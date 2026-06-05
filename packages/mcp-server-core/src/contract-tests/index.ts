@@ -31,8 +31,8 @@ export type { KvContractClock, KvContractOptions } from './kv-store.js';
 export { embeddingProviderContract } from './embedding-provider.js';
 export { renderStoreContract } from './render-store.js';
 export type {
-  RenderStoreContractClock,
-  RenderStoreContractOptions,
+  GguiSessionStoreContractClock,
+  GguiSessionStoreContractOptions,
 } from './render-store.js';
 export { threadStoreContract } from './thread-store.js';
 export { authAdapterContract } from './auth-adapter.js';
@@ -52,8 +52,8 @@ export { scopedFileStoreContract } from './scoped-file-store.js';
 // these pin known real bug classes plus the foundational lifecycle
 // invariants (event monotonicity, close surface). Plug into adapter
 // test suites alongside the basic contract to widen the drift net.
-export { runRenderStoreConformance } from './render-store.conformance.js';
-export type { RenderStoreConformanceFactory } from './render-store.conformance.js';
+export { runGguiSessionStoreConformance } from './render-store.conformance.js';
+export type { GguiSessionStoreConformanceFactory } from './render-store.conformance.js';
 export { runPendingEventConsumerConformance } from './pending-event-consumer.conformance.js';
 export type { PendingEventConsumerConformanceFactory } from './pending-event-consumer.conformance.js';
 

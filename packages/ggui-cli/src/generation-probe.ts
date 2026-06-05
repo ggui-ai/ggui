@@ -45,7 +45,7 @@ import type {
   LlmRoute,
   LlmSelection,
   ProviderKeyRef,
-  Render,
+  GguiSession,
 } from '@ggui-ai/mcp-server';
 import { createUiGenerator } from '@ggui-ai/ui-gen';
 import type {
@@ -127,7 +127,7 @@ export interface ProbeGenerationBindingOptions {
       readonly renderId: string;
       readonly nowIso: string;
     },
-  ) => Render | null | Promise<Render | null>;
+  ) => GguiSession | null | Promise<GguiSession | null>;
 }
 
 /**
@@ -261,7 +261,7 @@ export async function probeGenerationBinding(
 }
 
 /**
- * Render a single operator-facing banner line describing the
+ * GguiSession a single operator-facing banner line describing the
  * generation binding. Always returns a string — when boot didn't
  * resolve a key, the line still names the default provider/model
  * the per-request resolver will try first, so the operator

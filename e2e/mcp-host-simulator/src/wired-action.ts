@@ -49,7 +49,7 @@ export function wiredActionFnv1a(payload: string): string {
 }
 
 /**
- * Render a wired-action's `data` payload as a short inline string for
+ * GguiSession a wired-action's `data` payload as a short inline string for
  * embedding in the `ui/message` consent prompt. Mirror of
  * `packages/iframe-runtime/src/runtime.ts::formatWiredActionDataInline`
  * — must produce identical output for the same input so consent

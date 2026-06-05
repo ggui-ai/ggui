@@ -28,7 +28,7 @@ import { render, act } from '@testing-library/react';
 import type { WebSocketMessage } from '@ggui-ai/protocol/transport/websocket';
 import type {
   ActionSpec,
-  ComponentRender,
+  ComponentGguiSession,
   PropsSpec,
   StreamSpec,
 } from '@ggui-ai/protocol';
@@ -108,7 +108,7 @@ const PROPS_SPEC: PropsSpec = {
   },
 };
 
-function makeRender(id: string): ComponentRender {
+function makeRender(id: string): ComponentGguiSession {
   const now = Date.now();
   return {
     id,

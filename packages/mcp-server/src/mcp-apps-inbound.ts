@@ -33,10 +33,10 @@ import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/
 import {
   type ConnectorRegistry,
   type RegisteredConnector,
-  type RenderStore,
+  type GguiSessionStore,
 } from '@ggui-ai/mcp-server-core';
-import { isMcpAppsRender } from '@ggui-ai/protocol/integrations/mcp-apps';
-import type { McpAppsRender } from '@ggui-ai/protocol/integrations/mcp-apps';
+import { isMcpAppsGguiSession } from '@ggui-ai/protocol/integrations/mcp-apps';
+import type { McpAppsGguiSession } from '@ggui-ai/protocol/integrations/mcp-apps';
 import type { Logger } from './logger.js';
 
 /** Default mount path for the MCP Apps inbound routes. */
@@ -44,7 +44,7 @@ export const DEFAULT_MCP_APPS_INBOUND_PATH = '/mcp-apps';
 
 export interface McpAppsInboundOptions {
   readonly connectors: ConnectorRegistry;
-  readonly renderStore: RenderStore;
+  readonly renderStore: GguiSessionStore;
   readonly logger: Logger;
   /** Override for the mount path prefix. Defaults to `/mcp-apps`. */
   readonly path?: string;
@@ -137,23 +137,23 @@ function readVisibility(toolDecl: unknown): Array<'model' | 'app'> {
 
 /**
  * Resolve `{render}` from the ggui render store to a
- * {@link McpAppsRender}. Returns null if the render is missing or is
+ * {@link McpAppsGguiSession}. Returns null if the render is missing or is
  * not an mcpApps variant.
  *
  * Phase B: a render IS the addressable unit — no per-item lookup inside
- * a stack vessel — so the render id alone resolves the McpAppsRender
+ * a stack vessel — so the render id alone resolves the McpAppsGguiSession
  * directly. The `itemId` parameter is preserved on the wire-facing
  * query string for callsite stability but ignored when it matches the
  * renderId (which is the only valid value post-collapse).
  */
 async function resolveMcpAppsItem(
-  store: RenderStore,
+  store: GguiSessionStore,
   renderId: string,
   _itemId: string,
-): Promise<McpAppsRender | null> {
+): Promise<McpAppsGguiSession | null> {
   const stored = await store.get(renderId);
   if (!stored) return null;
-  if (!isMcpAppsRender(stored.render)) return null;
+  if (!isMcpAppsGguiSession(stored.render)) return null;
   return stored.render;
 }
 
@@ -161,7 +161,7 @@ async function resolveMcpAppsItem(
  * Register the MCP Apps inbound proxy routes on an Express app.
  *
  *   GET  /mcp-apps/resource?render=<id>&item=<id>
- *     Fetches the referenced McpAppsRender's `source.resourceUri`
+ *     Fetches the referenced McpAppsGguiSession's `source.resourceUri`
  *     via resources/read on the source MCP server. Returns the HTML
  *     with the MIME declared by the source (typically
  *     `text/html;profile=mcp-app`) and spec-canonical CSP headers.
@@ -189,7 +189,7 @@ export function installMcpAppsInbound(
     }
     const item = await resolveMcpAppsItem(opts.renderStore, renderId, itemId);
     if (!item) {
-      res.status(404).type('text/plain').send('Render not found');
+      res.status(404).type('text/plain').send('GguiSession not found');
       return;
     }
     const connector = await opts.connectors.get(item.source.connectorId);
@@ -318,7 +318,7 @@ export function installMcpAppsInbound(
  * Returns null when no CSP was declared (caller leaves the default
  * header in place).
  */
-function composeCsp(item: McpAppsRender): string | null {
+function composeCsp(item: McpAppsGguiSession): string | null {
   const csp = item.csp;
   if (!csp) return null;
   const parts: string[] = [];

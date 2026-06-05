@@ -30,7 +30,7 @@
 export interface RegisteredConnector {
   /**
    * Stable, URL-safe connector id. Persisted as
-   * `McpAppsRender.source.connectorId`. Changing this id IS a
+   * `McpAppsGguiSession.source.connectorId`. Changing this id IS a
    * breaking operational change for renders that reference it.
    */
   readonly id: string;

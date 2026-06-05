@@ -1,7 +1,7 @@
 /**
  * Per-render `versionOverride` semantics — Slice K.
  *
- * Asserts that {@link RenderStore.setVersionOverride} scoped a
+ * Asserts that {@link GguiSessionStore.setVersionOverride} scoped a
  * version mismatch to one render without leaking to another, and
  * that the WS subscribe handler advertises the per-render value
  * (not the instance-level default) when emitting UPGRADE_REQUIRED.

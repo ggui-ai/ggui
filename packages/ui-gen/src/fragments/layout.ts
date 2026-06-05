@@ -21,7 +21,7 @@ export const layoutFragments: Record<string, HarnessFragment> = {
     // below; non-multi-step fixtures had 0 fails across the same benches.
     promptText:
       "## Layout: multi-step\n" +
-      "Wizard. Track `step` in useState (0-indexed). Render a progress " +
+      "Wizard. Track `step` in useState (0-indexed). GguiSession a progress " +
       "indicator (e.g., '2 of 4') and Next/Back buttons. Keep all step " +
       "state in a single payload object; do NOT reset previous-step data " +
       "on navigation.\n\n" +

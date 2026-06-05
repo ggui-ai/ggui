@@ -60,8 +60,8 @@ import type {
   PendingEventConsumer,
   ProviderKeyStore,
   RateLimiter,
-  RenderStore,
-  RenderStreamBuffer,
+  GguiSessionStore,
+  GguiSessionStreamBuffer,
   ShortCodeIndex,
   TelemetrySink,
   ThreadStore,
@@ -90,8 +90,8 @@ import {
   InMemoryPairingService,
   InMemoryPendingEventConsumer,
   InMemoryQuotaStore,
-  InMemoryRenderStore,
-  InMemoryRenderStreamBuffer,
+  InMemoryGguiSessionStore,
+  InMemoryGguiSessionStreamBuffer,
   InMemoryVectorStore,
   MockEmbeddingProvider,
   NoopAuditSink,
@@ -127,7 +127,7 @@ import type { OperatorConfig, ThemeConfig } from "@ggui-ai/project-config";
 import { GguiJsonV1 } from "@ggui-ai/project-config";
 import type { DiscoveredPrimitiveCatalog, LoadedTheme } from "@ggui-ai/project-config/node";
 import { findGguiJson, loadTheme, safeLoadGguiJson } from "@ggui-ai/project-config/node";
-import type { Blueprint, CanvasLifecyclePayload, Render } from "@ggui-ai/protocol";
+import type { Blueprint, CanvasLifecyclePayload, GguiSession } from "@ggui-ai/protocol";
 import { LIFECYCLE_CHANNEL } from "@ggui-ai/protocol";
 import {
   GGUI_RENDER_RESOURCE_MIME,
@@ -284,8 +284,8 @@ import {
 } from "./pairing-transport.js";
 import { createPairLoginRateLimitMiddleware } from "./rate-limit-middleware.js";
 import {
-  createRenderChannelServer,
-  type RenderChannelServer,
+  createGguiSessionChannelServer,
+  type GguiSessionChannelServer,
   type WiredActionRouter,
 } from "./render-channel.js";
 import { buildRequestContextMiddleware, resolveRuntimeUrl } from "./request-context.js";
@@ -377,7 +377,7 @@ function collectAppCallableToolNames(
  *
  * `render` is opt-in via `deps.render` — it's only useful when the server
  * was booted with `mcpApps: true` (so `ui://ggui/render` is served)
- * and pairs a real RenderStore. Callers get the choice explicitly.
+ * and pairs a real GguiSessionStore. Callers get the choice explicitly.
  */
 /**
  * Assemble the `opsBlueprint` dep bundle for `defaultHandlers`.
@@ -511,7 +511,7 @@ export function defaultHandlers(deps: {
      * / cross-tenant ids at the earliest boundary; cloud pods omit and
      * validate at render-commit time via their own DDB-backed path.
      */
-    readonly renderStore?: RenderStore;
+    readonly renderStore?: GguiSessionStore;
     /**
      * Optional negotiator binding. Absent = `ggui_handshake` stamps
      * `action: 'create'` + honest no-negotiator reason on the record
@@ -537,7 +537,7 @@ export function defaultHandlers(deps: {
     readonly serverCapabilities?: () => import("@ggui-ai/protocol").ServerCapabilities | undefined;
   };
   readonly render?: {
-    readonly renderStore: RenderStore;
+    readonly renderStore: GguiSessionStore;
     /**
      * Optional bootstrap-credential minter. When present, `ggui_render`
      * (the renamed render-commit tool) results carry the
@@ -620,7 +620,7 @@ export function defaultHandlers(deps: {
      * channel traffic.
      *
      * Constructed by `createGguiServer` from `opts.provisionalPreview`
-     * plus the late-bound `RenderChannelServer.sendToRender`
+     * plus the late-bound `GguiSessionChannelServer.sendToGguiSession`
      * closure; callers threading their own handler set can build
      * `ProvisionalPreviewDeps` directly.
      */
@@ -629,7 +629,7 @@ export function defaultHandlers(deps: {
     /**
      * Optional generation wiring. When present, `ggui_render` invokes
      * the supplied {@link UiGenerator} on every story-path call and
-     * commits the generated `Render` before returning `codeReady:
+     * commits the generated `GguiSession` before returning `codeReady:
      * true`. Absent = render stays in placeholder mode (render +
      * shortCode + preview still work, but no componentCode is
      * produced).
@@ -657,7 +657,7 @@ export function defaultHandlers(deps: {
     /**
      * Optional F4 schema compat check hook. When present,
      * `ggui_render` invokes it immediately
-     * before every `renderStore.commit` — if the pending Render's
+     * before every `renderStore.commit` — if the pending GguiSession's
      * `actionSpec` / `streamSpec` references a tool whose schemas
      * disagree, the hook throws `SchemaCompatError` and the handler
      * converts the rejection into an error render + `codeReady:
@@ -734,7 +734,7 @@ export function defaultHandlers(deps: {
   };
   /**
    * `ggui_update` wiring. When present, register the OSS update
-   * handler against the supplied RenderStore + optional live-channel
+   * handler against the supplied GguiSessionStore + optional live-channel
    * props_update notifier. The handler reads `renderId` from wire
    * input today, but a future in-process dispatcher can populate it
    * on the canonical context.
@@ -744,10 +744,10 @@ export function defaultHandlers(deps: {
    * static-blueprint demos, MCP-Apps-only deployments).
    */
   readonly update?: {
-    readonly renderStore: RenderStore;
+    readonly renderStore: GguiSessionStore;
     /**
      * Optional live-subscriber `props_update` notifier — typically a
-     * thin closure over `RenderChannelServer.sendPropsUpdate`.
+     * thin closure over `GguiSessionChannelServer.sendPropsUpdate`.
      * Forwarded as-is to `createGguiUpdateHandler`. Hosts without a
      * render channel leave this absent; the handler still persists
      * via `renderStore.commit` on every successful patch.
@@ -804,7 +804,7 @@ export function defaultHandlers(deps: {
    * Stream channel wiring for `ggui_emit`. When `render` is bound, the
    * handler registers automatically; its `sendEnvelope` closes over
    * `stream.channelProvider`, a lazy getter that resolves the
-   * `RenderChannelServer` at emit time (the channel is constructed
+   * `GguiSessionChannelServer` at emit time (the channel is constructed
    * AFTER `defaultHandlers` runs, so a static reference would always
    * be null on the OSS in-process boot).
    *
@@ -813,10 +813,10 @@ export function defaultHandlers(deps: {
    * cloud's `ggui_emit_accepted_no_receiver` posture.
    *
    * The getter pattern lets the OSS server bind once at boot, then
-   * mutate the cell after `createRenderChannelServer` runs.
+   * mutate the cell after `createGguiSessionChannelServer` runs.
    */
   readonly stream?: {
-    readonly channelProvider?: () => RenderChannelServer | null;
+    readonly channelProvider?: () => GguiSessionChannelServer | null;
   };
   /**
    * Structured-event logger threaded into handlers that emit
@@ -1055,7 +1055,7 @@ export function defaultHandlers(deps: {
   // claude.ai (and any MCP Apps host) routes iframe-issued
   // `tools/call` here. Wired only when a renderStore is bound (render
   // is on) — the handler's whole job is upserting the snapshot onto
-  // the active Render, which requires the same store render writes
+  // the active GguiSession, which requires the same store render writes
   // to. Without render, there's no render to mutate.
   if (deps.render) {
     handlers.push(
@@ -1097,7 +1097,7 @@ export function defaultHandlers(deps: {
   // Canvas-mode lifecycle emitter — shared by handshake/render/consume so
   // the three handlers publish to the reserved `_ggui:lifecycle`
   // channel through one binding. Lazy-resolves the channel provider
-  // because `createRenderChannelServer` runs after `defaultHandlers`;
+  // because `createGguiSessionChannelServer` runs after `defaultHandlers`;
   // a static reference would always be null on first emit. Mirrors the
   // pattern `ggui_emit`'s `sendEnvelope` uses below.
   //
@@ -1111,7 +1111,7 @@ export function defaultHandlers(deps: {
           const channel = lifecycleChannelProvider();
           if (!channel) return;
           void channel
-            .sendToRender({
+            .sendToGguiSession({
               renderId,
               channel: LIFECYCLE_CHANNEL,
               mode: "append",
@@ -1168,7 +1168,7 @@ export function defaultHandlers(deps: {
     );
   }
   // ggui_consume registers whenever render is bound (it shares the
-  // RenderStore for renderId resolution + tenancy checks).
+  // GguiSessionStore for renderId resolution + tenancy checks).
   // Default backing is in-memory; operators override via
   // `deps.consume.pendingEventConsumer` for SQLite / Dynamo adapters.
   // Without this registration the `nextStep → consume` hint that
@@ -1228,7 +1228,7 @@ export function defaultHandlers(deps: {
     // `ggui_consume` nextStep + the imperative directive in the message
     // text). No timer, no rescue drain, no inline payload, no race
     // between two atomic-pop callers.
-    // ggui_get_render is a pure read off the RenderStore, registered
+    // ggui_get_render is a pure read off the GguiSessionStore, registered
     // alongside the render-commit handler. (ggui_get_stack was deleted
     // — a render IS the addressable unit; there is no stack to read.
     // The former companion `ggui_close` tool was also retired: renders
@@ -1262,13 +1262,13 @@ export function defaultHandlers(deps: {
       }) as SharedHandler<ZodRawShape, ZodRawShape>
     );
     // `ggui_emit` routes outbound stream envelopes through the active
-    // `RenderChannelServer.sendToRender`
-    // (which records into the bound `RenderStreamBuffer` + fans out
+    // `GguiSessionChannelServer.sendToGguiSession`
+    // (which records into the bound `GguiSessionStreamBuffer` + fans out
     // to subscribers). When no channel is bound, the handler accepts
     // the envelope and returns silently — mirrors cloud's
     // `ggui_emit_accepted_no_receiver` posture.
     //
-    // `channelProvider` is lazy because `createRenderChannelServer`
+    // `channelProvider` is lazy because `createGguiSessionChannelServer`
     // runs AFTER `defaultHandlers`; a static reference would always
     // be null on first emit. The OSS server's outer scope mutates
     // `channelForHealth` on listen() and points the provider at it.
@@ -1284,16 +1284,16 @@ export function defaultHandlers(deps: {
             // recorded the envelope.
             return {};
           }
-          const { seq } = await channel.sendToRender({
+          const { seq } = await channel.sendToGguiSession({
             renderId: envelope.renderId,
             channel: envelope.channel,
             mode: envelope.mode,
             payload: envelope.payload,
             ...(envelope.complete === true ? { complete: true as const } : {}),
           });
-          // `sendToRender` plumbs the stamped seq out of fanOut so
+          // `sendToGguiSession` plumbs the stamped seq out of fanOut so
           // ggui_emit's wire output carries ordering info — matches
-          // cloud's `RedisRenderStreamBuffer.record` returning seq
+          // cloud's `RedisGguiSessionStreamBuffer.record` returning seq
           // and being threaded onto the response. Agents that want to
           // correlate "I just emitted on channel X" with a specific
           // wire frame have a stable handle.
@@ -1994,23 +1994,23 @@ export interface CreateGguiServerOptions {
   readonly bodyLimit?: string;
 
   /**
-   * Render store — backing plane for the live-channel render endpoint
+   * GguiSession store — backing plane for the live-channel render endpoint
    * (and OSS render-reading MCP tools). Defaults to
-   * `InMemoryRenderStore`, which is fine for OSS zero-config / dev.
+   * `InMemoryGguiSessionStore`, which is fine for OSS zero-config / dev.
    * SQLite / Postgres / Redis adapters bind via the same interface
    * when they land.
    */
-  readonly renderStore?: RenderStore;
+  readonly renderStore?: GguiSessionStore;
 
   /**
    * Outbound stream replay buffer for the live-channel endpoint. Defaults
-   * to a fresh `InMemoryRenderStreamBuffer` — fine for OSS zero-config
+   * to a fresh `InMemoryGguiSessionStreamBuffer` — fine for OSS zero-config
    * / dev. Operators who need durability layer a different
-   * `RenderStreamBuffer` implementation behind this seam.
+   * `GguiSessionStreamBuffer` implementation behind this seam.
    *
    * Only used when `renderChannel` is enabled. Ignored otherwise.
    */
-  readonly streamBuffer?: RenderStreamBuffer;
+  readonly streamBuffer?: GguiSessionStreamBuffer;
 
   /**
    * Enable the OSS live-channel render endpoint at `/ws` (configurable).
@@ -2054,7 +2054,7 @@ export interface CreateGguiServerOptions {
   /**
    * Per-call timeout for wired-tool invocations, in ms. Defaults to
    * `DEFAULT_WIRED_TOOL_TIMEOUT_MS` (30 s) when omitted. Forwarded
-   * verbatim to `createRenderChannelServer`.
+   * verbatim to `createGguiSessionChannelServer`.
    */
   readonly wiredActionTimeoutMs?: number;
   /**
@@ -2072,27 +2072,27 @@ export interface CreateGguiServerOptions {
    * agrees with the server on which channels use WS fan-out.
    *
    * Only consulted when `renderChannel` is enabled. Forwarded
-   * verbatim to `createRenderChannelServer` (see
-   * `RenderChannelOptions.streamWebSocketLocalTools`).
+   * verbatim to `createGguiSessionChannelServer` (see
+   * `GguiSessionChannelOptions.streamWebSocketLocalTools`).
    */
-  readonly streamWebSocketLocalTools?: import("./render-channel.js").RenderChannelLocalToolsOptions;
+  readonly streamWebSocketLocalTools?: import("./render-channel.js").GguiSessionChannelLocalToolsOptions;
   /**
    * Hook fired when the local subscriber count for `renderId`
    * transitions 0 → 1 on the live channel. Forwarded verbatim to
-   * `createRenderChannelServer`. Used by cloud adapters for per-render
+   * `createGguiSessionChannelServer`. Used by cloud adapters for per-render
    * cross-pod pubsub channel scoping; OSS callers leave this undefined.
    *
    * Only consulted when `renderChannel` is enabled. See
-   * `RenderChannelOptions.onFirstSubscriber` for the full contract.
+   * `GguiSessionChannelOptions.onFirstSubscriber` for the full contract.
    */
   readonly onFirstSubscriber?: (renderId: string) => void;
   /**
    * Hook fired when the local subscriber count for `renderId`
    * transitions 1 → 0 on the live channel. Forwarded verbatim to
-   * `createRenderChannelServer`.
+   * `createGguiSessionChannelServer`.
    *
    * Only consulted when `renderChannel` is enabled. See
-   * `RenderChannelOptions.onLastSubscriberGone` for the full contract.
+   * `GguiSessionChannelOptions.onLastSubscriberGone` for the full contract.
    */
   readonly onLastSubscriberGone?: (renderId: string) => void;
   /**
@@ -2101,7 +2101,7 @@ export interface CreateGguiServerOptions {
    * `@ggui-ai/protocol::sanitizeCausedBy` when omitted — redacts
    * Bearer tokens, query-param secrets, common env-var dumps, and
    * truncates at 2 KB. Forwarded verbatim to
-   * `createRenderChannelServer`. See `RenderChannelOptions
+   * `createGguiSessionChannelServer`. See `GguiSessionChannelOptions
    * .sanitizeCausedBy` for the contract.
    */
   readonly sanitizeCausedBy?: import("@ggui-ai/protocol").SanitizeCausedBy;
@@ -2129,8 +2129,8 @@ export interface CreateGguiServerOptions {
 
   /**
    * Protocol-version handshake policy for the render channel. Forwarded
-   * verbatim to `createRenderChannelServer` (see
-   * `RenderChannelOptions.versionPolicy`). Defaults to `'reject'` —
+   * verbatim to `createGguiSessionChannelServer` (see
+   * `GguiSessionChannelOptions.versionPolicy`). Defaults to `'reject'` —
    * mismatched `SubscribePayload.supportedVersions` emits
    * UPGRADE_REQUIRED and closes the connection. Legacy opt-out
    * `'advisory'` keeps the connection open after the error frame for
@@ -2834,7 +2834,7 @@ export interface CreateGguiServerOptions {
   /**
    * Generation wiring for the `ggui_render` story path. When present,
    * every component render invokes the bound `UiGenerator` and commits
-   * the result as a real `Render`. Absent = placeholder mode:
+   * the result as a real `GguiSession`. Absent = placeholder mode:
    * `ggui_render` on the story path returns `codeReady: false`
    * without writing componentCode.
    *
@@ -3059,9 +3059,9 @@ export interface GguiServer {
    * enabled. `null` when disabled. Hosts can use this for
    * introspection (`.renderCount`, `.subscriberCount`) or for
    * composition with future mutation handlers that want to fan out
-   * via `renderChannel.sendToRender(renderId, data)`.
+   * via `renderChannel.sendToGguiSession(renderId, data)`.
    */
-  readonly renderChannel: RenderChannelServer | null;
+  readonly renderChannel: GguiSessionChannelServer | null;
   /**
    * The pairing service bound to this server, when the `pairing` option
    * was enabled. `null` when pairing is disabled. In-process hosts
@@ -3300,20 +3300,20 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
       runtimeUrl: runtimeBootstrapUrl,
     }) ?? runtimeBootstrapUrl;
 
-  // Render store is resolved here (not lazy-inside-renderChannel)
+  // GguiSession store is resolved here (not lazy-inside-renderChannel)
   // when mcpApps is on, because the render-commit handler needs it at
   // handler-factory time, BEFORE the render-channel factory runs.
-  const renderStore: RenderStore | undefined =
+  const renderStore: GguiSessionStore | undefined =
     opts.renderStore ??
-    (mcpAppsEnabled || opts.renderChannel ? new InMemoryRenderStore() : undefined);
+    (mcpAppsEnabled || opts.renderChannel ? new InMemoryGguiSessionStore() : undefined);
 
   // Outbound stream replay buffer is hoisted here so the
   // `/ggui/console/timeline/*` mount can read its cursor alongside
-  // RenderStore events. Only constructed when the channel is
+  // GguiSessionStore events. Only constructed when the channel is
   // enabled; otherwise there's nothing to buffer and the timeline
   // routes report `streamSeq: 0` honestly.
-  const streamBuffer: RenderStreamBuffer | undefined = opts.renderChannel
-    ? (opts.streamBuffer ?? new InMemoryRenderStreamBuffer())
+  const streamBuffer: GguiSessionStreamBuffer | undefined = opts.renderChannel
+    ? (opts.streamBuffer ?? new InMemoryGguiSessionStreamBuffer())
     : undefined;
 
   // Bootstrap-credential plumbing. Secret is process-local unless the
@@ -3331,7 +3331,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
   let mintBootstrap:
     | ((renderId: string, appId: string) => { wsUrl: string; token: string; expiresAt: string })
     | undefined;
-  let channelBootstrap: import("./render-channel.js").RenderChannelBootstrap | undefined;
+  let channelBootstrap: import("./render-channel.js").GguiSessionChannelBootstrap | undefined;
   // Shared HMAC secret for server-minted creds (bootstrap tokens,
   // session tokens, console cookies). Distinct `kind` claims
   // prevent cross-kind confusion; sharing the secret keeps the
@@ -3411,7 +3411,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
   // during the render-channel factory run further down. Safe because
   // `ggui_render` can only fire after `listen()` binds HTTP, which is
   // strictly after that factory runs.
-  let channelForHealth: RenderChannelServer | null = null;
+  let channelForHealth: GguiSessionChannelServer | null = null;
 
   // Provisional preview wiring. Must precede the default-handlers
   // construction so `render.provisionalPreview` is threaded through at
@@ -3670,7 +3670,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
           : {}),
       },
       emitter: opts.provisionalPreview.emitter,
-      // Late-binds to the RenderChannelServer created further down.
+      // Late-binds to the GguiSessionChannelServer created further down.
       // `ggui_render` can only fire after `listen()` binds the HTTP
       // server, by which point `channelForHealth` is assigned.
       sendEnvelope: async (envelope) => {
@@ -3680,7 +3680,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
           // but a silent no-op is strictly safer than a throw).
           return {};
         }
-        await channelForHealth.sendToRender({
+        await channelForHealth.sendToGguiSession({
           renderId: envelope.renderId,
           channel: envelope.channel,
           mode: envelope.mode,
@@ -3834,7 +3834,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
               // Wire the UI generator into `ggui_render`. When bound,
               // every story-path render awaits
               // `uiGenerator.generate(...)`, commits the generated
-              // Render, and returns `codeReady:true`. Absent =
+              // GguiSession, and returns `codeReady:true`. Absent =
               // placeholder mode (no componentCode produced).
               //
               // `generationWithCache` enriches the caller-supplied
@@ -3863,7 +3863,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
                   }
                 : {}),
               // Live-subscriber notifier. Late-binds to the
-              // RenderChannelServer created further down (`channel`
+              // GguiSessionChannelServer created further down (`channel`
               // / `channelForHealth`) — the channel doesn't exist yet
               // at handler-factory time, so we hand the render handler
               // a thin closure that forwards to whatever channel ends
@@ -3874,13 +3874,13 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
               // the floor, which is correct for hosts that didn't
               // enable `renderChannel` (no live subscribers to
               // notify in the first place). The handler's own
-              // `safelyNotifyRenderCommit` swallows on absent notifier
+              // `safelyNotifyGguiSessionCommit` swallows on absent notifier
               // anyway, but providing the closure unconditionally
               // keeps the typecheck simple — no per-config branching.
               channelNotifier: {
-                notifyRenderCommit: (renderId, render, matchType) => {
+                notifyGguiSessionCommit: (renderId, render, matchType) => {
                   if (!channelForHealth) return;
-                  channelForHealth.notifyRenderCommit(renderId, render, matchType);
+                  channelForHealth.notifyGguiSessionCommit(renderId, render, matchType);
                 },
               },
               // F4 schema compat check. Late-binds to the composed
@@ -3920,7 +3920,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
               checkRenderContracts: (shape) => {
                 // Shape carries the optional actionSpec / streamSpec
                 // pair from either the authored DataContract (render
-                // validation) or a Render (gen / cache-hit backstops).
+                // validation) or a GguiSession (gen / cache-hit backstops).
                 // Both fit structurally; the helper handles missing
                 // fields as a compatible no-op.
                 const report = checkRenderSchemaCompat(
@@ -3954,7 +3954,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
           }
         : {}),
       // `ggui_update` handler. Registered alongside `render` because
-      // both want the RenderStore and
+      // both want the GguiSessionStore and
       // benefit from live-channel fan-out. Same late-bind pattern as
       // `channelNotifier` / `provisionalPreviewDeps.sendEnvelope`:
       // the handler factory captures a closure, the closure forwards
@@ -4064,7 +4064,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
       // ggui_emit resolves the channel via
       // a lazy getter so the handler captures whatever
       // `channelForHealth` ends up pointing at after
-      // createRenderChannelServer runs (which is AFTER
+      // createGguiSessionChannelServer runs (which is AFTER
       // defaultHandlers). Same late-bind posture as channelNotifier /
       // provisionalPreviewDeps.sendEnvelope.
       stream: {
@@ -4923,7 +4923,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
   //
   // Distinct from R7's `/api/renders/:id/events?sinceSequence=N`
   // (planned): /state is a snapshot; /events is a cursor-replay. Both
-  // are gated identically (wsToken), unified under the RenderEvent
+  // are gated identically (wsToken), unified under the GguiSessionEvent
   // ledger cursor (`render.lastSequence`).
   if (mcpAppsEnabled && renderStore && sharedTokenSecret !== undefined) {
     const renderStoreForState = renderStore;
@@ -4998,7 +4998,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
         return;
       }
       // Phase B: a render IS the addressable unit. Pick directly from
-      // the resolved Render (no stack walk).
+      // the resolved GguiSession (no stack walk).
       const render = stored.render;
       const isMcpApps = render.type === "mcpApps";
       const isSystem = !isMcpApps && render.type === "system";
@@ -5136,13 +5136,13 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
 
   // R7 — GET /api/renders/:renderId/events?wsToken=&sinceSequence=N&limit=M
   //
-  // Cursor-replay read from the RenderEvent ledger (`bc524f2f0` in
+  // Cursor-replay read from the GguiSessionEvent ledger (`bc524f2f0` in
   // cloud; in-memory + sqlite stores OSS). Returns events with
   // `seq > sinceSequence`, up to `limit` (default 100, max 500).
   //
   // Unification: WS subscribe's `sinceSequence` cursor and this HTTP
   // endpoint read from the SAME ledger via the same `listEventsSince`
-  // RenderStore method. Different transports, same cursor model —
+  // GguiSessionStore method. Different transports, same cursor model —
   // that's R7's payoff.
   //
   // Auth: wsToken-gated, identical posture to /state.
@@ -5262,7 +5262,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
         });
         return;
       }
-      // RenderEvent is now the unified wire-shape ledger primitive
+      // GguiSessionEvent is now the unified wire-shape ledger primitive
       // (Wave 7 of flatten-render-identity, 2026-05-28). The store
       // returns events in protocol-canonical shape (seq + type +
       // timestamp[ISO] + data); no projection needed.
@@ -5641,9 +5641,9 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
   const consoleEnabled = opts.console !== undefined && opts.console !== false;
   // Cookie-auth binding into the render-channel. Populated inside
   // the console block below when `sessionCookie` is enabled, then
-  // threaded into createRenderChannelServer. Declared `let` here so
+  // threaded into createGguiSessionChannelServer. Declared `let` here so
   // the declaration-order dance stays legible.
-  let consoleCookieAuth: import("./render-channel.js").RenderChannelCookieAuth | undefined;
+  let consoleCookieAuth: import("./render-channel.js").GguiSessionChannelCookieAuth | undefined;
   // Admin token resolution. Surfaced on `GguiServer.adminToken` when
   // console is on; `null` when it's off (no consumer for the gate).
   // Operator-supplied wins; otherwise we mint a fresh
@@ -5845,7 +5845,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
             const createdAt = Date.now();
 
             const contract = entry.manifest.contract ?? {};
-            const render: Render = {
+            const render: GguiSession = {
               id: renderId,
               appId,
               type: "component",
@@ -5858,7 +5858,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
               description: `Blueprint try-live: ${entry.manifest.name}`,
               // Data contract fields from the manifest. Each is
               // conditionally spread — absent on the manifest →
-              // absent on the Render (keeps shape honest + avoids
+              // absent on the GguiSession (keeps shape honest + avoids
               // an empty-shape contract tripping structural
               // validators downstream).
               ...(contract.propsSpec ? { propsSpec: contract.propsSpec } : {}),
@@ -6460,7 +6460,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
     mountConsolePayloadsRoutes(app, payloadTraceSink);
 
     // Timeline surfaces — `/devtools/timeline` reads the render
-    // list and per-render RenderStore.observe replay. REST
+    // list and per-render GguiSessionStore.observe replay. REST
     // only — replay is a snapshot, not a live stream. Admin-gated by
     // the loop above. The hoisted `renderStore` + `streamBuffer` may
     // be undefined when neither `mcpApps` nor `renderChannel` is on;
@@ -6473,10 +6473,10 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
     // shortCode so rows can link through to `/s/<shortCode>` (the
     // existing render viewer).
     //
-    // Scope: active renders only. The `RenderFilter.status`
+    // Scope: active renders only. The `GguiSessionFilter.status`
     // taxonomy ('active' | 'completed' | 'expired') requires the
     // store's private `closed` bucket flag to disambiguate completed
-    // from expired — that flag isn't on the `Render` protocol type,
+    // from expired — that flag isn't on the `GguiSession` protocol type,
     // so exposing mixed-status listings honestly requires a seam
     // extension we don't need for the "live right now" use case.
     // Future slices (historical renders, closed-renders triage)
@@ -6497,7 +6497,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
     // renderChannel nor mcpApps enabled).
     app.get("/ggui/console/renders", async (req, res) => {
       applyDevtoolSecurityHeaders(res);
-      interface RenderSummary {
+      interface GguiSessionSummary {
         readonly renderId: string;
         readonly shortCode?: string;
         readonly appId: string;
@@ -6525,7 +6525,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
           status: "active",
           limit,
         });
-        const summaries: RenderSummary[] = [];
+        const summaries: GguiSessionSummary[] = [];
         for (const render of renders) {
           let shortCode: string | null = null;
           if (opts.shortCodeIndex) {
@@ -6565,8 +6565,8 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
           error: "renders_unavailable",
           message:
             err instanceof Error
-              ? `Render store failed to list — ${err.message}`
-              : `Render store failed to list — ${String(err)}`,
+              ? `GguiSession store failed to list — ${err.message}`
+              : `GguiSession store failed to list — ${String(err)}`,
         });
       }
     });
@@ -6804,7 +6804,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
       //   - `vectorStore`: same rule for vectors.
       // Keeps the label taxonomy narrow — two states the operator can
       // act on (swap to SQLite, swap to Postgres). Implementation-name
-      // leakage (e.g., "InMemoryRenderStore") would couple the wire
+      // leakage (e.g., "InMemoryGguiSessionStore") would couple the wire
       // to class names that are not part of the public contract.
       const storage = {
         renderStore: (opts.renderStore ? "custom" : "memory") as "memory" | "custom",
@@ -6832,7 +6832,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
     // the cohesive agent experience: every user message commits a
     // render against a thread-scoped render; the render handler owns
     // generation, cache, and provisional preview; the client renders
-    // the resulting render inline using `RenderRenderer`.
+    // the resulting render inline using `GguiSessionRenderer`.
     //
     // Shape: `{ text, threadId?, renderId? }` →
     // `{ threadId, userMessage, agentMessage, ui? }`.
@@ -7092,7 +7092,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
         });
       });
 
-      // Console render-resource pair. The console's `RenderViewer`
+      // Console render-resource pair. The console's `GguiSessionViewer`
       // runs the production iframe path:
       //
       //   1. GET /ggui/console/render-resource?render=<renderId>
@@ -7128,7 +7128,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
       //     `verifyDevtoolCookie`. Invalid / missing → 401.
       //   - Scope: `cookie.renderId` MUST equal `?render=`. Cross-
       //     render access with a valid cookie → 403.
-      //   - Render existence + appId match: 404 / 403 respectively.
+      //   - GguiSession existence + appId match: 404 / 403 respectively.
       //   - The bootstrap route additionally requires `mintBootstrap`
       //     (`mcpApps: true` at construction); 503 otherwise.
       //
@@ -7180,10 +7180,10 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
           });
           return null;
         }
-        // Render existence + appId match — even on the static-shell
+        // GguiSession existence + appId match — even on the static-shell
         // route we honestly answer 404 instead of leaking an HTML blob
         // for a render the server doesn't know about.
-        let render: Awaited<ReturnType<RenderStore["get"]>> = null;
+        let render: Awaited<ReturnType<GguiSessionStore["get"]>> = null;
         if (renderStore) {
           try {
             render = await renderStore.get(claims.renderId);
@@ -7199,7 +7199,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
         if (!render) {
           res.status(404).json({
             error: "render_not_found",
-            message: `Render '${claims.renderId}' is not on this server`,
+            message: `GguiSession '${claims.renderId}' is not on this server`,
           });
           return null;
         }
@@ -7329,7 +7329,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
         // Slice-envelope response (Phase B: single ai.ggui/render
         // slice) — same shape as the wire `_meta` and the inline
         // `__GGUI_META__` global the `/r/<shortCode>` shell carries.
-        // RenderViewer parses with `parseMcpAppAiGguiRenderMeta`.
+        // GguiSessionViewer parses with `parseMcpAppAiGguiRenderMeta`.
         const renderMeta: McpAppAiGguiRenderMeta = {
           renderId: verified.renderId,
           appId: verified.appId,
@@ -7352,14 +7352,14 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
       // GET /ggui/console/render?render=<renderId>
       // → `{render, eventSequence}` JSON.
       //
-      // Console-only observation surface for `<RenderViewer>` to mount
+      // Console-only observation surface for `<GguiSessionViewer>` to mount
       // `<RenderInspector>`. The iframe owns the live WS subscription
       // + the bootstrap token (single-use), so the OUTER console DOM
       // has no live source for render data — without this endpoint
       // the inspector can't render contract / test-action panels.
       //
       // Named parties:
-      //   - console SPA (`RenderViewer`) — holds the same-origin
+      //   - console SPA (`GguiSessionViewer`) — holds the same-origin
       //     cookie minted by `POST /ggui/console/render-cookie`.
       //   - mcp-server (this handler) — gates auth + scope, reads the
       //     authoritative render from `renderStore`.
@@ -7374,11 +7374,11 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
       //   - 503 if `renderStore` is not wired (zero-config server).
       //
       // Shape note: Phase B collapsed the prior session-stack array to
-      // a single `Render` row. The response now returns the resolved
-      // `Render` directly; console narrows on `render.type` before
+      // a single `GguiSession` row. The response now returns the resolved
+      // `GguiSession` directly; console narrows on `render.type` before
       // passing into `<RenderInspector>` (which only accepts the
-      // ComponentRender variant since the inspector reads actionSpec /
-      // streamSpec / propsSpec — fields McpAppsRender doesn't carry).
+      // ComponentGguiSession variant since the inspector reads actionSpec /
+      // streamSpec / propsSpec — fields McpAppsGguiSession doesn't carry).
       app.get("/ggui/console/render", async (req: Request, res: Response) => {
         applyDevtoolSecurityHeaders(res);
         res.setHeader("Content-Type", "application/json; charset=utf-8");
@@ -7388,11 +7388,11 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
           res.status(503).json({
             error: "render_store_unavailable",
             message:
-              "Render observation requires renderChannel: true on the server so the render store is wired. Enable `renderChannel` on createGguiServer() and retry.",
+              "GguiSession observation requires renderChannel: true on the server so the render store is wired. Enable `renderChannel` on createGguiServer() and retry.",
           });
           return;
         }
-        let stored: Awaited<ReturnType<RenderStore["get"]>> = null;
+        let stored: Awaited<ReturnType<GguiSessionStore["get"]>> = null;
         try {
           stored = await renderStore.get(verified.renderId);
         } catch (err) {
@@ -7408,7 +7408,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
           // could expire between calls. Honest 404.
           res.status(404).json({
             error: "render_not_found",
-            message: `Render '${verified.renderId}' is not on this server`,
+            message: `GguiSession '${verified.renderId}' is not on this server`,
           });
           return;
         }
@@ -7419,7 +7419,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
       });
 
       // Bind cookieAuth into the render channel. Declared `let`
-      // above so createRenderChannelServer can reference it below.
+      // above so createGguiSessionChannelServer can reference it below.
       consoleCookieAuth = {
         readCookie: readDevtoolCookieFromHeaders,
         verify: (cookieValue: string) => verifyDevtoolCookie(cookieValue, secret),
@@ -8424,15 +8424,15 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
     composePreviewReservedValidator(),
     opts.extraReservedValidators
   );
-  const channel: RenderChannelServer | null = opts.renderChannel
-    ? createRenderChannelServer({
-        renderStore: renderStore ?? new InMemoryRenderStore(),
+  const channel: GguiSessionChannelServer | null = opts.renderChannel
+    ? createGguiSessionChannelServer({
+        renderStore: renderStore ?? new InMemoryGguiSessionStore(),
         auth,
         logger: logger.child({ component: "render-channel" }),
         path: typeof opts.renderChannel === "object" ? opts.renderChannel.path : undefined,
         streamBuffer:
           streamBuffer ??
-          new InMemoryRenderStreamBuffer() /* hoist guarantees non-null when opts.renderChannel truthy; fallback only for TS narrowing */,
+          new InMemoryGguiSessionStreamBuffer() /* hoist guarantees non-null when opts.renderChannel truthy; fallback only for TS narrowing */,
         ...(channelBootstrap ? { bootstrap: channelBootstrap } : {}),
         ...(consoleCookieAuth ? { cookieAuth: consoleCookieAuth } : {}),
         ...(opts.wiredActionRouter ? { wiredActionRouter: opts.wiredActionRouter } : {}),

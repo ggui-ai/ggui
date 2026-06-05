@@ -21,7 +21,7 @@ describe('fixtures catalog', () => {
   it('ships 14 fixtures across six materialized sub-modules', () => {
     expect(allFixtures.length).toBe(14);
     // Sanity: confirm the deleted canvas-mode + host-context fixtures
-    // (retired alongside the Render-identity flatten in Phase A) are
+    // (retired alongside the GguiSession-identity flatten in Phase A) are
     // not in the catalog under their old slugs.
     const names = new Set(allFixtures.map((f) => f.name));
     expect(names.has('canvas-bootstrap-mutual-exclusion')).toBe(false);

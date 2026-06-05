@@ -188,7 +188,7 @@ export interface ParsedServeFlags {
   /**
    * Disable the cross-restart persistence bundle. Without this flag,
    * `ggui serve` reads or mints the HMAC secrets (and, in later
-   * slices, RenderStore + ShortCodeIndex + VectorStore + paired
+   * slices, GguiSessionStore + ShortCodeIndex + VectorStore + paired
    * bearers) under `getPersistentDir(projectRoot)` so a server
    * restart doesn't invalidate cached `_meta["ai.ggui/render"].wsToken`
    * envelopes — claude.ai chat-history revisits keep working.
@@ -972,7 +972,7 @@ grows.
 First-run bundle (all on by default):
   - Landing page at /          — operator opens a browser and sees
                                   server identity + pair-code card.
-  - Render viewer at /r/<code>  — same-origin viewer for renders
+  - GguiSession viewer at /r/<code>  — same-origin viewer for renders
                                   minted by ggui_render; same-origin
                                   HTTP-only cookie authenticates the
                                   live-channel /ws upgrade.
@@ -1075,7 +1075,7 @@ Persistent storage (default-on; opt-out via --ephemeral):
       ├── ws-token-secret.hex       (HMAC, 0600)
       ├── render-signer-secret.hex  (HMAC, 0600)
       ├── short-codes.sqlite        (signed render-URL resolution)
-      ├── renders.sqlite            (RenderStore — renders + event history)
+      ├── renders.sqlite            (GguiSessionStore — renders + event history)
       ├── vectors.sqlite            (RAG corpus)
       └── keys.json                 (paired bearers)
 

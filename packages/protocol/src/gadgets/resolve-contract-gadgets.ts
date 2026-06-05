@@ -6,7 +6,7 @@
  * It carries identity only — `(package, export name)` — never
  * `version` or transport metadata. The operator's `App.gadgets`
  * catalog owns those; `filterDescriptorsToContract` snapshots the
- * referenced subset onto `ComponentRender.gadgetDescriptors` as a
+ * referenced subset onto `ComponentGguiSession.gadgetDescriptors` as a
  * sidecar.
  */
 import type {
@@ -112,7 +112,7 @@ export function listContractGadgets(
  * descriptor IS a package, and `App.gadgets` registers at most one
  * descriptor per package, so a package key resolves to exactly one
  * descriptor. The filtered list lands as a sidecar on
- * `ComponentRender.gadgetDescriptors`.
+ * `ComponentGguiSession.gadgetDescriptors`.
  *
  * Ordering: descriptors appear in the order their package key first
  * appears on `clientCapabilities.gadgets`. A package absent from

@@ -16,7 +16,7 @@ export interface ContentGroup {
   kind: 'text' | 'card' | 'other';
   authorRole: 'user' | 'agent';
   blocks: ContentBlock[];
-  /** For kind='card' only — a frozen Render extracted from the tool_result. */
+  /** For kind='card' only — a frozen GguiSession extracted from the tool_result. */
   cardSnapshot: unknown | null;
   /** Human-readable ~160-char preview (for chat-list lastMessagePreview). */
   textPreview: string;

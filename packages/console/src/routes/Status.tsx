@@ -66,7 +66,7 @@ interface ServerInfoResponse {
   };
 }
 
-interface RenderSummary {
+interface GguiSessionSummary {
   readonly renderId: string;
   readonly shortCode?: string;
   readonly appId: string;
@@ -75,8 +75,8 @@ interface RenderSummary {
   readonly status: 'active' | 'completed' | 'expired';
 }
 
-interface RendersResponse {
-  readonly renders: readonly RenderSummary[];
+interface GguiSessionsResponse {
+  readonly renders: readonly GguiSessionSummary[];
   readonly total: number;
 }
 
@@ -85,14 +85,14 @@ type InfoState =
   | { readonly kind: 'ok'; readonly info: ServerInfoResponse }
   | { readonly kind: 'error'; readonly message: string };
 
-type RendersState =
+type GguiSessionsState =
   | { readonly kind: 'loading' }
-  | { readonly kind: 'ok'; readonly data: RendersResponse }
+  | { readonly kind: 'ok'; readonly data: GguiSessionsResponse }
   | { readonly kind: 'error' };
 
 export function Status(): ReactElement {
   const [info, setInfo] = useState<InfoState>({ kind: 'loading' });
-  const [renders, setRenders] = useState<RendersState>({
+  const [renders, setRenders] = useState<GguiSessionsState>({
     kind: 'loading',
   });
 
@@ -128,7 +128,7 @@ export function Status(): ReactElement {
           setRenders({ kind: 'error' });
           return;
         }
-        const body = (await res.json()) as RendersResponse;
+        const body = (await res.json()) as GguiSessionsResponse;
         setRenders({ kind: 'ok', data: body });
       } catch {
         if (!controller.signal.aborted) setRenders({ kind: 'error' });
@@ -154,7 +154,7 @@ export function Status(): ReactElement {
           </>
         }
       />
-      <LiveRendersHero state={renders} />
+      <LiveGguiSessionsHero state={renders} />
       <div className="ggui-status-grid">
         <ServerCard state={info} />
         <PairingCard state={info} />
@@ -411,10 +411,10 @@ function StorageCard({
  * "what's live right now?" — one click away, first thing visible,
  * captures the common case (open latest) with a single button.
  */
-function LiveRendersHero({
+function LiveGguiSessionsHero({
   state,
 }: {
-  readonly state: RendersState;
+  readonly state: GguiSessionsState;
 }): ReactElement {
   if (state.kind === 'loading') {
     return (

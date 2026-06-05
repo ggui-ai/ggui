@@ -108,7 +108,7 @@ export interface UIGenerationResponse {
    * Populated by the generator when the component calls wire hooks
    * (`useAction('name')`, `useStream('channel')`) — the generator
    * extracts the call sites and emits a matching authoring-side
-   * envelope so downstream consumers (`ggui_render` → Render, console
+   * envelope so downstream consumers (`ggui_render` → GguiSession, console
    * inspectors, render-channel router) have the contract available.
    *
    * - When the caller supplied `UiGenerateInput.contract` that

@@ -196,7 +196,7 @@ export interface BuildMcpServerBackendOptions {
   /**
    * Generation wiring for `ggui_render`. When present, the OSS render
    * handler invokes the bound `UiGenerator` on every story-path
-   * call and commits real componentCode as a `Render`. Absent =
+   * call and commits real componentCode as a `GguiSession`. Absent =
    * placeholder mode: render mints renderIds + shortCodes but does
    * not produce componentCode.
    *
@@ -800,7 +800,7 @@ export function buildMcpServerBackend(opts: BuildMcpServerBackendOptions): Serve
     // Cross-restart HMAC secrets. Present iff the caller declared a
     // persistent dir. Both threaded so the next restart can verify
     // tokens minted by the previous run instead of regenerating per
-    // process. Render-signer.secret rides on the `renderSigning`
+    // process. GguiSession-signer.secret rides on the `renderSigning`
     // discriminated union (the `false` shape disables the layer
     // entirely; we always want it on here, so build the object form).
     ...(persistedWsTokenSecret !== undefined ? { wsTokenSecret: persistedWsTokenSecret } : {}),

@@ -85,7 +85,7 @@ async function handshakeOnly(args: {
 
 /**
  * Read the tool-level error message from a `tools/call` response.
- * Render validators throw → MCP wraps the throw as `result.isError: true`
+ * GguiSession validators throw → MCP wraps the throw as `result.isError: true`
  * with the message in `result.content[0].text`. Returns the message
  * string when present, or `null` when the response was a success.
  */

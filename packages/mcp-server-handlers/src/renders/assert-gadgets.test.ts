@@ -304,7 +304,7 @@ describe('filterDescriptorsToContract', () => {
   // `appGadgets` whose npm PACKAGE key is referenced by
   // `contract.clientCapabilities?.gadgets` — deduplicated, in
   // contract-ref insertion order. The wire stays the wire; resolved
-  // descriptors land as a sidecar on `Render.gadgetDescriptors`.
+  // descriptors land as a sidecar on `GguiSession.gadgetDescriptors`.
 
   it('returns an empty array when no clientCapabilities.gadgets declared', () => {
     const contract: DataContract = { propsSpec: { properties: {} } };

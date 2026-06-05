@@ -10,7 +10,7 @@
  *     event log into the right pane.
  *   - **Right**: scrubber over the picked render's event log.
  *     Slider walks `seq` from 1..N; current event card shows the
- *     full `RenderEvent.data` JSON in a `<pre>`. Prev / next /
+ *     full `GguiSessionEvent.data` JSON in a `<pre>`. Prev / next /
  *     jump-to-start / jump-to-end buttons. Empty state when no
  *     events.
  *
@@ -37,7 +37,7 @@ import {
 import { SectionHead } from '../brand/SectionHead.js';
 import { StatusBadge } from '../brand/StatusBadge.js';
 
-interface TimelineRenderSummary {
+interface TimelineGguiSessionSummary {
   readonly renderId: string;
   readonly appId: string;
   readonly createdAt: number;
@@ -46,12 +46,12 @@ interface TimelineRenderSummary {
   readonly streamSeq: number;
 }
 
-interface TimelineRendersResponse {
-  readonly renders: readonly TimelineRenderSummary[];
+interface TimelineGguiSessionsResponse {
+  readonly renders: readonly TimelineGguiSessionSummary[];
   readonly total: number;
 }
 
-interface TimelineRenderEvent {
+interface TimelineGguiSessionEvent {
   readonly seq: number;
   readonly type: string;
   /** ISO 8601 UTC timestamp stamped at append time. */
@@ -61,14 +61,14 @@ interface TimelineRenderEvent {
 
 interface TimelineEventsResponse {
   readonly renderId: string;
-  readonly events: readonly TimelineRenderEvent[];
+  readonly events: readonly TimelineGguiSessionEvent[];
   readonly streamSeq: number;
   readonly status: 'active' | 'completed' | 'expired' | 'unknown';
 }
 
-type RendersState =
+type GguiSessionsState =
   | { readonly kind: 'loading' }
-  | { readonly kind: 'ready'; readonly data: TimelineRendersResponse }
+  | { readonly kind: 'ready'; readonly data: TimelineGguiSessionsResponse }
   | { readonly kind: 'error'; readonly message: string };
 
 type EventsState =
@@ -86,7 +86,7 @@ type EventsState =
     };
 
 export function Timeline(): ReactElement {
-  const [renders, setRenders] = useState<RendersState>({ kind: 'loading' });
+  const [renders, setRenders] = useState<GguiSessionsState>({ kind: 'loading' });
   const [events, setEvents] = useState<EventsState>({ kind: 'idle' });
   const [pickedRenderId, setPickedRenderId] = useState<string | null>(null);
   const [scrubIndex, setScrubIndex] = useState(0);
@@ -108,7 +108,7 @@ export function Timeline(): ReactElement {
           });
           return;
         }
-        const body = (await res.json()) as TimelineRendersResponse;
+        const body = (await res.json()) as TimelineGguiSessionsResponse;
         setRenders({ kind: 'ready', data: body });
       } catch (err) {
         if (controller.signal.aborted) return;
@@ -176,13 +176,13 @@ export function Timeline(): ReactElement {
     <section className="ggui-section">
       <SectionHead
         num="DEVTOOLS / 7D"
-        title="Render timeline."
+        title="GguiSession timeline."
         mute="Snapshot."
         intro={
           <>
             Pick a render, then step through its event log
             chronologically. Each event carries the full
-            <code className="ggui-code"> RenderEvent.data </code>
+            <code className="ggui-code"> GguiSessionEvent.data </code>
             payload — useful for answering &ldquo;what was the UI
             state at event N?&rdquo; without a live tail.
           </>
@@ -197,7 +197,7 @@ export function Timeline(): ReactElement {
           alignItems: 'start',
         }}
       >
-        <RendersPane
+        <GguiSessionsPane
           state={renders}
           pickedRenderId={pickedRenderId}
           onPick={pickRender}
@@ -214,12 +214,12 @@ export function Timeline(): ReactElement {
 
 // ── Renders pane ──────────────────────────────────────────────────────
 
-function RendersPane({
+function GguiSessionsPane({
   state,
   pickedRenderId,
   onPick,
 }: {
-  readonly state: RendersState;
+  readonly state: GguiSessionsState;
   readonly pickedRenderId: string | null;
   readonly onPick: (renderId: string) => void;
 }): ReactElement {
@@ -250,7 +250,7 @@ function RendersPane({
           </p>
         ) : state.data.renders.length === 0 ? (
           <p className="ggui-muted" style={{ margin: 0, padding: 12 }}>
-            No renders yet. Render from an agent (
+            No renders yet. GguiSession from an agent (
             <code className="ggui-code">ggui_render</code>) to create one.
           </p>
         ) : (
@@ -264,7 +264,7 @@ function RendersPane({
             }}
           >
             {state.data.renders.map((render) => (
-              <RenderRow
+              <GguiSessionRow
                 key={render.renderId}
                 render={render}
                 selected={render.renderId === pickedRenderId}
@@ -278,12 +278,12 @@ function RendersPane({
   );
 }
 
-function RenderRow({
+function GguiSessionRow({
   render,
   selected,
   onClick,
 }: {
-  readonly render: TimelineRenderSummary;
+  readonly render: TimelineGguiSessionSummary;
   readonly selected: boolean;
   readonly onClick: () => void;
 }): ReactElement {
@@ -545,7 +545,7 @@ function EventsLoaded({
 function EventCard({
   event,
 }: {
-  readonly event: TimelineRenderEvent;
+  readonly event: TimelineGguiSessionEvent;
 }): ReactElement {
   return (
     <div

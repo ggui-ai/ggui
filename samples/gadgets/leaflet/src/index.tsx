@@ -124,7 +124,7 @@ function syncMarkers(
 }
 
 /**
- * Render an interactive Leaflet map. The component owns the container
+ * GguiSession an interactive Leaflet map. The component owns the container
  * `<div>`, the map lifecycle, and teardown — callers just pass props.
  */
 export function LeafletMap(props: LeafletMapProps): ReactElement {
@@ -217,9 +217,9 @@ export const leafletGadget = defineGadgetPackage({
       component: 'LeafletMap',
       impl: LeafletMap,
       description:
-        'Render an interactive Leaflet map with a tile layer, pan/zoom, and optional markers. The component owns the container, sizing, and lifecycle.',
+        'GguiSession an interactive Leaflet map with a tile layer, pan/zoom, and optional markers. The component owns the container, sizing, and lifecycle.',
       usage:
-        'Render `<LeafletMap center={[lat, lng]} zoom={2..20} />` when the intent names a rendered map (location browsing, route preview, delivery tracking, points-of-interest). Optional `markers={[{ lat, lng, label? }]}` plot pins; optional `tileUrl` swaps the OpenStreetMap default; optional `height` (default 400) sizes the map.',
+        'GguiSession `<LeafletMap center={[lat, lng]} zoom={2..20} />` when the intent names a rendered map (location browsing, route preview, delivery tracking, points-of-interest). Optional `markers={[{ lat, lng, label? }]}` plot pins; optional `tileUrl` swaps the OpenStreetMap default; optional `height` (default 400) sizes the map.',
       example: {
         componentSnippet:
           'function DeliveryMap({ center, deliveries }: Props) { return <LeafletMap center={center} zoom={12} markers={deliveries.map((d) => ({ id: d.id, lat: d.lat, lng: d.lng, label: d.label }))} />; }',

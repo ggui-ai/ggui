@@ -1,7 +1,7 @@
 /**
  * SqliteThreadStore tests.
  *
- * Two layers — same shape as the SqliteRenderStore suite:
+ * Two layers — same shape as the SqliteGguiSessionStore suite:
  *   1. The shared {@link threadStoreContract} suite — proves the
  *      SQLite adapter honors the same ownership, idempotency, seq,
  *      action-state, and observe semantics the in-memory reference

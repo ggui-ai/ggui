@@ -42,7 +42,7 @@ interface TasksPayload {
 export default function TodoList(): JSX.Element {
   const [draft, setDraft] = useState('');
 
-  // Render-bound subscription. The refresh tool (tasks_list) returns
+  // GguiSession-bound subscription. The refresh tool (tasks_list) returns
   // `{items: Task[]}` on every wired-action completion — the channel
   // is declared mode:'append', so `.latest` gives the most-recent
   // snapshot and `.all` carries the history. We read `.latest?.items`

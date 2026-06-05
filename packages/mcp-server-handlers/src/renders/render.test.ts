@@ -39,7 +39,7 @@ import { z } from 'zod';
 import {
   InMemoryBlueprintIndex,
   InMemoryKeyValueStore,
-  InMemoryRenderStore,
+  InMemoryGguiSessionStore,
   InMemoryVectorStore,
 } from '@ggui-ai/mcp-server-core/in-memory';
 import type {
@@ -49,7 +49,7 @@ import type {
 import {
   renderOutputSchema,
   type DataContract,
-  type ComponentRender,
+  type ComponentGguiSession,
 } from '@ggui-ai/protocol';
 import { blueprintKey, variantKey } from '@ggui-ai/protocol/blueprint-key';
 import * as matcherModule from './blueprint-matcher.js';
@@ -168,7 +168,7 @@ function makeSchemaCompatStub(): NonNullable<
 
 interface Harness {
   readonly handshakeStore: InMemoryKeyValueStore;
-  readonly renderStore: InMemoryRenderStore;
+  readonly renderStore: InMemoryGguiSessionStore;
   readonly vectorStore: InMemoryVectorStore;
   readonly index: InMemoryBlueprintIndex;
   readonly handler: ReturnType<typeof createGguiRenderHandler>;
@@ -176,14 +176,14 @@ interface Harness {
 
 function buildHandler(opts: {
   readonly handshakeStore: InMemoryKeyValueStore;
-  readonly renderStore: InMemoryRenderStore;
+  readonly renderStore: InMemoryGguiSessionStore;
   readonly vectorStore: InMemoryVectorStore;
   readonly index: InMemoryBlueprintIndex;
   readonly coldCode: string;
   /**
    * Optional schema-compat seam. When present it's threaded onto the
    * handler deps' `checkRenderContracts`, so cache-hit AND cold-gen
-   * commits run it against the projected `ComponentRender`. Default
+   * commits run it against the projected `ComponentGguiSession`. Default
    * tests omit it (the no-registry / zero-config case); the reuse ×
    * action-bearing-contract test passes a stub that replicates the real
    * cross-MCP escape hatch to exercise the seam the cache path drops.
@@ -263,7 +263,7 @@ async function buildAcceptCacheHarness(): Promise<{
   readonly handshakeId: string;
 }> {
   const handshakeStore = new InMemoryKeyValueStore();
-  const renderStore = new InMemoryRenderStore();
+  const renderStore = new InMemoryGguiSessionStore();
   const vectorStore = new InMemoryVectorStore();
   const index = new InMemoryBlueprintIndex();
 
@@ -330,7 +330,7 @@ async function buildAcceptCacheHarnessFor(
   readonly handshakeId: string;
 }> {
   const handshakeStore = new InMemoryKeyValueStore();
-  const renderStore = new InMemoryRenderStore();
+  const renderStore = new InMemoryGguiSessionStore();
   const vectorStore = new InMemoryVectorStore();
   const index = new InMemoryBlueprintIndex();
 
@@ -402,7 +402,7 @@ async function buildColdGenHarness(): Promise<{
   readonly handshakeId: string;
 }> {
   const handshakeStore = new InMemoryKeyValueStore();
-  const renderStore = new InMemoryRenderStore();
+  const renderStore = new InMemoryGguiSessionStore();
   const vectorStore = new InMemoryVectorStore();
   const index = new InMemoryBlueprintIndex();
 
@@ -484,13 +484,13 @@ describe('createGguiRenderHandler — cache-reuse point-read (Phase 2)', () => {
     expect(out.cache.reason).toContain(storedUuid);
 
     const stored = await harness.renderStore.get(out.renderId);
-    const render = stored?.render as ComponentRender | undefined;
+    const render = stored?.render as ComponentGguiSession | undefined;
     expect(render?.componentCode).toBe(STORED_CODE);
   });
 
   it('(d) a dangling matchedBlueprint.id self-heals to cold-gen (no throw)', async () => {
     const handshakeStore = new InMemoryKeyValueStore();
-    const renderStore = new InMemoryRenderStore();
+    const renderStore = new InMemoryGguiSessionStore();
     const vectorStore = new InMemoryVectorStore();
     const index = new InMemoryBlueprintIndex();
 
@@ -524,7 +524,7 @@ describe('createGguiRenderHandler — cache-reuse point-read (Phase 2)', () => {
     // Self-heal: falls through to cold-gen rather than throwing.
     expect(out.cache.hit).toBe(false);
     const stored = await renderStore.get(out.renderId);
-    const render = stored?.render as ComponentRender | undefined;
+    const render = stored?.render as ComponentGguiSession | undefined;
     expect(render?.componentCode).toBe(COLD_CODE);
   });
 
@@ -584,7 +584,7 @@ describe('createGguiRenderHandler — cache-reuse point-read (Phase 2)', () => {
     // The served component code is the COLD-GEN output, NOT the stored
     // blueprint's STORED_CODE (mirrors how test (c) reads the render).
     const stored = await harness.renderStore.get(out.renderId);
-    const render = stored?.render as ComponentRender | undefined;
+    const render = stored?.render as ComponentGguiSession | undefined;
     expect(render?.componentCode).toBe(COLD_CODE);
     expect(render?.componentCode).not.toBe(STORED_CODE);
 
@@ -600,7 +600,7 @@ describe('createGguiRenderHandler — cache-reuse point-read (Phase 2)', () => {
   //
   // The live bug: the cache-hit projection copies the matched
   // blueprint's actionSpec/streamSpec/propsSpec/contextSpec/
-  // clientCapabilities but DROPS agentCapabilities. commitCachedRender's
+  // clientCapabilities but DROPS agentCapabilities. commitCachedGguiSession's
   // schema-compat escape hatch reads cacheHit.agentCapabilities to exempt
   // a cross-MCP `nextStep` from the ggui-registry check — with the field
   // dropped, the exempt set is empty and any reused blueprint whose
@@ -700,11 +700,11 @@ describe('createGguiRenderHandler — seed-pool-aware reuse point-read', () => {
     readonly perAppRow?: { readonly componentCode: string };
   }): Promise<{
     readonly handler: ReturnType<typeof createGguiRenderHandler>;
-    readonly renderStore: InMemoryRenderStore;
+    readonly renderStore: InMemoryGguiSessionStore;
     readonly handshakeId: string;
   }> {
     const handshakeStore = new InMemoryKeyValueStore();
-    const renderStore = new InMemoryRenderStore();
+    const renderStore = new InMemoryGguiSessionStore();
     const vectorStore = new InMemoryVectorStore();
     const index = new InMemoryBlueprintIndex();
 
@@ -798,7 +798,7 @@ describe('createGguiRenderHandler — seed-pool-aware reuse point-read', () => {
     expect(out.blueprintId).toBe(uuid);
 
     const stored = await renderStore.get(out.renderId);
-    const render = stored?.render as ComponentRender | undefined;
+    const render = stored?.render as ComponentGguiSession | undefined;
     expect(render?.componentCode).toBe(SEED_CODE);
     expect(render?.componentCode).not.toBe(COLD_CODE);
   });
@@ -807,7 +807,7 @@ describe('createGguiRenderHandler — seed-pool-aware reuse point-read', () => {
     // This test guards the "capability-agnostic reuse" seam for blueprints
     // that live ONLY in a seed pool. Historically the §6 cache-hit
     // projection dropped `agentCapabilities` from the `cacheHit` arg passed
-    // to `commitCachedRender`, leaving the committed ComponentRender without
+    // to `commitCachedGguiSession`, leaving the committed ComponentGguiSession without
     // a capability catalog. Downstream consumers (schema-compat escape hatch,
     // iframe bootstrap-meta derivation) reading `agentCapabilities` from the
     // committed render would see an empty set, silently breaking cross-MCP
@@ -815,8 +815,8 @@ describe('createGguiRenderHandler — seed-pool-aware reuse point-read', () => {
     //
     // The fix (render.ts, the `...(blueprintHit.contract.agentCapabilities …)`
     // spread) projects the seed blueprint's capability catalog into cacheHit
-    // before it reaches `commitCachedRender`. `commitCachedRender` then
-    // projects `cacheHit.agentCapabilities` onto the ComponentRender it
+    // before it reaches `commitCachedGguiSession`. `commitCachedGguiSession` then
+    // projects `cacheHit.agentCapabilities` onto the ComponentGguiSession it
     // passes to `checkRenderContracts`. We capture what the hook receives
     // (the OUTPUT of the reuse projection) and assert the catalog is intact.
     //
@@ -851,7 +851,7 @@ describe('createGguiRenderHandler — seed-pool-aware reuse point-read', () => {
     };
 
     // Capture hook — mirrors makeSchemaCompatStub's typed parameter shape.
-    // `checkRenderContracts` receives the committed ComponentRender (the
+    // `checkRenderContracts` receives the committed ComponentGguiSession (the
     // reuse OUTPUT), and `shape.agentCapabilities` is the projected value.
     let capturedCaps: Parameters<
       NonNullable<GguiRenderHandlerDeps['checkRenderContracts']>
@@ -871,7 +871,7 @@ describe('createGguiRenderHandler — seed-pool-aware reuse point-read', () => {
     // Build the handler directly (mirrors buildSeedPoolHarness but adds the
     // capture hook). EMPTY per-app cache — blueprint lives ONLY in the pool.
     const handshakeStore = new InMemoryKeyValueStore();
-    const renderStore = new InMemoryRenderStore();
+    const renderStore = new InMemoryGguiSessionStore();
     const vectorStore = new InMemoryVectorStore();
     const index = new InMemoryBlueprintIndex();
     const handshakeId = 'hs-seed-agentcaps-1';
@@ -929,8 +929,8 @@ describe('createGguiRenderHandler — seed-pool-aware reuse point-read', () => {
     expect(out.cache.hit).toBe(true);
     expect(out.cache.cachedBlueprintId).toBe(uuid);
 
-    // `capturedCaps` was set by the capture hook when `commitCachedRender`
-    // called `checkRenderContracts` with the committed ComponentRender.
+    // `capturedCaps` was set by the capture hook when `commitCachedGguiSession`
+    // called `checkRenderContracts` with the committed ComponentGguiSession.
     // This is the OUTPUT of the projection — not the input contract.
     // Deep equality covers serverInfo.name verbatim (the narrowest sanity
     // we need; the hook's type uses Record<string,unknown> for tools values,
@@ -963,7 +963,7 @@ describe('createGguiRenderHandler — seed-pool-aware reuse point-read', () => {
     // Per-app-first: the per-app STORED_CODE is served, NOT the seed
     // pool's SEED_CODE.
     const stored = await renderStore.get(out.renderId);
-    const render = stored?.render as ComponentRender | undefined;
+    const render = stored?.render as ComponentGguiSession | undefined;
     expect(render?.componentCode).toBe(STORED_CODE);
     expect(render?.componentCode).not.toBe(SEED_CODE);
   });
@@ -974,7 +974,7 @@ describe('createGguiRenderHandler — variance-aware input reshape (Tasks 6+7)',
   function inputObject() {
     const handler = buildHandler({
       handshakeStore: new InMemoryKeyValueStore(),
-      renderStore: new InMemoryRenderStore(),
+      renderStore: new InMemoryGguiSessionStore(),
       vectorStore: new InMemoryVectorStore(),
       index: new InMemoryBlueprintIndex(),
       coldCode: COLD_CODE,
@@ -1093,7 +1093,7 @@ describe('createGguiRenderHandler — variance-aware input reshape (Tasks 6+7)',
     // The served code is the COLD-GEN output (the persona variant had no
     // stored component), not the default row's STORED_CODE.
     const stored = await harness.renderStore.get(out.renderId);
-    const render = stored?.render as ComponentRender | undefined;
+    const render = stored?.render as ComponentGguiSession | undefined;
     expect(render?.componentCode).toBe(COLD_CODE);
   });
 });
@@ -1109,7 +1109,7 @@ describe('createGguiRenderHandler — description (P2-25 CALL SHAPE)', () => {
   function description(): string {
     const handler = buildHandler({
       handshakeStore: new InMemoryKeyValueStore(),
-      renderStore: new InMemoryRenderStore(),
+      renderStore: new InMemoryGguiSessionStore(),
       vectorStore: new InMemoryVectorStore(),
       index: new InMemoryBlueprintIndex(),
       coldCode: COLD_CODE,

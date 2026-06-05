@@ -13,7 +13,7 @@
  *   - Consumer abandoning the iterator unregisters the subscriber
  *     (observable via `subscriberCount` when implementations expose it;
  *     the contract is enforced via a close-after-drop round-trip).
- *   - Render isolation — `publish({renderId: A})` never delivers to a
+ *   - GguiSession isolation — `publish({renderId: A})` never delivers to a
  *     subscriber of render B.
  */
 import { describe, expect, it } from 'vitest';

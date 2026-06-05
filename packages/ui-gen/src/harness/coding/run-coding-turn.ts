@@ -308,7 +308,7 @@ ${currentFile}
 
 ## Required this turn (non-negotiable)
 
-1. Render every required prop from the Props interface in the appropriate region
+1. GguiSession every required prop from the Props interface in the appropriate region
 2. Wire every hook to a real interactive element with the correct payload shape
 3. Add real content — text, labels, icons, variants — so the UI matches the user's request
 
@@ -340,7 +340,7 @@ ${currentFile}
 ## Required this turn (non-negotiable)
 
 1. JSX structure that parses — balanced tags, closed fragments, no stray braces
-2. Render every required prop from the Props interface
+2. GguiSession every required prop from the Props interface
 3. Wire every \`useAction\` / \`useStream\` / \`useGguiContext\` hook from the boilerplate to a visible element. If the contract declared \`clientCapabilities\`, the boilerplate emits a capability-hook call for each (e.g., \`const loc = useGeolocation();\`); call \`.start()\` from a UI control and render the result.
 
 ## Allowed to simplify (ONLY flourishes/polish — NOT core work above)

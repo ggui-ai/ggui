@@ -67,7 +67,7 @@ import { levenshtein } from "../ops-blueprint/persona-normalization.js";
 // Re-export the canonical resolver. The previous
 // `enrichContractGadgets` (which overlaid descriptors onto the
 // contract) is retired — the wire stays the wire; descriptors land
-// on `Render.gadgetDescriptors` as a sidecar. Keeps the
+// on `GguiSession.gadgetDescriptors` as a sidecar. Keeps the
 // existing `from '../renders/assert-gadgets'` import path
 // stable for downstream callers.
 export { filterDescriptorsToContract };
@@ -99,7 +99,7 @@ export interface PackageMismatchEntry {
 }
 
 /**
- * Render the "also failing" message tail listing the lower-priority
+ * GguiSession the "also failing" message tail listing the lower-priority
  * package misses, so a multi-category render surfaces every violation in
  * one rejection. Empty string when there is nothing else to report.
  */

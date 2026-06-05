@@ -6,7 +6,7 @@
  * against a live server that just did a real cold-gen.
  *
  * Flow:
- *   1. Render with a deterministic override-contract → cold-gen runs,
+ *   1. GguiSession with a deterministic override-contract → cold-gen runs,
  *      registry writes a `template:${contractKey}` row.
  *   2. GET `/ggui/console/blueprints/cached` → row appears with the
  *      new-shape fields (`contractKey`, `kind`, `cachedIntent`,
@@ -74,7 +74,7 @@ function bootstrapUrlFromRenderUrl(renderUrl: string | undefined): string {
   if (typeof renderUrl !== 'string') {
     throw new Error(`render output missing url: ${String(renderUrl)}`);
   }
-  // Render URL shape: `<base>/r/<shortCode>?sig=...&exp=...`. Rewrite the
+  // GguiSession URL shape: `<base>/r/<shortCode>?sig=...&exp=...`. Rewrite the
   // host to the local dev port, preserve the signed query. R4 retired
   // `/api/bootstrap/:shortCode`; content-negotiated `/r/:shortCode`
   // covers the same surface.

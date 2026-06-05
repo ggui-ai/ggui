@@ -16,7 +16,7 @@ const leafletDescriptor: GadgetDescriptor = {
   exports: [
     {
       hook: 'useLeafletMap',
-      description: 'Render an interactive Leaflet map.',
+      description: 'GguiSession an interactive Leaflet map.',
       usage: 'Mount when intent names a rendered map.',
     },
   ],
@@ -30,8 +30,8 @@ const chartDescriptor: GadgetDescriptor = {
   exports: [
     {
       component: 'Chart',
-      description: 'Render an SVG bar chart.',
-      usage: 'Render <Chart data={…} /> for a metric breakdown.',
+      description: 'GguiSession an SVG bar chart.',
+      usage: 'GguiSession <Chart data={…} /> for a metric breakdown.',
     },
     {
       hook: 'useChartTheme',

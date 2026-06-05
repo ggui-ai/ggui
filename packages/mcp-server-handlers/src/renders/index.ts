@@ -19,12 +19,12 @@
  *   - `assertActionContract(spec, value)` — same shape for inbound user
  *     actions (live-channel ingress).
  *
- *   Render mutation flow:
- *   - `applyRenderPatch({render, patch})` — pure update flow:
+ *   GguiSession mutation flow:
+ *   - `applyGguiSessionPatch({render, patch})` — pure update flow:
  *     enforce propsSpec, return the updated render.
  *
  *   Typed errors (each maps to a distinct enforcement concern):
- *   - `RenderNotFoundError` — render id missing or cross-tenant
+ *   - `GguiSessionNotFoundError` — render id missing or cross-tenant
  *   - `ChannelNotDeclaredError` — streamSpec or channel missing
  *   - `InvalidCompleteError` — `complete: true` on a non-completable channel
  *   - `ContractViolationError` (from `@ggui-ai/protocol`) — payload shape
@@ -32,10 +32,10 @@
  *     throw sites.
  */
 export {
-  applyRenderPatch,
-  type ApplyRenderPatchInput,
-  type ApplyRenderPatchResult,
-  type RenderTarget,
+  applyGguiSessionPatch,
+  type ApplyGguiSessionPatchInput,
+  type ApplyGguiSessionPatchResult,
+  type GguiSessionTarget,
 } from "./apply-render-patch.js";
 export { assertActionContract } from "./assert-action-contract.js";
 export {
@@ -93,7 +93,7 @@ export {
   InMemoryToolIdentityCatalogStore,
   type ToolIdentityCatalogStore,
 } from "./tool-identity-catalog-store.js";
-export { ChannelNotDeclaredError, InvalidCompleteError, RenderNotFoundError } from "./errors.js";
+export { ChannelNotDeclaredError, InvalidCompleteError, GguiSessionNotFoundError } from "./errors.js";
 export {
   clearGenerationCache,
   DEFAULT_CACHE_SIMILARITY_THRESHOLD,
@@ -113,17 +113,17 @@ export {
   handleStream,
   type HandleStreamDeps,
   type HandleStreamEnvelope,
-  type RenderStreamTarget,
+  type GguiSessionStreamTarget,
   type SendEnvelopeFn,
   type SendEnvelopeResult,
 } from "./handle-stream.js";
 export {
   createGguiListRendersHandler,
   type GguiListRendersHandlerDeps,
-  type RenderSummaryWire,
+  type GguiSessionSummaryWire,
 } from "./list-renders.js";
 export {
-  buildNoCredentialsRender,
+  buildNoCredentialsGguiSession,
   NO_CREDENTIALS_SYSTEM_CARD_KIND,
 } from "./no-credentials-card.js";
 export {
@@ -146,7 +146,7 @@ export {
   type GenerationCredentials,
   type GenerationDeps,
   type GguiRenderHandlerDeps,
-  type RenderPostSuccessArgs,
+  type GguiSessionPostSuccessArgs,
 } from "./render.js";
 export {
   applyRecordOp,
@@ -157,7 +157,7 @@ export {
   ReplayConflictError,
   replayFromBufferOp,
   ReplayMaxRetriesExceededError,
-  ReplayRenderNotFoundError,
+  ReplayGguiSessionNotFoundError,
   runSequencedRecord,
   type ApplyRecordResult,
   type BufferedReplayEnvelope,

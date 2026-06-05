@@ -40,7 +40,7 @@ describe('formatGadgetsSection — dynamic clientCapabilities table', () => {
         exports: [
           {
             hook: 'useLeafletMap',
-            description: 'Render an interactive Leaflet map.',
+            description: 'GguiSession an interactive Leaflet map.',
             usage: 'Mount when the intent names a rendered map.',
           },
         ],
@@ -63,12 +63,12 @@ describe('formatGadgetsSection — dynamic clientCapabilities table', () => {
         exports: [
           {
             hook: 'useStripeCheckout',
-            description: 'Render a Stripe Checkout session.',
+            description: 'GguiSession a Stripe Checkout session.',
           },
         ],
       },
     ]);
-    expect(section).toContain('Render a Stripe Checkout session.');
+    expect(section).toContain('GguiSession a Stripe Checkout session.');
   });
 
   it('returns a no-libraries hint when the catalog is empty', () => {
@@ -92,7 +92,7 @@ describe('formatGadgetsSection — dynamic clientCapabilities table', () => {
           exports: [
             {
               hook: 'useLeafletMap',
-              description: 'Render an interactive Leaflet map.',
+              description: 'GguiSession an interactive Leaflet map.',
             },
           ],
         },
@@ -138,7 +138,7 @@ describe('formatGadgetsSection — dynamic clientCapabilities table', () => {
           exports: [
             {
               hook: 'useLeafletMap',
-              description: 'Render an interactive Leaflet map.',
+              description: 'GguiSession an interactive Leaflet map.',
             },
           ],
         },
@@ -157,7 +157,7 @@ describe('formatGadgetsSection — dynamic clientCapabilities table', () => {
         exports: [
           {
             hook: 'useLeafletMap',
-            description: 'Render an interactive Leaflet map.',
+            description: 'GguiSession an interactive Leaflet map.',
           },
         ],
       },
@@ -174,15 +174,15 @@ describe('formatGadgetsSection — dynamic clientCapabilities table', () => {
         exports: [
           {
             component: 'LeafletMap',
-            description: 'Render an interactive Leaflet map.',
-            usage: 'Render when the intent names a rendered map.',
+            description: 'GguiSession an interactive Leaflet map.',
+            usage: 'GguiSession when the intent names a rendered map.',
           },
         ],
       },
     ]);
     expect(section).toContain('`LeafletMap`');
     expect(section).toContain('`@ggui-samples/gadget-leaflet`');
-    // Render-vs-call teaching — a component is mounted as JSX.
+    // GguiSession-vs-call teaching — a component is mounted as JSX.
     expect(section).toContain('RENDER it as a JSX element');
     expect(section).toContain('Do NOT call it like a hook');
   });
@@ -195,8 +195,8 @@ describe('formatGadgetsSection — dynamic clientCapabilities table', () => {
         exports: [
           {
             component: 'Chart',
-            description: 'Render an SVG bar chart.',
-            usage: 'Render for a metric breakdown.',
+            description: 'GguiSession an SVG bar chart.',
+            usage: 'GguiSession for a metric breakdown.',
           },
           {
             hook: 'useChartTheme',
@@ -222,7 +222,7 @@ describe('formatGadgetsSection — dynamic clientCapabilities table', () => {
         exports: [
           {
             component: 'LeafletMap',
-            description: 'Render an interactive Leaflet map.',
+            description: 'GguiSession an interactive Leaflet map.',
           },
         ],
       },
@@ -249,7 +249,7 @@ export declare function Chart(props: ChartProps): JSX.Element;
           package: '@ggui-samples/gadget-chart',
           version: '0.0.1',
           exports: [
-            { component: 'Chart', description: 'Render a bar chart.' },
+            { component: 'Chart', description: 'GguiSession a bar chart.' },
           ],
         },
       ],
@@ -267,7 +267,7 @@ export declare function Chart(props: ChartProps): JSX.Element;
       {
         package: '@ggui-samples/gadget-chart',
         version: '0.0.1',
-        exports: [{ component: 'Chart', description: 'Render a bar chart.' }],
+        exports: [{ component: 'Chart', description: 'GguiSession a bar chart.' }],
       },
     ]);
     expect(section).toContain('`Chart`');
@@ -296,7 +296,7 @@ describe('buildSystemPrompt — clientCapabilities section integration', () => {
           exports: [
             {
               hook: 'useLeafletMap',
-              description: 'Render an interactive Leaflet map.',
+              description: 'GguiSession an interactive Leaflet map.',
               usage:
                 'Mount when the intent names a rendered map (location browsing, route preview).',
             },

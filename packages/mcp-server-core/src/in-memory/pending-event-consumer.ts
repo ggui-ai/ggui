@@ -21,7 +21,7 @@
  * agent's long-poll loop terminates on the next consume.
  */
 
-import type { RenderStatus } from '@ggui-ai/protocol';
+import type { GguiSessionStatus } from '@ggui-ai/protocol';
 import {
   type PendingEventConsumeResult,
   type PendingEventConsumer,
@@ -30,7 +30,7 @@ import {
 
 interface PipeEntry {
   events: Array<Record<string, unknown>>;
-  status: RenderStatus;
+  status: GguiSessionStatus;
   lastActivityAt: number;
   expiresAt: number;
 }
@@ -93,7 +93,7 @@ export class InMemoryPendingEventConsumer implements PendingEventConsumer {
    * semantics — callers shouldn't have to guard against vanished
    * renders).
    */
-  markStatus(renderId: string, status: RenderStatus): void {
+  markStatus(renderId: string, status: GguiSessionStatus): void {
     const entry = this.pipes.get(renderId);
     if (!entry) return;
     entry.status = status;

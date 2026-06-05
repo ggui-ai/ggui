@@ -7,10 +7,10 @@
  * Behavior:
  *   - Resolves render via `renderStore.get(renderId)`.
  *   - Tenancy gate via `ctx.appId` — cross-tenant + missing both
- *     surface uniformly as {@link RenderNotFoundError}.
- *   - Returns the wire-shape `Render` payload directly (the
- *     {@link StoredRender} wrapper's lifecycle fields are already
- *     embedded on the render via `RenderBase` for component / system
+ *     surface uniformly as {@link GguiSessionNotFoundError}.
+ *   - Returns the wire-shape `GguiSession` payload directly (the
+ *     {@link StoredGguiSession} wrapper's lifecycle fields are already
+ *     embedded on the render via `GguiSessionBase` for component / system
  *     variants; the MCP-Apps variant is locator-only).
  *   - Optional heartbeat hook — when set, the handler invokes
  *     `heartbeat(renderId)` on every successful read so cloud's
@@ -20,27 +20,27 @@
  * Post-Phase-B (flatten-render-identity): collapsed from
  * `ggui_get_session` which projected a vessel-shape `SessionView`
  * (ISO timestamps + stack array). The wire response is now the
- * `Render` shape with epoch-ms timestamps + flat (no stack).
+ * `GguiSession` shape with epoch-ms timestamps + flat (no stack).
  */
 
 import { z } from 'zod';
-import type { Render, GguiGetRenderOutput } from '@ggui-ai/protocol';
+import type { GguiSession, GguiGetRenderOutput } from '@ggui-ai/protocol';
 import type {
-  RenderStore,
-  StoredRender,
+  GguiSessionStore,
+  StoredGguiSession,
 } from '@ggui-ai/mcp-server-core';
 import type { HandlerContext, SharedHandler } from '../types.js';
-import { RenderNotFoundError } from './errors.js';
+import { GguiSessionNotFoundError } from './errors.js';
 
 const inputSchema = {
   renderId: z
     .string()
     .min(1)
-    .describe('Render opaque id (UUID) — returned by ggui_render.'),
+    .describe('GguiSession opaque id (UUID) — returned by ggui_render.'),
 } as const;
 
 const outputSchema = {
-  // `Render` is a discriminated union; downstream typing comes from
+  // `GguiSession` is a discriminated union; downstream typing comes from
   // the typed `GguiGetRenderOutput` return shape — the raw record-
   // shaped zod schema here is just for runtime validation framing.
   id: z.string(),
@@ -65,7 +65,7 @@ export interface GetRenderHeartbeatResult {
 }
 
 export interface GguiGetRenderHandlerDeps {
-  readonly renderStore: RenderStore;
+  readonly renderStore: GguiSessionStore;
   /**
    * Optional activity-bump hook. When set, the handler calls this
    * after a successful read so the render's lastActivity / TTL stay
@@ -106,7 +106,7 @@ export function createGguiGetRenderHandler(
       if (!stored || stored.appId !== ctx.appId) {
         // Tenancy + missing both surface uniformly so cross-tenant
         // existence is not leaked.
-        throw new RenderNotFoundError(renderId);
+        throw new GguiSessionNotFoundError(renderId);
       }
 
       // Best-effort heartbeat — don't fail the read if the bump fails.
@@ -120,7 +120,7 @@ export function createGguiGetRenderHandler(
       }
 
       const overlayed = applyHeartbeatOverlay(stored, heartbeatResult);
-      return projectRender(overlayed);
+      return projectGguiSession(overlayed);
     },
   };
 }
@@ -130,9 +130,9 @@ export function createGguiGetRenderHandler(
  * wire response reflects post-heartbeat TTL.
  */
 function applyHeartbeatOverlay(
-  stored: StoredRender,
+  stored: StoredGguiSession,
   heartbeat: GetRenderHeartbeatResult | void,
-): StoredRender {
+): StoredGguiSession {
   if (!heartbeat) return stored;
   if (
     heartbeat.lastActivityAt === undefined &&
@@ -152,19 +152,19 @@ function applyHeartbeatOverlay(
 }
 
 /**
- * Project the {@link StoredRender} into the wire-shape `Render`.
+ * Project the {@link StoredGguiSession} into the wire-shape `GguiSession`.
  *
- * Component / system variants extend `RenderBase` which already
+ * Component / system variants extend `GguiSessionBase` which already
  * carries the lifecycle fields; we overlay the store's authoritative
  * `eventSequence` / `lastActivityAt` / `expiresAt` so a freshly-
  * minted render that hasn't been re-read since commit still surfaces
  * the latest values the store knows about.
  *
- * The MCP-Apps variant is locator-only (no `RenderBase` fields by
+ * The MCP-Apps variant is locator-only (no `GguiSessionBase` fields by
  * design); we surface it verbatim — clients reading `ui://ggui/render`
  * mounts have separate paths for MCP-Apps resources.
  */
-function projectRender(stored: StoredRender): Render {
+function projectGguiSession(stored: StoredGguiSession): GguiSession {
   const r = stored.render;
   if (r.type === 'mcpApps') {
     return r;

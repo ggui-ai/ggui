@@ -52,8 +52,8 @@ export interface App {
    * per-app values on the App row.
    *
    * Sits at layer 2 of the theme-resolution chain (see
-   * `Render.themeId` in `@ggui-ai/protocol` for the full ordering:
-   * Render.themeId > App.defaultThemeId > server fallback). Absent
+   * `GguiSession.themeId` in `@ggui-ai/protocol` for the full ordering:
+   * GguiSession.themeId > App.defaultThemeId > server fallback). Absent
    * ⇒ chain falls through to the server's built-in theme.
    */
   readonly defaultThemeId?: string;

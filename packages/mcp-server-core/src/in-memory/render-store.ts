@@ -1,5 +1,5 @@
 /**
- * InMemoryRenderStore — reference implementation of {@link RenderStore}.
+ * InMemoryGguiSessionStore — reference implementation of {@link GguiSessionStore}.
  *
  * Intended for tests, dev, and the OSS `@ggui-ai/mcp-server` in its
  * zero-config mode. No persistence, no cross-process fanout. Append
@@ -9,27 +9,27 @@
  * Production bindings (SQLite, Postgres LISTEN/NOTIFY, DDB+AppSync)
  * ship as separate packages and MUST pass `renderStoreContract`.
  */
-import type { Render } from '@ggui-ai/protocol';
+import type { GguiSession } from '@ggui-ai/protocol';
 import type {
   AppendEventInput,
-  CommitRenderInput,
-  CreateRenderInput,
+  CommitGguiSessionInput,
+  CreateGguiSessionInput,
   ObserveOptions,
-  RenderEvent,
-  RenderFilter,
-  RenderPatch,
-  RenderStore,
-  StoredRender,
+  GguiSessionEvent,
+  GguiSessionFilter,
+  GguiSessionPatch,
+  GguiSessionStore,
+  StoredGguiSession,
 } from '../render-store.js';
 
 interface RenderBucket {
-  stored: StoredRender;
-  events: RenderEvent[];
+  stored: StoredGguiSession;
+  events: GguiSessionEvent[];
   /** Tail subscribers waiting for the next event or for `delete`. */
-  waiters: Array<(e: RenderEvent | null) => void>;
+  waiters: Array<(e: GguiSessionEvent | null) => void>;
 }
 
-export interface InMemoryRenderStoreOptions {
+export interface InMemoryGguiSessionStoreOptions {
   /** Clock. Defaults to `Date.now`. Inject for deterministic tests. */
   now?: () => number;
   /** Id generator. Defaults to a counter-based "render-N" id. */
@@ -53,32 +53,32 @@ export interface InMemoryRenderStoreOptions {
 /** Sentinel for "effectively infinite" TTL — `Number.MAX_SAFE_INTEGER` ms. */
 const EFFECTIVELY_INFINITE_TTL_MS = Number.MAX_SAFE_INTEGER;
 
-export class InMemoryRenderStore implements RenderStore {
+export class InMemoryGguiSessionStore implements GguiSessionStore {
   private readonly buckets = new Map<string, RenderBucket>();
   private readonly now: () => number;
   private readonly idGenerator: () => string;
   private readonly defaultTtlMs: number;
   private idCounter = 0;
 
-  constructor(opts: InMemoryRenderStoreOptions = {}) {
+  constructor(opts: InMemoryGguiSessionStoreOptions = {}) {
     this.now = opts.now ?? Date.now;
     this.idGenerator = opts.idGenerator ?? (() => `render-${++this.idCounter}`);
     this.defaultTtlMs = opts.defaultTtlMs ?? EFFECTIVELY_INFINITE_TTL_MS;
   }
 
-  async create(input: CreateRenderInput): Promise<StoredRender> {
+  async create(input: CreateGguiSessionInput): Promise<StoredGguiSession> {
     const id = input.id ?? this.idGenerator();
     if (this.buckets.has(id)) {
       throw new Error(
-        `InMemoryRenderStore.create: render already exists: ${id}`,
+        `InMemoryGguiSessionStore.create: render already exists: ${id}`,
       );
     }
     const t = this.now();
-    // Placeholder ComponentRender — the visible-bits surface fills in
+    // Placeholder ComponentGguiSession — the visible-bits surface fills in
     // when `commit` runs at `ggui_render` time. The create path exists
     // so callers can mint a row + start streaming events before the
     // first commit.
-    const placeholder: Render = {
+    const placeholder: GguiSession = {
       type: 'component',
       id,
       appId: input.appId,
@@ -88,7 +88,7 @@ export class InMemoryRenderStore implements RenderStore {
       lastActivityAt: t,
       expiresAt: t + this.defaultTtlMs,
     };
-    const stored: StoredRender = {
+    const stored: StoredGguiSession = {
       id,
       appId: input.appId,
       userId: input.userId,
@@ -109,15 +109,15 @@ export class InMemoryRenderStore implements RenderStore {
     return cloneStored(stored);
   }
 
-  async get(id: string): Promise<StoredRender | null> {
+  async get(id: string): Promise<StoredGguiSession | null> {
     const bucket = this.buckets.get(id);
     if (!bucket) return null;
     return cloneStored(withStatus(bucket.stored, this.now()));
   }
 
-  async list(filter: RenderFilter): Promise<StoredRender[]> {
+  async list(filter: GguiSessionFilter): Promise<StoredGguiSession[]> {
     const now = this.now();
-    const out: StoredRender[] = [];
+    const out: StoredGguiSession[] = [];
     for (const bucket of this.buckets.values()) {
       const s = bucket.stored;
       if (filter.appId !== undefined && s.appId !== filter.appId) continue;
@@ -146,12 +146,12 @@ export class InMemoryRenderStore implements RenderStore {
     return out.slice(offset, offset + limit);
   }
 
-  async update(id: string, patch: RenderPatch): Promise<StoredRender> {
+  async update(id: string, patch: GguiSessionPatch): Promise<StoredGguiSession> {
     const bucket = this.buckets.get(id);
     if (!bucket) {
-      throw new Error(`InMemoryRenderStore.update: render not found: ${id}`);
+      throw new Error(`InMemoryGguiSessionStore.update: render not found: ${id}`);
     }
-    const merged: StoredRender = {
+    const merged: StoredGguiSession = {
       ...bucket.stored,
       ...(patch.lastActivityAt !== undefined
         ? { lastActivityAt: patch.lastActivityAt }
@@ -173,7 +173,7 @@ export class InMemoryRenderStore implements RenderStore {
     this.buckets.delete(id);
   }
 
-  async commit(input: CommitRenderInput): Promise<StoredRender> {
+  async commit(input: CommitGguiSessionInput): Promise<StoredGguiSession> {
     const { render: incoming } = input;
     const existing = this.buckets.get(incoming.id);
     const t = this.now();
@@ -181,7 +181,7 @@ export class InMemoryRenderStore implements RenderStore {
       // Replace visible-bits surface; preserve lifecycle fields owned
       // by the store (createdAt, eventSequence, identity slice captured
       // at create time).
-      const merged: StoredRender = {
+      const merged: StoredGguiSession = {
         ...existing.stored,
         lastActivityAt: t,
         render: incoming,
@@ -190,7 +190,7 @@ export class InMemoryRenderStore implements RenderStore {
       return cloneStored(merged);
     }
     // First-write — mint a fresh bucket using the supplied lifecycle slice.
-    const stored: StoredRender = {
+    const stored: StoredGguiSession = {
       id: incoming.id,
       appId: input.appId,
       userId: input.userId,
@@ -215,12 +215,12 @@ export class InMemoryRenderStore implements RenderStore {
     const bucket = this.buckets.get(input.renderId);
     if (!bucket) {
       throw new Error(
-        `InMemoryRenderStore.appendEvent: render not found: ${input.renderId}`,
+        `InMemoryGguiSessionStore.appendEvent: render not found: ${input.renderId}`,
       );
     }
     const seq = bucket.stored.eventSequence + 1;
     const nowMs = this.now();
-    const event: RenderEvent = {
+    const event: GguiSessionEvent = {
       seq,
       type: input.type,
       timestamp: new Date(nowMs).toISOString(),
@@ -242,7 +242,7 @@ export class InMemoryRenderStore implements RenderStore {
     sinceSeq: number,
     limit: number,
   ): Promise<{
-    readonly events: readonly RenderEvent[];
+    readonly events: readonly GguiSessionEvent[];
     readonly lastSequence: number;
     readonly hasMore: boolean;
     readonly horizonSeq: number;
@@ -257,7 +257,7 @@ export class InMemoryRenderStore implements RenderStore {
     if (sinceSeq < horizonSeq) {
       return { events: [], lastSequence, hasMore: false, horizonSeq };
     }
-    const filtered: RenderEvent[] = [];
+    const filtered: GguiSessionEvent[] = [];
     for (const event of bucket.events) {
       if (event.seq <= sinceSeq) continue;
       if (filtered.length >= limit) {
@@ -268,16 +268,16 @@ export class InMemoryRenderStore implements RenderStore {
     return { events: filtered, lastSequence, hasMore: false, horizonSeq };
   }
 
-  observe(id: string, opts: ObserveOptions = {}): AsyncIterable<RenderEvent> {
+  observe(id: string, opts: ObserveOptions = {}): AsyncIterable<GguiSessionEvent> {
     const fromSeq = opts.fromSeq ?? 1;
     const tail = opts.tail ?? true;
     const getBucket = (): RenderBucket | undefined => this.buckets.get(id);
     return {
-      [Symbol.asyncIterator](): AsyncIterator<RenderEvent> {
+      [Symbol.asyncIterator](): AsyncIterator<GguiSessionEvent> {
         let nextSeq = fromSeq;
         let done = false;
         return {
-          async next(): Promise<IteratorResult<RenderEvent>> {
+          async next(): Promise<IteratorResult<GguiSessionEvent>> {
             if (done) return { value: undefined, done: true };
             const bucket = getBucket();
             if (!bucket) {
@@ -293,7 +293,7 @@ export class InMemoryRenderStore implements RenderStore {
               done = true;
               return { value: undefined, done: true };
             }
-            const event = await new Promise<RenderEvent | null>((resolve) => {
+            const event = await new Promise<GguiSessionEvent | null>((resolve) => {
               bucket.waiters.push(resolve);
             });
             if (event === null) {
@@ -303,7 +303,7 @@ export class InMemoryRenderStore implements RenderStore {
             nextSeq = event.seq + 1;
             return { value: event, done: false };
           },
-          async return(): Promise<IteratorResult<RenderEvent>> {
+          async return(): Promise<IteratorResult<GguiSessionEvent>> {
             done = true;
             return { value: undefined, done: true };
           },
@@ -313,7 +313,7 @@ export class InMemoryRenderStore implements RenderStore {
   }
 }
 
-function cloneStored(s: StoredRender): StoredRender {
+function cloneStored(s: StoredGguiSession): StoredGguiSession {
   return {
     ...s,
     ...(s.endUserIdentity
@@ -323,12 +323,12 @@ function cloneStored(s: StoredRender): StoredRender {
   };
 }
 
-function withStatus(s: StoredRender, now: number): StoredRender {
+function withStatus(s: StoredGguiSession, now: number): StoredGguiSession {
   return { ...s, status: computeStatus(s, now) };
 }
 
 function computeStatus(
-  s: StoredRender,
+  s: StoredGguiSession,
   now: number,
 ): 'active' | 'expired' {
   if (s.expiresAt <= now) return 'expired';

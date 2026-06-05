@@ -1,5 +1,5 @@
 /**
- * RenderRenderer (RN) — provisional-branch tests.
+ * GguiSessionRenderer (RN) — provisional-branch tests.
  *
  * Mirrors the web test. Empty `componentCode` AND no `descriptor` →
  * routes through `ProvisionalRenderer` with the caller's fallback
@@ -11,7 +11,7 @@ import React from 'react';
 import { create, act, type ReactTestRenderer } from 'react-test-renderer';
 import { PREVIEW_CHANNEL } from '@ggui-ai/protocol';
 import type { StreamEnvelope } from '@ggui-ai/protocol';
-import { RenderRenderer } from './DynamicComponent';
+import { GguiSessionRenderer } from './DynamicComponent';
 import {
   __resetPreviewBridgeForTests,
   emitPreviewBridge,
@@ -58,7 +58,7 @@ function hasTestId(tree: ReactTestRenderer, id: string): boolean {
   }
 }
 
-describe('RenderRenderer (RN) — provisional branching', () => {
+describe('GguiSessionRenderer (RN) — provisional branching', () => {
   beforeEach(() => {
     __resetPreviewBridgeForTests();
   });
@@ -67,7 +67,7 @@ describe('RenderRenderer (RN) — provisional branching', () => {
     let tree: ReactTestRenderer;
     await act(async () => {
       tree = create(
-        React.createElement(RenderRenderer, {
+        React.createElement(GguiSessionRenderer, {
           render: { componentCode: '' },
           fallback: React.createElement(
             'View',
@@ -84,7 +84,7 @@ describe('RenderRenderer (RN) — provisional branching', () => {
     let tree: ReactTestRenderer;
     await act(async () => {
       tree = create(
-        React.createElement(RenderRenderer, {
+        React.createElement(GguiSessionRenderer, {
           render: { componentCode: '' },
         }),
       );
@@ -111,7 +111,7 @@ describe('RenderRenderer (RN) — provisional branching', () => {
     let tree: ReactTestRenderer;
     await act(async () => {
       tree = create(
-        React.createElement(RenderRenderer, {
+        React.createElement(GguiSessionRenderer, {
           render: {
             componentCode: '',
             descriptor: { type: 'TestUnknown' },

@@ -9,7 +9,7 @@
  * provider per stack item via `LegacyScopableWireConfig.scope()`) is
  * retired. Renders mount one-at-a-time inside `<GguiRender>`; the
  * scoping factory it composed against is gone. The replacement
- * `<RenderRenderer>` is a leaf — it consumes the ambient wire context
+ * `<GguiSessionRenderer>` is a leaf — it consumes the ambient wire context
  * established by `<GguiRender>` directly. The provisional path (empty
  * `componentCode`, A2UI preview channel) is preserved unchanged.
  */
@@ -46,24 +46,24 @@ export type DynamicComponentProps = ReactComponentRendererProps;
 export const DynamicComponent = ReactComponentRenderer;
 
 // ---------------------------------------------------------------------------
-// RenderRenderer
+// GguiSessionRenderer
 // ---------------------------------------------------------------------------
 
 /**
- * Render a single component-variant render.
+ * GguiSession a single component-variant render.
  *
  * Loose input shape (id + componentCode + props + caps + actionSpec +
  * contractHash) because callers — preview routes, ad-hoc viewers, the
- * shells — historically passed a fragment of {@link ComponentRender}
+ * shells — historically passed a fragment of {@link ComponentGguiSession}
  * rather than the full type. The shape is internally a superset of the
  * fields the renderer actually reads.
  *
  * @example
  * ```tsx
- * <RenderRenderer render={render} />
+ * <GguiSessionRenderer render={render} />
  * ```
  */
-export interface RenderRendererProps {
+export interface GguiSessionRendererProps {
   /** The render to display (component variant). */
   render: {
     id?: string;
@@ -88,13 +88,13 @@ export interface RenderRendererProps {
   themeId?: string;
 }
 
-export function RenderRenderer({
+export function GguiSessionRenderer({
   render,
   fallback,
   onError,
   cssOverrides,
   themeId,
-}: RenderRendererProps): React.JSX.Element {
+}: GguiSessionRendererProps): React.JSX.Element {
   const handleRepair = React.useCallback((error: Error) => {
     // Dispatch repair request — picked up by host shells which forward
     // it to the agent so it can re-generate with error context.

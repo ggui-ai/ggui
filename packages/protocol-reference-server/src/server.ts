@@ -10,7 +10,7 @@
  * no implicit `@ggui-ai/mcp-server` coupling.
  *
  * Wire-field note: the render identity field is the canonical SPEC
- * field `renderId` — see {@link Render} for the identity name used
+ * field `renderId` — see {@link GguiSession} for the identity name used
  * throughout this package.
  */
 import { createServer, type Server as HttpServer } from 'node:http';
@@ -19,7 +19,7 @@ import { PROTOCOL_SCHEMA_VERSION } from '@ggui-ai/protocol';
 import { WebSocketServer, type WebSocket } from 'ws';
 
 import { dispatchAction, parseActionFrame } from './action-router.js';
-import { RenderStore, type Subscriber } from './render.js';
+import { GguiSessionStore, type Subscriber } from './render.js';
 import { ToolRegistry } from './tool-registry.js';
 
 export interface ReferenceServerOptions {
@@ -54,7 +54,7 @@ export interface ReferenceServerOptions {
 }
 
 export class ReferenceServer {
-  readonly renders = new RenderStore();
+  readonly renders = new GguiSessionStore();
   readonly tools = new ToolRegistry();
 
   private readonly options: Required<ReferenceServerOptions>;
@@ -232,7 +232,7 @@ export class ReferenceServer {
     const payload = frame['payload'];
     if (payload === null || typeof payload !== 'object') return;
     const p = payload as Record<string, unknown>;
-    // Render-identity field: the canonical SPEC field `renderId`.
+    // GguiSession-identity field: the canonical SPEC field `renderId`.
     const renderId = typeof p['renderId'] === 'string' ? p['renderId'] : undefined;
     if (renderId === undefined) return;
     const appId = typeof p['appId'] === 'string' ? p['appId'] : 'conformance';

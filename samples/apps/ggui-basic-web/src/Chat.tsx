@@ -13,7 +13,7 @@ import { AppRenderer, type RequestHandlerExtra } from '@mcp-ui/client';
 import {
   useMcpAppsChat,
   type ChatEntry,
-  type RenderRef,
+  type GguiSessionRef,
   type ToolCallEntry,
   type UseMcpAppsChatResult,
 } from '@ggui-ai/react/chat-helpers';
@@ -468,7 +468,7 @@ function PanelView({
   getAuthToken,
   onAppMessage,
 }: {
-  renders: ReadonlyArray<RenderRef>;
+  renders: ReadonlyArray<GguiSessionRef>;
   sandboxUrl: string;
   agentEndpoint: string;
   getAuthToken: () => string | undefined;
@@ -497,7 +497,7 @@ function PanelView({
 }
 
 /**
- * Render one MCP-Apps resource. Mounts straight from the inlined
+ * GguiSession one MCP-Apps resource. Mounts straight from the inlined
  * resource `@ggui-ai/agent-server`'s tool-result interceptor stamped
  * on `_meta.ui.resource` (zero-round-trip mount). On rehydration the
  * `GET /agent` replay re-inlines each render FRESH from the MCP, so
@@ -513,7 +513,7 @@ function ResourceFrame({
   fillContainer = false,
   onAppMessage,
 }: {
-  item: RenderRef;
+  item: GguiSessionRef;
   sandboxUrl: string;
   agentEndpoint: string;
   getAuthToken: () => string | undefined;
@@ -527,7 +527,7 @@ function ResourceFrame({
 
   const sandbox = useMemo(() => {
     if (!inlinedCsp) return { url: new URL(sandboxUrl) };
-    // SandboxConfig wants mutable string[] arrays; the RenderRef
+    // SandboxConfig wants mutable string[] arrays; the GguiSessionRef
     // shape keeps them readonly so reassignment doesn't leak. Copy
     // here at the boundary.
     const csp: {
@@ -659,7 +659,7 @@ function ResourceFrame({
   );
 }
 
-function shortLabel(item: RenderRef): string {
+function shortLabel(item: GguiSessionRef): string {
   if (item.toolUseId !== undefined && item.toolUseId.length > 0) {
     return `#${item.toolUseId.slice(0, 12)}`;
   }

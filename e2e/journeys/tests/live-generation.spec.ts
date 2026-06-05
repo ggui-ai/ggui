@@ -95,7 +95,7 @@ import { createPerfRecorder, type PerfRecorder } from './perf-recorder';
  */
 const TEST_TIMEOUT_MS = 180_000;
 
-/** Render-wait budget — the RPC blocks on generation before responding. */
+/** GguiSession-wait budget — the RPC blocks on generation before responding. */
 const GENERATION_BUDGET_MS = 120_000;
 
 /**
@@ -271,7 +271,7 @@ test.describe.serial(
         waitUntil: 'networkidle',
       });
 
-      // 5. The console RenderViewer mounts the rendered UI inside a
+      // 5. The console GguiSessionViewer mounts the rendered UI inside a
       //    plain `<iframe srcDoc>` (read-only / visual-only — post
       //    C1-fix it no longer carries the `<McpAppIframe>` lifecycle-
       //    mirror attribute). Readiness is gated by the inner

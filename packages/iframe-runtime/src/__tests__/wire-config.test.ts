@@ -5,7 +5,7 @@
  * scope factory is gone. Each iframe mounts EXACTLY ONE render and
  * `buildRootWireConfig` returns a single `WireConfig` keyed by the
  * bootstrap's `renderId`. The active render's `actionSpec` resolves
- * through the `getCurrentRender` thunk on every dispatch so
+ * through the `getCurrentGguiSession` thunk on every dispatch so
  * props_update patches stay coherent without rebuilding the config.
  *
  * The audit-critical shape properties locked here:
@@ -14,7 +14,7 @@
  *      `schemaVersion`, and ride in a `{type:'action', payload: envelope}`
  *      WS frame.
  *   2. The active render's `actionSpec[name].nextStep` resolves on
- *      every dispatch via `getCurrentRender()`.
+ *      every dispatch via `getCurrentGguiSession()`.
  *   3. Validation violations route through `onContractViolation` +
  *      block the outbound send.
  *   4. Stream fan-out goes through the in-renderer StreamBus; wire's
@@ -26,8 +26,8 @@ import { describe, it, expect, vi } from 'vitest';
 import type {
   ActionEnvelope,
   ActionSpec,
-  ComponentRender,
-  Render,
+  ComponentGguiSession,
+  GguiSession,
   StreamEnvelope,
 } from '@ggui-ai/protocol';
 import type { WebSocketMessage } from '@ggui-ai/protocol/transport/websocket';
@@ -39,8 +39,8 @@ import {
 
 function makeRender(
   id: string,
-  overrides: Partial<ComponentRender> = {},
-): Render {
+  overrides: Partial<ComponentGguiSession> = {},
+): GguiSession {
   return {
     id,
     appId: 'app_x',
@@ -74,7 +74,7 @@ describe('buildRootWireConfig — envelope shape', () => {
     const cfg = buildRootWireConfig({
       renderId: 'render_001',
       appId: 'app_x',
-      getCurrentRender: () => render,
+      getCurrentGguiSession: () => render,
       manager: { send },
       streamBus: new StreamBus(),
     });
@@ -101,7 +101,7 @@ describe('buildRootWireConfig — envelope shape', () => {
     const cfg = buildRootWireConfig({
       renderId: 'render_001',
       appId: 'app_x',
-      getCurrentRender: () => makeRender('render_001'),
+      getCurrentGguiSession: () => makeRender('render_001'),
       manager: { send },
       streamBus: new StreamBus(),
     });
@@ -119,18 +119,18 @@ describe('buildRootWireConfig — envelope shape', () => {
 
 describe('buildRootWireConfig — active actionSpec resolution', () => {
   it('reads the active render\'s actionSpec on every dispatch (not snapshotted)', () => {
-    // Mutate the render reference returned by `getCurrentRender` to
+    // Mutate the render reference returned by `getCurrentGguiSession` to
     // simulate a props_update / re-mount that replaces actionSpec
     // mid-render. The wire config MUST see the new spec without
     // being rebuilt.
     const { send, messages } = makeFakeManager();
-    let activeRender: Render = makeRender('render_001', {
+    let activeRender: GguiSession = makeRender('render_001', {
       actionSpec: { submit: { label: 'Submit', nextStep: 'tool-v1' } },
     });
     const cfg = buildRootWireConfig({
       renderId: 'render_001',
       appId: 'app_x',
-      getCurrentRender: () => activeRender,
+      getCurrentGguiSession: () => activeRender,
       manager: { send },
       streamBus: new StreamBus(),
     });
@@ -167,7 +167,7 @@ describe('buildRootWireConfig — outbound validation', () => {
     const cfg = buildRootWireConfig({
       renderId: 'render_001',
       appId: 'app_x',
-      getCurrentRender: () => render,
+      getCurrentGguiSession: () => render,
       manager: { send },
       streamBus: new StreamBus(),
       onContractViolation,
@@ -193,7 +193,7 @@ describe('buildRootWireConfig — outbound validation', () => {
     const cfg = buildRootWireConfig({
       renderId: 'render_001',
       appId: 'app_x',
-      getCurrentRender: () => render,
+      getCurrentGguiSession: () => render,
       manager: { send },
       streamBus: new StreamBus(),
     });
@@ -374,7 +374,7 @@ describe('buildRootWireConfig — subscribe via StreamBus', () => {
     const cfg = buildRootWireConfig({
       renderId: 'render_001',
       appId: 'app_x',
-      getCurrentRender: () => null,
+      getCurrentGguiSession: () => null,
       manager: { send: vi.fn() },
       streamBus: bus,
     });

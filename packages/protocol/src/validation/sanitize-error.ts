@@ -16,7 +16,7 @@
 // renderChannel router pipes every `err.stack` through
 // {@link sanitizeCausedBy} before populating `causedBy`. Operators who
 // need stricter sanitization can inject their own function via
-// `createRenderChannelServer({ sanitizeCausedBy })`.
+// `createGguiSessionChannelServer({ sanitizeCausedBy })`.
 //
 // Scope: this is a DEFENSE-IN-DEPTH belt, not the sole line. Libraries
 // that handle secrets should already avoid embedding them in error
@@ -33,7 +33,7 @@
  * Each regex replaces the matched span with `[REDACTED]`. Replacement is
  * conservative — we'd rather over-redact than leak. Operators who need
  * finer control inject a custom sanitizer via
- * `createRenderChannelServer({ sanitizeCausedBy })`.
+ * `createGguiSessionChannelServer({ sanitizeCausedBy })`.
  */
 export const DEFAULT_CREDENTIAL_PATTERNS: readonly RegExp[] = [
   // Bearer / Basic header values. `Bearer <token>` / `Authorization: Basic <base64>`.
@@ -96,7 +96,7 @@ export function sanitizeCausedBy(
 
 /**
  * Signature of the sanitizer hook operators can inject into
- * `createRenderChannelServer`. Receives the raw stringified error
+ * `createGguiSessionChannelServer`. Receives the raw stringified error
  * (typically `err.stack`) and MUST return a safe-to-emit string.
  *
  * Defaults to {@link sanitizeCausedBy} when no override is supplied. A

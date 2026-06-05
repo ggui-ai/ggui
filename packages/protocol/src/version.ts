@@ -1543,11 +1543,11 @@
  *
  *   b1. **`Session` deleted.** The vessel-wrapping-a-stack-of-one model
  *      is gone. `SessionStackEntry` (the actual rendered thing) was
- *      promoted to a flat `Render` union (`ComponentRender | SystemRender
- *      | McpAppsRender`) and `SessionView` was retired. Conversation
+ *      promoted to a flat `GguiSession` union (`ComponentGguiSession | SystemGguiSession
+ *      | McpAppsGguiSession`) and `SessionView` was retired. Conversation
  *      grouping (sibling renders within one host chat) flows via the
  *      unchanged `_meta["ai.ggui/host-session"]` channel captured ONCE
- *      at render creation, NOT by lifting fields onto every Render.
+ *      at render creation, NOT by lifting fields onto every GguiSession.
  *
  *   b2. **`sessionId` + `stackItemId` → `renderId`.** One identifier on
  *      the wire (the two values were already the same once each render
@@ -1599,7 +1599,7 @@
  *      `StackItemSummary`, `EventSubscription`, `DEFAULT_SUBSCRIPTION`,
  *      `Action` re-export, lifecycle-event literals
  *      `lifecycle:stack_push`, `stack_pop`, `session_start`,
- *      `session_end`. `SessionSummaryWire` → `RenderSummaryWire`
+ *      `session_end`. `SessionSummaryWire` → `GguiSessionSummaryWire`
  *      (always-1 `stackItemCount` field deleted). Stack-navigation
  *      reducer (`stackNavigationReducer`, `initialNavigationState`,
  *      `StackNavigationState`, `StackNavigationAction`) deleted — no
@@ -1609,29 +1609,29 @@
  *      `ggui_new_session`: with the Session vessel gone, there is no
  *      entry-and-exit ceremony to bracket a render. Renders decay
  *      implicitly via TTL — created → active → expired. The
- *      `RenderStatus` union collapses from
+ *      `GguiSessionStatus` union collapses from
  *      `'active' | 'completed' | 'expired'` to `'active' | 'expired'`;
- *      the `'session.closed'` `RenderEventType` literal is gone (no
+ *      the `'session.closed'` `GguiSessionEventType` literal is gone (no
  *      terminal ledger event); `GguiCloseInput` / `GguiCloseOutput`
  *      types + `closeInputSchema` Zod schema deleted from the protocol
  *      surface. `notifyRenderClosed` observer-notifier seam, the
- *      `RenderStore`-side `closed` bucket flag + per-render-close revoke
+ *      `GguiSessionStore`-side `closed` bucket flag + per-render-close revoke
  *      paths (`shortCodeIndex.revokeByStackItemId`,
  *      `pendingEventConsumer.markDeleted`) all retire alongside.
  *      Agent-side: the long-poll loop terminates on TTL expiry rather
  *      than on an explicit terminal status.
  *
- *   b8. **SessionEvent dropped; RenderEvent is the single ledger
+ *   b8. **SessionEvent dropped; GguiSessionEvent is the single ledger
  *      primitive (Wave 7, 2026-05-28).** The protocol-side `SessionEvent`
  *      (sequence + emittedAt + type + payload) and the server-side
- *      `RenderEvent` (seq + timestamp[ms-epoch] + type + data) merge
- *      into one canonical `RenderEvent` owned by `@ggui-ai/protocol`.
+ *      `GguiSessionEvent` (seq + timestamp[ms-epoch] + type + data) merge
+ *      into one canonical `GguiSessionEvent` owned by `@ggui-ai/protocol`.
  *      Field shape: `seq + type + timestamp[ISO 8601 UTC string] +
- *      data`. `EventsResponse.events` now ships `ReadonlyArray<RenderEvent>`.
+ *      data`. `EventsResponse.events` now ships `ReadonlyArray<GguiSessionEvent>`.
  *      The WS replay frame discriminator renames
  *      `'session_event' → 'render_event'`; payload type follows the
- *      same shape. `@ggui-ai/mcp-server-core` re-exports `RenderEvent`
- *      / `RenderEventType` from `@ggui-ai/protocol` so downstream
+ *      same shape. `@ggui-ai/mcp-server-core` re-exports `GguiSessionEvent`
+ *      / `GguiSessionEventType` from `@ggui-ai/protocol` so downstream
  *      import paths stay stable. Sqlite + DDB stores stamp ISO
  *      strings on write; legacy numeric rows are coerced on read.
  *      Cross-deployment uniformity: the same field type ships from

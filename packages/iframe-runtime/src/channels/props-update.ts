@@ -5,7 +5,7 @@
  *
  * Post-stack-removal (2026-05-27): each iframe holds exactly one
  * mounted render. The handler reads the current render via
- * `getCurrentRender()`, validates the inbound props against its
+ * `getCurrentGguiSession()`, validates the inbound props against its
  * cached `propsSpec`, and re-applies the patched render through
  * `applyRender` — the same callback the render handler uses, so the
  * React update surface is unified.
@@ -14,7 +14,7 @@
  *   - `renderId` is empty or not a string.
  *   - `props` is null / not an object (defensive — server can't emit
  *     this shape, but the dispatcher routes the frame on type alone).
- *   - No render is currently mounted (`getCurrentRender` returns null).
+ *   - No render is currently mounted (`getCurrentGguiSession` returns null).
  *   - The current render's id doesn't match `payload.renderId` —
  *     the server may have raced ahead of an in-flight render swap.
  *   - The current render is `mcpApps` / `system` (no `propsSpec`;
@@ -32,9 +32,9 @@
 import type { ChannelHandler } from '@ggui-ai/live-channel';
 import type {
   PropsUpdatePayload,
-  Render,
+  GguiSession,
 } from '@ggui-ai/protocol';
-import type { RenderSeedInput } from '../types.js';
+import type { GguiSessionSeedInput } from '../types.js';
 
 import { validateInboundPropsPayload } from '../validation.js';
 
@@ -46,12 +46,12 @@ export interface PropsUpdateHandlerDeps {
    * `props_update` before the first render frame has no React tree to
    * patch.
    */
-  readonly getCurrentRender: () => Render | RenderSeedInput | null;
+  readonly getCurrentGguiSession: () => GguiSession | GguiSessionSeedInput | null;
   /**
    * Re-apply the patched render to the single mount slot. Shared with
    * the render-frame handler so React updates flow through one path.
    */
-  readonly applyRender: (render: Render | RenderSeedInput) => Promise<void>;
+  readonly applyRender: (render: GguiSession | GguiSessionSeedInput) => Promise<void>;
 }
 
 export function createPropsUpdateHandler(
@@ -64,7 +64,7 @@ export function createPropsUpdateHandler(
       if (typeof renderId !== 'string' || renderId.length === 0) return;
       if (props === null || typeof props !== 'object') return;
 
-      const current = deps.getCurrentRender();
+      const current = deps.getCurrentGguiSession();
       if (current === null) return;
       if (current.id !== renderId) return;
       if (current.type === 'mcpApps' || current.type === 'system') return;

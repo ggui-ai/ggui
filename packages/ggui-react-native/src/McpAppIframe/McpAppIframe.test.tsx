@@ -131,7 +131,7 @@ describe('dispatchHostBridgeRequest (RN shared switch)', () => {
 
   it('ui/initialize is invariant under ctx (Reading-B retired) — never carries toolOutput._meta', async () => {
     // The dispatcher no longer accepts a `meta` on the context.
-    // Render-meta now flows through the separate spec-canonical
+    // GguiSession-meta now flows through the separate spec-canonical
     // `ui/notifications/tool-result` notification (see the
     // `buildToolResultNotification` block below). This test pins the
     // adapter-boundary posture by asserting the response is the same

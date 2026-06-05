@@ -1,12 +1,12 @@
 /**
  * Per-render `WireConfig` factory for the renderer iframe.
  *
- * The renderer iframe mounts EXACTLY ONE {@link Render} per iframe
+ * The renderer iframe mounts EXACTLY ONE {@link GguiSession} per iframe
  * post-render-identity-collapse (2026-05-27). There is no per-item
  * scoping factory anymore — the WireConfig is built once at boot,
  * keyed by the bootstrap's `renderId`, and the active render's
  * `actionSpec` is wired in via the {@link buildRootWireConfig}'s
- * `getCurrentRender` thunk.
+ * `getCurrentGguiSession` thunk.
  *
  * Outbound dispatch uses `buildActionEnvelope` (from
  * `@ggui-ai/wire`) + `validateOutboundActionEnvelope` + a direct
@@ -18,10 +18,10 @@
 import type {
   ActionEnvelope,
   JsonValue,
-  Render,
+  GguiSession,
   StreamEnvelope,
 } from '@ggui-ai/protocol';
-import type { RenderSeedInput } from './types.js';
+import type { GguiSessionSeedInput } from './types.js';
 import {
   ClientContractViolationError,
   buildActionEnvelope,
@@ -101,7 +101,7 @@ const RESERVED_CHANNEL_REPLAY_MAX = 256;
  *   capped at {@link RESERVED_CHANNEL_REPLAY_MAX}. New subscribers
  *   receive the buffered envelopes synchronously before the unsubscribe
  *   handle returns — same mental model as the server-side
- *   `RenderStreamBuffer.replay(...)` walk over reserved channels at
+ *   `GguiSessionStreamBuffer.replay(...)` walk over reserved channels at
  *   ack time, but mirrored at the inner bus boundary so the host
  *   transport stays portable (Claude Desktop / ChatGPT / Cursor /
  *   `<McpAppIframe>` all behave the same).
@@ -184,13 +184,13 @@ export interface BuildRootWireConfigOptions {
   readonly renderId: string;
   readonly appId: string;
   /**
-   * Read the currently-mounted {@link Render}. The config's `dispatch`
+   * Read the currently-mounted {@link GguiSession}. The config's `dispatch`
    * resolves the active render's `actionSpec` through this thunk so
    * the `tool` + outbound validator stay coherent across props_update
    * patches (which replace the render reference) without rebuilding
    * the WireConfig.
    */
-  readonly getCurrentRender: () => Render | RenderSeedInput | null;
+  readonly getCurrentGguiSession: () => GguiSession | GguiSessionSeedInput | null;
   /** Handle to the renderer's WS manager; used for outbound `action` + `feedback` frames. */
   readonly manager: RendererSendSurface;
   /** Shared bus for inbound stream deliveries. */
@@ -271,7 +271,7 @@ export interface BuildRootWireConfigOptions {
  * Bootstraps the renderer's outbound emission + inbound subscription
  * seams. Returns a `WireConfig` keyed by the bootstrap's `renderId`;
  * the active render's `actionSpec` is resolved through the
- * {@link BuildRootWireConfigOptions.getCurrentRender} thunk on every
+ * {@link BuildRootWireConfigOptions.getCurrentGguiSession} thunk on every
  * dispatch so props_update patches don't require rebuilding the
  * config.
  *
@@ -324,7 +324,7 @@ export function buildRootWireConfig(
       // Per-render lifecycle: props_update patches replace the render
       // reference; reading through the thunk keeps the tool binding
       // + outbound validator coherent without rebuilding the config.
-      const currentRender = opts.getCurrentRender();
+      const currentRender = opts.getCurrentGguiSession();
       const activeActionSpec =
         currentRender !== null &&
         currentRender.type !== 'mcpApps' &&

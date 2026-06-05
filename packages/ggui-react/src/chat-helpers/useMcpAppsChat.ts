@@ -3,7 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type {
   ChatEntry,
   HostDisplayMode,
-  RenderRef,
+  GguiSessionRef,
   ToolCallEntry,
 } from './mcp-apps-chat-types';
 
@@ -128,7 +128,7 @@ export interface UseMcpAppsChatOptions {
  */
 export interface UseMcpAppsChatResult {
   readonly entries: ReadonlyArray<ChatEntry>;
-  readonly renders: ReadonlyArray<RenderRef>;
+  readonly renders: ReadonlyArray<GguiSessionRef>;
   /**
    * Most-recent host-side presentation hint stamped on a render, or
    * `undefined` when no render has yet carried one. Drives apps that
@@ -186,7 +186,7 @@ export interface UseMcpAppsChatResult {
  * The hook walks the SDK message stream and, for every `tool_result`
  * block, extracts the MCP-Apps standard `_meta.ui.resourceUri` (or the
  * legacy flat `_meta['ui/resourceUri']` form). Each unique resourceUri
- * becomes one {@link RenderRef} — dedupe is by URI alone, so re-emits
+ * becomes one {@link GguiSessionRef} — dedupe is by URI alone, so re-emits
  * of the same URI (after server-side state mutations such as a
  * `*_update` tool call) coalesce onto the same iframe entry. The host
  * mounts the iframe by passing `resourceUri` to
@@ -219,7 +219,7 @@ export function useMcpAppsChat(
   } = opts;
 
   const [entries, setEntries] = useState<ChatEntry[]>([]);
-  const [renders, setRenders] = useState<RenderRef[]>([]);
+  const [renders, setRenders] = useState<GguiSessionRef[]>([]);
   const [hostDisplayMode, setHostDisplayMode] = useState<
     HostDisplayMode | undefined
   >(undefined);
@@ -268,7 +268,7 @@ export function useMcpAppsChat(
     [],
   );
 
-  const addRender = useCallback((item: RenderRef) => {
+  const addRender = useCallback((item: GguiSessionRef) => {
     setRenders((prev) => {
       // Dedupe by resourceUri — re-emits (e.g. *_update returning the
       // same URI) coalesce onto the same iframe entry rather than
@@ -574,7 +574,7 @@ export function useMcpAppsChat(
  */
 interface HandleEventDeps {
   readonly append: (e: ChatEntry) => void;
-  readonly addRender: (r: RenderRef) => void;
+  readonly addRender: (r: GguiSessionRef) => void;
   readonly setHostDisplayMode: (mode: HostDisplayMode | undefined) => void;
   readonly patchToolCall: (
     toolUseId: string,
@@ -664,7 +664,7 @@ export function handleEvent(
     // SEP-1865 / SEP-2133. Legacy `_meta['ui/resourceUri']` flat key is
     // checked as a fallback for older shells.
     let resourceUri: string | undefined;
-    let inlinedResource: RenderRef['inlinedResource'];
+    let inlinedResource: GguiSessionRef['inlinedResource'];
     if (tmRaw !== null && typeof tmRaw === 'object') {
       const uiBlock = (tmRaw as { ui?: unknown }).ui;
       if (uiBlock !== null && typeof uiBlock === 'object') {
@@ -786,7 +786,7 @@ export function handleEvent(
       // addRender — `*_update`-style calls that return the same URI
       // coalesce onto the existing iframe.
       if (resourceUri === undefined) continue;
-      const item: RenderRef = {
+      const item: GguiSessionRef = {
         resourceUri,
         action: 'render',
         ...(toolUseId.length > 0 ? { toolUseId } : {}),
@@ -825,10 +825,10 @@ export function handleEvent(
 interface ChatSnapshotResponse {
   readonly chatId: string;
   readonly messages?: ReadonlyArray<unknown>;
-  readonly renders?: ReadonlyArray<RestoredRender>;
+  readonly renders?: ReadonlyArray<RestoredGguiSession>;
 }
 
-interface RestoredRender {
+interface RestoredGguiSession {
   readonly resourceUri: string;
   readonly action?: string;
   readonly toolUseId?: string;

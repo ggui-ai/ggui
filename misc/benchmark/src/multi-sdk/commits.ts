@@ -908,9 +908,9 @@ All data comes from props (recipient name, list of deliveries with lat/lng/eta/s
           {
             component: 'LeafletMap',
             description:
-              'Render an interactive Leaflet map with a tile layer, pan/zoom, and optional markers. The component owns the container, sizing, and lifecycle.',
+              'GguiSession an interactive Leaflet map with a tile layer, pan/zoom, and optional markers. The component owns the container, sizing, and lifecycle.',
             usage:
-              'Render `<LeafletMap center={[lat, lng]} zoom={2..20} />` when the intent names a rendered map (location browsing, route preview, delivery tracking, points-of-interest). Optional `markers={[{ lat, lng, label? }]}` plot pins; optional `height` (default 400) sizes the map.',
+              'GguiSession `<LeafletMap center={[lat, lng]} zoom={2..20} />` when the intent names a rendered map (location browsing, route preview, delivery tracking, points-of-interest). Optional `markers={[{ lat, lng, label? }]}` plot pins; optional `height` (default 400) sizes the map.',
             example: {
               componentSnippet:
                 'function DeliveryMap({ center, deliveries }: Props) { return <LeafletMap center={center} zoom={12} markers={deliveries.map((d) => ({ id: d.id, lat: d.lat, lng: d.lng, label: d.label }))} />; }',
@@ -1013,9 +1013,9 @@ All data comes from props (report title, list of quarters with a label and a rev
           {
             component: 'Chart',
             description:
-              'Render a responsive SVG bar chart. Each datum is a labelled magnitude; bars scale to the largest value.',
+              'GguiSession a responsive SVG bar chart. Each datum is a labelled magnitude; bars scale to the largest value.',
             usage:
-              'Render `<Chart data={[{ label, value }]} />` when the intent names a bar chart or a metric breakdown. Optional `height` (default 240) and `barColor`. The component owns the full SVG render — pass plain data, no refs.',
+              'GguiSession `<Chart data={[{ label, value }]} />` when the intent names a bar chart or a metric breakdown. Optional `height` (default 240) and `barColor`. The component owns the full SVG render — pass plain data, no refs.',
             example: {
               componentSnippet:
                 'function RevenuePanel({ quarters }: Props) { return <Chart data={quarters.map((q) => ({ label: q.label, value: q.revenue }))} height={260} />; }',

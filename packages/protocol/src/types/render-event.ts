@@ -1,5 +1,5 @@
 /**
- * RenderEvent ledger — wire-frame replay primitives (R7).
+ * GguiSessionEvent ledger — wire-frame replay primitives (R7).
  *
  * Core protocol-layer types backing the unified cursor-replay model.
  * The same ledger is read by:
@@ -16,7 +16,7 @@
  *
  * # Why this is core (not an integration)
  *
- * RenderEvent is the wire-frame ledger shape — the structural unit
+ * GguiSessionEvent is the wire-frame ledger shape — the structural unit
  * the live-channel transport replays. It sits at the same layer as
  * other transport-level types (`StreamEnvelope`, `AckPayload`). It is
  * NOT an MCP-Apps-integration-specific concept — it's the protocol's
@@ -25,12 +25,12 @@
  *
  * # Source of truth
  *
- * This is the canonical definition. The server-side `RenderStore`
+ * This is the canonical definition. The server-side `GguiSessionStore`
  * seam in `@ggui-ai/mcp-server-core` re-exports these types so
  * implementors (in-memory, sqlite, dynamo) all bind to the same
  * shape. Wave 7 (flatten-render-identity, 2026-05-28): merged the
  * earlier protocol-side `SessionEvent` (sequence + emittedAt + type +
- * payload) into the server-side RenderEvent shape (seq + timestamp +
+ * payload) into the server-side GguiSessionEvent shape (seq + timestamp +
  * type + data); one ledger primitive everywhere. `timestamp` carries
  * an ISO 8601 UTC string for cross-layer uniformity (was epoch-ms on
  * the server side).
@@ -48,7 +48,7 @@
  *
  * @public
  */
-export interface RenderEvent<TData = unknown> {
+export interface GguiSessionEvent<TData = unknown> {
   /**
    * Monotonic, gap-free per render. Starts at 1 for the first event;
    * `0` is the sentinel for "no events yet" / fresh subscriber.
@@ -56,7 +56,7 @@ export interface RenderEvent<TData = unknown> {
   readonly seq: number;
   /**
    * Wire-frame type. The canonical taxonomy lives at
-   * {@link RenderEventType} for type-discrimination ergonomics;
+   * {@link GguiSessionEventType} for type-discrimination ergonomics;
    * keeping the field as a plain string lets first-party servers mint
    * new types without a protocol bump.
    */
@@ -83,7 +83,7 @@ export interface RenderEvent<TData = unknown> {
  *
  * @public
  */
-export type RenderEventType =
+export type GguiSessionEventType =
   | 'ui.created'
   | 'ui.updated'
   | 'ui.committed'
@@ -98,7 +98,7 @@ export type RenderEventType =
  *   - `events` — strictly ascending by `seq`; only events with
  *     `seq > sinceSequence`, capped at `limit`.
  *   - `lastSequence` — the server's current high-water mark
- *     (`Render.eventSequence`), NOT the last event's seq in this
+ *     (`GguiSession.eventSequence`), NOT the last event's seq in this
  *     page. Clients use it to advance their cursor even when the
  *     page is empty.
  *   - `hasMore` — `true` when `limit` truncated the result. Clients
@@ -108,7 +108,7 @@ export type RenderEventType =
  * @public
  */
 export interface EventsResponse {
-  readonly events: ReadonlyArray<RenderEvent>;
+  readonly events: ReadonlyArray<GguiSessionEvent>;
   readonly lastSequence: number;
   readonly hasMore: boolean;
 }

@@ -401,7 +401,7 @@ describe('ggui.gadget.json — exports[] shape validation', () => {
         {
           component: 'WeatherCard',
           description: 'Renders a weather card.',
-          usage: 'Render to display current weather conditions.',
+          usage: 'GguiSession to display current weather conditions.',
           example: { render: '<WeatherCard />' },
         },
       ],
@@ -422,7 +422,7 @@ describe('ggui.gadget.json — exports[] shape validation', () => {
         {
           component: 'WeatherCard',
           description: 'Renders a weather card.',
-          usage: 'Render the card.',
+          usage: 'GguiSession the card.',
           example: { render: '<WeatherCard />' },
         },
       ],

@@ -1,27 +1,27 @@
 /**
- * RenderStore — persistent + observable per-render state.
+ * GguiSessionStore — persistent + observable per-render state.
  *
- * Post-Phase-B (flatten-render-identity): the store holds {@link Render}
+ * Post-Phase-B (flatten-render-identity): the store holds {@link GguiSession}
  * records directly. Each row IS one rendered surface (component, system
  * card, or MCP-Apps iframe); there is no vessel that wraps a stack of
  * entries. The vessel concept (`Session`) is deleted from the protocol.
  *
  * Reference implementations:
- *   - InMemoryRenderStore   (tests, dev)
- *   - SqliteRenderStore     (OSS default; live tail via in-process EventEmitter)
- *   - PostgresRenderStore   (optional; LISTEN/NOTIFY fanout)
- *   - DynamoRenderStore     (hosted runtime; AppSync subscriptions)
+ *   - InMemoryGguiSessionStore   (tests, dev)
+ *   - SqliteGguiSessionStore     (OSS default; live tail via in-process EventEmitter)
+ *   - PostgresGguiSessionStore   (optional; LISTEN/NOTIFY fanout)
+ *   - DynamoGguiSessionStore     (hosted runtime; AppSync subscriptions)
  *
  * Conversation-context lookups (sibling renders within one host
  * conversation) flow via the unchanged `hostSession` pair on each
- * {@link Render} — NOT by lifting fields from a vessel. See
+ * {@link GguiSession} — NOT by lifting fields from a vessel. See
  * [[session-concept-deletion-2026-05-27]] for the framing.
  */
 import type {
   HostContextProjection,
-  Render,
-  RenderEvent,
-  RenderEventType,
+  GguiSession,
+  GguiSessionEvent,
+  GguiSessionEventType,
 } from '@ggui-ai/protocol';
 
 // Re-export the protocol-level types so downstream importers
@@ -30,27 +30,27 @@ import type {
 // canonical definitions live in `@ggui-ai/protocol` (Wave 7 of
 // flatten-render-identity, 2026-05-28); these aliases preserve the
 // composition boundary without duplicating the types.
-export type { RenderEvent, RenderEventType } from '@ggui-ai/protocol';
+export type { GguiSessionEvent, GguiSessionEventType } from '@ggui-ai/protocol';
 
 /**
- * Server-side persisted shape of a {@link Render}. Wraps the protocol's
- * wire-shape `Render` union (which intentionally narrows
- * `McpAppsRender` to just locator metadata) with the lifecycle +
+ * Server-side persisted shape of a {@link GguiSession}. Wraps the protocol's
+ * wire-shape `GguiSession` union (which intentionally narrows
+ * `McpAppsGguiSession` to just locator metadata) with the lifecycle +
  * tenancy fields the server owns: `appId`, `userId`, `eventSequence`,
  * `createdAt`, `lastActivityAt`, `expiresAt`, `status?`,
  * `endUserIdentity?`, `themeId?`, `hostSession?`, `hostContext?`.
  *
- * Why a wrapper: `ComponentRender` and `SystemRender` extend
- * `RenderBase` which already carries these fields, but `McpAppsRender`
+ * Why a wrapper: `ComponentGguiSession` and `SystemGguiSession` extend
+ * `GguiSessionBase` which already carries these fields, but `McpAppsGguiSession`
  * is a separately-defined wire shape that intentionally OMITS them
  * (it represents an inbound spec-canonical resource from the agent;
  * no server lifecycle attached to the wire). The store needs a single
  * uniform shape regardless of variant.
  *
- * `render` is the wire-shape payload (any `Render` variant). The
+ * `render` is the wire-shape payload (any `GguiSession` variant). The
  * sibling fields are what the store stamps + maintains independently.
  */
-export interface StoredRender {
+export interface StoredGguiSession {
   readonly id: string;
   readonly appId: string;
   readonly userId?: string;
@@ -67,16 +67,16 @@ export interface StoredRender {
   readonly expiresAt: number;
   readonly status?: 'active' | 'expired';
   /**
-   * Visible-bits surface — the wire-shape `Render` payload (any
+   * Visible-bits surface — the wire-shape `GguiSession` payload (any
    * variant). When the store mints a placeholder via `create()` before
-   * any commit, `render` is a minimal `ComponentRender` with empty
+   * any commit, `render` is a minimal `ComponentGguiSession` with empty
    * `componentCode`; subsequent `commit()` replaces it.
    */
-  readonly render: Render;
+  readonly render: GguiSession;
 }
 
 /**
- * Options for {@link RenderStore.observe}.
+ * Options for {@link GguiSessionStore.observe}.
  */
 export interface ObserveOptions {
   /**
@@ -92,9 +92,9 @@ export interface ObserveOptions {
 }
 
 /**
- * Input for {@link RenderStore.create}.
+ * Input for {@link GguiSessionStore.create}.
  */
-export interface CreateRenderInput {
+export interface CreateGguiSessionInput {
   appId: string;
   userId?: string;
   /**
@@ -114,7 +114,7 @@ export interface CreateRenderInput {
    * implementations MUST persist it as-is and surface it on
    * subsequent `get()` calls.
    *
-   * Cloud's dynamoRenderStore reads this via a separate auth-gate
+   * Cloud's dynamoGguiSessionStore reads this via a separate auth-gate
    * write path today; threading it through `create()` here unifies
    * the surface and enables the conformance suite to pin round-trip
    * parity uniformly across impls.
@@ -122,7 +122,7 @@ export interface CreateRenderInput {
   endUserIdentity?: import('@ggui-ai/protocol').EndUserIdentity;
   /**
    * Theme preset id for this render — sits at layer 1 of the
-   * bootstrap-meta theme-resolution chain (Render.themeId >
+   * bootstrap-meta theme-resolution chain (GguiSession.themeId >
    * App.defaultThemeId > server fallback). Sourced from
    * `ggui_render`'s `themeId?` input or the per-app
    * `App.defaultThemeId` default. Persisted across restart by stores
@@ -150,9 +150,9 @@ export interface CreateRenderInput {
 }
 
 /**
- * Filter for {@link RenderStore.list}.
+ * Filter for {@link GguiSessionStore.list}.
  */
-export interface RenderFilter {
+export interface GguiSessionFilter {
   appId?: string;
   userId?: string;
   status?: 'active' | 'expired';
@@ -171,18 +171,18 @@ export interface RenderFilter {
    * Filter by the host-supplied grouping key. Typically paired with
    * {@link hostName} so the same host-side id across two different
    * hosts cannot alias. Matches the persisted slice from
-   * {@link CreateRenderInput.hostSession}; renders without a host
+   * {@link CreateGguiSessionInput.hostSession}; renders without a host
    * slice never match (one-shot rows are non-rehydratable).
    */
   hostSessionId?: string;
 }
 
 /**
- * Patch shape for {@link RenderStore.update}. Partial; only fields present
+ * Patch shape for {@link GguiSessionStore.update}. Partial; only fields present
  * are updated. Writing an event is NOT done through `update` — use
  * `appendEvent`.
  */
-export interface RenderPatch {
+export interface GguiSessionPatch {
   lastActivityAt?: number;
   expiresAt?: number;
   /**
@@ -190,7 +190,7 @@ export interface RenderPatch {
    * Wire path: client →
    * `host_context_observed` live-channel message → server inbound
    * handler → `update(renderId, { hostContext })` → persisted on
-   * `Render.hostContext`. Idempotent overwrite; merge logic lives
+   * `GguiSession.hostContext`. Idempotent overwrite; merge logic lives
    * client-side in `host-context-emitter`.
    */
   hostContext?: HostContextProjection;
@@ -202,12 +202,12 @@ export interface RenderPatch {
  */
 export interface AppendEventInput {
   renderId: string;
-  type: RenderEventType;
+  type: GguiSessionEventType;
   data: unknown;
 }
 
 /**
- * Input for {@link RenderStore.commit} — the full Render payload
+ * Input for {@link GguiSessionStore.commit} — the full GguiSession payload
  * mints/replaces in one call. A render IS the top-level row, so
  * committing the visible-bits surface is just an upsert on the row
  * itself.
@@ -226,8 +226,8 @@ export interface AppendEventInput {
  * the write either way and surface lifecycle exclusively via the
  * `status` field on subsequent reads.
  */
-export interface CommitRenderInput {
-  render: Render;
+export interface CommitGguiSessionInput {
+  render: GguiSession;
   /**
    * Carries the tenancy + identity slice when the row doesn't yet
    * exist. Required so first-write `commit` calls can mint the row
@@ -243,22 +243,22 @@ export interface CommitRenderInput {
   };
 }
 
-export interface RenderStore {
-  create(input: CreateRenderInput): Promise<StoredRender>;
-  get(id: string): Promise<StoredRender | null>;
-  list(filter: RenderFilter): Promise<StoredRender[]>;
-  update(id: string, patch: RenderPatch): Promise<StoredRender>;
+export interface GguiSessionStore {
+  create(input: CreateGguiSessionInput): Promise<StoredGguiSession>;
+  get(id: string): Promise<StoredGguiSession | null>;
+  list(filter: GguiSessionFilter): Promise<StoredGguiSession[]>;
+  update(id: string, patch: GguiSessionPatch): Promise<StoredGguiSession>;
   delete(id: string): Promise<void>;
 
   /**
-   * Upsert a render row with the supplied {@link Render} payload. Used
+   * Upsert a render row with the supplied {@link GguiSession} payload. Used
    * by `ggui_render` at commit time — the agent has produced the full
    * render shape and the server persists it.
    *
-   * See {@link CommitRenderInput} for the create-vs-replace behavior.
+   * See {@link CommitGguiSessionInput} for the create-vs-replace behavior.
    * Returns the committed render.
    */
-  commit(input: CommitRenderInput): Promise<StoredRender>;
+  commit(input: CommitGguiSessionInput): Promise<StoredGguiSession>;
 
   /** Write a new event and return the assigned `seq`. */
   appendEvent(input: AppendEventInput): Promise<number>;
@@ -274,7 +274,7 @@ export interface RenderStore {
    *   - `events` — strictly ascending by `seq`, only entries with
    *     `seq > sinceSeq`, up to `limit` items.
    *   - `lastSequence` — the render's current high-water mark
-   *     (`Render.eventSequence`) regardless of pagination. Clients use
+   *     (`GguiSession.eventSequence`) regardless of pagination. Clients use
    *     this to advance their cursor on empty pages.
    *   - `hasMore` — `true` when the page was truncated by `limit`.
    *   - `horizonSeq` — the lowest `seq` the implementation can still
@@ -295,7 +295,7 @@ export interface RenderStore {
     sinceSeq: number,
     limit: number,
   ): Promise<{
-    readonly events: readonly RenderEvent[];
+    readonly events: readonly GguiSessionEvent[];
     readonly lastSequence: number;
     readonly hasMore: boolean;
     readonly horizonSeq: number;
@@ -326,5 +326,5 @@ export interface RenderStore {
    *   via TTL, and a consumer of an expired render simply stops
    *   receiving new entries (the historical replay is still served).
    */
-  observe(id: string, opts?: ObserveOptions): AsyncIterable<RenderEvent>;
+  observe(id: string, opts?: ObserveOptions): AsyncIterable<GguiSessionEvent>;
 }

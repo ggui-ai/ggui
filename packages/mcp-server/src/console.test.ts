@@ -839,7 +839,7 @@ describe('createGguiServer — console security headers', () => {
  *   2. POST /ggui/console/render-cookie → 200 + Set-Cookie.
  *   3. WebSocket upgrade to /ws carrying the cookie.
  *   4. subscribe → ack (cookie-bound, no bearer in sight).
- *   5. server-side sendToRender → subscriber receives the data frame.
+ *   5. server-side sendToGguiSession → subscriber receives the data frame.
  *
  * Tests the integration across packages (mcp-server-core short-code
  * index + mcp-server console routes + mcp-server render-channel
@@ -863,7 +863,7 @@ describe('createGguiServer — console full ceremony integration', () => {
     }
   });
 
-  it('short-code → cookie mint → WS subscribe → sendToRender delivers to subscriber', async () => {
+  it('short-code → cookie mint → WS subscribe → sendToGguiSession delivers to subscriber', async () => {
     const { InMemoryShortCodeIndex } = await import(
       '@ggui-ai/mcp-server-core/in-memory'
     );
@@ -942,7 +942,7 @@ describe('createGguiServer — console full ceremony integration', () => {
     // union (server defaults compose the A2UI validator via Item 4
     // injection). Use the smallest valid shape — `deleteSurface` — so
     // the test proves fan-out wiring without coupling to a fake payload.
-    await fx.server.renderChannel!.sendToRender({
+    await fx.server.renderChannel!.sendToGguiSession({
       renderId: 'sess-42',
       channel: '_ggui:preview',
       mode: 'append',
@@ -1021,7 +1021,7 @@ describe('createGguiServer — console full ceremony integration', () => {
     ws.on('message', (raw: Buffer) => {
       frames.push(JSON.parse(String(raw)));
     });
-    await fx.server.renderChannel!.sendToRender({
+    await fx.server.renderChannel!.sendToGguiSession({
       renderId: 'sess-42', // the cookie's real render
       channel: '_ggui:preview',
       mode: 'append',

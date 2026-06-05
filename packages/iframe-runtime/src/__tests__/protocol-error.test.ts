@@ -34,7 +34,7 @@ import type {
   WebSocketMessage,
 } from '@ggui-ai/protocol/transport/websocket';
 import type { McpAppAiGguiRenderMeta } from '@ggui-ai/protocol/integrations/mcp-apps';
-import type { Render } from '@ggui-ai/protocol';
+import type { GguiSession } from '@ggui-ai/protocol';
 import { ChannelRegistry } from '@ggui-ai/live-channel';
 import {
   ClientContractViolationError,
@@ -167,7 +167,7 @@ describe('protocol-error constructors', () => {
 // (1) buildRootWireConfig — client-contract violations → onProtocolError
 // =============================================================================
 
-function makeRender(id: string, overrides: Partial<Render> = {}): Render {
+function makeRender(id: string, overrides: Partial<GguiSession> = {}): GguiSession {
   return {
     id,
     appId: 'app_x',
@@ -178,7 +178,7 @@ function makeRender(id: string, overrides: Partial<Render> = {}): Render {
     lastActivityAt: Date.now(),
     expiresAt: Date.now() + 60_000,
     ...overrides,
-  } as Render;
+  } as GguiSession;
 }
 
 function makeFakeManager(): { send: ReturnType<typeof vi.fn> } {
@@ -203,7 +203,7 @@ describe('buildRootWireConfig — onProtocolError', () => {
     const cfg = buildRootWireConfig({
       renderId: 'render_001',
       appId: 'a1',
-      getCurrentRender: () => render,
+      getCurrentGguiSession: () => render,
       manager: { send },
       streamBus: new StreamBus(),
       onProtocolError,
@@ -237,7 +237,7 @@ describe('buildRootWireConfig — onProtocolError', () => {
     const cfg = buildRootWireConfig({
       renderId: 'render_001',
       appId: 'a1',
-      getCurrentRender: () => render,
+      getCurrentGguiSession: () => render,
       manager: { send },
       streamBus: new StreamBus(),
     });

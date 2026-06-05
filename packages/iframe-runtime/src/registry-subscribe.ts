@@ -81,7 +81,7 @@ export interface RegistrySubscribeHandle {
  */
 export interface ConnectViaRegistryOptions {
   /**
-   * Render slice (`McpAppAiGguiRenderMeta`) — the live-channel
+   * GguiSession slice (`McpAppAiGguiRenderMeta`) — the live-channel
    * credentials this subscribe path actually needs: `renderId`,
    * `appId`, `wsUrl`, `wsToken`. The rest of the slice (codeUrl /
    * propsJson / contextSlots / etc.) is load-bearing only for the

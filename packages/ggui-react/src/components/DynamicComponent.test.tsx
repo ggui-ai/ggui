@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor, act } from '@testing-library/react';
-import { DynamicComponent, RenderRenderer } from './DynamicComponent';
+import { DynamicComponent, GguiSessionRenderer } from './DynamicComponent';
 
 // Mock URL.createObjectURL/revokeObjectURL
 const mockUrls = new Map<string, string>();
@@ -153,10 +153,10 @@ describe('DynamicComponent', () => {
 
 });
 
-describe('RenderRenderer', () => {
+describe('GguiSessionRenderer', () => {
   it('renders blueprint without controller', () => {
     const { container } = render(
-      <RenderRenderer
+      <GguiSessionRenderer
         render={{
           componentCode: 'export default function Template() { return "template"; }',
         }}
@@ -169,7 +169,7 @@ describe('RenderRenderer', () => {
 
   it('renders with props passed to blueprint', () => {
     const { container } = render(
-      <RenderRenderer
+      <GguiSessionRenderer
         render={{
           componentCode: 'export default function Template() { return "template"; }',
           props: { city: 'London' },
@@ -185,7 +185,7 @@ describe('RenderRenderer', () => {
     const onError = vi.fn();
 
     render(
-      <RenderRenderer
+      <GguiSessionRenderer
         render={{
           componentCode: 'invalid',
         }}
@@ -199,7 +199,7 @@ describe('RenderRenderer', () => {
 
   it('passes fallback to DynamicComponent', () => {
     render(
-      <RenderRenderer
+      <GguiSessionRenderer
         render={{
           componentCode: 'export default function() { return "hi"; }',
         }}

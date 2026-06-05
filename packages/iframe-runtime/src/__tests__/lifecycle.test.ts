@@ -23,7 +23,7 @@
  * the spec-canonical `ui/notifications/tool-result` notification.
  */
 import { describe, it, expect, vi, type Mock } from 'vitest';
-import type { Render } from '@ggui-ai/protocol';
+import type { GguiSession } from '@ggui-ai/protocol';
 import type {
   McpAppAiGguiRenderMeta,
   McpAppLifecycleEvent,
@@ -55,7 +55,7 @@ function notifyParentCalls(mock: Mock): unknown[] {
 /**
  * Build a happy-path `connectFn` returning the supplied render on ack.
  */
-function buildHappyConnect(render: Render): ConnectFn {
+function buildHappyConnect(render: GguiSession): ConnectFn {
   return async () => ({
     handle: {
       kind: 'ws' as const,
@@ -174,7 +174,7 @@ const VALID_META: McpAppAiGguiRenderMeta = {
   runtimeUrl: '/_ggui/iframe-runtime.js',
 };
 
-function makeRender(id: string): Render {
+function makeRender(id: string): GguiSession {
   return {
     id,
     appId: 'app_001',

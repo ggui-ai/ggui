@@ -1,13 +1,13 @@
 /**
  * Pure replay-policy operations — the stateless core of the
- * `RenderStreamBuffer` contract.
+ * `GguiSessionStreamBuffer` contract.
  *
  * These helpers drive both OSS (in-memory ring) and hosted (DDB-backed
- * Render row) implementations from a single set of rules. They take
+ * GguiSession row) implementations from a single set of rules. They take
  * the current buffer state as input and return the next state + the
  * stamped envelope — no IO, no allocation of storage adapters.
  *
- * Shape mirrors `@ggui-ai/mcp-server-core`'s `InMemoryRenderStreamBuffer`
+ * Shape mirrors `@ggui-ai/mcp-server-core`'s `InMemoryGguiSessionStreamBuffer`
  * semantics one-for-one:
  *
  *   - `'none'`: seq is still assigned (so fan-out has a stable cursor),
@@ -23,7 +23,7 @@
  *
  * Why this lives in `@ggui-ai/mcp-server-handlers` (below core in the
  * layering): pure logic with no storage shape assumption, callable by
- * both the OSS `RenderStreamBuffer` adapter and the hosted Lambda/pod
+ * both the OSS `GguiSessionStreamBuffer` adapter and the hosted Lambda/pod
  * DDB adapter. Keeps the replay contract single-source, independent
  * of where the buffer physically sits.
  *
@@ -226,7 +226,7 @@ export function applyRecordOp(
 /**
  * Return the envelopes a reconnecting subscriber should receive.
  *
- * Rules — mirror the OSS `RenderStreamBuffer.replay` contract:
+ * Rules — mirror the OSS `GguiSessionStreamBuffer.replay` contract:
  *
  *   - `fromSeq === undefined` (fresh subscribe) → empty envelopes;
  *     caller transitions straight to the live tail.
@@ -305,7 +305,7 @@ export function replayFromBufferOp(
  * fields are absent.
  *
  * Does NOT validate array/map entry shapes — callers that read from
- * trusted server-owned storage (hosted Render row) can rely on them
+ * trusted server-owned storage (hosted GguiSession row) can rely on them
  * being well-formed by construction.
  */
 export function normalizeBufferState(partial: {
@@ -332,13 +332,13 @@ export function normalizeBufferState(partial: {
 //
 // `runSequencedRecord` centralizes the OCC loop: read → apply →
 // conditional-write (expected-old-seq); on conflict, re-read + retry.
-// Matching OSS `InMemoryRenderStreamBuffer`'s single-writer property
+// Matching OSS `InMemoryGguiSessionStreamBuffer`'s single-writer property
 // at the DDB layer — the conditional check is the fence.
 //
 // Errors are typed so adapters can surface the right thing to callers:
 //   - `ReplayConflictError` is transient; the loop retries up to
 //     `maxRetries` before promoting to `ReplayMaxRetriesExceededError`.
-//   - `ReplayRenderNotFoundError` is terminal; no retry makes a
+//   - `ReplayGguiSessionNotFoundError` is terminal; no retry makes a
 //     vanished render reappear.
 
 /** Thrown by a sequencer's `persist` when the expected-seq check fails.
@@ -373,10 +373,10 @@ export class ReplayMaxRetriesExceededError extends Error {
 /** Thrown when the sequencer's `fetchState` returns null — the render
  *  row is gone (TTL-reaped or explicitly closed between writer reads).
  *  Terminal — no retry brings the row back. */
-export class ReplayRenderNotFoundError extends Error {
+export class ReplayGguiSessionNotFoundError extends Error {
   constructor(public readonly renderId: string) {
     super(`replay sequencer: render ${renderId} not found`);
-    this.name = 'ReplayRenderNotFoundError';
+    this.name = 'ReplayGguiSessionNotFoundError';
   }
 }
 
@@ -396,7 +396,7 @@ export interface ReplaySequencerDeps {
   /**
    * Read the current replay state + active streamSpec. Return `null`
    * when the render row is missing — the loop surfaces a
-   * {@link ReplayRenderNotFoundError}.
+   * {@link ReplayGguiSessionNotFoundError}.
    */
   readonly fetchState: (renderId: string) => Promise<FetchedReplayState | null>;
   /**
@@ -429,7 +429,7 @@ export interface RunSequencedRecordOptions {
  * authoritative render-scoped monotonic sequence for this emission.
  * Two concurrent calls MUST observe two distinct seqs.
  *
- * @throws {@link ReplayRenderNotFoundError} — render row gone.
+ * @throws {@link ReplayGguiSessionNotFoundError} — render row gone.
  * @throws {@link ReplayMaxRetriesExceededError} — contention too high.
  */
 export async function runSequencedRecord(
@@ -444,7 +444,7 @@ export async function runSequencedRecord(
   while (attempts <= maxRetries) {
     const read = await deps.fetchState(renderId);
     if (!read) {
-      throw new ReplayRenderNotFoundError(renderId);
+      throw new ReplayGguiSessionNotFoundError(renderId);
     }
     const result = applyRecordOp(read.state, input, read.spec, maxPerRender);
     try {

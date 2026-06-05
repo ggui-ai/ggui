@@ -33,7 +33,7 @@
  *      `sendEnvelope`.
  *
  *   6. `sendEnvelope` returns `{seq?}` — seq-aware implementations (OSS
- *      `RenderStreamBuffer`) stamp and return the assigned sequence;
+ *      `GguiSessionStreamBuffer`) stamp and return the assigned sequence;
  *      implementations without a buffer (hosted today) return `{}`.
  *      `handleStream` propagates seq back through its result so the tool
  *      handler can surface it to the agent.
@@ -55,7 +55,7 @@
  *
  * Post-Phase-B (flatten-render-identity): collapsed from the prior
  * `{sessionId, stack[], currentStackIndex}` target shape into a single
- * `RenderStreamTarget` — every render IS the addressable scope.
+ * `GguiSessionStreamTarget` — every render IS the addressable scope.
  */
 import type { GguiEmitInput, GguiEmitOutput, JsonValue, StreamSpec } from "@ggui-ai/protocol";
 import {
@@ -71,7 +71,7 @@ import { ChannelNotDeclaredError, InvalidCompleteError } from "./errors.js";
  * project their hosted DDB row or OSS in-memory render onto this — both
  * satisfy the shape naturally, so neither needs a cast.
  */
-export interface RenderStreamTarget {
+export interface GguiSessionStreamTarget {
   readonly renderId: string;
   readonly streamSpec?: StreamSpec;
 }
@@ -110,7 +110,7 @@ export interface SendEnvelopeResult {
 export type SendEnvelopeFn = (envelope: HandleStreamEnvelope) => Promise<SendEnvelopeResult>;
 
 export interface HandleStreamDeps {
-  readonly render: RenderStreamTarget;
+  readonly render: GguiSessionStreamTarget;
   readonly sendEnvelope: SendEnvelopeFn;
 }
 

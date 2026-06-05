@@ -113,8 +113,8 @@ describe('manifestToRegistryEntry', () => {
         },
         {
           component: 'Chart',
-          description: 'Render a chart from series data.',
-          usage: 'Render with series data from useChartData.',
+          description: 'GguiSession a chart from series data.',
+          usage: 'GguiSession with series data from useChartData.',
           example: { render: '<Chart data={…} />' },
         },
       ],

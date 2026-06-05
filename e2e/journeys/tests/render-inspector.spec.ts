@@ -1,5 +1,5 @@
 /**
- * Render inspector — Slice 9c live round-trip proof (advisory, BYOK).
+ * GguiSession inspector — Slice 9c live round-trip proof (advisory, BYOK).
  *
  * Closes the loop on the
  * `docs/plans/2026-04-22-session-contract-activity-panel.md` Slice 9b
@@ -62,7 +62,7 @@ const RENDER_INTENT = 'A small greeting card with a title "Hello"';
  * structuredContent surface ({renderId, url, action, nextStep?})
  * plus the derived shortCode.
  */
-interface RenderArtifacts {
+interface GguiSessionArtifacts {
   readonly renderId: string;
   readonly url: string;
   readonly shortCode: string;
@@ -76,7 +76,7 @@ test.describe.serial(
   'Slice 9c — render inspector round-trip on /s/<shortCode> (advisory)',
   () => {
     let handle: GguiServeHandle | null = null;
-    let render: RenderArtifacts | null = null;
+    let render: GguiSessionArtifacts | null = null;
     let skipped = false;
 
     test.beforeAll(async () => {
@@ -168,9 +168,9 @@ test.describe.serial(
     });
 
     // Slice J (2026-04-26) wired `<RenderInspector>` into production
-    // `<RenderViewer>` so an inspector renders under the committed
+    // `<GguiSessionViewer>` so an inspector renders under the committed
     // render. Post Phase-B stack collapse the data source is now
-    // `GET /ggui/console/render?render=<id>` (single Render row instead
+    // `GET /ggui/console/render?render=<id>` (single GguiSession row instead
     // of a stack array; auth-gated by the same cookie path the resource
     // + meta routes use). Both spec branches below now run for real —
     // `test.fixme` lifted.

@@ -30,14 +30,14 @@ import type {
   DrainAckPayload,
   JsonValue,
   JsonObject,
-  Render,
+  GguiSession,
 } from '@ggui-ai/protocol';
 import type { WebSocketMessage } from '@ggui-ai/protocol/transport/websocket';
 import type {
   McpAppAiGguiRenderMeta,
   GguiUserActionMeta,
 } from '@ggui-ai/protocol/integrations/mcp-apps';
-import type { ValidatedMcpAppAiGguiMeta, RenderSeedInput } from './types.js';
+import type { ValidatedMcpAppAiGguiMeta, GguiSessionSeedInput } from './types.js';
 import {
   parseMetaFromGlobal,
   parseMetaFromToolResult,
@@ -556,14 +556,14 @@ export interface RendererHandle {
    * Shared by the `render` and `props_update` channel handlers so React
    * updates flow through one path.
    */
-  applyRender(render: Render | RenderSeedInput): Promise<void>;
+  applyRender(render: GguiSession | GguiSessionSeedInput): Promise<void>;
   /**
    * Read the currently-mounted render. `null` until the first
    * render frame lands. Read by the `props_update` + `data` channel
    * handlers to validate inbound payloads against the active render's
    * `propsSpec` / `streamSpec`.
    */
-  getCurrentRender(): Render | RenderSeedInput | null;
+  getCurrentGguiSession(): GguiSession | GguiSessionSeedInput | null;
   readonly validatorCtx: RendererValidatorContext;
   /**
    * Send surface for outbound frames. Wired by `setup()` to the WS
@@ -620,7 +620,7 @@ export interface BootSequenceResult {
    * render; this replaces the earlier `StackModel` return that wrapped
    * a multi-item model.
    */
-  readonly mountedRender: Render | RenderSeedInput | null;
+  readonly mountedRender: GguiSession | GguiSessionSeedInput | null;
 }
 
 export async function bootSequence(opts: BootSequenceOptions): Promise<BootSequenceResult> {
@@ -661,7 +661,7 @@ export async function bootSequence(opts: BootSequenceOptions): Promise<BootSeque
   // that needs `propsSpec` / `streamSpec`. Tracked as a closure-scoped
   // ref so the failure-path returns can carry the same value through
   // `BootSequenceResult`.
-  let mountedRender: Render | RenderSeedInput | null = null;
+  let mountedRender: GguiSession | GguiSessionSeedInput | null = null;
   setStatus(refs, 'Negotiating with host…', 'connecting');
 
   notifyParent({ type: 'ggui:renderer-ready', version: RENDERER_VERSION });
@@ -858,7 +858,7 @@ export async function bootSequence(opts: BootSequenceOptions): Promise<BootSeque
    * idempotent on the (renderId, channelName) tuple.
    */
   const applyAck = async (ackPayload: {
-    readonly render?: Render;
+    readonly render?: GguiSession;
   }): Promise<void> => {
     const target = ackPayload.render;
     if (target === undefined) return;
@@ -921,9 +921,9 @@ export async function bootSequence(opts: BootSequenceOptions): Promise<BootSeque
     if (meta.gadgets !== undefined && meta.gadgets.length > 0) {
       await renderer.composedGadgets;
     }
-    let seed: RenderSeedInput | null = null;
+    let seed: GguiSessionSeedInput | null = null;
     try {
-      seed = await buildRenderSeedInput(meta);
+      seed = await buildGguiSessionSeedInput(meta);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       if (!hasLiveTrio) {
@@ -1280,8 +1280,8 @@ function parseSeedProps(propsJson: string | undefined): JsonObject | undefined {
 
 /**
  * Project the inline `__GGUI_META__` bootstrap into a
- * {@link RenderSeedInput} the mount surface can paint immediately,
- * BEFORE the authoritative wire `Render` arrives over the WS — and with
+ * {@link GguiSessionSeedInput} the mount surface can paint immediately,
+ * BEFORE the authoritative wire `GguiSession` arrives over the WS — and with
  * no WS at all for spec-compliant MCP-Apps hosts that expose no ggui
  * live channel (claude.ai / ChatGPT / Claude Desktop).
  *
@@ -1294,11 +1294,11 @@ function parseSeedProps(propsJson: string | undefined): JsonObject | undefined {
  * nothing to seed — the first WS ack mounts it). Throws when a `codeUrl`
  * fetch fails so the caller can surface a typed boot failure. The four
  * server-assigned ledger fields are intentionally absent — the first
- * ack reconciles the seed to a full `Render` (no fabrication).
+ * ack reconciles the seed to a full `GguiSession` (no fabrication).
  */
-export async function buildRenderSeedInput(
+export async function buildGguiSessionSeedInput(
   meta: SelfContainedMcpAppAiGguiMeta,
-): Promise<RenderSeedInput | null> {
+): Promise<GguiSessionSeedInput | null> {
   const props = parseSeedProps(meta.propsJson);
 
   // System-card mode — `kind` keyed against the built-in registry.
@@ -1317,7 +1317,7 @@ export async function buildRenderSeedInput(
   const res = await fetch(meta.codeUrl);
   if (!res.ok) {
     throw new Error(
-      `buildRenderSeedInput: codeUrl fetch failed (${res.status}): ${meta.codeUrl}`,
+      `buildGguiSessionSeedInput: codeUrl fetch failed (${res.status}): ${meta.codeUrl}`,
     );
   }
   const componentCode = await res.text();
@@ -1477,7 +1477,7 @@ let postMountListenerInstalled = false;
  * `bootSequence` with no renderer never set it → the listener no-ops).
  */
 let activeApplyRender:
-  | ((render: Render | RenderSeedInput) => Promise<void>)
+  | ((render: GguiSession | GguiSessionSeedInput) => Promise<void>)
   | null = null;
 
 /**
@@ -1515,7 +1515,7 @@ function fnv1aHex(payload: string): string {
 }
 
 /**
- * Render a wired-action's `data` payload as a short inline string
+ * GguiSession a wired-action's `data` payload as a short inline string
  * for embedding in a `ui/message` consent prompt. Goal: human-
  * readable, not a JSON dump. Falls back to truncated JSON for
  * nested values so the prompt doesn't drop information silently.
@@ -2650,7 +2650,7 @@ function installPostMountListener(): void {
     // tool-result meta into a seed and re-apply it.
     const apply = activeApplyRender;
     if (apply === null) return; // no renderer published yet — no-op safely
-    void buildRenderSeedInput(meta).then((seed) => {
+    void buildGguiSessionSeedInput(meta).then((seed) => {
       if (seed === null) return;
       void apply(seed).then(() => {
         // Re-emit last-known contextSpec values after a successful
@@ -2675,7 +2675,7 @@ function installPostMountListener(): void {
 /**
  * Detect a live-channel bootstrap shape inlined onto `__GGUI_META__`.
  * The first-party render shells (`/r/<shortCode>`,
- * `ui://ggui/render/<renderId>`, the embedded-ui RenderViewer's thin
+ * `ui://ggui/render/<renderId>`, the embedded-ui GguiSessionViewer's thin
  * shell) populate this synchronously before the runtime loads.
  *
  * Post-Phase-B the global carries a slice ENVELOPE (same shape as the
@@ -3004,7 +3004,7 @@ async function bootProduction(opts: {
       // render frame. The wire config + data channel handler read it
       // through `currentRender`-returning thunks so they always see the
       // latest snapshot without holding stale refs.
-      let currentRender: Render | RenderSeedInput | null = null;
+      let currentRender: GguiSession | GguiSessionSeedInput | null = null;
       let renderHandle: RenderItemHandle | null = null;
 
       const dispatchToolName = resolveDispatchToolName();
@@ -3032,7 +3032,7 @@ async function bootProduction(opts: {
       const rootConfig = buildRootWireConfig({
         renderId: meta.renderId,
         appId: meta.appId,
-        getCurrentRender: () => currentRender,
+        getCurrentGguiSession: () => currentRender,
         manager,
         streamBus,
         ...(onObserve !== undefined ? { onObserve } : {}),
@@ -3075,7 +3075,7 @@ async function bootProduction(opts: {
       // short-circuits to a Fragment, so the wrap is free for renders
       // with no contextSpec.
       const buildOuterWrapper = (
-        render: Render | RenderSeedInput,
+        render: GguiSession | GguiSessionSeedInput,
       ): ((mountedTree: ReactNode) => ReactNode) | undefined => {
         if (render.type === 'mcpApps' || render.type === 'system') return undefined;
         return (mountedTree) =>
@@ -3090,8 +3090,8 @@ async function bootProduction(opts: {
       // host has its own contract (adapter-boundary rule).
       // Post-render-identity-collapse the WireConfig is bound to the
       // single render at boot, so there's no per-render scope factory
-      // — every dispatch resolves through `getCurrentRender`.
-      const buildScopedWireFor = (render: Render | RenderSeedInput): WireConfig | null => {
+      // — every dispatch resolves through `getCurrentGguiSession`.
+      const buildScopedWireFor = (render: GguiSession | GguiSessionSeedInput): WireConfig | null => {
         if (render.type === 'mcpApps' || render.type === 'system') return null;
         return rootConfig;
       };
@@ -3104,7 +3104,7 @@ async function bootProduction(opts: {
       // the default ggui theme even when `_meta["ai.ggui/render"].themeId`
       // is `'indigo'`. Sibling `bootSelfContained` path threads the
       // same fields onto its `mountOpts` for parity.
-      const buildOpts = (render: Render | RenderSeedInput): RenderItemOptions => {
+      const buildOpts = (render: GguiSession | GguiSessionSeedInput): RenderItemOptions => {
         const wrapOuter = buildOuterWrapper(render);
         return {
           render,
@@ -3114,7 +3114,7 @@ async function bootProduction(opts: {
           // Thread the bootstrap's 3rd-party gadget packages so the import
           // rewriter resolves non-STDLIB gadget imports even for a static
           // seed mount (which carries no gadgetDescriptors). A full
-          // WS-delivered Render carries gadgetDescriptors and ignores this.
+          // WS-delivered GguiSession carries gadgetDescriptors and ignores this.
           ...(meta.gadgets !== undefined
             ? { gadgetPackages: meta.gadgets.map((g) => g.package) }
             : {}),
@@ -3138,7 +3138,7 @@ async function bootProduction(opts: {
        * layer just calls `applyRender(render)` without owning
        * lifecycle state.
        */
-      const applyRender = async (render: Render | RenderSeedInput): Promise<void> => {
+      const applyRender = async (render: GguiSession | GguiSessionSeedInput): Promise<void> => {
         currentRender = render;
         if (renderHandle === null) {
           renderHandle = await mountRender(renderInto, buildOpts(render));
@@ -3253,7 +3253,7 @@ async function bootProduction(opts: {
       );
       channelRegistry.register(
         createDataHandler({
-          getCurrentRender: () => currentRender,
+          getCurrentGguiSession: () => currentRender,
           streamBus,
           validatorCtx,
           ...(onObserve !== undefined ? { onObserve } : {}),
@@ -3261,7 +3261,7 @@ async function bootProduction(opts: {
       );
       channelRegistry.register(
         createPropsUpdateHandler({
-          getCurrentRender: () => currentRender,
+          getCurrentGguiSession: () => currentRender,
           applyRender,
         }),
       );
@@ -3289,7 +3289,7 @@ async function bootProduction(opts: {
         rootWireConfig: rootConfig,
         streamBus,
         applyRender,
-        getCurrentRender: () => currentRender,
+        getCurrentGguiSession: () => currentRender,
         validatorCtx,
         manager,
         channelTransport,

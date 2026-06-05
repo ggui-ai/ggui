@@ -9,7 +9,7 @@
  * Both routes are admin-gated server-side. The page uses no auth-token
  * client-side; the cookie + admin-HTML gate handle it.
  *
- * Render shape: reverse-chronological list of cards. Each card shows:
+ * GguiSession shape: reverse-chronological list of cards. Each card shows:
  *   - timestamp + direction chip (inbound-render / outbound-update)
  *   - tool name (`ggui_render` / `ggui_update`)
  *   - renderId truncated to 8 chars
@@ -347,7 +347,7 @@ function safeStringify(value: unknown): string {
   }
 }
 
-/** Render a byte count as `123 B` / `4.2 KB` / `1.3 MB`. */
+/** GguiSession a byte count as `123 B` / `4.2 KB` / `1.3 MB`. */
 function formatBytes(bytes: number): string {
   if (!Number.isFinite(bytes) || bytes < 0) return '—';
   if (bytes < 1024) return `${bytes} B`;

@@ -1,6 +1,6 @@
 /**
- * InMemoryRenderStreamBuffer — reference implementation of
- * {@link RenderStreamBuffer}.
+ * InMemoryGguiSessionStreamBuffer — reference implementation of
+ * {@link GguiSessionStreamBuffer}.
  *
  * Intended for the OSS `@ggui-ai/mcp-server` in its zero-config mode
  * and for tests. Bounded per-session ring that applies replay policy
@@ -11,7 +11,7 @@
  * Not persistent. Server restart drops all buffered envelopes — this
  * is documented on the interface, not worked around. Adapters that
  * need durability ship as separate packages against the same
- * {@link RenderStreamBuffer} interface.
+ * {@link GguiSessionStreamBuffer} interface.
  */
 import { DEFAULT_STREAM_REPLAY_POLICY } from '@ggui-ai/protocol';
 import { resolveStreamChannel } from '@ggui-ai/protocol';
@@ -23,8 +23,8 @@ import {
   type BufferedStreamEnvelope,
   type RecordResult,
   type ReplayResult,
-  type RenderStreamBuffer,
-  type RenderStreamBufferOptions,
+  type GguiSessionStreamBuffer,
+  type GguiSessionStreamBufferOptions,
   type StreamEnvelopeInput,
 } from '../render-stream-buffer.js';
 
@@ -51,15 +51,15 @@ interface RenderBucket {
   latestByChannel: Map<string, BufferedStreamEnvelope>;
 }
 
-export class InMemoryRenderStreamBuffer implements RenderStreamBuffer {
+export class InMemoryGguiSessionStreamBuffer implements GguiSessionStreamBuffer {
   private readonly buckets = new Map<string, RenderBucket>();
   private readonly maxPerSession: number;
 
-  constructor(opts: RenderStreamBufferOptions = {}) {
+  constructor(opts: GguiSessionStreamBufferOptions = {}) {
     this.maxPerSession = opts.maxPerSession ?? DEFAULT_SESSION_STREAM_BUFFER_MAX;
     if (this.maxPerSession < 1) {
       throw new Error(
-        `InMemoryRenderStreamBuffer: maxPerSession must be >= 1, got ${this.maxPerSession}`,
+        `InMemoryGguiSessionStreamBuffer: maxPerSession must be >= 1, got ${this.maxPerSession}`,
       );
     }
   }

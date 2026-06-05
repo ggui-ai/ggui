@@ -1,19 +1,19 @@
 /**
- * Phase 2 (boot-consolidation) — `buildRenderSeedInput` projection.
+ * Phase 2 (boot-consolidation) — `buildGguiSessionSeedInput` projection.
  *
- * Projects the inline `__GGUI_META__` bootstrap into a `RenderSeedInput`
+ * Projects the inline `__GGUI_META__` bootstrap into a `GguiSessionSeedInput`
  * the unified mount surface can paint BEFORE the authoritative wire
- * `Render` arrives (or with no WS at all, for spec-compliant MCP-Apps
- * hosts). BLOCKER #2 from the Workflow-1 audit: building a full `Render`
+ * `GguiSession` arrives (or with no WS at all, for spec-compliant MCP-Apps
+ * hosts). BLOCKER #2 from the Workflow-1 audit: building a full `GguiSession`
  * from meta alone would require fabricating the 4 server-assigned ledger
  * fields (banned). The seed carries only what the meta honestly provides;
- * the first ack reconciles to a full `Render`.
+ * the first ack reconciles to a full `GguiSession`.
  *
  * Pure projection — no mount, no React.
  */
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import type { SelfContainedMcpAppAiGguiMeta } from '../runtime.js';
-import { buildRenderSeedInput } from '../runtime.js';
+import { buildGguiSessionSeedInput } from '../runtime.js';
 
 const BASE: SelfContainedMcpAppAiGguiMeta = {
   renderId: 'render_seed_1',
@@ -26,9 +26,9 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe('buildRenderSeedInput', () => {
+describe('buildGguiSessionSeedInput', () => {
   it('projects a system-card seed from `kind` (no fetch)', async () => {
-    const seed = await buildRenderSeedInput({
+    const seed = await buildGguiSessionSeedInput({
       ...BASE,
       kind: 'no-credentials',
       propsJson: JSON.stringify({ reason: 'missing key' }),
@@ -51,7 +51,7 @@ describe('buildRenderSeedInput', () => {
     }));
     vi.stubGlobal('fetch', fetchMock);
 
-    const seed = await buildRenderSeedInput({
+    const seed = await buildGguiSessionSeedInput({
       ...BASE,
       codeUrl: 'http://localhost:7000/code/abc.js',
       propsJson: JSON.stringify({ count: 3 }),
@@ -69,7 +69,7 @@ describe('buildRenderSeedInput', () => {
   });
 
   it('returns null for a live-only meta (no codeUrl, no kind)', async () => {
-    const seed = await buildRenderSeedInput({
+    const seed = await buildGguiSessionSeedInput({
       ...BASE,
       wsUrl: 'ws://localhost:7000/ws',
       wsToken: 'tok_x',
@@ -78,7 +78,7 @@ describe('buildRenderSeedInput', () => {
   });
 
   it('skips props on malformed propsJson (shape-preserving, no throw)', async () => {
-    const seed = await buildRenderSeedInput({
+    const seed = await buildGguiSessionSeedInput({
       ...BASE,
       kind: 'mcp-apps-probe',
       propsJson: '{ not valid json',
@@ -93,7 +93,7 @@ describe('buildRenderSeedInput', () => {
       vi.fn(async () => ({ ok: false, status: 404, text: async () => '' })),
     );
     await expect(
-      buildRenderSeedInput({ ...BASE, codeUrl: 'http://localhost:7000/code/missing.js' }),
+      buildGguiSessionSeedInput({ ...BASE, codeUrl: 'http://localhost:7000/code/missing.js' }),
     ).rejects.toThrow(/codeUrl fetch failed \(404\)/);
   });
 });

@@ -4,12 +4,12 @@
  * Post-Phase-B (flatten-render-identity): the pending-events pipe is
  * keyed by `renderId` (was `stackItemId`). The handler takes a single
  * `renderId` input, no longer round-trips through a secondary
- * `stackItemId → sessionId` index. `SessionStore` → `RenderStore`.
- * `StackItemNotFoundError` → `RenderNotFoundError`.
+ * `stackItemId → sessionId` index. `SessionStore` → `GguiSessionStore`.
+ * `StackItemNotFoundError` → `GguiSessionNotFoundError`.
  *
  * Covers the wire contract:
  *   - renderId → tenancy gate via renderStore.get + appId cmp
- *   - tenancy mismatch + unknown render surface as RenderNotFoundError
+ *   - tenancy mismatch + unknown render surface as GguiSessionNotFoundError
  *   - long-poll loop semantics (immediate, with-events, completed,
  *     mid-poll render-disappeared)
  *   - normalize raw rows to ConsumeEventEntry via parsePendingEnvelope
@@ -17,11 +17,11 @@
  *   - drain_ack + activeConsumerRegistry + slow-consume telemetry
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { ComponentRender } from '@ggui-ai/protocol';
+import type { ComponentGguiSession } from '@ggui-ai/protocol';
 import {
   InMemoryActiveConsumerRegistry,
   InMemoryPendingEventConsumer,
-  InMemoryRenderStore,
+  InMemoryGguiSessionStore,
 } from '@ggui-ai/mcp-server-core/in-memory';
 import {
   createGguiConsumeHandler,
@@ -29,16 +29,16 @@ import {
   type DrainAckNotifier,
   type ObserverNotifier,
 } from './consume.js';
-import { RenderNotFoundError } from './errors.js';
+import { GguiSessionNotFoundError } from './errors.js';
 
 const NOW_MS = Date.parse('2026-05-09T00:00:00.000Z');
 
 describe('createGguiConsumeHandler', () => {
-  let renderStore: InMemoryRenderStore;
+  let renderStore: InMemoryGguiSessionStore;
   let consumer: InMemoryPendingEventConsumer;
 
   beforeEach(() => {
-    renderStore = new InMemoryRenderStore();
+    renderStore = new InMemoryGguiSessionStore();
     consumer = new InMemoryPendingEventConsumer();
     vi.useRealTimers();
   });
@@ -48,7 +48,7 @@ describe('createGguiConsumeHandler', () => {
   });
 
   async function seedRender(renderId: string, appId: string): Promise<void> {
-    const render: ComponentRender = {
+    const render: ComponentGguiSession = {
       id: renderId,
       appId,
       type: 'component',
@@ -99,7 +99,7 @@ describe('createGguiConsumeHandler', () => {
       expect(result.status).toBe('active');
     });
 
-    it('cross-tenant renderId throws RenderNotFoundError (no leak)', async () => {
+    it('cross-tenant renderId throws GguiSessionNotFoundError (no leak)', async () => {
       await seedRender('render-1', 'app-1');
       const handler = createGguiConsumeHandler({
         pendingEventConsumer: consumer,
@@ -110,10 +110,10 @@ describe('createGguiConsumeHandler', () => {
           { renderId: 'render-1', timeout: 0 },
           { appId: 'tenant-X', requestId: 'r1' },
         ),
-      ).rejects.toBeInstanceOf(RenderNotFoundError);
+      ).rejects.toBeInstanceOf(GguiSessionNotFoundError);
     });
 
-    it('unknown renderId throws RenderNotFoundError', async () => {
+    it('unknown renderId throws GguiSessionNotFoundError', async () => {
       const handler = createGguiConsumeHandler({
         pendingEventConsumer: consumer,
         renderStore,
@@ -123,7 +123,7 @@ describe('createGguiConsumeHandler', () => {
           { renderId: 'never-existed', timeout: 0 },
           { appId: 'app-1', requestId: 'r1' },
         ),
-      ).rejects.toBeInstanceOf(RenderNotFoundError);
+      ).rejects.toBeInstanceOf(GguiSessionNotFoundError);
     });
   });
 
@@ -510,8 +510,8 @@ describe('createGguiConsumeHandler', () => {
       expect(registry.hasActive('render-1')).toBe(false);
     });
 
-    it('exits the registry even when the handler throws (RenderNotFoundError)', async () => {
-      // Tenancy mismatch surfaces as RenderNotFoundError; enter MUST
+    it('exits the registry even when the handler throws (GguiSessionNotFoundError)', async () => {
+      // Tenancy mismatch surfaces as GguiSessionNotFoundError; enter MUST
       // still pair with exit so a long-poll-with-bad-tenancy can't
       // leave a sticky `hasActive: true` for that renderId.
       await seedRender('render-1', 'app-OWNER');
@@ -526,7 +526,7 @@ describe('createGguiConsumeHandler', () => {
           { renderId: 'render-1', timeout: 0 },
           { appId: 'app-INTRUDER', requestId: 'r1' },
         ),
-      ).rejects.toBeInstanceOf(RenderNotFoundError);
+      ).rejects.toBeInstanceOf(GguiSessionNotFoundError);
       expect(registry.hasActive('render-1')).toBe(false);
     });
 

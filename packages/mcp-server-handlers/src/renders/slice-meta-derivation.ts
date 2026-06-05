@@ -43,7 +43,7 @@ import {
   type GadgetDescriptor,
   type JsonSchema,
   type JsonValue,
-  type Render,
+  type GguiSession,
 } from '@ggui-ai/protocol';
 import {
   deriveContextName,
@@ -184,10 +184,10 @@ function resolveGadgetUrlsImpl(
  * are omitted.
  */
 export function deriveWiredActionTools(
-  item: Render,
+  item: GguiSession,
 ): Record<string, string> | undefined {
   // McpApps + system variants don't carry an actionSpec. Discriminator
-  // narrowing gives typed access to ComponentRender.actionSpec.
+  // narrowing gives typed access to ComponentGguiSession.actionSpec.
   if (item.type === 'mcpApps' || item.type === 'system') return undefined;
   const actionSpec = item.actionSpec;
   if (actionSpec === undefined || actionSpec === null) return undefined;
@@ -218,7 +218,7 @@ export function deriveWiredActionTools(
  * literal null over silently emitting `undefined`, which would break
  * the runtime's typed Provider seed.
  *
- * Resume-aware seed: when the Render carries a `contextSnapshot`
+ * Resume-aware seed: when the GguiSession carries a `contextSnapshot`
  * (mirrored from the runtime via `ggui_runtime_sync_context`), each slot's
  * `default` is sourced from the snapshot value if present,
  * otherwise from the contract's authoring-time default. Chat-history
@@ -226,7 +226,7 @@ export function deriveWiredActionTools(
  * state instead of resetting to the contract default.
  */
 export function deriveContextSlots(
-  item: Render,
+  item: GguiSession,
 ): ReadonlyArray<{
   name: string;
   contextName: string;
@@ -235,7 +235,7 @@ export function deriveContextSlots(
   debounceMs?: number;
 }> | undefined {
   // Both `contextSpec` and `contextSnapshot` live on the `component`
-  // variant of Render — narrowing via the discriminator gives typed
+  // variant of GguiSession — narrowing via the discriminator gives typed
   // access without casts. mcpApps and system variants don't carry
   // these fields.
   if (item.type === 'mcpApps' || item.type === 'system') return undefined;
@@ -313,7 +313,7 @@ export function deriveContextSlots(
  *     (entries appear in declaration order from the libraries map).
  */
 export function derivePermissionsPolicy(
-  item: Render,
+  item: GguiSession,
 ): readonly string[] | undefined {
   // Read from the descriptor sidecar (not the wire use map). The
   // wire's `GadgetExportUse` doesn't carry `permission`; the resolved
@@ -381,7 +381,7 @@ export function derivePermissionsPolicy(
  * to throw mid-request.
  */
 export function deriveBundleOrigins(
-  item: Render,
+  item: GguiSession,
 ): { script: readonly string[]; style: readonly string[]; connect: readonly string[] } | undefined {
   // Read from the descriptor sidecar.
   const descriptors =
@@ -519,11 +519,11 @@ export function composeContentSecurityPolicy(
  *
  * Try/catch around `JSON.stringify` is defensive: the upstream render
  * handler validates props against `propsSpec` before they land on the
- * Render, so a JSON-circularity here would mean an internal
+ * GguiSession, so a JSON-circularity here would mean an internal
  * mutation post-validation. Returning `undefined` keeps the renderer
  * on the fallback path instead of failing the whole bootstrap.
  */
-export function derivePropsJson(item: Render): string | undefined {
+export function derivePropsJson(item: GguiSession): string | undefined {
   if (!('props' in item) || item.props === undefined) return undefined;
   try {
     return JSON.stringify(item.props);
@@ -654,7 +654,7 @@ export interface RenderMetaView {
  *   - `appPublicEnv` is empty / undefined
  */
 export function derivePublicEnvProjection(
-  item: Render,
+  item: GguiSession,
   appPublicEnv: Readonly<Record<string, string>> | undefined,
 ): Readonly<Record<string, string>> | undefined {
   // Read from the descriptor sidecar (`requires` is descriptor-side).
@@ -705,7 +705,7 @@ export function derivePublicEnvProjection(
  * or resolves to only STDLIB packages.
  */
 export function deriveGadgetRegistrations(
-  item: Render,
+  item: GguiSession,
 ): ReadonlyArray<{
   readonly package: string;
   readonly bundleUrl?: string;
@@ -775,7 +775,7 @@ export function deriveGadgetRegistrations(
  * for component items that declare no runtime-validated schema.
  */
 export async function deriveContractBundle(
-  item: Render,
+  item: GguiSession,
 ): Promise<
   | {
       readonly contractHash: string;
@@ -805,7 +805,7 @@ export async function deriveContractBundle(
  * Pure. Same input → identical output, byte-for-byte.
  */
 export function deriveRenderMeta(
-  item: Render,
+  item: GguiSession,
 ): RenderMetaView {
   // MCP Apps items wire through their own shell — no projection here.
   if (item.type === 'mcpApps') return {};

@@ -14,9 +14,9 @@ import type { EndUserIdentity } from './auth';
 import type { HostContextProjection } from './host-context';
 // MCP Apps inbound variant lives behind a boundary subpath to keep core
 // render typing opt-in. The import IS legitimate — the design lock
-// explicitly treats the `Render` union as core's one concession to MCP
+// explicitly treats the `GguiSession` union as core's one concession to MCP
 // Apps. Root-barrel exposure stays narrow (see index.ts).
-import type { McpAppsRender } from '../integrations/mcp-apps';
+import type { McpAppsGguiSession } from '../integrations/mcp-apps';
 
 // ============================================================================
 // File status — Phase B render-identity collapse
@@ -26,7 +26,7 @@ import type { McpAppsRender } from '../integrations/mcp-apps';
 // `SessionStackEntry[]` (the actual rendered things). Post-Phase-A every
 // session held a stack of exactly one entry, making the vessel dead
 // weight; Phase B deletes the vessel and promotes the entries to a flat
-// `Render` shape.
+// `GguiSession` shape.
 //
 // Renamed `session.ts`→`render.ts` in the render-identity cleanup; the
 // EXPORTS were reworked end-to-end during Phase B:
@@ -34,17 +34,17 @@ import type { McpAppsRender } from '../integrations/mcp-apps';
 //   Was                       →  Now
 //   ──────────────────────────────────────────────────────
 //   Session (interface)       →  DELETED (no vessel)
-//   SessionView (interface)   →  DELETED (use Render directly)
-//   StackItem (interface)     →  ComponentRender
-//   SystemStackItem           →  SystemRender
-//   SessionStackEntry (union) →  Render (the union)
+//   SessionView (interface)   →  DELETED (use GguiSession directly)
+//   StackItem (interface)     →  ComponentGguiSession
+//   SystemStackItem           →  SystemGguiSession
+//   SessionStackEntry (union) →  GguiSession (the union)
 //   Action (interface)        →  DELETED (was already @deprecated)
 //   ProgressUpdate.sessionId +
 //   ProgressUpdate.stackItemId →  ProgressUpdate.renderId (collapsed)
 //
 // Conversation-scoped lookups (sibling renders, host continuity) flow
 // via the unchanged `hostSessionId` channel — NOT by lifting fields
-// from the deleted Session vessel onto every Render. See
+// from the deleted Session vessel onto every GguiSession. See
 // [[session-concept-deletion-2026-05-27]] for the framing.
 
 /**
@@ -53,7 +53,7 @@ import type { McpAppsRender } from '../integrations/mcp-apps';
  * matching renderer fall through to a generic "system message" card so
  * an old runtime + new server still produce something visible.
  */
-export type SystemRenderKind =
+export type SystemGguiSessionKind =
   | 'no-credentials'
   | 'mcp-apps-probe'
   // Future kinds: 'rate-limited' | 'quota-exceeded' | 'server-down' …
@@ -77,11 +77,11 @@ export type AdapterPermissions = {
 };
 
 // ============================================================================
-// Render shape — the core protocol type
+// GguiSession shape — the core protocol type
 // ============================================================================
 
 /**
- * Lifecycle status of a {@link Render}. RenderStore implementations MAY
+ * Lifecycle status of a {@link GguiSession}. GguiSessionStore implementations MAY
  * populate this on `get`; absent ⇒ caller treats as `'active'`.
  *
  * Two states only:
@@ -95,10 +95,10 @@ export type AdapterPermissions = {
  * in the earlier handshake collapse. The companion `ggui_close` tool
  * that wrote it was removed in the same slice.
  */
-export type RenderStatus = 'active' | 'expired';
+export type GguiSessionStatus = 'active' | 'expired';
 
 /**
- * Common base for every {@link Render} variant. Carries identity,
+ * Common base for every {@link GguiSession} variant. Carries identity,
  * tenancy, lifecycle, and conversation-scoped context that every
  * rendered thing has regardless of how its visible bits are
  * produced (LLM-generated component, server-emitted system card,
@@ -107,12 +107,12 @@ export type RenderStatus = 'active' | 'expired';
  * **Conversation-scoped context note** — fields that convey "this
  * render belongs to a logical group of renders within a host
  * conversation" (hostContext continuity, sibling render discovery)
- * are NOT duplicated onto each Render. They look up via the optional
- * {@link RenderBase.hostSession} pair instead. See
+ * are NOT duplicated onto each GguiSession. They look up via the optional
+ * {@link GguiSessionBase.hostSession} pair instead. See
  * [[session-concept-deletion-2026-05-27]] for the framing.
  */
-export interface RenderBase {
-  /** Render identity. The value an iframe's bootstrap meta and every
+export interface GguiSessionBase {
+  /** GguiSession identity. The value an iframe's bootstrap meta and every
    *  wire reference (props_update, consume, update) keys by. */
   readonly id: string;
   /** App identity (tenancy boundary, always per-render). */
@@ -143,7 +143,7 @@ export interface RenderBase {
   };
   /**
    * Theme preset id for this render. Resolution chain:
-   *   1. `Render.themeId` — agent-explicit per-render override
+   *   1. `GguiSession.themeId` — agent-explicit per-render override
    *   2. `App.defaultThemeId` — server-side per-app default
    *   3. server fallback (process default)
    * First non-undefined wins at bootstrap-meta projection.
@@ -170,9 +170,9 @@ export interface RenderBase {
    */
   readonly adapterPermissions?: AdapterPermissions;
   /** Resolved lifecycle status. Absent ⇒ caller treats as `'active'`. */
-  readonly status?: RenderStatus;
-  /** Monotonic event ledger sequence (per-render — each Render has its
-   *  own RenderEvent ledger). */
+  readonly status?: GguiSessionStatus;
+  /** Monotonic event ledger sequence (per-render — each GguiSession has its
+   *  own GguiSessionEvent ledger). */
   readonly eventSequence: number;
   /** Creation timestamp (epoch ms). */
   readonly createdAt: number;
@@ -183,18 +183,18 @@ export interface RenderBase {
 }
 
 /**
- * `Render` — the canonical protocol shape for a single rendered UI.
+ * `GguiSession` — the canonical protocol shape for a single rendered UI.
  *
- * Three variants share {@link RenderBase} (identity, tenancy,
+ * Three variants share {@link GguiSessionBase} (identity, tenancy,
  * lifecycle); each variant adds its own visible-bits surface:
  *
- *   - {@link ComponentRender} — LLM-generated / native React component.
+ *   - {@link ComponentGguiSession} — LLM-generated / native React component.
  *     Carries `componentCode`, `propsSpec`, `actionSpec`, `streamSpec`,
  *     `contextSpec`, `gadgetDescriptors`, etc.
- *   - {@link SystemRender} — server-emitted system card. Carries an
+ *   - {@link SystemGguiSession} — server-emitted system card. Carries an
  *     opaque `kind` + structured `props`; the runtime maps the kind to
  *     a built-in `.tsx` renderer.
- *   - {@link McpAppsRender} — embedded third-party MCP-App iframe.
+ *   - {@link McpAppsGguiSession} — embedded third-party MCP-App iframe.
  *     Carries `resourceUri` + MCP server config. (Lives in
  *     `@ggui-ai/protocol/integrations/mcp-apps` to keep core typing
  *     MCP-Apps-opt-in.)
@@ -202,26 +202,26 @@ export interface RenderBase {
  * Narrowing pattern:
  * ```ts
  * if (render.type === 'mcpApps') {
- *   // McpAppsRender — render via host-role adapter
+ *   // McpAppsGguiSession — render via host-role adapter
  * } else if (render.type === 'system') {
- *   // SystemRender — render via built-in card registry
+ *   // SystemGguiSession — render via built-in card registry
  * } else {
- *   // ComponentRender — render via DynamicComponent
+ *   // ComponentGguiSession — render via DynamicComponent
  * }
  * ```
  */
-export type Render<TProps = JsonObject> =
-  | ComponentRender<TProps>
-  | SystemRender
-  | McpAppsRender;
+export type GguiSession<TProps = JsonObject> =
+  | ComponentGguiSession<TProps>
+  | SystemGguiSession
+  | McpAppsGguiSession;
 
 /**
- * Render variant: LLM-generated / native React component.
+ * GguiSession variant: LLM-generated / native React component.
  *
  * Discriminator: `type === 'component'` OR `type` absent (back-compat
  * default — every producer that omits `type` is producing this variant).
  */
-export interface ComponentRender<TProps = JsonObject> extends RenderBase {
+export interface ComponentGguiSession<TProps = JsonObject> extends GguiSessionBase {
   /** Variant discriminator. Optional; absent ⇒ `'component'`. */
   readonly type?: 'component';
   /** Blueprint component code (pure UI). */
@@ -268,7 +268,7 @@ export interface ComponentRender<TProps = JsonObject> extends RenderBase {
    * preserved verbatim from the agent's render payload — no enrichment
    * overlay, no `version` (resolves from `App.gadgets`). Resolution
    * metadata lives on the parallel
-   * {@link ComponentRender.gadgetDescriptors} sidecar.
+   * {@link ComponentGguiSession.gadgetDescriptors} sidecar.
    */
   readonly clientCapabilities?: ClientCapabilitiesSpec;
   /**
@@ -296,7 +296,7 @@ export interface ComponentRender<TProps = JsonObject> extends RenderBase {
 }
 
 /**
- * Render variant: server-emitted system card.
+ * GguiSession variant: server-emitted system card.
  *
  * Used when the SERVER (not an LLM, not an MCP host) needs to render
  * a UI card the operator can act on: "set up your LLM key", "rate
@@ -305,8 +305,8 @@ export interface ComponentRender<TProps = JsonObject> extends RenderBase {
  * Wire shape is intentionally tiny — server emits identifier + data,
  * not code. The runtime maps `kind` to a built-in `.tsx` component.
  */
-export interface SystemRender<TProps extends JsonObject = JsonObject>
-  extends RenderBase {
+export interface SystemGguiSession<TProps extends JsonObject = JsonObject>
+  extends GguiSessionBase {
   readonly type: 'system';
   /**
    * Identifier the runtime maps to a built-in renderer. Stable strings
@@ -314,7 +314,7 @@ export interface SystemRender<TProps extends JsonObject = JsonObject>
    * never breaks an older runtime; it just falls through to a generic
    * card carrying the props as raw JSON.
    */
-  readonly kind: SystemRenderKind;
+  readonly kind: SystemGguiSessionKind;
   /** Props forwarded to the built-in renderer. */
   readonly props?: TProps;
   /** Optional descriptive text the server can attach (telemetry, logs). */

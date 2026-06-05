@@ -219,11 +219,11 @@ export const CRITERIA: readonly EvalCriterion[] = [
   },
   {
     id: "render-props",
-    name: "Render all Props fields",
+    name: "GguiSession all Props fields",
     priority: "P0",
     tier: 0,
     failOutcome: "warn",
-    codingGuidance: "Render every Props field in JSX. Access via props.fieldName.",
+    codingGuidance: "GguiSession every Props field in JSX. Access via props.fieldName.",
     evalInstruction:
       "Check that every field from interface Props appears as props.fieldName in the function body.",
   },

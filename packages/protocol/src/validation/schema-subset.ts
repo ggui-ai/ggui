@@ -12,7 +12,7 @@
  *
  * **Check points.**
  *
- *   - Pre-commit of a `Render` with `actionSpec` / `streamSpec`
+ *   - Pre-commit of a `GguiSession` with `actionSpec` / `streamSpec`
  *     entries that reference tools: each action's declared schema
  *     MUST be a subset of the tool's inputSchema (what the action
  *     payload is allowed to send ⊆ what the tool accepts). Each

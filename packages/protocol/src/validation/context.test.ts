@@ -5,7 +5,7 @@
  * declaring observable client state the LLM context consumes. This
  * file tests two layers:
  *
- *   1. Render-time structural validation via `validateContractStructure`
+ *   1. GguiSession-time structural validation via `validateContractStructure`
  *      — rejects malformed contextSpec declarations.
  *   2. Runtime data validation via `validateContextData`
  *      — gates Provider values before posting to the LLM context.

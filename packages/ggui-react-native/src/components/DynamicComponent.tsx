@@ -18,8 +18,8 @@ import React, {
   type ComponentType,
 } from 'react';
 import { View, Text, ActivityIndicator, StyleSheet } from 'react-native';
-import type { Render } from '@ggui-ai/protocol';
-import { isMcpAppsRender } from '@ggui-ai/protocol/integrations/mcp-apps';
+import type { GguiSession } from '@ggui-ai/protocol';
+import { isMcpAppsGguiSession } from '@ggui-ai/protocol/integrations/mcp-apps';
 import { WebViewRenderer, type BridgeEvent } from './WebViewRenderer';
 import { ProvisionalRenderer } from './ProvisionalRenderer';
 
@@ -157,7 +157,7 @@ export function DynamicComponent({
     );
   }
 
-  // Strategy 1: Render from descriptor tree (native components)
+  // Strategy 1: GguiSession from descriptor tree (native components)
   if (descriptor) {
     try {
       const mergedDescriptor: ComponentDescriptor = {
@@ -175,14 +175,14 @@ export function DynamicComponent({
       onError?.(e);
       return (
         <View style={styles.error}>
-          <Text style={styles.errorTitle}>Render Error</Text>
+          <Text style={styles.errorTitle}>GguiSession Error</Text>
           <Text style={styles.errorMessage}>{e.message}</Text>
         </View>
       );
     }
   }
 
-  // Strategy 2: Render compiled code via WebView
+  // Strategy 2: GguiSession compiled code via WebView
   if (code) {
     return (
       <View style={styles.container}>
@@ -205,12 +205,12 @@ export function DynamicComponent({
 }
 
 /**
- * Render a {@link Render} entry. Post-Phase-B every render arrives as a
- * top-level Render rather than as a stacked session entry. This
- * component handles the `ComponentRender` variant only — descriptor
+ * GguiSession a {@link GguiSession} entry. Post-Phase-B every render arrives as a
+ * top-level GguiSession rather than as a stacked session entry. This
+ * component handles the `ComponentGguiSession` variant only — descriptor
  * tree on native, WebView for compiled code.
  *
- * The `McpAppsRender` variant is the responsibility of `<McpAppIframe>`
+ * The `McpAppsGguiSession` variant is the responsibility of `<McpAppIframe>`
  * (exported from the root barrel); routing it through this component
  * is a programming error and surfaces as `onError`.
  *
@@ -218,9 +218,9 @@ export function DynamicComponent({
  * `descriptor` field, preserved for the existing RN-only descriptor
  * rendering path until the descriptor tree moves into the protocol.
  */
-export interface RenderRendererProps {
+export interface GguiSessionRendererProps {
   render:
-    | Render
+    | GguiSession
     | {
         componentCode: string;
         props?: Record<string, unknown>;
@@ -231,16 +231,16 @@ export interface RenderRendererProps {
   onEvent?: (event: BridgeEvent) => void;
 }
 
-export function RenderRenderer({
+export function GguiSessionRenderer({
   render,
   fallback,
   onError,
   onEvent,
-}: RenderRendererProps): React.JSX.Element {
+}: GguiSessionRendererProps): React.JSX.Element {
   // MCP Apps variant belongs to <McpAppIframe>, not this component.
-  if (isMcpAppsRender(render as unknown)) {
+  if (isMcpAppsGguiSession(render as unknown)) {
     const err = new Error(
-      'RenderRenderer received an McpAppsRender; route mcpApps renders ' +
+      'GguiSessionRenderer received an McpAppsGguiSession; route mcpApps renders ' +
         'through <McpAppIframe> instead.',
     );
     onError?.(err);

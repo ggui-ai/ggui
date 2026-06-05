@@ -70,7 +70,7 @@ function bootstrapUrlFromRenderUrl(renderUrl: string | undefined): string {
   if (typeof renderUrl !== 'string') {
     throw new Error(`render output missing url: ${String(renderUrl)}`);
   }
-  // Render URL shape: `<base>/r/<shortCode>?sig=...&exp=...`. Rewrite the
+  // GguiSession URL shape: `<base>/r/<shortCode>?sig=...&exp=...`. Rewrite the
   // host to match the local dev port, preserve path + signed query.
   // R4: `/api/bootstrap/:shortCode` retired — content-negotiated JSON
   // branch of `/r/:shortCode` covers the same surface.

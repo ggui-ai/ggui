@@ -45,7 +45,7 @@ import { navigateTo } from '../router.js';
  * the server owns its wire shape, TypeScript checks compatibility at
  * the parse boundary.
  */
-interface RenderSummary {
+interface GguiSessionSummary {
   readonly renderId: string;
   readonly shortCode?: string;
   readonly appId: string;
@@ -54,14 +54,14 @@ interface RenderSummary {
   readonly status: 'active' | 'completed' | 'expired';
 }
 
-interface RendersResponse {
-  readonly renders: readonly RenderSummary[];
+interface GguiSessionsResponse {
+  readonly renders: readonly GguiSessionSummary[];
   readonly total: number;
 }
 
 type FetchState =
   | { readonly kind: 'loading' }
-  | { readonly kind: 'ready'; readonly data: RendersResponse }
+  | { readonly kind: 'ready'; readonly data: GguiSessionsResponse }
   | { readonly kind: 'error'; readonly message: string };
 
 export function Renders(): ReactElement {
@@ -83,7 +83,7 @@ export function Renders(): ReactElement {
           });
           return;
         }
-        const body = (await res.json()) as RendersResponse;
+        const body = (await res.json()) as GguiSessionsResponse;
         setState({ kind: 'ready', data: body });
       } catch (err) {
         if (controller.signal.aborted) return;
@@ -149,7 +149,7 @@ export function Renders(): ReactElement {
               />
             </div>
           </div>
-          <RenderList
+          <GguiSessionList
             all={state.data.renders}
             shown={filtered ?? state.data.renders}
             filterActive={needle.length > 0}
@@ -160,16 +160,16 @@ export function Renders(): ReactElement {
   );
 }
 
-function RenderList({
+function GguiSessionList({
   all,
   shown,
   filterActive,
 }: {
-  readonly all: readonly RenderSummary[];
-  readonly shown: readonly RenderSummary[];
+  readonly all: readonly GguiSessionSummary[];
+  readonly shown: readonly GguiSessionSummary[];
   readonly filterActive: boolean;
 }): ReactElement {
-  if (all.length === 0) return <EmptyRenders />;
+  if (all.length === 0) return <EmptyGguiSessions />;
   return (
     <div
       data-ggui-renders-list
@@ -191,7 +191,7 @@ function RenderList({
       ) : (
         <ul className="ggui-stack__list">
           {shown.map((render, index) => (
-            <RenderRow
+            <GguiSessionRow
               key={render.renderId}
               render={render}
               index={index + 1}
@@ -203,11 +203,11 @@ function RenderList({
   );
 }
 
-function RenderRow({
+function GguiSessionRow({
   render,
   index,
 }: {
-  readonly render: RenderSummary;
+  readonly render: GguiSessionSummary;
   readonly index: number;
 }): ReactElement {
   const shortId = render.renderId.slice(0, 8);
@@ -291,7 +291,7 @@ function formatRelative(ms: number): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
-function EmptyRenders(): ReactElement {
+function EmptyGguiSessions(): ReactElement {
   return (
     <div className="ggui-card">
       <div className="ggui-card__head">
@@ -301,7 +301,7 @@ function EmptyRenders(): ReactElement {
       <div className="ggui-card__body">
         <p className="ggui-body">No renders yet.</p>
         <p className="ggui-muted">
-          Render from an agent (<code className="ggui-code">ggui_render</code>)
+          GguiSession from an agent (<code className="ggui-code">ggui_render</code>)
           to start a generation — new renders appear here on reload.
         </p>
       </div>

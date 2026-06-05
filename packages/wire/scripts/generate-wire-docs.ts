@@ -544,8 +544,8 @@ Import: \`import { useAction, useStream } from '@ggui-ai/wire'\``);
       returnIface = allInterfaces.get('AuthInfo');
     } else if (hook.returnType === 'AppInfo') {
       returnIface = allInterfaces.get('AppInfo');
-    } else if (hook.returnType === 'RenderInfo') {
-      returnIface = allInterfaces.get('RenderInfo');
+    } else if (hook.returnType === 'GguiSessionInfo') {
+      returnIface = allInterfaces.get('GguiSessionInfo');
     }
 
     sections.push(generateHookMarkdown(hook, returnIface));
@@ -566,8 +566,8 @@ Import: \`import { useAction, useStream } from '@ggui-ai/wire'\``);
       returnIface = allInterfaces.get('AuthInfo');
     } else if (hook.returnType === 'AppInfo') {
       returnIface = allInterfaces.get('AppInfo');
-    } else if (hook.returnType === 'RenderInfo') {
-      returnIface = allInterfaces.get('RenderInfo');
+    } else if (hook.returnType === 'GguiSessionInfo') {
+      returnIface = allInterfaces.get('GguiSessionInfo');
     }
 
     sections.push(generateHookMarkdown(hook, returnIface));

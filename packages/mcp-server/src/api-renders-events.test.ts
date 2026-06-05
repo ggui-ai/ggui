@@ -1,6 +1,6 @@
 /**
  * Tests for `GET /api/renders/:renderId/events?wsToken=&sinceSequence=N&limit=M`
- * — the R7 wsToken-gated cursor-replay read from the RenderEvent
+ * — the R7 wsToken-gated cursor-replay read from the GguiSessionEvent
  * ledger.
  *
  * # Auth surface
@@ -28,7 +28,7 @@ import type { Server as HttpServer } from 'node:http';
 import {
   InMemoryAuthAdapter,
   InMemoryCodeStore,
-  InMemoryRenderStore,
+  InMemoryGguiSessionStore,
   InMemoryShortCodeIndex,
 } from '@ggui-ai/mcp-server-core/in-memory';
 import { mintWsToken } from '@ggui-ai/mcp-server-core';
@@ -51,7 +51,7 @@ interface Fixture {
   renderId: string;
   appId: string;
   validToken: string;
-  store: InMemoryRenderStore;
+  store: InMemoryGguiSessionStore;
 }
 
 interface BootOpts {
@@ -59,7 +59,7 @@ interface BootOpts {
 }
 
 async function bootWithRender(opts: BootOpts = {}): Promise<Fixture> {
-  const renderStore = new InMemoryRenderStore();
+  const renderStore = new InMemoryGguiSessionStore();
   const stored = await renderStore.create({ appId: 'app-events-test' });
   // Seed N synthetic events so cursor / pagination scenarios have
   // something to walk. Type `'ui.created'` is one of the canonical
@@ -256,7 +256,7 @@ describe('GET /api/renders/:renderId/events', () => {
   });
 
   it('returns 410 REPLAY_HORIZON_PASSED when sinceSequence exceeds lastSequence', async () => {
-    // Render has 2 events (lastSequence=2). Cursor at 99 is a stale
+    // GguiSession has 2 events (lastSequence=2). Cursor at 99 is a stale
     // cursor from a different deployment / reset render.
     fx = await bootWithRender({ eventCount: 2 });
     const res = await fetch(

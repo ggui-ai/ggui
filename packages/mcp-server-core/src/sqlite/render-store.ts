@@ -1,6 +1,6 @@
 /**
- * SqliteRenderStore — file-backed reference implementation of
- * {@link RenderStore}.
+ * SqliteGguiSessionStore — file-backed reference implementation of
+ * {@link GguiSessionStore}.
  *
  * Ships as the OSS default for `@ggui-ai/mcp-server` when the operator
  * points `ggui serve` at a durable database file instead of running
@@ -32,7 +32,7 @@
  *
  * Historical replay is read directly from `render_events` by
  * `(render_id, seq >= fromSeq)` — this is fully persistent and
- * survives restart, equivalent to {@link InMemoryRenderStore}.
+ * survives restart, equivalent to {@link InMemoryGguiSessionStore}.
  *
  * Live tailing is served by an in-process `EventEmitter`. That's
  * **intentionally narrower** than the interface allows:
@@ -56,23 +56,23 @@ import Database, {
   type Statement as SqliteStatement,
 } from 'better-sqlite3';
 import { EventEmitter } from 'node:events';
-import type { Render } from '@ggui-ai/protocol';
+import type { GguiSession } from '@ggui-ai/protocol';
 import type {
   AppendEventInput,
-  CommitRenderInput,
-  CreateRenderInput,
+  CommitGguiSessionInput,
+  CreateGguiSessionInput,
   ObserveOptions,
-  RenderEvent,
-  RenderFilter,
-  RenderPatch,
-  RenderStore,
-  StoredRender,
+  GguiSessionEvent,
+  GguiSessionFilter,
+  GguiSessionPatch,
+  GguiSessionStore,
+  StoredGguiSession,
 } from '../render-store.js';
 
-export interface SqliteRenderStoreOptions {
+export interface SqliteGguiSessionStoreOptions {
   /**
    * SQLite database file path. Pass `:memory:` for ephemeral tests
-   * — shares the `SqliteRenderStore` code path but gets reset on
+   * — shares the `SqliteGguiSessionStore` code path but gets reset on
    * every instance. Default: `./ggui-renders.sqlite` (relative to
    * the process CWD).
    */
@@ -100,11 +100,11 @@ export interface SqliteRenderStoreOptions {
 const EFFECTIVELY_INFINITE_TTL_MS = Number.MAX_SAFE_INTEGER;
 
 /** Shape of a raw `renders` row as stored in SQLite. */
-interface RenderRow {
+interface GguiSessionRow {
   id: string;
   app_id: string;
   user_id: string | null;
-  /** JSON-serialised wire-shape Render payload. */
+  /** JSON-serialised wire-shape GguiSession payload. */
   payload: string;
   event_sequence: number;
   created_at: number;
@@ -129,9 +129,9 @@ interface EventRow {
 
 /** Per-render tail waiter — parked on `waitForNext()` until an append
  *  or delete wakes them via the shared `EventEmitter`. */
-type Waiter = (event: RenderEvent | null) => void;
+type Waiter = (event: GguiSessionEvent | null) => void;
 
-export class SqliteRenderStore implements RenderStore {
+export class SqliteGguiSessionStore implements GguiSessionStore {
   private readonly db: SqliteDatabase;
   private readonly ownsDatabase: boolean;
   private readonly now: () => number;
@@ -145,8 +145,8 @@ export class SqliteRenderStore implements RenderStore {
   private readonly stmts: {
     insertRender: SqliteStatement<unknown[]>;
     upsertRenderPayload: SqliteStatement<unknown[]>;
-    getRender: SqliteStatement<unknown[], RenderRow>;
-    listAll: SqliteStatement<unknown[], RenderRow>;
+    getGguiSession: SqliteStatement<unknown[], GguiSessionRow>;
+    listAll: SqliteStatement<unknown[], GguiSessionRow>;
     updateTimestamps: SqliteStatement<unknown[]>;
     updateHostContext: SqliteStatement<unknown[]>;
     deleteRender: SqliteStatement<unknown[]>;
@@ -159,7 +159,7 @@ export class SqliteRenderStore implements RenderStore {
 
   private idCounter = 0;
 
-  constructor(opts: SqliteRenderStoreOptions = {}) {
+  constructor(opts: SqliteGguiSessionStoreOptions = {}) {
     if (opts.database) {
       this.db = opts.database;
       this.ownsDatabase = false;
@@ -179,10 +179,10 @@ export class SqliteRenderStore implements RenderStore {
     this.stmts = {
       insertRender: this.db.prepare<unknown[]>(INSERT_RENDER_SQL),
       upsertRenderPayload: this.db.prepare<unknown[]>(UPSERT_RENDER_PAYLOAD_SQL),
-      getRender: this.db.prepare<unknown[], RenderRow>(
+      getGguiSession: this.db.prepare<unknown[], GguiSessionRow>(
         `SELECT * FROM renders WHERE id = ?`,
       ),
-      listAll: this.db.prepare<unknown[], RenderRow>(
+      listAll: this.db.prepare<unknown[], GguiSessionRow>(
         `SELECT * FROM renders ORDER BY created_at ASC, id ASC`,
       ),
       updateTimestamps: this.db.prepare<unknown[]>(
@@ -222,17 +222,17 @@ export class SqliteRenderStore implements RenderStore {
     if (this.ownsDatabase) this.db.close();
   }
 
-  async create(input: CreateRenderInput): Promise<StoredRender> {
+  async create(input: CreateGguiSessionInput): Promise<StoredGguiSession> {
     const id = input.id ?? this.idGenerator();
-    const existing = this.stmts.getRender.get(id) as RenderRow | undefined;
+    const existing = this.stmts.getGguiSession.get(id) as GguiSessionRow | undefined;
     if (existing) {
       throw new Error(
-        `SqliteRenderStore.create: render already exists: ${id}`,
+        `SqliteGguiSessionStore.create: render already exists: ${id}`,
       );
     }
     const t = this.now();
-    // Placeholder ComponentRender — visible-bits surface fills on `commit`.
-    const placeholder: Render = {
+    // Placeholder ComponentGguiSession — visible-bits surface fills on `commit`.
+    const placeholder: GguiSession = {
       type: 'component',
       id,
       appId: input.appId,
@@ -242,7 +242,7 @@ export class SqliteRenderStore implements RenderStore {
       lastActivityAt: t,
       expiresAt: t + this.defaultTtlMs,
     };
-    const stored: StoredRender = {
+    const stored: StoredGguiSession = {
       id,
       appId: input.appId,
       userId: input.userId,
@@ -276,15 +276,15 @@ export class SqliteRenderStore implements RenderStore {
     return stored;
   }
 
-  async get(id: string): Promise<StoredRender | null> {
-    const row = this.stmts.getRender.get(id) as RenderRow | undefined;
+  async get(id: string): Promise<StoredGguiSession | null> {
+    const row = this.stmts.getGguiSession.get(id) as GguiSessionRow | undefined;
     return row ? rowToStored(row) : null;
   }
 
-  async list(filter: RenderFilter): Promise<StoredRender[]> {
-    const rows = this.stmts.listAll.all() as RenderRow[];
+  async list(filter: GguiSessionFilter): Promise<StoredGguiSession[]> {
+    const rows = this.stmts.listAll.all() as GguiSessionRow[];
     const now = this.now();
-    const filtered: StoredRender[] = [];
+    const filtered: StoredGguiSession[] = [];
     for (const row of rows) {
       if (filter.appId !== undefined && row.app_id !== filter.appId) continue;
       if (filter.userId !== undefined && (row.user_id ?? undefined) !== filter.userId) continue;
@@ -302,10 +302,10 @@ export class SqliteRenderStore implements RenderStore {
     return filtered.slice(offset, offset + limit);
   }
 
-  async update(id: string, patch: RenderPatch): Promise<StoredRender> {
-    const row = this.stmts.getRender.get(id) as RenderRow | undefined;
+  async update(id: string, patch: GguiSessionPatch): Promise<StoredGguiSession> {
+    const row = this.stmts.getGguiSession.get(id) as GguiSessionRow | undefined;
     if (!row) {
-      throw new Error(`SqliteRenderStore.update: render not found: ${id}`);
+      throw new Error(`SqliteGguiSessionStore.update: render not found: ${id}`);
     }
     this.stmts.updateTimestamps.run(
       patch.lastActivityAt ?? null,
@@ -315,7 +315,7 @@ export class SqliteRenderStore implements RenderStore {
     if (patch.hostContext !== undefined) {
       this.stmts.updateHostContext.run(JSON.stringify(patch.hostContext), id);
     }
-    const updated = this.stmts.getRender.get(id) as RenderRow;
+    const updated = this.stmts.getGguiSession.get(id) as GguiSessionRow;
     return rowToStored(updated);
   }
 
@@ -328,10 +328,10 @@ export class SqliteRenderStore implements RenderStore {
     this.wakeWaiters(id, null);
   }
 
-  async commit(input: CommitRenderInput): Promise<StoredRender> {
+  async commit(input: CommitGguiSessionInput): Promise<StoredGguiSession> {
     const incoming = input.render;
-    const existing = this.stmts.getRender.get(incoming.id) as
-      | RenderRow
+    const existing = this.stmts.getGguiSession.get(incoming.id) as
+      | GguiSessionRow
       | undefined;
     const t = this.now();
     if (existing) {
@@ -342,11 +342,11 @@ export class SqliteRenderStore implements RenderStore {
         t,
         incoming.id,
       );
-      const updated = this.stmts.getRender.get(incoming.id) as RenderRow;
+      const updated = this.stmts.getGguiSession.get(incoming.id) as GguiSessionRow;
       return rowToStored(updated);
     }
     // First-write — mint a fresh row using the supplied lifecycle slice.
-    const stored: StoredRender = {
+    const stored: StoredGguiSession = {
       id: incoming.id,
       appId: input.appId,
       userId: input.userId,
@@ -380,13 +380,13 @@ export class SqliteRenderStore implements RenderStore {
     // Serialize the read-then-write under `BEGIN IMMEDIATE` so
     // concurrent appends can't both read `eventSequence = N` and
     // race on `N+1`.
-    const txn = this.db.transaction((): { seq: number; event: RenderEvent } => {
-      const row = this.stmts.getRender.get(input.renderId) as
-        | RenderRow
+    const txn = this.db.transaction((): { seq: number; event: GguiSessionEvent } => {
+      const row = this.stmts.getGguiSession.get(input.renderId) as
+        | GguiSessionRow
         | undefined;
       if (!row) {
         throw new Error(
-          `SqliteRenderStore.appendEvent: render not found: ${input.renderId}`,
+          `SqliteGguiSessionStore.appendEvent: render not found: ${input.renderId}`,
         );
       }
       const seq = row.event_sequence + 1;
@@ -402,7 +402,7 @@ export class SqliteRenderStore implements RenderStore {
       // `last_activity_at` stays numeric ms-epoch — it tracks the
       // render row's lifecycle clock, not the ledger's wire shape.
       this.stmts.bumpSequence.run(seq, nowMs, input.renderId);
-      const event: RenderEvent = {
+      const event: GguiSessionEvent = {
         seq,
         type: input.type,
         timestamp: timestampIso,
@@ -423,12 +423,12 @@ export class SqliteRenderStore implements RenderStore {
     sinceSeq: number,
     limit: number,
   ): Promise<{
-    readonly events: readonly RenderEvent[];
+    readonly events: readonly GguiSessionEvent[];
     readonly lastSequence: number;
     readonly hasMore: boolean;
     readonly horizonSeq: number;
   } | null> {
-    const row = this.stmts.getRender.get(renderId) as RenderRow | undefined;
+    const row = this.stmts.getGguiSession.get(renderId) as GguiSessionRow | undefined;
     if (!row) return null;
     const lastSequence = row.event_sequence;
     const horizonSeq = 0;
@@ -450,22 +450,22 @@ export class SqliteRenderStore implements RenderStore {
     return { events, lastSequence, hasMore, horizonSeq };
   }
 
-  observe(id: string, opts: ObserveOptions = {}): AsyncIterable<RenderEvent> {
+  observe(id: string, opts: ObserveOptions = {}): AsyncIterable<GguiSessionEvent> {
     const fromSeq = opts.fromSeq ?? 1;
     const tail = opts.tail ?? true;
     const selectStmt = this.stmts.selectEventsFromSeq;
-    const getStmt = this.stmts.getRender;
-    const waitForNext = (renderId: string): Promise<RenderEvent | null> =>
+    const getStmt = this.stmts.getGguiSession;
+    const waitForNext = (renderId: string): Promise<GguiSessionEvent | null> =>
       this.waitForNext(renderId);
 
     return {
-      [Symbol.asyncIterator](): AsyncIterator<RenderEvent> {
+      [Symbol.asyncIterator](): AsyncIterator<GguiSessionEvent> {
         let nextSeq = fromSeq;
         let done = false;
         return {
-          async next(): Promise<IteratorResult<RenderEvent>> {
+          async next(): Promise<IteratorResult<GguiSessionEvent>> {
             if (done) return { value: undefined, done: true };
-            const row = getStmt.get(id) as RenderRow | undefined;
+            const row = getStmt.get(id) as GguiSessionRow | undefined;
             if (!row) {
               done = true;
               return { value: undefined, done: true };
@@ -488,7 +488,7 @@ export class SqliteRenderStore implements RenderStore {
             nextSeq = event.seq + 1;
             return { value: event, done: false };
           },
-          async return(): Promise<IteratorResult<RenderEvent>> {
+          async return(): Promise<IteratorResult<GguiSessionEvent>> {
             done = true;
             return { value: undefined, done: true };
           },
@@ -499,8 +499,8 @@ export class SqliteRenderStore implements RenderStore {
 
   // ── internals ──────────────────────────────────────────────────────
 
-  private waitForNext(renderId: string): Promise<RenderEvent | null> {
-    return new Promise<RenderEvent | null>((resolve) => {
+  private waitForNext(renderId: string): Promise<GguiSessionEvent | null> {
+    return new Promise<GguiSessionEvent | null>((resolve) => {
       let waiters = this.waiters.get(renderId);
       if (!waiters) {
         waiters = new Set<Waiter>();
@@ -510,14 +510,14 @@ export class SqliteRenderStore implements RenderStore {
     });
   }
 
-  private wakeWaiters(renderId: string, event: RenderEvent | null): void {
+  private wakeWaiters(renderId: string, event: GguiSessionEvent | null): void {
     const waiters = this.waiters.get(renderId);
     if (!waiters || waiters.size === 0) return;
     this.waiters.delete(renderId);
     for (const w of waiters) w(event);
   }
 
-  private wakeAllWaiters(event: RenderEvent | null): void {
+  private wakeAllWaiters(event: GguiSessionEvent | null): void {
     for (const [, waiters] of this.waiters) {
       for (const w of waiters) w(event);
     }
@@ -589,12 +589,12 @@ UPDATE renders SET payload = ?, last_activity_at = ? WHERE id = ?
 // Row ↔ domain conversions
 // ─────────────────────────────────────────────────────────────────────
 
-function rowToStored(row: RenderRow): StoredRender {
+function rowToStored(row: GguiSessionRow): StoredGguiSession {
   const now = Date.now();
   const status: 'active' | 'expired' = row.expires_at <= now
     ? 'expired'
     : 'active';
-  const render = parseJson<Render>(row.payload, {
+  const render = parseJson<GguiSession>(row.payload, {
     type: 'component',
     id: row.id,
     appId: row.app_id,
@@ -603,8 +603,8 @@ function rowToStored(row: RenderRow): StoredRender {
     createdAt: row.created_at,
     lastActivityAt: row.last_activity_at,
     expiresAt: row.expires_at,
-  } as Render);
-  const stored: StoredRender = {
+  } as GguiSession);
+  const stored: StoredGguiSession = {
     id: row.id,
     appId: row.app_id,
     userId: row.user_id ?? undefined,
@@ -616,7 +616,7 @@ function rowToStored(row: RenderRow): StoredRender {
     render,
   };
   if (row.end_user_identity) {
-    const identity = parseJson<NonNullable<StoredRender['endUserIdentity']> | null>(
+    const identity = parseJson<NonNullable<StoredGguiSession['endUserIdentity']> | null>(
       row.end_user_identity,
       null,
     );
@@ -624,7 +624,7 @@ function rowToStored(row: RenderRow): StoredRender {
   }
   if (row.theme_id) (stored as { themeId?: string }).themeId = row.theme_id;
   if (row.host_context) {
-    const ctx = parseJson<NonNullable<StoredRender['hostContext']> | null>(
+    const ctx = parseJson<NonNullable<StoredGguiSession['hostContext']> | null>(
       row.host_context,
       null,
     );
@@ -639,7 +639,7 @@ function rowToStored(row: RenderRow): StoredRender {
   return stored;
 }
 
-function rowToEvent(row: EventRow): RenderEvent {
+function rowToEvent(row: EventRow): GguiSessionEvent {
   // Legacy rows (pre-Wave-7) stored a numeric ms-epoch. Coerce on
   // read so downstream consumers always see the ISO string the
   // protocol promises.
@@ -664,7 +664,7 @@ function parseJson<T>(raw: string, fallback: T): T {
 }
 
 function computeRowStatus(
-  row: RenderRow,
+  row: GguiSessionRow,
   now: number,
 ): 'active' | 'expired' {
   if (row.expires_at <= now) return 'expired';

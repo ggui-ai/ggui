@@ -15,7 +15,7 @@
  *
  * Tests are transport-agnostic — the fake `sendEnvelope` records
  * envelopes in-memory. Real transport plumbing (OSS
- * `RenderStreamBuffer`, hosted DDB writer) is exercised separately
+ * `GguiSessionStreamBuffer`, hosted DDB writer) is exercised separately
  * in their own suites; these tests pin the orchestrator's contract.
  */
 import { describe, it, expect, vi } from 'vitest';
@@ -108,7 +108,7 @@ function makeDeps(overrides: {
 
 describe('evaluateProvisionalPreviewGate', () => {
   const ctx = { appId: 'app-1', renderId: 'sess-1' };
-  const storyInput = { story: { intent: 'go' }, isMcpAppsRender: false };
+  const storyInput = { story: { intent: 'go' }, isMcpAppsGguiSession: false };
 
   it('skips when deps undefined (preview not wired)', () => {
     expect(evaluateProvisionalPreviewGate(undefined, storyInput, ctx)).toEqual({
@@ -132,7 +132,7 @@ describe('evaluateProvisionalPreviewGate', () => {
     const { deps } = makeDeps({ emitter: { run: async () => {} } });
     const result = evaluateProvisionalPreviewGate(
       deps,
-      { story: { intent: 'go' }, isMcpAppsRender: true },
+      { story: { intent: 'go' }, isMcpAppsGguiSession: true },
       ctx,
     );
     expect(result).toEqual({ kind: 'skip', reason: 'mcp-apps-render' });
@@ -143,7 +143,7 @@ describe('evaluateProvisionalPreviewGate', () => {
     expect(
       evaluateProvisionalPreviewGate(
         deps,
-        { story: undefined, isMcpAppsRender: false },
+        { story: undefined, isMcpAppsGguiSession: false },
         ctx,
       ),
     ).toEqual({ kind: 'skip', reason: 'no-story' });
@@ -185,7 +185,7 @@ describe('evaluateProvisionalPreviewGate', () => {
     });
     evaluateProvisionalPreviewGate(
       deps,
-      { story: { intent: 'specific' }, isMcpAppsRender: false },
+      { story: { intent: 'specific' }, isMcpAppsGguiSession: false },
       ctx,
     );
     expect(predicate).toHaveBeenCalledWith({

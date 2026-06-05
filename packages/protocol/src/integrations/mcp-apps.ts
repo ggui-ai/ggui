@@ -302,7 +302,7 @@ export interface McpAppAiGguiRenderMeta {
    */
   readonly lastSequence?: number;
 
-  // Render state — what the iframe re-renders on update
+  // GguiSession state — what the iframe re-renders on update
   readonly propsJson?: string;
   readonly actionNextSteps?: Readonly<Record<string, string>>;
   readonly contextSlots?: ReadonlyArray<McpAppContextSlot>;
@@ -630,7 +630,7 @@ export function parseMcpAppAiGguiHostSessionMeta(
  *
  * @public
  */
-export interface RenderSummaryWire {
+export interface GguiSessionSummaryWire {
   readonly renderId: string;
   readonly hostName?: string;
   readonly hostSessionId?: string;
@@ -696,7 +696,7 @@ export interface McpAppsSource {
 }
 
 /**
- * Render variant: an embedded third-party MCP App iframe.
+ * GguiSession variant: an embedded third-party MCP App iframe.
  *
  * **Locator-oriented, not content-oriented.** Persisted state carries
  * `source` (connector identity) + declared CSP/permissions/dimensions
@@ -704,13 +704,13 @@ export interface McpAppsSource {
  * The `@ggui-ai/mcp-server` resource-proxy route fetches the bytes
  * on-demand via `resources/read` against the source server.
  *
- * **Union safety.** Fields that exist on the {@link ComponentRender}
+ * **Union safety.** Fields that exist on the {@link ComponentGguiSession}
  * variant are declared here as `?: never` so consumers that access them
- * via optional chaining on `Render` still typecheck cleanly. Those
- * fields semantically DO NOT exist on McpAppsRender — the `?: never`
+ * via optional chaining on `GguiSession` still typecheck cleanly. Those
+ * fields semantically DO NOT exist on McpAppsGguiSession — the `?: never`
  * typing encodes the "structurally absent" guarantee.
  */
-export interface McpAppsRender {
+export interface McpAppsGguiSession {
   /** Discriminator — required on this variant. */
   readonly type: 'mcpApps';
 
@@ -743,8 +743,8 @@ export interface McpAppsRender {
    */
   readonly resourceContent?: string;
 
-  // ComponentRender-specific fields — ALWAYS absent on this variant.
-  // Typed as `?: never` so `Render` readers that optional-chain these
+  // ComponentGguiSession-specific fields — ALWAYS absent on this variant.
+  // Typed as `?: never` so `GguiSession` readers that optional-chain these
   // fields (`item.componentCode?.trim()`) still typecheck. If you find
   // yourself wanting to populate one of these, reconsider the design —
   // they belong to the OTHER variant.
@@ -765,10 +765,10 @@ export interface McpAppsRender {
 }
 
 /**
- * Type guard: narrows a `Render` (or unknown) to {@link McpAppsRender}.
+ * Type guard: narrows a `GguiSession` (or unknown) to {@link McpAppsGguiSession}.
  * Uses the discriminator.
  */
-export function isMcpAppsRender(entry: unknown): entry is McpAppsRender {
+export function isMcpAppsGguiSession(entry: unknown): entry is McpAppsGguiSession {
   return (
     entry !== null &&
     typeof entry === 'object' &&
@@ -777,15 +777,15 @@ export function isMcpAppsRender(entry: unknown): entry is McpAppsRender {
 }
 
 /**
- * Structural validator for an `McpAppsRender` — not a Zod schema
+ * Structural validator for an `McpAppsGguiSession` — not a Zod schema
  * so we don't force a Zod dependency here. Returns null on failure
  * (caller maps to an appropriate error code). Required when accepting
  * one over the wire from an agent: the discriminator alone isn't
  * enough.
  */
-export function validateMcpAppsRender(
+export function validateMcpAppsGguiSession(
   input: unknown,
-): McpAppsRender | null {
+): McpAppsGguiSession | null {
   if (input === null || typeof input !== 'object') return null;
   const item = input as Record<string, unknown>;
   if (item.type !== 'mcpApps') return null;
@@ -798,7 +798,7 @@ export function validateMcpAppsRender(
   if (typeof source.connectorId !== 'string' || source.connectorId.length === 0) return null;
   if (typeof source.toolName !== 'string' || source.toolName.length === 0) return null;
   if (typeof source.resourceUri !== 'string' || !source.resourceUri.startsWith('ui://')) return null;
-  return input as McpAppsRender;
+  return input as McpAppsGguiSession;
 }
 
 // =============================================================================

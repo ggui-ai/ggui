@@ -188,7 +188,7 @@ Available adapters: ${adapters.join(', ')}`;
 ## Interactive Actions
 The component MUST include clickable elements for each action below.
 Each element must call \`props.onSubmit({ action: "click", actionId: "<id>", label: "<label>" })\` when clicked.
-Render these as buttons, cards, or list items — match the UI style.
+GguiSession these as buttons, cards, or list items — match the UI style.
 
 ${actions.map((a, i) => `${i + 1}. **${a.label}** (id: \`${a.id}\`)${a.description ? ` — ${a.description}` : ''}${a.icon ? ` [icon: ${a.icon}]` : ''}`).join('\n')}`;
   }

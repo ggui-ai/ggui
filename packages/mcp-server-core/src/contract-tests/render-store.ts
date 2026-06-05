@@ -1,5 +1,5 @@
 /**
- * Contract test factory for {@link RenderStore} implementations.
+ * Contract test factory for {@link GguiSessionStore} implementations.
  *
  * Normative semantics covered (see `render-store.ts` JSDoc):
  *
@@ -20,33 +20,33 @@
 import { describe, expect, it } from 'vitest';
 import type {
   AppendEventInput,
-  RenderEvent,
-  RenderStore,
+  GguiSessionEvent,
+  GguiSessionStore,
 } from '../render-store.js';
 
-export interface RenderStoreContractClock {
+export interface GguiSessionStoreContractClock {
   now(): number;
   tick(ms: number): void;
 }
 
-export interface RenderStoreContractOptions {
+export interface GguiSessionStoreContractOptions {
   /**
    * Factory that produces `(clock, store)` pairs where `store` reads
    * wall-time from `clock`. Omit if the impl can't be time-injected —
    * status=`expired` tests are then skipped, not failed.
    */
   makeWithClock?: () => Promise<{
-    clock: RenderStoreContractClock;
-    store: RenderStore;
+    clock: GguiSessionStoreContractClock;
+    store: GguiSessionStore;
   }>;
 }
 
 export function renderStoreContract(
   label: string,
-  makeStore: () => Promise<RenderStore> | RenderStore,
-  opts: RenderStoreContractOptions = {},
+  makeStore: () => Promise<GguiSessionStore> | GguiSessionStore,
+  opts: GguiSessionStoreContractOptions = {},
 ): void {
-  describe(`RenderStore contract — ${label}`, () => {
+  describe(`GguiSessionStore contract — ${label}`, () => {
     it('create returns a render with appId + timestamps populated', async () => {
       const store = await makeStore();
       const r = await store.create({ appId: 'app-a', userId: 'u1' });
@@ -151,7 +151,7 @@ export function renderStoreContract(
         data: {},
       });
 
-      const collected: RenderEvent[] = [];
+      const collected: GguiSessionEvent[] = [];
       const iter = store.observe(r.id)[Symbol.asyncIterator]();
       // First next resolves synchronously from backlog.
       const first = await iter.next();
@@ -212,7 +212,7 @@ export function renderStoreContract(
 }
 
 async function appendMany(
-  store: RenderStore,
+  store: GguiSessionStore,
   renderId: string,
   events: Array<Omit<AppendEventInput, 'renderId'>>,
 ): Promise<void> {
@@ -222,9 +222,9 @@ async function appendMany(
 }
 
 async function collect(
-  iterable: AsyncIterable<RenderEvent>,
-): Promise<RenderEvent[]> {
-  const out: RenderEvent[] = [];
+  iterable: AsyncIterable<GguiSessionEvent>,
+): Promise<GguiSessionEvent[]> {
+  const out: GguiSessionEvent[] = [];
   for await (const e of iterable) out.push(e);
   return out;
 }

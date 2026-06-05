@@ -12,21 +12,21 @@
  * `currentRender`, that frame now provably patches the visible mount.
  */
 import { describe, it, expect, vi } from 'vitest';
-import type { Render, PropsUpdatePayload } from '@ggui-ai/protocol';
-import type { RenderSeedInput } from '../types.js';
+import type { GguiSession, PropsUpdatePayload } from '@ggui-ai/protocol';
+import type { GguiSessionSeedInput } from '../types.js';
 import { createPropsUpdateHandler } from '../channels/props-update.js';
 
 /** Typed mount-surface stub — matches the handler's `applyRender` dep. */
 const makeApplyRender = (): ReturnType<
-  typeof vi.fn<(render: Render | RenderSeedInput) => Promise<void>>
-> => vi.fn(async (_render: Render | RenderSeedInput): Promise<void> => {});
+  typeof vi.fn<(render: GguiSession | GguiSessionSeedInput) => Promise<void>>
+> => vi.fn(async (_render: GguiSession | GguiSessionSeedInput): Promise<void> => {});
 
-function componentRender(props: Record<string, unknown>): Render {
+function componentRender(props: Record<string, unknown>): GguiSession {
   return {
     id: 'render_1',
     appId: 'app_1',
     componentCode: 'export default () => null',
-    props: props as Render['props'],
+    props: props as GguiSession['props'],
     eventSequence: 0,
     createdAt: 0,
     lastActivityAt: 0,
@@ -39,7 +39,7 @@ describe('createPropsUpdateHandler (#290 boot-consolidation core)', () => {
     const current = componentRender({ checked: false });
     const applyRender = makeApplyRender();
     const handler = createPropsUpdateHandler({
-      getCurrentRender: () => current,
+      getCurrentGguiSession: () => current,
       applyRender,
     });
 
@@ -61,7 +61,7 @@ describe('createPropsUpdateHandler (#290 boot-consolidation core)', () => {
   it('drops a frame whose renderId does not match the mounted render', async () => {
     const applyRender = makeApplyRender();
     const handler = createPropsUpdateHandler({
-      getCurrentRender: () => componentRender({ checked: false }),
+      getCurrentGguiSession: () => componentRender({ checked: false }),
       applyRender,
     });
     await handler.onMessage({
@@ -74,7 +74,7 @@ describe('createPropsUpdateHandler (#290 boot-consolidation core)', () => {
   it('no-ops when no render is mounted yet', async () => {
     const applyRender = makeApplyRender();
     const handler = createPropsUpdateHandler({
-      getCurrentRender: () => null,
+      getCurrentGguiSession: () => null,
       applyRender,
     });
     await handler.onMessage({
@@ -86,7 +86,7 @@ describe('createPropsUpdateHandler (#290 boot-consolidation core)', () => {
 
   it('no-ops for a system render (system cards take no props_update)', async () => {
     const applyRender = makeApplyRender();
-    const systemRender: Render = {
+    const systemRender: GguiSession = {
       id: 'render_1',
       appId: 'app_1',
       type: 'system',
@@ -97,7 +97,7 @@ describe('createPropsUpdateHandler (#290 boot-consolidation core)', () => {
       expiresAt: 0,
     };
     const handler = createPropsUpdateHandler({
-      getCurrentRender: () => systemRender,
+      getCurrentGguiSession: () => systemRender,
       applyRender,
     });
     await handler.onMessage({
@@ -110,7 +110,7 @@ describe('createPropsUpdateHandler (#290 boot-consolidation core)', () => {
   it('ignores a malformed frame (null props)', async () => {
     const applyRender = makeApplyRender();
     const handler = createPropsUpdateHandler({
-      getCurrentRender: () => componentRender({ checked: false }),
+      getCurrentGguiSession: () => componentRender({ checked: false }),
       applyRender,
     });
     await handler.onMessage({

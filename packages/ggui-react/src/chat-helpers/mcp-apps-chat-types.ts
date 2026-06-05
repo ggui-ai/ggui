@@ -31,12 +31,12 @@ export type HostDisplayMode = 'inline' | 'fullscreen' | 'pip';
  * mechanics (WebSocket, state polling, partial patches) are the server-
  * rendered HTML's concern — the host stays brand-neutral.
  */
-export interface RenderRef {
+export interface GguiSessionRef {
   /**
    * MCP-Apps spec-canonical resource URI from `_meta.ui.resourceUri` on
    * the tool result. Stable per render: re-emits of the same URI (e.g.
    * an `*_update` tool returning the same URI) coalesce onto the same
-   * iframe entry via {@link RenderRef} dedupe.
+   * iframe entry via {@link GguiSessionRef} dedupe.
    */
   readonly resourceUri: string;
   /**
@@ -108,6 +108,6 @@ export type ChatEntry =
   | { readonly id: string; readonly kind: 'user'; readonly text: string }
   | { readonly id: string; readonly kind: 'assistant'; readonly text: string }
   | ToolCallEntry
-  | { readonly id: string; readonly kind: 'render'; readonly render: RenderRef }
+  | { readonly id: string; readonly kind: 'render'; readonly render: GguiSessionRef }
   | { readonly id: string; readonly kind: 'error'; readonly text: string }
   | { readonly id: string; readonly kind: 'end'; readonly subtype: string };

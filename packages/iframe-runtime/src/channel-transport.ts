@@ -75,7 +75,7 @@ export const DEFAULT_IFRAME_POLL_INTERVAL_MS = 10_000;
  * render lifecycle and across WS disconnect/reconnect transitions.
  */
 interface ChannelState {
-  /** Render id the subscription is bound to. */
+  /** GguiSession id the subscription is bound to. */
   readonly renderId: string;
   /** Channel name (keys into `streamSpec`). */
   readonly channelName: string;
@@ -137,7 +137,7 @@ export type ToolsCallInvoker = (args: {
  * Options for {@link createChannelTransportRouter}.
  */
 export interface ChannelTransportRouterOptions {
-  /** Render id the router scopes channel_subscribe frames against. */
+  /** GguiSession id the router scopes channel_subscribe frames against. */
   readonly renderId: string;
   /** App (tenant) id paired with renderId on the subscribe frame. */
   readonly appId: string;

@@ -133,7 +133,7 @@ describe('checkMissingUsage', () => {
   it('does NOT flag clientCapabilities.gadgets export-uses without usage', () => {
     // `GadgetExportUse.usage` is an OPTIONAL intent-override; the
     // SPEC-documented canonical wire form is the bare identity
-    // reference `gadgets[<pkg>][<export>] = {}`. Render-time resolution
+    // reference `gadgets[<pkg>][<export>] = {}`. GguiSession-time resolution
     // inherits the registered descriptor's `usage`, so a missing
     // wire-side `usage` is the happy path — not a hygiene issue.
     const contract: DataContract = {

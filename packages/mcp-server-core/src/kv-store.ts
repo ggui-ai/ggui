@@ -9,7 +9,7 @@
  *   - Idempotency tokens (deduplication windows)
  *   - "Last seen `seq` per consumer" resume points (can be volatile)
  *
- * Distinct from {@link RenderStore} — renders are durable and event-
+ * Distinct from {@link GguiSessionStore} — renders are durable and event-
  * streamed; kv entries are transient and keyed.
  *
  * Reference implementations:

@@ -6,7 +6,7 @@ import type {
   JsonObject,
   StreamSpec,
 } from '@ggui-ai/protocol';
-import type { ComponentRender, SystemRender } from '@ggui-ai/protocol';
+import type { ComponentGguiSession, SystemGguiSession } from '@ggui-ai/protocol';
 import {
   composeContentSecurityPolicy,
   deriveBundleOrigins,
@@ -24,12 +24,12 @@ const NOW = '2026-05-09T00:00:00.000Z';
 const NOW_MS = Date.parse(NOW);
 
 /**
- * Build a `ComponentRender` (replaces the pre-Phase-B `StackItem` helper).
+ * Build a `ComponentGguiSession` (replaces the pre-Phase-B `StackItem` helper).
  * Post-flatten-render-identity: every render is the addressable unit;
- * `RenderBase` carries the lifecycle fields (appId, eventSequence,
+ * `GguiSessionBase` carries the lifecycle fields (appId, eventSequence,
  * createdAt, lastActivityAt, expiresAt) so the helpers expect them.
  */
-function componentItem(over: Partial<ComponentRender> = {}): ComponentRender {
+function componentItem(over: Partial<ComponentGguiSession> = {}): ComponentGguiSession {
   return {
     id: 'page-1',
     appId: 'app-test',
@@ -43,7 +43,7 @@ function componentItem(over: Partial<ComponentRender> = {}): ComponentRender {
   };
 }
 
-function systemItem(over: Partial<SystemRender> = {}): SystemRender {
+function systemItem(over: Partial<SystemGguiSession> = {}): SystemGguiSession {
   return {
     id: 'page-1',
     appId: 'app-test',
@@ -294,7 +294,7 @@ describe('deriveContractBundle — content-addressable validator bundle', () => 
 describe('deriveContextSlots — resume-aware seed from contextSnapshot', () => {
   // Resume contract — slice V wires the runtime to mirror its
   // contextSpec snapshots to the server via `ggui_runtime_sync_context`.
-  // The handler upserts onto `ComponentRender.contextSnapshot`. On
+  // The handler upserts onto `ComponentGguiSession.contextSnapshot`. On
   // chat-history rehydrate, the bootstrap-meta projection reads the
   // snapshot first (when present) and falls back to the contract's
   // authoring-time default when a slot wasn't covered. The user
@@ -478,7 +478,7 @@ describe('derivePermissionsPolicy — clientCapabilities → Permissions-Policy 
     ).toEqual(['camera']);
   });
 
-  it('system items return undefined (no clientCapabilities field on SystemRender)', () => {
+  it('system items return undefined (no clientCapabilities field on SystemGguiSession)', () => {
     expect(derivePermissionsPolicy(systemItem())).toBeUndefined();
   });
 
@@ -989,7 +989,7 @@ describe('derivePublicEnvProjection', () => {
 
   function componentWithCaps(
     gadgetDescriptors: readonly GadgetDescriptor[],
-  ): ComponentRender {
+  ): ComponentGguiSession {
     return componentItem({ gadgetDescriptors });
   }
 

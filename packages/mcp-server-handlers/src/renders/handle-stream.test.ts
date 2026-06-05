@@ -2,7 +2,7 @@
  * handleStream — validation branches + derivation correctness.
  *
  * Post-Phase-B (flatten-render-identity): the helper now takes a
- * `RenderStreamTarget` (single render — no vessel, no stack). The
+ * `GguiSessionStreamTarget` (single render — no vessel, no stack). The
  * `NoActiveStackItemError` + `StackItemNotFoundError` matrix collapsed
  * — those errors are only meaningful when the stream target wraps a
  * stack of entries; with one render per target, "stack item not
@@ -19,7 +19,7 @@ import {
   handleStream,
   type HandleStreamEnvelope,
   type SendEnvelopeFn,
-  type RenderStreamTarget,
+  type GguiSessionStreamTarget,
 } from './handle-stream.js';
 import { ChannelNotDeclaredError, InvalidCompleteError } from './errors.js';
 
@@ -39,7 +39,7 @@ const BASIC_SPEC: StreamSpec = {
   },
 };
 
-function mkRender(overrides: Partial<RenderStreamTarget> = {}): RenderStreamTarget {
+function mkRender(overrides: Partial<GguiSessionStreamTarget> = {}): GguiSessionStreamTarget {
   return {
     renderId: 'render_1',
     streamSpec: BASIC_SPEC,

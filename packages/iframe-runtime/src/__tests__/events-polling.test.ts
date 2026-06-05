@@ -1,7 +1,7 @@
 /**
  * `buildEventsPolling` — registry-level events-polling composition for
  * the iframe-runtime (R7). Reads /api/renders/:renderId/events with a
- * RenderEvent ledger cursor; dispatches each event by `event.type` to
+ * GguiSessionEvent ledger cursor; dispatches each event by `event.type` to
  * the registered channel handler.
  *
  * Mirrors the dropped R6 snapshot-polling tests with the cursor

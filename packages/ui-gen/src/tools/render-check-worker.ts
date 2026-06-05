@@ -176,22 +176,22 @@ async function renderOnce(input: WorkerInput): Promise<WorkerOutput> {
     if (message.includes('Cannot read properties of undefined')) {
       return {
         ok: false,
-        error: `Render error: ${message}. A prop is likely undefined — add a default value or null check.`,
+        error: `GguiSession error: ${message}. A prop is likely undefined — add a default value or null check.`,
       };
     }
     if (message.includes('Cannot read properties of null')) {
       return {
         ok: false,
-        error: `Render error: ${message}. A value is null — add a null check or fallback.`,
+        error: `GguiSession error: ${message}. A value is null — add a null check or fallback.`,
       };
     }
     if (message.includes('is not a function')) {
       return {
         ok: false,
-        error: `Render error: ${message}. Check that all imported functions exist and are called correctly.`,
+        error: `GguiSession error: ${message}. Check that all imported functions exist and are called correctly.`,
       };
     }
-    return { ok: false, error: `Render error: ${message}` };
+    return { ok: false, error: `GguiSession error: ${message}` };
   }
 }
 

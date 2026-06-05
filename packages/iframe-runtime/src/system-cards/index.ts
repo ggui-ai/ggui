@@ -1,7 +1,7 @@
 /**
  * System-card registry.
  *
- * Central mapping from `SystemRender.kind` (a stable wire string)
+ * Central mapping from `SystemGguiSession.kind` (a stable wire string)
  * to a real React component bundled inside the iframe-runtime. The
  * runtime's self-contained boot path looks up the kind here when it
  * sees a render with `type: 'system'`. Unknown kinds fall through
@@ -13,7 +13,7 @@
  *   1. Author `MyNewCard.tsx` in this directory.
  *   2. Add an entry to {@link SYSTEM_CARD_REGISTRY} below.
  *   3. (Optional) Add the new kind string to
- *      `SystemRenderKind` in `@ggui-ai/protocol` for IDE autocomplete.
+ *      `SystemGguiSessionKind` in `@ggui-ai/protocol` for IDE autocomplete.
  */
 import * as React from 'react';
 import { ThemeProvider, lightTheme, darkTheme } from '@ggui-ai/design/themes';
@@ -106,7 +106,7 @@ function UnknownSystemCard({
 
 /**
  * Registered system-card kinds. Keep keys aligned with
- * `SystemRenderKind` in `@ggui-ai/protocol` so wire + bundle stay
+ * `SystemGguiSessionKind` in `@ggui-ai/protocol` so wire + bundle stay
  * in sync. New kinds added without a registry entry render as
  * {@link UnknownSystemCard}.
  */

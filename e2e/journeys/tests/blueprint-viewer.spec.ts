@@ -125,7 +125,7 @@ test.describe.serial(
       });
 
       // 4. Mount card paints with the canonical data-ggui-* anchors
-      //    (same contract the RenderViewer's render surface uses). Scoping
+      //    (same contract the GguiSessionViewer's render surface uses). Scoping
       //    by `data-ggui-blueprint-id` so a future multi-blueprint
       //    route can land without churning this spec.
       const mountCard = page.locator(

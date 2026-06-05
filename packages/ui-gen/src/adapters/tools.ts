@@ -274,7 +274,7 @@ export function createGeneratorTools(context: GeneratorToolsContext = {}): ToolD
             warnings.push(...contractWarnings.map((i) => `[contract:${i.field}] ${i.message}`));
           }
 
-          // Render smoke test — catches runtime errors tsc misses
+          // GguiSession smoke test — catches runtime errors tsc misses
           // Prefer explicit sampleProps (realistic data), fall back to contract-derived
           const sampleProps = context.sampleProps
             ?? (context.contract?.propsSpec ? generateSampleProps(context.contract.propsSpec) : undefined);

@@ -42,7 +42,7 @@ export const interfaceContextSchema = z.object({
 // boundary instead of silently no-op-ing because the server stripped them.
 
 export const consumeInputSchema = z.object({
-  renderId: z.string().describe('Render opaque id (UUID) — returned by ggui_render.'),
+  renderId: z.string().describe('GguiSession opaque id (UUID) — returned by ggui_render.'),
   timeout: z.number().min(0).max(25).optional()
     .describe('Long-poll timeout in seconds (default short; max 25).'),
 }).strict();
@@ -52,7 +52,7 @@ export const consumeInputSchema = z.object({
  * `streamSpec[channel]`.
  */
 export const emitInputSchema = z.object({
-  renderId: z.string().describe('Render opaque id (UUID) — returned by ggui_render.'),
+  renderId: z.string().describe('GguiSession opaque id (UUID) — returned by ggui_render.'),
   channel: z.string()
     .describe('Channel name declared on the active render streamSpec.'),
   payload: z.unknown().describe('Payload — must match streamSpec[channel].schema.'),
@@ -61,7 +61,7 @@ export const emitInputSchema = z.object({
 }).strict();
 
 export const getRenderInputSchema = z.object({
-  renderId: z.string().describe('Render opaque id (UUID) — returned by ggui_render.'),
+  renderId: z.string().describe('GguiSession opaque id (UUID) — returned by ggui_render.'),
 }).strict();
 
 export const listFeaturedBlueprintsInputSchema = z.object({
@@ -96,7 +96,7 @@ export const requestCredentialInputSchema = z.object({
 // render server-side. Conversation grouping (sibling renders within one
 // host chat) lives on the unchanged `_meta["ai.ggui/host-session"]`
 // channel, captured ONCE at render creation, never threaded by the
-// agent. The collapse of Session→Render means `renderId` is the single
+// agent. The collapse of Session→GguiSession means `renderId` is the single
 // identity the wire references everywhere.
 //
 
@@ -124,7 +124,7 @@ export const requestCredentialInputSchema = z.object({
  *     server mints `renderId` on the paired `ggui_render`; host
  *     conversation grouping flows via the host-supplied
  *     `_meta["ai.ggui/host-session"]` envelope captured at render
- *     creation (see {@link RenderBase.hostSession}).
+ *     creation (see {@link GguiSessionBase.hostSession}).
  */
 export const handshakeInputSchema = z.object({
   /**
@@ -436,13 +436,13 @@ export const renderOutputSchema = z.object({
  */
 export const updateInputSchema = z.discriminatedUnion('kind', [
   z.object({
-    renderId: z.string().describe('Render opaque id (UUID) — returned by ggui_render.'),
+    renderId: z.string().describe('GguiSession opaque id (UUID) — returned by ggui_render.'),
     kind: z.literal('replace'),
     props: z.record(z.string(), z.unknown())
       .describe('Full replacement props map. New map IS the new state.'),
   }).strict(),
   z.object({
-    renderId: z.string().describe('Render opaque id (UUID) — returned by ggui_render.'),
+    renderId: z.string().describe('GguiSession opaque id (UUID) — returned by ggui_render.'),
     kind: z.literal('merge'),
     patch: z.record(z.string(), z.unknown())
       .describe('RFC 7396 JSON Merge Patch — null deletes a key; arrays fully replace.'),

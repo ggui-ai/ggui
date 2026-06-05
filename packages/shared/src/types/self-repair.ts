@@ -18,7 +18,7 @@
 export interface ComponentErrorReport {
   /** Unique error ID for tracking */
   errorId: string;
-  /** Render that experienced the error. Post-Phase-B the old
+  /** GguiSession that experienced the error. Post-Phase-B the old
    *  `sessionId` + `stackItemId` pair collapses to one `renderId` —
    *  every stack item is now a top-level render and the values were
    *  always identical anyway. */
@@ -65,7 +65,7 @@ export interface ComponentRepairResult {
   success: boolean;
   /** The error ID this repairs */
   errorId: string;
-  /** Render ID — the failing component's render identity. */
+  /** GguiSession ID — the failing component's render identity. */
   renderId: string;
   /** Repaired compiled code (if successful) */
   repairedCode?: string;
@@ -135,7 +135,7 @@ export interface RepairHistoryEntry {
   errorId: string;
   /** App ID */
   appId: string;
-  /** Render ID */
+  /** GguiSession ID */
   renderId: string;
   /** Error type */
   errorType: string;

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import type { Render } from '@ggui-ai/protocol';
+import type { GguiSession } from '@ggui-ai/protocol';
 import type { McpAppAiGguiRenderMeta } from '@ggui-ai/protocol/integrations/mcp-apps';
 import { bootSequence, type RendererBootFailedMessage } from '../runtime.js';
 import type { ConnectFn } from '../registry-subscribe.js';
@@ -48,7 +48,7 @@ const VALID_META: McpAppAiGguiRenderMeta = {
   runtimeUrl: '/_ggui/iframe-runtime.js',
 };
 
-function makeRender(id: string, description: string): Render {
+function makeRender(id: string, description: string): GguiSession {
   return {
     id,
     appId: 'app_001',
@@ -67,7 +67,7 @@ function makeRender(id: string, description: string): Render {
  * through the registered handlers post-bind. Returns the connectFn +
  * the emitter + a reference to the captured registry.
  */
-function buildMockConnect(render: Render | undefined): {
+function buildMockConnect(render: GguiSession | undefined): {
   connectFn: ConnectFn;
   emitFrame: (type: string, payload: unknown) => void;
 } {
@@ -140,7 +140,7 @@ describe('bootSequence — happy path', () => {
     // Ack's render promoted to mountedRender on the result.
     expect(result.mountedRender?.id).toBe('render_001');
 
-    // Render-frame behavior in placeholder mode is silent (status-log
+    // GguiSession-frame behavior in placeholder mode is silent (status-log
     // only — no React mount, no DOM mutation). The emitFrame helper
     // still confirms the render handler is registered and accepts the
     // frame without throwing.

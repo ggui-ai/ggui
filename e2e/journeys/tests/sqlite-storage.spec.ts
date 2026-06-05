@@ -21,7 +21,7 @@
  *   3. Exercises the write path: mint a pair token, fire a
  *      `ggui_render` story, and confirm the `.sqlite` artifact
  *      mutates (file size grows from the zero-turn baseline). This
- *      proves the SqliteRenderStore is actually persisting events,
+ *      proves the SqliteGguiSessionStore is actually persisting events,
  *      not just being instantiated.
  *
  * What this spec deliberately does NOT cover (called out so future
@@ -205,7 +205,7 @@ test.describe.serial('Phase 5 — SQLite storage driver boot', () => {
     expect(
       postWriteBytes,
       `renders sqlite family did not grow after ggui_render — baseline=${baselineBytes}B, post=${postWriteBytes}B. ` +
-        `The SqliteRenderStore may be silently falling through to in-memory. ` +
+        `The SqliteGguiSessionStore may be silently falling through to in-memory. ` +
         `(Sum spans ggui-renders.sqlite + ggui-renders.sqlite-wal + ggui-renders.sqlite-shm.)`,
     ).toBeGreaterThan(baselineBytes);
   });

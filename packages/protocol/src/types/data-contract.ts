@@ -776,7 +776,7 @@ export interface GadgetUse {
  *   - **Resolved sidecar side** — at render time
  *     `filterDescriptorsToContract` snapshots the subset of
  *     `App.gadgets` the contract references onto
- *     `ComponentRender.gadgetDescriptors`. Wire-side authors NEVER
+ *     `ComponentGguiSession.gadgetDescriptors`. Wire-side authors NEVER
  *     see this shape; they author the package-keyed
  *     {@link ClientCapabilitiesSpec} map of {@link GadgetPackageUse}.
  *
@@ -960,7 +960,7 @@ export interface GadgetDescriptor {
  * Non-generic — the wire surface carries package-keyed
  * {@link GadgetPackageUse} values. The post-resolution view (full
  * descriptors for hygiene + transport metadata derivation) lives on
- * `ComponentRender.gadgetDescriptors` as a sidecar, NOT as an
+ * `ComponentGguiSession.gadgetDescriptors` as a sidecar, NOT as an
  * enrichment overlay on this type.
  */
 export interface ClientCapabilitiesSpec {
@@ -1100,7 +1100,7 @@ export type ContextSpec = Record<string, ContextEntry>;
  *      - `null` → `null`
  *   3. `undefined` (caller validates / rejects)
  *
- * Render-time validators MUST reject contextSpec entries that resolve
+ * GguiSession-time validators MUST reject contextSpec entries that resolve
  * to `undefined` here (e.g., schema is `oneOf` with no clear primitive
  * type — author MUST provide an explicit `default` for such schemas).
  *
@@ -1263,7 +1263,7 @@ export interface DataContract {
    * Wire-side only. Package-keyed — values are {@link GadgetPackageUse}
    * (per-package export-use maps keyed by export name). The
    * post-resolution descriptor view lives on
-   * `ComponentRender.gadgetDescriptors` as a sidecar.
+   * `ComponentGguiSession.gadgetDescriptors` as a sidecar.
    */
   clientCapabilities?: ClientCapabilitiesSpec;
 }

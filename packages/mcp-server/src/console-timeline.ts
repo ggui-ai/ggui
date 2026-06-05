@@ -10,22 +10,22 @@
  * "sessions" terminology; the canonical addressable unit is now the
  * render. The on-wire `renderId` path param replaces `sessionId`.
  *
- * Memory: bounded by whatever the underlying RenderStore retains.
- * `InMemoryRenderStore` keeps everything for the process lifetime —
+ * Memory: bounded by whatever the underlying GguiSessionStore retains.
+ * `InMemoryGguiSessionStore` keeps everything for the process lifetime —
  * fine for OSS dev. A hosted closed runtime's persistent store is the
  * durability surface.
  */
 import type { Request, Response, Express } from 'express';
 import type {
-  RenderEvent,
-  RenderStore,
-  RenderStreamBuffer,
+  GguiSessionEvent,
+  GguiSessionStore,
+  GguiSessionStreamBuffer,
 } from '@ggui-ai/mcp-server-core';
 import { applyDevtoolSecurityHeaders } from './console-headers.js';
 import { singleParam } from './route-param.js';
 
 /** One row in `GET /ggui/console/timeline/renders`. */
-interface TimelineRenderSummary {
+interface TimelineGguiSessionSummary {
   readonly renderId: string;
   readonly appId: string;
   readonly createdAt: number;
@@ -41,15 +41,15 @@ interface TimelineRenderSummary {
 }
 
 /** Body of `GET /ggui/console/timeline/renders`. */
-interface TimelineRendersResponse {
-  readonly renders: readonly TimelineRenderSummary[];
+interface TimelineGguiSessionsResponse {
+  readonly renders: readonly TimelineGguiSessionSummary[];
   readonly total: number;
 }
 
 /** Body of `GET /ggui/console/timeline/:renderId/events`. */
 interface TimelineEventsResponse {
   readonly renderId: string;
-  readonly events: readonly RenderEvent[];
+  readonly events: readonly GguiSessionEvent[];
   /**
    * Latest live-channel outbound seq for this render. Reported alongside
    * the inbound event log so the operator UI can hint "this render
@@ -67,16 +67,16 @@ interface TimelineEventsResponse {
 }
 
 /**
- * Drain {@link RenderStore.observe} into an array. The observe iterator
+ * Drain {@link GguiSessionStore.observe} into an array. The observe iterator
  * with `{ tail: false }` resolves cleanly after replaying every stored
  * event, so this is a plain `for await`. Bound by the store's per-
  * render retention (in-memory: full history; hosted: store-defined).
  */
-async function drainRenderEvents(
-  renderStore: RenderStore,
+async function drainGguiSessionEvents(
+  renderStore: GguiSessionStore,
   renderId: string,
-): Promise<RenderEvent[]> {
-  const out: RenderEvent[] = [];
+): Promise<GguiSessionEvent[]> {
+  const out: GguiSessionEvent[] = [];
   for await (const event of renderStore.observe(renderId, {
     fromSeq: 1,
     tail: false,
@@ -94,8 +94,8 @@ async function drainRenderEvents(
  */
 export function mountConsoleTimelineRoutes(
   app: Express,
-  renderStore: RenderStore | undefined,
-  streamBuffer: RenderStreamBuffer | undefined,
+  renderStore: GguiSessionStore | undefined,
+  streamBuffer: GguiSessionStreamBuffer | undefined,
 ): void {
   // GET /ggui/console/timeline/renders?limit=<n>
   app.get(
@@ -114,7 +114,7 @@ export function mountConsoleTimelineRoutes(
 
       // Zero-config shape: no store wired (pure-MCP boot) → empty list.
       if (!renderStore) {
-        const body: TimelineRendersResponse = { renders: [], total: 0 };
+        const body: TimelineGguiSessionsResponse = { renders: [], total: 0 };
         res.json(body);
         return;
       }
@@ -124,7 +124,7 @@ export function mountConsoleTimelineRoutes(
         // expired renders, not just live ones. Limit is post-filter
         // so the response stays bounded.
         const stored = await renderStore.list({});
-        const summaries: TimelineRenderSummary[] = [];
+        const summaries: TimelineGguiSessionSummary[] = [];
         const now = Date.now();
         for (const row of stored) {
           let streamSeq = 0;
@@ -138,12 +138,12 @@ export function mountConsoleTimelineRoutes(
           }
           // Compute status from render state (the store doesn't
           // surface its private `closed` flag uniformly across impls).
-          // We mirror the InMemoryRenderStore's rule:
+          // We mirror the InMemoryGguiSessionStore's rule:
           // expired = expiresAt <= now, otherwise active. The
           // 'completed' state needs the closed flag to disambiguate;
           // we report 'active' until eviction. Operators reading the
           // detail pane get the authoritative status from the store.
-          const status: TimelineRenderSummary['status'] =
+          const status: TimelineGguiSessionSummary['status'] =
             row.expiresAt <= now ? 'expired' : 'active';
           summaries.push({
             renderId: row.id,
@@ -162,7 +162,7 @@ export function mountConsoleTimelineRoutes(
           return a.renderId.localeCompare(b.renderId);
         });
         const trimmed = summaries.slice(0, limit);
-        const body: TimelineRendersResponse = {
+        const body: TimelineGguiSessionsResponse = {
           renders: trimmed,
           total: summaries.length,
         };
@@ -172,8 +172,8 @@ export function mountConsoleTimelineRoutes(
           error: 'timeline_renders_list_failed',
           message:
             err instanceof Error
-              ? `Render store failed to list — ${err.message}`
-              : `Render store failed to list — ${String(err)}`,
+              ? `GguiSession store failed to list — ${err.message}`
+              : `GguiSession store failed to list — ${String(err)}`,
         });
       }
     },
@@ -223,7 +223,7 @@ export function mountConsoleTimelineRoutes(
           return;
         }
 
-        const events = await drainRenderEvents(renderStore, renderId);
+        const events = await drainGguiSessionEvents(renderStore, renderId);
         let streamSeq = 0;
         if (streamBuffer) {
           try {
@@ -247,8 +247,8 @@ export function mountConsoleTimelineRoutes(
           error: 'timeline_events_drain_failed',
           message:
             err instanceof Error
-              ? `Render store failed to drain — ${err.message}`
-              : `Render store failed to drain — ${String(err)}`,
+              ? `GguiSession store failed to drain — ${err.message}`
+              : `GguiSession store failed to drain — ${String(err)}`,
         });
       }
     },

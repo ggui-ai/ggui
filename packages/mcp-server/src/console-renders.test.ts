@@ -8,7 +8,7 @@
  *   - zero-config empty shape when no renderStore is wired (pure
  *     MCP boot without renderChannel / mcpApps)
  *   - populated shape reads renderId / appId / lastActivityAt /
- *     createdAt from each `Render`
+ *     createdAt from each `GguiSession`
  *   - shortCode enrichment via `shortCodeIndex.findByRenderId(id)`,
  *     optional on the wire (absent-key semantics, not `null`)
  *   - limit query param clamps to [1, 100], defaults to 25
@@ -25,11 +25,11 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import type { Server as HttpServer } from 'node:http';
 import {
-  InMemoryRenderStore,
+  InMemoryGguiSessionStore,
   InMemoryShortCodeIndex,
 } from '@ggui-ai/mcp-server-core/in-memory';
 import type {
-  RenderStore,
+  GguiSessionStore,
   ShortCodeIndex,
 } from '@ggui-ai/mcp-server-core';
 import { createGguiServer, type GguiServer } from './server.js';
@@ -60,7 +60,7 @@ async function boot(
   return { server, httpServer, url: `http://127.0.0.1:${addr.port}` };
 }
 
-interface RendersResponse {
+interface GguiSessionsResponse {
   readonly renders: ReadonlyArray<{
     readonly renderId: string;
     readonly shortCode?: string;
@@ -87,17 +87,17 @@ describe('GET /ggui/console/renders', () => {
     const res = await fetch(`${fx.url}/ggui/console/renders`, { headers: { authorization: `Bearer ${fx.server.adminToken}` } });
     expect(res.status).toBe(200);
     expect(res.headers.get('content-type')).toContain('application/json');
-    const body = (await res.json()) as RendersResponse;
+    const body = (await res.json()) as GguiSessionsResponse;
     expect(body).toEqual({ renders: [], total: 0 });
   });
 
   it('surfaces renderId + appId from an active render', async () => {
-    const renderStore: RenderStore = new InMemoryRenderStore();
+    const renderStore: GguiSessionStore = new InMemoryGguiSessionStore();
     const created = await renderStore.create({ appId: 'app-alpha' });
     fx = await boot({ console: {}, renderStore });
     const res = await fetch(`${fx.url}/ggui/console/renders`, { headers: { authorization: `Bearer ${fx.server.adminToken}` } });
     expect(res.status).toBe(200);
-    const body = (await res.json()) as RendersResponse;
+    const body = (await res.json()) as GguiSessionsResponse;
     expect(body.renders).toHaveLength(1);
     expect(body.total).toBe(1);
     const row = body.renders[0];
@@ -113,7 +113,7 @@ describe('GET /ggui/console/renders', () => {
   });
 
   it('enriches rows with shortCode via shortCodeIndex.findByRenderId', async () => {
-    const renderStore: RenderStore = new InMemoryRenderStore();
+    const renderStore: GguiSessionStore = new InMemoryGguiSessionStore();
     const shortCodeIndex: ShortCodeIndex = new InMemoryShortCodeIndex();
     const created = await renderStore.create({ appId: 'app-alpha' });
     await shortCodeIndex.put('share12345', {
@@ -122,13 +122,13 @@ describe('GET /ggui/console/renders', () => {
     });
     fx = await boot({ console: {}, renderStore, shortCodeIndex });
     const res = await fetch(`${fx.url}/ggui/console/renders`, { headers: { authorization: `Bearer ${fx.server.adminToken}` } });
-    const body = (await res.json()) as RendersResponse;
+    const body = (await res.json()) as GguiSessionsResponse;
     expect(body.renders).toHaveLength(1);
     expect(body.renders[0]?.shortCode).toBe('share12345');
   });
 
   it('orders rows by lastActivityAt descending (most-recent first)', async () => {
-    const renderStore: RenderStore = new InMemoryRenderStore();
+    const renderStore: GguiSessionStore = new InMemoryGguiSessionStore();
     const s1 = await renderStore.create({ appId: 'a' });
     const s2 = await renderStore.create({ appId: 'a' });
     const s3 = await renderStore.create({ appId: 'a' });
@@ -137,7 +137,7 @@ describe('GET /ggui/console/renders', () => {
     await renderStore.update(s3.id, { lastActivityAt: Date.now() + 5_000 });
     fx = await boot({ console: {}, renderStore });
     const res = await fetch(`${fx.url}/ggui/console/renders`, { headers: { authorization: `Bearer ${fx.server.adminToken}` } });
-    const body = (await res.json()) as RendersResponse;
+    const body = (await res.json()) as GguiSessionsResponse;
     expect(body.renders.map((r) => r.renderId)).toEqual([
       s2.id,
       s3.id,
@@ -146,7 +146,7 @@ describe('GET /ggui/console/renders', () => {
   });
 
   it('honors ?limit= and clamps to [1, 100]', async () => {
-    const renderStore: RenderStore = new InMemoryRenderStore();
+    const renderStore: GguiSessionStore = new InMemoryGguiSessionStore();
     // Seed 3 renders so we can verify a limit of 2 returns 2 rows.
     await renderStore.create({ appId: 'a' });
     await renderStore.create({ appId: 'a' });
@@ -154,19 +154,19 @@ describe('GET /ggui/console/renders', () => {
     fx = await boot({ console: {}, renderStore });
 
     const res2 = await fetch(`${fx.url}/ggui/console/renders?limit=2`, { headers: { authorization: `Bearer ${fx.server.adminToken}` } });
-    const body2 = (await res2.json()) as RendersResponse;
+    const body2 = (await res2.json()) as GguiSessionsResponse;
     expect(body2.renders).toHaveLength(2);
     expect(body2.total).toBe(2);
 
     // Nonsense input → default (25). 3 rows is well under, so all
     // three come back.
     const resBogus = await fetch(`${fx.url}/ggui/console/renders?limit=abc`, { headers: { authorization: `Bearer ${fx.server.adminToken}` } });
-    const bodyBogus = (await resBogus.json()) as RendersResponse;
+    const bodyBogus = (await resBogus.json()) as GguiSessionsResponse;
     expect(bodyBogus.renders).toHaveLength(3);
 
     // Zero / negative → default (clamped up to positive).
     const resZero = await fetch(`${fx.url}/ggui/console/renders?limit=0`, { headers: { authorization: `Bearer ${fx.server.adminToken}` } });
-    const bodyZero = (await resZero.json()) as RendersResponse;
+    const bodyZero = (await resZero.json()) as GguiSessionsResponse;
     expect(bodyZero.renders).toHaveLength(3);
 
     // Oversized → capped at 100. Hard to prove directly without
@@ -179,7 +179,7 @@ describe('GET /ggui/console/renders', () => {
   it('shortCode absence for a specific row does NOT break the request', async () => {
     // A mixed case: one render has a shortCode, the other doesn't.
     // Row-wise enrichment; absent shortCode → absent key on the wire.
-    const renderStore: RenderStore = new InMemoryRenderStore();
+    const renderStore: GguiSessionStore = new InMemoryGguiSessionStore();
     const shortCodeIndex: ShortCodeIndex = new InMemoryShortCodeIndex();
     const withCode = await renderStore.create({ appId: 'a' });
     const withoutCode = await renderStore.create({ appId: 'a' });
@@ -189,7 +189,7 @@ describe('GET /ggui/console/renders', () => {
     });
     fx = await boot({ console: {}, renderStore, shortCodeIndex });
     const res = await fetch(`${fx.url}/ggui/console/renders`, { headers: { authorization: `Bearer ${fx.server.adminToken}` } });
-    const body = (await res.json()) as RendersResponse;
+    const body = (await res.json()) as GguiSessionsResponse;
     const rowWith = body.renders.find((r) => r.renderId === withCode.id);
     const rowWithout = body.renders.find(
       (r) => r.renderId === withoutCode.id,
@@ -202,7 +202,7 @@ describe('GET /ggui/console/renders', () => {
     // A reverse-index implementation could throw (misconfigured GSI,
     // backend hiccup). The row must still land — just without the
     // click-through link — rather than 500ing the whole list.
-    const renderStore: RenderStore = new InMemoryRenderStore();
+    const renderStore: GguiSessionStore = new InMemoryGguiSessionStore();
     await renderStore.create({ appId: 'a' });
     const flakyIndex: ShortCodeIndex = {
       async put() {
@@ -228,13 +228,13 @@ describe('GET /ggui/console/renders', () => {
     });
     const res = await fetch(`${fx.url}/ggui/console/renders`, { headers: { authorization: `Bearer ${fx.server.adminToken}` } });
     expect(res.status).toBe(200);
-    const body = (await res.json()) as RendersResponse;
+    const body = (await res.json()) as GguiSessionsResponse;
     expect(body.renders).toHaveLength(1);
     expect(body.renders[0]?.shortCode).toBeUndefined();
   });
 
   it('404s when console is not enabled', async () => {
-    const renderStore: RenderStore = new InMemoryRenderStore();
+    const renderStore: GguiSessionStore = new InMemoryGguiSessionStore();
     await renderStore.create({ appId: 'a' });
     fx = await boot({ renderStore });
     const res = await fetch(`${fx.url}/ggui/console/renders`, { headers: { authorization: `Bearer ${fx.server.adminToken}` } });
@@ -242,7 +242,7 @@ describe('GET /ggui/console/renders', () => {
   });
 
   it('500s with a structured error when renderStore.list() throws', async () => {
-    const flakyStore: RenderStore = {
+    const flakyStore: GguiSessionStore = {
       async create() {
         throw new Error('not used');
       },

@@ -293,7 +293,7 @@ export type InferGadgetNames<T> =
  *
  * `mode` / `seq` / transport details are intentionally NOT on this union:
  * `mode` is derived from `streamSpec[channel].mode` server-side,
- * and `seq` is server-assigned via `RenderStreamBuffer`. Producers that
+ * and `seq` is server-assigned via `GguiSessionStreamBuffer`. Producers that
  * try to set either are drifting against the streamSpec design lock.
  *
  * Falls back to `{ channel: string; payload: JsonValue; complete?: boolean }`

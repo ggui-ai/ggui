@@ -22,7 +22,7 @@ import type { Route } from '../router.js';
 import { AdminShell } from './AdminShell.js';
 import { DevtoolsShell } from './DevtoolsShell.js';
 import { Footer } from './Footer.js';
-import { LiveRenderPill } from './LiveRenderPill.js';
+import { LiveGguiSessionPill } from './LiveGguiSessionPill.js';
 import { TopNav } from './TopNav.js';
 
 export interface ShellProps {
@@ -32,7 +32,7 @@ export interface ShellProps {
   readonly showFooter?: boolean;
   /**
    * Optional additional nav-right content. Always rendered AFTER the
-   * default `LiveRenderPill` so page-specific pills (if ever added)
+   * default `LiveGguiSessionPill` so page-specific pills (if ever added)
    * sit to the right of the live-render portal.
    */
   readonly navRightSlot?: ReactNode;
@@ -51,7 +51,7 @@ export function Shell({
       : 'ggui-shell__main';
   const rightSlot = (
     <>
-      <LiveRenderPill route={route} />
+      <LiveGguiSessionPill route={route} />
       {navRightSlot}
     </>
   );

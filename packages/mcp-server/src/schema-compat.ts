@@ -1,11 +1,11 @@
 /**
- * Schema compatibility check — verifies that a Render's declared
+ * Schema compatibility check — verifies that a GguiSession's declared
  * `actionSpec` / `streamSpec` schemas line up with the input/output
  * schemas of the tools they reference. Wired at two canonical check
  * points: `ggui_render` validation (defensive, fires when the
  * generator eventually emits contract) and blueprint registration
  * (the console blueprint-try endpoint — the real-world site where a
- * Render with pre-declared `actionSpec` / `streamSpec` and tool
+ * GguiSession with pre-declared `actionSpec` / `streamSpec` and tool
  * refs lands on the server).
  *
  * **Algorithmic primitive** lives in `@ggui-ai/protocol`:
@@ -16,7 +16,7 @@
  *     `inputSchema` / `outputSchema` to the JsonSchema shape the
  *     subset algorithm consumes.
  *
- * **What this module adds.** A small layer that walks a Render's
+ * **What this module adds.** A small layer that walks a GguiSession's
  * `actionSpec` + `streamSpec`, resolves each declared `tool` ref
  * against a toolName → ZodRawShape registry, runs the appropriate
  * subset check, and reports a stable {@link SchemaCompatReport}. The
@@ -141,9 +141,9 @@ export interface ToolSchemaRef {
 }
 
 /**
- * Narrow shape of the Render subset the checker consumes — the
+ * Narrow shape of the GguiSession subset the checker consumes — the
  * two spec fields PLUS the contract's own tool catalog. Accepts any
- * object carrying them, so both `@ggui-ai/protocol::Render` and
+ * object carrying them, so both `@ggui-ai/protocol::GguiSession` and
  * the console endpoint's manifest contract shape work without a cast.
  *
  * `agentCapabilities.tools` is the contract author's declared catalog
@@ -154,7 +154,7 @@ export interface ToolSchemaRef {
  * schema check (we can't validate a remote server's tool schema from
  * here; the agent owns the cross-MCP call).
  */
-export interface RenderContractShape {
+export interface GguiSessionContractShape {
   readonly actionSpec?: ActionSpec;
   readonly streamSpec?: StreamSpec;
   readonly agentCapabilities?: {
@@ -177,7 +177,7 @@ export class SchemaCompatError extends Error {
 }
 
 /**
- * Check a Render's `actionSpec` / `streamSpec` entries against
+ * Check a GguiSession's `actionSpec` / `streamSpec` entries against
  * the tool registry. See {@link SchemaCompatMode} for policy
  * semantics.
  *
@@ -191,7 +191,7 @@ export class SchemaCompatError extends Error {
  * which ingress surfaced the mismatch.
  */
 export function checkRenderSchemaCompat(
-  render: RenderContractShape,
+  render: GguiSessionContractShape,
   tools: Iterable<ToolSchemaRef>,
   mode: SchemaCompatMode,
   context: string,

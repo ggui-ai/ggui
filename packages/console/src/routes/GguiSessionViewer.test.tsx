@@ -1,5 +1,5 @@
 /**
- * `RenderViewer` — jsdom proofs for the cookie → resource → srcdoc
+ * `GguiSessionViewer` — jsdom proofs for the cookie → resource → srcdoc
  * iframe pipeline.
  *
  * The viewer is a READ-ONLY operator preview surface. It mounts a
@@ -39,7 +39,7 @@ import { cleanup, render, screen, waitFor } from '@testing-library/react';
 // Import the viewer. No external module-boundary mocks — the viewer
 // has no React-side iframe-host dependency to stub now that
 // `<McpAppIframe>` / `<AppRenderer>` is no longer in the chain.
-import { RenderViewer } from './RenderViewer.js';
+import { GguiSessionViewer } from './GguiSessionViewer.js';
 
 // ── Test helpers ────────────────────────────────────────────────────
 
@@ -128,10 +128,10 @@ afterEach(() => {
 
 // ── Mount pipeline ──────────────────────────────────────────────────
 
-describe('RenderViewer — mount pipeline', () => {
+describe('GguiSessionViewer — mount pipeline', () => {
   it('fetches cookie → (resource + meta in parallel), then mounts srcdoc iframe with the shell HTML', async () => {
     installFetchMock();
-    render(<RenderViewer shortCode="scode0001" />);
+    render(<GguiSessionViewer shortCode="scode0001" />);
 
     const iframe = await waitFor(() => {
       const el = screen.getByTestId('render-viewer-iframe');
@@ -154,7 +154,7 @@ describe('RenderViewer — mount pipeline', () => {
 
   it('replies to the shell\'s ui/initialize postMessage with the slice-envelope toolOutput._meta', async () => {
     installFetchMock();
-    render(<RenderViewer shortCode="scode-init" />);
+    render(<GguiSessionViewer shortCode="scode-init" />);
 
     const iframe = await waitFor(() => {
       const el = screen.getByTestId('render-viewer-iframe');
@@ -231,7 +231,7 @@ describe('RenderViewer — mount pipeline', () => {
 
   it('ignores non-ui/initialize postMessages', async () => {
     installFetchMock();
-    render(<RenderViewer shortCode="scode-noise" />);
+    render(<GguiSessionViewer shortCode="scode-noise" />);
 
     const iframe = await waitFor(() => {
       const el = screen.getByTestId('render-viewer-iframe');
@@ -278,7 +278,7 @@ describe('RenderViewer — mount pipeline', () => {
     installFetchMock({
       cookie: async () => new Response('not found', { status: 404 }),
     });
-    render(<RenderViewer shortCode="missing" />);
+    render(<GguiSessionViewer shortCode="missing" />);
     await waitFor(() => {
       expect(screen.getByText(/short-code not found/i)).toBeTruthy();
     });
@@ -292,7 +292,7 @@ describe('RenderViewer — mount pipeline', () => {
           status: 503,
         }),
     });
-    render(<RenderViewer shortCode="scode0002" />);
+    render(<GguiSessionViewer shortCode="scode0002" />);
     await waitFor(() => {
       expect(screen.getByText(/render resource unavailable/i)).toBeTruthy();
     });
@@ -306,7 +306,7 @@ describe('RenderViewer — mount pipeline', () => {
     installFetchMock({
       resource: async () => jsonResponse({ contents: [] }),
     });
-    render(<RenderViewer shortCode="scode0003" />);
+    render(<GguiSessionViewer shortCode="scode0003" />);
     await waitFor(() => {
       expect(screen.getByText(/empty contents array/i)).toBeTruthy();
     });
@@ -319,7 +319,7 @@ describe('RenderViewer — mount pipeline', () => {
           status: 503,
         }),
     });
-    render(<RenderViewer shortCode="scode0004" />);
+    render(<GguiSessionViewer shortCode="scode0004" />);
     await waitFor(() => {
       expect(screen.getByText(/render resource unavailable/i)).toBeTruthy();
     });
@@ -333,7 +333,7 @@ describe('RenderViewer — mount pipeline', () => {
     installFetchMock({
       bootstrap: async () => jsonResponse({}),
     });
-    render(<RenderViewer shortCode="scode0005" />);
+    render(<GguiSessionViewer shortCode="scode0005" />);
     await waitFor(() => {
       expect(
         screen.getByText(/missing `ai\.ggui\/render` slice/i),

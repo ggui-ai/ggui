@@ -57,7 +57,7 @@
  *     Those observers only see the new messages on their next call
  *     after catching up — effectively poll-on-reconnect.
  *
- * Matches the already-shipped `SqliteRenderStore` story. Cross-process
+ * Matches the already-shipped `SqliteGguiSessionStore` story. Cross-process
  * fanout needs an external broker (Postgres LISTEN/NOTIFY, etc.) and
  * belongs to the corresponding adapter package, not here.
  */

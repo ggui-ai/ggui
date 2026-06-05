@@ -13,7 +13,7 @@
  *   - {@link composePreviewReservedValidator} — returns a single-entry
  *     map binding `_ggui:preview` to the A2UI adapter. Call at server
  *     construction and feed into `extraReservedValidators` on
- *     `RenderChannelOptions` / `CreateGguiServerOptions`.
+ *     `GguiSessionChannelOptions` / `CreateGguiServerOptions`.
  *   - {@link mergeReservedValidators} — combine multiple validator maps
  *     when a caller provides their own extras AND the server wants to
  *     layer A2UI on top. Caller-provided entries win on key conflict.

@@ -14,7 +14,7 @@
  * Pure + seam-free:
  *   - input is a single typed render snapshot
  *   - output is the updated render snapshot
- *   - no RenderStore, no DDB, no WebSocket delivery — the caller
+ *   - no GguiSessionStore, no DDB, no WebSocket delivery — the caller
  *     (hosted pod / OSS handler) owns the read-modify-write
  *     persistence and any live-delivery side-effects
  *
@@ -24,27 +24,27 @@
  *     `merge`) fail validation
  *
  * The caller is expected to have already narrowed its raw DB row into
- * a `RenderTarget` — DB-shape sanity checks stay hosted-specific.
+ * a `GguiSessionTarget` — DB-shape sanity checks stay hosted-specific.
  */
 import type { JsonObject, JsonValue, PropsSpec } from '@ggui-ai/protocol';
 import { assertPropsContract } from './assert-props-contract.js';
 
 /**
  * Minimum shape the helper needs to validate + patch a render. Both
- * `@ggui-ai/protocol`'s `ComponentRender` and the hosted pod's raw DDB
+ * `@ggui-ai/protocol`'s `ComponentGguiSession` and the hosted pod's raw DDB
  * projection satisfy this shape, so the helper works for both without
  * either caller needing a cast. The generic `T` carries through so the
  * returned render preserves the caller's concrete type. `props` is
  * included so the merge path can read the existing state before
  * computing the next.
  */
-export interface RenderTarget {
+export interface GguiSessionTarget {
   readonly id: string;
   readonly propsSpec?: PropsSpec;
   readonly props?: JsonObject;
 }
 
-export type ApplyRenderPatchInput<T extends RenderTarget> =
+export type ApplyGguiSessionPatchInput<T extends GguiSessionTarget> =
   | {
       readonly render: T;
       readonly mode: 'replace';
@@ -56,7 +56,7 @@ export type ApplyRenderPatchInput<T extends RenderTarget> =
       readonly patch: JsonObject;
     };
 
-export interface ApplyRenderPatchResult<T extends RenderTarget> {
+export interface ApplyGguiSessionPatchResult<T extends GguiSessionTarget> {
   /** The updated render (post-patch). Safe to persist. */
   readonly updatedRender: T;
   /** The final props map applied (post-merge for `mode:'merge'`). */
@@ -110,9 +110,9 @@ export function applyMergePatch(
   return result;
 }
 
-export function applyRenderPatch<T extends RenderTarget>(
-  input: ApplyRenderPatchInput<T>,
-): ApplyRenderPatchResult<T> {
+export function applyGguiSessionPatch<T extends GguiSessionTarget>(
+  input: ApplyGguiSessionPatchInput<T>,
+): ApplyGguiSessionPatchResult<T> {
   const existing = input.render;
 
   // Compute the FINAL props map. For `replace` it's just the new map;

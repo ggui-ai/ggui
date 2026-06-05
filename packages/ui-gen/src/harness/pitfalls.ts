@@ -87,7 +87,7 @@ export const PITFALLS: readonly Pitfall[] = [
 ];
 
 /**
- * Render the pitfalls as the Common Pitfalls block of the system prompt.
+ * GguiSession the pitfalls as the Common Pitfalls block of the system prompt.
  * Called by runtime.ts::buildSystemPrompt. Deterministic ordering (by id)
  * so prompt-cache prefix stays stable across runs.
  */

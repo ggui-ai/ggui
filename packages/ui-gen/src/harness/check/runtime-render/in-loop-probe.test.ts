@@ -37,7 +37,7 @@ describe("isRecoverableRenderCrash", () => {
   it("recognizes 'function is not iterable' (Google × onboarding-wizard)", () => {
     expect(
       isRecoverableRenderCrash(
-        "Render threw: TypeError: function is not iterable",
+        "GguiSession threw: TypeError: function is not iterable",
       ),
     ).toBe(true);
   });
@@ -45,7 +45,7 @@ describe("isRecoverableRenderCrash", () => {
   it("recognizes 'number 0 is not iterable' (Google × stock-ticker)", () => {
     expect(
       isRecoverableRenderCrash(
-        "Render threw: TypeError: number 0 is not iterable",
+        "GguiSession threw: TypeError: number 0 is not iterable",
       ),
     ).toBe(true);
   });
@@ -67,7 +67,7 @@ describe("isRecoverableRenderCrash", () => {
   it("recognizes 'Cannot access X before initialization' (TDZ)", () => {
     expect(
       isRecoverableRenderCrash(
-        "Render threw: ReferenceError: Cannot access 'foo' before initialization",
+        "GguiSession threw: ReferenceError: Cannot access 'foo' before initialization",
       ),
     ).toBe(true);
   });
@@ -75,7 +75,7 @@ describe("isRecoverableRenderCrash", () => {
   it("recognizes 'X is not defined' (typo / missing destructure)", () => {
     expect(
       isRecoverableRenderCrash(
-        "Render threw: ReferenceError: handleSubmit is not defined",
+        "GguiSession threw: ReferenceError: handleSubmit is not defined",
       ),
     ).toBe(true);
   });
@@ -83,7 +83,7 @@ describe("isRecoverableRenderCrash", () => {
   it("recognizes 'Cannot read property … of undefined'", () => {
     expect(
       isRecoverableRenderCrash(
-        "Render threw: TypeError: Cannot read properties of undefined (reading 'name')",
+        "GguiSession threw: TypeError: Cannot read properties of undefined (reading 'name')",
       ),
     ).toBe(true);
   });
@@ -216,8 +216,8 @@ describe("runEvalRound — in-loop runtime probe trigger", () => {
         category: "crash",
         subcategory: "runtime:render-no-throw",
         severity: "critical",
-        description: "Component crashed at runtime: Render threw: TypeError: function is not iterable",
-        fix: "Render iterated over a non-array. Default to [] before .map.",
+        description: "Component crashed at runtime: GguiSession threw: TypeError: function is not iterable",
+        fix: "GguiSession iterated over a non-array. Default to [] before .map.",
       },
     ]);
     const probe: RuntimeRenderCheck = {

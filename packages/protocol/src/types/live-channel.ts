@@ -15,7 +15,7 @@
  * The corresponding inbound user-action envelope ({@link ActionEnvelope})
  * lives in `types/events.ts` alongside the event-type enum.
  */
-import type { Render } from './render';
+import type { GguiSession } from './render';
 import type {
   JsonObject,
   JsonValue,
@@ -47,7 +47,7 @@ export interface SubscribePayload {
    *     the last envelope the client observed.
    *
    * Honored only by implementations that expose
-   * `RenderStreamBuffer`-backed replay. Hosted cloud does NOT
+   * `GguiSessionStreamBuffer`-backed replay. Hosted cloud does NOT
    * yet honor `fromSeq` — the field is silently ignored there. OSS
    * `@ggui-ai/mcp-server` honors it fully.
    */
@@ -155,7 +155,7 @@ export interface AckPayload {
   timestamp: number;
   /** Current render snapshot (returned on subscribe). Single item,
    *  not an array — Phase B collapsed the vessel. */
-  render?: Render;
+  render?: GguiSession;
   /**
    * Current outbound-stream cursor snapshot at the moment the ack is
    * sent. Distinct from `sequence` (which counts INBOUND events like
@@ -164,7 +164,7 @@ export interface AckPayload {
    *   - seed their `lastSeenSeq` if they didn't pass `fromSeq` on
    *     subscribe.
    *
-   * Absent on implementations without a `RenderStreamBuffer`.
+   * Absent on implementations without a `GguiSessionStreamBuffer`.
    * 0 means the render has recorded no outbound envelopes yet.
    */
   streamSeq?: number;
@@ -220,11 +220,11 @@ export interface AckPayload {
 
 /**
  * Payload for render message (Server → Client: agent push event with
- * generated/cached UI). Carries a {@link Render} — either a
+ * generated/cached UI). Carries a {@link GguiSession} — either a
  * component variant or an embedded MCP Apps iframe variant.
  */
 export interface RenderPayload {
-  render: Render;
+  render: GguiSession;
   matchType?: string;
 }
 
@@ -250,7 +250,7 @@ export interface RenderPayload {
  * addition driven by a concrete client-UX need.
  */
 export interface StreamEnvelope {
-  /** Render this delivery belongs to. */
+  /** GguiSession this delivery belongs to. */
   renderId: string;
   /** Channel name (keys into `spec.channels`). */
   channel: string;
@@ -274,7 +274,7 @@ export interface StreamEnvelope {
    */
   complete?: boolean;
   /**
-   * Render-scoped monotonic outbound sequence. Server-assigned;
+   * GguiSession-scoped monotonic outbound sequence. Server-assigned;
    * clients MUST NOT populate it on producer-side inputs. Gap-free
    * within a single render, starting at 1. Used by the client to:
    *   - track `lastSeenSeq` for reconnect (pass it back as
@@ -282,7 +282,7 @@ export interface StreamEnvelope {
    *   - dedupe deliveries (at-least-once semantics).
    *
    * OPTIONAL because hosted cloud does not yet stamp `seq`;
-   * implementations backed by `RenderStreamBuffer`
+   * implementations backed by `GguiSessionStreamBuffer`
    * (OSS `@ggui-ai/mcp-server`) always populate it. When absent,
    * clients treat deliveries as single-shot with no replay possible.
    * This becomes required once the hosted runtime supports replay.
@@ -480,7 +480,7 @@ export interface AgentMsgPayload {
   type: AgentMsgType;
   /** Message text from the agent */
   message: string;
-  /** Render ID */
+  /** GguiSession ID */
   renderId: string;
 }
 
@@ -489,7 +489,7 @@ export interface AgentMsgPayload {
  * Replaces props on an existing rendered component without re-generation.
  */
 export interface PropsUpdatePayload {
-  /** Render id of the rendered component being updated. */
+  /** GguiSession id of the rendered component being updated. */
   renderId: string;
   /** New props — full replacement */
   props: JsonObject;
@@ -531,7 +531,7 @@ export interface SystemPayload {
   status?: string;
   /** App ID requesting access (used with auth_required for app-scoped grants) */
   appId?: string;
-  /** Render ID for WebSocket context (used with auth_required) */
+  /** GguiSession ID for WebSocket context (used with auth_required) */
   renderId?: string;
 }
 
@@ -564,7 +564,7 @@ export interface InternalProgressPayload {
 export interface DrainAckPayload {
   /** Active app id from the bootstrap that emitted the action. */
   appId: string;
-  /** Render the drained event was queued on. */
+  /** GguiSession the drained event was queued on. */
   renderId: string;
   /**
    * Server-assigned `ActionEnvelope.id` of the specific event that

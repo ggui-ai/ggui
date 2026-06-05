@@ -34,7 +34,7 @@
 
 import type {
   BlueprintIndex,
-  RenderStore,
+  GguiSessionStore,
   VectorStore,
 } from "@ggui-ai/mcp-server-core";
 import {
@@ -45,7 +45,7 @@ import {
   findBlueprintExact,
   type Blueprint,
 } from "@ggui-ai/mcp-server-handlers/renders";
-import type { Render } from "@ggui-ai/protocol";
+import type { GguiSession } from "@ggui-ai/protocol";
 import { deriveContextDefault, type ContextSpec } from "@ggui-ai/protocol";
 import {
   GGUI_RENDER_RESOURCE_MIME,
@@ -650,7 +650,7 @@ export function advertiseMcpAppsUiCapability(server: McpServer): void {
  * @public
  */
 export interface SelfContainedShellInputs {
-  /** Render id whose visible-bits surface is being inlined. */
+  /** GguiSession id whose visible-bits surface is being inlined. */
   readonly renderId: string;
   /** App / tenant id the render is scoped to. */
   readonly appId: string;
@@ -802,7 +802,7 @@ export interface SelfContainedShellInputs {
    */
   readonly expiresAt?: string;
   /**
-   * Monotonic RenderEvent ledger cursor at emit time, mirrored from
+   * Monotonic GguiSessionEvent ledger cursor at emit time, mirrored from
    * {@link McpAppAiGguiRenderMeta.lastSequence}. Polling clients
    * initialize the R7 `/events?sinceSequence=N` cursor from this.
    * Absent in pre-R7 envelopes (back-compat); post-R7 it MUST be
@@ -1024,9 +1024,9 @@ export function buildSelfContainedLoadingShell(renderId: string): string {
  * @public
  */
 export interface GguiRenderResourceTemplateOptions {
-  /** RenderStore the template handler reads to find the render's
+  /** GguiSessionStore the template handler reads to find the render's
    *  componentCode. */
-  readonly renderStore: RenderStore;
+  readonly renderStore: GguiSessionStore;
   /** Absolute URL of the iframe-runtime bundle inlined in the shell. */
   readonly runtimeUrl: string;
   /**
@@ -1132,7 +1132,7 @@ export interface GguiRenderResourceTemplateOptions {
 }
 
 /**
- * Renderable picked from a {@link Render} — discriminates between
+ * Renderable picked from a {@link GguiSession} — discriminates between
  * compiled-component renders (carry `componentCode`) and
  * server-emitted system cards (carry `kind`). The shell builders
  * stamp one or the other into `__GGUI_META__`; the runtime
@@ -1140,7 +1140,7 @@ export interface GguiRenderResourceTemplateOptions {
  *
  * Phase B: a render IS the addressable unit — there is no enclosing
  * stack vessel — so this helper is a direct narrowing of a single
- * {@link Render}, not a pick-from-stack scan.
+ * {@link GguiSession}, not a pick-from-stack scan.
  */
 type RenderRenderable =
   | {
@@ -1151,17 +1151,17 @@ type RenderRenderable =
       /** Original source render — carried so the resource handler can
        *  thread it through `deriveRenderMeta` for projection of
        *  permissions / contextSlots / actionNextSteps. */
-      source: Render;
+      source: GguiSession;
     }
   | {
       kind: string;
       id: string;
       componentCode?: undefined;
       props?: Record<string, unknown>;
-      source: Render;
+      source: GguiSession;
     };
 
-function pickComponentFromRender(render: Render | null | undefined): RenderRenderable | null {
+function pickComponentFromGguiSession(render: GguiSession | null | undefined): RenderRenderable | null {
   if (!render) return null;
   if (render.type === "mcpApps") return null;
   const propsRaw = "props" in render ? render.props : undefined;
@@ -1208,10 +1208,10 @@ function pickComponentFromRender(render: Render | null | undefined): RenderRende
  * the templated URI.
  *
  * Failure modes:
- *   - Render not found → loading shell (host re-fetches; absent
+ *   - GguiSession not found → loading shell (host re-fetches; absent
  *     render is a transient state immediately after `ggui_render`).
- *   - Render found, no componentCode yet → loading shell.
- *   - Render found, componentCode present → self-contained shell.
+ *   - GguiSession found, no componentCode yet → loading shell.
+ *   - GguiSession found, componentCode present → self-contained shell.
  *
  * Returns nothing; mutates the server in place.
  *
@@ -1348,7 +1348,7 @@ export function registerGguiRenderResourceTemplate(
     // Happy path: render present and renderable. Mount with the live
     // state (current props, current contextSpec values).
     if (stored) {
-      const picked = pickComponentFromRender(stored.render);
+      const picked = pickComponentFromGguiSession(stored.render);
       if (picked) {
         // Project the active render to the transport-agnostic bootstrap
         // view — same source of truth the render-mutation handler and

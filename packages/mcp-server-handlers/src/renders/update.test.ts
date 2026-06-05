@@ -4,23 +4,23 @@
  *
  * Post-Phase-B (flatten-render-identity): the prior
  * `{sessionId, stackItemId}` pair collapsed to a single `{renderId}`.
- * `SessionStore` was replaced by `RenderStore`. `StackItem` no longer
- * exists — `ComponentRender` is the addressable unit. The
+ * `SessionStore` was replaced by `GguiSessionStore`. `StackItem` no longer
+ * exists — `ComponentGguiSession` is the addressable unit. The
  * `StackItemNotFoundError` matrix collapsed to one
- * `RenderNotFoundError`.
+ * `GguiSessionNotFoundError`.
  */
 import { describe, expect, it } from 'vitest';
 import {
   ContractViolationError,
-  type ComponentRender,
+  type ComponentGguiSession,
   type JsonObject,
   type PropsSpec,
 } from '@ggui-ai/protocol';
 import { parseMcpAppAiGguiRenderMeta } from '@ggui-ai/protocol/integrations/mcp-apps';
-import { InMemoryRenderStore } from '@ggui-ai/mcp-server-core/in-memory';
+import { InMemoryGguiSessionStore } from '@ggui-ai/mcp-server-core/in-memory';
 import {
   createGguiUpdateHandler,
-  RenderNotFoundError,
+  GguiSessionNotFoundError,
   type PropsUpdateNotifier,
 } from './update';
 
@@ -36,7 +36,7 @@ const NOW_MS = Date.parse('2026-05-09T00:00:00.000Z');
  * `renderStore.commit` round-trip. `commit` upserts the render row.
  */
 async function seedRender(opts: {
-  store: InMemoryRenderStore;
+  store: InMemoryGguiSessionStore;
   appId?: string;
   renderId?: string;
   propsSpec?: PropsSpec;
@@ -44,7 +44,7 @@ async function seedRender(opts: {
 }): Promise<{ renderId: string }> {
   const renderId = opts.renderId ?? 'render-1';
   const appId = opts.appId ?? APP_A;
-  const render: ComponentRender = {
+  const render: ComponentGguiSession = {
     id: renderId,
     appId,
     type: 'component',
@@ -63,13 +63,13 @@ async function seedRender(opts: {
 describe('createGguiUpdateHandler', () => {
   describe('declaration', () => {
     it('exposes the canonical tool name ggui_update', () => {
-      const store = new InMemoryRenderStore();
+      const store = new InMemoryGguiSessionStore();
       const handler = createGguiUpdateHandler({ renderStore: store });
       expect(handler.name).toBe('ggui_update');
     });
 
     it('declares the updateOutputSchema shape — {renderId, resourceUri, updated}', () => {
-      const store = new InMemoryRenderStore();
+      const store = new InMemoryGguiSessionStore();
       const handler = createGguiUpdateHandler({ renderStore: store });
       const outKeys = Object.keys(handler.outputSchema).sort();
       // Phase-B (flatten-render-identity): stackItemId → renderId.
@@ -80,7 +80,7 @@ describe('createGguiUpdateHandler', () => {
     });
 
     it('does NOT carry any MCP Apps _meta stamp — update is a pure mutation', () => {
-      const store = new InMemoryRenderStore();
+      const store = new InMemoryGguiSessionStore();
       const handler = createGguiUpdateHandler({ renderStore: store });
       expect(handler._meta).toBeUndefined();
     });
@@ -88,7 +88,7 @@ describe('createGguiUpdateHandler', () => {
 
   describe('direct path', () => {
     it('replaces props on the targeted render via renderStore.commit upsert', async () => {
-      const store = new InMemoryRenderStore();
+      const store = new InMemoryGguiSessionStore();
       const { renderId } = await seedRender({ store });
       const handler = createGguiUpdateHandler({ renderStore: store });
 
@@ -103,15 +103,15 @@ describe('createGguiUpdateHandler', () => {
         resourceUri: `ui://ggui/render/${renderId}`,
       });
       const after = await store.get(renderId);
-      // The render's wire-shape payload narrows to ComponentRender here
+      // The render's wire-shape payload narrows to ComponentGguiSession here
       // — the seed produced a `type: 'component'` row.
-      expect((after?.render as ComponentRender | undefined)?.props).toEqual({
+      expect((after?.render as ComponentGguiSession | undefined)?.props).toEqual({
         count: 7,
       });
     });
 
     it('falls back to HandlerContext.renderId when wire input omits it', async () => {
-      const store = new InMemoryRenderStore();
+      const store = new InMemoryGguiSessionStore();
       const { renderId } = await seedRender({ store });
       const handler = createGguiUpdateHandler({ renderStore: store });
 
@@ -130,7 +130,7 @@ describe('createGguiUpdateHandler', () => {
     });
 
     it('wire input overrides HandlerContext when both are present', async () => {
-      const store = new InMemoryRenderStore();
+      const store = new InMemoryGguiSessionStore();
       const { renderId } = await seedRender({ store });
       const handler = createGguiUpdateHandler({ renderStore: store });
 
@@ -146,7 +146,7 @@ describe('createGguiUpdateHandler', () => {
 
   describe('propsSpec enforcement', () => {
     it('throws ContractViolationError{tool:ggui_update} on a missing required field', async () => {
-      const store = new InMemoryRenderStore();
+      const store = new InMemoryGguiSessionStore();
       const propsSpec: PropsSpec = {
         properties: {
           count: { required: true, schema: { type: 'number' } },
@@ -161,7 +161,7 @@ describe('createGguiUpdateHandler', () => {
     });
 
     it('passes when patch satisfies propsSpec', async () => {
-      const store = new InMemoryRenderStore();
+      const store = new InMemoryGguiSessionStore();
       const propsSpec: PropsSpec = {
         properties: {
           count: { required: true, schema: { type: 'number' } },
@@ -178,7 +178,7 @@ describe('createGguiUpdateHandler', () => {
     });
 
     it('no-ops the contract check when the render carries no propsSpec', async () => {
-      const store = new InMemoryRenderStore();
+      const store = new InMemoryGguiSessionStore();
       // No propsSpec → permissive (matches legacy semantics).
       const { renderId } = await seedRender({ store });
       const handler = createGguiUpdateHandler({ renderStore: store });
@@ -193,7 +193,7 @@ describe('createGguiUpdateHandler', () => {
 
   describe('merge mode (RFC 7396)', () => {
     it('merges a flat patch onto existing props', async () => {
-      const store = new InMemoryRenderStore();
+      const store = new InMemoryGguiSessionStore();
       const { renderId } = await seedRender({
         store,
         initialProps: { temp: 20, condition: 'sunny', city: 'Berlin' },
@@ -212,7 +212,7 @@ describe('createGguiUpdateHandler', () => {
       });
       const after = await store.get(renderId);
       // Only `temp` changes; `condition` and `city` carry through.
-      expect((after?.render as ComponentRender).props).toEqual({
+      expect((after?.render as ComponentGguiSession).props).toEqual({
         temp: 25,
         condition: 'sunny',
         city: 'Berlin',
@@ -220,7 +220,7 @@ describe('createGguiUpdateHandler', () => {
     });
 
     it('deletes a key when the patch value is null (RFC 7396 semantic)', async () => {
-      const store = new InMemoryRenderStore();
+      const store = new InMemoryGguiSessionStore();
       const { renderId } = await seedRender({
         store,
         initialProps: { temp: 20, alert: 'storm warning' },
@@ -233,14 +233,14 @@ describe('createGguiUpdateHandler', () => {
       );
 
       const after = await store.get(renderId);
-      const props = (after?.render as ComponentRender).props ?? {};
+      const props = (after?.render as ComponentGguiSession).props ?? {};
       expect(props).toEqual({ temp: 20 });
       // `alert` removed entirely (not set to null).
       expect('alert' in props).toBe(false);
     });
 
     it('deep-merges nested objects (RFC 7396 recursion)', async () => {
-      const store = new InMemoryRenderStore();
+      const store = new InMemoryGguiSessionStore();
       const { renderId } = await seedRender({
         store,
         initialProps: {
@@ -260,13 +260,13 @@ describe('createGguiUpdateHandler', () => {
 
       const after = await store.get(renderId);
       // `name` and `theme` carry through; only `age` changes.
-      expect((after?.render as ComponentRender).props).toEqual({
+      expect((after?.render as ComponentGguiSession).props).toEqual({
         user: { name: 'Alice', age: 31, theme: 'dark' },
       });
     });
 
     it('fully replaces arrays (RFC 7396 — no element-wise merge)', async () => {
-      const store = new InMemoryRenderStore();
+      const store = new InMemoryGguiSessionStore();
       const { renderId } = await seedRender({
         store,
         initialProps: { tags: ['a', 'b', 'c'] },
@@ -279,11 +279,11 @@ describe('createGguiUpdateHandler', () => {
       );
 
       const after = await store.get(renderId);
-      expect((after?.render as ComponentRender).props).toEqual({ tags: ['x'] });
+      expect((after?.render as ComponentGguiSession).props).toEqual({ tags: ['x'] });
     });
 
     it('validates the MERGED RESULT against propsSpec, not the patch alone', async () => {
-      const store = new InMemoryRenderStore();
+      const store = new InMemoryGguiSessionStore();
       const propsSpec: PropsSpec = {
         properties: {
           count: { required: true, schema: { type: 'number' } },
@@ -308,7 +308,7 @@ describe('createGguiUpdateHandler', () => {
     });
 
     it('rejects merge mode without a patch field', async () => {
-      const store = new InMemoryRenderStore();
+      const store = new InMemoryGguiSessionStore();
       const { renderId } = await seedRender({ store });
       const handler = createGguiUpdateHandler({ renderStore: store });
 
@@ -321,7 +321,7 @@ describe('createGguiUpdateHandler', () => {
     });
 
     it('rejects replace mode without a props field', async () => {
-      const store = new InMemoryRenderStore();
+      const store = new InMemoryGguiSessionStore();
       const { renderId } = await seedRender({ store });
       const handler = createGguiUpdateHandler({ renderStore: store });
 
@@ -334,7 +334,7 @@ describe('createGguiUpdateHandler', () => {
     });
 
     it('rejects replace mode that also carries a patch field', async () => {
-      const store = new InMemoryRenderStore();
+      const store = new InMemoryGguiSessionStore();
       const { renderId } = await seedRender({ store });
       const handler = createGguiUpdateHandler({ renderStore: store });
 
@@ -353,8 +353,8 @@ describe('createGguiUpdateHandler', () => {
   });
 
   describe('errors', () => {
-    it('throws RenderNotFoundError when the renderId does not exist', async () => {
-      const store = new InMemoryRenderStore();
+    it('throws GguiSessionNotFoundError when the renderId does not exist', async () => {
+      const store = new InMemoryGguiSessionStore();
       const handler = createGguiUpdateHandler({ renderStore: store });
 
       await expect(
@@ -362,11 +362,11 @@ describe('createGguiUpdateHandler', () => {
           { renderId: 'no-such-render', kind: 'replace' as const, props: {} },
           ctx(),
         ),
-      ).rejects.toThrow(RenderNotFoundError);
+      ).rejects.toThrow(GguiSessionNotFoundError);
     });
 
-    it('rejects cross-tenant access as RenderNotFoundError (no leak)', async () => {
-      const store = new InMemoryRenderStore();
+    it('rejects cross-tenant access as GguiSessionNotFoundError (no leak)', async () => {
+      const store = new InMemoryGguiSessionStore();
       // Seed a render owned by APP_A.
       const { renderId } = await seedRender({ store });
       const handler = createGguiUpdateHandler({ renderStore: store });
@@ -377,22 +377,22 @@ describe('createGguiUpdateHandler', () => {
           { renderId, kind: 'replace' as const, props: { x: 1 } },
           ctx(APP_B),
         ),
-      ).rejects.toThrow(RenderNotFoundError);
+      ).rejects.toThrow(GguiSessionNotFoundError);
     });
 
     it('rejects when neither wire nor ctx carries renderId', async () => {
-      const store = new InMemoryRenderStore();
+      const store = new InMemoryGguiSessionStore();
       const handler = createGguiUpdateHandler({ renderStore: store });
 
       await expect(
         handler.handler({ kind: 'replace' as const, props: { x: 1 } }, ctx()),
-      ).rejects.toThrow(RenderNotFoundError);
+      ).rejects.toThrow(GguiSessionNotFoundError);
     });
   });
 
   describe('live-delivery notifier', () => {
     it('fires propsUpdateNotifier.sendPropsUpdate after persistence', async () => {
-      const store = new InMemoryRenderStore();
+      const store = new InMemoryGguiSessionStore();
       const { renderId } = await seedRender({ store });
 
       const calls: Array<{ renderId: string; props: JsonObject }> = [];
@@ -419,7 +419,7 @@ describe('createGguiUpdateHandler', () => {
     });
 
     it('still returns updated=true when the notifier throws (best-effort delivery)', async () => {
-      const store = new InMemoryRenderStore();
+      const store = new InMemoryGguiSessionStore();
       const { renderId } = await seedRender({ store });
 
       const propsUpdateNotifier: PropsUpdateNotifier = {
@@ -440,11 +440,11 @@ describe('createGguiUpdateHandler', () => {
       expect(out.updated).toBe(true);
       // Persistence still committed.
       const after = await store.get(renderId);
-      expect((after?.render as ComponentRender).props).toEqual({ count: 11 });
+      expect((after?.render as ComponentGguiSession).props).toEqual({ count: 11 });
     });
 
     it('does not fire the notifier when the contract check rejects', async () => {
-      const store = new InMemoryRenderStore();
+      const store = new InMemoryGguiSessionStore();
       const propsSpec: PropsSpec = {
         properties: {
           count: { required: true, schema: { type: 'number' } },
@@ -469,10 +469,10 @@ describe('createGguiUpdateHandler', () => {
       ).rejects.toThrow(ContractViolationError);
       expect(notifierCalls).toBe(0);
 
-      // Persistence wasn't committed either — applyRenderPatch threw
+      // Persistence wasn't committed either — applyGguiSessionPatch threw
       // before renderStore.commit ran.
       const after = await store.get(renderId);
-      expect((after?.render as ComponentRender).props).toEqual({ count: 0 });
+      expect((after?.render as ComponentGguiSession).props).toEqual({ count: 0 });
     });
   });
 
@@ -480,11 +480,11 @@ describe('createGguiUpdateHandler', () => {
     it('emits slice meta with propsJson even when bootstrap-emitting deps are unwired (default runtimeUrl)', async () => {
       // Post-Phase-B: update.resultMeta is props-only. Once there's
       // any patched props (always the case after a successful update —
-      // applyRenderPatch sets `props: patch`), the envelope emits the
+      // applyGguiSessionPatch sets `props: patch`), the envelope emits the
       // propsJson + a default runtimeUrl. The cross-host postMessage
       // fallback path needs the runtimeUrl to re-mount on hosts that
       // strip the live trio; the default is /_ggui/iframe-runtime.js.
-      const store = new InMemoryRenderStore();
+      const store = new InMemoryGguiSessionStore();
       const { renderId } = await seedRender({
         store,
         initialProps: { x: 1 },
@@ -502,7 +502,7 @@ describe('createGguiUpdateHandler', () => {
     });
 
     it('emits slice meta with propsJson + renderId/auth/runtime on the patched view (props-only post-trim)', async () => {
-      const store = new InMemoryRenderStore();
+      const store = new InMemoryGguiSessionStore();
       const { renderId } = await seedRender({
         store,
         initialProps: { count: 0 },
@@ -550,7 +550,7 @@ describe('createGguiUpdateHandler', () => {
     });
 
     it('forwards themeId + themeMode from themeProvider over static deps', async () => {
-      const store = new InMemoryRenderStore();
+      const store = new InMemoryGguiSessionStore();
       const { renderId } = await seedRender({ store });
       const handler = createGguiUpdateHandler({
         renderStore: store,

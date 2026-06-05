@@ -13,7 +13,7 @@ export { useStream, type StreamResult } from './useStream';
 export { useContract, type InferredContractHooks, type ManualContractHooks } from './useContract';
 export { useAuth, type AuthInfo } from './useAuth';
 export { useApp, type AppInfo } from './useApp';
-export { useRender, type RenderInfo } from './useRender';
+export { useRender, type GguiSessionInfo } from './useRender';
 export {
   ClientContractViolationError,
   buildActionEnvelope,

@@ -48,7 +48,7 @@ import {
 } from '../channels/index.js';
 import { mergeReservedValidators } from '../validation.js';
 import { StreamBus } from '../wire-config.js';
-import type { ActionSpec, Render } from '@ggui-ai/protocol';
+import type { ActionSpec, GguiSession } from '@ggui-ai/protocol';
 
 // =============================================================================
 // postObservabilityToParent — default postMessage emitter
@@ -113,7 +113,7 @@ describe('buildRootWireConfig — wired-tool-invoked emission', () => {
         nextStep: 'tasks.create_tool',
       },
     };
-    const render: Render = {
+    const render: GguiSession = {
       id: 'page-1',
       appId: 'app-1',
       componentCode: 'export default () => null',
@@ -126,7 +126,7 @@ describe('buildRootWireConfig — wired-tool-invoked emission', () => {
     const config = buildRootWireConfig({
       renderId: 'render-1',
       appId: 'app-1',
-      getCurrentRender: () => render,
+      getCurrentGguiSession: () => render,
       manager: managerShim,
       streamBus: new (class {
         subscribe(): () => void {
@@ -156,7 +156,7 @@ describe('buildRootWireConfig — wired-tool-invoked emission', () => {
   it('does NOT emit when the dispatched action has no tool binding', () => {
     const observed: ObservabilityEvent[] = [];
     const sent: WebSocketMessage[] = [];
-    const render: Render = {
+    const render: GguiSession = {
       id: 'page-agent',
       appId: 'app-agent',
       componentCode: 'export default () => null',
@@ -171,7 +171,7 @@ describe('buildRootWireConfig — wired-tool-invoked emission', () => {
     const config = buildRootWireConfig({
       renderId: 'render-agent',
       appId: 'app-agent',
-      getCurrentRender: () => render,
+      getCurrentGguiSession: () => render,
       manager: { send: (m) => sent.push(m) },
       streamBus: new (class {
         subscribe(): () => void {
@@ -354,7 +354,7 @@ describe('data handler — contract-error-emitted emission', () => {
     // no active streamSpec. Behaviour matches a render that
     // hasn't declared a streamSpec entry for the inbound channel.
     const handler = createDataHandler({
-      getCurrentRender: () => null,
+      getCurrentGguiSession: () => null,
       streamBus: new StreamBus(),
       validatorCtx: { reservedValidators: mergeReservedValidators(undefined, undefined) },
       onObserve: (e) => observed.push(e),
@@ -389,7 +389,7 @@ describe('data handler — contract-error-emitted emission', () => {
   it('skips emission on data envelopes for non-reserved channels', () => {
     const observed: ObservabilityEvent[] = [];
     const handler = createDataHandler({
-      getCurrentRender: () => null,
+      getCurrentGguiSession: () => null,
       streamBus: new StreamBus(),
       validatorCtx: { reservedValidators: mergeReservedValidators(undefined, undefined) },
       onObserve: (e) => observed.push(e),

@@ -49,7 +49,7 @@ export interface StreamSpecEntry {
   readonly tool: string;
 }
 
-export interface Render {
+export interface GguiSession {
   readonly renderId: string;
   readonly appId: string;
   readonly actionSpecs: Map<string, ActionSpecEntry>;
@@ -83,22 +83,22 @@ export interface Subscriber {
 }
 
 /**
- * In-memory render store. Wraps a `Map<renderId, Render>` with
+ * In-memory render store. Wraps a `Map<renderId, GguiSession>` with
  * the operations the ConformanceHost adapter + WS subscribe handler
  * need. No locking — JS single-threaded; all calls originate from
  * the event loop.
  */
-export class RenderStore {
-  private readonly renders = new Map<string, Render>();
+export class GguiSessionStore {
+  private readonly renders = new Map<string, GguiSession>();
   private lastCreated: string | undefined;
 
-  create(renderId: string, appId: string): Render {
+  create(renderId: string, appId: string): GguiSession {
     const existing = this.renders.get(renderId);
     if (existing !== undefined) {
       this.lastCreated = renderId;
       return existing;
     }
-    const render: Render = {
+    const render: GguiSession = {
       renderId,
       appId,
       actionSpecs: new Map(),
@@ -122,7 +122,7 @@ export class RenderStore {
     return this.lastCreated;
   }
 
-  get(renderId: string): Render | undefined {
+  get(renderId: string): GguiSession | undefined {
     return this.renders.get(renderId);
   }
 
@@ -130,7 +130,7 @@ export class RenderStore {
     return this.renders.delete(renderId);
   }
 
-  addSubscriber(renderId: string, subscriber: Subscriber): Render {
+  addSubscriber(renderId: string, subscriber: Subscriber): GguiSession {
     const render = this.create(renderId, 'conformance');
     render.subscribers.add(subscriber);
     return render;
@@ -163,7 +163,7 @@ export class RenderStore {
   /**
    * Set the per-render protocol-version override. Used by the
    * `server-version-override` ConformanceHost directive — populates
-   * {@link Render.versionOverride} so the WS subscribe handler
+   * {@link GguiSession.versionOverride} so the WS subscribe handler
    * advertises this value (and emits UPGRADE_REQUIRED keyed off it)
    * for THIS render only, leaving parallel renders on the instance-
    * level default.

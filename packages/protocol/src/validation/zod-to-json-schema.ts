@@ -33,7 +33,7 @@
  *
  * **Intended call sites.**
  *
- *   - Render-time + blueprint-registration schema-compat checks in
+ *   - GguiSession-time + blueprint-registration schema-compat checks in
  *     `@ggui-ai/mcp-server`: a mount-registered tool handler exposes
  *     its `inputSchema` as a {@link ZodRawShape}; wrapping it in
  *     `z.object(shape)` and converting gives the JsonSchema that

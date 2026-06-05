@@ -26,7 +26,7 @@
  *      `renderId` sourced from its `_meta.ggui.bootstrap`.
  *   3. `ggui_consume({renderId, timeout})` blocks; long-poll loop
  *      calls `consumeAndClear` until events arrive OR `timeout`
- *      elapses. Render TTL eventually reaps the pipe; subsequent
+ *      elapses. GguiSession TTL eventually reaps the pipe; subsequent
  *      ops throw `PendingPipeNotFoundError`, which the handler
  *      treats as the loop-terminating signal.
  *
@@ -39,12 +39,12 @@
  * `RETURN_VALUES=ALL_OLD` for atomic per-render fetch-and-clear.
  *
  * The consumer is a pending-events surface, NOT the append-only
- * event log on `RenderStore.appendEvent`/`observe`. Those are two
+ * event log on `GguiSessionStore.appendEvent`/`observe`. Those are two
  * different streams — the buffer here gets cleared on every consume
  * (queue semantics) while the event log is append-only retained.
  */
 
-import type { RenderStatus } from '@ggui-ai/protocol';
+import type { GguiSessionStatus } from '@ggui-ai/protocol';
 
 /**
  * Result envelope from a single `consumeAndClear` call.
@@ -61,7 +61,7 @@ import type { RenderStatus } from '@ggui-ai/protocol';
  */
 export interface PendingEventConsumeResult {
   readonly events: ReadonlyArray<Record<string, unknown>>;
-  readonly status: RenderStatus;
+  readonly status: GguiSessionStatus;
 }
 
 /**
@@ -146,7 +146,7 @@ export interface PendingEventConsumer {
    * No-op when the pipe doesn't exist — callers shouldn't need to
    * guard a status flip against a vanished render.
    */
-  markStatus?(renderId: string, status: RenderStatus): void;
+  markStatus?(renderId: string, status: GguiSessionStatus): void;
 
   /**
    * Tear down the pipe for `renderId`. Subsequent `append` /

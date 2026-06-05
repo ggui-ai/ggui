@@ -14,7 +14,7 @@ export type FeedbackRating = 'love' | 'dislike' | 'other';
  * Input payload for submitting UI feedback via WebSocket.
  */
 export interface UIFeedbackPayload {
-  /** Render being rated */
+  /** GguiSession being rated */
   renderId: string;
   /** Rating type */
   rating: FeedbackRating;

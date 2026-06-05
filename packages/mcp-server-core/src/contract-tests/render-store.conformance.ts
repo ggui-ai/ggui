@@ -1,20 +1,20 @@
 /**
- * `RenderStore` cross-impl conformance suite.
+ * `GguiSessionStore` cross-impl conformance suite.
  *
- * A portable battery of assertions every `RenderStore` implementation
+ * A portable battery of assertions every `GguiSessionStore` implementation
  * MUST satisfy. The function below takes a factory returning a fresh
  * store + an optional teardown hook; real impls plug in:
  *
- * - `InMemoryRenderStore` invokes from its existing test file.
- * - `SqliteRenderStore` invokes with a temp-file db that gets cleaned
+ * - `InMemoryGguiSessionStore` invokes from its existing test file.
+ * - `SqliteGguiSessionStore` invokes with a temp-file db that gets cleaned
  *   on teardown.
- * - Cloud `dynamoRenderStore` invokes against a DynamoDB-Local mock
+ * - Cloud `dynamoGguiSessionStore` invokes against a DynamoDB-Local mock
  *   (follow-up — needs Docker shim).
  *
  * The assertions focus on **known observed bug classes**, plus the
  * contract surface invariants. Each named bug class:
  *
- * 1. **endUserIdentity round-trip parity** — a `dynamoRenderStore`
+ * 1. **endUserIdentity round-trip parity** — a `dynamoGguiSessionStore`
  *    can treat the JSON-string column form as an opaque id
  *    (`{id: '{"sub":"u-42",…}'}`) instead of JSON-parsing to the
  *    structured shape. Test: set `endUserIdentity` on create, assert
@@ -38,17 +38,17 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import type { Render } from '@ggui-ai/protocol';
-import type { RenderStore } from '../render-store.js';
+import type { GguiSession } from '@ggui-ai/protocol';
+import type { GguiSessionStore } from '../render-store.js';
 
 /**
  * Factory + cleanup pair. The cleanup is awaited after each test —
  * impls that hold OS resources (sqlite tempfiles, dynamo client
  * connections) plug their teardown here.
  */
-export interface RenderStoreConformanceFactory {
-  readonly create: () => Promise<RenderStore>;
-  readonly cleanup?: (store: RenderStore) => Promise<void> | void;
+export interface GguiSessionStoreConformanceFactory {
+  readonly create: () => Promise<GguiSessionStore>;
+  readonly cleanup?: (store: GguiSessionStore) => Promise<void> | void;
 }
 
 /**
@@ -56,16 +56,16 @@ export interface RenderStoreConformanceFactory {
  * block; the suite installs its own `describe` + `it` calls
  * underneath.
  *
- * `label` is the impl name (e.g. `'InMemoryRenderStore'`); it
+ * `label` is the impl name (e.g. `'InMemoryGguiSessionStore'`); it
  * prefixes every nested describe so failures point at the right impl
  * in CI output.
  */
-export function runRenderStoreConformance(
+export function runGguiSessionStoreConformance(
   label: string,
-  factory: RenderStoreConformanceFactory,
+  factory: GguiSessionStoreConformanceFactory,
 ): void {
   async function withStore<T>(
-    fn: (store: RenderStore) => Promise<T>,
+    fn: (store: GguiSessionStore) => Promise<T>,
   ): Promise<T> {
     const store = await factory.create();
     try {
@@ -81,7 +81,7 @@ export function runRenderStoreConformance(
     id: string,
     appId: string,
     componentCode = '/* placeholder */',
-  ): Render {
+  ): GguiSession {
     return {
       type: 'component',
       id,

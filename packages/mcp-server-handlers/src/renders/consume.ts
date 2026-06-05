@@ -21,7 +21,7 @@
  *     short-killing proxy can lower the cap via `maxTimeoutSeconds`.
  *
  * Output schema mirrors the cloud handler verbatim:
- * `{events: ConsumeEventEntry[], status: RenderStatus}`. Each row is
+ * `{events: ConsumeEventEntry[], status: GguiSessionStatus}`. Each row is
  * normalized to canonical `PendingEvent` then unwrapped to its
  * `envelope` payload via `parsePendingEnvelope` so SDK consumers
  * read the per-gesture entry shape directly.
@@ -40,15 +40,15 @@ import {
   type ConsumeEventEntry,
   type GguiConsumeOutput,
   type PendingEvent,
-  type RenderStatus,
+  type GguiSessionStatus,
 } from '@ggui-ai/protocol';
 import {
   type ActiveConsumerRegistry,
   type PendingEventConsumer,
-  type RenderStore,
+  type GguiSessionStore,
 } from '@ggui-ai/mcp-server-core';
 import type { HandlerContext, SharedHandler } from '../types.js';
-import { RenderNotFoundError } from './errors.js';
+import { GguiSessionNotFoundError } from './errors.js';
 
 /**
  * Default server-side cap on the actual inline long-poll wait —
@@ -130,7 +130,7 @@ export interface ObserverNotifier {
  * on its existing WS connection and uses these frames to dismiss the
  * matching per-action toast.
  *
- * `mcp-server`'s `RenderChannelServer.sendDrainAck` implements this
+ * `mcp-server`'s `GguiSessionChannelServer.sendDrainAck` implements this
  * contract; the handler depends on the narrowed shape so the handlers
  * package doesn't take a peer dep on the full render-channel surface
  * (parallels `PropsUpdateNotifier` in `update.ts`).
@@ -159,7 +159,7 @@ export interface ConsumeLogger {
 
 export interface GguiConsumeHandlerDeps {
   readonly pendingEventConsumer: PendingEventConsumer;
-  readonly renderStore: RenderStore;
+  readonly renderStore: GguiSessionStore;
   /** Default render TTL in seconds when the render row carries
    *  no explicit ttl. Cloud reads from config; OSS reads from
    *  ggui.json. Falls back to ~1 day on absence. */
@@ -224,7 +224,7 @@ const CONSUME_SLOW_THRESHOLD_MS = 2000;
 
 interface ConsumeResultRaw {
   readonly events: ReadonlyArray<Record<string, unknown>>;
-  readonly status: RenderStatus;
+  readonly status: GguiSessionStatus;
 }
 
 const DEFAULT_TTL_SECONDS = 24 * 60 * 60; // 1 day
@@ -259,7 +259,7 @@ export function createGguiConsumeHandler(
         // tenant).
         const stored = await deps.renderStore.get(renderId);
         if (!stored || stored.appId !== ctx.appId) {
-          throw new RenderNotFoundError(renderId);
+          throw new GguiSessionNotFoundError(renderId);
         }
 
         const maxTimeoutSeconds =
@@ -423,7 +423,7 @@ export function createGguiConsumeHandler(
         // Wrapper omitted when no projection exists yet.
         return {
           events,
-          status: result.status ?? ('active' as RenderStatus),
+          status: result.status ?? ('active' as GguiSessionStatus),
           ...(stored.hostContext !== undefined
             ? { client: { hostContext: stored.hostContext } }
             : {}),
@@ -455,7 +455,7 @@ async function fetchAndClearSafe(
     if (
       err instanceof Error &&
       (err.name === 'PendingPipeNotFoundError' ||
-        err.name === 'RenderNotFoundError')
+        err.name === 'GguiSessionNotFoundError')
     ) {
       // Treat mid-long-poll disappearance as 'expired' to unblock
       // callers without forcing them to handle yet another error.

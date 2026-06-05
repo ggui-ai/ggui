@@ -34,7 +34,7 @@
  * this host path. Host-to-host sandboxing is browser-enforced by
  * the iframe's `sandbox="allow-scripts"` attribute.
  */
-import type { McpAppsRender } from '@ggui-ai/protocol/integrations/mcp-apps';
+import type { McpAppsGguiSession } from '@ggui-ai/protocol/integrations/mcp-apps';
 
 // =============================================================================
 // JSON-RPC wire types (iframe postMessage bridge)
@@ -68,8 +68,8 @@ const DEFAULT_THEME: Readonly<Record<string, string>> = {
 // =============================================================================
 
 export interface McpAppIframeMountOptions {
-  readonly render: McpAppsRender;
-  /** Render id — threaded into the proxy URL so server-side
+  readonly render: McpAppsGguiSession;
+  /** GguiSession id — threaded into the proxy URL so server-side
    *  connector scoping works. */
   readonly renderId: string;
   /**
@@ -121,7 +121,7 @@ function buildSandboxAttr(): string {
   return 'allow-scripts allow-forms';
 }
 
-function buildAllowAttr(render: McpAppsRender): string | undefined {
+function buildAllowAttr(render: McpAppsGguiSession): string | undefined {
   const perms = render.permissions;
   if (!perms) return undefined;
   const parts: string[] = [];

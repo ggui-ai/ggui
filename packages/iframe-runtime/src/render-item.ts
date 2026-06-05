@@ -1,5 +1,5 @@
 /**
- * Render dispatcher — routes a single {@link Render} to the
+ * GguiSession dispatcher — routes a single {@link GguiSession} to the
  * appropriate renderer based on its discriminator.
  *
  * Post-render-identity-collapse (2026-05-27): the iframe-runtime mounts
@@ -39,9 +39,9 @@
  */
 import { createElement } from 'react';
 import type { ReactNode } from 'react';
-import type { Render } from '@ggui-ai/protocol';
-import type { McpAppsRender } from '@ggui-ai/protocol/integrations/mcp-apps';
-import type { RenderSeedInput } from './types.js';
+import type { GguiSession } from '@ggui-ai/protocol';
+import type { McpAppsGguiSession } from '@ggui-ai/protocol/integrations/mcp-apps';
+import type { GguiSessionSeedInput } from './types.js';
 import { GguiWireProvider, type WireConfig } from '@ggui-ai/wire';
 import { mountReactRoot, type ReactRootMount } from './react-renderer.js';
 import {
@@ -60,7 +60,7 @@ import type { StreamBus } from './wire-config.js';
 
 export interface RenderItemOptions {
   /** The render to mount. */
-  readonly render: Render | RenderSeedInput;
+  readonly render: GguiSession | GguiSessionSeedInput;
   /** Wire config for this render — caller builds it via the runtime's
    *  `buildRootWireConfig(...)` (see `wire-config.ts`). `null` ⇒ the
    *  component mounts without a wire provider (standalone — matches
@@ -70,17 +70,17 @@ export interface RenderItemOptions {
   /** Shared stream bus — provisional renderer subscribes to
    *  `_ggui:preview` for this render. */
   readonly streamBus: StreamBus;
-  /** Render id — used by the mcp-apps iframe host for proxy URLs. */
+  /** GguiSession id — used by the mcp-apps iframe host for proxy URLs. */
   readonly renderId: string;
   /**
    * 3rd-party gadget package names whose direct imports the rewriter
    * must resolve to per-package shims. FALLBACK source used only when
    * the render carries no `gadgetDescriptors` sidecar — i.e. the static
-   * seed mount ({@link RenderSeedInput}, which has no descriptors). The
+   * seed mount ({@link GguiSessionSeedInput}, which has no descriptors). The
    * caller threads the bootstrap's `meta.gadgets` package names here so a
    * generated component importing a non-STDLIB gadget on a no-WS host
    * (claude.ai / ChatGPT) still resolves its shim on first paint. A
-   * WS-delivered full `Render` carries `gadgetDescriptors` and ignores
+   * WS-delivered full `GguiSession` carries `gadgetDescriptors` and ignores
    * this. STDLIB `@ggui-ai/gadgets` is always rewritten regardless.
    */
   readonly gadgetPackages?: readonly string[];
@@ -141,7 +141,7 @@ export interface RenderItemHandle {
 // Kind detection
 // =============================================================================
 
-function detectKind(render: Render | RenderSeedInput): 'mcpApps' | 'react' | 'provisional' | 'system' {
+function detectKind(render: GguiSession | GguiSessionSeedInput): 'mcpApps' | 'react' | 'provisional' | 'system' {
   if (render.type === 'mcpApps') return 'mcpApps';
   // System renders mount via the built-in `SystemCardHost` registry
   // (the `'system'` branch in `mountByKind`). This is the single mount
@@ -172,7 +172,7 @@ export async function mountRender(
   // tree has no wire/context wrap; we hold the react-dom Root for
   // teardown + a re-render closure for same-kind prop updates.
   let systemRoot: { render: (node: ReactNode) => void; unmount: () => void } | null = null;
-  let systemRerender: ((render: Render | RenderSeedInput) => void) | null = null;
+  let systemRerender: ((render: GguiSession | GguiSessionSeedInput) => void) | null = null;
 
   function teardown(): void {
     if (reactMount !== null) {
@@ -201,8 +201,8 @@ export async function mountRender(
 
   async function mountByKind(kind: 'mcpApps' | 'react' | 'provisional' | 'system'): Promise<void> {
     if (kind === 'mcpApps') {
-      // Render narrows to McpAppsRender when type='mcpApps'.
-      const render = currentOpts.render as McpAppsRender;
+      // GguiSession narrows to McpAppsGguiSession when type='mcpApps'.
+      const render = currentOpts.render as McpAppsGguiSession;
       mcpMount = mountMcpAppIframe(container, {
         render,
         renderId: currentOpts.renderId,
@@ -216,7 +216,7 @@ export async function mountRender(
 
     if (kind === 'system') {
       // System card — server-emitted `kind` mapped to a built-in
-      // `.tsx` via `SystemCardHost`. Render-only: no `__ggui__` shim,
+      // `.tsx` via `SystemCardHost`. GguiSession-only: no `__ggui__` shim,
       // no GguiWireProvider, no contextSpec wrap (system cards don't
       // dispatch wire actions or read contexts). The registry handles
       // unknown kinds via a typed fallback. Dynamic-import keeps the
@@ -229,7 +229,7 @@ export async function mountRender(
         import('./system-cards/index.js'),
       ]);
       const root = reactDomClient.createRoot(container);
-      const renderCard = (r: Render | RenderSeedInput): void => {
+      const renderCard = (r: GguiSession | GguiSessionSeedInput): void => {
         if (r.type !== 'system') return;
         root.render(
           createElement(systemCardsMod.SystemCardHost, {

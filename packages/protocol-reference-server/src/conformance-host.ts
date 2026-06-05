@@ -30,7 +30,7 @@
  */
 import type {
   ConformanceHost,
-  CreateRenderSetup,
+  CreateGguiSessionSetup,
   EmitEnvelopeSetup,
   HostSetupStep,
   HostTeardownStep,
@@ -62,7 +62,7 @@ export function createReferenceConformanceHost({
       // `HostUnknownSetupStep` arm (`kind: string & {}`) widens the
       // discriminant and blocks literal-narrowing on the union.
       if (step.kind === 'create-render') {
-        const s = step as CreateRenderSetup;
+        const s = step as CreateGguiSessionSetup;
         serverInstance.renders.create(s.renderId, s.appId ?? 'conformance');
         return;
       }

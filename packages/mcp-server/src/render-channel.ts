@@ -14,10 +14,10 @@
  *   - `action` → inbound user action carried as an {@link ActionEnvelope}.
  *     Gated through `assertEventAllowed` (allowlist) +
  *     `assertActionContract` (payload, for data:submit). Persisted to
- *     RenderStore as a typed render event.
+ *     GguiSessionStore as a typed render event.
  *   - `ping`/`pong` → heartbeat parity with hosted.
  *   - `close`/socket-close → clean subscriber teardown.
- *   - `sendToRender(renderId, data)` → outbound fan-out API for
+ *   - `sendToGguiSession(renderId, data)` → outbound fan-out API for
  *     mutation handlers (ggui_emit / connector `ctx.send`). Validated
  *     through `assertStreamContract` before delivery.
  *
@@ -41,15 +41,15 @@ import type {
   AuthAdapter,
   AuthResult,
   BufferedStreamEnvelope,
-  RenderPatch,
-  RenderStore,
-  RenderStreamBuffer,
+  GguiSessionPatch,
+  GguiSessionStore,
+  GguiSessionStreamBuffer,
   StreamEnvelopeInput,
   StreamFanout,
   TelemetrySink,
 } from "@ggui-ai/mcp-server-core";
 import {
-  InMemoryRenderStreamBuffer,
+  InMemoryGguiSessionStreamBuffer,
   InProcessStreamFanout,
   NoopTelemetrySink,
 } from "@ggui-ai/mcp-server-core/in-memory";
@@ -63,7 +63,7 @@ import type {
   ErrorPayload,
   JsonObject,
   RefreshInput,
-  Render,
+  GguiSession,
   ReservedChannelValidator,
   SanitizeCausedBy,
   StreamSpec,
@@ -103,7 +103,7 @@ class EventNotAllowedError extends Error {
 function assertEventAllowed(_subscription: unknown, _type: string): void {
   // No-op: pre-Phase-B this read `StackItem.subscription` and rejected
   // event types not on the allowlist. Post-collapse there's no
-  // subscription field on `Render`; the gate is deferred to a follow-up
+  // subscription field on `GguiSession`; the gate is deferred to a follow-up
   // slice that defines per-render event policy on the new wire shape.
 }
 
@@ -171,7 +171,7 @@ interface ChannelSubscriptionState {
   readonly pollIntervalMs: number;
   /** Source tool name resolved from `streamSpec[channelName].source.tool`. */
   readonly toolName: string;
-  /** Render this subscription is bound to (for fan-out scoping). */
+  /** GguiSession this subscription is bound to (for fan-out scoping). */
   readonly renderId: string;
   /** Channel name (key into `streamSpec`). */
   readonly channelName: string;
@@ -196,7 +196,7 @@ interface ChannelSubscriptionState {
  * Server-authoritative: clients propose `pollIntervalMs` on
  * `channel_subscribe`, server clamps to [floorMs, ceilingMs] and
  * defaults to `defaultMs` when absent. Conservative defaults — operators
- * tune via {@link RenderChannelLocalToolsOptions.pollCadence}.
+ * tune via {@link GguiSessionChannelLocalToolsOptions.pollCadence}.
  */
 const DEFAULT_CHANNEL_POLL_FLOOR_MS = 1_000;
 const DEFAULT_CHANNEL_POLL_CEILING_MS = 60_000;
@@ -204,13 +204,13 @@ const DEFAULT_CHANNEL_POLL_DEFAULT_MS = 10_000;
 
 /**
  * Opt-in plumbing for the `channel_subscribe` polling loop. When this
- * field is set on {@link RenderChannelOptions}, channel subscribes
+ * field is set on {@link GguiSessionChannelOptions}, channel subscribes
  * whose `source.tool` is in {@link allowlist} are accepted and the
  * server begins polling. When absent, every `channel_subscribe`
  * returns `CHANNEL_NOT_LOCAL` so the iframe falls back to direct
  * polling via the MCP host proxy.
  */
-export interface RenderChannelLocalToolsOptions {
+export interface GguiSessionChannelLocalToolsOptions {
   /**
    * Whitelist of `source.tool` names this channel can poll. Must mirror
    * the value the host advertises on
@@ -278,7 +278,7 @@ export interface RenderChannelLocalToolsOptions {
  * handshake. Past expiry, the iframe MAY refresh via the
  * {@link refresh} surface; past the refresh window, fresh handshake.
  */
-export type RenderChannelBootstrapVerifyResult =
+export type GguiSessionChannelBootstrapVerifyResult =
   | {
       readonly ok: true;
       readonly renderId: string;
@@ -287,13 +287,13 @@ export type RenderChannelBootstrapVerifyResult =
   | { readonly ok: false; readonly reason: "expired" | "invalid" };
 
 /**
- * Result of {@link RenderChannelBootstrap.refresh}.
+ * Result of {@link GguiSessionChannelBootstrap.refresh}.
  *
  *   - `ok: true`: caller swaps the old envelope for `token` and resumes.
  *   - `ok: false`: caller MUST re-handshake (refresh window closed,
  *     tampered envelope, etc.).
  */
-export type RenderChannelBootstrapRefreshResult =
+export type GguiSessionChannelBootstrapRefreshResult =
   | {
       readonly ok: true;
       readonly token: string;
@@ -301,7 +301,7 @@ export type RenderChannelBootstrapRefreshResult =
     }
   | { readonly ok: false; readonly reason: "window_closed" | "invalid" };
 
-export interface RenderChannelBootstrap {
+export interface GguiSessionChannelBootstrap {
   /**
    * Verify a `SubscribePayload.bootstrap` token.
    *
@@ -311,7 +311,7 @@ export interface RenderChannelBootstrap {
    * `BOOTSTRAP_INVALID` for tamper / format / kind failures (no
    * refresh on those).
    */
-  verify(token: string): RenderChannelBootstrapVerifyResult;
+  verify(token: string): GguiSessionChannelBootstrapVerifyResult;
   /**
    * Mint a longer-lived reconnect credential to return in
    * `AckPayload.renderToken`. Called only after a successful
@@ -332,12 +332,12 @@ export interface RenderChannelBootstrap {
    * 'window_closed'}`; tampered envelopes are `{ok:false, reason:
    * 'invalid'}`.
    */
-  refresh(token: string): RenderChannelBootstrapRefreshResult;
+  refresh(token: string): GguiSessionChannelBootstrapRefreshResult;
 }
 
 /**
  * Default timeout for a single wired-tool invocation, in ms. Operators
- * override via {@link RenderChannelOptions.wiredActionTimeoutMs}; the
+ * override via {@link GguiSessionChannelOptions.wiredActionTimeoutMs}; the
  * 30 s ceiling is a honest non-promise: long-running tools MUST design
  * their own completion path (streaming, polling).
  */
@@ -403,7 +403,7 @@ export interface WiredActionContext {
   /**
    * Push a `{type:'props_update', payload:{renderId, props}}` frame to
    * every live subscriber bound to this dispatcher's `renderId`. The
-   * call closes over the `RenderChannelServer.sendPropsUpdate` method,
+   * call closes over the `GguiSessionChannelServer.sendPropsUpdate` method,
    * scoped to the active render for safety.
    *
    * Best-effort: per-subscriber send failures are swallowed; a closed
@@ -438,9 +438,9 @@ export interface WiredActionRouter {
   ): Promise<unknown>;
 }
 
-export interface RenderChannelOptions {
-  /** Required — the render backing store (typically `InMemoryRenderStore`). */
-  readonly renderStore: RenderStore;
+export interface GguiSessionChannelOptions {
+  /** Required — the render backing store (typically `InMemoryGguiSessionStore`). */
+  readonly renderStore: GguiSessionStore;
   /**
    * Required — the same `AuthAdapter` the `/mcp` endpoint uses. Any
    * failure during `subscribe` rejects the upgrade with HTTP 401.
@@ -456,15 +456,15 @@ export interface RenderChannelOptions {
   readonly path?: string;
   /**
    * Outbound stream replay buffer. Defaults to a fresh
-   * `InMemoryRenderStreamBuffer` when omitted — fine for OSS
+   * `InMemoryGguiSessionStreamBuffer` when omitted — fine for OSS
    * zero-config / dev. Persistent adapters bind via the same
-   * `RenderStreamBuffer` interface when they land.
+   * `GguiSessionStreamBuffer` interface when they land.
    *
    * Each channel instance owns its own seq cursor space; sharing a
    * buffer across two channels in the same process would couple their
    * sequences in confusing ways.
    */
-  readonly streamBuffer?: RenderStreamBuffer;
+  readonly streamBuffer?: GguiSessionStreamBuffer;
   /**
    * Live-tail pub/sub for outbound live-channel frames. Defaults to a
    * fresh `InProcessStreamFanout` (in-memory, single-process). Hosted
@@ -482,7 +482,7 @@ export interface RenderChannelOptions {
    * credentials in `AckPayload.renderToken`. When absent, bootstrap
    * tokens are rejected with `BOOTSTRAP_NOT_SUPPORTED`.
    */
-  readonly bootstrap?: RenderChannelBootstrap;
+  readonly bootstrap?: GguiSessionChannelBootstrap;
 
   /**
    * Optional console cookie-auth plumbing. When present, the
@@ -500,7 +500,7 @@ export interface RenderChannelOptions {
    * bootstrap path (via `?bootstrap=` query) wins; cookie is only
    * consulted for standard upgrades.
    */
-  readonly cookieAuth?: RenderChannelCookieAuth;
+  readonly cookieAuth?: GguiSessionChannelCookieAuth;
   /**
    * Opt-in wired-action dispatch router. When present, validated
    * `data:submit` envelopes whose declared `actionSpec[name]
@@ -583,7 +583,7 @@ export interface RenderChannelOptions {
    * `handshake.serverCapabilities.streamWebSocketLocalTools` so iframe
    * + server agree on which channels use the WS fan-out path.
    */
-  readonly streamWebSocketLocalTools?: RenderChannelLocalToolsOptions;
+  readonly streamWebSocketLocalTools?: GguiSessionChannelLocalToolsOptions;
   /**
    * Protocol-version handshake policy. Governs server behavior when a
    * subscribe declares a `supportedVersions` list that does NOT
@@ -618,7 +618,7 @@ export interface RenderChannelOptions {
    * Hosted deployments use this to lazily SUBSCRIBE to the per-render
    * cross-pod broadcast channel (e.g. Redis pub/sub); OSS has no use
    * for it (in-process broadcasts already route via
-   * {@link RenderChannelServer.sendPropsUpdate}). Bounding pubsub
+   * {@link GguiSessionChannelServer.sendPropsUpdate}). Bounding pubsub
    * fan-in to only renders a pod actually holds connections for is a
    * correctness requirement, not an optimization — without it every
    * pod receives every other pod's broadcast for every active render.
@@ -649,7 +649,7 @@ export interface RenderChannelOptions {
  * exclusively by the same-origin console viewer; see
  * `console-auth.ts` for the single consumer today.
  */
-export interface RenderChannelCookieAuth {
+export interface GguiSessionChannelCookieAuth {
   /**
    * Read the raw cookie value for THIS server's console cookie
    * from the incoming request headers. Returns `null` when the
@@ -664,7 +664,7 @@ export interface RenderChannelCookieAuth {
   verify(cookieValue: string): { renderId: string; appId: string } | null;
 }
 
-export interface RenderChannelServer {
+export interface GguiSessionChannelServer {
   /** The URL path the channel accepts upgrade requests on. */
   readonly path: string;
   /**
@@ -701,7 +701,7 @@ export interface RenderChannelServer {
    * Throws `ContractViolationError` on payload mismatch; transport
    * errors are logged but not propagated (per-subscriber best-effort).
    */
-  sendToRender(delivery: StreamEnvelopeInput): Promise<{ seq: number }>;
+  sendToGguiSession(delivery: StreamEnvelopeInput): Promise<{ seq: number }>;
   /**
    * Fan a `{type:'render', payload:{render, matchType?}}` wire frame
    * to every subscriber currently bound to `renderId`. Use this to
@@ -716,8 +716,8 @@ export interface RenderChannelServer {
    * entry. The second turn's commit landed on the live render — the
    * subscriber never heard about the new entry, the inline UI slot
    * stayed in "Waiting for render channel replay…" indefinitely.
-   * `notifyRenderCommit` closes that gap. Best-effort: per-subscriber
-   * send failures are swallowed (same posture as `sendToRender`).
+   * `notifyGguiSessionCommit` closes that gap. Best-effort: per-subscriber
+   * send failures are swallowed (same posture as `sendToGguiSession`).
    *
    * NOT durable. Frames are not stamped through the replay buffer —
    * fresh subscribers still get the current render via `ack.render` on
@@ -731,7 +731,7 @@ export interface RenderChannelServer {
    * `renderStore.commit` resolves so the snapshot a
    * concurrent fresh subscriber observes still includes the entry.
    */
-  notifyRenderCommit(renderId: string, render: Render, matchType?: string): void;
+  notifyGguiSessionCommit(renderId: string, render: GguiSession, matchType?: string): void;
   /**
    * Prime every declared streamSpec channel on `render` that carries a
    * `tool` refresh hint. Invokes each refresh tool via the bound
@@ -753,12 +753,12 @@ export interface RenderChannelServer {
    * channel lacks a `.tool` hint.
    *
    * Ordering: callers should invoke AFTER the render is persisted
-   * so `sendToRender`'s active-render lookup resolves. The
+   * so `sendToGguiSession`'s active-render lookup resolves. The
    * `try-live` endpoint awaits this before returning the shortCode so
    * the viewer SPA subscribes with the initial envelope already
    * buffered on the render's stream-buffer replay state.
    */
-  primeStreams(renderId: string, render: Render): Promise<void>;
+  primeStreams(renderId: string, render: GguiSession): Promise<void>;
   /**
    * Fan a `{type:'props_update', payload:{renderId, props}}` wire frame
    * to every subscriber currently bound to `renderId`. Mount tools
@@ -767,7 +767,7 @@ export interface RenderChannelServer {
    * mutates server-side state can replace renderer props in-place
    * without going through a refresh-stream tool.
    *
-   * Validation posture (mirrors `notifyRenderCommit`'s "best-effort orphan
+   * Validation posture (mirrors `notifyGguiSessionCommit`'s "best-effort orphan
    * no-op"):
    *   1. Look up the render via `renderStore.get`. Absent → log
    *      `render_channel_props_update_orphan` and return — the wire
@@ -780,7 +780,7 @@ export interface RenderChannelServer {
    * NOT routed through StreamFanout — `type: 'props_update'` is a
    * distinct WebSocket message type, not a stream envelope. Stream
    * envelopes flow on `data` frames and have a `seq` cursor; props
-   * updates are ephemeral and follow `notifyRenderCommit`'s pattern
+   * updates are ephemeral and follow `notifyGguiSessionCommit`'s pattern
    * (live-only, no replay-buffer stamping). A new subscriber that
    * connects mid-render reads current `props` from the render
    * snapshot delivered in `ack.render`.
@@ -806,7 +806,7 @@ export interface RenderChannelServer {
    * Implements the `DrainAckNotifier` contract from
    * `@ggui-ai/mcp-server-handlers`.
    *
-   * Same posture as `notifyRenderCommit` / `sendPropsUpdate` — live-only,
+   * Same posture as `notifyGguiSessionCommit` / `sendPropsUpdate` — live-only,
    * no replay-buffer stamping. Subscribers that connect AFTER the
    * drain see the next consume's snapshot rather than the missed
    * frame; the iframe's claim timer + atomic-pop primitive backstop
@@ -820,7 +820,7 @@ export interface RenderChannelServer {
   }): void;
   /**
    * Fan a server-frame to every local WS subscriber bound to
-   * `renderId`. Skips replay-buffer stamping, RenderStore lookups,
+   * `renderId`. Skips replay-buffer stamping, GguiSessionStore lookups,
    * and contract validation — the caller is the one that originally
    * validated + persisted the underlying mutation. This surface is the
    * cloud adapter's path for delivering already-validated frames that
@@ -833,7 +833,7 @@ export interface RenderChannelServer {
    *
    * No-op when no local subscriber is bound to `renderId`. Closed
    * sockets are skipped silently by the underlying `send()` helper —
-   * same posture as `sendPropsUpdate` / `notifyRenderCommit`. Per-
+   * same posture as `sendPropsUpdate` / `notifyGguiSessionCommit`. Per-
    * subscriber send failures are logged but never propagated.
    */
   externalBroadcast(renderId: string, frame: WebSocketMessage): void;
@@ -868,11 +868,11 @@ class WiredToolTimeoutError extends Error {
  * Build an OSS live-channel server. The returned object is designed to be
  * composed into `createGguiServer` — see `server.ts` for the wire-up.
  */
-export function createRenderChannelServer(opts: RenderChannelOptions): RenderChannelServer {
+export function createGguiSessionChannelServer(opts: GguiSessionChannelOptions): GguiSessionChannelServer {
   const path = opts.path ?? DEFAULT_RENDER_CHANNEL_PATH;
   // Outbound stream buffer — owns seq assignment + bounded replay
   // storage. Default is in-memory; operators swap via `opts.streamBuffer`.
-  const streamBuffer: RenderStreamBuffer = opts.streamBuffer ?? new InMemoryRenderStreamBuffer();
+  const streamBuffer: GguiSessionStreamBuffer = opts.streamBuffer ?? new InMemoryGguiSessionStreamBuffer();
   // Live-tail pub/sub. Default in-process; hosted binds RedisPubSubFanout.
   const streamFanout: StreamFanout = opts.streamFanout ?? new InProcessStreamFanout();
   // `causedBy` sanitizer applied to every contract-error emission.
@@ -889,7 +889,7 @@ export function createRenderChannelServer(opts: RenderChannelOptions): RenderCha
   // at composition so the `channel_subscribe` handler doesn't pay the
   // option-spread cost per request. Absent ⇒ all channel subscribes
   // reject with `CHANNEL_NOT_LOCAL`.
-  const localTools: RenderChannelLocalToolsOptions | undefined = opts.streamWebSocketLocalTools;
+  const localTools: GguiSessionChannelLocalToolsOptions | undefined = opts.streamWebSocketLocalTools;
   const localToolsAllowlist: ReadonlySet<string> = localTools
     ? new Set(localTools.allowlist)
     : new Set();
@@ -912,7 +912,7 @@ export function createRenderChannelServer(opts: RenderChannelOptions): RenderCha
   const subscribersByWs = new WeakMap<WebSocket, Subscriber>();
   /**
    * Per-render local subscriber count. Drives the {@link
-   * RenderChannelOptions.onFirstSubscriber} / `onLastSubscriberGone`
+   * GguiSessionChannelOptions.onFirstSubscriber} / `onLastSubscriberGone`
    * 0↔1 transition hooks used by cloud adapters for per-render
    * cross-pod pub/sub channel scoping. Distinct from the
    * `renderCount` getter — that walks `wsSubscribers` on demand;
@@ -1088,11 +1088,11 @@ export function createRenderChannelServer(opts: RenderChannelOptions): RenderCha
    * new shape; the next round-trip re-emits whatever the persistence
    * layer lost.
    */
-  async function applyRenderPatch(
+  async function applyGguiSessionPatch(
     renderId: string,
     appId: string,
     messageType: string,
-    patch: RenderPatch
+    patch: GguiSessionPatch
   ): Promise<void> {
     try {
       await opts.renderStore.update(renderId, patch);
@@ -1272,7 +1272,7 @@ export function createRenderChannelServer(opts: RenderChannelOptions): RenderCha
         payload.renderId,
         payload.channelName,
         "RENDER_NOT_FOUND",
-        `Render '${payload.renderId}' not found on subscriber '${sub.renderId}'`,
+        `GguiSession '${payload.renderId}' not found on subscriber '${sub.renderId}'`,
         message.requestId
       );
       return;
@@ -1404,7 +1404,7 @@ export function createRenderChannelServer(opts: RenderChannelOptions): RenderCha
   /**
    * Stamp a delivery through the replay buffer and fan it out to every
    * subscriber of the render, honoring the per-subscriber replay
-   * cursor. Shared by the public `sendToRender` entry point AND by
+   * cursor. Shared by the public `sendToGguiSession` entry point AND by
    * the wiredActionRouter's refresh/error emissions — extracting this
    * avoids duplicating the seq-stamp + subscriber-iteration logic in
    * two places.
@@ -1426,7 +1426,7 @@ export function createRenderChannelServer(opts: RenderChannelOptions): RenderCha
     // per-sub replay-cursor filter, and sends to the WS. Fire-and-forget
     // because publish() never throws on the in-process impl, and a hosted
     // RedisPubSubFanout failure here would already be persisted to the
-    // RenderStreamBuffer for replay-recovery on reconnect.
+    // GguiSessionStreamBuffer for replay-recovery on reconnect.
     void streamFanout.publish({ renderId: envelope.renderId, envelope });
     return { seq: envelope.seq };
   }
@@ -1523,7 +1523,7 @@ export function createRenderChannelServer(opts: RenderChannelOptions): RenderCha
   }
 
   /**
-   * Internal impl behind the public {@link RenderChannelServer.sendPropsUpdate}.
+   * Internal impl behind the public {@link GguiSessionChannelServer.sendPropsUpdate}.
    * Extracted as a closure-level function so the wired-action dispatcher
    * can build a `WiredActionContext.sendPropsUpdate` that closes over the
    * same logic without forward-referencing the returned object. Best-
@@ -1547,7 +1547,7 @@ export function createRenderChannelServer(opts: RenderChannelOptions): RenderCha
       return;
     }
     // Filter the flat WS-subscriber set by renderId; same posture as
-    // `notifyRenderCommit`. `send()` already silently skips closed sockets
+    // `notifyGguiSessionCommit`. `send()` already silently skips closed sockets
     // and logs (but doesn't throw on) per-subscriber send failures, so
     // the caller's mount-handler path can't be made to fail by a dead
     // WebSocket.
@@ -1582,7 +1582,7 @@ export function createRenderChannelServer(opts: RenderChannelOptions): RenderCha
    */
   async function dispatchWiredAction(
     stored: { id: string },
-    activeItem: Render | undefined,
+    activeItem: GguiSession | undefined,
     envelope: ActionEnvelope,
     dispatchedAt: string
   ): Promise<void> {
@@ -1602,7 +1602,7 @@ export function createRenderChannelServer(opts: RenderChannelOptions): RenderCha
     // client is the source of truth for what the user actually saw.
     // Cross-validation against the agent's tracked contract happens on
     // the agent-SDK side, not here.
-    // actionSpec / streamSpec only exist on ComponentRender. The
+    // actionSpec / streamSpec only exist on ComponentGguiSession. The
     // mcpApps / system variants narrow them to undefined.
     const componentItem =
       activeItem.type === "mcpApps" || activeItem.type === "system" ? undefined : activeItem;
@@ -1895,9 +1895,9 @@ export function createRenderChannelServer(opts: RenderChannelOptions): RenderCha
    * IS the addressable unit, so the active render is the stored render
    * itself. MCP Apps / system variants narrow to `undefined` so
    * upstream enforcement skips (allowlist + actionSpec checks are
-   * no-ops when no `ComponentRender` is active).
+   * no-ops when no `ComponentGguiSession` is active).
    */
-  function resolveActiveRender(render: Render | undefined): Render | undefined {
+  function resolveActiveGguiSession(render: GguiSession | undefined): GguiSession | undefined {
     if (!render) return undefined;
     if (render.type === "mcpApps" || render.type === "system") return undefined;
     return render;
@@ -1909,7 +1909,7 @@ export function createRenderChannelServer(opts: RenderChannelOptions): RenderCha
    *
    * Two-step enforcement: (1) allowlist via {@link assertEventAllowed}
    * against the active render's subscription allowlist (Phase B: no-op
-   * stub — Render no longer carries `subscription.events`); (2)
+   * stub — GguiSession no longer carries `subscription.events`); (2)
    * actionSpec payload check via {@link assertActionContract} for
    * `data:submit` types. Both helpers are shared with the hosted
    * `handle-action.ts` ingress.
@@ -1938,7 +1938,7 @@ export function createRenderChannelServer(opts: RenderChannelOptions): RenderCha
       sendError(
         ws,
         "RENDER_NOT_FOUND",
-        `Render ${sub.renderId} no longer exists`,
+        `GguiSession ${sub.renderId} no longer exists`,
         message.requestId
       );
       return;
@@ -1947,11 +1947,11 @@ export function createRenderChannelServer(opts: RenderChannelOptions): RenderCha
     // Phase B: a render IS the addressable unit. The prior stack
     // routing (stackIndex / cross-stack pickIds) collapses — the
     // resolved render itself is the active item.
-    const activeItem = resolveActiveRender(stored.render);
+    const activeItem = resolveActiveGguiSession(stored.render);
 
     // ── Two-step enforcement ──
     //   1. allowlist via assertEventAllowed (Phase B: no-op stub —
-    //      Render no longer carries a `subscription` allowlist;
+    //      GguiSession no longer carries a `subscription` allowlist;
     //      reinstating per-render event policy is deferred.)
     //   2. actionSpec payload check via assertActionContract (data:submit)
     // Envelope.payload for data:submit carries the ActionEventValue
@@ -1992,7 +1992,7 @@ export function createRenderChannelServer(opts: RenderChannelOptions): RenderCha
       }
     }
 
-    // Persist the envelope. RenderStore.appendEvent assigns a monotonic
+    // Persist the envelope. GguiSessionStore.appendEvent assigns a monotonic
     // seq the client acks back with so reconnects can resume via `fromSeq`.
     const dispatchedAt = new Date().toISOString();
     let seq: number;
@@ -2069,7 +2069,7 @@ export function createRenderChannelServer(opts: RenderChannelOptions): RenderCha
     //     pre-handshake.
     //
     // Placed FIRST — before bootstrap verify (which consumes the
-    // single-use bootstrap token per the RenderChannelBootstrap
+    // single-use bootstrap token per the GguiSessionChannelBootstrap
     // docstring) and before render lookup/creation (DB work).
     // Bootstrap iframes with a version mismatch must retry with a
     // fresh bootstrap token; burning the token on a mismatch the
@@ -2201,7 +2201,7 @@ export function createRenderChannelServer(opts: RenderChannelOptions): RenderCha
 
     // Dev-mode render provisioning: look up first; if not present,
     // create with the client-provided id via the widened
-    // CreateRenderInput.id seam. Matches the hosted model's shape
+    // CreateGguiSessionInput.id seam. Matches the hosted model's shape
     // (agent creates via ggui_render → client subscribes) in a single
     // step — production deployments tighten this by supplying an
     // AuthAdapter that mints render-scoped tokens on render.
@@ -2211,7 +2211,7 @@ export function createRenderChannelServer(opts: RenderChannelOptions): RenderCha
         sendError(
           ws,
           "APP_MISMATCH",
-          `Render ${payload.renderId} belongs to a different app`,
+          `GguiSession ${payload.renderId} belongs to a different app`,
           message.requestId
         );
         return;
@@ -2234,7 +2234,7 @@ export function createRenderChannelServer(opts: RenderChannelOptions): RenderCha
     }
 
     // Snapshot the outbound-stream cursor BEFORE registering the
-    // subscriber. Any concurrent producer that calls sendToRender
+    // subscriber. Any concurrent producer that calls sendToGguiSession
     // between here and registration gets seq > snapshotSeq, so the
     // subscriber will receive it via live fan-out (not via replay).
     //
@@ -2316,7 +2316,7 @@ export function createRenderChannelServer(opts: RenderChannelOptions): RenderCha
       ...(message.requestId ? { requestId: message.requestId } : {}),
     });
 
-    // R7 — RenderEvent ledger replay. When `payload.sinceSequence` is
+    // R7 — GguiSessionEvent ledger replay. When `payload.sinceSequence` is
     // present, fetch events with `seq > sinceSequence` from the per-
     // render ledger and emit each as a `render_event` wire frame
     // BEFORE the per-channel stream-buffer replay. Consumers dispatch
@@ -2346,7 +2346,7 @@ export function createRenderChannelServer(opts: RenderChannelOptions): RenderCha
           100
         );
         if (ledger === null) {
-          // Render disappeared between resolve and ledger read —
+          // GguiSession disappeared between resolve and ledger read —
           // already handled by the broader error envelope path; nothing
           // to do here.
         } else if (sinceSeq > ledger.lastSequence || sinceSeq < ledger.horizonSeq) {
@@ -2359,7 +2359,7 @@ export function createRenderChannelServer(opts: RenderChannelOptions): RenderCha
           );
         } else {
           for (const event of ledger.events) {
-            // RenderEvent is now the wire-shape ledger primitive
+            // GguiSessionEvent is now the wire-shape ledger primitive
             // (Wave 7 of flatten-render-identity, 2026-05-28); no
             // projection — emit the store's row directly.
             send(ws, {
@@ -2486,13 +2486,13 @@ export function createRenderChannelServer(opts: RenderChannelOptions): RenderCha
         // The iframe-runtime echoes its captured `McpUiHostContext`
         // after `ui/initialize` resolves and on every
         // `ui/notifications/host-context-changed` notification. Persist
-        // on `Render.hostContext` so `ggui_handshake` and
+        // on `GguiSession.hostContext` so `ggui_handshake` and
         // `ggui_consume` can surface it to the agent on subsequent
         // turns. Fire-and-forget on the client side; no response.
         if (!checkSubscriberTenancy(ws, sub, message.payload, message.type, message.requestId)) {
           return;
         }
-        await applyRenderPatch(sub.renderId, sub.appId, message.type, {
+        await applyGguiSessionPatch(sub.renderId, sub.appId, message.type, {
           hostContext: message.payload.hostContext,
           lastActivityAt: Date.now(),
         });
@@ -2615,7 +2615,7 @@ export function createRenderChannelServer(opts: RenderChannelOptions): RenderCha
           socket.destroy();
         });
     },
-    async sendToRender(delivery) {
+    async sendToGguiSession(delivery) {
       // Outbound fan-out enforcement (defense-in-depth parity with
       // hosted `handle-data.ts`). Re-validates the delivery's payload
       // against the render's streamSpec BEFORE delivery — so a future
@@ -2637,10 +2637,10 @@ export function createRenderChannelServer(opts: RenderChannelOptions): RenderCha
       );
       return fanOut(delivery, streamSpec);
     },
-    notifyRenderCommit(renderId, render, matchType) {
+    notifyGguiSessionCommit(renderId, render, matchType) {
       // Best-effort fan-out to every live subscriber bound to this
       // render. NOT routed through the replay buffer — see the
-      // `notifyRenderCommit` JSDoc on the interface for why fresh
+      // `notifyGguiSessionCommit` JSDoc on the interface for why fresh
       // subscribers rely on `ack.render` instead of a replay frame.
       // NOT routed through StreamFanout either — `type: 'render'` is a
       // distinct WebSocket message type. Filter the flat WS-subscriber
@@ -2753,7 +2753,7 @@ export function createRenderChannelServer(opts: RenderChannelOptions): RenderCha
       // `send()` already guards closed sockets and logs (but doesn't
       // throw on) per-subscriber failures, so the caller (a cloud
       // pubsub on-message handler) can't be made to fail by a dead
-      // WebSocket. No RenderStore lookup — the publisher already
+      // WebSocket. No GguiSessionStore lookup — the publisher already
       // validated; this seam is the cross-pod delivery path, not the
       // re-validation point.
       for (const sub of wsSubscribers) {

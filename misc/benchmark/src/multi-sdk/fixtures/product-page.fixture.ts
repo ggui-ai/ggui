@@ -34,7 +34,7 @@ export const productPage = retrofit("product-page", {
     "Add to Cart disabled when out of stock",
   ],
   whyNotReducible:
-    "Render + single small-payload commit action. display subShape=commit case. " +
+    "GguiSession + single small-payload commit action. display subShape=commit case. " +
     "Distinct from forms (payload is 2 keys, not ≥3) and from collection (no arr<obj> entity list).",
 });
 

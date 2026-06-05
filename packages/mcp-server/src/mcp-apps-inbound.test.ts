@@ -33,9 +33,9 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import {
   InMemoryConnectorRegistry,
-  InMemoryRenderStore,
+  InMemoryGguiSessionStore,
 } from '@ggui-ai/mcp-server-core/in-memory';
-import type { McpAppsRender } from '@ggui-ai/protocol/integrations/mcp-apps';
+import type { McpAppsGguiSession } from '@ggui-ai/protocol/integrations/mcp-apps';
 import { installMcpAppsInbound } from './mcp-apps-inbound.js';
 
 const silentLogger = {
@@ -197,7 +197,7 @@ interface InboundFixture {
   app: Express;
   httpServer: HttpServer;
   httpBase: string;
-  renderStore: InMemoryRenderStore;
+  renderStore: InMemoryGguiSessionStore;
   connectors: InMemoryConnectorRegistry;
   source: MockSourceFixture;
   close: () => Promise<void>;
@@ -210,7 +210,7 @@ async function bootInbound(options?: {
   const source = await bootMockSource();
   const app = express();
   app.use(express.json({ limit: '2mb' }));
-  const renderStore = new InMemoryRenderStore();
+  const renderStore = new InMemoryGguiSessionStore();
   const connectors = new InMemoryConnectorRegistry([
     {
       id: options?.connectorId ?? 'mock',
@@ -244,13 +244,13 @@ async function bootInbound(options?: {
   };
 }
 
-/** Seeds an `McpAppsRender` row. */
+/** Seeds an `McpAppsGguiSession` row. */
 async function seedMcpAppsRender(
-  store: InMemoryRenderStore,
-  overrides?: Partial<McpAppsRender>,
-): Promise<{ renderId: string; item: McpAppsRender }> {
+  store: InMemoryGguiSessionStore,
+  overrides?: Partial<McpAppsGguiSession>,
+): Promise<{ renderId: string; item: McpAppsGguiSession }> {
   const renderId = `sess-${randomUUID()}`;
-  const item: McpAppsRender = {
+  const item: McpAppsGguiSession = {
     type: 'mcpApps',
     id: renderId,
     createdAt: new Date().toISOString(),

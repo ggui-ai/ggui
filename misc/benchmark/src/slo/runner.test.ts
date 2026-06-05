@@ -3,7 +3,7 @@
  * handler + real provisional-preview orchestrator and verify the
  * checkpoint schema distinguishes them correctly.
  *
- * These tests ARE integration-ish (they boot an InMemoryRenderStore
+ * These tests ARE integration-ish (they boot an InMemoryGguiSessionStore
  * + createGguiRenderHandler end-to-end) but don't touch network or
  * LLM. Clock + sleep are injected to keep timing deterministic.
  */
@@ -101,7 +101,7 @@ describe('runSloCase — oss_miss (null as signal)', () => {
     expect(result.derived.timeToFirstPreview).toBeNull();
     expect(result.derived.timeToPreviewFinalize).toBeNull();
 
-    // Render still succeeded — handler returned, final timestamp is real.
+    // GguiSession still succeeded — handler returned, final timestamp is real.
     expect(result.checkpoints.finalCompiledAt).not.toBeNull();
     expect(result.derived.timeToFinalCompiled).not.toBeNull();
     expect(result.errors).toEqual([]);

@@ -38,7 +38,7 @@ import {
 } from '@ggui-ai/mcp-server-handlers';
 import {
   InMemoryKeyValueStore,
-  InMemoryRenderStore,
+  InMemoryGguiSessionStore,
 } from '@ggui-ai/mcp-server-core/in-memory';
 
 import type { SloCase, SloEmitterPlan } from './corpus.js';
@@ -117,7 +117,7 @@ export async function runSloCase(
       ? undefined
       : buildPreviewDeps(kase.emitterPlan, { now, sleep, onOutcome });
 
-  const renderStore = new InMemoryRenderStore();
+  const renderStore = new InMemoryGguiSessionStore();
   const kvStore = new InMemoryKeyValueStore();
   const handshakeHandler = createGguiHandshakeHandler({ kvStore });
   const handler = createGguiRenderHandler({

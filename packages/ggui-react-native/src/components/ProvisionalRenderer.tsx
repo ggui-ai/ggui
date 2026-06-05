@@ -32,7 +32,7 @@
  *
  * Nothing in this file knows that the final render will be a React
  * component bundle or a descriptor tree or anything else. Handoff is
- * driven externally by the RenderRenderer branch.
+ * driven externally by the GguiSessionRenderer branch.
  */
 import { useMemo, type ReactNode } from 'react';
 import {
@@ -344,7 +344,7 @@ function renderComponent(
       );
 
     case 'ChoicePicker': {
-      // Render label + the currently-selected value's label (or the
+      // GguiSession label + the currently-selected value's label (or the
       // first option's label if no `value` arrived yet). An
       // interactive picker arrives with the final render; this
       // preview is intentionally static.

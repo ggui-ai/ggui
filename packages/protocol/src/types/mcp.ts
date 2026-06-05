@@ -1,6 +1,6 @@
 import type { z } from 'zod';
 import type { JsonObject, JsonSchema, JsonValue } from './data-contract';
-import type { Render, RenderStatus } from './render';
+import type { GguiSession, GguiSessionStatus } from './render';
 import type {
   handshakeInputSchema,
   handshakeOutputSchema,
@@ -13,7 +13,7 @@ import type {
   declareToolCatalogOutputSchema,
 } from '../schemas/mcp';
 
-export type { RenderStatus } from './render';
+export type { GguiSessionStatus } from './render';
 // Zod schemas in ../schemas/mcp.ts are the runtime validation source of truth.
 // These TypeScript types are the compile-time API surface with precise domain types
 // (DataContract, InterfaceContext, etc.) that Zod can't express.
@@ -44,8 +44,8 @@ export interface PendingEvent {
    */
   envelope: ConsumeEventEntry | string;
   /**
-   * Render-scoped monotonic sequence assigned at ingestion. Mirrors
-   * `Render.eventSequence` at the moment this row was appended so
+   * GguiSession-scoped monotonic sequence assigned at ingestion. Mirrors
+   * `GguiSession.eventSequence` at the moment this row was appended so
    * consumers can detect gaps without reading render state.
    */
   sequence: number;
@@ -72,7 +72,7 @@ export interface PendingEvent {
  */
 export interface GguiConsumeInput {
   /**
-   * Render to consume events from. Globally unique (UUID).
+   * GguiSession to consume events from. Globally unique (UUID).
    * Cross-tenant access surfaces uniformly as `render_not_found`.
    */
   renderId: string;
@@ -96,7 +96,7 @@ export interface GguiConsumeInput {
  *
  * Fields the agent MUST NOT supply:
  *   - `mode` — derived from `streamSpec[channel].mode` (default `'append'`).
- *   - `seq` — server-assigned via `RenderStreamBuffer`.
+ *   - `seq` — server-assigned via `GguiSessionStreamBuffer`.
  *   - `timestamp` — server clock.
  *   - `connectionId` / transport details — fan-out plumbing.
  *
@@ -104,7 +104,7 @@ export interface GguiConsumeInput {
  * guarded by `types.test.ts`.
  */
 export interface GguiEmitInput<TPayload = JsonValue> {
-  /** Render to stream to. Server enforces app-ownership. */
+  /** GguiSession to stream to. Server enforces app-ownership. */
   renderId: string;
 
   /**
@@ -144,9 +144,9 @@ export interface GguiEmitOutput {
   accepted: boolean;
 
   /**
-   * Render-scoped monotonic outbound sequence assigned to this
+   * GguiSession-scoped monotonic outbound sequence assigned to this
    * delivery. Omitted on implementations without a
-   * `RenderStreamBuffer` (hosted cloud today); required on OSS
+   * `GguiSessionStreamBuffer` (hosted cloud today); required on OSS
    * `@ggui-ai/mcp-server`.
    */
   seq?: number;
@@ -158,14 +158,14 @@ export interface GguiEmitOutput {
  * Input for ggui_get_render tool - retrieves render state
  */
 export interface GguiGetRenderInput {
-  /** Render ID to get state for */
+  /** GguiSession ID to get state for */
   renderId: string;
 }
 
 /**
  * Output from ggui_get_render tool — full render snapshot.
  */
-export type GguiGetRenderOutput = Render;
+export type GguiGetRenderOutput = GguiSession;
 
 // =============================================================================
 // MCP Tool Output Types
@@ -191,7 +191,7 @@ export type GguiGetRenderOutput = Render;
 export interface ConsumeEventEntry {
   /** Stable discriminator — always the literal `'action'`. */
   readonly type: 'action';
-  /** Render the gesture targeted. */
+  /** GguiSession the gesture targeted. */
   readonly renderId: string;
   /** Which `actionSpec[*]` entry the iframe dispatched against. */
   readonly intent: string;
@@ -227,9 +227,9 @@ export interface ConsumeEventEntry {
 export interface GguiConsumeOutput {
   /** Buffered consume-entries (cleared after return). */
   events: ConsumeEventEntry[];
-  /** Render status — `'expired'` means the render's TTL elapsed and
+  /** GguiSession status — `'expired'` means the render's TTL elapsed and
    *  no more events will arrive; the agent's long-poll loop terminates. */
-  status: RenderStatus;
+  status: GguiSessionStatus;
   /**
    * Client-side observations echoed back to the agent. Same shape
    * `ggui_handshake` exposes. Lets the agent pick up mid-render

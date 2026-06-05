@@ -86,7 +86,7 @@ import {
 /** Generous — real Anthropic call + browser boot + layered assertions. */
 const TEST_TIMEOUT_MS = 180_000;
 
-/** Render-wait budget — the RPC blocks on real generation. */
+/** GguiSession-wait budget — the RPC blocks on real generation. */
 const GENERATION_BUDGET_MS = 120_000;
 
 const MUTATION_TITLE = 'Ship Slice 6 Tasks-backed product proof';
@@ -218,7 +218,7 @@ test.describe.serial(
       //  is non-deterministic (per CLAUDE.md).
       // ─────────────────────────────────────────────────────────
       const intent = [
-        `Render a simple card or list showing the user's open tasks.`,
+        `GguiSession a simple card or list showing the user's open tasks.`,
         `Highlight the task titled "${SEEDED_TITLE_FIRST}" — it is the top priority.`,
         `Use only basic HTML elements; no external assets.`,
       ].join(' ');
@@ -291,7 +291,7 @@ test.describe.serial(
         waitUntil: 'networkidle',
       });
 
-      // The console RenderViewer mounts the rendered UI inside a
+      // The console GguiSessionViewer mounts the rendered UI inside a
       // plain `<iframe srcDoc>` (read-only / visual-only — post C1-fix
       // it no longer carries the `<McpAppIframe>` lifecycle-mirror
       // attribute). Readiness is gated by the inner `ggui-rcr-*`

@@ -21,12 +21,12 @@ export type {
   ActionEnvelope,
   EventType,
   // Post-Phase-B render shape — replaces the deleted Session/StackItem
-  // pair with a single Render union (ComponentRender, SystemRender,
-  // McpAppsRender) keyed by the flat `renderId`.
-  Render,
-  ComponentRender,
-  SystemRender,
-  RenderStatus,
+  // pair with a single GguiSession union (ComponentGguiSession, SystemGguiSession,
+  // McpAppsGguiSession) keyed by the flat `renderId`.
+  GguiSession,
+  ComponentGguiSession,
+  SystemGguiSession,
+  GguiSessionStatus,
   AdapterPermissions,
   PermissionStatus,
   SubscribePayload,
@@ -132,18 +132,18 @@ export type { AdapterRegistry } from './context/GguiContext';
 export { ThemeProvider } from './components/ThemeProvider';
 export type { ThemeProviderProps } from './components/ThemeProvider';
 
-// Render
+// GguiSession
 export { GguiRender } from './components/GguiRender';
-export type { GguiRenderProps, RenderApi, RenderInfo } from './components/GguiRender';
+export type { GguiRenderProps, GguiSessionApi, GguiSessionInfo } from './components/GguiRender';
 
 // Dynamic Component Rendering
 export {
   DynamicComponent,
-  RenderRenderer,
+  GguiSessionRenderer,
 } from './components/DynamicComponent';
 export type {
   DynamicComponentProps,
-  RenderRendererProps,
+  GguiSessionRendererProps,
 } from './components/DynamicComponent';
 
 // Spec-canonical MCP Apps iframe host — import DIRECTLY from `@mcp-ui/client`.

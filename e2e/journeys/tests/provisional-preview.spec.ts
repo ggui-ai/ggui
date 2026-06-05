@@ -149,7 +149,7 @@ test.describe.serial(
         waitUntil: 'networkidle',
       });
 
-      // 4. The console RenderViewer mounts the rendered UI inside a
+      // 4. The console GguiSessionViewer mounts the rendered UI inside a
       //    plain `<iframe srcDoc>` (read-only / visual-only — post
       //    C1-fix it no longer carries the `<McpAppIframe>` lifecycle-
       //    mirror attribute). Inner connection-status text lives INSIDE

@@ -1,5 +1,5 @@
 /**
- * RenderStreamBuffer — per-session bounded replay ring for live-channel
+ * GguiSessionStreamBuffer — per-session bounded replay ring for live-channel
  * outbound stream envelopes.
  *
  * Scope (2026-04-19). Lands the server-side primitive that makes
@@ -8,7 +8,7 @@
  * doctrine, the live channel is the enforcement point for the typed live
  * contract; replay is one half of its durability story (the other
  * being idempotent inbound action delivery, which lives on
- * RenderStore's inbound-event log).
+ * GguiSessionStore's inbound-event log).
  *
  * Intentionally narrow:
  *
@@ -17,7 +17,7 @@
  *     model and is OUT of scope for this slice.
  *   - Bounded, NOT persistent. Server restart drops all buffered
  *     envelopes — documented on the interface. Consumers that need
- *     persistence layer a different `RenderStreamBuffer`
+ *     persistence layer a different `GguiSessionStreamBuffer`
  *     implementation behind this interface.
  *   - Replay policy applied at RECORD time (memory-optimal). `'none'`
  *     channels don't store; `'latest'` channels keep a single slot;
@@ -28,9 +28,9 @@
  *     latest stored value if any envelope remains in the buffer after
  *     a record/replay cycle; there's no explicit "reset" path short
  *     of `clear(renderId)`.
- *   - NOT a replacement for RenderStore's inbound-event log.
- *     RenderStore tracks user actions + UI mutations for
- *     observation/audit. RenderStreamBuffer tracks outbound
+ *   - NOT a replacement for GguiSessionStore's inbound-event log.
+ *     GguiSessionStore tracks user actions + UI mutations for
+ *     observation/audit. GguiSessionStreamBuffer tracks outbound
  *     live-channel deliveries for the narrower purpose of reconnect
  *     replay. Different seq spaces, different retention policies,
  *     different consumers.
@@ -131,7 +131,7 @@ export interface ReplayResult {
 }
 
 /**
- * `RenderStreamBuffer` — server-side durability primitive for channel
+ * `GguiSessionStreamBuffer` — server-side durability primitive for channel
  * 3's outbound stream. Every field is documented on the individual
  * methods.
  *
@@ -144,7 +144,7 @@ export interface ReplayResult {
  * still guaranteed by atomic `INCR`-based seq assignment, so the
  * recorded order matches seq order even under concurrent writers.
  */
-export interface RenderStreamBuffer {
+export interface GguiSessionStreamBuffer {
   /**
    * Assign the next seq for `input.renderId` and (conditionally)
    * store the stamped envelope per the channel's replay policy.
@@ -228,12 +228,12 @@ export interface RenderStreamBuffer {
 }
 
 /**
- * Config for {@link RenderStreamBuffer} implementations. Implementers
+ * Config for {@link GguiSessionStreamBuffer} implementations. Implementers
  * are NOT required to honor every field — in-memory uses all of them;
  * a persistent adapter might ignore `maxPerSession` and use a
  * different retention model.
  */
-export interface RenderStreamBufferOptions {
+export interface GguiSessionStreamBufferOptions {
   /**
    * Per-session cap on buffered envelopes across ALL `'all'` channels.
    * Does not cap `'latest'` channels (they're always single-slot

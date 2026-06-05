@@ -89,10 +89,10 @@ export function createRenderBlueprintHandler(
 ): SharedHandler<typeof inputSchema, typeof outputSchema, GguiRenderBlueprintOutput> {
   return {
     name: 'ggui_render_blueprint',
-    title: 'Render blueprint',
+    title: 'GguiSession blueprint',
     audience: ['agent'],
     description:
-      "Render a registered blueprint (ggui.json#blueprints.include → ggui.ui.json) into its compiled JS bundle. Returns inline `code` + `contentType` — the caller mounts it directly. Fails with a clear error when the id is unknown or the registry has no bundle available (source-only dev, compile-failed).",
+      "GguiSession a registered blueprint (ggui.json#blueprints.include → ggui.ui.json) into its compiled JS bundle. Returns inline `code` + `contentType` — the caller mounts it directly. Fails with a clear error when the id is unknown or the registry has no bundle available (source-only dev, compile-failed).",
     inputSchema,
     outputSchema,
     async handler(rawInput: Record<string, unknown>): Promise<GguiRenderBlueprintOutput> {

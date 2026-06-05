@@ -4,7 +4,7 @@ import type {
   ActionEnvelope,
   ActionSpec,
   EventType,
-  Render,
+  GguiSession,
   ReservedChannelValidator,
   StreamEnvelope,
   StreamPayload,
@@ -33,7 +33,7 @@ import {
 /**
  * Minimal render metadata passed to lifecycle callbacks.
  */
-export interface RenderInfo {
+export interface GguiSessionInfo {
   renderId: string;
 }
 
@@ -75,7 +75,7 @@ function surfaceContractViolation(
  */
 export interface GguiRenderProps {
   /**
-   * Render identity. Post-Phase-B this is the canonical key the server
+   * GguiSession identity. Post-Phase-B this is the canonical key the server
    * binds the WS subscriber to; envelopes with a mismatching renderId
    * are rejected `RENDER_MISMATCH`.
    */
@@ -84,10 +84,10 @@ export interface GguiRenderProps {
   userId?: string;
 
   // Lifecycle hooks
-  onRenderStart?: (render: RenderInfo) => void;
-  onRenderEnd?: (render: RenderInfo, reason: string) => void;
-  /** Fires on the initial subscribe ack carrying the current Render snapshot. */
-  onRenderReceived?: (render: Render) => void;
+  onRenderStart?: (render: GguiSessionInfo) => void;
+  onRenderEnd?: (render: GguiSessionInfo, reason: string) => void;
+  /** Fires on the initial subscribe ack carrying the current GguiSession snapshot. */
+  onRenderReceived?: (render: GguiSession) => void;
 
   // Data hooks
   onBeforeAction?: <T>(data: T, meta: ActionMeta) => T | undefined;
@@ -129,7 +129,7 @@ export interface GguiRenderProps {
    */
   extraReservedValidators?: ReadonlyMap<string, ReservedChannelValidator>;
 
-  children: ReactNode | ((api: RenderApi) => ReactNode);
+  children: ReactNode | ((api: GguiSessionApi) => ReactNode);
 }
 
 /**
@@ -160,7 +160,7 @@ export interface ActionMeta {
  * Streamable Invoke Protocol cutover. User text messages now flow through
  * `useInvoke().send()` at the consumer layer.
  */
-export interface RenderApi {
+export interface GguiSessionApi {
   /**
    * Submit user interaction data from a rendered UI component.
    *
@@ -184,11 +184,11 @@ export interface RenderApi {
   /** Current WebSocket connection status. */
   connectionStatus: ConnectionStatus;
 
-  /** Current Render snapshot (populated from ack on subscribe and refreshed
+  /** Current GguiSession snapshot (populated from ack on subscribe and refreshed
    *  on render frame). Absent until the first ack arrives. */
-  render: Render | undefined;
+  render: GguiSession | undefined;
 
-  /** Render ID. */
+  /** GguiSession ID. */
   renderId: string;
 }
 
@@ -197,7 +197,7 @@ export interface RenderApi {
  *
  * Opens a WebSocket connection (if `wsEndpoint` is set on the provider),
  * subscribes to the render, and handles incoming server messages
- * (render, progress, data, stream, error). Exposes a {@link RenderApi}
+ * (render, progress, data, stream, error). Exposes a {@link GguiSessionApi}
  * via render props or provides it implicitly to child components.
  *
  * Post-Phase-B: a single render per component instance — no stack, no
@@ -238,7 +238,7 @@ export function GguiRender({
   children,
 }: GguiRenderProps) {
   const { appId, wsEndpoint, auth, appMetadata, appConfig } = useGguiContext();
-  const [render, setRender] = useState<Render | undefined>(undefined);
+  const [render, setRender] = useState<GguiSession | undefined>(undefined);
 
   // Stable refs for callbacks to avoid unnecessary effect re-runs
   const onErrorRef = useRef(onError);
@@ -278,7 +278,7 @@ export function GguiRender({
 
   // Always-current render ref — wire dispatch reads this to look up the
   // active contract without forcing wireConfig re-creation on every frame.
-  const renderRef = useRef<Render | undefined>(render);
+  const renderRef = useRef<GguiSession | undefined>(render);
   renderRef.current = render;
 
   // Handle incoming WebSocket messages from server
@@ -294,7 +294,7 @@ export function GguiRender({
         if (message.payload.code === 'UPGRADE_REQUIRED') {
           // Lift `details.serverVersion` into the typed error when
           // the server populated it (first-party servers do — see
-          // RenderChannelOptions). Defensive: treat the details
+          // GguiSessionChannelOptions). Defensive: treat the details
           // bag as unknown and only lift the string field.
           const details = message.payload.details;
           const serverVersion =
@@ -463,7 +463,7 @@ export function GguiRender({
             // Apps + system renders have no props and aren't targeted
             // by props_update frames.
             if (prev.type === 'mcpApps' || prev.type === 'system') return prev;
-            return { ...prev, props } as Render;
+            return { ...prev, props } as GguiSession;
           });
         }
       }
@@ -641,7 +641,7 @@ export function GguiRender({
   // server handler was deleted). User text messages now go through
   // `useInvoke().send` at the consumer layer.
 
-  const api = useMemo<RenderApi>(
+  const api = useMemo<GguiSessionApi>(
     () => ({
       action,
       send,

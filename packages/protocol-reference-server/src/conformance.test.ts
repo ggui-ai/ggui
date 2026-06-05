@@ -74,7 +74,7 @@ import { ReferenceServer } from './server.js';
  *     `server-version-override` of `'99.99-unsupported'` via the
  *     Slice-K directive. The kit's subscribe carries
  *     `supportedVersions: ['1.1']`; the WS handler reads the
- *     render-scoped override (set on the `Render` record by
+ *     render-scoped override (set on the `GguiSession` record by
  *     `setVersionOverride()`), notices `'99.99-unsupported'` is not
  *     in the client's accepted set, and emits the canonical
  *     `error{payload.code:'UPGRADE_REQUIRED', serverVersion}` frame.

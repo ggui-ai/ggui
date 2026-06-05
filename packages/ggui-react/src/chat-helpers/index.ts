@@ -23,6 +23,6 @@ export type {
 export type {
   ChatEntry,
   HostDisplayMode,
-  RenderRef,
+  GguiSessionRef,
   ToolCallEntry,
 } from './mcp-apps-chat-types';

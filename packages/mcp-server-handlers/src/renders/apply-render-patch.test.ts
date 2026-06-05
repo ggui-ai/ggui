@@ -5,8 +5,8 @@ import {
   type PropsSpec,
 } from '@ggui-ai/protocol';
 import {
-  applyRenderPatch,
-  type RenderTarget,
+  applyGguiSessionPatch,
+  type GguiSessionTarget,
 } from './apply-render-patch.js';
 
 const PROPS_SPEC: PropsSpec = {
@@ -15,17 +15,17 @@ const PROPS_SPEC: PropsSpec = {
   },
 };
 
-function makeRender(id: string, propsSpec?: PropsSpec): RenderTarget {
+function makeRender(id: string, propsSpec?: PropsSpec): GguiSessionTarget {
   return {
     id,
     ...(propsSpec ? { propsSpec } : {}),
   };
 }
 
-describe('applyRenderPatch', () => {
+describe('applyGguiSessionPatch', () => {
   it('updates the render and returns a new snapshot (immutable input)', () => {
     const render = makeRender('render_b');
-    const { updatedRender, finalProps } = applyRenderPatch({
+    const { updatedRender, finalProps } = applyGguiSessionPatch({
       render,
       mode: 'merge' as const,
       patch: { city: 'Seoul' },
@@ -40,7 +40,7 @@ describe('applyRenderPatch', () => {
   it('is a no-op on contract enforcement when the render has no propsSpec', () => {
     const render = makeRender('render_a');
     expect(() =>
-      applyRenderPatch({
+      applyGguiSessionPatch({
         render,
         mode: 'merge' as const,
         patch: { anything: true } as JsonObject,
@@ -51,7 +51,7 @@ describe('applyRenderPatch', () => {
   it('enforces the render propsSpec — passes on valid patch', () => {
     const render = makeRender('render_a', PROPS_SPEC);
     expect(() =>
-      applyRenderPatch({
+      applyGguiSessionPatch({
         render,
         mode: 'merge' as const,
         patch: { city: 'Seoul' },
@@ -63,7 +63,7 @@ describe('applyRenderPatch', () => {
     const render = makeRender('render_a', PROPS_SPEC);
     let err: unknown;
     try {
-      applyRenderPatch({
+      applyGguiSessionPatch({
         render,
         mode: 'merge' as const,
         patch: {},
@@ -76,11 +76,11 @@ describe('applyRenderPatch', () => {
   });
 
   it('accepts a minimal-shape render (hosted DDB-row case)', () => {
-    const render: RenderTarget & { extra: string } = {
+    const render: GguiSessionTarget & { extra: string } = {
       id: 'r1',
       extra: 'field',
     };
-    const { updatedRender } = applyRenderPatch({
+    const { updatedRender } = applyGguiSessionPatch({
       render,
       mode: 'merge' as const,
       patch: { city: 'Tokyo' },
@@ -92,11 +92,11 @@ describe('applyRenderPatch', () => {
   });
 
   it('replace mode replaces the entire props map', () => {
-    const render: RenderTarget & { props: JsonObject } = {
+    const render: GguiSessionTarget & { props: JsonObject } = {
       id: 'r1',
       props: { city: 'Seoul', count: 1 },
     };
-    const { updatedRender, finalProps } = applyRenderPatch({
+    const { updatedRender, finalProps } = applyGguiSessionPatch({
       render,
       mode: 'replace' as const,
       props: { city: 'Tokyo' },

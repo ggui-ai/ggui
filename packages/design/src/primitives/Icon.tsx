@@ -40,7 +40,7 @@ function resolveLucideName(name: string): string | undefined {
 }
 
 // ---------------------------------------------------------------------------
-// Render Lucide icon from SVG element data
+// GguiSession Lucide icon from SVG element data
 // ---------------------------------------------------------------------------
 
 type IconNode = [string, Record<string, string>][];

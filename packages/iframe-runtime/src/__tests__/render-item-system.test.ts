@@ -18,7 +18,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import { act } from 'react';
-import type { Render, JsonObject } from '@ggui-ai/protocol';
+import type { GguiSession, JsonObject } from '@ggui-ai/protocol';
 import { mountRender } from '../render-item.js';
 import { StreamBus } from '../wire-config.js';
 
@@ -34,7 +34,7 @@ async function flush(fn?: () => void | Promise<void>): Promise<void> {
   });
 }
 
-function makeSystemRender(props: JsonObject = {}): Render {
+function makeSystemRender(props: JsonObject = {}): GguiSession {
   return {
     id: 'render_sys_1',
     appId: 'app_001',

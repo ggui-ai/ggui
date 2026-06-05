@@ -25,7 +25,7 @@ import type { Server as HttpServer } from 'node:http';
 import {
   InMemoryAuthAdapter,
   InMemoryCodeStore,
-  InMemoryRenderStore,
+  InMemoryGguiSessionStore,
   InMemoryShortCodeIndex,
 } from '@ggui-ai/mcp-server-core/in-memory';
 import {
@@ -64,7 +64,7 @@ async function bootWithRender(opts?: {
   readonly componentCode?: string;
   readonly props?: JsonObject;
 }): Promise<Fixture> {
-  const renderStore = new InMemoryRenderStore();
+  const renderStore = new InMemoryGguiSessionStore();
   const stored = await renderStore.create({ appId: 'app-state-test' });
   if (opts?.withRender) {
     const now = Date.now();

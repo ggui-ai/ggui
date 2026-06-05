@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { InMemoryRenderStore } from '@ggui-ai/mcp-server-core/in-memory';
+import { InMemoryGguiSessionStore } from '@ggui-ai/mcp-server-core/in-memory';
 import type {
-  ComponentRender,
+  ComponentGguiSession,
   ContextSpec,
   JsonObject,
 } from '@ggui-ai/protocol';
@@ -21,7 +21,7 @@ import { createGguiSyncContextHandler } from './sync-context.js';
 const NOW_MS = Date.parse('2026-05-10T00:00:00.000Z');
 
 async function seedRender(
-  store: InMemoryRenderStore,
+  store: InMemoryGguiSessionStore,
   opts: {
     renderId?: string;
     appId?: string;
@@ -31,7 +31,7 @@ async function seedRender(
 ): Promise<{ renderId: string }> {
   const renderId = opts.renderId ?? 'render-1';
   const appId = opts.appId ?? 'app-1';
-  const render: ComponentRender = {
+  const render: ComponentGguiSession = {
     id: renderId,
     appId,
     type: 'component',
@@ -48,10 +48,10 @@ async function seedRender(
 }
 
 describe('createGguiSyncContextHandler', () => {
-  let renderStore: InMemoryRenderStore;
+  let renderStore: InMemoryGguiSessionStore;
 
   beforeEach(() => {
-    renderStore = new InMemoryRenderStore();
+    renderStore = new InMemoryGguiSessionStore();
   });
 
   describe('declaration metadata', () => {
@@ -86,7 +86,7 @@ describe('createGguiSyncContextHandler', () => {
       );
       expect(out.ok).toBe(true);
       const stored = await renderStore.get(renderId);
-      expect((stored?.render as ComponentRender).contextSnapshot).toEqual({
+      expect((stored?.render as ComponentGguiSession).contextSnapshot).toEqual({
         count: 7,
       });
     });
@@ -111,7 +111,7 @@ describe('createGguiSyncContextHandler', () => {
         { appId: 'app-1', requestId: 'r2' },
       );
       const stored = await renderStore.get(renderId);
-      expect((stored?.render as ComponentRender).contextSnapshot).toEqual({
+      expect((stored?.render as ComponentGguiSession).contextSnapshot).toEqual({
         count: 9,
       });
     });

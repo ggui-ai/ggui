@@ -45,7 +45,7 @@ import type { SendEnvelopeFn } from './handle-stream.js';
  * Sink handed to the emitter. Writes one provisional-preview payload
  * as an outbound {@link StreamEnvelope} on the reserved preview
  * channel. The inner `sendEnvelope` lives at the caller's transport
- * boundary — OSS wraps `RenderStreamBuffer.record`, hosted wraps
+ * boundary — OSS wraps `GguiSessionStreamBuffer.record`, hosted wraps
  * the DDB writer.
  *
  * Return value mirrors `SendEnvelopeFn` — `{seq?}` is propagated so
@@ -309,7 +309,7 @@ export type ProvisionalPreviewGate =
 export interface ProvisionalPreviewGateInput {
   readonly story: { readonly intent: string } | undefined;
   /** `true` when the render is an MCP Apps delivery. */
-  readonly isMcpAppsRender: boolean;
+  readonly isMcpAppsGguiSession: boolean;
 }
 
 /**
@@ -331,7 +331,7 @@ export function evaluateProvisionalPreviewGate(
   if (!deps || !deps.config.enabled) {
     return { kind: 'skip', reason: 'disabled' };
   }
-  if (input.isMcpAppsRender) {
+  if (input.isMcpAppsGguiSession) {
     return { kind: 'skip', reason: 'mcp-apps-render' };
   }
   if (!input.story) {

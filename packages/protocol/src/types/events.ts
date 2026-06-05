@@ -83,7 +83,7 @@ export interface ActionEventValue<TData = unknown> {
  */
 export interface ActionEnvelope<TPayload = JsonValue> {
   /**
-   * Render identity. Server enforces subscriber-render binding —
+   * GguiSession identity. Server enforces subscriber-render binding —
    * envelopes whose renderId doesn't match the ws subscriber's bound
    * render are rejected (RENDER_MISMATCH).
    */

@@ -8,7 +8,7 @@
  *
  * Post-Phase-B (flatten-render-identity): the pre-rename Session* +
  * StackItem* error matrix is collapsed to a single
- * {@link RenderNotFoundError}. The vessel-vs-entry distinction the prior
+ * {@link GguiSessionNotFoundError}. The vessel-vs-entry distinction the prior
  * matrix encoded does not exist anymore — every render IS the addressable
  * unit; "session not found" and "stack item not found" both fold into
  * "render not found".
@@ -29,14 +29,14 @@
  * fresh renderId, then thread it through subsequent `ggui_update` /
  * `ggui_consume` calls.
  */
-export class RenderNotFoundError extends Error {
+export class GguiSessionNotFoundError extends Error {
   readonly code = 'render_not_found' as const;
   constructor(public readonly renderId: string, message?: string) {
     super(
       message ??
-        `Render "${renderId}" not found. Either it was never minted, expired (TTL), was closed, or belongs to a different appId. Recovery: call ggui_handshake then ggui_render to mint a fresh renderId.`,
+        `GguiSession "${renderId}" not found. Either it was never minted, expired (TTL), was closed, or belongs to a different appId. Recovery: call ggui_handshake then ggui_render to mint a fresh renderId.`,
     );
-    this.name = 'RenderNotFoundError';
+    this.name = 'GguiSessionNotFoundError';
   }
 }
 

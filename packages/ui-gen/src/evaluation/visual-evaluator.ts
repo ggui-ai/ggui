@@ -83,7 +83,7 @@ const root = createRoot(document.getElementById('root')!);
 try {
   root.render(React.createElement(Component, props));
 } catch (err) {
-  root.render(React.createElement('div', { className: 'error' }, 'Render error: ' + (err as Error).message));
+  root.render(React.createElement('div', { className: 'error' }, 'GguiSession error: ' + (err as Error).message));
 }
 `;
 
@@ -228,7 +228,7 @@ The screenshot shows a generated React component built from a design system with
 
 ## Important
 - Check the screenshot against the "Original Request" — does it actually deliver what was asked for?
-- Error messages like "Render error" or blank white space = rendering score 0
+- Error messages like "GguiSession error" or blank white space = rendering score 0
 - A component that renders but is just a wall of text with no structure should score low on layout and hierarchy
 
 Respond with ONLY a JSON object (no markdown, no explanation):

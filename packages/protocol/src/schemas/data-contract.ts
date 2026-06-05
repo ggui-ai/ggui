@@ -653,8 +653,8 @@ export const gadgetPackageUseSchema = z
  * the UI uses. The wire carries identity only — `(package, export
  * name)` — never `version` or transport metadata: the ggui server
  * resolves the full {@link GadgetDescriptor} from the `App.gadgets`
- * catalog at render time onto the `ComponentRender.gadgetDescriptors`
- * sidecar (the `gadgetDescriptors` field of the `Render` union member).
+ * catalog at render time onto the `ComponentGguiSession.gadgetDescriptors`
+ * sidecar (the `gadgetDescriptors` field of the `GguiSession` union member).
  *
  * `.strict()` (not `.passthrough()`): the retired `libraries` field
  * (renamed to `gadgets`) and any other stale sibling field MUST fail

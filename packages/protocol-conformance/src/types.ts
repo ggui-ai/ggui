@@ -125,13 +125,13 @@ export type AuthConfig =
  * extend the setup vocabulary without a kit version bump.
  */
 export type SetupStep =
-  | CreateRenderStep
+  | CreateGguiSessionStep
   | RegisterToolStep
   | EmitEnvelopeStep
   | SeedChannelStep
   | UnknownSetupStep;
 
-export interface CreateRenderStep {
+export interface CreateGguiSessionStep {
   readonly type: 'create-render';
   /** Opaque render id the host allocates. Downstream steps + the
    *  fixture's `inputEnvelope` reference it by value. */

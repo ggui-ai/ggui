@@ -12,7 +12,7 @@
  * sole dispatch surface for `data` frames.
  *
  * Post-stack-removal (2026-05-27): the active render is read through
- * the caller-supplied `getCurrentRender` thunk instead of via a
+ * the caller-supplied `getCurrentGguiSession` thunk instead of via a
  * `StackModel.snapshot()` walk — the iframe holds exactly one mounted
  * render, so the lookup is direct.
  */
@@ -20,10 +20,10 @@
 import type { ChannelHandler } from '@ggui-ai/live-channel';
 import {
   CONTRACT_ERROR_CHANNEL,
-  type Render,
+  type GguiSession,
   type StreamEnvelope,
 } from '@ggui-ai/protocol';
-import type { RenderSeedInput } from '../types.js';
+import type { GguiSessionSeedInput } from '../types.js';
 
 import type {
   ObservabilityEmitter,
@@ -41,7 +41,7 @@ export interface DataHandlerDeps {
    * has been mounted yet — data frames received pre-mount have no
    * streamSpec to validate against and silently drop.
    */
-  readonly getCurrentRender: () => Render | RenderSeedInput | null;
+  readonly getCurrentGguiSession: () => GguiSession | GguiSessionSeedInput | null;
   readonly streamBus: StreamBus;
   readonly validatorCtx: RendererValidatorContext;
   /**
@@ -83,7 +83,7 @@ export function createDataHandler(
 
       // Active render carries the streamSpec — mirrors
       // `GguiRender.handleServerMessage`.
-      const activeRender = deps.getCurrentRender();
+      const activeRender = deps.getCurrentGguiSession();
       const streamSpec =
         activeRender !== null &&
         activeRender.type !== 'mcpApps' &&

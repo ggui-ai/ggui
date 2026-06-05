@@ -45,7 +45,7 @@ import {
 import {
   ManifestBlueprintProvider,
   resolveStorageFromConfig,
-  buildNoCredentialsRender,
+  buildNoCredentialsGguiSession,
   type BlueprintProvider,
   type LlmProvider,
   type McpServerMount,
@@ -71,7 +71,7 @@ import { createThemeWriter } from './theme-writer.js';
 import { createThemeFileUploader } from './theme-file-uploader.js';
 import { getPersistentDir } from './paths.js';
 import {
-  createPersistentRenderStore,
+  createPersistentGguiSessionStore,
   createPersistentVectorStore,
 } from './persistent-stores.js';
 import {
@@ -271,7 +271,7 @@ async function runServeCommand(args: string[]): Promise<number> {
     });
   } catch (err) {
     // Hard-config-error path: malformed ggui.json or unsupported
-    // agent.entry. Render a crisp, actionable message + exit 1.
+    // agent.entry. GguiSession a crisp, actionable message + exit 1.
     if (err instanceof GguiJsonLoadError) {
       process.stderr.write(`ggui serve: ${err.message}\n`);
       if (err.cause && err.cause instanceof Error) {
@@ -312,7 +312,7 @@ async function runServeCommand(args: string[]): Promise<number> {
     return 1;
   }
 
-  // Persistent default for RenderStore + VectorStore — layered AFTER
+  // Persistent default for GguiSessionStore + VectorStore — layered AFTER
   // the manifest resolver so explicit `ggui.json#storage` declarations
   // always win, and BEFORE the banner so `describeStorageStatus`
   // reflects the actual wired state. Without this layer, ggui-default
@@ -324,7 +324,7 @@ async function runServeCommand(args: string[]): Promise<number> {
     // `--ephemeral` skips the whole persistent layering. Operators who
     // pass the flag get pure in-memory defaults across the board (HMAC
     // secrets mint fresh per process). Without the flag, the
-    // sqlite-backed VectorStore + RenderStore persist across restarts
+    // sqlite-backed VectorStore + GguiSessionStore persist across restarts
     // — note this means the install-to-cache bridge can serve stale
     // install-provenance rows after a boot if the source TSX behind a
     // cached row has been edited or uninstalled in the meantime.
@@ -342,7 +342,7 @@ async function runServeCommand(args: string[]): Promise<number> {
       // resolved above) — the operator asked for it by name.
       if (!manifestDeclaresRenders && storage.renderStore === undefined) {
         try {
-          const renderStore = await createPersistentRenderStore(persistentDir);
+          const renderStore = await createPersistentGguiSessionStore(persistentDir);
           storage = { ...storage, renderStore };
         } catch (err) {
           process.stderr.write(
@@ -605,7 +605,7 @@ async function runServeCommand(args: string[]): Promise<number> {
       ...(configuredRoute ? { configuredRoute } : {}),
       onNoCredentials: (ctx, story) => {
         const nowEpochMs = Date.parse(story.nowIso);
-        return buildNoCredentialsRender({
+        return buildNoCredentialsGguiSession({
           renderId: story.renderId,
           appId: ctx.appId,
           intent: story.intent,

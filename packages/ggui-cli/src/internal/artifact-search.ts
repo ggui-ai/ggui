@@ -616,7 +616,7 @@ function isSearchErrorBody(v: unknown): v is SearchErrorBody {
 /* -------------------------------------------------------------------------- */
 
 /**
- * Render the default human-readable view. Each entry takes two lines:
+ * GguiSession the default human-readable view. Each entry takes two lines:
  *
  *   gadget @my-org/weather-card@0.1.0 — Beautiful weather card
  *     install: ggui install @my-org/weather-card@0.1.0 --registry=registry.example.com

@@ -17,7 +17,7 @@
  * | Scope          | Prefix                            | Lifetime               |
  * | -------------- | --------------------------------- | ---------------------- |
  * | `app`          | `apps/<appId>/`                   | App lifecycle          |
- * | `render`       | `renders/<renderId>/`             | Render TTL             |
+ * | `render`       | `renders/<renderId>/`             | GguiSession TTL             |
  * | `userApp`      | `users/<userId>/apps/<appId>/`    | User account / app     |
  * | `crossAppUser` | `users/<userId>/shared/`          | User account (opt-in)  |
  *
@@ -35,12 +35,12 @@
  * ## Protocol & Contract Bar
  *
  * **Parties:**
- * - Producer / writer: `DynamoRenderStore` offload (`render.componentCode`,
+ * - Producer / writer: `DynamoGguiSessionStore` offload (`render.componentCode`,
  *   `conversationHistory.jsonl`), agent code via `ctx.renderStorage` /
  *   `ctx.userStorage` / `ctx.appStorage` / `ctx.crossAppStorage`,
  *   blueprint asset uploaders.
  * - Consumer / reader: `render-resource/handler.ts` rendering pipeline,
- *   agent code reading back its own writes, `RenderStore.observe`
+ *   agent code reading back its own writes, `GguiSessionStore.observe`
  *   replay readers, future blueprint-asset CDN.
  *
  * **Obligations:**
@@ -72,7 +72,7 @@
  *   or any other scope.
  *
  * **Failure mode:**
- * - Backend errors throw. The producer's caller (e.g. `DynamoRenderStore`)
+ * - Backend errors throw. The producer's caller (e.g. `DynamoGguiSessionStore`)
  *   decides whether to retry, fall back, or surface to the user.
  * - Per-object size cap is impl-specific; impls SHOULD document.
  *   Buffered `put` MUST tolerate at least 5 MB; larger payloads SHOULD
@@ -88,8 +88,8 @@
  *
  * ## Relationship to other seams
  *
- * - {@link RenderStore} (`render-store.ts`) — durable per-render
- *   metadata + event log. `DynamoRenderStore` offloads heavy
+ * - {@link GguiSessionStore} (`render-store.ts`) — durable per-render
+ *   metadata + event log. `DynamoGguiSessionStore` offloads heavy
  *   `render.componentCode` and `conversationHistory` blobs into
  *   `ScopedFileStoreRegistry.render(renderId)` so the DDB row stays
  *   under the 400 KB limit.
@@ -262,7 +262,7 @@ export interface ScopedFileStoreRegistry {
   /** App scope: `apps/<appId>/`. App lifecycle, no user identity. */
   app(appId: string): ScopedFileStore;
 
-  /** Render scope: `renders/<renderId>/`. Render TTL. */
+  /** GguiSession scope: `renders/<renderId>/`. GguiSession TTL. */
   render(renderId: string): ScopedFileStore;
 
   /**

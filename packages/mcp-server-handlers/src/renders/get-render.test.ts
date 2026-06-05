@@ -5,18 +5,18 @@
  * `get-session.test.ts` — the wire input collapsed from `{sessionId}`
  * to `{renderId}` and the response shape collapsed from a
  * `SessionView` (vessel + ISO timestamps + stack array) to the flat
- * `Render` shape with epoch-ms timestamps.
+ * `GguiSession` shape with epoch-ms timestamps.
  */
 import { beforeEach, describe, expect, it } from 'vitest';
-import type { ComponentRender } from '@ggui-ai/protocol';
-import { InMemoryRenderStore } from '@ggui-ai/mcp-server-core/in-memory';
+import type { ComponentGguiSession } from '@ggui-ai/protocol';
+import { InMemoryGguiSessionStore } from '@ggui-ai/mcp-server-core/in-memory';
 import { createGguiGetRenderHandler } from './get-render.js';
-import { RenderNotFoundError } from './errors.js';
+import { GguiSessionNotFoundError } from './errors.js';
 
 const NOW_MS = Date.parse('2026-05-09T00:00:00.000Z');
 
 async function seedRender(
-  store: InMemoryRenderStore,
+  store: InMemoryGguiSessionStore,
   opts: {
     renderId?: string;
     appId?: string;
@@ -25,7 +25,7 @@ async function seedRender(
 ): Promise<{ renderId: string }> {
   const renderId = opts.renderId ?? 'render-1';
   const appId = opts.appId ?? 'app-1';
-  const render: ComponentRender = {
+  const render: ComponentGguiSession = {
     id: renderId,
     appId,
     type: 'component',
@@ -41,10 +41,10 @@ async function seedRender(
 }
 
 describe('createGguiGetRenderHandler', () => {
-  let renderStore: InMemoryRenderStore;
+  let renderStore: InMemoryGguiSessionStore;
 
   beforeEach(() => {
-    renderStore = new InMemoryRenderStore();
+    renderStore = new InMemoryGguiSessionStore();
   });
 
   describe('declaration metadata', () => {
@@ -64,7 +64,7 @@ describe('createGguiGetRenderHandler', () => {
         { appId: 'app-1', requestId: 'r1' },
       );
 if (out.type === 'mcpApps') {
-        throw new Error('expected ComponentRender, got McpAppsRender');
+        throw new Error('expected ComponentGguiSession, got McpAppsGguiSession');
       }
       expect(out.id).toBe(renderId);
       expect(out.appId).toBe('app-1');
@@ -82,14 +82,14 @@ if (out.type === 'mcpApps') {
         { appId: 'app-1', requestId: 'r1' },
       );
       if (out.type === 'mcpApps') {
-        throw new Error('expected ComponentRender, got McpAppsRender');
+        throw new Error('expected ComponentGguiSession, got McpAppsGguiSession');
       }
       expect(out.themeId).toBe('indigo');
     });
   });
 
   describe('tenancy + missing', () => {
-    it('throws RenderNotFoundError on cross-tenant access (no leak)', async () => {
+    it('throws GguiSessionNotFoundError on cross-tenant access (no leak)', async () => {
       const { renderId } = await seedRender(renderStore, { appId: 'app-1' });
       const handler = createGguiGetRenderHandler({ renderStore });
       await expect(
@@ -97,17 +97,17 @@ if (out.type === 'mcpApps') {
           { renderId },
           { appId: 'app-OTHER', requestId: 'r1' },
         ),
-      ).rejects.toBeInstanceOf(RenderNotFoundError);
+      ).rejects.toBeInstanceOf(GguiSessionNotFoundError);
     });
 
-    it('throws RenderNotFoundError on unknown renderId', async () => {
+    it('throws GguiSessionNotFoundError on unknown renderId', async () => {
       const handler = createGguiGetRenderHandler({ renderStore });
       await expect(
         handler.handler(
           { renderId: 'never-existed' },
           { appId: 'app-1', requestId: 'r1' },
         ),
-      ).rejects.toBeInstanceOf(RenderNotFoundError);
+      ).rejects.toBeInstanceOf(GguiSessionNotFoundError);
     });
   });
 
@@ -142,7 +142,7 @@ if (out.type === 'mcpApps') {
         { appId: 'app-1', requestId: 'r1' },
       );
       if (out.type === 'mcpApps') {
-        throw new Error('expected ComponentRender, got McpAppsRender');
+        throw new Error('expected ComponentGguiSession, got McpAppsGguiSession');
       }
       expect(out.lastActivityAt).toBe(9_999_999);
       expect(out.expiresAt).toBe(10_000_000);
@@ -178,7 +178,7 @@ if (out.type === 'mcpApps') {
           { renderId },
           { appId: 'tenant-X', requestId: 'r1' },
         ),
-      ).rejects.toBeInstanceOf(RenderNotFoundError);
+      ).rejects.toBeInstanceOf(GguiSessionNotFoundError);
       expect(calls).toHaveLength(0);
     });
   });

@@ -21,7 +21,7 @@
  * BYOK LLM → Lane 2) or a privileged test-fixture endpoint to
  * inject renders (new surface, out of Slice 3). Lane 3
  * (`console-renders.test.ts`) covers the populated-list case with
- * an in-process `InMemoryRenderStore` — faster, deterministic,
+ * an in-process `InMemoryGguiSessionStore` — faster, deterministic,
  * same contract.
  */
 import { test, expect } from '@playwright/test';
@@ -94,7 +94,7 @@ test.describe.serial(
       ).toBeVisible({ timeout: 10_000 });
 
       // No list container when the catalog is empty (component
-      // short-circuits before rendering `<RenderList>`).
+      // short-circuits before rendering `<GguiSessionList>`).
       await expect(
         page.locator('[data-ggui-renders-list]'),
       ).toHaveCount(0);

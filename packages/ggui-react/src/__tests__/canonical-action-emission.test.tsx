@@ -23,7 +23,7 @@ import type { WebSocketMessage } from '@ggui-ai/protocol/transport/websocket';
 import type {
   ActionEnvelope,
   ActionSpec,
-  ComponentRender,
+  ComponentGguiSession,
 } from '@ggui-ai/protocol';
 import { useAction } from '@ggui-ai/wire';
 import { GguiProvider } from '../components/GguiProvider';
@@ -85,7 +85,7 @@ const ACTION_SPEC: ActionSpec = {
   },
 };
 
-function makeRender(id: string): ComponentRender {
+function makeRender(id: string): ComponentGguiSession {
   const now = Date.now();
   return {
     id,

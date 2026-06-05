@@ -87,7 +87,7 @@ const TEST_TIMEOUT_MS = 60_000;
  * and wait for the SPA to land on `/s/<shortCode>` with the blueprint
  * mounted inside the render viewer.
  *
- * The console RenderViewer mounts the render inside a
+ * The console GguiSessionViewer mounts the render inside a
  * plain `<iframe srcDoc>` (read-only / visual-only — post C1-fix
  * it no longer carries the `<McpAppIframe>` lifecycle-mirror
  * attribute). The inner render attributes
@@ -131,7 +131,7 @@ async function openLiveRender(
   }
   const shortCode = match[1]!;
 
-  // Wait for the RenderViewer iframe to be visible. Inner-DOM
+  // Wait for the GguiSessionViewer iframe to be visible. Inner-DOM
   // assertions further down the test body (probe buttons, error
   // panels) carry their own timeouts and serve as the de-facto
   // readiness gate now that the lifecycle mirror is gone.
@@ -211,7 +211,7 @@ test.describe.serial(
       gate = await installNetworkGate(page);
 
       await openLiveRender(page, handle.baseUrl, 'todo-list');
-      // Renderer DOM is inside the RenderViewer iframe child;
+      // Renderer DOM is inside the GguiSessionViewer iframe child;
       // outer-iframe visibility gating happened in `openLiveRender`.
       // Interactions below scope through frameLocator.
       const frame = rendererFrame(page);
@@ -349,7 +349,7 @@ test.describe.serial(
       await expect(row).toHaveAttribute('data-tool', 'tasks_broken');
       await expect(row).toHaveAttribute('data-source', 'wired-action');
 
-      // Render survives: the probe button is still clickable + the
+      // GguiSession survives: the probe button is still clickable + the
       // panel is still rendered. A React error boundary firing would
       // unmount either.
       await expect(breakBtn).toBeVisible();
@@ -408,7 +408,7 @@ test.describe.serial(
         'refresh-stream',
       );
 
-      // Render survives + the probe UI stays interactive.
+      // GguiSession survives + the probe UI stays interactive.
       await expect(malformedBtn).toBeVisible();
       await expect(malformedBtn).toBeEnabled();
 

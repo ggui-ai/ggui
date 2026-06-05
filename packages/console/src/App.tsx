@@ -31,7 +31,7 @@
  *   - `/devtools/benchmarks` → {@link Devtools} (benchmarks dashboard embed)
  *
  *   Deep-link surfaces (top-level, bare-chrome — share-link targets):
- *   - `/s/<shortCode>`       → {@link RenderViewer}
+ *   - `/s/<shortCode>`       → {@link GguiSessionViewer}
  *   - `/preview/<id>`        → {@link BlueprintViewer}
  *
  * Route matching + navigation live in `./router.ts` — this component
@@ -53,7 +53,7 @@ import { Config } from './routes/Config.js';
 import { Devtools } from './routes/Devtools.js';
 import { Keys } from './routes/Keys.js';
 import { McpInspector } from './routes/McpInspector.js';
-import { RenderViewer } from './routes/RenderViewer.js';
+import { GguiSessionViewer } from './routes/GguiSessionViewer.js';
 import { Renders } from './routes/Renders.js';
 import { Status } from './routes/Status.js';
 import { Theme } from './routes/Theme.js';
@@ -85,7 +85,7 @@ export function App(): ReactElement {
   if (route.kind === 'viewer') {
     return (
       <Shell route={route} variant="narrow">
-        <RenderViewer shortCode={route.shortCode} />
+        <GguiSessionViewer shortCode={route.shortCode} />
       </Shell>
     );
   }

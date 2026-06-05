@@ -1,5 +1,5 @@
 /**
- * LiveRenderPill — Slice 10b focused render tests.
+ * LiveGguiSessionPill — Slice 10b focused render tests.
  *
  * Lane 3 (vitest + jsdom). Three concerns:
  *
@@ -13,7 +13,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { Route } from '../router.js';
-import { LiveRenderPill } from './LiveRenderPill.js';
+import { LiveGguiSessionPill } from './LiveGguiSessionPill.js';
 
 // Any non-viewer route works — pill suppresses only on `viewer`.
 // Picking `admin-status` after the two-zone IA reorg.
@@ -41,10 +41,10 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe('LiveRenderPill', () => {
+describe('LiveGguiSessionPill', () => {
   it('renders nothing when the server reports no active renders', async () => {
     mockFetch({ renders: [], total: 0 });
-    render(<LiveRenderPill route={STATUS_ROUTE} />);
+    render(<LiveGguiSessionPill route={STATUS_ROUTE} />);
     // Give the fetch a chance to resolve — pill still shouldn't appear.
     await waitFor(() => {
       expect(global.fetch).toHaveBeenCalledTimes(1);
@@ -62,7 +62,7 @@ describe('LiveRenderPill', () => {
       ],
       total: 1,
     });
-    render(<LiveRenderPill route={STATUS_ROUTE} />);
+    render(<LiveGguiSessionPill route={STATUS_ROUTE} />);
     await waitFor(() => {
       expect(global.fetch).toHaveBeenCalledTimes(1);
     });
@@ -79,7 +79,7 @@ describe('LiveRenderPill', () => {
       ],
       total: 1,
     });
-    render(<LiveRenderPill route={STATUS_ROUTE} />);
+    render(<LiveGguiSessionPill route={STATUS_ROUTE} />);
     await waitFor(() => {
       const pill = document.querySelector('[data-ggui-nav-live-pill]');
       expect(pill).toBeTruthy();
@@ -100,7 +100,7 @@ describe('LiveRenderPill', () => {
       ],
       total: 3,
     });
-    render(<LiveRenderPill route={STATUS_ROUTE} />);
+    render(<LiveGguiSessionPill route={STATUS_ROUTE} />);
     await waitFor(() => {
       expect(
         document.querySelector('[data-ggui-nav-live-pill]')?.textContent,
@@ -116,7 +116,7 @@ describe('LiveRenderPill', () => {
       total: 1,
     });
     const pushStateSpy = vi.spyOn(window.history, 'pushState');
-    render(<LiveRenderPill route={STATUS_ROUTE} />);
+    render(<LiveGguiSessionPill route={STATUS_ROUTE} />);
     const pill = await waitFor(() => {
       const el = document.querySelector('[data-ggui-nav-live-pill]');
       if (!el) throw new Error('pill not rendered');
@@ -136,7 +136,7 @@ describe('LiveRenderPill', () => {
       ],
       total: 1,
     });
-    render(<LiveRenderPill route={VIEWER_ROUTE} />);
+    render(<LiveGguiSessionPill route={VIEWER_ROUTE} />);
     // No fetch should even fire on the viewer route.
     expect(global.fetch).not.toHaveBeenCalled();
     expect(document.querySelector('[data-ggui-nav-live-pill]')).toBeNull();
@@ -147,7 +147,7 @@ describe('LiveRenderPill', () => {
       'fetch',
       vi.fn(async () => new Response('err', { status: 500 })),
     );
-    render(<LiveRenderPill route={STATUS_ROUTE} />);
+    render(<LiveGguiSessionPill route={STATUS_ROUTE} />);
     await waitFor(() => {
       expect(global.fetch).toHaveBeenCalledTimes(1);
     });

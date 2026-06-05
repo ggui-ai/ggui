@@ -14,7 +14,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 
 // `@ggui-ai/ui-gen` ships both `src/` and `dist/` (see package.json `files`).
 // Templates always live at `<pkg-root>/src/boilerplate/templates/` (kept in
-// the published tarball via `files: ['src', 'dist', ...]`). Render.ts gets
+// the published tarball via `files: ['src', 'dist', ...]`). GguiSession.ts gets
 // inlined into multiple dist entrypoints by tsup (`boilerplate.js`,
 // `harness/runtime.js`, `harness/index.js`, …), so `__dirname` varies. We
 // enumerate every reasonable location:

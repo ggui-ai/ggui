@@ -32,7 +32,7 @@ function runPropCoverage(input: AxisCheckInput): EvalIssue[] {
       mkIssue(
         "universal.prop_coverage",
         `Required prop "${name}" is not referenced anywhere in the component.`,
-        `Render props.${name} — the data contract marks it required.`,
+        `GguiSession props.${name} — the data contract marks it required.`,
       ),
     );
   }

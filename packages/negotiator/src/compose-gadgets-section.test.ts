@@ -37,7 +37,7 @@ describe('composeAvailableGadgetsSection — synth-prompt teaching text plumb', 
           {
             component: 'LeafletMap',
             description: 'Interactive Leaflet map component.',
-            usage: 'Render when intent names a rendered map.',
+            usage: 'GguiSession when intent names a rendered map.',
           },
         ],
       },

@@ -51,7 +51,7 @@ const DEV_BEARER = 'dev';
 
 // A niche contract → no built-in blueprint match → turn-1 is a genuine cold
 // generation, and turn-2's hit is attributable to turn-1, not a shipped default.
-const INTENT = 'Render a soil-moisture gauge panel for a greenhouse zone labelled "Bed 7"';
+const INTENT = 'GguiSession a soil-moisture gauge panel for a greenhouse zone labelled "Bed 7"';
 const CONTRACT = {
   propsSpec: {
     description: 'gauge',
@@ -87,7 +87,7 @@ const SIMILAR_CONTRACT = {
 // After normalization the contract is a clean, matchable oil-pressure gauge —
 // niche enough that turn-1 is a genuine cold gen, so turn-2's hit is
 // attributable to turn-1's blueprint (not a shipped default).
-const QUIRKY_INTENT = 'Render an oil-pressure gauge for pump station "PS-4"';
+const QUIRKY_INTENT = 'GguiSession an oil-pressure gauge for pump station "PS-4"';
 const QUIRKY_CONTRACT = {
   propsSpec: {
     description: 'oil pressure gauge',
@@ -112,7 +112,7 @@ const V_DENSE: Variance = { persona: 'data-dense' };
 // scenario's V_DENSE exact-key-hit another's registration (which would break the
 // VARIANCE_GAP / disposes assertions). Each pairs with its own niche intent so
 // the contractKey/embedding stay coherent (turn-1 is a genuine cold gen).
-const INTENT_V1 = 'Render a battery-health gauge for a delivery drone labelled "Falcon-3"';
+const INTENT_V1 = 'GguiSession a battery-health gauge for a delivery drone labelled "Falcon-3"';
 const CONTRACT_V1 = {
   propsSpec: {
     description: 'battery gauge',
@@ -123,7 +123,7 @@ const CONTRACT_V1 = {
   },
 } as const;
 
-const INTENT_V2 = 'Render a water-tank level indicator for cistern "Tank-B"';
+const INTENT_V2 = 'GguiSession a water-tank level indicator for cistern "Tank-B"';
 const CONTRACT_V2 = {
   propsSpec: {
     description: 'tank level',
@@ -134,7 +134,7 @@ const CONTRACT_V2 = {
   },
 } as const;
 
-const INTENT_V3 = 'Render a CPU-temperature dial for server rack "R-12"';
+const INTENT_V3 = 'GguiSession a CPU-temperature dial for server rack "R-12"';
 const CONTRACT_V3 = {
   propsSpec: {
     description: 'cpu temp',
@@ -189,7 +189,7 @@ interface RenderCacheMarker {
  * `renderOutputSchema`; `action` rides along for completeness but is NOT
  * asserted on (it tracks render-row reuse, orthogonal to blueprint reuse — D1).
  */
-interface RenderResult {
+interface GguiSessionResult {
   isError?: boolean;
   renderId?: string;
   action?: string;
@@ -232,11 +232,11 @@ async function mcpCall(gguiUrl: string, method: string, params: unknown): Promis
 /** ggui_render CallToolResult envelope — the structured fields ride on `structuredContent`. */
 interface RenderCallResult {
   isError?: boolean;
-  structuredContent?: RenderResult;
+  structuredContent?: GguiSessionResult;
 }
 
 /** The parsed render output, the handshake suggestion, and the wall-clock ms. */
-interface RenderOnceResult extends RenderResult {
+interface GguiSessionOnceResult extends GguiSessionResult {
   ms: number;
   suggestion?: HandshakeSuggestion;
 }
@@ -279,7 +279,7 @@ async function renderOnce(
     forceCreate: boolean;
     override?: RenderOverride;
   },
-): Promise<RenderOnceResult> {
+): Promise<GguiSessionOnceResult> {
   const hs = await mcpCall(gguiUrl, 'tools/call', {
     name: 'ggui_handshake',
     arguments: {

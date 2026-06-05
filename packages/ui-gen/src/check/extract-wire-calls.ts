@@ -40,7 +40,7 @@ import type { DataContract } from "@ggui-ai/protocol";
  *
  * `'context'` covers `useGguiContext` calls. The iframe-runtime mounts
  * Contexts only when the bootstrap envelope carries `contextSlots`,
- * which fires only when the persisted Render has `contextSpec`,
+ * which fires only when the persisted GguiSession has `contextSpec`,
  * which happens only when the agent authored
  * `story.contract.contextSpec` AND render.ts plumbed it to the
  * generator. The symptom of a missing slot is a blank `/r/<id>` direct

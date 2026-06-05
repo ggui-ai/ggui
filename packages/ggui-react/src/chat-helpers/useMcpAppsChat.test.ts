@@ -19,12 +19,12 @@ import { handleEvent } from './useMcpAppsChat';
 import type {
   ChatEntry,
   HostDisplayMode,
-  RenderRef,
+  GguiSessionRef,
 } from './mcp-apps-chat-types';
 
 interface CapturedDeps {
   readonly entries: ChatEntry[];
-  readonly renders: RenderRef[];
+  readonly renders: GguiSessionRef[];
   readonly displayModes: Array<HostDisplayMode | undefined>;
   readonly patches: Array<{
     readonly toolUseId: string;

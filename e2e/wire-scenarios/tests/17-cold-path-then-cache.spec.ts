@@ -4,7 +4,7 @@
  * matchBlueprint fast path.
  *
  * What this proves: the registry-fill loop closes end-to-end through
- * the agent-facing wire. Render registers the cold-gen output via
+ * the agent-facing wire. GguiSession registers the cold-gen output via
  * `registerBlueprint` (see `render.ts` blueprint-write path post-gen);
  * the next handshake with the same contract — even with a paraphrased
  * intent — surfaces `origin: 'cache'` + `codeHash`; that handshake's

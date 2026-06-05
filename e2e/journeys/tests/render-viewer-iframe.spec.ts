@@ -10,13 +10,13 @@
  *   2. Fixtures that can drive against today's Phase-2 harness
  *      (`ggui serve` + `playground/` + existing blueprints)
  *      produce a green assertion through the read-only console
- *      RenderViewer iframe (renderer-inside-srcdoc) host path.
+ *      GguiSessionViewer iframe (renderer-inside-srcdoc) host path.
  *   3. Fixtures authored for Phase 3.1's `ConformanceHost` dispatcher
  *      skip cleanly with their `skipReason` reported — proving the
  *      format is forward-loadable without the runner that will
  *      un-skip them.
  *
- * ## Why this spec is the "RenderViewer iframe" spec
+ * ## Why this spec is the "GguiSessionViewer iframe" spec
  *
  * Every assertion in a RUN-tier fixture exercises the RENDERER
  * CONTRACT through the iframe-runtime's own WS channel. The console's
@@ -29,10 +29,10 @@
  * `frameLocator`.
  *
  * Pre-C1-fix this spec was the `<McpAppIframe>` host path. The
- * console RenderViewer was migrated off `<McpAppIframe>` to a plain
+ * console GguiSessionViewer was migrated off `<McpAppIframe>` to a plain
  * read-only iframe (no MCP client relay, no IframeErrorPane, no
  * lifecycle-mirror attribute) — see
- * `oss/packages/console/src/routes/RenderViewer.tsx`. The
+ * `oss/packages/console/src/routes/GguiSessionViewer.tsx`. The
  * fixture-catalog dispatch paths that depended on `<McpAppIframe>`
  * surfaces (bootstrap-failure → IframeErrorPane) are now PENDING
  * a new driver and skip honestly. The wired-action + contract-error
@@ -126,7 +126,7 @@ const FIXTURE_BLUEPRINTS: Readonly<Record<string, string>> = {
  * and wait for the SPA to land on `/s/<shortCode>` with the blueprint
  * mounted inside the render viewer. Returns the resolved `shortCode`.
  *
- * The console RenderViewer mounts a plain `<iframe srcDoc>` with
+ * The console GguiSessionViewer mounts a plain `<iframe srcDoc>` with
  * `data-testid="render-viewer-iframe"` (read-only / visual-only —
  * post C1-fix it no longer carries the `<McpAppIframe>`
  * lifecycle-mirror attribute). Inner render attributes
@@ -259,7 +259,7 @@ async function driveContractErrorFixture(page: Page, fixture: TestCase): Promise
     await expect(row).toHaveAttribute("data-source", behavior.sourceAction);
   }
 
-  // Render-alive invariant: the probe button stays interactive after
+  // GguiSession-alive invariant: the probe button stays interactive after
   // the error row lands. A React error boundary firing would unmount
   // either the button or the panel.
   await expect(button).toBeVisible();
@@ -417,7 +417,7 @@ const KIT_DRIVEN_KNOWN_GAPS: Readonly<Record<string, string>> = {};
  *     pre-C1-fix these ran through a Playwright `page.route()`-based
  *     fault-injection path against the console's `<McpAppIframe>` +
  *     `<IframeErrorPane>` surface. Post C1-fix the console
- *     RenderViewer is a read-only plain-iframe inspector — it no
+ *     GguiSessionViewer is a read-only plain-iframe inspector — it no
  *     longer mounts `<IframeErrorPane>` and no longer surfaces the
  *     `data-ggui-console-iframe-error` outer-DOM marker the fixtures
  *     assert on. A new driver needs either (a) a vanilla harness host
@@ -509,11 +509,11 @@ async function runFixtureViaKit(
 // =============================================================================
 //
 // The Playwright `page.route()`-based bootstrap-failure driver was deleted
-// when the console RenderViewer was migrated off `<McpAppIframe>` to a
+// when the console GguiSessionViewer was migrated off `<McpAppIframe>` to a
 // plain read-only `<iframe srcDoc>` (see
-// `oss/packages/console/src/routes/RenderViewer.tsx`). The driver
+// `oss/packages/console/src/routes/GguiSessionViewer.tsx`). The driver
 // targeted the `<IframeErrorPane>` outer-DOM marker
-// (`data-ggui-console-iframe-error`) which the new RenderViewer no
+// (`data-ggui-console-iframe-error`) which the new GguiSessionViewer no
 // longer surfaces. The two fixtures it dispatched —
 // `bootstrap-bundle-fetch-failed` + `bootstrap-meta-missing` — now route
 // through `PENDING_DRIVER_FIXTURES` and skip honestly with a pointer to
@@ -542,7 +542,7 @@ async function runFixtureViaKit(
  * Single browser-driven dispatcher remaining: pre-C1-fix there was a
  * sibling `BROWSER_DRIVEN_FIXTURES` set covering bootstrap-failure via
  * Playwright `page.route()` fault injection, but that set was retired
- * when the console RenderViewer dropped `<IframeErrorPane>`. The
+ * when the console GguiSessionViewer dropped `<IframeErrorPane>`. The
  * `installNetworkGate` clean-room invariant still applies — the mount
  * handler runs in-process and the props_update fan-out stays inside
  * the live `ggui serve` server, so no hosted/AWS reach-out can occur
@@ -556,7 +556,7 @@ const BROWSER_DRIVEN_PROPS_UPDATE_FIXTURES: ReadonlySet<string> = new Set([
  * Drive the `props-update-roundtrip` fixture through the live `ggui
  * serve` SPA + `props-echo` blueprint:
  *   1. `openLiveRender` lands on `/s/<shortCode>` with the
- *      RenderViewer iframe visible.
+ *      GguiSessionViewer iframe visible.
  *   2. Inside the iframe, assert the cold-start render stamps
  *      `data-ggui-prop-count="0"` (the component's `count ?? 0`
  *      fallback — no `props_update` has fired yet).
@@ -610,7 +610,7 @@ async function runBrowserDrivenPropsUpdateFixture(
     timeout: 5_000,
   });
 
-  // Render-alive invariant: the bump button stays interactive after
+  // GguiSession-alive invariant: the bump button stays interactive after
   // the props_update lands. A renderer-side error or a React error
   // boundary firing would unmount either the button or the counter
   // (mirrors the contract-probe assertion shape).

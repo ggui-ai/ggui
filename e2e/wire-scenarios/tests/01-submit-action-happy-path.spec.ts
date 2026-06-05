@@ -36,7 +36,7 @@ describe.skipIf(!HAS_KEY)('Scenario 1 — submit_action happy path', () => {
   test(
     'iframe button click → pipe append → ggui_consume drains the event',
     async () => {
-      // 1. Render a canonical "Save button + note slot" contract.
+      // 1. GguiSession a canonical "Save button + note slot" contract.
       //    Shared verbatim with scenarios 02 + 03 so the OSS
       //    in-memory blueprint registry's exact-key matcher cache-
       //    hits across them — first scenario to render cold-gens, the

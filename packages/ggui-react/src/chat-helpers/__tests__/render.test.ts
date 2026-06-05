@@ -24,7 +24,7 @@ describe('extractRenderFromToolResult', () => {
     expect(extractRenderFromToolResult(toolResult(null))).toBeNull();
   });
 
-  it('picks up the direct Render shape', () => {
+  it('picks up the direct GguiSession shape', () => {
     const item = { id: 'cmp_1', componentCode: 'export default () => null', props: {} };
     expect(extractRenderFromToolResult(toolResult(item))).toBe(item);
   });

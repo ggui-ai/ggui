@@ -1,5 +1,5 @@
 /**
- * RenderRenderer — provisional-branch tests.
+ * GguiSessionRenderer — provisional-branch tests.
  *
  * Verifies the small conditional added in
  * `DynamicComponent.tsx` that routes renders with empty
@@ -7,7 +7,7 @@
  * ESM-loading path. The goal is behavioural-preservation plus the
  * forward-compatible upgrade when `_ggui:preview` envelopes arrive.
  *
- * Post-Phase-B: `StackItemRenderer` was renamed to `RenderRenderer` and
+ * Post-Phase-B: `StackItemRenderer` was renamed to `GguiSessionRenderer` and
  * the prop shape collapsed from `{ stackItem: {...} }` to a flat
  * `{ render: {...} }` carrying the single mounted render.
  */
@@ -15,7 +15,7 @@ import { describe, it, expect } from 'vitest';
 import { act, render } from '@testing-library/react';
 import { BRIDGE_EVENTS, PREVIEW_CHANNEL } from '@ggui-ai/protocol';
 import type { StreamEnvelope } from '@ggui-ai/protocol';
-import { RenderRenderer } from './DynamicComponent.js';
+import { GguiSessionRenderer } from './DynamicComponent.js';
 
 function sendPreview(payload: unknown): void {
   const envelope: StreamEnvelope = {
@@ -31,10 +31,10 @@ function sendPreview(payload: unknown): void {
   });
 }
 
-describe('RenderRenderer — provisional branching', () => {
+describe('GguiSessionRenderer — provisional branching', () => {
   it('routes empty componentCode through ProvisionalRenderer and shows the caller fallback', () => {
     const { container } = render(
-      <RenderRenderer
+      <GguiSessionRenderer
         render={{ id: 'pending', componentCode: '' }}
         fallback={<div data-testid="loading">loading…</div>}
       />,
@@ -47,7 +47,7 @@ describe('RenderRenderer — provisional branching', () => {
 
   it('paints the provisional surface once preview envelopes arrive', () => {
     const { container } = render(
-      <RenderRenderer
+      <GguiSessionRenderer
         render={{ id: 'pending', componentCode: '' }}
       />,
     );
@@ -74,7 +74,7 @@ describe('RenderRenderer — provisional branching', () => {
 
   it('does NOT route through the preview path when componentCode is present', () => {
     const { container } = render(
-      <RenderRenderer
+      <GguiSessionRenderer
         render={{
           id: 'ready',
           componentCode: 'export default function C() { return null; }',

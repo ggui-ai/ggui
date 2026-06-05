@@ -4,7 +4,7 @@
  * Post-Phase-B (flatten-render-identity): the wire input collapsed
  * from `{sessionId, channel, payload, complete?, stackItemId?}` to
  * `{renderId, channel, payload, complete?}`. `SessionStore` →
- * `RenderStore`. `SessionNotFoundError` → `RenderNotFoundError`.
+ * `GguiSessionStore`. `SessionNotFoundError` → `GguiSessionNotFoundError`.
  *
  * Focused on the factory's wrapping concerns: tenancy gate, the
  * sendEnvelope seam wiring, and the optional observer fan-out.
@@ -14,25 +14,25 @@
  * suite checks the factory plumbing, not the helper internals.
  */
 import { beforeEach, describe, expect, it } from 'vitest';
-import type { ComponentRender } from '@ggui-ai/protocol';
-import { InMemoryRenderStore } from '@ggui-ai/mcp-server-core/in-memory';
+import type { ComponentGguiSession } from '@ggui-ai/protocol';
+import { InMemoryGguiSessionStore } from '@ggui-ai/mcp-server-core/in-memory';
 import {
   createGguiEmitHandler,
   type StreamObserverNotifier,
 } from './stream.js';
-import { RenderNotFoundError } from './errors.js';
+import { GguiSessionNotFoundError } from './errors.js';
 import type { SendEnvelopeFn } from './handle-stream.js';
 
 const CTX = { appId: 'app-1', requestId: 'r1' };
 const NOW_MS = Date.parse('2026-05-11T00:00:00.000Z');
 
 async function seedRender(
-  store: InMemoryRenderStore,
-  opts: { renderId?: string; appId?: string; streamSpec?: ComponentRender['streamSpec'] } = {},
+  store: InMemoryGguiSessionStore,
+  opts: { renderId?: string; appId?: string; streamSpec?: ComponentGguiSession['streamSpec'] } = {},
 ): Promise<{ renderId: string }> {
   const renderId = opts.renderId ?? 'render-1';
   const appId = opts.appId ?? 'app-1';
-  const render: ComponentRender = {
+  const render: ComponentGguiSession = {
     id: renderId,
     appId,
     type: 'component',
@@ -49,10 +49,10 @@ async function seedRender(
 }
 
 describe('createGguiEmitHandler', () => {
-  let renderStore: InMemoryRenderStore;
+  let renderStore: InMemoryGguiSessionStore;
 
   beforeEach(() => {
-    renderStore = new InMemoryRenderStore();
+    renderStore = new InMemoryGguiSessionStore();
   });
 
   describe('declaration metadata', () => {
@@ -104,7 +104,7 @@ describe('createGguiEmitHandler', () => {
   });
 
   describe('tenancy + missing', () => {
-    it('cross-tenant render throws RenderNotFoundError (no leak)', async () => {
+    it('cross-tenant render throws GguiSessionNotFoundError (no leak)', async () => {
       const { renderId } = await seedRender(renderStore);
       const handler = createGguiEmitHandler({
         renderStore,
@@ -115,10 +115,10 @@ describe('createGguiEmitHandler', () => {
           { renderId, channel: 'updates', payload: {} },
           { appId: 'tenant-X', requestId: 'r1' },
         ),
-      ).rejects.toBeInstanceOf(RenderNotFoundError);
+      ).rejects.toBeInstanceOf(GguiSessionNotFoundError);
     });
 
-    it('unknown render throws RenderNotFoundError', async () => {
+    it('unknown render throws GguiSessionNotFoundError', async () => {
       const handler = createGguiEmitHandler({
         renderStore,
         sendEnvelope: async () => ({}),
@@ -128,7 +128,7 @@ describe('createGguiEmitHandler', () => {
           { renderId: 'never', channel: 'updates', payload: {} },
           CTX,
         ),
-      ).rejects.toBeInstanceOf(RenderNotFoundError);
+      ).rejects.toBeInstanceOf(GguiSessionNotFoundError);
     });
 
     it('sendEnvelope NOT invoked when tenancy gate rejects', async () => {
@@ -146,7 +146,7 @@ describe('createGguiEmitHandler', () => {
           { renderId, channel: 'updates', payload: {} },
           { appId: 'tenant-X', requestId: 'r1' },
         ),
-      ).rejects.toBeInstanceOf(RenderNotFoundError);
+      ).rejects.toBeInstanceOf(GguiSessionNotFoundError);
       expect(sent).toHaveLength(0);
     });
   });

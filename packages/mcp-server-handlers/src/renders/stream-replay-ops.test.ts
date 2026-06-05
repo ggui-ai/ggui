@@ -1,12 +1,12 @@
 /**
  * Pure replay-ops — every policy branch + every replay rule.
  *
- * Mirrors the coverage of `InMemoryRenderStreamBuffer`'s suite in
+ * Mirrors the coverage of `InMemoryGguiSessionStreamBuffer`'s suite in
  * `@ggui-ai/mcp-server-core`, just on the stateless functions that drive
  * both OSS and hosted implementations from a single source of truth.
  *
  * The pure ops are the contract; any storage adapter (in-memory ring,
- * DDB-backed Render row) MUST produce the same outcomes when threaded
+ * DDB-backed GguiSession row) MUST produce the same outcomes when threaded
  * through `applyRecordOp` + `replayFromBufferOp`.
  */
 import { describe, it, expect, vi } from 'vitest';
@@ -18,7 +18,7 @@ import {
   runSequencedRecord,
   ReplayConflictError,
   ReplayMaxRetriesExceededError,
-  ReplayRenderNotFoundError,
+  ReplayGguiSessionNotFoundError,
   EMPTY_BUFFER_STATE,
   DEFAULT_REPLAY_MAX_PER_RENDER,
   DEFAULT_REPLAY_MAX_RETRIES,
@@ -592,7 +592,7 @@ describe('runSequencedRecord', () => {
     expect(seq.calls.persist).toBe(2);
   });
 
-  it('throws ReplayRenderNotFoundError immediately when fetchState returns null', async () => {
+  it('throws ReplayGguiSessionNotFoundError immediately when fetchState returns null', async () => {
     const seq = mkFakeSequencer();
     seq.queueMissing(1);
     await expect(
@@ -601,7 +601,7 @@ describe('runSequencedRecord', () => {
         mkInput({ channel: 'message', payload: { text: 'x' } }),
         seq.deps,
       ),
-    ).rejects.toBeInstanceOf(ReplayRenderNotFoundError);
+    ).rejects.toBeInstanceOf(ReplayGguiSessionNotFoundError);
     expect(seq.calls.fetchState).toBe(1);
     expect(seq.calls.persist).toBe(0);
   });

@@ -8,8 +8,8 @@
  * supports host-conversation filtering via hostName + hostSessionId.
  */
 import { beforeEach, describe, expect, it } from 'vitest';
-import type { ComponentRender } from '@ggui-ai/protocol';
-import { InMemoryRenderStore } from '@ggui-ai/mcp-server-core/in-memory';
+import type { ComponentGguiSession } from '@ggui-ai/protocol';
+import { InMemoryGguiSessionStore } from '@ggui-ai/mcp-server-core/in-memory';
 import {
   createGguiListRendersHandler,
   type ListRendersMintSeam,
@@ -18,7 +18,7 @@ import {
 const NOW_MS = Date.parse('2026-05-09T00:00:00.000Z');
 
 async function seedRender(
-  store: InMemoryRenderStore,
+  store: InMemoryGguiSessionStore,
   opts: {
     renderId?: string;
     appId?: string;
@@ -30,7 +30,7 @@ async function seedRender(
 ): Promise<{ renderId: string }> {
   const renderId = opts.renderId ?? 'render-1';
   const appId = opts.appId ?? 'app-1';
-  const render: ComponentRender = {
+  const render: ComponentGguiSession = {
     id: renderId,
     appId,
     type: 'component',
@@ -66,10 +66,10 @@ async function seedRender(
 }
 
 describe('createGguiListRendersHandler', () => {
-  let renderStore: InMemoryRenderStore;
+  let renderStore: InMemoryGguiSessionStore;
 
   beforeEach(() => {
-    renderStore = new InMemoryRenderStore();
+    renderStore = new InMemoryGguiSessionStore();
   });
 
   describe('declaration metadata', () => {

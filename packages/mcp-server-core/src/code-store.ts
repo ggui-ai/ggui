@@ -33,7 +33,7 @@
  *
  * **Parties:**
  * - Producer / writer: `mcp-server-handlers/renders/render.ts` —
- *   after `runGenerationIntoRender` produces componentCode, the handler
+ *   after `runGenerationIntoGguiSession` produces componentCode, the handler
  *   computes `sha256(code)` and `put`s the (hash, code) pair before
  *   minting the bootstrap envelope.
  * - Consumer / reader: the HTTP route `GET /code/<hash>.js` mounted by

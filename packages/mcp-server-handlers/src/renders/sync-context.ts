@@ -57,12 +57,12 @@ import {
   CONTEXT_SNAPSHOT_MAX_BYTES,
   CONTEXT_SNAPSHOT_MAX_SLOTS,
   validateContextData,
-  type ComponentRender,
+  type ComponentGguiSession,
   type ContextSpec,
   type ContractViolation,
   type JsonObject,
 } from '@ggui-ai/protocol';
-import type { RenderStore } from '@ggui-ai/mcp-server-core';
+import type { GguiSessionStore } from '@ggui-ai/mcp-server-core';
 import type { SharedHandler } from '../types.js';
 
 const inputSchema = {
@@ -113,7 +113,7 @@ interface SyncContextRejected {
 type SyncContextOutput = SyncContextAccepted | SyncContextRejected;
 
 export interface CreateGguiSyncContextHandlerDeps {
-  readonly renderStore: RenderStore;
+  readonly renderStore: GguiSessionStore;
 }
 
 /**
@@ -221,7 +221,7 @@ export function createGguiSyncContextHandler(
       // — same render.id replaces the existing entry in place. No new
       // event sequence bump for context sync; this is internal state-
       // mirroring, not an observable agent event.
-      const updated: ComponentRender = {
+      const updated: ComponentGguiSession = {
         ...stored.render,
         contextSnapshot: snapshot as JsonObject,
       };

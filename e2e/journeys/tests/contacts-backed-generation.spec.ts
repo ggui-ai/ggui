@@ -63,7 +63,7 @@ const FIXTURE_CWD = resolve(__dirname, 'fixtures/contacts-mount-via-serve');
 /** Generous — real Anthropic call + browser boot + layered assertions. */
 const TEST_TIMEOUT_MS = 180_000;
 
-/** Render-wait budget — the RPC blocks on real generation. */
+/** GguiSession-wait budget — the RPC blocks on real generation. */
 const GENERATION_BUDGET_MS = 120_000;
 
 /** Must match `contacts-mount.mjs` seed exactly — copied as literals (spec can't import ESM fixtures). */
@@ -173,7 +173,7 @@ test.describe.serial(
       // assertions stay shape-only per CLAUDE.md.
       // ─────────────────────────────────────────────────────────
       const intent = [
-        `Render a simple contact card or list showing the user's contacts.`,
+        `GguiSession a simple contact card or list showing the user's contacts.`,
         `Emphasize "${SEEDED_NAME_FIRST}" — they are the primary contact.`,
         `Use only basic HTML elements; no external assets.`,
       ].join(' ');
@@ -245,7 +245,7 @@ test.describe.serial(
 
       await page.goto(`${baseUrl}/s/${shortCode}`, { waitUntil: 'networkidle' });
 
-      // The console RenderViewer mounts the rendered UI inside a
+      // The console GguiSessionViewer mounts the rendered UI inside a
       // plain `<iframe srcDoc>` (read-only / visual-only — post C1-fix
       // it no longer carries the `<McpAppIframe>` lifecycle-mirror
       // attribute). Readiness is gated by the inner `ggui-rcr-*`

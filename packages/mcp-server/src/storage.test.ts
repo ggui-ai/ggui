@@ -25,7 +25,7 @@ afterAll(() => {
 });
 
 /**
- * RenderStore / VectorStore interfaces don't declare `close()` —
+ * GguiSessionStore / VectorStore interfaces don't declare `close()` —
  * only the sqlite variants do. Duck-type close to release file
  * handles at test end without widening the public interface.
  */

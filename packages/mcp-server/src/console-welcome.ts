@@ -215,7 +215,7 @@ export const renderWelcomeHtml = (
         <p class="eyebrow">Public surfaces</p>
         <div class="surfaces">
           <div class="surface">
-            <span class="surface-label">Render viewer</span>
+            <span class="surface-label">GguiSession viewer</span>
             <code>/s/&lt;short-code&gt;</code>
             <span class="desc">Open the live render your agent linked you to.</span>
           </div>

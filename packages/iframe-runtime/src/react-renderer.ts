@@ -278,7 +278,7 @@ class RcrErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState>
 
 export interface ReactRootMountOptions {
   /**
-   * Render whose componentCode + props drive the mount. Only
+   * GguiSession whose componentCode + props drive the mount. Only
    * `componentCode` + `props` are read here; the caller is
    * responsible for wrapping this with a `<GguiWireProvider>` at the
    * higher-level dispatcher (see `render-item.ts`).

@@ -1,5 +1,5 @@
 /**
- * `LiveRenderPill` — compact zero-click portal to the most-recent
+ * `LiveGguiSessionPill` — compact zero-click portal to the most-recent
  * live render, making the `/s/<shortCode>` viewer discoverable from
  * the top nav.
  *
@@ -30,13 +30,13 @@ import { isAdminRoute, navigateTo, type Route } from '../router.js';
 
 const POLL_INTERVAL_MS = 10_000;
 
-interface RenderRow {
+interface GguiSessionRow {
   readonly renderId: string;
   readonly shortCode?: string;
 }
 
-interface RendersBody {
-  readonly renders: readonly RenderRow[];
+interface GguiSessionsBody {
+  readonly renders: readonly GguiSessionRow[];
   readonly total: number;
 }
 
@@ -44,7 +44,7 @@ type PillState =
   | { readonly kind: 'idle' }
   | { readonly kind: 'active'; readonly total: number; readonly shortCode: string };
 
-export function LiveRenderPill({
+export function LiveGguiSessionPill({
   route,
 }: {
   readonly route: Route;
@@ -73,7 +73,7 @@ export function LiveRenderPill({
         if (!res.ok) {
           if (!cancelled) setState({ kind: 'idle' });
         } else {
-          const body = (await res.json()) as RendersBody;
+          const body = (await res.json()) as GguiSessionsBody;
           if (cancelled) return;
           const withShort = body.renders.find(
             (r) => typeof r.shortCode === 'string',

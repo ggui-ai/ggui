@@ -25,7 +25,7 @@
  */
 import { makeContractErrorPayload } from '@ggui-ai/protocol';
 
-import type { Render } from './render.js';
+import type { GguiSession } from './render.js';
 import type { ToolRegistry } from './tool-registry.js';
 
 /** Timeout the `timeout` handler exceeds; the kit's matcher
@@ -78,7 +78,7 @@ export function parseActionFrame(frame: unknown): IncomingActionFrame | undefine
 }
 
 export interface DispatchContext {
-  readonly render: Render;
+  readonly render: GguiSession;
   readonly tools: ToolRegistry;
 }
 
@@ -241,7 +241,7 @@ export async function dispatchAction(
  * preserves that contract.
  */
 async function dispatchRefreshStreams(
-  render: Render,
+  render: GguiSession,
   tools: ToolRegistry,
 ): Promise<void> {
   for (const spec of render.streamSpecs.values()) {
@@ -305,7 +305,7 @@ interface EmitContractErrorInput {
   readonly sourceActionType?: 'wired-action' | 'refresh-stream';
 }
 
-function emitContractError(render: Render, input: EmitContractErrorInput): void {
+function emitContractError(render: GguiSession, input: EmitContractErrorInput): void {
   // Canonical SPEC §4.4 `ContractErrorPayload` via the central
   // builder. Nested `error: {code, message, causedBy}` alongside
   // flat `toolName` / `actionName` / `sourceAction` / `timestamp`.
@@ -334,7 +334,7 @@ function emitContractError(render: Render, input: EmitContractErrorInput): void 
   });
 }
 
-function broadcast(render: Render, frame: unknown): void {
+function broadcast(render: GguiSession, frame: unknown): void {
   for (const subscriber of render.subscribers) {
     try {
       subscriber.send(frame);

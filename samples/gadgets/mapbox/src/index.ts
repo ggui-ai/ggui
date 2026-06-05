@@ -117,7 +117,7 @@ const useMapboxImpl: GadgetHook<MapboxValue, MapboxOptions> = () => {
 export const useMapbox = createGguiGadget<MapboxValue, MapboxOptions>({
   hook: 'useMapbox',
   description:
-    'Render an interactive Mapbox GL map with style, pan/zoom controls, and marker support. Returns a container ref to attach to a <div>.',
+    'GguiSession an interactive Mapbox GL map with style, pan/zoom controls, and marker support. Returns a container ref to attach to a <div>.',
   usage:
     "Mount when the intent names a rendered map and the operator has stamped a Mapbox access token on App.publicEnv. Pass `center: [lng, lat]` (Mapbox uses lng-first order, opposite of Leaflet) + `zoom: 2..22`. Default style is `mapbox://styles/mapbox/streets-v12`; declare a custom `styleUrl` to use a different style (and add its origin to the wrapper registration's `connect[]`).",
   example: {

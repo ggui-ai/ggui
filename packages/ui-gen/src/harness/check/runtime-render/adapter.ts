@@ -147,7 +147,7 @@ export function classifyRenderCrashFix(reason: string): string {
   }
   if (r.includes("is not iterable") || r.includes("symbol(symbol.iterator)")) {
     return (
-      "Render iterated over a non-array. Find the `for...of`, `[...spread]`, " +
+      "GguiSession iterated over a non-array. Find the `for...of`, `[...spread]`, " +
       "or `.map`/`.filter`/`.reduce` call that crashed and either: (a) " +
       "default the value to `[]` (`const items = props.items ?? []`), or " +
       "(b) check it's an array before iterating (`Array.isArray(x) && ...`)."
@@ -263,7 +263,7 @@ function toEvalIssue(issue: RenderCheckIssue): EvalIssue | null {
         category: "contract",
         subcategory,
         description: `${issue.reason}${diagSuffix}`,
-        fix: `Render props.${subject} somewhere in the JSX (e.g., <Text>{props.${subject}}</Text>). If you display a derived/formatted version, this warn may be a false positive.`,
+        fix: `GguiSession props.${subject} somewhere in the JSX (e.g., <Text>{props.${subject}}</Text>). If you display a derived/formatted version, this warn may be a false positive.`,
       };
 
     case "stream-rerender":

@@ -9,7 +9,7 @@
  * Both routes are admin-gated server-side. The page uses no auth-token
  * client-side; the cookie + admin-HTML gate handle it.
  *
- * Render shape: reverse-chronological list of cards. Each card shows:
+ * GguiSession shape: reverse-chronological list of cards. Each card shows:
  *   - timestamp + provider/model
  *   - kind chip (callText / callTools / callWithTools)
  *   - duration + token counts (in / out / cache-read / cache-write)

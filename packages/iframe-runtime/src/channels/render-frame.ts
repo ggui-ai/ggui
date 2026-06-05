@@ -19,7 +19,7 @@
  */
 
 import type { ChannelHandler } from '@ggui-ai/live-channel';
-import type { RenderPayload, Render } from '@ggui-ai/protocol';
+import type { RenderPayload, GguiSession } from '@ggui-ai/protocol';
 
 import type { ChannelTransportRouter } from '../channel-transport.js';
 import { setConnectedStatus, type StatusRefs } from '../status-dom.js';
@@ -44,7 +44,7 @@ export interface RenderHandlerDeps {
    * `await`s the apply before activating the per-channel transport
    * so the router targets the render React already mounted.
    */
-  readonly applyRender?: (render: Render) => Promise<void>;
+  readonly applyRender?: (render: GguiSession) => Promise<void>;
   /**
    * Renderer-mode hook — returns the per-channel transport router so
    * the render handler can activate `source.tool` channel subscriptions

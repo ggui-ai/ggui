@@ -49,7 +49,7 @@ const WEATHER_CONTRACT: DataContract = {
   },
 };
 
-interface RenderStructured {
+interface GguiSessionStructured {
   cache?: RenderCacheMarker;
 }
 
@@ -119,7 +119,7 @@ describe('host-simulator: Slice 16e blueprint-first registry', () => {
     intent: string;
     contract?: DataContract;
     props?: Record<string, unknown>;
-  }): Promise<RenderStructured> {
+  }): Promise<GguiSessionStructured> {
     if (!host) throw new Error('host not booted');
     const flow = await host.openRender({
       intent: args.intent,
@@ -132,7 +132,7 @@ describe('host-simulator: Slice 16e blueprint-first registry', () => {
         : {}),
       ...(args.props !== undefined ? { props: args.props } : {}),
     });
-    return flow.render.structuredContent as RenderStructured;
+    return flow.render.structuredContent as GguiSessionStructured;
   }
 
   it('paraphrase resilience: same contract under different intent prose hits Tier 1', async () => {
@@ -187,7 +187,7 @@ describe('host-simulator: Slice 16e blueprint-first registry', () => {
     });
     expect(calls.count).toBe(1);
 
-    // Render a STRUCTURALLY different contract — even with prose that
+    // GguiSession a STRUCTURALLY different contract — even with prose that
     // sounds related, the contract-key is different so Tier 1 misses.
     // Tier 2 has only one candidate (notepad), and the mock embedder
     // path won't pull that on a wholly disparate context shape — so

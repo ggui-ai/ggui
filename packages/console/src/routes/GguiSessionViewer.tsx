@@ -1,7 +1,7 @@
 /**
- * Render viewer route — `/s/<shortCode>`.
+ * GguiSession viewer route — `/s/<shortCode>`.
  *
- * **Posture: read-only / visual-only.** The console RenderViewer is
+ * **Posture: read-only / visual-only.** The console GguiSessionViewer is
  * an admin inspector view — it shows what the agent rendered into a
  * given render. It does NOT forward end-user interactions back to
  * any MCP host (the console has no MCP client to relay through), and
@@ -74,7 +74,7 @@ import { navigateTo } from '../router.js';
  * Response shape of `POST /ggui/console/render-cookie`. Must
  * match `packages/mcp-server/src/server.ts`'s cookie-mint route.
  */
-interface RenderCookieResponse {
+interface GguiSessionCookieResponse {
   readonly renderId: string;
   readonly appId: string;
   readonly expiresAt: number;
@@ -85,7 +85,7 @@ interface RenderCookieResponse {
  * endpoint. Structurally compatible with
  * `@modelcontextprotocol/sdk`'s `ResourceContents`.
  */
-interface RenderResourceContents {
+interface GguiSessionResourceContents {
   readonly uri: string;
   readonly mimeType: string;
   readonly text: string;
@@ -95,27 +95,27 @@ interface RenderResourceContents {
  * Shape of `GET /ggui/console/render-resource?render=<id>`'s
  * success body.
  */
-interface RenderResourceResponse {
-  readonly contents: readonly RenderResourceContents[];
+interface GguiSessionResourceResponse {
+  readonly contents: readonly GguiSessionResourceContents[];
 }
 
 type BootstrapState =
   | { readonly kind: 'minting' }
   | {
       readonly kind: 'loading-resource';
-      readonly render: RenderCookieResponse;
+      readonly render: GguiSessionCookieResponse;
     }
   | {
       readonly kind: 'ready';
-      readonly render: RenderCookieResponse;
-      readonly resource: RenderResourceContents;
+      readonly render: GguiSessionCookieResponse;
+      readonly resource: GguiSessionResourceContents;
       readonly meta: McpAppAiGguiRenderMeta;
     }
   | { readonly kind: 'not-found' }
   | { readonly kind: 'resource-failed'; readonly message: string }
   | { readonly kind: 'error'; readonly message: string };
 
-export function RenderViewer({
+export function GguiSessionViewer({
   shortCode,
 }: {
   readonly shortCode: string;
@@ -148,7 +148,7 @@ export function RenderViewer({
           });
           return;
         }
-        const render = (await res.json()) as RenderCookieResponse;
+        const render = (await res.json()) as GguiSessionCookieResponse;
         setState({ kind: 'loading-resource', render });
       } catch (err) {
         if (controller.signal.aborted) return;
@@ -205,7 +205,7 @@ export function RenderViewer({
           return;
         }
         const resourceBody =
-          (await resourceRes.json()) as RenderResourceResponse;
+          (await resourceRes.json()) as GguiSessionResourceResponse;
         const first = resourceBody.contents[0];
         if (!first) {
           setState({
@@ -278,7 +278,7 @@ export function RenderViewer({
         />
       ) : state.kind === 'resource-failed' ? (
         <UnresolvedCard
-          title="Render resource unavailable"
+          title="GguiSession resource unavailable"
           body={<p className="ggui-muted">{state.message}</p>}
         />
       ) : (
@@ -335,8 +335,8 @@ function LiveViewer({
   meta,
   shortCode,
 }: {
-  readonly render: RenderCookieResponse;
-  readonly resource: RenderResourceContents;
+  readonly render: GguiSessionCookieResponse;
+  readonly resource: GguiSessionResourceContents;
   readonly meta: McpAppAiGguiRenderMeta;
   readonly shortCode: string;
 }): ReactElement {

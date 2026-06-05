@@ -408,7 +408,7 @@ function buildSdkComparison(results: BenchmarkRunResult[]): SdkComparisonMatrix 
 }
 
 /**
- * Render a benchmark report as a markdown string.
+ * GguiSession a benchmark report as a markdown string.
  */
 export function renderReportMarkdown(report: BenchmarkReport): string {
   const lines: string[] = [];
@@ -443,7 +443,7 @@ export function renderReportMarkdown(report: BenchmarkReport): string {
   lines.push('');
 
   // Multi-Generator Comparison.
-  // Render only when more than one generator is represented in the
+  // GguiSession only when more than one generator is represented in the
   // run — single-generator reports stay backward-compatible.
   if (report.generatorSummaries.length > 1) {
     lines.push('## Multi-generator Comparison');

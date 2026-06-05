@@ -336,7 +336,7 @@ export const McpAppIframe = forwardRef<McpAppIframeRef, McpAppIframeProps>(
       permissions?.camera !== true && permissions?.microphone !== true;
 
     if (mountSource === null) {
-      // Render an empty View so the caller still sees a slot; onError
+      // GguiSession an empty View so the caller still sees a slot; onError
       // already fired the bootstrap-failed error.
       return (
         <View

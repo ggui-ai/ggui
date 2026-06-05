@@ -49,7 +49,7 @@ import Database, {
   type Database as SqliteDatabase,
   type Statement as SqliteStatement,
 } from 'better-sqlite3';
-import type { RenderStatus } from '@ggui-ai/protocol';
+import type { GguiSessionStatus } from '@ggui-ai/protocol';
 import {
   type PendingEventConsumeResult,
   type PendingEventConsumer,
@@ -65,7 +65,7 @@ export interface SqlitePendingEventConsumerOptions {
   filename?: string;
   /**
    * Optional pre-opened `better-sqlite3` Database instance. Lets
-   * hosts share one connection between RenderStore and consumer.
+   * hosts share one connection between GguiSessionStore and consumer.
    * Mutually exclusive with `filename`.
    */
   db?: SqliteDatabase;
@@ -77,7 +77,7 @@ export interface SqlitePendingEventConsumerOptions {
 
 interface PipeRow {
   render_id: string;
-  status: RenderStatus;
+  status: GguiSessionStatus;
   last_activity_at: number;
   expires_at: number;
 }

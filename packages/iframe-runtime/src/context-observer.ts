@@ -255,7 +255,7 @@ export interface ContextSnapshotPoster {
  *      — the existing path; agent's LLM reads these via
  *      `read_widget_context` for in-turn awareness.
  *   2. `tools/call` for `ggui_runtime_sync_context` — the server mirror.
- *      Server stores the snapshot on the active Render; chat-
+ *      Server stores the snapshot on the active GguiSession; chat-
  *      history rehydrate seeds `contextSlots[i].default` with the
  *      snapshotted values, restoring the user's last-known state.
  *
@@ -480,7 +480,7 @@ export function createContextStateHost(deps: {
   }): ReactElement => {
     const { slots, children } = props;
     if (slots.length === 0) {
-      // Render children inside a no-op Fragment so the return type is
+      // GguiSession children inside a no-op Fragment so the return type is
       // ReactElement uniformly (children is ReactNode).
       return deps.react.createElement(
         deps.react.Fragment,

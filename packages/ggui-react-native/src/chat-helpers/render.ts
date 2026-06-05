@@ -1,14 +1,14 @@
 import type { ContentBlock } from '@ggui-ai/protocol';
 
 /**
- * Pull a durable Render-shaped object out of a `tool_result` block's
+ * Pull a durable GguiSession-shaped object out of a `tool_result` block's
  * `content` payload. Tolerant of shapes:
- *   - Direct: { id, componentCode, props, ... }                (Render itself)
+ *   - Direct: { id, componentCode, props, ... }                (GguiSession itself)
  *   - Wrapped: { render: {...} }
  *   - Nested: { result: { render: {...} } }
  *   - Nested direct: { result: { id, componentCode, ... } }
  *
- * Returns `null` if no Render can be found — caller falls back to
+ * Returns `null` if no GguiSession can be found — caller falls back to
  * placeholder rendering.
  *
  * Post-Phase-B: the wrapper key was `stackItem` pre-collapse; now it's

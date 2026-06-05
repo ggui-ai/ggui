@@ -131,7 +131,7 @@ test.describe.serial("OSS hero path — `ggui serve` (real CLI bin)", () => {
     // trying to load one.
     // Hero-path identity: "no account, no cloud, no BYOK". The spec
     // deliberately proves `codeReady:false` + the truthful empty-state
-    // in the RenderViewer. We strip BYOK provider keys from the
+    // in the GguiSessionViewer. We strip BYOK provider keys from the
     // forwarded env because Playwright's `.env.local` loader injects
     // them into `process.env` for the live-generation specs — without
     // this, the CLI would detect BYOK, run the real generator, and

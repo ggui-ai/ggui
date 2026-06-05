@@ -18,17 +18,17 @@
 
 import { z } from 'zod';
 import type {
-  ComponentRender,
+  ComponentGguiSession,
   GguiEmitInput,
   GguiEmitOutput,
   StreamEnvelope,
 } from '@ggui-ai/protocol';
-import type { RenderStore } from '@ggui-ai/mcp-server-core';
+import type { GguiSessionStore } from '@ggui-ai/mcp-server-core';
 import type { HandlerContext, SharedHandler } from '../types.js';
-import { RenderNotFoundError } from './errors.js';
+import { GguiSessionNotFoundError } from './errors.js';
 import {
   handleStream,
-  type RenderStreamTarget,
+  type GguiSessionStreamTarget,
   type SendEnvelopeFn,
 } from './handle-stream.js';
 
@@ -44,7 +44,7 @@ const outputSchema = {
 } as const;
 
 export interface GguiEmitHandlerDeps {
-  readonly renderStore: RenderStore;
+  readonly renderStore: GguiSessionStore;
   /**
    * Caller-supplied envelope sink. Invoked after `handleStream`
    * validates + stamps. OSS hosts wrap an in-process render
@@ -92,10 +92,10 @@ export function createGguiEmitHandler(
         .parse(rawInput);
 
       // Tenancy gate. Cross-tenant + missing surface uniformly as
-      // RenderNotFoundError so cross-tenant existence isn't leaked.
+      // GguiSessionNotFoundError so cross-tenant existence isn't leaked.
       const stored = await deps.renderStore.get(renderId);
       if (!stored || stored.appId !== ctx.appId) {
-        throw new RenderNotFoundError(renderId);
+        throw new GguiSessionNotFoundError(renderId);
       }
 
       // Extract the streamSpec from the resolved render (component
@@ -103,10 +103,10 @@ export function createGguiEmitHandler(
       const streamSpec =
         stored.render.type === undefined ||
         stored.render.type === 'component'
-          ? (stored.render as ComponentRender).streamSpec
+          ? (stored.render as ComponentGguiSession).streamSpec
           : undefined;
 
-      const target: RenderStreamTarget = {
+      const target: GguiSessionStreamTarget = {
         renderId,
         ...(streamSpec !== undefined ? { streamSpec } : {}),
       };

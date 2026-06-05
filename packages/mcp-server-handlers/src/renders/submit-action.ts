@@ -211,7 +211,7 @@ export interface GguiSubmitActionHandlerDeps {
    * writes. Tests + minimal composers can omit; production OSS +
    * cloud wire it from the shared render store.
    */
-  readonly renderStore?: import('@ggui-ai/mcp-server-core').RenderStore;
+  readonly renderStore?: import('@ggui-ai/mcp-server-core').GguiSessionStore;
   /**
    * Optional logger for best-effort audit-write failures. When the
    * dual-write to `renderStore.appendEvent` errors (e.g., SQLite

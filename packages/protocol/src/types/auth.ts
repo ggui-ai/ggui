@@ -19,7 +19,7 @@ export type GguiAuthScope = 'email' | 'name' | 'picture';
  * Matches the backend UserAuthConfig schema.
  *
  * BYO has two flavors:
- *   - Render-surface HMAC-JWT shortcut: {@link authUrl} / {@link callbackSecret} /
+ *   - GguiSession-surface HMAC-JWT shortcut: {@link authUrl} / {@link callbackSecret} /
  *     {@link tokenClaimUserId} (`your-app.example/auth/callback`, iframe UIs).
  *   - Portal BYO OAuth 2.1 flow: the `oauth*` fields below
  *     (`your-app.example/oauth/byo/callback`, native Portal).

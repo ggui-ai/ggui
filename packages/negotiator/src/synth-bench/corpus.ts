@@ -150,9 +150,9 @@ const LEAFLET_DESCRIPTOR: GadgetDescriptor = {
     {
       component: 'LeafletMap',
       description:
-        'Render an interactive Leaflet map with a tile layer, pan/zoom controls, and markers. The component owns the container, sizing, and lifecycle.',
+        'GguiSession an interactive Leaflet map with a tile layer, pan/zoom controls, and markers. The component owns the container, sizing, and lifecycle.',
       usage:
-        'Render `<LeafletMap center={[lat, lng]} zoom={2..20} />` when the intent names a rendered map (location browsing, route preview, delivery tracking, points-of-interest grid).',
+        'GguiSession `<LeafletMap center={[lat, lng]} zoom={2..20} />` when the intent names a rendered map (location browsing, route preview, delivery tracking, points-of-interest grid).',
     },
   ],
 };
@@ -172,9 +172,9 @@ const CHART_DESCRIPTOR: GadgetDescriptor = {
     {
       component: 'Chart',
       description:
-        'Render a responsive SVG bar chart from labelled magnitudes.',
+        'GguiSession a responsive SVG bar chart from labelled magnitudes.',
       usage:
-        'Render `<Chart data={[{ label, value }]} />` when the intent names a bar chart or a metric breakdown.',
+        'GguiSession `<Chart data={[{ label, value }]} />` when the intent names a bar chart or a metric breakdown.',
     },
     {
       hook: 'useChartTheme',

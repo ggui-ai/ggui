@@ -16,13 +16,13 @@
  *
  * Lane 3 of the 4-lane taxonomy (in-process fake, no browser). The
  * viewer-side mount proof lives in
- * `packages/console/src/routes/RenderViewer.test.tsx`.
+ * `packages/console/src/routes/GguiSessionViewer.test.tsx`.
  */
 import { afterEach, describe, expect, it } from 'vitest';
 import type { Server as HttpServer } from 'node:http';
 import { InMemoryAuthAdapter } from '@ggui-ai/mcp-server-core/in-memory';
 import {
-  InMemoryRenderStore,
+  InMemoryGguiSessionStore,
   InMemoryShortCodeIndex,
 } from '@ggui-ai/mcp-server-core/in-memory';
 import { createGguiServer, type GguiServer } from './server.js';
@@ -51,7 +51,7 @@ interface Fixture {
  * so callers can ride it on subsequent requests.
  */
 async function bootAndMintCookie(): Promise<Fixture> {
-  const renderStore = new InMemoryRenderStore();
+  const renderStore = new InMemoryGguiSessionStore();
   const render = await renderStore.create({ appId: 'app-console' });
   const shortCodeIndex = new InMemoryShortCodeIndex();
   await shortCodeIndex.put('scode1234', {
@@ -261,7 +261,7 @@ describe('GET /ggui/console/renders/:renderId/meta', () => {
     // Same console + render-channel wiring but WITHOUT mcpApps —
     // the meta route must honestly 503 instead of minting a token the
     // subscribe path would reject at handshake.
-    const renderStore = new InMemoryRenderStore();
+    const renderStore = new InMemoryGguiSessionStore();
     const render = await renderStore.create({ appId: 'app-console' });
     const shortCodeIndex = new InMemoryShortCodeIndex();
     await shortCodeIndex.put('scode1234', {
@@ -310,7 +310,7 @@ describe('GET /ggui/console/renders/:renderId/meta', () => {
 
 // The stack-snapshot route was retired in the Phase-B render-identity
 // collapse — no session-stack array exists post Phase-B, just one
-// Render row. The console's `<RenderViewer>` fan-out is now
+// GguiSession row. The console's `<GguiSessionViewer>` fan-out is now
 // (render-resource, renders/:id/meta) only; what was formerly
 // stack-snapshot data is reachable as a single `render` row via
 // `GET /ggui/console/render-resource?render=<id>`.

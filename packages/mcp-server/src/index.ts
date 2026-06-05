@@ -27,15 +27,15 @@
  */
 
 export type { HandlerContext, SharedHandler } from '@ggui-ai/mcp-server-handlers';
-// `Render` is the canonical render shape the OSS CLI composes when
+// `GguiSession` is the canonical render shape the OSS CLI composes when
 // authoring no-credentials fallback cards. Re-exported here so
 // embedders don't need a separate `@ggui-ai/protocol` dependency
 // for the type alone.
 export type {
   GadgetDescriptor,
   McpUiDisplayMode,
-  Render,
-  SystemRender,
+  GguiSession,
+  SystemGguiSession,
 } from '@ggui-ai/protocol';
 export type {
   GenerationCredentials,
@@ -47,7 +47,7 @@ export type {
 // dependency.
 export {
   NO_CREDENTIALS_SYSTEM_CARD_KIND,
-  buildNoCredentialsRender,
+  buildNoCredentialsGguiSession,
 } from '@ggui-ai/mcp-server-handlers';
 export { createGguiServer, defaultHandlers } from './server.js';
 export type {
@@ -77,7 +77,7 @@ export { validateMcpServices, validateServicePath } from './mcp-mounts.js';
 // for `_ggui:preview`; `mergeReservedValidators` layers caller-provided
 // extras on top. `createGguiServer` composes these automatically —
 // consumers that embed the render-channel server directly (via
-// `createRenderChannelServer`) wire them up manually.
+// `createGguiSessionChannelServer`) wire them up manually.
 export {
   composePreviewReservedValidator,
   mergeReservedValidators,
@@ -96,7 +96,7 @@ export type {
   SchemaCompatFinding,
   SchemaCompatMode,
   SchemaCompatReport,
-  RenderContractShape,
+  GguiSessionContractShape,
   ToolSchemaRef,
 } from './schema-compat.js';
 export type { ServerInfo } from './build-mcp.js';
@@ -108,13 +108,13 @@ export {
 export { createConsoleLogger } from './logger.js';
 export type { Logger } from './logger.js';
 export {
-  createRenderChannelServer,
+  createGguiSessionChannelServer,
   DEFAULT_RENDER_CHANNEL_PATH,
   DEFAULT_WIRED_TOOL_TIMEOUT_MS,
 } from './render-channel.js';
 export type {
-  RenderChannelOptions,
-  RenderChannelServer,
+  GguiSessionChannelOptions,
+  GguiSessionChannelServer,
   WiredActionContext,
   WiredActionRouter,
 } from './render-channel.js';

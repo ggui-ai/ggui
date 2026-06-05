@@ -41,12 +41,12 @@ export type {
 export type {
   ActionEnvelope,
   EventType,
-  // Single Render union (ComponentRender, SystemRender, McpAppsRender)
+  // Single GguiSession union (ComponentGguiSession, SystemGguiSession, McpAppsGguiSession)
   // keyed by the flat `renderId`.
-  Render,
-  ComponentRender,
-  SystemRender,
-  RenderStatus,
+  GguiSession,
+  ComponentGguiSession,
+  SystemGguiSession,
+  GguiSessionStatus,
   AdapterPermissions,
   PermissionStatus,
   SubscribePayload,
@@ -103,21 +103,21 @@ export { GguiProvider, useGguiContext, useAdapter } from './components/GguiProvi
 export type { GguiProviderProps } from './components/GguiProvider';
 export type { AdapterRegistry } from './context/GguiContext';
 
-// Render
+// GguiSession
 export { GguiRender } from './components/GguiRender';
-export type { GguiRenderProps, RenderApi, RenderInfo } from './components/GguiRender';
+export type { GguiRenderProps, GguiSessionApi, GguiSessionInfo } from './components/GguiRender';
 
 // Dynamic Component Rendering
 export {
   DynamicComponent,
-  RenderRenderer,
+  GguiSessionRenderer,
   registerComponent,
   getComponent,
   clearRegistry,
 } from './components/DynamicComponent';
 export type {
   DynamicComponentProps,
-  RenderRendererProps,
+  GguiSessionRendererProps,
   ComponentDescriptor,
 } from './components/DynamicComponent';
 

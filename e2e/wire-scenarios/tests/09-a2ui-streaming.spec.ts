@@ -4,7 +4,7 @@
  * OSS `ggui serve` wires a deterministic provisional-preview emitter
  * (`createDeterministicPreviewEmitter`) on `provisionalPreview.emitter`.
  * The handler kicks off the emitter at render time, BEFORE
- * `runGenerationIntoRender` calls the real LLM. Frames stream over
+ * `runGenerationIntoGguiSession` calls the real LLM. Frames stream over
  * the reserved `_ggui:preview` channel, and the iframe-runtime's
  * `mountProvisional` renders the A2UI surface visibly while cold-gen
  * runs in the background. When the authoritative componentCode lands,

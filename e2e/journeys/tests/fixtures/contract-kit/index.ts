@@ -12,7 +12,7 @@ export type {
   TestCase,
   // Setup vocabulary
   SetupStep,
-  CreateRenderStep,
+  CreateGguiSessionStep,
   RegisterToolStep,
   EmitEnvelopeStep,
   SeedChannelStep,

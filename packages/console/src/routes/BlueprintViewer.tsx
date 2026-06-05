@@ -4,8 +4,8 @@
  * One-shot mount surface for a manifest-registered blueprint. The SPA
  * fetches the blueprint's compiled bundle from
  * `GET /ggui/console/blueprint/:id`, then hands the code to
- * `RenderRenderer` — the same primitive shells use to mount a single
- * `ComponentRender`. No WebSocket, no render cookie; a blueprint is
+ * `GguiSessionRenderer` — the same primitive shells use to mount a single
+ * `ComponentGguiSession`. No WebSocket, no render cookie; a blueprint is
  * an authored UI rendering in isolation.
  *
  * Route scope:
@@ -15,10 +15,10 @@
  *     artifact; the operator or agent wraps it in richer context
  *     elsewhere (the dev chat, a committed render) when interactivity
  *     is needed.
- *   - Error shapes mirror the RenderViewer's: 404 (id unknown),
+ *   - Error shapes mirror the GguiSessionViewer's: 404 (id unknown),
  *     4xx/5xx (server error), network fail (raw message).
  *
- * Visual shell follows the brand kit (same as `RenderViewer`): one
+ * Visual shell follows the brand kit (same as `GguiSessionViewer`): one
  * section head, a pane-style header for blueprint identity + content
  * type, and the mount card stamping `data-ggui-render-entry="component"`
  * + `data-ggui-code-ready="true"` + `data-ggui-blueprint-id` — a
@@ -30,7 +30,7 @@ import {
   type ReactElement,
   type ReactNode,
 } from 'react';
-import { RenderRenderer } from '@ggui-ai/react';
+import { GguiSessionRenderer } from '@ggui-ai/react';
 import { SectionHead } from '../brand/SectionHead.js';
 import { StatusBadge } from '../brand/StatusBadge.js';
 import { navigateTo } from '../router.js';
@@ -130,7 +130,7 @@ export function BlueprintViewer({
 }
 
 /**
- * Mount card — wraps `RenderRenderer` in the canonical
+ * Mount card — wraps `GguiSessionRenderer` in the canonical
  * `data-ggui-render-entry="component"` shell. Reusing this data-attr
  * contract across console surfaces lets browser specs target one
  * selector against both in-process and blueprint mounts.
@@ -169,7 +169,7 @@ function BlueprintMount({
         <TryLiveAction blueprintId={blueprint.blueprintId} />
       </div>
       <div className="ggui-pane__body">
-        <RenderRenderer
+        <GguiSessionRenderer
           render={{
             id: blueprint.blueprintId,
             componentCode: blueprint.code,

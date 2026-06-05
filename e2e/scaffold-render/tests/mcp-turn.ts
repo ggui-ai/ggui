@@ -63,7 +63,7 @@ export interface RenderCacheMarker {
  * `variantKey` + `contractHash` + `cache` are the reuse-visibility fields
  * surfaced on `renderOutputSchema`.
  */
-export interface RenderResult {
+export interface GguiSessionResult {
   isError?: boolean;
   renderId?: string;
   action?: string;
@@ -76,7 +76,7 @@ export interface RenderResult {
 /** ggui_render CallToolResult envelope — structured fields ride on `structuredContent`. */
 export interface RenderCallResult {
   isError?: boolean;
-  structuredContent?: RenderResult;
+  structuredContent?: GguiSessionResult;
 }
 
 /** Local mirror of the protocol BlueprintVariance (kept dependency-free). */
@@ -94,7 +94,7 @@ export interface RenderOverride {
 }
 
 /** The parsed render output, the handshake suggestion, and the wall-clock ms. */
-export interface RenderOnceResult extends RenderResult {
+export interface GguiSessionOnceResult extends GguiSessionResult {
   ms: number;
   suggestion?: HandshakeSuggestion;
 }
@@ -157,7 +157,7 @@ export async function renderOnce(
     forceCreate: boolean;
     override?: RenderOverride;
   },
-): Promise<RenderOnceResult> {
+): Promise<GguiSessionOnceResult> {
   const hs = await mcpCall(gguiUrl, 'tools/call', {
     name: 'ggui_handshake',
     arguments: {

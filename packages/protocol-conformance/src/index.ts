@@ -24,7 +24,7 @@ export type {
   TestCase,
   // Setup vocabulary (JSON-authoring surface)
   SetupStep,
-  CreateRenderStep,
+  CreateGguiSessionStep,
   RegisterToolStep,
   EmitEnvelopeStep,
   SeedChannelStep,
@@ -59,7 +59,7 @@ export type {
   ConformanceHost,
   // Setup directives (runtime surface — narrowed)
   SetupStep as HostSetupStep,
-  CreateRenderSetup,
+  CreateGguiSessionSetup,
   RegisterToolSetup,
   RegisterActionSpecSetup,
   EmitEnvelopeSetup,

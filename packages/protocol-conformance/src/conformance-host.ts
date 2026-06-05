@@ -57,7 +57,7 @@
  * never silently succeed.
  */
 export type SetupStep =
-  | CreateRenderSetup
+  | CreateGguiSessionSetup
   | RegisterToolSetup
   | RegisterActionSpecSetup
   | EmitEnvelopeSetup
@@ -66,7 +66,7 @@ export type SetupStep =
   | ServerVersionOverrideSetup
   | UnknownSetupStep;
 
-export interface CreateRenderSetup {
+export interface CreateGguiSessionSetup {
   readonly kind: 'create-render';
   readonly renderId: string;
   readonly appId?: string;

@@ -90,7 +90,7 @@ export type WithTrait<Own> =
   | TraitVariant<Own, TraitComponent>;
 
 /**
- * Render a div-rooted primitive's root element, composing a trait when
+ * GguiSession a div-rooted primitive's root element, composing a trait when
  * `as` is set:
  *
  *   - no trait  → a plain `<div>` carrying the primitive's resolved

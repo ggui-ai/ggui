@@ -17,8 +17,8 @@
 import type { McpAppAiGguiRenderMeta } from '@ggui-ai/protocol/integrations/mcp-apps';
 import type {
   HostContextProjection,
-  ComponentRender,
-  SystemRender,
+  ComponentGguiSession,
+  SystemGguiSession,
 } from '@ggui-ai/protocol';
 
 /**
@@ -33,10 +33,10 @@ export type ValidatedMcpAppAiGguiMeta = McpAppAiGguiRenderMeta;
 
 /**
  * The four server-assigned ledger fields on every wire-delivered
- * {@link Render}. They're stamped by the server's per-render event
+ * {@link GguiSession}. They're stamped by the server's per-render event
  * ledger — NOT derivable from the inline `__GGUI_META__` bootstrap.
  */
-type RenderLedgerFields =
+type GguiSessionLedgerFields =
   | 'eventSequence'
   | 'createdAt'
   | 'lastActivityAt'
@@ -44,26 +44,26 @@ type RenderLedgerFields =
 
 /**
  * The mount surface's INPUT contract — what `mountRender` / `applyRender`
- * accept. It is a {@link Render} minus the four server-assigned ledger
- * fields ({@link RenderLedgerFields}), so the runtime can mount the
+ * accept. It is a {@link GguiSession} minus the four server-assigned ledger
+ * fields ({@link GguiSessionLedgerFields}), so the runtime can mount the
  * compiled component (or system card) carried inline by the resource
- * shell BEFORE the authoritative wire `Render` arrives over the WS.
+ * shell BEFORE the authoritative wire `GguiSession` arrives over the WS.
  *
- * A full `Render` is assignable to `RenderSeedInput` (it carries every
+ * A full `GguiSession` is assignable to `GguiSessionSeedInput` (it carries every
  * field plus the ledger), so the WS-ack reconcile path passes a real
- * `Render` here unchanged; the inline-seed path passes the projection
- * built by `buildRenderSeedInput`. We do NOT fabricate the ledger fields
+ * `GguiSession` here unchanged; the inline-seed path passes the projection
+ * built by `buildGguiSessionSeedInput`. We do NOT fabricate the ledger fields
  * (Strict-Typing-First / no-type-laundering) — the first ack replaces
- * the seed with the authoritative `Render`.
+ * the seed with the authoritative `GguiSession`.
  *
- * Carries the SAME contract-spec fields a full `ComponentRender` does
+ * Carries the SAME contract-spec fields a full `ComponentGguiSession` does
  * (`propsSpec` / `streamSpec` / `actionSpec`), as `undefined` on a
  * seed — so the channel handlers that read those after the
  * `type !== 'mcpApps' && type !== 'system'` narrowing stay type-clean.
  */
-export type RenderSeedInput =
-  | Omit<ComponentRender, RenderLedgerFields>
-  | Omit<SystemRender, RenderLedgerFields>;
+export type GguiSessionSeedInput =
+  | Omit<ComponentGguiSession, GguiSessionLedgerFields>
+  | Omit<SystemGguiSession, GguiSessionLedgerFields>;
 
 // =============================================================================
 // Slice parse — the typed result of reading the per-window meta keys

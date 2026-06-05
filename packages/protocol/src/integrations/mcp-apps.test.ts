@@ -19,16 +19,16 @@ import {
   parseMcpAppAiGguiHostSessionMeta,
   toMcpAppEnvelope,
   deriveContextName,
-  isMcpAppsRender,
+  isMcpAppsGguiSession,
   isMcpAppLifecycleMessage,
   isGguiSubmitActionInput,
-  validateMcpAppsRender,
+  validateMcpAppsGguiSession,
   type McpAppAiGguiRenderMeta,
   type McpAppAiGguiHostSessionMeta,
   type McpAppLifecycleEvent,
   type McpAppLifecycleMessage,
   type McpAppLifecycleState,
-  type McpAppsRender,
+  type McpAppsGguiSession,
   type McpAppsToolVisibility,
   type SubmitActionKind,
   type GguiSubmitActionInput,
@@ -111,11 +111,11 @@ describe('non-leak lock: outbound meta types live on the integrations subpath', 
 });
 
 // =============================================================================
-// Slice B — inbound McpAppsRender shape
+// Slice B — inbound McpAppsGguiSession shape
 // =============================================================================
 
-describe('isMcpAppsRender type guard', () => {
-  const validItem: McpAppsRender = {
+describe('isMcpAppsGguiSession type guard', () => {
+  const validItem: McpAppsGguiSession = {
     type: 'mcpApps',
     id: 'item-1',
     createdAt: new Date().toISOString(),
@@ -125,21 +125,21 @@ describe('isMcpAppsRender type guard', () => {
       resourceUri: 'ui://stripe/checkout',
     },
   };
-  it('accepts well-shaped McpAppsRender', () => {
-    expect(isMcpAppsRender(validItem)).toBe(true);
+  it('accepts well-shaped McpAppsGguiSession', () => {
+    expect(isMcpAppsGguiSession(validItem)).toBe(true);
   });
   it('rejects component renders', () => {
-    expect(isMcpAppsRender({ id: 'c', componentCode: '' })).toBe(false);
+    expect(isMcpAppsGguiSession({ id: 'c', componentCode: '' })).toBe(false);
   });
   it('rejects null / primitives / non-mcpApps type', () => {
-    expect(isMcpAppsRender(null)).toBe(false);
-    expect(isMcpAppsRender('string')).toBe(false);
-    expect(isMcpAppsRender({ type: 'component' })).toBe(false);
+    expect(isMcpAppsGguiSession(null)).toBe(false);
+    expect(isMcpAppsGguiSession('string')).toBe(false);
+    expect(isMcpAppsGguiSession({ type: 'component' })).toBe(false);
   });
 });
 
-describe('validateMcpAppsRender', () => {
-  const base: McpAppsRender = {
+describe('validateMcpAppsGguiSession', () => {
+  const base: McpAppsGguiSession = {
     type: 'mcpApps',
     id: 'item-1',
     createdAt: new Date().toISOString(),
@@ -150,41 +150,41 @@ describe('validateMcpAppsRender', () => {
     },
   };
   it('accepts a well-shaped item', () => {
-    expect(validateMcpAppsRender(base)).not.toBeNull();
+    expect(validateMcpAppsGguiSession(base)).not.toBeNull();
   });
   it('rejects missing / empty id', () => {
-    expect(validateMcpAppsRender({ ...base, id: '' })).toBeNull();
+    expect(validateMcpAppsGguiSession({ ...base, id: '' })).toBeNull();
   });
   it('rejects missing source', () => {
-    expect(validateMcpAppsRender({ ...base, source: undefined })).toBeNull();
+    expect(validateMcpAppsGguiSession({ ...base, source: undefined })).toBeNull();
   });
   it('rejects empty connectorId', () => {
     expect(
-      validateMcpAppsRender({ ...base, source: { ...base.source, connectorId: '' } }),
+      validateMcpAppsGguiSession({ ...base, source: { ...base.source, connectorId: '' } }),
     ).toBeNull();
   });
   it('rejects resourceUri that is not a ui:// URI', () => {
     expect(
-      validateMcpAppsRender({
+      validateMcpAppsGguiSession({
         ...base,
         source: { ...base.source, resourceUri: 'https://example.com' },
       }),
     ).toBeNull();
   });
   it('rejects wrong-type discriminator', () => {
-    expect(validateMcpAppsRender({ ...base, type: 'component' })).toBeNull();
+    expect(validateMcpAppsGguiSession({ ...base, type: 'component' })).toBeNull();
   });
 });
 
-describe('McpAppsRender structural lock — ?:never on component fields', () => {
+describe('McpAppsGguiSession structural lock — ?:never on component fields', () => {
   it('typechecks when read via optional chain on the union', () => {
-    const item: McpAppsRender = {
+    const item: McpAppsGguiSession = {
       type: 'mcpApps',
       id: 'x',
       createdAt: '',
       source: { connectorId: 'c', toolName: 't', resourceUri: 'ui://c/t' },
     };
-    // These fields are `?: never` on McpAppsRender. Optional-chain
+    // These fields are `?: never` on McpAppsGguiSession. Optional-chain
     // reads should resolve to `undefined` at runtime.
     expect(item.componentCode).toBeUndefined();
     expect(item.actionSpec).toBeUndefined();

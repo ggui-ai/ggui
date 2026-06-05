@@ -2,7 +2,7 @@
  * Generic MCP-Apps host-role bridge helpers — the transport-agnostic
  * JSON-RPC dispatcher plus the native WebView shim builders.
  *
- * Extracted from the (now-deleted) `McpAppsRenderRenderer` component
+ * Extracted from the (now-deleted) `McpAppsGguiSessionRenderer` component
  * so the spec-canonical `<McpAppIframe>` can still reuse the bridge
  * surface without dragging in the render-bound legacy renderer.
  *
@@ -22,7 +22,7 @@
  */
 
 import { Linking, Platform } from 'react-native';
-import type { McpAppsRender } from '@ggui-ai/protocol/integrations/mcp-apps';
+import type { McpAppsGguiSession } from '@ggui-ai/protocol/integrations/mcp-apps';
 
 interface JsonRpcRequest {
   jsonrpc?: '2.0';
@@ -55,11 +55,11 @@ const DEFAULT_THEME: Record<string, string> = {
 
 export interface HostBridgeContext {
   readonly renderId: string;
-  readonly render: McpAppsRender;
+  readonly render: McpAppsGguiSession;
   readonly toolsCallUrl: string;
   readonly theme?: Record<string, string>;
   readonly locale?: string;
-  readonly containerDimensions?: McpAppsRender['containerDimensions'];
+  readonly containerDimensions?: McpAppsGguiSession['containerDimensions'];
 }
 
 /**

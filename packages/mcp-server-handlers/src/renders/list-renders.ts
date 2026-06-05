@@ -27,10 +27,10 @@
  */
 
 import { z } from 'zod';
-import type { RenderSummaryWire } from '@ggui-ai/protocol/integrations/mcp-apps';
+import type { GguiSessionSummaryWire } from '@ggui-ai/protocol/integrations/mcp-apps';
 import type {
-  RenderStore,
-  StoredRender,
+  GguiSessionStore,
+  StoredGguiSession,
 } from '@ggui-ai/mcp-server-core';
 import type { HandlerContext, SharedHandler } from '../types.js';
 
@@ -83,15 +83,15 @@ const outputSchema = {
   renders: z.array(renderSummaryWireSchema),
 } as const;
 
-// `RenderSummaryWire` is re-exported below from
+// `GguiSessionSummaryWire` is re-exported below from
 // `@ggui-ai/protocol/integrations/mcp-apps` — single typed source of
 // truth, kept on the protocol so non-handler consumers (sample-agent's
 // `/chat/restore` route, future host SDK helpers) import the same
 // shape rather than redeclaring it.
-export type { RenderSummaryWire };
+export type { GguiSessionSummaryWire };
 
 interface ListRendersOutput {
-  readonly renders: readonly RenderSummaryWire[];
+  readonly renders: readonly GguiSessionSummaryWire[];
 }
 
 /**
@@ -110,7 +110,7 @@ export interface ListRendersMintSeam {
 }
 
 export interface GguiListRendersHandlerDeps {
-  readonly renderStore: RenderStore;
+  readonly renderStore: GguiSessionStore;
   /**
    * Optional ws-token minter. When wired, each listed render
    * summary carries a fresh `wsToken` + `wsTokenExpiresAt` the
@@ -160,9 +160,9 @@ export function createGguiListRendersHandler(
 }
 
 function projectSummary(
-  stored: StoredRender,
+  stored: StoredGguiSession,
   mintWsToken: ListRendersMintSeam | undefined,
-): RenderSummaryWire {
+): GguiSessionSummaryWire {
   const minted = mintWsToken?.mint({
     renderId: stored.id,
     appId: stored.appId,

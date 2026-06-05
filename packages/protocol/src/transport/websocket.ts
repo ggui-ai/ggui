@@ -43,7 +43,7 @@ import type {
   DrainAckPayload,
 } from '../types/live-channel';
 import type { HostContextObservedPayload } from '../types/host-context';
-import type { RenderEvent } from '../types/render-event';
+import type { GguiSessionEvent } from '../types/render-event';
 
 /**
  * WebSocket message types for client-server communication.
@@ -76,8 +76,8 @@ export type WebSocketMessageType =
   | 'drain_ack' // Server → Client: ggui_consume popped an ActionEnvelope; iframe cancels its claim timer
   // ─── Canvas-mode host-context capture ───
   | 'host_context_observed' // Client → Server: iframe echoes McpUiHostContext from ui/initialize + on host-context-changed
-  // ─── R7 RenderEvent ledger replay ───
-  | 'render_event'; // Server → Client: one RenderEvent from the per-render ledger; emitted on subscribe-time replay when SubscribePayload.sinceSequence is set
+  // ─── R7 GguiSessionEvent ledger replay ───
+  | 'render_event'; // Server → Client: one GguiSessionEvent from the per-render ledger; emitted on subscribe-time replay when SubscribePayload.sinceSequence is set
 
 /** Fields shared by all WebSocket message variants. */
 interface WsMessageBase {
@@ -141,14 +141,14 @@ export type WebSocketMessage =
   // Apps `ui/initialize` response and echoes it here so the server can
   // persist it on `RenderRecord.hostContext` for agent visibility.
   | (WsMessageBase & { type: 'host_context_observed'; payload: HostContextObservedPayload })
-  // R7 — RenderEvent ledger replay frame (Server → Client only).
+  // R7 — GguiSessionEvent ledger replay frame (Server → Client only).
   // Emitted before the live tail when SubscribePayload.sinceSequence
   // is set; one frame per ledger entry with `seq > sinceSequence`.
-  // The payload IS the full RenderEvent (seq + timestamp + type +
+  // The payload IS the full GguiSessionEvent (seq + timestamp + type +
   // data). Consumers dispatch by `payload.type` to fold the wire-
   // frame-equivalent handler (render → render handler, props_update →
   // props_update handler, etc.) — the unification R7 lands.
-  | (WsMessageBase & { type: 'render_event'; payload: RenderEvent });
+  | (WsMessageBase & { type: 'render_event'; payload: GguiSessionEvent });
 
 /**
  * WebSocket connection status. Client-side transport enum describing

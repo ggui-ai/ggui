@@ -3,7 +3,7 @@
  * a live ggui MCP endpoint. The handshake's `blueprintDraft.contract`
  * carries a verbatim DataContract; the render pins it via
  * `override: {contract}`. (Omitting `override` would ACCEPT the synth's
- * suggestion instead.) Render WILL invoke the configured generator (LLM)
+ * suggestion instead.) GguiSession WILL invoke the configured generator (LLM)
  * to produce componentCode — see `ANTHROPIC_API_KEY` gating in each
  * scenario.
  *

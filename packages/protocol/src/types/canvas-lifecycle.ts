@@ -98,7 +98,7 @@ export interface ConsumePollingPayload extends JsonObject {
    * shape change.
    */
   readonly state: 'open';
-  /** Render id whose action pipe is being polled. */
+  /** GguiSession id whose action pipe is being polled. */
   readonly renderId: string;
 }
 

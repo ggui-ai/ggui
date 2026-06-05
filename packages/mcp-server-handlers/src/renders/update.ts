@@ -13,13 +13,13 @@
  * Pure render-mutation flow:
  *   1. Validate union — surface "neither arm matched" before tenant work.
  *   2. Load + tenancy-gate the render via `renderStore.get` + `appId` cmp.
- *   3. Apply patch via the shared `applyRenderPatch` helper:
+ *   3. Apply patch via the shared `applyGguiSessionPatch` helper:
  *      - throws `ContractViolationError{tool:'ggui_update'}` on schema fail
  *   4. Persist the updated render via `renderStore.commit(...)` (upserts
  *      by `render.id`, preserves lifecycle).
  *   5. Best-effort live delivery via the optional `propsUpdateNotifier`
  *      seam (closure forwarded by the host onto
- *      `RenderChannelServer.sendPropsUpdate`). Failures are swallowed —
+ *      `GguiSessionChannelServer.sendPropsUpdate`). Failures are swallowed —
  *      the persistence write is the source of truth, the WS push is a
  *      latency optimization.
  *
@@ -40,31 +40,31 @@
 import { z } from 'zod';
 import {
   ContractViolationError,
-  type ComponentRender,
+  type ComponentGguiSession,
   type JsonObject,
-  type Render,
+  type GguiSession,
 } from '@ggui-ai/protocol';
 import {
   GGUI_RENDER_UI_META,
   toMcpAppEnvelope,
   type McpAppAiGguiRenderMeta,
 } from '@ggui-ai/protocol/integrations/mcp-apps';
-import type { RenderStore } from '@ggui-ai/mcp-server-core';
+import type { GguiSessionStore } from '@ggui-ai/mcp-server-core';
 import type { HandlerContext, SharedHandler } from '../types.js';
 import {
-  applyRenderPatch,
-  type RenderTarget,
+  applyGguiSessionPatch,
+  type GguiSessionTarget,
 } from './apply-render-patch.js';
 import {
   deriveRenderMeta,
   type RenderMetaView,
 } from './slice-meta-derivation.js';
-import { RenderNotFoundError } from './errors.js';
+import { GguiSessionNotFoundError } from './errors.js';
 import { emitPayloadTraceEvent } from './payload-trace-sink.js';
 
 /**
  * Live-subscriber props-update notifier. The mcp-server's
- * `RenderChannelServer.sendPropsUpdate` implements this contract; the
+ * `GguiSessionChannelServer.sendPropsUpdate` implements this contract; the
  * handler depends on the narrowed shape so the handlers package doesn't
  * take a peer dep on the full render-channel surface.
  *
@@ -87,7 +87,7 @@ export interface PropsUpdateNotifier {
  * malformed render row or a structural reject the wire schema couldn't
  * encode.
  *
- * Distinct from `RenderNotFoundError` (render missing or cross-tenant)
+ * Distinct from `GguiSessionNotFoundError` (render missing or cross-tenant)
  * and `ContractViolationError` (props validation fail). The transport
  * layer projects these three to distinct MCP error envelopes.
  */
@@ -100,7 +100,7 @@ export class UpdateUnsupportedError extends Error {
 }
 
 /** Re-exported for callers that prefer to import the error from this module. */
-export { RenderNotFoundError, ContractViolationError };
+export { GguiSessionNotFoundError, ContractViolationError };
 
 /**
  * Pre-mutation gate. The handler invokes `preCheck` before any state
@@ -131,8 +131,8 @@ export interface BillingGate {
  * shape — a small narrow seam set, all optional parts marked as such.
  */
 export interface GguiUpdateHandlerDeps {
-  /** Render-backing store. Used to load + persist the patched render. */
-  readonly renderStore: RenderStore;
+  /** GguiSession-backing store. Used to load + persist the patched render. */
+  readonly renderStore: GguiSessionStore;
   /**
    * Optional live-subscriber notifier. When present, every successful
    * persistence fans a `{type:'props_update', payload:{renderId, props}}`
@@ -307,17 +307,17 @@ export function createGguiUpdateHandler(
       const renderId: string | undefined =
         parsed.renderId ?? ctx.renderId;
       if (!renderId) {
-        throw new RenderNotFoundError(
+        throw new GguiSessionNotFoundError(
           '',
           'ggui_update: renderId is required on the wire (or threaded via HandlerContext for in-process dispatchers).',
         );
       }
 
       // Tenancy gate. Cross-tenant + missing surface uniformly as
-      // RenderNotFoundError so cross-tenant existence is not leaked.
+      // GguiSessionNotFoundError so cross-tenant existence is not leaked.
       const stored = await deps.renderStore.get(renderId);
       if (!stored || stored.appId !== ctx.appId) {
-        throw new RenderNotFoundError(renderId);
+        throw new GguiSessionNotFoundError(renderId);
       }
 
       // Devtools payload trace. No-op when no sink is registered.
@@ -398,17 +398,17 @@ export function createGguiUpdateHandler(
         patchInput = { mode: 'merge', patch: parsed.patch as JsonObject };
       }
 
-      // applyRenderPatch throws ContractViolationError{tool:'ggui_update'}
+      // applyGguiSessionPatch throws ContractViolationError{tool:'ggui_update'}
       // on propsSpec fail (validated against the FINAL props — post-merge
       // for `merge` mode). Propagates verbatim — transport layer maps.
       //
-      // Pull renderTarget from `stored.render` — both ComponentRender and
-      // SystemRender satisfy `RenderTarget` (id + optional propsSpec +
-      // optional props). McpAppsRender has no propsSpec — the helper's
+      // Pull renderTarget from `stored.render` — both ComponentGguiSession and
+      // SystemGguiSession satisfy `GguiSessionTarget` (id + optional propsSpec +
+      // optional props). McpAppsGguiSession has no propsSpec — the helper's
       // assertPropsContract no-ops on absent spec, so MCP Apps renders
       // accept any patch shape (the iframe owns its own validation).
-      const renderTarget: RenderTarget & Render = stored.render;
-      const { updatedRender, finalProps } = applyRenderPatch({
+      const renderTarget: GguiSessionTarget & GguiSession = stored.render;
+      const { updatedRender, finalProps } = applyGguiSessionPatch({
         render: renderTarget,
         ...patchInput,
       });
@@ -439,7 +439,7 @@ export function createGguiUpdateHandler(
         try {
           await deps.propsUpdateNotifier.sendPropsUpdate(renderId, finalProps);
         } catch {
-          // Silent: stay aligned with `safelyNotifyRenderCommit`'s
+          // Silent: stay aligned with `safelyNotifyGguiSessionCommit`'s
           // posture in render.ts. A throwing notifier is a host-side
           // bug, not a tool-call failure.
         }
@@ -504,7 +504,7 @@ export function createGguiUpdateHandler(
             stored.render.type !== 'system'
           ) {
             renderThemeId =
-              (stored.render as ComponentRender).themeId ?? renderThemeId;
+              (stored.render as ComponentGguiSession).themeId ?? renderThemeId;
           }
         }
       } catch {
