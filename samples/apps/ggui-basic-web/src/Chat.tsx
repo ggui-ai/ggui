@@ -174,7 +174,7 @@ export function Chat({ agentEndpoint, sandboxUrl }: ChatProps) {
     });
   }, []);
 
-  const { entries, renders, hostDisplayMode, sending, send, handleAppMessage, abort } =
+  const { entries, sessions, hostDisplayMode, sending, send, handleAppMessage, abort } =
     useMcpAppsChat({
       chatEndpoint: `${agentEndpoint}/agent`,
       snapshotEndpoint: `${agentEndpoint}/agent`,
@@ -337,7 +337,7 @@ export function Chat({ agentEndpoint, sandboxUrl }: ChatProps) {
       {layout === 'panel' ? (
         <main className="ui-pane">
           <PanelView
-            renders={renders}
+            sessions={sessions}
             sandboxUrl={sandboxUrl}
             agentEndpoint={agentEndpoint}
             getAuthToken={getAuthToken}
@@ -379,12 +379,12 @@ function ChatEntryView({
   getAuthToken: () => string | undefined;
   onAppMessage: AppMessageHandler;
 }) {
-  if (entry.kind === 'render') {
+  if (entry.kind === 'session') {
     if (renderInline) {
       return (
         <div className="msg render-wrap">
           <ResourceFrame
-            item={entry.render}
+            item={entry.session}
             sandboxUrl={sandboxUrl}
             agentEndpoint={agentEndpoint}
             getAuthToken={getAuthToken}
@@ -395,7 +395,7 @@ function ChatEntryView({
     }
     return (
       <div className="msg tool">
-        ← UI · {shortLabel(entry.render)}
+        ← UI · {shortLabel(entry.session)}
       </div>
     );
   }
@@ -462,19 +462,19 @@ function prettyJson(value: unknown): string {
 }
 
 function PanelView({
-  renders,
+  sessions,
   sandboxUrl,
   agentEndpoint,
   getAuthToken,
   onAppMessage,
 }: {
-  renders: ReadonlyArray<GguiSessionRef>;
+  sessions: ReadonlyArray<GguiSessionRef>;
   sandboxUrl: string;
   agentEndpoint: string;
   getAuthToken: () => string | undefined;
   onAppMessage: AppMessageHandler;
 }) {
-  const top = useMemo(() => renders[renders.length - 1], [renders]);
+  const top = useMemo(() => sessions[sessions.length - 1], [sessions]);
   if (!top) {
     return (
       <div className="ui-placeholder">
