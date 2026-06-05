@@ -137,13 +137,13 @@ export const RETIRED_CONTRACT_FIELDS: Readonly<Record<string, string>> = {
  * Sourced from {@link STDLIB_GADGET_HOOKS} — the canonical
  * hook-name set the first-party `@ggui-ai/gadgets` package
  * exports. Local alias keeps existing call sites stable while the
- * source of truth lives in `registries/stdlib-gadgets.ts`.
+ * source of truth lives in `gadgets/stdlib-gadgets.ts`.
  */
 const KNOWN_STDLIB_HOOKS = STDLIB_GADGET_HOOKS;
 
 /**
  * Default package for gadget hooks. Sourced from the
- * stdlib-libraries registry — when an entry's `package` is omitted,
+ * stdlib-gadgets registry — when an entry's `package` is omitted,
  * the hygiene linter assumes it resolves to the first-party
  * `@ggui-ai/gadgets` package and runs hook-registry +
  * permission checks against the stdlib catalog. Third-party packages
