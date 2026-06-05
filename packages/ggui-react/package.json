@@ -94,8 +94,7 @@
     "@ggui-ai/iframe-runtime": "workspace:*",
     "@ggui-ai/shared": "workspace:*",
     "@ggui-ai/wire": "workspace:*",
-    "@mcp-ui/client": "^7.1.1",
-    "lucide-react": "^1.7.0"
+    "@mcp-ui/client": "^7.1.1"
   },
   "devDependencies": {
     "@ggui-ai/design": "workspace:*",
