@@ -37,7 +37,12 @@ _lap=$SECONDS
 lap() { echo "[setup] ⏱ $1: $((SECONDS - _lap))s"; _lap=$SECONDS; }
 
 echo "[setup 1/4] build @ggui-ai/* (dist must exist before publish)"
-( cd "$REPO_ROOT" && pnpm build )
+# Scope to the publishable cohort ONLY (oss/packages — exactly what
+# publish-all.sh uploads). The root `pnpm build` also builds the
+# @ggui-apps/* Next apps, which can't resolve the sandbox-generated
+# backend/amplify_outputs.json in a fresh cell → breaks setup before any
+# render assertion runs. The apps are never published, so exclude them.
+( cd "$REPO_ROOT" && pnpm exec turbo build --filter='./oss/packages/*' )
 lap "build cohort"
 
 if [ "$SKIP_VERDACCIO_BOOT" = "1" ]; then
