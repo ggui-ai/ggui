@@ -128,11 +128,11 @@ const AppSchema = z.strictObject({
    * declared in some registered wrapper's `requires`. Operators who
    * declare a key without a value can use the empty string (the
    * Mapbox SDK will surface "Invalid token" on first request rather
-   * than a missing-key error from the push gate).
+   * than a missing-key error from the render gate).
    *
    * Omitting this field is equivalent to `{}` — wrappers without
    * `requires` work unchanged; wrappers that declare `requires` will
-   * fail at push-gate validation if their required keys are missing.
+   * fail at render-gate validation if their required keys are missing.
    */
   publicEnv: appPublicEnvSchema.optional(),
   /**
@@ -143,13 +143,13 @@ const AppSchema = z.strictObject({
    * Honored by hosts as a PRESENTATION preference — `'fullscreen'`
    * says "render as a main view"; `'inline'` says "stack vertically in
    * the chat log"; `'pip'` says "render as picture-in-picture overlay".
-   * The wire mechanism is identical regardless of mode (every push
+   * The wire mechanism is identical regardless of mode (every render
    * stamps its own `_meta.ui.resourceUri` and every iframe goes
    * through the same runtime mount path); display mode controls ONLY
    * how the host arranges the iframes it mounts. Agents can override
-   * per push via `ggui_render.input.displayMode`.
+   * per render via `ggui_render.input.displayMode`.
    *
-   * Absent ⇒ no per-push hint stamped (host falls back to its own
+   * Absent ⇒ no per-render hint stamped (host falls back to its own
    * default, typically `'inline'`).
    */
   defaultDisplayMode: z.enum(['inline', 'fullscreen', 'pip']).optional(),

@@ -282,8 +282,8 @@ export interface BootstrapFailureBehavior {
 
 /**
  * Expect the renderer to reach the "ready to accept actions" state —
- * no bootstrap failure, no version rejection, the first stack item
- * rendered with `data-ggui-code-ready="true"` (or the host's
+ * no bootstrap failure, no version rejection, the render reaching
+ * `data-ggui-code-ready="true"` (or the host's
  * equivalent signal).
  */
 export interface BootstrapSuccessBehavior {
