@@ -77,19 +77,21 @@ Requirements:
     agentCapabilities: {
       tools: {
         loadOlder: {
-          description: "Fetch older emails when the swipe stack runs low",
-          inputSchema: {
-            type: "object",
-            properties: {
-              before: { type: "string" },
-              limit: { type: "number" },
+          toolInfo: {
+            description: "Fetch older emails when the swipe stack runs low",
+            inputSchema: {
+              type: "object",
+              properties: {
+                before: { type: "string" },
+                limit: { type: "number" },
+              },
             },
-          },
-          outputSchema: {
-            type: "object",
-            properties: {
-              emails: { type: "array", items: { type: "object" } },
-              hasMore: { type: "boolean" },
+            outputSchema: {
+              type: "object",
+              properties: {
+                emails: { type: "array", items: { type: "object" } },
+                hasMore: { type: "boolean" },
+              },
             },
           },
           example: {

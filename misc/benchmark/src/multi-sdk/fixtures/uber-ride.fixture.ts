@@ -145,19 +145,21 @@ Requirements:
     agentCapabilities: {
       tools: {
         getDriverProfile: {
-          description: "Fetch driver full profile for the drill-down modal",
-          inputSchema: {
-            type: "object",
-            properties: { driverId: { type: "string" } },
-          },
-          outputSchema: {
-            type: "object",
-            properties: {
-              name: { type: "string" },
-              rating: { type: "number" },
-              carModel: { type: "string" },
-              plateNumber: { type: "string" },
-              totalTrips: { type: "number" },
+          toolInfo: {
+            description: "Fetch driver full profile for the drill-down modal",
+            inputSchema: {
+              type: "object",
+              properties: { driverId: { type: "string" } },
+            },
+            outputSchema: {
+              type: "object",
+              properties: {
+                name: { type: "string" },
+                rating: { type: "number" },
+                carModel: { type: "string" },
+                plateNumber: { type: "string" },
+                totalTrips: { type: "number" },
+              },
             },
           },
           example: {

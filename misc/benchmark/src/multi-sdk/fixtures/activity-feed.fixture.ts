@@ -100,19 +100,21 @@ Requirements:
     agentCapabilities: {
       tools: {
         loadOlder: {
-          description: "Fetch older activities for infinite scroll",
-          inputSchema: {
-            type: "object",
-            properties: {
-              before: { type: "string" },
-              limit: { type: "number" },
+          toolInfo: {
+            description: "Fetch older activities for infinite scroll",
+            inputSchema: {
+              type: "object",
+              properties: {
+                before: { type: "string" },
+                limit: { type: "number" },
+              },
             },
-          },
-          outputSchema: {
-            type: "object",
-            properties: {
-              activities: { type: "array", items: { type: "object" } },
-              hasMore: { type: "boolean" },
+            outputSchema: {
+              type: "object",
+              properties: {
+                activities: { type: "array", items: { type: "object" } },
+                hasMore: { type: "boolean" },
+              },
             },
           },
           example: {

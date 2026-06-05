@@ -66,18 +66,20 @@ Requirements:
     agentCapabilities: {
       tools: {
         searchPlaces: {
-          description: "Run a new place search with the given query",
-          inputSchema: {
-            type: "object",
-            properties: {
-              query: { type: "string" },
-              category: { type: "string" },
+          toolInfo: {
+            description: "Run a new place search with the given query",
+            inputSchema: {
+              type: "object",
+              properties: {
+                query: { type: "string" },
+                category: { type: "string" },
+              },
             },
-          },
-          outputSchema: {
-            type: "object",
-            properties: {
-              places: { type: "array", items: { type: "object" } },
+            outputSchema: {
+              type: "object",
+              properties: {
+                places: { type: "array", items: { type: "object" } },
+              },
             },
           },
           example: {
