@@ -233,7 +233,7 @@ test.describe.serial(
         structuredContent?: {
           renderId?: string;
           url?: string;
-          action?: 'create' | 'reuse' | 'update' | 'replace' | 'compose';
+          action?: 'create' | 'reuse' | 'update' | 'replace' | 'declined';
         };
         isError?: boolean;
       };

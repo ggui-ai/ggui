@@ -330,7 +330,7 @@ export interface RenderPostSuccessArgs {
    */
   readonly intent: string;
   /** Decision action classification — same value as on the response. */
-  readonly action: 'create' | 'reuse' | 'update' | 'replace' | 'compose';
+  readonly action: GguiRenderOutput['action'];
   /** Whether the render committed real componentCode. */
   readonly codeReady: boolean;
 }
@@ -907,7 +907,7 @@ const inputSchema = {
  *   - `nextStep` — terse recovery hint (tool + args). Emitted only
  *     when the contract has actionSpec; pure-display renders omit.
  *   - `action` — negotiator's decision (`create | reuse | update |
- *     replace | compose`). May inform the agent's follow-up prompt.
+ *     replace | declined`). May inform the agent's follow-up prompt.
  */
 /**
  * Canonical wire output shape — pulled from `@ggui-ai/protocol`'s

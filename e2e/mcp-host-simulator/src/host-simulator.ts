@@ -188,7 +188,7 @@ export interface HandshakeSuggestionView {
  */
 export interface HandshakeOutput {
   readonly handshakeId: string;
-  readonly action: "create" | "reuse" | "update" | "replace" | "compose" | "declined";
+  readonly action: "create" | "reuse" | "update" | "replace" | "declined";
   readonly reason: string;
   readonly target: {
     readonly renderId?: string;
