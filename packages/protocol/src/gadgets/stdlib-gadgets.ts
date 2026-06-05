@@ -41,7 +41,7 @@ export const STDLIB_GADGETS_PACKAGE = '@ggui-ai/gadgets';
  * in `@ggui-ai/gadgets` asserts the two stay in sync, so a release-time
  * bump to the runtime package without updating this constant fails CI.
  */
-export const STDLIB_GADGETS_VERSION = '0.2.0';
+export const STDLIB_GADGETS_VERSION = '0.2.1';
 
 /**
  * v1 catalog of stdlib gadget descriptors. Every entry's
