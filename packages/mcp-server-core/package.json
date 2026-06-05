@@ -48,8 +48,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@ggui-ai/protocol": "workspace:*",
-    "zod": "^4.3.6"
+    "@ggui-ai/protocol": "workspace:*"
   },
   "peerDependencies": {
     "better-sqlite3": "^11.0.0"

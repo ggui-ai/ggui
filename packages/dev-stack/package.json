@@ -38,8 +38,7 @@
     "@ggui-ai/project-config": "workspace:*",
     "@ggui-ai/ui-registry": "workspace:*",
     "chokidar": "^4.0.3",
-    "esbuild": "^0.25.12",
-    "tinyglobby": "^0.2.16"
+    "esbuild": "^0.25.12"
   },
   "devDependencies": {
     "@ggui-ai/design": "workspace:*",

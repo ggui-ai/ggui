@@ -297,7 +297,6 @@
     "@ggui-ai/ui-visual-tester": "workspace:*",
     "@ggui-ai/wire": "workspace:*",
     "@google/genai": "^1.45.0",
-    "@huggingface/transformers": "^3.0.0",
     "@typescript-eslint/parser": "^8.0.0",
     "diff": "^8.0.3",
     "esbuild": "^0.25.0",
