@@ -80,20 +80,6 @@ export interface ParsedServeFlags {
    */
   publicBaseUrl?: string;
   /**
-   * When true, auto-spawn a cloudflared quick-tunnel pointed at the
-   * local listen port and treat the assigned URL as
-   * {@link publicBaseUrl}. Mutually exclusive with `--public-base-url`
-   * (operator gets EITHER explicit URL OR auto-tunnel).
-   *
-   * `--public + --dev-allow-all` combination is rejected at parse
-   * time unless `--i-know-its-public` is also set — exposing
-   * any-bearer auth to the open internet via cloudflared takes a
-   * deliberate flag.
-   */
-  publicAutoTunnel?: boolean;
-  /** Acknowledgement flag — see {@link publicAutoTunnel}. */
-  iKnowItsPublic?: boolean;
-  /**
    * Mount the OAuth 2.1 + PKCE + Dynamic Client Registration routes
    * required by MCP custom-connector hosts (claude.ai, ChatGPT) whose
    * "Add connector" form has no field for a pre-shared bearer token.
@@ -323,14 +309,6 @@ export function parseServeFlags(args: readonly string[]): ParsedServeFlags {
       out.publicBaseUrl = v.replace(/\/+$/, '');
       continue;
     }
-    if (arg === '--public') {
-      out.publicAutoTunnel = true;
-      continue;
-    }
-    if (arg === '--i-know-its-public') {
-      out.iKnowItsPublic = true;
-      continue;
-    }
     if (arg === '--no-open') {
       out.noOpen = true;
       continue;
@@ -415,24 +393,6 @@ export function parseServeFlags(args: readonly string[]): ParsedServeFlags {
         'Multi-tenant requires real per-user identities (kind:"user" / kind:"app"); ' +
         'the any-bearer modes collapse every caller to kind:"builder" which the ' +
         'multi-tenant gate rejects. Drop the other flag and pair with real bearers.',
-    };
-  }
-  if (out.publicAutoTunnel && out.publicBaseUrl !== undefined) {
-    return {
-      ...out,
-      error:
-        '--public and --public-base-url are mutually exclusive. ' +
-        '--public auto-spawns a cloudflared quick-tunnel and sets the URL; ' +
-        '--public-base-url pins an explicit URL. Pick one.',
-    };
-  }
-  if (out.publicAutoTunnel && out.devAllowAll && !out.iKnowItsPublic) {
-    return {
-      ...out,
-      error:
-        '--public + --dev-allow-all exposes any-bearer auth to the open ' +
-        'internet via cloudflared. Add --i-know-its-public to acknowledge ' +
-        'this, or pair real bearers and drop --dev-allow-all.',
     };
   }
   return out;
