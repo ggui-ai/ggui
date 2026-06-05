@@ -365,17 +365,15 @@ export interface BuildMcpServerBackendOptions {
 
   /**
    * Pre-resolved `ShortCodeIndex` implementation. When set, replaces
-   * the default `InMemoryShortCodeIndex` — typically the caller passes
-   * `SqliteShortCodeIndex` rooted under `persistentDir` so cached
-   * `/api/bootstrap/<code>` URLs (and the `/r/<code>` viewer) keep
-   * resolving after a `ggui serve` restart. Without that, the index
-   * is process-local and every restart turns prior shortCodes into
-   * 404s — defeating the bootstrap-secret persistence above.
+   * the default `InMemoryShortCodeIndex` — e.g. a `SqliteShortCodeIndex`
+   * rooted under `persistentDir` so cached `/api/bootstrap/<code>` URLs
+   * keep resolving after a `ggui serve` restart. With the in-memory
+   * default the index is process-local and every restart turns prior
+   * shortCodes into 404s — defeating the bootstrap-secret persistence
+   * above.
    *
-   * Absent = `InMemoryShortCodeIndex` (the legacy default, fine for
-   * tests + `--ephemeral`). The CLI composes this via
-   * `createPersistentShortCodeIndex(persistentDir)` in cli.ts so the
-   * sqlite peer-dep loads lazily.
+   * Absent = `InMemoryShortCodeIndex` (the default, fine for tests +
+   * `--ephemeral`).
    */
   readonly shortCodeIndex?: ShortCodeIndex;
 
