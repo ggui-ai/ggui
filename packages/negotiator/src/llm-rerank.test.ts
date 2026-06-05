@@ -1,7 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
   rerankCandidates,
-  summarizeContract,
   RERANK_SYSTEM_PROMPT,
   type RerankCandidate,
   type RerankQuery,
@@ -251,16 +250,5 @@ describe('RERANK_SYSTEM_PROMPT — similarity-only judge (no field-coverage gate
       expect(decision.matchId).toBe('bp-weather-cityonly');
       expect(decision.confidence).toBeCloseTo(0.8);
     });
-  });
-});
-
-describe('summarizeContract re-export', () => {
-  // Full coverage lives in @ggui-ai/protocol's
-  // registry/summarize-contract.test.ts. This is a smoke check that
-  // negotiator's barrel still surfaces the same canonical function.
-  it('reaches the protocol-side implementation through the barrel', () => {
-    expect(summarizeContract({ contextSpec: { x: { schema: { type: 'string' } } } })).toMatch(
-      /slots=x:string/,
-    );
   });
 });

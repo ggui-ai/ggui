@@ -26,7 +26,6 @@
  */
 
 export { hashContract, buildVariant } from './contract-hash.js';
-export { inferInteractionMode, inferJsonSchemaType } from './pure.js';
 export type { LLMCaller, LLMCallerConfig, ToolSchema } from './llm-caller.js';
 export { rerankCandidates } from './llm-rerank.js';
 export type {

@@ -12,7 +12,6 @@
  * judge restores precision. Combined break-even hit rate is ~10%;
  * realistic workloads observe 30-70%.
  */
-import { summarizeContract } from '@ggui-ai/protocol';
 import type { LLMCaller, ToolSchema } from './llm-caller.js';
 
 /**
@@ -29,7 +28,7 @@ export interface RerankCandidate {
   readonly cachedIntent: string;
   /**
    * One-line summary of the blueprint's contract surface. Format
-   * matches `summarizeContract()` below — `slots=...; actions=...;
+   * matches `@ggui-ai/protocol`'s `summarizeContract()` — `slots=...; actions=...;
    * streams=...; props=...` so the judge sees the structural shape
    * without the JSON noise.
    */
@@ -153,13 +152,6 @@ function truncate(text: string, max: number): string {
   if (text.length <= max) return text;
   return `${text.slice(0, max - 1)}…`;
 }
-
-// Re-export `summarizeContract` from protocol for backwards-compatible
-// access through `@ggui-ai/negotiator/llm-rerank` consumers (the
-// canonical home is `@ggui-ai/protocol` — both the registry storage
-// and the rerank prompt depend on it). Kept as a re-export so the
-// existing test imports here keep working.
-export { summarizeContract };
 
 interface RerankToolInput {
   matchId: string | null;
