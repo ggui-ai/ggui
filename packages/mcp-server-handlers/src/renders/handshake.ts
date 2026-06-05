@@ -871,9 +871,6 @@ export class HandshakeNotFoundError extends Error {
   }
 }
 
-// Re-export some types for backwards-import-paths.
-export type { SuggestionFinding };
-
 /**
  * Telemetry event name emitted by the handshake handler on every
  * successful negotiation.
