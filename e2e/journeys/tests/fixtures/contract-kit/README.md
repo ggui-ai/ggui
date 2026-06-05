@@ -32,7 +32,7 @@ Each fixture is one JSON file. The filename (minus `.json`) MUST equal the `name
   "skipReason": null,
 
   "setup": [
-    { "type": "create-render", "renderId": "test-r1" },
+    { "type": "create-session", "renderId": "test-r1" },
     { "type": "register-tool", "toolName": "known-tool", "handler": "echo" },
   ],
 
@@ -71,7 +71,7 @@ Each fixture is one JSON file. The filename (minus `.json`) MUST equal the `name
 
 Every discriminator that could reasonably gain new members without a wire-version bump carries a `(string & {})` tail (see `types.ts`):
 
-- `SetupStep['type']` — `'create-render' | 'register-tool' | 'emit-envelope' | 'seed-channel' | (string & {})`
+- `SetupStep['type']` — `'create-session' | 'register-tool' | 'emit-envelope' | 'seed-channel' | (string & {})`
 - `TeardownStep['type']` — `'unregister-tool' | (string & {})`
 - `ExpectedBehavior['kind']` — `'contract-error' | 'stream-update' | 'observability-event' | 'bootstrap-failure' | 'bootstrap-success' | 'version-mismatch' | 'props-update' | 'no-op' | (string & {})`
 - `ExpectedObservabilityEvent['kind']` — renderer's `ObservabilityEvent['kind']` set + `(string & {})`

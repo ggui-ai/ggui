@@ -19,20 +19,20 @@ import type { ActiveConsumerRegistry } from '../active-consumer-registry.js';
 export class InMemoryActiveConsumerRegistry implements ActiveConsumerRegistry {
   private readonly counts = new Map<string, number>();
 
-  enter(renderId: string): void {
-    this.counts.set(renderId, (this.counts.get(renderId) ?? 0) + 1);
+  enter(sessionId: string): void {
+    this.counts.set(sessionId, (this.counts.get(sessionId) ?? 0) + 1);
   }
 
-  exit(renderId: string): void {
-    const next = (this.counts.get(renderId) ?? 0) - 1;
+  exit(sessionId: string): void {
+    const next = (this.counts.get(sessionId) ?? 0) - 1;
     if (next <= 0) {
-      this.counts.delete(renderId);
+      this.counts.delete(sessionId);
     } else {
-      this.counts.set(renderId, next);
+      this.counts.set(sessionId, next);
     }
   }
 
-  hasActive(renderId: string): boolean {
-    return (this.counts.get(renderId) ?? 0) > 0;
+  hasActive(sessionId: string): boolean {
+    return (this.counts.get(sessionId) ?? 0) > 0;
   }
 }

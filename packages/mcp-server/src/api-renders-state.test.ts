@@ -1,5 +1,5 @@
 /**
- * Tests for `GET /api/renders/:renderId/state?wsToken=<token>` — the
+ * Tests for `GET /api/sessions/:sessionId/state?wsToken=<token>` — the
  * R6 wsToken-gated snapshot read of the current render state.
  *
  * # Auth surface
@@ -53,7 +53,7 @@ interface Fixture {
   server: GguiServer;
   httpServer: HttpServer;
   url: string;
-  renderId: string;
+  sessionId: string;
   appId: string;
   validToken: string;
   validClaims: WsTokenClaims;
@@ -102,21 +102,21 @@ async function bootWithRender(opts?: {
     throw new Error('server.address() did not return AddressInfo');
   }
   const { token, claims } = mintWsToken(
-    { renderId: stored.id, appId: stored.appId },
+    { sessionId: stored.id, appId: stored.appId },
     SECRET,
   );
   return {
     server,
     httpServer,
     url: `http://127.0.0.1:${addr.port}`,
-    renderId: stored.id,
+    sessionId: stored.id,
     appId: stored.appId,
     validToken: token,
     validClaims: claims,
   };
 }
 
-describe('GET /api/renders/:renderId/state', () => {
+describe('GET /api/sessions/:sessionId/state', () => {
   let fx: Fixture | null = null;
   afterEach(async () => {
     if (fx) {
@@ -128,7 +128,7 @@ describe('GET /api/renders/:renderId/state', () => {
   it('returns 200 + slice envelope with lastSequence stamped on happy path', async () => {
     fx = await bootWithRender({ withRender: true });
     const res = await fetch(
-      `${fx.url}/api/renders/${fx.renderId}/state?wsToken=${encodeURIComponent(fx.validToken)}`,
+      `${fx.url}/api/sessions/${fx.sessionId}/state?wsToken=${encodeURIComponent(fx.validToken)}`,
     );
     expect(res.status).toBe(200);
     expect(res.headers.get('content-type')).toMatch(/application\/json/);
@@ -139,7 +139,7 @@ describe('GET /api/renders/:renderId/state', () => {
       | McpAppAiGguiRenderMeta
       | undefined;
     expect(renderMeta).toBeDefined();
-    expect(renderMeta?.renderId).toBe(fx.renderId);
+    expect(renderMeta?.sessionId).toBe(fx.sessionId);
     expect(renderMeta?.appId).toBe(fx.appId);
     expect(typeof renderMeta?.runtimeUrl).toBe('string');
     // R6 contract — lastSequence MUST be stamped on every /state read.
@@ -151,14 +151,14 @@ describe('GET /api/renders/:renderId/state', () => {
 
   it('returns 401 when wsToken query is absent', async () => {
     fx = await bootWithRender();
-    const res = await fetch(`${fx.url}/api/renders/${fx.renderId}/state`);
+    const res = await fetch(`${fx.url}/api/sessions/${fx.sessionId}/state`);
     expect(res.status).toBe(401);
   });
 
   it('returns 401 when wsToken signature is invalid', async () => {
     fx = await bootWithRender();
     const res = await fetch(
-      `${fx.url}/api/renders/${fx.renderId}/state?wsToken=tampered.payload`,
+      `${fx.url}/api/sessions/${fx.sessionId}/state?wsToken=tampered.payload`,
     );
     expect(res.status).toBe(401);
   });
@@ -169,28 +169,28 @@ describe('GET /api/renders/:renderId/state', () => {
     // `exp <= now` (line 314 of ws-tokens.ts).
     const { token: expiredToken } = mintWsToken(
       {
-        renderId: fx.renderId,
+        sessionId: fx.sessionId,
         appId: fx.appId,
         ttlSec: -10,
       },
       SECRET,
     );
     const res = await fetch(
-      `${fx.url}/api/renders/${fx.renderId}/state?wsToken=${encodeURIComponent(expiredToken)}`,
+      `${fx.url}/api/sessions/${fx.sessionId}/state?wsToken=${encodeURIComponent(expiredToken)}`,
     );
     expect(res.status).toBe(410);
   });
 
-  it('returns 401 when wsToken renderId does not match URL renderId', async () => {
+  it('returns 401 when wsToken sessionId does not match URL sessionId', async () => {
     fx = await bootWithRender();
-    // Mint a token for a different render; the URL targets fx.renderId
-    // but the token claims a different renderId — tenancy gate trips.
-    const { token: otherRenderToken } = mintWsToken(
-      { renderId: 'other-render', appId: fx.appId },
+    // Mint a token for a different render; the URL targets fx.sessionId
+    // but the token claims a different sessionId — tenancy gate trips.
+    const { token: otherSessionToken } = mintWsToken(
+      { sessionId: 'other-render', appId: fx.appId },
       SECRET,
     );
     const res = await fetch(
-      `${fx.url}/api/renders/${fx.renderId}/state?wsToken=${encodeURIComponent(otherRenderToken)}`,
+      `${fx.url}/api/sessions/${fx.sessionId}/state?wsToken=${encodeURIComponent(otherSessionToken)}`,
     );
     expect(res.status).toBe(401);
   });
@@ -198,24 +198,24 @@ describe('GET /api/renders/:renderId/state', () => {
   it('returns 401 when wsToken appId does not match render appId', async () => {
     fx = await bootWithRender();
     const { token: otherAppToken } = mintWsToken(
-      { renderId: fx.renderId, appId: 'other-app' },
+      { sessionId: fx.sessionId, appId: 'other-app' },
       SECRET,
     );
     const res = await fetch(
-      `${fx.url}/api/renders/${fx.renderId}/state?wsToken=${encodeURIComponent(otherAppToken)}`,
+      `${fx.url}/api/sessions/${fx.sessionId}/state?wsToken=${encodeURIComponent(otherAppToken)}`,
     );
     expect(res.status).toBe(401);
   });
 
-  it('returns 404 when renderId does not resolve', async () => {
+  it('returns 404 when sessionId does not resolve', async () => {
     fx = await bootWithRender();
     // Mint a token for a render that does not exist in the store.
     const { token: ghostToken } = mintWsToken(
-      { renderId: 'sess-ghost', appId: fx.appId },
+      { sessionId: 'sess-ghost', appId: fx.appId },
       SECRET,
     );
     const res = await fetch(
-      `${fx.url}/api/renders/sess-ghost/state?wsToken=${encodeURIComponent(ghostToken)}`,
+      `${fx.url}/api/sessions/sess-ghost/state?wsToken=${encodeURIComponent(ghostToken)}`,
     );
     expect(res.status).toBe(404);
   });

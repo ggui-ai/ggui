@@ -56,7 +56,7 @@ describe('host-context-emitter', () => {
 
   it('emits the initial projection on first seed', () => {
     seed({
-      renderId: 'render_1',
+      sessionId: 'render_1',
       send,
       initial: { currentDisplayMode: 'inline' },
     });
@@ -64,7 +64,7 @@ describe('host-context-emitter', () => {
     expect(sent[0]).toEqual({
       type: 'host_context_observed',
       payload: {
-        renderId: 'render_1',
+        sessionId: 'render_1',
         hostContext: { currentDisplayMode: 'inline' },
       },
     });
@@ -72,13 +72,13 @@ describe('host-context-emitter', () => {
 
   it('re-seed with the same projection does NOT emit again', () => {
     seed({
-      renderId: 'render_1',
+      sessionId: 'render_1',
       send,
       initial: { currentDisplayMode: 'inline' },
     });
     expect(sent).toHaveLength(1);
     seed({
-      renderId: 'render_1',
+      sessionId: 'render_1',
       send,
       initial: { currentDisplayMode: 'inline' },
     });
@@ -87,12 +87,12 @@ describe('host-context-emitter', () => {
 
   it('re-seed with a DIFFERENT projection emits', () => {
     seed({
-      renderId: 'render_1',
+      sessionId: 'render_1',
       send,
       initial: { currentDisplayMode: 'inline' },
     });
     seed({
-      renderId: 'render_1',
+      sessionId: 'render_1',
       send,
       initial: { currentDisplayMode: 'fullscreen' },
     });
@@ -104,7 +104,7 @@ describe('host-context-emitter', () => {
 
   it('emits on host-context-changed when projection-visible field changes', () => {
     seed({
-      renderId: 'render_1',
+      sessionId: 'render_1',
       send,
       initial: { currentDisplayMode: 'inline' },
     });
@@ -116,7 +116,7 @@ describe('host-context-emitter', () => {
 
   it('merges partial updates into the held projection', () => {
     seed({
-      renderId: 'render_1',
+      sessionId: 'render_1',
       send,
       initial: {
         currentDisplayMode: 'inline',
@@ -138,7 +138,7 @@ describe('host-context-emitter', () => {
 
   it('suppresses no-op host-context-changed (nothing projection-visible changed)', () => {
     seed({
-      renderId: 'render_1',
+      sessionId: 'render_1',
       send,
       initial: { currentDisplayMode: 'inline' },
     });
@@ -151,7 +151,7 @@ describe('host-context-emitter', () => {
 
   it('ignores non-notification messages', () => {
     seed({
-      renderId: 'render_1',
+      sessionId: 'render_1',
       send,
       initial: { currentDisplayMode: 'inline' },
     });
@@ -182,7 +182,7 @@ describe('host-context-emitter', () => {
 
   it('detach() removes the listener and clears state', () => {
     seed({
-      renderId: 'render_1',
+      sessionId: 'render_1',
       send,
       initial: { currentDisplayMode: 'inline' },
     });
@@ -198,7 +198,7 @@ describe('host-context-emitter', () => {
     const received: unknown[] = [];
     subscribeLocal((p) => received.push(p));
     seed({
-      renderId: 'render_1',
+      sessionId: 'render_1',
       send,
       initial: { currentDisplayMode: 'inline' },
     });
@@ -208,7 +208,7 @@ describe('host-context-emitter', () => {
     // Re-seed in a fresh "scenario" — the OLD subscriber MUST NOT
     // fire (it would, if detach didn't clear localSubscribers).
     seed({
-      renderId: 'render_2',
+      sessionId: 'render_2',
       send,
       initial: { currentDisplayMode: 'fullscreen' },
     });
@@ -228,7 +228,7 @@ describe('host-context-emitter', () => {
     };
     expect(() =>
       seed({
-        renderId: 'render_1',
+        sessionId: 'render_1',
         send: throwingSend,
         initial: { currentDisplayMode: 'inline' },
       }),
@@ -237,7 +237,7 @@ describe('host-context-emitter', () => {
 
   it('attaches listener idempotently (duplicate calls do not register twice)', () => {
     seed({
-      renderId: 'render_1',
+      sessionId: 'render_1',
       send,
       initial: { currentDisplayMode: 'inline' },
     });

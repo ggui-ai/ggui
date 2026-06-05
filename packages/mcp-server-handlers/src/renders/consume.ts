@@ -11,7 +11,7 @@
  *     from `@ggui-ai/mcp-server-core`) owns the atomic fetch-and-clear
  *     contract. The standalone server uses in-memory / SQLite; a
  *     cloud deployment wraps an atomic-read-and-clear datastore op.
- *   - `renderStore.get(renderId)` resolves the render, tenancy-checks
+ *   - `renderStore.get(sessionId)` resolves the render, tenancy-checks
  *     via `ctx.appId`, and reads TTL for the activity heartbeat.
  *   - Long-poll is server-side (1-900s, default cap 900s). The
  *     original 25s ceiling assumed an API Gateway 30s kill in front
@@ -28,8 +28,8 @@
  *
  * Post-Phase-B (flatten-render-identity): collapsed from the prior
  * `{stackItemId}` input + session/stack-item double-resolution into a
- * single `{renderId}` input + one render lookup. The pending-events
- * pipe is keyed by `renderId` (was `stackItemId`); the value is the
+ * single `{sessionId}` input + one render lookup. The pending-events
+ * pipe is keyed by `sessionId` (was `stackItemId`); the value is the
  * same.
  */
 
@@ -76,11 +76,11 @@ const DEFAULT_MAX_TIMEOUT_SECONDS = 120;
 const POLL_INTERVAL_MS = 1500;
 
 const inputSchema = {
-  renderId: z
+  sessionId: z
     .string()
     .min(1)
     .describe(
-      'Globally-unique renderId to consume events from. Cross-tenant access surfaces uniformly as render_not_found.',
+      'Globally-unique sessionId to consume events from. Cross-tenant access surfaces uniformly as session_not_found.',
     ),
   timeout: z
     .number()
@@ -114,7 +114,7 @@ export interface ObserverNotifier {
   notifyToolCall(args: {
     readonly appId: string;
     readonly tool: string;
-    readonly renderId: string;
+    readonly sessionId: string;
     readonly args: Record<string, unknown>;
     readonly result: {
       readonly eventCount: number;
@@ -140,7 +140,7 @@ export interface ObserverNotifier {
  */
 export interface DrainAckNotifier {
   sendDrainAck(args: {
-    readonly renderId: string;
+    readonly sessionId: string;
     readonly appId: string;
     readonly eventId: string;
     readonly drainedAt: string;
@@ -191,8 +191,8 @@ export interface GguiConsumeHandlerDeps {
   readonly logger?: ConsumeLogger;
   /**
    * Optional active-consumer awareness seam. When bound, the handler
-   * calls `enter(renderId)` at the top of the long-poll and
-   * `exit(renderId)` in `finally` so a concurrent
+   * calls `enter(sessionId)` at the top of the long-poll and
+   * `exit(sessionId)` in `finally` so a concurrent
    * `ggui_runtime_submit_action` append can query `hasActive` and
    * surface `consumerPresent: false` to the iframe when no long-poll
    * is registered for the targeted render — the iframe then emits
@@ -237,14 +237,14 @@ export function createGguiConsumeHandler(
     title: 'Consume',
     audience: ['agent'],
     description:
-      'Long-poll for buffered events on a render. CALL THIS RIGHT AFTER EVERY `ggui_render` THAT RETURNS `nextStep.tool === "ggui_consume"` — that hint is your cue to start listening for the user\'s gesture. Keyed by renderId (global UUID); tenancy-checked via ctx.appId. Inline long-poll supported up to a deployment cap (default 30s — host MCP clients abort longer tool calls; pick 5-15s typical, 30s max). Returns `{events, status}` — each event carries `{intent, actionData, uiContext, actionId, firedAt}`: `actionData` is WHAT the user did, `uiContext` is the iframe-local snapshot of the contract\'s contextSpec slots AT THE MOMENT they did it. Both inform your reaction without a second round trip. Returns immediately when an action event arrives OR the render completes OR the timeout elapses. On timeout with no event, re-call ggui_consume to keep waiting.  THE LOOP: when `events` is non-empty, REACT, then re-call `ggui_consume` to wait for the next event. Exit only when status:"expired".  IMPORTANT — the iframe state is independent of your backend state: after you mutate via domain tools (todo_toggle, cart_add, etc.), the UI still shows the OLD props until you call `ggui_update`. If the events caused observable state changes the user is looking at, your reaction MUST include `ggui_update` somewhere before re-consuming; otherwise the user sees stale props (the #1 wire compliance bug). Pure-info events that don\'t change displayed state can skip ggui_update. You decide the call order and which tools you need — the protocol just guarantees that `ggui_update` is the way to refresh the iframe.  HOSTS WITH PROGRESSIVE TOOL DISCOVERY (claude.ai-style connectors): if a call here errors with "tool not loaded yet" or "wrong parameter names," call `tool_search({query:"ggui_consume"})` once to warm the tool, then retry with the same args. DO NOT skip the consume — silent gesture drops are the worst protocol failure.',
+      'Long-poll for buffered events on a render. CALL THIS RIGHT AFTER EVERY `ggui_render` THAT RETURNS `nextStep.tool === "ggui_consume"` — that hint is your cue to start listening for the user\'s gesture. Keyed by sessionId (global UUID); tenancy-checked via ctx.appId. Inline long-poll supported up to a deployment cap (default 30s — host MCP clients abort longer tool calls; pick 5-15s typical, 30s max). Returns `{events, status}` — each event carries `{intent, actionData, uiContext, actionId, firedAt}`: `actionData` is WHAT the user did, `uiContext` is the iframe-local snapshot of the contract\'s contextSpec slots AT THE MOMENT they did it. Both inform your reaction without a second round trip. Returns immediately when an action event arrives OR the render completes OR the timeout elapses. On timeout with no event, re-call ggui_consume to keep waiting.  THE LOOP: when `events` is non-empty, REACT, then re-call `ggui_consume` to wait for the next event. Exit only when status:"expired".  IMPORTANT — the iframe state is independent of your backend state: after you mutate via domain tools (todo_toggle, cart_add, etc.), the UI still shows the OLD props until you call `ggui_update`. If the events caused observable state changes the user is looking at, your reaction MUST include `ggui_update` somewhere before re-consuming; otherwise the user sees stale props (the #1 wire compliance bug). Pure-info events that don\'t change displayed state can skip ggui_update. You decide the call order and which tools you need — the protocol just guarantees that `ggui_update` is the way to refresh the iframe.  HOSTS WITH PROGRESSIVE TOOL DISCOVERY (claude.ai-style connectors): if a call here errors with "tool not loaded yet" or "wrong parameter names," call `tool_search({query:"ggui_consume"})` once to warm the tool, then retry with the same args. DO NOT skip the consume — silent gesture drops are the worst protocol failure.',
     inputSchema,
     outputSchema,
     async handler(
       rawInput: Record<string, unknown>,
       ctx: HandlerContext,
     ): Promise<GguiConsumeOutput> {
-      const { renderId, timeout = 0 } = z.object(inputSchema).parse(rawInput);
+      const { sessionId, timeout = 0 } = z.object(inputSchema).parse(rawInput);
 
       // Register this long-poll on the active-consumer registry IMMEDIATELY
       // — before the tenancy resolution awaits — so a concurrent
@@ -252,14 +252,14 @@ export function createGguiConsumeHandler(
       // earliest possible window. `exit` is paired in `finally` below so
       // every termination path (success, timeout, error, tenancy reject)
       // decrements the count exactly once.
-      deps.activeConsumerRegistry?.enter(renderId);
+      deps.activeConsumerRegistry?.enter(sessionId);
       try {
         // Resolve render. Cross-tenant + missing surface uniformly as
-        // render_not_found (don't leak whether the id exists in another
+        // session_not_found (don't leak whether the id exists in another
         // tenant).
-        const stored = await deps.renderStore.get(renderId);
+        const stored = await deps.renderStore.get(sessionId);
         if (!stored || stored.appId !== ctx.appId) {
-          throw new GguiSessionNotFoundError(renderId);
+          throw new GguiSessionNotFoundError(sessionId);
         }
 
         const maxTimeoutSeconds =
@@ -274,12 +274,12 @@ export function createGguiConsumeHandler(
           deps.defaultRenderTtlSeconds ?? DEFAULT_TTL_SECONDS,
         );
 
-        // The pending-event pipe is keyed by renderId. The render
+        // The pending-event pipe is keyed by sessionId. The render
         // lookup above is purely a tenancy gate; pipe reads use
-        // renderId directly.
+        // sessionId directly.
         let result = await fetchAndClearSafe(
           deps.pendingEventConsumer,
-          renderId,
+          sessionId,
           ttlMs,
         );
 
@@ -297,10 +297,10 @@ export function createGguiConsumeHandler(
           // closing transition relies on the absence of further opens
           // for the same render; spamming would mask the close signal.
           // Fire-and-forget — absent emitter no-ops.
-          deps.canvasLifecycle?.emit(renderId, {
+          deps.canvasLifecycle?.emit(sessionId, {
             kind: 'consume_polling',
             state: 'open',
-            renderId,
+            sessionId,
           });
           while (Date.now() < deadline) {
             // Abort-awareness. `ctx.signal` fires when the inbound
@@ -308,7 +308,7 @@ export function createGguiConsumeHandler(
             // loop (browser reload → agent-server SSE abort → SDK
             // abort) surfaces here as a `notifications/cancelled` OR a
             // transport close. Breaking promptly lets `finally` run
-            // `activeConsumerRegistry.exit(renderId)` NOW, so a
+            // `activeConsumerRegistry.exit(sessionId)` NOW, so a
             // concurrent post-reload `ggui_runtime_submit_action`
             // reads `hasActive: false` and the iframe rings the
             // recovery doorbell instead of suppressing it against a
@@ -327,7 +327,7 @@ export function createGguiConsumeHandler(
             }
             result = await fetchAndClearSafe(
               deps.pendingEventConsumer,
-              renderId,
+              sessionId,
               ttlMs,
             );
             if (result.events.length > 0 || result.status === 'expired') {
@@ -365,7 +365,7 @@ export function createGguiConsumeHandler(
                 if (latencyMs > CONSUME_SLOW_THRESHOLD_MS) {
                   try {
                     deps.logger.info('action_consume_slow', {
-                      renderId,
+                      sessionId,
                       appId: ctx.appId,
                       eventId: pe.id,
                       latencyMs,
@@ -380,7 +380,7 @@ export function createGguiConsumeHandler(
             if (deps.drainAckNotifier && pe.id.length > 0) {
               try {
                 deps.drainAckNotifier.sendDrainAck({
-                  renderId,
+                  sessionId,
                   appId: ctx.appId,
                   eventId: pe.id,
                   drainedAt,
@@ -402,7 +402,7 @@ export function createGguiConsumeHandler(
           deps.observerNotifier.notifyToolCall({
             appId: ctx.appId,
             tool: 'ggui_consume',
-            renderId,
+            sessionId,
             args: { timeout: cappedTimeout },
             result: {
               eventCount: events.length,
@@ -429,7 +429,7 @@ export function createGguiConsumeHandler(
             : {}),
         };
       } finally {
-        deps.activeConsumerRegistry?.exit(renderId);
+        deps.activeConsumerRegistry?.exit(sessionId);
       }
     },
   };
@@ -445,11 +445,11 @@ export function createGguiConsumeHandler(
  */
 async function fetchAndClearSafe(
   consumer: PendingEventConsumer,
-  renderId: string,
+  sessionId: string,
   ttlMs: number,
 ): Promise<ConsumeResultRaw> {
   try {
-    const r = await consumer.consumeAndClear(renderId, ttlMs);
+    const r = await consumer.consumeAndClear(sessionId, ttlMs);
     return { events: r.events, status: r.status };
   } catch (err) {
     if (

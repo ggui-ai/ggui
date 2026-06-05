@@ -190,6 +190,6 @@ void ({} as _Pinned);
 // exist and `LegacyScopableWireConfig` is deleted. The renderer mounts
 // exactly one render per iframe; "scope" collapses to identity.
 // @ts-expect-error WireConfig no longer carries a `scope(item)` method.
-typedCfg.scope({ renderId: 'x' });
+typedCfg.scope({ sessionId: 'x' });
 
 export {};

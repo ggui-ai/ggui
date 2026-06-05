@@ -98,7 +98,7 @@ function readToolErrorMessage(resp: {
 
 // Post-Phase-B: the render slice meta lives at
 // `_meta["ai.ggui/render"]` (was `_meta.ggui.bootstrap` pre-rename).
-// `McpAppAiGguiRenderMeta` carries `renderId`, `appId`, `gadgets`,
+// `McpAppAiGguiRenderMeta` carries `sessionId`, `appId`, `gadgets`,
 // `publicEnv`, and the rest of the iframe-mount payload directly.
 function readBootstrap(resp: {
   result?: { _meta?: Record<string, unknown> };
@@ -156,9 +156,9 @@ describe('Scenario 20 — public env channel gate (ggui-mapbox-demo)', () => {
     // Gate accepts.
     expect(readToolErrorMessage(renderResp)).toBeNull();
     const structured = (renderResp as {
-      result?: { structuredContent?: { renderId?: string } };
+      result?: { structuredContent?: { sessionId?: string } };
     }).result?.structuredContent;
-    expect(structured?.renderId).toBeTypeOf('string');
+    expect(structured?.sessionId).toBeTypeOf('string');
     // Bootstrap carries the projected publicEnv. Slice 2.2 — the
     // server filters App.publicEnv to the union of declared wrappers'
     // `requires`, so only the Mapbox token is forwarded (any other

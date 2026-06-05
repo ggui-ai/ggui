@@ -4,7 +4,7 @@
  * Core protocol-layer types backing the unified cursor-replay model.
  * The same ledger is read by:
  *
- *   - `GET /api/renders/:renderId/events?sinceSequence=N&limit=M` —
+ *   - `GET /api/sessions/:sessionId/events?sinceSequence=N&limit=M` —
  *     HTTP cursor-replay endpoint; polling clients walk it on a
  *     2s tick.
  *   - WS `subscribe` with `SubscribePayload.sinceSequence` — server
@@ -92,7 +92,7 @@ export type GguiSessionEventType =
   | 'user.submitted';
 
 /**
- * Response body for `GET /api/renders/:renderId/events?sinceSequence=N&limit=M`.
+ * Response body for `GET /api/sessions/:sessionId/events?sinceSequence=N&limit=M`.
  *
  * Pagination semantics:
  *   - `events` — strictly ascending by `seq`; only events with
@@ -117,7 +117,7 @@ export interface EventsResponse {
  * 410 Gone response body — `sinceSequence` predates the server's
  * replay horizon (events evicted from the bounded ring buffer or
  * never written before the ledger went online). Client recovery:
- * re-mount from a fresh snapshot (`/api/renders/:id/state`) and
+ * re-mount from a fresh snapshot (`/api/sessions/:id/state`) and
  * reset the cursor to the returned `currentSequence`.
  *
  * @public

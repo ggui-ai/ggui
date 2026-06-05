@@ -139,7 +139,7 @@ export interface McpAppIframeProps {
    *
    * **Rule of thumb:** set this exactly when the WebView was spawned by
    * following ggui's own resource URI (`ui://ggui/render` or
-   * `ui://ggui/render/<renderId>` etc.) and the host is responsible
+   * `ui://ggui/render/<sessionId>` etc.) and the host is responsible
    * for wiring the meta forward — e.g. the console's
    * `<McpAppIframe>` mount feeds it the meta fetched from
    * `GET /ggui/console/render-resource`. Do NOT set this for any

@@ -22,7 +22,7 @@ export type {
   EventType,
   // Post-Phase-B render shape — replaces the deleted Session/StackItem
   // pair with a single GguiSession union (ComponentGguiSession, SystemGguiSession,
-  // McpAppsGguiSession) keyed by the flat `renderId`.
+  // McpAppsGguiSession) keyed by the flat `sessionId`.
   GguiSession,
   ComponentGguiSession,
   SystemGguiSession,

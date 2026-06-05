@@ -433,7 +433,7 @@ describe("POST /agent { kind:'tool-call' }", () => {
         body: JSON.stringify({
           kind: 'tool-call',
           name: 'ggui_runtime_submit_action',
-          arguments: { renderId: 'r_1', event: { name: 'click' } },
+          arguments: { sessionId: 'r_1', event: { name: 'click' } },
         }),
       });
       expect(res.status).toBe(200);
@@ -715,10 +715,10 @@ describe('deleted endpoints', () => {
     expect(res.status).toBe(404);
   });
 
-  it('GET /api/renders/:id/state is gone (404) — freshness handled in GET /agent', async () => {
+  it('GET /api/sessions/:id/state is gone (404) — freshness handled in GET /agent', async () => {
     const { app } = buildApp();
     const { guestToken } = await mintGuestBearer(app);
-    const res = await app.request('http://localhost/api/renders/r_1/state', {
+    const res = await app.request('http://localhost/api/sessions/r_1/state', {
       headers: { Authorization: `Bearer ${guestToken}` },
     });
     expect(res.status).toBe(404);

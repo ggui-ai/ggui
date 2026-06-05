@@ -382,13 +382,13 @@ test.describe.serial('Phase 5 — pair flow + clean-room + strict-auth /mcp', ()
       },
     );
     expect(renderEnv.error).toBeUndefined();
-    // Post-Phase-B structuredContent: {renderId, url, action,
-    // nextStep?}. The proof the render committed is `renderId` + a
+    // Post-Phase-B structuredContent: {sessionId, url, action,
+    // nextStep?}. The proof the render committed is `sessionId` + a
     // `/r/<shortCode>` URL.
     const renderResult = renderEnv.result as {
-      structuredContent?: { renderId?: string; url?: string };
+      structuredContent?: { sessionId?: string; url?: string };
     };
-    expect(renderResult.structuredContent?.renderId).toBeTruthy();
+    expect(renderResult.structuredContent?.sessionId).toBeTruthy();
     expect(renderResult.structuredContent?.url).toMatch(/\/r\/[a-z0-9]+/);
 
     // 4. Network gate — no browser-side call attempted hosted / AWS

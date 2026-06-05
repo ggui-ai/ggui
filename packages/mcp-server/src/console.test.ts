@@ -320,7 +320,7 @@ describe('createGguiServer — console opt-in', () => {
  *   - 400 on missing/bad body
  *   - cookie does NOT authenticate /mcp (scope invariant)
  *   - cookie DOES authenticate the live-channel WS upgrade, scoped
- *     to the bound render (subscribe renderId mismatch rejected)
+ *     to the bound render (subscribe sessionId mismatch rejected)
  */
 describe('createGguiServer — console.sessionCookie', () => {
   let fx: Fixture | null = null;
@@ -396,7 +396,7 @@ describe('createGguiServer — console.sessionCookie', () => {
       '@ggui-ai/mcp-server-core/in-memory'
     );
     const index = new InMemoryShortCodeIndex();
-    await index.put('abc12345', { renderId: 'sess-1', appId: 'app-1' });
+    await index.put('abc12345', { sessionId: 'sess-1', appId: 'app-1' });
 
     fx = await boot({
       renderChannel: true,
@@ -415,11 +415,11 @@ describe('createGguiServer — console.sessionCookie', () => {
     expect(setCookie).toMatch(/HttpOnly/);
     expect(setCookie).toMatch(/SameSite=Strict/);
     const body = (await res.json()) as {
-      renderId: string;
+      sessionId: string;
       appId: string;
       expiresAt: number;
     };
-    expect(body.renderId).toBe('sess-1');
+    expect(body.sessionId).toBe('sess-1');
     expect(body.appId).toBe('app-1');
     expect(typeof body.expiresAt).toBe('number');
     expect(body.expiresAt).toBeGreaterThan(Date.now());
@@ -430,7 +430,7 @@ describe('createGguiServer — console.sessionCookie', () => {
       '@ggui-ai/mcp-server-core/in-memory'
     );
     const index = new InMemoryShortCodeIndex();
-    await index.put('abc12345', { renderId: 'sess-1', appId: 'app-1' });
+    await index.put('abc12345', { sessionId: 'sess-1', appId: 'app-1' });
 
     fx = await boot({
       auth: new InMemoryAuthAdapter({ devAllowAll: false }),
@@ -475,7 +475,7 @@ describe('createGguiServer — console.sessionCookie', () => {
       '@ggui-ai/mcp-server-core/in-memory'
     );
     const index = new InMemoryShortCodeIndex();
-    await index.put('abc12345', { renderId: 'sess-1', appId: 'app-1' });
+    await index.put('abc12345', { sessionId: 'sess-1', appId: 'app-1' });
 
     fx = await boot({
       auth: new InMemoryAuthAdapter({ devAllowAll: false }),
@@ -503,7 +503,7 @@ describe('createGguiServer — console.sessionCookie', () => {
       '@ggui-ai/mcp-server-core/in-memory'
     );
     const index = new InMemoryShortCodeIndex();
-    await index.put('abc12345', { renderId: 'sess-1', appId: 'app-1' });
+    await index.put('abc12345', { sessionId: 'sess-1', appId: 'app-1' });
 
     fx = await boot({
       auth: new InMemoryAuthAdapter({ devAllowAll: false }),
@@ -532,7 +532,7 @@ describe('createGguiServer — console.sessionCookie', () => {
         ws.send(
           JSON.stringify({
             type: 'subscribe',
-            payload: { renderId: 'sess-1', appId: 'app-1' },
+            payload: { sessionId: 'sess-1', appId: 'app-1' },
             requestId: 'r1',
           }),
         );
@@ -546,12 +546,12 @@ describe('createGguiServer — console.sessionCookie', () => {
     expect(ack).toMatchObject({ type: 'ack' });
   });
 
-  it('cookie-bound subscribe rejects mismatched renderId', async () => {
+  it('cookie-bound subscribe rejects mismatched sessionId', async () => {
     const { InMemoryShortCodeIndex } = await import(
       '@ggui-ai/mcp-server-core/in-memory'
     );
     const index = new InMemoryShortCodeIndex();
-    await index.put('abc12345', { renderId: 'sess-1', appId: 'app-1' });
+    await index.put('abc12345', { sessionId: 'sess-1', appId: 'app-1' });
 
     fx = await boot({
       auth: new InMemoryAuthAdapter({ devAllowAll: false }),
@@ -582,7 +582,7 @@ describe('createGguiServer — console.sessionCookie', () => {
         ws.send(
           JSON.stringify({
             type: 'subscribe',
-            payload: { renderId: 'sess-other', appId: 'app-1' },
+            payload: { sessionId: 'sess-other', appId: 'app-1' },
             requestId: 'r1',
           }),
         );
@@ -599,7 +599,7 @@ describe('createGguiServer — console.sessionCookie', () => {
     });
     ws.close();
     expect(msg.type).toBe('error');
-    expect(msg.payload?.code).toBe('DEVTOOL_COOKIE_RENDER_MISMATCH');
+    expect(msg.payload?.code).toBe('DEVTOOL_COOKIE_SESSION_MISMATCH');
   });
 
   it('invalid cookie on /ws upgrade rejects the handshake (401)', async () => {
@@ -744,7 +744,7 @@ describe('createGguiServer — console security headers', () => {
       '@ggui-ai/mcp-server-core/in-memory'
     );
     const index = new InMemoryShortCodeIndex();
-    await index.put('abc12345', { renderId: 'sess-1', appId: 'app-1' });
+    await index.put('abc12345', { sessionId: 'sess-1', appId: 'app-1' });
     fx = await boot({
       renderChannel: true,
       shortCodeIndex: index,
@@ -868,7 +868,7 @@ describe('createGguiServer — console full ceremony integration', () => {
       '@ggui-ai/mcp-server-core/in-memory'
     );
     const index = new InMemoryShortCodeIndex();
-    await index.put('xyz98765', { renderId: 'sess-42', appId: 'app-42' });
+    await index.put('xyz98765', { sessionId: 'sess-42', appId: 'app-42' });
 
     fx = await boot({
       auth: new InMemoryAuthAdapter({ devAllowAll: false }),
@@ -902,7 +902,7 @@ describe('createGguiServer — console full ceremony integration', () => {
         ws.send(
           JSON.stringify({
             type: 'subscribe',
-            payload: { renderId: 'sess-42', appId: 'app-42' },
+            payload: { sessionId: 'sess-42', appId: 'app-42' },
             requestId: 'r1',
           }),
         );
@@ -943,7 +943,7 @@ describe('createGguiServer — console full ceremony integration', () => {
     // injection). Use the smallest valid shape — `deleteSurface` — so
     // the test proves fan-out wiring without coupling to a fake payload.
     await fx.server.renderChannel!.sendToGguiSession({
-      renderId: 'sess-42',
+      sessionId: 'sess-42',
       channel: '_ggui:preview',
       mode: 'append',
       payload: { version: 'v0.9', deleteSurface: { surfaceId: 'surf-1' } },
@@ -957,7 +957,7 @@ describe('createGguiServer — console full ceremony integration', () => {
     ws.close();
   });
 
-  it('full ceremony — cookie-scoped subscribe rejects hostile renderId even after ack attempt', async () => {
+  it('full ceremony — cookie-scoped subscribe rejects hostile sessionId even after ack attempt', async () => {
     // Belt-and-braces: the ceremony WITHOUT a cookie-render match
     // must not leak frames into the wrong render. Pins that cookie
     // binding is enforced at subscribe time, not just advisory.
@@ -965,7 +965,7 @@ describe('createGguiServer — console full ceremony integration', () => {
       '@ggui-ai/mcp-server-core/in-memory'
     );
     const index = new InMemoryShortCodeIndex();
-    await index.put('xyz98765', { renderId: 'sess-42', appId: 'app-42' });
+    await index.put('xyz98765', { sessionId: 'sess-42', appId: 'app-42' });
 
     fx = await boot({
       auth: new InMemoryAuthAdapter({ devAllowAll: false }),
@@ -994,7 +994,7 @@ describe('createGguiServer — console full ceremony integration', () => {
         ws.send(
           JSON.stringify({
             type: 'subscribe',
-            payload: { renderId: 'other-render', appId: 'app-42' },
+            payload: { sessionId: 'other-render', appId: 'app-42' },
             requestId: 'r1',
           }),
         );
@@ -1011,7 +1011,7 @@ describe('createGguiServer — console full ceremony integration', () => {
     });
     expect(firstMessage.type).toBe('error');
     expect(firstMessage.payload?.code).toBe(
-      'DEVTOOL_COOKIE_RENDER_MISMATCH',
+      'DEVTOOL_COOKIE_SESSION_MISMATCH',
     );
 
     // Even a server-side fan-out to the LEGITIMATE render the
@@ -1022,7 +1022,7 @@ describe('createGguiServer — console full ceremony integration', () => {
       frames.push(JSON.parse(String(raw)));
     });
     await fx.server.renderChannel!.sendToGguiSession({
-      renderId: 'sess-42', // the cookie's real render
+      sessionId: 'sess-42', // the cookie's real render
       channel: '_ggui:preview',
       mode: 'append',
       // Valid A2UI shape (payload passes the injected validator) — the

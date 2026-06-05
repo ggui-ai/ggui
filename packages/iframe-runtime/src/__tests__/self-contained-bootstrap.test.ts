@@ -48,7 +48,7 @@ describe('extractMetaFromToolResult — Slice 3 codeUrl', () => {
   it('accepts a bootstrap with codeUrl alone (Slice 3 preferred path)', () => {
     const result = extractMetaFromToolResult(
       buildToolResultParams({
-        renderId: 'render_001',
+        sessionId: 'render_001',
         appId: 'a1',
         runtimeUrl: SAMPLE_RUNTIME_URL,
         codeUrl: SAMPLE_CODE_URL,
@@ -71,7 +71,7 @@ describe('extractMetaFromToolResult — Slice 3 codeUrl', () => {
     expect(
       extractMetaFromToolResult(
         buildToolResultParams({
-          renderId: 'render_001',
+          sessionId: 'render_001',
           appId: 'a1',
           runtimeUrl: SAMPLE_RUNTIME_URL,
         }),
@@ -83,7 +83,7 @@ describe('extractMetaFromToolResult — Slice 3 codeUrl', () => {
     expect(
       extractMetaFromToolResult(
         buildToolResultParams({
-          renderId: 'render_001',
+          sessionId: 'render_001',
           appId: 'a1',
           runtimeUrl: SAMPLE_RUNTIME_URL,
           codeUrl: '',
@@ -96,7 +96,7 @@ describe('extractMetaFromToolResult — Slice 3 codeUrl', () => {
     expect(
       extractMetaFromToolResult(
         buildToolResultParams({
-          renderId: 'render_001',
+          sessionId: 'render_001',
           appId: 'a1',
           runtimeUrl: SAMPLE_RUNTIME_URL,
           // TS-allowed in the fixture; runtime parser rejects per
@@ -114,7 +114,7 @@ describe('extractMetaFromToolResult — Slice 3 codeUrl', () => {
     expect(
       extractMetaFromToolResult(
         buildToolResultParams({
-          renderId: 'render_001',
+          sessionId: 'render_001',
           appId: 'a1',
           runtimeUrl: SAMPLE_RUNTIME_URL,
           kind: 'connect-claude',
@@ -127,7 +127,7 @@ describe('extractMetaFromToolResult — Slice 3 codeUrl', () => {
   it('still accepts a clean system-card bootstrap (kind only, no code)', () => {
     const result = extractMetaFromToolResult(
       buildToolResultParams({
-        renderId: 'render_001',
+        sessionId: 'render_001',
         appId: 'a1',
         runtimeUrl: SAMPLE_RUNTIME_URL,
         kind: 'connect-claude',
@@ -154,7 +154,7 @@ describe('readSelfContainedMeta — Slice 3 codeUrl on window global', () => {
 
   it('reads codeUrl from window.__GGUI_META__', () => {
     setGlobal({
-      renderId: 'render_001',
+      sessionId: 'render_001',
       appId: 'a1',
       runtimeUrl: SAMPLE_RUNTIME_URL,
       codeUrl: SAMPLE_CODE_URL,
@@ -169,7 +169,7 @@ describe('readSelfContainedMeta — Slice 3 codeUrl on window global', () => {
 
   it('returns null when codeUrl is absent (no mode discriminator)', () => {
     setGlobal({
-      renderId: 'render_001',
+      sessionId: 'render_001',
       appId: 'a1',
       runtimeUrl: SAMPLE_RUNTIME_URL,
     });
@@ -178,7 +178,7 @@ describe('readSelfContainedMeta — Slice 3 codeUrl on window global', () => {
 
   it('passes themeMode through when set to "dark"', () => {
     setGlobal({
-      renderId: 'render_001',
+      sessionId: 'render_001',
       appId: 'a1',
       runtimeUrl: SAMPLE_RUNTIME_URL,
       codeUrl: SAMPLE_CODE_URL,
@@ -196,7 +196,7 @@ describe('readSelfContainedMeta — Slice 3 codeUrl on window global', () => {
 
   it('passes themeMode through for system-card variant', () => {
     setGlobal({
-      renderId: 'render_001',
+      sessionId: 'render_001',
       appId: 'a1',
       runtimeUrl: SAMPLE_RUNTIME_URL,
       kind: 'no-credentials',
@@ -213,7 +213,7 @@ describe('readSelfContainedMeta — Slice 3 codeUrl on window global', () => {
 
   it('drops malformed themeMode silently (falls back to undefined)', () => {
     setGlobal({
-      renderId: 'render_001',
+      sessionId: 'render_001',
       appId: 'a1',
       runtimeUrl: SAMPLE_RUNTIME_URL,
       codeUrl: SAMPLE_CODE_URL,
@@ -230,7 +230,7 @@ describe('readSelfContainedMeta — Slice 3 codeUrl on window global', () => {
 
   it('omits themeMode when absent from bootstrap', () => {
     setGlobal({
-      renderId: 'render_001',
+      sessionId: 'render_001',
       appId: 'a1',
       runtimeUrl: SAMPLE_RUNTIME_URL,
       codeUrl: SAMPLE_CODE_URL,
@@ -249,7 +249,7 @@ describe('readSelfContainedMeta — Slice 3 codeUrl on window global', () => {
 describe('SelfContainedMcpAppAiGguiMeta typing', () => {
   it('allows constructing a component variant with codeUrl', () => {
     const bs: SelfContainedMcpAppAiGguiMeta = {
-      renderId: 'render_001',
+      sessionId: 'render_001',
       appId: 'a1',
       runtimeUrl: SAMPLE_RUNTIME_URL,
       codeUrl: SAMPLE_CODE_URL,

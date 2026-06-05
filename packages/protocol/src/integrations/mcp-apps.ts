@@ -21,7 +21,7 @@
  * drift is bounded to callers that explicitly import from here.
  *
  * Core still carries two fields that make the bootstrap flow work —
- * `SubscribePayload.bootstrap?: string` and `AckPayload.renderToken?:
+ * `SubscribePayload.bootstrap?: string` and `AckPayload.sessionToken?:
  * string`. Those are deliberately framed as **general transport bootstrap
  * credentials** (opaque strings), not MCP-Apps-specific. Any future
  * bootstrap mechanism (short-code auto-login, signed-URL bootstrap, etc.)
@@ -154,7 +154,7 @@ export function deriveContextName(slotKey: string): string {
 // ```jsonc
 // "_meta": {
 //   "ai.ggui/render": {
-//     renderId, appId, runtimeUrl,
+//     sessionId, appId, runtimeUrl,
 //     wsUrl?, wsToken?, expiresAt?,
 //     pollingUrl?,
 //     themeId?, themeMode?,
@@ -241,7 +241,7 @@ export interface McpAppContextSlot {
  * live-channel auth + capability advertisements + render state +
  * contract pointer + component-mode discriminator.
  *
- * **Identity.** `renderId` is the value an iframe's bootstrap meta and
+ * **Identity.** `sessionId` is the value an iframe's bootstrap meta and
  * every wire reference (props_update, consume, update) keys by. The
  * value is the same one stack items carried as `stackItemId` pre-Phase-B;
  * the rename reflects the conceptual collapse (no enclosing vessel).
@@ -253,7 +253,7 @@ export interface McpAppContextSlot {
  *
  * **Polling-fallback URL.** When WS is blocked at the host CSP layer
  * the iframe polls `pollingUrl` (server-stamped post-Phase-B as
- * `/api/renders/<renderId>/events?wsToken=<token>`). The iframe-runtime
+ * `/api/sessions/<sessionId>/events?wsToken=<token>`). The iframe-runtime
  * composes per-tick `&sinceSequence=<cursor>&limit=<N>` against this
  * base; companion to `lastSequence` which seeds the initial cursor.
  *
@@ -265,9 +265,9 @@ export interface McpAppContextSlot {
  * @public
  */
 export interface McpAppAiGguiRenderMeta {
-  // Identity (was sessionId on the session slice; now renderId; value =
+  // Identity (was sessionId on the session slice; now sessionId; value =
   // old stackItemId).
-  readonly renderId: string;
+  readonly sessionId: string;
   readonly appId: string;
   readonly runtimeUrl: string;
 
@@ -277,7 +277,7 @@ export interface McpAppAiGguiRenderMeta {
   readonly expiresAt?: string;
 
   // Polling fallback (server-stamped URL post-rename:
-  // `/api/renders/<renderId>/events`)
+  // `/api/sessions/<sessionId>/events`)
   readonly pollingUrl?: string;
 
   // Theme
@@ -294,10 +294,10 @@ export interface McpAppAiGguiRenderMeta {
   /**
    * Monotonic sequence number of the most-recent event applied to
    * this render's event ledger. Stamped on every emission (render,
-   * update, `GET /api/renders/:id/state` read, MCP `resources/read`
+   * update, `GET /api/sessions/:id/state` read, MCP `resources/read`
    * of `ui://ggui/render/<id>`). Consumers use it to initialize
    * polling cursors aligned with the event ledger — see the
-   * `/api/renders/:id/events?sinceSequence=N` endpoint that reads
+   * `/api/sessions/:id/events?sinceSequence=N` endpoint that reads
    * from a cursor.
    */
   readonly lastSequence?: number;
@@ -341,7 +341,7 @@ export type ParseMcpAppAiGguiRenderMetaResult =
  * Read the `ai.ggui/render` slice off a parsed JSON-RPC `_meta` object.
  *
  * Structural validation only. Missing key returns `{ok: true, meta: undefined}`
- * — not a failure. Required-fields gate (renderId / appId / runtimeUrl)
+ * — not a failure. Required-fields gate (sessionId / appId / runtimeUrl)
  * fires only when the key is present. Field-level optional-field
  * defensive parsing (e.g. context-slot schema narrowing, expiresAt date
  * parse) lives downstream in the iframe-runtime's `validateMeta`.
@@ -366,8 +366,8 @@ export function parseMcpAppAiGguiRenderMeta(
 
   // Identity — required when slice is present.
   if (
-    typeof s.renderId !== 'string' ||
-    s.renderId.length === 0 ||
+    typeof s.sessionId !== 'string' ||
+    s.sessionId.length === 0 ||
     typeof s.appId !== 'string' ||
     s.appId.length === 0 ||
     typeof s.runtimeUrl !== 'string' ||
@@ -426,7 +426,7 @@ export function parseMcpAppAiGguiRenderMeta(
     vUrl.length > 0;
 
   const slice: McpAppAiGguiRenderMeta = {
-    renderId: s.renderId,
+    sessionId: s.sessionId,
     appId: s.appId,
     runtimeUrl: s.runtimeUrl,
     ...(hasW && hasT ? { wsUrl: aw as string, wsToken: at as string } : {}),
@@ -614,7 +614,7 @@ export function parseMcpAppAiGguiHostSessionMeta(
 }
 
 /**
- * Wire shape of one row in `ggui_list_renders` output. Mirrors the
+ * Wire shape of one row in `ggui_list_sessions` output. Mirrors the
  * handler's Zod-described `renders[*]`. Surfaced at the protocol level
  * so non-handler consumers (sample-agent's `/chat/restore` server, future
  * host SDK helpers) can import a single typed shape instead of
@@ -624,14 +624,14 @@ export function parseMcpAppAiGguiHostSessionMeta(
  * wired a `mintWsToken` seam on the handler — otherwise the lean
  * summary path returns them absent.
  *
- * Post-Phase-B: `sessionId` → `renderId`; the old `stackItemCount` is
+ * Post-Phase-B: `sessionId` → `sessionId`; the old `stackItemCount` is
  * dropped (every render is exactly one item — Phase B collapsed the
  * vessel).
  *
  * @public
  */
 export interface GguiSessionSummaryWire {
-  readonly renderId: string;
+  readonly sessionId: string;
   readonly hostName?: string;
   readonly hostSessionId?: string;
   readonly createdAt: string;
@@ -880,7 +880,7 @@ export type McpAppLifecycleState =
  *
  * Fields:
  *   - `state` — required. The lifecycle state being entered.
- *   - `renderId` — optional. When present, the lifecycle pertains to a
+ *   - `sessionId` — optional. When present, the lifecycle pertains to a
  *     specific render (per-card iframes via single-item mode).
  *     Absent → whole-renderer lifecycle.
  *   - `error` — optional, only meaningful when `state === 'error'`.
@@ -901,7 +901,7 @@ export type McpAppLifecycleState =
  */
 export interface McpAppLifecycleEvent {
   readonly state: McpAppLifecycleState;
-  readonly renderId?: string;
+  readonly sessionId?: string;
   readonly error?: {
     readonly code: string;
     readonly message: string;
@@ -993,7 +993,7 @@ export const MCP_APP_LIFECYCLE_STATES: readonly McpAppLifecycleState[] = [
  *   - Outer envelope is an object with `type === 'ggui:lifecycle'`.
  *   - `event` is an object with `state` matching {@link
  *     MCP_APP_LIFECYCLE_STATES}.
- *   - If `renderId` is present, it is a non-empty string.
+ *   - If `sessionId` is present, it is a non-empty string.
  *   - If `error` is present, it is an object with string `code` +
  *     `message`.
  *
@@ -1008,15 +1008,15 @@ export function isMcpAppLifecycleMessage(
   if (m.event === null || typeof m.event !== 'object') return false;
   const e = m.event as {
     state?: unknown;
-    renderId?: unknown;
+    sessionId?: unknown;
     error?: unknown;
   };
   if (typeof e.state !== 'string') return false;
   if (!MCP_APP_LIFECYCLE_STATES.includes(e.state as McpAppLifecycleState)) {
     return false;
   }
-  if (e.renderId !== undefined) {
-    if (typeof e.renderId !== 'string' || e.renderId.length === 0) {
+  if (e.sessionId !== undefined) {
+    if (typeof e.sessionId !== 'string' || e.sessionId.length === 0) {
       return false;
     }
   }
@@ -1133,7 +1133,7 @@ export type SubmitActionEnvelope =
  * Per-kind semantics:
  *
  *   - `kind === 'dispatch'`: server appends a consume-entry onto the
- *     render-keyed pending-events pipe (`{type:'action', renderId,
+ *     render-keyed pending-events pipe (`{type:'action', sessionId,
  *     intent, actionData, uiContext, actionId, firedAt}`) so the agent's
  *     `ggui_consume` long-poll unblocks in the same chat turn. The
  *     handler's response carries `consumerPresent` — whether a
@@ -1143,7 +1143,7 @@ export type SubmitActionEnvelope =
  *     reload), the iframe-runtime ALSO emits a `ui/message` doorbell
  *     carrying `content[0]._meta["ai.ggui/userAction"]` (see
  *     {@link GguiUserActionMeta}) so a fresh agent turn calls
- *     `ggui_consume({renderId})` to drain the just-enqueued gesture.
+ *     `ggui_consume({sessionId})` to drain the just-enqueued gesture.
  *     The doorbell is a PURE POINTER — the gesture stays solely on the
  *     pipe, making the action exactly-once.
  *   - `kind ∈ {'openLink','requestDisplayMode'}`: pure audit — the
@@ -1152,7 +1152,7 @@ export type SubmitActionEnvelope =
  *     the gesture for the RenderInspector feed.
  *
  * Required fields:
- *   - `renderId` / `appId`: bootstrap-issued; server cross-checks.
+ *   - `sessionId` / `appId`: bootstrap-issued; server cross-checks.
  *   - `actionId`: 8-hex correlation hash (FNV-1a of intent + data + firedAt
  *     for `dispatch`, kind + payload + firedAt for the host-control kinds).
  *     Lets the host LLM cross-verify a `[ggui:pending-action]` context entry
@@ -1165,7 +1165,7 @@ export type SubmitActionEnvelope =
  * shape — see {@link SubmitActionEnvelope}.
  */
 export type GguiSubmitActionInput = SubmitActionEnvelope & {
-  readonly renderId: string;
+  readonly sessionId: string;
   readonly appId: string;
   readonly actionId: string;
   readonly firedAt: string;
@@ -1200,7 +1200,7 @@ export function isGguiSubmitActionInput(
   if (value === null || typeof value !== 'object') return false;
   const v = value as Record<string, unknown>;
   if (typeof v.kind !== 'string' || v.kind.length === 0) return false;
-  if (typeof v.renderId !== 'string' || v.renderId.length === 0) return false;
+  if (typeof v.sessionId !== 'string' || v.sessionId.length === 0) return false;
   if (typeof v.appId !== 'string' || v.appId.length === 0) return false;
   if (typeof v.actionId !== 'string' || v.actionId.length === 0) return false;
   if (typeof v.firedAt !== 'string' || v.firedAt.length === 0) return false;
@@ -1248,7 +1248,7 @@ export function isGguiSubmitActionInput(
  * the render's server-side pending-event pipe by the iframe's
  * `ggui_runtime_submit_action` call (relayed by the host) BEFORE this
  * notification fired; this slice's only job is to make a fresh agent turn
- * call `ggui_consume({renderId})` to drain it.
+ * call `ggui_consume({sessionId})` to drain it.
  *
  * SINGLE SOURCE OF TRUTH: the pending-event queue. This slice carries ONLY
  * a pointer to the render whose queue holds the gesture — never the action
@@ -1276,12 +1276,12 @@ export function isGguiSubmitActionInput(
 export interface GguiUserActionMeta {
   readonly kind: 'user-action';
   readonly description: string;
-  readonly renderId: string;
+  readonly sessionId: string;
   readonly actionId: string;
   readonly submittedAt: string;
   readonly intent: string;
   readonly nextStep: {
     readonly tool: 'ggui_consume';
-    readonly args: { readonly renderId: string };
+    readonly args: { readonly sessionId: string };
   };
 }

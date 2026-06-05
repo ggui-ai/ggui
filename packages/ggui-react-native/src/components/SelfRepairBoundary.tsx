@@ -39,7 +39,7 @@ export interface SelfRepairBoundaryProps {
   /** App ID */
   appId: string;
   /** GguiSession identity — single flat id per the current render shape. */
-  renderId: string;
+  sessionId: string;
   /** Original source code (if available) */
   sourceCode?: string;
   /** Compiled code */
@@ -138,7 +138,7 @@ export class SelfRepairBoundary extends Component<
   }
 
   private async attemptRepair(error: Error, componentStack?: string): Promise<void> {
-    const { config, appId, renderId, sourceCode, compiledCode, onReportError } =
+    const { config, appId, sessionId, sourceCode, compiledCode, onReportError } =
       this.props;
     const { attemptCount, errorId } = this.state;
 
@@ -154,7 +154,7 @@ export class SelfRepairBoundary extends Component<
     const report: ComponentErrorReport = {
       errorId: errorId || generateErrorId(),
       appId,
-      renderId,
+      sessionId,
       error: {
         message: error.message,
         name: error.name,

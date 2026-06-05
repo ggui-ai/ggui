@@ -55,7 +55,7 @@ const MCP_URL = `http://localhost:${GGUI_PORT}/mcp`;
 const HAS_KEY = !!process.env.ANTHROPIC_API_KEY;
 
 interface RenderOut {
-  renderId: string;
+  sessionId: string;
   url?: string;
   action?: string;
 }
@@ -63,7 +63,7 @@ interface RenderOut {
 interface BootstrapJson {
   codeUrl?: string;
   codeHash?: string;
-  renderId?: string;
+  sessionId?: string;
 }
 
 function bootstrapUrlFromRenderUrl(renderUrl: string | undefined): string {
@@ -99,8 +99,8 @@ async function fetchBootstrap(renderUrl: string | undefined): Promise<BootstrapJ
   return {
     codeUrl: typeof renderSlice['codeUrl'] === 'string' ? renderSlice['codeUrl'] : undefined,
     codeHash: typeof renderSlice['codeHash'] === 'string' ? renderSlice['codeHash'] : undefined,
-    renderId:
-      typeof renderSlice['renderId'] === 'string' ? renderSlice['renderId'] : undefined,
+    sessionId:
+      typeof renderSlice['sessionId'] === 'string' ? renderSlice['sessionId'] : undefined,
   };
 }
 
@@ -137,13 +137,13 @@ describe.skipIf(!HAS_KEY)('Scenario 8 — cached render (warm path)', () => {
     'second render with same intent hits cache + emits identical codeHash',
     async () => {
       const cold = await renderOnce({ intent: BANNER_INTENT });
-      expect(cold.out.renderId).toBeTruthy();
+      expect(cold.out.sessionId).toBeTruthy();
       expect(typeof cold.out.url).toBe('string');
       expect(typeof cold.bootstrap.codeHash).toBe('string');
       expect(cold.bootstrap.codeHash?.length).toBeGreaterThan(0);
 
       const warm = await renderOnce({ intent: BANNER_INTENT });
-      expect(warm.out.renderId).toBeTruthy();
+      expect(warm.out.sessionId).toBeTruthy();
       expect(typeof warm.bootstrap.codeHash).toBe('string');
 
       // STRUCTURAL cache-hit signal: identical componentCode bytes →

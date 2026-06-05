@@ -20,7 +20,7 @@
  *
  * Visual shell follows the brand kit (same as `GguiSessionViewer`): one
  * section head, a pane-style header for blueprint identity + content
- * type, and the mount card stamping `data-ggui-render-entry="component"`
+ * type, and the mount card stamping `data-ggui-session-entry="component"`
  * + `data-ggui-code-ready="true"` + `data-ggui-blueprint-id` — a
  * stable anchor contract browser specs target across console surfaces.
  */
@@ -131,7 +131,7 @@ export function BlueprintViewer({
 
 /**
  * Mount card — wraps `GguiSessionRenderer` in the canonical
- * `data-ggui-render-entry="component"` shell. Reusing this data-attr
+ * `data-ggui-session-entry="component"` shell. Reusing this data-attr
  * contract across console surfaces lets browser specs target one
  * selector against both in-process and blueprint mounts.
  *
@@ -153,7 +153,7 @@ function BlueprintMount({
 }): ReactElement {
   return (
     <section
-      data-ggui-render-entry="component"
+      data-ggui-session-entry="component"
       data-ggui-code-ready="true"
       data-ggui-blueprint-id={blueprint.blueprintId}
       className="ggui-pane"
@@ -232,7 +232,7 @@ function TryLiveAction({
         return;
       }
       const body = (await res.json()) as {
-        readonly renderId: string;
+        readonly sessionId: string;
         readonly shortCode: string | null;
         readonly url: string | null;
         readonly warning?: string;

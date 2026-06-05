@@ -295,7 +295,7 @@ async function runServeCommand(args: string[]): Promise<number> {
   // Resolve `ggui.json#storage` → concrete adapters BEFORE binding.
   // Absent storage block → empty bundle → server keeps in-memory
   // defaults. Sqlite paths resolve relative to the manifest directory
-  // (not CWD) so `"path": "./ggui-renders.sqlite"` lands next to
+  // (not CWD) so `"path": "./ggui-sessions.sqlite"` lands next to
   // `ggui.json` regardless of where the operator invoked `ggui serve`
   // from. Failure to instantiate (e.g. better-sqlite3 peer dep
   // missing, permission denied) propagates to the exit-1 path below.
@@ -606,7 +606,7 @@ async function runServeCommand(args: string[]): Promise<number> {
       onNoCredentials: (ctx, story) => {
         const nowEpochMs = Date.parse(story.nowIso);
         return buildNoCredentialsGguiSession({
-          renderId: story.renderId,
+          sessionId: story.sessionId,
           appId: ctx.appId,
           intent: story.intent,
           nowEpochMs,

@@ -53,7 +53,7 @@ export interface ProgressState {
  * the render layer. On native platforms, this is a no-op (progress events
  * are delivered via the `onProgress` callback on GguiRender instead).
  *
- * @returns `getProgress(renderId)` for a specific render, and
+ * @returns `getProgress(sessionId)` for a specific render, and
  *          `getLatestProgress()` for the most recent event across all renders
  */
 export function useGenerationProgress() {
@@ -66,13 +66,13 @@ export function useGenerationProgress() {
       const detail = (event as CustomEvent).detail;
       if (!detail || typeof detail !== 'object') return;
 
-      const renderId = detail.renderId;
+      const sessionId = detail.sessionId;
       const { step, message } = detail;
-      if (!renderId || !step) return;
+      if (!sessionId || !step) return;
 
       setProgressMap(prev => {
         const next = new Map(prev);
-        next.set(renderId, {
+        next.set(sessionId, {
           step,
           message: message || '',
           label: STEP_LABELS[step] || step,
@@ -88,7 +88,7 @@ export function useGenerationProgress() {
   }, []);
 
   const getProgress = useCallback(
-    (renderId: string): ProgressState | undefined => progressMap.get(renderId),
+    (sessionId: string): ProgressState | undefined => progressMap.get(sessionId),
     [progressMap]
   );
 

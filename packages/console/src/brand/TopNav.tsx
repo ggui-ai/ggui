@@ -115,7 +115,7 @@ function breadcrumbFor(route: Route): string | null {
     case 'admin-index':
     case 'admin-status':
       return '/ admin / status';
-    case 'admin-renders':
+    case 'admin-sessions':
       return '/ admin / renders';
     case 'admin-blueprints':
       return '/ admin / blueprints';

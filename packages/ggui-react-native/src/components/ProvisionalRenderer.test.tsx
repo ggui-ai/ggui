@@ -17,7 +17,7 @@ import {
 
 function sendPayload(payload: unknown, complete = false): void {
   const envelope: StreamEnvelope = {
-    renderId: 'render-1',
+    sessionId: 'render-1',
     channel: PREVIEW_CHANNEL,
     mode: 'append',
     payload: payload as StreamEnvelope['payload'],

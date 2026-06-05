@@ -43,7 +43,7 @@ import {
  * cross-layer import (handlers must NOT depend on core).
  */
 export interface StreamReplayInput {
-  readonly renderId: string;
+  readonly sessionId: string;
   readonly channel: string;
   readonly mode: StreamChannelMode;
   readonly payload: JsonValue;
@@ -54,9 +54,9 @@ export interface StreamReplayInput {
  * Stamped + persistable envelope. Carries the assigned seq. Peer of
  * `@ggui-ai/mcp-server-core.BufferedStreamEnvelope`.
  *
- * Does NOT carry `renderId` on the storage shape — that's redundant
+ * Does NOT carry `sessionId` on the storage shape — that's redundant
  * (every buffer state is per-render by construction). Callers that
- * need a full wire `StreamEnvelope` upcast with `{renderId, ...}`.
+ * need a full wire `StreamEnvelope` upcast with `{sessionId, ...}`.
  */
 export interface BufferedReplayEnvelope {
   readonly seq: number;
@@ -345,11 +345,11 @@ export function normalizeBufferState(partial: {
  *  The outer loop retries — callers typically never see this. */
 export class ReplayConflictError extends Error {
   constructor(
-    public readonly renderId: string,
+    public readonly sessionId: string,
     public readonly expectedOldSeq: number,
   ) {
     super(
-      `replay conflict on render ${renderId}: streamSeq changed from ${expectedOldSeq} mid-flight`,
+      `replay conflict on render ${sessionId}: streamSeq changed from ${expectedOldSeq} mid-flight`,
     );
     this.name = 'ReplayConflictError';
   }
@@ -360,11 +360,11 @@ export class ReplayConflictError extends Error {
  *  than the retry budget could absorb. */
 export class ReplayMaxRetriesExceededError extends Error {
   constructor(
-    public readonly renderId: string,
+    public readonly sessionId: string,
     public readonly attempts: number,
   ) {
     super(
-      `replay sequencer exhausted ${attempts} retries on render ${renderId}`,
+      `replay sequencer exhausted ${attempts} retries on render ${sessionId}`,
     );
     this.name = 'ReplayMaxRetriesExceededError';
   }
@@ -374,8 +374,8 @@ export class ReplayMaxRetriesExceededError extends Error {
  *  row is gone (TTL-reaped or explicitly closed between writer reads).
  *  Terminal — no retry brings the row back. */
 export class ReplayGguiSessionNotFoundError extends Error {
-  constructor(public readonly renderId: string) {
-    super(`replay sequencer: render ${renderId} not found`);
+  constructor(public readonly sessionId: string) {
+    super(`replay sequencer: render ${sessionId} not found`);
     this.name = 'ReplayGguiSessionNotFoundError';
   }
 }
@@ -388,7 +388,7 @@ export interface FetchedReplayState {
 
 /**
  * Storage-backed seam the retry loop uses. Adapters implement this
- * inline (one shared deps object per renderId call is fine —
+ * inline (one shared deps object per sessionId call is fine —
  * `fetchState` closes over the storage client, `persist` closes
  * over the same).
  */
@@ -398,14 +398,14 @@ export interface ReplaySequencerDeps {
    * when the render row is missing — the loop surfaces a
    * {@link ReplayGguiSessionNotFoundError}.
    */
-  readonly fetchState: (renderId: string) => Promise<FetchedReplayState | null>;
+  readonly fetchState: (sessionId: string) => Promise<FetchedReplayState | null>;
   /**
    * Persist the new state conditional on `expectedOldSeq` matching
    * the current stored `streamSeq`. Throw {@link ReplayConflictError}
    * on mismatch; any other error propagates as-is.
    */
   readonly persist: (
-    renderId: string,
+    sessionId: string,
     expectedOldSeq: number,
     newState: BufferState,
   ) => Promise<void>;
@@ -433,7 +433,7 @@ export interface RunSequencedRecordOptions {
  * @throws {@link ReplayMaxRetriesExceededError} — contention too high.
  */
 export async function runSequencedRecord(
-  renderId: string,
+  sessionId: string,
   input: StreamReplayInput,
   deps: ReplaySequencerDeps,
   options: RunSequencedRecordOptions = {},
@@ -442,13 +442,13 @@ export async function runSequencedRecord(
   const maxPerRender = options.maxPerRender ?? DEFAULT_REPLAY_MAX_PER_RENDER;
   let attempts = 0;
   while (attempts <= maxRetries) {
-    const read = await deps.fetchState(renderId);
+    const read = await deps.fetchState(sessionId);
     if (!read) {
-      throw new ReplayGguiSessionNotFoundError(renderId);
+      throw new ReplayGguiSessionNotFoundError(sessionId);
     }
     const result = applyRecordOp(read.state, input, read.spec, maxPerRender);
     try {
-      await deps.persist(renderId, read.state.streamSeq, result.next);
+      await deps.persist(sessionId, read.state.streamSeq, result.next);
       return result;
     } catch (err) {
       if (err instanceof ReplayConflictError) {
@@ -458,5 +458,5 @@ export async function runSequencedRecord(
       throw err;
     }
   }
-  throw new ReplayMaxRetriesExceededError(renderId, attempts);
+  throw new ReplayMaxRetriesExceededError(sessionId, attempts);
 }

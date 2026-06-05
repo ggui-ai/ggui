@@ -67,7 +67,7 @@ function stubFetch(
           headers: { 'content-type': 'application/json' },
         });
       }
-      if (url.includes('/ggui/console/renders')) {
+      if (url.includes('/ggui/console/sessions')) {
         return new Response(JSON.stringify(rendersBody), {
           status: rendersStatus,
           headers: { 'content-type': 'application/json' },
@@ -97,7 +97,7 @@ describe('Status — live-renders hero', () => {
     });
     // No active-render attributes when empty.
     expect(
-      document.querySelector('[data-ggui-live-render-count]'),
+      document.querySelector('[data-ggui-live-session-count]'),
     ).toBeNull();
   });
 
@@ -105,7 +105,7 @@ describe('Status — live-renders hero', () => {
     stubFetch({
       renders: [
         {
-          renderId: 'rndr-1',
+          sessionId: 'rndr-1',
           shortCode: 'abc12345',
           appId: 'builder',
           lastActivityAt: Date.now(),
@@ -123,7 +123,7 @@ describe('Status — live-renders hero', () => {
       }
       return el;
     });
-    expect(hero.getAttribute('data-ggui-live-render-count')).toBe('1');
+    expect(hero.getAttribute('data-ggui-live-session-count')).toBe('1');
     expect(
       hero.querySelector('[data-ggui-status-hero-open-latest]'),
     ).toBeTruthy();
@@ -138,7 +138,7 @@ describe('Status — live-renders hero', () => {
     stubFetch({
       renders: [
         {
-          renderId: 'r-1',
+          sessionId: 'r-1',
           shortCode: 'aaaa1111',
           appId: 'builder',
           lastActivityAt: now,
@@ -146,7 +146,7 @@ describe('Status — live-renders hero', () => {
           status: 'active',
         },
         {
-          renderId: 'r-2',
+          sessionId: 'r-2',
           shortCode: 'bbbb2222',
           appId: 'builder',
           lastActivityAt: now - 500,
@@ -161,7 +161,7 @@ describe('Status — live-renders hero', () => {
       expect(
         document
           .querySelector('[data-ggui-status-hero]')
-          ?.getAttribute('data-ggui-live-render-count'),
+          ?.getAttribute('data-ggui-live-session-count'),
       ).toBe('2');
     });
     const eyebrow = document.querySelector('.ggui-status-hero__eyebrow');
@@ -173,7 +173,7 @@ describe('Status — live-renders hero', () => {
     stubFetch({
       renders: [
         {
-          renderId: 'r-latest',
+          sessionId: 'r-latest',
           shortCode: 'deadbeef',
           appId: 'builder',
           lastActivityAt: now,

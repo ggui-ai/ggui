@@ -8,9 +8,9 @@
  * Dynamo adapter; this one stays in `@ggui-ai/mcp-server-core` for
  * dev / single-process / on-prem self-hosters.
  *
- * ## Storage layout (renderId-keyed)
+ * ## Storage layout (sessionId-keyed)
  *
- * Two tables. The on-disk column is `render_id`, storing a `renderId`.
+ * Two tables. The on-disk column is `render_id`, storing a `sessionId`.
  *
  *   - `pending_event_pipes(render_id PK, status, last_activity_at,
  *     expires_at)` — per-pipe lifecycle row. Created via
@@ -161,18 +161,18 @@ export class SqlitePendingEventConsumer implements PendingEventConsumer {
   }
 
   async consumeAndClear(
-    renderId: string,
+    sessionId: string,
     ttlMs: number,
   ): Promise<PendingEventConsumeResult> {
     const txn = this.db.transaction(() => {
-      const pipe = this.stmts.getPipe.get(renderId);
+      const pipe = this.stmts.getPipe.get(sessionId);
       if (!pipe) {
-        throw new PendingPipeNotFoundError(renderId);
+        throw new PendingPipeNotFoundError(sessionId);
       }
-      const eventRows = this.stmts.selectEventsForPipe.all(renderId);
-      this.stmts.deleteEventsForPipe.run(renderId);
+      const eventRows = this.stmts.selectEventsForPipe.all(sessionId);
+      this.stmts.deleteEventsForPipe.run(sessionId);
       const t = this.now();
-      this.stmts.updateActivity.run(t, t + ttlMs, renderId);
+      this.stmts.updateActivity.run(t, t + ttlMs, sessionId);
       return {
         events: eventRows.map((row) =>
           parseEventJson(row.event_json),
@@ -184,37 +184,37 @@ export class SqlitePendingEventConsumer implements PendingEventConsumer {
   }
 
   async append(
-    renderId: string,
+    sessionId: string,
     event: Record<string, unknown>,
   ): Promise<void> {
     const txn = this.db.transaction(() => {
-      const pipe = this.stmts.getPipe.get(renderId);
+      const pipe = this.stmts.getPipe.get(sessionId);
       if (!pipe) {
-        throw new PendingPipeNotFoundError(renderId);
+        throw new PendingPipeNotFoundError(sessionId);
       }
-      const seqRow = this.stmts.nextSeq.get(renderId);
+      const seqRow = this.stmts.nextSeq.get(sessionId);
       const seq = seqRow?.next_seq ?? 1;
       const t = this.now();
       this.stmts.insertEvent.run(
-        renderId,
+        sessionId,
         seq,
         JSON.stringify(event),
         t,
       );
-      this.stmts.updateActivity.run(t, pipe.expires_at, renderId);
+      this.stmts.updateActivity.run(t, pipe.expires_at, sessionId);
     });
     txn();
   }
 
-  markCreated(renderId: string, ttlMs = Number.MAX_SAFE_INTEGER): void {
+  markCreated(sessionId: string, ttlMs = Number.MAX_SAFE_INTEGER): void {
     const t = this.now();
     // INSERT OR IGNORE — idempotent on re-mark.
-    this.stmts.insertPipe.run(renderId, 'active', t, t + ttlMs);
+    this.stmts.insertPipe.run(sessionId, 'active', t, t + ttlMs);
   }
 
   /** Inspector for tests: how many events are queued? */
-  pendingCount(renderId: string): number {
-    const rows = this.stmts.selectEventsForPipe.all(renderId);
+  pendingCount(sessionId: string): number {
+    const rows = this.stmts.selectEventsForPipe.all(sessionId);
     return rows.length;
   }
 }

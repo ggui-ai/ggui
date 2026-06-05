@@ -55,17 +55,17 @@ export interface GguiProviderProps {
    * Conversation envelope identity. Forwarded by {@link useInvoke} as
    * the `X-Ggui-Host-Session-Id` header so the agent threads multi-turn
    * invokes through its own keyed conversation state. Distinct from
-   * `renderId` — this names the chat thread, not a render.
+   * `sessionId` — this names the chat thread, not a render.
    */
   hostSessionId?: string;
   /**
    * Per-render scope identity for the client-side tool system. Used by
-   * `useTool` / `useBindings` as `ToolContext.renderId` — scopes the
+   * `useTool` / `useBindings` as `ToolContext.sessionId` — scopes the
    * in-memory fetch cache so two concurrent renders cannot leak each
    * other's cached responses. Distinct from `hostSessionId` — this
    * names a single render, not the conversation envelope.
    */
-  renderId?: string;
+  sessionId?: string;
   /** Base URL for API calls (used by fetch tool) */
   apiBaseUrl?: string;
   /** App metadata (name, description, icon). Passed to wire's useApp hook. */
@@ -93,7 +93,7 @@ export interface GguiProviderProps {
  * </GguiProvider>
  * ```
  */
-export function GguiProvider({ appId, wsEndpoint, adapterImpls, interfaceContext: interfaceContextProp, queryClient, permissionHandler, auth, hostSessionId, renderId, apiBaseUrl, appMetadata, appConfig, children }: GguiProviderProps) {
+export function GguiProvider({ appId, wsEndpoint, adapterImpls, interfaceContext: interfaceContextProp, queryClient, permissionHandler, auth, hostSessionId, sessionId, apiBaseUrl, appMetadata, appConfig, children }: GguiProviderProps) {
   const [adapterPermissions, setAdapterPermissions] = useState<AdapterPermissions>({});
 
   // Auto-detect interface context from window, or use SSR default
@@ -170,12 +170,12 @@ export function GguiProvider({ appId, wsEndpoint, adapterImpls, interfaceContext
       queryClient,
       auth,
       hostSessionId,
-      renderId,
+      sessionId,
       apiBaseUrl,
       appMetadata,
       appConfig: resolvedAppConfig,
     }),
-    [appId, wsEndpoint, adapterPermissions, resolvedAdapterImpls, requestPermission, interfaceContext, queryClient, auth, hostSessionId, renderId, apiBaseUrl, appMetadata, resolvedAppConfig]
+    [appId, wsEndpoint, adapterPermissions, resolvedAdapterImpls, requestPermission, interfaceContext, queryClient, auth, hostSessionId, sessionId, apiBaseUrl, appMetadata, resolvedAppConfig]
   );
 
   return <GguiContext.Provider value={value}>{children}</GguiContext.Provider>;

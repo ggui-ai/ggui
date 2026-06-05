@@ -3,7 +3,7 @@
  * Do NOT use `export *` here — named re-exports only (parity-test policy).
  */
 export { useRafThrottled } from './useRafThrottled';
-export { extractRenderFromToolResult, extractRenderIdFromToolResult } from './render';
+export { extractRenderFromToolResult, extractSessionIdFromToolResult } from './render';
 export {
   invokeMessageToContentGroups,
   contentGroupsToConversationMessages,

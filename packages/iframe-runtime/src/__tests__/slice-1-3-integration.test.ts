@@ -50,7 +50,7 @@ function buildBootstrapEnvelope(
   const meta: McpAppAiGguiRenderMeta = {
     wsUrl: 'wss://server.example/ws',
     wsToken: 'tok_abc',
-    renderId: 'render_001',
+    sessionId: 'render_001',
     appId: 'app_001',
     runtimeUrl: '/_ggui/iframe-runtime.js',
     ...(gadgets !== undefined ? { gadgets } : {}),
@@ -58,7 +58,7 @@ function buildBootstrapEnvelope(
   return {
     toolOutput: {
       _meta: toMcpAppEnvelope(meta),
-      structuredContent: { renderId: 'render_001' },
+      structuredContent: { sessionId: 'render_001' },
     },
   };
 }

@@ -12,7 +12,7 @@ import { parsePendingEnvelope } from './envelope-adapters.js';
 
 const sampleEntry: ConsumeEventEntry = {
   type: 'action',
-  renderId: 'render_abc',
+  sessionId: 'render_abc',
   intent: 'submit',
   actionData: { x: 42 },
   uiContext: {},

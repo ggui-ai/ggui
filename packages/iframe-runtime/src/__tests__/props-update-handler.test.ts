@@ -44,7 +44,7 @@ describe('createPropsUpdateHandler (#290 boot-consolidation core)', () => {
     });
 
     await handler.onMessage({
-      renderId: 'render_1',
+      sessionId: 'render_1',
       props: { checked: true },
     } as PropsUpdatePayload);
 
@@ -58,14 +58,14 @@ describe('createPropsUpdateHandler (#290 boot-consolidation core)', () => {
     ).toBe('export default () => null');
   });
 
-  it('drops a frame whose renderId does not match the mounted render', async () => {
+  it('drops a frame whose sessionId does not match the mounted render', async () => {
     const applyRender = makeApplyRender();
     const handler = createPropsUpdateHandler({
       getCurrentGguiSession: () => componentRender({ checked: false }),
       applyRender,
     });
     await handler.onMessage({
-      renderId: 'some_other_render',
+      sessionId: 'some_other_render',
       props: { checked: true },
     } as PropsUpdatePayload);
     expect(applyRender).not.toHaveBeenCalled();
@@ -78,7 +78,7 @@ describe('createPropsUpdateHandler (#290 boot-consolidation core)', () => {
       applyRender,
     });
     await handler.onMessage({
-      renderId: 'render_1',
+      sessionId: 'render_1',
       props: { checked: true },
     } as PropsUpdatePayload);
     expect(applyRender).not.toHaveBeenCalled();
@@ -101,7 +101,7 @@ describe('createPropsUpdateHandler (#290 boot-consolidation core)', () => {
       applyRender,
     });
     await handler.onMessage({
-      renderId: 'render_1',
+      sessionId: 'render_1',
       props: { checked: true },
     } as PropsUpdatePayload);
     expect(applyRender).not.toHaveBeenCalled();
@@ -114,7 +114,7 @@ describe('createPropsUpdateHandler (#290 boot-consolidation core)', () => {
       applyRender,
     });
     await handler.onMessage({
-      renderId: 'render_1',
+      sessionId: 'render_1',
       props: null,
     } as unknown as PropsUpdatePayload);
     expect(applyRender).not.toHaveBeenCalled();

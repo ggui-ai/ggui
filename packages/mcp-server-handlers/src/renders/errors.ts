@@ -15,26 +15,26 @@
  */
 
 /**
- * Thrown when a tool that requires a renderId receives one that
+ * Thrown when a tool that requires a sessionId receives one that
  * doesn't resolve to any live render for the caller's appId. Three
  * triggers, all surfaced as the same error to avoid leaking cross-
  * tenant existence:
  *
- *   1. The renderId was never minted (typo, fabricated, replay from a
+ *   1. The sessionId was never minted (typo, fabricated, replay from a
  *      different deployment).
- *   2. The renderId belongs to a different appId (cross-tenant probe).
+ *   2. The sessionId belongs to a different appId (cross-tenant probe).
  *   3. The render was deleted, closed, or its TTL expired.
  *
  * Recovery: call `ggui_handshake` followed by `ggui_render` to mint a
- * fresh renderId, then thread it through subsequent `ggui_update` /
+ * fresh sessionId, then thread it through subsequent `ggui_update` /
  * `ggui_consume` calls.
  */
 export class GguiSessionNotFoundError extends Error {
-  readonly code = 'render_not_found' as const;
-  constructor(public readonly renderId: string, message?: string) {
+  readonly code = 'session_not_found' as const;
+  constructor(public readonly sessionId: string, message?: string) {
     super(
       message ??
-        `GguiSession "${renderId}" not found. Either it was never minted, expired (TTL), was closed, or belongs to a different appId. Recovery: call ggui_handshake then ggui_render to mint a fresh renderId.`,
+        `GguiSession "${sessionId}" not found. Either it was never minted, expired (TTL), was closed, or belongs to a different appId. Recovery: call ggui_handshake then ggui_render to mint a fresh sessionId.`,
     );
     this.name = 'GguiSessionNotFoundError';
   }
@@ -53,12 +53,12 @@ export class GguiSessionNotFoundError extends Error {
 export class ChannelNotDeclaredError extends Error {
   readonly channel: string;
   readonly declaredChannels: ReadonlyArray<string>;
-  readonly renderId: string | undefined;
+  readonly sessionId: string | undefined;
 
   constructor(
     channel: string,
     declaredChannels: ReadonlyArray<string>,
-    renderId?: string,
+    sessionId?: string,
   ) {
     super(
       `Channel '${channel}' is not declared on the render's streamSpec. Declared channels: [${declaredChannels.join(', ') || '(none — no streamSpec on this render)'}]`,
@@ -66,10 +66,10 @@ export class ChannelNotDeclaredError extends Error {
     this.name = 'ChannelNotDeclaredError';
     this.channel = channel;
     this.declaredChannels = declaredChannels;
-    if (renderId !== undefined) {
-      this.renderId = renderId;
+    if (sessionId !== undefined) {
+      this.sessionId = sessionId;
     } else {
-      this.renderId = undefined;
+      this.sessionId = undefined;
     }
   }
 }

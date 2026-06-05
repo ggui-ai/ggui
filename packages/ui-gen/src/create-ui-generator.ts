@@ -290,7 +290,7 @@ export function createUiGenerator(
         return {
           ok: true,
           response: {
-            renderId: `render_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+            sessionId: `session_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
             componentCode: result.compiledCode,
             ...(result.sourceCode ? { sourceCode: result.sourceCode } : {}),
             ...(input.contract ? { contract: input.contract } : {}),

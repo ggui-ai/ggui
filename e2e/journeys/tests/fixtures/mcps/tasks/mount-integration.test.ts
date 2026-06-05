@@ -194,10 +194,10 @@ describe('Tasks MCP mounted on createGguiServer — real /mcp wire', () => {
         },
       });
       const structured = result.structuredContent as {
-        renderId: string;
+        sessionId: string;
         action: string;
       };
-      expect(structured.renderId).toBeTruthy();
+      expect(structured.sessionId).toBeTruthy();
       // Post-R5 (fix-A 2026-05-26): no dead `url` on structuredContent.
       expect(Object.keys(structured)).not.toContain('url');
     } finally {

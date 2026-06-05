@@ -290,7 +290,7 @@ export function buildResourceTeardownNotification(): HostBridgeNotification {
  *     content: [],
  *     structuredContent: {},
  *     _meta: {
- *       'ai.ggui/render': { renderId, appId, runtimeUrl, ... },
+ *       'ai.ggui/render': { sessionId, appId, runtimeUrl, ... },
  *     },
  *   },
  * }

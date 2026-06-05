@@ -59,11 +59,11 @@ const RENDER_INTENT = 'A small greeting card with a title "Hello"';
 
 /**
  * Captured render artifacts for this spec — the post-Phase-B
- * structuredContent surface ({renderId, url, action, nextStep?})
+ * structuredContent surface ({sessionId, url, action, nextStep?})
  * plus the derived shortCode.
  */
 interface GguiSessionArtifacts {
-  readonly renderId: string;
+  readonly sessionId: string;
   readonly url: string;
   readonly shortCode: string;
 }
@@ -135,16 +135,16 @@ test.describe.serial(
         throw new Error(`ggui_render failed: ${JSON.stringify(env.error)}`);
       }
       const result = env.result as {
-        structuredContent?: { renderId?: string; url?: string };
+        structuredContent?: { sessionId?: string; url?: string };
         isError?: boolean;
       };
       if (result.isError === true) {
         throw new Error(`ggui_render isError: see server stderr.`);
       }
       const sc = result.structuredContent;
-      if (!sc?.renderId || !sc.url) {
+      if (!sc?.sessionId || !sc.url) {
         throw new Error(
-          `ggui_render returned no renderId/url: ${JSON.stringify(result)}`,
+          `ggui_render returned no sessionId/url: ${JSON.stringify(result)}`,
         );
       }
       const shortCodeMatch = new URL(sc.url).pathname.match(/^\/[rs]\/([^/?]+)/);
@@ -152,7 +152,7 @@ test.describe.serial(
         throw new Error(`render url is not /r/<shortCode>: ${sc.url}`);
       }
       render = {
-        renderId: sc.renderId,
+        sessionId: sc.sessionId,
         url: sc.url,
         shortCode: shortCodeMatch[1]!,
       };

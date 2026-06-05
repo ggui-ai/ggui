@@ -113,7 +113,7 @@ describe('content block schemas', () => {
     const result: ContentBlock = {
       type: 'tool_result',
       tool_use_id: 'tool_1',
-      content: { renderId: 'render_new', shortCode: 'abc', url: 'https://render.ggui.ai/abc' },
+      content: { sessionId: 'render_new', shortCode: 'abc', url: 'https://render.ggui.ai/abc' },
     };
     expect(contentBlockSchema.parse(text)).toEqual(text);
     expect(contentBlockSchema.parse(call)).toEqual(call);

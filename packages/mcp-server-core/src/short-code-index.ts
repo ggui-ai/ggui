@@ -1,5 +1,5 @@
 /**
- * ShortCodeIndex — shortCode → renderId/appId lookup.
+ * ShortCodeIndex — shortCode → sessionId/appId lookup.
  *
  * Scope. Single narrow purpose: the console render viewer (and
  * future same-origin share-link consumers) resolve `/r/<shortCode>`
@@ -11,7 +11,7 @@
  * Ownership / writers.
  *   - `@ggui-ai/mcp-server-handlers/renders/render` is the
  *     only writer today. After minting a `shortCode` it calls
- *     `index.put(shortCode, { renderId, appId })` — best-effort, no
+ *     `index.put(shortCode, { sessionId, appId })` — best-effort, no
  *     throw on failure, since the tool result is already constructed
  *     by the time the write happens.
  *   - Future writers (share-link tool, programmatic API) bind the
@@ -19,10 +19,10 @@
  *
  * Consumers.
  *   - `@ggui-ai/mcp-server`'s console cookie route uses `lookup`
- *     to resolve a POSTed shortCode into the renderId the cookie
+ *     to resolve a POSTed shortCode into the sessionId the cookie
  *     will be bound to.
  *   - Nothing else reads. In particular: `/mcp` tool handlers never
- *     consult this index — renderId is always on the wire directly
+ *     consult this index — sessionId is always on the wire directly
  *     for them.
  *
  * Lifetime + eviction. Implementation choice. The in-memory reference
@@ -43,19 +43,19 @@
  * no scopes, no expiry. Adding fields here means every writer has to
  * be updated; resist.
  *
- * Post Phase-B identity collapse: `renderId` IS the addressable unit
+ * Post Phase-B identity collapse: `sessionId` IS the addressable unit
  * (session+stackItem merged). The previous `sessionId` + `stackItemId`
  * slot pair always held the same value at the bind site, so both
- * collapse to one `renderId` field on the binding row.
+ * collapse to one `sessionId` field on the binding row.
  */
 export interface ShortCodeBinding {
-  readonly renderId: string;
+  readonly sessionId: string;
   readonly appId: string;
 }
 
 export interface ShortCodeIndex {
   /**
-   * Record a `shortCode → { renderId, appId }` binding. Idempotent —
+   * Record a `shortCode → { sessionId, appId }` binding. Idempotent —
    * calling with the same shortCode twice replaces the previous
    * binding. Writers don't await concurrent put calls, so
    * implementations MUST tolerate racy overlapping writes on the
@@ -73,7 +73,7 @@ export interface ShortCodeIndex {
 
   /**
    * Reverse lookup — return the shortCode currently bound to
-   * `renderId`, or `null` if no binding exists.
+   * `sessionId`, or `null` if no binding exists.
    *
    * Semantics when a render has multiple historical shortCodes:
    * implementations return the most-recently-bound shortCode
@@ -81,13 +81,13 @@ export interface ShortCodeIndex {
    * valid on the forward `lookup` side; this method is for the
    * console renders page which shows ONE shortCode per render.
    *
-   * Added to support `GET /ggui/console/renders` — the console's
+   * Added to support `GET /ggui/console/sessions` — the console's
    * operator-facing list surface needs to enrich each render row
    * with its current shortCode without iterating the whole index.
    * Hosted DDB implementations will back this by a GSI on
-   * `renderId`; the in-memory reference keeps a secondary `Map`.
+   * `sessionId`; the in-memory reference keeps a secondary `Map`.
    */
-  findByRenderId(renderId: string): Promise<string | null>;
+  findBySessionId(sessionId: string): Promise<string | null>;
 
   /**
    * Revoke (delete) a single binding. Idempotent — revoking an absent
@@ -100,7 +100,7 @@ export interface ShortCodeIndex {
   revoke(shortCode: string): Promise<void>;
 
   /**
-   * Bulk revoke — drop every binding tied to `renderId`. Used by
+   * Bulk revoke — drop every binding tied to `sessionId`. Used by
    * render-wide teardown paths (operator-initiated cleanup,
    * tenant offboarding, test fixtures): a single call drops every URL
    * that was ever minted against the supplied id.
@@ -110,5 +110,5 @@ export interface ShortCodeIndex {
    *   - Returns the count of revoked bindings (0 when none existed).
    *   - Idempotent.
    */
-  revokeByRenderId(renderId: string): Promise<number>;
+  revokeBySessionId(sessionId: string): Promise<number>;
 }

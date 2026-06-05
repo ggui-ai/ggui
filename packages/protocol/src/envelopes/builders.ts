@@ -56,7 +56,7 @@ import { PROTOCOL_SCHEMA_VERSION } from '../version.js';
 
 /** Input type for {@link makeActionEnvelope}. */
 export interface MakeActionEnvelopeInput<TPayload = JsonValue> {
-  readonly renderId: string;
+  readonly sessionId: string;
   readonly type: EventType;
   readonly payload?: TPayload;
   readonly clientSeq?: number;
@@ -71,7 +71,7 @@ export interface MakeActionEnvelopeInput<TPayload = JsonValue> {
 
 /** Input type for {@link makeStreamEnvelope}. */
 export interface MakeStreamEnvelopeInput {
-  readonly renderId: string;
+  readonly sessionId: string;
   readonly channel: string;
   readonly mode: StreamChannelMode;
   readonly payload: JsonValue;
@@ -135,7 +135,7 @@ export function makeActionEnvelope<TPayload = JsonValue>(
   parts: MakeActionEnvelopeInput<TPayload>,
 ): ActionEnvelope<TPayload> {
   const envelope: ActionEnvelope<TPayload> = {
-    renderId: parts.renderId,
+    sessionId: parts.sessionId,
     type: parts.type,
   };
   if (parts.payload !== undefined) envelope.payload = parts.payload;
@@ -157,7 +157,7 @@ export function makeStreamEnvelope(
   parts: MakeStreamEnvelopeInput,
 ): StreamEnvelope {
   const envelope: StreamEnvelope = {
-    renderId: parts.renderId,
+    sessionId: parts.sessionId,
     channel: parts.channel,
     mode: parts.mode,
     payload: parts.payload,

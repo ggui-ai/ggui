@@ -69,7 +69,7 @@ export interface ResolveStorageFromConfigOptions {
   /**
    * Directory used to resolve relative `path` values in the storage
    * config. Typically the directory containing `ggui.json` so a
-   * manifest saying `"path": "./ggui-renders.sqlite"` lands next to
+   * manifest saying `"path": "./ggui-sessions.sqlite"` lands next to
    * the manifest (not CWD, which would silently create a file wherever
    * the process happened to be started).
    *
@@ -207,7 +207,7 @@ export async function resolveStorageFromConfig(
 
 /**
  * Create the parent directory of a sqlite database file if it doesn't
- * already exist. Turns the declarative `path: './data/renders.sqlite'`
+ * already exist. Turns the declarative `path: './data/sessions.sqlite'`
  * into a working adapter without forcing the operator to mkdir by hand
  * — better-sqlite3 refuses to open a file whose parent doesn't exist,
  * and the parent is uninteresting bookkeeping the manifest already

@@ -265,7 +265,7 @@ function projectMeta(
   const contextSlots = projectContextSlots(meta.contextSlots);
 
   const projected: McpAppAiGguiRenderMeta = {
-    renderId: meta.renderId,
+    sessionId: meta.sessionId,
     appId: meta.appId,
     runtimeUrl: meta.runtimeUrl,
     appCallableTools,

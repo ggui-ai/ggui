@@ -130,10 +130,10 @@ test.describe.serial(
         arguments: { handshakeId, props: {}, override: { contract: {} } },
       });
       expect(renderEnv.error).toBeUndefined();
-      // Post-Phase-B structuredContent: {renderId, url, action,
+      // Post-Phase-B structuredContent: {sessionId, url, action,
       // nextStep?}. `shortCode` is derived from the url tail.
       const renderResult = renderEnv.result as {
-        structuredContent?: { renderId?: string; url?: string };
+        structuredContent?: { sessionId?: string; url?: string };
       };
       const renderUrl = renderResult.structuredContent?.url;
       expect(renderUrl, 'ggui_render returned no url').toBeTruthy();

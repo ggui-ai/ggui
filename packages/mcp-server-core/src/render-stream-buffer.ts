@@ -27,7 +27,7 @@
  *     global — and gap-free once started. Counter resumes from the
  *     latest stored value if any envelope remains in the buffer after
  *     a record/replay cycle; there's no explicit "reset" path short
- *     of `clear(renderId)`.
+ *     of `clear(sessionId)`.
  *   - NOT a replacement for GguiSessionStore's inbound-event log.
  *     GguiSessionStore tracks user actions + UI mutations for
  *     observation/audit. GguiSessionStreamBuffer tracks outbound
@@ -58,7 +58,7 @@ import { DEFAULT_STREAM_REPLAY_POLICY } from '@ggui-ai/protocol';
  * can upcast trivially with `{...delivery, seq}`.
  */
 export interface StreamEnvelopeInput {
-  readonly renderId: string;
+  readonly sessionId: string;
   readonly channel: string;
   readonly mode: StreamChannelMode;
   readonly payload: JsonValue;
@@ -75,7 +75,7 @@ export interface StreamEnvelopeInput {
  * (optional on the wire) to required at the record layer.
  */
 export interface BufferedStreamEnvelope {
-  readonly renderId: string;
+  readonly sessionId: string;
   readonly seq: number;
   readonly channel: string;
   readonly mode: StreamChannelMode;
@@ -146,7 +146,7 @@ export interface ReplayResult {
  */
 export interface GguiSessionStreamBuffer {
   /**
-   * Assign the next seq for `input.renderId` and (conditionally)
+   * Assign the next seq for `input.sessionId` and (conditionally)
    * store the stamped envelope per the channel's replay policy.
    *
    * Per-channel policy resolution:
@@ -198,7 +198,7 @@ export interface GguiSessionStreamBuffer {
    * Output is stable-sorted by `seq` ASC across channels.
    */
   replay(
-    renderId: string,
+    sessionId: string,
     fromSeq: number | undefined,
     spec?: StreamSpec,
   ): Promise<ReplayResult>;
@@ -208,14 +208,14 @@ export interface GguiSessionStreamBuffer {
    * recorded. Useful for a reconnecting subscriber that wants to know
    * the live cursor without pulling history.
    */
-  currentSeq(renderId: string): Promise<number>;
+  currentSeq(sessionId: string): Promise<number>;
 
   /**
    * Drop all buffered state for a render. Invoked on render `delete`
    * or TTL eviction by the render-lifecycle layer. Idempotent —
    * no-op when the render has no buffered state.
    */
-  clear(renderId: string): Promise<void>;
+  clear(sessionId: string): Promise<void>;
 
   /**
    * Total buffered envelope count across all sessions. Useful for

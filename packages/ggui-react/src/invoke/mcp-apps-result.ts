@@ -19,7 +19,7 @@
  *
  * Post-Phase-B: the two-slice `{session, stackItem}` shape collapses
  * into a single flat `McpAppAiGguiRenderMeta` slice keyed by
- * `renderId`.
+ * `sessionId`.
  */
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import {

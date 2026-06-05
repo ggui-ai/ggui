@@ -132,10 +132,10 @@ export type SetupStep =
   | UnknownSetupStep;
 
 export interface CreateGguiSessionStep {
-  readonly type: 'create-render';
+  readonly type: 'create-session';
   /** Opaque render id the host allocates. Downstream steps + the
    *  fixture's `inputEnvelope` reference it by value. */
-  readonly renderId: string;
+  readonly sessionId: string;
   /** Optional app (tenant) id the render scopes to. Defaults to the
    *  host's implementation-defined "default app". */
   readonly appId?: string;
@@ -169,7 +169,7 @@ export interface EmitEnvelopeStep {
 
 export interface SeedChannelStep {
   readonly type: 'seed-channel';
-  readonly renderId: string;
+  readonly sessionId: string;
   readonly channel: string;
   readonly value: unknown;
 }
@@ -397,9 +397,9 @@ export interface TestCase {
    * shape — the runner passes it verbatim to the host's transport.
    *
    * Typically an object like
-   * `{type: 'action', channel: 0, renderId: 'test-r1', action: {…}}`
+   * `{type: 'action', channel: 0, sessionId: 'test-r1', action: {…}}`
    * (channel 0 = wired-action dispatch) or
-   * `{type: 'render', renderId: 'test-r1', resource: {…}}` for
+   * `{type: 'render', sessionId: 'test-r1', resource: {…}}` for
    * bootstrap-path fixtures.
    *
    * `unknown` rather than a typed union because the kit may drive
@@ -452,7 +452,7 @@ export type ContractErrorCode =
   | 'TOOL_TIMEOUT'
   | 'SCHEMA_VIOLATION'
   | 'SCHEMA_MISMATCH_ERROR'
-  | 'RENDER_NOT_FOUND'
+  | 'SESSION_NOT_FOUND'
   | 'AUTH_REJECTED'
   | (string & {});
 
@@ -474,7 +474,7 @@ export type BootstrapFailureReason =
   | 'UPGRADE_REQUIRED'
   | 'BUNDLE_FETCH_FAILED'
   | 'CSP_VIOLATION'
-  | 'RENDER_NOT_FOUND'
+  | 'SESSION_NOT_FOUND'
   | 'AUTH_REJECTED'
   | (string & {});
 
@@ -496,13 +496,13 @@ export type ProtocolError =
     }
   | {
       readonly kind: 'auth';
-      readonly code: 'RENDER_NOT_FOUND' | 'TOKEN_EXPIRED' | 'AUTH_REJECTED';
+      readonly code: 'SESSION_NOT_FOUND' | 'TOKEN_EXPIRED' | 'AUTH_REJECTED';
       readonly message?: string;
     }
   | {
       readonly kind: 'protocol';
       readonly code:
-        | 'RENDER_MISMATCH'
+        | 'SESSION_MISMATCH'
         | 'APP_MISMATCH'
         | 'MALFORMED_ENVELOPE'
         | (string & {});

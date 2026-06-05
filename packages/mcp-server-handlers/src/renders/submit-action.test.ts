@@ -6,8 +6,8 @@
  * future edit accidentally widens or narrows shape independently.
  *
  * Post-Phase-B (flatten-render-identity): the wire input collapsed
- * from `{sessionId, stackItemId, appId, …}` to `{renderId, appId, …}`.
- * The pending-events pipe is keyed by `renderId`.
+ * from `{sessionId, stackItemId, appId, …}` to `{sessionId, appId, …}`.
+ * The pending-events pipe is keyed by `sessionId`.
  *
  * Empirically critical: the iframe-runtime `emitAudit` helper posts
  * EXACTLY these envelopes via `tools/call`, and a shape mismatch
@@ -23,7 +23,7 @@ import {
 import { createGguiSubmitActionHandler } from './submit-action.js';
 
 const baseEnv = {
-  renderId: 'render_1',
+  sessionId: 'render_1',
   appId: 'app_1',
   actionId: 'a3f2b1d4',
   firedAt: '2026-05-07T10:00:00.000Z',
@@ -48,15 +48,15 @@ describe('createGguiSubmitActionHandler', () => {
   describe('accepts canonical action envelopes', () => {
     it('appends a dispatch envelope to the pipe (verified via consume)', async () => {
       const consumer = new InMemoryPendingEventConsumer();
-      const renderId = 'render-dispatch-1';
-      await consumer.markCreated(renderId);
+      const sessionId = 'render-dispatch-1';
+      await consumer.markCreated(sessionId);
       const h = createGguiSubmitActionHandler({
         pendingEventConsumer: consumer,
       });
       const out = await h.handler(
         {
           ...baseEnv,
-          renderId,
+          sessionId,
           kind: 'dispatch',
           payload: {
             intent: 'submit',
@@ -71,11 +71,11 @@ describe('createGguiSubmitActionHandler', () => {
       // reads ok/code only; the envelope state is observable through
       // the pipe drain below).
       expect(out).toEqual({ ok: true });
-      const drained = await consumer.consumeAndClear(renderId, 100);
+      const drained = await consumer.consumeAndClear(sessionId, 100);
       expect(drained.events.length).toBe(1);
       expect(drained.events[0]?.envelope).toMatchObject({
         type: 'action',
-        renderId,
+        sessionId,
         intent: 'submit',
         actionData: { title: 'Team sync' },
         uiContext: { draft: 'wip' },
@@ -115,7 +115,7 @@ describe('createGguiSubmitActionHandler', () => {
     it.each([
       ['missing kind', { ...baseEnv, payload: { url: 'x' } }],
       ['missing payload', { ...baseEnv, kind: 'openLink' }],
-      ['missing actionId', { kind: 'openLink', payload: { url: 'x' }, renderId: 'r', appId: 'a', firedAt: 't' }],
+      ['missing actionId', { kind: 'openLink', payload: { url: 'x' }, sessionId: 'r', appId: 'a', firedAt: 't' }],
       [
         'dispatch missing intent',
         { ...baseEnv, kind: 'dispatch', payload: { actionData: {}, uiContext: {} } },
@@ -170,7 +170,7 @@ describe('createGguiSubmitActionHandler', () => {
       const out = await h.handler(
         {
           ...baseEnv,
-          renderId: 'orphan-render',
+          sessionId: 'orphan-render',
           kind: 'dispatch',
           payload: { intent: 'submit', actionData: null, uiContext: {} },
         },
@@ -203,15 +203,15 @@ describe('createGguiSubmitActionHandler', () => {
   describe('consumerPresent on successful dispatch (active-consumer awareness)', () => {
     it('omits consumerPresent when no activeConsumerRegistry is wired', async () => {
       const consumer = new InMemoryPendingEventConsumer();
-      const renderId = 'render-no-registry';
-      await consumer.markCreated(renderId);
+      const sessionId = 'render-no-registry';
+      await consumer.markCreated(sessionId);
       const h = createGguiSubmitActionHandler({
         pendingEventConsumer: consumer,
       });
       const out = await h.handler(
         {
           ...baseEnv,
-          renderId,
+          sessionId,
           kind: 'dispatch',
           payload: { intent: 'submit', actionData: null, uiContext: {} },
         },
@@ -224,8 +224,8 @@ describe('createGguiSubmitActionHandler', () => {
 
     it('reports consumerPresent:false when registry has no entry for the render', async () => {
       const consumer = new InMemoryPendingEventConsumer();
-      const renderId = 'render-no-consumer';
-      await consumer.markCreated(renderId);
+      const sessionId = 'render-no-consumer';
+      await consumer.markCreated(sessionId);
       const registry = new InMemoryActiveConsumerRegistry();
       const h = createGguiSubmitActionHandler({
         pendingEventConsumer: consumer,
@@ -234,7 +234,7 @@ describe('createGguiSubmitActionHandler', () => {
       const out = await h.handler(
         {
           ...baseEnv,
-          renderId,
+          sessionId,
           kind: 'dispatch',
           payload: { intent: 'submit', actionData: null, uiContext: {} },
         },
@@ -245,10 +245,10 @@ describe('createGguiSubmitActionHandler', () => {
 
     it('reports consumerPresent:true when a consumer is currently registered for the render', async () => {
       const consumer = new InMemoryPendingEventConsumer();
-      const renderId = 'render-with-consumer';
-      await consumer.markCreated(renderId);
+      const sessionId = 'render-with-consumer';
+      await consumer.markCreated(sessionId);
       const registry = new InMemoryActiveConsumerRegistry();
-      registry.enter(renderId);
+      registry.enter(sessionId);
       const h = createGguiSubmitActionHandler({
         pendingEventConsumer: consumer,
         activeConsumerRegistry: registry,
@@ -256,7 +256,7 @@ describe('createGguiSubmitActionHandler', () => {
       const out = await h.handler(
         {
           ...baseEnv,
-          renderId,
+          sessionId,
           kind: 'dispatch',
           payload: { intent: 'submit', actionData: null, uiContext: {} },
         },
@@ -265,7 +265,7 @@ describe('createGguiSubmitActionHandler', () => {
       expect(out).toEqual({ ok: true, consumerPresent: true });
     });
 
-    it('isolates consumer presence by renderId', async () => {
+    it('isolates consumer presence by sessionId', async () => {
       const consumer = new InMemoryPendingEventConsumer();
       await consumer.markCreated('render-A');
       await consumer.markCreated('render-B');
@@ -278,7 +278,7 @@ describe('createGguiSubmitActionHandler', () => {
       const outA = await h.handler(
         {
           ...baseEnv,
-          renderId: 'render-A',
+          sessionId: 'render-A',
           kind: 'dispatch',
           payload: { intent: 'submit', actionData: null, uiContext: {} },
         },
@@ -287,7 +287,7 @@ describe('createGguiSubmitActionHandler', () => {
       const outB = await h.handler(
         {
           ...baseEnv,
-          renderId: 'render-B',
+          sessionId: 'render-B',
           kind: 'dispatch',
           payload: { intent: 'submit', actionData: null, uiContext: {} },
         },

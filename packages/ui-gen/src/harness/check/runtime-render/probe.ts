@@ -377,7 +377,7 @@ export function createProbeWireConfig(
       appDescription: "Eval-time probe wire config",
     },
     render: {
-      renderId: "probe-render",
+      sessionId: "probe-render",
       isConnected: true,
     },
     auth: {

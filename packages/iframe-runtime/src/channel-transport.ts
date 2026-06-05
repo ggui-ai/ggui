@@ -36,7 +36,7 @@
  * on the {@link RendererWebSocketManager}. The router only watches
  * status transitions; it doesn't own the reconnect schedule.
  *
- * **Idempotence** — re-subscribing the same `(renderId, channelName)`
+ * **Idempotence** — re-subscribing the same `(sessionId, channelName)`
  * pair is server-side idempotent (the server's `ChannelSubscriptionState`
  * replaces in place). Clients can re-send on reconnect without bookkeeping
  * a "did we already subscribe?" gate.
@@ -76,7 +76,7 @@ export const DEFAULT_IFRAME_POLL_INTERVAL_MS = 10_000;
  */
 interface ChannelState {
   /** GguiSession id the subscription is bound to. */
-  readonly renderId: string;
+  readonly sessionId: string;
   /** Channel name (keys into `streamSpec`). */
   readonly channelName: string;
   /** Source tool name (`streamSpec[channelName].source.tool`). */
@@ -138,8 +138,8 @@ export type ToolsCallInvoker = (args: {
  */
 export interface ChannelTransportRouterOptions {
   /** GguiSession id the router scopes channel_subscribe frames against. */
-  readonly renderId: string;
-  /** App (tenant) id paired with renderId on the subscribe frame. */
+  readonly sessionId: string;
+  /** App (tenant) id paired with sessionId on the subscribe frame. */
   readonly appId: string;
   /**
    * Allowlist of `source.tool` names this server can subscribe-for
@@ -177,19 +177,19 @@ export interface ChannelTransportRouterOptions {
 export type ChannelTransportEvent =
   | {
       readonly kind: 'channel-transport-picked';
-      readonly renderId: string;
+      readonly sessionId: string;
       readonly channelName: string;
       readonly transport: 'ws' | 'poll';
     }
   | {
       readonly kind: 'channel-transport-fallback';
-      readonly renderId: string;
+      readonly sessionId: string;
       readonly channelName: string;
       readonly reason: 'ws-disconnect' | 'channel-not-local';
     }
   | {
       readonly kind: 'channel-transport-resubscribed';
-      readonly renderId: string;
+      readonly sessionId: string;
       readonly channelName: string;
     };
 
@@ -207,7 +207,7 @@ export interface ChannelTransportRouter {
    * the source-fed subset.
    */
   readonly applyRender: (render: {
-    readonly renderId: string;
+    readonly sessionId: string;
     readonly streamSpec?: StreamSpec;
   }) => void;
 
@@ -240,7 +240,7 @@ export interface ChannelTransportRouter {
 /**
  * Factory.
  *
- * Per-channel transport routing — owns the `(renderId, channelName)`
+ * Per-channel transport routing — owns the `(sessionId, channelName)`
  * registry, the WS-vs-poll decision per channel, and the cross-state
  * transitions (disconnect → poll fallback, reconnect → re-subscribe).
  */
@@ -248,7 +248,7 @@ export function createChannelTransportRouter(
   opts: ChannelTransportRouterOptions,
 ): ChannelTransportRouter {
   /**
-   * Registry keyed by `${renderId}:${channelName}`. The composite
+   * Registry keyed by `${sessionId}:${channelName}`. The composite
    * key matches the server-side `channelSubs` map shape exactly, so
    * test snapshots line up.
    */
@@ -270,8 +270,8 @@ export function createChannelTransportRouter(
 
   const observe = opts.onObserve ?? ((): void => {});
 
-  function keyOf(renderId: string, channelName: string): string {
-    return `${renderId}:${channelName}`;
+  function keyOf(sessionId: string, channelName: string): string {
+    return `${sessionId}:${channelName}`;
   }
 
   function stopPolling(state: ChannelState): void {
@@ -287,7 +287,7 @@ export function createChannelTransportRouter(
     complete?: boolean,
   ): void {
     const envelope: StreamEnvelope = {
-      renderId: state.renderId,
+      sessionId: state.sessionId,
       channel: state.channelName,
       mode: state.mode,
       payload,
@@ -330,14 +330,14 @@ export function createChannelTransportRouter(
 
   /**
    * Send a `channel_subscribe` WS frame. Server-side bookkeeping is
-   * idempotent on `(renderId, channelName)`, so re-sends on reconnect
+   * idempotent on `(sessionId, channelName)`, so re-sends on reconnect
    * are safe.
    */
   function sendSubscribe(state: ChannelState): void {
     opts.send({
       type: 'channel_subscribe',
       payload: {
-        renderId: state.renderId,
+        sessionId: state.sessionId,
         appId: opts.appId,
         channelName: state.channelName,
         ...(state.args !== undefined ? { args: { ...state.args } } : {}),
@@ -354,7 +354,7 @@ export function createChannelTransportRouter(
     opts.send({
       type: 'channel_unsubscribe',
       payload: {
-        renderId: state.renderId,
+        sessionId: state.sessionId,
         appId: opts.appId,
         channelName: state.channelName,
       },
@@ -378,7 +378,7 @@ export function createChannelTransportRouter(
         sendSubscribe(state);
         observe({
           kind: 'channel-transport-picked',
-          renderId: state.renderId,
+          sessionId: state.sessionId,
           channelName: state.channelName,
           transport: 'ws',
         });
@@ -389,7 +389,7 @@ export function createChannelTransportRouter(
       startPolling(state);
       observe({
         kind: 'channel-transport-picked',
-        renderId: state.renderId,
+        sessionId: state.sessionId,
         channelName: state.channelName,
         transport: 'poll',
       });
@@ -398,7 +398,7 @@ export function createChannelTransportRouter(
     startPolling(state);
     observe({
       kind: 'channel-transport-picked',
-      renderId: state.renderId,
+      sessionId: state.sessionId,
       channelName: state.channelName,
       transport: 'poll',
     });
@@ -429,12 +429,12 @@ export function createChannelTransportRouter(
           source.args !== undefined && source.args !== null
             ? (source.args as JsonObject)
             : undefined;
-        const k = keyOf(render.renderId, channelName);
+        const k = keyOf(render.sessionId, channelName);
         seenKeys.add(k);
 
         const existing = channels.get(k);
         if (existing !== undefined) {
-          // Same (renderId, channelName) — leave the transport
+          // Same (sessionId, channelName) — leave the transport
           // bookkeeping alone. Spec changes that flip preferWs
           // mid-render are out of 1c scope (would require
           // re-handshake).
@@ -442,7 +442,7 @@ export function createChannelTransportRouter(
         }
 
         const state: ChannelState = {
-          renderId: render.renderId,
+          sessionId: render.sessionId,
           channelName,
           toolName,
           ...(channelArgs !== undefined ? { args: channelArgs } : {}),
@@ -462,7 +462,7 @@ export function createChannelTransportRouter(
       // call `dispose()` for the wholesale teardown.
       for (const [k, state] of channels) {
         if (
-          state.renderId === render.renderId &&
+          state.sessionId === render.sessionId &&
           !seenKeys.has(k)
         ) {
           stopPolling(state);
@@ -476,7 +476,7 @@ export function createChannelTransportRouter(
       if (disposed) return false;
       if (msg.type === 'channel_payload') {
         const p = msg.payload;
-        const k = keyOf(p.renderId, p.channelName);
+        const k = keyOf(p.sessionId, p.channelName);
         const state = channels.get(k);
         if (state === undefined) return false;
         // First WS payload after a disconnect-fallback → cancel the
@@ -493,7 +493,7 @@ export function createChannelTransportRouter(
       if (msg.type === 'channel_error') {
         const p = msg.payload;
         // Locate by `channelName` only — the error payload doesn't
-        // carry `renderId`. We match by channel-name across active
+        // carry `sessionId`. We match by channel-name across active
         // items and apply the permanent-fallback flag to the matching
         // entries. Same channel name across renders is rare; the
         // policy is conservative (fall back ALL matches rather than
@@ -503,13 +503,13 @@ export function createChannelTransportRouter(
           if (
             p.code === 'CHANNEL_NOT_LOCAL' ||
             p.code === 'CHANNEL_UNKNOWN' ||
-            p.code === 'RENDER_NOT_FOUND'
+            p.code === 'SESSION_NOT_FOUND'
           ) {
             state.permanentPollFallback = true;
             startPolling(state);
             observe({
               kind: 'channel-transport-fallback',
-              renderId: state.renderId,
+              sessionId: state.sessionId,
               channelName: state.channelName,
               reason: 'channel-not-local',
             });
@@ -546,7 +546,7 @@ export function createChannelTransportRouter(
             startPolling(state);
             observe({
               kind: 'channel-transport-fallback',
-              renderId: state.renderId,
+              sessionId: state.sessionId,
               channelName: state.channelName,
               reason: 'ws-disconnect',
             });
@@ -570,7 +570,7 @@ export function createChannelTransportRouter(
           sendSubscribe(state);
           observe({
             kind: 'channel-transport-resubscribed',
-            renderId: state.renderId,
+            sessionId: state.sessionId,
             channelName: state.channelName,
           });
         }

@@ -15,7 +15,7 @@ export type FeedbackRating = 'love' | 'dislike' | 'other';
  */
 export interface UIFeedbackPayload {
   /** GguiSession being rated */
-  renderId: string;
+  sessionId: string;
   /** Rating type */
   rating: FeedbackRating;
   /** Free-text comment (required when rating is 'other', optional otherwise) */

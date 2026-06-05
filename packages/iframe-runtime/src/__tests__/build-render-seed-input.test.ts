@@ -16,7 +16,7 @@ import type { SelfContainedMcpAppAiGguiMeta } from '../runtime.js';
 import { buildGguiSessionSeedInput } from '../runtime.js';
 
 const BASE: SelfContainedMcpAppAiGguiMeta = {
-  renderId: 'render_seed_1',
+  sessionId: 'render_seed_1',
   appId: 'app_001',
   runtimeUrl: '/_ggui/iframe-runtime.js',
   expiresAt: '2099-01-01T00:00:00.000Z',

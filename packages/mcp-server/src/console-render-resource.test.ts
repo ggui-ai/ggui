@@ -5,7 +5,7 @@
  *   - `GET /ggui/console/render-resource?render=<id>` — returns the
  *     production thin-shell HTML wrapped as a ResourceContents blob.
  *     NO inlined bootstrap — console fetches that separately.
- *   - `GET /ggui/console/renders/:renderId/meta` — returns the
+ *   - `GET /ggui/console/sessions/:sessionId/meta` — returns the
  *     `{ "ai.ggui/render": McpAppAiGguiRenderMeta }` slice envelope
  *     JSON. The console replies with this to the iframe's
  *     `ui/initialize` postMessage (Path-B inline-meta delivery).
@@ -39,7 +39,7 @@ interface Fixture {
   server: GguiServer;
   httpServer: HttpServer;
   url: string;
-  renderId: string;
+  sessionId: string;
   appId: string;
   cookiePair: string;
 }
@@ -55,7 +55,7 @@ async function bootAndMintCookie(): Promise<Fixture> {
   const render = await renderStore.create({ appId: 'app-console' });
   const shortCodeIndex = new InMemoryShortCodeIndex();
   await shortCodeIndex.put('scode1234', {
-    renderId: render.id,
+    sessionId: render.id,
     appId: render.appId,
   });
 
@@ -89,7 +89,7 @@ async function bootAndMintCookie(): Promise<Fixture> {
     server,
     httpServer,
     url,
-    renderId: render.id,
+    sessionId: render.id,
     appId: render.appId,
     cookiePair,
   };
@@ -118,7 +118,7 @@ describe('GET /ggui/console/render-resource', () => {
   it('returns 401 when the console cookie is missing', async () => {
     fx = await bootAndMintCookie();
     const res = await fetch(
-      `${fx.url}/ggui/console/render-resource?render=${fx.renderId}`,
+      `${fx.url}/ggui/console/render-resource?render=${fx.sessionId}`,
     );
     expect(res.status).toBe(401);
     const body = (await res.json()) as { error: string };
@@ -128,7 +128,7 @@ describe('GET /ggui/console/render-resource', () => {
   it('returns 401 when the console cookie is invalid', async () => {
     fx = await bootAndMintCookie();
     const res = await fetch(
-      `${fx.url}/ggui/console/render-resource?render=${fx.renderId}`,
+      `${fx.url}/ggui/console/render-resource?render=${fx.sessionId}`,
       {
         headers: { cookie: 'ggui_console_session=bogus-token' },
       },
@@ -154,7 +154,7 @@ describe('GET /ggui/console/render-resource', () => {
   it('returns 200 with the PRODUCTION thin-shell ResourceContents on the happy path', async () => {
     fx = await bootAndMintCookie();
     const res = await fetch(
-      `${fx.url}/ggui/console/render-resource?render=${fx.renderId}`,
+      `${fx.url}/ggui/console/render-resource?render=${fx.sessionId}`,
       {
         headers: { cookie: fx.cookiePair },
       },
@@ -178,12 +178,12 @@ describe('GET /ggui/console/render-resource', () => {
     expect(content.text).toContain('data-ggui-shell="thin"');
     expect(content.text).not.toContain('data-ggui-shell="console"');
     // No inlined bootstrap on this route — console fetches it separately.
-    expect(content.text).not.toMatch(/"renderId":"[^"]+"/);
+    expect(content.text).not.toMatch(/"sessionId":"[^"]+"/);
     expect(content.text).not.toMatch(/"token":"[^"]+"/);
   });
 });
 
-describe('GET /ggui/console/renders/:renderId/meta', () => {
+describe('GET /ggui/console/sessions/:sessionId/meta', () => {
   let fx: Fixture | null = null;
 
   afterEach(async () => {
@@ -196,7 +196,7 @@ describe('GET /ggui/console/renders/:renderId/meta', () => {
   it('returns 401 when the console cookie is missing', async () => {
     fx = await bootAndMintCookie();
     const res = await fetch(
-      `${fx.url}/ggui/console/renders/${fx.renderId}/meta`,
+      `${fx.url}/ggui/console/sessions/${fx.sessionId}/meta`,
     );
     expect(res.status).toBe(401);
   });
@@ -204,7 +204,7 @@ describe('GET /ggui/console/renders/:renderId/meta', () => {
   it('returns 403 when the cookie is scoped to a different render', async () => {
     fx = await bootAndMintCookie();
     const res = await fetch(
-      `${fx.url}/ggui/console/renders/some-other-render/meta`,
+      `${fx.url}/ggui/console/sessions/some-other-render/meta`,
       {
         headers: { cookie: fx.cookiePair },
       },
@@ -217,7 +217,7 @@ describe('GET /ggui/console/renders/:renderId/meta', () => {
   it('returns 200 with a well-shaped slice envelope on the happy path', async () => {
     fx = await bootAndMintCookie();
     const res = await fetch(
-      `${fx.url}/ggui/console/renders/${fx.renderId}/meta`,
+      `${fx.url}/ggui/console/sessions/${fx.sessionId}/meta`,
       {
         headers: { cookie: fx.cookiePair },
       },
@@ -232,7 +232,7 @@ describe('GET /ggui/console/renders/:renderId/meta', () => {
       | Record<string, unknown>
       | undefined;
     expect(renderSlice).toBeDefined();
-    expect(renderSlice?.['renderId']).toBe(fx.renderId);
+    expect(renderSlice?.['sessionId']).toBe(fx.sessionId);
     expect(renderSlice?.['appId']).toBe(fx.appId);
     expect(typeof renderSlice?.['wsUrl']).toBe('string');
     expect((renderSlice?.['wsUrl'] as string).length).toBeGreaterThan(0);
@@ -265,7 +265,7 @@ describe('GET /ggui/console/renders/:renderId/meta', () => {
     const render = await renderStore.create({ appId: 'app-console' });
     const shortCodeIndex = new InMemoryShortCodeIndex();
     await shortCodeIndex.put('scode1234', {
-      renderId: render.id,
+      sessionId: render.id,
       appId: render.appId,
     });
     const server = createGguiServer({
@@ -294,7 +294,7 @@ describe('GET /ggui/console/renders/:renderId/meta', () => {
         ';',
       )[0];
       const res = await fetch(
-        `${url}/ggui/console/renders/${render.id}/meta`,
+        `${url}/ggui/console/sessions/${render.id}/meta`,
         {
           headers: { cookie: cookiePair },
         },

@@ -130,7 +130,7 @@ const FIXTURE_BLUEPRINTS: Readonly<Record<string, string>> = {
  * `data-testid="render-viewer-iframe"` (read-only / visual-only —
  * post C1-fix it no longer carries the `<McpAppIframe>`
  * lifecycle-mirror attribute). Inner render attributes
- * (`data-ggui-render-entry`, `data-ggui-code-ready`) live INSIDE the
+ * (`data-ggui-session-entry`, `data-ggui-code-ready`) live INSIDE the
  * iframe child and are reachable only via Playwright's
  * `frameLocator`. Readiness is gated by waiting for the iframe to be
  * visible + by inner-DOM assertions further down the fixture

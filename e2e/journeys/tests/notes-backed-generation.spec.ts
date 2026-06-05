@@ -227,19 +227,19 @@ test.describe.serial('Lane 2 N1 — Notes-backed OSS generation + browser render
     const renderElapsedMs = Date.now() - renderStart;
 
     expect(renderEnv.error).toBeUndefined();
-    // Post-Phase-B structuredContent surface: {renderId, url,
+    // Post-Phase-B structuredContent surface: {sessionId, url,
     // action, nextStep?}. shortCode is the tail of url's /r/<...> path;
     // codeReady was retired (the visual render assertions below are
     // the structural proof generation succeeded).
     const renderResult = renderEnv.result as {
-      structuredContent?: { renderId?: string; url?: string };
+      structuredContent?: { sessionId?: string; url?: string };
       isError?: boolean;
     };
     expect(
       renderResult.isError,
       `ggui_render returned isError: true — check CLI stderr for generator failure.`,
     ).not.toBe(true);
-    expect(renderResult.structuredContent?.renderId).toBeTruthy();
+    expect(renderResult.structuredContent?.sessionId).toBeTruthy();
     const renderUrl = renderResult.structuredContent?.url;
     expect(renderUrl, 'ggui_render returned no url').toBeTruthy();
     const shortCodeMatch = new URL(renderUrl!).pathname.match(/^\/[rs]\/([^/?]+)/);

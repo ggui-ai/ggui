@@ -9,7 +9,7 @@
  *   2. `makeLifecycleEvent` builds a populated event with no
  *      `undefined` keys.
  *   3. `bootSequence({onLifecycle})` fires `mounting` → `code-ready`
- *      on the happy path, in order, with the correct renderId
+ *      on the happy path, in order, with the correct sessionId
  *      forwarding.
  *   4. `bootSequence({onLifecycle})` fires `mounting` → `error` on
  *      every failure path (UI_INITIALIZE_FAILED, MISSING_META_GGUI_
@@ -97,7 +97,7 @@ describe('postLifecycleToParent', () => {
     }
   });
 
-  it('forwards renderId + error fields from the event', () => {
+  it('forwards sessionId + error fields from the event', () => {
     const posted: unknown[] = [];
     const spy = vi
       .spyOn(window.parent, 'postMessage')
@@ -107,11 +107,11 @@ describe('postLifecycleToParent', () => {
     try {
       postLifecycleToParent({
         state: 'error',
-        renderId: 'render_a',
+        sessionId: 'render_a',
         error: { code: 'BOOM', message: 'kapow' },
       });
       const msg = posted[0] as McpAppLifecycleMessage;
-      expect(msg.event.renderId).toBe('render_a');
+      expect(msg.event.sessionId).toBe('render_a');
       expect(msg.event.error).toEqual({ code: 'BOOM', message: 'kapow' });
     } finally {
       spy.mockRestore();
@@ -142,14 +142,14 @@ describe('makeLifecycleEvent', () => {
     expect(Object.keys(event)).toEqual(['state']);
   });
 
-  it('includes renderId when non-empty', () => {
-    const event = makeLifecycleEvent('code-ready', { renderId: 'render_a' });
-    expect(event.renderId).toBe('render_a');
+  it('includes sessionId when non-empty', () => {
+    const event = makeLifecycleEvent('code-ready', { sessionId: 'render_a' });
+    expect(event.sessionId).toBe('render_a');
   });
 
-  it('drops empty renderId — never emits a {state, renderId: ""} shape', () => {
-    const event = makeLifecycleEvent('code-ready', { renderId: '' });
-    expect(event.renderId).toBeUndefined();
+  it('drops empty sessionId — never emits a {state, sessionId: ""} shape', () => {
+    const event = makeLifecycleEvent('code-ready', { sessionId: '' });
+    expect(event.sessionId).toBeUndefined();
     expect(Object.keys(event)).toEqual(['state']);
   });
 
@@ -168,7 +168,7 @@ describe('makeLifecycleEvent', () => {
 const VALID_META: McpAppAiGguiRenderMeta = {
   wsUrl: 'wss://server.example/ws',
   wsToken: 'tok_abc',
-  renderId: 'render_001',
+  sessionId: 'render_001',
   appId: 'app_001',
   expiresAt: '2099-01-01T00:00:00.000Z',
   runtimeUrl: '/_ggui/iframe-runtime.js',
@@ -214,7 +214,7 @@ describe('bootSequence — lifecycle on happy path', () => {
     expect(states).toEqual(['mounting', 'code-ready']);
   });
 
-  it('forwards bootstrap.renderId on the code-ready event (single-render mode)', async () => {
+  it('forwards bootstrap.sessionId on the code-ready event (single-render mode)', async () => {
     const dom = document.implementation.createHTMLDocument('renderer-test');
     const onLifecycle = vi.fn();
 
@@ -237,10 +237,10 @@ describe('bootSequence — lifecycle on happy path', () => {
 
     const events = lifecycleEvents(onLifecycle);
     const codeReady = events.find((e) => e.state === 'code-ready');
-    expect(codeReady?.renderId).toBe('render_001');
+    expect(codeReady?.sessionId).toBe('render_001');
 
     const mounting = events.find((e) => e.state === 'mounting');
-    expect(mounting?.renderId).toBeUndefined();
+    expect(mounting?.sessionId).toBeUndefined();
   });
 });
 

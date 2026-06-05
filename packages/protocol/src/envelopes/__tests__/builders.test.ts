@@ -29,7 +29,7 @@ import { PROTOCOL_SCHEMA_VERSION } from '../../version.js';
 describe('makeActionEnvelope', () => {
   it('default-stamps-current-version', () => {
     const env = makeActionEnvelope({
-      renderId: 'render-1',
+      sessionId: 'render-1',
       type: 'data:submit',
     });
     expect(env.schemaVersion).toBe(PROTOCOL_SCHEMA_VERSION);
@@ -37,7 +37,7 @@ describe('makeActionEnvelope', () => {
 
   it('explicit-override-respected', () => {
     const env = makeActionEnvelope({
-      renderId: 'render-1',
+      sessionId: 'render-1',
       type: 'data:submit',
       schemaVersion: '99.99-future',
     });
@@ -46,7 +46,7 @@ describe('makeActionEnvelope', () => {
 
   it('explicit-undefined-omits-stamp (test-only pattern)', () => {
     const env = makeActionEnvelope({
-      renderId: 'render-1',
+      sessionId: 'render-1',
       type: 'data:submit',
       schemaVersion: undefined,
     });
@@ -56,7 +56,7 @@ describe('makeActionEnvelope', () => {
 
   it('filters undefined optional fields (byte-equivalence)', () => {
     const env = makeActionEnvelope({
-      renderId: 'render-1',
+      sessionId: 'render-1',
       type: 'data:submit',
       // payload, clientSeq all omitted
     });
@@ -68,13 +68,13 @@ describe('makeActionEnvelope', () => {
 
   it('preserves all supplied fields verbatim', () => {
     const env = makeActionEnvelope({
-      renderId: 'render-1',
+      sessionId: 'render-1',
       type: 'data:submit',
       payload: { action: 'submit', data: { text: 'hi' } },
       clientSeq: 42,
     });
     expect(env).toEqual({
-      renderId: 'render-1',
+      sessionId: 'render-1',
       type: 'data:submit',
       payload: { action: 'submit', data: { text: 'hi' } },
       clientSeq: 42,
@@ -86,7 +86,7 @@ describe('makeActionEnvelope', () => {
     const env: ActionEnvelope<{ action: string }> = makeActionEnvelope<{
       action: string;
     }>({
-      renderId: 'render-1',
+      sessionId: 'render-1',
       type: 'data:submit',
       payload: { action: 'submit' },
     });
@@ -97,7 +97,7 @@ describe('makeActionEnvelope', () => {
 describe('makeStreamEnvelope', () => {
   it('default-stamps-current-version', () => {
     const env = makeStreamEnvelope({
-      renderId: 'render-1',
+      sessionId: 'render-1',
       channel: 'tasks',
       mode: 'replace',
       payload: [{ id: 1 }],
@@ -107,7 +107,7 @@ describe('makeStreamEnvelope', () => {
 
   it('explicit-override-respected', () => {
     const env = makeStreamEnvelope({
-      renderId: 'render-1',
+      sessionId: 'render-1',
       channel: 'tasks',
       mode: 'replace',
       payload: null,
@@ -118,7 +118,7 @@ describe('makeStreamEnvelope', () => {
 
   it('explicit-undefined-omits-stamp (test-only pattern)', () => {
     const env = makeStreamEnvelope({
-      renderId: 'render-1',
+      sessionId: 'render-1',
       channel: 'tasks',
       mode: 'replace',
       payload: null,
@@ -130,7 +130,7 @@ describe('makeStreamEnvelope', () => {
 
   it('filters undefined optional fields (byte-equivalence)', () => {
     const env = makeStreamEnvelope({
-      renderId: 'render-1',
+      sessionId: 'render-1',
       channel: 'tasks',
       mode: 'replace',
       payload: null,
@@ -142,7 +142,7 @@ describe('makeStreamEnvelope', () => {
 
   it('preserves all supplied fields verbatim', () => {
     const env = makeStreamEnvelope({
-      renderId: 'render-1',
+      sessionId: 'render-1',
       channel: 'tasks',
       mode: 'append',
       payload: { todo: 'x' },
@@ -150,7 +150,7 @@ describe('makeStreamEnvelope', () => {
       seq: 7,
     });
     expect(env).toEqual({
-      renderId: 'render-1',
+      sessionId: 'render-1',
       channel: 'tasks',
       mode: 'append',
       payload: { todo: 'x' },
@@ -162,12 +162,12 @@ describe('makeStreamEnvelope', () => {
 
   it('produced envelope is assignable to StreamEnvelope', () => {
     const env: StreamEnvelope = makeStreamEnvelope({
-      renderId: 'render-1',
+      sessionId: 'render-1',
       channel: 'tasks',
       mode: 'replace',
       payload: null,
     });
-    expect(env.renderId).toBe('render-1');
+    expect(env.sessionId).toBe('render-1');
   });
 });
 

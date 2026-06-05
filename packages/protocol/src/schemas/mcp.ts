@@ -42,7 +42,7 @@ export const interfaceContextSchema = z.object({
 // boundary instead of silently no-op-ing because the server stripped them.
 
 export const consumeInputSchema = z.object({
-  renderId: z.string().describe('GguiSession opaque id (UUID) — returned by ggui_render.'),
+  sessionId: z.string().describe('GguiSession opaque id (UUID) — returned by ggui_render.'),
   timeout: z.number().min(0).max(25).optional()
     .describe('Long-poll timeout in seconds (default short; max 25).'),
 }).strict();
@@ -52,7 +52,7 @@ export const consumeInputSchema = z.object({
  * `streamSpec[channel]`.
  */
 export const emitInputSchema = z.object({
-  renderId: z.string().describe('GguiSession opaque id (UUID) — returned by ggui_render.'),
+  sessionId: z.string().describe('GguiSession opaque id (UUID) — returned by ggui_render.'),
   channel: z.string()
     .describe('Channel name declared on the active render streamSpec.'),
   payload: z.unknown().describe('Payload — must match streamSpec[channel].schema.'),
@@ -61,7 +61,7 @@ export const emitInputSchema = z.object({
 }).strict();
 
 export const getRenderInputSchema = z.object({
-  renderId: z.string().describe('GguiSession opaque id (UUID) — returned by ggui_render.'),
+  sessionId: z.string().describe('GguiSession opaque id (UUID) — returned by ggui_render.'),
 }).strict();
 
 export const listFeaturedBlueprintsInputSchema = z.object({
@@ -86,7 +86,7 @@ export const discoverInputSchema = z.object({}).strict();
 export const requestCredentialInputSchema = z.object({
   serviceId: z.string().describe('OAuth service ID (e.g., "bashdoor", "ubot")'),
   reason: z.string().optional().describe('Why the agent needs this credential (shown to user)'),
-  renderId: z.string().optional().describe('Existing render id to render consent UI into.'),
+  sessionId: z.string().optional().describe('Existing render id to render consent UI into.'),
 }).strict();
 
 // ── Post-Phase-B — canonical tool triad ──
@@ -96,7 +96,7 @@ export const requestCredentialInputSchema = z.object({
 // render server-side. Conversation grouping (sibling renders within one
 // host chat) lives on the unchanged `_meta["ai.ggui/host-session"]`
 // channel, captured ONCE at render creation, never threaded by the
-// agent. The collapse of Session→GguiSession means `renderId` is the single
+// agent. The collapse of Session→GguiSession means `sessionId` is the single
 // identity the wire references everywhere.
 //
 
@@ -121,7 +121,7 @@ export const requestCredentialInputSchema = z.object({
  *   - The agent is the contract authority; synth amends only when
  *     validation fails.
  *   - Post-Phase-B the handshake input carries NO `sessionId`. The
- *     server mints `renderId` on the paired `ggui_render`; host
+ *     server mints `sessionId` on the paired `ggui_render`; host
  *     conversation grouping flows via the host-supplied
  *     `_meta["ai.ggui/host-session"]` envelope captured at render
  *     creation (see {@link GguiSessionBase.hostSession}).
@@ -330,7 +330,7 @@ export const renderCacheMarkerSchema = z.object({
 });
 
 /**
- * Wire-output shape — `{renderId, resourceUri, action, contractHash,
+ * Wire-output shape — `{sessionId, resourceUri, action, contractHash,
  * cache, nextStep?}`. `contractHash` (data-contract identity) and `cache`
  * (reuse outcome) are required wire fields on this schema.
  * The handler carries `shortCode`, `codeReady`, `handshakeId`,
@@ -342,7 +342,7 @@ export const renderCacheMarkerSchema = z.object({
  * `expiresAt`) via the single `ai.ggui/render` slice meta, not via this
  * response. There is no clickable `url` field — post-R5 the `/r/`
  * shortCode route was deleted (every host either resolves the
- * `_meta.ui.resourceUri` iframe or reads `{renderId}` via
+ * `_meta.ui.resourceUri` iframe or reads `{sessionId}` via
  * `render-resource/...`). Leaving a dead URL on the wire had the model
  * hallucinating links that resolve nowhere.
  *
@@ -350,7 +350,7 @@ export const renderCacheMarkerSchema = z.object({
  * stack of N renders to compose against.
  */
 export const renderOutputSchema = z.object({
-  renderId: z.string(),
+  sessionId: z.string(),
   /**
    * Spec-canonical MCP-Apps entry-point — same `ui://ggui/render/{id}`
    * URI surfaced on `_meta.ui.resourceUri`. Surfacing it on the LLM-
@@ -388,7 +388,7 @@ export const renderOutputSchema = z.object({
    * Mirrors the chain at `handshake.nextStep` (→ render). Closes the loop
    * with consume.
    *
-   * `args.renderId` is the literal value the agent passes to
+   * `args.sessionId` is the literal value the agent passes to
    * `ggui_consume` — copy-paste shape.
    */
   nextStep: z.object({
@@ -396,10 +396,10 @@ export const renderOutputSchema = z.object({
     description: z.string(),
     example: z.string(),
     args: z.object({
-      renderId: z.string(),
+      sessionId: z.string(),
     }),
   }).optional().describe(
-    'Recovery hint — when the rendered contract has actions, points the agent at ggui_consume({renderId}) for the inbound action loop. Absent for pure-display renders.',
+    'Recovery hint — when the rendered contract has actions, points the agent at ggui_consume({sessionId}) for the inbound action loop. Absent for pure-display renders.',
   ),
 });
 
@@ -431,18 +431,18 @@ export const renderOutputSchema = z.object({
  * partial patches that would break required fields, type-mismatch
  * values, etc. all reject pre-persist.
  *
- * `renderId` is globally unique; the server tenancy-checks via
+ * `sessionId` is globally unique; the server tenancy-checks via
  * `ctx.appId`.
  */
 export const updateInputSchema = z.discriminatedUnion('kind', [
   z.object({
-    renderId: z.string().describe('GguiSession opaque id (UUID) — returned by ggui_render.'),
+    sessionId: z.string().describe('GguiSession opaque id (UUID) — returned by ggui_render.'),
     kind: z.literal('replace'),
     props: z.record(z.string(), z.unknown())
       .describe('Full replacement props map. New map IS the new state.'),
   }).strict(),
   z.object({
-    renderId: z.string().describe('GguiSession opaque id (UUID) — returned by ggui_render.'),
+    sessionId: z.string().describe('GguiSession opaque id (UUID) — returned by ggui_render.'),
     kind: z.literal('merge'),
     patch: z.record(z.string(), z.unknown())
       .describe('RFC 7396 JSON Merge Patch — null deletes a key; arrays fully replace.'),
@@ -461,7 +461,7 @@ export const updateInputSchema = z.discriminatedUnion('kind', [
  * acknowledgement.
  */
 export const updateOutputSchema = z.object({
-  renderId: z.string(),
+  sessionId: z.string(),
   updated: z.boolean(),
 });
 

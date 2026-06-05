@@ -9,7 +9,7 @@
  * the wire bit-for-bit.
  *
  * Post-Phase-B: the two-slice `{session, stackItem}` shape collapses
- * into a single flat `McpAppAiGguiRenderMeta` slice keyed by `renderId`.
+ * into a single flat `McpAppAiGguiRenderMeta` slice keyed by `sessionId`.
  */
 import { describe, it, expect } from 'vitest';
 import { toMcpAppEnvelope } from '@ggui-ai/protocol/integrations/mcp-apps';
@@ -20,7 +20,7 @@ import { parseSseStream } from '../sse-parse';
 
 /** MUST match `@ggui-ai/server/src/invoke/__tests__/tool-result-push.test.ts`. */
 const FIXTURE_META: McpAppAiGguiRenderMeta = {
-  renderId: 'render_XYZ',
+  sessionId: 'render_XYZ',
   appId: 'app_round_trip',
   runtimeUrl: '/_ggui/iframe-runtime.js',
   wsUrl: 'wss://mcp.example.test/ws',
@@ -45,7 +45,7 @@ function encodeSse(events: InvokeEvent[]): ReadableStream<Uint8Array> {
 describe('extractMcpAppAiGguiMeta', () => {
   it('returns the meta on well-shaped content', () => {
     const content = {
-      renderId: FIXTURE_META.renderId,
+      sessionId: FIXTURE_META.sessionId,
       _meta: toMcpAppEnvelope(FIXTURE_META),
     };
     expect(extractMcpAppAiGguiMeta(content)).toEqual(FIXTURE_META);
@@ -72,7 +72,7 @@ describe('extractMcpAppAiGguiMeta', () => {
     const malformed = {
       _meta: {
         'ai.ggui/render': {
-          renderId: FIXTURE_META.renderId,
+          sessionId: FIXTURE_META.sessionId,
           appId: FIXTURE_META.appId,
           // runtimeUrl intentionally absent
           wsUrl: FIXTURE_META.wsUrl,
@@ -121,7 +121,7 @@ describe('SSE round-trip: parseSseStream → extractMcpAppAiGguiMeta', () => {
           type: 'tool_result',
           tool_use_id: toolUseId,
           content: {
-            renderId: FIXTURE_META.renderId,
+            sessionId: FIXTURE_META.sessionId,
             _meta: toMcpAppEnvelope(FIXTURE_META),
           },
         },

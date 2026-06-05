@@ -12,7 +12,7 @@
  * transport is NOT a full MCP client — it does not try to be
  * compatible with the MCP SDK, and it does not implement stack
  * management. The kit runs against an already-provisioned render
- * (the host's `create-render` setup step ran first) and treats the
+ * (the host's `create-session` setup step ran first) and treats the
  * wire as opaque after that.
  *
  * Auth:

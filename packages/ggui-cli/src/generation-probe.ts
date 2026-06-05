@@ -124,7 +124,7 @@ export interface ProbeGenerationBindingOptions {
     ctx: HandlerContext,
     story: {
       readonly intent: string;
-      readonly renderId: string;
+      readonly sessionId: string;
       readonly nowIso: string;
     },
   ) => GguiSession | null | Promise<GguiSession | null>;

@@ -85,17 +85,17 @@ export function renderStoreContract(
       const store = await makeStore();
       const r = await store.create({ appId: 'app-a' });
       const a = await store.appendEvent({
-        renderId: r.id,
+        sessionId: r.id,
         type: 'ui.created',
         data: { a: 1 },
       });
       const b = await store.appendEvent({
-        renderId: r.id,
+        sessionId: r.id,
         type: 'ui.updated',
         data: { a: 2 },
       });
       const c = await store.appendEvent({
-        renderId: r.id,
+        sessionId: r.id,
         type: 'tool.called',
         data: {},
       });
@@ -107,7 +107,7 @@ export function renderStoreContract(
     it('appendEvent on a missing render rejects', async () => {
       const store = await makeStore();
       await expect(
-        store.appendEvent({ renderId: 'nope', type: 'ui.created', data: {} }),
+        store.appendEvent({ sessionId: 'nope', type: 'ui.created', data: {} }),
       ).rejects.toThrow();
     });
 
@@ -146,7 +146,7 @@ export function renderStoreContract(
       const store = await makeStore();
       const r = await store.create({ appId: 'app-a' });
       await store.appendEvent({
-        renderId: r.id,
+        sessionId: r.id,
         type: 'ui.created',
         data: {},
       });
@@ -160,7 +160,7 @@ export function renderStoreContract(
       // Second next awaits — append while it's pending.
       const pending = iter.next();
       await store.appendEvent({
-        renderId: r.id,
+        sessionId: r.id,
         type: 'ui.updated',
         data: { fresh: true },
       });
@@ -213,11 +213,11 @@ export function renderStoreContract(
 
 async function appendMany(
   store: GguiSessionStore,
-  renderId: string,
-  events: Array<Omit<AppendEventInput, 'renderId'>>,
+  sessionId: string,
+  events: Array<Omit<AppendEventInput, 'sessionId'>>,
 ): Promise<void> {
   for (const e of events) {
-    await store.appendEvent({ ...e, renderId });
+    await store.appendEvent({ ...e, sessionId });
   }
 }
 

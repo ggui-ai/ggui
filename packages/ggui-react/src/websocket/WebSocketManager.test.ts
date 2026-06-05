@@ -65,7 +65,7 @@ describe('WebSocketManager', () => {
 
     const manager = new WebSocketManager({
       url: 'wss://example.com',
-      renderId: 'render_123',
+      sessionId: 'render_123',
       appId: 'app_456',
       onMessage,
       onStatusChange,
@@ -87,7 +87,7 @@ describe('WebSocketManager', () => {
 
     const manager = new WebSocketManager({
       url: 'wss://example.com',
-      renderId: 'render_123',
+      sessionId: 'render_123',
       appId: 'app_456',
       onMessage,
       onStatusChange,
@@ -111,7 +111,7 @@ describe('WebSocketManager', () => {
 
     const manager = new WebSocketManager({
       url: 'wss://example.com',
-      renderId: 'render_123',
+      sessionId: 'render_123',
       appId: 'app_456',
       onMessage,
       onStatusChange,
@@ -137,7 +137,7 @@ describe('WebSocketManager', () => {
 
     const manager = new WebSocketManager({
       url: 'wss://example.com',
-      renderId: 'render_123',
+      sessionId: 'render_123',
       appId: 'app_456',
       onMessage,
       onStatusChange,
@@ -160,7 +160,7 @@ describe('WebSocketManager', () => {
 
     const manager = new WebSocketManager({
       url: 'wss://example.com',
-      renderId: 'render_123',
+      sessionId: 'render_123',
       appId: 'app_456',
       onMessage,
       onStatusChange,
@@ -184,7 +184,7 @@ describe('WebSocketManager', () => {
 
     const manager = new WebSocketManager({
       url: 'wss://example.com',
-      renderId: 'render_123',
+      sessionId: 'render_123',
       appId: 'app_456',
       onMessage,
       onStatusChange,
@@ -206,7 +206,7 @@ describe('WebSocketManager', () => {
 
     const manager = new WebSocketManager({
       url: 'wss://example.com',
-      renderId: 'render_123',
+      sessionId: 'render_123',
       appId: 'app_456',
       onMessage,
       onStatusChange,
@@ -239,7 +239,7 @@ describe('WebSocketManager', () => {
 
     const manager = new WebSocketManager({
       url: 'wss://example.com',
-      renderId: 'render_123',
+      sessionId: 'render_123',
       appId: 'app_456',
       onMessage,
       onStatusChange,
@@ -266,7 +266,7 @@ describe('WebSocketManager', () => {
 
     const manager = new WebSocketManager({
       url: 'wss://example.com',
-      renderId: 'render_123',
+      sessionId: 'render_123',
       appId: 'app_456',
       onMessage,
       onStatusChange,
@@ -295,7 +295,7 @@ describe('WebSocketManager', () => {
 
     const manager = new WebSocketManager({
       url: 'wss://example.com',
-      renderId: 'render_123',
+      sessionId: 'render_123',
       appId: 'app_456',
       onMessage,
       onStatusChange,
@@ -316,7 +316,7 @@ describe('WebSocketManager', () => {
 
     const manager = new WebSocketManager({
       url: 'wss://example.com',
-      renderId: 'render_123',
+      sessionId: 'render_123',
       appId: 'app_456',
       onMessage,
       onStatusChange,
@@ -341,7 +341,7 @@ describe('WebSocketManager', () => {
 
     const manager = new WebSocketManager({
       url: 'wss://example.com',
-      renderId: 'render_123',
+      sessionId: 'render_123',
       appId: 'app_456',
       onMessage,
       onStatusChange,
@@ -366,7 +366,7 @@ describe('WebSocketManager', () => {
   });
 
   it('opts into the handshake on deferred subscribeToRender too', async () => {
-    // start-invoke flow connects with appId only; renderId arrives
+    // start-invoke flow connects with appId only; sessionId arrives
     // later via `subscribeToRender`. Both paths must stamp
     // `supportedVersions` so the server sees the declaration
     // regardless of connection mode.
@@ -393,10 +393,10 @@ describe('WebSocketManager', () => {
     expect(subscribeFrame).toBeDefined();
     const parsed = JSON.parse(subscribeFrame!) as {
       type: string;
-      payload: { renderId: string; supportedVersions: string[] };
+      payload: { sessionId: string; supportedVersions: string[] };
     };
     expect(parsed.type).toBe('subscribe');
-    expect(parsed.payload.renderId).toBe('render_deferred');
+    expect(parsed.payload.sessionId).toBe('render_deferred');
     expect(parsed.payload.supportedVersions).toEqual([
       ...CLIENT_SUPPORTED_VERSIONS,
     ]);

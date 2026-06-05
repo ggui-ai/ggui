@@ -25,7 +25,7 @@
  *    create a render that's both "explicitly active" AND expired by
  *    `expiresAt`; assert status is `'active'`.
  *
- * 3. **commit upsert in-place** — re-committing the same renderId MUST
+ * 3. **commit upsert in-place** — re-committing the same sessionId MUST
  *    replace the visible-bits surface in place; lifecycle fields
  *    (`createdAt`, `eventSequence`, `hostSession`) stay untouched.
  *
@@ -219,17 +219,17 @@ export function runGguiSessionStoreConformance(
         await withStore(async (store) => {
           await store.create({ id: 'render-1', appId: 'app-1' });
           const seq1 = await store.appendEvent({
-            renderId: 'render-1',
+            sessionId: 'render-1',
             type: 'user.submitted',
             data: { n: 1 },
           });
           const seq2 = await store.appendEvent({
-            renderId: 'render-1',
+            sessionId: 'render-1',
             type: 'user.submitted',
             data: { n: 2 },
           });
           const seq3 = await store.appendEvent({
-            renderId: 'render-1',
+            sessionId: 'render-1',
             type: 'user.submitted',
             data: { n: 3 },
           });
@@ -243,17 +243,17 @@ export function runGguiSessionStoreConformance(
           await store.create({ id: 'render-A', appId: 'app-1' });
           await store.create({ id: 'render-B', appId: 'app-1' });
           const a1 = await store.appendEvent({
-            renderId: 'render-A',
+            sessionId: 'render-A',
             type: 'user.submitted',
             data: {},
           });
           const b1 = await store.appendEvent({
-            renderId: 'render-B',
+            sessionId: 'render-B',
             type: 'user.submitted',
             data: {},
           });
           const a2 = await store.appendEvent({
-            renderId: 'render-A',
+            sessionId: 'render-A',
             type: 'user.submitted',
             data: {},
           });

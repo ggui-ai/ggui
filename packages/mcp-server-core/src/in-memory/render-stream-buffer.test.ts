@@ -22,9 +22,9 @@ const MIXED_SPEC: StreamSpec = {
 describe('InMemoryGguiSessionStreamBuffer — sequencing', () => {
   it('assigns monotonic gap-free seq per session starting at 1', async () => {
     const buf = new InMemoryGguiSessionStreamBuffer();
-    const r1 = await buf.record({ renderId: SESSION, channel: 'feed', mode: 'append', payload: { n: 1 } }, MIXED_SPEC);
-    const r2 = await buf.record({ renderId: SESSION, channel: 'feed', mode: 'append', payload: { n: 2 } }, MIXED_SPEC);
-    const r3 = await buf.record({ renderId: SESSION, channel: 'snap', mode: 'replace', payload: { v: 'x' } }, MIXED_SPEC);
+    const r1 = await buf.record({ sessionId: SESSION, channel: 'feed', mode: 'append', payload: { n: 1 } }, MIXED_SPEC);
+    const r2 = await buf.record({ sessionId: SESSION, channel: 'feed', mode: 'append', payload: { n: 2 } }, MIXED_SPEC);
+    const r3 = await buf.record({ sessionId: SESSION, channel: 'snap', mode: 'replace', payload: { v: 'x' } }, MIXED_SPEC);
     expect(r1.envelope.seq).toBe(1);
     expect(r2.envelope.seq).toBe(2);
     expect(r3.envelope.seq).toBe(3);
@@ -33,9 +33,9 @@ describe('InMemoryGguiSessionStreamBuffer — sequencing', () => {
 
   it('seq is session-scoped — concurrent sessions advance independently', async () => {
     const buf = new InMemoryGguiSessionStreamBuffer();
-    const a1 = await buf.record({ renderId: 'A', channel: 'feed', mode: 'append', payload: {} }, MIXED_SPEC);
-    const b1 = await buf.record({ renderId: 'B', channel: 'feed', mode: 'append', payload: {} }, MIXED_SPEC);
-    const a2 = await buf.record({ renderId: 'A', channel: 'feed', mode: 'append', payload: {} }, MIXED_SPEC);
+    const a1 = await buf.record({ sessionId: 'A', channel: 'feed', mode: 'append', payload: {} }, MIXED_SPEC);
+    const b1 = await buf.record({ sessionId: 'B', channel: 'feed', mode: 'append', payload: {} }, MIXED_SPEC);
+    const a2 = await buf.record({ sessionId: 'A', channel: 'feed', mode: 'append', payload: {} }, MIXED_SPEC);
     expect(a1.envelope.seq).toBe(1);
     expect(b1.envelope.seq).toBe(1);
     expect(a2.envelope.seq).toBe(2);
@@ -46,7 +46,7 @@ describe('InMemoryGguiSessionStreamBuffer — sequencing', () => {
   it('assigns seq to "none" channels too (cursor stays contiguous for fan-out) even though nothing is buffered', async () => {
     const buf = new InMemoryGguiSessionStreamBuffer();
     const { envelope, buffered } = await buf.record(
-      { renderId: SESSION, channel: 'silent', mode: 'append', payload: {} },
+      { sessionId: SESSION, channel: 'silent', mode: 'append', payload: {} },
       MIXED_SPEC,
     );
     expect(envelope.seq).toBe(1);
@@ -58,7 +58,7 @@ describe('InMemoryGguiSessionStreamBuffer — sequencing', () => {
   it('applies DEFAULT_STREAM_REPLAY_POLICY (none) when spec is absent', async () => {
     const buf = new InMemoryGguiSessionStreamBuffer();
     const r = await buf.record(
-      { renderId: SESSION, channel: 'anything', mode: 'append', payload: {} },
+      { sessionId: SESSION, channel: 'anything', mode: 'append', payload: {} },
       undefined,
     );
     expect(r.envelope.seq).toBe(1);
@@ -74,8 +74,8 @@ describe('InMemoryGguiSessionStreamBuffer — sequencing', () => {
 describe('InMemoryGguiSessionStreamBuffer — record policies', () => {
   it('"none" policy stores nothing', async () => {
     const buf = new InMemoryGguiSessionStreamBuffer();
-    await buf.record({ renderId: SESSION, channel: 'silent', mode: 'append', payload: { ignore: true } }, MIXED_SPEC);
-    await buf.record({ renderId: SESSION, channel: 'silent', mode: 'append', payload: { also: true } }, MIXED_SPEC);
+    await buf.record({ sessionId: SESSION, channel: 'silent', mode: 'append', payload: { ignore: true } }, MIXED_SPEC);
+    await buf.record({ sessionId: SESSION, channel: 'silent', mode: 'append', payload: { also: true } }, MIXED_SPEC);
     expect(await buf.getSize()).toBe(0);
   });
 
@@ -85,9 +85,9 @@ describe('InMemoryGguiSessionStreamBuffer — record policies', () => {
       snap2: { schema: { type: 'object' }, replay: 'latest' },
     };
     const buf = new InMemoryGguiSessionStreamBuffer();
-    await buf.record({ renderId: SESSION, channel: 'snap1', mode: 'replace', payload: { v: 1 } }, spec);
-    await buf.record({ renderId: SESSION, channel: 'snap2', mode: 'replace', payload: { v: 'a' } }, spec);
-    await buf.record({ renderId: SESSION, channel: 'snap1', mode: 'replace', payload: { v: 2 } }, spec);
+    await buf.record({ sessionId: SESSION, channel: 'snap1', mode: 'replace', payload: { v: 1 } }, spec);
+    await buf.record({ sessionId: SESSION, channel: 'snap2', mode: 'replace', payload: { v: 'a' } }, spec);
+    await buf.record({ sessionId: SESSION, channel: 'snap1', mode: 'replace', payload: { v: 2 } }, spec);
 
     // One slot per channel, so 2 entries total.
     expect(await buf.getSize()).toBe(2);
@@ -108,7 +108,7 @@ describe('InMemoryGguiSessionStreamBuffer — record policies', () => {
       feed: { schema: { type: 'object' }, replay: 'all' },
     };
     for (let i = 1; i <= 5; i++) {
-      await buf.record({ renderId: SESSION, channel: 'feed', mode: 'append', payload: { i } }, spec);
+      await buf.record({ sessionId: SESSION, channel: 'feed', mode: 'append', payload: { i } }, spec);
     }
     // Seq 1,2 evicted; 3,4,5 retained.
     const r = await buf.replay(SESSION, 0, spec);
@@ -118,11 +118,11 @@ describe('InMemoryGguiSessionStreamBuffer — record policies', () => {
 
   it('records of mixed policies coexist without interference', async () => {
     const buf = new InMemoryGguiSessionStreamBuffer();
-    await buf.record({ renderId: SESSION, channel: 'silent', mode: 'append', payload: {} }, MIXED_SPEC);
-    await buf.record({ renderId: SESSION, channel: 'feed', mode: 'append', payload: { i: 1 } }, MIXED_SPEC);
-    await buf.record({ renderId: SESSION, channel: 'snap', mode: 'replace', payload: { v: 1 } }, MIXED_SPEC);
-    await buf.record({ renderId: SESSION, channel: 'feed', mode: 'append', payload: { i: 2 } }, MIXED_SPEC);
-    await buf.record({ renderId: SESSION, channel: 'snap', mode: 'replace', payload: { v: 2 } }, MIXED_SPEC);
+    await buf.record({ sessionId: SESSION, channel: 'silent', mode: 'append', payload: {} }, MIXED_SPEC);
+    await buf.record({ sessionId: SESSION, channel: 'feed', mode: 'append', payload: { i: 1 } }, MIXED_SPEC);
+    await buf.record({ sessionId: SESSION, channel: 'snap', mode: 'replace', payload: { v: 1 } }, MIXED_SPEC);
+    await buf.record({ sessionId: SESSION, channel: 'feed', mode: 'append', payload: { i: 2 } }, MIXED_SPEC);
+    await buf.record({ sessionId: SESSION, channel: 'snap', mode: 'replace', payload: { v: 2 } }, MIXED_SPEC);
     // silent=0 stored, feed=2 in ring, snap=1 in latest-slot
     expect(await buf.getSize()).toBe(3);
   });
@@ -131,8 +131,8 @@ describe('InMemoryGguiSessionStreamBuffer — record policies', () => {
 describe('InMemoryGguiSessionStreamBuffer — replay', () => {
   it('returns empty envelopes + streamSeq when fromSeq is undefined (fresh subscribe)', async () => {
     const buf = new InMemoryGguiSessionStreamBuffer();
-    await buf.record({ renderId: SESSION, channel: 'feed', mode: 'append', payload: { i: 1 } }, MIXED_SPEC);
-    await buf.record({ renderId: SESSION, channel: 'feed', mode: 'append', payload: { i: 2 } }, MIXED_SPEC);
+    await buf.record({ sessionId: SESSION, channel: 'feed', mode: 'append', payload: { i: 1 } }, MIXED_SPEC);
+    await buf.record({ sessionId: SESSION, channel: 'feed', mode: 'append', payload: { i: 2 } }, MIXED_SPEC);
 
     const r = await buf.replay(SESSION, undefined, MIXED_SPEC);
     expect(r.envelopes).toEqual([]);
@@ -142,9 +142,9 @@ describe('InMemoryGguiSessionStreamBuffer — replay', () => {
 
   it('returns only envelopes with seq > fromSeq', async () => {
     const buf = new InMemoryGguiSessionStreamBuffer();
-    await buf.record({ renderId: SESSION, channel: 'feed', mode: 'append', payload: { i: 1 } }, MIXED_SPEC);
-    await buf.record({ renderId: SESSION, channel: 'feed', mode: 'append', payload: { i: 2 } }, MIXED_SPEC);
-    await buf.record({ renderId: SESSION, channel: 'feed', mode: 'append', payload: { i: 3 } }, MIXED_SPEC);
+    await buf.record({ sessionId: SESSION, channel: 'feed', mode: 'append', payload: { i: 1 } }, MIXED_SPEC);
+    await buf.record({ sessionId: SESSION, channel: 'feed', mode: 'append', payload: { i: 2 } }, MIXED_SPEC);
+    await buf.record({ sessionId: SESSION, channel: 'feed', mode: 'append', payload: { i: 3 } }, MIXED_SPEC);
 
     const r = await buf.replay(SESSION, 1, MIXED_SPEC);
     expect(r.envelopes.map((e) => e.seq)).toEqual([2, 3]);
@@ -154,9 +154,9 @@ describe('InMemoryGguiSessionStreamBuffer — replay', () => {
 
   it('"latest" channel replays at most one envelope — the stored latest', async () => {
     const buf = new InMemoryGguiSessionStreamBuffer();
-    await buf.record({ renderId: SESSION, channel: 'snap', mode: 'replace', payload: { v: 'a' } }, MIXED_SPEC);
-    await buf.record({ renderId: SESSION, channel: 'snap', mode: 'replace', payload: { v: 'b' } }, MIXED_SPEC);
-    await buf.record({ renderId: SESSION, channel: 'snap', mode: 'replace', payload: { v: 'c' } }, MIXED_SPEC);
+    await buf.record({ sessionId: SESSION, channel: 'snap', mode: 'replace', payload: { v: 'a' } }, MIXED_SPEC);
+    await buf.record({ sessionId: SESSION, channel: 'snap', mode: 'replace', payload: { v: 'b' } }, MIXED_SPEC);
+    await buf.record({ sessionId: SESSION, channel: 'snap', mode: 'replace', payload: { v: 'c' } }, MIXED_SPEC);
 
     const r = await buf.replay(SESSION, 0, MIXED_SPEC);
     expect(r.envelopes).toHaveLength(1);
@@ -166,8 +166,8 @@ describe('InMemoryGguiSessionStreamBuffer — replay', () => {
 
   it('"latest" channel replays nothing when latest.seq <= fromSeq', async () => {
     const buf = new InMemoryGguiSessionStreamBuffer();
-    await buf.record({ renderId: SESSION, channel: 'snap', mode: 'replace', payload: { v: 'old' } }, MIXED_SPEC);
-    await buf.record({ renderId: SESSION, channel: 'feed', mode: 'append', payload: {} }, MIXED_SPEC);
+    await buf.record({ sessionId: SESSION, channel: 'snap', mode: 'replace', payload: { v: 'old' } }, MIXED_SPEC);
+    await buf.record({ sessionId: SESSION, channel: 'feed', mode: 'append', payload: {} }, MIXED_SPEC);
 
     // Subscriber already saw seq 2 — snap's latest is at seq 1 which is behind.
     const r = await buf.replay(SESSION, 2, MIXED_SPEC);
@@ -178,8 +178,8 @@ describe('InMemoryGguiSessionStreamBuffer — replay', () => {
 
   it('"none" channel contributes nothing even when receiver requests full replay', async () => {
     const buf = new InMemoryGguiSessionStreamBuffer();
-    await buf.record({ renderId: SESSION, channel: 'silent', mode: 'append', payload: {} }, MIXED_SPEC);
-    await buf.record({ renderId: SESSION, channel: 'silent', mode: 'append', payload: {} }, MIXED_SPEC);
+    await buf.record({ sessionId: SESSION, channel: 'silent', mode: 'append', payload: {} }, MIXED_SPEC);
+    await buf.record({ sessionId: SESSION, channel: 'silent', mode: 'append', payload: {} }, MIXED_SPEC);
     const r = await buf.replay(SESSION, 0, MIXED_SPEC);
     expect(r.envelopes).toEqual([]);
     expect(r.streamSeq).toBe(2); // seq still advances
@@ -187,12 +187,12 @@ describe('InMemoryGguiSessionStreamBuffer — replay', () => {
 
   it('mixed policies replay correctly together and in seq order', async () => {
     const buf = new InMemoryGguiSessionStreamBuffer();
-    await buf.record({ renderId: SESSION, channel: 'feed', mode: 'append', payload: { i: 1 } }, MIXED_SPEC);
-    await buf.record({ renderId: SESSION, channel: 'silent', mode: 'append', payload: {} }, MIXED_SPEC);
-    await buf.record({ renderId: SESSION, channel: 'snap', mode: 'replace', payload: { v: 'a' } }, MIXED_SPEC);
-    await buf.record({ renderId: SESSION, channel: 'feed', mode: 'append', payload: { i: 2 } }, MIXED_SPEC);
-    await buf.record({ renderId: SESSION, channel: 'snap', mode: 'replace', payload: { v: 'b' } }, MIXED_SPEC);
-    await buf.record({ renderId: SESSION, channel: 'feed', mode: 'append', payload: { i: 3 } }, MIXED_SPEC);
+    await buf.record({ sessionId: SESSION, channel: 'feed', mode: 'append', payload: { i: 1 } }, MIXED_SPEC);
+    await buf.record({ sessionId: SESSION, channel: 'silent', mode: 'append', payload: {} }, MIXED_SPEC);
+    await buf.record({ sessionId: SESSION, channel: 'snap', mode: 'replace', payload: { v: 'a' } }, MIXED_SPEC);
+    await buf.record({ sessionId: SESSION, channel: 'feed', mode: 'append', payload: { i: 2 } }, MIXED_SPEC);
+    await buf.record({ sessionId: SESSION, channel: 'snap', mode: 'replace', payload: { v: 'b' } }, MIXED_SPEC);
+    await buf.record({ sessionId: SESSION, channel: 'feed', mode: 'append', payload: { i: 3 } }, MIXED_SPEC);
 
     // fromSeq=0 → everything past the cutoff per-policy.
     const r = await buf.replay(SESSION, 0, MIXED_SPEC);
@@ -211,9 +211,9 @@ describe('InMemoryGguiSessionStreamBuffer — replay', () => {
     const spec: StreamSpec = {
       feed: { schema: { type: 'object' }, replay: 'all' },
     };
-    await buf.record({ renderId: SESSION, channel: 'feed', mode: 'append', payload: { i: 1 } }, spec);
-    await buf.record({ renderId: SESSION, channel: 'feed', mode: 'append', payload: { i: 2 } }, spec);
-    await buf.record({ renderId: SESSION, channel: 'feed', mode: 'append', payload: { i: 3 } }, spec);
+    await buf.record({ sessionId: SESSION, channel: 'feed', mode: 'append', payload: { i: 1 } }, spec);
+    await buf.record({ sessionId: SESSION, channel: 'feed', mode: 'append', payload: { i: 2 } }, spec);
+    await buf.record({ sessionId: SESSION, channel: 'feed', mode: 'append', payload: { i: 3 } }, spec);
     // Seq 1 evicted.
 
     // fromSeq=0 subscriber missed seq 1, which is gone.
@@ -240,7 +240,7 @@ describe('InMemoryGguiSessionStreamBuffer — replay', () => {
   it('returns nothing when spec is absent — default policy (none) everywhere', async () => {
     const buf = new InMemoryGguiSessionStreamBuffer();
     // Record with a spec so something gets stored.
-    await buf.record({ renderId: SESSION, channel: 'feed', mode: 'append', payload: { i: 1 } }, MIXED_SPEC);
+    await buf.record({ sessionId: SESSION, channel: 'feed', mode: 'append', payload: { i: 1 } }, MIXED_SPEC);
     // Replay without spec — buffer has no live contract to honor.
     const r = await buf.replay(SESSION, 0, undefined);
     expect(r.envelopes).toEqual([]);
@@ -251,9 +251,9 @@ describe('InMemoryGguiSessionStreamBuffer — replay', () => {
 describe('InMemoryGguiSessionStreamBuffer — clear', () => {
   it('drops all state for a session; other sessions untouched', async () => {
     const buf = new InMemoryGguiSessionStreamBuffer();
-    await buf.record({ renderId: 'A', channel: 'feed', mode: 'append', payload: {} }, MIXED_SPEC);
-    await buf.record({ renderId: 'A', channel: 'snap', mode: 'replace', payload: {} }, MIXED_SPEC);
-    await buf.record({ renderId: 'B', channel: 'feed', mode: 'append', payload: {} }, MIXED_SPEC);
+    await buf.record({ sessionId: 'A', channel: 'feed', mode: 'append', payload: {} }, MIXED_SPEC);
+    await buf.record({ sessionId: 'A', channel: 'snap', mode: 'replace', payload: {} }, MIXED_SPEC);
+    await buf.record({ sessionId: 'B', channel: 'feed', mode: 'append', payload: {} }, MIXED_SPEC);
 
     await buf.clear('A');
     expect(await buf.currentSeq('A')).toBe(0);
@@ -271,10 +271,10 @@ describe('InMemoryGguiSessionStreamBuffer — clear', () => {
 
   it('after clear, new records start seq at 1 again', async () => {
     const buf = new InMemoryGguiSessionStreamBuffer();
-    await buf.record({ renderId: SESSION, channel: 'feed', mode: 'append', payload: {} }, MIXED_SPEC);
-    await buf.record({ renderId: SESSION, channel: 'feed', mode: 'append', payload: {} }, MIXED_SPEC);
+    await buf.record({ sessionId: SESSION, channel: 'feed', mode: 'append', payload: {} }, MIXED_SPEC);
+    await buf.record({ sessionId: SESSION, channel: 'feed', mode: 'append', payload: {} }, MIXED_SPEC);
     await buf.clear(SESSION);
-    const r = await buf.record({ renderId: SESSION, channel: 'feed', mode: 'append', payload: {} }, MIXED_SPEC);
+    const r = await buf.record({ sessionId: SESSION, channel: 'feed', mode: 'append', payload: {} }, MIXED_SPEC);
     expect(r.envelope.seq).toBe(1);
   });
 });
@@ -282,10 +282,10 @@ describe('InMemoryGguiSessionStreamBuffer — clear', () => {
 describe('InMemoryGguiSessionStreamBuffer — getSize', () => {
   it('counts buffered entries across sessions + both storage forms', async () => {
     const buf = new InMemoryGguiSessionStreamBuffer();
-    await buf.record({ renderId: 'A', channel: 'feed', mode: 'append', payload: {} }, MIXED_SPEC);
-    await buf.record({ renderId: 'A', channel: 'snap', mode: 'replace', payload: {} }, MIXED_SPEC);
-    await buf.record({ renderId: 'A', channel: 'silent', mode: 'append', payload: {} }, MIXED_SPEC);
-    await buf.record({ renderId: 'B', channel: 'feed', mode: 'append', payload: {} }, MIXED_SPEC);
+    await buf.record({ sessionId: 'A', channel: 'feed', mode: 'append', payload: {} }, MIXED_SPEC);
+    await buf.record({ sessionId: 'A', channel: 'snap', mode: 'replace', payload: {} }, MIXED_SPEC);
+    await buf.record({ sessionId: 'A', channel: 'silent', mode: 'append', payload: {} }, MIXED_SPEC);
+    await buf.record({ sessionId: 'B', channel: 'feed', mode: 'append', payload: {} }, MIXED_SPEC);
     // A: 1 ring + 1 latest = 2; silent not counted. B: 1 ring.
     expect(await buf.getSize()).toBe(3);
   });

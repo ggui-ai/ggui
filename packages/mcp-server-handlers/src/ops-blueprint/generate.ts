@@ -37,7 +37,7 @@
  *
  * ## What this handler does NOT do
  *
- *   - Commit a render. No `renderId`, no commit into the render
+ *   - Commit a render. No `sessionId`, no commit into the render
  *     store. Pure registry mutation.
  *   - Pick a generator dynamically. Operator chooses; the LLM-driven
  *     selector layers above the registry, not below.
@@ -330,7 +330,7 @@ export function createGguiOpsGenerateBlueprintHandler(
       // 5. Dispatch through the generator.
       const generateInput: UiGenerateInput = {
         request: {
-          renderId: `ops_gen_${randomUUID()}`,
+          sessionId: `ops_gen_${randomUUID()}`,
           prompt: parsed.seedPrompt ?? "Operator-authored blueprint variant",
         },
         blueprints: deps.blueprints,

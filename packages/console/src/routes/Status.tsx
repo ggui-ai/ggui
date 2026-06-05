@@ -22,7 +22,7 @@
  *
  * Fetches in parallel:
  *   - `GET /ggui/console/info`           (server + pairing + capabilities + storage)
- *   - `GET /ggui/console/renders?limit=3` (live-now rail data)
+ *   - `GET /ggui/console/sessions?limit=3` (live-now rail data)
  */
 import {
   useEffect,
@@ -67,7 +67,7 @@ interface ServerInfoResponse {
 }
 
 interface GguiSessionSummary {
-  readonly renderId: string;
+  readonly sessionId: string;
   readonly shortCode?: string;
   readonly appId: string;
   readonly lastActivityAt: number;
@@ -120,7 +120,7 @@ export function Status(): ReactElement {
     })();
     void (async () => {
       try {
-        const res = await fetch('/ggui/console/renders?limit=3', {
+        const res = await fetch('/ggui/console/sessions?limit=3', {
           signal: controller.signal,
           headers: { accept: 'application/json' },
         });
@@ -427,7 +427,7 @@ function LiveGguiSessionsHero({
     return (
       <div className="ggui-status-hero" data-ggui-status-hero="error">
         <p className="ggui-muted">
-          Couldn&apos;t reach <code className="ggui-code">/ggui/console/renders</code>.
+          Couldn&apos;t reach <code className="ggui-code">/ggui/console/sessions</code>.
         </p>
       </div>
     );
@@ -468,7 +468,7 @@ function LiveGguiSessionsHero({
     <div
       className="ggui-status-hero ggui-status-hero--active"
       data-ggui-status-hero="active"
-      data-ggui-live-render-count={String(all.length)}
+      data-ggui-live-session-count={String(all.length)}
     >
       <div className="ggui-status-hero__head">
         <span className="ggui-status-hero__eyebrow">
@@ -495,9 +495,9 @@ function LiveGguiSessionsHero({
       <ul className="ggui-status-hero__list">
         {top3.map((r) => (
           <li
-            key={r.renderId}
+            key={r.sessionId}
             className="ggui-status-hero__row"
-            data-ggui-dashboard-render-id={r.renderId}
+            data-ggui-dashboard-session-id={r.sessionId}
           >
             <div className="ggui-status-hero__row-main">
               {r.shortCode ? (
@@ -508,7 +508,7 @@ function LiveGguiSessionsHero({
                   /s/{r.shortCode}
                 </code>
               ) : (
-                <code className="ggui-code">{r.renderId.slice(0, 8)}…</code>
+                <code className="ggui-code">{r.sessionId.slice(0, 8)}…</code>
               )}
               <span className="ggui-muted">
                 {formatRelative(r.lastActivityAt)}
@@ -537,7 +537,7 @@ function LiveGguiSessionsHero({
           <button
             type="button"
             className="ggui-link"
-            onClick={() => navigateTo('/admin/renders')}
+            onClick={() => navigateTo('/admin/sessions')}
           >
             view all {all.length} →
           </button>
@@ -547,7 +547,7 @@ function LiveGguiSessionsHero({
           <button
             type="button"
             className="ggui-link"
-            onClick={() => navigateTo('/admin/renders')}
+            onClick={() => navigateTo('/admin/sessions')}
           >
             view all →
           </button>

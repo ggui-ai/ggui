@@ -59,7 +59,7 @@ describe('host-simulator: wired-action bridge', () => {
     const built = buildWiredAction({
       intent: 'createEvent',
       data: { title: 'Team sync', when: '2026-05-04T15:00' },
-      renderId: 'rnd_abc',
+      sessionId: 'rnd_abc',
       appId: 'app_xyz',
       firedAt: '2026-05-04T12:00:00.000Z',
       idSeed: [1, 2, 3],
@@ -83,7 +83,7 @@ describe('host-simulator: wired-action bridge', () => {
         actionData: { title: 'Team sync', when: '2026-05-04T15:00' },
         uiContext: {},
       },
-      renderId: 'rnd_abc',
+      sessionId: 'rnd_abc',
       appId: 'app_xyz',
       firedAt: '2026-05-04T12:00:00.000Z',
     });
@@ -110,7 +110,7 @@ describe('host-simulator: wired-action bridge', () => {
     });
     await host.connect();
 
-    // Mint a real bootstrap — the wired-action needs a renderId/appId
+    // Mint a real bootstrap — the wired-action needs a sessionId/appId
     // pair from a `ggui_render` to be wire-faithful. Use the canonical
     // handshake → render flow.
     const flow = await host.openRender({
@@ -150,7 +150,7 @@ describe('host-simulator: wired-action bridge', () => {
     expect(result.pendingActionText).toContain(`"actionId":"${result.actionId}"`);
     expect(result.pendingActionText).toContain('"intent":"submit"');
     expect(result.pendingActionText).toContain('"name":"Wanseob"');
-    expect(result.pendingActionText).toContain(`"renderId":"${bootstrap.renderId}"`);
+    expect(result.pendingActionText).toContain(`"sessionId":"${bootstrap.sessionId}"`);
     expect(result.pendingActionText).toContain(`"appId":"${bootstrap.appId}"`);
 
     // (4) Consent prompt has the human-readable summary + actionId stamp.

@@ -28,7 +28,7 @@
  *   "params": {
  *     "name": "ggui_runtime_sync_context",
  *     "arguments": {
- *       "renderId":  "rnd_…",
+ *       "sessionId":  "rnd_…",
  *       "appId":     "app_…",
  *       "snapshot":  { "count": 5, "noteText": "draft" }
  *     }
@@ -37,7 +37,7 @@
  * ```
  *
  * **REPLACE semantics, not append.** Each call carries the FULL
- * current snapshot. Last-write-wins per renderId. Matches the
+ * current snapshot. Last-write-wins per sessionId. Matches the
  * runtime's existing posture (see `context-observer.ts` —
  * claude.ai's host already treats `ui/update-model-context` as
  * REPLACE, so deltas would diverge between server and host).
@@ -48,7 +48,7 @@
  * a runtime concern, not an agent gesture.
  *
  * Post-Phase-B (flatten-render-identity): collapsed from
- * `{sessionId, stackItemId, ...}` to `{renderId, ...}` — every render
+ * `{sessionId, stackItemId, ...}` to `{sessionId, ...}` — every render
  * IS the addressable scope.
  */
 import { z } from 'zod';
@@ -66,11 +66,11 @@ import type { GguiSessionStore } from '@ggui-ai/mcp-server-core';
 import type { SharedHandler } from '../types.js';
 
 const inputSchema = {
-  renderId: z
+  sessionId: z
     .string()
-    .min(1, 'renderId is required')
+    .min(1, 'sessionId is required')
     .describe(
-      'Active render id — sourced from `_meta["ai.ggui/render"].renderId` on the iframe boot envelope.',
+      'Active render id — sourced from `_meta["ai.ggui/render"].sessionId` on the iframe boot envelope.',
     ),
   appId: z
     .string()
@@ -89,7 +89,7 @@ const outputSchema = {
   ok: z.boolean(),
   code: z
     .enum([
-      'RENDER_NOT_FOUND',
+      'SESSION_NOT_FOUND',
       'TENANT_MISMATCH',
       'CONTEXT_SCHEMA_VIOLATION',
       'CONTEXT_TOO_LARGE',
@@ -104,7 +104,7 @@ interface SyncContextAccepted {
 interface SyncContextRejected {
   readonly ok: false;
   readonly code:
-    | 'RENDER_NOT_FOUND'
+    | 'SESSION_NOT_FOUND'
     | 'TENANT_MISMATCH'
     | 'CONTEXT_SCHEMA_VIOLATION'
     | 'CONTEXT_TOO_LARGE';
@@ -129,7 +129,7 @@ export function createGguiSyncContextHandler(
     title: '[runtime] Sync Context',
     audience: ['runtime'],
     description:
-      'Mirrors a contextSpec snapshot from the iframe-runtime to the server (REPLACE semantics, last-write-wins per renderId). Iframe-only — `_meta.ui.visibility: [\'app\']` restricts callers per spec §401. Server stores the snapshot on the render; chat-history rehydrate seeds `contextSlots[i].default` with the snapshotted values, restoring the user\'s last-known interactive state instead of resetting to authoring-time defaults.',
+      'Mirrors a contextSpec snapshot from the iframe-runtime to the server (REPLACE semantics, last-write-wins per sessionId). Iframe-only — `_meta.ui.visibility: [\'app\']` restricts callers per spec §401. Server stores the snapshot on the render; chat-history rehydrate seeds `contextSlots[i].default` with the snapshotted values, restoring the user\'s last-known interactive state instead of resetting to authoring-time defaults.',
     inputSchema,
     outputSchema,
     _meta: {
@@ -140,13 +140,13 @@ export function createGguiSyncContextHandler(
       if (!parsed.success) {
         return {
           ok: false,
-          code: 'RENDER_NOT_FOUND',
+          code: 'SESSION_NOT_FOUND',
           message: `sync-context envelope rejected at top-level: ${parsed.error.issues
             .map((i) => `${i.path.join('.') || '<root>'}: ${i.message}`)
             .join('; ')}`,
         };
       }
-      const { renderId, appId, snapshot } = parsed.data;
+      const { sessionId, appId, snapshot } = parsed.data;
 
       // Bound the snapshot. contextSpec is observable state for the
       // agent, NOT content storage. Reject (not truncate) so authors
@@ -163,12 +163,12 @@ export function createGguiSyncContextHandler(
         };
       }
 
-      const stored = await deps.renderStore.get(renderId);
+      const stored = await deps.renderStore.get(sessionId);
       if (!stored) {
         return {
           ok: false,
-          code: 'RENDER_NOT_FOUND',
-          message: `render "${renderId}" not found — likely TTL-expired or closed. Iframe should drop further sync attempts until the next render refreshes the bootstrap.`,
+          code: 'SESSION_NOT_FOUND',
+          message: `render "${sessionId}" not found — likely TTL-expired or closed. Iframe should drop further sync attempts until the next render refreshes the bootstrap.`,
         };
       }
       // Tenant gate. Without this, a malicious iframe (or a buggy
@@ -179,7 +179,7 @@ export function createGguiSyncContextHandler(
         return {
           ok: false,
           code: 'TENANT_MISMATCH',
-          message: `render "${renderId}" is owned by a different app — request declared "${appId}" but render is bound to "${stored.appId}".`,
+          message: `render "${sessionId}" is owned by a different app — request declared "${appId}" but render is bound to "${stored.appId}".`,
         };
       }
       // mcpApps locator renders have no contextSpec — they're
@@ -189,15 +189,15 @@ export function createGguiSyncContextHandler(
       if (stored.render.type === 'mcpApps') {
         return {
           ok: false,
-          code: 'RENDER_NOT_FOUND',
-          message: `render "${renderId}" is an MCP Apps locator (third-party iframe) — context sync is not applicable.`,
+          code: 'SESSION_NOT_FOUND',
+          message: `render "${sessionId}" is an MCP Apps locator (third-party iframe) — context sync is not applicable.`,
         };
       }
       if (stored.render.type === 'system') {
         return {
           ok: false,
-          code: 'RENDER_NOT_FOUND',
-          message: `render "${renderId}" is a system card — context sync is not applicable.`,
+          code: 'SESSION_NOT_FOUND',
+          message: `render "${sessionId}" is a system card — context sync is not applicable.`,
         };
       }
       // Schema validation: every snapshot key MUST be a declared slot

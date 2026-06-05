@@ -5,7 +5,7 @@
  * `ggui_render` tool call with bootstrap `_meta` on the result,
  * `resources/read ui://ggui/render` serving the thin shell, and a
  * real live-channel subscribe with the minted bootstrap token producing
- * an ack with a reconnect `renderToken`.
+ * an ack with a reconnect `sessionToken`.
  */
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { Server as HttpServer } from 'node:http';
@@ -79,10 +79,10 @@ async function handshakeAndRender(
   intent: string,
 ): Promise<Awaited<ReturnType<Client['callTool']>>> {
   // Post-Phase-B (flatten-render-identity): the prior `ggui_new_session`
-  // + `ggui_handshake({renderId})` + `ggui_push` triple collapses to
+  // + `ggui_handshake({sessionId})` + `ggui_push` triple collapses to
   // `ggui_handshake({intent, blueprintDraft})` + `ggui_render({handshakeId,
   // props})`. Accept = OMIT `override`; props is REQUIRED (pass {} for a
-  // no-propsSpec contract). The renderId is minted by `ggui_render` itself
+  // no-propsSpec contract). The sessionId is minted by `ggui_render` itself
   // (returned on the result's structuredContent).
   const handshake = await client.callTool({
     name: 'ggui_handshake',
@@ -241,16 +241,16 @@ describe('end-to-end outbound flow', () => {
       'token',
       'bootstrap',
       'bootstrapToken',
-      'renderToken',
+      'sessionToken',
       'expiresAt',
     ]) {
       expect(scKeys).not.toContain(bootstrapKey);
     }
-    expect(sc.renderId).toBeDefined();
+    expect(sc.sessionId).toBeDefined();
     // Post-R5 cleanup: there is no `url` field on structuredContent.
     // The `/r/<shortCode>` route was deleted; every host either
     // mounts via `_meta.ui.resourceUri` or resolves the render
-    // resource from `{renderId}` itself.
+    // resource from `{sessionId}` itself.
     expect(scKeys).not.toContain('url');
 
     // The `ai.ggui/render` _meta slice decodes to a flat shape
@@ -259,7 +259,7 @@ describe('end-to-end outbound flow', () => {
     const parsed = parseMcpAppAiGguiRenderMeta(result._meta);
     expect(parsed.ok).toBe(true);
     if (!parsed.ok || !parsed.meta) return;
-    expect(parsed.meta.renderId).toBeDefined();
+    expect(parsed.meta.sessionId).toBeDefined();
     expect(parsed.meta.appId).toBeDefined();
     expect(parsed.meta.runtimeUrl).toBeDefined();
   });
@@ -402,7 +402,7 @@ async function bootOutboundServerWith(
   return { server, httpServer, httpBase, wsUrl };
 }
 
-describe('end-to-end bootstrap subscribe → ack renderToken', () => {
+describe('end-to-end bootstrap subscribe → ack sessionToken', () => {
   let fx: Fixture;
   let client: Client;
 
@@ -419,7 +419,7 @@ describe('end-to-end bootstrap subscribe → ack renderToken', () => {
   async function mintRenderBootstrap(): Promise<{
     wsUrl: string;
     token: string;
-    renderId: string;
+    sessionId: string;
     appId: string;
   }> {
     const result = await handshakeAndRender(client, 'bootstrap-test');
@@ -437,12 +437,12 @@ describe('end-to-end bootstrap subscribe → ack renderToken', () => {
     return {
       wsUrl: meta.wsUrl,
       token: meta.wsToken, // local struct retains 'token' for downstream call sites
-      renderId: meta.renderId,
+      sessionId: meta.sessionId,
       appId: meta.appId,
     };
   }
 
-  it('bootstrap-auth subscribe succeeds and ack carries renderToken', async () => {
+  it('bootstrap-auth subscribe succeeds and ack carries sessionToken', async () => {
     const bootstrap = await mintRenderBootstrap();
     // Open WS with ?wsToken= gate — upgrade-time AuthAdapter is skipped.
     const ws = new WebSocket(
@@ -455,7 +455,7 @@ describe('end-to-end bootstrap subscribe → ack renderToken', () => {
 
     const ackPromise = new Promise<{
       sequence: number;
-      renderToken?: string;
+      sessionToken?: string;
       render?: { id: string; appId: string };
     }>((resolve, reject) => {
       ws.on('message', (raw) => {
@@ -463,7 +463,7 @@ describe('end-to-end bootstrap subscribe → ack renderToken', () => {
           type: string;
           payload: {
             sequence: number;
-            renderToken?: string;
+            sessionToken?: string;
             render?: { id: string; appId: string };
             code?: string;
           };
@@ -477,7 +477,7 @@ describe('end-to-end bootstrap subscribe → ack renderToken', () => {
       JSON.stringify({
         type: 'subscribe',
         payload: {
-          renderId: bootstrap.renderId,
+          sessionId: bootstrap.sessionId,
           appId: bootstrap.appId,
           wsToken: bootstrap.token,
         },
@@ -486,12 +486,12 @@ describe('end-to-end bootstrap subscribe → ack renderToken', () => {
 
     const ack = await ackPromise;
     expect(ack.sequence).toBeDefined();
-    expect(typeof ack.renderToken).toBe('string');
-    expect((ack.renderToken as string).length).toBeGreaterThan(10);
+    expect(typeof ack.sessionToken).toBe('string');
+    expect((ack.sessionToken as string).length).toBeGreaterThan(10);
     // Phase B replaced the prior `stack: GguiSession[]` ack slot with a
     // single `render: GguiSession` (a render IS the addressable unit).
     expect(ack.render).toBeDefined();
-    expect(ack.render?.id).toBe(bootstrap.renderId);
+    expect(ack.render?.id).toBe(bootstrap.sessionId);
     expect(ack.render?.appId).toBe(bootstrap.appId);
     ws.close();
   });
@@ -507,7 +507,7 @@ describe('end-to-end bootstrap subscribe → ack renderToken', () => {
     // on a server-side jti-claim Map.
     const bootstrap = await mintRenderBootstrap();
 
-    async function subscribeWithBootstrap(): Promise<{ ok: true; renderToken?: string } | { ok: false; code: string }> {
+    async function subscribeWithBootstrap(): Promise<{ ok: true; sessionToken?: string } | { ok: false; code: string }> {
       const ws = new WebSocket(
         `${fx.wsUrl}?wsToken=${encodeURIComponent(bootstrap.token)}`,
       );
@@ -516,21 +516,21 @@ describe('end-to-end bootstrap subscribe → ack renderToken', () => {
         ws.once('error', reject);
       });
       const result = await new Promise<
-        { ok: true; renderToken?: string } | { ok: false; code: string }
+        { ok: true; sessionToken?: string } | { ok: false; code: string }
       >((resolve) => {
         ws.on('message', (raw) => {
           const msg = JSON.parse(raw.toString()) as {
             type: string;
-            payload: { renderToken?: string; code?: string };
+            payload: { sessionToken?: string; code?: string };
           };
-          if (msg.type === 'ack') resolve({ ok: true, renderToken: msg.payload.renderToken });
+          if (msg.type === 'ack') resolve({ ok: true, sessionToken: msg.payload.sessionToken });
           else if (msg.type === 'error') resolve({ ok: false, code: msg.payload.code as string });
         });
         ws.send(
           JSON.stringify({
             type: 'subscribe',
             payload: {
-              renderId: bootstrap.renderId,
+              sessionId: bootstrap.sessionId,
               appId: bootstrap.appId,
               wsToken: bootstrap.token,
             },
@@ -547,9 +547,9 @@ describe('end-to-end bootstrap subscribe → ack renderToken', () => {
     const second = await subscribeWithBootstrap();
     expect(second.ok).toBe(true);
     if (second.ok) {
-      // Each subscribe still mints a fresh renderToken — that's the
+      // Each subscribe still mints a fresh sessionToken — that's the
       // longer-TTL reconnect credential and is per-subscribe by design.
-      expect(typeof second.renderToken).toBe('string');
+      expect(typeof second.sessionToken).toBe('string');
     }
   });
 
@@ -576,7 +576,7 @@ describe('end-to-end bootstrap subscribe → ack renderToken', () => {
         JSON.stringify({
           type: 'subscribe',
           payload: {
-            renderId: bootstrap.renderId,
+            sessionId: bootstrap.sessionId,
             appId: bootstrap.appId,
             wsToken: tampered,
           },
@@ -611,7 +611,7 @@ describe('end-to-end bootstrap subscribe → ack renderToken', () => {
         JSON.stringify({
           type: 'subscribe',
           payload: {
-            renderId: 'different-render',
+            sessionId: 'different-render',
             appId: bootstrap.appId,
             wsToken: bootstrap.token,
           },
@@ -620,7 +620,7 @@ describe('end-to-end bootstrap subscribe → ack renderToken', () => {
     });
 
     expect(outcome.type).toBe('error');
-    expect(outcome.code).toBe('BOOTSTRAP_RENDER_MISMATCH');
+    expect(outcome.code).toBe('BOOTSTRAP_SESSION_MISMATCH');
     ws.close();
   });
 });

@@ -4,9 +4,9 @@
  * `ui/props-echo/`).
  *
  * The single tool maintains a per-render counter (in-memory `Map`
- * keyed by `ctx.renderId`) and calls
+ * keyed by `ctx.sessionId`) and calls
  * `ctx.sendPropsUpdate({count: newValue})` on every dispatch. The
- * render-channel server fans a `{type:'props_update', payload:{renderId,
+ * render-channel server fans a `{type:'props_update', payload:{sessionId,
  * props}}` frame to the live subscriber; the renderer's iframe-runtime
  * applies the patch in-place via its existing `props_update` branch and
  * the blueprint's `data-ggui-prop-count` attribute re-stamps with the
@@ -30,13 +30,13 @@
  * Why ctx fields are read structurally: the JS-side `handler(input,
  * ctx)` sees a runtime ctx that satisfies the static `HandlerContext`
  * type AND structurally carries the wired-action runtime fields
- * (`renderId`, `sendPropsUpdate`). See `WiredMountContext` + the slice
+ * (`sessionId`, `sendPropsUpdate`). See `WiredMountContext` + the slice
  * doctrine in `mcp-mounts.ts`.
  */
 import { z } from 'zod';
 
 export function createGguiMcpMount() {
-  /** Per-render counter store. Keyed by `ctx.renderId` so multiple
+  /** Per-render counter store. Keyed by `ctx.sessionId` so multiple
    * concurrent renders in the same process don't share state — the
    * Lane-1 spec runs serially today, but the contract should hold for
    * parallel renders when a future fixture exercises that path. */
@@ -53,11 +53,11 @@ export function createGguiMcpMount() {
         inputSchema: {},
         outputSchema: { count: z.number() },
         async handler(_input, ctx) {
-          const renderId = ctx.renderId;
+          const sessionId = ctx.sessionId;
           const sendPropsUpdate = ctx.sendPropsUpdate;
-          if (typeof renderId !== 'string' || renderId.length === 0) {
+          if (typeof sessionId !== 'string' || sessionId.length === 0) {
             throw new Error(
-              'bump_count: ctx.renderId is missing — the wired-action router must thread it.',
+              'bump_count: ctx.sessionId is missing — the wired-action router must thread it.',
             );
           }
           if (typeof sendPropsUpdate !== 'function') {
@@ -65,9 +65,9 @@ export function createGguiMcpMount() {
               'bump_count: ctx.sendPropsUpdate is missing — the wired-action router must thread it.',
             );
           }
-          const previous = counters.get(renderId) ?? 0;
+          const previous = counters.get(sessionId) ?? 0;
           const next = previous + 1;
-          counters.set(renderId, next);
+          counters.set(sessionId, next);
           // Fan-out via the channel server's `sendPropsUpdate` seam.
           // Best-effort by contract — the call returns a Promise but
           // the seam never throws (orphan + closed-socket no-ops), so

@@ -3,11 +3,11 @@
  * tool triad.
  *
  * Post-Phase-B (render-identity collapse) — Session vessel deleted;
- * `renderId` is the single identity referenced across the wire. The
+ * `sessionId` is the single identity referenced across the wire. The
  * handshake input carries NO `sessionId` (handshake mints the render
  * server-side); `ggui_new_session` is gone (folded into handshake);
  * `ggui_push` renamed to `ggui_render`; render output keys by
- * `renderId` (was `stackItemId`); update input keys by `renderId`.
+ * `sessionId` (was `stackItemId`); update input keys by `sessionId`.
  *
  * MVB-5 (2026-05-12) — three-step handshake protocol. Pre-MVB-5
  * shapes (flat `contract?` + `hint?` on handshake input, `match` +
@@ -330,7 +330,7 @@ describe('ggui_render — variance-aware override reshape', () => {
   it('rejects an output missing the required cache-reuse fields', () => {
     expect(() =>
       renderOutputSchema.parse({
-        renderId: 'render_1',
+        sessionId: 'render_1',
         resourceUri: 'ui://ggui/render/render_1',
         action: 'create',
       }),
@@ -339,7 +339,7 @@ describe('ggui_render — variance-aware override reshape', () => {
 
   it('round-trips a render output with contractHash + blueprintId + variantKey + cache', () => {
     const out = {
-      renderId: 'render_1',
+      sessionId: 'render_1',
       resourceUri: 'ui://ggui/render/render_1',
       action: 'create' as const,
       contractHash: '1c00b3ab282a45f6',
@@ -353,7 +353,7 @@ describe('ggui_render — variance-aware override reshape', () => {
   it('rejects an output missing the required blueprintId / variantKey fields', () => {
     expect(() =>
       renderOutputSchema.parse({
-        renderId: 'render_1',
+        sessionId: 'render_1',
         resourceUri: 'ui://ggui/render/render_1',
         action: 'create',
         contractHash: '1c00b3ab282a45f6',
@@ -364,7 +364,7 @@ describe('ggui_render — variance-aware override reshape', () => {
 
   it('surfaces a cache.hit:true marker on output, with cachedBlueprintId === blueprintId', () => {
     const out = {
-      renderId: 'render_1',
+      sessionId: 'render_1',
       resourceUri: 'ui://ggui/render/render_1',
       action: 'reuse' as const,
       contractHash: '1c00b3ab282a45f6',
@@ -386,7 +386,7 @@ describe('ggui_render — variance-aware override reshape', () => {
 
   it('strips the post-R5-retired `url` field on parse (no clickable URL on the wire)', () => {
     const parsed = renderOutputSchema.parse({
-      renderId: 'render_1',
+      sessionId: 'render_1',
       resourceUri: 'ui://ggui/render/render_1',
       action: 'create',
       contractHash: '1c00b3ab282a45f6',
@@ -399,7 +399,7 @@ describe('ggui_render — variance-aware override reshape', () => {
       url: 'https://stale-render.example.com/abc12345',
     } as unknown as Record<string, unknown>);
     expect(parsed).toEqual({
-      renderId: 'render_1',
+      sessionId: 'render_1',
       resourceUri: 'ui://ggui/render/render_1',
       action: 'create',
       contractHash: '1c00b3ab282a45f6',
@@ -413,7 +413,7 @@ describe('ggui_render — variance-aware override reshape', () => {
   it('rejects the retired `compose` action value on output', () => {
     expect(() =>
       renderOutputSchema.parse({
-        renderId: 'render_1',
+        sessionId: 'render_1',
         resourceUri: 'ui://ggui/render/render_1',
         action: 'compose',
       }),
@@ -424,7 +424,7 @@ describe('ggui_render — variance-aware override reshape', () => {
 describe('ggui_update', () => {
   it('accepts kind:"replace" with full props', () => {
     const parsed = updateInputSchema.parse({
-      renderId: 'render_1',
+      sessionId: 'render_1',
       kind: 'replace',
       props: { temp: 24, condition: 'cloudy' },
     });
@@ -436,7 +436,7 @@ describe('ggui_update', () => {
 
   it('accepts kind:"merge" with a delta patch', () => {
     const parsed = updateInputSchema.parse({
-      renderId: 'render_1',
+      sessionId: 'render_1',
       kind: 'merge',
       patch: { temp: 25 },
     });
@@ -448,7 +448,7 @@ describe('ggui_update', () => {
 
   it('accepts kind:"merge" with null values (RFC 7396 delete semantic)', () => {
     const parsed = updateInputSchema.parse({
-      renderId: 'render_1',
+      sessionId: 'render_1',
       kind: 'merge',
       patch: { alert: null },
     });
@@ -461,7 +461,7 @@ describe('ggui_update', () => {
   it('rejects kind:"replace" without props', () => {
     expect(() =>
       updateInputSchema.parse({
-        renderId: 'render_1',
+        sessionId: 'render_1',
         kind: 'replace',
       }),
     ).toThrow();
@@ -470,7 +470,7 @@ describe('ggui_update', () => {
   it('rejects kind:"merge" without patch', () => {
     expect(() =>
       updateInputSchema.parse({
-        renderId: 'render_1',
+        sessionId: 'render_1',
         kind: 'merge',
       }),
     ).toThrow();
@@ -479,7 +479,7 @@ describe('ggui_update', () => {
   it('rejects missing kind', () => {
     expect(() =>
       updateInputSchema.parse({
-        renderId: 'render_1',
+        sessionId: 'render_1',
         props: { temp: 24 },
       }),
     ).toThrow();
@@ -488,14 +488,14 @@ describe('ggui_update', () => {
   it('rejects unknown kind', () => {
     expect(() =>
       updateInputSchema.parse({
-        renderId: 'render_1',
+        sessionId: 'render_1',
         kind: 'patch',
         patch: { temp: 24 },
       }),
     ).toThrow();
   });
 
-  it('rejects missing renderId on either kind', () => {
+  it('rejects missing sessionId on either kind', () => {
     expect(() =>
       updateInputSchema.parse({ kind: 'replace', props: { temp: 24 } }),
     ).toThrow();
@@ -505,7 +505,7 @@ describe('ggui_update', () => {
   });
 
   it('round-trips an update output', () => {
-    const out = { renderId: 'render_1', updated: true };
+    const out = { sessionId: 'render_1', updated: true };
     expect(updateOutputSchema.parse(out)).toEqual(out);
   });
 });

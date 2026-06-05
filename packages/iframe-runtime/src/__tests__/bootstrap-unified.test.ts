@@ -46,7 +46,7 @@ const FUTURE_ISO = '2099-01-01T00:00:00.000Z';
 const RUNTIME_URL = '/_ggui/iframe-runtime.js';
 
 const componentBootstrap: McpAppAiGguiRenderMeta = {
-  renderId: 'render_001',
+  sessionId: 'render_001',
   appId: 'app_001',
   runtimeUrl: RUNTIME_URL,
   codeUrl: 'https://example.com/code/sha256-abc.js',
@@ -67,7 +67,7 @@ const componentBootstrap: McpAppAiGguiRenderMeta = {
 };
 
 const liveBootstrap: McpAppAiGguiRenderMeta = {
-  renderId: 'render_001',
+  sessionId: 'render_001',
   appId: 'app_001',
   runtimeUrl: RUNTIME_URL,
   wsUrl: 'wss://server.example/ws',
@@ -76,7 +76,7 @@ const liveBootstrap: McpAppAiGguiRenderMeta = {
 };
 
 const systemBootstrap: McpAppAiGguiRenderMeta = {
-  renderId: 'render_001',
+  sessionId: 'render_001',
   appId: 'app_001',
   runtimeUrl: RUNTIME_URL,
   kind: 'no-credentials',
@@ -173,10 +173,10 @@ describe('Slice 14 — per-mode validation', () => {
     }
   });
 
-  it('rejects no-discriminator (only renderId/appId/runtimeUrl)', () => {
+  it('rejects no-discriminator (only sessionId/appId/runtimeUrl)', () => {
     expect(
       validateMeta({
-        renderId: 'render_001',
+        sessionId: 'render_001',
         appId: 'app_001',
         runtimeUrl: RUNTIME_URL,
       }),
@@ -186,7 +186,7 @@ describe('Slice 14 — per-mode validation', () => {
   it('rejects missing runtimeUrl on live mode', () => {
     expect(
       validateMeta({
-        renderId: 'render_001',
+        sessionId: 'render_001',
         appId: 'app_001',
         wsUrl: 'wss://server.example/ws',
         wsToken: 'tok_abc',
@@ -198,7 +198,7 @@ describe('Slice 14 — per-mode validation', () => {
   it('rejects empty-string discriminator (wsUrl: "" + wsToken: "")', () => {
     expect(
       validateMeta({
-        renderId: 'render_001',
+        sessionId: 'render_001',
         appId: 'app_001',
         runtimeUrl: RUNTIME_URL,
         wsUrl: '',

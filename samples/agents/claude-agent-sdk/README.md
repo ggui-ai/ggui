@@ -18,7 +18,7 @@ src/
               yields normalized SDKMessage events.
   server.ts   Pure-Node HTTP API (no framework). Exposes /chat (SSE),
               /chat?chatId= snapshot, /relay/tools-call,
-              /relay/resources-read, /api/renders/:id/state, and
+              /relay/resources-read, /api/sessions/:id/state, and
               /sandbox-proxy-url. Brand-agnostic — knows nothing about
               ggui's _meta envelope.
   index.ts    Boots the server with env-derived options. The only place
@@ -44,7 +44,7 @@ Three layers, one direction. Each file's docstring spells out its boundary and w
 │   /chat ──► runAgent(prompt, …)     │
 │   /relay/tools-call    ──► ggui MCP │
 │   /relay/resources-read ──► ggui MCP │
-│   /api/renders/:id/state ──► ggui MCP│
+│   /api/sessions/:id/state ──► ggui MCP│
 └─────────┬───────────────────────────┘
           │
           │ for await msg of runAgent(…)

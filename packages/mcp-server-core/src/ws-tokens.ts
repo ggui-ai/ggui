@@ -19,7 +19,7 @@
  *
  *   - **Session token** — longer-TTL, reusable, minted by the live-
  *     channel server on the FIRST successful ws-token-authed subscribe
- *     and returned in `AckPayload.renderToken`. The iframe uses it for
+ *     and returned in `AckPayload.sessionToken`. The iframe uses it for
  *     live-channel reconnects (over the standard bearer path) so the
  *     original token source doesn't need to re-mint.
  *
@@ -71,7 +71,7 @@ export type TokenKind = 'ws' | 'session' | 'console-session';
 /** Claims carried in a ws, session, or console-session token. */
 export interface WsTokenClaims {
   /** GguiSession id the token is scoped to (Phase B: was `sessionId` pre-collapse). */
-  readonly renderId: string;
+  readonly sessionId: string;
   /** App (tenant) id the token is scoped to. */
   readonly appId: string;
   /** Kind discriminator — distinguishes mint/verify surfaces. */
@@ -116,7 +116,7 @@ export const DEFAULT_WS_TOKEN_REFRESH_WINDOW_MULTIPLIER = 2;
 export const DEFAULT_DEVTOOL_SESSION_TTL_SEC = 60 * 60 * 8;
 
 export interface MintTokenInput {
-  readonly renderId: string;
+  readonly sessionId: string;
   readonly appId: string;
   /** Token lifetime in seconds. Defaults per-kind. */
   readonly ttlSec?: number;
@@ -150,7 +150,7 @@ function mintToken(
   const now = Math.floor(Date.now() / 1000);
   const ttl = input.ttlSec ?? input.defaultTtlSec;
   const claims: WsTokenClaims = {
-    renderId: input.renderId,
+    sessionId: input.sessionId,
     appId: input.appId,
     kind: input.kind,
     iat: now,
@@ -191,7 +191,7 @@ export function mintWsToken(
  * Mint a longer-TTL reusable session token.
  *
  * Issued by the live-channel server on the FIRST successful
- * ws-token-authed subscribe and returned in `AckPayload.renderToken`.
+ * ws-token-authed subscribe and returned in `AckPayload.sessionToken`.
  * The iframe persists it (sessionStorage / equivalent) and uses it
  * on reconnects via the standard `Authorization: Bearer <...>` or
  * `?token=<...>` paths. Not single-use.
@@ -284,7 +284,7 @@ export function verifyToken(
     const json = base64urlDecode(payloadB64).toString('utf8');
     const raw = JSON.parse(json) as Record<string, unknown>;
     if (
-      typeof raw.renderId !== 'string' ||
+      typeof raw.sessionId !== 'string' ||
       typeof raw.appId !== 'string' ||
       typeof raw.iat !== 'number' ||
       typeof raw.exp !== 'number' ||
@@ -296,7 +296,7 @@ export function verifyToken(
       return { ok: false, reason: 'malformed_claims' };
     }
     claims = {
-      renderId: raw.renderId,
+      sessionId: raw.sessionId,
       appId: raw.appId,
       kind: raw.kind,
       iat: raw.iat,
@@ -373,7 +373,7 @@ export type RefreshWsTokenResult =
  * the envelope if its ORIGINAL `iat` is within the refresh window
  * (`now - iat <= refreshWindowSec`), and mints a fresh ws envelope
  * with new `iat` + `exp` + `jti`. The new envelope is bound to the SAME
- * `renderId` + `appId` as the original (a refresh never re-scopes).
+ * `sessionId` + `appId` as the original (a refresh never re-scopes).
  *
  * Failure semantics — the refresh path tolerates `'expired'` (that's its
  * whole purpose) but NOT `'invalid_signature'` / `'malformed_claims'`
@@ -413,7 +413,7 @@ export function refreshWsToken(
         // verifyToken, so this should always succeed; explicit re-check
         // keeps the `claims!` non-null assertion below honest.
         if (
-          typeof raw.renderId === 'string' &&
+          typeof raw.sessionId === 'string' &&
           typeof raw.appId === 'string' &&
           typeof raw.iat === 'number' &&
           typeof raw.exp === 'number' &&
@@ -421,7 +421,7 @@ export function refreshWsToken(
           raw.kind === 'ws'
         ) {
           claims = {
-            renderId: raw.renderId,
+            sessionId: raw.sessionId,
             appId: raw.appId,
             kind: raw.kind,
             iat: raw.iat,
@@ -448,14 +448,14 @@ export function refreshWsToken(
     return { ok: false, reason: 'refresh_window_closed' };
   }
 
-  // Mint a fresh ws token with the SAME renderId + appId. New iat,
+  // Mint a fresh ws token with the SAME sessionId + appId. New iat,
   // exp, jti — the new envelope's lifetime starts from `now`, but the
   // refresh window remains anchored to the ORIGINAL iat the caller
   // first received (callers that refresh repeatedly cannot extend the
   // window arbitrarily — see RefreshWsTokenOptions.refreshWindowSec).
   const { token: newToken, claims: newClaims } = mintWsToken(
     {
-      renderId: claims.renderId,
+      sessionId: claims.sessionId,
       appId: claims.appId,
       ttlSec,
     },

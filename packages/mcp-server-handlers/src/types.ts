@@ -81,10 +81,10 @@ export interface HandlerContext {
    *   1. Wired-action dispatch. The render-channel router synthesizes
    *      the runtime ctx for mount handlers as a structural superset
    *      of `HandlerContext` + `WiredActionContext`; formally
-   *      declaring `renderId` here lets the same `ctx` argument carry
+   *      declaring `sessionId` here lets the same `ctx` argument carry
    *      it under the canonical static type, no cast needed at the
    *      mount-handler call site.
-   *   2. Agent-driven `ggui_update`. The handler reads `renderId`
+   *   2. Agent-driven `ggui_update`. The handler reads `sessionId`
    *      off the wire input directly — but when a future caller
    *      (live-channel dispatch, console inspector) invokes the
    *      handler in-process, populating this field threads the active
@@ -97,10 +97,10 @@ export interface HandlerContext {
    * it as optional and fall back to wire-input fields when bound.
    *
    * Post-Phase-B (flatten-render-identity): collapsed from the prior
-   * `sessionId` + `stackItemId` pair to a single `renderId` — every
+   * `sessionId` + `stackItemId` pair to a single `sessionId` — every
    * render IS the addressable scope.
    */
-  readonly renderId?: string;
+  readonly sessionId?: string;
   /**
    * Host-supplied `_meta` from the inbound JSON-RPC `tools/call`
    * request. The MCP SDK extracts this from `params._meta` and the

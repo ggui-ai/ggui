@@ -1,19 +1,19 @@
 /**
  * In-memory `PendingEventConsumer` for OSS dev/test.
  *
- * Backed by a `Map<renderId, {events, status, lastActivityAt}>`
+ * Backed by a `Map<sessionId, {events, status, lastActivityAt}>`
  * struct with per-render mutex serialization on `consumeAndClear`
  * and `append` so concurrent callers can't race the buffer.
  *
- * Lifecycle (renderId-keyed):
- *   - `markCreated(renderId)` opens a pipe so subsequent
+ * Lifecycle (sessionId-keyed):
+ *   - `markCreated(sessionId)` opens a pipe so subsequent
  *     `append` / `consumeAndClear` work. Called by the `ggui_render`
  *     handler the moment a render is committed — so events queued
  *     BEFORE the agent's first `ggui_consume` (e.g. the user clicks
  *     before the agent starts polling) still land in the pipe.
- *   - `append(renderId, event)` enqueues an action envelope.
+ *   - `append(sessionId, event)` enqueues an action envelope.
  *     Throws `PendingPipeNotFoundError` if the pipe wasn't opened.
- *   - `consumeAndClear(renderId, ttlMs)` atomically drains the
+ *   - `consumeAndClear(sessionId, ttlMs)` atomically drains the
  *     buffer and bumps the pipe's heartbeat.
  *
  * No explicit close. Pipes decay implicitly via TTL — when a render's
@@ -37,18 +37,18 @@ interface PipeEntry {
 
 export class InMemoryPendingEventConsumer implements PendingEventConsumer {
   private readonly pipes = new Map<string, PipeEntry>();
-  /** Per-renderId mutex — `consumeAndClear` and `append` chain on
+  /** Per-sessionId mutex — `consumeAndClear` and `append` chain on
    *  this so atomicity is preserved under concurrent callers. */
   private readonly mutexes = new Map<string, Promise<void>>();
 
   async consumeAndClear(
-    renderId: string,
+    sessionId: string,
     ttlMs: number,
   ): Promise<PendingEventConsumeResult> {
-    return this.withMutex(renderId, async () => {
-      const entry = this.pipes.get(renderId);
+    return this.withMutex(sessionId, async () => {
+      const entry = this.pipes.get(sessionId);
       if (!entry) {
-        throw new PendingPipeNotFoundError(renderId);
+        throw new PendingPipeNotFoundError(sessionId);
       }
       const events = entry.events;
       entry.events = [];
@@ -59,13 +59,13 @@ export class InMemoryPendingEventConsumer implements PendingEventConsumer {
   }
 
   async append(
-    renderId: string,
+    sessionId: string,
     event: Record<string, unknown>,
   ): Promise<void> {
-    return this.withMutex(renderId, async () => {
-      const entry = this.pipes.get(renderId);
+    return this.withMutex(sessionId, async () => {
+      const entry = this.pipes.get(sessionId);
       if (!entry) {
-        throw new PendingPipeNotFoundError(renderId);
+        throw new PendingPipeNotFoundError(sessionId);
       }
       entry.events.push(event);
       entry.lastActivityAt = Date.now();
@@ -75,10 +75,10 @@ export class InMemoryPendingEventConsumer implements PendingEventConsumer {
   /** Test / handler-side hook: open a pipe so subsequent appends +
    *  consumes work. Idempotent — calling on an existing pipe resets
    *  nothing. */
-  markCreated(renderId: string, ttlMs = Number.MAX_SAFE_INTEGER): void {
-    if (this.pipes.has(renderId)) return;
+  markCreated(sessionId: string, ttlMs = Number.MAX_SAFE_INTEGER): void {
+    if (this.pipes.has(sessionId)) return;
     const now = Date.now();
-    this.pipes.set(renderId, {
+    this.pipes.set(sessionId, {
       events: [],
       status: 'active',
       lastActivityAt: now,
@@ -93,40 +93,40 @@ export class InMemoryPendingEventConsumer implements PendingEventConsumer {
    * semantics — callers shouldn't have to guard against vanished
    * renders).
    */
-  markStatus(renderId: string, status: GguiSessionStatus): void {
-    const entry = this.pipes.get(renderId);
+  markStatus(sessionId: string, status: GguiSessionStatus): void {
+    const entry = this.pipes.get(sessionId);
     if (!entry) return;
     entry.status = status;
     entry.lastActivityAt = Date.now();
   }
 
   /**
-   * Tear down the pipe for `renderId`. Subsequent `append` /
+   * Tear down the pipe for `sessionId`. Subsequent `append` /
    * `consumeAndClear` calls throw {@link PendingPipeNotFoundError}
    * exactly as if the pipe had never been opened. Idempotent —
    * deleting a non-existent pipe is a no-op.
    */
-  markDeleted(renderId: string): void {
-    this.pipes.delete(renderId);
-    this.mutexes.delete(renderId);
+  markDeleted(sessionId: string): void {
+    this.pipes.delete(sessionId);
+    this.mutexes.delete(sessionId);
   }
 
   /** Inspector for tests: how many events are queued? */
-  pendingCount(renderId: string): number {
-    return this.pipes.get(renderId)?.events.length ?? 0;
+  pendingCount(sessionId: string): number {
+    return this.pipes.get(sessionId)?.events.length ?? 0;
   }
 
   private async withMutex<T>(
-    renderId: string,
+    sessionId: string,
     fn: () => Promise<T>,
   ): Promise<T> {
-    const prev = this.mutexes.get(renderId) ?? Promise.resolve();
+    const prev = this.mutexes.get(sessionId) ?? Promise.resolve();
     let release!: () => void;
     const next = new Promise<void>((resolve) => {
       release = resolve;
     });
     this.mutexes.set(
-      renderId,
+      sessionId,
       prev.then(() => next),
     );
     await prev;

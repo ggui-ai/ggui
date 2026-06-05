@@ -10,11 +10,11 @@
  * Two recognition paths:
  *
  *   - **GguiSession-resource URL** (the default). The tool_result content
- *     carries `{renderId, ...}` (the
+ *     carries `{sessionId, ...}` (the
  *     {@link import('@ggui-ai/protocol').GguiRenderOutput} shape —
  *     streamable agents call `stream.toolResult(id, renderOutput)`
  *     from their handler). The host endpoint —
- *     `/api/renders/<renderId>/resource` — mints a renderId-stamped
+ *     `/api/sessions/<sessionId>/resource` — mints a sessionId-stamped
  *     bootstrap on fetch and returns thin-shell HTML. Requires a
  *     `renderResourceOrigin` option; without one no URL can be built
  *     and the moment is skipped.
@@ -41,7 +41,7 @@
  * Post-Phase-B: the old two-slice `{session, stackItem}` extraction
  * collapses to a single flat `McpAppAiGguiRenderMeta` slice and the
  * `/ggui/session-resource/item/<sid>/<itemId>` URL collapses to
- * `/api/renders/<renderId>/resource`.
+ * `/api/sessions/<sessionId>/resource`.
  */
 import type { ConversationMessage } from './useInvoke';
 import { extractMcpAppAiGguiMeta } from './mcp-apps-result';
@@ -60,11 +60,11 @@ export interface UiMoment {
   readonly key: string;
 
   /**
-   * GguiSession identity. For render-resource moments this is `renderId`
+   * GguiSession identity. For render-resource moments this is `sessionId`
    * from {@link import('@ggui-ai/protocol').GguiRenderOutput}. For
-   * inline-meta moments this is `renderId` from the render slice.
+   * inline-meta moments this is `sessionId` from the render slice.
    */
-  readonly renderId: string;
+  readonly sessionId: string;
 
   readonly source:
     | {
@@ -72,7 +72,7 @@ export interface UiMoment {
         /**
          * Fully-qualified URL the shell passes to the MCP-Apps
          * renderer's `resource.uri`. Shape:
-         * `<origin>/api/renders/<renderId>/resource`.
+         * `<origin>/api/sessions/<sessionId>/resource`.
          */
         readonly url: string;
       }
@@ -90,7 +90,7 @@ export interface UiMoment {
 export interface ExtractUiMomentsOptions {
   /**
    * Origin for render-resource URL construction. Trailing slashes are
-   * trimmed. Path shape appended: `/api/renders/<renderId>/resource`.
+   * trimmed. Path shape appended: `/api/sessions/<sessionId>/resource`.
    *
    * When absent, render-resource tool_results are skipped — a UI
    * moment requires either a valid URL or an inline meta slice.
@@ -124,7 +124,7 @@ export function extractUiMoments(
       if (meta !== null) {
         out.push({
           key: block.tool_use_id,
-          renderId: meta.renderId,
+          sessionId: meta.sessionId,
           source: { kind: 'bootstrap-inline', meta },
         });
         continue;
@@ -137,10 +137,10 @@ export function extractUiMoments(
       if (rendered === null) continue;
       out.push({
         key: block.tool_use_id,
-        renderId: rendered.renderId,
+        sessionId: rendered.sessionId,
         source: {
           kind: 'render-resource',
-          url: `${origin}/api/renders/${encodeURIComponent(rendered.renderId)}/resource`,
+          url: `${origin}/api/sessions/${encodeURIComponent(rendered.sessionId)}/resource`,
         },
       });
     }
@@ -150,25 +150,25 @@ export function extractUiMoments(
 }
 
 /**
- * Pull `{renderId}` from a tool_result content payload shaped like
+ * Pull `{sessionId}` from a tool_result content payload shaped like
  * {@link import('@ggui-ai/protocol').GguiRenderOutput}. Tolerant of
  * one level of wrapping (e.g. `{result: renderOutput}`) — same
- * tolerance as `useInvoke`'s internal `extractRenderIdFromContent`.
+ * tolerance as `useInvoke`'s internal `extractSessionIdFromContent`.
  * Returns `null` when the shape doesn't match.
  */
 function extractRenderCoordinates(
   content: unknown,
-): { readonly renderId: string } | null {
+): { readonly sessionId: string } | null {
   if (content === null || typeof content !== 'object') return null;
   const top = content as Record<string, unknown>;
-  if (typeof top['renderId'] === 'string') {
-    return { renderId: top['renderId'] };
+  if (typeof top['sessionId'] === 'string') {
+    return { sessionId: top['sessionId'] };
   }
   for (const value of Object.values(top)) {
     if (value === null || typeof value !== 'object') continue;
     const inner = value as Record<string, unknown>;
-    if (typeof inner['renderId'] === 'string') {
-      return { renderId: inner['renderId'] };
+    if (typeof inner['sessionId'] === 'string') {
+      return { sessionId: inner['sessionId'] };
     }
   }
   return null;

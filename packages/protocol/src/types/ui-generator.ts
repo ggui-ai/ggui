@@ -82,7 +82,7 @@ export function computeStyleFingerprint(input: StyleFingerprintInput): string {
  * Generic `TContext` defaults to {@link JsonObject} for generator context hints.
  */
 export interface UIGenerationRequest<TContext = JsonObject> {
-  renderId: string;
+  sessionId: string;
   prompt: string;
   context?: TContext;
   schema?: JsonSchema;
@@ -98,7 +98,7 @@ export interface UIGenerationRequest<TContext = JsonObject> {
  * field.
  */
 export interface UIGenerationResponse {
-  renderId: string;
+  sessionId: string;
   componentCode: string;
   sourceCode?: string;
   warnings?: string[];

@@ -63,7 +63,7 @@ describe('WebSocketManager', () => {
 
     const manager = new WebSocketManager({
       url: 'wss://example.com',
-      renderId: 'render_123',
+      sessionId: 'render_123',
       appId: 'app_456',
       onMessage,
       onStatusChange,
@@ -84,7 +84,7 @@ describe('WebSocketManager', () => {
 
     const manager = new WebSocketManager({
       url: 'wss://example.com',
-      renderId: 'render_123',
+      sessionId: 'render_123',
       appId: 'app_456',
       onMessage,
       onStatusChange,
@@ -107,7 +107,7 @@ describe('WebSocketManager', () => {
 
     const manager = new WebSocketManager({
       url: 'wss://example.com',
-      renderId: 'render_123',
+      sessionId: 'render_123',
       appId: 'app_456',
       onMessage,
       onStatusChange,
@@ -132,7 +132,7 @@ describe('WebSocketManager', () => {
 
     const manager = new WebSocketManager({
       url: 'wss://example.com',
-      renderId: 'render_123',
+      sessionId: 'render_123',
       appId: 'app_456',
       onMessage,
       onStatusChange,
@@ -155,7 +155,7 @@ describe('WebSocketManager', () => {
 
     const manager = new WebSocketManager({
       url: 'wss://example.com',
-      renderId: 'render_123',
+      sessionId: 'render_123',
       appId: 'app_456',
       onMessage,
       onStatusChange,
@@ -183,7 +183,7 @@ describe('WebSocketManager', () => {
 
     const manager = new WebSocketManager({
       url: 'wss://example.com',
-      renderId: 'render_123',
+      sessionId: 'render_123',
       appId: 'app_456',
       onMessage,
       onStatusChange,
@@ -206,7 +206,7 @@ describe('WebSocketManager', () => {
 
     const manager = new WebSocketManager({
       url: 'wss://example.com',
-      renderId: 'render_123',
+      sessionId: 'render_123',
       appId: 'app_456',
       onMessage,
       onStatusChange,
@@ -227,7 +227,7 @@ describe('WebSocketManager', () => {
 
     const manager = new WebSocketManager({
       url: 'wss://example.com',
-      renderId: 'render_123',
+      sessionId: 'render_123',
       appId: 'app_456',
       onMessage,
       onStatusChange,
@@ -259,7 +259,7 @@ describe('WebSocketManager', () => {
 
     const manager = new WebSocketManager({
       url: 'wss://example.com',
-      renderId: 'render_123',
+      sessionId: 'render_123',
       appId: 'app_456',
       onMessage,
       onStatusChange,
@@ -294,7 +294,7 @@ describe('WebSocketManager', () => {
 
     const manager = new WebSocketManager({
       url: 'wss://example.com',
-      renderId: 'render_123',
+      sessionId: 'render_123',
       appId: 'app_456',
       onMessage,
       onStatusChange,
@@ -327,7 +327,7 @@ describe('WebSocketManager', () => {
 
     const manager = new WebSocketManager({
       url: 'wss://example.com',
-      renderId: 'render_123',
+      sessionId: 'render_123',
       appId: 'app_456',
       onMessage,
       onStatusChange,
@@ -354,7 +354,7 @@ describe('WebSocketManager', () => {
 
     const manager = new WebSocketManager({
       url: 'wss://example.com',
-      renderId: 'render_123',
+      sessionId: 'render_123',
       appId: 'app_456',
       onMessage,
       onStatusChange,
@@ -379,7 +379,7 @@ describe('WebSocketManager', () => {
 
     const manager = new WebSocketManager({
       url: 'wss://example.com',
-      renderId: 'render_123',
+      sessionId: 'render_123',
       appId: 'app_456',
       onMessage,
       onStatusChange,
@@ -405,7 +405,7 @@ describe('WebSocketManager', () => {
 
     const manager = new WebSocketManager({
       url: 'wss://example.com',
-      renderId: 'render_123',
+      sessionId: 'render_123',
       appId: 'app_456',
       onMessage,
       onStatusChange,
@@ -426,7 +426,7 @@ describe('WebSocketManager', () => {
 
     const manager = new WebSocketManager({
       url: 'wss://example.com',
-      renderId: 'render_123',
+      sessionId: 'render_123',
       appId: 'app_456',
       onMessage,
       onStatusChange,

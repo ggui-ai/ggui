@@ -93,7 +93,7 @@ describe.skipIf(!HAS_KEY)('Scenario 1 — submit_action happy path', () => {
         status: string;
       }>(
         await callTool(MCP_URL, 'ggui_consume', {
-          renderId: ref.renderId,
+          sessionId: ref.sessionId,
           timeout: 5,
         }),
       );

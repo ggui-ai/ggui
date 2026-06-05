@@ -145,8 +145,8 @@ const DEFAULT_ALLOWED_TOOLS: Record<string, ReadonlyArray<string>> = {
     'mcp__ggui__ggui_update',
     'mcp__ggui__ggui_emit',
     'mcp__ggui__ggui_consume',
-    'mcp__ggui__ggui_get_render',
-    'mcp__ggui__ggui_list_renders',
+    'mcp__ggui__ggui_get_session',
+    'mcp__ggui__ggui_list_sessions',
     // blueprint reuse (blueprint-first)
     'mcp__ggui__ggui_search_blueprints',
     'mcp__ggui__ggui_render_blueprint',

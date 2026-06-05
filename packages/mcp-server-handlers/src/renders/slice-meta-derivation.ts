@@ -18,7 +18,7 @@
  *     render boot, SSR-prerendered HTML, mobile native, etc.
  *
  * Each transport composes the slice meta with its own envelope
- * concerns (renderId / appId / runtimeUrl / wsUrl / theme / auth /
+ * concerns (sessionId / appId / runtimeUrl / wsUrl / theme / auth /
  * codeUrl), but the *projection of the active render itself* is
  * variant-agnostic. Without a single source of truth for that
  * projection, every transport re-implements it, and a field that

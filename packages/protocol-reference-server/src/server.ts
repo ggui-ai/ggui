@@ -10,7 +10,7 @@
  * no implicit `@ggui-ai/mcp-server` coupling.
  *
  * Wire-field note: the render identity field is the canonical SPEC
- * field `renderId` — see {@link GguiSession} for the identity name used
+ * field `sessionId` — see {@link GguiSession} for the identity name used
  * throughout this package.
  */
 import { createServer, type Server as HttpServer } from 'node:http';
@@ -147,7 +147,7 @@ export class ReferenceServer {
   private handleConnection(socket: WebSocket): void {
     // Subscribe state is per-connection — one WS may subscribe to
     // one render at a time. Re-subscribe overwrites.
-    let subscribedRenderId: string | null = null;
+    let subscribedSessionId: string | null = null;
     const subscriber: Subscriber = {
       send: (frame: unknown) => {
         try {
@@ -162,20 +162,20 @@ export class ReferenceServer {
       void this.handleMessage(raw.toString('utf8'), {
         socket,
         subscriber,
-        onSubscribed: (renderId) => {
+        onSubscribed: (sessionId) => {
           // If previously subscribed to a different render, unsub
           // from it first.
-          if (subscribedRenderId !== null && subscribedRenderId !== renderId) {
-            this.renders.removeSubscriber(subscribedRenderId, subscriber);
+          if (subscribedSessionId !== null && subscribedSessionId !== sessionId) {
+            this.renders.removeSubscriber(subscribedSessionId, subscriber);
           }
-          subscribedRenderId = renderId;
+          subscribedSessionId = sessionId;
         },
       });
     });
 
     socket.on('close', () => {
-      if (subscribedRenderId !== null) {
-        this.renders.removeSubscriber(subscribedRenderId, subscriber);
+      if (subscribedSessionId !== null) {
+        this.renders.removeSubscriber(subscribedSessionId, subscriber);
       }
     });
   }
@@ -185,7 +185,7 @@ export class ReferenceServer {
     ctx: {
       readonly socket: WebSocket;
       readonly subscriber: Subscriber;
-      readonly onSubscribed: (renderId: string) => void;
+      readonly onSubscribed: (sessionId: string) => void;
     },
   ): Promise<void> {
     let frame: unknown;
@@ -212,7 +212,7 @@ export class ReferenceServer {
     if (f['type'] === 'action') {
       const parsed = parseActionFrame(frame);
       if (parsed === undefined) return; // malformed — silently drop
-      const render = this.renders.get(parsed.renderId);
+      const render = this.renders.get(parsed.sessionId);
       if (render === undefined) return; // drop actions for unknown renders
       await dispatchAction(parsed, { render, tools: this.tools });
       return;
@@ -225,16 +225,16 @@ export class ReferenceServer {
     frame: Record<string, unknown>,
     ctx: {
       readonly subscriber: Subscriber;
-      readonly onSubscribed: (renderId: string) => void;
+      readonly onSubscribed: (sessionId: string) => void;
       readonly socket: WebSocket;
     },
   ): void {
     const payload = frame['payload'];
     if (payload === null || typeof payload !== 'object') return;
     const p = payload as Record<string, unknown>;
-    // GguiSession-identity field: the canonical SPEC field `renderId`.
-    const renderId = typeof p['renderId'] === 'string' ? p['renderId'] : undefined;
-    if (renderId === undefined) return;
+    // GguiSession-identity field: the canonical SPEC field `sessionId`.
+    const sessionId = typeof p['sessionId'] === 'string' ? p['sessionId'] : undefined;
+    if (sessionId === undefined) return;
     const appId = typeof p['appId'] === 'string' ? p['appId'] : 'conformance';
     const requestId = typeof frame['requestId'] === 'string' ? frame['requestId'] : undefined;
     const supportedVersions = Array.isArray(p['supportedVersions'])
@@ -255,7 +255,7 @@ export class ReferenceServer {
     // subscribe landed, advertise that value instead of the instance-
     // level default. Lets parallel kit fixtures share one server while
     // mismatching version on exactly one render.
-    const existingRender = this.renders.get(renderId);
+    const existingRender = this.renders.get(sessionId);
     const advertised = existingRender?.versionOverride ?? this.options.versionOverride;
     if (supportedVersions !== undefined && !supportedVersions.includes(advertised)) {
       ctx.subscriber.send({
@@ -278,11 +278,11 @@ export class ReferenceServer {
     }
 
     // Add the subscriber + emit ack.
-    this.renders.addSubscriber(renderId, ctx.subscriber);
+    this.renders.addSubscriber(sessionId, ctx.subscriber);
     // Preserve appId on first subscribe — create() is no-op if the
     // render already exists from an earlier directive.
-    this.renders.create(renderId, appId);
-    ctx.onSubscribed(renderId);
+    this.renders.create(sessionId, appId);
+    ctx.onSubscribed(sessionId);
     ctx.subscriber.send({
       type: 'ack',
       payload: { serverVersion: advertised },

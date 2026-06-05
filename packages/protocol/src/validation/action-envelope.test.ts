@@ -33,7 +33,7 @@ const ACTION_SPEC: ActionSpec = {
 describe('validateActionEnvelope', () => {
   it('is permissive when actionSpec is undefined', () => {
     const envelope: ActionEnvelope = {
-      renderId: 'render-1',
+      sessionId: 'render-1',
       type: 'data:submit',
       payload: { action: 'submit', data: { text: 'hello' } },
     };
@@ -43,7 +43,7 @@ describe('validateActionEnvelope', () => {
 
   it("skips payload check for non-data:submit types — 'lifecycle:blur' passes without actionSpec lookup", () => {
     const envelope: ActionEnvelope = {
-      renderId: 'render-1',
+      sessionId: 'render-1',
       type: 'lifecycle:blur',
     };
     // Even with an actionSpec that requires everything, lifecycle events
@@ -54,7 +54,7 @@ describe('validateActionEnvelope', () => {
 
   it('skips payload check for interaction:click', () => {
     const envelope: ActionEnvelope = {
-      renderId: 'render-1',
+      sessionId: 'render-1',
       type: 'interaction:click',
       payload: { anything: 'goes' },
     };
@@ -64,7 +64,7 @@ describe('validateActionEnvelope', () => {
 
   it('accepts data:submit with a declared action + matching payload', () => {
     const envelope: ActionEnvelope = {
-      renderId: 'render-1',
+      sessionId: 'render-1',
       type: 'data:submit',
       payload: { action: 'submit', data: { text: 'hello' } },
     };
@@ -74,7 +74,7 @@ describe('validateActionEnvelope', () => {
 
   it('accepts data:submit for a void-payload action (no schema on actionSpec entry)', () => {
     const envelope: ActionEnvelope = {
-      renderId: 'render-1',
+      sessionId: 'render-1',
       type: 'data:submit',
       payload: { action: 'voidAction' },
     };
@@ -84,7 +84,7 @@ describe('validateActionEnvelope', () => {
 
   it('rejects data:submit when action id is not declared', () => {
     const envelope: ActionEnvelope = {
-      renderId: 'render-1',
+      sessionId: 'render-1',
       type: 'data:submit',
       payload: { action: 'deleteAccount', data: {} },
     };
@@ -95,7 +95,7 @@ describe('validateActionEnvelope', () => {
 
   it('rejects data:submit when a required field is missing', () => {
     const envelope: ActionEnvelope = {
-      renderId: 'render-1',
+      sessionId: 'render-1',
       type: 'data:submit',
       // `text` is required by the actionSpec; the object lacks it.
       payload: { action: 'submit', data: {} },
@@ -107,7 +107,7 @@ describe('validateActionEnvelope', () => {
 
   it('rejects data:submit when action payload.data is the wrong shape (primitive vs declared object)', () => {
     const envelope: ActionEnvelope = {
-      renderId: 'render-1',
+      sessionId: 'render-1',
       type: 'data:submit',
       // `data` is declared as an object; a string hits the
       // object-vs-primitive mismatch path.
@@ -120,7 +120,7 @@ describe('validateActionEnvelope', () => {
 
   it('rejects data:submit when payload is not an object (missing ActionEventValue shape)', () => {
     const envelope: ActionEnvelope = {
-      renderId: 'render-1',
+      sessionId: 'render-1',
       type: 'data:submit',
       payload: null,
     };
@@ -138,17 +138,17 @@ describe('validateActionEnvelope ↔ validateActionData — symmetry', () => {
     const undeclared = { action: 'whoami', data: {} };
 
     const envelopeGood: ActionEnvelope = {
-      renderId: 'r',
+      sessionId: 'r',
       type: 'data:submit',
       payload: goodPayload,
     };
     const envelopeBad: ActionEnvelope = {
-      renderId: 'r',
+      sessionId: 'r',
       type: 'data:submit',
       payload: badPayload,
     };
     const envelopeUndeclared: ActionEnvelope = {
-      renderId: 'r',
+      sessionId: 'r',
       type: 'data:submit',
       payload: undeclared,
     };
@@ -170,7 +170,7 @@ describe('ActionEnvelope — type shape', () => {
     // Structural lock: the ActionEnvelope lands on the 'action' variant
     // of WebSocketMessage.
     const envelope: ActionEnvelope = {
-      renderId: 'render-1',
+      sessionId: 'render-1',
       type: 'data:submit',
       payload: { action: 'submit', data: { text: 'ok' } },
     };
@@ -180,10 +180,10 @@ describe('ActionEnvelope — type shape', () => {
     }
   });
 
-  it('renderId + type are required; other fields optional', () => {
-    // Forces renderId and type; allows absent optionals.
+  it('sessionId + type are required; other fields optional', () => {
+    // Forces sessionId and type; allows absent optionals.
     const minimal: ActionEnvelope = {
-      renderId: 'r',
+      sessionId: 'r',
       type: 'lifecycle:blur',
     };
     expect(minimal.payload).toBeUndefined();
@@ -196,7 +196,7 @@ describe('ActionEnvelope — type shape', () => {
       data: { text: string };
     }
     const envelope: ActionEnvelope<SubmitPayload> = {
-      renderId: 'r',
+      sessionId: 'r',
       type: 'data:submit',
       payload: { action: 'submit', data: { text: 'hi' } },
     };

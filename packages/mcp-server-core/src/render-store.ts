@@ -104,7 +104,7 @@ export interface CreateGguiSessionInput {
    * and assign their own.
    *
    * Motivating case: OSS live-channel `subscribe` messages provide the
-   * renderId the client wants to join, so the server can be idempotent
+   * sessionId the client wants to join, so the server can be idempotent
    * on reconnect without round-tripping through a separate mint step.
    */
   id?: string;
@@ -137,7 +137,7 @@ export interface CreateGguiSessionInput {
    * subsequent calls naming the same render id MUST NOT update it.
    *
    * Captures opt-in host identity for later rehydration via
-   * `ggui_list_renders(hostName, hostSessionId)`. Implementations
+   * `ggui_list_sessions(hostName, hostSessionId)`. Implementations
    * MUST persist both fields together on stores that survive restart;
    * the in-memory reference holds it for the process lifetime only.
    * Absent on legacy rows (pre-slice) — those renders are
@@ -164,7 +164,7 @@ export interface GguiSessionFilter {
    * Filter by the host that created the render — paired with
    * {@link hostSessionId} for full-key lookups, or used alone to list
    * every render a given host has ever opened against this app.
-   * Powers the `ggui_list_renders` tool's host-scoped resume flow.
+   * Powers the `ggui_list_sessions` tool's host-scoped resume flow.
    */
   hostName?: string;
   /**
@@ -189,7 +189,7 @@ export interface GguiSessionPatch {
    * Latest host-context projection echoed by the iframe-runtime.
    * Wire path: client →
    * `host_context_observed` live-channel message → server inbound
-   * handler → `update(renderId, { hostContext })` → persisted on
+   * handler → `update(sessionId, { hostContext })` → persisted on
    * `GguiSession.hostContext`. Idempotent overwrite; merge logic lives
    * client-side in `host-context-emitter`.
    */
@@ -201,7 +201,7 @@ export interface GguiSessionPatch {
  * Implementations MUST ensure `seq` is monotonic + gap-free per render.
  */
 export interface AppendEventInput {
-  renderId: string;
+  sessionId: string;
   type: GguiSessionEventType;
   data: unknown;
 }
@@ -266,7 +266,7 @@ export interface GguiSessionStore {
   /**
    * List events for a render with `seq > sinceSeq`, capped at `limit`.
    *
-   * Backs the R7 `GET /api/renders/:id/events?sinceSequence=N&limit=M`
+   * Backs the R7 `GET /api/sessions/:id/events?sinceSequence=N&limit=M`
    * HTTP endpoint and the WS-subscribe `sinceSequence` cursor replay
    * (`SubscribePayload.sinceSequence`). Returns `{events, lastSequence,
    * hasMore, horizonSeq}` where:
@@ -291,7 +291,7 @@ export interface GguiSessionStore {
    * are available, `events.length <= limit`.
    */
   listEventsSince(
-    renderId: string,
+    sessionId: string,
     sinceSeq: number,
     limit: number,
   ): Promise<{

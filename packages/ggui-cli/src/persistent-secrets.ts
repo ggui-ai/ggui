@@ -20,7 +20,7 @@
  * Security posture: these secrets are a render-token signing key, NOT
  * a long-lived credential like an OAuth client secret. Losing them
  * means an attacker can mint MCP Apps bootstrap tokens for arbitrary
- * `(renderId, appId)` pairs — same blast radius as before, just
+ * `(sessionId, appId)` pairs — same blast radius as before, just
  * surviving restart. Mode 0600 on the file matches `~/.ggui/credentials
  * .json` (BYOK keys) which has the same threat model.
  *

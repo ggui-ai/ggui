@@ -8,7 +8,7 @@
  * exactly one mounted render for its lifetime. The handler routes the
  * inbound `render` to a caller-supplied `applyRender` callback that
  * either mounts (first frame) or re-applies (subsequent frames to the
- * same id). Frames addressed to a different `renderId` are out-of-spec
+ * same id). Frames addressed to a different `sessionId` are out-of-spec
  * and drop with a console warning — the host spawns a fresh iframe
  * per unique render id.
  *
@@ -32,12 +32,12 @@ export interface RenderHandlerDeps {
    */
   readonly statusRefs: StatusRefs;
   /**
-   * Pin — when set, render frames with a different `renderId`
+   * Pin — when set, render frames with a different `sessionId`
    * are dropped with a console warning. Set by the renderer hook to
    * the render id the iframe was bootstrapped against (every
    * post-displayMode iframe is pinned to a single render).
    */
-  readonly pinnedRenderId?: string;
+  readonly pinnedSessionId?: string;
   /**
    * Apply the inbound render to the single mount slot. Absent in
    * placeholder mode (no React mount). When present, the handler
@@ -61,7 +61,7 @@ export function createRenderHandler(
     onMessage: async (payload) => {
       const render = payload.render;
 
-      if (deps.pinnedRenderId !== undefined && render.id !== deps.pinnedRenderId) {
+      if (deps.pinnedSessionId !== undefined && render.id !== deps.pinnedSessionId) {
         // Out-of-spec: each iframe is pinned to exactly one render id
         // post-displayMode-divergence; the host spawns a fresh iframe
         // per render. A frame for some other id means the host wired
@@ -69,7 +69,7 @@ export function createRenderHandler(
         // frames.
         // eslint-disable-next-line no-console
         console.warn(
-          `[ggui:render] ignoring render for ${render.id} — iframe pinned to ${deps.pinnedRenderId}`,
+          `[ggui:render] ignoring render for ${render.id} — iframe pinned to ${deps.pinnedSessionId}`,
         );
         return;
       }
@@ -83,7 +83,7 @@ export function createRenderHandler(
       if (channelTransport === undefined) return;
       if (render.type === 'mcpApps' || render.type === 'system') return;
       channelTransport.applyRender({
-        renderId: render.id,
+        sessionId: render.id,
         ...(render.streamSpec !== undefined
           ? { streamSpec: render.streamSpec }
           : {}),

@@ -3,7 +3,7 @@
  *
  * Agent contract:
  *   - Contracts WITH `actionSpec` → render response includes
- *     `nextStep: {tool:'ggui_consume', args:{renderId}}` so the
+ *     `nextStep: {tool:'ggui_consume', args:{sessionId}}` so the
  *     agent long-polls for user gestures.
  *   - Contracts WITHOUT `actionSpec` → no `nextStep`. Agent ends its
  *     turn cleanly; the user reads the UI and prompts when ready.
@@ -41,7 +41,7 @@ describe.skipIf(!HAS_KEY)('Scenario 5 — pure-display render (no actionSpec)', 
     );
 
     const render = unwrapStructured<{
-      renderId: string;
+      sessionId: string;
       nextStep?: { tool?: string };
     }>(
       await callTool(MCP_URL, 'ggui_render', {
@@ -50,7 +50,7 @@ describe.skipIf(!HAS_KEY)('Scenario 5 — pure-display render (no actionSpec)', 
       }),
     );
 
-    expect(render.renderId).toBeTruthy();
+    expect(render.sessionId).toBeTruthy();
     // Pure display = no consume loop = no nextStep.
     expect(render.nextStep).toBeUndefined();
   }, 90_000);

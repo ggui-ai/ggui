@@ -27,7 +27,7 @@
  *      `_meta.ui.resourceUri` + `_meta.ui.visibility` entry-point stamp
  *      per `docs/plans/2026-04-17-ggui-oss-split.md` §2.4.1.
  *   4. `tools/call ggui_render` creates a render, returns a structured
- *      renderId tuple, and carries the post-Phase-B slice envelope at
+ *      sessionId tuple, and carries the post-Phase-B slice envelope at
  *      `_meta["ai.ggui/render"]`.
  *   5. `GET /` serves the console landing bundle with the CSP /
  *      security-header set per `packages/console/README.md` §Security.
@@ -35,7 +35,7 @@
  *   7. Browser navigation to `/s/<shortCode>` mints the same-origin
  *      HTTP-only console cookie (via `POST /ggui/console/render-cookie`),
  *      opens a cookie-authenticated live-channel WebSocket, reaches the
- *      live `connected` state, and shows the real renderId + "no renders
+ *      live `connected` state, and shows the real sessionId + "no renders
  *      yet" empty-state — the truthful current OSS state because
  *      component-code generation is deferred on OSS (see the `codeReady:
  *      false` note in `packages/mcp-server-handlers/src/renders/render.ts`).
@@ -317,7 +317,7 @@ test.describe.serial("OSS hero path — `ggui serve` (real CLI bin)", () => {
     // previously rode on `structuredContent` (sessionId, stackItemId,
     // shortCode, codeReady, handshakeId, contractHash, decision) are
     // gone — `_meta["ai.ggui/render"]` (Phase-B slice envelope)
-    // carries the renderId + auth tuple.
+    // carries the sessionId + auth tuple.
     const hsEnvelope = await mcpCall(baseUrl, pairToken, "tools/call", {
       name: "ggui_handshake",
       arguments: {
@@ -336,9 +336,9 @@ test.describe.serial("OSS hero path — `ggui serve` (real CLI bin)", () => {
     const renderResult = renderEnvelope.result as {
       content?: ReadonlyArray<{ type: string; text: string }>;
       structuredContent?: {
-        renderId: string;
+        sessionId: string;
         action: string;
-        nextStep?: { tool: string; args: { renderId: string } };
+        nextStep?: { tool: string; args: { sessionId: string } };
       };
       _meta?: {
         // Phase-B slice envelope — `_meta["ai.ggui/render"]` replaced
@@ -348,7 +348,7 @@ test.describe.serial("OSS hero path — `ggui serve` (real CLI bin)", () => {
           wsUrl: string;
           wsToken: string;
           expiresAt: string;
-          renderId: string;
+          sessionId: string;
           appId: string;
         };
       };
@@ -359,14 +359,14 @@ test.describe.serial("OSS hero path — `ggui serve` (real CLI bin)", () => {
       (JSON.parse(renderResult.content![0].text) as NonNullable<
         typeof renderResult.structuredContent
       >);
-    expect(out.renderId).toBeTruthy();
+    expect(out.sessionId).toBeTruthy();
     // First render mints a fresh render — `create`. (Cache hits would
     // surface as `reuse`; on a brand-new server the catalog can also
     // exact-key match, accept either.)
     expect(["create", "reuse"]).toContain(out.action);
     // Post-R5 (fix-A 2026-05-26): there is no `url` field on
     // structuredContent. The `/r/<shortCode>` route was deleted; hosts
-    // mount via `_meta.ui.resourceUri` or resolve `{renderId}`
+    // mount via `_meta.ui.resourceUri` or resolve `{sessionId}`
     // through their own render-resource endpoint. Assert the dead
     // field really is gone.
     expect(Object.keys(out)).not.toContain("url");
@@ -375,7 +375,7 @@ test.describe.serial("OSS hero path — `ggui serve` (real CLI bin)", () => {
     expect(renderSlice).toBeTruthy();
     expect(renderSlice?.wsUrl).toBe(`ws://127.0.0.1:${new URL(baseUrl).port}/ws`);
     expect(typeof renderSlice?.wsToken).toBe("string");
-    expect(renderSlice?.renderId).toBe(out.renderId);
+    expect(renderSlice?.sessionId).toBe(out.sessionId);
 
     // ── 4. Console info endpoint ───────────────────────────────────
     // Admin-gated since the Slice 4 admin-zone refactor — pass the

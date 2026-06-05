@@ -103,13 +103,13 @@ export interface HandshakeStoredInput {
  * Routing hint carried from handshake to the paired render.
  *
  * Post-Phase-B (flatten-render-identity): the prior `sessionId` +
- * `stackItemId` pair collapsed to a single optional `renderId`. The
+ * `stackItemId` pair collapsed to a single optional `sessionId`. The
  * negotiator MAY suggest reusing an existing render (the cache /
  * update path); absent ⇒ the paired `ggui_render` mints a fresh
  * render.
  */
 export interface HandshakeStoredTarget {
-  readonly renderId?: string;
+  readonly sessionId?: string;
 }
 
 /**
@@ -126,7 +126,7 @@ export interface HandshakeStoredTarget {
  *     accept-path. Equals the agent's draft for `origin: agent`, the
  *     amended contract for `origin: synth`, the cached blueprint's
  *     contract for `origin: cache`.
- *   - `target` — optional renderId routing hint (cache / update path).
+ *   - `target` — optional sessionId routing hint (cache / update path).
  */
 export interface HandshakeRecord {
   readonly handshakeId: string;
@@ -329,7 +329,7 @@ export interface GguiHandshakeHandlerDeps {
    * Post-Phase-B (flatten-render-identity): the emitter is keyed by
    * `handshakeId` instead of `sessionId` — handshakes happen BEFORE
    * a render exists; canvas mode that wants to bracket the gap binds
-   * its emitter on the renderId returned by the paired `ggui_render`.
+   * its emitter on the sessionId returned by the paired `ggui_render`.
    * Absent ⇒ no emissions.
    */
   readonly canvasLifecycle?: CanvasLifecycleEmitter;

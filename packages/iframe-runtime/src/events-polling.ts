@@ -2,14 +2,14 @@
  * Registry-level events-polling composition for the iframe-runtime (R7).
  *
  * The R7 cursor-replay model — paired transport of the
- * `/api/renders/:renderId/events?sinceSequence=N&limit=100` HTTP endpoint
+ * `/api/sessions/:sessionId/events?sinceSequence=N&limit=100` HTTP endpoint
  * + the WS subscribe `sinceSequence` cursor. Both transports replay
  * from the same GguiSessionEvent ledger; the polling client uses HTTP, the
  * live client uses WS, and they SHARE the cursor model. Switching
  * transports does not lose events.
  *
  * Semantics (vs. R6 snapshot-polling):
- *   - **URL** — `/api/renders/<renderId>/events?wsToken=<token>` with
+ *   - **URL** — `/api/sessions/<sessionId>/events?wsToken=<token>` with
  *     `sinceSequence` and `limit` added per tick.
  *   - **Interval** — fixed 2000ms (mirrors R6's default).
  *   - **parseSnapshot** — reads the `EventsResponse` envelope, dispatches
@@ -51,7 +51,7 @@ export interface BuildEventsPollingOptions {
   /**
    * Base URL the polling tick reads from. The composer appends
    * `&sinceSequence=<cursor>&limit=<limit>` per tick. Typically the
-   * `/api/renders/<renderId>/events?wsToken=<token>` URL the iframe
+   * `/api/sessions/<sessionId>/events?wsToken=<token>` URL the iframe
    * derived from the render slice. Must already include a `?` or `&`
    * separator-ready terminator; we add the cursor params with
    * `&` if the URL contains `?`, else `?`.
@@ -117,7 +117,7 @@ function isGguiSessionEvent(value: unknown): value is GguiSessionEvent {
 
 /**
  * Build a {@link RegistryPollingOptions} descriptor that reads
- * `/api/renders/:renderId/events?sinceSequence=N&limit=M` and dispatches
+ * `/api/sessions/:sessionId/events?sinceSequence=N&limit=M` and dispatches
  * each `GguiSessionEvent` by `event.type` to the registry's matching
  * channel handler. Cursor advances per-tick to the server's
  * `lastSequence`.

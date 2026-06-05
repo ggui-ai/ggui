@@ -202,7 +202,7 @@ describe('resolveAgentPlan — §10.2a fallback matrix', () => {
       ...MINIMAL_MANIFEST,
       agent: { entry: './agent.ts' },
       storage: {
-        renders: { driver: 'sqlite', path: './ggui-renders.sqlite' },
+        renders: { driver: 'sqlite', path: './ggui-sessions.sqlite' },
       },
     });
     writeAgent('agent.ts');
@@ -211,7 +211,7 @@ describe('resolveAgentPlan — §10.2a fallback matrix', () => {
     expect(plan.manifest).not.toBeNull();
     expect(plan.manifest?.storage?.renders).toEqual({
       driver: 'sqlite',
-      path: './ggui-renders.sqlite',
+      path: './ggui-sessions.sqlite',
     });
     expect(plan.projectRoot).toBe(projectRoot);
   });

@@ -28,7 +28,7 @@ import { callTool, unwrapStructured } from '../fixtures/mcp-client.js';
 import { PROVIDERS, REQUIRE_ALL, providerSkip } from '../fixtures/provider-matrix.js';
 
 interface RenderOut {
-  renderId: string;
+  sessionId: string;
   url?: string;
 }
 

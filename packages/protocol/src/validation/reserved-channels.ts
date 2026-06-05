@@ -429,11 +429,11 @@ export function validateCanvasLifecyclePayload(
       }
       break;
     case 'render_started':
-      requireString('renderId');
+      requireString('sessionId');
       requireString('intent');
       break;
     case 'consume_polling':
-      requireString('renderId');
+      requireString('sessionId');
       if (p.state !== 'open') {
         violations.push({
           field: 'state',

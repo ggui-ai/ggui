@@ -7,13 +7,13 @@
  *
  *   1. Boot `ggui serve` against the `manifest-capabilities` fixture.
  *      The fixture has no committed renders at boot — perfect for the
- *      empty-state path the `/admin/renders` page surfaces.
- *   2. Navigate to `/admin/renders`. The SPA fetches
- *      `GET /ggui/console/renders` (200, shape `{renders:[],total:0}`)
+ *      empty-state path the `/admin/sessions` page surfaces.
+ *   2. Navigate to `/admin/sessions`. The SPA fetches
+ *      `GET /ggui/console/sessions` (200, shape `{renders:[],total:0}`)
  *      and paints the branded empty-state card.
  *   3. Navigate via the TopNav's `renders` link from another page,
  *      proving the cross-page nav wire works.
- *   4. Network gate — `/admin/renders` is a local read; no hosted /
+ *   4. Network gate — `/admin/sessions` is a local read; no hosted /
  *      AWS / Cognito browser hits.
  *
  * Why not seed a populated-list case at Lane 1? Seeding a live
@@ -72,14 +72,14 @@ test.describe.serial(
       if (handle) await attachServeArtifacts(handle);
     });
 
-    test('direct navigation to /admin/renders paints the empty state', async ({
+    test('direct navigation to /admin/sessions paints the empty state', async ({
       page,
     }) => {
       test.setTimeout(TEST_TIMEOUT_MS);
       gate = await installNetworkGate(page);
       await handle.signInAsAdmin(page);
 
-      await page.goto(`${handle.baseUrl}/admin/renders`, {
+      await page.goto(`${handle.baseUrl}/admin/sessions`, {
         waitUntil: 'networkidle',
       });
 
@@ -96,10 +96,10 @@ test.describe.serial(
       // No list container when the catalog is empty (component
       // short-circuits before rendering `<GguiSessionList>`).
       await expect(
-        page.locator('[data-ggui-renders-list]'),
+        page.locator('[data-ggui-sessions-list]'),
       ).toHaveCount(0);
 
-      // Network gate — /admin/renders is a local read. Browser must
+      // Network gate — /admin/sessions is a local read. Browser must
       // not reach hosted / AWS / Cognito hosts.
       expect(gate.attempts).toEqual([]);
     });

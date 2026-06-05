@@ -13,7 +13,7 @@ import type { ContentBlock } from '@ggui-ai/protocol';
  *
  * Post-Phase-B: the wrapper key was `stackItem` pre-collapse; now it's
  * `render`. Stack item ID and session ID are gone — every render
- * carries a single flat `renderId`.
+ * carries a single flat `sessionId`.
  */
 export function extractRenderFromToolResult(block: ContentBlock): unknown | null {
   if (block.type !== 'tool_result') return null;
@@ -32,17 +32,17 @@ export function extractRenderFromToolResult(block: ContentBlock): unknown | null
   return null;
 }
 
-/** Same traversal looking for just a renderId field. */
-export function extractRenderIdFromToolResult(block: ContentBlock): string | null {
+/** Same traversal looking for just a sessionId field. */
+export function extractSessionIdFromToolResult(block: ContentBlock): string | null {
   if (block.type !== 'tool_result') return null;
   const content = block.content as unknown;
   if (typeof content !== 'object' || content === null) return null;
   const rec = content as Record<string, unknown>;
-  if (typeof rec.renderId === 'string') return rec.renderId;
+  if (typeof rec.sessionId === 'string') return rec.sessionId;
   for (const v of Object.values(rec)) {
     if (typeof v === 'object' && v !== null) {
       const inner = v as Record<string, unknown>;
-      if (typeof inner.renderId === 'string') return inner.renderId;
+      if (typeof inner.sessionId === 'string') return inner.sessionId;
     }
   }
   return null;

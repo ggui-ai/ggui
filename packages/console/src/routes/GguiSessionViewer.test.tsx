@@ -16,7 +16,7 @@
  *     mints a cookie-render response that drives the state machine
  *     into `loading-resource`.
  *   - Step 2 — GET /ggui/console/render-resource?render=<id> and
- *     /ggui/console/renders/:id/meta fire in parallel; the resource's
+ *     /ggui/console/sessions/:id/meta fire in parallel; the resource's
  *     `contents[0].text` lands on the iframe's `srcdoc`, the meta slice
  *     replies to `ui/initialize`.
  *   - `ui/initialize` postMessage from the iframe's contentWindow
@@ -78,7 +78,7 @@ function installFetchMock({
     if (url.includes('/ggui/console/render-cookie')) {
       if (cookie) return cookie();
       return jsonResponse({
-        renderId: 'rndr-xyz',
+        sessionId: 'rndr-xyz',
         appId: 'app-demo',
         expiresAt: Date.now() + 3600_000,
       });
@@ -86,14 +86,14 @@ function installFetchMock({
     // renders/:id/meta matched BEFORE render-resource because the
     // former is a longer prefix; without this ordering render-resource
     // would shadow it.
-    if (url.includes('/ggui/console/renders/') && url.endsWith('/meta')) {
+    if (url.includes('/ggui/console/sessions/') && url.endsWith('/meta')) {
       if (bootstrap) return bootstrap();
       return jsonResponse({
         'ai.ggui/render': {
           wsUrl: 'wss://test.example/ws',
           wsToken: 'mock-token',
           expiresAt: '2099-12-31T23:59:59.999Z',
-          renderId: 'rndr-xyz',
+          sessionId: 'rndr-xyz',
           appId: 'app-demo',
           runtimeUrl: '/_ggui/iframe-runtime.js',
         },
@@ -214,7 +214,7 @@ describe('GguiSessionViewer — mount pipeline', () => {
         toolOutput?: {
           _meta?: {
             'ai.ggui/render'?: {
-              renderId?: string;
+              sessionId?: string;
               runtimeUrl?: string;
             };
           };
@@ -225,7 +225,7 @@ describe('GguiSessionViewer — mount pipeline', () => {
     expect(reply.id).toBe(1);
     const renderSlice = reply.result?.toolOutput?._meta?.['ai.ggui/render'];
     expect(renderSlice).toBeTruthy();
-    expect(renderSlice?.renderId).toBe('rndr-xyz');
+    expect(renderSlice?.sessionId).toBe('rndr-xyz');
     expect(renderSlice?.runtimeUrl).toBe('/_ggui/iframe-runtime.js');
   });
 

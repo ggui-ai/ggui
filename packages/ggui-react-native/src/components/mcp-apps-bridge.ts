@@ -54,7 +54,7 @@ const DEFAULT_THEME: Record<string, string> = {
 };
 
 export interface HostBridgeContext {
-  readonly renderId: string;
+  readonly sessionId: string;
   readonly render: McpAppsGguiSession;
   readonly toolsCallUrl: string;
   readonly theme?: Record<string, string>;
@@ -153,7 +153,7 @@ export async function handleHostBridgeRequest(
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            render: ctx.renderId,
+            render: ctx.sessionId,
             tool,
             arguments: args,
           }),

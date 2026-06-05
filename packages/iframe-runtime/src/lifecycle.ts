@@ -68,7 +68,7 @@ export function postLifecycleToParent(event: McpAppLifecycleEvent): void {
  * Build a lifecycle event payload. Centralises the `state` →
  * `McpAppLifecycleEvent` projection so call sites in
  * `runtime.ts` don't repeat the `{state, ...optional}` shape and so
- * the additive-extension semantic of `renderId` / `error` is
+ * the additive-extension semantic of `sessionId` / `error` is
  * single-sourced.
  *
  * @public
@@ -76,20 +76,20 @@ export function postLifecycleToParent(event: McpAppLifecycleEvent): void {
 export function makeLifecycleEvent(
   state: McpAppLifecycleState,
   options?: {
-    readonly renderId?: string;
+    readonly sessionId?: string;
     readonly error?: { readonly code: string; readonly message: string };
   },
 ): McpAppLifecycleEvent {
   // Avoid emitting `undefined` keys — the protocol's structural lock
   // (mcp-apps.test.ts "shape lock") asserts a populated event has
-  // exactly state + renderId + error keys, not an Object.keys-
+  // exactly state + sessionId + error keys, not an Object.keys-
   // observable `undefined` field.
   if (options === undefined) return { state };
-  const { renderId, error } = options;
+  const { sessionId, error } = options;
   return {
     state,
-    ...(typeof renderId === 'string' && renderId.length > 0
-      ? { renderId }
+    ...(typeof sessionId === 'string' && sessionId.length > 0
+      ? { sessionId }
       : {}),
     ...(error !== undefined ? { error } : {}),
   };

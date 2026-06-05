@@ -43,7 +43,7 @@ export interface CreditTransactionView {
   readonly balanceAfterCents: number;
   readonly reason: string;
   readonly createdAt: string;
-  readonly relatedRenderId?: string;
+  readonly relatedSessionId?: string;
 }
 
 export interface ListCreditTransactionsDeps {
@@ -66,7 +66,7 @@ const outputSchema = {
       balanceAfterCents: z.number().int(),
       reason: z.string(),
       createdAt: z.string(),
-      relatedRenderId: z.string().optional(),
+      relatedSessionId: z.string().optional(),
     }),
   ),
   /** Set when more rows exist past `limit`. Pass back as the next call's `cursor`. */
@@ -86,7 +86,7 @@ export function createListCreditTransactionsHandler(
     title: 'List credit transactions',
     audience: ['ops'],
     description:
-      "Returns the calling user's credit transaction ledger, newest-first. Each row carries kind ('free_credit' | 'render_charge' | 'topup' | 'refund'), deltaCents (signed — positive for grants/topups, negative for charges), balanceAfterCents (snapshot at time of write), reason (human-readable), and optional relatedRenderId for render_charge rows. Default limit 20, cap 100; pass `cursor` from the previous response's `nextCursor` for paging.",
+      "Returns the calling user's credit transaction ledger, newest-first. Each row carries kind ('free_credit' | 'render_charge' | 'topup' | 'refund'), deltaCents (signed — positive for grants/topups, negative for charges), balanceAfterCents (snapshot at time of write), reason (human-readable), and optional relatedSessionId for render_charge rows. Default limit 20, cap 100; pass `cursor` from the previous response's `nextCursor` for paging.",
     inputSchema,
     outputSchema,
     // No `allowedFor` — same toolset on every pod kind. Callers

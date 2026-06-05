@@ -85,7 +85,7 @@ export interface WiredActionToolsCallEnvelope {
     readonly arguments: {
       readonly kind: 'dispatch' | 'openLink' | 'requestDisplayMode' | string;
       readonly payload: Record<string, unknown>;
-      readonly renderId: string;
+      readonly sessionId: string;
       readonly appId: string;
       readonly actionId: string;
       readonly firedAt: string;
@@ -125,11 +125,11 @@ export interface BuildWiredActionArgs {
   readonly intent: string;
   readonly data?: unknown;
   /**
-   * Active render id — sourced from `bootstrap.renderId`. The
+   * Active render id — sourced from `bootstrap.sessionId`. The
    * submit_action handler requires it for `kind:"dispatch"` (the
    * pending-events pipe is render-keyed).
    */
-  readonly renderId: string;
+  readonly sessionId: string;
   /**
    * `contextSpec` snapshot at gesture time — the iframe's
    * `readLocalUiContext()` output. Defaults to `{}` (no context).
@@ -203,7 +203,7 @@ export function buildWiredAction(args: BuildWiredActionArgs): BuiltWiredAction {
     intent: args.intent,
     data: data ?? null,
     firedAt,
-    renderId: args.renderId,
+    sessionId: args.sessionId,
     appId: args.appId,
   })}`;
   const consentText = `Please proceed with **${args.intent}**${dataPart}. [id: \`${actionId}\`]`;
@@ -228,7 +228,7 @@ export function buildWiredAction(args: BuildWiredActionArgs): BuiltWiredAction {
             actionData: data ?? null,
             uiContext: args.uiContext ?? {},
           },
-          renderId: args.renderId,
+          sessionId: args.sessionId,
           appId: args.appId,
           actionId,
           firedAt,

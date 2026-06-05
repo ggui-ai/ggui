@@ -1,8 +1,8 @@
 /**
- * Renders route — `/admin/renders`.
+ * Renders route — `/admin/sessions`.
  *
  * Operator-facing "what's live right now?" list. Reads
- * `GET /ggui/console/renders` on mount, paints one entry card per
+ * `GET /ggui/console/sessions` on mount, paints one entry card per
  * active render, and click-through to `/s/<shortCode>` (the
  * existing viewer) when a shortCode is bound.
  *
@@ -22,9 +22,9 @@
  *
  * Test contract (data-attrs):
  *
- *   - `data-ggui-renders-list` on the column container.
- *   - `data-ggui-render-id={renderId}` on every row.
- *   - `data-ggui-render-status={status}` on every row.
+ *   - `data-ggui-sessions-list` on the column container.
+ *   - `data-ggui-session-id={sessionId}` on every row.
+ *   - `data-ggui-session-status={status}` on every row.
  */
 import {
   useEffect,
@@ -38,7 +38,7 @@ import { StatusBadge } from '../brand/StatusBadge.js';
 import { navigateTo } from '../router.js';
 
 /**
- * Response shape of `GET /ggui/console/renders`. Must stay in sync
+ * Response shape of `GET /ggui/console/sessions`. Must stay in sync
  * with the handler in `packages/mcp-server/src/server.ts`. Defined
  * locally (not exported from a shared module) — same convention the
  * Blueprints + BlueprintViewer routes use: the SPA owns its view-model,
@@ -46,7 +46,7 @@ import { navigateTo } from '../router.js';
  * the parse boundary.
  */
 interface GguiSessionSummary {
-  readonly renderId: string;
+  readonly sessionId: string;
   readonly shortCode?: string;
   readonly appId: string;
   readonly lastActivityAt: number;
@@ -72,7 +72,7 @@ export function Renders(): ReactElement {
     const controller = new AbortController();
     void (async () => {
       try {
-        const res = await fetch('/ggui/console/renders', {
+        const res = await fetch('/ggui/console/sessions', {
           signal: controller.signal,
           headers: { accept: 'application/json' },
         });
@@ -98,7 +98,7 @@ export function Renders(): ReactElement {
     if (state.kind !== 'ready') return null;
     if (needle.length === 0) return state.data.renders;
     return state.data.renders.filter((r) =>
-      [r.renderId, r.shortCode ?? '', r.appId]
+      [r.sessionId, r.shortCode ?? '', r.appId]
         .join(' ')
         .toLowerCase()
         .includes(needle),
@@ -140,7 +140,7 @@ export function Renders(): ReactElement {
                 id="ggui-renders-filter"
                 name="filter"
                 aria-label="filter render entries"
-                placeholder="substring match over renderId, shortCode, appId…"
+                placeholder="substring match over sessionId, shortCode, appId…"
                 value={filter}
                 onChange={(event) => setFilter(event.target.value)}
                 autoCapitalize="off"
@@ -172,7 +172,7 @@ function GguiSessionList({
   if (all.length === 0) return <EmptyGguiSessions />;
   return (
     <div
-      data-ggui-renders-list
+      data-ggui-sessions-list
       className="ggui-stack"
       aria-label="active renders"
     >
@@ -192,7 +192,7 @@ function GguiSessionList({
         <ul className="ggui-stack__list">
           {shown.map((render, index) => (
             <GguiSessionRow
-              key={render.renderId}
+              key={render.sessionId}
               render={render}
               index={index + 1}
             />
@@ -210,7 +210,7 @@ function GguiSessionRow({
   readonly render: GguiSessionSummary;
   readonly index: number;
 }): ReactElement {
-  const shortId = render.renderId.slice(0, 8);
+  const shortId = render.sessionId.slice(0, 8);
   const tone =
     render.status === 'active'
       ? 'live'
@@ -219,8 +219,8 @@ function GguiSessionRow({
         : 'ink';
   return (
     <li
-      data-ggui-render-id={render.renderId}
-      data-ggui-render-status={render.status}
+      data-ggui-session-id={render.sessionId}
+      data-ggui-session-status={render.status}
       className="ggui-stack__entry"
     >
       <div className="ggui-stack__entry-head">

@@ -19,10 +19,10 @@ export interface ComponentErrorReport {
   /** Unique error ID for tracking */
   errorId: string;
   /** GguiSession that experienced the error. Post-Phase-B the old
-   *  `sessionId` + `stackItemId` pair collapses to one `renderId` —
+   *  `sessionId` + `stackItemId` pair collapses to one `sessionId` —
    *  every stack item is now a top-level render and the values were
    *  always identical anyway. */
-  renderId: string;
+  sessionId: string;
   /** App ID */
   appId: string;
   /** Error details */
@@ -66,7 +66,7 @@ export interface ComponentRepairResult {
   /** The error ID this repairs */
   errorId: string;
   /** GguiSession ID — the failing component's render identity. */
-  renderId: string;
+  sessionId: string;
   /** Repaired compiled code (if successful) */
   repairedCode?: string;
   /** Repaired source code (if available) */
@@ -122,9 +122,9 @@ export type SelfRepairEventType =
  */
 export interface SelfRepairEvents {
   'component:error': ComponentErrorReport;
-  'component:repairing': { errorId: string; renderId: string };
+  'component:repairing': { errorId: string; sessionId: string };
   'component:repaired': ComponentRepairResult;
-  'component:repair-failed': { errorId: string; renderId: string; reason: string };
+  'component:repair-failed': { errorId: string; sessionId: string; reason: string };
 }
 
 /**
@@ -136,7 +136,7 @@ export interface RepairHistoryEntry {
   /** App ID */
   appId: string;
   /** GguiSession ID */
-  renderId: string;
+  sessionId: string;
   /** Error type */
   errorType: string;
   /** Error message */

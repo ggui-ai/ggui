@@ -101,7 +101,7 @@ export function GguiSessionRenderer({
     if (typeof window !== 'undefined' && render.id) {
       window.dispatchEvent(new CustomEvent('ggui:request-repair', {
         detail: {
-          renderId: render.id,
+          sessionId: render.id,
           prompt: render.prompt,
           error: error.message,
           componentCode: render.componentCode,
@@ -153,7 +153,7 @@ export function GguiSessionRenderer({
  * channel" contract authored components depend on.
  *
  * Post-Phase-B: there is no per-render scoping factory. `<GguiRender>`
- * provides one WireConfig keyed by the single mounted renderId; this
+ * provides one WireConfig keyed by the single mounted sessionId; this
  * leaf either consumes that or provides the standalone fallback.
  */
 function EnsureWireContext({
@@ -173,7 +173,7 @@ function EnsureWireContext({
 
 const STANDALONE_WIRE_CONFIG: WireConfig = {
   app: { appId: 'preview', appName: 'preview' },
-  render: { renderId: 'preview', isConnected: false },
+  render: { sessionId: 'preview', isConnected: false },
   auth: { isAuthenticated: false },
   dispatch: () => {
     /* no-op — preview mounts have no host to route actions to */

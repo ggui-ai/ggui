@@ -28,7 +28,7 @@
  *   4. Derive `mode` from `streamSpec[channel].mode` (default
  *      `'append'`). Agent-supplied `mode` is NOT supported.
  *
- *   5. Build a {@link HandleStreamEnvelope} `{renderId, channel, mode,
+ *   5. Build a {@link HandleStreamEnvelope} `{sessionId, channel, mode,
  *      payload, complete?}` and hand it to the caller-supplied
  *      `sendEnvelope`.
  *
@@ -72,7 +72,7 @@ import { ChannelNotDeclaredError, InvalidCompleteError } from "./errors.js";
  * satisfy the shape naturally, so neither needs a cast.
  */
 export interface GguiSessionStreamTarget {
-  readonly renderId: string;
+  readonly sessionId: string;
   readonly streamSpec?: StreamSpec;
 }
 
@@ -85,7 +85,7 @@ export interface GguiSessionStreamTarget {
  * Consumers that accept `StreamEnvelopeInput` can assign this directly.
  */
 export interface HandleStreamEnvelope {
-  readonly renderId: string;
+  readonly sessionId: string;
   readonly channel: string;
   readonly mode: StreamChannelMode;
   readonly payload: JsonValue;
@@ -133,7 +133,7 @@ export async function handleStream<TPayload extends JsonValue = JsonValue>(
   const resolved = spec ? resolveStreamChannel(spec, input.channel) : undefined;
   if (!resolved) {
     const declared = spec ? Object.keys(spec) : [];
-    throw new ChannelNotDeclaredError(input.channel, declared, render.renderId);
+    throw new ChannelNotDeclaredError(input.channel, declared, render.sessionId);
   }
 
   // ── Step 2: payload schema validation ────────────────────────────────
@@ -155,7 +155,7 @@ export async function handleStream<TPayload extends JsonValue = JsonValue>(
 
   // ── Step 5: build envelope-input and delegate to sendEnvelope ────────
   const envelope: HandleStreamEnvelope = {
-    renderId: render.renderId,
+    sessionId: render.sessionId,
     channel: input.channel,
     mode,
     payload: input.payload,

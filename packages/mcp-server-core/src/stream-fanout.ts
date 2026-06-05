@@ -20,7 +20,7 @@
  *
  * **Obligations:**
  * - Producer MUST call `publish()` at most once per envelope per render.
- *   The envelope MUST carry a `renderId` that matches the routing key
+ *   The envelope MUST carry a `sessionId` that matches the routing key
  *   and a `seq` that is strictly increasing for the render (gap-free
  *   for a single writer; gaps across concurrent writers surface as
  *   sequence conflicts upstream at the `GguiSessionStreamBuffer.record`
@@ -47,7 +47,7 @@
  *   upstream `close()`) MUST end the async iterator cleanly (return
  *   `{done: true}`). Consumers detect termination and reconnect via
  *   replay.
- * - `close(renderId)` MUST cause all in-flight subscribers for that
+ * - `close(sessionId)` MUST cause all in-flight subscribers for that
  *   render to terminate cleanly. It is idempotent.
  *
  * **Observable violation:**
@@ -62,7 +62,7 @@
  * - {@link GguiSessionStreamBuffer} — stores envelopes for replay on reconnect.
  *   StreamFanout is the LIVE channel; replay is the HISTORY channel.
  *   A typical emitter path: `buffer.record(delivery)` → get
- *   BufferedStreamEnvelope → `fanout.publish({renderId, envelope})`.
+ *   BufferedStreamEnvelope → `fanout.publish({sessionId, envelope})`.
  * - {@link GguiSessionStore} — durable render state. Orthogonal; fanout
  *   carries data to live subscribers, GguiSessionStore persists it.
  *
@@ -71,7 +71,7 @@
  * OSS default: `InProcessStreamFanout` (from `@ggui-ai/mcp-server-core/in-memory`).
  *
  * Hosted binding (Path A): a Redis-backed implementation in a closed
- * adapter package. Key pattern: `ggui:stream:<renderId>`; payload is
+ * adapter package. Key pattern: `ggui:stream:<sessionId>`; payload is
  * the JSON-encoded {@link BufferedStreamEnvelope}; close fires a
  * close-marker record that subscribers recognize and unwind.
  */
@@ -83,7 +83,7 @@ import type { BufferedStreamEnvelope } from './render-stream-buffer.js';
  */
 export interface StreamFanoutPublishInput {
   /** GguiSession this frame belongs to. Routing key for fanout. */
-  readonly renderId: string;
+  readonly sessionId: string;
   /**
    * The buffered envelope — already seq-stamped and schemaVersion-tagged
    * by {@link GguiSessionStreamBuffer.record}. StreamFanout does NOT stamp or
@@ -121,7 +121,7 @@ export interface StreamFanout {
    *   - Implementation-detected error (Redis disconnect, etc.) —
    *     iterator throws; consumer reconnects via `GguiSessionStreamBuffer.replay`.
    */
-  subscribe(renderId: string): AsyncIterable<BufferedStreamEnvelope>;
+  subscribe(sessionId: string): AsyncIterable<BufferedStreamEnvelope>;
 
   /**
    * Terminate all in-flight subscribers for this render. Typically
@@ -129,5 +129,5 @@ export interface StreamFanout {
    * don't leak. Idempotent; calling `close` on a render with no
    * subscribers is a no-op.
    */
-  close(renderId: string): Promise<void>;
+  close(sessionId: string): Promise<void>;
 }

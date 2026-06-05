@@ -4,7 +4,7 @@
  * the top nav.
  *
  * Mounts in the `TopNav` right slot; self-fetches `GET
- * /ggui/console/renders?limit=3`, repolls every 10s, and renders a
+ * /ggui/console/sessions?limit=3`, repolls every 10s, and renders a
  * small `live · N ↗` pill when the server has at least one active
  * render with a shortCode. Click → `navigateTo('/s/<shortCode>')`.
  *
@@ -31,7 +31,7 @@ import { isAdminRoute, navigateTo, type Route } from '../router.js';
 const POLL_INTERVAL_MS = 10_000;
 
 interface GguiSessionRow {
-  readonly renderId: string;
+  readonly sessionId: string;
   readonly shortCode?: string;
 }
 
@@ -52,7 +52,7 @@ export function LiveGguiSessionPill({
   const [state, setState] = useState<PillState>({ kind: 'idle' });
   // Hide on (a) the viewer itself — pointing at "the latest" while
   // already viewing it is noise — and (b) every non-admin route.
-  // `/ggui/console/renders` is admin-cookie-gated since the 2026-05-03
+  // `/ggui/console/sessions` is admin-cookie-gated since the 2026-05-03
   // security fix, so polling it from `/`, `/settings`, `/login` would
   // 401 every 10s and surface no live data. The pill is operator
   // chrome by design now; user-zone surfaces don't need it.
@@ -66,7 +66,7 @@ export function LiveGguiSessionPill({
     const poll = async (): Promise<void> => {
       const controller = new AbortController();
       try {
-        const res = await fetch('/ggui/console/renders?limit=3', {
+        const res = await fetch('/ggui/console/sessions?limit=3', {
           signal: controller.signal,
           headers: { accept: 'application/json' },
         });

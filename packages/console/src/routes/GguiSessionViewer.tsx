@@ -26,12 +26,12 @@
  * # Boot sequence
  *
  *   1. POST `/ggui/console/render-cookie` with the short-code →
- *      mint a same-origin HttpOnly cookie bound to (renderId, appId).
+ *      mint a same-origin HttpOnly cookie bound to (sessionId, appId).
  *   2. In parallel:
- *      - GET `/ggui/console/render-resource?render=<renderId>` →
+ *      - GET `/ggui/console/render-resource?render=<sessionId>` →
  *        `ResourceContents` blob whose `text` is the production thin-
  *        shell HTML.
- *      - GET `/ggui/console/renders/<renderId>/meta` →
+ *      - GET `/ggui/console/sessions/<sessionId>/meta` →
  *        slice-envelope JSON (`{ "ai.ggui/render": {...} }`, same
  *        shape as the wire `_meta` after the Phase-B session+stackItem
  *        collapse).
@@ -75,7 +75,7 @@ import { navigateTo } from '../router.js';
  * match `packages/mcp-server/src/server.ts`'s cookie-mint route.
  */
 interface GguiSessionCookieResponse {
-  readonly renderId: string;
+  readonly sessionId: string;
   readonly appId: string;
   readonly expiresAt: number;
 }
@@ -169,7 +169,7 @@ export function GguiSessionViewer({
     const controller = new AbortController();
     void (async () => {
       try {
-        const renderParam = encodeURIComponent(loadingRender.renderId);
+        const renderParam = encodeURIComponent(loadingRender.sessionId);
         const [resourceRes, metaRes] = await Promise.all([
           fetch(
             `/ggui/console/render-resource?render=${renderParam}`,
@@ -181,7 +181,7 @@ export function GguiSessionViewer({
             },
           ),
           fetch(
-            `/ggui/console/renders/${renderParam}/meta`,
+            `/ggui/console/sessions/${renderParam}/meta`,
             {
               method: 'GET',
               signal: controller.signal,
@@ -424,7 +424,7 @@ function LiveViewer({
           >
             <StatusBadge tone="ink">mounted</StatusBadge>
             <span className="ggui-muted">
-              render <code className="ggui-code">{render.renderId}</code>
+              render <code className="ggui-code">{render.sessionId}</code>
             </span>
           </div>
           <p className="ggui-muted">
@@ -445,7 +445,7 @@ function LiveViewer({
           className="ggui-pane__body"
           style={{ padding: 0, minHeight: 420 }}
           data-ggui-console-iframe-host
-          data-ggui-console-render={render.renderId}
+          data-ggui-console-session={render.sessionId}
         >
           <iframe
             ref={iframeRef}

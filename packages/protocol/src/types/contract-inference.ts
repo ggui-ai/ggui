@@ -288,7 +288,7 @@ export type InferGadgetNames<T> =
  * Discriminated union of all stream emissions in a contract.
  *
  * Each member has `{ channel: ChannelName; payload: PayloadType; complete?: boolean }`
- * — the agent-supplied fields of {@link GguiEmitInput} minus `renderId`
+ * — the agent-supplied fields of {@link GguiEmitInput} minus `sessionId`
  * (which is caller context, not per-delivery).
  *
  * `mode` / `seq` / transport details are intentionally NOT on this union:

@@ -206,11 +206,11 @@ async function runOneFixture(
     const wsUrl = deriveWsUrl(config.serverUrl);
     transport = await openWsTransport({ kind: 'ws', url: wsUrl, auth: config.auth });
 
-    const renderId = extractRenderId(fixture);
+    const sessionId = extractSessionId(fixture);
     transport.send({
       type: 'subscribe',
       payload: {
-        renderId,
+        sessionId,
         appId: 'conformance',
         role: 'user',
         ...(maybeSupportedVersions(fixture.expectedBehavior) ?? {}),
@@ -296,26 +296,26 @@ function deriveWsUrl(serverUrl: string): string {
   return `ws://${trimmed}/ws`;
 }
 
-function extractRenderId(fixture: TestCase): string {
-  // Prefer a renderId from the first `create-render` setup step —
+function extractSessionId(fixture: TestCase): string {
+  // Prefer a sessionId from the first `create-session` setup step —
   // this is the fixture's declared render identity. Fall back to
-  // inputEnvelope.renderId, then to the fixture name.
+  // inputEnvelope.sessionId, then to the fixture name.
   for (const step of fixture.setup) {
     if (
-      (step as { type?: unknown }).type === 'create-render' &&
-      typeof (step as { renderId?: unknown }).renderId === 'string'
+      (step as { type?: unknown }).type === 'create-session' &&
+      typeof (step as { sessionId?: unknown }).sessionId === 'string'
     ) {
-      return (step as { renderId: string }).renderId;
+      return (step as { sessionId: string }).sessionId;
     }
   }
   const envelope = fixture.inputEnvelope;
   if (
     envelope !== null &&
     typeof envelope === 'object' &&
-    'renderId' in envelope &&
-    typeof (envelope as { renderId?: unknown }).renderId === 'string'
+    'sessionId' in envelope &&
+    typeof (envelope as { sessionId?: unknown }).sessionId === 'string'
   ) {
-    return (envelope as { renderId: string }).renderId;
+    return (envelope as { sessionId: string }).sessionId;
   }
   return fixture.name;
 }

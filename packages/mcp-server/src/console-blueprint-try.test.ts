@@ -9,7 +9,7 @@
  *   - Commits a `GguiSession` with `componentCode` + manifest-backed
  *     `propsSpec` / `actionSpec` / `streamSpec`.
  *   - Mints a fresh shortCode, binds it via `ShortCodeIndex`, returns
- *     `{renderId, shortCode, url}`.
+ *     `{sessionId, shortCode, url}`.
  *
  * Gate combinations covered:
  *   - Full wiring (uiRegistry + renderChannel + shortCodeIndex) →
@@ -234,24 +234,24 @@ describe('POST /ggui/console/blueprint/:id/try', () => {
     });
     expect(res.status).toBe(200);
     const body = (await res.json()) as {
-      renderId: string;
+      sessionId: string;
       shortCode: string;
       url: string;
     };
     // Phase B identity collapse: the prior (sessionId=`try-<uuid>`,
-    // stackItemId=`blueprint-<bpId>`) pair collapsed to one renderId
+    // stackItemId=`blueprint-<bpId>`) pair collapsed to one sessionId
     // `try-<bpId>-<uuid>`. The blueprint slug stays in the id for
     // debug readability; the uuid disambiguates same-blueprint retries.
-    expect(body.renderId).toMatch(/^try-[a-z0-9-]+-[0-9a-f-]{36}$/);
+    expect(body.sessionId).toMatch(/^try-[a-z0-9-]+-[0-9a-f-]{36}$/);
     expect(body.shortCode).toMatch(/^[a-z0-9]{18}$/);
     expect(body.url).toBe(`/s/${body.shortCode}`);
 
     // Stored render row exists with our GguiSession payload. Post-collapse
-    // `render.id === renderId` (single identity).
-    const stored = await fx.renderStore.get(body.renderId);
+    // `render.id === sessionId` (single identity).
+    const stored = await fx.renderStore.get(body.sessionId);
     expect(stored).not.toBeNull();
     const item = stored!.render as ComponentGguiSession;
-    expect(item.id).toBe(body.renderId);
+    expect(item.id).toBe(body.sessionId);
     expect(item.componentCode).toBe(BUNDLE_CODE);
     expect(item.contentType).toBe('application/javascript+react');
     // Load-bearing: all three contract fields flowed through.
@@ -260,12 +260,12 @@ describe('POST /ggui/console/blueprint/:id/try', () => {
     expect(item.propsSpec).toEqual(CONTRACT_PROPS);
 
     // ShortCode binding resolves to this render row. Post Phase-B
-    // the binding is the (renderId, appId) pair — the previous
-    // `sessionId` slot was renamed to `renderId` along with the
+    // the binding is the (sessionId, appId) pair — the previous
+    // `sessionId` slot was renamed to `sessionId` along with the
     // identity collapse.
     const binding = await fx.shortCodeIndex.lookup(body.shortCode);
     expect(binding).not.toBeNull();
-    expect(binding!.renderId).toBe(body.renderId);
+    expect(binding!.sessionId).toBe(body.sessionId);
     expect(binding!.appId).toBe('builder');
   });
 
@@ -287,8 +287,8 @@ describe('POST /ggui/console/blueprint/:id/try', () => {
       { method: 'POST' },
     );
     expect(res.status).toBe(200);
-    const body = (await res.json()) as { renderId: string };
-    const stored = await fx.renderStore.get(body.renderId);
+    const body = (await res.json()) as { sessionId: string };
+    const stored = await fx.renderStore.get(body.sessionId);
     const item = stored!.render as ComponentGguiSession;
     expect(item.actionSpec).toBeUndefined();
     expect(item.streamSpec).toBeUndefined();
@@ -322,8 +322,8 @@ describe('POST /ggui/console/blueprint/:id/try', () => {
       method: 'POST',
     });
     expect(res.status).toBe(200);
-    const body = (await res.json()) as { renderId: string };
-    const stored = await fx.renderStore.get(body.renderId);
+    const body = (await res.json()) as { sessionId: string };
+    const stored = await fx.renderStore.get(body.sessionId);
     const item = stored!.render as ComponentGguiSession;
     expect(item.componentCode).toBe(streamCode);
   });
@@ -455,11 +455,11 @@ describe('POST /ggui/console/blueprint/:id/try', () => {
       { method: 'POST' },
     );
     expect(res.status).toBe(200);
-    const body = (await res.json()) as { renderId: string };
-    const stored = await fx.renderStore.get(body.renderId);
+    const body = (await res.json()) as { sessionId: string };
+    const stored = await fx.renderStore.get(body.sessionId);
     expect(stored).not.toBeNull();
-    // Phase B identity collapse: render.id === renderId.
-    expect(stored!.render.id).toBe(body.renderId);
+    // Phase B identity collapse: render.id === sessionId.
+    expect(stored!.render.id).toBe(body.sessionId);
   });
 
   it('schemaCompatCheck=warn: lets the render through; no 422, render commits', async () => {
@@ -482,11 +482,11 @@ describe('POST /ggui/console/blueprint/:id/try', () => {
       { method: 'POST' },
     );
     expect(res.status).toBe(200);
-    const body = (await res.json()) as { renderId: string };
-    const stored = await fx.renderStore.get(body.renderId);
+    const body = (await res.json()) as { sessionId: string };
+    const stored = await fx.renderStore.get(body.sessionId);
     expect(stored).not.toBeNull();
-    // Phase B identity collapse: render.id === renderId.
-    expect(stored!.render.id).toBe(body.renderId);
+    // Phase B identity collapse: render.id === sessionId.
+    expect(stored!.render.id).toBe(body.sessionId);
   });
 
   it('schemaCompatCheck=reject: rejects on streamSpec tool ref too (inverse direction)', async () => {
@@ -585,11 +585,11 @@ describe('POST /ggui/console/blueprint/:id/try', () => {
       { method: 'POST' },
     );
     expect(res.status).toBe(200);
-    const body = (await res.json()) as { renderId: string };
-    const stored = await fx.renderStore.get(body.renderId);
+    const body = (await res.json()) as { sessionId: string };
+    const stored = await fx.renderStore.get(body.sessionId);
     expect(stored).not.toBeNull();
-    // Phase B identity collapse: render.id === renderId.
-    expect(stored!.render.id).toBe(body.renderId);
+    // Phase B identity collapse: render.id === sessionId.
+    expect(stored!.render.id).toBe(body.sessionId);
   });
 
   it('schemaCompatCheck=off: skips the check entirely (already exercised by the base tests)', async () => {

@@ -2,13 +2,13 @@
  * Tests for `createGguiConsumeHandler`.
  *
  * Post-Phase-B (flatten-render-identity): the pending-events pipe is
- * keyed by `renderId` (was `stackItemId`). The handler takes a single
- * `renderId` input, no longer round-trips through a secondary
+ * keyed by `sessionId` (was `stackItemId`). The handler takes a single
+ * `sessionId` input, no longer round-trips through a secondary
  * `stackItemId → sessionId` index. `SessionStore` → `GguiSessionStore`.
  * `StackItemNotFoundError` → `GguiSessionNotFoundError`.
  *
  * Covers the wire contract:
- *   - renderId → tenancy gate via renderStore.get + appId cmp
+ *   - sessionId → tenancy gate via renderStore.get + appId cmp
  *   - tenancy mismatch + unknown render surface as GguiSessionNotFoundError
  *   - long-poll loop semantics (immediate, with-events, completed,
  *     mid-poll render-disappeared)
@@ -47,9 +47,9 @@ describe('createGguiConsumeHandler', () => {
     vi.useRealTimers();
   });
 
-  async function seedRender(renderId: string, appId: string): Promise<void> {
+  async function seedRender(sessionId: string, appId: string): Promise<void> {
     const render: ComponentGguiSession = {
-      id: renderId,
+      id: sessionId,
       appId,
       type: 'component',
       componentCode: '',
@@ -60,7 +60,7 @@ describe('createGguiConsumeHandler', () => {
       expiresAt: NOW_MS + 60_000,
     };
     await renderStore.commit({ render, appId });
-    consumer.markCreated(renderId);
+    consumer.markCreated(sessionId);
   }
 
   describe('declaration metadata', () => {
@@ -74,8 +74,8 @@ describe('createGguiConsumeHandler', () => {
     });
   });
 
-  describe('renderId resolution', () => {
-    it('resolves renderId via the render store and returns events', async () => {
+  describe('sessionId resolution', () => {
+    it('resolves sessionId via the render store and returns events', async () => {
       await seedRender('render-1', 'app-1');
       await consumer.append('render-1', {
         id: 'evt-1',
@@ -91,7 +91,7 @@ describe('createGguiConsumeHandler', () => {
         renderStore,
       });
       const result = await handler.handler(
-        { renderId: 'render-1', timeout: 0 },
+        { sessionId: 'render-1', timeout: 0 },
         { appId: 'app-1', requestId: 'r1' },
       );
       expect(result.events).toHaveLength(1);
@@ -99,7 +99,7 @@ describe('createGguiConsumeHandler', () => {
       expect(result.status).toBe('active');
     });
 
-    it('cross-tenant renderId throws GguiSessionNotFoundError (no leak)', async () => {
+    it('cross-tenant sessionId throws GguiSessionNotFoundError (no leak)', async () => {
       await seedRender('render-1', 'app-1');
       const handler = createGguiConsumeHandler({
         pendingEventConsumer: consumer,
@@ -107,20 +107,20 @@ describe('createGguiConsumeHandler', () => {
       });
       await expect(
         handler.handler(
-          { renderId: 'render-1', timeout: 0 },
+          { sessionId: 'render-1', timeout: 0 },
           { appId: 'tenant-X', requestId: 'r1' },
         ),
       ).rejects.toBeInstanceOf(GguiSessionNotFoundError);
     });
 
-    it('unknown renderId throws GguiSessionNotFoundError', async () => {
+    it('unknown sessionId throws GguiSessionNotFoundError', async () => {
       const handler = createGguiConsumeHandler({
         pendingEventConsumer: consumer,
         renderStore,
       });
       await expect(
         handler.handler(
-          { renderId: 'never-existed', timeout: 0 },
+          { sessionId: 'never-existed', timeout: 0 },
           { appId: 'app-1', requestId: 'r1' },
         ),
       ).rejects.toBeInstanceOf(GguiSessionNotFoundError);
@@ -142,7 +142,7 @@ describe('createGguiConsumeHandler', () => {
       });
       const start = Date.now();
       const result = await handler.handler(
-        { renderId: 'render-1', timeout: 0 },
+        { sessionId: 'render-1', timeout: 0 },
         { appId: 'app-1', requestId: 'r1' },
       );
       // No long-poll wait when timeout=0.
@@ -157,7 +157,7 @@ describe('createGguiConsumeHandler', () => {
         renderStore,
       });
       const result = await handler.handler(
-        { renderId: 'render-1', timeout: 0 },
+        { sessionId: 'render-1', timeout: 0 },
         { appId: 'app-1', requestId: 'r1' },
       );
       expect(result.events).toEqual([]);
@@ -182,7 +182,7 @@ describe('createGguiConsumeHandler', () => {
         });
       }, 200);
       const result = await handler.handler(
-        { renderId: 'render-1', timeout: 5 },
+        { sessionId: 'render-1', timeout: 5 },
         { appId: 'app-1', requestId: 'r1' },
       );
       expect(result.events.length).toBeGreaterThan(0);
@@ -198,7 +198,7 @@ describe('createGguiConsumeHandler', () => {
       });
       const start = Date.now();
       const result = await handler.handler(
-        { renderId: 'render-1', timeout: 5 },
+        { sessionId: 'render-1', timeout: 5 },
         { appId: 'app-1', requestId: 'r1' },
       );
       // First fetchAndClearSafe sees status=expired → no long-poll wait.
@@ -218,7 +218,7 @@ describe('createGguiConsumeHandler', () => {
         consumer.markDeleted('render-1');
       }, 200);
       const result = await handler.handler(
-        { renderId: 'render-1', timeout: 3 },
+        { sessionId: 'render-1', timeout: 3 },
         { appId: 'app-1', requestId: 'r1' },
       );
       // PendingPipeNotFoundError mid-poll is converted to expired status.
@@ -234,7 +234,7 @@ describe('createGguiConsumeHandler', () => {
         id: 'evt-obj',
         envelope: {
           type: 'action',
-          renderId: 'render-1',
+          sessionId: 'render-1',
           intent: 'choose',
           actionData: { value: 'X' },
           uiContext: {},
@@ -249,7 +249,7 @@ describe('createGguiConsumeHandler', () => {
         renderStore,
       });
       const result = await handler.handler(
-        { renderId: 'render-1', timeout: 0 },
+        { sessionId: 'render-1', timeout: 0 },
         { appId: 'app-1', requestId: 'r1' },
       );
       expect(result.events[0].intent).toBe('choose');
@@ -262,7 +262,7 @@ describe('createGguiConsumeHandler', () => {
         id: 'evt-str',
         envelope: JSON.stringify({
           type: 'action',
-          renderId: 'render-1',
+          sessionId: 'render-1',
           intent: 'submit',
           actionData: { v: 1 },
           uiContext: {},
@@ -277,7 +277,7 @@ describe('createGguiConsumeHandler', () => {
         renderStore,
       });
       const result = await handler.handler(
-        { renderId: 'render-1', timeout: 0 },
+        { sessionId: 'render-1', timeout: 0 },
         { appId: 'app-1', requestId: 'r1' },
       );
       expect(result.events[0].intent).toBe('submit');
@@ -302,7 +302,7 @@ describe('createGguiConsumeHandler', () => {
 
       // Empty consume — no notify.
       await handler.handler(
-        { renderId: 'render-1', timeout: 0 },
+        { sessionId: 'render-1', timeout: 0 },
         { appId: 'app-1', requestId: 'r1' },
       );
       expect(calls).toHaveLength(0);
@@ -315,11 +315,11 @@ describe('createGguiConsumeHandler', () => {
         createdAt: new Date().toISOString(),
       });
       await handler.handler(
-        { renderId: 'render-1', timeout: 0 },
+        { sessionId: 'render-1', timeout: 0 },
         { appId: 'app-1', requestId: 'r2' },
       );
       expect(calls).toHaveLength(1);
-      expect(calls[0].renderId).toBe('render-1');
+      expect(calls[0].sessionId).toBe('render-1');
       expect(calls[0].appId).toBe('app-1');
       expect(calls[0].tool).toBe('ggui_consume');
       expect(calls[0].result.eventCount).toBe(1);
@@ -339,7 +339,7 @@ describe('createGguiConsumeHandler', () => {
         renderStore,
       });
       const result = await handler.handler(
-        { renderId: 'render-1', timeout: 0 },
+        { sessionId: 'render-1', timeout: 0 },
         { appId: 'app-1', requestId: 'r1' },
       );
       expect(result.events).toHaveLength(1);
@@ -369,13 +369,13 @@ describe('createGguiConsumeHandler', () => {
         drainAckNotifier,
       });
       await handler.handler(
-        { renderId: 'render-1', timeout: 0 },
+        { sessionId: 'render-1', timeout: 0 },
         { appId: 'app-1', requestId: 'r1' },
       );
       expect(sendDrainAck).toHaveBeenCalledTimes(2);
       expect(sendDrainAck).toHaveBeenCalledWith(
         expect.objectContaining({
-          renderId: 'render-1',
+          sessionId: 'render-1',
           appId: 'app-1',
           eventId: 'evt-1',
         }),
@@ -395,7 +395,7 @@ describe('createGguiConsumeHandler', () => {
         drainAckNotifier,
       });
       await handler.handler(
-        { renderId: 'render-1', timeout: 0 },
+        { sessionId: 'render-1', timeout: 0 },
         { appId: 'app-1', requestId: 'r1' },
       );
       expect(sendDrainAck).not.toHaveBeenCalled();
@@ -420,7 +420,7 @@ describe('createGguiConsumeHandler', () => {
         drainAckNotifier,
       });
       const result = await handler.handler(
-        { renderId: 'render-1', timeout: 0 },
+        { sessionId: 'render-1', timeout: 0 },
         { appId: 'app-1', requestId: 'r1' },
       );
       expect(result.events).toHaveLength(1);
@@ -446,13 +446,13 @@ describe('createGguiConsumeHandler', () => {
         logger,
       });
       await handler.handler(
-        { renderId: 'render-1', timeout: 0 },
+        { sessionId: 'render-1', timeout: 0 },
         { appId: 'app-1', requestId: 'r1' },
       );
       expect(info).toHaveBeenCalledWith(
         'action_consume_slow',
         expect.objectContaining({
-          renderId: 'render-1',
+          sessionId: 'render-1',
           appId: 'app-1',
           eventId: 'evt-1',
           thresholdMs: 2000,
@@ -476,7 +476,7 @@ describe('createGguiConsumeHandler', () => {
         logger,
       });
       await handler.handler(
-        { renderId: 'render-1', timeout: 0 },
+        { sessionId: 'render-1', timeout: 0 },
         { appId: 'app-1', requestId: 'r1' },
       );
       expect(info).not.toHaveBeenCalled();
@@ -501,7 +501,7 @@ describe('createGguiConsumeHandler', () => {
         activeConsumerRegistry: registry,
       });
       await handler.handler(
-        { renderId: 'render-1', timeout: 0 },
+        { sessionId: 'render-1', timeout: 0 },
         { appId: 'app-1', requestId: 'r1' },
       );
       expect(enterSpy).toHaveBeenCalledWith('render-1');
@@ -513,7 +513,7 @@ describe('createGguiConsumeHandler', () => {
     it('exits the registry even when the handler throws (GguiSessionNotFoundError)', async () => {
       // Tenancy mismatch surfaces as GguiSessionNotFoundError; enter MUST
       // still pair with exit so a long-poll-with-bad-tenancy can't
-      // leave a sticky `hasActive: true` for that renderId.
+      // leave a sticky `hasActive: true` for that sessionId.
       await seedRender('render-1', 'app-OWNER');
       const registry = new InMemoryActiveConsumerRegistry();
       const handler = createGguiConsumeHandler({
@@ -523,7 +523,7 @@ describe('createGguiConsumeHandler', () => {
       });
       await expect(
         handler.handler(
-          { renderId: 'render-1', timeout: 0 },
+          { sessionId: 'render-1', timeout: 0 },
           { appId: 'app-INTRUDER', requestId: 'r1' },
         ),
       ).rejects.toBeInstanceOf(GguiSessionNotFoundError);
@@ -544,7 +544,7 @@ describe('createGguiConsumeHandler', () => {
         activeConsumerRegistry: registry,
       });
       const promise = handler.handler(
-        { renderId: 'render-1', timeout: 5 },
+        { sessionId: 'render-1', timeout: 5 },
         { appId: 'app-1', requestId: 'r1' },
       );
       // Yield once so the handler's body runs up through `enter()`.
@@ -582,7 +582,7 @@ describe('createGguiConsumeHandler', () => {
       const controller = new AbortController();
       const start = Date.now();
       const promise = handler.handler(
-        { renderId: 'render-1', timeout: 60 },
+        { sessionId: 'render-1', timeout: 60 },
         { appId: 'app-1', requestId: 'r1', signal: controller.signal },
       );
       // Yield so the handler runs up through `enter()` + into the loop.
@@ -619,7 +619,7 @@ describe('createGguiConsumeHandler', () => {
       controller.abort();
       const start = Date.now();
       const result = await handler.handler(
-        { renderId: 'render-1', timeout: 60 },
+        { sessionId: 'render-1', timeout: 60 },
         { appId: 'app-1', requestId: 'r1', signal: controller.signal },
       );
       expect(Date.now() - start).toBeLessThan(500);
@@ -645,7 +645,7 @@ describe('createGguiConsumeHandler', () => {
         });
       }, 200);
       const result = await handler.handler(
-        { renderId: 'render-1', timeout: 5 },
+        { sessionId: 'render-1', timeout: 5 },
         { appId: 'app-1', requestId: 'r1' },
       );
       expect(result.events.length).toBeGreaterThan(0);

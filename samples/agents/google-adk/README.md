@@ -21,7 +21,7 @@ src/
               (so the same frontend hook works across all 3 SDKs).
   server.ts   Pure-Node HTTP API (no framework). Exposes /chat (SSE),
               /chat?chatId= snapshot, /relay/tools-call,
-              /relay/resources-read, /api/renders/:id/state, and
+              /relay/resources-read, /api/sessions/:id/state, and
               /sandbox-proxy-url. Brand-agnostic — knows nothing about
               ggui's _meta envelope.
   index.ts    Boots the server with env-derived options. The only place
@@ -47,7 +47,7 @@ Identical layering, wire surface, and chat-snapshot semantics as the sibling Cla
 │   /chat ──► runAgent(prompt, …)     │
 │   /relay/tools-call    ──► ggui MCP │
 │   /relay/resources-read ──► ggui MCP │
-│   /api/renders/:id/state ──► ggui MCP│
+│   /api/sessions/:id/state ──► ggui MCP│
 └─────────┬───────────────────────────┘
           │
           │ for await msg of runAgent(…)

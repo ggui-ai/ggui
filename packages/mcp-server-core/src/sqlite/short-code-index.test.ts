@@ -21,9 +21,9 @@ describe('SqliteShortCodeIndex', () => {
 
   it('put + lookup round-trip preserves the binding', async () => {
     const idx = new SqliteShortCodeIndex({ filename: ':memory:' });
-    await idx.put('abc12345', { renderId: 'r1', appId: 'a1' });
+    await idx.put('abc12345', { sessionId: 'r1', appId: 'a1' });
     expect(await idx.lookup('abc12345')).toEqual({
-      renderId: 'r1',
+      sessionId: 'r1',
       appId: 'a1',
     });
     idx.close();
@@ -31,30 +31,30 @@ describe('SqliteShortCodeIndex', () => {
 
   it('put is idempotent — replaces existing binding', async () => {
     const idx = new SqliteShortCodeIndex({ filename: ':memory:' });
-    await idx.put('abc', { renderId: 'r1', appId: 'a1' });
-    await idx.put('abc', { renderId: 'r2', appId: 'a2' });
-    expect(await idx.lookup('abc')).toEqual({ renderId: 'r2', appId: 'a2' });
+    await idx.put('abc', { sessionId: 'r1', appId: 'a1' });
+    await idx.put('abc', { sessionId: 'r2', appId: 'a2' });
+    expect(await idx.lookup('abc')).toEqual({ sessionId: 'r2', appId: 'a2' });
     idx.close();
   });
 
   it('rejects empty shortCode on put', async () => {
     const idx = new SqliteShortCodeIndex({ filename: ':memory:' });
     await expect(
-      idx.put('', { renderId: 'r1', appId: 'a1' }),
+      idx.put('', { sessionId: 'r1', appId: 'a1' }),
     ).rejects.toThrow(/shortCode/i);
     idx.close();
   });
 
-  describe('findByRenderId', () => {
-    it('returns null for an unknown renderId', async () => {
+  describe('findBySessionId', () => {
+    it('returns null for an unknown sessionId', async () => {
       const idx = new SqliteShortCodeIndex({ filename: ':memory:' });
-      expect(await idx.findByRenderId('nope')).toBeNull();
+      expect(await idx.findBySessionId('nope')).toBeNull();
       idx.close();
     });
 
-    it('returns null for an empty renderId', async () => {
+    it('returns null for an empty sessionId', async () => {
       const idx = new SqliteShortCodeIndex({ filename: ':memory:' });
-      expect(await idx.findByRenderId('')).toBeNull();
+      expect(await idx.findBySessionId('')).toBeNull();
       idx.close();
     });
 
@@ -64,8 +64,8 @@ describe('SqliteShortCodeIndex', () => {
         filename: ':memory:',
         now: () => t++,
       });
-      await idx.put('abc12345', { renderId: 'r1', appId: 'app' });
-      expect(await idx.findByRenderId('r1')).toBe('abc12345');
+      await idx.put('abc12345', { sessionId: 'r1', appId: 'app' });
+      expect(await idx.findBySessionId('r1')).toBe('abc12345');
       idx.close();
     });
 
@@ -79,12 +79,12 @@ describe('SqliteShortCodeIndex', () => {
         filename: ':memory:',
         now: () => t++,
       });
-      await idx.put('first0000', { renderId: 'r1', appId: 'app' });
-      await idx.put('secnd0000', { renderId: 'r1', appId: 'app' });
-      expect(await idx.findByRenderId('r1')).toBe('secnd0000');
+      await idx.put('first0000', { sessionId: 'r1', appId: 'app' });
+      await idx.put('secnd0000', { sessionId: 'r1', appId: 'app' });
+      expect(await idx.findBySessionId('r1')).toBe('secnd0000');
       // Old shortCode still resolves forward (per the contract).
       expect(await idx.lookup('first0000')).toEqual({
-        renderId: 'r1',
+        sessionId: 'r1',
         appId: 'app',
       });
       idx.close();
@@ -93,7 +93,7 @@ describe('SqliteShortCodeIndex', () => {
     it('cleans up the reverse view when a shortCode is rebound to a different render', async () => {
       // Rebind hygiene contract from the InMemory reference: if
       // shortCode "share123" was bound to r1 and then rebound to r2,
-      // findByRenderId('r1') must NOT keep returning "share123" — the
+      // findBySessionId('r1') must NOT keep returning "share123" — the
       // forward row now belongs to r2. The sqlite impl gets this via
       // INSERT OR REPLACE updating the render_id column in place; the
       // `selectLatestByRender` query for r1 then matches no rows.
@@ -102,11 +102,11 @@ describe('SqliteShortCodeIndex', () => {
         filename: ':memory:',
         now: () => t++,
       });
-      await idx.put('share123', { renderId: 'r1', appId: 'app' });
-      expect(await idx.findByRenderId('r1')).toBe('share123');
-      await idx.put('share123', { renderId: 'r2', appId: 'app' });
-      expect(await idx.findByRenderId('r1')).toBeNull();
-      expect(await idx.findByRenderId('r2')).toBe('share123');
+      await idx.put('share123', { sessionId: 'r1', appId: 'app' });
+      expect(await idx.findBySessionId('r1')).toBe('share123');
+      await idx.put('share123', { sessionId: 'r2', appId: 'app' });
+      expect(await idx.findBySessionId('r1')).toBeNull();
+      expect(await idx.findBySessionId('r2')).toBe('share123');
     });
 
     it('leaves r1 reverse entry alone when r1 also owns a different shortCode', async () => {
@@ -120,14 +120,14 @@ describe('SqliteShortCodeIndex', () => {
         filename: ':memory:',
         now: () => t++,
       });
-      await idx.put('aaaa1111', { renderId: 'r1', appId: 'app' });
-      await idx.put('bbbb2222', { renderId: 'r1', appId: 'app' });
+      await idx.put('aaaa1111', { sessionId: 'r1', appId: 'app' });
+      await idx.put('bbbb2222', { sessionId: 'r1', appId: 'app' });
       // r1 reverse now → 'bbbb2222' (later created_at)
-      await idx.put('aaaa1111', { renderId: 'r2', appId: 'app' });
+      await idx.put('aaaa1111', { sessionId: 'r2', appId: 'app' });
       // Rebinding 'aaaa1111' away from r1 must NOT collapse r1's
       // reverse view — 'bbbb2222' still belongs to r1.
-      expect(await idx.findByRenderId('r1')).toBe('bbbb2222');
-      expect(await idx.findByRenderId('r2')).toBe('aaaa1111');
+      expect(await idx.findBySessionId('r1')).toBe('bbbb2222');
+      expect(await idx.findBySessionId('r2')).toBe('aaaa1111');
     });
 
     it('moves to the next-latest binding when the latest is revoked', async () => {
@@ -140,11 +140,11 @@ describe('SqliteShortCodeIndex', () => {
         filename: ':memory:',
         now: () => t++,
       });
-      await idx.put('first0000', { renderId: 'r1', appId: 'app' });
-      await idx.put('secnd0000', { renderId: 'r1', appId: 'app' });
-      expect(await idx.findByRenderId('r1')).toBe('secnd0000');
+      await idx.put('first0000', { sessionId: 'r1', appId: 'app' });
+      await idx.put('secnd0000', { sessionId: 'r1', appId: 'app' });
+      expect(await idx.findBySessionId('r1')).toBe('secnd0000');
       await idx.revoke('secnd0000');
-      expect(await idx.findByRenderId('r1')).toBe('first0000');
+      expect(await idx.findBySessionId('r1')).toBe('first0000');
       idx.close();
     });
   });
@@ -152,10 +152,10 @@ describe('SqliteShortCodeIndex', () => {
   describe('revoke', () => {
     it('revoke makes a previously bound shortCode resolve to null', async () => {
       const idx = new SqliteShortCodeIndex({ filename: ':memory:' });
-      await idx.put('abc12345', { renderId: 'r1', appId: 'app' });
+      await idx.put('abc12345', { sessionId: 'r1', appId: 'app' });
       await idx.revoke('abc12345');
       expect(await idx.lookup('abc12345')).toBeNull();
-      expect(await idx.findByRenderId('r1')).toBeNull();
+      expect(await idx.findBySessionId('r1')).toBeNull();
       idx.close();
     });
 
@@ -167,25 +167,25 @@ describe('SqliteShortCodeIndex', () => {
     });
   });
 
-  describe('revokeByRenderId', () => {
+  describe('revokeBySessionId', () => {
     it('drops every binding for the render and returns the count', async () => {
       const idx = new SqliteShortCodeIndex({ filename: ':memory:' });
-      await idx.put('aaaa1111', { renderId: 'r1', appId: 'app' });
-      await idx.put('bbbb2222', { renderId: 'r1', appId: 'app' });
-      await idx.put('cccc3333', { renderId: 'r2', appId: 'app' });
-      expect(await idx.revokeByRenderId('r1')).toBe(2);
+      await idx.put('aaaa1111', { sessionId: 'r1', appId: 'app' });
+      await idx.put('bbbb2222', { sessionId: 'r1', appId: 'app' });
+      await idx.put('cccc3333', { sessionId: 'r2', appId: 'app' });
+      expect(await idx.revokeBySessionId('r1')).toBe(2);
       expect(await idx.lookup('aaaa1111')).toBeNull();
       expect(await idx.lookup('bbbb2222')).toBeNull();
-      expect(await idx.findByRenderId('r1')).toBeNull();
+      expect(await idx.findBySessionId('r1')).toBeNull();
       expect(await idx.lookup('cccc3333')).not.toBeNull();
-      expect(await idx.findByRenderId('r2')).toBe('cccc3333');
+      expect(await idx.findBySessionId('r2')).toBe('cccc3333');
       idx.close();
     });
 
-    it('returns 0 on unknown renderId, no throw', async () => {
+    it('returns 0 on unknown sessionId, no throw', async () => {
       const idx = new SqliteShortCodeIndex({ filename: ':memory:' });
-      expect(await idx.revokeByRenderId('ghost')).toBe(0);
-      expect(await idx.revokeByRenderId('')).toBe(0);
+      expect(await idx.revokeBySessionId('ghost')).toBe(0);
+      expect(await idx.revokeBySessionId('')).toBe(0);
       idx.close();
     });
   });
@@ -193,29 +193,29 @@ describe('SqliteShortCodeIndex', () => {
   describe('persistence across reopen', () => {
     // The point of the sqlite impl. A fresh handle opened against the
     // same file resumes the prior state — closing and reopening must
-    // expose identical lookup + findByRenderId behavior.
+    // expose identical lookup + findBySessionId behavior.
     it('a binding survives close + reopen on a real file', async () => {
       const filename = freshFile();
       const first = new SqliteShortCodeIndex({ filename });
       await first.put('persist1', {
-        renderId: 'r1',
+        sessionId: 'r1',
         appId: 'app',
       });
       first.close();
 
       const second = new SqliteShortCodeIndex({ filename });
       expect(await second.lookup('persist1')).toEqual({
-        renderId: 'r1',
+        sessionId: 'r1',
         appId: 'app',
       });
-      expect(await second.findByRenderId('r1')).toBe('persist1');
+      expect(await second.findBySessionId('r1')).toBe('persist1');
       second.close();
     });
 
     it('revoke also persists — second open sees the deletion', async () => {
       const filename = freshFile();
       const first = new SqliteShortCodeIndex({ filename });
-      await first.put('persist2', { renderId: 'r1', appId: 'app' });
+      await first.put('persist2', { sessionId: 'r1', appId: 'app' });
       await first.revoke('persist2');
       first.close();
 

@@ -63,11 +63,11 @@ describe('useMcpAppsChat handleAppMessage', () => {
     const doorbell = {
       kind: 'user-action',
       description: 'User interacted with render r_1; call ggui_consume…',
-      renderId: 'r_1',
+      sessionId: 'r_1',
       actionId: 'deadbeef',
       submittedAt: '2026-05-29T10:00:00Z',
       intent: 'toggle',
-      nextStep: { tool: 'ggui_consume', args: { renderId: 'r_1' } },
+      nextStep: { tool: 'ggui_consume', args: { sessionId: 'r_1' } },
     };
 
     await act(async () => {

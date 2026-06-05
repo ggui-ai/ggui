@@ -1,5 +1,5 @@
 /**
- * `ggui_list_renders` — host-scoped render enumeration for resume.
+ * `ggui_list_sessions` — host-scoped render enumeration for resume.
  *
  * Called by an MCP host (sample-agent backend, claude.ai-style host)
  * when its end-user lands on a previously-visited chat conversation
@@ -7,7 +7,7 @@
  * host passes its `hostName` + `hostSessionId` (matching what it set
  * on `_meta["ai.ggui/host-session"]` at render creation) and receives
  * the list of matching render ids it can rehydrate via
- * `/api/renders/:id/state`.
+ * `/api/sessions/:id/state`.
  *
  * Scoping:
  *   - ALWAYS scoped to `ctx.appId` — tenancy boundary; cross-tenant
@@ -22,7 +22,7 @@
  * renders by design.
  *
  * Post-Phase-B (flatten-render-identity): renamed from
- * `ggui_list_sessions`. The summary shape now uses `renderId` and
+ * `ggui_list_sessions`. The summary shape now uses `sessionId` and
  * drops the per-summary stack count (every render IS one item).
  */
 
@@ -62,7 +62,7 @@ const inputSchema = {
 
 const renderSummaryWireSchema = z
   .object({
-    renderId: z.string(),
+    sessionId: z.string(),
     hostName: z.string().optional(),
     hostSessionId: z.string().optional(),
     createdAt: z.string(),
@@ -73,7 +73,7 @@ const renderSummaryWireSchema = z
     // (without immediately rehydrating) wire no seam and get the lean
     // summary; hosts driving a resume flow wire the seam and get a
     // fresh credential per render so the frontend can immediately
-    // call `/api/renders/:id/state?wsToken=<>` to mount each iframe.
+    // call `/api/sessions/:id/state?wsToken=<>` to mount each iframe.
     wsToken: z.string().optional(),
     wsTokenExpiresAt: z.string().optional(),
   })
@@ -90,7 +90,7 @@ const outputSchema = {
 // shape rather than redeclaring it.
 export type { GguiSessionSummaryWire };
 
-interface ListRendersOutput {
+interface ListSessionsOutput {
   readonly renders: readonly GguiSessionSummaryWire[];
 }
 
@@ -102,32 +102,32 @@ interface ListRendersOutput {
  * that wouldn't pass the WS upgrade is a deployment bug, not a wire-
  * contract failure — this seam is trusted.
  */
-export interface ListRendersMintSeam {
+export interface ListSessionsMintSeam {
   mint(input: {
-    readonly renderId: string;
+    readonly sessionId: string;
     readonly appId: string;
   }): { token: string; expiresAt: string };
 }
 
-export interface GguiListRendersHandlerDeps {
+export interface GguiListSessionsHandlerDeps {
   readonly renderStore: GguiSessionStore;
   /**
    * Optional ws-token minter. When wired, each listed render
    * summary carries a fresh `wsToken` + `wsTokenExpiresAt` the
-   * frontend can pass straight to `/api/renders/:id/state`. When
+   * frontend can pass straight to `/api/sessions/:id/state`. When
    * absent, summaries omit those fields and the caller is
    * responsible for minting via another seam.
    */
-  readonly mintWsToken?: ListRendersMintSeam;
+  readonly mintWsToken?: ListSessionsMintSeam;
 }
 
 const DEFAULT_LIMIT = 50;
 
-export function createGguiListRendersHandler(
-  deps: GguiListRendersHandlerDeps,
-): SharedHandler<typeof inputSchema, typeof outputSchema, ListRendersOutput> {
+export function createGguiListSessionsHandler(
+  deps: GguiListSessionsHandlerDeps,
+): SharedHandler<typeof inputSchema, typeof outputSchema, ListSessionsOutput> {
   return {
-    name: 'ggui_list_renders',
+    name: 'ggui_list_sessions',
     title: 'List renders',
     audience: ['agent'],
     description:
@@ -137,7 +137,7 @@ export function createGguiListRendersHandler(
     async handler(
       rawInput: Record<string, unknown>,
       ctx: HandlerContext,
-    ): Promise<ListRendersOutput> {
+    ): Promise<ListSessionsOutput> {
       const parsed = z.object(inputSchema).parse(rawInput);
       const renders = await deps.renderStore.list({
         appId: ctx.appId,
@@ -161,14 +161,14 @@ export function createGguiListRendersHandler(
 
 function projectSummary(
   stored: StoredGguiSession,
-  mintWsToken: ListRendersMintSeam | undefined,
+  mintWsToken: ListSessionsMintSeam | undefined,
 ): GguiSessionSummaryWire {
   const minted = mintWsToken?.mint({
-    renderId: stored.id,
+    sessionId: stored.id,
     appId: stored.appId,
   });
   return {
-    renderId: stored.id,
+    sessionId: stored.id,
     ...(stored.hostSession?.hostName !== undefined
       ? { hostName: stored.hostSession.hostName }
       : {}),

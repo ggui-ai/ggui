@@ -7,7 +7,7 @@
  * to produce componentCode — see `ANTHROPIC_API_KEY` gating in each
  * scenario.
  *
- * Returns the rendered URL (`<server>/r/<shortCode>`) and the renderId
+ * Returns the rendered URL (`<server>/r/<shortCode>`) and the sessionId
  * so tests can open the iframe AND drive ggui_consume for the same
  * render.
  */
@@ -15,7 +15,7 @@ import { callTool, unwrapStructured } from './mcp-client.js';
 
 export interface RenderedContractRef {
   readonly handshakeId: string;
-  readonly renderId: string;
+  readonly sessionId: string;
   /** Absolute URL the renderer is served at. */
   readonly url: string;
 }
@@ -36,7 +36,7 @@ export interface RenderContractOptions {
 /**
  * Run the full handshake → render chain with the supplied contract.
  * Returns enough to (a) open the renderer URL in a browser AND
- * (b) call `ggui_consume({renderId})` to drain the pending-events pipe.
+ * (b) call `ggui_consume({sessionId})` to drain the pending-events pipe.
  */
 export async function renderKnownContract(
   opts: RenderContractOptions,
@@ -55,7 +55,7 @@ export async function renderKnownContract(
   // non-deterministic. `props` is required on every render; default to
   // `{}` since these contracts declare no propsSpec.
   const render = unwrapStructured<{
-    renderId: string;
+    sessionId: string;
     renderUrl?: string;
     url?: string;
   }>(
@@ -69,11 +69,11 @@ export async function renderKnownContract(
   const url =
     render.renderUrl ??
     render.url ??
-    deriveRenderUrl(opts.mcpUrl, render.renderId);
+    deriveRenderUrl(opts.mcpUrl, render.sessionId);
 
   return {
     handshakeId: handshake.handshakeId,
-    renderId: render.renderId,
+    sessionId: render.sessionId,
     url,
   };
 }
@@ -82,11 +82,11 @@ export async function renderKnownContract(
  * Fallback URL derivation when the render response doesn't carry a
  * fully-resolved renderer URL. The OSS renderer serves at
  * `<server>/r/<shortCode>` where shortCode is derived from
- * `renderId`. If render responses already include the URL (current
+ * `sessionId`. If render responses already include the URL (current
  * OSS behavior), this never runs.
  */
-function deriveRenderUrl(mcpUrl: string, renderId: string): string {
+function deriveRenderUrl(mcpUrl: string, sessionId: string): string {
   const u = new URL(mcpUrl);
-  u.pathname = `/r/${renderId}`;
+  u.pathname = `/r/${sessionId}`;
   return u.toString();
 }

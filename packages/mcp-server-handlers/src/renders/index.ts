@@ -105,9 +105,9 @@ export {
   type GenerationCacheHit,
 } from "./generation-cache.js";
 export {
-  createGguiGetRenderHandler,
-  type GetRenderHeartbeatResult,
-  type GguiGetRenderHandlerDeps,
+  createGguiGetSessionHandler,
+  type GetSessionHeartbeatResult,
+  type GguiGetSessionHandlerDeps,
 } from "./get-render.js";
 export {
   handleStream,
@@ -118,8 +118,8 @@ export {
   type SendEnvelopeResult,
 } from "./handle-stream.js";
 export {
-  createGguiListRendersHandler,
-  type GguiListRendersHandlerDeps,
+  createGguiListSessionsHandler,
+  type GguiListSessionsHandlerDeps,
   type GguiSessionSummaryWire,
 } from "./list-renders.js";
 export {

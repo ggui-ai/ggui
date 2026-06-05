@@ -11,11 +11,11 @@
  * React update surface is unified.
  *
  * Skips when:
- *   - `renderId` is empty or not a string.
+ *   - `sessionId` is empty or not a string.
  *   - `props` is null / not an object (defensive — server can't emit
  *     this shape, but the dispatcher routes the frame on type alone).
  *   - No render is currently mounted (`getCurrentGguiSession` returns null).
- *   - The current render's id doesn't match `payload.renderId` —
+ *   - The current render's id doesn't match `payload.sessionId` —
  *     the server may have raced ahead of an in-flight render swap.
  *   - The current render is `mcpApps` / `system` (no `propsSpec`;
  *     server should never emit `props_update` for these).
@@ -23,7 +23,7 @@
  *
  * R6 (2026-05-26) retired the per-handler polling descriptor. Polling
  * is now registry-level — the iframe-runtime composes the
- * `/api/renders/:id/state?wsToken=<token>` URL and a snapshot-parsing
+ * `/api/sessions/:id/state?wsToken=<token>` URL and a snapshot-parsing
  * function once at bind time (see `runtime.ts`); a single fetch per
  * tick projects the slice envelope into per-handler frames the
  * `PollingTransport` dispatches.
@@ -60,13 +60,13 @@ export function createPropsUpdateHandler(
   return {
     type: 'props_update',
     onMessage: async (payload) => {
-      const { renderId, props } = payload;
-      if (typeof renderId !== 'string' || renderId.length === 0) return;
+      const { sessionId, props } = payload;
+      if (typeof sessionId !== 'string' || sessionId.length === 0) return;
       if (props === null || typeof props !== 'object') return;
 
       const current = deps.getCurrentGguiSession();
       if (current === null) return;
-      if (current.id !== renderId) return;
+      if (current.id !== sessionId) return;
       if (current.type === 'mcpApps' || current.type === 'system') return;
 
       const result = validateInboundPropsPayload(current.propsSpec, props);

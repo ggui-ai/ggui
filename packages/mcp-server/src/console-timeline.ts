@@ -8,7 +8,7 @@
  *
  * Post-Phase-B (flatten-render-identity): renamed from the prior
  * "sessions" terminology; the canonical addressable unit is now the
- * render. The on-wire `renderId` path param replaces `sessionId`.
+ * render. The on-wire `sessionId` path param replaces `sessionId`.
  *
  * Memory: bounded by whatever the underlying GguiSessionStore retains.
  * `InMemoryGguiSessionStore` keeps everything for the process lifetime —
@@ -26,7 +26,7 @@ import { singleParam } from './route-param.js';
 
 /** One row in `GET /ggui/console/timeline/renders`. */
 interface TimelineGguiSessionSummary {
-  readonly renderId: string;
+  readonly sessionId: string;
   readonly appId: string;
   readonly createdAt: number;
   readonly lastActivityAt: number;
@@ -46,9 +46,9 @@ interface TimelineGguiSessionsResponse {
   readonly total: number;
 }
 
-/** Body of `GET /ggui/console/timeline/:renderId/events`. */
+/** Body of `GET /ggui/console/timeline/:sessionId/events`. */
 interface TimelineEventsResponse {
-  readonly renderId: string;
+  readonly sessionId: string;
   readonly events: readonly GguiSessionEvent[];
   /**
    * Latest live-channel outbound seq for this render. Reported alongside
@@ -74,10 +74,10 @@ interface TimelineEventsResponse {
  */
 async function drainGguiSessionEvents(
   renderStore: GguiSessionStore,
-  renderId: string,
+  sessionId: string,
 ): Promise<GguiSessionEvent[]> {
   const out: GguiSessionEvent[] = [];
-  for await (const event of renderStore.observe(renderId, {
+  for await (const event of renderStore.observe(sessionId, {
     fromSeq: 1,
     tail: false,
   })) {
@@ -146,7 +146,7 @@ export function mountConsoleTimelineRoutes(
           const status: TimelineGguiSessionSummary['status'] =
             row.expiresAt <= now ? 'expired' : 'active';
           summaries.push({
-            renderId: row.id,
+            sessionId: row.id,
             appId: row.appId,
             createdAt: row.createdAt,
             lastActivityAt: row.lastActivityAt,
@@ -154,12 +154,12 @@ export function mountConsoleTimelineRoutes(
             streamSeq,
           });
         }
-        // Most-recent activity first. Tiebreak on renderId for
+        // Most-recent activity first. Tiebreak on sessionId for
         // stable ordering across reloads.
         summaries.sort((a, b) => {
           const byRecency = b.lastActivityAt - a.lastActivityAt;
           if (byRecency !== 0) return byRecency;
-          return a.renderId.localeCompare(b.renderId);
+          return a.sessionId.localeCompare(b.sessionId);
         });
         const trimmed = summaries.slice(0, limit);
         const body: TimelineGguiSessionsResponse = {
@@ -179,17 +179,17 @@ export function mountConsoleTimelineRoutes(
     },
   );
 
-  // GET /ggui/console/timeline/:renderId/events
+  // GET /ggui/console/timeline/:sessionId/events
   app.get(
-    '/ggui/console/timeline/:renderId/events',
+    '/ggui/console/timeline/:sessionId/events',
     async (req: Request, res: Response) => {
       applyDevtoolSecurityHeaders(res);
 
-      const renderId = singleParam(req.params['renderId']);
-      if (!renderId || renderId.length === 0) {
+      const sessionId = singleParam(req.params['sessionId']);
+      if (!sessionId || sessionId.length === 0) {
         res.status(400).json({
           error: 'invalid_render_id',
-          message: 'renderId path parameter is required',
+          message: 'sessionId path parameter is required',
         });
         return;
       }
@@ -197,7 +197,7 @@ export function mountConsoleTimelineRoutes(
       // Zero-config shape: no store wired → empty events.
       if (!renderStore) {
         const body: TimelineEventsResponse = {
-          renderId,
+          sessionId,
           events: [],
           streamSeq: 0,
           status: 'unknown',
@@ -207,14 +207,14 @@ export function mountConsoleTimelineRoutes(
       }
 
       try {
-        const stored = await renderStore.get(renderId);
+        const stored = await renderStore.get(sessionId);
         if (!stored) {
           // 404 is the right status — but we still return a well-
           // formed body so the SPA can render an "expired/dropped"
           // notice without a special-case branch. Body matches the
           // schema; status code disambiguates.
           const body: TimelineEventsResponse = {
-            renderId,
+            sessionId,
             events: [],
             streamSeq: 0,
             status: 'unknown',
@@ -223,11 +223,11 @@ export function mountConsoleTimelineRoutes(
           return;
         }
 
-        const events = await drainGguiSessionEvents(renderStore, renderId);
+        const events = await drainGguiSessionEvents(renderStore, sessionId);
         let streamSeq = 0;
         if (streamBuffer) {
           try {
-            streamSeq = await streamBuffer.currentSeq(renderId);
+            streamSeq = await streamBuffer.currentSeq(sessionId);
           } catch {
             // Best-effort. Inbound events stand on their own.
           }
@@ -236,7 +236,7 @@ export function mountConsoleTimelineRoutes(
         const status: TimelineEventsResponse['status'] =
           stored.expiresAt <= now ? 'expired' : 'active';
         const body: TimelineEventsResponse = {
-          renderId,
+          sessionId,
           events,
           streamSeq,
           status,

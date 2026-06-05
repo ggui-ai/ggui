@@ -1,16 +1,16 @@
 /**
- * Tests for `createGguiGetRenderHandler`.
+ * Tests for `createGguiGetSessionHandler`.
  *
  * Phase B (flatten-render-identity): replaces the prior
  * `get-session.test.ts` — the wire input collapsed from `{sessionId}`
- * to `{renderId}` and the response shape collapsed from a
+ * to `{sessionId}` and the response shape collapsed from a
  * `SessionView` (vessel + ISO timestamps + stack array) to the flat
  * `GguiSession` shape with epoch-ms timestamps.
  */
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { ComponentGguiSession } from '@ggui-ai/protocol';
 import { InMemoryGguiSessionStore } from '@ggui-ai/mcp-server-core/in-memory';
-import { createGguiGetRenderHandler } from './get-render.js';
+import { createGguiGetSessionHandler } from './get-render.js';
 import { GguiSessionNotFoundError } from './errors.js';
 
 const NOW_MS = Date.parse('2026-05-09T00:00:00.000Z');
@@ -18,15 +18,15 @@ const NOW_MS = Date.parse('2026-05-09T00:00:00.000Z');
 async function seedRender(
   store: InMemoryGguiSessionStore,
   opts: {
-    renderId?: string;
+    sessionId?: string;
     appId?: string;
     themeId?: string;
   } = {},
-): Promise<{ renderId: string }> {
-  const renderId = opts.renderId ?? 'render-1';
+): Promise<{ sessionId: string }> {
+  const sessionId = opts.sessionId ?? 'render-1';
   const appId = opts.appId ?? 'app-1';
   const render: ComponentGguiSession = {
-    id: renderId,
+    id: sessionId,
     appId,
     type: 'component',
     componentCode: 'export default () => null;',
@@ -37,10 +37,10 @@ async function seedRender(
     ...(opts.themeId !== undefined ? { themeId: opts.themeId } : {}),
   };
   await store.commit({ render, appId });
-  return { renderId };
+  return { sessionId };
 }
 
-describe('createGguiGetRenderHandler', () => {
+describe('createGguiGetSessionHandler', () => {
   let renderStore: InMemoryGguiSessionStore;
 
   beforeEach(() => {
@@ -48,25 +48,25 @@ describe('createGguiGetRenderHandler', () => {
   });
 
   describe('declaration metadata', () => {
-    it('exposes ggui_get_render name + agent audience', () => {
-      const handler = createGguiGetRenderHandler({ renderStore });
-      expect(handler.name).toBe('ggui_get_render');
+    it('exposes ggui_get_session name + agent audience', () => {
+      const handler = createGguiGetSessionHandler({ renderStore });
+      expect(handler.name).toBe('ggui_get_session');
       expect(handler.audience).toEqual(['agent']);
     });
   });
 
   describe('happy path', () => {
     it('returns the render with id, appId, eventSequence, lifecycle timestamps', async () => {
-      const { renderId } = await seedRender(renderStore);
-      const handler = createGguiGetRenderHandler({ renderStore });
+      const { sessionId } = await seedRender(renderStore);
+      const handler = createGguiGetSessionHandler({ renderStore });
       const out = await handler.handler(
-        { renderId },
+        { sessionId },
         { appId: 'app-1', requestId: 'r1' },
       );
 if (out.type === 'mcpApps') {
         throw new Error('expected ComponentGguiSession, got McpAppsGguiSession');
       }
-      expect(out.id).toBe(renderId);
+      expect(out.id).toBe(sessionId);
       expect(out.appId).toBe('app-1');
       expect(typeof out.eventSequence).toBe('number');
       expect(typeof out.createdAt).toBe('number');
@@ -75,10 +75,10 @@ if (out.type === 'mcpApps') {
     });
 
     it('forwards themeId when present on the render', async () => {
-      const { renderId } = await seedRender(renderStore, { themeId: 'indigo' });
-      const handler = createGguiGetRenderHandler({ renderStore });
+      const { sessionId } = await seedRender(renderStore, { themeId: 'indigo' });
+      const handler = createGguiGetSessionHandler({ renderStore });
       const out = await handler.handler(
-        { renderId },
+        { sessionId },
         { appId: 'app-1', requestId: 'r1' },
       );
       if (out.type === 'mcpApps') {
@@ -90,21 +90,21 @@ if (out.type === 'mcpApps') {
 
   describe('tenancy + missing', () => {
     it('throws GguiSessionNotFoundError on cross-tenant access (no leak)', async () => {
-      const { renderId } = await seedRender(renderStore, { appId: 'app-1' });
-      const handler = createGguiGetRenderHandler({ renderStore });
+      const { sessionId } = await seedRender(renderStore, { appId: 'app-1' });
+      const handler = createGguiGetSessionHandler({ renderStore });
       await expect(
         handler.handler(
-          { renderId },
+          { sessionId },
           { appId: 'app-OTHER', requestId: 'r1' },
         ),
       ).rejects.toBeInstanceOf(GguiSessionNotFoundError);
     });
 
-    it('throws GguiSessionNotFoundError on unknown renderId', async () => {
-      const handler = createGguiGetRenderHandler({ renderStore });
+    it('throws GguiSessionNotFoundError on unknown sessionId', async () => {
+      const handler = createGguiGetSessionHandler({ renderStore });
       await expect(
         handler.handler(
-          { renderId: 'never-existed' },
+          { sessionId: 'never-existed' },
           { appId: 'app-1', requestId: 'r1' },
         ),
       ).rejects.toBeInstanceOf(GguiSessionNotFoundError);
@@ -113,24 +113,24 @@ if (out.type === 'mcpApps') {
 
   describe('heartbeat seam', () => {
     it('invokes the heartbeat hook after a successful read', async () => {
-      const { renderId } = await seedRender(renderStore);
+      const { sessionId } = await seedRender(renderStore);
       const calls: string[] = [];
-      const handler = createGguiGetRenderHandler({
+      const handler = createGguiGetSessionHandler({
         renderStore,
         heartbeat: (rid) => {
           calls.push(rid);
         },
       });
       await handler.handler(
-        { renderId },
+        { sessionId },
         { appId: 'app-1', requestId: 'r1' },
       );
-      expect(calls).toEqual([renderId]);
+      expect(calls).toEqual([sessionId]);
     });
 
     it('overlays heartbeat-returned timestamps onto the wire response', async () => {
-      const { renderId } = await seedRender(renderStore);
-      const handler = createGguiGetRenderHandler({
+      const { sessionId } = await seedRender(renderStore);
+      const handler = createGguiGetSessionHandler({
         renderStore,
         heartbeat: () => ({
           lastActivityAt: 9_999_999,
@@ -138,7 +138,7 @@ if (out.type === 'mcpApps') {
         }),
       });
       const out = await handler.handler(
-        { renderId },
+        { sessionId },
         { appId: 'app-1', requestId: 'r1' },
       );
       if (out.type === 'mcpApps') {
@@ -149,25 +149,25 @@ if (out.type === 'mcpApps') {
     });
 
     it('swallows heartbeat failures (best-effort)', async () => {
-      const { renderId } = await seedRender(renderStore);
-      const handler = createGguiGetRenderHandler({
+      const { sessionId } = await seedRender(renderStore);
+      const handler = createGguiGetSessionHandler({
         renderStore,
         heartbeat: () => {
           throw new Error('write failed');
         },
       });
       const out = await handler.handler(
-        { renderId },
+        { sessionId },
         { appId: 'app-1', requestId: 'r1' },
       );
       // Read still returns the pre-heartbeat snapshot.
-      expect(out.id).toBe(renderId);
+      expect(out.id).toBe(sessionId);
     });
 
     it('does NOT invoke heartbeat when tenancy gate rejects', async () => {
-      const { renderId } = await seedRender(renderStore, { appId: 'app-1' });
+      const { sessionId } = await seedRender(renderStore, { appId: 'app-1' });
       const calls: number[] = [];
-      const handler = createGguiGetRenderHandler({
+      const handler = createGguiGetSessionHandler({
         renderStore,
         heartbeat: () => {
           calls.push(1);
@@ -175,7 +175,7 @@ if (out.type === 'mcpApps') {
       });
       await expect(
         handler.handler(
-          { renderId },
+          { sessionId },
           { appId: 'tenant-X', requestId: 'r1' },
         ),
       ).rejects.toBeInstanceOf(GguiSessionNotFoundError);

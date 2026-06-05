@@ -9,9 +9,9 @@
  *   2. The pre-fetched resource body is non-empty (the iframe shell
  *      HTML lives on this URI per `mcp-apps-outbound.ts`).
  *   3. `ggui_render` returns `_meta["ai.ggui/render"]` carrying the WS
- *      URL + token + renderId + appId + runtimeUrl.
+ *      URL + token + sessionId + appId + runtimeUrl.
  *   4. WebSocket subscribe with the bootstrap token yields an `ack`
- *      with a reconnect `renderToken`.
+ *      with a reconnect `sessionToken`.
  *
  * That's the minimum claude.ai does on a single user-message turn,
  * minus the LLM tool-selection layer (which is host-side, not
@@ -83,14 +83,14 @@ describe('host-simulator: happy path against OSS createGguiServer', () => {
     expect(flow.render.meta?.wsToken).toBeTruthy();
     // OSS factory mints bare UUID; pod-side prefixes (different
     // convention). Assert non-empty rather than format-specific.
-    expect(flow.render.meta?.renderId.length ?? 0).toBeGreaterThan(0);
+    expect(flow.render.meta?.sessionId.length ?? 0).toBeGreaterThan(0);
 
     // 4. WS subscribe → ack.
     const { ack } = await host.subscribeWith(flow.render.meta!);
     expect(ack.kind, `WS ack expected, got code=${ack.code ?? '(none)'}`).toBe(
       'ack',
     );
-    expect(ack.renderToken, 'ack must carry reconnect renderToken').toBeTruthy();
+    expect(ack.sessionToken, 'ack must carry reconnect sessionToken').toBeTruthy();
   });
 
   it('caches tools/list — second listTools() call is idempotent', async () => {

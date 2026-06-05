@@ -2,7 +2,7 @@
  * Scenario 2 — `PIPE_NOT_FOUND` is terminal (no inline fallback, no doorbell).
  *
  * When `ggui_runtime_submit_action` fires a `kind:'dispatch'` envelope
- * for a renderId whose pending-events pipe was never opened (or has been
+ * for a sessionId whose pending-events pipe was never opened (or has been
  * decayed/closed), the server's `pendingEventConsumer.append` throws
  * `PendingPipeNotFoundError` → the handler returns
  * `{ok:false, code:'PIPE_NOT_FOUND'}` in `structuredContent`.
@@ -19,7 +19,7 @@
  * This is a deterministic server-contract check: no LLM, no browser, no
  * cold-gen. It calls the relay-visible `ggui_runtime_submit_action`
  * directly against `/mcp` (the same route the host relays the iframe's
- * `tools/call` through) with a renderId that was never minted, and pins
+ * `tools/call` through) with a sessionId that was never minted, and pins
  * the `{ok:false, code:'PIPE_NOT_FOUND'}` envelope the iframe-runtime
  * branches on.
  *
@@ -38,12 +38,12 @@ const MCP_URL = `http://localhost:${GGUI_PORT}/mcp`;
 
 describe('Scenario 2 — PIPE_NOT_FOUND is terminal (no fallback, no doorbell)', () => {
   test(
-    'dispatch to a never-minted renderId → {ok:false, code:PIPE_NOT_FOUND}',
+    'dispatch to a never-minted sessionId → {ok:false, code:PIPE_NOT_FOUND}',
     async () => {
-      // A renderId the server has never `markCreated` for. The handler's
+      // A sessionId the server has never `markCreated` for. The handler's
       // `pendingEventConsumer.append` throws `PendingPipeNotFoundError`,
       // which surfaces as `{ok:false, code:'PIPE_NOT_FOUND'}`.
-      const missingRenderId = `rnd_pipe_not_found_${Date.now().toString(36)}`;
+      const missingSessionId = `rnd_pipe_not_found_${Date.now().toString(36)}`;
 
       const result = unwrapStructured<{
         ok: boolean;
@@ -61,7 +61,7 @@ describe('Scenario 2 — PIPE_NOT_FOUND is terminal (no fallback, no doorbell)',
             actionData: null,
             uiContext: {},
           },
-          renderId: missingRenderId,
+          sessionId: missingSessionId,
           appId: 'app_scenario_2',
           actionId: 'deadbeef',
           firedAt: new Date().toISOString(),

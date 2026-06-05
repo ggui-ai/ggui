@@ -801,10 +801,10 @@ export async function bootSequence(opts: BootSequenceOptions): Promise<BootSeque
 
   // Pin — this iframe binds to exactly one render id for its lifetime
   // (post-render-identity-collapse each iframe = one mounted render,
-  // per [[kill-displaymode-divergence]]). The bootstrap's `renderId`
+  // per [[kill-displaymode-divergence]]). The bootstrap's `sessionId`
   // is the pin; the render handler drops any frame addressed
   // elsewhere.
-  const pinnedRenderId: string = meta.renderId;
+  const pinnedSessionId: string = meta.sessionId;
 
   // Renderer wiring — when supplied, the handler routes frames through
   // the single-render mount surface + WireConfig + StreamBus. When
@@ -823,7 +823,7 @@ export async function bootSequence(opts: BootSequenceOptions): Promise<BootSeque
         })
       : null;
 
-  setStatus(refs, `Connecting to ${meta.renderId}…`, 'connecting');
+  setStatus(refs, `Connecting to ${meta.sessionId}…`, 'connecting');
 
   // Boot-without-renderer path: we still need a ChannelRegistry to
   // receive frames, because the registry is the only dispatch
@@ -836,14 +836,14 @@ export async function bootSequence(opts: BootSequenceOptions): Promise<BootSeque
       ? createPlaceholderRegistry({
           meta,
           statusRefs: refs,
-          pinnedRenderId,
+          pinnedSessionId,
         })
       : null;
   const activeRegistry = renderer?.channelRegistry ?? placeholderRegistry!;
 
   /**
    * Apply an ack's render snapshot to the runtime — when the ack
-   * carries a render matching `pinnedRenderId`, mount it through the
+   * carries a render matching `pinnedSessionId`, mount it through the
    * renderer. Used by:
    *
    *   - The initial bootSequence path (first ack after subscribe).
@@ -855,14 +855,14 @@ export async function bootSequence(opts: BootSequenceOptions): Promise<BootSeque
    * Idempotent on identical inputs — `applyRender` patches in place
    * via {@link RenderItemHandle.update} when called with the same
    * render id; `channelTransport.applyRender` is server-side
-   * idempotent on the (renderId, channelName) tuple.
+   * idempotent on the (sessionId, channelName) tuple.
    */
   const applyAck = async (ackPayload: {
     readonly render?: GguiSession;
   }): Promise<void> => {
     const target = ackPayload.render;
     if (target === undefined) return;
-    if (target.id !== pinnedRenderId) {
+    if (target.id !== pinnedSessionId) {
       // Server's snapshot is for a different render — likely a stale
       // re-subscribe after the server pruned ours. Nothing to mount.
       return;
@@ -872,7 +872,7 @@ export async function bootSequence(opts: BootSequenceOptions): Promise<BootSeque
       await renderer.applyRender(target);
       if (target.type !== 'mcpApps' && target.type !== 'system') {
         renderer.channelTransport.applyRender({
-          renderId: target.id,
+          sessionId: target.id,
           ...(target.streamSpec !== undefined
             ? { streamSpec: target.streamSpec }
             : {}),
@@ -889,7 +889,7 @@ export async function bootSequence(opts: BootSequenceOptions): Promise<BootSeque
   const emitCodeReadyOnce = (): void => {
     if (codeReadyEmitted) return;
     codeReadyEmitted = true;
-    onLifecycle?.(makeLifecycleEvent('code-ready', { renderId: meta.renderId }));
+    onLifecycle?.(makeLifecycleEvent('code-ready', { sessionId: meta.sessionId }));
   };
 
   // Mode discriminators. The mount surface is DECOUPLED from the live
@@ -911,7 +911,7 @@ export async function bootSequence(opts: BootSequenceOptions): Promise<BootSeque
   // ggui live channel (claude.ai / ChatGPT / Claude Desktop), AND the
   // instant first paint for first-party hosts that ALSO open a WS (the
   // WS ack then reconciles in place — `applyRender` is idempotent on the
-  // pinned renderId, and the ack's componentCode is byte-identical to the
+  // pinned sessionId, and the ack's componentCode is byte-identical to the
   // seed's `codeUrl` bytes, so it's a props-only update, no remount).
   if (renderer !== null && hasStaticContent) {
     // Await the 3rd-party gadget merge before first paint when the
@@ -966,7 +966,7 @@ export async function bootSequence(opts: BootSequenceOptions): Promise<BootSeque
     // (no-op) echo. WS hosts get the real echo on the live-trio path below.
     if (parsed.hostContext !== undefined) {
       seedHostContext({
-        renderId: meta.renderId,
+        sessionId: meta.sessionId,
         send: () => {},
         initial: parsed.hostContext,
       });
@@ -1014,7 +1014,7 @@ export async function bootSequence(opts: BootSequenceOptions): Promise<BootSeque
       },
       // R7 — registry-level events-polling fallback. Composed once at
       // bind time from `meta.pollingUrl` (server-stamped wsToken-
-      // gated /api/renders/<id>/events URL) + `meta.lastSequence`
+      // gated /api/sessions/<id>/events URL) + `meta.lastSequence`
       // (cursor seed). FailoverHandle uses this when WS reaches
       // 'failed'; absent → no polling fallback (WS-only mode).
       //
@@ -1079,7 +1079,7 @@ export async function bootSequence(opts: BootSequenceOptions): Promise<BootSeque
   // didn't emit a HostContext (parsed.hostContext === undefined).
   if (parsed.hostContext !== undefined) {
     seedHostContext({
-      renderId: meta.renderId,
+      sessionId: meta.sessionId,
       send: (msg) => handle.handle.send(msg),
       initial: parsed.hostContext,
     });
@@ -1091,7 +1091,7 @@ export async function bootSequence(opts: BootSequenceOptions): Promise<BootSeque
   }
 
   // First ack — apply the server's render snapshot (when matching
-  // `pinnedRenderId`) and mount it. Reuses the same `applyAck` helper
+  // `pinnedSessionId`) and mount it. Reuses the same `applyAck` helper
   // the reconnect-rebootstrap path uses — so a server-restart-driven
   // snapshot replay and the first-boot snapshot apply flow through
   // one implementation.
@@ -1119,14 +1119,14 @@ export async function bootSequence(opts: BootSequenceOptions): Promise<BootSeque
 function createPlaceholderRegistry(params: {
   readonly meta: McpAppAiGguiRenderMeta;
   readonly statusRefs: StatusRefs;
-  /** Pin — render frames with a different renderId drop with a warning. */
-  readonly pinnedRenderId: string;
+  /** Pin — render frames with a different sessionId drop with a warning. */
+  readonly pinnedSessionId: string;
 }): ChannelRegistry {
   const registry = new ChannelRegistry({
     subscribeFrameBuilder: () => ({
       type: 'subscribe',
       payload: {
-        renderId: params.meta.renderId,
+        sessionId: params.meta.sessionId,
         appId: params.meta.appId,
         ...(params.meta.wsToken !== undefined
           ? { wsToken: params.meta.wsToken }
@@ -1137,7 +1137,7 @@ function createPlaceholderRegistry(params: {
   registry.register(
     createRenderHandler({
       statusRefs: params.statusRefs,
-      pinnedRenderId: params.pinnedRenderId,
+      pinnedSessionId: params.pinnedSessionId,
     }),
   );
   return registry;
@@ -1211,7 +1211,7 @@ function shouldAutostart(): boolean {
 // the same runtime bundle work in third-party MCP Apps hosts.
 //
 // Contract: when the embedding HTML inlines a global of shape
-//   { renderId: string, appId: string, componentCode: string }
+//   { sessionId: string, appId: string, componentCode: string }
 // (where `componentCode` is base64-encoded compiled ES module source
 // of a React component) BEFORE this bundle's `<script type="module">`
 // executes, the runtime takes over synchronously, mounts the compiled
@@ -1304,7 +1304,7 @@ export async function buildGguiSessionSeedInput(
   // System-card mode — `kind` keyed against the built-in registry.
   if (meta.kind !== undefined) {
     return {
-      id: meta.renderId,
+      id: meta.sessionId,
       appId: meta.appId,
       type: 'system',
       kind: meta.kind,
@@ -1322,7 +1322,7 @@ export async function buildGguiSessionSeedInput(
   }
   const componentCode = await res.text();
   return {
-    id: meta.renderId,
+    id: meta.sessionId,
     appId: meta.appId,
     componentCode,
     ...(props !== undefined ? { props } : {}),
@@ -1493,7 +1493,7 @@ let anchorClickInterceptInstalled = false;
  * Module-level guard for {@link installFullscreenInterceptors}. The
  * fullscreen interceptors REPLACE prototype methods on `Element` and
  * `Document`; re-overriding on every re-mount would chain wrappers
- * and (if the captured `args` differ) leak stale `renderId`/`appId`.
+ * and (if the captured `args` differ) leak stale `sessionId`/`appId`.
  * The guard ensures exactly one prototype patch.
  */
 let fullscreenInterceptInstalled = false;
@@ -1682,7 +1682,7 @@ const productionContextSnapshotPoster: ContextSnapshotPoster = {
       params: {
         name: 'ggui_runtime_sync_context',
         arguments: {
-          renderId: params.renderId,
+          sessionId: params.sessionId,
           appId: params.appId,
           snapshot: params.snapshot,
         },
@@ -1755,7 +1755,7 @@ export function emitAudit(args: {
   readonly toolName: string;
   readonly kind: 'dispatch' | 'openLink' | 'requestDisplayMode';
   readonly payload: Record<string, unknown>;
-  readonly renderId: string;
+  readonly sessionId: string;
   readonly appId: string;
   readonly actionId: string;
   readonly firedAt: string;
@@ -1769,7 +1769,7 @@ export function emitAudit(args: {
       arguments: {
         kind: args.kind,
         payload: args.payload,
-        renderId: args.renderId,
+        sessionId: args.sessionId,
         appId: args.appId,
         actionId: args.actionId,
         firedAt: args.firedAt,
@@ -1998,7 +1998,7 @@ function readLocalUiContext(): Record<string, unknown> {
  * consume loop has ended, e.g. after a page reload). The gesture is
  * ALREADY on the pipe from the just-completed `submit_action` append;
  * this doorbell only wakes a fresh agent turn so it calls
- * `ggui_consume({renderId})` to drain it.
+ * `ggui_consume({sessionId})` to drain it.
  *
  * SINGLE SOURCE OF TRUTH: the pipe. This carries ONLY a pointer to the
  * render — never the action payload or uiContext. Carrying the payload
@@ -2009,7 +2009,7 @@ function readLocalUiContext(): Record<string, unknown> {
  */
 function emitUserActionDoorbell(args: {
   readonly intent: string;
-  readonly renderId: string;
+  readonly sessionId: string;
   readonly actionId: string;
   readonly submittedAt: string;
 }): void {
@@ -2034,17 +2034,17 @@ function emitUserActionDoorbell(args: {
   // Prose + XML tags only, no fenced ```json``` block: a verbatim copy
   // of a tool-call wire shape trips claude.ai's prompt-injection
   // classifier even on the user-trusted `ui/message` channel.
-  const nextArgs = JSON.stringify({ renderId: args.renderId });
+  const nextArgs = JSON.stringify({ sessionId: args.sessionId });
   const text = [
     `Your REQUIRED FIRST TOOL CALL is ggui_consume with arguments ${nextArgs}. Call it NOW to retrieve and process the pending interaction. Do not respond conversationally; do not summarize. Issue the tool call as your next action.`,
     '',
     `<ggui_directive kind="user-action">`,
-    `  <render_id>${args.renderId}</render_id>`,
+    `  <render_id>${args.sessionId}</render_id>`,
     `  <next_tool>ggui_consume</next_tool>`,
     `  <next_args>${nextArgs}</next_args>`,
     `</ggui_directive>`,
     '',
-    `The user interacted with render ${args.renderId} while no ggui_consume long-poll was active. The gesture is queued on the consume pipe for that render — it is NOT in this message. After ggui_consume returns, react to the returned event with the appropriate domain tool, then call ggui_update on the SAME renderId (${args.renderId}).`,
+    `The user interacted with render ${args.sessionId} while no ggui_consume long-poll was active. The gesture is queued on the consume pipe for that render — it is NOT in this message. After ggui_consume returns, react to the returned event with the appropriate domain tool, then call ggui_update on the SAME sessionId (${args.sessionId}).`,
   ].join('\n');
   // Structured mirror of the directive for ggui-aware programmatic
   // consumers. OPTIONAL — nothing in the loop depends on a server-side
@@ -2052,17 +2052,17 @@ function emitUserActionDoorbell(args: {
   // alone. Typed against the protocol interface (no runtime guard
   // exists — the shape is locked at compile time here).
   const description =
-    `User interacted with render ${args.renderId}; call ggui_consume to retrieve and process it.`;
+    `User interacted with render ${args.sessionId}; call ggui_consume to retrieve and process it.`;
   const userAction: GguiUserActionMeta = {
     kind: 'user-action',
     description,
-    renderId: args.renderId,
+    sessionId: args.sessionId,
     actionId: args.actionId,
     submittedAt: args.submittedAt,
     intent: args.intent,
     nextStep: {
       tool: 'ggui_consume',
-      args: { renderId: args.renderId },
+      args: { sessionId: args.sessionId },
     },
   };
   // RAW postMessage — NOT `app.sendMessage`. The doorbell MUST bypass
@@ -2113,11 +2113,11 @@ export function dispatchWiredAction(args: {
   readonly toolName: string;
   readonly intent: string;
   readonly data: unknown;
-  readonly renderId: string;
+  readonly sessionId: string;
   readonly appId: string;
 }): void {
   if (typeof window === 'undefined') return;
-  const { toolName, intent, data, renderId, appId } = args;
+  const { toolName, intent, data, sessionId, appId } = args;
   const firedAt = new Date().toISOString();
   const actionId = fnv1aHex(
     `${intent}|${JSON.stringify(data ?? null)}|${firedAt}`,
@@ -2139,7 +2139,7 @@ export function dispatchWiredAction(args: {
           intent,
           data: data ?? null,
           firedAt,
-          renderId,
+          sessionId,
           appId,
         })}`,
       },
@@ -2180,7 +2180,7 @@ export function dispatchWiredAction(args: {
           actionData: data ?? null,
           uiContext,
         },
-        renderId,
+        sessionId,
         appId,
         actionId,
         firedAt,
@@ -2198,7 +2198,7 @@ export function dispatchWiredAction(args: {
         );
         emitUserActionDoorbell({
           intent,
-          renderId,
+          sessionId,
           actionId,
           submittedAt: firedAt,
         });
@@ -2299,7 +2299,7 @@ export function routeDispatch(args: {
   readonly actionName: string;
   readonly data: unknown;
   readonly meta: {
-    readonly renderId: string;
+    readonly sessionId: string;
     readonly appId: string;
     readonly appCallableTools?: readonly string[];
     readonly actionNextSteps?: Readonly<Record<string, string>>;
@@ -2328,7 +2328,7 @@ export function routeDispatch(args: {
       toolName: dispatchToolName,
       intent: actionName,
       data,
-      renderId: meta.renderId,
+      sessionId: meta.sessionId,
       appId: meta.appId,
     });
   }
@@ -2343,11 +2343,11 @@ export function routeDispatch(args: {
 export function openLinkInParent(args: {
   readonly toolName: string;
   readonly url: string;
-  readonly renderId: string;
+  readonly sessionId: string;
   readonly appId: string;
 }): void {
   if (typeof window === 'undefined') return;
-  const { toolName, url, renderId, appId } = args;
+  const { toolName, url, sessionId, appId } = args;
   if (typeof url !== 'string' || url.length === 0) {
     throw new RangeError(
       'wire.openLink(url): `url` must be a non-empty string.',
@@ -2359,7 +2359,7 @@ export function openLinkInParent(args: {
     toolName,
     kind: 'openLink',
     payload: { url },
-    renderId,
+    sessionId,
     appId,
     actionId,
     firedAt,
@@ -2377,18 +2377,18 @@ export function openLinkInParent(args: {
 export function requestDisplayModeInParent(args: {
   readonly toolName: string;
   readonly mode: 'fullscreen' | 'pip' | 'inline';
-  readonly renderId: string;
+  readonly sessionId: string;
   readonly appId: string;
 }): void {
   if (typeof window === 'undefined') return;
-  const { toolName, mode, renderId, appId } = args;
+  const { toolName, mode, sessionId, appId } = args;
   const firedAt = new Date().toISOString();
   const actionId = fnv1aHex(`requestDisplayMode|${mode}|${firedAt}`);
   emitAudit({
     toolName,
     kind: 'requestDisplayMode',
     payload: { mode },
-    renderId,
+    sessionId,
     appId,
     actionId,
     firedAt,
@@ -2433,7 +2433,7 @@ export function requestDisplayModeInParent(args: {
 /** @internal — exported for unit tests. */
 export function installAnchorClickInterceptor(args: {
   readonly dispatchToolName: string;
-  readonly renderId: string;
+  readonly sessionId: string;
   readonly appId: string;
 }): void {
   if (anchorClickInterceptInstalled) return;
@@ -2441,7 +2441,7 @@ export function installAnchorClickInterceptor(args: {
   if (typeof document === 'undefined') return;
   anchorClickInterceptInstalled = true;
 
-  const { dispatchToolName, renderId, appId } = args;
+  const { dispatchToolName, sessionId, appId } = args;
 
   const onClick = (event: MouseEvent): void => {
     if (event.defaultPrevented) return;
@@ -2486,7 +2486,7 @@ export function installAnchorClickInterceptor(args: {
     openLinkInParent({
       toolName: dispatchToolName,
       url: absoluteHref,
-      renderId,
+      sessionId,
       appId,
     });
   };
@@ -2528,12 +2528,12 @@ export function installAnchorClickInterceptor(args: {
  *
  * Idempotent: the {@link fullscreenInterceptInstalled} guard prevents
  * re-mounts from chaining wrappers (which would also leak the prior
- * mount's `renderId`/`appId` if they ever differed).
+ * mount's `sessionId`/`appId` if they ever differed).
  */
 /** @internal — exported for unit tests. */
 export function installFullscreenInterceptors(args: {
   readonly dispatchToolName: string;
-  readonly renderId: string;
+  readonly sessionId: string;
   readonly appId: string;
 }): void {
   if (fullscreenInterceptInstalled) return;
@@ -2543,7 +2543,7 @@ export function installFullscreenInterceptors(args: {
   }
   fullscreenInterceptInstalled = true;
 
-  const { dispatchToolName, renderId, appId } = args;
+  const { dispatchToolName, sessionId, appId } = args;
 
   Element.prototype.requestFullscreen = function (
     this: Element,
@@ -2552,7 +2552,7 @@ export function installFullscreenInterceptors(args: {
     requestDisplayModeInParent({
       toolName: dispatchToolName,
       mode: 'fullscreen',
-      renderId,
+      sessionId,
       appId,
     });
     return Promise.resolve();
@@ -2564,7 +2564,7 @@ export function installFullscreenInterceptors(args: {
     requestDisplayModeInParent({
       toolName: dispatchToolName,
       mode: 'inline',
-      renderId,
+      sessionId,
       appId,
     });
     return Promise.resolve();
@@ -2586,7 +2586,7 @@ export function __resetInterceptorsForTest(): void {
  * Install a persistent `app.addEventListener('toolresult', …)` listener
  * that catches `ui/notifications/tool-result` notifications arriving
  * AFTER the initial mount. Each new tool-result that carries a
- * different bootstrap (different renderId / codeUrl / kind) triggers
+ * different bootstrap (different sessionId / codeUrl / kind) triggers
  * a re-mount via {@link bootSelfContained}. This closes the boot-only-
  * listener gap that prevented live re-render when an agent issued
  * a second `ggui_render` to the same render-resource.
@@ -2623,7 +2623,7 @@ function installPostMountListener(): void {
     // claude.ai) often emit the initial meta WITHOUT the wsUrl+token
     // pair (the Anthropic SDK strips `_meta` from tool results), then
     // refetch + re-emit the FULL envelope. The two envelopes share
-    // renderId/kind/codeUrl/propsJson but differ on the live trio —
+    // sessionId/kind/codeUrl/propsJson but differ on the live trio —
     // without trio in the key, the second arrival deduped silently and
     // bootSelfContained never opened the WS, so `ggui_update` props_update
     // frames fanned to zero subscribers.
@@ -2635,7 +2635,7 @@ function installPostMountListener(): void {
         ? 'live'
         : '-';
     const key = [
-      meta.renderId,
+      meta.sessionId,
       meta.kind ?? '-',
       meta.codeUrl ?? '-',
       meta.propsJson ?? '-',
@@ -2664,7 +2664,7 @@ function installPostMountListener(): void {
         reemitLastContextValues(
           productionContextSnapshotPoster,
           activeSlotNames,
-          { renderId: meta.renderId, appId: meta.appId },
+          { sessionId: meta.sessionId, appId: meta.appId },
         );
       });
     });
@@ -2675,7 +2675,7 @@ function installPostMountListener(): void {
 /**
  * Detect a live-channel bootstrap shape inlined onto `__GGUI_META__`.
  * The first-party render shells (`/r/<shortCode>`,
- * `ui://ggui/render/<renderId>`, the embedded-ui GguiSessionViewer's thin
+ * `ui://ggui/render/<sessionId>`, the embedded-ui GguiSessionViewer's thin
  * shell) populate this synchronously before the runtime loads.
  *
  * Post-Phase-B the global carries a slice ENVELOPE (same shape as the
@@ -2709,8 +2709,8 @@ function readLiveBootstrapShape(): boolean {
     (renderBag['wsUrl'] as string).length > 0 &&
     typeof renderBag['wsToken'] === 'string' &&
     (renderBag['wsToken'] as string).length > 0 &&
-    typeof renderBag['renderId'] === 'string' &&
-    (renderBag['renderId'] as string).length > 0 &&
+    typeof renderBag['sessionId'] === 'string' &&
+    (renderBag['sessionId'] as string).length > 0 &&
     typeof renderBag['appId'] === 'string' &&
     (renderBag['appId'] as string).length > 0
   );
@@ -2867,7 +2867,7 @@ async function bootProduction(opts: {
   // + wire config on demand inside bootSequence.
   const renderer: RendererHooks = {
     setup: ({ meta, renderInto, statusRefs, onObserve }) => {
-      // Post-Phase-B `meta` is the flat render slice — `renderId` /
+      // Post-Phase-B `meta` is the flat render slice — `sessionId` /
       // `appId` / `runtimeUrl` / `wsUrl` / `wsToken` / `themeId` /
       // `gadgets` / `publicEnv` / `contextSlots` / `actionNextSteps` /
       // `appCallableTools` / `streamWebSocketLocalTools` all live
@@ -2955,7 +2955,7 @@ async function bootProduction(opts: {
             ? console.warn.bind(console)
             : undefined,
         identity: {
-          renderId: meta.renderId,
+          sessionId: meta.sessionId,
           appId: meta.appId,
         },
       });
@@ -3020,17 +3020,17 @@ async function bootProduction(opts: {
       // live-rendered component silently no-op'd.
       installAnchorClickInterceptor({
         dispatchToolName,
-        renderId: meta.renderId,
+        sessionId: meta.sessionId,
         appId: meta.appId,
       });
       installFullscreenInterceptors({
         dispatchToolName,
-        renderId: meta.renderId,
+        sessionId: meta.sessionId,
         appId: meta.appId,
       });
 
       const rootConfig = buildRootWireConfig({
-        renderId: meta.renderId,
+        sessionId: meta.sessionId,
         appId: meta.appId,
         getCurrentGguiSession: () => currentRender,
         manager,
@@ -3052,7 +3052,7 @@ async function bootProduction(opts: {
             actionName: payload.action,
             data: payload.data,
             meta: {
-              renderId: meta.renderId,
+              sessionId: meta.sessionId,
               appId: meta.appId,
               ...(meta.appCallableTools !== undefined
                 ? { appCallableTools: meta.appCallableTools }
@@ -3110,7 +3110,7 @@ async function bootProduction(opts: {
           render,
           scopedWireConfig: buildScopedWireFor(render),
           streamBus,
-          renderId: meta.renderId,
+          sessionId: meta.sessionId,
           // Thread the bootstrap's 3rd-party gadget packages so the import
           // rewriter resolves non-STDLIB gadget imports even for a static
           // seed mount (which carries no gadgetDescriptors). A full
@@ -3153,7 +3153,7 @@ async function bootProduction(opts: {
       // the listener re-mounts through THIS `applyRender` — no fresh boot,
       // no second WS. The no-WS live-re-render channel; for WS hosts the
       // render-frame handler already covers re-render, so it's a
-      // redundant-safe fallback (guarded by the renderId pin + liveTrio
+      // redundant-safe fallback (guarded by the sessionId pin + liveTrio
       // dedupe). Runs only on the production renderer path (tests that
       // drive bootSequence without a renderer never reach setup()).
       activeApplyRender = applyRender;
@@ -3176,7 +3176,7 @@ async function bootProduction(opts: {
       // frame handler (which calls `channelTransport.applyRender` on
       // every render fold).
       const channelTransport = createChannelTransportRouter({
-        renderId: meta.renderId,
+        sessionId: meta.sessionId,
         appId: meta.appId,
         ...(meta.streamWebSocketLocalTools !== undefined
           ? {
@@ -3235,7 +3235,7 @@ async function bootProduction(opts: {
         subscribeFrameBuilder: () => ({
           type: 'subscribe',
           payload: {
-            renderId: meta.renderId,
+            sessionId: meta.sessionId,
             appId: meta.appId,
             ...(meta.wsToken !== undefined
               ? { wsToken: meta.wsToken }
@@ -3246,7 +3246,7 @@ async function bootProduction(opts: {
       channelRegistry.register(
         createRenderHandler({
           statusRefs,
-          pinnedRenderId: meta.renderId,
+          pinnedSessionId: meta.sessionId,
           applyRender,
           getChannelTransport: () => channelTransport,
         }),

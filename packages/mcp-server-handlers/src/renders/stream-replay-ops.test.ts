@@ -59,7 +59,7 @@ function mkInput(
   overrides: Partial<StreamReplayInput> & Pick<StreamReplayInput, 'channel'>,
 ): StreamReplayInput {
   return {
-    renderId: 'r_1',
+    sessionId: 'r_1',
     mode: 'append',
     payload: { dummy: true },
     ...overrides,
@@ -496,24 +496,24 @@ function mkFakeSequencer(
   let missingToReturn = 0;
   const calls = { fetchState: 0, persist: 0 };
   const deps: ReplaySequencerDeps = {
-    async fetchState(renderId) {
+    async fetchState(sessionId) {
       calls.fetchState += 1;
       if (missingToReturn > 0) {
         missingToReturn -= 1;
         return null;
       }
-      void renderId;
+      void sessionId;
       return { state, spec };
     },
-    async persist(renderId, expectedOldSeq, newState) {
+    async persist(sessionId, expectedOldSeq, newState) {
       calls.persist += 1;
       if (conflictsToThrow > 0) {
         conflictsToThrow -= 1;
-        throw new ReplayConflictError(renderId, expectedOldSeq);
+        throw new ReplayConflictError(sessionId, expectedOldSeq);
       }
       if (expectedOldSeq !== state.streamSeq) {
         // Realistic DDB behavior: condition check failed silently.
-        throw new ReplayConflictError(renderId, expectedOldSeq);
+        throw new ReplayConflictError(sessionId, expectedOldSeq);
       }
       state = newState;
     },

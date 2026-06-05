@@ -164,7 +164,7 @@ const GGUI_RENDER_SHELL_SCRIPT_BODY = `
 // Phase B (2026-05-27): the historic two-slice envelope
 // (\`ai.ggui/session\` + \`ai.ggui/stack-item\`) collapsed to ONE flat
 // \`ai.ggui/render\` slice. runtimeUrl now lives directly on the
-// render slice; renderId is the canonical identity.
+// render slice; sessionId is the canonical identity.
 var rpcId=1,pending={};
 var rootEl=document.getElementById('ggui-root');
 rootEl.style.cssText='display:flex;flex-direction:column;height:100%;min-height:300px;margin:0';
@@ -193,7 +193,7 @@ function postBootstrapFailed(reason,message){
 }
 async function mountFromMeta(envelope){
   if(mounted)return;
-  // Slice envelope shape (Phase B): { "ai.ggui/render": { renderId,
+  // Slice envelope shape (Phase B): { "ai.ggui/render": { sessionId,
   // appId, runtimeUrl, ... } }. runtimeUrl on the render slice is
   // the only load-bearing field at the shell layer — it tells us
   // which iframe-runtime bundle to fetch. Everything else is
@@ -624,7 +624,7 @@ export function advertiseMcpAppsUiCapability(server: McpServer): void {
 // runtime bundle's `<script type="module">` runs. The runtime reads
 // the global synchronously, mounts the React component, and never
 // speaks postMessage / opens a WebSocket. The `ui://ggui/render/{
-// renderId}` resource template (registered below) is what binds a
+// sessionId}` resource template (registered below) is what binds a
 // per-call `_meta.ui.resourceUri` (stamped by `ggui_render.resultMeta`)
 // to the right render row.
 //
@@ -651,7 +651,7 @@ export function advertiseMcpAppsUiCapability(server: McpServer): void {
  */
 export interface SelfContainedShellInputs {
   /** GguiSession id whose visible-bits surface is being inlined. */
-  readonly renderId: string;
+  readonly sessionId: string;
   /** App / tenant id the render is scoped to. */
   readonly appId: string;
   /**
@@ -810,7 +810,7 @@ export interface SelfContainedShellInputs {
    */
   readonly lastSequence?: McpAppAiGguiRenderMeta["lastSequence"];
   /**
-   * Wire-stamped polling fallback URL — `${base}/api/renders/<id>/events?wsToken=<...>`.
+   * Wire-stamped polling fallback URL — `${base}/api/sessions/<id>/events?wsToken=<...>`.
    * When the iframe-runtime's WS transport reaches `'failed'` (CSP
    * blocks `ws://`, corporate firewall, etc.), `@ggui-ai/live-channel`
    * fails over to cursor-based event polling against this URL using
@@ -874,7 +874,7 @@ export function buildSelfContainedShell(opts: SelfContainedShellInputs): string 
   // postMessage paths use. `runtimeUrl` is required across all modes
   // (the shell-bundled script tag fetches the runtime from there).
   const render: McpAppAiGguiRenderMeta = {
-    renderId: opts.renderId,
+    sessionId: opts.sessionId,
     appId: opts.appId,
     runtimeUrl: opts.runtimeUrl,
     ...(opts.themeId !== undefined ? { themeId: opts.themeId } : {}),
@@ -1003,14 +1003,14 @@ export function buildSelfContainedShell(opts: SelfContainedShellInputs): string 
  *
  * @public
  */
-export function buildSelfContainedLoadingShell(renderId: string): string {
+export function buildSelfContainedLoadingShell(sessionId: string): string {
   // Standalone served-iframe loading document — same surface-backdrop
   // paint + gating as the thin/self-contained shells so the canvas is
   // dark while the render is still in flight (no Safari white flash).
   return `<!doctype html>
 <html lang="en" style="background-color:${GGUI_RENDER_SHELL_SURFACE}"><head><meta charset="utf-8"><title>ggui render</title></head>
 <body style="background-color:${GGUI_RENDER_SHELL_SURFACE}">
-<div id="ggui-root" data-ggui-shell="loading" data-ggui-render-id="${renderId
+<div id="ggui-root" data-ggui-shell="loading" data-ggui-session-id="${sessionId
     .replace(/&/g, "&amp;")
     .replace(/"/g, "&quot;")
     .replace(/</g, "&lt;")
@@ -1066,7 +1066,7 @@ export interface GguiRenderResourceTemplateOptions {
    * Vector store backing the blueprint registry. When wired alongside
    * `defaultAppIdFallback`, the resource handler runs a registry-only
    * rehydrate fallback for the two-segment URI shape
-   * (`ui://ggui/render/{renderId}/{blueprintKey}`): if the render is
+   * (`ui://ggui/render/{sessionId}/{blueprintKey}`): if the render is
    * gone but the blueprint registry still holds the entry, return the
    * static initial render (default props + default context) instead of
    * the dead "Generating UI…" loading shell. Single-tenant OSS sees
@@ -1122,7 +1122,7 @@ export interface GguiRenderResourceTemplateOptions {
    * call here because it runs OUTSIDE the per-tool-call context.
    */
   readonly mintWsToken?: (
-    renderId: string,
+    sessionId: string,
     appId: string,
   ) => {
     readonly wsUrl: string;
@@ -1196,13 +1196,13 @@ function pickComponentFromGguiSession(render: GguiSession | null | undefined): R
 }
 
 /**
- * Register a `ui://ggui/render/{renderId}` resource template. Each
+ * Register a `ui://ggui/render/{sessionId}` resource template. Each
  * `resources/read` request is resolved by looking up the render in the
  * store and returning the self-contained shell with that
  * componentCode inlined.
  *
  * Per-call `_meta.ui.resourceUri` (stamped by `ggui_render.resultMeta`)
- * pins the URI to a specific renderId; hosts fetch THAT URI rather
+ * pins the URI to a specific sessionId; hosts fetch THAT URI rather
  * than the static `ui://ggui/render` one. Both registrations co-exist:
  * legacy postMessage shell at the static URI, self-contained shell at
  * the templated URI.
@@ -1223,12 +1223,12 @@ export function registerGguiRenderResourceTemplate(
 ): void {
   // TWO templates registered against the same handler core:
   //
-  //   1. Single-segment legacy URI — `ui://ggui/render/{renderId}`.
+  //   1. Single-segment legacy URI — `ui://ggui/render/{sessionId}`.
   //      Pre-resume-contract chats in claude.ai's history persisted
   //      this shape; we keep the registration so historical messages
   //      still rehydrate (loading shell on render miss).
   //
-  //   2. Two-segment resume URI — `ui://ggui/render/{renderId}/
+  //   2. Two-segment resume URI — `ui://ggui/render/{sessionId}/
   //      {blueprintKey}`. Stamped by every render since the resume
   //      contract landed. Carries enough state for the handler to do:
   //      (a) parallel render + blueprint registry lookup (no data
@@ -1236,7 +1236,7 @@ export function registerGguiRenderResourceTemplate(
   //      the render is gone but the blueprint is still cached
   //      (renders the original card with default props/context
   //      instead of the dead loading shell).
-  const legacyTemplate = new ResourceTemplate(`${GGUI_RENDER_RESOURCE_URI}/{renderId}`, {
+  const legacyTemplate = new ResourceTemplate(`${GGUI_RENDER_RESOURCE_URI}/{sessionId}`, {
     // No list-callback — the resource set is unbounded per render
     // count, and `resources/list` would leak render ids across
     // tenants. Hosts discover specific URIs via per-call `_meta.ui.
@@ -1244,7 +1244,7 @@ export function registerGguiRenderResourceTemplate(
     list: undefined,
   });
   const resumeTemplate = new ResourceTemplate(
-    `${GGUI_RENDER_RESOURCE_URI}/{renderId}/{blueprintKey}`,
+    `${GGUI_RENDER_RESOURCE_URI}/{sessionId}/{blueprintKey}`,
     { list: undefined }
   );
 
@@ -1306,8 +1306,8 @@ export function registerGguiRenderResourceTemplate(
       },
     ],
   });
-  const loadingShell = (uri: URL, renderId: string) =>
-    shellContents(uri, buildSelfContainedLoadingShell(renderId));
+  const loadingShell = (uri: URL, sessionId: string) =>
+    shellContents(uri, buildSelfContainedLoadingShell(sessionId));
 
   // Single shared handler powers both templates. `blueprintKey` is
   // optional in the variables map — present for the resume URI shape,
@@ -1316,9 +1316,9 @@ export function registerGguiRenderResourceTemplate(
     uri: URL,
     variables: Record<string, string | string[]>
   ): Promise<{ contents: ShellContent[] }> {
-    const renderIdRaw = variables["renderId"];
-    const renderId = Array.isArray(renderIdRaw) ? renderIdRaw[0] : renderIdRaw;
-    if (typeof renderId !== "string" || renderId.length === 0) {
+    const sessionIdRaw = variables["sessionId"];
+    const sessionId = Array.isArray(sessionIdRaw) ? sessionIdRaw[0] : sessionIdRaw;
+    if (typeof sessionId !== "string" || sessionId.length === 0) {
       return loadingShell(uri, "unknown");
     }
     const blueprintKeyRaw = variables["blueprintKey"];
@@ -1332,7 +1332,7 @@ export function registerGguiRenderResourceTemplate(
     // is still cached (chat-history rehydrate after render TTL or
     // process restart).
     const [stored, blueprint] = await Promise.all([
-      opts.renderStore.get(renderId),
+      opts.renderStore.get(sessionId),
       hasResumeKey && opts.vectorStore && opts.index && opts.defaultAppIdFallback
         ? findBlueprintExact(
             { vectorStore: opts.vectorStore, index: opts.index },
@@ -1399,7 +1399,7 @@ export function registerGguiRenderResourceTemplate(
           // codeStore is wired. Direct-render `/r/<shortCode>` falls
           // through to live-mode instead; this MCP-resource path has
           // no WS-mode fallback (resources/read is one-shot).
-          return loadingShell(uri, renderId);
+          return loadingShell(uri, sessionId);
         }
 
         // Project the wrapper catalog AND the union-filtered
@@ -1429,7 +1429,7 @@ export function registerGguiRenderResourceTemplate(
         let wsToken: string | undefined;
         if (opts.mintWsToken) {
           try {
-            const minted = opts.mintWsToken(renderId, stored.appId);
+            const minted = opts.mintWsToken(sessionId, stored.appId);
             wsUrl = minted.wsUrl;
             wsToken = minted.token;
           } catch {
@@ -1438,7 +1438,7 @@ export function registerGguiRenderResourceTemplate(
         }
 
         const html = buildSelfContainedShell({
-          renderId,
+          sessionId,
           appId: stored.appId,
           ...(isSystem
             ? { systemKind: picked.kind }
@@ -1492,7 +1492,7 @@ export function registerGguiRenderResourceTemplate(
     // shell.
     if (blueprint && opts.defaultAppIdFallback) {
       const html = await buildShellFromBlueprint({
-        renderId,
+        sessionId,
         appId: opts.defaultAppIdFallback,
         blueprint,
         runtimeUrl: opts.runtimeUrl,
@@ -1507,7 +1507,7 @@ export function registerGguiRenderResourceTemplate(
       // Fallthrough to loading shell when codeStore isn't wired.
     }
 
-    return loadingShell(uri, renderId);
+    return loadingShell(uri, sessionId);
   }
 
   server.registerResource(
@@ -1528,7 +1528,7 @@ export function registerGguiRenderResourceTemplate(
     {
       title: "ggui render (self-contained, resume URI)",
       description:
-        "Per-render self-contained shell — two-segment URI shape carrying both renderId AND blueprintKey. Resource handler runs Promise.all over render + registry; falls back to registry-only static render when the render has been evicted but the blueprint is still cached.",
+        "Per-render self-contained shell — two-segment URI shape carrying both sessionId AND blueprintKey. Resource handler runs Promise.all over render + registry; falls back to registry-only static render when the render has been evicted but the blueprint is still cached.",
       mimeType: GGUI_RENDER_RESOURCE_MIME,
     },
     handle
@@ -1549,7 +1549,7 @@ export function registerGguiRenderResourceTemplate(
  * the blueprintKey that bounds which blueprint we render).
  */
 async function buildShellFromBlueprint(args: {
-  renderId: string;
+  sessionId: string;
   appId: string;
   blueprint: Blueprint;
   runtimeUrl: string;
@@ -1586,7 +1586,7 @@ async function buildShellFromBlueprint(args: {
     return undefined;
   }
   return buildSelfContainedShell({
-    renderId: args.renderId,
+    sessionId: args.sessionId,
     appId: args.appId,
     codeUrl,
     codeHash,
@@ -1658,7 +1658,7 @@ function deriveWiredActionToolsFromSpec(
  * one line.
  *
  * When `selfContained` is supplied, ALSO registers the per-render
- * `ui://ggui/render/{renderId}` resource template that serves the
+ * `ui://ggui/render/{sessionId}` resource template that serves the
  * self-contained shell (the path third-party MCP Apps hosts use). The
  * legacy static URI registration is unconditional — first-party hosts
  * (Studio, Portal, console) still rely on the postMessage path.
@@ -1669,7 +1669,7 @@ export function installMcpAppsOutbound(
     readonly shellHtml?: string;
     /**
      * Per-render self-contained shell registration. When supplied,
-     * `ui://ggui/render/{renderId}` becomes a readable resource
+     * `ui://ggui/render/{sessionId}` becomes a readable resource
      * template whose body inlines the compiled componentCode from the
      * render. Absent → only the legacy postMessage shell is registered.
      */

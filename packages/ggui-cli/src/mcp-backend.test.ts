@@ -59,7 +59,7 @@ import type { ServeBackend } from './serve-command.js';
  * post-synth-authority; `ggui_render` REQUIRES a handshakeId).
  *
  * Post-flatten (Phase B): handshake no longer takes `sessionId` —
- * the paired `ggui_render` auto-mints a renderId. The session-create
+ * the paired `ggui_render` auto-mints a sessionId. The session-create
  * step is gone entirely (`ggui_new_session` deleted).
  */
 async function renderOverMcp(args: {
@@ -367,12 +367,12 @@ describe('buildMcpServerBackend', () => {
     expect(render?._meta?.ui?.visibility).toEqual(expect.arrayContaining(['model']));
   });
 
-  it('the composed `ggui_render` structuredContent carries a renderId — and no dead `url` field', async () => {
+  it('the composed `ggui_render` structuredContent carries a sessionId — and no dead `url` field', async () => {
     // End-to-end: drive the canonical handshake-first flow and assert
     // the LLM-visible surface. Post-R5 the `/r/<shortCode>` route was
     // deleted; the wire-output schema no longer ships a `url` (it was
     // hallucination bait — see fix-A 2026-05-26). Hosts mount via
-    // `_meta.ui.resourceUri` or resolve `{renderId}` through their own
+    // `_meta.ui.resourceUri` or resolve `{sessionId}` through their own
     // render-resource fetch.
     const { url } = await boot();
     const token = await mintPairToken(backend!, url, 'ggui-render-smoke');
@@ -385,7 +385,7 @@ describe('buildMcpServerBackend', () => {
     const result = body.result as {
       structuredContent: Record<string, unknown>;
     };
-    expect(typeof result.structuredContent.renderId).toBe('string');
+    expect(typeof result.structuredContent.sessionId).toBe('string');
     expect(Object.keys(result.structuredContent)).not.toContain('url');
   });
 
@@ -401,7 +401,7 @@ describe('buildMcpServerBackend', () => {
     // wire-up reaches the slice metadata the shell reads — i.e.
     // that Task #382's fix is actually in the render result, not just
     // set on construction. Post-B.1 the carrier is the single
-    // `ai.ggui/render` slice (renderId + appId + runtimeUrl +
+    // `ai.ggui/render` slice (sessionId + appId + runtimeUrl +
     // wsToken + caps).
     const { url } = await boot();
     const token = await mintPairToken(backend!, url, 'renderer-url-smoke');

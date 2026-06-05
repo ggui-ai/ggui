@@ -5,15 +5,15 @@
  * valid-vs-invalid action semantics. This file asserts the WIRE SHAPE
  * of outbound messages: that the emitter produces the
  * {@link ActionEnvelope} form (`type: 'action'`) with the expected
- * fields (renderId / type / payload / clientSeq).
+ * fields (sessionId / type / payload / clientSeq).
  *
  * Structural locks that catch regressions:
  *   - every outbound submit is a `type: 'action'` message.
  *   - clientSeq increments monotonically across multiple submissions.
- *   - renderId is populated from the active render's `id`.
+ *   - sessionId is populated from the active render's `id`.
  *
  * Post-Phase-B: the legacy `{sessionId, stackIndex, stackItemId}` triple
- * on the envelope collapsed to a single flat `renderId`. There is no
+ * on the envelope collapsed to a single flat `sessionId`. There is no
  * stack vessel — one render per mount.
  */
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
@@ -112,14 +112,14 @@ function ActionFireHelper({
   return null;
 }
 
-async function bootRender(renderId = 'render-0'): Promise<{
+async function bootRender(sessionId = 'render-0'): Promise<{
   socket: MockWebSocket;
   fire: (data: unknown) => void;
 }> {
   let fire!: (data: unknown) => void;
   render(
     <GguiProvider appId="test-app" wsEndpoint="wss://example.test">
-      <GguiRender renderId={renderId}>
+      <GguiRender sessionId={sessionId}>
         <ActionFireHelper onReady={(f) => { fire = f; }} />
       </GguiRender>
     </GguiProvider>,
@@ -136,7 +136,7 @@ async function bootRender(renderId = 'render-0'): Promise<{
       payload: {
         sequence: 0,
         timestamp: Date.now(),
-        render: makeRender(renderId),
+        render: makeRender(sessionId),
       },
     });
   });
@@ -172,7 +172,7 @@ describe('canonical action envelope emission — web', () => {
     if (frame.type !== 'action') throw new Error('narrowing');
     const envelope: ActionEnvelope = frame.payload;
 
-    expect(envelope.renderId).toBe('render-emit');
+    expect(envelope.sessionId).toBe('render-emit');
     expect(envelope.type).toBe('data:submit');
     expect(typeof envelope.clientSeq).toBe('number');
     expect(envelope.payload).toEqual({

@@ -1,11 +1,11 @@
 /**
- * `createGguiGetRenderHandler` — read full render state.
+ * `createGguiGetSessionHandler` — read full render state.
  *
  * Shared by every deployment — both the cloud server and the
  * standalone `@ggui-ai/mcp-server` compose this one factory.
  *
  * Behavior:
- *   - Resolves render via `renderStore.get(renderId)`.
+ *   - Resolves render via `renderStore.get(sessionId)`.
  *   - Tenancy gate via `ctx.appId` — cross-tenant + missing both
  *     surface uniformly as {@link GguiSessionNotFoundError}.
  *   - Returns the wire-shape `GguiSession` payload directly (the
@@ -13,7 +13,7 @@
  *     embedded on the render via `GguiSessionBase` for component / system
  *     variants; the MCP-Apps variant is locator-only).
  *   - Optional heartbeat hook — when set, the handler invokes
- *     `heartbeat(renderId)` on every successful read so cloud's
+ *     `heartbeat(sessionId)` on every successful read so cloud's
  *     activity-bump-on-get behavior is preserved without forcing
  *     OSS to maintain a TTL store.
  *
@@ -24,7 +24,7 @@
  */
 
 import { z } from 'zod';
-import type { GguiSession, GguiGetRenderOutput } from '@ggui-ai/protocol';
+import type { GguiSession, GguiGetSessionOutput } from '@ggui-ai/protocol';
 import type {
   GguiSessionStore,
   StoredGguiSession,
@@ -33,7 +33,7 @@ import type { HandlerContext, SharedHandler } from '../types.js';
 import { GguiSessionNotFoundError } from './errors.js';
 
 const inputSchema = {
-  renderId: z
+  sessionId: z
     .string()
     .min(1)
     .describe('GguiSession opaque id (UUID) — returned by ggui_render.'),
@@ -41,7 +41,7 @@ const inputSchema = {
 
 const outputSchema = {
   // `GguiSession` is a discriminated union; downstream typing comes from
-  // the typed `GguiGetRenderOutput` return shape — the raw record-
+  // the typed `GguiGetSessionOutput` return shape — the raw record-
   // shaped zod schema here is just for runtime validation framing.
   id: z.string(),
   appId: z.string(),
@@ -59,12 +59,12 @@ const outputSchema = {
  * row state. `void` return = no overlay; factory uses the values
  * already on the resolved render.
  */
-export interface GetRenderHeartbeatResult {
+export interface GetSessionHeartbeatResult {
   readonly lastActivityAt?: number;
   readonly expiresAt?: number;
 }
 
-export interface GguiGetRenderHandlerDeps {
+export interface GguiGetSessionHandlerDeps {
   readonly renderStore: GguiSessionStore;
   /**
    * Optional activity-bump hook. When set, the handler calls this
@@ -78,18 +78,18 @@ export interface GguiGetRenderHandlerDeps {
    * failure doesn't prevent returning the snapshot we just read.
    */
   readonly heartbeat?: (
-    renderId: string,
+    sessionId: string,
   ) =>
-    | Promise<GetRenderHeartbeatResult | void>
-    | GetRenderHeartbeatResult
+    | Promise<GetSessionHeartbeatResult | void>
+    | GetSessionHeartbeatResult
     | void;
 }
 
-export function createGguiGetRenderHandler(
-  deps: GguiGetRenderHandlerDeps,
-): SharedHandler<typeof inputSchema, typeof outputSchema, GguiGetRenderOutput> {
+export function createGguiGetSessionHandler(
+  deps: GguiGetSessionHandlerDeps,
+): SharedHandler<typeof inputSchema, typeof outputSchema, GguiGetSessionOutput> {
   return {
-    name: 'ggui_get_render',
+    name: 'ggui_get_session',
     title: 'Get render',
     audience: ['agent'],
     description:
@@ -99,21 +99,21 @@ export function createGguiGetRenderHandler(
     async handler(
       rawInput: Record<string, unknown>,
       ctx: HandlerContext,
-    ): Promise<GguiGetRenderOutput> {
-      const { renderId } = z.object(inputSchema).parse(rawInput);
+    ): Promise<GguiGetSessionOutput> {
+      const { sessionId } = z.object(inputSchema).parse(rawInput);
 
-      const stored = await deps.renderStore.get(renderId);
+      const stored = await deps.renderStore.get(sessionId);
       if (!stored || stored.appId !== ctx.appId) {
         // Tenancy + missing both surface uniformly so cross-tenant
         // existence is not leaked.
-        throw new GguiSessionNotFoundError(renderId);
+        throw new GguiSessionNotFoundError(sessionId);
       }
 
       // Best-effort heartbeat — don't fail the read if the bump fails.
-      let heartbeatResult: GetRenderHeartbeatResult | void = undefined;
+      let heartbeatResult: GetSessionHeartbeatResult | void = undefined;
       if (deps.heartbeat) {
         try {
-          heartbeatResult = await deps.heartbeat(renderId);
+          heartbeatResult = await deps.heartbeat(sessionId);
         } catch {
           // Intentionally swallowed.
         }
@@ -131,7 +131,7 @@ export function createGguiGetRenderHandler(
  */
 function applyHeartbeatOverlay(
   stored: StoredGguiSession,
-  heartbeat: GetRenderHeartbeatResult | void,
+  heartbeat: GetSessionHeartbeatResult | void,
 ): StoredGguiSession {
   if (!heartbeat) return stored;
   if (

@@ -68,7 +68,7 @@ export class InMemoryGguiSessionStreamBuffer implements GguiSessionStreamBuffer 
     input: StreamEnvelopeInput,
     spec?: StreamSpec,
   ): Promise<RecordResult> {
-    const bucket = this.bucketFor(input.renderId);
+    const bucket = this.bucketFor(input.sessionId);
     bucket.seq += 1;
     // Central stamp via makeStreamEnvelope. BufferedStreamEnvelope
     // narrows StreamEnvelope.seq?: number to required — re-assert seq
@@ -78,7 +78,7 @@ export class InMemoryGguiSessionStreamBuffer implements GguiSessionStreamBuffer 
     // schemaVersion stamp.
     const seq = bucket.seq;
     const stamped = makeStreamEnvelope({
-      renderId: input.renderId,
+      sessionId: input.sessionId,
       seq,
       channel: input.channel,
       mode: input.mode,
@@ -139,11 +139,11 @@ export class InMemoryGguiSessionStreamBuffer implements GguiSessionStreamBuffer 
   }
 
   async replay(
-    renderId: string,
+    sessionId: string,
     fromSeq: number | undefined,
     spec?: StreamSpec,
   ): Promise<ReplayResult> {
-    const bucket = this.buckets.get(renderId);
+    const bucket = this.buckets.get(sessionId);
     const streamSeq = bucket?.seq ?? 0;
 
     // Fresh subscribe (no fromSeq) never pulls history — return the
@@ -225,12 +225,12 @@ export class InMemoryGguiSessionStreamBuffer implements GguiSessionStreamBuffer 
     return { envelopes: collected, truncated, streamSeq };
   }
 
-  async currentSeq(renderId: string): Promise<number> {
-    return this.buckets.get(renderId)?.seq ?? 0;
+  async currentSeq(sessionId: string): Promise<number> {
+    return this.buckets.get(sessionId)?.seq ?? 0;
   }
 
-  async clear(renderId: string): Promise<void> {
-    this.buckets.delete(renderId);
+  async clear(sessionId: string): Promise<void> {
+    this.buckets.delete(sessionId);
   }
 
   async getSize(): Promise<number> {
@@ -241,8 +241,8 @@ export class InMemoryGguiSessionStreamBuffer implements GguiSessionStreamBuffer 
     return n;
   }
 
-  private bucketFor(renderId: string): RenderBucket {
-    let bucket = this.buckets.get(renderId);
+  private bucketFor(sessionId: string): RenderBucket {
+    let bucket = this.buckets.get(sessionId);
     if (!bucket) {
       bucket = {
         seq: 0,
@@ -250,7 +250,7 @@ export class InMemoryGguiSessionStreamBuffer implements GguiSessionStreamBuffer 
         evictedAboveSeq: 0,
         latestByChannel: new Map(),
       };
-      this.buckets.set(renderId, bucket);
+      this.buckets.set(sessionId, bucket);
     }
     return bucket;
   }

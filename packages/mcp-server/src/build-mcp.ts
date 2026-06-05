@@ -50,7 +50,7 @@ export interface BuildMcpServerOptions {
   /**
    * Per-render self-contained shell options. When supplied,
    * `installMcpAppsOutbound` ALSO registers
-   * `ui://ggui/render/{renderId}` as a resource template — the URI
+   * `ui://ggui/render/{sessionId}` as a resource template — the URI
    * `ggui_render.resultMeta` stamps on per-call `_meta.ui.resourceUri`
    * for third-party MCP Apps hosts (Claude Desktop, claude.ai web)
    * that don't speak ggui's custom postMessage protocol.

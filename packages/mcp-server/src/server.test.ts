@@ -1622,7 +1622,7 @@ describe('createGguiServer — ggui_handshake (Slice 5 preflight seam)', () => {
   // session-lifecycle pack (get-session, get-stack, close, pop, stream)
   // collapsed to the render-shape equivalents: a render IS the addressable
   // row, so `ggui_get_session` + `ggui_get_stack` + `ggui_pop` all fold
-  // into the single `ggui_get_render` + `ggui_list_renders` pair, and
+  // into the single `ggui_get_session` + `ggui_list_sessions` pair, and
   // `ggui_close` was deleted (no terminal write — renders decay via TTL).
   // Closes the OSS surface gap: agents can now call the full lifecycle
   // (handshake → render → consume → get_render / list_renders / emit)
@@ -1633,8 +1633,8 @@ describe('createGguiServer — ggui_handshake (Slice 5 preflight seam)', () => {
     try {
       const { tools } = await client.listTools();
       const names = new Set(tools.map((t) => t.name));
-      expect(names).toContain('ggui_get_render');
-      expect(names).toContain('ggui_list_renders');
+      expect(names).toContain('ggui_get_session');
+      expect(names).toContain('ggui_list_sessions');
       expect(names).toContain('ggui_emit');
       // `ggui_close` was retired alongside the terminal `session.closed`
       // event; renders expire implicitly via TTL.
@@ -1668,8 +1668,8 @@ describe('createGguiServer — ggui_handshake (Slice 5 preflight seam)', () => {
     const client = await connect(fx);
     try {
       // 1. Handshake: stamps a record in the default in-memory KV.
-      // Post-Phase-B: handshake does NOT require a renderId — the
-      // paired `ggui_render` call mints the renderId itself.
+      // Post-Phase-B: handshake does NOT require a sessionId — the
+      // paired `ggui_render` call mints the sessionId itself.
       const hsResult = await client.callTool({
         name: 'ggui_handshake',
         arguments: {
@@ -1689,10 +1689,10 @@ describe('createGguiServer — ggui_handshake (Slice 5 preflight seam)', () => {
       //    handshake's stored suggestion contract is the effective
       //    contract. props is REQUIRED ({} for this no-propsSpec
       //    contract). Post-Phase-B: structuredContent is
-      //    {renderId, nextStep?, action} — `sessionId` + `stackItemId`
-      //    collapse to `renderId`, no `url` (the `/r/<shortCode>` route
+      //    {sessionId, nextStep?, action} — `sessionId` + `stackItemId`
+      //    collapse to `sessionId`, no `url` (the `/r/<shortCode>` route
       //    was deleted; hosts mount via `_meta.ui.resourceUri` or
-      //    resolve `{renderId}` via their own render-resource endpoint).
+      //    resolve `{sessionId}` via their own render-resource endpoint).
       const renderResult = await client.callTool({
         name: 'ggui_render',
         arguments: {
@@ -1705,7 +1705,7 @@ describe('createGguiServer — ggui_handshake (Slice 5 preflight seam)', () => {
         string,
         unknown
       >;
-      expect(renderContent.renderId).toBeTruthy();
+      expect(renderContent.sessionId).toBeTruthy();
       expect(Object.keys(renderContent)).not.toContain('url');
     } finally {
       await client.close();

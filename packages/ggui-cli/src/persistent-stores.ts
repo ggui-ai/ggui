@@ -29,7 +29,7 @@ export async function createPersistentGguiSessionStore(
     '@ggui-ai/mcp-server-core/sqlite'
   );
   return new SqliteGguiSessionStore({
-    filename: join(persistentDir, 'renders.sqlite'),
+    filename: join(persistentDir, 'sessions.sqlite'),
   });
 }
 

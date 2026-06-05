@@ -8,7 +8,7 @@
  * shape into a single registry-level descriptor
  * ({@link RegistryPollingOptions}). One URL, one tick interval, one
  * snapshot parser. The consumer composes the snapshot URL (e.g.
- * `/api/renders/:id/state?wsToken=<token>`) and supplies a
+ * `/api/sessions/:id/state?wsToken=<token>`) and supplies a
  * `parseSnapshot` closure that returns a `Record<type, frame>` map
  * (or `null` to short-circuit when nothing changed since the last
  * poll).

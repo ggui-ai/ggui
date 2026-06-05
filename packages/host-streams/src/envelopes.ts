@@ -52,7 +52,7 @@ export interface StreamSubscribeNotification {
   readonly jsonrpc: '2.0';
   readonly method: 'ui/extensions/ggui/stream-subscribe';
   readonly params: {
-    readonly renderId: string;
+    readonly sessionId: string;
     readonly channel: string;
     readonly tool: string;
     readonly args?: JsonObject;
@@ -78,7 +78,7 @@ export interface StreamUnsubscribeNotification {
   readonly jsonrpc: '2.0';
   readonly method: 'ui/extensions/ggui/stream-unsubscribe';
   readonly params: {
-    readonly renderId: string;
+    readonly sessionId: string;
     readonly channel: string;
   };
 }
@@ -104,7 +104,7 @@ export interface StreamFrameNotification {
   readonly jsonrpc: '2.0';
   readonly method: 'ui/extensions/ggui/stream-frame';
   readonly params: {
-    readonly renderId: string;
+    readonly sessionId: string;
     readonly channel: string;
     readonly payload: JsonValue;
     readonly seq?: number;
@@ -125,7 +125,7 @@ export interface StreamErrorNotification {
   readonly jsonrpc: '2.0';
   readonly method: 'ui/extensions/ggui/stream-error';
   readonly params: {
-    readonly renderId: string;
+    readonly sessionId: string;
     readonly channel: string;
     readonly code:
       | 'tool_not_found'

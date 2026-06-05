@@ -77,7 +77,7 @@ describe('resolveStorageFromConfig — explicit memory driver', () => {
 describe('resolveStorageFromConfig — sqlite driver', () => {
   it('instantiates both adapters when both surfaces declare sqlite', async () => {
     const path = join(tmpRoot, 'both');
-    const rendersPath = join(path, 'ggui-renders.sqlite');
+    const rendersPath = join(path, 'ggui-sessions.sqlite');
     const vectorsPath = join(path, 'ggui-vectors.sqlite');
 
     // Use absolute paths so resolution is explicit; path resolution is
@@ -111,7 +111,7 @@ describe('resolveStorageFromConfig — sqlite driver', () => {
     const result = await resolveStorageFromConfig({
       renders: {
         driver: 'sqlite',
-        path: join(path, 'ggui-renders.sqlite'),
+        path: join(path, 'ggui-sessions.sqlite'),
       },
     });
     expect(result.renderStore).toBeDefined();
@@ -199,7 +199,7 @@ describe('resolveStorageFromConfig — path resolution', () => {
     // were unresolvable, better-sqlite3 would throw during open.
     const result = await resolveStorageFromConfig(
       {
-        renders: { driver: 'sqlite', path: './db/renders.sqlite' },
+        renders: { driver: 'sqlite', path: './db/sessions.sqlite' },
       },
       { baseDir },
     );
@@ -208,7 +208,7 @@ describe('resolveStorageFromConfig — path resolution', () => {
   });
 
   it('passes absolute paths through unchanged', async () => {
-    const abs = join(tmpRoot, 'absolute-renders.sqlite');
+    const abs = join(tmpRoot, 'absolute-sessions.sqlite');
     expect(isAbsolute(abs)).toBe(true);
     const result = await resolveStorageFromConfig(
       {
@@ -270,7 +270,7 @@ describe('resolveStorageFromConfig → createGguiServer end-to-end', () => {
     const config: StorageConfig = {
       renders: {
         driver: 'sqlite',
-        path: join(dir, 'renders.sqlite'),
+        path: join(dir, 'sessions.sqlite'),
       },
       vectors: {
         driver: 'sqlite',

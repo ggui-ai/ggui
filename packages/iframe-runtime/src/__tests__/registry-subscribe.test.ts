@@ -102,7 +102,7 @@ function installMockWebSocket(): void {
 const META = {
   wsUrl: 'wss://server.example/ws',
   wsToken: 'tok_abc',
-  renderId: 'render_001',
+  sessionId: 'render_001',
   appId: 'app_001',
   expiresAt: '2099-01-01T00:00:00.000Z',
   runtimeUrl: '/_ggui/iframe-runtime.js',
@@ -118,7 +118,7 @@ function makeRegistry(): ChannelRegistry {
     subscribeFrameBuilder: () => ({
       type: 'subscribe',
       payload: {
-        renderId: META.renderId,
+        sessionId: META.sessionId,
         appId: META.appId,
         wsToken: META.wsToken,
         supportedVersions: [...CLIENT_SUPPORTED_VERSIONS],
@@ -172,14 +172,14 @@ describe('connectViaRegistry — happy path', () => {
     const sub = JSON.parse(MockWebSocket.instances[0]?.sent[0] ?? '{}') as {
       type: string;
       payload: {
-        renderId: string;
+        sessionId: string;
         appId: string;
         wsToken: string;
         supportedVersions: string[];
       };
     };
     expect(sub.type).toBe('subscribe');
-    expect(sub.payload.renderId).toBe(META.renderId);
+    expect(sub.payload.sessionId).toBe(META.sessionId);
     expect(sub.payload.appId).toBe(META.appId);
     expect(sub.payload.wsToken).toBe(META.wsToken);
     expect(sub.payload.supportedVersions).toEqual([...CLIENT_SUPPORTED_VERSIONS]);
@@ -357,7 +357,7 @@ describe('connectViaRegistry — version handshake', () => {
     MockWebSocket.instances[0]?.emit({
       type: 'progress',
       payload: {
-        renderId: 'render_001',
+        sessionId: 'render_001',
         step: 'compiling',
         message: 'still working',
       },

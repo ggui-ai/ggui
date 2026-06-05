@@ -31,7 +31,7 @@ import type { WiredActionContext, WiredActionRouter } from "./render-channel.js"
  * {@link WiredActionContext}.
  *
  * Why the type is exported: TS-authored mount tools that want to read
- * `ctx.sendPropsUpdate` / `ctx.renderId` import this and narrow their
+ * `ctx.sendPropsUpdate` / `ctx.sessionId` import this and narrow their
  * `handler` parameter (e.g. `async handler(input, ctx) { const wired =
  * ctx as WiredMountContext; … }`). JS-authored mounts (.mjs) read the
  * fields structurally — they're present on the runtime object whether
@@ -47,7 +47,7 @@ import type { WiredActionContext, WiredActionRouter } from "./render-channel.js"
  */
 /**
  * Intersection (not interface-extension) because `HandlerContext` declares
- * `renderId?` as optional — the canonical context shape any handler may
+ * `sessionId?` as optional — the canonical context shape any handler may
  * see — whereas `WiredActionContext` declares it as required (the
  * wired-action dispatcher always knows the active render at invocation
  * time). Interface-extends rejects "narrowing optional → required" via
@@ -55,11 +55,11 @@ import type { WiredActionContext, WiredActionRouter } from "./render-channel.js"
  * the two perfectly: optional ∧ required ≡ required.
  *
  * Surface for consumers stays identical — a TS-authored mount that types
- * its `handler` parameter as `WiredMountContext` reads `renderId: string`
+ * its `handler` parameter as `WiredMountContext` reads `sessionId: string`
  * (no `| undefined`) + every `HandlerContext` field
  * (`appId`, `requestId`, optional `apiKeyHash`).
  */
-export type WiredMountContext = Omit<HandlerContext, "renderId"> & WiredActionContext;
+export type WiredMountContext = Omit<HandlerContext, "sessionId"> & WiredActionContext;
 
 /**
  * One named bundle of tool handlers the server should aggregate onto
@@ -367,7 +367,7 @@ export function composeHandlersWithMounts(
  *     {@link WiredActionContext}. The runtime ctx the mount handler
  *     sees is a structural superset
  *     ({@link WiredMountContext}) so a JS-authored mount can call
- *     `ctx.sendPropsUpdate({...})` directly (closed over `ctx.renderId`).
+ *     `ctx.sendPropsUpdate({...})` directly (closed over `ctx.sessionId`).
  *     The static
  *     `SharedHandler.handler(input, ctx: HandlerContext)` shape stays
  *     untouched — tooling that doesn't read the wired fields keeps its
@@ -415,7 +415,7 @@ export function composeWiredActionRouterFromMounts(
       const baseCtx = resolveContext();
       const ctx: WiredMountContext = {
         ...baseCtx,
-        renderId: wiredCtx.renderId,
+        sessionId: wiredCtx.sessionId,
         sendPropsUpdate: wiredCtx.sendPropsUpdate,
       };
       return handler.handler(input, ctx);

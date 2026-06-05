@@ -104,9 +104,9 @@ describe('MockTransport — App handshake', () => {
     transport.pushNotification({
       method: 'ui/notifications/tool-result',
       params: {
-        _meta: { 'ai.ggui/render': { renderId: 'r1' } },
+        _meta: { 'ai.ggui/render': { sessionId: 'r1' } },
         content: [{ type: 'text', text: 'done' }],
-        structuredContent: { renderId: 'r1' },
+        structuredContent: { sessionId: 'r1' },
       },
     });
 
@@ -117,7 +117,7 @@ describe('MockTransport — App handshake', () => {
 
     expect(received).toHaveLength(1);
     const evt = received[0] as { _meta?: Record<string, unknown> };
-    expect(evt._meta?.['ai.ggui/render']).toEqual({ renderId: 'r1' });
+    expect(evt._meta?.['ai.ggui/render']).toEqual({ sessionId: 'r1' });
   });
 
   it('host-context-changed updates getHostContext()', async () => {

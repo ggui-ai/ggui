@@ -3,16 +3,16 @@
   "description": "Thin shell reads a valid `_meta.ggui.bootstrap.runtimeUrl` but the `<script src>` errors (network failure / 404 / CSP reject). Shell emits `postMessage({type:'ggui:bootstrap-failed', reason:'BUNDLE_FETCH_FAILED', message})` to the parent. No WS opens.",
   "skipReason": null,
   "setup": [
-    { "type": "create-render", "renderId": "ck-bundle-fetch-failed-1" },
+    { "type": "create-session", "sessionId": "ck-bundle-fetch-failed-1" },
     {
       "type": "renderer-url-override",
-      "renderId": "ck-bundle-fetch-failed-1",
+      "sessionId": "ck-bundle-fetch-failed-1",
       "url": "http://127.0.0.1:1/does-not-exist.js"
     }
   ],
   "inputEnvelope": {
     "type": "render",
-    "renderId": "ck-bundle-fetch-failed-1",
+    "sessionId": "ck-bundle-fetch-failed-1",
     "resource": {
       "uri": "ui://ggui/render"
     }

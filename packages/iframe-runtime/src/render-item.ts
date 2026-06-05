@@ -71,7 +71,7 @@ export interface RenderItemOptions {
    *  `_ggui:preview` for this render. */
   readonly streamBus: StreamBus;
   /** GguiSession id — used by the mcp-apps iframe host for proxy URLs. */
-  readonly renderId: string;
+  readonly sessionId: string;
   /**
    * 3rd-party gadget package names whose direct imports the rewriter
    * must resolve to per-package shims. FALLBACK source used only when
@@ -205,7 +205,7 @@ export async function mountRender(
       const render = currentOpts.render as McpAppsGguiSession;
       mcpMount = mountMcpAppIframe(container, {
         render,
-        renderId: currentOpts.renderId,
+        sessionId: currentOpts.sessionId,
         ...(currentOpts.mcpAppsServerBaseUrl !== undefined
           ? { serverBaseUrl: currentOpts.mcpAppsServerBaseUrl }
           : {}),

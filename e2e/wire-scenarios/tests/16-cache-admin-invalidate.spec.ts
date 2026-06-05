@@ -18,7 +18,7 @@
  *      since other concurrent test scenarios may have left rows in
  *      the same scope, even though parallel suite runs are gated).
  *   6. Third render with the same contract → cold-gen fires again
- *      (different renderId guaranteed). The structural proof is
+ *      (different sessionId guaranteed). The structural proof is
  *      that the registry row reappears at the same contractKey slot
  *      — cache writes only happen at the END of a successful gen
  *      pipeline, so a present row proves the cold path ran.
@@ -47,7 +47,7 @@ const MCP_URL = `http://localhost:${GGUI_PORT}/mcp`;
 const HAS_KEY = !!process.env.ANTHROPIC_API_KEY;
 
 interface RenderOut {
-  renderId: string;
+  sessionId: string;
   url?: string;
 }
 
@@ -164,7 +164,7 @@ describe.skipIf(!HAS_KEY)(
       async () => {
         // ── 1. cold-gen primes the registry ─────────────────────────
         const cold = await renderWithContract();
-        expect(cold.out.renderId).toBeTruthy();
+        expect(cold.out.sessionId).toBeTruthy();
         expect(typeof cold.bootstrap.codeHash).toBe('string');
 
         // ── 2. /cached lists the new row in the new-shape projection
@@ -201,7 +201,7 @@ describe.skipIf(!HAS_KEY)(
         // happen at the END of a successful gen pipeline, so a present
         // row proves the cold path ran.
         const reCold = await renderWithContract();
-        expect(reCold.out.renderId).toBeTruthy();
+        expect(reCold.out.sessionId).toBeTruthy();
 
         const listAfterReprime = await fetchCachedList();
         const repopulated = listAfterReprime.entries.find(

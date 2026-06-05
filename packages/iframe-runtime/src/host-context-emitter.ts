@@ -26,7 +26,7 @@
  *
  * Lifecycle:
  *
- *   - Initial seed: `seed(projection, renderId)` called from
+ *   - Initial seed: `seed(projection, sessionId)` called from
  *     `bootProduction` right after the WS transport is attached and we
  *     know the initial projection from `projectHostContext(app.getHostContext())`.
  *     {@link applyHostContextStyling} fires separately from
@@ -103,7 +103,7 @@ type ListenerHandle =
   | { readonly kind: 'app'; readonly off: () => void };
 
 interface EmitterState {
-  readonly renderId: string;
+  readonly sessionId: string;
   readonly send: HostContextSendFn;
   current: HostContextProjection;
   listener: ListenerHandle | null;
@@ -121,19 +121,19 @@ let state: EmitterState | null = null;
  * the same projection) suppresses the duplicate emission via the
  * equality check.
  *
- * Re-seeding with a DIFFERENT `renderId` is undefined behavior; the
+ * Re-seeding with a DIFFERENT `sessionId` is undefined behavior; the
  * iframe-runtime is one-render-per-mount by construction. Tests
  * exercising multi-render flows MUST call `detach()` between seeds.
  */
 export function seed(args: {
-  readonly renderId: string;
+  readonly sessionId: string;
   readonly send: HostContextSendFn;
   readonly initial: HostContextProjection;
 }): void {
   // First seed — record state + emit initial.
   if (state === null) {
     state = {
-      renderId: args.renderId,
+      sessionId: args.sessionId,
       send: args.send,
       current: args.initial,
       listener: null,
@@ -408,7 +408,7 @@ function emit(): void {
     state.send({
       type: 'host_context_observed',
       payload: {
-        renderId: state.renderId,
+        sessionId: state.sessionId,
         hostContext: state.current,
       },
     });

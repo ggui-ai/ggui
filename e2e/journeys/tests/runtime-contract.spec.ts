@@ -91,7 +91,7 @@ const TEST_TIMEOUT_MS = 60_000;
  * plain `<iframe srcDoc>` (read-only / visual-only — post C1-fix
  * it no longer carries the `<McpAppIframe>` lifecycle-mirror
  * attribute). The inner render attributes
- * (`data-ggui-render-entry`, `data-ggui-code-ready`) live INSIDE the
+ * (`data-ggui-session-entry`, `data-ggui-code-ready`) live INSIDE the
  * iframe child and are reachable only via Playwright's
  * `frameLocator`. Readiness is gated by waiting for the iframe
  * itself to be visible + by inner-DOM assertions further down the

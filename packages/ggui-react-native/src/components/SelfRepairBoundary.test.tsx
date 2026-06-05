@@ -34,7 +34,7 @@ describe('SelfRepairBoundary', () => {
   // the actual child node (passed as the third arg) win at runtime.
   const defaultProps = {
     appId: 'app_456',
-    renderId: 'render_789',
+    sessionId: 'render_789',
     config: defaultConfig,
     onReportError: vi.fn(async () => {}),
     children: null as React.ReactNode,
@@ -77,7 +77,7 @@ describe('SelfRepairBoundary', () => {
     expect(firstCall).toBeDefined();
     const report = firstCall![0];
     expect(report.error.message).toBe('Test render error');
-    expect(report.renderId).toBe('render_789');
+    expect(report.sessionId).toBe('render_789');
   });
 
   it('shows repairing UI when showRepairUI is true', () => {
@@ -140,7 +140,7 @@ describe('SelfRepairBoundary', () => {
     const boundaryInstance = renderer!.root.findByType(SelfRepairBoundary).instance as SelfRepairBoundary;
     const repairResult: ComponentRepairResult = {
       errorId: 'err_123',
-      renderId: 'render_789',
+      sessionId: 'render_789',
       success: true,
       repairedCode: 'fixed code',
     };
@@ -177,7 +177,7 @@ describe('SelfRepairBoundary', () => {
     const boundaryInstance = renderer!.root.findByType(SelfRepairBoundary).instance as SelfRepairBoundary;
     const failedResult: ComponentRepairResult = {
       errorId: 'err_123',
-      renderId: 'render_789',
+      sessionId: 'render_789',
       success: false,
       failureReason: 'Could not fix',
     };

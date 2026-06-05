@@ -9,7 +9,7 @@
  *
  *   2. `connectViaRegistry` — pre-ack `error` frames:
  *        - UPGRADE_REQUIRED → `{kind: 'version'}`
- *        - RENDER_NOT_FOUND / AUTH_REJECTED → `{kind: 'auth'}`
+ *        - SESSION_NOT_FOUND / AUTH_REJECTED → `{kind: 'auth'}`
  *        - other → `{kind: 'protocol'}` with extensibly-closed code
  *      plus client-side version mismatch on the first ack.
  *
@@ -104,9 +104,9 @@ describe('protocol-error constructors', () => {
   });
 
   it('fromAuthFailure maps each auth code without leaking foreign codes', () => {
-    expect(fromAuthFailure('RENDER_NOT_FOUND', 'gone')).toEqual({
+    expect(fromAuthFailure('SESSION_NOT_FOUND', 'gone')).toEqual({
       kind: 'auth',
-      code: 'RENDER_NOT_FOUND',
+      code: 'SESSION_NOT_FOUND',
       message: 'gone',
     });
     expect(fromAuthFailure('TOKEN_EXPIRED')).toEqual({
@@ -201,7 +201,7 @@ describe('buildRootWireConfig — onProtocolError', () => {
     const render = makeRender('render_001', { actionSpec });
     const onProtocolError = vi.fn<(err: ProtocolError) => void>();
     const cfg = buildRootWireConfig({
-      renderId: 'render_001',
+      sessionId: 'render_001',
       appId: 'a1',
       getCurrentGguiSession: () => render,
       manager: { send },
@@ -235,7 +235,7 @@ describe('buildRootWireConfig — onProtocolError', () => {
     };
     const render = makeRender('render_001', { actionSpec });
     const cfg = buildRootWireConfig({
-      renderId: 'render_001',
+      sessionId: 'render_001',
       appId: 'a1',
       getCurrentGguiSession: () => render,
       manager: { send },
@@ -294,7 +294,7 @@ function makeRegistry(meta: McpAppAiGguiRenderMeta): ChannelRegistry {
     subscribeFrameBuilder: () => ({
       type: 'subscribe',
       payload: {
-        renderId: meta.renderId,
+        sessionId: meta.sessionId,
         appId: meta.appId,
         bootstrap: meta.wsToken,
         supportedVersions: [...CLIENT_SUPPORTED_VERSIONS],
@@ -318,7 +318,7 @@ describe('connectViaRegistry — onProtocolError', () => {
   function meta(): McpAppAiGguiRenderMeta {
     return {
       wsUrl: 'ws://test/ws',
-      renderId: 'render_001',
+      sessionId: 'render_001',
       appId: 'app_x',
       wsToken: 'bootstrap_token',
       expiresAt: new Date(Date.now() + 60_000).toISOString(),
@@ -355,7 +355,7 @@ describe('connectViaRegistry — onProtocolError', () => {
     expect(versionErr.clientSupports).toEqual(CLIENT_SUPPORTED_VERSIONS);
   });
 
-  it('emits kind=auth on RENDER_NOT_FOUND error frame', async () => {
+  it('emits kind=auth on SESSION_NOT_FOUND error frame', async () => {
     const emitted: ProtocolError[] = [];
     const promise = connectViaRegistry({
       meta: meta(),
@@ -370,7 +370,7 @@ describe('connectViaRegistry — onProtocolError', () => {
     ws.simulateMessage({
       type: 'error',
       payload: {
-        code: 'RENDER_NOT_FOUND',
+        code: 'SESSION_NOT_FOUND',
         message: 'no render',
       },
     });
@@ -379,7 +379,7 @@ describe('connectViaRegistry — onProtocolError', () => {
     const authErr = emitted.find((e) => e.kind === 'auth');
     expect(authErr).toBeDefined();
     if (!authErr || authErr.kind !== 'auth') throw new Error('unreachable');
-    expect(authErr.code).toBe('RENDER_NOT_FOUND');
+    expect(authErr.code).toBe('SESSION_NOT_FOUND');
   });
 
   it('emits kind=protocol on unknown error code with extensibly-closed forwarding', async () => {

@@ -26,7 +26,7 @@ function makeCtx(
   const recorded: unknown[] = [];
   const abortController = new AbortController();
   const ctx: DeterministicPreviewContext = {
-    renderId: 'page-1',
+    sessionId: 'page-1',
     story: { intent: 'build a dashboard' },
     emit: async (payload) => {
       recorded.push(payload);
@@ -69,8 +69,8 @@ describe('produceDeterministicPreview — happy path', () => {
     }
   });
 
-  it('defaults surfaceId to ctx.renderId and catalogId to ggui.preview.v1', async () => {
-    const { ctx, recorded } = makeCtx({ renderId: 'specific-page' });
+  it('defaults surfaceId to ctx.sessionId and catalogId to ggui.preview.v1', async () => {
+    const { ctx, recorded } = makeCtx({ sessionId: 'specific-page' });
     await produceDeterministicPreview(ctx);
     const created = expectValidServerMessage(recorded[0]);
     if (!('createSurface' in created)) throw new Error('narrow');
@@ -79,7 +79,7 @@ describe('produceDeterministicPreview — happy path', () => {
   });
 
   it('honors surfaceId override on createSurface (no deleteSurface to verify)', async () => {
-    const { ctx, recorded } = makeCtx({ renderId: 'page-1' });
+    const { ctx, recorded } = makeCtx({ sessionId: 'page-1' });
     await produceDeterministicPreview(ctx, { surfaceId: 'override-surface' });
     expect(recorded).toHaveLength(3);
     const created = expectValidServerMessage(recorded[0]);

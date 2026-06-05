@@ -5,7 +5,7 @@
  *
  *   - **Left**: render picker. Fetches
  *     `GET /ggui/console/timeline/renders` once on mount; rows show
- *     renderId / appId / status / event-cursor metadata, sorted
+ *     sessionId / appId / status / event-cursor metadata, sorted
  *     most-recent-`lastActivityAt` first. Click a row to load its
  *     event log into the right pane.
  *   - **Right**: scrubber over the picked render's event log.
@@ -22,7 +22,7 @@
  *
  * Test contract (data-attrs):
  *   - `data-ggui-timeline-pane="renders"` — left list
- *   - `data-ggui-timeline-render-id={id}` — each render row
+ *   - `data-ggui-timeline-session-id={id}` — each render row
  *   - `data-ggui-timeline-pane="events"` — right pane
  *   - `data-ggui-timeline-event-seq={seq}` — current event card
  *   - `data-ggui-timeline-scrubber` — the slider
@@ -38,7 +38,7 @@ import { SectionHead } from '../brand/SectionHead.js';
 import { StatusBadge } from '../brand/StatusBadge.js';
 
 interface TimelineGguiSessionSummary {
-  readonly renderId: string;
+  readonly sessionId: string;
   readonly appId: string;
   readonly createdAt: number;
   readonly lastActivityAt: number;
@@ -60,7 +60,7 @@ interface TimelineGguiSessionEvent {
 }
 
 interface TimelineEventsResponse {
-  readonly renderId: string;
+  readonly sessionId: string;
   readonly events: readonly TimelineGguiSessionEvent[];
   readonly streamSeq: number;
   readonly status: 'active' | 'completed' | 'expired' | 'unknown';
@@ -73,22 +73,22 @@ type GguiSessionsState =
 
 type EventsState =
   | { readonly kind: 'idle' }
-  | { readonly kind: 'loading'; readonly renderId: string }
+  | { readonly kind: 'loading'; readonly sessionId: string }
   | {
       readonly kind: 'ready';
-      readonly renderId: string;
+      readonly sessionId: string;
       readonly data: TimelineEventsResponse;
     }
   | {
       readonly kind: 'error';
-      readonly renderId: string;
+      readonly sessionId: string;
       readonly message: string;
     };
 
 export function Timeline(): ReactElement {
   const [renders, setRenders] = useState<GguiSessionsState>({ kind: 'loading' });
   const [events, setEvents] = useState<EventsState>({ kind: 'idle' });
-  const [pickedRenderId, setPickedRenderId] = useState<string | null>(null);
+  const [pickedSessionId, setPickedSessionId] = useState<string | null>(null);
   const [scrubIndex, setScrubIndex] = useState(0);
 
   // Fetch the render picker once on mount.
@@ -122,19 +122,19 @@ export function Timeline(): ReactElement {
   }, []);
 
   // Fetch events whenever the picked render changes.
-  const pickRender = useCallback((renderId: string) => {
-    setPickedRenderId(renderId);
+  const pickRender = useCallback((sessionId: string) => {
+    setPickedSessionId(sessionId);
     setScrubIndex(0);
-    setEvents({ kind: 'loading', renderId });
+    setEvents({ kind: 'loading', sessionId });
   }, []);
 
   useEffect(() => {
-    if (!pickedRenderId) return;
+    if (!pickedSessionId) return;
     const controller = new AbortController();
     void (async () => {
       try {
         const res = await fetch(
-          `/ggui/console/timeline/${encodeURIComponent(pickedRenderId)}/events`,
+          `/ggui/console/timeline/${encodeURIComponent(pickedSessionId)}/events`,
           {
             signal: controller.signal,
             headers: { accept: 'application/json' },
@@ -147,14 +147,14 @@ export function Timeline(): ReactElement {
         if (!res.ok && res.status !== 404) {
           setEvents({
             kind: 'error',
-            renderId: pickedRenderId,
+            sessionId: pickedSessionId,
             message: `server returned ${res.status}`,
           });
           return;
         }
         setEvents({
           kind: 'ready',
-          renderId: pickedRenderId,
+          sessionId: pickedSessionId,
           data: body,
         });
         // Default to the latest event so the operator sees the
@@ -164,13 +164,13 @@ export function Timeline(): ReactElement {
         if (controller.signal.aborted) return;
         setEvents({
           kind: 'error',
-          renderId: pickedRenderId,
+          sessionId: pickedSessionId,
           message: err instanceof Error ? err.message : String(err),
         });
       }
     })();
     return () => controller.abort();
-  }, [pickedRenderId]);
+  }, [pickedSessionId]);
 
   return (
     <section className="ggui-section">
@@ -199,7 +199,7 @@ export function Timeline(): ReactElement {
       >
         <GguiSessionsPane
           state={renders}
-          pickedRenderId={pickedRenderId}
+          pickedSessionId={pickedSessionId}
           onPick={pickRender}
         />
         <EventsPane
@@ -216,12 +216,12 @@ export function Timeline(): ReactElement {
 
 function GguiSessionsPane({
   state,
-  pickedRenderId,
+  pickedSessionId,
   onPick,
 }: {
   readonly state: GguiSessionsState;
-  readonly pickedRenderId: string | null;
-  readonly onPick: (renderId: string) => void;
+  readonly pickedSessionId: string | null;
+  readonly onPick: (sessionId: string) => void;
 }): ReactElement {
   return (
     <div className="ggui-card" data-ggui-timeline-pane="renders">
@@ -244,7 +244,7 @@ function GguiSessionsPane({
           <p
             className="ggui-muted"
             style={{ margin: 0, padding: 12 }}
-            data-ggui-timeline-renders-error
+            data-ggui-timeline-sessions-error
           >
             Couldn&apos;t load renders — {state.message}.
           </p>
@@ -265,10 +265,10 @@ function GguiSessionsPane({
           >
             {state.data.renders.map((render) => (
               <GguiSessionRow
-                key={render.renderId}
+                key={render.sessionId}
                 render={render}
-                selected={render.renderId === pickedRenderId}
-                onClick={() => onPick(render.renderId)}
+                selected={render.sessionId === pickedSessionId}
+                onClick={() => onPick(render.sessionId)}
               />
             ))}
           </ul>
@@ -287,7 +287,7 @@ function GguiSessionRow({
   readonly selected: boolean;
   readonly onClick: () => void;
 }): ReactElement {
-  const shortId = render.renderId.slice(0, 12);
+  const shortId = render.sessionId.slice(0, 12);
   const tone =
     render.status === 'active'
       ? 'live'
@@ -296,8 +296,8 @@ function GguiSessionRow({
         : 'ink';
   return (
     <li
-      data-ggui-timeline-render-id={render.renderId}
-      data-ggui-timeline-render-selected={selected ? 'true' : 'false'}
+      data-ggui-timeline-session-id={render.sessionId}
+      data-ggui-timeline-session-selected={selected ? 'true' : 'false'}
       style={{
         borderBottom: '1px solid var(--ggui-rule)',
       }}
@@ -379,7 +379,7 @@ function EventsPane({
         <div className="ggui-card__body">
           <p className="ggui-muted">
             Loading events for{' '}
-            <code className="ggui-code">{shorten(state.renderId)}</code>…
+            <code className="ggui-code">{shorten(state.sessionId)}</code>…
           </p>
         </div>
       </div>
@@ -440,7 +440,7 @@ function EventsLoaded({
     <div className="ggui-card" data-ggui-timeline-pane="events">
       <div className="ggui-card__head">
         <span className="ggui-card__title">
-          <code className="ggui-code">{shorten(state.renderId)}</code>
+          <code className="ggui-code">{shorten(state.sessionId)}</code>
         </span>
         <span className="ggui-card__num">
           {total === 0 ? 'no events' : `${safeIndex + 1} / ${total}`}

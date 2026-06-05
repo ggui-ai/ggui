@@ -3,10 +3,10 @@
   "description": "Host's `ui/initialize` response returns a tool-output without `_meta.ggui.bootstrap` (or missing the `runtimeUrl` field). Thin shell emits `postMessage({type:'ggui:bootstrap-failed', reason:'BOOTSTRAP_META_MISSING', message})` to the parent. No WS connection opens — live-channel envelopes are out of scope pre-handshake.",
   "skipReason": null,
   "setup": [
-    { "type": "create-render", "renderId": "ck-bootstrap-meta-missing-1" },
+    { "type": "create-session", "sessionId": "ck-bootstrap-meta-missing-1" },
     {
       "type": "ui-initialize-response-override",
-      "renderId": "ck-bootstrap-meta-missing-1",
+      "sessionId": "ck-bootstrap-meta-missing-1",
       "override": {
         "toolOutput": {
           "_meta": {
@@ -18,7 +18,7 @@
   ],
   "inputEnvelope": {
     "type": "render",
-    "renderId": "ck-bootstrap-meta-missing-1",
+    "sessionId": "ck-bootstrap-meta-missing-1",
     "resource": {
       "uri": "ui://ggui/render"
     }

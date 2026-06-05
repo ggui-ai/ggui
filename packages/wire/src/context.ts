@@ -13,11 +13,11 @@ import type {
  * handler. Carries the per-delivery semantics a subscriber needs to
  * fold state correctly — `mode` (append vs replace) and the optional
  * `complete` terminal marker — without leaking transport plumbing
- * (renderId, requestId).
+ * (sessionId, requestId).
  *
  * Maps 1:1 onto the `payload`/`mode`/`complete` fields of the
  * outbound {@link import('@ggui-ai/protocol').StreamEnvelope}. The
- * envelope's `renderId` + `channel` are resolved by the provider
+ * envelope's `sessionId` + `channel` are resolved by the provider
  * before dispatch, so handlers never see them.
  */
 export interface StreamDelivery<T = unknown> {
@@ -85,7 +85,7 @@ export type WireStreamPayload<T, N extends string> =
  * `dispatch(name, data)` and the optional `nextStep` field on the
  * action entry names the tool the agent SHOULD invoke next.
  *
- * The renderer mounts exactly ONE render per iframe — `render.renderId`
+ * The renderer mounts exactly ONE render per iframe — `render.sessionId`
  * is the stable identity the WireProvider was constructed with. No
  * per-item scoping factory; with a one-render-per-mount lifecycle,
  * "scope" collapses to identity.
@@ -98,7 +98,7 @@ export interface WireConfig<T extends DataContract = DataContract> {
     readonly appIcon?: string;
   };
   readonly render: {
-    readonly renderId: string;
+    readonly sessionId: string;
     readonly isConnected: boolean;
   };
   readonly auth: {

@@ -249,19 +249,19 @@ test.describe.serial(
       const renderElapsedMs = Date.now() - renderStart;
 
       expect(renderEnv.error).toBeUndefined();
-      // Post-Phase-B structuredContent: {renderId, url, action,
+      // Post-Phase-B structuredContent: {sessionId, url, action,
       // nextStep?}. shortCode is the tail of url; codeReady retired
       // (the render assertions below are the structural proof
       // generation succeeded).
       const renderResult = renderEnv.result as {
-        structuredContent?: { renderId?: string; url?: string };
+        structuredContent?: { sessionId?: string; url?: string };
         isError?: boolean;
       };
       expect(
         renderResult.isError,
         `ggui_render returned isError: true — check CLI stderr for generator failure.`,
       ).not.toBe(true);
-      expect(renderResult.structuredContent?.renderId).toBeTruthy();
+      expect(renderResult.structuredContent?.sessionId).toBeTruthy();
       const renderUrl = renderResult.structuredContent?.url;
       expect(renderUrl, 'ggui_render returned no url').toBeTruthy();
       const shortCodeMatch = new URL(renderUrl!).pathname.match(/^\/[rs]\/([^/?]+)/);

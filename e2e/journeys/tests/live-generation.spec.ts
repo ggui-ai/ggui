@@ -225,13 +225,13 @@ test.describe.serial(
       expect(renderEnv.error).toBeUndefined();
 
       // Post-Phase-B the render handler's LLM-visible structuredContent
-      // is {renderId, url, action, nextStep?} — retired fields
+      // is {sessionId, url, action, nextStep?} — retired fields
       // (sessionId, stackItemId, shortCode, codeReady, handshakeId,
       // contractHash, decision) are gone. `shortCode` is the tail of
       // `url`'s `/r/<shortCode>` path.
       const renderResult = renderEnv.result as {
         structuredContent?: {
-          renderId?: string;
+          sessionId?: string;
           url?: string;
           action?: 'create' | 'reuse' | 'update' | 'replace' | 'declined';
         };
@@ -251,7 +251,7 @@ test.describe.serial(
       // floor below + the rendered assertions further down
       // (ggui-rcr-* scope must mount, which only happens when
       // generation completed successfully).
-      expect(typeof renderResult.structuredContent?.renderId).toBe('string');
+      expect(typeof renderResult.structuredContent?.sessionId).toBe('string');
       // Sanity: a real generator call takes noticeable time. If this
       // returns instantly, something is stubbing the provider (wrong
       // build pulled in, regression in probe wiring). 1s floor is

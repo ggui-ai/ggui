@@ -48,7 +48,7 @@ import {
 import type { McpAppIframeRef } from './types';
 
 const SAMPLE_META: McpAppAiGguiRenderMeta = {
-  renderId: 'render-test',
+  sessionId: 'render-test',
   appId: 'app-test',
   runtimeUrl: '/_ggui/iframe-runtime.js',
   wsUrl: 'wss://test.example/ws',
@@ -124,7 +124,7 @@ describe('dispatchHostBridgeRequest (RN shared switch)', () => {
     ]);
     expect(res?.result).not.toHaveProperty('toolOutput');
     expect(res?.result).not.toHaveProperty('_meta');
-    for (const forbidden of ['stack', 'renderId', 'appId', 'actionSpec', 'streamSpec']) {
+    for (const forbidden of ['stack', 'sessionId', 'appId', 'actionSpec', 'streamSpec']) {
       expect(res?.result).not.toHaveProperty(forbidden);
     }
   });
@@ -258,7 +258,7 @@ describe('buildToolResultNotification (RN spec-canonical wire shape)', () => {
     const render = metaEnv['ai.ggui/render'] as McpAppAiGguiRenderMeta;
     expect(render.wsUrl).toBe(SAMPLE_META.wsUrl);
     expect(render.wsToken).toBe(SAMPLE_META.wsToken);
-    expect(render.renderId).toBe(SAMPLE_META.renderId);
+    expect(render.sessionId).toBe(SAMPLE_META.sessionId);
     expect(render.appId).toBe(SAMPLE_META.appId);
     expect(render.runtimeUrl).toBe(SAMPLE_META.runtimeUrl);
   });
@@ -658,7 +658,7 @@ describe('<McpAppIframe> — spec-canonical tool-result delivery', () => {
     // Spec-canonical: slice on `params._meta` (NOT `params.toolOutput._meta`).
     expect(Object.keys(metaEnv).sort()).toEqual(['ai.ggui/render']);
     const render = metaEnv['ai.ggui/render'] as McpAppAiGguiRenderMeta;
-    expect(render.renderId).toBe(SAMPLE_META.renderId);
+    expect(render.sessionId).toBe(SAMPLE_META.sessionId);
     expect(render.wsUrl).toBe(SAMPLE_META.wsUrl);
     expect(render.wsToken).toBe(SAMPLE_META.wsToken);
 

@@ -6,11 +6,11 @@
  * targeted render, the server returns `{ok:true, consumerPresent:false}`
  * on submit_action and the iframe-runtime emits a `ui/message`
  * IMMEDIATELY. That message is a PURE DOORBELL: its TEXT carries the
- * imperative `ggui_consume({renderId})` directive (every host forwards it
+ * imperative `ggui_consume({sessionId})` directive (every host forwards it
  * verbatim), and its structured mirror lives on
  * `content[0]._meta["ai.ggui/userAction"]` with `kind: 'user-action'` —
  * a pointer ONLY, never the action payload. The agent's next turn calls
- * `ggui_consume({renderId})` to drain the gesture that's already on the
+ * `ggui_consume({sessionId})` to drain the gesture that's already on the
  * pipe.
  *
  * No 10s timer. No rescue drain. No inline payload. The pipe holds the
@@ -27,7 +27,7 @@
  *      `ggui_consume` directive + `<ggui_directive kind="user-action">`,
  *      and whose `content[0]._meta["ai.ggui/userAction"]` is a pure
  *      pointer (`kind === 'user-action'`, `nextStep.tool === 'ggui_consume'`,
- *      correct renderId, NO action payload).
+ *      correct sessionId, NO action payload).
  *   5. Drain via `ggui_consume` and assert the event carries
  *      `intent: 'save'` + per-event `actionData` + `uiContext`.
  */
@@ -125,14 +125,14 @@ describe.skipIf(!HAS_KEY)(
               _meta?: {
                 'ai.ggui/userAction'?: {
                   kind?: string;
-                  renderId?: string;
+                  sessionId?: string;
                   intent?: string;
                   actionId?: string;
                   submittedAt?: string;
                   payload?: unknown;
                   nextStep?: {
                     tool?: string;
-                    args?: { renderId?: string };
+                    args?: { sessionId?: string };
                   };
                 };
               };
@@ -154,18 +154,18 @@ describe.skipIf(!HAS_KEY)(
         const text = block?.text ?? '';
         expect(text).toContain('ggui_consume');
         expect(text).toContain('<ggui_directive kind="user-action">');
-        expect(text).toContain(ref.renderId);
+        expect(text).toContain(ref.sessionId);
 
         // Structured mirror: pure pointer on
         // content[0]._meta["ai.ggui/userAction"].
         const userAction = block?._meta?.['ai.ggui/userAction'];
         expect(userAction).toBeDefined();
         expect(userAction?.kind).toBe('user-action');
-        expect(userAction?.renderId).toBe(ref.renderId);
+        expect(userAction?.sessionId).toBe(ref.sessionId);
         expect(typeof userAction?.intent).toBe('string');
         expect(typeof userAction?.submittedAt).toBe('string');
         expect(userAction?.nextStep?.tool).toBe('ggui_consume');
-        expect(userAction?.nextStep?.args?.renderId).toBe(ref.renderId);
+        expect(userAction?.nextStep?.args?.sessionId).toBe(ref.sessionId);
         // PURE DOORBELL: NO action payload travels on the doorbell — the
         // gesture stays solely on the pipe (exactly-once by construction).
         expect(userAction?.payload).toBeUndefined();
@@ -182,7 +182,7 @@ describe.skipIf(!HAS_KEY)(
           status: string;
         }>(
           await callTool(MCP_URL, 'ggui_consume', {
-            renderId: ref.renderId,
+            sessionId: ref.sessionId,
             timeout: 5,
           }),
         );

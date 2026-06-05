@@ -72,7 +72,7 @@ describe('mountProvisional — envelope pushing', () => {
     await flush();
 
     const offChannel: StreamEnvelope = {
-      renderId: 'render_001',
+      sessionId: 'render_001',
       channel: 'progress',
       mode: 'append',
       payload: { percent: 50 },
@@ -93,7 +93,7 @@ describe('mountProvisional — envelope pushing', () => {
     await flush();
 
     const malformed: StreamEnvelope = {
-      renderId: 'render_001',
+      sessionId: 'render_001',
       channel: PREVIEW_CHANNEL,
       mode: 'append',
       payload: { notAnA2uiMessage: true },
@@ -139,7 +139,7 @@ describe('mountProvisional — pre-mount pending queue', () => {
     // Push envelope BEFORE flushing — controlRef is still null at
     // this instant.
     const env: StreamEnvelope = {
-      renderId: 'render_001',
+      sessionId: 'render_001',
       channel: PREVIEW_CHANNEL,
       mode: 'append',
       payload: { notAnA2uiMessage: true }, // malformed, but the
@@ -178,7 +178,7 @@ describe('mountProvisional — pre-mount pending queue', () => {
     const surfaceId = 'sx';
     const v0_9 = 'v0.9' as const;
     mount.pushEnvelope({
-      renderId: 'render_001',
+      sessionId: 'render_001',
       channel: PREVIEW_CHANNEL,
       mode: 'append',
       payload: {
@@ -187,7 +187,7 @@ describe('mountProvisional — pre-mount pending queue', () => {
       },
     });
     mount.pushEnvelope({
-      renderId: 'render_001',
+      sessionId: 'render_001',
       channel: PREVIEW_CHANNEL,
       mode: 'append',
       payload: {

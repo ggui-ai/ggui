@@ -36,12 +36,12 @@ const TIMEOUT_MS = 500;
  * One inbound action frame shape. Matches the fixtures' authored
  * `inputEnvelope` for `wired-action-*` cases — the runner sends the
  * envelope verbatim. The render-identity field is the canonical SPEC
- * field `renderId`.
+ * field `sessionId`.
  */
 interface IncomingActionFrame {
   readonly type: 'action';
   readonly channel?: number;
-  readonly renderId: string;
+  readonly sessionId: string;
   readonly action: {
     readonly name: string;
     readonly data?: unknown;
@@ -54,14 +54,14 @@ interface IncomingActionFrame {
  * `no-op` fixtures expects silence, so loud rejection would break
  * them).
  *
- * Reads the canonical SPEC render-identity field `renderId`.
+ * Reads the canonical SPEC render-identity field `sessionId`.
  */
 export function parseActionFrame(frame: unknown): IncomingActionFrame | undefined {
   if (frame === null || typeof frame !== 'object') return undefined;
   const f = frame as Record<string, unknown>;
   if (f['type'] !== 'action') return undefined;
-  const renderId = typeof f['renderId'] === 'string' ? f['renderId'] : undefined;
-  if (renderId === undefined) return undefined;
+  const sessionId = typeof f['sessionId'] === 'string' ? f['sessionId'] : undefined;
+  if (sessionId === undefined) return undefined;
   const action = f['action'];
   if (action === null || typeof action !== 'object') return undefined;
   const a = action as Record<string, unknown>;
@@ -72,7 +72,7 @@ export function parseActionFrame(frame: unknown): IncomingActionFrame | undefine
   return {
     type: 'action',
     ...(typeof channelValue === 'number' ? { channel: channelValue } : {}),
-    renderId,
+    sessionId,
     action: { name, ...(data !== undefined ? { data } : {}) },
   };
 }

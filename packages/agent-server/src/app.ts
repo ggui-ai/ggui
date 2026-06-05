@@ -23,7 +23,7 @@
  *                                rehydration reflects the CURRENT
  *                                server-authoritative render state, not
  *                                the frozen record-time HTML. There is
- *                                no `/api/renders/:id/state` proxy —
+ *                                no `/api/sessions/:id/state` proxy —
  *                                rehydration freshness is handled here.
  *
  *   POST /agent                — `kind`-discriminated body:

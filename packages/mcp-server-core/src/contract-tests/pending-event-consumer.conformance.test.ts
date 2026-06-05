@@ -17,7 +17,7 @@ runPendingEventConsumerConformance('InMemoryPendingEventConsumer', {
     const consumer = new InMemoryPendingEventConsumer();
     return {
       consumer,
-      seed: (renderId: string) => consumer.markCreated(renderId),
+      seed: (sessionId: string) => consumer.markCreated(sessionId),
     };
   },
 });
@@ -27,7 +27,7 @@ runPendingEventConsumerConformance('SqlitePendingEventConsumer', {
     const consumer = new SqlitePendingEventConsumer({ filename: ':memory:' });
     return {
       consumer,
-      seed: (renderId: string) => consumer.markCreated(renderId),
+      seed: (sessionId: string) => consumer.markCreated(sessionId),
     };
   },
 });

@@ -34,7 +34,7 @@ export interface UseInvokeOptions {
    * Continue an existing conversation. Absent → new session each call.
    * Forwarded to the agent as the `X-Ggui-Host-Session-Id` header — this
    * is the conversation envelope identity (the chat thread), distinct
-   * from any per-render `renderId` carried on `_meta["ai.ggui/render"]`.
+   * from any per-render `sessionId` carried on `_meta["ai.ggui/render"]`.
    */
   hostSessionId?: string;
   /** End-user JWT for authenticated apps. */
@@ -55,14 +55,14 @@ export interface UseInvokeOptions {
    *     assistant turn. Servers built on `@ggui-ai/server` emit these via
    *     `stream.toolResultPush(id, meta)` so the result's
    *     `content._meta` carries the per-render `ai.ggui/render` slice
-   *     (`renderId` / `appId` / `runtimeUrl` + optional `wsUrl` / `wsToken` /
+   *     (`sessionId` / `appId` / `runtimeUrl` + optional `wsUrl` / `wsToken` /
    *     `expiresAt` / capability fields / contract pointer / component-
    *     mode discriminator) — the exact shape
    *     `@ggui-ai/protocol/integrations/mcp-apps` defines as
    *     {@link McpAppAiGguiRenderMeta}. Consumers watch for the slice and
    *     mount `<AppRenderer>` using `extractMcpAppAiGguiMeta(content)`
    *     (exported from this module) to pull the meta off the result —
-   *     NOT by reading a plain `renderId` field.
+   *     NOT by reading a plain `sessionId` field.
    *   - `ggui_render_blueprint` — a pure client tool (no server result to
    *     pair with); the consumer resolves the blueprint name locally.
    * ChatShell wires both patterns internally; callers who build their own
@@ -203,7 +203,7 @@ export function useInvoke(options: UseInvokeOptions = {}): UseInvokeReturn {
         // one — the agent threads multi-turn invokes through its own keyed
         // state on `X-Ggui-Host-Session-Id`. This is the conversation
         // envelope identity (`hostSessionId`, distinct from any per-render
-        // `renderId` carried on `_meta["ai.ggui/render"]`).
+        // `sessionId` carried on `_meta["ai.ggui/render"]`).
         if (options.hostSessionId) headers['X-Ggui-Host-Session-Id'] = options.hostSessionId;
         if (options.bearerToken) headers['Authorization'] = `Bearer ${options.bearerToken}`;
 

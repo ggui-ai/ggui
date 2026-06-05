@@ -233,7 +233,7 @@ describe('resolveBindings', () => {
     const result = await resolveBindings(bindings, {
       resolved: {},
       appId: 'test',
-      renderId: 'test',
+      sessionId: 'test',
     });
 
     expect(result.data.user).toEqual({ id: 'user123', name: 'Test User' });
@@ -253,7 +253,7 @@ describe('resolveBindings', () => {
     const result = await resolveBindings(bindings, {
       resolved: {},
       appId: 'test',
-      renderId: 'test',
+      sessionId: 'test',
     });
 
     expect(result.data.user).toEqual({ id: 'user123', name: 'Test User' });
@@ -276,7 +276,7 @@ describe('resolveBindings', () => {
     const result = await resolveBindings(bindings, {
       resolved: {},
       appId: 'test',
-      renderId: 'test',
+      sessionId: 'test',
     });
 
     expect(result.errors.prefs).toBeInstanceOf(Error);

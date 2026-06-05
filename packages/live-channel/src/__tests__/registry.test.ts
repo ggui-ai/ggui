@@ -30,7 +30,7 @@ describe('ChannelRegistry — register()', () => {
     const registry = new ChannelRegistry({ subscribeFrameBuilder: noopBuilder });
     // Bootstrap without wsUrl → PollingTransport, no handlers to poll.
     const handle = await registry.bind({
-      bootstrap: { renderId: 's', appId: 'a' },
+      bootstrap: { sessionId: 's', appId: 'a' },
     });
     expect(() =>
       registry.register({ type: 'late', onMessage: () => {} }),
@@ -43,7 +43,7 @@ describe('ChannelRegistry — transport selection', () => {
   it('picks PollingTransport when wsUrl is absent', async () => {
     const registry = new ChannelRegistry({ subscribeFrameBuilder: noopBuilder });
     const handle = await registry.bind({
-      bootstrap: { renderId: 's', appId: 'a' },
+      bootstrap: { sessionId: 's', appId: 'a' },
     });
     expect(handle.kind).toBe('polling');
     await handle.dispose();
@@ -52,7 +52,7 @@ describe('ChannelRegistry — transport selection', () => {
   it('picks PollingTransport when token is missing (half-live bootstrap)', async () => {
     const registry = new ChannelRegistry({ subscribeFrameBuilder: noopBuilder });
     const handle = await registry.bind({
-      bootstrap: { wsUrl: 'ws://localhost/ws', renderId: 's', appId: 'a' },
+      bootstrap: { wsUrl: 'ws://localhost/ws', sessionId: 's', appId: 'a' },
     });
     expect(handle.kind).toBe('polling');
     await handle.dispose();
@@ -76,7 +76,7 @@ describe('ChannelRegistry — transport selection', () => {
       bootstrap: {
         wsUrl: 'ws://localhost/ws',
         wsToken: 'bootstrap-token',
-        renderId: 's',
+        sessionId: 's',
         appId: 'a',
       },
     });
@@ -87,10 +87,10 @@ describe('ChannelRegistry — transport selection', () => {
   it('throws on double-bind', async () => {
     const registry = new ChannelRegistry({ subscribeFrameBuilder: noopBuilder });
     const handle = await registry.bind({
-      bootstrap: { renderId: 's', appId: 'a' },
+      bootstrap: { sessionId: 's', appId: 'a' },
     });
     await expect(
-      registry.bind({ bootstrap: { renderId: 's', appId: 'a' } }),
+      registry.bind({ bootstrap: { sessionId: 's', appId: 'a' } }),
     ).rejects.toThrow(/already bound/);
     await handle.dispose();
   });
@@ -155,7 +155,7 @@ describe('ChannelRegistry — FailoverHandle (WS → polling swap)', () => {
       bootstrap: {
         wsUrl: 'ws://csp-blocked',
         wsToken: 'tok',
-        renderId: 's',
+        sessionId: 's',
         appId: 'a',
       },
       onStatusChange: (s) => statuses.push(s),
@@ -219,7 +219,7 @@ describe('ChannelRegistry — FailoverHandle (WS → polling swap)', () => {
       bootstrap: {
         wsUrl: 'ws://localhost/ws',
         wsToken: 'tok',
-        renderId: 's',
+        sessionId: 's',
         appId: 'a',
       },
       onStatusChange: (s) => statuses.push(s),

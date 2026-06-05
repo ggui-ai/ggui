@@ -30,7 +30,7 @@
  *           `ai.ggui/userAction` PURE DOORBELL on a `ui/message` (RAW
  *           postMessage, bypassing the host's closed-schema parse so the
  *           directive text + content-block `_meta` survive) so a fresh
- *           agent turn calls `ggui_consume({renderId})` to drain it.
+ *           agent turn calls `ggui_consume({sessionId})` to drain it.
  *           Pointer-only — the gesture stays solely on the pipe.
  *       (3'') On `{ok:false}` / JSON-RPC error → the enqueue FAILED; the
  *           gesture is on no pipe, so NO `ui/message` is emitted (a
@@ -148,7 +148,7 @@ describe('routeDispatch — Pattern α vs Pattern β', () => {
       actionName: 'archive',
       data: { id: 'msg_1' },
       meta: {
-        renderId: 'render_1',
+        sessionId: 'render_1',
         appId: 'app_1',
         actionNextSteps: { archive: 'gmail_archive' },
         appCallableTools: ['gmail_archive', 'ggui_runtime_submit_action'],
@@ -179,7 +179,7 @@ describe('routeDispatch — Pattern α vs Pattern β', () => {
         actionName: 'archive',
         data: { id: 'msg_1' },
         meta: {
-          renderId: 'render_1',
+          sessionId: 'render_1',
           appId: 'app_1',
           actionNextSteps: { archive: 'gmail_archive' },
           // gmail_archive is NOT app-visible on this server connection.
@@ -227,7 +227,7 @@ describe('routeDispatch — Pattern α vs Pattern β', () => {
               actionData: { id: 'msg_1' },
               uiContext: {},
             },
-            renderId: 'render_1',
+            sessionId: 'render_1',
             appId: 'app_1',
           },
         },
@@ -243,7 +243,7 @@ describe('routeDispatch — Pattern α vs Pattern β', () => {
         actionName: 'archive',
         data: { id: 'msg_1' },
         meta: {
-          renderId: 'render_1',
+          sessionId: 'render_1',
           appId: 'app_1',
           actionNextSteps: { archive: 'gmail_archive' },
           appCallableTools: ['ggui_runtime_submit_action'],
@@ -278,7 +278,7 @@ describe('routeDispatch — Pattern α vs Pattern β', () => {
         actionName: 'archive',
         data: { id: 'msg_1' },
         meta: {
-          renderId: 'render_1',
+          sessionId: 'render_1',
           appId: 'app_1',
           actionNextSteps: { archive: 'gmail_archive' },
           appCallableTools: ['ggui_runtime_submit_action'],
@@ -310,7 +310,7 @@ describe('routeDispatch — Pattern α vs Pattern β', () => {
         actionName: 'archive',
         data: { id: 'msg_1' },
         meta: {
-          renderId: 'render_1',
+          sessionId: 'render_1',
           appId: 'app_1',
           actionNextSteps: { archive: 'gmail_archive' },
           appCallableTools: ['ggui_runtime_submit_action'],
@@ -367,7 +367,7 @@ describe('routeDispatch — Pattern α vs Pattern β', () => {
       expect(text).toContain('Do not respond conversationally');
       expect(text).toContain('<ggui_directive kind="user-action">');
       expect(text).toContain('<render_id>render_1</render_id>');
-      expect(text).toContain('<next_args>{"renderId":"render_1"}</next_args>');
+      expect(text).toContain('<next_args>{"sessionId":"render_1"}</next_args>');
 
       // Spec-canonical structured mirror: pointer lives on
       // content[0]._meta["ai.ggui/userAction"], NOT on params._meta.
@@ -380,24 +380,24 @@ describe('routeDispatch — Pattern α vs Pattern β', () => {
       // nextStep === ggui_consume. NO action payload, NO uiContext, NO
       // inline kind — the gesture stays solely on the pipe.
       expect(userAction.kind).toBe('user-action');
-      expect(userAction.renderId).toBe('render_1');
+      expect(userAction.sessionId).toBe('render_1');
       expect(userAction.payload).toBeUndefined();
       expect(userAction.nextStep).toEqual({
         tool: 'ggui_consume',
-        args: { renderId: 'render_1' },
+        args: { sessionId: 'render_1' },
       });
     });
 
-    it('post-reload re-mounted iframe → doorbell still carries NON-EMPTY directive text naming the renderId', async () => {
+    it('post-reload re-mounted iframe → doorbell still carries NON-EMPTY directive text naming the sessionId', async () => {
       // Regression lock for the live bug: on the FIRST post-reload click
       // (the agent's persistent ggui_consume long-poll has ended, so the
       // server reports consumerPresent:false), the doorbell `ui/message`
       // was going out with EMPTY content[0].text and the host rejected
       // it. A re-mounted iframe carries a fresh, distinctly-shaped
-      // renderId; the doorbell text MUST be built reliably from THAT
-      // renderId and reach the host non-empty over the raw postMessage
+      // sessionId; the doorbell text MUST be built reliably from THAT
+      // sessionId and reach the host non-empty over the raw postMessage
       // path.
-      const remountRenderId = 'render_8f3a-remounted-after-reload';
+      const remountSessionId = 'render_8f3a-remounted-after-reload';
       transport.queueResponse('tools/call', {
         result: {
           structuredContent: { ok: true, consumerPresent: false },
@@ -408,7 +408,7 @@ describe('routeDispatch — Pattern α vs Pattern β', () => {
         actionName: 'toggle',
         data: { id: 'todo_2', done: true },
         meta: {
-          renderId: remountRenderId,
+          sessionId: remountSessionId,
           appId: 'app_1',
           actionNextSteps: { toggle: 'todo_toggle' },
           appCallableTools: ['ggui_runtime_submit_action'],
@@ -430,22 +430,22 @@ describe('routeDispatch — Pattern α vs Pattern β', () => {
       // The host's handleAppMessage rejects with isError ONLY when the
       // joined+trimmed text is empty. Assert the exact condition that
       // failed live: non-empty text carrying ggui_consume + the
-      // re-mounted renderId.
+      // re-mounted sessionId.
       expect(text.trim().length).toBeGreaterThan(0);
       expect(text).toContain('ggui_consume');
-      expect(text).toContain(remountRenderId);
+      expect(text).toContain(remountSessionId);
       expect(text).toContain(
-        `<next_args>{"renderId":"${remountRenderId}"}</next_args>`,
+        `<next_args>{"sessionId":"${remountSessionId}"}</next_args>`,
       );
 
-      // Structured mirror points at the same re-mounted renderId.
+      // Structured mirror points at the same re-mounted sessionId.
       const userAction = (content[0]._meta as Record<string, unknown>)[
         'ai.ggui/userAction'
       ] as Record<string, unknown>;
-      expect(userAction.renderId).toBe(remountRenderId);
+      expect(userAction.sessionId).toBe(remountSessionId);
       expect(userAction.nextStep).toEqual({
         tool: 'ggui_consume',
-        args: { renderId: remountRenderId },
+        args: { sessionId: remountSessionId },
       });
     });
 
@@ -460,7 +460,7 @@ describe('routeDispatch — Pattern α vs Pattern β', () => {
         actionName: 'archive',
         data: { id: 'msg_1' },
         meta: {
-          renderId: 'render_1',
+          sessionId: 'render_1',
           appId: 'app_1',
           actionNextSteps: { archive: 'gmail_archive' },
           appCallableTools: ['ggui_runtime_submit_action'],
@@ -490,7 +490,7 @@ describe('routeDispatch — Pattern α vs Pattern β', () => {
         actionName: 'archive',
         data: { id: 'msg_1' },
         meta: {
-          renderId: 'render_1',
+          sessionId: 'render_1',
           appId: 'app_1',
           actionNextSteps: { archive: 'gmail_archive' },
           appCallableTools: ['ggui_runtime_submit_action'],
@@ -517,7 +517,7 @@ describe('routeDispatch — Pattern α vs Pattern β', () => {
       actionName: 'archive',
       data: { id: 'msg_1' },
       meta: {
-        renderId: 'render_1',
+        sessionId: 'render_1',
         appId: 'app_1',
         // actionNextSteps deliberately undefined.
         appCallableTools: ['gmail_archive'],
@@ -546,7 +546,7 @@ describe('routeDispatch — Pattern α vs Pattern β', () => {
       actionName: 'archive',
       data: { id: 'msg_1' },
       meta: {
-        renderId: 'render_1',
+        sessionId: 'render_1',
         appId: 'app_1',
         actionNextSteps: { send: 'gmail_send' },
         appCallableTools: ['gmail_send'],
@@ -573,7 +573,7 @@ describe('routeDispatch — Pattern α vs Pattern β', () => {
       actionName: 'archive',
       data: { id: 'msg_1' },
       meta: {
-        renderId: 'render_1',
+        sessionId: 'render_1',
         appId: 'app_1',
         actionNextSteps: { archive: 'gmail_archive' },
       },

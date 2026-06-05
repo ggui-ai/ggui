@@ -34,7 +34,7 @@ import {
  * Minimal render metadata passed to lifecycle callbacks.
  */
 export interface GguiSessionInfo {
-  renderId: string;
+  sessionId: string;
 }
 
 /**
@@ -76,10 +76,10 @@ function surfaceContractViolation(
 export interface GguiRenderProps {
   /**
    * GguiSession identity. Post-Phase-B this is the canonical key the server
-   * binds the WS subscriber to; envelopes with a mismatching renderId
-   * are rejected `RENDER_MISMATCH`.
+   * binds the WS subscriber to; envelopes with a mismatching sessionId
+   * are rejected `SESSION_MISMATCH`.
    */
-  renderId: string;
+  sessionId: string;
   userToken?: string;
   userId?: string;
 
@@ -140,7 +140,7 @@ export interface GguiRenderProps {
  * live on the render, not per-delivery.
  */
 export interface ActionMeta {
-  renderId: string;
+  sessionId: string;
 }
 
 /**
@@ -189,7 +189,7 @@ export interface GguiSessionApi {
   render: GguiSession | undefined;
 
   /** GguiSession ID. */
-  renderId: string;
+  sessionId: string;
 }
 
 /**
@@ -213,7 +213,7 @@ export interface GguiSessionApi {
  * // render prop.
  * const { send } = useInvoke();
  * return (
- *   <GguiRender renderId={rid}>
+ *   <GguiRender sessionId={rid}>
  *     {({ render, action, connectionStatus }) => (
  *       <MyUI render={render} onAction={action} onSend={send} status={connectionStatus} />
  *     )}
@@ -222,7 +222,7 @@ export interface GguiSessionApi {
  * ```
  */
 export function GguiRender({
-  renderId,
+  sessionId,
   onRenderStart,
   onRenderEnd,
   onBeforeAction,
@@ -349,7 +349,7 @@ export function GguiRender({
           if (matchType) {
             const isHit = matchType === 'cached' || matchType === 'predefined' || matchType === 'exact';
             onProgressRef.current?.({
-              renderId: nextRender.id,
+              sessionId: nextRender.id,
               step: 'compiling',
               message: isHit ? 'Found matching blueprint' : 'No blueprint match found',
             });
@@ -434,8 +434,8 @@ export function GguiRender({
       }
       if (message.type === 'props_update') {
         // ggui_update: replace props on the active render (no re-generation)
-        const { renderId: targetRenderId, props } = message.payload;
-        if (targetRenderId && props) {
+        const { sessionId: targetSessionId, props } = message.payload;
+        if (targetSessionId && props) {
           // Defense-in-depth: server already validates props via
           // assertPropsContract on the ggui_update path; the client
           // re-checks against the active render's cached propsSpec to
@@ -444,7 +444,7 @@ export function GguiRender({
           // Ignore frames targeting a different render — the server
           // routes by subscription, but a sloppy implementation could
           // fan out cross-render updates; reject locally.
-          if (!target || target.id !== targetRenderId) return;
+          if (!target || target.id !== targetSessionId) return;
           const propsSpec =
             target.type !== 'mcpApps' && target.type !== 'system'
               ? target.propsSpec
@@ -458,7 +458,7 @@ export function GguiRender({
             return;
           }
           setRender((prev) => {
-            if (!prev || prev.id !== targetRenderId) return prev;
+            if (!prev || prev.id !== targetSessionId) return prev;
             // `props` belongs to the component variant only; MCP
             // Apps + system renders have no props and aren't targeted
             // by props_update frames.
@@ -477,7 +477,7 @@ export function GguiRender({
   // Initialize WebSocket connection (only if wsEndpoint is provided)
   const { sendAction, send, status: connectionStatus } = useWebSocket({
     url: wsEndpoint || '',
-    renderId,
+    sessionId,
     appId,
     onMessage: handleServerMessage,
   });
@@ -540,7 +540,7 @@ export function GguiRender({
       const entry = actionSpec?.[actionName];
       const tool = entry?.nextStep;
       const envelope = buildActionEnvelope({
-        renderId,
+        sessionId,
         type: 'data:submit',
         payload: {
           action: actionName,
@@ -560,7 +560,7 @@ export function GguiRender({
       }
       emitEnvelope(envelope);
     },
-    [renderId, emitEnvelope],
+    [sessionId, emitEnvelope],
   );
 
   /**
@@ -573,14 +573,14 @@ export function GguiRender({
     (type: EventType, payload: JsonValue | undefined) => {
       clientSeqRef.current += 1;
       const envelope = buildActionEnvelope({
-        renderId,
+        sessionId,
         type,
         ...(payload !== undefined ? { payload } : {}),
         clientSeq: clientSeqRef.current,
       });
       emitEnvelope(envelope);
     },
-    [renderId, emitEnvelope],
+    [sessionId, emitEnvelope],
   );
 
   // Forward user data from rendered components (via window CustomEvent)
@@ -599,15 +599,15 @@ export function GguiRender({
     return () => window.removeEventListener(BRIDGE_EVENTS.USER_DATA, handleUserData);
   }, [emitTyped]);
 
-  // Reset render when renderId changes
+  // Reset render when sessionId changes
   useEffect(() => {
     setRender(undefined);
-    onRenderStartRef.current?.({ renderId });
+    onRenderStartRef.current?.({ sessionId });
 
     return () => {
-      onRenderEndRef.current?.({ renderId }, 'unmount');
+      onRenderEndRef.current?.({ sessionId }, 'unmount');
     };
-  }, [renderId]);
+  }, [sessionId]);
 
   // Action handler with middleware (component interactions → agent).
   // Builds a canonical data:submit ActionEnvelope via the shared
@@ -616,7 +616,7 @@ export function GguiRender({
   const action = useCallback(
     <T,>(data: T) => {
       try {
-        const meta: ActionMeta = { renderId };
+        const meta: ActionMeta = { sessionId };
 
         // Call onBeforeAction middleware — may transform or cancel (by
         // returning undefined). Return-undefined remains the "drop"
@@ -633,7 +633,7 @@ export function GguiRender({
         onErrorRef.current?.(error instanceof Error ? error : new Error(String(error)));
       }
     },
-    [renderId, emitTyped]
+    [sessionId, emitTyped]
   );
 
   // NOTE: The legacy `invoke(text)` method was retired with the v1.1
@@ -647,9 +647,9 @@ export function GguiRender({
       send,
       connectionStatus,
       render,
-      renderId,
+      sessionId,
     }),
-    [action, send, connectionStatus, render, renderId]
+    [action, send, connectionStatus, render, sessionId]
   );
 
   const wireConfig = useMemo<WireConfig>(() => ({
@@ -660,7 +660,7 @@ export function GguiRender({
       appIcon: appMetadata?.appIcon,
     },
     render: {
-      renderId,
+      sessionId,
       isConnected: connectionStatus === 'connected',
     },
     auth: {
@@ -698,7 +698,7 @@ export function GguiRender({
     // underlying tool. Cross-refs surface via `actionSpec[*].nextStep`
     // (event hint) and `streamSpec[*].source.tool` (channel data
     // source).
-  }), [appId, renderId, connectionStatus, auth, appMetadata, appConfig, dispatchAction, resolveActiveActionSpec]);
+  }), [appId, sessionId, connectionStatus, auth, appMetadata, appConfig, dispatchAction, resolveActiveActionSpec]);
 
   return (
     <GguiWireProvider config={wireConfig}>

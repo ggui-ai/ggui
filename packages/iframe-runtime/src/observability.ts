@@ -159,7 +159,7 @@ export interface AuthRequiredEvent {
  */
 export interface ChannelTransportPickedEvent {
   readonly kind: 'channel-transport-picked';
-  readonly renderId: string;
+  readonly sessionId: string;
   readonly channelName: string;
   readonly transport: 'ws' | 'poll';
 }
@@ -175,7 +175,7 @@ export interface ChannelTransportPickedEvent {
  */
 export interface ChannelTransportFallbackEvent {
   readonly kind: 'channel-transport-fallback';
-  readonly renderId: string;
+  readonly sessionId: string;
   readonly channelName: string;
   readonly reason: 'ws-disconnect' | 'channel-not-local';
 }
@@ -188,7 +188,7 @@ export interface ChannelTransportFallbackEvent {
  */
 export interface ChannelTransportResubscribedEvent {
   readonly kind: 'channel-transport-resubscribed';
-  readonly renderId: string;
+  readonly sessionId: string;
   readonly channelName: string;
 }
 

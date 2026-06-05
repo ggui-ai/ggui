@@ -17,12 +17,12 @@
  *     GguiSessionStore as a typed render event.
  *   - `ping`/`pong` → heartbeat parity with hosted.
  *   - `close`/socket-close → clean subscriber teardown.
- *   - `sendToGguiSession(renderId, data)` → outbound fan-out API for
+ *   - `sendToGguiSession(sessionId, data)` → outbound fan-out API for
  *     mutation handlers (ggui_emit / connector `ctx.send`). Validated
  *     through `assertStreamContract` before delivery.
  *
  * `props_update`: mount handlers dispatched through the wired-action
- * router can call `ctx.sendPropsUpdate(renderId, props)` to fan a
+ * router can call `ctx.sendPropsUpdate(sessionId, props)` to fan a
  * `{type:'props_update'}` frame to live subscribers without going
  * through a refresh-stream path. Reaches the renderer's existing
  * `props_update` branch in `iframe-runtime` and applies new props
@@ -117,7 +117,7 @@ export const DEFAULT_RENDER_CHANNEL_PATH = "/ws";
  */
 interface Subscriber {
   readonly ws: WebSocket;
-  readonly renderId: string;
+  readonly sessionId: string;
   readonly appId: string;
   readonly identity: AuthResult;
   readonly connectedAt: number;
@@ -142,7 +142,7 @@ interface Subscriber {
   readonly iter: AsyncIterator<BufferedStreamEnvelope>;
   /**
    * Active `channel_subscribe` polling loops for this subscriber.
-   * Keyed by `${renderId}:${channelName}` so a reconnect that
+   * Keyed by `${sessionId}:${channelName}` so a reconnect that
    * re-subscribes to the same (render, channel) pair replaces the
    * existing timer rather than minting a duplicate (idempotent
    * semantics on the wire). Torn down en masse by `unregister(ws)` on
@@ -156,7 +156,7 @@ interface Subscriber {
 }
 
 /**
- * Per-(subscriber, renderId, channelName) polling-loop state.
+ * Per-(subscriber, sessionId, channelName) polling-loop state.
  * Created on `channel_subscribe` accept, torn down on `channel_unsubscribe`
  * / WS close / re-subscribe-replace.
  *
@@ -172,7 +172,7 @@ interface ChannelSubscriptionState {
   /** Source tool name resolved from `streamSpec[channelName].source.tool`. */
   readonly toolName: string;
   /** GguiSession this subscription is bound to (for fan-out scoping). */
-  readonly renderId: string;
+  readonly sessionId: string;
   /** Channel name (key into `streamSpec`). */
   readonly channelName: string;
   /**
@@ -252,13 +252,13 @@ export interface GguiSessionChannelLocalToolsOptions {
  * message (`SubscribePayload.bootstrap`). When present:
  *
  *   1. `verify(token)` is called. Must return the bound
- *      `{renderId, appId}` on success, or `null` on any failure
+ *      `{sessionId, appId}` on success, or `null` on any failure
  *      (invalid sig, expired, wrong kind, replayed, etc.).
- *   2. The bound `renderId` MUST match the one on the subscribe
+ *   2. The bound `sessionId` MUST match the one on the subscribe
  *      payload. Mismatches are rejected with a clean error.
  *   3. On success, the server mints a reconnect credential via
- *      `issueRenderToken(renderId, appId)` and returns it in
- *      `AckPayload.renderToken`. The iframe stores this for WS
+ *      `issueSessionToken(sessionId, appId)` and returns it in
+ *      `AckPayload.sessionToken`. The iframe stores this for WS
  *      reconnects via the normal bearer path.
  *
  * Bootstrap auth is MUTUALLY EXCLUSIVE with the upstream `AuthAdapter`
@@ -281,7 +281,7 @@ export interface GguiSessionChannelLocalToolsOptions {
 export type GguiSessionChannelBootstrapVerifyResult =
   | {
       readonly ok: true;
-      readonly renderId: string;
+      readonly sessionId: string;
       readonly appId: string;
     }
   | { readonly ok: false; readonly reason: "expired" | "invalid" };
@@ -314,10 +314,10 @@ export interface GguiSessionChannelBootstrap {
   verify(token: string): GguiSessionChannelBootstrapVerifyResult;
   /**
    * Mint a longer-lived reconnect credential to return in
-   * `AckPayload.renderToken`. Called only after a successful
+   * `AckPayload.sessionToken`. Called only after a successful
    * `verify()` on a bootstrap subscribe.
    */
-  issueRenderToken(renderId: string, appId: string): string;
+  issueSessionToken(sessionId: string, appId: string): string;
   /**
    * Refresh a (possibly-expired-but-signature-valid) bootstrap envelope
    * into a new envelope with a fresh TTL. Used by the
@@ -327,7 +327,7 @@ export interface GguiSessionChannelBootstrap {
    *
    * Stateless: verifies HMAC against the same secret used at mint,
    * checks the refresh window against the ORIGINAL `iat`, and mints
-   * a fresh bootstrap envelope bound to the SAME `(renderId, appId)`.
+   * a fresh bootstrap envelope bound to the SAME `(sessionId, appId)`.
    * Past the refresh window the result is `{ok:false, reason:
    * 'window_closed'}`; tampered envelopes are `{ok:false, reason:
    * 'invalid'}`.
@@ -383,7 +383,7 @@ export const DEFAULT_WIRED_TOOL_TIMEOUT_MS = 30_000;
  * shape every shared handler — ggui-native AND mounted — accepts. It
  * stays narrow on purpose (`appId`, `requestId`, optional `apiKeyHash`)
  * so the surface a host implements is stable. Wired-action runtime
- * fields (`renderId`, `renderId`, `sendPropsUpdate`) are dispatcher-
+ * fields (`sessionId`, `sessionId`, `sendPropsUpdate`) are dispatcher-
  * specific — only mount tools invoked through the wired-action router
  * see them, only at dispatch time. Passing them as a third arg to
  * `invoke` keeps the canonical handler shape untouched and makes
@@ -392,17 +392,17 @@ export const DEFAULT_WIRED_TOOL_TIMEOUT_MS = 30_000;
  * The composer in `mcp-mounts.ts::composeWiredActionRouterFromMounts`
  * synthesizes a runtime ctx for the mount handler that satisfies
  * `HandlerContext` AND structurally carries these wired fields, so a
- * mount fixture can read `ctx.sendPropsUpdate` / `ctx.renderId` from the
+ * mount fixture can read `ctx.sendPropsUpdate` / `ctx.sessionId` from the
  * same `ctx` argument the canonical `HandlerContext` sig types — no
  * cast, no widening of the static type.
  */
 export interface WiredActionContext {
   /** The render this dispatch is bound to. Sourced from the live
-   * subscriber + the action envelope's spoof-guarded `renderId`. */
-  readonly renderId: string;
+   * subscriber + the action envelope's spoof-guarded `sessionId`. */
+  readonly sessionId: string;
   /**
-   * Push a `{type:'props_update', payload:{renderId, props}}` frame to
-   * every live subscriber bound to this dispatcher's `renderId`. The
+   * Push a `{type:'props_update', payload:{sessionId, props}}` frame to
+   * every live subscriber bound to this dispatcher's `sessionId`. The
    * call closes over the `GguiSessionChannelServer.sendPropsUpdate` method,
    * scoped to the active render for safety.
    *
@@ -479,7 +479,7 @@ export interface GguiSessionChannelOptions {
   /**
    * Optional bootstrap-auth plumbing. When present, the channel
    * accepts `SubscribePayload.bootstrap` and issues reconnect
-   * credentials in `AckPayload.renderToken`. When absent, bootstrap
+   * credentials in `AckPayload.sessionToken`. When absent, bootstrap
    * tokens are rejected with `BOOTSTRAP_NOT_SUPPORTED`.
    */
   readonly bootstrap?: GguiSessionChannelBootstrap;
@@ -488,9 +488,9 @@ export interface GguiSessionChannelOptions {
    * Optional console cookie-auth plumbing. When present, the
    * channel upgrade looks for the configured cookie on the incoming
    * request. A valid cookie binds the identity as a `builder` and
-   * scopes the subscriber to the cookie's `renderId` — any
-   * `subscribe.renderId` mismatch is rejected with
-   * `DEVTOOL_COOKIE_RENDER_MISMATCH`.
+   * scopes the subscriber to the cookie's `sessionId` — any
+   * `subscribe.sessionId` mismatch is rejected with
+   * `DEVTOOL_COOKIE_SESSION_MISMATCH`.
    *
    * Absent = cookie auth disabled on this channel. Cookies are never
    * auto-enabled; the server's console composition decides.
@@ -612,7 +612,7 @@ export interface GguiSessionChannelOptions {
   readonly versionPolicy?: "advisory" | "reject";
   /**
    * Optional hook fired synchronously when the local subscriber count
-   * for `renderId` transitions 0 → 1 (the first subscriber for that
+   * for `sessionId` transitions 0 → 1 (the first subscriber for that
    * render connects to this server instance).
    *
    * Hosted deployments use this to lazily SUBSCRIBE to the per-render
@@ -628,20 +628,20 @@ export interface GguiSessionChannelOptions {
    * `wsSubscribers` set would drift out of sync with the real socket
    * lifecycle.
    *
-   * Concurrent register/unregister for the same renderId are serialized
+   * Concurrent register/unregister for the same sessionId are serialized
    * by the channel's single-threaded WS event loop; hook implementations
    * do not need their own mutex for the 0↔1 transition.
    */
-  readonly onFirstSubscriber?: (renderId: string) => void;
+  readonly onFirstSubscriber?: (sessionId: string) => void;
   /**
    * Optional hook fired synchronously when the local subscriber count
-   * for `renderId` transitions 1 → 0 (the last subscriber for that
+   * for `sessionId` transitions 1 → 0 (the last subscriber for that
    * render disconnects).
    *
    * Symmetric with {@link onFirstSubscriber}; same best-effort posture
    * and single-threaded serialization guarantee.
    */
-  readonly onLastSubscriberGone?: (renderId: string) => void;
+  readonly onLastSubscriberGone?: (sessionId: string) => void;
 }
 
 /**
@@ -661,7 +661,7 @@ export interface GguiSessionChannelCookieAuth {
    * `null` on any failure (signature, expiry, wrong kind). Never
    * throws.
    */
-  verify(cookieValue: string): { renderId: string; appId: string } | null;
+  verify(cookieValue: string): { sessionId: string; appId: string } | null;
 }
 
 export interface GguiSessionChannelServer {
@@ -674,7 +674,7 @@ export interface GguiSessionChannelServer {
    */
   handleUpgrade(req: IncomingMessage, socket: Duplex, head: Buffer): void;
   /**
-   * Deliver a stream envelope to every subscriber of `delivery.renderId`.
+   * Deliver a stream envelope to every subscriber of `delivery.sessionId`.
    *
    * Outbound fan-out enforcement point — the delivery's `payload` is
    * validated against the active render's streamSpec via
@@ -704,7 +704,7 @@ export interface GguiSessionChannelServer {
   sendToGguiSession(delivery: StreamEnvelopeInput): Promise<{ seq: number }>;
   /**
    * Fan a `{type:'render', payload:{render, matchType?}}` wire frame
-   * to every subscriber currently bound to `renderId`. Use this to
+   * to every subscriber currently bound to `sessionId`. Use this to
    * notify already-subscribed clients about a render-commit that
    * happened AFTER they subscribed — the initial `ack.render` snapshot
    * covers state at subscribe time only, so without an explicit notify
@@ -731,7 +731,7 @@ export interface GguiSessionChannelServer {
    * `renderStore.commit` resolves so the snapshot a
    * concurrent fresh subscriber observes still includes the entry.
    */
-  notifyGguiSessionCommit(renderId: string, render: GguiSession, matchType?: string): void;
+  notifyGguiSessionCommit(sessionId: string, render: GguiSession, matchType?: string): void;
   /**
    * Prime every declared streamSpec channel on `render` that carries a
    * `tool` refresh hint. Invokes each refresh tool via the bound
@@ -758,10 +758,10 @@ export interface GguiSessionChannelServer {
    * the viewer SPA subscribes with the initial envelope already
    * buffered on the render's stream-buffer replay state.
    */
-  primeStreams(renderId: string, render: GguiSession): Promise<void>;
+  primeStreams(sessionId: string, render: GguiSession): Promise<void>;
   /**
-   * Fan a `{type:'props_update', payload:{renderId, props}}` wire frame
-   * to every subscriber currently bound to `renderId`. Mount tools
+   * Fan a `{type:'props_update', payload:{sessionId, props}}` wire frame
+   * to every subscriber currently bound to `sessionId`. Mount tools
    * dispatched through {@link WiredActionRouter} call this via
    * `WiredActionContext.sendPropsUpdate` so a wired action that
    * mutates server-side state can replace renderer props in-place
@@ -774,7 +774,7 @@ export interface GguiSessionChannelServer {
    *      validator on the renderer side would reject a frame for an
    *      unknown render anyway.
    *   2. Iterate the flat WS-subscriber set, filter to subscribers
-   *      whose `renderId` matches, and `send()` the frame. Closed
+   *      whose `sessionId` matches, and `send()` the frame. Closed
    *      sockets are skipped silently by `send()`.
    *
    * NOT routed through StreamFanout — `type: 'props_update'` is a
@@ -794,11 +794,11 @@ export interface GguiSessionChannelServer {
    * trusted-runtime today (mounts execute in-process, same trust
    * boundary as ggui-native handlers).
    */
-  sendPropsUpdate(renderId: string, props: JsonObject): Promise<void>;
+  sendPropsUpdate(sessionId: string, props: JsonObject): Promise<void>;
   /**
-   * Fan a `{type:'drain_ack', payload:{renderId, appId, renderId,
+   * Fan a `{type:'drain_ack', payload:{sessionId, appId, sessionId,
    * eventId, drainedAt}}` wire frame to every subscriber currently
-   * bound to `renderId`.
+   * bound to `sessionId`.
    *
    * Fired by `createGguiConsumeHandler` once per drained
    * `PendingEvent` so the iframe-runtime can cancel the matching
@@ -813,14 +813,14 @@ export interface GguiSessionChannelServer {
    * any frame loss.
    */
   sendDrainAck(args: {
-    readonly renderId: string;
+    readonly sessionId: string;
     readonly appId: string;
     readonly eventId: string;
     readonly drainedAt: string;
   }): void;
   /**
    * Fan a server-frame to every local WS subscriber bound to
-   * `renderId`. Skips replay-buffer stamping, GguiSessionStore lookups,
+   * `sessionId`. Skips replay-buffer stamping, GguiSessionStore lookups,
    * and contract validation — the caller is the one that originally
    * validated + persisted the underlying mutation. This surface is the
    * cloud adapter's path for delivering already-validated frames that
@@ -831,12 +831,12 @@ export interface GguiSessionChannelServer {
    * callers. The publisher is responsible for ensuring `frame` is
    * wire-valid; this method does not re-validate.
    *
-   * No-op when no local subscriber is bound to `renderId`. Closed
+   * No-op when no local subscriber is bound to `sessionId`. Closed
    * sockets are skipped silently by the underlying `send()` helper —
    * same posture as `sendPropsUpdate` / `notifyGguiSessionCommit`. Per-
    * subscriber send failures are logged but never propagated.
    */
-  externalBroadcast(renderId: string, frame: WebSocketMessage): void;
+  externalBroadcast(sessionId: string, frame: WebSocketMessage): void;
   /** Number of live subscribers. Useful for health / debug introspection. */
   readonly subscriberCount: number;
   /** Number of distinct renders with at least one subscriber. */
@@ -949,7 +949,7 @@ export function createGguiSessionChannelServer(opts: GguiSessionChannelOptions):
       }
     } catch (err) {
       opts.logger.warn("render_channel_pump_failed", {
-        renderId: sub.renderId,
+        sessionId: sub.sessionId,
         error: String(err),
       });
     }
@@ -961,16 +961,16 @@ export function createGguiSessionChannelServer(opts: GguiSessionChannelOptions):
     // Per-render count bookkeeping + 0→1 hook for cloud pubsub
     // adapter scoping. Increment FIRST so the hook sees the up-to-date
     // state; hook fires only on the transition (prevCount === 0).
-    const prevCount = renderCountById.get(sub.renderId) ?? 0;
-    renderCountById.set(sub.renderId, prevCount + 1);
+    const prevCount = renderCountById.get(sub.sessionId) ?? 0;
+    renderCountById.set(sub.sessionId, prevCount + 1);
     if (prevCount === 0 && opts.onFirstSubscriber) {
       try {
-        opts.onFirstSubscriber(sub.renderId);
+        opts.onFirstSubscriber(sub.sessionId);
       } catch (err) {
         // Best-effort: a thrown hook MUST NOT corrupt the
         // wsSubscribers set vs the real socket lifecycle.
         opts.logger.warn("render_channel_on_first_subscriber_threw", {
-          renderId: sub.renderId,
+          sessionId: sub.sessionId,
           error: String(err),
         });
       }
@@ -986,21 +986,21 @@ export function createGguiSessionChannelServer(opts: GguiSessionChannelOptions):
     subscribersByWs.delete(ws);
     wsSubscribers.delete(sub);
     // Per-render count bookkeeping + 1→0 hook (symmetric with register).
-    const prevCount = renderCountById.get(sub.renderId) ?? 0;
+    const prevCount = renderCountById.get(sub.sessionId) ?? 0;
     if (prevCount <= 1) {
-      renderCountById.delete(sub.renderId);
+      renderCountById.delete(sub.sessionId);
       if (prevCount === 1 && opts.onLastSubscriberGone) {
         try {
-          opts.onLastSubscriberGone(sub.renderId);
+          opts.onLastSubscriberGone(sub.sessionId);
         } catch (err) {
           opts.logger.warn("render_channel_on_last_subscriber_gone_threw", {
-            renderId: sub.renderId,
+            sessionId: sub.sessionId,
             error: String(err),
           });
         }
       }
     } else {
-      renderCountById.set(sub.renderId, prevCount - 1);
+      renderCountById.set(sub.sessionId, prevCount - 1);
     }
     // Ending the iter terminates pumpSubscriber AND unregisters this
     // subscriber from the StreamFanout. Idempotent on the seam side
@@ -1045,17 +1045,17 @@ export function createGguiSessionChannelServer(opts: GguiSessionChannelOptions):
    * AND emits the appropriate error frame when:
    *
    *   - the socket has no bound subscriber (NOT_SUBSCRIBED)
-   *   - payload.renderId doesn't match the subscriber binding
-   *     (RENDER_MISMATCH)
+   *   - payload.sessionId doesn't match the subscriber binding
+   *     (SESSION_MISMATCH)
    *
    * Subscriber binding is the authoritative tenancy scope. The wire
-   * payload's renderId is belt-and-suspenders so the error message
+   * payload's sessionId is belt-and-suspenders so the error message
    * can be specific; appId narrows transparently via the binding.
    */
   function checkSubscriberTenancy(
     ws: WebSocket,
     sub: Subscriber | undefined,
-    payload: { readonly renderId?: string },
+    payload: { readonly sessionId?: string },
     messageType: string,
     requestId?: string
   ): sub is Subscriber {
@@ -1068,11 +1068,11 @@ export function createGguiSessionChannelServer(opts: GguiSessionChannelOptions):
       );
       return false;
     }
-    if (payload.renderId !== sub.renderId) {
+    if (payload.sessionId !== sub.sessionId) {
       sendError(
         ws,
-        "RENDER_MISMATCH",
-        `${messageType} payload id '${payload.renderId ?? "<missing>"}' does not match subscriber render '${sub.renderId}'`,
+        "SESSION_MISMATCH",
+        `${messageType} payload id '${payload.sessionId ?? "<missing>"}' does not match subscriber render '${sub.sessionId}'`,
         requestId
       );
       return false;
@@ -1089,17 +1089,17 @@ export function createGguiSessionChannelServer(opts: GguiSessionChannelOptions):
    * layer lost.
    */
   async function applyGguiSessionPatch(
-    renderId: string,
+    sessionId: string,
     appId: string,
     messageType: string,
     patch: GguiSessionPatch
   ): Promise<void> {
     try {
-      await opts.renderStore.update(renderId, patch);
+      await opts.renderStore.update(sessionId, patch);
     } catch (err) {
       opts.logger.warn("render_channel_observation_persist_failed", {
         messageType,
-        renderId,
+        sessionId,
         appId,
         error: err instanceof Error ? err.message : String(err),
       });
@@ -1109,7 +1109,7 @@ export function createGguiSessionChannelServer(opts: GguiSessionChannelOptions):
   /**
    * Emit a `channel_error` frame to a specific subscriber. Used by the
    * `channel_subscribe` handler for both subscribe-time rejections
-   * (`CHANNEL_UNKNOWN`, `CHANNEL_NOT_LOCAL`, `RENDER_NOT_FOUND`,
+   * (`CHANNEL_UNKNOWN`, `CHANNEL_NOT_LOCAL`, `SESSION_NOT_FOUND`,
    * `SUBSCRIBE_UNAUTHORIZED`) AND poll-time failures (`POLL_FAILED`).
    *
    * Direct-to-WS, not via fanOut — channel_error frames are
@@ -1119,12 +1119,12 @@ export function createGguiSessionChannelServer(opts: GguiSessionChannelOptions):
    */
   function sendChannelError(
     ws: WebSocket,
-    renderId: string,
+    sessionId: string,
     channelName: string,
     code:
       | "CHANNEL_UNKNOWN"
       | "CHANNEL_NOT_LOCAL"
-      | "RENDER_NOT_FOUND"
+      | "SESSION_NOT_FOUND"
       | "SUBSCRIBE_UNAUTHORIZED"
       | "POLL_FAILED",
     message: string,
@@ -1134,7 +1134,7 @@ export function createGguiSessionChannelServer(opts: GguiSessionChannelOptions):
     send(ws, {
       type: "channel_error",
       payload: {
-        renderId,
+        sessionId,
         channelName,
         code,
         message,
@@ -1183,7 +1183,7 @@ export function createGguiSessionChannelServer(opts: GguiSessionChannelOptions):
       send(sub.ws, {
         type: "channel_payload",
         payload: {
-          renderId: sub.renderId,
+          sessionId: sub.sessionId,
           appId: sub.appId,
           channelName: state.channelName,
           seq: state.seq,
@@ -1201,7 +1201,7 @@ export function createGguiSessionChannelServer(opts: GguiSessionChannelOptions):
       if (sub.ws.readyState !== sub.ws.OPEN) return;
       sendChannelError(
         sub.ws,
-        sub.renderId,
+        sub.sessionId,
         state.channelName,
         "POLL_FAILED",
         err instanceof Error ? err.message : String(err),
@@ -1211,7 +1211,7 @@ export function createGguiSessionChannelServer(opts: GguiSessionChannelOptions):
         sanitize(err instanceof Error ? (err.stack ?? err.message) : String(err))
       );
       opts.logger.warn("render_channel_channel_poll_failed", {
-        renderId: sub.renderId,
+        sessionId: sub.sessionId,
         appId: sub.appId,
         channelName: state.channelName,
         toolName: state.toolName,
@@ -1224,7 +1224,7 @@ export function createGguiSessionChannelServer(opts: GguiSessionChannelOptions):
    * Handle a `channel_subscribe` message. Validates the request,
    * resolves the channel's `source.tool` against the configured
    * allowlist, and schedules a polling loop. Idempotent on
-   * `${renderId}:${channelName}` — a re-subscribe replaces any
+   * `${sessionId}:${channelName}` — a re-subscribe replaces any
    * existing interval rather than running two in parallel.
    */
   async function handleChannelSubscribe(
@@ -1233,16 +1233,16 @@ export function createGguiSessionChannelServer(opts: GguiSessionChannelOptions):
     message: WebSocketMessage & { type: "channel_subscribe" }
   ): Promise<void> {
     const payload = message.payload;
-    // renderId match — the spoof guard at every wire-input boundary.
+    // sessionId match — the spoof guard at every wire-input boundary.
     // A subscriber bound to render A can't drive a subscribe for
     // render B even if they crafted the inbound payload.
-    if (payload.renderId !== sub.renderId) {
+    if (payload.sessionId !== sub.sessionId) {
       sendChannelError(
         ws,
-        payload.renderId,
+        payload.sessionId,
         payload.channelName,
         "SUBSCRIBE_UNAUTHORIZED",
-        `Subscriber is bound to render '${sub.renderId}' but channel_subscribe targets '${payload.renderId}'`,
+        `Subscriber is bound to render '${sub.sessionId}' but channel_subscribe targets '${payload.sessionId}'`,
         message.requestId
       );
       return;
@@ -1253,7 +1253,7 @@ export function createGguiSessionChannelServer(opts: GguiSessionChannelOptions):
     if (!localTools) {
       sendChannelError(
         ws,
-        payload.renderId,
+        payload.sessionId,
         payload.channelName,
         "CHANNEL_NOT_LOCAL",
         "This server has no streamWebSocketLocalTools allowlist; iframe must poll the source tool directly.",
@@ -1265,14 +1265,14 @@ export function createGguiSessionChannelServer(opts: GguiSessionChannelOptions):
     // Phase B: a render IS the addressable unit. The prior
     // reverse-index lookup collapses — `renderStore.get` resolves
     // the render directly.
-    const stored = await opts.renderStore.get(payload.renderId);
-    if (!stored || stored.id !== sub.renderId) {
+    const stored = await opts.renderStore.get(payload.sessionId);
+    if (!stored || stored.id !== sub.sessionId) {
       sendChannelError(
         ws,
-        payload.renderId,
+        payload.sessionId,
         payload.channelName,
-        "RENDER_NOT_FOUND",
-        `GguiSession '${payload.renderId}' not found on subscriber '${sub.renderId}'`,
+        "SESSION_NOT_FOUND",
+        `GguiSession '${payload.sessionId}' not found on subscriber '${sub.sessionId}'`,
         message.requestId
       );
       return;
@@ -1289,10 +1289,10 @@ export function createGguiSessionChannelServer(opts: GguiSessionChannelOptions):
     if (!channelEntry || !channelEntry.source) {
       sendChannelError(
         ws,
-        payload.renderId,
+        payload.sessionId,
         payload.channelName,
         "CHANNEL_UNKNOWN",
-        `streamSpec['${payload.channelName}'] not declared OR has no source.tool on render '${payload.renderId}'`,
+        `streamSpec['${payload.channelName}'] not declared OR has no source.tool on render '${payload.sessionId}'`,
         message.requestId
       );
       return;
@@ -1301,7 +1301,7 @@ export function createGguiSessionChannelServer(opts: GguiSessionChannelOptions):
     if (!localToolsAllowlist.has(sourceTool)) {
       sendChannelError(
         ws,
-        payload.renderId,
+        payload.sessionId,
         payload.channelName,
         "CHANNEL_NOT_LOCAL",
         `source.tool '${sourceTool}' is not in streamWebSocketLocalTools; iframe must poll directly`,
@@ -1311,7 +1311,7 @@ export function createGguiSessionChannelServer(opts: GguiSessionChannelOptions):
     }
 
     // Validation passed — schedule (or re-schedule) the polling loop.
-    const channelKey = `${payload.renderId}:${payload.channelName}`;
+    const channelKey = `${payload.sessionId}:${payload.channelName}`;
     // Idempotent replace: a reconnect that re-subscribes the same
     // (render, channel) pair gets a fresh timer + zeroed seq. The
     // client's gap-detection treats it as a new stream from the
@@ -1350,7 +1350,7 @@ export function createGguiSessionChannelServer(opts: GguiSessionChannelOptions):
     const state: ChannelSubscriptionState = {
       pollIntervalMs,
       toolName: sourceTool,
-      renderId: payload.renderId,
+      sessionId: payload.sessionId,
       channelName: payload.channelName,
       args: mergedArgs,
       seq: 0,
@@ -1358,7 +1358,7 @@ export function createGguiSessionChannelServer(opts: GguiSessionChannelOptions):
     };
     sub.channelSubs.set(channelKey, state);
     opts.logger.info("render_channel_channel_subscribe", {
-      renderId: sub.renderId,
+      sessionId: sub.sessionId,
       appId: sub.appId,
       channelName: payload.channelName,
       toolName: sourceTool,
@@ -1383,19 +1383,19 @@ export function createGguiSessionChannelServer(opts: GguiSessionChannelOptions):
     message: WebSocketMessage & { type: "channel_unsubscribe" }
   ): void {
     const payload = message.payload;
-    if (payload.renderId !== sub.renderId) {
+    if (payload.sessionId !== sub.sessionId) {
       // No-op silently — the canonical "spoof guard" code path is in
       // channel_subscribe; unsubscribe gets no error frame to avoid
       // leaking cross-render existence.
       return;
     }
-    const channelKey = `${payload.renderId}:${payload.channelName}`;
+    const channelKey = `${payload.sessionId}:${payload.channelName}`;
     const existing = sub.channelSubs.get(channelKey);
     if (!existing) return;
     clearInterval(existing.timer);
     sub.channelSubs.delete(channelKey);
     opts.logger.info("render_channel_channel_unsubscribe", {
-      renderId: sub.renderId,
+      sessionId: sub.sessionId,
       appId: sub.appId,
       channelName: payload.channelName,
     });
@@ -1427,7 +1427,7 @@ export function createGguiSessionChannelServer(opts: GguiSessionChannelOptions):
     // because publish() never throws on the in-process impl, and a hosted
     // RedisPubSubFanout failure here would already be persisted to the
     // GguiSessionStreamBuffer for replay-recovery on reconnect.
-    void streamFanout.publish({ renderId: envelope.renderId, envelope });
+    void streamFanout.publish({ sessionId: envelope.sessionId, envelope });
     return { seq: envelope.seq };
   }
 
@@ -1438,7 +1438,7 @@ export function createGguiSessionChannelServer(opts: GguiSessionChannelOptions):
    * would be a footgun.
    */
   function emitContractError(
-    renderId: string,
+    sessionId: string,
     activeStreamSpec: StreamSpec | undefined,
     payload: ContractErrorPayload
   ): void {
@@ -1465,7 +1465,7 @@ export function createGguiSessionChannelServer(opts: GguiSessionChannelOptions):
       // RedisPubSubFanout failure is recoverable via replay-on-reconnect.
       void fanOut(
         {
-          renderId,
+          sessionId,
           channel: CONTRACT_ERROR_CHANNEL,
           mode: "append",
           payload: stamped as unknown as StreamEnvelopeInput["payload"],
@@ -1473,7 +1473,7 @@ export function createGguiSessionChannelServer(opts: GguiSessionChannelOptions):
         activeStreamSpec
       ).catch((err) => {
         opts.logger.error("render_channel_contract_error_emit_failed", {
-          renderId,
+          sessionId,
           toolName: payload.toolName,
           code: payload.error.code,
           error: String(err),
@@ -1481,7 +1481,7 @@ export function createGguiSessionChannelServer(opts: GguiSessionChannelOptions):
       });
     } catch (err) {
       opts.logger.error("render_channel_contract_error_emit_failed", {
-        renderId,
+        sessionId,
         toolName: payload.toolName,
         code: payload.error.code,
         error: String(err),
@@ -1529,33 +1529,33 @@ export function createGguiSessionChannelServer(opts: GguiSessionChannelOptions):
    * same logic without forward-referencing the returned object. Best-
    * effort + orphan-tolerant per the docstring on the public method.
    */
-  async function sendPropsUpdateImpl(renderId: string, props: JsonObject): Promise<void> {
+  async function sendPropsUpdateImpl(sessionId: string, props: JsonObject): Promise<void> {
     let stored;
     try {
-      stored = await opts.renderStore.get(renderId);
+      stored = await opts.renderStore.get(sessionId);
     } catch (err) {
       opts.logger.warn("render_channel_props_update_lookup_failed", {
-        renderId,
+        sessionId,
         error: String(err),
       });
       return;
     }
     if (!stored) {
       opts.logger.warn("render_channel_props_update_orphan", {
-        renderId,
+        sessionId,
       });
       return;
     }
-    // Filter the flat WS-subscriber set by renderId; same posture as
+    // Filter the flat WS-subscriber set by sessionId; same posture as
     // `notifyGguiSessionCommit`. `send()` already silently skips closed sockets
     // and logs (but doesn't throw on) per-subscriber send failures, so
     // the caller's mount-handler path can't be made to fail by a dead
     // WebSocket.
     for (const sub of wsSubscribers) {
-      if (sub.renderId !== renderId) continue;
+      if (sub.sessionId !== sessionId) continue;
       send(sub.ws, {
         type: "props_update",
-        payload: { renderId, props },
+        payload: { sessionId, props },
       });
     }
   }
@@ -1633,7 +1633,7 @@ export function createGguiSessionChannelServer(opts: GguiSessionChannelOptions):
         timestamp: new Date().toISOString(),
       });
       opts.logger.warn("render_channel_wired_tool_not_found", {
-        renderId: render.id,
+        sessionId: render.id,
         toolName: declaredTool,
         actionName,
       });
@@ -1643,12 +1643,12 @@ export function createGguiSessionChannelServer(opts: GguiSessionChannelOptions):
     // Build the wired-action context the router hands the mount tool.
     // `sendPropsUpdate` closes over the active
     // `render.id` so a buggy mount can't accidentally cross-deliver to
-    // another render by passing a foreign renderId. The same ctx is
+    // another render by passing a foreign sessionId. The same ctx is
     // reused for the refresh-stream pass below — a refresh tool that
     // wants to fire props_update can do so, though the canonical site
     // is the action tool itself.
     const wiredCtx: WiredActionContext = {
-      renderId: render.id,
+      sessionId: render.id,
       sendPropsUpdate(props) {
         void sendPropsUpdateImpl(render.id, props);
       },
@@ -1672,7 +1672,7 @@ export function createGguiSessionChannelServer(opts: GguiSessionChannelOptions):
         timestamp: new Date().toISOString(),
       });
       opts.logger.warn("render_channel_wired_tool_failed", {
-        renderId: render.id,
+        sessionId: render.id,
         toolName: declaredTool,
         actionName,
         code,
@@ -1691,7 +1691,7 @@ export function createGguiSessionChannelServer(opts: GguiSessionChannelOptions):
       attributes: {
         toolName: declaredTool,
         actionName,
-        renderId: render.id,
+        sessionId: render.id,
         latencyMs: Date.now() - invokeStartedAt,
       },
     });
@@ -1748,7 +1748,7 @@ export function createGguiSessionChannelServer(opts: GguiSessionChannelOptions):
           timestamp: new Date().toISOString(),
         });
         opts.logger.warn("render_channel_refresh_tool_failed", {
-          renderId: render.id,
+          sessionId: render.id,
           toolName: refreshTool,
           channel: channelName,
           code,
@@ -1772,7 +1772,7 @@ export function createGguiSessionChannelServer(opts: GguiSessionChannelOptions):
             timestamp: new Date().toISOString(),
           });
           opts.logger.warn("render_channel_refresh_schema_violation", {
-            renderId: render.id,
+            sessionId: render.id,
             toolName: refreshTool,
             channel: channelName,
             violations: err.violations,
@@ -1785,7 +1785,7 @@ export function createGguiSessionChannelServer(opts: GguiSessionChannelOptions):
       try {
         await fanOut(
           {
-            renderId: render.id,
+            sessionId: render.id,
             channel: channelName,
             mode: channelEntry?.mode ?? "append",
             payload: output as StreamEnvelopeInput["payload"],
@@ -1798,7 +1798,7 @@ export function createGguiSessionChannelServer(opts: GguiSessionChannelOptions):
         // but don't propagate — a single broken channel must not take
         // down the render.
         opts.logger.error("render_channel_refresh_emit_failed", {
-          renderId: render.id,
+          sessionId: render.id,
           toolName: refreshTool,
           channel: channelName,
           error: String(err),
@@ -1843,7 +1843,7 @@ export function createGguiSessionChannelServer(opts: GguiSessionChannelOptions):
     // the cookie is stale/missing, not carry a doomed handshake into
     // subscribe where the error surface is worse.
     //
-    // On success, we stash the bound `{renderId, appId}` on the
+    // On success, we stash the bound `{sessionId, appId}` on the
     // request so `handleSubscribe` can enforce that the subscribe
     // payload targets exactly those values. No synthesis from the
     // AuthAdapter — cookies ARE the auth signal.
@@ -1854,7 +1854,7 @@ export function createGguiSessionChannelServer(opts: GguiSessionChannelOptions):
         if (bound) {
           (
             req as IncomingMessage & {
-              __gguiCookieBound?: { renderId: string; appId: string };
+              __gguiCookieBound?: { sessionId: string; appId: string };
             }
           ).__gguiCookieBound = bound;
           return {
@@ -1921,24 +1921,24 @@ export function createGguiSessionChannelServer(opts: GguiSessionChannelOptions):
   ): Promise<void> {
     const envelope: ActionEnvelope = message.payload;
 
-    // Spoof guard — envelope.renderId is REQUIRED on the wire and
+    // Spoof guard — envelope.sessionId is REQUIRED on the wire and
     // MUST match the subscriber's bound render.
-    if (envelope.renderId !== sub.renderId) {
+    if (envelope.sessionId !== sub.sessionId) {
       sendError(
         ws,
-        "RENDER_MISMATCH",
-        `Action targets render '${envelope.renderId}' but this socket is subscribed to '${sub.renderId}'`,
+        "SESSION_MISMATCH",
+        `Action targets render '${envelope.sessionId}' but this socket is subscribed to '${sub.sessionId}'`,
         message.requestId
       );
       return;
     }
 
-    const stored = await opts.renderStore.get(sub.renderId);
+    const stored = await opts.renderStore.get(sub.sessionId);
     if (!stored) {
       sendError(
         ws,
-        "RENDER_NOT_FOUND",
-        `GguiSession ${sub.renderId} no longer exists`,
+        "SESSION_NOT_FOUND",
+        `GguiSession ${sub.sessionId} no longer exists`,
         message.requestId
       );
       return;
@@ -1961,7 +1961,7 @@ export function createGguiSessionChannelServer(opts: GguiSessionChannelOptions):
     } catch (err) {
       if (err instanceof EventNotAllowedError) {
         opts.logger.warn("render_channel_event_not_allowed", {
-          renderId: sub.renderId,
+          sessionId: sub.sessionId,
           envelope: "action",
           error: err.message,
         });
@@ -1981,7 +1981,7 @@ export function createGguiSessionChannelServer(opts: GguiSessionChannelOptions):
       } catch (err) {
         if (err instanceof ContractViolationError) {
           opts.logger.warn("render_channel_contract_violation", {
-            renderId: sub.renderId,
+            sessionId: sub.sessionId,
             violations: err.violations,
             envelope: "action",
           });
@@ -1998,13 +1998,13 @@ export function createGguiSessionChannelServer(opts: GguiSessionChannelOptions):
     let seq: number;
     try {
       seq = await opts.renderStore.appendEvent({
-        renderId: sub.renderId,
+        sessionId: sub.sessionId,
         type: "user.submitted",
         data: envelope,
       });
     } catch (err) {
       opts.logger.error("render_channel_append_failed", {
-        renderId: sub.renderId,
+        sessionId: sub.sessionId,
         error: String(err),
       });
       sendError(
@@ -2094,7 +2094,7 @@ export function createGguiSessionChannelServer(opts: GguiSessionChannelOptions):
         }
       );
       opts.logger.warn("render_channel_version_mismatch", {
-        renderId: payload.renderId,
+        sessionId: payload.sessionId,
         appId: payload.appId,
         serverVersion: PROTOCOL_SCHEMA_VERSION,
         clientSupportedVersions: payload.supportedVersions,
@@ -2116,7 +2116,7 @@ export function createGguiSessionChannelServer(opts: GguiSessionChannelOptions):
     // AuthAdapter identity — iframes don't carry bearer tokens.
     // Mutually-exclusive on purpose.
     let effectiveIdentity: AuthResult = identity;
-    let mintedRenderToken: string | undefined;
+    let mintedSessionToken: string | undefined;
     if (typeof payload.wsToken === "string" && payload.wsToken.length > 0) {
       if (!opts.bootstrap) {
         sendError(
@@ -2130,7 +2130,7 @@ export function createGguiSessionChannelServer(opts: GguiSessionChannelOptions):
       const verifyResult = opts.bootstrap.verify(payload.wsToken);
       if (!verifyResult.ok) {
         opts.logger.warn("render_channel_bootstrap_rejected", {
-          renderId: payload.renderId,
+          sessionId: payload.sessionId,
           appId: payload.appId,
           reason: verifyResult.reason,
         });
@@ -2157,12 +2157,12 @@ export function createGguiSessionChannelServer(opts: GguiSessionChannelOptions):
         }
         return;
       }
-      const bound = { renderId: verifyResult.renderId, appId: verifyResult.appId };
-      if (bound.renderId !== payload.renderId) {
+      const bound = { sessionId: verifyResult.sessionId, appId: verifyResult.appId };
+      if (bound.sessionId !== payload.sessionId) {
         sendError(
           ws,
-          "BOOTSTRAP_RENDER_MISMATCH",
-          `Bootstrap token is bound to render '${bound.renderId}' but subscribe targets '${payload.renderId}'`,
+          "BOOTSTRAP_SESSION_MISMATCH",
+          `Bootstrap token is bound to render '${bound.sessionId}' but subscribe targets '${payload.sessionId}'`,
           message.requestId
         );
         return;
@@ -2183,7 +2183,7 @@ export function createGguiSessionChannelServer(opts: GguiSessionChannelOptions):
       effectiveIdentity = {
         identity: {
           kind: "user",
-          userId: bound.renderId,
+          userId: bound.sessionId,
           workspaceId: bound.appId,
           roles: [],
         },
@@ -2192,9 +2192,9 @@ export function createGguiSessionChannelServer(opts: GguiSessionChannelOptions):
       // Mint the reconnect credential now — before create/observe
       // work — so a downstream failure doesn't leave the client with
       // no way to resume.
-      mintedRenderToken = opts.bootstrap.issueRenderToken(bound.renderId, bound.appId);
+      mintedSessionToken = opts.bootstrap.issueSessionToken(bound.sessionId, bound.appId);
       opts.logger.info("render_channel_bootstrap_accepted", {
-        renderId: bound.renderId,
+        sessionId: bound.sessionId,
         appId: bound.appId,
       });
     }
@@ -2205,13 +2205,13 @@ export function createGguiSessionChannelServer(opts: GguiSessionChannelOptions):
     // (agent creates via ggui_render → client subscribes) in a single
     // step — production deployments tighten this by supplying an
     // AuthAdapter that mints render-scoped tokens on render.
-    let stored = await opts.renderStore.get(payload.renderId);
+    let stored = await opts.renderStore.get(payload.sessionId);
     if (stored) {
       if (stored.appId !== payload.appId) {
         sendError(
           ws,
           "APP_MISMATCH",
-          `GguiSession ${payload.renderId} belongs to a different app`,
+          `GguiSession ${payload.sessionId} belongs to a different app`,
           message.requestId
         );
         return;
@@ -2219,13 +2219,13 @@ export function createGguiSessionChannelServer(opts: GguiSessionChannelOptions):
     } else {
       try {
         stored = await opts.renderStore.create({
-          id: payload.renderId,
+          id: payload.sessionId,
           appId: payload.appId,
         });
       } catch (err) {
         sendError(
           ws,
-          "RENDER_CREATE_FAILED",
+          "SESSION_CREATE_FAILED",
           err instanceof Error ? err.message : String(err),
           message.requestId
         );
@@ -2273,7 +2273,7 @@ export function createGguiSessionChannelServer(opts: GguiSessionChannelOptions):
     const fanoutIter = streamFanout.subscribe(stored.id)[Symbol.asyncIterator]();
     const sub: Subscriber = {
       ws,
-      renderId: stored.id,
+      sessionId: stored.id,
       appId: stored.appId,
       identity: effectiveIdentity,
       connectedAt: Date.now(),
@@ -2286,14 +2286,14 @@ export function createGguiSessionChannelServer(opts: GguiSessionChannelOptions):
     };
     register(sub);
     opts.logger.info("render_channel_subscribed", {
-      renderId: stored.id,
+      sessionId: stored.id,
       appId: stored.appId,
       identityKind: effectiveIdentity.identity.kind,
       fromSeq: payload.fromSeq,
       snapshotSeq,
       replayCount: replay?.envelopes.length ?? 0,
       replayTruncated: replay?.truncated ?? false,
-      bootstrap: mintedRenderToken !== undefined,
+      bootstrap: mintedSessionToken !== undefined,
     });
 
     const ackPayload: AckPayload = {
@@ -2308,7 +2308,7 @@ export function createGguiSessionChannelServer(opts: GguiSessionChannelOptions):
       // the handshake ignore the field (legacy-pass-through).
       serverVersion: PROTOCOL_SCHEMA_VERSION,
       ...(replay?.truncated ? { replayTruncated: true } : {}),
-      ...(mintedRenderToken !== undefined ? { renderToken: mintedRenderToken } : {}),
+      ...(mintedSessionToken !== undefined ? { sessionToken: mintedSessionToken } : {}),
     };
     send(ws, {
       type: "ack",
@@ -2322,7 +2322,7 @@ export function createGguiSessionChannelServer(opts: GguiSessionChannelOptions):
     // BEFORE the per-channel stream-buffer replay. Consumers dispatch
     // by `event.type` to fold the wire-frame-equivalent handler
     // (render/props_update/etc.) — same cursor model as the HTTP
-    // `/api/renders/:id/events?sinceSequence=N` endpoint.
+    // `/api/sessions/:id/events?sinceSequence=N` endpoint.
     //
     // Horizon gate: a cursor below the server's replay horizon OR
     // above `lastSequence` (stale from a different deployment) emits
@@ -2413,11 +2413,11 @@ export function createGguiSessionChannelServer(opts: GguiSessionChannelOptions):
         // render A can't be used to open render B.
         const cookieBound = pendingCookieBinding.get(ws);
         if (cookieBound) {
-          if (message.payload.renderId !== cookieBound.renderId) {
+          if (message.payload.sessionId !== cookieBound.sessionId) {
             sendError(
               ws,
-              "DEVTOOL_COOKIE_RENDER_MISMATCH",
-              `Embedded-ui cookie is bound to render '${cookieBound.renderId}' but subscribe targets '${message.payload.renderId}'`,
+              "DEVTOOL_COOKIE_SESSION_MISMATCH",
+              `Embedded-ui cookie is bound to render '${cookieBound.sessionId}' but subscribe targets '${message.payload.sessionId}'`,
               message.requestId
             );
             return;
@@ -2492,7 +2492,7 @@ export function createGguiSessionChannelServer(opts: GguiSessionChannelOptions):
         if (!checkSubscriberTenancy(ws, sub, message.payload, message.type, message.requestId)) {
           return;
         }
-        await applyGguiSessionPatch(sub.renderId, sub.appId, message.type, {
+        await applyGguiSessionPatch(sub.sessionId, sub.appId, message.type, {
           hostContext: message.payload.hostContext,
           lastActivityAt: Date.now(),
         });
@@ -2538,12 +2538,12 @@ export function createGguiSessionChannelServer(opts: GguiSessionChannelOptions):
   const pendingIdentity = new WeakMap<WebSocket, AuthResult>();
   /**
    * Embedded-ui cookie binding established at upgrade. When present,
-   * `handleSubscribe` enforces `subscribe.renderId === bound.renderId`
+   * `handleSubscribe` enforces `subscribe.sessionId === bound.sessionId`
    * so a valid cookie can't be used to open a render it wasn't
    * issued for. Parallel to {@link pendingIdentity} — same lifetime,
    * same WeakMap rationale.
    */
-  const pendingCookieBinding = new WeakMap<WebSocket, { renderId: string; appId: string }>();
+  const pendingCookieBinding = new WeakMap<WebSocket, { sessionId: string; appId: string }>();
 
   wss.on("connection", (ws, req) => {
     // Bind the resolved identity from the upgrade phase. It was
@@ -2553,7 +2553,7 @@ export function createGguiSessionChannelServer(opts: GguiSessionChannelOptions):
     // Likewise for any cookie binding.
     const cookieBound = (
       req as IncomingMessage & {
-        __gguiCookieBound?: { renderId: string; appId: string };
+        __gguiCookieBound?: { sessionId: string; appId: string };
       }
     ).__gguiCookieBound;
     if (cookieBound) pendingCookieBinding.set(ws, cookieBound);
@@ -2623,7 +2623,7 @@ export function createGguiSessionChannelServer(opts: GguiSessionChannelOptions):
       // fan out malformed data to subscribers. Throws
       // ContractViolationError{tool:'ggui_emit'} on violation;
       // caller decides what to do (log, rethrow, wrap).
-      const stored = await opts.renderStore.get(delivery.renderId);
+      const stored = await opts.renderStore.get(delivery.sessionId);
       const activeEntry = stored?.render;
       const streamSpec =
         activeEntry !== undefined && activeEntry.type !== "mcpApps" && activeEntry.type !== "system"
@@ -2637,21 +2637,21 @@ export function createGguiSessionChannelServer(opts: GguiSessionChannelOptions):
       );
       return fanOut(delivery, streamSpec);
     },
-    notifyGguiSessionCommit(renderId, render, matchType) {
+    notifyGguiSessionCommit(sessionId, render, matchType) {
       // Best-effort fan-out to every live subscriber bound to this
       // render. NOT routed through the replay buffer — see the
       // `notifyGguiSessionCommit` JSDoc on the interface for why fresh
       // subscribers rely on `ack.render` instead of a replay frame.
       // NOT routed through StreamFanout either — `type: 'render'` is a
       // distinct WebSocket message type. Filter the flat WS-subscriber
-      // set by renderId; N is typically 1-2 (multi-tab render sharing).
+      // set by sessionId; N is typically 1-2 (multi-tab render sharing).
       const payload = matchType !== undefined ? { render, matchType } : { render };
       for (const sub of wsSubscribers) {
-        if (sub.renderId !== renderId) continue;
+        if (sub.sessionId !== sessionId) continue;
         send(sub.ws, { type: "render", payload });
       }
     },
-    async primeStreams(renderId, render) {
+    async primeStreams(sessionId, render) {
       const router = opts.wiredActionRouter;
       const streamSpec = "streamSpec" in render ? render.streamSpec : undefined;
       if (!router || !streamSpec) return;
@@ -2661,9 +2661,9 @@ export function createGguiSessionChannelServer(opts: GguiSessionChannelOptions):
       // fires `sendPropsUpdate` on cold-start works the same way as
       // one fired post-action.
       const wiredCtx: WiredActionContext = {
-        renderId,
+        sessionId,
         sendPropsUpdate(props) {
-          void sendPropsUpdateImpl(renderId, props);
+          void sendPropsUpdateImpl(sessionId, props);
         },
       };
       for (const [channelName, channelEntry] of Object.entries(streamSpec)) {
@@ -2671,7 +2671,7 @@ export function createGguiSessionChannelServer(opts: GguiSessionChannelOptions):
         if (!refreshTool) continue;
         if (!router.has(refreshTool)) {
           opts.logger.warn("render_channel_prime_tool_not_found", {
-            renderId,
+            sessionId,
             toolName: refreshTool,
             channel: channelName,
           });
@@ -2688,7 +2688,7 @@ export function createGguiSessionChannelServer(opts: GguiSessionChannelOptions):
           );
         } catch (err) {
           opts.logger.warn("render_channel_prime_tool_failed", {
-            renderId,
+            sessionId,
             toolName: refreshTool,
             channel: channelName,
             error: String(err),
@@ -2699,7 +2699,7 @@ export function createGguiSessionChannelServer(opts: GguiSessionChannelOptions):
           assertStreamContract(streamSpec, channelName, output, opts.extraReservedValidators);
         } catch (err) {
           opts.logger.warn("render_channel_prime_schema_violation", {
-            renderId,
+            sessionId,
             toolName: refreshTool,
             channel: channelName,
             error: String(err),
@@ -2709,7 +2709,7 @@ export function createGguiSessionChannelServer(opts: GguiSessionChannelOptions):
         try {
           await fanOut(
             {
-              renderId,
+              sessionId,
               channel: channelName,
               mode: channelEntry?.mode ?? "append",
               payload: output as StreamEnvelopeInput["payload"],
@@ -2718,7 +2718,7 @@ export function createGguiSessionChannelServer(opts: GguiSessionChannelOptions):
           );
         } catch (err) {
           opts.logger.error("render_channel_prime_emit_failed", {
-            renderId,
+            sessionId,
             toolName: refreshTool,
             channel: channelName,
             error: String(err),
@@ -2726,30 +2726,30 @@ export function createGguiSessionChannelServer(opts: GguiSessionChannelOptions):
         }
       }
     },
-    sendPropsUpdate(renderId, props) {
+    sendPropsUpdate(sessionId, props) {
       // Public entry point — delegates to the closure-level impl that
       // the wired-action dispatcher's `WiredActionContext.sendPropsUpdate`
       // also calls. Returns the impl's promise so the caller can await
       // store-lookup completion if desired (the wiredCtx call site
       // fire-and-forgets via `void`).
-      return sendPropsUpdateImpl(renderId, props);
+      return sendPropsUpdateImpl(sessionId, props);
     },
-    sendDrainAck({ renderId, appId, eventId, drainedAt }) {
+    sendDrainAck({ sessionId, appId, eventId, drainedAt }) {
       // Server-side fan-out for the action-drain ack.
-      // Filter the flat WS-subscriber set by renderId (same posture
+      // Filter the flat WS-subscriber set by sessionId (same posture
       // as `sendPropsUpdate`). No persistence; subscribers that
       // missed the frame fall back to their 10s claim timer, which
       // the atomic pop resolves cleanly.
       for (const sub of wsSubscribers) {
-        if (sub.renderId !== renderId) continue;
+        if (sub.sessionId !== sessionId) continue;
         send(sub.ws, {
           type: "drain_ack",
-          payload: { renderId, appId, eventId, drainedAt },
+          payload: { sessionId, appId, eventId, drainedAt },
         });
       }
     },
-    externalBroadcast(renderId, frame) {
-      // Walk the flat subscriber set; filter to matching renderId.
+    externalBroadcast(sessionId, frame) {
+      // Walk the flat subscriber set; filter to matching sessionId.
       // `send()` already guards closed sockets and logs (but doesn't
       // throw on) per-subscriber failures, so the caller (a cloud
       // pubsub on-message handler) can't be made to fail by a dead
@@ -2757,7 +2757,7 @@ export function createGguiSessionChannelServer(opts: GguiSessionChannelOptions):
       // validated; this seam is the cross-pod delivery path, not the
       // re-validation point.
       for (const sub of wsSubscribers) {
-        if (sub.renderId !== renderId) continue;
+        if (sub.sessionId !== sessionId) continue;
         send(sub.ws, frame);
       }
     },
@@ -2766,10 +2766,10 @@ export function createGguiSessionChannelServer(opts: GguiSessionChannelOptions):
     },
     get renderCount() {
       // Distinct render count across live WS subscribers. With
-      // multi-tab clients, two subscribers may share a renderId —
+      // multi-tab clients, two subscribers may share a sessionId —
       // dedupe before counting.
       const renders = new Set<string>();
-      for (const sub of wsSubscribers) renders.add(sub.renderId);
+      for (const sub of wsSubscribers) renders.add(sub.sessionId);
       return renders.size;
     },
     async close() {
@@ -2788,9 +2788,9 @@ export function createGguiSessionChannelServer(opts: GguiSessionChannelOptions):
       // Code 1001 (used previously) means "endpoint going away" with
       // no reconnect hint — semantically inaccurate for the pod-roll
       // case and the wrong signal for client reconnect logic.
-      const renderIds = new Set<string>();
+      const sessionIds = new Set<string>();
       for (const sub of wsSubscribers) {
-        renderIds.add(sub.renderId);
+        sessionIds.add(sub.sessionId);
         try {
           sub.ws.close(1012, "service_restart");
         } catch {
@@ -2805,8 +2805,8 @@ export function createGguiSessionChannelServer(opts: GguiSessionChannelOptions):
       // when there are no subscribers; for hosted bindings it ensures
       // the per-render pub/sub channel teardown fires.
       await Promise.all(
-        Array.from(renderIds, (renderId) =>
-          streamFanout.close(renderId).catch(() => {
+        Array.from(sessionIds, (sessionId) =>
+          streamFanout.close(sessionId).catch(() => {
             /* best-effort */
           })
         )

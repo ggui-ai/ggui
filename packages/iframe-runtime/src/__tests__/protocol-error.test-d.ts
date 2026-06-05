@@ -35,7 +35,7 @@ function exhaust(err: ProtocolError): string {
       return err.code;
     case 'auth':
       expectTypeOf(err.code).toEqualTypeOf<
-        'RENDER_NOT_FOUND' | 'TOKEN_EXPIRED' | 'AUTH_REJECTED'
+        'SESSION_NOT_FOUND' | 'TOKEN_EXPIRED' | 'AUTH_REJECTED'
       >();
       return err.code;
     case 'protocol': {
@@ -43,7 +43,7 @@ function exhaust(err: ProtocolError): string {
       // foreign strings without losing autocomplete.
       const okCanonical: ProtocolError & { kind: 'protocol' } = {
         kind: 'protocol',
-        code: 'RENDER_MISMATCH',
+        code: 'SESSION_MISMATCH',
       };
       const okForeign: ProtocolError & { kind: 'protocol' } = {
         kind: 'protocol',
@@ -93,7 +93,7 @@ const _canonical: BootstrapFailureReason[] = [
   'UPGRADE_REQUIRED',
   'BUNDLE_FETCH_FAILED',
   'CSP_VIOLATION',
-  'RENDER_NOT_FOUND',
+  'SESSION_NOT_FOUND',
   'AUTH_REJECTED',
 ];
 void _canonical;

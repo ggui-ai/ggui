@@ -1,14 +1,14 @@
 /**
  * `ggui_update` — handler for props mutation on an existing render.
  *
- * `renderId` arrives on the wire input today, but a future caller
+ * `sessionId` arrives on the wire input today, but a future caller
  * dispatching this handler in-process from the live channel can
- * populate the canonical `HandlerContext.renderId` field instead; the
+ * populate the canonical `HandlerContext.sessionId` field instead; the
  * handler reads either source.
  *
  * Wire input (matches `updateInputSchema` in `@ggui-ai/protocol`):
- *   - `{renderId, kind:'replace', props}` — full props replacement.
- *   - `{renderId, kind:'merge', patch}` — RFC 7396 JSON Merge Patch.
+ *   - `{sessionId, kind:'replace', props}` — full props replacement.
+ *   - `{sessionId, kind:'merge', patch}` — RFC 7396 JSON Merge Patch.
  *
  * Pure render-mutation flow:
  *   1. Validate union — surface "neither arm matched" before tenant work.
@@ -33,7 +33,7 @@
  *
  * Post-Phase-B (flatten-render-identity): collapsed from
  * `{sessionId, stackItemId, …}` resolution + stack mutation to a single
- * `{renderId, …}` resolution + direct render commit. The slice meta on
+ * `{sessionId, …}` resolution + direct render commit. The slice meta on
  * `resultMeta` collapsed from `ai.ggui/session` + `ai.ggui/stack-item`
  * to one `ai.ggui/render`.
  */
@@ -79,7 +79,7 @@ import { emitPayloadTraceEvent } from './payload-trace-sink.js';
  * call).
  */
 export interface PropsUpdateNotifier {
-  sendPropsUpdate(renderId: string, props: JsonObject): Promise<void>;
+  sendPropsUpdate(sessionId: string, props: JsonObject): Promise<void>;
 }
 
 /**
@@ -135,7 +135,7 @@ export interface GguiUpdateHandlerDeps {
   readonly renderStore: GguiSessionStore;
   /**
    * Optional live-subscriber notifier. When present, every successful
-   * persistence fans a `{type:'props_update', payload:{renderId, props}}`
+   * persistence fans a `{type:'props_update', payload:{sessionId, props}}`
    * live-channel frame to live subscribers via the seam. Forwarded as-is
    * to {@link PropsUpdateNotifier.sendPropsUpdate}.
    *
@@ -174,7 +174,7 @@ export interface GguiUpdateHandlerDeps {
    * the spec-compliant postMessage fallback path is unwired.
    */
   readonly mintWsToken?: (
-    renderId: string,
+    sessionId: string,
     appId: string,
   ) => { wsUrl: string; token: string; expiresAt: string };
   /**
@@ -228,10 +228,10 @@ const inputSchema = {
   /**
    * Globally-unique render id. Optional on the wire so an in-process
    * dispatcher (live-channel dispatch / threaded mount) can populate it
-   * via `HandlerContext.renderId` instead. Required at the handler
+   * via `HandlerContext.sessionId` instead. Required at the handler
    * level — see the resolve step inside `handler`.
    */
-  renderId: z.string().optional(),
+  sessionId: z.string().optional(),
   /**
    * Mode discriminator. `'replace'` requires `props`; `'merge'`
    * requires `patch`. The narrowing step inside `handler` enforces
@@ -254,7 +254,7 @@ const inputSchema = {
 } as const;
 
 const outputSchema = {
-  renderId: z.string(),
+  sessionId: z.string(),
   updated: z.boolean(),
   /**
    * Spec-canonical MCP-Apps entry-point — same `ui://ggui/render/{id}`
@@ -270,7 +270,7 @@ const outputSchema = {
 } as const;
 
 interface UpdateOutput {
-  renderId: string;
+  sessionId: string;
   updated: boolean;
   resourceUri: string;
 }
@@ -290,7 +290,7 @@ export function createGguiUpdateHandler(
     audience: ['agent'],
     description:
       deps.description ??
-      "Refresh the rendered UI with new state. Two modes:  (1) `{renderId, kind:'replace', props}` — full props replacement; `props` IS the new state. Use when most fields change or you want deterministic restoration.  (2) `{renderId, kind:'merge', patch}` — RFC 7396 JSON Merge Patch; send ONLY the delta. Top-level keys merge shallow, nested objects merge recursively, a `null` value DELETES that key, arrays fully replace. Use when one or two fields change (much cheaper for the agent to construct than re-sending all props).  USE THIS TOOL AFTER ANY DOMAIN-TOOL CALL THAT CHANGED DATA THE UI SHOWS — e.g. you handled a `todo_toggle`/`cart_add`/`note_save` event from `ggui_consume`, mutated backend state, and the user is now staring at stale props. Skipping this leaves the iframe frozen on the old state and is the #1 wire bug. Pattern: `consume → domain-tool → ggui_update → loop`. The server fans a `props_update` frame to live subscribers; the mount re-renders WITHOUT losing scroll position, focus, or uncommitted input — far cheaper than re-rendering. Both modes validate the FINAL props (post-merge for `merge`) against the render's `propsSpec` (when declared) and reject on violation. Mutation ownership: only the render-creating identity may overwrite.",
+      "Refresh the rendered UI with new state. Two modes:  (1) `{sessionId, kind:'replace', props}` — full props replacement; `props` IS the new state. Use when most fields change or you want deterministic restoration.  (2) `{sessionId, kind:'merge', patch}` — RFC 7396 JSON Merge Patch; send ONLY the delta. Top-level keys merge shallow, nested objects merge recursively, a `null` value DELETES that key, arrays fully replace. Use when one or two fields change (much cheaper for the agent to construct than re-sending all props).  USE THIS TOOL AFTER ANY DOMAIN-TOOL CALL THAT CHANGED DATA THE UI SHOWS — e.g. you handled a `todo_toggle`/`cart_add`/`note_save` event from `ggui_consume`, mutated backend state, and the user is now staring at stale props. Skipping this leaves the iframe frozen on the old state and is the #1 wire bug. Pattern: `consume → domain-tool → ggui_update → loop`. The server fans a `props_update` frame to live subscribers; the mount re-renders WITHOUT losing scroll position, focus, or uncommitted input — far cheaper than re-rendering. Both modes validate the FINAL props (post-merge for `merge`) against the render's `propsSpec` (when declared) and reject on violation. Mutation ownership: only the render-creating identity may overwrite.",
     inputSchema,
     outputSchema,
     async handler(input, ctx: HandlerContext): Promise<UpdateOutput> {
@@ -303,21 +303,21 @@ export function createGguiUpdateHandler(
         await deps.billingGate.preCheck({ ctx, tool: 'ggui_update' });
       }
 
-      // Resolve renderId from wire OR threaded HandlerContext.
-      const renderId: string | undefined =
-        parsed.renderId ?? ctx.renderId;
-      if (!renderId) {
+      // Resolve sessionId from wire OR threaded HandlerContext.
+      const sessionId: string | undefined =
+        parsed.sessionId ?? ctx.sessionId;
+      if (!sessionId) {
         throw new GguiSessionNotFoundError(
           '',
-          'ggui_update: renderId is required on the wire (or threaded via HandlerContext for in-process dispatchers).',
+          'ggui_update: sessionId is required on the wire (or threaded via HandlerContext for in-process dispatchers).',
         );
       }
 
       // Tenancy gate. Cross-tenant + missing surface uniformly as
       // GguiSessionNotFoundError so cross-tenant existence is not leaked.
-      const stored = await deps.renderStore.get(renderId);
+      const stored = await deps.renderStore.get(sessionId);
       if (!stored || stored.appId !== ctx.appId) {
-        throw new GguiSessionNotFoundError(renderId);
+        throw new GguiSessionNotFoundError(sessionId);
       }
 
       // Devtools payload trace. No-op when no sink is registered.
@@ -325,7 +325,7 @@ export function createGguiUpdateHandler(
       // into the trace. Payload is the validated wire shape.
       emitPayloadTraceEvent({
         direction: 'outbound-update',
-        renderId,
+        sessionId,
         appId: ctx.appId,
         tool: 'ggui_update',
         payload: parsed,
@@ -437,7 +437,7 @@ export function createGguiUpdateHandler(
       // (re)subscribe).
       if (deps.propsUpdateNotifier) {
         try {
-          await deps.propsUpdateNotifier.sendPropsUpdate(renderId, finalProps);
+          await deps.propsUpdateNotifier.sendPropsUpdate(sessionId, finalProps);
         } catch {
           // Silent: stay aligned with `safelyNotifyGguiSessionCommit`'s
           // posture in render.ts. A throwing notifier is a host-side
@@ -451,9 +451,9 @@ export function createGguiUpdateHandler(
       // update tool_result) returns the fresh shell with new
       // `__GGUI_META__` baked in. Single-segment is sufficient: both
       // single + two-segment URI shapes route to the same handler.
-      const resourceUri = `${GGUI_RENDER_UI_META.resourceUri}/${renderId}`;
+      const resourceUri = `${GGUI_RENDER_UI_META.resourceUri}/${sessionId}`;
       return {
-        renderId,
+        sessionId,
         updated: true,
         resourceUri,
       };
@@ -494,7 +494,7 @@ export function createGguiUpdateHandler(
       // cursor (R7) aligned with the WS stream.
       let lastSequence: number | undefined;
       try {
-        const stored = await deps.renderStore.get(output.renderId);
+        const stored = await deps.renderStore.get(output.sessionId);
         if (stored) {
           lastSequence = stored.eventSequence;
           renderThemeId = stored.themeId;
@@ -528,7 +528,7 @@ export function createGguiUpdateHandler(
       // The minter's own return shape names the credential `token`
       // (legacy); the render slice uses `wsToken`. Remap explicitly.
       const mintedTrio = deps.mintWsToken
-        ? deps.mintWsToken(output.renderId, ctx.appId)
+        ? deps.mintWsToken(output.sessionId, ctx.appId)
         : undefined;
       const authFields: Partial<
         Pick<McpAppAiGguiRenderMeta, 'wsUrl' | 'wsToken' | 'expiresAt'>
@@ -548,7 +548,7 @@ export function createGguiUpdateHandler(
       const resolvedThemeMode = liveTheme?.mode ?? deps.themeMode;
 
       const render: McpAppAiGguiRenderMeta = {
-        renderId: output.renderId,
+        sessionId: output.sessionId,
         appId: ctx.appId,
         runtimeUrl,
         ...authFields,

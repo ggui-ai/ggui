@@ -8,7 +8,7 @@
  * to `'sqlite'` through a fixture `ggui.json` and proves the CLI:
  *
  *   1. Status-reports the sqlite driver on the pre-banner stdout lines
- *      `storage: renders  → sqlite (./ggui-renders.sqlite)` (plus
+ *      `storage: renders  → sqlite (./ggui-sessions.sqlite)` (plus
  *      vectors/threads siblings). This pins the `describeStorageStatus`
  *      contract from `packages/ggui-cli/src/cli.ts` on the wire.
  *   2. Creates the actual `.sqlite` files on disk after boot — proof
@@ -135,7 +135,7 @@ test.describe.serial('Phase 5 — SQLite storage driver boot', () => {
     //    dynamically imported and `better-sqlite3` loaded. The paths
     //    are relative to the ggui.json directory (the tempCwd) —
     //    same contract `resolveStorageFromConfig` consumes.
-    const rendersDb = join(handle.tempCwd, 'ggui-renders.sqlite');
+    const rendersDb = join(handle.tempCwd, 'ggui-sessions.sqlite');
     const vectorsDb = join(handle.tempCwd, 'ggui-vectors.sqlite');
     const threadsDb = join(handle.tempCwd, 'ggui-threads.sqlite');
     expect(
@@ -163,7 +163,7 @@ test.describe.serial('Phase 5 — SQLite storage driver boot', () => {
     //    `sqliteFamilyBytes` helper.
     const baselineBytes = sqliteFamilyBytes(
       handle.tempCwd,
-      'ggui-renders.sqlite',
+      'ggui-sessions.sqlite',
     );
     const { token } = await mintPairToken(handle, 'sqlite-storage-spec');
     expect(token.length).toBeGreaterThan(0);
@@ -189,24 +189,24 @@ test.describe.serial('Phase 5 — SQLite storage driver boot', () => {
       arguments: { handshakeId, props: {}, override: { contract: {} } },
     });
     expect(renderEnv.error).toBeUndefined();
-    // Post-Phase-B structuredContent surface: {renderId, url, action,
-    // nextStep?}. The presence of `renderId` is the proof the render
+    // Post-Phase-B structuredContent surface: {sessionId, url, action,
+    // nextStep?}. The presence of `sessionId` is the proof the render
     // committed.
     const renderOutput = renderEnv.result as {
-      structuredContent?: { renderId?: string; url?: string };
+      structuredContent?: { sessionId?: string; url?: string };
       isError?: boolean;
     };
-    expect(renderOutput.structuredContent?.renderId).toBeTruthy();
+    expect(renderOutput.structuredContent?.sessionId).toBeTruthy();
 
     const postWriteBytes = sqliteFamilyBytes(
       handle.tempCwd,
-      'ggui-renders.sqlite',
+      'ggui-sessions.sqlite',
     );
     expect(
       postWriteBytes,
       `renders sqlite family did not grow after ggui_render — baseline=${baselineBytes}B, post=${postWriteBytes}B. ` +
         `The SqliteGguiSessionStore may be silently falling through to in-memory. ` +
-        `(Sum spans ggui-renders.sqlite + ggui-renders.sqlite-wal + ggui-renders.sqlite-shm.)`,
+        `(Sum spans ggui-sessions.sqlite + ggui-sessions.sqlite-wal + ggui-sessions.sqlite-shm.)`,
     ).toBeGreaterThan(baselineBytes);
   });
 });

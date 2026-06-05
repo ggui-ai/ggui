@@ -31,7 +31,7 @@ function dispatchEnvelope(envelope: Partial<StreamEnvelope> & { channel: string 
     window.dispatchEvent(
       new CustomEvent(BRIDGE_EVENTS.AGENT_DATA, {
         detail: {
-          renderId: 's1',
+          sessionId: 's1',
           mode: 'append',
           payload: {},
           ...envelope,

@@ -1,6 +1,6 @@
 /**
  * `buildEventsPolling` — registry-level events-polling composition for
- * the iframe-runtime (R7). Reads /api/renders/:renderId/events with a
+ * the iframe-runtime (R7). Reads /api/sessions/:sessionId/events with a
  * GguiSessionEvent ledger cursor; dispatches each event by `event.type` to
  * the registered channel handler.
  *
@@ -14,32 +14,32 @@ import { buildEventsPolling } from '../events-polling.js';
 describe('buildEventsPolling', () => {
   it('returns a descriptor with the cursor-aware URL and default interval', () => {
     const desc = buildEventsPolling({
-      baseUrl: 'http://ggui.test/api/renders/rdr-1/events?wsToken=abc',
+      baseUrl: 'http://ggui.test/api/sessions/rdr-1/events?wsToken=abc',
     });
     expect(desc.intervalMs).toBe(2000);
     // First access — cursor seeded at 0.
     expect(desc.url).toBe(
-      'http://ggui.test/api/renders/rdr-1/events?wsToken=abc&sinceSequence=0&limit=100',
+      'http://ggui.test/api/sessions/rdr-1/events?wsToken=abc&sinceSequence=0&limit=100',
     );
   });
 
   it('honors initialSinceSequence + limit overrides on the composed URL', () => {
     const desc = buildEventsPolling({
-      baseUrl: 'http://ggui.test/api/renders/rdr-1/events?wsToken=abc',
+      baseUrl: 'http://ggui.test/api/sessions/rdr-1/events?wsToken=abc',
       initialSinceSequence: 12,
       limit: 50,
     });
     expect(desc.url).toBe(
-      'http://ggui.test/api/renders/rdr-1/events?wsToken=abc&sinceSequence=12&limit=50',
+      'http://ggui.test/api/sessions/rdr-1/events?wsToken=abc&sinceSequence=12&limit=50',
     );
   });
 
   it('uses ? separator when baseUrl has no query string', () => {
     const desc = buildEventsPolling({
-      baseUrl: 'http://ggui.test/api/renders/rdr-1/events',
+      baseUrl: 'http://ggui.test/api/sessions/rdr-1/events',
     });
     expect(desc.url).toBe(
-      'http://ggui.test/api/renders/rdr-1/events?sinceSequence=0&limit=100',
+      'http://ggui.test/api/sessions/rdr-1/events?sinceSequence=0&limit=100',
     );
   });
 
@@ -73,7 +73,7 @@ describe('buildEventsPolling', () => {
     const body: EventsResponse = {
       events: [
         { seq: 1, timestamp: '2026-01-01T00:00:00Z', type: 'render', data: { render: { id: 'a' } } },
-        { seq: 2, timestamp: '2026-01-01T00:00:01Z', type: 'props_update', data: { renderId: 'a', props: { x: 1 } } },
+        { seq: 2, timestamp: '2026-01-01T00:00:01Z', type: 'props_update', data: { sessionId: 'a', props: { x: 1 } } },
       ],
       lastSequence: 2,
       hasMore: false,
@@ -114,8 +114,8 @@ describe('buildEventsPolling', () => {
     const desc = buildEventsPolling({ baseUrl: 'http://x/events' });
     const body: EventsResponse = {
       events: [
-        { seq: 1, timestamp: '2026-01-01T00:00:00Z', type: 'props_update', data: { renderId: 'a', props: { x: 1 } } },
-        { seq: 2, timestamp: '2026-01-01T00:00:01Z', type: 'props_update', data: { renderId: 'a', props: { x: 2 } } },
+        { seq: 1, timestamp: '2026-01-01T00:00:00Z', type: 'props_update', data: { sessionId: 'a', props: { x: 1 } } },
+        { seq: 2, timestamp: '2026-01-01T00:00:01Z', type: 'props_update', data: { sessionId: 'a', props: { x: 2 } } },
       ],
       lastSequence: 2,
       hasMore: false,

@@ -71,7 +71,7 @@ export interface McpAppIframeMountOptions {
   readonly render: McpAppsGguiSession;
   /** GguiSession id — threaded into the proxy URL so server-side
    *  connector scoping works. */
-  readonly renderId: string;
+  readonly sessionId: string;
   /**
    * Base URL of the ggui server (origin). The host appends
    *  `/mcp-apps/resource` + `/mcp-apps/tools-call` to this. Should
@@ -98,12 +98,12 @@ export interface McpAppIframeMount {
 
 function composeResourceUrl(opts: {
   serverBaseUrl: string;
-  renderId: string;
+  sessionId: string;
   itemId: string;
 }): string {
   const base = opts.serverBaseUrl.replace(/\/$/, '');
   const qs = new URLSearchParams({
-    render: opts.renderId,
+    render: opts.sessionId,
     item: opts.itemId,
   });
   return `${base}/mcp-apps/resource?${qs.toString()}`;
@@ -153,7 +153,7 @@ export function mountMcpAppIframe(
   const serverBaseUrl = opts.serverBaseUrl ?? '';
   const resourceUrl = composeResourceUrl({
     serverBaseUrl,
-    renderId: opts.renderId,
+    sessionId: opts.sessionId,
     itemId: opts.render.id,
   });
   const toolsCallUrl = composeToolsCallUrl(serverBaseUrl);
@@ -166,7 +166,7 @@ export function mountMcpAppIframe(
 
   const iframe = container.ownerDocument.createElement('iframe');
   iframe.setAttribute('data-ggui-mcp-apps', 'iframe');
-  iframe.setAttribute('data-ggui-render-id', opts.render.id);
+  iframe.setAttribute('data-ggui-session-id', opts.render.id);
   iframe.setAttribute('data-ggui-connector-id', opts.render.source.connectorId);
   iframe.src = resourceUrl;
   iframe.title = opts.render.description ?? 'MCP App';
@@ -239,7 +239,7 @@ export function mountMcpAppIframe(
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              render: opts.renderId,
+              render: opts.sessionId,
               item: opts.render.id,
               tool,
               arguments: args,

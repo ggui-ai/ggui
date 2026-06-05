@@ -41,7 +41,7 @@ const BASIC_SPEC: StreamSpec = {
 
 function mkRender(overrides: Partial<GguiSessionStreamTarget> = {}): GguiSessionStreamTarget {
   return {
-    renderId: 'render_1',
+    sessionId: 'render_1',
     streamSpec: BASIC_SPEC,
     ...overrides,
   };
@@ -57,7 +57,7 @@ describe('handleStream', () => {
       const send = okSend();
       await expect(
         handleStream(
-          { renderId: 'render_1', channel: 'message', payload: { text: 'hi' } },
+          { sessionId: 'render_1', channel: 'message', payload: { text: 'hi' } },
           { render: mkRender({ streamSpec: undefined }), sendEnvelope: send },
         ),
       ).rejects.toBeInstanceOf(ChannelNotDeclaredError);
@@ -68,7 +68,7 @@ describe('handleStream', () => {
       const send = okSend();
       await expect(
         handleStream(
-          { renderId: 'render_1', channel: 'unknown-channel', payload: {} },
+          { sessionId: 'render_1', channel: 'unknown-channel', payload: {} },
           { render: mkRender(), sendEnvelope: send },
         ),
       ).rejects.toBeInstanceOf(ChannelNotDeclaredError);
@@ -78,7 +78,7 @@ describe('handleStream', () => {
     it('error carries the declared channel list for debugging', async () => {
       try {
         await handleStream(
-          { renderId: 'render_1', channel: 'nope', payload: {} },
+          { sessionId: 'render_1', channel: 'nope', payload: {} },
           { render: mkRender(), sendEnvelope: okSend() },
         );
         throw new Error('should have thrown');
@@ -86,7 +86,7 @@ describe('handleStream', () => {
         if (e instanceof ChannelNotDeclaredError) {
           expect(e.declaredChannels).toEqual(['message', 'status', 'log']);
           expect(e.channel).toBe('nope');
-          expect(e.renderId).toBe('render_1');
+          expect(e.sessionId).toBe('render_1');
         } else {
           throw e;
         }
@@ -99,7 +99,7 @@ describe('handleStream', () => {
       const send = okSend();
       await expect(
         handleStream(
-          { renderId: 'render_1', channel: 'message', payload: { wrong: 'shape' } },
+          { sessionId: 'render_1', channel: 'message', payload: { wrong: 'shape' } },
           { render: mkRender(), sendEnvelope: send },
         ),
       ).rejects.toBeInstanceOf(ContractViolationError);
@@ -112,7 +112,7 @@ describe('handleStream', () => {
       const send = okSend();
       await expect(
         handleStream(
-          { renderId: 'render_1', channel: 'message', payload: { text: 'hi' }, complete: true },
+          { sessionId: 'render_1', channel: 'message', payload: { text: 'hi' }, complete: true },
           { render: mkRender(), sendEnvelope: send },
         ),
       ).rejects.toBeInstanceOf(InvalidCompleteError);
@@ -122,7 +122,7 @@ describe('handleStream', () => {
     it('allows complete=true on a channel declared completable', async () => {
       const send = okSend();
       await handleStream(
-        { renderId: 'render_1', channel: 'log', payload: { line: 'done' }, complete: true },
+        { sessionId: 'render_1', channel: 'log', payload: { line: 'done' }, complete: true },
         { render: mkRender(), sendEnvelope: send },
       );
       expect(send).toHaveBeenCalledTimes(1);
@@ -133,7 +133,7 @@ describe('handleStream', () => {
     it('omits complete from envelope when input.complete is false/undefined', async () => {
       const send = okSend();
       await handleStream(
-        { renderId: 'render_1', channel: 'message', payload: { text: 'hi' } },
+        { sessionId: 'render_1', channel: 'message', payload: { text: 'hi' } },
         { render: mkRender(), sendEnvelope: send },
       );
       const call = (send as unknown as { mock: { calls: [HandleStreamEnvelope][] } }).mock.calls[0][0];
@@ -145,7 +145,7 @@ describe('handleStream', () => {
     it('derives append mode from spec', async () => {
       const send = okSend();
       await handleStream(
-        { renderId: 'render_1', channel: 'message', payload: { text: 'hi' } },
+        { sessionId: 'render_1', channel: 'message', payload: { text: 'hi' } },
         { render: mkRender(), sendEnvelope: send },
       );
       const call = (send as unknown as { mock: { calls: [HandleStreamEnvelope][] } }).mock.calls[0][0];
@@ -155,7 +155,7 @@ describe('handleStream', () => {
     it('derives replace mode from spec', async () => {
       const send = okSend();
       await handleStream(
-        { renderId: 'render_1', channel: 'status', payload: { active: true } },
+        { sessionId: 'render_1', channel: 'status', payload: { active: true } },
         { render: mkRender(), sendEnvelope: send },
       );
       const call = (send as unknown as { mock: { calls: [HandleStreamEnvelope][] } }).mock.calls[0][0];
@@ -166,7 +166,7 @@ describe('handleStream', () => {
       const send = okSend();
       // channel 'log' has no `mode` on the spec — resolveStreamChannel applies default.
       await handleStream(
-        { renderId: 'render_1', channel: 'log', payload: { line: 'x' } },
+        { sessionId: 'render_1', channel: 'log', payload: { line: 'x' } },
         { render: mkRender(), sendEnvelope: send },
       );
       const call = (send as unknown as { mock: { calls: [HandleStreamEnvelope][] } }).mock.calls[0][0];
@@ -178,7 +178,7 @@ describe('handleStream', () => {
     it('returns { accepted: true } when sendEnvelope returns no seq', async () => {
       const send = okSend();
       const out = await handleStream(
-        { renderId: 'render_1', channel: 'message', payload: { text: 'hi' } },
+        { sessionId: 'render_1', channel: 'message', payload: { text: 'hi' } },
         { render: mkRender(), sendEnvelope: send },
       );
       expect(out).toEqual({ accepted: true });
@@ -187,7 +187,7 @@ describe('handleStream', () => {
     it('propagates seq when sendEnvelope returns one', async () => {
       const send = okSend(42);
       const out = await handleStream(
-        { renderId: 'render_1', channel: 'message', payload: { text: 'hi' } },
+        { sessionId: 'render_1', channel: 'message', payload: { text: 'hi' } },
         { render: mkRender(), sendEnvelope: send },
       );
       expect(out).toEqual({ accepted: true, seq: 42 });
@@ -195,15 +195,15 @@ describe('handleStream', () => {
   });
 
   describe('sendEnvelope shape', () => {
-    it('builds envelope with renderId/channel/mode/payload (and complete when set)', async () => {
+    it('builds envelope with sessionId/channel/mode/payload (and complete when set)', async () => {
       const send = okSend(7);
       await handleStream(
-        { renderId: 'render_1', channel: 'log', payload: { line: 'end' }, complete: true },
+        { sessionId: 'render_1', channel: 'log', payload: { line: 'end' }, complete: true },
         { render: mkRender(), sendEnvelope: send },
       );
       const call = (send as unknown as { mock: { calls: [HandleStreamEnvelope][] } }).mock.calls[0][0];
       expect(call).toEqual({
-        renderId: 'render_1',
+        sessionId: 'render_1',
         channel: 'log',
         mode: 'append',
         payload: { line: 'end' },

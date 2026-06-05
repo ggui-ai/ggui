@@ -60,7 +60,7 @@ export interface HostStreamWsConfig {
  * Per-iframe binding handle. Identifies the (render, app) tuple the
  * bound iframe is rendering — the manager uses these to scope
  * subscriptions when an iframe announces a channel (the
- * `stream-subscribe` notification's renderId MUST match; mismatches
+ * `stream-subscribe` notification's sessionId MUST match; mismatches
  * are silently dropped to prevent cross-render subscription leaks).
  */
 export interface BindIframeOptions {
@@ -74,7 +74,7 @@ export interface BindIframeOptions {
    * it prefers a thinner update path. Both paths converge on the
    * same subscription-management primitive.
    */
-  readonly renderId: string;
+  readonly sessionId: string;
   readonly appId: string;
   /**
    * Optional allowlist of tool names this iframe is permitted to
@@ -173,7 +173,7 @@ export interface HostStreamManager {
    * subscribe announcements. Used when the host rotates which
    * render the iframe is showing without remounting it.
    */
-  rebindRender(iframe: HTMLIFrameElement, renderId: string): void;
+  rebindRender(iframe: HTMLIFrameElement, sessionId: string): void;
   /**
    * Tear everything down. After dispose, the manager rejects new
    * `bindIframe` calls + drops every existing binding. Mainly for

@@ -144,14 +144,14 @@ function readVisibility(toolDecl: unknown): Array<'model' | 'app'> {
  * a stack vessel — so the render id alone resolves the McpAppsGguiSession
  * directly. The `itemId` parameter is preserved on the wire-facing
  * query string for callsite stability but ignored when it matches the
- * renderId (which is the only valid value post-collapse).
+ * sessionId (which is the only valid value post-collapse).
  */
 async function resolveMcpAppsItem(
   store: GguiSessionStore,
-  renderId: string,
+  sessionId: string,
   _itemId: string,
 ): Promise<McpAppsGguiSession | null> {
-  const stored = await store.get(renderId);
+  const stored = await store.get(sessionId);
   if (!stored) return null;
   if (!isMcpAppsGguiSession(stored.render)) return null;
   return stored.render;
@@ -181,13 +181,13 @@ export function installMcpAppsInbound(
   const cache = new ToolsListCache();
 
   app.get(`${path}/resource`, async (req: Request, res: Response) => {
-    const renderId = typeof req.query.render === 'string' ? req.query.render : '';
-    const itemId = typeof req.query.item === 'string' ? req.query.item : renderId;
-    if (!renderId) {
+    const sessionId = typeof req.query.render === 'string' ? req.query.render : '';
+    const itemId = typeof req.query.item === 'string' ? req.query.item : sessionId;
+    if (!sessionId) {
       res.status(400).type('text/plain').send('Missing ?render');
       return;
     }
-    const item = await resolveMcpAppsItem(opts.renderStore, renderId, itemId);
+    const item = await resolveMcpAppsItem(opts.renderStore, sessionId, itemId);
     if (!item) {
       res.status(404).type('text/plain').send('GguiSession not found');
       return;
@@ -220,7 +220,7 @@ export function installMcpAppsInbound(
       res.status(200).type((first.mimeType as string) ?? 'text/html;profile=mcp-app').send(first.text);
     } catch (err) {
       opts.logger.error('mcp_apps_resource_proxy_failed', {
-        renderId,
+        sessionId,
         itemId,
         connectorId: item.source.connectorId,
         error: String(err),
@@ -238,14 +238,14 @@ export function installMcpAppsInbound(
       tool?: unknown;
       arguments?: unknown;
     };
-    const renderId = typeof body.render === 'string' ? body.render : '';
-    const itemId = typeof body.item === 'string' ? body.item : renderId;
+    const sessionId = typeof body.render === 'string' ? body.render : '';
+    const itemId = typeof body.item === 'string' ? body.item : sessionId;
     const toolName = typeof body.tool === 'string' ? body.tool : '';
-    if (!renderId || !toolName) {
+    if (!sessionId || !toolName) {
       res.status(400).json({ error: 'missing_fields' });
       return;
     }
-    const item = await resolveMcpAppsItem(opts.renderStore, renderId, itemId);
+    const item = await resolveMcpAppsItem(opts.renderStore, sessionId, itemId);
     if (!item) {
       res.status(404).json({ error: 'item_not_found' });
       return;
@@ -297,7 +297,7 @@ export function installMcpAppsInbound(
       res.status(200).json(result);
     } catch (err) {
       opts.logger.error('mcp_apps_tools_call_proxy_failed', {
-        renderId,
+        sessionId,
         itemId,
         connectorId: item.source.connectorId,
         toolName,

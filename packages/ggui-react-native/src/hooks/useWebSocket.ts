@@ -11,7 +11,7 @@ import { WebSocketManager } from '../websocket/WebSocketManager';
  */
 export interface UseWebSocketOptions {
   url: string;
-  renderId: string;
+  sessionId: string;
   appId: string;
   onMessage?: (message: WebSocketMessage) => void;
 }
@@ -38,13 +38,13 @@ export interface UseWebSocketReturn {
  * Creates a mobile-aware {@link WebSocketManager} that handles AppState
  * monitoring (background/foreground transitions) and optional NetInfo
  * integration. Connects on mount, disconnects on unmount, and reconnects
- * when `url`, `renderId`, or `appId` change.
+ * when `url`, `sessionId`, or `appId` change.
  *
  * @param options - Connection configuration and message handler
  * @returns Connection status, envelope sender, raw sender, and last error
  */
 export function useWebSocket(options: UseWebSocketOptions): UseWebSocketReturn {
-  const { url, renderId, appId, onMessage } = options;
+  const { url, sessionId, appId, onMessage } = options;
   const [status, setStatus] = useState<ConnectionStatus>('disconnected');
   const [lastError, setLastError] = useState<Error | null>(null);
   const managerRef = useRef<WebSocketManager | null>(null);
@@ -60,7 +60,7 @@ export function useWebSocket(options: UseWebSocketOptions): UseWebSocketReturn {
 
     const manager = new WebSocketManager({
       url,
-      renderId,
+      sessionId,
       appId,
       onMessage: (msg) => {
         if (msg.type === 'error') {
@@ -81,7 +81,7 @@ export function useWebSocket(options: UseWebSocketOptions): UseWebSocketReturn {
       manager.disconnect();
       managerRef.current = null;
     };
-  }, [url, renderId, appId]);
+  }, [url, sessionId, appId]);
 
   const sendAction = useCallback((envelope: ActionEnvelope) => {
     managerRef.current?.send({

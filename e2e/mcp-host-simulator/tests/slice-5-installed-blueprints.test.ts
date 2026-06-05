@@ -111,7 +111,7 @@ describe("host-simulator: Slice 5 installed-blueprints unification", () => {
             return {
               ok: true,
               response: {
-                renderId: "ignored",
+                sessionId: "ignored",
                 componentCode: "unused-cold-gen",
                 sourceCode: "unused-cold-gen",
               },

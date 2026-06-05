@@ -165,7 +165,7 @@ export interface HostContextProjection {
  * stored value; no merge logic.
  */
 export interface HostContextObservedPayload {
-  readonly renderId: string;
+  readonly sessionId: string;
   readonly hostContext: HostContextProjection;
 }
 

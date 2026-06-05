@@ -57,8 +57,8 @@ export interface PendingEvent {
  * Input for ggui_consume tool — long-poll for buffered events on a
  * specific render.
  *
- * Keyed by `renderId`. The agent gets `renderId` from
- * `renderOutput.renderId`.
+ * Keyed by `sessionId`. The agent gets `sessionId` from
+ * `renderOutput.sessionId`.
  *
  * Default semantic: long-poll, return on first event or server-default
  * timeout. Agent loops by re-calling. There is no `until` parameter —
@@ -73,9 +73,9 @@ export interface PendingEvent {
 export interface GguiConsumeInput {
   /**
    * GguiSession to consume events from. Globally unique (UUID).
-   * Cross-tenant access surfaces uniformly as `render_not_found`.
+   * Cross-tenant access surfaces uniformly as `session_not_found`.
    */
-  renderId: string;
+  sessionId: string;
   /**
    * Timeout in seconds for long-poll. Server-side wall-clock cap.
    * - 0: immediate return (no waiting)
@@ -105,7 +105,7 @@ export interface GguiConsumeInput {
  */
 export interface GguiEmitInput<TPayload = JsonValue> {
   /** GguiSession to stream to. Server enforces app-ownership. */
-  renderId: string;
+  sessionId: string;
 
   /**
    * Channel name. MUST be declared on the resolved render's
@@ -155,17 +155,17 @@ export interface GguiEmitOutput {
 
 
 /**
- * Input for ggui_get_render tool - retrieves render state
+ * Input for ggui_get_session tool - retrieves render state
  */
-export interface GguiGetRenderInput {
+export interface GguiGetSessionInput {
   /** GguiSession ID to get state for */
-  renderId: string;
+  sessionId: string;
 }
 
 /**
- * Output from ggui_get_render tool — full render snapshot.
+ * Output from ggui_get_session tool — full render snapshot.
  */
-export type GguiGetRenderOutput = GguiSession;
+export type GguiGetSessionOutput = GguiSession;
 
 // =============================================================================
 // MCP Tool Output Types
@@ -184,7 +184,7 @@ export type GguiGetRenderOutput = GguiSession;
  * have mutated by the time consume returns.
  *
  * Distinct from the inbound live-channel `ActionEnvelope` (which has
- * `{renderId, type, payload?, ...}` and lives on the WebSocket inbound
+ * `{sessionId, type, payload?, ...}` and lives on the WebSocket inbound
  * seam) — consume reads from a separate render-scoped pipe whose entries
  * originate at `submit_action`.
  */
@@ -192,7 +192,7 @@ export interface ConsumeEventEntry {
   /** Stable discriminator — always the literal `'action'`. */
   readonly type: 'action';
   /** GguiSession the gesture targeted. */
-  readonly renderId: string;
+  readonly sessionId: string;
   /** Which `actionSpec[*]` entry the iframe dispatched against. */
   readonly intent: string;
   /**
@@ -408,7 +408,7 @@ export interface GguiRequestCredentialInput {
   /** Why the agent needs this credential (shown to user) */
   reason?: string;
   /** Existing render to render consent UI into */
-  renderId?: string;
+  sessionId?: string;
 }
 
 /**
@@ -584,7 +584,7 @@ export const MCP_ERROR_CODES = {
   INTERNAL_ERROR: -32603,
   // Protocol-specific error codes
   UNAUTHORIZED: -32001,
-  RENDER_NOT_FOUND: -32002,
+  SESSION_NOT_FOUND: -32002,
   APP_NOT_FOUND: -32003,
   PRODUCTION_FAILED: -32004,
   CAPABILITY_DENIED: -32005,
@@ -597,7 +597,7 @@ export const MCP_ERROR_CODES = {
 export const PLATFORM_ERROR_CODES = {
   GENERATION_QUOTA_EXCEEDED: -32010,
   APP_LIMIT_EXCEEDED: -32011,
-  CONCURRENT_RENDER_LIMIT: -32012,
+  CONCURRENT_SESSION_LIMIT: -32012,
   RATE_LIMIT_EXCEEDED: -32013,
   CONTRACT_VIOLATION: -32020,
 } as const;

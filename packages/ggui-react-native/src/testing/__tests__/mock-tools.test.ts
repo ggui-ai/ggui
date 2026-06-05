@@ -152,7 +152,7 @@ describe('createTestContext', () => {
   it('creates a context with defaults', () => {
     const ctx = createTestContext();
     expect(ctx.appId).toBe('test-app');
-    expect(ctx.renderId).toBe('test-render');
+    expect(ctx.sessionId).toBe('test-render');
     expect(ctx.auth).toEqual({ isAuthenticated: false });
   });
 

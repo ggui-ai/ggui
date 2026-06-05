@@ -47,7 +47,7 @@ export interface ChannelRegistryOptions {
   /**
    * Caller-supplied subscribe-frame factory. The library stays
    * protocol-version-agnostic — the consumer (iframe-runtime) knows
-   * the exact `{type:'subscribe', payload:{renderId, appId,
+   * the exact `{type:'subscribe', payload:{sessionId, appId,
    * bootstrap, fromSeq?}}` shape its server expects and supplies it
    * via this factory at bind time.
    *

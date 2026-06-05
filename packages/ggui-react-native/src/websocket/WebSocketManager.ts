@@ -16,7 +16,7 @@ export interface NetInfoState {
  */
 export interface WebSocketManagerOptions {
   url: string;
-  renderId: string;
+  sessionId: string;
   appId: string;
   onMessage: (message: WebSocketMessage) => void;
   onStatusChange: (status: ConnectionStatus) => void;
@@ -75,10 +75,10 @@ export class WebSocketManager {
     // Load any persisted buffered events on first connect
     await this.buffer.loadPersisted();
 
-    const { url, renderId, appId, onStatusChange } = this.options;
+    const { url, sessionId, appId, onStatusChange } = this.options;
     onStatusChange('connecting');
 
-    const wsUrl = `${url}?renderId=${renderId}&appId=${appId}`;
+    const wsUrl = `${url}?sessionId=${sessionId}&appId=${appId}`;
     this.ws = new WebSocket(wsUrl);
 
     this.ws.onopen = () => {
@@ -92,7 +92,7 @@ export class WebSocketManager {
       this.ws?.send(JSON.stringify({
         type: 'subscribe',
         payload: {
-          renderId,
+          sessionId,
           appId,
           supportedVersions: [...CLIENT_SUPPORTED_VERSIONS],
         },

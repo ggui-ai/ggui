@@ -12,9 +12,9 @@ import { createGguiSyncContextHandler } from './sync-context.js';
  *
  * Post-Phase-B (flatten-render-identity): the wire input collapsed
  * from `{sessionId, stackItemId, appId, snapshot}` to
- * `{renderId, appId, snapshot}`. The reject codes
+ * `{sessionId, appId, snapshot}`. The reject codes
  * `SESSION_NOT_FOUND` + `STACK_ITEM_NOT_FOUND` collapsed to one
- * `RENDER_NOT_FOUND`. The snapshot lands on the render's
+ * `SESSION_NOT_FOUND`. The snapshot lands on the render's
  * `contextSnapshot` field via `renderStore.commit`.
  */
 
@@ -23,16 +23,16 @@ const NOW_MS = Date.parse('2026-05-10T00:00:00.000Z');
 async function seedRender(
   store: InMemoryGguiSessionStore,
   opts: {
-    renderId?: string;
+    sessionId?: string;
     appId?: string;
     contextSpec?: ContextSpec;
     initialSnapshot?: JsonObject;
   } = {},
-): Promise<{ renderId: string }> {
-  const renderId = opts.renderId ?? 'render-1';
+): Promise<{ sessionId: string }> {
+  const sessionId = opts.sessionId ?? 'render-1';
   const appId = opts.appId ?? 'app-1';
   const render: ComponentGguiSession = {
-    id: renderId,
+    id: sessionId,
     appId,
     type: 'component',
     componentCode: 'export default () => null;',
@@ -44,7 +44,7 @@ async function seedRender(
     ...(opts.initialSnapshot ? { contextSnapshot: opts.initialSnapshot } : {}),
   };
   await store.commit({ render, appId });
-  return { renderId };
+  return { sessionId };
 }
 
 describe('createGguiSyncContextHandler', () => {
@@ -74,18 +74,18 @@ describe('createGguiSyncContextHandler', () => {
       const contextSpec: ContextSpec = {
         count: { schema: { type: 'number' }, default: 0 },
       };
-      const { renderId } = await seedRender(renderStore, { contextSpec });
+      const { sessionId } = await seedRender(renderStore, { contextSpec });
       const h = createGguiSyncContextHandler({ renderStore });
       const out = await h.handler(
         {
-          renderId,
+          sessionId,
           appId: 'app-1',
           snapshot: { count: 7 },
         },
         { appId: 'app-1', requestId: 'r1' },
       );
       expect(out.ok).toBe(true);
-      const stored = await renderStore.get(renderId);
+      const stored = await renderStore.get(sessionId);
       expect((stored?.render as ComponentGguiSession).contextSnapshot).toEqual({
         count: 7,
       });
@@ -96,7 +96,7 @@ describe('createGguiSyncContextHandler', () => {
         count: { schema: { type: 'number' }, default: 0 },
         text: { schema: { type: 'string' }, default: '' },
       };
-      const { renderId } = await seedRender(renderStore, {
+      const { sessionId } = await seedRender(renderStore, {
         contextSpec,
         initialSnapshot: { count: 5, text: 'first' },
       });
@@ -104,13 +104,13 @@ describe('createGguiSyncContextHandler', () => {
       // Second snapshot omits `text` — REPLACE drops it (no merge).
       await h.handler(
         {
-          renderId,
+          sessionId,
           appId: 'app-1',
           snapshot: { count: 9 },
         },
         { appId: 'app-1', requestId: 'r2' },
       );
-      const stored = await renderStore.get(renderId);
+      const stored = await renderStore.get(sessionId);
       expect((stored?.render as ComponentGguiSession).contextSnapshot).toEqual({
         count: 9,
       });
@@ -120,10 +120,10 @@ describe('createGguiSyncContextHandler', () => {
       const contextSpec: ContextSpec = {
         count: { schema: { type: 'number' }, default: 0 },
       };
-      const { renderId } = await seedRender(renderStore, { contextSpec });
+      const { sessionId } = await seedRender(renderStore, { contextSpec });
       const h = createGguiSyncContextHandler({ renderStore });
       const out = await h.handler(
-        { renderId, appId: 'app-1', snapshot: {} },
+        { sessionId, appId: 'app-1', snapshot: {} },
         { appId: 'app-1', requestId: 'r1' },
       );
       expect(out.ok).toBe(true);
@@ -135,11 +135,11 @@ describe('createGguiSyncContextHandler', () => {
       const contextSpec: ContextSpec = {
         count: { schema: { type: 'number' }, default: 0 },
       };
-      const { renderId } = await seedRender(renderStore, { contextSpec });
+      const { sessionId } = await seedRender(renderStore, { contextSpec });
       const h = createGguiSyncContextHandler({ renderStore });
       const out = await h.handler(
         {
-          renderId,
+          sessionId,
           appId: 'app-1',
           snapshot: { count: 'not a number' },
         },
@@ -154,11 +154,11 @@ describe('createGguiSyncContextHandler', () => {
       const contextSpec: ContextSpec = {
         count: { schema: { type: 'number' }, default: 0 },
       };
-      const { renderId } = await seedRender(renderStore, { contextSpec });
+      const { sessionId } = await seedRender(renderStore, { contextSpec });
       const h = createGguiSyncContextHandler({ renderStore });
       const out = await h.handler(
         {
-          renderId,
+          sessionId,
           appId: 'app-1',
           snapshot: { count: 5, undeclared: 'value' },
         },
@@ -170,11 +170,11 @@ describe('createGguiSyncContextHandler', () => {
     });
 
     it('rejects snapshot when contract declares no contextSpec', async () => {
-      const { renderId } = await seedRender(renderStore);
+      const { sessionId } = await seedRender(renderStore);
       const h = createGguiSyncContextHandler({ renderStore });
       const out = await h.handler(
         {
-          renderId,
+          sessionId,
           appId: 'app-1',
           snapshot: { anything: 'goes' },
         },
@@ -187,11 +187,11 @@ describe('createGguiSyncContextHandler', () => {
   });
 
   describe('failure modes', () => {
-    it('rejects unknown renderId with RENDER_NOT_FOUND', async () => {
+    it('rejects unknown sessionId with SESSION_NOT_FOUND', async () => {
       const h = createGguiSyncContextHandler({ renderStore });
       const out = await h.handler(
         {
-          renderId: 'never-existed',
+          sessionId: 'never-existed',
           appId: 'app-1',
           snapshot: {},
         },
@@ -199,15 +199,15 @@ describe('createGguiSyncContextHandler', () => {
       );
       expect(out.ok).toBe(false);
       if (out.ok) throw new Error('expected reject');
-      expect(out.code).toBe('RENDER_NOT_FOUND');
+      expect(out.code).toBe('SESSION_NOT_FOUND');
     });
 
     it('rejects cross-tenant snapshot with TENANT_MISMATCH', async () => {
-      const { renderId } = await seedRender(renderStore, { appId: 'app-1' });
+      const { sessionId } = await seedRender(renderStore, { appId: 'app-1' });
       const h = createGguiSyncContextHandler({ renderStore });
       const out = await h.handler(
         {
-          renderId,
+          sessionId,
           appId: 'app-OTHER',
           snapshot: {},
         },
@@ -227,11 +227,11 @@ describe('createGguiSyncContextHandler', () => {
       const contextSpec: ContextSpec = {
         blob: { schema: { type: 'string' }, default: '' },
       };
-      const { renderId } = await seedRender(renderStore, { contextSpec });
+      const { sessionId } = await seedRender(renderStore, { contextSpec });
       const h = createGguiSyncContextHandler({ renderStore });
       const oversize = 'x'.repeat(17 * 1024);
       const out = await h.handler(
-        { renderId, appId: 'app-1', snapshot: { blob: oversize } },
+        { sessionId, appId: 'app-1', snapshot: { blob: oversize } },
         { appId: 'app-1', requestId: 'r1' },
       );
       expect(out.ok).toBe(false);
@@ -250,10 +250,10 @@ describe('createGguiSyncContextHandler', () => {
         contextSpec[slot] = { schema: { type: 'string' }, default: '' };
         snapshot[slot] = slotValue;
       }
-      const { renderId } = await seedRender(renderStore, { contextSpec });
+      const { sessionId } = await seedRender(renderStore, { contextSpec });
       const h = createGguiSyncContextHandler({ renderStore });
       const out = await h.handler(
-        { renderId, appId: 'app-1', snapshot },
+        { sessionId, appId: 'app-1', snapshot },
         { appId: 'app-1', requestId: 'r1' },
       );
       expect(out.ok).toBe(false);
@@ -269,10 +269,10 @@ describe('createGguiSyncContextHandler', () => {
         contextSpec[slot] = { schema: { type: 'number' }, default: 0 };
         snapshot[slot] = i;
       }
-      const { renderId } = await seedRender(renderStore, { contextSpec });
+      const { sessionId } = await seedRender(renderStore, { contextSpec });
       const h = createGguiSyncContextHandler({ renderStore });
       const out = await h.handler(
-        { renderId, appId: 'app-1', snapshot },
+        { sessionId, appId: 'app-1', snapshot },
         { appId: 'app-1', requestId: 'r1' },
       );
       expect(out.ok).toBe(false);
@@ -284,10 +284,10 @@ describe('createGguiSyncContextHandler', () => {
       const contextSpec: ContextSpec = {
         count: { schema: { type: 'number' }, default: 0 },
       };
-      const { renderId } = await seedRender(renderStore, { contextSpec });
+      const { sessionId } = await seedRender(renderStore, { contextSpec });
       const h = createGguiSyncContextHandler({ renderStore });
       const out = await h.handler(
-        { renderId, appId: 'app-1', snapshot: { count: 1 } },
+        { sessionId, appId: 'app-1', snapshot: { count: 1 } },
         { appId: 'app-1', requestId: 'r1' },
       );
       expect(out.ok).toBe(true);

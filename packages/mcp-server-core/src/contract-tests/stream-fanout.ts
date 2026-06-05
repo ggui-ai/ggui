@@ -9,11 +9,11 @@
  *   - Publish-before-subscribe semantics — frames published before
  *     subscribe-return MAY be missed; frames published after MUST arrive.
  *   - Concurrent producers for the same render interleave without loss.
- *   - `close(renderId)` drains all subscribers cleanly (iterator ends).
+ *   - `close(sessionId)` drains all subscribers cleanly (iterator ends).
  *   - Consumer abandoning the iterator unregisters the subscriber
  *     (observable via `subscriberCount` when implementations expose it;
  *     the contract is enforced via a close-after-drop round-trip).
- *   - GguiSession isolation — `publish({renderId: A})` never delivers to a
+ *   - GguiSession isolation — `publish({sessionId: A})` never delivers to a
  *     subscriber of render B.
  */
 import { describe, expect, it } from 'vitest';
@@ -21,12 +21,12 @@ import type { StreamFanout } from '../stream-fanout.js';
 import type { BufferedStreamEnvelope } from '../render-stream-buffer.js';
 
 function makeEnvelope(
-  renderId: string,
+  sessionId: string,
   seq: number,
   overrides: Partial<BufferedStreamEnvelope> = {},
 ): BufferedStreamEnvelope {
   return {
-    renderId,
+    sessionId,
     seq,
     channel: 'message',
     mode: 'append',
@@ -67,10 +67,10 @@ export function streamFanoutContract(
       // already registered; the very next publish MUST arrive. The
       // test parks next() first so a delivered envelope resolves it.
       const first = iter.next();
-      await fanout.publish({ renderId: 's1', envelope: makeEnvelope('s1', 1) });
+      await fanout.publish({ sessionId: 's1', envelope: makeEnvelope('s1', 1) });
       const { value, done } = await first;
       expect(done).toBe(false);
-      expect(value).toMatchObject({ renderId: 's1', seq: 1 });
+      expect(value).toMatchObject({ sessionId: 's1', seq: 1 });
       await fanout.close('s1');
     });
 
@@ -79,13 +79,13 @@ export function streamFanoutContract(
       const iter = fanout.subscribe('s1')[Symbol.asyncIterator]();
       // Prime the iterator so subsequent publishes are guaranteed delivery.
       const primed = iter.next();
-      await fanout.publish({ renderId: 's1', envelope: makeEnvelope('s1', 1) });
+      await fanout.publish({ sessionId: 's1', envelope: makeEnvelope('s1', 1) });
       const first = await primed;
       expect(first.done).toBe(false);
 
       for (let i = 2; i <= 1000; i++) {
         await fanout.publish({
-          renderId: 's1',
+          sessionId: 's1',
           envelope: makeEnvelope('s1', i),
         });
       }
@@ -103,14 +103,14 @@ export function streamFanoutContract(
       const iterB = fanout.subscribe('s1')[Symbol.asyncIterator]();
       const primeA = iterA.next();
       const primeB = iterB.next();
-      await fanout.publish({ renderId: 's1', envelope: makeEnvelope('s1', 1) });
+      await fanout.publish({ sessionId: 's1', envelope: makeEnvelope('s1', 1) });
       const [a0, b0] = await Promise.all([primeA, primeB]);
       expect(a0.value).toMatchObject({ seq: 1 });
       expect(b0.value).toMatchObject({ seq: 1 });
 
       for (let i = 2; i <= 10; i++) {
         await fanout.publish({
-          renderId: 's1',
+          sessionId: 's1',
           envelope: makeEnvelope('s1', i),
         });
       }
@@ -129,18 +129,18 @@ export function streamFanoutContract(
       const primed = iterB.next();
       // Publish to a different render; iterB must still be pending.
       await fanout.publish({
-        renderId: 'sA',
+        sessionId: 'sA',
         envelope: makeEnvelope('sA', 1),
       });
       // Give the event loop a chance to deliver (if it were going to).
       await new Promise((r) => setTimeout(r, 20));
       // Now publish to sB and confirm that's what iterB gets.
       await fanout.publish({
-        renderId: 'sB',
+        sessionId: 'sB',
         envelope: makeEnvelope('sB', 1),
       });
       const first = await primed;
-      expect(first.value).toMatchObject({ renderId: 'sB', seq: 1 });
+      expect(first.value).toMatchObject({ sessionId: 'sB', seq: 1 });
       await fanout.close('sA');
       await fanout.close('sB');
     });
@@ -150,7 +150,7 @@ export function streamFanoutContract(
       const iter = fanout.subscribe('s1')[Symbol.asyncIterator]();
       // Prime with a sentinel seq=0 so we know the subscriber is live.
       const primed = iter.next();
-      await fanout.publish({ renderId: 's1', envelope: makeEnvelope('s1', 0) });
+      await fanout.publish({ sessionId: 's1', envelope: makeEnvelope('s1', 0) });
       await primed;
 
       const N = 200;
@@ -165,7 +165,7 @@ export function streamFanoutContract(
           (async () => {
             for (let s = start; s < end; s++) {
               await fanout.publish({
-                renderId: 's1',
+                sessionId: 's1',
                 envelope: makeEnvelope('s1', s),
               });
             }
@@ -182,7 +182,7 @@ export function streamFanoutContract(
       await fanout.close('s1');
     });
 
-    it('close(renderId) drains all subscribers — iterator ends cleanly', async () => {
+    it('close(sessionId) drains all subscribers — iterator ends cleanly', async () => {
       const fanout = await makeFanout();
       const iterA = fanout.subscribe('s1')[Symbol.asyncIterator]();
       const iterB = fanout.subscribe('s1')[Symbol.asyncIterator]();
@@ -195,7 +195,7 @@ export function streamFanoutContract(
       expect(rb.done).toBe(true);
     });
 
-    it('close(renderId) is idempotent', async () => {
+    it('close(sessionId) is idempotent', async () => {
       const fanout = await makeFanout();
       await expect(fanout.close('never-subscribed')).resolves.toBeUndefined();
       const iter = fanout.subscribe('s1')[Symbol.asyncIterator]();
@@ -212,7 +212,7 @@ export function streamFanoutContract(
       const fanout = await makeFanout();
       const iter = fanout.subscribe('s1')[Symbol.asyncIterator]();
       const primed = iter.next();
-      await fanout.publish({ renderId: 's1', envelope: makeEnvelope('s1', 1) });
+      await fanout.publish({ sessionId: 's1', envelope: makeEnvelope('s1', 1) });
       await primed;
       // Abandon the iterator explicitly.
       await iter.return?.();
@@ -222,7 +222,7 @@ export function streamFanoutContract(
       // throw). This is a smoke-level check; impl-specific tests can go
       // deeper via e.g. subscriberCount().
       await expect(
-        fanout.publish({ renderId: 's1', envelope: makeEnvelope('s1', 2) }),
+        fanout.publish({ sessionId: 's1', envelope: makeEnvelope('s1', 2) }),
       ).resolves.toBeUndefined();
       await fanout.close('s1');
     });

@@ -56,7 +56,7 @@ export function createHostStreamManager(
     bindIframe(_iframe: HTMLIFrameElement, _options: BindIframeOptions): UnbindIframe {
       throw new NotImplementedError('bindIframe');
     },
-    rebindRender(_iframe: HTMLIFrameElement, _renderId: string): void {
+    rebindRender(_iframe: HTMLIFrameElement, _sessionId: string): void {
       throw new NotImplementedError('rebindRender');
     },
     dispose(): void {

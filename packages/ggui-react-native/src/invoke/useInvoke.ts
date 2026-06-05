@@ -81,7 +81,7 @@ export interface UseInvokeOptions {
    * Continue an existing conversation. Absent → new session each call.
    * Forwarded to the agent as the `X-Ggui-Host-Session-Id` header — this
    * is the conversation envelope identity (the chat thread), distinct
-   * from any per-render `renderId` carried on `_meta["ai.ggui/render"]`.
+   * from any per-render `sessionId` carried on `_meta["ai.ggui/render"]`.
    */
   hostSessionId?: string;
   /** End-user JWT for authenticated apps. */
@@ -181,7 +181,7 @@ export function useInvoke(options: UseInvokeOptions = {}): UseInvokeReturn {
   // without this the agent mints a new session per POST and turn-2 render
   // events never reach the already-mounted `<GguiRender>`. Mirrors the web
   // hook's fix. Names the conversation envelope (the chat thread),
-  // distinct from any per-render `renderId`.
+  // distinct from any per-render `sessionId`.
   const hostSessionIdRef = useRef<string | null>(options.hostSessionId ?? null);
 
   const send = useCallback(

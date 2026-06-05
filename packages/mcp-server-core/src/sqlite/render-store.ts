@@ -73,7 +73,7 @@ export interface SqliteGguiSessionStoreOptions {
   /**
    * SQLite database file path. Pass `:memory:` for ephemeral tests
    * — shares the `SqliteGguiSessionStore` code path but gets reset on
-   * every instance. Default: `./ggui-renders.sqlite` (relative to
+   * every instance. Default: `./ggui-sessions.sqlite` (relative to
    * the process CWD).
    */
   filename?: string;
@@ -138,7 +138,7 @@ export class SqliteGguiSessionStore implements GguiSessionStore {
   private readonly idGenerator: () => string;
   private readonly defaultTtlMs: number;
 
-  /** Fanout: renderId → listeners waiting for the next append / close. */
+  /** Fanout: sessionId → listeners waiting for the next append / close. */
   private readonly waiters = new Map<string, Set<Waiter>>();
 
   /** Prepared statements — built once at construction for hot paths. */
@@ -164,7 +164,7 @@ export class SqliteGguiSessionStore implements GguiSessionStore {
       this.db = opts.database;
       this.ownsDatabase = false;
     } else {
-      this.db = new Database(opts.filename ?? './ggui-renders.sqlite');
+      this.db = new Database(opts.filename ?? './ggui-sessions.sqlite');
       this.ownsDatabase = true;
     }
     this.now = opts.now ?? Date.now;
@@ -204,7 +204,7 @@ export class SqliteGguiSessionStore implements GguiSessionStore {
       selectEventsFromSeq: this.db.prepare<unknown[], EventRow>(
         `SELECT * FROM render_events WHERE render_id = ? AND seq >= ? ORDER BY seq ASC`,
       ),
-      // R7 — `listEventsSince(renderId, sinceSeq, limit)` backing.
+      // R7 — `listEventsSince(sessionId, sinceSeq, limit)` backing.
       // STRICT inequality (`seq > ?`) since callers pass their cursor
       // and want only events newer than what they've already seen.
       // We fetch `limit + 1` to compute `hasMore` in a single query.
@@ -381,19 +381,19 @@ export class SqliteGguiSessionStore implements GguiSessionStore {
     // concurrent appends can't both read `eventSequence = N` and
     // race on `N+1`.
     const txn = this.db.transaction((): { seq: number; event: GguiSessionEvent } => {
-      const row = this.stmts.getGguiSession.get(input.renderId) as
+      const row = this.stmts.getGguiSession.get(input.sessionId) as
         | GguiSessionRow
         | undefined;
       if (!row) {
         throw new Error(
-          `SqliteGguiSessionStore.appendEvent: render not found: ${input.renderId}`,
+          `SqliteGguiSessionStore.appendEvent: render not found: ${input.sessionId}`,
         );
       }
       const seq = row.event_sequence + 1;
       const nowMs = this.now();
       const timestampIso = new Date(nowMs).toISOString();
       this.stmts.insertEvent.run(
-        input.renderId,
+        input.sessionId,
         seq,
         input.type,
         JSON.stringify(input.data ?? null),
@@ -401,7 +401,7 @@ export class SqliteGguiSessionStore implements GguiSessionStore {
       );
       // `last_activity_at` stays numeric ms-epoch — it tracks the
       // render row's lifecycle clock, not the ledger's wire shape.
-      this.stmts.bumpSequence.run(seq, nowMs, input.renderId);
+      this.stmts.bumpSequence.run(seq, nowMs, input.sessionId);
       const event: GguiSessionEvent = {
         seq,
         type: input.type,
@@ -414,12 +414,12 @@ export class SqliteGguiSessionStore implements GguiSessionStore {
     const { seq, event } = txn.immediate();
     // Fanout to in-process observers AFTER the transaction commits —
     // observers should never see an event that might be rolled back.
-    this.wakeWaiters(input.renderId, event);
+    this.wakeWaiters(input.sessionId, event);
     return seq;
   }
 
   async listEventsSince(
-    renderId: string,
+    sessionId: string,
     sinceSeq: number,
     limit: number,
   ): Promise<{
@@ -428,7 +428,7 @@ export class SqliteGguiSessionStore implements GguiSessionStore {
     readonly hasMore: boolean;
     readonly horizonSeq: number;
   } | null> {
-    const row = this.stmts.getGguiSession.get(renderId) as GguiSessionRow | undefined;
+    const row = this.stmts.getGguiSession.get(sessionId) as GguiSessionRow | undefined;
     if (!row) return null;
     const lastSequence = row.event_sequence;
     const horizonSeq = 0;
@@ -436,7 +436,7 @@ export class SqliteGguiSessionStore implements GguiSessionStore {
       return { events: [], lastSequence, hasMore: false, horizonSeq };
     }
     const fetched = this.stmts.selectEventsSinceLimited.all(
-      renderId,
+      sessionId,
       sinceSeq,
       limit + 1,
     ) as EventRow[];
@@ -455,8 +455,8 @@ export class SqliteGguiSessionStore implements GguiSessionStore {
     const tail = opts.tail ?? true;
     const selectStmt = this.stmts.selectEventsFromSeq;
     const getStmt = this.stmts.getGguiSession;
-    const waitForNext = (renderId: string): Promise<GguiSessionEvent | null> =>
-      this.waitForNext(renderId);
+    const waitForNext = (sessionId: string): Promise<GguiSessionEvent | null> =>
+      this.waitForNext(sessionId);
 
     return {
       [Symbol.asyncIterator](): AsyncIterator<GguiSessionEvent> {
@@ -499,21 +499,21 @@ export class SqliteGguiSessionStore implements GguiSessionStore {
 
   // ── internals ──────────────────────────────────────────────────────
 
-  private waitForNext(renderId: string): Promise<GguiSessionEvent | null> {
+  private waitForNext(sessionId: string): Promise<GguiSessionEvent | null> {
     return new Promise<GguiSessionEvent | null>((resolve) => {
-      let waiters = this.waiters.get(renderId);
+      let waiters = this.waiters.get(sessionId);
       if (!waiters) {
         waiters = new Set<Waiter>();
-        this.waiters.set(renderId, waiters);
+        this.waiters.set(sessionId, waiters);
       }
       waiters.add(resolve);
     });
   }
 
-  private wakeWaiters(renderId: string, event: GguiSessionEvent | null): void {
-    const waiters = this.waiters.get(renderId);
+  private wakeWaiters(sessionId: string, event: GguiSessionEvent | null): void {
+    const waiters = this.waiters.get(sessionId);
     if (!waiters || waiters.size === 0) return;
-    this.waiters.delete(renderId);
+    this.waiters.delete(sessionId);
     for (const w of waiters) w(event);
   }
 
@@ -553,7 +553,7 @@ CREATE TABLE IF NOT EXISTS renders (
 
 CREATE INDEX IF NOT EXISTS idx_renders_app_id ON renders(app_id);
 CREATE INDEX IF NOT EXISTS idx_renders_user_id ON renders(user_id);
--- Composite index for ggui_list_renders(hostName, hostSessionId).
+-- Composite index for ggui_list_sessions(hostName, hostSessionId).
 CREATE INDEX IF NOT EXISTS idx_renders_host
   ON renders(host_name, host_session_id);
 

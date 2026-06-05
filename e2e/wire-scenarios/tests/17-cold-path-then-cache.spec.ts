@@ -78,7 +78,7 @@ interface HandshakeOut {
 }
 
 interface RenderOut {
-  renderId: string;
+  sessionId: string;
   url?: string;
 }
 

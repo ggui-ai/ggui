@@ -205,9 +205,9 @@ import {
   createGguiConsumeHandler,
   createGguiDeclareToolCatalogHandler,
   createGguiEmitHandler,
-  createGguiGetRenderHandler,
+  createGguiGetSessionHandler,
   createGguiHandshakeHandler,
-  createGguiListRendersHandler,
+  createGguiListSessionsHandler,
   createGguiRefreshWsTokenHandler,
   createGguiRenderHandler,
   createGguiSubmitActionHandler,
@@ -542,11 +542,11 @@ export function defaultHandlers(deps: {
      * Optional bootstrap-credential minter. When present, `ggui_render`
      * (the renamed render-commit tool) results carry the
      * `ai.ggui/render` slice meta. When absent, they don't —
-     * non-MCP-Apps hosts read `{renderId}` off structuredContent and
+     * non-MCP-Apps hosts read `{sessionId}` off structuredContent and
      * resolve the render-resource themselves.
      */
     readonly mintBootstrap?: (
-      renderId: string,
+      sessionId: string,
       appId: string
     ) => { wsUrl: string; token: string; expiresAt: string };
     /**
@@ -735,7 +735,7 @@ export function defaultHandlers(deps: {
   /**
    * `ggui_update` wiring. When present, register the OSS update
    * handler against the supplied GguiSessionStore + optional live-channel
-   * props_update notifier. The handler reads `renderId` from wire
+   * props_update notifier. The handler reads `sessionId` from wire
    * input today, but a future in-process dispatcher can populate it
    * on the canonical context.
    *
@@ -763,7 +763,7 @@ export function defaultHandlers(deps: {
      * the same minter.
      */
     readonly mintBootstrap?: (
-      renderId: string,
+      sessionId: string,
       appId: string
     ) => { wsUrl: string; token: string; expiresAt: string };
     /** Iframe-runtime bundle URL forwarded onto the
@@ -957,7 +957,7 @@ export function defaultHandlers(deps: {
     readonly coupons: CouponRedeemSource;
   };
 }): ReadonlyArray<SharedHandler<ZodRawShape, ZodRawShape>> {
-  // Single shared pending-events pipe (Model C, renderId-keyed).
+  // Single shared pending-events pipe (Model C, sessionId-keyed).
   // render opens (`markCreated`), submit_action appends, consume drains,
   // pop/close clean up. Every handler that touches the pipe MUST get
   // the same instance — separate instances would mean the pipe render
@@ -1107,12 +1107,12 @@ export function defaultHandlers(deps: {
   const lifecycleChannelProvider = deps.stream?.channelProvider;
   const canvasLifecycleEmitter = lifecycleChannelProvider
     ? {
-        emit(renderId: string, payload: CanvasLifecyclePayload): void {
+        emit(sessionId: string, payload: CanvasLifecyclePayload): void {
           const channel = lifecycleChannelProvider();
           if (!channel) return;
           void channel
             .sendToGguiSession({
-              renderId,
+              sessionId,
               channel: LIFECYCLE_CHANNEL,
               mode: "append",
               payload,
@@ -1168,7 +1168,7 @@ export function defaultHandlers(deps: {
     );
   }
   // ggui_consume registers whenever render is bound (it shares the
-  // GguiSessionStore for renderId resolution + tenancy checks).
+  // GguiSessionStore for sessionId resolution + tenancy checks).
   // Default backing is in-memory; operators override via
   // `deps.consume.pendingEventConsumer` for SQLite / Dynamo adapters.
   // Without this registration the `nextStep → consume` hint that
@@ -1186,7 +1186,7 @@ export function defaultHandlers(deps: {
       if (!provider) return undefined;
       return {
         sendDrainAck(args: {
-          readonly renderId: string;
+          readonly sessionId: string;
           readonly appId: string;
           readonly eventId: string;
           readonly drainedAt: string;
@@ -1228,17 +1228,17 @@ export function defaultHandlers(deps: {
     // `ggui_consume` nextStep + the imperative directive in the message
     // text). No timer, no rescue drain, no inline payload, no race
     // between two atomic-pop callers.
-    // ggui_get_render is a pure read off the GguiSessionStore, registered
+    // ggui_get_session is a pure read off the GguiSessionStore, registered
     // alongside the render-commit handler. (ggui_get_stack was deleted
     // — a render IS the addressable unit; there is no stack to read.
     // The former companion `ggui_close` tool was also retired: renders
     // decay implicitly via TTL, so there is no terminal write to make.)
     handlers.push(
-      createGguiGetRenderHandler({
+      createGguiGetSessionHandler({
         renderStore: deps.render.renderStore,
       }) as SharedHandler<ZodRawShape, ZodRawShape>
     );
-    // ggui_list_renders — host-scoped render enumeration for resume.
+    // ggui_list_sessions — host-scoped render enumeration for resume.
     // Folds the ws-token mint into the same call so the host doesn't
     // round-trip twice (list, then mint-per-render). Reuses the
     // already-wired `deps.render.mintBootstrap` seam so both code paths
@@ -1247,13 +1247,13 @@ export function defaultHandlers(deps: {
     // ⇒ summaries omit wsToken and the caller must mint elsewhere.
     const renderMintBootstrap = deps.render.mintBootstrap;
     handlers.push(
-      createGguiListRendersHandler({
+      createGguiListSessionsHandler({
         renderStore: deps.render.renderStore,
         ...(renderMintBootstrap !== undefined
           ? {
               mintWsToken: {
-                mint: ({ renderId, appId }) => {
-                  const { token, expiresAt } = renderMintBootstrap(renderId, appId);
+                mint: ({ sessionId, appId }) => {
+                  const { token, expiresAt } = renderMintBootstrap(sessionId, appId);
                   return { token, expiresAt };
                 },
               },
@@ -1285,7 +1285,7 @@ export function defaultHandlers(deps: {
             return {};
           }
           const { seq } = await channel.sendToGguiSession({
-            renderId: envelope.renderId,
+            sessionId: envelope.sessionId,
             channel: envelope.channel,
             mode: envelope.mode,
             payload: envelope.payload,
@@ -2041,7 +2041,7 @@ export interface CreateGguiServerOptions {
    *
    * Absent = agent-mediated behavior (canonical for MCP Apps hosts and
    * Claude Agent SDK consumers). Inbound actions land on the
-   * renderId-keyed pending-events pipe via `ggui_runtime_submit_action`
+   * sessionId-keyed pending-events pipe via `ggui_runtime_submit_action`
    * and the agent's `ggui_consume` long-poll drains them. CLI
    * composition in `ggui serve` wires a router by default over the
    * same handler bundle `/mcp` uses, since that command runs WITHOUT
@@ -2077,7 +2077,7 @@ export interface CreateGguiServerOptions {
    */
   readonly streamWebSocketLocalTools?: import("./render-channel.js").GguiSessionChannelLocalToolsOptions;
   /**
-   * Hook fired when the local subscriber count for `renderId`
+   * Hook fired when the local subscriber count for `sessionId`
    * transitions 0 → 1 on the live channel. Forwarded verbatim to
    * `createGguiSessionChannelServer`. Used by cloud adapters for per-render
    * cross-pod pubsub channel scoping; OSS callers leave this undefined.
@@ -2085,16 +2085,16 @@ export interface CreateGguiServerOptions {
    * Only consulted when `renderChannel` is enabled. See
    * `GguiSessionChannelOptions.onFirstSubscriber` for the full contract.
    */
-  readonly onFirstSubscriber?: (renderId: string) => void;
+  readonly onFirstSubscriber?: (sessionId: string) => void;
   /**
-   * Hook fired when the local subscriber count for `renderId`
+   * Hook fired when the local subscriber count for `sessionId`
    * transitions 1 → 0 on the live channel. Forwarded verbatim to
    * `createGguiSessionChannelServer`.
    *
    * Only consulted when `renderChannel` is enabled. See
    * `GguiSessionChannelOptions.onLastSubscriberGone` for the full contract.
    */
-  readonly onLastSubscriberGone?: (renderId: string) => void;
+  readonly onLastSubscriberGone?: (sessionId: string) => void;
   /**
    * Override the sanitizer applied to the stringified original error
    * written into `ContractErrorPayload.error.causedBy`. Defaults to
@@ -2234,7 +2234,7 @@ export interface CreateGguiServerOptions {
    *   4. Each `ggui_render` result carries the `ai.ggui/render` slice
    *      with wsUrl + short-TTL token + expiresAt. The render-channel
    *      server accepts that token on `subscribe` and issues a
-   *      longer-TTL `renderToken` in the ack for iframe reconnects.
+   *      longer-TTL `sessionToken` in the ack for iframe reconnects.
    */
   readonly mcpApps?:
     | boolean
@@ -2628,7 +2628,7 @@ export interface CreateGguiServerOptions {
          * confusing. Throws at construction if that invariant fails.
          *
          * Enabling REQUIRES a configured {@link shortCodeIndex} — the
-         * cookie endpoint resolves shortCode → renderId by reading
+         * cookie endpoint resolves shortCode → sessionId by reading
          * it. Throws at construction if the index is absent.
          *
          * The cookie signing secret is the same {@link wsTokenSecret}
@@ -2721,7 +2721,7 @@ export interface CreateGguiServerOptions {
   };
 
   /**
-   * Index for resolving `shortCode → { renderId, appId }`. Required
+   * Index for resolving `shortCode → { sessionId, appId }`. Required
    * when `console.sessionCookie` is enabled (the cookie endpoint
    * looks up the posted shortCode to find the render to bind).
    *
@@ -3059,7 +3059,7 @@ export interface GguiServer {
    * enabled. `null` when disabled. Hosts can use this for
    * introspection (`.renderCount`, `.subscriberCount`) or for
    * composition with future mutation handlers that want to fan out
-   * via `renderChannel.sendToGguiSession(renderId, data)`.
+   * via `renderChannel.sendToGguiSession(sessionId, data)`.
    */
   readonly renderChannel: GguiSessionChannelServer | null;
   /**
@@ -3329,7 +3329,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
   // (which always call this on the live-mode path) get clean strings
   // without per-callsite narrowing.
   let mintBootstrap:
-    | ((renderId: string, appId: string) => { wsUrl: string; token: string; expiresAt: string })
+    | ((sessionId: string, appId: string) => { wsUrl: string; token: string; expiresAt: string })
     | undefined;
   let channelBootstrap: import("./render-channel.js").GguiSessionChannelBootstrap | undefined;
   // Shared HMAC secret for server-minted creds (bootstrap tokens,
@@ -3353,8 +3353,8 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
     // without a fresh handshake. The replay cache class stays exported
     // from `@ggui-ai/mcp-server-core` for callers that need explicit
     // single-use semantics (one-time-link share, etc.).
-    const syncMinter = (renderId: string, appId: string) => {
-      const { token, claims } = mintWsToken({ renderId, appId }, secret);
+    const syncMinter = (sessionId: string, appId: string) => {
+      const { token, claims } = mintWsToken({ sessionId, appId }, secret);
       return {
         wsUrl,
         token,
@@ -3368,7 +3368,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
         if (result.ok) {
           return {
             ok: true,
-            renderId: result.claims.renderId,
+            sessionId: result.claims.sessionId,
             appId: result.claims.appId,
           };
         }
@@ -3380,8 +3380,8 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
         }
         return { ok: false, reason: "invalid" };
       },
-      issueRenderToken: (renderId, appId) => {
-        const { token } = mintSessionToken({ renderId, appId }, secret);
+      issueSessionToken: (sessionId, appId) => {
+        const { token } = mintSessionToken({ sessionId, appId }, secret);
         return token;
       },
       refresh: (token) => {
@@ -3681,7 +3681,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
           return {};
         }
         await channelForHealth.sendToGguiSession({
-          renderId: envelope.renderId,
+          sessionId: envelope.sessionId,
           channel: envelope.channel,
           mode: envelope.mode,
           payload: envelope.payload,
@@ -3731,7 +3731,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
             handshake: {
               kvStore: handshakeKvStore,
               // renderStore validation is OPT-IN at the handshake
-              // layer. The OSS default trusts the wire renderId and
+              // layer. The OSS default trusts the wire sessionId and
               // surfaces validation downstream — render consumes the
               // record + create-if-missing semantics on
               // `renderStore.create({id})` keep render-per-chat
@@ -3878,9 +3878,9 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
               // anyway, but providing the closure unconditionally
               // keeps the typecheck simple — no per-config branching.
               channelNotifier: {
-                notifyGguiSessionCommit: (renderId, render, matchType) => {
+                notifyGguiSessionCommit: (sessionId, render, matchType) => {
                   if (!channelForHealth) return;
-                  channelForHealth.notifyGguiSessionCommit(renderId, render, matchType);
+                  channelForHealth.notifyGguiSessionCommit(sessionId, render, matchType);
                 },
               },
               // F4 schema compat check. Late-binds to the composed
@@ -3972,9 +3972,9 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
             update: {
               renderStore,
               propsUpdateNotifier: {
-                sendPropsUpdate: async (renderId, props) => {
+                sendPropsUpdate: async (sessionId, props) => {
                   if (!channelForHealth) return;
-                  await channelForHealth.sendPropsUpdate(renderId, props);
+                  await channelForHealth.sendPropsUpdate(sessionId, props);
                 },
               },
               // Bootstrap-emission deps. Mirror render so MCP Apps hosts
@@ -4558,7 +4558,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
         // Per-render self-contained shell registration. Only wired
         // when MCP Apps is on AND the render store is resolved —
         // both preconditions for `ggui_render.resultMeta` stamping a
-        // per-call `ui://ggui/render/<renderId>` URI a host can
+        // per-call `ui://ggui/render/<sessionId>` URI a host can
         // resolve here. Absent either, we register only the legacy
         // static `ui://ggui/render` URI (postMessage shell).
         ...(mcpAppsEnabled && renderStore
@@ -4901,7 +4901,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
     }
   }
 
-  // R6 — GET /api/renders/:renderId/state?wsToken=<token>
+  // R6 — GET /api/sessions/:sessionId/state?wsToken=<token>
   //
   // Auth'd snapshot read of the current render state, returning the
   // same slice envelope as the wire `_meta` (a single
@@ -4918,10 +4918,10 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
   // Distinct from `/r/:shortCode` (JSON branch):
   //   - `/r/...` is shortCode-gated (bearer-by-obscurity; anyone with
   //     the URL can read). R5 deletes that surface entirely.
-  //   - `/api/renders/.../state` is wsToken-gated (HMAC-signed,
-  //     short-TTL, scoped to renderId+appId). Survives R5.
+  //   - `/api/sessions/.../state` is wsToken-gated (HMAC-signed,
+  //     short-TTL, scoped to sessionId+appId). Survives R5.
   //
-  // Distinct from R7's `/api/renders/:id/events?sinceSequence=N`
+  // Distinct from R7's `/api/sessions/:id/events?sinceSequence=N`
   // (planned): /state is a snapshot; /events is a cursor-replay. Both
   // are gated identically (wsToken), unified under the GguiSessionEvent
   // ledger cursor (`render.lastSequence`).
@@ -4937,10 +4937,10 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
           : undefined;
     const stateThemeMode =
       opts.theme === undefined || opts.theme.source === "default" ? undefined : opts.theme.mode;
-    app.get("/api/renders/:renderId/state", async (req, res) => {
-      const renderId = req.params["renderId"];
-      if (typeof renderId !== "string" || renderId.length === 0) {
-        res.status(400).type("text/plain").send("renderId required");
+    app.get("/api/sessions/:sessionId/state", async (req, res) => {
+      const sessionId = req.params["sessionId"];
+      if (typeof sessionId !== "string" || sessionId.length === 0) {
+        res.status(400).type("text/plain").send("sessionId required");
         return;
       }
       const wsTokenRaw = req.query["wsToken"];
@@ -4965,19 +4965,19 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
         res.status(401).type("text/plain").send("wsToken invalid");
         return;
       }
-      // Tenancy gate: the wsToken's claimed renderId MUST match the
-      // URL's renderId. A wsToken minted for render A MUST NOT read
+      // Tenancy gate: the wsToken's claimed sessionId MUST match the
+      // URL's sessionId. A wsToken minted for render A MUST NOT read
       // render B's state.
-      if (verify.claims.renderId !== renderId) {
+      if (verify.claims.sessionId !== sessionId) {
         res.status(401).type("text/plain").send("wsToken scope mismatch");
         return;
       }
       let stored;
       try {
-        stored = await renderStoreForState.get(renderId);
+        stored = await renderStoreForState.get(sessionId);
       } catch (err) {
         logger.warn("state_read_failed", {
-          renderId,
+          sessionId,
           error: String(err),
         });
         res.status(500).type("text/plain").send("internal error");
@@ -5040,7 +5040,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
       const pollingBase = opts.publicBaseUrl
         ? opts.publicBaseUrl.replace(/\/$/, "")
         : `${req.protocol}://${requestHostForPolling}`;
-      const pollingUrl = `${pollingBase}/api/renders/${encodeURIComponent(stored.id)}/state`;
+      const pollingUrl = `${pollingBase}/api/sessions/${encodeURIComponent(stored.id)}/state`;
       // Static-component delivery via codeUrl (the same content-addressable
       // channel /r/ uses). Polling clients are render-capable and need
       // the URL to mount/refresh the static-component variant.
@@ -5082,7 +5082,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
       // Phase B: single flat ai.ggui/render slice — render + visible-
       // bits surface fields merged into one shape.
       const renderMeta: McpAppAiGguiRenderMeta = {
-        renderId: stored.id,
+        sessionId: stored.id,
         appId: stored.appId,
         runtimeUrl: resolveRuntimeUrlForResultMeta(),
         ...(liveTrio !== undefined
@@ -5134,7 +5134,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
     });
   }
 
-  // R7 — GET /api/renders/:renderId/events?wsToken=&sinceSequence=N&limit=M
+  // R7 — GET /api/sessions/:sessionId/events?wsToken=&sinceSequence=N&limit=M
   //
   // Cursor-replay read from the GguiSessionEvent ledger (`bc524f2f0` in
   // cloud; in-memory + sqlite stores OSS). Returns events with
@@ -5151,7 +5151,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
   //   - 200 — `{events, lastSequence, hasMore}` (matches
   //     `EventsResponse` from @ggui-ai/protocol/integrations/mcp-apps).
   //   - 401 — wsToken missing / invalid / wrong-scope.
-  //   - 404 — renderId does not resolve.
+  //   - 404 — sessionId does not resolve.
   //   - 410 — `{reason: 'REPLAY_HORIZON_PASSED', currentSequence}` when
   //     `sinceSequence` is below the server's replay horizon OR strictly
   //     greater than `lastSequence` (cursor is from a stale deployment
@@ -5159,10 +5159,10 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
   if (mcpAppsEnabled && renderStore && sharedTokenSecret !== undefined) {
     const renderStoreForEvents = renderStore;
     const eventsSecret = sharedTokenSecret;
-    app.get("/api/renders/:renderId/events", async (req, res) => {
-      const renderId = req.params["renderId"];
-      if (typeof renderId !== "string" || renderId.length === 0) {
-        res.status(400).type("text/plain").send("renderId required");
+    app.get("/api/sessions/:sessionId/events", async (req, res) => {
+      const sessionId = req.params["sessionId"];
+      if (typeof sessionId !== "string" || sessionId.length === 0) {
+        res.status(400).type("text/plain").send("sessionId required");
         return;
       }
       const wsTokenRaw = req.query["wsToken"];
@@ -5180,7 +5180,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
         res.status(401).type("text/plain").send("wsToken invalid");
         return;
       }
-      if (verify.claims.renderId !== renderId) {
+      if (verify.claims.sessionId !== sessionId) {
         res.status(401).type("text/plain").send("wsToken scope mismatch");
         return;
       }
@@ -5215,10 +5215,10 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
       }
       let result;
       try {
-        result = await renderStoreForEvents.listEventsSince(renderId, sinceSequence, limit);
+        result = await renderStoreForEvents.listEventsSince(sessionId, sinceSequence, limit);
       } catch (err) {
         logger.warn("events_read_failed", {
-          renderId,
+          sessionId,
           error: String(err),
         });
         res.status(500).type("text/plain").send("internal error");
@@ -5233,7 +5233,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
       // Tenancy gate (round 2): the wsToken's appId MUST match the
       // render's appId. We need the render record to check — fetch
       // it. listEventsSince validated the render exists.
-      const stored = await renderStoreForEvents.get(renderId);
+      const stored = await renderStoreForEvents.get(sessionId);
       if (!stored) {
         res.status(404).type("text/plain").send("render not found");
         return;
@@ -5764,7 +5764,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
       // POST /ggui/console/blueprint/:id/try — create a render,
       // compile the blueprint's componentCode, commit a render with
       // its full contract (actionSpec/streamSpec/propsSpec from the
-      // manifest), mint a shortCode, and return `{renderId, shortCode,
+      // manifest), mint a shortCode, and return `{sessionId, shortCode,
       // url}`. The returned `/s/<shortCode>` lands on the console's
       // render viewer + subscribes to the render over `/ws`, so the
       // just-committed render arrives via `ack.render` on subscribe.
@@ -5839,14 +5839,14 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
             const appId = DEFAULT_BUILDER_APP_ID;
             // Phase B: a render IS the addressable unit; the prior
             // (sessionId, stackItemId) pair collapses to a single
-            // renderId. The blueprint id makes a natural slug; a
+            // sessionId. The blueprint id makes a natural slug; a
             // same-blueprint retry replaces the row.
-            const renderId = `try-${blueprintId}-${randomUUID()}`;
+            const sessionId = `try-${blueprintId}-${randomUUID()}`;
             const createdAt = Date.now();
 
             const contract = entry.manifest.contract ?? {};
             const render: GguiSession = {
-              id: renderId,
+              id: sessionId,
               appId,
               type: "component",
               componentCode: code,
@@ -5923,7 +5923,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
             } catch (err) {
               logger.warn("console_blueprint_try_commit_failed", {
                 blueprintId,
-                renderId,
+                sessionId,
                 error: String(err),
               });
               res.status(500).json({
@@ -5948,11 +5948,11 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
             // blueprint's empty state remains a valid degraded UX.
             if (channelForHealth) {
               try {
-                await channelForHealth.primeStreams(renderId, render);
+                await channelForHealth.primeStreams(sessionId, render);
               } catch (err) {
                 logger.warn("console_blueprint_try_prime_failed", {
                   blueprintId,
-                  renderId,
+                  sessionId,
                   error: String(err),
                 });
               }
@@ -5964,17 +5964,17 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
             // fail the whole try-live — a 500 here would leave the
             // render behind with no way to resolve from
             // `/s/<shortCode>`, but the operator can still hit the
-            // render via `/ggui/console/renders`).
+            // render via `/ggui/console/sessions`).
             const shortCode = generateTryLiveShortCode();
             try {
               await shortCodeIndexForTry.put(shortCode, {
-                renderId,
+                sessionId,
                 appId,
               });
             } catch (err) {
               logger.warn("console_blueprint_try_shortcode_failed", {
                 blueprintId,
-                renderId,
+                sessionId,
                 shortCode,
                 error: String(err),
               });
@@ -5982,17 +5982,17 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
               // the renders list. Surface the issue in the payload
               // so the SPA can show a degraded banner.
               res.status(200).json({
-                renderId,
+                sessionId,
                 shortCode: null,
                 url: null,
                 warning:
-                  "shortCode minted but not persisted; viewer link unavailable. Open via /ggui/console/renders.",
+                  "shortCode minted but not persisted; viewer link unavailable. Open via /ggui/console/sessions.",
               });
               return;
             }
 
             res.json({
-              renderId,
+              sessionId,
               shortCode,
               url: `/s/${shortCode}`,
             });
@@ -6411,7 +6411,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
       const adminGuardForReadEndpoints = requestHasAdminAuthShared;
       for (const path of [
         "/ggui/console/info",
-        "/ggui/console/renders",
+        "/ggui/console/sessions",
         "/ggui/console/config",
         "/ggui/console/llm-trace",
         "/ggui/console/validator",
@@ -6420,13 +6420,13 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
         "/ggui/console/timeline",
       ]) {
         app.use(path, (req, res, next) => {
-          // The per-render meta route (`/ggui/console/renders/:id/meta`)
+          // The per-render meta route (`/ggui/console/sessions/:id/meta`)
           // gates on the same-origin console cookie, NOT the admin token —
           // its caller is a same-origin iframe that already proved cookie
           // possession. Exempt it from this admin-token middleware so
           // both gates compose cleanly (admin token for `/renders` list,
           // cookie for per-render meta).
-          if (path === "/ggui/console/renders" && /^\/[^/]+\/meta\/?$/.test(req.path)) {
+          if (path === "/ggui/console/sessions" && /^\/[^/]+\/meta\/?$/.test(req.path)) {
             return next();
           }
           if (adminGuardForReadEndpoints(req)) return next();
@@ -6467,8 +6467,8 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
     // the route handlers tolerate that and return empty bodies.
     mountConsoleTimelineRoutes(app, renderStore, streamBuffer);
 
-    // GET /ggui/console/renders?limit=<n> — active-render list for
-    // the console SPA's `/admin/renders` page. Operator-facing "what's
+    // GET /ggui/console/sessions?limit=<n> — active-render list for
+    // the console SPA's `/admin/sessions` page. Operator-facing "what's
     // live right now?" surface, enriched with each render's current
     // shortCode so rows can link through to `/s/<shortCode>` (the
     // existing render viewer).
@@ -6485,7 +6485,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
     // Sources:
     //   - `renderStore.list({ status: 'active', limit })` — single
     //     page, limit default 25, clamped to [1, 100].
-    //   - `shortCodeIndex.findByRenderId(render.id)` — best-effort
+    //   - `shortCodeIndex.findBySessionId(render.id)` — best-effort
     //     enrichment; absent shortCode is a valid row (displays
     //     without a click-through link).
     //
@@ -6495,10 +6495,10 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
     // Zero-config shape: `{ renders: [], total: 0 }` when no
     // renderStore is wired (e.g. pure-MCP dev boot with neither
     // renderChannel nor mcpApps enabled).
-    app.get("/ggui/console/renders", async (req, res) => {
+    app.get("/ggui/console/sessions", async (req, res) => {
       applyDevtoolSecurityHeaders(res);
       interface GguiSessionSummary {
-        readonly renderId: string;
+        readonly sessionId: string;
         readonly shortCode?: string;
         readonly appId: string;
         readonly lastActivityAt: number;
@@ -6530,18 +6530,18 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
           let shortCode: string | null = null;
           if (opts.shortCodeIndex) {
             try {
-              shortCode = await opts.shortCodeIndex.findByRenderId(render.id);
+              shortCode = await opts.shortCodeIndex.findBySessionId(render.id);
             } catch (err) {
               // Best-effort — the render row is still honest
               // without a shortCode.
               logger.warn("console_renders_shortcode_lookup_failed", {
-                renderId: render.id,
+                sessionId: render.id,
                 error: String(err),
               });
             }
           }
           summaries.push({
-            renderId: render.id,
+            sessionId: render.id,
             ...(shortCode ? { shortCode } : {}),
             appId: render.appId,
             lastActivityAt: render.lastActivityAt,
@@ -6549,12 +6549,12 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
             status: "active",
           });
         }
-        // Most-recent activity first. Tiebreak on renderId for
+        // Most-recent activity first. Tiebreak on sessionId for
         // stability when multiple rows share the same ms timestamp.
         summaries.sort((a, b) => {
           const byRecency = b.lastActivityAt - a.lastActivityAt;
           if (byRecency !== 0) return byRecency;
-          return a.renderId.localeCompare(b.renderId);
+          return a.sessionId.localeCompare(b.sessionId);
         });
         res.json({ renders: summaries, total: summaries.length });
       } catch (err) {
@@ -6834,10 +6834,10 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
     // generation, cache, and provisional preview; the client renders
     // the resulting render inline using `GguiSessionRenderer`.
     //
-    // Shape: `{ text, threadId?, renderId? }` →
+    // Shape: `{ text, threadId?, sessionId? }` →
     // `{ threadId, userMessage, agentMessage, ui? }`.
     //   - `ui` is populated only when the render handler is wired AND
-    //     the call succeeded. `ui.renderId` is the render id the client
+    //     the call succeeded. `ui.sessionId` is the render id the client
     //     subscribes to over `/ws`; the committed render arrives via
     //     the subscribe ack's single `render` field, which the client
     //     mounts inline to show the agent's generated component.
@@ -6846,7 +6846,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
     //     carries an honest text-only acknowledgment. This preserves
     //     the text-only round-trip path so operators without a key can
     //     still exercise the chat UI end-to-end.
-    //   - `renderId` is echoed on every response and should be passed
+    //   - `sessionId` is echoed on every response and should be passed
     //     back on subsequent messages so the thread reuses one render.
     //
     // Same-origin only — no bearer auth. The console surface is
@@ -6879,7 +6879,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
       const body = (req.body ?? {}) as {
         text?: unknown;
         threadId?: unknown;
-        renderId?: unknown;
+        sessionId?: unknown;
       };
       const text = typeof body.text === "string" ? body.text.trim() : "";
       if (text.length === 0) {
@@ -6916,7 +6916,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
       // agentMessage text without pretending a UI landed.
       let ui:
         | {
-            renderId: string;
+            sessionId: string;
             shortCode: string;
             codeReady: boolean;
             cache?: { hit: boolean; llmCallsAvoided: number };
@@ -6939,13 +6939,13 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
             { appId: DEFAULT_BUILDER_APP_ID, requestId }
           );
           const result = raw as {
-            renderId: string;
+            sessionId: string;
             shortCode: string;
             codeReady: boolean;
             cache?: { hit: boolean; llmCallsAvoided: number };
           };
           ui = {
-            renderId: result.renderId,
+            sessionId: result.sessionId,
             shortCode: result.shortCode,
             codeReady: result.codeReady,
             ...(result.cache ? { cache: result.cache } : {}),
@@ -6970,7 +6970,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
               opts.console.sessionCookie !== null &&
               opts.console.sessionCookie.secure === true;
             const mint = mintDevtoolCookie({
-              renderId: result.renderId,
+              sessionId: result.sessionId,
               appId: DEFAULT_BUILDER_APP_ID,
               secret,
               ...(cookieTtlSec !== undefined ? { ttlSec: cookieTtlSec } : {}),
@@ -7025,7 +7025,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
         threadId,
         userMessageId: userMessage.id,
         textLength: text.length,
-        uiRenderId: ui?.renderId,
+        uiSessionId: ui?.sessionId,
         uiCodeReady: ui?.codeReady,
       });
       res.status(200).json({
@@ -7078,7 +7078,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
           return;
         }
         const mint = mintDevtoolCookie({
-          renderId: binding.renderId,
+          sessionId: binding.sessionId,
           appId: binding.appId,
           secret,
           ...(cookieTtlSec !== undefined ? { ttlSec: cookieTtlSec } : {}),
@@ -7086,7 +7086,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
         });
         res.setHeader("Set-Cookie", mint.setCookieHeader);
         res.json({
-          renderId: mint.renderId,
+          sessionId: mint.sessionId,
           appId: mint.appId,
           expiresAt: mint.expiresAt,
         });
@@ -7095,14 +7095,14 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
       // Console render-resource pair. The console's `GguiSessionViewer`
       // runs the production iframe path:
       //
-      //   1. GET /ggui/console/render-resource?render=<renderId>
+      //   1. GET /ggui/console/render-resource?render=<sessionId>
       //      → returns a `ResourceContents` blob whose `text` IS the
       //      production thin-shell HTML (`GGUI_RENDER_SHELL_HTML`,
       //      byte-identical to what Claude Desktop fetches via MCP
       //      `resources/read ui://ggui/render`). The shell does NOT
       //      carry an inlined bootstrap — same as production.
       //
-      //   2. GET /ggui/console/renders/:renderId/meta
+      //   2. GET /ggui/console/sessions/:sessionId/meta
       //      → returns `{ "ai.ggui/render": McpAppAiGguiRenderMeta }` JSON.
       //      The console replies with this to the iframe's
       //      `ui/initialize` postMessage (Path-B inline-meta delivery
@@ -7126,7 +7126,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
       // Auth + scope obligations (both routes — uniform):
       //   - Cookie-auth via `readDevtoolCookieFromHeaders` +
       //     `verifyDevtoolCookie`. Invalid / missing → 401.
-      //   - Scope: `cookie.renderId` MUST equal `?render=`. Cross-
+      //   - Scope: `cookie.sessionId` MUST equal `?render=`. Cross-
       //     render access with a valid cookie → 403.
       //   - GguiSession existence + appId match: 404 / 403 respectively.
       //   - The bootstrap route additionally requires `mintBootstrap`
@@ -7137,7 +7137,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
 
       /**
        * Shared auth + scope gate for the two console render routes.
-       * Returns the verified `(renderId, appId)` pair on success or
+       * Returns the verified `(sessionId, appId)` pair on success or
        * `null` after writing an HTTP error response on failure.
        *
        * Internal — closure-scoped to the route block; not exported.
@@ -7145,15 +7145,15 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
       const gateDevtoolRenderRequest = async (
         req: Request,
         res: Response,
-        explicitRenderId?: string
-      ): Promise<{ renderId: string; appId: string } | null> => {
-        const renderIdRaw =
-          explicitRenderId !== undefined ? explicitRenderId : req.query["render"];
-        if (typeof renderIdRaw !== "string" || renderIdRaw.length === 0) {
+        explicitSessionId?: string
+      ): Promise<{ sessionId: string; appId: string } | null> => {
+        const sessionIdRaw =
+          explicitSessionId !== undefined ? explicitSessionId : req.query["render"];
+        if (typeof sessionIdRaw !== "string" || sessionIdRaw.length === 0) {
           res.status(400).json({
             error: "invalid_request",
             message:
-              "`render` query parameter (or :renderId path parameter on the meta route) is required",
+              "`render` query parameter (or :sessionId path parameter on the meta route) is required",
           });
           return null;
         }
@@ -7173,10 +7173,10 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
           });
           return null;
         }
-        if (claims.renderId !== renderIdRaw) {
+        if (claims.sessionId !== sessionIdRaw) {
           res.status(403).json({
             error: "cookie_render_mismatch",
-            message: `Console cookie is bound to render '${claims.renderId}' but request targets '${renderIdRaw}'`,
+            message: `Console cookie is bound to render '${claims.sessionId}' but request targets '${sessionIdRaw}'`,
           });
           return null;
         }
@@ -7186,11 +7186,11 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
         let render: Awaited<ReturnType<GguiSessionStore["get"]>> = null;
         if (renderStore) {
           try {
-            render = await renderStore.get(claims.renderId);
+            render = await renderStore.get(claims.sessionId);
           } catch (err) {
             cookieLogger.error("render_resource_store_failed", {
               error: String(err),
-              renderId: claims.renderId,
+              sessionId: claims.sessionId,
             });
             res.status(500).json({ error: "internal_error" });
             return null;
@@ -7198,8 +7198,8 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
         }
         if (!render) {
           res.status(404).json({
-            error: "render_not_found",
-            message: `GguiSession '${claims.renderId}' is not on this server`,
+            error: "session_not_found",
+            message: `GguiSession '${claims.sessionId}' is not on this server`,
           });
           return null;
         }
@@ -7210,10 +7210,10 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
           });
           return null;
         }
-        return { renderId: claims.renderId, appId: claims.appId };
+        return { sessionId: claims.sessionId, appId: claims.appId };
       };
 
-      // GET /ggui/console/render-resource?render=<renderId>
+      // GET /ggui/console/render-resource?render=<sessionId>
       // → production thin-shell HTML, wrapped as a ResourceContents
       //   blob. NO inlined bootstrap — console fetches the bootstrap
       //   separately (route below) and replies to the iframe's
@@ -7234,28 +7234,28 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
         });
       });
 
-      // GET /ggui/console/renders/:renderId/meta
+      // GET /ggui/console/sessions/:sessionId/meta
       // → slice-envelope JSON (`{ "ai.ggui/render": {...} }`, the same
       //   shape as the wire `_meta`). Required when the console is
       //   hosting the renderer in a srcdoc iframe and needs to feed
       //   the iframe a meta payload via `ui/initialize`. `mcpApps:
       //   true` is required (mintWsToken/mintBootstrap presence) —
       //   503 otherwise.
-      app.get("/ggui/console/renders/:renderId/meta", async (req: Request, res: Response) => {
+      app.get("/ggui/console/sessions/:sessionId/meta", async (req: Request, res: Response) => {
         applyDevtoolSecurityHeaders(res);
         res.setHeader("Content-Type", "application/json; charset=utf-8");
-        const renderIdFromPath = singleParam(req.params["renderId"]);
-        const verified = await gateDevtoolRenderRequest(req, res, renderIdFromPath);
+        const sessionIdFromPath = singleParam(req.params["sessionId"]);
+        const verified = await gateDevtoolRenderRequest(req, res, sessionIdFromPath);
         if (!verified) return;
         if (!mintBootstrap) {
           res.status(503).json({
             error: "mcp_apps_disabled",
             message:
-              "renders/:renderId/meta requires mcpApps: true on the server so the renderer can receive a valid WS auth token. Enable `mcpApps` on createGguiServer() and retry.",
+              "renders/:sessionId/meta requires mcpApps: true on the server so the renderer can receive a valid WS auth token. Enable `mcpApps` on createGguiServer() and retry.",
           });
           return;
         }
-        const minted = mintBootstrap(verified.renderId, verified.appId);
+        const minted = mintBootstrap(verified.sessionId, verified.appId);
         // Console/srcdoc absolute-URL fix: `<McpAppIframe>`
         // mounts the resource via `srcdoc`, so the iframe's URL
         // is `about:srcdoc` and any relative URL would resolve
@@ -7301,7 +7301,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
         let renderValidatorsUrl: string | undefined;
         if (renderStore && opts.codeStore) {
           try {
-            const stored = await renderStore.get(verified.renderId);
+            const stored = await renderStore.get(verified.sessionId);
             if (
               stored !== null &&
               stored.render.type !== "mcpApps" &&
@@ -7322,7 +7322,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
           } catch (err) {
             cookieLogger.warn("render_meta_validators_failed", {
               error: String(err),
-              renderId: verified.renderId,
+              sessionId: verified.sessionId,
             });
           }
         }
@@ -7331,7 +7331,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
         // `__GGUI_META__` global the `/r/<shortCode>` shell carries.
         // GguiSessionViewer parses with `parseMcpAppAiGguiRenderMeta`.
         const renderMeta: McpAppAiGguiRenderMeta = {
-          renderId: verified.renderId,
+          sessionId: verified.sessionId,
           appId: verified.appId,
           runtimeUrl: absoluteRendererUrl,
           wsUrl: resolvedWsUrl,
@@ -7349,7 +7349,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
         });
       });
 
-      // GET /ggui/console/render?render=<renderId>
+      // GET /ggui/console/render?render=<sessionId>
       // → `{render, eventSequence}` JSON.
       //
       // Console-only observation surface for `<GguiSessionViewer>` to mount
@@ -7365,7 +7365,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
       //     authoritative render from `renderStore`.
       //
       // Auth + scope: identical to render-resource / render-bootstrap
-      // (cookie-auth + renderId match + appId match).
+      // (cookie-auth + sessionId match + appId match).
       //
       // Failure modes:
       //   - 401 missing/invalid cookie · 403 cross-render/app · 404
@@ -7386,7 +7386,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
         if (!verified) return;
         if (!renderStore) {
           res.status(503).json({
-            error: "render_store_unavailable",
+            error: "session_store_unavailable",
             message:
               "GguiSession observation requires renderChannel: true on the server so the render store is wired. Enable `renderChannel` on createGguiServer() and retry.",
           });
@@ -7394,11 +7394,11 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
         }
         let stored: Awaited<ReturnType<GguiSessionStore["get"]>> = null;
         try {
-          stored = await renderStore.get(verified.renderId);
+          stored = await renderStore.get(verified.sessionId);
         } catch (err) {
           cookieLogger.error("render_store_failed", {
             error: String(err),
-            renderId: verified.renderId,
+            sessionId: verified.sessionId,
           });
           res.status(500).json({ error: "internal_error" });
           return;
@@ -7407,8 +7407,8 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
           // Race: gate verified existence above but the render
           // could expire between calls. Honest 404.
           res.status(404).json({
-            error: "render_not_found",
-            message: `GguiSession '${verified.renderId}' is not on this server`,
+            error: "session_not_found",
+            message: `GguiSession '${verified.sessionId}' is not on this server`,
           });
           return;
         }

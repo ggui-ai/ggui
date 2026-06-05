@@ -1543,11 +1543,11 @@
  *
  *   b1. **`Session` deleted.** The vessel-wrapping-a-stack-of-one model
  *      is gone. `SessionStackEntry` (the actual rendered thing) was
- *      promoted to a flat `GguiSession` union (`ComponentGguiSession | SystemGguiSession
- *      | McpAppsGguiSession`) and `SessionView` was retired. Conversation
+ *      promoted to a flat `Render` union (`ComponentRender | SystemRender
+ *      | McpAppsRender`) and `SessionView` was retired. Conversation
  *      grouping (sibling renders within one host chat) flows via the
  *      unchanged `_meta["ai.ggui/host-session"]` channel captured ONCE
- *      at render creation, NOT by lifting fields onto every GguiSession.
+ *      at render creation, NOT by lifting fields onto every Render.
  *
  *   b2. **`sessionId` + `stackItemId` → `renderId`.** One identifier on
  *      the wire (the two values were already the same once each render
@@ -1599,7 +1599,7 @@
  *      `StackItemSummary`, `EventSubscription`, `DEFAULT_SUBSCRIPTION`,
  *      `Action` re-export, lifecycle-event literals
  *      `lifecycle:stack_push`, `stack_pop`, `session_start`,
- *      `session_end`. `SessionSummaryWire` → `GguiSessionSummaryWire`
+ *      `session_end`. `SessionSummaryWire` → `RenderSummaryWire`
  *      (always-1 `stackItemCount` field deleted). Stack-navigation
  *      reducer (`stackNavigationReducer`, `initialNavigationState`,
  *      `StackNavigationState`, `StackNavigationAction`) deleted — no
@@ -1609,35 +1609,62 @@
  *      `ggui_new_session`: with the Session vessel gone, there is no
  *      entry-and-exit ceremony to bracket a render. Renders decay
  *      implicitly via TTL — created → active → expired. The
- *      `GguiSessionStatus` union collapses from
+ *      `RenderStatus` union collapses from
  *      `'active' | 'completed' | 'expired'` to `'active' | 'expired'`;
- *      the `'session.closed'` `GguiSessionEventType` literal is gone (no
+ *      the `'session.closed'` `RenderEventType` literal is gone (no
  *      terminal ledger event); `GguiCloseInput` / `GguiCloseOutput`
  *      types + `closeInputSchema` Zod schema deleted from the protocol
  *      surface. `notifyRenderClosed` observer-notifier seam, the
- *      `GguiSessionStore`-side `closed` bucket flag + per-render-close revoke
+ *      `RenderStore`-side `closed` bucket flag + per-render-close revoke
  *      paths (`shortCodeIndex.revokeByStackItemId`,
  *      `pendingEventConsumer.markDeleted`) all retire alongside.
  *      Agent-side: the long-poll loop terminates on TTL expiry rather
  *      than on an explicit terminal status.
  *
- *   b8. **SessionEvent dropped; GguiSessionEvent is the single ledger
+ *   b8. **SessionEvent dropped; RenderEvent is the single ledger
  *      primitive (Wave 7, 2026-05-28).** The protocol-side `SessionEvent`
  *      (sequence + emittedAt + type + payload) and the server-side
- *      `GguiSessionEvent` (seq + timestamp[ms-epoch] + type + data) merge
- *      into one canonical `GguiSessionEvent` owned by `@ggui-ai/protocol`.
+ *      `RenderEvent` (seq + timestamp[ms-epoch] + type + data) merge
+ *      into one canonical `RenderEvent` owned by `@ggui-ai/protocol`.
  *      Field shape: `seq + type + timestamp[ISO 8601 UTC string] +
- *      data`. `EventsResponse.events` now ships `ReadonlyArray<GguiSessionEvent>`.
+ *      data`. `EventsResponse.events` now ships `ReadonlyArray<RenderEvent>`.
  *      The WS replay frame discriminator renames
  *      `'session_event' → 'render_event'`; payload type follows the
- *      same shape. `@ggui-ai/mcp-server-core` re-exports `GguiSessionEvent`
- *      / `GguiSessionEventType` from `@ggui-ai/protocol` so downstream
+ *      same shape. `@ggui-ai/mcp-server-core` re-exports `RenderEvent`
+ *      / `RenderEventType` from `@ggui-ai/protocol` so downstream
  *      import paths stay stable. Sqlite + DDB stores stamp ISO
  *      strings on write; legacy numeric rows are coerced on read.
  *      Cross-deployment uniformity: the same field type ships from
  *      polling HTTP endpoint, WS replay frame, and store-side `observe()`.
+ *
+ *   b9. **GguiSession reintroduced as the render-OBJECT noun
+ *      (2026-06-05).** The flatten arc named the rendered object
+ *      `Render`; this restores `GguiSession` as that noun while `render`
+ *      stays the VERB. Source-breaking TS-symbol renames for
+ *      `@ggui-ai/*` importers: `Render`→`GguiSession` (+ `ComponentRender`,
+ *      `SystemRender`, `McpAppsRender`, `RenderBase`, `RenderStatus`),
+ *      `RenderEvent`→`GguiSessionEvent`, `RenderStore`→`GguiSessionStore`
+ *      (+ every impl), `RenderStreamBuffer`, `RenderNotFoundError`,
+ *      `RenderChannelServer`, `RenderApi`/`RenderInfo`/`RenderRef`,
+ *      `RenderRenderer`→`GguiSessionRenderer`. WIRE-breaking renames: the
+ *      canonical id `renderId`→`sessionId` (every payload/param/envelope/
+ *      URL/_meta field); tools `ggui_list_renders`→`ggui_list_sessions`
+ *      and `ggui_get_render`→`ggui_get_session`; error codes
+ *      `RENDER_NOT_FOUND`/`RENDER_MISMATCH`/`RENDER_CREATE_FAILED`/
+ *      `CONCURRENT_RENDER_LIMIT`→`SESSION_*` (numeric values unchanged);
+ *      REST routes `/api/renders`, `/admin/renders`, `/console/renders`
+ *      → `/…/sessions`; DOM `data-ggui-render-*`→`data-ggui-session-*`;
+ *      ack `renderToken`→`sessionToken`. The VERB `render` is KEPT
+ *      verbatim: the `ggui_render` (+ `ggui_render_blueprint`) tool,
+ *      `renderInputSchema`/`renderOutputSchema` + `GguiRenderInput`/
+ *      `GguiRenderOutput`, the `*Renderer` actor components, the
+ *      `ai.ggui/render` _meta slice key, the `ui://ggui/render` resource
+ *      URI (only its `{sessionId}` path segment follows the id rename),
+ *      and the WS frame discriminators `'render'` / `'render_event'`.
+ *      OSS-first; the cloud pod follows at its next image build. See
+ *      `docs/protocol/migrations/2026-06-05-gguisession-reintroduction.md`.
  */
-export const PROTOCOL_VERSION = "draft-2026-06-02";
+export const PROTOCOL_VERSION = "draft-2026-06-05";
 
 /**
  * Schema version stamped onto wire envelopes that opt into the

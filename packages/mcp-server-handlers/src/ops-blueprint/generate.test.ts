@@ -54,7 +54,7 @@ function makeMockGenerator(
         };
       }
       const response: UIGenerationResponse = {
-        renderId: "render_mock",
+        sessionId: "render_mock",
         componentCode,
       };
       const metadata = {

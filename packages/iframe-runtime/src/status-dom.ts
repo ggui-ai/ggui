@@ -62,8 +62,8 @@ export interface StatusRefs {
 
 /**
  * Build the React mount target. Reuses a pre-existing
- * `[data-ggui-render-root]` if one was already written; else creates a
- * fresh `<ul data-ggui-render-root>` and appends it to `<body>`. The
+ * `[data-ggui-session-root]` if one was already written; else creates a
+ * fresh `<ul data-ggui-session-root>` and appends it to `<body>`. The
  * companion `status` element is created detached and never appended —
  * consumers that still pass it through `StatusRefs` see no visible
  * effect.
@@ -73,12 +73,12 @@ export interface StatusRefs {
  * subtree post-stack-removal.
  */
 export function ensureStatusDom(doc: Document): StatusRefs {
-  const existingRoot = doc.querySelector<HTMLElement>('[data-ggui-render-root]');
+  const existingRoot = doc.querySelector<HTMLElement>('[data-ggui-session-root]');
   const renderRoot =
     existingRoot ??
     (() => {
       const el = doc.createElement('ul');
-      el.setAttribute('data-ggui-render-root', '');
+      el.setAttribute('data-ggui-session-root', '');
       doc.body.appendChild(el);
       return el;
     })();

@@ -178,7 +178,7 @@ export async function runA2uiCase(
   const emitter: ProvisionalPreviewEmitter = {
     run: (ctx: ProvisionalPreviewContext) =>
       deterministic.run({
-        renderId: ctx.renderId,
+        sessionId: ctx.sessionId,
         story: ctx.story,
         emit: ctx.emit as (payload: unknown) => Promise<unknown>,
         signal: ctx.signal,
@@ -194,7 +194,7 @@ export async function runA2uiCase(
   };
 
   const ctx: ProvisionalPreviewRunContext = {
-    renderId: `bench-a2ui-${randomUUID()}`,
+    sessionId: `bench-a2ui-${randomUUID()}`,
     appId: `app-a2ui-${kase.id}`,
     story: { intent: kase.intent },
   };

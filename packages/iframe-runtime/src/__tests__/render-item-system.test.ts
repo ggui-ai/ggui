@@ -57,7 +57,7 @@ describe('mountRender — system card branch (Phase 1)', () => {
         render: makeSystemRender(),
         scopedWireConfig: null,
         streamBus: new StreamBus(),
-        renderId: 'render_sys_1',
+        sessionId: 'render_sys_1',
       });
     });
 
@@ -79,7 +79,7 @@ describe('mountRender — system card branch (Phase 1)', () => {
         render: makeSystemRender({ message: 'first' }),
         scopedWireConfig: null,
         streamBus: new StreamBus(),
-        renderId: 'render_sys_1',
+        sessionId: 'render_sys_1',
       });
     });
     expect(handle.kind).toBe('system');
@@ -89,7 +89,7 @@ describe('mountRender — system card branch (Phase 1)', () => {
         render: makeSystemRender({ message: 'second' }),
         scopedWireConfig: null,
         streamBus: new StreamBus(),
-        renderId: 'render_sys_1',
+        sessionId: 'render_sys_1',
       });
     });
     // Still a system mount — no teardown-to-provisional, no crash.
@@ -107,7 +107,7 @@ describe('mountRender — system card branch (Phase 1)', () => {
         render: makeSystemRender(),
         scopedWireConfig: null,
         streamBus: new StreamBus(),
-        renderId: 'render_sys_1',
+        sessionId: 'render_sys_1',
       });
     });
     await flush(() => {

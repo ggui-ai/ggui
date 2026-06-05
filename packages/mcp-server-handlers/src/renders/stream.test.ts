@@ -3,7 +3,7 @@
  *
  * Post-Phase-B (flatten-render-identity): the wire input collapsed
  * from `{sessionId, channel, payload, complete?, stackItemId?}` to
- * `{renderId, channel, payload, complete?}`. `SessionStore` →
+ * `{sessionId, channel, payload, complete?}`. `SessionStore` →
  * `GguiSessionStore`. `SessionNotFoundError` → `GguiSessionNotFoundError`.
  *
  * Focused on the factory's wrapping concerns: tenancy gate, the
@@ -28,12 +28,12 @@ const NOW_MS = Date.parse('2026-05-11T00:00:00.000Z');
 
 async function seedRender(
   store: InMemoryGguiSessionStore,
-  opts: { renderId?: string; appId?: string; streamSpec?: ComponentGguiSession['streamSpec'] } = {},
-): Promise<{ renderId: string }> {
-  const renderId = opts.renderId ?? 'render-1';
+  opts: { sessionId?: string; appId?: string; streamSpec?: ComponentGguiSession['streamSpec'] } = {},
+): Promise<{ sessionId: string }> {
+  const sessionId = opts.sessionId ?? 'render-1';
   const appId = opts.appId ?? 'app-1';
   const render: ComponentGguiSession = {
-    id: renderId,
+    id: sessionId,
     appId,
     type: 'component',
     componentCode: '',
@@ -45,7 +45,7 @@ async function seedRender(
     ...(opts.streamSpec ? { streamSpec: opts.streamSpec } : {}),
   };
   await store.commit({ render, appId });
-  return { renderId };
+  return { sessionId };
 }
 
 describe('createGguiEmitHandler', () => {
@@ -68,7 +68,7 @@ describe('createGguiEmitHandler', () => {
 
   describe('happy path', () => {
     it('routes through handleStream + sendEnvelope, returns accepted', async () => {
-      const { renderId } = await seedRender(renderStore, {
+      const { sessionId } = await seedRender(renderStore, {
         streamSpec: {
           updates: {
             mode: 'replace',
@@ -90,7 +90,7 @@ describe('createGguiEmitHandler', () => {
       });
       const out = await handler.handler(
         {
-          renderId,
+          sessionId,
           channel: 'updates',
           payload: { tick: 1 },
         },
@@ -105,14 +105,14 @@ describe('createGguiEmitHandler', () => {
 
   describe('tenancy + missing', () => {
     it('cross-tenant render throws GguiSessionNotFoundError (no leak)', async () => {
-      const { renderId } = await seedRender(renderStore);
+      const { sessionId } = await seedRender(renderStore);
       const handler = createGguiEmitHandler({
         renderStore,
         sendEnvelope: async () => ({}),
       });
       await expect(
         handler.handler(
-          { renderId, channel: 'updates', payload: {} },
+          { sessionId, channel: 'updates', payload: {} },
           { appId: 'tenant-X', requestId: 'r1' },
         ),
       ).rejects.toBeInstanceOf(GguiSessionNotFoundError);
@@ -125,14 +125,14 @@ describe('createGguiEmitHandler', () => {
       });
       await expect(
         handler.handler(
-          { renderId: 'never', channel: 'updates', payload: {} },
+          { sessionId: 'never', channel: 'updates', payload: {} },
           CTX,
         ),
       ).rejects.toBeInstanceOf(GguiSessionNotFoundError);
     });
 
     it('sendEnvelope NOT invoked when tenancy gate rejects', async () => {
-      const { renderId } = await seedRender(renderStore);
+      const { sessionId } = await seedRender(renderStore);
       const sent: unknown[] = [];
       const handler = createGguiEmitHandler({
         renderStore,
@@ -143,7 +143,7 @@ describe('createGguiEmitHandler', () => {
       });
       await expect(
         handler.handler(
-          { renderId, channel: 'updates', payload: {} },
+          { sessionId, channel: 'updates', payload: {} },
           { appId: 'tenant-X', requestId: 'r1' },
         ),
       ).rejects.toBeInstanceOf(GguiSessionNotFoundError);
@@ -153,7 +153,7 @@ describe('createGguiEmitHandler', () => {
 
   describe('observer notifier seam', () => {
     it('fires after successful emission with appId + channel + complete + accepted', async () => {
-      const { renderId } = await seedRender(renderStore, {
+      const { sessionId } = await seedRender(renderStore, {
         streamSpec: {
           updates: {
             mode: 'append',
@@ -177,7 +177,7 @@ describe('createGguiEmitHandler', () => {
       });
       await handler.handler(
         {
-          renderId,
+          sessionId,
           channel: 'updates',
           payload: { x: 1 },
           complete: true,
@@ -187,7 +187,7 @@ describe('createGguiEmitHandler', () => {
       expect(calls).toHaveLength(1);
       expect(calls[0]).toMatchObject({
         appId: 'app-1',
-        renderId,
+        sessionId,
         channel: 'updates',
         hasPayload: true,
         complete: true,
@@ -196,7 +196,7 @@ describe('createGguiEmitHandler', () => {
     });
 
     it('observer throw is swallowed — emission still succeeds', async () => {
-      const { renderId } = await seedRender(renderStore, {
+      const { sessionId } = await seedRender(renderStore, {
         streamSpec: {
           updates: {
             mode: 'replace',
@@ -217,7 +217,7 @@ describe('createGguiEmitHandler', () => {
         },
       });
       const out = await handler.handler(
-        { renderId, channel: 'updates', payload: { v: 1 } },
+        { sessionId, channel: 'updates', payload: { v: 1 } },
         CTX,
       );
       expect(out.accepted).toBe(true);

@@ -56,7 +56,7 @@ function surfaceContractViolation(
  * Minimal render metadata passed to lifecycle callbacks.
  */
 export interface GguiSessionInfo {
-  renderId: string;
+  sessionId: string;
 }
 
 /**
@@ -66,7 +66,7 @@ export interface GguiSessionInfo {
  * hooks for fine-grained control over the mounted render.
  */
 export interface GguiRenderProps {
-  renderId: string;
+  sessionId: string;
   userToken?: string;
   userId?: string;
 
@@ -123,7 +123,7 @@ export interface GguiRenderProps {
  * Minimal context passed to {@link GguiRenderProps.onBeforeAction}.
  */
 export interface ActionMeta {
-  renderId: string;
+  sessionId: string;
 }
 
 /**
@@ -135,7 +135,7 @@ export interface GguiSessionApi {
   /** Current GguiSession snapshot (populated from ack on subscribe and refreshed
    *  on render frame). Absent until the first ack arrives. */
   render: GguiSession | undefined;
-  renderId: string;
+  sessionId: string;
 }
 
 /**
@@ -156,7 +156,7 @@ export interface GguiSessionApi {
  * ```tsx
  * const { send } = useInvoke();
  * return (
- *   <GguiRender renderId={rid}>
+ *   <GguiRender sessionId={rid}>
  *     {({ render, action, connectionStatus }) => (
  *       <MyUI render={render} onAction={action} onSend={send} status={connectionStatus} />
  *     )}
@@ -165,7 +165,7 @@ export interface GguiSessionApi {
  * ```
  */
 export function GguiRender({
-  renderId,
+  sessionId,
   onRenderStart,
   onRenderEnd,
   onBeforeAction,
@@ -283,7 +283,7 @@ export function GguiRender({
           if (payload.matchType) {
             const isHit = payload.matchType === 'cached' || payload.matchType === 'predefined' || payload.matchType === 'exact';
             onProgressRef.current?.({
-              renderId: payload.render.id,
+              sessionId: payload.render.id,
               step: 'compiling',
               message: isHit ? 'Found matching blueprint' : 'No blueprint match found',
             });
@@ -364,11 +364,11 @@ export function GguiRender({
         // generation). Validate against the active render's cached
         // propsSpec BEFORE applying to React state — defense-in-depth
         // for server↔client spec drift.
-        const { renderId: targetRenderId, props } = message.payload;
-        if (targetRenderId && props) {
+        const { sessionId: targetSessionId, props } = message.payload;
+        if (targetSessionId && props) {
           const target = renderRef.current;
           // Ignore frames targeting a different render.
-          if (!target || target.id !== targetRenderId) return;
+          if (!target || target.id !== targetSessionId) return;
           const propsSpec =
             target.type !== 'mcpApps' && target.type !== 'system'
               ? target.propsSpec
@@ -382,7 +382,7 @@ export function GguiRender({
             return;
           }
           setRender((prev) => {
-            if (!prev || prev.id !== targetRenderId) return prev;
+            if (!prev || prev.id !== targetSessionId) return prev;
             // props_update targets component renders only; MCP Apps
             // iframes + server-emitted system cards have no client-
             // mutable props and are unaffected.
@@ -411,7 +411,7 @@ export function GguiRender({
   // Initialize WebSocket connection (only if wsEndpoint is provided)
   const { sendAction, status: connectionStatus } = useWebSocket({
     url: wsEndpoint || '',
-    renderId,
+    sessionId,
     appId,
     onMessage: handleServerMessage,
   });
@@ -463,14 +463,14 @@ export function GguiRender({
     (type: EventType, payload: JsonValue | undefined) => {
       clientSeqRef.current += 1;
       const envelope = buildActionEnvelope({
-        renderId,
+        sessionId,
         type,
         ...(payload !== undefined ? { payload } : {}),
         clientSeq: clientSeqRef.current,
       });
       emitEnvelope(envelope);
     },
-    [renderId, emitEnvelope],
+    [sessionId, emitEnvelope],
   );
 
   // Forward user data from component iframe/WebView → WebSocket
@@ -490,15 +490,15 @@ export function GguiRender({
     return () => window.removeEventListener(BRIDGE_EVENTS.USER_DATA, handleUserData);
   }, [emitTyped]);
 
-  // Reset render snapshot when renderId changes
+  // Reset render snapshot when sessionId changes
   useEffect(() => {
     setRender(undefined);
-    onRenderStartRef.current?.({ renderId });
+    onRenderStartRef.current?.({ sessionId });
 
     return () => {
-      onRenderEndRef.current?.({ renderId }, 'unmount');
+      onRenderEndRef.current?.({ sessionId }, 'unmount');
     };
-  }, [renderId]);
+  }, [sessionId]);
 
   // Action handler with middleware (component interactions → agent).
   // Builds a canonical data:submit ActionEnvelope; onBeforeAction runs
@@ -515,7 +515,7 @@ export function GguiRender({
   const action = useCallback(
     <T,>(data: T) => {
       try {
-        const meta: ActionMeta = { renderId };
+        const meta: ActionMeta = { sessionId };
 
         // Call onBeforeAction middleware — may transform or cancel
         // (by returning undefined).
@@ -530,7 +530,7 @@ export function GguiRender({
         if (actionSpec) {
           clientSeqRef.current += 1;
           const envelope = buildActionEnvelope({
-            renderId,
+            sessionId,
             type: 'data:submit',
             payload: transformedData as JsonValue,
             clientSeq: clientSeqRef.current,
@@ -554,7 +554,7 @@ export function GguiRender({
         onErrorRef.current?.(error instanceof Error ? error : new Error(String(error)));
       }
     },
-    [renderId, resolveActiveActionSpec, emitTyped, emitEnvelope],
+    [sessionId, resolveActiveActionSpec, emitTyped, emitEnvelope],
   );
 
   // NOTE: The legacy `invoke(text)` method was retired with the v1.1
@@ -566,9 +566,9 @@ export function GguiRender({
       action,
       connectionStatus,
       render,
-      renderId,
+      sessionId,
     }),
-    [action, connectionStatus, render, renderId]
+    [action, connectionStatus, render, sessionId]
   );
 
   return <>{typeof children === 'function' ? children(api) : children}</>;

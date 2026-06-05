@@ -1,9 +1,9 @@
 /**
- * Tests for `createGguiListRendersHandler`.
+ * Tests for `createGguiListSessionsHandler`.
  *
  * Phase B (flatten-render-identity): replaces the prior
  * `list-sessions.test.ts` — the wire shape collapsed from a per-
- * summary {sessionId, stackItemCount, …} to a flat {renderId, …}.
+ * summary {sessionId, stackItemCount, …} to a flat {sessionId, …}.
  * The handler still gates by ctx.appId (+ optional ctx.userId) and
  * supports host-conversation filtering via hostName + hostSessionId.
  */
@@ -11,8 +11,8 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import type { ComponentGguiSession } from '@ggui-ai/protocol';
 import { InMemoryGguiSessionStore } from '@ggui-ai/mcp-server-core/in-memory';
 import {
-  createGguiListRendersHandler,
-  type ListRendersMintSeam,
+  createGguiListSessionsHandler,
+  type ListSessionsMintSeam,
 } from './list-renders.js';
 
 const NOW_MS = Date.parse('2026-05-09T00:00:00.000Z');
@@ -20,18 +20,18 @@ const NOW_MS = Date.parse('2026-05-09T00:00:00.000Z');
 async function seedRender(
   store: InMemoryGguiSessionStore,
   opts: {
-    renderId?: string;
+    sessionId?: string;
     appId?: string;
     userId?: string;
     hostName?: string;
     hostSessionId?: string;
     createdAt?: number;
   } = {},
-): Promise<{ renderId: string }> {
-  const renderId = opts.renderId ?? 'render-1';
+): Promise<{ sessionId: string }> {
+  const sessionId = opts.sessionId ?? 'render-1';
   const appId = opts.appId ?? 'app-1';
   const render: ComponentGguiSession = {
-    id: renderId,
+    id: sessionId,
     appId,
     type: 'component',
     componentCode: '',
@@ -62,10 +62,10 @@ async function seedRender(
         }
       : {}),
   });
-  return { renderId };
+  return { sessionId };
 }
 
-describe('createGguiListRendersHandler', () => {
+describe('createGguiListSessionsHandler', () => {
   let renderStore: InMemoryGguiSessionStore;
 
   beforeEach(() => {
@@ -73,74 +73,74 @@ describe('createGguiListRendersHandler', () => {
   });
 
   describe('declaration metadata', () => {
-    it('exposes ggui_list_renders name + agent audience', () => {
-      const handler = createGguiListRendersHandler({ renderStore });
-      expect(handler.name).toBe('ggui_list_renders');
+    it('exposes ggui_list_sessions name + agent audience', () => {
+      const handler = createGguiListSessionsHandler({ renderStore });
+      expect(handler.name).toBe('ggui_list_sessions');
       expect(handler.audience).toEqual(['agent']);
     });
   });
 
   describe('scoping', () => {
     it('returns only renders for the caller appId (cross-tenant excluded)', async () => {
-      await seedRender(renderStore, { renderId: 'a', appId: 'app-1' });
-      await seedRender(renderStore, { renderId: 'b', appId: 'app-2' });
-      const handler = createGguiListRendersHandler({ renderStore });
+      await seedRender(renderStore, { sessionId: 'a', appId: 'app-1' });
+      await seedRender(renderStore, { sessionId: 'b', appId: 'app-2' });
+      const handler = createGguiListSessionsHandler({ renderStore });
       const out = await handler.handler(
         {},
         { appId: 'app-1', requestId: 'r1' },
       );
-      expect(out.renders.map((r) => r.renderId)).toEqual(['a']);
+      expect(out.renders.map((r) => r.sessionId)).toEqual(['a']);
     });
 
     it('returns only renders for the caller userId when ctx.userId is set', async () => {
       await seedRender(renderStore, {
-        renderId: 'mine',
+        sessionId: 'mine',
         appId: 'app-1',
         userId: 'u1',
       });
       await seedRender(renderStore, {
-        renderId: 'theirs',
+        sessionId: 'theirs',
         appId: 'app-1',
         userId: 'u2',
       });
-      const handler = createGguiListRendersHandler({ renderStore });
+      const handler = createGguiListSessionsHandler({ renderStore });
       const out = await handler.handler(
         {},
         { appId: 'app-1', requestId: 'r1', userId: 'u1' },
       );
-      expect(out.renders.map((r) => r.renderId)).toEqual(['mine']);
+      expect(out.renders.map((r) => r.sessionId)).toEqual(['mine']);
     });
   });
 
   describe('host-conversation filtering', () => {
     it('narrows by hostName + hostSessionId pair', async () => {
       await seedRender(renderStore, {
-        renderId: 'claude-1',
+        sessionId: 'claude-1',
         appId: 'app-1',
         hostName: 'claude.ai',
         hostSessionId: 'thread-abc',
       });
       await seedRender(renderStore, {
-        renderId: 'claude-2',
+        sessionId: 'claude-2',
         appId: 'app-1',
         hostName: 'claude.ai',
         hostSessionId: 'thread-xyz',
       });
       await seedRender(renderStore, {
-        renderId: 'no-host',
+        sessionId: 'no-host',
         appId: 'app-1',
       });
-      const handler = createGguiListRendersHandler({ renderStore });
+      const handler = createGguiListSessionsHandler({ renderStore });
       const out = await handler.handler(
         { hostName: 'claude.ai', hostSessionId: 'thread-abc' },
         { appId: 'app-1', requestId: 'r1' },
       );
-      expect(out.renders.map((r) => r.renderId)).toEqual(['claude-1']);
+      expect(out.renders.map((r) => r.sessionId)).toEqual(['claude-1']);
     });
 
     it('renders without a host slice never match a host-scoped query (opt-out posture)', async () => {
-      await seedRender(renderStore, { renderId: 'no-host', appId: 'app-1' });
-      const handler = createGguiListRendersHandler({ renderStore });
+      await seedRender(renderStore, { sessionId: 'no-host', appId: 'app-1' });
+      const handler = createGguiListSessionsHandler({ renderStore });
       const out = await handler.handler(
         { hostName: 'claude.ai', hostSessionId: 'thread-abc' },
         { appId: 'app-1', requestId: 'r1' },
@@ -150,19 +150,19 @@ describe('createGguiListRendersHandler', () => {
   });
 
   describe('summary shape', () => {
-    it('projects renderId + lifecycle timestamps + status', async () => {
-      const { renderId } = await seedRender(renderStore, {
+    it('projects sessionId + lifecycle timestamps + status', async () => {
+      const { sessionId } = await seedRender(renderStore, {
         hostName: 'sample',
         hostSessionId: 'chat-1',
       });
-      const handler = createGguiListRendersHandler({ renderStore });
+      const handler = createGguiListSessionsHandler({ renderStore });
       const out = await handler.handler(
         {},
         { appId: 'app-1', requestId: 'r1' },
       );
       expect(out.renders).toHaveLength(1);
       const summary = out.renders[0]!;
-      expect(summary.renderId).toBe(renderId);
+      expect(summary.sessionId).toBe(sessionId);
       expect(summary.hostName).toBe('sample');
       expect(summary.hostSessionId).toBe('chat-1');
       expect(typeof summary.createdAt).toBe('string');
@@ -174,15 +174,15 @@ describe('createGguiListRendersHandler', () => {
     });
 
     it('attaches fresh wsToken + expiresAt when mintWsToken is wired', async () => {
-      const { renderId } = await seedRender(renderStore);
-      const minted: Array<{ renderId: string; appId: string }> = [];
-      const mintWsToken: ListRendersMintSeam = {
-        mint: ({ renderId: rid, appId }) => {
-          minted.push({ renderId: rid, appId });
+      const { sessionId } = await seedRender(renderStore);
+      const minted: Array<{ sessionId: string; appId: string }> = [];
+      const mintWsToken: ListSessionsMintSeam = {
+        mint: ({ sessionId: rid, appId }) => {
+          minted.push({ sessionId: rid, appId });
           return { token: `tok-${rid}`, expiresAt: '2099-01-01T00:00:00.000Z' };
         },
       };
-      const handler = createGguiListRendersHandler({
+      const handler = createGguiListSessionsHandler({
         renderStore,
         mintWsToken,
       });
@@ -190,11 +190,11 @@ describe('createGguiListRendersHandler', () => {
         {},
         { appId: 'app-1', requestId: 'r1' },
       );
-      expect(out.renders[0]?.wsToken).toBe(`tok-${renderId}`);
+      expect(out.renders[0]?.wsToken).toBe(`tok-${sessionId}`);
       expect(out.renders[0]?.wsTokenExpiresAt).toBe(
         '2099-01-01T00:00:00.000Z',
       );
-      expect(minted).toEqual([{ renderId, appId: 'app-1' }]);
+      expect(minted).toEqual([{ sessionId, appId: 'app-1' }]);
     });
   });
 });

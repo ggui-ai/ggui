@@ -1,6 +1,6 @@
 /**
  * Slice 14 (2026-05-08) — `buildSelfContainedShell` injects the full
- * bootstrap envelope, not just `{renderId, appId, componentCode|kind}`.
+ * bootstrap envelope, not just `{sessionId, appId, componentCode|kind}`.
  *
  * Pre-Slice-14 the inline `__GGUI_META__` global only carried the
  * minimum to mount a compiled component on the postMessage shell path.
@@ -81,7 +81,7 @@ const SAMPLE_CODE_HASH = 'sha256-abc123';
 describe('buildSelfContainedShell — Slice 14 inline-bootstrap shape', () => {
   it('inlines runtimeUrl on the render slice (closes the blank-page bug)', () => {
     const html = buildSelfContainedShell({
-      renderId: 'sess_001',
+      sessionId: 'sess_001',
       appId: 'app_001',
       runtimeUrl: SAMPLE_RUNTIME_URL,
       codeUrl: SAMPLE_CODE_URL,
@@ -108,7 +108,7 @@ describe('buildSelfContainedShell — Slice 14 inline-bootstrap shape', () => {
       },
     ];
     const html = buildSelfContainedShell({
-      renderId: 'sess_001',
+      sessionId: 'sess_001',
       appId: 'app_001',
       runtimeUrl: SAMPLE_RUNTIME_URL,
       codeUrl: SAMPLE_CODE_URL,
@@ -121,7 +121,7 @@ describe('buildSelfContainedShell — Slice 14 inline-bootstrap shape', () => {
 
   it('inlines appCallableTools on the render slice when supplied non-empty', () => {
     const html = buildSelfContainedShell({
-      renderId: 'sess_001',
+      sessionId: 'sess_001',
       appId: 'app_001',
       runtimeUrl: SAMPLE_RUNTIME_URL,
       codeUrl: SAMPLE_CODE_URL,
@@ -137,7 +137,7 @@ describe('buildSelfContainedShell — Slice 14 inline-bootstrap shape', () => {
 
   it('inlines actionNextSteps on the render slice when supplied non-empty', () => {
     const html = buildSelfContainedShell({
-      renderId: 'sess_001',
+      sessionId: 'sess_001',
       appId: 'app_001',
       runtimeUrl: SAMPLE_RUNTIME_URL,
       codeUrl: SAMPLE_CODE_URL,
@@ -152,7 +152,7 @@ describe('buildSelfContainedShell — Slice 14 inline-bootstrap shape', () => {
     // Empty arrays / records spread to "absent" so consumers see no
     // change vs an envelope built without these fields.
     const html = buildSelfContainedShell({
-      renderId: 'sess_001',
+      sessionId: 'sess_001',
       appId: 'app_001',
       runtimeUrl: SAMPLE_RUNTIME_URL,
       codeUrl: SAMPLE_CODE_URL,
@@ -178,7 +178,7 @@ describe('buildSelfContainedShell — Slice 14 inline-bootstrap shape', () => {
   // (Leaflet, Mapbox).
   it('inlines gadgets on the render slice when supplied (GG.8.2 — per-package channel)', () => {
     const html = buildSelfContainedShell({
-      renderId: 'sess_001',
+      sessionId: 'sess_001',
       appId: 'app_001',
       runtimeUrl: SAMPLE_RUNTIME_URL,
       codeUrl: SAMPLE_CODE_URL,
@@ -193,7 +193,7 @@ describe('buildSelfContainedShell — Slice 14 inline-bootstrap shape', () => {
 
   it('inlines publicEnv when supplied (Slice 2.2 forward)', () => {
     const html = buildSelfContainedShell({
-      renderId: 'sess_001',
+      sessionId: 'sess_001',
       appId: 'app_001',
       runtimeUrl: SAMPLE_RUNTIME_URL,
       codeUrl: SAMPLE_CODE_URL,
@@ -208,7 +208,7 @@ describe('buildSelfContainedShell — Slice 14 inline-bootstrap shape', () => {
 
   it('emits a slice envelope that the iframe-runtime validator accepts (component mode)', async () => {
     const html = buildSelfContainedShell({
-      renderId: 'sess_001',
+      sessionId: 'sess_001',
       appId: 'app_001',
       runtimeUrl: SAMPLE_RUNTIME_URL,
       codeUrl: SAMPLE_CODE_URL,
@@ -244,7 +244,7 @@ describe('buildSelfContainedShell — Slice 14 inline-bootstrap shape', () => {
 
   it('emits a slice envelope that the iframe-runtime validator accepts (system-card mode)', async () => {
     const html = buildSelfContainedShell({
-      renderId: 'sess_001',
+      sessionId: 'sess_001',
       appId: 'app_001',
       runtimeUrl: SAMPLE_RUNTIME_URL,
       systemKind: 'no-credentials',

@@ -441,9 +441,9 @@ describe('createGguiHandshakeHandler — MVB-5', () => {
       expect(out.alternatives).toEqual([alternative]);
     });
 
-    it('propagates a target.renderId routing hint from the negotiator', async () => {
+    it('propagates a target.sessionId routing hint from the negotiator', async () => {
       // Phase-B: routing hint collapsed from {sessionId, stackItemId}
-      // to a single {renderId?}. The negotiator MAY suggest reusing
+      // to a single {sessionId?}. The negotiator MAY suggest reusing
       // an existing render (cache / update path).
       const kvStore = new InMemoryKeyValueStore();
       const suggestion: HandshakeSuggestion = {
@@ -462,7 +462,7 @@ describe('createGguiHandshakeHandler — MVB-5', () => {
           reason: 'update existing render in place',
           suggestion,
           effectiveContract: {} as DataContract,
-          target: { renderId: 'render-existing-123' },
+          target: { sessionId: 'render-existing-123' },
         }),
       };
       const handler = createGguiHandshakeHandler({ kvStore, negotiator });
@@ -470,7 +470,7 @@ describe('createGguiHandshakeHandler — MVB-5', () => {
         minimalInput(),
         { appId: 'app-1', requestId: 'r' },
       );
-      expect(out.target.renderId).toBe('render-existing-123');
+      expect(out.target.sessionId).toBe('render-existing-123');
     });
   });
 

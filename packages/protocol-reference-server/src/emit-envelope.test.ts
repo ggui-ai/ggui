@@ -17,7 +17,7 @@
  * Mirrors the test-helper pattern from `render-version-override.test.ts`.
  *
  * Wire-field note: subscribes carry the canonical render-identity
- * field `renderId` on the wire.
+ * field `sessionId` on the wire.
  */
 import { describe, expect, it, beforeEach, afterEach } from 'vitest';
 import { WebSocket } from 'ws';
@@ -38,16 +38,16 @@ describe('emit-envelope ConformanceHost directive', () => {
   });
 
   it('injects a stream frame into a subscribed render and the WS client observes it', async () => {
-    const renderId = 'emit-target';
+    const sessionId = 'emit-target';
     const host = createReferenceConformanceHost({ serverInstance: server });
 
-    // Fixture-canonical order: create-render → (client subscribes) →
-    // emit-envelope. The `lastCreatedRenderId()` scoping convention
-    // requires create-render before the directive lands.
-    await host.dispatchSetup({ kind: 'create-render', renderId });
+    // Fixture-canonical order: create-session → (client subscribes) →
+    // emit-envelope. The `lastCreatedSessionId()` scoping convention
+    // requires create-session before the directive lands.
+    await host.dispatchSetup({ kind: 'create-session', sessionId });
 
     // Subscribe a real WS client + capture frames after the ack.
-    const observed = await captureFramesAfterAck(server.baseUrl, renderId, async () => {
+    const observed = await captureFramesAfterAck(server.baseUrl, sessionId, async () => {
       // Triggered AFTER the subscribe ack lands so the subscriber set
       // is populated when the directive fans out.
       await host.dispatchSetup({
@@ -70,7 +70,7 @@ describe('emit-envelope ConformanceHost directive', () => {
 
   it('rejects directive without channel', async () => {
     const host = createReferenceConformanceHost({ serverInstance: server });
-    await host.dispatchSetup({ kind: 'create-render', renderId: 'no-channel' });
+    await host.dispatchSetup({ kind: 'create-session', sessionId: 'no-channel' });
     await expect(
       host.dispatchSetup({
         // Channel deliberately empty — directive must reject.
@@ -89,12 +89,12 @@ describe('emit-envelope ConformanceHost directive', () => {
         channel: 'demo:counter',
         payload: { x: 1 },
       }),
-    ).rejects.toThrow(/before create-render/);
+    ).rejects.toThrow(/before create-session/);
   });
 
   it('no-ops (warns) when the render has no subscribers — directive resolves, no throw', async () => {
     const host = createReferenceConformanceHost({ serverInstance: server });
-    await host.dispatchSetup({ kind: 'create-render', renderId: 'no-subs' });
+    await host.dispatchSetup({ kind: 'create-session', sessionId: 'no-subs' });
 
     const warnSpy = jestLikeWarnSpy();
     try {
@@ -119,7 +119,7 @@ describe('emit-envelope ConformanceHost directive', () => {
 // =============================================================================
 
 /**
- * Open a WS, send a `subscribe` frame for `renderId`, await the ack,
+ * Open a WS, send a `subscribe` frame for `sessionId`, await the ack,
  * trigger `afterAck` (which is expected to cause a server-side
  * frame to fan out to this subscriber), then collect every subsequent
  * frame that lands within a short observation window. Close + return
@@ -132,7 +132,7 @@ describe('emit-envelope ConformanceHost directive', () => {
  */
 async function captureFramesAfterAck(
   baseUrl: string,
-  renderId: string,
+  sessionId: string,
   afterAck: () => Promise<void>,
 ): Promise<readonly unknown[]> {
   const wsUrl = baseUrl.replace(/^http/, 'ws') + '/ws';
@@ -158,7 +158,7 @@ async function captureFramesAfterAck(
       ws.send(
         JSON.stringify({
           type: 'subscribe',
-          payload: { renderId, appId: 'conformance', role: 'user' },
+          payload: { sessionId, appId: 'conformance', role: 'user' },
           requestId: 'capture-req',
         }),
       );

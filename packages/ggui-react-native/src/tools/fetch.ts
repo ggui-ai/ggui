@@ -38,18 +38,18 @@ function setCache(key: string, data: unknown, ttl: number): void {
  * Clear cached fetch responses.
  *
  * The cache is render-scoped (see {@link fetchTool} — keys are prefixed
- * with `ToolContext.renderId`). Pass `renderId` to drop only that render's
+ * with `ToolContext.sessionId`). Pass `sessionId` to drop only that render's
  * entries; omit to flush the entire cache.
  *
- * @param renderId - If provided, only entries scoped to that render are
+ * @param sessionId - If provided, only entries scoped to that render are
  *                   removed. If omitted, the entire cache is cleared.
  */
-export function clearFetchCache(renderId?: string): void {
-  if (!renderId) {
+export function clearFetchCache(sessionId?: string): void {
+  if (!sessionId) {
     cache.clear();
     return;
   }
-  const prefix = `${renderId}:`;
+  const prefix = `${sessionId}:`;
   for (const key of cache.keys()) {
     if (key.startsWith(prefix)) {
       cache.delete(key);
@@ -75,9 +75,9 @@ export const fetchTool = defineTool<FetchToolConfig['config'], unknown>({
     const baseUrl = context.apiBaseUrl || '';
     const url = endpoint.startsWith('http') ? endpoint : `${baseUrl}${endpoint}`;
 
-    // Scope cache key by renderId to prevent cross-render leaks
+    // Scope cache key by sessionId to prevent cross-render leaks
     const rawCacheKey = cacheConfig?.key || url;
-    const cacheKey = context.renderId ? `${context.renderId}:${rawCacheKey}` : rawCacheKey;
+    const cacheKey = context.sessionId ? `${context.sessionId}:${rawCacheKey}` : rawCacheKey;
     if (method === 'GET' && cacheConfig?.ttl) {
       const cached = getCached(cacheKey);
       if (cached !== undefined) {

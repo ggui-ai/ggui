@@ -16,8 +16,8 @@
  * Seed semantics: PendingEventConsumer is a per-render buffer; every
  * test needs a render to be present in the consumer's bookkeeping
  * before consume/append can succeed. Real impls expose this via
- * `markCreated(renderId, ttlMs?)` (in-memory + sqlite) or a parallel
- * DDB row write (cloud). The factory's `seed(renderId)` callback
+ * `markCreated(sessionId, ttlMs?)` (in-memory + sqlite) or a parallel
+ * DDB row write (cloud). The factory's `seed(sessionId)` callback
  * wraps whichever path the impl exposes.
  */
 
@@ -27,8 +27,8 @@ import type { PendingEventConsumer } from '../pending-event-consumer.js';
 export interface PendingEventConsumerConformanceFactory {
   readonly create: () => Promise<{
     readonly consumer: PendingEventConsumer;
-    /** Register `renderId` so subsequent consume/append succeeds. */
-    readonly seed: (renderId: string) => void | Promise<void>;
+    /** Register `sessionId` so subsequent consume/append succeeds. */
+    readonly seed: (sessionId: string) => void | Promise<void>;
   }>;
   readonly cleanup?: (consumer: PendingEventConsumer) => Promise<void> | void;
 }

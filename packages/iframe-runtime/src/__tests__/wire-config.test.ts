@@ -4,12 +4,12 @@
  * Post-render-identity-collapse (2026-05-27): the per-stack-item
  * scope factory is gone. Each iframe mounts EXACTLY ONE render and
  * `buildRootWireConfig` returns a single `WireConfig` keyed by the
- * bootstrap's `renderId`. The active render's `actionSpec` resolves
+ * bootstrap's `sessionId`. The active render's `actionSpec` resolves
  * through the `getCurrentGguiSession` thunk on every dispatch so
  * props_update patches stay coherent without rebuilding the config.
  *
  * The audit-critical shape properties locked here:
- *   1. Action envelopes emitted by the config carry `renderId` (not
+ *   1. Action envelopes emitted by the config carry `sessionId` (not
  *      `sessionId`/`stackItemId`/`stackIndex`) plus `clientSeq` +
  *      `schemaVersion`, and ride in a `{type:'action', payload: envelope}`
  *      WS frame.
@@ -72,7 +72,7 @@ describe('buildRootWireConfig — envelope shape', () => {
       actionSpec: { submit: { label: 'Submit', nextStep: 'submit-tool' } },
     });
     const cfg = buildRootWireConfig({
-      renderId: 'render_001',
+      sessionId: 'render_001',
       appId: 'app_x',
       getCurrentGguiSession: () => render,
       manager: { send },
@@ -86,7 +86,7 @@ describe('buildRootWireConfig — envelope shape', () => {
     expect(frame?.type).toBe('action');
     if (frame?.type !== 'action') throw new Error('unreachable');
     const env: ActionEnvelope = frame.payload;
-    expect(env.renderId).toBe('render_001');
+    expect(env.sessionId).toBe('render_001');
     expect(env.type).toBe('data:submit');
     expect(env.clientSeq).toBe(1);
     expect(env.schemaVersion).toBe(PROTOCOL_SCHEMA_VERSION);
@@ -99,7 +99,7 @@ describe('buildRootWireConfig — envelope shape', () => {
   it('increments clientSeq monotonically across dispatches', () => {
     const { send, messages } = makeFakeManager();
     const cfg = buildRootWireConfig({
-      renderId: 'render_001',
+      sessionId: 'render_001',
       appId: 'app_x',
       getCurrentGguiSession: () => makeRender('render_001'),
       manager: { send },
@@ -128,7 +128,7 @@ describe('buildRootWireConfig — active actionSpec resolution', () => {
       actionSpec: { submit: { label: 'Submit', nextStep: 'tool-v1' } },
     });
     const cfg = buildRootWireConfig({
-      renderId: 'render_001',
+      sessionId: 'render_001',
       appId: 'app_x',
       getCurrentGguiSession: () => activeRender,
       manager: { send },
@@ -165,7 +165,7 @@ describe('buildRootWireConfig — outbound validation', () => {
     const render = makeRender('render_001', { actionSpec: spec });
     const onContractViolation = vi.fn();
     const cfg = buildRootWireConfig({
-      renderId: 'render_001',
+      sessionId: 'render_001',
       appId: 'app_x',
       getCurrentGguiSession: () => render,
       manager: { send },
@@ -191,7 +191,7 @@ describe('buildRootWireConfig — outbound validation', () => {
     };
     const render = makeRender('render_001', { actionSpec: spec });
     const cfg = buildRootWireConfig({
-      renderId: 'render_001',
+      sessionId: 'render_001',
       appId: 'app_x',
       getCurrentGguiSession: () => render,
       manager: { send },
@@ -210,7 +210,7 @@ describe('StreamBus', () => {
     const unsubscribe = bus.subscribe('progress', handler);
 
     const env: StreamEnvelope = {
-      renderId: 'render_001',
+      sessionId: 'render_001',
       channel: 'progress',
       mode: 'append',
       payload: { percent: 50 },
@@ -230,7 +230,7 @@ describe('StreamBus', () => {
     bus.subscribe('progress', progressHandler);
 
     bus.emit({
-      renderId: 'render_001',
+      sessionId: 'render_001',
       channel: 'status',
       mode: 'replace',
       payload: 'ok',
@@ -246,14 +246,14 @@ describe('StreamBus', () => {
     // spinner and the user sees nothing.
     const bus = new StreamBus();
     const env1: StreamEnvelope = {
-      renderId: 'render_001',
+      sessionId: 'render_001',
       channel: '_ggui:preview',
       mode: 'append',
       payload: { createSurface: { surfaceId: 'sx' } },
       seq: 1,
     };
     const env2: StreamEnvelope = {
-      renderId: 'render_001',
+      sessionId: 'render_001',
       channel: '_ggui:preview',
       mode: 'append',
       payload: {
@@ -277,7 +277,7 @@ describe('StreamBus', () => {
 
     // Live frames after subscribe still flow through.
     const env3: StreamEnvelope = {
-      renderId: 'render_001',
+      sessionId: 'render_001',
       channel: '_ggui:preview',
       mode: 'append',
       payload: { deleteSurface: { surfaceId: 'sx' } },
@@ -293,7 +293,7 @@ describe('StreamBus', () => {
     // not consumed.
     const bus = new StreamBus();
     const env: StreamEnvelope = {
-      renderId: 'render_001',
+      sessionId: 'render_001',
       channel: '_ggui:preview',
       mode: 'append',
       payload: { createSurface: { surfaceId: 'sx' } },
@@ -316,7 +316,7 @@ describe('StreamBus', () => {
     // would change agent contract semantics.
     const bus = new StreamBus();
     bus.emit({
-      renderId: 'render_001',
+      sessionId: 'render_001',
       channel: 'progress',
       mode: 'append',
       payload: { percent: 50 },
@@ -337,7 +337,7 @@ describe('StreamBus', () => {
     // recent few survive while a very-old one is gone).
     for (let i = 0; i < 300; i += 1) {
       bus.emit({
-        renderId: 'render_001',
+        sessionId: 'render_001',
         channel: '_ggui:preview',
         mode: 'append',
         payload: { i },
@@ -372,7 +372,7 @@ describe('buildRootWireConfig — subscribe via StreamBus', () => {
   it('forwards StreamBus envelopes to subscribe handler with mode + complete', () => {
     const bus = new StreamBus();
     const cfg = buildRootWireConfig({
-      renderId: 'render_001',
+      sessionId: 'render_001',
       appId: 'app_x',
       getCurrentGguiSession: () => null,
       manager: { send: vi.fn() },
@@ -387,13 +387,13 @@ describe('buildRootWireConfig — subscribe via StreamBus', () => {
     cfg.subscribe('progress', handler);
 
     bus.emit({
-      renderId: 'render_001',
+      sessionId: 'render_001',
       channel: 'progress',
       mode: 'append',
       payload: { percent: 25 },
     });
     bus.emit({
-      renderId: 'render_001',
+      sessionId: 'render_001',
       channel: 'progress',
       mode: 'replace',
       payload: { percent: 100 },

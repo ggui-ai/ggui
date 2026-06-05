@@ -5,7 +5,7 @@
  * Each subscriber owns a tiny async-queue: publishes enqueue; the
  * iterator dequeues and yields. Abandoned iterators (consumer drops
  * the for-await) clean up on their next pull (the GC'd `return()`
- * hook) OR on `close(renderId)`.
+ * hook) OR on `close(sessionId)`.
  *
  * Production hosted-side binding (Redis pub/sub) lives in a closed
  * Redis adapter package. Any binding MUST pass `streamFanoutContract`.
@@ -22,7 +22,7 @@ interface Subscriber {
   queue: BufferedStreamEnvelope[];
   /** If the iterator is parked awaiting a frame, this resolves it. */
   waiter: ((value: IteratorResult<BufferedStreamEnvelope>) => void) | null;
-  /** Set when `close()` fires for this renderId or the iterator is returned. */
+  /** Set when `close()` fires for this sessionId or the iterator is returned. */
   closed: boolean;
 }
 
@@ -30,8 +30,8 @@ export class InProcessStreamFanout implements StreamFanout {
   private readonly subscribersByRender = new Map<string, Set<Subscriber>>();
 
   async publish(input: StreamFanoutPublishInput): Promise<void> {
-    const { renderId, envelope } = input;
-    const subs = this.subscribersByRender.get(renderId);
+    const { sessionId, envelope } = input;
+    const subs = this.subscribersByRender.get(sessionId);
     if (!subs || subs.size === 0) return;
     for (const sub of subs) {
       if (sub.closed) continue;
@@ -46,7 +46,7 @@ export class InProcessStreamFanout implements StreamFanout {
     }
   }
 
-  subscribe(renderId: string): AsyncIterable<BufferedStreamEnvelope> {
+  subscribe(sessionId: string): AsyncIterable<BufferedStreamEnvelope> {
     const sub: Subscriber = { queue: [], waiter: null, closed: false };
 
     // Eager registration — the Protocol Bar promises delivery of every
@@ -55,10 +55,10 @@ export class InProcessStreamFanout implements StreamFanout {
     // promise keepable: by the time the returned AsyncIterable is handed
     // back, the subscriber is already in `subscribersByRender`, so the
     // very next `publish()` will observe it.
-    let set = this.subscribersByRender.get(renderId);
+    let set = this.subscribersByRender.get(sessionId);
     if (!set) {
       set = new Set();
-      this.subscribersByRender.set(renderId, set);
+      this.subscribersByRender.set(sessionId, set);
     }
     set.add(sub);
     let registered = true;
@@ -72,10 +72,10 @@ export class InProcessStreamFanout implements StreamFanout {
         resolve({ value: undefined, done: true });
       }
       if (!registered) return;
-      const liveSet = this.subscribersByRender.get(renderId);
+      const liveSet = this.subscribersByRender.get(sessionId);
       if (liveSet) {
         liveSet.delete(sub);
-        if (liveSet.size === 0) this.subscribersByRender.delete(renderId);
+        if (liveSet.size === 0) this.subscribersByRender.delete(sessionId);
       }
       registered = false;
     };
@@ -112,8 +112,8 @@ export class InProcessStreamFanout implements StreamFanout {
     };
   }
 
-  async close(renderId: string): Promise<void> {
-    const subs = this.subscribersByRender.get(renderId);
+  async close(sessionId: string): Promise<void> {
+    const subs = this.subscribersByRender.get(sessionId);
     if (!subs) return;
     for (const sub of subs) {
       sub.closed = true;
@@ -123,11 +123,11 @@ export class InProcessStreamFanout implements StreamFanout {
         resolve({ value: undefined, done: true });
       }
     }
-    this.subscribersByRender.delete(renderId);
+    this.subscribersByRender.delete(sessionId);
   }
 
   /** Debug / test-only — current subscriber count for this render. */
-  subscriberCount(renderId: string): number {
-    return this.subscribersByRender.get(renderId)?.size ?? 0;
+  subscriberCount(sessionId: string): number {
+    return this.subscribersByRender.get(sessionId)?.size ?? 0;
   }
 }

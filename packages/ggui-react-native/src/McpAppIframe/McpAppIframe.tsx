@@ -227,7 +227,7 @@ export const McpAppIframe = forwardRef<McpAppIframeRef, McpAppIframeProps>(
             // `type === 'ggui:lifecycle'`, but a host MUST not trust
             // `event.state` without confirming it's a known
             // `McpAppLifecycleState`. A malformed envelope (unknown
-            // state, empty renderId, malformed error) silently
+            // state, empty sessionId, malformed error) silently
             // skips the mirror — the legacy attribute stays at its
             // previous value, observers see the protocol violation
             // as a stuck attribute.

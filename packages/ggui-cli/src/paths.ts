@@ -94,7 +94,7 @@ export function getCodeCacheDir(): string {
 }
 
 /**
- * Directory backing the `--persistent` bundle (renders.sqlite,
+ * Directory backing the `--persistent` bundle (sessions.sqlite,
  * short-codes.sqlite, bootstrap-secret.hex, render-signer-secret.hex,
  * keys.json …). Survives `ggui serve` restarts so claude.ai chat-history
  * revisits can rehydrate the iframe instead of seeing four cascading

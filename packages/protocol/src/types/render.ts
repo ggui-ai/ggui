@@ -40,7 +40,7 @@ import type { McpAppsGguiSession } from '../integrations/mcp-apps';
 //   SessionStackEntry (union) →  GguiSession (the union)
 //   Action (interface)        →  DELETED (was already @deprecated)
 //   ProgressUpdate.sessionId +
-//   ProgressUpdate.stackItemId →  ProgressUpdate.renderId (collapsed)
+//   ProgressUpdate.stackItemId →  ProgressUpdate.sessionId (collapsed)
 //
 // Conversation-scoped lookups (sibling renders, host continuity) flow
 // via the unchanged `hostSessionId` channel — NOT by lifting fields
@@ -130,7 +130,7 @@ export interface GguiSessionBase {
    * the host's thread/chat id.
    *
    * Multiple renders inside one host conversation share the same
-   * `hostSessionId`. The `ggui_list_renders(hostName, hostSessionId)`
+   * `hostSessionId`. The `ggui_list_sessions(hostName, hostSessionId)`
    * tool enumerates renders belonging to a host conversation; absent
    * `hostSession` ⇒ the render is one-shot (functional but
    * non-rehydratable).
@@ -349,11 +349,11 @@ export interface ConversationTurn<TToolArgs = JsonObject> {
  * Delivered via the `ggui:logs` bridge event.
  *
  * Post-Phase-B: collapsed from `{ sessionId, stackItemId }` to a single
- * `renderId` (the two identifiers were the same value once each render
+ * `sessionId` (the two identifiers were the same value once each render
  * was its own thing).
  */
 export interface ProgressUpdate {
-  renderId: string;
+  sessionId: string;
   step:
     | 'queued'
     | 'negotiating'

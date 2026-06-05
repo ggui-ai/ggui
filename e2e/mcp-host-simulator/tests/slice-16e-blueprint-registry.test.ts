@@ -82,7 +82,7 @@ describe('host-simulator: Slice 16e blueprint-first registry', () => {
             return {
               ok: true,
               response: {
-                renderId: 'ignored',
+                sessionId: 'ignored',
                 componentCode: `export default function C() { return <div>gen:${input.request.prompt}</div>; }`,
                 sourceCode: `export default function C() { return <div>gen:${input.request.prompt}</div>; }`,
               },

@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import type { ContentBlock } from '@ggui-ai/protocol';
 import {
   extractRenderFromToolResult,
-  extractRenderIdFromToolResult,
+  extractSessionIdFromToolResult,
 } from '../render';
 
 function toolResult(content: unknown): ContentBlock {
@@ -48,32 +48,32 @@ describe('extractRenderFromToolResult', () => {
 
   it('returns null when no render-shaped object is present', () => {
     expect(
-      extractRenderFromToolResult(toolResult({ renderId: 'r1', foo: 'bar' })),
+      extractRenderFromToolResult(toolResult({ sessionId: 'r1', foo: 'bar' })),
     ).toBeNull();
   });
 });
 
-describe('extractRenderIdFromToolResult', () => {
+describe('extractSessionIdFromToolResult', () => {
   it('returns null for non-tool_result blocks', () => {
     const text: ContentBlock = { type: 'text', text: 'hi' };
-    expect(extractRenderIdFromToolResult(text)).toBeNull();
+    expect(extractSessionIdFromToolResult(text)).toBeNull();
   });
 
-  it('reads a top-level renderId', () => {
-    expect(extractRenderIdFromToolResult(toolResult({ renderId: 'render_42' }))).toBe(
+  it('reads a top-level sessionId', () => {
+    expect(extractSessionIdFromToolResult(toolResult({ sessionId: 'render_42' }))).toBe(
       'render_42',
     );
   });
 
-  it('reads a nested renderId one level deep', () => {
+  it('reads a nested sessionId one level deep', () => {
     expect(
-      extractRenderIdFromToolResult(toolResult({ result: { renderId: 'render_7' } })),
+      extractSessionIdFromToolResult(toolResult({ result: { sessionId: 'render_7' } })),
     ).toBe('render_7');
   });
 
-  it('returns null when no renderId is anywhere', () => {
+  it('returns null when no sessionId is anywhere', () => {
     expect(
-      extractRenderIdFromToolResult(toolResult({ id: 'cmp_1', componentCode: 'x' })),
+      extractSessionIdFromToolResult(toolResult({ id: 'cmp_1', componentCode: 'x' })),
     ).toBeNull();
   });
 });

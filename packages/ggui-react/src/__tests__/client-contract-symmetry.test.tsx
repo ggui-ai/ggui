@@ -20,7 +20,7 @@
  * validators themselves are unit-tested in `wire-contract.test.ts`.
  *
  * Post-Phase-B: the legacy GguiSession + multi-item stack collapsed to
- * a single GguiRender mount; envelopes carry `renderId` only.
+ * a single GguiRender mount; envelopes carry `sessionId` only.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import React from 'react';
@@ -149,7 +149,7 @@ async function bootRender(opts: { onError?: (err: Error) => void } = {}): Promis
   let fire!: (name: string, data: unknown) => void;
   render(
     <GguiProvider appId="test-app" wsEndpoint="wss://example.test">
-      <GguiRender renderId={RENDER_ID} onError={opts.onError}>
+      <GguiRender sessionId={RENDER_ID} onError={opts.onError}>
         <ActionFireHelper onReady={(f) => { fire = f; }} />
       </GguiRender>
     </GguiProvider>,
@@ -311,7 +311,7 @@ describe('client contract symmetry — inbound stream', () => {
         socket.simulateMessage({
           type: 'data',
           payload: {
-            renderId: RENDER_ID,
+            sessionId: RENDER_ID,
             channel: 'tick',
             mode: 'append',
             payload: { count: 7 },
@@ -321,7 +321,7 @@ describe('client contract symmetry — inbound stream', () => {
 
       expect(captured).toHaveLength(1);
       expect(captured[0]).toEqual({
-        renderId: RENDER_ID,
+        sessionId: RENDER_ID,
         channel: 'tick',
         mode: 'append',
         payload: { count: 7 },
@@ -347,7 +347,7 @@ describe('client contract symmetry — inbound stream', () => {
         socket.simulateMessage({
           type: 'data',
           payload: {
-            renderId: RENDER_ID,
+            sessionId: RENDER_ID,
             channel: 'mystery', // undeclared channel
             mode: 'append',
             payload: {},
@@ -386,7 +386,7 @@ describe('client contract symmetry — inbound props', () => {
       socket.simulateMessage({
         type: 'props_update',
         payload: {
-          renderId: RENDER_ID,
+          sessionId: RENDER_ID,
           props: { temp: 15 }, // missing required 'city'
         },
       });
@@ -405,7 +405,7 @@ describe('client contract symmetry — inbound props', () => {
       socket.simulateMessage({
         type: 'props_update',
         payload: {
-          renderId: RENDER_ID,
+          sessionId: RENDER_ID,
           props: { city: 'Seoul' },
         },
       });

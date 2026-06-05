@@ -49,7 +49,7 @@ export function buildToolResultParams(
   return {
     _meta: toMcpAppEnvelope(meta),
     content: [{ type: 'text', text: 'rendered' }],
-    structuredContent: { renderId: meta.renderId },
+    structuredContent: { sessionId: meta.sessionId },
   };
 }
 

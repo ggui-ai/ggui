@@ -57,7 +57,7 @@ describe('LiveGguiSessionPill', () => {
     mockFetch({
       renders: [
         {
-          renderId: 'rndr-without-shortcode',
+          sessionId: 'rndr-without-shortcode',
         },
       ],
       total: 1,
@@ -73,7 +73,7 @@ describe('LiveGguiSessionPill', () => {
     mockFetch({
       renders: [
         {
-          renderId: 'rndr-1',
+          sessionId: 'rndr-1',
           shortCode: 'abc12345',
         },
       ],
@@ -94,9 +94,9 @@ describe('LiveGguiSessionPill', () => {
   it('reports the plural render count when multiple renders are live', async () => {
     mockFetch({
       renders: [
-        { renderId: 'r-1', shortCode: 'aaaa1111' },
-        { renderId: 'r-2', shortCode: 'bbbb2222' },
-        { renderId: 'r-3', shortCode: 'cccc3333' },
+        { sessionId: 'r-1', shortCode: 'aaaa1111' },
+        { sessionId: 'r-2', shortCode: 'bbbb2222' },
+        { sessionId: 'r-3', shortCode: 'cccc3333' },
       ],
       total: 3,
     });
@@ -111,7 +111,7 @@ describe('LiveGguiSessionPill', () => {
   it('navigates to /s/<shortCode> on click', async () => {
     mockFetch({
       renders: [
-        { renderId: 'rndr-1', shortCode: 'aabbccdd' },
+        { sessionId: 'rndr-1', shortCode: 'aabbccdd' },
       ],
       total: 1,
     });
@@ -132,7 +132,7 @@ describe('LiveGguiSessionPill', () => {
   it('suppresses itself when the current route is the viewer', async () => {
     mockFetch({
       renders: [
-        { renderId: 'rndr-1', shortCode: 'abc12345' },
+        { sessionId: 'rndr-1', shortCode: 'abc12345' },
       ],
       total: 1,
     });

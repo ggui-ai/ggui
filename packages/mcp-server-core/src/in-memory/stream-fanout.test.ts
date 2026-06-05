@@ -23,7 +23,7 @@ describe('InProcessStreamFanout — impl-specific', () => {
     expect(fanout.subscriberCount('s1')).toBe(0);
   });
 
-  it('close(renderId) clears subscriberCount and drains parked waiters', async () => {
+  it('close(sessionId) clears subscriberCount and drains parked waiters', async () => {
     const fanout = new InProcessStreamFanout();
     const iter1 = fanout.subscribe('s1')[Symbol.asyncIterator]();
     const iter2 = fanout.subscribe('s1')[Symbol.asyncIterator]();
@@ -48,9 +48,9 @@ describe('InProcessStreamFanout — impl-specific', () => {
     // subscriber. Then drain.
     for (let i = 1; i <= 3; i++) {
       await fanout.publish({
-        renderId: 's1',
+        sessionId: 's1',
         envelope: {
-          renderId: 's1',
+          sessionId: 's1',
           seq: i,
           channel: 'message',
           mode: 'append',

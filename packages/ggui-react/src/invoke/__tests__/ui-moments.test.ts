@@ -4,7 +4,7 @@
  * to mount as `<AppRenderer>`. Pure function; no React.
  *
  * Covers both recognition paths:
- *   - render-resource — URL from `{renderId}` (GguiRenderOutput shape);
+ *   - render-resource — URL from `{sessionId}` (GguiRenderOutput shape);
  *   - inline meta — `_meta["ai.ggui/render"]` slice
  *     ({@link McpAppAiGguiRenderMeta}).
  * Plus precedence (inline wins), filtering of non-ggui tool_results,
@@ -12,7 +12,7 @@
  *
  * Post-Phase-B: the old two-slice `{session, stackItem}` shape collapses
  * into a single flat render slice; the URL path collapses to
- * `/api/renders/<renderId>/resource`.
+ * `/api/sessions/<sessionId>/resource`.
  */
 import { describe, it, expect } from 'vitest';
 import { toMcpAppEnvelope } from '@ggui-ai/protocol/integrations/mcp-apps';
@@ -21,7 +21,7 @@ import type { ConversationMessage } from '../useInvoke';
 import { extractUiMoments } from '../ui-moments';
 
 const META_INLINE: McpAppAiGguiRenderMeta = {
-  renderId: 'render_inline',
+  sessionId: 'render_inline',
   appId: 'app_inline',
   runtimeUrl: '/_ggui/iframe-runtime.js',
   wsUrl: 'wss://mcp.example.test/ws',
@@ -30,7 +30,7 @@ const META_INLINE: McpAppAiGguiRenderMeta = {
 };
 
 const META_INLINE_B: McpAppAiGguiRenderMeta = {
-  renderId: 'render_inline_b',
+  sessionId: 'render_inline_b',
   appId: 'app_inline_b',
   runtimeUrl: '/_ggui/iframe-runtime.js',
   wsUrl: 'wss://mcp.example.test/ws',
@@ -64,14 +64,14 @@ describe('extractUiMoments', () => {
   });
 
   describe('render-resource URL from GguiRenderOutput', () => {
-    it('builds URL when origin + {renderId} are present', () => {
+    it('builds URL when origin + {sessionId} are present', () => {
       const messages = [
         assistantWith([
           {
             type: 'tool_result',
             tool_use_id: 'toolu_render_1',
             content: {
-              renderId: 'render_abc',
+              sessionId: 'render_abc',
               shortCode: 'xyz',
               url: 'https://example/preview/xyz',
               action: 'create',
@@ -86,10 +86,10 @@ describe('extractUiMoments', () => {
       expect(out).toEqual([
         {
           key: 'toolu_render_1',
-          renderId: 'render_abc',
+          sessionId: 'render_abc',
           source: {
             kind: 'render-resource',
-            url: 'https://api.example.test/api/renders/render_abc/resource',
+            url: 'https://api.example.test/api/sessions/render_abc/resource',
           },
         },
       ]);
@@ -101,7 +101,7 @@ describe('extractUiMoments', () => {
           {
             type: 'tool_result',
             tool_use_id: 'toolu_render_1',
-            content: { renderId: 'render_p' },
+            content: { sessionId: 'render_p' },
           },
         ]),
       ];
@@ -114,7 +114,7 @@ describe('extractUiMoments', () => {
           {
             type: 'tool_result',
             tool_use_id: 'toolu_render_1',
-            content: { renderId: 'render_p' },
+            content: { sessionId: 'render_p' },
           },
         ]),
       ];
@@ -124,18 +124,18 @@ describe('extractUiMoments', () => {
       expect(out[0]?.source.kind).toBe('render-resource');
       if (out[0]?.source.kind === 'render-resource') {
         expect(out[0].source.url).toBe(
-          'https://api.example.test/api/renders/render_p/resource',
+          'https://api.example.test/api/sessions/render_p/resource',
         );
       }
     });
 
-    it('URL-encodes renderId with unsafe characters', () => {
+    it('URL-encodes sessionId with unsafe characters', () => {
       const messages = [
         assistantWith([
           {
             type: 'tool_result',
             tool_use_id: 'toolu_render_1',
-            content: { renderId: 'render/weird id?x=1' },
+            content: { sessionId: 'render/weird id?x=1' },
           },
         ]),
       ];
@@ -144,7 +144,7 @@ describe('extractUiMoments', () => {
       });
       if (out[0]?.source.kind === 'render-resource') {
         expect(out[0].source.url).toBe(
-          'https://api.example.test/api/renders/render%2Fweird%20id%3Fx%3D1/resource',
+          'https://api.example.test/api/sessions/render%2Fweird%20id%3Fx%3D1/resource',
         );
       }
     });
@@ -155,7 +155,7 @@ describe('extractUiMoments', () => {
           {
             type: 'tool_result',
             tool_use_id: 'toolu_render_1',
-            content: { result: { renderId: 'render_p' } },
+            content: { result: { sessionId: 'render_p' } },
           },
         ]),
       ];
@@ -163,10 +163,10 @@ describe('extractUiMoments', () => {
         renderResourceOrigin: 'https://api.example.test',
       });
       expect(out).toHaveLength(1);
-      expect(out[0]?.renderId).toBe('render_p');
+      expect(out[0]?.sessionId).toBe('render_p');
     });
 
-    it('skips tool_result with no renderId field', () => {
+    it('skips tool_result with no sessionId field', () => {
       const messages = [
         assistantWith([
           {
@@ -183,7 +183,7 @@ describe('extractUiMoments', () => {
   });
 
   describe('inline meta from ai.ggui/render slice', () => {
-    it('extracts meta and uses meta.renderId', () => {
+    it('extracts meta and uses meta.sessionId', () => {
       const messages = [
         assistantWith([
           {
@@ -197,7 +197,7 @@ describe('extractUiMoments', () => {
       expect(out).toEqual([
         {
           key: 'toolu_render_c1',
-          renderId: META_INLINE.renderId,
+          sessionId: META_INLINE.sessionId,
           source: { kind: 'bootstrap-inline', meta: META_INLINE },
         },
       ]);
@@ -227,7 +227,7 @@ describe('extractUiMoments', () => {
             type: 'tool_result',
             tool_use_id: 'toolu_render_mixed',
             content: {
-              renderId: 'render_coord_only',
+              sessionId: 'render_coord_only',
               _meta: toMcpAppEnvelope(META_INLINE),
             },
           },
@@ -238,13 +238,13 @@ describe('extractUiMoments', () => {
       });
       expect(out).toHaveLength(1);
       expect(out[0]?.source.kind).toBe('bootstrap-inline');
-      // renderId follows meta.renderId, not the coordinate field.
-      expect(out[0]?.renderId).toBe(META_INLINE.renderId);
+      // sessionId follows meta.sessionId, not the coordinate field.
+      expect(out[0]?.sessionId).toBe(META_INLINE.sessionId);
     });
   });
 
   describe('filtering — non-ggui tool_results drop silently', () => {
-    it('drops text-only tool_result (no renderId, no _meta)', () => {
+    it('drops text-only tool_result (no sessionId, no _meta)', () => {
       const messages = [
         assistantWith([
           {
@@ -288,7 +288,7 @@ describe('extractUiMoments', () => {
           {
             type: 'tool_result',
             tool_use_id: 'toolu_render_a',
-            content: { renderId: 'render_a' },
+            content: { sessionId: 'render_a' },
           },
           {
             type: 'tool_result',
@@ -314,7 +314,7 @@ describe('extractUiMoments', () => {
             {
               type: 'tool_result',
               tool_use_id: 'toolu_m1_a',
-              content: { renderId: 'render_m1' },
+              content: { sessionId: 'render_m1' },
             },
           ],
           'msg_1',
@@ -324,7 +324,7 @@ describe('extractUiMoments', () => {
             {
               type: 'tool_result',
               tool_use_id: 'toolu_m2_a',
-              content: { renderId: 'render_m2' },
+              content: { sessionId: 'render_m2' },
             },
           ],
           'msg_2',

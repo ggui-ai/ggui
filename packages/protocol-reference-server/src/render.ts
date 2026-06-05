@@ -12,7 +12,7 @@
  *
  * Wire-shape note: the conformance kit drives the reference server
  * over the SPEC §12.2 wire using the canonical render-identity field
- * `renderId`.
+ * `sessionId`.
  */
 
 /**
@@ -50,7 +50,7 @@ export interface StreamSpecEntry {
 }
 
 export interface GguiSession {
-  readonly renderId: string;
+  readonly sessionId: string;
   readonly appId: string;
   readonly actionSpecs: Map<string, ActionSpecEntry>;
   readonly streamSpecs: Map<string, StreamSpecEntry>;
@@ -83,7 +83,7 @@ export interface Subscriber {
 }
 
 /**
- * In-memory render store. Wraps a `Map<renderId, GguiSession>` with
+ * In-memory render store. Wraps a `Map<sessionId, GguiSession>` with
  * the operations the ConformanceHost adapter + WS subscribe handler
  * need. No locking — JS single-threaded; all calls originate from
  * the event loop.
@@ -92,58 +92,58 @@ export class GguiSessionStore {
   private readonly renders = new Map<string, GguiSession>();
   private lastCreated: string | undefined;
 
-  create(renderId: string, appId: string): GguiSession {
-    const existing = this.renders.get(renderId);
+  create(sessionId: string, appId: string): GguiSession {
+    const existing = this.renders.get(sessionId);
     if (existing !== undefined) {
-      this.lastCreated = renderId;
+      this.lastCreated = sessionId;
       return existing;
     }
     const render: GguiSession = {
-      renderId,
+      sessionId,
       appId,
       actionSpecs: new Map(),
       streamSpecs: new Map(),
       subscribers: new Set(),
     };
-    this.renders.set(renderId, render);
-    this.lastCreated = renderId;
+    this.renders.set(sessionId, render);
+    this.lastCreated = sessionId;
     return render;
   }
 
   /**
-   * The renderId most recently passed to `create()`. Used by the
+   * The sessionId most recently passed to `create()`. Used by the
    * ConformanceHost's `register-actionspec` dispatcher — that
-   * directive doesn't carry a renderId in its JSON shape, so the
+   * directive doesn't carry a sessionId in its JSON shape, so the
    * adapter needs the "most recently created" scope to bind the
    * actionspec to. This matches the fixture-authoring convention that
-   * create-render always precedes register-actionspec.
+   * create-session always precedes register-actionspec.
    */
-  lastCreatedRenderId(): string | undefined {
+  lastCreatedSessionId(): string | undefined {
     return this.lastCreated;
   }
 
-  get(renderId: string): GguiSession | undefined {
-    return this.renders.get(renderId);
+  get(sessionId: string): GguiSession | undefined {
+    return this.renders.get(sessionId);
   }
 
-  close(renderId: string): boolean {
-    return this.renders.delete(renderId);
+  close(sessionId: string): boolean {
+    return this.renders.delete(sessionId);
   }
 
-  addSubscriber(renderId: string, subscriber: Subscriber): GguiSession {
-    const render = this.create(renderId, 'conformance');
+  addSubscriber(sessionId: string, subscriber: Subscriber): GguiSession {
+    const render = this.create(sessionId, 'conformance');
     render.subscribers.add(subscriber);
     return render;
   }
 
-  removeSubscriber(renderId: string, subscriber: Subscriber): void {
-    const render = this.renders.get(renderId);
+  removeSubscriber(sessionId: string, subscriber: Subscriber): void {
+    const render = this.renders.get(sessionId);
     if (render === undefined) return;
     render.subscribers.delete(subscriber);
   }
 
-  registerActionSpec(renderId: string, entry: ActionSpecEntry): void {
-    const render = this.create(renderId, 'conformance');
+  registerActionSpec(sessionId: string, entry: ActionSpecEntry): void {
+    const render = this.create(sessionId, 'conformance');
     render.actionSpecs.set(entry.name, entry);
   }
 
@@ -155,8 +155,8 @@ export class GguiSessionStore {
    * `entry.channel` — registering the same channel twice replaces
    * the prior binding, matching the action-spec map's behavior.
    */
-  registerStreamSpec(renderId: string, entry: StreamSpecEntry): void {
-    const render = this.create(renderId, 'conformance');
+  registerStreamSpec(sessionId: string, entry: StreamSpecEntry): void {
+    const render = this.create(sessionId, 'conformance');
     render.streamSpecs.set(entry.channel, entry);
   }
 
@@ -171,8 +171,8 @@ export class GguiSessionStore {
    * Same "create-if-missing" semantics as the other register* setters
    * so directive ordering relative to subscribe doesn't matter.
    */
-  setVersionOverride(renderId: string, version: string): void {
-    const render = this.create(renderId, 'conformance');
+  setVersionOverride(sessionId: string, version: string): void {
+    const render = this.create(sessionId, 'conformance');
     render.versionOverride = version;
   }
 
@@ -195,8 +195,8 @@ export class GguiSessionStore {
    * `broadcast()` — one bad subscriber must not block fan-out to the
    * rest.
    */
-  injectFrame(renderId: string, frame: unknown): boolean {
-    const render = this.renders.get(renderId);
+  injectFrame(sessionId: string, frame: unknown): boolean {
+    const render = this.renders.get(sessionId);
     if (render === undefined) return false;
     if (render.subscribers.size === 0) return false;
     for (const subscriber of render.subscribers) {

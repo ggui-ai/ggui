@@ -29,7 +29,7 @@ export const NO_CREDENTIALS_SYSTEM_CARD_KIND = 'no-credentials' as const;
 
 /**
  * Build a {@link SystemGguiSession} carrying the no-credentials card.
- * The `id` MUST equal the in-flight `renderId` so a subsequent
+ * The `id` MUST equal the in-flight `sessionId` so a subsequent
  * `renderStore.commit({render})` upserts in place over any
  * provisional preview placeholder.
  *
@@ -39,7 +39,7 @@ export const NO_CREDENTIALS_SYSTEM_CARD_KIND = 'no-credentials' as const;
  * `/settings`.
  */
 export function buildNoCredentialsGguiSession(args: {
-  readonly renderId: string;
+  readonly sessionId: string;
   readonly appId: string;
   readonly intent: string;
   readonly nowEpochMs: number;
@@ -47,7 +47,7 @@ export function buildNoCredentialsGguiSession(args: {
   readonly settingsUrl: string;
 }): SystemGguiSession {
   return {
-    id: args.renderId,
+    id: args.sessionId,
     appId: args.appId,
     type: 'system',
     kind: NO_CREDENTIALS_SYSTEM_CARD_KIND,

@@ -119,7 +119,7 @@ export type TransportKind = 'ws' | 'polling';
 export interface ChannelClientBootstrap {
   readonly wsUrl?: string;
   readonly wsToken?: string;
-  readonly renderId: string;
+  readonly sessionId: string;
   readonly appId: string;
 }
 

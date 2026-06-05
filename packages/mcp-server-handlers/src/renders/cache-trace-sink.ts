@@ -267,7 +267,7 @@ export interface CacheTraceEvent {
    * Human-readable explanation. Mirrors the `reason` strings the
    * cache-backed handshake negotiator surfaces, so operators see one
    * consistent vocabulary across `/devtools/cache` and
-   * `/ggui/console/renders`.
+   * `/ggui/console/sessions`.
    */
   readonly reason: string;
 }

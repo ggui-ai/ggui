@@ -12,7 +12,7 @@
  * GguiSession shape: reverse-chronological list of cards. Each card shows:
  *   - timestamp + direction chip (inbound-render / outbound-update)
  *   - tool name (`ggui_render` / `ggui_update`)
- *   - renderId truncated to 8 chars
+ *   - sessionId truncated to 8 chars
  *   - byte size of the payload
  *   - expandable detail panel with pretty-printed JSON in a paper-2
  *     pre-block, max-height 400px scroll cap
@@ -29,7 +29,7 @@ interface PayloadEvent {
   readonly id: string;
   readonly at: number;
   readonly direction: PayloadDirection;
-  readonly renderId: string;
+  readonly sessionId: string;
   readonly appId: string;
   readonly tool: string;
   readonly payload: unknown;
@@ -213,9 +213,9 @@ function PayloadCard({
     hour12: false,
   });
   const renderShort =
-    event.renderId.length > 8
-      ? `${event.renderId.slice(0, 8)}…`
-      : event.renderId;
+    event.sessionId.length > 8
+      ? `${event.sessionId.slice(0, 8)}…`
+      : event.sessionId;
   const directionLabel =
     event.direction === 'inbound-render' ? 'inbound' : 'outbound';
 
@@ -297,7 +297,7 @@ function PayloadDetail({
           className="ggui-muted"
           style={{ fontFamily: 'var(--ggui-font-mono)', fontSize: 12 }}
         >
-          {event.renderId} · app {event.appId}
+          {event.sessionId} · app {event.appId}
         </span>
       </Section>
       <Section label="payload">

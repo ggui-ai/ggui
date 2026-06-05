@@ -26,7 +26,7 @@ import type {
  * Payload for subscribe message
  */
 export interface SubscribePayload {
-  renderId: string;
+  sessionId: string;
   appId: string;
   /** Role of the subscriber: 'user' (Portal) or 'agent' (MCP bridge) */
   role?: 'user' | 'agent';
@@ -55,7 +55,7 @@ export interface SubscribePayload {
   /**
    * Opaque WS auth credential for initial subscribe — the live-channel
    * counterpart to a bearer token. Symmetric with {@link
-   * SubscribePayload.renderId}/`appId`/`wsUrl` — names what it auths.
+   * SubscribePayload.sessionId}/`appId`/`wsUrl` — names what it auths.
    *
    * **Auth-credential string only.** Identity/render fields ride on
    * the `ai.ggui/render` slice meta delivered through the MCP Apps
@@ -69,7 +69,7 @@ export interface SubscribePayload {
    * field with the same semantics:
    *
    *   - Opaque to the client — validated server-side against the
-   *     subscribe's `renderId` + `appId`.
+   *     subscribe's `sessionId` + `appId`.
    *   - Short TTL (seconds-to-minutes); stale tokens are rejected
    *     (refresh via `ggui_runtime_refresh_ws_token` within the
    *     refresh window, otherwise re-handshake).
@@ -77,7 +77,7 @@ export interface SubscribePayload {
    *     can reconnect without a fresh handshake.
    *
    * On a successful ws-token-authed subscribe, the server SHOULD issue
-   * a longer-lived reconnect credential via {@link AckPayload.renderToken}.
+   * a longer-lived reconnect credential via {@link AckPayload.sessionToken}.
    *
    * Mutually compatible with upstream bearer-auth (`Authorization`
    * header / `?token=` query). When both are present, server behavior
@@ -191,16 +191,16 @@ export interface AckPayload {
    *
    * Semantics:
    *   - Longer TTL than the ws token (minutes-to-hours).
-   *   - Bound to the same `renderId` + `appId`.
+   *   - Bound to the same `sessionId` + `appId`.
    *   - Passed on reconnect via the standard bearer path
-   *     (`Authorization: Bearer <renderToken>` or `?token=`), NOT in
+   *     (`Authorization: Bearer <sessionToken>` or `?token=`), NOT in
    *     `SubscribePayload.wsToken` (which is short-TTL and credential-scoped).
    *
    * Absent when the subscribe was bearer-authed (no ws-token-bound
    * reconnect credential needed) and on servers that don't implement
    * ws-token auth.
    */
-  renderToken?: string;
+  sessionToken?: string;
   /**
    * Protocol schema version this server emits on. Advertised on every
    * successful ack. First-party servers populate this with
@@ -251,7 +251,7 @@ export interface RenderPayload {
  */
 export interface StreamEnvelope {
   /** GguiSession this delivery belongs to. */
-  renderId: string;
+  sessionId: string;
   /** Channel name (keys into `spec.channels`). */
   channel: string;
   /**
@@ -304,7 +304,7 @@ export interface StreamEnvelope {
  * Delivers streaming text chunks from the agent in real-time.
  */
 export interface StreamPayload {
-  renderId: string;
+  sessionId: string;
   /** Text chunk from agent. Empty string on final (done=true) message. */
   chunk: string;
   /** Whether this is the final chunk in the stream. */
@@ -339,7 +339,7 @@ export interface ErrorPayload {
  * to begin polling the channel's `streamSpec[ch].source.tool` on the
  * iframe's behalf and fan results out as `channel_payload` frames.
  *
- * Idempotent on reconnect: replaying the same `{renderId, channelName,
+ * Idempotent on reconnect: replaying the same `{sessionId, channelName,
  * pollIntervalMs?, args?}` triple after a WS disconnect re-binds the
  * existing subscription rather than minting a duplicate. The server is
  * authoritative on `pollIntervalMs` — clients propose, server caps to
@@ -347,7 +347,7 @@ export interface ErrorPayload {
  */
 export interface ChannelSubscribePayload {
   /** Active render id from the iframe's bootstrap. */
-  renderId: string;
+  sessionId: string;
   /** Active app id from the iframe's bootstrap. */
   appId: string;
   /** Channel name as keyed in `streamSpec`. The source.tool comes from the contract. */
@@ -368,13 +368,13 @@ export interface ChannelSubscribePayload {
 
 /**
  * Payload for `channel_unsubscribe` (Client → Server). Idempotent: the
- * server tolerates an unsubscribe for an unknown `{renderId,
+ * server tolerates an unsubscribe for an unknown `{sessionId,
  * channelName}` pair (treats as a no-op + ack). Closing the WebSocket
  * implicitly unsubscribes all channels on that subscriber — this
  * message is for fine-grained mid-render cancellation.
  */
 export interface ChannelUnsubscribePayload {
-  renderId: string;
+  sessionId: string;
   appId: string;
   channelName: string;
 }
@@ -390,7 +390,7 @@ export interface ChannelUnsubscribePayload {
  * semantics as iframe-polled payloads.
  */
 export interface ChannelPayloadFrame {
-  renderId: string;
+  sessionId: string;
   appId: string;
   channelName: string;
   /** Server-monotonic sequence for this channel — gap-detection on the client. */
@@ -420,17 +420,17 @@ export interface ChannelPayloadFrame {
  *
  *   - `CHANNEL_UNKNOWN`         — channelName not present in streamSpec.
  *   - `CHANNEL_NOT_LOCAL`       — `source.tool` not in `streamWebSocketLocalTools`; iframe must poll directly.
- *   - `RENDER_NOT_FOUND`        — `renderId` not on the server.
+ *   - `SESSION_NOT_FOUND`        — `sessionId` not on the server.
  *   - `SUBSCRIBE_UNAUTHORIZED`  — WS auth token expired or render-mismatch.
  *   - `POLL_FAILED`             — source.tool invocation threw. `details` carries the error.
  */
 export interface ChannelErrorPayload {
-  renderId: string;
+  sessionId: string;
   channelName: string;
   code:
     | 'CHANNEL_UNKNOWN'
     | 'CHANNEL_NOT_LOCAL'
-    | 'RENDER_NOT_FOUND'
+    | 'SESSION_NOT_FOUND'
     | 'SUBSCRIBE_UNAUTHORIZED'
     | 'POLL_FAILED'
     | (string & {});
@@ -442,7 +442,7 @@ export interface ChannelErrorPayload {
  * Payload for close message (Client → Server: close render)
  */
 export interface ClosePayload {
-  renderId: string;
+  sessionId: string;
 }
 
 /**
@@ -463,7 +463,7 @@ export type ProgressStep = 'queued' | 'primitives' | 'writing' | 'compiling';
  * Payload for progress message (Server → Client)
  */
 export interface ProgressPayload {
-  renderId: string;
+  sessionId: string;
   step: ProgressStep;
   message: string;
 }
@@ -481,7 +481,7 @@ export interface AgentMsgPayload {
   /** Message text from the agent */
   message: string;
   /** GguiSession ID */
-  renderId: string;
+  sessionId: string;
 }
 
 /**
@@ -490,7 +490,7 @@ export interface AgentMsgPayload {
  */
 export interface PropsUpdatePayload {
   /** GguiSession id of the rendered component being updated. */
-  renderId: string;
+  sessionId: string;
   /** New props — full replacement */
   props: JsonObject;
 }
@@ -500,7 +500,7 @@ export interface PropsUpdatePayload {
  * Note: shortCode is returned; client constructs full URL using renderUrl from amplify_outputs
  */
 export interface UrlPayload {
-  renderId: string;
+  sessionId: string;
   shortCode: string;
 }
 
@@ -532,14 +532,14 @@ export interface SystemPayload {
   /** App ID requesting access (used with auth_required for app-scoped grants) */
   appId?: string;
   /** GguiSession ID for WebSocket context (used with auth_required) */
-  renderId?: string;
+  sessionId?: string;
 }
 
 /**
  * Payload for internal:progress message (generator → handler)
  */
 export interface InternalProgressPayload {
-  renderId: string;
+  sessionId: string;
   step: ProgressStep;
 }
 
@@ -565,7 +565,7 @@ export interface DrainAckPayload {
   /** Active app id from the bootstrap that emitted the action. */
   appId: string;
   /** GguiSession the drained event was queued on. */
-  renderId: string;
+  sessionId: string;
   /**
    * Server-assigned `ActionEnvelope.id` of the specific event that
    * was drained. The iframe-runtime keys its toast resolution on this

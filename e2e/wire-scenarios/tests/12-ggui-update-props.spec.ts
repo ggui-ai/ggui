@@ -3,7 +3,7 @@
  *
  * Locks in the B4 fix: when a renderer iframe is mounted via
  * `bootSelfContained` AND the bootstrap carries the live trio
- * (wsUrl + token + renderId), a server-side `ggui_update` MUST
+ * (wsUrl + token + sessionId), a server-side `ggui_update` MUST
  * propagate to the iframe over WS so React re-renders with new props.
  *
  * Setup: render a contract with a `propsSpec.count` numeric prop +
@@ -96,7 +96,7 @@ for (const provider of PROVIDERS) {
 
           // 4. Call ggui_update with new props.
           await callTool(MCP_URL, 'ggui_update', {
-            renderId: ref.renderId,
+            sessionId: ref.sessionId,
             kind: 'replace',
             props: { count: 42 },
           });

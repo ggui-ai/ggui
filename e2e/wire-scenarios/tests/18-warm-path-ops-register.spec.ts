@@ -71,7 +71,7 @@ interface HandshakeOut {
 }
 
 interface RenderOut {
-  renderId: string;
+  sessionId: string;
 }
 
 interface BootstrapJson {
@@ -108,7 +108,7 @@ const REGISTER_TEST_COMPONENT_CODE =
 
 /**
  * Post-Phase-B: `ggui_render` no longer surfaces a `url` field on its
- * structured output (output schema is `{renderId, nextStep?, action}`).
+ * structured output (output schema is `{sessionId, nextStep?, action}`).
  * The bootstrap payload — including `codeUrl` / `codeHash` — rides on
  * the result's `_meta["ai.ggui/render"]` slice instead. Reading the
  * slice directly off the render response skips the `/r/<shortCode>`
@@ -176,7 +176,7 @@ describe(
         });
         const render = unwrapStructured<RenderOut>(renderResp);
         const renderLatencyMs = Date.now() - renderStart;
-        expect(typeof render.renderId).toBe('string');
+        expect(typeof render.sessionId).toBe('string');
         const bootstrap = readRenderBootstrap(renderResp);
 
         expect(bootstrap.codeHash).toBe(expectedCodeHash);

@@ -15,7 +15,7 @@
  * be testable without round-tripping through the kit.
  *
  * Wire-field note: the subscribe payload carries the canonical
- * render-identity field `renderId`.
+ * render-identity field `sessionId`.
  */
 import { PROTOCOL_SCHEMA_VERSION } from '@ggui-ai/protocol';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -36,14 +36,14 @@ describe('per-render versionOverride', () => {
   });
 
   it('subscribe to a render with overridden version emits UPGRADE_REQUIRED carrying the override', async () => {
-    const renderId = 'override-target';
-    server.renders.create(renderId, 'conformance');
-    server.renders.setVersionOverride(renderId, '99.99-unsupported');
+    const sessionId = 'override-target';
+    server.renders.create(sessionId, 'conformance');
+    server.renders.setVersionOverride(sessionId, '99.99-unsupported');
 
     const frame = await firstFrame(server.baseUrl, {
       type: 'subscribe',
       payload: {
-        renderId,
+        sessionId,
         appId: 'conformance',
         role: 'user',
         supportedVersions: [PROTOCOL_SCHEMA_VERSION],
@@ -71,7 +71,7 @@ describe('per-render versionOverride', () => {
     const frame = await firstFrame(server.baseUrl, {
       type: 'subscribe',
       payload: {
-        renderId: cleanId,
+        sessionId: cleanId,
         appId: 'conformance',
         role: 'user',
         supportedVersions: [PROTOCOL_SCHEMA_VERSION],

@@ -49,7 +49,7 @@ function makeRouter(opts: {
   bus.subscribe('quotes', (env) => received.push(env));
   bus.subscribe('news', (env) => received.push(env));
   const router = createChannelTransportRouter({
-    renderId: RENDER_ID,
+    sessionId: RENDER_ID,
     appId: APP_ID,
     ...(opts.streamWebSocketLocalTools !== undefined
       ? { streamWebSocketLocalTools: opts.streamWebSocketLocalTools }
@@ -96,21 +96,21 @@ describe('channel-transport router — transport selection', () => {
       streamWebSocketLocalTools: ['weather_now'],
     });
     router.applyRender({
-      renderId: RENDER_ID,
+      sessionId: RENDER_ID,
       streamSpec: STREAM_SPEC_WS,
     });
     expect(sent).toHaveLength(1);
     expect(sent[0]).toEqual({
       type: 'channel_subscribe',
       payload: {
-        renderId: RENDER_ID,
+        sessionId: RENDER_ID,
         appId: APP_ID,
         channelName: 'weather',
       },
     });
     expect(observed).toContainEqual({
       kind: 'channel-transport-picked',
-      renderId: RENDER_ID,
+      sessionId: RENDER_ID,
       channelName: 'weather',
       transport: 'ws',
     });
@@ -125,14 +125,14 @@ describe('channel-transport router — transport selection', () => {
       toolsCallResults: [{ q: 'one' }, { q: 'two' }, { q: 'three' }],
     });
     router.applyRender({
-      renderId: RENDER_ID,
+      sessionId: RENDER_ID,
       streamSpec: STREAM_SPEC_POLL,
     });
     // No WS frame
     expect(sent).toHaveLength(0);
     expect(observed).toContainEqual({
       kind: 'channel-transport-picked',
-      renderId: RENDER_ID,
+      sessionId: RENDER_ID,
       channelName: 'quotes',
       transport: 'poll',
     });
@@ -142,7 +142,7 @@ describe('channel-transport router — transport selection', () => {
     expect(calls.length).toBeGreaterThanOrEqual(1);
     expect(calls[0]).toEqual({ toolName: 'thirdparty_quotes', args: {} });
     expect(received[0]).toEqual({
-      renderId: RENDER_ID,
+      sessionId: RENDER_ID,
       channel: 'quotes',
       mode: 'append',
       payload: { q: 'one' },
@@ -162,7 +162,7 @@ describe('channel-transport router — transport selection', () => {
       toolsCallResults: [{ ok: true }, { ok: true }],
     });
     router.applyRender({
-      renderId: RENDER_ID,
+      sessionId: RENDER_ID,
       streamSpec: STREAM_SPEC_WS,
     });
     expect(sent).toHaveLength(0);
@@ -178,7 +178,7 @@ describe('channel-transport router — transport selection', () => {
       streamWebSocketLocalTools: ['weather_now'],
     });
     router.applyRender({
-      renderId: RENDER_ID,
+      sessionId: RENDER_ID,
       streamSpec: {
         legacy: { schema: { type: 'object' }, mode: 'append' },
       },
@@ -194,13 +194,13 @@ describe('channel-transport router — WS payload delivery', () => {
       streamWebSocketLocalTools: ['weather_now'],
     });
     router.applyRender({
-      renderId: RENDER_ID,
+      sessionId: RENDER_ID,
       streamSpec: STREAM_SPEC_WS,
     });
     const consumed = router.handleWsFrame({
       type: 'channel_payload',
       payload: {
-        renderId: RENDER_ID,
+        sessionId: RENDER_ID,
         appId: APP_ID,
         channelName: 'weather',
         seq: 1,
@@ -211,7 +211,7 @@ describe('channel-transport router — WS payload delivery', () => {
     });
     expect(consumed).toBe(true);
     expect(received[0]).toEqual({
-      renderId: RENDER_ID,
+      sessionId: RENDER_ID,
       channel: 'weather',
       mode: 'replace',
       payload: { temp: 72 },
@@ -224,13 +224,13 @@ describe('channel-transport router — WS payload delivery', () => {
       streamWebSocketLocalTools: ['weather_now'],
     });
     router.applyRender({
-      renderId: RENDER_ID,
+      sessionId: RENDER_ID,
       streamSpec: STREAM_SPEC_WS,
     });
     router.handleWsFrame({
       type: 'channel_payload',
       payload: {
-        renderId: RENDER_ID,
+        sessionId: RENDER_ID,
         appId: APP_ID,
         channelName: 'weather',
         seq: 1,
@@ -249,13 +249,13 @@ describe('channel-transport router — WS payload delivery', () => {
       streamWebSocketLocalTools: ['weather_now'],
     });
     router.applyRender({
-      renderId: RENDER_ID,
+      sessionId: RENDER_ID,
       streamSpec: STREAM_SPEC_WS,
     });
     const consumed = router.handleWsFrame({
       type: 'channel_payload',
       payload: {
-        renderId: RENDER_ID,
+        sessionId: RENDER_ID,
         appId: APP_ID,
         channelName: 'unknown-channel',
         seq: 1,
@@ -284,14 +284,14 @@ describe('channel-transport router — WS drop → poll fallback', () => {
       toolsCallResults: [{ ok: true }, { ok: true }, { ok: true }],
     });
     router.applyRender({
-      renderId: RENDER_ID,
+      sessionId: RENDER_ID,
       streamSpec: STREAM_SPEC_WS,
     });
     expect(calls).toHaveLength(0);
     router.onWsStatusChange('disconnected');
     expect(observed).toContainEqual({
       kind: 'channel-transport-fallback',
-      renderId: RENDER_ID,
+      sessionId: RENDER_ID,
       channelName: 'weather',
       reason: 'ws-disconnect',
     });
@@ -309,7 +309,7 @@ describe('channel-transport router — WS drop → poll fallback', () => {
       toolsCallResults: [{ ok: true }],
     });
     router.applyRender({
-      renderId: RENDER_ID,
+      sessionId: RENDER_ID,
       streamSpec: STREAM_SPEC_WS,
     });
     expect(sent).toHaveLength(1);
@@ -323,7 +323,7 @@ describe('channel-transport router — WS drop → poll fallback', () => {
     expect(sent[1]?.type).toBe('channel_subscribe');
     expect(observed).toContainEqual({
       kind: 'channel-transport-resubscribed',
-      renderId: RENDER_ID,
+      sessionId: RENDER_ID,
       channelName: 'weather',
     });
     // Polling still running until the first channel_payload
@@ -332,7 +332,7 @@ describe('channel-transport router — WS drop → poll fallback', () => {
     router.handleWsFrame({
       type: 'channel_payload',
       payload: {
-        renderId: RENDER_ID,
+        sessionId: RENDER_ID,
         appId: APP_ID,
         channelName: 'weather',
         seq: 1,
@@ -353,14 +353,14 @@ describe('channel-transport router — WS drop → poll fallback', () => {
       streamWebSocketLocalTools: ['weather_now'],
     });
     router.applyRender({
-      renderId: RENDER_ID,
+      sessionId: RENDER_ID,
       streamSpec: STREAM_SPEC_WS,
     });
     expect(sent).toHaveLength(1);
     // Second applyRender with the same shape — no new subscribe
     // frame, transport state untouched.
     router.applyRender({
-      renderId: RENDER_ID,
+      sessionId: RENDER_ID,
       streamSpec: STREAM_SPEC_WS,
     });
     expect(sent).toHaveLength(1);
@@ -378,7 +378,7 @@ describe('channel-transport router — WS drop → poll fallback', () => {
       toolsCallResults: [{ ok: true }, { ok: true }, { ok: true }],
     });
     router.applyRender({
-      renderId: RENDER_ID,
+      sessionId: RENDER_ID,
       streamSpec: STREAM_SPEC_POLL,
     });
     // First leading tick from the initial activate
@@ -407,13 +407,13 @@ describe('channel-transport router — channel_error → fallback', () => {
       toolsCallResults: [{ ok: true }],
     });
     router.applyRender({
-      renderId: RENDER_ID,
+      sessionId: RENDER_ID,
       streamSpec: STREAM_SPEC_WS,
     });
     router.handleWsFrame({
       type: 'channel_error',
       payload: {
-        renderId: RENDER_ID,
+        sessionId: RENDER_ID,
         channelName: 'weather',
         code: 'CHANNEL_NOT_LOCAL',
         message: 'tool not in streamWebSocketLocalTools',
@@ -421,7 +421,7 @@ describe('channel-transport router — channel_error → fallback', () => {
     });
     expect(observed).toContainEqual({
       kind: 'channel-transport-fallback',
-      renderId: RENDER_ID,
+      sessionId: RENDER_ID,
       channelName: 'weather',
       reason: 'channel-not-local',
     });
@@ -443,13 +443,13 @@ describe('channel-transport router — channel_error → fallback', () => {
       streamWebSocketLocalTools: ['weather_now'],
     });
     router.applyRender({
-      renderId: RENDER_ID,
+      sessionId: RENDER_ID,
       streamSpec: STREAM_SPEC_WS,
     });
     router.handleWsFrame({
       type: 'channel_error',
       payload: {
-        renderId: RENDER_ID,
+        sessionId: RENDER_ID,
         channelName: 'weather',
         code: 'POLL_FAILED',
         message: 'tool threw',
@@ -482,7 +482,7 @@ describe('channel-transport router — backoff schedule honored', () => {
       ],
     });
     router.applyRender({
-      renderId: RENDER_ID,
+      sessionId: RENDER_ID,
       streamSpec: STREAM_SPEC_POLL,
     });
     // Leading tick: flush microtask
@@ -520,7 +520,7 @@ describe('channel-transport router — dispose teardown', () => {
       toolsCallResults: [{ ok: true }, { ok: true }, { ok: true }],
     });
     router.applyRender({
-      renderId: RENDER_ID,
+      sessionId: RENDER_ID,
       streamSpec: STREAM_SPEC_POLL,
     });
     await vi.runOnlyPendingTimersAsync();
@@ -532,18 +532,18 @@ describe('channel-transport router — dispose teardown', () => {
 });
 
 describe('channel-transport router — channel-only key match for channel_error', () => {
-  it('routes channel_error to fallback via the (renderId, channelName) key', () => {
+  it('routes channel_error to fallback via the (sessionId, channelName) key', () => {
     const { router, observed } = makeRouter({
       streamWebSocketLocalTools: ['weather_now'],
     });
     router.applyRender({
-      renderId: RENDER_ID,
+      sessionId: RENDER_ID,
       streamSpec: STREAM_SPEC_WS,
     });
     router.handleWsFrame({
       type: 'channel_error',
       payload: {
-        renderId: RENDER_ID,
+        sessionId: RENDER_ID,
         channelName: 'weather',
         code: 'CHANNEL_NOT_LOCAL',
         message: 'demo',

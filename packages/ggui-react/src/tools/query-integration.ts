@@ -63,7 +63,7 @@ export function useQueryTool<T = unknown>(options: UseToolOptions): UseToolRetur
       return executor(config.config, {
         resolved: {},
         appId: gguiCtx.appId,
-        renderId: '',
+        sessionId: '',
         auth: { isAuthenticated: false },
         ...contextOverrides,
       } as ToolContext);
@@ -119,7 +119,7 @@ export function useQueryBindings(options: UseBindingsOptions): ResolvedBindings 
       return resolveBindings(bindings, {
         resolved: {},
         appId: gguiCtx.appId,
-        renderId: '',
+        sessionId: '',
         auth: { isAuthenticated: false },
         ...contextOverrides,
       } as ToolContext);

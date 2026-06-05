@@ -508,7 +508,7 @@ export type ActionSpec = Record<string, ActionEntry>;
  *
  *   1. Call sites are grep-able — producers and consumers that need to
  *      reason about the refresh-input contract can find each other.
- *   2. v2 evolution (e.g., passing `{renderId}` / `{actor}` context on
+ *   2. v2 evolution (e.g., passing `{sessionId}` / `{actor}` context on
  *      refresh) has a single point to widen; today's `{}` literal
  *      wouldn't trip any compile error if the wire expectation
  *      changed.
@@ -1132,7 +1132,7 @@ export function deriveContextDefault(entry: ContextEntry): JsonValue | undefined
  * Data contract that bind a generated component to its consumers.
  *
  * Seven parts:
- * - **intent**: WHY this UI exists — concise purpose capturing user goal, data shown, and interaction pattern (NOT a contract field; threaded externally on `ggui_handshake({renderId, intent})`)
+ * - **intent**: WHY this UI exists — concise purpose capturing user goal, data shown, and interaction pattern (NOT a contract field; threaded externally on `ggui_handshake({sessionId, intent})`)
  * - **propsSpec**: WHAT data the UI renders initially (set on render, mutated via ggui_update) — agent → client one-shot
  * - **streamSpec**: WHAT live data the UI accepts — flat map keyed by channel name (agent → client live)
  * - **contextSpec**: WHAT observable client state the LLM sees — flat map keyed by slot name (client → agent live, last-write-wins state)
@@ -1320,7 +1320,7 @@ export interface DataContract {
  * envelope reaches the agentic loop — instead of a silent `TOOL_THREW`
  * at runtime.
  *
- * `'RENDER_NOT_FOUND'` + `'AUTH_REJECTED'` — fire on post-WS-open
+ * `'SESSION_NOT_FOUND'` + `'AUTH_REJECTED'` — fire on post-WS-open
  * boot failures where the live channel is already alive (so the envelope-
  * emittable invariant is satisfied). The renderer bundle surfaces
  * them BOTH on the live-channel `_ggui:contract-error` envelope (with
@@ -1342,7 +1342,7 @@ export type ContractErrorCode =
   | 'TOOL_TIMEOUT'
   | 'SCHEMA_VIOLATION'
   | 'SCHEMA_MISMATCH_ERROR'
-  | 'RENDER_NOT_FOUND'
+  | 'SESSION_NOT_FOUND'
   | 'AUTH_REJECTED'
   /**
    * `'INVALID_ACTION_KIND'` — emitted when the
@@ -1358,7 +1358,7 @@ export type ContractErrorCode =
   | 'INVALID_ACTION_KIND'
   /**
    * `'PIPE_NOT_FOUND'` — surfaced when `ggui_runtime_submit_action`
-   * receives a `kind:"dispatch"` envelope referencing a `renderId`
+   * receives a `kind:"dispatch"` envelope referencing a `sessionId`
    * whose pending-events pipe is closed/missing (drained, render
    * closed, or never opened). The handler returns `{ok:false, code:
    * 'PIPE_NOT_FOUND'}` in structuredContent; the iframe-runtime

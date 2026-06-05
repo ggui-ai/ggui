@@ -14,7 +14,7 @@
  *
  * The handler runs the size gate BEFORE the render-existence check,
  * so this scenario does NOT need a real handshake/render — any non-empty
- * renderId/appId pair with an oversize snapshot trips the rejection
+ * sessionId/appId pair with an oversize snapshot trips the rejection
  * path. That's why this scenario runs without an LLM.
  */
 import { describe, expect, test } from 'vitest';
@@ -24,7 +24,7 @@ const MCP_URL = `http://localhost:${process.env.GGUI_PORT ?? 6781}/mcp`;
 
 function makeArgs(snapshot: Record<string, unknown>): Record<string, unknown> {
   return {
-    renderId: 'rnd-fake-for-size-check',
+    sessionId: 'rnd-fake-for-size-check',
     appId: 'builder',
     snapshot,
   };

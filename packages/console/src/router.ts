@@ -21,7 +21,7 @@
  *       /                       → admin-index (lands on Status)
  *       /admin                  → admin-index — same as /
  *       /admin/status           → server / pairing / capabilities / storage
- *       /admin/renders          → active render list
+ *       /admin/sessions          → active render list
  *       /admin/blueprints       → registered blueprint + primitive catalog
  *       /admin/variants         → variant management (list, grouped by contract)
  *       /admin/variants/:hash   → per-contract variant detail (A/B compare)
@@ -59,7 +59,7 @@ export type Route =
   // `/` and `/admin` and renders the same content as `admin-status`.
   | { readonly kind: 'admin-index' }
   | { readonly kind: 'admin-status' }
-  | { readonly kind: 'admin-renders' }
+  | { readonly kind: 'admin-sessions' }
   | { readonly kind: 'admin-blueprints' }
   // Operator UX for the multi-variant blueprint system. Sibling of
   // `admin-blueprints` (the declared+cached registry view, which
@@ -124,8 +124,8 @@ export function parseRoute(pathname: string): Route {
   if (pathname === '/admin/status' || pathname === '/admin/status/') {
     return { kind: 'admin-status' };
   }
-  if (pathname === '/admin/renders' || pathname === '/admin/renders/') {
-    return { kind: 'admin-renders' };
+  if (pathname === '/admin/sessions' || pathname === '/admin/sessions/') {
+    return { kind: 'admin-sessions' };
   }
   if (
     pathname === '/admin/blueprints' ||
@@ -296,7 +296,7 @@ export function isAdminRoute(route: Route): boolean {
   return (
     route.kind === 'admin-index' ||
     route.kind === 'admin-status' ||
-    route.kind === 'admin-renders' ||
+    route.kind === 'admin-sessions' ||
     route.kind === 'admin-blueprints' ||
     route.kind === 'admin-variants' ||
     route.kind === 'admin-variant-detail' ||

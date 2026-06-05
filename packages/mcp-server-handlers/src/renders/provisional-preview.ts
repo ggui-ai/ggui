@@ -68,7 +68,7 @@ export type ProvisionalPreviewEmit = (
  *   - `now` is a clock override for tests.
  */
 export interface ProvisionalPreviewContext {
-  readonly renderId: string;
+  readonly sessionId: string;
   readonly appId: string;
   /**
    * The `story` block from the `ggui_render` input. `intent` is
@@ -107,14 +107,14 @@ export interface ProvisionalPreviewConfig {
    */
   readonly enabled: boolean;
   /**
-   * Per-render override. Receives `appId`, `renderId`, and the
+   * Per-render override. Receives `appId`, `sessionId`, and the
    * resolved `story`. Returning `false` skips with reason
    * `'predicate'`. When omitted, gate passes as long as `enabled`
    * is true and the render shape qualifies.
    */
   readonly isEnabledFor?: (ctx: {
     readonly appId: string;
-    readonly renderId: string;
+    readonly sessionId: string;
     readonly story: { readonly intent: string } & Record<string, unknown>;
   }) => boolean;
 }
@@ -139,18 +139,18 @@ export type ProvisionalPreviewOutcome =
   | {
       readonly status: 'skipped';
       readonly reason: ProvisionalPreviewSkipReason;
-      readonly renderId: string;
+      readonly sessionId: string;
       readonly appId: string;
     }
   | {
       readonly status: 'started';
-      readonly renderId: string;
+      readonly sessionId: string;
       readonly appId: string;
       readonly startedAt: number;
     }
   | {
       readonly status: 'first-frame';
-      readonly renderId: string;
+      readonly sessionId: string;
       readonly appId: string;
       readonly startedAt: number;
       /**
@@ -161,7 +161,7 @@ export type ProvisionalPreviewOutcome =
     }
   | {
       readonly status: 'completed';
-      readonly renderId: string;
+      readonly sessionId: string;
       readonly appId: string;
       readonly startedAt: number;
       readonly finishedAt: number;
@@ -177,7 +177,7 @@ export type ProvisionalPreviewOutcome =
     }
   | {
       readonly status: 'failed';
-      readonly renderId: string;
+      readonly sessionId: string;
       readonly appId: string;
       readonly startedAt: number;
       readonly finishedAt: number;
@@ -187,7 +187,7 @@ export type ProvisionalPreviewOutcome =
     }
   | {
       readonly status: 'cancelled';
-      readonly renderId: string;
+      readonly sessionId: string;
       readonly appId: string;
       readonly startedAt: number;
       readonly finishedAt: number;
@@ -235,7 +235,7 @@ export interface ProvisionalPreviewDeps {
    * Optional registry the render handler registers active handles
    * into. External callsites (`apply-render-patch` once
    * `componentCode` lands, render teardown, shutdown) cancel by
-   * `renderId` to hand off to the authoritative UI cleanly.
+   * `sessionId` to hand off to the authoritative UI cleanly.
    *
    * Absent registry = no external cancellation site; the preamble
    * simply runs to completion. V1 OSS handoff wiring still lands
@@ -247,11 +247,11 @@ export interface ProvisionalPreviewDeps {
 
 /**
  * In-process registry of active preamble handles keyed by
- * {@link ProvisionalPreviewRunContext.renderId}. The render handler
+ * {@link ProvisionalPreviewRunContext.sessionId}. The render handler
  * registers on kickoff; the runner clears the entry when its
  * terminal outcome fires. External cancellation points (handoff,
  * teardown) call {@link ProvisionalPreviewRegistry.cancel} by
- * `renderId`.
+ * `sessionId`.
  *
  * One-instance scope. Distributed deployments (Redis-backed etc.)
  * implement the same surface with their own storage — the render
@@ -260,7 +260,7 @@ export interface ProvisionalPreviewDeps {
 export interface ProvisionalPreviewRegistry {
   /**
    * Register a running preamble under a key. Typically the key is
-   * the `renderId` — one preamble per render at a time.
+   * the `sessionId` — one preamble per render at a time.
    * Registering a second handle under the same key cancels the
    * previous one (fire-and-forget) so a duplicate kickoff doesn't
    * leak.
@@ -326,7 +326,7 @@ export interface ProvisionalPreviewGateInput {
 export function evaluateProvisionalPreviewGate(
   deps: ProvisionalPreviewDeps | undefined,
   input: ProvisionalPreviewGateInput,
-  ctx: { readonly appId: string; readonly renderId: string },
+  ctx: { readonly appId: string; readonly sessionId: string },
 ): ProvisionalPreviewGate {
   if (!deps || !deps.config.enabled) {
     return { kind: 'skip', reason: 'disabled' };
@@ -341,7 +341,7 @@ export function evaluateProvisionalPreviewGate(
   if (predicate !== undefined) {
     const ok = predicate({
       appId: ctx.appId,
-      renderId: ctx.renderId,
+      sessionId: ctx.sessionId,
       story: input.story as { readonly intent: string } & Record<string, unknown>,
     });
     if (!ok) return { kind: 'skip', reason: 'predicate' };
@@ -361,10 +361,10 @@ export const PROVISIONAL_PREVIEW_CHANNEL = '_ggui:preview';
  * Run-time context the runner computes synchronously from the render
  * handler's resolved state. Structurally distinct from
  * {@link ProvisionalPreviewGateInput} because the runner needs the
- * resolved `renderId` + `appId` the gate doesn't know about.
+ * resolved `sessionId` + `appId` the gate doesn't know about.
  */
 export interface ProvisionalPreviewRunContext {
-  readonly renderId: string;
+  readonly sessionId: string;
   readonly appId: string;
   readonly story: { readonly intent: string } & Record<string, unknown>;
 }
@@ -419,7 +419,7 @@ export async function runProvisionalPreview(
 
   deps.onOutcome?.({
     status: 'started',
-    renderId: ctx.renderId,
+    sessionId: ctx.sessionId,
     appId: ctx.appId,
     startedAt,
   });
@@ -429,7 +429,7 @@ export async function runProvisionalPreview(
       throw new PreviewAbortError('Preview emission aborted');
     }
     const result = await deps.sendEnvelope({
-      renderId: ctx.renderId,
+      sessionId: ctx.sessionId,
       channel: PROVISIONAL_PREVIEW_CHANNEL,
       mode: 'append',
       payload,
@@ -447,7 +447,7 @@ export async function runProvisionalPreview(
       firstFrameAt = now();
       deps.onOutcome?.({
         status: 'first-frame',
-        renderId: ctx.renderId,
+        sessionId: ctx.sessionId,
         appId: ctx.appId,
         startedAt,
         firstFrameAt,
@@ -458,7 +458,7 @@ export async function runProvisionalPreview(
 
   try {
     await deps.emitter.run({
-      renderId: ctx.renderId,
+      sessionId: ctx.sessionId,
       appId: ctx.appId,
       story: ctx.story,
       emit,
@@ -474,7 +474,7 @@ export async function runProvisionalPreview(
     if (signal.aborted) {
       deps.onOutcome?.({
         status: 'cancelled',
-        renderId: ctx.renderId,
+        sessionId: ctx.sessionId,
         appId: ctx.appId,
         startedAt,
         finishedAt,
@@ -485,7 +485,7 @@ export async function runProvisionalPreview(
     } else {
       deps.onOutcome?.({
         status: 'completed',
-        renderId: ctx.renderId,
+        sessionId: ctx.sessionId,
         appId: ctx.appId,
         startedAt,
         finishedAt,
@@ -507,7 +507,7 @@ export async function runProvisionalPreview(
       // mid-stream abort; the abort reason is the caller's story.
       deps.onOutcome?.({
         status: 'cancelled',
-        renderId: ctx.renderId,
+        sessionId: ctx.sessionId,
         appId: ctx.appId,
         startedAt,
         finishedAt,
@@ -523,7 +523,7 @@ export async function runProvisionalPreview(
     }
     deps.onOutcome?.({
       status: 'failed',
-      renderId: ctx.renderId,
+      sessionId: ctx.sessionId,
       appId: ctx.appId,
       startedAt,
       finishedAt,
@@ -559,7 +559,7 @@ async function finalizePreviewChannel(
 ): Promise<void> {
   try {
     await deps.sendEnvelope({
-      renderId: ctx.renderId,
+      sessionId: ctx.sessionId,
       channel: PROVISIONAL_PREVIEW_CHANNEL,
       mode: 'append',
       payload: null,
@@ -627,7 +627,7 @@ function abortReason(signal: AbortSignal): string {
  * provisional preview cleanly.
  *
  * Semantics:
- *   - Cancels the preview registered under `renderId` on the supplied
+ *   - Cancels the preview registered under `sessionId` on the supplied
  *     registry. The registry's own `cancel` aborts the runner and
  *     awaits settle, so this helper resolves only once the
  *     `cancelled` outcome has fired with the supplied reason.
@@ -647,10 +647,10 @@ function abortReason(signal: AbortSignal): string {
  */
 export async function finalizeProvisionalPreview(
   registry: ProvisionalPreviewRegistry,
-  renderId: string,
+  sessionId: string,
   reason: string = 'handoff',
 ): Promise<void> {
-  await registry.cancel(renderId, reason);
+  await registry.cancel(sessionId, reason);
 }
 
 /**
@@ -662,7 +662,7 @@ export async function finalizeProvisionalPreview(
  * Behaviour:
  *   - `register` replaces any existing handle under the same key,
  *     cancelling the previous one via its controller. Prevents
- *     duplicate kickoffs on the same renderId from leaking.
+ *     duplicate kickoffs on the same sessionId from leaking.
  *   - Auto-clears entries when the handle's `done` settles, so
  *     natural completions don't accumulate stale keys.
  *   - `cancel` aborts + awaits settlement. `cancelAll` fans out

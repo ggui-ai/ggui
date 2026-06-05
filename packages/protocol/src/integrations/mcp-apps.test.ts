@@ -87,7 +87,7 @@ describe('McpAppAiGguiRenderMeta structural lock', () => {
   // own thing — the two slices were always activated together.
   it('carries identity + boot wiring + render state on a single flat shape', () => {
     const meta: McpAppAiGguiRenderMeta = {
-      renderId: 'r-1',
+      sessionId: 'r-1',
       appId: 'a',
       runtimeUrl: '/_ggui/iframe-runtime.js',
       wsUrl: 'w',
@@ -97,7 +97,7 @@ describe('McpAppAiGguiRenderMeta structural lock', () => {
       codeUrl: 'blob:...',
       codeHash: 'sha256:abc',
     };
-    expect(meta.renderId).toBe('r-1');
+    expect(meta.sessionId).toBe('r-1');
     expect(meta.appId).toBe('a');
     expect(meta.codeUrl).toBe('blob:...');
     expect(meta.propsJson).toBe('{}');
@@ -225,10 +225,10 @@ describe('isMcpAppLifecycleMessage type guard', () => {
     expect(isMcpAppLifecycleMessage(msg)).toBe(true);
   });
 
-  it('accepts a code-ready envelope with renderId', () => {
+  it('accepts a code-ready envelope with sessionId', () => {
     const msg: McpAppLifecycleMessage = {
       type: 'ggui:lifecycle',
-      event: { state: 'code-ready', renderId: 'item_a' },
+      event: { state: 'code-ready', sessionId: 'item_a' },
     };
     expect(isMcpAppLifecycleMessage(msg)).toBe(true);
   });
@@ -263,8 +263,8 @@ describe('isMcpAppLifecycleMessage type guard', () => {
     ['null event', { type: 'ggui:lifecycle', event: null }],
     ['missing state', { type: 'ggui:lifecycle', event: {} }],
     ['unknown state', { type: 'ggui:lifecycle', event: { state: 'spinning' } }],
-    ['empty renderId', { type: 'ggui:lifecycle', event: { state: 'mounting', renderId: '' } }],
-    ['non-string renderId', { type: 'ggui:lifecycle', event: { state: 'mounting', renderId: 7 } }],
+    ['empty sessionId', { type: 'ggui:lifecycle', event: { state: 'mounting', sessionId: '' } }],
+    ['non-string sessionId', { type: 'ggui:lifecycle', event: { state: 'mounting', sessionId: 7 } }],
     ['null error object', { type: 'ggui:lifecycle', event: { state: 'error', error: null } }],
     ['error missing code', { type: 'ggui:lifecycle', event: { state: 'error', error: { message: 'x' } } }],
     ['error missing message', { type: 'ggui:lifecycle', event: { state: 'error', error: { code: 'X' } } }],
@@ -274,17 +274,17 @@ describe('isMcpAppLifecycleMessage type guard', () => {
 });
 
 describe('McpAppLifecycleEvent shape lock', () => {
-  // Producers MUST not add fields beyond `state`, `renderId`,
+  // Producers MUST not add fields beyond `state`, `sessionId`,
   // `error`. Adding a key to this list is a protocol change — the
   // failing test forces a doc revision.
-  it('a fully-populated event carries exactly state + renderId + error', () => {
+  it('a fully-populated event carries exactly state + sessionId + error', () => {
     const event: McpAppLifecycleEvent = {
       state: 'error',
-      renderId: 'item_a',
+      sessionId: 'item_a',
       error: { code: 'WS_HANDSHAKE_FAILED', message: 'boom' },
     };
     const keys = Object.keys(event).sort();
-    expect(keys).toEqual(['error', 'renderId', 'state']);
+    expect(keys).toEqual(['error', 'sessionId', 'state']);
   });
 });
 
@@ -308,7 +308,7 @@ describe('Gesture-audit envelope (ggui_runtime_submit_action input contract)', (
 
   describe('isGguiSubmitActionInput type guard', () => {
     const baseFields = {
-      renderId: 'r_1',
+      sessionId: 'r_1',
       appId: 'app_1',
       actionId: 'a3f2b1d4',
       firedAt: '2026-05-07T10:00:00.000Z',
@@ -373,7 +373,7 @@ describe('Gesture-audit envelope (ggui_runtime_submit_action input contract)', (
       ['non-object', 'string'],
       ['empty object', {}],
       ['missing kind', { ...baseFields, payload: {} }],
-      ['missing renderId', { kind: 'dispatch', appId: 'a', actionId: 'i', firedAt: 't', payload: { intent: 's', actionData: null, uiContext: {} } }],
+      ['missing sessionId', { kind: 'dispatch', appId: 'a', actionId: 'i', firedAt: 't', payload: { intent: 's', actionData: null, uiContext: {} } }],
       ['missing actionId', { ...baseFields, kind: 'dispatch', payload: { intent: 's', actionData: null, uiContext: {} }, actionId: '' }],
       [
         'dispatch with empty intent',
@@ -418,15 +418,15 @@ describe('GguiUserActionMeta — single pure-doorbell shape lock', () => {
       kind: 'user-action',
       description:
         'The user interacted with render r_1. Call ggui_consume to retrieve it.',
-      renderId: 'r_1',
+      sessionId: 'r_1',
       actionId: '8f3a2b1c',
       submittedAt: '2026-05-14T00:00:00.000Z',
       intent: 'toggle',
-      nextStep: { tool: 'ggui_consume', args: { renderId: 'r_1' } },
+      nextStep: { tool: 'ggui_consume', args: { sessionId: 'r_1' } },
     };
     expect(meta.kind).toBe('user-action');
     expect(meta.nextStep.tool).toBe('ggui_consume');
-    expect(meta.nextStep.args.renderId).toBe('r_1');
+    expect(meta.nextStep.args.sessionId).toBe('r_1');
     // The slice carries no action payload — pointer only. (A `payload`
     // key would be a compile error against the interface; this runtime
     // assertion documents the absence for readers.)
@@ -443,7 +443,7 @@ describe('GguiUserActionMeta — single pure-doorbell shape lock', () => {
 
 describe('parseMcpAppAiGguiRenderMeta', () => {
   const minimalRender: McpAppAiGguiRenderMeta = {
-    renderId: 'r-1',
+    sessionId: 'r-1',
     appId: 'app-1',
     runtimeUrl: '/_ggui/iframe-runtime.js',
   };
@@ -461,7 +461,7 @@ describe('parseMcpAppAiGguiRenderMeta', () => {
 
   it('returns MALFORMED_RENDER when slice is present but identity is missing', () => {
     const result = parseMcpAppAiGguiRenderMeta({
-      [MCP_APP_AI_GGUI_RENDER_META_KEY]: { renderId: '', appId: 'a', runtimeUrl: '/r' },
+      [MCP_APP_AI_GGUI_RENDER_META_KEY]: { sessionId: '', appId: 'a', runtimeUrl: '/r' },
     });
     expect(result.ok ? null : result.reason).toBe('MALFORMED_RENDER');
   });
@@ -494,7 +494,7 @@ describe('parseMcpAppAiGguiRenderMeta', () => {
     });
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.meta?.renderId).toBe('r-1');
+      expect(result.meta?.sessionId).toBe('r-1');
       expect(result.meta?.wsUrl).toBe('ws://x');
       expect(result.meta?.wsToken).toBe('t');
       expect(result.meta?.contractHash).toBe('sha256:abc');
@@ -621,7 +621,7 @@ describe('parseMcpAppAiGguiHostSessionMeta', () => {
 describe('toMcpAppEnvelope', () => {
   it('emits the single render key', () => {
     const out = toMcpAppEnvelope({
-      renderId: 'r', appId: 'a', runtimeUrl: '/r',
+      sessionId: 'r', appId: 'a', runtimeUrl: '/r',
     });
     expect(out[MCP_APP_AI_GGUI_RENDER_META_KEY]).toBeDefined();
     expect(Object.keys(out)).toEqual([MCP_APP_AI_GGUI_RENDER_META_KEY]);
@@ -631,10 +631,10 @@ describe('toMcpAppEnvelope', () => {
 describe('emit ⇔ parse round-trip', () => {
   it('preserves the typed render slice across emit → parse', () => {
     const meta: McpAppAiGguiRenderMeta = {
-      renderId: 'r-1',
+      sessionId: 'r-1',
       appId: 'app-1',
       runtimeUrl: '/_ggui/iframe-runtime.js',
-      pollingUrl: '/api/renders/r-1/events',
+      pollingUrl: '/api/sessions/r-1/events',
       themeId: 'indigo',
       themeMode: 'dark',
       wsUrl: 'ws://localhost:8080/ws',

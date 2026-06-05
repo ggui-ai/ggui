@@ -186,10 +186,10 @@ function specFor(slot: ResolvedContextSlot): ContextSpec {
  *
  * Post-render-identity-collapse (2026-05-27): the previous
  * `{sessionId, appId, stackItemId}` tuple collapsed to
- * `{renderId, appId}` — render is the single identity key.
+ * `{sessionId, appId}` — render is the single identity key.
  */
 export interface ContextPostIdentity {
-  readonly renderId: string;
+  readonly sessionId: string;
   readonly appId: string;
 }
 
@@ -243,7 +243,7 @@ export interface ContextSnapshotPoster {
    * mirror.
    */
   readonly postContextMirror: (params: {
-    readonly renderId: string;
+    readonly sessionId: string;
     readonly appId: string;
     readonly snapshot: Record<string, unknown>;
   }) => void;
@@ -268,7 +268,7 @@ export interface ContextSnapshotPoster {
  * (`[ggui:context-slot] {slot,value}`). Empirical: claude.ai's host
  * treats each `ui/update-model-context` post as a REPLACE of the
  * widget's tracked context, not a per-slot merge. Server mirror
- * matches: REPLACE-per-renderId, last-write-wins. Both destinations
+ * matches: REPLACE-per-sessionId, last-write-wins. Both destinations
  * therefore stay structurally consistent.
  *
  * Server-mirror skipped when `identity` is undefined — dev/test code
@@ -294,7 +294,7 @@ function postContextSnapshot(
   // (dev / test paths without a real bootstrap).
   if (identity) {
     poster.postContextMirror({
-      renderId: identity.renderId,
+      sessionId: identity.sessionId,
       appId: identity.appId,
       snapshot,
     });

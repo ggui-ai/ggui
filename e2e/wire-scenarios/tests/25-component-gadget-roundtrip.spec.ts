@@ -144,9 +144,9 @@ describe('Scenario 25 — component-gadget registry round-trip', () => {
     // Gate accepts a component-gadget reference → render completes.
     expect(readToolErrorMessage(renderResp)).toBeNull();
     const structured = (
-      renderResp as { result?: { structuredContent?: { renderId?: string } } }
+      renderResp as { result?: { structuredContent?: { sessionId?: string } } }
     ).result?.structuredContent;
-    expect(structured?.renderId).toBeTypeOf('string');
+    expect(structured?.sessionId).toBeTypeOf('string');
   });
 
   test('render with an unregistered component export is rejected with the gate error', async () => {

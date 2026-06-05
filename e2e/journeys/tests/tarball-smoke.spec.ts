@@ -152,11 +152,11 @@ test.describe.serial('Phase 5.5 — tarball-install smoke (cli + mcp-server)', (
     expect(tools.map((t) => t.name).sort()).toEqual([
       'ggui_consume',
       'ggui_emit',
-      'ggui_get_render',
+      'ggui_get_session',
       'ggui_handshake',
       'ggui_list_featured_blueprints',
       'ggui_list_gadgets',
-      'ggui_list_renders',
+      'ggui_list_sessions',
       'ggui_list_themes',
       'ggui_render',
       'ggui_runtime_refresh_ws_token',

@@ -22,7 +22,7 @@
  *      (accept the proposed variance OR re-aim via `override.variance`).
  *   4. Validates routing targets on the contract's `actionSpec`.
  *   5. Resolves or mints the render row from
- *      `handshakeRecord.target.renderId`.
+ *      `handshakeRecord.target.sessionId`.
  *   6. Runs the blueprint matcher when cache is wired (cache-hit
  *      short-circuits generation).
  *   7. Otherwise runs the bound `UiGenerator` and registers the
@@ -36,12 +36,12 @@
  * runs. The placeholder gives the iframe-runtime a surface to mount the
  * `mountProvisional` branch off — without it, A2UI preview frames on
  * `_ggui:preview` paint into the void. When generation later settles,
- * the SAME `renderId` is reused — `renderStore.commit` upserts by id,
+ * the SAME `sessionId` is reused — `renderStore.commit` upserts by id,
  * so the placeholder is replaced in-place by the authoritative
  * componentCode (success) or an error render (failure).
  *
  * Post-Phase-B (flatten-render-identity): the prior
- * `{sessionId, stackItemId}` pair collapsed to a single `renderId`. The
+ * `{sessionId, stackItemId}` pair collapsed to a single `sessionId`. The
  * outbound `_meta` collapsed from two slices
  * (`ai.ggui/session` + `ai.ggui/stack-item`) to one (`ai.ggui/render`).
  */
@@ -274,7 +274,7 @@ export interface GenerationDeps {
    * preserved for callers that don't opt in.
    *
    * Authored render invariant: the returned render's `id` MUST equal
-   * the in-flight `renderId` — `renderStore.commit` upserts by id, so
+   * the in-flight `sessionId` — `renderStore.commit` upserts by id, so
    * reusing the id replaces the provisional preview placeholder
    * in-place. Helpers in `./no-credentials-card.ts` build the
    * canonical Connect-Claude card shape; embedders compose their own
@@ -289,7 +289,7 @@ export interface GenerationDeps {
     ctx: HandlerContext,
     story: {
       readonly intent: string;
-      readonly renderId: string;
+      readonly sessionId: string;
       readonly nowIso: string;
     },
   ) => GguiSession | null | Promise<GguiSession | null>;
@@ -313,11 +313,11 @@ export interface GenerationCredentials {
  * write) have everything they need without re-deriving from raw input.
  *
  * Post-Phase-B (flatten-render-identity): the pre-rename `sessionId` +
- * `stackItemId` pair collapsed to a single `renderId`.
+ * `stackItemId` pair collapsed to a single `sessionId`.
  */
 export interface GguiSessionPostSuccessArgs {
   readonly ctx: HandlerContext;
-  readonly renderId: string;
+  readonly sessionId: string;
   /** Resolved DataContract used for this render (echoed contract or override). */
   readonly contract: DataContract;
   /** RFC 8785 canonical key of {@link contract}. */
@@ -358,7 +358,7 @@ export interface GguiRenderHandlerDeps {
   readonly appMetadataStore?: AppMetadataStore;
   /**
    * Optional pending-events pipe. When wired, the handler calls
-   * `markCreated(renderId)` the moment the renderId is minted (Model
+   * `markCreated(sessionId)` the moment the sessionId is minted (Model
    * C: pipes are render-keyed, opened at render time so events from
    * `ggui_runtime_submit_action` land in the pipe even BEFORE the
    * agent's first `ggui_consume` arrives — covers the "user clicks
@@ -371,11 +371,11 @@ export interface GguiRenderHandlerDeps {
    * Bootstrap-credential minter for the MCP Apps outbound path. When
    * present, the handler's `resultMeta` emits the live-auth trio on
    * the `ai.ggui/render` slice. When ABSENT, no auth fields are
-   * emitted — non-MCP-Apps hosts read `{renderId}` straight off
+   * emitted — non-MCP-Apps hosts read `{sessionId}` straight off
    * `structuredContent` and resolve the render-resource themselves.
    *
    * Returns the live-auth fields — `{wsUrl, token, expiresAt}`. The
-   * handler adds `renderId` + `appId` from the render context itself,
+   * handler adds `sessionId` + `appId` from the render context itself,
    * plus `runtimeUrl` from the separate `runtimeUrl` dep
    * (server-level config, not minter-scoped).
    *
@@ -385,13 +385,13 @@ export interface GguiRenderHandlerDeps {
    * self-contained / system-card-only deployments.
    */
   readonly mintWsToken?: (
-    renderId: string,
+    sessionId: string,
     appId: string,
   ) => { wsUrl: string; token: string; expiresAt: string };
   /**
    * URL of the renderer bundle the thin shell should fetch. Padded
    * onto {@link McpAppAiGguiRenderMeta.runtimeUrl} at `resultMeta` time
-   * alongside `renderId` / `appId`. Separate dep (not a field on
+   * alongside `sessionId` / `appId`. Separate dep (not a field on
    * `mintWsToken`'s return) because the URL is a server-config value
    * (same for every render), not a per-mint credential.
    *
@@ -512,7 +512,7 @@ export interface GguiRenderHandlerDeps {
 
   /**
    * ShortCode → render lookup. When present, every successful render
-   * records the minted `shortCode → { renderId, appId }` binding so
+   * records the minted `shortCode → { sessionId, appId }` binding so
    * downstream same-origin consumers (console `/s/<shortCode>` viewer)
    * can resolve it back. Writes are best-effort: if the index `put`
    * rejects, the render tool result is NOT failed — the agent already
@@ -629,7 +629,7 @@ export interface GguiRenderHandlerDeps {
 
   /**
    * Canvas-mode lifecycle emitter. Fires `render_started` on the
-   * `_ggui:lifecycle` channel right after renderId is minted so the
+   * `_ggui:lifecycle` channel right after sessionId is minted so the
    * canvas animator transitions from `ready`/`handshake` to
    * `constructing` immediately — without waiting for the final commit
    * envelope (which arrives after generation completes).
@@ -697,7 +697,7 @@ export interface GguiRenderHandlerDeps {
    * Post-success hook. Fires AFTER the render commit for this call
    * and AFTER the response object is assembled, but BEFORE the handler
    * returns. Receives a {@link GguiSessionPostSuccessArgs} bundle with the
-   * resolved renderId, contract, contractHash, story echo, action
+   * resolved sessionId, contract, contractHash, story echo, action
    * classification, and codeReady — everything cloud needs for
    * fire-and-forget side-effects.
    *
@@ -743,17 +743,17 @@ export interface GguiRenderHandlerDeps {
   ) => Promise<import('@ggui-ai/mcp-server-core').UiGenerateResult>;
 
   /**
-   * ID factory for fresh renders. The handler mints a renderId
+   * ID factory for fresh renders. The handler mints a sessionId
    * upstream of `renderStore.commit` so the just-minted id flows
    * onto the response BEFORE any persistence side-effect runs.
    *
    * OSS default: `randomUUID()` (no prefix). Hosted impls that need
    * a typed prefix (e.g. `rend_<uuid>`) supply this dep so the prefix
    * convention propagates without forking the factory's id-minting
-   * site. Called ONLY on the create path — `target.renderId`
+   * site. Called ONLY on the create path — `target.sessionId`
    * resolution + reuse skip this entirely.
    */
-  readonly renderIdFactory?: () => string;
+  readonly sessionIdFactory?: () => string;
 }
 
 /**
@@ -768,12 +768,12 @@ export interface GguiRenderHandlerDeps {
  *
  * Post-Phase-B (flatten-render-identity): collapsed from the prior
  * `notifyGguiSessionCommit(sessionId, stackItem, matchType?)` to
- * `notifyGguiSessionCommit(renderId, render, matchType?)` — the render IS
+ * `notifyGguiSessionCommit(sessionId, render, matchType?)` — the render IS
  * the addressable row.
  */
 export interface ChannelNotifier {
   notifyGguiSessionCommit(
-    renderId: string,
+    sessionId: string,
     render: GguiSession,
     matchType?: string,
   ): void;
@@ -896,10 +896,10 @@ const inputSchema = {
  * Output raw-shape — minimum LLM-actionable surface (2026-05-13).
  *
  * Pre-launch, no back-compat. Four fields, all load-bearing:
- *   - `renderId` — agent's handle for follow-up tool calls
+ *   - `sessionId` — agent's handle for follow-up tool calls
  *     (ggui_consume, ggui_update).
  *   - `resourceUri` — spec-canonical MCP-Apps entry-point
- *     (`ui://ggui/render/{renderId}[/{contractHash}]`). SDKs that
+ *     (`ui://ggui/render/{sessionId}[/{contractHash}]`). SDKs that
  *     preserve `_meta` also receive this on `_meta.ui.resourceUri`,
  *     but SDKs that strip `_meta` from tool_results (OpenAI Agents
  *     SDK, Google ADK) reach the URI only via this LLM-visible field.
@@ -921,7 +921,7 @@ const outputSchema = renderOutputSchema.shape;
  * Internal handler-output type — carries the FULL field set that
  * downstream seams need (resultMeta, postSuccessHook, cloud
  * persistence, test assertions). The LLM-visible serialization is
- * the `GguiRenderOutput` subset (`{renderId, resourceUri, nextStep?,
+ * the `GguiRenderOutput` subset (`{sessionId, resourceUri, nextStep?,
  * action}`); zod's `.parse()` strips the extras (`shortCode`,
  * `codeReady`, etc.) before they land on `structuredContent`.
  */
@@ -973,7 +973,7 @@ export function createGguiRenderHandler(
         // 2. Prerequisite — handshake first, always.
         'PREREQUISITE: call ggui_handshake({intent, blueprintDraft}) FIRST. The response carries handshakeId + suggestion (origin: cache | agent | synth) — render consumes it. Direct render without a handshakeId fails with handshake_not_found.',
         // 2b. Next step — driven by the response, not blanket-applied.
-        "NEXT STEP: read the response. If it carries a `nextStep` field (only emitted when the contract had non-empty actionSpec), call that tool — it names ggui_consume({renderId}) and you must long-poll for the user's gesture before ending your turn. If the response has NO nextStep, the UI is pure-display (props only, no interactive buttons/forms) — you can end your turn; the user reads the UI and prompts you again when ready. After consume returns an event, the event's own `nextStep` (if any) tells you the tool to call next; otherwise loop back to handshake → render.",
+        "NEXT STEP: read the response. If it carries a `nextStep` field (only emitted when the contract had non-empty actionSpec), call that tool — it names ggui_consume({sessionId}) and you must long-poll for the user's gesture before ending your turn. If the response has NO nextStep, the UI is pure-display (props only, no interactive buttons/forms) — you can end your turn; the user reads the UI and prompts you again when ready. After consume returns an event, the event's own `nextStep` (if any) tells you the tool to call next; otherwise loop back to handshake → render.",
         // 3. Recovery shape — what happens on validation failure.
         "RECOVERABLE FAILURES: cross_reference_unresolved / contract_schema_invalid / schema_mismatch_error / contract_violation (props) / missing_props all preserve the handshake — fix your input and retry on the SAME handshakeId. cross_reference_unresolved fires when an `actionSpec[name].nextStep` or `streamSpec[channel].source.tool` names a tool that's not declared in `agentCapabilities.tools` — every referenced tool MUST appear in agentCapabilities.tools (catalog discoverability; same-MCP and cross-MCP both go here). contract_schema_invalid fires when an inner JSON Schema is malformed (e.g. `propsSpec.properties.X.schema` missing `type`). schema_mismatch_error fires when an actionSpec entry's `schema` is not a subset of the named tool's registered inputSchema, OR a streamSpec channel's `schema` doesn't accept the tool's return shape — adjust the action/channel schema to match the tool, or omit `nextStep` if the agent will compose the call from a different toolset entirely. Only handshake_not_found forces a re-handshake.",
         // 4. Mutation rule — never re-render.
@@ -981,7 +981,7 @@ export function createGguiRenderHandler(
         // 5. Wire surface — DataContract overview.
         "WIRE SURFACE (DataContract). PLACEMENT RULE for the two inbound specs: actionSpec carries DISCRETE EVENTS that drive the agent's next turn (submit, send, confirm, cancel, choose). contextSpec carries STATE the agent observes (draft text, slider value, current selection, in-progress list items). The single test: does this thing need the agent's next-turn reasoning? Yes → actionSpec. No → contextSpec. There is no third category — no `terminal` flag, no `consumeSpec`, no `interaction` mode. Specs (every entry is a WRAPPER that contains a JSON Schema in `schema:` — the JSON Schema does NOT sit flat at the entry level):  • propsSpec.properties[name].{schema, required?, default?} — initial render values, validated against propsSpec.  • actionSpec[name].{label, schema?, nextStep?, confirm?, icon?} — clicks. `nextStep` is an OPTIONAL string naming the agent's intended next tool call (e.g. nextStep:'todo_toggle'); the named tool MUST also be declared in `agentCapabilities.tools`. Omit nextStep for actions the agent composes freely from any toolset.  • contextSpec[slot].{schema, default?} — observable client state (counters, toggles, slider values). Use slot setter; NOT useAction.  • streamSpec[channel].{schema, mode?, replay?, source?} — live updates from agent to UI (outbound).  • agentCapabilities.tools[name].{toolInfo: {inputSchema, description?, outputSchema?}, serverInfo?, usage?, example?} — declarative catalog of every MCP tool the contract references from actionSpec.nextStep or streamSpec.source.tool. `toolInfo.inputSchema` is REQUIRED; the MCP descriptor nests under `toolInfo`.",
         // 6. Hosting hint — what the result looks like.
-        'HOSTING: on MCP Apps hosts (Claude.ai, Claude Desktop) mounts an iframe via ui://ggui/render and streams on the live channel; other hosts resolve `{renderId}` from structuredContent and render via their own render-resource fetch.',
+        'HOSTING: on MCP Apps hosts (Claude.ai, Claude Desktop) mounts an iframe via ui://ggui/render and streams on the live channel; other hosts resolve `{sessionId}` from structuredContent and render via their own render-resource fetch.',
       ].join(' '),
     inputSchema,
     outputSchema,
@@ -1285,36 +1285,36 @@ export function createGguiRenderHandler(
       }
 
       // Resolve or mint the render id. The handshake negotiator MAY
-      // suggest reusing an existing render via `target.renderId` (the
+      // suggest reusing an existing render via `target.sessionId` (the
       // cache / update path); absent ⇒ mint a fresh id. Reuse only
       // counts when the existing render belongs to the same appId —
       // cross-tenant id collisions fall back to mint.
-      const requestedId = handshakeRecord.target.renderId;
-      let renderId: string;
+      const requestedId = handshakeRecord.target.sessionId;
+      let sessionId: string;
       let action: RenderOutput['action'];
 
       if (requestedId) {
         const existing = await deps.renderStore.get(requestedId);
         if (existing && existing.appId === ctx.appId) {
-          renderId = existing.id;
+          sessionId = existing.id;
           action = 'reuse';
         } else {
-          renderId = requestedId;
+          sessionId = requestedId;
           action = 'create';
         }
       } else {
-        renderId = deps.renderIdFactory
-          ? deps.renderIdFactory()
+        sessionId = deps.sessionIdFactory
+          ? deps.sessionIdFactory()
           : randomUUID();
         action = 'create';
       }
 
       // Devtools payload trace. No-op when no sink is registered.
-      // Post-Phase-B the sink shape addresses by `renderId` directly
+      // Post-Phase-B the sink shape addresses by `sessionId` directly
       // (every render IS the addressable row).
       emitPayloadTraceEvent({
         direction: 'outbound-update',
-        renderId,
+        sessionId,
         appId: ctx.appId,
         tool: 'ggui_render',
         payload: { handshakeId: parsed.handshakeId, story },
@@ -1323,20 +1323,20 @@ export function createGguiRenderHandler(
       // Emit render_started so the canvas animator transitions to its
       // `constructing` state immediately, without waiting for cold-
       // gen to settle. Fire-and-forget.
-      deps.canvasLifecycle?.emit(renderId, {
+      deps.canvasLifecycle?.emit(sessionId, {
         kind: 'render_started',
-        renderId,
+        sessionId,
         intent: story.intent,
       });
 
-      // Open the renderId-keyed pending-events pipe (Model C). This
+      // Open the sessionId-keyed pending-events pipe (Model C). This
       // MUST happen before any iframe-side dispatch could fire — the
       // user can click before the agent's first `ggui_consume`, and
       // `ggui_runtime_submit_action` needs an open pipe to append to.
-      // Idempotent: re-mark on the same renderId is a no-op.
+      // Idempotent: re-mark on the same sessionId is a no-op.
       if (deps.pendingEventConsumer) {
         try {
-          deps.pendingEventConsumer.markCreated?.(renderId);
+          deps.pendingEventConsumer.markCreated?.(sessionId);
         } catch {
           // Pipe open failures are non-fatal — `ui/message` fallback
           // on the host still routes gestures on the next chat turn.
@@ -1346,14 +1346,14 @@ export function createGguiRenderHandler(
       const shortCode = generateShortCode();
 
       // Record shortCode → render binding for same-origin console
-      // viewer lookups. Post Phase-B identity collapse: `renderId` IS
+      // viewer lookups. Post Phase-B identity collapse: `sessionId` IS
       // the addressable unit, so the binding row carries a single
-      // `renderId` field (the prior `sessionId` + `stackItemId` slot
+      // `sessionId` field (the prior `sessionId` + `stackItemId` slot
       // pair always held the same value at the bind site).
       if (deps.shortCodeIndex) {
         try {
           await deps.shortCodeIndex.put(shortCode, {
-            renderId,
+            sessionId,
             appId: ctx.appId,
           });
         } catch {
@@ -1380,27 +1380,27 @@ export function createGguiRenderHandler(
           story,
           isMcpAppsGguiSession: false,
         },
-        { appId: ctx.appId, renderId },
+        { appId: ctx.appId, sessionId },
       );
       if (previewGate.kind === 'skip') {
         deps.provisionalPreview?.onOutcome?.({
           status: 'skipped',
           reason: previewGate.reason,
-          renderId,
+          sessionId,
           appId: ctx.appId,
         });
       } else if (deps.provisionalPreview) {
         const handle = kickoffProvisionalPreview(deps.provisionalPreview, {
-          renderId,
+          sessionId,
           appId: ctx.appId,
           story,
         });
         // Register into the optional handoff registry so a later
         // handler (generation success below, apply-render-patch
         // setting componentCode, render teardown, shutdown) can
-        // cancel by `renderId`. Absent registry → the preamble still
+        // cancel by `sessionId`. Absent registry → the preamble still
         // runs; it just has no external cancellation site.
-        deps.provisionalPreview.registry?.register(renderId, handle);
+        deps.provisionalPreview.registry?.register(sessionId, handle);
 
         // Placeholder render — drives the provisional preview path.
         // The iframe-runtime mounts `mountProvisional` per render
@@ -1411,7 +1411,7 @@ export function createGguiRenderHandler(
         // Lifecycle: this placeholder lives until generation settles.
         // `renderStore.commit` upserts by `render.id`, so when the
         // cold-generation success / cache-hit / generation-failed
-        // paths below call `commit` with the SAME `renderId`, the
+        // paths below call `commit` with the SAME `sessionId`, the
         // placeholder is replaced in-place — no double-commit, no
         // stale entry. When generation is NOT wired (no provider
         // key), the placeholder stays for the render's lifetime;
@@ -1426,7 +1426,7 @@ export function createGguiRenderHandler(
         // wouldn't know to mount a surface for it.
         const nowEpochMs = Date.now();
         const placeholder: ComponentGguiSession = {
-          id: renderId,
+          id: sessionId,
           appId: ctx.appId,
           type: 'component',
           componentCode: '',
@@ -1444,13 +1444,13 @@ export function createGguiRenderHandler(
           });
         } catch {
           // Defensive — a placeholder-commit failure is not fatal to
-          // the render. The renderId + shortCode are already minted;
+          // the render. The sessionId + shortCode are already minted;
           // the worst case is the live renderer paints nothing for
           // this render, which is the same "preview never wired"
           // degraded state callers without `provisionalPreview`
           // already see.
         }
-        safelyNotifyGguiSessionCommit(deps.channelNotifier, renderId, placeholder);
+        safelyNotifyGguiSessionCommit(deps.channelNotifier, sessionId, placeholder);
       }
 
       // Generation + cache gate. Absent generation deps = placeholder
@@ -1486,7 +1486,7 @@ export function createGguiRenderHandler(
       if (story.intent.startsWith(PROBE_INTENT_PREFIX)) {
         const nowEpochMs = Date.now();
         const probeRender: SystemGguiSession = {
-          id: renderId,
+          id: sessionId,
           appId: ctx.appId,
           type: 'system',
           kind: 'mcp-apps-probe',
@@ -1501,14 +1501,14 @@ export function createGguiRenderHandler(
             render: probeRender,
             appId: ctx.appId,
           });
-          safelyNotifyGguiSessionCommit(deps.channelNotifier, renderId, probeRender);
+          safelyNotifyGguiSessionCommit(deps.channelNotifier, sessionId, probeRender);
           generatedCodeReady = true;
         } catch {
           // Commit failure leaves codeReady=false; downstream synth
           // emits an empty bootstrap which the runtime renders as the
           // generic system-card fallback.
         }
-        await safelyFinalizePreview(deps.provisionalPreview, renderId, 'probe');
+        await safelyFinalizePreview(deps.provisionalPreview, sessionId, 'probe');
       } else if (deps.generation) {
         const intent = story.intent;
         const forceCreate = storedInput.forceCreate === true;
@@ -1667,7 +1667,7 @@ export function createGguiRenderHandler(
             deps.channelNotifier,
             deps.checkRenderContracts,
             {
-              renderId,
+              sessionId,
               appId: ctx.appId,
               story,
               cacheHit: {
@@ -1757,7 +1757,7 @@ export function createGguiRenderHandler(
             deps.generator,
             {
               ctx,
-              renderId,
+              sessionId,
               story,
               ...(runtimeProps !== undefined
                 ? { runtimeProps: runtimeProps as JsonObject }
@@ -1839,7 +1839,7 @@ export function createGguiRenderHandler(
       let codeHash: string | undefined;
       if (deps.codeStore && deps.codeBaseUrl) {
         try {
-          const stored = await deps.renderStore.get(renderId);
+          const stored = await deps.renderStore.get(sessionId);
           const rendered = stored?.render;
           if (
             rendered
@@ -1876,7 +1876,7 @@ export function createGguiRenderHandler(
       // cosmetic overlay.
       if (parsed.themeId !== undefined) {
         try {
-          const stored = await deps.renderStore.get(renderId);
+          const stored = await deps.renderStore.get(sessionId);
           const top = stored?.render;
           if (
             top &&
@@ -1919,8 +1919,8 @@ export function createGguiRenderHandler(
             tool: 'ggui_consume' as const,
             description:
               'Drain the action pipe for this render — long-polls until a user gesture arrives or 15s timeout.',
-            example: `ggui_consume({ renderId: "${renderId}" })`,
-            args: { renderId },
+            example: `ggui_consume({ sessionId: "${sessionId}" })`,
+            args: { sessionId },
           }
         : undefined;
 
@@ -1939,9 +1939,9 @@ export function createGguiRenderHandler(
       const blueprintSegmentForOutput = resolvedContractHash
         ? `/${resolvedContractHash}`
         : '';
-      const resourceUriForOutput = `${GGUI_RENDER_UI_META.resourceUri}/${renderId}${blueprintSegmentForOutput}`;
+      const resourceUriForOutput = `${GGUI_RENDER_UI_META.resourceUri}/${sessionId}${blueprintSegmentForOutput}`;
       const result: RenderOutput = {
-        renderId,
+        sessionId,
         resourceUri: resourceUriForOutput,
         action,
         shortCode,
@@ -1972,7 +1972,7 @@ export function createGguiRenderHandler(
       if (deps.postSuccessHook) {
         await deps.postSuccessHook({
           ctx,
-          renderId,
+          sessionId,
           contract: effectiveContract,
           contractHash: resolvedContractHash,
           intent: story.intent,
@@ -2025,7 +2025,7 @@ export function createGguiRenderHandler(
       // cursor (R7) aligned with the WS stream.
       let lastSequence: number | undefined;
       try {
-        const stored = await deps.renderStore.get(output.renderId);
+        const stored = await deps.renderStore.get(output.sessionId);
         const top = stored?.render;
         if (stored) {
           lastSequence = stored.eventSequence;
@@ -2065,10 +2065,10 @@ export function createGguiRenderHandler(
       // minter's own return shape names the credential `token` (legacy);
       // we rename to `wsToken` here so the render slice matches the
       // wire field name. When absent we still emit a minimal
-      // `ai.ggui/render` slice carrying renderId + appId + runtimeUrl
+      // `ai.ggui/render` slice carrying sessionId + appId + runtimeUrl
       // so postMessage-mount paths work without a WS-token minter.
       const mintedTrio = deps.mintWsToken
-        ? deps.mintWsToken(output.renderId, ctx.appId)
+        ? deps.mintWsToken(output.sessionId, ctx.appId)
         : undefined;
       const authFields: Partial<
         Pick<McpAppAiGguiRenderMeta, 'wsUrl' | 'wsToken' | 'expiresAt'>
@@ -2122,7 +2122,7 @@ export function createGguiRenderHandler(
       let validatorsUrl: string | undefined;
       if (deps.codeStore && deps.codeBaseUrl) {
         try {
-          const stored = await deps.renderStore.get(output.renderId);
+          const stored = await deps.renderStore.get(output.sessionId);
           const top = stored?.render;
           if (top) {
             const bundle = await deriveContractBundle(top);
@@ -2144,7 +2144,7 @@ export function createGguiRenderHandler(
       // current render state + contract pointer + component-mode
       // discriminator — everything an iframe needs to mount.
       const render: McpAppAiGguiRenderMeta = {
-        renderId: output.renderId,
+        sessionId: output.sessionId,
         appId: ctx.appId,
         runtimeUrl,
         ...authFields,
@@ -2236,7 +2236,7 @@ const DEFAULT_RENDER_TTL_MS = 60 * 60 * 1000;
  * Side-effects:
  *
  *   - Success: `renderStore.commit({render})` with the generator's
- *     componentCode + sourceCode and `renderId` as the render id.
+ *     componentCode + sourceCode and `sessionId` as the render id.
  *     Preview (if registered) is cancelled with reason `'handoff'`.
  *   - Failure: `renderStore.commit({render: errorRender})` with
  *     `componentCode: ''` and a populated `error` field so the agent
@@ -2275,7 +2275,7 @@ async function runGenerationIntoGguiSession(
   generatorOverride: GguiRenderHandlerDeps['generator'] | undefined,
   args: {
     readonly ctx: HandlerContext;
-    readonly renderId: string;
+    readonly sessionId: string;
     readonly story: {
       readonly intent: string;
       readonly context?: unknown;
@@ -2303,7 +2303,7 @@ async function runGenerationIntoGguiSession(
     readonly infra?: { readonly model?: string };
   },
 ): Promise<GenerationRunOutcome> {
-  const { ctx, renderId, story } = args;
+  const { ctx, sessionId, story } = args;
   const nowIso = new Date().toISOString();
   const nowEpochMs = Date.now();
 
@@ -2311,7 +2311,7 @@ async function runGenerationIntoGguiSession(
   // OSS path build their generator input on top of this.
   const generateInputBase: Omit<UiGenerateInput, 'llm' | 'providerKey'> = {
     request: {
-      renderId,
+      sessionId,
       prompt: story.intent,
       ...(isJsonObject(story.context) ? { context: story.context } : {}),
     },
@@ -2338,7 +2338,7 @@ async function runGenerationIntoGguiSession(
       result = await generatorOverride(generateInputBase, ctx);
     } catch (err) {
       return commitErrorGguiSession(renderStore, previewDeps, channelNotifier, {
-        renderId,
+        sessionId,
         appId: ctx.appId,
         story,
         nowIso,
@@ -2357,7 +2357,7 @@ async function runGenerationIntoGguiSession(
       creds = await generation.resolveLlm(ctx);
     } catch (err) {
       return commitErrorGguiSession(renderStore, previewDeps, channelNotifier, {
-        renderId,
+        sessionId,
         appId: ctx.appId,
         story,
         nowIso,
@@ -2376,7 +2376,7 @@ async function runGenerationIntoGguiSession(
         try {
           fallback = await generation.onNoCredentials(ctx, {
             intent: story.intent,
-            renderId,
+            sessionId,
             nowIso,
           });
         } catch {
@@ -2388,7 +2388,7 @@ async function runGenerationIntoGguiSession(
             previewDeps,
             channelNotifier,
             {
-              renderId,
+              sessionId,
               appId: ctx.appId,
               nowIso,
               render: fallback,
@@ -2397,7 +2397,7 @@ async function runGenerationIntoGguiSession(
         }
       }
       return commitErrorGguiSession(renderStore, previewDeps, channelNotifier, {
-        renderId,
+        sessionId,
         appId: ctx.appId,
         story,
         nowIso,
@@ -2416,7 +2416,7 @@ async function runGenerationIntoGguiSession(
       });
     } catch (err) {
       return commitErrorGguiSession(renderStore, previewDeps, channelNotifier, {
-        renderId,
+        sessionId,
         appId: ctx.appId,
         story,
         nowIso,
@@ -2432,7 +2432,7 @@ async function runGenerationIntoGguiSession(
 
   if (!result.ok) {
     return commitErrorGguiSession(renderStore, previewDeps, channelNotifier, {
-      renderId,
+      sessionId,
       appId: ctx.appId,
       story,
       nowIso,
@@ -2445,7 +2445,7 @@ async function runGenerationIntoGguiSession(
   // Happy path — commit the authoritative ComponentGguiSession.
   const responseContracts = result.response.contract;
   const componentRender: ComponentGguiSession = {
-    id: renderId,
+    id: sessionId,
     appId: ctx.appId,
     type: 'component',
     componentCode: result.response.componentCode,
@@ -2490,7 +2490,7 @@ async function runGenerationIntoGguiSession(
     } catch (err) {
       await safelyFinalizePreview(
         previewDeps,
-        renderId,
+        sessionId,
         'schema-mismatch',
       );
       throw err;
@@ -2502,15 +2502,15 @@ async function runGenerationIntoGguiSession(
       appId: ctx.appId,
     });
   } catch {
-    await safelyFinalizePreview(previewDeps, renderId, 'commit-failed');
+    await safelyFinalizePreview(previewDeps, sessionId, 'commit-failed');
     return { ok: false, createdAt: nowIso };
   }
   // Live-subscriber notify. Cold-generation success — the entry reuses
-  // an existing renderId, so already-subscribed clients should see the
+  // an existing sessionId, so already-subscribed clients should see the
   // new componentCode flip the matching `data-ggui-code-ready` slot
   // from `false` to `true`.
-  safelyNotifyGguiSessionCommit(channelNotifier, renderId, componentRender);
-  await safelyFinalizePreview(previewDeps, renderId, 'handoff');
+  safelyNotifyGguiSessionCommit(channelNotifier, sessionId, componentRender);
+  await safelyFinalizePreview(previewDeps, sessionId, 'handoff');
   return {
     ok: true,
     componentCode: result.response.componentCode,
@@ -2526,7 +2526,7 @@ async function runGenerationIntoGguiSession(
  * `kind` on the `ai.ggui/render.kind` slice field — the iframe
  * renderer mounts the registered system card.
  *
- * GguiSession-id contract: the caller's `render.id` MUST equal `renderId`
+ * GguiSession-id contract: the caller's `render.id` MUST equal `sessionId`
  * (the in-flight render id) so `renderStore.commit` replaces the
  * provisional placeholder in place. This helper rebinds it
  * defensively to keep the contract local — a hook that returns a
@@ -2537,13 +2537,13 @@ async function commitNoCredentialsCardGguiSession(
   previewDeps: ProvisionalPreviewDeps | undefined,
   channelNotifier: ChannelNotifier | undefined,
   args: {
-    readonly renderId: string;
+    readonly sessionId: string;
     readonly appId: string;
     readonly nowIso: string;
     readonly render: GguiSession;
   },
 ): Promise<GenerationRunOutcome> {
-  const render: GguiSession = { ...args.render, id: args.renderId } as GguiSession;
+  const render: GguiSession = { ...args.render, id: args.sessionId } as GguiSession;
   let committed = false;
   try {
     await renderStore.commit({
@@ -2556,9 +2556,9 @@ async function commitNoCredentialsCardGguiSession(
     // the render store is otherwise unchanged.
   }
   if (committed) {
-    safelyNotifyGguiSessionCommit(channelNotifier, args.renderId, render);
+    safelyNotifyGguiSessionCommit(channelNotifier, args.sessionId, render);
   }
-  await safelyFinalizePreview(previewDeps, args.renderId, 'no-credentials');
+  await safelyFinalizePreview(previewDeps, args.sessionId, 'no-credentials');
   // System cards have no `componentCode` — surface an empty string so
   // the outcome shape stays uniform; downstream observers don't read
   // it for the fallback path.
@@ -2583,7 +2583,7 @@ async function commitErrorGguiSession(
   previewDeps: ProvisionalPreviewDeps | undefined,
   channelNotifier: ChannelNotifier | undefined,
   args: {
-    readonly renderId: string;
+    readonly sessionId: string;
     readonly appId: string;
     readonly story: { readonly intent: string };
     readonly nowIso: string;
@@ -2593,7 +2593,7 @@ async function commitErrorGguiSession(
   },
 ): Promise<GenerationRunOutcome> {
   const errorRender: ComponentGguiSession = {
-    id: args.renderId,
+    id: args.sessionId,
     appId: args.appId,
     type: 'component',
     componentCode: '',
@@ -2618,9 +2618,9 @@ async function commitErrorGguiSession(
     // still finalizing preview below.
   }
   if (committed) {
-    safelyNotifyGguiSessionCommit(channelNotifier, args.renderId, errorRender);
+    safelyNotifyGguiSessionCommit(channelNotifier, args.sessionId, errorRender);
   }
-  await safelyFinalizePreview(previewDeps, args.renderId, args.reason);
+  await safelyFinalizePreview(previewDeps, args.sessionId, args.reason);
   return { ok: false, createdAt: args.nowIso };
 }
 
@@ -2637,13 +2637,13 @@ async function commitErrorGguiSession(
  */
 function safelyNotifyGguiSessionCommit(
   notifier: ChannelNotifier | undefined,
-  renderId: string,
+  sessionId: string,
   render: GguiSession,
   matchType?: string,
 ): void {
   if (!notifier) return;
   try {
-    notifier.notifyGguiSessionCommit(renderId, render, matchType);
+    notifier.notifyGguiSessionCommit(sessionId, render, matchType);
   } catch {
     // Swallow — same posture as `safelyFinalizePreview`. A notify
     // failure is observability, not correctness.
@@ -2660,13 +2660,13 @@ function safelyNotifyGguiSessionCommit(
  */
 async function safelyFinalizePreview(
   previewDeps: ProvisionalPreviewDeps | undefined,
-  renderId: string,
+  sessionId: string,
   reason: string,
 ): Promise<void> {
   const registry = previewDeps?.registry;
   if (!registry) return;
   try {
-    await finalizeProvisionalPreview(registry, renderId, reason);
+    await finalizeProvisionalPreview(registry, sessionId, reason);
   } catch {
     // Swallow. The runner's own terminal outcome already fired; a
     // second-order cancel rejection isn't worth propagating.
@@ -2706,7 +2706,7 @@ async function commitCachedGguiSession(
       }) => void)
     | undefined,
   args: {
-    readonly renderId: string;
+    readonly sessionId: string;
     readonly appId: string;
     readonly story: { readonly intent: string };
     readonly cacheHit: GenerationCacheHit;
@@ -2729,7 +2729,7 @@ async function commitCachedGguiSession(
   // ComponentGguiSession so the bootstrap-meta derivation in `resultMeta`
   // reads them off the active render.
   const componentRender: ComponentGguiSession = {
-    id: args.renderId,
+    id: args.sessionId,
     appId: args.appId,
     type: 'component',
     componentCode: args.cacheHit.componentCode,
@@ -2770,7 +2770,7 @@ async function commitCachedGguiSession(
     } catch (err) {
       await safelyFinalizePreview(
         previewDeps,
-        args.renderId,
+        args.sessionId,
         'schema-mismatch',
       );
       throw err;
@@ -2782,17 +2782,17 @@ async function commitCachedGguiSession(
       appId: args.appId,
     });
   } catch {
-    await safelyFinalizePreview(previewDeps, args.renderId, 'commit-failed');
+    await safelyFinalizePreview(previewDeps, args.sessionId, 'commit-failed');
     return false;
   }
   // Fan out to live subscribers — the load-bearing case for B1.
   safelyNotifyGguiSessionCommit(
     channelNotifier,
-    args.renderId,
+    args.sessionId,
     componentRender,
     'cached',
   );
-  await safelyFinalizePreview(previewDeps, args.renderId, 'handoff');
+  await safelyFinalizePreview(previewDeps, args.sessionId, 'handoff');
   return true;
 }
 

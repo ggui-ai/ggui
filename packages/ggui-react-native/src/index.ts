@@ -42,7 +42,7 @@ export type {
   ActionEnvelope,
   EventType,
   // Single GguiSession union (ComponentGguiSession, SystemGguiSession, McpAppsGguiSession)
-  // keyed by the flat `renderId`.
+  // keyed by the flat `sessionId`.
   GguiSession,
   ComponentGguiSession,
   SystemGguiSession,

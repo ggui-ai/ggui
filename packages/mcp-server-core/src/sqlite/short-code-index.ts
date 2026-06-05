@@ -12,7 +12,7 @@
  * ## Schema
  *
  * Single table; primary key on the shortCode itself, with an index on
- * `render_id` so {@link findByRenderId} + {@link revokeByRenderId}
+ * `render_id` so {@link findBySessionId} + {@link revokeBySessionId}
  * stay O(matches) instead of O(table).
  *
  * ```sql
@@ -25,7 +25,7 @@
  * CREATE INDEX idx_short_codes_render ON short_codes(render_id);
  * ```
  *
- * `created_at` is the deciding signal for {@link findByRenderId}'s
+ * `created_at` is the deciding signal for {@link findBySessionId}'s
  * "latest shortCode wins" semantics — the in-memory impl tracks this
  * implicitly via Map insertion order; SQLite needs an explicit column
  * so `ORDER BY created_at DESC LIMIT 1` gives the same answer across
@@ -40,7 +40,7 @@
  *     atomicity per-statement.
  *   - Lifetime: the reference never evicts. Renders decay implicitly
  *     via TTL; orphan rows after a crashed process are inert and
- *     cleared by the next `revokeByRenderId` if the operator runs
+ *     cleared by the next `revokeBySessionId` if the operator runs
  *     a teardown sweep, otherwise they sit until manually vacuumed.
  */
 import Database, {
@@ -145,7 +145,7 @@ export class SqliteShortCodeIndex implements ShortCodeIndex {
     }
     this.stmts.upsert.run(
       shortCode,
-      binding.renderId,
+      binding.sessionId,
       binding.appId,
       this.now(),
     );
@@ -158,9 +158,9 @@ export class SqliteShortCodeIndex implements ShortCodeIndex {
     return rowToBinding(row);
   }
 
-  async findByRenderId(renderId: string): Promise<string | null> {
-    if (!renderId) return null;
-    const row = this.stmts.selectLatestByRender.get(renderId);
+  async findBySessionId(sessionId: string): Promise<string | null> {
+    if (!sessionId) return null;
+    const row = this.stmts.selectLatestByRender.get(sessionId);
     return row ? row.short_code : null;
   }
 
@@ -169,9 +169,9 @@ export class SqliteShortCodeIndex implements ShortCodeIndex {
     this.stmts.deleteByCode.run(shortCode);
   }
 
-  async revokeByRenderId(renderId: string): Promise<number> {
-    if (!renderId) return 0;
-    const result = this.stmts.deleteByRender.run(renderId);
+  async revokeBySessionId(sessionId: string): Promise<number> {
+    if (!sessionId) return 0;
+    const result = this.stmts.deleteByRender.run(sessionId);
     return result.changes;
   }
 }
@@ -179,7 +179,7 @@ export class SqliteShortCodeIndex implements ShortCodeIndex {
 function rowToBinding(row: ShortCodeRow): ShortCodeBinding {
   // Defensive shape — callers may mutate.
   return {
-    renderId: row.render_id,
+    sessionId: row.render_id,
     appId: row.app_id,
   };
 }

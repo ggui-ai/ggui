@@ -40,7 +40,7 @@ export interface InMemoryGguiSessionStoreOptions {
    * indefinitely unless the operator opts into a finite TTL. Chat
    * conversations on hosted clients (Claude.ai, ChatGPT) routinely
    * span weeks of inactivity; reaping a render because the agent
-   * paused for 7 days would surface as a `render_not_found` error
+   * paused for 7 days would surface as a `session_not_found` error
    * to a freshly-resumed agent. Monetization-driven expiration is a
    * separate concern (gated by quota/billing, not TTL).
    *
@@ -212,10 +212,10 @@ export class InMemoryGguiSessionStore implements GguiSessionStore {
   }
 
   async appendEvent(input: AppendEventInput): Promise<number> {
-    const bucket = this.buckets.get(input.renderId);
+    const bucket = this.buckets.get(input.sessionId);
     if (!bucket) {
       throw new Error(
-        `InMemoryGguiSessionStore.appendEvent: render not found: ${input.renderId}`,
+        `InMemoryGguiSessionStore.appendEvent: render not found: ${input.sessionId}`,
       );
     }
     const seq = bucket.stored.eventSequence + 1;
@@ -238,7 +238,7 @@ export class InMemoryGguiSessionStore implements GguiSessionStore {
   }
 
   async listEventsSince(
-    renderId: string,
+    sessionId: string,
     sinceSeq: number,
     limit: number,
   ): Promise<{
@@ -247,7 +247,7 @@ export class InMemoryGguiSessionStore implements GguiSessionStore {
     readonly hasMore: boolean;
     readonly horizonSeq: number;
   } | null> {
-    const bucket = this.buckets.get(renderId);
+    const bucket = this.buckets.get(sessionId);
     if (!bucket) return null;
     // In-memory keeps every event for the render's lifetime — no
     // horizon eviction. `horizonSeq=0` ⇒ full history is always

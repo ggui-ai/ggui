@@ -124,7 +124,7 @@ describe('buildRootWireConfig — wired-tool-invoked emission', () => {
       actionSpec,
     };
     const config = buildRootWireConfig({
-      renderId: 'render-1',
+      sessionId: 'render-1',
       appId: 'app-1',
       getCurrentGguiSession: () => render,
       manager: managerShim,
@@ -169,7 +169,7 @@ describe('buildRootWireConfig — wired-tool-invoked emission', () => {
       },
     };
     const config = buildRootWireConfig({
-      renderId: 'render-agent',
+      sessionId: 'render-agent',
       appId: 'app-agent',
       getCurrentGguiSession: () => render,
       manager: { send: (m) => sent.push(m) },
@@ -246,7 +246,7 @@ afterEach(() => {
 
 function renderMeta(): McpAppAiGguiRenderMeta {
   return {
-    renderId: 'render-c12',
+    sessionId: 'render-c12',
     appId: 'app-c12',
     wsUrl: 'wss://test.invalid/ws',
     wsToken: 'boot-token',
@@ -260,7 +260,7 @@ function makeRegistry(meta: McpAppAiGguiRenderMeta): ChannelRegistry {
     subscribeFrameBuilder: () => ({
       type: 'subscribe',
       payload: {
-        renderId: meta.renderId,
+        sessionId: meta.sessionId,
         appId: meta.appId,
         bootstrap: meta.wsToken,
         supportedVersions: [...CLIENT_SUPPORTED_VERSIONS],
@@ -325,7 +325,7 @@ describe('connectViaRegistry — schema-version-mismatch emission', () => {
       data: JSON.stringify({
         type: 'ack',
         payload: {
-          renderToken: 't',
+          sessionToken: 't',
           serverVersion: '999.0.0',
         },
       }),
@@ -361,7 +361,7 @@ describe('data handler — contract-error-emitted emission', () => {
     });
 
     void handler.onMessage({
-      renderId: 'render-c12-obs',
+      sessionId: 'render-c12-obs',
       channel: '_ggui:contract-error',
       mode: 'append',
       payload: {
@@ -396,7 +396,7 @@ describe('data handler — contract-error-emitted emission', () => {
     });
 
     void handler.onMessage({
-      renderId: 'render-skip',
+      sessionId: 'render-skip',
       channel: 'tasks',
       mode: 'replace',
       payload: [{ id: 1 }],
@@ -423,7 +423,7 @@ describe('system handler — auth-required emission (Wave 3 §S2)', () => {
       consentUrl: 'https://credentials.example.com/oauth/initiate?service=google',
       message: 'This agent needs access to your Google Calendar.',
       appId: 'app-s2-auth',
-      renderId: 'render-s2-auth',
+      sessionId: 'render-s2-auth',
     });
 
     const event = observed.find(

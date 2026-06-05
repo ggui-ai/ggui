@@ -1075,7 +1075,7 @@ Persistent storage (default-on; opt-out via --ephemeral):
       ├── ws-token-secret.hex       (HMAC, 0600)
       ├── render-signer-secret.hex  (HMAC, 0600)
       ├── short-codes.sqlite        (signed render-URL resolution)
-      ├── renders.sqlite            (GguiSessionStore — renders + event history)
+      ├── sessions.sqlite            (GguiSessionStore — renders + event history)
       ├── vectors.sqlite            (RAG corpus)
       └── keys.json                 (paired bearers)
 
@@ -1089,7 +1089,7 @@ Persistent storage (default-on; opt-out via --ephemeral):
 
     {
       "storage": {
-        "renders": { "driver": "sqlite", "path": "./ggui-renders.sqlite" },
+        "renders": { "driver": "sqlite", "path": "./ggui-sessions.sqlite" },
         "vectors": { "driver": "sqlite", "path": "./ggui-vectors.sqlite" },
         "threads": { "driver": "sqlite", "path": "./ggui-threads.sqlite" }
       }

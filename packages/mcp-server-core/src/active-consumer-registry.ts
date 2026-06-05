@@ -3,7 +3,7 @@
  * currently have at least one in-flight `ggui_consume` long-poll.
  *
  * **Why this exists.** `ggui_runtime_submit_action` appends a user-action
- * envelope onto the renderId-keyed pending-events pipe; the agent's
+ * envelope onto the sessionId-keyed pending-events pipe; the agent's
  * `ggui_consume` long-poll drains it mid-turn. When no long-poll is
  * currently registered (typical case: agent finished its turn, no
  * pending consume call), the appended event sits in the pipe until the
@@ -22,7 +22,7 @@
  *   - `consume.ts` wraps its long-poll in `try { enter(); … } finally
  *     { exit(); }` so EVERY exit path (events returned, timeout elapsed,
  *     pipe vanished, error) decrements the count.
- *   - `submit-action.ts` queries `hasActive(renderId)` AFTER a
+ *   - `submit-action.ts` queries `hasActive(sessionId)` AFTER a
  *     successful pipe append. If `false`, the response carries
  *     `consumerPresent: false` and the iframe takes the immediate-nudge
  *     fast-path.
@@ -37,7 +37,7 @@
  * a Redis-backed registry without touching the DDB UpdateItem path.
  *
  * **Counting semantics.** Multiple concurrent long-polls on the same
- * `renderId` are valid (rare, but possible — e.g. a debugging tool
+ * `sessionId` are valid (rare, but possible — e.g. a debugging tool
  * peeking alongside the agent). The registry stores a reference count;
  * `hasActive` is `count > 0`. `enter` increments, `exit` decrements; once
  * count hits zero, the entry is removed from the map (no zombie keys).
@@ -46,26 +46,26 @@
  */
 export interface ActiveConsumerRegistry {
   /**
-   * Increment the consumer count for `renderId`. Called from
+   * Increment the consumer count for `sessionId`. Called from
    * `consume.ts` at the top of the handler (before the long-poll loop)
    * so a concurrent `submit-action.ts` append sees `hasActive: true`
    * even during the 1.5s sleep between consumeAndClear ticks.
    */
-  enter(renderId: string): void;
+  enter(sessionId: string): void;
 
   /**
-   * Decrement the consumer count for `renderId`. Called from
+   * Decrement the consumer count for `sessionId`. Called from
    * `consume.ts`'s `finally` block so EVERY exit path (success, timeout,
    * error) cleans up. When the count reaches zero the entry is removed.
    */
-  exit(renderId: string): void;
+  exit(sessionId: string): void;
 
   /**
    * True iff at least one consume long-poll is currently registered for
-   * `renderId`. Called from `submit-action.ts` after a successful
+   * `sessionId`. Called from `submit-action.ts` after a successful
    * pipe append; the result rides back to the iframe as
    * `consumerPresent`.
    */
-  hasActive(renderId: string): boolean;
+  hasActive(sessionId: string): boolean;
 }
 

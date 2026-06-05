@@ -43,7 +43,7 @@ export type PayloadTraceDirection = 'inbound-render' | 'outbound-update';
 
 /**
  * One payload trace entry. Emitted **after** the handler successfully
- * parses input and resolves the render — so `renderId` and `appId`
+ * parses input and resolves the render — so `sessionId` and `appId`
  * are always populated and the payload is the post-validation shape
  * the handler is about to act on. Pre-validation rejections (schema
  * shape, missing handshakeStore, etc.) never reach this sink.
@@ -55,7 +55,7 @@ export interface PayloadTraceEvent {
   readonly at: number;
   readonly direction: PayloadTraceDirection;
   /** Resolved render id. Always populated. */
-  readonly renderId: string;
+  readonly sessionId: string;
   /** Resolved app/tenant id from `HandlerContext`. */
   readonly appId: string;
   /** Tool name (`'ggui_render'` | `'ggui_update'`). */
@@ -127,7 +127,7 @@ export function emitPayloadTraceEvent(
     id: input.id ?? newPayloadTraceId(),
     at: input.at ?? Date.now(),
     direction: input.direction,
-    renderId: input.renderId,
+    sessionId: input.sessionId,
     appId: input.appId,
     tool: input.tool,
     payload: input.payload,

@@ -373,12 +373,12 @@ describe('ggui.json schema — storage block (explicit opt-in) (locked 2026-04-1
     const parsed = parseGguiJson({
       ...MINIMAL_V1,
       storage: {
-        renders: { driver: 'sqlite', path: './ggui-renders.sqlite' },
+        renders: { driver: 'sqlite', path: './ggui-sessions.sqlite' },
         vectors: { driver: 'sqlite', path: './ggui-vectors.sqlite' },
       },
     });
     expect(parsed.storage).toEqual({
-      renders: { driver: 'sqlite', path: './ggui-renders.sqlite' },
+      renders: { driver: 'sqlite', path: './ggui-sessions.sqlite' },
       vectors: { driver: 'sqlite', path: './ggui-vectors.sqlite' },
     });
   });
@@ -387,12 +387,12 @@ describe('ggui.json schema — storage block (explicit opt-in) (locked 2026-04-1
     const parsed = parseGguiJson({
       ...MINIMAL_V1,
       storage: {
-        renders: { driver: 'sqlite', path: './ggui-renders.sqlite' },
+        renders: { driver: 'sqlite', path: './ggui-sessions.sqlite' },
       },
     });
     expect(parsed.storage?.renders).toEqual({
       driver: 'sqlite',
-      path: './ggui-renders.sqlite',
+      path: './ggui-sessions.sqlite',
     });
     expect(parsed.storage?.vectors).toBeUndefined();
   });
@@ -466,7 +466,7 @@ describe('ggui.json schema — storage block (explicit opt-in) (locked 2026-04-1
       storage: {
         renders: {
           driver: 'sqlite',
-          path: './ggui-renders.sqlite',
+          path: './ggui-sessions.sqlite',
           paht: './another.sqlite',
         },
       },
@@ -478,7 +478,7 @@ describe('ggui.json schema — storage block (explicit opt-in) (locked 2026-04-1
     const once = parseGguiJson({
       ...MINIMAL_V1,
       storage: {
-        renders: { driver: 'sqlite', path: './ggui-renders.sqlite' },
+        renders: { driver: 'sqlite', path: './ggui-sessions.sqlite' },
         vectors: { driver: 'memory' },
       },
     });

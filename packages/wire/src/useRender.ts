@@ -1,7 +1,7 @@
 import { useWireContext } from './context';
 
 export interface GguiSessionInfo {
-  renderId: string;
+  sessionId: string;
   isConnected: boolean;
 }
 

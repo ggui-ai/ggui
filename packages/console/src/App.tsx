@@ -7,7 +7,7 @@
  *   - `/`                    → admin-index → mounts {@link Status}
  *   - `/admin`               → admin-index → mounts {@link Status}
  *   - `/admin/status`        → {@link Status}
- *   - `/admin/renders`       → {@link Renders}
+ *   - `/admin/sessions`       → {@link Renders}
  *   - `/admin/blueprints`    → {@link Blueprints}
  *   - `/admin/variants`      → {@link BlueprintVariants}
  *   - `/admin/variants/:hash`         → {@link BlueprintVariantDetail}
@@ -107,7 +107,7 @@ export function App(): ReactElement {
       </Shell>
     );
   }
-  if (route.kind === 'admin-renders') {
+  if (route.kind === 'admin-sessions') {
     return (
       <Shell route={route} variant="admin">
         <Renders />

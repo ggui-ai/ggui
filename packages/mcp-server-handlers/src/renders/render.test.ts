@@ -124,11 +124,11 @@ const fakeEmbedding: EmbeddingProvider = {
  *  no LLM. */
 function fakeGenerator(componentCode: string) {
   return async (
-    input: { request: { renderId: string } },
+    input: { request: { sessionId: string } },
   ): Promise<UiGenerateResult> => ({
     ok: true,
     response: {
-      renderId: input.request.renderId,
+      sessionId: input.request.sessionId,
       componentCode,
     },
     metadata: {
@@ -483,7 +483,7 @@ describe('createGguiRenderHandler — cache-reuse point-read (Phase 2)', () => {
     expect(out.cache.reason).toContain('full-template');
     expect(out.cache.reason).toContain(storedUuid);
 
-    const stored = await harness.renderStore.get(out.renderId);
+    const stored = await harness.renderStore.get(out.sessionId);
     const render = stored?.render as ComponentGguiSession | undefined;
     expect(render?.componentCode).toBe(STORED_CODE);
   });
@@ -523,7 +523,7 @@ describe('createGguiRenderHandler — cache-reuse point-read (Phase 2)', () => {
     );
     // Self-heal: falls through to cold-gen rather than throwing.
     expect(out.cache.hit).toBe(false);
-    const stored = await renderStore.get(out.renderId);
+    const stored = await renderStore.get(out.sessionId);
     const render = stored?.render as ComponentGguiSession | undefined;
     expect(render?.componentCode).toBe(COLD_CODE);
   });
@@ -583,7 +583,7 @@ describe('createGguiRenderHandler — cache-reuse point-read (Phase 2)', () => {
 
     // The served component code is the COLD-GEN output, NOT the stored
     // blueprint's STORED_CODE (mirrors how test (c) reads the render).
-    const stored = await harness.renderStore.get(out.renderId);
+    const stored = await harness.renderStore.get(out.sessionId);
     const render = stored?.render as ComponentGguiSession | undefined;
     expect(render?.componentCode).toBe(COLD_CODE);
     expect(render?.componentCode).not.toBe(STORED_CODE);
@@ -797,7 +797,7 @@ describe('createGguiRenderHandler — seed-pool-aware reuse point-read', () => {
     expect(out.cache.cachedBlueprintId).toBe(uuid);
     expect(out.blueprintId).toBe(uuid);
 
-    const stored = await renderStore.get(out.renderId);
+    const stored = await renderStore.get(out.sessionId);
     const render = stored?.render as ComponentGguiSession | undefined;
     expect(render?.componentCode).toBe(SEED_CODE);
     expect(render?.componentCode).not.toBe(COLD_CODE);
@@ -962,7 +962,7 @@ describe('createGguiRenderHandler — seed-pool-aware reuse point-read', () => {
 
     // Per-app-first: the per-app STORED_CODE is served, NOT the seed
     // pool's SEED_CODE.
-    const stored = await renderStore.get(out.renderId);
+    const stored = await renderStore.get(out.sessionId);
     const render = stored?.render as ComponentGguiSession | undefined;
     expect(render?.componentCode).toBe(STORED_CODE);
     expect(render?.componentCode).not.toBe(SEED_CODE);
@@ -1092,7 +1092,7 @@ describe('createGguiRenderHandler — variance-aware input reshape (Tasks 6+7)',
 
     // The served code is the COLD-GEN output (the persona variant had no
     // stored component), not the default row's STORED_CODE.
-    const stored = await harness.renderStore.get(out.renderId);
+    const stored = await harness.renderStore.get(out.sessionId);
     const render = stored?.render as ComponentGguiSession | undefined;
     expect(render?.componentCode).toBe(COLD_CODE);
   });

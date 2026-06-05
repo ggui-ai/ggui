@@ -16,37 +16,37 @@ import type {
 export class InMemoryShortCodeIndex implements ShortCodeIndex {
   private readonly store = new Map<string, ShortCodeBinding>();
   /**
-   * Reverse map backing {@link findByRenderId}. Maintained in lockstep
+   * Reverse map backing {@link findBySessionId}. Maintained in lockstep
    * with `store` by every {@link put} — the forward store is the truth
    * (multiple renders could previously share a shortCode via rebind),
    * but for the reverse side we want "latest shortCode bound to this
-   * render" which is exactly `renderIdToShortCode.get(renderId)`.
+   * render" which is exactly `sessionIdToShortCode.get(sessionId)`.
    */
-  private readonly renderIdToShortCode = new Map<string, string>();
+  private readonly sessionIdToShortCode = new Map<string, string>();
 
   async put(shortCode: string, binding: ShortCodeBinding): Promise<void> {
     if (!shortCode) {
       throw new Error('InMemoryShortCodeIndex.put: shortCode is required');
     }
     // Rebind hygiene: if this shortCode was previously bound to a
-    // DIFFERENT renderId, clear that render's reverse entry so
-    // `findByRenderId(oldRenderId)` doesn't keep returning the
+    // DIFFERENT sessionId, clear that render's reverse entry so
+    // `findBySessionId(oldSessionId)` doesn't keep returning the
     // rebound shortCode. Matches the last-writer-wins contract in
     // `short-code-index.ts`.
     const previous = this.store.get(shortCode);
-    if (previous && previous.renderId !== binding.renderId) {
+    if (previous && previous.sessionId !== binding.sessionId) {
       const stillPointsHere =
-        this.renderIdToShortCode.get(previous.renderId) === shortCode;
+        this.sessionIdToShortCode.get(previous.sessionId) === shortCode;
       if (stillPointsHere) {
-        this.renderIdToShortCode.delete(previous.renderId);
+        this.sessionIdToShortCode.delete(previous.sessionId);
       }
     }
     this.store.set(shortCode, { ...binding });
-    // Reverse side is last-writer-wins per renderId: if a render
+    // Reverse side is last-writer-wins per sessionId: if a render
     // had an earlier shortCode, the new one takes over. The old
     // shortCode stays valid on the forward side — operators who
     // typed it before the rebind still resolve correctly.
-    this.renderIdToShortCode.set(binding.renderId, shortCode);
+    this.sessionIdToShortCode.set(binding.sessionId, shortCode);
   }
 
   async lookup(shortCode: string): Promise<ShortCodeBinding | null> {
@@ -54,14 +54,14 @@ export class InMemoryShortCodeIndex implements ShortCodeIndex {
     if (!entry) return null;
     // Defensive copy — callers may mutate.
     return {
-      renderId: entry.renderId,
+      sessionId: entry.sessionId,
       appId: entry.appId,
     };
   }
 
-  async findByRenderId(renderId: string): Promise<string | null> {
-    if (!renderId) return null;
-    return this.renderIdToShortCode.get(renderId) ?? null;
+  async findBySessionId(sessionId: string): Promise<string | null> {
+    if (!sessionId) return null;
+    return this.sessionIdToShortCode.get(sessionId) ?? null;
   }
 
   async revoke(shortCode: string): Promise<void> {
@@ -71,20 +71,20 @@ export class InMemoryShortCodeIndex implements ShortCodeIndex {
     this.store.delete(shortCode);
     // Only clear the reverse pointer if it still points at THIS code
     // (a later rebind may have overwritten it).
-    if (this.renderIdToShortCode.get(entry.renderId) === shortCode) {
-      this.renderIdToShortCode.delete(entry.renderId);
+    if (this.sessionIdToShortCode.get(entry.sessionId) === shortCode) {
+      this.sessionIdToShortCode.delete(entry.sessionId);
     }
   }
 
-  async revokeByRenderId(renderId: string): Promise<number> {
-    if (!renderId) return 0;
+  async revokeBySessionId(sessionId: string): Promise<number> {
+    if (!sessionId) return 0;
     let count = 0;
-    // Iterate forward map — multiple shortCodes may share a renderId
+    // Iterate forward map — multiple shortCodes may share a sessionId
     // (the reverse map only tracks the latest). Collect-then-delete
     // pattern avoids mutation-during-iteration.
     const codesToRevoke: string[] = [];
     for (const [code, binding] of this.store.entries()) {
-      if (binding.renderId === renderId) {
+      if (binding.sessionId === sessionId) {
         codesToRevoke.push(code);
       }
     }
@@ -92,7 +92,7 @@ export class InMemoryShortCodeIndex implements ShortCodeIndex {
       this.store.delete(code);
       count += 1;
     }
-    this.renderIdToShortCode.delete(renderId);
+    this.sessionIdToShortCode.delete(sessionId);
     return count;
   }
 

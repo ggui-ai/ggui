@@ -26,8 +26,8 @@ import {
  *     the spec-canonical `ui/notifications/tool-result` notification
  *     and feeds the parsed value into `connectFn`.
  *   - On a successful ack, `result.mountedRender` reflects the render
- *     when the ack snapshot's `render.id` matches `pinnedRenderId`
- *     (post-render-identity-collapse the renderId IS the pin).
+ *     when the ack snapshot's `render.id` matches `pinnedSessionId`
+ *     (post-render-identity-collapse the sessionId IS the pin).
  *   - Negative paths (UI_INITIALIZE_FAILED, MISSING_META_GGUI_BOOTSTRAP,
  *     UPGRADE_REQUIRED, WS_HANDSHAKE_FAILED) each surface a
  *     `ggui:bootstrap-failed` envelope to the recorder.
@@ -42,7 +42,7 @@ import {
 const VALID_META: McpAppAiGguiRenderMeta = {
   wsUrl: 'wss://server.example/ws',
   wsToken: 'tok_abc',
-  renderId: 'render_001',
+  sessionId: 'render_001',
   appId: 'app_001',
   expiresAt: '2099-01-01T00:00:00.000Z',
   runtimeUrl: '/_ggui/iframe-runtime.js',
@@ -104,7 +104,7 @@ describe('bootSequence — happy path', () => {
   it('boots from a spec-canonical toolresult notification and mounts the ack render', async () => {
     const dom = document.implementation.createHTMLDocument('renderer-test');
 
-    // The bootstrap's renderId pins the mount slot; the ack's render
+    // The bootstrap's sessionId pins the mount slot; the ack's render
     // MUST carry that same id to land. Single-render-per-iframe.
     const initial = makeRender('render_001', 'first render');
 
@@ -186,7 +186,7 @@ describe('bootSequence — preResolvedMeta short-circuit', () => {
     // Push a HOSTILE toolresult — should be ignored entirely since
     // preResolvedMeta short-circuits the resolver chain.
     await tick();
-    pushToolResult({ ...VALID_META, renderId: 'render_hostile' });
+    pushToolResult({ ...VALID_META, sessionId: 'render_hostile' });
 
     const result = await bootPromise;
     expect(result.ok).toBe(true);
@@ -199,7 +199,7 @@ describe('bootSequence — single-render mode (post-render-identity-collapse)', 
     const dom = document.implementation.createHTMLDocument('renderer-test');
 
     // The ack carries a render with a different id — the renderer
-    // ignores the mismatch (pinned to meta.renderId = 'render_001').
+    // ignores the mismatch (pinned to meta.sessionId = 'render_001').
     const otherRender = makeRender('render_other', 'unrelated');
 
     const { app, transport, pushToolResult } = buildBootHarness();

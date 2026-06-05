@@ -345,7 +345,7 @@ export interface ToolContext<TResolved = JsonObject> {
   };
   /** App configuration */
   appId: string;
-  renderId: string;
+  sessionId: string;
   /** Base URL for API calls */
   apiBaseUrl?: string;
 }

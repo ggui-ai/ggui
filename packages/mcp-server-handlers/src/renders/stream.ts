@@ -12,7 +12,7 @@
  *
  * Post-Phase-B (flatten-render-identity): the wire input collapsed
  * from `{sessionId, channel, payload, complete?, stackItemId?}` to
- * `{renderId, channel, payload, complete?}` — every render IS the
+ * `{sessionId, channel, payload, complete?}` — every render IS the
  * addressable scope.
  */
 
@@ -33,7 +33,7 @@ import {
 } from './handle-stream.js';
 
 const inputSchema = {
-  renderId: z.string().min(1),
+  sessionId: z.string().min(1),
   channel: z.string().min(1),
   payload: z.unknown(),
   complete: z.boolean().optional(),
@@ -64,7 +64,7 @@ export interface GguiEmitHandlerDeps {
 export interface StreamObserverNotifier {
   notifyToolCall(args: {
     readonly appId: string;
-    readonly renderId: string;
+    readonly sessionId: string;
     readonly channel: string;
     readonly hasPayload: boolean;
     readonly complete: boolean;
@@ -80,22 +80,22 @@ export function createGguiEmitHandler(
     title: 'Stream',
     audience: ['agent'],
     description:
-      "Emit a new delivery on a declared channel of the render's streamSpec. The agent supplies {renderId, channel, payload, complete?}; the server derives mode from the channel's declared mode and stamps the canonical StreamEnvelope. Validates the payload against the channel's schema and rejects undeclared channels. Acceptance is at the server boundary — no-subscriber is not an error.",
+      "Emit a new delivery on a declared channel of the render's streamSpec. The agent supplies {sessionId, channel, payload, complete?}; the server derives mode from the channel's declared mode and stamps the canonical StreamEnvelope. Validates the payload against the channel's schema and rejects undeclared channels. Acceptance is at the server boundary — no-subscriber is not an error.",
     inputSchema,
     outputSchema,
     async handler(
       rawInput: Record<string, unknown>,
       ctx: HandlerContext,
     ): Promise<GguiEmitOutput> {
-      const { renderId, channel, payload, complete } = z
+      const { sessionId, channel, payload, complete } = z
         .object(inputSchema)
         .parse(rawInput);
 
       // Tenancy gate. Cross-tenant + missing surface uniformly as
       // GguiSessionNotFoundError so cross-tenant existence isn't leaked.
-      const stored = await deps.renderStore.get(renderId);
+      const stored = await deps.renderStore.get(sessionId);
       if (!stored || stored.appId !== ctx.appId) {
-        throw new GguiSessionNotFoundError(renderId);
+        throw new GguiSessionNotFoundError(sessionId);
       }
 
       // Extract the streamSpec from the resolved render (component
@@ -107,12 +107,12 @@ export function createGguiEmitHandler(
           : undefined;
 
       const target: GguiSessionStreamTarget = {
-        renderId,
+        sessionId,
         ...(streamSpec !== undefined ? { streamSpec } : {}),
       };
 
       const input: GguiEmitInput = {
-        renderId,
+        sessionId,
         channel,
         payload: payload as StreamEnvelope['payload'],
         ...(complete === true ? { complete: true as const } : {}),
@@ -128,7 +128,7 @@ export function createGguiEmitHandler(
         try {
           deps.observerNotifier.notifyToolCall({
             appId: ctx.appId,
-            renderId,
+            sessionId,
             channel,
             hasPayload: payload !== undefined,
             complete: complete === true,

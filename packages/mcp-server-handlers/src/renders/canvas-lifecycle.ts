@@ -29,9 +29,9 @@ import type { CanvasLifecyclePayload } from '@ggui-ai/protocol';
  * pill state changes) but MUST NOT impact the handler's primary
  * result.
  *
- * Post-Phase-B (flatten-render-identity): keyed by `renderId` (was
+ * Post-Phase-B (flatten-render-identity): keyed by `sessionId` (was
  * `sessionId`) — every render IS the addressable channel.
  */
 export interface CanvasLifecycleEmitter {
-  emit(renderId: string, payload: CanvasLifecyclePayload): void;
+  emit(sessionId: string, payload: CanvasLifecyclePayload): void;
 }

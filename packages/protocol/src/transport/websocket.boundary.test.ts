@@ -79,20 +79,20 @@ describe('websocket transport boundary — type narrowing', () => {
     const msg: WebSocketMessage = {
       type: 'action',
       payload: {
-        renderId: 'render-1',
+        sessionId: 'render-1',
         type: 'data:submit',
         payload: { action: 'submit', data: { text: 'hi' } },
       },
     };
     if (msg.type !== 'action') throw new Error('narrowing');
     const envelope: ActionEnvelope = msg.payload;
-    expect(envelope.renderId).toBe('render-1');
+    expect(envelope.sessionId).toBe('render-1');
     expect(envelope.type).toBe('data:submit');
   });
 
   it('narrows to StreamEnvelope on type:data', () => {
     const envelope: StreamEnvelope = {
-      renderId: 'render-1',
+      sessionId: 'render-1',
       channel: 'tick',
       mode: 'append',
       payload: { count: 1 },
@@ -104,7 +104,7 @@ describe('websocket transport boundary — type narrowing', () => {
 
   it('narrows to SubscribePayload on type:subscribe', () => {
     const sub: SubscribePayload = {
-      renderId: 'render-1',
+      sessionId: 'render-1',
       appId: 'app-1',
       fromSeq: 42,
     };
@@ -147,7 +147,7 @@ describe('websocket transport boundary — type narrowing', () => {
     const msg: WebSocketMessage = {
       type: 'channel_subscribe',
       payload: {
-        renderId: 'render-1',
+        sessionId: 'render-1',
         appId: 'a',
         channelName: 'weather',
         pollIntervalMs: 5000,
@@ -164,7 +164,7 @@ describe('websocket transport boundary — type narrowing', () => {
     const msg: WebSocketMessage = {
       type: 'channel_payload',
       payload: {
-        renderId: 'render-1',
+        sessionId: 'render-1',
         appId: 'a',
         channelName: 'weather',
         seq: 1,
@@ -183,7 +183,7 @@ describe('websocket transport boundary — type narrowing', () => {
     const msg: WebSocketMessage = {
       type: 'channel_error',
       payload: {
-        renderId: 'render-1',
+        sessionId: 'render-1',
         channelName: 'weather',
         code: 'CHANNEL_NOT_LOCAL',
         message: 'tool not in streamWebSocketLocalTools',
@@ -198,7 +198,7 @@ describe('websocket transport boundary — type narrowing', () => {
     const msg: WebSocketMessage = {
       type: 'drain_ack',
       payload: {
-        renderId: 'render-1',
+        sessionId: 'render-1',
         appId: 'a',
         eventId: 'evt_1',
         drainedAt: '2026-05-14T00:00:00.000Z',

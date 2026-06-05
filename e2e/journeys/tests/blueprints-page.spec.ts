@@ -140,7 +140,7 @@ test.describe.serial(
       //    blueprint-viewer spec asserts, scoped by data-ggui-blueprint-id
       //    so this spec doesn't regress if other fixtures land.
       const mountCard = page.locator(
-        `[data-ggui-render-entry="component"][data-ggui-blueprint-id="${BLUEPRINT_ID}"]`,
+        `[data-ggui-session-entry="component"][data-ggui-blueprint-id="${BLUEPRINT_ID}"]`,
       );
       await expect(mountCard).toBeVisible({ timeout: 15_000 });
 

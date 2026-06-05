@@ -4,7 +4,7 @@
  * The renderer iframe mounts EXACTLY ONE {@link GguiSession} per iframe
  * post-render-identity-collapse (2026-05-27). There is no per-item
  * scoping factory anymore — the WireConfig is built once at boot,
- * keyed by the bootstrap's `renderId`, and the active render's
+ * keyed by the bootstrap's `sessionId`, and the active render's
  * `actionSpec` is wired in via the {@link buildRootWireConfig}'s
  * `getCurrentGguiSession` thunk.
  *
@@ -181,7 +181,7 @@ export class StreamBus {
 // =============================================================================
 
 export interface BuildRootWireConfigOptions {
-  readonly renderId: string;
+  readonly sessionId: string;
   readonly appId: string;
   /**
    * Read the currently-mounted {@link GguiSession}. The config's `dispatch`
@@ -269,7 +269,7 @@ export interface BuildRootWireConfigOptions {
 /**
  * Build the per-render `WireConfig` for the iframe runtime.
  * Bootstraps the renderer's outbound emission + inbound subscription
- * seams. Returns a `WireConfig` keyed by the bootstrap's `renderId`;
+ * seams. Returns a `WireConfig` keyed by the bootstrap's `sessionId`;
  * the active render's `actionSpec` is resolved through the
  * {@link BuildRootWireConfigOptions.getCurrentGguiSession} thunk on every
  * dispatch so props_update patches don't require rebuilding the
@@ -317,7 +317,7 @@ export function buildRootWireConfig(
 
   return {
     app: { appId: opts.appId, appName: opts.appId },
-    render: { renderId: opts.renderId, isConnected: true },
+    render: { sessionId: opts.sessionId, isConnected: true },
     auth: { isAuthenticated: false },
     dispatch: (actionName, data) => {
       // Resolve the active render's actionSpec on every dispatch.
@@ -335,7 +335,7 @@ export function buildRootWireConfig(
       const tool = entry?.nextStep;
 
       const envelope = buildActionEnvelope({
-        renderId: opts.renderId,
+        sessionId: opts.sessionId,
         type: 'data:submit',
         payload: {
           action: actionName,

@@ -184,7 +184,7 @@ describe("Probe — postMessage spy", () => {
             arguments: {
               kind: "openLink",
               payload: { url: "https://example.com" },
-              renderId: "r1",
+              sessionId: "r1",
               appId: "a1",
             },
           },

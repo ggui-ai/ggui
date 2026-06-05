@@ -32,13 +32,13 @@ describe('ContractErrorCode', () => {
     // `SCHEMA_MISMATCH_ERROR` joined at F4 (Phase 1 Item 5); the
     // producer is the schema-compat checker's render-time hook.
     expectTypeOf<'SCHEMA_MISMATCH_ERROR'>().toMatchTypeOf<ContractErrorCode>();
-    // `RENDER_NOT_FOUND` + `AUTH_REJECTED` joined at C8 — post-WS-open
+    // `SESSION_NOT_FOUND` + `AUTH_REJECTED` joined at C8 — post-WS-open
     // bootstrap failures surfaced on live-channel `_ggui:contract-error`
     // envelopes (`sourceAction.type === 'bootstrap-load'`). Pre-WS
     // bootstrap codes (BUNDLE_FETCH_FAILED, CSP_VIOLATION,
     // BOOTSTRAP_META_MISSING) are deliberately NOT in this set —
     // they can't reach the live channel because the WS doesn't exist yet.
-    expectTypeOf<'RENDER_NOT_FOUND'>().toMatchTypeOf<ContractErrorCode>();
+    expectTypeOf<'SESSION_NOT_FOUND'>().toMatchTypeOf<ContractErrorCode>();
     expectTypeOf<'AUTH_REJECTED'>().toMatchTypeOf<ContractErrorCode>();
   });
 

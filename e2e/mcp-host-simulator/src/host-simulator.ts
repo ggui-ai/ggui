@@ -15,7 +15,7 @@
  *      `resultMeta._meta.ggui.bootstrap`, the host opens the iframe
  *      with the bootstrap token + WS URL.
  *   4. WebSocket subscribe — iframe runtime connects with the
- *      bootstrap token, gets an ack with a reconnect `renderToken`,
+ *      bootstrap token, gets an ack with a reconnect `sessionToken`,
  *      then receives event frames pushed by the server.
  *   5. **Wired-action bridge** (separate slice T2.5) — when the
  *      iframe renders a wired button + the user "clicks" it, the
@@ -121,7 +121,7 @@ export interface CallToolResult {
 /**
  * WebSocket ack frame the iframe runtime expects after subscribe.
  * Mirrors the live-channel wire shape:
- *   - Ack:   `{ type: 'ack', payload: { renderToken, sequence, render } }`
+ *   - Ack:   `{ type: 'ack', payload: { sessionToken, sequence, render } }`
  *   - Error: `{ type: 'error', payload: { code } }`
  *
  * The simulator normalises both into a single discriminator on `kind`
@@ -130,7 +130,7 @@ export interface CallToolResult {
 export interface SubscribeAck {
   readonly kind: "ack" | "error";
   /** Set on `ack` — the reconnect token replacing the bootstrap one. */
-  readonly renderToken?: string;
+  readonly sessionToken?: string;
   /** Set on `ack` — current sequence number for reconnect resume. */
   readonly sequence?: number;
   /** Set on `error` — wire error code (BOOTSTRAP_INVALID, …). */
@@ -191,7 +191,7 @@ export interface HandshakeOutput {
   readonly action: "create" | "reuse" | "update" | "replace" | "declined";
   readonly reason: string;
   readonly target: {
-    readonly renderId?: string;
+    readonly sessionId?: string;
   };
   readonly suggestion: HandshakeSuggestionView;
   readonly alternatives?: ReadonlyArray<unknown>;
@@ -230,7 +230,7 @@ export interface SimulateWiredActionArgs {
   /**
    * {@link McpAppAiGguiRenderMeta} from a prior
    * {@link HostSimulator.callTool} `ggui_render` — supplies the
-   * renderId + appId the action targets.
+   * sessionId + appId the action targets.
    */
   readonly meta: McpAppAiGguiRenderMeta;
   /** Override `firedAt` for deterministic actionId tests. */
@@ -576,7 +576,7 @@ export class HostSimulator {
    * Open a WebSocket to the bootstrap's `wsUrl`, send a `subscribe`
    * frame with the token, await the ack. Returns the parsed ack
    * frame — the test can assert `kind === 'ack'` and pull the
-   * `renderToken` for reconnect tests.
+   * `sessionToken` for reconnect tests.
    *
    * Does NOT keep the socket open beyond ack; the caller can pass
    * `keepOpen: true` to retain the WS for streaming-event tests.
@@ -622,8 +622,8 @@ export class HostSimulator {
           const payload = parsed.payload ?? {};
           resolve({
             kind,
-            ...(typeof payload["renderToken"] === "string"
-              ? { renderToken: payload["renderToken"] }
+            ...(typeof payload["sessionToken"] === "string"
+              ? { sessionToken: payload["sessionToken"] }
               : {}),
             ...(typeof payload["sequence"] === "number" ? { sequence: payload["sequence"] } : {}),
             ...(typeof payload["code"] === "string" ? { code: payload["code"] } : {}),
@@ -652,12 +652,12 @@ export class HostSimulator {
     });
 
     // Wire shape per `mcp-apps-outbound.test.ts`:
-    //   { type: 'subscribe', payload: { renderId, appId, wsToken } }
+    //   { type: 'subscribe', payload: { sessionId, appId, wsToken } }
     ws.send(
       JSON.stringify({
         type: "subscribe",
         payload: {
-          renderId: meta.renderId,
+          sessionId: meta.sessionId,
           appId: meta.appId,
           wsToken: meta.wsToken,
         },
@@ -698,7 +698,7 @@ export class HostSimulator {
     const built: BuiltWiredAction = buildWiredAction({
       intent: args.intent,
       data: args.data,
-      renderId: args.meta.renderId,
+      sessionId: args.meta.sessionId,
       appId: args.meta.appId,
       ...(args.firedAt !== undefined ? { firedAt: args.firedAt } : {}),
     });

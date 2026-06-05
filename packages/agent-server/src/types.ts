@@ -5,7 +5,7 @@
  * SSE, MCP discovery, tool-result resource inlining, server-allocated
  * chat ids, auth); the per-SDK ADAPTER owns nothing but mapping the
  * agent loop to / from {@link NormalizedMessage}s. Neither knows about
- * renderId, host-session, or any `_meta.ui.*` key — the prompt is
+ * sessionId, host-session, or any `_meta.ui.*` key — the prompt is
  * forwarded verbatim, so guest-gesture directives (authored in the
  * iframe's `ui/message` text) pass straight through.
  *
@@ -169,7 +169,7 @@ export interface AgentInput {
  *
  * Adapters MUST stay brand-agnostic: no imports of
  * `@ggui-ai/protocol/integrations/mcp-apps`, no awareness of
- * `renderId` / `host-session`. The library is a pure prompt-forwarder
+ * `sessionId` / `host-session`. The library is a pure prompt-forwarder
  * + host plumbing around the adapter — neither layer has ggui-protocol
  * knowledge.
  */

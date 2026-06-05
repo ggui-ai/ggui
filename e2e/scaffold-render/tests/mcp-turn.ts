@@ -65,7 +65,7 @@ export interface RenderCacheMarker {
  */
 export interface GguiSessionResult {
   isError?: boolean;
-  renderId?: string;
+  sessionId?: string;
   action?: string;
   blueprintId?: string;
   variantKey?: string;

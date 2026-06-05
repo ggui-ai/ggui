@@ -18,7 +18,7 @@ const TOOL_RESULT_WITH_URI: NormalizedMessage = {
   },
   tool_use_result: {
     content: [{ type: 'text', text: 'rendered' }],
-    structuredContent: { renderId: 'r_1' },
+    structuredContent: { sessionId: 'r_1' },
     _meta: {
       ui: {
         resourceUri: 'ui://ggui/render/r_1',

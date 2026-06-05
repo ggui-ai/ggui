@@ -67,8 +67,8 @@ export type SetupStep =
   | UnknownSetupStep;
 
 export interface CreateGguiSessionSetup {
-  readonly kind: 'create-render';
-  readonly renderId: string;
+  readonly kind: 'create-session';
+  readonly sessionId: string;
   readonly appId?: string;
 }
 

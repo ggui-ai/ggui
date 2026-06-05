@@ -92,46 +92,46 @@ describe('ActionEnvelope boundary lock (type-level)', () => {
   // assignments, so the locks use a literal annotated with the type.
   it('does NOT carry MCP-Apps-specific source / csp / permissions fields', () => {
     const env: ActionEnvelope = {
-      renderId: 'r',
+      sessionId: 'r',
       type: 'data:submit',
       payload: { action: 'x' },
       // @ts-expect-error — `source` is not an ActionEnvelope field.
       source: { connectorId: 'x', toolName: 't', resourceUri: 'ui://x/t' } satisfies McpAppsSource,
     };
-    expect(env.renderId).toBe('r');
+    expect(env.sessionId).toBe('r');
   });
 
   it('does NOT allow csp / permissions / containerDimensions / resourceUri / bootstrap fields', () => {
     const env1: ActionEnvelope = {
-      renderId: 'r',
+      sessionId: 'r',
       type: 'data:submit',
       // @ts-expect-error — csp is not an ActionEnvelope field.
       csp: {} satisfies McpAppsCsp,
     };
     const env2: ActionEnvelope = {
-      renderId: 'r',
+      sessionId: 'r',
       type: 'data:submit',
       // @ts-expect-error — permissions is not an ActionEnvelope field.
       permissions: {} satisfies McpAppsPermissions,
     };
     const env3: ActionEnvelope = {
-      renderId: 'r',
+      sessionId: 'r',
       type: 'data:submit',
       // @ts-expect-error — containerDimensions is not an ActionEnvelope field.
       containerDimensions: {} satisfies McpAppsContainerDimensions,
     };
     const env4: ActionEnvelope = {
-      renderId: 'r',
+      sessionId: 'r',
       type: 'data:submit',
       // @ts-expect-error — resourceUri is not an ActionEnvelope field.
       resourceUri: 'ui://x',
     };
     const env5: ActionEnvelope = {
-      renderId: 'r',
+      sessionId: 'r',
       type: 'data:submit',
       // @ts-expect-error — render slice meta is not an ActionEnvelope field.
       bootstrap: {
-        renderId: 'r',
+        sessionId: 'r',
         appId: 'a',
         runtimeUrl: '/_ggui/iframe-runtime.js',
         wsUrl: 'w',
@@ -139,7 +139,7 @@ describe('ActionEnvelope boundary lock (type-level)', () => {
         expiresAt: 'e',
       } satisfies McpAppAiGguiRenderMeta,
     };
-    expect([env1, env2, env3, env4, env5].map((e) => e.renderId)).toEqual(
+    expect([env1, env2, env3, env4, env5].map((e) => e.sessionId)).toEqual(
       Array(5).fill('r'),
     );
   });
@@ -150,7 +150,7 @@ describe('StreamEnvelope boundary lock (type-level)', () => {
   // have their own contract via the host postMessage bridge.
   it('does NOT carry MCP-Apps-specific source / csp / resourceUri / bootstrap fields', () => {
     const env1: StreamEnvelope = {
-      renderId: 'r',
+      sessionId: 'r',
       channel: 'c',
       mode: 'append',
       payload: null,
@@ -158,7 +158,7 @@ describe('StreamEnvelope boundary lock (type-level)', () => {
       source: { connectorId: 'c', toolName: 't', resourceUri: 'ui://c/t' } satisfies McpAppsSource,
     };
     const env2: StreamEnvelope = {
-      renderId: 'r',
+      sessionId: 'r',
       channel: 'c',
       mode: 'append',
       payload: null,
@@ -166,14 +166,14 @@ describe('StreamEnvelope boundary lock (type-level)', () => {
       csp: {} satisfies McpAppsCsp,
     };
     const env3: StreamEnvelope = {
-      renderId: 'r',
+      sessionId: 'r',
       channel: 'c',
       mode: 'append',
       payload: null,
       // @ts-expect-error — no resourceUri on stream wire.
       resourceUri: 'ui://x',
     };
-    expect([env1, env2, env3].map((e) => e.renderId)).toEqual(['r', 'r', 'r']);
+    expect([env1, env2, env3].map((e) => e.sessionId)).toEqual(['r', 'r', 'r']);
   });
 });
 
@@ -235,24 +235,24 @@ describe('StreamSpec / ActionSpec / PropsSpec boundary lock (type-level)', () =>
 });
 
 describe('Subscribe / Ack bootstrap slots are generic, not MCP-Apps-typed (type-level)', () => {
-  // `SubscribePayload.bootstrap` and `AckPayload.renderToken` are
+  // `SubscribePayload.bootstrap` and `AckPayload.sessionToken` are
   // deliberately framed as GENERAL transport-bootstrap credentials
   // (opaque strings), NOT as MCP-Apps-typed fields. This lock ensures
   // a future change doesn't accidentally narrow them to
   // `McpAppAiGguiRenderMeta`-shaped objects.
   it('SubscribePayload.bootstrap is a string, not a render-slice object', () => {
     const s: SubscribePayload = {
-      renderId: 'x',
+      sessionId: 'x',
       appId: 'a',
       bootstrap: 'opaque-token',
     };
     expect(typeof s.bootstrap).toBe('string');
     const s2: SubscribePayload = {
-      renderId: 'x',
+      sessionId: 'x',
       appId: 'a',
       // @ts-expect-error — bootstrap is `string | undefined`, not an object.
       bootstrap: {
-        renderId: 'r',
+        sessionId: 'r',
         appId: 'a',
         runtimeUrl: '/_ggui/iframe-runtime.js',
         wsUrl: 'w',
@@ -263,13 +263,13 @@ describe('Subscribe / Ack bootstrap slots are generic, not MCP-Apps-typed (type-
     expect(s2).toBeDefined();
   });
 
-  it('AckPayload.renderToken is a string, not a typed credential object', () => {
+  it('AckPayload.sessionToken is a string, not a typed credential object', () => {
     const a: AckPayload = {
       sequence: 1,
       timestamp: 0,
-      renderToken: 'opaque',
+      sessionToken: 'opaque',
     };
-    expect(typeof a.renderToken).toBe('string');
+    expect(typeof a.sessionToken).toBe('string');
   });
 });
 

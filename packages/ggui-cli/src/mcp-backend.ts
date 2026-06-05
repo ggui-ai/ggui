@@ -20,7 +20,7 @@
  *     `/s/<shortCode>` viewer + same-origin HTTP-only cookie flow.
  *   - `shortCodeIndex: new InMemoryShortCodeIndex()` — required by
  *     the `sessionCookie` flow so `POST /ggui/console/render-cookie`
- *     can resolve a posted shortCode to the bound `{renderId, appId}`.
+ *     can resolve a posted shortCode to the bound `{sessionId, appId}`.
  *     In-memory is correct for the OSS first-run: render state lives
  *     in memory unless the operator opts into sqlite, so a matching
  *     index lifetime is what operators expect.
@@ -197,7 +197,7 @@ export interface BuildMcpServerBackendOptions {
    * Generation wiring for `ggui_render`. When present, the OSS render
    * handler invokes the bound `UiGenerator` on every story-path
    * call and commits real componentCode as a `GguiSession`. Absent =
-   * placeholder mode: render mints renderIds + shortCodes but does
+   * placeholder mode: render mints sessionIds + shortCodes but does
    * not produce componentCode.
    *
    * The CLI resolves this from the operator's BYOK state at boot via
@@ -992,7 +992,7 @@ export function buildMcpServerBackend(opts: BuildMcpServerBackendOptions): Serve
     },
     // Generation wiring. Threaded through to
     // `defaultHandlers.render.generation` → `createGguiRenderHandler`.
-    // Absent = placeholder mode: render mints renderIds + shortCodes
+    // Absent = placeholder mode: render mints sessionIds + shortCodes
     // + preview but does NOT produce componentCode. The CLI's
     // `runServeCommand` probes BYOK (env → credentials file) at
     // boot and only supplies this opt on a hit. See

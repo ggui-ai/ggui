@@ -17,7 +17,7 @@
  * | Scope          | Prefix                            | Lifetime               |
  * | -------------- | --------------------------------- | ---------------------- |
  * | `app`          | `apps/<appId>/`                   | App lifecycle          |
- * | `render`       | `renders/<renderId>/`             | GguiSession TTL             |
+ * | `render`       | `renders/<sessionId>/`             | GguiSession TTL             |
  * | `userApp`      | `users/<userId>/apps/<appId>/`    | User account / app     |
  * | `crossAppUser` | `users/<userId>/shared/`          | User account (opt-in)  |
  *
@@ -91,7 +91,7 @@
  * - {@link GguiSessionStore} (`render-store.ts`) — durable per-render
  *   metadata + event log. `DynamoGguiSessionStore` offloads heavy
  *   `render.componentCode` and `conversationHistory` blobs into
- *   `ScopedFileStoreRegistry.render(renderId)` so the DDB row stays
+ *   `ScopedFileStoreRegistry.render(sessionId)` so the DDB row stays
  *   under the 400 KB limit.
  * - {@link KeyValueStore} (`kv-store.ts`) — TTL'd ephemeral kv.
  *   Orthogonal: kv is small / hot / tokenish; ScopedFileStore is for
@@ -262,8 +262,8 @@ export interface ScopedFileStoreRegistry {
   /** App scope: `apps/<appId>/`. App lifecycle, no user identity. */
   app(appId: string): ScopedFileStore;
 
-  /** GguiSession scope: `renders/<renderId>/`. GguiSession TTL. */
-  render(renderId: string): ScopedFileStore;
+  /** GguiSession scope: `renders/<sessionId>/`. GguiSession TTL. */
+  render(sessionId: string): ScopedFileStore;
 
   /**
    * Per-user-per-app scope: `users/<userId>/apps/<appId>/`. The

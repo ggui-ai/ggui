@@ -75,7 +75,7 @@ export interface ActionEventValue<TData = unknown> {
  *   - `timestamp` — the server uses its own clock for ordering + log
  *     emission; client-supplied timestamps aren't authoritative.
  *   - `correlationId` — the doctrine names this for agent-push ↔ user
- *     action pairing; `renderId` covers the narrow case today.
+ *     action pairing; `sessionId` covers the narrow case today.
  *
  * Required fields map to existing enforcement concerns; optional fields
  * are doctrine-aligned forward-compat additions that cost nothing on the
@@ -84,10 +84,10 @@ export interface ActionEventValue<TData = unknown> {
 export interface ActionEnvelope<TPayload = JsonValue> {
   /**
    * GguiSession identity. Server enforces subscriber-render binding —
-   * envelopes whose renderId doesn't match the ws subscriber's bound
-   * render are rejected (RENDER_MISMATCH).
+   * envelopes whose sessionId doesn't match the ws subscriber's bound
+   * render are rejected (SESSION_MISMATCH).
    */
-  renderId: string;
+  sessionId: string;
   /**
    * Action / event type. Gated by the active render's
    * `actionSpec` declarations.
@@ -106,7 +106,7 @@ export interface ActionEnvelope<TPayload = JsonValue> {
    * shape; no server enforcement today (no inbound dedup infrastructure
    * yet). Clients SHOULD populate when their transport can replay
    * (e.g., reconnect-with-backfill); server SHOULD dedup by
-   * `(renderId, clientSeq)` when dedup lands.
+   * `(sessionId, clientSeq)` when dedup lands.
    */
   clientSeq?: number;
   /**

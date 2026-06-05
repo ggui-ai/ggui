@@ -166,9 +166,9 @@ describe('Scenario 19 — gadget registry-membership gate', () => {
     // Gate accepts → render completes. No tool-level error envelope,
     // structuredContent carries the RenderBootstrap shape.
     expect(readToolErrorMessage(renderResp)).toBeNull();
-    const structured = (renderResp as { result?: { structuredContent?: { renderId?: string } } })
+    const structured = (renderResp as { result?: { structuredContent?: { sessionId?: string } } })
       .result?.structuredContent;
-    expect(structured?.renderId).toBeTypeOf('string');
+    expect(structured?.sessionId).toBeTypeOf('string');
   });
 
   test('render with an unregistered hook is rejected with the gate error', async () => {
