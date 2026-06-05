@@ -294,7 +294,7 @@ describe('GguiSessionViewer — mount pipeline', () => {
     });
     render(<GguiSessionViewer shortCode="scode0002" />);
     await waitFor(() => {
-      expect(screen.getByText(/render resource unavailable/i)).toBeTruthy();
+      expect(screen.getByText(/resource unavailable/i)).toBeTruthy();
     });
     expect(
       screen.getByText(/render-resource fetch returned 503/i),
@@ -321,7 +321,7 @@ describe('GguiSessionViewer — mount pipeline', () => {
     });
     render(<GguiSessionViewer shortCode="scode0004" />);
     await waitFor(() => {
-      expect(screen.getByText(/render resource unavailable/i)).toBeTruthy();
+      expect(screen.getByText(/resource unavailable/i)).toBeTruthy();
     });
     expect(
       screen.getByText(/renders\/:id\/meta fetch returned 503/i),

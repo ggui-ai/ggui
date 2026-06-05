@@ -244,10 +244,10 @@ describe('parseRoute — retired paths (pre-launch no-backcompat)', () => {
     });
   });
 
-  it('rejects the retired top-level /admin/sessions (renamed to /admin/sessions post-Phase-B)', () => {
-    expect(parseRoute('/admin/sessions')).toEqual({
+  it('rejects the retired top-level /admin/renders (renamed to /admin/sessions post-Phase-B)', () => {
+    expect(parseRoute('/admin/renders')).toEqual({
       kind: 'not-found',
-      pathname: '/admin/sessions',
+      pathname: '/admin/renders',
     });
   });
 
