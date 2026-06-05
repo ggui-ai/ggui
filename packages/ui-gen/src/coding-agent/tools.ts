@@ -202,33 +202,10 @@ async function autoCommit(
     return { result: 'FAILED: no file to compile', error: true };
   }
 
-  // Temporarily disabled — testing without Prettier to confirm it's causing regressions
-  // Auto-format with Prettier — normalizes line lengths and indentation
-  // so the agent sees consistent formatting on next turn.
+  // No post-compile formatting — the generated TSX is built as-is.
+  // (Prettier auto-format was removed; it added a dependency + repair
+  // churn without a quality gain.)
   const formatted = raw;
-  // try {
-  //   const prettier = await import('prettier');
-  //   formatted = await prettier.format(raw, {
-  //     parser: 'typescript',       // TSX is handled by the typescript parser
-  //     filepath: 'ui.tsx',         // hint to Prettier that this is TSX (enables JSX formatting)
-  //     printWidth: 80,             // short lines → LLM targets lines accurately
-  //     tabWidth: 2,                // compact indentation
-  //     semi: true,                 // explicit semicolons — less ambiguity
-  //     singleQuote: true,          // consistent JS quotes
-  //     jsxSingleQuote: false,      // JSX uses double quotes (React convention)
-  //     trailingComma: 'all',       // reduces diff noise on additions
-  //     bracketSameLine: false,     // closing > on new line → clear tag boundaries
-  //     singleAttributePerLine: true, // one JSX prop per line → precise line targeting
-  //     arrowParens: 'always',      // (x) => {} — consistent, less ambiguous
-  //     bracketSpacing: true,       // { x } not {x} — easier to read
-  //     jsxBracketSameLine: false,  // same as bracketSameLine for JSX
-  //   });
-  //   if (formatted !== raw) {
-  //     workspace.write(formatted);
-  //   }
-  // } catch {
-  //   // Prettier can fail on malformed code — continue with unformatted
-  // }
 
   // Build with esbuild — keep all imports (react, @ggui-ai/design)
   // esbuild.transform() passes them through as-is, the runtime resolves them
