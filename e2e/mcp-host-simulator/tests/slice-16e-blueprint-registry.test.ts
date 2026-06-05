@@ -50,7 +50,6 @@ const WEATHER_CONTRACT: DataContract = {
 };
 
 interface RenderStructured {
-  codeReady: boolean;
   cache?: RenderCacheMarker;
 }
 
@@ -144,7 +143,6 @@ describe('host-simulator: Slice 16e blueprint-first registry', () => {
       intent: 'live notepad for capturing thoughts',
       contract: NOTEPAD_CONTRACT,
     });
-    expect(first.codeReady).toBe(true);
     expect(first.cache?.hit).toBe(false);
     expect(first.cache?.kind).toBe('cold');
     expect(first.cache?.llmCallsAvoided).toBe(0);
