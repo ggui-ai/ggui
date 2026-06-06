@@ -8,7 +8,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import type { StreamSpec } from '@ggui-ai/protocol';
-import { InMemoryGguiSessionStreamBuffer } from './render-stream-buffer.js';
+import { InMemoryGguiSessionStreamBuffer } from './ggui-session-stream-buffer.js';
 
 const SESSION = 'sess-1';
 

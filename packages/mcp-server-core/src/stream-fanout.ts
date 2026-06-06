@@ -75,7 +75,7 @@
  * the JSON-encoded {@link BufferedStreamEnvelope}; close fires a
  * close-marker record that subscribers recognize and unwind.
  */
-import type { BufferedStreamEnvelope } from './render-stream-buffer.js';
+import type { BufferedStreamEnvelope } from './ggui-session-stream-buffer.js';
 
 /**
  * Input to {@link StreamFanout.publish}. Flat-object shape for easy

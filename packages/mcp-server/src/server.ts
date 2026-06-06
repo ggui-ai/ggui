@@ -287,7 +287,7 @@ import {
   createGguiSessionChannelServer,
   type GguiSessionChannelServer,
   type WiredActionRouter,
-} from "./render-channel.js";
+} from "./ggui-session-channel.js";
 import { buildRequestContextMiddleware, resolveRuntimeUrl } from "./request-context.js";
 import { composePreviewReservedValidator, mergeReservedValidators } from "./reserved-validators.js";
 import {
@@ -2075,7 +2075,7 @@ export interface CreateGguiServerOptions {
    * verbatim to `createGguiSessionChannelServer` (see
    * `GguiSessionChannelOptions.streamWebSocketLocalTools`).
    */
-  readonly streamWebSocketLocalTools?: import("./render-channel.js").GguiSessionChannelLocalToolsOptions;
+  readonly streamWebSocketLocalTools?: import("./ggui-session-channel.js").GguiSessionChannelLocalToolsOptions;
   /**
    * Hook fired when the local subscriber count for `sessionId`
    * transitions 0 → 1 on the live channel. Forwarded verbatim to
@@ -3331,7 +3331,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
   let mintBootstrap:
     | ((sessionId: string, appId: string) => { wsUrl: string; token: string; expiresAt: string })
     | undefined;
-  let channelBootstrap: import("./render-channel.js").GguiSessionChannelBootstrap | undefined;
+  let channelBootstrap: import("./ggui-session-channel.js").GguiSessionChannelBootstrap | undefined;
   // Shared HMAC secret for server-minted creds (bootstrap tokens,
   // session tokens, console cookies). Distinct `kind` claims
   // prevent cross-kind confusion; sharing the secret keeps the
@@ -5643,7 +5643,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
   // the console block below when `sessionCookie` is enabled, then
   // threaded into createGguiSessionChannelServer. Declared `let` here so
   // the declaration-order dance stays legible.
-  let consoleCookieAuth: import("./render-channel.js").GguiSessionChannelCookieAuth | undefined;
+  let consoleCookieAuth: import("./ggui-session-channel.js").GguiSessionChannelCookieAuth | undefined;
   // Admin token resolution. Surfaced on `GguiServer.adminToken` when
   // console is on; `null` when it's off (no consumer for the gate).
   // Operator-supplied wins; otherwise we mint a fresh

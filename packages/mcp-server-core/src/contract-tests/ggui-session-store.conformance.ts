@@ -39,7 +39,7 @@
 
 import { describe, expect, it } from 'vitest';
 import type { GguiSession } from '@ggui-ai/protocol';
-import type { GguiSessionStore } from '../render-store.js';
+import type { GguiSessionStore } from '../ggui-session-store.js';
 
 /**
  * Factory + cleanup pair. The cleanup is awaited after each test —

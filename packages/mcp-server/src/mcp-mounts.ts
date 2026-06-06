@@ -22,7 +22,7 @@
  */
 import type { HandlerContext, SharedHandler } from "@ggui-ai/mcp-server-handlers";
 import type { ZodRawShape } from "zod";
-import type { WiredActionContext, WiredActionRouter } from "./render-channel.js";
+import type { WiredActionContext, WiredActionRouter } from "./ggui-session-channel.js";
 
 /**
  * Runtime ctx the mount-router hands the mount handler. Structurally a

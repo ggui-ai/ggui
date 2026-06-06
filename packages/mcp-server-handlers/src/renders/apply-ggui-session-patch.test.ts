@@ -7,7 +7,7 @@ import {
 import {
   applyGguiSessionPatch,
   type GguiSessionTarget,
-} from './apply-render-patch.js';
+} from './apply-ggui-session-patch.js';
 
 const PROPS_SPEC: PropsSpec = {
   properties: {

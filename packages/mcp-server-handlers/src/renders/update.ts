@@ -54,7 +54,7 @@ import type { HandlerContext, SharedHandler } from '../types.js';
 import {
   applyGguiSessionPatch,
   type GguiSessionTarget,
-} from './apply-render-patch.js';
+} from './apply-ggui-session-patch.js';
 import {
   deriveRenderMeta,
   type RenderMetaView,

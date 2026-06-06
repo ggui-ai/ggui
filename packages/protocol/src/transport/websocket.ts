@@ -43,7 +43,7 @@ import type {
   DrainAckPayload,
 } from '../types/live-channel';
 import type { HostContextObservedPayload } from '../types/host-context';
-import type { GguiSessionEvent } from '../types/render-event';
+import type { GguiSessionEvent } from '../types/ggui-session-event';
 
 /**
  * WebSocket message types for client-server communication.

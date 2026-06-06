@@ -20,7 +20,7 @@ import type {
   GguiSessionPatch,
   GguiSessionStore,
   StoredGguiSession,
-} from '../render-store.js';
+} from '../ggui-session-store.js';
 
 interface RenderBucket {
   stored: StoredGguiSession;

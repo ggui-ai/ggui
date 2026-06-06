@@ -111,13 +111,13 @@ export {
   createGguiSessionChannelServer,
   DEFAULT_RENDER_CHANNEL_PATH,
   DEFAULT_WIRED_TOOL_TIMEOUT_MS,
-} from './render-channel.js';
+} from './ggui-session-channel.js';
 export type {
   GguiSessionChannelOptions,
   GguiSessionChannelServer,
   WiredActionContext,
   WiredActionRouter,
-} from './render-channel.js';
+} from './ggui-session-channel.js';
 export { resolveStorageFromConfig } from './storage.js';
 export type {
   ResolveStorageFromConfigOptions,

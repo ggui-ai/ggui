@@ -13,7 +13,7 @@ import { InMemoryGguiSessionStore } from '@ggui-ai/mcp-server-core/in-memory';
 import {
   createGguiListSessionsHandler,
   type ListSessionsMintSeam,
-} from './list-renders.js';
+} from './list-sessions.js';
 
 const NOW_MS = Date.parse('2026-05-09T00:00:00.000Z');
 

@@ -10,7 +10,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { ComponentGguiSession } from '@ggui-ai/protocol';
 import { InMemoryGguiSessionStore } from '@ggui-ai/mcp-server-core/in-memory';
-import { createGguiGetSessionHandler } from './get-render.js';
+import { createGguiGetSessionHandler } from './get-session.js';
 import { GguiSessionNotFoundError } from './errors.js';
 
 const NOW_MS = Date.parse('2026-05-09T00:00:00.000Z');

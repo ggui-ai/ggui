@@ -26,7 +26,7 @@ import {
   type GguiSessionStreamBuffer,
   type GguiSessionStreamBufferOptions,
   type StreamEnvelopeInput,
-} from '../render-stream-buffer.js';
+} from '../ggui-session-stream-buffer.js';
 
 interface RenderBucket {
   /** Latest assigned seq for the session. 0 when never recorded. */

@@ -36,7 +36,7 @@ export {
   type ApplyGguiSessionPatchInput,
   type ApplyGguiSessionPatchResult,
   type GguiSessionTarget,
-} from "./apply-render-patch.js";
+} from "./apply-ggui-session-patch.js";
 export { assertActionContract } from "./assert-action-contract.js";
 export {
   assertContractNoRetiredFields,
@@ -108,7 +108,7 @@ export {
   createGguiGetSessionHandler,
   type GetSessionHeartbeatResult,
   type GguiGetSessionHandlerDeps,
-} from "./get-render.js";
+} from "./get-session.js";
 export {
   handleStream,
   type HandleStreamDeps,
@@ -121,7 +121,7 @@ export {
   createGguiListSessionsHandler,
   type GguiListSessionsHandlerDeps,
   type GguiSessionSummaryWire,
-} from "./list-renders.js";
+} from "./list-sessions.js";
 export {
   buildNoCredentialsGguiSession,
   NO_CREDENTIALS_SYSTEM_CARD_KIND,

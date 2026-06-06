@@ -22,7 +22,7 @@ import type {
   AppendEventInput,
   GguiSessionEvent,
   GguiSessionStore,
-} from '../render-store.js';
+} from '../ggui-session-store.js';
 
 export interface GguiSessionStoreContractClock {
   now(): number;

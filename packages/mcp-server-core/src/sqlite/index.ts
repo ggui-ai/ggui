@@ -14,8 +14,8 @@
  * package.json.
  */
 
-export { SqliteGguiSessionStore } from './render-store.js';
-export type { SqliteGguiSessionStoreOptions } from './render-store.js';
+export { SqliteGguiSessionStore } from './ggui-session-store.js';
+export type { SqliteGguiSessionStoreOptions } from './ggui-session-store.js';
 export { SqlitePendingEventConsumer } from './pending-event-consumer.js';
 export type { SqlitePendingEventConsumerOptions } from './pending-event-consumer.js';
 export { SqliteShortCodeIndex } from './short-code-index.js';

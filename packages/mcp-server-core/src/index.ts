@@ -39,8 +39,8 @@ export * from './blueprint-search.js';
 // ladder remains the load-bearing floor.
 export * from './variant-selection.js';
 export * from './variant-selector-with-llm.js';
-export * from './render-store.js';
-export * from './render-stream-buffer.js';
+export * from './ggui-session-store.js';
+export * from './ggui-session-stream-buffer.js';
 export * from './stream-fanout.js';
 export * from './pending-event-consumer.js';
 // Optional active-consumer awareness seam. Tracks which renders
