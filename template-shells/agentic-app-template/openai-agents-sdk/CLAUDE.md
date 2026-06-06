@@ -57,7 +57,7 @@ apps/web (browser SPA)                          servers/agent (LLM backend)
 The agent-facing render tools (discovered via the standard MCP handshake, so
 they need zero glue in `servers/agent`): `ggui_handshake` → `ggui_render` (draw
 a surface) → `ggui_update` / `ggui_emit` (mutate or stream into it) →
-`ggui_consume` (await the next user action) → `ggui_get_render` (read current
+`ggui_consume` (await the next user action) → `ggui_get_session` (read current
 state). You rarely think about these — the tool descriptions teach the agent;
 you just write tools + a posture prompt.
 
