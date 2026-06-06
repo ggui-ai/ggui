@@ -74,13 +74,13 @@ import { ReferenceServer } from './server.js';
  *     `server-version-override` of `'99.99-unsupported'` via the
  *     Slice-K directive. The kit's subscribe carries
  *     `supportedVersions: ['1.1']`; the WS handler reads the
- *     render-scoped override (set on the `GguiSession` record by
+ *     GguiSession-scoped override (set on the `GguiSession` record by
  *     `setVersionOverride()`), notices `'99.99-unsupported'` is not
  *     in the client's accepted set, and emits the canonical
  *     `error{payload.code:'UPGRADE_REQUIRED', serverVersion}` frame.
  *     Proves the version-handshake half of Protocol #3 is observable
  *     end-to-end on the reference server with parallel-fixture
- *     isolation (other renders on the same server still advertise
+ *     isolation (other GguiSessions on the same server still advertise
  *     the canonical default).
  *
  *   - `observability-contract-error-emitted` /

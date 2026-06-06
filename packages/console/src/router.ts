@@ -21,7 +21,7 @@
  *       /                       → admin-index (lands on Status)
  *       /admin                  → admin-index — same as /
  *       /admin/status           → server / pairing / capabilities / storage
- *       /admin/sessions          → active render list
+ *       /admin/sessions          → active GguiSession list
  *       /admin/blueprints       → registered blueprint + primitive catalog
  *       /admin/variants         → variant management (list, grouped by contract)
  *       /admin/variants/:hash   → per-contract variant detail (A/B compare)

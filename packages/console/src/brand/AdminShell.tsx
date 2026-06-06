@@ -53,7 +53,7 @@ const GROUPS: readonly RailGroup[] = [
     label: 'server',
     items: [
       { label: 'status', path: '/admin/status', match: 'admin-status' },
-      { label: 'renders', path: '/admin/sessions', match: 'admin-sessions' },
+      { label: 'sessions', path: '/admin/sessions', match: 'admin-sessions' },
       {
         label: 'blueprints',
         path: '/admin/blueprints',

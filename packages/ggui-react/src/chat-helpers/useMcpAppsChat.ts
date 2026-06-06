@@ -815,11 +815,11 @@ export function handleEvent(
  * Snapshot returned by `GET <snapshotEndpoint>?chatId=<id>`. `messages`
  * is the verbatim SDK message stream the server observed during the
  * live conversation (replayed through `handleEvent` to rebuild the chat
- * panel). `renders` is an optional list of resource URIs (mounted
+ * panel). `sessions` is an optional list of resource URIs (mounted
  * directly for any iframe whose URI didn't ride inline on a recorded
  * SDKMessage).
  *
- * Servers may omit `renders` entirely when the SDK preserves `_meta` on
+ * Servers may omit `sessions` entirely when the SDK preserves `_meta` on
  * tool_use_result (the replay path mounts iframes by itself).
  */
 interface ChatSnapshotResponse {

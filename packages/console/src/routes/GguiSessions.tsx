@@ -3,12 +3,12 @@
  *
  * Operator-facing "what's live right now?" list. Reads
  * `GET /ggui/console/sessions` on mount and paints one entry card per
- * active render. Each row surfaces the render's `sessionId`, `appId`,
+ * active GguiSession. Each row surfaces the session's `sessionId`, `appId`,
  * status, and (when bound) its `shortCode`.
  *
  * Scope:
  *
- *   - Active renders only. Completed / expired states need server
+ *   - Active GguiSessions only. Completed / expired states need server
  *     surface we don't expose yet; the endpoint pins `status:
  *     'active'` so every row the SPA sees is live.
  *   - No per-row polling. Single fetch on mount; operators reload
@@ -107,12 +107,12 @@ export function GguiSessions(): ReactElement {
   return (
     <section className="ggui-section">
       <SectionHead
-        num="01 / renders"
-        title="Live renders."
+        num="01 / sessions"
+        title="Live sessions."
         mute="Active only — render from an agent to create one."
         intro={
           <>
-            Every row is an active render on this server. A render has a{' '}
+            Every row is an active GguiSession on this server. A session has a{' '}
             <code className="ggui-code">shortCode</code> once one is
             minted by <code className="ggui-code">ggui_render</code>.
           </>

@@ -60,7 +60,7 @@ export const emitInputSchema = z.object({
     .describe('True marks the stream complete; subsequent emits on this channel reject.'),
 }).strict();
 
-export const getRenderInputSchema = z.object({
+export const getSessionInputSchema = z.object({
   sessionId: z.string().describe('GguiSession opaque id (UUID) — returned by ggui_render.'),
 }).strict();
 

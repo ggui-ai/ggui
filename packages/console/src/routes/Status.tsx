@@ -408,7 +408,7 @@ function StorageCard({
  *
  * Rationale: this component is the dashboard's answer to "what's live
  * right now?" — first thing visible, with a one-click link to the
- * full renders list at `/admin/sessions`.
+ * full GguiSessions list at `/admin/sessions`.
  */
 function LiveGguiSessionsHero({
   state,

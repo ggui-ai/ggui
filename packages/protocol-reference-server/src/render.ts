@@ -83,7 +83,7 @@ export interface Subscriber {
 }
 
 /**
- * In-memory GguiSession store. Wraps a `Map<sessionId, GguiSession>` with
+ * In-memory GguiSession store. Wraps a `Map<sessionId, GguiSession>` keyed by sessionId with
  * the operations the ConformanceHost adapter + WS subscribe handler
  * need. No locking — JS single-threaded; all calls originate from
  * the event loop.
