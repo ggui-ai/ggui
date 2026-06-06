@@ -37,8 +37,8 @@
  */
 
 /**
- * Append-only ledger event for one render. Each event carries a
- * monotonic `seq` that is gap-free within a single render, starting
+ * Append-only ledger event for one GguiSession. Each event carries a
+ * monotonic `seq` that is gap-free within a single GguiSession, starting
  * at 1.
  *
  * Discriminator is `type`; `data` is type-specific and structurally

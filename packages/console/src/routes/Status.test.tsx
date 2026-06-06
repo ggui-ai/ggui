@@ -9,7 +9,7 @@
  *   - active  → rail with per-row shortCode + "view all" link
  *
  * The underlying fetch is stubbed so tests don't hit the real server.
- * Status fires two parallel fetches (`/info` + `/renders?limit=3`);
+ * Status fires two parallel fetches (`/info` + `/sessions?limit=3`);
  * the tests reply to both via a URL-routing stub.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -162,7 +162,7 @@ describe('Status — live-renders hero', () => {
       ).toBe('2');
     });
     const eyebrow = document.querySelector('.ggui-status-hero__eyebrow');
-    expect(eyebrow?.textContent).toMatch(/2 renders/);
+    expect(eyebrow?.textContent).toMatch(/2 sessions/);
   });
 
   it('navigates to the renders list on "view all →" click', async () => {

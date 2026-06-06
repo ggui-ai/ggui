@@ -203,7 +203,7 @@ export function Chat({ agentEndpoint, sandboxUrl }: ChatProps) {
   const newSession = useCallback(() => {
     // Stop any in-flight stream so its tail doesn't bleed into the fresh
     // conversation, then drop the URL chat param + local state. Clearing
-    // `chatId` makes useMcpAppsChat reset entries/renders; the next POST
+    // `chatId` makes useMcpAppsChat reset entries/sessions; the next POST
     // allocates a fresh server-side chatId, which lands via
     // onChatAllocated.
     abort();

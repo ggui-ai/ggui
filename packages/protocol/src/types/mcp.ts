@@ -227,7 +227,7 @@ export interface ConsumeEventEntry {
 export interface GguiConsumeOutput {
   /** Buffered consume-entries (cleared after return). */
   events: ConsumeEventEntry[];
-  /** GguiSession status — `'expired'` means the render's TTL elapsed and
+  /** GguiSession status — `'expired'` means the GguiSession's TTL elapsed and
    *  no more events will arrive; the agent's long-poll loop terminates. */
   status: GguiSessionStatus;
   /**

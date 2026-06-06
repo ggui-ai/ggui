@@ -714,7 +714,7 @@ form button:disabled {
   height: 480px;
 }
 
-/* Loading shimmer for renders before McpAppIframe paints */
+/* Loading shimmer for sessions before McpAppIframe paints */
 .render-frame.loading::before {
   content: "";
   position: absolute;

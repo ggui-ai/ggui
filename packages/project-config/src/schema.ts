@@ -423,8 +423,8 @@ const StorageSurfaceSchema = z.discriminatedUnion('driver', [
 ]);
 
 const StorageSchema = z.strictObject({
-  /** Render persistence (events + identity). Absent = in-memory
-   * (renders reset on restart). */
+  /** GguiSession persistence (events + identity). Absent = in-memory
+   * (sessions reset on restart). */
   renders: StorageSurfaceSchema.optional(),
   /** Vector index persistence (RAG, blueprint embeddings). Absent =
    * in-memory (index rebuilds on restart). */

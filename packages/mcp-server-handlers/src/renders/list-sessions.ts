@@ -40,7 +40,7 @@ const inputSchema = {
     .min(1)
     .optional()
     .describe(
-      'Filter by host identifier — `sample`, `claude.ai`, `chatgpt`, etc. When paired with `hostSessionId`, returns the renders for one specific host-conversation. When passed alone, returns every render this host has ever opened for the current user / app.',
+      'Filter by host identifier — `sample`, `claude.ai`, `chatgpt`, etc. When paired with `hostSessionId`, returns the GguiSessions for one specific host-conversation. When passed alone, returns every GguiSession this host has ever opened for the current user / app.',
     ),
   hostSessionId: z
     .string()
@@ -56,7 +56,7 @@ const inputSchema = {
     .max(200)
     .optional()
     .describe(
-      'Maximum number of render summaries to return. Defaults to 50; capped at 200. Newest-last ordering matches the natural conversation timeline.',
+      'Maximum number of GguiSession summaries to return. Defaults to 50; capped at 200. Newest-last ordering matches the natural conversation timeline.',
     ),
 } as const;
 

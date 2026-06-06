@@ -418,7 +418,7 @@ function LiveGguiSessionsHero({
   if (state.kind === 'loading') {
     return (
       <div className="ggui-status-hero" data-ggui-status-hero="loading">
-        <p className="ggui-muted">Loading live renders…</p>
+        <p className="ggui-muted">Loading live sessions…</p>
       </div>
     );
   }
@@ -440,11 +440,11 @@ function LiveGguiSessionsHero({
         <div className="ggui-status-hero__head">
           <span className="ggui-status-hero__eyebrow">
             <StatusBadge tone="ink">idle</StatusBadge>
-            <span>live renders</span>
+            <span>live sessions</span>
           </span>
         </div>
         <p className="ggui-muted" style={{ margin: 0 }}>
-          No renders yet. Open{' '}
+          No sessions yet. Open{' '}
           <button
             type="button"
             className="ggui-link"
@@ -472,7 +472,7 @@ function LiveGguiSessionsHero({
         <span className="ggui-status-hero__eyebrow">
           <StatusBadge tone="live">live</StatusBadge>
           <span>
-            {all.length} {all.length === 1 ? 'render' : 'renders'}
+            {all.length} {all.length === 1 ? 'session' : 'sessions'}
           </span>
         </span>
       </div>

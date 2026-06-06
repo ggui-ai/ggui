@@ -19,7 +19,7 @@
  * contract suite still applies at the server layer and the
  * validators themselves are unit-tested in `wire-contract.test.ts`.
  *
- * Post-Phase-B: the legacy GguiSession + multi-item stack collapsed to
+ * Post-Phase-B: the legacy Session vessel + multi-item stack collapsed to
  * a single GguiRender mount; envelopes carry `sessionId` only.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';

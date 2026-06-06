@@ -87,7 +87,7 @@ Or skip authoring and point the agent at an **existing third-party MCP** — jus
 add its URL to the agent's MCP config.
 
 ### 3. The frontend
-`apps/web` is a Vite SPA that calls the agent backend and mounts renders via
+`apps/web` is a Vite SPA that calls the agent backend and mounts sessions via
 `<AppRenderer>`. Edit `apps/web/src/App.tsx` to tweak the chat shell (header,
 layout). It owns no secrets and runs no server logic.
 

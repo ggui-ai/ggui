@@ -121,11 +121,11 @@ export function GguiSessions(): ReactElement {
 
       {state.kind === 'loading' ? (
         <StatusCard title="loading" num="REN / 01" tone="draft">
-          Loading renders…
+          Loading sessions…
         </StatusCard>
       ) : state.kind === 'error' ? (
         <StatusCard title="error" num="ERR / 01" tone="signal">
-          Couldn&apos;t load renders — {state.message}.
+          Couldn&apos;t load sessions — {state.message}.
         </StatusCard>
       ) : (
         <>
@@ -172,11 +172,11 @@ function GguiSessionList({
     <div
       data-ggui-sessions-list
       className="ggui-stack"
-      aria-label="active renders"
+      aria-label="active sessions"
     >
       <div className="ggui-stack__head">
         <span className="ggui-stack__num">REN</span>
-        <span className="ggui-stack__label">live renders</span>
+        <span className="ggui-stack__label">live sessions</span>
         <span className="ggui-stack__count">
           {shown.length}
           {filterActive && shown.length !== all.length ? ` / ${all.length}` : ''}
@@ -184,7 +184,7 @@ function GguiSessionList({
       </div>
       {shown.length === 0 ? (
         <p className="ggui-muted" style={{ margin: 0, padding: 12 }}>
-          No renders match the filter.
+          No sessions match the filter.
         </p>
       ) : (
         <ul className="ggui-stack__list">
@@ -287,10 +287,10 @@ function EmptyGguiSessions(): ReactElement {
         <span className="ggui-card__num">REN / 00</span>
       </div>
       <div className="ggui-card__body">
-        <p className="ggui-body">No renders yet.</p>
+        <p className="ggui-body">No sessions yet.</p>
         <p className="ggui-muted">
           Render from an agent (<code className="ggui-code">ggui_render</code>)
-          to start a generation — new renders appear here on reload.
+          to start a generation — new sessions appear here on reload.
         </p>
       </div>
     </div>

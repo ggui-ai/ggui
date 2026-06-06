@@ -129,13 +129,13 @@ export interface GguiSessionBase {
    * host's opaque grouping key for "this conversation" — typically
    * the host's thread/chat id.
    *
-   * Multiple renders inside one host conversation share the same
+   * Multiple GguiSessions inside one host conversation share the same
    * `hostSessionId`. The `ggui_list_sessions(hostName, hostSessionId)`
-   * tool enumerates renders belonging to a host conversation; absent
-   * `hostSession` ⇒ the render is one-shot (functional but
+   * tool enumerates GguiSessions belonging to a host conversation; absent
+   * `hostSession` ⇒ the GguiSession is one-shot (functional but
    * non-rehydratable).
    *
-   * Once captured, immutable for the render's lifetime.
+   * Once captured, immutable for the GguiSession's lifetime.
    */
   readonly hostSession?: {
     readonly hostName: string;
@@ -166,7 +166,7 @@ export interface GguiSessionBase {
   /**
    * Per-render Web Permissions API status map. Populated as the user
    * grants / denies adapter requests (geolocation, camera, etc.) over
-   * the render's lifetime.
+   * the GguiSession's lifetime.
    */
   readonly adapterPermissions?: AdapterPermissions;
   /** Resolved lifecycle status. Absent ⇒ caller treats as `'active'`. */

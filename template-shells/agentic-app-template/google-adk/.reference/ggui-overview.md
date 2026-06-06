@@ -12,7 +12,7 @@
 | `servers/agent` | The LLM agent (your SDK). Connects to MCP servers; owns the chat loop. |
 | `servers/ggui`  | `ggui serve` — generates + serves the UI. Configured by `ggui.json`. |
 | `servers/mcps/*`| Your **domain tools** as MCP servers (the worked example: `todo`). |
-| `apps/web`      | A Vite SPA that mounts renders via `<AppRenderer>` (`@ggui-ai/react`). |
+| `apps/web`      | A Vite SPA that mounts sessions via `<AppRenderer>` (`@ggui-ai/react`). |
 
 ## The loop
 

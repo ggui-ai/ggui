@@ -19,7 +19,7 @@ A pnpm monorepo with three backend servers + one frontend SPA, ready to run:
 | `servers/agent`       | The agent — `@openai/agents` + an HTTP API the frontend hits.       |
 | `servers/ggui`        | A `ggui serve` config — turns the agent's render calls into a live UI. |
 | `servers/mcps/todo`   | A standalone MCP server (todo CRUD) — the agent's domain tools.     |
-| `apps/web`            | A Vite SPA frontend that mounts the agent's renders in iframes.     |
+| `apps/web`            | A Vite SPA frontend that mounts the agent's sessions in iframes.     |
 
 Together they demonstrate the full loop: you chat → the agent calls domain
 tools and renders a React UI → you click in that UI → the agent reacts.
@@ -84,7 +84,7 @@ auto-registers each from a `GGUI_<NAME>_MCP_URL` env var — no wiring code. See
 ### 3. Customize the frontend
 
 `apps/web` is a Vite SPA that talks to your agent backend over HTTP. It uses
-`@ggui-ai/react`'s `<AppRenderer>` to mount the agent's renders in iframes.
+`@ggui-ai/react`'s `<AppRenderer>` to mount the agent's sessions in iframes.
 Edit `apps/web/src/App.tsx` to tweak the chat shell.
 
 ### 4. Customize the ggui server
