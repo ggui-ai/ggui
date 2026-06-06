@@ -89,7 +89,7 @@ describe('extractUiMoments', () => {
           sessionId: 'session_abc',
           source: {
             kind: 'render-resource',
-            url: 'https://api.example.test/api/sessions/render_abc/resource',
+            url: 'https://api.example.test/api/sessions/session_abc/resource',
           },
         },
       ]);
@@ -124,7 +124,7 @@ describe('extractUiMoments', () => {
       expect(out[0]?.source.kind).toBe('render-resource');
       if (out[0]?.source.kind === 'render-resource') {
         expect(out[0].source.url).toBe(
-          'https://api.example.test/api/sessions/render_p/resource',
+          'https://api.example.test/api/sessions/session_p/resource',
         );
       }
     });
