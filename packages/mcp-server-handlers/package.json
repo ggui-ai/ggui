@@ -84,24 +84,18 @@
     "@ggui-ai/negotiator": "workspace:*",
     "@ggui-ai/protocol": "workspace:*",
     "@ggui-ai/ui-gen": "workspace:*",
-    "@ggui-ai/ui-registry": "workspace:*"
-  },
-  "peerDependencies": {
-    "zod": "^3.0.0"
+    "@ggui-ai/ui-registry": "workspace:*",
+    "zod": "^4.3.6"
   },
   "peerDependenciesMeta": {
     "vitest": {
       "optional": true
-    },
-    "zod": {
-      "optional": false
     }
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
     "typescript": "^5.0.0",
-    "vitest": "^3.0.0",
-    "zod": "^4.3.6"
+    "vitest": "^3.0.0"
   },
   "repository": {
     "type": "git",

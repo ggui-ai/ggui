@@ -307,7 +307,7 @@
     "memfs": "^4.56.11",
     "openai": "^6.29.0",
     "typescript": "^5.0.0",
-    "zod": "^4.0.0"
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "@ggui-ai/mcp-server-core": "workspace:*",
