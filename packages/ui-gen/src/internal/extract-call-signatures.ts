@@ -83,7 +83,7 @@ const componentPropsCache = new Map<string, ComponentPropsMap>();
  */
 interface ExtractorContext {
   readonly checker: ts.TypeChecker;
-  /** GguiSession a `ts.Type` as a self-contained, prompt-ready expression. */
+  /** Render a `ts.Type` as a self-contained, prompt-ready expression. */
   readonly renderType: (t: ts.Type, depth: number) => string;
   /**
    * Requested export name → its resolved call signatures, in
@@ -196,7 +196,7 @@ function buildExtractorContext(
     return decls.some((d) => d.getSourceFile().fileName === VIRTUAL_DTS_PATH);
   }
 
-  // GguiSession a single `ts.Type` as a self-contained TS type expression.
+  // Render a single `ts.Type` as a self-contained TS type expression.
   //
   // The TS node builder keeps a type's NAME whenever that name is
   // reachable in the program — for a `.d.ts` whose option/value types
@@ -369,7 +369,7 @@ function printCallSignature(sig: ts.Signature, ctx: ExtractorContext): string {
 }
 
 /**
- * GguiSession a function component's props — the first parameter's type,
+ * Render a function component's props — the first parameter's type,
  * structurally expanded into a self-contained object type. A
  * zero-parameter component yields `{}`. Returns `undefined` when the
  * expander bottoms out on an unresolvable token.

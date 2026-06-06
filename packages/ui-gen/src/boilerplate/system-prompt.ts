@@ -108,7 +108,7 @@ const SCREEN_DESCRIPTIONS: Record<string, string> = {
 };
 
 /**
- * GguiSession the `clientCapabilities — registered catalog` table from the
+ * Render the `clientCapabilities — registered catalog` table from the
  * per-app gadget catalog. Each registered gadget renders one row
  * with hook + permission + the `description`-or-`usage` field as the
  * "what it does" column. Permission falls back to `(none)` when the

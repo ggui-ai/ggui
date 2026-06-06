@@ -453,7 +453,7 @@ describe('generateBoilerplate — clientCapabilities.gadgets emits direct gadget
             {
               component: 'LeafletMap',
               description: 'Interactive Leaflet map',
-              usage: 'GguiSession when the intent names a rendered map',
+              usage: 'Render when the intent names a rendered map',
             },
           ],
         },

@@ -23,7 +23,7 @@ const leaflet: GadgetDescriptor = {
   exports: [
     {
       hook: "useLeafletMap",
-      description: "GguiSession an interactive Leaflet map.",
+      description: "Render an interactive Leaflet map.",
       usage: "Mount when intent names a rendered map.",
     },
   ],

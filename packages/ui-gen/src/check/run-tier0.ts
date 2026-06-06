@@ -860,7 +860,7 @@ export async function runTier0Checks(
           issues.push({
             tier: 0, result: 'warn', category: 'contract', subcategory: `stream:${channelName}`,
             description: `Stream hook '${channelName}' from contract is declared but never rendered in the component`,
-            fix: `GguiSession ${channelName}.latest data in the JSX (with null guard: ${channelName}.latest && ...)`,
+            fix: `Render ${channelName}.latest data in the JSX (with null guard: ${channelName}.latest && ...)`,
           });
         }
       }
@@ -941,7 +941,7 @@ export async function runTier0Checks(
           issues.push({
             tier: 0, result: 'warn', category: 'contract', subcategory: `prop:${propName}`,
             description: `Props field '${propName}' from contract is never rendered — data is wasted`,
-            fix: `GguiSession props.${propName} in the JSX (e.g., <Text>{props.${propName}}</Text>)`,
+            fix: `Render props.${propName} in the JSX (e.g., <Text>{props.${propName}}</Text>)`,
           });
         }
       }

@@ -5,7 +5,7 @@
 // Pipeline:
 //   1. Spin up happy-dom globals (window/document/etc.)
 //   2. Eval compiled component → React component reference
-//   3. GguiSession it inside <GguiWireProvider config={probeWireConfig}>
+//   3. Render it inside <GguiWireProvider config={probeWireConfig}>
 //   4. Run 5 checks against probe + DOM
 //   5. Tear down DOM
 //
@@ -266,7 +266,7 @@ export async function runRenderCheck(
     //   "%s\n\nThe above error occurred in the <%s> component:\n%s\n..."
     // The 4th argument is the component-stack string ("    at SurveyForm
     // (...) \n    at FormProvider (...) \n..."). We capture it so the
-    // probe's "GguiSession threw" diagnostic can name the offending component.
+    // probe's "Render threw" diagnostic can name the offending component.
     let capturedComponentStack: string | null = null;
     const loopPatterns: ReadonlyArray<readonly [RegExp, string]> = [
       [/Maximum update depth exceeded/i, "max-update-depth"],
@@ -376,8 +376,8 @@ export async function runRenderCheck(
       const baseReason = loopSignature
         ? `Infinite render loop (${loopSignature}) — likely setState/dispatch inside useEffect with missing or unstable dependency`
         : /runtime-hang/.test(msg)
-          ? `GguiSession wall-clock exceeded ${RENDER_TIMEOUT_MS}ms — likely async effect loop or unresolved promise`
-          : `GguiSession threw: ${msg}`;
+          ? `Render wall-clock exceeded ${RENDER_TIMEOUT_MS}ms — likely async effect loop or unresolved promise`
+          : `Render threw: ${msg}`;
       // Localization context for the LLM. Two complementary signals:
       //   1. JS error.stack — top frames from the throw site. Filter to
       //      user-code lines (drop happy-dom / RTL / React internals)
@@ -440,7 +440,7 @@ export async function runRenderCheck(
       issues.push({
         check: "render-no-throw",
         outcome: "failed",
-        reason: `GguiSession threw: ${errMsg}${compBlock}`,
+        reason: `Render threw: ${errMsg}${compBlock}`,
       });
       cleanup();
       return finalize(issues, t0, 0, 0, 0, 0);
@@ -627,7 +627,7 @@ export function installGadgetStubRegistry(
       pkgSlot[use.name] = () => resultStub;
     } else {
       // Component export (PascalCase) — React invokes it as a
-      // function component. GguiSession nothing: the gadget stays a
+      // function component. Render nothing: the gadget stays a
       // well-behaved black box while the host component's own render
       // tree is the thing under verification.
       pkgSlot[use.name] = () => null;

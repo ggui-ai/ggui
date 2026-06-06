@@ -116,7 +116,7 @@ function runOptionListsConsumed(input: AxisCheckInput): EvalIssue[] {
       mkIssue(
         "state.payload.option_lists_consumed",
         reason,
-        `GguiSession options with \`props.${name}.map(option => <RadioOption value={option} ... />)\`.`,
+        `Render options with \`props.${name}.map(option => <RadioOption value={option} ... />)\`.`,
       ),
     );
   }

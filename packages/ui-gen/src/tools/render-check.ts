@@ -195,30 +195,30 @@ export async function tryRender(
   });
 
   if (result.outcome === 'timeout') {
-    return `GguiSession timeout: component did not finish within ${RENDER_TIMEOUT_MS}ms (likely infinite loop or runaway recursion).`;
+    return `Render timeout: component did not finish within ${RENDER_TIMEOUT_MS}ms (likely infinite loop or runaway recursion).`;
   }
   if (result.outcome === 'overflow-stdout' || result.outcome === 'overflow-stderr') {
-    return `GguiSession error: worker produced excessive output (${result.outcome}). The component is likely in a pathological state.`;
+    return `Render error: worker produced excessive output (${result.outcome}). The component is likely in a pathological state.`;
   }
   if (result.outcome === 'canceled') {
-    return 'GguiSession error: smoke test was canceled before completing.';
+    return 'Render error: smoke test was canceled before completing.';
   }
   if (result.outcome === 'spawn-error') {
-    return `GguiSession error: failed to start worker — ${result.errorMessage}`;
+    return `Render error: failed to start worker — ${result.errorMessage}`;
   }
   if (result.outcome !== 'exit') {
-    return `GguiSession error: unexpected sandbox outcome '${result.outcome}'.`;
+    return `Render error: unexpected sandbox outcome '${result.outcome}'.`;
   }
 
   // Worker exited cleanly. Parse its verdict.
   if (result.exitCode !== 0) {
     const tail = result.stderr.trim() || result.stdout.trim();
-    return `GguiSession error: worker exited ${result.exitCode}${tail ? ` — ${tail}` : ''}`;
+    return `Render error: worker exited ${result.exitCode}${tail ? ` — ${tail}` : ''}`;
   }
 
   const stdout = result.stdout.trim();
   if (stdout.length === 0) {
-    return 'GguiSession error: worker exited without producing a verdict.';
+    return 'Render error: worker exited without producing a verdict.';
   }
 
   type Verdict = { ok: true } | { ok: false; error: string };
@@ -226,7 +226,7 @@ export async function tryRender(
   try {
     verdict = JSON.parse(stdout) as Verdict;
   } catch (err) {
-    return `GguiSession error: malformed worker verdict — ${
+    return `Render error: malformed worker verdict — ${
       err instanceof Error ? err.message : String(err)
     }`;
   }

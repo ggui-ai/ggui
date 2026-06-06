@@ -16,21 +16,21 @@ export const realtimeFragments: Record<string, HarnessFragment> = {
     value: "merge",
     cacheTier: "axisDelta",
     promptText:
-      "## Realtime: merge\nStream events carry an id; merge into LOCAL STATE. Subscribing alone is not enough — the local list must update on each event for the DOM to re-render.\n\n```tsx\nconst stream = useStream<UpdateT>('streamName');\nconst [items, setItems] = useState(props.items);\nuseEffect(() => {\n  if (!stream.latest) return;\n  setItems((prev) => prev.map((it) => it.id === stream.latest!.id ? { ...it, ...stream.latest } : it));\n}, [stream.latest]);\n// GguiSession `items.map(...)` — NOT props.items, NOT stream.all.\n```\n\nNever append — stream=merge means the entity already exists locally.",
+      "## Realtime: merge\nStream events carry an id; merge into LOCAL STATE. Subscribing alone is not enough — the local list must update on each event for the DOM to re-render.\n\n```tsx\nconst stream = useStream<UpdateT>('streamName');\nconst [items, setItems] = useState(props.items);\nuseEffect(() => {\n  if (!stream.latest) return;\n  setItems((prev) => prev.map((it) => it.id === stream.latest!.id ? { ...it, ...stream.latest } : it));\n}, [stream.latest]);\n// Render `items.map(...)` — NOT props.items, NOT stream.all.\n```\n\nNever append — stream=merge means the entity already exists locally.",
   },
   append: {
     axis: "realtime",
     value: "append",
     cacheTier: "axisDelta",
     promptText:
-      "## Realtime: append\nStream events are new entities; APPEND to local state. Subscribing alone is not enough — the local list must update for the DOM to re-render.\n\n```tsx\nconst stream = useStream<EventT>('streamName');\nconst [items, setItems] = useState(props.items);\nuseEffect(() => {\n  if (!stream.latest) return;\n  setItems((prev) => [...prev, stream.latest!]);\n}, [stream.latest]);\n// GguiSession `items.map(...)` — NOT props.items, NOT stream.all (which accumulates only post-mount).\n```\n\nUse head for newest-first, tail for chat-style. Cap list length if needed. Do not dedupe unless the contract guarantees at-most-once.",
+      "## Realtime: append\nStream events are new entities; APPEND to local state. Subscribing alone is not enough — the local list must update for the DOM to re-render.\n\n```tsx\nconst stream = useStream<EventT>('streamName');\nconst [items, setItems] = useState(props.items);\nuseEffect(() => {\n  if (!stream.latest) return;\n  setItems((prev) => [...prev, stream.latest!]);\n}, [stream.latest]);\n// Render `items.map(...)` — NOT props.items, NOT stream.all (which accumulates only post-mount).\n```\n\nUse head for newest-first, tail for chat-style. Cap list length if needed. Do not dedupe unless the contract guarantees at-most-once.",
   },
   status: {
     axis: "realtime",
     value: "status",
     cacheTier: "axisDelta",
     promptText:
-      "## Realtime: status\nStream replaces a singleton (e.g., marketStatus, rideStatus). `stream.latest` is the current value — bind directly into JSX, no local state needed for the singleton itself:\n\n```tsx\nconst statusStream = useStream<StatusT>('streamName');\nconst status = statusStream.latest;\n// GguiSession `<Badge>{status?.state ?? 'loading'}</Badge>`.\n```\n\nIf you also need the timestamp of the last update, derive it from `useEffect` on `statusStream.latest`.",
+      "## Realtime: status\nStream replaces a singleton (e.g., marketStatus, rideStatus). `stream.latest` is the current value — bind directly into JSX, no local state needed for the singleton itself:\n\n```tsx\nconst statusStream = useStream<StatusT>('streamName');\nconst status = statusStream.latest;\n// Render `<Badge>{status?.state ?? 'loading'}</Badge>`.\n```\n\nIf you also need the timestamp of the last update, derive it from `useEffect` on `statusStream.latest`.",
   },
   presence: {
     axis: "realtime",
