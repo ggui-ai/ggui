@@ -85,9 +85,9 @@ export type WireStreamPayload<T, N extends string> =
  * `dispatch(name, data)` and the optional `nextStep` field on the
  * action entry names the tool the agent SHOULD invoke next.
  *
- * The renderer mounts exactly ONE render per iframe — `render.sessionId`
+ * The renderer mounts exactly ONE GguiSession per iframe — `render.sessionId`
  * is the stable identity the WireProvider was constructed with. No
- * per-item scoping factory; with a one-render-per-mount lifecycle,
+ * per-item scoping factory; with a one-GguiSession-per-mount lifecycle,
  * "scope" collapses to identity.
  */
 export interface WireConfig<T extends DataContract = DataContract> {

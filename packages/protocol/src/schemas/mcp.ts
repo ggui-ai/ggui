@@ -54,7 +54,7 @@ export const consumeInputSchema = z.object({
 export const emitInputSchema = z.object({
   sessionId: z.string().describe('GguiSession opaque id (UUID) — returned by ggui_render.'),
   channel: z.string()
-    .describe('Channel name declared on the active render streamSpec.'),
+    .describe('Channel name declared on the active GguiSession streamSpec.'),
   payload: z.unknown().describe('Payload — must match streamSpec[channel].schema.'),
   complete: z.boolean().optional()
     .describe('True marks the stream complete; subsequent emits on this channel reject.'),
@@ -86,7 +86,7 @@ export const discoverInputSchema = z.object({}).strict();
 export const requestCredentialInputSchema = z.object({
   serviceId: z.string().describe('OAuth service ID (e.g., "bashdoor", "ubot")'),
   reason: z.string().optional().describe('Why the agent needs this credential (shown to user)'),
-  sessionId: z.string().optional().describe('Existing render id to render consent UI into.'),
+  sessionId: z.string().optional().describe('Existing GguiSession id to render consent UI into.'),
 }).strict();
 
 // ── Post-Phase-B — canonical tool triad ──

@@ -7,7 +7,7 @@
  *   - `/`                    → admin-index → mounts {@link Status}
  *   - `/admin`               → admin-index → mounts {@link Status}
  *   - `/admin/status`        → {@link Status}
- *   - `/admin/sessions`       → {@link Renders}
+ *   - `/admin/sessions`       → {@link GguiSessions}
  *   - `/admin/blueprints`    → {@link Blueprints}
  *   - `/admin/variants`      → {@link BlueprintVariants}
  *   - `/admin/variants/:hash`         → {@link BlueprintVariantDetail}
@@ -52,7 +52,7 @@ import { Config } from './routes/Config.js';
 import { Devtools } from './routes/Devtools.js';
 import { Keys } from './routes/Keys.js';
 import { McpInspector } from './routes/McpInspector.js';
-import { Renders } from './routes/Renders.js';
+import { GguiSessions } from './routes/GguiSessions.js';
 import { Status } from './routes/Status.js';
 import { Theme } from './routes/Theme.js';
 import { getStableRoute, navigateTo, onRouteChange, type Route, isDevtoolsRoute } from './router.js';
@@ -101,7 +101,7 @@ export function App(): ReactElement {
   if (route.kind === 'admin-sessions') {
     return (
       <Shell route={route} variant="admin">
-        <Renders />
+        <GguiSessions />
       </Shell>
     );
   }

@@ -43,7 +43,7 @@ const SERVICE_RESTART_RECONNECT_DELAY_MS = 100;
  */
 const NEVER_OPENED_FAIL_FAST_THRESHOLD = 2;
 // Bumped from 50 → 500 at B3 (parity with the retired
-// `RendererWebSocketManager`) — chatty stack items during a long
+// `RendererWebSocketManager`) — chatty outbound frames during a long
 // disconnect can buffer more than 50 outbound frames before the
 // reconnect ladder lands.
 const OUTBOUND_QUEUE_LIMIT = 500;

@@ -128,10 +128,10 @@ export function createGguiListSessionsHandler(
 ): SharedHandler<typeof inputSchema, typeof outputSchema, ListSessionsOutput> {
   return {
     name: 'ggui_list_sessions',
-    title: 'List renders',
+    title: 'List GguiSessions',
     audience: ['agent'],
     description:
-      'List ggui renders scoped to the caller, optionally narrowed to a host conversation. Pass `hostName` + `hostSessionId` (the same pair the host set on `_meta["ai.ggui/host-session"]` at render creation) to find the renders belonging to one chat conversation. Pass `hostName` alone to list every render opened by that host for this caller. Pass nothing for every render this caller owns. Renders without a host slice (opt-out hosts) never appear in host-scoped queries.',
+      'List ggui sessions scoped to the caller, optionally narrowed to a host conversation. Pass `hostName` + `hostSessionId` (the same pair the host set on `_meta["ai.ggui/host-session"]` at render creation) to find the GguiSessions belonging to one chat conversation. Pass `hostName` alone to list every GguiSession opened by that host for this caller. Pass nothing for every GguiSession this caller owns. GguiSessions without a host slice (opt-out hosts) never appear in host-scoped queries.',
     inputSchema,
     outputSchema,
     async handler(

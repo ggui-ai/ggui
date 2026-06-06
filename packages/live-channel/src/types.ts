@@ -87,7 +87,7 @@ export interface RegistryPollingOptions {
    * Return `null` when nothing changed since the last poll — the
    * transport skips dispatch entirely. Empty `{}` is distinct from
    * `null`: it means "snapshot parsed but no handlers matched today's
-   * keys" (e.g. session-only, no stack-item slice).
+   * keys" (e.g. session-only, no render slice).
    */
   parseSnapshot(body: unknown): Record<string, ChannelFrame> | null;
 }

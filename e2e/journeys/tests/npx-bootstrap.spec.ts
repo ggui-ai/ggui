@@ -25,7 +25,7 @@
  *   3. `tools/list` over real MCP JSON-RPC surfaces `ggui_render` with the
  *      `_meta.ui.resourceUri` + `_meta.ui.visibility` entry-point stamp
  *      per `docs/plans/2026-04-17-ggui-oss-split.md` §2.4.1.
- *   4. `tools/call ggui_render` creates a render, returns a structured
+ *   4. `tools/call ggui_render` creates a GguiSession, returns a structured
  *      sessionId tuple, and carries the post-Phase-B slice envelope at
  *      `_meta["ai.ggui/render"]`.
  *   5. `GET /` serves the console landing bundle with the CSP /

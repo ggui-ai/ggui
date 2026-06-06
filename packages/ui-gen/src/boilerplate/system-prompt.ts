@@ -330,7 +330,7 @@ Renaming a binding is fine — the wiring is the string-literal argument, not th
 
 ## Contract surface — four specs + two catalogs
 
-A \`DataContract\` declares everything a render exchanges with the outside world. **Four typed specs** for the four data-flow directions, **two reference catalogs** for tool / hook lookups:
+A \`DataContract\` declares everything a GguiSession exchanges with the outside world. **Four typed specs** for the four data-flow directions, **two reference catalogs** for tool / hook lookups:
 
 | Surface              | Direction                  | Role                                                                 |
 | -------------------- | -------------------------- | -------------------------------------------------------------------- |

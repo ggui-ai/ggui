@@ -35,7 +35,7 @@ const TIMEOUT_MS = 500;
 /**
  * One inbound action frame shape. Matches the fixtures' authored
  * `inputEnvelope` for `wired-action-*` cases — the runner sends the
- * envelope verbatim. The render-identity field is the canonical SPEC
+ * envelope verbatim. The session-identity field is the canonical SPEC
  * field `sessionId`.
  */
 interface IncomingActionFrame {
@@ -54,7 +54,7 @@ interface IncomingActionFrame {
  * `no-op` fixtures expects silence, so loud rejection would break
  * them).
  *
- * Reads the canonical SPEC render-identity field `sessionId`.
+ * Reads the canonical SPEC session-identity field `sessionId`.
  */
 export function parseActionFrame(frame: unknown): IncomingActionFrame | undefined {
   if (frame === null || typeof frame !== 'object') return undefined;
@@ -84,7 +84,7 @@ export interface DispatchContext {
 
 /**
  * Dispatch one action frame. Runs asynchronously; contract-error
- * emissions are broadcast to every subscriber on the render via
+ * emissions are broadcast to every subscriber on the GguiSession via
  * `render.subscribers`.
  *
  * Returns when the dispatch's observable outcome has been emitted
@@ -218,7 +218,7 @@ export async function dispatchAction(
 
   // Refresh-stream fan-out (SPEC §2.3 StreamSpec refresh triggers).
   // After a successful wired-action dispatch, every streamSpec
-  // declared on the render fires its refresh tool and emits a
+  // declared on the GguiSession fires its refresh tool and emits a
   // stream-update on the bound channel. This is the wire-level
   // proof of the refresh-after-action contract the kit's
   // `stream-refresh-success` fixture asserts.

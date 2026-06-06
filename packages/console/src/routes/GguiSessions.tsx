@@ -1,5 +1,5 @@
 /**
- * Renders route — `/admin/sessions`.
+ * GguiSessions route — `/admin/sessions`.
  *
  * Operator-facing "what's live right now?" list. Reads
  * `GET /ggui/console/sessions` on mount and paints one entry card per
@@ -63,7 +63,7 @@ type FetchState =
   | { readonly kind: 'ready'; readonly data: GguiSessionsResponse }
   | { readonly kind: 'error'; readonly message: string };
 
-export function Renders(): ReactElement {
+export function GguiSessions(): ReactElement {
   const [state, setState] = useState<FetchState>({ kind: 'loading' });
   const [filter, setFilter] = useState('');
 

@@ -121,7 +121,7 @@ export const FATAL_CATALOG_LINT_CODES: ReadonlySet<string> = new Set([
  *   - `broadcast`     → `streamSpec[ch].source`
  *   - `capabilities`  → `agentCapabilities` + `clientCapabilities`
  *
- * GguiSession-gate handlers re-use this list to hard-reject; surfacing it
+ * Render-gate handlers re-use this list to hard-reject; surfacing it
  * here keeps the wire vocabulary single-sourced.
  */
 export const RETIRED_CONTRACT_FIELDS: Readonly<Record<string, string>> = {
@@ -290,7 +290,7 @@ export function checkOrphanAgentTools(
  * is intentionally NOT linted here: `GadgetExportUse.usage` is an
  * OPTIONAL intent-OVERRIDE, and the SPEC-documented canonical wire
  * form is the bare identity reference `gadgets[<pkg>][<export>] = {}`.
- * GguiSession-time resolution inherits the registered descriptor's `usage`,
+ * Render-time resolution inherits the registered descriptor's `usage`,
  * and the registry-side `lintGadgetCatalog` (via
  * `strictGadgetExportSchema`) already enforces real teaching text at
  * registration time. Flagging an empty wire-side use object would

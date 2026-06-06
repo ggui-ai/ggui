@@ -1100,7 +1100,7 @@ export type ContextSpec = Record<string, ContextEntry>;
  *      - `null` → `null`
  *   3. `undefined` (caller validates / rejects)
  *
- * GguiSession-time validators MUST reject contextSpec entries that resolve
+ * Render-time validators MUST reject contextSpec entries that resolve
  * to `undefined` here (e.g., schema is `oneOf` with no clear primitive
  * type — author MUST provide an explicit `default` for such schemas).
  *

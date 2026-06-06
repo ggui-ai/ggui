@@ -59,7 +59,7 @@ describe('parseRoute — admin zone', () => {
     expect(parseRoute('/admin/status/')).toEqual({ kind: 'admin-status' });
   });
 
-  it('matches /admin/sessions to admin-renders', () => {
+  it('matches /admin/sessions to admin-sessions', () => {
     expect(parseRoute('/admin/sessions')).toEqual({ kind: 'admin-sessions' });
     expect(parseRoute('/admin/sessions/')).toEqual({ kind: 'admin-sessions' });
   });

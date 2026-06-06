@@ -24,7 +24,7 @@
  *      `WireDispatchData` etc. keeps the default-case usable.
  *
  *   3. **`scope(item)` is NOT on `WireConfig`.** Post-flatten-render-
- *      identity (Phase B) the renderer mounts exactly one render per
+ *      identity (Phase B) the renderer mounts exactly one GguiSession per
  *      iframe; there is no per-stack-item scoping factory because there
  *      is no stack. `LegacyScopableWireConfig` is DELETED.
  */
@@ -188,7 +188,7 @@ void ({} as _Pinned);
 
 // Post-flatten-render-identity (Phase B), `WireConfig.scope` does not
 // exist and `LegacyScopableWireConfig` is deleted. The renderer mounts
-// exactly one render per iframe; "scope" collapses to identity.
+// exactly one GguiSession per iframe; "scope" collapses to identity.
 // @ts-expect-error WireConfig no longer carries a `scope(item)` method.
 typedCfg.scope({ sessionId: 'x' });
 

@@ -32,7 +32,7 @@ export interface StreamResult<T> {
  * `mode: 'replace'` — this hook folds them into a single-latest
  * value without accumulating history.
  *
- * @param channelName - Channel name from the render's streamSpec
+ * @param channelName - Channel name from the GguiSession's streamSpec
  * @returns { latest, all, isComplete }
  */
 export function useStream<T = unknown>(channelName: string): StreamResult<T> {

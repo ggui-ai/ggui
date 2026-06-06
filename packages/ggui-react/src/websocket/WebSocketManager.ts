@@ -7,7 +7,7 @@ import { EventBuffer } from './EventBuffer';
  */
 export interface WebSocketManagerOptions {
   url: string;
-  /** GguiSession ID — optional for start-invoke flow (platform assigns render). */
+  /** GguiSession ID — optional for start-invoke flow (platform assigns the GguiSession). */
   sessionId?: string;
   appId: string;
   onMessage: (message: WebSocketMessage) => void;

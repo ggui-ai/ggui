@@ -385,7 +385,7 @@ test.describe.serial('Phase 5 — pair flow + clean-room + strict-auth /mcp', ()
     // Post-Phase-B structuredContent: {sessionId, action, nextStep?}.
     // The proof the render committed is the minted `sessionId` — the
     // legacy `url`/`/r/<shortCode>` field is retired (hosts resolve the
-    // render via `_meta.ui.resourceUri` or `{sessionId}`).
+    // GguiSession via `_meta.ui.resourceUri` or `{sessionId}`).
     const renderResult = renderEnv.result as {
       structuredContent?: { sessionId?: string };
     };

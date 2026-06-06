@@ -50,7 +50,7 @@ export interface CreateReferenceConformanceHostInput {
  *
  * The server MUST be `start()`-ed before the first dispatch — the
  * kit calls `create-session` via `dispatchSetup` before any subscribe,
- * so the render store must be reachable. The caller owns the
+ * so the GguiSession store must be reachable. The caller owns the
  * server lifecycle (`start()` + `stop()`).
  */
 export function createReferenceConformanceHost({

@@ -66,7 +66,7 @@ export interface GguiContextValue {
    * Conversation envelope identity. Forwarded by {@link useInvoke} as
    * the `X-Ggui-Host-Session-Id` header so the agent threads multi-turn
    * invokes through its own keyed conversation state. Distinct from
-   * {@link sessionId} — this names the chat thread, not a render.
+   * {@link sessionId} — this names the chat thread, not a GguiSession.
    */
   hostSessionId?: string;
   /**
@@ -74,7 +74,7 @@ export interface GguiContextValue {
    * {@link useTool} / {@link useBindings} as `ToolContext.sessionId` —
    * scopes the in-memory fetch cache so two concurrent renders cannot
    * leak each other's cached responses. Distinct from
-   * {@link hostSessionId} — this names a single render, not the
+   * {@link hostSessionId} — this names a single GguiSession, not the
    * conversation envelope.
    */
   sessionId?: string;

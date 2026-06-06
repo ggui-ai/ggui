@@ -20,7 +20,7 @@ export interface ComponentErrorReport {
   errorId: string;
   /** GguiSession that experienced the error. Post-Phase-B the old
    *  `sessionId` + `stackItemId` pair collapses to one `sessionId` —
-   *  every stack item is now a top-level render and the values were
+   *  every render is now a top-level GguiSession and the values were
    *  always identical anyway. */
   sessionId: string;
   /** App ID */

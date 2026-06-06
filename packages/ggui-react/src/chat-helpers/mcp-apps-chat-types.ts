@@ -98,7 +98,7 @@ export interface ToolCallEntry {
  *   - `tool-call` — the agent invoked a tool; the result lands on the
  *                   same entry asynchronously when the SDK forwards the
  *                   matching `tool_result` block.
- *   - `render`    — an MCP-Apps resource iframe — one per unique
+ *   - `session`   — an MCP-Apps resource iframe — one per unique
  *                   `_meta.ui.resourceUri`.
  *   - `error`     — terminal error from the agent or the transport.
  *   - `end`       — turn-completed marker (`subtype` is the SDK's

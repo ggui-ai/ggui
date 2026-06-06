@@ -90,10 +90,10 @@ export function createGguiGetSessionHandler(
 ): SharedHandler<typeof inputSchema, typeof outputSchema, GguiGetSessionOutput> {
   return {
     name: 'ggui_get_session',
-    title: 'Get render',
+    title: 'Get GguiSession',
     audience: ['agent'],
     description:
-      'Retrieve full render state — id, appId, eventSequence, render variant. Bumps the render activity heartbeat on every successful read.',
+      'Retrieve full GguiSession state — id, appId, eventSequence, GguiSession variant. Bumps the GguiSession activity heartbeat on every successful read.',
     inputSchema,
     outputSchema,
     async handler(

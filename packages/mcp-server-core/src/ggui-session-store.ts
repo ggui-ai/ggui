@@ -208,7 +208,7 @@ export interface AppendEventInput {
 
 /**
  * Input for {@link GguiSessionStore.commit} — the full GguiSession payload
- * mints/replaces in one call. A render IS the top-level row, so
+ * mints/replaces in one call. A GguiSession IS the top-level row, so
  * committing the visible-bits surface is just an upsert on the row
  * itself.
  *

@@ -624,7 +624,7 @@ export function parseMcpAppAiGguiHostSessionMeta(
  * wired a `mintWsToken` seam on the handler — otherwise the lean
  * summary path returns them absent.
  *
- * Post-Phase-B: `sessionId` → `sessionId`; the old `stackItemCount` is
+ * Post-Phase-B: `stackItemId` → `sessionId`; the old `stackItemCount` is
  * dropped (every render is exactly one item — Phase B collapsed the
  * vessel).
  *

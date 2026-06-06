@@ -1,11 +1,11 @@
 /**
- * In-memory render store for the reference server.
+ * In-memory GguiSession store for the reference server.
  *
- * Renders are ephemeral and process-local — this is the whole
+ * GguiSessions are ephemeral and process-local — this is the whole
  * point of the reference server. Persistence is explicitly out of
  * scope. Restart drops state; that's documented behavior, not a TODO.
  *
- * Each render carries an actionSpec map that the `register-actionspec`
+ * Each GguiSession carries an actionSpec map that the `register-actionspec`
  * ConformanceHost directive populates. The action router
  * (`./action-router.ts`) consults this map at dispatch time to
  * resolve action-name → tool-name → handler.
@@ -37,7 +37,7 @@ export interface ActionSpecEntry {
  *
  * Reference-server scope: refresh-tool invocation is unconditional
  * — every successful wired-action dispatch fans out through every
- * registered streamSpec for the render. Real ggui servers may
+ * registered streamSpec for the GguiSession. Real ggui servers may
  * filter by which actions touch which channels; the reference
  * server's narrower contract is "any successful action triggers all
  * declared refreshes", which is sufficient for the kit's
@@ -83,7 +83,7 @@ export interface Subscriber {
 }
 
 /**
- * In-memory render store. Wraps a `Map<sessionId, GguiSession>` with
+ * In-memory GguiSession store. Wraps a `Map<sessionId, GguiSession>` with
  * the operations the ConformanceHost adapter + WS subscribe handler
  * need. No locking — JS single-threaded; all calls originate from
  * the event loop.
@@ -183,8 +183,8 @@ export class GguiSessionStore {
    * would not normally emit on its own) so the kit can assert
    * downstream consequences (sequencing, fan-out, observability).
    *
-   * Returns `true` if the render existed and at least one subscriber
-   * received the frame; `false` if the render is unknown OR has no
+   * Returns `true` if the GguiSession existed and at least one subscriber
+   * received the frame; `false` if the GguiSession is unknown OR has no
    * subscribers attached. Caller may use the boolean to log a warning
    * when a fixture's directive-injection lands before any subscribe
    * — the directive then has no observable effect, which is usually

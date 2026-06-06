@@ -800,7 +800,7 @@ export function buildMcpServerBackend(opts: BuildMcpServerBackendOptions): Serve
     // Cross-restart HMAC secrets. Present iff the caller declared a
     // persistent dir. Both threaded so the next restart can verify
     // tokens minted by the previous run instead of regenerating per
-    // process. GguiSession-signer.secret rides on the `renderSigning`
+    // process. render-signer.secret rides on the `renderSigning`
     // discriminated union (the `false` shape disables the layer
     // entirely; we always want it on here, so build the object form).
     ...(persistedWsTokenSecret !== undefined ? { wsTokenSecret: persistedWsTokenSecret } : {}),

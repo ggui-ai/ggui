@@ -407,7 +407,7 @@ export interface GguiRequestCredentialInput {
   serviceId: string;
   /** Why the agent needs this credential (shown to user) */
   reason?: string;
-  /** Existing render to render consent UI into */
+  /** Existing GguiSession to render consent UI into */
   sessionId?: string;
 }
 

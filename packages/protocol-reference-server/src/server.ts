@@ -9,7 +9,7 @@
  * server passes `@ggui-ai/protocol-conformance`, the protocol has
  * no implicit `@ggui-ai/mcp-server` coupling.
  *
- * Wire-field note: the render identity field is the canonical SPEC
+ * Wire-field note: the GguiSession identity field is the canonical SPEC
  * field `sessionId` — see {@link GguiSession} for the identity name used
  * throughout this package.
  */
