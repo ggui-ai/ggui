@@ -86,7 +86,7 @@ import {
 /** Generous — real Anthropic call + browser boot + layered assertions. */
 const TEST_TIMEOUT_MS = 180_000;
 
-/** GguiSession-wait budget — the RPC blocks on real generation. */
+/** Render-wait budget — the RPC blocks on real generation. */
 const GENERATION_BUDGET_MS = 120_000;
 
 const MUTATION_TITLE = 'Ship Slice 6 Tasks-backed product proof';
@@ -218,7 +218,7 @@ test.describe.serial(
       //  is non-deterministic (per CLAUDE.md).
       // ─────────────────────────────────────────────────────────
       const intent = [
-        `GguiSession a simple card or list showing the user's open tasks.`,
+        `Render a simple card or list showing the user's open tasks.`,
         `Highlight the task titled "${SEEDED_TITLE_FIRST}" — it is the top priority.`,
         `Use only basic HTML elements; no external assets.`,
       ].join(' ');

@@ -8,7 +8,7 @@
  *   - Contracts WITHOUT `actionSpec` → no `nextStep`. Agent ends its
  *     turn cleanly; the user reads the UI and prompts when ready.
  *
- * Server-side only (no browser). GguiSession still triggers generation, so
+ * Server-side only (no browser). Render still triggers generation, so
  * the scenario is gated on `ANTHROPIC_API_KEY`.
  */
 import { describe, expect, test } from 'vitest';

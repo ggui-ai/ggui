@@ -497,7 +497,7 @@ function PanelView({
 }
 
 /**
- * GguiSession one MCP-Apps resource. Mounts straight from the inlined
+ * Render one MCP-Apps resource. Mounts straight from the inlined
  * resource `@ggui-ai/agent-server`'s tool-result interceptor stamped
  * on `_meta.ui.resource` (zero-round-trip mount). On rehydration the
  * `GET /agent` replay re-inlines each render FRESH from the MCP, so

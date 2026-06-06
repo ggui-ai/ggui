@@ -32,14 +32,14 @@ Each fixture is one JSON file. The filename (minus `.json`) MUST equal the `name
   "skipReason": null,
 
   "setup": [
-    { "type": "create-session", "renderId": "test-r1" },
+    { "type": "create-session", "sessionId": "test-r1" },
     { "type": "register-tool", "toolName": "known-tool", "handler": "echo" },
   ],
 
   "inputEnvelope": {
     "type": "action",
     "channel": 0,
-    "renderId": "test-r1",
+    "sessionId": "test-r1",
     "action": { "name": "does-not-exist", "data": {} },
   },
 

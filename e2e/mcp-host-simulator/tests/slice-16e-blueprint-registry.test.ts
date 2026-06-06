@@ -187,7 +187,7 @@ describe('host-simulator: Slice 16e blueprint-first registry', () => {
     });
     expect(calls.count).toBe(1);
 
-    // GguiSession a STRUCTURALLY different contract — even with prose that
+    // Render a STRUCTURALLY different contract — even with prose that
     // sounds related, the contract-key is different so Tier 1 misses.
     // Tier 2 has only one candidate (notepad), and the mock embedder
     // path won't pull that on a wholly disparate context shape — so

@@ -51,7 +51,7 @@ const DEV_BEARER = 'dev';
 
 // A niche contract → no built-in blueprint match → turn-1 is a genuine cold
 // generation, and turn-2's hit is attributable to turn-1, not a shipped default.
-const INTENT = 'GguiSession a soil-moisture gauge panel for a greenhouse zone labelled "Bed 7"';
+const INTENT = 'Render a soil-moisture gauge panel for a greenhouse zone labelled "Bed 7"';
 const CONTRACT = {
   propsSpec: {
     description: 'gauge',
@@ -87,7 +87,7 @@ const SIMILAR_CONTRACT = {
 // After normalization the contract is a clean, matchable oil-pressure gauge —
 // niche enough that turn-1 is a genuine cold gen, so turn-2's hit is
 // attributable to turn-1's blueprint (not a shipped default).
-const QUIRKY_INTENT = 'GguiSession an oil-pressure gauge for pump station "PS-4"';
+const QUIRKY_INTENT = 'Render an oil-pressure gauge for pump station "PS-4"';
 const QUIRKY_CONTRACT = {
   propsSpec: {
     description: 'oil pressure gauge',
@@ -112,7 +112,7 @@ const V_DENSE: Variance = { persona: 'data-dense' };
 // scenario's V_DENSE exact-key-hit another's registration (which would break the
 // VARIANCE_GAP / disposes assertions). Each pairs with its own niche intent so
 // the contractKey/embedding stay coherent (turn-1 is a genuine cold gen).
-const INTENT_V1 = 'GguiSession a battery-health gauge for a delivery drone labelled "Falcon-3"';
+const INTENT_V1 = 'Render a battery-health gauge for a delivery drone labelled "Falcon-3"';
 const CONTRACT_V1 = {
   propsSpec: {
     description: 'battery gauge',
@@ -123,7 +123,7 @@ const CONTRACT_V1 = {
   },
 } as const;
 
-const INTENT_V2 = 'GguiSession a water-tank level indicator for cistern "Tank-B"';
+const INTENT_V2 = 'Render a water-tank level indicator for cistern "Tank-B"';
 const CONTRACT_V2 = {
   propsSpec: {
     description: 'tank level',
@@ -134,7 +134,7 @@ const CONTRACT_V2 = {
   },
 } as const;
 
-const INTENT_V3 = 'GguiSession a CPU-temperature dial for server rack "R-12"';
+const INTENT_V3 = 'Render a CPU-temperature dial for server rack "R-12"';
 const CONTRACT_V3 = {
   propsSpec: {
     description: 'cpu temp',

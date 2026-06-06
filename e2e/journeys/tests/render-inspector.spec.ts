@@ -1,5 +1,5 @@
 /**
- * GguiSession inspector — Slice 9c live round-trip proof (advisory, BYOK).
+ * Render inspector — Slice 9c live round-trip proof (advisory, BYOK).
  *
  * Closes the loop on the
  * `docs/plans/2026-04-22-session-contract-activity-panel.md` Slice 9b

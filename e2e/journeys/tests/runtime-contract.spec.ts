@@ -349,7 +349,7 @@ test.describe.serial(
       await expect(row).toHaveAttribute('data-tool', 'tasks_broken');
       await expect(row).toHaveAttribute('data-source', 'wired-action');
 
-      // GguiSession survives: the probe button is still clickable + the
+      // Render survives: the probe button is still clickable + the
       // panel is still rendered. A React error boundary firing would
       // unmount either.
       await expect(breakBtn).toBeVisible();
@@ -408,7 +408,7 @@ test.describe.serial(
         'refresh-stream',
       );
 
-      // GguiSession survives + the probe UI stays interactive.
+      // Render survives + the probe UI stays interactive.
       await expect(malformedBtn).toBeVisible();
       await expect(malformedBtn).toBeEnabled();
 

@@ -119,7 +119,7 @@ test.describe.serial('Phase 5 — SQLite storage driver boot', () => {
     expect(
       stdout,
       'CLI did not announce the sqlite renders store',
-    ).toMatch(/storage: renders\s+→ sqlite \(\.\/ggui-renders\.sqlite\)/);
+    ).toMatch(/storage: renders\s+→ sqlite \(\.\/ggui-sessions\.sqlite\)/);
     expect(
       stdout,
       'CLI did not announce the sqlite vectors store',

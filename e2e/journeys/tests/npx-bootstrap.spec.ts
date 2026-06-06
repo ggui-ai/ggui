@@ -291,7 +291,7 @@ test.describe.serial("OSS hero path — `ggui serve` (real CLI bin)", () => {
     const toolNames = tools.map((t) => t.name).sort();
     // Required surface: the 4 historical tools (handshake / render /
     // update / blueprint-search) + the 3 lifecycle tools (consume,
-    // emit, get_render) that ground the OSS hero path. Other native
+    // emit, get_session) that ground the OSS hero path. Other native
     // tools (runtime_*, list_gadgets, etc.) ride along but aren't
     // load-bearing for this spec — present is enough, exhaustive
     // pinning is brittle.

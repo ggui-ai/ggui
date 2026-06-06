@@ -58,7 +58,7 @@ const TODO_LIST_CONTRACT = {
 } as const;
 
 const INTENT = [
-  'GguiSession a todo list display:',
+  'Render a todo list display:',
   '(1) An h1 heading containing the value of props.title.',
   '(2) A list of props.todos — each row shows the value of props.todos[i].text',
   "    AND a visible indicator of props.todos[i].completed (a checkbox whose 'checked'",
@@ -105,7 +105,7 @@ for (const provider of PROVIDERS) {
       test(
         'replace, merge shallow, merge nested-deep, and merge null-delete all reach the iframe DOM',
         async () => {
-          // 1. GguiSession the initial contract.
+          // 1. Render the initial contract.
           const ref = await renderKnownContract({
             mcpUrl: MCP_URL,
             intent: INTENT,

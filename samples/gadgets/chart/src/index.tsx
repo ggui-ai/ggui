@@ -62,7 +62,7 @@ const AXIS_COLOR = 'var(--ggui-color-outline, #d4d4d8)';
 const FONT_FAMILY = 'var(--ggui-font-family-sans, sans-serif)';
 
 /**
- * GguiSession a responsive SVG bar chart. Bars scale to the largest
+ * Render a responsive SVG bar chart. Bars scale to the largest
  * `value`; the SVG uses a `viewBox` so it fits its container width.
  * Declarative — re-rendering with new `data` repaints the chart.
  */
@@ -234,9 +234,9 @@ export const chartGadget = defineGadgetPackage({
       component: 'Chart',
       impl: Chart,
       description:
-        'GguiSession a responsive SVG bar chart. Each datum is a labelled magnitude; bars scale to the largest value.',
+        'Render a responsive SVG bar chart. Each datum is a labelled magnitude; bars scale to the largest value.',
       usage:
-        'GguiSession `<Chart data={[{ label, value }]} />` when the intent names a bar chart, a metric breakdown, or a small dataviz panel. Optional `height` (default 240) and `barColor` (any CSS color or `var(--…)`). The component owns the full SVG render — pass plain data, no refs.',
+        'Render `<Chart data={[{ label, value }]} />` when the intent names a bar chart, a metric breakdown, or a small dataviz panel. Optional `height` (default 240) and `barColor` (any CSS color or `var(--…)`). The component owns the full SVG render — pass plain data, no refs.',
       example: {
         componentSnippet:
           'function RevenuePanel({ quarters }: Props) { return <Chart data={quarters.map((q) => ({ label: q.label, value: q.revenue }))} height={260} />; }',

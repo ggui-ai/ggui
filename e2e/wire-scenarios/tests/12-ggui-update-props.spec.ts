@@ -61,7 +61,7 @@ for (const provider of PROVIDERS) {
       test(
         'initial props render; ggui_update with new props triggers re-render',
         async () => {
-          // 1. GguiSession a contract with propsSpec.count + initial count=0.
+          // 1. Render a contract with propsSpec.count + initial count=0.
           const ref = await renderKnownContract({
             mcpUrl: MCP_URL,
             intent: PROPS_INTENT,

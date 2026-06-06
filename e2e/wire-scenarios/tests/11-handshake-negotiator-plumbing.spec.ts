@@ -84,7 +84,7 @@ function bootstrapUrlFromRenderUrl(renderUrl: string | undefined): string {
   if (typeof renderUrl !== 'string') {
     throw new Error(`render output missing url: ${String(renderUrl)}`);
   }
-  // GguiSession URL shape: `<base>/r/<shortCode>?sig=...&exp=...`. Rewrite the
+  // Render URL shape: `<base>/r/<shortCode>?sig=...&exp=...`. Rewrite the
   // path to `/r/<shortCode>` but PRESERVE the signed query —
   // SEC-C.2rev's HMAC gate on /api/bootstrap rejects unsigned reads.
   const parsed = new URL(renderUrl);

@@ -96,7 +96,7 @@ describe("compose output — low risk vs high risk", () => {
     const composed = compose(c);
     expect(composed.promptText).toContain("Trigger: drag");
     expect(composed.promptText).toContain("Writes: compose");
-    expect(composed.promptText).toContain("GguiSession: master-detail");
+    expect(composed.promptText).toContain("Render: master-detail");
   });
 
   it("inbox-triage (swipe + modal) includes swipe + modal guidance", () => {

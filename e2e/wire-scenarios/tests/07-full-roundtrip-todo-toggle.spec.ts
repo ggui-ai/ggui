@@ -242,7 +242,7 @@ describe.skipIf(!HAS_KEY)(
         //    intent: a checkbox to mark done, not a delete affordance,
         //    so the click maps cleanly to `todo_toggle`.
         const prompt = [
-          'Show me my todo list. GguiSession each todo as a row with a checkbox',
+          'Show me my todo list. Render each todo as a row with a checkbox',
           "in front of the todo's text. When I click a checkbox, mark that",
           'todo as done (or un-done) using the todo_toggle tool, then',
           're-render the list so I can see the new state. No delete buttons,',

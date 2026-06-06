@@ -191,7 +191,7 @@ describe.skip(
         // about both halves — the agent must declare the channel in the
         // contract AND emit on it for the test to pass.
         const prompt = [
-          'Show me my todo list. GguiSession each todo as a row with a checkbox',
+          'Show me my todo list. Render each todo as a row with a checkbox',
           "in front of the todo's text. ALSO render a toast banner area at",
           'the top of the UI that subscribes to a streamSpec channel named',
           '"toast" — when a frame arrives on that channel, display the',

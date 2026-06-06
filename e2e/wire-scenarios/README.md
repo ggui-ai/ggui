@@ -32,14 +32,14 @@ Vitest doesn't have this problem (it doesn't rely on singleton module identity),
 
 The suite has 25+ scenarios pinning the wire's behavioral contract. The flagship integration tests are listed below; the rest follow the same shape (Vitest `describe` + Playwright-core browser) and live under `tests/`.
 
-| #   | Scenario                                     | Needs LLM | Notes                                                                                                             |
-| --- | -------------------------------------------- | --------- | ----------------------------------------------------------------------------------------------------------------- |
-| 1   | submit_action happy path                     | ✅        | render contract with actionSpec → click → consume drains event                                                    |
-| 2   | PIPE_NOT_FOUND is terminal                   | ❌        | dispatch to a never-minted renderId → asserts `{ok:false, code:PIPE_NOT_FOUND}` (no doorbell, no inline fallback) |
-| 3   | contextSnapshot bundle                       | ✅        | render w/contextSpec → sync_context → click → consume returns the snapshot                                        |
-| 4   | CONTEXT_TOO_LARGE rejection                  | ❌        | sync_context with oversize snapshot → asserts CONTEXT_TOO_LARGE                                                   |
-| 5   | pure-display render (no actionSpec)          | ✅        | render w/o actionSpec → asserts no nextStep                                                                       |
-| 6   | sample-agent + todo MCP real-data round trip | ✅        | full-stack: prompt → todo_add → state mutates → re-render                                                         |
+| #   | Scenario                                     | Needs LLM | Notes                                                                                                              |
+| --- | -------------------------------------------- | --------- | ------------------------------------------------------------------------------------------------------------------ |
+| 1   | submit_action happy path                     | ✅        | render contract with actionSpec → click → consume drains event                                                     |
+| 2   | PIPE_NOT_FOUND is terminal                   | ❌        | dispatch to a never-minted sessionId → asserts `{ok:false, code:PIPE_NOT_FOUND}` (no doorbell, no inline fallback) |
+| 3   | contextSnapshot bundle                       | ✅        | render w/contextSpec → sync_context → click → consume returns the snapshot                                         |
+| 4   | CONTEXT_TOO_LARGE rejection                  | ❌        | sync_context with oversize snapshot → asserts CONTEXT_TOO_LARGE                                                    |
+| 5   | pure-display render (no actionSpec)          | ✅        | render w/o actionSpec → asserts no nextStep                                                                        |
+| 6   | sample-agent + todo MCP real-data round trip | ✅        | full-stack: prompt → todo_add → state mutates → re-render                                                          |
 
 ### Provider matrix
 

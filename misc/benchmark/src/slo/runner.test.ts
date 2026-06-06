@@ -101,7 +101,7 @@ describe('runSloCase — oss_miss (null as signal)', () => {
     expect(result.derived.timeToFirstPreview).toBeNull();
     expect(result.derived.timeToPreviewFinalize).toBeNull();
 
-    // GguiSession still succeeded — handler returned, final timestamp is real.
+    // Render still succeeded — handler returned, final timestamp is real.
     expect(result.checkpoints.finalCompiledAt).not.toBeNull();
     expect(result.derived.timeToFinalCompiled).not.toBeNull();
     expect(result.errors).toEqual([]);

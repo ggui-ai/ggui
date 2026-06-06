@@ -83,7 +83,7 @@ const FIXTURE_CWD = resolve(
 /** Generous — real Anthropic call + two MCP reads + browser mount. */
 const TEST_TIMEOUT_MS = 180_000;
 
-/** GguiSession-wait budget — RPC blocks on real generation. */
+/** Render-wait budget — RPC blocks on real generation. */
 const GENERATION_BUDGET_MS = 120_000;
 
 /** Shape-only facets of the mount's output. Load-bearing for passing
@@ -200,7 +200,7 @@ test.describe.serial(
       // has a deterministic reference; the browser assertions stay
       // shape-only because LLM output is non-deterministic.
       const intent = [
-        `GguiSession a person-centric work view for ${alice!.displayName}.`,
+        `Render a person-centric work view for ${alice!.displayName}.`,
         `Show their contact info at the top (name + email),`,
         `then list the open tasks assigned to them with each task's title and status.`,
         `Use only basic HTML elements; no external assets.`,

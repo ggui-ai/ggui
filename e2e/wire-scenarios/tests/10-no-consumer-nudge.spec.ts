@@ -19,7 +19,7 @@
  * is exactly-once by construction.
  *
  * Test choreography:
- *   1. GguiSession a contract with `actionSpec.save` (no agent listening).
+ *   1. Render a contract with `actionSpec.save` (no agent listening).
  *   2. Open the renderer URL with a postMessage interceptor.
  *   3. Click the Save button. (No `ggui_consume` long-poll runs in
  *      this test, so the server reports `consumerPresent: false`.)

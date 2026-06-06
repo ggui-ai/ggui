@@ -95,7 +95,7 @@ import { createPerfRecorder, type PerfRecorder } from './perf-recorder';
  */
 const TEST_TIMEOUT_MS = 180_000;
 
-/** GguiSession-wait budget — the RPC blocks on generation before responding. */
+/** Render-wait budget — the RPC blocks on generation before responding. */
 const GENERATION_BUDGET_MS = 120_000;
 
 /**

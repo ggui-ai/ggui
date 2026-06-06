@@ -259,7 +259,7 @@ async function driveContractErrorFixture(page: Page, fixture: TestCase): Promise
     await expect(row).toHaveAttribute("data-source", behavior.sourceAction);
   }
 
-  // GguiSession-alive invariant: the probe button stays interactive after
+  // Render-alive invariant: the probe button stays interactive after
   // the error row lands. A React error boundary firing would unmount
   // either the button or the panel.
   await expect(button).toBeVisible();
@@ -610,7 +610,7 @@ async function runBrowserDrivenPropsUpdateFixture(
     timeout: 5_000,
   });
 
-  // GguiSession-alive invariant: the bump button stays interactive after
+  // Render-alive invariant: the bump button stays interactive after
   // the props_update lands. A renderer-side error or a React error
   // boundary firing would unmount either the button or the counter
   // (mirrors the contract-probe assertion shape).
