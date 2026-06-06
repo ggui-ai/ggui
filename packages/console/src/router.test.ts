@@ -21,36 +21,6 @@ describe('parseRoute — root + deep-links', () => {
     expect(parseRoute('')).toEqual({ kind: 'admin-index' });
   });
 
-  it('matches /s/<shortCode> to viewer (deep-link)', () => {
-    expect(parseRoute('/s/abc12345')).toEqual({
-      kind: 'viewer',
-      shortCode: 'abc12345',
-    });
-    expect(parseRoute('/s/abc12345/')).toEqual({
-      kind: 'viewer',
-      shortCode: 'abc12345',
-    });
-  });
-
-  it('URL-decodes the shortCode segment', () => {
-    const encoded = encodeURIComponent('abc+def');
-    expect(parseRoute(`/s/${encoded}`)).toEqual({
-      kind: 'viewer',
-      shortCode: 'abc+def',
-    });
-  });
-
-  it('rejects /s/ with empty segment as not-found', () => {
-    expect(parseRoute('/s/')).toEqual({ kind: 'not-found', pathname: '/s/' });
-  });
-
-  it('rejects nested viewer paths as not-found', () => {
-    expect(parseRoute('/s/abc/def')).toEqual({
-      kind: 'not-found',
-      pathname: '/s/abc/def',
-    });
-  });
-
   it('matches /preview/<blueprintId> to blueprint (deep-link)', () => {
     expect(parseRoute('/preview/weather-card-fixture')).toEqual({
       kind: 'blueprint',
@@ -251,6 +221,17 @@ describe('parseRoute — retired paths (pre-launch no-backcompat)', () => {
     });
   });
 
+  it('rejects the retired /s/<shortCode> render viewer (viewer surface removed)', () => {
+    expect(parseRoute('/s/abc12345')).toEqual({
+      kind: 'not-found',
+      pathname: '/s/abc12345',
+    });
+    expect(parseRoute('/s/')).toEqual({
+      kind: 'not-found',
+      pathname: '/s/',
+    });
+  });
+
   it('rejects the retired top-level /blueprints', () => {
     expect(parseRoute('/blueprints')).toEqual({
       kind: 'not-found',
@@ -320,7 +301,6 @@ describe('isAdminRoute', () => {
 
   it('returns false for deep-link surfaces, admin-login, and not-found', () => {
     expect(isAdminRoute({ kind: 'admin-login' })).toBe(false);
-    expect(isAdminRoute({ kind: 'viewer', shortCode: 'abc' })).toBe(false);
     expect(isAdminRoute({ kind: 'blueprint', blueprintId: 'x' })).toBe(false);
     expect(isAdminRoute({ kind: 'not-found', pathname: '/x' })).toBe(false);
   });
@@ -332,9 +312,9 @@ describe('getStableRoute', () => {
   });
 
   it('returns the same object reference on repeated calls with the same pathname', () => {
-    const a = getStableRoute('/s/abc12345');
-    const b = getStableRoute('/s/abc12345');
-    const c = getStableRoute('/s/abc12345');
+    const a = getStableRoute('/preview/abc12345');
+    const b = getStableRoute('/preview/abc12345');
+    const c = getStableRoute('/preview/abc12345');
     expect(b).toBe(a);
     expect(c).toBe(a);
   });
@@ -343,9 +323,9 @@ describe('getStableRoute', () => {
     const root1 = getStableRoute('/');
     const root2 = getStableRoute('/');
     expect(root2).toBe(root1);
-    const viewer1 = getStableRoute('/s/hak3cw89');
-    const viewer2 = getStableRoute('/s/hak3cw89');
-    expect(viewer2).toBe(viewer1);
+    const blueprint1 = getStableRoute('/preview/hak3cw89');
+    const blueprint2 = getStableRoute('/preview/hak3cw89');
+    expect(blueprint2).toBe(blueprint1);
     const notFound1 = getStableRoute('/unknown');
     const notFound2 = getStableRoute('/unknown');
     expect(notFound2).toBe(notFound1);
@@ -353,10 +333,10 @@ describe('getStableRoute', () => {
 
   it('returns a fresh reference when the pathname changes', () => {
     const a = getStableRoute('/');
-    const b = getStableRoute('/s/xyz');
+    const b = getStableRoute('/preview/xyz');
     expect(b).not.toBe(a);
     expect(a).toEqual({ kind: 'admin-index' });
-    expect(b).toEqual({ kind: 'viewer', shortCode: 'xyz' });
+    expect(b).toEqual({ kind: 'blueprint', blueprintId: 'xyz' });
     const aAgain = getStableRoute('/');
     expect(aAgain).toEqual({ kind: 'admin-index' });
     expect(aAgain).not.toBe(a);
@@ -369,9 +349,9 @@ describe('getStableRoute', () => {
   });
 
   it('survives thousands of repeated calls without reallocating', () => {
-    const first = getStableRoute('/s/test');
+    const first = getStableRoute('/preview/test');
     for (let i = 0; i < 5000; i++) {
-      expect(getStableRoute('/s/test')).toBe(first);
+      expect(getStableRoute('/preview/test')).toBe(first);
     }
   });
 });

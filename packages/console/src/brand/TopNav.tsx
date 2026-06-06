@@ -7,8 +7,8 @@
  * user-zone links to display because every surface is operator-zone,
  * and operators navigate within the admin sub-shell's left rail. A
  * simple "admin" link makes the entry point obvious from the deep-
- * link surfaces (`/s/<code>`, `/preview/<id>`) and from the not-found
- * page; the link disappears when already inside `/admin/*`.
+ * link surface (`/preview/<id>`) and from the not-found page; the
+ * link disappears when already inside `/admin/*`.
  */
 import type { ReactElement, ReactNode } from 'react';
 import { getServerMode } from '../mode.js';
@@ -23,7 +23,7 @@ import { Wordmark } from '../routes/Wordmark.js';
 export interface TopNavProps {
   /**
    * Current route kind — used to render the active-link underline and
-   * render the in-section breadcrumb text (shortCode / blueprintId).
+   * render the in-section breadcrumb text (e.g. blueprintId).
    */
   readonly route: Route;
   /**
@@ -108,8 +108,6 @@ export function TopNav({ route, rightSlot }: TopNavProps): ReactElement {
 
 function breadcrumbFor(route: Route): string | null {
   switch (route.kind) {
-    case 'viewer':
-      return `/ s / ${route.shortCode}`;
     case 'blueprint':
       return `/ preview / ${route.blueprintId}`;
     case 'admin-index':

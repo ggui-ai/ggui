@@ -31,7 +31,6 @@
  *   - `/devtools/benchmarks` → {@link Devtools} (benchmarks dashboard embed)
  *
  *   Deep-link surfaces (top-level, bare-chrome — share-link targets):
- *   - `/s/<shortCode>`       → {@link GguiSessionViewer}
  *   - `/preview/<id>`        → {@link BlueprintViewer}
  *
  * Route matching + navigation live in `./router.ts` — this component
@@ -53,7 +52,6 @@ import { Config } from './routes/Config.js';
 import { Devtools } from './routes/Devtools.js';
 import { Keys } from './routes/Keys.js';
 import { McpInspector } from './routes/McpInspector.js';
-import { GguiSessionViewer } from './routes/GguiSessionViewer.js';
 import { Renders } from './routes/Renders.js';
 import { Status } from './routes/Status.js';
 import { Theme } from './routes/Theme.js';
@@ -82,13 +80,6 @@ export function App(): ReactElement {
   );
 
   // ── Deep-link surfaces (bare chrome) ──────────────────────────
-  if (route.kind === 'viewer') {
-    return (
-      <Shell route={route} variant="narrow">
-        <GguiSessionViewer shortCode={route.shortCode} />
-      </Shell>
-    );
-  }
   if (route.kind === 'blueprint') {
     return (
       <Shell route={route} variant="narrow">
@@ -270,11 +261,10 @@ function NotFound({ pathname }: { readonly pathname: string }): ReactElement {
             </li>
           </ul>
           <p className="ggui-muted">
-            The <code className="ggui-code">/s/&lt;shortCode&gt;</code> and{' '}
+            The{' '}
             <code className="ggui-code">/preview/&lt;blueprintId&gt;</code>{' '}
-            routes require a real id — paste a render shortCode from
-            <code className="ggui-code">ggui_render</code> or a blueprint
-            id registered in <code className="ggui-code">ggui.json</code>.
+            route requires a real id — paste a blueprint id registered
+            in <code className="ggui-code">ggui.json</code>.
           </p>
         </div>
       </div>

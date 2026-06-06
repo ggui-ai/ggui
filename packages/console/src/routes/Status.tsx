@@ -11,8 +11,9 @@
  *
  *   - SectionHead (page title only — no brand hero).
  *   - **Live renders rail** (above the grid): full-width card with
- *     top-3 renders + an "open latest →" one-click CTA. Renders an
- *     empty variant pointing at `/` when no renders are live.
+ *     top-3 renders + a "view all →" link to the renders list.
+ *     Renders an empty variant pointing at `/` when no renders are
+ *     live.
  *   - 2-column grid of status cards (stacks on narrow viewports):
  *       • server        — name + version + description
  *       • pairing       — pair code + expiry / disabled / idle
@@ -395,21 +396,19 @@ function StorageCard({
 
 /**
  * Live-renders hero — surfaces the most operator-relevant signal on
- * this page (where to find the live `/s/<shortCode>` viewer). Rendered
- * directly above the status grid so it's the first thing an operator
- * sees after the page header.
+ * this page (what's rendering right now). Rendered directly above the
+ * status grid so it's the first thing an operator sees after the page
+ * header.
  *
  *   - loading → skeleton line; no layout thrash
  *   - error   → quiet micro-card, grid still paints
- *   - empty   → compact tip pointing at `/chat` (no hero rail)
- *   - ≥1      → full-width rail with top-3 rows + "open latest →"
- *               primary CTA + "view all (N) →" trailing link
+ *   - empty   → compact tip pointing at `/` (no hero rail)
+ *   - ≥1      → full-width rail with top-3 rows + "view all (N) →"
+ *               trailing link to the full renders list
  *
- * Rationale: the `/s/<shortCode>` viewer is the most important page
- * in the console, but reaching it from the dashboard would otherwise
- * take two clicks. This component is the dashboard's answer to
- * "what's live right now?" — one click away, first thing visible,
- * captures the common case (open latest) with a single button.
+ * Rationale: this component is the dashboard's answer to "what's live
+ * right now?" — first thing visible, with a one-click link to the
+ * full renders list at `/admin/sessions`.
  */
 function LiveGguiSessionsHero({
   state,
@@ -462,7 +461,6 @@ function LiveGguiSessionsHero({
 
   const all = state.data.renders;
   const top3 = all.slice(0, 3);
-  const latest = top3.find((r) => typeof r.shortCode === 'string');
 
   return (
     <div
@@ -477,20 +475,6 @@ function LiveGguiSessionsHero({
             {all.length} {all.length === 1 ? 'render' : 'renders'}
           </span>
         </span>
-        {latest ? (
-          <button
-            type="button"
-            className="ggui-btn"
-            onClick={() =>
-              navigateTo(
-                `/s/${encodeURIComponent(latest.shortCode as string)}`,
-              )
-            }
-            data-ggui-status-hero-open-latest
-          >
-            open latest →
-          </button>
-        ) : null}
       </div>
       <ul className="ggui-status-hero__list">
         {top3.map((r) => (
@@ -505,7 +489,7 @@ function LiveGguiSessionsHero({
                   className="ggui-code"
                   data-ggui-status-hero-shortcode={r.shortCode}
                 >
-                  /s/{r.shortCode}
+                  {r.shortCode}
                 </code>
               ) : (
                 <code className="ggui-code">{r.sessionId.slice(0, 8)}…</code>
@@ -514,21 +498,6 @@ function LiveGguiSessionsHero({
                 {formatRelative(r.lastActivityAt)}
               </span>
             </div>
-            {r.shortCode ? (
-              <button
-                type="button"
-                className="ggui-btn ggui-btn--ghost"
-                onClick={() =>
-                  navigateTo(
-                    `/s/${encodeURIComponent(r.shortCode as string)}`,
-                  )
-                }
-              >
-                open →
-              </button>
-            ) : (
-              <span className="ggui-muted">no shortCode</span>
-            )}
           </li>
         ))}
       </ul>

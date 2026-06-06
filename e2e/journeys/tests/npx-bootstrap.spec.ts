@@ -1,8 +1,7 @@
 /**
- * OSS hero-path E2E: `ggui serve` → MCP wire → ggui_render →
- * console viewer. No hosted account, no cloud, no Docker — the
- * whole journey runs against the real `@ggui-ai/cli` binary booted on
- * an ephemeral 127.0.0.1 port.
+ * OSS hero-path E2E: `ggui serve` → MCP wire → ggui_render. No hosted
+ * account, no cloud, no Docker — the whole journey runs against the
+ * real `@ggui-ai/cli` binary booted on an ephemeral 127.0.0.1 port.
  *
  * Command under test:
  *
@@ -32,13 +31,10 @@
  *   5. `GET /` serves the console landing bundle with the CSP /
  *      security-header set per `packages/console/README.md` §Security.
  *   6. `GET /ggui/console/info` returns the server-identity block.
- *   7. Browser navigation to `/s/<shortCode>` mints the same-origin
- *      HTTP-only console cookie (via `POST /ggui/console/render-cookie`),
- *      opens a cookie-authenticated live-channel WebSocket, reaches the
- *      live `connected` state, and shows the real sessionId + "no renders
- *      yet" empty-state — the truthful current OSS state because
- *      component-code generation is deferred on OSS (see the `codeReady:
- *      false` note in `packages/mcp-server-handlers/src/renders/render.ts`).
+ *
+ * The retired `/s/<shortCode>` console render-viewer step is gone: the
+ * canonical render-delivery surface is the MCP-Apps iframe path, covered
+ * by the scaffold-render container e2e. This spec stays boot-focused.
  *
  * WHAT THIS SPEC DOES **NOT** PROVE (and why):
  *   - Real component-code generation. The OSS `ggui_render` deliberately

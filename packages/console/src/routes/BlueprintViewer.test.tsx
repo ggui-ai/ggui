@@ -178,7 +178,7 @@ describe('BlueprintViewer — render states', () => {
     expect(card.textContent).toContain('application/javascript+react');
   });
 
-  it('Slice 11.5 C5 — clicking "Try live →" POSTs to /try and navigates to the returned url', async () => {
+  it('Slice 11.5 C5 — clicking "Try live →" POSTs to /try and surfaces an ok marker (no navigation)', async () => {
     const calls: Array<{ url: string; method?: string }> = [];
     vi.stubGlobal(
       'fetch',
@@ -189,7 +189,6 @@ describe('BlueprintViewer — render states', () => {
             JSON.stringify({
               sessionId: 'try-abc',
               shortCode: 'abc1234567',
-              url: '/s/abc1234567',
             }),
             { status: 200 },
           );
@@ -231,8 +230,12 @@ describe('BlueprintViewer — render states', () => {
       expect(postCall.url).toBe('/ggui/console/blueprint/todo-list/try');
     });
     await waitFor(() => {
-      expect(pushStateSpy).toHaveBeenCalledWith(null, '', '/s/abc1234567');
+      const marker = container.querySelector('[data-ggui-try-live="ok"]');
+      if (!marker) throw new Error('ok marker not rendered');
     });
+    // The viewer was retired — try-live exercises the server path only,
+    // it does not navigate anywhere.
+    expect(pushStateSpy).not.toHaveBeenCalled();
   });
 
   it('Slice 11.5 C5 — surfaces an inline error when /try returns 503 try_not_wired', async () => {

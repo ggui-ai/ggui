@@ -22,7 +22,6 @@ import type { Route } from '../router.js';
 import { AdminShell } from './AdminShell.js';
 import { DevtoolsShell } from './DevtoolsShell.js';
 import { Footer } from './Footer.js';
-import { LiveGguiSessionPill } from './LiveGguiSessionPill.js';
 import { TopNav } from './TopNav.js';
 
 export interface ShellProps {
@@ -31,9 +30,8 @@ export interface ShellProps {
   readonly variant?: 'wide' | 'narrow' | 'admin' | 'devtools';
   readonly showFooter?: boolean;
   /**
-   * Optional additional nav-right content. Always rendered AFTER the
-   * default `LiveGguiSessionPill` so page-specific pills (if ever added)
-   * sit to the right of the live-render portal.
+   * Optional additional nav-right content — page-specific pills sit on
+   * the right of the nav bar, after the primary nav links.
    */
   readonly navRightSlot?: ReactNode;
 }
@@ -49,12 +47,6 @@ export function Shell({
     variant === 'narrow'
       ? 'ggui-shell__main ggui-shell__main--narrow'
       : 'ggui-shell__main';
-  const rightSlot = (
-    <>
-      <LiveGguiSessionPill route={route} />
-      {navRightSlot}
-    </>
-  );
   let body: ReactNode = children;
   if (variant === 'admin') {
     body = <AdminShell route={route}>{children}</AdminShell>;
@@ -63,7 +55,7 @@ export function Shell({
   }
   return (
     <div className="ggui-shell">
-      <TopNav route={route} rightSlot={rightSlot} />
+      <TopNav route={route} rightSlot={navRightSlot} />
       <main className={mainClass}>{body}</main>
       {showFooter ? <Footer /> : null}
     </div>

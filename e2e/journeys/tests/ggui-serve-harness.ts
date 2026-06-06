@@ -39,8 +39,8 @@ import {
   statSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, resolve, relative } from 'node:path';
-import { hoistedBin, packagePath } from './workspace-paths';
+import { join, relative } from 'node:path';
+import { packagePath } from './workspace-paths';
 
 // Publishable-package paths are resolved CONTEXT-INDEPENDENTLY via
 // `workspace-paths.ts` — it walks up to the nearest `pnpm-workspace.yaml`
@@ -378,8 +378,8 @@ export interface SpawnGguiServeOptions {
   /**
    * Env var names to forward verbatim from the caller's `process.env`
    * into the spawned child. The plan §4.4 #3 BYOK carve-out — specs
-   * that legitimately need a real credential (e.g., `live-generation`
-   * under a real Anthropic key) pass `['ANTHROPIC_API_KEY']` here.
+   * that legitimately need a real credential (e.g., a live-generation
+   * journey under a real Anthropic key) pass `['ANTHROPIC_API_KEY']` here.
    * Values absent from the caller's env are silently dropped; the
    * spec is responsible for `test.skip()`-gating on presence before
    * this harness is called.
@@ -788,155 +788,14 @@ export async function spawnGguiServeInCwd(
   return handle;
 }
 
-/**
- * Absolute path to the Tasks-mounted serve launcher — see
- * `./tasks-backed-launcher.mts`. Extension is `.mts` (TypeScript ESM)
- * so `node --import tsx` loads it through tsx's ESM pipeline rather
- * than the CJS transform — required because `@ggui-ai/mcp-server` +
- * `@ggui-ai/ui-gen` are ESM-only packages whose `exports` have no
- * `require` condition.
- */
-export const TASKS_BACKED_LAUNCHER = resolve(
-  __dirname,
-  'tasks-backed-launcher.mts',
-);
-
-/**
- * Absolute path to `tsx`'s ESM loader. pnpm hoists shared dev deps to
- * the OUTERMOST workspace root — the true monorepo root (one above
- * `oss/`) in the monorepo, the single repo root in the OSS standalone
- * repo — so `hoistedBin` resolves against that, not the nearer `oss/`.
- */
-const TSX_BIN = hoistedBin('tsx');
-
-/**
- * Spawn a `createGguiServer({ mcpMounts: [tasks], ... })` child process
- * via the Tasks-mounted launcher. Same boot-beacon contract as
- * {@link spawnGguiServe} — emits `READY <url>\n` + `PAIR_CODE <code>
- * \n` on stdout — so the returned handle plugs into the same helpers
- * (`mintPairToken`, `mcpCallAs`, `attachServeArtifacts`).
- *
- * Why this exists: `ggui serve` has no `mcpMounts` config surface
- * today. Slice 6 proves Tasks is reachable on the real `createGguiServer`
- * factory runtime — the launcher calls that factory directly, with
- * Tasks mounted. See `./tasks-backed-launcher.ts` for the boot shape.
- *
- * `forwardEnv` must include `'ANTHROPIC_API_KEY'` (the launcher exits
- * non-zero when absent). Other env names can be added if future
- * slices need multi-provider BYOK here.
- */
-export async function spawnTasksBackedServe(
-  opts: SpawnGguiServeOptions = {},
-): Promise<GguiServeHandle> {
-  if (!existsSync(TASKS_BACKED_LAUNCHER)) {
-    throw new Error(
-      `tasks-backed launcher missing at ${TASKS_BACKED_LAUNCHER}. This should never happen — did the file get renamed?`,
-    );
-  }
-  if (!existsSync(TSX_BIN)) {
-    throw new Error(
-      `tsx binary missing at ${TSX_BIN}. Run \`pnpm install\` at the workspace root.`,
-    );
-  }
-  if (!existsSync(DEVTOOL_DIST)) {
-    throw new Error(
-      `@ggui-ai/console dist missing at ${DEVTOOL_DIST}. Run \`pnpm --filter @ggui-ai/console build\` first.`,
-    );
-  }
-
-  const forwardEnv = opts.forwardEnv ?? [];
-  // Per-spawn code cache. `launcherCwd` below is the workspace-owned
-  // OSS e2e package root (not a scratch dir), so the cache gets its own
-  // temp dir, reclaimed in `close()`. See `spawnGguiServe` for why.
-  const codeCacheDir = mkdtempSync(join(tmpdir(), 'ggui-code-cache-e2e-'));
-  const env = allowlistedEnv({
-    forwardEnv,
-    codeCacheDir,
-    embeddingCacheDir: SHARED_EMBEDDING_CACHE_DIR,
-  });
-  assertNoBannedEnv(env, {
-    skip: [...forwardEnv, CODE_CACHE_ENV, EMBEDDING_CACHE_ENV],
-  });
-  // CWD = `e2e/ggui-oss/` package root. Two reasons:
-  //   1. tsx's ESM loader seeds some package resolutions from CWD;
-  //      a random `/tmp/…` breaks `@ggui-ai/*` sub-path resolution
-  //      we observed during Slice 6 development.
-  //   2. The Slice 6 product proof tests Tasks-backed generation,
-  //      not clean-room boot invariants — those stay the domain of
-  //      the sibling `spawnGguiServe` harness + its `mkdtempSync`
-  //      CWD for `npx serve` specs.
-  const launcherCwd = resolve(__dirname, '..');
-
-  // `tsx` binary (workspace-root node_modules) transpiles the `.mts`
-  // launcher through its ESM loader. The `.mts` extension is the
-  // critical knob — without it tsx treats the file as CJS and the
-  // launcher's `@ggui-ai/*` ESM-only imports fail. Avoids a
-  // dedicated build step for a test-only entrypoint. Spawn shape
-  // mirrors `spawnGguiServe` so future launchers share beacon
-  // plumbing rather than growing parallel helpers.
-  const spawnStartedAt = Date.now();
-  const proc: ChildProcessWithoutNullStreams = spawn(
-    TSX_BIN,
-    [TASKS_BACKED_LAUNCHER],
-    {
-      cwd: launcherCwd,
-      stdio: ['pipe', 'pipe', 'pipe'],
-      env,
-    },
-  ) as ChildProcessWithoutNullStreams;
-
-  const watcher = watchBootBeacons(proc, {
-    label: 'tasks-launcher',
-    subject: 'tasks-backed launcher',
-  });
-  const { baseUrl, initialPairCode, adminToken } = await watcher.beacons;
-
-  let closed = false;
-  const close = async (): Promise<void> => {
-    if (closed) return;
-    closed = true;
-    if (!proc.killed) {
-      proc.kill('SIGTERM');
-      await new Promise<void>((done) => {
-        const resolve2 = (): void => done();
-        proc.once('exit', resolve2);
-        setTimeout(() => {
-          try {
-            if (!proc.killed) proc.kill('SIGKILL');
-          } catch {
-            /* best-effort */
-          }
-          resolve2();
-        }, 5_000);
-      });
-    }
-    // launcherCwd is the workspace-owned OSS e2e package root (not a
-    // mkdtemp scratch dir); the harness owns only the code-cache temp.
-    try {
-      rmSync(codeCacheDir, { recursive: true, force: true });
-    } catch {
-      /* best-effort — tmp dir cleanup failures are noise, not signal */
-    }
-  };
-
-  const handle: GguiServeHandle = {
-    baseUrl,
-    // `tempCwd` on the handle is the process CWD — here the OSS
-    // e2e package root (see launcherCwd rationale above), NOT a
-    // mkdtemp scratch dir. Naming preserved for handle-shape
-    // compatibility with `spawnGguiServe`.
-    tempCwd: launcherCwd,
-    spawnEnv: freezeEnv(env),
-    initialPairCode,
-    adminToken,
-    readyElapsedMs: Date.now() - spawnStartedAt,
-    stderr: watcher.stderr,
-    stdout: watcher.stdout,
-    close,
-    signInAsAdmin: (page) => signInAsAdmin(handle, page),
-  };
-  return handle;
-}
+/* The Tasks-mounted serve launcher (`spawnTasksBackedServe` +
+ * `tasks-backed-launcher.mts` + the `TSX_BIN` hoisted-bin lookup) was
+ * removed alongside the `/s/<shortCode>` console render-viewer specs
+ * that were its only callers (`tasks-backed-generation.spec.ts`,
+ * `notes-backed-generation.spec.ts`). Canonical render delivery is the
+ * MCP-Apps iframe path, covered by the scaffold-render container e2e.
+ * The shared Tasks MCP fixture under `fixtures/mcps/tasks/` is unaffected
+ * — surviving mount-via-serve fixtures still consume it. */
 
 /**
  * Consume `handle.initialPairCode` via a real `POST /pair` round-trip

@@ -6,7 +6,7 @@
  *   - loading → quiet skeleton (grid still paints)
  *   - empty   → idle eyebrow + playground pointer
  *   - error   → quiet error copy
- *   - active  → rail with "open latest →" CTA + per-row "open →"
+ *   - active  → rail with per-row shortCode + "view all" link
  *
  * The underlying fetch is stubbed so tests don't hit the real server.
  * Status fires two parallel fetches (`/info` + `/renders?limit=3`);
@@ -101,7 +101,7 @@ describe('Status — live-renders hero', () => {
     ).toBeNull();
   });
 
-  it('renders the active hero with row + open-latest button when a render exists', async () => {
+  it('renders the active hero with a per-render shortCode row when a render exists', async () => {
     stubFetch({
       renders: [
         {
@@ -124,9 +124,6 @@ describe('Status — live-renders hero', () => {
       return el;
     });
     expect(hero.getAttribute('data-ggui-live-session-count')).toBe('1');
-    expect(
-      hero.querySelector('[data-ggui-status-hero-open-latest]'),
-    ).toBeTruthy();
     const rowShort = hero.querySelector(
       '[data-ggui-status-hero-shortcode="abc12345"]',
     );
@@ -168,7 +165,7 @@ describe('Status — live-renders hero', () => {
     expect(eyebrow?.textContent).toMatch(/2 renders/);
   });
 
-  it('navigates to the latest render on "open latest →" click', async () => {
+  it('navigates to the renders list on "view all →" click', async () => {
     const now = Date.now();
     stubFetch({
       renders: [
@@ -186,14 +183,13 @@ describe('Status — live-renders hero', () => {
     const pushSpy = vi.spyOn(window.history, 'pushState');
     render(<Status />);
     const btn = (await waitFor(() => {
-      const el = document.querySelector(
-        '[data-ggui-status-hero-open-latest]',
-      );
-      if (!el) throw new Error('open-latest button not rendered yet');
+      const hero = document.querySelector('[data-ggui-status-hero="active"]');
+      const el = hero?.querySelector('.ggui-status-hero__foot .ggui-link');
+      if (!el) throw new Error('view-all link not rendered yet');
       return el;
     })) as HTMLButtonElement;
     fireEvent.click(btn);
-    expect(pushSpy).toHaveBeenCalledWith(null, '', '/s/deadbeef');
+    expect(pushSpy).toHaveBeenCalledWith(null, '', '/admin/sessions');
     pushSpy.mockRestore();
   });
 

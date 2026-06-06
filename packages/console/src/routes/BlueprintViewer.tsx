@@ -15,12 +15,12 @@
  *     artifact; the operator or agent wraps it in richer context
  *     elsewhere (the dev chat, a committed render) when interactivity
  *     is needed.
- *   - Error shapes mirror the GguiSessionViewer's: 404 (id unknown),
- *     4xx/5xx (server error), network fail (raw message).
+ *   - Error shapes: 404 (id unknown), 4xx/5xx (server error),
+ *     network fail (raw message).
  *
- * Visual shell follows the brand kit (same as `GguiSessionViewer`): one
- * section head, a pane-style header for blueprint identity + content
- * type, and the mount card stamping `data-ggui-session-entry="component"`
+ * Visual shell follows the brand kit: one section head, a pane-style
+ * header for blueprint identity + content type, and the mount card
+ * stamping `data-ggui-session-entry="component"`
  * + `data-ggui-code-ready="true"` + `data-ggui-blueprint-id` — a
  * stable anchor contract browser specs target across console surfaces.
  */
@@ -140,9 +140,9 @@ export function BlueprintViewer({
  * URL — load-bearing for multi-blueprint tests that may land later.
  *
  * The `<TryLiveAction>` CTA POSTs to
- * `/ggui/console/blueprint/:id/try` and navigates to the returned
- * `/s/<shortCode>` URL. Hidden on blueprints with no actionSpec /
- * streamSpec (nothing to exercise live) is NOT enforced here because
+ * `/ggui/console/blueprint/:id/try` to exercise the blueprint's
+ * live-render path server-side. Hidden on blueprints with no actionSpec
+ * / streamSpec (nothing to exercise live) is NOT enforced here because
  * the blueprint response is metadata-only; the button always appears
  * and the try-live endpoint's 503 response surfaces any wiring gap.
  */
@@ -192,12 +192,13 @@ function BlueprintMount({
 type TryLiveState =
   | { readonly kind: 'idle' }
   | { readonly kind: 'pending' }
+  | { readonly kind: 'ok' }
   | { readonly kind: 'error'; readonly message: string };
 
 /**
- * POSTs to `/ggui/console/blueprint/:id/try` and navigates to
- * `/s/<shortCode>` on success. Errors surface inline — a broken
- * try-live is an operator-facing signal (unwired server, bundle
+ * POSTs to `/ggui/console/blueprint/:id/try` to exercise the
+ * blueprint's live-render path server-side. Errors surface inline — a
+ * broken try-live is an operator-facing signal (unwired server, bundle
  * failure) and the current blueprint mount stays intact.
  *
  * `data-ggui-try-live="pending"` on the button while the request is
@@ -231,20 +232,7 @@ function TryLiveAction({
         });
         return;
       }
-      const body = (await res.json()) as {
-        readonly sessionId: string;
-        readonly shortCode: string | null;
-        readonly url: string | null;
-        readonly warning?: string;
-      };
-      if (!body.url) {
-        setState({
-          kind: 'error',
-          message: body.warning ?? 'try-live returned no viewer URL',
-        });
-        return;
-      }
-      navigateTo(body.url);
+      setState({ kind: 'ok' });
     } catch (err) {
       setState({ kind: 'error', message: String(err) });
     }
@@ -262,6 +250,15 @@ function TryLiveAction({
           try-live failed
         </span>
       ) : null}
+      {state.kind === 'ok' ? (
+        <span
+          className="ggui-muted"
+          data-ggui-try-live="ok"
+          style={{ marginRight: '8px', fontSize: '0.75rem' }}
+        >
+          try-live ok
+        </span>
+      ) : null}
       <button
         type="button"
         className="ggui-btn ggui-btn--ghost"
@@ -272,7 +269,7 @@ function TryLiveAction({
           void onClick();
         }}
       >
-        {state.kind === 'pending' ? 'opening…' : 'Try live →'}
+        {state.kind === 'pending' ? 'trying…' : 'Try live →'}
       </button>
     </span>
   );

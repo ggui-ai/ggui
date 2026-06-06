@@ -2,9 +2,9 @@
  * Renders route — `/admin/sessions`.
  *
  * Operator-facing "what's live right now?" list. Reads
- * `GET /ggui/console/sessions` on mount, paints one entry card per
- * active render, and click-through to `/s/<shortCode>` (the
- * existing viewer) when a shortCode is bound.
+ * `GET /ggui/console/sessions` on mount and paints one entry card per
+ * active render. Each row surfaces the render's `sessionId`, `appId`,
+ * status, and (when bound) its `shortCode`.
  *
  * Scope:
  *
@@ -35,7 +35,6 @@ import {
 } from 'react';
 import { SectionHead } from '../brand/SectionHead.js';
 import { StatusBadge } from '../brand/StatusBadge.js';
-import { navigateTo } from '../router.js';
 
 /**
  * Response shape of `GET /ggui/console/sessions`. Must stay in sync
@@ -113,10 +112,9 @@ export function Renders(): ReactElement {
         mute="Active only — render from an agent to create one."
         intro={
           <>
-            Every row is an active render on this server. Click-through
-            to the viewer when a render has a{' '}
-            <code className="ggui-code">shortCode</code> minted by{' '}
-            <code className="ggui-code">ggui_render</code>.
+            Every row is an active render on this server. A render has a{' '}
+            <code className="ggui-code">shortCode</code> once one is
+            minted by <code className="ggui-code">ggui_render</code>.
           </>
         }
       />
@@ -245,20 +243,10 @@ function GguiSessionRow({
       </div>
       <div style={{ marginTop: 12, display: 'flex', gap: 10, alignItems: 'center' }}>
         {render.shortCode ? (
-          <>
+          <span>
+            shortCode{' '}
             <code className="ggui-code">{render.shortCode}</code>
-            <button
-              type="button"
-              className="ggui-btn ggui-btn--ghost"
-              onClick={() =>
-                navigateTo(
-                  `/s/${encodeURIComponent(render.shortCode as string)}`,
-                )
-              }
-            >
-              open viewer →
-            </button>
-          </>
+          </span>
         ) : (
           <span className="ggui-muted">
             No shortCode — render via{' '}

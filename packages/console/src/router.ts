@@ -37,7 +37,6 @@
  *
  * Deep-link surfaces (top-level, bare-chrome — share-link targets):
  *
- *       /s/<shortCode>          → render viewer
  *       /preview/<blueprintId>  → blueprint mount
  *
  * Anything else falls through as `not-found`. No dynamic routing
@@ -52,7 +51,6 @@
 
 export type Route =
   // — Deep-link surfaces (top-level, bare-chrome) —
-  | { readonly kind: 'viewer'; readonly shortCode: string }
   | { readonly kind: 'blueprint'; readonly blueprintId: string }
   // — Admin zone — `/admin/*`. All admin-cookie-gated, all rendered
   // inside `AdminShell`. `admin-index` is the landing route for both
@@ -101,12 +99,6 @@ export function parseRoute(pathname: string): Route {
   if (pathname === '/' || pathname === '') return { kind: 'admin-index' };
 
   // ── Deep-link surfaces ────────────────────────────────────────────
-  const viewerMatch = /^\/s\/([^/]+)\/?$/.exec(pathname);
-  if (viewerMatch) {
-    const shortCode = viewerMatch[1];
-    if (!shortCode) return { kind: 'not-found', pathname };
-    return { kind: 'viewer', shortCode: decodeURIComponent(shortCode) };
-  }
   const previewMatch = /^\/preview\/([^/]+)\/?$/.exec(pathname);
   if (previewMatch) {
     const blueprintId = previewMatch[1];
