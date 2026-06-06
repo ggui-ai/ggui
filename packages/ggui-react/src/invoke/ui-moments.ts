@@ -80,7 +80,7 @@ export interface UiMoment {
         readonly kind: 'bootstrap-inline';
         /**
          * Parsed {@link McpAppAiGguiRenderMeta} slice extracted from
-         * the tool-result's `_meta`. The shell can render the render
+         * the tool-result's `_meta`. The shell can render the GguiSession
          * directly (no second server round-trip).
          */
         readonly meta: McpAppAiGguiRenderMeta;

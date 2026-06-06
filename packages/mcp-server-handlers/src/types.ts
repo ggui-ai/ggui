@@ -214,7 +214,7 @@ export interface SharedHandler<
    *
    *   - `'agent'` — runtime agent-callable tools on the canonical agent
    *     route (`/mcp`, or a cloud server's bare-root + `/apps/{appId}`).
-   *     Examples: `ggui_render`, `ggui_handshake`, `ggui_render`,
+   *     Examples: `ggui_render`, `ggui_handshake`,
    *     `ggui_update`, `ggui_consume`, `ggui_search_blueprints`.
    *   - `'runtime'` — iframe-runtime-callable tools (visibility-tagged
    *     `'app'`). Hidden from agent's tools/list but routed on the same
@@ -252,7 +252,7 @@ export interface SharedHandler<
    * and `content`), NOT merged into `structuredContent`.
    *
    * This is the canonical seam for attaching APP-FACING metadata — e.g.
-   * the `ai.ggui/render` + `ai.ggui/render` slice pair carrying
+   * the `ai.ggui/render` slice carrying
    * the WebSocket bootstrap credentials the MCP Apps iframe needs.
    * Because `_meta` is not described by `outputSchema`, agents that
    * typecheck against the tool signature never see these fields; only

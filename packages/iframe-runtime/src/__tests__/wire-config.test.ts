@@ -9,8 +9,8 @@
  * props_update patches stay coherent without rebuilding the config.
  *
  * The audit-critical shape properties locked here:
- *   1. Action envelopes emitted by the config carry `sessionId` (not
- *      `sessionId`/`stackItemId`/`stackIndex`) plus `clientSeq` +
+ *   1. Action envelopes emitted by the config carry a single `sessionId`
+ *      (no `stackItemId`/`stackIndex` companions) plus `clientSeq` +
  *      `schemaVersion`, and ride in a `{type:'action', payload: envelope}`
  *      WS frame.
  *   2. The active render's `actionSpec[name].nextStep` resolves on

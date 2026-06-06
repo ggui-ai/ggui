@@ -10,9 +10,9 @@
  * Layout:
  *
  *   - SectionHead (page title only — no brand hero).
- *   - **Live renders rail** (above the grid): full-width card with
- *     top-3 renders + a "view all →" link to the renders list.
- *     Renders an empty variant pointing at `/` when no renders are
+ *   - **Live sessions rail** (above the grid): full-width card with
+ *     top-3 sessions + a "view all →" link to the sessions list.
+ *     Renders an empty variant pointing at `/` when no sessions are
  *     live.
  *   - 2-column grid of status cards (stacks on narrow viewports):
  *       • server        — name + version + description

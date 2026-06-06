@@ -16,7 +16,7 @@ dist-ui/
 # Claude Code — per-developer local settings (never commit)
 .claude/settings.local.json
 
-# ggui serve runtime state (renders, render secrets, vector index)
+# ggui serve runtime state (GguiSessions, GguiSession secrets, vector index)
 .ggui/
 
 # Test / coverage

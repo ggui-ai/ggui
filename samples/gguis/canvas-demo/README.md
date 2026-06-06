@@ -32,4 +32,4 @@ follow up with `ggui_render` — each render response carries
 
 The end-to-end suite uses this sample to verify that the fullscreen
 hint propagates through the render pipeline unchanged regardless of how
-many renders a conversation emits.
+many GguiSessions a conversation emits.

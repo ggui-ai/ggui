@@ -997,7 +997,7 @@ export function createGguiRenderHandler(
       ui: GGUI_RENDER_UI_META,
     },
     async handler(input, ctx: HandlerContext): Promise<RenderOutput> {
-      // GguiSession is handshake-first. The wire input is just
+      // Rendering is handshake-first. The wire input is just
       // {handshakeId, props, override?}; the generator input (intent,
       // context, schema, adapters, forceCreate) flows from the
       // handshake record the agent already wrote in the prior
@@ -1513,7 +1513,7 @@ export function createGguiRenderHandler(
         const intent = story.intent;
         const forceCreate = storedInput.forceCreate === true;
 
-        // §6 deterministic reuse resolution. GguiSession NO LONGER runs its
+        // §6 deterministic reuse resolution. The render flow NO LONGER runs its
         // own semantic match (`matchBlueprint` is gone from this
         // handler). Three paths, all keyed on the EFFECTIVE
         // `(contractKey, variantKey)` identity:
@@ -1924,7 +1924,7 @@ export function createGguiRenderHandler(
           }
         : undefined;
 
-      // GguiSession response architecture (2026-05-13):
+      // Render response architecture (2026-05-13):
       //   - `outputSchema` defines the LLM-visible subset (3 fields).
       //   - This `result` carries the FULL set — extras are stripped
       //     by zod's `.parse()` (z.object default behavior) before
