@@ -139,7 +139,7 @@ export type WebSocketMessage =
   // Canvas-mode host-context capture (Client → Server only).
   // The iframe-runtime extracts a `HostContextProjection` from the MCP
   // Apps `ui/initialize` response and echoes it here so the server can
-  // persist it on `RenderRecord.hostContext` for agent visibility.
+  // persist it on `GguiSession.hostContext` for agent visibility.
   | (WsMessageBase & { type: 'host_context_observed'; payload: HostContextObservedPayload })
   // R7 — GguiSessionEvent ledger replay frame (Server → Client only).
   // Emitted before the live tail when SubscribePayload.sinceSequence

@@ -9,7 +9,7 @@
  * deviceCapabilities). ggui captures it iframe-side at `ui/initialize` and
  * echoes a TRIMMED projection back over the live channel (via the
  * `host_context_observed` outbound message) so the server can persist it on
- * `RenderRecord.hostContext` and surface it on `ggui_handshake` /
+ * `GguiSession.hostContext` and surface it on `ggui_handshake` /
  * `ggui_consume` output for the agent.
  *
  * Why a projection rather than passthrough:
@@ -151,7 +151,7 @@ export interface HostContextProjection {
 /**
  * Live-channel inbound (client → server) payload that delivers the
  * iframe-captured `HostContextProjection` to the server. Server-side
- * handler writes to `RenderRecord.hostContext`; subsequent
+ * handler writes to `GguiSession.hostContext`; subsequent
  * `ggui_handshake` / `ggui_consume` responses surface the value to the
  * agent via the optional `client.hostContext` field.
  *
