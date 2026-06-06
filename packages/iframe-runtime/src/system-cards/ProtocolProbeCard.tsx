@@ -306,7 +306,7 @@ function hashAction(payload: string): string {
 }
 
 /**
- * GguiSession an action's `data` payload as a short inline string for
+ * Render an action's `data` payload as a short inline string for
  * embedding in a chat message. Goal: readable by humans, not a JSON
  * dump. Falls back to truncated JSON for nested / non-scalar values
  * so the consent prompt doesn't drop information silently.

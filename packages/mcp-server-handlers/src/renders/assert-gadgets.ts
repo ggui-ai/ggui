@@ -99,7 +99,7 @@ export interface PackageMismatchEntry {
 }
 
 /**
- * GguiSession the "also failing" message tail listing the lower-priority
+ * Render the "also failing" message tail listing the lower-priority
  * package misses, so a multi-category render surfaces every violation in
  * one rejection. Empty string when there is nothing else to report.
  */

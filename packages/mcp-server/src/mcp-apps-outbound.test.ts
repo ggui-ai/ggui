@@ -456,7 +456,7 @@ describe('end-to-end bootstrap subscribe → ack sessionToken', () => {
     const ackPromise = new Promise<{
       sequence: number;
       sessionToken?: string;
-      render?: { id: string; appId: string };
+      session?: { id: string; appId: string };
     }>((resolve, reject) => {
       ws.on('message', (raw) => {
         const msg = JSON.parse(raw.toString()) as {
@@ -464,7 +464,7 @@ describe('end-to-end bootstrap subscribe → ack sessionToken', () => {
           payload: {
             sequence: number;
             sessionToken?: string;
-            render?: { id: string; appId: string };
+            session?: { id: string; appId: string };
             code?: string;
           };
         };

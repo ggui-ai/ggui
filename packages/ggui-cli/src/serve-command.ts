@@ -972,7 +972,7 @@ grows.
 First-run bundle (all on by default):
   - Landing page at /          — operator opens a browser and sees
                                   server identity + pair-code card.
-  - GguiSession viewer at /r/<code>  — same-origin viewer for renders
+  - Render viewer at /r/<code>  — same-origin viewer for renders
                                   minted by ggui_render; same-origin
                                   HTTP-only cookie authenticates the
                                   live-channel /ws upgrade.

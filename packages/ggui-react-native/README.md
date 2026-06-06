@@ -30,7 +30,7 @@ import { GguiProvider, GguiRender } from "@ggui-ai/react-native";
 export function App() {
   return (
     <GguiProvider appId="my-app">
-      <GguiRender renderId="render-123">{/* render state */}</GguiRender>
+      <GguiRender sessionId="session-123">{/* render state */}</GguiRender>
     </GguiProvider>
   );
 }

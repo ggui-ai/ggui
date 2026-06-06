@@ -20,7 +20,7 @@ import { parseSseStream } from '../sse-parse';
 
 /** MUST match `@ggui-ai/server/src/invoke/__tests__/tool-result-push.test.ts`. */
 const FIXTURE_META: McpAppAiGguiRenderMeta = {
-  sessionId: 'render_XYZ',
+  sessionId: 'session_XYZ',
   appId: 'app_round_trip',
   runtimeUrl: '/_ggui/iframe-runtime.js',
   wsUrl: 'wss://mcp.example.test/ws',

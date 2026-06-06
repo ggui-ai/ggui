@@ -124,7 +124,7 @@ export function revokeLocalKey(state: LocalKeysState, pairingId: string): boolea
 }
 
 /**
- * GguiSession a fixed-width table to stdout. Columns chosen to match the
+ * Render a fixed-width table to stdout. Columns chosen to match the
  * cloud-side `keys list` shape so operators recognize the layout
  * regardless of which mode they're in.
  */

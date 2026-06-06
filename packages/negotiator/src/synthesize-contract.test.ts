@@ -481,7 +481,7 @@ describe('synthesizeContract — gadget refs (package-keyed clientCapabilities)'
           clientCapabilities: {
             gadgets: {
               '@acme/charts': {
-                RevenueChart: { usage: 'GguiSession the quarterly revenue series.' },
+                RevenueChart: { usage: 'Render the quarterly revenue series.' },
               },
             },
           },
@@ -493,7 +493,7 @@ describe('synthesizeContract — gadget refs (package-keyed clientCapabilities)'
     expect(result.contract).not.toBeNull();
     expect(result.contract?.clientCapabilities?.gadgets).toEqual({
       '@acme/charts': {
-        RevenueChart: { usage: 'GguiSession the quarterly revenue series.' },
+        RevenueChart: { usage: 'Render the quarterly revenue series.' },
       },
     });
     expect(result.reason).toMatch(/synthesize-ok/);

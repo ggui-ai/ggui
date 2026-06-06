@@ -19,7 +19,7 @@ import { GguiSessionRenderer } from './DynamicComponent.js';
 
 function sendPreview(payload: unknown): void {
   const envelope: StreamEnvelope = {
-    sessionId: 'render-preview',
+    sessionId: 'session-preview',
     channel: PREVIEW_CHANNEL,
     mode: 'append',
     payload: payload as StreamEnvelope['payload'],

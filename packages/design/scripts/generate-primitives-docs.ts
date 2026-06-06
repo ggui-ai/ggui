@@ -220,7 +220,7 @@ function generateSectionMarkdown(
   const componentInterfaces = interfaces.filter((i) => i.isComponentProps);
   const supportTypes = interfaces.filter((i) => !i.isComponentProps);
 
-  // GguiSession component interfaces
+  // Render component interfaces
   for (const iface of componentInterfaces) {
     lines.push(`### ${iface.componentName}`);
     lines.push('');
@@ -251,7 +251,7 @@ function generateSectionMarkdown(
     }
   }
 
-  // GguiSession support types
+  // Render support types
   if (supportTypes.length > 0) {
     lines.push('### Support Types');
     lines.push('');
@@ -302,7 +302,7 @@ Applies to: Input, TextArea, Select, Checkbox, RadioGroup, Slider, Tabs, Accordi
 
 ### Available Motion & Animation
 
-GguiSession \`<MotionKeyframes />\` once (anywhere in tree) to enable all keyframes.
+Render \`<MotionKeyframes />\` once (anywhere in tree) to enable all keyframes.
 
 **Entrance/exit:** fadeIn, fadeOut, slideInUp, slideInDown, scaleIn, scaleOut
 **State feedback:** flash (background-color highlight), pulse (opacity breathing), bounce (scale overshoot)

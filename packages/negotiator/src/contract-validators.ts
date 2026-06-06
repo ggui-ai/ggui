@@ -590,7 +590,7 @@ export async function validateContractNovelty(
 }
 
 /**
- * GguiSession a findings array as a single human-readable line for use in
+ * Render a findings array as a single human-readable line for use in
  * synthesizer `reason` strings, cache trace events, and operator logs.
  * Empty findings → empty string so callers can append unconditionally.
  */

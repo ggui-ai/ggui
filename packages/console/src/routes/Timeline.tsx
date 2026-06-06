@@ -176,7 +176,7 @@ export function Timeline(): ReactElement {
     <section className="ggui-section">
       <SectionHead
         num="DEVTOOLS / 7D"
-        title="GguiSession timeline."
+        title="Render timeline."
         mute="Snapshot."
         intro={
           <>
@@ -250,7 +250,7 @@ function GguiSessionsPane({
           </p>
         ) : state.data.renders.length === 0 ? (
           <p className="ggui-muted" style={{ margin: 0, padding: 12 }}>
-            No renders yet. GguiSession from an agent (
+            No renders yet. Render from an agent (
             <code className="ggui-code">ggui_render</code>) to create one.
           </p>
         ) : (

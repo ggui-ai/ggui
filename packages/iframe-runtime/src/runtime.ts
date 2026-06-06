@@ -1515,7 +1515,7 @@ function fnv1aHex(payload: string): string {
 }
 
 /**
- * GguiSession a wired-action's `data` payload as a short inline string
+ * Render a wired-action's `data` payload as a short inline string
  * for embedding in a `ui/message` consent prompt. Goal: human-
  * readable, not a JSON dump. Falls back to truncated JSON for
  * nested values so the prompt doesn't drop information silently.
@@ -2039,7 +2039,7 @@ function emitUserActionDoorbell(args: {
     `Your REQUIRED FIRST TOOL CALL is ggui_consume with arguments ${nextArgs}. Call it NOW to retrieve and process the pending interaction. Do not respond conversationally; do not summarize. Issue the tool call as your next action.`,
     '',
     `<ggui_directive kind="user-action">`,
-    `  <render_id>${args.sessionId}</render_id>`,
+    `  <session_id>${args.sessionId}</session_id>`,
     `  <next_tool>ggui_consume</next_tool>`,
     `  <next_args>${nextArgs}</next_args>`,
     `</ggui_directive>`,

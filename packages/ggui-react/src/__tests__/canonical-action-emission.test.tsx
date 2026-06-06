@@ -112,7 +112,7 @@ function ActionFireHelper({
   return null;
 }
 
-async function bootRender(sessionId = 'render-0'): Promise<{
+async function bootRender(sessionId = 'session-0'): Promise<{
   socket: MockWebSocket;
   fire: (data: unknown) => void;
 }> {
@@ -158,7 +158,7 @@ describe('canonical action envelope emission — web', () => {
   });
 
   it("emits a `type: 'action'` message carrying ActionEnvelope shape", async () => {
-    const { socket, fire } = await bootRender('render-emit');
+    const { socket, fire } = await bootRender('session-emit');
 
     await act(async () => {
       fire({ text: 'hello' });
@@ -172,7 +172,7 @@ describe('canonical action envelope emission — web', () => {
     if (frame.type !== 'action') throw new Error('narrowing');
     const envelope: ActionEnvelope = frame.payload;
 
-    expect(envelope.sessionId).toBe('render-emit');
+    expect(envelope.sessionId).toBe('session-emit');
     expect(envelope.type).toBe('data:submit');
     expect(typeof envelope.clientSeq).toBe('number');
     expect(envelope.payload).toEqual({

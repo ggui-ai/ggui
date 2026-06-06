@@ -48,7 +48,7 @@ import {
 import type { McpAppIframeRef } from './types';
 
 const SAMPLE_META: McpAppAiGguiRenderMeta = {
-  sessionId: 'render-test',
+  sessionId: 'session-test',
   appId: 'app-test',
   runtimeUrl: '/_ggui/iframe-runtime.js',
   wsUrl: 'wss://test.example/ws',

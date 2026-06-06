@@ -34,7 +34,7 @@ let app: App;
 
 const baseArgs = {
   dispatchToolName: 'ggui_runtime_submit_action',
-  sessionId: 'render_1',
+  sessionId: 'sess_1',
   appId: 'app_1',
 } as const;
 

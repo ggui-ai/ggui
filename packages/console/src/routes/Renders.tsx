@@ -301,7 +301,7 @@ function EmptyGguiSessions(): ReactElement {
       <div className="ggui-card__body">
         <p className="ggui-body">No renders yet.</p>
         <p className="ggui-muted">
-          GguiSession from an agent (<code className="ggui-code">ggui_render</code>)
+          Render from an agent (<code className="ggui-code">ggui_render</code>)
           to start a generation — new renders appear here on reload.
         </p>
       </div>

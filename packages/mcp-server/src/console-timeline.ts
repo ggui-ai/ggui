@@ -188,7 +188,7 @@ export function mountConsoleTimelineRoutes(
       const sessionId = singleParam(req.params['sessionId']);
       if (!sessionId || sessionId.length === 0) {
         res.status(400).json({
-          error: 'invalid_render_id',
+          error: 'invalid_session_id',
           message: 'sessionId path parameter is required',
         });
         return;

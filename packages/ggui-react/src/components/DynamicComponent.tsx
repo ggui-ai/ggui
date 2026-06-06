@@ -50,7 +50,7 @@ export const DynamicComponent = ReactComponentRenderer;
 // ---------------------------------------------------------------------------
 
 /**
- * GguiSession a single component-variant render.
+ * Render a single component-variant render.
  *
  * Loose input shape (id + componentCode + props + caps + actionSpec +
  * contractHash) because callers — preview routes, ad-hoc viewers, the

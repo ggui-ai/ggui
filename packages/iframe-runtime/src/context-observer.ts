@@ -480,7 +480,7 @@ export function createContextStateHost(deps: {
   }): ReactElement => {
     const { slots, children } = props;
     if (slots.length === 0) {
-      // GguiSession children inside a no-op Fragment so the return type is
+      // Render children inside a no-op Fragment so the return type is
       // ReactElement uniformly (children is ReactNode).
       return deps.react.createElement(
         deps.react.Fragment,

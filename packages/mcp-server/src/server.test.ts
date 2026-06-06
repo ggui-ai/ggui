@@ -1625,7 +1625,7 @@ describe('createGguiServer — ggui_handshake (Slice 5 preflight seam)', () => {
   // into the single `ggui_get_session` + `ggui_list_sessions` pair, and
   // `ggui_close` was deleted (no terminal write — renders decay via TTL).
   // Closes the OSS surface gap: agents can now call the full lifecycle
-  // (handshake → render → consume → get_render / list_renders / emit)
+  // (handshake → render → consume → get_session / list_sessions / emit)
   // on `ggui serve` without hosting cloud.
   it('registers the full render-lifecycle suite alongside ggui_render', async () => {
     fx = await bootHandshake();

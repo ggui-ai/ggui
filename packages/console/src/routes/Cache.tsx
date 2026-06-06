@@ -9,7 +9,7 @@
  * Both routes are admin-gated server-side. The page uses no auth-token
  * client-side; the cookie + admin-HTML gate handle it.
  *
- * GguiSession shape: reverse-chronological list of cards. Each card shows:
+ * Render shape: reverse-chronological list of cards. Each card shows:
  *   - timestamp + scope
  *   - outcome pill (MATCH / MISS / SYNTH / legacy HIT)
  *   - strategy chip when present (exact-key / semantic)

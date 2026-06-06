@@ -23,7 +23,7 @@ import {
 import { createGguiSubmitActionHandler } from './submit-action.js';
 
 const baseEnv = {
-  sessionId: 'render_1',
+  sessionId: 'sess_1',
   appId: 'app_1',
   actionId: 'a3f2b1d4',
   firedAt: '2026-05-07T10:00:00.000Z',

@@ -7,7 +7,7 @@
  * Strategy:
  * 1. Take compiled component code (ESM module)
  * 2. Wrap in an HTML shell with React from CDN
- * 3. GguiSession in a WebView
+ * 3. Render in a WebView
  * 4. Bridge events back to RN via postMessage/onMessage
  */
 
@@ -182,7 +182,7 @@ function buildHtml(
         onClick: (data) => window.__ggui_bridge.sendEvent('interaction:click', data),
       };
 
-      // GguiSession with data props + bridge props injected
+      // Render with data props + bridge props injected
       const dataProps = ${propsJson};
       const root = createRoot(document.getElementById('root'));
       root.render(React.createElement(RootComponent, { ...dataProps, ...bridgeProps }));
@@ -192,7 +192,7 @@ function buildHtml(
       window.__ggui_bridge.sendError(err.message || String(err));
       document.getElementById('root').innerHTML =
         '<div style="padding:16px;color:#991b1b;background:#fee2e2;border-radius:8px;margin:8px">' +
-        '<strong>GguiSession Error</strong><br/>' + (err.message || err) + '</div>';
+        '<strong>Render Error</strong><br/>' + (err.message || err) + '</div>';
     }
   </script>
 </body>
@@ -316,7 +316,7 @@ export function WebViewRenderer({
       )}
       {error && (
         <View style={styles.error}>
-          <Text style={styles.errorTitle}>GguiSession Error</Text>
+          <Text style={styles.errorTitle}>Render Error</Text>
           <Text style={styles.errorMessage}>{error}</Text>
         </View>
       )}
@@ -406,7 +406,7 @@ function WebIframeRenderer({
       )}
       {error && (
         <View style={styles.error}>
-          <Text style={styles.errorTitle}>GguiSession Error</Text>
+          <Text style={styles.errorTitle}>Render Error</Text>
           <Text style={styles.errorMessage}>{error}</Text>
         </View>
       )}

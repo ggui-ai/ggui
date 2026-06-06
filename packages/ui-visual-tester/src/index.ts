@@ -51,7 +51,7 @@
  *
  * For each entry in `contract.actionSpec`:
  *
- *   1. GguiSession the component in a real Chromium tab via Playwright.
+ *   1. Render the component in a real Chromium tab via Playwright.
  *   2. Find a button matching the action's `label` (aria-label first,
  *      then visible-text contains, case-insensitive).
  *   3. Snapshot the current DOM state.

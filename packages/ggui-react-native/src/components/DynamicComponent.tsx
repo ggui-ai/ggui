@@ -157,7 +157,7 @@ export function DynamicComponent({
     );
   }
 
-  // Strategy 1: GguiSession from descriptor tree (native components)
+  // Strategy 1: Render from descriptor tree (native components)
   if (descriptor) {
     try {
       const mergedDescriptor: ComponentDescriptor = {
@@ -175,14 +175,14 @@ export function DynamicComponent({
       onError?.(e);
       return (
         <View style={styles.error}>
-          <Text style={styles.errorTitle}>GguiSession Error</Text>
+          <Text style={styles.errorTitle}>Render Error</Text>
           <Text style={styles.errorMessage}>{e.message}</Text>
         </View>
       );
     }
   }
 
-  // Strategy 2: GguiSession compiled code via WebView
+  // Strategy 2: Render compiled code via WebView
   if (code) {
     return (
       <View style={styles.container}>
@@ -205,7 +205,7 @@ export function DynamicComponent({
 }
 
 /**
- * GguiSession a {@link GguiSession} entry. Post-Phase-B every render arrives as a
+ * Render a {@link GguiSession} entry. Post-Phase-B every render arrives as a
  * top-level GguiSession rather than as a stacked session entry. This
  * component handles the `ComponentGguiSession` variant only — descriptor
  * tree on native, WebView for compiled code.

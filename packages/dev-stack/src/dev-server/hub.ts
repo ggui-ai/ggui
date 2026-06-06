@@ -414,7 +414,7 @@ const HUB_JS = `
     renderPreview();
   }
 
-  // GguiSession the Preview panel based on the current selectedUi.
+  // Render the Preview panel based on the current selectedUi.
   // When nothing is selected we show a hint; otherwise we mount
   // an iframe at /hub/preview?ui=ID — the shell over there is
   // responsible for fetching + rendering the bundle. The iframe
@@ -499,7 +499,7 @@ const HUB_JS = `
       return;
     }
     if (el.eventsCount) el.eventsCount.textContent = '(' + events.length + ')';
-    // GguiSession newest-first — operators scan top-down.
+    // Render newest-first — operators scan top-down.
     var html = '';
     for (var i = events.length - 1; i >= Math.max(0, events.length - MAX_EVENTS); i--) {
       var e = events[i];
@@ -672,7 +672,7 @@ const HUB_JS = `
   }
 
   /**
-   * GguiSession the Diagnostics panel — one row per endpoint with a
+   * Render the Diagnostics panel — one row per endpoint with a
    * click-to-copy curl command. Done once on load (host/port/token
    * don't change for the life of the tab).
    */

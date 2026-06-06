@@ -344,7 +344,7 @@ function renderComponent(
       );
 
     case 'ChoicePicker': {
-      // GguiSession label + the currently-selected value's label (or the
+      // Render label + the currently-selected value's label (or the
       // first option's label if no `value` arrived yet). An
       // interactive picker arrives with the final render; this
       // preview is intentionally static.

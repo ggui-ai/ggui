@@ -9,7 +9,7 @@
  *      `ui/notifications/host-context-changed` postMessage from the host.
  *   2. Echo each fresh value as a `type: 'host_context_observed'`
  *      WebSocket envelope so the server can persist it on
- *      `RenderRecord.hostContext` for agent visibility.
+ *      `GguiSessionRecord.hostContext` for agent visibility.
  *   3. Suppress no-op re-emissions (via deep-equality on the projection
  *      shape) — avoids server-side write traffic when a notification
  *      arrives but no projection-visible field actually changed (e.g.,

@@ -23,7 +23,7 @@ const makeApplyRender = (): ReturnType<
 
 function componentRender(props: Record<string, unknown>): GguiSession {
   return {
-    id: 'render_1',
+    id: 'sess_1',
     appId: 'app_1',
     componentCode: 'export default () => null',
     props: props as GguiSession['props'],
@@ -44,13 +44,13 @@ describe('createPropsUpdateHandler (#290 boot-consolidation core)', () => {
     });
 
     await handler.onMessage({
-      sessionId: 'render_1',
+      sessionId: 'sess_1',
       props: { checked: true },
     } as PropsUpdatePayload);
 
     expect(applyRender).toHaveBeenCalledTimes(1);
     const applied = applyRender.mock.calls[0]?.[0];
-    expect(applied?.id).toBe('render_1');
+    expect(applied?.id).toBe('sess_1');
     expect(applied?.props).toEqual({ checked: true });
     // The patch preserves the render identity/code — only props change.
     expect(
@@ -78,7 +78,7 @@ describe('createPropsUpdateHandler (#290 boot-consolidation core)', () => {
       applyRender,
     });
     await handler.onMessage({
-      sessionId: 'render_1',
+      sessionId: 'sess_1',
       props: { checked: true },
     } as PropsUpdatePayload);
     expect(applyRender).not.toHaveBeenCalled();
@@ -87,7 +87,7 @@ describe('createPropsUpdateHandler (#290 boot-consolidation core)', () => {
   it('no-ops for a system render (system cards take no props_update)', async () => {
     const applyRender = makeApplyRender();
     const systemRender: GguiSession = {
-      id: 'render_1',
+      id: 'sess_1',
       appId: 'app_1',
       type: 'system',
       kind: 'no-credentials',
@@ -101,7 +101,7 @@ describe('createPropsUpdateHandler (#290 boot-consolidation core)', () => {
       applyRender,
     });
     await handler.onMessage({
-      sessionId: 'render_1',
+      sessionId: 'sess_1',
       props: { checked: true },
     } as PropsUpdatePayload);
     expect(applyRender).not.toHaveBeenCalled();
@@ -114,7 +114,7 @@ describe('createPropsUpdateHandler (#290 boot-consolidation core)', () => {
       applyRender,
     });
     await handler.onMessage({
-      sessionId: 'render_1',
+      sessionId: 'sess_1',
       props: null,
     } as unknown as PropsUpdatePayload);
     expect(applyRender).not.toHaveBeenCalled();

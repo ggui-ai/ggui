@@ -140,7 +140,7 @@ function ActionFireHelper({ onReady }: { onReady: (fire: (name: string, data: un
   return null;
 }
 
-const RENDER_ID = 'render-test';
+const RENDER_ID = 'session-test';
 
 async function bootRender(opts: { onError?: (err: Error) => void } = {}): Promise<{
   socket: MockWebSocket;

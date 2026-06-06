@@ -9,7 +9,7 @@
  *
  * Two recognition paths:
  *
- *   - **GguiSession-resource URL** (the default). The tool_result content
+ *   - **Render-resource URL** (the default). The tool_result content
  *     carries `{sessionId, ...}` (the
  *     {@link import('@ggui-ai/protocol').GguiRenderOutput} shape —
  *     streamable agents call `stream.toolResult(id, renderOutput)`
@@ -130,7 +130,7 @@ export function extractUiMoments(
         continue;
       }
 
-      // GguiSession-resource moment — GguiRenderOutput shape. Requires an
+      // Render-resource moment — GguiRenderOutput shape. Requires an
       // origin; skip silently when there is no URL to build.
       if (origin === undefined) continue;
       const rendered = extractRenderCoordinates(block.content);

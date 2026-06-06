@@ -21,7 +21,7 @@ import type { ConversationMessage } from '../useInvoke';
 import { extractUiMoments } from '../ui-moments';
 
 const META_INLINE: McpAppAiGguiRenderMeta = {
-  sessionId: 'render_inline',
+  sessionId: 'session_inline',
   appId: 'app_inline',
   runtimeUrl: '/_ggui/iframe-runtime.js',
   wsUrl: 'wss://mcp.example.test/ws',
@@ -30,7 +30,7 @@ const META_INLINE: McpAppAiGguiRenderMeta = {
 };
 
 const META_INLINE_B: McpAppAiGguiRenderMeta = {
-  sessionId: 'render_inline_b',
+  sessionId: 'session_inline_b',
   appId: 'app_inline_b',
   runtimeUrl: '/_ggui/iframe-runtime.js',
   wsUrl: 'wss://mcp.example.test/ws',
@@ -71,7 +71,7 @@ describe('extractUiMoments', () => {
             type: 'tool_result',
             tool_use_id: 'toolu_render_1',
             content: {
-              sessionId: 'render_abc',
+              sessionId: 'session_abc',
               shortCode: 'xyz',
               url: 'https://example/preview/xyz',
               action: 'create',
@@ -86,7 +86,7 @@ describe('extractUiMoments', () => {
       expect(out).toEqual([
         {
           key: 'toolu_render_1',
-          sessionId: 'render_abc',
+          sessionId: 'session_abc',
           source: {
             kind: 'render-resource',
             url: 'https://api.example.test/api/sessions/render_abc/resource',
@@ -101,7 +101,7 @@ describe('extractUiMoments', () => {
           {
             type: 'tool_result',
             tool_use_id: 'toolu_render_1',
-            content: { sessionId: 'render_p' },
+            content: { sessionId: 'session_p' },
           },
         ]),
       ];
@@ -114,7 +114,7 @@ describe('extractUiMoments', () => {
           {
             type: 'tool_result',
             tool_use_id: 'toolu_render_1',
-            content: { sessionId: 'render_p' },
+            content: { sessionId: 'session_p' },
           },
         ]),
       ];
@@ -135,7 +135,7 @@ describe('extractUiMoments', () => {
           {
             type: 'tool_result',
             tool_use_id: 'toolu_render_1',
-            content: { sessionId: 'render/weird id?x=1' },
+            content: { sessionId: 'session/weird id?x=1' },
           },
         ]),
       ];
@@ -144,7 +144,7 @@ describe('extractUiMoments', () => {
       });
       if (out[0]?.source.kind === 'render-resource') {
         expect(out[0].source.url).toBe(
-          'https://api.example.test/api/sessions/render%2Fweird%20id%3Fx%3D1/resource',
+          'https://api.example.test/api/sessions/session%2Fweird%20id%3Fx%3D1/resource',
         );
       }
     });
@@ -155,7 +155,7 @@ describe('extractUiMoments', () => {
           {
             type: 'tool_result',
             tool_use_id: 'toolu_render_1',
-            content: { result: { sessionId: 'render_p' } },
+            content: { result: { sessionId: 'session_p' } },
           },
         ]),
       ];
@@ -163,7 +163,7 @@ describe('extractUiMoments', () => {
         renderResourceOrigin: 'https://api.example.test',
       });
       expect(out).toHaveLength(1);
-      expect(out[0]?.sessionId).toBe('render_p');
+      expect(out[0]?.sessionId).toBe('session_p');
     });
 
     it('skips tool_result with no sessionId field', () => {
@@ -227,7 +227,7 @@ describe('extractUiMoments', () => {
             type: 'tool_result',
             tool_use_id: 'toolu_render_mixed',
             content: {
-              sessionId: 'render_coord_only',
+              sessionId: 'session_coord_only',
               _meta: toMcpAppEnvelope(META_INLINE),
             },
           },
@@ -288,7 +288,7 @@ describe('extractUiMoments', () => {
           {
             type: 'tool_result',
             tool_use_id: 'toolu_render_a',
-            content: { sessionId: 'render_a' },
+            content: { sessionId: 'session_a' },
           },
           {
             type: 'tool_result',
@@ -314,7 +314,7 @@ describe('extractUiMoments', () => {
             {
               type: 'tool_result',
               tool_use_id: 'toolu_m1_a',
-              content: { sessionId: 'render_m1' },
+              content: { sessionId: 'session_m1' },
             },
           ],
           'msg_1',
@@ -324,7 +324,7 @@ describe('extractUiMoments', () => {
             {
               type: 'tool_result',
               tool_use_id: 'toolu_m2_a',
-              content: { sessionId: 'render_m2' },
+              content: { sessionId: 'session_m2' },
             },
           ],
           'msg_2',

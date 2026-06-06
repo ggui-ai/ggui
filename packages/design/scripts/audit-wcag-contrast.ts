@@ -298,7 +298,7 @@ function auditTheme(
   };
 }
 
-// ── GguiSession ──────────────────────────────────────────────────────────
+// ── Render ──────────────────────────────────────────────────────────
 
 function fmtRatio(n: number): string {
   return n.toFixed(2);

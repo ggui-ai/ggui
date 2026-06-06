@@ -261,7 +261,7 @@ export async function probeGenerationBinding(
 }
 
 /**
- * GguiSession a single operator-facing banner line describing the
+ * Render a single operator-facing banner line describing the
  * generation binding. Always returns a string — when boot didn't
  * resolve a key, the line still names the default provider/model
  * the per-request resolver will try first, so the operator

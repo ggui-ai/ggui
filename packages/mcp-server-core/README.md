@@ -3,7 +3,7 @@
 Core interfaces and reference storage adapters for the **ggui protocol** MCP server.
 
 This package defines the narrow seams that an MCP server for ggui is built on —
-`UiGenerator`, `RenderStore`, `BlueprintProvider`, `AuthAdapter`, plus the
+`UiGenerator`, `GguiSessionStore`, `BlueprintProvider`, `AuthAdapter`, plus the
 negotiator / embedding / vector / kv storage contracts — and ships reference
 implementations of each.
 

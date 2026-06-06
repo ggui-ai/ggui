@@ -60,15 +60,15 @@ describe('extractSessionIdFromToolResult', () => {
   });
 
   it('reads a top-level sessionId', () => {
-    expect(extractSessionIdFromToolResult(toolResult({ sessionId: 'render_42' }))).toBe(
-      'render_42',
+    expect(extractSessionIdFromToolResult(toolResult({ sessionId: 'session_42' }))).toBe(
+      'session_42',
     );
   });
 
   it('reads a nested sessionId one level deep', () => {
     expect(
-      extractSessionIdFromToolResult(toolResult({ result: { sessionId: 'render_7' } })),
-    ).toBe('render_7');
+      extractSessionIdFromToolResult(toolResult({ result: { sessionId: 'session_7' } })),
+    ).toBe('session_7');
   });
 
   it('returns null when no sessionId is anywhere', () => {

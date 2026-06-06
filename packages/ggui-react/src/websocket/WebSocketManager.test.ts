@@ -65,7 +65,7 @@ describe('WebSocketManager', () => {
 
     const manager = new WebSocketManager({
       url: 'wss://example.com',
-      sessionId: 'render_123',
+      sessionId: 'session_123',
       appId: 'app_456',
       onMessage,
       onStatusChange,
@@ -87,7 +87,7 @@ describe('WebSocketManager', () => {
 
     const manager = new WebSocketManager({
       url: 'wss://example.com',
-      sessionId: 'render_123',
+      sessionId: 'session_123',
       appId: 'app_456',
       onMessage,
       onStatusChange,
@@ -111,7 +111,7 @@ describe('WebSocketManager', () => {
 
     const manager = new WebSocketManager({
       url: 'wss://example.com',
-      sessionId: 'render_123',
+      sessionId: 'session_123',
       appId: 'app_456',
       onMessage,
       onStatusChange,
@@ -137,7 +137,7 @@ describe('WebSocketManager', () => {
 
     const manager = new WebSocketManager({
       url: 'wss://example.com',
-      sessionId: 'render_123',
+      sessionId: 'session_123',
       appId: 'app_456',
       onMessage,
       onStatusChange,
@@ -160,7 +160,7 @@ describe('WebSocketManager', () => {
 
     const manager = new WebSocketManager({
       url: 'wss://example.com',
-      sessionId: 'render_123',
+      sessionId: 'session_123',
       appId: 'app_456',
       onMessage,
       onStatusChange,
@@ -184,7 +184,7 @@ describe('WebSocketManager', () => {
 
     const manager = new WebSocketManager({
       url: 'wss://example.com',
-      sessionId: 'render_123',
+      sessionId: 'session_123',
       appId: 'app_456',
       onMessage,
       onStatusChange,
@@ -206,7 +206,7 @@ describe('WebSocketManager', () => {
 
     const manager = new WebSocketManager({
       url: 'wss://example.com',
-      sessionId: 'render_123',
+      sessionId: 'session_123',
       appId: 'app_456',
       onMessage,
       onStatusChange,
@@ -239,7 +239,7 @@ describe('WebSocketManager', () => {
 
     const manager = new WebSocketManager({
       url: 'wss://example.com',
-      sessionId: 'render_123',
+      sessionId: 'session_123',
       appId: 'app_456',
       onMessage,
       onStatusChange,
@@ -266,7 +266,7 @@ describe('WebSocketManager', () => {
 
     const manager = new WebSocketManager({
       url: 'wss://example.com',
-      sessionId: 'render_123',
+      sessionId: 'session_123',
       appId: 'app_456',
       onMessage,
       onStatusChange,
@@ -295,7 +295,7 @@ describe('WebSocketManager', () => {
 
     const manager = new WebSocketManager({
       url: 'wss://example.com',
-      sessionId: 'render_123',
+      sessionId: 'session_123',
       appId: 'app_456',
       onMessage,
       onStatusChange,
@@ -316,7 +316,7 @@ describe('WebSocketManager', () => {
 
     const manager = new WebSocketManager({
       url: 'wss://example.com',
-      sessionId: 'render_123',
+      sessionId: 'session_123',
       appId: 'app_456',
       onMessage,
       onStatusChange,
@@ -341,7 +341,7 @@ describe('WebSocketManager', () => {
 
     const manager = new WebSocketManager({
       url: 'wss://example.com',
-      sessionId: 'render_123',
+      sessionId: 'session_123',
       appId: 'app_456',
       onMessage,
       onStatusChange,
@@ -383,12 +383,12 @@ describe('WebSocketManager', () => {
     manager.connect();
     await vi.advanceTimersByTimeAsync(1);
 
-    manager.subscribeToRender('render_deferred');
+    manager.subscribeToRender('session_deferred');
 
     // @ts-expect-error - accessing private property for test
     const ws = manager.ws as MockWebSocket;
     const subscribeFrame = ws.sentMessages.find((raw) =>
-      raw.includes('render_deferred'),
+      raw.includes('session_deferred'),
     );
     expect(subscribeFrame).toBeDefined();
     const parsed = JSON.parse(subscribeFrame!) as {
@@ -396,7 +396,7 @@ describe('WebSocketManager', () => {
       payload: { sessionId: string; supportedVersions: string[] };
     };
     expect(parsed.type).toBe('subscribe');
-    expect(parsed.payload.sessionId).toBe('render_deferred');
+    expect(parsed.payload.sessionId).toBe('session_deferred');
     expect(parsed.payload.supportedVersions).toEqual([
       ...CLIENT_SUPPORTED_VERSIONS,
     ]);

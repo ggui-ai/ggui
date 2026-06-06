@@ -634,7 +634,7 @@ function utf8ByteLength(s: string): number {
  */
 export interface BlueprintProbeRunner {
   /**
-   * GguiSession the compiled blueprint with the manifest's fixtureProps in
+   * Render the compiled blueprint with the manifest's fixtureProps in
    * a sandboxed DOM. Resolve to `ok: true` on a clean render; resolve
    * to `ok: false` with a single error carrying code
    * `'blueprint_runtime_probe_failed'` on any thrown error during

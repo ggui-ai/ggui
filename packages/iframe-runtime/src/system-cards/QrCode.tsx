@@ -42,7 +42,7 @@ export interface QrCodeProps {
 }
 
 /**
- * GguiSession a QR code as inline SVG. Returns `null` when the encoder
+ * Render a QR code as inline SVG. Returns `null` when the encoder
  * fails (e.g., URL too long for any error-correction level) so the
  * caller can render a fallback.
  */

@@ -9,7 +9,7 @@ import { useAction, useStream, useAuth, useApp, useRender } from '@ggui-ai/wire'
 function createMockConfig(overrides?: Partial<WireConfig>): WireConfig {
   return {
     app: { appId: 'test-app', appName: 'Test App', appDescription: 'A test', appIcon: undefined },
-    render: { sessionId: 'render-123', isConnected: true },
+    render: { sessionId: 'session-123', isConnected: true },
     auth: { userId: 'user-alice', isAuthenticated: true },
     dispatch: vi.fn(),
     subscribe: vi.fn(() => vi.fn()), // returns unsubscribe
@@ -49,7 +49,7 @@ describe('Wire hooks inside GguiWireProvider', () => {
     it('returns render info', () => {
       const config = createMockConfig();
       const { result } = renderHook(() => useRender(), { wrapper: createWrapper(config) });
-      expect(result.current.sessionId).toBe('render-123');
+      expect(result.current.sessionId).toBe('session-123');
       expect(result.current.isConnected).toBe(true);
     });
   });

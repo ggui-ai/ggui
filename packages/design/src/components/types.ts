@@ -591,7 +591,7 @@ export interface PaginationProps extends BaseProps {
 
 /**
  * EmptyState -- placeholder for a region with no data: empty lists,
- * zero search results, an error fallback. GguiSession it instead of
+ * zero search results, an error fallback. Render it instead of
  * nothing whenever a data array could be empty — a list that shows
  * nothing when empty looks broken.
  *

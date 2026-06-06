@@ -271,7 +271,7 @@ async function runServeCommand(args: string[]): Promise<number> {
     });
   } catch (err) {
     // Hard-config-error path: malformed ggui.json or unsupported
-    // agent.entry. GguiSession a crisp, actionable message + exit 1.
+    // agent.entry. Render a crisp, actionable message + exit 1.
     if (err instanceof GguiJsonLoadError) {
       process.stderr.write(`ggui serve: ${err.message}\n`);
       if (err.cause && err.cause instanceof Error) {
