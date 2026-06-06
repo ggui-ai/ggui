@@ -77,7 +77,7 @@ interface GguiSessionSummary {
 }
 
 interface GguiSessionsResponse {
-  readonly renders: readonly GguiSessionSummary[];
+  readonly sessions: readonly GguiSessionSummary[];
   readonly total: number;
 }
 
@@ -431,7 +431,7 @@ function LiveGguiSessionsHero({
       </div>
     );
   }
-  if (state.data.renders.length === 0) {
+  if (state.data.sessions.length === 0) {
     return (
       <div
         className="ggui-status-hero ggui-status-hero--empty"
@@ -459,7 +459,7 @@ function LiveGguiSessionsHero({
     );
   }
 
-  const all = state.data.renders;
+  const all = state.data.sessions;
   const top3 = all.slice(0, 3);
 
   return (

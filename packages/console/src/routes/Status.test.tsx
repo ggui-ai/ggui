@@ -89,7 +89,7 @@ afterEach(() => {
 
 describe('Status — live-renders hero', () => {
   it('renders the empty-state hero when no renders are live', async () => {
-    stubFetch({ renders: [], total: 0 });
+    stubFetch({ sessions: [], total: 0 });
     render(<Status />);
     await waitFor(() => {
       const hero = document.querySelector('[data-ggui-status-hero]');
@@ -103,7 +103,7 @@ describe('Status — live-renders hero', () => {
 
   it('renders the active hero with a per-render shortCode row when a render exists', async () => {
     stubFetch({
-      renders: [
+      sessions: [
         {
           sessionId: 'rndr-1',
           shortCode: 'abc12345',
@@ -133,7 +133,7 @@ describe('Status — live-renders hero', () => {
   it('renders a render count in the eyebrow that matches returned rows', async () => {
     const now = Date.now();
     stubFetch({
-      renders: [
+      sessions: [
         {
           sessionId: 'r-1',
           shortCode: 'aaaa1111',
@@ -168,7 +168,7 @@ describe('Status — live-renders hero', () => {
   it('navigates to the renders list on "view all →" click', async () => {
     const now = Date.now();
     stubFetch({
-      renders: [
+      sessions: [
         {
           sessionId: 'r-latest',
           shortCode: 'deadbeef',
@@ -194,7 +194,7 @@ describe('Status — live-renders hero', () => {
   });
 
   it('renders the error copy when /renders returns non-ok', async () => {
-    stubFetch({ renders: [], total: 0 }, { rendersStatus: 500 });
+    stubFetch({ sessions: [], total: 0 }, { rendersStatus: 500 });
     render(<Status />);
     await waitFor(() => {
       expect(

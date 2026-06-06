@@ -142,7 +142,7 @@ export interface McpAppIframeProps {
    * `ui://ggui/render/<sessionId>` etc.) and the host is responsible
    * for wiring the meta forward — e.g. the console's
    * `<McpAppIframe>` mount feeds it the meta fetched from
-   * `GET /ggui/console/render-resource`. Do NOT set this for any
+   * `GET /ggui/console/session-resource`. Do NOT set this for any
    * WebView loading content authored outside ggui's render-resource
    * surface.
    *

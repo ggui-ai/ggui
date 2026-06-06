@@ -55,7 +55,7 @@
  *     door to inline `<script>` or `<style>` blocks (different CSP
  *     directive). Scoped, not dangerous.
  *   - `connect-src 'self'` — covers both same-origin `fetch()` to
- *     `/ggui/console/render-cookie` and the `new WebSocket('/ws')`
+ *     `/ggui/console/session-cookie` and the `new WebSocket('/ws')`
  *     upgrade. CSP Level 3 treats `'self'` as matching the document's
  *     origin across http/https/ws/wss, which is exactly the scope.
  *   - `img-src 'self' data:` — no images in the minimal viewer today,

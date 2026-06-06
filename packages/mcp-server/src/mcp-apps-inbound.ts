@@ -7,7 +7,7 @@
  * resource bytes:
  *
  *   browser iframe
- *        ↓  https://<ggui-server>/mcp-apps/resource?render=…&item=…
+ *        ↓  https://<ggui-server>/mcp-apps/resource?session=…&item=…
  *   ggui-server proxy route
  *        ↓  MCP resources/read  (via @modelcontextprotocol/sdk/client)
  *   source MCP server
@@ -160,14 +160,14 @@ async function resolveMcpAppsItem(
 /**
  * Register the MCP Apps inbound proxy routes on an Express app.
  *
- *   GET  /mcp-apps/resource?render=<id>&item=<id>
+ *   GET  /mcp-apps/resource?session=<id>&item=<id>
  *     Fetches the referenced McpAppsGguiSession's `source.resourceUri`
  *     via resources/read on the source MCP server. Returns the HTML
  *     with the MIME declared by the source (typically
  *     `text/html;profile=mcp-app`) and spec-canonical CSP headers.
  *
  *   POST /mcp-apps/tools-call
- *     Body: { render, item, tool, arguments? }.
+ *     Body: { session, item, tool, arguments? }.
  *     Resolves the render → connector → cached tools/list, gates
  *     on `_meta.ui.visibility` (must include 'app'), and proxies the
  *     call via MCP client. Cross-connector / unknown tool / model-
@@ -181,10 +181,10 @@ export function installMcpAppsInbound(
   const cache = new ToolsListCache();
 
   app.get(`${path}/resource`, async (req: Request, res: Response) => {
-    const sessionId = typeof req.query.render === 'string' ? req.query.render : '';
+    const sessionId = typeof req.query.session === 'string' ? req.query.session : '';
     const itemId = typeof req.query.item === 'string' ? req.query.item : sessionId;
     if (!sessionId) {
-      res.status(400).type('text/plain').send('Missing ?render');
+      res.status(400).type('text/plain').send('Missing ?session');
       return;
     }
     const item = await resolveMcpAppsItem(opts.renderStore, sessionId, itemId);
@@ -233,12 +233,12 @@ export function installMcpAppsInbound(
 
   app.post(`${path}/tools-call`, async (req: Request, res: Response) => {
     const body = (req.body ?? {}) as {
-      render?: unknown;
+      session?: unknown;
       item?: unknown;
       tool?: unknown;
       arguments?: unknown;
     };
-    const sessionId = typeof body.render === 'string' ? body.render : '';
+    const sessionId = typeof body.session === 'string' ? body.session : '';
     const itemId = typeof body.item === 'string' ? body.item : sessionId;
     const toolName = typeof body.tool === 'string' ? body.tool : '';
     if (!sessionId || !toolName) {

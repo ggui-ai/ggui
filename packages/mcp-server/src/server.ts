@@ -2616,7 +2616,7 @@ export interface CreateGguiServerOptions {
         readonly distDir?: string;
         /**
          * Enable the Slice-2 same-origin session-cookie flow
-         * (`POST /ggui/console/render-cookie` + render-channel
+         * (`POST /ggui/console/session-cookie` + render-channel
          * cookie-auth wiring). Defaults to OFF — the landing-page
          * static surface is useful on its own (pair-code display,
          * server identity); turning on the cookie flow is an
@@ -5617,7 +5617,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
   //   - `GET /ggui/console/info` — JSON describing this server
   //     (name + version + pairing block). Stable shape so the SPA
   //     client in `@ggui-ai/console` can fetch once on load.
-  //   - `POST /ggui/console/render-cookie` — resolve shortCode
+  //   - `POST /ggui/console/session-cookie` — resolve shortCode
   //     → render and mint the same-origin HTTP-only cookie the
   //     viewer authenticates to the live channel with. Enabled only when
   //     `console.sessionCookie` is on AND `shortCodeIndex` +
@@ -6492,7 +6492,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
     // Sort: most-recent `lastActivityAt` first — matches operator
     // intent "show me what I was just looking at."
     //
-    // Zero-config shape: `{ renders: [], total: 0 }` when no
+    // Zero-config shape: `{ sessions: [], total: 0 }` when no
     // renderStore is wired (e.g. pure-MCP dev boot with neither
     // renderChannel nor mcpApps enabled).
     app.get("/ggui/console/sessions", async (req, res) => {
@@ -6516,7 +6516,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
       }
 
       if (!renderStore) {
-        res.json({ renders: [], total: 0 });
+        res.json({ sessions: [], total: 0 });
         return;
       }
 
@@ -6556,7 +6556,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
           if (byRecency !== 0) return byRecency;
           return a.sessionId.localeCompare(b.sessionId);
         });
-        res.json({ renders: summaries, total: summaries.length });
+        res.json({ sessions: summaries, total: summaries.length });
       } catch (err) {
         logger.warn("console_renders_list_failed", {
           error: String(err),
@@ -6952,7 +6952,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
           };
           // If console cookie auth is enabled, mint a session
           // cookie so the chat can open the /ws subscription without
-          // a separate POST to /ggui/console/render-cookie. Single round-trip
+          // a separate POST to /ggui/console/session-cookie. Single round-trip
           // per turn; cookie is same-origin HttpOnly.
           if (sessionCookieEnabled) {
             const secret = sharedTokenSecret as string;
@@ -7050,7 +7050,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
         component: "console-cookie",
       });
 
-      app.post("/ggui/console/render-cookie", async (req: Request, res: Response) => {
+      app.post("/ggui/console/session-cookie", async (req: Request, res: Response) => {
         applyDevtoolSecurityHeaders(res);
         const body = (req.body ?? {}) as { shortCode?: unknown };
         if (typeof body.shortCode !== "string" || body.shortCode.length === 0) {
@@ -7095,7 +7095,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
       // Console render-resource pair. The console's `GguiSessionViewer`
       // runs the production iframe path:
       //
-      //   1. GET /ggui/console/render-resource?render=<sessionId>
+      //   1. GET /ggui/console/session-resource?session=<sessionId>
       //      → returns a `ResourceContents` blob whose `text` IS the
       //      production thin-shell HTML (`GGUI_RENDER_SHELL_HTML`,
       //      byte-identical to what Claude Desktop fetches via MCP
@@ -7126,7 +7126,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
       // Auth + scope obligations (both routes — uniform):
       //   - Cookie-auth via `readDevtoolCookieFromHeaders` +
       //     `verifyDevtoolCookie`. Invalid / missing → 401.
-      //   - Scope: `cookie.sessionId` MUST equal `?render=`. Cross-
+      //   - Scope: `cookie.sessionId` MUST equal `?session=`. Cross-
       //     render access with a valid cookie → 403.
       //   - GguiSession existence + appId match: 404 / 403 respectively.
       //   - The bootstrap route additionally requires `mintBootstrap`
@@ -7148,7 +7148,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
         explicitSessionId?: string
       ): Promise<{ sessionId: string; appId: string } | null> => {
         const sessionIdRaw =
-          explicitSessionId !== undefined ? explicitSessionId : req.query["render"];
+          explicitSessionId !== undefined ? explicitSessionId : req.query["session"];
         if (typeof sessionIdRaw !== "string" || sessionIdRaw.length === 0) {
           res.status(400).json({
             error: "invalid_request",
@@ -7161,7 +7161,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
         if (!rawCookie) {
           res.status(401).json({
             error: "missing_cookie",
-            message: `${CONSOLE_COOKIE_NAME} cookie required (mint via POST /ggui/console/render-cookie first)`,
+            message: `${CONSOLE_COOKIE_NAME} cookie required (mint via POST /ggui/console/session-cookie first)`,
           });
           return null;
         }
@@ -7175,7 +7175,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
         }
         if (claims.sessionId !== sessionIdRaw) {
           res.status(403).json({
-            error: "cookie_render_mismatch",
+            error: "cookie_session_mismatch",
             message: `Console cookie is bound to render '${claims.sessionId}' but request targets '${sessionIdRaw}'`,
           });
           return null;
@@ -7213,12 +7213,12 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
         return { sessionId: claims.sessionId, appId: claims.appId };
       };
 
-      // GET /ggui/console/render-resource?render=<sessionId>
+      // GET /ggui/console/session-resource?session=<sessionId>
       // → production thin-shell HTML, wrapped as a ResourceContents
       //   blob. NO inlined bootstrap — console fetches the bootstrap
       //   separately (route below) and replies to the iframe's
       //   `ui/initialize` postMessage with it.
-      app.get("/ggui/console/render-resource", async (req: Request, res: Response) => {
+      app.get("/ggui/console/session-resource", async (req: Request, res: Response) => {
         applyDevtoolSecurityHeaders(res);
         res.setHeader("Content-Type", "application/json; charset=utf-8");
         const verified = await gateDevtoolRenderRequest(req, res);
@@ -7349,7 +7349,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
         });
       });
 
-      // GET /ggui/console/render?render=<sessionId>
+      // GET /ggui/console/session?session=<sessionId>
       // → `{render, eventSequence}` JSON.
       //
       // Console-only observation surface for `<GguiSessionViewer>` to mount
@@ -7360,7 +7360,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
       //
       // Named parties:
       //   - console SPA (`GguiSessionViewer`) — holds the same-origin
-      //     cookie minted by `POST /ggui/console/render-cookie`.
+      //     cookie minted by `POST /ggui/console/session-cookie`.
       //   - mcp-server (this handler) — gates auth + scope, reads the
       //     authoritative render from `renderStore`.
       //
@@ -7379,7 +7379,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
       // passing into `<RenderInspector>` (which only accepts the
       // ComponentGguiSession variant since the inspector reads actionSpec /
       // streamSpec / propsSpec — fields McpAppsGguiSession doesn't carry).
-      app.get("/ggui/console/render", async (req: Request, res: Response) => {
+      app.get("/ggui/console/session", async (req: Request, res: Response) => {
         applyDevtoolSecurityHeaders(res);
         res.setHeader("Content-Type", "application/json; charset=utf-8");
         const verified = await gateDevtoolRenderRequest(req, res);

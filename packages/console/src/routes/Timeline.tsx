@@ -47,7 +47,7 @@ interface TimelineGguiSessionSummary {
 }
 
 interface TimelineGguiSessionsResponse {
-  readonly renders: readonly TimelineGguiSessionSummary[];
+  readonly sessions: readonly TimelineGguiSessionSummary[];
   readonly total: number;
 }
 
@@ -232,7 +232,7 @@ function GguiSessionsPane({
             ? 'loading…'
             : state.kind === 'error'
               ? 'error'
-              : `${state.data.renders.length} / ${state.data.total}`}
+              : `${state.data.sessions.length} / ${state.data.total}`}
         </span>
       </div>
       <div className="ggui-card__body" style={{ padding: 0 }}>
@@ -248,7 +248,7 @@ function GguiSessionsPane({
           >
             Couldn&apos;t load renders — {state.message}.
           </p>
-        ) : state.data.renders.length === 0 ? (
+        ) : state.data.sessions.length === 0 ? (
           <p className="ggui-muted" style={{ margin: 0, padding: 12 }}>
             No renders yet. Render from an agent (
             <code className="ggui-code">ggui_render</code>) to create one.
@@ -263,7 +263,7 @@ function GguiSessionsPane({
               overflowY: 'auto',
             }}
           >
-            {state.data.renders.map((render) => (
+            {state.data.sessions.map((render) => (
               <GguiSessionRow
                 key={render.sessionId}
                 render={render}

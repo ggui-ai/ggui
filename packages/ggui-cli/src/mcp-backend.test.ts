@@ -227,11 +227,11 @@ describe('buildMcpServerBackend', () => {
 
   it('exposes the render-cookie endpoint so /s/<shortCode> can bootstrap', async () => {
     const { url } = await boot();
-    // POST /ggui/console/render-cookie without a valid shortCode
+    // POST /ggui/console/session-cookie without a valid shortCode
     // → 400 (missing) or 404 (unknown), NEVER 404-on-route. A
     // route-level 404 means the `console.sessionCookie` flow
     // wasn't wired.
-    const res = await fetch(`${url}/ggui/console/render-cookie`, {
+    const res = await fetch(`${url}/ggui/console/session-cookie`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({}),

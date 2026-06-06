@@ -365,7 +365,7 @@ describe('createGguiServer — console.sessionCookie', () => {
       shortCodeIndex: new InMemoryShortCodeIndex(),
       console: { sessionCookie: true },
     });
-    const res = await fetch(`${fx.url}/ggui/console/render-cookie`, {
+    const res = await fetch(`${fx.url}/ggui/console/session-cookie`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ shortCode: 'nope' }),
@@ -383,7 +383,7 @@ describe('createGguiServer — console.sessionCookie', () => {
       shortCodeIndex: new InMemoryShortCodeIndex(),
       console: { sessionCookie: true },
     });
-    const res = await fetch(`${fx.url}/ggui/console/render-cookie`, {
+    const res = await fetch(`${fx.url}/ggui/console/session-cookie`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({}),
@@ -404,7 +404,7 @@ describe('createGguiServer — console.sessionCookie', () => {
       console: { sessionCookie: true },
       wsTokenSecret: 'deterministic-secret-' + 'x'.repeat(32),
     });
-    const res = await fetch(`${fx.url}/ggui/console/render-cookie`, {
+    const res = await fetch(`${fx.url}/ggui/console/session-cookie`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ shortCode: 'abc12345' }),
@@ -440,7 +440,7 @@ describe('createGguiServer — console.sessionCookie', () => {
       wsTokenSecret: 'deterministic-secret-' + 'x'.repeat(32),
     });
     // Mint the cookie.
-    const mintRes = await fetch(`${fx.url}/ggui/console/render-cookie`, {
+    const mintRes = await fetch(`${fx.url}/ggui/console/session-cookie`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ shortCode: 'abc12345' }),
@@ -484,7 +484,7 @@ describe('createGguiServer — console.sessionCookie', () => {
       console: { sessionCookie: true },
       wsTokenSecret: 'deterministic-secret-' + 'x'.repeat(32),
     });
-    const mintRes = await fetch(`${fx.url}/ggui/console/render-cookie`, {
+    const mintRes = await fetch(`${fx.url}/ggui/console/session-cookie`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ shortCode: 'abc12345' }),
@@ -514,7 +514,7 @@ describe('createGguiServer — console.sessionCookie', () => {
     });
     // Mint the cookie via HTTP so the token was really produced by
     // the server (don't shortcut the plumbing).
-    const mintRes = await fetch(`${fx.url}/ggui/console/render-cookie`, {
+    const mintRes = await fetch(`${fx.url}/ggui/console/session-cookie`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ shortCode: 'abc12345' }),
@@ -560,7 +560,7 @@ describe('createGguiServer — console.sessionCookie', () => {
       console: { sessionCookie: true },
       wsTokenSecret: 'deterministic-secret-' + 'x'.repeat(32),
     });
-    const mintRes = await fetch(`${fx.url}/ggui/console/render-cookie`, {
+    const mintRes = await fetch(`${fx.url}/ggui/console/session-cookie`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ shortCode: 'abc12345' }),
@@ -712,7 +712,7 @@ describe('createGguiServer — console security headers', () => {
       shortCodeIndex: new InMemoryShortCodeIndex(),
       console: { sessionCookie: true },
     });
-    const res = await fetch(`${fx.url}/ggui/console/render-cookie`, {
+    const res = await fetch(`${fx.url}/ggui/console/session-cookie`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({}),
@@ -730,7 +730,7 @@ describe('createGguiServer — console security headers', () => {
       shortCodeIndex: new InMemoryShortCodeIndex(),
       console: { sessionCookie: true },
     });
-    const res = await fetch(`${fx.url}/ggui/console/render-cookie`, {
+    const res = await fetch(`${fx.url}/ggui/console/session-cookie`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ shortCode: 'nope' }),
@@ -751,7 +751,7 @@ describe('createGguiServer — console security headers', () => {
       console: { sessionCookie: true },
       wsTokenSecret: 'deterministic-secret-' + 'x'.repeat(32),
     });
-    const res = await fetch(`${fx.url}/ggui/console/render-cookie`, {
+    const res = await fetch(`${fx.url}/ggui/console/session-cookie`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ shortCode: 'abc12345' }),
@@ -836,7 +836,7 @@ describe('createGguiServer — console security headers', () => {
  * /s/<shortCode>" to "agent render appears on the browser":
  *
  *   1. shortCodeIndex.put (simulates the write ggui_render does).
- *   2. POST /ggui/console/render-cookie → 200 + Set-Cookie.
+ *   2. POST /ggui/console/session-cookie → 200 + Set-Cookie.
  *   3. WebSocket upgrade to /ws carrying the cookie.
  *   4. subscribe → ack (cookie-bound, no bearer in sight).
  *   5. server-side sendToGguiSession → subscriber receives the data frame.
@@ -880,7 +880,7 @@ describe('createGguiServer — console full ceremony integration', () => {
 
     // Step 1: mint the cookie via HTTP (no shortcut around the
     // endpoint — this is what the SPA calls).
-    const mintRes = await fetch(`${fx.url}/ggui/console/render-cookie`, {
+    const mintRes = await fetch(`${fx.url}/ggui/console/session-cookie`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ shortCode: 'xyz98765' }),
@@ -974,7 +974,7 @@ describe('createGguiServer — console full ceremony integration', () => {
       console: { sessionCookie: true },
       wsTokenSecret: 'deterministic-secret-' + 'z'.repeat(32),
     });
-    const mintRes = await fetch(`${fx.url}/ggui/console/render-cookie`, {
+    const mintRes = await fetch(`${fx.url}/ggui/console/session-cookie`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ shortCode: 'xyz98765' }),

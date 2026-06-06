@@ -103,7 +103,7 @@ function composeResourceUrl(opts: {
 }): string {
   const base = opts.serverBaseUrl.replace(/\/$/, '');
   const qs = new URLSearchParams({
-    render: opts.sessionId,
+    session: opts.sessionId,
     item: opts.itemId,
   });
   return `${base}/mcp-apps/resource?${qs.toString()}`;
@@ -239,7 +239,7 @@ export function mountMcpAppIframe(
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              render: opts.sessionId,
+              session: opts.sessionId,
               item: opts.render.id,
               tool,
               arguments: args,

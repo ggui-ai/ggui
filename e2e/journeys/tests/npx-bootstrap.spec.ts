@@ -411,7 +411,7 @@ test.describe.serial("OSS hero path — `ggui serve` (real CLI bin)", () => {
     // since the spec-level driver no longer has a shortCode in hand.
     //
     // Restoring an end-to-end equivalent — `<McpAppIframe>` driving
-    // the render-resource endpoint (`/ggui/console/render-resource?render=...`)
+    // the render-resource endpoint (`/ggui/console/session-resource?session=...`)
     // and a Playwright shell rendering the inner iframe — is queued
     // for the post-R5 e2e refresh slice. This block is intentionally
     // empty: the typecheck/lint surface stays clean, the spec still

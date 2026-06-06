@@ -1,7 +1,7 @@
 /**
  * HTTP-level integration tests for the MCP Apps inbound proxy routes —
  *
- *   GET  /mcp-apps/resource?render=<id>&item=<id>
+ *   GET  /mcp-apps/resource?session=<id>&item=<id>
  *   POST /mcp-apps/tools-call
  *
  * Exercises the routes end-to-end against a real mock MCP source server
@@ -277,7 +277,7 @@ describe('GET /mcp-apps/resource', () => {
   it('returns the source-resolved HTML on the happy path', async () => {
     const { sessionId, item } = await seedMcpAppsRender(fx.renderStore);
     const res = await fetch(
-      `${fx.httpBase}/mcp-apps/resource?render=${sessionId}&item=${item.id}`,
+      `${fx.httpBase}/mcp-apps/resource?session=${sessionId}&item=${item.id}`,
     );
     expect(res.status).toBe(200);
     const ct = res.headers.get('content-type') ?? '';
@@ -296,7 +296,7 @@ describe('GET /mcp-apps/resource', () => {
       },
     });
     const res = await fetch(
-      `${fx.httpBase}/mcp-apps/resource?render=${sessionId}&item=${item.id}`,
+      `${fx.httpBase}/mcp-apps/resource?session=${sessionId}&item=${item.id}`,
     );
     expect(res.status).toBe(200);
     const csp = res.headers.get('content-security-policy');
@@ -310,7 +310,7 @@ describe('GET /mcp-apps/resource', () => {
   it('omits the CSP header when the render declares none', async () => {
     const { sessionId, item } = await seedMcpAppsRender(fx.renderStore);
     const res = await fetch(
-      `${fx.httpBase}/mcp-apps/resource?render=${sessionId}&item=${item.id}`,
+      `${fx.httpBase}/mcp-apps/resource?session=${sessionId}&item=${item.id}`,
     );
     expect(res.status).toBe(200);
     // Express may synthesize defaults; the important property is that
@@ -324,7 +324,7 @@ describe('GET /mcp-apps/resource', () => {
     });
     const countBefore = fx.source.toolsListCount();
     const res = await fetch(
-      `${fx.httpBase}/mcp-apps/resource?render=${sessionId}&item=${item.id}`,
+      `${fx.httpBase}/mcp-apps/resource?session=${sessionId}&item=${item.id}`,
     );
     expect(res.status).toBe(200);
     expect(await res.text()).toContain('data-inline');
@@ -344,7 +344,7 @@ describe('GET /mcp-apps/resource', () => {
 
   it('returns 404 for an unknown render', async () => {
     const res = await fetch(
-      `${fx.httpBase}/mcp-apps/resource?render=nope&item=also-nope`,
+      `${fx.httpBase}/mcp-apps/resource?session=nope&item=also-nope`,
     );
     expect(res.status).toBe(404);
   });
@@ -365,7 +365,7 @@ describe('GET /mcp-apps/resource', () => {
       appId: 'app-1',
     });
     const res = await fetch(
-      `${fx.httpBase}/mcp-apps/resource?render=${sessionId}`,
+      `${fx.httpBase}/mcp-apps/resource?session=${sessionId}`,
     );
     expect(res.status).toBe(404);
   });
@@ -379,7 +379,7 @@ describe('GET /mcp-apps/resource', () => {
       },
     });
     const res = await fetch(
-      `${fx.httpBase}/mcp-apps/resource?render=${sessionId}&item=${item.id}`,
+      `${fx.httpBase}/mcp-apps/resource?session=${sessionId}&item=${item.id}`,
     );
     expect(res.status).toBe(404);
     expect(await res.text()).toContain('Unknown connector');
@@ -394,7 +394,7 @@ describe('GET /mcp-apps/resource', () => {
       },
     });
     const res = await fetch(
-      `${fx.httpBase}/mcp-apps/resource?render=${sessionId}&item=${item.id}`,
+      `${fx.httpBase}/mcp-apps/resource?session=${sessionId}&item=${item.id}`,
     );
     expect(res.status).toBe(502);
   });
@@ -420,7 +420,7 @@ describe('POST /mcp-apps/tools-call', () => {
   it('proxies an app-visible tool call on the happy path', async () => {
     const { sessionId, item } = await seedMcpAppsRender(fx.renderStore);
     const res = await callTool({
-      render: sessionId,
+      session: sessionId,
       item: item.id,
       tool: 'app_callable',
       arguments: { amount: 42 },
@@ -437,7 +437,7 @@ describe('POST /mcp-apps/tools-call', () => {
   it('rejects model-only tools with 403 visibility_denied', async () => {
     const { sessionId, item } = await seedMcpAppsRender(fx.renderStore);
     const res = await callTool({
-      render: sessionId,
+      session: sessionId,
       item: item.id,
       tool: 'model_only',
     });
@@ -450,7 +450,7 @@ describe('POST /mcp-apps/tools-call', () => {
   it('returns 404 tool_not_found for an unknown tool name', async () => {
     const { sessionId, item } = await seedMcpAppsRender(fx.renderStore);
     const res = await callTool({
-      render: sessionId,
+      session: sessionId,
       item: item.id,
       tool: 'does_not_exist',
     });
@@ -461,7 +461,7 @@ describe('POST /mcp-apps/tools-call', () => {
   });
 
   it('returns 400 when required fields are missing', async () => {
-    const res = await callTool({ render: 'x', item: 'y' });
+    const res = await callTool({ session: 'x', item: 'y' });
     expect(res.status).toBe(400);
   });
 
@@ -469,7 +469,7 @@ describe('POST /mcp-apps/tools-call', () => {
     const sessionId = `sess-${randomUUID()}`;
     await fx.renderStore.create({ id: sessionId, appId: 'app-1' });
     const res = await callTool({
-      render: sessionId,
+      session: sessionId,
       item: 'nope',
       tool: 'app_callable',
     });
@@ -488,7 +488,7 @@ describe('POST /mcp-apps/tools-call', () => {
       },
     });
     const res = await callTool({
-      render: sessionId,
+      session: sessionId,
       item: item.id,
       tool: 'app_callable',
     });
@@ -506,7 +506,7 @@ describe('POST /mcp-apps/tools-call', () => {
     // transport-level failures (e.g. unreachable source).
     const { sessionId, item } = await seedMcpAppsRender(fx.renderStore);
     const res = await callTool({
-      render: sessionId,
+      session: sessionId,
       item: item.id,
       tool: 'boom',
     });
@@ -528,7 +528,7 @@ describe('POST /mcp-apps/tools-call', () => {
     // cannot reach connector B" guarantee structurally.
     const { sessionId, item } = await seedMcpAppsRender(fx.renderStore);
     const res = await callTool({
-      render: sessionId,
+      session: sessionId,
       item: item.id,
       // Forging a different connectorId in the body is ignored — the
       // route dispatches by item.source.connectorId.
@@ -539,7 +539,7 @@ describe('POST /mcp-apps/tools-call', () => {
     // And a tool that ONLY exists on some hypothetical other connector
     // is not found — we never reach any other source.
     const res2 = await callTool({
-      render: sessionId,
+      session: sessionId,
       item: item.id,
       tool: 'tool_on_some_other_connector',
     });

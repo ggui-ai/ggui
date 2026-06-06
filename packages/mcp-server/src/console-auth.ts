@@ -33,7 +33,7 @@
  * so the cookie never leaves the console's origin in the first
  * place.
  *
- * Lifecycle. Cookie is minted at `POST /ggui/console/render-cookie`
+ * Lifecycle. Cookie is minted at `POST /ggui/console/session-cookie`
  * (operator posts a shortCode → server resolves → sets Set-Cookie).
  * Cookie is consumed at `GET /ws` upgrade (if the server composition
  * wires `cookieAuth` to the render-channel). Never mutated in

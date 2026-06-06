@@ -42,7 +42,7 @@ interface TimelineGguiSessionSummary {
 
 /** Body of `GET /ggui/console/timeline/renders`. */
 interface TimelineGguiSessionsResponse {
-  readonly renders: readonly TimelineGguiSessionSummary[];
+  readonly sessions: readonly TimelineGguiSessionSummary[];
   readonly total: number;
 }
 
@@ -114,7 +114,7 @@ export function mountConsoleTimelineRoutes(
 
       // Zero-config shape: no store wired (pure-MCP boot) → empty list.
       if (!renderStore) {
-        const body: TimelineGguiSessionsResponse = { renders: [], total: 0 };
+        const body: TimelineGguiSessionsResponse = { sessions: [], total: 0 };
         res.json(body);
         return;
       }
@@ -163,13 +163,13 @@ export function mountConsoleTimelineRoutes(
         });
         const trimmed = summaries.slice(0, limit);
         const body: TimelineGguiSessionsResponse = {
-          renders: trimmed,
+          sessions: trimmed,
           total: summaries.length,
         };
         res.json(body);
       } catch (err) {
         res.status(500).json({
-          error: 'timeline_renders_list_failed',
+          error: 'timeline_sessions_list_failed',
           message:
             err instanceof Error
               ? `GguiSession store failed to list — ${err.message}`

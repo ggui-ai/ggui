@@ -54,7 +54,7 @@ interface GguiSessionSummary {
 }
 
 interface GguiSessionsResponse {
-  readonly renders: readonly GguiSessionSummary[];
+  readonly sessions: readonly GguiSessionSummary[];
   readonly total: number;
 }
 
@@ -95,8 +95,8 @@ export function Renders(): ReactElement {
   const needle = filter.trim().toLowerCase();
   const filtered = useMemo(() => {
     if (state.kind !== 'ready') return null;
-    if (needle.length === 0) return state.data.renders;
-    return state.data.renders.filter((r) =>
+    if (needle.length === 0) return state.data.sessions;
+    return state.data.sessions.filter((r) =>
       [r.sessionId, r.shortCode ?? '', r.appId]
         .join(' ')
         .toLowerCase()
@@ -148,8 +148,8 @@ export function Renders(): ReactElement {
             </div>
           </div>
           <GguiSessionList
-            all={state.data.renders}
-            shown={filtered ?? state.data.renders}
+            all={state.data.sessions}
+            shown={filtered ?? state.data.sessions}
             filterActive={needle.length > 0}
           />
         </>

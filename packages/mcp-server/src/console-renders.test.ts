@@ -61,7 +61,7 @@ async function boot(
 }
 
 interface GguiSessionsResponse {
-  readonly renders: ReadonlyArray<{
+  readonly sessions: ReadonlyArray<{
     readonly sessionId: string;
     readonly shortCode?: string;
     readonly appId: string;
@@ -88,7 +88,7 @@ describe('GET /ggui/console/sessions', () => {
     expect(res.status).toBe(200);
     expect(res.headers.get('content-type')).toContain('application/json');
     const body = (await res.json()) as GguiSessionsResponse;
-    expect(body).toEqual({ renders: [], total: 0 });
+    expect(body).toEqual({ sessions: [], total: 0 });
   });
 
   it('surfaces sessionId + appId from an active render', async () => {
@@ -98,9 +98,9 @@ describe('GET /ggui/console/sessions', () => {
     const res = await fetch(`${fx.url}/ggui/console/sessions`, { headers: { authorization: `Bearer ${fx.server.adminToken}` } });
     expect(res.status).toBe(200);
     const body = (await res.json()) as GguiSessionsResponse;
-    expect(body.renders).toHaveLength(1);
+    expect(body.sessions).toHaveLength(1);
     expect(body.total).toBe(1);
-    const row = body.renders[0];
+    const row = body.sessions[0];
     if (!row) throw new Error('expected row');
     expect(row.sessionId).toBe(created.id);
     expect(row.appId).toBe('app-alpha');
@@ -123,8 +123,8 @@ describe('GET /ggui/console/sessions', () => {
     fx = await boot({ console: {}, renderStore, shortCodeIndex });
     const res = await fetch(`${fx.url}/ggui/console/sessions`, { headers: { authorization: `Bearer ${fx.server.adminToken}` } });
     const body = (await res.json()) as GguiSessionsResponse;
-    expect(body.renders).toHaveLength(1);
-    expect(body.renders[0]?.shortCode).toBe('share12345');
+    expect(body.sessions).toHaveLength(1);
+    expect(body.sessions[0]?.shortCode).toBe('share12345');
   });
 
   it('orders rows by lastActivityAt descending (most-recent first)', async () => {
@@ -138,7 +138,7 @@ describe('GET /ggui/console/sessions', () => {
     fx = await boot({ console: {}, renderStore });
     const res = await fetch(`${fx.url}/ggui/console/sessions`, { headers: { authorization: `Bearer ${fx.server.adminToken}` } });
     const body = (await res.json()) as GguiSessionsResponse;
-    expect(body.renders.map((r) => r.sessionId)).toEqual([
+    expect(body.sessions.map((r) => r.sessionId)).toEqual([
       s2.id,
       s3.id,
       s1.id,
@@ -155,19 +155,19 @@ describe('GET /ggui/console/sessions', () => {
 
     const res2 = await fetch(`${fx.url}/ggui/console/sessions?limit=2`, { headers: { authorization: `Bearer ${fx.server.adminToken}` } });
     const body2 = (await res2.json()) as GguiSessionsResponse;
-    expect(body2.renders).toHaveLength(2);
+    expect(body2.sessions).toHaveLength(2);
     expect(body2.total).toBe(2);
 
     // Nonsense input → default (25). 3 rows is well under, so all
     // three come back.
     const resBogus = await fetch(`${fx.url}/ggui/console/sessions?limit=abc`, { headers: { authorization: `Bearer ${fx.server.adminToken}` } });
     const bodyBogus = (await resBogus.json()) as GguiSessionsResponse;
-    expect(bodyBogus.renders).toHaveLength(3);
+    expect(bodyBogus.sessions).toHaveLength(3);
 
     // Zero / negative → default (clamped up to positive).
     const resZero = await fetch(`${fx.url}/ggui/console/sessions?limit=0`, { headers: { authorization: `Bearer ${fx.server.adminToken}` } });
     const bodyZero = (await resZero.json()) as GguiSessionsResponse;
-    expect(bodyZero.renders).toHaveLength(3);
+    expect(bodyZero.sessions).toHaveLength(3);
 
     // Oversized → capped at 100. Hard to prove directly without
     // creating 101 renders; we assert the handler accepts the
@@ -190,8 +190,8 @@ describe('GET /ggui/console/sessions', () => {
     fx = await boot({ console: {}, renderStore, shortCodeIndex });
     const res = await fetch(`${fx.url}/ggui/console/sessions`, { headers: { authorization: `Bearer ${fx.server.adminToken}` } });
     const body = (await res.json()) as GguiSessionsResponse;
-    const rowWith = body.renders.find((r) => r.sessionId === withCode.id);
-    const rowWithout = body.renders.find(
+    const rowWith = body.sessions.find((r) => r.sessionId === withCode.id);
+    const rowWithout = body.sessions.find(
       (r) => r.sessionId === withoutCode.id,
     );
     expect(rowWith?.shortCode).toBe('share0000');
@@ -229,8 +229,8 @@ describe('GET /ggui/console/sessions', () => {
     const res = await fetch(`${fx.url}/ggui/console/sessions`, { headers: { authorization: `Bearer ${fx.server.adminToken}` } });
     expect(res.status).toBe(200);
     const body = (await res.json()) as GguiSessionsResponse;
-    expect(body.renders).toHaveLength(1);
-    expect(body.renders[0]?.shortCode).toBeUndefined();
+    expect(body.sessions).toHaveLength(1);
+    expect(body.sessions[0]?.shortCode).toBeUndefined();
   });
 
   it('404s when console is not enabled', async () => {

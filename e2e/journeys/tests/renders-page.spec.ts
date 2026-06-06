@@ -9,7 +9,7 @@
  *      The fixture has no committed renders at boot — perfect for the
  *      empty-state path the `/admin/sessions` page surfaces.
  *   2. Navigate to `/admin/sessions`. The SPA fetches
- *      `GET /ggui/console/sessions` (200, shape `{renders:[],total:0}`)
+ *      `GET /ggui/console/sessions` (200, shape `{sessions:[],total:0}`)
  *      and paints the branded empty-state card.
  *   3. Navigate via the TopNav's `renders` link from another page,
  *      proving the cross-page nav wire works.
@@ -84,7 +84,7 @@ test.describe.serial(
       });
 
       // The fixture has no live renders, so the endpoint returns
-      // `{renders:[],total:0}` and the SPA renders the empty-state
+      // `{sessions:[],total:0}` and the SPA renders the empty-state
       // card. Assert the empty-state copy — load-bearing proof the
       // fetch + no-renders branch wired correctly, because the
       // branded-card container has a stable anchor the row list
