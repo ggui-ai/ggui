@@ -29,7 +29,7 @@ export type { BlueprintIndexConformanceFactory } from './blueprint-index.js';
 export { kvStoreContract } from './kv-store.js';
 export type { KvContractClock, KvContractOptions } from './kv-store.js';
 export { embeddingProviderContract } from './embedding-provider.js';
-export { renderStoreContract } from './ggui-session-store.js';
+export { gguiSessionStoreContract } from './ggui-session-store.js';
 export type {
   GguiSessionStoreContractClock,
   GguiSessionStoreContractOptions,
@@ -48,7 +48,7 @@ export { streamFanoutContract } from './stream-fanout.js';
 export { scopedFileStoreContract } from './scoped-file-store.js';
 
 // Bug-class focused conformance suites. Sibling-but-narrower to the
-// existing `renderStoreContract` / `pendingEventConsumerContract` —
+// existing `gguiSessionStoreContract` / `pendingEventConsumerContract` —
 // these pin known real bug classes plus the foundational lifecycle
 // invariants (event monotonicity, close surface). Plug into adapter
 // test suites alongside the basic contract to widen the drift net.

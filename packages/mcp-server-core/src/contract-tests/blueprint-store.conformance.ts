@@ -2,7 +2,7 @@
  * `BlueprintStore` cross-impl conformance suite.
  *
  * Portable battery every {@link BlueprintStore} implementation MUST
- * satisfy. Mirrors the `render-store.conformance` pattern: a factory
+ * satisfy. Mirrors the `ggui-session-store.conformance` pattern: a factory
  * supplies a fresh store + optional teardown hook; concrete impls plug
  * in their own runner test.
  *

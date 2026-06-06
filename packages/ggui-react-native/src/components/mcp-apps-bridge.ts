@@ -153,7 +153,7 @@ export async function handleHostBridgeRequest(
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            render: ctx.sessionId,
+            session: ctx.sessionId,
             tool,
             arguments: args,
           }),

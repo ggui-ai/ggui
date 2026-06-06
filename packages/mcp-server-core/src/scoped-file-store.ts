@@ -88,7 +88,7 @@
  *
  * ## Relationship to other seams
  *
- * - {@link GguiSessionStore} (`render-store.ts`) — durable per-render
+ * - {@link GguiSessionStore} (`ggui-session-store.ts`) — durable per-render
  *   metadata + event log. `DynamoGguiSessionStore` offloads heavy
  *   `render.componentCode` and `conversationHistory` blobs into
  *   `ScopedFileStoreRegistry.render(sessionId)` so the DDB row stays

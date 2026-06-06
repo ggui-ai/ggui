@@ -500,9 +500,9 @@ function PanelView({
  * Render one MCP-Apps resource. Mounts straight from the inlined
  * resource `@ggui-ai/agent-server`'s tool-result interceptor stamped
  * on `_meta.ui.resource` (zero-round-trip mount). On rehydration the
- * `GET /agent` replay re-inlines each render FRESH from the MCP, so
+ * `GET /agent` replay re-inlines each GguiSession FRESH from the MCP, so
  * the inlined HTML always reflects current server state. When no
- * inlined HTML is present (a render that no longer resolves), the
+ * inlined HTML is present (a GguiSession that no longer resolves), the
  * frame shows a small "not inlined" notice rather than fetching.
  */
 function ResourceFrame({

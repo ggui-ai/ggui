@@ -81,7 +81,7 @@ const inputSchema = {
   snapshot: z
     .record(z.string(), z.unknown())
     .describe(
-      'Full current snapshot of every declared contextSpec slot. Last-write-wins; the server overwrites any prior `contextSnapshot` on the render with this map verbatim.',
+      'Full current snapshot of every declared contextSpec slot. Last-write-wins; the server overwrites any prior `contextSnapshot` on the GguiSession with this map verbatim.',
     ),
 } as const;
 
@@ -268,7 +268,7 @@ function validateSnapshotAgainstSpec(
       {
         field: 'contextSnapshot',
         message:
-          'snapshot supplied but the render declares no contextSpec — refine the contract OR drop the snapshot.',
+          'snapshot supplied but the GguiSession declares no contextSpec — refine the contract OR drop the snapshot.',
         expected: 'no snapshot (no contextSpec declared)',
         received: `snapshot with keys: ${slots.join(', ')}`,
       },

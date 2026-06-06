@@ -103,7 +103,7 @@ export function buildHandler(kind: ToolHandlerKind): ToolHandler {
 /**
  * In-memory tool registry. Scoped to a GguiSession via the action router
  * (the plan's register-tool directive wires a handler under the
- * render's tool namespace). No-persistence by design.
+ * GguiSession's tool namespace). No-persistence by design.
  */
 export class ToolRegistry {
   private readonly tools = new Map<string, RegisteredTool>();

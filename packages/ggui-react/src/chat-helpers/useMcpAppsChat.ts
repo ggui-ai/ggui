@@ -60,9 +60,9 @@ export interface UseMcpAppsChatOptions {
   readonly chatEndpoint: string;
   /**
    * GET endpoint for the server-authoritative chat snapshot. Called
-   * once on mount with `?chatId=<id>`. Returns `{messages, renders}` —
+   * once on mount with `?chatId=<id>`. Returns `{messages, sessions}` —
    * `messages` are SDK messages (replayed through the same handler the
-   * live SSE stream uses), `renders` are optional descriptors for any
+   * live SSE stream uses), `sessions` are optional descriptors for any
    * MCP-Apps resource whose URI didn't ride inline on a recorded
    * SDKMessage. Defaults to the same URL as {@link chatEndpoint}.
    *
@@ -120,10 +120,10 @@ export interface UseMcpAppsChatOptions {
 /**
  * Public return of {@link useMcpAppsChat}.
  *
- * `entries[]` is the render-ready chat log; `renders[]` is every
+ * `entries[]` is the render-ready chat log; `sessions[]` is every
  * MCP-Apps resource the agent has produced this conversation (latest at
  * the end). Sample chat panels render `entries` inline and pass
- * `renders[i]` to `<AppRenderer toolResourceUri={...}>` for iframe
+ * `sessions[i]` to `<AppRenderer toolResourceUri={...}>` for iframe
  * mounting.
  */
 export interface UseMcpAppsChatResult {

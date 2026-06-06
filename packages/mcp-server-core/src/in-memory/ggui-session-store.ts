@@ -7,7 +7,7 @@
  * JS turn and is gap-free within a render.
  *
  * Production bindings (SQLite, Postgres LISTEN/NOTIFY, DDB+AppSync)
- * ship as separate packages and MUST pass `renderStoreContract`.
+ * ship as separate packages and MUST pass `gguiSessionStoreContract`.
  */
 import type { GguiSession } from '@ggui-ai/protocol';
 import type {

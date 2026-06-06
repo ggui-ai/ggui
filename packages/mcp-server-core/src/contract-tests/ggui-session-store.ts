@@ -1,7 +1,7 @@
 /**
  * Contract test factory for {@link GguiSessionStore} implementations.
  *
- * Normative semantics covered (see `render-store.ts` JSDoc):
+ * Normative semantics covered (see `ggui-session-store.ts` JSDoc):
  *
  *   - `create` returns a fresh render with appId + createdAt set.
  *   - `get` missing → null; hit → full render.
@@ -41,7 +41,7 @@ export interface GguiSessionStoreContractOptions {
   }>;
 }
 
-export function renderStoreContract(
+export function gguiSessionStoreContract(
   label: string,
   makeStore: () => Promise<GguiSessionStore> | GguiSessionStore,
   opts: GguiSessionStoreContractOptions = {},

@@ -61,7 +61,7 @@ export class ChannelNotDeclaredError extends Error {
     sessionId?: string,
   ) {
     super(
-      `Channel '${channel}' is not declared on the render's streamSpec. Declared channels: [${declaredChannels.join(', ') || '(none — no streamSpec on this render)'}]`,
+      `Channel '${channel}' is not declared on the GguiSession's streamSpec. Declared channels: [${declaredChannels.join(', ') || '(none — no streamSpec on this GguiSession)'}]`,
     );
     this.name = 'ChannelNotDeclaredError';
     this.channel = channel;

@@ -7,7 +7,7 @@
  *   - `entries[]`   — a flat, render-ready chat log (user prompts,
  *                     assistant text, tool calls, embedded renders,
  *                     errors, end markers).
- *   - `renders[]`   — every MCP-Apps resource the agent has produced
+ *   - `sessions[]` — every MCP-Apps resource the agent has produced
  *                     this conversation, ready to mount via
  *                     `<AppRenderer toolResourceUri={...}>`.
  *

@@ -11,7 +11,7 @@
  *     an unseeded render; class instanceof OR `name` field check both
  *     pass (cloud's adapter throws its own class).
  *
- * Same factory + cleanup pattern as `render-store.conformance.ts`.
+ * Same factory + cleanup pattern as `ggui-session-store.conformance.ts`.
  *
  * Seed semantics: PendingEventConsumer is a per-render buffer; every
  * test needs a render to be present in the consumer's bookkeeping

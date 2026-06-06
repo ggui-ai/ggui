@@ -21,7 +21,7 @@
  *     slice.
  *
  * Layout follows the same `ggui-stack` entry-card grammar the
- * Blueprints + Renders pages use, so all the index pages read as
+ * Blueprints + GguiSessions pages use, so all the index pages read as
  * one surface.
  *
  * Test contract (data-attrs):

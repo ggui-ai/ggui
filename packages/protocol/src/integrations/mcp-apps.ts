@@ -615,7 +615,7 @@ export function parseMcpAppAiGguiHostSessionMeta(
 
 /**
  * Wire shape of one row in `ggui_list_sessions` output. Mirrors the
- * handler's Zod-described `renders[*]`. Surfaced at the protocol level
+ * handler's Zod-described `sessions[*]`. Surfaced at the protocol level
  * so non-handler consumers (sample-agent's `/chat/restore` server, future
  * host SDK helpers) can import a single typed shape instead of
  * redeclaring it — preventing drift if the handler ever grows fields.

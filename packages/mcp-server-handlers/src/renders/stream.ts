@@ -80,7 +80,7 @@ export function createGguiEmitHandler(
     title: 'Stream',
     audience: ['agent'],
     description:
-      "Emit a new delivery on a declared channel of the render's streamSpec. The agent supplies {sessionId, channel, payload, complete?}; the server derives mode from the channel's declared mode and stamps the canonical StreamEnvelope. Validates the payload against the channel's schema and rejects undeclared channels. Acceptance is at the server boundary — no-subscriber is not an error.",
+      "Emit a new delivery on a declared channel of the GguiSession's streamSpec. The agent supplies {sessionId, channel, payload, complete?}; the server derives mode from the channel's declared mode and stamps the canonical StreamEnvelope. Validates the payload against the channel's schema and rejects undeclared channels. Acceptance is at the server boundary — no-subscriber is not an error.",
     inputSchema,
     outputSchema,
     async handler(

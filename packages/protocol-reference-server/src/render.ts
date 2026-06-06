@@ -56,7 +56,7 @@ export interface GguiSession {
   readonly streamSpecs: Map<string, StreamSpecEntry>;
   readonly subscribers: Set<Subscriber>;
   /**
-   * Per-render protocol-version override. When set, the WS subscribe
+   * Per-GguiSession protocol-version override. When set, the WS subscribe
    * + UPGRADE_REQUIRED paths advertise this value in place of the
    * server-instance-level `versionOverride`.
    *
@@ -65,9 +65,9 @@ export interface GguiSession {
    * `server-version-override` setup directive in the conformance host
    * adapter — production code paths leave this `undefined`.
    *
-   * Why per-render, not per-instance: parallel kit fixtures share
+   * Why per-GguiSession, not per-instance: parallel kit fixtures share
    * one `ReferenceServer`. Mutating the instance-level override would
-   * leak across renders; the per-render field scopes the mismatch
+   * leak across GguiSessions; the per-GguiSession field scopes the mismatch
    * to the one fixture that asked for it.
    */
   versionOverride?: string;
@@ -165,7 +165,7 @@ export class GguiSessionStore {
    * `server-version-override` ConformanceHost directive — populates
    * {@link GguiSession.versionOverride} so the WS subscribe handler
    * advertises this value (and emits UPGRADE_REQUIRED keyed off it)
-   * for THIS render only, leaving parallel renders on the instance-
+   * for THIS GguiSession only, leaving parallel GguiSessions on the instance-
    * level default.
    *
    * Same "create-if-missing" semantics as the other register* setters

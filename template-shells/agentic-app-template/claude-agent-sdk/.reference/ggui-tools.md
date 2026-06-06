@@ -14,9 +14,9 @@ ggui_handshake → ggui_render → … user interacts … → ggui_consume → g
 | Tool | What it does |
 | ---- | ------------ |
 | `ggui_handshake` | Negotiate the contract/blueprint for a surface before rendering. |
-| `ggui_render` | Materialize **one** render from a natural-language UI description (+ data). The core call. |
-| `ggui_update` | Mutate the current render's **props** in place (no full re-render). |
-| `ggui_emit` | Push **live/streaming** data into the current render (e.g. status ticks). |
+| `ggui_render` | Materialize **one** GguiSession from a natural-language UI description (+ data). The core call. |
+| `ggui_update` | Mutate the current GguiSession's **props** in place (no full re-render). |
+| `ggui_emit` | Push **live/streaming** data into the current GguiSession (e.g. status ticks). |
 | `ggui_consume` | **Long-poll** for the next user action (a click/submit). The agent awaits this, then reasons on the next turn. |
 | `ggui_get_session` | Read the current GguiSession, including the latest **observed UI state** (form drafts, selections). |
 | `ggui_list_sessions` | List the GguiSessions in the current host session (conversation grouping). |

@@ -19,9 +19,8 @@ export interface ComponentErrorReport {
   /** Unique error ID for tracking */
   errorId: string;
   /** GguiSession that experienced the error. Post-Phase-B the old
-   *  `sessionId` + `stackItemId` pair collapses to one `sessionId` —
-   *  every render is now a top-level GguiSession and the values were
-   *  always identical anyway. */
+   *  every GguiSession is now a top-level instance; the old per-item
+   *  identity has been folded into a single `sessionId`. */
   sessionId: string;
   /** App ID */
   appId: string;

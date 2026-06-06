@@ -102,7 +102,7 @@ interface WsMessageBase {
  *       msg.payload.details; // JsonValue | undefined
  *       break;
  *     case 'render':
- *       msg.payload.render; // RenderPayload — auto-narrowed
+ *       msg.payload.session; // RenderPayload — auto-narrowed
  *       break;
  *     case 'data':
  *       msg.payload.payload; // StreamEnvelope.payload
