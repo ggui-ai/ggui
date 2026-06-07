@@ -24,4 +24,14 @@ describe("computeToolCatalogHash", () => {
   it("empty catalog is stable", () => {
     expect(computeToolCatalogHash({})).toMatch(/^[0-9a-f]{16}$/);
   });
+  it("changes when a tool version changes", () => {
+    const a = computeToolCatalogHash({ todo_add: { name: "@x/todo", version: "1.0" } });
+    const b = computeToolCatalogHash({ todo_add: { name: "@x/todo", version: "2.0" } });
+    expect(a).not.toBe(b);
+  });
+  it("distinguishes absent vs present version", () => {
+    const a = computeToolCatalogHash({ todo_add: { name: "@x/todo" } });
+    const b = computeToolCatalogHash({ todo_add: { name: "@x/todo", version: "1.0" } });
+    expect(a).not.toBe(b);
+  });
 });

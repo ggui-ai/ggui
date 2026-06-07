@@ -30,9 +30,6 @@ export { canonicalizeContracts, canonicalizeValue } from "./registry/canonicaliz
 // as `./content-hash`. Server consumers import from the subpath:
 //   import { blueprintKey } from '@ggui-ai/protocol/blueprint-key';
 export { summarizeContract } from "./registry/summarize-contract";
-// Blueprint-stamp helpers — deterministic hash of a tool-identity catalog
-// for portable blueprint integrity checks. Server-only (pulls `node:crypto`).
-export * from "./registry/blueprint-stamp";
 // Explicit type re-exports — `export *` from a types-only file does not always
 // surface re-exported types in the generated .d.ts root index when the source
 // uses `export type` (TS's emit elides them in some configurations). Listing

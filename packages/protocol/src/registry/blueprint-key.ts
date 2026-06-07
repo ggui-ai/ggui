@@ -41,3 +41,7 @@ export {
   type PortableBlueprintSource,
   type PortableBlueprintImport,
 } from './portable-blueprint.js';
+
+// `computeToolCatalogHash` pulls `node:crypto`, so it lives behind this
+// server-only subpath alongside `blueprintKey` rather than the root barrel.
+export * from './blueprint-stamp.js';
