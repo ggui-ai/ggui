@@ -133,24 +133,37 @@ const SERVICES = [
   { name: 'agent', color: 32, script: 'dev:agent', where: `http://localhost:${AGENT_PORT}`, note: 'LLM backend' },
   { name: 'web', color: 36, script: 'dev:web', where: WEB_URL, note: 'the app you open  ←' },
 ];
-const nameW = Math.max(...SERVICES.map((s) => s.name.length));
-const whereW = Math.max(...SERVICES.map((s) => s.where.length));
+
+// When GGUI_MCP_URL points at a remote (non-localhost) host the local ggui
+// service is unnecessary — the agent already talks to the cloud endpoint.
+// Skip spawning it so the dev tree doesn't race or conflict with it.
+function isRemoteGguiUrl(u) {
+  if (!u) return false;
+  try { const h = new URL(u).hostname; return !/^(localhost|127\.|0\.0\.0\.0|\[?::1\]?)$/.test(h); }
+  catch { return false; }
+}
+const useCloudGgui = isRemoteGguiUrl(process.env.GGUI_MCP_URL);
+const services = SERVICES.filter((s) => !(useCloudGgui && s.name === 'ggui'));
+if (useCloudGgui) console.log('[dev] GGUI_MCP_URL is remote → using managed ggui; skipping local ggui service');
+
+const nameW = Math.max(...services.map((s) => s.name.length));
+const whereW = Math.max(...services.map((s) => s.where.length));
 const tag = (s) => `\x1b[${s.color}m[${s.name.padEnd(nameW)}]\x1b[0m`;
-const table = SERVICES.map(
+const table = services.map(
   (s) => `    \x1b[${s.color}m${s.name.padEnd(nameW)}\x1b[0m  ${s.where.padEnd(whereW)}  ${s.note}`,
 ).join('\n');
 
 const logHint = VERBOSE
-  ? `Streaming logs, labeled ${SERVICES.map(tag).join(' ')}.`
+  ? `Streaming logs, labeled ${services.map(tag).join(' ')}.`
   : 'Logs are hidden — run \x1b[1mpnpm dev --verbose\x1b[0m to stream them.';
 
 process.stdout.write(`
-  Starting your ggui app — ${SERVICES.length} servers, one command:
+  Starting your ggui app — ${services.length} servers, one command:
 
 ${table}
 
   \x1b[1m👉  Open ${WEB_URL}\x1b[0m  (opens automatically once 'web' is ready).
-  The other three are backend servers; all ${SERVICES.length} run in the BACKGROUND until
+  The other ${services.length - 1} are backend servers; all ${services.length} run in the BACKGROUND until
   you press Ctrl-C, which stops every one of them (or \x1b[1mpnpm dev:stop\x1b[0m if a port sticks).
   ${logHint}
 
@@ -187,7 +200,7 @@ process.on('SIGINT', () => shutdown(0));
 process.on('SIGTERM', () => shutdown(0));
 process.on('SIGHUP', () => shutdown(0));
 
-for (const s of SERVICES) {
+for (const s of services) {
   // `detached` puts each group in its own process group so killTree can take
   // down the whole subtree (pnpm only unreliably forwards signals to its kids).
   const child = spawn('pnpm', [s.script], { env: process.env, detached: POSIX });
