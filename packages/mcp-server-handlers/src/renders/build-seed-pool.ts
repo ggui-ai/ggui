@@ -10,6 +10,7 @@ import type {
 } from '@ggui-ai/mcp-server-core';
 import { fromPortableBlueprint } from '@ggui-ai/protocol/blueprint-key';
 import { registerBlueprint } from './blueprint-registry.js';
+import { gateImportedBlueprint, type ImportGateCtx } from './import-gate.js';
 import type { BlueprintPool } from './decide-handshake.js';
 import type { BlueprintSource } from './blueprint-source.js';
 
@@ -38,6 +39,15 @@ function semanticInert(inner: EnumerableVectorStore): EnumerableVectorStore {
 export interface BuildSeedPoolOptions {
   /** Fixed scope for the pool's blueprints (default 'shared'). */
   readonly scope?: string;
+  /**
+   * Import-gate context. When provided, every loaded record is run through
+   * {@link gateImportedBlueprint}; records that fail the persistence contract
+   * (retired contract field, generator-era mismatch, tool-identity catalog
+   * divergence) are SKIPPED and reported via console.warn rather than served
+   * stale. When omitted, NO gating happens — preserving today's `--seed-pool`
+   * behavior exactly so existing OSS usage is unchanged.
+   */
+  readonly ctx?: ImportGateCtx;
 }
 
 /**
@@ -55,6 +65,23 @@ export async function buildSeedPool(
   const registry = { embedding: INERT_EMBEDDING, vectorStore: inner, index };
 
   for (const record of await source.loadAll()) {
+    // Persistence-contract gate (opt-in via options.ctx). A PortableBlueprint
+    // structurally satisfies GateInput. A failing record is skipped + reported
+    // — never silently served stale. When ctx is absent, gating is skipped.
+    if (options.ctx) {
+      const gate = gateImportedBlueprint(record, options.ctx);
+      for (const w of gate.warnings) {
+        // eslint-disable-next-line no-console -- operator-visible integrity warning
+        console.warn(`[ggui] seed pool: ${w}`);
+      }
+      if (!gate.ok) {
+        // eslint-disable-next-line no-console -- operator-visible integrity warning
+        console.warn(
+          `[ggui] seed pool: skipped a blueprint failing the import gate — ${gate.reason ?? 'unknown reason'}`,
+        );
+        continue;
+      }
+    }
     const { input, keyMismatch } = fromPortableBlueprint(record);
     if (keyMismatch) {
       // eslint-disable-next-line no-console -- operator-visible integrity warning
