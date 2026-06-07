@@ -1,4 +1,7 @@
 import { dirname, resolve } from 'node:path';
+import { mkdtemp } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import {
   listRegistryBlueprintsForExport,
   type ExportableBlueprint,
@@ -43,11 +46,17 @@ Options:
 Requires a persistent vectors store (ggui.json: storage.vectors.driver = "sqlite").
 `;
 
-export async function runExportPoolCommand(args: readonly string[]): Promise<number> {
-  const flags = parseExportPoolFlags(args);
-  if (flags.error === '__help__') { process.stdout.write(EXPORT_POOL_HELP); return 0; }
-  if (flags.error) { process.stderr.write(`ggui export-pool: ${flags.error}\n`); return 1; }
-
+/**
+ * Resolve the storage stack → list blueprints → write a pool artifact to disk.
+ *
+ * When `outDir` is omitted a fresh temp directory is created (suitable for
+ * a subsequent `ggui push` that immediately reads the artifact). When provided,
+ * the artifact is written to `resolve(process.cwd(), outDir)`.
+ *
+ * Throws on hard errors (no vectors store, list failure).
+ * Returns the absolute path of the written artifact directory.
+ */
+export async function exportLocalPool(outDir?: string): Promise<string> {
   // Resolve the SAME storage stack `ggui serve` uses, from ggui.json in cwd.
   // A missing manifest is fine (MCP-only / default storage); a manifest that
   // exists but fails schema validation is a hard error — surface it rather
@@ -57,35 +66,56 @@ export async function runExportPoolCommand(args: readonly string[]): Promise<num
   if (gguiJsonPath) {
     const loaded = safeLoadGguiJson(gguiJsonPath);
     if (!loaded.success) {
-      process.stderr.write(`ggui export-pool: ${loaded.error.message}\n`);
-      return 1;
+      throw new Error(loaded.error.message);
     }
     manifest = loaded.data;
   }
   const projectRoot = gguiJsonPath ? dirname(gguiJsonPath) : process.cwd();
   const storage = await resolveStorageFromConfig(manifest?.storage, { baseDir: projectRoot });
   if (!storage.vectors) {
-    process.stderr.write(
-      'ggui export-pool: no persistent vectors store. Set storage.vectors.driver="sqlite" in ggui.json (nothing to export from an in-memory store).\n',
+    throw new Error(
+      'no persistent vectors store. Set storage.vectors.driver="sqlite" in ggui.json (nothing to export from an in-memory store).',
     );
-    return 1;
   }
 
-  let rows: readonly ExportableBlueprint[];
+  const rows: readonly ExportableBlueprint[] =
+    await listRegistryBlueprintsForExport(storage.vectors, DEFAULT_BUILDER_APP_ID);
+  if (rows.length === 0) {
+    throw new Error('0 blueprints found for this app; nothing to export.');
+  }
+
+  // Tool-identity catalog is NOT available here: `export-pool` is a
+  // batch offline export with no live MCP connections. The catalog is
+  // a runtime artifact built from active `initialize` + `tools/list`
+  // handshakes during `ggui serve`. Passing it here would require
+  // either persisting it to disk or starting the server just for export
+  // — both are the wrong trade-off for an offline command. The
+  // `generatorProtocolVersion` stamp (always set by toPortableBlueprint)
+  // is sufficient for era-compatibility gating; the `toolIdentityCatalogHash`
+  // remains absent, triggering an "unstamped → warn" policy on importers.
+  const records = rows.map((r) => toPortableBlueprint(r));
+
+  const resolvedDir = outDir !== undefined
+    ? resolve(process.cwd(), outDir)
+    : await mkdtemp(join(tmpdir(), 'ggui-pool-'));
+
+  await writePoolArtifact(resolvedDir, records);
+  return resolvedDir;
+}
+
+export async function runExportPoolCommand(args: readonly string[]): Promise<number> {
+  const flags = parseExportPoolFlags(args);
+  if (flags.error === '__help__') { process.stdout.write(EXPORT_POOL_HELP); return 0; }
+  if (flags.error) { process.stderr.write(`ggui export-pool: ${flags.error}\n`); return 1; }
+
+  let outDir: string;
   try {
-    rows = await listRegistryBlueprintsForExport(storage.vectors, DEFAULT_BUILDER_APP_ID);
+    outDir = await exportLocalPool(flags.out);
   } catch (err) {
     process.stderr.write(`ggui export-pool: ${err instanceof Error ? err.message : String(err)}\n`);
     return 1;
   }
-  if (rows.length === 0) {
-    process.stderr.write('ggui export-pool: 0 blueprints found for this app; nothing written.\n');
-    return 1;
-  }
 
-  const records = rows.map((r) => toPortableBlueprint(r));
-  const outDir = resolve(process.cwd(), flags.out);
-  await writePoolArtifact(outDir, records);
-  process.stdout.write(`ggui export-pool: wrote ${records.length} blueprint(s) to ${outDir}\n`);
+  process.stdout.write(`ggui export-pool: wrote blueprints to ${outDir}\n`);
   return 0;
 }

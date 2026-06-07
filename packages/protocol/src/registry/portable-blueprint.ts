@@ -2,6 +2,9 @@ import type { PortableBlueprint } from '../types/portable-blueprint.js';
 import type { DataContract } from '../types/data-contract.js';
 import type { BlueprintVariance } from '../types/blueprint.js';
 import { blueprintKey, variantKey } from './blueprint-key.js';
+import { PROTOCOL_VERSION } from '../version.js';
+import type { ToolCatalogShape } from './blueprint-stamp.js';
+import { computeToolCatalogHash } from './blueprint-stamp.js';
 
 export type { PortableBlueprint };
 
@@ -19,7 +22,22 @@ export interface PortableBlueprintImport {
   readonly keyMismatch: boolean;
 }
 
-export function toPortableBlueprint(src: PortableBlueprintSource): PortableBlueprint {
+/** Options for {@link toPortableBlueprint}. */
+export interface ToPortableBlueprintOpts {
+  /**
+   * Tool-identity catalog used to canonicalize the contract at export time.
+   * When provided, its hash is stamped as `toolIdentityCatalogHash` so
+   * importers can detect catalog drift (same intent → different key).
+   * When omitted, `toolIdentityCatalogHash` is left absent ("unstamped →
+   * warn" policy on the importer side).
+   */
+  readonly catalog?: ToolCatalogShape;
+}
+
+export function toPortableBlueprint(
+  src: PortableBlueprintSource,
+  opts?: ToPortableBlueprintOpts,
+): PortableBlueprint {
   return {
     schemaVersion: 1,
     contract: src.contract,
@@ -27,6 +45,10 @@ export function toPortableBlueprint(src: PortableBlueprintSource): PortableBluep
     variance: src.variance,
     contractHash: blueprintKey(src.contract),
     variantKey: variantKey(src.variance),
+    generatorProtocolVersion: PROTOCOL_VERSION,
+    ...(opts?.catalog !== undefined
+      ? { toolIdentityCatalogHash: computeToolCatalogHash(opts.catalog) }
+      : {}),
   };
 }
 

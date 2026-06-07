@@ -10,6 +10,7 @@ import {
   findBlueprintExact,
 } from '@ggui-ai/mcp-server-handlers';
 import { blueprintKey, variantKey, toPortableBlueprint } from '@ggui-ai/protocol/blueprint-key';
+import { PROTOCOL_VERSION } from '@ggui-ai/protocol/version';
 import type { DataContract } from '@ggui-ai/protocol';
 import { writePoolArtifact } from './pool-artifact.js';
 import { FileSystemBlueprintSource } from './filesystem-blueprint-source.js';
@@ -76,5 +77,31 @@ describe('shared blueprint pool: full export → artifact → seed pool round tr
     // byte-for-byte; any truncation, encoding drift, or key mismatch would fail
     // this assertion.
     expect(reused!.componentCode).toBe(CODE);
+  });
+
+  it('exported records carry generatorProtocolVersion stamped to PROTOCOL_VERSION', async () => {
+    const registryA = {
+      embedding,
+      vectorStore: new InMemoryVectorStore(),
+      index: new InMemoryBlueprintIndex(),
+    };
+    await registerBlueprint(registryA, 'builder', {
+      kind: 'template',
+      contract,
+      intent: 'stamp test',
+      componentCode: CODE,
+      provenance: 'register',
+      variance: {},
+    });
+
+    const rows = await listRegistryBlueprintsForExport(registryA.vectorStore, 'builder');
+    expect(rows).toHaveLength(1);
+    const records = rows.map((r) => toPortableBlueprint(r));
+
+    // Every exported record must carry the protocol-version stamp so
+    // importers can gate on generator-era compatibility.
+    for (const record of records) {
+      expect(record.generatorProtocolVersion).toBe(PROTOCOL_VERSION);
+    }
   });
 });
