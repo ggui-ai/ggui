@@ -20,7 +20,7 @@ import {
   ReplayMaxRetriesExceededError,
   ReplayGguiSessionNotFoundError,
   EMPTY_BUFFER_STATE,
-  DEFAULT_REPLAY_MAX_PER_RENDER,
+  DEFAULT_REPLAY_MAX_PER_SESSION,
   DEFAULT_REPLAY_MAX_RETRIES,
   type BufferState,
   type BufferedReplayEnvelope,
@@ -144,7 +144,7 @@ describe('applyRecordOp', () => {
     ]);
   });
 
-  it('FIFO-evicts "all" entries past maxPerRender and tracks evictedAboveSeq', () => {
+  it('FIFO-evicts "all" entries past maxPerSession and tracks evictedAboveSeq', () => {
     let state: BufferState = EMPTY_BUFFER_STATE;
     const cap = 3;
     for (let i = 1; i <= 5; i++) {
@@ -237,7 +237,7 @@ describe('applyRecordOp', () => {
     expect(r.next.latestByChannel).toEqual({});
   });
 
-  it('throws when maxPerRender < 1', () => {
+  it('throws when maxPerSession < 1', () => {
     expect(() =>
       applyRecordOp(
         EMPTY_BUFFER_STATE,
@@ -248,7 +248,7 @@ describe('applyRecordOp', () => {
     ).toThrow(TypeError);
   });
 
-  it('uses DEFAULT_REPLAY_MAX_PER_RENDER when cap is omitted', () => {
+  it('uses DEFAULT_REPLAY_MAX_PER_SESSION when cap is omitted', () => {
     let state: BufferState = EMPTY_BUFFER_STATE;
     // Don't actually push 257 entries — just confirm the ring absorbs
     // a handful without eviction at default cap.
@@ -261,7 +261,7 @@ describe('applyRecordOp', () => {
     }
     expect(state.ring.length).toBe(10);
     expect(state.evictedAboveSeq).toBe(0);
-    expect(DEFAULT_REPLAY_MAX_PER_RENDER).toBeGreaterThanOrEqual(256);
+    expect(DEFAULT_REPLAY_MAX_PER_SESSION).toBeGreaterThanOrEqual(256);
   });
 });
 
@@ -680,7 +680,7 @@ describe('runSequencedRecord', () => {
     expect(result.envelope.seq).toBe(6);
   });
 
-  it('uses maxPerRender cap from options during apply', async () => {
+  it('uses maxPerSession cap from options during apply', async () => {
     // Start with a 3-entry ring, cap=3; next record evicts oldest.
     const seeded = normalizeBufferState({
       streamSeq: 3,
@@ -700,7 +700,7 @@ describe('runSequencedRecord', () => {
       'sess_1',
       mkInput({ channel: 'message', payload: { text: 'd' } }),
       customDeps,
-      { maxPerRender: 3 },
+      { maxPerSession: 3 },
     );
     expect(result.envelope.seq).toBe(4);
     expect(result.next.ring.map((e) => e.seq)).toEqual([2, 3, 4]);

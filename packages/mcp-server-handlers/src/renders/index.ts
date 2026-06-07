@@ -150,7 +150,7 @@ export {
 } from "./render.js";
 export {
   applyRecordOp,
-  DEFAULT_REPLAY_MAX_PER_RENDER,
+  DEFAULT_REPLAY_MAX_PER_SESSION,
   DEFAULT_REPLAY_MAX_RETRIES,
   EMPTY_BUFFER_STATE,
   normalizeBufferState,

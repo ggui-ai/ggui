@@ -58,7 +58,7 @@ export type ApplyGguiSessionPatchInput<T extends GguiSessionTarget> =
 
 export interface ApplyGguiSessionPatchResult<T extends GguiSessionTarget> {
   /** The updated render (post-patch). Safe to persist. */
-  readonly updatedRender: T;
+  readonly updatedSession: T;
   /** The final props map applied (post-merge for `mode:'merge'`). */
   readonly finalProps: JsonObject;
 }
@@ -132,10 +132,10 @@ export function applyGguiSessionPatch<T extends GguiSessionTarget>(
   // top. Cast is required because TS can't prove {...T, props:
   // JsonObject} is T (T's own props type isn't constrained here),
   // but structurally it is.
-  const updatedRender = { ...existing, props: finalProps } as unknown as T;
+  const updatedSession = { ...existing, props: finalProps } as unknown as T;
 
   return {
-    updatedRender,
+    updatedSession,
     finalProps,
   };
 }

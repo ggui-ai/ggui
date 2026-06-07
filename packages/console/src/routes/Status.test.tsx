@@ -165,7 +165,7 @@ describe('Status — live-renders hero', () => {
     expect(eyebrow?.textContent).toMatch(/2 sessions/);
   });
 
-  it('navigates to the renders list on "view all →" click', async () => {
+  it('navigates to the sessions list on "view all →" click', async () => {
     const now = Date.now();
     stubFetch({
       sessions: [
@@ -193,7 +193,7 @@ describe('Status — live-renders hero', () => {
     pushSpy.mockRestore();
   });
 
-  it('renders the error copy when /renders returns non-ok', async () => {
+  it('renders the error copy when /sessions returns non-ok', async () => {
     stubFetch({ sessions: [], total: 0 }, { rendersStatus: 500 });
     render(<Status />);
     await waitFor(() => {

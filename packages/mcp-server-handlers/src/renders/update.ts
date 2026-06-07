@@ -408,7 +408,7 @@ export function createGguiUpdateHandler(
       // assertPropsContract no-ops on absent spec, so MCP Apps renders
       // accept any patch shape (the iframe owns its own validation).
       const renderTarget: GguiSessionTarget & GguiSession = stored.render;
-      const { updatedRender, finalProps } = applyGguiSessionPatch({
+      const { updatedSession, finalProps } = applyGguiSessionPatch({
         render: renderTarget,
         ...patchInput,
       });
@@ -418,7 +418,7 @@ export function createGguiUpdateHandler(
       // store (createdAt, eventSequence, hostSession) preserved across
       // the upsert.
       await deps.renderStore.commit({
-        render: updatedRender,
+        render: updatedSession,
         appId: stored.appId,
         ...(stored.userId !== undefined ? { userId: stored.userId } : {}),
         ...(stored.endUserIdentity !== undefined

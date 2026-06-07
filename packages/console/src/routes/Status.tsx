@@ -2,7 +2,7 @@
  * Status dashboard — `/status`.
  *
  * Internal debug view: "what's this ggui serve doing right now?"
- * (wiring, storage, capabilities, live renders). Chat at `/` owns
+ * (wiring, storage, capabilities, live sessions). Chat at `/` owns
  * the brand hero + wordmark; this page is utilitarian, so its
  * header is just the SectionHead carrying the page name — no
  * wordmark duplication.
@@ -395,7 +395,7 @@ function StorageCard({
 }
 
 /**
- * Live-renders hero — surfaces the most operator-relevant signal on
+ * Live-sessions hero — surfaces the most operator-relevant signal on
  * this page (what's rendering right now). Rendered directly above the
  * status grid so it's the first thing an operator sees after the page
  * header.
@@ -404,7 +404,7 @@ function StorageCard({
  *   - error   → quiet micro-card, grid still paints
  *   - empty   → compact tip pointing at `/` (no hero rail)
  *   - ≥1      → full-width rail with top-3 rows + "view all (N) →"
- *               trailing link to the full renders list
+ *               trailing link to the full sessions list
  *
  * Rationale: this component is the dashboard's answer to "what's live
  * right now?" — first thing visible, with a one-click link to the

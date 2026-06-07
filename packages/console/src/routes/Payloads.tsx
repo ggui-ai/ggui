@@ -292,7 +292,7 @@ function PayloadDetail({
         gap: 12,
       }}
     >
-      <Section label="render">
+      <Section label="session">
         <span
           className="ggui-muted"
           style={{ fontFamily: 'var(--ggui-font-mono)', fontSize: 12 }}

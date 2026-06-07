@@ -67,7 +67,7 @@ import type { ObservabilityEmitter } from './observability.js';
  * Result of a successful handshake — the live typed transport handle
  * plus the resolved `AckPayload` from the first ack frame. The caller
  * attaches `handle` to the renderer's outbound send surface (via the
- * BufferedManagerShim flush) and applies `ack.render` to the mounted
+ * BufferedManagerShim flush) and applies `ack.session` to the mounted
  * render slot.
  */
 export interface RegistrySubscribeHandle {
@@ -132,7 +132,7 @@ export interface ConnectViaRegistryOptions {
    * during a WS dropout window flows back into the iframe on
    * reconnect.
    *
-   * Idempotent at the runtime layer: `applyRender(ack.render)` patches
+   * Idempotent at the runtime layer: `applyRender(ack.session)` patches
    * in place. Channels re-subscribed by
    * `ChannelTransportRouter.onWsStatusChange('connected')` upstream
    * of this callback, so the per-channel transport state is already

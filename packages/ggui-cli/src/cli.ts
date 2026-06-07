@@ -573,7 +573,7 @@ async function runServeCommand(args: string[]): Promise<number> {
   const settingsUrl = `${baseUrlForCard}/settings`;
   // No-credentials cards live for an hour from mint — long enough for
   // the operator to follow the Connect-Claude link, paste a key, and
-  // re-prompt before the persisted render is GC'd.
+  // re-prompt before the persisted GguiSession is GC'd.
   const NO_CREDENTIALS_CARD_TTL_MS = 60 * 60 * 1000;
 
   // Resolve the operator's explicit `generation.model` route, if any.

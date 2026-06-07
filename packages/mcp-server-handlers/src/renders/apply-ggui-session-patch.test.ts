@@ -25,13 +25,13 @@ function makeRender(id: string, propsSpec?: PropsSpec): GguiSessionTarget {
 describe('applyGguiSessionPatch', () => {
   it('updates the render and returns a new snapshot (immutable input)', () => {
     const render = makeRender('render_b');
-    const { updatedRender, finalProps } = applyGguiSessionPatch({
+    const { updatedSession, finalProps } = applyGguiSessionPatch({
       render,
       mode: 'merge' as const,
       patch: { city: 'Seoul' },
     });
-    expect(updatedRender.id).toBe('render_b');
-    expect(updatedRender.props).toEqual({ city: 'Seoul' });
+    expect(updatedSession.id).toBe('render_b');
+    expect(updatedSession.props).toEqual({ city: 'Seoul' });
     expect(finalProps).toEqual({ city: 'Seoul' });
     // original input is not mutated
     expect(render.props).toBeUndefined();
@@ -80,15 +80,15 @@ describe('applyGguiSessionPatch', () => {
       id: 'r1',
       extra: 'field',
     };
-    const { updatedRender } = applyGguiSessionPatch({
+    const { updatedSession } = applyGguiSessionPatch({
       render,
       mode: 'merge' as const,
       patch: { city: 'Tokyo' },
     });
-    expect(updatedRender.id).toBe('r1');
+    expect(updatedSession.id).toBe('r1');
     // extra field flows through (preserved via generic T)
-    expect(updatedRender.extra).toBe('field');
-    expect(updatedRender.props).toEqual({ city: 'Tokyo' });
+    expect(updatedSession.extra).toBe('field');
+    expect(updatedSession.props).toEqual({ city: 'Tokyo' });
   });
 
   it('replace mode replaces the entire props map', () => {
@@ -96,12 +96,12 @@ describe('applyGguiSessionPatch', () => {
       id: 'r1',
       props: { city: 'Seoul', count: 1 },
     };
-    const { updatedRender, finalProps } = applyGguiSessionPatch({
+    const { updatedSession, finalProps } = applyGguiSessionPatch({
       render,
       mode: 'replace' as const,
       props: { city: 'Tokyo' },
     });
-    expect(updatedRender.props).toEqual({ city: 'Tokyo' });
+    expect(updatedSession.props).toEqual({ city: 'Tokyo' });
     expect(finalProps).toEqual({ city: 'Tokyo' });
   });
 });

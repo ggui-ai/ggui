@@ -441,7 +441,7 @@ export class HostSimulator {
    * Convenience wrapper for `ggui_handshake` — post-Phase-B input shape:
    * `{intent, blueprintDraft?, forceCreate?}`. Returns the structured
    * handshake output (handshakeId, action, contractHash, suggestion,
-   * target, …). The prior `sessionId` parameter is gone — every render
+   * target, …). The prior `sessionId` parameter is gone — every GguiSession
    * IS the addressable scope.
    *
    * The `blueprintDraft` carries the agent's contract draft + optional

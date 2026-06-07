@@ -17,7 +17,7 @@
  *     supersedes any prior entry for the same channel. Never
  *     participates in cap-driven eviction.
  *   - `'all'`: append to a FIFO ring; evict the oldest entry when the
- *     ring exceeds `maxPerRender`. Tracks `evictedAboveSeq` so
+ *     ring exceeds `maxPerSession`. Tracks `evictedAboveSeq` so
  *     replay can honestly report `truncated` when a subscriber's
  *     `fromSeq` predates a dropped envelope.
  *
@@ -73,7 +73,7 @@ export interface BufferedReplayEnvelope {
  * Separation of `ring` vs `latestByChannel` matches the OSS in-memory
  * structure. `'latest'` entries NEVER participate in ring eviction —
  * they're held indefinitely, one per channel. `'all'` entries share
- * a FIFO ring capped by `maxPerRender`.
+ * a FIFO ring capped by `maxPerSession`.
  */
 export interface BufferState {
   /** Latest assigned seq for the render. 0 when never recorded. */
@@ -132,7 +132,7 @@ export const EMPTY_BUFFER_STATE: BufferState = {
  * `DEFAULT_SESSION_STREAM_BUFFER_MAX`. Hosted may pick a smaller cap
  * because on-row storage is constrained by the 400KB DDB item limit.
  */
-export const DEFAULT_REPLAY_MAX_PER_RENDER = 256;
+export const DEFAULT_REPLAY_MAX_PER_SESSION = 256;
 
 /**
  * Bump the render's seq and (conditionally) persist the stamped
@@ -142,17 +142,17 @@ export const DEFAULT_REPLAY_MAX_PER_RENDER = 256;
  * input. Consumers that want reference equality for unchanged fields
  * pass the result's `next` through to storage.
  *
- * @throws {TypeError} when `maxPerRender < 1`.
+ * @throws {TypeError} when `maxPerSession < 1`.
  */
 export function applyRecordOp(
   current: BufferState,
   input: StreamReplayInput,
   spec: StreamSpec | undefined,
-  maxPerRender: number = DEFAULT_REPLAY_MAX_PER_RENDER,
+  maxPerSession: number = DEFAULT_REPLAY_MAX_PER_SESSION,
 ): ApplyRecordResult {
-  if (maxPerRender < 1) {
+  if (maxPerSession < 1) {
     throw new TypeError(
-      `applyRecordOp: maxPerRender must be >= 1, got ${maxPerRender}`,
+      `applyRecordOp: maxPerSession must be >= 1, got ${maxPerSession}`,
     );
   }
   const newSeq = current.streamSeq + 1;
@@ -197,7 +197,7 @@ export function applyRecordOp(
     case 'all': {
       const nextRing: BufferedReplayEnvelope[] = [...current.ring, envelope];
       let evictedAboveSeq = current.evictedAboveSeq;
-      while (nextRing.length > maxPerRender) {
+      while (nextRing.length > maxPerSession) {
         const evicted = nextRing.shift();
         if (evicted && evicted.seq > evictedAboveSeq) {
           evictedAboveSeq = evicted.seq;
@@ -416,7 +416,7 @@ export interface ReplaySequencerDeps {
 export const DEFAULT_REPLAY_MAX_RETRIES = 5;
 
 export interface RunSequencedRecordOptions {
-  readonly maxPerRender?: number;
+  readonly maxPerSession?: number;
   readonly maxRetries?: number;
 }
 
@@ -439,14 +439,14 @@ export async function runSequencedRecord(
   options: RunSequencedRecordOptions = {},
 ): Promise<ApplyRecordResult> {
   const maxRetries = options.maxRetries ?? DEFAULT_REPLAY_MAX_RETRIES;
-  const maxPerRender = options.maxPerRender ?? DEFAULT_REPLAY_MAX_PER_RENDER;
+  const maxPerSession = options.maxPerSession ?? DEFAULT_REPLAY_MAX_PER_SESSION;
   let attempts = 0;
   while (attempts <= maxRetries) {
     const read = await deps.fetchState(sessionId);
     if (!read) {
       throw new ReplayGguiSessionNotFoundError(sessionId);
     }
-    const result = applyRecordOp(read.state, input, read.spec, maxPerRender);
+    const result = applyRecordOp(read.state, input, read.spec, maxPerSession);
     try {
       await deps.persist(sessionId, read.state.streamSeq, result.next);
       return result;

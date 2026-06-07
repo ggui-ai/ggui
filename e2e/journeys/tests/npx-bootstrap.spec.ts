@@ -356,7 +356,7 @@ test.describe.serial("OSS hero path — `ggui serve` (real CLI bin)", () => {
         typeof renderResult.structuredContent
       >);
     expect(out.sessionId).toBeTruthy();
-    // First render mints a fresh render — `create`. (Cache hits would
+    // First render mints a fresh GguiSession — `create`. (Cache hits would
     // surface as `reuse`; on a brand-new server the catalog can also
     // exact-key match, accept either.)
     expect(["create", "reuse"]).toContain(out.action);
