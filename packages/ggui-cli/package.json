@@ -21,6 +21,11 @@
       "types": "./dist/tunnel-provider.d.ts",
       "import": "./dist/tunnel-provider.js",
       "default": "./dist/tunnel-provider.js"
+    },
+    "./push": {
+      "types": "./dist/push-command.d.ts",
+      "import": "./dist/push-command.js",
+      "default": "./dist/push-command.js"
     }
   },
   "files": [

@@ -100,20 +100,44 @@ export interface GguiSessionOnceResult extends GguiSessionResult {
 }
 
 /**
- * Minimal MCP JSON-RPC over Streamable-HTTP. Posts to `${gguiUrl}/mcp` with a
- * dev bearer; parses either a plain JSON body or the first SSE `data:` frame.
+ * Per-call MCP transport options.
+ *
+ *  - `bearer` — the `Authorization: Bearer <…>` value. Defaults to
+ *    {@link DEV_BEARER} (`'dev'`), which the local scaffolded `ggui serve
+ *    --dev-allow-all` accepts as `builder`. The cross-deployment persistence
+ *    capstone (cloud Phase B) passes a real app-scoped `ggui_user_*` key here.
+ *  - `mcpPath` — the path segment appended to `gguiUrl`. Defaults to `'/mcp'`
+ *    (the OSS `ggui serve` convention). The deployed cloud pod mounts MCP at
+ *    the bare root of its per-app endpoint (`/apps/<appId>`), so cloud callers
+ *    pass `mcpPath: ''`.
+ *
+ * Both default to the existing local-scaffold behavior — back-compat for the
+ * sub-tier-B scaffold-render callers, which omit `opts` entirely.
+ */
+export interface McpTransportOpts {
+  readonly bearer?: string;
+  readonly mcpPath?: string;
+}
+
+/**
+ * Minimal MCP JSON-RPC over Streamable-HTTP. Posts to `${gguiUrl}${mcpPath}`
+ * (default `/mcp`) with a bearer (default `'dev'`); parses either a plain JSON
+ * body or the first SSE `data:` frame.
  */
 export async function mcpCall(
   gguiUrl: string,
   method: string,
   params: unknown,
+  opts: McpTransportOpts = {},
 ): Promise<McpEnvelope> {
-  const res = await fetch(`${gguiUrl}/mcp`, {
+  const bearer = opts.bearer ?? DEV_BEARER;
+  const mcpPath = opts.mcpPath ?? '/mcp';
+  const res = await fetch(`${gguiUrl}${mcpPath}`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       Accept: 'application/json, text/event-stream',
-      Authorization: `Bearer ${DEV_BEARER}`,
+      Authorization: `Bearer ${bearer}`,
     },
     body: JSON.stringify({ jsonrpc: '2.0', id: `turn-${Date.now()}`, method, params }),
   });
@@ -147,6 +171,12 @@ export async function mcpCall(
  * optional props, so we pass `props: {}`.
  *
  * Returns the parsed render output + the handshake suggestion + wall-clock ms.
+ *
+ * `transport` (optional) overrides the bearer + MCP path — see
+ * {@link McpTransportOpts}. The local scaffold-render callers omit it (default
+ * `Bearer dev` → `/mcp`); the cross-deployment persistence capstone passes
+ * `{ bearer: <app key>, mcpPath: '' }` to drive the deployed cloud pod's
+ * per-app endpoint.
  */
 export async function renderOnce(
   gguiUrl: string,
@@ -157,18 +187,24 @@ export async function renderOnce(
     forceCreate: boolean;
     override?: RenderOverride;
   },
+  transport: McpTransportOpts = {},
 ): Promise<GguiSessionOnceResult> {
-  const hs = await mcpCall(gguiUrl, 'tools/call', {
-    name: 'ggui_handshake',
-    arguments: {
-      intent: opts.intent,
-      blueprintDraft: {
-        contract: opts.contract,
-        ...(opts.variance !== undefined ? { variance: opts.variance } : {}),
+  const hs = await mcpCall(
+    gguiUrl,
+    'tools/call',
+    {
+      name: 'ggui_handshake',
+      arguments: {
+        intent: opts.intent,
+        blueprintDraft: {
+          contract: opts.contract,
+          ...(opts.variance !== undefined ? { variance: opts.variance } : {}),
+        },
+        ...(opts.forceCreate ? { forceCreate: true } : {}),
       },
-      ...(opts.forceCreate ? { forceCreate: true } : {}),
     },
-  });
+    transport,
+  );
   if (hs.error) throw new Error(`ggui_handshake RPC error: ${hs.error.message}`);
   const handshake = (hs.result as HandshakeResult | undefined)?.structuredContent;
   const handshakeId = handshake?.handshakeId;
@@ -177,14 +213,19 @@ export async function renderOnce(
   }
 
   const t0 = Date.now();
-  const env = await mcpCall(gguiUrl, 'tools/call', {
-    name: 'ggui_render',
-    arguments: {
-      handshakeId,
-      props: {},
-      ...(opts.override !== undefined ? { override: opts.override } : {}),
+  const env = await mcpCall(
+    gguiUrl,
+    'tools/call',
+    {
+      name: 'ggui_render',
+      arguments: {
+        handshakeId,
+        props: {},
+        ...(opts.override !== undefined ? { override: opts.override } : {}),
+      },
     },
-  });
+    transport,
+  );
   const ms = Date.now() - t0;
   if (env.error) throw new Error(`ggui_render RPC error: ${env.error.message}`);
   const call = env.result as RenderCallResult | undefined;
