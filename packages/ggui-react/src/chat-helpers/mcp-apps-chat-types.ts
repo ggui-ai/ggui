@@ -17,7 +17,7 @@
  */
 
 /**
- * Host-display-mode hint, parsed from the most-recent render's
+ * Host-display-mode hint, parsed from the most-recent GguiSession's
  * `_meta.ui.displayMode` (spec-native MCP-Apps SEP-1865).
  */
 export type HostDisplayMode = 'inline' | 'fullscreen' | 'pip';
@@ -34,20 +34,20 @@ export type HostDisplayMode = 'inline' | 'fullscreen' | 'pip';
 export interface GguiSessionRef {
   /**
    * MCP-Apps spec-canonical resource URI from `_meta.ui.resourceUri` on
-   * the tool result. Stable per render: re-emits of the same URI (e.g.
+   * the tool result. Stable per GguiSession: re-emits of the same URI (e.g.
    * an `*_update` tool returning the same URI) coalesce onto the same
    * iframe entry via {@link GguiSessionRef} dedupe.
    */
   readonly resourceUri: string;
   /**
-   * Free-form label describing how this render arrived (`'render'` for
+   * Free-form label describing how this GguiSession arrived (`'render'` for
    * live emissions, `'restored'` for snapshot rehydration). Treat as
    * opaque chrome metadata.
    */
   readonly action: string;
   /**
    * Optional tool-call id of the tool whose result carried this URI.
-   * Useful for chat panels that want to cross-link renders to the
+   * Useful for chat panels that want to cross-link GguiSessions to the
    * tool-call entry that produced them.
    */
   readonly toolUseId?: string;

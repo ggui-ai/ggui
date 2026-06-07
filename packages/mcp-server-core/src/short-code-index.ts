@@ -44,7 +44,7 @@
  * be updated; resist.
  *
  * Post Phase-B identity collapse: `sessionId` IS the addressable unit
- * (session+stackItem merged). The previous `sessionId` + `stackItemId`
+ * (the addressable unit is one GguiSession). The previous two-slot pair
  * slot pair always held the same value at the bind site, so both
  * collapse to one `sessionId` field on the binding row.
  */

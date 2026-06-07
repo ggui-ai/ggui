@@ -6,7 +6,7 @@
  * Scope for Lane 1 coverage:
  *
  *   1. Boot `ggui serve` against the `manifest-capabilities` fixture.
- *      The fixture has no committed renders at boot — perfect for the
+ *      The fixture has no committed sessions at boot — perfect for the
  *      empty-state path the `/admin/sessions` page surfaces.
  *   2. Navigate to `/admin/sessions`. The SPA fetches
  *      `GET /ggui/console/sessions` (200, shape `{sessions:[],total:0}`)
@@ -83,14 +83,14 @@ test.describe.serial(
         waitUntil: 'networkidle',
       });
 
-      // The fixture has no live renders, so the endpoint returns
+      // The fixture has no live sessions, so the endpoint returns
       // `{sessions:[],total:0}` and the SPA renders the empty-state
       // card. Assert the empty-state copy — load-bearing proof the
       // fetch + no-renders branch wired correctly, because the
       // branded-card container has a stable anchor the row list
       // wouldn't produce.
       await expect(
-        page.locator('text=No renders yet.'),
+        page.locator('text=No sessions yet.'),
       ).toBeVisible({ timeout: 10_000 });
 
       // No list container when the catalog is empty (component
@@ -127,7 +127,7 @@ test.describe.serial(
         'empty',
         { timeout: 10_000 },
       );
-      await expect(hero).toContainText('No renders yet.');
+      await expect(hero).toContainText('No sessions yet.');
 
       // TopNav live-render pill is suppressed when no render with
       // a shortCode is live — the component collapses to render

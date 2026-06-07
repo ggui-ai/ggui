@@ -189,7 +189,7 @@ export function installMcpAppsInbound(
     }
     const item = await resolveMcpAppsItem(opts.renderStore, sessionId, itemId);
     if (!item) {
-      res.status(404).type('text/plain').send('GguiSession not found');
+      res.status(404).type('text/plain').send('Session not found');
       return;
     }
     const connector = await opts.connectors.get(item.source.connectorId);

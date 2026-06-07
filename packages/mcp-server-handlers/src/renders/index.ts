@@ -5,7 +5,7 @@
  *
  * Post-Phase-B (flatten-render-identity): the prior "renders"
  * surface (vessel-wrapping-a-stack) collapsed to "render-mutations"
- * (a render IS the addressable unit). Helpers + errors renamed; the
+ * (a GguiSession IS the addressable unit). Helpers + errors renamed; the
  * folder retains its old name to keep import paths stable for one
  * more slice — folder rename will land separately.
  *

@@ -130,14 +130,14 @@ export function GguiSessions(): ReactElement {
       ) : (
         <>
           <div className="ggui-form" style={{ marginBottom: 20 }}>
-            <label className="ggui-label" htmlFor="ggui-renders-filter">
+            <label className="ggui-label" htmlFor="ggui-sessions-filter">
               filter
             </label>
             <div className="ggui-field">
               <input
-                id="ggui-renders-filter"
+                id="ggui-sessions-filter"
                 name="filter"
-                aria-label="filter render entries"
+                aria-label="filter session entries"
                 placeholder="substring match over sessionId, shortCode, appId…"
                 value={filter}
                 onChange={(event) => setFilter(event.target.value)}

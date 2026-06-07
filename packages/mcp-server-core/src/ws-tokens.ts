@@ -70,7 +70,7 @@ export type TokenKind = 'ws' | 'session' | 'console-session';
 
 /** Claims carried in a ws, session, or console-session token. */
 export interface WsTokenClaims {
-  /** GguiSession id the token is scoped to (Phase B: was `sessionId` pre-collapse). */
+  /** GguiSession id the token is scoped to. */
   readonly sessionId: string;
   /** App (tenant) id the token is scoped to. */
   readonly appId: string;

@@ -204,7 +204,7 @@ test.describe.serial('Phase 5 — SQLite storage driver boot', () => {
     );
     expect(
       postWriteBytes,
-      `renders sqlite family did not grow after ggui_render — baseline=${baselineBytes}B, post=${postWriteBytes}B. ` +
+      `sessions sqlite family did not grow after ggui_render — baseline=${baselineBytes}B, post=${postWriteBytes}B. ` +
         `The SqliteGguiSessionStore may be silently falling through to in-memory. ` +
         `(Sum spans ggui-sessions.sqlite + ggui-sessions.sqlite-wal + ggui-sessions.sqlite-shm.)`,
     ).toBeGreaterThan(baselineBytes);

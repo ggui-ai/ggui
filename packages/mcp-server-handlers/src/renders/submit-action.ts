@@ -373,7 +373,7 @@ export function createGguiSubmitActionHandler(
             return {
               ok: false,
               code: 'PIPE_NOT_FOUND',
-              message: `submit_action: no pending-events pipe for sessionId "${env.sessionId}". The render may have been closed, or the pipe never opened. Iframe should fall through to ui/message.`,
+              message: `submit_action: no pending-events pipe for sessionId "${env.sessionId}". The GguiSession may have been closed, or the pipe never opened. Iframe should fall through to ui/message.`,
             };
           }
           // Non-pipe-class error: still surface as PIPE_NOT_FOUND so

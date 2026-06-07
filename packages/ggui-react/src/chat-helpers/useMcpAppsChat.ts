@@ -130,8 +130,8 @@ export interface UseMcpAppsChatResult {
   readonly entries: ReadonlyArray<ChatEntry>;
   readonly sessions: ReadonlyArray<GguiSessionRef>;
   /**
-   * Most-recent host-side presentation hint stamped on a render, or
-   * `undefined` when no render has yet carried one. Drives apps that
+   * Most-recent host-side presentation hint stamped on a GguiSession, or
+   * `undefined` when no GguiSession has yet carried one. Drives apps that
    * want to auto-switch their layout between inline / panel / pip in
    * response to `_meta.ui.displayMode` (MCP-Apps SEP-1865).
    */

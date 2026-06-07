@@ -77,7 +77,7 @@ export function runGguiSessionStoreConformance(
     }
   }
 
-  function makeComponentRender(
+  function makeComponentGguiSession(
     id: string,
     appId: string,
     componentCode = '/* placeholder */',
@@ -152,7 +152,7 @@ export function runGguiSessionStoreConformance(
         await withStore(async (store) => {
           await store.commit({
             appId: 'app-1',
-            render: makeComponentRender('render-1', 'app-1', '/* v1 */'),
+            render: makeComponentGguiSession('render-1', 'app-1', '/* v1 */'),
           });
           const got = await store.get('render-1');
           expect(got?.id).toBe('render-1');
@@ -166,12 +166,12 @@ export function runGguiSessionStoreConformance(
         await withStore(async (store) => {
           await store.commit({
             appId: 'app-1',
-            render: makeComponentRender('render-1', 'app-1', '/* v1 */'),
+            render: makeComponentGguiSession('render-1', 'app-1', '/* v1 */'),
           });
           const first = await store.get('render-1');
           await store.commit({
             appId: 'app-1',
-            render: makeComponentRender('render-1', 'app-1', '/* v2 */'),
+            render: makeComponentGguiSession('render-1', 'app-1', '/* v2 */'),
           });
           const second = await store.get('render-1');
           const r = second?.render as { componentCode?: string } | undefined;

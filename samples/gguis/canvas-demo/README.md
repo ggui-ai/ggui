@@ -7,7 +7,7 @@ as a host hint, in addition to its per-render `_meta.ui.resourceUri`. The
 hint tells hosts to render the iframe as a main view (replacing the
 previous one in the primary slot) rather than stacking it inline in
 the chat log. The wire mechanism is identical to inline mode — every
-render stamps its own resource URI and every iframe goes through the
+GguiSession stamps its own resource URI and every iframe goes through the
 same runtime mount path; the only difference is how the host arranges
 the iframes it mounts.
 

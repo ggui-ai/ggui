@@ -9,7 +9,7 @@
  * Post-Phase-B (flatten-render-identity): the pre-rename Session* +
  * StackItem* error matrix is collapsed to a single
  * {@link GguiSessionNotFoundError}. The vessel-vs-entry distinction the prior
- * matrix encoded does not exist anymore — every render IS the addressable
+ * matrix encoded does not exist anymore — every GguiSession IS the addressable
  * unit; "session not found" and "stack item not found" both fold into
  * "GguiSession not found".
  */
