@@ -47,6 +47,7 @@ export {
   compileUiOnDemand,
   resolveEntryFile,
   COMPILED_BUNDLE_CONTENT_TYPE,
+  SANDBOX_EXTERNALS,
   type CompileResult,
 } from './local-registry/compile-ui.js';
 

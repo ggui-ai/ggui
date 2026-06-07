@@ -19,6 +19,10 @@ import {
   saveAuthSession,
   type AuthSessionDocument,
 } from './auth-store.js';
+// Type-only import — erased at runtime, so it does NOT create a runtime
+// circular dependency even though `push-command.ts` imports
+// `pushAppBlueprints` from this module.
+import type { PushRecord } from './push-command.js';
 
 // ─────────────────────────────────────────────────────────────────────────
 // Wire types — match the backend handlers exactly.
@@ -286,7 +290,7 @@ export interface PushResponse {
 
 export async function pushAppBlueprints(
   appId: string,
-  blueprints: unknown[],
+  blueprints: PushRecord[],
 ): Promise<PushResponse> {
   return withAuthRetry(
     (s) =>

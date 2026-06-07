@@ -44,7 +44,7 @@ import type { UiManifest } from '@ggui-ai/project-config';
  * and lets Studio's in-tree React instance be shared across every
  * rendered UI.
  */
-const SANDBOX_EXTERNALS = [
+export const SANDBOX_EXTERNALS = [
   'react',
   'react/*',
   'react-dom',

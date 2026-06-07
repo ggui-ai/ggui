@@ -1,7 +1,9 @@
 import { writeFile, rm } from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { build as esbuild } from 'esbuild';
+import { SANDBOX_EXTERNALS } from '@ggui-ai/dev-stack';
 import type { DataContract } from '@ggui-ai/protocol';
 import { readPoolArtifact } from './pool-artifact.js';
 import { findGguiJson, readGguiJson } from './internal/ggui-json.js';
@@ -76,13 +78,16 @@ export function parsePushFlags(args: readonly string[]): ParsedPushFlags {
 /**
  * Compile a TSX source string to an ESM JS string using esbuild.
  *
- * The compiled output is browser-targeted ESM with React externalized —
- * matching the pattern in `artifact-publish.ts`. esbuild writes to a
- * temp file because its stdin mode doesn't set a meaningful `loader`
- * for JSX — the `.tsx` file extension is used to drive the right loader.
+ * The compiled output is browser-targeted ESM with the same external set
+ * the dev-stack sandbox compiler uses (`SANDBOX_EXTERNALS` — React family
+ * + `@ggui-ai/{design,wire,react}`), so stored blueprint code that imports
+ * any of those resolves against the iframe runtime's shared instances
+ * instead of getting bundled (which would risk a second React copy).
+ * esbuild writes to a temp file because the `.tsx` extension drives the
+ * right JSX loader (stdin mode wouldn't).
  */
 export async function compileTsx(code: string): Promise<string> {
-  const tmpFile = join(tmpdir(), `ggui-push-${Date.now()}-${Math.random().toString(36).slice(2)}.tsx`);
+  const tmpFile = join(tmpdir(), `ggui-push-${randomUUID()}.tsx`);
   try {
     await writeFile(tmpFile, code, 'utf-8');
     const result = await esbuild({
@@ -95,7 +100,7 @@ export async function compileTsx(code: string): Promise<string> {
       platform: 'browser',
       minify: false,
       write: false,
-      external: ['react', 'react-dom', 'react/jsx-runtime'],
+      external: SANDBOX_EXTERNALS,
       logLevel: 'silent',
     });
     if (result.outputFiles.length !== 1) {
@@ -135,7 +140,7 @@ export async function buildBlueprintPushPayload(artifactDir: string): Promise<Pu
         contract: r.contract,
         ...(r.variance.seedPrompt !== undefined
           ? { description: r.variance.seedPrompt }
-          : { description: 'pushed blueprint' }),
+          : {}),
       },
       compiledBytes,
     });
@@ -190,14 +195,19 @@ export async function runPushCommand(args: readonly string[]): Promise<number> {
     return 2;
   }
 
-  // Resolve artifact directory: --from flag or on-the-fly export
+  // Resolve artifact directory: --from flag or on-the-fly export.
+  // The on-the-fly export does NOT error on an empty pool (it writes an
+  // empty artifact dir); the empty case is handled gracefully below after
+  // the payload build, so `ggui push` on an empty pool exits 0 with
+  // "nothing to push." rather than failing.
   let artifactDir: string;
   if (flags.from !== undefined) {
     artifactDir = flags.from;
   } else {
     try {
-      // exportLocalPool creates a temp dir when no outDir is given
-      artifactDir = await exportLocalPool();
+      // exportLocalPool creates a temp dir when no outDir is given.
+      const exported = await exportLocalPool();
+      artifactDir = exported.dir;
     } catch (err) {
       process.stderr.write(
         `ggui push: export failed — ${err instanceof Error ? err.message : String(err)}\n`,

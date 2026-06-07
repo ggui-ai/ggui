@@ -1,11 +1,11 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { DataContract } from '@ggui-ai/protocol';
 import { toPortableBlueprint } from '@ggui-ai/protocol/blueprint-key';
 import { writePoolArtifact } from './pool-artifact.js';
-import { buildBlueprintPushPayload, parsePushFlags } from './push-command.js';
+import { buildBlueprintPushPayload, parsePushFlags, runPushCommand } from './push-command.js';
 
 const contract: DataContract = {
   propsSpec: {
@@ -103,5 +103,27 @@ describe('buildBlueprintPushPayload', () => {
 
     const payload = await buildBlueprintPushPayload(dir);
     expect(payload).toHaveLength(0);
+  });
+});
+
+describe('runPushCommand', () => {
+  it('prints "nothing to push" and exits 0 GRACEFULLY on an empty pool', async () => {
+    // An empty artifact via --from skips export; the build yields zero
+    // records → the graceful empty path must fire (no throw, exit 0).
+    await writePoolArtifact(dir, []);
+
+    const writes: string[] = [];
+    vi.spyOn(process.stdout, 'write').mockImplementation((chunk: string | Uint8Array) => {
+      writes.push(typeof chunk === 'string' ? chunk : Buffer.from(chunk).toString('utf-8'));
+      return true;
+    });
+
+    try {
+      const code = await runPushCommand(['--app', 'my-app', '--from', dir]);
+      expect(code).toBe(0);
+      expect(writes.join('')).toContain('nothing to push');
+    } finally {
+      vi.restoreAllMocks();
+    }
   });
 });
