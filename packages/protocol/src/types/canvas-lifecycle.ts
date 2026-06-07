@@ -76,7 +76,7 @@ export interface HandshakeCompletedPayload extends JsonObject {
  */
 export interface RenderStartedPayload extends JsonObject {
   readonly kind: 'render_started';
-  /** The render id the eventual `render` envelope will carry. */
+  /** The GguiSession id the eventual `render` envelope will carry. */
   readonly sessionId: string;
   /** Echoed for the animator label ("Building: <intent>"). */
   readonly intent: string;

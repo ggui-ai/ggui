@@ -120,7 +120,7 @@ export function GguiSessions(): ReactElement {
       />
 
       {state.kind === 'loading' ? (
-        <StatusCard title="loading" num="REN / 01" tone="draft">
+        <StatusCard title="loading" num="SES / 01" tone="draft">
           Loading sessions…
         </StatusCard>
       ) : state.kind === 'error' ? (
@@ -175,7 +175,7 @@ function GguiSessionList({
       aria-label="active sessions"
     >
       <div className="ggui-stack__head">
-        <span className="ggui-stack__num">REN</span>
+        <span className="ggui-stack__num">SES</span>
         <span className="ggui-stack__label">live sessions</span>
         <span className="ggui-stack__count">
           {shown.length}
@@ -223,7 +223,7 @@ function GguiSessionRow({
     >
       <div className="ggui-stack__entry-head">
         <span className="ggui-stack__entry-num">
-          {`REN / ${String(index).padStart(2, '0')}`}
+          {`SES / ${String(index).padStart(2, '0')}`}
         </span>
         <span className="ggui-stack__entry-title">
           <code className="ggui-code">{shortId}</code>…
@@ -284,7 +284,7 @@ function EmptyGguiSessions(): ReactElement {
     <div className="ggui-card">
       <div className="ggui-card__head">
         <span className="ggui-card__title">empty</span>
-        <span className="ggui-card__num">REN / 00</span>
+        <span className="ggui-card__num">SES / 00</span>
       </div>
       <div className="ggui-card__body">
         <p className="ggui-body">No sessions yet.</p>

@@ -129,7 +129,7 @@ export function createGguiSyncContextHandler(
     title: '[runtime] Sync Context',
     audience: ['runtime'],
     description:
-      'Mirrors a contextSpec snapshot from the iframe-runtime to the server (REPLACE semantics, last-write-wins per sessionId). Iframe-only — `_meta.ui.visibility: [\'app\']` restricts callers per spec §401. Server stores the snapshot on the render; chat-history rehydrate seeds `contextSlots[i].default` with the snapshotted values, restoring the user\'s last-known interactive state instead of resetting to authoring-time defaults.',
+      'Mirrors a contextSpec snapshot from the iframe-runtime to the server (REPLACE semantics, last-write-wins per sessionId). Iframe-only — `_meta.ui.visibility: [\'app\']` restricts callers per spec §401. Server stores the snapshot on the GguiSession; chat-history rehydrate seeds `contextSlots[i].default` with the snapshotted values, restoring the user\'s last-known interactive state instead of resetting to authoring-time defaults.',
     inputSchema,
     outputSchema,
     _meta: {

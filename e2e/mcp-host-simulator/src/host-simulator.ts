@@ -121,7 +121,7 @@ export interface CallToolResult {
 /**
  * WebSocket ack frame the iframe runtime expects after subscribe.
  * Mirrors the live-channel wire shape:
- *   - Ack:   `{ type: 'ack', payload: { sessionToken, sequence, render } }`
+ *   - Ack:   `{ type: 'ack', payload: { sessionToken, sequence, session } }`
  *   - Error: `{ type: 'error', payload: { code } }`
  *
  * The simulator normalises both into a single discriminator on `kind`

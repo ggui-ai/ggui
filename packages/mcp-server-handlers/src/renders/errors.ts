@@ -11,19 +11,19 @@
  * {@link GguiSessionNotFoundError}. The vessel-vs-entry distinction the prior
  * matrix encoded does not exist anymore — every render IS the addressable
  * unit; "session not found" and "stack item not found" both fold into
- * "render not found".
+ * "GguiSession not found".
  */
 
 /**
  * Thrown when a tool that requires a sessionId receives one that
- * doesn't resolve to any live render for the caller's appId. Three
+ * doesn't resolve to any live GguiSession for the caller's appId. Three
  * triggers, all surfaced as the same error to avoid leaking cross-
  * tenant existence:
  *
  *   1. The sessionId was never minted (typo, fabricated, replay from a
  *      different deployment).
  *   2. The sessionId belongs to a different appId (cross-tenant probe).
- *   3. The render was deleted, closed, or its TTL expired.
+ *   3. The GguiSession was deleted, closed, or its TTL expired.
  *
  * Recovery: call `ggui_handshake` followed by `ggui_render` to mint a
  * fresh sessionId, then thread it through subsequent `ggui_update` /
@@ -42,12 +42,12 @@ export class GguiSessionNotFoundError extends Error {
 
 /**
  * Thrown when `ggui_emit` targets a channel that is not declared on the
- * resolved render's `streamSpec`, OR when the resolved render has no
+ * resolved GguiSession's `streamSpec`, OR when the resolved GguiSession has no
  * `streamSpec` at all.
  *
  * Post-streamSpec-rewrite, permissive-when-spec-missing is no longer
- * allowed: a render without a streamSpec cannot accept `ggui_emit`
- * emissions. Callers who want a render without live-channel affordances
+ * allowed: a GguiSession without a streamSpec cannot accept `ggui_emit`
+ * emissions. Callers who want a GguiSession without live-channel affordances
  * simply don't call the tool.
  */
 export class ChannelNotDeclaredError extends Error {

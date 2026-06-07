@@ -140,7 +140,7 @@ describe('bootSequence — happy path', () => {
     // Ack's render promoted to mountedRender on the result.
     expect(result.mountedRender?.id).toBe('render_001');
 
-    // GguiSession-frame behavior in placeholder mode is silent (status-log
+    // render-frame behavior in placeholder mode is silent (status-log
     // only — no React mount, no DOM mutation). The emitFrame helper
     // still confirms the render handler is registered and accepts the
     // frame without throwing.

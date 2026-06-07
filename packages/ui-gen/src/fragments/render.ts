@@ -27,7 +27,7 @@ export const renderFragments: Record<string, HarnessFragment> = {
     value: "grid",
     cacheTier: "axisDelta",
     promptText:
-      "## Render: grid\n2D tile layout. Use <CardGrid> or CSS `display: grid` with `grid-blueprint-columns: repeat(N, 1fr)`. If items carry row/col fields, position each tile at (row, col). Do not scroll horizontally.",
+      "## Render: grid\n2D tile layout. Use <CardGrid> or CSS `display: grid` with `grid-template-columns: repeat(N, 1fr)`. If items carry row/col fields, position each tile at (row, col). Do not scroll horizontally.",
   },
   spatial: {
     axis: "render",

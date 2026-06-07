@@ -72,7 +72,7 @@ describe('buildEventsPolling', () => {
     const desc = buildEventsPolling({ baseUrl: 'http://x/events' });
     const body: EventsResponse = {
       events: [
-        { seq: 1, timestamp: '2026-01-01T00:00:00Z', type: 'render', data: { render: { id: 'a' } } },
+        { seq: 1, timestamp: '2026-01-01T00:00:00Z', type: 'render', data: { session: { id: 'a' } } },
         { seq: 2, timestamp: '2026-01-01T00:00:01Z', type: 'props_update', data: { sessionId: 'a', props: { x: 1 } } },
       ],
       lastSequence: 2,

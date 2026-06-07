@@ -125,7 +125,7 @@ export interface BuildWiredActionArgs {
   readonly intent: string;
   readonly data?: unknown;
   /**
-   * Active render id — sourced from `bootstrap.sessionId`. The
+   * Active GguiSession id — sourced from `bootstrap.sessionId`. The
    * submit_action handler requires it for `kind:"dispatch"` (the
    * pending-events pipe is render-keyed).
    */

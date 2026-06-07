@@ -346,7 +346,7 @@ export interface ErrorPayload {
  * its policy floor.
  */
 export interface ChannelSubscribePayload {
-  /** Active render id from the iframe's bootstrap. */
+  /** Active GguiSession id from the iframe's bootstrap. */
   sessionId: string;
   /** Active app id from the iframe's bootstrap. */
   appId: string;
