@@ -86,6 +86,12 @@ export {
   type ToolIdentityCatalog,
 } from "./canonicalize-tool-identity.js";
 export {
+  gateImportedBlueprint,
+  type GateInput,
+  type ImportGateCtx,
+  type ImportGateResult,
+} from "./import-gate.js";
+export {
   createGguiDeclareToolCatalogHandler,
   type GguiDeclareToolCatalogDeps,
 } from "./declare-tool-catalog.js";
