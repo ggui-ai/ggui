@@ -89,6 +89,7 @@ import { runThemeCommand } from './theme-command.js';
 import { runExportPoolCommand } from './export-pool-command.js';
 import { runCreateCommand } from './create-app-command.js';
 import { runPushCommand } from './push-command.js';
+import { runDeployCommand } from './deploy-command.js';
 
 const HELP = `ggui — open CLI for the ggui protocol
 
@@ -153,6 +154,10 @@ Commands:
 
                  --out <dir>  Output directory (default: ./ggui-pool).
 
+  deploy       Provision + wire a ggui.ai cloud app for this project
+               (idempotent: safe to re-run after a partial failure).
+               Requires a ggui.json in the current directory tree.
+
   push         Compile + bulk-push blueprints to a ggui.ai cloud app.
                Requires \`ggui login\`.
 
@@ -208,6 +213,8 @@ async function main(argv: string[]): Promise<number> {
       return runPushCommand(rest);
     case 'create':
       return runCreateCommand(rest);
+    case 'deploy':
+      return runDeployCommand(rest);
     default:
       process.stderr.write(`ggui: unknown command "${command}"\n\n`);
       process.stderr.write(HELP);
