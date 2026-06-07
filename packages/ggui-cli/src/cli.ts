@@ -88,6 +88,7 @@ import { runBlueprintCommand } from './blueprint-command.js';
 import { runThemeCommand } from './theme-command.js';
 import { runExportPoolCommand } from './export-pool-command.js';
 import { runCreateCommand } from './create-app-command.js';
+import { runPushCommand } from './push-command.js';
 
 const HELP = `ggui — open CLI for the ggui protocol
 
@@ -152,6 +153,12 @@ Commands:
 
                  --out <dir>  Output directory (default: ./ggui-pool).
 
+  push         Compile + bulk-push blueprints to a ggui.ai cloud app.
+               Requires \`ggui login\`.
+
+                 --app <appId>  Target app ID (default: ggui.json#appId).
+                 --from <dir>   Read from an existing pool artifact directory.
+
 Global options:
   --help, -h   Show this help.
   --version    Show installed version.
@@ -197,6 +204,8 @@ async function main(argv: string[]): Promise<number> {
       return runThemeCommand(rest);
     case 'export-pool':
       return runExportPoolCommand(rest);
+    case 'push':
+      return runPushCommand(rest);
     case 'create':
       return runCreateCommand(rest);
     default:

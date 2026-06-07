@@ -278,3 +278,23 @@ export async function revokeKey(id: string): Promise<void> {
     async () => undefined,
   );
 }
+
+export interface PushResponse {
+  pushed: number;
+  appId: string;
+}
+
+export async function pushAppBlueprints(
+  appId: string,
+  blueprints: unknown[],
+): Promise<PushResponse> {
+  return withAuthRetry(
+    (s) =>
+      authedFetch(s, {
+        method: 'POST',
+        path: `/v1/apps/${encodeURIComponent(appId)}/blueprints`,
+        body: { blueprints },
+      }),
+    (res) => res.json() as Promise<PushResponse>,
+  );
+}
