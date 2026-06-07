@@ -80,6 +80,10 @@ describe('buildBlueprintPushPayload', () => {
     expect(r!.compiledBytes.length).toBeGreaterThan(0);
     // manifest must carry the contract
     expect(r!.manifest.contract).toBeDefined();
+    // manifest must carry the generator-era stamp so the cloud import gate
+    // can verify the blueprint against the deployment's protocol version.
+    expect(r!.manifest.generatorProtocolVersion).toBe(record.generatorProtocolVersion);
+    expect(r!.manifest.generatorProtocolVersion).toBeDefined();
     // version is always '1'
     expect(r!.version).toBe('1');
   });

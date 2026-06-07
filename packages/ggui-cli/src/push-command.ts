@@ -23,6 +23,10 @@ export interface PushRecord {
   readonly manifest: {
     readonly contract: DataContract;
     readonly description?: string;
+    /** Generator era this blueprint was built against — feeds the import gate. */
+    readonly generatorProtocolVersion?: string;
+    /** Tool-identity catalog hash at export — feeds the import gate's re-key check. */
+    readonly toolIdentityCatalogHash?: string;
   };
   /** Compiled ESM JS, ready for the pod to evaluate directly (no pod-side esbuild). */
   readonly compiledBytes: string;
@@ -140,6 +144,14 @@ export async function buildBlueprintPushPayload(artifactDir: string): Promise<Pu
         contract: r.contract,
         ...(r.variance.seedPrompt !== undefined
           ? { description: r.variance.seedPrompt }
+          : {}),
+        // Carry the PortableBlueprint stamp fields so the cloud import gate
+        // can verify generator era + tool-identity catalog at load time.
+        ...(r.generatorProtocolVersion !== undefined
+          ? { generatorProtocolVersion: r.generatorProtocolVersion }
+          : {}),
+        ...(r.toolIdentityCatalogHash !== undefined
+          ? { toolIdentityCatalogHash: r.toolIdentityCatalogHash }
           : {}),
       },
       compiledBytes,
