@@ -383,7 +383,7 @@ export const DEFAULT_WIRED_TOOL_TIMEOUT_MS = 30_000;
  * shape every shared handler — ggui-native AND mounted — accepts. It
  * stays narrow on purpose (`appId`, `requestId`, optional `apiKeyHash`)
  * so the surface a host implements is stable. Wired-action runtime
- * fields (`sessionId`, `sessionId`, `sendPropsUpdate`) are dispatcher-
+ * fields (`sessionId`, `sendPropsUpdate`) are dispatcher-
  * specific — only mount tools invoked through the wired-action router
  * see them, only at dispatch time. Passing them as a third arg to
  * `invoke` keeps the canonical handler shape untouched and makes
@@ -796,7 +796,7 @@ export interface GguiSessionChannelServer {
    */
   sendPropsUpdate(sessionId: string, props: JsonObject): Promise<void>;
   /**
-   * Fan a `{type:'drain_ack', payload:{sessionId, appId, sessionId,
+   * Fan a `{type:'drain_ack', payload:{sessionId, appId,
    * eventId, drainedAt}}` wire frame to every subscriber currently
    * bound to `sessionId`.
    *

@@ -529,7 +529,7 @@ function LiveGguiSessionsHero({
 /**
  * Relative-time formatter — shared with `GguiSessions.tsx`. Simple inline
  * copy avoids creating a utilities module for a 10-line helper; the
- * status hero list mirrors the renders-list formatter character for
+ * status hero list mirrors the sessions-list formatter character for
  * character so operators read the same string across pages.
  */
 function formatRelative(ms: number): string {

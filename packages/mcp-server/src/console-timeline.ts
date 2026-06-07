@@ -8,7 +8,7 @@
  *
  * Post-Phase-B (flatten-render-identity): renamed from the prior
  * "sessions" terminology; the canonical addressable unit is now the
- * render. The on-wire `sessionId` path param replaces `sessionId`.
+ * render. The on-wire `sessionId` path param replaces the prior `renderId`.
  *
  * Memory: bounded by whatever the underlying GguiSessionStore retains.
  * `InMemoryGguiSessionStore` keeps everything for the process lifetime —

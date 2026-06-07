@@ -1,5 +1,5 @@
 /**
- * Renders page proof — closes the Slice-3 loop of the console page
+ * Sessions page proof — closes the Slice-3 loop of the console page
  * construction plan (`docs/plans/2026-04-22-console-page-construction.md`
  * §3.3).
  *
@@ -19,7 +19,7 @@
  * Why not seed a populated-list case at Lane 1? Seeding a live
  * render requires either a real `ggui_render` round-trip (needs a
  * BYOK LLM → Lane 2) or a privileged test-fixture endpoint to
- * inject renders (new surface, out of Slice 3). Lane 3
+ * inject sessions (new surface, out of Slice 3). Lane 3
  * (`console-renders.test.ts`) covers the populated-list case with
  * an in-process `InMemoryGguiSessionStore` — faster, deterministic,
  * same contract.
@@ -41,7 +41,7 @@ const TEST_TIMEOUT_MS = 60_000;
 const FIXTURE_DIR = resolvePath(__dirname, 'fixtures/manifest-capabilities');
 
 test.describe.serial(
-  'Console renders page — empty-state + cross-page nav',
+  'Console sessions page — empty-state + cross-page nav',
   () => {
     let handle: GguiServeHandle;
     let gate: NetworkGate;
@@ -86,7 +86,7 @@ test.describe.serial(
       // The fixture has no live sessions, so the endpoint returns
       // `{sessions:[],total:0}` and the SPA renders the empty-state
       // card. Assert the empty-state copy — load-bearing proof the
-      // fetch + no-renders branch wired correctly, because the
+      // fetch + no-sessions branch wired correctly, because the
       // branded-card container has a stable anchor the row list
       // wouldn't produce.
       await expect(
@@ -104,14 +104,14 @@ test.describe.serial(
       expect(gate.attempts).toEqual([]);
     });
 
-    test('status dashboard paints the empty live-renders hero (Slice 10)', async ({
+    test('status dashboard paints the empty live-sessions hero (Slice 10)', async ({
       page,
     }) => {
       test.setTimeout(TEST_TIMEOUT_MS);
       // Slice 10 replaced the 5th-in-grid "recent renders" card with
       // a full-width hero above the status grid. In the fixture's
       // no-active-renders state, the hero renders its empty variant
-      // and points the operator at the playground (where renders
+      // and points the operator at the playground (where sessions
       // get born), not the list (which would be empty too). Active
       // state + "open latest →" + "view all →" are covered by the
       // Lane-3 `Status.test.tsx` spec with a mocked fetch — seeding
