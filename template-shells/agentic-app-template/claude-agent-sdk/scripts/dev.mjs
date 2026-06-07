@@ -139,8 +139,10 @@ const SERVICES = [
 // Skip spawning it so the dev tree doesn't race or conflict with it.
 function isRemoteGguiUrl(u) {
   if (!u) return false;
-  try { const h = new URL(u).hostname; return !/^(localhost|127\.|0\.0\.0\.0|\[?::1\]?)$/.test(h); }
-  catch { return false; }
+  try {
+    const h = new URL(u).hostname;
+    return !(h === 'localhost' || h.startsWith('127.') || h === '0.0.0.0' || h === '[::1]' || h === '::1');
+  } catch { return false; }
 }
 const useCloudGgui = isRemoteGguiUrl(process.env.GGUI_MCP_URL);
 const services = SERVICES.filter((s) => !(useCloudGgui && s.name === 'ggui'));

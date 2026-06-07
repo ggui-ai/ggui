@@ -103,6 +103,34 @@ export function upsertEnvLocal(envLocalPath: string, key: string, value: string)
   writeFileSync(envLocalPath, result.endsWith('\n') ? result : `${result}\n`, 'utf-8');
 }
 
+/**
+ * Read the non-empty value of `key` from `.env.local`, or `undefined` if
+ * the file doesn't exist, the key is absent, or its value is empty.
+ * Strips surrounding quotes + `export ` prefix the same way `upsertEnvLocal`
+ * recognises them.
+ */
+export function readEnvLocalValue(
+  envLocalPath: string,
+  key: string,
+): string | undefined {
+  if (!existsSync(envLocalPath)) return undefined;
+  const raw = readFileSync(envLocalPath, 'utf-8');
+  for (const rawLine of raw.split('\n')) {
+    const l = rawLine.trim().startsWith('export ')
+      ? rawLine.trim().slice(7)
+      : rawLine.trim();
+    const eq = l.indexOf('=');
+    if (eq !== -1 && l.slice(0, eq).trim() === key) {
+      const val = l
+        .slice(eq + 1)
+        .replace(/^["']|["']$/g, '')
+        .trim();
+      if (val.length > 0) return val;
+    }
+  }
+  return undefined;
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // State reader
 // ─────────────────────────────────────────────────────────────────────────────
@@ -136,18 +164,7 @@ function readDeployContext(cwd: string): ResolvedProjectContext {
     }
   }
 
-  let hasKey = false;
-  if (existsSync(envLocalPath)) {
-    const raw = readFileSync(envLocalPath, 'utf-8');
-    for (const rawLine of raw.split('\n')) {
-      const l = rawLine.trim().startsWith('export ') ? rawLine.trim().slice(7) : rawLine.trim();
-      const eq = l.indexOf('=');
-      if (eq !== -1 && l.slice(0, eq).trim() === 'GGUI_MCP_BEARER') {
-        const val = l.slice(eq + 1).replace(/^["']|["']$/g, '').trim();
-        if (val.length > 0) { hasKey = true; break; }
-      }
-    }
-  }
+  const hasKey = readEnvLocalValue(envLocalPath, 'GGUI_MCP_BEARER') !== undefined;
 
   return {
     gguiJsonPath,
@@ -190,8 +207,7 @@ export async function runDeployCommand(_args: readonly string[]): Promise<number
 
   // Read current state.
   const ctx = readDeployContext(cwd);
-  const { gguiJsonPath, envLocalPath } = ctx;
-  let { state } = ctx;
+  const { gguiJsonPath, envLocalPath, state } = ctx;
 
   if (!gguiJsonPath) {
     process.stderr.write(
@@ -216,8 +232,9 @@ export async function runDeployCommand(_args: readonly string[]): Promise<number
           process.stderr.write('ggui deploy: login failed. Aborting.\n');
           return code;
         }
-        // Re-read auth state so subsequent steps that need the session work.
-        state = { ...state, authed: true };
+        // runLoginCommand persisted the session to ~/.ggui/auth.json;
+        // createApp / createKey load it internally, so nothing to thread
+        // forward here.
         break;
       }
 
@@ -234,11 +251,20 @@ export async function runDeployCommand(_args: readonly string[]): Promise<number
         }
         appId = app.appId;
         connectUrl = app.connectUrl;
-        // Persist appId into ggui.json.
+        // Persist appId into ggui.json. The app already exists server-side
+        // now, so a persist failure is LOUD: without the appId on disk a
+        // re-run would call create-app again and create a DUPLICATE app.
         const read = readGguiJson(gguiJsonPath);
-        if ('value' in read) {
-          writeGguiJson(gguiJsonPath, { ...read.value, appId });
+        if ('error' in read) {
+          process.stderr.write(
+            `ggui deploy: create-app: app ${app.appId} was created, but ggui.json ` +
+              `could not be read to persist appId — ${read.error}\n` +
+              `  Add "appId": "${app.appId}" to ggui.json manually before re-running, ` +
+              `or a re-run will create a DUPLICATE app.\n`,
+          );
+          return 1;
         }
+        writeGguiJson(gguiJsonPath, { ...read.value, appId });
         process.stdout.write(`  appId:      ${app.appId}\n`);
         process.stdout.write(`  connectUrl: ${app.connectUrl}\n`);
         break;
@@ -281,8 +307,24 @@ export async function runDeployCommand(_args: readonly string[]): Promise<number
           process.stderr.write('ggui deploy: wire-env: no appId resolved. This is a bug.\n');
           return 1;
         }
-        // Prefer the connectUrl we got from create-app; fall back to
-        // constructing the canonical cloud URL from appId.
+        // NEVER clobber an existing GGUI_MCP_URL. The FIRST deploy writes
+        // the deployment-correct base derived from create-app's connectUrl
+        // (e.g. sandbox `<env>.mcp.sandbox.ggui.ai`, prod `mcp.ggui.ai`).
+        // On REDEPLOY we have only the appId — reconstructing a hardcoded
+        // prod URL here would silently break a sandbox/non-prod deployment.
+        // So: leave any existing value alone; only write when absent.
+        const existing = readEnvLocalValue(envLocalPath, 'GGUI_MCP_URL');
+        if (existing) {
+          process.stdout.write(
+            `  GGUI_MCP_URL already set (${existing}) — leaving it unchanged.\n`,
+          );
+          break;
+        }
+        // No prior value. Prefer the connectUrl from a create-app this
+        // session (deployment-correct base); otherwise fall back to the
+        // PRODUCTION default. The fallback only fires when there's no prior
+        // URL AND create-app didn't run this session — a non-prod first
+        // deploy always has connectUrl, so it never reaches the fallback.
         const mcpUrl = connectUrl
           ? `${connectUrl}/mcp`
           : `https://mcp.ggui.ai/apps/${appId}/mcp`;
@@ -301,13 +343,10 @@ export async function runDeployCommand(_args: readonly string[]): Promise<number
     }
   }
 
-  // Final resolved appId for the summary.
-  const finalAppId = appId;
-  const finalMcpUrl = connectUrl
-    ? `${connectUrl}/mcp`
-    : finalAppId
-      ? `https://mcp.ggui.ai/apps/${finalAppId}/mcp`
-      : '(unknown)';
+  // Report the URL actually in .env.local — after wire-env that file is
+  // authoritative (a preserved sandbox/non-prod value is reflected
+  // accurately rather than re-derived as the prod default).
+  const finalMcpUrl = readEnvLocalValue(envLocalPath, 'GGUI_MCP_URL') ?? '(unknown)';
 
   process.stdout.write('\n');
   process.stdout.write('  ggui deploy complete.\n');
