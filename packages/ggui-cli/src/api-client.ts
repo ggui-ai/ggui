@@ -255,9 +255,8 @@ export interface AppsCreateResponse {
   appId: string;
   /**
    * Base app URL WITHOUT the `/mcp` suffix — callers append `/mcp` to form
-   * the agent's ggui MCP endpoint. Carries the deployment-correct host
-   * (e.g. sandbox `<env>.mcp.sandbox.ggui.ai`, prod `mcp.ggui.ai`), so it
-   * must be preferred over any reconstructed/hardcoded URL.
+   * the agent's ggui MCP endpoint. Carries the deployment-correct host for
+   * this app, so it must be preferred over any reconstructed/hardcoded URL.
    */
   connectUrl: string;
   isDefault: boolean;
