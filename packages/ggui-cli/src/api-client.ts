@@ -247,6 +247,27 @@ export async function createKey(args: {
   );
 }
 
+export interface AppsCreateResponse {
+  appId: string;
+  connectUrl: string;
+  isDefault: boolean;
+  createdAt: string;
+}
+
+export async function createApp(args: {
+  displayName?: string;
+}): Promise<AppsCreateResponse> {
+  return withAuthRetry(
+    (s) =>
+      authedFetch(s, {
+        method: 'POST',
+        path: '/v1/apps',
+        body: { displayName: args.displayName },
+      }),
+    (r) => r.json() as Promise<AppsCreateResponse>,
+  );
+}
+
 export async function revokeKey(id: string): Promise<void> {
   await withAuthRetry(
     (s) =>

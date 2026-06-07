@@ -87,6 +87,7 @@ import { runGadgetCommand } from './gadget-command.js';
 import { runBlueprintCommand } from './blueprint-command.js';
 import { runThemeCommand } from './theme-command.js';
 import { runExportPoolCommand } from './export-pool-command.js';
+import { runCreateCommand } from './create-app-command.js';
 
 const HELP = `ggui — open CLI for the ggui protocol
 
@@ -127,6 +128,11 @@ Commands:
   logout       Discard the local ggui.ai session.
   whoami       Print the authenticated user.
   keys         Manage ggui_user_* connector keys (list/create/revoke).
+  create       Create cloud resources tied to this project.
+
+                 create app [--name <displayName>]  Create a new ggui.ai app
+                                                    and write appId into ggui.json.
+
   gadget       Author gadgets for the ggui marketplace.
 
                  gadget create <scope/name>  Scaffold a new gadget repo.
@@ -191,6 +197,8 @@ async function main(argv: string[]): Promise<number> {
       return runThemeCommand(rest);
     case 'export-pool':
       return runExportPoolCommand(rest);
+    case 'create':
+      return runCreateCommand(rest);
     default:
       process.stderr.write(`ggui: unknown command "${command}"\n\n`);
       process.stderr.write(HELP);
