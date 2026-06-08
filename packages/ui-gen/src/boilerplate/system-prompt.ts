@@ -14,7 +14,7 @@
 // string — the skeleton still renders cleanly for OSS callers who don't
 // pass doc blocks.
 
-import { STDLIB_GADGETS } from "@ggui-ai/protocol";
+import { resolveAppGadgets } from "@ggui-ai/protocol";
 import type {
   GadgetDescriptor,
   GadgetExport,
@@ -295,7 +295,7 @@ export function buildSystemPrompt(inputs: SystemPromptInputs): string {
   // `formatGadgetsSection` renders a `Type:` line per third-party
   // gadget from it. When omitted, no `Type:` lines are rendered.
   const gadgetsSection = formatGadgetsSection(
-    inputs.appGadgets ?? STDLIB_GADGETS,
+    resolveAppGadgets(inputs.appGadgets),
     inputs.gadgetTypes,
   );
 

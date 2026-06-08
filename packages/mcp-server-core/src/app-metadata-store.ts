@@ -19,7 +19,7 @@
  */
 
 import {
-  STDLIB_GADGETS,
+  resolveAppGadgets,
   type AppBlueprintSearchConfig,
   type GadgetDescriptor,
   type McpUiDisplayMode,
@@ -173,7 +173,7 @@ export interface ComposeAppInput {
 export function composeApp(input: ComposeAppInput): App {
   return {
     id: input.id,
-    gadgets: input.gadgets ?? STDLIB_GADGETS,
+    gadgets: resolveAppGadgets(input.gadgets),
     ...(input.defaultThemeId !== undefined
       ? { defaultThemeId: input.defaultThemeId }
       : {}),

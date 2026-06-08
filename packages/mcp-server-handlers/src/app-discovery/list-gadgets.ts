@@ -41,7 +41,7 @@
 
 import { z } from 'zod';
 import {
-  STDLIB_GADGETS,
+  resolveAppGadgets,
   gadgetDescriptorSchema,
   type GadgetDescriptor,
 } from '@ggui-ai/protocol';
@@ -124,7 +124,7 @@ export function createGguiListGadgetsHandler(
       // explicitly created. Return the stdlib seed so callers always
       // get a meaningful catalog. This mirrors the cloud DDB adapter's
       // default-on-read pattern at the row-projection site.
-      const gadgets = app?.gadgets ?? STDLIB_GADGETS;
+      const gadgets = resolveAppGadgets(app?.gadgets);
       return { gadgets };
     },
   };

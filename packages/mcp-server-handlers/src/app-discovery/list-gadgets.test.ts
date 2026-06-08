@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import { STDLIB_GADGETS, type GadgetDescriptor } from '@ggui-ai/protocol';
+const STDLIB_PKG = STDLIB_GADGETS[0].package;
 import { InMemoryAppMetadataStore } from '@ggui-ai/mcp-server-core/in-memory';
 import type { HandlerContext } from '../types.js';
 import { createGguiListGadgetsHandler } from './list-gadgets.js';
@@ -11,15 +12,18 @@ function makeCtx(appId: string): HandlerContext {
 }
 
 describe('createGguiListGadgetsHandler', () => {
-  it('returns app.gadgets when the app is registered', async () => {
+  it('returns app.gadgets when the app is registered (stdlib seed, content-equal)', async () => {
     const appMetadataStore = new InMemoryAppMetadataStore();
     appMetadataStore.register('app-1');
     const tool = createGguiListGadgetsHandler({ appMetadataStore });
     const result = await tool.handler({}, makeCtx('app-1'));
-    expect(result.gadgets).toBe(STDLIB_GADGETS);
+    // resolveAppGadgets is applied at both composeApp and list-gadgets handler
+    // layers — the result is content-equal to STDLIB_GADGETS but may be a
+    // new array reference (idempotent by value, not by identity).
+    expect(result.gadgets).toEqual(STDLIB_GADGETS);
   });
 
-  it('returns a custom catalog when the app was registered with one', async () => {
+  it('returns a custom catalog unioned with stdlib floor', async () => {
     const appMetadataStore = new InMemoryAppMetadataStore();
     const custom: GadgetDescriptor[] = [
       {
@@ -38,7 +42,10 @@ describe('createGguiListGadgetsHandler', () => {
     appMetadataStore.register('app-1', { gadgets: custom });
     const tool = createGguiListGadgetsHandler({ appMetadataStore });
     const result = await tool.handler({}, makeCtx('app-1'));
-    expect(result.gadgets).toBe(custom);
+    // resolveAppGadgets unions — stdlib floor is always present.
+    expect(result.gadgets.map((g) => g.package)).toEqual(
+      expect.arrayContaining([STDLIB_PKG, '@acme/x']),
+    );
   });
 
   it('falls back to STDLIB_GADGETS when the app is not registered', async () => {
@@ -53,7 +60,8 @@ describe('createGguiListGadgetsHandler', () => {
     appMetadataStore.register('app-1');
     const tool = createGguiListGadgetsHandler({ appMetadataStore });
     const result = await tool.handler({ appId: 'app-1' }, makeCtx('app-1'));
-    expect(result.gadgets).toBe(STDLIB_GADGETS);
+    // Content-equal to STDLIB_GADGETS (resolveAppGadgets applied twice = idempotent by value).
+    expect(result.gadgets).toEqual(STDLIB_GADGETS);
   });
 
   it('throws AppAccessDeniedError when the explicit appId does not match ctx.appId', async () => {

@@ -43,7 +43,7 @@ import {
   FATAL_CATALOG_LINT_CODES,
   lintGadgetCatalog,
   registeredGadgetDescriptorSchema,
-  STDLIB_GADGETS,
+  resolveAppGadgets,
   type GadgetDescriptor,
 } from '@ggui-ai/protocol';
 import type { AppMetadataStore } from './app-metadata-store.js';
@@ -119,7 +119,7 @@ export class AppMetadataGadgetCatalog {
    */
   async list(appId: string): Promise<readonly GadgetDescriptor[]> {
     const app = await this.#store.get(appId);
-    const descriptors = app?.gadgets ?? STDLIB_GADGETS;
+    const descriptors = resolveAppGadgets(app?.gadgets);
 
     const violations: GadgetCatalogViolation[] = [];
 

@@ -4,6 +4,7 @@ import {
   gadgetExportName,
   type GadgetDescriptor,
 } from '@ggui-ai/protocol';
+const STDLIB_PKG = STDLIB_GADGETS[0].package;
 import type { GadgetCatalogAdapter } from '@ggui-ai/gadgets';
 import type { App, AppMetadataStore } from './app-metadata-store.js';
 import {
@@ -52,13 +53,18 @@ describe('AppMetadataGadgetCatalog', () => {
     expect(typeof adapter.list).toBe('function');
   });
 
-  it('returns the registered catalog for a known app', async () => {
+  it('returns the registered catalog for a known app (stdlib floor + custom)', async () => {
     const catalog = new AppMetadataGadgetCatalog(
       makeStore({ app1: [VALID_LEAFLET] }),
     );
     const result = await catalog.list('app1');
-    expect(result).toHaveLength(1);
-    const exp = result[0]?.exports[0];
+    // resolveAppGadgets unions — stdlib package is always present as the floor.
+    expect(result).toHaveLength(STDLIB_GADGETS.length + 1);
+    expect(result.map((g) => g.package)).toEqual(
+      expect.arrayContaining([STDLIB_PKG, VALID_LEAFLET.package]),
+    );
+    const leafletPkg = result.find((g) => g.package === VALID_LEAFLET.package);
+    const exp = leafletPkg?.exports[0];
     expect(exp && gadgetExportName(exp)).toBe('useLeafletMap');
   });
 
@@ -145,6 +151,7 @@ describe('AppMetadataGadgetCatalog', () => {
     const catalog = new AppMetadataGadgetCatalog(
       makeStore({ app1: [unscoped] }),
     );
-    await expect(catalog.list('app1')).resolves.toHaveLength(1);
+    // resolveAppGadgets unions — stdlib floor + unscoped = 2 packages total.
+    await expect(catalog.list('app1')).resolves.toHaveLength(STDLIB_GADGETS.length + 1);
   });
 });

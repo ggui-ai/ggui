@@ -306,23 +306,22 @@ describe('buildSystemPrompt — clientCapabilities section integration', () => {
     });
     expect(prompt).toContain('`useLeafletMap`');
     expect(prompt).toContain('Mount when the intent names a rendered map');
-    // The replacement caps the catalog table at what's passed — no
-    // STDLIB row bleed-through when the operator has explicitly
-    // registered a narrower (or wider, plugin-bearing) catalog. We
-    // assert against the table-row syntax (`| `useFoo`  |`) rather
-    // than bare hook names, since `useGeolocation` STILL appears as
-    // an EXAMPLE in surrounding prose (the catalog-table is one
-    // section; the prose mentions the hook generically elsewhere).
-    expect(prompt).not.toMatch(/\|\s*`useGeolocation`\s*\|/);
+    // resolveAppGadgets unions the custom catalog WITH the stdlib floor — stdlib
+    // hooks (including useGeolocation) are always present as table rows.
+    expect(prompt).toMatch(/\|\s*`useGeolocation`\s*\|/);
   });
 
-  it('surfaces a "no libraries registered" hint when the catalog is empty', () => {
+  it('resolves to the stdlib floor when appGadgets is empty', () => {
+    // resolveAppGadgets([]) returns STDLIB_GADGETS — the "no libraries registered"
+    // hint is only shown by formatGadgetsSection([]), which can no longer be
+    // reached when the floor is always enforced. Empty declared ⇒ stdlib seed.
     const prompt = buildSystemPrompt({
       userRequest: 'show a static card',
       appGadgets: [],
     });
-    expect(prompt).toContain("Don't declare `clientCapabilities.gadgets`");
-    expect(prompt).not.toMatch(/\|\s*`useGeolocation`\s*\|/);
+    // The stdlib floor is present — useGeolocation appears in the table.
+    expect(prompt).toMatch(/\|\s*`useGeolocation`\s*\|/);
+    expect(prompt).not.toContain("Don't declare `clientCapabilities.gadgets`");
   });
 
   it("preserves the `gadget_not_registered` enforcement nudge", () => {

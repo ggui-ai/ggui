@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { STDLIB_GADGETS, type GadgetDescriptor } from '@ggui-ai/protocol';
+const STDLIB_PKG = STDLIB_GADGETS[0].package;
 import { InMemoryAppMetadataStore } from './app-metadata-store.js';
 
 /**
@@ -46,12 +47,16 @@ describe('InMemoryAppMetadataStore', () => {
     expect(app?.gadgets).toBe(STDLIB_GADGETS);
   });
 
-  it('accepts explicit gadgets on registration', async () => {
+  it('accepts explicit gadgets on registration (unioned with stdlib floor)', async () => {
     const store = new InMemoryAppMetadataStore();
     const custom = [makeGadget({ hook: 'useCustom', package: '@acme/custom-hooks' })];
     store.register('app-1', { gadgets: custom });
     const app = await store.get('app-1');
-    expect(app?.gadgets).toBe(custom);
+    // resolveAppGadgets unions with stdlib — stdlib is always present as the floor.
+    expect(app?.gadgets.map((g) => g.package)).toEqual(
+      expect.arrayContaining([STDLIB_PKG, '@acme/custom-hooks']),
+    );
+    expect(app?.gadgets).toHaveLength(STDLIB_GADGETS.length + 1);
   });
 
   it('register() replaces an existing app entry', async () => {
@@ -60,7 +65,11 @@ describe('InMemoryAppMetadataStore', () => {
     const custom = [makeGadget({ hook: 'useNew', package: '@acme/new' })];
     store.register('app-1', { gadgets: custom });
     const app = await store.get('app-1');
-    expect(app?.gadgets).toBe(custom);
+    // resolveAppGadgets unions with stdlib — the replacement includes stdlib + custom.
+    expect(app?.gadgets.map((g) => g.package)).toEqual(
+      expect.arrayContaining([STDLIB_PKG, '@acme/new']),
+    );
+    expect(app?.gadgets).toHaveLength(STDLIB_GADGETS.length + 1);
   });
 
   it('getOrCreate() seeds stdlib on first access', async () => {
@@ -77,7 +86,11 @@ describe('InMemoryAppMetadataStore', () => {
     const custom = [makeGadget({ hook: 'useCustom', package: '@acme/x' })];
     store.register('app-1', { gadgets: custom });
     const app = store.getOrCreate('app-1');
-    expect(app.gadgets).toBe(custom);
+    // resolveAppGadgets unions — stdlib floor + custom package present.
+    expect(app.gadgets.map((g) => g.package)).toEqual(
+      expect.arrayContaining([STDLIB_PKG, '@acme/x']),
+    );
+    expect(app.gadgets).toHaveLength(STDLIB_GADGETS.length + 1);
   });
 
   describe('defaults fall-through on get()', () => {
@@ -128,7 +141,11 @@ describe('InMemoryAppMetadataStore', () => {
       });
       const app = await store.get('never-registered');
       expect(app).not.toBeNull();
-      expect(app?.gadgets).toBe(custom);
+      // resolveAppGadgets unions — stdlib floor + custom package present.
+      expect(app?.gadgets.map((g) => g.package)).toEqual(
+        expect.arrayContaining([STDLIB_PKG, '@ggui-samples/gadget-leaflet']),
+      );
+      expect(app?.gadgets).toHaveLength(STDLIB_GADGETS.length + 1);
     });
 
     it('seeds defaultGadgets on register() when no per-app catalog passed', async () => {
@@ -143,10 +160,14 @@ describe('InMemoryAppMetadataStore', () => {
       });
       store.register('app-1');
       const app = await store.get('app-1');
-      expect(app?.gadgets).toBe(custom);
+      // resolveAppGadgets unions — stdlib floor + custom package present.
+      expect(app?.gadgets.map((g) => g.package)).toEqual(
+        expect.arrayContaining([STDLIB_PKG, '@ggui-samples/gadget-leaflet']),
+      );
+      expect(app?.gadgets).toHaveLength(STDLIB_GADGETS.length + 1);
     });
 
-    it('per-app gadgets on register() wins over defaultGadgets', async () => {
+    it('per-app gadgets on register() wins over defaultGadgets (both unioned with stdlib)', async () => {
       const defaultLibs = [
         makeGadget({ hook: 'useDefault', package: '@acme/default' }),
       ];
@@ -158,7 +179,13 @@ describe('InMemoryAppMetadataStore', () => {
       });
       store.register('app-1', { gadgets: perAppLibs });
       const app = await store.get('app-1');
-      expect(app?.gadgets).toBe(perAppLibs);
+      // resolveAppGadgets unions per-app with stdlib floor.
+      // The defaultGadgets (@acme/default) is NOT present — per-app wins.
+      expect(app?.gadgets.map((g) => g.package)).toEqual(
+        expect.arrayContaining([STDLIB_PKG, '@acme/per-app']),
+      );
+      expect(app?.gadgets.map((g) => g.package)).not.toContain('@acme/default');
+      expect(app?.gadgets).toHaveLength(STDLIB_GADGETS.length + 1);
     });
 
     // Slice 2 — public env channel wiring.
@@ -270,7 +297,11 @@ describe('InMemoryAppMetadataStore', () => {
       const good = makeGadget({ hook: 'useGood', package: '@acme/good' });
       expect(() => store.register('app-1', { gadgets: [good] })).not.toThrow();
       const app = await store.get('app-1');
-      expect(app?.gadgets).toEqual([good]);
+      // resolveAppGadgets unions — stdlib floor + the validated gadget both present.
+      expect(app?.gadgets.map((g) => g.package)).toEqual(
+        expect.arrayContaining([STDLIB_PKG, '@acme/good']),
+      );
+      expect(app?.gadgets).toHaveLength(STDLIB_GADGETS.length + 1);
     });
   });
 });

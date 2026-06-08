@@ -115,7 +115,7 @@ import {
   validateContract,
   dataContractSchema,
   blueprintVarianceSchema,
-  STDLIB_GADGETS,
+  resolveAppGadgets,
   renderOutputSchema,
   type GguiRenderOutput,
   type RenderCacheMarker,
@@ -1182,7 +1182,7 @@ export function createGguiRenderHandler(
       // connect[]. No-op when `appMetadataStore` is unset.
       if (deps.appMetadataStore) {
         const appRecord = await deps.appMetadataStore.get(ctx.appId);
-        const appGadgets = appRecord?.gadgets ?? STDLIB_GADGETS;
+        const appGadgets = resolveAppGadgets(appRecord?.gadgets);
         assertGadgetsRegistered(story.contract, appGadgets);
         assertPublicEnvSatisfied(
           story.contract,

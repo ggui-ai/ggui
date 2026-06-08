@@ -20,8 +20,10 @@ describe('composeApp', () => {
     expect(app.gadgets).toBe(STDLIB_GADGETS);
   });
 
-  it('honors an explicit gadgets array verbatim', () => {
+  it('unions an explicit gadgets array with the stdlib floor', () => {
     // GG.8.1 — a `GadgetDescriptor` is a PACKAGE bundling `exports[]`.
+    // resolveAppGadgets always includes the stdlib package as the floor,
+    // so the result is a NEW array (union), not identity-equal to `custom`.
     const custom: GadgetDescriptor[] = [
       {
         package: '@ggui-samples/gadget-leaflet',
@@ -30,8 +32,11 @@ describe('composeApp', () => {
       },
     ];
     const app = composeApp({ id: 'app-1', gadgets: custom });
-    // Identity preserved through the composer.
-    expect(app.gadgets).toBe(custom);
+    // The stdlib package is always present as the floor.
+    expect(app.gadgets.map((g) => g.package)).toEqual(
+      expect.arrayContaining([STDLIB_GADGETS[0].package, '@ggui-samples/gadget-leaflet']),
+    );
+    expect(app.gadgets).toHaveLength(STDLIB_GADGETS.length + 1);
   });
 
   it('preserves the absent-vs-empty distinction for optional fields', () => {
@@ -89,6 +94,14 @@ describe('composeApp', () => {
     expect(app.publicEnv).toEqual({});
   });
 
+  it('keeps the stdlib package when an app declares an extension', () => {
+    const ext = { ...STDLIB_GADGETS[0], package: '@acme/maps' };
+    const app = composeApp({ id: 'a', gadgets: [ext] });
+    expect(app.gadgets.map((g) => g.package)).toEqual(
+      expect.arrayContaining([STDLIB_GADGETS[0].package, '@acme/maps']),
+    );
+  });
+
   it('round-trips a fully-populated App through the composer (drift canary)', () => {
     // If a new field is added to App but NOT to ComposeAppInput, this
     // round-trip will fail at compile time when the test fixture grows.
@@ -112,7 +125,12 @@ describe('composeApp', () => {
     } as const;
     const app = composeApp(fixture);
     expect(app.id).toBe(fixture.id);
-    expect(app.gadgets).toBe(fixture.gadgets);
+    // resolveAppGadgets unions with stdlib floor — result is a new array,
+    // not identity-equal to fixture.gadgets. The custom package is present.
+    expect(app.gadgets.map((g) => g.package)).toEqual(
+      expect.arrayContaining([STDLIB_GADGETS[0].package, fixtureGadgets[0].package]),
+    );
+    expect(app.gadgets).toHaveLength(STDLIB_GADGETS.length + 1);
     expect(app.defaultThemeId).toBe(fixture.defaultThemeId);
     expect(app.availableThemeIds).toEqual(fixture.availableThemeIds);
     expect(app.publicEnv).toBe(fixture.publicEnv);

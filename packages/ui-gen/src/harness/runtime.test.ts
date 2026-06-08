@@ -47,8 +47,8 @@ describe("buildSystemPrompt wrapper — appGadgets thread", () => {
       [leaflet],
     );
     expect(prompt).toMatch(/\|\s*`useLeafletMap`\s*\|/);
-    // When a catalog is provided, the STDLIB seed is REPLACED, not
-    // merged — symmetric with `formatGadgetsSection`'s pin.
-    expect(prompt).not.toMatch(/\|\s*`useGeolocation`\s*\|/);
+    // resolveAppGadgets unions the custom catalog WITH the stdlib floor —
+    // stdlib hooks are always present as the floor, so useGeolocation appears.
+    expect(prompt).toMatch(/\|\s*`useGeolocation`\s*\|/);
   });
 });
