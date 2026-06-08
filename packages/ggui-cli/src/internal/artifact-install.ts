@@ -999,12 +999,12 @@ export async function runArtifactInstall(
 
 /**
  * Append a {@link GadgetDescriptor} to `app.gadgets`,
- * creating the `app` block + array if either is missing. The schema's
- * default for absent `gadgets` is the protocol's
- * `STDLIB_GADGETS`; once an install adds a 3rd-party entry,
- * the operator opts into explicit-declaration mode and the stdlib
- * still gets merged at server boot (the merge lives on the cloud +
- * dev-stack sides, not here).
+ * creating the `app` block + array if either is missing.
+ *
+ * `app.gadgets` carries the app's EXTENSION set only. The first-party
+ * stdlib package is unioned in as the structural floor at resolve time
+ * via `resolveAppGadgets` in `@ggui-ai/protocol` — so declaring an
+ * extension never drops stdlib hooks from the generated UI.
  *
  * Idempotent on `(scope, name, version)` — re-running install on the
  * same identifier replaces the existing row rather than adding a
