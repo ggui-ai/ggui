@@ -28,37 +28,26 @@ import { findGguiJson, readGguiJson } from './internal/ggui-json.js';
  * (schema parse fails).
  */
 export function readGadgetsFromGguiJson(gguiJson: unknown): GadgetDescriptor[] {
-  if (
-    gguiJson === null ||
-    typeof gguiJson !== 'object' ||
-    Array.isArray(gguiJson)
-  ) {
-    return [];
-  }
-  const root = gguiJson as Record<string, unknown>;
-  const app = root['app'];
-  if (app === null || app === undefined || typeof app !== 'object' || Array.isArray(app)) {
-    return [];
-  }
-  const appObj = app as Record<string, unknown>;
-  const gadgets = appObj['gadgets'];
-  if (gadgets === undefined || gadgets === null) {
-    return [];
-  }
-
-  const schema = z.array(strictGadgetDescriptorSchema);
-  const result = schema.safeParse(gadgets);
+  // Navigate to `app.gadgets` via a nested schema rather than casting +
+  // index access. `z.object` is non-strict by default, so ggui.json's other
+  // fields (schema / protocol / generation / app.publicEnv / …) ride through
+  // as allowed-and-stripped extras — only `app.gadgets` is validated here.
+  const schema = z.object({
+    app: z
+      .object({
+        gadgets: z.array(strictGadgetDescriptorSchema).optional(),
+      })
+      .optional(),
+  });
+  const result = schema.safeParse(gguiJson);
   if (!result.success) {
-    const issues = result.error.issues
-      .map((i) => `  [${i.path.join('.')}] ${i.message}`)
-      .join('\n');
     throw new Error(
-      `ggui.json: app.gadgets contains an invalid descriptor:\n${issues}`,
+      `ggui.json: app.gadgets is invalid — ${result.error.issues[0]?.message ?? 'malformed descriptor'}`,
     );
   }
-  // result.data is GadgetDescriptor[] — no cast needed; strictGadgetDescriptorSchema
-  // parses to the same shape as GadgetDescriptor.
-  return result.data;
+  // result.data.app?.gadgets is GadgetDescriptor[] — strictGadgetDescriptorSchema
+  // parses to the same shape as GadgetDescriptor. Spread to a fresh mutable array.
+  return [...(result.data.app?.gadgets ?? [])];
 }
 
 /**
@@ -69,36 +58,24 @@ export function readGadgetsFromGguiJson(gguiJson: unknown): GadgetDescriptor[] {
  * Keys must match `PUBLIC_ENV_APP_KEY_RE` (`GGUI_PUBLIC_APP_<NAME>`).
  */
 export function readPublicEnvFromGguiJson(gguiJson: unknown): Record<string, string> {
-  if (
-    gguiJson === null ||
-    typeof gguiJson !== 'object' ||
-    Array.isArray(gguiJson)
-  ) {
-    return {};
-  }
-  const root = gguiJson as Record<string, unknown>;
-  const app = root['app'];
-  if (app === null || app === undefined || typeof app !== 'object' || Array.isArray(app)) {
-    return {};
-  }
-  const appObj = app as Record<string, unknown>;
-  const publicEnv = appObj['publicEnv'];
-  if (publicEnv === undefined || publicEnv === null) {
-    return {};
-  }
-
-  const result = appPublicEnvSchema.safeParse(publicEnv);
+  // Navigate to `app.publicEnv` via a nested schema (same posture as
+  // readGadgetsFromGguiJson) — other ggui.json fields ride through as
+  // allowed-and-stripped extras; only `app.publicEnv` is validated here.
+  const schema = z.object({
+    app: z
+      .object({
+        publicEnv: appPublicEnvSchema.optional(),
+      })
+      .optional(),
+  });
+  const result = schema.safeParse(gguiJson);
   if (!result.success) {
-    const issues = result.error.issues
-      .map((i) => `  [${i.path.join('.')}] ${i.message}`)
-      .join('\n');
     throw new Error(
-      `ggui.json: app.publicEnv is invalid — keys must match GGUI_PUBLIC_APP_<NAME>:\n${issues}`,
+      `ggui.json: app.publicEnv is invalid — keys must match GGUI_PUBLIC_APP_<NAME>: ${result.error.issues[0]?.message ?? 'invalid entry'}`,
     );
   }
-  // Return a plain mutable Record<string,string>; appPublicEnvSchema returns
-  // a readonly record, so we spread it.
-  return { ...result.data };
+  // appPublicEnvSchema returns a readonly record; spread to a fresh mutable one.
+  return { ...(result.data.app?.publicEnv ?? {}) };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
