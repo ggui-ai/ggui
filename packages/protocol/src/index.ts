@@ -21,6 +21,10 @@ export * from "./types/mcp";
 export * from "./schemas/mcp";
 export * from "./schemas/invoke";
 export * from "./schemas/data-contract";
+// Per-app theme overlay — `AppTheme` + injection-safe `appThemeSchema`
+// (`--ggui-*` css-var map). Consumed by the deploy/persist path (ggui.json
+// → managed cloud app) and projected into the rendered iframe's `:root`.
+export * from "./schemas/app-theme";
 // Registry-side helpers — pure utilities for computing the canonical
 // identity hash of a DataContract shape. Consumed by the Tier 1
 // exact-match path of the blueprint registry.
