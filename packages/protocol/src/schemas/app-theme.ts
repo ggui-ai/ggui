@@ -1,7 +1,17 @@
 import { z } from 'zod';
 
-/** Platform CSS-variable namespace — only `--ggui-*` custom properties. */
-export const GGUI_CSS_VAR_KEY_RE = /^--ggui-[a-z0-9-]+$/;
+/**
+ * Platform CSS-variable namespace — only `--ggui-*` custom properties.
+ *
+ * The charset allows mixed-case ASCII because the canonical theme parser
+ * (`@ggui-ai/design`) emits camelCase token segments verbatim into the
+ * variable name (e.g. `--ggui-color-onSurface`, `--ggui-zIndex-modal`,
+ * `--ggui-font-lineHeight-tight`) — and the design system both EMITS and
+ * CONSUMES those exact keys (`var(--ggui-color-onSurface)`). Case has no
+ * bearing on injection safety; the `--ggui-` prefix is the namespace guard
+ * and value-level breakout characters are forbidden by {@link CSS_VALUE_SAFE_RE}.
+ */
+export const GGUI_CSS_VAR_KEY_RE = /^--ggui-[a-zA-Z0-9-]+$/;
 
 /**
  * A single safe CSS value. The map is serialized into a `:root { --k: v; }`

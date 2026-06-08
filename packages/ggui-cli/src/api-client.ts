@@ -23,7 +23,7 @@ import {
 // circular dependency even though `push-command.ts` imports
 // `pushAppBlueprints` from this module.
 import type { PushRecord } from './push-command.js';
-import type { GadgetDescriptor } from '@ggui-ai/protocol';
+import type { GadgetDescriptor, AppTheme } from '@ggui-ai/protocol';
 
 // ─────────────────────────────────────────────────────────────────────────
 // Wire types — match the backend handlers exactly.
@@ -342,6 +342,7 @@ export async function patchAppConfig(
     gadgets?: GadgetDescriptor[];
     publicEnv?: Record<string, string>;
     generation?: { model: string; keySource: 'own' | 'managed' };
+    theme?: AppTheme;
   },
 ): Promise<PatchAppConfigResponse> {
   return withAuthRetry(

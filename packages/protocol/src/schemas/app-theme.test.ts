@@ -17,6 +17,20 @@ describe('appThemeSchema', () => {
   it('rejects a non-ggui css-var key (no foreign custom properties)', () => {
     expect(appThemeSchema.safeParse({ ...valid, cssVariables: { '--evil-x': 'red' } }).success).toBe(false);
   });
+  it('accepts canonical camelCase --ggui-* keys emitted by the theme parser', () => {
+    // The design system emits camelCase token segments verbatim, e.g.
+    // `--ggui-color-onSurface`, `--ggui-zIndex-modal`. These are first-party
+    // platform tokens and MUST validate.
+    const camel: AppTheme = {
+      mode: 'light',
+      cssVariables: {
+        '--ggui-color-onSurface': '#1a1917',
+        '--ggui-zIndex-modal': '1000',
+        '--ggui-font-lineHeight-tight': '1.2',
+      },
+    };
+    expect(appThemeSchema.safeParse(camel).success).toBe(true);
+  });
   it('rejects an injection value (CSS rule breakout)', () => {
     expect(appThemeSchema.safeParse({ ...valid, cssVariables: { '--ggui-color-primary-600': 'red; } :root { background: url(x)' } }).success).toBe(false);
   });

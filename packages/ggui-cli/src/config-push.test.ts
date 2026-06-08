@@ -14,6 +14,7 @@ import { join } from 'node:path';
 import {
   STDLIB_GADGETS,
   type GadgetDescriptor,
+  type AppTheme,
 } from '@ggui-ai/protocol';
 
 // ─── hoisted mocks ────────────────────────────────────────────────────────────
@@ -25,6 +26,7 @@ const mocks = vi.hoisted(() => ({
         gadgets?: GadgetDescriptor[];
         publicEnv?: Record<string, string>;
         generation?: { model: string; keySource: 'own' | 'managed' };
+        theme?: AppTheme;
       },
     ) => Promise<{ updated: string[] }>
   >(),
@@ -39,9 +41,31 @@ import {
   readGadgetsFromGguiJson,
   readPublicEnvFromGguiJson,
   readGenerationFromGguiJson,
+  readThemeFromGguiJson,
   assertGadgetBundlesReachable,
   runConfigPushStep,
 } from './config-push.js';
+import { appThemeSchema } from '@ggui-ai/protocol';
+import type { GguiJsonV1, ThemeConfig } from '@ggui-ai/project-config';
+
+// ─── theme fixtures ─────────────────────────────────────────────────────────
+/**
+ * A complete `ggui.json` manifest with an optional `theme` block. `loadTheme`
+ * (and the `GguiJsonV1` contract) require the full manifest shape, so theme
+ * tests use this rather than the minimal slice fixtures the other readers
+ * accept. Typed `GguiJsonV1` so the fixture stays honest about the wire shape.
+ */
+function makeThemeManifest(theme?: ThemeConfig): GguiJsonV1 {
+  return {
+    schema: '1',
+    protocol: '1.1',
+    app: { slug: 'test', name: 'Test' },
+    blueprints: { include: [] },
+    primitives: { packages: ['@ggui-ai/design/primitives'], local: [] },
+    mcpMounts: [],
+    ...(theme !== undefined ? { theme } : {}),
+  };
+}
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 
@@ -155,6 +179,54 @@ describe('readGenerationFromGguiJson', () => {
   it('throws when generation.keySource is an invalid value', () => {
     const bad = { generation: { model: 'anthropic:claude-haiku-4-5-20251001', keySource: 'invalid' } };
     expect(() => readGenerationFromGguiJson(bad)).toThrow();
+  });
+});
+
+// ─── readThemeFromGguiJson ────────────────────────────────────────────────────
+describe('readThemeFromGguiJson', () => {
+  // `__dirname`-free absolute root — the reader only resolves relative
+  // `theme.file` paths against this, and preset themes never touch disk.
+  const projectRoot = tmpdir();
+
+  it('returns undefined when the theme field is absent', () => {
+    expect(readThemeFromGguiJson(projectRoot, makeThemeManifest(undefined))).toBeUndefined();
+  });
+
+  it('resolves a preset theme to an injection-safe AppTheme', () => {
+    // `claudic` is a registered preset (see @ggui-ai/design themes/registry.ts).
+    const manifest = makeThemeManifest({ preset: 'claudic', mode: 'dark' });
+    const theme = readThemeFromGguiJson(projectRoot, manifest);
+    expect(theme).toBeDefined();
+    expect(theme!.mode).toBe('dark');
+    expect(theme!.name).toBe('claudic');
+
+    const keys = Object.keys(theme!.cssVariables);
+    expect(keys.length).toBeGreaterThan(0);
+    for (const k of keys) {
+      expect(k.startsWith('--ggui-'), `key ${k} must be --ggui-* namespaced`).toBe(true);
+    }
+    // No `:root {` / `}` wrapper artifacts leaked into the map.
+    expect(keys).not.toContain(':root {');
+    expect(theme!.cssVariables[':root {']).toBeUndefined();
+  });
+
+  it('honors the requested mode (light vs dark differ)', () => {
+    const dark = readThemeFromGguiJson(projectRoot, makeThemeManifest({ preset: 'claudic', mode: 'dark' }));
+    const light = readThemeFromGguiJson(projectRoot, makeThemeManifest({ preset: 'claudic', mode: 'light' }));
+    expect(dark!.mode).toBe('dark');
+    expect(light!.mode).toBe('light');
+    expect(dark!.cssVariables).not.toEqual(light!.cssVariables);
+  });
+
+  it('produces a value that passes appThemeSchema (proves injection-safety)', () => {
+    const theme = readThemeFromGguiJson(projectRoot, makeThemeManifest({ preset: 'ggui', mode: 'light' }));
+    const parsed = appThemeSchema.safeParse(theme);
+    expect(parsed.success, parsed.success ? '' : JSON.stringify(parsed.error?.issues)).toBe(true);
+  });
+
+  it('throws a clear error when the preset id is unregistered', () => {
+    const manifest = makeThemeManifest({ preset: 'not-a-real-preset', mode: 'light' });
+    expect(() => readThemeFromGguiJson(projectRoot, manifest)).toThrow(/theme/i);
   });
 });
 
@@ -366,5 +438,44 @@ describe('runConfigPushStep', () => {
 
     const output = stdoutSpy.mock.calls.map((c) => String(c[0])).join('');
     expect(output).toContain('anthropic:claude-haiku-4-5-20251001');
+  });
+
+  it('includes the resolved theme in the PATCH when ggui.json has a theme block', async () => {
+    const gguiJson = makeThemeManifest({ preset: 'claudic', mode: 'dark' });
+    writeFileSync(join(dir, 'ggui.json'), JSON.stringify(gguiJson), 'utf-8');
+
+    vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+    const code = await runConfigPushStep('app123', dir);
+    expect(code).toBe(0);
+
+    const [, patch] = mocks.patchAppConfig.mock.calls[0]!;
+    expect(patch.theme).toBeDefined();
+    expect(patch.theme!.mode).toBe('dark');
+    expect(patch.theme!.name).toBe('claudic');
+    expect(Object.keys(patch.theme!.cssVariables).every((k) => k.startsWith('--ggui-'))).toBe(true);
+  });
+
+  it('omits theme from the PATCH when ggui.json has no theme block', async () => {
+    const gguiJson = { app: {} };
+    writeFileSync(join(dir, 'ggui.json'), JSON.stringify(gguiJson), 'utf-8');
+
+    vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+    const code = await runConfigPushStep('app123', dir);
+    expect(code).toBe(0);
+
+    const [, patch] = mocks.patchAppConfig.mock.calls[0]!;
+    expect(patch.theme).toBeUndefined();
+  });
+
+  it('prints the theme in the summary line when a theme is pushed', async () => {
+    const gguiJson = makeThemeManifest({ preset: 'claudic', mode: 'dark' });
+    writeFileSync(join(dir, 'ggui.json'), JSON.stringify(gguiJson), 'utf-8');
+
+    const stdoutSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+    const code = await runConfigPushStep('app123', dir);
+    expect(code).toBe(0);
+
+    const output = stdoutSpy.mock.calls.map((c) => String(c[0])).join('');
+    expect(output).toContain('claudic');
   });
 });
