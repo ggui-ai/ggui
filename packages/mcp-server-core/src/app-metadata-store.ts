@@ -27,12 +27,13 @@ import {
 
 /**
  * Per-app generation configuration. Selects the model route and key
- * source for UI generation. Absent on the App ⇒ the pod falls back to
- * its default generation policy (platform-managed key + default model).
+ * source for UI generation. Absent on the App ⇒ the server falls back
+ * to its default generation policy.
  *
- * OSS values only — no cloud-tier semantics in this type:
- *   - `'own'`     — app owner's BYOK key (registered via `ggui_set_provider_key`).
- *   - `'managed'` — platform-managed key pool (multi-tenant cloud deployments).
+ * Key-source semantics:
+ *   - `'own'`     — generation runs against your own configured provider
+ *                   key (registered via `ggui provider-key set`).
+ *   - `'managed'` — your hosting provider supplies the key.
  *
  * Self-hosted deployments that don't distinguish key sources can treat
  * `'own'` as "use the locally configured key" and ignore `'managed'`.
@@ -40,7 +41,7 @@ import {
 export interface AppGeneration {
   /** Canonical `provider:model` route string, e.g. `'anthropic:claude-haiku-4-5-20251001'`. */
   readonly model: string;
-  /** Which key pool backs generation for this app. */
+  /** Whether generation uses your own configured key or the key supplied by your hosting provider. */
   readonly keySource: 'own' | 'managed';
 }
 
