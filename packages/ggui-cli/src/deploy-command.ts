@@ -7,7 +7,8 @@
  *   2. create-app   — POST /v1/apps, persist appId into ggui.json
  *   3. mint-key     — POST /v1/keys, write GGUI_MCP_BEARER into .env.local
  *   4. push         — export local blueprint pool + upload to the app
- *   5. wire-env     — write GGUI_MCP_URL into .env.local
+ *   5. push-config  — PATCH /v1/apps/{appId}: gadgets + publicEnv from ggui.json
+ *   6. wire-env     — write GGUI_MCP_URL into .env.local
  *
  * Each step is skipped when its gate is already satisfied, making the
  * command idempotent — run it again after a partial failure and it
@@ -24,6 +25,7 @@ import { runLoginCommand } from './auth-login.js';
 import { createApp, createKey } from './api-client.js';
 import { findGguiJson, readGguiJson, writeGguiJson } from './internal/ggui-json.js';
 import { runPushCommand } from './push-command.js';
+import { runConfigPushStep } from './config-push.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Pure planner — no I/O, fully unit-testable
@@ -39,7 +41,7 @@ export interface DeployState {
   readonly hasKey: boolean;
 }
 
-export type DeployStepKind = 'login' | 'create-app' | 'mint-key' | 'push' | 'wire-env';
+export type DeployStepKind = 'login' | 'create-app' | 'mint-key' | 'push' | 'push-config' | 'wire-env';
 
 export interface DeployStep {
   readonly kind: DeployStepKind;
@@ -54,7 +56,7 @@ export function planDeploySteps(s: DeployState): DeployStep[] {
   if (!s.authed) steps.push({ kind: 'login' });
   if (!s.appId) steps.push({ kind: 'create-app' });
   if (!s.hasKey) steps.push({ kind: 'mint-key' });
-  steps.push({ kind: 'push' }, { kind: 'wire-env' });
+  steps.push({ kind: 'push' }, { kind: 'push-config' }, { kind: 'wire-env' });
   return steps;
 }
 
@@ -186,7 +188,8 @@ Steps (ggui-side only):
   2. create-app   Create a cloud app + write appId into ggui.json
   3. mint-key     Create a connector key + write GGUI_MCP_BEARER into .env.local
   4. push         Export + upload blueprints to the app
-  5. wire-env     Write GGUI_MCP_URL into .env.local
+  5. push-config  Push declared gadgets + publicEnv to the app
+  6. wire-env     Write GGUI_MCP_URL into .env.local
 
 Agent / MCP HOSTING (guuey.com) is handled separately.
 
@@ -296,6 +299,20 @@ export async function runDeployCommand(_args: readonly string[]): Promise<number
         const code = await runPushCommand(['--app', appId]);
         if (code !== 0) {
           process.stderr.write('ggui deploy: push failed. Aborting.\n');
+          return code;
+        }
+        break;
+      }
+
+      case 'push-config': {
+        process.stdout.write('\n[ggui deploy] Step: push-config\n');
+        if (!appId) {
+          process.stderr.write('ggui deploy: push-config: no appId resolved. This is a bug.\n');
+          return 1;
+        }
+        const code = await runConfigPushStep(appId);
+        if (code !== 0) {
+          process.stderr.write('ggui deploy: push-config failed. Aborting.\n');
           return code;
         }
         break;
