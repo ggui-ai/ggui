@@ -118,6 +118,20 @@ describe('composeApp', () => {
     expect('generation' in app).toBe(false);
   });
 
+  // St3 M1 — theme read path
+  it('composeApp threads theme through when present', () => {
+    const theme = {
+      mode: 'dark',
+      cssVariables: { '--ggui-color-primary-600': '#7c3aed' },
+    } as const;
+    const app = composeApp({ id: 'a1', theme });
+    expect(app.theme).toEqual(theme);
+  });
+
+  it('composeApp omits theme when absent', () => {
+    expect(composeApp({ id: 'a1' }).theme).toBeUndefined();
+  });
+
   it('round-trips a fully-populated App through the composer (drift canary)', () => {
     // If a new field is added to App but NOT to ComposeAppInput, this
     // round-trip will fail at compile time when the test fixture grows.

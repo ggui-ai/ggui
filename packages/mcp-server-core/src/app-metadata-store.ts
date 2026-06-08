@@ -21,6 +21,7 @@
 import {
   resolveAppGadgets,
   type AppBlueprintSearchConfig,
+  type AppTheme,
   type GadgetDescriptor,
   type McpUiDisplayMode,
 } from '@ggui-ai/protocol';
@@ -123,6 +124,11 @@ export interface App {
    */
   readonly generation?: AppGeneration;
   /**
+   * Per-app theme — the resolved per-app CSS-variable overlay + mode applied
+   * at render. Absent ⇒ the renderer's default theme. See {@link AppTheme}.
+   */
+  readonly theme?: AppTheme;
+  /**
    * Public environment values the App makes available to registered
    * gadgets via `getPublicEnv()`. Each key
    * MUST match `PUBLIC_ENV_APP_KEY_RE` (`^GGUI_PUBLIC_APP_[A-Z0-9_]+$`,
@@ -172,6 +178,7 @@ export interface ComposeAppInput {
   readonly defaultDisplayMode?: McpUiDisplayMode;
   readonly publicEnv?: Readonly<Record<string, string>>;
   readonly generation?: AppGeneration;
+  readonly theme?: AppTheme;
 }
 
 /**
@@ -218,6 +225,7 @@ export function composeApp(input: ComposeAppInput): App {
       : {}),
     ...(input.publicEnv !== undefined ? { publicEnv: input.publicEnv } : {}),
     ...(input.generation !== undefined ? { generation: input.generation } : {}),
+    ...(input.theme !== undefined ? { theme: input.theme } : {}),
   };
 }
 
