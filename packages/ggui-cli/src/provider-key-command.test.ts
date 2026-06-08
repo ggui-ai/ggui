@@ -120,8 +120,8 @@ describe('envVarForProvider', () => {
     expect(envVarForProvider('openai')).toBe('OPENAI_API_KEY');
   });
 
-  it('google → GEMINI_API_KEY (primary)', () => {
-    expect(envVarForProvider('google')).toBe('GEMINI_API_KEY');
+  it('google → GOOGLE_API_KEY (primary)', () => {
+    expect(envVarForProvider('google')).toBe('GOOGLE_API_KEY');
   });
 
   it('openrouter → OPENROUTER_API_KEY', () => {
@@ -144,14 +144,14 @@ describe('readKeyFromEnv', () => {
     expect(readKeyFromEnv('openai', env)).toBe('sk-openai-xyz');
   });
 
-  it('google: GEMINI_API_KEY wins when both are present', () => {
-    const env = { GEMINI_API_KEY: 'gemini-primary', GOOGLE_API_KEY: 'google-fallback' };
-    expect(readKeyFromEnv('google', env)).toBe('gemini-primary');
+  it('google: GOOGLE_API_KEY wins when both are present', () => {
+    const env = { GOOGLE_API_KEY: 'google-primary', GEMINI_API_KEY: 'gemini-fallback' };
+    expect(readKeyFromEnv('google', env)).toBe('google-primary');
   });
 
-  it('google: falls back to GOOGLE_API_KEY when GEMINI_API_KEY is absent', () => {
-    const env = { GOOGLE_API_KEY: 'google-fallback' };
-    expect(readKeyFromEnv('google', env)).toBe('google-fallback');
+  it('google: falls back to GEMINI_API_KEY when GOOGLE_API_KEY is absent', () => {
+    const env = { GEMINI_API_KEY: 'gemini-fallback' };
+    expect(readKeyFromEnv('google', env)).toBe('gemini-fallback');
   });
 
   it('google: returns undefined when both GEMINI and GOOGLE are absent', () => {

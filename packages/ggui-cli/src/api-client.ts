@@ -338,7 +338,11 @@ export interface PatchAppConfigResponse {
 
 export async function patchAppConfig(
   appId: string,
-  patch: { gadgets?: GadgetDescriptor[]; publicEnv?: Record<string, string> },
+  patch: {
+    gadgets?: GadgetDescriptor[];
+    publicEnv?: Record<string, string>;
+    generation?: { model: string; keySource: 'own' | 'managed' };
+  },
 ): Promise<PatchAppConfigResponse> {
   return withAuthRetry(
     (s) =>

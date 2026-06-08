@@ -103,8 +103,9 @@ export function inferProvider(
 
 /**
  * Return the primary env-var name for a BYOK provider.
- * For google the primary is `GEMINI_API_KEY` (with `GOOGLE_API_KEY` as
- * fallback checked in `readKeyFromEnv`).
+ * For google the primary is `GOOGLE_API_KEY` (with `GEMINI_API_KEY` as
+ * fallback checked in `readKeyFromEnv`). Order matches `byok-resolver.ts`
+ * so that the local-dev key and the pushed key always agree.
  */
 export function envVarForProvider(provider: ByokProvider): string {
   switch (provider) {
@@ -113,7 +114,7 @@ export function envVarForProvider(provider: ByokProvider): string {
     case 'openai':
       return 'OPENAI_API_KEY';
     case 'google':
-      return 'GEMINI_API_KEY';
+      return 'GOOGLE_API_KEY';
     case 'openrouter':
       return 'OPENROUTER_API_KEY';
   }
@@ -124,8 +125,11 @@ export function envVarForProvider(provider: ByokProvider): string {
  *
  * - `anthropic`   → `ANTHROPIC_API_KEY`
  * - `openai`      → `OPENAI_API_KEY`
- * - `google`      → `GEMINI_API_KEY` (primary), then `GOOGLE_API_KEY` (fallback)
+ * - `google`      → `GOOGLE_API_KEY` (primary), then `GEMINI_API_KEY` (fallback)
  * - `openrouter`  → `OPENROUTER_API_KEY`
+ *
+ * Order matches `byok-resolver.ts` so that the key the cloud receives is
+ * always the same one local generation uses.
  *
  * Returns `undefined` when no non-empty value is found.
  */
@@ -135,7 +139,7 @@ export function readKeyFromEnv(
 ): string | undefined {
   const candidates: string[] =
     provider === 'google'
-      ? ['GEMINI_API_KEY', 'GOOGLE_API_KEY']
+      ? ['GOOGLE_API_KEY', 'GEMINI_API_KEY']
       : [envVarForProvider(provider)];
 
   for (const name of candidates) {
@@ -165,7 +169,7 @@ Subcommands:
         Reads the key from env:
           ANTHROPIC_API_KEY  (anthropic)
           OPENAI_API_KEY     (openai)
-          GEMINI_API_KEY     (google, primary); GOOGLE_API_KEY (fallback)
+          GOOGLE_API_KEY     (google, primary); GEMINI_API_KEY (fallback)
           OPENROUTER_API_KEY (openrouter)
 
 Options:
@@ -242,7 +246,7 @@ export async function runProviderKeyCommand(
     const primaryVar = envVarForProvider(provider);
     const hint =
       provider === 'google'
-        ? `${primaryVar} (or GOOGLE_API_KEY)`
+        ? `${primaryVar} (or GEMINI_API_KEY)`
         : primaryVar;
     process.stderr.write(
       `ggui provider-key set: no key found for provider "${provider}" — set ${hint} and retry.\n`,

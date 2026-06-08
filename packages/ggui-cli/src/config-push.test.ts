@@ -19,7 +19,14 @@ import {
 // ─── hoisted mocks ────────────────────────────────────────────────────────────
 const mocks = vi.hoisted(() => ({
   patchAppConfig: vi.fn<
-    (appId: string, patch: { gadgets?: GadgetDescriptor[]; publicEnv?: Record<string, string> }) => Promise<{ updated: string[] }>
+    (
+      appId: string,
+      patch: {
+        gadgets?: GadgetDescriptor[];
+        publicEnv?: Record<string, string>;
+        generation?: { model: string; keySource: 'own' | 'managed' };
+      },
+    ) => Promise<{ updated: string[] }>
   >(),
 }));
 
@@ -31,6 +38,7 @@ vi.mock('./api-client.js', () => ({
 import {
   readGadgetsFromGguiJson,
   readPublicEnvFromGguiJson,
+  readGenerationFromGguiJson,
   assertGadgetBundlesReachable,
   runConfigPushStep,
 } from './config-push.js';
@@ -104,6 +112,49 @@ describe('readPublicEnvFromGguiJson', () => {
   it('throws when a value is not a string', () => {
     const bad = { app: { publicEnv: { GGUI_PUBLIC_APP_TOKEN: 42 } } };
     expect(() => readPublicEnvFromGguiJson(bad)).toThrow();
+  });
+});
+
+// ─── readGenerationFromGguiJson ───────────────────────────────────────────────
+describe('readGenerationFromGguiJson', () => {
+  it('returns undefined when generation block is absent', () => {
+    expect(readGenerationFromGguiJson({})).toBeUndefined();
+    expect(readGenerationFromGguiJson({ app: {} })).toBeUndefined();
+  });
+
+  it('returns undefined when generation is present but model is absent', () => {
+    expect(readGenerationFromGguiJson({ generation: {} })).toBeUndefined();
+    expect(readGenerationFromGguiJson({ generation: { keySource: 'own' } })).toBeUndefined();
+  });
+
+  it('returns model+keySource when both are present', () => {
+    const input = { generation: { model: 'anthropic:claude-haiku-4-5-20251001', keySource: 'own' as const } };
+    const result = readGenerationFromGguiJson(input);
+    expect(result).toEqual({ model: 'anthropic:claude-haiku-4-5-20251001', keySource: 'own' });
+  });
+
+  it('defaults keySource to "managed" when model is present but keySource is absent', () => {
+    const input = { generation: { model: 'openai:gpt-5' } };
+    const result = readGenerationFromGguiJson(input);
+    expect(result).toEqual({ model: 'openai:gpt-5', keySource: 'managed' });
+  });
+
+  it('preserves the model as a raw string — does NOT transform it', () => {
+    // The raw model string is forwarded as-is; cloud re-parses via parseAnyLlmRoute.
+    const rawModel = 'gemini/gemini-3.5-flash';
+    const input = { generation: { model: rawModel, keySource: 'managed' as const } };
+    const result = readGenerationFromGguiJson(input);
+    expect(result?.model).toBe(rawModel);
+  });
+
+  it('throws when generation.model is empty string', () => {
+    const bad = { generation: { model: '' } };
+    expect(() => readGenerationFromGguiJson(bad)).toThrow();
+  });
+
+  it('throws when generation.keySource is an invalid value', () => {
+    const bad = { generation: { model: 'anthropic:claude-haiku-4-5-20251001', keySource: 'invalid' } };
+    expect(() => readGenerationFromGguiJson(bad)).toThrow();
   });
 });
 
@@ -257,5 +308,63 @@ describe('runConfigPushStep', () => {
     const [, patch] = mocks.patchAppConfig.mock.calls[0]!;
     expect(patch.gadgets).toEqual([]);
     expect(patch.publicEnv).toBeUndefined();
+  });
+
+  it('includes generation in the PATCH when ggui.json has a generation block', async () => {
+    const gguiJson = {
+      generation: { model: 'anthropic:claude-haiku-4-5-20251001', keySource: 'own' },
+      app: {},
+    };
+    writeFileSync(join(dir, 'ggui.json'), JSON.stringify(gguiJson), 'utf-8');
+
+    vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+    const code = await runConfigPushStep('app123', dir);
+    expect(code).toBe(0);
+
+    const [appId, patch] = mocks.patchAppConfig.mock.calls[0]!;
+    expect(appId).toBe('app123');
+    expect(patch.generation).toEqual({ model: 'anthropic:claude-haiku-4-5-20251001', keySource: 'own' });
+  });
+
+  it('omits generation from the PATCH when ggui.json has no generation block', async () => {
+    const gguiJson = { app: {} };
+    writeFileSync(join(dir, 'ggui.json'), JSON.stringify(gguiJson), 'utf-8');
+
+    vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+    const code = await runConfigPushStep('app123', dir);
+    expect(code).toBe(0);
+
+    const [, patch] = mocks.patchAppConfig.mock.calls[0]!;
+    expect(patch.generation).toBeUndefined();
+  });
+
+  it('defaults generation.keySource to "managed" when only model is present', async () => {
+    const gguiJson = {
+      generation: { model: 'openai:gpt-5' },
+      app: {},
+    };
+    writeFileSync(join(dir, 'ggui.json'), JSON.stringify(gguiJson), 'utf-8');
+
+    vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+    const code = await runConfigPushStep('app123', dir);
+    expect(code).toBe(0);
+
+    const [, patch] = mocks.patchAppConfig.mock.calls[0]!;
+    expect(patch.generation).toEqual({ model: 'openai:gpt-5', keySource: 'managed' });
+  });
+
+  it('prints the model in the summary line when generation is pushed', async () => {
+    const gguiJson = {
+      generation: { model: 'anthropic:claude-haiku-4-5-20251001' },
+      app: {},
+    };
+    writeFileSync(join(dir, 'ggui.json'), JSON.stringify(gguiJson), 'utf-8');
+
+    const stdoutSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+    const code = await runConfigPushStep('app123', dir);
+    expect(code).toBe(0);
+
+    const output = stdoutSpy.mock.calls.map((c) => String(c[0])).join('');
+    expect(output).toContain('anthropic:claude-haiku-4-5-20251001');
   });
 });

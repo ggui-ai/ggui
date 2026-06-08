@@ -1,6 +1,7 @@
 /**
- * `config-push` — read `ggui.json#app.{gadgets,publicEnv}`, guard against
- * loopback bundle URLs, and PATCH the cloud app config via the REST API.
+ * `config-push` — read `ggui.json#app.{gadgets,publicEnv}` and
+ * `ggui.json#generation`, guard against loopback bundle URLs, and PATCH the
+ * cloud app config via the REST API.
  *
  * Consumed by `ggui deploy` (M3.3) — wiring into that command is a separate
  * task. This module is the pure logic layer: readers + guard + network call.
@@ -78,6 +79,38 @@ export function readPublicEnvFromGguiJson(gguiJson: unknown): Record<string, str
   return { ...(result.data.app?.publicEnv ?? {}) };
 }
 
+/**
+ * Extract and validate `generation` from a decoded ggui.json value.
+ *
+ * Reads the RAW model string (not a resolved `LlmRoute`) — the cloud
+ * re-validates via `parseAnyLlmRoute` server-side; the CLI just forwards.
+ *
+ * Returns `{ model, keySource }` when `generation.model` is present.
+ * Returns `undefined` when the generation block is absent or has no model.
+ * Throws when the generation block is structurally invalid.
+ */
+export function readGenerationFromGguiJson(
+  gguiJson: unknown,
+): { model: string; keySource: 'own' | 'managed' } | undefined {
+  const schema = z.object({
+    generation: z
+      .object({
+        model: z.string().min(1).optional(),
+        keySource: z.enum(['own', 'managed']).optional(),
+      })
+      .optional(),
+  });
+  const result = schema.safeParse(gguiJson);
+  if (!result.success) {
+    throw new Error(
+      `ggui.json: generation is invalid — ${result.error.issues[0]?.message ?? 'malformed generation block'}`,
+    );
+  }
+  const model = result.data.generation?.model;
+  if (!model) return undefined;
+  return { model, keySource: result.data.generation?.keySource ?? 'managed' };
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Loopback guard
 // ─────────────────────────────────────────────────────────────────────────────
@@ -151,6 +184,7 @@ export async function runConfigPushStep(
 
   let gadgets: GadgetDescriptor[];
   let publicEnv: Record<string, string>;
+  let generation: { model: string; keySource: 'own' | 'managed' } | undefined;
 
   try {
     gadgets = readGadgetsFromGguiJson(readResult.value);
@@ -171,6 +205,15 @@ export async function runConfigPushStep(
   }
 
   try {
+    generation = readGenerationFromGguiJson(readResult.value);
+  } catch (err) {
+    process.stderr.write(
+      `ggui deploy: ${err instanceof Error ? err.message : String(err)}\n`,
+    );
+    return 1;
+  }
+
+  try {
     assertGadgetBundlesReachable(gadgets);
   } catch (err) {
     process.stderr.write(
@@ -183,6 +226,7 @@ export async function runConfigPushStep(
     await patchAppConfig(appId, {
       gadgets,
       ...(Object.keys(publicEnv).length > 0 ? { publicEnv } : {}),
+      ...(generation !== undefined ? { generation } : {}),
     });
   } catch (err) {
     process.stderr.write(
@@ -199,7 +243,8 @@ export async function runConfigPushStep(
     Object.keys(publicEnv).length > 0
       ? ` + ${Object.keys(publicEnv).length} publicEnv key(s)`
       : '';
-  process.stdout.write(`  ${gadgetLine}${envLine}\n`);
+  const generationLine = generation !== undefined ? ` + model ${generation.model}` : '';
+  process.stdout.write(`  ${gadgetLine}${envLine}${generationLine}\n`);
 
   return 0;
 }
