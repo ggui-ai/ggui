@@ -26,6 +26,7 @@ import { createApp, createKey } from './api-client.js';
 import { findGguiJson, readGguiJson, writeGguiJson } from './internal/ggui-json.js';
 import { runPushCommand } from './push-command.js';
 import { runConfigPushStep } from './config-push.js';
+import { runProviderKeyCommand } from './provider-key-command.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Pure planner — no I/O, fully unit-testable
@@ -41,22 +42,35 @@ export interface DeployState {
   readonly hasKey: boolean;
 }
 
-export type DeployStepKind = 'login' | 'create-app' | 'mint-key' | 'push' | 'push-config' | 'wire-env';
+export type DeployStepKind = 'login' | 'create-app' | 'mint-key' | 'push' | 'push-config' | 'push-keys' | 'wire-env';
 
 export interface DeployStep {
   readonly kind: DeployStepKind;
 }
 
+/** Input to the planner — pure data, no I/O. */
+export interface DeployInput {
+  readonly state: DeployState;
+  /** When true, insert a `push-keys` step after `push-config` and before `wire-env`. */
+  readonly pushKeys?: boolean;
+}
+
 /**
  * Derive the ordered list of steps to execute given the current state.
  * Pure function — no I/O.
+ *
+ * Step order:
+ *   login? → create-app? → mint-key? → push → push-config → push-keys? → wire-env
  */
-export function planDeploySteps(s: DeployState): DeployStep[] {
+export function planDeploySteps(input: DeployInput): DeployStep[] {
+  const { state: s, pushKeys } = input;
   const steps: DeployStep[] = [];
   if (!s.authed) steps.push({ kind: 'login' });
   if (!s.appId) steps.push({ kind: 'create-app' });
   if (!s.hasKey) steps.push({ kind: 'mint-key' });
-  steps.push({ kind: 'push' }, { kind: 'push-config' }, { kind: 'wire-env' });
+  steps.push({ kind: 'push' }, { kind: 'push-config' });
+  if (pushKeys) steps.push({ kind: 'push-keys' });
+  steps.push({ kind: 'wire-env' });
   return steps;
 }
 
@@ -189,12 +203,20 @@ Steps (ggui-side only):
   3. mint-key     Create a connector key + write GGUI_MCP_BEARER into .env.local
   4. push         Export + upload blueprints to the app
   5. push-config  Push declared gadgets + publicEnv to the app
-  6. wire-env     Write GGUI_MCP_URL into .env.local
+  6. push-keys    Push provider API key from env to the app (only with --push-keys)
+  7. wire-env     Write GGUI_MCP_URL into .env.local
 
 Agent / MCP HOSTING (guuey.com) is handled separately.
 
 Usage:
-  ggui deploy
+  ggui deploy [--push-keys]
+
+Options:
+  --push-keys  Read the provider API key from the appropriate env var
+               (e.g. ANTHROPIC_API_KEY) and push it to the cloud app so
+               keySource=own renders work. Derives the provider from
+               ggui.json#generation.model (or pass --provider to
+               \`ggui provider-key set\` directly).
 `;
 
 /**
@@ -205,6 +227,8 @@ export async function runDeployCommand(_args: readonly string[]): Promise<number
     process.stdout.write(DEPLOY_HELP);
     return 0;
   }
+
+  const pushKeys = _args.includes('--push-keys');
 
   const cwd = process.cwd();
 
@@ -220,7 +244,7 @@ export async function runDeployCommand(_args: readonly string[]): Promise<number
     return 1;
   }
 
-  const steps = planDeploySteps(state);
+  const steps = planDeploySteps({ state, pushKeys });
 
   // Mutable state for values discovered mid-run that subsequent steps need.
   let appId = state.appId;
@@ -318,6 +342,20 @@ export async function runDeployCommand(_args: readonly string[]): Promise<number
         break;
       }
 
+      case 'push-keys': {
+        process.stdout.write('\n[ggui deploy] Step: push-keys\n');
+        if (!appId) {
+          process.stderr.write('ggui deploy: push-keys: no appId resolved. This is a bug.\n');
+          return 1;
+        }
+        const code = await runProviderKeyCommand(['set', '--app', appId]);
+        if (code !== 0) {
+          process.stderr.write('ggui deploy: push-keys failed. Aborting.\n');
+          return code;
+        }
+        break;
+      }
+
       case 'wire-env': {
         process.stdout.write('\n[ggui deploy] Step: wire-env\n');
         if (!appId) {
@@ -356,6 +394,29 @@ export async function runDeployCommand(_args: readonly string[]): Promise<number
         const _exhaustive: never = step.kind;
         process.stderr.write(`ggui deploy: unknown step "${_exhaustive as string}"\n`);
         return 1;
+      }
+    }
+  }
+
+  // keySource=own WARN — if the project declared keySource='own' but the
+  // user didn't pass --push-keys this deploy, remind them that cloud renders
+  // will reject until a key is set.
+  if (!pushKeys && appId) {
+    const gguiReadResult = readGguiJson(gguiJsonPath);
+    if ('value' in gguiReadResult) {
+      const { z } = await import('zod');
+      const schema = z.object({
+        generation: z.object({ keySource: z.string().optional() }).optional(),
+      });
+      const parsed = schema.safeParse(gguiReadResult.value);
+      if (parsed.success && parsed.data.generation?.keySource === 'own') {
+        process.stderr.write(
+          `\n  WARN: keySource=own but no provider key pushed — run\n` +
+            `    ggui deploy --push-keys\n` +
+            `  or\n` +
+            `    ggui provider-key set --app ${appId}\n` +
+            `  else cloud renders will reject.\n`,
+        );
       }
     }
   }

@@ -12,7 +12,7 @@ import {
 describe('planDeploySteps', () => {
   it('full first deploy: all three gates missing → login+create-app+mint-key+push+push-config+wire-env', () => {
     const state: DeployState = { authed: false, appId: undefined, hasKey: false };
-    const steps = planDeploySteps(state);
+    const steps = planDeploySteps({ state });
     expect(steps.map((s) => s.kind)).toEqual([
       'login',
       'create-app',
@@ -25,19 +25,19 @@ describe('planDeploySteps', () => {
 
   it('idempotent re-deploy: authed + appId set + hasKey → push+push-config+wire-env only', () => {
     const state: DeployState = { authed: true, appId: 'app_abc123', hasKey: true };
-    const steps = planDeploySteps(state);
+    const steps = planDeploySteps({ state });
     expect(steps.map((s) => s.kind)).toEqual(['push', 'push-config', 'wire-env']);
   });
 
   it('partial: authed + appId set + no key → mint-key+push+push-config+wire-env', () => {
     const state: DeployState = { authed: true, appId: 'app_abc123', hasKey: false };
-    const steps = planDeploySteps(state);
+    const steps = planDeploySteps({ state });
     expect(steps.map((s) => s.kind)).toEqual(['mint-key', 'push', 'push-config', 'wire-env']);
   });
 
   it('authed but no appId and no key → create-app+mint-key+push+push-config+wire-env', () => {
     const state: DeployState = { authed: true, appId: undefined, hasKey: false };
-    const steps = planDeploySteps(state);
+    const steps = planDeploySteps({ state });
     expect(steps.map((s) => s.kind)).toEqual([
       'create-app',
       'mint-key',
@@ -49,20 +49,20 @@ describe('planDeploySteps', () => {
 
   it('authed + no appId + hasKey → create-app+push+push-config+wire-env (key present, just need app)', () => {
     const state: DeployState = { authed: true, appId: undefined, hasKey: true };
-    const steps = planDeploySteps(state);
+    const steps = planDeploySteps({ state });
     expect(steps.map((s) => s.kind)).toEqual(['create-app', 'push', 'push-config', 'wire-env']);
   });
 
   it('not authed + has appId + has key → login+push+push-config+wire-env', () => {
     const state: DeployState = { authed: false, appId: 'app_xyz', hasKey: true };
-    const steps = planDeploySteps(state);
+    const steps = planDeploySteps({ state });
     expect(steps.map((s) => s.kind)).toEqual(['login', 'push', 'push-config', 'wire-env']);
   });
 
   it('push-config step is always included, after push and before wire-env', () => {
     // Full first deploy: all gates missing
     const fullState: DeployState = { authed: false, appId: undefined, hasKey: false };
-    const fullSteps = planDeploySteps(fullState).map((s) => s.kind);
+    const fullSteps = planDeploySteps({ state: fullState }).map((s) => s.kind);
     expect(fullSteps).toContain('push-config');
     const pushIdx = fullSteps.indexOf('push');
     const pushConfigIdx = fullSteps.indexOf('push-config');
@@ -72,8 +72,42 @@ describe('planDeploySteps', () => {
 
     // Idempotent re-deploy: authed + appId + hasKey
     const redeployState: DeployState = { authed: true, appId: 'app_abc123', hasKey: true };
-    const redeploySteps = planDeploySteps(redeployState).map((s) => s.kind);
+    const redeploySteps = planDeploySteps({ state: redeployState }).map((s) => s.kind);
     expect(redeploySteps).toEqual(['push', 'push-config', 'wire-env']);
+  });
+
+  it('push-keys step appears AFTER push-config and BEFORE wire-env when pushKeys=true', () => {
+    const state: DeployState = { authed: true, appId: 'app_abc123', hasKey: true };
+    const steps = planDeploySteps({ state, pushKeys: true }).map((s) => s.kind);
+    expect(steps).toContain('push-keys');
+    const pushConfigIdx = steps.indexOf('push-config');
+    const pushKeysIdx = steps.indexOf('push-keys');
+    const wireEnvIdx = steps.indexOf('wire-env');
+    expect(pushKeysIdx).toBeGreaterThan(pushConfigIdx);
+    expect(pushKeysIdx).toBeLessThan(wireEnvIdx);
+  });
+
+  it('push-keys step is NOT included when pushKeys is false/absent', () => {
+    const state: DeployState = { authed: true, appId: 'app_abc123', hasKey: true };
+    const steps = planDeploySteps({ state }).map((s) => s.kind);
+    expect(steps).not.toContain('push-keys');
+
+    const stepsExplicit = planDeploySteps({ state, pushKeys: false }).map((s) => s.kind);
+    expect(stepsExplicit).not.toContain('push-keys');
+  });
+
+  it('full first deploy with pushKeys: login+create-app+mint-key+push+push-config+push-keys+wire-env', () => {
+    const state: DeployState = { authed: false, appId: undefined, hasKey: false };
+    const steps = planDeploySteps({ state, pushKeys: true }).map((s) => s.kind);
+    expect(steps).toEqual([
+      'login',
+      'create-app',
+      'mint-key',
+      'push',
+      'push-config',
+      'push-keys',
+      'wire-env',
+    ]);
   });
 });
 

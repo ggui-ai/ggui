@@ -309,6 +309,29 @@ export async function pushAppBlueprints(
   );
 }
 
+export interface SetProviderKeyResponse {
+  provider: string;
+  lastFour: string;
+  appId: string;
+}
+
+export async function setAppProviderKey(
+  appId: string,
+  provider: string,
+  plaintextKey: string,
+  label?: string,
+): Promise<SetProviderKeyResponse> {
+  return withAuthRetry(
+    (s) =>
+      authedFetch(s, {
+        method: 'POST',
+        path: `/v1/apps/${encodeURIComponent(appId)}/provider-keys`,
+        body: { provider, plaintextKey, ...(label ? { label } : {}) },
+      }),
+    (r) => r.json() as Promise<SetProviderKeyResponse>,
+  );
+}
+
 export interface PatchAppConfigResponse {
   updated: string[];
 }

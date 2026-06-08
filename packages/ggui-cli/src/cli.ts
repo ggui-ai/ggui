@@ -90,6 +90,7 @@ import { runExportPoolCommand } from './export-pool-command.js';
 import { runCreateCommand } from './create-app-command.js';
 import { runPushCommand } from './push-command.js';
 import { runDeployCommand } from './deploy-command.js';
+import { runProviderKeyCommand } from './provider-key-command.js';
 
 const HELP = `ggui — open CLI for the ggui protocol
 
@@ -158,6 +159,13 @@ Commands:
                (idempotent: safe to re-run after a partial failure).
                Requires a ggui.json in the current directory tree.
 
+                 --push-keys  Also push provider API key from env to the app.
+
+  provider-key Manage provider API keys for a cloud ggui app.
+
+                 provider-key set --app <appId> [--provider <name>]
+                   Push a provider API key from env to the cloud app.
+
   push         Compile + bulk-push blueprints to a ggui.ai cloud app.
                Requires \`ggui login\`.
 
@@ -215,6 +223,8 @@ async function main(argv: string[]): Promise<number> {
       return runCreateCommand(rest);
     case 'deploy':
       return runDeployCommand(rest);
+    case 'provider-key':
+      return runProviderKeyCommand(rest);
     default:
       process.stderr.write(`ggui: unknown command "${command}"\n\n`);
       process.stderr.write(HELP);

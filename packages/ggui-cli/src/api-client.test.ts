@@ -21,7 +21,7 @@ vi.mock('./auth-store.js', () => ({
 }));
 
 // Import AFTER vi.mock so the mock is in place.
-import { patchAppConfig } from './api-client.js';
+import { patchAppConfig, setAppProviderKey } from './api-client.js';
 
 // ─── shared fixture ───────────────────────────────────────────────────────────
 const SESSION: AuthSessionDocument = {
@@ -36,6 +36,92 @@ const SESSION: AuthSessionDocument = {
 beforeEach(() => {
   mocks.loadAuthSession.mockReturnValue(SESSION);
   mocks.saveAuthSession.mockReset();
+});
+
+// ─── setAppProviderKey ────────────────────────────────────────────────────────
+describe('setAppProviderKey', () => {
+  it('POSTs to /v1/apps/<appId>/provider-keys with provider + plaintextKey', async () => {
+    const responseBody = { provider: 'anthropic', lastFour: 'xYz1', appId: 'app_test1' };
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify(responseBody), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        }),
+      );
+
+    const result = await setAppProviderKey('app_test1', 'anthropic', 'sk-ant-secret');
+
+    expect(result).toEqual(responseBody);
+
+    expect(fetchSpy).toHaveBeenCalledOnce();
+    const [url, init] = fetchSpy.mock.calls[0]!;
+    expect(url).toBe('https://api.ggui.ai/v1/apps/app_test1/provider-keys');
+    expect(init?.method).toBe('POST');
+    const body = JSON.parse(init?.body as string);
+    expect(body).toEqual({ provider: 'anthropic', plaintextKey: 'sk-ant-secret' });
+    expect((init?.headers as Record<string, string>)['Authorization']).toBe('Bearer cli_at_test');
+
+    fetchSpy.mockRestore();
+  });
+
+  it('includes optional label when provided', async () => {
+    const responseBody = { provider: 'openai', lastFour: 'ab12', appId: 'app_test2' };
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify(responseBody), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        }),
+      );
+
+    await setAppProviderKey('app_test2', 'openai', 'sk-openai-key', 'my-label');
+
+    const [, init] = fetchSpy.mock.calls[0]!;
+    const body = JSON.parse(init?.body as string);
+    expect(body).toEqual({ provider: 'openai', plaintextKey: 'sk-openai-key', label: 'my-label' });
+
+    fetchSpy.mockRestore();
+  });
+
+  it('encodes special characters in appId', async () => {
+    const responseBody = { provider: 'google', lastFour: 'cd34', appId: 'app/special' };
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify(responseBody), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        }),
+      );
+
+    await setAppProviderKey('app/special', 'google', 'AIza-secret');
+
+    const [url] = fetchSpy.mock.calls[0]!;
+    expect(url).toBe('https://api.ggui.ai/v1/apps/app%2Fspecial/provider-keys');
+
+    fetchSpy.mockRestore();
+  });
+
+  it('propagates a non-200 response as ApiError', async () => {
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({ error: 'not_found', error_description: 'App not found' }),
+          { status: 404, headers: { 'content-type': 'application/json' } },
+        ),
+      );
+
+    await expect(setAppProviderKey('missing', 'anthropic', 'key')).rejects.toMatchObject({
+      status: 404,
+      code: 'not_found',
+    });
+
+    fetchSpy.mockRestore();
+  });
 });
 
 // ─── patchAppConfig ───────────────────────────────────────────────────────────
