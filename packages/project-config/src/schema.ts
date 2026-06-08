@@ -488,6 +488,26 @@ const GenerationSchema = z.strictObject({
       }
       return parsed;
     }),
+
+  /**
+   * Which API key UI generation runs against.
+   *
+   * - `'own'` — your own configured provider key (e.g. an env var
+   *   or secrets manager entry you supply); the server uses whatever
+   *   key the configured `generation.model` provider resolves.
+   * - `'managed'` — your hosting provider supplies the key; you do
+   *   not need to configure a provider key yourself.
+   *
+   * Absent (the default) means the server resolves the key from the
+   * environment via the standard provider-key lookup chain. Self-host
+   * deployments always use `'own'`.
+   */
+  keySource: z
+    .enum(['own', 'managed'])
+    .optional()
+    .describe(
+      "Which API key UI generation runs against: 'own' = your own configured provider key; 'managed' = your hosting provider supplies the key. Self-host deployments always use 'own'.",
+    ),
 });
 
 /**

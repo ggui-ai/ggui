@@ -701,6 +701,63 @@ describe('ggui.json schema — generation block (slice #43 — explicit LlmRoute
     const parsed = parseGguiJson(MINIMAL_V1);
     expect(parsed.generation).toBeUndefined();
   });
+
+  // 2b M0.1 — generation.keySource
+  it('accepts keySource "own"', () => {
+    const parsed = parseGguiJson({
+      ...MINIMAL_V1,
+      generation: { model: 'anthropic:claude-haiku-4-5-20251001', keySource: 'own' },
+    });
+    expect(parsed.generation?.keySource).toBe('own');
+  });
+
+  it('accepts keySource "managed"', () => {
+    const parsed = parseGguiJson({
+      ...MINIMAL_V1,
+      generation: { model: 'anthropic:claude-haiku-4-5-20251001', keySource: 'managed' },
+    });
+    expect(parsed.generation?.keySource).toBe('managed');
+  });
+
+  it('keySource is optional — absent is valid', () => {
+    const parsed = parseGguiJson({
+      ...MINIMAL_V1,
+      generation: { model: 'anthropic:claude-haiku-4-5-20251001' },
+    });
+    expect(parsed.generation?.keySource).toBeUndefined();
+  });
+
+  it('rejects keySource "pool"', () => {
+    const result = safeParseGguiJson({
+      ...MINIMAL_V1,
+      generation: { model: 'anthropic:claude-haiku-4-5-20251001', keySource: 'pool' },
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects keySource "platform"', () => {
+    const result = safeParseGguiJson({
+      ...MINIMAL_V1,
+      generation: { model: 'anthropic:claude-haiku-4-5-20251001', keySource: 'platform' },
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects keySource "byok"', () => {
+    const result = safeParseGguiJson({
+      ...MINIMAL_V1,
+      generation: { model: 'anthropic:claude-haiku-4-5-20251001', keySource: 'byok' },
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects keySource "x" (arbitrary string)', () => {
+    const result = safeParseGguiJson({
+      ...MINIMAL_V1,
+      generation: { model: 'anthropic:claude-haiku-4-5-20251001', keySource: 'x' },
+    });
+    expect(result.success).toBe(false);
+  });
 });
 
 describe('ggui.json schema — registry field (Slice 3.2 plugin marketplace)', () => {
