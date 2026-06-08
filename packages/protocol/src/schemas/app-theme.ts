@@ -9,6 +9,13 @@ export const GGUI_CSS_VAR_KEY_RE = /^--ggui-[a-z0-9-]+$/;
  * terminate the declaration or open a new rule/comment. Forbid the breakout
  * characters `; { } < > @` and the comment opener `/*`. Everything else
  * (colors, lengths, `calc(...)`, `var(...)`, font-family lists) is allowed.
+ *
+ * PARTIAL gate — this regex alone is NOT a complete validator. Bare `/` and
+ * `*` are intentionally allowed (legal in `16px/1.5`, `calc(2 * 4px)`); only
+ * the `/*` comment-opener SEQUENCE is forbidden, and that check lives in
+ * {@link appThemeSchema}'s `.refine`, not here. Callers MUST validate values
+ * through `appThemeSchema` (the complete validator) — never against this
+ * bare regex on its own.
  */
 export const CSS_VALUE_SAFE_RE = /^[^;{}<>@]*$/;
 

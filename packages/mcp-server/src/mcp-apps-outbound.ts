@@ -697,6 +697,14 @@ export interface SelfContainedShellInputs {
    */
   readonly themeMode?: "light" | "dark";
   /**
+   * Resolved per-app theme overlay (mode + `--ggui-*` CSS-variable map),
+   * mirrored from {@link McpAppAiGguiRenderMeta.theme}. Symmetric forward
+   * for the self-contained shell so `/r/<shortCode>` + `resources/read`
+   * iframes apply the same operator overlay the MCP-Apps postMessage
+   * path carries. Absent ⇒ the renderer's default theme.
+   */
+  readonly theme?: McpAppAiGguiRenderMeta["theme"];
+  /**
    * Optional pre-serialized props (must be a JSON string) forwarded
    * to the renderer. Server inlines the string verbatim — the
    * renderer parses + narrows to `Record<string, unknown>` at boot.
@@ -879,6 +887,10 @@ export function buildSelfContainedShell(opts: SelfContainedShellInputs): string 
     runtimeUrl: opts.runtimeUrl,
     ...(opts.themeId !== undefined ? { themeId: opts.themeId } : {}),
     ...(opts.themeMode !== undefined ? { themeMode: opts.themeMode } : {}),
+    // Per-app theme overlay — same field the MCP-Apps `_meta` slice
+    // carries, forwarded onto the inline bootstrap so the self-contained
+    // shell applies the operator overlay too.
+    ...(opts.theme !== undefined ? { theme: opts.theme } : {}),
     ...(opts.appCallableTools !== undefined && opts.appCallableTools.length > 0
       ? { appCallableTools: opts.appCallableTools }
       : {}),
@@ -1452,6 +1464,10 @@ export function registerGguiRenderResourceTemplate(
             : {}),
           ...(opts.themeId !== undefined ? { themeId: opts.themeId } : {}),
           ...(opts.themeMode !== undefined ? { themeMode: opts.themeMode } : {}),
+          // Per-app theme overlay projected by `deriveRenderMeta` from
+          // the render's `theme` sidecar — forwarded so the
+          // resource-served iframe matches the postMessage path.
+          ...(view.theme !== undefined ? { theme: view.theme } : {}),
           ...(view.propsJson !== undefined ? { propsJson: view.propsJson } : {}),
           ...(view.actionNextSteps !== undefined ? { actionNextSteps: view.actionNextSteps } : {}),
           ...(view.contextSlots !== undefined ? { contextSlots: view.contextSlots } : {}),

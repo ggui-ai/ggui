@@ -33,6 +33,7 @@ import type {
   JsonSchema,
   JsonValue,
 } from '../types/data-contract.js';
+import { appThemeSchema, type AppTheme } from '../schemas/app-theme.js';
 
 /**
  * MCP capability name ggui servers advertise in their MCP `initialize`
@@ -283,6 +284,15 @@ export interface McpAppAiGguiRenderMeta {
   // Theme
   readonly themeId?: string;
   readonly themeMode?: 'light' | 'dark';
+  /**
+   * Resolved per-app theme overlay — mode + the `--ggui-*` CSS-variable
+   * map snapshotted from `App.theme` and projected by `deriveRenderMeta`.
+   * Distinct from `themeId` (a registry preset reference) and `themeMode`
+   * (the bare light/dark discriminator): this carries the concrete
+   * variable values the iframe applies as a `:root` declaration block.
+   * Absent ⇒ no per-app overlay; the renderer applies its default theme.
+   */
+  readonly theme?: AppTheme;
 
   // Capability accumulators
   readonly gadgets?: ReadonlyArray<McpAppGadgetRef>;
@@ -425,6 +435,15 @@ export function parseMcpAppAiGguiRenderMeta(
     typeof vUrl === 'string' &&
     vUrl.length > 0;
 
+  // Theme overlay — validated via the complete `appThemeSchema` so the
+  // parsed value is typed `AppTheme` without an unguarded cast. A
+  // malformed/absent overlay yields `undefined` and is dropped from the
+  // slice (tolerant degrade, consistent with the other optional fields).
+  const themeParse =
+    s.theme !== undefined ? appThemeSchema.safeParse(s.theme) : undefined;
+  const parsedTheme: AppTheme | undefined =
+    themeParse?.success === true ? themeParse.data : undefined;
+
   const slice: McpAppAiGguiRenderMeta = {
     sessionId: s.sessionId,
     appId: s.appId,
@@ -436,6 +455,12 @@ export function parseMcpAppAiGguiRenderMeta(
     ...(s.themeMode !== undefined
       ? { themeMode: s.themeMode as 'light' | 'dark' }
       : {}),
+    // `theme` is the only structured optional field on the slice, so
+    // it gets the schema as its parser (the rest are scalar/array
+    // casts). `appThemeSchema` is the complete validator — a malformed
+    // overlay degrades to "no overlay" rather than failing the whole
+    // slice, matching the tolerant posture of the other optional fields.
+    ...(parsedTheme !== undefined ? { theme: parsedTheme } : {}),
     ...(s.gadgets !== undefined
       ? { gadgets: s.gadgets as ReadonlyArray<McpAppGadgetRef> }
       : {}),

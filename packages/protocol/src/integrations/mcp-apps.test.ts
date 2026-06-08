@@ -502,6 +502,38 @@ describe('parseMcpAppAiGguiRenderMeta', () => {
     }
   });
 
+  // St3 M2.1 — the per-app theme overlay survives the wire round-trip.
+  it('preserves a well-formed `theme` overlay through the parser', () => {
+    const theme = {
+      mode: 'dark' as const,
+      cssVariables: { '--ggui-color-primary-600': '#7c3aed' },
+      name: 'violet',
+    };
+    const result = parseMcpAppAiGguiRenderMeta({
+      [MCP_APP_AI_GGUI_RENDER_META_KEY]: { ...minimalRender, theme },
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.meta?.theme).toEqual(theme);
+    }
+  });
+
+  it('drops a malformed `theme` overlay (tolerant degrade, slice still ok)', () => {
+    const result = parseMcpAppAiGguiRenderMeta({
+      // `mode` is not a valid enum value → appThemeSchema rejects →
+      // theme dropped, slice still parses.
+      [MCP_APP_AI_GGUI_RENDER_META_KEY]: {
+        ...minimalRender,
+        theme: { mode: 'sepia', cssVariables: {} },
+      },
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.meta?.sessionId).toBe('r-1');
+      expect(result.meta?.theme).toBeUndefined();
+    }
+  });
+
   it('rejects half-live auth (wsUrl without wsToken)', () => {
     const result = parseMcpAppAiGguiRenderMeta({
       [MCP_APP_AI_GGUI_RENDER_META_KEY]: { ...minimalRender, wsUrl: 'ws://x' },

@@ -5095,6 +5095,10 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
         pollingUrl,
         ...(stateThemeId !== undefined ? { themeId: stateThemeId } : {}),
         ...(stateThemeMode !== undefined ? { themeMode: stateThemeMode } : {}),
+        // Per-app theme overlay projected by `deriveRenderMeta` from the
+        // render's `theme` sidecar — same field the render result-meta
+        // carries, so a /state read returns the identical overlay.
+        ...(view?.theme !== undefined ? { theme: view.theme } : {}),
         ...(view?.gadgets !== undefined && view.gadgets.length > 0
           ? { gadgets: view.gadgets }
           : {}),

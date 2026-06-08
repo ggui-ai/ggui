@@ -48,9 +48,11 @@ import type {
 } from '@ggui-ai/mcp-server-core';
 import {
   renderOutputSchema,
+  type AppTheme,
   type DataContract,
   type ComponentGguiSession,
 } from '@ggui-ai/protocol';
+import { parseMcpAppAiGguiRenderMeta } from '@ggui-ai/protocol/integrations/mcp-apps';
 import { blueprintKey, variantKey } from '@ggui-ai/protocol/blueprint-key';
 import * as matcherModule from './blueprint-matcher.js';
 import { registerBlueprint } from './blueprint-registry.js';
@@ -1189,5 +1191,71 @@ describe('createGguiRenderHandler — description (P2-25 CALL SHAPE)', () => {
     ]) {
       expect(d.toLowerCase()).not.toContain(banned.toLowerCase());
     }
+  });
+});
+
+describe('createGguiRenderHandler — resultMeta forwards App.theme to the wire slice (St3 M2.1)', () => {
+  const THEME: AppTheme = {
+    mode: 'dark',
+    cssVariables: { '--ggui-color-primary-600': '#7c3aed' },
+    name: 'violet',
+  };
+
+  /** Seed a committed component render carrying a `theme` sidecar, then
+   *  drive the handler's `resultMeta` and parse the emitted wire meta —
+   *  the ASSEMBLED `McpAppAiGguiRenderMeta`, not the intermediate view. */
+  async function emitWireMeta(
+    overrides: Partial<ComponentGguiSession>,
+  ): Promise<ReturnType<typeof parseMcpAppAiGguiRenderMeta>> {
+    const renderStore = new InMemoryGguiSessionStore();
+    const sessionId = 'render-theme-1';
+    const nowMs = Date.now();
+    const render: ComponentGguiSession = {
+      id: sessionId,
+      appId: APP_ID,
+      type: 'component',
+      componentCode: STORED_CODE,
+      contentType: 'application/javascript+react',
+      createdAt: nowMs,
+      lastActivityAt: nowMs,
+      expiresAt: nowMs + 60_000,
+      eventSequence: 0,
+      ...overrides,
+    };
+    await renderStore.commit({ render, appId: APP_ID });
+
+    const handler = buildHandler({
+      handshakeStore: new InMemoryKeyValueStore(),
+      renderStore,
+      vectorStore: new InMemoryVectorStore(),
+      index: new InMemoryBlueprintIndex(),
+      coldCode: COLD_CODE,
+    });
+
+    const output = {
+      sessionId,
+      resourceUri: `ui://ggui/render/${sessionId}`,
+      action: 'create' as const,
+      contractHash: 'hash',
+      blueprintId: 'bp_x',
+      variantKey: 'vk',
+      cache: { hit: false, llmCallsAvoided: 0, kind: 'cold' as const },
+    };
+    const meta = await handler.resultMeta?.(output, {}, CTX);
+    return parseMcpAppAiGguiRenderMeta(meta);
+  }
+
+  it('stamps the render-sidecar theme onto the assembled wire meta', async () => {
+    const parsed = await emitWireMeta({ theme: THEME });
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) return;
+    expect(parsed.meta?.theme).toEqual(THEME);
+  });
+
+  it('omits theme from the wire meta when the render carries none', async () => {
+    const parsed = await emitWireMeta({});
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) return;
+    expect(parsed.meta?.theme).toBeUndefined();
   });
 });

@@ -2185,6 +2185,11 @@ export function createGguiRenderHandler(
         ...(resolvedThemeMode !== undefined
           ? { themeMode: resolvedThemeMode }
           : {}),
+        // Resolved per-app theme overlay (mode + `--ggui-*` variable map)
+        // projected by `deriveRenderMeta` from the render's `theme`
+        // sidecar. Only emitted when the App declared a theme so
+        // theme-less apps stay byte-identical.
+        ...(view.theme !== undefined ? { theme: view.theme } : {}),
         ...(view.permissionsPolicy !== undefined
           ? { permissionsPolicy: [...view.permissionsPolicy] }
           : {}),

@@ -839,10 +839,6 @@ export function deriveRenderMeta(
   if (item.type === 'mcpApps') return {};
 
   const propsJson = derivePropsJson(item);
-  // Per-app theme overlay (sidecar). Variant-agnostic — surfaced on
-  // both the system and component projections so the iframe applies
-  // the operator overlay regardless of render shape.
-  const theme = deriveTheme(item);
 
   // System-card variant: emits `kind` + (optional) `propsJson`.
   // Component variant: emits (optional) `propsJson` + (optional)
@@ -861,7 +857,6 @@ export function deriveRenderMeta(
         ? { kind: item.kind }
         : {}),
       ...(propsJson !== undefined ? { propsJson } : {}),
-      ...(theme !== undefined ? { theme } : {}),
     };
   }
 
@@ -873,6 +868,10 @@ export function deriveRenderMeta(
     deriveBundleOrigins(item),
   );
   const gadgets = deriveGadgetRegistrations(item);
+  // Per-app theme overlay (sidecar). Component-only for this stage —
+  // system cards theme via the SystemCardHost→ThemeProvider path, not
+  // this slice, so `SystemGguiSession` never carries a `theme` sidecar.
+  const theme = deriveTheme(item);
   return {
     ...(propsJson !== undefined ? { propsJson } : {}),
     ...(actionNextSteps !== undefined ? { actionNextSteps } : {}),
