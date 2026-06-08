@@ -94,6 +94,16 @@ export interface RenderItemOptions {
    * design registry's `getTheme(id, mode?)` default.
    */
   readonly themeMode?: 'light' | 'dark';
+  /**
+   * Per-app theme overlay forwarded to {@link ReactRootMountOptions.appTheme}
+   * so the renderer injects the `--ggui-*` overrides + `color-scheme` at
+   * `:root`. Sourced from the bootstrap's `_meta["ai.ggui/render"].theme`.
+   * A structural subset of protocol's `AppTheme` (`name` is display-only).
+   */
+  readonly appTheme?: {
+    readonly mode: 'light' | 'dark';
+    readonly cssVariables: Record<string, string>;
+  };
   readonly cssOverrides?: string;
   readonly onError?: (err: Error) => void;
   readonly onRequestRepair?: (err: Error) => void;
@@ -279,6 +289,7 @@ export async function mountRender(
       ...(gadgetPackages !== undefined ? { gadgetPackages } : {}),
       ...(currentOpts.themeId !== undefined ? { themeId: currentOpts.themeId } : {}),
       ...(currentOpts.themeMode !== undefined ? { themeMode: currentOpts.themeMode } : {}),
+      ...(currentOpts.appTheme !== undefined ? { appTheme: currentOpts.appTheme } : {}),
       ...(currentOpts.cssOverrides !== undefined
         ? { cssOverrides: currentOpts.cssOverrides }
         : {}),
@@ -353,6 +364,7 @@ export async function mountRender(
           },
           ...(next.themeId !== undefined ? { themeId: next.themeId } : {}),
           ...(next.themeMode !== undefined ? { themeMode: next.themeMode } : {}),
+          ...(next.appTheme !== undefined ? { appTheme: next.appTheme } : {}),
           ...(next.cssOverrides !== undefined ? { cssOverrides: next.cssOverrides } : {}),
           ...(next.onError !== undefined ? { onError: next.onError } : {}),
           ...(next.onRequestRepair !== undefined

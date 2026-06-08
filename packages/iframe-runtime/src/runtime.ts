@@ -3122,6 +3122,13 @@ async function bootProduction(opts: {
           ...(meta.themeMode !== undefined
             ? { themeMode: meta.themeMode }
             : {}),
+          // Per-app theme overlay (St3 M2.2). Threaded straight from the
+          // bootstrap's `_meta["ai.ggui/render"].theme` (typed `AppTheme`,
+          // already injection-validated by the wire parser) onto the mount
+          // options so the renderer applies the `--ggui-*` overrides +
+          // `color-scheme` at `:root`. THEME IS COMPONENT-ONLY — system
+          // cards theme via the SystemCardHost/ThemeProvider path.
+          ...(meta.theme !== undefined ? { appTheme: meta.theme } : {}),
           ...(wrapOuter !== undefined ? { wrapOuter } : {}),
         };
       };

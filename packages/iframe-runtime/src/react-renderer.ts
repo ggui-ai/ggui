@@ -295,6 +295,18 @@ export interface ReactRootMountOptions {
    * registered theme paints when the operator selected it.
    */
   readonly themeMode?: 'light' | 'dark';
+  /**
+   * Per-app theme overlay applied at the iframe's `:root` AFTER the base
+   * token block, so the operator-supplied `--ggui-*` values win the
+   * cascade (a partial set — unset vars keep their token defaults). A
+   * structural subset of protocol's `AppTheme` (`name` is display-only,
+   * not needed at render). `mode` drives `color-scheme` so native
+   * controls / scrollbars / canvas pick up dark vs light.
+   */
+  readonly appTheme?: {
+    readonly mode: 'light' | 'dark';
+    readonly cssVariables: Record<string, string>;
+  };
   readonly cssOverrides?: string;
   readonly onError?: (error: Error) => void;
   readonly onRequestRepair?: (error: Error) => void;
@@ -401,9 +413,22 @@ export async function mountReactRoot(
     // `ThemeProvider` so a Studio/Portal context with both runtime + RP
     // active doesn't double-stack.
     if (typeof document !== 'undefined') {
-      const rootCss = opts.themeId
+      let rootCss = opts.themeId
         ? getThemeCss(opts.themeId, opts.themeMode)
         : getCssTokens(opts.themeMode);
+      if (opts.appTheme) {
+        const decls = Object.entries(opts.appTheme.cssVariables)
+          .map(([k, v]) => `${k}: ${v};`)
+          .join('');
+        // Appended AFTER the base block → the per-app overlay wins; it is a
+        // partial set (unset vars keep their token defaults). CSS custom
+        // properties at :root inherit into the scoped React tree, so this
+        // alone is sufficient for the component to resolve `var(--ggui-*)`.
+        // Values were validated injection-safe upstream (write-side
+        // `appThemeSchema` + the wire parser re-validates), so the
+        // string-join here is safe — do NOT re-sanitize.
+        rootCss += `:root{color-scheme:${opts.appTheme.mode};${decls}}`;
+      }
       const styleId = 'ggui-theme-vars';
       let styleEl = document.getElementById(styleId) as HTMLStyleElement | null;
       if (!styleEl) {

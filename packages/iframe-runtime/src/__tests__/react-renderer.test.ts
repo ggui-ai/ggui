@@ -97,6 +97,53 @@ describe('mountReactRoot — eval error', () => {
   });
 });
 
+describe('mountReactRoot — per-app theme overlay', () => {
+  it('injects the per-app theme overlay at :root + sets color-scheme', async () => {
+    const container = makeContainer();
+    let mount: Awaited<ReturnType<typeof mountReactRoot>> | null = null;
+    await flush(async () => {
+      mount = await mountReactRoot(container, {
+        render: { id: 'x', componentCode: '' },
+        appTheme: {
+          mode: 'dark',
+          cssVariables: { '--ggui-color-primary-600': '#7c3aed' },
+        },
+      });
+    });
+
+    const styleEl = document.getElementById('ggui-theme-vars');
+    expect(styleEl?.textContent).toContain('--ggui-color-primary-600: #7c3aed');
+    expect(styleEl?.textContent).toContain('color-scheme:dark');
+
+    mount!.unmount();
+  });
+
+  it('appends the overlay AFTER the base token block so it wins', async () => {
+    const container = makeContainer();
+    let mount: Awaited<ReturnType<typeof mountReactRoot>> | null = null;
+    await flush(async () => {
+      mount = await mountReactRoot(container, {
+        render: { id: 'x', componentCode: '' },
+        appTheme: {
+          mode: 'light',
+          cssVariables: { '--ggui-color-primary-600': '#abcdef' },
+        },
+      });
+    });
+
+    const text = document.getElementById('ggui-theme-vars')?.textContent ?? '';
+    // The overlay declaration must appear after the base `:root{...}`
+    // token block — later declarations win the cascade.
+    const overlayIdx = text.indexOf('color-scheme:light');
+    expect(overlayIdx).toBeGreaterThan(0);
+    expect(text.lastIndexOf('--ggui-color-primary-600: #abcdef')).toBeGreaterThan(
+      overlayIdx,
+    );
+
+    mount!.unmount();
+  });
+});
+
 describe('mountReactRoot — update with new props (no re-eval)', () => {
   it('skips evaluation when componentCode is unchanged across update()', async () => {
     // We can't easily observe "skipped evaluation" without mocking

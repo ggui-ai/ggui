@@ -282,6 +282,9 @@ function projectMeta(
       : {}),
     ...(meta.themeId !== undefined ? { themeId: meta.themeId } : {}),
     ...(themeMode !== undefined ? { themeMode } : {}),
+    // Per-app theme overlay carried through verbatim. Already validated
+    // via `appThemeSchema` by the wire parser, so no re-validation here.
+    ...(meta.theme !== undefined ? { theme: meta.theme } : {}),
     ...(gadgets !== undefined ? { gadgets } : {}),
     ...(publicEnv !== undefined ? { publicEnv } : {}),
     ...(streamWebSocketLocalTools !== undefined
