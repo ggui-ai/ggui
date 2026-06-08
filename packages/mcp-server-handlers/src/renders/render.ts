@@ -49,6 +49,7 @@
 import { randomUUID, randomBytes } from 'node:crypto';
 import { z } from 'zod';
 import {
+  type AppTheme,
   type BlueprintVariance,
   type GadgetDescriptor,
   type DataContract,
@@ -1132,6 +1133,14 @@ export function createGguiRenderHandler(
       // the system prompt falls through to its STDLIB default.
       let resolvedAppLibraries: readonly GadgetDescriptor[] | undefined;
 
+      // Resolved per-app theme overlay, lifted to handler scope
+      // alongside `resolvedAppLibraries`. When `appMetadataStore` is
+      // bound, the registry block below snapshots `App.theme` here so
+      // both render-commit builders (cold-gen + cached) sidecar it onto
+      // the persisted `ComponentGguiSession.theme`. Stays `undefined`
+      // when `appMetadataStore` is unset or the App declares no theme.
+      let appTheme: AppTheme | undefined;
+
       // Admission check. Fires BEFORE state changes — a rate-limited
       // caller should get 429 without the server doing any real work.
       if (deps.rateLimiter) {
@@ -1193,6 +1202,7 @@ export function createGguiRenderHandler(
           story.contract,
           appGadgets,
         );
+        appTheme = appRecord?.theme;
       }
 
       // (Name-invariant + schema-compat invariants are covered by the
@@ -1722,6 +1732,7 @@ export function createGguiRenderHandler(
               ...(resolvedAppLibraries !== undefined
                 ? { appGadgets: resolvedAppLibraries }
                 : {}),
+              ...(appTheme !== undefined ? { appTheme } : {}),
             },
           );
           cacheMarker = {
@@ -1765,6 +1776,7 @@ export function createGguiRenderHandler(
               ...(resolvedAppLibraries !== undefined
                 ? { appGadgets: resolvedAppLibraries }
                 : {}),
+              ...(appTheme !== undefined ? { appTheme } : {}),
               ...(resolvedGadgetTypes !== undefined
                 ? { gadgetTypes: resolvedGadgetTypes }
                 : {}),
@@ -2292,6 +2304,12 @@ async function runGenerationIntoGguiSession(
      */
     readonly appGadgets?: readonly GadgetDescriptor[];
     /**
+     * Resolved per-app theme overlay snapshotted from `App.theme`.
+     * Sidecar'd onto the persisted `ComponentGguiSession.theme` so the
+     * bootstrap-meta derivation surfaces it on the render slice.
+     */
+    readonly appTheme?: AppTheme;
+    /**
      * `package → .d.ts content` for the contract's non-stdlib
      * gadgets, parallel-fetched by the render handler.
      */
@@ -2482,6 +2500,7 @@ async function runGenerationIntoGguiSession(
     ...(args.appGadgets !== undefined && args.appGadgets.length > 0
       ? { gadgetDescriptors: args.appGadgets }
       : {}),
+    ...(args.appTheme !== undefined ? { theme: args.appTheme } : {}),
   };
   // Schema-compat check (DEFENSIVE backstop).
   if (checkRenderContracts) {
@@ -2722,6 +2741,12 @@ async function commitCachedGguiSession(
      * descriptor metadata without re-resolving.
      */
     readonly appGadgets?: readonly GadgetDescriptor[];
+    /**
+     * Resolved per-app theme overlay snapshotted from `App.theme`.
+     * Persisted on the render as `theme` so the bootstrap-meta
+     * derivation surfaces it on the render slice.
+     */
+    readonly appTheme?: AppTheme;
   },
 ): Promise<boolean> {
   const nowEpochMs = Date.now();
@@ -2763,6 +2788,7 @@ async function commitCachedGguiSession(
     ...(args.appGadgets !== undefined && args.appGadgets.length > 0
       ? { gadgetDescriptors: args.appGadgets }
       : {}),
+    ...(args.appTheme !== undefined ? { theme: args.appTheme } : {}),
   };
   if (checkRenderContracts) {
     try {

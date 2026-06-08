@@ -12,6 +12,7 @@ import type {
 } from './data-contract';
 import type { EndUserIdentity } from './auth';
 import type { HostContextProjection } from './host-context';
+import type { AppTheme } from '../schemas/app-theme';
 // MCP Apps inbound variant lives behind a boundary subpath to keep core
 // render typing opt-in. The import IS legitimate — the design lock
 // explicitly treats the `GguiSession` union as core's one concession to MCP
@@ -278,6 +279,18 @@ export interface ComponentGguiSession<TProps = JsonObject> extends GguiSessionBa
    * + CSP + bundle-loader derivation read from this array.
    */
   readonly gadgetDescriptors?: readonly GadgetDescriptor[];
+  /**
+   * Theme sidecar — the resolved per-app theme overlay (mode +
+   * `--ggui-*` CSS-variable map) snapshotted from `App.theme` at
+   * render-commit time. Sibling to {@link ComponentGguiSession.gadgetDescriptors}:
+   * a render-time snapshot the slice-meta derivation reads without
+   * re-resolving against the App record. The bootstrap projection
+   * (`deriveRenderMeta`) surfaces it on the
+   * `_meta["ai.ggui/render"].theme` slice so the iframe applies the
+   * operator-curated overlay at boot. Absent ⇒ the renderer's default
+   * theme.
+   */
+  readonly theme?: AppTheme;
   /**
    * Last-known snapshot of the contextSpec slot values, mirrored from
    * the runtime's `ui/update-model-context` posts via

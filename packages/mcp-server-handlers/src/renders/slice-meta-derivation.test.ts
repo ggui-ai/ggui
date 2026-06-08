@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import type {
   ActionSpec,
+  AppTheme,
   ContextSpec,
   GadgetDescriptor,
   JsonObject,
@@ -17,6 +18,7 @@ import {
   derivePropsJson,
   derivePublicEnvProjection,
   deriveRenderMeta,
+  deriveTheme,
   deriveWiredActionTools,
 } from './slice-meta-derivation';
 
@@ -243,6 +245,43 @@ describe('deriveRenderMeta', () => {
       // calls deriveContractBundle directly + writes to the
       // content-addressable store. The view carries no contract bytes.
     });
+  });
+
+  // St3 M2.1 — the per-app theme overlay is sidecar'd onto the render
+  // item (`item.theme`) and projected onto the slice so the iframe can
+  // apply the operator-curated CSS-variable overlay at boot.
+  it('stamps the app theme onto the slice (component variant)', () => {
+    const theme: AppTheme = {
+      mode: 'dark',
+      cssVariables: { '--ggui-color-primary-600': '#7c3aed' },
+    };
+    expect(deriveRenderMeta(componentItem({ theme })).theme).toEqual({
+      mode: 'dark',
+      cssVariables: { '--ggui-color-primary-600': '#7c3aed' },
+    });
+  });
+
+  it('omits theme when the item has none', () => {
+    expect(deriveRenderMeta(componentItem()).theme).toBeUndefined();
+  });
+});
+
+describe('deriveTheme', () => {
+  it('returns the sidecar theme when present', () => {
+    const theme: AppTheme = {
+      mode: 'light',
+      cssVariables: { '--ggui-color-bg': '#ffffff' },
+      name: 'daylight',
+    };
+    expect(deriveTheme(componentItem({ theme }))).toEqual(theme);
+  });
+
+  it('returns undefined when the item carries no theme', () => {
+    expect(deriveTheme(componentItem())).toBeUndefined();
+  });
+
+  it('returns undefined for a system item (no theme sidecar)', () => {
+    expect(deriveTheme(systemItem())).toBeUndefined();
   });
 });
 

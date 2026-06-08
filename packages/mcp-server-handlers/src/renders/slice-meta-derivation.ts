@@ -40,6 +40,7 @@ import {
   computeContractBundle,
   deriveContextDefault,
   DEFAULT_BUNDLE_HOST,
+  type AppTheme,
   type GadgetDescriptor,
   type JsonSchema,
   type JsonValue,
@@ -345,6 +346,20 @@ export function derivePermissionsPolicy(
 }
 
 /**
+ * The app's resolved per-app theme overlay, sidecar'd onto the render
+ * item (`item.theme`) at render-commit time. Sibling to
+ * {@link derivePermissionsPolicy} — reads a snapshot off the item
+ * rather than re-resolving against the App record.
+ *
+ * Only the component variant carries a `theme` sidecar; system /
+ * mcpApps items return `undefined` (the `'theme' in item` guard is
+ * false for them). Absent ⇒ the renderer applies its default theme.
+ */
+export function deriveTheme(item: GguiSession): AppTheme | undefined {
+  return 'theme' in item ? item.theme : undefined;
+}
+
+/**
  * Bundle/style/API origins derived from a render's
  * `gadgetDescriptors` sidecar. Sibling to
  * {@link derivePermissionsPolicy} — same iteration pattern over the
@@ -618,6 +633,19 @@ export interface RenderMetaView {
      * when present. */
     readonly bundleSri?: string;
   }>;
+  /**
+   * Per-app theme overlay derived from the render's `theme` sidecar
+   * (snapshotted from `App.theme` at render-commit time). Carries the
+   * mode (`light` / `dark`) + the `--ggui-*` CSS-variable map the
+   * iframe applies as a `:root` declaration block at boot. Each
+   * transport emits it on its own envelope — `_meta["ai.ggui/render"].theme`
+   * for the MCP-Apps slice + the inline `__GGUI_META__` global for
+   * the public-render `/r/<shortCode>` path.
+   *
+   * Absent ⇒ no per-app overlay; the renderer applies its default
+   * theme.
+   */
+  readonly theme?: AppTheme;
   // `compiledValidators` removed in #109 — validators are now served
   // via a content-addressable URL surfaced on the render slice
   // (`_meta["ai.ggui/render"].validatorsUrl`). Producers call
@@ -811,6 +839,10 @@ export function deriveRenderMeta(
   if (item.type === 'mcpApps') return {};
 
   const propsJson = derivePropsJson(item);
+  // Per-app theme overlay (sidecar). Variant-agnostic — surfaced on
+  // both the system and component projections so the iframe applies
+  // the operator overlay regardless of render shape.
+  const theme = deriveTheme(item);
 
   // System-card variant: emits `kind` + (optional) `propsJson`.
   // Component variant: emits (optional) `propsJson` + (optional)
@@ -829,6 +861,7 @@ export function deriveRenderMeta(
         ? { kind: item.kind }
         : {}),
       ...(propsJson !== undefined ? { propsJson } : {}),
+      ...(theme !== undefined ? { theme } : {}),
     };
   }
 
@@ -851,5 +884,6 @@ export function deriveRenderMeta(
       ? { contentSecurityPolicy }
       : {}),
     ...(gadgets !== undefined ? { gadgets } : {}),
+    ...(theme !== undefined ? { theme } : {}),
   };
 }
