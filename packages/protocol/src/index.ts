@@ -113,6 +113,7 @@ export {
   STDLIB_GADGETS_VERSION,
   STDLIB_GADGET_HOOKS,
 } from "./gadgets/stdlib-gadgets";
+export { resolveAppGadgets } from './gadgets/resolve-app-gadgets';
 export {
   filterDescriptorsToContract,
   gadgetIdentityKey,
