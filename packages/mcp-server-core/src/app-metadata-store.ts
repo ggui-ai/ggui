@@ -26,6 +26,25 @@ import {
 } from '@ggui-ai/protocol';
 
 /**
+ * Per-app generation configuration. Selects the model route and key
+ * source for UI generation. Absent on the App ⇒ the pod falls back to
+ * its default generation policy (platform-managed key + default model).
+ *
+ * OSS values only — no cloud-tier semantics in this type:
+ *   - `'own'`     — app owner's BYOK key (registered via `ggui_set_provider_key`).
+ *   - `'managed'` — platform-managed key pool (multi-tenant cloud deployments).
+ *
+ * Self-hosted deployments that don't distinguish key sources can treat
+ * `'own'` as "use the locally configured key" and ignore `'managed'`.
+ */
+export interface AppGeneration {
+  /** Canonical `provider:model` route string, e.g. `'anthropic:claude-haiku-4-5-20251001'`. */
+  readonly model: string;
+  /** Which key pool backs generation for this app. */
+  readonly keySource: 'own' | 'managed';
+}
+
+/**
  * Per-app metadata record. The core field is `gadgets`, which backs
  * the `ggui_list_gadgets` tool.
  *
@@ -95,6 +114,14 @@ export interface App {
    */
   readonly defaultDisplayMode?: McpUiDisplayMode;
   /**
+   * Per-app generation config. When present, the pod uses this model
+   * and key source for every render of this app instead of the global
+   * defaults. Absent ⇒ pod falls back to its default generation policy.
+   *
+   * See {@link AppGeneration} for field semantics.
+   */
+  readonly generation?: AppGeneration;
+  /**
    * Public environment values the App makes available to registered
    * gadgets via `getPublicEnv()`. Each key
    * MUST match `PUBLIC_ENV_APP_KEY_RE` (`^GGUI_PUBLIC_APP_[A-Z0-9_]+$`,
@@ -143,6 +170,7 @@ export interface ComposeAppInput {
   readonly blueprintSearchConfig?: AppBlueprintSearchConfig;
   readonly defaultDisplayMode?: McpUiDisplayMode;
   readonly publicEnv?: Readonly<Record<string, string>>;
+  readonly generation?: AppGeneration;
 }
 
 /**
@@ -188,6 +216,7 @@ export function composeApp(input: ComposeAppInput): App {
       ? { defaultDisplayMode: input.defaultDisplayMode }
       : {}),
     ...(input.publicEnv !== undefined ? { publicEnv: input.publicEnv } : {}),
+    ...(input.generation !== undefined ? { generation: input.generation } : {}),
   };
 }
 

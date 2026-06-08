@@ -9,7 +9,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { STDLIB_GADGETS, type GadgetDescriptor } from '@ggui-ai/protocol';
-import { composeApp } from './app-metadata-store.js';
+import { composeApp, type AppGeneration } from './app-metadata-store.js';
 
 describe('composeApp', () => {
   it('returns an App with STDLIB gadgets when gadgets is omitted', () => {
@@ -50,6 +50,7 @@ describe('composeApp', () => {
     expect('availableThemeIds' in app).toBe(false);
     expect('blueprintSearchConfig' in app).toBe(false);
     expect('publicEnv' in app).toBe(false);
+    expect('generation' in app).toBe(false);
   });
 
   it('includes defaultThemeId when supplied', () => {
@@ -102,6 +103,21 @@ describe('composeApp', () => {
     );
   });
 
+  // 2b M0.3 — generation read path
+  it('passes generation through when supplied', () => {
+    const generation: AppGeneration = {
+      model: 'anthropic:claude-haiku-4-5-20251001',
+      keySource: 'own',
+    };
+    const app = composeApp({ id: 'a', generation });
+    expect(app.generation).toEqual(generation);
+  });
+
+  it('generation is absent when omitted (absent-vs-empty)', () => {
+    const app = composeApp({ id: 'a' });
+    expect('generation' in app).toBe(false);
+  });
+
   it('round-trips a fully-populated App through the composer (drift canary)', () => {
     // If a new field is added to App but NOT to ComposeAppInput, this
     // round-trip will fail at compile time when the test fixture grows.
@@ -116,12 +132,17 @@ describe('composeApp', () => {
         exports: [{ hook: 'useLeafletMap' }],
       },
     ];
+    const fixtureGeneration: AppGeneration = {
+      model: 'anthropic:claude-haiku-4-5-20251001',
+      keySource: 'managed',
+    };
     const fixture = {
       id: 'app-1',
       gadgets: fixtureGadgets,
       defaultThemeId: 'claudic',
       availableThemeIds: ['claudic', 'ggui'],
       publicEnv: { GGUI_PUBLIC_APP_MAPBOX_TOKEN: 'pk.eyJ...' },
+      generation: fixtureGeneration,
     } as const;
     const app = composeApp(fixture);
     expect(app.id).toBe(fixture.id);
@@ -134,5 +155,6 @@ describe('composeApp', () => {
     expect(app.defaultThemeId).toBe(fixture.defaultThemeId);
     expect(app.availableThemeIds).toEqual(fixture.availableThemeIds);
     expect(app.publicEnv).toBe(fixture.publicEnv);
+    expect(app.generation).toEqual(fixtureGeneration);
   });
 });
