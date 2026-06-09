@@ -68,5 +68,5 @@ renders it against whatever theme is active. So editing `theme` here restyles th
 **entire** app — every agent-generated surface — with no component edits. That's
 the `/bootstrap` Beat-4 ownership moment.
 
-(Preset token sources live in `@ggui-ai/design`; deeper docs via the `ggui-docs`
+(Preset token sources live in `@ggui-ai/design`; deeper docs via the `ggui-dev`
 MCP — see `.mcp.json` — or https://docs.ggui.ai.)

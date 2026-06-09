@@ -1,8 +1,8 @@
 {
   "mcpServers": {
-    "ggui-docs": {
+    "ggui-dev": {
       "type": "http",
-      "url": "https://mcp.ggui.ai/docs"
+      "url": "https://mcp.ggui.ai/dev"
     }
   }
 }

@@ -3,7 +3,7 @@
 These are distilled, authoritative notes about **ggui** for the agent (and you)
 working in this scaffolded app. The Claude Code instance here can't read the ggui
 source — so this folder is its local source of truth, alongside the live
-`ggui-docs` MCP (`.mcp.json`) and https://docs.ggui.ai.
+`ggui-dev` MCP (`.mcp.json`) and https://docs.ggui.ai.
 
 `CLAUDE.md` is the map; read these for depth.
 
@@ -17,4 +17,4 @@ source — so this folder is its local source of truth, alongside the live
 | [`theme.example.json`](./theme.example.json) | A schema-valid starter theme — copy, edit `color.primary`, validate. |
 
 Not exhaustive — for protocol internals (the four specs, blueprints, gadgets),
-query the `ggui-docs` MCP or the docs site.
+query the `ggui-dev` MCP or the docs site.

@@ -42,4 +42,4 @@ are the iframe→host plumbing — the model never calls them.)
   things you model in your tool's inputs/outputs.
 
 Deeper protocol detail (the four specs — props/stream/action/context) lives in
-the `ggui-docs` MCP (`.mcp.json`) / https://docs.ggui.ai.
+the `ggui-dev` MCP (`.mcp.json`) / https://docs.ggui.ai.

@@ -111,5 +111,6 @@ Author one with **`/gadget`**, or by hand.
 - [ggui docs](https://ggui.ai/docs) — protocol, blueprints, gadgets, CLI.
 - [OpenAI Agents SDK](https://www.npmjs.com/package/@openai/agents)
 - [ggui on GitHub](https://github.com/ggui-ai/ggui)
-- `.mcp.json` wires `https://mcp.ggui.ai/docs` as a project MCP server so
-  Claude Code can query the ggui docs MCP directly while you work.
+- `.mcp.json` wires `https://mcp.ggui.ai/dev` as a project MCP server so Claude
+  Code can query the ggui dev MCP — docs + protocol tools + (with a connector
+  key) account ops — directly while you work.

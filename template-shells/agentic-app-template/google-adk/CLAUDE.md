@@ -175,9 +175,11 @@ first to see exactly what it will do. Implementation: `scripts/deploy-railway.mj
   can't read ggui's source, so read these first): `ggui-overview.md` (the loop),
   `ggui-tools.md`, `writing-mcp-tools.md`, `ggui-json.md`, `theming.md`
   (+ `theme.example.json`). Index: `.reference/README.md`.
-- **ggui docs MCP** — `.mcp.json` wires `https://mcp.ggui.ai/docs` as the
-  `ggui-docs` project MCP server (pre-approved). Query it for protocol / API /
-  blueprint / gadget details before guessing.
+- **ggui dev MCP** — `.mcp.json` wires `https://mcp.ggui.ai/dev` as the
+  `ggui-dev` project MCP server (pre-approved). One endpoint for docs
+  (search/read), protocol tools (validate blueprints, list primitives, get
+  examples), and — with a ggui connector key — account ops (create apps,
+  manage keys, register blueprints, credits). Query it before guessing.
 - Docs — **https://docs.ggui.ai** · ggui — https://github.com/ggui-ai/ggui
 - Google ADK — https://www.npmjs.com/package/@google/adk
 - Each server's own `README.md` has standalone run instructions.
