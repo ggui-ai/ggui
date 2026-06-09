@@ -96,11 +96,12 @@ export type ArtifactKind = 'gadget' | 'blueprint';
  * Fallback registry URL when neither `--registry`, `GGUI_REGISTRY`,
  * nor a `ggui.json#registry` field is set.
  *
- * Production consumers should resolve their registry explicitly. The
- * `--registry` flag and the `GGUI_REGISTRY` env var always take
- * precedence, so this is a safety net, not a recommendation.
+ * Defaults to the PRODUCTION marketplace registry — an install with no
+ * explicit config must reach the real registry, not a sandbox/dev host. The
+ * `--registry` flag and the `GGUI_REGISTRY` env var always take precedence
+ * (point them at `<env>.registry.sandbox.ggui.ai` for non-prod testing).
  */
-const DEFAULT_REGISTRY_URL = 'https://dev.registry.sandbox.ggui.ai';
+const DEFAULT_REGISTRY_URL = 'https://registry.ggui.ai';
 
 /* -------------------------------------------------------------------------- */
 /* Flag parsing                                                               */

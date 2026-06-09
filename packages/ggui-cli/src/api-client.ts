@@ -255,9 +255,11 @@ export async function createKey(args: {
 export interface AppsCreateResponse {
   appId: string;
   /**
-   * Base app URL WITHOUT the `/mcp` suffix — callers append `/mcp` to form
-   * the agent's ggui MCP endpoint. Carries the deployment-correct host for
-   * this app, so it must be preferred over any reconstructed/hardcoded URL.
+   * The app's MCP endpoint, used VERBATIM as `GGUI_MCP_URL` — `<base>/apps/<appId>`,
+   * with NO `/mcp` suffix. The per-app cloud pod serves the MCP transport at this
+   * bare path; appending `/mcp` (a local `ggui serve` convention) 404s. Carries
+   * the deployment-correct host (prod `mcp.ggui.ai`, sandbox `<env>.mcp.sandbox…`),
+   * so prefer it over any reconstructed/hardcoded URL. See `resolveDeployMcpUrl`.
    */
   connectUrl: string;
   isDefault: boolean;
