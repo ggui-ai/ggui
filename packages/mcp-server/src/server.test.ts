@@ -24,6 +24,7 @@ import {
   MockEmbeddingProvider,
 } from '@ggui-ai/mcp-server-core/in-memory';
 import { createGguiServer, type GguiServer } from './server.js';
+import type { HandlerContext } from '@ggui-ai/mcp-server-handlers';
 
 interface BootedFixture {
   server: GguiServer;
@@ -1542,6 +1543,86 @@ describe('createGguiServer — mcpServices (Slice 8.0 isolated services)', () =>
       }),
     });
     expect(res.status).toBe(401);
+  });
+
+  // ── Auth-OPTIONAL on anonymous services ──
+  // An anonymous service must still RESOLVE a presented bearer to its
+  // real identity (so it can offer authenticated capabilities, e.g.
+  // mcp.ggui.ai/dev's ops tools that read ctx.userId), falling back to the
+  // synthesized builder only when no/invalid credentials are presented.
+  // Regression lock: a prior impl short-circuited to `builder` for EVERY
+  // request on an anonymous service, silently dropping a valid bearer.
+  const whoamiTool = {
+    name: 'whoami',
+    description: 'Echo the resolved identity for this request.',
+    inputSchema: {},
+    outputSchema: { userId: z.string().nullable(), appId: z.string() },
+    handler: async (_input: Record<string, unknown>, ctx: HandlerContext) => ({
+      userId: ctx.userId ?? null,
+      appId: ctx.appId,
+    }),
+  };
+
+  async function connectAnonAt(url: string, token: string | null): Promise<Client> {
+    const transport = new StreamableHTTPClientTransport(new URL(`${url}/devlike`), {
+      requestInit: token ? { headers: { Authorization: `Bearer ${token}` } } : {},
+    });
+    const client = new Client({ name: 'test-client', version: '0' }, { capabilities: {} });
+    await client.connect(transport);
+    return client;
+  }
+
+  function anonServiceBoot() {
+    return boot({
+      auth: new InMemoryAuthAdapter({
+        devAllowAll: false,
+        seedTokens: [
+          {
+            token: 'user-token',
+            result: { identity: { kind: 'user', userId: 'u-123', roles: [] }, source: 'apikey' },
+          },
+        ],
+      }),
+      mcpServices: [
+        { name: 'devlike', path: '/devlike', handlers: [whoamiTool], anonymous: true },
+      ],
+    });
+  }
+
+  it('anonymous: true RESOLVES a present valid bearer to the real identity (ctx.userId set)', async () => {
+    fx = await anonServiceBoot();
+    const client = await connectAnonAt(fx.url, 'user-token');
+    try {
+      const r = await client.callTool({ name: 'whoami', arguments: {} });
+      expect(r.structuredContent).toMatchObject({ userId: 'u-123' });
+    } finally {
+      await client.close();
+    }
+  });
+
+  it('anonymous: true falls back to the builder identity when NO bearer is presented', async () => {
+    fx = await anonServiceBoot();
+    const client = await connectAnonAt(fx.url, null);
+    try {
+      const r = await client.callTool({ name: 'whoami', arguments: {} });
+      expect(r.structuredContent).toMatchObject({ userId: null, appId: 'builder' });
+    } finally {
+      await client.close();
+    }
+  });
+
+  it('anonymous: true falls back to builder on an INVALID bearer (no 401 — public reads still work)', async () => {
+    fx = await anonServiceBoot();
+    // A bad token must NOT 401 the connect — it downgrades to anonymous so
+    // docs/protocol reads work; an ops tool would then 401 via its own
+    // handler-level auth gate (ctx.userId absent), not at the transport.
+    const client = await connectAnonAt(fx.url, 'WRONG-TOKEN');
+    try {
+      const r = await client.callTool({ name: 'whoami', arguments: {} });
+      expect(r.structuredContent).toMatchObject({ userId: null, appId: 'builder' });
+    } finally {
+      await client.close();
+    }
   });
 });
 

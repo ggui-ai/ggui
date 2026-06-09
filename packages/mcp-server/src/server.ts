@@ -4443,20 +4443,24 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
           : randomUUID();
       const reqLogger = logger.child({ requestId });
 
+      // Auth is OPTIONAL on anonymous services and REQUIRED otherwise.
+      // Always attempt to resolve a presented credential: an anonymous
+      // service with a valid bearer still resolves to the real identity
+      // (so it can offer authenticated capabilities — e.g. `/dev`'s ops
+      // tools read `ctx.userId`), while a missing/unauthenticated
+      // credential falls back to the synthesized anonymous builder so
+      // public reads (docs, protocol) work bearer-less. This is what makes
+      // `source: 'anonymous'` distinguishable from an authenticated caller,
+      // per the `McpService.anonymous` contract — resolving a present
+      // bearer is the only way a handler can tell the two apart.
       let identity: AuthResult;
-      if (handlerOpts?.anonymous) {
-        // Anonymous-mode services bypass the auth chain. Synthesize an
-        // identity so every downstream consumer (HandlerContext, MCP
-        // server build, logger metadata) sees the same shape it would
-        // for any other request — the only difference is `source` =
-        // `'anonymous'`, which handlers may read if they need to gate
-        // sensitive paths (e.g. writes) even on a public service.
-        identity = { identity: { kind: "builder" }, source: "anonymous" };
-      } else {
-        try {
-          identity = await resolveIdentity(auth, req);
-        } catch (err) {
-          if (err instanceof UnauthenticatedError) {
+      try {
+        identity = await resolveIdentity(auth, req);
+      } catch (err) {
+        if (err instanceof UnauthenticatedError) {
+          if (handlerOpts?.anonymous) {
+            identity = { identity: { kind: "builder" }, source: "anonymous" };
+          } else {
             reqLogger.warn("auth_failed", { reason: err.message });
             // OAuth-discovery clients (Claude Desktop, claude.ai, etc.)
             // read this header to find the resource-metadata URL and
@@ -4483,6 +4487,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
             });
             return;
           }
+        } else {
           reqLogger.error("auth_unexpected_error", { error: String(err) });
           res.status(500).json({
             jsonrpc: "2.0",
