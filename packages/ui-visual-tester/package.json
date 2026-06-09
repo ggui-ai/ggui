@@ -1,6 +1,6 @@
 {
   "name": "@ggui-ai/ui-visual-tester",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "description": "Behavioral validator for ggui-generated component code. Renders a component in real Chromium via Playwright, clicks each action declared in its contract, and verifies the action actually does something — mutating bound state or dispatching to the agent. Catches buttons wired to no-op handlers that structural validators miss. Playwright is an optional peer dependency, injected by the caller.",
   "keywords": [
     "ggui",

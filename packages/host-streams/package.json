@@ -1,6 +1,6 @@
 {
   "name": "@ggui-ai/host-streams",
-  "version": "0.1.0-rc.1",
+  "version": "0.3.0",
   "private": true,
   "description": "Host-side stream mediator for ggui. Lets an MCP Apps host own a single WebSocket connection (with polling fallback) and fan each channel frame to the right iframe via postMessage, instead of every iframe opening its own socket.",
   "keywords": [

@@ -1,6 +1,6 @@
 {
   "name": "@ggui-ai/mcp-server-handlers",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "description": "MCP tool handler logic for the ggui protocol. Pure over @ggui-ai/mcp-server-core seams and consumed by @ggui-ai/mcp-server. Never imports AWS, HTTP transports, or CLI concerns.",
   "keywords": [
     "ggui",

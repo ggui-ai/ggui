@@ -1,6 +1,6 @@
 {
   "name": "@ggui-ai/react",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "description": "React SDK for ggui — components and hooks for embedding agent-generated UIs in web apps.",
   "keywords": [
     "ggui",

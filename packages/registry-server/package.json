@@ -1,6 +1,6 @@
 {
   "name": "@ggui-ai/registry-server",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "description": "Self-hostable HTTP server for the ggui marketplace registry. Wraps @ggui-ai/registry-core with hono, filesystem storage, and bearer-token auth. Run via npx for local dev, CI, and on-prem deployments.",
   "keywords": [
     "ggui",
