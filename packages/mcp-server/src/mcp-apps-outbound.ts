@@ -1439,11 +1439,17 @@ export function registerGguiRenderResourceTemplate(
         // state).
         let wsUrl: string | undefined;
         let wsToken: string | undefined;
+        let wsExpiresAt: string | undefined;
         if (opts.mintWsToken) {
           try {
             const minted = opts.mintWsToken(sessionId, stored.appId);
             wsUrl = minted.wsUrl;
             wsToken = minted.token;
+            // Forward the token TTL so the iframe-runtime can degrade to
+            // static-only mode once it lapses (parity with the render-tool
+            // slice projection, render.ts). Dropping it left the live-mode
+            // resource shell unable to know when its WS token expired.
+            wsExpiresAt = minted.expiresAt;
           } catch {
             // Silent — falls back to static-component mode.
           }
@@ -1474,7 +1480,11 @@ export function registerGguiRenderResourceTemplate(
                 {}),
           runtimeUrl: opts.runtimeUrl,
           ...(wsUrl !== undefined && wsToken !== undefined
-            ? { wsUrl, token: wsToken }
+            ? {
+                wsUrl,
+                token: wsToken,
+                ...(wsExpiresAt !== undefined ? { expiresAt: wsExpiresAt } : {}),
+              }
             : {}),
           ...(opts.themeId !== undefined ? { themeId: opts.themeId } : {}),
           ...(opts.themeMode !== undefined ? { themeMode: opts.themeMode } : {}),
