@@ -75,6 +75,15 @@ EOF
   # as a `[ggui:cache-trace]` JSON line — the diagnostic the cache-hit spec
   # dumps via app.stdout() to see WHY a semantic match did/didn't propose.
   echo "GGUI_CACHE_TRACE_STDERR=1"
+  # Cross-deployment cloud-render capstone (env-gated; unset → local ggui). When
+  # GGUI_MCP_URL is a remote pod URL the template dev.mjs's `isRemoteGguiUrl`
+  # SKIPS the local ggui service and the agent (which reads GGUI_MCP_BEARER from
+  # this file via dotenv) authenticates to the deployed `mcp.ggui.ai/apps/<id>`.
+  # The todo MCP (6782) stays local — only UI generation moves to the cloud pod.
+  if [ -n "${GGUI_MCP_URL:-}" ]; then
+    echo "GGUI_MCP_URL=$GGUI_MCP_URL"
+    if [ -n "${GGUI_MCP_BEARER:-}" ]; then echo "GGUI_MCP_BEARER=$GGUI_MCP_BEARER"; fi
+  fi
 } > "$APP_DIR/.env.local"
 
 # ── Cross-deployment seed-pool e2e wiring (env-gated) ─────────────────────────

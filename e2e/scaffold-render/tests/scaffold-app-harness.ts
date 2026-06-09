@@ -99,11 +99,14 @@ async function isAnswering(url: string): Promise<boolean> {
   }
 }
 
-async function assertPortsFree(): Promise<void> {
+async function assertPortsFree(remoteGgui = false): Promise<void> {
   // A stale server from a sibling worktree on 6781/6890 would make our
   // readiness poll latch onto the WRONG process (a false green). Fail loudly
-  // before booting. (See the e2e-stale-servers-across-worktrees hazard.)
-  for (const port of [GGUI_PORT, WEB_PORT]) {
+  // before booting. (See the e2e-stale-servers-across-worktrees hazard.) In
+  // remote-ggui (cloud) mode the local ggui (6781) is never booted, so only
+  // the web port matters.
+  const guardedPorts = remoteGgui ? [WEB_PORT] : [GGUI_PORT, WEB_PORT];
+  for (const port of guardedPorts) {
     if (await isAnswering(`http://localhost:${port}`)) {
       throw new Error(
         `port ${port} is already answering before boot — a stale ggui/dev server ` +
@@ -129,8 +132,21 @@ export async function spawnScaffoldedApp(opts: {
    * its blueprints are reused by exact contract match. Default: no shared pool.
    */
   seedPoolDir?: string;
+  /**
+   * Point the scaffolded app's agent at a REMOTE ggui MCP endpoint (the
+   * `ggui deploy` flow) instead of spawning a local `ggui serve`. When set,
+   * `scaffold-and-boot.sh` writes `GGUI_MCP_URL` + `GGUI_MCP_BEARER` into the
+   * app's `.env.local`; the template `dev.mjs`'s `isRemoteGguiUrl` then SKIPS
+   * the local ggui service (only mcps/agent/web boot) and the agent
+   * authenticates to the remote pod with the bearer. Used by the
+   * cross-deployment cloud-render capstone (monorepo-only) to drive the
+   * deployed `mcp.ggui.ai/apps/<appId>` through the real browser loop.
+   * Default: unset → boots a local ggui (existing behavior, unchanged).
+   */
+  cloudGgui?: { readonly mcpUrl: string; readonly bearer: string };
 }): Promise<ScaffoldAppHandle> {
-  await assertPortsFree();
+  const remote = opts.cloudGgui;
+  await assertPortsFree(remote !== undefined);
   const tpl = await ensureSetup();
   const bootStart = Date.now();
   const appBase = mkdtempSync(join(tmpdir(), `app-${opts.sdk}-`));
@@ -151,6 +167,12 @@ export async function spawnScaffoldedApp(opts: {
       // `--seed-pool <dir>` to the ggui start script.
       ...(opts.sqliteVectors ? { GGUI_STORAGE_SQLITE: '1' } : {}),
       ...(opts.seedPoolDir !== undefined ? { GGUI_SEED_POOL: opts.seedPoolDir } : {}),
+      // Cross-deployment cloud-render capstone (env-gated; unset → local ggui).
+      // scaffold-and-boot.sh writes these to .env.local; the template dev.mjs's
+      // isRemoteGguiUrl skips the local ggui service and the agent (which reads
+      // GGUI_MCP_BEARER) authenticates to the remote pod. Pass them as real env
+      // vars too so dev.mjs (which reads process.env.GGUI_MCP_URL) sees them.
+      ...(remote ? { GGUI_MCP_URL: remote.mcpUrl, GGUI_MCP_BEARER: remote.bearer } : {}),
     },
     stdio: ['ignore', 'pipe', 'pipe'],
     detached: true,
@@ -163,11 +185,15 @@ export async function spawnScaffoldedApp(opts: {
   });
 
   const webUrl = `http://localhost:${WEB_PORT}`;
-  const gguiUrl = `http://localhost:${GGUI_PORT}`;
+  // In remote-ggui (cloud) mode the local ggui service is skipped, so its URL
+  // is the remote pod endpoint and nothing binds 6781 locally.
+  const gguiUrl = remote ? remote.mcpUrl : `http://localhost:${GGUI_PORT}`;
   // Wait for BOTH web (render scenario) AND ggui (cache-hit hits it directly).
   // The 4 servers boot in parallel; ggui can lag web, so a web-only wait races
-  // the cache-hit's first MCP call → ECONNREFUSED on 6781.
-  const ready = await waitForReady([webUrl, gguiUrl], child, () => buf);
+  // the cache-hit's first MCP call → ECONNREFUSED on 6781. In remote mode only
+  // web/agent/mcps boot locally — wait on web alone (the remote pod is already up).
+  const readyUrls = remote ? [webUrl] : [webUrl, gguiUrl];
+  const ready = await waitForReady(readyUrls, child, () => buf);
   if (!ready) {
     await killGroup(child);
     throw new Error(
