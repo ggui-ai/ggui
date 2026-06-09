@@ -4,10 +4,32 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
   planDeploySteps,
+  resolveDeployMcpUrl,
   upsertEnvLocal,
   readEnvLocalValue,
   type DeployState,
 } from './deploy-command.js';
+
+describe('resolveDeployMcpUrl', () => {
+  it('uses the connectUrl VERBATIM — the bare per-app endpoint, no /mcp suffix', () => {
+    // The per-app cloud pod serves MCP at the bare endpoint; a /mcp suffix 404s.
+    expect(resolveDeployMcpUrl('https://ggui-main.mcp.sandbox.ggui.ai/apps/abc123', 'abc123')).toBe(
+      'https://ggui-main.mcp.sandbox.ggui.ai/apps/abc123',
+    );
+    expect(resolveDeployMcpUrl('https://mcp.ggui.ai/apps/xyz', 'xyz')).toBe(
+      'https://mcp.ggui.ai/apps/xyz',
+    );
+  });
+
+  it('falls back to the PRODUCTION bare per-app URL when no connectUrl this session', () => {
+    expect(resolveDeployMcpUrl(undefined, 'app_1')).toBe('https://mcp.ggui.ai/apps/app_1');
+  });
+
+  it('NEVER appends /mcp (regression: the per-app pod serves MCP at the bare root)', () => {
+    expect(resolveDeployMcpUrl('https://mcp.ggui.ai/apps/x', 'x')).not.toMatch(/\/mcp$/);
+    expect(resolveDeployMcpUrl(undefined, 'x')).not.toMatch(/\/mcp$/);
+  });
+});
 
 describe('planDeploySteps', () => {
   it('full first deploy: all three gates missing → login+create-app+mint-key+push+push-config+wire-env', () => {

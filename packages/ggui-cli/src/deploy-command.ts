@@ -74,6 +74,27 @@ export function planDeploySteps(input: DeployInput): DeployStep[] {
   return steps;
 }
 
+/**
+ * Resolve the `GGUI_MCP_URL` value `ggui deploy` wires into `.env.local`.
+ *
+ * The per-app cloud pod serves the MCP transport at the BARE per-app endpoint
+ * `<base>/apps/<appId>` (the `connectUrl` the backend advertises) — NOT a
+ * `/mcp` sub-path. The `/mcp` suffix is the LOCAL `ggui serve` convention;
+ * appending it here produced a URL the per-app pod 404s, so the agent (which
+ * reads GGUI_MCP_URL verbatim) could never connect to a deployed app.
+ *
+ *   - `connectUrl` present (a create-app ran this session) → use it VERBATIM —
+ *     the deployment-correct base (prod `mcp.ggui.ai`, sandbox
+ *     `<env>.mcp.sandbox.ggui.ai`, derived from whichever backend `GGUI_API_URL`
+ *     pointed at).
+ *   - absent → the PRODUCTION default `https://mcp.ggui.ai/apps/<appId>`.
+ *
+ * The caller leaves any pre-existing `GGUI_MCP_URL` untouched (env override).
+ */
+export function resolveDeployMcpUrl(connectUrl: string | undefined, appId: string): string {
+  return connectUrl ?? `https://mcp.ggui.ai/apps/${appId}`;
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // .env.local upsert helper
 // ─────────────────────────────────────────────────────────────────────────────
@@ -375,14 +396,12 @@ export async function runDeployCommand(_args: readonly string[]): Promise<number
           );
           break;
         }
-        // No prior value. Prefer the connectUrl from a create-app this
-        // session (deployment-correct base); otherwise fall back to the
-        // PRODUCTION default. The fallback only fires when there's no prior
-        // URL AND create-app didn't run this session — a non-prod first
-        // deploy always has connectUrl, so it never reaches the fallback.
-        const mcpUrl = connectUrl
-          ? `${connectUrl}/mcp`
-          : `https://mcp.ggui.ai/apps/${appId}/mcp`;
+        // No prior value → resolve the deployment-correct BARE per-app URL
+        // (see resolveDeployMcpUrl: the per-app pod serves MCP at the bare
+        // endpoint, never `/mcp`). The fallback to the production default only
+        // fires when create-app didn't run this session — a first deploy always
+        // has connectUrl, so it never reaches the fallback in practice.
+        const mcpUrl = resolveDeployMcpUrl(connectUrl, appId);
         upsertEnvLocal(envLocalPath, 'GGUI_MCP_URL', mcpUrl);
         process.stdout.write(`  GGUI_MCP_URL=${mcpUrl}\n`);
         break;
