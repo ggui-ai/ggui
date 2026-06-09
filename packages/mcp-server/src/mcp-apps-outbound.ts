@@ -1405,14 +1405,14 @@ export function registerGguiRenderResourceTemplate(
             // validators (server-side gate is authoritative).
           }
         }
-        if (!isSystem && codeUrl === undefined) {
-          // Compiled-component render but no codeUrl channel available
-          // — emit the loading shell so the operator can refresh once
-          // codeStore is wired. Direct-render `/r/<shortCode>` falls
-          // through to live-mode instead; this MCP-resource path has
-          // no WS-mode fallback (resources/read is one-shot).
-          return loadingShell(uri, sessionId);
-        }
+        // The codeUrl gate is applied AFTER the live-channel mint below, so
+        // a render with no static codeUrl still mounts via live-mode
+        // (wsUrl + wsToken) instead of stalling on the loading shell —
+        // parity with the `/r/<shortCode>` path. (See the gate after the
+        // mint.) This matters for deployments that wire `mintWsToken` but no
+        // `codeStore`/`codeBaseUrl` (e.g. the cloud pod): the agent-server
+        // inlines THIS resource, so without the fallback every cloud render
+        // hung on the dead "Generating UI…" shell.
 
         // Project the wrapper catalog AND the union-filtered
         // publicEnv onto the inline bootstrap so the resource-served
@@ -1449,15 +1449,29 @@ export function registerGguiRenderResourceTemplate(
           }
         }
 
+        // Mount-mode gate (moved below the live-channel mint): emit the
+        // loading shell ONLY when NEITHER a static codeUrl channel NOR a
+        // live-channel wsToken is available. A deployment that wires no
+        // codeStore (codeUrl === undefined) but DOES wire mintWsToken now
+        // mounts via live-mode rather than hanging on "Generating UI…".
+        if (!isSystem && codeUrl === undefined && (wsUrl === undefined || wsToken === undefined)) {
+          return loadingShell(uri, sessionId);
+        }
+
         const html = buildSelfContainedShell({
           sessionId,
           appId: stored.appId,
           ...(isSystem
             ? { systemKind: picked.kind }
-            : {
-                codeUrl: codeUrl!,
-                ...(codeHash !== undefined ? { codeHash } : {}),
-              }),
+            : codeUrl !== undefined
+              ? {
+                  codeUrl,
+                  ...(codeHash !== undefined ? { codeHash } : {}),
+                }
+              : // No static codeUrl → live-mode (wsUrl + token spread below)
+                // carries the render; buildSelfContainedShell accepts
+                // live-mode without codeUrl.
+                {}),
           runtimeUrl: opts.runtimeUrl,
           ...(wsUrl !== undefined && wsToken !== undefined
             ? { wsUrl, token: wsToken }
