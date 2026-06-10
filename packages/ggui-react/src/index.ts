@@ -93,16 +93,13 @@ export type {
   // classifying iframe-origin failures.
   RendererBootFailedMessage,
   // `<AppRenderer onError>` emission union. Embedding apps
-  // pattern-match on `event.kind` (`wired-tool-invoked` /
-  // `contract-error-emitted` / `schema-version-mismatch` /
+  // pattern-match on `event.kind` (`schema-version-mismatch` /
   // `subscribe-failed` / `auth-required` / unknown tail). Re-exported
   // here so host apps wiring the onError callback don't need a
   // direct `@ggui-ai/iframe-runtime` import; same boundary posture as
   // `ProtocolError` above.
   ObservabilityEvent,
   ObservabilityMessage,
-  WiredToolInvokedEvent,
-  ContractErrorEmittedEvent,
   SchemaVersionMismatchEvent,
   SubscribeFailedEvent,
   AuthRequiredEvent,

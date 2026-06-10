@@ -35,11 +35,10 @@ import {
 
 // --- Consumer-side classifier (mirrors console/RenderInspector) ---
 
-type ActivityTab = 'All' | 'Actions' | 'Errors' | 'Version' | 'Subscribe';
+type ActivityTab = 'All' | 'Auth' | 'Version' | 'Subscribe';
 
 function observabilityCategoryOf(kind: string): ActivityTab | undefined {
-  if (kind === 'wired-tool-invoked') return 'Actions';
-  if (kind === 'contract-error-emitted') return 'Errors';
+  if (kind === 'auth-required') return 'Auth';
   if (kind === 'schema-version-mismatch') return 'Version';
   if (kind === 'subscribe-failed') return 'Subscribe';
   return undefined;
@@ -48,7 +47,7 @@ function observabilityCategoryOf(kind: string): ActivityTab | undefined {
 describe('C12 observability integration — renderer → host → classifier', () => {
   /**
    * Stand up a host-side postMessage listener, run a renderer-side
-   * emit for each of the four canonical kinds, and assert every
+   * emit for each of the three canonical kinds, and assert every
    * event lands in its declared tab bucket.
    */
   it('every emitted kind reaches the classifier with the right category', async () => {
@@ -69,16 +68,9 @@ describe('C12 observability integration — renderer → host → classifier', (
     try {
       const emissions: ObservabilityEvent[] = [
         {
-          kind: 'wired-tool-invoked',
-          toolName: 'tasks.create_tool',
-          actionName: 'tasks.create',
-          dispatchedAt: '2026-04-23T00:00:00.000Z',
-        },
-        {
-          kind: 'contract-error-emitted',
-          code: 'TOOL_THREW',
-          toolName: 'tasks.create_tool',
-          actionName: 'tasks.create',
+          kind: 'auth-required',
+          provider: 'google',
+          authUrl: 'https://credentials.example.com/oauth/initiate?service=google',
         },
         {
           kind: 'schema-version-mismatch',
@@ -107,8 +99,7 @@ describe('C12 observability integration — renderer → host → classifier', (
         tab: observabilityCategoryOf(e.kind),
       }));
       expect(pairs).toEqual([
-        { kind: 'wired-tool-invoked', tab: 'Actions' },
-        { kind: 'contract-error-emitted', tab: 'Errors' },
+        { kind: 'auth-required', tab: 'Auth' },
         { kind: 'schema-version-mismatch', tab: 'Version' },
         { kind: 'subscribe-failed', tab: 'Subscribe' },
       ]);

@@ -50,7 +50,6 @@ import {
   fromClientContractViolation,
   type ProtocolErrorEmitter,
 } from './protocol-error.js';
-import type { ObservabilityEmitter } from './observability.js';
 
 // =============================================================================
 // StreamBus — the in-renderer bridge between inbound `data` frames
@@ -186,9 +185,9 @@ export interface BuildRootWireConfigOptions {
   /**
    * Read the currently-mounted {@link GguiSession}. The config's `dispatch`
    * resolves the active render's `actionSpec` through this thunk so
-   * the `tool` + outbound validator stay coherent across props_update
-   * patches (which replace the render reference) without rebuilding
-   * the WireConfig.
+   * the outbound validator stays coherent across props_update patches
+   * (which replace the render reference) without rebuilding the
+   * WireConfig.
    */
   readonly getCurrentGguiSession: () => GguiSession | GguiSessionSeedInput | null;
   /** Handle to the renderer's WS manager; used for outbound `action` + `feedback` frames. */
@@ -225,20 +224,6 @@ export interface BuildRootWireConfigOptions {
    */
   readonly onProtocolError?: ProtocolErrorEmitter;
   /**
-   * Optional {@link ObservabilityEmitter} sink. Fires a
-   * `wired-tool-invoked` event every time {@link dispatchByItem}
-   * successfully sends a wired-action envelope (i.e. the ctx's
-   * resolved `tool` is populated AND outbound validation passed).
-   *
-   * The event is client-side — `dispatchedAt` records when the
-   * envelope left the renderer, NOT when the server's router
-   * completed the tool. The SERVER independently emits a
-   * `wired-tool.invoked` telemetry event on its own sink for
-   * operational metrics; the two surfaces are deliberately separate
-   * (host inspector vs operator telemetry).
-   */
-  readonly onObserve?: ObservabilityEmitter;
-  /**
    * Optional outbound action sink. When provided, REPLACES the
    * default WS-frame send (`manager.send({type:'action', payload})`).
    *
@@ -252,8 +237,7 @@ export interface BuildRootWireConfigOptions {
    * wakes the agent.
    *
    * The default `manager.send({type:'action'})` path writes to the
-   * render ledger only — it has no downstream consumer in OSS (no
-   * `wiredActionRouter`, no bridge to `pendingEventConsumer`).
+   * render ledger only — it has no bridge to `pendingEventConsumer`.
    * Production callers MUST supply this option to reach the agent.
    *
    * Called AFTER outbound validation passes. Receives the validated
@@ -292,7 +276,6 @@ export function buildRootWireConfig(
 
   const emitProtocolError: ProtocolErrorEmitter =
     opts.onProtocolError ?? defaultProtocolErrorEmitter;
-  const emitObserve: ObservabilityEmitter = opts.onObserve ?? (() => {});
 
   function surfaceViolation(err: ClientContractViolationError): void {
     // Dual emission — the narrow `onContractViolation` sink stays
@@ -322,8 +305,8 @@ export function buildRootWireConfig(
     dispatch: (actionName, data) => {
       // Resolve the active render's actionSpec on every dispatch.
       // Per-render lifecycle: props_update patches replace the render
-      // reference; reading through the thunk keeps the tool binding
-      // + outbound validator coherent without rebuilding the config.
+      // reference; reading through the thunk keeps the outbound
+      // validator coherent without rebuilding the config.
       const currentRender = opts.getCurrentGguiSession();
       const activeActionSpec =
         currentRender !== null &&
@@ -331,16 +314,16 @@ export function buildRootWireConfig(
         currentRender.type !== 'system'
           ? currentRender.actionSpec
           : undefined;
-      const entry = activeActionSpec?.[actionName];
-      const tool = entry?.nextStep;
 
+      // The envelope carries `action` + `data` only. The agent-facing
+      // `tool` hint on the consume event is derived SERVER-side from
+      // the render's `actionSpec[name].nextStep` at event-build time.
       const envelope = buildActionEnvelope({
         sessionId: opts.sessionId,
         type: 'data:submit',
         payload: {
           action: actionName,
           data: data as JsonValue,
-          ...(tool ? { tool } : {}),
         },
         clientSeq: nextSeq(),
       });
@@ -360,20 +343,6 @@ export function buildRootWireConfig(
         opts.onDispatchEnvelope(envelope);
       } else {
         sendActionEnvelope(opts.manager, envelope);
-      }
-      // Observability: a wired-tool dispatch is a `data:submit` whose
-      // resolved action has a `tool` binding. Plain agent-routed actions
-      // (no `tool` on the actionSpec) fire a `dispatch` activity row in
-      // the console via the render-side ring buffer; only wired tools
-      // get this observability event. The server separately emits the
-      // operational telemetry variant on its TelemetrySink.
-      if (tool !== undefined) {
-        emitObserve({
-          kind: 'wired-tool-invoked',
-          toolName: tool,
-          actionName,
-          dispatchedAt: new Date().toISOString(),
-        });
       }
     },
     subscribe: (channelName, handler) => {

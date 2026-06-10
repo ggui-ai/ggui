@@ -219,7 +219,7 @@ export type ConnectAppResult =
 
 /**
  * Vestigial JSON-RPC response shape — still referenced by the legacy
- * `postRpcToParent` helper used by `dispatchWiredAction` and the
+ * `postRpcToParent` helper used by `dispatchSubmitAction` and the
  * channel-transport router. Phase 1.19b.3 migrates those to
  * `app.callServerTool` in a follow-on sub-phase; until then keep the
  * interface here so the helper signatures still typecheck.
@@ -253,7 +253,7 @@ function createDefaultApp(): { app: App; transport: Transport } {
  * hand-rolled JSON-RPC pump.
  *
  * `null` between the moment the module loads and the moment one of
- * the boot paths assigns it — `dispatchWiredAction`'s callsites are
+ * the boot paths assigns it — `dispatchSubmitAction`'s callsites are
  * gated on this, so calls fired pre-boot drop with a console warning.
  */
 let currentApp: App | null = null;
@@ -425,17 +425,14 @@ export interface BootSequenceOptions {
    * Optional {@link ObservabilityEmitter} sink. Fires for every
    * renderer-observed event flow the host inspector cares about:
    *
-   *   - `contract-error-emitted` — whenever a `_ggui:contract-error`
-   *     envelope arrives on the live channel.
    *   - `schema-version-mismatch` — forwarded from subscribe's own
    *     emission on UPGRADE_REQUIRED.
    *   - `subscribe-failed` — forwarded from subscribe's emission on
    *     transient reconnect transitions.
-   *
-   * `wired-tool-invoked` is emitted from the wire config's outbound
-   * dispatch path (see `buildRootWireConfig`'s `onObserve`), NOT from
-   * here — the `data:submit` envelope hasn't passed through this
-   * handler when it fires.
+   *   - `auth-required` — fired by the system channel handler when an
+   *     `auth_required` system frame arrives.
+   *   - `channel-transport-*` — fired by the channel-transport router
+   *     on per-channel transport picks / fallbacks / resubscribes.
    *
    * Absent = observability emission skipped entirely (matches the
    * ProtocolError posture; the `<McpAppIframe>` host wrapper decides
@@ -518,11 +515,11 @@ export interface RendererHooks {
    * with `StackRenderer`.
    *
    * `onObserve` — optional observability emitter threaded down to
-   * the root wire config so `wired-tool-invoked` events fire on
-   * every successful outbound wired-action dispatch. Absent = the
-   * wire config runs with a no-op observer (the other emission sites
-   * — subscribe.ts, handleObservableMessage — still fire via their
-   * own emitters).
+   * the channel handlers (system `auth-required`) and the
+   * channel-transport router (`channel-transport-*`). Absent = those
+   * sites run silent (the connect-time emission sites —
+   * `connectViaRegistry`'s version + subscribe events — still fire
+   * via their own emitters).
    */
   setup(params: {
     readonly meta: ValidatedMcpAppAiGguiMeta;
@@ -701,7 +698,7 @@ export async function bootSequence(opts: BootSequenceOptions): Promise<BootSeque
   }
 
   // Connected — expose the App on the module-level slot so outbound
-  // `tools/call` (dispatchWiredAction, channel-transport router)
+  // `tools/call` (dispatchSubmitAction, channel-transport router)
   // routes through `app.callServerTool` instead of the legacy raw
   // postMessage pump. Idempotent: re-boot with the same App is a
   // no-op; a different App throws (the iframe is single-tenant).
@@ -1001,9 +998,8 @@ export async function bootSequence(opts: BootSequenceOptions): Promise<BootSeque
       // + version + protocol errors on its own, we just plumb them
       // along.
       ...(onProtocolError !== undefined ? { onProtocolError } : {}),
-      // Forward observability emissions (schema-version-mismatch,
-      // subscribe-failed). The renderer owns `contract-error-emitted`
-      // via the data channel handler; connectFn owns the other two.
+      // Forward observability emissions — connectFn owns the
+      // schema-version-mismatch + subscribe-failed kinds.
       ...(onObserve !== undefined ? { onObserve } : {}),
       // Reconnect-with-rebootstrap — on every ack received AFTER the
       // initial handshake settled, reapply the server's authoritative
@@ -1149,15 +1145,13 @@ function createPlaceholderRegistry(params: {
  * `props_update`, `drain_ack`, `feedback`, `channel_payload`,
  * `channel_error`, `system`) has a registered handler in
  * `channels/*.ts`; the registry's bound transport routes inbound
- * frames directly to them. Observability emissions
- * (`contract-error-emitted`, `auth-required`) are now inside the
- * data + system handlers respectively.
+ * frames directly to them. Observability emission (`auth-required`)
+ * is inside the system handler.
  *
  * The pre-B3b helpers (`handleServerMessage`, `handleRendererMessage`,
- * `handleObservableMessage`, `emitContractErrorFromDataFrame`,
- * `emitAuthRequiredFromSystemFrame`, `BufferedManagerShim`) lived
- * here and have been retired — see commit message + plan B3b for the
- * full retirement notes.
+ * `handleObservableMessage`, `emitAuthRequiredFromSystemFrame`,
+ * `BufferedManagerShim`) lived here and have been retired — see
+ * commit message + plan B3b for the full retirement notes.
  */
 
 /**
@@ -1499,7 +1493,7 @@ let anchorClickInterceptInstalled = false;
 let fullscreenInterceptInstalled = false;
 
 /**
- * Compute a short deterministic action-id from a wired-action
+ * Compute a short deterministic action-id from a submit-action
  * payload. FNV-1a 32-bit, 8 hex chars — not cryptographically
  * strong, just collision-resistant enough for in-flight
  * correlation between the silent context-update and the loud
@@ -1515,7 +1509,7 @@ function fnv1aHex(payload: string): string {
 }
 
 /**
- * Render a wired-action's `data` payload as a short inline string
+ * Render a submit-action's `data` payload as a short inline string
  * for embedding in a `ui/message` consent prompt. Goal: human-
  * readable, not a JSON dump. Falls back to truncated JSON for
  * nested values so the prompt doesn't drop information silently.
@@ -1526,7 +1520,7 @@ function fnv1aHex(payload: string): string {
  * the LLM think every dispatch was a contentless "Please proceed
  * with **<intent>**" request.
  */
-export function formatWiredActionDataInline(data: unknown): string {
+export function formatSubmitActionDataInline(data: unknown): string {
   if (data === null || data === undefined) return '';
   // Bare primitives: render verbatim. Strings unquoted (most legible
   // in a "Please proceed with X (foo)" sentence). Numbers / booleans
@@ -1556,37 +1550,6 @@ export function formatWiredActionDataInline(data: unknown): string {
   return parts.join(', ');
 }
 
-/**
- * Dispatch a wired-action via the empirically-validated bridge
- * chain (validated against claude.ai):
- *
- *   1. `tools/call` to {@link toolName} with the action envelope
- *      — server-side gateway log + audit. Hosts MUST honor
- *      `_meta.ui.visibility:['app']` per spec §401, otherwise the
- *      call is silently rejected (probe found this empirically).
- *   2. `ui/update-model-context` (silent) — drops a structured
- *      `[ggui:pending-action]` payload into the LLM's persistent
- *      context. Carries the exact intent + data + actionId so the
- *      LLM has unambiguous tool args (no natural-language
- *      paraphrase risk).
- *   3. `ui/message` (consent prompt) — natural-language
- *      authorization the user confirms in chat. Spec §1032 + §401
- *      together: this is the prompt-injection firewall — the
- *      iframe can ASK the LLM to act, but the user is the one who
- *      introduces the message into the LLM's context.
- *
- * Why all three: the probe empirically proved that `tools/call`
- * alone never reaches the LLM (host-side scope:['app'] firewall),
- * and `ui/message` alone forces the LLM to parse natural language
- * for tool args (lossy + hallucination-prone). Pairing them with
- * a hash-bound id (#3) gives the LLM both verifiable args AND
- * explicit user authorization.
- *
- * Parts 2+3 fail-soft: if the host rejects either, the user can
- * still observe the click via #1's audit log on the server side,
- * but the LLM won't act on it. Acceptable degraded UX vs. the
- * pre-bridge "silent button click" status quo.
- */
 /**
  * Post an arbitrary JSON-RPC envelope to the iframe's parent
  * window. Internal helper shared across {@link emitAudit} (the
@@ -1740,10 +1703,10 @@ async function callServerToolSpec(
  * Fire a single canonical action envelope (`tools/call
  * ggui_runtime_submit_action`) carrying the typed `{kind, payload, …}` shape
  * defined in `@ggui-ai/protocol/integrations/mcp-apps`. Every
- * user-driven gesture (Pattern α/β dispatch, native-idiom anchor click,
- * native-idiom fullscreen request) calls this alongside its primary
- * host effect, so operators get **uniform server-side observability**
- * across every gesture kind.
+ * user-driven gesture (submit-action dispatch, native-idiom anchor
+ * click, native-idiom fullscreen request) calls this alongside its
+ * primary host effect, so operators get **uniform server-side
+ * observability** across every gesture kind.
  *
  * Fail-soft: a rejected audit fire MUST NOT block the primary host
  * effect. Detached-parent / host-rejected audit envelopes are
@@ -2108,8 +2071,20 @@ function emitUserActionDoorbell(args: {
   });
 }
 
-/** @internal — exported for unit tests. */
-export function dispatchWiredAction(args: {
+/**
+ * Dispatch a submit-action via the empirically-validated bridge
+ * chain (validated against claude.ai): a `tools/call` to
+ * {@link toolName} (the `ggui_runtime_submit_action` receiver)
+ * appends the gesture to the render's consume pipe, paired with a
+ * silent `ui/update-model-context` prime and — only when the server
+ * reports no active `ggui_consume` long-poll — a `ui/message`
+ * doorbell so a fresh agent turn drains the pipe. Hosts MUST honor
+ * `_meta.ui.visibility:['app']` per spec §401, otherwise the
+ * `tools/call` is silently rejected (probe found this empirically).
+ *
+ * @internal — exported for unit tests.
+ */
+export function dispatchSubmitAction(args: {
   readonly toolName: string;
   readonly intent: string;
   readonly data: unknown;
@@ -2122,7 +2097,7 @@ export function dispatchWiredAction(args: {
   const actionId = fnv1aHex(
     `${intent}|${JSON.stringify(data ?? null)}|${firedAt}`,
   );
-  const inlineData = formatWiredActionDataInline(data);
+  const inlineData = formatSubmitActionDataInline(data);
   const dataPart = inlineData === '' ? '' : ` (${inlineData})`;
   const uiContext = readLocalUiContext();
 
@@ -2218,61 +2193,8 @@ export function dispatchWiredAction(args: {
 }
 
 /**
- * Fire a wired action via Pattern α — direct `tools/call` against a
- * same-server, app-visible target tool. The iframe is allowed to fire
- * the tool directly from this server connection per MCP-Apps spec
- * §2026-01-26 visibility rules. Skips the submit_action pipe entirely:
- * the tool fires without the agent's involvement (the whole point of
- * Pattern α), chat stays clean.
- *
- * PIPE-2 design note: Pattern α deliberately does NOT fire
- * `submit_action` — a pipe append would queue the gesture for the
- * agent's `ggui_consume` long-poll, causing double-processing
- * (host's tool relay AND agent's reaction). RenderInspector loses
- * Pattern α observability for now; re-add via a dedicated audit-only
- * gesture kind if operators need it.
- *
- * @internal — exported for unit tests.
- */
-export function fireDirectToolCall(args: {
-  readonly targetToolName: string;
-  readonly data: unknown;
-}): void {
-  if (typeof window === 'undefined') return;
-  const { targetToolName, data } = args;
-
-  // Direct tools/call — fires on the same MCP server connection the
-  // iframe was bootstrapped against. Spec §2026-01-26: "app"
-  // visibility tools are callable by the app from the same server
-  // connection only.
-  postToParent({
-    jsonrpc: '2.0',
-    id: Math.floor(Math.random() * 1e9),
-    method: 'tools/call',
-    params: {
-      name: targetToolName,
-      arguments: (data ?? {}) as Record<string, unknown>,
-    },
-  });
-}
-
-/**
- * Pure routing helper for `WireConfig.dispatch` — chooses Pattern α
- * (direct `tools/call`) when the action's wired tool is in
- * `appCallableTools`, otherwise falls back to Pattern β (the 3-message
- * bridge).
- *
- * The routing logic was previously inlined as a closure body inside
- * `bootSelfContained`'s `wireConfig.dispatch`, with a verbatim
- * re-creation in `__tests__/dispatch-routing.test.ts`. Tests could
- * pass against stale code if either drifted. Extraction means
- * production + tests now exercise the same code path.
- *
- * Pattern α (same-server, app-visible target tool): chat stays clean,
- * no LLM consent loop. Pattern β (anything else: cross-server tool, no
- * wired tool, or tool not in `appCallableTools`): the canonical
- * 3-message workaround the LLM brokers when the tool isn't directly
- * callable from the iframe.
+ * Resolve the name of the spec-canonical submit-action receiver tool
+ * the dispatch path targets with `tools/call`.
  *
  * @internal — exported for unit tests + production reuse.
  */
@@ -2293,6 +2215,17 @@ export function resolveDispatchToolName(): string {
 }
 
 /**
+ * Routing helper for `WireConfig.dispatch` — every user action takes
+ * the same path: enqueue the gesture onto the render's pending-event
+ * pipe via `submit_action`. The agent retrieves it EXCLUSIVELY via
+ * `ggui_consume` — the gesture never travels inline, so there is no
+ * `nextStep` hint to forward client-side (the server derives the
+ * agent-facing hint from the render's `actionSpec[name].nextStep`
+ * when it builds the consume event).
+ *
+ * Lives as a named export (rather than a closure body inside the
+ * boot path) so production + tests exercise the same code path.
+ *
  * @internal — exported for unit tests + production reuse.
  */
 export function routeDispatch(args: {
@@ -2301,37 +2234,17 @@ export function routeDispatch(args: {
   readonly meta: {
     readonly sessionId: string;
     readonly appId: string;
-    readonly appCallableTools?: readonly string[];
-    readonly actionNextSteps?: Readonly<Record<string, string>>;
   };
   readonly dispatchToolName: string;
 }): void {
   const { actionName, data, meta, dispatchToolName } = args;
-  const tool = meta.actionNextSteps?.[actionName];
-  const appCallable =
-    typeof tool === 'string' &&
-    (meta.appCallableTools ?? []).includes(tool);
-
-  if (appCallable && tool !== undefined) {
-    fireDirectToolCall({
-      targetToolName: tool,
-      data,
-    });
-  } else {
-    // Pattern β: enqueue the gesture onto the render's pending-event
-    // pipe via `submit_action`. The agent retrieves it EXCLUSIVELY via
-    // `ggui_consume` — the gesture never travels inline, so there is no
-    // `nextStep` hint to forward (the doorbell carries only a pointer to
-    // the render). This branch is also where
-    // `actionSpec[*].dispatch.kind === 'agent'` lands.
-    dispatchWiredAction({
-      toolName: dispatchToolName,
-      intent: actionName,
-      data,
-      sessionId: meta.sessionId,
-      appId: meta.appId,
-    });
-  }
+  dispatchSubmitAction({
+    toolName: dispatchToolName,
+    intent: actionName,
+    data,
+    sessionId: meta.sessionId,
+    appId: meta.appId,
+  });
 }
 
 /**
@@ -2869,9 +2782,8 @@ async function bootProduction(opts: {
     setup: ({ meta, renderInto, statusRefs, onObserve }) => {
       // Post-Phase-B `meta` is the flat render slice — `sessionId` /
       // `appId` / `runtimeUrl` / `wsUrl` / `wsToken` / `themeId` /
-      // `gadgets` / `publicEnv` / `contextSlots` / `actionNextSteps` /
-      // `appCallableTools` / `streamWebSocketLocalTools` all live
-      // directly on `meta`.
+      // `gadgets` / `publicEnv` / `contextSlots` /
+      // `streamWebSocketLocalTools` all live directly on `meta`.
 
       // Compose the gadget registry: STDLIB seed PLUS any
       // operator-registered wrappers carried on the bootstrap.
@@ -3035,11 +2947,10 @@ async function bootProduction(opts: {
         getCurrentGguiSession: () => currentRender,
         manager,
         streamBus,
-        ...(onObserve !== undefined ? { onObserve } : {}),
         onDispatchEnvelope: (envelope) => {
           if (envelope.type !== 'data:submit') return;
           const payload = envelope.payload as
-            | { action?: unknown; data?: unknown; tool?: unknown }
+            | { action?: unknown; data?: unknown }
             | undefined;
           if (
             payload === undefined
@@ -3054,12 +2965,6 @@ async function bootProduction(opts: {
             meta: {
               sessionId: meta.sessionId,
               appId: meta.appId,
-              ...(meta.appCallableTools !== undefined
-                ? { appCallableTools: meta.appCallableTools }
-                : {}),
-              ...(meta.actionNextSteps !== undefined
-                ? { actionNextSteps: meta.actionNextSteps }
-                : {}),
             },
             dispatchToolName,
           });
@@ -3196,8 +3101,8 @@ async function bootProduction(opts: {
           // Iframe-polling transport — `tools/call` against the
           // parent MCP host via `app.callServerTool` (spec-canonical)
           // when the App handle is set; falls back to raw postMessage
-          // pre-handshake or in tests. Pattern α direct call (no LLM
-          // consent loop). Returns the tool's structuredContent (or
+          // pre-handshake or in tests. Direct call (no LLM consent
+          // loop). Returns the tool's structuredContent (or
           // `content[0]` if that's where the payload landed) as a
           // JsonValue. On RPC error we throw — the router catches
           // and silently retries on the next tick.
@@ -3263,7 +3168,6 @@ async function bootProduction(opts: {
           getCurrentGguiSession: () => currentRender,
           streamBus,
           validatorCtx,
-          ...(onObserve !== undefined ? { onObserve } : {}),
         }),
       );
       channelRegistry.register(

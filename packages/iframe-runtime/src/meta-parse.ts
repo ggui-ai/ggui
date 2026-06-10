@@ -27,8 +27,7 @@
  * {@link validateMeta} layers in mode-discriminator + expiresAt
  * expiration checks and field-level defensive parsing for the
  * optional containers (`contextSlots`, `gadgets`, `publicEnv`,
- * `permissionsPolicy`, `appCallableTools`, `actionNextSteps`,
- * `streamWebSocketLocalTools`).
+ * `permissionsPolicy`, `streamWebSocketLocalTools`).
  *
  * Reading-B (`result.toolOutput._meta` on the `ui/initialize`
  * response) was retired in Phase 1.19b.3 — the
@@ -186,10 +185,9 @@ function projectPublicEnv(
  *     in the past AND the slice carries static content (codeUrl / kind),
  *     DEGRADE to static-only (drop `wsUrl` / `wsToken` / `expiresAt`);
  *     otherwise return EXPIRED_BOOTSTRAP.
- *   - `gadgets` / `publicEnv` / `appCallableTools` /
- *     `permissionsPolicy` / `streamWebSocketLocalTools` /
- *     `contextSlots` / `actionNextSteps` get defensive entry-level
- *     validation; malformed → defaulted.
+ *   - `gadgets` / `publicEnv` / `permissionsPolicy` /
+ *     `streamWebSocketLocalTools` / `contextSlots` get defensive
+ *     entry-level validation; malformed → defaulted.
  */
 function projectMeta(
   meta: McpAppAiGguiRenderMeta,
@@ -218,13 +216,6 @@ function projectMeta(
   const gadgets = projectGadgets(meta.gadgets);
   const publicEnv = projectPublicEnv(meta.publicEnv);
 
-  const appCallableToolsRaw = meta.appCallableTools;
-  const appCallableTools: readonly string[] =
-    Array.isArray(appCallableToolsRaw) &&
-    appCallableToolsRaw.every((s): s is string => typeof s === 'string')
-      ? appCallableToolsRaw
-      : [];
-
   const permissionsPolicyRaw = meta.permissionsPolicy;
   const permissionsPolicy: readonly string[] | undefined =
     Array.isArray(permissionsPolicyRaw) &&
@@ -251,24 +242,12 @@ function projectMeta(
       ? themeModeRaw
       : undefined;
 
-  const actionNextStepsRaw = meta.actionNextSteps;
-  let actionNextSteps: Readonly<Record<string, string>> | undefined;
-  if (
-    isPlainObject(actionNextStepsRaw) &&
-    Object.values(actionNextStepsRaw).every(
-      (v): v is string => typeof v === 'string',
-    )
-  ) {
-    actionNextSteps = actionNextStepsRaw as Record<string, string>;
-  }
-
   const contextSlots = projectContextSlots(meta.contextSlots);
 
   const projected: McpAppAiGguiRenderMeta = {
     sessionId: meta.sessionId,
     appId: meta.appId,
     runtimeUrl: meta.runtimeUrl,
-    appCallableTools,
     ...(dropLiveCreds
       ? {}
       : {
@@ -293,7 +272,6 @@ function projectMeta(
     ...(permissionsPolicy !== undefined ? { permissionsPolicy } : {}),
     ...(meta.lastSequence !== undefined ? { lastSequence: meta.lastSequence } : {}),
     ...(meta.propsJson !== undefined ? { propsJson: meta.propsJson } : {}),
-    ...(actionNextSteps !== undefined ? { actionNextSteps } : {}),
     ...(contextSlots !== undefined ? { contextSlots } : {}),
     ...(meta.contractHash !== undefined && meta.validatorsUrl !== undefined
       ? {

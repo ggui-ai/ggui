@@ -12,9 +12,10 @@
  *   1. Action envelopes emitted by the config carry a single `sessionId`
  *      (no `stackItemId`/`stackIndex` companions) plus `clientSeq` +
  *      `schemaVersion`, and ride in a `{type:'action', payload: envelope}`
- *      WS frame.
- *   2. The active render's `actionSpec[name].nextStep` resolves on
- *      every dispatch via `getCurrentGguiSession()`.
+ *      WS frame. The payload is `action` + `data` ONLY — the agent's
+ *      `tool` hint is server-derived at consume-event build time.
+ *   2. The active render's `actionSpec` resolves on every dispatch
+ *      via `getCurrentGguiSession()` (validator stays coherent).
  *   3. Validation violations route through `onContractViolation` +
  *      block the outbound send.
  *   4. Stream fan-out goes through the in-renderer StreamBus; wire's
@@ -90,10 +91,12 @@ describe('buildRootWireConfig — envelope shape', () => {
     expect(env.type).toBe('data:submit');
     expect(env.clientSeq).toBe(1);
     expect(env.schemaVersion).toBe(PROTOCOL_SCHEMA_VERSION);
-    const payload = env.payload as { action: string; data: unknown; tool?: string };
+    const payload = env.payload as { action: string; data: unknown };
     expect(payload.action).toBe('submit');
     expect(payload.data).toEqual({ email: 'user@example.com' });
-    expect(payload.tool).toBe('submit-tool');
+    // No client-side `tool` hint — the agent-facing hint is derived
+    // server-side from `actionSpec[name].nextStep` at event-build time.
+    expect('tool' in payload).toBe(false);
   });
 
   it('increments clientSeq monotonically across dispatches', () => {
@@ -121,33 +124,46 @@ describe('buildRootWireConfig — active actionSpec resolution', () => {
   it('reads the active render\'s actionSpec on every dispatch (not snapshotted)', () => {
     // Mutate the render reference returned by `getCurrentGguiSession` to
     // simulate a props_update / re-mount that replaces actionSpec
-    // mid-render. The wire config MUST see the new spec without
-    // being rebuilt.
+    // mid-render. The wire config MUST validate against the new spec
+    // without being rebuilt.
     const { send, messages } = makeFakeManager();
     let activeRender: GguiSession = makeRender('render_001', {
-      actionSpec: { submit: { label: 'Submit', nextStep: 'tool-v1' } },
+      actionSpec: {
+        submit: {
+          label: 'Submit',
+          schema: { type: 'object', properties: { v: { type: 'number' } }, required: ['v'] },
+        },
+      },
     });
+    const onContractViolation = vi.fn();
     const cfg = buildRootWireConfig({
       sessionId: 'render_001',
       appId: 'app_x',
       getCurrentGguiSession: () => activeRender,
       manager: { send },
       streamBus: new StreamBus(),
+      onContractViolation,
     });
 
+    // Passes the v1 spec.
     cfg.dispatch('submit', { v: 1 });
+    expect(messages).toHaveLength(1);
+    expect(onContractViolation).not.toHaveBeenCalled();
+
+    // Replace the render with a spec that requires a different field —
+    // the SAME payload must now violate, proving per-dispatch
+    // resolution through the thunk.
     activeRender = makeRender('render_001', {
-      actionSpec: { submit: { label: 'Submit', nextStep: 'tool-v2' } },
+      actionSpec: {
+        submit: {
+          label: 'Submit',
+          schema: { type: 'object', properties: { email: { type: 'string' } }, required: ['email'] },
+        },
+      },
     });
     cfg.dispatch('submit', { v: 2 });
-
-    const tools = messages
-      .filter((m): m is WebSocketMessage & { type: 'action' } => m.type === 'action')
-      .map((m) => {
-        const p = m.payload.payload as { tool?: string };
-        return p.tool;
-      });
-    expect(tools).toEqual(['tool-v1', 'tool-v2']);
+    expect(messages).toHaveLength(1);
+    expect(onContractViolation).toHaveBeenCalledTimes(1);
   });
 });
 

@@ -23,7 +23,6 @@ const baseSlice: McpAppAiGguiRenderMeta = {
   sessionId: 'sess-1',
   appId: 'app-1',
   runtimeUrl: 'https://runtime.example/bundle.js',
-  appCallableTools: [],
   // static-component mode discriminator so `validateMeta` accepts the
   // slice without live-channel creds.
   codeUrl: 'https://code.example/component.js',

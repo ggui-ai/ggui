@@ -28,8 +28,6 @@
  * @public
  */
 export type ObservabilityEvent =
-  | WiredToolInvokedEvent
-  | ContractErrorEmittedEvent
   | SchemaVersionMismatchEvent
   | SubscribeFailedEvent
   | AuthRequiredEvent
@@ -37,36 +35,6 @@ export type ObservabilityEvent =
   | ChannelTransportFallbackEvent
   | ChannelTransportResubscribedEvent
   | UnknownObservabilityEvent;
-
-/**
- * Fired when a wired action successfully dispatched to a registered
- * MCP tool. Hosts surface this as a dispatch row in RenderInspector.
- * Emitted by the server-side router (render-channel.ts) via
- * postMessage relay through the renderer.
- *
- * @public
- */
-export interface WiredToolInvokedEvent {
-  readonly kind: 'wired-tool-invoked';
-  readonly toolName: string;
-  readonly actionName?: string;
-  readonly dispatchedAt: string;
-  readonly latencyMs?: number;
-}
-
-/**
- * Fired when the server emits a `_ggui:contract-error` envelope on
- * the live channel. Mirrors the envelope's `code` field for host-side
- * inspection without requiring the host to parse channel frames.
- *
- * @public
- */
-export interface ContractErrorEmittedEvent {
-  readonly kind: 'contract-error-emitted';
-  readonly code: string;
-  readonly toolName: string;
-  readonly actionName?: string;
-}
 
 /**
  * Fired when the protocol-version handshake rejects the connection.
@@ -100,7 +68,7 @@ export interface SubscribeFailedEvent {
 /**
  * Fired when the server emits a `system` frame with
  * `action: 'auth_required'` — the agent needs the end-user to authorize
- * an OAuth service (Google, Slack, etc.) before a wired tool can
+ * an OAuth service (Google, Slack, etc.) before its tool call can
  * proceed. The host listens via `<McpAppIframe onObserve>` and renders
  * a consent overlay OUTSIDE the iframe, then redirects the user to
  * `authUrl` to complete the OAuth flow.

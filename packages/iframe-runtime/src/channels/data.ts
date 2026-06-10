@@ -5,12 +5,6 @@
  * (matching `GguiRender.handleServerMessage`'s surfacing policy —
  * the violation is already logged by the validator).
  *
- * Also fires `contract-error-emitted` on the optional observability
- * sink when the envelope arrives on the reserved
- * `CONTRACT_ERROR_CHANNEL`. Absorbed from `handleObservableMessage`
- * in `runtime.ts` as part of the B3b cleanup — the handler is now the
- * sole dispatch surface for `data` frames.
- *
  * Post-stack-removal (2026-05-27): the active render is read through
  * the caller-supplied `getCurrentGguiSession` thunk instead of via a
  * `StackModel.snapshot()` walk — the iframe holds exactly one mounted
@@ -18,17 +12,9 @@
  */
 
 import type { ChannelHandler } from '@ggui-ai/live-channel';
-import {
-  CONTRACT_ERROR_CHANNEL,
-  type GguiSession,
-  type StreamEnvelope,
-} from '@ggui-ai/protocol';
+import type { GguiSession, StreamEnvelope } from '@ggui-ai/protocol';
 import type { GguiSessionSeedInput } from '../types.js';
 
-import type {
-  ObservabilityEmitter,
-  ObservabilityEvent,
-} from '../observability.js';
 import {
   validateInboundStreamPayload,
   type RendererValidatorContext,
@@ -44,14 +30,6 @@ export interface DataHandlerDeps {
   readonly getCurrentGguiSession: () => GguiSession | GguiSessionSeedInput | null;
   readonly streamBus: StreamBus;
   readonly validatorCtx: RendererValidatorContext;
-  /**
-   * Optional observability sink. When present, every envelope on the
-   * reserved `_ggui:contract-error` channel fires a
-   * {@link ContractErrorEmittedEvent}. Absent = the observation skips
-   * silently (matches the pre-B3b posture when no `onObserve` is
-   * bound).
-   */
-  readonly onObserve?: ObservabilityEmitter;
 }
 
 export function createDataHandler(
@@ -66,19 +44,6 @@ export function createDataHandler(
         typeof envelope.channel !== 'string'
       ) {
         return;
-      }
-
-      // Observability-axis emission for the reserved contract-error
-      // channel. Fires BEFORE validation because the envelope shape
-      // is owned by the server's reserved validator
-      // (`BUILTIN_RESERVED_VALIDATORS`) — invalid payloads at this
-      // boundary are server-side bugs the host inspector should still
-      // surface, not silently drop.
-      if (
-        envelope.channel === CONTRACT_ERROR_CHANNEL &&
-        deps.onObserve !== undefined
-      ) {
-        emitContractErrorFromDataFrame(envelope, deps.onObserve);
       }
 
       // Active render carries the streamSpec — mirrors
@@ -100,44 +65,4 @@ export function createDataHandler(
       deps.streamBus.emit(envelope);
     },
   };
-}
-
-/**
- * Narrow a contract-error envelope and emit
- * {@link ContractErrorEmittedEvent}. Malformed envelopes silently
- * skip (trust-boundary posture — host inspector gets a row only when
- * the wire payload carries the required discriminator fields).
- */
-function emitContractErrorFromDataFrame(
-  envelope: StreamEnvelope,
-  emit: ObservabilityEmitter,
-): void {
-  const payload = envelope.payload;
-  if (payload === null || typeof payload !== 'object' || Array.isArray(payload)) {
-    return;
-  }
-  const shaped = payload as {
-    readonly toolName?: unknown;
-    readonly actionName?: unknown;
-    readonly error?: { readonly code?: unknown };
-  };
-  const code =
-    shaped.error !== undefined &&
-    shaped.error !== null &&
-    typeof shaped.error === 'object' &&
-    typeof shaped.error.code === 'string'
-      ? shaped.error.code
-      : undefined;
-  const toolName =
-    typeof shaped.toolName === 'string' ? shaped.toolName : undefined;
-  if (code === undefined || toolName === undefined) return;
-  const event: ObservabilityEvent = {
-    kind: 'contract-error-emitted',
-    code,
-    toolName,
-    ...(typeof shaped.actionName === 'string'
-      ? { actionName: shaped.actionName }
-      : {}),
-  };
-  emit(event);
 }

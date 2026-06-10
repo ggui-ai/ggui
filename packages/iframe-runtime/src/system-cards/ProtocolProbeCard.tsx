@@ -4,24 +4,20 @@
  * Diagnostic + regression fixture exercising every gesture surface
  * the iframe runtime routes:
  *
- *   1. **Pattern β bridge** — `tools/call ggui_runtime_submit_action` (audit) +
- *      `ui/update-model-context` (silent context) + `ui/message`
- *      (consent prompt). Fires for cross-server / non-app-visible
- *      `actionSpec[name].dispatch.tool` targets, OR any
- *      `dispatch.kind === 'agent'` entry. Empirical-first reproduction
- *      of the production `dispatchWiredAction` path.
- *   2. **Pattern α direct fire** — `tools/call ggui_runtime_submit_action`
- *      (audit) + `tools/call <T>` (direct, no consent prompt). Fires
- *      for same-server, app-visible target tools. Probes against
- *      `ggui_runtime_submit_action` itself (the only universally-app-visible
- *      tool the iframe can be sure exists).
- *   3. **Native-idiom: anchor click** — `ui/open-link` paired with
+ *   1. **Submit-action bridge** — `tools/call ggui_runtime_submit_action`
+ *      (audit) + `ui/update-model-context` (silent context) +
+ *      `ui/message` (consent prompt). Fires for every
+ *      `actionSpec[name]` dispatch — the gesture queues on the
+ *      render's consume pipe for the agent (`nextStep` is an advisory
+ *      hint, never a client-side route). Empirical-first reproduction
+ *      of the production `dispatchSubmitAction` path.
+ *   2. **Native-idiom: anchor click** — `ui/open-link` paired with
  *      `kind: 'openLink'` audit. Triggered by the runtime's
  *      capture-phase `<a href>` interceptor (cross-origin or
  *      `target="_blank"`). The probe row simulates the postMessage
  *      directly so the operator sees the envelope without needing to
  *      click an anchor.
- *   4. **Native-idiom: fullscreen** — `ui/request-display-mode` +
+ *   3. **Native-idiom: fullscreen** — `ui/request-display-mode` +
  *      `kind: 'requestDisplayMode'` audit. Triggered by the runtime's
  *      `Element.prototype.requestFullscreen` /
  *      `Document.prototype.exitFullscreen` overrides. The probe row
@@ -50,7 +46,7 @@
  * reject `tools/call` from views for tools without `'app'` in
  * visibility — claude.ai silently dropped the call. The original
  * probe diagnosed the gap; the routing simplification work landed
- * Pattern α / Pattern β / native idioms in response.
+ * the submit-action bridge + native idioms in response.
  */
 import * as React from 'react';
 import {
@@ -253,7 +249,7 @@ function defaultParams(method: ProbeMethod): unknown {
     case 'ui/request-display-mode':
       return { mode: 'fullscreen' };
     case 'tools/call':
-      // Mirror `runtime.ts::emitAudit` + `runtime.ts::dispatchWiredAction`
+      // Mirror `runtime.ts::emitAudit` + `runtime.ts::dispatchSubmitAction`
       // so this probe empirically validates the canonical
       // `GguiUserActionInput` envelope (SPEC §4.6, see
       // `@ggui-ai/protocol/integrations/mcp-apps`). `ggui_runtime_submit_action`
@@ -263,9 +259,9 @@ function defaultParams(method: ProbeMethod): unknown {
       // a tool result; the host forwards that result to this iframe
       // via the JSON-RPC response matching our outbound id.
       //
-      // The probe uses `kind: 'dispatch'` so the chained Pattern β
-      // 3-message follow-up (`ui/update-model-context` + `ui/message`)
-      // semantically matches a real wired-action click.
+      // The probe uses `kind: 'dispatch'` so the chained 3-message
+      // follow-up (`ui/update-model-context` + `ui/message`)
+      // semantically matches a real submit-action click.
       return {
         name: 'ggui_runtime_submit_action',
         arguments: {
@@ -286,7 +282,7 @@ function defaultParams(method: ProbeMethod): unknown {
 /**
  * Compute a short deterministic action-id from an action payload.
  * FNV-1a 32-bit, 8 hex chars — not cryptographically strong, just
- * collision-resistant enough for in-flight wired-action correlation.
+ * collision-resistant enough for in-flight submit-action correlation.
  *
  * Why hash (vs. random UUID): the id reproduces from
  * `{intent, data, firedAt}` so both the silent context-update AND
@@ -384,8 +380,8 @@ function ProbeButtonRow({
         const args = (params as { arguments?: Record<string, unknown> })
           .arguments ?? {};
         // New gesture-envelope shape (SPEC §4.6): `{kind, payload,
-        // sessionId, appId, actionId, firedAt}`. For Pattern β the
-        // `payload` carries `{intent, data}`.
+        // sessionId, appId, actionId, firedAt}`. For dispatch
+        // gestures the `payload` carries `{intent, data}`.
         const payload = (args['payload'] as Record<string, unknown> | undefined) ?? {};
         const intent = String(payload['intent'] ?? '?');
         const data = payload['data'];
@@ -582,12 +578,13 @@ export function ProtocolProbeCard({
             }}
           >
             One button per primary host effect emitted by the iframe
-            runtime's gesture surfaces (Pattern α / Pattern β / native-
+            runtime's gesture surfaces (submit-action bridge / native-
             idiom interceptors). Click each to verify which methods
             this host honors. The
-            <code>tools/call</code> row chains the full Pattern β bridge
-            (audit + context + consent), reproducing the production
-            <code>dispatchWiredAction</code> envelope shape verbatim.
+            <code>tools/call</code> row chains the full submit-action
+            bridge (audit + context + consent), reproducing the
+            production <code>dispatchSubmitAction</code> envelope shape
+            verbatim.
             The receive log below captures every notification the host
             emits while this card is mounted.
           </Text>
@@ -596,12 +593,12 @@ export function ProtocolProbeCard({
         <Stack gap="md">
           <ProbeButtonRow
             method="ui/message"
-            description="Pattern β step 3 — consent-gated user authorization. Host pre-fills + waits for user confirm before the LLM acts on the paired pending-action context."
+            description="Submit-action bridge step 3 — consent-gated user authorization. Host pre-fills + waits for user confirm before the LLM acts on the paired pending-action context."
             call={call}
           />
           <ProbeButtonRow
             method="ui/update-model-context"
-            description="Pattern β step 2 — silent structured `[ggui:pending-action]` context drop. LLM honors on next turn. No immediate UI."
+            description="Submit-action bridge step 2 — silent structured `[ggui:pending-action]` context drop. LLM honors on next turn. No immediate UI."
             call={call}
           />
           <ProbeButtonRow
@@ -616,7 +613,7 @@ export function ProtocolProbeCard({
           />
           <ProbeButtonRow
             method="tools/call"
-            description="Pattern β full bridge: `tools/call ggui_runtime_submit_action` (audit, kind:'dispatch') + `ui/update-model-context` + `ui/message`. Spec §401 requires `_meta.ui.visibility:['app']` on the receiving tool. Pattern α (direct fire to a same-server app-visible target) would skip steps 2+3 and add a second `tools/call` to the target tool instead."
+            description="Full submit-action bridge: `tools/call ggui_runtime_submit_action` (audit, kind:'dispatch') + `ui/update-model-context` + `ui/message`. Spec §401 requires `_meta.ui.visibility:['app']` on the receiving tool."
             call={call}
           />
         </Stack>

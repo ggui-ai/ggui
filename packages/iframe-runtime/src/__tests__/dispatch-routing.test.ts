@@ -1,53 +1,39 @@
 /**
- * Pattern α / Pattern β routing for `WireConfig.dispatch`.
+ * Submit-action routing for `WireConfig.dispatch` — the single action
+ * path: every gesture enqueues on the render's pending-event pipe via
+ * `submit_action`, and the agent drains it via `ggui_consume`.
  *
- * Per MCP-Apps spec §2026-01-26: tools tagged with
- * `_meta.ui.visibility:['app']` are callable by an iframe from the
- * SAME server connection only — cross-server calls are always blocked.
- *
- * PIPE-2 wire-up (2026-05-12):
- *
- *   - **Pattern α** (direct `tools/call`): same-server, app-visible
- *     target tool. Fires ONE postMessage — direct `tools/call` against
- *     the target. No audit, no `ui/update-model-context`, no
- *     `ui/message`. Pipe append is deliberately skipped to avoid the
- *     host-relay-fires-the-tool AND agent-reacts-to-pipe double-
- *     processing pitfall.
- *
- *   - **Pattern β** (submit_action with ui/message doorbell): everything
- *     else (cross-server tool, no wired tool, tool not in
- *     `appCallableTools`). Synchronously fires:
- *       (1) `ui/update-model-context` — silent LLM hint.
- *       (2) `tools/call ggui_runtime_submit_action` — routed through
- *           the spec-canonical `app.callServerTool` API. Awaits the
- *           response.
- *     Then asynchronously, on relay response:
- *       (3) On `{ok:true, consumerPresent:true}` (or `consumerPresent`
- *           absent) → DONE; the agent's active `ggui_consume` long-poll
- *           drains the just-enqueued gesture.
- *       (3') On `{ok:true, consumerPresent:false}` (no consume loop is
- *           listening — e.g. after a page reload) → emit the
- *           `ai.ggui/userAction` PURE DOORBELL on a `ui/message` (RAW
- *           postMessage, bypassing the host's closed-schema parse so the
- *           directive text + content-block `_meta` survive) so a fresh
- *           agent turn calls `ggui_consume({sessionId})` to drain it.
- *           Pointer-only — the gesture stays solely on the pipe.
- *       (3'') On `{ok:false}` / JSON-RPC error → the enqueue FAILED; the
- *           gesture is on no pipe, so NO `ui/message` is emitted (a
- *           doorbell would point at an empty queue). Surfaces a toast
- *           only.
+ * The bridge (with its `ui/message` doorbell) synchronously fires:
+ *   (1) `ui/update-model-context` — silent LLM hint.
+ *   (2) `tools/call ggui_runtime_submit_action` — routed through
+ *       the spec-canonical `app.callServerTool` API. Awaits the
+ *       response.
+ * Then asynchronously, on relay response:
+ *   (3) On `{ok:true, consumerPresent:true}` (or `consumerPresent`
+ *       absent) → DONE; the agent's active `ggui_consume` long-poll
+ *       drains the just-enqueued gesture.
+ *   (3') On `{ok:true, consumerPresent:false}` (no consume loop is
+ *       listening — e.g. after a page reload) → emit the
+ *       `ai.ggui/userAction` PURE DOORBELL on a `ui/message` (RAW
+ *       postMessage, bypassing the host's closed-schema parse so the
+ *       directive text + content-block `_meta` survive) so a fresh
+ *       agent turn calls `ggui_consume({sessionId})` to drain it.
+ *       Pointer-only — the gesture stays solely on the pipe.
+ *   (3'') On `{ok:false}` / JSON-RPC error → the enqueue FAILED; the
+ *       gesture is on no pipe, so NO `ui/message` is emitted (a
+ *       doorbell would point at an empty queue). Surfaces a toast
+ *       only.
  *
  * Post-Phase-1.19b.3 (2026-05-28): outbound `tools/call` from
- * `dispatchWiredAction` flows through `app.callServerTool` on the
+ * `dispatchSubmitAction` flows through `app.callServerTool` on the
  * module-level App handle (`setCurrentApp`). This suite injects a
  * `MockTransport`-bound App via `setCurrentApp` so the `submit_action`
  * envelope round-trips through the spec-canonical API and the relay
  * response is delivered via `transport.queueResponse('tools/call', …)`
  * instead of a faked `MessageEvent`. `ui/update-model-context` flows
  * through the App method (`app.updateModelContext`) and is asserted on
- * `transport.sent`. The Pattern α direct `tools/call`
- * (`fireDirectToolCall`) and the Pattern β `ui/message` DOORBELL both
- * ride raw `window.parent.postMessage`, so they are asserted via the
+ * `transport.sent`. The `ui/message` DOORBELL rides raw
+ * `window.parent.postMessage`, so it is asserted via the
  * `postMessageSpy`. The doorbell uses the raw path deliberately: the
  * host validates an incoming `ui/message` request against the spec's
  * closed `McpUiMessageRequestSchema`, which strips the content-block
@@ -59,7 +45,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { App } from '@modelcontextprotocol/ext-apps';
 import {
   __resetAppForTest,
-  fireDirectToolCall,
   routeDispatch,
   setCurrentApp,
 } from '../runtime.js';
@@ -96,84 +81,8 @@ afterEach(() => {
   __resetAppForTest();
 });
 
-describe('fireDirectToolCall (Pattern α helper)', () => {
-  it('emits exactly one direct tools/call against the target tool', () => {
-    fireDirectToolCall({
-      targetToolName: 'gmail_archive',
-      data: { id: 'msg_1' },
-    });
-    expect(postMessageSpy).toHaveBeenCalledTimes(1);
-    const direct = postMessageSpy.mock.calls[0][0] as Record<string, unknown>;
-    expect(direct).toMatchObject({
-      jsonrpc: '2.0',
-      method: 'tools/call',
-      params: {
-        name: 'gmail_archive',
-        arguments: { id: 'msg_1' },
-      },
-    });
-  });
-
-  it('does NOT emit ui/update-model-context, ui/message, or submit_action audit', () => {
-    fireDirectToolCall({
-      targetToolName: 'gmail_archive',
-      data: { id: 'msg_1' },
-    });
-    const methods = postMessageSpy.mock.calls.map(
-      (call) => (call[0] as { method?: unknown }).method,
-    );
-    expect(methods).not.toContain('ui/update-model-context');
-    expect(methods).not.toContain('ui/message');
-    // Only the direct tools/call against the target.
-    expect(methods).toEqual(['tools/call']);
-    const direct = postMessageSpy.mock.calls[0][0] as Record<string, unknown>;
-    expect((direct.params as { name?: unknown }).name).toBe('gmail_archive');
-  });
-
-  it('falls back to {} when data is null/undefined', () => {
-    fireDirectToolCall({
-      targetToolName: 'gmail_archive',
-      data: undefined,
-    });
-    const direct = postMessageSpy.mock.calls[0][0] as Record<string, unknown>;
-    expect(
-      (direct.params as Record<string, unknown>).arguments as unknown,
-    ).toEqual({});
-  });
-});
-
-describe('routeDispatch — Pattern α vs Pattern β', () => {
-  it('Pattern α: 1 envelope (direct tools/call only) when actionNextSteps[name] is in appCallableTools', () => {
-    routeDispatch({
-      actionName: 'archive',
-      data: { id: 'msg_1' },
-      meta: {
-        sessionId: 'sess_1',
-        appId: 'app_1',
-        actionNextSteps: { archive: 'gmail_archive' },
-        appCallableTools: ['gmail_archive', 'ggui_runtime_submit_action'],
-      },
-      dispatchToolName: 'ggui_runtime_submit_action',
-    });
-    // Pattern α flows through fireDirectToolCall → postToParent → raw
-    // postMessage. Nothing hits the App transport.
-    expect(postMessageSpy).toHaveBeenCalledTimes(1);
-    const methods = postMessageSpy.mock.calls.map(
-      (call) => (call[0] as { method?: unknown }).method,
-    );
-    expect(methods).toEqual(['tools/call']);
-    const direct = postMessageSpy.mock.calls[0][0] as Record<string, unknown>;
-    expect((direct.params as Record<string, unknown>).name).toBe(
-      'gmail_archive',
-    );
-    // Pattern α does NOT call submit_action — transport.sent stays empty.
-    const toolsCallsOnTransport = transport.sent.filter(
-      (msg) => (msg as { method?: unknown }).method === 'tools/call',
-    );
-    expect(toolsCallsOnTransport).toHaveLength(0);
-  });
-
-  describe('Pattern β (submit_action with ui/message doorbell)', () => {
+describe('routeDispatch — submit-action bridge', () => {
+  describe('submit_action with ui/message doorbell', () => {
     it('fires ui/update-model-context + tools/call submit_action through App transport (post-#275)', async () => {
       routeDispatch({
         actionName: 'archive',
@@ -181,9 +90,6 @@ describe('routeDispatch — Pattern α vs Pattern β', () => {
         meta: {
           sessionId: 'sess_1',
           appId: 'app_1',
-          actionNextSteps: { archive: 'gmail_archive' },
-          // gmail_archive is NOT app-visible on this server connection.
-          appCallableTools: ['ggui_runtime_submit_action'],
         },
         dispatchToolName: 'ggui_runtime_submit_action',
       });
@@ -245,8 +151,6 @@ describe('routeDispatch — Pattern α vs Pattern β', () => {
         meta: {
           sessionId: 'sess_1',
           appId: 'app_1',
-          actionNextSteps: { archive: 'gmail_archive' },
-          appCallableTools: ['ggui_runtime_submit_action'],
         },
         dispatchToolName: 'ggui_runtime_submit_action',
       });
@@ -280,8 +184,6 @@ describe('routeDispatch — Pattern α vs Pattern β', () => {
         meta: {
           sessionId: 'sess_1',
           appId: 'app_1',
-          actionNextSteps: { archive: 'gmail_archive' },
-          appCallableTools: ['ggui_runtime_submit_action'],
         },
         dispatchToolName: 'ggui_runtime_submit_action',
       });
@@ -312,8 +214,6 @@ describe('routeDispatch — Pattern α vs Pattern β', () => {
         meta: {
           sessionId: 'sess_1',
           appId: 'app_1',
-          actionNextSteps: { archive: 'gmail_archive' },
-          appCallableTools: ['ggui_runtime_submit_action'],
         },
         dispatchToolName: 'ggui_runtime_submit_action',
       });
@@ -410,8 +310,6 @@ describe('routeDispatch — Pattern α vs Pattern β', () => {
         meta: {
           sessionId: remountSessionId,
           appId: 'app_1',
-          actionNextSteps: { toggle: 'todo_toggle' },
-          appCallableTools: ['ggui_runtime_submit_action'],
         },
         dispatchToolName: 'ggui_runtime_submit_action',
       });
@@ -462,8 +360,6 @@ describe('routeDispatch — Pattern α vs Pattern β', () => {
         meta: {
           sessionId: 'sess_1',
           appId: 'app_1',
-          actionNextSteps: { archive: 'gmail_archive' },
-          appCallableTools: ['ggui_runtime_submit_action'],
         },
         dispatchToolName: 'ggui_runtime_submit_action',
       });
@@ -492,8 +388,6 @@ describe('routeDispatch — Pattern α vs Pattern β', () => {
         meta: {
           sessionId: 'sess_1',
           appId: 'app_1',
-          actionNextSteps: { archive: 'gmail_archive' },
-          appCallableTools: ['ggui_runtime_submit_action'],
         },
         dispatchToolName: 'ggui_runtime_submit_action',
       });
@@ -510,87 +404,5 @@ describe('routeDispatch — Pattern α vs Pattern β', () => {
       );
       expect(rawMethods).not.toContain('ui/message');
     });
-  });
-
-  it('Pattern β when actionNextSteps is absent (legacy bootstrap)', async () => {
-    routeDispatch({
-      actionName: 'archive',
-      data: { id: 'msg_1' },
-      meta: {
-        sessionId: 'sess_1',
-        appId: 'app_1',
-        // actionNextSteps deliberately undefined.
-        appCallableTools: ['gmail_archive'],
-      },
-      dispatchToolName: 'ggui_runtime_submit_action',
-    });
-
-    // Both ui/update-model-context and submit_action flow through the
-    // App transport post-#275.
-    expect(postMessageSpy).not.toHaveBeenCalled();
-    await tick();
-    const transportMethods = transport.sent
-      .map((msg) => (msg as { method?: unknown }).method)
-      .filter((m): m is string => typeof m === 'string')
-      .filter(
-        (m) => m !== 'ui/initialize' && m !== 'ui/notifications/initialized',
-      );
-    expect(transportMethods).toEqual([
-      'ui/update-model-context',
-      'tools/call',
-    ]);
-  });
-
-  it('Pattern β when the action name is not in actionNextSteps', async () => {
-    routeDispatch({
-      actionName: 'archive',
-      data: { id: 'msg_1' },
-      meta: {
-        sessionId: 'sess_1',
-        appId: 'app_1',
-        actionNextSteps: { send: 'gmail_send' },
-        appCallableTools: ['gmail_send'],
-      },
-      dispatchToolName: 'ggui_runtime_submit_action',
-    });
-
-    expect(postMessageSpy).not.toHaveBeenCalled();
-    await tick();
-    const transportMethods = transport.sent
-      .map((msg) => (msg as { method?: unknown }).method)
-      .filter((m): m is string => typeof m === 'string')
-      .filter(
-        (m) => m !== 'ui/initialize' && m !== 'ui/notifications/initialized',
-      );
-    expect(transportMethods).toEqual([
-      'ui/update-model-context',
-      'tools/call',
-    ]);
-  });
-
-  it('Pattern β when appCallableTools is absent (legacy bootstrap)', async () => {
-    routeDispatch({
-      actionName: 'archive',
-      data: { id: 'msg_1' },
-      meta: {
-        sessionId: 'sess_1',
-        appId: 'app_1',
-        actionNextSteps: { archive: 'gmail_archive' },
-      },
-      dispatchToolName: 'ggui_runtime_submit_action',
-    });
-
-    expect(postMessageSpy).not.toHaveBeenCalled();
-    await tick();
-    const transportMethods = transport.sent
-      .map((msg) => (msg as { method?: unknown }).method)
-      .filter((m): m is string => typeof m === 'string')
-      .filter(
-        (m) => m !== 'ui/initialize' && m !== 'ui/notifications/initialized',
-      );
-    expect(transportMethods).toEqual([
-      'ui/update-model-context',
-      'tools/call',
-    ]);
   });
 });

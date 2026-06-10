@@ -15,7 +15,7 @@
  *
  *   - **Iframe polling** — fallback for every other channel. The
  *     router runs a setInterval that fires `tools/call` against
- *     the parent MCP host (Pattern α — direct, no bridge). Works
+ *     the parent MCP host (direct, no bridge). Works
  *     for any tool the agent has access to, including third-party
  *     MCP servers the local pod can't subscribe-for.
  *
@@ -171,7 +171,7 @@ export interface ChannelTransportRouterOptions {
 /**
  * Observability events the router emits. Hosts that wire `onObserve`
  * see these alongside the renderer's other observability events
- * (`subscribe-failed`, `wired-tool-invoked`, …). The shape stays
+ * (`subscribe-failed`, `auth-required`, …). The shape stays
  * narrow + non-breaking so future events can extend the union.
  */
 export type ChannelTransportEvent =

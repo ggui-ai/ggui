@@ -537,15 +537,15 @@ export function GguiRender({
       actionSpec: ActionSpec | undefined,
     ) => {
       clientSeqRef.current += 1;
-      const entry = actionSpec?.[actionName];
-      const tool = entry?.nextStep;
+      // The envelope carries `action` + `data` only. The agent-facing
+      // `tool` hint on the consume event is derived SERVER-side from
+      // the render's `actionSpec[name].nextStep` at event-build time.
       const envelope = buildActionEnvelope({
         sessionId,
         type: 'data:submit',
         payload: {
           action: actionName,
           data: data as JsonValue,
-          ...(tool ? { tool } : {}),
         },
         clientSeq: clientSeqRef.current,
       });

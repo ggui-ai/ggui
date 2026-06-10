@@ -1,19 +1,15 @@
 /**
  * Observability emission — C12 + Wave 3 §S2 unit tests.
  *
- * Covers each of the five renderer-side emission points:
+ * Covers each of the three renderer-side emission points:
  *
- *   1. `wired-tool-invoked` — fires from the wire config's outbound
- *      dispatch whenever a `data:submit` envelope resolves to a tool.
- *   2. `contract-error-emitted` — fires from the data channel handler
- *      when a `_ggui:contract-error` envelope arrives on the live channel.
- *   3. `schema-version-mismatch` — fires from `connectViaRegistry`'s
+ *   1. `schema-version-mismatch` — fires from `connectViaRegistry`'s
  *      UPGRADE_REQUIRED branches (client-side ack mismatch + server
  *      pre-ack error frame).
- *   4. `subscribe-failed` — fires from `connectViaRegistry`'s wrapped
+ *   2. `subscribe-failed` — fires from `connectViaRegistry`'s wrapped
  *      `onStatusChange` whenever the transport transitions to
  *      `reconnecting`.
- *   5. `auth-required` (Wave 3 §S2) — fires from the system channel
+ *   3. `auth-required` (Wave 3 §S2) — fires from the system channel
  *      handler when a `system` frame arrives with
  *      `action: 'auth_required'` and a usable `consentUrl`.
  *
@@ -24,15 +20,14 @@
  *   - For `connectViaRegistry`-owned emissions: use the connectFn
  *     seam to inject a mock transport that emits frames through the
  *     registry's handlers post-bind.
- *   - For `data` + `system` channel emissions: invoke the channel
- *     handlers directly with the test payload.
+ *   - For `system` channel emissions: invoke the channel handler
+ *     directly with the test payload.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
   CLIENT_SUPPORTED_VERSIONS,
   UPGRADE_REQUIRED,
 } from '@ggui-ai/protocol/version';
-import type { WebSocketMessage } from '@ggui-ai/protocol/transport/websocket';
 import type { McpAppAiGguiRenderMeta } from '@ggui-ai/protocol/integrations/mcp-apps';
 import { ChannelRegistry } from '@ggui-ai/live-channel';
 import {
@@ -41,14 +36,7 @@ import {
   type ObservabilityMessage,
 } from '../observability.js';
 import { connectViaRegistry } from '../registry-subscribe.js';
-import { buildRootWireConfig } from '../wire-config.js';
-import {
-  createDataHandler,
-  createSystemHandler,
-} from '../channels/index.js';
-import { mergeReservedValidators } from '../validation.js';
-import { StreamBus } from '../wire-config.js';
-import type { ActionSpec, GguiSession } from '@ggui-ai/protocol';
+import { createSystemHandler } from '../channels/index.js';
 
 // =============================================================================
 // postObservabilityToParent — default postMessage emitter
@@ -95,97 +83,6 @@ describe('postObservabilityToParent', () => {
     } finally {
       spy.mockRestore();
     }
-  });
-});
-
-// =============================================================================
-// wire-config dispatch — `wired-tool-invoked`
-// =============================================================================
-
-describe('buildRootWireConfig — wired-tool-invoked emission', () => {
-  it('emits a wired-tool-invoked event when a dispatched action resolves to a tool', () => {
-    const observed: ObservabilityEvent[] = [];
-    const sent: WebSocketMessage[] = [];
-    const managerShim = { send: (m: WebSocketMessage) => sent.push(m) };
-    const actionSpec: ActionSpec = {
-      'tasks.create': {
-        label: 'Create',
-        nextStep: 'tasks.create_tool',
-      },
-    };
-    const render: GguiSession = {
-      id: 'page-1',
-      appId: 'app-1',
-      componentCode: 'export default () => null',
-      eventSequence: 0,
-      createdAt: Date.now(),
-      lastActivityAt: Date.now(),
-      expiresAt: Date.now() + 60_000,
-      actionSpec,
-    };
-    const config = buildRootWireConfig({
-      sessionId: 'render-1',
-      appId: 'app-1',
-      getCurrentGguiSession: () => render,
-      manager: managerShim,
-      streamBus: new (class {
-        subscribe(): () => void {
-          return () => {};
-        }
-        emit(): void {}
-      })() as unknown as import('../wire-config.js').StreamBus,
-      onObserve: (event) => observed.push(event),
-    });
-
-    config.dispatch('tasks.create', { title: 'hello' });
-
-    expect(sent).toHaveLength(1);
-    expect(observed).toHaveLength(1);
-    const wired = observed.find(
-      (e): e is Extract<ObservabilityEvent, { kind: 'wired-tool-invoked' }> =>
-        e.kind === 'wired-tool-invoked',
-    );
-    expect(wired).toBeDefined();
-    if (wired === undefined) return;
-    expect(wired.toolName).toBe('tasks.create_tool');
-    expect(wired.actionName).toBe('tasks.create');
-    expect(typeof wired.dispatchedAt).toBe('string');
-    expect(Number.isNaN(Date.parse(wired.dispatchedAt))).toBe(false);
-  });
-
-  it('does NOT emit when the dispatched action has no tool binding', () => {
-    const observed: ObservabilityEvent[] = [];
-    const sent: WebSocketMessage[] = [];
-    const render: GguiSession = {
-      id: 'page-agent',
-      appId: 'app-agent',
-      componentCode: 'export default () => null',
-      eventSequence: 0,
-      createdAt: Date.now(),
-      lastActivityAt: Date.now(),
-      expiresAt: Date.now() + 60_000,
-      actionSpec: {
-        'plain.action': { label: 'Plain' /* agent-routed, no tool */ },
-      },
-    };
-    const config = buildRootWireConfig({
-      sessionId: 'render-agent',
-      appId: 'app-agent',
-      getCurrentGguiSession: () => render,
-      manager: { send: (m) => sent.push(m) },
-      streamBus: new (class {
-        subscribe(): () => void {
-          return () => {};
-        }
-        emit(): void {}
-      })() as unknown as import('../wire-config.js').StreamBus,
-      onObserve: (event) => observed.push(event),
-    });
-
-    config.dispatch('plain.action', { foo: 1 });
-
-    expect(sent).toHaveLength(1);
-    expect(observed).toHaveLength(0);
   });
 });
 
@@ -344,69 +241,6 @@ describe('connectViaRegistry — schema-version-mismatch emission', () => {
 });
 
 // =============================================================================
-// data channel handler — contract-error-emitted emission
-// =============================================================================
-
-describe('data handler — contract-error-emitted emission', () => {
-  it('emits contract-error-emitted when a _ggui:contract-error envelope arrives', () => {
-    const observed: ObservabilityEvent[] = [];
-    // No mounted render — the validator won't enforce because there's
-    // no active streamSpec. Behaviour matches a render that
-    // hasn't declared a streamSpec entry for the inbound channel.
-    const handler = createDataHandler({
-      getCurrentGguiSession: () => null,
-      streamBus: new StreamBus(),
-      validatorCtx: { reservedValidators: mergeReservedValidators(undefined, undefined) },
-      onObserve: (e) => observed.push(e),
-    });
-
-    void handler.onMessage({
-      sessionId: 'render-c12-obs',
-      channel: '_ggui:contract-error',
-      mode: 'append',
-      payload: {
-        toolName: 'tasks.create_tool',
-        actionName: 'tasks.create',
-        error: {
-          code: 'TOOL_THREW',
-          message: 'boom',
-        },
-        timestamp: new Date().toISOString(),
-      },
-    });
-
-    const event = observed.find(
-      (e): e is Extract<ObservabilityEvent, { kind: 'contract-error-emitted' }> =>
-        e.kind === 'contract-error-emitted',
-    );
-    expect(event).toBeDefined();
-    if (event === undefined) return;
-    expect(event.code).toBe('TOOL_THREW');
-    expect(event.toolName).toBe('tasks.create_tool');
-    expect(event.actionName).toBe('tasks.create');
-  });
-
-  it('skips emission on data envelopes for non-reserved channels', () => {
-    const observed: ObservabilityEvent[] = [];
-    const handler = createDataHandler({
-      getCurrentGguiSession: () => null,
-      streamBus: new StreamBus(),
-      validatorCtx: { reservedValidators: mergeReservedValidators(undefined, undefined) },
-      onObserve: (e) => observed.push(e),
-    });
-
-    void handler.onMessage({
-      sessionId: 'render-skip',
-      channel: 'tasks',
-      mode: 'replace',
-      payload: [{ id: 1 }],
-    });
-
-    expect(observed).toHaveLength(0);
-  });
-});
-
-// =============================================================================
 // system channel handler — auth-required emission (Wave 3 §S2)
 // =============================================================================
 
@@ -496,7 +330,7 @@ describe('system handler — auth-required emission (Wave 3 §S2)', () => {
     expect(observed.filter((e) => e.kind === 'auth-required')).toHaveLength(0);
   });
 
-  it('does not emit contract-error-emitted on a system frame', () => {
+  it('emits ONLY auth-required kinds on a system frame', () => {
     const observed: ObservabilityEvent[] = [];
     const handler = createSystemHandler({ onObserve: (e) => observed.push(e) });
 
@@ -507,7 +341,7 @@ describe('system handler — auth-required emission (Wave 3 §S2)', () => {
     });
 
     expect(
-      observed.filter((e) => e.kind === 'contract-error-emitted'),
+      observed.filter((e) => e.kind !== 'auth-required'),
     ).toHaveLength(0);
   });
 });

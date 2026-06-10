@@ -22,7 +22,7 @@
  *     `INVALID_ACTION_KIND` and operators lose observability.
  *
  * `sendMessage` was retired 2026-05-08 (Slice 12 Phase 2) — chat-shortcut
- * UX degrades to Pattern β consent prompts in v1.
+ * UX degrades to submit-action consent prompts in v1.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { App } from '@modelcontextprotocol/ext-apps';

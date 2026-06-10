@@ -15,9 +15,8 @@
  *      each accept their canonical shape and reject every deformation
  *      enumerated in the validator's contract (no discriminator,
  *      half-live, missing runtimeUrl).
- *   3. **Optional-field preservation** — `contextSlots`,
- *      `appCallableTools`, `actionNextSteps` round-trip identically
- *      through every wrapper.
+ *   3. **Optional-field preservation** — `contextSlots` round-trips
+ *      identically through every wrapper.
  *
  * Post-Phase-B (2026-05-27): the wire merged the previous two-slice
  * envelope (`ai.ggui/session` + `ai.ggui/stack-item`) into a single
@@ -54,8 +53,6 @@ const componentBootstrap: McpAppAiGguiRenderMeta = {
   themeId: 'indigo',
   themeMode: 'light' as const,
   propsJson: '{"name":"Ada"}',
-  appCallableTools: ['ggui_runtime_submit_action', 'foo_tool'],
-  actionNextSteps: { archive: 'gmail_archive' },
   contextSlots: [
     {
       name: 'currentStep',
@@ -239,33 +236,4 @@ describe('Slice 14 — optional-field round-trip', () => {
     }
   });
 
-  it('preserves appCallableTools through every extractor', () => {
-    setGlobal(componentBootstrap);
-    const fromGlobal = parseMetaFromGlobal();
-    const fromTool = parseMetaFromToolResult(
-      wrapToolResult(componentBootstrap),
-    );
-    expect(fromGlobal.ok && fromGlobal.meta.appCallableTools).toEqual([
-      'ggui_runtime_submit_action',
-      'foo_tool',
-    ]);
-    expect(fromTool.ok && fromTool.meta.appCallableTools).toEqual([
-      'ggui_runtime_submit_action',
-      'foo_tool',
-    ]);
-  });
-
-  it('preserves actionNextSteps through every extractor', () => {
-    setGlobal(componentBootstrap);
-    const fromGlobal = parseMetaFromGlobal();
-    const fromTool = parseMetaFromToolResult(
-      wrapToolResult(componentBootstrap),
-    );
-    expect(fromGlobal.ok && fromGlobal.meta.actionNextSteps).toEqual({
-      archive: 'gmail_archive',
-    });
-    expect(fromTool.ok && fromTool.meta.actionNextSteps).toEqual({
-      archive: 'gmail_archive',
-    });
-  });
 });

@@ -65,8 +65,6 @@ export type {
   ObservabilityEvent,
   ObservabilityEmitter,
   ObservabilityMessage,
-  WiredToolInvokedEvent,
-  ContractErrorEmittedEvent,
   SchemaVersionMismatchEvent,
   SubscribeFailedEvent,
   AuthRequiredEvent,

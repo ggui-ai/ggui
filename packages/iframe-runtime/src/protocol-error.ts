@@ -164,9 +164,9 @@ export function defaultProtocolErrorEmitter(err: ProtocolError): void {
  *
  * Client-side violations do NOT ride the server-emitted
  * `_ggui:contract-error` envelope — that shape (`ContractErrorPayload`)
- * is tool-failure-scoped and authored by the render-channel router.
- * A client-side violation is a DIFFERENT category: nothing reached the
- * tool. We surface it as `{kind: 'protocol'; code:
+ * is server-authored vocabulary for contract failures the server
+ * observes. A client-side violation is a DIFFERENT category: nothing
+ * left the renderer. We surface it as `{kind: 'protocol'; code:
  * 'CLIENT_CONTRACT_VIOLATION'}` with structured `details` so hosts can
  * render the same summary that `console.warn` would have produced.
  *
