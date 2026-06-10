@@ -11,7 +11,10 @@
  *     handler (`./action-router.ts`) enforces name-membership for
  *     inbound `data:submit` envelopes against it;
  *   - an event ledger (the consume buffer) — appended actions get a
- *     monotonic per-session `sequence` the action ack echoes back.
+ *     monotonic per-session `sequence` the action ack echoes back;
+ *   - an outbound stream-sequence cursor — the `emit-envelope`
+ *     ConformanceHost directive stamps `StreamEnvelope.seq` on
+ *     injected `{type:'data'}` frames from it.
  *
  * Wire-shape note: the conformance kit drives the reference server
  * over the SPEC §12.2 wire using the canonical render-identity field
@@ -49,6 +52,17 @@ export interface GguiSession {
   actionSpec?: Readonly<Record<string, ActionSpecEntryDecl>>;
   /** Consume-buffer event ledger. Append via {@link appendEvent}. */
   readonly events: SessionEvent[];
+  /**
+   * Outbound stream-delivery sequence cursor — the `seq` stamped on
+   * the most recent `{type:'data'}` StreamEnvelope emitted for this
+   * render. Starts at 0 (nothing emitted yet); advanced by
+   * {@link GguiSessionStore.nextStreamSeq}. Per-render and monotonic,
+   * mirroring the StreamEnvelope sequencing contract (`seq` starts at
+   * 1, gap-free within a render). Distinct from the consume-buffer
+   * ledger's `sequence` — that counts INBOUND appended actions; this
+   * counts OUTBOUND stream deliveries.
+   */
+  streamSeq: number;
   readonly subscribers: Set<Subscriber>;
   /**
    * Per-GguiSession protocol-version override. When set, the WS subscribe
@@ -112,6 +126,7 @@ export class GguiSessionStore {
       sessionId,
       appId,
       events: [],
+      streamSeq: 0,
       subscribers: new Set(),
     };
     this.renders.set(sessionId, render);
@@ -182,6 +197,26 @@ export class GguiSessionStore {
   setVersionOverride(sessionId: string, version: string): void {
     const render = this.create(sessionId, 'conformance');
     render.versionOverride = version;
+  }
+
+  /**
+   * Assign the next outbound stream sequence for the named render —
+   * advances {@link GguiSession.streamSeq} and returns the new value
+   * (first assignment = 1). Called by the `emit-envelope`
+   * ConformanceHost directive when stamping the `StreamEnvelope` it
+   * injects. Sequence assignment is emission-scoped, not
+   * delivery-scoped: a frame emitted with zero subscribers attached
+   * still consumes its sequence number, mirroring buffer-backed
+   * servers that assign `seq` at append time regardless of who is
+   * connected.
+   *
+   * Same "create-if-missing" semantics as the other setters so
+   * directive ordering relative to subscribe doesn't matter.
+   */
+  nextStreamSeq(sessionId: string): number {
+    const render = this.create(sessionId, 'conformance');
+    render.streamSeq += 1;
+    return render.streamSeq;
   }
 
   /**

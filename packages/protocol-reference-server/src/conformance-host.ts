@@ -6,13 +6,14 @@
  * Directives split into "implement" and "throw":
  *
  *   Implement:
- *     - create-session             → `renders.create()` (+
+ *     - create-session            → `renders.create()` (+
  *       `renders.declareActionSpec()` when the directive carries one)
  *     - server-version-override   → `renders.setVersionOverride()`
- *     - emit-envelope             → `renders.injectFrame()`
+ *     - emit-envelope             → wrap the directive's body in the
+ *       SPEC §12.2 channel-3 delivery frame `{type:'data', payload:
+ *       StreamEnvelope}` → `renders.injectFrame()`
  *
  *   Throw (kit records SKIP, not FAIL):
- *     - seed-channel              — unimplemented
  *     - renderer-url-override     — unimplemented (browser-level)
  *     - ui-initialize-response-override — unimplemented
  *
@@ -21,16 +22,23 @@
  * richer host harness. Throwing surfaces "directive not implemented"
  * with the error message as the skip reason.
  *
+ * The kit validates every fixture-authored directive against its
+ * closed `SetupStep` vocabulary before dispatch, so this adapter only
+ * ever receives shape-valid steps of a known kind — narrowing is by
+ * the `kind` discriminant; no defensive re-parsing.
+ *
  * Note: render-termination directive (`close-render`) is intentionally
  * absent — render lifecycle is implicit (created → active → TTL-expired);
  * there is no agent-facing close tool, and no kit directive to invoke.
  */
+import {
+  DEFAULT_STREAM_CHANNEL_MODE,
+  makeStreamEnvelope,
+  type JsonValue,
+} from '@ggui-ai/protocol';
 import type {
   ConformanceHost,
-  CreateGguiSessionSetup,
-  EmitEnvelopeSetup,
   HostSetupStep,
-  HostTeardownStep,
 } from '@ggui-ai/protocol-conformance';
 
 import type { ReferenceServer } from './server.js';
@@ -54,51 +62,70 @@ export function createReferenceConformanceHost({
 }: CreateReferenceConformanceHostInput): ConformanceHost {
   return {
     async dispatchSetup(step: HostSetupStep): Promise<void> {
-      // Discriminant-narrow via explicit casts — the extensibly-closed
-      // `HostUnknownSetupStep` arm (`kind: string & {}`) widens the
-      // discriminant and blocks literal-narrowing on the union.
       if (step.kind === 'create-session') {
-        const s = step as CreateGguiSessionSetup;
-        serverInstance.renders.create(s.sessionId, s.appId ?? 'conformance');
-        if (s.actionSpec !== undefined) {
-          serverInstance.renders.declareActionSpec(s.sessionId, s.actionSpec);
+        serverInstance.renders.create(step.sessionId, step.appId ?? 'conformance');
+        if (step.actionSpec !== undefined) {
+          serverInstance.renders.declareActionSpec(step.sessionId, step.actionSpec);
         }
         return;
       }
+      if (step.kind === 'server-version-override') {
+        serverInstance.renders.setVersionOverride(step.sessionId, step.advertiseVersion);
+        return;
+      }
       if (step.kind === 'emit-envelope') {
-        // The directive carries `channel` + `payload` but no
-        // sessionId — it's scoped to the most-recently-created
-        // render, matching the same fixture-authoring convention as
-        // server-version-override (the kit's `narrowSetupStep` is a
-        // flat `type → kind` rename pass-through, so any sessionId on
-        // the directive JSON would survive, but the canonical
-        // EmitEnvelopeSetup shape doesn't declare one).
-        //
-        // Wire-format wrapping: the directive's `payload: unknown` is
-        // the envelope body; the host wraps it in the SPEC §12.2
-        // `{type:'stream', payload:{channel, value}}` shape before
-        // fan-out. Per the kit type docstring, "Host is responsible
-        // for wrapping in the wire format (sequence stamp, timestamp,
-        // etc.)" — the kit does NOT expect the directive to carry a
-        // fully-formed wire frame.
-        const s = step as EmitEnvelopeSetup;
-        if (typeof s.channel !== 'string' || s.channel.length === 0) {
+        // The directive carries `channel` + `payload` but no sessionId
+        // — it's scoped to the most-recently-created render (the
+        // fixture-authoring convention is that `create-session`
+        // immediately precedes it).
+        if (step.channel.length === 0) {
           throw new Error(
             `emit-envelope directive missing channel: ${JSON.stringify(step)}`,
           );
         }
-        const lastSessionId = serverInstance.renders.lastCreatedSessionId();
-        if (lastSessionId === undefined) {
+        // The directive types `payload` as `unknown` (opaque to the
+        // runner) but `StreamEnvelope.payload` is `JsonValue`.
+        // Fixture-sourced bodies are JSON by construction; direct host
+        // embedders could pass anything — validate, never cast.
+        const body = step.payload;
+        if (!isJsonValue(body)) {
+          throw new Error(
+            'emit-envelope payload must be a JSON value (string / finite number / boolean / null / array / object)',
+          );
+        }
+        const sessionId = serverInstance.renders.lastCreatedSessionId();
+        if (sessionId === undefined) {
           throw new Error(
             'reference-server: emit-envelope invoked before create-session — no render scope to bind to',
           );
         }
-        const fanned = serverInstance.renders.injectFrame(lastSessionId, {
-          type: 'stream',
-          payload: {
-            channel: s.channel,
-            value: s.payload,
-          },
+        // Wire-format wrapping: the directive's `payload` is the
+        // envelope body; the host wraps it in the SPEC §12.2 channel-3
+        // delivery frame `{type:'data', payload: StreamEnvelope}`
+        // before fan-out. Per the kit directive contract, the host
+        // owns the wire framing — sequence stamp + schema-version
+        // stamp included:
+        //   - `mode`: the server declares no streamSpec, so each
+        //     delivery carries the protocol's declared default.
+        //   - `seq`: per-render monotonic outbound cursor, assigned at
+        //     emission time (mirrors buffer-backed servers that assign
+        //     `seq` at append, regardless of who is subscribed).
+        //   - `schemaVersion`: the version this server advertises for
+        //     THIS render — same per-render-override precedence the
+        //     subscribe handler uses.
+        const envelope = makeStreamEnvelope({
+          sessionId,
+          channel: step.channel,
+          mode: DEFAULT_STREAM_CHANNEL_MODE,
+          payload: body,
+          seq: serverInstance.renders.nextStreamSeq(sessionId),
+          schemaVersion:
+            serverInstance.renders.get(sessionId)?.versionOverride ??
+            serverInstance.advertisedVersion,
+        });
+        const fanned = serverInstance.renders.injectFrame(sessionId, {
+          type: 'data',
+          payload: envelope,
         });
         if (!fanned) {
           // No subscribers attached — the directive's emission is
@@ -109,7 +136,7 @@ export function createReferenceConformanceHost({
           // the unobservability is a fixture concern.
           // eslint-disable-next-line no-console
           console.warn(
-            `[@ggui-ai/protocol-reference-server] emit-envelope on render '${lastSessionId}' channel '${s.channel}' had no subscribers — frame dropped`,
+            `[@ggui-ai/protocol-reference-server] emit-envelope on render '${sessionId}' channel '${step.channel}' had no subscribers — frame dropped`,
           );
         }
         return;
@@ -124,55 +151,49 @@ export function createReferenceConformanceHost({
           'reference server does not implement ui-initialize-response-override — MCP Apps host concern, out of scope',
         );
       }
-      if (step.kind === 'server-version-override') {
-        // Fixture JSON authors `advertiseVersion` (matches the
-        // semantic — "advertise this version on the wire"); the kit's
-        // exported `ServerVersionOverrideSetup` interface uses
-        // `version`. Tolerate both for forward-compat with the kit's
-        // own type. The runtime `narrowSetupStep` only renames
-        // `type → kind` and passes other fields verbatim, so
-        // whichever the fixture authors arrives unchanged.
-        const raw = step as unknown as {
-          readonly advertiseVersion?: string;
-          readonly version?: string;
-        };
-        const advertise = raw.advertiseVersion ?? raw.version;
-        if (typeof advertise !== 'string' || advertise.length === 0) {
-          throw new Error(
-            `server-version-override directive missing advertiseVersion/version: ${JSON.stringify(step)}`,
-          );
-        }
-        // Same most-recently-created render scope as emit-envelope —
-        // the fixture authoring convention is `create-session`
-        // immediately precedes this directive, and the canonical
-        // ServerVersionOverrideSetup type doesn't declare a sessionId,
-        // so fixtures may omit it. Falling back to
-        // `lastCreatedSessionId()` keeps the host robust to either.
-        const lastSessionId = serverInstance.renders.lastCreatedSessionId();
-        if (lastSessionId === undefined) {
-          throw new Error(
-            'reference-server: server-version-override invoked before create-session — no render scope to bind to',
-          );
-        }
-        serverInstance.renders.setVersionOverride(lastSessionId, advertise);
-        return;
-      }
-      // Unknown kind — extensibly-closed. Throw so the kit records
-      // SKIP with an honest reason.
-      const unknownKind = (step as { kind?: unknown }).kind ?? 'unknown';
-      throw new Error(
-        `reference server does not implement setup kind '${String(unknownKind)}'`,
-      );
+      return unreachableSetupStep(step);
     },
 
-    async dispatchTeardown(step: HostTeardownStep): Promise<void> {
-      // No teardown directives are defined in the kit today (renders
-      // decay via TTL). Throw so the kit surfaces any future-authored
-      // directive as an honest skip rather than a silent success.
-      const unknownKind = (step as { kind?: unknown }).kind ?? 'unknown';
-      throw new Error(
-        `reference server does not implement teardown kind '${String(unknownKind)}'`,
-      );
+    async dispatchTeardown(): Promise<void> {
+      // The kit's teardown vocabulary is empty (`HostTeardownStep` is
+      // `never`) — the runner rejects any fixture-authored teardown
+      // directive before dispatch, so this is statically unreachable
+      // today. Throw so a future kit version that grows a teardown
+      // vocabulary surfaces here as an honest "not implemented"
+      // (reporter warning) rather than a silent success.
+      throw new Error('reference server does not implement any teardown directive');
     },
   };
+}
+
+/**
+ * Compile-time exhaustiveness lock: the kit's setup vocabulary is a
+ * closed union. When a future kit version adds a directive arm, this
+ * call stops compiling — forcing this host to either implement the
+ * directive or throw "not implemented" explicitly. Silently ignoring
+ * a directive (the fall-through default) is the one behavior the
+ * `ConformanceHost` contract forbids.
+ */
+function unreachableSetupStep(step: never): never {
+  throw new Error(
+    `reference server received a setup directive outside the kit's closed vocabulary: ${JSON.stringify(step)}`,
+  );
+}
+
+/**
+ * Validating narrower: is `value` representable as a protocol
+ * `JsonValue`? Rejects functions, symbols, bigints, `undefined`, and
+ * non-finite numbers anywhere in the tree. Used to gate the
+ * `emit-envelope` directive's opaque body before it's stamped into a
+ * `StreamEnvelope`.
+ */
+function isJsonValue(value: unknown): value is JsonValue {
+  if (value === null) return true;
+  if (typeof value === 'string' || typeof value === 'boolean') return true;
+  if (typeof value === 'number') return Number.isFinite(value);
+  if (Array.isArray(value)) return value.every(isJsonValue);
+  if (typeof value === 'object') {
+    return Object.values(value).every(isJsonValue);
+  }
+  return false;
 }

@@ -1,24 +1,33 @@
 /**
- * `emit-envelope` ConformanceHost directive — Slice gap-6.
+ * `emit-envelope` ConformanceHost directive.
  *
  * Asserts that the directive injects a wire-format-wrapped envelope
  * into the named render's subscriber set, and that the receiving WS
- * client observes the canonical `{type:'stream', payload:{channel,
- * value}}` shape.
+ * client observes the canonical SPEC §12.2 channel-3 delivery frame
+ * `{type:'data', payload: StreamEnvelope}` — channel + body on the
+ * protocol's envelope shape, with a per-render monotonic `seq` and
+ * the render's advertised `schemaVersion` stamped by the host.
+ * (`{type:'stream'}` is a DIFFERENT canonical frame — agent
+ * text-chunk streaming — and never appears here.)
  *
  * Why this is a separate test file from `conformance.test.ts`:
- * `emit-envelope` has no kit fixture wired against it today (Slice O
- * routed the only consumer — `props-update-roundtrip` — through Path
- * B Playwright). This file proves the host's directive contract
- * directly, runs in <2s, and stays green even if a future kit fixture
- * lands on the directive — the host-level contract is package-internal
- * and should be testable without round-tripping through the kit.
+ * `emit-envelope` has no kit fixture graded over pure WS today (the
+ * only consumer — `props-update-roundtrip` — asserts on rendered DOM
+ * and skips as Path-B). This file proves the host's directive
+ * contract directly, runs in <2s, and stays green even if a future
+ * kit fixture lands on the directive — the host-level contract is
+ * package-internal and should be testable without round-tripping
+ * through the kit.
  *
  * Mirrors the test-helper pattern from `render-version-override.test.ts`.
  *
  * Wire-field note: subscribes carry the canonical render-identity
  * field `sessionId` on the wire.
  */
+import {
+  DEFAULT_STREAM_CHANNEL_MODE,
+  PROTOCOL_SCHEMA_VERSION,
+} from '@ggui-ai/protocol';
 import { describe, expect, it, beforeEach, afterEach } from 'vitest';
 import { WebSocket } from 'ws';
 
@@ -37,7 +46,7 @@ describe('emit-envelope ConformanceHost directive', () => {
     await server.stop();
   });
 
-  it('injects a stream frame into a subscribed render and the WS client observes it', async () => {
+  it('injects a canonical data frame into a subscribed render and the WS client observes it', async () => {
     const sessionId = 'emit-target';
     const host = createReferenceConformanceHost({ serverInstance: server });
 
@@ -57,15 +66,70 @@ describe('emit-envelope ConformanceHost directive', () => {
       });
     });
 
-    // First frame after ack should be the injected envelope.
+    // First frame after ack should be the injected envelope — the
+    // exact SPEC §12.2 `{type:'data', payload: StreamEnvelope}` wire
+    // shape, pinned field-by-field:
+    //   - `mode` is the protocol's declared default (the reference
+    //     server declares no streamSpec to override it per-channel);
+    //   - `seq` starts at 1 — first outbound delivery on this render;
+    //   - `schemaVersion` is the version the server advertises for
+    //     this render (canonical default here — no override directive
+    //     ran).
     expect(observed).toHaveLength(1);
     expect(observed[0]).toEqual({
-      type: 'stream',
+      type: 'data',
       payload: {
+        sessionId,
         channel: 'demo:counter',
-        value: { count: 7, label: 'hello' },
+        mode: DEFAULT_STREAM_CHANNEL_MODE,
+        payload: { count: 7, label: 'hello' },
+        seq: 1,
+        schemaVersion: PROTOCOL_SCHEMA_VERSION,
       },
     });
+  });
+
+  it('stamps a per-render monotonic seq across successive emissions', async () => {
+    const sessionId = 'emit-seq';
+    const host = createReferenceConformanceHost({ serverInstance: server });
+    await host.dispatchSetup({ kind: 'create-session', sessionId });
+
+    const observed = await captureFramesAfterAck(server.baseUrl, sessionId, async () => {
+      await host.dispatchSetup({
+        kind: 'emit-envelope',
+        channel: 'demo:counter',
+        payload: { tick: 1 },
+      });
+      await host.dispatchSetup({
+        kind: 'emit-envelope',
+        channel: 'demo:counter',
+        payload: { tick: 2 },
+      });
+    });
+
+    expect(observed).toHaveLength(2);
+    expect(observed[0]).toMatchObject({
+      type: 'data',
+      payload: { sessionId, seq: 1, payload: { tick: 1 } },
+    });
+    expect(observed[1]).toMatchObject({
+      type: 'data',
+      payload: { sessionId, seq: 2, payload: { tick: 2 } },
+    });
+  });
+
+  it('rejects a payload that is not representable as a JSON value', async () => {
+    const host = createReferenceConformanceHost({ serverInstance: server });
+    await host.dispatchSetup({ kind: 'create-session', sessionId: 'bad-payload' });
+    await expect(
+      host.dispatchSetup({
+        kind: 'emit-envelope',
+        channel: 'demo:counter',
+        // Functions can't ride a StreamEnvelope — the host must reject
+        // loudly instead of serializing to a hole.
+        payload: { onTick: () => 7 },
+      }),
+    ).rejects.toThrow(/JSON value/);
   });
 
   it('rejects directive without channel', async () => {
