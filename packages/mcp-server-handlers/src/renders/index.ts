@@ -289,7 +289,6 @@ export {
   derivePropsJson,
   derivePublicEnvProjection,
   deriveRenderMeta,
-  deriveWiredActionTools,
   resolveGadgetUrls,
   type RenderMetaView,
 } from "./slice-meta-derivation.js";

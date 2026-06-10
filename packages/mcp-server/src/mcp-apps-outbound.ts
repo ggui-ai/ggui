@@ -711,24 +711,6 @@ export interface SelfContainedShellInputs {
    */
   readonly propsJson?: string;
   /**
-   * Names of same-server tools whose `_meta.ui.visibility` includes
-   * `"app"`, mirrored from {@link McpAppAiGguiRenderMeta.appCallableTools}.
-   * Forwarded to the iframe-runtime so its dispatch closure can choose
-   * Pattern α (direct `tools/call`) over Pattern β (3-message bridge)
-   * per wired action — even on the self-contained `/r/<shortCode>`
-   * path where there's no `ui/initialize` round-trip to deliver the
-   * field.
-   *
-   * Empty / absent → no fallout: the runtime's dispatch routes every
-   * action through Pattern β.
-   */
-  readonly appCallableTools?: McpAppAiGguiRenderMeta["appCallableTools"];
-  /**
-   * Per-action wired-tool mapping for the active render, mirrored
-   * from {@link McpAppAiGguiRenderMeta.actionNextSteps}.
-   */
-  readonly actionNextSteps?: McpAppAiGguiRenderMeta["actionNextSteps"];
-  /**
    * Per-slot data for the active render's `contextSpec`, mirrored
    * from {@link McpAppAiGguiRenderMeta.contextSlots}. The runtime
    * synthesizes one `React.createContext(default)` per entry at boot.
@@ -891,9 +873,6 @@ export function buildSelfContainedShell(opts: SelfContainedShellInputs): string 
     // carries, forwarded onto the inline bootstrap so the self-contained
     // shell applies the operator overlay too.
     ...(opts.theme !== undefined ? { theme: opts.theme } : {}),
-    ...(opts.appCallableTools !== undefined && opts.appCallableTools.length > 0
-      ? { appCallableTools: opts.appCallableTools }
-      : {}),
     ...(opts.permissionsPolicy !== undefined && opts.permissionsPolicy.length > 0
       ? { permissionsPolicy: opts.permissionsPolicy }
       : {}),
@@ -937,9 +916,6 @@ export function buildSelfContainedShell(opts: SelfContainedShellInputs): string 
         }
       : {}),
     ...(opts.propsJson !== undefined ? { propsJson: opts.propsJson } : {}),
-    ...(opts.actionNextSteps !== undefined && Object.keys(opts.actionNextSteps).length > 0
-      ? { actionNextSteps: opts.actionNextSteps }
-      : {}),
     ...(opts.contextSlots !== undefined && opts.contextSlots.length > 0
       ? { contextSlots: opts.contextSlots }
       : {}),
@@ -1162,7 +1138,7 @@ type RenderRenderable =
       props?: Record<string, unknown>;
       /** Original source render — carried so the resource handler can
        *  thread it through `deriveRenderMeta` for projection of
-       *  permissions / contextSlots / actionNextSteps. */
+       *  permissions / contextSlots. */
       source: GguiSession;
     }
   | {
@@ -1493,7 +1469,6 @@ export function registerGguiRenderResourceTemplate(
           // resource-served iframe matches the postMessage path.
           ...(view.theme !== undefined ? { theme: view.theme } : {}),
           ...(view.propsJson !== undefined ? { propsJson: view.propsJson } : {}),
-          ...(view.actionNextSteps !== undefined ? { actionNextSteps: view.actionNextSteps } : {}),
           ...(view.contextSlots !== undefined ? { contextSlots: view.contextSlots } : {}),
           ...(view.permissionsPolicy !== undefined
             ? { permissionsPolicy: view.permissionsPolicy }
@@ -1611,10 +1586,6 @@ async function buildShellFromBlueprint(args: {
       : undefined;
   const propsJson = propsSpec ? JSON.stringify(deriveDefaultPropsValues(propsSpec)) : undefined;
   const contextSlots = deriveDefaultContextSlots(contract.contextSpec);
-  const actionNextSteps =
-    "actionSpec" in contract && contract.actionSpec !== undefined
-      ? deriveWiredActionToolsFromSpec(contract.actionSpec)
-      : undefined;
   let codeUrl: string;
   let codeHash: string;
   try {
@@ -1635,7 +1606,6 @@ async function buildShellFromBlueprint(args: {
     ...(args.themeMode !== undefined ? { themeMode: args.themeMode } : {}),
     ...(propsJson !== undefined ? { propsJson } : {}),
     ...(contextSlots !== undefined ? { contextSlots } : {}),
-    ...(actionNextSteps !== undefined ? { actionNextSteps } : {}),
   });
 }
 
@@ -1674,22 +1644,6 @@ function deriveDefaultContextSlots(
   return collected.length > 0 ? collected : undefined;
 }
 
-function deriveWiredActionToolsFromSpec(
-  spec: import("@ggui-ai/protocol").ActionSpec
-): Record<string, string> | undefined {
-  const collected: Record<string, string> = {};
-  for (const [name, entry] of Object.entries(spec)) {
-    if (
-      entry &&
-      typeof entry === "object" &&
-      typeof entry.nextStep === "string" &&
-      entry.nextStep.length > 0
-    ) {
-      collected[name] = entry.nextStep;
-    }
-  }
-  return Object.keys(collected).length > 0 ? collected : undefined;
-}
 
 /**
  * Apply the full MCP Apps outbound wiring to a fresh `McpServer` - both

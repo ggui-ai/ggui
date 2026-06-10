@@ -39,8 +39,8 @@
  */
 
 /**
- * Action-routing pattern detail (Pattern α / Pattern β). Layered atop
- * `default` by the `aggressive` and `always` presets — `default`
+ * Action-routing detail (submit_action → consume-pipe loop). Layered
+ * atop `default` by the `aggressive` and `always` presets — `default`
  * already covers the actionSpec wire shape via the MENTAL MODEL
  * block; this paragraph adds the host-side dispatch semantics that
  * matter when an operator wants the LLM to also reason about how the
@@ -164,9 +164,9 @@ export const MCP_INSTRUCTIONS_PRESETS = {
 
   /**
    * Default protocol primer + the host-side action-routing detail
-   * (Pattern α direct dispatch vs Pattern β cross-server consent
-   * bridge). Pick when the operator wants the LLM to also reason
-   * about how the underlying tools/call envelopes flow.
+   * (submit_action relay → per-render pipe → `ggui_consume` drain).
+   * Pick when the operator wants the LLM to also reason about how
+   * the underlying tools/call envelopes flow.
    */
   aggressive: [...DEFAULT_PRESET_BODY, '', ACTION_ROUTING_PARAGRAPH].join('\n'),
 

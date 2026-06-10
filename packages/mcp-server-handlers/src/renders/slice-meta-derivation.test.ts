@@ -19,7 +19,6 @@ import {
   derivePublicEnvProjection,
   deriveRenderMeta,
   deriveTheme,
-  deriveWiredActionTools,
 } from './slice-meta-derivation';
 
 const NOW = '2026-05-09T00:00:00.000Z';
@@ -145,9 +144,9 @@ describe('deriveRenderMeta', () => {
   // T3-1 (2026-05-13) — the projection no longer carries componentCode.
   // Static-component bytes ride on the render handler's `codeUrl` channel
   // composed from its `codeStore` + `codeBaseUrl` deps. The view now
-  // emits only the wire-shape metadata fields (propsJson, actionNextSteps,
-  // contextSlots, permissionsPolicy) plus the `kind` discriminator for
-  // system variants.
+  // emits only the wire-shape metadata fields (propsJson, contextSlots,
+  // permissionsPolicy) plus the `kind` discriminator for system
+  // variants.
 
   it('component variant: omits componentCode (delivered via codeUrl channel)', () => {
     const view = deriveRenderMeta(componentItem());
@@ -162,14 +161,14 @@ describe('deriveRenderMeta', () => {
     expect(view.propsJson).toBe('{"city":"Seoul"}');
   });
 
-  it("component variant: includes actionNextSteps when actionSpec declares dispatch.kind='tool' entries", () => {
+  it('component variant: actionSpec does not leak into the View (nextStep hints derive server-side at consume-event build time)', () => {
     const actionSpec: ActionSpec = {
       save: { label: 'Save', nextStep: 'save_note' },
       undo: { label: 'Undo' },
     };
     const view = deriveRenderMeta(componentItem({ actionSpec }));
-    // `save` has dispatch.kind='tool' → included. `undo` is agent-routed → excluded.
-    expect(view.actionNextSteps).toEqual({ save: 'save_note' });
+    expect('actionSpec' in view).toBe(false);
+    expect('actionNextSteps' in view).toBe(false);
   });
 
   it('component variant: includes contextSlots when contextSpec is declared', () => {
@@ -199,7 +198,6 @@ describe('deriveRenderMeta', () => {
     expect(view.kind).toBe('no-credentials');
     expect(view.propsJson).toBe('{"reason":"demo"}');
     expect((view as Record<string, unknown>).componentCode).toBeUndefined();
-    expect(view.actionNextSteps).toBeUndefined();
     expect(view.contextSlots).toBeUndefined();
   });
 
@@ -232,7 +230,6 @@ describe('deriveRenderMeta', () => {
     );
     expect(view).toEqual({
       propsJson: '{"city":"Seoul"}',
-      actionNextSteps: { save: 'save_note' },
       contextSlots: [
         {
           name: 'count',
@@ -404,14 +401,10 @@ describe('deriveContextSlots — resume-aware seed from contextSnapshot', () => 
   });
 });
 
-describe('deriveWiredActionTools / deriveContextSlots — single-purpose helpers', () => {
-  // Existing helpers retained for callers that only need one field;
-  // the unified View is the preferred entry point but these stay
-  // public so legacy code paths can migrate piecemeal.
-  it('deriveWiredActionTools returns undefined when no actionSpec', () => {
-    expect(deriveWiredActionTools(componentItem())).toBeUndefined();
-  });
-
+describe('deriveContextSlots — single-purpose helper', () => {
+  // Retained for callers that only need one field; the unified View
+  // is the preferred entry point but this stays public so legacy
+  // code paths can migrate piecemeal.
   it('deriveContextSlots returns undefined when no contextSpec', () => {
     expect(deriveContextSlots(componentItem())).toBeUndefined();
   });

@@ -41,9 +41,7 @@ import { compileUiOnDemand } from "@ggui-ai/dev-stack";
 import { createLocalEmbeddingProvider } from "@ggui-ai/embedding-local";
 import { RUNTIME_BUNDLE_URL_PATH } from "@ggui-ai/iframe-runtime/server";
 import {
-  composeWiredActionRouterFromMounts,
   createGguiServer,
-  DEFAULT_BUILDER_APP_ID,
   FileSystemCodeStore,
   FixedWindowRateLimiter,
   InMemoryAuthAdapter,
@@ -82,7 +80,6 @@ import {
 import { createDeterministicPreviewEmitter } from "@ggui-ai/preview-a2ui/emitters";
 import type { UiManifest } from "@ggui-ai/project-config";
 import type { UiRegistry } from "@ggui-ai/ui-registry";
-import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
 import { createServer as createNetServer } from "node:net";
 import { join } from "node:path";
@@ -495,13 +492,6 @@ export function buildMcpServerBackend(opts: BuildMcpServerBackendOptions): Serve
   // derive the live-channel URL.
   const baseUrl = opts.publicBaseUrl ?? `http://${opts.host}:${opts.port}`;
   const wsBaseUrl = baseUrl.replace(/^http(s?):\/\//, "ws$1://");
-  // Router over the mount handler bundle. Computed once; absent
-  // (`null`) when no mounts are declared so the server falls through
-  // to agent-routed behavior.
-  const wiredActionRouter = composeWiredActionRouterFromMounts(opts.mcpMounts, () => ({
-    appId: DEFAULT_BUILDER_APP_ID,
-    requestId: randomUUID(),
-  }));
   // Strict-auth OSS default (`devAllowAll: false`). `createGguiServer`
   // would otherwise fall back to `InMemoryAuthAdapter({ devAllowAll:
   // true })`, which authenticates any non-empty bearer as builder — a
@@ -1007,20 +997,12 @@ export function buildMcpServerBackend(opts: BuildMcpServerBackendOptions): Serve
     // programmatic hosts + integration tests compose mounts through
     // this opt directly.
     ...(opts.mcpMounts && opts.mcpMounts.length > 0 ? { mcpMounts: opts.mcpMounts } : {}),
-    // wiredActionRouter composed from the same mount handlers. With
-    // mounts present, every mounted tool becomes wire-dispatchable
-    // from a generated UI's `actionSpec[name].dispatch.tool` (when
-    // `dispatch.kind === 'tool'`) — the "zero agent code" path.
-    // Without mounts, no router is wired and inbound actions stay on
-    // the agent-routed path.
-    ...(wiredActionRouter ? { wiredActionRouter } : {}),
     // Schema-compat mode. Defaults to `'reject'` inside
     // `createGguiServer`; the env override is the operator's escape
     // hatch for scenarios that intentionally ship a blueprint with a
-    // schema mismatch (e.g. contract-probe fixtures that test runtime
-    // TOOL_THREW / SCHEMA_VIOLATION error paths — `'reject'` would
-    // otherwise block the render at render/try-live time before
-    // runtime gets to emit the envelope under test).
+    // schema mismatch (e.g. contract-probe fixtures that exercise
+    // mismatch handling downstream — `'reject'` would otherwise block
+    // the render at render/try-live time before the scenario starts).
     //
     // Accepted values match `SchemaCompatMode`: `'reject' | 'warn' |
     // 'off'`. Unrecognized values fall through to the server's
@@ -1033,26 +1015,6 @@ export function buildMcpServerBackend(opts: BuildMcpServerBackendOptions): Serve
           schemaCompatCheck: process.env["GGUI_SCHEMA_COMPAT_MODE"] as "reject" | "warn" | "off",
         }
       : {}),
-    // Wired-tool per-call timeout override (default 30 s in
-    // `render-channel.ts::DEFAULT_WIRED_TOOL_TIMEOUT_MS`). Mirrors the
-    // `GGUI_SCHEMA_COMPAT_MODE` escape-hatch shape: env-only; absent or
-    // unparseable falls through to the server's default. Test harnesses
-    // exercising TOOL_TIMEOUT envelopes lower this to keep per-test
-    // budgets small (the conformance fixture
-    // `wired-action-tool-timeout.json` deliberately wires a hanging
-    // tool; the default 30 s wait would dominate a Lane-1 spec budget).
-    //
-    // Parse uses `Number()` + finite + positive-integer checks; a typo
-    // (`"abc"`, `"-100"`, `"NaN"`) falls through silently to default.
-    // Operators that need a different production timeout SHOULD compose
-    // `createGguiServer` directly rather than rely on env coupling.
-    ...(() => {
-      const raw = process.env["GGUI_WIRED_TIMEOUT_MS"];
-      if (raw === undefined || raw === "") return {};
-      const parsed = Number(raw);
-      if (!Number.isFinite(parsed) || parsed <= 0) return {};
-      return { wiredActionTimeoutMs: Math.floor(parsed) };
-    })(),
   });
   return {
     listen: async (port, host) => {

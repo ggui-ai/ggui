@@ -1,51 +1,36 @@
 /**
  * Schema compatibility check — verifies that a GguiSession's declared
- * `actionSpec` / `streamSpec` schemas line up with the input/output
- * schemas of the tools they reference. Wired at two canonical check
- * points: `ggui_render` validation (defensive, fires when the
- * generator eventually emits contract) and blueprint registration
- * (the console blueprint-try endpoint — the real-world site where a
- * GguiSession with pre-declared `actionSpec` / `streamSpec` and tool
- * refs lands on the server).
+ * `actionSpec` schemas line up with the input schemas of the
+ * `nextStep` tools they hint at. Wired at two canonical check points:
+ * `ggui_render` validation (defensive, fires when the generator
+ * eventually emits contract) and blueprint registration (the console
+ * blueprint-try endpoint — the real-world site where a GguiSession
+ * with a pre-declared `actionSpec` and tool hints lands on the
+ * server).
  *
  * **Algorithmic primitive** lives in `@ggui-ai/protocol`:
  *
  *   - `isSchemaSubset(superset, subset)` answers "can every value
  *     subset accepts also pass superset?".
  *   - `zodToJsonSchema(...)` converts a tool's ZodRawShape
- *     `inputSchema` / `outputSchema` to the JsonSchema shape the
- *     subset algorithm consumes.
+ *     `inputSchema` to the JsonSchema shape the subset algorithm
+ *     consumes.
  *
  * **What this module adds.** A small layer that walks a GguiSession's
- * `actionSpec` + `streamSpec`, resolves each declared `tool` ref
- * against a toolName → ZodRawShape registry, runs the appropriate
- * subset check, and reports a stable {@link SchemaCompatReport}. The
- * caller (console endpoint, render handler — later) decides whether
- * a non-empty report should throw, warn, or be ignored per the
- * {@link SchemaCompatMode} policy flag.
+ * `actionSpec`, resolves each declared `nextStep` hint against a
+ * toolName → ZodRawShape registry, runs the subset check, and reports
+ * a stable {@link SchemaCompatReport}. The caller (console endpoint,
+ * render handler) decides whether a non-empty report should throw,
+ * warn, or be ignored per the {@link SchemaCompatMode} policy flag.
  *
- * **Direction semantics (load-bearing).**
- *
- *   - For `actionSpec[name].schema` + `tool`: the action's payload
- *     is sent INTO the tool, so the action schema must be a subset
- *     of the tool's `inputSchema`. Compat relation:
- *     `isSchemaSubset(toolInputSchema, actionSchema)`.
- *   - For `streamSpec[channel].schema` + `tool`: the tool's return
- *     value is emitted OUT on the channel. Every value the tool
- *     returns MUST be accepted by the channel schema (otherwise a
- *     tool-fired refresh would emit a payload that subscribers
- *     reject). The channel schema is therefore the PERMISSIVE side
- *     and the tool's return is the restricted side. Compat relation:
- *     `isSchemaSubset(channelSchema, toolReturnSchema)` — i.e.
- *     "every toolReturn-accepted value is also channelSchema-
- *     accepted".
- *
- *     Note: the `StreamChannelEntry.schema` docstring phrases this
- *     as "the tool's returns MUST be a superset of channel schema".
- *     That historical phrasing is author-facing and slightly
- *     misleading if read literally as set-theoretic superset of
- *     accepted-values; the semantic intent is the one encoded here
- *     — EVERY tool return passes channel validation.
+ * **Direction semantics (load-bearing).** For `actionSpec[name]
+ * .schema` + `nextStep`: the action's payload is what the agent
+ * forwards INTO the hinted tool, so the action schema must be a
+ * subset of the tool's `inputSchema`. Compat relation:
+ * `isSchemaSubset(toolInputSchema, actionSchema)`. The check is
+ * advisory by nature — `nextStep` is a hint the agent owns — but a
+ * mismatch on a same-server tool is an author bug worth failing
+ * loudly at registration time.
  */
 import type { ZodRawShape } from 'zod';
 import {
@@ -53,7 +38,6 @@ import {
   zodToJsonSchema,
   type SubsetViolation,
   type ActionSpec,
-  type StreamSpec,
 } from '@ggui-ai/protocol';
 
 /**
@@ -86,21 +70,20 @@ export const DEFAULT_SCHEMA_COMPAT_MODE: SchemaCompatMode = 'reject';
  */
 export interface SchemaCompatFinding {
   /**
-   * Which spec side produced this finding. `'action'` for an
-   * `actionSpec[name]` tool ref; `'stream'` for a
-   * `streamSpec[channel].tool` ref. Consumers can branch on this
-   * when rendering the cause.
+   * Which spec side produced this finding. Always `'action'` — the
+   * only spec side carrying a tool reference is `actionSpec[name]
+   * .nextStep`. Kept as a literal field so consumers that render the
+   * cause have a stable discriminator.
    */
-  readonly kind: 'action' | 'stream';
+  readonly kind: 'action';
   /** Action name or channel name. */
   readonly specName: string;
   /** Tool name the spec referenced. */
   readonly toolName: string;
   /** One of:
-   *   - `'tool-not-found'`  — the ref's tool is not registered on
-   *     the composed handler set. (Author bug — matching the
-   *     existing `TOOL_NOT_FOUND` contract semantics, but surfaced
-   *     before any envelope reaches the agentic loop.)
+   *   - `'tool-not-found'`  — the hinted tool is not registered on
+   *     the composed handler set (and not declared in the contract's
+   *     `agentCapabilities.tools` cross-MCP catalog).
    *   - `'schema-mismatch'` — the subset check failed with at least
    *     one violation. See {@link SchemaCompatFinding.violations}.
    */
@@ -131,18 +114,17 @@ export interface SchemaCompatReport {
 
 /**
  * Narrow shape of what the check helper needs from each registered
- * tool. Satisfied by `SharedHandler<ZodRawShape, ZodRawShape>` — the
- * two schema fields are the only consumed inputs.
+ * tool. Satisfied by `SharedHandler<ZodRawShape, ZodRawShape>` —
+ * `name` + `inputSchema` are the only consumed inputs.
  */
 export interface ToolSchemaRef {
   readonly name: string;
   readonly inputSchema: ZodRawShape;
-  readonly outputSchema: ZodRawShape;
 }
 
 /**
  * Narrow shape of the GguiSession subset the checker consumes — the
- * two spec fields PLUS the contract's own tool catalog. Accepts any
+ * `actionSpec` PLUS the contract's own tool catalog. Accepts any
  * object carrying them, so both `@ggui-ai/protocol::GguiSession` and
  * the console endpoint's manifest contract shape work without a cast.
  *
@@ -156,7 +138,6 @@ export interface ToolSchemaRef {
  */
 export interface GguiSessionContractShape {
   readonly actionSpec?: ActionSpec;
-  readonly streamSpec?: StreamSpec;
   readonly agentCapabilities?: {
     readonly tools?: Readonly<Record<string, unknown>>;
   };
@@ -177,9 +158,8 @@ export class SchemaCompatError extends Error {
 }
 
 /**
- * Check a GguiSession's `actionSpec` / `streamSpec` entries against
- * the tool registry. See {@link SchemaCompatMode} for policy
- * semantics.
+ * Check a GguiSession's `actionSpec` entries against the tool
+ * registry. See {@link SchemaCompatMode} for policy semantics.
  *
  * Returns a {@link SchemaCompatReport}. When `mode === 'reject'`
  * AND findings exist, throws {@link SchemaCompatError} instead —
@@ -273,46 +253,6 @@ export function checkRenderSchemaCompat(
     }
   }
 
-  // streamSpec — each channel.tool's outputSchema must be a superset
-  // of channel.schema (inverted direction from actions).
-  const streamSpec = render.streamSpec ?? {};
-  for (const [channelName, entry] of Object.entries(streamSpec)) {
-    if (!entry || typeof entry !== 'object') continue;
-    const toolName = entry.tool;
-    if (typeof toolName !== 'string' || toolName.length === 0) continue;
-    const channelSchema = entry.schema;
-    if (!channelSchema) continue;
-
-    const tool = byName.get(toolName);
-    if (!tool) {
-      // Cross-MCP escape hatch — symmetric with the actionSpec arm.
-      if (contractDeclaredTools.has(toolName)) continue;
-      // stream tool-not-found stays error — spec defers the stream downgrade (Phase 2 scope = action nextStep only).
-      findings.push({
-        kind: 'stream',
-        specName: channelName,
-        toolName,
-        reason: 'tool-not-found',
-        violations: [],
-      });
-      continue;
-    }
-    const toolOutput = zodToJsonSchema(tool.outputSchema);
-    // Direction: every tool-returned value must be accepted by the
-    // channel schema. Channel is the superset / permissive side,
-    // tool-return is the restricted side.
-    const result = isSchemaSubset(channelSchema, toolOutput);
-    if (!result.compatible) {
-      findings.push({
-        kind: 'stream',
-        specName: channelName,
-        toolName,
-        reason: 'schema-mismatch',
-        violations: result.violations,
-      });
-    }
-  }
-
   const report: SchemaCompatReport = {
     compatible: findings.length === 0,
     findings,
@@ -342,17 +282,16 @@ export function hasErrorFinding(report: SchemaCompatReport): boolean {
 /**
  * Format a report into a human-readable message suitable for a
  * thrown error or a log line. Output is deterministic — sorted
- * by `kind` then `specName` — so tests can pattern-match on the
+ * by `specName` — so tests can pattern-match on the
  * exact string without ordering flakes.
  */
 function formatReport(report: SchemaCompatReport, context: string): string {
   if (report.compatible) {
     return `${context}: SCHEMA_MISMATCH_ERROR (no findings — internal error)`;
   }
-  const sorted = [...report.findings].sort((a, b) => {
-    if (a.kind !== b.kind) return a.kind < b.kind ? -1 : 1;
-    return a.specName < b.specName ? -1 : a.specName > b.specName ? 1 : 0;
-  });
+  const sorted = [...report.findings].sort((a, b) =>
+    a.specName < b.specName ? -1 : a.specName > b.specName ? 1 : 0,
+  );
   const lines = sorted.map((f) => {
     if (f.reason === 'tool-not-found') {
       return `- ${f.kind} "${f.specName}" references tool "${f.toolName}" which is not registered`;

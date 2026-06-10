@@ -171,43 +171,6 @@ function resolveGadgetUrlsImpl(
 }
 
 /**
- * Per-action nextStep-tool mapping for an active render, derived
- * from its `actionSpec`. Returns `undefined` when there are no entries
- * (caller spreads `...(result !== undefined ? {actionNextSteps: result} : {})`
- * to keep legacy bootstrap envelopes byte-identical).
- *
- * Post-2026-05-11: every `actionSpec` entry is agent-routed; the
- * optional `nextStep` field names the agent-side tool the agent
- * INTENDS to call next. The renderer surfaces this map as
- * `actionNextSteps` to keep the bootstrap-meta shape stable —
- * downstream tooling (renderer dev console, RenderInspector) reads it
- * as "which actions hint at which tools." Entries without `nextStep`
- * are omitted.
- */
-export function deriveWiredActionTools(
-  item: GguiSession,
-): Record<string, string> | undefined {
-  // McpApps + system variants don't carry an actionSpec. Discriminator
-  // narrowing gives typed access to ComponentGguiSession.actionSpec.
-  if (item.type === 'mcpApps' || item.type === 'system') return undefined;
-  const actionSpec = item.actionSpec;
-  if (actionSpec === undefined || actionSpec === null) return undefined;
-  const collected: Record<string, string> = {};
-  for (const [actionName, entry] of Object.entries(actionSpec)) {
-    if (
-      entry !== null &&
-      typeof entry === 'object' &&
-      typeof entry.nextStep === 'string' &&
-      entry.nextStep.length > 0
-    ) {
-      collected[actionName] = entry.nextStep;
-    }
-  }
-  if (Object.keys(collected).length === 0) return undefined;
-  return collected;
-}
-
-/**
  * Per-slot contextSpec data for an active render, derived to a
  * wire-friendly array. Returns `undefined` when no slots are declared.
  *
@@ -558,7 +521,6 @@ export function derivePropsJson(item: GguiSession): string | undefined {
  *     delivered via the content-addressable `codeUrl` channel composed
  *     by the render handler from its `codeStore` + `codeBaseUrl` deps.
  *   - `propsJson` — pre-serialized JSON string of the runtime props.
- *   - `actionNextSteps` — per-action tool mapping (Pattern α).
  *   - `contextSlots` — per-slot contextSpec data (one
  *     `React.createContext(default)` per entry).
  *
@@ -569,7 +531,6 @@ export function derivePropsJson(item: GguiSession): string | undefined {
 export interface RenderMetaView {
   readonly kind?: string;
   readonly propsJson?: string;
-  readonly actionNextSteps?: Record<string, string>;
   readonly contextSlots?: ReadonlyArray<{
     name: string;
     contextName: string;
@@ -842,15 +803,14 @@ export function deriveRenderMeta(
 
   // System-card variant: emits `kind` + (optional) `propsJson`.
   // Component variant: emits (optional) `propsJson` + (optional)
-  // `actionNextSteps` + (optional) `contextSlots` + (optional)
-  // `permissionsPolicy`. The compiled code body itself rides on the
-  // render handler's `codeUrl` channel (composed at render time from the
-  // handler's `codeStore` + `codeBaseUrl` deps) — it is NOT projected
-  // here. The actionNextSteps / contextSlots derivations are tolerant
-  // of system items (return undefined when actionSpec / contextSpec is
-  // absent), so calling them unconditionally is safe — but the
-  // structural intent is that those fields belong to the component
-  // variant only.
+  // `contextSlots` + (optional) `permissionsPolicy`. The compiled
+  // code body itself rides on the render handler's `codeUrl` channel
+  // (composed at render time from the handler's `codeStore` +
+  // `codeBaseUrl` deps) — it is NOT projected here. The contextSlots
+  // derivation is tolerant of system items (returns undefined when
+  // contextSpec is absent), so calling it unconditionally is safe —
+  // but the structural intent is that those fields belong to the
+  // component variant only.
   if (item.type === 'system') {
     return {
       ...(typeof item.kind === 'string' && item.kind.length > 0
@@ -861,7 +821,6 @@ export function deriveRenderMeta(
   }
 
   // Component variant.
-  const actionNextSteps = deriveWiredActionTools(item);
   const slots = deriveContextSlots(item);
   const permissionsPolicy = derivePermissionsPolicy(item);
   const contentSecurityPolicy = composeContentSecurityPolicy(
@@ -874,7 +833,6 @@ export function deriveRenderMeta(
   const theme = deriveTheme(item);
   return {
     ...(propsJson !== undefined ? { propsJson } : {}),
-    ...(actionNextSteps !== undefined ? { actionNextSteps } : {}),
     ...(slots !== undefined ? { contextSlots: [...slots] } : {}),
     ...(permissionsPolicy !== undefined
       ? { permissionsPolicy: [...permissionsPolicy] }

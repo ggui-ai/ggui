@@ -446,18 +446,6 @@ export interface GguiRenderHandlerDeps {
     readonly mode?: 'light' | 'dark';
   } | undefined;
   /**
-   * Returns the names of registered tools whose `_meta.ui.visibility`
-   * includes `"app"`. Used to populate `bootstrap.appCallableTools`
-   * so the iframe-runtime can decide between direct `tools/call`
-   * (Pattern α) and the 3-message bridge (Pattern β) per wired action.
-   *
-   * Returns an empty array when no app-visible tools are registered.
-   * Optional in deps because tests / smoke harnesses may not wire the
-   * full registry.
-   */
-  readonly appCallableTools?: () => readonly string[];
-
-  /**
    * Resolver for the bootstrap field `streamWebSocketLocalTools`.
    * Mirrors the same-named field on
    * `GguiHandshakeHandlerDeps.serverCapabilities` so the iframe-runtime
@@ -2018,10 +2006,9 @@ export function createGguiRenderHandler(
       // itself.
       //
       // GguiSession-derived fields (componentCode | kind, propsJson,
-      // actionNextSteps, contextSlots) come from the
-      // {@link deriveRenderMeta} projection — same single source of
-      // truth the public-render `/r/<shortCode>` route composes its
-      // inline shell from.
+      // contextSlots) come from the {@link deriveRenderMeta}
+      // projection — same single source of truth the public-render
+      // `/r/<shortCode>` route composes its inline shell from.
       let view: RenderMetaView = {};
       // Public env projection requires App.publicEnv, which lives on
       // the App record (not the render). Re-read here in resultMeta
@@ -2115,10 +2102,6 @@ export function createGguiRenderHandler(
       const resolvedThemeId =
         liveTheme?.id ?? renderThemeId ?? deps.themeId;
       const resolvedThemeMode = liveTheme?.mode ?? deps.themeMode;
-      // Surface the names of same-server app-visible tools so the
-      // iframe-runtime can choose Pattern α (direct tools/call) over
-      // Pattern β (3-message bridge) per wired action.
-      const appCallableTools = deps.appCallableTools?.() ?? [];
       // Mirror `serverCapabilities.streamWebSocketLocalTools` onto
       // the bootstrap.
       const streamWebSocketLocalTools = deps.streamWebSocketLocalTools?.();
@@ -2160,7 +2143,6 @@ export function createGguiRenderHandler(
         appId: ctx.appId,
         runtimeUrl,
         ...authFields,
-        ...(appCallableTools.length > 0 ? { appCallableTools } : {}),
         ...(streamWebSocketLocalTools !== undefined
           ? { streamWebSocketLocalTools }
           : {}),
@@ -2195,9 +2177,6 @@ export function createGguiRenderHandler(
           : {}),
         ...(lastSequence !== undefined ? { lastSequence } : {}),
         ...(view.propsJson !== undefined ? { propsJson: view.propsJson } : {}),
-        ...(view.actionNextSteps !== undefined
-          ? { actionNextSteps: view.actionNextSteps }
-          : {}),
         ...(view.contextSlots !== undefined
           ? { contextSlots: [...view.contextSlots] }
           : {}),

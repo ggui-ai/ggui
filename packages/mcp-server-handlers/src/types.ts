@@ -76,20 +76,13 @@ export interface HandlerContext {
   /**
    * Active render id, when the dispatcher knows it at invocation time.
    *
-   * Populated for render-scoped invocations — today's two paths:
-   *
-   *   1. Wired-action dispatch. The render-channel router synthesizes
-   *      the runtime ctx for mount handlers as a structural superset
-   *      of `HandlerContext` + `WiredActionContext`; formally
-   *      declaring `sessionId` here lets the same `ctx` argument carry
-   *      it under the canonical static type, no cast needed at the
-   *      mount-handler call site.
-   *   2. Agent-driven `ggui_update`. The handler reads `sessionId`
-   *      off the wire input directly — but when a future caller
-   *      (live-channel dispatch, console inspector) invokes the
-   *      handler in-process, populating this field threads the active
-   *      render through the canonical context shape rather than a
-   *      parallel parameter.
+   * Populated for render-scoped invocations — today's one path:
+   * agent-driven `ggui_update`. The handler reads `sessionId` off the
+   * wire input directly — but when a future caller (console
+   * inspector, in-process composition) invokes the handler
+   * in-process, populating this field threads the active render
+   * through the canonical context shape rather than a parallel
+   * parameter.
    *
    * `undefined` for everything else: `/mcp` HTTP ingress (per-request
    * context built from auth identity, no render bound), blueprint /
@@ -110,11 +103,10 @@ export interface HandlerContext {
    * group renders for end-user resume).
    *
    * `undefined` when the request carried no `_meta` (most calls) and
-   * for in-process invocations (wired-action dispatch, console
-   * inspector, contract-test fixtures) where there is no upstream
-   * MCP request. Handlers MUST treat it as optional and read keys
-   * with a parser that tolerates absence — never assume a particular
-   * slice is present.
+   * for in-process invocations (console inspector, contract-test
+   * fixtures) where there is no upstream MCP request. Handlers MUST
+   * treat it as optional and read keys with a parser that tolerates
+   * absence — never assume a particular slice is present.
    */
   readonly requestMeta?: Readonly<Record<string, unknown>>;
   /**
@@ -135,10 +127,10 @@ export interface HandlerContext {
    * zombie-consumer bug that suppresses the recovery doorbell on a
    * post-reload user gesture).
    *
-   * `undefined` for in-process invocations (wired-action dispatch,
-   * console inspector, contract-test fixtures) where there is no
-   * upstream MCP request. Handlers MUST treat it as optional — a missing
-   * signal simply means "no cancellation channel," not "never cancel."
+   * `undefined` for in-process invocations (console inspector,
+   * contract-test fixtures) where there is no upstream MCP request.
+   * Handlers MUST treat it as optional — a missing signal simply
+   * means "no cancellation channel," not "never cancel."
    */
   readonly signal?: AbortSignal;
 }

@@ -534,16 +534,14 @@ describe('createGguiUpdateHandler', () => {
       // for the spec-compliant postMessage re-apply path).
       expect(m?.propsJson).toBe(JSON.stringify({ count: 5 }));
       // Post-Phase-B props-only trim: mount-time fields (codeUrl /
-      // kind / contextSlots / actionNextSteps / appCallableTools /
+      // kind / contextSlots /
       // streamWebSocketLocalTools / contractHash / validatorsUrl /
       // permissionsPolicy) are NOT re-emitted on update — the iframe
       // already has them from its initial render bootstrap.
       expect(m?.codeUrl).toBeUndefined();
       expect(m?.kind).toBeUndefined();
       expect(m?.contextSlots).toBeUndefined();
-      expect(m?.actionNextSteps).toBeUndefined();
       expect(m?.permissionsPolicy).toBeUndefined();
-      expect(m?.appCallableTools).toBeUndefined();
       expect(m?.streamWebSocketLocalTools).toBeUndefined();
       expect(m?.contractHash).toBeUndefined();
       expect(m?.validatorsUrl).toBeUndefined();

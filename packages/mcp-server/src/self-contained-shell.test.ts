@@ -7,9 +7,8 @@
  * The self-contained per-render resource (`ui://ggui/render/<id>`)
  * direct-preview path uses the SAME global as its sole boot source —
  * so anything the runtime needs (`runtimeUrl` for the bundle URL,
- * `contextSlots` for Provider seeds, `appCallableTools` /
- * `actionNextSteps` for dispatch routing) had to be inlined too.
- * Without these, contextSpec UIs blank-page'd because the runtime's
+ * `contextSlots` for Provider seeds) had to be inlined too. Without
+ * these, contextSpec UIs blank-page'd because the runtime's
  * bootstrap validator rejected the envelope as MALFORMED.
  *
  * Post-Phase-B (flatten-render-identity, 2026-05-27): the wire
@@ -119,35 +118,6 @@ describe('buildSelfContainedShell — Slice 14 inline-bootstrap shape', () => {
     expect(slice?.['contextSlots']).toEqual(slots);
   });
 
-  it('inlines appCallableTools on the render slice when supplied non-empty', () => {
-    const html = buildSelfContainedShell({
-      sessionId: 'sess_001',
-      appId: 'app_001',
-      runtimeUrl: SAMPLE_RUNTIME_URL,
-      codeUrl: SAMPLE_CODE_URL,
-      codeHash: SAMPLE_CODE_HASH,
-      appCallableTools: ['ggui_runtime_submit_action', 'gmail_archive'],
-    });
-    const slice = extractInlineRenderSlice(html);
-    expect(slice?.['appCallableTools']).toEqual([
-      'ggui_runtime_submit_action',
-      'gmail_archive',
-    ]);
-  });
-
-  it('inlines actionNextSteps on the render slice when supplied non-empty', () => {
-    const html = buildSelfContainedShell({
-      sessionId: 'sess_001',
-      appId: 'app_001',
-      runtimeUrl: SAMPLE_RUNTIME_URL,
-      codeUrl: SAMPLE_CODE_URL,
-      codeHash: SAMPLE_CODE_HASH,
-      actionNextSteps: { archive: 'gmail_archive' },
-    });
-    const slice = extractInlineRenderSlice(html);
-    expect(slice?.['actionNextSteps']).toEqual({ archive: 'gmail_archive' });
-  });
-
   it('omits optional fields when supplied empty', () => {
     // Empty arrays / records spread to "absent" so consumers see no
     // change vs an envelope built without these fields.
@@ -157,17 +127,13 @@ describe('buildSelfContainedShell — Slice 14 inline-bootstrap shape', () => {
       runtimeUrl: SAMPLE_RUNTIME_URL,
       codeUrl: SAMPLE_CODE_URL,
       codeHash: SAMPLE_CODE_HASH,
-      appCallableTools: [],
-      actionNextSteps: {},
       contextSlots: [],
       gadgets: [],
       publicEnv: {},
     });
     const slice = extractInlineRenderSlice(html);
-    expect(slice && 'appCallableTools' in slice).toBe(false);
     expect(slice && 'gadgets' in slice).toBe(false);
     expect(slice && 'publicEnv' in slice).toBe(false);
-    expect(slice && 'actionNextSteps' in slice).toBe(false);
     expect(slice && 'contextSlots' in slice).toBe(false);
   });
 

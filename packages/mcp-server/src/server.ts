@@ -286,7 +286,6 @@ import { createPairLoginRateLimitMiddleware } from "./rate-limit-middleware.js";
 import {
   createGguiSessionChannelServer,
   type GguiSessionChannelServer,
-  type WiredActionRouter,
 } from "./ggui-session-channel.js";
 import { buildRequestContextMiddleware, resolveRuntimeUrl } from "./request-context.js";
 import { composePreviewReservedValidator, mergeReservedValidators } from "./reserved-validators.js";
@@ -313,47 +312,6 @@ const DEFAULT_INFO: ServerInfo = {
   description:
     "Open self-hosted MCP server for the ggui protocol. Powered by @ggui-ai/mcp-server-handlers.",
 };
-
-/**
- * Type-narrowing predicate for an `_meta` shape that carries an
- * MCP-Apps `ui.visibility` array. Defensive against legacy handlers
- * that omit `_meta` entirely (no cast required to read through).
- */
-function hasUiVisibilityArray(meta: Record<string, unknown> | undefined): meta is Record<
-  string,
-  unknown
-> & {
-  ui: { visibility: readonly string[] };
-} {
-  if (!meta) return false;
-  const ui = meta["ui"];
-  if (ui === null || typeof ui !== "object") return false;
-  const visibility = (ui as { visibility?: unknown }).visibility;
-  return Array.isArray(visibility) && visibility.every((v) => typeof v === "string");
-}
-
-/**
- * Scan a handler list and return the names of those whose
- * `_meta.ui.visibility` array includes `"app"`. Used by the render
- * handler's `appCallableTools` provider to populate the bootstrap
- * field the iframe-runtime consults for Pattern α / Pattern β
- * dispatch routing.
- *
- * Returns an empty array when no app-visible tools are registered.
- * Order matches handler registration order (deterministic for tests).
- */
-function collectAppCallableToolNames(
-  handlers: ReadonlyArray<SharedHandler<ZodRawShape, ZodRawShape>>
-): readonly string[] {
-  const names: string[] = [];
-  for (const h of handlers) {
-    if (!hasUiVisibilityArray(h._meta)) continue;
-    if (h._meta.ui.visibility.includes("app")) {
-      names.push(h.name);
-    }
-  }
-  return names;
-}
 
 /**
  * Canonical default handler set. Every `@ggui-ai/mcp-server-handlers`
@@ -781,8 +739,6 @@ export function defaultHandlers(deps: {
           readonly mode?: "light" | "dark";
         }
       | undefined;
-    /** Returns names of app-visible tools for bootstrap.appCallableTools. */
-    readonly appCallableTools?: () => readonly string[];
     /** Resolver for bootstrap.streamWebSocketLocalTools. */
     readonly streamWebSocketLocalTools?: () => readonly string[] | undefined;
   };
@@ -1158,9 +1114,6 @@ export function defaultHandlers(deps: {
         ...(deps.update.themeProvider !== undefined
           ? { themeProvider: deps.update.themeProvider }
           : {}),
-        ...(deps.update.appCallableTools !== undefined
-          ? { appCallableTools: deps.update.appCallableTools }
-          : {}),
         ...(deps.update.streamWebSocketLocalTools !== undefined
           ? { streamWebSocketLocalTools: deps.update.streamWebSocketLocalTools }
           : {}),
@@ -1303,15 +1256,6 @@ export function defaultHandlers(deps: {
     );
   }
   if (deps.render) {
-    // Provider that scans the registered handler list for tools
-    // whose `_meta.ui.visibility` includes
-    // `"app"`, surfacing the names on `bootstrap.appCallableTools`.
-    // Closure defers the scan to render-time so handlers added AFTER
-    // render (e.g. mounted MCP server tools composed via
-    // `composeHandlersWithMounts`) are NOT included — same-server
-    // app-visible tools live on the OSS handler list, mounted tools
-    // are by definition cross-server.
-    const appCallableToolsProvider = (): readonly string[] => collectAppCallableToolNames(handlers);
     handlers.push(
       createGguiRenderHandler({
         renderStore: deps.render.renderStore,
@@ -1322,7 +1266,6 @@ export function defaultHandlers(deps: {
         // same registry membership.
         ...(deps.appMetadataStore ? { appMetadataStore: deps.appMetadataStore } : {}),
         pendingEventConsumer,
-        appCallableTools: appCallableToolsProvider,
         ...(deps.render.streamWebSocketLocalTools !== undefined
           ? { streamWebSocketLocalTools: deps.render.streamWebSocketLocalTools }
           : {}),
@@ -2030,34 +1973,6 @@ export interface CreateGguiServerOptions {
   readonly renderChannel?: boolean | { readonly path?: string };
 
   /**
-   * Opt-in WS-direct action dispatcher for agent-less deployments.
-   * When present AND `renderChannel: true`, the channel server
-   * fires the tool named by an incoming action's `payload.tool` hint
-   * (falling back to `actionSpec[name].nextStep` when the client
-   * omitted the hint) in-process after inbound validation, and emits
-   * every declared `streamSpec[name].source.tool` refresh on the
-   * render. See {@link WiredActionRouter} + `render-channel.ts` for
-   * the full router contract.
-   *
-   * Absent = agent-mediated behavior (canonical for MCP Apps hosts and
-   * Claude Agent SDK consumers). Inbound actions land on the
-   * sessionId-keyed pending-events pipe via `ggui_runtime_submit_action`
-   * and the agent's `ggui_consume` long-poll drains them. CLI
-   * composition in `ggui serve` wires a router by default over the
-   * same handler bundle `/mcp` uses, since that command runs WITHOUT
-   * an agent (raw WS clients hitting the OSS server directly). Library
-   * consumers MAY pass their own router; library consumers running
-   * behind an agent typically pass `undefined` so actions flow through
-   * the agent's reasoning loop.
-   */
-  readonly wiredActionRouter?: WiredActionRouter;
-  /**
-   * Per-call timeout for wired-tool invocations, in ms. Defaults to
-   * `DEFAULT_WIRED_TOOL_TIMEOUT_MS` (30 s) when omitted. Forwarded
-   * verbatim to `createGguiSessionChannelServer`.
-   */
-  readonly wiredActionTimeoutMs?: number;
-  /**
    * Opt-in plumbing for `channel_subscribe` polling — the WS fan-out
    * path for `streamSpec[*].source.tool`. When present, the
    * render channel accepts `channel_subscribe` frames whose
@@ -2095,17 +2010,6 @@ export interface CreateGguiServerOptions {
    * `GguiSessionChannelOptions.onLastSubscriberGone` for the full contract.
    */
   readonly onLastSubscriberGone?: (sessionId: string) => void;
-  /**
-   * Override the sanitizer applied to the stringified original error
-   * written into `ContractErrorPayload.error.causedBy`. Defaults to
-   * `@ggui-ai/protocol::sanitizeCausedBy` when omitted — redacts
-   * Bearer tokens, query-param secrets, common env-var dumps, and
-   * truncates at 2 KB. Forwarded verbatim to
-   * `createGguiSessionChannelServer`. See `GguiSessionChannelOptions
-   * .sanitizeCausedBy` for the contract.
-   */
-  readonly sanitizeCausedBy?: import("@ggui-ai/protocol").SanitizeCausedBy;
-
   /**
    * Extra reserved-channel payload validators merged with the
    * server's default A2UI preview validator before being passed to
@@ -5125,7 +5029,6 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
             }
           : {}),
         ...(view?.propsJson !== undefined ? { propsJson: view.propsJson } : {}),
-        ...(view?.actionNextSteps !== undefined ? { actionNextSteps: view.actionNextSteps } : {}),
         ...(view?.contextSlots !== undefined ? { contextSlots: view.contextSlots } : {}),
         ...(renderContractHash !== undefined && renderValidatorsUrl !== undefined
           ? {
@@ -5842,9 +5745,8 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
             }
 
             // Same default appId the CLI's pairing-authenticated /mcp
-            // ingress resolves for single-tenant OSS. Keeps the
-            // render + its wiredActionRouter invocation scoped to
-            // the same tenant.
+            // ingress resolves for single-tenant OSS — the render is
+            // scoped to the same tenant.
             const appId = DEFAULT_BUILDER_APP_ID;
             // Phase B: a render IS the addressable unit; the prior
             // (sessionId, stackItemId) pair collapses to a single
@@ -5876,12 +5778,13 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
             };
 
             // Schema compatibility check. Fires BEFORE the render
-            // commits — if the blueprint's pre-declared actionSpec /
-            // streamSpec references a tool whose schemas don't align,
+            // commits — if the blueprint's pre-declared actionSpec
+            // hints at a same-server tool whose schemas don't align,
             // the operator gets a named `SCHEMA_MISMATCH_ERROR`
-            // response instead of a silent runtime `TOOL_THREW`. Mode
-            // sourced from `createGguiServer({schemaCompatCheck})`;
-            // defaults to `'reject'`. See `./schema-compat.ts`.
+            // response at registration time instead of an agent-side
+            // surprise on the first dispatched action. Mode sourced
+            // from `createGguiServer({schemaCompatCheck})`; defaults
+            // to `'reject'`. See `./schema-compat.ts`.
             try {
               const report = checkRenderSchemaCompat(
                 render,
@@ -5940,31 +5843,6 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
                 message: err instanceof Error ? err.message : String(err),
               });
               return;
-            }
-
-            // Prime every declared streamSpec channel that carries a
-            // refresh tool. Without this, a try-live viewer that mounts
-            // a blueprint with e.g. `streamSpec.tasks.tool = 'tasks_list'`
-            // hits its empty-state branch because `useStream('tasks').
-            // latest` stays `undefined` — no one fires the refresh
-            // tool. Await so the initial envelope is buffered via
-            // `renderChannel`'s replay state before the shortCode
-            // returns; the viewer subscribes moments later and its
-            // `ack.initialReplay` carries the seeded frame.
-            //
-            // Best-effort: refresh failures on any channel log + skip
-            // that channel but don't fail the try-live call — the
-            // blueprint's empty state remains a valid degraded UX.
-            if (channelForHealth) {
-              try {
-                await channelForHealth.primeStreams(sessionId, render);
-              } catch (err) {
-                logger.warn("console_blueprint_try_prime_failed", {
-                  blueprintId,
-                  sessionId,
-                  error: String(err),
-                });
-              }
             }
 
             // Mint the shortCode last — if earlier steps failed the
@@ -8444,10 +8322,6 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
           new InMemoryGguiSessionStreamBuffer() /* hoist guarantees non-null when opts.renderChannel truthy; fallback only for TS narrowing */,
         ...(channelBootstrap ? { bootstrap: channelBootstrap } : {}),
         ...(consoleCookieAuth ? { cookieAuth: consoleCookieAuth } : {}),
-        ...(opts.wiredActionRouter ? { wiredActionRouter: opts.wiredActionRouter } : {}),
-        ...(opts.wiredActionTimeoutMs !== undefined
-          ? { wiredActionTimeoutMs: opts.wiredActionTimeoutMs }
-          : {}),
         // Opt-in channel_subscribe polling. Same options
         // object is also surfaced on every handshake response's
         // `serverCapabilities.streamWebSocketLocalTools` (via the
@@ -8457,16 +8331,15 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
         ...(opts.streamWebSocketLocalTools
           ? { streamWebSocketLocalTools: opts.streamWebSocketLocalTools }
           : {}),
-        ...(opts.sanitizeCausedBy ? { sanitizeCausedBy: opts.sanitizeCausedBy } : {}),
         ...(composedReservedValidators
           ? { extraReservedValidators: composedReservedValidators }
           : {}),
         ...(opts.versionPolicy !== undefined ? { versionPolicy: opts.versionPolicy } : {}),
         ...(opts.onFirstSubscriber ? { onFirstSubscriber: opts.onFirstSubscriber } : {}),
         ...(opts.onLastSubscriberGone ? { onLastSubscriberGone: opts.onLastSubscriberGone } : {}),
-        // Shared TelemetrySink — bound once at composition so wired-
-        // tool dispatches on the live channel emit `wired-tool.invoked`
-        // telemetry alongside the existing server.composed signal.
+        // Shared TelemetrySink — bound once at composition so future
+        // live-channel operational signals land on the same sink as the
+        // existing server.composed signal.
         telemetry,
       })
     : null;

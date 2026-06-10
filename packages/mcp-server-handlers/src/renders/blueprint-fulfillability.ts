@@ -34,8 +34,7 @@ import type { AgentCapabilitiesSpec, DataContract } from '@ggui-ai/protocol';
 /**
  * The union of MCP tools a contract REQUIRES the agent to be able to call —
  * every `actionSpec[*].nextStep` hint plus every `streamSpec[*].source.tool`
- * channel source (and the legacy `streamSpec[*].tool` refresh hint).
- * Deduplicated; order-insensitive.
+ * channel source. Deduplicated; order-insensitive.
  */
 export function requiredTools(contract: DataContract): string[] {
   const tools = new Set<string>();
@@ -44,7 +43,6 @@ export function requiredTools(contract: DataContract): string[] {
   }
   for (const channel of Object.values(contract.streamSpec ?? {})) {
     if (typeof channel.source?.tool === 'string') tools.add(channel.source.tool);
-    else if (typeof channel.tool === 'string') tools.add(channel.tool);
   }
   return [...tools];
 }

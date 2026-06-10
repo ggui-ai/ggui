@@ -21,13 +21,11 @@
  *     mutation handlers (ggui_emit / connector `ctx.send`). Validated
  *     through `assertStreamContract` before delivery.
  *
- * `props_update`: mount handlers dispatched through the wired-action
- * router can call `ctx.sendPropsUpdate(sessionId, props)` to fan a
- * `{type:'props_update'}` frame to live subscribers without going
- * through a refresh-stream path. Reaches the renderer's existing
- * `props_update` branch in `iframe-runtime` and applies new props
- * in-place. This seam is scoped to mount tools; the agent-driven
- * `ggui_update` path is handled separately.
+ * `props_update`: the agent-driven `ggui_update` handler calls
+ * `channel.sendPropsUpdate(sessionId, props)` (wired as its
+ * `propsUpdateNotifier`) to fan a `{type:'props_update'}` frame to
+ * live subscribers. Reaches the renderer's existing `props_update`
+ * branch in `iframe-runtime` and applies new props in-place.
  *
  * Not handled here:
  *
@@ -51,30 +49,21 @@ import type {
 import {
   InMemoryGguiSessionStreamBuffer,
   InProcessStreamFanout,
-  NoopTelemetrySink,
 } from "@ggui-ai/mcp-server-core/in-memory";
 import { assertActionContract, assertStreamContract } from "@ggui-ai/mcp-server-handlers/renders";
 import type {
   AckPayload,
   ActionEnvelope,
-  ActionEventValue,
-  ContractErrorCode,
-  ContractErrorPayload,
   ErrorPayload,
   JsonObject,
-  RefreshInput,
   GguiSession,
   ReservedChannelValidator,
-  SanitizeCausedBy,
   StreamSpec,
   SubscribePayload,
 } from "@ggui-ai/protocol";
 import {
-  CONTRACT_ERROR_CHANNEL,
   ContractViolationError,
-  sanitizeCausedBy as defaultSanitizeCausedBy,
-  EMPTY_REFRESH_INPUT,
-  makeContractErrorPayload,
+  sanitizeCausedBy,
   PROTOCOL_SCHEMA_VERSION,
   UPGRADE_REQUIRED,
 } from "@ggui-ai/protocol";
@@ -335,109 +324,6 @@ export interface GguiSessionChannelBootstrap {
   refresh(token: string): GguiSessionChannelBootstrapRefreshResult;
 }
 
-/**
- * Default timeout for a single wired-tool invocation, in ms. Operators
- * override via {@link GguiSessionChannelOptions.wiredActionTimeoutMs}; the
- * 30 s ceiling is a honest non-promise: long-running tools MUST design
- * their own completion path (streaming, polling).
- */
-export const DEFAULT_WIRED_TOOL_TIMEOUT_MS = 30_000;
-
-/**
- * Opt-in wired-action dispatch surface. When present on a render
- * channel, `data:submit` envelopes whose declared `actionSpec
- * [name].tool` resolves against this router fire the named tool
- * in-process after validation, and the router's return value flows
- * back onto the render through a refresh-stream emission (see the
- * {@link import('@ggui-ai/protocol').StreamChannelEntry.tool} field).
- *
- * This is the agent-free contract-execution path — "zero agent code"
- * lands here. In OSS `ggui serve`, the CLI composes a router that
- * delegates to the same handler bundle `/mcp` uses (ggui-native +
- * mounts). Hosted deployments that want the same behavior compose
- * their own.
- *
- * Intentionally minimal surface:
- *   - `has(name)` separates "tool absent" (TOOL_NOT_FOUND envelope,
- *     recoverable) from "tool handler threw" (TOOL_THREW envelope,
- *     isolated). The channel server uses the split to pick the error
- *     code BEFORE invoking.
- *   - `invoke(name, input)` returns `unknown` — the router doesn't
- *     impose a shape, the refresh emission validates against the
- *     declared `streamSpec[*].schema`.
- *
- * Thread-safety: implementations MUST tolerate concurrent invocations
- * for the same or different tools. The render channel fires no retry;
- * the router's handler is the sole execution.
- */
-/**
- * Per-invocation context the wired-action dispatcher hands the router.
- * The render-channel server constructs this at dispatch time from
- * the active render, then closes
- * `sendPropsUpdate` over the channel's outbound fan-out so the mount
- * handler can push a `props_update` frame to live subscribers without
- * routing through a refresh-stream tool.
- *
- * Why this is its own type, not threaded through `HandlerContext`:
- * `HandlerContext` (in `@ggui-ai/mcp-server-handlers`) is the canonical
- * shape every shared handler — ggui-native AND mounted — accepts. It
- * stays narrow on purpose (`appId`, `requestId`, optional `apiKeyHash`)
- * so the surface a host implements is stable. Wired-action runtime
- * fields (`sessionId`, `sendPropsUpdate`) are dispatcher-
- * specific — only mount tools invoked through the wired-action router
- * see them, only at dispatch time. Passing them as a third arg to
- * `invoke` keeps the canonical handler shape untouched and makes
- * "this code reaches a wired dispatch path" syntactically obvious.
- *
- * The composer in `mcp-mounts.ts::composeWiredActionRouterFromMounts`
- * synthesizes a runtime ctx for the mount handler that satisfies
- * `HandlerContext` AND structurally carries these wired fields, so a
- * mount fixture can read `ctx.sendPropsUpdate` / `ctx.sessionId` from the
- * same `ctx` argument the canonical `HandlerContext` sig types — no
- * cast, no widening of the static type.
- */
-export interface WiredActionContext {
-  /** The render this dispatch is bound to. Sourced from the live
-   * subscriber + the action envelope's spoof-guarded `sessionId`. */
-  readonly sessionId: string;
-  /**
-   * Push a `{type:'props_update', payload:{sessionId, props}}` frame to
-   * every live subscriber bound to this dispatcher's `sessionId`. The
-   * call closes over the `GguiSessionChannelServer.sendPropsUpdate` method,
-   * scoped to the active render for safety.
-   *
-   * Best-effort: per-subscriber send failures are swallowed; a closed
-   * socket is a no-op.
-   */
-  sendPropsUpdate(props: JsonObject): void;
-}
-
-export interface WiredActionRouter {
-  /** Returns `true` when the named tool has a registered handler. Used
-   * to emit a clean `TOOL_NOT_FOUND` envelope before invoking — an
-   * "invoke unknown tool" would throw through router internals, but
-   * the error surface would be less specific. */
-  has(toolName: string): boolean;
-  /**
-   * Invoke the named tool with the given input + per-dispatch wired
-   * context. The channel server wraps this call in a timeout +
-   * try/catch; implementations SHOULD NOT add their own retry or
-   * timeout layer on top.
-   *
-   * `ctx.sendPropsUpdate` is closed over the active render — mounts
-   * fire it to push props to live subscribers without an extra refresh
-   * round-trip. Refresh-stream invocations (the post-action pass that
-   * fires every declared `streamSpec[*].tool`) reuse the SAME ctx —
-   * a refresh tool that wants to emit a props_update can do so, though
-   * the canonical surface is the action tool itself.
-   */
-  invoke(
-    toolName: string,
-    input: Record<string, unknown>,
-    ctx: WiredActionContext
-  ): Promise<unknown>;
-}
-
 export interface GguiSessionChannelOptions {
   /** Required — the render backing store (typically `InMemoryGguiSessionStore`). */
   readonly renderStore: GguiSessionStore;
@@ -502,44 +388,6 @@ export interface GguiSessionChannelOptions {
    */
   readonly cookieAuth?: GguiSessionChannelCookieAuth;
   /**
-   * Opt-in wired-action dispatch router. When present, validated
-   * `data:submit` envelopes whose declared `actionSpec[name]
-   * .tool` names a tool the router knows fire the tool in-process and
-   * emit any declared refresh on the render. See
-   * {@link WiredActionRouter}.
-   *
-   * Absent (the default) = the server relays inbound actions to the
-   * render store for agent pickup and emits no synthetic stream
-   * frames. Matches pre-Slice-11.5 behavior — no regression surface.
-   */
-  readonly wiredActionRouter?: WiredActionRouter;
-  /**
-   * Per-call timeout for wired-tool invocations, in milliseconds.
-   * Defaults to {@link DEFAULT_WIRED_TOOL_TIMEOUT_MS} (30 s). Applied
-   * identically to the initial action tool AND to each refresh-stream
-   * tool. On timeout, a `TOOL_TIMEOUT` envelope emits on
-   * `_ggui:contract-error` and the render channel keeps running.
-   */
-  readonly wiredActionTimeoutMs?: number;
-  /**
-   * Override the default sanitizer applied to the stringified original
-   * error before it's written to `ContractErrorPayload.error.causedBy`.
-   *
-   * Defaults to `@ggui-ai/protocol::sanitizeCausedBy` (redacts Bearer
-   * tokens, query-param secrets, common env-var patterns, truncates at
-   * 2KB). Operators running in locked-down environments can pass a
-   * stricter function — e.g., one that returns an empty string to
-   * disable `causedBy` entirely, or one that layers additional
-   * patterns on top of the defaults.
-   *
-   * The contract-error envelope flows on `_ggui:contract-error` with
-   * `replay: 'all'`, so anything that lands in `causedBy` persists in
-   * the render ring buffer and surfaces in RenderInspector. Accepting
-   * raw `err.stack` verbatim is a credential-leak footgun; the default
-   * sanitizer is load-bearing.
-   */
-  readonly sanitizeCausedBy?: SanitizeCausedBy;
-  /**
    * Reserved-channel payload validators for channels whose shape is
    * NOT protocol-owned (Item 4 injection pattern). The primary
    * consumer is `_ggui:preview` — the server composes a
@@ -559,16 +407,18 @@ export interface GguiSessionChannelOptions {
    */
   readonly extraReservedValidators?: ReadonlyMap<string, ReservedChannelValidator>;
   /**
-   * Optional {@link TelemetrySink} for live-channel operational signals
-   * (C12). When present, the channel emits `wired-tool.invoked` events
-   * on successful wired-tool dispatches — operational counts +
-   * durations for OTLP / CloudWatch / Datadog forwarders. Defaults
-   * to {@link NoopTelemetrySink} (swallow silently).
+   * Optional {@link TelemetrySink} for live-channel operational
+   * signals (C12) — operational counts + durations for OTLP /
+   * CloudWatch / Datadog forwarders. Reserved seam: the channel
+   * defines the binding point but emits no signals of its own today;
+   * future operational counts (e.g. subscribe / poll failure rates)
+   * bind here so operator sink wiring composes uniformly with the
+   * server's `server.composed` signal.
    *
    * Deliberately separate from the renderer's client-side
-   * `ObservabilityEvent` surface: same event name, two independent
-   * consumers (backend metrics vs host inspector UI). See C12 plan +
-   * the TelemetrySink docstring for the sync/lossy contract.
+   * `ObservabilityEvent` surface — two independent consumers (backend
+   * metrics vs host inspector UI). See the TelemetrySink docstring
+   * for the sync/lossy contract.
    */
   readonly telemetry?: TelemetrySink;
   /**
@@ -733,39 +583,11 @@ export interface GguiSessionChannelServer {
    */
   notifyGguiSessionCommit(sessionId: string, render: GguiSession, matchType?: string): void;
   /**
-   * Prime every declared streamSpec channel on `render` that carries a
-   * `tool` refresh hint. Invokes each refresh tool via the bound
-   * wiredActionRouter with the empty refresh input, validates the result
-   * against the channel's schema, and fans it out so subscribers see an
-   * initial value instead of `latest = undefined`.
-   *
-   * Intended for seed-a-render mount paths (console try-live, agent-
-   * initiated bootstraps that mint a render without a driving
-   * action). Without this, blueprints with `streamSpec[channel].tool`
-   * render their empty-state branch because the channel has no live
-   * delivery — operators see "waiting for data" UI even when the
-   * refresh tool would have produced initial content.
-   *
-   * Same isolation posture as the action-driven refresh pass: one
-   * broken refresh MUST NOT block others; per-channel failures log a
-   * warning but don't throw. No-op when no wiredActionRouter is
-   * configured, when `render.streamSpec` is absent, or when every
-   * channel lacks a `.tool` hint.
-   *
-   * Ordering: callers should invoke AFTER the render is persisted
-   * so `sendToGguiSession`'s active-render lookup resolves. The
-   * `try-live` endpoint awaits this before returning the shortCode so
-   * the viewer SPA subscribes with the initial envelope already
-   * buffered on the render's stream-buffer replay state.
-   */
-  primeStreams(sessionId: string, render: GguiSession): Promise<void>;
-  /**
    * Fan a `{type:'props_update', payload:{sessionId, props}}` wire frame
-   * to every subscriber currently bound to `sessionId`. Mount tools
-   * dispatched through {@link WiredActionRouter} call this via
-   * `WiredActionContext.sendPropsUpdate` so a wired action that
-   * mutates server-side state can replace renderer props in-place
-   * without going through a refresh-stream tool.
+   * to every subscriber currently bound to `sessionId`. The agent-driven
+   * `ggui_update` handler calls this (wired as its `propsUpdateNotifier`)
+   * so a props patch replaces renderer props in-place on live
+   * subscribers without waiting for a resubscribe.
    *
    * Validation posture (mirrors `notifyGguiSessionCommit`'s "best-effort orphan
    * no-op"):
@@ -786,13 +608,12 @@ export interface GguiSessionChannelServer {
    * snapshot delivered in `ack.render`.
    *
    * Schema validation against `propsSpec`: NOT enforced server-side
-   * here. The renderer validates inbound props via
+   * here. The `ggui_update` handler validates the patch against the
+   * render's `propsSpec` BEFORE persisting and notifying, and the
+   * renderer re-validates inbound props via
    * `validateInboundPropsPayload` against the cached
    * `render.propsSpec` before applying — defense-in-depth at the
-   * receiving boundary. Server-side enforcement is reserved for the
-   * future agent-driven `ggui_update` path; the mount-tool seam is
-   * trusted-runtime today (mounts execute in-process, same trust
-   * boundary as ggui-native handlers).
+   * receiving boundary.
    */
   sendPropsUpdate(sessionId: string, props: JsonObject): Promise<void>;
   /**
@@ -848,23 +669,6 @@ export interface GguiSessionChannelServer {
 }
 
 /**
- * Raised by `invokeWithTimeout` when a wired-tool call exceeds its
- * per-call budget. Internal — surfaces as a `TOOL_TIMEOUT` code on
- * {@link ContractErrorPayload} before the caller sees any channel
- * output.
- */
-class WiredToolTimeoutError extends Error {
-  readonly toolName: string;
-  readonly timeoutMs: number;
-  constructor(toolName: string, timeoutMs: number) {
-    super(`Wired tool '${toolName}' did not complete within ${timeoutMs}ms`);
-    this.name = "WiredToolTimeoutError";
-    this.toolName = toolName;
-    this.timeoutMs = timeoutMs;
-  }
-}
-
-/**
  * Build an OSS live-channel server. The returned object is designed to be
  * composed into `createGguiServer` — see `server.ts` for the wire-up.
  */
@@ -875,16 +679,6 @@ export function createGguiSessionChannelServer(opts: GguiSessionChannelOptions):
   const streamBuffer: GguiSessionStreamBuffer = opts.streamBuffer ?? new InMemoryGguiSessionStreamBuffer();
   // Live-tail pub/sub. Default in-process; hosted binds RedisPubSubFanout.
   const streamFanout: StreamFanout = opts.streamFanout ?? new InProcessStreamFanout();
-  // `causedBy` sanitizer applied to every contract-error emission.
-  // Defaults to the protocol's pattern-based redactor (Bearer tokens,
-  // query-param secrets, env-var dumps, 2 KB truncation). Operators
-  // pass their own to tighten or broaden coverage.
-  const sanitize: SanitizeCausedBy = opts.sanitizeCausedBy ?? defaultSanitizeCausedBy;
-  // Operational telemetry — default no-op. Fires `wired-tool.invoked`
-  // on every successful wired-action dispatch (C12); future sites
-  // (refresh-stream success / failure counts) reuse the same sink.
-  const telemetry: TelemetrySink = opts.telemetry ?? new NoopTelemetrySink();
-
   // Channel-subscribe local-tool poll plumbing. Resolved once
   // at composition so the `channel_subscribe` handler doesn't pay the
   // option-spread cost per request. Absent ⇒ all channel subscribes
@@ -1206,9 +1000,11 @@ export function createGguiSessionChannelServer(opts: GguiSessionChannelOptions):
         "POLL_FAILED",
         err instanceof Error ? err.message : String(err),
         undefined,
-        // causedBy slot — sanitized for credential safety in the same
-        // posture as wired-tool's TOOL_THREW emission.
-        sanitize(err instanceof Error ? (err.stack ?? err.message) : String(err))
+        // causedBy slot — the raw stack is redacted (Bearer tokens,
+        // query-param secrets, env-var dumps, 2 KB truncation) before
+        // it reaches the wire; raw `err.stack` verbatim is a
+        // credential-leak footgun.
+        sanitizeCausedBy(err instanceof Error ? (err.stack ?? err.message) : String(err))
       );
       opts.logger.warn("render_channel_channel_poll_failed", {
         sessionId: sub.sessionId,
@@ -1404,14 +1200,11 @@ export function createGguiSessionChannelServer(opts: GguiSessionChannelOptions):
   /**
    * Stamp a delivery through the replay buffer and fan it out to every
    * subscriber of the render, honoring the per-subscriber replay
-   * cursor. Shared by the public `sendToGguiSession` entry point AND by
-   * the wiredActionRouter's refresh/error emissions — extracting this
-   * avoids duplicating the seq-stamp + subscriber-iteration logic in
-   * two places.
+   * cursor. Backs the public `sendToGguiSession` entry point.
    *
    * Caller is responsible for validating `delivery.payload` against
    * the active streamSpec BEFORE calling — the fan-out here trusts
-   * its input. Reserved-channel emissions (e.g. `_ggui:contract-
+   * its input. Reserved-channel deliveries (e.g. `_ggui:contract-
    * error`) bypass the streamSpec check upstream via
    * `assertStreamContract`.
    */
@@ -1432,102 +1225,10 @@ export function createGguiSessionChannelServer(opts: GguiSessionChannelOptions):
   }
 
   /**
-   * Emit a canonical {@link ContractErrorPayload} on the reserved
-   * `_ggui:contract-error` channel. Never throws — the wiredActionRouter
-   * dispatch path calls this from `catch` branches; a second failure
-   * would be a footgun.
-   */
-  function emitContractError(
-    sessionId: string,
-    activeStreamSpec: StreamSpec | undefined,
-    payload: ContractErrorPayload
-  ): void {
-    try {
-      // Central stamp — re-emit through makeContractErrorPayload so
-      // every contract-error envelope carries the current stamped
-      // schemaVersion regardless of which dispatch branch produced
-      // `payload`. Byte-equivalent to the pre-Item-1 inline stamp
-      // (`{...payload, schemaVersion: PROTOCOL_SCHEMA_VERSION}`) which
-      // also always clobbered to the current version — the local
-      // dispatch paths never forward pre-stamped payloads, so any
-      // incoming schemaVersion on `payload` is discarded by design.
-      const stamped = makeContractErrorPayload({
-        toolName: payload.toolName,
-        error: payload.error,
-        timestamp: payload.timestamp,
-        ...(payload.actionName !== undefined ? { actionName: payload.actionName } : {}),
-        ...(payload.sourceAction !== undefined ? { sourceAction: payload.sourceAction } : {}),
-      });
-      // Fire-and-forget: emitContractError is called from sync `catch`
-      // branches and a second async failure here would be a footgun.
-      // Promise rejection logs but doesn't propagate; the seam contract
-      // says publish never throws on InProcess impl, and a hosted
-      // RedisPubSubFanout failure is recoverable via replay-on-reconnect.
-      void fanOut(
-        {
-          sessionId,
-          channel: CONTRACT_ERROR_CHANNEL,
-          mode: "append",
-          payload: stamped as unknown as StreamEnvelopeInput["payload"],
-        },
-        activeStreamSpec
-      ).catch((err) => {
-        opts.logger.error("render_channel_contract_error_emit_failed", {
-          sessionId,
-          toolName: payload.toolName,
-          code: payload.error.code,
-          error: String(err),
-        });
-      });
-    } catch (err) {
-      opts.logger.error("render_channel_contract_error_emit_failed", {
-        sessionId,
-        toolName: payload.toolName,
-        code: payload.error.code,
-        error: String(err),
-      });
-    }
-  }
-
-  /**
-   * Race a wired-tool invocation against a timeout. On timeout, the
-   * underlying promise is abandoned (we do NOT cancel the tool —
-   * handlers are trusted to clean up their own resources) but the
-   * caller sees a {@link WiredToolTimeoutError} and emits
-   * `TOOL_TIMEOUT`.
-   */
-  async function invokeWithTimeout(
-    router: WiredActionRouter,
-    toolName: string,
-    // Accepts either a validated wired-action payload (Record) OR the
-    // typed empty refresh input ({@link RefreshInput} /
-    // {@link EMPTY_REFRESH_INPUT}). The two call sites upstream are
-    // the only producers; nothing else should widen this.
-    input: Record<string, unknown> | RefreshInput,
-    ctx: WiredActionContext,
-    timeoutMs: number
-  ): Promise<unknown> {
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    try {
-      return await Promise.race([
-        router.invoke(toolName, input, ctx),
-        new Promise<never>((_, reject) => {
-          timer = setTimeout(() => {
-            reject(new WiredToolTimeoutError(toolName, timeoutMs));
-          }, timeoutMs);
-        }),
-      ]);
-    } finally {
-      if (timer) clearTimeout(timer);
-    }
-  }
-
-  /**
    * Internal impl behind the public {@link GguiSessionChannelServer.sendPropsUpdate}.
-   * Extracted as a closure-level function so the wired-action dispatcher
-   * can build a `WiredActionContext.sendPropsUpdate` that closes over the
-   * same logic without forward-referencing the returned object. Best-
-   * effort + orphan-tolerant per the docstring on the public method.
+   * Closure-level so it can be referenced without forward-referencing
+   * the returned object. Best-effort + orphan-tolerant per the
+   * docstring on the public method.
    */
   async function sendPropsUpdateImpl(sessionId: string, props: JsonObject): Promise<void> {
     let stored;
@@ -1549,261 +1250,13 @@ export function createGguiSessionChannelServer(opts: GguiSessionChannelOptions):
     // Filter the flat WS-subscriber set by sessionId; same posture as
     // `notifyGguiSessionCommit`. `send()` already silently skips closed sockets
     // and logs (but doesn't throw on) per-subscriber send failures, so
-    // the caller's mount-handler path can't be made to fail by a dead
-    // WebSocket.
+    // the calling handler can't be made to fail by a dead WebSocket.
     for (const sub of wsSubscribers) {
       if (sub.sessionId !== sessionId) continue;
       send(sub.ws, {
         type: "props_update",
         payload: { sessionId, props },
       });
-    }
-  }
-
-  /**
-   * Dispatch a wired action after inbound validation has passed.
-   * Called synchronously inside `handleInboundAction` — the caller
-   * awaits so the UI's ack arrives AFTER any refresh-stream frames
-   * land (honest ordering: "when you see the ack, your action
-   * completed + the screen reflects it").
-   *
-   * No-ops when:
-   *   - no wiredActionRouter is configured on this channel
-   *   - the action didn't resolve to a tool name (plain agent-routed
-   *     action that we persist + forward as-is)
-   *   - the resolved tool isn't registered (emits `TOOL_NOT_FOUND`)
-   *
-   * On successful tool invocation, every declared channel on the
-   * active render's streamSpec with a `tool` refresh hint fires
-   * that tool + emits its return value on the channel. Refresh tools
-   * are invoked with an empty argument object (`{}`); authors who
-   * need filter args should inline the action + refresh into a single
-   * tool that returns the new state.
-   */
-  async function dispatchWiredAction(
-    stored: { id: string },
-    activeItem: GguiSession | undefined,
-    envelope: ActionEnvelope,
-    dispatchedAt: string
-  ): Promise<void> {
-    const render = stored;
-    const router = opts.wiredActionRouter;
-    if (!router || !activeItem || envelope.type !== "data:submit") return;
-
-    const payload = envelope.payload as ActionEventValue | undefined;
-    if (!payload || typeof payload.action !== "string") return;
-
-    // Disagreement policy — the server-side enforcement point for the
-    // `client wins` rule documented on `ActionEventValue.tool`. Prefer
-    // the envelope's client-populated `tool` (useAction fills it from
-    // the same contract lookup the server would redo). Fall back to the
-    // actionSpec declaration so a client that omits the wire hint still
-    // gets the expected routing. If the two disagree, client wins — the
-    // client is the source of truth for what the user actually saw.
-    // Cross-validation against the agent's tracked contract happens on
-    // the agent-SDK side, not here.
-    // actionSpec / streamSpec only exist on ComponentGguiSession. The
-    // mcpApps / system variants narrow them to undefined.
-    const componentItem =
-      activeItem.type === "mcpApps" || activeItem.type === "system" ? undefined : activeItem;
-    const actionEntry = componentItem?.actionSpec?.[payload.action];
-    const serverDeclaredTool = actionEntry?.nextStep;
-    const declaredTool =
-      (typeof payload.tool === "string" && payload.tool.length > 0 ? payload.tool : undefined) ??
-      serverDeclaredTool;
-    if (!declaredTool) return;
-
-    const actionName = payload.action;
-    const input =
-      payload.data && typeof payload.data === "object" && !Array.isArray(payload.data)
-        ? (payload.data as Record<string, unknown>)
-        : {};
-    const timeoutMs = opts.wiredActionTimeoutMs ?? DEFAULT_WIRED_TOOL_TIMEOUT_MS;
-    const streamSpec = componentItem?.streamSpec;
-
-    if (!router.has(declaredTool)) {
-      emitContractError(render.id, streamSpec, {
-        toolName: declaredTool,
-        actionName,
-        sourceAction: { type: "wired-action", dispatchedAt },
-        error: {
-          code: "TOOL_NOT_FOUND",
-          message: `wiredActionRouter has no handler for tool '${declaredTool}'`,
-        },
-        timestamp: new Date().toISOString(),
-      });
-      opts.logger.warn("render_channel_wired_tool_not_found", {
-        sessionId: render.id,
-        toolName: declaredTool,
-        actionName,
-      });
-      return;
-    }
-
-    // Build the wired-action context the router hands the mount tool.
-    // `sendPropsUpdate` closes over the active
-    // `render.id` so a buggy mount can't accidentally cross-deliver to
-    // another render by passing a foreign sessionId. The same ctx is
-    // reused for the refresh-stream pass below — a refresh tool that
-    // wants to fire props_update can do so, though the canonical site
-    // is the action tool itself.
-    const wiredCtx: WiredActionContext = {
-      sessionId: render.id,
-      sendPropsUpdate(props) {
-        void sendPropsUpdateImpl(render.id, props);
-      },
-    };
-
-    const invokeStartedAt = Date.now();
-    try {
-      await invokeWithTimeout(router, declaredTool, input, wiredCtx, timeoutMs);
-    } catch (err) {
-      const code: ContractErrorCode =
-        err instanceof WiredToolTimeoutError ? "TOOL_TIMEOUT" : "TOOL_THREW";
-      emitContractError(render.id, streamSpec, {
-        toolName: declaredTool,
-        actionName,
-        sourceAction: { type: "wired-action", dispatchedAt },
-        error: {
-          code,
-          message: err instanceof Error ? err.message : String(err),
-          ...(err instanceof Error && err.stack ? { causedBy: sanitize(err.stack) } : {}),
-        },
-        timestamp: new Date().toISOString(),
-      });
-      opts.logger.warn("render_channel_wired_tool_failed", {
-        sessionId: render.id,
-        toolName: declaredTool,
-        actionName,
-        code,
-        error: String(err),
-      });
-      return;
-    }
-
-    // Operational telemetry — record the successful dispatch. Lossy
-    // by contract (TelemetrySink.emit is sync + non-throwing); a bad
-    // sink MUST NOT block the refresh pass. Attribute set is kept
-    // flat + primitive-only per TelemetryEvent.attributes shape.
-    telemetry.emit({
-      name: "wired-tool.invoked",
-      at: Date.now(),
-      attributes: {
-        toolName: declaredTool,
-        actionName,
-        sessionId: render.id,
-        latencyMs: Date.now() - invokeStartedAt,
-      },
-    });
-
-    // Refresh pass — every declared channel with a `tool` hint fires a
-    // fresh read and emits the result on that channel. Each refresh
-    // tool gets its own timeout + isolation: one broken refresh MUST
-    // NOT block others from completing.
-    if (!streamSpec) return;
-    for (const [channelName, channelEntry] of Object.entries(streamSpec)) {
-      const refreshTool = channelEntry?.tool;
-      if (!refreshTool) continue;
-
-      if (!router.has(refreshTool)) {
-        emitContractError(render.id, streamSpec, {
-          toolName: refreshTool,
-          actionName,
-          sourceAction: { type: "refresh-stream", dispatchedAt },
-          error: {
-            code: "TOOL_NOT_FOUND",
-            message: `wiredActionRouter has no handler for refresh tool '${refreshTool}' (channel '${channelName}')`,
-          },
-          timestamp: new Date().toISOString(),
-        });
-        continue;
-      }
-
-      let output: unknown;
-      try {
-        // Refresh input is v1-locked to the empty shape via
-        // EMPTY_REFRESH_INPUT. DO NOT replace with an inline `{}`
-        // literal — the named constant is what keeps this contract
-        // grep-able and future-proofs v2 evolution (see
-        // {@link RefreshInput}).
-        output = await invokeWithTimeout(
-          router,
-          refreshTool,
-          EMPTY_REFRESH_INPUT,
-          wiredCtx,
-          timeoutMs
-        );
-      } catch (err) {
-        const code: ContractErrorCode =
-          err instanceof WiredToolTimeoutError ? "TOOL_TIMEOUT" : "TOOL_THREW";
-        emitContractError(render.id, streamSpec, {
-          toolName: refreshTool,
-          actionName,
-          sourceAction: { type: "refresh-stream", dispatchedAt },
-          error: {
-            code,
-            message: err instanceof Error ? err.message : String(err),
-            ...(err instanceof Error && err.stack ? { causedBy: sanitize(err.stack) } : {}),
-          },
-          timestamp: new Date().toISOString(),
-        });
-        opts.logger.warn("render_channel_refresh_tool_failed", {
-          sessionId: render.id,
-          toolName: refreshTool,
-          channel: channelName,
-          code,
-          error: String(err),
-        });
-        continue;
-      }
-
-      try {
-        assertStreamContract(streamSpec, channelName, output, opts.extraReservedValidators);
-      } catch (err) {
-        if (err instanceof ContractViolationError) {
-          emitContractError(render.id, streamSpec, {
-            toolName: refreshTool,
-            actionName,
-            sourceAction: { type: "refresh-stream", dispatchedAt },
-            error: {
-              code: "SCHEMA_VIOLATION",
-              message: err.message,
-            },
-            timestamp: new Date().toISOString(),
-          });
-          opts.logger.warn("render_channel_refresh_schema_violation", {
-            sessionId: render.id,
-            toolName: refreshTool,
-            channel: channelName,
-            violations: err.violations,
-          });
-          continue;
-        }
-        throw err;
-      }
-
-      try {
-        await fanOut(
-          {
-            sessionId: render.id,
-            channel: channelName,
-            mode: channelEntry?.mode ?? "append",
-            payload: output as StreamEnvelopeInput["payload"],
-          },
-          streamSpec
-        );
-      } catch (err) {
-        // fanOut swallows per-subscriber transport errors; a throw here
-        // is buffer-internal (e.g., record() invariant violation). Log
-        // but don't propagate — a single broken channel must not take
-        // down the render.
-        opts.logger.error("render_channel_refresh_emit_failed", {
-          sessionId: render.id,
-          toolName: refreshTool,
-          channel: channelName,
-          error: String(err),
-        });
-      }
     }
   }
 
@@ -1904,6 +1357,45 @@ export function createGguiSessionChannelServer(opts: GguiSessionChannelOptions):
   }
 
   /**
+   * Stamp the agent-facing `tool` hint onto a `data:submit` envelope's
+   * `ActionEventValue` payload before it persists as a consume event.
+   *
+   * The hint derives server-side from the active render's
+   * `actionSpec[action].nextStep` — the single authoritative source —
+   * and only fills the gap when the inbound payload carries no `tool`
+   * of its own. The hint is advisory: the agent sees it on
+   * `ggui_consume` and decides whether to honor it on its next turn.
+   *
+   * Pass-through (returns the envelope unchanged) when:
+   *   - the envelope is not `data:submit`,
+   *   - no `ComponentGguiSession` is active (mcpApps / system),
+   *   - the payload lacks a string `action` or already carries a
+   *     non-empty `tool`,
+   *   - the named action declares no `nextStep`.
+   */
+  function withDerivedToolHint(
+    envelope: ActionEnvelope,
+    activeItem: GguiSession | undefined
+  ): ActionEnvelope {
+    if (envelope.type !== "data:submit" || !activeItem) return envelope;
+    if (activeItem.type === "mcpApps" || activeItem.type === "system") return envelope;
+    const payload = envelope.payload;
+    if (
+      payload === null ||
+      payload === undefined ||
+      typeof payload !== "object" ||
+      Array.isArray(payload)
+    ) {
+      return envelope;
+    }
+    if (typeof payload.action !== "string" || payload.action.length === 0) return envelope;
+    if (typeof payload.tool === "string" && payload.tool.length > 0) return envelope;
+    const nextStep = activeItem.actionSpec?.[payload.action]?.nextStep;
+    if (typeof nextStep !== "string" || nextStep.length === 0) return envelope;
+    return { ...envelope, payload: { ...payload, tool: nextStep } };
+  }
+
+  /**
    * Handle an inbound `action` message — the canonical flat
    * {@link ActionEnvelope} shape.
    *
@@ -1992,15 +1484,17 @@ export function createGguiSessionChannelServer(opts: GguiSessionChannelOptions):
       }
     }
 
-    // Persist the envelope. GguiSessionStore.appendEvent assigns a monotonic
-    // seq the client acks back with so reconnects can resume via `fromSeq`.
-    const dispatchedAt = new Date().toISOString();
+    // Persist the envelope. GguiSessionStore.appendEvent assigns a
+    // monotonic seq the client acks back with so reconnects can resume
+    // via `fromSeq`. The persisted envelope IS the consume event the
+    // agent drains, so this is the single authoritative build site for
+    // the agent-facing `tool` hint — see {@link withDerivedToolHint}.
     let seq: number;
     try {
       seq = await opts.renderStore.appendEvent({
         sessionId: sub.sessionId,
         type: "user.submitted",
-        data: envelope,
+        data: withDerivedToolHint(envelope, activeItem),
       });
     } catch (err) {
       opts.logger.error("render_channel_append_failed", {
@@ -2015,32 +1509,6 @@ export function createGguiSessionChannelServer(opts: GguiSessionChannelOptions):
       );
       return;
     }
-
-    // wiredActionRouter — fire any declared action-tool +
-    // stream-refresh tools BEFORE acking the user. Honest ordering:
-    // when the ack lands, any refresh frames the tool produced have
-    // already fanned out, so the client can treat "ack received" as
-    // "UI state reflects my action". No-op when no router is
-    // configured OR when the action didn't declare a tool.
-    //
-    // Awaited (not fire-and-forget): dispatchWiredAction internally
-    // catches every failure and emits contract-error envelopes; a
-    // throw out of this call would be a platform bug and we'd rather
-    // see it in tests than silently drop.
-    await dispatchWiredAction(stored, activeItem, envelope, dispatchedAt);
-
-    // StreamFanout pump-drain: dispatchWiredAction's internal fanOut
-    // calls `streamFanout.publish()` which queues envelopes into the
-    // pump's async iterator. The pump's `await iter.next()` resolves
-    // on the microtask queue — without this drain, the synchronous
-    // `send(ws, ack)` below races ahead of the pump's `send(ws, data)`,
-    // and the data-before-ack invariant fails. `setImmediate` waits for
-    // the next macrotask, which is strictly after all pending
-    // microtasks (the pump iterations) drain. OSS-only invariant —
-    // hosted Path A's RedisPubSubFanout can't preserve cross-pod
-    // ordering by construction; clients on hosted treat data + ack as
-    // independent signals.
-    await new Promise<void>((resolve) => setImmediate(resolve));
 
     send(ws, {
       type: "ack",
@@ -2651,87 +2119,10 @@ export function createGguiSessionChannelServer(opts: GguiSessionChannelOptions):
         send(sub.ws, { type: "render", payload });
       }
     },
-    async primeStreams(sessionId, render) {
-      const router = opts.wiredActionRouter;
-      const streamSpec = "streamSpec" in render ? render.streamSpec : undefined;
-      if (!router || !streamSpec) return;
-      const timeoutMs = opts.wiredActionTimeoutMs ?? DEFAULT_WIRED_TOOL_TIMEOUT_MS;
-      // Build the same wired-action ctx the dispatcher uses.
-      // Prime-time invocations reuse the seam so a refresh tool that
-      // fires `sendPropsUpdate` on cold-start works the same way as
-      // one fired post-action.
-      const wiredCtx: WiredActionContext = {
-        sessionId,
-        sendPropsUpdate(props) {
-          void sendPropsUpdateImpl(sessionId, props);
-        },
-      };
-      for (const [channelName, channelEntry] of Object.entries(streamSpec)) {
-        const refreshTool = channelEntry?.tool;
-        if (!refreshTool) continue;
-        if (!router.has(refreshTool)) {
-          opts.logger.warn("render_channel_prime_tool_not_found", {
-            sessionId,
-            toolName: refreshTool,
-            channel: channelName,
-          });
-          continue;
-        }
-        let output: unknown;
-        try {
-          output = await invokeWithTimeout(
-            router,
-            refreshTool,
-            EMPTY_REFRESH_INPUT,
-            wiredCtx,
-            timeoutMs
-          );
-        } catch (err) {
-          opts.logger.warn("render_channel_prime_tool_failed", {
-            sessionId,
-            toolName: refreshTool,
-            channel: channelName,
-            error: String(err),
-          });
-          continue;
-        }
-        try {
-          assertStreamContract(streamSpec, channelName, output, opts.extraReservedValidators);
-        } catch (err) {
-          opts.logger.warn("render_channel_prime_schema_violation", {
-            sessionId,
-            toolName: refreshTool,
-            channel: channelName,
-            error: String(err),
-          });
-          continue;
-        }
-        try {
-          await fanOut(
-            {
-              sessionId,
-              channel: channelName,
-              mode: channelEntry?.mode ?? "append",
-              payload: output as StreamEnvelopeInput["payload"],
-            },
-            streamSpec
-          );
-        } catch (err) {
-          opts.logger.error("render_channel_prime_emit_failed", {
-            sessionId,
-            toolName: refreshTool,
-            channel: channelName,
-            error: String(err),
-          });
-        }
-      }
-    },
     sendPropsUpdate(sessionId, props) {
-      // Public entry point — delegates to the closure-level impl that
-      // the wired-action dispatcher's `WiredActionContext.sendPropsUpdate`
-      // also calls. Returns the impl's promise so the caller can await
-      // store-lookup completion if desired (the wiredCtx call site
-      // fire-and-forgets via `void`).
+      // Public entry point — delegates to the closure-level impl.
+      // Returns the impl's promise so the caller can await store-lookup
+      // completion if desired.
       return sendPropsUpdateImpl(sessionId, props);
     },
     sendDrainAck({ sessionId, appId, eventId, drainedAt }) {

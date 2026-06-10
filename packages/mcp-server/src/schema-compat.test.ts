@@ -1,8 +1,8 @@
 /**
  * Unit tests for the F4 schema compat checker wired at render-time
- * + blueprint-registration. Covers every policy-flag branch, both
- * directions (action → tool inputSchema; channel ← tool outputSchema),
- * and every finding-reason bucket (`tool-not-found`, `schema-mismatch`).
+ * + blueprint-registration. Covers every policy-flag branch, the
+ * action → tool inputSchema direction, and every finding-reason
+ * bucket (`tool-not-found`, `schema-mismatch`).
  */
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
@@ -16,30 +16,18 @@ import {
 // ── Fixtures ──────────────────────────────────────────────────────
 
 /** A well-aligned tool registry: `submit_task` accepts any string
- *  `title` + optional string `note`; returns `{id, status}` (both
- *  plain strings to keep the fixtures inside P0 algorithm scope —
- *  enums are flagged as P1-unsupported and surface `unsupported`
- *  violations independent of the compat direction). */
+ *  `title` + optional string `note` (plain strings keep the fixtures
+ *  inside P0 algorithm scope — enums are flagged as P1-unsupported
+ *  and surface `unsupported` violations). */
 const submitTaskTool: ToolSchemaRef = {
   name: 'submit_task',
   inputSchema: {
     title: z.string(),
     note: z.string().optional(),
   },
-  outputSchema: {
-    id: z.string(),
-    status: z.string(),
-  },
 };
 
-/** Strict tool: outputSchema narrower than we might channel-emit. */
-const strictTool: ToolSchemaRef = {
-  name: 'strict_tool',
-  inputSchema: { x: z.string() },
-  outputSchema: { id: z.string() },
-};
-
-const registry: ToolSchemaRef[] = [submitTaskTool, strictTool];
+const registry: ToolSchemaRef[] = [submitTaskTool];
 
 // ── 'off' mode ────────────────────────────────────────────────────
 
@@ -223,28 +211,6 @@ describe('checkRenderSchemaCompat — actionSpec direction', () => {
     ).toThrow(SchemaCompatError);
   });
 
-  it('reject mode STILL throws for a stream tool-not-found', () => {
-    // Reuse the ghost_tool stream fixture: a stream channel references
-    // an unregistered tool → tool-not-found stays error severity, so
-    // reject mode throws (stream downgrade deferred — Phase 2 scope is
-    // action nextStep only).
-    expect(() =>
-      checkRenderSchemaCompat(
-        {
-          streamSpec: {
-            feed: {
-              schema: { type: 'object' } satisfies JsonSchema,
-              tool: 'ghost_tool',
-            },
-          },
-        },
-        registry,
-        'reject',
-        'test:stream-missing-throws',
-      ),
-    ).toThrow(SchemaCompatError);
-  });
-
   it('void action (no schema) + tool with required fields → flagged as mismatch (wire sends empty object)', () => {
     // submit_task.inputSchema requires `title`; void action sends
     // nothing ⇒ the wire would deliver {} to a tool that rejects
@@ -279,7 +245,6 @@ describe('checkRenderSchemaCompat — actionSpec direction', () => {
     const noRequiredTool: ToolSchemaRef = {
       name: 'noop_tool',
       inputSchema: {},
-      outputSchema: { ok: z.boolean() },
     };
     const report = checkRenderSchemaCompat(
       {
@@ -298,7 +263,7 @@ describe('checkRenderSchemaCompat — actionSpec direction', () => {
     expect(report.compatible).toBe(true);
   });
 
-  it("skips actions with dispatch.kind='agent' (wired by agent, not in-process)", () => {
+  it('skips actions that declare no nextStep hint (nothing to check against)', () => {
     const report = checkRenderSchemaCompat(
       {
         actionSpec: {
@@ -319,113 +284,11 @@ describe('checkRenderSchemaCompat — actionSpec direction', () => {
   });
 });
 
-// ── stream ref compat (channel.schema ⊆ tool.outputSchema) ───────
 
-describe('checkRenderSchemaCompat — streamSpec direction', () => {
-  it('compat: every tool-return value is accepted by the channel schema (channel is permissive)', () => {
-    // Tool returns `{id, status}` (both required). Channel declares
-    // the same two fields — both required, open to additional. Tool
-    // returns are all accepted by channel.
-    const report = checkRenderSchemaCompat(
-      {
-        streamSpec: {
-          taskStatus: {
-            schema: {
-              type: 'object',
-              properties: {
-                id: { type: 'string' },
-                status: { type: 'string' },
-              },
-              required: ['id', 'status'],
-            } satisfies JsonSchema,
-            tool: 'submit_task',
-          },
-        },
-      },
-      registry,
-      'reject',
-      'test:stream-compat',
-    );
-    expect(report.compatible).toBe(true);
-  });
+// ── Multi-entry handling ─────────────────────────────────────────
 
-  it('compat: channel is narrower (additionalProperties open) — still accepts every tool return', () => {
-    // Channel declares only `id` but leaves additionalProperties
-    // open (default true). Tool returns `{id, status}` — the `status`
-    // lands in additionalProperties and the channel accepts it.
-    const report = checkRenderSchemaCompat(
-      {
-        streamSpec: {
-          taskStatus: {
-            schema: {
-              type: 'object',
-              properties: { id: { type: 'string' } },
-              required: ['id'],
-            } satisfies JsonSchema,
-            tool: 'submit_task',
-          },
-        },
-      },
-      registry,
-      'reject',
-      'test:stream-compat-open',
-    );
-    expect(report.compatible).toBe(true);
-  });
-
-  it('incompat: tool returns fields the channel rejects (additionalProperties: false)', () => {
-    // Tool returns `{id, status}`. Channel declares only `id` AND
-    // sets additionalProperties: false — so the `status` key the
-    // tool emits would be rejected by the channel schema.
-    // Direction: isSchemaSubset(channel, toolReturn) flags toolReturn
-    // as widening the channel via the `status` property.
-    const report = checkRenderSchemaCompat(
-      {
-        streamSpec: {
-          status: {
-            schema: {
-              type: 'object',
-              properties: { id: { type: 'string' } },
-              required: ['id'],
-              additionalProperties: false,
-            } satisfies JsonSchema,
-            tool: 'submit_task',
-          },
-        },
-      },
-      registry,
-      'warn',
-      'test:stream-incompat',
-    );
-    expect(report.compatible).toBe(false);
-    expect(report.findings[0]?.kind).toBe('stream');
-    expect(report.findings[0]?.specName).toBe('status');
-    expect(report.findings[0]?.reason).toBe('schema-mismatch');
-  });
-
-  it('flags tool-not-found for stream refs too', () => {
-    const report = checkRenderSchemaCompat(
-      {
-        streamSpec: {
-          feed: {
-            schema: { type: 'object' } satisfies JsonSchema,
-            tool: 'ghost_tool',
-          },
-        },
-      },
-      registry,
-      'warn',
-      'test:stream-missing',
-    );
-    expect(report.compatible).toBe(false);
-    expect(report.findings[0]?.reason).toBe('tool-not-found');
-  });
-});
-
-// ── Mixed spec handling ──────────────────────────────────────────
-
-describe('checkRenderSchemaCompat — mixed spec handling', () => {
-  it('reports all findings from both specs in a single report', () => {
+describe('checkRenderSchemaCompat — multi-entry handling', () => {
+  it('reports every failing action in a single report', () => {
     const report = checkRenderSchemaCompat(
       {
         actionSpec: {
@@ -437,17 +300,16 @@ describe('checkRenderSchemaCompat — mixed spec handling', () => {
               properties: { title: { type: 'number' } }, // wrong type
             } satisfies JsonSchema,
           },
-        },
-        streamSpec: {
           ghost: {
+            label: 'ghost',
+            nextStep: 'ghost_tool',
             schema: { type: 'object' } satisfies JsonSchema,
-            tool: 'ghost_tool',
           },
         },
       },
       registry,
       'warn',
-      'test:mixed',
+      'test:multi',
     );
     expect(report.compatible).toBe(false);
     expect(report.findings).toHaveLength(2);
@@ -455,7 +317,7 @@ describe('checkRenderSchemaCompat — mixed spec handling', () => {
     expect(reasons).toEqual(['schema-mismatch', 'tool-not-found']);
   });
 
-  it('no actionSpec + no streamSpec = always compatible', () => {
+  it('no actionSpec = always compatible', () => {
     const report = checkRenderSchemaCompat(
       {},
       registry,
@@ -481,11 +343,13 @@ describe('SchemaCompatError — message formatting', () => {
             properties: { title: { type: 'number' } },
           } satisfies JsonSchema,
         },
-      },
-      streamSpec: {
         feed: {
-          schema: { type: 'object' } satisfies JsonSchema,
-          tool: 'ghost_tool',
+          label: 'Feed',
+          nextStep: 'ghost_tool',
+          schema: {
+            type: 'object',
+            properties: { title: { type: 'number' } },
+          } satisfies JsonSchema,
         },
       },
     };

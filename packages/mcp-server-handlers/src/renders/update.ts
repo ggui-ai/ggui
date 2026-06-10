@@ -199,14 +199,6 @@ export interface GguiUpdateHandlerDeps {
     readonly mode?: 'light' | 'dark';
   } | undefined;
   /**
-   * Returns the names of registered tools whose `_meta.ui.visibility`
-   * includes `"app"`. Forwarded onto the `ai.ggui/render.appCallableTools`
-   * slice field so the iframe-runtime can resolve pattern α (direct
-   * tools/call) vs pattern β (3-message bridge) per wired action — same
-   * posture render uses.
-   */
-  readonly appCallableTools?: () => readonly string[];
-  /**
    * Resolver for the `ai.ggui/render.streamWebSocketLocalTools` slice
    * field. Mirrors render's resolver so the post-update render slice
    * agrees with what the iframe-runtime saw on initial mount.
@@ -483,10 +475,10 @@ export function createGguiUpdateHandler(
     resultMeta: async (output, _input, ctx) => {
       // Load the just-patched render only to derive the projected
       // propsJson. The other view fields (componentCode / kind /
-      // contextSlots / actionNextSteps / permissionsPolicy /
-      // compiledValidators) are mount-time invariants — the initial
-      // render already shipped them, and `ggui_update` patches `props`
-      // only, never the contract specs.
+      // contextSlots / permissionsPolicy / compiledValidators) are
+      // mount-time invariants — the initial render already shipped
+      // them, and `ggui_update` patches `props` only, never the
+      // contract specs.
       let view: RenderMetaView = {};
       let renderThemeId: string | undefined;
       // `lastSequence` — monotonic event-ledger cursor stamped on every

@@ -126,7 +126,7 @@ describe('assertStreamContract', () => {
       expect(() =>
         assertStreamContract(SPEC, '_ggui:contract-error', {
           toolName: 'my-tool',
-          error: { code: 'TOOL_THREW', message: 'boom' },
+          error: { code: 'SCHEMA_VIOLATION', message: 'boom' },
           timestamp: '2026-04-23T00:00:00.000Z',
         }),
       ).not.toThrow();

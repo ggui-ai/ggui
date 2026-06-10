@@ -89,7 +89,6 @@ const CONTRACT_STREAM: StreamSpec = {
       properties: { items: { type: 'array', items: { type: 'object' } } },
       required: ['items'],
     },
-    tool: 'tasks_list',
   },
 };
 
@@ -181,9 +180,9 @@ async function bootFull(
     shortCodeIndex,
     renderChannel: true,
     // Default the existing pre-F4 tests to `schemaCompatCheck: 'off'`
-    // so their test-only fixtures referencing unregistered tool names
-    // (`tasks_complete`, `tasks_list`) continue to exercise the
-    // bundle / render-commit / shortCode / renderChannel flow. A separate
+    // so their test-only fixtures referencing the unregistered tool
+    // name `tasks_complete` continue to exercise the bundle /
+    // render-commit / shortCode / renderChannel flow. A separate
     // describe block below covers the F4 check firing end-to-end.
     schemaCompatCheck: overrides?.schemaCompatCheck ?? 'off',
     ...(overrides?.mcpMounts ? { mcpMounts: overrides.mcpMounts } : {}),
@@ -487,45 +486,6 @@ describe('POST /ggui/console/blueprint/:id/try', () => {
     expect(stored).not.toBeNull();
     // Phase B identity collapse: render.id === sessionId.
     expect(stored!.render.id).toBe(body.sessionId);
-  });
-
-  it('schemaCompatCheck=reject: rejects on streamSpec tool ref too (inverse direction)', async () => {
-    // `CONTRACT_STREAM` references `tasks_list` which no mount
-    // registers. Same tool-not-found path; proves the streamSpec
-    // side of the check fires at this ingress.
-    fx = await bootFull(
-      [
-        {
-          id: 'todo-list',
-          name: 'Todo List',
-          bundle: {
-            code: BUNDLE_CODE,
-            contentType: 'application/javascript+react',
-          },
-          contract: { stream: CONTRACT_STREAM },
-        },
-      ],
-      { schemaCompatCheck: 'reject' },
-    );
-    const res = await fetch(
-      `${fx.url}/ggui/console/blueprint/todo-list/try`,
-      { method: 'POST' },
-    );
-    expect(res.status).toBe(422);
-    const body = (await res.json()) as {
-      error: string;
-      findings: Array<{
-        kind: string;
-        specName: string;
-        toolName: string;
-        reason: string;
-      }>;
-    };
-    expect(body.error).toBe('SCHEMA_MISMATCH_ERROR');
-    expect(body.findings[0]?.kind).toBe('stream');
-    expect(body.findings[0]?.specName).toBe('tasks');
-    expect(body.findings[0]?.toolName).toBe('tasks_list');
-    expect(body.findings[0]?.reason).toBe('tool-not-found');
   });
 
   it('schemaCompatCheck=reject: compat passes when mcpMount registers the tool with matching schemas', async () => {

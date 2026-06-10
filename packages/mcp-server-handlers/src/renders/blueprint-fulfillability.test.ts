@@ -54,15 +54,6 @@ describe('requiredTools', () => {
     expect([...requiredTools(contract)].sort()).toEqual(['todo_add', 'todo_list']);
   });
 
-  it('includes the legacy streamSpec[*].tool refresh hint', () => {
-    const contract: DataContract = {
-      streamSpec: {
-        items: { schema: { type: 'object' }, tool: 'items_list' },
-      },
-    };
-    expect(requiredTools(contract)).toEqual(['items_list']);
-  });
-
   it('returns [] for a contract with no action/stream tool refs', () => {
     const contract: DataContract = { propsSpec: { properties: {} } };
     expect(requiredTools(contract)).toEqual([]);
