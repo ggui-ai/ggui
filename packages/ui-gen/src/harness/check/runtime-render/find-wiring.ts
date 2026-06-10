@@ -62,7 +62,7 @@ export interface WiringDetection {
 
 export interface FindWiringInput {
   readonly sourceCode: string;
-  /** "useAction" or "useWiredTool" or "useStream" or "useClientTool" */
+  /** "useAction" or "useStream" */
   readonly hookName: string;
   /** The hook's first-arg literal — the action/tool/event name. */
   readonly hookArg: string;
@@ -89,9 +89,8 @@ export function findWiring(input: FindWiringInput): WiringDetection {
 
   // Step 1: find the destructured variable name from the hook call.
   //   const save = useAction('save')
-  //   const search = useWiredTool('search')
-  // Returns the binding name(s) — multiple if the hook returns an object destructure
-  // (e.g., useWiredTool returns { call, data, isPending }).
+  // Returns the binding name(s) — multiple if the hook returns an object
+  // destructure.
   const hookBindings = findHookBindings(sf, hookName, hookArg);
   if (hookBindings.length === 0) {
     return {
@@ -106,10 +105,9 @@ export function findWiring(input: FindWiringInput): WiringDetection {
   // Step 2: collect every identifier that should "count" as a reference to the
   // hook's callable. This includes:
   //   - The hook bindings themselves (e.g., `save`)
-  //   - For useWiredTool: the `.call` member access (e.g., `search.call`)
   //   - One-level aliases: `const onSave = () => save(...); const onClick = save;`
   //     → `onSave` and `onClick` count as references to `save`
-  const callableNames = expandAliases(sf, hookBindings, hookName);
+  const callableNames = expandAliases(sf, hookBindings);
 
   // Step 3: scan JSX attributes. For each attribute whose value contains a
   // reference to any callableName, classify by attribute name + element kind.
@@ -241,13 +239,8 @@ export function findWiring(input: FindWiringInput): WiringDetection {
 
 /**
  * Find variable bindings produced by `hookName('hookArg')` calls.
- *   const save = useAction('save')                          → ['save']
- *   const { call: doSearch } = useWiredTool('search')       → ['doSearch']
- *   const { call, data } = useWiredTool('search')           → ['call', 'data']  (caller filters)
- *
- * For useWiredTool we expand to include `.call` member access against the binding,
- * since the production hook returns { call, data, isPending, error } and `.call`
- * is the dispatch.
+ *   const save = useAction('save')               → ['save']
+ *   const { latest } = useStream('progress')     → ['latest']
  */
 function findHookBindings(sf: ts.SourceFile, hookName: string, hookArg: string): string[] {
   const bindings: string[] = [];
@@ -295,18 +288,11 @@ function findHookBindings(sf: ts.SourceFile, hookName: string, hookArg: string):
  *   const onSave = () => save(payload)         → onSave is alias for save
  *   const handleClick = save                    → handleClick is alias for save
  *
- * For useWiredTool: also include `${binding}.call` so that
- *   <Button onClick={() => search.call(...)}> matches.
- *
  * Returns the set of identifier NAMES that should count as the hook's callable
  * (used by JSX scanner to detect references).
  */
-function expandAliases(sf: ts.SourceFile, bindings: string[], hookName: string): Set<string> {
+function expandAliases(sf: ts.SourceFile, bindings: string[]): Set<string> {
   const all = new Set<string>(bindings);
-
-  // For useWiredTool, also accept member expressions {binding}.call.
-  // We model this as "any identifier named exactly the binding" — the JSX
-  // scanner uses findReferencedNames which descends into property accesses.
 
   function visit(node: ts.Node): void {
     if (
@@ -322,7 +308,7 @@ function expandAliases(sf: ts.SourceFile, bindings: string[], hookName: string):
       }
       // Wrapper closure: const onSave = () => save(payload);
       if (ts.isArrowFunction(init) || ts.isFunctionExpression(init)) {
-        if (bodyReferences(init.body, all, hookName)) {
+        if (bodyReferences(init.body, all)) {
           all.add(newName);
         }
       }
@@ -330,7 +316,7 @@ function expandAliases(sf: ts.SourceFile, bindings: string[], hookName: string):
       // Generalize: walk the entire initializer expression for hook references.
       // If found, the alias counts as a reference site.
       if (ts.isCallExpression(init)) {
-        if (bodyReferences(init, all, hookName)) {
+        if (bodyReferences(init, all)) {
           all.add(newName);
         }
       }
@@ -342,22 +328,11 @@ function expandAliases(sf: ts.SourceFile, bindings: string[], hookName: string):
   return all;
 }
 
-function bodyReferences(body: ts.Node, names: ReadonlySet<string>, hookName: string): boolean {
+function bodyReferences(body: ts.Node, names: ReadonlySet<string>): boolean {
   let found = false;
   function walk(n: ts.Node): void {
     if (found) return;
     if (ts.isIdentifier(n) && names.has(n.text)) {
-      found = true;
-      return;
-    }
-    // For useWiredTool: recognize `${binding}.call` pattern
-    if (
-      hookName === "useWiredTool" &&
-      ts.isPropertyAccessExpression(n) &&
-      ts.isIdentifier(n.expression) &&
-      names.has(n.expression.text) &&
-      n.name.text === "call"
-    ) {
       found = true;
       return;
     }
@@ -376,13 +351,6 @@ function findReferencedNames(node: ts.Node, names: ReadonlySet<string>): Set<str
   function walk(n: ts.Node): void {
     if (ts.isIdentifier(n) && names.has(n.text)) {
       found.add(n.text);
-    } else if (
-      ts.isPropertyAccessExpression(n) &&
-      ts.isIdentifier(n.expression) &&
-      names.has(n.expression.text)
-    ) {
-      // matches `binding.call` in <Button onClick={() => binding.call(...)}>
-      found.add(n.expression.text);
     }
     ts.forEachChild(n, walk);
   }

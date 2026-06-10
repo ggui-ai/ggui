@@ -1,7 +1,7 @@
 {
   "name": "@ggui-ai/e2e-mcp-host-simulator",
   "version": "0.0.1",
-  "description": "Tier-2 E2E harness — headless MCP Apps host simulator for the OSS-local path. Mimics what claude.ai / Claude Desktop / Goose actually do (tools/list resourceUri pre-fetch, /mcp tool calls, bootstrap-token extraction, WebSocket subscribe, wired-action bridge, OAuth flow) against an in-process @ggui-ai/mcp-server `createGguiServer` factory, without ever opening a browser. Also exports the shared `HostSimulator` core consumed by @ggui-private/e2e-host-simulator-remote.",
+  "description": "Tier-2 E2E harness — headless MCP Apps host simulator for the OSS-local path. Mimics what claude.ai / Claude Desktop / Goose actually do (tools/list resourceUri pre-fetch, /mcp tool calls, bootstrap-token extraction, WebSocket subscribe, submit-action bridge, OAuth flow) against an in-process @ggui-ai/mcp-server `createGguiServer` factory, without ever opening a browser. Also exports the shared `HostSimulator` core consumed by @ggui-private/e2e-host-simulator-remote.",
   "private": true,
   "type": "module",
   "main": "./src/index.ts",

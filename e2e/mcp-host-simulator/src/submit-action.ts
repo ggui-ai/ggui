@@ -1,10 +1,10 @@
 /**
- * Wired-action bridge — host-side mirror of the 3-envelope dance the
+ * Submit-action bridge — host-side mirror of the 3-envelope dance the
  * iframe runtime fires on every button click. See
- * `docs/development/mcp-apps-wired-actions.md` for the empirical
- * findings that drove this shape.
+ * `docs/development/mcp-apps-submit-action-bridge.md` for the
+ * empirical findings that drove this shape.
  *
- * The iframe runtime's `dispatchWiredAction` (packages/iframe-runtime/
+ * The iframe runtime's `dispatchSubmitAction` (packages/iframe-runtime/
  * src/runtime.ts) posts three envelopes in order to `window.parent`.
  * In production they go to the MCP-Apps host (claude.ai et al.),
  * which handles each one differently:
@@ -26,7 +26,7 @@
  * The hash + builders here MUST stay byte-identical to runtime.ts —
  * if a future change in iframe-runtime alters the envelope shape, the
  * simulator's host will silently mis-handle real iframe traffic. The
- * `wiredActionFnv1a` test fixture cross-checks against runtime.ts
+ * `submitActionFnv1a` test fixture cross-checks against runtime.ts
  * output to catch that drift.
  */
 
@@ -39,7 +39,7 @@
  * correlation between the silent context-update and the consent
  * message that bridge a click to the host's LLM.
  */
-export function wiredActionFnv1a(payload: string): string {
+export function submitActionFnv1a(payload: string): string {
   let hash = 0x811c9dc5;
   for (let i = 0; i < payload.length; i += 1) {
     hash ^= payload.charCodeAt(i);
@@ -49,13 +49,13 @@ export function wiredActionFnv1a(payload: string): string {
 }
 
 /**
- * Render a wired-action's `data` payload as a short inline string for
- * embedding in the `ui/message` consent prompt. Mirror of
- * `packages/iframe-runtime/src/runtime.ts::formatWiredActionDataInline`
- * — must produce identical output for the same input so consent
- * messages match runtime.ts byte-for-byte.
+ * Render a submit-action's `data` payload as a short inline string for
+ * embedding in the `ui/message` consent prompt. Mirror of the inline-
+ * data formatter in `packages/iframe-runtime/src/runtime.ts` — must
+ * produce identical output for the same input so consent messages
+ * match runtime.ts byte-for-byte.
  */
-export function formatWiredActionDataInline(data: unknown): string {
+export function formatSubmitActionDataInline(data: unknown): string {
   if (data === null || data === undefined) return '';
   if (typeof data !== 'object' || Array.isArray(data)) return '';
   const entries = Object.entries(data as Record<string, unknown>);
@@ -76,7 +76,7 @@ export function formatWiredActionDataInline(data: unknown): string {
  * (`{kind, payload}` discriminated union) plus the ambient correlation
  * fields the runtime stamps on every submit-action envelope.
  */
-export interface WiredActionToolsCallEnvelope {
+export interface SubmitActionToolsCallEnvelope {
   readonly jsonrpc: '2.0';
   readonly id: number;
   readonly method: 'tools/call';
@@ -94,7 +94,7 @@ export interface WiredActionToolsCallEnvelope {
 }
 
 /** JSON-RPC 2.0 envelope for the silent context update. */
-export interface WiredActionUpdateContextEnvelope {
+export interface SubmitActionUpdateContextEnvelope {
   readonly jsonrpc: '2.0';
   readonly id: number;
   readonly method: 'ui/update-model-context';
@@ -104,7 +104,7 @@ export interface WiredActionUpdateContextEnvelope {
 }
 
 /** JSON-RPC 2.0 envelope for the consent-gated user message. */
-export interface WiredActionUiMessageEnvelope {
+export interface SubmitActionUiMessageEnvelope {
   readonly jsonrpc: '2.0';
   readonly id: number;
   readonly method: 'ui/message';
@@ -121,7 +121,7 @@ export interface WiredActionUiMessageEnvelope {
  * audit envelope and would need a separate builder when host-side
  * coverage of those primary effects is exercised — out of scope here.
  */
-export interface BuildWiredActionArgs {
+export interface BuildSubmitActionArgs {
   readonly intent: string;
   readonly data?: unknown;
   /**
@@ -144,7 +144,7 @@ export interface BuildWiredActionArgs {
   readonly firedAt?: string;
   /**
    * Receiver tool name. Defaults to `'ggui_runtime_submit_action'` —
-   * the MCP server's wired-action receiver. Override only in tests
+   * the MCP server's submit-action receiver. Override only in tests
    * that wire a custom gateway tool.
    */
   readonly toolName?: string;
@@ -155,12 +155,12 @@ export interface BuildWiredActionArgs {
   readonly idSeed?: readonly [number, number, number];
 }
 
-export interface BuiltWiredAction {
+export interface BuiltSubmitAction {
   readonly actionId: string;
   readonly firedAt: string;
-  readonly toolsCall: WiredActionToolsCallEnvelope;
-  readonly updateContext: WiredActionUpdateContextEnvelope;
-  readonly uiMessage: WiredActionUiMessageEnvelope;
+  readonly toolsCall: SubmitActionToolsCallEnvelope;
+  readonly updateContext: SubmitActionUpdateContextEnvelope;
+  readonly uiMessage: SubmitActionUiMessageEnvelope;
   /**
    * The `[ggui:pending-action] {...}` JSON text the host stuffs into
    * the LLM's persistent context. Pulled out for direct assertion
@@ -178,23 +178,23 @@ export interface BuiltWiredAction {
 const randId = (): number => Math.floor(Math.random() * 1e9);
 
 /**
- * Build the 3 envelopes the iframe runtime would post for a wired
+ * Build the 3 envelopes the iframe runtime would post for a submit
  * action, plus the derived `actionId` + display strings. Pure: no
  * I/O, no network. Tests that want the full bridge dance call
- * `HostSimulator.simulateWiredAction` which uses this internally.
+ * `HostSimulator.simulateSubmitAction` which uses this internally.
  */
-export function buildWiredAction(args: BuildWiredActionArgs): BuiltWiredAction {
+export function buildSubmitAction(args: BuildSubmitActionArgs): BuiltSubmitAction {
   const toolName = args.toolName ?? 'ggui_runtime_submit_action';
   const firedAt = args.firedAt ?? new Date().toISOString();
   const data = args.data === undefined ? undefined : args.data;
-  // Mirror iframe-runtime/runtime.ts::dispatchWiredAction byte-for-byte:
+  // Mirror iframe-runtime/runtime.ts::dispatchSubmitAction byte-for-byte:
   // `${intent}|${JSON.stringify(data ?? null)}|${firedAt}`. Drift here
   // makes the host's consent-text actionId disagree with the iframe's
   // pending-action actionId, breaking the LLM cross-check.
-  const actionId = wiredActionFnv1a(
+  const actionId = submitActionFnv1a(
     `${args.intent}|${JSON.stringify(data ?? null)}|${firedAt}`,
   );
-  const inlineData = formatWiredActionDataInline(data);
+  const inlineData = formatSubmitActionDataInline(data);
   const dataPart = inlineData === '' ? '' : ` (${inlineData})`;
   const ids = args.idSeed ?? ([randId(), randId(), randId()] as const);
 

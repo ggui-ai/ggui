@@ -20,11 +20,11 @@
  *      todo MCP.
  *   8. Todo MCP mutates state. Test asserts on `/admin/state`.
  *
- * The actionSpec entry MUST use `dispatch.kind: 'agent'` (event-style)
- * for this flow to work in the current sample setup — the host relay
- * forwards `tools/call` only to the ggui MCP, so `dispatch.kind: 'tool'`
- * with a `todo_*` name has no path to the todo MCP. The prompt nudges
- * the LLM toward the agent-routed pattern.
+ * Every action is agent-routed: the click lands as an event on the
+ * GguiSession's consume buffer and the agent decides which tool to
+ * call next — `actionSpec[*].nextStep` is an advisory hint, nothing
+ * more. The prompt nudges the LLM to drain `ggui_consume` mid-turn so
+ * the toggle reaches the todo MCP within the same conversation.
  *
  * This is the canonical "real production scenario" pin: real user, real
  * LLM, real wire, real domain MCP, real state mutation.

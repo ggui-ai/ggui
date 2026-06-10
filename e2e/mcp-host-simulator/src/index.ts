@@ -22,8 +22,8 @@ export {
   type HostSimulatorOptions,
   type CallToolResult,
   type SubscribeAck,
-  type SimulateWiredActionArgs,
-  type SimulateWiredActionResult,
+  type SimulateSubmitActionArgs,
+  type SimulateSubmitActionResult,
   type HandshakeOutput,
   type HandshakeSuggestionView,
   type SuggestionBlueprintMeta,
@@ -31,15 +31,15 @@ export {
 } from './host-simulator.js';
 export { bootOssServer, type OssFixture } from './boot-oss.js';
 export {
-  buildWiredAction,
-  wiredActionFnv1a,
-  formatWiredActionDataInline,
-  type BuildWiredActionArgs,
-  type BuiltWiredAction,
-  type WiredActionToolsCallEnvelope,
-  type WiredActionUpdateContextEnvelope,
-  type WiredActionUiMessageEnvelope,
-} from './wired-action.js';
+  buildSubmitAction,
+  submitActionFnv1a,
+  formatSubmitActionDataInline,
+  type BuildSubmitActionArgs,
+  type BuiltSubmitAction,
+  type SubmitActionToolsCallEnvelope,
+  type SubmitActionUpdateContextEnvelope,
+  type SubmitActionUiMessageEnvelope,
+} from './submit-action.js';
 export {
   OAuthFlowSimulator,
   generatePkcePair,

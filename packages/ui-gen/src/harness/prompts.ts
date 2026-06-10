@@ -448,7 +448,6 @@ export function buildContractsContext(
       .map(([name, entry]: [string, StreamChannelEntry]) => {
         const bits = [`  - ${name}`];
         if (entry.description) bits.push(`— ${entry.description}`);
-        if (entry.tool) bits.push(`(refresh tool: \`${entry.tool}\`)`);
         return bits.join(' ');
       })
       .join('\n');

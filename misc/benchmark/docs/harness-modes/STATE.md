@@ -39,16 +39,16 @@ core/-deletion refactor. **Open** = `packages/ui-gen/` (publishable as `@ggui-ai
 
 Defined in `packages/ui-gen/src/classifier/axes.ts`. Values that matter for slicing:
 
-| Axis           | Values                                                                 | Source of signal                                        |
-| -------------- | ---------------------------------------------------------------------- | ------------------------------------------------------- |
-| `render`       | `static` / `list` / `grid` / `timeline` / `master-detail`              | props shape + prompt                                    |
-| `state`        | `none` / `ui-affordance` / `payload` / `draft` / `merge`               | `arr<obj>` + streams + actions                          |
-| `writes`       | `none` / `commit` / `multi-commit` / `per-item` / `submit` / `compose` | actions + payload shape                                 |
-| `writeTrigger` | `click` / `drag` / `swipe`                                             | prompt keywords + gesture signals                       |
-| `realtime`     | `none` / `append` / `merge` / `mixed` / `presence` / `status`          | stream kinds in contract                                |
-| `fetch`        | `none` / `manual` / `periodic` / `live`                                | streams + agent tools                                   |
-| `layout`       | `single` / `multi-step` / `master-detail` / `overlay`                  | prompt + contract hints                                 |
-| `tooling`      | `none` / `wired` / `client` / `both`                                   | `contract.wiredTools` + `contract.clientTools` presence |
+| Axis           | Values                                                                 | Source of signal                                          |
+| -------------- | ---------------------------------------------------------------------- | --------------------------------------------------------- |
+| `render`       | `static` / `list` / `grid` / `timeline` / `master-detail`              | props shape + prompt                                      |
+| `state`        | `none` / `ui-affordance` / `payload` / `draft` / `merge`               | `arr<obj>` + streams + actions                            |
+| `writes`       | `none` / `commit` / `multi-commit` / `per-item` / `submit` / `compose` | actions + payload shape                                   |
+| `writeTrigger` | `click` / `drag` / `swipe`                                             | prompt keywords + gesture signals                         |
+| `realtime`     | `none` / `append` / `merge` / `mixed` / `presence` / `status`          | stream kinds in contract                                  |
+| `fetch`        | `none` / `manual` / `periodic` / `live`                                | streams + agent tools                                     |
+| `layout`       | `single` / `multi-step` / `master-detail` / `overlay`                  | prompt + contract hints                                   |
+| `tooling`      | `none` / `wired` / `client` / `both`                                   | `agentCapabilities.tools` + `clientCapabilities` presence |
 
 `riskTier` derivation is in `classifier.ts::riskTierFromVector`. Roughly:
 

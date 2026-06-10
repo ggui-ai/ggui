@@ -1,13 +1,12 @@
 // core/src/harness/check/runtime-render/find-wiring.test.ts
 //
 // Tests for AST-based wiring detection (per Codex's repro-set, 2026-04-13).
-// Covers the seven canonical cases:
+// Covers the six canonical cases:
 //   - direct button click       → click (verified)
 //   - form submit               → submit (verified)
 //   - native select/input change → change (verified)
 //   - dropdown / custom select  → unverified
 //   - missing wiring            → missing
-//   - useWiredTool .call native  → click (verified)
 //   - alias indirection         → click (verified)
 
 import { describe, it, expect } from "vitest";
@@ -133,33 +132,6 @@ describe("findWiring — alias indirection", () => {
     // so this case might land in unverified depending on AST detection completeness.
     // Soft expectation: we DO recognize the inner reference to `save`.
     expect(["click", "unverified"]).toContain(w.kind);
-  });
-});
-
-describe("findWiring — wiredTool .call indirection", () => {
-  it("inline .call inside onClick → click", () => {
-    const src = `
-      import { useWiredTool } from '@ggui-ai/wire';
-      export default function C() {
-        const search = useWiredTool('search');
-        return <button onClick={() => search.call({ q: 'hi' })}>Search</button>;
-      }
-    `;
-    const w = findWiring({ sourceCode: src, hookName: "useWiredTool", hookArg: "search" });
-    expect(w.kind).toBe("click");
-  });
-
-  it("aliased handler calling .call → click", () => {
-    const src = `
-      import { useWiredTool } from '@ggui-ai/wire';
-      export default function C() {
-        const search = useWiredTool('search');
-        const runSearch = () => search.call({ q: 'hi' });
-        return <button onClick={runSearch}>Search</button>;
-      }
-    `;
-    const w = findWiring({ sourceCode: src, hookName: "useWiredTool", hookArg: "search" });
-    expect(w.kind).toBe("click");
   });
 });
 

@@ -546,12 +546,6 @@ export function generateBoilerplate(
     streamTypeAliases.length > 0
       ? wrapTypes("stream event types generated from stream contract.", streamTypeAliases.join("\n\n"))
       : "";
-  // `agentCapabilities.tools` emits no type aliases: the catalog
-  // declares tools the AGENT invokes; the component never imports their
-  // request/response types directly. This empty block is left as a
-  // sentinel so future readers see why the catalog branch above
-  // produces no boilerplate output.
-  const wiredToolTypesBlock = "";
   // `clientCapabilities.gadgets` ship NO type-alias block — gadget
   // hooks own their typed return shape internally; the contract surface
   // is pure declaration. The boilerplate generator inserts a
@@ -566,7 +560,6 @@ export function generateBoilerplate(
     PROPS_INTERFACE: propsInterface,
     ACTION_TYPES: actionTypesBlock,
     STREAM_TYPES: streamTypesBlock,
-    WIRED_TOOL_TYPES: wiredToolTypesBlock,
     CLIENT_TOOL_TYPES: clientToolTypesBlock,
     CONTEXT_HOOKS: contextHooks,
     WIRE_HOOKS: hookBody,

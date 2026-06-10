@@ -17,11 +17,11 @@
  *   4. WebSocket subscribe — iframe runtime connects with the
  *      bootstrap token, gets an ack with a reconnect `sessionToken`,
  *      then receives event frames pushed by the server.
- *   5. **Wired-action bridge** (separate slice T2.5) — when the
- *      iframe renders a wired button + the user "clicks" it, the
- *      iframe posts `ui/message` to the host; the host replies with
- *      the documented 3-message dance from
- *      `docs/development/mcp-apps-wired-actions.md`.
+ *   5. **Submit-action bridge** (separate slice T2.5) — when the
+ *      iframe renders an action-bound button + the user "clicks" it,
+ *      the iframe posts `ui/message` to the host; the host replies
+ *      with the documented 3-message dance from
+ *      `docs/development/mcp-apps-submit-action-bridge.md`.
  *
  * This class wraps the MCP SDK client + a bootstrap-token consumer
  * + a WS connection — enough scaffolding to drive happy-path E2E
@@ -30,7 +30,7 @@
  *
  * Out of scope at v1:
  *   - OAuth flow (deferred to T2.6 — for now use a static bearer)
- *   - Wired-action bridge (T2.5)
+ *   - Submit-action bridge (T2.5)
  *   - Host-shape configs (T2.7)
  */
 import {
@@ -42,11 +42,11 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import WebSocket from "ws";
 import {
-  buildWiredAction,
-  type BuiltWiredAction,
-  type WiredActionUiMessageEnvelope,
-  type WiredActionUpdateContextEnvelope,
-} from "./wired-action.js";
+  buildSubmitAction,
+  type BuiltSubmitAction,
+  type SubmitActionUiMessageEnvelope,
+  type SubmitActionUpdateContextEnvelope,
+} from "./submit-action.js";
 
 export interface HostSimulatorOptions {
   /**
@@ -220,11 +220,11 @@ export interface RenderOverrideInput {
 }
 
 /**
- * Args for {@link HostSimulator.simulateWiredAction}. Mirrors the
- * input shape the iframe runtime's `dispatchWiredAction` consumes,
+ * Args for {@link HostSimulator.simulateSubmitAction}. Mirrors the
+ * input shape the iframe runtime's `dispatchSubmitAction` consumes,
  * minus the wire-level fields the simulator derives itself.
  */
-export interface SimulateWiredActionArgs {
+export interface SimulateSubmitActionArgs {
   readonly intent: string;
   readonly data?: unknown;
   /**
@@ -238,12 +238,12 @@ export interface SimulateWiredActionArgs {
 }
 
 /**
- * Result of {@link HostSimulator.simulateWiredAction} — the audit
+ * Result of {@link HostSimulator.simulateSubmitAction} — the audit
  * round-trip from the gateway tool plus the two host-internal
  * envelopes that real claude.ai would have routed to its LLM
  * context + chat input. Tests assert on these fields directly.
  */
-export interface SimulateWiredActionResult {
+export interface SimulateSubmitActionResult {
   /** FNV-1a 8-hex-char actionId binding the three envelopes. */
   readonly actionId: string;
   /** ISO-8601 firedAt — useful to replay the same actionId. */
@@ -262,13 +262,13 @@ export interface SimulateWiredActionResult {
    * `pendingActionContext.text` for assertions on the `[ggui:pending-action]`
    * JSON line.
    */
-  readonly pendingActionContext: WiredActionUpdateContextEnvelope;
+  readonly pendingActionContext: SubmitActionUpdateContextEnvelope;
   /**
    * The captured `ui/message` envelope (not sent over the wire — host-
    * internal in production until user consents). Use
    * `consentMessage.text` for the rendered consent prompt.
    */
-  readonly consentMessage: WiredActionUiMessageEnvelope;
+  readonly consentMessage: SubmitActionUiMessageEnvelope;
   /**
    * Pulled out from `pendingActionContext.params.content[0].text` for
    * convenience — the raw `[ggui:pending-action] {...}` line.
@@ -284,19 +284,19 @@ export class HostSimulator {
   private cachedTools: ToolListEntry[] | null = null;
   private prefetchedResources = new Map<string, string>();
   /**
-   * Latest `ui/update-model-context` envelope captured from a wired
+   * Latest `ui/update-model-context` envelope captured from a submit
    * action. Per spec §1099 each new envelope OVERWRITES the previous —
    * tests use this to verify latest-wins semantics across rapid clicks.
-   * `null` until {@link simulateWiredAction} fires at least once.
+   * `null` until {@link simulateSubmitAction} fires at least once.
    */
-  private modelContext: WiredActionUpdateContextEnvelope | null = null;
+  private modelContext: SubmitActionUpdateContextEnvelope | null = null;
   /**
-   * Append-only log of `ui/message` envelopes captured from wired
+   * Append-only log of `ui/message` envelopes captured from submit
    * actions. Multiple consent prompts can stack pre-user-send (the
    * user has to clear/send each one); the simulator records all of
    * them for assertion.
    */
-  private readonly consentLog: WiredActionUiMessageEnvelope[] = [];
+  private readonly consentLog: SubmitActionUiMessageEnvelope[] = [];
   private readonly opts: HostSimulatorOptions;
 
   constructor(opts: HostSimulatorOptions) {
@@ -673,8 +673,8 @@ export class HostSimulator {
   }
 
   /**
-   * Simulate a wired-action button click — drives the documented
-   * 3-message bridge from `docs/development/mcp-apps-wired-actions.md`:
+   * Simulate a submit-action button click — drives the documented
+   * 3-message bridge from `docs/development/mcp-apps-submit-action-bridge.md`:
    *
    *   1. `tools/call ggui_runtime_submit_action` — actually fires across
    *      the MCP transport (the server-side submit-action path runs).
@@ -685,7 +685,7 @@ export class HostSimulator {
    *
    * The 3 envelopes share an FNV-1a 8-hex actionId derived from
    * `intent | JSON.stringify(data) | firedAt`, byte-identical to the
-   * iframe runtime's `dispatchWiredAction`. The LLM in production
+   * iframe runtime's `dispatchSubmitAction`. The LLM in production
    * cross-checks the actionId in the consent text against the
    * pending-action context before acting — drift between the two
    * builders breaks that check.
@@ -693,9 +693,9 @@ export class HostSimulator {
    * Returns the actionId + gateway tool result + both captured
    * envelopes for direct assertion.
    */
-  async simulateWiredAction(args: SimulateWiredActionArgs): Promise<SimulateWiredActionResult> {
+  async simulateSubmitAction(args: SimulateSubmitActionArgs): Promise<SimulateSubmitActionResult> {
     if (!this.client) throw new Error("connect() first");
-    const built: BuiltWiredAction = buildWiredAction({
+    const built: BuiltSubmitAction = buildSubmitAction({
       intent: args.intent,
       data: args.data,
       sessionId: args.meta.sessionId,
@@ -731,10 +731,10 @@ export class HostSimulator {
 
   /**
    * Latest captured `ui/update-model-context` envelope, or `null`
-   * before the first {@link simulateWiredAction}. Subsequent wired
+   * before the first {@link simulateSubmitAction}. Subsequent submit
    * actions overwrite this (latest-wins, mirroring spec §1099).
    */
-  getModelContext(): WiredActionUpdateContextEnvelope | null {
+  getModelContext(): SubmitActionUpdateContextEnvelope | null {
     return this.modelContext;
   }
 
@@ -743,7 +743,7 @@ export class HostSimulator {
    * {@link connect}, in the order they were dispatched. Read-only
    * snapshot — the underlying log keeps growing.
    */
-  getConsentLog(): readonly WiredActionUiMessageEnvelope[] {
+  getConsentLog(): readonly SubmitActionUiMessageEnvelope[] {
     return [...this.consentLog];
   }
 

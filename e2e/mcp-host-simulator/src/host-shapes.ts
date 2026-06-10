@@ -3,7 +3,7 @@
  * partials for each MCP-Apps-aware host we know about. Tests use
  * these to keep `clientInfo` consistent + as a centralized
  * breadcrumb for known host-quirks documented in
- * `docs/development/mcp-apps-wired-actions.md`.
+ * `docs/development/mcp-apps-submit-action-bridge.md`.
  *
  * No server-side branching exists today on `clientInfo.name` —
  * every host walks the same MCP+OAuth+App-spec wire. The presets
@@ -35,7 +35,7 @@ export interface HostShape extends Pick<HostSimulatorOptions, 'clientInfo'> {
  *     example is rejected by claude.ai's validator.
  *   - `tools/call` from a view scope `['app']` ONLY reaches the
  *     server, NEVER the LLM (host-side prompt-injection firewall
- *     per spec §401). The 3-message wired-action bridge exists
+ *     per spec §401). The 3-message submit-action bridge exists
  *     because of this.
  *   - On `tools/list` claude.ai pre-fetches every declared
  *     `_meta.ui.resourceUri` — lazy fetch on first call is wrong.

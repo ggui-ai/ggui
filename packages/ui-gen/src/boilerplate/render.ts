@@ -82,7 +82,6 @@ export interface BoilerplateMarkers {
   PROPS_INTERFACE: string;
   ACTION_TYPES: string;
   STREAM_TYPES: string;
-  WIRED_TOOL_TYPES: string;
   CLIENT_TOOL_TYPES: string;
   /** `useGguiContext` destructure lines, one per declared `contextSpec`
    * slot. Emitted at the top of the user component body. The runtime

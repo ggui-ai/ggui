@@ -1,7 +1,7 @@
 /**
- * Tier 2 wired-action bridge: prove the host simulator drives the
+ * Tier 2 submit-action bridge: prove the host simulator drives the
  * empirically-validated 3-message dance documented at
- * `docs/development/mcp-apps-wired-actions.md` end-to-end.
+ * `docs/development/mcp-apps-submit-action-bridge.md` end-to-end.
  *
  * What this asserts (per documented bridge contract):
  *   1. The shared FNV-1a 8-hex actionId binds all three envelopes —
@@ -14,7 +14,7 @@
  *      which would defeat the bridge's whole point).
  *   4. The consent prompt embeds intent + inline data + actionId so
  *      the user can see what they're authorizing.
- *   5. Latest-wins overwrite (spec §1099): a second wired action
+ *   5. Latest-wins overwrite (spec §1099): a second submit action
  *      replaces the model context but stacks the consent log.
  *
  * If any of these break, real claude.ai traffic against the server
@@ -24,12 +24,12 @@ import { afterEach, describe, expect, it } from 'vitest';
 import {
   HostSimulator,
   bootOssServer,
-  buildWiredAction,
-  wiredActionFnv1a,
+  buildSubmitAction,
+  submitActionFnv1a,
   type OssFixture,
 } from '../src/index.js';
 
-describe('host-simulator: wired-action bridge', () => {
+describe('host-simulator: submit-action bridge', () => {
   let fixture: OssFixture | null = null;
   let host: HostSimulator | null = null;
 
@@ -48,15 +48,15 @@ describe('host-simulator: wired-action bridge', () => {
     // Spot-check against a known input/output pair so future drift in
     // either side fails loudly here. The hash is fed `intent | JSON |
     // firedAt` — pinning a deterministic case.
-    expect(wiredActionFnv1a('submit|null|2026-05-04T10:00:00.000Z')).toMatch(
+    expect(submitActionFnv1a('submit|null|2026-05-04T10:00:00.000Z')).toMatch(
       /^[0-9a-f]{8}$/,
     );
-    expect(wiredActionFnv1a('a')).toBe('e40c292c');
-    expect(wiredActionFnv1a('')).toBe('811c9dc5');
+    expect(submitActionFnv1a('a')).toBe('e40c292c');
+    expect(submitActionFnv1a('')).toBe('811c9dc5');
   });
 
   it('builds 3 envelopes with shared actionId + correct shape', () => {
-    const built = buildWiredAction({
+    const built = buildSubmitAction({
       intent: 'createEvent',
       data: { title: 'Team sync', when: '2026-05-04T15:00' },
       sessionId: 'rnd_abc',
@@ -102,7 +102,7 @@ describe('host-simulator: wired-action bridge', () => {
     expect(built.consentText).toContain('title: Team sync');
   });
 
-  it('happy path: simulateWiredAction round-trips gateway, captures host envelopes', async () => {
+  it('happy path: simulateSubmitAction round-trips gateway, captures host envelopes', async () => {
     fixture = await bootOssServer();
     host = new HostSimulator({
       url: fixture.url,
@@ -110,7 +110,7 @@ describe('host-simulator: wired-action bridge', () => {
     });
     await host.connect();
 
-    // Mint a real bootstrap — the wired-action needs a sessionId/appId
+    // Mint a real bootstrap — the submit-action needs a sessionId/appId
     // pair from a `ggui_render` to be wire-faithful. Use the canonical
     // handshake → render flow.
     const flow = await host.openRender({
@@ -125,11 +125,11 @@ describe('host-simulator: wired-action bridge', () => {
     });
     expect(
       flow.render.meta,
-      'bootstrap is required for the wired action',
+      'bootstrap is required for the submit action',
     ).toBeDefined();
     const bootstrap = flow.render.meta!;
 
-    const result = await host.simulateWiredAction({
+    const result = await host.simulateSubmitAction({
       intent: 'submit',
       data: { name: 'Wanseob', tier: 'pro' },
       meta: bootstrap,
@@ -185,12 +185,12 @@ describe('host-simulator: wired-action bridge', () => {
     });
     const bootstrap = flow.render.meta!;
 
-    const first = await host.simulateWiredAction({
+    const first = await host.simulateSubmitAction({
       intent: 'increment',
       data: { by: 1 },
       meta: bootstrap,
     });
-    const second = await host.simulateWiredAction({
+    const second = await host.simulateSubmitAction({
       intent: 'reset',
       data: null,
       meta: bootstrap,

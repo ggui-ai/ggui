@@ -10,7 +10,7 @@ A reusable test fixture that mimics what an MCP-Apps-aware host (claude.ai, Clau
 2. **`tools/list`** with `_meta.ui.resourceUri` pre-fetch (the host fetches each declared bundle URL on tools/list, NOT lazily on first tool-call — the spec says hosts SHOULD pre-fetch)
 3. **`tools/call`** with bootstrap-token extraction from `resultMeta._meta["ai.ggui/render"]`
 4. **WebSocket subscribe** with the bootstrap token, validates the ack
-5. **Wired-action bridge** — when the iframe sends `ui/message`, the host responds with the documented 3-message bridge (`ggui_user_action` + `ui/update-model-context` + reply), per `docs/development/mcp-apps-wired-actions.md`
+5. **Submit-action bridge** — when the iframe sends `ui/message`, the host responds with the documented 3-message bridge (`ggui_runtime_submit_action` + `ui/update-model-context` + `ui/message`), per `docs/development/mcp-apps-submit-action-bridge.md`
 6. **OAuth flow** — RFC 9728 + 8414 + 7591 + 7636 + 6749 + 8707 discovery + DCR + PKCE code-grant
 
 Everything runs in vitest with no browser, no jsdom, no Playwright.
@@ -57,7 +57,7 @@ it("happy path: tools/list → handshake → render → bootstrap → ws ack", a
 });
 ```
 
-### Wired-action usage
+### Submit-action usage
 
 ```ts
 import { HostSimulator, bootOssServer } from "@ggui-private/e2e-oss-mcp-host-simulator";
@@ -69,11 +69,11 @@ await host.connect();
 // 1. Mint a bootstrap from ggui_render.
 const flow = await host.openRender({ intent: "render a counter" });
 
-// 2. Simulate a wired-action click. Drives:
+// 2. Simulate a submit-action click. Drives:
 //    - tools/call ggui_runtime_submit_action over MCP transport (real round-trip)
 //    - ui/update-model-context (captured into host.getModelContext())
 //    - ui/message (appended to host.getConsentLog())
-const result = await host.simulateWiredAction({
+const result = await host.simulateSubmitAction({
   intent: "submit",
   data: { name: "Wanseob" },
   meta: flow.render.meta!,
@@ -85,7 +85,7 @@ console.log(result.pendingActionText); // [ggui:pending-action] {...}
 console.log(result.consentText); // Please proceed with **submit** (name: Wanseob). [id: `…`]
 ```
 
-The 3 envelopes are byte-identical to what `packages/iframe-runtime/src/runtime.ts::dispatchWiredAction` posts in production. Per `docs/development/mcp-apps-wired-actions.md`, the `tools/call` is the only one that crosses the wire — the other two are host-internal (LLM context + chat input). The simulator captures both for assertion.
+The 3 envelopes are byte-identical to what `packages/iframe-runtime/src/runtime.ts::dispatchSubmitAction` posts in production. Per `docs/development/mcp-apps-submit-action-bridge.md`, the `tools/call` is the only one that crosses the wire — the other two are host-internal (LLM context + chat input). The simulator captures both for assertion.
 
 ### OAuth flow usage
 
@@ -116,6 +116,6 @@ The simulator collapses the user-consent step (real claude.ai opens a browser) b
 | `happy-path.test.ts`                   | initialize → tools/list pre-fetch → tools/call → ws ack                    |
 | `host-shapes.test.ts`                  | `claude-ai` / `claude-desktop` / `goose` preset parity                     |
 | `oauth-flow.test.ts`                   | full RFC discovery + DCR + PKCE code-grant chain                           |
-| `wired-action.test.ts`                 | the 3-message wired-action bridge end-to-end                               |
+| `submit-action.test.ts`                | the 3-message submit-action bridge end-to-end                              |
 | `slice-5-installed-blueprints.test.ts` | installed-blueprint → handshake `origin: 'cache'` proof                    |
 | `slice-16e-blueprint-registry.test.ts` | blueprint-first registry over the wire (`describe.skip` — see file header) |
