@@ -43,8 +43,10 @@
  *     event persisted to the GguiSession's consume buffer.
  *   - `error-frame`    — an `error` frame with the expected
  *     `payload.code` (+ optional echoed `requestId`).
- *   - `stream-update`  — stream frame on named channel matches
- *     declared value.
+ *   - `stream-update`  — canonical channel-3 delivery frame
+ *     (`{type: 'data', payload: StreamEnvelope}`, SPEC §12.2) whose
+ *     envelope names the declared channel and carries the declared
+ *     value as its `payload` body.
  *   - `no-op`          — no frames observed after input dispatch.
  *
  * v1 Path-B-only kinds (return `unmatchable-on-ws`):
@@ -69,6 +71,8 @@
  * cannot drive. Grading it needs an MCP-binding driver; that gap is
  * declared here rather than papered over with a weaker assertion.
  */
+import type { StreamEnvelope } from '@ggui-ai/protocol';
+
 import type {
   ActionAckBehavior,
   BootstrapSuccessBehavior,
@@ -275,26 +279,45 @@ function matchErrorFrame(
   return { kind: 'pass' };
 }
 
+/**
+ * `stream-update` — matches the canonical channel-3 delivery frame
+ * (SPEC §12.2): `{type: 'data', payload: StreamEnvelope}`. The
+ * {@link StreamEnvelope} (from `@ggui-ai/protocol`) carries the
+ * channel identity on `channel` and the delivery body on `payload`;
+ * the matcher requires a `data` frame whose envelope names the
+ * declared channel and whose body deep-equals the declared value.
+ *
+ * Two near-miss frames deliberately do NOT match:
+ *   - `{type: 'stream', payload: {sessionId, chunk, done}}` — the
+ *     agent text-chunk streaming frame, a different wire type.
+ *   - Any `data` frame whose body fails the {@link StreamEnvelope}
+ *     shape (missing `sessionId` / `channel` / `mode`) — a
+ *     non-conformant envelope must not satisfy the assertion.
+ */
 function matchStreamUpdate(
   behavior: StreamUpdateBehavior,
   frames: readonly ObservedFrame[],
 ): MatchResult {
-  const match = frames.find(
-    (f) =>
-      f.kind === 'frame' &&
-      f.parsed['type'] === 'stream' &&
-      isRecord(f.parsed['payload']) &&
-      f.parsed['payload']['channel'] === behavior.channel &&
-      deepEqual(f.parsed['payload']['value'], behavior.value),
+  const envelopes: readonly StreamEnvelope[] = frames.flatMap((f) => {
+    if (f.kind !== 'frame' || f.parsed['type'] !== 'data') return [];
+    const body = f.parsed['payload'];
+    return isStreamEnvelope(body) ? [body] : [];
+  });
+  const match = envelopes.find(
+    (envelope) =>
+      envelope.channel === behavior.channel && deepEqual(envelope.payload, behavior.value),
   );
   if (match === undefined) {
     return {
       kind: 'fail',
-      expected: { channel: behavior.channel, value: behavior.value },
+      expected: {
+        type: 'data',
+        payload: { channel: behavior.channel, payload: behavior.value },
+      },
       received: frames
-        .filter((f) => f.kind === 'frame' && f.parsed['type'] === 'stream')
-        .map((f) => (f.kind === 'frame' ? f.parsed['payload'] : f)),
-      message: `expected a \`stream\` frame on channel '${behavior.channel}' with the declared value shape; none matched.`,
+        .filter((f) => f.kind === 'frame' && f.parsed['type'] === 'data')
+        .map((f) => (f.kind === 'frame' ? f.parsed : f)),
+      message: `expected a \`data\` frame whose StreamEnvelope names channel '${behavior.channel}' and carries the declared value as its payload; none matched.`,
     };
   }
   return { kind: 'pass' };
@@ -349,6 +372,22 @@ function findErrorFrame(
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+/**
+ * Validating narrower for {@link StreamEnvelope} — the body of a
+ * channel-3 `data` frame. Field names come from `@ggui-ai/protocol`
+ * (`types/live-channel`): `sessionId` + `channel` are required
+ * strings, `mode` is the declared state-folding mode
+ * (`'append' | 'replace'`), and the delivery body lives under
+ * `payload`.
+ */
+function isStreamEnvelope(value: unknown): value is StreamEnvelope {
+  if (!isRecord(value)) return false;
+  if (typeof value['sessionId'] !== 'string') return false;
+  if (typeof value['channel'] !== 'string') return false;
+  if (value['mode'] !== 'append' && value['mode'] !== 'replace') return false;
+  return 'payload' in value;
 }
 
 function deepEqual(a: unknown, b: unknown): boolean {

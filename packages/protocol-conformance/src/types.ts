@@ -13,24 +13,28 @@
  * {@link TeardownStep}, and {@link ExpectedBehavior} IS the public
  * API. Renaming a field breaks every third-party consumer of the
  * conformance kit. Treat this file the way `@ggui-ai/protocol`'s
- * type declarations get treated: additive changes only, extensibility
- * via `(string & {})` tails.
+ * type declarations get treated: additive changes only; where a
+ * union is extensible, it is via `(string & {})` tails (see the next
+ * section for which unions those are).
  *
- * ## Extensibly-closed unions
+ * ## Closed vs extensibly-closed unions
  *
- * Every discriminator in this module carries a `(string & {})` tail —
- * see SPEC §extensibility and `ContractErrorCode` in
- * `@ggui-ai/protocol`. Third-party conformance-host implementations
- * MAY introduce setup / teardown / expectation kinds the reference
- * kit doesn't recognize; the runner SHOULD skip such cases with a
- * warning rather than failing loudly, exactly the way
- * `ContractErrorCode`'s extensibility works.
+ * Two different evolution postures coexist in this module:
  *
- * Only these discriminators are extensibly closed:
- *   - `SetupStep['type']`
- *   - `TeardownStep['type']`
- *   - `ExpectedBehavior['kind']`
- *   - `TransportConfig['kind']`
+ *   - `SetupStep['type']` is **closed** — exactly the directive
+ *     vocabulary the shipped fixture catalog authors. An unknown or
+ *     malformed directive is a fixture-authoring error the runner
+ *     rejects loudly (it can never be a legitimate runtime extension
+ *     point, because the catalog and the vocabulary ship together).
+ *     New directives land as new union arms in a kit version bump.
+ *     `TeardownStep` is the same posture with a currently-empty
+ *     vocabulary.
+ *   - `ExpectedBehavior['kind']` and `TransportConfig['kind']` carry a
+ *     `(string & {})` tail — see SPEC §extensibility and
+ *     `ContractErrorCode` in `@ggui-ai/protocol`. Runners that
+ *     receive a behavior kind they don't recognize SHOULD skip with a
+ *     warning; an unrecognized transport kind is a configuration
+ *     error.
  *
  * Everything else — tool names, envelope field names, contract error
  * codes — is passed verbatim and the implementation under test owns
@@ -119,15 +123,20 @@ export type AuthConfig =
  * this module authors the declarative intent; the host owns the
  * implementation.
  *
- * Discriminator is extensibly closed: unknown `type` values skip the
- * fixture with a warning rather than erroring. Third-party hosts MAY
- * extend the setup vocabulary without a kit version bump.
+ * Discriminator is CLOSED: exactly the directive vocabulary the
+ * shipped fixture catalog authors. The runner validates every step
+ * against this union before dispatching and throws a descriptive
+ * fixture-authoring error on an unknown or malformed directive — a
+ * typo'd `type` can never silently skip. Hosts that don't implement
+ * a (valid) directive signal it by throwing from `dispatchSetup`,
+ * which the runner records as a SKIP.
  */
 export type SetupStep =
   | CreateGguiSessionStep
-  | EmitEnvelopeStep
-  | SeedChannelStep
-  | UnknownSetupStep;
+  | RendererUrlOverrideStep
+  | ServerVersionOverrideStep
+  | UiInitializeResponseOverrideStep
+  | EmitEnvelopeStep;
 
 /**
  * Declared-action entry for {@link CreateGguiSessionStep.actionSpec}.
@@ -160,6 +169,47 @@ export interface CreateGguiSessionStep {
   readonly actionSpec?: Readonly<Record<string, ActionSpecEntryDecl>>;
 }
 
+/**
+ * Point the render's bootstrap at a renderer-bundle URL the host
+ * controls — typically an unreachable one, to drive the
+ * `BUNDLE_FETCH_FAILED` bootstrap-failure path. A browser-host (Path-B)
+ * concern: WS-only hosts throw on it and the fixture skips.
+ */
+export interface RendererUrlOverrideStep {
+  readonly type: 'renderer-url-override';
+  /** GguiSession the override scopes to (a prior `create-session`). */
+  readonly sessionId: string;
+  /** Renderer-bundle URL the host substitutes for the real one. */
+  readonly url: string;
+}
+
+/**
+ * Advertise a server schema version other than the implementation's
+ * real one — drives the version-handshake rejection path
+ * (`UPGRADE_REQUIRED`).
+ */
+export interface ServerVersionOverrideStep {
+  readonly type: 'server-version-override';
+  /** GguiSession the override scopes to (a prior `create-session`). */
+  readonly sessionId: string;
+  /** Schema version the server advertises on the wire for this render. */
+  readonly advertiseVersion: string;
+}
+
+/**
+ * Substitute the MCP Apps `ui/initialize` response the host returns to
+ * the iframe — drives bootstrap-failure paths like
+ * `BOOTSTRAP_META_MISSING`. A browser-host (Path-B) concern: WS-only
+ * hosts throw on it and the fixture skips.
+ */
+export interface UiInitializeResponseOverrideStep {
+  readonly type: 'ui-initialize-response-override';
+  /** GguiSession the override scopes to (a prior `create-session`). */
+  readonly sessionId: string;
+  /** Response body the host returns from `ui/initialize` verbatim. */
+  readonly override: unknown;
+}
+
 export interface EmitEnvelopeStep {
   readonly type: 'emit-envelope';
   /** Reserved-channel or declared-channel name. */
@@ -169,34 +219,15 @@ export interface EmitEnvelopeStep {
   readonly payload: unknown;
 }
 
-export interface SeedChannelStep {
-  readonly type: 'seed-channel';
-  readonly sessionId: string;
-  readonly channel: string;
-  readonly value: unknown;
-}
-
 /**
- * Future-compat catch. Hosts that do not recognize the `type` SHOULD
- * skip the case with a warning.
+ * Teardown directive — mirrors {@link SetupStep}'s closed posture,
+ * scoped to cleanup. The vocabulary is EMPTY in this kit version: no
+ * fixture authors a teardown directive (renders decay via TTL), so
+ * the union has no members and the runner rejects any authored
+ * teardown step as a fixture-authoring error. Future cleanup
+ * directives land additively as union arms.
  */
-export interface UnknownSetupStep {
-  readonly type: string & {};
-  readonly [field: string]: unknown;
-}
-
-/**
- * Teardown directive — mirrors {@link SetupStep}'s vocabulary, scoped
- * to cleanup. No fixture authors a teardown directive today (renders
- * decay via TTL); the union stays so future cleanup vocabulary lands
- * additively.
- */
-export type TeardownStep = UnknownTeardownStep;
-
-export interface UnknownTeardownStep {
-  readonly type: string & {};
-  readonly [field: string]: unknown;
-}
+export type TeardownStep = never;
 
 // =============================================================================
 // Expected-behavior union
@@ -257,8 +288,15 @@ export interface ErrorFrameBehavior {
   readonly requestId?: string;
 }
 
-/** Expect a stream-update on the named channel matching the given value
- *  shape (deep-equal, via the host's matcher). */
+/**
+ * Expect a canonical channel-3 delivery frame (SPEC §12.2):
+ * `{type: 'data', payload: StreamEnvelope}` whose envelope names the
+ * declared `channel` and whose `payload.payload` body deep-equals the
+ * declared `value`. The `StreamEnvelope` shape is defined by
+ * `@ggui-ai/protocol` (`types/live-channel`). Note `{type: 'stream'}`
+ * is a different frame — agent text-chunk streaming — and does NOT
+ * satisfy this expectation.
+ */
 export interface StreamUpdateBehavior {
   readonly kind: 'stream-update';
   readonly channel: string;

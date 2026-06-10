@@ -11,36 +11,30 @@
  *
  * When a host IS provided, the runner calls `dispatchSetup()` for
  * every step before driving the fixture's `inputEnvelope`, then
- * `dispatchTeardown()` for every step after the assertion. Unknown
- * `kind` values MUST throw so unimplemented directives surface as a
+ * `dispatchTeardown()` for every step after the assertion. A host
+ * that does not implement a directive MUST throw so it surfaces as a
  * test SKIP with a clear "host does not implement X" reason — never
  * a silent pass.
  *
- * ## Extensibly-closed
+ * ## Closed vocabulary
  *
- * The concrete step vocabulary below mirrors `./types`' vocabulary
- * but is re-exported here as a host-facing narrower form:
- *   - Every arm carries the full semantic payload (not the JSON-
- *     loader's `unknown`-fields view).
- *   - The tail `(Record<string, unknown> & { readonly kind: string & {} })`
- *     catches fixture-JSON directives the host hasn't wired — the host
- *     returns by throwing, the runner maps it to a skip.
- *
- * Third-party hosts MAY extend either union with additional arms by
- * augmenting the declaration in their own module. v1.0 of the kit
- * does not require exhaustive coverage — it requires *honest*
- * coverage: either implement the directive OR throw, never silently
- * succeed on an unknown kind.
+ * Both step unions here are CLOSED — they carry exactly the directive
+ * vocabulary the shipped fixture catalog authors, with the same field
+ * names the fixture JSON uses. The runner validates every authored
+ * directive against the JSON-authoring union in `./types` before
+ * dispatch (unknown / malformed directives are fixture-authoring
+ * errors, thrown loudly, never dispatched), so a host only ever
+ * receives shape-valid steps of a known kind. Hosts therefore need
+ * exactly two behaviors per directive: implement it, or throw
+ * "not implemented" — never silently succeed.
  *
  * ## Relation to `./types`
  *
- * `./types` defines the JSON-authoring surface: every directive has
- * optional-by-default fields so JSON authors don't have to think
- * about shape. This module defines the *runtime* surface: once the
- * loader has validated a directive, the host receives a narrowed
- * form. The two are intentionally parallel but not identical — JSON
- * loaders accept what the author wrote; hosts receive what the
- * runner confirmed is shape-valid.
+ * `./types` defines the JSON-authoring surface (discriminated on
+ * `type`); this module defines the *runtime* surface the host
+ * receives (discriminated on `kind`). The two are intentionally
+ * parallel: same directives, same field names, different
+ * discriminator key.
  */
 import type { ActionSpecEntryDecl } from './types.js';
 
@@ -52,18 +46,19 @@ import type { ActionSpecEntryDecl } from './types.js';
  * Setup directive the host dispatches BEFORE a fixture's input
  * envelope drives the system under test.
  *
- * Extensibly-closed: a host that receives a `kind` it doesn't
- * recognize MUST throw `Error('conformance-host: unknown setup kind: <kind>')`
- * so the runner records the fixture as SKIPPED with that reason —
- * never silently succeed.
+ * Closed union — the runner validates fixture-authored directives
+ * before dispatch, so only these five kinds ever reach a host. A host
+ * that does not implement one of them MUST throw (e.g.
+ * `Error('host does not implement renderer-url-override')`) so the
+ * runner records the fixture as SKIPPED with that reason — never
+ * silently succeed.
  */
 export type SetupStep =
   | CreateGguiSessionSetup
-  | EmitEnvelopeSetup
   | RendererUrlOverrideSetup
-  | UiInitializeResponseOverrideSetup
   | ServerVersionOverrideSetup
-  | UnknownSetupStep;
+  | UiInitializeResponseOverrideSetup
+  | EmitEnvelopeSetup;
 
 export interface CreateGguiSessionSetup {
   readonly kind: 'create-session';
@@ -78,45 +73,45 @@ export interface CreateGguiSessionSetup {
   readonly actionSpec?: Readonly<Record<string, ActionSpecEntryDecl>>;
 }
 
+/** Runtime form of `RendererUrlOverrideStep` (see `./types`). */
+export interface RendererUrlOverrideSetup {
+  readonly kind: 'renderer-url-override';
+  readonly sessionId: string;
+  readonly url: string;
+}
+
+/** Runtime form of `ServerVersionOverrideStep` (see `./types`). */
+export interface ServerVersionOverrideSetup {
+  readonly kind: 'server-version-override';
+  readonly sessionId: string;
+  readonly advertiseVersion: string;
+}
+
+/** Runtime form of `UiInitializeResponseOverrideStep` (see `./types`). */
+export interface UiInitializeResponseOverrideSetup {
+  readonly kind: 'ui-initialize-response-override';
+  readonly sessionId: string;
+  readonly override: unknown;
+}
+
+/** Runtime form of `EmitEnvelopeStep` (see `./types`). */
 export interface EmitEnvelopeSetup {
   readonly kind: 'emit-envelope';
   readonly channel: string;
   readonly payload: unknown;
 }
 
-export interface RendererUrlOverrideSetup {
-  readonly kind: 'renderer-url-override';
-  readonly url: string;
-}
-
-export interface UiInitializeResponseOverrideSetup {
-  readonly kind: 'ui-initialize-response-override';
-  readonly response: unknown;
-}
-
-export interface ServerVersionOverrideSetup {
-  readonly kind: 'server-version-override';
-  readonly version: string;
-}
-
-/**
- * Future-compat catch. A host that reaches this arm MUST throw rather
- * than return silently — the runner interprets the throw as a skip
- * with the error message as the reason.
- */
-export type UnknownSetupStep = Record<string, unknown> & {
-  readonly kind: string & {};
-};
-
 // =============================================================================
 // Teardown directives — runtime surface
 // =============================================================================
 
-export type TeardownStep = UnknownTeardownStep;
-
-export type UnknownTeardownStep = Record<string, unknown> & {
-  readonly kind: string & {};
-};
+/**
+ * Closed-and-empty, mirroring `./types`' `TeardownStep`: no teardown
+ * vocabulary exists in this kit version (renders decay via TTL), so
+ * `dispatchTeardown` is never invoked today. The slot stays so future
+ * cleanup directives land additively as union arms.
+ */
+export type TeardownStep = never;
 
 // =============================================================================
 // Host interface
@@ -128,9 +123,9 @@ export type UnknownTeardownStep = Record<string, unknown> & {
  *
  *   - Implement every directive the kit authors (full coverage — the
  *     reference `@ggui-ai/mcp-server`-backed host target).
- *   - Implement a subset + throw on unknown kinds (partial coverage
- *     — the kit records unimplemented directives as SKIPPED rather
- *     than failed).
+ *   - Implement a subset + throw on the rest (partial coverage — the
+ *     kit records unimplemented directives as SKIPPED rather than
+ *     failed).
  *   - Not be provided at all (the runner drops every fixture with a
  *     non-empty `setup` or `teardown` as skip-with-reason).
  *

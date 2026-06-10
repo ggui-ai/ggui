@@ -18,7 +18,7 @@ Path-A-matchable kinds (`matchBehavior` returns `pass` / `fail`):
 - `version-mismatch` — `error` frame with `code: UPGRADE_REQUIRED`
 - `action-ack` — the action's `ack` frame (matched by echoed `requestId`) carries a numeric `payload.sequence`, proving the action event persisted to the GguiSession's consume buffer before the ack
 - `error-frame` — `error` frame with the expected `payload.code` (e.g. `CONTRACT_VIOLATION` for an action absent from the declared actionSpec)
-- `stream-update` — `stream` frame on a named channel matching the declared value
+- `stream-update` — canonical channel-3 delivery frame (`{type: 'data', payload: StreamEnvelope}`, SPEC §12.2) whose envelope names the declared channel and carries the declared value as its `payload` body
 - `no-op` — silence after input dispatch
 
 Path-B-only kinds (`matchBehavior` returns `unmatchable-on-ws` → runner records SKIP):
@@ -72,16 +72,22 @@ const result = await runConformance({
   auth: { kind: "bearer", token: process.env.TOKEN! },
 });
 
-if (result.failed.length > 0) {
+// A failed fixture is a red build — and so is a run that executed
+// ZERO fixtures (all skips prove nothing).
+if (result.failed.length > 0 || result.passed.length === 0) {
   process.exit(1);
 }
 ```
+
+`serverUrl` accepts either a bare origin (`http://localhost:3000` — the runner derives `ws://localhost:3000/ws`) or the full live-channel endpoint (`ws://localhost:3000/ws` — used exactly as given; the runner never appends to an explicit path).
 
 CLI equivalent:
 
 ```
 npx @ggui-ai/protocol-conformance --url ws://localhost:3000/ws --auth bearer:$TOKEN
 ```
+
+The CLI exits `0` only when at least one fixture executed and none failed; `1` on any fixture failure; `2` on invocation errors **or** when every fixture skipped (a zero-executed run never reads as success in CI).
 
 Full adoption guide + fixture-to-contract mapping table land with the fixture-extraction commit.
 

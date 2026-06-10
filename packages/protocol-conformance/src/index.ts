@@ -22,16 +22,16 @@ export type {
   AuthConfig,
   // Core fixture shape
   TestCase,
-  // Setup vocabulary (JSON-authoring surface)
+  // Setup vocabulary (JSON-authoring surface — closed union)
   SetupStep,
   CreateGguiSessionStep,
   ActionSpecEntryDecl,
+  RendererUrlOverrideStep,
+  ServerVersionOverrideStep,
+  UiInitializeResponseOverrideStep,
   EmitEnvelopeStep,
-  SeedChannelStep,
-  UnknownSetupStep,
-  // Teardown vocabulary (JSON-authoring surface)
+  // Teardown vocabulary (JSON-authoring surface — empty this version)
   TeardownStep,
-  UnknownTeardownStep,
   // Expected-behavior vocabulary
   ExpectedBehavior,
   ActionAckBehavior,
@@ -58,14 +58,12 @@ export type {
   // Setup directives (runtime surface — narrowed)
   SetupStep as HostSetupStep,
   CreateGguiSessionSetup,
-  EmitEnvelopeSetup,
   RendererUrlOverrideSetup,
-  UiInitializeResponseOverrideSetup,
   ServerVersionOverrideSetup,
-  UnknownSetupStep as HostUnknownSetupStep,
-  // Teardown directives (runtime surface — narrowed)
+  UiInitializeResponseOverrideSetup,
+  EmitEnvelopeSetup,
+  // Teardown directives (runtime surface — empty this version)
   TeardownStep as HostTeardownStep,
-  UnknownTeardownStep as HostUnknownTeardownStep,
 } from './conformance-host.js';
 
 // Fixture catalog — every authored conformance case, classified by

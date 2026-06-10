@@ -8,24 +8,28 @@
  *       --url http://localhost:3000 \
  *       --auth bearer:TOKEN
  *
- * Exits with code 0 if every fixture passed OR skipped; exits 1 if
- * ANY fixture failed. Skips are not failures — an implementation may
- * legitimately not provide every `ConformanceHost` directive in
- * v1.0. Operators who want skip-is-failure semantics can pair
- * `--require-host` (future) with a host that implements every known
- * directive.
+ * Exits 0 only when at least one fixture executed AND none failed.
+ * Exits 1 if ANY fixture failed. Exits 2 on invocation errors AND
+ * when the run executed zero fixtures (everything skipped) — a
+ * conformance run that proved nothing must not read as success in
+ * CI. Individual skips are still not failures — an implementation
+ * may legitimately not provide every `ConformanceHost` directive in
+ * v1.0 — but a run that is ALL skips carries no signal.
  *
  * Honest scope of the bundled CLI: no `host` wiring. The CLI runs
  * the runner with an absent host, meaning every fixture with non-empty
- * `setup` skips cleanly with the "no host provided" reason. To get
- * real pass/fail signal against an implementation, consumers call
- * `runConformance({ host: myImpl })` programmatically. The CLI is the
- * lowest-friction entry point for a smoke check, and for CI jobs where
- * the server under test is exercised directly over the wire via a
- * subprocess harness rather than a `ConformanceHost` injection.
+ * `setup` skips cleanly with the "no host provided" reason — and
+ * since every fixture in the current catalog declares setup, a
+ * hostless CLI run skips them all and exits 2 by design. To get real
+ * pass/fail signal against an implementation, consumers call
+ * `runConformance({ host: myImpl })` programmatically and apply the
+ * same guard: `result.failed.length > 0 || result.passed.length === 0`
+ * is a red build. The CLI remains the lowest-friction wire-level
+ * smoke check for setups where the server under test is provisioned
+ * out-of-band rather than through a `ConformanceHost` injection.
  */
 import { createDefaultReporter, formatFailures, formatSkips } from './reporter.js';
-import { runConformance } from './run-conformance.js';
+import { runConformance, type ConformanceResult } from './run-conformance.js';
 import type { AuthConfig } from './types.js';
 
 // =============================================================================
@@ -114,8 +118,11 @@ Usage:
   ggui-protocol-conformance --url <URL> --auth <kind:value> [options]
 
 Required:
-  --url <URL>              Base URL of the server (http://… or https://…).
-                           The runner derives ws://…/ws from this.
+  --url <URL>              Server URL. A bare origin (http://… or ws://…
+                           without a path) gets the default live-channel
+                           path /ws appended; a URL that already carries
+                           a path (e.g. ws://host:3000/ws) is used as
+                           given. http(s) schemes derive ws(s).
   --auth <kind:value>      Auth carried on the WS upgrade.
                              bearer:TOKEN          — Authorization header
                              session-cookie:COOKIE — Cookie header
@@ -127,9 +134,11 @@ Options:
   --help, -h               Show this help.
 
 Exit codes:
-  0  — all fixtures passed or skipped.
+  0  — at least one fixture executed and none failed.
   1  — at least one fixture failed.
-  2  — invocation error (bad args, cannot reach server, etc.).
+  2  — invocation error (bad args, cannot reach server, etc.), or the
+       run executed zero fixtures (every fixture skipped) — a run that
+       proved nothing never reads as success.
 `.trimStart();
 
 async function main(argv: readonly string[]): Promise<number> {
@@ -183,12 +192,32 @@ async function main(argv: readonly string[]): Promise<number> {
     if (skips.length > 0) process.stdout.write(`${skips}\n`);
   }
 
-  return result.failed.length > 0 ? 1 : 0;
+  const code = exitCodeForResult(result);
+  if (code === 2) {
+    process.stderr.write(
+      `error: conformance run executed ZERO fixtures (0 passed, ${result.failed.length} failed, ${result.skipped.length} skipped) — an all-skip run proves nothing and must not read as success; exiting 2. Run with --verbose for skip reasons.\n`,
+    );
+  }
+  return code;
+}
+
+/**
+ * Map a {@link ConformanceResult} to the CLI exit code:
+ *   - `1` — at least one fixture failed.
+ *   - `2` — zero fixtures executed (every fixture skipped). A run
+ *     that graded nothing carries no conformance signal and must not
+ *     read as success in CI.
+ *   - `0` — at least one fixture executed and none failed.
+ */
+function exitCodeForResult(result: ConformanceResult): 0 | 1 | 2 {
+  if (result.failed.length > 0) return 1;
+  if (result.passed.length === 0) return 2;
+  return 0;
 }
 
 // Immediately-invoked — this module IS the bin entry. Tests import
-// `parseArgs` / `parseAuth` / `main` via named exports without
-// triggering the run.
+// `parseArgs` / `parseAuth` / `exitCodeForResult` / `main` via named
+// exports without triggering the run.
 if (isEntryPoint()) {
   main(process.argv.slice(2)).then(
     (code) => process.exit(code),
@@ -215,4 +244,4 @@ function isEntryPoint(): boolean {
   }
 }
 
-export { main, parseArgs, parseAuth };
+export { exitCodeForResult, main, parseArgs, parseAuth };

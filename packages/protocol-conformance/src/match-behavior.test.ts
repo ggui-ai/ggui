@@ -4,16 +4,22 @@
  *
  * Pure unit-level: no transport, no server. The arms under test are
  * `action-ack` (asserts the action's ack frame carries the consume-
- * buffer append sequence) + `error-frame` (asserts an `error` frame
+ * buffer append sequence), `error-frame` (asserts an `error` frame
  * with the expected `payload.code`, the generalized read the
- * `version-mismatch` arm narrows to `UPGRADE_REQUIRED`). Path-B
- * kinds and unknown vocabulary remain `unmatchable-on-ws`; this file
- * pins that contract too.
+ * `version-mismatch` arm narrows to `UPGRADE_REQUIRED`), and
+ * `stream-update` (asserts the canonical channel-3 delivery frame
+ * `{type:'data', payload: StreamEnvelope}`). Path-B kinds and unknown
+ * vocabulary remain `unmatchable-on-ws`; this file pins that contract
+ * too.
  */
 import { describe, expect, it } from 'vitest';
 
 import { matchBehavior } from './match-behavior.js';
-import type { ActionAckBehavior, ErrorFrameBehavior } from './types.js';
+import type {
+  ActionAckBehavior,
+  ErrorFrameBehavior,
+  StreamUpdateBehavior,
+} from './types.js';
 import type { ObservedFrame } from './ws-transport.js';
 
 function frame(parsed: Record<string, unknown>): ObservedFrame {
@@ -160,6 +166,118 @@ describe('matchBehavior — version-mismatch rides the error-frame read', () => 
       frames,
     );
     expect(result.kind).toBe('pass');
+  });
+});
+
+describe('matchBehavior — stream-update matches the canonical channel-3 data frame', () => {
+  const behavior: StreamUpdateBehavior = {
+    kind: 'stream-update',
+    channel: 'message',
+    value: { text: 'Hi' },
+  };
+
+  it('passes on a `data` frame whose StreamEnvelope names the channel and carries the value', () => {
+    const frames: readonly ObservedFrame[] = [
+      SUBSCRIBE_ACK,
+      frame({
+        type: 'data',
+        payload: {
+          sessionId: 'rnd-stream-1',
+          channel: 'message',
+          mode: 'append',
+          payload: { text: 'Hi' },
+          seq: 13,
+        },
+      }),
+    ];
+    expect(matchBehavior(behavior, frames).kind).toBe('pass');
+  });
+
+  it('passes with replace mode and without optional seq / complete / schemaVersion', () => {
+    const frames: readonly ObservedFrame[] = [
+      frame({
+        type: 'data',
+        payload: {
+          sessionId: 'rnd-stream-1',
+          channel: 'message',
+          mode: 'replace',
+          payload: { text: 'Hi' },
+        },
+      }),
+    ];
+    expect(matchBehavior(behavior, frames).kind).toBe('pass');
+  });
+
+  it('fails when no data frame names the declared channel', () => {
+    const frames: readonly ObservedFrame[] = [
+      frame({
+        type: 'data',
+        payload: {
+          sessionId: 'rnd-stream-1',
+          channel: 'other-channel',
+          mode: 'append',
+          payload: { text: 'Hi' },
+        },
+      }),
+    ];
+    const result = matchBehavior(behavior, frames);
+    expect(result.kind).toBe('fail');
+    if (result.kind !== 'fail') return;
+    expect(result.message).toContain("channel 'message'");
+  });
+
+  it('fails when the envelope payload does not deep-equal the declared value', () => {
+    const frames: readonly ObservedFrame[] = [
+      frame({
+        type: 'data',
+        payload: {
+          sessionId: 'rnd-stream-1',
+          channel: 'message',
+          mode: 'append',
+          payload: { text: 'something else' },
+        },
+      }),
+    ];
+    expect(matchBehavior(behavior, frames).kind).toBe('fail');
+  });
+
+  it('fails when the data frame body is not a conformant StreamEnvelope (missing mode)', () => {
+    const frames: readonly ObservedFrame[] = [
+      frame({
+        type: 'data',
+        payload: {
+          sessionId: 'rnd-stream-1',
+          channel: 'message',
+          payload: { text: 'Hi' },
+        },
+      }),
+    ];
+    expect(matchBehavior(behavior, frames).kind).toBe('fail');
+  });
+
+  it("REGRESSION: the retired kit idiolect {type:'stream', payload:{channel, value}} does NOT match", () => {
+    // Pre-canonical kit versions graded a frame shape no conformant
+    // server speaks. The canonical channel-3 delivery frame is
+    // `{type:'data', payload: StreamEnvelope}` (SPEC §12.2); the
+    // idiolect must stay rejected so the matcher never regresses to
+    // accepting it.
+    const frames: readonly ObservedFrame[] = [
+      frame({
+        type: 'stream',
+        payload: { channel: 'message', value: { text: 'Hi' } },
+      }),
+    ];
+    expect(matchBehavior(behavior, frames).kind).toBe('fail');
+  });
+
+  it("does not match the text-chunk streaming frame {type:'stream', payload:{sessionId, chunk, done}}", () => {
+    const frames: readonly ObservedFrame[] = [
+      frame({
+        type: 'stream',
+        payload: { sessionId: 'rnd-stream-1', chunk: 'Hi', done: false },
+      }),
+    ];
+    expect(matchBehavior(behavior, frames).kind).toBe('fail');
   });
 });
 
