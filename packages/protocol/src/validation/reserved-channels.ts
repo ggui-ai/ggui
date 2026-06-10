@@ -20,10 +20,10 @@
  *     A2UI validator into `validateStreamData`'s
  *     `extraReservedValidators` parameter.
  *   - {@link CONTRACT_ERROR_CHANNEL} — canonical error envelope
- *     surface for wiredActionRouter failures. Server
- *     emits a {@link ContractErrorPayload} whenever a declared
- *     `actionSpec[name].nextStep` or `streamSpec[name].source.tool`
- *     fails to execute.
+ *     surface for runtime contract violations. A server emits a
+ *     {@link ContractErrorPayload} when a tool-mediated contract
+ *     obligation fails (e.g., a tool return violates the schema the
+ *     contract declares for it).
  *     Payload is a PROTOCOL-OWNED shape, so the structural validator
  *     ships inside this module as a built-in (see
  *     {@link validateContractErrorPayload} +
@@ -49,16 +49,15 @@ export const RESERVED_CHANNEL_PREFIX = '_ggui:';
 export const PREVIEW_CHANNEL = '_ggui:preview';
 
 /**
- * Reserved channel for canonical contract-error envelopes emitted by
- * the wiredActionRouter. Body shape is `ContractErrorPayload` (see
- * `types/data-contract.ts`). Agent-authored `streamSpec`
- * MUST NOT declare this channel — structural validation rejects it
- * alongside every other reserved-prefix name.
+ * Reserved channel for canonical contract-error envelopes. Body shape
+ * is `ContractErrorPayload` (see `types/data-contract.ts`).
+ * Agent-authored `streamSpec` MUST NOT declare this channel —
+ * structural validation rejects it alongside every other
+ * reserved-prefix name.
  *
- * If future work adds richer contract observability (e.g., separate
- * `_ggui:wired-tool-invoked` success trace), each new name joins this
- * module with its own constant and the {@link KNOWN_RESERVED_CHANNELS}
- * set below.
+ * If future work adds richer contract observability, each new name
+ * joins this module with its own constant and the
+ * {@link KNOWN_RESERVED_CHANNELS} set below.
  */
 export const CONTRACT_ERROR_CHANNEL = '_ggui:contract-error';
 
@@ -167,15 +166,11 @@ export type ReservedChannelValidator = (
  *   - Payload MUST be a non-null object (arrays rejected).
  *   - Required fields: `toolName: string`, `error.code: string`,
  *     `error.message: string`, `timestamp: string`.
- *   - Optional fields: `actionName: string`, `sourceAction: {type:
- *     string, dispatchedAt: string}`, `error.causedBy: string`,
- *     `schemaVersion: string`.
+ *   - Optional fields: `error.causedBy: string`, `schemaVersion: string`.
  *   - `error.code` accepts ANY string — the {@link ContractErrorCode}
  *     type is extensibly-closed per Item 2 (`(string & {})` branch),
  *     so forward-compat codes like `BOOTSTRAP_FAILED` /
  *     `RATE_LIMIT_EXCEEDED` MUST NOT be rejected at this layer.
- *   - `sourceAction.type` accepts ANY string — per F6 extensibility
- *     (`'wired-action' | 'refresh-stream' | (string & {})`).
  *
  * Returns `{valid: true, violations: []}` on conformance. Reject sets
  * `valid: false` with one violation per missing-or-mistyped field.
@@ -209,52 +204,6 @@ export function validateContractErrorPayload(
       expected: 'string',
       received: p.toolName === undefined ? 'undefined' : typeof p.toolName,
     });
-  }
-
-  // ── Optional: actionName ──
-  if (p.actionName !== undefined && typeof p.actionName !== 'string') {
-    violations.push({
-      field: 'actionName',
-      message: "Optional field 'actionName' must be a string when present",
-      expected: 'string',
-      received: typeof p.actionName,
-    });
-  }
-
-  // ── Optional: sourceAction ──
-  if (p.sourceAction !== undefined) {
-    if (
-      typeof p.sourceAction !== 'object' ||
-      p.sourceAction === null ||
-      Array.isArray(p.sourceAction)
-    ) {
-      violations.push({
-        field: 'sourceAction',
-        message: "Optional field 'sourceAction' must be an object when present",
-        expected: 'object',
-        received: p.sourceAction === null ? 'null' : Array.isArray(p.sourceAction) ? 'array' : typeof p.sourceAction,
-      });
-    } else {
-      const sa = p.sourceAction as Record<string, unknown>;
-      if (typeof sa.type !== 'string') {
-        // Accepts any string — extensibility per F6. Type presence is
-        // required, VALUE is open.
-        violations.push({
-          field: 'sourceAction.type',
-          message: "Field 'sourceAction.type' must be a string",
-          expected: 'string',
-          received: sa.type === undefined ? 'undefined' : typeof sa.type,
-        });
-      }
-      if (typeof sa.dispatchedAt !== 'string') {
-        violations.push({
-          field: 'sourceAction.dispatchedAt',
-          message: "Field 'sourceAction.dispatchedAt' must be a string (ISO 8601)",
-          expected: 'string',
-          received: sa.dispatchedAt === undefined ? 'undefined' : typeof sa.dispatchedAt,
-        });
-      }
-    }
   }
 
   // ── Required: error.code + error.message ──

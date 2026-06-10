@@ -23,12 +23,7 @@ export type EventType =
  *
  * Actions ALWAYS drive turns — every action emits an event the agent
  * reacts to on its next turn through `ggui_consume`. There is no
- * synchronous server-side dispatch in agent-mediated deployments. The
- * optional `tool` hint mirrors the active render's
- * `actionSpec[action].nextStep` so consumers (the WS-direct
- * `wiredActionRouter` for agent-less `ggui serve` deployments, and
- * telemetry on agent-mediated deployments) see which tool the agent
- * intends to call next without re-looking-up the contract.
+ * synchronous server-side dispatch.
  *
  * @typeParam TData - Type of the action payload (defaults to `unknown`).
  */
@@ -38,21 +33,13 @@ export interface ActionEventValue<TData = unknown> {
   /** Action payload (e.g., form data). */
   data: TData;
   /**
-   * MCP tool name mirrored from the active render's
-   * `actionSpec[action].nextStep` (when the author declared one).
+   * MCP tool name populated SERVER-SIDE from the render's
+   * `actionSpec[action].nextStep` when the consume event is built.
    * Absent when the action has no `nextStep` — the agent decides the
    * next tool freely from broader context.
    *
-   * Consumer behavior:
-   *   - Agent-mediated deployments: read by the agent on `ggui_consume`
-   *     as a hint; agent decides whether to honor it.
-   *   - WS-direct agent-less deployments (`ggui serve`): the
-   *     `wiredActionRouter` fires this tool synchronously when present.
-   *
-   * **Disagreement policy:** if both the envelope's `tool` and the
-   * server's `actionSpec[action].nextStep` are present and disagree,
-   * the **client-populated value wins** (client is the source of truth
-   * for what the user actually saw).
+   * Advisory hint, not binding: the agent sees it on `ggui_consume`
+   * and decides whether to honor it on its next turn.
    */
   tool?: string;
 }

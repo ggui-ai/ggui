@@ -279,26 +279,11 @@ export interface StreamChannelEntry {
    * data receipt, `@ggui-ai/react-native` data receipt) all validate
    * deliveries against it.
    *
-   * **Author invariant when paired with {@link StreamChannelEntry.tool}:**
-   * when a refresh tool is declared, the values the tool returns MUST
-   * be a superset of the values `schema` accepts — i.e., every
-   * possible tool return passes validation. Drift in the opposite
-   * direction (tool returns shapes the schema rejects) produces
-   * `_ggui:contract-error` envelopes with `code: 'SCHEMA_VIOLATION'`
-   * rather than silent data, but channel subscribers see fewer
-   * refreshes than expected, which looks like a broken tool to
-   * operators.
-   *
-   * **F4 schema compat checker.** The compat relation — every value
-   * the tool returns MUST be accepted by this channel schema — is
-   * encoded as `isSchemaSubset(channelSchema, toolReturnSchema)` and
-   * is checked at render time (before the render commits) and at
-   * blueprint-registration time (when the blueprint pre-declares
-   * tool refs). Mismatches surface as `SCHEMA_MISMATCH_ERROR` on
-   * the reserved `_ggui:contract-error` channel rather than showing
-   * up as downstream `SCHEMA_VIOLATION` rejections on individual
-   * refreshes. Default policy is `'reject'`; see the docstring on
-   * {@link ActionEntry.schema} for the full policy flag contract.
+   * When the channel declares a `source.tool` feed, the protocol-level
+   * `CTR_SCHEMA_INCOMPAT` linter additionally checks that the feed
+   * tool's declared return schema is a subset of this schema — see
+   * the docstring on {@link ActionEntry.schema} for the schema-subset
+   * algorithm and the `SCHEMA_MISMATCH_ERROR` failure surface.
    */
   schema: JsonSchema;
   /** Example payload (used for documentation and smoke testing). Typed as {@link JsonValue}. */
@@ -328,44 +313,6 @@ export interface StreamChannelEntry {
    * work lands.
    */
   complete?: boolean;
-  /**
-   * Optional MCP tool name this channel is refreshed from when a
-   * wired action fires. Consumed by the server-side wiredActionRouter
-   * (see `@ggui-ai/mcp-server` renderChannel) as a declarative hint:
-   * after a wired action on this render succeeds, the router
-   * invokes the named tool and emits its return value on THIS channel.
-   *
-   * Name-scoping invariant:
-   *
-   *   A bare tool name (`"tasks_list"`) MUST be unique across every
-   *   mount registered on the server. `composeHandlersWithMounts` in
-   *   `@ggui-ai/mcp-server` rejects collisions at boot and names both
-   *   owners in the error — an operator with two mounts both exposing
-   *   `list` is forced to rename one. No namespace syntax is accepted
-   *   here: MCP protocol requires unique tool names on `tools/list` /
-   *   `tools/call` regardless, so two mounts can't both expose the
-   *   same name at the wire level. Authors adding a second mount to
-   *   an existing `ggui.json` SHOULD re-check this invariant; a newly-
-   *   registered duplicate will fail server boot with a message
-   *   naming both mounts.
-   *
-   * Refresh semantics (locked):
-   *
-   *   - The refresh tool SHOULD be idempotent-read-only. The router
-   *     calls it after every wired action targeting this channel.
-   *   - On failure, the router emits a `_ggui:contract-error` envelope
-   *     (see {@link ContractErrorPayload}) and the channel's previous
-   *     state is preserved — the router does NOT fall back to the
-   *     wired action's own return value.
-   *   - Authors who want write-then-read semantics SHOULD chain via a
-   *     single action tool that returns the new state directly.
-   *
-   * Absent ⇒ no refresh fires; channel is written to by the agent (or
-   * by some other server-emitted source). Declarative hint only — it
-   * does NOT alter payload shape validation, which remains
-   * `schema`-driven.
-   */
-  tool?: string;
   /**
    * Optional source declaration — when present, the channel is fed by
    * a tool called periodically (poll) or subscribed-to (push) by the
@@ -487,49 +434,6 @@ export interface ActionEntry {
  * `DataContract.actionSpec[actionName]` IS the entry.
  */
 export type ActionSpec = Record<string, ActionEntry>;
-
-/**
- * Input passed to a refresh tool when the wiredActionRouter fires it
- * after a wired action succeeds. See {@link StreamChannelEntry.tool}
- * for the broader refresh-semantics lock.
- *
- * **v1 constraint: always empty.** Refresh tools MUST be parameterless
- * (filter-less, context-less). Authors who need filtered / contextual
- * reads should chain the filter into a single action tool that returns
- * the filtered state directly — the refresh path is deliberately a
- * read-only re-fetch of the channel's canonical state.
- *
- * Typed as `Record<string, never>` (empty object with no properties)
- * rather than an empty interface so the type stays structurally
- * assignable to `Record<string, unknown>` call sites (e.g.,
- * `WiredActionRouter.invoke`) without any cast.
- *
- * This type is named separately from `{}` so that:
- *
- *   1. Call sites are grep-able — producers and consumers that need to
- *      reason about the refresh-input contract can find each other.
- *   2. v2 evolution (e.g., passing `{sessionId}` / `{actor}` context on
- *      refresh) has a single point to widen; today's `{}` literal
- *      wouldn't trip any compile error if the wire expectation
- *      changed.
- *   3. Implementations of {@link WiredActionRouter} that want to treat
- *      refresh inputs specially (e.g., route through a different
- *      invoker) can pattern-match on the type.
- */
-export type RefreshInput = Record<string, never>;
-
-/**
- * Frozen singleton instance of {@link RefreshInput}. Pass this to
- * refresh-tool invocations instead of a fresh `{}` literal so that:
- *
- *   - Every call site emits exactly the same reference (cheap identity
- *     checks in mocks / spies / test harnesses).
- *   - `Object.freeze` catches accidental mutation that would otherwise
- *     surface as cross-invocation interference in long-running servers.
- */
-export const EMPTY_REFRESH_INPUT: RefreshInput = Object.freeze(
-  {},
-) as RefreshInput;
 
 // =============================================================================
 // Agent Capabilities Contract
@@ -1274,59 +1178,47 @@ export interface DataContract {
 
 /**
  * Canonical error codes emitted on the reserved
- * `_ggui:contract-error` channel when a declared
- * `streamSpec[name].source.tool` (continuous feed),
- * `streamSpec[name].tool` (refresh-after-action hint, agent-less
- * deployments only), or a render-level boot failure happens. Emitted
- * as the body of a stream envelope.
+ * `_ggui:contract-error` channel when a contract obligation is
+ * violated at runtime. Emitted as the body of a stream envelope.
  *
- * v1 codes emitted by `@ggui-ai/mcp-server`'s renderChannel router:
- *
- * - `TOOL_NOT_FOUND` — declared tool not registered on the wired
- *   action router. Author wiring bug.
- * - `TOOL_THREW` — the tool handler threw (sync or async rejection).
- *   Handler failure captured verbatim in `message`; original stack (if
- *   any) lives on `causedBy`.
- * - `TOOL_TIMEOUT` — invocation exceeded the router's configured
- *   timeout (default 30s). Handler may still complete in the
- *   background; caller must treat as failure either way.
- * - `SCHEMA_VIOLATION` — the tool returned a shape that violates the
- *   declared `streamSpec[name].schema`. Router rejected
- *   BEFORE emitting on the channel, so subscribers do NOT see the
- *   malformed payload.
- *
- * Extensibility — typed as `'TOOL_NOT_FOUND' | 'TOOL_THREW' |
- * 'TOOL_TIMEOUT' | 'SCHEMA_VIOLATION' | 'SCHEMA_MISMATCH_ERROR' |
- * (string & {})` rather than a closed union. Consumers MUST handle
- * unknown codes gracefully — render as raw string, not switch-case
- * without default. Future failure modes that may populate this field
+ * The union is EXTENSIBLY-CLOSED — the named members below are the
+ * canonical vocabulary, and the `(string & {})` branch keeps the type
+ * open to future codes. Consumers MUST handle unknown codes
+ * gracefully — render as raw string, not switch-case without
+ * default. Future failure modes that may populate this field
  * include `'SANITIZER_FAILED'` (the `causedBy` sanitizer itself
- * threw), `'MCP_TRANSPORT_ERROR'` (the MCP transport rejected the
+ * threw), `'MCP_TRANSPORT_ERROR'` (the MCP transport rejected a
  * tool invocation before the handler ran), `'RATE_LIMIT_EXCEEDED'`
- * (the tool was refused by an upstream rate limiter), and
+ * (a tool was refused by an upstream rate limiter), and
  * `'BOOTSTRAP_FAILED'` (C8 — initial contract bootstrap failed on
  * attach). Adding such codes does NOT bump the protocol version,
  * because the type was extensible from day one.
  *
+ * `'SCHEMA_VIOLATION'` — a value violated a contract-declared schema.
+ * The generic shape-guard code: an emitter that catches a payload
+ * disagreeing with the schema the contract declares for it (e.g., a
+ * tool return that violates the target channel's
+ * `streamSpec[name].schema`) rejects the value BEFORE it reaches
+ * subscribers and surfaces this code instead of delivering
+ * malformed data.
+ *
  * `'SCHEMA_MISMATCH_ERROR'` — F4 schema compat checker. Emitted when
- * `actionSpec[name].schema` and its declared `tool`'s inputSchema
- * disagree, or when a `streamSpec[channel].schema` and its declared
- * `tool`'s return schema disagree. Fires at render time (before the
- * render commits) and at blueprint-registration time. See
- * {@link ActionEntry.schema} and {@link StreamChannelEntry.schema}
- * for the author invariant, and `@ggui-ai/protocol/validation/
+ * `actionSpec[name].schema` and its declared `nextStep` tool's
+ * inputSchema disagree, or when a `streamSpec[channel].schema` and
+ * its declared `source.tool`'s return schema disagree. Fires at
+ * render time (before the render commits) and at
+ * blueprint-registration time. See {@link ActionEntry.schema} for
+ * the author invariant, and `@ggui-ai/protocol/validation/
  * schema-subset` for the subset algorithm that produces the named
- * failure. Provides a named, actionable signal before a malformed
- * envelope reaches the agentic loop — instead of a silent `TOOL_THREW`
- * at runtime.
+ * failure. Provides a named, actionable signal at declaration time —
+ * before a malformed payload reaches the agentic loop at runtime.
  *
  * `'SESSION_NOT_FOUND'` + `'AUTH_REJECTED'` — fire on post-WS-open
  * boot failures where the live channel is already alive (so the envelope-
  * emittable invariant is satisfied). The renderer bundle surfaces
- * them BOTH on the live-channel `_ggui:contract-error` envelope (with
- * `sourceAction.type === 'bootstrap-load'`) AND as a
- * `postMessage({type:'ggui:bootstrap-failed', reason, message})` to
- * the embedding host — the former for in-render observability, the
+ * them BOTH on the live-channel `_ggui:contract-error` envelope AND
+ * as a `postMessage({type:'ggui:bootstrap-failed', reason, message})`
+ * to the embedding host — the former for in-render observability, the
  * latter for host-level UX response. Pre-WS bootstrap failures
  * (`BUNDLE_FETCH_FAILED`, `CSP_VIOLATION`, `BOOTSTRAP_META_MISSING`)
  * are postMessage-only: they can't reach the live channel because the WS
@@ -1337,9 +1229,6 @@ export interface DataContract {
  * subset that's observable on the contract-error envelope.
  */
 export type ContractErrorCode =
-  | 'TOOL_NOT_FOUND'
-  | 'TOOL_THREW'
-  | 'TOOL_TIMEOUT'
   | 'SCHEMA_VIOLATION'
   | 'SCHEMA_MISMATCH_ERROR'
   | 'SESSION_NOT_FOUND'
@@ -1403,11 +1292,10 @@ export const CONTEXT_SNAPSHOT_MAX_BYTES = 64 * 1024;
 export const CONTEXT_SNAPSHOT_MAX_SLOTS = 50;
 
 /**
- * The body of a stream envelope the server emits on the reserved
- * `_ggui:contract-error` channel when a wired-action or refresh-stream
- * invocation fails. Carries enough shape to surface the failure in
- * operator-facing activity panels AND to correlate back to the
- * originating dispatch.
+ * The body of a stream envelope a server emits on the reserved
+ * `_ggui:contract-error` channel when a tool-mediated contract
+ * obligation fails. Carries enough shape to surface the failure in
+ * operator-facing activity panels.
  *
  * Design notes:
  *
@@ -1421,40 +1309,8 @@ export const CONTEXT_SNAPSHOT_MAX_SLOTS = 50;
  *     are an explicit non-goal of the v1 contract.
  */
 export interface ContractErrorPayload {
-  /** The tool that failed — wired-action tool OR refresh-stream tool. */
+  /** The tool whose invocation or return value triggered the error. */
   readonly toolName: string;
-  /** The originating action name when the error came from a wired
-   * action. Absent when the failure occurred on a refresh-stream path
-   * that fired after a successful wired action. */
-  readonly actionName?: string;
-  /** Provenance on the router side — whether this error came from the
-   * wired-action invocation (directly in response to a dispatch) or
-   * from the refresh-stream tool that followed a successful action.
-   *
-   * v1 values emitted by `@ggui-ai/mcp-server`'s renderChannel
-   * router:
-   *
-   *   - `'wired-action'` — failure surfaced on the wired-action dispatch
-   *     path (the originating tool threw, was not found, or timed out).
-   *   - `'refresh-stream'` — failure surfaced on the refresh tool that
-   *     fires after a successful wired action (declared via
-   *     {@link StreamChannelEntry.tool}).
-   *
-   * Extensibility — typed as `(string & {}) | 'wired-action' |
-   * 'refresh-stream'` rather than a closed union. Consumers MUST handle
-   * unknown values gracefully (render as the raw string, not a hard
-   * switch-case that throws). Future router sources that may populate
-   * this field include `'bootstrap-refresh'` (initial attach-time
-   * refresh before the first wired action), `'scheduled-refresh'` (a
-   * timer-driven refresh independent of any action), and
-   * `'session-restore'` (a refresh fired after a session-resume
-   * hydration). Adding such values does NOT bump the protocol version,
-   * because the type was extensible from day one. */
-  readonly sourceAction?: {
-    readonly type: 'wired-action' | 'refresh-stream' | (string & {});
-    /** ISO 8601 timestamp when the originating dispatch hit the router. */
-    readonly dispatchedAt: string;
-  };
   readonly error: {
     readonly code: ContractErrorCode;
     /** Short, author-readable failure summary. Safe to log/display. */
@@ -1467,9 +1323,7 @@ export interface ContractErrorPayload {
      * landed here persists in the session ring buffer and surfaces in
      * operator tools. The default sanitizer redacts
      * Bearer tokens, query-param secrets, and common env-var dumps, and
-     * truncates at 2KB. `@ggui-ai/mcp-server`'s renderChannel router
-     * applies it by default; alternative producers MUST match that
-     * posture. */
+     * truncates at 2KB. */
     readonly causedBy?: string;
   };
   /** ISO 8601 timestamp of the error envelope itself. */

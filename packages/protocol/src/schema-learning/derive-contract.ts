@@ -53,8 +53,8 @@ export interface DeriveContractInput {
  * - `intent` — "<serverName> — <humanized tool verb>" unless overridden.
  * - `props` — each top-level property of dataTool.outputSchema becomes a PropEntry.
  *   If outputSchema is not an object schema, a single `data` prop wraps the whole thing.
- * - `actions` — one ActionEntry per actionTool, with `tool` wired to the MCP tool name
- *   and `schema` set to the tool's inputSchema (if present).
+ * - `actions` — one ActionEntry per actionTool, with `nextStep` set to the MCP tool
+ *   name (advisory hint) and `schema` set to the tool's inputSchema (if present).
  *
  * Pure — deterministic given identical input.
  */

@@ -63,12 +63,6 @@ export interface ResolvedStreamChannel {
   readonly description?: string;
   /** Optional passthrough — channel's example payload. */
   readonly example?: JsonValue;
-  /** Optional passthrough — refresh tool declared for this channel.
-   * Server-side action dispatch (WS-direct agent-less deployments)
-   * fires this after a wired action succeeds; absence means "no
-   * refresh fires." Distinct from the `source` poll/push feed on
-   * `StreamChannelEntry`. See `StreamChannelEntry.tool`. */
-  readonly tool?: string;
 }
 
 /**
@@ -100,6 +94,5 @@ export function resolveStreamChannel(
     complete: entry.complete ?? DEFAULT_STREAM_CHANNEL_COMPLETE,
     ...(entry.description !== undefined ? { description: entry.description } : {}),
     ...(entry.example !== undefined ? { example: entry.example } : {}),
-    ...(entry.tool !== undefined ? { tool: entry.tool } : {}),
   };
 }

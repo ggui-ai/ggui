@@ -124,14 +124,13 @@ describe('stream channel semantics — defaults consistency', () => {
         ? K
         : never;
     }[keyof StreamChannelEntry];
-    // `description`, `example`, `tool`, `source` — passthroughs with
-    // no defaults, intentional (`tool` is a wiredActionRouter hint,
-    // `source` is the channel data-feed declaration consumed by
-    // `@ggui-ai/wire` for transport negotiation — neither is a
-    // semantics field).
+    // `description`, `example`, `source` — passthroughs with no
+    // defaults, intentional (`source` is the channel data-feed
+    // declaration consumed by `@ggui-ai/wire` for transport
+    // negotiation — not a semantics field).
     // `mode`, `replay`, `complete` — covered by DEFAULT_STREAM_*.
     expectTypeOf<OptionalSemantics>().toEqualTypeOf<
-      'description' | 'example' | 'mode' | 'replay' | 'complete' | 'tool' | 'source'
+      'description' | 'example' | 'mode' | 'replay' | 'complete' | 'source'
     >();
   });
 });

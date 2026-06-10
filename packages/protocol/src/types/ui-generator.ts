@@ -108,8 +108,8 @@ export interface UIGenerationResponse {
    * Populated by the generator when the component calls wire hooks
    * (`useAction('name')`, `useStream('channel')`) — the generator
    * extracts the call sites and emits a matching authoring-side
-   * envelope so downstream consumers (`ggui_render` → GguiSession, console
-   * inspectors, render-channel router) have the contract available.
+   * envelope so downstream consumers (`ggui_render` → GguiSession,
+   * console inspectors) have the contract available.
    *
    * - When the caller supplied `UiGenerateInput.contract` that
    *   envelope is passed through as-is (already authoritative).
@@ -118,7 +118,7 @@ export interface UIGenerationResponse {
    *   `actionSpec[name] = {label: name}` and
    *   `streamSpec[channel] = {schema: {type: 'object'}}`. Enough for
    *   the receiver to know the surface exists; callers who need
-   *   richer metadata (labels, schemas, refresh tools) should
+   *   richer metadata (labels, schemas, nextStep hints) should
    *   author the contract themselves and pass it on input.
    * - When no wire hooks are used, this field stays absent.
    */

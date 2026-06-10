@@ -178,7 +178,6 @@ export const streamChannelEntrySchema = z
     mode: z.enum(['append', 'replace']).optional(),
     replay: z.enum(['latest', 'all', 'none']).optional(),
     complete: z.boolean().optional(),
-    tool: z.string().optional(),
     source: z
       .object({
         tool: z.string(),

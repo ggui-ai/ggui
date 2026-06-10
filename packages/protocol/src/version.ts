@@ -6,6 +6,45 @@
  * schema change; the most recent change anchors {@link PROTOCOL_VERSION}.
  *
  * --------------------------------------------------------------------
+ * Synchronous wired-action dispatch retired — agent-routed consume
+ * loop is the single action model (2026-06-10, BREAKING, pre-launch):
+ *
+ *   wa1. **`StreamChannelEntry.tool` (refresh hint) deleted.** The
+ *      per-channel "refresh this channel from tool X after an action"
+ *      declaration is gone from the type and from
+ *      `streamChannelEntrySchema`. The entry schema is `.strict()`,
+ *      so a contract carrying a stray `tool` key now fails
+ *      `CTR_SHAPE_UNRECOGNIZED_KEYS` at lint time. The channel data
+ *      feed `StreamChannelEntry.source` (`{tool, args?}`) is a
+ *      DIFFERENT axis and survives unchanged.
+ *      `ResolvedStreamChannel` drops the matching passthrough.
+ *
+ *   wa2. **`ContractErrorCode` narrows.** `TOOL_NOT_FOUND`,
+ *      `TOOL_THREW`, and `TOOL_TIMEOUT` leave the named union — their
+ *      only emitters were the synchronous dispatch routers. The union
+ *      stays extensibly-closed (`(string & {})` branch);
+ *      `SCHEMA_VIOLATION` survives as the generic
+ *      value-violates-contract-declared-schema code.
+ *
+ *   wa3. **`ContractErrorPayload` narrows to
+ *      `{toolName, error, timestamp, schemaVersion?}`.**
+ *      `actionName` and `sourceAction` (the
+ *      `'wired-action' | 'refresh-stream'` dispatch provenance) are
+ *      deleted along with their `validateContractErrorPayload` arms
+ *      and the `makeContractErrorPayload` builder inputs. The
+ *      `_ggui:contract-error` reserved channel, the payload validator,
+ *      and `BUILTIN_RESERVED_VALIDATORS` all remain defined vocabulary.
+ *
+ *   wa4. **`actionNextSteps` deleted from the `ai.ggui/render`
+ *      slice.** The per-action nextStep map (SPEC name
+ *      `wiredActionTools`) existed to gate the client-side direct
+ *      `tools/call` arm, which is retired; the agent hint now derives
+ *      server-side from the render's `actionSpec[name].nextStep` when
+ *      the consume event is built. `RefreshInput` /
+ *      `EMPTY_REFRESH_INPUT` (router-only refresh-tool input types)
+ *      are deleted with the dispatch path.
+ *
+ * --------------------------------------------------------------------
  * `AgentToolEntry` restructured — `{serverInfo?, toolInfo, usage, example}`
  * (2026-06-02, BREAKING, pre-launch):
  *
@@ -1664,7 +1703,7 @@
  *      OSS-first; the cloud pod follows at its next image build. See
  *      `docs/protocol/migrations/2026-06-05-gguisession-reintroduction.md`.
  */
-export const PROTOCOL_VERSION = "draft-2026-06-05";
+export const PROTOCOL_VERSION = "draft-2026-06-10";
 
 /**
  * Schema version stamped onto wire envelopes that opt into the

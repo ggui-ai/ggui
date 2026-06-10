@@ -160,9 +160,9 @@ export function deriveContextName(slotKey: string): string {
 //     pollingUrl?,
 //     themeId?, themeMode?,
 //     gadgets?, publicEnv?, streamWebSocketLocalTools?,
-//     appCallableTools?, permissionsPolicy?,
+//     permissionsPolicy?,
 //     lastSequence?,
-//     propsJson?, actionNextSteps?, contextSlots?,
+//     propsJson?, contextSlots?,
 //     contractHash?, validatorsUrl?,
 //     codeUrl?, codeHash?, kind?
 //   }
@@ -298,7 +298,6 @@ export interface McpAppAiGguiRenderMeta {
   readonly gadgets?: ReadonlyArray<McpAppGadgetRef>;
   readonly publicEnv?: Readonly<Record<string, string>>;
   readonly streamWebSocketLocalTools?: readonly string[];
-  readonly appCallableTools?: readonly string[];
   readonly permissionsPolicy?: readonly string[];
 
   /**
@@ -314,7 +313,6 @@ export interface McpAppAiGguiRenderMeta {
 
   // GguiSession state — what the iframe re-renders on update
   readonly propsJson?: string;
-  readonly actionNextSteps?: Readonly<Record<string, string>>;
   readonly contextSlots?: ReadonlyArray<McpAppContextSlot>;
 
   // Contract pointer (content-addressable). When present, the iframe
@@ -473,21 +471,11 @@ export function parseMcpAppAiGguiRenderMeta(
             s.streamWebSocketLocalTools as readonly string[],
         }
       : {}),
-    ...(s.appCallableTools !== undefined
-      ? { appCallableTools: s.appCallableTools as readonly string[] }
-      : {}),
     ...(s.permissionsPolicy !== undefined
       ? { permissionsPolicy: s.permissionsPolicy as readonly string[] }
       : {}),
     ...(ls !== undefined ? { lastSequence: ls as number } : {}),
     ...(s.propsJson !== undefined ? { propsJson: s.propsJson as string } : {}),
-    ...(s.actionNextSteps !== undefined
-      ? {
-          actionNextSteps: s.actionNextSteps as Readonly<
-            Record<string, string>
-          >,
-        }
-      : {}),
     ...(s.contextSlots !== undefined
       ? {
           contextSlots:

@@ -214,14 +214,9 @@ describe('validateContractStructure — reserved-channel rejection', () => {
 /** Canonical contract-error payload used across the block. */
 const CANONICAL_CONTRACT_ERROR: ContractErrorPayload = {
   toolName: 'my-tool',
-  actionName: 'submit',
-  sourceAction: {
-    type: 'wired-action',
-    dispatchedAt: '2026-04-23T00:00:00.000Z',
-  },
   error: {
-    code: 'TOOL_THREW',
-    message: 'tool threw an error',
+    code: 'SCHEMA_VIOLATION',
+    message: 'tool return violates the declared channel schema',
     causedBy: 'Error: boom',
   },
   timestamp: '2026-04-23T00:00:01.000Z',
@@ -238,7 +233,7 @@ describe('validateContractErrorPayload', () => {
   it('accepts the minimum-required-only shape', () => {
     const minimal: ContractErrorPayload = {
       toolName: 'my-tool',
-      error: { code: 'TOOL_THREW', message: 'boom' },
+      error: { code: 'SCHEMA_VIOLATION', message: 'boom' },
       timestamp: '2026-04-23T00:00:00.000Z',
     };
     const result = validateContractErrorPayload(minimal);
@@ -301,7 +296,7 @@ describe('validateContractErrorPayload', () => {
   it('rejects missing error.message', () => {
     const result = validateContractErrorPayload({
       ...CANONICAL_CONTRACT_ERROR,
-      error: { code: 'TOOL_THREW' },
+      error: { code: 'SCHEMA_VIOLATION' },
     });
     expect(result.valid).toBe(false);
     expect(result.violations.some((v) => v.field === 'error.message')).toBe(true);
@@ -317,10 +312,10 @@ describe('validateContractErrorPayload', () => {
 
   it('accepts any error.code string (extensibly-closed per Item 2)', () => {
     for (const code of [
-      'TOOL_NOT_FOUND',
-      'TOOL_THREW',
-      'TOOL_TIMEOUT',
       'SCHEMA_VIOLATION',
+      'SCHEMA_MISMATCH_ERROR',
+      'SESSION_NOT_FOUND',
+      'AUTH_REJECTED',
       'BOOTSTRAP_FAILED',
       'RATE_LIMIT_EXCEEDED',
       'MCP_TRANSPORT_ERROR',
@@ -334,75 +329,17 @@ describe('validateContractErrorPayload', () => {
     }
   });
 
-  it('accepts any sourceAction.type string (F6 extensibility)', () => {
-    for (const type of [
-      'wired-action',
-      'refresh-stream',
-      'bootstrap-refresh',
-      'scheduled-refresh',
-      'session-restore',
-      'future-router-source',
-    ]) {
-      const result = validateContractErrorPayload({
-        ...CANONICAL_CONTRACT_ERROR,
-        sourceAction: {
-          type,
-          dispatchedAt: '2026-04-23T00:00:00.000Z',
-        },
-      });
-      expect(result.valid, `type=${type}`).toBe(true);
-    }
-  });
-
-  it('rejects malformed sourceAction — missing dispatchedAt', () => {
-    const result = validateContractErrorPayload({
-      ...CANONICAL_CONTRACT_ERROR,
-      sourceAction: { type: 'wired-action' },
-    });
-    expect(result.valid).toBe(false);
-    expect(
-      result.violations.some((v) => v.field === 'sourceAction.dispatchedAt'),
-    ).toBe(true);
-  });
-
-  it('rejects malformed sourceAction — wrong-type dispatchedAt', () => {
-    const result = validateContractErrorPayload({
-      ...CANONICAL_CONTRACT_ERROR,
-      sourceAction: {
-        type: 'wired-action',
-        dispatchedAt: 1234567890 as unknown as string,
-      },
-    });
-    expect(result.valid).toBe(false);
-    expect(
-      result.violations.find((v) => v.field === 'sourceAction.dispatchedAt')?.received,
-    ).toBe('number');
-  });
-
-  it('rejects non-object sourceAction', () => {
-    const result = validateContractErrorPayload({
-      ...CANONICAL_CONTRACT_ERROR,
-      sourceAction: 'not-an-object' as unknown as ContractErrorPayload['sourceAction'],
-    });
-    expect(result.valid).toBe(false);
-    expect(
-      result.violations.some((v) => v.field === 'sourceAction'),
-    ).toBe(true);
-  });
-
   it('rejects non-string optional fields when present', () => {
     const result = validateContractErrorPayload({
       ...CANONICAL_CONTRACT_ERROR,
-      actionName: 42 as unknown as string,
       schemaVersion: true as unknown as string,
       error: {
-        code: 'TOOL_THREW',
+        code: 'SCHEMA_VIOLATION',
         message: 'msg',
         causedBy: { not: 'a string' } as unknown as string,
       },
     });
     expect(result.valid).toBe(false);
-    expect(result.violations.some((v) => v.field === 'actionName')).toBe(true);
     expect(result.violations.some((v) => v.field === 'schemaVersion')).toBe(true);
     expect(result.violations.some((v) => v.field === 'error.causedBy')).toBe(true);
   });
@@ -410,8 +347,7 @@ describe('validateContractErrorPayload', () => {
   it('reports multiple violations on a deeply malformed payload', () => {
     const result = validateContractErrorPayload({
       // missing toolName, missing error.message, timestamp wrong type
-      actionName: 'submit',
-      error: { code: 'TOOL_THREW' },
+      error: { code: 'SCHEMA_VIOLATION' },
       timestamp: 42,
     });
     expect(result.valid).toBe(false);

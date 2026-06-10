@@ -178,7 +178,7 @@ describe('makeContractErrorPayload', () => {
     const p = makeContractErrorPayload({
       toolName: 'tool_a',
       timestamp: ISO,
-      error: { code: 'TOOL_THREW', message: 'boom' },
+      error: { code: 'SCHEMA_VIOLATION', message: 'boom' },
     });
     expect(p.schemaVersion).toBe(PROTOCOL_SCHEMA_VERSION);
   });
@@ -187,7 +187,7 @@ describe('makeContractErrorPayload', () => {
     const p = makeContractErrorPayload({
       toolName: 'tool_a',
       timestamp: ISO,
-      error: { code: 'TOOL_THREW', message: 'boom' },
+      error: { code: 'SCHEMA_VIOLATION', message: 'boom' },
       schemaVersion: '99.99-future',
     });
     expect(p.schemaVersion).toBe('99.99-future');
@@ -197,31 +197,18 @@ describe('makeContractErrorPayload', () => {
     const p = makeContractErrorPayload({
       toolName: 'tool_a',
       timestamp: ISO,
-      error: { code: 'TOOL_THREW', message: 'boom' },
+      error: { code: 'SCHEMA_VIOLATION', message: 'boom' },
       schemaVersion: undefined,
     });
     expect('schemaVersion' in p).toBe(false);
     expect(p.schemaVersion).toBeUndefined();
   });
 
-  it('filters undefined optional fields (byte-equivalence)', () => {
-    const p = makeContractErrorPayload({
-      toolName: 'tool_a',
-      timestamp: ISO,
-      error: { code: 'TOOL_THREW', message: 'boom' },
-      // actionName, sourceAction omitted
-    });
-    expect('actionName' in p).toBe(false);
-    expect('sourceAction' in p).toBe(false);
-  });
-
   it('preserves all supplied fields verbatim', () => {
     const p = makeContractErrorPayload({
       toolName: 'tool_a',
-      actionName: 'submit',
-      sourceAction: { type: 'wired-action', dispatchedAt: ISO },
       error: {
-        code: 'TOOL_THREW',
+        code: 'SCHEMA_VIOLATION',
         message: 'boom',
         causedBy: 'Error: stack\n  at x',
       },
@@ -229,10 +216,8 @@ describe('makeContractErrorPayload', () => {
     });
     expect(p).toEqual({
       toolName: 'tool_a',
-      actionName: 'submit',
-      sourceAction: { type: 'wired-action', dispatchedAt: ISO },
       error: {
-        code: 'TOOL_THREW',
+        code: 'SCHEMA_VIOLATION',
         message: 'boom',
         causedBy: 'Error: stack\n  at x',
       },
@@ -241,25 +226,11 @@ describe('makeContractErrorPayload', () => {
     });
   });
 
-  it('accepts extensibly-closed sourceAction.type strings', () => {
-    // Post-Item-2 extensibility: any string is a valid type.
-    const p = makeContractErrorPayload({
-      toolName: 'tool_a',
-      sourceAction: {
-        type: 'bootstrap-refresh' as const,
-        dispatchedAt: ISO,
-      },
-      error: { code: 'TOOL_THREW', message: 'boom' },
-      timestamp: ISO,
-    });
-    expect(p.sourceAction?.type).toBe('bootstrap-refresh');
-  });
-
   it('produced payload is assignable to ContractErrorPayload', () => {
     const p: ContractErrorPayload = makeContractErrorPayload({
       toolName: 'tool_a',
       timestamp: ISO,
-      error: { code: 'TOOL_THREW', message: 'boom' },
+      error: { code: 'SCHEMA_VIOLATION', message: 'boom' },
     });
     expect(p.toolName).toBe('tool_a');
   });

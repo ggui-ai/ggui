@@ -12,11 +12,10 @@
 // in operator tools (RenderInspector activity panels). If an operator
 // shares a bug report with that data, the credential leaks externally.
 //
-// This module's default posture is "sanitize before emission": the
-// renderChannel router pipes every `err.stack` through
-// {@link sanitizeCausedBy} before populating `causedBy`. Operators who
-// need stricter sanitization can inject their own function via
-// `createGguiSessionChannelServer({ sanitizeCausedBy })`.
+// This module's default posture is "sanitize before emission": every
+// producer pipes the raw `err.stack` through {@link sanitizeCausedBy}
+// before populating `causedBy`. Producers that need stricter
+// sanitization substitute their own {@link SanitizeCausedBy} function.
 //
 // Scope: this is a DEFENSE-IN-DEPTH belt, not the sole line. Libraries
 // that handle secrets should already avoid embedding them in error
@@ -32,8 +31,8 @@
  *
  * Each regex replaces the matched span with `[REDACTED]`. Replacement is
  * conservative — we'd rather over-redact than leak. Operators who need
- * finer control inject a custom sanitizer via
- * `createGguiSessionChannelServer({ sanitizeCausedBy })`.
+ * finer control supply a custom {@link SanitizeCausedBy} function (or
+ * pass a stricter pattern set to {@link sanitizeCausedBy}).
  */
 export const DEFAULT_CREDENTIAL_PATTERNS: readonly RegExp[] = [
   // Bearer / Basic header values. `Bearer <token>` / `Authorization: Basic <base64>`.
@@ -95,11 +94,11 @@ export function sanitizeCausedBy(
 }
 
 /**
- * Signature of the sanitizer hook operators can inject into
- * `createGguiSessionChannelServer`. Receives the raw stringified error
- * (typically `err.stack`) and MUST return a safe-to-emit string.
+ * Signature of a `causedBy` sanitizer hook. Receives the raw
+ * stringified error (typically `err.stack`) and MUST return a
+ * safe-to-emit string.
  *
- * Defaults to {@link sanitizeCausedBy} when no override is supplied. A
+ * {@link sanitizeCausedBy} is the canonical implementation. A
  * pass-through function that returns `raw` unchanged is valid but
  * discouraged — it re-enables the leak this module was added to close.
  */

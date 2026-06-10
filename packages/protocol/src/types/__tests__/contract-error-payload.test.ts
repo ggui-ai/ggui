@@ -1,8 +1,7 @@
 /**
- * Shape-lock for {@link ContractErrorPayload} — the body emitted by
- * the server-side wiredActionRouter on the reserved
- * `_ggui:contract-error` channel when a declared action-tool or
- * refresh-stream tool fails.
+ * Shape-lock for {@link ContractErrorPayload} — the body emitted on
+ * the reserved `_ggui:contract-error` channel when a tool-mediated
+ * contract obligation fails.
  *
  * These tests pin both the code enum and the envelope shape: if a
  * future slice widens the error surface (e.g., adds retry metadata),
@@ -16,37 +15,25 @@ import type {
 } from '../data-contract.js';
 
 describe('ContractErrorCode', () => {
-  it('pins the v1 named codes', () => {
-    // Each of the four v1 literals MUST remain assignable to
-    // ContractErrorCode. If a literal drops out of the union, the
-    // producer (mcp-server renderChannel router) loses its
+  it('pins the named codes', () => {
+    // Each named literal MUST remain assignable to ContractErrorCode.
+    // If a literal drops out of the union, producers lose their
     // narrow code selector and the protocol version actually
     // regressed.
-    expectTypeOf<'TOOL_NOT_FOUND'>().toMatchTypeOf<ContractErrorCode>();
-    expectTypeOf<'TOOL_THREW'>().toMatchTypeOf<ContractErrorCode>();
-    expectTypeOf<'TOOL_TIMEOUT'>().toMatchTypeOf<ContractErrorCode>();
     expectTypeOf<'SCHEMA_VIOLATION'>().toMatchTypeOf<ContractErrorCode>();
-  });
-
-  it('pins the 2026-04-23 additions (F4 + C8)', () => {
-    // `SCHEMA_MISMATCH_ERROR` joined at F4 (Phase 1 Item 5); the
-    // producer is the schema-compat checker's render-time hook.
     expectTypeOf<'SCHEMA_MISMATCH_ERROR'>().toMatchTypeOf<ContractErrorCode>();
-    // `SESSION_NOT_FOUND` + `AUTH_REJECTED` joined at C8 — post-WS-open
-    // bootstrap failures surfaced on live-channel `_ggui:contract-error`
-    // envelopes (`sourceAction.type === 'bootstrap-load'`). Pre-WS
-    // bootstrap codes (BUNDLE_FETCH_FAILED, CSP_VIOLATION,
-    // BOOTSTRAP_META_MISSING) are deliberately NOT in this set —
-    // they can't reach the live channel because the WS doesn't exist yet.
     expectTypeOf<'SESSION_NOT_FOUND'>().toMatchTypeOf<ContractErrorCode>();
     expectTypeOf<'AUTH_REJECTED'>().toMatchTypeOf<ContractErrorCode>();
+    expectTypeOf<'INVALID_ACTION_KIND'>().toMatchTypeOf<ContractErrorCode>();
+    expectTypeOf<'PIPE_NOT_FOUND'>().toMatchTypeOf<ContractErrorCode>();
+    expectTypeOf<'CONTEXT_TOO_LARGE'>().toMatchTypeOf<ContractErrorCode>();
   });
 
   it('is an EXTENSIBLE union — accepts arbitrary future codes without a version bump', () => {
-    // The `| (string & {})` widening means a future router source
+    // The `| (string & {})` widening means a future emitter
     // (SANITIZER_FAILED, MCP_TRANSPORT_ERROR, RATE_LIMIT_EXCEEDED,
     // BOOTSTRAP_FAILED) can populate `.error.code` without forcing
-    // a protocol major bump. Consumers that pin on the v1 names
+    // a protocol major bump. Consumers that pin on the named codes
     // still autocomplete correctly; consumers that render the raw
     // string keep working for unknown codes.
     expectTypeOf<'SANITIZER_FAILED'>().toMatchTypeOf<ContractErrorCode>();
@@ -82,64 +69,37 @@ describe('ContractErrorCode', () => {
 });
 
 describe('ContractErrorPayload shape', () => {
-  it('accepts a minimal wired-action envelope', () => {
+  it('accepts a schema-violation envelope', () => {
     const payload: ContractErrorPayload = {
-      toolName: 'tasks_broken',
-      actionName: 'toggleTask',
-      sourceAction: {
-        type: 'wired-action',
-        dispatchedAt: '2026-04-22T00:00:00.000Z',
-      },
+      toolName: 'tasks_malformed_list',
       error: {
-        code: 'TOOL_THREW',
-        message: 'tasks_broken is intentionally broken',
+        code: 'SCHEMA_VIOLATION',
+        message: 'tool returned a payload that violates the tasks schema',
       },
       timestamp: '2026-04-22T00:00:00.123Z',
     };
-    expect(payload.error.code).toBe('TOOL_THREW');
-    expect(payload.toolName).toBe('tasks_broken');
+    expect(payload.error.code).toBe('SCHEMA_VIOLATION');
+    expect(payload.toolName).toBe('tasks_malformed_list');
   });
 
-  it('accepts a refresh-stream envelope without actionName', () => {
-    // Refresh errors that fire AFTER a successful wired action have
-    // provenance but no originating action name — the action
-    // succeeded, only the follow-up refresh failed.
+  it('accepts a minimal envelope without causedBy', () => {
     const payload: ContractErrorPayload = {
-      toolName: 'tasks_malformed_list',
-      sourceAction: {
-        type: 'refresh-stream',
-        dispatchedAt: '2026-04-22T00:00:00.000Z',
-      },
+      toolName: 'tasks_list',
       error: {
-        code: 'SCHEMA_VIOLATION',
-        message: 'refresh tool returned a payload that violates tasks schema',
-      },
-      timestamp: '2026-04-22T00:00:00.456Z',
-    };
-    expect(payload.actionName).toBeUndefined();
-    expect(payload.sourceAction?.type).toBe('refresh-stream');
-  });
-
-  it('accepts a minimal envelope without sourceAction or causedBy', () => {
-    // Router-origin errors (e.g., TOOL_NOT_FOUND before we even
-    // dispatch) may lack sourceAction provenance. Shape still stands.
-    const payload: ContractErrorPayload = {
-      toolName: 'tasks_never_registered',
-      error: {
-        code: 'TOOL_NOT_FOUND',
-        message: 'no handler registered for tool tasks_never_registered',
+        code: 'SCHEMA_MISMATCH_ERROR',
+        message: 'declared schemas disagree for tasks_list',
       },
       timestamp: '2026-04-22T00:00:00.000Z',
     };
-    expect(payload.sourceAction).toBeUndefined();
     expect(payload.error.causedBy).toBeUndefined();
+    expect(payload.schemaVersion).toBeUndefined();
   });
 
   it('carries optional causedBy for stack-trace debugging', () => {
     const payload: ContractErrorPayload = {
       toolName: 'tasks_broken',
       error: {
-        code: 'TOOL_THREW',
+        code: 'SCHEMA_VIOLATION',
         message: 'unexpected runtime failure',
         causedBy: 'Error: boom\n    at tasks_broken (broken.ts:12:3)',
       },

@@ -4,8 +4,8 @@
  *
  * **Why centralize.** The `schemaVersion` forward-compat stamp is
  * emitted from many producer sites (wire helper, React-SDK emit
- * paths, OSS in-memory stream buffer, renderChannel contract-error
- * router, hosted server paths). Spreading stamp logic across N sites
+ * paths, OSS in-memory stream buffer, hosted server paths).
+ * Spreading stamp logic across N sites
  * causes drift — producers silently skip the stamp. These builders
  * remove the drift surface by giving every producer a single function
  * to call; the default stamp happens inside the builder.
@@ -91,11 +91,6 @@ export interface MakeErrorPayloadInput {
 /** Input type for {@link makeContractErrorPayload}. */
 export interface MakeContractErrorPayloadInput {
   readonly toolName: string;
-  readonly actionName?: string;
-  readonly sourceAction?: {
-    readonly type: 'wired-action' | 'refresh-stream' | (string & {});
-    readonly dispatchedAt: string;
-  };
   readonly error: {
     readonly code: ContractErrorCode;
     readonly message: string;
@@ -199,9 +194,8 @@ export function makeErrorPayload(parts: MakeErrorPayloadInput): ErrorPayload {
  * Build a {@link ContractErrorPayload} with `schemaVersion` stamped
  * to {@link PROTOCOL_SCHEMA_VERSION} unless the caller overrides.
  *
- * Filters `undefined` optional fields so the emitted payload keeps
- * byte-equivalence with the pre-refactor renderChannel router
- * code.
+ * Filters the `undefined` optional stamp so the emitted payload
+ * carries no `schemaVersion` key on the test-only omit path.
  */
 export function makeContractErrorPayload(
   parts: MakeContractErrorPayloadInput,
@@ -211,10 +205,6 @@ export function makeContractErrorPayload(
     toolName: parts.toolName,
     error: parts.error,
     timestamp: parts.timestamp,
-    ...(parts.actionName !== undefined ? { actionName: parts.actionName } : {}),
-    ...(parts.sourceAction !== undefined
-      ? { sourceAction: parts.sourceAction }
-      : {}),
     ...(stamp !== undefined ? { schemaVersion: stamp } : {}),
   };
   return payload;
