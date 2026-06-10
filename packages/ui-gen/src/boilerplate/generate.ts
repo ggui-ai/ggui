@@ -548,10 +548,7 @@ export function generateBoilerplate(
       : "";
   // `clientCapabilities.gadgets` ship NO type-alias block — gadget
   // hooks own their typed return shape internally; the contract surface
-  // is pure declaration. The boilerplate generator inserts a
-  // `CLIENT_TOOL_TYPES` slot for legacy template compatibility but
-  // fills it with an empty string under the new shape.
-  const clientToolTypesBlock = "";
+  // is pure declaration.
 
   return renderBoilerplate(shellType ?? "fullscreen", screen ?? "universal", {
     REACT_IMPORT: reactImport,
@@ -560,7 +557,6 @@ export function generateBoilerplate(
     PROPS_INTERFACE: propsInterface,
     ACTION_TYPES: actionTypesBlock,
     STREAM_TYPES: streamTypesBlock,
-    CLIENT_TOOL_TYPES: clientToolTypesBlock,
     CONTEXT_HOOKS: contextHooks,
     WIRE_HOOKS: hookBody,
     AXIS_SECTIONS: composedSections ?? "",

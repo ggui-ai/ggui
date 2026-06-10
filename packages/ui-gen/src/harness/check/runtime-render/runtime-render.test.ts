@@ -47,16 +47,6 @@ describe("Probe", () => {
     expect(received).toHaveLength(2); // didn't receive
   });
 
-  // `registerClientTool` + agent→UI RPC retired 2026-05-11 with the
-  // `clientTools` → `clientCapabilities` reframe. Capability hooks are
-  // imported from `@ggui-ai/gadgets` (or vendor) and own their
-  // own lifecycle on the UI side; no probe surface remains.
-
-  // `callWiredTool` retired 2026-05-11 with the EE+ wire-shape v2. The
-  // probe's `wiredToolResponses` / `fired wiredTool.called` internals
-  // are retained as inert no-ops for shape stability (see probe.ts) but
-  // the component-side hook is gone, so there's nothing left to test.
-
   it("reset() clears all state", () => {
     const probe = createProbe();
     const config = createProbeWireConfig(probe);
@@ -80,15 +70,11 @@ describe("Probe", () => {
 // The probe's spy observes those envelopes and records:
 //   ui/open-link        → LinkOpenedEvent
 //   ui/request-display-mode → DisplayModeRequestedEvent
-//   tools/call(non-audit) → ToolDirectlyInvokedEvent (Pattern α direct fire)
-//   tools/call(ggui_runtime_submit_action) → ignored (audit envelope; WireConfig already
-//                                    records the paired action.fired event)
-//
-// Pattern β's third message (`ui/message` consent prompt) is NOT recorded —
-// the paired `action.fired` from WireConfig.dispatch already represents the
-// gesture. The `sendMessage` primitive has been dropped entirely; the
-// chat-shortcut path that drove the dedicated `ui/message` spy decoder is
-// retired.
+//   tools/call          → ignored (the audit envelope's gesture is already
+//                         recorded as the paired action.fired via
+//                         WireConfig.dispatch; no other tools/call has a
+//                         legitimate emitter — agents invoke tools on
+//                         their own turn, never the iframe)
 
 describe("Probe — postMessage spy", () => {
   it("records ui/open-link envelopes as link.opened events", () => {
@@ -141,36 +127,7 @@ describe("Probe — postMessage spy", () => {
     }
   });
 
-  it("records non-audit tools/call as tool.directly_invoked (Pattern α)", () => {
-    const probe = createProbe();
-    const uninstall = probe.installPostMessageSpy();
-    try {
-      window.parent.postMessage(
-        {
-          jsonrpc: "2.0",
-          id: 4,
-          method: "tools/call",
-          params: {
-            name: "gmail_archive",
-            arguments: { messageId: "abc123" },
-          },
-        },
-        "*",
-      );
-      const log = probe.getFireLog();
-      const toolEvent = log.find(e => e.kind === "tool.directly_invoked");
-      expect(toolEvent).toBeDefined();
-      expect(toolEvent).toMatchObject({
-        kind: "tool.directly_invoked",
-        toolName: "gmail_archive",
-        arguments: { messageId: "abc123" },
-      });
-    } finally {
-      uninstall();
-    }
-  });
-
-  it("ignores tools/call(ggui_runtime_submit_action) — audit envelopes don't double-record", () => {
+  it("ignores tools/call envelopes — the gesture is recorded via WireConfig.dispatch", () => {
     const probe = createProbe();
     const uninstall = probe.installPostMessageSpy();
     try {
@@ -191,10 +148,10 @@ describe("Probe — postMessage spy", () => {
         },
         "*",
       );
-      const log = probe.getFireLog();
-      // Audit envelope is filtered out — WireConfig.dispatch already
-      // records the paired action.fired event when applicable.
-      expect(log.find(e => e.kind === "tool.directly_invoked")).toBeUndefined();
+      // The audit envelope is filtered out — WireConfig.dispatch already
+      // records the paired action.fired event when applicable. Nothing
+      // else legitimately emits tools/call from the iframe.
+      expect(probe.getFireLog()).toHaveLength(0);
     } finally {
       uninstall();
     }

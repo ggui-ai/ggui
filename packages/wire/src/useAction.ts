@@ -5,10 +5,12 @@ import { tryAcceptDispatch } from './dispatch-dedup';
 /**
  * Fire an action to the agent. Fire-and-forget — no response, no pending state.
  *
- * Protocol V4: when the action contract sets `actions[name].tool`, the platform
- * routes the dispatch to that named MCP tool server-side. The component code is
- * identical — call `useAction(name)(payload)` either way. Treat the tool name
- * as informational (use it to inform button labels, icons, copy).
+ * Every action is an event: it lands on the GguiSession's consume buffer and
+ * the agent receives it on its next turn (via `ggui_consume`). The action
+ * entry's optional `nextStep` names the tool the agent SHOULD invoke in
+ * response — advisory only; the agent owns the call decision. Component code
+ * is identical either way: call `useAction(name)(payload)` and treat
+ * `nextStep` as informational (use it to inform button labels, icons, copy).
  *
  * RUNTIME DEDUP (backstop, not a feature). Same-`(name, payload)` calls within
  * one event-loop task are coalesced — the first wins, subsequent duplicates

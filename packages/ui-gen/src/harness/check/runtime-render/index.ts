@@ -4,12 +4,10 @@
 //
 // runRenderCheck() takes a compiled component + mockup props + contract,
 // renders it in happy-dom with a probe-backed WireConfig, and verifies:
-//   - it renders without throw                       (block)
-//   - declared actions fire when the wired UI is clicked   (block)
-//   - declared wiredTools are callable from the UI         (block, if present)
-//   - declared clientTools register their handlers         (block, if present)
-//   - declared props appear in the DOM                     (warn)
-//   - declared stream events update the DOM when emitted   (warn)
+//   - it renders without throw                              (block)
+//   - declared actions fire when the bound UI is clicked    (block)
+//   - declared props appear in the DOM                      (warn)
+//   - declared stream events update the DOM when emitted    (warn)
 
 export { runRenderCheck, type RenderCheckResult, type RenderCheckIssue } from "./render-check.js";
 export { createProbe, createProbeWireConfig, type Probe } from "./probe.js";

@@ -198,9 +198,6 @@ function toEvalIssue(issue: RenderCheckIssue): EvalIssue | null {
   if (diag?.actionsFiredFromClicks?.length) {
     diagParts.push(`other actions fired from clicks: ${diag.actionsFiredFromClicks.join(", ")}`);
   }
-  if (diag?.resolvedTool) {
-    diagParts.push(`server-side routes to MCP tool: ${diag.resolvedTool}`);
-  }
   const diagSuffix = diagParts.length ? ` [observed: ${diagParts.join("; ")}]` : "";
 
   switch (issue.check) {
@@ -229,32 +226,6 @@ function toEvalIssue(issue: RenderCheckIssue): EvalIssue | null {
         fix,
       };
     }
-
-    case "wiredTool-wiring": {
-      const fix = issue.outcome === "unverified"
-        ? `Source shows useWiredTool('${subject}').call flowing into a non-native or custom-component prop. If intentional (e.g., wired into a design-system component's onClick that doesn't forward to a real <button>), this warn is informational. Otherwise call ${subject}.call(args) from <button onClick={...}>.`
-        : `Wire ${subject}.call(args) to a native onClick. Source-AST analysis didn't find ${subject}.call referenced in any JSX event prop.`;
-      return {
-        tier: 0,
-        result,
-        category: "contract",
-        subcategory,
-        severity: result === "fail" ? "critical" : "major",
-        description: `${issue.reason}${elementHint}${diagSuffix}`,
-        fix,
-      };
-    }
-
-    case "clientTool-registration":
-      return {
-        tier: 0,
-        result,
-        category: "contract",
-        subcategory,
-        severity: result === "fail" ? "critical" : "major",
-        description: issue.reason,
-        fix: `Register the handler: useClientTool('${subject}', (args) => { return { ...response matching contract } });`,
-      };
 
     case "prop-coverage":
       return {

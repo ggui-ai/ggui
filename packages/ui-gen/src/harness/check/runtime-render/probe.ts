@@ -22,7 +22,6 @@
 // Tests use the outside reference to:
 //   - emitStream(name, payload) → invokes captured subscribers, real useStream re-renders
 //   - inspect getFireLog() / getRegistered() to verify wiring
-//   - setWiredToolResponse(name, value) to control req/res mocks
 
 import type { WireConfig } from "@ggui-ai/wire";
 
@@ -34,20 +33,6 @@ export interface ActionFiredEvent {
   readonly kind: "action.fired";
   readonly name: string;
   readonly payload?: unknown;
-  readonly ts: number;
-}
-
-export interface WiredToolCalledEvent {
-  readonly kind: "wiredTool.called";
-  readonly name: string;
-  readonly args?: unknown;
-  readonly ts: number;
-}
-
-export interface ClientToolInvokedEvent {
-  readonly kind: "clientTool.invoked";
-  readonly name: string;
-  readonly args?: unknown;
   readonly ts: number;
 }
 
@@ -75,37 +60,14 @@ export interface DisplayModeRequestedEvent {
   readonly ts: number;
 }
 
-/**
- * Pattern α: a `tools/call` envelope was emitted directly from the
- * iframe (the action's tool resolves to one of the SAME MCP server's
- * `appCallableTools`). The runtime fires the tool without going
- * through the 3-message bridge. CHECK tier observes both the audit
- * envelope (recorded as `action.fired`) AND this direct invocation.
- *
- * Cross-server actions (Pattern β) only emit `action.fired` — the
- * tool runs in a separate turn after the host LLM relays the consent
- * envelope, which the probe's same-render lifetime cannot observe.
- */
-export interface ToolDirectlyInvokedEvent {
-  readonly kind: "tool.directly_invoked";
-  readonly toolName: string;
-  readonly arguments: Record<string, unknown>;
-  readonly ts: number;
-}
-
 export type ProbeEvent =
   | ActionFiredEvent
-  | WiredToolCalledEvent
-  | ClientToolInvokedEvent
   | LinkOpenedEvent
-  | DisplayModeRequestedEvent
-  | ToolDirectlyInvokedEvent;
+  | DisplayModeRequestedEvent;
 
 export interface RegisteredHooks {
   /** Stream event names that received at least one subscribe() call. */
   readonly streams: readonly string[];
-  /** Tool names that received a registerClientTool() call. */
-  readonly clientTools: readonly string[];
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -116,30 +78,19 @@ export interface Probe {
   // ── Inputs (test → component) ──────────────────────────────────────────
   /** Push a stream event payload. Calls all current subscribers for `eventName`. */
   emitStream<T = unknown>(eventName: string, payload: T): void;
-  /** Configure what the next callWiredTool(name, _) should resolve to. */
-  setWiredToolResponse<T = unknown>(toolName: string, response: T): void;
-  /** Configure what the next callWiredTool(name, _) should throw. */
-  setWiredToolError(toolName: string, error: Error): void;
-  /** Synchronously invoke a registered client-tool handler — used to probe handler shape. */
-  invokeClientTool<A = unknown, R = unknown>(toolName: string, args: A): R;
 
   // ── Observations (read after interaction) ──────────────────────────────
   getFireLog(): readonly ProbeEvent[];
   getRegistered(): RegisteredHooks;
   /** Convenience: did any action.fired event match this name? */
   fired(actionName: string): boolean;
-  /** Convenience: did any wiredTool.called event match this name? */
-  wiredToolCalled(toolName: string): boolean;
-  /** Convenience: was a client tool registered under this name? */
-  clientToolRegistered(toolName: string): boolean;
 
   // ── Lifecycle ──────────────────────────────────────────────────────────
   /**
    * Install a spy on `window.parent.postMessage` so envelopes emitted
    * by the iframe-runtime interceptors (anchor click → `ui/open-link`,
-   * `requestFullscreen()` → `ui/request-display-mode`, Pattern α direct
-   * tool fires → `tools/call`) are recorded into the probe's fire log.
-   * Returns an uninstall function.
+   * `requestFullscreen()` → `ui/request-display-mode`) are recorded
+   * into the probe's fire log. Returns an uninstall function.
    *
    * Safe to call multiple times — each call replaces the previous spy.
    * The render-check harness installs the spy at render boot and
@@ -156,20 +107,14 @@ export interface Probe {
 interface ProbeInternals {
   fireLog: ProbeEvent[];
   streamHandlers: Map<string, Set<(d: unknown) => void>>;
-  clientToolHandlers: Map<string, (args: unknown) => unknown>;
-  wiredToolResponses: Map<string, { kind: "ok"; value: unknown } | { kind: "err"; error: Error }>;
   registeredStreams: Set<string>;
-  registeredClientTools: Set<string>;
 }
 
 function makeInternals(): ProbeInternals {
   return {
     fireLog: [],
     streamHandlers: new Map(),
-    clientToolHandlers: new Map(),
-    wiredToolResponses: new Map(),
     registeredStreams: new Set(),
-    registeredClientTools: new Set(),
   };
 }
 
@@ -190,44 +135,14 @@ export function createProbe(): Probe & {
       for (const handler of handlers) handler(payload);
     },
 
-    setWiredToolResponse: <T>(toolName: string, response: T): void => {
-      internals.wiredToolResponses.set(toolName, { kind: "ok", value: response });
-    },
-
-    setWiredToolError: (toolName: string, error: Error): void => {
-      internals.wiredToolResponses.set(toolName, { kind: "err", error });
-    },
-
-    invokeClientTool: <A, R>(toolName: string, args: A): R => {
-      const handler = internals.clientToolHandlers.get(toolName);
-      if (!handler) {
-        throw new Error(`No client tool handler registered for '${toolName}'`);
-      }
-      const result = handler(args) as R;
-      internals.fireLog.push({
-        kind: "clientTool.invoked",
-        name: toolName,
-        args,
-        ts: Date.now(),
-      });
-      return result;
-    },
-
     getFireLog: (): readonly ProbeEvent[] => internals.fireLog.slice(),
 
     getRegistered: (): RegisteredHooks => ({
       streams: Array.from(internals.registeredStreams),
-      clientTools: Array.from(internals.registeredClientTools),
     }),
 
     fired: (actionName: string): boolean =>
       internals.fireLog.some(e => e.kind === "action.fired" && e.name === actionName),
-
-    wiredToolCalled: (toolName: string): boolean =>
-      internals.fireLog.some(e => e.kind === "wiredTool.called" && e.name === toolName),
-
-    clientToolRegistered: (toolName: string): boolean =>
-      internals.registeredClientTools.has(toolName),
 
     installPostMessageSpy: (): (() => void) => installPostMessageSpy(probe),
 
@@ -245,10 +160,10 @@ export function createProbe(): Probe & {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // postMessage spy — observes envelopes emitted by the iframe-runtime
-// interceptors (anchor click, requestFullscreen, Pattern α direct tool
-// fires). The renderer's WireConfig still funnels into the probe via
-// the closure-shared internals; this spy is the parallel observation
-// channel for envelope-layer effects that bypass WireConfig.
+// interceptors (anchor click, requestFullscreen). The renderer's
+// WireConfig still funnels into the probe via the closure-shared
+// internals; this spy is the parallel observation channel for
+// envelope-layer effects that bypass WireConfig.
 // ─────────────────────────────────────────────────────────────────────────────
 
 interface JsonRpcEnvelope {
@@ -328,24 +243,12 @@ function recordEnvelope(internals: ProbeInternals, envelope: unknown): void {
       return;
     }
     case "tools/call": {
-      const toolName = typeof params.name === "string" ? params.name : "";
-      const argsObj =
-        params.arguments && typeof params.arguments === "object"
-          ? (params.arguments as Record<string, unknown>)
-          : {};
-      if (toolName === "ggui_runtime_submit_action") {
-        // Audit envelope. The action name lives in arguments.payload —
-        // the WireConfig.dispatch path already records `action.fired`
-        // for us, so we don't double-record here.
-        return;
-      }
-      // Pattern α — direct tool fire from the iframe (same-server tool).
-      internals.fireLog.push({
-        kind: "tool.directly_invoked",
-        toolName,
-        arguments: argsObj,
-        ts: Date.now(),
-      });
+      // The only tools/call with a legitimate emitter is the audit
+      // envelope (`ggui_runtime_submit_action`), and WireConfig.dispatch
+      // already records its paired `action.fired` — nothing to record
+      // here. The runtime never fires any other tool from the iframe:
+      // every action rides the consume buffer and the agent invokes
+      // tools on its own turn.
       return;
     }
     default:
@@ -407,12 +310,8 @@ export function createProbeWireConfig(
       };
     },
 
-    // `callWiredTool` is retired — the WireConfig surface no longer has
-    // this method. The probe's related internal state
-    // (wiredToolResponses map, wiredToolCalled fireLog events) is kept
-    // so the Probe public API doesn't change shape; it simply never
-    // fires because no component code can reach it.
-    // `registerClientTool` is also retired — browser-capability hooks
-    // live in `@ggui-ai/gadgets`, not on the WireConfig surface.
+    // The WireConfig surface is dispatch + subscribe only. Capability
+    // hooks live in `@ggui-ai/gadgets` and own their own lifecycle —
+    // they never route through WireConfig.
   };
 }

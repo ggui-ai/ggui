@@ -9,8 +9,7 @@
 //   4. Run 5 checks against probe + DOM
 //   5. Tear down DOM
 //
-// Block (fail outcome): render-no-throw, action-wiring, wiredTool-wiring,
-//                       clientTool-registration
+// Block (fail outcome): render-no-throw, action-wiring
 // Warn outcome:         prop-coverage, stream-rerender
 //
 // All checks are best-effort: if a heuristic can't find an element, the
@@ -68,8 +67,6 @@ export interface RenderCheckIssue {
   readonly check:
     | "render-no-throw"
     | "action-wiring"
-    | "wiredTool-wiring"
-    | "clientTool-registration"
     | "prop-coverage"
     | "stream-rerender";
   readonly outcome: CheckOutcome;
@@ -88,9 +85,6 @@ export interface RenderCheckIssue {
     readonly observedCustomProps?: readonly string[];
     /** For action-wiring: which actions DID fire from probe clicks (helps surface mis-wiring). */
     readonly actionsFiredFromClicks?: readonly string[];
-    /** Resolved MCP tool name from `contract.actionSpec[name].dispatch.tool`
-     *  when `dispatch.kind === 'tool'`, undefined otherwise. */
-    readonly resolvedTool?: string;
     /** Surfaced to the agent: prop sourceTool hints from the contract (only if present). */
     readonly sourceToolHints?: Readonly<Record<string, string>>;
   };
@@ -101,8 +95,6 @@ export interface RenderCheckResult {
   readonly issues: readonly RenderCheckIssue[];
   readonly stats: {
     readonly actionsChecked: number;
-    readonly wiredToolsChecked: number;
-    readonly clientToolsChecked: number;
     readonly streamsChecked: number;
     readonly renderMs: number;
   };
@@ -228,7 +220,7 @@ export async function runRenderCheck(
         outcome: "failed",
         reason: `Failed to load component: ${e instanceof Error ? e.message : String(e)}`,
       });
-      return finalize(issues, t0, 0, 0, 0, 0);
+      return finalize(issues, t0, 0, 0);
     }
 
     // ── Build probe + wire config ───────────────────────────────────────
@@ -238,9 +230,9 @@ export async function runRenderCheck(
     // Install the postMessage spy AFTER happy-dom is up so window.parent
     // exists. The spy observes envelopes emitted by the iframe-runtime
     // interceptors (anchor → ui/open-link, requestFullscreen →
-    // ui/request-display-mode, Pattern α direct tool fires → tools/call).
-    // WireConfig-layer events (dispatch, callWiredTool) continue to flow
-    // through the closure-shared probe internals.
+    // ui/request-display-mode). WireConfig-layer events (dispatch,
+    // subscribe) continue to flow through the closure-shared probe
+    // internals.
     uninstallSpy = probe.installPostMessageSpy();
 
     const { render, cleanup } = await import("@testing-library/react");
@@ -417,7 +409,7 @@ export async function runRenderCheck(
         reason: loopReason,
       });
       console.error = originalConsoleError;
-      return finalize(issues, t0, 0, 0, 0, 0);
+      return finalize(issues, t0, 0, 0);
     }
     console.error = originalConsoleError;
 
@@ -443,7 +435,7 @@ export async function runRenderCheck(
         reason: `Render threw: ${errMsg}${compBlock}`,
       });
       cleanup();
-      return finalize(issues, t0, 0, 0, 0, 0);
+      return finalize(issues, t0, 0, 0);
     }
 
     // RTL types `container` as HTMLElement; we use a structural MinimalElement
@@ -458,12 +450,6 @@ export async function runRenderCheck(
     };
 
     let actionsChecked = 0;
-    // `wiredToolsChecked` / `clientToolsChecked` are retired — the
-    // `wiredTool-wiring` check is gone and clientCapabilities use a
-    // different verification path. Kept as 0 in the finalize signature
-    // to preserve the report shape.
-    const wiredToolsChecked = 0;
-    const clientToolsChecked = 0;
     let streamsChecked = 0;
 
     try {
@@ -477,13 +463,11 @@ export async function runRenderCheck(
             hookName: "useAction",
             hookArg: name,
           });
-          const resolvedTool = entry.nextStep;
           const issue = await checkActionWiring({
             container,
             actionName: name,
             actionLabel: entry.label,
             wiring,
-            resolvedTool,
             probe,
             user: user as { click: (el: MinimalElement) => Promise<void> },
           });
@@ -535,7 +519,7 @@ export async function runRenderCheck(
       cleanup();
     }
 
-    return finalize(issues, t0, actionsChecked, wiredToolsChecked, clientToolsChecked, streamsChecked);
+    return finalize(issues, t0, actionsChecked, streamsChecked);
   } finally {
     try { uninstallSpy?.(); } catch { /* ignore */ }
     try { uninstallGadgetRegistry?.(); } catch { /* ignore */ }
@@ -891,8 +875,6 @@ function finalize(
   issues: RenderCheckIssue[],
   t0: number,
   actionsChecked: number,
-  wiredToolsChecked: number,
-  clientToolsChecked: number,
   streamsChecked: number,
 ): RenderCheckResult {
   const ok = !issues.some(i => i.outcome === "failed");
@@ -901,8 +883,6 @@ function finalize(
     issues,
     stats: {
       actionsChecked,
-      wiredToolsChecked,
-      clientToolsChecked,
       streamsChecked,
       renderMs: Date.now() - t0,
     },
@@ -918,19 +898,17 @@ interface CheckActionInput {
   actionName: string;
   actionLabel: string;
   wiring: WiringDetection;
-  resolvedTool?: string;
   probe: Probe;
   user: { click: (el: MinimalElement) => Promise<void> };
 }
 
 async function checkActionWiring(input: CheckActionInput): Promise<RenderCheckIssue | null> {
-  const { container, actionName, actionLabel, wiring, resolvedTool, probe, user } = input;
+  const { container, actionName, actionLabel, wiring, probe, user } = input;
 
   const baseDiagnostics = {
     observedJsxElements: wiring.observedJsxElements,
     observedNativeProps: wiring.observedNativeProps,
     observedCustomProps: wiring.observedCustomProps,
-    resolvedTool,
   };
 
   // Source says the hook is destructured but never referenced anywhere → fail.
