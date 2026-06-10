@@ -220,7 +220,7 @@ const MCP_PROTOCOL_VERSION = '2025-06-18';
 const CLIENT_INFO = {
   name: '@ggui-ai/agent-server',
   // keep in sync with package.json version
-  version: '0.2.1',
+  version: '0.3.0',
 } as const;
 
 /**
