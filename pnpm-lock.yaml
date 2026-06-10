@@ -504,9 +504,6 @@ importers:
       esbuild:
         specifier: ^0.25.12
         version: 0.25.12
-      tinyglobby:
-        specifier: ^0.2.16
-        version: 0.2.16
     devDependencies:
       '@ggui-ai/design':
         specifier: workspace:*
@@ -676,6 +673,9 @@ importers:
       esbuild:
         specifier: ^0.25.12
         version: 0.25.12
+      zod:
+        specifier: ^4.3.6
+        version: 4.3.6
     devDependencies:
       '@types/node':
         specifier: ^24.0.0
@@ -686,9 +686,6 @@ importers:
       vitest:
         specifier: ^3.0.0
         version: 3.2.4(@types/node@24.12.2)(happy-dom@20.9.0)(jsdom@25.0.1)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3)
-      zod:
-        specifier: ^4.3.6
-        version: 4.3.6
 
   packages/ggui-react:
     dependencies:
@@ -710,12 +707,6 @@ importers:
       '@mcp-ui/client':
         specifier: ^7.1.1
         version: 7.1.1(react-dom@19.0.0(react@19.0.0))(react@19.0.0)
-      '@modelcontextprotocol/ext-apps':
-        specifier: ^1.7.2
-        version: 1.7.2(@modelcontextprotocol/sdk@1.27.1(zod@4.3.6))(react-dom@19.0.0(react@19.0.0))(react@19.0.0)(zod@4.3.6)
-      lucide-react:
-        specifier: ^1.7.0
-        version: 1.12.0(react@19.0.0)
     devDependencies:
       '@ggui-ai/design':
         specifier: workspace:*
@@ -982,9 +973,6 @@ importers:
       '@ggui-ai/protocol':
         specifier: workspace:*
         version: link:../protocol
-      zod:
-        specifier: ^4.3.6
-        version: 4.3.6
     devDependencies:
       '@ggui-ai/gadgets':
         specifier: workspace:*
@@ -1022,6 +1010,9 @@ importers:
       '@ggui-ai/ui-registry':
         specifier: workspace:*
         version: link:../ui-registry
+      zod:
+        specifier: ^4.3.6
+        version: 4.3.6
     devDependencies:
       '@types/node':
         specifier: ^22.0.0
@@ -1032,9 +1023,6 @@ importers:
       vitest:
         specifier: ^3.0.0
         version: 3.2.4(@types/node@22.19.15)(happy-dom@20.9.0)(jsdom@25.0.1)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3)
-      zod:
-        specifier: ^4.3.6
-        version: 4.3.6
 
   packages/negotiator:
     dependencies:
@@ -1277,9 +1265,6 @@ importers:
       '@ggui-ai/gadgets':
         specifier: workspace:*
         version: link:../gadgets
-      '@ggui-ai/project-config':
-        specifier: workspace:*
-        version: link:../project-config
       '@ggui-ai/sandbox':
         specifier: workspace:*
         version: link:../sandbox
@@ -1292,9 +1277,6 @@ importers:
       '@google/genai':
         specifier: ^1.45.0
         version: 1.50.1(@modelcontextprotocol/sdk@1.27.1(zod@4.3.6))
-      '@huggingface/transformers':
-        specifier: ^3.0.0
-        version: 3.8.1
       '@typescript-eslint/parser':
         specifier: ^8.0.0
         version: 8.59.1(eslint@8.57.1)(typescript@5.9.3)
@@ -1326,12 +1308,15 @@ importers:
         specifier: ^5.0.0
         version: 5.9.3
       zod:
-        specifier: ^4.0.0
+        specifier: ^4.3.6
         version: 4.3.6
     devDependencies:
       '@ggui-ai/mcp-server-core':
         specifier: workspace:*
         version: link:../mcp-server-core
+      '@ggui-ai/project-config':
+        specifier: workspace:*
+        version: link:../project-config
       '@ggui-ai/protocol':
         specifier: workspace:*
         version: link:../protocol
@@ -6820,11 +6805,6 @@ packages:
   lru.min@1.1.4:
     resolution: {integrity: sha512-DqC6n3QQ77zdFpCMASA1a3Jlb64Hv2N2DciFGkO/4L9+q/IpIAuRlKOvCXabtRW6cQf8usbmM6BE/TOPysCdIA==}
     engines: {bun: '>=1.0.0', deno: '>=1.30.0', node: '>=8.0.0'}
-
-  lucide-react@1.12.0:
-    resolution: {integrity: sha512-rTKR3RN6HIAxdNZALoPvqxd64vjL9nTThU0JF9q1Qg8yUnmo1r+d8baN72YNVK3RGxUmzBzbd77IWJq/fkm+Xw==}
-    peerDependencies:
-      react: ^16.5.1 || ^17.0.0 || ^18.0.0 || ^19.0.0
 
   lucide@0.577.0:
     resolution: {integrity: sha512-PpC/m5eOItp/WU/GlQPFBXDOhq6HibL73KzYP37OX3LM7VmzWQF8voEj8QRWUFvy9FIKfeDQkWYoyS1D/MdWFA==}
@@ -15527,10 +15507,6 @@ snapshots:
   lru-cache@7.18.3: {}
 
   lru.min@1.1.4: {}
-
-  lucide-react@1.12.0(react@19.0.0):
-    dependencies:
-      react: 19.0.0
 
   lucide@0.577.0: {}
 

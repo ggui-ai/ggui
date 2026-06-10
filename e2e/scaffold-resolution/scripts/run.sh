@@ -35,7 +35,13 @@ echo "  scaffold-resolution gate   (work: $WORK)"
 echo "════════════════════════════════════════════════════════════"
 
 echo "[1/5] build @ggui-ai/* (dist must exist before publish)"
-( cd "$REPO_ROOT" && pnpm build )
+# Scope to the publishable cohort ONLY (oss/packages — exactly what
+# publish-all.sh uploads). The root `pnpm build` also builds the
+# @ggui-apps/* Next apps, which can't resolve the sandbox-generated
+# backend/amplify_outputs.json in a fresh CI checkout → breaks the gate
+# before any resolution assertion runs. (Same scoping as the
+# scaffold-render setup.sh.)
+( cd "$REPO_ROOT" && pnpm exec turbo build --filter='./oss/packages/*' )
 
 echo "[2/5] start throwaway Verdaccio at $REGISTRY"
 docker rm -f "$CONTAINER" >/dev/null 2>&1 || true
