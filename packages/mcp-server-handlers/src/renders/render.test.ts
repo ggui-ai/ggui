@@ -1239,6 +1239,8 @@ describe('createGguiRenderHandler — resultMeta forwards App.theme to the wire 
       contractHash: 'hash',
       blueprintId: 'bp_x',
       variantKey: 'vk',
+      shortCode: 'abcdefghjk234567',
+      codeReady: true,
       cache: { hit: false, llmCallsAvoided: 0, kind: 'cold' as const },
     };
     const meta = await handler.resultMeta?.(output, {}, CTX);
