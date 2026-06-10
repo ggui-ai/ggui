@@ -51,6 +51,7 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
+    "@ggui-ai/protocol-conformance": "workspace:*",
     "@types/express": "^5.0.0",
     "@types/node": "^22.0.0",
     "@types/nodemailer": "^8.0.0",

@@ -2026,15 +2026,30 @@ export function createGguiSessionChannelServer(opts: GguiSessionChannelOptions):
     ).__gguiCookieBound;
     if (cookieBound) pendingCookieBinding.set(ws, cookieBound);
 
+    // Per-socket inbound processing chain. The WebSocket wire is an
+    // ORDERED frame stream, so inbound handling must observe arrival
+    // order even though the handlers are async: without the chain, a
+    // client that pipelines `subscribe` + `action` in one TCP segment
+    // (both `message` events fire in the same macrotask) gets the
+    // action handled while `handleSubscribe` is parked at its first
+    // `await` — the socket has no bound subscriber yet, and a
+    // correctly-ordered client is rejected with NOT_SUBSCRIBED.
+    // Serializing per socket restores the wire's ordering on the
+    // processing side; distinct sockets stay fully concurrent.
+    let inboundChain: Promise<void> = Promise.resolve();
     ws.on("message", (raw) => {
       // `ws.on('message')` delivers Buffer/ArrayBuffer/Buffer[] depending
       // on frame type; normalize to string.
       const text = typeof raw === "string" ? raw : raw.toString("utf8");
-      onMessage(ws, text).catch((err) => {
-        opts.logger.error("render_channel_message_failed", {
-          error: String(err),
-        });
-      });
+      inboundChain = inboundChain.then(() =>
+        onMessage(ws, text).catch((err) => {
+          // Catch INSIDE the chain link so one failed message never
+          // poisons the chain for subsequent frames.
+          opts.logger.error("render_channel_message_failed", {
+            error: String(err),
+          });
+        })
+      );
     });
 
     ws.on("close", () => {
