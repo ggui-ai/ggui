@@ -311,6 +311,7 @@
   },
   "devDependencies": {
     "@ggui-ai/mcp-server-core": "workspace:*",
+    "@ggui-ai/project-config": "workspace:*",
     "@ggui-ai/protocol": "workspace:*",
     "@google/adk": "^0.5.0",
     "@openai/agents": "^0.7.1",
