@@ -12,14 +12,15 @@ kit grounds the claim empirically rather than by assertion.
 ## Scope
 
 - WebSocket transport matching the ggui live-channel wire.
-- In-memory render store (no persistence).
+- In-memory render store with a consume-buffer event ledger (no persistence).
 - `schemaVersion` handshake with `UPGRADE_REQUIRED` on mismatch.
-- A 4-handler wired-action registry:
-  - `echo` — returns `{received: args}`.
-  - `throw` — rejects → `TOOL_THREW` emitted on `_ggui:contract-error`.
-  - `timeout` — never resolves → `TOOL_TIMEOUT` after 500ms.
-  - `malformed` — shape-mismatched return → `SCHEMA_VIOLATION`.
-- `TOOL_NOT_FOUND` when an unregistered action is invoked.
+- The single action-routing model:
+  - a declared action appends to the GguiSession's consume buffer and the
+    ack carries `payload.sequence` (validate → append → ack);
+  - a `data:submit` action absent from the declared actionSpec is rejected
+    with an `error` frame, code `CONTRACT_VIOLATION` — nothing is appended.
+- The agent-side drain (`ggui_consume`) is an MCP surface this WS-only
+  server does not implement — a declared kit grading gap.
 
 ## Non-scope
 
@@ -40,6 +41,6 @@ Prints `READY ws://127.0.0.1:3100/ws` when bound. Ctrl-C to stop.
 
 `src/conformance.test.ts` boots this server and runs `@ggui-ai/protocol-conformance`
 against it through a `ConformanceHost` adapter. Every drivable conformance fixture must
-pass (bootstrap-success, wired-action-success, wired-action-tool-threw,
-stream-schema-violation); directives outside this server's scope (renderer-url-override,
+pass (bootstrap-success, action-ack-sequence, undeclared-action-rejected, version-match,
+version-mismatch); directives outside this server's scope (renderer-url-override,
 ui-initialize-response-override, and similar) skip cleanly per the kit's design.

@@ -1,7 +1,6 @@
 /**
- * The Phase 3.2 payoff test — runs `@ggui-ai/protocol-conformance`
- * against a booted `ReferenceServer`, asserts the expected pass /
- * skip shape.
+ * The payoff test — runs `@ggui-ai/protocol-conformance` against a
+ * booted `ReferenceServer`, asserts the expected pass / skip shape.
  *
  * This is the empirical proof of Protocol #6 (vendor-neutral
  * separation). If this test passes, an implementation that does
@@ -9,30 +8,12 @@
  * kit — the vendor-neutrality claim is grounded.
  *
  * Expected outcome:
- *   - 10 fixtures PASS: `bootstrap-success`, the three wired-action
- *     contract-error paths (`TOOL_NOT_FOUND`, `TOOL_THREW`,
- *     `TOOL_TIMEOUT`), `wired-action-success` (Slice L's WS-evidence
- *     `observability-event` matcher grounds the primary
- *     `wired-tool-invoked` arm), `stream-refresh-success` (Slice I
- *     added refresh-stream dispatch via `register-streamspec`),
- *     `stream-schema-violation` (fixture declares `register-streamspec`
- *     against `tasks_malformed_list` whose `malformed-stream` handler
- *     returns a shape that fails `assertStreamContract`, producing the
- *     SCHEMA_VIOLATION envelope on `_ggui:contract-error` — drift fixes
- *     `03462b99` + `c243d4e3`), `version-mismatch` (Slice K added the
- *     per-render `server-version-override` directive —
- *     `setVersionOverride()` on the render store, consulted by the WS
- *     subscribe handler before falling back to the instance-level
- *     advertised version), and the two standalone `observability-event`
- *     fixtures (`observability-contract-error-emitted` +
- *     `observability-wired-tool-invoked`) — Slice L's matcher per the
- *     protocol-bar's "every conformant host MUST mirror-emit
- *     observability events on the WS evidence the bar mandates" claim.
- *   - Remaining fixtures SKIP — either `skipReason !== null` in the
- *     fixture JSON (e.g. browser-level directives) or runner matcher
- *     returns `unmatchable-on-ws` for `props-update` /
- *     `bootstrap-failure` (Path-B browser-host adapter territory; see
- *     `match-behavior.ts` for the Path-A vs Path-B partition).
+ *   - 5 fixtures PASS (see {@link EXPECTED_PASSING}).
+ *   - 3 fixtures SKIP (see {@link EXPECTED_SKIPPED}) — browser-level
+ *     directives the host throws on (`renderer-url-override`,
+ *     `ui-initialize-response-override`) or the matcher's
+ *     `unmatchable-on-ws` for Path-B claims (`props-update`). See
+ *     `match-behavior.ts` for the Path-A vs Path-B partition.
  *   - 0 fixtures FAIL — `KNOWN_FAILURES_AT_v0` is empty.
  */
 import { runConformance } from '@ggui-ai/protocol-conformance';
@@ -42,99 +23,78 @@ import { createReferenceConformanceHost } from './conformance-host.js';
 import { ReferenceServer } from './server.js';
 
 /**
- * Fixtures the reference server reliably passes today. Covers the
- * WS-level bootstrap proof plus every wired-action contract-error
- * path the conformance kit models — `TOOL_NOT_FOUND` / `TOOL_THREW`
- * / `TOOL_TIMEOUT` — emitted via the protocol's canonical
- * `makeContractErrorPayload` builder and matched against the kit's
- * canonical-shape reader.
+ * Fixtures the reference server reliably passes today.
  *
  *   - `bootstrap-success`: WS subscribe → ack round-trip works
  *     end-to-end with zero `@ggui-ai/mcp-server*` dependency — the
  *     minimum Protocol #6 claim grounded.
  *
- *   - `wired-action-tool-not-found` / `wired-action-tool-threw` /
- *     `wired-action-tool-timeout`: each asserts the matching
- *     `_ggui:contract-error` envelope shape per SPEC §4.4. Router
- *     resolves action → tool via the fixture's explicit
- *     `register-actionspec` directive; unresolved actions emit
- *     `TOOL_NOT_FOUND` with `toolName` set to the requested action
- *     name.
+ *   - `action-ack-sequence`: the `create-session` directive declares
+ *     `actionSpec: {toggleTask: {}}`; the kit dispatches a canonical
+ *     `data:submit` action message; the server appends the envelope
+ *     to the GguiSession's consume-buffer ledger and acks with
+ *     `payload.sequence` echoing the action's `requestId`
+ *     (validate → append → ack, mirroring the first-party ordering).
+ *     Proves the persistence half of the single action-routing model
+ *     is observable on pure WS. The retrieval half (`ggui_consume`)
+ *     is an MCP tool call outside this WS-only server's scope — a
+ *     declared kit grading gap, not a skipped obligation.
  *
- *   - `stream-refresh-success`: declares
- *     `streamSpec.tasks.tool = 'tasks_list'` via the Slice-I
- *     `register-streamspec` directive. After the wired
- *     `createTask → tasks_create` action succeeds, the router runs
- *     `tasks_list` (kind `list-snapshot`, returns `{items:[]}`) and
- *     emits a stream-update on channel `tasks`. The kit's matcher
- *     asserts the `{items:[]}` shape arrived — proves the refresh-
- *     after-action contract is observable on pure WS.
+ *   - `undeclared-action-rejected`: same setup, but the dispatched
+ *     action names an entry absent from the declared actionSpec. The
+ *     server replies an `error` frame with code `CONTRACT_VIOLATION`
+ *     (echoing the `requestId`) and appends nothing. Proves the
+ *     declared-action contract gates the consume buffer.
+ *
+ *   - `version-match`: subscribe without a version conflict completes
+ *     the handshake — the ack arrives, no `UPGRADE_REQUIRED`. The
+ *     happy-path half of Protocol #3.
  *
  *   - `version-mismatch`: declares a per-render
- *     `server-version-override` of `'99.99-unsupported'` via the
- *     Slice-K directive. The kit's subscribe carries
- *     `supportedVersions: ['1.1']`; the WS handler reads the
- *     GguiSession-scoped override (set on the `GguiSession` record by
- *     `setVersionOverride()`), notices `'99.99-unsupported'` is not
- *     in the client's accepted set, and emits the canonical
- *     `error{payload.code:'UPGRADE_REQUIRED', serverVersion}` frame.
- *     Proves the version-handshake half of Protocol #3 is observable
- *     end-to-end on the reference server with parallel-fixture
- *     isolation (other GguiSessions on the same server still advertise
- *     the canonical default).
- *
- *   - `observability-contract-error-emitted` /
- *     `observability-wired-tool-invoked`: standalone observability
- *     fixtures whose `expectedBehavior.kind === 'observability-event'`.
- *     Slice L grounded the matcher: per the protocol-and-contract bar,
- *     every conformant host MUST mirror-emit
- *     `contract-error-emitted` on every observed
- *     `_ggui:contract-error` envelope, and MUST mirror-emit
- *     `wired-tool-invoked` on every observed wired-action tool
- *     dispatch+result. The matcher asserts directly on the WS evidence
- *     the bar makes mandatory — no postMessage capture needed. The
- *     reference server's `action-router.ts` emits both signals (the
- *     `_ggui:wired-tool-invoked` stream frame on happy-path; the
- *     canonical `_ggui:contract-error` envelope on the throw path)
- *     after the fixtures' `register-actionspec` directive resolves the
- *     authored action → tool mapping.
- *
- * Note on `wired-action-success` vs the standalone observability
- * fixtures: `wired-action-success` carries an `expectedObservability`
- * co-assertion array (action tool + refresh tool — two signals). The
- * Path-A kit matches on the primary `expectedBehavior` only — the
- * `expectedObservability` co-assertion is for a richer host harness
- * to enforce. The primary `wired-tool-invoked` arm is what passes
- * here; the co-assertion is observed-but-not-asserted at this layer.
+ *     `server-version-override` of `'99.99-unsupported'`. The kit's
+ *     subscribe carries `supportedVersions: ['1.1']`; the WS handler
+ *     reads the GguiSession-scoped override (set on the `GguiSession`
+ *     record by `setVersionOverride()`), notices the advertised
+ *     version is not in the client's accepted set, and emits the
+ *     canonical `error{payload.code:'UPGRADE_REQUIRED',
+ *     serverVersion}` frame. Proves the rejection half of Protocol #3
+ *     with parallel-fixture isolation (other GguiSessions on the same
+ *     server still advertise the canonical default).
  */
 const EXPECTED_PASSING = [
+  'action-ack-sequence',
   'bootstrap-success',
-  'wired-action-tool-not-found',
-  'wired-action-tool-threw',
-  'wired-action-tool-timeout',
-  'wired-action-success',
-  'stream-refresh-success',
-  'stream-schema-violation',
+  'undeclared-action-rejected',
+  'version-match',
   'version-mismatch',
-  'observability-contract-error-emitted',
-  'observability-wired-tool-invoked',
+];
+
+/**
+ * Fixtures that SKIP on the reference server, by name. Pinning the
+ * exact set (not just "skips have a reason") catches both regressions:
+ * a Path-A fixture silently degrading to a skip AND a Path-B fixture
+ * silently starting to "pass" through a hole in the partition.
+ *
+ *   - `bootstrap-bundle-fetch-failed` / `bootstrap-meta-missing`:
+ *     setup needs `renderer-url-override` /
+ *     `ui-initialize-response-override` — browser-level fault
+ *     injection the host adapter throws on by design.
+ *   - `props-update-roundtrip`: the assertion is on rendered DOM; the
+ *     matcher returns `unmatchable-on-ws` (Path-B).
+ */
+const EXPECTED_SKIPPED = [
+  'bootstrap-bundle-fetch-failed',
+  'bootstrap-meta-missing',
+  'props-update-roundtrip',
 ];
 
 /**
  * Fixtures that fail on today's reference server for reasons tracked
- * as Protocol #6 findings — scope-limited dispatch paths the
- * reference server deliberately doesn't implement. Listed here so
- * the test asserts "no NEW failures beyond these" rather than "zero
- * failures".
- *
- * Currently empty: every Path-A fixture either passes (see
- * `EXPECTED_PASSING`) or skips with a clear reason (fixture-declared
- * `skipReason`, the host's throw-on-unimplemented for browser-only
- * directives, or the matcher's `unmatchable-on-ws` for
- * `bootstrap-failure` / `props-update`). Re-populate if a future
- * scope-limitation regresses to a hard FAIL — but the kit's design
- * intent is "no FAILs" once the server's vendor-neutral surface is
- * grounded.
+ * as Protocol #6 findings. Currently empty: every Path-A fixture
+ * passes and every skip is in {@link EXPECTED_SKIPPED}. Re-populate
+ * only if a scope limitation regresses to a hard FAIL — the kit's
+ * design intent is "no FAILs" once the server's vendor-neutral
+ * surface is grounded.
  */
 const KNOWN_FAILURES_AT_v0: readonly string[] = [];
 
@@ -156,8 +116,8 @@ describe('protocol-reference-server passes @ggui-ai/protocol-conformance', () =>
       serverUrl: server.baseUrl,
       auth: { kind: 'bearer', token: 'reference' },
       host,
-      // Shorter observation window — 500ms beats the 2s default for
-      // the tool-timeout fixture (which intentionally times out).
+      // Every fixture waits out the full observation window — keep it
+      // short; the reference server's emissions are synchronous.
       observationTimeoutMs: 1500,
     });
 
@@ -179,7 +139,7 @@ describe('protocol-reference-server passes @ggui-ai/protocol-conformance', () =>
     }
 
     // Expected failures (known Protocol #6 findings under
-    // investigation — see KNOWN_FAILURES_AT_v0 below). Any failure
+    // investigation — see KNOWN_FAILURES_AT_v0 above). Any failure
     // NOT in this set is a genuine vendor-neutrality bug.
     const unexpectedFailures = result.failed.filter(
       (f) => !KNOWN_FAILURES_AT_v0.includes(f.name),
@@ -188,9 +148,13 @@ describe('protocol-reference-server passes @ggui-ai/protocol-conformance', () =>
       unexpectedFailures,
       `unexpected failures beyond known Protocol #6 findings:\n${diagnostic}`,
     ).toEqual([]);
+
+    // The pass set is exact — a fixture leaving it is a regression,
+    // a fixture entering it should be pinned deliberately.
+    expect([...result.passed].sort(), diagnostic).toEqual(EXPECTED_PASSING);
   }, 30_000);
 
-  it('skipped fixtures are ONLY for out-of-scope directives or fixture-declared skips', async () => {
+  it('skipped fixtures are exactly the declared out-of-scope set', async () => {
     const host = createReferenceConformanceHost({ serverInstance: server });
     const result = await runConformance({
       serverUrl: server.baseUrl,
@@ -199,22 +163,17 @@ describe('protocol-reference-server passes @ggui-ai/protocol-conformance', () =>
       observationTimeoutMs: 1500,
     });
 
-    // Every skip reason must match one of:
-    //   - a fixture-declared `skipReason` (string in the JSON)
-    //   - "reference server does not implement <directive>"
-    //     (our adapter's throw-on-unimplemented)
-    //   - "requires browser-level…" / matcher's unmatchable-on-ws
-    //     reason
-    //   - "no host provided" (can't happen here — we DO provide a
-    //     host — so absence is a spec violation)
+    expect(result.skipped.map((s) => s.name).sort()).toEqual(EXPECTED_SKIPPED);
+
+    // Every skip carries an honest reason; "no host provided" cannot
+    // happen here — we DO provide a host — so its presence would be a
+    // runner-wiring bug.
     for (const skip of result.skipped) {
-      const reasonIsAcceptable =
-        skip.reason.length > 0 &&
-        !skip.reason.includes('no host provided');
+      expect(skip.reason.length).toBeGreaterThan(0);
       expect(
-        reasonIsAcceptable,
+        skip.reason.includes('no host provided'),
         `fixture '${skip.name}' skipped for unexpected reason: ${skip.reason}`,
-      ).toBe(true);
+      ).toBe(false);
     }
   }, 30_000);
 });

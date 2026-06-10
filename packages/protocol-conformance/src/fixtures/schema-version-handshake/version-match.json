@@ -9,7 +9,6 @@
     "clientAccepts": ["1.1"]
   },
   "expectedBehavior": {
-    "kind": "bootstrap-success",
-    "observabilitySequence": []
+    "kind": "bootstrap-success"
   }
 }

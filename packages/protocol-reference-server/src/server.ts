@@ -1,7 +1,9 @@
 /**
  * `ReferenceServer` — the minimal WS live-channel server this package
- * exports. Honest scope: SPEC §12.2 wire, version handshake,
- * wired-action dispatch. That's it.
+ * exports. Honest scope: SPEC §12.2 wire, version handshake, and the
+ * single action-routing model (action → consume-buffer append → ack
+ * with sequence; undeclared actions rejected with CONTRACT_VIOLATION).
+ * That's it.
  *
  * No auth (accepts any bearer). No persistence. No bundle loading.
  * The whole point is to be narrow enough that the vendor-neutral
@@ -18,9 +20,8 @@ import { createServer, type Server as HttpServer } from 'node:http';
 import { PROTOCOL_SCHEMA_VERSION } from '@ggui-ai/protocol';
 import { WebSocketServer, type WebSocket } from 'ws';
 
-import { dispatchAction, parseActionFrame } from './action-router.js';
+import { handleAction, parseActionFrame } from './action-router.js';
 import { GguiSessionStore, type Subscriber } from './render.js';
-import { ToolRegistry } from './tool-registry.js';
 
 export interface ReferenceServerOptions {
   /** Port to bind. `0` = ephemeral — use {@link ReferenceServer.port}
@@ -55,7 +56,6 @@ export interface ReferenceServerOptions {
 
 export class ReferenceServer {
   readonly renders = new GguiSessionStore();
-  readonly tools = new ToolRegistry();
 
   private readonly options: Required<ReferenceServerOptions>;
   private http: HttpServer | null = null;
@@ -159,7 +159,7 @@ export class ReferenceServer {
     };
 
     socket.on('message', (raw: Buffer) => {
-      void this.handleMessage(raw.toString('utf8'), {
+      this.handleMessage(raw.toString('utf8'), {
         socket,
         subscriber,
         onSubscribed: (sessionId) => {
@@ -180,14 +180,14 @@ export class ReferenceServer {
     });
   }
 
-  private async handleMessage(
+  private handleMessage(
     text: string,
     ctx: {
       readonly socket: WebSocket;
       readonly subscriber: Subscriber;
       readonly onSubscribed: (sessionId: string) => void;
     },
-  ): Promise<void> {
+  ): void {
     let frame: unknown;
     try {
       frame = JSON.parse(text);
@@ -212,9 +212,11 @@ export class ReferenceServer {
     if (f['type'] === 'action') {
       const parsed = parseActionFrame(frame);
       if (parsed === undefined) return; // malformed — silently drop
-      const render = this.renders.get(parsed.sessionId);
+      const render = this.renders.get(parsed.payload.sessionId);
       if (render === undefined) return; // drop actions for unknown renders
-      await dispatchAction(parsed, { render, tools: this.tools });
+      // Ack + contract rejections reply to the SENDING socket — the
+      // dispatcher gets the persistence proof, not the broadcast set.
+      handleAction(parsed, { render, reply: ctx.subscriber });
       return;
     }
     // Unrecognized type — silently drop (extensibly-closed; third

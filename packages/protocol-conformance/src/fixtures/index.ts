@@ -20,11 +20,10 @@
  *
  * ## Current coverage
  *
- * Seven sub-modules with content (18 fixtures). Three additional
- * sub-modules (`data-contract`, `tool-name-uniqueness`,
- * `contract-error-payload`) are reserved for additive fixture
- * expansion and not yet materialized — adding fixtures there is a
- * kit minor version.
+ * Four sub-modules with content (8 fixtures). Additional sub-modules
+ * (`data-contract`, `tool-name-uniqueness`, `contract-error-payload`)
+ * are reserved for additive fixture expansion and not yet
+ * materialized — adding fixtures there is a kit minor version.
  *
  * ## What is NOT here — the gadget pure-function obligations
  *
@@ -39,19 +38,15 @@
  */
 
 export { bootstrapProtocolFixtures } from './bootstrap-protocol/index.js';
-export { observabilityEventsFixtures } from './observability-events/index.js';
-export { refreshSemanticsFixtures } from './refresh-semantics/index.js';
+export { consumeBufferFixtures } from './consume-buffer/index.js';
 export { reservedChannelAuthorityFixtures } from './reserved-channel-authority/index.js';
 export { schemaVersionHandshakeFixtures } from './schema-version-handshake/index.js';
-export { wiredActionDispatchFixtures } from './wired-action-dispatch/index.js';
 
 import type { TestCase } from '../types.js';
 import { bootstrapProtocolFixtures } from './bootstrap-protocol/index.js';
-import { observabilityEventsFixtures } from './observability-events/index.js';
-import { refreshSemanticsFixtures } from './refresh-semantics/index.js';
+import { consumeBufferFixtures } from './consume-buffer/index.js';
 import { reservedChannelAuthorityFixtures } from './reserved-channel-authority/index.js';
 import { schemaVersionHandshakeFixtures } from './schema-version-handshake/index.js';
-import { wiredActionDispatchFixtures } from './wired-action-dispatch/index.js';
 
 /**
  * Contract slugs — match the sub-module directory names. The
@@ -61,11 +56,9 @@ import { wiredActionDispatchFixtures } from './wired-action-dispatch/index.js';
  */
 export type ContractSlug =
   | 'bootstrap-protocol'
-  | 'observability-events'
-  | 'refresh-semantics'
+  | 'consume-buffer'
   | 'reserved-channel-authority'
   | 'schema-version-handshake'
-  | 'wired-action-dispatch'
   | (string & {});
 
 /**
@@ -78,11 +71,9 @@ export type ContractSlug =
  */
 export const fixturesByContract: Readonly<Record<ContractSlug, readonly TestCase[]>> = {
   'bootstrap-protocol': bootstrapProtocolFixtures,
-  'observability-events': observabilityEventsFixtures,
-  'refresh-semantics': refreshSemanticsFixtures,
+  'consume-buffer': consumeBufferFixtures,
   'reserved-channel-authority': reservedChannelAuthorityFixtures,
   'schema-version-handshake': schemaVersionHandshakeFixtures,
-  'wired-action-dispatch': wiredActionDispatchFixtures,
 };
 
 /**

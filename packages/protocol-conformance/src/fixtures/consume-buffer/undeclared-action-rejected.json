@@ -1,0 +1,29 @@
+{
+  "name": "undeclared-action-rejected",
+  "description": "A `data:submit` action whose name is absent from the GguiSession's declared actionSpec is rejected at the wire boundary: the server replies an `error` frame with code CONTRACT_VIOLATION (echoing the action's requestId) and the envelope is NOT appended to the consume buffer. Proves the declared-action contract gates persistence — undeclared actions never reach the agent.",
+  "skipReason": null,
+  "setup": [
+    {
+      "type": "create-session",
+      "sessionId": "ck-undeclared-action-1",
+      "actionSpec": { "toggleTask": {} }
+    }
+  ],
+  "inputEnvelope": {
+    "type": "action",
+    "requestId": "ck-undeclared-action-1-req",
+    "payload": {
+      "sessionId": "ck-undeclared-action-1",
+      "type": "data:submit",
+      "payload": {
+        "action": "doesNotExist",
+        "data": {}
+      }
+    }
+  },
+  "expectedBehavior": {
+    "kind": "error-frame",
+    "code": "CONTRACT_VIOLATION",
+    "requestId": "ck-undeclared-action-1-req"
+  }
+}

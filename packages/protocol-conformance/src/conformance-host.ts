@@ -42,6 +42,7 @@
  * loaders accept what the author wrote; hosts receive what the
  * runner confirmed is shape-valid.
  */
+import type { ActionSpecEntryDecl } from './types.js';
 
 // =============================================================================
 // Setup directives — runtime surface
@@ -58,8 +59,6 @@
  */
 export type SetupStep =
   | CreateGguiSessionSetup
-  | RegisterToolSetup
-  | RegisterActionSpecSetup
   | EmitEnvelopeSetup
   | RendererUrlOverrideSetup
   | UiInitializeResponseOverrideSetup
@@ -70,27 +69,13 @@ export interface CreateGguiSessionSetup {
   readonly kind: 'create-session';
   readonly sessionId: string;
   readonly appId?: string;
-}
-
-/**
- * Register a tool on the render by symbolic handler name. Known
- * handlers the reference implementation supports:
- *   - `'echo'`     — returns `{received: args}`.
- *   - `'throw'`    — rejects with `Error('tool_threw_for_fixture')`.
- *   - `'timeout'`  — never resolves; runner times out per policy.
- *   - `'malformed'`— returns `{wrong:'shape'}` to exercise
- *                    `SCHEMA_VIOLATION`.
- */
-export interface RegisterToolSetup {
-  readonly kind: 'register-tool';
-  readonly name: string;
-  readonly handler: 'echo' | 'throw' | 'timeout' | 'malformed' | (string & {});
-}
-
-export interface RegisterActionSpecSetup {
-  readonly kind: 'register-actionspec';
-  readonly name: string;
-  readonly tool: string;
+  /**
+   * Optional actionSpec declared on the GguiSession at creation. See
+   * `CreateGguiSessionStep.actionSpec` in `./types` — hosts that
+   * receive the field MUST install it as the render's declared-action
+   * contract before the fixture's input envelope is dispatched.
+   */
+  readonly actionSpec?: Readonly<Record<string, ActionSpecEntryDecl>>;
 }
 
 export interface EmitEnvelopeSetup {
@@ -127,14 +112,7 @@ export type UnknownSetupStep = Record<string, unknown> & {
 // Teardown directives — runtime surface
 // =============================================================================
 
-export type TeardownStep =
-  | UnregisterToolTeardown
-  | UnknownTeardownStep;
-
-export interface UnregisterToolTeardown {
-  readonly kind: 'unregister-tool';
-  readonly name: string;
-}
+export type TeardownStep = UnknownTeardownStep;
 
 export type UnknownTeardownStep = Record<string, unknown> & {
   readonly kind: string & {};

@@ -145,15 +145,15 @@ describe('formatFailures', () => {
       {
         name: 'fixture-a',
         criterion: 'Contract #3 defined failure modes',
-        expected: { code: 'TOOL_THREW' },
-        received: { code: 'TOOL_NOT_FOUND' },
+        expected: { code: 'CONTRACT_VIOLATION' },
+        received: { code: 'SCHEMA_VIOLATION' },
         message: 'code mismatch',
       },
     ]);
     expect(output).toContain('fixture-a');
     expect(output).toContain('Contract #3');
-    expect(output).toContain('TOOL_THREW');
-    expect(output).toContain('TOOL_NOT_FOUND');
+    expect(output).toContain('CONTRACT_VIOLATION');
+    expect(output).toContain('SCHEMA_VIOLATION');
     expect(output).toContain('code mismatch');
   });
 });

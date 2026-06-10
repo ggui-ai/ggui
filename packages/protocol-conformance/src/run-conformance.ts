@@ -26,15 +26,14 @@
  *   3. Invoke `reporter.onComplete(result)` + return.
  *
  * Scope v1: pure WS transport. Browser-level fixtures (bootstrap-
- * failure, props-update, observability-event) automatically skip via
- * the matcher's `unmatchable-on-ws` arm.
+ * failure, props-update) automatically skip via the matcher's
+ * `unmatchable-on-ws` arm.
  */
 import { allFixtures, fixturesByContract } from './fixtures/index.js';
 import type { ConformanceHost } from './conformance-host.js';
 import { matchBehavior } from './match-behavior.js';
 import type {
   AuthConfig,
-  ContractErrorBehavior,
   SetupStep,
   StreamUpdateBehavior,
   TeardownStep,
@@ -363,16 +362,12 @@ function slugToCriterion(slug: string): string {
   switch (slug) {
     case 'bootstrap-protocol':
       return 'Protocol #5 named failure modes — bootstrap contract';
-    case 'observability-events':
-      return 'Phase 2 C12 observability contract';
-    case 'refresh-semantics':
-      return 'SPEC §2.3 StreamSpec refresh triggers';
+    case 'consume-buffer':
+      return 'Single action-routing model — consume-buffer persistence + declared-action contract';
     case 'reserved-channel-authority':
       return 'SPEC §4.4 reserved-channel authority';
     case 'schema-version-handshake':
       return 'Protocol #3 version negotiation';
-    case 'wired-action-dispatch':
-      return 'Contract #3 defined failure modes (wiredActionRouter)';
     default:
       return slug;
   }
@@ -405,4 +400,4 @@ function narrowTeardownStep(
 
 // Re-export the narrowed union types for callers building custom
 // reporters.
-export type { ContractErrorBehavior, StreamUpdateBehavior, VersionMismatchBehavior };
+export type { StreamUpdateBehavior, VersionMismatchBehavior };

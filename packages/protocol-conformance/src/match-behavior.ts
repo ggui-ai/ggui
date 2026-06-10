@@ -10,12 +10,12 @@
  * ## Path-A vs Path-B partition
  *
  * The kit's behavior vocabulary spans both wire-observable claims (the
- * subscribe ack, contract-error envelopes on reserved channels, stream
- * updates) AND surface-observable claims (DOM state after a props
- * update, browser-side bootstrap failure modes). This file matches the
- * **Path-A** subset — the wire-observable behaviors a runner can
- * assert from frames alone, with no MCP-Apps-host adapter and no
- * Playwright page. The Path-B subset (browser-host harness) is
+ * subscribe ack, the action ack's persistence sequence, error frames,
+ * stream updates) AND surface-observable claims (DOM state after a
+ * props update, browser-side bootstrap failure modes). This file
+ * matches the **Path-A** subset — the wire-observable behaviors a
+ * runner can assert from frames alone, with no MCP-Apps-host adapter
+ * and no browser page. The Path-B subset (browser-host harness) is
  * inherently NOT WS-reducible: bootstrap-failure modes are caused by
  * the renderer-bundle fetch + `ui/initialize` round-trip the host
  * speaks over postMessage; props-update assertions are assertions on
@@ -24,27 +24,28 @@
  * reason and the runner records SKIP — they are NOT failures of the
  * server, they are claims a different driver must drive.
  *
- * The Path-B driver is a separate Playwright-based test suite — it
- * picks up the `bootstrap-failure` fixtures and asserts on the
- * iframe-host's `data-ggui-console-iframe-error` pane after
- * route-based fault injection. A future packaged browser-host adapter
- * will fold that capability into the kit so third-party adopters
- * don't have to reimplement it. Until then, the partition is honest:
- * Path A handles wire claims, Path B (out-of-process) handles
- * browser claims, and `unmatchable-on-ws` is the partition seam.
+ * The Path-B driver is not yet packaged — no browser-host harness
+ * ships with the kit today, so Path-B fixtures are skipped wherever
+ * the kit runs. A future packaged browser-host adapter folds that
+ * capability into the kit so third-party adopters don't have to
+ * reimplement it. Until then, the partition is honest: Path A handles
+ * wire claims, Path B is a declared grading gap, and
+ * `unmatchable-on-ws` is the partition seam.
  *
  * v1 Path-A scope:
  *
  *   - `bootstrap-success` — subscribe produced an `ack` frame.
  *   - `version-mismatch` — subscribe produced an `error` frame with
- *     `code: 'UPGRADE_REQUIRED'`.
- *   - `contract-error`  — stream frame on `_ggui:contract-error`
- *     channel matches `code` + `toolName` (+ optional `actionName` +
- *     `sourceAction`).
- *   - `stream-update`   — stream frame on named channel matches
+ *     `code: 'UPGRADE_REQUIRED'` (the generic error-frame read
+ *     narrowed to one code).
+ *   - `action-ack`     — the action's `ack` frame (matched by echoed
+ *     `requestId`) carries a numeric `payload.sequence` — proof the
+ *     event persisted to the GguiSession's consume buffer.
+ *   - `error-frame`    — an `error` frame with the expected
+ *     `payload.code` (+ optional echoed `requestId`).
+ *   - `stream-update`  — stream frame on named channel matches
  *     declared value.
- *   - `no-op`           — no frames observed after input dispatch.
- *   - `observability-event` — see below.
+ *   - `no-op`          — no frames observed after input dispatch.
  *
  * v1 Path-B-only kinds (return `unmatchable-on-ws`):
  *
@@ -60,51 +61,20 @@
  *     "frame was emitted", not as "DOM reflects it" — and the fixture
  *     vocabulary asserts the latter.
  *
- * ## `observability-event` — WS-evidence matcher
+ * ## Declared grading gap — the `ggui_consume` retrieval half
  *
- * The ggui protocol bar mandates that observability events follow
- * from WS-observable evidence. The bar's claim is "any conformant host
- * MUST emit `wired-tool-invoked` when the WS observes a wired-action's
- * tool dispatch + result frame; any conformant host MUST emit
- * `contract-error-emitted` when the WS observes a `_ggui:contract-
- * error` envelope." So a Path-A pass on an `observability-event`
- * fixture is the kit certifying "WS evidence the bar mandates a host
- * mirror-emission for is present" — a true vendor-neutral conformance
- * claim, not a renderer-internal probe.
- *
- * Two recognized event arms (extensibly closed via `(string & {})`):
- *
- *   - `wired-tool-invoked` — assert a `stream` frame on the
- *     `_ggui:wired-tool-invoked` channel carrying
- *     `value: {toolName, actionName?}` matching `event.toolName`
- *     (+ optional `event.actionName`). The reference server emits
- *     this signal from `action-router.ts::dispatchAction()` after a
- *     successful handler resolution — every conformant host MUST
- *     produce equivalent WS evidence (or a richer mirror-emission a
- *     Path-B browser host can observe).
- *
- *   - `contract-error-emitted` — assert a `stream` frame on the
- *     `_ggui:contract-error` channel whose canonical SPEC §4.4
- *     `ContractErrorPayload` carries `error.code === event.code` and
- *     `toolName === event.toolName` (+ optional `event.actionName`).
- *     This is the SAME frame {@link matchContractError} matches; the
- *     observability arm asserts the bar's "every live-channel envelope
- *     becomes an observability event" mirror without requiring a
- *     postMessage-capture harness.
- *
- * Other arms (`schema-version-mismatch`, `subscribe-failed`,
- * future `(string & {})` tails) the matcher cannot ground in current
- * WS evidence — return `unmatchable-on-ws` with a sharp reason so the
- * runner records SKIP, not FAIL. These are Path-B candidates for the
- * future browser-host adapter.
+ * `action-ack` proves the append half of the consume-buffer contract.
+ * The retrieval half — the agent draining the buffer via
+ * `ggui_consume({sessionId})` — is an MCP tool call a WS-only runner
+ * cannot drive. Grading it needs an MCP-binding driver; that gap is
+ * declared here rather than papered over with a weaker assertion.
  */
 import type {
+  ActionAckBehavior,
   BootstrapSuccessBehavior,
-  ContractErrorBehavior,
+  ErrorFrameBehavior,
   ExpectedBehavior,
-  ExpectedObservabilityEvent,
   NoOpBehavior,
-  ObservabilityBehavior,
   StreamUpdateBehavior,
   VersionMismatchBehavior,
 } from './types.js';
@@ -140,8 +110,11 @@ export function matchBehavior(
   if (behavior.kind === 'version-mismatch') {
     return matchVersionMismatch(behavior as VersionMismatchBehavior, frames);
   }
-  if (behavior.kind === 'contract-error') {
-    return matchContractError(behavior as ContractErrorBehavior, frames);
+  if (behavior.kind === 'action-ack') {
+    return matchActionAck(behavior as ActionAckBehavior, frames);
+  }
+  if (behavior.kind === 'error-frame') {
+    return matchErrorFrame(behavior as ErrorFrameBehavior, frames);
   }
   if (behavior.kind === 'stream-update') {
     return matchStreamUpdate(behavior as StreamUpdateBehavior, frames);
@@ -153,17 +126,14 @@ export function matchBehavior(
     return {
       kind: 'unmatchable-on-ws',
       reason:
-        'bootstrap-failure is a Path-B (browser-host) claim — the fault surface is the host\'s bootstrap-fetch + `ui/initialize` postMessage round-trip, not a WS frame the server emits. The `renderer-url-override` / `ui-initialize-response-override` setup directives are MCP-Apps-host concerns; the reference server\'s host adapter throws "out of scope" on them by design. Drive these fixtures via a Path-B browser-host harness (today: PENDING a new driver; future: packaged Phase-3.2 adapter inside the kit).',
+        'bootstrap-failure is a Path-B (browser-host) claim — the fault surface is the host\'s bootstrap-fetch + `ui/initialize` postMessage round-trip, not a WS frame the server emits. The `renderer-url-override` / `ui-initialize-response-override` setup directives are MCP-Apps-host concerns; the reference server\'s host adapter throws "out of scope" on them by design. The Path-B driver is not yet packaged — these fixtures skip until a browser-host adapter ships with the kit.',
     };
-  }
-  if (behavior.kind === 'observability-event') {
-    return matchObservabilityEvent(behavior as ObservabilityBehavior, frames);
   }
   if (behavior.kind === 'props-update') {
     return {
       kind: 'unmatchable-on-ws',
       reason:
-        'props-update is a Path-B (browser-host) claim — the assertion is on rendered DOM (selector + attribute/text), not on the `_ggui:props` WS frame in isolation. Matchable on WS only as "frame was emitted"; the fixture vocabulary asserts "DOM reflects the update". Drive via a Path-B browser-host harness; future: packaged Phase-3.2 adapter inside the kit.',
+        'props-update is a Path-B (browser-host) claim — the assertion is on rendered DOM (selector + attribute/text), not on the `_ggui:props` WS frame in isolation. Matchable on WS only as "frame was emitted"; the fixture vocabulary asserts "DOM reflects the update". The Path-B driver is not yet packaged — this fixture skips until a browser-host adapter ships with the kit.',
     };
   }
   // Extensibly-closed union catch — unknown `kind` = new fixture
@@ -215,13 +185,9 @@ function matchVersionMismatch(
   behavior: VersionMismatchBehavior,
   frames: readonly ObservedFrame[],
 ): MatchResult {
-  const error = frames.find(
-    (f) =>
-      f.kind === 'frame' &&
-      f.parsed['type'] === 'error' &&
-      isRecord(f.parsed['payload']) &&
-      f.parsed['payload']['code'] === 'UPGRADE_REQUIRED',
-  );
+  // The generalized error-frame read narrowed to the version
+  // handshake's canonical rejection code.
+  const error = findErrorFrame(frames, 'UPGRADE_REQUIRED');
   if (error === undefined) {
     return {
       kind: 'fail',
@@ -238,77 +204,72 @@ function matchVersionMismatch(
   return { kind: 'pass' };
 }
 
-function matchContractError(
-  behavior: ContractErrorBehavior,
+/**
+ * `action-ack` — the ack frame echoing the action's `requestId` MUST
+ * carry a numeric `payload.sequence`: the monotonic event sequence the
+ * server assigned when it appended the action to the GguiSession's
+ * consume buffer. Matching on the echoed `requestId` distinguishes the
+ * action's ack from the subscribe ack the runner's own subscribe frame
+ * produces.
+ */
+function matchActionAck(
+  behavior: ActionAckBehavior,
   frames: readonly ObservedFrame[],
 ): MatchResult {
-  const candidates = frames.filter(
+  const acks = frames.filter(
     (f) =>
       f.kind === 'frame' &&
-      f.parsed['type'] === 'stream' &&
-      isRecord(f.parsed['payload']) &&
-      f.parsed['payload']['channel'] === '_ggui:contract-error',
+      f.parsed['type'] === 'ack' &&
+      f.parsed['requestId'] === behavior.requestId,
   );
-  if (candidates.length === 0) {
+  if (acks.length === 0) {
     return {
       kind: 'fail',
-      expected: {
-        channel: '_ggui:contract-error',
-        code: behavior.code,
-        toolName: behavior.toolName,
-      },
+      expected: { type: 'ack', requestId: behavior.requestId },
       received: frames.map((f) => (f.kind === 'frame' ? f.parsed : f)),
-      message:
-        'expected a `stream` frame on the `_ggui:contract-error` reserved channel; none observed.',
+      message: `expected an \`ack\` frame echoing requestId '${behavior.requestId}' after action dispatch; received none.`,
     };
   }
-  // Check at least one candidate carries the expected code + tool.
-  //
-  // Canonical shape per SPEC §4.4 `ContractErrorPayload`: `code` is
-  // NESTED under `value.error.code`, alongside `value.error.message`
-  // and `value.error.causedBy`. `toolName` / `actionName` /
-  // `sourceAction` / `timestamp` live at the top of `value`. The
-  // matcher reads the canonical shape exclusively — the reference
-  // server (and `@ggui-ai/mcp-server`'s router) emits via
-  // `makeContractErrorPayload`, which is the authoritative builder.
-  // Any producer emitting a flat `code` field is a spec violation and
-  // will correctly fail this match — that's the point of Protocol #5
-  // (named failure modes) being assertable.
-  const match = candidates.find((f) => {
+  const match = acks.find((f) => {
     if (f.kind !== 'frame') return false;
     const payload = f.parsed['payload'];
-    if (!isRecord(payload)) return false;
-    const value = payload['value'];
-    if (!isRecord(value)) return false;
-    const error = value['error'];
-    if (!isRecord(error)) return false;
-    if (error['code'] !== behavior.code) return false;
-    if (value['toolName'] !== behavior.toolName) return false;
-    if (
-      behavior.actionName !== undefined &&
-      value['actionName'] !== behavior.actionName
-    ) {
-      return false;
-    }
-    if (behavior.sourceAction !== undefined) {
-      const source = value['sourceAction'];
-      const sourceType = isRecord(source) ? source['type'] : source;
-      if (sourceType !== behavior.sourceAction) return false;
-    }
-    return true;
+    return isRecord(payload) && typeof payload['sequence'] === 'number';
   });
   if (match === undefined) {
     return {
       kind: 'fail',
       expected: {
-        code: behavior.code,
-        toolName: behavior.toolName,
-        actionName: behavior.actionName,
-        sourceAction: behavior.sourceAction,
+        type: 'ack',
+        requestId: behavior.requestId,
+        payload: { sequence: '<number>' },
       },
-      received: candidates.map((f) => (f.kind === 'frame' ? f.parsed : f)),
+      received: acks.map((f) => (f.kind === 'frame' ? f.parsed : f)),
       message:
-        '`_ggui:contract-error` frame observed but payload did not match the expected code/tool/action triple.',
+        'action `ack` frame observed but `payload.sequence` is missing or non-numeric — the ack does not prove the event persisted to the consume buffer.',
+    };
+  }
+  return { kind: 'pass' };
+}
+
+/**
+ * `error-frame` — an `error` frame with the expected `payload.code`
+ * (+ the echoed `requestId` when the fixture declares one).
+ */
+function matchErrorFrame(
+  behavior: ErrorFrameBehavior,
+  frames: readonly ObservedFrame[],
+): MatchResult {
+  const match = findErrorFrame(frames, behavior.code, behavior.requestId);
+  if (match === undefined) {
+    return {
+      kind: 'fail',
+      expected: {
+        type: 'error',
+        payload: { code: behavior.code },
+        ...(behavior.requestId !== undefined ? { requestId: behavior.requestId } : {}),
+      },
+      received: frames.map((f) => (f.kind === 'frame' ? f.parsed : f)),
+      message: `expected an \`error\` frame with \`payload.code === ${behavior.code}\`${behavior.requestId !== undefined ? ` echoing requestId '${behavior.requestId}'` : ''}; received none.`,
     };
   }
   return { kind: 'pass' };
@@ -362,186 +323,29 @@ function matchNoOp(
   return { kind: 'pass' };
 }
 
-/**
- * Match an observability-event behavior against WS evidence the
- * protocol-and-contract bar mandates a conformant host mirror-emit on.
- *
- * Two arms are matchable on pure WS today; everything else returns
- * `unmatchable-on-ws` with a sharp reason — see the file-level
- * docstring for the rationale.
- */
-function matchObservabilityEvent(
-  behavior: ObservabilityBehavior,
-  frames: readonly ObservedFrame[],
-): MatchResult {
-  const { event } = behavior;
-  if (event.kind === 'wired-tool-invoked') {
-    return matchWiredToolInvoked(event, frames);
-  }
-  if (event.kind === 'contract-error-emitted') {
-    return matchContractErrorEmitted(event, frames);
-  }
-  return {
-    kind: 'unmatchable-on-ws',
-    reason: `observability-event of kind '${event.kind}' is a Path-B (browser-host) claim — not grounded in WS-observable evidence by the kit's matcher. Drive via a Path-B browser-host harness (today: \`page.exposeBinding\` in spec-side dispatch; future: packaged Phase-3.2 adapter inside the kit).`,
-  };
-}
-
-/**
- * `wired-tool-invoked` — the WS evidence is a `stream` frame on the
- * canonical `_ggui:wired-tool-invoked` channel carrying
- * `value: {toolName, actionName?}`. The reference server's
- * `action-router.ts::dispatchAction()` emits this after a successful
- * handler resolution; the bar mandates equivalent WS evidence from any
- * conformant host on the wired-tool-invoked path.
- */
-function matchWiredToolInvoked(
-  event: ExpectedObservabilityEvent,
-  frames: readonly ObservedFrame[],
-): MatchResult {
-  if (event.toolName === undefined) {
-    return {
-      kind: 'fail',
-      expected: { kind: 'wired-tool-invoked', toolName: '<required>' },
-      received: { event },
-      message:
-        'observability-event of kind `wired-tool-invoked` MUST declare `toolName` for the matcher to assert against; fixture is under-specified.',
-    };
-  }
-  const candidates = frames.filter(
-    (f) =>
-      f.kind === 'frame' &&
-      f.parsed['type'] === 'stream' &&
-      isRecord(f.parsed['payload']) &&
-      f.parsed['payload']['channel'] === '_ggui:wired-tool-invoked',
-  );
-  if (candidates.length === 0) {
-    return {
-      kind: 'fail',
-      expected: {
-        channel: '_ggui:wired-tool-invoked',
-        value: { toolName: event.toolName, actionName: event.actionName },
-      },
-      received: frames.map((f) => (f.kind === 'frame' ? f.parsed : f)),
-      message:
-        'expected a `stream` frame on `_ggui:wired-tool-invoked` (the WS-observable evidence the protocol bar mandates a conformant host mirror-emit `wired-tool-invoked` on); none observed.',
-    };
-  }
-  const match = candidates.find((f) => {
-    if (f.kind !== 'frame') return false;
-    const payload = f.parsed['payload'];
-    if (!isRecord(payload)) return false;
-    const value = payload['value'];
-    if (!isRecord(value)) return false;
-    if (value['toolName'] !== event.toolName) return false;
-    if (
-      event.actionName !== undefined &&
-      value['actionName'] !== event.actionName
-    ) {
-      return false;
-    }
-    return true;
-  });
-  if (match === undefined) {
-    return {
-      kind: 'fail',
-      expected: {
-        channel: '_ggui:wired-tool-invoked',
-        value: { toolName: event.toolName, actionName: event.actionName },
-      },
-      received: candidates.map((f) => (f.kind === 'frame' ? f.parsed : f)),
-      message:
-        '`_ggui:wired-tool-invoked` frame observed but value did not match the expected toolName/actionName.',
-    };
-  }
-  return { kind: 'pass' };
-}
-
-/**
- * `contract-error-emitted` — the WS evidence is the canonical SPEC
- * §4.4 `_ggui:contract-error` envelope itself. Per the bar, every such
- * envelope MUST be mirrored as a `contract-error-emitted` observability
- * event on the host side; asserting on the WS frame is asserting on
- * the cause the bar makes load-bearing for the mirror.
- */
-function matchContractErrorEmitted(
-  event: ExpectedObservabilityEvent,
-  frames: readonly ObservedFrame[],
-): MatchResult {
-  if (event.code === undefined || event.toolName === undefined) {
-    return {
-      kind: 'fail',
-      expected: {
-        kind: 'contract-error-emitted',
-        code: event.code ?? '<required>',
-        toolName: event.toolName ?? '<required>',
-      },
-      received: { event },
-      message:
-        'observability-event of kind `contract-error-emitted` MUST declare both `code` and `toolName` for the matcher to assert against; fixture is under-specified.',
-    };
-  }
-  const candidates = frames.filter(
-    (f) =>
-      f.kind === 'frame' &&
-      f.parsed['type'] === 'stream' &&
-      isRecord(f.parsed['payload']) &&
-      f.parsed['payload']['channel'] === '_ggui:contract-error',
-  );
-  if (candidates.length === 0) {
-    return {
-      kind: 'fail',
-      expected: {
-        channel: '_ggui:contract-error',
-        code: event.code,
-        toolName: event.toolName,
-      },
-      received: frames.map((f) => (f.kind === 'frame' ? f.parsed : f)),
-      message:
-        'expected a `stream` frame on `_ggui:contract-error` (the WS-observable evidence the protocol bar mandates a conformant host mirror-emit `contract-error-emitted` on); none observed.',
-    };
-  }
-  // Same canonical-shape reader as `matchContractError` — code is
-  // nested under `payload.value.error.code`, toolName at the top of
-  // `payload.value`.
-  const match = candidates.find((f) => {
-    if (f.kind !== 'frame') return false;
-    const payload = f.parsed['payload'];
-    if (!isRecord(payload)) return false;
-    const value = payload['value'];
-    if (!isRecord(value)) return false;
-    const error = value['error'];
-    if (!isRecord(error)) return false;
-    if (error['code'] !== event.code) return false;
-    if (value['toolName'] !== event.toolName) return false;
-    if (
-      event.actionName !== undefined &&
-      value['actionName'] !== event.actionName
-    ) {
-      return false;
-    }
-    return true;
-  });
-  if (match === undefined) {
-    return {
-      kind: 'fail',
-      expected: {
-        channel: '_ggui:contract-error',
-        code: event.code,
-        toolName: event.toolName,
-        actionName: event.actionName,
-      },
-      received: candidates.map((f) => (f.kind === 'frame' ? f.parsed : f)),
-      message:
-        '`_ggui:contract-error` frame observed but payload did not match the expected code/tool/action triple for the mandated mirror-emission.',
-    };
-  }
-  return { kind: 'pass' };
-}
-
 // =============================================================================
 // Helpers
 // =============================================================================
+
+/**
+ * Find an `error` frame carrying `payload.code === code` and, when
+ * `requestId` is given, echoing it. Shared by the generic
+ * `error-frame` matcher and the `version-mismatch` arm.
+ */
+function findErrorFrame(
+  frames: readonly ObservedFrame[],
+  code: string,
+  requestId?: string,
+): ObservedFrame | undefined {
+  return frames.find(
+    (f) =>
+      f.kind === 'frame' &&
+      f.parsed['type'] === 'error' &&
+      isRecord(f.parsed['payload']) &&
+      f.parsed['payload']['code'] === code &&
+      (requestId === undefined || f.parsed['requestId'] === requestId),
+  );
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);

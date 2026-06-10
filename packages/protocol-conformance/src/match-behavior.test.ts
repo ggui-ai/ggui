@@ -1,218 +1,188 @@
 /**
  * Matcher unit tests — synthetic frame arrays exercising the
- * `observability-event` arm Slice L grounded.
+ * Path-A behavior arms.
  *
  * Pure unit-level: no transport, no server. The arms under test are
- * `wired-tool-invoked` (asserts on `_ggui:wired-tool-invoked` stream
- * frame) + `contract-error-emitted` (asserts on the canonical SPEC
- * §4.4 `_ggui:contract-error` envelope shape). Other event kinds
- * remain `unmatchable-on-ws`; this file pins that contract too.
+ * `action-ack` (asserts the action's ack frame carries the consume-
+ * buffer append sequence) + `error-frame` (asserts an `error` frame
+ * with the expected `payload.code`, the generalized read the
+ * `version-mismatch` arm narrows to `UPGRADE_REQUIRED`). Path-B
+ * kinds and unknown vocabulary remain `unmatchable-on-ws`; this file
+ * pins that contract too.
  */
 import { describe, expect, it } from 'vitest';
 
 import { matchBehavior } from './match-behavior.js';
-import type { ObservabilityBehavior } from './types.js';
+import type { ActionAckBehavior, ErrorFrameBehavior } from './types.js';
 import type { ObservedFrame } from './ws-transport.js';
 
 function frame(parsed: Record<string, unknown>): ObservedFrame {
   return { kind: 'frame', raw: JSON.stringify(parsed), parsed };
 }
 
-const ACK_FRAME: ObservedFrame = frame({ type: 'ack' });
+/** The subscribe ack the runner's own subscribe frame produces. */
+const SUBSCRIBE_ACK: ObservedFrame = frame({
+  type: 'ack',
+  payload: { serverVersion: '1.1' },
+  requestId: 'conformance-subscribe-fixture',
+});
 
-describe('matchBehavior — observability-event::wired-tool-invoked', () => {
-  const behavior: ObservabilityBehavior = {
-    kind: 'observability-event',
-    event: {
-      kind: 'wired-tool-invoked',
-      toolName: 'tasks_complete',
-      actionName: 'toggleTask',
-    },
+describe('matchBehavior — action-ack', () => {
+  const behavior: ActionAckBehavior = {
+    kind: 'action-ack',
+    requestId: 'action-req-1',
   };
 
-  it('passes when a `_ggui:wired-tool-invoked` stream frame matches toolName + actionName', () => {
+  it('passes when the ack echoes the requestId and carries a numeric payload.sequence', () => {
     const frames: readonly ObservedFrame[] = [
-      ACK_FRAME,
+      SUBSCRIBE_ACK,
       frame({
-        type: 'stream',
-        payload: {
-          channel: '_ggui:wired-tool-invoked',
-          value: { toolName: 'tasks_complete', actionName: 'toggleTask' },
-        },
+        type: 'ack',
+        payload: { sequence: 1, timestamp: 1760000000000 },
+        requestId: 'action-req-1',
       }),
     ];
-    const result = matchBehavior(behavior, frames);
-    expect(result.kind).toBe('pass');
+    expect(matchBehavior(behavior, frames).kind).toBe('pass');
   });
 
-  it('passes when actionName is omitted on the event (toolName-only assertion)', () => {
-    const toolOnlyBehavior: ObservabilityBehavior = {
-      kind: 'observability-event',
-      event: { kind: 'wired-tool-invoked', toolName: 'tasks_complete' },
-    };
-    const frames: readonly ObservedFrame[] = [
-      ACK_FRAME,
-      frame({
-        type: 'stream',
-        payload: {
-          channel: '_ggui:wired-tool-invoked',
-          value: { toolName: 'tasks_complete', actionName: 'somethingElse' },
-        },
-      }),
-    ];
-    const result = matchBehavior(toolOnlyBehavior, frames);
-    expect(result.kind).toBe('pass');
-  });
-
-  it('fails when no `_ggui:wired-tool-invoked` stream frame is observed', () => {
-    const frames: readonly ObservedFrame[] = [ACK_FRAME];
-    const result = matchBehavior(behavior, frames);
+  it('fails when no ack echoes the action requestId (subscribe ack alone is not enough)', () => {
+    const result = matchBehavior(behavior, [SUBSCRIBE_ACK]);
     expect(result.kind).toBe('fail');
     if (result.kind !== 'fail') return;
-    expect(result.message).toContain('_ggui:wired-tool-invoked');
-    expect(result.message).toContain('protocol bar mandates');
+    expect(result.message).toContain("requestId 'action-req-1'");
   });
 
-  it('fails when the channel matches but toolName mismatches', () => {
+  it('fails when the ack echoes the requestId but payload.sequence is missing', () => {
     const frames: readonly ObservedFrame[] = [
-      ACK_FRAME,
+      SUBSCRIBE_ACK,
       frame({
-        type: 'stream',
-        payload: {
-          channel: '_ggui:wired-tool-invoked',
-          value: { toolName: 'wrong_tool', actionName: 'toggleTask' },
-        },
+        type: 'ack',
+        payload: { timestamp: 1760000000000 },
+        requestId: 'action-req-1',
       }),
     ];
     const result = matchBehavior(behavior, frames);
     expect(result.kind).toBe('fail');
     if (result.kind !== 'fail') return;
-    expect(result.message).toContain('did not match the expected toolName');
+    expect(result.message).toContain('payload.sequence');
   });
 
-  it('fails when actionName is required and mismatches', () => {
+  it('fails when payload.sequence is non-numeric', () => {
     const frames: readonly ObservedFrame[] = [
-      ACK_FRAME,
       frame({
-        type: 'stream',
-        payload: {
-          channel: '_ggui:wired-tool-invoked',
-          value: { toolName: 'tasks_complete', actionName: 'wrongAction' },
-        },
+        type: 'ack',
+        payload: { sequence: '1' },
+        requestId: 'action-req-1',
       }),
     ];
-    const result = matchBehavior(behavior, frames);
-    expect(result.kind).toBe('fail');
-  });
-
-  it('fails (under-specified fixture) when toolName is omitted from the event', () => {
-    const underSpecified: ObservabilityBehavior = {
-      kind: 'observability-event',
-      event: { kind: 'wired-tool-invoked' },
-    };
-    const frames: readonly ObservedFrame[] = [ACK_FRAME];
-    const result = matchBehavior(underSpecified, frames);
-    expect(result.kind).toBe('fail');
-    if (result.kind !== 'fail') return;
-    expect(result.message).toContain('MUST declare `toolName`');
+    expect(matchBehavior(behavior, frames).kind).toBe('fail');
   });
 });
 
-describe('matchBehavior — observability-event::contract-error-emitted', () => {
-  const behavior: ObservabilityBehavior = {
-    kind: 'observability-event',
-    event: {
-      kind: 'contract-error-emitted',
-      code: 'TOOL_THREW',
-      toolName: 'broken_tool',
-      actionName: 'triggerBroken',
-    },
+describe('matchBehavior — error-frame', () => {
+  const behavior: ErrorFrameBehavior = {
+    kind: 'error-frame',
+    code: 'CONTRACT_VIOLATION',
+    requestId: 'action-req-2',
   };
 
-  function contractErrorFrame(value: Record<string, unknown>): ObservedFrame {
-    return frame({
-      type: 'stream',
-      payload: { channel: '_ggui:contract-error', value },
-    });
-  }
-
-  it('passes when a canonical SPEC §4.4 contract-error envelope matches code + toolName + actionName', () => {
+  it('passes when an error frame matches code + echoed requestId', () => {
     const frames: readonly ObservedFrame[] = [
-      ACK_FRAME,
-      contractErrorFrame({
-        toolName: 'broken_tool',
-        actionName: 'triggerBroken',
-        sourceAction: { type: 'wired-action', dispatchedAt: '2026-04-26T00:00:00.000Z' },
-        error: {
-          code: 'TOOL_THREW',
-          message: 'tool_threw_for_fixture',
-        },
-        timestamp: '2026-04-26T00:00:00.000Z',
+      SUBSCRIBE_ACK,
+      frame({
+        type: 'error',
+        payload: { code: 'CONTRACT_VIOLATION', message: "Unknown action 'doesNotExist'" },
+        requestId: 'action-req-2',
       }),
     ];
-    const result = matchBehavior(behavior, frames);
-    expect(result.kind).toBe('pass');
+    expect(matchBehavior(behavior, frames).kind).toBe('pass');
   });
 
-  it('fails when no `_ggui:contract-error` frame is observed', () => {
-    const frames: readonly ObservedFrame[] = [ACK_FRAME];
-    const result = matchBehavior(behavior, frames);
-    expect(result.kind).toBe('fail');
-    if (result.kind !== 'fail') return;
-    expect(result.message).toContain('_ggui:contract-error');
-    expect(result.message).toContain('protocol bar mandates');
-  });
-
-  it('fails when contract-error frame is observed but `error.code` mismatches', () => {
+  it('passes without requestId pinning when the behavior omits it', () => {
+    const codeOnly: ErrorFrameBehavior = { kind: 'error-frame', code: 'SESSION_NOT_FOUND' };
     const frames: readonly ObservedFrame[] = [
-      ACK_FRAME,
-      contractErrorFrame({
-        toolName: 'broken_tool',
-        actionName: 'triggerBroken',
-        sourceAction: { type: 'wired-action', dispatchedAt: '2026-04-26T00:00:00.000Z' },
-        error: { code: 'TOOL_NOT_FOUND', message: '...' },
-        timestamp: '2026-04-26T00:00:00.000Z',
+      frame({
+        type: 'error',
+        payload: { code: 'SESSION_NOT_FOUND', message: 'gone' },
       }),
     ];
-    const result = matchBehavior(behavior, frames);
-    expect(result.kind).toBe('fail');
-    if (result.kind !== 'fail') return;
-    expect(result.message).toContain('did not match');
+    expect(matchBehavior(codeOnly, frames).kind).toBe('pass');
   });
 
-  it('fails (under-specified fixture) when code OR toolName is omitted', () => {
-    const noCode: ObservabilityBehavior = {
-      kind: 'observability-event',
-      event: { kind: 'contract-error-emitted', toolName: 'broken_tool' },
-    };
-    const result = matchBehavior(noCode, [ACK_FRAME]);
+  it('fails when no error frame is observed', () => {
+    const result = matchBehavior(behavior, [SUBSCRIBE_ACK]);
     expect(result.kind).toBe('fail');
     if (result.kind !== 'fail') return;
-    expect(result.message).toContain('MUST declare both `code` and `toolName`');
+    expect(result.message).toContain('CONTRACT_VIOLATION');
+  });
+
+  it('fails when the error code mismatches', () => {
+    const frames: readonly ObservedFrame[] = [
+      frame({
+        type: 'error',
+        payload: { code: 'SESSION_MISMATCH', message: 'wrong render' },
+        requestId: 'action-req-2',
+      }),
+    ];
+    expect(matchBehavior(behavior, frames).kind).toBe('fail');
+  });
+
+  it('fails when the code matches but the echoed requestId does not', () => {
+    const frames: readonly ObservedFrame[] = [
+      frame({
+        type: 'error',
+        payload: { code: 'CONTRACT_VIOLATION', message: 'rejected' },
+        requestId: 'some-other-request',
+      }),
+    ];
+    expect(matchBehavior(behavior, frames).kind).toBe('fail');
   });
 });
 
-describe('matchBehavior — observability-event::other arms', () => {
-  it('returns unmatchable-on-ws for `schema-version-mismatch` (not grounded in WS evidence)', () => {
-    const behavior: ObservabilityBehavior = {
-      kind: 'observability-event',
-      event: { kind: 'schema-version-mismatch' },
-    };
-    const result = matchBehavior(behavior, []);
+describe('matchBehavior — version-mismatch rides the error-frame read', () => {
+  it('passes on an UPGRADE_REQUIRED error frame', () => {
+    const frames: readonly ObservedFrame[] = [
+      frame({
+        type: 'error',
+        payload: {
+          code: 'UPGRADE_REQUIRED',
+          message: "server advertises '99.99-unsupported'",
+          serverVersion: '99.99-unsupported',
+        },
+      }),
+    ];
+    const result = matchBehavior(
+      {
+        kind: 'version-mismatch',
+        serverVersion: '99.99-unsupported',
+        clientAccepts: ['1.1'],
+      },
+      frames,
+    );
+    expect(result.kind).toBe('pass');
+  });
+});
+
+describe('matchBehavior — Path-B and unknown kinds skip', () => {
+  it('returns unmatchable-on-ws for props-update (DOM-level claim)', () => {
+    const result = matchBehavior(
+      {
+        kind: 'props-update',
+        channel: '_ggui:props',
+        props: { greeting: 'hi' },
+        evidence: { selector: '[data-x]', expected: 'hi' },
+      },
+      [],
+    );
     expect(result.kind).toBe('unmatchable-on-ws');
     if (result.kind !== 'unmatchable-on-ws') return;
-    expect(result.reason).toContain('schema-version-mismatch');
-    expect(result.reason).toContain('browser-host harness');
+    expect(result.reason).toContain('Path-B');
   });
 
-  it('returns unmatchable-on-ws for an unknown extensibly-closed event kind', () => {
-    const behavior: ObservabilityBehavior = {
-      kind: 'observability-event',
-      event: { kind: 'made-up-future-event' },
-    };
-    const result = matchBehavior(behavior, []);
+  it('returns unmatchable-on-ws for an unknown extensibly-closed behavior kind', () => {
+    const result = matchBehavior({ kind: 'made-up-future-behavior' }, []);
     expect(result.kind).toBe('unmatchable-on-ws');
     if (result.kind !== 'unmatchable-on-ws') return;
-    expect(result.reason).toContain('made-up-future-event');
+    expect(result.reason).toContain('made-up-future-behavior');
   });
 });

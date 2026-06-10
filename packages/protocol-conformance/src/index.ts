@@ -25,26 +25,24 @@ export type {
   // Setup vocabulary (JSON-authoring surface)
   SetupStep,
   CreateGguiSessionStep,
-  RegisterToolStep,
+  ActionSpecEntryDecl,
   EmitEnvelopeStep,
   SeedChannelStep,
   UnknownSetupStep,
   // Teardown vocabulary (JSON-authoring surface)
   TeardownStep,
-  UnregisterToolStep,
   UnknownTeardownStep,
   // Expected-behavior vocabulary
   ExpectedBehavior,
-  ContractErrorBehavior,
+  ActionAckBehavior,
+  ErrorFrameBehavior,
   StreamUpdateBehavior,
-  ObservabilityBehavior,
   BootstrapFailureBehavior,
   BootstrapSuccessBehavior,
   VersionMismatchBehavior,
   PropsUpdateBehavior,
   NoOpBehavior,
   UnknownBehavior,
-  ExpectedObservabilityEvent,
   // Authored protocol vocabulary copies
   ProtocolError,
   BootstrapFailureReason,
@@ -60,8 +58,6 @@ export type {
   // Setup directives (runtime surface — narrowed)
   SetupStep as HostSetupStep,
   CreateGguiSessionSetup,
-  RegisterToolSetup,
-  RegisterActionSpecSetup,
   EmitEnvelopeSetup,
   RendererUrlOverrideSetup,
   UiInitializeResponseOverrideSetup,
@@ -69,7 +65,6 @@ export type {
   UnknownSetupStep as HostUnknownSetupStep,
   // Teardown directives (runtime surface — narrowed)
   TeardownStep as HostTeardownStep,
-  UnregisterToolTeardown,
   UnknownTeardownStep as HostUnknownTeardownStep,
 } from './conformance-host.js';
 
@@ -80,11 +75,9 @@ export {
   allFixtures,
   fixturesByContract,
   bootstrapProtocolFixtures,
-  observabilityEventsFixtures,
-  refreshSemanticsFixtures,
+  consumeBufferFixtures,
   reservedChannelAuthorityFixtures,
   schemaVersionHandshakeFixtures,
-  wiredActionDispatchFixtures,
 } from './fixtures/index.js';
 export type { ContractSlug } from './fixtures/index.js';
 

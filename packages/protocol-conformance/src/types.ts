@@ -30,7 +30,6 @@
  *   - `SetupStep['type']`
  *   - `TeardownStep['type']`
  *   - `ExpectedBehavior['kind']`
- *   - `ExpectedObservabilityEvent['kind']`
  *   - `TransportConfig['kind']`
  *
  * Everything else — tool names, envelope field names, contract error
@@ -126,10 +125,20 @@ export type AuthConfig =
  */
 export type SetupStep =
   | CreateGguiSessionStep
-  | RegisterToolStep
   | EmitEnvelopeStep
   | SeedChannelStep
   | UnknownSetupStep;
+
+/**
+ * Declared-action entry for {@link CreateGguiSessionStep.actionSpec}.
+ * The behavioral fixtures exercise the name-membership half of the
+ * action contract — an empty entry declares a void-payload action.
+ * `schema` is authoring-reserved for future payload-validation
+ * fixtures; hosts MAY ignore it today.
+ */
+export interface ActionSpecEntryDecl {
+  readonly schema?: unknown;
+}
 
 export interface CreateGguiSessionStep {
   readonly type: 'create-session';
@@ -139,23 +148,16 @@ export interface CreateGguiSessionStep {
   /** Optional app (tenant) id the render scopes to. Defaults to the
    *  host's implementation-defined "default app". */
   readonly appId?: string;
-}
-
-export interface RegisterToolStep {
-  readonly type: 'register-tool';
-  readonly toolName: string;
-  /** Handler identifier the host maps to a real implementation. The
-   *  kit is authoring-only — it doesn't ship handler bodies. Known
-   *  values the reference `@ggui-ai/mcp-server`-backed host supports:
-   *
-   *    - `'echo'`   — returns `{received: args}`.
-   *    - `'throw'`  — rejects with `Error('tool_threw_for_fixture')`.
-   *    - `'timeout'`— never resolves (host enforces its own timeout).
-   *    - `'malformed-stream'` — returns `{wrong:'shape'}`.
-   *
-   *  Third-party hosts MAY recognize additional handlers; the kit
-   *  records the string verbatim. */
-  readonly handler: string;
+  /**
+   * Optional actionSpec declared on the GguiSession at creation —
+   * mirrors how a real ggui server derives the declared-action set
+   * from the render's data contract (actions are part of the render's
+   * identity, not separately registered). Servers MUST reject
+   * `data:submit` envelopes naming actions absent from this record
+   * with an `error` frame, code `CONTRACT_VIOLATION`. Omitting the
+   * field declares no contract — all actions are accepted.
+   */
+  readonly actionSpec?: Readonly<Record<string, ActionSpecEntryDecl>>;
 }
 
 export interface EmitEnvelopeStep {
@@ -185,16 +187,11 @@ export interface UnknownSetupStep {
 
 /**
  * Teardown directive — mirrors {@link SetupStep}'s vocabulary, scoped
- * to cleanup.
+ * to cleanup. No fixture authors a teardown directive today (renders
+ * decay via TTL); the union stays so future cleanup vocabulary lands
+ * additively.
  */
-export type TeardownStep =
-  | UnregisterToolStep
-  | UnknownTeardownStep;
-
-export interface UnregisterToolStep {
-  readonly type: 'unregister-tool';
-  readonly toolName: string;
-}
+export type TeardownStep = UnknownTeardownStep;
 
 export interface UnknownTeardownStep {
   readonly type: string & {};
@@ -210,16 +207,12 @@ export interface UnknownTeardownStep {
  *
  * Discriminator is extensibly closed via `(string & {})`. Each arm
  * carries only the fields the assertion semantically requires — no
- * optional-everything-bags. Cross-cuts (e.g. every failure-path case
- * also expects a matching observability event) are authored as
- * {@link TestCase.expectedBehavior} of one kind PLUS
- * {@link TestCase.expectedObservability} alongside, not as nested
- * unions.
+ * optional-everything-bags.
  */
 export type ExpectedBehavior =
-  | ContractErrorBehavior
+  | ActionAckBehavior
+  | ErrorFrameBehavior
   | StreamUpdateBehavior
-  | ObservabilityBehavior
   | BootstrapFailureBehavior
   | BootstrapSuccessBehavior
   | VersionMismatchBehavior
@@ -228,24 +221,40 @@ export type ExpectedBehavior =
   | UnknownBehavior;
 
 /**
- * Expect a `_ggui:contract-error` envelope with the given code + tool
- * + optional actionName + optional sourceAction.type. Matches the
- * renderer's {@link ProtocolError} kind `'contract'` variant AND the
- * server-wire `ContractErrorPayload` shape.
+ * Expect the action's `ack` frame to carry a numeric
+ * `payload.sequence` — the monotonic event sequence the server
+ * assigned when it appended the action to the GguiSession's consume
+ * buffer. The ack-carries-sequence contract is the wire-observable
+ * proof the event persisted; the retrieval half (the agent draining
+ * the buffer via `ggui_consume`) is an MCP tool call outside this WS
+ * kit's observation window.
  */
-export interface ContractErrorBehavior {
-  readonly kind: 'contract-error';
-  readonly code: ContractErrorCode;
-  readonly toolName: string;
-  readonly actionName?: string;
-  readonly sourceAction?: 'wired-action' | 'refresh-stream' | (string & {});
+export interface ActionAckBehavior {
+  readonly kind: 'action-ack';
   /**
-   * Optional observability co-assertion. Most contract-error paths
-   * also emit a `contract-error-emitted` observability event with the
-   * same `code` + `toolName`. Authoring this here keeps the
-   * cross-cut in one place.
+   * `requestId` the fixture's `inputEnvelope` stamps on the action
+   * frame. The matcher requires the ack to echo it — distinguishing
+   * the action's ack from the ack the runner's own subscribe frame
+   * produces.
    */
-  readonly observability?: ExpectedObservabilityEvent;
+  readonly requestId: string;
+}
+
+/**
+ * Expect an `error` frame whose `payload.code` matches. Generic
+ * error-frame vocabulary: `version-mismatch`'s `UPGRADE_REQUIRED`
+ * match is the same read narrowed to one code, and future rejection
+ * fixtures (`SESSION_NOT_FOUND`, `APP_MISMATCH`, …) author this arm
+ * with their expected code.
+ */
+export interface ErrorFrameBehavior {
+  readonly kind: 'error-frame';
+  /** Expected `payload.code` on the error frame. */
+  readonly code: string;
+  /** Optional `requestId` the error frame must echo — pins the error
+   *  to the fixture's own dispatched frame rather than any error the
+   *  observation window happens to catch. */
+  readonly requestId?: string;
 }
 
 /** Expect a stream-update on the named channel matching the given value
@@ -254,14 +263,6 @@ export interface StreamUpdateBehavior {
   readonly kind: 'stream-update';
   readonly channel: string;
   readonly value: unknown;
-}
-
-/** Expect a standalone observability event (no wired-action / refresh
- *  side-effect paired). Mostly used by happy-path rows + the
- *  `wired-tool-invoked` event. */
-export interface ObservabilityBehavior {
-  readonly kind: 'observability-event';
-  readonly event: ExpectedObservabilityEvent;
 }
 
 /**
@@ -288,8 +289,6 @@ export interface BootstrapFailureBehavior {
  */
 export interface BootstrapSuccessBehavior {
   readonly kind: 'bootstrap-success';
-  /** Optional: observability events the host MUST emit in order. */
-  readonly observabilitySequence?: readonly ExpectedObservabilityEvent[];
 }
 
 /**
@@ -339,28 +338,6 @@ export interface UnknownBehavior {
 }
 
 // =============================================================================
-// Observability co-assertion
-// =============================================================================
-
-/**
- * Narrowed observability-event shape for fixture assertions. Parallel
- * to `@ggui-ai/iframe-runtime`'s `ObservabilityEvent` but with every field
- * optional-by-default so fixtures can assert "at least these values"
- * without over-specifying (e.g. `latencyMs` is nondeterministic).
- */
-export interface ExpectedObservabilityEvent {
-  readonly kind:
-    | 'wired-tool-invoked'
-    | 'contract-error-emitted'
-    | 'schema-version-mismatch'
-    | 'subscribe-failed'
-    | (string & {});
-  readonly toolName?: string;
-  readonly actionName?: string;
-  readonly code?: string;
-}
-
-// =============================================================================
 // Test case
 // =============================================================================
 
@@ -396,9 +373,9 @@ export interface TestCase {
    * The envelope the runner feeds to the system under test. Opaque
    * shape — the runner passes it verbatim to the host's transport.
    *
-   * Typically an object like
-   * `{type: 'action', channel: 0, sessionId: 'test-r1', action: {…}}`
-   * (channel 0 = wired-action dispatch) or
+   * Typically a live-channel action message like
+   * `{type: 'action', requestId, payload: {sessionId, type:
+   * 'data:submit', payload: {action, data}}}` or
    * `{type: 'render', sessionId: 'test-r1', resource: {…}}` for
    * bootstrap-path fixtures.
    *
@@ -412,18 +389,9 @@ export interface TestCase {
   readonly expectedBehavior: ExpectedBehavior;
 
   /**
-   * Optional observability assertion, independent of
-   * {@link expectedBehavior}. When `expectedBehavior.kind ===
-   * 'contract-error'` and `expectedBehavior.observability` is set,
-   * this field SHOULD be omitted — the nested one is canonical.
-   */
-  readonly expectedObservability?: readonly ExpectedObservabilityEvent[];
-
-  /**
-   * Cleanup directives the host executes AFTER the assertion. Optional —
-   * most fixtures need no teardown post the `close-render` drop (renders
-   * decay via TTL); `unregister-tool` is the only remaining kind, used
-   * by fixtures that mutate the tool registry.
+   * Cleanup directives the host executes AFTER the assertion.
+   * Optional — no current fixture needs teardown (renders decay via
+   * TTL). The slot stays so future cleanup directives land additively.
    */
   readonly teardown?: readonly TeardownStep[];
 }
@@ -447,9 +415,6 @@ export interface TestCase {
  * a major.
  */
 export type ContractErrorCode =
-  | 'TOOL_NOT_FOUND'
-  | 'TOOL_THREW'
-  | 'TOOL_TIMEOUT'
   | 'SCHEMA_VIOLATION'
   | 'SCHEMA_MISMATCH_ERROR'
   | 'SESSION_NOT_FOUND'
@@ -513,11 +478,6 @@ export type ProtocolError =
       readonly kind: 'contract';
       readonly payload: {
         readonly toolName: string;
-        readonly actionName?: string;
-        readonly sourceAction?: {
-          readonly type: 'wired-action' | 'refresh-stream' | (string & {});
-          readonly dispatchedAt: string;
-        };
         readonly error: {
           readonly code: ContractErrorCode;
           readonly message: string;

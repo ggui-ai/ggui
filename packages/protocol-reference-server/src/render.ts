@@ -5,55 +5,50 @@
  * point of the reference server. Persistence is explicitly out of
  * scope. Restart drops state; that's documented behavior, not a TODO.
  *
- * Each GguiSession carries an actionSpec map that the `register-actionspec`
- * ConformanceHost directive populates. The action router
- * (`./action-router.ts`) consults this map at dispatch time to
- * resolve action-name → tool-name → handler.
+ * Each GguiSession carries:
+ *   - an optional declared `actionSpec` (installed by the
+ *     `create-session` ConformanceHost directive) — the action
+ *     handler (`./action-router.ts`) enforces name-membership for
+ *     inbound `data:submit` envelopes against it;
+ *   - an event ledger (the consume buffer) — appended actions get a
+ *     monotonic per-session `sequence` the action ack echoes back.
  *
  * Wire-shape note: the conformance kit drives the reference server
  * over the SPEC §12.2 wire using the canonical render-identity field
  * `sessionId`.
  */
+import type { ActionSpecEntryDecl } from '@ggui-ai/protocol-conformance';
 
 /**
- * Actionspec entry maps an action name (the value wired into DOM
- * `data-ggui-action` attributes on real UIs; here sent verbatim on
- * the fixture's inputEnvelope) to the registered tool name the
- * router should dispatch to.
+ * One appended consume-buffer event. The ledger is the reference
+ * server's stand-in for a real ggui server's persisted event store —
+ * `sequence` is assigned at append time, starts at 1, and increases
+ * monotonically per session. The agent-side drain (`ggui_consume`) is
+ * an MCP surface this WS-only server does not implement; the ledger
+ * exists so the ack's `payload.sequence` is a real persistence proof,
+ * not a fabricated counter.
  */
-export interface ActionSpecEntry {
-  readonly name: string;
-  readonly tool: string;
-}
-
-/**
- * Streamspec entry binds a stream channel to a "refresh tool" — the
- * tool the action-router invokes after a successful wired-action
- * dispatch to produce the channel's next snapshot. Mirrors the real
- * `streamSpec[channel].tool` shape declared by ggui blueprints (SPEC
- * §2.3 StreamSpec refresh triggers): a wired action mutates state,
- * the refresh tool reads fresh state, the stream-update wraps the
- * read into an envelope on the named channel.
- *
- * Reference-server scope: refresh-tool invocation is unconditional
- * — every successful wired-action dispatch fans out through every
- * registered streamSpec for the GguiSession. Real ggui servers may
- * filter by which actions touch which channels; the reference
- * server's narrower contract is "any successful action triggers all
- * declared refreshes", which is sufficient for the kit's
- * `stream-refresh-success` proof and stays under the package's
- * 20–50 LOC budget for refresh-stream support.
- */
-export interface StreamSpecEntry {
-  readonly channel: string;
-  readonly tool: string;
+export interface SessionEvent {
+  readonly sequence: number;
+  /** Event type, e.g. `'user.submitted'` for inbound actions. */
+  readonly type: string;
+  /** The appended envelope body, verbatim. */
+  readonly data: unknown;
 }
 
 export interface GguiSession {
   readonly sessionId: string;
   readonly appId: string;
-  readonly actionSpecs: Map<string, ActionSpecEntry>;
-  readonly streamSpecs: Map<string, StreamSpecEntry>;
+  /**
+   * Declared actionSpec — action name → entry. `undefined` means no
+   * contract is declared and the action handler accepts every action
+   * (mirroring the first-party `assertActionContract` no-op on
+   * undeclared specs). Installed by the `create-session` directive's
+   * `actionSpec` field; never mutated after install.
+   */
+  actionSpec?: Readonly<Record<string, ActionSpecEntryDecl>>;
+  /** Consume-buffer event ledger. Append via {@link appendEvent}. */
+  readonly events: SessionEvent[];
   readonly subscribers: Set<Subscriber>;
   /**
    * Per-GguiSession protocol-version override. When set, the WS subscribe
@@ -74,12 +69,27 @@ export interface GguiSession {
 }
 
 /**
- * Minimal subscriber handle — the action router calls `send()` to
- * emit stream frames (including `_ggui:contract-error`) back to the
- * subscribed WebSocket.
+ * Minimal subscriber handle — the server calls `send()` to emit
+ * frames (acks, errors, stream envelopes) back to the subscribed
+ * WebSocket.
  */
 export interface Subscriber {
   send(frame: unknown): void;
+}
+
+/**
+ * Append one event to the session's consume-buffer ledger and return
+ * the monotonic sequence it was assigned. The action handler calls
+ * this BEFORE acking — append-then-ack is the ordering contract the
+ * kit's `action-ack-sequence` fixture grades.
+ */
+export function appendEvent(
+  render: GguiSession,
+  event: { readonly type: string; readonly data: unknown },
+): number {
+  const sequence = render.events.length + 1;
+  render.events.push({ sequence, type: event.type, data: event.data });
+  return sequence;
 }
 
 /**
@@ -101,8 +111,7 @@ export class GguiSessionStore {
     const render: GguiSession = {
       sessionId,
       appId,
-      actionSpecs: new Map(),
-      streamSpecs: new Map(),
+      events: [],
       subscribers: new Set(),
     };
     this.renders.set(sessionId, render);
@@ -112,11 +121,11 @@ export class GguiSessionStore {
 
   /**
    * The sessionId most recently passed to `create()`. Used by the
-   * ConformanceHost's `register-actionspec` dispatcher — that
-   * directive doesn't carry a sessionId in its JSON shape, so the
-   * adapter needs the "most recently created" scope to bind the
-   * actionspec to. This matches the fixture-authoring convention that
-   * create-session always precedes register-actionspec.
+   * ConformanceHost's directive dispatchers whose JSON shapes don't
+   * carry a sessionId (`server-version-override`, `emit-envelope`) —
+   * the adapter scopes them to the "most recently created" render,
+   * matching the fixture-authoring convention that create-session
+   * always precedes the scoped directive.
    */
   lastCreatedSessionId(): string | undefined {
     return this.lastCreated;
@@ -142,22 +151,21 @@ export class GguiSessionStore {
     render.subscribers.delete(subscriber);
   }
 
-  registerActionSpec(sessionId: string, entry: ActionSpecEntry): void {
-    const render = this.create(sessionId, 'conformance');
-    render.actionSpecs.set(entry.name, entry);
-  }
-
   /**
-   * Register a stream channel ↔ refresh-tool binding on the named
-   * render. Same "create-if-missing" semantics as
-   * {@link registerActionSpec} so the ConformanceHost adapter can
-   * dispatch this directive before subscribe lands. Keyed by
-   * `entry.channel` — registering the same channel twice replaces
-   * the prior binding, matching the action-spec map's behavior.
+   * Install the declared actionSpec on the named render. Same
+   * "create-if-missing" semantics as the other setters so directive
+   * ordering relative to subscribe doesn't matter. Called by the
+   * `create-session` ConformanceHost directive when the fixture
+   * authors an `actionSpec` — actions are part of the render's
+   * identity, so the declaration rides session creation rather than a
+   * separate registration directive.
    */
-  registerStreamSpec(sessionId: string, entry: StreamSpecEntry): void {
+  declareActionSpec(
+    sessionId: string,
+    actionSpec: Readonly<Record<string, ActionSpecEntryDecl>>,
+  ): void {
     const render = this.create(sessionId, 'conformance');
-    render.streamSpecs.set(entry.channel, entry);
+    render.actionSpec = actionSpec;
   }
 
   /**
@@ -168,8 +176,8 @@ export class GguiSessionStore {
    * for THIS GguiSession only, leaving parallel GguiSessions on the instance-
    * level default.
    *
-   * Same "create-if-missing" semantics as the other register* setters
-   * so directive ordering relative to subscribe doesn't matter.
+   * Same "create-if-missing" semantics as the other setters so
+   * directive ordering relative to subscribe doesn't matter.
    */
   setVersionOverride(sessionId: string, version: string): void {
     const render = this.create(sessionId, 'conformance');
@@ -181,7 +189,7 @@ export class GguiSessionStore {
    * the `emit-envelope` ConformanceHost directive — kit fixtures use
    * it to inject WS-observable side-effects (envelopes the server
    * would not normally emit on its own) so the kit can assert
-   * downstream consequences (sequencing, fan-out, observability).
+   * downstream consequences (sequencing, fan-out).
    *
    * Returns `true` if the GguiSession existed and at least one subscriber
    * received the frame; `false` if the GguiSession is unknown OR has no
@@ -191,8 +199,7 @@ export class GguiSessionStore {
    * a fixture-authoring bug worth surfacing.
    *
    * Subscriber-level send failures (closed socket, etc.) are
-   * swallowed per the same convention as the action router's
-   * `broadcast()` — one bad subscriber must not block fan-out to the
+   * swallowed — one bad subscriber must not block fan-out to the
    * rest.
    */
   injectFrame(sessionId: string, frame: unknown): boolean {

@@ -1,0 +1,28 @@
+{
+  "name": "action-ack-sequence",
+  "description": "A declared action dispatched on the live channel persists to the GguiSession's consume buffer before the ack: the server appends the envelope as an event, assigns a monotonic sequence, and the ack frame echoes the action's requestId carrying `payload.sequence`. Proves the persistence half of the single action-routing model — the agent drains the buffer via `ggui_consume` on its next turn (an MCP tool call outside this WS kit's observation window).",
+  "skipReason": null,
+  "setup": [
+    {
+      "type": "create-session",
+      "sessionId": "ck-action-ack-1",
+      "actionSpec": { "toggleTask": {} }
+    }
+  ],
+  "inputEnvelope": {
+    "type": "action",
+    "requestId": "ck-action-ack-1-req",
+    "payload": {
+      "sessionId": "ck-action-ack-1",
+      "type": "data:submit",
+      "payload": {
+        "action": "toggleTask",
+        "data": { "id": "seed-1" }
+      }
+    }
+  },
+  "expectedBehavior": {
+    "kind": "action-ack",
+    "requestId": "ck-action-ack-1-req"
+  }
+}

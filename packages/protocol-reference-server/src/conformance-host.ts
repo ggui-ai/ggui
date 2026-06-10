@@ -6,13 +6,10 @@
  * Directives split into "implement" and "throw":
  *
  *   Implement:
- *     - create-session             → `renders.create()`
- *     - register-tool             → `tools.register(name, handler)`
- *     - register-actionspec       → `renders.registerActionSpec()`
- *     - register-streamspec       → `renders.registerStreamSpec()`
+ *     - create-session             → `renders.create()` (+
+ *       `renders.declareActionSpec()` when the directive carries one)
  *     - server-version-override   → `renders.setVersionOverride()`
  *     - emit-envelope             → `renders.injectFrame()`
- *     - unregister-tool           → `tools.unregister()`
  *
  *   Throw (kit records SKIP, not FAIL):
  *     - seed-channel              — unimplemented
@@ -34,7 +31,6 @@ import type {
   EmitEnvelopeSetup,
   HostSetupStep,
   HostTeardownStep,
-  RegisterActionSpecSetup,
 } from '@ggui-ai/protocol-conformance';
 
 import type { ReferenceServer } from './server.js';
@@ -64,100 +60,27 @@ export function createReferenceConformanceHost({
       if (step.kind === 'create-session') {
         const s = step as CreateGguiSessionSetup;
         serverInstance.renders.create(s.sessionId, s.appId ?? 'conformance');
-        return;
-      }
-      if (step.kind === 'register-tool') {
-        // Fixture JSON authors the field as `toolName`; the kit's
-        // runtime narrowing (`run-conformance.ts::narrowSetupStep`)
-        // only renames `type → kind` and passes other fields verbatim,
-        // so the runtime object carries `toolName` not `name`.
-        // Tolerate both for forward-compat with a kit fix.
-        const raw = step as unknown as {
-          readonly toolName?: string;
-          readonly name?: string;
-          readonly handler: string;
-        };
-        const toolName = raw.toolName ?? raw.name;
-        if (typeof toolName !== 'string' || toolName.length === 0) {
-          throw new Error(
-            `register-tool directive missing toolName/name: ${JSON.stringify(step)}`,
-          );
+        if (s.actionSpec !== undefined) {
+          serverInstance.renders.declareActionSpec(s.sessionId, s.actionSpec);
         }
-        serverInstance.tools.register(toolName, raw.handler);
-        return;
-      }
-      if (step.kind === 'register-actionspec') {
-        const s = step as RegisterActionSpecSetup;
-        // register-actionspec doesn't carry a sessionId in the
-        // directive shape — it's scoped to the most-recently-created
-        // render, matching the fixture-authoring convention that
-        // create-session → register-tool → register-actionspec all
-        // land in order on the same render.
-        const lastSessionId = serverInstance.renders.lastCreatedSessionId();
-        if (lastSessionId === undefined) {
-          throw new Error(
-            'reference-server: register-actionspec invoked before create-session — no render scope to bind to',
-          );
-        }
-        serverInstance.renders.registerActionSpec(lastSessionId, {
-          name: s.name,
-          tool: s.tool,
-        });
-        return;
-      }
-      if (step.kind === 'register-streamspec') {
-        // register-streamspec is the streamSpec analogue of register-
-        // actionspec — binds a stream channel to a refresh tool. The
-        // kit does not export a `RegisterStreamSpecSetup` type today
-        // (the directive is reference-server-specific scaffolding for
-        // Slice I refresh-stream support); the runtime shape is
-        // narrowed locally, matching the same convention as the
-        // pre-existing `register-tool` branch above. Same most-
-        // recently-created render scoping as register-actionspec.
-        const raw = step as unknown as {
-          readonly channel?: string;
-          readonly tool?: string;
-        };
-        if (typeof raw.channel !== 'string' || raw.channel.length === 0) {
-          throw new Error(
-            `register-streamspec directive missing channel: ${JSON.stringify(step)}`,
-          );
-        }
-        if (typeof raw.tool !== 'string' || raw.tool.length === 0) {
-          throw new Error(
-            `register-streamspec directive missing tool: ${JSON.stringify(step)}`,
-          );
-        }
-        const lastSessionId = serverInstance.renders.lastCreatedSessionId();
-        if (lastSessionId === undefined) {
-          throw new Error(
-            'reference-server: register-streamspec invoked before create-session — no render scope to bind to',
-          );
-        }
-        serverInstance.renders.registerStreamSpec(lastSessionId, {
-          channel: raw.channel,
-          tool: raw.tool,
-        });
         return;
       }
       if (step.kind === 'emit-envelope') {
         // The directive carries `channel` + `payload` but no
         // sessionId — it's scoped to the most-recently-created
         // render, matching the same fixture-authoring convention as
-        // register-actionspec / register-streamspec / server-version-
-        // override (the kit's `narrowSetupStep` is a flat `type → kind`
-        // rename pass-through, so any sessionId on the directive JSON
-        // would survive, but the canonical EmitEnvelopeSetup shape
-        // doesn't declare one).
+        // server-version-override (the kit's `narrowSetupStep` is a
+        // flat `type → kind` rename pass-through, so any sessionId on
+        // the directive JSON would survive, but the canonical
+        // EmitEnvelopeSetup shape doesn't declare one).
         //
         // Wire-format wrapping: the directive's `payload: unknown` is
         // the envelope body; the host wraps it in the SPEC §12.2
-        // `{type:'stream', payload:{channel, value}}` shape (matching
-        // the existing reference-server stream emissions in
-        // action-router.ts) before fan-out. Per the kit type docstring,
-        // "Host is responsible for wrapping in the wire format
-        // (sequence stamp, timestamp, etc.)" — the kit does NOT
-        // expect the directive to carry a fully-formed wire frame.
+        // `{type:'stream', payload:{channel, value}}` shape before
+        // fan-out. Per the kit type docstring, "Host is responsible
+        // for wrapping in the wire format (sequence stamp, timestamp,
+        // etc.)" — the kit does NOT expect the directive to carry a
+        // fully-formed wire frame.
         const s = step as EmitEnvelopeSetup;
         if (typeof s.channel !== 'string' || s.channel.length === 0) {
           throw new Error(
@@ -206,9 +129,8 @@ export function createReferenceConformanceHost({
         // semantic — "advertise this version on the wire"); the kit's
         // exported `ServerVersionOverrideSetup` interface uses
         // `version`. Tolerate both for forward-compat with the kit's
-        // own type, mirroring the same name-tolerance pattern in
-        // register-tool above. The runtime `narrowSetupStep` only
-        // renames `type → kind` and passes other fields verbatim, so
+        // own type. The runtime `narrowSetupStep` only renames
+        // `type → kind` and passes other fields verbatim, so
         // whichever the fixture authors arrives unchanged.
         const raw = step as unknown as {
           readonly advertiseVersion?: string;
@@ -220,15 +142,11 @@ export function createReferenceConformanceHost({
             `server-version-override directive missing advertiseVersion/version: ${JSON.stringify(step)}`,
           );
         }
-        // Same most-recently-created render scope as register-
-        // actionspec / register-streamspec — the fixture authoring
-        // convention is `create-session` immediately precedes this
-        // directive, and the kit's narrowSetupStep doesn't surface a
-        // sessionId on the directive object even when the fixture
-        // JSON includes one (only `type → kind` is renamed; the rest
-        // is a flat passthrough, so a `sessionId` field WOULD survive
-        // — but the canonical ServerVersionOverrideSetup type doesn't
-        // declare one, so fixtures may omit it. Falling back to
+        // Same most-recently-created render scope as emit-envelope —
+        // the fixture authoring convention is `create-session`
+        // immediately precedes this directive, and the canonical
+        // ServerVersionOverrideSetup type doesn't declare a sessionId,
+        // so fixtures may omit it. Falling back to
         // `lastCreatedSessionId()` keeps the host robust to either.
         const lastSessionId = serverInstance.renders.lastCreatedSessionId();
         if (lastSessionId === undefined) {
@@ -248,18 +166,9 @@ export function createReferenceConformanceHost({
     },
 
     async dispatchTeardown(step: HostTeardownStep): Promise<void> {
-      if (step.kind === 'unregister-tool') {
-        // Same toolName/name tolerance as register-tool.
-        const raw = step as unknown as {
-          readonly toolName?: string;
-          readonly name?: string;
-        };
-        const toolName = raw.toolName ?? raw.name;
-        if (typeof toolName === 'string' && toolName.length > 0) {
-          serverInstance.tools.unregister(toolName);
-        }
-        return;
-      }
+      // No teardown directives are defined in the kit today (renders
+      // decay via TTL). Throw so the kit surfaces any future-authored
+      // directive as an honest skip rather than a silent success.
       const unknownKind = (step as { kind?: unknown }).kind ?? 'unknown';
       throw new Error(
         `reference server does not implement teardown kind '${String(unknownKind)}'`,

@@ -16,20 +16,21 @@ Path-A-matchable kinds (`matchBehavior` returns `pass` / `fail`):
 
 - `bootstrap-success` — subscribe → `ack` round-trip
 - `version-mismatch` — `error` frame with `code: UPGRADE_REQUIRED`
-- `contract-error` — `_ggui:contract-error` envelope on the reserved channel
+- `action-ack` — the action's `ack` frame (matched by echoed `requestId`) carries a numeric `payload.sequence`, proving the action event persisted to the GguiSession's consume buffer before the ack
+- `error-frame` — `error` frame with the expected `payload.code` (e.g. `CONTRACT_VIOLATION` for an action absent from the declared actionSpec)
 - `stream-update` — `stream` frame on a named channel matching the declared value
 - `no-op` — silence after input dispatch
-- `observability-event` — `wired-tool-invoked` and `contract-error-emitted` arms (the WS evidence the protocol-and-contract bar mandates a conformant host mirror-emit on)
 
 Path-B-only kinds (`matchBehavior` returns `unmatchable-on-ws` → runner records SKIP):
 
 - `bootstrap-failure` — fault surface is the host's bootstrap-fetch + `ui/initialize` postMessage round-trip; `renderer-url-override` / `ui-initialize-response-override` setup directives are MCP-Apps-host concerns, not WS server concerns.
 - `props-update` — assertion is on rendered DOM after `_ggui:props` is emitted; matchable on WS only as "frame was emitted", not as "DOM reflects it".
-- Future `observability-event` arms beyond the two above (e.g. `schema-version-mismatch`, `subscribe-failed`).
 
-A Path-B browser-host harness drives these fixtures via Playwright + `page.route()` fault injection + DOM assertion. A future packaged browser-host adapter will fold that capability into the kit so third-party adopters don't reimplement it.
+The Path-B driver is not yet packaged — no browser-host harness ships with the kit today, so Path-B fixtures skip wherever the kit runs. A future packaged browser-host adapter will fold that capability into the kit so third-party adopters don't reimplement it.
 
 The partition is intentional: Path-A FAILs are vendor-neutrality bugs the server owns; Path-B SKIPs are not fails — they are claims a different driver is responsible for.
+
+One declared grading gap on the action loop: `action-ack` proves the append half of the consume-buffer contract; the retrieval half (the agent draining the buffer via `ggui_consume`) is an MCP tool call a WS-only runner cannot drive. Grading it needs an MCP-binding driver — a future kit surface, not a weaker WS assertion.
 
 ## Pure-function conformance catalogs
 

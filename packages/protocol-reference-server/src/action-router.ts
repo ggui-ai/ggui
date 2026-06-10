@@ -1,346 +1,144 @@
 /**
- * Wired-action dispatcher — consumes an inbound `action` frame and
- * emits the matching `_ggui:contract-error` stream frame (plus happy-
- * path effects) per SPEC §4.4 + Contract #3.
+ * Inbound `action` frame handling — parse the canonical live-channel
+ * action message, enforce the declared actionSpec contract, append the
+ * envelope to the GguiSession's consume-buffer ledger, and ack with
+ * the assigned sequence.
  *
- * This file owns every ContractErrorCode emission path the
- * conformance kit's matcher asserts on:
+ * Ordering contract (mirrors the first-party server): validate →
+ * append → ack. The ack's `payload.sequence` is the wire-observable
+ * proof the action event persisted to the consume buffer — the kit's
+ * `action-ack-sequence` fixture grades exactly this. The retrieval
+ * half (the agent draining the buffer via `ggui_consume`) is an MCP
+ * tool call outside this WS-only server's scope.
  *
- *   - TOOL_NOT_FOUND   — dispatched action's tool is not registered
- *   - TOOL_THREW       — handler throws
- *   - TOOL_TIMEOUT     — handler exceeds `TIMEOUT_MS` (500ms)
- *   - SCHEMA_VIOLATION — handler returns shape not matching declared
- *                        channel schema (currently: `malformed` kind
- *                        always trips this path)
- *
- * Happy-path: echo handler's success return fires an observability
- * signal (kit's `wired-action-success` fixture asserts the router
- * dispatch observably happened). Since observability events are
- * unmatchable-on-ws per the conformance kit's matcher, the
- * happy-path emission here is best-effort: we emit a non-reserved
- * stream frame on `_ggui:wired-tool-invoked` carrying
- * `{toolName, actionName}` so an iframe-host kit can match the same
- * tool invocation signal from either side. Pure WS kit currently
- * treats this as SKIP.
+ * Contract enforcement: for `type: 'data:submit'` envelopes against a
+ * session WITH a declared actionSpec, the ActionEventValue's `action`
+ * MUST name a declared entry. Violations reply an `error` frame with
+ * code `CONTRACT_VIOLATION` (echoing the message's `requestId`) and
+ * the envelope is NOT appended — undeclared actions never reach the
+ * buffer. Sessions without a declared actionSpec accept every action:
+ * no contract, nothing to enforce.
  */
-import { makeContractErrorPayload } from '@ggui-ai/protocol';
-
-import type { GguiSession } from './render.js';
-import type { ToolRegistry } from './tool-registry.js';
-
-/** Timeout the `timeout` handler exceeds; the kit's matcher
- *  recognizes TOOL_TIMEOUT within this window. */
-const TIMEOUT_MS = 500;
+import { appendEvent, type GguiSession, type Subscriber } from './render.js';
 
 /**
- * One inbound action frame shape. Matches the fixtures' authored
- * `inputEnvelope` for `wired-action-*` cases — the runner sends the
- * envelope verbatim. The session-identity field is the canonical SPEC
- * field `sessionId`.
+ * One inbound action message — the canonical live-channel shape:
+ * `{type: 'action', payload: ActionEnvelope, requestId?}` where the
+ * envelope carries `{sessionId, type, payload?}` and, for
+ * `type: 'data:submit'`, `payload` is the ActionEventValue
+ * (`{action, data?, tool?}`).
  */
-interface IncomingActionFrame {
+interface IncomingActionMessage {
   readonly type: 'action';
-  readonly channel?: number;
-  readonly sessionId: string;
-  readonly action: {
-    readonly name: string;
-    readonly data?: unknown;
+  readonly requestId?: string;
+  readonly payload: {
+    readonly sessionId: string;
+    /** Event type, e.g. `'data:submit'`. */
+    readonly type: string;
+    /** ActionEventValue for `data:submit`; free-form otherwise. */
+    readonly payload?: unknown;
   };
 }
 
 /**
- * Parse + validate an inbound action frame. Returns the normalized
+ * Parse + validate an inbound action message. Returns the normalized
  * shape on success, `undefined` on any malformed input (matcher for
  * `no-op` fixtures expects silence, so loud rejection would break
  * them).
  *
- * Reads the canonical SPEC session-identity field `sessionId`.
+ * Reads the canonical SPEC session-identity field `sessionId` from
+ * the envelope body.
  */
-export function parseActionFrame(frame: unknown): IncomingActionFrame | undefined {
+export function parseActionFrame(frame: unknown): IncomingActionMessage | undefined {
   if (frame === null || typeof frame !== 'object') return undefined;
   const f = frame as Record<string, unknown>;
   if (f['type'] !== 'action') return undefined;
-  const sessionId = typeof f['sessionId'] === 'string' ? f['sessionId'] : undefined;
+  const envelope = f['payload'];
+  if (envelope === null || typeof envelope !== 'object') return undefined;
+  const e = envelope as Record<string, unknown>;
+  const sessionId = typeof e['sessionId'] === 'string' ? e['sessionId'] : undefined;
   if (sessionId === undefined) return undefined;
-  const action = f['action'];
-  if (action === null || typeof action !== 'object') return undefined;
-  const a = action as Record<string, unknown>;
-  const name = a['name'];
-  if (typeof name !== 'string') return undefined;
-  const data = 'data' in a ? a['data'] : undefined;
-  const channelValue = f['channel'];
+  const eventType = typeof e['type'] === 'string' ? e['type'] : undefined;
+  if (eventType === undefined) return undefined;
+  const requestId = typeof f['requestId'] === 'string' ? f['requestId'] : undefined;
   return {
     type: 'action',
-    ...(typeof channelValue === 'number' ? { channel: channelValue } : {}),
-    sessionId,
-    action: { name, ...(data !== undefined ? { data } : {}) },
+    ...(requestId !== undefined ? { requestId } : {}),
+    payload: {
+      sessionId,
+      type: eventType,
+      ...('payload' in e ? { payload: e['payload'] } : {}),
+    },
   };
 }
 
-export interface DispatchContext {
+export interface HandleActionContext {
   readonly render: GguiSession;
-  readonly tools: ToolRegistry;
+  /** Reply handle for the SENDING socket — acks and contract
+   *  rejections go to the dispatcher, not the broadcast set. */
+  readonly reply: Subscriber;
 }
 
 /**
- * Dispatch one action frame. Runs asynchronously; contract-error
- * emissions are broadcast to every subscriber on the GguiSession via
- * `render.subscribers`.
- *
- * Returns when the dispatch's observable outcome has been emitted
- * (either a happy-path observability frame or a contract-error).
- * The awaiting call site is the WS message handler — letting it
- * await ensures the kit's observation window captures the emission.
+ * Handle one parsed action message: enforce the declared-action
+ * contract, append, ack. Synchronous — the ledger is in-memory, so
+ * the ack ordering is deterministic relative to the inbound message
+ * stream.
  */
-export async function dispatchAction(
-  frame: IncomingActionFrame,
-  context: DispatchContext,
-): Promise<void> {
-  const { render, tools } = context;
-  const actionName = frame.action.name;
+export function handleAction(
+  message: IncomingActionMessage,
+  context: HandleActionContext,
+): void {
+  const { render, reply } = context;
+  const requestIdProps =
+    message.requestId !== undefined ? { requestId: message.requestId } : {};
 
-  // Action → tool resolution, in priority order:
-  //   1. Explicit `register-actionspec` directive on this render.
-  //   2. Tool whose name equals the action name (1:1 convention).
-  //
-  // A real ggui server uses a blueprint's declared `actionSpec` to
-  // bind action names to tool names; the reference server honors the
-  // same binding via the fixture's explicit `register-actionspec`
-  // setup directive. If neither path resolves, emit TOOL_NOT_FOUND
-  // with `toolName = actionName` — the error payload names the
-  // missing tool by the identifier the dispatcher was asked to
-  // resolve, which is the action name itself.
-  const actionSpec = render.actionSpecs.get(actionName);
-  let toolName: string | undefined = actionSpec?.tool;
-  if (toolName === undefined && tools.has(actionName)) {
-    toolName = actionName;
+  if (message.payload.type === 'data:submit' && render.actionSpec !== undefined) {
+    const violation = checkActionContract(render.actionSpec, message.payload.payload);
+    if (violation !== undefined) {
+      reply.send({
+        type: 'error',
+        payload: { code: 'CONTRACT_VIOLATION', message: violation },
+        ...requestIdProps,
+      });
+      return;
+    }
   }
 
-  if (toolName === undefined) {
-    emitContractError(render, {
-      code: 'TOOL_NOT_FOUND',
-      toolName: actionName,
-      actionName,
-      message: `no actionSpec bound action '${actionName}' and no tool of that name is registered`,
-    });
-    return;
-  }
-
-  const tool = tools.get(toolName);
-  if (tool === undefined) {
-    emitContractError(render, {
-      code: 'TOOL_NOT_FOUND',
-      toolName,
-      actionName,
-      message: `tool '${toolName}' is not registered`,
-    });
-    return;
-  }
-
-  // Malformed handler is defined to return the wrong shape — emit
-  // SCHEMA_VIOLATION instead of passing the bad return through.
-  if (tool.kind === 'malformed') {
-    emitContractError(render, {
-      code: 'SCHEMA_VIOLATION',
-      toolName: tool.name,
-      actionName,
-      message: `tool '${tool.name}' returned a shape that does not match the declared channel schema`,
-    });
-    return;
-  }
-
-  // Run the handler with a timeout bound. `timeout` kind wins the
-  // timeout race deliberately; other handlers should resolve or
-  // throw well before 500ms.
-  let handlerOutcome: { readonly kind: 'resolved'; readonly value: unknown } | { readonly kind: 'rejected'; readonly error: Error } | { readonly kind: 'timeout' };
-  try {
-    handlerOutcome = await Promise.race([
-      (async () => {
-        try {
-          const value = await tool.handler(frame.action.data);
-          return { kind: 'resolved' as const, value };
-        } catch (err) {
-          return {
-            kind: 'rejected' as const,
-            error: err instanceof Error ? err : new Error(String(err)),
-          };
-        }
-      })(),
-      new Promise<{ readonly kind: 'timeout' }>((done) => {
-        setTimeout(() => done({ kind: 'timeout' }), TIMEOUT_MS);
-      }),
-    ]);
-  } catch (err) {
-    // Promise.race never rejects since we catch inside; defensive.
-    emitContractError(render, {
-      code: 'TOOL_THREW',
-      toolName: tool.name,
-      actionName,
-      message: (err as Error).message ?? String(err),
-      causedBy: (err as Error).stack?.split('\n').slice(0, 3).join('\n'),
-    });
-    return;
-  }
-
-  if (handlerOutcome.kind === 'timeout') {
-    emitContractError(render, {
-      code: 'TOOL_TIMEOUT',
-      toolName: tool.name,
-      actionName,
-      message: `tool '${tool.name}' exceeded ${TIMEOUT_MS}ms`,
-    });
-    return;
-  }
-
-  if (handlerOutcome.kind === 'rejected') {
-    emitContractError(render, {
-      code: 'TOOL_THREW',
-      toolName: tool.name,
-      actionName,
-      message: handlerOutcome.error.message,
-      causedBy: handlerOutcome.error.stack?.split('\n').slice(0, 3).join('\n'),
-    });
-    return;
-  }
-
-  // Happy path — emit the observability signal so iframe-host kits
-  // can observe it. WS-only kit's matcher will return
-  // `unmatchable-on-ws` for `observability-event`, which the runner
-  // maps to SKIP (not FAIL). That's the intended behavior per the
-  // kit's design note at the top of `match-behavior.ts`.
-  broadcast(render, {
-    type: 'stream',
-    payload: {
-      channel: '_ggui:wired-tool-invoked',
-      value: { toolName: tool.name, actionName },
-    },
+  const sequence = appendEvent(render, {
+    type: 'user.submitted',
+    data: message.payload,
   });
 
-  // Refresh-stream fan-out (SPEC §2.3 StreamSpec refresh triggers).
-  // After a successful wired-action dispatch, every streamSpec
-  // declared on the GguiSession fires its refresh tool and emits a
-  // stream-update on the bound channel. This is the wire-level
-  // proof of the refresh-after-action contract the kit's
-  // `stream-refresh-success` fixture asserts.
-  //
-  // Refresh-tool failures are emitted as contract-errors with
-  // `sourceAction: 'refresh-stream'` so the kit's matcher can
-  // distinguish action-path failures from refresh-path failures
-  // (and so `stream-schema-violation` has a path forward when its
-  // fixture flips off the known-failures list).
-  await dispatchRefreshStreams(render, tools);
+  reply.send({
+    type: 'ack',
+    payload: { sequence, timestamp: Date.now() },
+    ...requestIdProps,
+  });
 }
 
 /**
- * Run every streamSpec's refresh tool and broadcast the result on
- * its bound channel. Errors map to canonical `_ggui:contract-error`
- * envelopes with `sourceAction: 'refresh-stream'`. Sequential
- * dispatch keeps subscriber-frame ordering deterministic — the
- * kit's matcher doesn't depend on order today, but a real ggui
- * runtime emits in declaration order and the reference server
- * preserves that contract.
+ * Name-membership half of the action contract: the ActionEventValue
+ * must be an object whose `action` names a declared actionSpec entry.
+ * Returns the violation message, or `undefined` when the value
+ * conforms. Schema validation of `data` is out of the reference
+ * server's scope — the declared entries' `schema` field is authoring-
+ * reserved vocabulary the kit's fixtures don't exercise yet.
  */
-async function dispatchRefreshStreams(
-  render: GguiSession,
-  tools: ToolRegistry,
-): Promise<void> {
-  for (const spec of render.streamSpecs.values()) {
-    const refreshTool = tools.get(spec.tool);
-    if (refreshTool === undefined) {
-      emitContractError(render, {
-        code: 'TOOL_NOT_FOUND',
-        toolName: spec.tool,
-        actionName: spec.channel,
-        message: `streamSpec for channel '${spec.channel}' references tool '${spec.tool}', which is not registered`,
-        sourceActionType: 'refresh-stream',
-      });
-      continue;
-    }
-    if (refreshTool.kind === 'malformed' || refreshTool.kind === 'malformed-stream') {
-      emitContractError(render, {
-        code: 'SCHEMA_VIOLATION',
-        toolName: refreshTool.name,
-        actionName: spec.channel,
-        message: `refresh tool '${refreshTool.name}' returned a shape that does not match channel '${spec.channel}'`,
-        sourceActionType: 'refresh-stream',
-      });
-      continue;
-    }
-    let value: unknown;
-    try {
-      value = await refreshTool.handler(undefined);
-    } catch (err) {
-      const error = err instanceof Error ? err : new Error(String(err));
-      emitContractError(render, {
-        code: 'TOOL_THREW',
-        toolName: refreshTool.name,
-        actionName: spec.channel,
-        message: error.message,
-        causedBy: error.stack?.split('\n').slice(0, 3).join('\n'),
-        sourceActionType: 'refresh-stream',
-      });
-      continue;
-    }
-    broadcast(render, {
-      type: 'stream',
-      payload: {
-        channel: spec.channel,
-        value,
-      },
-    });
+function checkActionContract(
+  actionSpec: Readonly<Record<string, unknown>>,
+  value: unknown,
+): string | undefined {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+    return 'Action payload must be an object with an `action` field';
   }
-}
-
-// =============================================================================
-// Contract-error emission
-// =============================================================================
-
-interface EmitContractErrorInput {
-  readonly code: string;
-  readonly toolName: string;
-  readonly actionName: string;
-  readonly message: string;
-  readonly causedBy?: string;
-  /** Defaults to `'wired-action'` when omitted. */
-  readonly sourceActionType?: 'wired-action' | 'refresh-stream';
-}
-
-function emitContractError(render: GguiSession, input: EmitContractErrorInput): void {
-  // Canonical SPEC §4.4 `ContractErrorPayload` via the central
-  // builder. Nested `error: {code, message, causedBy}` alongside
-  // flat `toolName` / `actionName` / `sourceAction` / `timestamp`.
-  // The conformance kit's matcher reads this canonical shape
-  // directly — no dual-shape workaround needed.
-  const value = makeContractErrorPayload({
-    toolName: input.toolName,
-    actionName: input.actionName,
-    sourceAction: {
-      type: input.sourceActionType ?? 'wired-action',
-      dispatchedAt: new Date().toISOString(),
-    },
-    error: {
-      code: input.code,
-      message: input.message,
-      ...(input.causedBy !== undefined ? { causedBy: input.causedBy } : {}),
-    },
-    timestamp: new Date().toISOString(),
-  });
-  broadcast(render, {
-    type: 'stream',
-    payload: {
-      channel: '_ggui:contract-error',
-      value,
-    },
-  });
-}
-
-function broadcast(render: GguiSession, frame: unknown): void {
-  for (const subscriber of render.subscribers) {
-    try {
-      subscriber.send(frame);
-    } catch {
-      // Subscriber lifecycle issues (closed socket, etc.) are the
-      // subscriber's problem — the router keeps broadcasting.
-    }
+  const action = (value as Record<string, unknown>)['action'];
+  if (typeof action !== 'string' || action.length === 0) {
+    return 'Missing or empty `action` identifier';
   }
+  if (!(action in actionSpec)) {
+    const declared = Object.keys(actionSpec).join(', ') || '(none)';
+    return `Unknown action '${action}'. Declared actions: ${declared}`;
+  }
+  return undefined;
 }
