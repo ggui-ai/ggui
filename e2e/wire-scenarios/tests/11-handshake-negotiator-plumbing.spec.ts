@@ -39,18 +39,12 @@
  * Parametric over the model-provider axis. See provider-matrix.ts.
  */
 import { describe, expect, test } from 'vitest';
-import { parseMcpAppAiGguiRenderMeta } from '@ggui-ai/protocol/integrations/mcp-apps';
+import { callTool, unwrapStructured } from '../fixtures/mcp-client.js';
 import {
-  callTool,
-  unwrapStructured,
-  type JsonRpcResponse,
-} from '../fixtures/mcp-client.js';
+  readRenderCodeRef,
+  type RenderCodeRef,
+} from '../fixtures/render-contract.js';
 import { PROVIDERS, REQUIRE_ALL, providerSkip } from '../fixtures/provider-matrix.js';
-
-interface RenderCodeRef {
-  readonly codeUrl?: string;
-  readonly codeHash?: string;
-}
 
 /**
  * Handshake-time contract (also what `accept` re-renders against).
@@ -94,35 +88,6 @@ const OVERRIDE_DRAFT_CONTRACT = {
     },
   },
 } as const;
-
-/**
- * Read `codeUrl` + `codeHash` off the render response's
- * `_meta["ai.ggui/render"]` slice — the live replacement for the
- * retired `/r/<shortCode>` bootstrap fetch. The `_meta` object is an
- * untrusted wire payload, so it goes through the protocol's published
- * validating parser instead of a structural cast.
- *
- * Spec-local for now — fixture-worthy once the shared `fixtures/`
- * directory reopens for edits (scenarios 16 + 17 carry the same
- * helper).
- */
-function readRenderCodeRef(resp: JsonRpcResponse): RenderCodeRef {
-  const parsed = parseMcpAppAiGguiRenderMeta(resp.result?._meta);
-  if (!parsed.ok) {
-    throw new Error(
-      `render response carries a malformed ai.ggui/render slice: ${JSON.stringify(resp.result?._meta).slice(0, 400)}`,
-    );
-  }
-  if (parsed.meta === undefined) {
-    throw new Error(
-      `render response missing the ai.ggui/render slice meta: ${JSON.stringify(resp.result?._meta).slice(0, 400)}`,
-    );
-  }
-  return {
-    ...(parsed.meta.codeUrl !== undefined ? { codeUrl: parsed.meta.codeUrl } : {}),
-    ...(parsed.meta.codeHash !== undefined ? { codeHash: parsed.meta.codeHash } : {}),
-  };
-}
 
 async function handshakeAndRender(
   mcpUrl: string,
@@ -208,8 +173,10 @@ for (const provider of PROVIDERS) {
           // would collide.
           expect(accepted.codeHash).not.toBe(overridden.codeHash);
         },
-        // 90s × 2 cold-gens (one per render) + handshake LLM calls +
-        // headroom. Both renders cold-gen because their canonical
+        // 2 cold-gens (one per render; observed typical ~2-3s each) +
+        // handshake LLM calls + headroom. The 240s ceiling is
+        // tail-insurance for model variance, not the expected
+        // duration. Both renders cold-gen because their canonical
         // contracts differ structurally.
         240_000,
       );

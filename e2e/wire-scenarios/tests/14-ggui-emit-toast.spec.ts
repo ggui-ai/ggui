@@ -146,8 +146,7 @@ describe.skip(
     beforeEach(async () => {
       await fetch(`${TODO_ADMIN}/reset`, { method: 'POST' });
       await seedTodos(['buy milk', 'walk the dog']);
-      // Relay OFF: the mcp-app-host wrapper page IS the host party.
-      handle = await openBrowser({ relayToolCallsToMcp: false });
+      handle = await openBrowser();
     });
 
     afterEach(async () => {

@@ -37,11 +37,7 @@ describe.skipIf(!HAS_KEY)('Scenario 1 — submit_action happy path', () => {
   let handle: BrowserHandle;
   let host: McpAppHostHandle | undefined;
   beforeEach(async () => {
-    // Relay OFF: the mcp-app-host wrapper page IS the host party
-    // (answers ui/initialize + relays tools/call). A second relay on
-    // the outer window would double-deliver every click's
-    // submit_action.
-    handle = await openBrowser({ relayToolCallsToMcp: false });
+    handle = await openBrowser();
   });
   afterEach(async () => {
     await handle.close();
@@ -84,10 +80,13 @@ describe.skipIf(!HAS_KEY)('Scenario 1 — submit_action happy path', () => {
       //    if present, then click "Save" inside. Multiple matches:
       //    click each until the pipe accepts an event.
       const buttons = appFrame.getByRole('button', { name: /save/i });
-      // 90s: cold-gen + fetch(codeUrl) + dynamic import + react paint.
-      // Cache is cleared between e2e runs (global-setup wipes
-      // GGUI_CODE_CACHE_DIR), so this scenario always exercises the
-      // cold path — keeps the LLM honest about cold-gen latency.
+      // Cold-gen + fetch(codeUrl) + dynamic import + react paint.
+      // Observed typical: the whole chain lands in ~2-3s; the 90s
+      // ceiling is deliberate tail-insurance for model/provider
+      // variance, not the expected duration. Cache is cleared between
+      // e2e runs (global-setup wipes GGUI_CODE_CACHE_DIR), so this
+      // scenario always exercises the cold path — keeps the LLM honest
+      // about cold-gen latency.
       await buttons.first().waitFor({ state: 'visible', timeout: 90_000 });
 
       // Visible buttons may include a trigger + "Save" (inside modal,

@@ -18,17 +18,20 @@
  *      (the A2UI provisional surface) — the user is NEVER staring at
  *      a blank screen during cold-gen.
  *   3. The final component eventually replaces the provisional surface
- *      (within the 90s cold-gen budget).
+ *      (observed typical ~2-3s; the 90s ceiling is tail-insurance for
+ *      model variance).
  *
  * Drive path (post-R5): the render's `resourceUri` is resolved via MCP
  * `resources/read` and mounted behind the MCP-Apps host stand-in
  * (fixtures/mcp-app-host.ts) — the retired `/r/<shortCode>` renderer
  * URL no longer serves the iframe. The visibility probes go through
  * the host's app iframe and read the resource document's BODY text:
- * the runtime mounts the surface in the document body, not inside the
- * shell's `#ggui-root` anchor (verified empirically 2026-06-11 —
- * `#ggui-root` stays empty while the rendered UI paints), so the
- * pre-port `#ggui-root.innerText` probe would read '' forever.
+ * the runtime appends its own `[data-ggui-session-root]` mount target
+ * to the document body (verified empirically 2026-06-11 — the shell's
+ * then-present `#ggui-root` anchor stayed empty while the rendered UI
+ * painted, so the pre-port `#ggui-root.innerText` probe read ''
+ * forever; that dead anchor has since been deleted from the
+ * self-contained shell).
  *
  * Parametric over the model-provider axis. See provider-matrix.ts.
  */
@@ -60,8 +63,7 @@ for (const provider of PROVIDERS) {
       let handle: BrowserHandle;
       let host: McpAppHostHandle | undefined;
       beforeEach(async () => {
-        // Relay OFF: the mcp-app-host wrapper page IS the host party.
-        handle = await openBrowser({ relayToolCallsToMcp: false });
+        handle = await openBrowser();
       });
       afterEach(async () => {
         await handle.close();
@@ -101,8 +103,8 @@ for (const provider of PROVIDERS) {
           // seconds of page load — far before cold-gen completes. We
           // assert that SOME visible content exists in the iframe long
           // before the final "Submit" button could possibly land.
-          // Probe the resource document's body — the runtime mounts
-          // the surface there, not inside `#ggui-root` (see header).
+          // Probe the resource document's body — the runtime appends
+          // its own mount root there (see header).
           const body = appFrame.locator('body');
           await body.waitFor({ state: 'attached', timeout: 5_000 });
 
@@ -119,8 +121,9 @@ for (const provider of PROVIDERS) {
           expect(sawProvisionalContent).toBe(true);
 
           // Final mount — the authoritative componentCode replaces the
-          // provisional surface. 90s budget covers cold-gen + fetch(
-          // codeUrl) + dynamic import + react paint.
+          // provisional surface. Observed typical ~2-3s for cold-gen +
+          // fetch(codeUrl) + dynamic import + react paint; the 90s
+          // ceiling is tail-insurance for model variance.
           const submit = appFrame.getByRole('button', { name: /submit/i });
           await submit.first().waitFor({ state: 'visible', timeout: 90_000 });
         },

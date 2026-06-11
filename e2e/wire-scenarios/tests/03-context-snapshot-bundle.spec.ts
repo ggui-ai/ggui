@@ -48,8 +48,7 @@ for (const provider of PROVIDERS) {
       let handle: BrowserHandle;
       let host: McpAppHostHandle | undefined;
       beforeEach(async () => {
-        // Relay OFF: the mcp-app-host wrapper page IS the host party.
-        handle = await openBrowser({ relayToolCallsToMcp: false });
+        handle = await openBrowser();
       });
       afterEach(async () => {
         await handle.close();
@@ -76,10 +75,12 @@ for (const provider of PROVIDERS) {
           const appFrame = page.frameLocator(MCP_APP_IFRAME_SELECTOR);
 
           const buttons = appFrame.getByRole('button', { name: /save/i });
-          // 90s: cold-gen first time the cache is fresh; warm hit (sub-
-          // second) once the canonical contract is in the OSS in-memory
-          // blueprint registry (01/02 render the same shape so this often
-          // gets a cache hit when they ran first in the same run).
+          // Cold-gen first time the cache is fresh (observed typical
+          // ~2-3s; the 90s ceiling is tail-insurance for model
+          // variance); warm hit (sub-second) once the canonical
+          // contract is in the OSS in-memory blueprint registry (01/02
+          // render the same shape so this often gets a cache hit when
+          // they ran first in the same run).
           await buttons.first().waitFor({ state: 'visible', timeout: 90_000 });
           for (let i = 0; i < 3; i++) {
             const visible = buttons.filter({ visible: true });

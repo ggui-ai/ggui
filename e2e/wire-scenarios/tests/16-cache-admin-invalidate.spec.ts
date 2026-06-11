@@ -71,12 +71,11 @@
  * have a row to invalidate.
  */
 import { describe, expect, test } from 'vitest';
-import { parseMcpAppAiGguiRenderMeta } from '@ggui-ai/protocol/integrations/mcp-apps';
+import { callTool, unwrapStructured } from '../fixtures/mcp-client.js';
 import {
-  callTool,
-  unwrapStructured,
-  type JsonRpcResponse,
-} from '../fixtures/mcp-client.js';
+  readRenderCodeRef,
+  type RenderCodeRef,
+} from '../fixtures/render-contract.js';
 import {
   CACHE_ADMIN_CONTRACT,
   CACHE_ADMIN_INTENT,
@@ -88,11 +87,6 @@ const HAS_KEY = !!process.env.ANTHROPIC_API_KEY;
 
 interface RenderOut {
   sessionId: string;
-}
-
-interface RenderCodeRef {
-  readonly codeUrl?: string;
-  readonly codeHash?: string;
 }
 
 interface CachedEntry {
@@ -107,30 +101,6 @@ interface CachedEntry {
 interface CachedListResponse {
   entries: readonly CachedEntry[];
   total: number;
-}
-
-/**
- * Read `codeUrl` + `codeHash` off the render response's
- * `_meta["ai.ggui/render"]` slice — the live replacement for the
- * retired `/r/<shortCode>` bootstrap fetch. Same helper as scenarios
- * 11 + 17 (spec-local; fixture-worthy once `fixtures/` reopens).
- */
-function readRenderCodeRef(resp: JsonRpcResponse): RenderCodeRef {
-  const parsed = parseMcpAppAiGguiRenderMeta(resp.result?._meta);
-  if (!parsed.ok) {
-    throw new Error(
-      `render response carries a malformed ai.ggui/render slice: ${JSON.stringify(resp.result?._meta).slice(0, 400)}`,
-    );
-  }
-  if (parsed.meta === undefined) {
-    throw new Error(
-      `render response missing the ai.ggui/render slice meta: ${JSON.stringify(resp.result?._meta).slice(0, 400)}`,
-    );
-  }
-  return {
-    ...(parsed.meta.codeUrl !== undefined ? { codeUrl: parsed.meta.codeUrl } : {}),
-    ...(parsed.meta.codeHash !== undefined ? { codeHash: parsed.meta.codeHash } : {}),
-  };
 }
 
 async function fetchCachedList(): Promise<CachedListResponse> {

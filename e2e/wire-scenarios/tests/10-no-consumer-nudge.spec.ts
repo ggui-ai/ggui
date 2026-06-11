@@ -56,8 +56,7 @@ describe.skipIf(!HAS_KEY)(
     let handle: BrowserHandle;
     let host: McpAppHostHandle | undefined;
     beforeEach(async () => {
-      // Relay OFF: the mcp-app-host wrapper page IS the host party.
-      handle = await openBrowser({ relayToolCallsToMcp: false });
+      handle = await openBrowser();
     });
     afterEach(async () => {
       await handle.close();

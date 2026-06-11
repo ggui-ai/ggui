@@ -130,11 +130,7 @@ describe.skipIf(!HAS_KEY)(
       // Empty + re-seed so each test starts identical.
       await fetch(`${TODO_ADMIN}/reset`, { method: 'POST' });
       await seedTodos(['buy milk', 'walk the dog', 'finish report']);
-      // Relay OFF: the mcp-app-host wrapper page IS the host party
-      // here (answers ui/initialize + relays tools/call). A second
-      // relay on the outer window would double-deliver every click's
-      // submit_action.
-      handle = await openBrowser({ relayToolCallsToMcp: false });
+      handle = await openBrowser();
     });
 
     afterEach(async () => {

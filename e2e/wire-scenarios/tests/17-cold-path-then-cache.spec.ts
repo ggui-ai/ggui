@@ -65,12 +65,8 @@
  * Gated on `ANTHROPIC_API_KEY` — step 2 cold-gens once.
  */
 import { describe, expect, test } from 'vitest';
-import { parseMcpAppAiGguiRenderMeta } from '@ggui-ai/protocol/integrations/mcp-apps';
-import {
-  callTool,
-  unwrapStructured,
-  type JsonRpcResponse,
-} from '../fixtures/mcp-client.js';
+import { callTool, unwrapStructured } from '../fixtures/mcp-client.js';
+import { readRenderCodeRef } from '../fixtures/render-contract.js';
 import {
   COLD_PATH_CONTRACT,
   COLD_PATH_INTENT_CANONICAL,
@@ -102,35 +98,6 @@ interface HandshakeOut {
 
 interface RenderOut {
   sessionId: string;
-}
-
-interface RenderCodeRef {
-  readonly codeUrl?: string;
-  readonly codeHash?: string;
-}
-
-/**
- * Read `codeUrl` + `codeHash` off the render response's
- * `_meta["ai.ggui/render"]` slice — the live replacement for the
- * retired `/r/<shortCode>` bootstrap fetch. Same helper as scenarios
- * 11 + 16 (spec-local; fixture-worthy once `fixtures/` reopens).
- */
-function readRenderCodeRef(resp: JsonRpcResponse): RenderCodeRef {
-  const parsed = parseMcpAppAiGguiRenderMeta(resp.result?._meta);
-  if (!parsed.ok) {
-    throw new Error(
-      `render response carries a malformed ai.ggui/render slice: ${JSON.stringify(resp.result?._meta).slice(0, 400)}`,
-    );
-  }
-  if (parsed.meta === undefined) {
-    throw new Error(
-      `render response missing the ai.ggui/render slice meta: ${JSON.stringify(resp.result?._meta).slice(0, 400)}`,
-    );
-  }
-  return {
-    ...(parsed.meta.codeUrl !== undefined ? { codeUrl: parsed.meta.codeUrl } : {}),
-    ...(parsed.meta.codeHash !== undefined ? { codeHash: parsed.meta.codeHash } : {}),
-  };
 }
 
 async function handshakeFresh(intent: string): Promise<HandshakeOut> {

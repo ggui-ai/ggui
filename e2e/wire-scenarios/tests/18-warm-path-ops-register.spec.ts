@@ -37,15 +37,8 @@
  */
 import { createHash } from 'node:crypto';
 import { describe, expect, test } from 'vitest';
-import {
-  MCP_APP_AI_GGUI_RENDER_META_KEY,
-  type McpAppAiGguiRenderMeta,
-} from '@ggui-ai/protocol/integrations/mcp-apps';
-import {
-  callTool,
-  unwrapStructured,
-  type JsonRpcResponse,
-} from '../fixtures/mcp-client.js';
+import { callTool, unwrapStructured } from '../fixtures/mcp-client.js';
+import { readRenderCodeRef } from '../fixtures/render-contract.js';
 
 const GGUI_PORT = Number.parseInt(process.env.GGUI_PORT ?? '6781', 10);
 const MCP_URL = `http://localhost:${GGUI_PORT}/mcp`;
@@ -74,11 +67,6 @@ interface RenderOut {
   sessionId: string;
 }
 
-interface BootstrapJson {
-  codeUrl?: string;
-  codeHash?: string;
-}
-
 interface OpsRegisterOut {
   blueprintId: string;
   codeHash: string;
@@ -105,29 +93,6 @@ const REGISTER_TEST_CONTRACT = {
 
 const REGISTER_TEST_COMPONENT_CODE =
   "export default function PreBuiltCard() { return null; }\n";
-
-/**
- * Post-Phase-B: `ggui_render` no longer surfaces a `url` field on its
- * structured output (output schema is `{sessionId, nextStep?, action}`).
- * The bootstrap payload — including `codeUrl` / `codeHash` — rides on
- * the result's `_meta["ai.ggui/render"]` slice instead. Reading the
- * slice directly off the render response skips the `/r/<shortCode>`
- * round-trip the legacy `?url=` flow needed.
- */
-function readRenderBootstrap(resp: JsonRpcResponse): BootstrapJson {
-  const slice = resp.result?._meta?.[MCP_APP_AI_GGUI_RENDER_META_KEY] as
-    | McpAppAiGguiRenderMeta
-    | undefined;
-  if (slice === undefined) {
-    throw new Error(
-      `render response missing ai.ggui/render slice meta: ${JSON.stringify(resp.result?._meta)}`,
-    );
-  }
-  const out: BootstrapJson = {};
-  if (typeof slice.codeUrl === 'string') out.codeUrl = slice.codeUrl;
-  if (typeof slice.codeHash === 'string') out.codeHash = slice.codeHash;
-  return out;
-}
 
 describe(
   'Scenario 18 — warm path: /ops register (pre-built code) → handshake matches → render.accept',
@@ -177,7 +142,11 @@ describe(
         const render = unwrapStructured<RenderOut>(renderResp);
         const renderLatencyMs = Date.now() - renderStart;
         expect(typeof render.sessionId).toBe('string');
-        const bootstrap = readRenderBootstrap(renderResp);
+        // Post-Phase-B: `ggui_render`'s structured output carries no
+        // `url`/`codeHash` — the bootstrap payload rides on the
+        // result's `_meta["ai.ggui/render"]` slice, narrowed by the
+        // shared fixture via the protocol's own validating parser.
+        const bootstrap = readRenderCodeRef(renderResp);
 
         expect(bootstrap.codeHash).toBe(expectedCodeHash);
         expect(renderLatencyMs).toBeLessThan(5_000);

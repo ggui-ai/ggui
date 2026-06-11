@@ -74,10 +74,7 @@ for (const provider of PROVIDERS) {
       let handle: BrowserHandle;
       let host: McpAppHostHandle | undefined;
       beforeEach(async () => {
-        // Relay OFF: the mcp-app-host wrapper page IS the host party
-        // (answers ui/initialize + relays tools/call) — same posture
-        // as scenario 07.
-        handle = await openBrowser({ relayToolCallsToMcp: false });
+        handle = await openBrowser();
       });
       afterEach(async () => {
         await handle.close();
@@ -142,8 +139,10 @@ for (const provider of PROVIDERS) {
             .not.toMatch(/\b0\b/);
         },
         // The render call itself blocks on cold-gen (formerly outside
-        // the old spec's paint-poll budget) — 240s covers gen + mount
-        // + the update round-trip across all three providers.
+        // the old spec's paint-poll budget; observed typical ~2-3s) —
+        // the 240s ceiling covers gen + mount + the update round-trip
+        // across all three providers as tail-insurance for model
+        // variance, not the expected duration.
         240_000,
       );
     },

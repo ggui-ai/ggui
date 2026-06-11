@@ -16,7 +16,50 @@
  * mount it behind the host stand-in: see `mountRenderResource` in
  * fixtures/mcp-app-host.ts.
  */
-import { callTool, unwrapStructured } from './mcp-client.js';
+import { parseMcpAppAiGguiRenderMeta } from '@ggui-ai/protocol/integrations/mcp-apps';
+import {
+  callTool,
+  unwrapStructured,
+  type JsonRpcResponse,
+} from './mcp-client.js';
+
+/** Code identity pair read off the render's `ai.ggui/render` slice. */
+export interface RenderCodeRef {
+  readonly codeUrl?: string;
+  readonly codeHash?: string;
+}
+
+/**
+ * Read `codeUrl` + `codeHash` off a render response's
+ * `_meta["ai.ggui/render"]` slice — the live replacement for the
+ * retired `/r/<shortCode>` bootstrap fetch (R5 removed that HTTP
+ * surface, and zod strips `codeUrl`/`codeHash` from
+ * `structuredContent`). The slice is the single `deriveRenderMeta`-fed
+ * projection every transport composes from
+ * (docs/principles/mcp-apps-compliance.md). The `_meta` object is an
+ * untrusted wire payload, so it goes through the protocol's published
+ * validating parser instead of a structural cast.
+ *
+ * Shared by scenarios 11/16/17 (cache-identity pins) and 18 (warm-path
+ * ops register).
+ */
+export function readRenderCodeRef(resp: JsonRpcResponse): RenderCodeRef {
+  const parsed = parseMcpAppAiGguiRenderMeta(resp.result?._meta);
+  if (!parsed.ok) {
+    throw new Error(
+      `render response carries a malformed ai.ggui/render slice: ${JSON.stringify(resp.result?._meta).slice(0, 400)}`,
+    );
+  }
+  if (parsed.meta === undefined) {
+    throw new Error(
+      `render response missing the ai.ggui/render slice meta: ${JSON.stringify(resp.result?._meta).slice(0, 400)}`,
+    );
+  }
+  return {
+    ...(parsed.meta.codeUrl !== undefined ? { codeUrl: parsed.meta.codeUrl } : {}),
+    ...(parsed.meta.codeHash !== undefined ? { codeHash: parsed.meta.codeHash } : {}),
+  };
+}
 
 export interface RenderedContractRef {
   readonly handshakeId: string;

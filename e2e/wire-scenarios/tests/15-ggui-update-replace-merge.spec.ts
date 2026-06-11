@@ -116,8 +116,7 @@ for (const provider of PROVIDERS) {
       let handle: BrowserHandle;
       let host: McpAppHostHandle | undefined;
       beforeEach(async () => {
-        // Relay OFF: the mcp-app-host wrapper page IS the host party.
-        handle = await openBrowser({ relayToolCallsToMcp: false });
+        handle = await openBrowser();
       });
       afterEach(async () => {
         await handle.close();
@@ -238,8 +237,10 @@ for (const provider of PROVIDERS) {
             .poll(bodyText, { timeout: 2_000, interval: 200 })
             .toMatch(/2 of 2 done/i);
         },
-        // The render call itself blocks on cold-gen — 240s covers gen
-        // + mount + the four update phases across all three providers.
+        // The render call itself blocks on cold-gen (observed typical
+        // ~2-3s) — the 240s ceiling covers gen + mount + the four
+        // update phases across all three providers as tail-insurance
+        // for model variance, not the expected duration.
         240_000,
       );
     },
