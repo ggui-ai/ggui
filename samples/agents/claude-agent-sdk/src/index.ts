@@ -18,9 +18,11 @@
  *   ANTHROPIC_API_KEY   Required. The agent fails-fast AT BOOT if absent
  *                       (checked below + in agent.ts).
  *
- * Adding another MCP server: one entry below + one env var. The agent
- * also needs an `ALLOWED_TOOLS_BY_SERVER` entry in `agent.ts` for its
- * tool prefix.
+ * Adding another MCP server: just set `GGUI_<NAME>_MCP_URL` — the env
+ * scan below auto-registers it; no change in this file. Claude SDK
+ * only: also add the server's tools to `DEFAULT_ALLOWED_TOOLS` in
+ * `agent.ts` (or pass `allowedToolsByServer`) — the SDK's allowlist
+ * matches exact tool names.
  *
  * Auto-loads `.env.local` walking up from this file, so a workspace-
  * root `.env.local` is picked up without explicit sourcing. External
@@ -89,7 +91,7 @@ const systemPrompt =
       : undefined; // undefined → agent.ts uses DEFAULT_SYSTEM_PROMPT
 
 // MCP servers the agent can call into. `ggui` is the one fixed render endpoint
-// (the relay handlers in server.ts forward to it). Every *other* MCP is a
+// (the agent-server library relays iframe tool-calls to it). Every *other* MCP is a
 // domain server discovered from the env: any `GGUI_<NAME>_MCP_URL` registers as
 // `<name>`, so adding an MCP server needs no change here — just the env var
 // (e.g. `GGUI_TODO_MCP_URL` → `todo`, `GGUI_ORDERS_MCP_URL` → `orders`).

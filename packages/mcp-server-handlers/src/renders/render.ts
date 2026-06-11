@@ -1229,7 +1229,7 @@ export function createGguiRenderHandler(
       // props"), so the local stays `Record<string, unknown> | undefined`.
       let runtimeProps: Record<string, unknown> | undefined = parsed.props;
       if (effectiveContract.propsSpec) {
-        const propsToValidate = (runtimeProps ?? {}) as Record<string, unknown>;
+        const propsToValidate: Record<string, unknown> = runtimeProps ?? {};
         const propsValidation = validatePropsData(
           propsToValidate,
           effectiveContract.propsSpec,

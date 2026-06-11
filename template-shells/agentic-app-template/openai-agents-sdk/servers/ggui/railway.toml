@@ -1,0 +1,31 @@
+# Railway config-as-code — the GGUI service ONLY.
+#
+# Railway reads ONE service per config file; multi-service `[services.*]`
+# blocks are not part of config-as-code and are silently ignored, so this
+# template ships one railway.toml per service directory.
+#
+# The blessed deploy path is `pnpm deploy:railway` (scripts/deploy-railway.mjs):
+# it provisions all four services, sets these same build/start commands via
+# Railway's API, and wires the env vars (including cross-service URL refs)
+# that config-as-code cannot express. Use this file only for a manual
+# dashboard deploy: create the service from the repo, then point its
+# Settings → Config-as-code file path at `servers/ggui/railway.toml`.
+#
+# `ggui serve` is public — the browser loads its runtime bundle + live
+# channel directly from this service's public domain.
+#
+# Env vars to set on this service in the dashboard (config-as-code cannot
+# set variables):
+#   PORT                 = 6781
+#   OPENAI_API_KEY       = <secret — drives ggui's UI generation; same
+#                          provider as the agent in this template
+#                          (servers/ggui/ggui.json picks the model)>
+#   GGUI_PUBLIC_BASE_URL = https://${{ggui.RAILWAY_PUBLIC_DOMAIN}}
+
+[build]
+# `--if-present`: this package is a `ggui serve` config dir with no build
+# script; the flag keeps the uniform per-service command from hard-failing.
+buildCommand = "pnpm install --frozen-lockfile && pnpm --filter ./servers/ggui run --if-present build"
+
+[deploy]
+startCommand = "pnpm --filter ./servers/ggui start"

@@ -1,6 +1,6 @@
 {
   "schema": "1",
-  "protocol": "draft-2026-05-23",
+  "protocol": "draft-2026-06-11",
   "app": {
     "slug": "sample-ggui-canvas-demo",
     "name": "Sample ggui — fullscreen-mode canvas demo",

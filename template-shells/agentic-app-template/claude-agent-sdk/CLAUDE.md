@@ -35,7 +35,7 @@ apps/web (browser SPA)                          servers/agent (LLM backend)
    │  prompt ───────────────────────────────────▶  │ ──MCP──▶ servers/ggui      (renders the UI)
    │                                                │ ──MCP──▶ servers/mcps/*    (your domain tools)
    │  ◀── reply with the UI inlined ────────────────┘
-   └─ mounts it with <AppRenderer> (@ggui-ai/react); the rendered iframe loads
+   └─ mounts it with <AppRenderer> (@mcp-ui/client); the rendered iframe loads
       ggui's runtime + a live channel directly from servers/ggui
    │  user clicks ── action relayed to the agent ──▶ agent drains it, re-renders
 ```
@@ -80,8 +80,11 @@ add your own:
 2. Implement your tools in `src/handlers.ts` (zod input schema + a handler that
    returns `structuredContent`). Write **user-facing tool descriptions** — the
    agent reads them to decide what to call.
-3. Register it with the agent: add its URL env var in `servers/agent/src/index.ts`
-   and its tool-prefix to the allowlist in `servers/agent/src/agent.ts`.
+3. Register it with the agent: set `GGUI_<NAME>_MCP_URL` in `.env.local` — the
+   agent env-scans and auto-registers it; no `index.ts` edit. Claude SDK only:
+   also add its tool names to `DEFAULT_ALLOWED_TOOLS` in
+   `servers/agent/src/agent.ts` (the SDK allowlist matches exact names). See
+   `.reference/writing-mcp-tools.md`.
 
 Or skip authoring and point the agent at an **existing third-party MCP** — just
 add its URL to the agent's MCP config.
@@ -159,7 +162,7 @@ first to see exactly what it will do. Implementation: `scripts/deploy-railway.mj
 | `servers/agent`     | The agent — `@anthropic-ai/claude-agent-sdk` HTTP API.                |
 | `servers/ggui`      | Vendored `ggui serve` config (`ggui.json`). Renders the agent's UI.   |
 | `servers/mcps/todo` | Worked-example MCP server. **Copy this** to author your own domain MCP. |
-| `apps/web`          | Vite SPA — `@ggui-ai/react` `<AppRenderer>`.                          |
+| `apps/web`          | Vite SPA — `@mcp-ui/client` `<AppRenderer>` + `@ggui-ai/react` chat helpers. |
 | `blueprints/*`      | Blueprints you author with `/blueprint` (empty until you create one). |
 | `gadgets/*`         | Gadgets you author with `/gadget` (empty until you create one).       |
 

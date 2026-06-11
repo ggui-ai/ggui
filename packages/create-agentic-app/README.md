@@ -48,9 +48,8 @@ Pick one at scaffold time:
 | `openai-agents-sdk` | OpenAI           |
 | `google-adk`        | Google Gemini    |
 
-All three agent backends listen on the same dev port (6790). The Railway
-deploy config is the one place ports diverge per SDK (6790 / 6791 / 6792 in
-`railway.toml`).
+All three agent backends listen on the same dev port (6790) — locally and on
+Railway (each service dir carries its own single-service `railway.toml`).
 
 `npx @ggui-ai/create-agentic-app --list-agents` prints the current list.
 
@@ -66,7 +65,7 @@ my-app/
 │   └── mcps/
 │       └── todo/       # worked-example MCP server — copy it for your domain
 ├── apps/
-│   └── web/            # Vite SPA — @ggui-ai/react <AppRenderer>
+│   └── web/            # Vite SPA — @mcp-ui/client <AppRenderer> + @ggui-ai/react chat helpers
 ├── .reference/         # local ggui guides for the Claude Code in this repo
 ├── .claude/            # Claude Code settings + /bootstrap slash command
 ├── scripts/            # deploy-railway.mjs (powers `pnpm deploy:railway`)
@@ -74,7 +73,6 @@ my-app/
 ├── .env.local          # seeded from .env.example
 ├── .gitignore          # already excludes .env*.local, node_modules, dist
 ├── .mcp.json           # wires the ggui-docs MCP for Claude Code
-├── railway.toml
 ├── package.json        # renamed to your project name
 ├── pnpm-workspace.yaml
 ├── CLAUDE.md           # Claude Code guidance for this project

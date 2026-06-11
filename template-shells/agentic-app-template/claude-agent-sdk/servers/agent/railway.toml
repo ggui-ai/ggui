@@ -1,0 +1,30 @@
+# Railway config-as-code — the AGENT service ONLY.
+#
+# Railway reads ONE service per config file; multi-service `[services.*]`
+# blocks are not part of config-as-code and are silently ignored, so this
+# template ships one railway.toml per service directory.
+#
+# The blessed deploy path is `pnpm deploy:railway` (scripts/deploy-railway.mjs):
+# it provisions all four services, sets these same build/start commands via
+# Railway's API, and wires the env vars (including cross-service URL refs)
+# that config-as-code cannot express. Use this file only for a manual
+# dashboard deploy: create the service from the repo, then point its
+# Settings → Config-as-code file path at `servers/agent/railway.toml`.
+#
+# Env vars to set on this service in the dashboard (config-as-code cannot
+# set variables; internal refs use RAILWAY_PRIVATE_DOMAIN over plain http):
+#   PORT                     = 6790
+#   ANTHROPIC_API_KEY        = <secret — drives the Claude Agent SDK loop>
+#   GGUI_MCP_URL             = http://${{ggui.RAILWAY_PRIVATE_DOMAIN}}:6781/mcp
+#   GGUI_TODO_MCP_URL        = http://${{todo.RAILWAY_PRIVATE_DOMAIN}}:6782/mcp
+#   SANDBOX_PROXY_PORT       = 7790
+#   SANDBOX_PROXY_PUBLIC_URL = https://<second Railway domain targeting 7790>
+#                              (the spec-mandated second-origin sandbox proxy;
+#                              give it its own domain on PORT+1000)
+#   MODEL                    = <optional Claude model override>
+
+[build]
+buildCommand = "pnpm install --frozen-lockfile && pnpm --filter ./servers/agent run --if-present build"
+
+[deploy]
+startCommand = "pnpm --filter ./servers/agent start"

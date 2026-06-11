@@ -10,8 +10,12 @@
  *                       (default http://localhost:6781/mcp)
  *   GGUI_TODO_MCP_URL   Optional second MCP for domain tools (todo demo).
  *                       Omitted by default — the agent runs ggui-only.
- *   GEMINI_MODEL        Override the default Gemini model
- *                       (default `gemini-3.5-flash` — see agent.ts)
+ *   MODEL               Override the default Gemini model
+ *                       (default `gemini-3.5-flash` — see agent.ts).
+ *                       `MODEL` is the cross-SDK contract every template
+ *                       surface (shell docs, deploy script) speaks;
+ *                       `GEMINI_MODEL` is accepted as a provider-specific
+ *                       alias when `MODEL` is unset.
  *   SYSTEM_PROMPT       Override the default ggui-agent system prompt.
  *                       Set to `none` to disable entirely.
  *   GEMINI_API_KEY      Required. The agent fails-fast AT BOOT if absent
@@ -19,7 +23,9 @@
  *                       accepted as a fallback for parity with the ADK's
  *                       own env discovery.
  *
- * Adding another MCP server: one entry below + one env var.
+ * Adding another MCP server: just set `GGUI_<NAME>_MCP_URL` — the env
+ * scan below auto-registers it; no change in this file (ADK's
+ * `MCPToolset` discovers its tools automatically).
  *
  * Auto-loads `.env.local` walking up from this file, so a workspace-
  * root `.env.local` is picked up without explicit sourcing.
@@ -68,7 +74,9 @@ const PORT = Number(process.env.PORT ?? 6790);
 const SANDBOX_PROXY_PORT = process.env.SANDBOX_PROXY_PORT
   ? Number(process.env.SANDBOX_PROXY_PORT)
   : 7792;
-const MODEL = process.env.GEMINI_MODEL;
+// Cross-SDK contract first (`MODEL` — what the shells' .env.example +
+// deploy script set), provider-specific alias second.
+const MODEL = process.env.MODEL ?? process.env.GEMINI_MODEL;
 const SYSTEM_PROMPT_ENV = process.env.SYSTEM_PROMPT;
 const systemPrompt =
   SYSTEM_PROMPT_ENV === 'none'
@@ -78,7 +86,7 @@ const systemPrompt =
       : undefined;
 
 // MCP servers the agent can call into. `ggui` is the one fixed render endpoint
-// (the relay handlers in server.ts forward to it). Every *other* MCP is a
+// (the agent-server library relays iframe tool-calls to it). Every *other* MCP is a
 // domain server discovered from the env: any `GGUI_<NAME>_MCP_URL` registers as
 // `<name>`, so adding an MCP server needs no change here — just the env var
 // (e.g. `GGUI_TODO_MCP_URL` → `todo`, `GGUI_ORDERS_MCP_URL` → `orders`).

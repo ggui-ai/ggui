@@ -136,7 +136,13 @@ function discoverServices() {
   return out;
 }
 
-const buildCommand = (p) => `pnpm install --frozen-lockfile && pnpm --filter ./${p} build`;
+// `--if-present`: servers/ggui has no `build` script (it is a config dir
+// run via `ggui serve`), and `pnpm --filter <pkg> run build` HARD-FAILS
+// (ERR_PNPM_RECURSIVE_RUN_NO_SCRIPT) when the script is absent — which
+// would fail that service's Railway build. One uniform command, valid
+// for all four services.
+const buildCommand = (p) =>
+  `pnpm install --frozen-lockfile && pnpm --filter ./${p} run --if-present build`;
 const startCommand = (p) => `pnpm --filter ./${p} start`;
 const privateRef = (s) => `\${{${s.name}.RAILWAY_PRIVATE_DOMAIN}}`;
 const publicRef = (s) => `\${{${s.name}.RAILWAY_PUBLIC_DOMAIN}}`;
@@ -270,10 +276,15 @@ async function main() {
     }
     if (svc.public) railway(['domain', '--service', svc.name, '--port', String(svc.port)]);
     if (svc.role === 'agent') {
-      // The agent also runs the spec-mandated sandbox proxy on port+1000 — a
-      // SECOND browser-facing origin. Give it its own Railway domain and pass
-      // its public URL to the agent (read by @ggui-ai/agent-server).
-      const sandboxDomain = mintDomain(svc.name, svc.port + 1000, manualSteps);
+      // The agent also runs the spec-mandated sandbox proxy — a SECOND
+      // browser-facing origin. Pin its port explicitly to PORT+1000 (the
+      // per-SDK samples default to DIFFERENT sandbox ports locally, so the
+      // minted domain and the listener must be tied together here), give it
+      // its own Railway domain, and pass its public URL to the agent (read
+      // by @ggui-ai/agent-server).
+      const sandboxPort = svc.port + 1000;
+      railway(['variable', 'set', `SANDBOX_PROXY_PORT=${sandboxPort}`, '--service', svc.name, '--skip-deploys']);
+      const sandboxDomain = mintDomain(svc.name, sandboxPort, manualSteps);
       if (sandboxDomain) {
         railway(['variable', 'set', `SANDBOX_PROXY_PUBLIC_URL=https://${sandboxDomain}`, '--service', svc.name, '--skip-deploys']);
       }

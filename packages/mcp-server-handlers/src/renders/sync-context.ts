@@ -152,9 +152,7 @@ export function createGguiSyncContextHandler(
       // agent, NOT content storage. Reject (not truncate) so authors
       // notice and route bulky data through the right surface
       // (propsSpec / streamSpec / a tool call).
-      const sizeViolation = enforceSnapshotSize(
-        snapshot as Record<string, unknown>,
-      );
+      const sizeViolation = enforceSnapshotSize(snapshot);
       if (sizeViolation !== null) {
         return {
           ok: false,
@@ -205,7 +203,7 @@ export function createGguiSyncContextHandler(
       // the slot's JSON Schema.
       const renderContextSpec = stored.render.contextSpec;
       const violations = validateSnapshotAgainstSpec(
-        snapshot as Record<string, unknown>,
+        snapshot,
         renderContextSpec,
       );
       if (violations.length > 0) {

@@ -10,14 +10,20 @@
  *                       (default http://localhost:6781/mcp)
  *   GGUI_TODO_MCP_URL   Optional second MCP for domain tools (todo demo).
  *                       Omitted by default — the agent runs ggui-only.
- *   OPENAI_MODEL        Override the default OpenAI model
- *                       (default `gpt-5.5` — see agent.ts)
+ *   MODEL               Override the default OpenAI model
+ *                       (default `gpt-5.5` — see agent.ts).
+ *                       `MODEL` is the cross-SDK contract every template
+ *                       surface (shell docs, deploy script) speaks;
+ *                       `OPENAI_MODEL` is accepted as a provider-specific
+ *                       alias when `MODEL` is unset.
  *   SYSTEM_PROMPT       Override the default ggui-agent system prompt.
  *                       Set to `none` to disable entirely.
  *   OPENAI_API_KEY      Required. The agent fails-fast AT BOOT if absent
  *                       (checked below + in agent.ts).
  *
- * Adding another MCP server: one entry below + one env var.
+ * Adding another MCP server: just set `GGUI_<NAME>_MCP_URL` — the env
+ * scan below auto-registers it; no change in this file (the OpenAI
+ * Agents SDK discovers each configured server's tools automatically).
  *
  * Auto-loads `.env.local` walking up from this file, so a workspace-
  * root `.env.local` is picked up without explicit sourcing. External
@@ -68,7 +74,9 @@ const PORT = Number(process.env.PORT ?? 6790);
 const SANDBOX_PROXY_PORT = process.env.SANDBOX_PROXY_PORT
   ? Number(process.env.SANDBOX_PROXY_PORT)
   : 7791;
-const MODEL = process.env.OPENAI_MODEL;
+// Cross-SDK contract first (`MODEL` — what the shells' .env.example +
+// deploy script set), provider-specific alias second.
+const MODEL = process.env.MODEL ?? process.env.OPENAI_MODEL;
 const SYSTEM_PROMPT_ENV = process.env.SYSTEM_PROMPT;
 const systemPrompt =
   SYSTEM_PROMPT_ENV === 'none'
@@ -78,7 +86,7 @@ const systemPrompt =
       : undefined;
 
 // MCP servers the agent can call into. `ggui` is the one fixed render endpoint
-// (the relay handlers in server.ts forward to it). Every *other* MCP is a
+// (the agent-server library relays iframe tool-calls to it). Every *other* MCP is a
 // domain server discovered from the env: any `GGUI_<NAME>_MCP_URL` registers as
 // `<name>`, so adding an MCP server needs no change here — just the env var
 // (e.g. `GGUI_TODO_MCP_URL` → `todo`, `GGUI_ORDERS_MCP_URL` → `orders`).

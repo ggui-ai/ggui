@@ -10,12 +10,9 @@
  * Returns `{ valid, failedAt, errors, warnings }`. `failedAt` reports
  * the FIRST tier that failed (or `null` when all green).
  *
- * Single source of truth for path-(b) validation. Two consumers today:
- *   - `validateGguiBlueprint` AppSync mutation Lambda (`backend`)
- *   - `registerGguiBlueprint` AppSync mutation Lambda — defense-in-depth
- *
- * Pod-side `ggui_validate_blueprint` MCP tool will import from here too
- * once S4.A.5 lands.
+ * Single source of truth for path-(b) validation — every register /
+ * validate surface (MCP `ggui_validate_blueprint` tool, server-side
+ * register defense-in-depth) runs this same orchestrator.
  *
  * Path (a) (ggui's own LLM driving the harness in `runCheck`) keeps
  * running every check unconditionally for full feedback in one round.

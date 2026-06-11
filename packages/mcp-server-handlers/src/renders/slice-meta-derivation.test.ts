@@ -8,6 +8,7 @@ import type {
   StreamSpec,
 } from '@ggui-ai/protocol';
 import type { ComponentGguiSession, SystemGguiSession } from '@ggui-ai/protocol';
+import { isRecord } from '@ggui-ai/protocol';
 import {
   composeContentSecurityPolicy,
   deriveBundleOrigins,
@@ -150,7 +151,8 @@ describe('deriveRenderMeta', () => {
 
   it('component variant: omits componentCode (delivered via codeUrl channel)', () => {
     const view = deriveRenderMeta(componentItem());
-    expect((view as Record<string, unknown>).componentCode).toBeUndefined();
+    if (!isRecord(view)) throw new Error('expected the View to be an object');
+    expect(view.componentCode).toBeUndefined();
     expect(view.kind).toBeUndefined();
   });
 
@@ -188,7 +190,8 @@ describe('deriveRenderMeta', () => {
     const view = deriveRenderMeta(componentItem({ streamSpec }));
     // No streamSpec field on the View today. If a future field is
     // added, update both the View interface AND this assertion.
-    expect((view as Record<string, unknown>).streamSpec).toBeUndefined();
+    if (!isRecord(view)) throw new Error('expected the View to be an object');
+    expect(view.streamSpec).toBeUndefined();
   });
 
   it('system variant: emits kind + propsJson', () => {
@@ -197,7 +200,8 @@ describe('deriveRenderMeta', () => {
     );
     expect(view.kind).toBe('no-credentials');
     expect(view.propsJson).toBe('{"reason":"demo"}');
-    expect((view as Record<string, unknown>).componentCode).toBeUndefined();
+    if (!isRecord(view)) throw new Error('expected the View to be an object');
+    expect(view.componentCode).toBeUndefined();
     expect(view.contextSlots).toBeUndefined();
   });
 

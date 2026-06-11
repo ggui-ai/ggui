@@ -1,0 +1,27 @@
+# Railway config-as-code — the TODO MCP service ONLY.
+#
+# Railway reads ONE service per config file; multi-service `[services.*]`
+# blocks are not part of config-as-code and are silently ignored, so this
+# template ships one railway.toml per service directory. When you copy
+# `servers/mcps/todo` to author your own domain MCP, copy this file with it
+# (adjust the paths + port).
+#
+# The blessed deploy path is `pnpm deploy:railway` (scripts/deploy-railway.mjs):
+# it provisions all four services, sets these same build/start commands via
+# Railway's API, and wires the env vars that config-as-code cannot express.
+# Use this file only for a manual dashboard deploy: create the service from
+# the repo, then point its Settings → Config-as-code file path at
+# `servers/mcps/todo/railway.toml`.
+#
+# Private — no public domain; only the agent talks to it over Railway's
+# internal network (http://${{todo.RAILWAY_PRIVATE_DOMAIN}}:6782/mcp).
+#
+# Env vars to set on this service in the dashboard (config-as-code cannot
+# set variables):
+#   PORT = 6782
+
+[build]
+buildCommand = "pnpm install --frozen-lockfile && pnpm --filter ./servers/mcps/todo run --if-present build"
+
+[deploy]
+startCommand = "pnpm --filter ./servers/mcps/todo start"

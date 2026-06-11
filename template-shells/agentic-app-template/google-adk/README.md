@@ -79,8 +79,10 @@ auto-registers each from a `GGUI_<NAME>_MCP_URL` env var — no wiring code. See
 
 ### 3. Customize the frontend
 
-`apps/web` is a Vite SPA that talks to your agent backend over HTTP. It uses
-`@ggui-ai/react`'s `<AppRenderer>` to mount the agent's sessions in iframes.
+`apps/web` is a Vite SPA that talks to your agent backend over HTTP. It mounts
+the agent's sessions in iframes with `<AppRenderer>` from `@mcp-ui/client`
+(the spec-canonical MCP Apps host — ggui deliberately does not wrap or
+re-export it), wired up by `useMcpAppsChat` from `@ggui-ai/react/chat-helpers`.
 Edit `apps/web/src/App.tsx` to tweak the chat shell.
 
 ### 4. Customize the ggui server

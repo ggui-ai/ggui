@@ -17,8 +17,13 @@
  *
  *   template-shells/agentic-app-template/<sdk>/
  *       ← per-SDK wrapper: package.json, pnpm-workspace.yaml,
- *         railway.toml, README, CLAUDE.md, LICENSE, .gitignore,
- *         .env.example, .mcp.json, .claude/{settings.json,commands/}
+ *         README, CLAUDE.md, LICENSE, .gitignore, .env.example,
+ *         .mcp.json, .claude/{settings.json,commands/}, plus one
+ *         single-service railway.toml per service dir (servers/agent,
+ *         servers/ggui, servers/mcps/todo, apps/web — Railway
+ *         config-as-code is one service per file). The shell is copied
+ *         FIRST and the sample dirs are merged over it, so the shell's
+ *         per-service railway.toml files survive assembly.
  *
  * Output: one assembled tree per SDK at
  *   <outBase>/<sdk>/
@@ -26,19 +31,22 @@
  * pnpm dev:*`. Internal layout:
  *
  *   <sdk>/
- *     package.json + pnpm-workspace.yaml + railway.toml + …
- *     servers/agent/    (from samples/agents/<sdk>/)
- *     servers/ggui/     (from samples/gguis/default/)
- *     servers/mcps/todo/ (from samples/mcp-servers/todo/)
- *     apps/web/         (from samples/apps/ggui-basic-web/)
+ *     package.json + pnpm-workspace.yaml + …
+ *     servers/agent/    (from samples/agents/<sdk>/ + shell railway.toml)
+ *     servers/ggui/     (from samples/gguis/default/ + shell railway.toml)
+ *     servers/mcps/todo/ (from samples/mcp-servers/todo/ + shell railway.toml)
+ *     apps/web/         (from samples/apps/ggui-basic-web/ + shell railway.toml)
  *
  * Package-json rewrites at assembly time:
  *   1. `"name": "@ggui-samples/<X>"` → `"name": "@agentic-app-template/<X>"`
  *      so create-agentic-app can globally s/@agentic-app-template/@<scope>/.
- *   2. `"<pkg>": "workspace:*"` → `"<pkg>": "<PUBLISHED_VERSION>"` for
- *      every `@ggui-ai/*` dep, so the assembled tree installs from npm.
- *      With `--pin=<version>` the @ggui-ai/* deps are pinned EXACTLY to
- *      <version> (the co-published cohort) instead of a caret range.
+ *   2. `"<pkg>": "workspace:*"` → the prerelease-inclusive caret range
+ *      from gguiAiPinRange (e.g. `^0.3.0-alpha.0`) for every `@ggui-ai/*`
+ *      dep, so the assembled tree installs from npm. The sync workflow
+ *      verifies the range is actually satisfiable on npm before any
+ *      mirror push (scripts/check-template-pins.mjs). With
+ *      `--pin=<version>` the @ggui-ai/* deps are pinned EXACTLY to
+ *      <version> (the co-published cohort) instead of the range.
  *
  * Usage:
  *   node oss/scripts/build-templates.mjs --all --out-base=/tmp/templates
@@ -121,6 +129,31 @@ function readPublishedVersion() {
 }
 
 /**
+ * SINGLE SOURCE OF TRUTH for the default @ggui-ai/* dep range every
+ * assembled template ships (overridden only by `--pin` / `--link`).
+ *
+ * Prerelease-inclusive caret, NOT an exact pin. `^X.Y.Z-alpha.0`
+ * matches the FULL prerelease cohort of the X.Y.Z line (alpha/beta/rc)
+ * and auto-promotes to stable X.Y.z once it ships; a plain `^X.Y.Z`
+ * would EXCLUDE prereleases and fail to install while only prereleases
+ * exist on npm. Resolvers always pick the HIGHEST satisfying published
+ * version, so the `-alpha.0` floor never *selects* an early build — it
+ * only keeps the range satisfiable when `X.Y.Z-alpha.0` is the sole
+ * published prerelease of the line.
+ *
+ * NOTE the base is read from the COMMITTED tree (readPublishedVersion)
+ * and is NOT guaranteed to be published: after a lockstep version bump
+ * the range matches nothing on npm until the new cohort ships. The
+ * template-sync workflow preflights every assembled @ggui-ai/* range
+ * against npm (scripts/check-template-pins.mjs) and refuses to push the
+ * public mirror when the range is unsatisfiable — publish the cohort
+ * first, then sync.
+ */
+function gguiAiPinRange(base) {
+  return `^${base}-alpha.0`;
+}
+
+/**
  * Scan `packages/*` (relative to oss-root) for the publishable `@ggui-ai/*`
  * packages and map each package name → its absolute workspace directory.
  * Used by `--link`
@@ -152,12 +185,12 @@ function buildGguiAiLinkMap() {
 /**
  * Rewrite a parsed package.json:
  *   - "@ggui-samples/<X>" → "@agentic-app-template/<X>" (root name + any deps)
- *   - "workspace:*" → published version for @ggui-ai/* and @agentic-app-template/* deps
+ *   - "workspace:*" → `pinRange` (see gguiAiPinRange) for @ggui-ai/* deps
  *     (or `link:<local-dir>` when `linkMap` is provided — `--link` mode;
  *      or the EXACT `pin` version when `pin` is provided — `--pin` mode).
  * Returns the mutated pkg object.
  */
-function rewritePkgJson(pkg, publishedVersion, linkMap, pin) {
+function rewritePkgJson(pkg, pinRange, linkMap, pin) {
   if (typeof pkg.name === 'string' && pkg.name.startsWith('@ggui-samples/')) {
     pkg.name = pkg.name.replace(/^@ggui-samples\//, '@agentic-app-template/');
   }
@@ -198,17 +231,10 @@ function rewritePkgJson(pkg, publishedVersion, linkMap, pin) {
             renamed[newName] = pin;
             continue;
           }
-          // Prerelease-inclusive caret, NOT an exact pin. `^X.Y.Z-alpha.1`
-          // installs the latest published X.Y.Z prerelease (the alpha/beta/rc
-          // cohort) and auto-promotes to stable X.Y.z once it ships; a plain
-          // `^X.Y.Z` would EXCLUDE prereleases and fail to install today.
-          // Floor is `-alpha.1`, NOT `-alpha.0`: the `-alpha.0` build of some
-          // packages (e.g. @ggui-ai/agent-server) was published with internal
-          // deps pinned to the unpublished plain base (`"@ggui-ai/protocol":
-          // "0.2.0"`), so `^…-alpha.0` admits that poisoned build and breaks
-          // `pnpm install` (ERR_PNPM_NO_MATCHING_VERSION). `publishedVersion`
-          // is the committed base (e.g. "0.2.0") — see readPublishedVersion.
-          renamed[newName] = `^${publishedVersion}-alpha.1`;
+          // Default mode: the prerelease-inclusive caret range computed
+          // ONCE in main() — see gguiAiPinRange for the full rationale
+          // and the npm-publishability preflight that gates the sync.
+          renamed[newName] = pinRange;
         } else if (newName.startsWith('@agentic-app-template/')) {
           // Inter-template deps stay workspace-flavored — the assembled tree
           // IS a pnpm workspace, so workspace:* resolves locally.
@@ -243,7 +269,7 @@ function copyTree(src, dst) {
   });
 }
 
-function rewriteAllPackageJsons(rootDir, publishedVersion, linkMap, pin) {
+function rewriteAllPackageJsons(rootDir, pinRange, linkMap, pin) {
   const visit = (dir) => {
     for (const entry of readdirSync(dir)) {
       const p = join(dir, entry);
@@ -260,7 +286,7 @@ function rewriteAllPackageJsons(rootDir, publishedVersion, linkMap, pin) {
           console.error(`✗ invalid JSON in ${p}: ${String(e)}`);
           process.exit(3);
         }
-        rewritePkgJson(pkg, publishedVersion, linkMap, pin);
+        rewritePkgJson(pkg, pinRange, linkMap, pin);
         writeFileSync(p, `${JSON.stringify(pkg, null, 2)}\n`);
       }
     }
@@ -268,7 +294,7 @@ function rewriteAllPackageJsons(rootDir, publishedVersion, linkMap, pin) {
   visit(rootDir);
 }
 
-function assembleOne(sdk, outDir, publishedVersion, linkMap, pin) {
+function assembleOne(sdk, outDir, pinRange, linkMap, pin) {
   const recipe = RECIPES.find((r) => r.sdk === sdk);
   if (!recipe) {
     console.error(`✗ unknown sdk: ${sdk}`);
@@ -306,7 +332,7 @@ function assembleOne(sdk, outDir, publishedVersion, linkMap, pin) {
   writeFileSync(gguiJsonPath, `${JSON.stringify(gguiCfg, null, 2)}\n`);
 
   // 4. Rewrite every package.json.
-  rewriteAllPackageJsons(outDir, publishedVersion, linkMap, pin);
+  rewriteAllPackageJsons(outDir, pinRange, linkMap, pin);
 
   console.log(`  ✓ shell + 4 samples + package-json rewrites`);
 }
@@ -330,7 +356,7 @@ function parseArgs(argv) {
   --out-base=<dir>   With --all: parent dir; each SDK lands at <dir>/<sdk>/.
   --out=<dir>        With --sdk: exact target dir.
   --pin=<version>    Pin @ggui-ai/* deps EXACTLY to <version> (no caret),
-                     instead of the default \`^<base>-alpha.1\` range. Used by
+                     instead of the default \`^<base>-alpha.0\` range. Used by
                      the bundled create-agentic-app build to pin the scaffold
                      to its co-published cohort version. Mutually exclusive
                      with --link.
@@ -370,7 +396,7 @@ function parseArgs(argv) {
 
 function main() {
   const args = parseArgs(process.argv.slice(2));
-  const publishedVersion = readPublishedVersion();
+  const pinRange = gguiAiPinRange(readPublishedVersion());
   const linkMap = args.link ? buildGguiAiLinkMap() : null;
   const pin = args.pin;
   if (linkMap) {
@@ -381,19 +407,17 @@ function main() {
   } else if (pin) {
     console.log(`build-templates: --pin mode → @ggui-ai/* deps pinned EXACTLY to \`${pin}\``);
   } else {
-    console.log(
-      `build-templates: @ggui-ai/* base ${publishedVersion} → pinned \`^${publishedVersion}-alpha.1\``,
-    );
+    console.log(`build-templates: @ggui-ai/* deps pinned \`${pinRange}\``);
   }
 
   if (args.all) {
     for (const { sdk } of RECIPES) {
       const outDir = resolve(args.outBase, sdk);
-      assembleOne(sdk, outDir, publishedVersion, linkMap, pin);
+      assembleOne(sdk, outDir, pinRange, linkMap, pin);
     }
     console.log(`\n✓ assembled ${RECIPES.length} templates under ${args.outBase}/`);
   } else {
-    assembleOne(args.sdk, resolve(args.out), publishedVersion, linkMap, pin);
+    assembleOne(args.sdk, resolve(args.out), pinRange, linkMap, pin);
     console.log(`\n✓ assembled ${args.sdk} at ${resolve(args.out)}`);
   }
 }

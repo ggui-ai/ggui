@@ -1,0 +1,28 @@
+# Railway config-as-code — the WEB (frontend SPA) service ONLY.
+#
+# Railway reads ONE service per config file; multi-service `[services.*]`
+# blocks are not part of config-as-code and are silently ignored, so this
+# template ships one railway.toml per service directory.
+#
+# The blessed deploy path is `pnpm deploy:railway` (scripts/deploy-railway.mjs):
+# it provisions all four services, sets these same build/start commands via
+# Railway's API, and wires the env vars (including cross-service URL refs)
+# that config-as-code cannot express. Use this file only for a manual
+# dashboard deploy: create the service from the repo, then point its
+# Settings → Config-as-code file path at `apps/web/railway.toml`.
+#
+# `pnpm --filter ./apps/web start` runs `vite build && vite preview`; the
+# app's vite config binds all interfaces, honors $PORT, and allows the
+# Railway-assigned Host header.
+#
+# Env vars to set on this service in the dashboard (config-as-code cannot
+# set variables; VITE_-prefixed values are inlined into the browser bundle
+# at build time):
+#   PORT                    = 6890
+#   VITE_AGENT_ENDPOINT_URL = https://${{agent.RAILWAY_PUBLIC_DOMAIN}}
+
+[build]
+buildCommand = "pnpm install --frozen-lockfile && pnpm --filter ./apps/web run --if-present build"
+
+[deploy]
+startCommand = "pnpm --filter ./apps/web start"
