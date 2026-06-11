@@ -35,13 +35,49 @@ export function assertGeneratorRegistered(
   requested: string | undefined,
   defaultGenerator: string | undefined,
 ): void {
+  // `undefined` means "use server default" — always registered. The
+  // explicit check (rather than relying on the predicate alone)
+  // narrows `requested` to `string` for the typed error below.
+  if (requested === undefined) return;
   if (isGeneratorRegistered(requested, defaultGenerator)) return;
-  const registered = defaultGenerator
-    ? `['${defaultGenerator}']`
-    : '[] (no generator registered)';
-  throw new Error(
-    `unknown_generator: '${requested}' is not registered on this server. Registered generators: ${registered}. Omit \`blueprintDraft.generator\` to use the server default.`,
-  );
+  throw new UnknownGeneratorError(requested, defaultGenerator);
+}
+
+/**
+ * Thrown when {@link assertGeneratorRegistered} receives a
+ * `blueprintDraft.generator` slug that is not bound on this server.
+ *
+ * The `code` slug is a member of the `GadgetGateErrorCode` union in
+ * `./errors.ts` — the type-level closure of every gate-rejection code
+ * the render + handshake stack can throw. Consumers match via
+ * `instanceof` or `error.code` string-equality, never by parsing the
+ * message prefix.
+ *
+ * The message names the registered slug so the recovery is obvious:
+ * omit `blueprintDraft.generator` to use the server default, or use
+ * the named generator.
+ */
+export class UnknownGeneratorError extends Error {
+  readonly code = 'unknown_generator' as const;
+  /** The unregistered slug the caller requested. */
+  readonly requested: string;
+  /**
+   * The server's currently-registered single generator, or
+   * `undefined` when no generator is bound at all.
+   */
+  readonly defaultGenerator: string | undefined;
+
+  constructor(requested: string, defaultGenerator: string | undefined) {
+    const registered = defaultGenerator
+      ? `['${defaultGenerator}']`
+      : '[] (no generator registered)';
+    super(
+      `unknown_generator: '${requested}' is not registered on this server. Registered generators: ${registered}. Omit \`blueprintDraft.generator\` to use the server default.`,
+    );
+    this.name = 'UnknownGeneratorError';
+    this.requested = requested;
+    this.defaultGenerator = defaultGenerator;
+  }
 }
 
 /**
