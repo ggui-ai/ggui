@@ -265,8 +265,8 @@ export const gadgetManifestSchema = z.strictObject({
    *   3. THIS field — gadget author's default
    *   4. spec default `registry.ggui.ai`
    *
-   * Most wrappers omit this (they publish to the hosted registry, and
-   * the spec default covers them). Set this only when the wrapper ships
+   * Most wrappers omit this (they publish to the default registry,
+   * and the spec default covers them). Set this only when the wrapper ships
    * via a non-default registry (private org registry, sandbox-only
    * fixture, …). The operator override remains the right knob for
    * sandbox-vs-prod swaps.
@@ -324,18 +324,6 @@ export const GGUI_GADGET_JSON_FILENAME = 'ggui.gadget.json';
  */
 export function parseGadgetManifest(raw: unknown): GadgetManifest {
   return gadgetManifestSchema.parse(raw);
-}
-
-/**
- * Assertion helper — narrows `raw` to {@link GadgetManifest} on
- * success, throws `ZodError` on failure. Useful when the caller wants
- * to keep the original reference (rather than the parsed copy
- * `parseGadgetManifest` returns).
- */
-export function assertGadgetManifestValid(
-  raw: unknown,
-): asserts raw is GadgetManifest {
-  gadgetManifestSchema.parse(raw);
 }
 
 /**

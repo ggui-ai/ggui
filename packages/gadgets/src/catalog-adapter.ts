@@ -16,7 +16,7 @@
  *
  *   - {@link CachingGadgetCatalog} — decorator over any other adapter
  *     with per-appId TTL caching + single-flight deduplication. Right
- *     for production cloud paths where descriptors live in DynamoDB /
+ *     for production paths where descriptors live in a database /
  *     a registry service and re-fetching on every render would burn
  *     network round-trips. Caches are scoped per-appId so two apps
  *     never see each other's catalogs.
@@ -55,8 +55,8 @@ import type { GadgetDescriptor } from '@ggui-ai/protocol';
  * Per-deployment source of registered gadget descriptors.
  *
  * Named parties: caller (render-time resolution / dev tools) ↔ adapter
- * (deployment-specific descriptor backing store, e.g., JSON, DynamoDB,
- * in-memory).
+ * (deployment-specific descriptor backing store, e.g., JSON, a
+ * database, in-memory).
  *
  * Obligations:
  *   - `list(appId)` MUST return the full set of descriptors registered
@@ -141,8 +141,8 @@ class InMemoryGadgetCatalogWithFallback extends InMemoryGadgetCatalog {
 /**
  * Decorator adapter — wraps any {@link GadgetCatalogAdapter} with
  * per-appId TTL caching + single-flight deduplication. Right for
- * production paths where the inner adapter hits DynamoDB / a registry
- * service and per-render fetches would dominate latency.
+ * production paths where the inner adapter hits a database / a
+ * registry service and per-render fetches would dominate latency.
  *
  * Concurrent `list(appId)` calls during a cache miss share ONE
  * inflight Promise — no thundering herd against the inner adapter.

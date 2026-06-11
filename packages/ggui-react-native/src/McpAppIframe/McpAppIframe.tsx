@@ -1,9 +1,12 @@
 /**
- * `<McpAppIframe>` — the generic MCP Apps iframe host for React Native.
+ * `<McpAppIframe>` — the generic MCP Apps host for React Native.
  *
- * RN mirror of `@ggui-ai/react::<McpAppIframe>` — same prop shape, same
- * imperative-ref shape, same callback contract. The platform-specific
- * parts are:
+ * Parity target is the MCP Apps host contract implemented on web by
+ * `<AppRenderer>` from `@mcp-ui/client` — NOT a web `<McpAppIframe>`
+ * (the web side retired that component; see `./types.ts` for the
+ * history). `@mcp-ui/client`'s two-iframe sandbox-proxy architecture
+ * has no WebView equivalent, so on RN this component IS the
+ * spec-canonical host primitive. The platform-specific parts are:
  *
  *   - Underlying element: `react-native-webview` WebView (not iframe).
  *   - Page → host bridge: `ReactNativeWebView.postMessage` forwarded
@@ -45,9 +48,7 @@ import WebView, {
 } from 'react-native-webview';
 import {
   fromBootstrapFailure,
-  fromUpgradeRequired,
   type ObservabilityMessage,
-  type ProtocolError,
   type RendererBootFailedMessage,
 } from '@ggui-ai/iframe-runtime';
 import {
@@ -111,7 +112,6 @@ export const McpAppIframe = forwardRef<McpAppIframeRef, McpAppIframeProps>(
       meta,
       onToolCall,
       onError,
-      onUpgradeRequired,
       onObserve,
       onLifecycle,
     },
@@ -211,11 +211,6 @@ export const McpAppIframe = forwardRef<McpAppIframeRef, McpAppIframeProps>(
             onError?.(fromBootstrapFailure(msg.reason, msg.message));
             return;
           }
-          case 'protocol-error': {
-            const env = payload as { error: ProtocolError };
-            onError?.(env.error);
-            return;
-          }
           case 'observability': {
             const env = payload as ObservabilityMessage;
             onObserve?.(env.event);
@@ -235,25 +230,6 @@ export const McpAppIframe = forwardRef<McpAppIframeRef, McpAppIframeProps>(
             const env = payload as McpAppLifecycleMessage;
             setLifecycleState(env.event.state);
             onLifecycle?.(env.event);
-            return;
-          }
-          case 'upgrade-required': {
-            const env = payload as {
-              server?: string;
-              client?: readonly string[];
-            };
-            const server = typeof env.server === 'string' ? env.server : '';
-            const client = Array.isArray(env.client)
-              ? (env.client as readonly string[])
-              : [];
-            onUpgradeRequired?.(server, client);
-            onError?.(
-              fromUpgradeRequired({
-                observedVersion: server.length > 0 ? server : undefined,
-                acceptedVersions: client,
-                message: 'upgrade-required',
-              }),
-            );
             return;
           }
           case 'jsonrpc': {
@@ -287,7 +263,7 @@ export const McpAppIframe = forwardRef<McpAppIframeRef, McpAppIframeProps>(
             return;
         }
       },
-      [deliverToWebView, onError, onObserve, onUpgradeRequired, onLifecycle],
+      [deliverToWebView, onError, onObserve, onLifecycle],
     );
 
     // Mount-source null → caller gave an unmountable resource. Emit

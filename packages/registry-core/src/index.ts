@@ -58,9 +58,7 @@ export {
 
 // Operations
 export {
-  BLUEPRINT_EXTERNAL_MODULES,
   compileBlueprint,
-  compiledDigestHex,
   type CompileBlueprintErr,
   type CompileBlueprintOk,
   type CompileBlueprintResult,

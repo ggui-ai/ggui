@@ -48,6 +48,9 @@
  */
 
 import {
+  MCP_APP_BOOTSTRAP_FAILED_TYPE,
+  MCP_APP_LIFECYCLE_TYPE,
+  MCP_APP_OBSERVE_TYPE,
   toMcpAppEnvelope,
   type McpAppAiGguiRenderMeta,
 } from '@ggui-ai/protocol/integrations/mcp-apps';
@@ -224,32 +227,32 @@ export async function dispatchHostBridgeRequest(
 
 export type RendererEnvelopeTag =
   | 'bootstrap-failed'
-  | 'protocol-error'
   | 'observability'
   | 'lifecycle'
-  | 'upgrade-required'
   | 'jsonrpc'
   | 'unknown';
 
 /**
  * Classify a raw message payload received from the WebView. The
- * platform host routes each tag to the matching callback prop.
+ * platform host routes each tag to the matching callback prop. The
+ * recognized `type` discriminators are the protocol-owned renderer →
+ * host envelope vocabulary (`@ggui-ai/protocol/integrations/mcp-apps`)
+ * — this classifier recognizes exactly the tags renderers emit, no
+ * phantom arms. (`ggui:renderer-ready` is deliberately untagged: it is
+ * an optional informational signal this host has no callback for, so
+ * it falls through to `unknown` and is dropped.)
  */
 export function classifyRendererEnvelope(data: unknown): RendererEnvelopeTag {
   if (data === null || typeof data !== 'object') return 'unknown';
   const d = data as { type?: unknown; jsonrpc?: unknown; method?: unknown };
   if (typeof d.type === 'string') {
     switch (d.type) {
-      case 'ggui:bootstrap-failed':
+      case MCP_APP_BOOTSTRAP_FAILED_TYPE:
         return 'bootstrap-failed';
-      case 'ggui:protocol-error':
-        return 'protocol-error';
-      case 'ggui:observe':
+      case MCP_APP_OBSERVE_TYPE:
         return 'observability';
-      case 'ggui:lifecycle':
+      case MCP_APP_LIFECYCLE_TYPE:
         return 'lifecycle';
-      case 'ggui:upgrade-required':
-        return 'upgrade-required';
       default:
         break;
     }

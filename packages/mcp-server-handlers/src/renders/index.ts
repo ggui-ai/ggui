@@ -212,7 +212,6 @@ export {
   findBlueprintExact,
   findBlueprintsByEmbedding,
   listBlueprints,
-  readSourceFromMetadata,
   recordBlueprintHit,
   registerBlueprint,
   type Blueprint,

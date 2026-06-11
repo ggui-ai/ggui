@@ -63,6 +63,5 @@ export {
 // RN-specific test helpers (re-export from test-setup)
 export {
   simulateAppStateChange,
-  simulateNetInfoChange,
   clearAsyncStore,
 } from '../test-setup';

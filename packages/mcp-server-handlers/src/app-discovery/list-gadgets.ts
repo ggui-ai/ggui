@@ -2,10 +2,11 @@
  * `ggui_list_gadgets` — per-app browser-capability gadget
  * catalog discovery tool.
  *
- * Returns the list of `GadgetDescriptor` declarations registered for
- * an app — the stdlib seed (`STDLIB_GADGETS` from
- * `@ggui-ai/protocol`) by default, or an operator-mutated catalog
- * once operator mutation is supported.
+ * Returns the app's effective `GadgetDescriptor` catalog: the
+ * first-party stdlib floor (`STDLIB_GADGETS` from
+ * `@ggui-ai/protocol`) with any operator-declared per-app packages
+ * (`ggui.json#app.gadgets`, pushed via the CLI's config-push) layered
+ * on top — a declared package wins on a `package`-name collision.
  *
  * ## Behavior
  *
@@ -15,14 +16,16 @@
  *   2. When `appId` is supplied explicitly, asserts it matches
  *      `ctx.appId`; cross-tenant requests fail with
  *      {@link AppAccessDeniedError}.
- *   3. Reads `app.gadgets` from the bound {@link AppMetadataStore}.
- *      When the store returns `null` (app not registered — common for
- *      OSS sandbox apps that bypass an explicit register call) the
- *      handler falls back to `STDLIB_GADGETS` so callers
- *      always get a meaningful catalog. This is a permitted-error
- *      path, not a tenancy escape — `ctx.appId` was already proved
- *      by the auth adapter; the absence of a registry row just means
- *      the deployment runs default-seeded.
+ *   3. Reads `app.gadgets` from the bound {@link AppMetadataStore}
+ *      and resolves the effective catalog via `resolveAppGadgets`
+ *      (stdlib floor + declared extensions). When the store returns
+ *      `null` (app not registered — common for OSS sandbox apps that
+ *      bypass an explicit register call) the resolution yields
+ *      exactly `STDLIB_GADGETS`, so callers always get a meaningful
+ *      catalog. This is a permitted-error path, not a tenancy
+ *      escape — `ctx.appId` was already proved by the auth adapter;
+ *      the absence of a registry row just means the deployment runs
+ *      default-seeded.
  *
  * ## Audience
  *
@@ -105,7 +108,7 @@ export function createGguiListGadgetsHandler(
     title: 'List gadgets',
     audience: ['agent'],
     description:
-      'List the per-app catalog of browser-capability gadget hooks the UI may import in `clientCapabilities.gadgets[*]` of a DataContract. Returns the v1 stdlib catalog by default; operator-mutated per-app overrides ship in a follow-up slice. Pass appId to scope explicitly (must match the caller identity); omit to default to the caller-resolved app.',
+      "List the per-app catalog of browser-capability gadget hooks the UI may import in `clientCapabilities.gadgets[*]` of a DataContract. Returns the app's effective catalog — the first-party stdlib floor plus any operator-registered per-app packages (`ggui.json#app.gadgets`); a declared package wins on a package-name collision. Pass appId to scope explicitly (must match the caller identity); omit to default to the caller-resolved app.",
     inputSchema,
     outputSchema,
     async handler(

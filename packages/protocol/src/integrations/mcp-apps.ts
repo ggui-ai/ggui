@@ -21,7 +21,7 @@
  * drift is bounded to callers that explicitly import from here.
  *
  * Core still carries two fields that make the bootstrap flow work —
- * `SubscribePayload.bootstrap?: string` and `AckPayload.sessionToken?:
+ * `SubscribePayload.wsToken?: string` and `AckPayload.sessionToken?:
  * string`. Those are deliberately framed as **general transport bootstrap
  * credentials** (opaque strings), not MCP-Apps-specific. Any future
  * bootstrap mechanism (short-code auto-login, signed-URL bootstrap, etc.)
@@ -158,7 +158,7 @@ export function deriveContextName(slotKey: string): string {
 //     sessionId, appId, runtimeUrl,
 //     wsUrl?, wsToken?, expiresAt?,
 //     pollingUrl?,
-//     themeId?, themeMode?,
+//     themeId?, themeMode?, theme?,
 //     gadgets?, publicEnv?, streamWebSocketLocalTools?,
 //     permissionsPolicy?,
 //     lastSequence?,
@@ -1041,6 +1041,74 @@ export function isMcpAppLifecycleMessage(
     }
   }
   return true;
+}
+
+// =============================================================================
+// Renderer → host postMessage envelope vocabulary
+//
+// The renderer (inside the MCP Apps iframe) speaks to its parent via a
+// small closed family of `{type: 'ggui:…'}` postMessage envelopes. The
+// DISCRIMINATOR vocabulary is protocol-owned and lives HERE, in one
+// place — hosts on every platform (web iframe hosts, React Native
+// WebView hosts) and the renderer itself import these constants rather
+// than re-encoding the strings, so a tag rename is a single-point
+// change and recognizer drift (a host classifying a tag no renderer
+// emits) is structurally impossible.
+//
+// Payload OWNERSHIP follows the vocabulary's semantics:
+//   - `ggui:lifecycle` — protocol-owned end to end (see
+//     {@link McpAppLifecycleMessage} above): the payload is a wire
+//     contract with host obligations.
+//   - `ggui:renderer-ready` / `ggui:bootstrap-failed` — envelope shape
+//     is protocol-owned ({@link McpAppRendererReadyMessage} /
+//     {@link McpAppBootstrapFailedMessage}); the renderer narrows
+//     `reason` to its own closed reason union at the emission site.
+//   - `ggui:observe` — only the TAG is protocol-owned. The event union
+//     it carries is renderer-internal telemetry vocabulary
+//     (`ObservabilityEvent` in the renderer package); hosts treat it
+//     as extensibly-closed.
+// =============================================================================
+
+/** Envelope tag: renderer alive + bundle evaluated (pre-`ui/initialize`). */
+export const MCP_APP_RENDERER_READY_TYPE = 'ggui:renderer-ready';
+
+/** Envelope tag: a boot-path failure (parse / initialize / handshake). */
+export const MCP_APP_BOOTSTRAP_FAILED_TYPE = 'ggui:bootstrap-failed';
+
+/** Envelope tag: renderer-internal observability event (telemetry). */
+export const MCP_APP_OBSERVE_TYPE = 'ggui:observe';
+
+/**
+ * Envelope tag: mount-lifecycle transition. Constant twin of the
+ * literal on {@link McpAppLifecycleMessage} — the annotation ties the
+ * two so they cannot drift.
+ */
+export const MCP_APP_LIFECYCLE_TYPE: McpAppLifecycleMessage['type'] =
+  'ggui:lifecycle';
+
+/**
+ * `ggui:renderer-ready` — posted by the renderer immediately after its
+ * status DOM mounts, BEFORE `ui/initialize` fires. Optional
+ * informational signal; hosts MAY surface a "renderer alive"
+ * indicator. `version` is the renderer bundle's package version.
+ */
+export interface McpAppRendererReadyMessage {
+  readonly type: typeof MCP_APP_RENDERER_READY_TYPE;
+  readonly version: string;
+}
+
+/**
+ * `ggui:bootstrap-failed` — posted by the renderer (or a pre-renderer
+ * shell) on any boot-path failure. Hosts surface it on their error
+ * callback. `reason` is extensibly-closed at the protocol layer
+ * (emitters narrow it to their own closed reason unions, e.g. the
+ * renderer's boot-failure reasons); hosts MUST tolerate reason codes
+ * they don't recognise.
+ */
+export interface McpAppBootstrapFailedMessage {
+  readonly type: typeof MCP_APP_BOOTSTRAP_FAILED_TYPE;
+  readonly reason: string;
+  readonly message: string;
 }
 
 // =============================================================================

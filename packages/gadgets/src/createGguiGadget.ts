@@ -7,11 +7,17 @@
  * {@link GadgetHook}. The factory:
  *
  *   1. Strictly validates the spec at call time via
- *      `strictGadgetDescriptorSchema` — non-empty teaching text
- *      (`description` / `usage` / `example`), at least one of
- *      `package` / `bundleUrl`, plus a non-function `hookImpl` check
- *      the schema can't see. Throws {@link WrapperConformanceError}
- *      with field-level paths on any violation.
+ *      `strictGadgetDescriptorSchema` — `package` (npm name) and a
+ *      pin-only semver `version` are REQUIRED on every descriptor,
+ *      teaching text (`description` / `usage` / `example`) is
+ *      REQUIRED and non-empty, URL fields (`bundleUrl` / `styleUrl` /
+ *      `typesUrl`) must be full URLs — plus a non-function `hookImpl`
+ *      check the schema can't see. Throws
+ *      {@link WrapperConformanceError} with field-level paths on any
+ *      violation. (`typesUrl` is not required HERE — at author time
+ *      the build hasn't emitted a `.d.ts` yet — but registration via
+ *      `registeredGadgetDescriptorSchema` requires it for every
+ *      non-stdlib package.)
  *   2. Returns the React hook function as the primary export, with
  *      the serializable {@link GadgetDescriptor} descriptor attached
  *      as `.descriptor`. Single export, dual purpose:
@@ -23,7 +29,8 @@
  *        usage: '...',
  *        example: { ... },
  *        package: '@my-org/ggui-leaflet',
- *        styleUrl: '/leaflet.css',
+ *        version: '0.1.0',
+ *        styleUrl: 'https://cdn.example.com/ggui-leaflet/leaflet.css',
  *        hookImpl: (options) => { …real React hook… },
  *      });
  *

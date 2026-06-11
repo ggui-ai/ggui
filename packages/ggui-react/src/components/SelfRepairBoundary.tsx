@@ -4,7 +4,8 @@
  * A React error boundary that catches runtime errors in generated components
  * and sends them to the server for automatic repair.
  *
- * Premium Feature: Requires self-repair to be enabled in the app config.
+ * Requires a server-side repair endpoint and self-repair enabled in the
+ * app config (`SelfRepairConfig`).
  *
  * @experimental This component is a preview/experimental feature.
  * Error reports are sent to the server, but automatic delivery of repair
@@ -28,8 +29,7 @@ export interface SelfRepairBoundaryProps {
   children: ReactNode;
   /** App ID */
   appId: string;
-  /** GguiSession identity — single flat id post-Phase-B (replaces the legacy
-   *  `sessionId` + `stackItemId` pair). */
+  /** GguiSession identity — the single flat id. */
   sessionId: string;
   /** Original source code (if available) */
   sourceCode?: string;

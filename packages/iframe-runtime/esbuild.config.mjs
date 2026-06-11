@@ -88,6 +88,11 @@ const result = await build({
   define: {
     'process.env.NODE_ENV': '"production"',
     __GGUI_RUNTIME_BUILD_ID__: JSON.stringify(buildId),
+    // Bare package version (no git sha) — advertised to hosts via the
+    // `ggui:renderer-ready` notification and the `ui/initialize`
+    // appInfo. Derived from package.json so the bundle can never
+    // advertise a version that drifts from the published package.
+    __GGUI_RUNTIME_VERSION__: JSON.stringify(pkgJson.version),
   },
   loader: {
     '.ts': 'ts',

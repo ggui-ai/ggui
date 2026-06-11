@@ -4,9 +4,11 @@
  * Per-SDK samples (Claude Agent SDK, OpenAI Agents SDK, Google ADK)
  * implement the {@link AgentAdapter} contract + call
  * {@link startAgentServer} — every ggui-coupled concern (HTTP,
- * SSE, MCP routing, tool-result resource inlining, directive
- * synthesis, server-allocated chat ids, auth, chat ownership) lives
- * in this package.
+ * SSE, MCP routing, tool-result resource inlining,
+ * server-allocated chat ids, auth, chat ownership) lives in this
+ * package. The prompt is forwarded to the adapter verbatim —
+ * guest-gesture directives are authored upstream, in the iframe's
+ * `ui/message` text.
  */
 export {
   startAgentServer,

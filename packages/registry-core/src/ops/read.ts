@@ -1,7 +1,7 @@
 /**
  * `readArtifact` — pure op for `GET /pkg/{scope}/{name}/{version}`.
- * A shared op that both this server and the hosted registry project
- * through their respective transport shells.
+ * A shared op that every registry deployment projects through its
+ * own transport shell.
  *
  * Flow:
  *   1. Point-read the version row via {@link RegistryStorage.getArtifactVersion}.
@@ -26,9 +26,9 @@ import type { RegistryStorage } from '../interfaces/registry-storage.js';
 
 export interface ReadArtifactInput {
   /**
-   * `<scope>/<name>` — the install identifier. Scope MUST start with `@`.
-   * Cloud API Gateway path params drop the leading `@`; the cloud
-   * Lambda shell re-prepends before calling this op.
+   * `<scope>/<name>` — the install identifier. Scope MUST start
+   * with `@`. Transports whose path params drop the leading `@`
+   * MUST re-prepend it before calling this op.
    */
   readonly artifactId: string;
   readonly version: string;

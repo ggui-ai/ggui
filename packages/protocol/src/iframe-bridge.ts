@@ -56,28 +56,6 @@ export const SRCDOC_AGENT_DATA_BRIDGE = `
   });`;
 
 /**
- * Srcdoc JS snippet: auto-report content height changes to parent.
- *
- * Uses a ResizeObserver on <html> to detect layout changes and posts
- * a `ggui-resize` message with the current scrollHeight. Also fires
- * an initial measurement on the next animation frame after injection.
- *
- * Inject this into any srcdoc or rendered page <script> so the parent
- * can auto-size the iframe to fit content without scrollbars.
- */
-export const SRCDOC_RESIZE_BRIDGE = `
-  (function() {
-    var resizeObserver = new ResizeObserver(function() {
-      parent.postMessage({ type: "${BRIDGE_EVENTS.RESIZE}", height: document.documentElement.scrollHeight }, "*");
-    });
-    resizeObserver.observe(document.documentElement);
-    // Initial measurement after first paint
-    requestAnimationFrame(function() {
-      parent.postMessage({ type: "${BRIDGE_EVENTS.RESIZE}", height: document.documentElement.scrollHeight }, "*");
-    });
-  })();`;
-
-/**
  * Srcdoc JS snippet: universal interaction bridge inside iframe.
  *
  * Three layers of automatic event capture (no props.onSubmit needed):

@@ -10,9 +10,6 @@ export type {
   ComponentErrorReport,
   ComponentRepairResult,
   SelfRepairConfig,
-  SelfRepairEventType,
-  SelfRepairEvents,
-  RepairHistoryEntry,
 } from './types/self-repair';
 
 // Agent listing types (marketplace)

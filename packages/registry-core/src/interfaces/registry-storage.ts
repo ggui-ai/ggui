@@ -1,9 +1,9 @@
 /**
  * `RegistryStorage` — the per-row persistence seam for the marketplace
- * registry. The interface mirrors a three-table DynamoDB shape
- * (artifacts + artifact-versions + author-keys) so a hosted DynamoDB
- * adapter can be a structural pass-through. Memory + filesystem impls
- * back the open-source server and unit tests.
+ * registry. The interface is a three-table key-value shape
+ * (artifacts + artifact-versions + author-keys) chosen so a hosted
+ * database adapter can be a structural pass-through. Memory +
+ * filesystem impls back the open-source server and unit tests.
  *
  * The shape follows a single-interface / multiple-impls / contract-test
  * pattern, with a Protocol & Contract Bar docstring.
@@ -23,19 +23,20 @@
  *
  * **Obligations:**
  * - {@link putArtifactVersionIfAbsent} MUST atomically reject when a row
- *   exists for `(artifactId, version)`. Mirrors DDB's
- *   `ConditionExpression: attribute_not_exists(...)`. Implementations
+ *   exists for `(artifactId, version)` — a conditional put-if-absent
+ *   at the storage layer. Implementations
  *   MUST NOT overwrite on conflict — per-version immutability is a
  *   load-bearing registry invariant.
  * - {@link getArtifactMetadata} / {@link getArtifactVersion} MUST return
  *   exactly what was last written. `null` on miss; throw on transport
  *   failure (caller decides retry).
- * - {@link scanArtifacts} returns rows in arbitrary order (cloud DDB
- *   Scan order; memory insertion order; filesystem directory order).
+ * - {@link scanArtifacts} returns rows in arbitrary order
+ *   (backing-store scan order; memory insertion order; filesystem
+ *   directory order).
  *   Consumers MUST treat ordering as non-deterministic.
  *
  * **Failure mode:**
- * - Transport-level failures (DDB throttle, disk full) throw.
+ * - Transport-level failures (store throttling, disk full) throw.
  *   {@link publishArtifact} wraps and returns 500 with `internal`
  *   error code.
  * - Missing rows return `null`; never throw.
@@ -71,8 +72,8 @@ export interface PutAuthorKeyOptions {
 /**
  * Thrown by {@link RegistryStorage.putAuthorKey} when the caller passed
  * `ifNotExists: true` AND a row already exists for `(subject, keyId)`.
- * Cloud DDB adapter surfaces `ConditionalCheckFailedException` as this
- * type; in-memory impl mirrors the contract synchronously.
+ * A hosted database adapter surfaces its conditional-write conflict
+ * as this type; the in-memory impl mirrors the contract synchronously.
  *
  * Callers re-read via {@link RegistryStorage.getAuthorKey} and dispatch
  * same-publicKey → 200, different-publicKey → 409.
@@ -113,16 +114,16 @@ export interface RegistryStorage {
   ): Promise<ArtifactVersionRow | null>;
   /**
    * List every version row for `artifactId`. Returns in arbitrary order
-   * (DDB Query order by SK = version, lexicographic; memory map
+   * (backing-store query order; memory map
    * insertion order; filesystem directory order). Callers MUST sort
    * by semver themselves if they need ordering.
    *
    * Backs the `GET /pkg/:scope/:name` list-versions route.
    *
-   * **Cost note.** A DynamoDB impl uses `Query` with `PK = artifactId`,
-   * which is the cheapest possible per-artifact lookup (no Scan, no
-   * GSI). Memory + filesystem impls do a full table walk filtered by
-   * artifactId — adequate for bounded row counts.
+   * **Cost note.** A key-value impl can serve this as a single
+   * partition query keyed by artifactId — the cheapest possible
+   * per-artifact lookup. Memory + filesystem impls do a full table
+   * walk filtered by artifactId — adequate for bounded row counts.
    *
    * **Returns:** empty array when no versions exist (NOT null) — the
    * "metadata-row present but no version rows" state should never
@@ -182,8 +183,9 @@ export interface RegistryStorage {
    *   - Version-row conflict — `(artifactId, version)` already exists.
    *     NEITHER row mutates. Returns `{ ok: false, reason: 'version_exists' }`.
    *     The publisher's idempotent-retry path.
-   *   - Transport-level failures (DDB throttle, disk full, transaction
-   *     conflict not attributable to either conditional) throw —
+   *   - Transport-level failures (store throttling, disk full,
+   *     transaction conflict not attributable to either conditional)
+   *     throw —
    *     {@link publishArtifact} wraps and returns 500.
    *
    * **Atomicity guarantee:**
@@ -191,10 +193,11 @@ export interface RegistryStorage {
    *   - Memory + filesystem impls: single-threaded JS event loop —
    *     the function awaits both writes before returning, no other
    *     awaitable interleaves.
-   *   - Cloud DDB impl: `TransactWriteItems` is all-or-nothing at the
-   *     service level. The new-blob path issues one transaction; the
-   *     dedup path may retry once if the optimistic new-blob path
-   *     fails because the digest landed between read-and-write.
+   *   - A hosted database impl uses its store's all-or-nothing
+   *     multi-row transaction. The new-blob path issues one
+   *     transaction; the dedup path may retry once if the optimistic
+   *     new-blob path fails because the digest landed between
+   *     read-and-write.
    *
    * **Why a single transaction matters (refCount double-increment on
    * retry)**: a sequenced write path could increment refCount, then

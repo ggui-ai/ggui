@@ -20,10 +20,11 @@
  *
  * @public
  */
-import type {
-  McpAppLifecycleEvent,
-  McpAppLifecycleMessage,
-  McpAppLifecycleState,
+import {
+  MCP_APP_LIFECYCLE_TYPE,
+  type McpAppLifecycleEvent,
+  type McpAppLifecycleMessage,
+  type McpAppLifecycleState,
 } from '@ggui-ai/protocol/integrations/mcp-apps';
 
 /**
@@ -55,7 +56,7 @@ export type LifecycleEmitter = (event: McpAppLifecycleEvent) => void;
  */
 export function postLifecycleToParent(event: McpAppLifecycleEvent): void {
   if (typeof window === 'undefined' || window.parent === null) return;
-  const message: McpAppLifecycleMessage = { type: 'ggui:lifecycle', event };
+  const message: McpAppLifecycleMessage = { type: MCP_APP_LIFECYCLE_TYPE, event };
   try {
     window.parent.postMessage(message, '*');
   } catch {

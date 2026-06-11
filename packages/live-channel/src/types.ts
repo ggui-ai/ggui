@@ -28,7 +28,7 @@
  *
  * `TPayload` is the payload shape on the wire (e.g. `DrainAckPayload`
  * for `type === 'drain_ack'`). The handler is responsible for any
- * validation of the payload shape — the gadget passes it through
+ * validation of the payload shape — the library passes it through
  * verbatim.
  *
  * Polling is REGISTRY-LEVEL (see {@link RegistryPollingOptions}) —
@@ -108,7 +108,7 @@ export type TransportKind = 'ws' | 'polling';
 /**
  * Bootstrap shape the registry reads to pick a transport. Mirrors the
  * subset of `McpAppAiGguiRenderMeta` the transport layer needs —
- * keeping the type local lets the gadget stay protocol-version-agnostic
+ * keeping the type local lets the library stay protocol-version-agnostic
  * at the import boundary (consumers thread in the concrete render
  * slice). Field names line up 1:1 with the upstream slice so callers
  * can spread without an adapter.
@@ -163,8 +163,8 @@ export interface TransportHandle {
  * channel. Callers narrow via the `kind` discriminator on the union
  * type returned by `ChannelRegistry.bind()`.
  *
- * Protocol-aware handshakes (subscribe→ack→error) are NOT a gadget
- * concern — consumers express them by registering a handler that
+ * Protocol-aware handshakes (subscribe→ack→error) are NOT a
+ * live-channel concern — consumers express them by registering a handler that
  * closes over a Promise resolver. The library stays a single-dispatch
  * primitive (handlers are the only delivery shape).
  */

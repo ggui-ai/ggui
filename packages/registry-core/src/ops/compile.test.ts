@@ -24,7 +24,7 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import * as esbuild from 'esbuild';
 import { describe, expect, it } from 'vitest';
-import { compileBlueprint, compiledDigestHex } from './compile.js';
+import { compileBlueprint } from './compile.js';
 
 describe('compileBlueprint', () => {
   it('compiles a minimal TSX blueprint to ESM JS', () => {
@@ -68,14 +68,6 @@ describe('compileBlueprint', () => {
     expect(b.ok).toBe(true);
     if (!a.ok || !b.ok) return;
     expect(a.compiledDigest).not.toBe(b.compiledDigest);
-  });
-
-  it('compiledDigestHex matches the inline digest from compileBlueprint', () => {
-    const source = 'export default () => <i/>';
-    const r = compileBlueprint(source);
-    expect(r.ok).toBe(true);
-    if (!r.ok) return;
-    expect(compiledDigestHex(r.compiledBytes)).toBe(r.compiledDigest);
   });
 
   it('preserves the externals contract — imports survive in compiled output', () => {

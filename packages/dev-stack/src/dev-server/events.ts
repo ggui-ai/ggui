@@ -64,8 +64,8 @@ export function openEventStream(
   });
 
   // Initial hello — lets the client know the stream is live
-  // before any UI event fires. Studio uses this to flip its
-  // status indicator to "live."
+  // before any UI event fires. An authoring UI uses this to flip
+  // its status indicator to "live."
   res.write(`event: hello\ndata: {"ok":true}\n\n`);
 
   const unsubscribe = registry.subscribe((event: UiRegistryEvent) => {

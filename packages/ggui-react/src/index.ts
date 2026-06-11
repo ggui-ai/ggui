@@ -108,13 +108,11 @@ export type {
 
 // Re-export types from internal
 export type {
-  // Self-repair types (premium)
+  // Self-repair types (error boundary, component repair)
   ComponentErrorReport,
   ComponentRepairResult,
   SelfRepairConfig,
-  SelfRepairEventType,
-  SelfRepairEvents,
-  // Agent listing types (marketplace)
+  // Agent listing types
   AgentListingItem,
   AgentListingVisibility,
   AgentListingStatus,
@@ -177,7 +175,7 @@ export type {
 export { ProvisionalRenderer } from './components/ProvisionalRenderer';
 export type { ProvisionalRendererProps } from './components/ProvisionalRenderer';
 
-// Self-Repair (Premium Feature)
+// Self-Repair
 export { SelfRepairBoundary } from './components/SelfRepairBoundary';
 export type { SelfRepairBoundaryProps } from './components/SelfRepairBoundary';
 

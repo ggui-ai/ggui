@@ -60,9 +60,10 @@ export interface App {
   readonly id: string;
   /**
    * Per-app browser-capability gadget catalog. Defaults to
-   * `STDLIB_GADGETS` (the 7 v1 hooks) on app registration.
-   * Operator UX to mutate this list ships in a follow-up slice; v1
-   * every app's catalog = stdlib seed.
+   * `STDLIB_GADGETS` (the 7 v1 hooks) on app registration. Operators
+   * extend it by declaring packages in `ggui.json#app.gadgets` and
+   * pushing via the CLI's config-push; resolution layers declared
+   * packages over the stdlib floor (`resolveAppGadgets`).
    */
   readonly gadgets: readonly GadgetDescriptor[];
   /**

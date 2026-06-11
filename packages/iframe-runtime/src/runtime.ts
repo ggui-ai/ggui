@@ -1,8 +1,8 @@
 /**
  * `@ggui-ai/iframe-runtime` iframe runtime entry.
  *
- * This is the file esbuild bundles into `dist/renderer.js`. The
- * thin-shell HTML loads it via `<script type="module" src=".../renderer.js">`;
+ * This is the file esbuild bundles into `dist/iframe-runtime.js`. The
+ * thin-shell HTML loads it via `<script type="module" src=".../iframe-runtime.js">`;
  * on import the side-effects below take over: build a status DOM,
  * postMessage `ui/initialize` to the parent, parse the bootstrap, open
  * the WebSocket, run the version handshake, and mount the render
@@ -33,11 +33,15 @@ import type {
   GguiSession,
 } from '@ggui-ai/protocol';
 import type { WebSocketMessage } from '@ggui-ai/protocol/transport/websocket';
-import type {
-  McpAppAiGguiRenderMeta,
-  GguiUserActionMeta,
+import {
+  MCP_APP_BOOTSTRAP_FAILED_TYPE,
+  MCP_APP_RENDERER_READY_TYPE,
+  type McpAppAiGguiRenderMeta,
+  type McpAppBootstrapFailedMessage,
+  type McpAppRendererReadyMessage,
+  type GguiUserActionMeta,
 } from '@ggui-ai/protocol/integrations/mcp-apps';
-import type { ValidatedMcpAppAiGguiMeta, GguiSessionSeedInput } from './types.js';
+import type { GguiSessionSeedInput } from './types.js';
 import {
   parseMetaFromGlobal,
   parseMetaFromToolResult,
@@ -70,7 +74,6 @@ import {
   createChannelPayloadHandler,
   createDataHandler,
   createDrainAckHandler,
-  createFeedbackHandler,
   createPropsUpdateHandler,
   createRenderHandler,
   createSystemHandler,
@@ -124,14 +127,20 @@ import {
 
 // =============================================================================
 // Build-time-stamped renderer version. Surfaced to the parent in the
-// `ggui:renderer-ready` notification so hosts (and console views)
-// can correlate runtime behavior with a specific bundle.
+// `ggui:renderer-ready` notification (and the `ui/initialize` appInfo
+// via APP_INFO) so hosts (and console views) can correlate runtime
+// behavior with a specific bundle.
 //
-// Hard-coded to the package.json version; future build tooling can
-// substitute via esbuild `define` if a non-package value is wanted.
+// Injected by esbuild `define` from package.json's version at bundle
+// time (see esbuild.config.mjs) — never a hand-maintained literal, so
+// the advertised version cannot drift from the published package.
+// `typeof` guards the non-bundled contexts (vitest imports this module
+// directly, no define pass) which fall back to `'dev'`.
 // =============================================================================
 
-const RENDERER_VERSION = '0.1.0';
+declare const __GGUI_RUNTIME_VERSION__: string;
+const RENDERER_VERSION =
+  typeof __GGUI_RUNTIME_VERSION__ === 'string' ? __GGUI_RUNTIME_VERSION__ : 'dev';
 
 /**
  * How long the spec-canonical postMessage tier (Tier 3 in
@@ -218,13 +227,14 @@ export type ConnectAppResult =
   | { readonly ok: false; readonly message: string };
 
 /**
- * Vestigial JSON-RPC response shape — still referenced by the legacy
- * `postRpcToParent` helper used by `dispatchSubmitAction` and the
- * channel-transport router. Phase 1.19b.3 migrates those to
- * `app.callServerTool` in a follow-on sub-phase; until then keep the
- * interface here so the helper signatures still typecheck.
+ * JSON-RPC response envelope returned by `callServerToolSpec` (the
+ * App-handle `tools/call` path). Success wraps the parsed
+ * `CallToolResult` in `{jsonrpc:'2.0', result}`; failure (no App
+ * bound, or the SDK call throwing) surfaces as `{error:{message}}` so
+ * dispatch callsites can branch on `error` without `instanceof`
+ * gymnastics.
  *
- * @internal — DO NOT export; remove with `postRpcToParent`.
+ * @internal — DO NOT export; consumers live in this module only.
  */
 interface JsonRpcResponse {
   readonly jsonrpc?: string;
@@ -246,8 +256,8 @@ function createDefaultApp(): { app: App; transport: Transport } {
 }
 
 /**
- * Module-level connected App handle. Set by `bootProduction` /
- * `bootSelfContained` once `app.connect()` resolves; consumed by the
+ * Module-level connected App handle. Set by `bootSequence` once
+ * `app.connect()` resolves; consumed by the
  * outbound dispatch path (`tools/call` via `app.callServerTool`) so
  * spec-compliant frame routing is used in place of the legacy
  * hand-rolled JSON-RPC pump.
@@ -264,8 +274,8 @@ let currentApp: App | null = null;
  * a replace only happens in tests that reuse the module across
  * scenarios (and want each spec to bind its own App).
  *
- * @internal — production callers are the boot paths
- *   (`bootProduction`, `bootSelfContained`); tests inject directly to
+ * @internal — the production caller is `bootSequence` (reached via
+ *   `bootProduction`); tests inject directly to
  *   drive outbound `tools/call` through a `MockTransport`-bound App
  *   without invoking the full boot pipeline.
  */
@@ -334,10 +344,14 @@ export type RendererBootFailureReason =
   | 'WS_HANDSHAKE_FAILED'
   | 'UPGRADE_REQUIRED';
 
-export interface RendererBootFailedMessage {
-  readonly type: 'ggui:bootstrap-failed';
+/**
+ * The renderer's emission-side narrowing of the protocol-owned
+ * {@link McpAppBootstrapFailedMessage} envelope: same wire shape, but
+ * `reason` is pinned to the closed {@link RendererBootFailureReason}
+ * union so every emission site stays exhaustive-checkable.
+ */
+export interface RendererBootFailedMessage extends McpAppBootstrapFailedMessage {
   readonly reason: RendererBootFailureReason;
-  readonly message: string;
 }
 
 /**
@@ -348,10 +362,11 @@ export interface RendererBootFailedMessage {
  */
 function postRendererReady(): void {
   try {
-    window.parent.postMessage(
-      { type: 'ggui:renderer-ready', version: RENDERER_VERSION },
-      '*',
-    );
+    const envelope: McpAppRendererReadyMessage = {
+      type: MCP_APP_RENDERER_READY_TYPE,
+      version: RENDERER_VERSION,
+    };
+    window.parent.postMessage(envelope, '*');
   } catch {
     // postMessage failure here means the parent is unreachable; the
     // boot sequence will fail downstream when `ui/initialize` doesn't
@@ -363,7 +378,7 @@ function postRendererReady(): void {
 function postBootFailure(reason: RendererBootFailureReason, message: string): void {
   try {
     const envelope: RendererBootFailedMessage = {
-      type: 'ggui:bootstrap-failed',
+      type: MCP_APP_BOOTSTRAP_FAILED_TYPE,
       reason,
       message,
     };
@@ -412,7 +427,7 @@ export interface BootSequenceOptions {
    * Notify-parent hook. Default posts to `window.parent`; tests
    * inject a recorder.
    */
-  readonly notifyParent: (msg: RendererBootFailedMessage | { type: 'ggui:renderer-ready'; version: string }) => void;
+  readonly notifyParent: (msg: RendererBootFailedMessage | McpAppRendererReadyMessage) => void;
   /**
    * Optional typed {@link import('./protocol-error.js').ProtocolError}
    * sink. Every bootstrap-failure path fires this in parallel with
@@ -464,7 +479,7 @@ export interface BootSequenceOptions {
    * (1) calls `renderer.setup()` after bootstrap parse;
    * (2) mounts the single render into the renderer's slot on
    * first ack + re-applies on every subsequent render; (3) routes
-   * inbound `data` / `props_update` / `feedback` frames through the
+   * inbound `data` / `props_update` frames through the
    * supplied wire config + StreamBus.
    *
    * When absent (default), the boot sequence runs the placeholder
@@ -486,7 +501,7 @@ export interface BootSequenceOptions {
    * runs — spec mandates `ui/initialize` regardless of how slice meta
    * arrives, and `hostContext` is captured from `app.getHostContext()`.
    */
-  readonly preResolvedMeta?: ValidatedMcpAppAiGguiMeta;
+  readonly preResolvedMeta?: McpAppAiGguiRenderMeta;
   /**
    * How long to wait for the spec-canonical `ui/notifications/tool-result`
    * notification (Tier 2 of the resolver chain) before failing with
@@ -522,7 +537,7 @@ export interface RendererHooks {
    * via their own emitters).
    */
   setup(params: {
-    readonly meta: ValidatedMcpAppAiGguiMeta;
+    readonly meta: McpAppAiGguiRenderMeta;
     readonly renderInto: HTMLElement;
     readonly statusRefs: StatusRefs;
     readonly onObserve?: ObservabilityEmitter;
@@ -582,7 +597,7 @@ export interface RendererHandle {
   /**
    * Channel-client registry holding handlers for every WS frame type
    * the iframe routes (`render`, `data`, `props_update`, `drain_ack`,
-   * `channel_payload`, `channel_error`, `system`, `feedback`). The
+   * `channel_payload`, `channel_error`, `system`). The
    * registry-bound transport is the sole dispatch surface — frames
    * arrive directly through registered handlers, no longer through a
    * separate `onMessage` callback.
@@ -638,7 +653,7 @@ export async function bootSequence(opts: BootSequenceOptions): Promise<BootSeque
   // `onError` callback.
   const emitBootFailure = (reason: BootstrapFailureReason, message: string): void => {
     notifyParent({
-      type: 'ggui:bootstrap-failed',
+      type: MCP_APP_BOOTSTRAP_FAILED_TYPE,
       // The legacy envelope's reason type is `RendererBootFailureReason`
       // (a subset of `BootstrapFailureReason`). Every value we emit here
       // is a member of that subset; the cast is a narrow-to-narrow
@@ -661,7 +676,7 @@ export async function bootSequence(opts: BootSequenceOptions): Promise<BootSeque
   let mountedRender: GguiSession | GguiSessionSeedInput | null = null;
   setStatus(refs, 'Negotiating with host…', 'connecting');
 
-  notifyParent({ type: 'ggui:renderer-ready', version: RENDERER_VERSION });
+  notifyParent({ type: MCP_APP_RENDERER_READY_TYPE, version: RENDERER_VERSION });
   // Lifecycle `mounting` — the renderer is alive + status DOM is up,
   // but no IO has run yet. Hosts mirroring lifecycle to outer DOM see
   // this transition concurrent with `ggui:renderer-ready`. Idempotent
@@ -685,7 +700,7 @@ export async function bootSequence(opts: BootSequenceOptions): Promise<BootSeque
   // Skipped entirely when `preResolvedMeta` is set (autostart caught
   // the toolresult or read the global early) — no listener installed,
   // no race to run.
-  const toolResultPromise: Promise<ValidatedMcpAppAiGguiMeta | null> =
+  const toolResultPromise: Promise<McpAppAiGguiRenderMeta | null> =
     opts.preResolvedMeta !== undefined
       ? Promise.resolve(null)
       : awaitToolResultMetaFromApp(app, toolResultTimeoutMs);
@@ -1060,7 +1075,7 @@ export async function bootSequence(opts: BootSequenceOptions): Promise<BootSeque
   }
 
   // Attach the live transport handle to the renderer — flushes any
-  // buffered outbound frames (feedback / action) that were queued
+  // buffered outbound `action` frames that were queued
   // while the subscribe handshake completed. `handle.handle.send` is
   // the canonical send surface for the bound WS transport.
   if (renderer !== null && rendererHooks?.attachManager !== undefined) {
@@ -1142,7 +1157,7 @@ function createPlaceholderRegistry(params: {
 /**
  * Frame dispatch lives inside `@ggui-ai/live-channel`'s
  * `ChannelRegistry`. Every WS frame type (`render`, `data`,
- * `props_update`, `drain_ack`, `feedback`, `channel_payload`,
+ * `props_update`, `drain_ack`, `channel_payload`,
  * `channel_error`, `system`) has a registered handler in
  * `channels/*.ts`; the registry's bound transport routes inbound
  * frames directly to them. Observability emission (`auth-required`)
@@ -1224,18 +1239,6 @@ function shouldAutostart(): boolean {
 // =============================================================================
 
 /**
- * Self-contained slice-meta shape — alias for {@link
- * ValidatedMcpAppAiGguiMeta}. Post-Phase-B every delivery channel
- * produces a single `McpAppAiGguiRenderMeta` slice.
- *
- * The export is kept so downstream consumers (`@ggui-ai/iframe-runtime`
- * barrel, dependent test suites) don't break.
- *
- * @public
- */
-export type SelfContainedMcpAppAiGguiMeta = ValidatedMcpAppAiGguiMeta;
-
-/**
  * Read `globalThis.__GGUI_META__` synchronously, validate against
  * the unified slice-meta shape, and return the typed meta (or null
  * on absence / malformation).
@@ -1246,7 +1249,7 @@ export type SelfContainedMcpAppAiGguiMeta = ValidatedMcpAppAiGguiMeta;
  * reader contract — the autostart resolver only needs the "valid
  * meta or fall through" signal.
  */
-export function readSelfContainedMeta(): SelfContainedMcpAppAiGguiMeta | null {
+export function readSelfContainedMeta(): McpAppAiGguiRenderMeta | null {
   const result = parseMetaFromGlobal();
   return result.ok ? result.meta : null;
 }
@@ -1291,7 +1294,7 @@ function parseSeedProps(propsJson: string | undefined): JsonObject | undefined {
  * ack reconciles the seed to a full `GguiSession` (no fabrication).
  */
 export async function buildGguiSessionSeedInput(
-  meta: SelfContainedMcpAppAiGguiMeta,
+  meta: McpAppAiGguiRenderMeta,
 ): Promise<GguiSessionSeedInput | null> {
   const props = parseSeedProps(meta.propsJson);
 
@@ -1324,7 +1327,7 @@ export async function buildGguiSessionSeedInput(
 }
 
 /**
- * Extract a {@link SelfContainedMcpAppAiGguiMeta} from a
+ * Extract a {@link McpAppAiGguiRenderMeta} from a
  * `ui/notifications/tool-result` JSON-RPC params payload — the
  * postMessage delivery shape MCP Apps hosts (Claude Desktop, claude.ai
  * web) use to push the active tool's `_meta` to the iframe.
@@ -1339,7 +1342,7 @@ export async function buildGguiSessionSeedInput(
  */
 export function extractMetaFromToolResult(
   params: unknown,
-): SelfContainedMcpAppAiGguiMeta | null {
+): McpAppAiGguiRenderMeta | null {
   const result = parseMetaFromToolResult(params);
   return result.ok ? result.meta : null;
 }
@@ -1356,7 +1359,7 @@ export function extractMetaFromToolResult(
  * `ui/notifications/tool-result` notifications, populated in
  * arrival order. The runtime drains it on first read.
  */
-function readPendingToolResults(): SelfContainedMcpAppAiGguiMeta | null {
+function readPendingToolResults(): McpAppAiGguiRenderMeta | null {
   if (typeof window === 'undefined') return null;
   const raw = (window as unknown as {
     __GGUI_PENDING_TOOL_RESULTS__?: unknown;
@@ -1384,7 +1387,7 @@ function readPendingToolResults(): SelfContainedMcpAppAiGguiMeta | null {
 function awaitToolResultMetaFromApp(
   app: App,
   timeoutMs: number,
-): Promise<SelfContainedMcpAppAiGguiMeta | null> {
+): Promise<McpAppAiGguiRenderMeta | null> {
   return new Promise((resolve) => {
     let settled = false;
     const handler = (params: CallToolResult): void => {
@@ -1417,11 +1420,11 @@ function awaitToolResultMetaFromApp(
  */
 function awaitToolResultMeta(
   timeoutMs: number,
-): Promise<SelfContainedMcpAppAiGguiMeta | null> {
+): Promise<McpAppAiGguiRenderMeta | null> {
   if (typeof window === 'undefined') return Promise.resolve(null);
   return new Promise((resolve) => {
     let settled = false;
-    const settle = (value: SelfContainedMcpAppAiGguiMeta | null) => {
+    const settle = (value: McpAppAiGguiRenderMeta | null) => {
       if (settled) return;
       settled = true;
       window.removeEventListener('message', onMessage);
@@ -1452,9 +1455,9 @@ function awaitToolResultMeta(
 /**
  * Module-level guard for the App-mediated post-mount toolresult
  * re-listener. Ensures exactly one persistent
- * `app.addEventListener('toolresult', …)` registration even when
- * `bootSelfContained` is called multiple times (e.g. an agent fires a
- * second `ggui_render` and we re-mount).
+ * `app.addEventListener('toolresult', …)` registration even across
+ * re-mounts (e.g. an agent fires a second `ggui_render` and the
+ * listener re-applies through the published `applyRender`).
  */
 let postMountListenerInstalled = false;
 
@@ -1657,7 +1660,7 @@ const productionContextSnapshotPoster: ContextSnapshotPoster = {
 /**
  * Outbound `tools/call` shim. Routes through the spec-canonical
  * `app.callServerTool` API on the module-level App handle. Production
- * always has the handle set (bootSequence / bootSelfContained call
+ * always has the handle set (`bootSequence` calls
  * `setCurrentApp(app)` after handshake); tests that exercise dispatch
  * routing install one explicitly via {@link setCurrentApp} bound to
  * a `MockTransport`.
@@ -2500,23 +2503,23 @@ export function __resetInterceptorsForTest(): void {
  * that catches `ui/notifications/tool-result` notifications arriving
  * AFTER the initial mount. Each new tool-result that carries a
  * different bootstrap (different sessionId / codeUrl / kind) triggers
- * a re-mount via {@link bootSelfContained}. This closes the boot-only-
+ * a re-mount through the published `applyRender`. This closes the boot-only-
  * listener gap that prevented live re-render when an agent issued
  * a second `ggui_render` to the same render-resource.
  *
  * Idempotent: subsequent calls no-op via {@link postMountListenerInstalled}.
  *
- * Why module-level vs scoped to a single mount: bootSelfContained may
- * itself trigger a re-mount, and the listener should outlive any
- * single mount cycle. The guard ensures we don't stack listeners
- * across re-mounts.
+ * Why module-level vs scoped to a single mount: re-mounts re-apply
+ * through `applyRender` while the listener stays live, and the
+ * listener should outlive any single mount cycle. The guard ensures
+ * we don't stack listeners across re-mounts.
  *
  * Spec-canonical (post-Phase-1.19b.3): the previous hand-rolled
  * `window.addEventListener('message', …)` is gone; App handles every
  * inbound `ui/notifications/tool-result` envelope and dispatches via
  * its event system. Per-iframe single-tenancy means the App handle
- * comes from `getCurrentApp()` — set by bootSelfContained's own
- * connect path before this helper runs.
+ * comes from `getCurrentApp()` — set by `bootSequence`'s connect
+ * path before this helper runs.
  */
 function installPostMountListener(): void {
   if (postMountListenerInstalled) return;
@@ -2538,7 +2541,7 @@ function installPostMountListener(): void {
     // refetch + re-emit the FULL envelope. The two envelopes share
     // sessionId/kind/codeUrl/propsJson but differ on the live trio —
     // without trio in the key, the second arrival deduped silently and
-    // bootSelfContained never opened the WS, so `ggui_update` props_update
+    // the re-mount never opened the WS, so `ggui_update` props_update
     // frames fanned to zero subscribers.
     const liveTrio =
       typeof meta.wsUrl === 'string' &&
@@ -2644,14 +2647,14 @@ function readLiveBootstrapShape(): boolean {
  * re-await the same postMessage or re-parse the same global), saving
  * up to the 30s postMessage timeout for spec-strict hosts.
  */
-function runBootProduction(preResolvedMeta?: ValidatedMcpAppAiGguiMeta): void {
+function runBootProduction(preResolvedMeta?: McpAppAiGguiRenderMeta): void {
   const { app, transport } = createDefaultApp();
   void bootProduction({
     doc: document,
     app,
     transport,
     notifyParent: (msg) => {
-      if (msg.type === 'ggui:renderer-ready') {
+      if (msg.type === MCP_APP_RENDERER_READY_TYPE) {
         postRendererReady();
         return;
       }
@@ -2745,7 +2748,7 @@ async function bootProduction(opts: {
   readonly doc: Document;
   readonly app: App;
   readonly transport: Transport;
-  readonly notifyParent: (msg: RendererBootFailedMessage | { type: 'ggui:renderer-ready'; version: string }) => void;
+  readonly notifyParent: (msg: RendererBootFailedMessage | McpAppRendererReadyMessage) => void;
   readonly onObserve?: ObservabilityEmitter;
   readonly onLifecycle?: LifecycleEmitter;
   /**
@@ -2753,7 +2756,7 @@ async function bootProduction(opts: {
    * threaded through `bootSequence` so the resolver skips the inline
    * + spec-canonical toolresult tiers.
    */
-  readonly preResolvedMeta?: ValidatedMcpAppAiGguiMeta;
+  readonly preResolvedMeta?: McpAppAiGguiRenderMeta;
 }): Promise<void> {
   // Dynamic-import the heavy module graph. Done here rather than at
   // top-level so spec files importing runtime.ts for `bootSequence`
@@ -2767,8 +2770,9 @@ async function bootProduction(opts: {
     import('@ggui-ai/design/interact'),
     import('@ggui-ai/design/tokens'),
     import('@ggui-ai/wire'),
-    // STDLIB gadget hooks. See the `bootSelfContained` callsite
-    // above for the rationale.
+    // STDLIB gadget hooks — seeds `__ggui__.gadgets` synchronously in
+    // the registry composition below, so a generated component's
+    // gadget data-URL shims resolve at mount time.
     import('@ggui-ai/gadgets'),
   ]);
   const [globalsMod, gadgetLoaderMod] = await Promise.all([
@@ -2842,7 +2846,7 @@ async function bootProduction(opts: {
 
       // Install the React Context registry + build a ContextStateHost
       // so the WS-driven shells (Studio, Portal, OSS console)
-      // participate in contextSpec the same way `bootSelfContained`
+      // participate in contextSpec the same way the static-seed mount
       // does. Without this the WS-driven path installed neither —
       // `globalThis.__ggui__.contexts` stayed empty, the boilerplate's
       // destructure resolved to `undefined`, and any declared
@@ -2901,7 +2905,7 @@ async function bootProduction(opts: {
 
       // Spec-canonical outbound dispatch. The WS pipe is for streamSpec
       // subscriptions ONLY (inbound `ggui_emit` fanout + `props_update` +
-      // `render` + `data` + `feedback` + `drain_ack` + `channel_payload`).
+      // `render` + `data` + `drain_ack` + `channel_payload`).
       // Outbound user actions go through the MCP-Apps host relay per
       // spec §401: postMessage `tools/call:ggui_runtime_submit_action`
       // to the parent → `AppRenderer.onCallTool` → sample agent's
@@ -2910,8 +2914,9 @@ async function bootProduction(opts: {
       // → `ggui_consume` wakes the agent. The server's WS
       // `handleInboundAction` writes to the render ledger only — no
       // downstream consumer — so the WS action path silently drops
-      // clicks. `routeDispatch` is the same helper `bootSelfContained`
-      // uses; threading it here aligns LIVE-mode with self-contained.
+      // clicks. `routeDispatch` is the shared named-export helper
+      // (production + tests exercise the same code path); threading it
+      // here keeps LIVE-mode on the canonical dispatch pipeline.
       // Single mounted render — populated by `applyRender` on the first
       // render frame. The wire config + data channel handler read it
       // through `currentRender`-returning thunks so they always see the
@@ -2927,9 +2932,9 @@ async function bootProduction(opts: {
       // through this single surface — the WS-ack render, the inline
       // static seed, and re-mounts — has anchor-click + fullscreen
       // capture live before the first `applyRender`. Pre-consolidation
-      // these lived only in `bootSelfContained`; the WS-driven path
-      // installed neither, so anchor clicks + fullscreen requests in a
-      // live-rendered component silently no-op'd.
+      // these lived only in the retired self-contained boot path; the
+      // WS-driven path installed neither, so anchor clicks + fullscreen
+      // requests in a live-rendered component silently no-op'd.
       installAnchorClickInterceptor({
         dispatchToolName,
         sessionId: meta.sessionId,
@@ -3007,8 +3012,7 @@ async function bootProduction(opts: {
       // Without this, react-renderer.ts falls back to
       // `getScopedCssTokens` (no preset) and the iframe renders with
       // the default ggui theme even when `_meta["ai.ggui/render"].themeId`
-      // is `'indigo'`. Sibling `bootSelfContained` path threads the
-      // same fields onto its `mountOpts` for parity.
+      // is `'indigo'`.
       const buildOpts = (render: GguiSession | GguiSessionSeedInput): RenderItemOptions => {
         const wrapOuter = buildOuterWrapper(render);
         return {
@@ -3179,7 +3183,6 @@ async function bootProduction(opts: {
       channelRegistry.register(
         createDrainAckHandler({ dispatch: dispatchDrainAck }),
       );
-      channelRegistry.register(createFeedbackHandler());
       channelRegistry.register(
         createChannelPayloadHandler({
           getChannelTransport: () => channelTransport,

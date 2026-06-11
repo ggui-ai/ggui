@@ -11,7 +11,6 @@ import type {
   UiRegistry,
   UiRegistryCapabilities,
   UiRegistryEvent,
-  WriteResult,
 } from './index.js';
 import type { UiManifest } from '@ggui-ai/project-config';
 
@@ -40,59 +39,35 @@ describe('UiRegistry contract — structural shape', () => {
               contentType: 'application/javascript+react',
             }
           : undefined,
-      capabilities: { writable: false, observable: false },
+      capabilities: { observable: false },
     };
-    // Sanity: the read paths work without write / subscribe.
-    expect(registry.capabilities.writable).toBe(false);
+    // Sanity: the read paths work without subscribe.
     expect(registry.capabilities.observable).toBe(false);
-    expect(registry.write).toBeUndefined();
     expect(registry.subscribe).toBeUndefined();
   });
 
-  it('a writable + observable registry implements the optional methods', async () => {
-    const state = new Map<string, UiManifestEntry>();
+  it('an observable registry implements the optional subscribe method', () => {
+    const handlers = new Set<(event: UiRegistryEvent) => void>();
     const registry: UiRegistry = {
-      list: async () => Array.from(state.values()),
-      get: async (id) => state.get(id),
+      list: async () => [],
+      get: async () => undefined,
       getBundle: async () => undefined,
-      subscribe: () => () => undefined,
-      write: async (entry) => {
-        const existing = state.get(entry.id);
-        if (existing && existing.contentHash !== entry.contentHash) {
-          return {
-            ok: false,
-            reason: 'id-conflict',
-            existingHash: existing.contentHash,
-          };
-        }
-        state.set(entry.id, entry);
-        return { ok: true, contentHash: entry.contentHash };
+      subscribe: (handler) => {
+        handlers.add(handler);
+        return () => handlers.delete(handler);
       },
-      remove: async (id) => {
-        state.delete(id);
-      },
-      capabilities: { writable: true, observable: true },
+      capabilities: { observable: true },
     };
 
-    const entry: UiManifestEntry = {
-      id: 'form',
-      contentHash: 'v1',
-      manifest: buildManifest('form'),
-    };
+    const seen: UiRegistryEvent[] = [];
+    const unsubscribe = registry.subscribe!((event) => seen.push(event));
+    for (const handler of handlers) {
+      handler({ type: 'changed', id: 'form', contentHash: 'v2' });
+    }
+    unsubscribe();
 
-    const first = await registry.write!(entry);
-    expect(first).toEqual({ ok: true, contentHash: 'v1' });
-    expect(await registry.get('form')).toEqual(entry);
-
-    const conflict = await registry.write!({ ...entry, contentHash: 'v2' });
-    expect(conflict).toEqual({
-      ok: false,
-      reason: 'id-conflict',
-      existingHash: 'v1',
-    });
-
-    await registry.remove!('form');
-    expect(await registry.get('form')).toBeUndefined();
+    expect(seen).toEqual([{ type: 'changed', id: 'form', contentHash: 'v2' }]);
+    expect(handlers.size).toBe(0);
   });
 
   it('UiRegistryEvent is a discriminated union on `type`', () => {
@@ -110,17 +85,6 @@ describe('UiRegistry contract — structural shape', () => {
         expect(typeof event.id).toBe('string');
       }
     }
-  });
-
-  it('WriteResult tags cover ok + three failure modes', () => {
-    const results: WriteResult[] = [
-      { ok: true, contentHash: 'h' },
-      { ok: false, reason: 'id-conflict', existingHash: 'h' },
-      { ok: false, reason: 'validation-failed', issues: ['e'] },
-      { ok: false, reason: 'not-supported' },
-    ];
-    expect(results.filter((r) => r.ok)).toHaveLength(1);
-    expect(results.filter((r) => !r.ok)).toHaveLength(3);
   });
 
   it('UiBundle.code accepts both string and ReadableStream', async () => {
@@ -144,7 +108,7 @@ describe('UiRegistry contract — structural shape', () => {
   });
 
   it('UiRegistryCapabilities is a plain flag probe', () => {
-    const caps: UiRegistryCapabilities = { writable: true, observable: false };
-    expect(caps).toEqual({ writable: true, observable: false });
+    const caps: UiRegistryCapabilities = { observable: false };
+    expect(caps).toEqual({ observable: false });
   });
 });

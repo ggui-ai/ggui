@@ -107,8 +107,9 @@ export interface GguiRenderProps {
   // System hooks
   onSystemMessage?: (payload: SystemPayload) => void;
 
-  // Error hooks
-  onValidationError?: (errors: unknown[], data: unknown) => void;
+  // Error hooks — validation failures (inbound stream/props AND
+  // outbound actions) surface here as ClientContractViolationError;
+  // pattern-match on `error.direction` / instanceof to handle them.
   onError?: (error: Error) => void;
 
   /**
@@ -154,7 +155,7 @@ export interface ActionMeta {
  *   via `ggui_consume`. Named "action" to match the data contract concept.
  *
  * - **send** — Send a raw WebSocket message. Internal SDK use only
- *   (feedback, diagnostics). Not intended for application code.
+ *   (diagnostics). Not intended for application code.
  *
  * NOTE: The legacy `invoke(text)` method was retired with the v1.1
  * Streamable Invoke Protocol cutover. User text messages now flow through
@@ -175,9 +176,9 @@ export interface GguiSessionApi {
   /**
    * Send a raw WebSocket message. Internal SDK use only.
    *
-   * Used for feedback submissions, diagnostics, and other low-level
-   * protocol messages. Not intended for application code — use `action`
-   * for UI interactions and `useInvoke().send` for chat.
+   * Used for diagnostics and other low-level protocol messages. Not
+   * intended for application code — use `action` for UI interactions
+   * and `useInvoke().send` for chat.
    */
   send: (message: WebSocketMessage) => void;
 
@@ -231,13 +232,12 @@ export function GguiRender({
   onProgress,
   onStream,
   onSystemMessage,
-  onValidationError: _onValidationError,
   onError,
   onRenderReceived,
   extraReservedValidators,
   children,
 }: GguiRenderProps) {
-  const { appId, wsEndpoint, auth, appMetadata, appConfig } = useGguiContext();
+  const { appId, wsEndpoint, auth, appMetadata } = useGguiContext();
   const [render, setRender] = useState<GguiSession | undefined>(undefined);
 
   // Stable refs for callbacks to avoid unnecessary effect re-runs
@@ -698,7 +698,7 @@ export function GguiRender({
     // underlying tool. Cross-refs surface via `actionSpec[*].nextStep`
     // (event hint) and `streamSpec[*].source.tool` (channel data
     // source).
-  }), [appId, sessionId, connectionStatus, auth, appMetadata, appConfig, dispatchAction, resolveActiveActionSpec]);
+  }), [appId, sessionId, connectionStatus, auth, appMetadata, dispatchAction, resolveActiveActionSpec]);
 
   return (
     <GguiWireProvider config={wireConfig}>

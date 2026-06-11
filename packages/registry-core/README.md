@@ -6,7 +6,7 @@ Pure-TypeScript registry operations + storage interfaces for the **ggui marketpl
 
 The registry's business logic — manifest validation, conformance gating, signature verification, version immutability — is identical regardless of where the registry runs. This package extracts that logic so:
 
-- The hosted registry's transport layer is a thin shell over these ops.
+- A hosted registry's transport layer is a thin shell over these ops.
 - The OSS server is a [hono](https://hono.dev) + filesystem/memory adapter over the same ops.
 - A third-party operator can build their own transport (Express, Fastify, gRPC) by implementing two storage interfaces.
 

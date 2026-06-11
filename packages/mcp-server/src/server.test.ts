@@ -986,7 +986,7 @@ describe('createGguiServer — MCP wire roundtrip', () => {
     // code). Together with the render-blueprint unit tests this
     // covers the happy path end-to-end through the wire.
     const registry = {
-      capabilities: { writable: false, observable: false },
+      capabilities: { observable: false },
       async list() {
         return [];
       },

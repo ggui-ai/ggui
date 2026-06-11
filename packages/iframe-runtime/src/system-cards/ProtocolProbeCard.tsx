@@ -31,8 +31,8 @@
  * host-issued request seen while the card is mounted.
  *
  * Why this lives outside the wire-context: system cards (`kind:
- * 'mcp-apps-probe'`, `'no-credentials'`, …) mount in a render-only
- * branch of `bootSelfContained` that does NOT install
+ * 'mcp-apps-probe'`, `'no-credentials'`, …) mount in render-item's
+ * `kind === 'system'` branch, which does NOT install
  * `<GguiWireProvider>` — they exist precisely to surface protocol
  * state when the wire-context might not be live (auth missing,
  * compile failed, etc.). The probe card mirrors the postMessage

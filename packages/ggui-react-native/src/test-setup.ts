@@ -77,19 +77,10 @@ vi.mock('@react-native-async-storage/async-storage', () => ({
   },
 }));
 
-// --- NetInfo mock ---
-
-let netInfoListener: ((state: { isConnected: boolean; isInternetReachable: boolean }) => void) | null = null;
-
-vi.mock('@react-native-community/netinfo', () => ({
-  default: {
-    addEventListener: vi.fn((listener: (state: { isConnected: boolean; isInternetReachable: boolean }) => void) => {
-      netInfoListener = listener;
-      return () => { netInfoListener = null; };
-    }),
-    fetch: vi.fn(async () => ({ isConnected: true, isInternetReachable: true })),
-  },
-}));
+// NOTE: no NetInfo mock — the package never imports
+// `@react-native-community/netinfo`. Network state is injected by the
+// app (`useChatThread({ isOnline })` / WebSocketManager's
+// `netInfoSubscribe` option); tests inject their own subscribers.
 
 // --- react-native-webview mock ---
 
@@ -109,10 +100,6 @@ export function simulateAppStateChange(state: string): void {
   for (const listener of appStateListeners) {
     listener(state);
   }
-}
-
-export function simulateNetInfoChange(state: { isConnected: boolean; isInternetReachable: boolean }): void {
-  netInfoListener?.(state);
 }
 
 export function clearAsyncStore(): void {

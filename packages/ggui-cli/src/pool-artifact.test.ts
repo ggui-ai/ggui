@@ -2,7 +2,12 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { mkdtemp, rm, writeFile, mkdir, readFile, readdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { writePoolArtifact, readPoolArtifact, POOL_ARTIFACT_V1_REJECTION } from './pool-artifact.js';
+import { writePoolArtifact, readPoolArtifact } from './pool-artifact.js';
+import {
+  POOL_ARTIFACT_SCHEMA_VERSION,
+  POOL_ARTIFACT_V1_REJECTION,
+  parsePoolArtifactManifest,
+} from '@ggui-ai/artifact-manifest';
 import { toPortableBlueprint, fromPortableBlueprint } from '@ggui-ai/protocol/blueprint-key';
 import type { PortableBlueprint } from '@ggui-ai/protocol';
 
@@ -45,6 +50,22 @@ describe('pool artifact codec', () => {
     expect(parsed.componentCode).toBe(rec.componentCode);
     expect(parsed.contractHash).toBe(rec.contractHash);
     expect(parsed.source).toEqual({ kind: 'user' });
+  });
+
+  it('writes the SHARED codec format — the artifact-manifest parser accepts the bytes verbatim', async () => {
+    // Split-brain guard: the writer must emit exactly what
+    // `@ggui-ai/artifact-manifest`'s pool-artifact codec defines, so a
+    // future schemaVersion bump in the codec package propagates here
+    // without a second literal to update.
+    await writePoolArtifact(dir, [rec]);
+    const raw = await readFile(join(dir, 'manifest.json'), 'utf-8');
+    const parsed = parsePoolArtifactManifest(raw);
+    expect(parsed.ok).toBe(true);
+    if (parsed.ok) {
+      expect(parsed.issues).toEqual([]);
+      expect(parsed.manifest.schemaVersion).toBe(POOL_ARTIFACT_SCHEMA_VERSION);
+      expect(parsed.manifest.blueprints).toHaveLength(1);
+    }
   });
 
   it('reports a missing code body as an issue, not a throw', async () => {

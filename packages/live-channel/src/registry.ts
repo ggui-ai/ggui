@@ -5,7 +5,12 @@
  * Usage pattern:
  *
  * ```ts
- * const registry = new ChannelRegistry();
+ * const registry = new ChannelRegistry({
+ *   subscribeFrameBuilder: () => ({
+ *     type: 'subscribe',
+ *     payload: { sessionId, appId, wsToken },
+ *   }),
+ * });
  * registry.register(propsUpdateHandler);
  * registry.register(drainAckHandler);
  * registry.register(channelPayloadHandler);
@@ -47,8 +52,8 @@ export interface ChannelRegistryOptions {
   /**
    * Caller-supplied subscribe-frame factory. The library stays
    * protocol-version-agnostic — the consumer (iframe-runtime) knows
-   * the exact `{type:'subscribe', payload:{sessionId, appId,
-   * bootstrap, fromSeq?}}` shape its server expects and supplies it
+   * the exact `{type:'subscribe', payload:{sessionId, appId?,
+   * wsToken, fromSeq?}}` shape its server expects and supplies it
    * via this factory at bind time.
    *
    * Called on every WSTransport `open` event (initial connect AND

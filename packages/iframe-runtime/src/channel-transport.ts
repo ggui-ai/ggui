@@ -33,8 +33,9 @@
  *      fallback (don't double-deliver).
  *
  * The WS-level exponential backoff (1s → 2s → 4s → ... cap 60s) lives
- * on the {@link RendererWebSocketManager}. The router only watches
- * status transitions; it doesn't own the reconnect schedule.
+ * on `@ggui-ai/live-channel`'s `WSTransport` (post-B3b owner of the
+ * reconnect ladder). The router only watches status transitions; it
+ * doesn't own the reconnect schedule.
  *
  * **Idempotence** — re-subscribing the same `(sessionId, channelName)`
  * pair is server-side idempotent (the server's `ChannelSubscriptionState`
@@ -58,6 +59,11 @@ import type {
   StreamSpec,
 } from '@ggui-ai/protocol';
 import type { WebSocketMessage } from '@ggui-ai/protocol/transport/websocket';
+import type {
+  ChannelTransportFallbackEvent,
+  ChannelTransportPickedEvent,
+  ChannelTransportResubscribedEvent,
+} from './observability.js';
 import type { StreamBus } from './wire-config.js';
 
 /**
@@ -116,9 +122,9 @@ interface ChannelState {
 }
 
 /**
- * Sender for outbound WS frames. The renderer's
- * {@link RendererWebSocketManager.send} fits structurally — pass
- * `manager.send.bind(manager)` or the buffered manager shim.
+ * Sender for outbound WS frames. Any structurally-fitting send fn
+ * works — post-B3b the registry wires the `@ggui-ai/live-channel`
+ * transport's send here.
  */
 export type WsSender = (msg: WebSocketMessage) => void;
 
@@ -171,27 +177,15 @@ export interface ChannelTransportRouterOptions {
 /**
  * Observability events the router emits. Hosts that wire `onObserve`
  * see these alongside the renderer's other observability events
- * (`subscribe-failed`, `auth-required`, …). The shape stays
- * narrow + non-breaking so future events can extend the union.
+ * (`subscribe-failed`, `auth-required`, …). The arm interfaces live in
+ * `observability.ts` (they are members of the exported
+ * `ObservabilityEvent` union); this alias is the router-scoped subset,
+ * so the two surfaces cannot drift.
  */
 export type ChannelTransportEvent =
-  | {
-      readonly kind: 'channel-transport-picked';
-      readonly sessionId: string;
-      readonly channelName: string;
-      readonly transport: 'ws' | 'poll';
-    }
-  | {
-      readonly kind: 'channel-transport-fallback';
-      readonly sessionId: string;
-      readonly channelName: string;
-      readonly reason: 'ws-disconnect' | 'channel-not-local';
-    }
-  | {
-      readonly kind: 'channel-transport-resubscribed';
-      readonly sessionId: string;
-      readonly channelName: string;
-    };
+  | ChannelTransportPickedEvent
+  | ChannelTransportFallbackEvent
+  | ChannelTransportResubscribedEvent;
 
 /**
  * Router handle returned by {@link createChannelTransportRouter}.

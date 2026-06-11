@@ -48,8 +48,10 @@ import type {
   EmbeddingProvider,
   VectorStore,
 } from '@ggui-ai/mcp-server-core';
-import type { GguiSearchBlueprintsOutput } from '@ggui-ai/protocol';
-import { readSourceFromMetadata } from '../renders/blueprint-registry.js';
+import {
+  flatToBlueprintSource,
+  type GguiSearchBlueprintsOutput,
+} from '@ggui-ai/protocol';
 import type { HandlerContext, SharedHandler } from '../types.js';
 
 /**
@@ -196,7 +198,7 @@ async function searchSemantic(
   const hits: MergedHit[] = [];
   for (const r of raw) {
     if (r.score < MIN_SIMILARITY_SCORE) continue;
-    const source = readSourceFromMetadata(r.metadata);
+    const source = flatToBlueprintSource(r.metadata);
     if (source === null) continue;
     const key = r.key;
     hits.push({

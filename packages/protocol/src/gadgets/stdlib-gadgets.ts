@@ -21,9 +21,11 @@
 // **Parity guarantee:** `@ggui-ai/gadgets` ships a cross-
 // package contract test (`stdlib-parity.test.ts`) that imports both
 // this list and the actual hook exports, then asserts the hook names
-// match exactly. Drift fails the test on CI; the protocol package
-// cannot ship a stale descriptor list without the runtime side
-// catching it.
+// match exactly AND that every `example` block sticks to the real
+// `GadgetHook` contract (statuses from the `GadgetStatus` union,
+// `start()`/`stop()` as the only invokable methods). Drift fails the
+// test on CI; the protocol package cannot ship a stale descriptor
+// list without the runtime side catching it.
 
 import type { GadgetDescriptor } from '../types/data-contract';
 
@@ -72,10 +74,15 @@ export const STDLIB_GADGETS: readonly Readonly<GadgetDescriptor>[] = [
         usage:
           'Mount when the intent names photo capture, QR / barcode scanning, video recording, or anything that requires a camera feed. The hook returns a stream once `start()` resolves; thread the resulting blob or stream URL into a contextSpec slot or an actionSpec payload to surface it to the agent.',
         example: {
-          call: 'const cam = useCamera();',
+          call: "const cam = useCamera({ facingMode: 'environment' }); // on button click: await cam.start()",
           returns: {
-            status: 'ready',
-            value: { stream: '<MediaStream>', kind: 'video' },
+            status: 'completed',
+            value: {
+              dataUrl: 'data:image/png;base64,…',
+              width: 640,
+              height: 480,
+              mimeType: 'image/png',
+            },
           },
         },
       },
@@ -86,8 +93,8 @@ export const STDLIB_GADGETS: readonly Readonly<GadgetDescriptor>[] = [
         usage:
           'Mount when the intent involves importing copied content (paste-into-form, paste-image-to-upload, paste-link). The Permissions API requires a user gesture; gate `start()` behind a button click. Returned value lands in a contextSpec slot or an actionSpec payload.',
         example: {
-          call: 'const paste = useClipboardPaste();',
-          returns: { status: 'ready', value: 'pasted clipboard text' },
+          call: 'const paste = useClipboardPaste(); // on button click: await paste.start()',
+          returns: { status: 'completed', value: 'pasted clipboard text' },
         },
       },
       {
@@ -97,8 +104,8 @@ export const STDLIB_GADGETS: readonly Readonly<GadgetDescriptor>[] = [
         usage:
           'Mount when the intent includes copying generated text, share links, codes, or transcripts to the system clipboard. Fire an actionSpec event so the agent observes the act (it does not see the written value — that stays component-local).',
         example: {
-          call: "const write = useClipboardWrite(); write.write('hello');",
-          returns: { status: 'ready' },
+          call: "const write = useClipboardWrite({ text: 'hello' }); // on button click: await write.start()",
+          returns: { status: 'completed', value: 'hello' },
         },
       },
       {
@@ -107,10 +114,19 @@ export const STDLIB_GADGETS: readonly Readonly<GadgetDescriptor>[] = [
         usage:
           'Mount when the intent names file upload, attachment selection, or document import. No permission required. The hook returns the picked files plus metadata; thread file refs / data URLs into a contextSpec slot or actionSpec payload.',
         example: {
-          call: 'const picker = useFilePicker({ accept: "image/*" });',
+          call: "const picker = useFilePicker({ accept: 'image/*' }); // on button click: await picker.start()",
           returns: {
-            status: 'ready',
-            value: [{ name: 'photo.png', type: 'image/png', size: 12345 }],
+            status: 'completed',
+            value: {
+              files: [
+                {
+                  name: 'photo.png',
+                  type: 'image/png',
+                  size: 12345,
+                  _file: '<File>',
+                },
+              ],
+            },
           },
         },
       },
@@ -121,10 +137,15 @@ export const STDLIB_GADGETS: readonly Readonly<GadgetDescriptor>[] = [
         usage:
           'Mount when the intent names "current location", maps, nearby search, location-aware UI. Browser prompts the user on `start()`; the hook returns coordinates once granted. Thread the resolved coords into a contextSpec slot so the agent observes the latest fix.',
         example: {
-          call: 'const geo = useGeolocation();',
+          call: 'const geo = useGeolocation(); // on button click: await geo.start()',
           returns: {
-            status: 'ready',
-            value: { latitude: 37.7749, longitude: -122.4194, accuracy: 20 },
+            status: 'completed',
+            value: {
+              latitude: 37.7749,
+              longitude: -122.4194,
+              accuracy: 20,
+              timestamp: 1718000000000,
+            },
           },
         },
       },
@@ -135,10 +156,10 @@ export const STDLIB_GADGETS: readonly Readonly<GadgetDescriptor>[] = [
         usage:
           'Mount when the intent names voice memos, audio messages, dictation, voice-driven UI. Returns an audio stream / blob; thread it into an actionSpec payload at recording-stop, or into a contextSpec slot for live transcription pipelines.',
         example: {
-          call: 'const mic = useMicrophone();',
+          call: 'const mic = useMicrophone(); // record on click: await mic.start(); end with mic.stop()',
           returns: {
-            status: 'ready',
-            value: { stream: '<MediaStream>', kind: 'audio' },
+            status: 'completed',
+            value: { blob: '<Blob>', durationMs: 4200, mimeType: 'audio/webm' },
           },
         },
       },
@@ -149,8 +170,8 @@ export const STDLIB_GADGETS: readonly Readonly<GadgetDescriptor>[] = [
         usage:
           'Mount when the intent involves alerting the user about something (reminders, completion of long tasks, incoming messages) and the UI may be in the background. Permission is prompted on first `start()`; the agent does NOT see notification dismissal directly — surface it via an actionSpec if needed.',
         example: {
-          call: "const notify = useNotifications(); notify.show({ title: 'Done' });",
-          returns: { status: 'ready', value: { granted: true } },
+          call: "const notify = useNotifications({ title: 'Done' }); // after the task completes: await notify.start()",
+          returns: { status: 'completed', value: { outcome: 'closed' } },
         },
       },
     ],

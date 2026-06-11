@@ -1,15 +1,16 @@
 /**
  * Self-Repair Types
  *
- * Types for the self-repair system that automatically fixes runtime errors
- * in generated components. This is a premium feature.
+ * Shared vocabulary for reporting runtime errors in generated
+ * components and describing repair outcomes.
  *
- * Flow:
- * 1. Client detects runtime error (React error boundary, window.onerror)
- * 2. Client sends error report to server via WebSocket
- * 3. Server analyzes error with LLM and generates fix
- * 4. Server sends repaired code back to client
- * 5. Client hot-reloads the fixed component
+ * `SelfRepairBoundary` (in the React SDKs) catches a component error,
+ * builds a `ComponentErrorReport`, and hands it to the consumer-supplied
+ * `onReportError` callback — how (and whether) the report reaches a
+ * repair backend is the consumer's choice; the boundary itself carries
+ * no transport. `ComponentRepairResult` describes the outcome a repair
+ * backend returns; `SelfRepairConfig` shapes the boundary's retry/UI
+ * policy.
  */
 
 /**
@@ -105,47 +106,4 @@ export interface SelfRepairConfig {
   onRepairSuccess?: (result: ComponentRepairResult) => void;
   /** Callback when repair fails */
   onRepairFailure?: (errorId: string, reason: string) => void;
-}
-
-/**
- * WebSocket event types for self-repair
- */
-export type SelfRepairEventType =
-  | 'component:error'      // Client → Server: Report error
-  | 'component:repairing'  // Server → Client: Repair in progress
-  | 'component:repaired'   // Server → Client: Repair complete
-  | 'component:repair-failed'; // Server → Client: Repair failed
-
-/**
- * Self-repair WebSocket events
- */
-export interface SelfRepairEvents {
-  'component:error': ComponentErrorReport;
-  'component:repairing': { errorId: string; sessionId: string };
-  'component:repaired': ComponentRepairResult;
-  'component:repair-failed': { errorId: string; sessionId: string; reason: string };
-}
-
-/**
- * Repair history entry (for analytics)
- */
-export interface RepairHistoryEntry {
-  /** Error ID */
-  errorId: string;
-  /** App ID */
-  appId: string;
-  /** GguiSession ID */
-  sessionId: string;
-  /** Error type */
-  errorType: string;
-  /** Error message */
-  errorMessage: string;
-  /** Whether repair succeeded */
-  repairSucceeded: boolean;
-  /** Number of attempts */
-  attempts: number;
-  /** Total repair time */
-  totalRepairTimeMs: number;
-  /** Timestamp */
-  timestamp: string;
 }

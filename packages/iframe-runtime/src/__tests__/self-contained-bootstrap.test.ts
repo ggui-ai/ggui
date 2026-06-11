@@ -21,7 +21,6 @@ import {
 import {
   extractMetaFromToolResult,
   readSelfContainedMeta,
-  type SelfContainedMcpAppAiGguiMeta,
 } from '../runtime.js';
 
 const SAMPLE_CODE_URL = 'https://app.example.com/code/abc123.js';
@@ -246,9 +245,9 @@ describe('readSelfContainedMeta — Slice 3 codeUrl on window global', () => {
 
 // Type-level lock: `codeUrl` is the sole static-component discriminator
 // (T3-1 2026-05-13 retired the inline `componentCode` channel).
-describe('SelfContainedMcpAppAiGguiMeta typing', () => {
+describe('McpAppAiGguiRenderMeta typing', () => {
   it('allows constructing a component variant with codeUrl', () => {
-    const bs: SelfContainedMcpAppAiGguiMeta = {
+    const bs: McpAppAiGguiRenderMeta = {
       sessionId: 'render_001',
       appId: 'a1',
       runtimeUrl: SAMPLE_RUNTIME_URL,

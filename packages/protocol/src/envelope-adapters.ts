@@ -7,16 +7,17 @@
  *
  * The only bounded adapter that lives here now is
  * {@link parsePendingEnvelope} — a shape-neutral reader for stored
- * `PendingEvent.envelope` values that may arrive as raw objects (direct
- * DDB writes) or as JSON strings (AppSync `a.json()` semantics).
+ * `PendingEvent.envelope` values that may arrive as raw objects or as
+ * JSON strings, depending on how the deployment's storage layer
+ * serializes rows.
  */
 import type { ConsumeEventEntry } from './types/mcp';
 
 /**
  * Parse a {@link PendingEvent.envelope} that may arrive as either a raw
- * object (direct DDB writes) or a JSON-stringified object (AppSync
- * `a.json()` semantics). Returns the parsed entry unchanged when
- * already an object.
+ * object or a JSON-stringified object, depending on how the
+ * deployment's storage layer serializes rows. Returns the parsed entry
+ * unchanged when already an object.
  *
  * Throws `SyntaxError` when a string input is malformed JSON. Does NOT
  * validate the entry shape — that's the caller's job.

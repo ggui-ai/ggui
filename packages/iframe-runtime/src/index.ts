@@ -44,7 +44,6 @@ export {
 export type {
   RendererBootFailureReason,
   RendererBootFailedMessage,
-  SelfContainedMcpAppAiGguiMeta,
 } from './runtime.js';
 export type {
   ProtocolError,
@@ -68,6 +67,9 @@ export type {
   SchemaVersionMismatchEvent,
   SubscribeFailedEvent,
   AuthRequiredEvent,
+  ChannelTransportPickedEvent,
+  ChannelTransportFallbackEvent,
+  ChannelTransportResubscribedEvent,
   UnknownObservabilityEvent,
 } from './observability.js';
 export { postObservabilityToParent } from './observability.js';

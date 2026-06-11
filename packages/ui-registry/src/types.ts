@@ -1,12 +1,12 @@
 /**
  * Source-contract types for UI artifacts.
  *
- * Studio (hosted), local `ggui dev` (filesystem-backed), and any
- * future UI source implement {@link UiRegistry}. The contract
- * spans reads (required) + optional writes + optional change
- * subscriptions. Deliberately does NOT include search, ranking,
- * embeddings, or sync — those live at higher layers (see
- * `BlueprintProvider` in `@ggui-ai/mcp-server-core`).
+ * Local `ggui dev` (filesystem-backed) and any remote UI source
+ * implement {@link UiRegistry}. The contract spans reads
+ * (required) + optional change subscriptions. Deliberately does
+ * NOT include search, ranking, embeddings, or sync — those live at
+ * higher layers (see `BlueprintProvider` in
+ * `@ggui-ai/mcp-server-core`).
  *
  * Design rules this shape enforces:
  *
@@ -19,12 +19,8 @@
  *    Consumers that only need the catalog never pay for compiled
  *    bytes.
  * 3. **Capability probe is data, not duck typing.** Don't
- *    `try/catch` optional methods — read `capabilities.writable`
- *    / `capabilities.observable` first. Keeps the contract
- *    declarative.
- * 4. **Write outcome is discriminated.** `WriteResult` is a tagged
- *    union so callers handle `id-conflict`, `validation-failed`,
- *    and `not-supported` explicitly. No throw-to-signal.
+ *    `try/catch` optional methods — read `capabilities.observable`
+ *    first. Keeps the contract declarative.
  */
 import type { UiManifest } from '@ggui-ai/project-config';
 
@@ -42,9 +38,8 @@ export interface UiManifestEntry {
 
   /**
    * Content hash of the compiled bundle — the artifact-version
-   * marker. Registries use this for conflict detection on writes:
-   * the client computes the target hash, includes it in the
-   * request, and the registry rejects mismatches.
+   * marker. Consumers use it to tell two versions of the same `id`
+   * apart (e.g. on a `changed` {@link UiRegistryEvent}).
    *
    * A registry that doesn't (yet) compile sources MAY populate
    * this from `manifest.contentHash` when present, or leave it as
@@ -86,34 +81,11 @@ export type UiRegistryEvent =
   | { type: 'removed'; id: string };
 
 /**
- * Discriminated write outcome. Success carries the new
- * `contentHash`. Failures name a specific reason so callers can
- * react without parsing error messages.
- *
- * - `id-conflict` — the registry already has an entry for `id`
- *   with a different hash. Caller decides whether to force-replace
- *   (re-write with the conflicting hash) or merge.
- * - `validation-failed` — the registry ran schema / policy checks
- *   and the entry didn't pass. `issues` is human-readable.
- * - `not-supported` — the registry is read-only or can't write
- *   this particular entry shape. Caller should have probed
- *   `capabilities.writable` first; this is a belt-and-suspenders
- *   signal for implementations that discover limitations late.
- */
-export type WriteResult =
-  | { ok: true; contentHash: string }
-  | { ok: false; reason: 'id-conflict'; existingHash: string }
-  | { ok: false; reason: 'validation-failed'; issues: string[] }
-  | { ok: false; reason: 'not-supported'; message?: string };
-
-/**
  * Capability probe. Callers consult these flags to branch the UI
- * (show/hide "Publish", show/hide "Live reload") instead of
- * detecting methods at runtime.
+ * (show/hide "Live reload") instead of detecting methods at
+ * runtime.
  */
 export interface UiRegistryCapabilities {
-  /** `true` if `write` + `remove` are safe to call. */
-  readonly writable: boolean;
   /** `true` if `subscribe` is implemented. */
   readonly observable: boolean;
 }
@@ -121,9 +93,8 @@ export interface UiRegistryCapabilities {
 /**
  * The source contract every UI registry implements.
  *
- * Read methods are required. Write + subscribe are optional; pair
- * each with its `capabilities` flag so callers can probe before
- * invoking.
+ * Read methods are required. `subscribe` is optional; probe
+ * `capabilities.observable` before invoking.
  */
 export interface UiRegistry {
   /**
@@ -155,26 +126,6 @@ export interface UiRegistry {
    * consumers MUST be idempotent to duplicates.
    */
   subscribe?(handler: (event: UiRegistryEvent) => void): () => void;
-
-  /**
-   * Add or replace an entry. Present only when
-   * `capabilities.writable === true`.
-   *
-   * `bundle` is optional because some registries (e.g. a
-   * manifest-only index) only track metadata. Registries that
-   * require bundles MUST reject a bundle-less write with
-   * `not-supported`.
-   */
-  write?(
-    entry: UiManifestEntry,
-    bundle?: UiBundle,
-  ): Promise<WriteResult>;
-
-  /**
-   * Delete an entry by id. Present only when
-   * `capabilities.writable === true`. No-op for missing ids.
-   */
-  remove?(id: string): Promise<void>;
 
   /** Capability probe. Always present, always truthful. */
   readonly capabilities: UiRegistryCapabilities;

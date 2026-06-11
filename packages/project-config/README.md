@@ -31,8 +31,8 @@ import { parseGguiJson, safeParseGguiJson } from "@ggui-ai/project-config";
 const manifest = parseGguiJson(JSON.parse(rawText)); // throws on invalid input
 
 const result = safeParseGguiJson(JSON.parse(rawText));
-if (result.ok) {
-  // result.value is a validated GguiJsonV1
+if (result.success) {
+  // result.data is a validated GguiJsonV1
 }
 ```
 

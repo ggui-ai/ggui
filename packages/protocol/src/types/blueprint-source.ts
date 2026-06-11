@@ -99,3 +99,81 @@ export function parseBlueprintSource(value: unknown): BlueprintSource | null {
 export function isBlueprintSource(value: unknown): value is BlueprintSource {
   return parseBlueprintSource(value) !== null;
 }
+
+// =============================================================================
+// Flat-provenance codec — the storage twin of `BlueprintSource`
+// =============================================================================
+
+/**
+ * Flat-encoded provenance: the SINGLE key vocabulary every store uses
+ * when it persists a {@link BlueprintSource} as scalar columns /
+ * attributes (vector-store metadata, key-value rows, …). The union is
+ * the code shape; storage stays flat — and every store flattens and
+ * rebuilds through THIS codec, never through hand-rolled key names.
+ *
+ * Key vocabulary: `sourceKind` / `sourceGenerator` / `sourceModel`.
+ * The `source`-prefixed triple is deliberate: flat rows mix provenance
+ * with arbitrary other attributes, and bare `generator` / `model` keys
+ * collide with row-level fields that legitimately carry their own
+ * generator/model semantics (e.g. a generation-result row). The prefix
+ * keeps the provenance keys self-describing, collision-free, and
+ * greppable, and mirrors the union access path (`source.kind` →
+ * `sourceKind`). No storage engine ergonomics argue against it —
+ * attribute names are free-form in every store we target.
+ */
+export const FLAT_BLUEPRINT_SOURCE_KEYS = {
+  kind: "sourceKind",
+  generator: "sourceGenerator",
+  model: "sourceModel",
+} as const;
+
+/**
+ * Flat (storage) shape of a {@link BlueprintSource}. `sourceGenerator`
+ * / `sourceModel` are present exactly when `sourceKind === 'llm'` —
+ * {@link blueprintSourceToFlat} never writes them for other arms, and
+ * {@link flatToBlueprintSource} sheds stray values on non-llm rows.
+ */
+export interface FlatBlueprintSource {
+  readonly sourceKind: BlueprintSourceKind;
+  readonly sourceGenerator?: string;
+  readonly sourceModel?: string;
+}
+
+/** Flatten a canonical {@link BlueprintSource} into storage keys. */
+export function blueprintSourceToFlat(
+  source: BlueprintSource,
+): FlatBlueprintSource {
+  return source.kind === "llm"
+    ? {
+        sourceKind: "llm",
+        sourceGenerator: source.generator,
+        sourceModel: source.model,
+      }
+    : { sourceKind: source.kind };
+}
+
+/**
+ * Validating narrower at the flat-row trust boundary: reassemble the
+ * `sourceKind` / `sourceGenerator` / `sourceModel` scalars of an
+ * UNTRUSTED row into a canonical {@link BlueprintSource}, or `null`
+ * when the row carries no valid provenance (rows written under a
+ * retired vocabulary, foreign rows, malformed writes). Callers drop
+ * the row — coercing into an arm is banned. Delegates the union
+ * rebuild to {@link parseBlueprintSource}, so stray keys never ride
+ * through and a non-llm row carrying vestigial generator/model
+ * scalars rebuilds to its bare arm.
+ *
+ * Accepts any object-shaped row (metadata records, unmarshalled rows);
+ * only the three codec keys are read.
+ */
+export function flatToBlueprintSource(row: {
+  readonly sourceKind?: unknown;
+  readonly sourceGenerator?: unknown;
+  readonly sourceModel?: unknown;
+}): BlueprintSource | null {
+  return parseBlueprintSource({
+    kind: row.sourceKind,
+    generator: row.sourceGenerator,
+    model: row.sourceModel,
+  });
+}

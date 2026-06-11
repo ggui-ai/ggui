@@ -242,7 +242,7 @@ export interface GguiSessionChannelLocalToolsOptions {
  * Bootstrap-auth plumbing for the live-channel endpoint.
  *
  * The channel accepts a bootstrap credential on the `subscribe`
- * message (`SubscribePayload.bootstrap`). When present:
+ * message (`SubscribePayload.wsToken`). When present:
  *
  *   1. `verify(token)` is called. Must return the bound
  *      `{sessionId, appId}` on success, or `null` on any failure
@@ -296,7 +296,7 @@ export type GguiSessionChannelBootstrapRefreshResult =
 
 export interface GguiSessionChannelBootstrap {
   /**
-   * Verify a `SubscribePayload.bootstrap` token.
+   * Verify a `SubscribePayload.wsToken` token.
    *
    * Returns the bound identity on success, or a discriminated failure.
    * The channel server maps `'expired'` to `BOOTSTRAP_EXPIRED` so the
@@ -372,7 +372,7 @@ export interface GguiSessionChannelOptions {
   readonly streamFanout?: StreamFanout;
   /**
    * Optional bootstrap-auth plumbing. When present, the channel
-   * accepts `SubscribePayload.bootstrap` and issues reconnect
+   * accepts `SubscribePayload.wsToken` and issues reconnect
    * credentials in `AckPayload.sessionToken`. When absent, bootstrap
    * tokens are rejected with `BOOTSTRAP_NOT_SUPPORTED`.
    */
@@ -1999,28 +1999,6 @@ export function createGguiSessionChannelServer(opts: GguiSessionChannelOptions):
           hostContext: message.payload.hostContext,
           lastActivityAt: Date.now(),
         });
-        return;
-      case "feedback":
-        // Require an active subscription for operational messages.
-        if (!sub) {
-          sendError(
-            ws,
-            "NOT_SUBSCRIBED",
-            `Send a 'subscribe' message first before '${message.type}'`,
-            message.requestId
-          );
-          return;
-        }
-        // These OSS channel handlers land incrementally once the
-        // matching shared handlers exist in @ggui-ai/mcp-server-handlers.
-        // For now the ingress point is documented but rejected with a
-        // clear code so clients don't assume silent success.
-        sendError(
-          ws,
-          "NOT_IMPLEMENTED",
-          `'${message.type}' not yet handled on the OSS channel server`,
-          message.requestId
-        );
         return;
       default:
         sendError(

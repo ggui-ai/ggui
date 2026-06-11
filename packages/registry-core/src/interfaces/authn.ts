@@ -3,9 +3,9 @@
  *
  * Vendor-neutral — registry-core's API never names a specific identity
  * provider (no JWT, no bearer, no cloud-vendor enum). Verification is
- * transport-specific: cloud handlers verify a JWT from the platform's
- * hosted auth surface and produce an `AuthnContext`; the OSS server
- * verifies a bearer token and produces an `AuthnContext`. Once
+ * transport-specific: a hosted deployment's handlers verify a JWT
+ * from its identity provider and produce an `AuthnContext`; the OSS
+ * server verifies a bearer token and produces an `AuthnContext`. Once
  * registry-core has the context, it only knows WHO is calling, not
  * HOW they proved it.
  *
@@ -16,8 +16,9 @@
  *
  * ## Protocol & Contract Bar
  *
- * **Parties:** the registry transport (cloud Lambda or OSS hono
- * server) is the producer; registry-core's ops are the consumer.
+ * **Parties:** the registry transport (a hosted deployment's handler
+ * or the OSS hono server) is the producer; registry-core's ops are
+ * the consumer.
  *
  * **Obligations:** the producer MUST verify the caller's credentials
  * (JWT signature, bearer-token constant-time compare, …) before
@@ -41,7 +42,7 @@
  */
 export interface AuthnContext {
   /**
-   * Stable, opaque caller identity. Cloud transport: hosted-auth `sub`
+   * Stable, opaque caller identity. JWT transport: the token's `sub`
    * claim. OSS bearer: a configured user identifier the operator chose
    * to associate with the token (or a hash of the token itself when no
    * identifier is configured).

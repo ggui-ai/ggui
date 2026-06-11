@@ -107,7 +107,6 @@ interface BlueprintSeed {
 
 function makeRegistry(seeds: readonly BlueprintSeed[]): UiRegistry {
   const capabilities: UiRegistryCapabilities = {
-    writable: false,
     observable: false,
   };
   return {

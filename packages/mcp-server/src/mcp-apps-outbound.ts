@@ -52,6 +52,7 @@ import {
   GGUI_RENDER_RESOURCE_URI,
   MCP_APPS_UI_CAPABILITY,
   MCP_APP_AI_GGUI_RENDER_META_KEY,
+  MCP_APP_BOOTSTRAP_FAILED_TYPE,
   deriveContextName,
   type McpAppAiGguiRenderMeta,
 } from "@ggui-ai/protocol/integrations/mcp-apps";
@@ -63,23 +64,25 @@ import { createHash } from "node:crypto";
  * Thin-shell body served from `ui://ggui/render` (C8 pivot).
  *
  * **Architectural role.** The shell is a ~30 LOC bootstrap wrapper -
- * it runs a minimal `ui/initialize` preflight to read the
- * `ai.ggui/render.runtimeUrl` slice field, then dynamic-script-loads
- * the `@ggui-ai/iframe-runtime` bundle from that URL. Every rendering
- * concern - WS open, subscribe, render mount, component code eval,
- * adapter install - belongs to the renderer bundle (shipped C7a-d),
- * not here.
+ * it runs the `ui/initialize` + `ui/notifications/initialized`
+ * handshake, then waits for the host's spec-canonical
+ * `ui/notifications/tool-result` notification carrying the
+ * `ai.ggui/render` slice in `_meta`, and dynamic-script-loads the
+ * `@ggui-ai/iframe-runtime` bundle from the slice's `runtimeUrl`.
+ * Every rendering concern - WS open, subscribe, render mount,
+ * component code eval, adapter install - belongs to the renderer
+ * bundle (shipped C7a-d), not here.
  *
  * **Why bootstrap-driven URL.** `srcdoc` iframes have `about:srcdoc`
  * as their URL, so relative paths can't resolve to the MCP server's
  * HTTP listener. The server-controlled `runtimeUrl` lands on the
  * `ai.ggui/render.runtimeUrl` slice field and the shell picks it up
- * from the first `ui/initialize` response - origin-agnostic, works
+ * from the tool-result `_meta` slice - origin-agnostic, works
  * under OSS same-origin AND hosted-cloud CDN deployments.
  *
  * **Why `<script type="module">`.** `@ggui-ai/iframe-runtime` is bundled as
  * ESM (its own runtime.ts:5 declares the contract: "the thin-shell
- * HTML loads it via `<script type="module" src=".../renderer.js">`").
+ * HTML loads it via `<script type="module" src=".../iframe-runtime.js">`").
  * Loading the bundle as a classic `<script src=...>` throws
  * `SyntaxError: Unexpected token 'export'` synchronously when the
  * browser parses the bundle - the renderer never executes, the
@@ -92,9 +95,8 @@ import { createHash } from "node:crypto";
  * surface to the parent via
  * `postMessage({type:'ggui:bootstrap-failed', reason, message}, '*')`:
  *
- *   - `BOOTSTRAP_META_MISSING` - `ui/initialize` returned without a
- *     valid `ai.ggui/render` slice OR without a `runtimeUrl` field on
- *     it.
+ *   - `BOOTSTRAP_MALFORMED` - the tool-result `_meta` slice arrived
+ *     without a valid `ai.ggui/render` envelope or `runtimeUrl`.
  *   - `BUNDLE_FETCH_FAILED` - `<script src>` errored (network failure,
  *     404, CSP reject with an observable `error` event).
  *
@@ -113,10 +115,12 @@ import { createHash } from "node:crypto";
  * `pending[m.id]` route-by-id check.
  *
  * **Double `ui/initialize` is intentional.** The shell runs a minimal
- * preflight solely to fetch `runtimeUrl`; the renderer bundle's
- * autostart path runs its own `ui/initialize` for the full bootstrap
- * parse. MCP Apps hosts handle repeats idempotently - the preflight's
- * cost is a single postMessage round-trip.
+ * preflight to complete the MCP Apps handshake (hosts release the
+ * tool-result notification only after `ui/notifications/initialized`);
+ * the renderer bundle's autostart path runs its own `ui/initialize`
+ * for the full bootstrap parse. MCP Apps hosts handle repeats
+ * idempotently - the preflight's cost is a single postMessage
+ * round-trip.
  *
  * Exported as a string constant for tests; not part of the public
  * package API. Vanilla JS, no build step, no external deps. The shell
@@ -149,9 +153,8 @@ const GGUI_RENDER_SHELL_SCRIPT_BODY = `
 //   2. iframe -> host: ui/notifications/initialized
 //   3. host -> iframe: ui/notifications/tool-result (per CallToolResult)
 // On tool-result, read the slice envelope from _meta (spec-canonical
-// CallToolResult _meta at the top level, or the first-party
-// params.toolOutput._meta shape), set window.__GGUI_META__ to the
-// envelope, fetch runtime as blob, inject as script.
+// CallToolResult _meta at the top level), set window.__GGUI_META__ to
+// the envelope, fetch runtime as blob, inject as script.
 // Runtime auto-mounts inline. No nested iframe (claudemcpcontent.com
 // CSP frame-src forbids cross-origin frames). State machine matches
 // buildSelfContainedShell so the same runtime mounts both paths.
@@ -189,7 +192,7 @@ function postBootstrapFailed(reason,message){
   // error pane (McpAppIframe onError, IframeErrorPane) see the
   // failure instead of staring at the inert overlay until the test
   // times out. Reason codes match BootstrapFailureReason.
-  try{window.parent.postMessage({type:'ggui:bootstrap-failed',reason:reason,message:message},'*');}catch(e){}
+  try{window.parent.postMessage({type:'${MCP_APP_BOOTSTRAP_FAILED_TYPE}',reason:reason,message:message},'*');}catch(e){}
 }
 async function mountFromMeta(envelope){
   if(mounted)return;
@@ -242,42 +245,17 @@ async function mountFromMeta(envelope){
     postBootstrapFailed('BUNDLE_FETCH_FAILED',msg);
   }
 }
-function readMetaFromInitResult(result){
-  if(!result||typeof result!=='object')return null;
-  var toolOutput=result.toolOutput;
-  if(!toolOutput||typeof toolOutput!=='object')return null;
-  var meta=toolOutput._meta;
-  if(!meta||typeof meta!=='object')return null;
-  // Single slice-envelope key (Phase B: ai.ggui/render). Only the
-  // render slice's runtimeUrl is load-bearing at the shell layer;
-  // the runtime reads everything else off window.__GGUI_META__
-  // after we set it.
-  var renderSlice=meta['ai.ggui/render'];
-  if(!renderSlice||typeof renderSlice!=='object')return null;
-  if(typeof renderSlice.runtimeUrl!=='string')return null;
-  return meta;
-}
-function hasAiGguiMetaPlaceholder(result){
-  // Detect the protocol-violation case where the host signaled
-  // "I tried to deliver meta" (toolOutput._meta carries an
-  // ai.ggui/render key) but it's malformed. Fail-fast with
-  // BOOTSTRAP_META_MISSING rather than waiting forever.
-  if(!result||typeof result!=='object')return false;
-  var toolOutput=result.toolOutput;
-  if(!toolOutput||typeof toolOutput!=='object')return false;
-  var meta=toolOutput._meta;
-  if(!meta||typeof meta!=='object')return false;
-  return 'ai.ggui/render' in meta;
-}
 function readMetaFromCallToolResult(params){
   // MCP Apps spec (specification/2026-01-26/apps.mdx:1145-1155):
   //   ui/notifications/tool-result
   //   params: CallToolResult  // Standard MCP type
   // So params IS the CallToolResult and _meta lives at the top
-  // level (NOT under params.toolOutput, which is where the
-  // first-party McpAppIframe convention wraps it). Spec-compliant
-  // hosts (Claude Desktop, claude.ai Connector, Claude Code) deliver
-  // slice-envelope material here.
+  // level. Spec-compliant hosts (Claude Desktop, claude.ai
+  // Connector, Claude Code) deliver slice-envelope material here.
+  // Single slice-envelope key (Phase B: ai.ggui/render). Only the
+  // render slice's runtimeUrl is load-bearing at the shell layer;
+  // the runtime reads everything else off window.__GGUI_META__
+  // after we set it.
   if(!params||typeof params!=='object')return null;
   var meta=params._meta;
   if(!meta||typeof meta!=='object')return null;
@@ -296,21 +274,14 @@ window.addEventListener('message',function(ev){
   }
   if(m.method==='ui/notifications/tool-result'){
     // Spec-compliant hosts: m.params IS the CallToolResult; _meta is
-    // at the top level. Try this FIRST so Claude Desktop / claude.ai
-    // Connector / Claude Code land here.
-    var specB=readMetaFromCallToolResult(m.params);
-    if(specB){mountFromMeta(specB);return;}
-    // First-party McpAppIframe convention: slice envelope nested under
-    // params.toolOutput._meta. First-party hosts (Studio, Portal,
-    // console) use this shape for both init-response and post-init
-    // notification.
-    var bb=readMetaFromInitResult(m.params);
-    if(bb){mountFromMeta(bb);return;}
+    // at the top level.
+    var specMeta=readMetaFromCallToolResult(m.params);
+    if(specMeta){mountFromMeta(specMeta);return;}
     // R5 (2026-05-26) -- the /r/<shortCode> HTTP fallback was removed
     // along with the bearer-by-obscurity model. Hosts that strip
     // _meta on the tool-result wire have no fallback path here;
-    // spec-canonical hosts deliver meta inline and land in the two
-    // branches above.
+    // spec-canonical hosts deliver meta inline and land in the branch
+    // above.
   }
 });
 setOverlay('Initializing…');
@@ -321,27 +292,13 @@ postRpc('ui/initialize',{
   appCapabilities:{},
   appInfo:{name:'ggui-render',version:'1.0.0'},
   protocolVersion:'2026-01-26'
-}).then(function(result){
+}).then(function(){
   clearTimeout(initTimer);
   postNotification('ui/notifications/initialized',{});
-  // Path B: slice envelope inline in ui/initialize result. Hosts
-  // using <McpAppIframe>'s first-party dispatch deliver meta here
-  // and never send a separate ui/notifications/tool-result.
-  var b=readMetaFromInitResult(result);
-  if(b){mountFromMeta(b);return;}
-  // Protocol-violation surface: host signalled an attempt
-  // (toolOutput._meta carries ai.ggui/render) but it's malformed.
-  // Fail fast so hosts pinning a typed error envelope don't sit on
-  // the Path-A waiting overlay forever.
-  if(hasAiGguiMetaPlaceholder(result)){
-    var msg='ui/initialize result missing valid ai.ggui/render.runtimeUrl';
-    setOverlay(msg);
-    postBootstrapFailed('BOOTSTRAP_META_MISSING',msg);
-    return;
-  }
-  // Path A: wait for the host to send ui/notifications/tool-result
-  // with structuredContent.{url, shortCode}. MCP Apps hosts that don't
-  // implement the reading-B inline-meta convention land here.
+  // Wait for the host to send ui/notifications/tool-result carrying
+  // the slice envelope in _meta — the spec-canonical delivery channel.
+  // The ui/initialize result itself carries no slice meta (the
+  // McpUiInitializeResult schema defines no such field).
   setOverlay('Waiting for tool result…');
 }).catch(function(e){
   clearTimeout(initTimer);

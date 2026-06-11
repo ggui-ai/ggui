@@ -3,7 +3,7 @@
  *
  * **NOT to be confused with {@link ClientCapabilitiesSpec} on
  * `DataContract.clientCapabilities`.** These types describe the
- * data-RESOLVER toolkit consumed by `@ggui-ai/ggui-react-native`
+ * data-RESOLVER toolkit consumed by `@ggui-ai/react-native`
  * (`fetch` / `auth` / `storage` / `subscription` / `voice` / `camera` /
  * `chain` / `transform` / `merge`) — the controllers wire one of these
  * tool configs onto a binding name and the runtime resolves the value

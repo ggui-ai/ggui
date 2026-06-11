@@ -53,7 +53,8 @@ import type {
 // into `@ggui-ai/mcp-server-core` directly.
 export type { BlueprintIndex } from '@ggui-ai/mcp-server-core';
 import {
-  parseBlueprintSource,
+  blueprintSourceToFlat,
+  flatToBlueprintSource,
   summarizeContract,
   type BlueprintSource,
   type BlueprintVariance,
@@ -258,13 +259,15 @@ export function composeEmbeddingInput(
 }
 
 /**
- * Vector-store metadata layout. Provenance is flat-encoded as three
- * scalar keys (`sourceKind` / `sourceGenerator` / `sourceModel`) —
- * the union is the code shape; storage stays scalar. Rows written
- * under the retired flat `provenance` vocabulary lack `sourceKind`
- * and therefore fail {@link readSourceFromMetadata} — they stop
- * reconstructing (rebuild posture: the cache regenerates; there is
- * no migration shim).
+ * Vector-store metadata layout. Provenance is flat-encoded via the
+ * protocol's flat-provenance codec (`blueprintSourceToFlat` /
+ * `flatToBlueprintSource`, keys `sourceKind` / `sourceGenerator` /
+ * `sourceModel`) — the union is the code shape; storage stays scalar,
+ * and the key vocabulary has ONE owner in `@ggui-ai/protocol`. Rows
+ * written under the retired flat `provenance` vocabulary lack
+ * `sourceKind` and therefore fail the codec's read narrower — they
+ * stop reconstructing (rebuild posture: the cache regenerates; there
+ * is no migration shim).
  */
 const METADATA_KEYS = {
   intent: 'intent',
@@ -277,9 +280,6 @@ const METADATA_KEYS = {
   createdAt: 'createdAt',
   hitCount: 'hitCount',
   lastHitAt: 'lastHitAt',
-  sourceKind: 'sourceKind',
-  sourceGenerator: 'sourceGenerator',
-  sourceModel: 'sourceModel',
   installed: 'installed',
 } as const;
 
@@ -296,39 +296,13 @@ function blueprintToMetadata(
     [METADATA_KEYS.kind]: bp.kind,
     [METADATA_KEYS.createdAt]: bp.createdAt,
     [METADATA_KEYS.hitCount]: bp.hitCount,
-    [METADATA_KEYS.sourceKind]: bp.source.kind,
-    ...(bp.source.kind === 'llm'
-      ? {
-          [METADATA_KEYS.sourceGenerator]: bp.source.generator,
-          [METADATA_KEYS.sourceModel]: bp.source.model,
-        }
-      : {}),
+    // Flat-provenance scalars — key names owned by the protocol codec.
+    ...blueprintSourceToFlat(bp.source),
     ...(bp.installed === true ? { [METADATA_KEYS.installed]: true } : {}),
     ...(bp.lastHitAt !== undefined
       ? { [METADATA_KEYS.lastHitAt]: bp.lastHitAt }
       : {}),
   };
-}
-
-/**
- * Validating narrower at the row trust boundary: reassemble the flat
- * `sourceKind` / `sourceGenerator` / `sourceModel` scalars into a
- * canonical {@link BlueprintSource}, or `null` when the row carries
- * no valid provenance (legacy rows written under the retired flat
- * `provenance` vocabulary, foreign rows, malformed writes). Callers
- * drop the row — coercing into an arm is banned.
- *
- * Exported for the export path (`export-registry.ts`), which reads
- * the same metadata layout without reconstructing a full Blueprint.
- */
-export function readSourceFromMetadata(
-  metadata: Record<string, string | number | boolean | null>,
-): BlueprintSource | null {
-  return parseBlueprintSource({
-    kind: metadata[METADATA_KEYS.sourceKind],
-    generator: metadata[METADATA_KEYS.sourceGenerator],
-    model: metadata[METADATA_KEYS.sourceModel],
-  });
 }
 
 /**
@@ -424,7 +398,7 @@ function rowToBlueprint(
   } catch {
     return null;
   }
-  const source = readSourceFromMetadata(metadata);
+  const source = flatToBlueprintSource(metadata);
   if (source === null) {
     warnDroppedRow(key);
     return null;

@@ -11,13 +11,16 @@
  * kinds for tooling that handles them generically (signing, registry
  * upload, search-index ingestion).
  *
+ * Also the single owner of the seed-pool wrapper-artifact format
+ * (`pool-artifact.ts`) — the `manifest.json` + `codes/` directory
+ * layout that pool exporters write and seed-pool readers consume.
+ *
  * Browser-safe (no Node dependencies) — pure schema + parsers.
  */
 
 // Gadget manifest — narrow surface.
 export {
   GGUI_GADGET_JSON_FILENAME,
-  assertGadgetManifestValid,
   parseGadgetManifest,
   gadgetManifestSchema,
   gadgetExportSchema,
@@ -28,7 +31,6 @@ export type { GadgetManifest } from './gadget-manifest.js';
 // Blueprint manifest — narrow surface.
 export {
   GGUI_BLUEPRINT_JSON_FILENAME,
-  assertBlueprintManifestValid,
   blueprintManifestSchema,
   parseBlueprintManifest,
   safeParseBlueprintManifest,
@@ -38,7 +40,6 @@ export type { BlueprintManifest } from './blueprint-manifest.js';
 // Discriminated union — top-level surface.
 export {
   artifactManifestSchema,
-  assertArtifactManifestValid,
   parseArtifactManifest,
   safeParseArtifactManifest,
 } from './artifact-manifest.js';
@@ -66,3 +67,22 @@ export {
   manifestToRegistryEntry,
   type ManifestToRegistryEntryFields,
 } from './manifest-to-registry-entry.js';
+
+// Seed-pool wrapper-artifact codec — single owner of the artifact
+// byte format (version literal, layout names, codeRef shape,
+// rejection messages). Pool writers and seed-pool readers both
+// import from here; they own only their IO.
+export {
+  POOL_ARTIFACT_CODES_DIR,
+  POOL_ARTIFACT_CODE_REF_PATTERN,
+  POOL_ARTIFACT_MANIFEST_FILENAME,
+  POOL_ARTIFACT_SCHEMA_VERSION,
+  POOL_ARTIFACT_V1_REJECTION,
+  buildPoolArtifactManifest,
+  parsePoolArtifactManifest,
+  poolArtifactCodeRef,
+  serializePoolArtifactManifest,
+  type ParsePoolArtifactManifestResult,
+  type PoolArtifactManifest,
+  type PoolArtifactManifestEntry,
+} from './pool-artifact.js';

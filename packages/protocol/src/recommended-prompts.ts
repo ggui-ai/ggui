@@ -40,7 +40,7 @@
  * @example
  * ```ts
  * import { query } from '@anthropic-ai/claude-agent-sdk';
- * import { GGUI_AGENT_SYSTEM_PROMPT } from '@ggui-ai/protocol/recommended-prompts';
+ * import { GGUI_AGENT_SYSTEM_PROMPT } from '@ggui-ai/protocol';
  *
  * query({
  *   prompt: userInput,

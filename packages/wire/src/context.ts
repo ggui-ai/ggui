@@ -126,9 +126,14 @@ export interface WireConfig<T extends DataContract = DataContract> {
    * duplicate-dispatch suppression. Fires alongside the always-on
    * `console.warn` whenever the runtime coalesces a same-(name,
    * payload) re-dispatch within one event-loop task — the nested-
-   * interactive double-fire backstop. Hosts can route this to
-   * telemetry sinks (Sentry, Datadog, server-side log) for ops
-   * dashboards; absent → only the dev-console signal fires.
+   * interactive double-fire backstop.
+   *
+   * Reachability constraint: the first-party renderers do NOT set
+   * this field — `buildRootWireConfig` (`@ggui-ai/iframe-runtime`)
+   * and `<GguiRender>`'s internal config both omit it. It fires only
+   * when a host hand-builds a complete `WireConfig` and mounts
+   * `GguiWireProvider` itself. On every first-party render path the
+   * `console.warn` is the sole suppression signal.
    */
   readonly onDispatchSuppressed?: (info: DispatchSuppressedInfo) => void;
 }

@@ -1,14 +1,13 @@
 {
   "name": "@ggui-ai/agent-server",
   "version": "0.3.0",
-  "description": "Brand-agnostic Hono-based HTTP backend for ggui-aware agents. Owns the wire shape, MCP discovery, tool-result resource inlining, and directive synthesis for `_meta[\"ai.ggui/userAction\"]` so per-SDK samples only have to implement a thin AgentAdapter (prompt + chatId in → NormalizedMessage stream out). Pairs with `@ggui-ai/react/chat-helpers` on the frontend.",
+  "description": "Brand-agnostic Hono-based HTTP backend for ggui-aware agents. Owns the wire shape, MCP discovery, tool-result resource inlining, server-allocated chat ids, and guest + bearer auth with chat ownership so per-SDK samples only have to implement a thin AgentAdapter (prompt + chatId in → NormalizedMessage stream out). The prompt is forwarded to the adapter verbatim — no ggui-protocol knowledge. Pairs with `@ggui-ai/react/chat-helpers` on the frontend.",
   "keywords": [
     "ggui",
     "mcp",
     "mcp-apps",
     "agent",
-    "hono",
-    "directive-synthesis"
+    "hono"
   ],
   "license": "Apache-2.0",
   "type": "module",

@@ -34,14 +34,14 @@ const artifact = parseArtifactManifest(json);
 
 ## Exports
 
-| Symbol                                                                                                            | What it is                                 |
-| ----------------------------------------------------------------------------------------------------------------- | ------------------------------------------ |
-| `gadgetManifestSchema`, `parseGadgetManifest`, `safeParseGadgetManifest`, `assertGadgetManifestValid`             | Gadget manifest schema + parsers           |
-| `blueprintManifestSchema`, `parseBlueprintManifest`, `safeParseBlueprintManifest`, `assertBlueprintManifestValid` | Blueprint manifest schema + parsers        |
-| `artifactManifestSchema`, `parseArtifactManifest`, `safeParseArtifactManifest`, `assertArtifactManifestValid`     | Discriminated union over both kinds        |
-| `manifestToRegistryEntry`                                                                                         | Translate a manifest into a registry entry |
-| `GADGET_NAME_RE`, `BLUEPRINT_NAME_RE`, `ArtifactScopeSchema`, `ArtifactVersionSchema`                             | Shared name + version validators           |
-| `GGUI_GADGET_JSON_FILENAME`, `GGUI_BLUEPRINT_JSON_FILENAME`                                                       | Canonical manifest filenames               |
+| Symbol                                                                                | What it is                                 |
+| ------------------------------------------------------------------------------------- | ------------------------------------------ |
+| `gadgetManifestSchema`, `parseGadgetManifest`, `safeParseGadgetManifest`              | Gadget manifest schema + parsers           |
+| `blueprintManifestSchema`, `parseBlueprintManifest`, `safeParseBlueprintManifest`     | Blueprint manifest schema + parsers        |
+| `artifactManifestSchema`, `parseArtifactManifest`, `safeParseArtifactManifest`        | Discriminated union over both kinds        |
+| `manifestToRegistryEntry`                                                             | Translate a manifest into a registry entry |
+| `GADGET_NAME_RE`, `BLUEPRINT_NAME_RE`, `ArtifactScopeSchema`, `ArtifactVersionSchema` | Shared name + version validators           |
+| `GGUI_GADGET_JSON_FILENAME`, `GGUI_BLUEPRINT_JSON_FILENAME`                           | Canonical manifest filenames               |
 
 `GadgetManifest`, `BlueprintManifest`, and `ArtifactManifest` types are exported alongside their schemas.
 

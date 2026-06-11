@@ -28,9 +28,10 @@ import { tryAcceptDispatch } from './dispatch-dedup';
  * NEVER SILENT. When the dedup fires, a `console.warn` is emitted in BOTH dev
  * and prod with the full diagnostic. The suppression is always visible in
  * browser DevTools; operators investigating a "the second click does nothing"
- * report see the warning immediately. Hosts that want structured telemetry
- * (Sentry, Datadog, server logs) can additionally set
- * {@link WireConfig.onDispatchSuppressed} on the provided `WireConfig`.
+ * report see the warning immediately. A structured observer also exists as
+ * `WireConfig.onDispatchSuppressed`, but the first-party renderers never set
+ * it — it is reachable only from a hand-built `WireConfig` (see its
+ * docstring), so the console signal is what operators get in practice.
  *
  * @param actionName - Action name from the action contract
  * @returns Stable callback that dispatches the action

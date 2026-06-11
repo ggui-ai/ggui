@@ -8,7 +8,6 @@ export {
 } from './drain-ack.js';
 export { createRenderHandler, type RenderHandlerDeps } from './render-frame.js';
 export { createDataHandler, type DataHandlerDeps } from './data.js';
-export { createFeedbackHandler } from './feedback.js';
 export {
   createChannelPayloadHandler,
   createChannelErrorHandler,

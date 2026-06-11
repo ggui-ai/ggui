@@ -53,7 +53,6 @@ export type WebSocketMessageType =
   | 'action' // Client → Server: ActionEnvelope (canonical inbound)
   | 'subscribe' // Client → Server: Subscribe to render
   | 'close' // Client → Server: Close render
-  | 'feedback' // Client → Server: UI feedback (love/dislike/other)
   | 'ping' // Client → Server: Heartbeat ping
   | 'pong' // Server → Client: Heartbeat pong response
   | 'ack' // Server → Client: Event acknowledged
@@ -115,7 +114,6 @@ export type WebSocketMessage =
   | (WsMessageBase & { type: 'action'; payload: ActionEnvelope })
   | (WsMessageBase & { type: 'subscribe'; payload: SubscribePayload })
   | (WsMessageBase & { type: 'close'; payload: ClosePayload })
-  | (WsMessageBase & { type: 'feedback'; payload: JsonObject })
   | (WsMessageBase & { type: 'ping'; payload: JsonObject })
   | (WsMessageBase & { type: 'pong'; payload: JsonObject })
   | (WsMessageBase & { type: 'ack'; payload: AckPayload })

@@ -70,17 +70,17 @@ export const ArtifactVersionSchema = z
   );
 
 /**
- * Visibility — controls how the artifact is stored + distributed:
+ * Visibility — controls how the artifact is signed + distributed:
  *
- *   - `public`  — sigstore-signed, served from S3 `public/` prefix,
- *                 publicly listable via `/search`.
- *   - `private` — Ed25519-signed, served from `private/<orgId>/`
- *                 with signed CloudFront URLs, only visible to the
- *                 publisher's Cognito org.
+ *   - `public`  — sigstore-signed, publicly listable via `/search`.
+ *   - `private` — Ed25519-signed, scoped to the publisher's org;
+ *                 never publicly listable.
  *
  * Both paths land in the same registry stack; the visibility flag
- * picks the signing trust chain + S3 prefix at publish time. No
- * "internal" / "team" third option in MVP.
+ * picks the signing trust chain at publish time. How a registry
+ * implementation partitions storage or gates download URLs per
+ * visibility is the storage adapter's concern. No "internal" /
+ * "team" third option in MVP.
  */
 export const ArtifactVisibilitySchema = z.enum(['public', 'private']);
 

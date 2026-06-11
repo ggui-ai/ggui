@@ -3,7 +3,8 @@
  * the system clipboard via `navigator.clipboard.writeText`. Satisfies
  * `GadgetHook<string, ClipboardWriteOptions>`.
  *
- * One-shot semantics: call `start({text})` to write; status moves
+ * One-shot semantics: pass `{text}` at hook-call time and call
+ * `start()` to write; status moves
  * `idle → prompting → completed` on success or `idle → prompting →
  * denied/error` on failure. The hook's `value` carries the most
  * recently written text so component code can confirm what landed
@@ -22,7 +23,9 @@ import type {
 } from '@ggui-ai/protocol';
 
 export interface ClipboardWriteOptions {
-  /** Text to write. Required at call site, not at hook construction. */
+  /** Text to write. Supplied at hook-call time; read when `start()`
+   *  fires, so component code re-renders the hook call with the
+   *  latest text rather than passing arguments to `start()`. */
   readonly text: string;
 }
 

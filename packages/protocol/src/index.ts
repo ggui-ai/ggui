@@ -2,7 +2,6 @@ export * from "./version";
 export * from "./types/auth";
 export * from "./types/capabilities";
 export * from "./types/events";
-export * from "./types/region";
 export * from "./types/render";
 export * from "./types/ggui-session-event";
 export * from "./types/thread";
@@ -66,12 +65,10 @@ export type {
 } from "./types/invoke";
 export * from "./types/llm";
 export * from "./types/llm-route";
-export * from "./types/openrouter-models";
 export * from "./types/interface-context";
 export * from "./types/host-context";
 export * from "./types/lifecycle";
 export * from "./types/data-bindings";
-export * from "./types/feedback";
 export * from "./types/data-contract";
 export * from "./types/blueprint";
 export * from "./types/blueprint-source";
@@ -104,14 +101,10 @@ export * from "./validation/sanitize-error";
 export * from "./validation/schema-subset";
 export * from "./validation/zod-to-json-schema";
 export * from "./validation/ui-security";
-export * from "./stream/stream-parser";
-export * from "./bridge/invoke-agent";
 export * from "./schema-learning/merge";
 export * from "./schema-learning/derive-contract";
 export * from "./screen-blueprints/index";
-export * from "./types/credential";
 export { GGUI_AGENT_SYSTEM_PROMPT } from "./recommended-prompts";
-export * from "./types/mcp-proxy";
 export {
   STDLIB_GADGETS,
   STDLIB_GADGETS_PACKAGE,

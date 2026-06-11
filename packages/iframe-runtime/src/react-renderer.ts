@@ -487,9 +487,9 @@ export async function mountReactRoot(
     } catch (err) {
       const e = err instanceof Error ? err : new Error(String(err));
       // Fail-loud on eval errors. The OPTIONAL `onError` callback is
-      // not enough on its own — bootSelfContained doesn't wire one,
-      // so without this log a self-contained mount with a broken
-      // component renders a blank iframe and emits nothing.
+      // not enough on its own — not every mount path wires one, so
+      // without this log a mount with a broken component renders a
+      // blank iframe and emits nothing.
       // eslint-disable-next-line no-console -- operator-visible failure signal
       console.error('[ggui] mountReactRoot: component evaluation failed —', e);
       currentComponent = null;

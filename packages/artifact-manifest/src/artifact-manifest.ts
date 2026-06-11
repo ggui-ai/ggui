@@ -71,16 +71,6 @@ export function parseArtifactManifest(raw: unknown): ArtifactManifest {
 }
 
 /**
- * Assertion helper — narrows `raw` to {@link ArtifactManifest} on
- * success, throws `ZodError` on failure.
- */
-export function assertArtifactManifestValid(
-  raw: unknown,
-): asserts raw is ArtifactManifest {
-  artifactManifestSchema.parse(raw);
-}
-
-/**
  * Safe-parse variant — returns a `z.safeParse` result. Prefer this
  * inside CLI tooling where you want to render the issue list without
  * try/catch.

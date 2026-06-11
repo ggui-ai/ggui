@@ -142,11 +142,12 @@ export interface UseMcpAppsChatResult {
    * an SSE stream to the chat endpoint and merges every frame.
    *
    * Optional `opts.meta` is an OPAQUE `_meta` record the hook forwards
-   * verbatim as `data.meta` in the POST body. The hook never inspects
-   * it; the agent-server backend recognizes + guards any keys it cares
-   * about (e.g. the spec-canonical `ai.ggui/userAction` doorbell) and
-   * synthesizes the LLM-facing directive server-side. Most callers use
-   * {@link handleAppMessage} instead of threading `meta` by hand.
+   * verbatim as `data.meta` in the POST body. Neither the hook nor the
+   * agent-server inspects it — the LLM-facing directive is already
+   * authored into the `ui/message` prompt text by iframe-runtime's
+   * `ai.ggui/userAction` doorbell before it reaches this hook. Most
+   * callers use {@link handleAppMessage} instead of threading `meta`
+   * by hand.
    */
   readonly send: (
     prompt: string,
@@ -307,10 +308,10 @@ export function useMcpAppsChat(
       abortControllerRef.current = controller;
       try {
         // Forward the guest message's `_meta` record OPAQUELY in
-        // `data.meta` when present. The hook never inspects it; the
-        // agent-server backend recognizes + guards the keys it cares
-        // about (e.g. `ai.ggui/userAction`) and synthesizes the
-        // imperative-first LLM directive server-side.
+        // `data.meta` when present. Neither the hook nor the
+        // agent-server inspects it — the imperative-first LLM
+        // directive is already authored into the prompt text by
+        // iframe-runtime's `ai.ggui/userAction` doorbell.
         //
         // `kind:'chat'` is the spec-canonical discriminator on the
         // agent-server's single `POST /agent` endpoint (the sibling

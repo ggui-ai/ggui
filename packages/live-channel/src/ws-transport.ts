@@ -51,7 +51,7 @@ const OUTBOUND_QUEUE_LIMIT = 500;
 /**
  * Frame factory the caller supplies — the subscribe frame composed
  * from `(sessionId, appId, bootstrap-token)`. Lives at the call site
- * so the gadget stays protocol-agnostic.
+ * so the library stays protocol-agnostic.
  */
 export type SubscribeFrameBuilder = () => unknown;
 

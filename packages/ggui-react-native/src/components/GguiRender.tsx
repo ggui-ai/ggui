@@ -94,8 +94,9 @@ export interface GguiRenderProps {
   // System hooks
   onSystemMessage?: (payload: SystemPayload) => void;
 
-  // Error hooks
-  onValidationError?: (errors: unknown[], data: unknown) => void;
+  // Error hooks — validation failures (inbound stream/props AND
+  // outbound actions) surface here as ClientContractViolationError;
+  // pattern-match on `error.direction` / instanceof to handle them.
   onError?: (error: Error) => void;
 
   /**
@@ -174,7 +175,6 @@ export function GguiRender({
   onProgress,
   onStream,
   onSystemMessage,
-  onValidationError: _onValidationError,
   onError,
   onRenderReceived,
   extraReservedValidators,

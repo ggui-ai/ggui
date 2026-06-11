@@ -948,8 +948,8 @@ export function buildMcpServerBackend(opts: BuildMcpServerBackendOptions): Serve
     // is the live-channel URL published on `_meta["ai.ggui/render"]`
     // so iframes opened by an MCP Apps host (Claude Desktop, Claude
     // Code, claude.ai) can subscribe back to this same process.
-    // First-party hosts (Studio, Portal, console) consume
-    // `_meta.ui.resourceUri` instead and never hit the URL directly.
+    // First-party hosted UIs consume `_meta.ui.resourceUri`
+    // instead and never hit the URL directly.
     mcpApps: {
       wsUrl: `${wsBaseUrl}/ws`,
     },

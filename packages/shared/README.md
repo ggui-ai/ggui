@@ -10,8 +10,8 @@ Type-only — no runtime code.
 
 ## What it exports
 
-- **Self-repair types** — `ComponentErrorReport`, `ComponentRepairResult`, `SelfRepairConfig`, `SelfRepairEvents`, and related shapes for the generated-component error boundary and repair flow.
-- **Agent listing types** — `AgentListingItem`, `AgentListingVisibility`, `AgentListingStatus` for the agent marketplace.
+- **Self-repair types** — `ComponentErrorReport`, `ComponentRepairResult`, `SelfRepairConfig`, and related shapes for the generated-component error boundary and repair flow.
+- **Agent listing types** — `AgentListingItem`, `AgentListingVisibility`, `AgentListingStatus` for agent browse/listing UIs.
 - **Benchmark display types** — `BenchmarkReportDisplay` and related shapes for rendering UI-generation benchmark reports.
 
 ## License

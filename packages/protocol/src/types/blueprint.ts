@@ -10,17 +10,18 @@
  *
  * Locked decisions:
  *
- *   - **Storage shape: S3 + DDB pointer.** Production adapters store
- *     code body in S3 at a content-hashed key and persist
- *     `codeS3Url + codeHash` on the metadata row. DDB's 400KB per-item
- *     limit precludes inline storage — typical generated code is
- *     5-30KB but advanced-generator iterative-loop output routinely
- *     exceeds it. OSS in-memory adapter skips S3 (in-process
+ *   - **Storage shape: content-addressed body + metadata pointer.**
+ *     Persistent adapters store the code body content-addressed (keyed
+ *     by its hash) and keep `codeS3Url + codeHash` as a pointer on the
+ *     metadata row — row-size limits in typical metadata stores
+ *     preclude inline storage (typical generated code is 5-30KB but
+ *     advanced-generator iterative-loop output routinely exceeds
+ *     them). The in-memory adapter skips the body store (in-process
  *     `Map<codeHash, string>`).
  *   - **Tenancy.** Scoped per `(appId, contractHash)`. Different apps'
  *     contract may coincidentally hash the same; their blueprints
- *     must never cross-pollinate. The DDB primary key is
- *     `blueprintId`; the lookup GSI is `blueprintsByAppAndContract`.
+ *     must never cross-pollinate. Rows are keyed by `blueprintId`;
+ *     lookups go through an indexed `(appId, contractHash)` query.
  *   - **`contract` field.** The contract shape is content-keyed by
  *     `contractHash` (RFC 8785 / `blueprintKey`), so any two
  *     blueprints with the same `contractHash` agree on it
@@ -68,8 +69,8 @@ export interface BlueprintSearchWeights {
  * server applies the global default when absent.
  *
  * Wire shape: lives on the per-app `App` record
- * in `@ggui-ai/mcp-server-core` as `App.blueprintSearchConfig?`. The
- * cloud DDB adapter carries it as an optional map column with
+ * in `@ggui-ai/mcp-server-core` as `App.blueprintSearchConfig?`.
+ * Persistent adapters carry it as an optional column with
  * default-on-read.
  */
 export interface AppBlueprintSearchConfig {

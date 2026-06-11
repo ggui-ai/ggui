@@ -48,14 +48,12 @@ describe('LocalUiRegistry', () => {
     rmSync(tmp, { recursive: true, force: true });
   });
 
-  it('declares itself read-only and observable (watcher-backed)', () => {
+  it('declares itself observable (watcher-backed)', () => {
     const registry = new LocalUiRegistry({
       projectRoot: tmp,
       manifest: makeGgui([]),
     });
-    expect(registry.capabilities).toEqual({ writable: false, observable: true });
-    expect(registry.write).toBeUndefined();
-    expect(registry.remove).toBeUndefined();
+    expect(registry.capabilities).toEqual({ observable: true });
     expect(typeof registry.subscribe).toBe('function');
   });
 

@@ -2,7 +2,6 @@ import { describe, expect, expectTypeOf, it } from 'vitest';
 import { z } from 'zod';
 import {
   artifactManifestSchema,
-  assertArtifactManifestValid,
   parseArtifactManifest,
   safeParseArtifactManifest,
   type ArtifactManifest,
@@ -51,11 +50,6 @@ describe('artifactManifest — happy path on each kind', () => {
   it('safeParse returns success on either kind', () => {
     expect(safeParseArtifactManifest(VALID_GADGET).success).toBe(true);
     expect(safeParseArtifactManifest(VALID_BLUEPRINT).success).toBe(true);
-  });
-
-  it('assertArtifactManifestValid does not throw on either kind', () => {
-    expect(() => assertArtifactManifestValid(VALID_GADGET)).not.toThrow();
-    expect(() => assertArtifactManifestValid(VALID_BLUEPRINT)).not.toThrow();
   });
 });
 

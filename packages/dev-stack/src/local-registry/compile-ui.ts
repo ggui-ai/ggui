@@ -2,10 +2,11 @@
  * Compile-on-demand for local `ggui dev` UIs.
  *
  * Resolves the authored TSX entry for a `ggui.ui.json` and runs
- * esbuild against it, producing an ESM bundle Studio can hand to
- * `DynamicComponent`. This replaces the "must pre-compile" state
- * the foundation slice left behind — `ggui dev` now feels like a
- * real dev server: start it, open Studio, see the render.
+ * esbuild against it, producing an ESM bundle an authoring UI can
+ * hand to `DynamicComponent`. This replaces the "must pre-compile"
+ * state the foundation slice left behind — `ggui dev` now feels
+ * like a real dev server: start it, open the authoring UI, see the
+ * render.
  *
  * Trust model:
  *
@@ -23,11 +24,11 @@
  *
  *   - esbuild `build` mode with bundle: true, so multi-file UIs
  *     work (import sibling helpers, theme tokens, wire hooks).
- *   - Sandbox externals match the runtime Studio renderer
+ *   - Sandbox externals match the runtime renderer
  *     (`DynamicComponent` in `@ggui-ai/react`). React, the design
  *     system, `@ggui-ai/wire`, and `@ggui-ai/react` stay external
- *     and resolve against the import map Studio provides at
- *     render time.
+ *     and resolve against the import map the rendering host
+ *     provides at render time.
  *   - No caching. Every request recompiles. esbuild TSX transform
  *     is ~50-200ms for a typical single-screen UI — fine for the
  *     dev loop. A watcher-driven cache lands with HMR, not here.
@@ -38,11 +39,11 @@ import { build, type BuildFailure, type Message } from 'esbuild';
 import type { UiManifest } from '@ggui-ai/project-config';
 
 /**
- * Packages the Studio runtime renderer already resolves from its
+ * Packages the runtime renderer already resolves from its
  * own bundle (via `@ggui-ai/design/module-loader`'s import-map).
  * Keeping them out of the compiled bundle keeps the artifact small
- * and lets Studio's in-tree React instance be shared across every
- * rendered UI.
+ * and lets the rendering host's in-tree React instance be shared
+ * across every rendered UI.
  */
 export const SANDBOX_EXTERNALS = [
   'react',

@@ -26,13 +26,22 @@ pnpm add @ggui-ai/live-channel
 ```ts
 import { ChannelRegistry } from "@ggui-ai/live-channel";
 
-const registry = new ChannelRegistry();
+// The library stays protocol-version-agnostic: the consumer supplies
+// the exact subscribe frame its server expects. The factory is called
+// on every WebSocket open (initial connect AND each reconnect), so
+// reconnect-resume semantics live in this closure.
+const registry = new ChannelRegistry({
+  subscribeFrameBuilder: () => ({
+    type: "subscribe",
+    payload: { sessionId, appId, wsToken },
+  }),
+});
 registry.register(propsUpdateHandler);
 registry.register(drainAckHandler);
 registry.register(channelPayloadHandler);
 
 // Transport is chosen here: WebSocket when the bootstrap declares a
-// `wsUrl` + `token`, otherwise HTTP polling. A hard WebSocket failure
+// `wsUrl` + `wsToken`, otherwise HTTP polling. A hard WebSocket failure
 // swaps in the polling transport transparently.
 const handle = await registry.bind({ bootstrap, logger });
 

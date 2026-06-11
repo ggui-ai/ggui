@@ -37,9 +37,9 @@ import { compareSemver } from '../utils/semver.js';
 
 export interface ListArtifactVersionsInput {
   /**
-   * `<scope>/<name>` — the install identifier. Scope MUST start with `@`.
-   * Cloud API Gateway path params drop the leading `@`; the cloud
-   * Lambda shell re-prepends before calling this op.
+   * `<scope>/<name>` — the install identifier. Scope MUST start
+   * with `@`. Transports whose path params drop the leading `@`
+   * MUST re-prepend it before calling this op.
    */
   readonly artifactId: string;
 }

@@ -8,7 +8,6 @@ import { z } from 'zod';
 import type {
   AppBlueprintSearchConfig,
   Blueprint,
-  BlueprintSearchWeights,
   BlueprintVariance,
 } from '../types/blueprint';
 import { dataContractSchema, jsonValueSchema } from './data-contract.js';
@@ -79,29 +78,11 @@ export const blueprintSchema: z.ZodType<Blueprint> = z
   .strict() as z.ZodType<Blueprint>;
 
 /**
- * Zod mirror of {@link BlueprintSearchWeights}. Every axis is a
+ * Zod mirror of the partial-weights shape on
+ * {@link AppBlueprintSearchConfig.weights}. Every axis is a
  * non-negative finite number. Per-axis defaults are applied at the
  * impl layer (see `DEFAULT_BLUEPRINT_SEARCH_WEIGHTS` in
- * `@ggui-ai/mcp-server-core`); this schema only validates the shape
- * an operator passes through `App.blueprintSearchConfig.weights`
- * when the operator provides EVERY axis.
- */
-export const blueprintSearchWeightsSchema: z.ZodType<BlueprintSearchWeights> = z
-  .object({
-    hash: z.number().min(0),
-    embed: z.number().min(0),
-    struct: z.number().min(0),
-    variance: z.number().min(0),
-    intent: z.number().min(0),
-  })
-  .strict() as z.ZodType<BlueprintSearchWeights>;
-
-/**
- * Zod mirror of the partial-weights shape on
- * {@link AppBlueprintSearchConfig.weights}. Built directly rather
- * than as `.partial()` on `blueprintSearchWeightsSchema` because
- * that schema is typed `z.ZodType<...>` for cross-zod-version
- * compatibility — `.partial()` only exists on `z.ZodObject`.
+ * `@ggui-ai/mcp-server-core`) for any axis the operator omits.
  */
 const partialBlueprintSearchWeightsSchema = z
   .object({

@@ -3,7 +3,7 @@
  *
  * Maps raw chokidar events to the contract's `UiRegistryEvent`
  * union (`added` / `changed` / `removed`). The watcher is scoped
- * to what actually affects what Studio can see:
+ * to what actually affects what a registry consumer can see:
  *
  *   - Any `ggui.ui.json` under the project tree → affects the
  *     manifest itself. A new one means `added`, a deletion
@@ -30,8 +30,8 @@ import type { UiRegistryEvent } from '@ggui-ai/ui-registry';
 /**
  * Listener for raw events the watcher emits. Delivery is
  * at-least-once — consumers dedupe where needed (e.g. the SSE
- * handler just forwards; Studio's subscription logic bumps a
- * counter and doesn't care about dupes).
+ * handler just forwards; a subscribing UI bumps a counter and
+ * doesn't care about dupes).
  */
 export type WatchListener = (event: UiRegistryEvent) => void;
 

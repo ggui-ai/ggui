@@ -34,13 +34,13 @@ import { validateOutboundActionEnvelope } from './validation.js';
  * Outbound send surface — the minimal shape wire-config calls on the
  * WS transport. Pre-B3b this read off `Pick<RendererWebSocketManager,
  * 'send'>`; post-B3b the WS lives inside `@ggui-ai/live-channel`,
- * but wire-config doesn't import the gadget directly — it consumes
+ * but wire-config doesn't import the library directly — it consumes
  * the shape via this local type so tests can stub `{send: vi.fn()}`
  * without dragging in the live-channel types.
  *
- * Frames sent here are always `{type: 'action', payload: ...}` or
- * `{type: 'feedback', payload: ...}` envelopes — wire-config never
- * sends transport-layer frames (`ping`, `subscribe`).
+ * Frames sent here are always `{type: 'action', payload: ...}`
+ * envelopes — wire-config never sends transport-layer frames
+ * (`ping`, `subscribe`).
  */
 export interface RendererSendSurface {
   readonly send: (message: WebSocketMessage) => void;
@@ -190,7 +190,7 @@ export interface BuildRootWireConfigOptions {
    * WireConfig.
    */
   readonly getCurrentGguiSession: () => GguiSession | GguiSessionSeedInput | null;
-  /** Handle to the renderer's WS manager; used for outbound `action` + `feedback` frames. */
+  /** Handle to the renderer's WS manager; used for outbound `action` frames. */
   readonly manager: RendererSendSurface;
   /** Shared bus for inbound stream deliveries. */
   readonly streamBus: StreamBus;
@@ -228,7 +228,7 @@ export interface BuildRootWireConfigOptions {
    * default WS-frame send (`manager.send({type:'action', payload})`).
    *
    * The WS live-channel exists for streamSpec subscriptions (inbound
-   * `ggui_emit` fanout + `props_update` + `render` + `data` + `feedback`
+   * `ggui_emit` fanout + `props_update` + `render` + `data`
    * + `drain_ack` + `channel_payload`). Outbound user actions belong
    * on a different pipe — per MCP-Apps spec §401, the iframe relays
    * `tools/call:ggui_runtime_submit_action` through the host (the

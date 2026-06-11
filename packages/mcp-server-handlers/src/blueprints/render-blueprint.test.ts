@@ -51,7 +51,6 @@ function makeFakeRegistry(
 ): UiRegistry {
   const byId = new Map(entries.map((e) => [e.id, e] as const));
   const capabilities: UiRegistryCapabilities = {
-    writable: false,
     observable: false,
   };
   return {

@@ -3,8 +3,8 @@
  *
  * When a developer runs `ggui serve`, the OSS server reads this file
  * to discover everything it needs: app identity, protocol version,
- * blueprint manifests, primitive packages, theme tokens, declared
- * adapter intent. The schema is framework-neutral — it describes
+ * blueprint manifests, primitive packages, theme tokens, MCP tool
+ * mounts. The schema is framework-neutral — it describes
  * *the ggui app*, never the internal orchestration of any specific
  * agent runtime. LLM choice, system prompt, framework-specific tool
  * inventory belong in each framework's own config, not here.
@@ -440,9 +440,9 @@ const StorageSchema = z.strictObject({
 });
 
 /**
- * Public type alias for one storage surface's config (renders or
- * vectors). Callers instantiating adapters from a parsed manifest
- * pattern-match on `driver`.
+ * Public type alias for one storage surface's config (renders,
+ * vectors, or threads). Callers instantiating adapters from a
+ * parsed manifest pattern-match on `driver`.
  */
 export type StorageSurfaceConfig = z.infer<typeof StorageSurfaceSchema>;
 
@@ -534,10 +534,12 @@ export type ThemeConfig = z.infer<typeof ThemeConfigSchema>;
  *
  * **Required fields:** `schema`, `protocol`, `app`.
  * **Optional fields with defaults:** `blueprints`, `primitives`,
- * `adapters`. A zero-config `ggui.json` is just the three required
+ * `mcpMounts`. A zero-config `ggui.json` is just the three required
  * fields — the OSS server boots with defaults for everything else.
- * **Optional without default:** `theme` (absent = shipped default
- * tokens), `agent` (absent = `ggui serve` runs MCP-only).
+ * **Optional without default:** `operator`, `theme` (absent =
+ * shipped default tokens), `agent` (absent = `ggui serve` runs
+ * MCP-only), `storage` (absent = in-memory), `generation`,
+ * `registry`.
  *
  * **Strict root:** unknown top-level keys are rejected.
  */
@@ -617,7 +619,7 @@ export const GguiJsonV1 = z.strictObject({
    * — no surface silently creates a file on disk. See
    * {@link StorageConfig}. */
   storage: StorageSchema.optional().describe(
-    'Per-surface storage adapter declarations. Absent = every persistence surface (renders, threads, vectors, kv) stays in-memory (zero-config OSS default). Present = opt-in per surface; no surface silently creates a file on disk.',
+    'Per-surface storage adapter declarations. Absent = every persistence surface (renders, threads, vectors) stays in-memory (zero-config OSS default). Present = opt-in per surface; no surface silently creates a file on disk.',
   ),
 
   /**

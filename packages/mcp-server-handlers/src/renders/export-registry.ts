@@ -2,12 +2,12 @@ import {
   isEnumerableVectorStore,
   type VectorStore,
 } from '@ggui-ai/mcp-server-core';
-import type {
-  BlueprintSource,
-  DataContract,
-  BlueprintVariance,
+import {
+  flatToBlueprintSource,
+  type BlueprintSource,
+  type DataContract,
+  type BlueprintVariance,
 } from '@ggui-ai/protocol';
-import { readSourceFromMetadata } from './blueprint-registry.js';
 
 export interface ExportableBlueprint {
   readonly contract: DataContract;
@@ -51,7 +51,7 @@ export async function listRegistryBlueprintsForExport(
     const codeRaw = m['componentCode'];
     if (typeof contractRaw !== 'string' || typeof codeRaw !== 'string') continue;
     if (m['kind'] !== 'template') continue;
-    const source = readSourceFromMetadata(m);
+    const source = flatToBlueprintSource(m);
     if (source === null) {
       // eslint-disable-next-line no-console -- operator-visible invalidation notice
       console.warn(

@@ -1,7 +1,6 @@
 /**
- * Conformance check — a pure function shared by the registry server,
- * the hosted registry, and the publish op so they all enforce the
- * same gate.
+ * Conformance check — a pure function shared by every registry
+ * transport and the publish op so they all enforce the same gate.
  *
  * ## Gadget gates
  *
@@ -159,9 +158,9 @@ const ALWAYS_ALLOWED_IMPORTS: ReadonlySet<string> = new Set([
 export const MAX_BLUEPRINT_SOURCE_BYTES = 5 * 1024 * 1024;
 
 /**
- * Run the conformance check synchronously. Pure function: no AWS, no
+ * Run the conformance check synchronously. Pure function: no
  * network, no env lookups. Returns the locked response body shape.
- * The OSS server, the cloud Lambda, and the publish op all call this.
+ * Every registry transport and the publish op call this.
  *
  * Static gates only — the optional runtime probe lives behind a
  * {@link BlueprintProbeRunner} seam so registry-core stays free of

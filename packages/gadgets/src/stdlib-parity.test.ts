@@ -31,8 +31,54 @@ import {
   STDLIB_GADGET_HOOKS,
   gadgetExportName,
 } from '@ggui-ai/protocol';
-import type { GadgetExport } from '@ggui-ai/protocol';
+import type { GadgetExport, GadgetStatus } from '@ggui-ai/protocol';
 import * as gadgets from './index.js';
+
+/**
+ * Runtime mirror of the `GadgetStatus` union. The `satisfies` clause
+ * rejects values outside the union; the `_statusExhaustive` pin below
+ * fails the build when a NEW union member is added without updating
+ * this list — so the example-validation tests can never run against a
+ * stale status vocabulary.
+ */
+const GADGET_STATUS_VALUES = [
+  'idle',
+  'prompting',
+  'active',
+  'completed',
+  'denied',
+  'error',
+] as const satisfies readonly GadgetStatus[];
+const _statusExhaustive: GadgetStatus extends (typeof GADGET_STATUS_VALUES)[number]
+  ? true
+  : never = true;
+void _statusExhaustive;
+
+/**
+ * The only invokable members of a `GadgetHook` result
+ * (`{value, status, error?, start, stop?}` — protocol
+ * `types/gadget.ts`). Example `call` strings invoking anything else
+ * (historic drift: `write.write(...)`, `notify.show(...)`) teach the
+ * generation LLM an API that does not exist.
+ */
+const HOOK_RESULT_METHODS = new Set(['start', 'stop']);
+
+/** Narrowed shape of every stdlib example block (typed `JsonValue`
+ *  on the descriptor, so the structure must be asserted at runtime). */
+interface StdlibExample {
+  readonly call: string;
+  readonly returns: { readonly status: string; readonly value?: unknown };
+}
+
+function asStdlibExample(hook: string, example: unknown): StdlibExample {
+  expect(example, `${hook}: example must be a {call, returns} object`).toEqual(
+    expect.objectContaining({
+      call: expect.any(String),
+      returns: expect.objectContaining({ status: expect.any(String) }),
+    }),
+  );
+  return example as StdlibExample;
+}
 
 /**
  * Every export across every stdlib gadget package, flattened. A
@@ -131,5 +177,53 @@ describe('@ggui-ai/gadgets ↔ STDLIB_GADGETS parity', () => {
     const names = allStdlibExports().map((exp) => gadgetExportName(exp));
     const unique = new Set(names);
     expect(unique.size).toBe(names.length);
+  });
+
+  // ── Example-block fidelity ────────────────────────────────────────
+  //
+  // The `example` blocks ship verbatim to agents via
+  // `ggui_list_gadgets`, and ui-gen's system prompt exempts stdlib
+  // gadgets from the `.d.ts` Type: line BECAUSE "they already carry an
+  // `example`" — so for stdlib hooks the example is the ONLY API
+  // signal the generation LLM gets. These tests pin every example to
+  // the real `GadgetHook` contract.
+
+  it("every example's returns.status is a GadgetStatus member", () => {
+    const statuses = new Set<string>(GADGET_STATUS_VALUES);
+    for (const exp of allStdlibExports()) {
+      const name = gadgetExportName(exp);
+      const example = asStdlibExample(name, exp.example);
+      expect(
+        statuses.has(example.returns.status),
+        `${name}: returns.status '${example.returns.status}' is not in the GadgetStatus union`,
+      ).toBe(true);
+    }
+  });
+
+  it("every example's call string invokes the declared hook and only start()/stop() on its result", () => {
+    for (const exp of allStdlibExports()) {
+      const name = gadgetExportName(exp);
+      const example = asStdlibExample(name, exp.example);
+
+      // The call string must actually invoke the hook it documents.
+      expect(
+        example.call.includes(`${name}(`),
+        `${name}: example call string never invokes the hook`,
+      ).toBe(true);
+
+      // Every `<ident>.<method>(` in the call string must be a real
+      // GadgetHook result member — start or stop. Catches drift like
+      // `write.write('hello')` / `notify.show({...})`.
+      const methodCalls = [...example.call.matchAll(/\.(\w+)\(/g)].map(
+        (m) => m[1],
+      );
+      const phantom = methodCalls.filter(
+        (method) => method !== undefined && !HOOK_RESULT_METHODS.has(method),
+      );
+      expect(
+        phantom,
+        `${name}: example call invokes method(s) [${phantom.join(', ')}] that do not exist on a GadgetHook result (only start/stop do)`,
+      ).toEqual([]);
+    }
   });
 });

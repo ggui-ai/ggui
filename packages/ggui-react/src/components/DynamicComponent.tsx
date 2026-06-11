@@ -1,9 +1,9 @@
 /**
  * DynamicComponent — alias for ReactComponentRenderer.
  *
- * Preserves the DynamicComponent public API so existing consumers
- * (ChatShell, FullscreenShell, etc.) continue to work after the
- * Phase B render-identity collapse.
+ * Public mount surface for compiled component code outside the
+ * `<GguiRender>` lifecycle — preview routes and ad-hoc blueprint
+ * viewers pass `{ id, componentCode }`.
  *
  * Post-Phase-B: the old `StackItemRenderer` (which scoped a wire
  * provider per stack item via `LegacyScopableWireConfig.scope()`) is
@@ -15,7 +15,6 @@
  */
 
 import React, { type ReactNode } from 'react';
-import type { CapabilityPermissions, ActionSpec } from '@ggui-ai/protocol';
 import {
   GguiWireProvider,
   useWireContext,
@@ -52,11 +51,10 @@ export const DynamicComponent = ReactComponentRenderer;
 /**
  * Render a single component-variant render.
  *
- * Loose input shape (id + componentCode + props + caps + actionSpec +
- * contractHash) because callers — preview routes, ad-hoc viewers, the
- * shells — historically passed a fragment of {@link ComponentGguiSession}
- * rather than the full type. The shape is internally a superset of the
- * fields the renderer actually reads.
+ * Loose input shape (id + componentCode + prompt + props) because
+ * callers — preview routes, ad-hoc viewers — pass a fragment of
+ * {@link ComponentGguiSession} rather than the full type. These four
+ * fields are exactly what the renderer reads.
  *
  * @example
  * ```tsx
@@ -71,12 +69,6 @@ export interface GguiSessionRendererProps {
     prompt?: string;
     /** Props to pass to the component at render time */
     props?: Record<string, unknown>;
-    /** Capability permissions granted to this component */
-    capabilities?: CapabilityPermissions;
-    /** Action contract — used by the wire layer to resolve action → MCP tool bindings */
-    actionSpec?: ActionSpec;
-    /** Contract hash — included in event context for traceability and cross-validation */
-    contractHash?: string;
   };
   /** Fallback UI while loading */
   fallback?: ReactNode;

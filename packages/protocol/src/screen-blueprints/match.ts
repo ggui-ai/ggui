@@ -1,12 +1,12 @@
 /**
  * Blueprint matcher — pure algorithm.
  *
- * Given a list of candidate `McpScreenBlueprint` rows (retrieved from DDB
- * via `byPrimaryDataTool` GSI) and the agent's `sourceTools`, return the
- * best matching blueprint.
+ * Given a list of candidate `McpScreenBlueprint` rows (retrieved by the
+ * hosting deployment via an indexed primary-data-tool query) and the
+ * agent's `sourceTools`, return the best matching blueprint.
  *
- * I/O-free. The DDB query layer lives in `core/src/blueprint-matcher.ts`;
- * that module's only job is fetching candidates and calling this function.
+ * I/O-free. The storage query layer lives in the hosting deployment;
+ * its only job is fetching candidates and calling this function.
  */
 import type { BlueprintSource, BlueprintSourceKind } from "../types/blueprint-source.js";
 

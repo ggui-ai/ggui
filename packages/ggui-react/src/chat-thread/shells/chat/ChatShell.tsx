@@ -1,18 +1,11 @@
 /**
  * ChatShell — a thread-backed reference chat UI for integrators.
  *
- * ─────────────────────────────────────────────────────────────────────
- * TWO ChatShells live in this repo — DO NOT confuse them:
- *   - THIS FILE (`chat-thread/shells/chat/ChatShell.tsx`) — THREAD-backed.
- *     Consumes useChatThread + MessageStorageAdapter. Exported at
- *     `@ggui-ai/react/chat-thread/shells/chat`.
- *   - The one at `shells/ChatShell.tsx` — INVOKE-SSE-backed. Consumes
- *     useInvoke + extractUiMoments + `<McpAppIframe>`. Exported at
- *     `@ggui-ai/react` root + `@ggui-ai/react/shells`.
- *
- * Both ship today. Consumers pick based on data model:
- *   invoke-SSE driven → the other shell; thread-backed → this file.
- * ─────────────────────────────────────────────────────────────────────
+ * The only ChatShell in the package: the legacy INVOKE-SSE-backed
+ * shell (`src/shells/ChatShell.tsx`) and the `@ggui-ai/react/shells`
+ * subpath were retired with the developer-embed shells. This one
+ * consumes useChatThread + MessageStorageAdapter and is exported at
+ * `@ggui-ai/react/chat-thread/shells/chat`.
  *
  * Deliberately small and generic: reads `useChatThread()`, renders a
  * timeline + composer + inline error banner, forwards user input back

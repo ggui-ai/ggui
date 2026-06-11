@@ -6,7 +6,34 @@
  * schema change; the most recent change anchors {@link PROTOCOL_VERSION}.
  *
  * --------------------------------------------------------------------
- * Retired-surface cleanup (2026-06-11, pre-launch):
+ * Blueprint provenance (`BlueprintSource` union + `PortableBlueprint`
+ * v2) + retired-surface cleanup (2026-06-11, BREAKING, pre-launch).
+ * One release, two strands: the bp* entries introduce provenance on
+ * the wire; the rc* entries delete vocabulary that had no emitter.
+ *
+ *   bp1. **`BlueprintSource` discriminated union introduced**
+ *      (`kind: 'llm' | 'user' | 'curated'`), replacing the flat
+ *      provenance strings that previously lived on three separate
+ *      seams (catalog entries, screen blueprints, the runtime cache
+ *      registry). The `llm` arm REQUIRES `generator` + `model`; the
+ *      legacy `heuristic` arm is deleted (zero mint sites repo-wide).
+ *      `parseBlueprintSource` / `isBlueprintSource` validate at trust
+ *      boundaries — legacy flat strings are rejected, never coerced.
+ *
+ *   bp2. **`PortableBlueprint` v2**
+ *      (`PORTABLE_BLUEPRINT_SCHEMA_VERSION = 2`): `source` and
+ *      `generatorProtocolVersion` are REQUIRED (the latter's
+ *      optional-for-back-compat shim dies). `fromPortableBlueprint`
+ *      is the validating importer: v1 artifacts and era-mismatched
+ *      records are REJECTED — a rejected seed entry is just a
+ *      cold-gen; the fix is to re-export the pool, never to coerce.
+ *      `toolIdentityCatalogHash` stays optional (an offline pool
+ *      export has no runtime handshake catalog to hash).
+ *
+ *   bp3. **Provenance is stamped at every mint site** and persisted
+ *      on stored blueprint rows. Rows whose `source` does not parse
+ *      are dropped at the load boundary, never coerced — blueprints
+ *      are a cache (invalidation = regeneration, never data loss).
  *
  *   rc1. **`SubscribePayload.appId` required → optional (widening).**
  *      Absent appId no longer flows through raw: the server resolves
@@ -31,6 +58,25 @@
  *      override path carries no generator field); the live surface is
  *      the forgiving `GENERATOR_UNKNOWN` handshake draft finding.
  *      Render-time generator selection is deferred to v2.
+ *
+ *   rc4. **`'feedback'` leaves the WS message union** (both
+ *      `WebSocketMessageType` and the `WebSocketMessage` variant,
+ *      which carried a bare `JsonObject` payload). The frame was
+ *      vocabulary with no emitter in either direction: no client ever
+ *      constructed it, and the only server touch rejected it
+ *      `NOT_IMPLEMENTED`. The iframe-runtime's inbound no-op stub
+ *      handler (a shim for servers that never existed) is deleted
+ *      with it. Conformance-kit-invisible (the kit never covered the
+ *      frame). If love/dislike feedback ships later it re-enters with
+ *      a real producer + consumer and a typed payload.
+ *
+ *   rc5. **`SubscribePayload.bootstrap` dead duplicate deleted.** The
+ *      R4 rename (r4.1 below) moved the live-channel auth credential
+ *      to `wsToken`, but the retired slot survived on the published
+ *      wire type as a "generic transport-bootstrap" judgment call with
+ *      ZERO emitters or readers in either direction. The field, its
+ *      boundary-test pin, and every docstring still teaching it as
+ *      live are deleted; `wsToken` is the only subscribe credential.
  *
  * --------------------------------------------------------------------
  * Synchronous wired-action dispatch retired — agent-routed consume
@@ -118,7 +164,7 @@
  *      on the wire was the credential, so the term lost its meaning.
  *      Renamed everywhere internally to `wsToken` (sharper, symmetric
  *      with `wsUrl`):
- *        - {@link SubscribePayload.bootstrap} → `SubscribePayload.wsToken`
+ *        - `SubscribePayload.bootstrap` → `SubscribePayload.wsToken`
  *        - `?bootstrap=<token>` WS upgrade query → `?wsToken=<token>`
  *        - `McpAppAiGguiSessionMeta.token` slice field → `wsToken`
  *        - `ChannelClientBootstrap.token` → `wsToken`
@@ -537,6 +583,8 @@
  *        - `handshakeOutputSchema`: dropped `reason`, `target`,
  *          `alternatives`, `contractHash`, `serverCapabilities`.
  *          `serverCapabilities` flows via `_meta.ggui.bootstrap` instead.
+ *          (`reason` was later reinstated as an optional ≤280-char wire
+ *          field — see the o-block below.)
  *        - `pushOutputSchema`: dropped `sessionId`, `shortCode`,
  *          `codeReady`, `handshakeId`, `decision`, `contract`,
  *          `interaction`, `contractHash`, `cache.*`, `codeUrl`,
@@ -1730,7 +1778,7 @@
  *      OSS-first; the cloud pod follows at its next image build. See
  *      `docs/protocol/migrations/2026-06-05-gguisession-reintroduction.md`.
  */
-export const PROTOCOL_VERSION = "draft-2026-06-10";
+export const PROTOCOL_VERSION = "draft-2026-06-11";
 
 /**
  * Schema version stamped onto wire envelopes that opt into the

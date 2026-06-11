@@ -4,13 +4,12 @@
  *
  * Scope (compile-on-demand slice, 2026-04-18):
  *
- *   - Read-only. `capabilities.writable === false`;
- *     `capabilities.observable === false`.
+ *   - Read-only — the `UiRegistry` contract has no write arm;
+ *     `capabilities.observable === true` (watcher-backed).
  *   - Manifest-backed. Discovery runs against `ggui.json` +
  *     `blueprints.include` globs via `./discovery.js` and is
  *     cached in memory. `refresh()` re-runs discovery on demand;
- *     file watching / `subscribe()` lands with a follow-up
- *     HMR slice.
+ *     `subscribe()` is watcher-backed (see `./watcher.ts`).
  *   - `getBundle(id)` resolution order:
  *       1. **Precompiled fast-path** — colocated `ggui.ui.js` or
  *          `ggui.ui.mjs` beside the manifest. Lets a project with
@@ -94,7 +93,6 @@ export interface BundleErrorLocation {
 
 export class LocalUiRegistry implements UiRegistry {
   readonly capabilities: UiRegistryCapabilities = {
-    writable: false,
     observable: true,
   };
 

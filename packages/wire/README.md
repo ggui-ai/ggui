@@ -15,9 +15,14 @@ A ggui component runs inside an iframe wired to a live channel. `GguiWireProvide
 ```tsx
 import { GguiWireProvider, useAction, useStream } from "@ggui-ai/wire";
 
+interface Todo {
+  id: string;
+  title: string;
+}
+
 function TodoList() {
-  const addTodo = useAction("addTodo"); // fires an ActionEnvelope to the agent
-  const { all } = useStream("todos"); // receives StreamEnvelopes from the agent
+  const addTodo = useAction<{ title: string }>("addTodo"); // fires an ActionEnvelope to the agent
+  const { all } = useStream<Todo>("todos"); // receives StreamEnvelopes from the agent
 
   return (
     <>
@@ -34,15 +39,15 @@ function TodoList() {
 
 ## Exports
 
-| Symbol                                                         | What it is                                                         |
-| -------------------------------------------------------------- | ------------------------------------------------------------------ |
-| `GguiWireProvider`                                             | Context provider — injects the live-channel `WireConfig`           |
-| `useAction(name)`                                              | Returns a callback that fires a named action to the agent          |
-| `useStream(name)`                                              | Subscribes to a named agent stream channel                         |
-| `useContract(contract)`                                        | Contract-aware hook factory — autocompletes names, infers payloads |
-| `useApp` / `useRender` / `useAuth`                             | Read app / render / auth info from the live channel                |
-| `useGguiContext`                                               | Read the host-provided interface context                           |
-| `buildActionEnvelope`, `validateOutbound*`, `validateInbound*` | Envelope build + contract-validation helpers                       |
+| Symbol                                                         | What it is                                                                               |
+| -------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| `GguiWireProvider`                                             | Context provider — injects the live-channel `WireConfig`                                 |
+| `useAction(name)`                                              | Returns a callback that fires a named action to the agent                                |
+| `useStream(name)`                                              | Subscribes to a named agent stream channel                                               |
+| `useContract(contract)`                                        | Contract-aware hook factory — autocompletes names, infers payloads                       |
+| `useApp` / `useRender` / `useAuth`                             | Read app / render / auth info from the live channel                                      |
+| `useGguiContext`                                               | Read `[value, setter]` for a declared `contextSpec` slot (client → agent mirrored state) |
+| `buildActionEnvelope`, `validateOutbound*`, `validateInbound*` | Envelope build + contract-validation helpers                                             |
 
 `useContract` gives you fully typed hooks: pass a `defineContract()` literal and action names autocomplete with payload types inferred from the contract's JSON Schemas.
 

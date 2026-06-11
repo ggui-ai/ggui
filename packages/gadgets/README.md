@@ -4,7 +4,7 @@
 
 ## Why
 
-LLM-generated component code needs a stable, narrow API for the small set of browser capabilities that interactive UIs reach for: geolocation, clipboard read/write, notifications, file pickers, microphone, camera. Each capability has the same lifecycle shape — pending → ready → error — and the same permission-prompt UX. Encoding that shape once, in a typed React hook, keeps the generator's output:
+LLM-generated component code needs a stable, narrow API for the small set of browser capabilities that interactive UIs reach for: geolocation, clipboard read/write, notifications, file pickers, microphone, camera. Each capability has the same lifecycle shape — idle → prompting → active → completed (or denied / error) — and the same permission-prompt UX. Encoding that shape once, in a typed React hook, keeps the generator's output:
 
 - predictable across providers and prompts,
 - testable by code-property assertions on the generated source (not just the rendered DOM),
@@ -22,7 +22,7 @@ Peer-dep: `react` ^18 || ^19.
 
 ## v1 stdlib catalog
 
-Seven hooks ship in v1, all with a shared `{ status, error, value | data | call }` shape:
+Seven hooks ship in v1, all with a shared `{ value, status, error?, start, stop? }` shape:
 
 | Hook                | Permission        | Description                                                  |
 | ------------------- | ----------------- | ------------------------------------------------------------ |
@@ -34,7 +34,7 @@ Seven hooks ship in v1, all with a shared `{ status, error, value | data | call 
 | `useMicrophone`     | `microphone`      | Stream access to the user's microphone via `getUserMedia`.   |
 | `useCamera`         | `camera`          | Stream access to the user's camera via `getUserMedia`.       |
 
-The same list is exported from `@ggui-ai/protocol` as `STDLIB_GADGETS` and seeds the discovery tool (`ggui_list_gadgets`) for any app without an operator-mutated override.
+The same list is exported from `@ggui-ai/protocol` as `STDLIB_GADGETS` and forms the structural floor of every app's `ggui_list_gadgets` catalog — operator-declared packages (`ggui.json#app.gadgets`) layer on top, winning on a package-name collision.
 
 ## How a contract uses these hooks
 
@@ -59,8 +59,8 @@ export const photoCaptureContract = defineContract({
     // `gadgets` is package-keyed: `Record<package, Record<exportName,
     // { description?, usage? }>>`. The wire carries identity only —
     // `version`, transport fields, and per-export registry metadata
-    // (`permission`, `example`, `gotchas`, `required`) are NOT on the
-    // wire; the server resolves them from `App.gadgets` at render time.
+    // (`permission`, `example`, `gotchas`) are NOT on the wire; the
+    // server resolves them from `App.gadgets` at render time.
     gadgets: {
       "@ggui-ai/gadgets": {
         useCamera: {

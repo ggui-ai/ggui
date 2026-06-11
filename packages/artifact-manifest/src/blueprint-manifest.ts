@@ -14,21 +14,24 @@
  *     hints that drive the LLM-driven variant selector when multiple
  *     blueprints share a `(appId, contractHash)` group.
  *
- * ## In-process counterpart
+ * ## Relation to `ggui_ops_register_blueprint`
  *
- * The in-process registration tool at
- * `cloud/ggui-protocol-pod/src/tools/register-blueprint.ts` accepts
- * `{source, contract?, fixtureProps?}` and a slug
- * `^[a-z0-9][a-z0-9_-]{0,63}$`. This manifest's `source` /
- * `contract` / `fixtureProps` fields mirror that envelope exactly
- * — round-tripping a blueprint through
- * `ggui_ops_register_blueprint` then exporting it back into a
- * `ggui.blueprint.json` must not require any field rewriting beyond
- * adding the marketplace identity (`scope`, `name`, `version`,
- * `kind`, `visibility`) and optional variance tags.
+ * The operator registration tool `ggui_ops_register_blueprint`
+ * (`@ggui-ai/mcp-server-handlers`) takes `{contract, componentCode,
+ * generator?, persona?, aesthetic?, context?, seedPrompt?,
+ * setAsOperatorDefault?}`. Mapping a manifest onto that envelope:
  *
- * The `name` regex matches the in-process slug rule
- * ({@link BLUEPRINT_NAME_RE}) — diverging would break round-trip.
+ *   - `source`            → `componentCode` (verbatim TSX body).
+ *   - `contract`          → `contract` (optional on the manifest,
+ *                           REQUIRED by the tool — a contract-less
+ *                           manifest cannot be registered as-is).
+ *   - `variance`          → the flat `persona` / `aesthetic` /
+ *                           `context` / `seedPrompt` fields.
+ *   - `fixtureProps`      → no counterpart. Conformance-gate-only:
+ *                           consumed by the registry's runtime probe,
+ *                           never sent on the register envelope.
+ *   - marketplace identity (`scope`, `name`, `version`, `kind`,
+ *     `visibility`) → no counterpart; registry-side only.
  *
  * ## Why no `matchers` field
  *
@@ -84,8 +87,7 @@ const BlueprintNameSchema = z.string().min(2).max(64).regex(BLUEPRINT_NAME_RE, {
  * runtime probe round-trips it through `JSON.stringify` and feeds it
  * as `props` to the rendered TSX. Any JSON-safe shape rides through;
  * the blueprint's own `contract.propsSchema` (when present) is what
- * actually validates the shape at runtime probe time. Mirrors the
- * in-process register-blueprint's `fixtureProps: z.unknown().optional()`.
+ * actually validates the shape at runtime probe time.
  *
  * `z.unknown()` is permitted here (not `Record<string, unknown>`)
  * because the value is genuinely shape-unknown at THIS layer — only
@@ -115,7 +117,7 @@ export const blueprintManifestSchema = z.strictObject({
     'Blueprint scope. Must start with `@` (e.g. `@my-org`). Disambiguates the `<scope>/<name>` install identifier.',
   ),
   name: BlueprintNameSchema.describe(
-    'Blueprint slug. 2-64 chars, `^[a-z0-9][a-z0-9-]{0,62}[a-z0-9]$` — kebab-case, no underscores, no single-character names. Unified with the gadget naming rule under LOCKED-25 (2026-05-18). The in-process `ggui_ops_register_blueprint` slug rule mirrors this for round-trip preservation.',
+    'Blueprint slug. 2-64 chars, `^[a-z0-9][a-z0-9-]{0,62}[a-z0-9]$` — kebab-case, no underscores, no single-character names. Unified with the gadget naming rule under LOCKED-25 (2026-05-18).',
   ),
   version: ArtifactVersionSchema.describe(
     'SemVer. `MAJOR.MINOR.PATCH` with optional `-pre` / `+build` suffixes. Per-version immutable once published.',
@@ -126,7 +128,7 @@ export const blueprintManifestSchema = z.strictObject({
     .string()
     .min(1)
     .describe(
-      'TSX source body with a default-exported React component. Mirrors the in-process register-blueprint `blueprint.source` field — the conformance gate compiles + runtime-probes this string before the registry accepts the upload.',
+      'TSX source body with a default-exported React component. Maps to `ggui_ops_register_blueprint`’s `componentCode` field; the conformance gate compiles + runtime-probes this string before the registry accepts the upload.',
     ),
   visibility: ArtifactVisibilitySchema.describe(
     'Storage + signing posture. `public` = sigstore-signed, listable; `private` = Ed25519-signed, visible only within publisher org.',
@@ -197,16 +199,6 @@ export const GGUI_BLUEPRINT_JSON_FILENAME = 'ggui.blueprint.json';
  */
 export function parseBlueprintManifest(raw: unknown): BlueprintManifest {
   return blueprintManifestSchema.parse(raw);
-}
-
-/**
- * Assertion helper — narrows `raw` to {@link BlueprintManifest} on
- * success, throws `ZodError` on failure.
- */
-export function assertBlueprintManifestValid(
-  raw: unknown,
-): asserts raw is BlueprintManifest {
-  blueprintManifestSchema.parse(raw);
 }
 
 /**

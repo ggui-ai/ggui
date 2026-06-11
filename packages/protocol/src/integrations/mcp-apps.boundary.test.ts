@@ -59,11 +59,7 @@ void _existenceValueLocks;
 
 // Also import the core protocol types — the boundary-lock tests below
 // assert that these DO NOT contain MCP-Apps-specific fields.
-import type {
-  StreamEnvelope,
-  SubscribePayload,
-  AckPayload,
-} from '../types/live-channel';
+import type { StreamEnvelope, AckPayload } from '../types/live-channel';
 import type { ActionEnvelope } from '../types/events';
 import type { StreamSpec, ActionSpec, PropsSpec } from '../types/data-contract';
 
@@ -234,35 +230,11 @@ describe('StreamSpec / ActionSpec / PropsSpec boundary lock (type-level)', () =>
   });
 });
 
-describe('Subscribe / Ack bootstrap slots are generic, not MCP-Apps-typed (type-level)', () => {
-  // `SubscribePayload.bootstrap` and `AckPayload.sessionToken` are
-  // deliberately framed as GENERAL transport-bootstrap credentials
-  // (opaque strings), NOT as MCP-Apps-typed fields. This lock ensures
-  // a future change doesn't accidentally narrow them to
-  // `McpAppAiGguiRenderMeta`-shaped objects.
-  it('SubscribePayload.bootstrap is a string, not a render-slice object', () => {
-    const s: SubscribePayload = {
-      sessionId: 'x',
-      appId: 'a',
-      bootstrap: 'opaque-token',
-    };
-    expect(typeof s.bootstrap).toBe('string');
-    const s2: SubscribePayload = {
-      sessionId: 'x',
-      appId: 'a',
-      // @ts-expect-error — bootstrap is `string | undefined`, not an object.
-      bootstrap: {
-        sessionId: 'r',
-        appId: 'a',
-        runtimeUrl: '/_ggui/iframe-runtime.js',
-        wsUrl: 'w',
-        wsToken: 't',
-        expiresAt: 'e',
-      } satisfies McpAppAiGguiRenderMeta,
-    };
-    expect(s2).toBeDefined();
-  });
-
+describe('Ack credential slot is generic, not MCP-Apps-typed (type-level)', () => {
+  // `AckPayload.sessionToken` is deliberately framed as a GENERAL
+  // transport credential (an opaque string), NOT as an MCP-Apps-typed
+  // field. This lock ensures a future change doesn't accidentally
+  // narrow it to an `McpAppAiGguiRenderMeta`-shaped object.
   it('AckPayload.sessionToken is a string, not a typed credential object', () => {
     const a: AckPayload = {
       sequence: 1,

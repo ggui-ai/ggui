@@ -10,7 +10,7 @@
  *
  * No write verbs, no subscribe. The `UiRegistry.capabilities` probe
  * exposed on `LocalUiRegistry` already declares this publicly; the
- * endpoints are strictly GETs so hosts / Studio can't accidentally
+ * endpoints are strictly GETs so consuming hosts can't accidentally
  * attempt a publish against a read-only source.
  *
  * Security posture:
@@ -285,8 +285,8 @@ async function handleRequest(
           writeJson(res, 404, { error: 'not-found', id });
           return;
         case 'missing-entry':
-          // 404 still — the contract is "no bundle," Studio collapses
-          // this to the "no preview available" state. The body gives
+          // 404 still — the contract is "no bundle," consumers
+          // collapse this to a "no preview available" state. The body gives
           // the developer the exact list of paths we searched so they
           // know what to add (a `ggui.ui.tsx` beside the manifest, or
           // an `entryPoint` field in `ggui.ui.json`).
@@ -303,8 +303,8 @@ async function handleRequest(
           // 422 Unprocessable Entity — the server understood the
           // request but couldn't produce output because the source
           // fails to compile. Body carries structured esbuild errors
-          // so Studio can render the first error with its file /
-          // line / column / highlighted line.
+          // so a consuming UI can render the first error with its
+          // file / line / column / highlighted line.
           writeJson(res, 422, {
             error: 'compile-failed',
             id,

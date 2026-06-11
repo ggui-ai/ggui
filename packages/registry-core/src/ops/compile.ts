@@ -20,19 +20,17 @@
  *   target: 'es2022'           — pinned to the lowest engine the
  *                                 protocol supports; rebumping is a
  *                                 minor protocol version bump.
- *   bundle: true               — single-file output; the matcher writes
- *                                 the bytes directly into componentCode.
  *   minify: false              — readability matters more than size at
  *                                 this scale (~10s of KB per blueprint).
- *   external: ['react',        — host-provided modules at iframe-render
- *              'react-dom',      time. The conformance gate enforces
- *              'react/jsx-runtime', the same allow-list on the SOURCE
- *              '@ggui-ai/gadgets']  side so we never compile a blueprint
- *                                   whose imports don't survive bundling.
- *   loader.tsx: 'tsx'          — input is JSX/TSX text.
+ *   loader: 'tsx'              — input is JSX/TSX text.
  *   treeShaking: false         — preserve all imports so the conformance
  *                                gate's import-walk matches what's in
- *                                the compiled output.
+ *                                the compiled output. Imports pass
+ *                                through verbatim (transformSync does
+ *                                no bundle resolution); consumers
+ *                                (iframe runtime, matcher) provide the
+ *                                conformance-gate allow-listed modules
+ *                                at module-load time.
  *
  * **esbuild version pin.** `packages/registry-core/package.json` pins
  * `esbuild` to a single minor — the digest is sensitive to esbuild's
@@ -72,30 +70,6 @@ export interface CompileBlueprintErr {
 export type CompileBlueprintResult = CompileBlueprintOk | CompileBlueprintErr;
 
 /**
- * Always-allowed imports on the SOURCE side. Mirrors the conformance
- * gate's `BLUEPRINT_ALLOWED_IMPORTS` to keep the wire-contract aligned;
- * any addition here MUST land in the conformance gate at the same
- * commit (and vice versa).
- */
-export const BLUEPRINT_EXTERNAL_MODULES: readonly string[] = Object.freeze([
-  'react',
-  'react-dom',
-  'react/jsx-runtime',
-  '@ggui-ai/gadgets',
-]);
-
-/**
- * Hex SHA-256 of `compiledBytes` (base64-decoded). Pure function; the
- * deterministic-compile contract is `compile(source) → sha256(bytes)`.
- *
- * Exported for callers that want to recompute the digest without
- * re-compiling (e.g. install-time defense-in-depth).
- */
-export function compiledDigestHex(compiledBytes: string): string {
-  return createHash('sha256').update(Buffer.from(compiledBytes, 'base64')).digest('hex');
-}
-
-/**
  * Compile a blueprint's TSX `source` into canonical compiled JS bytes.
  *
  * Sync at call site — esbuild's `transformSync` is used to keep the
@@ -128,13 +102,12 @@ export function compileBlueprint(source: string): CompileBlueprintResult {
       sourcemap: false,
     });
 
-    // Note on `BLUEPRINT_EXTERNAL_MODULES`: with `transformSync` (not
-    // `buildSync`) imports are preserved verbatim in the output —
-    // tree-shaking off + no bundle resolution means the import
-    // statements pass through unmodified. The externals list is the
-    // CONTRACT consumers (iframe runtime, matcher) honor at module-
-    // load time. The conformance gate's import-walk enforces the
-    // allow-list on the source side before publish.
+    // With `transformSync` (not `buildSync`) imports are preserved
+    // verbatim in the output — tree-shaking off + no bundle resolution
+    // means the import statements pass through unmodified. Consumers
+    // (iframe runtime, matcher) provide the allow-listed modules at
+    // module-load time; the conformance gate's import-walk enforces
+    // that allow-list on the source side before publish.
 
     const bytes = Buffer.from(result.code, 'utf-8');
     const compiledBytes = bytes.toString('base64');

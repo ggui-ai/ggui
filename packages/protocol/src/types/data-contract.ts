@@ -142,8 +142,8 @@ export interface PropEntry {
    * Data-lineage metadata. When set, the agent must have this tool available
    * (or `required: false` on this prop) for the contract to be satisfiable.
    * When absent, the agent populates the prop by its own means (memory,
-   * reasoning, search, etc.). Blueprint matcher aggregates these for GSI
-   * queries on `byPrimaryDataTool`.
+   * reasoning, search, etc.). The blueprint matcher aggregates these
+   * for indexed primary-data-tool candidate lookups.
    */
   sourceTool?: string;
 }

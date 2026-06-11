@@ -8,7 +8,7 @@
  * manager with a separate handshake helper; B3b unifies both behind
  * the `@ggui-ai/live-channel` library so every WS frame type (render,
  * data, props_update, drain_ack, channel_payload, channel_error,
- * system, feedback) flows through one registry-owned transport.
+ * system) flows through one registry-owned transport.
  *
  * Composition:
  *

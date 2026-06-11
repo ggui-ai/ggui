@@ -22,16 +22,6 @@ import type {
 } from '@ggui-ai/protocol';
 
 /**
- * Post-Phase-B alias kept for ergonomic call sites — the wire-side
- * `McpAppAiGguiRenderMeta` is the single source of truth, and the
- * "validated" qualifier is a no-op now (no nested-optional-session
- * narrowing left after the slice merge). Future callers SHOULD prefer
- * `McpAppAiGguiRenderMeta` directly; the alias persists so the rename
- * sweep can land incrementally without churn at every call site.
- */
-export type ValidatedMcpAppAiGguiMeta = McpAppAiGguiRenderMeta;
-
-/**
  * The four server-assigned ledger fields on every wire-delivered
  * {@link GguiSession}. They're stamped by the server's per-render event
  * ledger — NOT derivable from the inline `__GGUI_META__` bootstrap.
@@ -80,13 +70,16 @@ export type GguiSessionSeedInput =
  * `CSP_VIOLATION`, etc) live on the broader `BootstrapFailureReason`
  * union in `protocol-error.ts`. The four parse-time outcomes:
  *
- *   - `MISSING_TOOL_OUTPUT` — host echoed `ui/initialize` without a
- *     `result.toolOutput` object at all.
- *   - `MISSING_META_GGUI_BOOTSTRAP` — `result.toolOutput` exists but
- *     `_meta["ai.ggui/render"]` is absent. The on-wire synonym is
- *     `BOOTSTRAP_META_MISSING`. (Name retained pre-R4 for the
- *     observability + host-postMessage protocol; cosmetic rename is
+ *   - `MISSING_TOOL_OUTPUT` — the tool-result notification's `params`
+ *     was not an object (no `CallToolResult` to read). (Name predates
+ *     the spec-canonical top-level `_meta` reading; retained for the
+ *     observability + host-postMessage protocol — cosmetic rename is
  *     deferred.)
+ *   - `MISSING_META_GGUI_BOOTSTRAP` — `params` is an object but
+ *     `params._meta` is absent or carries no `ai.ggui/render` slice.
+ *     The on-wire synonym is `BOOTSTRAP_META_MISSING`. (Name retained
+ *     pre-R4 for the observability + host-postMessage protocol;
+ *     cosmetic rename is deferred.)
  *   - `MALFORMED_BOOTSTRAP` — slice is present but fails business
  *     rules (no live mode and no static content, mode discriminators
  *     mutually exclusive, structural rejection by the combiner).
@@ -106,17 +99,18 @@ export type McpAppAiGguiMetaParseFailureReason =
  * bundle).
  *
  * The `ok: true` arm carries the validated {@link McpAppAiGguiRenderMeta}
- * slice and optionally a `hostContext: HostContextProjection`. When the
- * meta is extracted from the `ui/initialize` response (Reading-A path),
- * the parser opportunistically projects the surrounding
- * `McpUiHostContext` into this field so the runtime can:
+ * slice and optionally a `hostContext: HostContextProjection`. The
+ * producer is the boot path in `runtime.ts`, which projects
+ * `app.getHostContext()` (the App class's spec-canonical
+ * `ui/initialize` capture plus its `hostcontextchanged` listener)
+ * into this field so the runtime can:
  *   - drive display-mode escalation (MCP Apps inline/fullscreen/pip)
  *   - echo to the server (live-channel `host_context_observed` envelope)
  *   - feed the agent on next handshake/consume
  *
  * Capture is best-effort: a malformed `HostContext` never blocks the
- * slice parse. Absent for the other extraction paths
- * (`__GGUI_META__` global, `ui/notifications/tool-result`) — those
+ * slice parse. The envelope extractors themselves (`__GGUI_META__`
+ * global, `ui/notifications/tool-result`) never populate it — those
  * envelopes don't carry HostContext.
  */
 export type McpAppAiGguiMetaParseResult =

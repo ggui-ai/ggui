@@ -14,12 +14,10 @@
  *      JSON-RPC round-trip.
  *   2. `ui/notifications/tool-result` postMessage — spec-canonical
  *      per MCP-Apps SEP-1865. `params` is a `CallToolResult` per the
- *      spec, so slices live under `params._meta`. We also accept
- *      `params.toolOutput._meta` as a back-compat aliased shape
- *      (some in-house emitters wrap the CallToolResult inside a
- *      `toolOutput` field). Spec-strict hosts (`<AppRenderer>` from
- *      `@mcp-ui/client`, ChatGPT MCP-Apps connector, claude.ai)
- *      deliver slice meta through this channel exclusively.
+ *      spec, so slices live under `params._meta`. Hosts (`<AppRenderer>`
+ *      from `@mcp-ui/client`, the RN `<McpAppIframe>`, ChatGPT MCP-Apps
+ *      connector, claude.ai) deliver slice meta through this channel
+ *      exclusively.
  *
  * Each extractor reaches the `_meta` object and calls the protocol's
  * {@link parseMcpAppAiGguiRenderMeta} to produce a typed slice.
@@ -365,10 +363,9 @@ export function parseMetaFromGlobal(): McpAppAiGguiMetaParseResult {
 
 /**
  * Parse the render slice from a `ui/notifications/tool-result`
- * postMessage params payload. Looks at BOTH the spec-canonical
- * location (`params._meta`) and the Reading-B `<McpAppIframe>`
- * convention (`params.toolOutput._meta`) — Claude Desktop / claude.ai
- * Connector use the first; first-party hosts the second.
+ * postMessage params payload. `params` is a `CallToolResult` per the
+ * MCP-Apps spec, so the slice envelope lives at the spec-canonical
+ * top-level `params._meta` — the only accepted location.
  *
  * Used by the runtime's autostart resolver as the second / third boot
  * source (drained from the pre-runtime-load buffer or caught by the
@@ -380,22 +377,11 @@ export function parseMetaFromToolResult(
   if (!isPlainObject(params)) {
     return { ok: false, reason: 'MISSING_TOOL_OUTPUT' };
   }
-  let meta: Record<string, unknown> | undefined;
   const topMeta = params['_meta'];
-  if (isPlainObject(topMeta)) {
-    meta = topMeta;
-  } else {
-    const toolOutput = params['toolOutput'];
-    if (isPlainObject(toolOutput)) {
-      const nestedMeta = toolOutput['_meta'];
-      if (isPlainObject(nestedMeta)) {
-        meta = nestedMeta;
-      }
-    }
-  }
-  if (meta === undefined) {
+  if (!isPlainObject(topMeta)) {
     return { ok: false, reason: 'MISSING_META_GGUI_BOOTSTRAP' };
   }
+  const meta: Record<string, unknown> = topMeta;
   const parsed = parseMcpAppAiGguiRenderMeta(meta);
   if (!parsed.ok) {
     return { ok: false, reason: 'MALFORMED_BOOTSTRAP' };

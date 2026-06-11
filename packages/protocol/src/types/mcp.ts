@@ -29,9 +29,9 @@ export type Screen = 'mobile' | 'tablet' | 'desktop' | 'universal';
  * is the render-scoped monotonic assigned at ingestion; it sits on the
  * row wrapper so consumers can detect gaps without parsing the payload.
  *
- * **Storage note**: the envelope is stored as either a JSON object
- * (direct DDB writes) or a JSON-stringified object (AppSync `a.json()`
- * semantics). Consume readers MUST accept both — see
+ * **Storage note**: the envelope is stored as either a JSON object or
+ * a JSON-stringified object, depending on how the deployment's storage
+ * layer serializes rows. Consume readers MUST accept both — see
  * {@link parsePendingEnvelope}.
  */
 export interface PendingEvent {

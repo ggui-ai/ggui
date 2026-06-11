@@ -153,7 +153,7 @@ export interface GguiGlobalRegistry {
    * in `<CurrentStepContext.Provider value={…}>` and the runtime
    * observer reads values back via `useContext`.
    *
-   * Mutable across re-mounts: on a second `bootSelfContained` call,
+   * Mutable across re-mounts: on a re-mount (a second `applyRender`),
    * the registry is REUSED (entries are keyed by contextName and
    * skipped on re-create) so the LLM's destructured Context
    * references stay live across re-mounts. Only NEW context names

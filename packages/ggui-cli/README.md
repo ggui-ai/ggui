@@ -1,6 +1,6 @@
 # @ggui-ai/cli
 
-> Open `ggui` CLI — the local dev + serve + pair + bench binary for the `ggui` protocol. OSS and self-hosted workflows end-to-end. **No account required.**
+> Open `ggui` CLI — the local dev + serve + authoring binary for the `ggui` protocol. OSS and self-hosted workflows end-to-end. **No account required.**
 
 [![npm version](https://img.shields.io/npm/v/@ggui-ai/cli.svg)](https://www.npmjs.com/package/@ggui-ai/cli)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](./LICENSE)
@@ -52,6 +52,25 @@ ggui serve --mcp-only               # skip agent supervision
 
 Start the local UI registry + compile-on-demand dev hub, optionally supervising a local agent runtime. See `ggui dev --help` for the full flag list (agent adapter, tunnel provider, browser auto-open).
 
+### Everything else
+
+| Command             | What it does                                                                                                                   |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| `ggui login`        | Sign into ggui.ai (device flow); tokens stored in `~/.ggui/auth.json`.                                                         |
+| `ggui logout`       | Discard the local ggui.ai session.                                                                                             |
+| `ggui whoami`       | Print the authenticated user.                                                                                                  |
+| `ggui keys`         | Manage `ggui_user_*` connector keys (list / create / revoke).                                                                  |
+| `ggui create`       | Create cloud resources tied to this project (`create app` writes `appId` into `ggui.json`).                                    |
+| `ggui gadget`       | Author gadgets for the ggui marketplace (`gadget create <scope/name>` scaffolds a repo).                                       |
+| `ggui blueprint`    | Author UI blueprints for the ggui marketplace (`blueprint create <scope/name>` scaffolds a repo).                              |
+| `ggui theme`        | Validate + inspect operator-authored DTCG themes (`theme validate <path>`).                                                    |
+| `ggui export-pool`  | Export this deployment's reusable blueprints as a shareable pool directory; load elsewhere via `ggui serve --seed-pool <dir>`. |
+| `ggui push`         | Compile + bulk-push blueprints to a ggui.ai cloud app (requires `ggui login`).                                                 |
+| `ggui deploy`       | Provision + wire a ggui.ai cloud app for this project (idempotent).                                                            |
+| `ggui provider-key` | Manage provider API keys for a cloud ggui app (`provider-key set --app <appId>`).                                              |
+
+Run `ggui --help` for per-command flags.
+
 ## Configuration
 
 `ggui.json` is the single source of truth. Minimum shape:
@@ -67,7 +86,7 @@ Start the local UI registry + compile-on-demand dev hub, optionally supervising 
 
 Set `protocol` to the value of `PROTOCOL_VERSION` exported by `@ggui-ai/protocol` in the version you install (or omit the field — the CLI will fall back to the installed protocol version).
 
-Optional blocks include `storage` (renders / vectors / threads via `memory` or `sqlite`), `primitives`, `theme`, `adapters`, and `blueprints`. See [`@ggui-ai/project-config`](../project-config) for the full schema.
+Optional blocks include `storage` (renders / vectors / threads via `memory` or `sqlite`), `primitives`, `theme`, `blueprints`, `generation`, and `mcpMounts`. See [`@ggui-ai/project-config`](../project-config) for the full schema.
 
 ## MCP config for your agent runtime
 

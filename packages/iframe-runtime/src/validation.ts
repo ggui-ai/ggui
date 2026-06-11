@@ -58,9 +58,8 @@ let activeValidatorSet: CompiledValidatorSet | undefined;
 
 /**
  * Install the precompiled validators loaded from the bootstrap. Called
- * once per boot (both `bootProduction` and `bootSelfContained`), after
- * the bootstrap is parsed. A single set per iframe document — one
- * render, one active contract.
+ * once per boot (by `bootSequence`), after the bootstrap is parsed. A
+ * single set per iframe document — one render, one active contract.
  */
 export function setActiveValidatorSet(
   set: CompiledValidatorSet | undefined,

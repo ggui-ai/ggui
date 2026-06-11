@@ -2,7 +2,6 @@ import { describe, expect, expectTypeOf, it } from 'vitest';
 import { z } from 'zod';
 import {
   GGUI_GADGET_JSON_FILENAME,
-  assertGadgetManifestValid,
   parseGadgetManifest,
   gadgetManifestSchema,
   safeParseGadgetManifest,
@@ -99,14 +98,6 @@ describe('ggui.gadget.json — happy path', () => {
   it('safeParse returns success on valid input', () => {
     const result = safeParseGadgetManifest(MINIMAL);
     expect(result.success).toBe(true);
-  });
-
-  it('assertGadgetManifestValid does not throw on valid input', () => {
-    expect(() => assertGadgetManifestValid(MINIMAL)).not.toThrow();
-  });
-
-  it('assertGadgetManifestValid throws ZodError on invalid input', () => {
-    expect(() => assertGadgetManifestValid({})).toThrow(z.ZodError);
   });
 });
 

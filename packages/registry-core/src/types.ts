@@ -1,6 +1,6 @@
 /**
  * Row + wire shapes for the ggui marketplace registry. The same
- * shapes back both this open-source server and the hosted registry,
+ * shapes back this open-source server and any hosted implementation,
  * so they project against one definition.
  *
  * Rows are the storage-layer projection — what {@link RegistryStorage}
@@ -19,12 +19,12 @@ import type { GadgetSignature } from '@ggui-ai/gadget-signing';
 import type { ConformanceFailureCode } from './ops/conformance.js';
 
 /**
- * SK literal for the per-artifactId metadata row on the cloud's
- * Artifacts table. Pinned as a constant so cloud + OSS impls agree
- * on the SK.
+ * SK literal for the per-artifactId metadata row in a sort-keyed
+ * table layout. Pinned as a constant so every impl agrees on the SK.
  *
- * OSS impls (filesystem / memory) MAY ignore this — they have one row
- * per artifactId so no SK is needed. Cloud DDB impls MUST honor it.
+ * Filesystem / memory impls MAY ignore this — they have one row per
+ * artifactId so no SK is needed. Sort-keyed database impls MUST
+ * honor it.
  */
 export const ARTIFACTS_METADATA_SK = 'metadata#' as const;
 
@@ -124,17 +124,18 @@ export interface ArtifactVersionRow {
  * load-bearing: federation-ready, cross-app cache sharing, and
  * sigstore signing all key off `compiledDigest`.
  *
- * **Storage choice — inline base64 vs S3 pointer.** The compiled
+ * **Storage choice — inline base64 vs blob pointer.** The compiled
  * bytes are inlined as a base64-encoded string column. Rationale:
  * blueprints today ship raw TSX inline on `manifest.source` (capped
  * at 5 MiB by `MAX_BLUEPRINT_SOURCE_BYTES`); compiled JS is typically
- * 1.5–3× the TSX size. DynamoDB's 400-KiB item ceiling caps practical
- * inline storage around ~300 KiB compiled (~200 KiB TSX), which
- * accommodates every realistic blueprint observed so far. Larger
- * blueprints (and gadgets, which always exceed this) will need an
- * S3-pointer variant as a future enhancement. Inline storage keeps
- * the two-layer write/read contract simple, without the bucket-
- * lifecycle and IAM-grant overhead of S3.
+ * 1.5–3× the TSX size. Typical KV row-size ceilings (e.g. 400 KiB)
+ * cap practical inline storage around ~300 KiB compiled (~200 KiB
+ * TSX), which accommodates every realistic blueprint observed so
+ * far. Larger blueprints (and gadgets, which always exceed this)
+ * will need a blob-store pointer variant as a future enhancement.
+ * Inline storage keeps the two-layer write/read contract simple,
+ * without the lifecycle and access-grant overhead of a separate
+ * blob store.
  *
  * **GC.** `refCount` is maintained on publish (+1) and yank (no
  * decrement — yanked versions retain their pointer for audit;
@@ -145,8 +146,8 @@ export interface ArtifactVersionRow {
  *
  * **Signatures.** `manifestSig` is the publisher's signature
  * (Ed25519 for private artifacts, sigstore-cosign for public) over
- * the manifest's canonical-JSON projection — read by the hosted
- * install path for defense-in-depth re-verification. Stored as a
+ * the manifest's canonical-JSON projection — read by the install
+ * path for defense-in-depth re-verification. Stored as a
  * JSON-encoded `GadgetSignature` discriminated union. `compiledSig`
  * (a registry-rooted sigstore signature over `compiledBytes`) is
  * reserved for a future enhancement.
@@ -166,7 +167,7 @@ export interface CompiledBlobRow {
   /**
    * Publisher's signature envelope, JSON-encoded `GadgetSignature`
    * discriminated union (Ed25519 for private, sigstore-cosign for
-   * public). Read by the hosted install path for defense-in-depth
+   * public). Read by the install path for defense-in-depth
    * re-verification before persisting an installed blueprint. May be
    * absent on rows published before signature persistence existed;
    * the install path hard-fails such rows with a clear error pointing
@@ -241,9 +242,9 @@ export interface SearchResultEntry {
 }
 
 /**
- * `GET /search?…` body. `nextCursor` is opaque (impl-defined: cloud
- * uses base64-encoded DDB LastEvaluatedKey; OSS uses an offset). Clients
- * roundtrip it verbatim on the next call.
+ * `GET /search?…` body. `nextCursor` is opaque (impl-defined: a
+ * paged-database impl encodes its native page cursor; OSS uses an
+ * offset). Clients roundtrip it verbatim on the next call.
  */
 export interface SearchResponse {
   readonly results: readonly SearchResultEntry[];
@@ -256,18 +257,19 @@ export interface SearchResponse {
  *
  *   - `recent` — order by {@link ArtifactsMetadataRow.publishedAt} DESC.
  *
- * Default (sort omitted) is impl-defined ordering: memory uses insertion
- * order, filesystem uses directory order, DDB uses Scan order. Callers
- * MUST opt in to a deterministic order via this field.
+ * Default (sort omitted) is impl-defined ordering: memory uses
+ * insertion order, filesystem uses directory order, a database impl
+ * uses its scan order. Callers MUST opt in to a deterministic order
+ * via this field.
  *
  * **Scale ceiling.** The `recent` sort is implemented as an in-memory
  * pass on the page returned by {@link RegistryStorage.scanArtifacts}.
  * For pre-launch row counts (< ~1k artifacts, single-page scans with
  * `limit=200`) this gives a globally-correct order. Once the artifact
- * table grows past one Scan page (~1 MiB of items), the order is only
+ * table grows past one scan page (~1 MiB of items), the order is only
  * page-local — clients paginating with `cursor` see per-page recency,
- * not global. A DDB GSI on `publishedAt` is the proper fix and is
- * planned as a follow-up.
+ * not global. A secondary index on `publishedAt` is the proper fix
+ * and is planned as a follow-up.
  */
 export const SEARCH_SORT_OPTIONS = ['recent'] as const;
 export type SearchSort = (typeof SEARCH_SORT_OPTIONS)[number];
@@ -307,10 +309,10 @@ export interface VersionListEntry {
  *
  * No pagination cursor — registry artifact version counts are
  * inherently bounded (typical: < 50 versions per artifact, hard ceiling
- * around ~1k for the lifetime of an artifact). If a single artifact ever
- * crosses the 1 MiB DDB Query page, we'll add a cursor — but for now the
- * round-trip cost of paginating versions is greater than the cost of
- * returning them all.
+ * around ~1k for the lifetime of an artifact). If a single artifact
+ * ever crosses a backing store's query-page size (~1 MiB), we'll add
+ * a cursor — but for now the round-trip cost of paginating versions
+ * is greater than the cost of returning them all.
  */
 export interface ListVersionsResponse {
   readonly artifactId: string;
@@ -508,8 +510,9 @@ export type ErrorBody =
  * Search filter shape. Passed to {@link RegistryStorage.scanArtifacts}.
  * `limit` is clamped to [1, 200] by {@link searchArtifacts}; impls
  * should respect it as a hard ceiling. `cursor` is opaque to consumers
- * — impls choose their own encoding (DDB LastEvaluatedKey base64;
- * memory uses an integer offset; filesystem uses a last-seen artifactId).
+ * — impls choose their own encoding (a database impl's native page
+ * cursor; memory uses an integer offset; filesystem uses a last-seen
+ * artifactId).
  */
 export interface ArtifactScanFilter {
   readonly q?: string;

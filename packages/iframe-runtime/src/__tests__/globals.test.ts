@@ -242,8 +242,8 @@ describe('installGlobalRegistry — gadgets slot (GG.8.2 per-package)', () => {
   // `import { useGeolocation } from '@ggui-ai/gadgets'`. The slot is a
   // `GadgetPackageRegistry` — package name → that package's whole
   // loaded module namespace. These tests pin the slot's semantics so
-  // the production boot wiring (`runtime.ts:bootProduction` +
-  // `bootSelfContained`) stays correct.
+  // the production boot wiring (`runtime.ts:bootProduction`) stays
+  // correct.
 
   it('populates the gadgets slot from the install options', () => {
     const target = makeFakeTarget();

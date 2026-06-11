@@ -1,3 +1,5 @@
+import { MCP_APP_OBSERVE_TYPE } from '@ggui-ai/protocol/integrations/mcp-apps';
+
 /**
  * Observability events emitted by the renderer iframe → surfaced to
  * the MCP Apps host via the `<McpAppIframe>` wrapper's `onObserve`
@@ -23,7 +25,12 @@
  *   - `@ggui-ai/iframe-runtime` owns this union, NOT `@ggui-ai/protocol`.
  *     Observability events are a renderer ↔ host implementation seam,
  *     not a wire-format contract between arbitrary protocol peers, so
- *     they stay out of the protocol package.
+ *     they stay out of the protocol package. The ENVELOPE TAG
+ *     (`ggui:observe`) IS protocol-owned, though — it belongs to the
+ *     renderer → host postMessage envelope family
+ *     (`MCP_APP_OBSERVE_TYPE` in
+ *     `@ggui-ai/protocol/integrations/mcp-apps`), so hosts on every
+ *     platform classify it from one vocabulary.
  *
  * @public
  */
@@ -181,7 +188,7 @@ export interface UnknownObservabilityEvent {
  * @public
  */
 export interface ObservabilityMessage {
-  readonly type: 'ggui:observe';
+  readonly type: typeof MCP_APP_OBSERVE_TYPE;
   readonly event: ObservabilityEvent;
 }
 
@@ -221,7 +228,7 @@ export function postObservabilityToParent(event: ObservabilityEvent): void {
   // so tests importing this helper never throw before their mocks
   // install.
   if (typeof window === 'undefined' || window.parent === null) return;
-  const message: ObservabilityMessage = { type: 'ggui:observe', event };
+  const message: ObservabilityMessage = { type: MCP_APP_OBSERVE_TYPE, event };
   try {
     window.parent.postMessage(message, '*');
   } catch {

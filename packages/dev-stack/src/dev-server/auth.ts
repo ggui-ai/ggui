@@ -6,7 +6,7 @@
  * - The dev server binds to `127.0.0.1` by default, so the *primary*
  *   trust boundary is the loopback interface. This module adds a
  *   belt-and-suspenders token + origin check so the same server can
- *   also be reached by a browser-side Studio preview opened in a
+ *   also be reached by a browser-side preview UI opened in a
  *   different localhost port (different origin → CORS-regulated)
  *   without inventing a wide-open public-by-default posture.
  *
@@ -15,7 +15,7 @@
  *   `crypto.randomBytes(24)` on boot. The CLI prints the token + a
  *   ready-to-curl `Authorization` header so the developer can paste
  *   it wherever they need. `/health` is intentionally unauthenticated
- *   — any reachability check, Studio handshake probe, or liveness
+ *   — any reachability check, client handshake probe, or liveness
  *   monitor wants this path without needing the token first.
  *
  * - Origin allowlist: browser clients must send `Origin` matching an
@@ -23,7 +23,7 @@
  *   port (`http(s)://localhost:NNNN` / `http(s)://127.0.0.1:NNNN`).
  *   Extra origins can be declared via `GGUI_DEV_ORIGINS` as a
  *   comma-separated exact-match list — no wildcards by design,
- *   Studio's real hostname goes in explicitly or not at all.
+ *   a remote client's real hostname goes in explicitly or not at all.
  *
  * - Non-browser clients (no `Origin` header) pass the origin check;
  *   they are gated by the bearer token alone. That matches `curl`

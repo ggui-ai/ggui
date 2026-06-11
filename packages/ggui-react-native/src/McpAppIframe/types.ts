@@ -167,18 +167,13 @@ export interface McpAppIframeProps {
   ) => Promise<unknown>;
 
   /**
-   * Surfaced on every ProtocolError the iframe postMessage'd up.
-   * Hosts pattern-match on `err.kind`. Handlers MUST NOT throw.
+   * Surfaced on every ProtocolError the host classifies from the
+   * WebView (today: the `ggui:bootstrap-failed` envelope, which also
+   * carries the renderer's version-handshake rejection as reason
+   * `UPGRADE_REQUIRED`). Hosts pattern-match on `err.kind`. Handlers
+   * MUST NOT throw.
    */
   readonly onError?: (err: ProtocolError) => void;
-
-  /**
-   * Called when the iframe surfaces a version-handshake rejection.
-   */
-  readonly onUpgradeRequired?: (
-    server: string,
-    client: readonly string[],
-  ) => void;
 
   /**
    * Surfaced for every {@link ObservabilityEvent} the iframe emits

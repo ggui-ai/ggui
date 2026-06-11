@@ -90,7 +90,7 @@ export interface ConsumePollingPayload extends JsonObject {
   /**
    * Always `'open'` today — the closing transition is signaled
    * by the existing `drain_ack` envelope (action consumed) and by the
-   * absence of further `consume_polling` for the same render.
+   * absence of further `consume_polling` for the same GguiSession.
    * Reserved as a discriminator field rather than implicit so future
    * `'closed'` / `'timeout'` variants can layer in without a wire
    * shape change.

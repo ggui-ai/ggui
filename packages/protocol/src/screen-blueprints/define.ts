@@ -2,8 +2,8 @@
  * `defineScreenBlueprint()` — authoring helper.
  *
  * Pass-through identity function. Exists purely to give IDE autocomplete
- * and type-checking on blueprint manifest files in
- * `cloud/amplify/data/screen-blueprints/*.ts`.
+ * and type-checking on a deployment's blueprint manifest files (the
+ * hand-authored screen-blueprint catalog).
  *
  * The helper is narrow by design — it preserves the literal type of the
  * blueprint so consumers can do precise inference (e.g. a future typed

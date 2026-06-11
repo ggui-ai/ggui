@@ -3,6 +3,9 @@
   "version": "0.3.0",
   "description": "Scaffold a ggui agentic app from one of the official templates (claude-agent-sdk, openai-agents-sdk, google-adk). One-time-use; meant to be invoked via `npx @ggui-ai/create-agentic-app`.",
   "license": "Apache-2.0",
+  "publishConfig": {
+    "access": "public"
+  },
   "type": "module",
   "bin": {
     "create-agentic-app": "./dist/cli.js"

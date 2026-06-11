@@ -1,5 +1,5 @@
 /**
- * AgentBrowsePanel — Slide-up marketplace panel for browsing agent listings.
+ * AgentBrowsePanel — Slide-up panel for browsing agent listings.
  *
  * Displays a searchable list of agents with a "Featured" horizontal scroll
  * section and an "All Agents" vertical list. Each card shows the agent's
@@ -297,7 +297,7 @@ export function AgentBrowsePanel({
     <div style={panelStyle(bottomOffset)}>
       {/* Header */}
       <div style={headerStyle}>
-        <span style={headerTitleStyle}>Agent Marketplace</span>
+        <span style={headerTitleStyle}>Browse Agents</span>
         {onClose && (
           <button type="button" style={closeButtonStyle} onClick={onClose} aria-label="Close">
             <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">

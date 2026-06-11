@@ -55,11 +55,12 @@ function buildBootstrapEnvelope(
     runtimeUrl: '/_ggui/iframe-runtime.js',
     ...(gadgets !== undefined ? { gadgets } : {}),
   };
+  // Spec-canonical `ui/notifications/tool-result` params shape —
+  // `params` IS the `CallToolResult`, so the slice envelope lives at
+  // the top-level `_meta`.
   return {
-    toolOutput: {
-      _meta: toMcpAppEnvelope(meta),
-      structuredContent: { sessionId: 'render_001' },
-    },
+    _meta: toMcpAppEnvelope(meta),
+    structuredContent: { sessionId: 'render_001' },
   };
 }
 

@@ -77,7 +77,7 @@ export const UiManifestV1 = z.strictObject({
   /** One-line description of what this UI does. */
   description: z.string().max(500).optional(),
 
-  /** Data contract: props, actions, streams, wired tools, client tools. */
+  /** Data contract: propsSpec, actionSpec, streamSpec, contextSpec, agentCapabilities/clientCapabilities. */
   contract: z.custom<DataContract>((v) => typeof v === 'object' && v !== null),
 
   /** Category for browsing/filtering (e.g., "dashboard", "form", "data-viz"). */

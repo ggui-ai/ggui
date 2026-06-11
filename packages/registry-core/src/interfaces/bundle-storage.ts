@@ -1,21 +1,21 @@
 /**
- * `BundleStorage` — bundle + signature + manifest blob storage. The
- * hosted registry backs this with S3 behind a CDN; the open-source
- * server backs it with the filesystem under
+ * `BundleStorage` — bundle + signature + manifest blob storage. A
+ * hosted implementation may serve blobs from object storage behind a
+ * CDN; the open-source server backs it with the filesystem under
  * `<root>/bundles/<scope>/<name>/<version>/`. A memory impl is
  * provided for tests.
  *
  * Each `put*` method returns the fully-qualified URL the consumer
  * (iframe runtime, install CLI) can fetch. The URL prefix is
- * determined by the impl's constructor — a CDN alias for the hosted
- * registry, or `http://localhost:9001` (or whatever the server is
- * bound to) for the open-source server.
+ * determined by the impl's constructor — a CDN alias for a
+ * CDN-fronted implementation, or `http://localhost:9001` (or
+ * whatever the server is bound to) for the open-source server.
  *
  * Bundles are immutable post-publish. Responses MUST emit
  * `Cache-Control: public, max-age=31536000, immutable` — SRI integrity
  * depends on it. The OSS server's bundle route sets this header
- * explicitly; the cloud's CloudFront distribution sets it via its
- * cache policy.
+ * explicitly; a CDN-fronted implementation sets it via its cache
+ * policy.
  *
  * ## Protocol & Contract Bar
  *

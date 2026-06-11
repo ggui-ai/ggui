@@ -2,7 +2,6 @@ import { describe, expect, expectTypeOf, it } from 'vitest';
 import { z } from 'zod';
 import {
   GGUI_BLUEPRINT_JSON_FILENAME,
-  assertBlueprintManifestValid,
   blueprintManifestSchema,
   parseBlueprintManifest,
   safeParseBlueprintManifest,
@@ -98,14 +97,6 @@ describe('ggui.blueprint.json — happy path', () => {
   it('safeParse returns success on valid input', () => {
     const result = safeParseBlueprintManifest(MINIMAL);
     expect(result.success).toBe(true);
-  });
-
-  it('assertBlueprintManifestValid does not throw on valid input', () => {
-    expect(() => assertBlueprintManifestValid(MINIMAL)).not.toThrow();
-  });
-
-  it('assertBlueprintManifestValid throws ZodError on invalid input', () => {
-    expect(() => assertBlueprintManifestValid({})).toThrow(z.ZodError);
   });
 });
 

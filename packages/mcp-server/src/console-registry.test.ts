@@ -74,7 +74,6 @@ function makeFakeRegistry(
   opts: { failList?: Error } = {},
 ): UiRegistry {
   const capabilities: UiRegistryCapabilities = {
-    writable: false,
     observable: false,
   };
   return {

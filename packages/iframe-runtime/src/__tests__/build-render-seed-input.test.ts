@@ -12,10 +12,10 @@
  * Pure projection — no mount, no React.
  */
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import type { SelfContainedMcpAppAiGguiMeta } from '../runtime.js';
+import type { McpAppAiGguiRenderMeta } from '@ggui-ai/protocol/integrations/mcp-apps';
 import { buildGguiSessionSeedInput } from '../runtime.js';
 
-const BASE: SelfContainedMcpAppAiGguiMeta = {
+const BASE: McpAppAiGguiRenderMeta = {
   sessionId: 'render_seed_1',
   appId: 'app_001',
   runtimeUrl: '/_ggui/iframe-runtime.js',

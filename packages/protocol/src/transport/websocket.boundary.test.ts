@@ -236,7 +236,6 @@ describe('websocket transport boundary — discriminator coverage', () => {
       'action',
       'subscribe',
       'close',
-      'feedback',
       'ping',
       'pong',
       'ack',
@@ -262,7 +261,7 @@ describe('websocket transport boundary — discriminator coverage', () => {
       // R7 — ledger replay frame.
       'render_event',
     ];
-    expect(types).toHaveLength(24);
+    expect(types).toHaveLength(23);
     // Structural lock: ConnectionStatus values also stable.
     const statuses: ConnectionStatus[] = [
       'connecting',

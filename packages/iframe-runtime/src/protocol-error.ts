@@ -6,11 +6,16 @@
  *
  * The transport wiring around this union:
  *
- *   - `postMessage({type:'ggui:protocol-error', error})` for every
- *     boot-path failure; the `_ggui:contract-error` envelope on the
- *     live channel for render-bound failures.
+ *   - Boot-path failures reach the host page via the protocol-owned
+ *     `postMessage({type:'ggui:bootstrap-failed', reason, message})`
+ *     envelope (`MCP_APP_BOOTSTRAP_FAILED_TYPE`); the
+ *     `_ggui:contract-error` envelope on the live channel carries
+ *     render-bound failures. There is NO `ggui:protocol-error`
+ *     postMessage envelope — the typed union itself travels only
+ *     through the in-process {@link ProtocolErrorEmitter} seam.
  *   - `<McpAppIframe onError={(err: ProtocolError) => …}>` surfaces
- *     these to embedding apps.
+ *     these to embedding apps (the host wrapper bridges the emitter
+ *     seam / the bootstrap-failed envelope to its `onError` prop).
  *
  * The union is the failure-mode axis of `WireConfig`'s contract:
  * named parties = renderer ↔ host; obligation = the renderer emits a

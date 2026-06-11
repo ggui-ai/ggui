@@ -38,9 +38,9 @@ import type { StreamEnvelope } from '@ggui-ai/protocol';
  * Spec-canonical A2UI preview channel name (from
  * `@ggui-ai/protocol::PREVIEW_CHANNEL`). Inlined here so this
  * module's runtime imports stay off the protocol root barrel —
- * importing the constant from `@ggui-ai/protocol` pulls in
- * `openrouter-models` + the entire zod validation graph via the
- * root re-export chain, adding ~250 KB gz to the renderer bundle.
+ * importing the constant from `@ggui-ai/protocol` pulls in the
+ * entire zod validation graph via the root re-export chain,
+ * adding hundreds of KB gz to the renderer bundle.
  * The value is a stable string literal (`isKnownReservedChannel`
  * and the spec both reference `_ggui:preview` directly); re-declaring
  * it here is shape-preserving and covered by the structural-lock

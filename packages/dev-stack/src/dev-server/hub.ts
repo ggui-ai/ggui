@@ -8,7 +8,7 @@
  *           compile/runtime errors, recent runtime events/logs,
  *           code-first local observability
  *
- *   IS NOT: Studio-lite, starter gallery, no-code authoring,
+ *   IS NOT: a full authoring UI, starter gallery, no-code authoring,
  *           billing/workspace UI, NL playground, deploy flow,
  *           tunnel flow
  *
@@ -257,7 +257,7 @@ button.preview-clear:hover { color: #e7e7e7; border-color: #3a3a3a; }
  *     send `Authorization`). On every `event: ui` frame, refreshes
  *     the registry-panel fetches immediately — so the `Discovered
  *     UIs` list + registry counts flip on save before the next
- *     poll tick fires. Same HMR mechanism Studio uses.
+ *     poll tick fires. Same HMR mechanism an authoring UI uses.
  *   - Live indicator (`#live`) paints connecting / live /
  *     reconnecting / offline; independent from the data-freshness
  *     tick.
@@ -586,8 +586,8 @@ const HUB_JS = `
   }
 
   /**
-   * Minimal SSE parser — same shape the dev server emits and the
-   * Studio local source consumes. Normalises CRLF, splits on the
+   * Minimal SSE parser — same shape the dev server emits and an
+   * authoring-UI local source consumes. Normalises CRLF, splits on the
    * blank-line delimiter, ignores ':keep-alive' comment frames,
    * and only dispatches 'event: ui' with a valid JSON body.
    */

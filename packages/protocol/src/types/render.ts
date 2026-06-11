@@ -90,7 +90,7 @@ export type AdapterPermissions = {
  *   - `'expired'` — TTL elapsed; no further writes accepted, reads return
  *     a historical snapshot.
  *
- * There is no explicit terminal state. Renders decay implicitly via TTL.
+ * There is no explicit terminal state. GguiSessions decay implicitly via TTL.
  * The dropped `'completed'` state was a vestige of the deleted Session
  * vessel — kept symmetrical with `ggui_new_session`, which was deleted
  * in the earlier handshake collapse. The companion `ggui_close` tool
@@ -106,8 +106,8 @@ export type GguiSessionStatus = 'active' | 'expired';
  * embedded MCP-App iframe).
  *
  * **Conversation-scoped context note** — fields that convey "this
- * render belongs to a logical group of renders within a host
- * conversation" (hostContext continuity, sibling render discovery)
+ * GguiSession belongs to a logical group of GguiSessions within a host
+ * conversation" (hostContext continuity, sibling-GguiSession discovery)
  * are NOT duplicated onto each GguiSession. They look up via the optional
  * {@link GguiSessionBase.hostSession} pair instead. See
  * [[session-concept-deletion-2026-05-27]] for the framing.

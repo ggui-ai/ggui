@@ -81,13 +81,40 @@ const contextFile = path.join(wireRoot, 'src/context.ts');
 // TypeScript AST helpers
 // ---------------------------------------------------------------------------
 
+/**
+ * Render a JSDoc comment (string or part array) to plain text.
+ *
+ * `{@link Target}` parts arrive as JSDocLink nodes whose `.text` is
+ * only the post-target tail — naive `.text` mapping drops the link
+ * target and leaves a dangling sentence in the generated docs (the
+ * F7 "can additionally set\n on the provided WireConfig" bug).
+ * Reconstruct the entity name instead and render it as inline code.
+ */
+function jsDocCommentToText(
+  comment: string | ts.NodeArray<ts.JSDocComment> | undefined,
+): string {
+  if (!comment) return '';
+  if (typeof comment === 'string') return comment;
+  return comment
+    .map((part) => {
+      if (
+        ts.isJSDocLink(part) ||
+        ts.isJSDocLinkCode(part) ||
+        ts.isJSDocLinkPlain(part)
+      ) {
+        const target = part.name ? part.name.getText() : '';
+        const combined = `${target}${part.text || ''}`;
+        return combined ? `\`${combined}\`` : '';
+      }
+      return part.text || '';
+    })
+    .join('');
+}
+
 function getJSDocDescription(node: ts.Node): string {
   const jsDocs = (node as { jsDoc?: ts.JSDoc[] }).jsDoc;
   if (!jsDocs || jsDocs.length === 0) return '';
-  const doc = jsDocs[0];
-  if (!doc.comment) return '';
-  if (typeof doc.comment === 'string') return doc.comment;
-  return doc.comment.map((c: ts.JSDocComment) => c.text || '').join('');
+  return jsDocCommentToText(jsDocs[0].comment);
 }
 
 function getJSDocTag(node: ts.Node, tagName: string): string | undefined {
@@ -97,9 +124,7 @@ function getJSDocTag(node: ts.Node, tagName: string): string | undefined {
     if (!doc.tags) continue;
     for (const tag of doc.tags) {
       if (tag.tagName.text === tagName) {
-        if (!tag.comment) return '';
-        if (typeof tag.comment === 'string') return tag.comment;
-        return tag.comment.map((c: ts.JSDocComment) => c.text || '').join('');
+        return jsDocCommentToText(tag.comment);
       }
     }
   }
@@ -115,12 +140,7 @@ function getJSDocParams(node: ts.Node): Map<string, string> {
     for (const tag of doc.tags) {
       if (tag.tagName.text === 'param' && ts.isJSDocParameterTag(tag)) {
         const paramName = tag.name.getText();
-        let paramDesc = '';
-        if (tag.comment) {
-          paramDesc = typeof tag.comment === 'string'
-            ? tag.comment
-            : tag.comment.map((c: ts.JSDocComment) => c.text || '').join('');
-        }
+        const paramDesc = jsDocCommentToText(tag.comment);
         // Strip leading "- " from descriptions
         params.set(paramName, paramDesc.replace(/^-\s*/, ''));
       }

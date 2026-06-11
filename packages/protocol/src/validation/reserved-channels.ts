@@ -67,9 +67,9 @@ export const CONTRACT_ERROR_CHANNEL = '_ggui:contract-error';
  * client-side progress indicators.
  *
  * Body shape: `GguiLifecyclePayload` (discriminated on `kind`). The
- * server emits; render-wide subscribers consume. Iframes pinned to a
- * single render do not receive envelopes on this channel — delivery
- * is gated by subscription scope.
+ * server emits; session-wide subscribers consume. Iframes pinned to a
+ * single GguiSession do not receive envelopes on this channel —
+ * delivery is gated by subscription scope.
  *
  * Agent-authored `streamSpec` MUST NOT declare this channel; the
  * structural validator rejects it alongside every other reserved-

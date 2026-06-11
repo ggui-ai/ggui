@@ -684,3 +684,27 @@ describe('emit ⇔ parse round-trip', () => {
     expect(parsed.meta).toEqual(meta);
   });
 });
+
+// =============================================================================
+// Renderer → host postMessage envelope vocabulary (single-owner tags)
+// =============================================================================
+
+describe('renderer → host envelope tags', () => {
+  it('pins the protocol-owned discriminator vocabulary', async () => {
+    const m = await import('./mcp-apps');
+    expect(m.MCP_APP_RENDERER_READY_TYPE).toBe('ggui:renderer-ready');
+    expect(m.MCP_APP_BOOTSTRAP_FAILED_TYPE).toBe('ggui:bootstrap-failed');
+    expect(m.MCP_APP_OBSERVE_TYPE).toBe('ggui:observe');
+    expect(m.MCP_APP_LIFECYCLE_TYPE).toBe('ggui:lifecycle');
+  });
+
+  it('lifecycle tag constant matches the envelope the guard accepts', async () => {
+    const m = await import('./mcp-apps');
+    expect(
+      isMcpAppLifecycleMessage({
+        type: m.MCP_APP_LIFECYCLE_TYPE,
+        event: { state: 'mounting' },
+      }),
+    ).toBe(true);
+  });
+});

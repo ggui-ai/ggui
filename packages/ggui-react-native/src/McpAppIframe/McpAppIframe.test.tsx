@@ -265,22 +265,27 @@ describe('buildToolResultNotification (RN spec-canonical wire shape)', () => {
 });
 
 describe('classifyRendererEnvelope (RN)', () => {
-  it('matches web port tags for every recognised envelope', () => {
+  it('recognises exactly the protocol-owned renderer envelope tags', () => {
     expect(classifyRendererEnvelope({ type: 'ggui:bootstrap-failed' })).toBe(
       'bootstrap-failed',
     );
-    expect(classifyRendererEnvelope({ type: 'ggui:protocol-error' })).toBe(
-      'protocol-error',
-    );
     expect(classifyRendererEnvelope({ type: 'ggui:observe' })).toBe('observability');
     expect(classifyRendererEnvelope({ type: 'ggui:lifecycle' })).toBe('lifecycle');
-    expect(classifyRendererEnvelope({ type: 'ggui:upgrade-required' })).toBe(
-      'upgrade-required',
-    );
     expect(classifyRendererEnvelope({ jsonrpc: '2.0', method: 'ping' })).toBe(
       'jsonrpc',
     );
     expect(classifyRendererEnvelope({ type: 'other' })).toBe('unknown');
+  });
+
+  it('drops tags no renderer emits — no phantom recognizer arms', () => {
+    // 'ggui:protocol-error' / 'ggui:upgrade-required' were classified
+    // here but had ZERO emitters repo-wide (XPKG-ENVELOPE-DRIFT);
+    // upgrade-required travels as a `ggui:bootstrap-failed` reason.
+    expect(classifyRendererEnvelope({ type: 'ggui:protocol-error' })).toBe('unknown');
+    expect(classifyRendererEnvelope({ type: 'ggui:upgrade-required' })).toBe('unknown');
+    // renderer-ready is a real envelope but this host has no callback
+    // for it; it deliberately falls through.
+    expect(classifyRendererEnvelope({ type: 'ggui:renderer-ready' })).toBe('unknown');
   });
 });
 

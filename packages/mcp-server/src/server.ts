@@ -6993,9 +6993,9 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
       //
       //   2. GET /ggui/console/sessions/:sessionId/meta
       //      → returns `{ "ai.ggui/render": McpAppAiGguiRenderMeta }` JSON.
-      //      The console replies with this to the iframe's
-      //      `ui/initialize` postMessage (Path-B inline-meta delivery
-      //      per `docs/protocol/extensions/ai.ggui-meta.md`).
+      //      The console forwards this to the iframe as the `_meta`
+      //      slice of a spec-canonical `ui/notifications/tool-result`
+      //      notification (per `docs/protocol/extensions/ai.ggui-meta.md`).
       //
       // Earlier iterations used a wrapped-shell path
       // (`buildDevtoolSessionResourceHtml`); that is gone — the
@@ -7006,11 +7006,12 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
       //   - console (SPA caller) — holds the same-origin cookie.
       //   - mcp-server (this handler) — gates auth + scope; mints the
       //     bootstrap on the bootstrap route.
-      //   - <McpAppIframe> host (bootstrap forwarder) — receives the
-      //     bootstrap JSON via prop and threads it through `ui/initialize`.
+      //   - host wrapper (bootstrap forwarder; `<AppRenderer>` on web,
+      //     `<McpAppIframe>` on RN) — receives the bootstrap JSON and
+      //     forwards it as a `ui/notifications/tool-result` `_meta` slice.
       //   - renderer bundle (inside the iframe) — runs the same boot
-      //     code path as production; reads the `ai.ggui/render` +
-      //     `ai.ggui/render` slice meta pair.
+      //     code path as production; reads the single `ai.ggui/render`
+      //     slice meta.
       //
       // Auth + scope obligations (both routes — uniform):
       //   - Cookie-auth via `readDevtoolCookieFromHeaders` +

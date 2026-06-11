@@ -15,10 +15,15 @@ Peer dependencies (install the ones your app uses):
 
 - `react` (18 or 19) and `react-native` (>= 0.70)
 - `react-native-webview` (>= 13) — used by the WebView renderer
-- `@react-native-async-storage/async-storage` — offline thread storage
-- `@react-native-community/netinfo` — network-state awareness
+- `@react-native-async-storage/async-storage` (2.x) — offline thread storage
 - `@modelcontextprotocol/sdk`
 - `@tanstack/react-query` (optional — only for `@ggui-ai/react-native/query`)
+
+Network-state awareness is injected, not bundled: the package never
+imports `@react-native-community/netinfo`. If your app wants real
+online/offline signals, wire netinfo yourself and pass them in via
+`useChatThread({ isOnline })` (or `WebSocketManager`'s
+`netInfoSubscribe` option).
 
 ## Quick start
 

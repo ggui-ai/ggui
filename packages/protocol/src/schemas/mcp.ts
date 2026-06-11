@@ -170,10 +170,11 @@ export const handshakeInputSchema = z.object({
  * to re-aim the suggestion — `override.contract` gens against a fresh
  * contract; `override.variance` re-aims the variant axis.
  *
- * Wire-output is intentionally lean. The handler carries `reason`,
- * `target`, `alternatives`, `contractHash`, `serverCapabilities` on
- * its internal `HandshakeOutput` TS shape for telemetry / post-classify
- * tracing — zod strips them before structuredContent serialization.
+ * Wire-output is intentionally lean. The handler carries `target`,
+ * `alternatives`, `contractHash`, `serverCapabilities` on its internal
+ * `HandshakeOutput` TS shape for telemetry / post-classify tracing —
+ * zod strips them before structuredContent serialization. `reason` IS
+ * a wire field (optional, ≤280 chars — see below).
  *
  * `serverCapabilities` reaches the iframe via the `ai.ggui/render`
  * slice meta (see `slice-meta-derivation.ts`), not via this response.
