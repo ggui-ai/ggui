@@ -51,11 +51,7 @@ export {
   type PackageMismatchEntry,
   type UnregisteredHookEntry,
 } from "./assert-gadgets.js";
-export {
-  assertGeneratorRegistered,
-  isGeneratorRegistered,
-  UnknownGeneratorError,
-} from "./assert-generator.js";
+export { isGeneratorRegistered } from "./assert-generator.js";
 export { assertPropsContract } from "./assert-props-contract.js";
 export {
   assertPublicEnvSatisfied,

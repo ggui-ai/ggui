@@ -22,6 +22,7 @@ export type {
   AuthConfig,
   // Core fixture shape
   TestCase,
+  SubscribeFrameShaping,
   // Setup vocabulary (JSON-authoring surface — closed union)
   SetupStep,
   CreateGguiSessionStep,

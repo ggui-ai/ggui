@@ -64,7 +64,7 @@ import type {
   VariantSelectionDecision,
 } from '@ggui-ai/mcp-server-core';
 import type { HandlerContext, SharedHandler } from '../types.js';
-import type { CanvasLifecycleEmitter } from './canvas-lifecycle.js';
+import type { GguiLifecycleEmitter } from './lifecycle.js';
 
 /**
  * Handshake-time input shape.
@@ -321,18 +321,18 @@ export interface GguiHandshakeHandlerDeps {
    */
   readonly defaultGenerator?: string;
   /**
-   * Canvas-mode lifecycle emitter. When wired, the handler fires
-   * `handshake_started` at entry and `handshake_completed` just
+   * Generation-progress lifecycle emitter. When wired, the handler
+   * fires `handshake_started` at entry and `handshake_completed` just
    * before return on the `_ggui:lifecycle` channel. Fire-and-forget
    * — emit errors are absorbed by the impl.
    *
    * Post-Phase-B (flatten-render-identity): the emitter is keyed by
    * `handshakeId` instead of `sessionId` — handshakes happen BEFORE
-   * a render exists; canvas mode that wants to bracket the gap binds
-   * its emitter on the sessionId returned by the paired `ggui_render`.
-   * Absent ⇒ no emissions.
+   * a render exists; consumers that want to bracket the gap bind
+   * their subscription on the sessionId returned by the paired
+   * `ggui_render`. Absent ⇒ no emissions.
    */
-  readonly canvasLifecycle?: CanvasLifecycleEmitter;
+  readonly lifecycleEmitter?: GguiLifecycleEmitter;
   /**
    * Optional operational-signal sink. When bound, the handler emits
    * a `handshake.decided` event on every successful handshake
@@ -523,8 +523,9 @@ export function createGguiHandshakeHandler(
 
       // Forgiving generator: an UNKNOWN generator slug is DROPPED (the
       // server default is used) + surfaced as a finding, rather than
-      // thrown. Handshake never hard-fails on a fixable detail; the
-      // STRICT render-override path keeps the throwing assert.
+      // thrown. Handshake never hard-fails on a fixable detail. This
+      // finding is the only generator-validation surface — render's
+      // strict override path carries no generator field.
       const generatorFindings: SuggestionFinding[] = [];
       if (
         !isGeneratorRegistered(
@@ -602,10 +603,10 @@ export function createGguiHandshakeHandler(
           : negotiated.suggestion;
 
       const handshakeId = mintHandshakeId();
-      // Emit handshake_started so the canvas animator transitions to
-      // its `handshake` state. Fire-and-forget; absent emitter is a
+      // Emit handshake_started so progress UIs can show a
+      // `negotiating` state. Fire-and-forget; absent emitter is a
       // no-op. Keyed by handshakeId — no render exists yet.
-      deps.canvasLifecycle?.emit(handshakeId, {
+      deps.lifecycleEmitter?.emit(handshakeId, {
         kind: 'handshake_started',
         handshakeId,
         intent: normalizedInput.intent,
@@ -660,7 +661,7 @@ export function createGguiHandshakeHandler(
           : negotiated.suggestion.origin === 'synth'
             ? 'amended'
             : 'accepted';
-      deps.canvasLifecycle?.emit(handshakeId, {
+      deps.lifecycleEmitter?.emit(handshakeId, {
         kind: 'handshake_completed',
         handshakeId,
         outcome: lifecycleOutcome,

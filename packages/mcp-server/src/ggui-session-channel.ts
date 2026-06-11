@@ -72,7 +72,11 @@ import { randomUUID } from "node:crypto";
 import type { IncomingMessage } from "node:http";
 import type { Duplex } from "node:stream";
 import { WebSocketServer, type WebSocket } from "ws";
-import { resolveIdentityFromHeaders, UnauthenticatedError } from "./auth.js";
+import {
+  defaultAppIdFromIdentity,
+  resolveIdentityFromHeaders,
+  UnauthenticatedError,
+} from "./auth.js";
 import type { Logger } from "./logger.js";
 
 // `assertEventAllowed` + `EventNotAllowedError` were removed from
@@ -333,9 +337,13 @@ export interface GguiSessionChannelOptions {
    */
   readonly auth: AuthAdapter;
   /**
-   * Maps resolved identity → tenant appId. Defaults to
-   * `defaultAppIdFromIdentity` — same mapping the `/mcp` endpoint uses.
+   * Maps resolved identity → tenant appId for subscribes that omit
+   * `payload.appId` (SPEC §12.2 identity-default resolution). Defaults
+   * to `defaultAppIdFromIdentity` — same mapping the `/mcp` endpoint
+   * uses. Token-bound subscribes (wsToken / console cookie) never
+   * consult this seam: their credential already binds the appId.
    */
+  readonly appIdFromIdentity?: (result: AuthResult) => string;
   /** Structured logger. */
   readonly logger: Logger;
   /** URL path to mount on. Defaults to `/ws`. */
@@ -834,8 +842,8 @@ export function createGguiSessionChannelServer(opts: GguiSessionChannelOptions):
   }
 
   /**
-   * Shared tenancy guard for client-emitted observation messages
-   * (`host_context_observed`, `canvas_navigated`). Returns `false`
+   * Tenancy guard for client-emitted observation messages
+   * (`host_context_observed` today). Returns `false`
    * AND emits the appropriate error frame when:
    *
    *   - the socket has no bound subscriber (NOT_SUBSCRIBED)
@@ -1520,7 +1528,8 @@ export function createGguiSessionChannelServer(opts: GguiSessionChannelOptions):
   async function handleSubscribe(
     ws: WebSocket,
     identity: AuthResult,
-    message: WebSocketMessage & { type: "subscribe" }
+    message: WebSocketMessage & { type: "subscribe" },
+    cookieBound?: { readonly sessionId: string; readonly appId: string }
   ): Promise<void> {
     const payload: SubscribePayload = message.payload;
 
@@ -1585,6 +1594,7 @@ export function createGguiSessionChannelServer(opts: GguiSessionChannelOptions):
     // Mutually-exclusive on purpose.
     let effectiveIdentity: AuthResult = identity;
     let mintedSessionToken: string | undefined;
+    let tokenBoundAppId: string | undefined;
     if (typeof payload.wsToken === "string" && payload.wsToken.length > 0) {
       if (!opts.bootstrap) {
         sendError(
@@ -1635,7 +1645,11 @@ export function createGguiSessionChannelServer(opts: GguiSessionChannelOptions):
         );
         return;
       }
-      if (bound.appId !== payload.appId) {
+      // `payload.appId` is OPTIONAL on the wire (SPEC §12.2): under a
+      // bound token, absence resolves to the token's bound appId — the
+      // token binding IS the identity-default. Only a PRESENT value
+      // that contradicts the binding is a mismatch.
+      if (payload.appId !== undefined && payload.appId !== bound.appId) {
         sendError(
           ws,
           "BOOTSTRAP_APP_MISMATCH",
@@ -1644,6 +1658,7 @@ export function createGguiSessionChannelServer(opts: GguiSessionChannelOptions):
         );
         return;
       }
+      tokenBoundAppId = bound.appId;
       // Synthesize a minimal AuthResult from the bootstrap claims.
       // The subscriber row needs an identity for logging and roster
       // inspection; the bootstrap-derived identity is a first-class
@@ -1667,6 +1682,22 @@ export function createGguiSessionChannelServer(opts: GguiSessionChannelOptions):
       });
     }
 
+    // Identity-default appId resolution (SPEC §12.2): `payload.appId`
+    // is optional on the wire. Absent ⇒ resolve it from the
+    // connection's authenticated identity BEFORE any store work —
+    // exactly the rule the `/mcp` endpoint applies: a credential
+    // binding wins (wsToken binds `(sessionId, appId)`; the console
+    // cookie binds the same pair), else the deployment's identity →
+    // appId mapping (`appIdFromIdentity`, defaulting to
+    // `defaultAppIdFromIdentity`). The resolved value then flows
+    // through the EXISTING tenancy gate + provisioning below — never
+    // an `undefined` tenant on a stored row.
+    const effectiveAppId: string =
+      payload.appId ??
+      tokenBoundAppId ??
+      cookieBound?.appId ??
+      (opts.appIdFromIdentity ?? defaultAppIdFromIdentity)(effectiveIdentity);
+
     // Dev-mode render provisioning: look up first; if not present,
     // create with the client-provided id via the widened
     // CreateGguiSessionInput.id seam. Matches the hosted model's shape
@@ -1675,7 +1706,7 @@ export function createGguiSessionChannelServer(opts: GguiSessionChannelOptions):
     // AuthAdapter that mints render-scoped tokens on render.
     let stored = await opts.renderStore.get(payload.sessionId);
     if (stored) {
-      if (stored.appId !== payload.appId) {
+      if (stored.appId !== effectiveAppId) {
         sendError(
           ws,
           "APP_MISMATCH",
@@ -1688,7 +1719,7 @@ export function createGguiSessionChannelServer(opts: GguiSessionChannelOptions):
       try {
         stored = await opts.renderStore.create({
           id: payload.sessionId,
-          appId: payload.appId,
+          appId: effectiveAppId,
         });
       } catch (err) {
         sendError(
@@ -1890,7 +1921,11 @@ export function createGguiSessionChannelServer(opts: GguiSessionChannelOptions):
             );
             return;
           }
-          if (message.payload.appId !== cookieBound.appId) {
+          // `appId` is optional on the wire (SPEC §12.2): absent
+          // resolves to the cookie's bound appId inside
+          // `handleSubscribe` — only a PRESENT contradicting value is
+          // a mismatch.
+          if (message.payload.appId !== undefined && message.payload.appId !== cookieBound.appId) {
             sendError(
               ws,
               "DEVTOOL_COOKIE_APP_MISMATCH",
@@ -1900,7 +1935,7 @@ export function createGguiSessionChannelServer(opts: GguiSessionChannelOptions):
             return;
           }
         }
-        await handleSubscribe(ws, identity, message);
+        await handleSubscribe(ws, identity, message, cookieBound);
         pendingIdentity.delete(ws);
         pendingCookieBinding.delete(ws);
         return;

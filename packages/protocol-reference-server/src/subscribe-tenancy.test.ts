@@ -15,13 +15,13 @@
  *     (`addSubscriber`'s create-if-missing fallback binds the default
  *     app, which would make a fresh render reject the same client's
  *     next subscribe);
- *   - a subscribe MISSING `appId` (REQUIRED per the §12.2 field table,
- *     no rejection outcome named by the SPEC) is treated as a
- *     malformed frame: silently dropped — no ack, no error frame, no
- *     render provisioned. Regression lock against the historical
- *     default-to-`'conformance'` fallback, which masked the
- *     requirement by acking and binding a tenant the client never
- *     supplied.
+ *   - a subscribe MISSING `appId` (OPTIONAL per the §12.2 field table)
+ *     resolves the caller's identity-default app and acks. This
+ *     server's identity model is no-auth, so the identity-default is
+ *     the deployment-level `DEPLOYMENT_DEFAULT_APP_ID` — the
+ *     provisioned render is bound to it (a real string tenant, never
+ *     an undefined one), and the §12.2.3 APP_MISMATCH gate still
+ *     applies on the resolved value.
  *
  * Mirrors the test-helper pattern from `emit-envelope.test.ts`.
  */
@@ -29,6 +29,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { WebSocket } from 'ws';
 
 import { createReferenceConformanceHost } from './conformance-host.js';
+import { DEPLOYMENT_DEFAULT_APP_ID } from './render.js';
 import { ReferenceServer } from './server.js';
 
 describe('SPEC §12.2 subscribe tenancy (APP_MISMATCH)', () => {
@@ -119,16 +120,39 @@ describe('SPEC §12.2 subscribe tenancy (APP_MISMATCH)', () => {
     });
   });
 
-  it('drops a subscribe missing the required appId — no reply frame, no render provisioned', async () => {
-    const reply = await subscribeSilence(server.baseUrl, {
+  it('defaults a subscribe missing appId to the deployment-level identity-default and acks', async () => {
+    const reply = await subscribeOnce(server.baseUrl, {
       sessionId: 'tenancy-4',
       requestId: 'tenancy-4-req',
     });
-    expect(reply).toBeNull();
-    // The malformed frame provisioned nothing — in particular it did
-    // NOT bind a fallback app the way the historical
-    // default-to-'conformance' behavior did.
-    expect(server.renders.get('tenancy-4')).toBeUndefined();
+    expect(reply).toMatchObject({ type: 'ack', requestId: 'tenancy-4-req' });
+    // The provisioned render is bound to the RESOLVED identity-default
+    // — a real string tenant, never an undefined one. (The corrupt-row
+    // failure mode this locks out: ack + a row whose appId is
+    // undefined, unreachable by any later legal subscribe.)
+    const provisioned = server.renders.get('tenancy-4');
+    expect(typeof provisioned?.appId).toBe('string');
+    expect(provisioned?.appId).toBe(DEPLOYMENT_DEFAULT_APP_ID);
+  });
+
+  it('tenancy still gates the resolved default — a render bound elsewhere rejects an appId-less subscribe with APP_MISMATCH', async () => {
+    const host = createReferenceConformanceHost({ serverInstance: server });
+    await host.dispatchSetup({
+      kind: 'create-session',
+      sessionId: 'tenancy-5',
+      appId: 'app-other',
+    });
+
+    const reply = await subscribeOnce(server.baseUrl, {
+      sessionId: 'tenancy-5',
+      requestId: 'tenancy-5-req',
+    });
+    expect(reply).toMatchObject({
+      type: 'error',
+      payload: { code: 'APP_MISMATCH' },
+      requestId: 'tenancy-5-req',
+    });
+    expect(server.renders.get('tenancy-5')?.subscribers.size).toBe(0);
   });
 });
 
@@ -140,11 +164,12 @@ describe('SPEC §12.2 subscribe tenancy (APP_MISMATCH)', () => {
  * Open a WS, send one `subscribe` frame, resolve with the FIRST frame
  * the server replies (ack or error), then close. The tenancy contract
  * is a single request/reply exchange, so one frame is the whole
- * observable surface.
+ * observable surface. `appId` is optional, mirroring the wire — omit
+ * it to drive the identity-default resolution path.
  */
 async function subscribeOnce(
   baseUrl: string,
-  payload: { sessionId: string; appId: string; requestId: string },
+  payload: { sessionId: string; appId?: string; requestId: string },
 ): Promise<unknown> {
   const wsUrl = baseUrl.replace(/^http/, 'ws') + '/ws';
   return await new Promise<unknown>((resolve, reject) => {
@@ -160,7 +185,7 @@ async function subscribeOnce(
           type: 'subscribe',
           payload: {
             sessionId: payload.sessionId,
-            appId: payload.appId,
+            ...(payload.appId !== undefined ? { appId: payload.appId } : {}),
             role: 'user',
           },
           requestId: payload.requestId,
@@ -182,54 +207,6 @@ async function subscribeOnce(
 
     ws.on('error', (err) => {
       clearTimeout(ceiling);
-      reject(err);
-    });
-  });
-}
-
-/**
- * Open a WS, send one `subscribe` frame WITHOUT `appId`, and resolve
- * `null` if the server stays silent for the observation window — the
- * malformed-frame posture has no reply at all, so silence IS the
- * asserted outcome. Resolves with the frame if one arrives (failing
- * the caller's `toBeNull()`).
- */
-async function subscribeSilence(
-  baseUrl: string,
-  payload: { sessionId: string; requestId: string },
-): Promise<unknown> {
-  const wsUrl = baseUrl.replace(/^http/, 'ws') + '/ws';
-  return await new Promise<unknown>((resolve, reject) => {
-    const ws = new WebSocket(wsUrl);
-    const window = setTimeout(() => {
-      ws.close();
-      resolve(null);
-    }, 400);
-
-    ws.on('open', () => {
-      ws.send(
-        JSON.stringify({
-          type: 'subscribe',
-          payload: { sessionId: payload.sessionId, role: 'user' },
-          requestId: payload.requestId,
-        }),
-      );
-    });
-
-    ws.on('message', (raw: Buffer) => {
-      let parsed: unknown;
-      try {
-        parsed = JSON.parse(raw.toString('utf8'));
-      } catch {
-        return;
-      }
-      clearTimeout(window);
-      ws.close();
-      resolve(parsed);
-    });
-
-    ws.on('error', (err) => {
-      clearTimeout(window);
       reject(err);
     });
   });

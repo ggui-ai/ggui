@@ -1,24 +1,21 @@
 /**
- * Canvas-mode lifecycle envelopes.
+ * Generation-progress lifecycle envelopes.
  *
  * Carried over the reserved `_ggui:lifecycle` channel via `data`
  * WebSocket messages. The server emits at four lifecycle moments;
- * canvas iframes consume (via the animator host) to drive their
- * pill state machine:
+ * subscribed clients consume them to drive progress indicators:
  *
  *   - `handshake_started` / `handshake_completed`: bracket each
- *     `ggui_handshake` call so the animator can render "negotiating"
+ *     `ggui_handshake` call so a progress UI can render "negotiating"
  *     during the gap.
  *   - `render_started`: emitted at the gen gate of `ggui_render`, before
- *     the final `render` envelope lands. Drives the animator's
- *     `constructing` state. The eventual `render` envelope (existing
- *     wire type) signals completion → animator transitions to
- *     `content`.
+ *     the final `render` envelope lands. Drives a "constructing"
+ *     indicator. The eventual `render` envelope (existing wire type)
+ *     signals completion → the indicator gives way to content.
  *   - `consume_polling`: signals that `ggui_consume` opened a long-
- *     poll. The animator's `listening` state. The complementary
- *     "close" signal is the existing `drain_ack` envelope (consume
- *     drained an action) — no separate "closed" lifecycle kind is
- *     needed.
+ *     poll — a "listening" indicator. The complementary "close"
+ *     signal is the existing `drain_ack` envelope (consume drained an
+ *     action) — no separate "closed" lifecycle kind is needed.
  *
  * Discriminated on `kind`. Adding a kind is a protocol-version bump,
  * not a silent extension — keeps the union closed so producers and
@@ -30,8 +27,9 @@
  *
  * Boundary discipline:
  *   - This module describes ENVELOPE SHAPES carried on a reserved
- *     channel. It does NOT describe the animator state machine that
- *     consumes them (lives in `@ggui-ai/iframe-runtime/canvas/animator`).
+ *     channel. It does NOT describe the progress-indicator state
+ *     machine that consumes them — that is client-side presentation,
+ *     outside the protocol.
  *   - This module is `data` only — no functions, no reducers. Pure
  *     types so the protocol bundle stays tiny.
  */
@@ -40,31 +38,31 @@ import type { JsonObject } from './data-contract';
 
 /**
  * Emitted when the server starts processing a `ggui_handshake` call.
- * Animator transitions from current state into `handshake` (or its
- * `content`-substate equivalent).
+ * Progress UIs transition from their current state into a
+ * "negotiating" indicator.
  */
 export interface HandshakeStartedPayload extends JsonObject {
   readonly kind: 'handshake_started';
   readonly handshakeId: string;
-  /** Agent's intent string — animator may surface this as a label. */
+  /** Agent's intent string — consumers may surface this as a label. */
   readonly intent: string;
 }
 
 /**
- * Emitted when the server finishes a `ggui_handshake` call. Animator
- * either drops back to `ready`/`content` (no gen expected) or
- * pre-warms to `constructing` if `genExpected: true` so the
- * transition from handshake → constructing doesn't flicker.
+ * Emitted when the server finishes a `ggui_handshake` call. A progress
+ * UI either drops back to its idle/content state (no gen expected) or
+ * pre-warms its "constructing" indicator if `genExpected: true` so the
+ * handshake → constructing transition doesn't flicker.
  */
 export interface HandshakeCompletedPayload extends JsonObject {
   readonly kind: 'handshake_completed';
   readonly handshakeId: string;
-  /** Negotiator outcome — informational; animator may surface. */
+  /** Negotiator outcome — informational; consumers may surface. */
   readonly outcome: 'accepted' | 'amended' | 'declined' | 'cached';
   /**
    * Whether a cold gen is about to follow this handshake. When true,
-   * the canvas may pre-warm the `constructing` state to suppress a
-   * `handshake → ready → constructing` flicker.
+   * the consumer may pre-warm its "constructing" indicator to suppress
+   * a `handshake → idle → constructing` flicker.
    */
   readonly genExpected: boolean;
 }
@@ -78,14 +76,14 @@ export interface RenderStartedPayload extends JsonObject {
   readonly kind: 'render_started';
   /** The GguiSession id the eventual `render` envelope will carry. */
   readonly sessionId: string;
-  /** Echoed for the animator label ("Building: <intent>"). */
+  /** Echoed for the progress label ("Building: <intent>"). */
   readonly intent: string;
 }
 
 /**
  * Emitted when `ggui_consume` opens a long-poll (after the action
- * pipe is found empty). Animator transitions to `listening`. The
- * complementary "close" signal is the existing `drain_ack` envelope.
+ * pipe is found empty) — a "listening" indicator. The complementary
+ * "close" signal is the existing `drain_ack` envelope.
  */
 export interface ConsumePollingPayload extends JsonObject {
   readonly kind: 'consume_polling';
@@ -103,11 +101,11 @@ export interface ConsumePollingPayload extends JsonObject {
 }
 
 /**
- * Closed discriminated union of every canvas-mode lifecycle payload.
- * New kinds bump the protocol version; consumers narrow on `kind`
- * with exhaustive switch.
+ * Closed discriminated union of every generation-progress lifecycle
+ * payload. New kinds bump the protocol version; consumers narrow on
+ * `kind` with exhaustive switch.
  */
-export type CanvasLifecyclePayload =
+export type GguiLifecyclePayload =
   | HandshakeStartedPayload
   | HandshakeCompletedPayload
   | RenderStartedPayload

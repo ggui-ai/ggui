@@ -29,7 +29,11 @@ import {
   parseHostContextObservedFrame,
 } from './host-context.js';
 import { isRecord } from './is-record.js';
-import { GguiSessionStore, type Subscriber } from './render.js';
+import {
+  DEPLOYMENT_DEFAULT_APP_ID,
+  GguiSessionStore,
+  type Subscriber,
+} from './render.js';
 
 export interface ReferenceServerOptions {
   /** Port to bind. `0` = ephemeral — use {@link ReferenceServer.port}
@@ -258,17 +262,20 @@ export class ReferenceServer {
     // GguiSession-identity field: the canonical SPEC field `sessionId`.
     const sessionId = typeof payload['sessionId'] === 'string' ? payload['sessionId'] : undefined;
     if (sessionId === undefined) return;
-    // `appId` is REQUIRED on the subscribe payload (SPEC §12.2 field
-    // table), but the SPEC names no rejection outcome for its absence
-    // and the first-party server has no deterministic posture to
-    // mirror (absent appId falls down path-dependent accidental
-    // outcomes there). Pending that wire decision this server refuses
-    // to invent one: a subscribe missing a required field is a
-    // malformed frame and takes the same posture as the missing
-    // `sessionId` above — silently dropped, no error frame, no render
+    // `appId` is OPTIONAL on the subscribe payload (SPEC §12.2 field
+    // table): absent ⇒ the server resolves the caller's
+    // identity-default app. This server's identity model is no-auth —
+    // every caller is the same anonymous identity — so the
+    // identity-default collapses to the deployment-level
+    // {@link DEPLOYMENT_DEFAULT_APP_ID}; the resolved value flows
+    // through the SAME tenancy gate + provision-on-subscribe path a
+    // client-supplied appId takes. A PRESENT-but-non-string `appId` is
+    // still a malformed frame and takes the missing-`sessionId`
+    // posture: silently dropped, no error frame, no render
     // provisioned.
-    const appId = typeof payload['appId'] === 'string' ? payload['appId'] : undefined;
-    if (appId === undefined) return;
+    const rawAppId = payload['appId'];
+    if (rawAppId !== undefined && typeof rawAppId !== 'string') return;
+    const appId = rawAppId ?? DEPLOYMENT_DEFAULT_APP_ID;
     const requestId = typeof frame['requestId'] === 'string' ? frame['requestId'] : undefined;
     const rawVersions = payload['supportedVersions'];
     const supportedVersions = Array.isArray(rawVersions)

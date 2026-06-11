@@ -8,7 +8,7 @@ import {
   RESERVED_CHANNEL_PREFIX,
   isKnownReservedChannel,
   isReservedChannelName,
-  validateCanvasLifecyclePayload,
+  validateGguiLifecyclePayload,
   validateContractErrorPayload,
   type ReservedChannelValidator,
 } from './reserved-channels.js';
@@ -378,7 +378,7 @@ describe('BUILTIN_RESERVED_VALIDATORS', () => {
 
   it('exposes the lifecycle validator under LIFECYCLE_CHANNEL', () => {
     const validator = BUILTIN_RESERVED_VALIDATORS.get(LIFECYCLE_CHANNEL);
-    expect(validator).toBe(validateCanvasLifecyclePayload);
+    expect(validator).toBe(validateGguiLifecyclePayload);
   });
 
   it('is a read-only view — consumers cannot mutate the global registry', () => {
@@ -531,17 +531,17 @@ describe('validateStreamData — reserved-channel validator injection', () => {
   });
 });
 
-describe('validateCanvasLifecyclePayload', () => {
+describe('validateGguiLifecyclePayload', () => {
   it('accepts each known kind with required fields', () => {
     expect(
-      validateCanvasLifecyclePayload({
+      validateGguiLifecyclePayload({
         kind: 'handshake_started',
         handshakeId: 'h-1',
         intent: 'show weather',
       }).valid,
     ).toBe(true);
     expect(
-      validateCanvasLifecyclePayload({
+      validateGguiLifecyclePayload({
         kind: 'handshake_completed',
         handshakeId: 'h-1',
         outcome: 'accepted',
@@ -549,14 +549,14 @@ describe('validateCanvasLifecyclePayload', () => {
       }).valid,
     ).toBe(true);
     expect(
-      validateCanvasLifecyclePayload({
+      validateGguiLifecyclePayload({
         kind: 'render_started',
         sessionId: 'render-1',
         intent: 'show weather',
       }).valid,
     ).toBe(true);
     expect(
-      validateCanvasLifecyclePayload({
+      validateGguiLifecyclePayload({
         kind: 'consume_polling',
         state: 'open',
         sessionId: 'render-1',
@@ -565,14 +565,14 @@ describe('validateCanvasLifecyclePayload', () => {
   });
 
   it('rejects non-object / null / array payloads', () => {
-    expect(validateCanvasLifecyclePayload(null).valid).toBe(false);
-    expect(validateCanvasLifecyclePayload([]).valid).toBe(false);
-    expect(validateCanvasLifecyclePayload('string').valid).toBe(false);
-    expect(validateCanvasLifecyclePayload(42).valid).toBe(false);
+    expect(validateGguiLifecyclePayload(null).valid).toBe(false);
+    expect(validateGguiLifecyclePayload([]).valid).toBe(false);
+    expect(validateGguiLifecyclePayload('string').valid).toBe(false);
+    expect(validateGguiLifecyclePayload(42).valid).toBe(false);
   });
 
   it('rejects unknown kind values (closed union)', () => {
-    const result = validateCanvasLifecyclePayload({
+    const result = validateGguiLifecyclePayload({
       kind: 'future_kind',
       whatever: 'value',
     });
@@ -582,21 +582,21 @@ describe('validateCanvasLifecyclePayload', () => {
 
   it('rejects missing required fields per variant', () => {
     expect(
-      validateCanvasLifecyclePayload({ kind: 'handshake_started' }).valid,
+      validateGguiLifecyclePayload({ kind: 'handshake_started' }).valid,
     ).toBe(false);
     expect(
-      validateCanvasLifecyclePayload({ kind: 'render_started', sessionId: 'x' })
+      validateGguiLifecyclePayload({ kind: 'render_started', sessionId: 'x' })
         .valid,
     ).toBe(false);
     expect(
-      validateCanvasLifecyclePayload({
+      validateGguiLifecyclePayload({
         kind: 'consume_polling',
         sessionId: 'x',
         state: 'closed', // wrong literal
       }).valid,
     ).toBe(false);
     expect(
-      validateCanvasLifecyclePayload({
+      validateGguiLifecyclePayload({
         kind: 'handshake_completed',
         handshakeId: 'h-1',
         outcome: 'bogus',

@@ -51,8 +51,8 @@
  * store instance the channel server persists into — so the verdict
  * reflects the server's true post-dispatch state, never a fabricated
  * value. The exposed field vocabulary is CLOSED to what the shipped
- * catalog authors (`hostContext`); an unknown field throws, so a
- * future-authored field surfaces as an honest skip to re-pin
+ * catalog authors (`hostContext`, `appId`); an unknown field throws,
+ * so a future-authored field surfaces as an honest skip to re-pin
  * deliberately.
  */
 import { createServer, type Server as HttpServer } from 'node:http';
@@ -131,8 +131,17 @@ const CONFORMANCE_APP_ID = 'conformance';
  *     graded by the kit's session-state read-back through this host's
  *     `readSessionField`, deep-equalling the persisted projection
  *     against the fixture's authored value.
+ *   - `absent-appid-defaults`: the kit's subscribe OMITS `appId`
+ *     (`subscribe.omitAppId`); the channel resolves the caller's
+ *     identity-default app through its `appIdFromIdentity` seam (this
+ *     harness's deployment mapping → `CONFORMANCE_APP_ID`) and the
+ *     provision-on-subscribe path binds the RESOLVED value. Graded by
+ *     session-state read-back of the row's `appId` — proving the SPEC
+ *     §12.2 identity-default rule binds a real tenant, never the
+ *     historical undefined-appId corrupt row.
  */
 const EXPECTED_PASSING = [
+  'absent-appid-defaults',
   'action-ack-sequence',
   'action-payload-schema-violation',
   'app-mismatch',
@@ -188,6 +197,14 @@ async function bootFirstPartyServer(): Promise<FirstPartyHarness> {
   const channel = createGguiSessionChannelServer({
     renderStore: store,
     auth: new InMemoryAuthAdapter({ devAllowAll: true }),
+    // Deployment identity → appId mapping (the same seam `createGguiServer`
+    // threads from its own `appIdFromIdentity` option). The conformance
+    // deployment maps every identity to the kit's conventional tenant —
+    // the identical alignment the host's `create-session` default keeps —
+    // so the `absent-appid-defaults` fixture's identity-default resolves
+    // to the value the kit grades. The resolution LOGIC under test runs
+    // unchanged; only the mapping is deployment config.
+    appIdFromIdentity: () => CONFORMANCE_APP_ID,
     logger: silentLogger,
   });
 
@@ -240,10 +257,11 @@ async function bootFirstPartyServer(): Promise<FirstPartyHarness> {
  *     `InMemoryGguiSessionStore` — the same store instance the channel
  *     persists into. Exposes exactly the field vocabulary the shipped
  *     session-state fixtures grade (`hostContext`, which the
- *     `host_context_observed` handler patches via
- *     `renderStore.update`); any other field throws so a
- *     future-authored fixture skips loudly instead of being graded
- *     against a fabricated read.
+ *     `host_context_observed` handler patches via `renderStore.update`;
+ *     `appId`, the tenancy column the `absent-appid-defaults` fixture
+ *     grades identity-default resolution against); any other field
+ *     throws so a future-authored fixture skips loudly instead of
+ *     being graded against a fabricated read.
  *
  * Refuse (kit records SKIP with the thrown message):
  *   - `renderer-url-override` / `ui-initialize-response-override` —
@@ -329,9 +347,9 @@ function createFirstPartyConformanceHost(harness: FirstPartyHarness): Conformanc
       // loudly (the kit records a skip), never read via a dynamic
       // index that could silently grade state this host never meant
       // to expose.
-      if (field !== 'hostContext') {
+      if (field !== 'hostContext' && field !== 'appId') {
         throw new Error(
-          `first-party conformance host exposes only the 'hostContext' session field for session-state grading — field '${field}' is not implemented`,
+          `first-party conformance host exposes only the 'hostContext' and 'appId' session fields for session-state grading — field '${field}' is not implemented`,
         );
       }
       const stored = await harness.store.get(sessionId);
@@ -339,6 +357,13 @@ function createFirstPartyConformanceHost(harness: FirstPartyHarness): Conformanc
         throw new Error(
           `readSessionField: no GguiSession '${sessionId}' in the channel's store — cannot read state off a missing render`,
         );
+      }
+      if (field === 'appId') {
+        // The tenancy column on the stored row — the
+        // `absent-appid-defaults` fixture reads it back to grade SPEC
+        // §12.2 identity-default resolution (an appId-less subscribe
+        // binds the resolved default, never an undefined tenant).
+        return stored.appId;
       }
       // May legitimately be undefined when the server dropped the
       // frame instead of persisting it — that surfaces as the kit's

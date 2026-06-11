@@ -28,6 +28,11 @@ export const REFERENCE_SERVER_VERSION = '0.1.0';
 //   - Throws on unimplemented directives — kit maps them to SKIP.
 export { ReferenceServer } from './server.js';
 export type { ReferenceServerOptions } from './server.js';
+// Deployment-level identity-default app id (SPEC §12.2: a subscribe
+// MAY omit `appId`; this no-auth server resolves every caller to this
+// deployment-wide tenant). Exported so external runners can assert
+// the bound default without restating the literal.
+export { DEPLOYMENT_DEFAULT_APP_ID } from './render.js';
 export {
   createReferenceConformanceHost,
   type CreateReferenceConformanceHostInput,

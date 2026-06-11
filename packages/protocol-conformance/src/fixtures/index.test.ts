@@ -22,8 +22,8 @@ import {
 } from './index.js';
 
 describe('fixtures catalog', () => {
-  it('ships 11 fixtures across six materialized sub-modules', () => {
-    expect(allFixtures.length).toBe(11);
+  it('ships 12 fixtures across six materialized sub-modules', () => {
+    expect(allFixtures.length).toBe(12);
     // Sanity: confirm the retired wired-dispatch / refresh /
     // observability fixtures are not in the catalog under their old
     // names — the synchronous wired-action path has exactly zero
@@ -70,7 +70,7 @@ describe('fixtures catalog', () => {
     expect(hostContextFixtures.length).toBe(1);
     expect(reservedChannelAuthorityFixtures.length).toBe(1);
     expect(schemaVersionHandshakeFixtures.length).toBe(2);
-    expect(subscribeTenancyFixtures.length).toBe(1);
+    expect(subscribeTenancyFixtures.length).toBe(2);
   });
 
   it('allFixtures is sorted lexicographically by name (deterministic)', () => {
@@ -108,6 +108,7 @@ describe('fixtures catalog', () => {
     const drivable = allFixtures.filter((f) => f.skipReason === null).map((f) => f.name);
     expect(drivable.length).toBe(allFixtures.length);
     expect(drivable.sort()).toEqual([
+      'absent-appid-defaults',
       'action-ack-sequence',
       'action-payload-schema-violation',
       'app-mismatch',
@@ -230,5 +231,32 @@ describe('fixtures catalog', () => {
     // descriptive and must NOT classify as a dispatchable frame.
     expect(parseInputEnvelope(fixture.name, fixture.inputEnvelope).kind).toBe('none');
     expect(fixture.expectedBehavior).toEqual({ kind: 'error-frame', code: 'APP_MISMATCH' });
+  });
+
+  it('absent-appid-defaults omits the runner appId stamp and grades the bound tenant by state read-back', () => {
+    // The runner's subscribe frame normally claims appId 'conformance';
+    // this fixture proves the §12.2 identity-default resolution only
+    // if the frame genuinely OMITS appId (subscribe.omitAppId) AND the
+    // grade reads the bound tenant back (a wire-ack-only grade would
+    // pass a server that acks while binding an undefined tenant — the
+    // corrupt-row failure mode).
+    const fixture = allFixtures.find((f) => f.name === 'absent-appid-defaults');
+    expect(fixture).toBeDefined();
+    if (fixture === undefined) return;
+    // No setup: provision-on-subscribe IS the path under test.
+    expect(fixture.setup).toEqual([]);
+    expect(fixture.subscribe).toEqual({ omitAppId: true });
+    // The probe is the runner-owned subscribe — the input envelope is
+    // descriptive (it carries the sessionId the runner subscribes
+    // under) and must NOT classify as a dispatchable frame.
+    expect(parseInputEnvelope(fixture.name, fixture.inputEnvelope).kind).toBe('none');
+    const behavior = fixture.expectedBehavior;
+    expect(behavior.kind).toBe('session-state');
+    if (!behaviorIs(behavior, 'session-state')) return;
+    expect(behavior.field).toBe('appId');
+    // The expected tenant is the conventional 'conformance' default —
+    // the same value the runner stamps when it does NOT omit appId, so
+    // the identity-default and the explicit path bind identically.
+    expect(behavior.expected).toBe('conformance');
   });
 });

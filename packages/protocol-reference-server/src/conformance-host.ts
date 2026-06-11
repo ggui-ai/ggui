@@ -28,8 +28,10 @@
  * introspection seam — `session-state` fixtures (stateful obligations
  * with no wire response, e.g. `host-context-observed-persists`) grade
  * by reading the GguiSession field back after the observation window.
- * Readable fields: `hostContext`. Unknown fields throw with a clear
- * message so the kit records an honest SKIP, never a weakened pass.
+ * Readable fields: `hostContext`, `appId` (the tenancy column the
+ * `absent-appid-defaults` fixture grades identity-default resolution
+ * against). Unknown fields throw with a clear message so the kit
+ * records an honest SKIP, never a weakened pass.
  *
  * The kit validates every fixture-authored directive against its
  * closed `SetupStep` vocabulary before dispatch, so this adapter only
@@ -52,6 +54,7 @@ import type {
   HostSetupStep,
 } from '@ggui-ai/protocol-conformance';
 
+import { DEPLOYMENT_DEFAULT_APP_ID } from './render.js';
 import type { ReferenceServer } from './server.js';
 
 export interface CreateReferenceConformanceHostInput {
@@ -74,7 +77,7 @@ export function createReferenceConformanceHost({
   return {
     async dispatchSetup(step: HostSetupStep): Promise<void> {
       if (step.kind === 'create-session') {
-        serverInstance.renders.create(step.sessionId, step.appId ?? 'conformance');
+        serverInstance.renders.create(step.sessionId, step.appId ?? DEPLOYMENT_DEFAULT_APP_ID);
         if (step.actionSpec !== undefined) {
           serverInstance.renders.declareActionSpec(
             step.sessionId,
@@ -185,8 +188,16 @@ export function createReferenceConformanceHost({
       if (field === 'hostContext') {
         return render.hostContext;
       }
+      if (field === 'appId') {
+        // The tenancy column on the live render row — the kit's
+        // `absent-appid-defaults` fixture reads it back to grade the
+        // SPEC §12.2 identity-default resolution (a subscribe that
+        // omits `appId` binds the deployment default, never an
+        // undefined tenant).
+        return render.appId;
+      }
       throw new Error(
-        `reference server does not expose GguiSession field '${field}' via readSessionField — readable fields: hostContext`,
+        `reference server does not expose GguiSession field '${field}' via readSessionField — readable fields: hostContext, appId`,
       );
     },
 

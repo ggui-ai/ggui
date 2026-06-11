@@ -260,7 +260,7 @@ export function _peekCurrent(): HostContextProjection | undefined {
 
 /**
  * Subscribe to local projection updates so
- * iframe-side consumers (canvas mount handle's display-mode state)
+ * iframe-side consumers (e.g. display-mode state on the mount handle)
  * can react to `host-context-changed` notifications without re-
  * parsing the postMessage envelope themselves.
  *
@@ -271,7 +271,7 @@ export function _peekCurrent(): HostContextProjection | undefined {
  *     `state.current` (post-projection, post-equality-check).
  *
  * Returns an unsubscribe function. Multi-subscriber by design —
- * tests + production canvas mount can coexist.
+ * tests + the production mount can coexist.
  */
 const localSubscribers = new Set<(p: HostContextProjection) => void>();
 export function subscribeLocal(
@@ -419,8 +419,8 @@ function emit(): void {
     // eventually-consistent, not transactional.
   }
   // Fan out to local iframe-side subscribers
-  // (canvas mount's display-mode state). Independent from the
-  // WS-send try/catch above — a send failure must not skip the
+  // (e.g. display-mode state on the mount handle). Independent from
+  // the WS-send try/catch above — a send failure must not skip the
   // local fan-out, and a subscriber throwing must not skip other
   // subscribers.
   for (const listener of localSubscribers) {

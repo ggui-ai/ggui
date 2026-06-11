@@ -202,16 +202,17 @@ export interface GguiConsumeHandlerDeps {
    */
   readonly activeConsumerRegistry?: ActiveConsumerRegistry;
   /**
-   * Canvas-mode lifecycle emitter. Fires
+   * Generation-progress lifecycle emitter. Fires
    * `consume_polling:open` on the `_ggui:lifecycle` channel when the
-   * handler enters its inline long-poll loop so the canvas animator
-   * transitions to its `listening` state. Closing is signalled by
-   * the existing `drain_ack` envelope (action consumed) — no
-   * dedicated `consume_polling:closed` emission.
+   * handler enters its inline long-poll loop so progress UIs can show
+   * a `listening` state. Closing is signalled by the existing
+   * `drain_ack` envelope (action consumed) — no dedicated
+   * `consume_polling:closed` emission.
    *
-   * Absent ⇒ no emission. Non-canvas deployments pay zero cost.
+   * Absent ⇒ no emission. Deployments without a lifecycle subscriber
+   * pay zero cost.
    */
-  readonly canvasLifecycle?: import('./canvas-lifecycle.js').CanvasLifecycleEmitter;
+  readonly lifecycleEmitter?: import('./lifecycle.js').GguiLifecycleEmitter;
 }
 
 /**
@@ -291,13 +292,13 @@ export function createGguiConsumeHandler(
           result.events.length === 0 &&
           result.status !== 'expired'
         ) {
-          // emit consume_polling:open so the canvas animator
-          // transitions to its `listening` state. We only emit once
+          // emit consume_polling:open so progress UIs can show a
+          // `listening` state. We only emit once
           // per consume call (not on every poll tick) because the
           // closing transition relies on the absence of further opens
           // for the same render; spamming would mask the close signal.
           // Fire-and-forget — absent emitter no-ops.
-          deps.canvasLifecycle?.emit(sessionId, {
+          deps.lifecycleEmitter?.emit(sessionId, {
             kind: 'consume_polling',
             state: 'open',
             sessionId,

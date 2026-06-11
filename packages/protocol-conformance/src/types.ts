@@ -477,6 +477,29 @@ export interface UnknownBehavior {
 // =============================================================================
 
 /**
+ * Optional shaping of the RUNNER-OWNED subscribe frame.
+ *
+ * The subscribe frame is not part of a fixture's `inputEnvelope` — the
+ * runner always sends it first, with its conventional payload
+ * (`{sessionId, appId: 'conformance', role: 'user'}`). Some contracts
+ * are only drivable by varying that frame itself; this object is the
+ * fixture's declarative knob for those variations. Additive
+ * vocabulary: new shaping fields land as optional members, mirroring
+ * the kit's authored-shape evolution discipline.
+ */
+export interface SubscribeFrameShaping {
+  /**
+   * When `true`, the runner OMITS `appId` from its subscribe payload.
+   * Drives SPEC §12.2's identity-default resolution path: `appId` is
+   * optional on the wire, and absence means the server resolves the
+   * caller's identity-default app (token binding, identity mapping,
+   * or deployment default). Default `false` — the runner stamps its
+   * conventional `appId: 'conformance'`.
+   */
+  readonly omitAppId?: boolean;
+}
+
+/**
  * One conformance-kit fixture. Authored as JSON under `./fixtures/**`,
  * consumed via the kit's loader, driven by either this package's
  * runner or third-party consumers of the JSON catalog.
@@ -503,6 +526,13 @@ export interface TestCase {
    * be empty. See {@link SetupStep}.
    */
   readonly setup: readonly SetupStep[];
+
+  /**
+   * Optional shaping of the runner-owned subscribe frame — see
+   * {@link SubscribeFrameShaping}. Absent means the runner's
+   * conventional subscribe payload is sent unmodified.
+   */
+  readonly subscribe?: SubscribeFrameShaping;
 
   /**
    * The envelope the runner feeds to the system under test. Opaque

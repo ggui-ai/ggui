@@ -127,7 +127,7 @@ import type { OperatorConfig, ThemeConfig } from "@ggui-ai/project-config";
 import { GguiJsonV1 } from "@ggui-ai/project-config";
 import type { DiscoveredPrimitiveCatalog, LoadedTheme } from "@ggui-ai/project-config/node";
 import { findGguiJson, loadTheme, safeLoadGguiJson } from "@ggui-ai/project-config/node";
-import type { Blueprint, CanvasLifecyclePayload, GguiSession } from "@ggui-ai/protocol";
+import type { Blueprint, GguiLifecyclePayload, GguiSession } from "@ggui-ai/protocol";
 import { LIFECYCLE_CHANNEL } from "@ggui-ai/protocol";
 import {
   GGUI_RENDER_RESOURCE_MIME,
@@ -1050,20 +1050,20 @@ export function defaultHandlers(deps: {
       >
     );
   }
-  // Canvas-mode lifecycle emitter — shared by handshake/render/consume so
-  // the three handlers publish to the reserved `_ggui:lifecycle`
-  // channel through one binding. Lazy-resolves the channel provider
-  // because `createGguiSessionChannelServer` runs after `defaultHandlers`;
-  // a static reference would always be null on first emit. Mirrors the
-  // pattern `ggui_emit`'s `sendEnvelope` uses below.
+  // Generation-progress lifecycle emitter — shared by handshake/render/
+  // consume so the three handlers publish to the reserved
+  // `_ggui:lifecycle` channel through one binding. Lazy-resolves the
+  // channel provider because `createGguiSessionChannelServer` runs after
+  // `defaultHandlers`; a static reference would always be null on first
+  // emit. Mirrors the pattern `ggui_emit`'s `sendEnvelope` uses below.
   //
-  // Fire-and-forget: a slow / failing publish degrades the canvas
-  // animator (no pill state change for that signal) but MUST NOT
+  // Fire-and-forget: a slow / failing publish degrades client-side
+  // progress indicators (no state change for that signal) but MUST NOT
   // impact the handler's primary result.
   const lifecycleChannelProvider = deps.stream?.channelProvider;
-  const canvasLifecycleEmitter = lifecycleChannelProvider
+  const lifecycleEmitter = lifecycleChannelProvider
     ? {
-        emit(sessionId: string, payload: CanvasLifecyclePayload): void {
+        emit(sessionId: string, payload: GguiLifecyclePayload): void {
           const channel = lifecycleChannelProvider();
           if (!channel) return;
           void channel
@@ -1093,7 +1093,7 @@ export function defaultHandlers(deps: {
         ...(deps.handshake.serverCapabilities
           ? { serverCapabilities: deps.handshake.serverCapabilities }
           : {}),
-        ...(canvasLifecycleEmitter ? { canvasLifecycle: canvasLifecycleEmitter } : {}),
+        ...(lifecycleEmitter ? { lifecycleEmitter } : {}),
       }) as SharedHandler<ZodRawShape, ZodRawShape>
     );
   }
@@ -1169,7 +1169,7 @@ export function defaultHandlers(deps: {
           : {}),
         ...(drainAckNotifier ? { drainAckNotifier } : {}),
         logger: drainTelemetryLogger,
-        ...(canvasLifecycleEmitter ? { canvasLifecycle: canvasLifecycleEmitter } : {}),
+        ...(lifecycleEmitter ? { lifecycleEmitter } : {}),
       }) as SharedHandler<ZodRawShape, ZodRawShape>
     );
     // 2026-05-14 — `ggui_runtime_claim_pending` retired alongside the
@@ -1314,7 +1314,7 @@ export function defaultHandlers(deps: {
         // across processes, but the defaults wire them to the same
         // instance.
         ...(deps.handshake ? { handshakeStore: deps.handshake.kvStore } : {}),
-        ...(canvasLifecycleEmitter ? { canvasLifecycle: canvasLifecycleEmitter } : {}),
+        ...(lifecycleEmitter ? { lifecycleEmitter } : {}),
       }) as SharedHandler<ZodRawShape, ZodRawShape>
     );
   }
@@ -8315,6 +8315,10 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
     ? createGguiSessionChannelServer({
         renderStore: renderStore ?? new InMemoryGguiSessionStore(),
         auth,
+        // Same identity → appId mapping the `/mcp` endpoint resolved
+        // above — subscribes that omit `payload.appId` resolve their
+        // identity-default through the identical rule (SPEC §12.2).
+        appIdFromIdentity,
         logger: logger.child({ component: "render-channel" }),
         path: typeof opts.renderChannel === "object" ? opts.renderChannel.path : undefined,
         streamBuffer:

@@ -617,15 +617,16 @@ export interface GguiRenderHandlerDeps {
   readonly channelNotifier?: ChannelNotifier;
 
   /**
-   * Canvas-mode lifecycle emitter. Fires `render_started` on the
-   * `_ggui:lifecycle` channel right after sessionId is minted so the
-   * canvas animator transitions from `ready`/`handshake` to
-   * `constructing` immediately — without waiting for the final commit
-   * envelope (which arrives after generation completes).
+   * Generation-progress lifecycle emitter. Fires `render_started` on
+   * the `_ggui:lifecycle` channel right after sessionId is minted so
+   * progress UIs can show a `constructing` state immediately —
+   * without waiting for the final commit envelope (which arrives
+   * after generation completes).
    *
-   * Absent ⇒ no emission. Non-canvas deployments pay zero cost.
+   * Absent ⇒ no emission. Deployments without a lifecycle subscriber
+   * pay zero cost.
    */
-  readonly canvasLifecycle?: import('./canvas-lifecycle.js').CanvasLifecycleEmitter;
+  readonly lifecycleEmitter?: import('./lifecycle.js').GguiLifecycleEmitter;
 
   /**
    * Content-addressable code-blob store.
@@ -1318,10 +1319,10 @@ export function createGguiRenderHandler(
         payload: { handshakeId: parsed.handshakeId, story },
       });
 
-      // Emit render_started so the canvas animator transitions to its
+      // Emit render_started so progress UIs can show a
       // `constructing` state immediately, without waiting for cold-
       // gen to settle. Fire-and-forget.
-      deps.canvasLifecycle?.emit(sessionId, {
+      deps.lifecycleEmitter?.emit(sessionId, {
         kind: 'render_started',
         sessionId,
         intent: story.intent,

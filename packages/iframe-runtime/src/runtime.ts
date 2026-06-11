@@ -206,7 +206,7 @@ const APP_INFO = { name: 'ggui-iframe-runtime', version: RENDERER_VERSION } as c
  * `ui/initialize` so spec-compliant hosts know `ui/request-display-mode`
  * requests for these values are honored. The runtime emits
  * `ui/request-display-mode` from the `Element.requestFullscreen`
- * interceptor + the canvas-mode display-mode escalation policy; both
+ * interceptor + the display-mode escalation policy; both
  * target this enum.
  */
 const APP_CAPABILITIES: { availableDisplayModes: ('inline' | 'fullscreen' | 'pip')[] } = {

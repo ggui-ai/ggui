@@ -95,14 +95,18 @@ export class InvalidCompleteError extends Error {
 }
 
 /**
- * Closed enum union of every error code the render + handshake gate
- * stack can throw for gadget-related rejections. Keeps the wire
- * vocabulary single-sourced so the cloud, standalone server, and SDK
- * error matchers don't silently diverge as new gate paths land.
+ * Closed enum union of every error code the gadget gate stack can
+ * throw — `ggui_render` plus the ops-blueprint register/generate
+ * paths, which share the same asserts. Keeps the wire vocabulary
+ * single-sourced so the cloud, standalone server, and SDK error
+ * matchers don't silently diverge as new gate paths land.
  *
- * Tag stays as the readonly `code` field on each error class above
- * (`GadgetNotRegisteredError.code`, `GadgetPublicEnvMissingError.code`).
- * This union is the type-level closure consumers can switch on.
+ * Tag stays as the readonly `code` field on each error class in the
+ * sibling assert modules (`GadgetNotRegisteredError.code` in
+ * `./assert-gadgets.ts`, `GadgetPublicEnvMissingError.code` in
+ * `./assert-public-env.ts`, `DuplicateGadgetHookError.code` in
+ * `./assert-no-duplicate-gadget-hooks.ts`). This union is the
+ * type-level closure consumers can switch on.
  *
  * ## NOT in this union: `gadget_preservation:<hook>`
  *
@@ -129,5 +133,4 @@ export type GadgetGateErrorCode =
   | 'duplicate_gadget_hook'
   | 'gadget_not_registered'
   | 'gadget_package_mismatch'
-  | 'gadget_public_env_missing'
-  | 'unknown_generator';
+  | 'gadget_public_env_missing';

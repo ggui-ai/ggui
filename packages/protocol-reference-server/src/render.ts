@@ -30,6 +30,19 @@
 import type { ActionSpec, HostContextProjection } from '@ggui-ai/protocol';
 
 /**
+ * Deployment-level default app id — this server's identity-default
+ * (SPEC §12.2: a subscribe MAY omit `appId`; the server resolves the
+ * caller's identity-default app). The reference server's identity
+ * model is no-auth — every caller is the same anonymous identity — so
+ * the per-identity mapping a real deployment configures collapses to
+ * one deployment-wide constant. The value matches the conformance
+ * kit's conventional tenant (`'conformance'`, the appId the kit's
+ * runner stamps on its subscribe frames) because grading by the kit is
+ * the only deployment context this package has.
+ */
+export const DEPLOYMENT_DEFAULT_APP_ID = 'conformance';
+
+/**
  * One appended consume-buffer event. The ledger is the reference
  * server's stand-in for a real ggui server's persisted event store —
  * `sequence` is assigned at append time, starts at 1, and increases
@@ -176,7 +189,7 @@ export class GguiSessionStore {
   }
 
   addSubscriber(sessionId: string, subscriber: Subscriber): GguiSession {
-    const render = this.create(sessionId, 'conformance');
+    const render = this.create(sessionId, DEPLOYMENT_DEFAULT_APP_ID);
     render.subscribers.add(subscriber);
     return render;
   }
@@ -197,7 +210,7 @@ export class GguiSessionStore {
    * separate registration directive.
    */
   declareActionSpec(sessionId: string, actionSpec: ActionSpec): void {
-    const render = this.create(sessionId, 'conformance');
+    const render = this.create(sessionId, DEPLOYMENT_DEFAULT_APP_ID);
     render.actionSpec = actionSpec;
   }
 
@@ -213,7 +226,7 @@ export class GguiSessionStore {
    * directive ordering relative to subscribe doesn't matter.
    */
   setVersionOverride(sessionId: string, version: string): void {
-    const render = this.create(sessionId, 'conformance');
+    const render = this.create(sessionId, DEPLOYMENT_DEFAULT_APP_ID);
     render.versionOverride = version;
   }
 
@@ -232,7 +245,7 @@ export class GguiSessionStore {
    * directive ordering relative to subscribe doesn't matter.
    */
   nextStreamSeq(sessionId: string): number {
-    const render = this.create(sessionId, 'conformance');
+    const render = this.create(sessionId, DEPLOYMENT_DEFAULT_APP_ID);
     render.streamSeq += 1;
     return render.streamSeq;
   }

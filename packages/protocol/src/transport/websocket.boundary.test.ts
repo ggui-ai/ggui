@@ -257,7 +257,7 @@ describe('websocket transport boundary — discriminator coverage', () => {
       'channel_error',
       // A2 — action-drain ack.
       'drain_ack',
-      // Canvas-mode host-context capture.
+      // Host-context capture.
       'host_context_observed',
       // R7 — ledger replay frame.
       'render_event',

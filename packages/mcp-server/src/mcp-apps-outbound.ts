@@ -470,10 +470,10 @@ function buildCspMeta(
    * same-origin deployments, e.g. `ggui serve` on `127.0.0.1`), derive
    * the CSP block from `runtimeUrl`. The runtime + WS + state endpoints
    * all live on the runtime's origin in same-origin deployments, so
-   * declaring it covers every fetch the canvas iframe makes.
+   * declaring it covers every fetch the sandboxed iframe makes.
    *
    * Without this fallback, local dev with cross-origin sandbox proxies
-   * (sample-agent's `:7790/sandbox.html` writing the canvas HTML that
+   * (sample-agent's `:7790/sandbox.html` writing the sandbox HTML that
    * references `:6786/_ggui/iframe-runtime.js`) trips a `script-src`
    * violation that blanks the iframe — verified live 2026-05-27.
    */
@@ -807,7 +807,7 @@ export interface SelfContainedShellInputs {
    * `{@link lastSequence}` as the initial cursor.
    *
    * Absent ⇒ runtime stays in WS-only mode. Operators that want the
-   * fallback path lit up MUST thread this through (the canvas/inline
+   * fallback path lit up MUST thread this through (the first-party
    * shell builders do; callers composing their own shells SHOULD).
    */
   readonly pollingUrl?: McpAppAiGguiRenderMeta["pollingUrl"];

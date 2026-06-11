@@ -24,10 +24,10 @@
  *
  * What the projection KEEPS:
  *
- *   - `availableDisplayModes` / `currentDisplayMode` — drives canvas-mode
- *     display-mode escalation policy (see canvas-mode-detail-displaymode.md).
+ *   - `availableDisplayModes` / `currentDisplayMode` — drives the
+ *     display-mode escalation policy (MCP Apps inline/fullscreen/pip).
  *   - `containerDimensions` — lets the agent reason about layout density
- *     and lets the canvas reflow on resize.
+ *     and lets the rendered UI reflow on resize.
  *   - `platform` / `deviceCapabilities` — feeds the generator's
  *     responsive-UI prompts.
  *   - `locale` / `timeZone` — useful for the agent's date/number rendering.

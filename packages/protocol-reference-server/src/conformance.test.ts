@@ -8,7 +8,7 @@
  * kit — the vendor-neutrality claim is grounded.
  *
  * Expected outcome:
- *   - 8 fixtures PASS (see {@link EXPECTED_PASSING}).
+ *   - 9 fixtures PASS (see {@link EXPECTED_PASSING}).
  *   - 3 fixtures SKIP (see {@link EXPECTED_SKIPPED}) — browser-level
  *     directives the host throws on (`renderer-url-override`,
  *     `ui-initialize-response-override`) or the matcher's
@@ -88,8 +88,19 @@ import { ReferenceServer } from './server.js';
  *     host's `readSessionField('hostContext')` introspection seam —
  *     the kit's third grading mechanism (session-state), beside the
  *     wire-frame matchers and the pure-function catalogs.
+ *
+ *   - `absent-appid-defaults`: the kit's subscribe OMITS `appId`
+ *     (`subscribe.omitAppId`). SPEC §12.2 makes `appId` optional —
+ *     absence resolves the caller's identity-default app, which for
+ *     this no-auth server is the deployment-level
+ *     `DEPLOYMENT_DEFAULT_APP_ID`. The provision-on-subscribe path
+ *     binds the resolved value; the kit grades it by session-state
+ *     read-back of the row's `appId` through `readSessionField` —
+ *     proving the default binds a real tenant, never an undefined
+ *     one.
  */
 const EXPECTED_PASSING = [
+  'absent-appid-defaults',
   'action-ack-sequence',
   'action-payload-schema-violation',
   'app-mismatch',

@@ -27,7 +27,18 @@ import type {
  */
 export interface SubscribePayload {
   sessionId: string;
-  appId: string;
+  /**
+   * App (tenant) identity. OPTIONAL — absent ⇒ the server resolves the
+   * caller's identity-default app, the same resolution rule the MCP
+   * route uses: a token binding (`wsToken` binds `(sessionId, appId)`)
+   * wins, then the deployment's identity → appId mapping, then the
+   * deployment default. Clients never invent a default; the identity
+   * resolves it server-side.
+   *
+   * When present it MUST match the GguiSession's bound `appId` or the
+   * subscribe fails `APP_MISMATCH` (SPEC §12.2.3).
+   */
+  appId?: string;
   /** Role of the subscriber: 'user' (Portal) or 'agent' (MCP bridge) */
   role?: 'user' | 'agent';
   /**

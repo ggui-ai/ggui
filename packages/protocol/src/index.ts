@@ -69,7 +69,7 @@ export * from "./types/llm-route";
 export * from "./types/openrouter-models";
 export * from "./types/interface-context";
 export * from "./types/host-context";
-export * from "./types/canvas-lifecycle";
+export * from "./types/lifecycle";
 export * from "./types/data-bindings";
 export * from "./types/feedback";
 export * from "./types/data-contract";

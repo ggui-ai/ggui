@@ -6,6 +6,33 @@
  * schema change; the most recent change anchors {@link PROTOCOL_VERSION}.
  *
  * --------------------------------------------------------------------
+ * Retired-surface cleanup (2026-06-11, pre-launch):
+ *
+ *   rc1. **`SubscribePayload.appId` required → optional (widening).**
+ *      Absent appId no longer flows through raw: the server resolves
+ *      the caller's identity-default app before any store work —
+ *      token-bound appId, else the deployment's identity mapping
+ *      (`defaultAppIdFromIdentity`, same rule as the MCP route), else
+ *      the deployment default. A PRESENT appId must still match the
+ *      GguiSession's bound app or subscribe fails `APP_MISMATCH`.
+ *      Closes the absent-appId bifurcation (silent provisioning of a
+ *      GguiSession row with `appId: undefined` on in-memory stores).
+ *
+ *   rc2. **`CanvasLifecyclePayload` → `GguiLifecyclePayload`** (and
+ *      `validateCanvasLifecyclePayload` → `validateGguiLifecyclePayload`).
+ *      Internal type rename only — the `_ggui:lifecycle` reserved
+ *      channel and its event vocabulary are unchanged on the wire.
+ *      Canvas MODE is discarded (MCP Apps display modes are the
+ *      model); the lifecycle channel is generation-progress, not
+ *      canvas.
+ *
+ *   rc3. **`unknown_generator` leaves `GadgetGateErrorCode`.** The
+ *      throwing gate had no production call site (render's strict
+ *      override path carries no generator field); the live surface is
+ *      the forgiving `GENERATOR_UNKNOWN` handshake draft finding.
+ *      Render-time generator selection is deferred to v2.
+ *
+ * --------------------------------------------------------------------
  * Synchronous wired-action dispatch retired — agent-routed consume
  * loop is the single action model (2026-06-10, BREAKING, pre-launch):
  *

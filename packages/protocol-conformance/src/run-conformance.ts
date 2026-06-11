@@ -251,11 +251,16 @@ async function runOneFixture(
     transport = await openWsTransport({ kind: 'ws', url: wsUrl, auth: config.auth });
 
     const sessionId = extractSessionId(fixture, setupSteps);
+    // `subscribe.omitAppId` (SubscribeFrameShaping) drops the runner's
+    // conventional `appId: 'conformance'` stamp — the probe for SPEC
+    // §12.2's identity-default resolution (absent appId ⇒ the server
+    // resolves the caller's identity-default app).
+    const omitAppId = fixture.subscribe?.omitAppId === true;
     transport.send({
       type: 'subscribe',
       payload: {
         sessionId,
-        appId: 'conformance',
+        ...(omitAppId ? {} : { appId: 'conformance' }),
         role: 'user',
         ...(maybeSupportedVersions(fixture.expectedBehavior) ?? {}),
       },

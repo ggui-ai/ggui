@@ -74,7 +74,7 @@ export type WebSocketMessageType =
   | 'channel_error' // Server → Client: subscribe rejected / poll failed / tool errored
   // ─── Action-drain ack ───
   | 'drain_ack' // Server → Client: ggui_consume popped an ActionEnvelope; iframe cancels its claim timer
-  // ─── Canvas-mode host-context capture ───
+  // ─── Host-context capture ───
   | 'host_context_observed' // Client → Server: iframe echoes McpUiHostContext from ui/initialize + on host-context-changed
   // ─── R7 GguiSessionEvent ledger replay ───
   | 'render_event'; // Server → Client: one GguiSessionEvent from the per-render ledger; emitted on subscribe-time replay when SubscribePayload.sinceSequence is set
@@ -136,7 +136,7 @@ export type WebSocketMessage =
   | (WsMessageBase & { type: 'channel_error'; payload: ChannelErrorPayload })
   // Action-drain ack (Server → Client only).
   | (WsMessageBase & { type: 'drain_ack'; payload: DrainAckPayload })
-  // Canvas-mode host-context capture (Client → Server only).
+  // Host-context capture (Client → Server only).
   // The iframe-runtime extracts a `HostContextProjection` from the MCP
   // Apps `ui/initialize` response and echoes it here so the server can
   // persist it on `GguiSession.hostContext` for agent visibility.

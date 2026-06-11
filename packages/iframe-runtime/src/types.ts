@@ -110,7 +110,7 @@ export type McpAppAiGguiMetaParseFailureReason =
  * meta is extracted from the `ui/initialize` response (Reading-A path),
  * the parser opportunistically projects the surrounding
  * `McpUiHostContext` into this field so the runtime can:
- *   - drive canvas-mode display-mode escalation
+ *   - drive display-mode escalation (MCP Apps inline/fullscreen/pip)
  *   - echo to the server (live-channel `host_context_observed` envelope)
  *   - feed the agent on next handshake/consume
  *

@@ -1,0 +1,18 @@
+{
+  "name": "absent-appid-defaults",
+  "description": "A subscribe that OMITS `appId` resolves the caller's identity-default app and acks. SPEC §12.2's subscribe-payload table makes `appId` optional: absent ⇒ the server resolves it from the connection's authenticated identity (token binding, else identity mapping, else the deployment default) — clients never invent the default. Under the kit's harness the identity-default is the conventional tenant 'conformance', so the provision-on-subscribe path must bind exactly that value to the fresh render row — a real string tenant, never an undefined one (the corrupt-row failure mode this fixture locks out: a silent ack whose provisioned row carries appId undefined, unreachable by any later legal subscribe). The runner-owned subscribe frame IS the probe (`subscribe.omitAppId` drops the runner's conventional appId stamp; the inputEnvelope is descriptive, not dispatched); graded as a session-state read-back of the bound `appId` through the host's readSessionField seam. The §12.2.3 APP_MISMATCH tenancy gate is the sibling `app-mismatch` fixture's claim and still applies to the RESOLVED value.",
+  "skipReason": null,
+  "setup": [],
+  "subscribe": {
+    "omitAppId": true
+  },
+  "inputEnvelope": {
+    "type": "handshake",
+    "sessionId": "ck-absent-appid-1"
+  },
+  "expectedBehavior": {
+    "kind": "session-state",
+    "field": "appId",
+    "expected": "conformance"
+  }
+}

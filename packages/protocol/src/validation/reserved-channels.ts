@@ -62,14 +62,14 @@ export const PREVIEW_CHANNEL = '_ggui:preview';
 export const CONTRACT_ERROR_CHANNEL = '_ggui:contract-error';
 
 /**
- * Reserved channel for canvas-mode render
- * lifecycle envelopes — handshake / render / consume lifecycle signals
- * that drive the ggui-animator's state machine.
+ * Reserved channel for generation-progress lifecycle envelopes —
+ * handshake / render / consume lifecycle signals that drive
+ * client-side progress indicators.
  *
- * Body shape: `CanvasLifecyclePayload` (discriminated on `kind`). The
- * server emits; canvas iframes (subscribed render-wide) consume.
- * Inline iframes (pinned to a single render) do not receive
- * envelopes on this channel — delivery is gated by subscription scope.
+ * Body shape: `GguiLifecyclePayload` (discriminated on `kind`). The
+ * server emits; render-wide subscribers consume. Iframes pinned to a
+ * single render do not receive envelopes on this channel — delivery
+ * is gated by subscription scope.
  *
  * Agent-authored `streamSpec` MUST NOT declare this channel; the
  * structural validator rejects it alongside every other reserved-
@@ -290,14 +290,14 @@ export const BUILTIN_RESERVED_VALIDATORS: ReadonlyMap<
   ReservedChannelValidator
 > = new Map([
   [CONTRACT_ERROR_CHANNEL, validateContractErrorPayload],
-  [LIFECYCLE_CHANNEL, validateCanvasLifecyclePayload],
+  [LIFECYCLE_CHANNEL, validateGguiLifecyclePayload],
   // PREVIEW_CHANNEL intentionally absent — injected at composition time.
 ]);
 
 /**
  * Structural validator for {@link LIFECYCLE_CHANNEL} payloads. The
  * wire shape is the closed discriminated union
- * {@link CanvasLifecyclePayload}; we narrow on `kind` and check the
+ * {@link GguiLifecyclePayload}; we narrow on `kind` and check the
  * required fields per variant. Defines the failure mode the protocol
  * bar requires for reserved channels.
  *
@@ -307,7 +307,7 @@ export const BUILTIN_RESERVED_VALIDATORS: ReadonlyMap<
  *   - unknown `kind` values (closed union — new kinds bump protocol)
  *   - missing or wrong-typed variant-specific fields
  */
-export function validateCanvasLifecyclePayload(
+export function validateGguiLifecyclePayload(
   payload: unknown,
 ): ValidationResult {
   const violations: ContractViolation[] = [];

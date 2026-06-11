@@ -38,7 +38,11 @@ import {
   InMemoryGguiSessionStore,
 } from '@ggui-ai/mcp-server-core/in-memory';
 import type { Logger } from './logger.js';
-import { createGguiSessionChannelServer } from './ggui-session-channel.js';
+import { DEFAULT_BUILDER_APP_ID } from './auth.js';
+import {
+  createGguiSessionChannelServer,
+  type GguiSessionChannelOptions,
+} from './ggui-session-channel.js';
 
 /**
  * Silent logger that records `logger.error` event names in call order.
@@ -77,12 +81,29 @@ interface Fixture {
 }
 
 /**
+ * Optional channel-composition extras a test can layer onto the
+ * fixture's `createGguiSessionChannelServer` call — the auth-plane
+ * seams the identity-default appId-resolution suite exercises
+ * (`appIdFromIdentity` override, wsToken bootstrap plumbing, console
+ * cookie plumbing). Authored as a factory over the fixture's
+ * `sessionId` so credential verifiers can bind to the render the
+ * fixture committed.
+ */
+type BootChannelExtras = Pick<
+  GguiSessionChannelOptions,
+  'appIdFromIdentity' | 'bootstrap' | 'cookieAuth'
+>;
+
+/**
  * Boot a channel server over a bare http server, commit a component
  * render carrying the given actionSpec, and open (but do NOT
  * subscribe) a real WS client. Hand back frame-pump helpers. The WS
  * `open` event has fired when this resolves.
  */
-async function bootChannel(actionSpec: ActionSpec): Promise<Fixture> {
+async function bootChannel(
+  actionSpec: ActionSpec,
+  makeExtras?: (sessionId: string) => BootChannelExtras,
+): Promise<Fixture> {
   const store = new InMemoryGguiSessionStore();
   const sessionId = randomUUID();
   const now = Date.now();
@@ -106,6 +127,7 @@ async function bootChannel(actionSpec: ActionSpec): Promise<Fixture> {
     renderStore: store,
     auth: new InMemoryAuthAdapter({ devAllowAll: true }),
     logger: createRecordingLogger(loggedErrors),
+    ...(makeExtras !== undefined ? makeExtras(sessionId) : {}),
   });
 
   const httpServer = createServer();
@@ -397,5 +419,126 @@ describe('per-socket inbound ordering — inboundChain serializes async frame ha
     // End-to-end proof the post-poison action was accepted.
     const payload = await persistedPayload(fx);
     expect(payload.action).toBe('archive');
+  });
+});
+
+describe('handleSubscribe — identity-default appId resolution (absent payload.appId, SPEC §12.2)', () => {
+  let fx: Fixture | null = null;
+  afterEach(async () => {
+    if (fx) {
+      await fx.close();
+      fx = null;
+    }
+  });
+
+  const IDENTITY_DEFAULT_APP = 'app-identity-default';
+
+  /** Wire-shaped subscribe frame WITHOUT `appId` — the resolution probe. */
+  function subscribeSansAppId(sessionId: string, extra?: Record<string, unknown>): string {
+    return JSON.stringify({
+      type: 'subscribe',
+      payload: { sessionId, ...(extra ?? {}) },
+      requestId: randomUUID(),
+    });
+  }
+
+  it('absent appId + existing render bound to the identity-default → ack (no APP_MISMATCH)', async () => {
+    // The fixture's render is bound to APP_ID; the deployment's
+    // identity mapping resolves the same value — the resolved default
+    // passes the EXISTING tenancy gate unchanged.
+    fx = await bootChannel({}, () => ({ appIdFromIdentity: () => APP_ID }));
+    fx.ws.send(subscribeSansAppId(fx.sessionId));
+    const ack = await fx.nextFrame('ack');
+    expect((ack['payload'] as { session?: { id?: string } }).session?.id).toBe(fx.sessionId);
+    expect(fx.frames.filter((f) => f['type'] === 'error')).toEqual([]);
+  });
+
+  it('absent appId + no render → the provisioned row carries the RESOLVED appId (never undefined)', async () => {
+    // Regression lock on the proven corrupt-row bug: absent appId +
+    // in-memory store used to silently ack a provisioned row whose
+    // appId was `undefined` — a tenant-less row no later subscribe
+    // could legally reach.
+    fx = await bootChannel({}, () => ({ appIdFromIdentity: () => IDENTITY_DEFAULT_APP }));
+    const freshSessionId = randomUUID();
+    fx.ws.send(subscribeSansAppId(freshSessionId));
+    await fx.nextFrame('ack');
+    const stored = await fx.store.get(freshSessionId);
+    expect(stored).not.toBeNull();
+    expect(typeof stored!.appId).toBe('string');
+    expect(stored!.appId).toBe(IDENTITY_DEFAULT_APP);
+  });
+
+  it('absent appId + render bound to a DIFFERENT app → APP_MISMATCH (tenancy still enforced)', async () => {
+    // Identity resolves to a default that does NOT own the render —
+    // the identity-default is a resolution rule, not a tenancy bypass.
+    fx = await bootChannel({}, () => ({ appIdFromIdentity: () => IDENTITY_DEFAULT_APP }));
+    fx.ws.send(subscribeSansAppId(fx.sessionId));
+    const err = await fx.nextFrame('error');
+    expect((err['payload'] as { code: string }).code).toBe('APP_MISMATCH');
+    expect(fx.frames.filter((f) => f['type'] === 'ack')).toEqual([]);
+  });
+
+  it('absent appId without an appIdFromIdentity override falls back to defaultAppIdFromIdentity (builder → DEFAULT_BUILDER_APP_ID)', async () => {
+    // devAllowAll resolves `{kind: 'builder'}` — the OSS fallback maps
+    // it to the well-known builder app, same as the `/mcp` endpoint.
+    fx = await bootChannel({});
+    const freshSessionId = randomUUID();
+    fx.ws.send(subscribeSansAppId(freshSessionId));
+    await fx.nextFrame('ack');
+    const stored = await fx.store.get(freshSessionId);
+    expect(stored).not.toBeNull();
+    expect(stored!.appId).toBe(DEFAULT_BUILDER_APP_ID);
+  });
+
+  it('absent appId under a bound wsToken resolves to the token-bound appId — no BOOTSTRAP_APP_MISMATCH on absence', async () => {
+    // The empirical probe's bifurcation: absent appId under a bound
+    // token used to fail BOOTSTRAP_APP_MISMATCH with "subscribe
+    // targets 'undefined'". The token binds `(sessionId, appId)` —
+    // absence resolves to the binding.
+    fx = await bootChannel({}, (sessionId) => ({
+      bootstrap: {
+        verify: (token) =>
+          token === 'tok-valid'
+            ? { ok: true, sessionId, appId: APP_ID }
+            : { ok: false, reason: 'invalid' },
+        issueSessionToken: () => 'reconnect-token-1',
+        refresh: () => ({ ok: false, reason: 'invalid' }),
+      },
+    }));
+    fx.ws.send(subscribeSansAppId(fx.sessionId, { wsToken: 'tok-valid' }));
+    const ack = await fx.nextFrame('ack');
+    expect((ack['payload'] as { sessionToken?: string }).sessionToken).toBe('reconnect-token-1');
+    expect(fx.frames.filter((f) => f['type'] === 'error')).toEqual([]);
+  });
+
+  it('a PRESENT appId contradicting the wsToken binding still rejects BOOTSTRAP_APP_MISMATCH', async () => {
+    fx = await bootChannel({}, (sessionId) => ({
+      bootstrap: {
+        verify: (token) =>
+          token === 'tok-valid'
+            ? { ok: true, sessionId, appId: APP_ID }
+            : { ok: false, reason: 'invalid' },
+        issueSessionToken: () => 'reconnect-token-1',
+        refresh: () => ({ ok: false, reason: 'invalid' }),
+      },
+    }));
+    fx.ws.send(
+      subscribeSansAppId(fx.sessionId, { wsToken: 'tok-valid', appId: 'app-imposter' }),
+    );
+    const err = await fx.nextFrame('error');
+    expect((err['payload'] as { code: string }).code).toBe('BOOTSTRAP_APP_MISMATCH');
+  });
+
+  it('absent appId under a console cookie resolves to the cookie-bound appId — no DEVTOOL_COOKIE_APP_MISMATCH on absence', async () => {
+    fx = await bootChannel({}, (sessionId) => ({
+      cookieAuth: {
+        readCookie: () => 'cookie-value',
+        verify: () => ({ sessionId, appId: APP_ID }),
+      },
+    }));
+    fx.ws.send(subscribeSansAppId(fx.sessionId));
+    const ack = await fx.nextFrame('ack');
+    expect((ack['payload'] as { session?: { id?: string } }).session?.id).toBe(fx.sessionId);
+    expect(fx.frames.filter((f) => f['type'] === 'error')).toEqual([]);
   });
 });
