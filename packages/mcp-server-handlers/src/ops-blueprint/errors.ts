@@ -22,6 +22,14 @@
  * Recovery: omit the `generator` field to use
  * `registry.defaultGenerator()`, or register the missing generator
  * before re-invoking.
+ *
+ * Not the retired agent-surface `unknown_generator` gate (rc3,
+ * retired-surface cleanup 2026-06-11 — see `@ggui-ai/protocol`'s
+ * version.ts changelog): the agent surface handles a bad
+ * `blueprintDraft.generator` hint forgivingly as the
+ * `GENERATOR_UNKNOWN` handshake finding (`renders/assert-generator.ts`);
+ * THIS error is the operator registry's strict slug lookup and stays
+ * live. Don't re-unify them.
  */
 export class GeneratorNotFoundError extends Error {
   readonly code = "generator_not_found" as const;

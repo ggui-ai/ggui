@@ -128,6 +128,19 @@ export class InvalidCompleteError extends Error {
  * `gadget_preservation:*` is the CODE-quality finding (LLM output
  * needs another pass). Conflating them would lose the "where in the
  * pipeline did this fail" signal that each consumer relies on.
+ *
+ * ## Also NOT in this union: ops-blueprint's `generator_not_found`
+ *
+ * The agent-surface `unknown_generator` gate left this union in rc3
+ * (retired-surface cleanup, 2026-06-11 — see `@ggui-ai/protocol`'s
+ * version.ts changelog): a bad `blueprintDraft.generator` hint is handled
+ * FORGIVINGLY as the `GENERATOR_UNKNOWN` handshake finding (see
+ * `./assert-generator.ts`), never thrown. Ops-blueprint's
+ * `GeneratorNotFoundError` (`generator_not_found` in
+ * `../ops-blueprint/errors.ts`) is a DIFFERENT, still-live concept —
+ * a strict slug lookup against the multi-generator ops registry — not
+ * a resurrection of the retired agent-surface gate. Don't re-unify
+ * them.
  */
 export type GadgetGateErrorCode =
   | 'duplicate_gadget_hook'

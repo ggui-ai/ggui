@@ -66,6 +66,18 @@ function createRecordingLogger(loggedErrors: string[]): Logger {
 
 const APP_ID = 'app-channel-test';
 
+/**
+ * Validating narrower for parsed WS frames — is `value` a non-null,
+ * non-array object? Same predicate shape as the conformance kit's
+ * shared `is-record.ts`; private here because `@ggui-ai/mcp-server`
+ * has no shared copy. Every frame the channel server emits is a JSON
+ * object, so a non-record frame is a server bug worth failing loudly
+ * on rather than casting past.
+ */
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
 interface Fixture {
   readonly httpServer: HttpServer;
   readonly store: InMemoryGguiSessionStore;
@@ -148,7 +160,11 @@ async function bootChannel(
   const frames: Record<string, unknown>[] = [];
   const waiters: Array<() => void> = [];
   ws.on('message', (raw) => {
-    frames.push(JSON.parse(String(raw)) as Record<string, unknown>);
+    const parsed: unknown = JSON.parse(String(raw));
+    if (!isRecord(parsed)) {
+      throw new Error(`channel frame is not a JSON object: ${String(raw)}`);
+    }
+    frames.push(parsed);
     for (const wake of waiters.splice(0)) wake();
   });
   const nextFrame = async (type: string): Promise<Record<string, unknown>> => {

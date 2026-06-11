@@ -382,6 +382,16 @@ postRpc('ui/initialize',{
 // Value-resolution only — no `--ggui-*` token added or renamed.
 const GGUI_RENDER_SHELL_SURFACE = `var(--ggui-color-surface, #1e293b)`;
 
+// `#ggui-root` here is LOAD-BEARING for the shell script (NOT a React
+// mount target): the inline script grabs it as `rootEl` for the
+// pre-mount overlays ("Initializing…", "Waiting for tool result…",
+// bootstrap-failure messages) and clears it before injecting the
+// runtime bundle. The runtime itself mounts into its own
+// `<ul data-ggui-session-root>` appended to `document.body`
+// (iframe-runtime `status-dom.ts#ensureStatusDom`), so `#ggui-root`
+// stays empty after a successful mount — that is expected, not a bug.
+// The self-contained shell (`buildSelfContainedShell`) has no overlay
+// script and therefore no anchor div at all.
 export const GGUI_RENDER_SHELL_HTML = `<!doctype html>
 <html lang="en" style="height:100%;background-color:${GGUI_RENDER_SHELL_SURFACE}"><head><meta charset="utf-8"><title>ggui render</title></head>
 <body style="margin:0;height:100%;min-height:480px;background-color:${GGUI_RENDER_SHELL_SURFACE}"><div id="ggui-root" data-ggui-shell="thin" style="height:100%;min-height:480px"></div>
@@ -969,10 +979,16 @@ export function buildSelfContainedShell(opts: SelfContainedShellInputs): string 
   // embedding. `var(--ggui-color-surface, …)` resolves to the active
   // theme's per-mode surface once the iframe-runtime injects the `:root`
   // theme vars; the static dark fallback covers pre-resolve paint.
+  // No anchor div: the iframe-runtime never mounts into a server-
+  // provided container — it appends its own `<ul data-ggui-session-root>`
+  // mount target to `document.body` at boot (iframe-runtime
+  // `status-dom.ts#ensureStatusDom`). The thin postMessage shell's
+  // `#ggui-root` is different: its inline script uses that div for
+  // pre-mount overlays, which this shell has none of (the runtime boots
+  // synchronously from the inline `__GGUI_META__` global).
   return `<!doctype html>
 <html lang="en" style="background-color:${GGUI_RENDER_SHELL_SURFACE}"><head><meta charset="utf-8"><title>ggui render</title></head>
 <body style="background-color:${GGUI_RENDER_SHELL_SURFACE}">
-<div id="ggui-root" data-ggui-shell="self-contained"></div>
 <script>window.__GGUI_META__ = ${json};</script>
 <script type="module" crossorigin="anonymous" src="${safeRuntimeUrl}"></script>
 </body></html>`;

@@ -369,7 +369,7 @@ export const renderOutputSchema = z.object({
   blueprintId: z
     .string()
     .describe(
-      'Opaque id of the materialised component for this render. Equal across two renders means the same cached component was served (a fresh generation mints a new id; a reuse returns the stored one).',
+      'Opaque id of the materialised component for this render. On the handshake-decided reuse paths (accept a cache-origin proposal, or a variance re-aim that resolves to an existing variant) it is the stored id — equal ids across renders mean the same stored component. override.contract always generates cold and mints a fresh id, even for an identical contract.',
     ),
   variantKey: z
     .string()

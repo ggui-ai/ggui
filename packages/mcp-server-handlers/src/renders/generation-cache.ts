@@ -146,9 +146,11 @@ function readScalarNumber(
  * per entry and serializing the full scope would bloat the endpoint
  * response for no paint-time benefit.
  *
- * `contractKey` + `kind` come from the blueprint-registry shape — the
- * id (`entry.key`) is `${kind}:${contractKey}` so the console can
- * project the two halves for ops display without re-parsing.
+ * `contractKey` + `kind` come from the blueprint-registry row's
+ * metadata. The id (`entry.key`) is the opaque `bp_<uuid>` minted once
+ * at first registration — slot identity is NOT derivable from it, so
+ * the console gets `kind` + `contractKey` projected as their own
+ * fields for ops display.
  * `hitCount` / `lastHitAt` are populated by `recordBlueprintHit`.
  */
 export interface GenerationCacheEntry {
@@ -231,7 +233,11 @@ export async function listGenerationCache(
  *
  * The id is whatever `listGenerationCache` returned, which is the raw
  * `entry.key` from the vector store. For blueprint-registry rows that's
- * `${kind}:${contractKey}` (e.g. `template:abc123...`). The function
+ * the opaque `bp_<uuid>` minted once per `(kind, contractKey,
+ * variantKey)` slot. Deleting a row leaves the slot's index binding
+ * dangling; the next registration at the same slot self-heals (drops
+ * the stale binding, mints a fresh id — see `registerBlueprint`), so a
+ * delete→re-prime lands on the same slot under a new id. The function
  * doesn't gate on shape — operators can delete any row by id from this
  * surface, and the row's shape is the registry's concern.
  */
