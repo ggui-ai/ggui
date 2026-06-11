@@ -298,6 +298,88 @@ describe('runRegisterAuthorKey', () => {
     });
   });
 
+  // --auth=bearer escape hatch (de-Cognito follow-up, 2026-06-11) —
+  // self-hosted registries authenticate with a static publish token;
+  // the register verb routes through the same `acquireAuthToken`
+  // strategy the publish verbs use.
+  it('--auth=bearer --token sends the explicit bearer (no login session needed)', async () => {
+    // Deliberately NO seedFreshToken() — bearer auth must not read
+    // ~/.ggui/auth.json at all.
+    seedKeypair('@a');
+    const fetchStub = makeFetchStub(() =>
+      jsonResponse(201, {
+        subject: 'self-hosted-sub',
+        keyId: 'derivedKeyId',
+        publicKeyBase64: 'irrelevant',
+      }),
+    );
+    const outcome = await runRegisterAuthorKey(
+      {
+        scope: '@a',
+        registry: REGISTRY_URL,
+        auth: { auth: 'bearer', token: 'static-publish-token' },
+      },
+      {
+        cwd: env.repoDir,
+        env: {},
+        fetch: fetchStub.fetch,
+        now: () => 1_700_000_000,
+      },
+    );
+    expect(outcome.ok).toBe(true);
+    const init = fetchStub.spy.mock.calls[0]![1];
+    expect(init.headers).toMatchObject({
+      authorization: 'Bearer static-publish-token',
+    });
+  });
+
+  it('--auth=bearer falls back to GGUI_REGISTRY_TOKEN from env', async () => {
+    seedKeypair('@a');
+    const fetchStub = makeFetchStub(() =>
+      jsonResponse(200, {
+        subject: 'self-hosted-sub',
+        keyId: 'derivedKeyId',
+        publicKeyBase64: 'irrelevant',
+      }),
+    );
+    const outcome = await runRegisterAuthorKey(
+      { scope: '@a', registry: REGISTRY_URL, auth: { auth: 'bearer' } },
+      {
+        cwd: env.repoDir,
+        env: { GGUI_REGISTRY_TOKEN: 'env-publish-token' },
+        fetch: fetchStub.fetch,
+        now: () => 1_700_000_000,
+      },
+    );
+    expect(outcome.ok).toBe(true);
+    const init = fetchStub.spy.mock.calls[0]![1];
+    expect(init.headers).toMatchObject({
+      authorization: 'Bearer env-publish-token',
+    });
+  });
+
+  it('--auth=bearer with no token anywhere → auth_config_missing naming the env var', async () => {
+    seedKeypair('@a');
+    const fetchStub = makeFetchStub(() => {
+      throw new Error('unexpected fetch');
+    });
+    const outcome = await runRegisterAuthorKey(
+      { scope: '@a', registry: REGISTRY_URL, auth: { auth: 'bearer' } },
+      {
+        cwd: env.repoDir,
+        env: {},
+        fetch: fetchStub.fetch,
+        now: () => 1_700_000_000,
+      },
+    );
+    expect(outcome.ok).toBe(false);
+    if (!outcome.ok) {
+      expect(outcome.code).toBe('auth_config_missing');
+      expect(outcome.message).toContain('GGUI_REGISTRY_TOKEN');
+    }
+    expect(fetchStub.spy).not.toHaveBeenCalled();
+  });
+
   it('returns ok with status 200 on idempotent re-register', async () => {
     seedFreshToken();
     seedKeypair('@a');

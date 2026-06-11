@@ -356,10 +356,11 @@
  *      session (`~/.ggui/auth.json`), refreshed via
  *      `POST /v1/auth/refresh`; `--auth=bearer` is unchanged. Auth
  *      errors are rewritten vendor-neutrally, and an HTTP 401 from
- *      the registry now surfaces as `auth_failed` with a credential-
- *      kind-specific diagnosis (the hosted registry does not accept
- *      CLI login sessions server-side yet — reported truthfully, no
- *      fake success).
+ *      the registry surfaces as `auth_failed` with a credential-
+ *      kind-specific diagnosis. (The hosted-registry server side
+ *      landed 2026-06-11: the write routes' gateway authorizer
+ *      validates `cli_at_*` session bearers, so the default auth
+ *      path works end-to-end against `registry.ggui.ai`.)
  *
  * --------------------------------------------------------------------
  * Synchronous wired-action dispatch retired — agent-routed consume

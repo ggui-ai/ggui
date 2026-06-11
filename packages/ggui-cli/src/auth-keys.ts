@@ -19,6 +19,7 @@ import {
   revokeLocalKey,
   saveLocalKeys,
 } from './local-keys.js';
+import { AUTH_HELP_FRAGMENT, parseAuthFlags } from './internal/auth-strategy.js';
 import { runRegisterAuthorKey } from './internal/register-author-key.js';
 
 export const KEYS_HELP = `ggui keys — manage CLI keys
@@ -27,7 +28,7 @@ Usage:
   ggui keys list                          [--keys-file <path>]
   ggui keys create  [--name <label>] [--expires-at <iso8601>] [--keys-file <path>]
   ggui keys revoke  <id>                  [--keys-file <path>]
-  ggui keys register --scope <@scope>    [--registry <url>]
+  ggui keys register --scope <@scope>    [--registry <url>] [--auth=bearer [--token <token>]]
 
 list      Print the caller's keys (id, prefix, name, status, dates).
 create    Mint a new connector key. The full secret is printed ONCE — copy it.
@@ -38,6 +39,8 @@ register  Register a per-scope Ed25519 PUBLISHER key with the marketplace
           auto-generated on first publish under
           ~/.ggui/keys/<scope>/{private,public}.key — this verb ships
           the public half to the registry's POST /author-keys.
+
+register-only ${AUTH_HELP_FRAGMENT}
 
 Pass --keys-file <path> to operate on the LOCAL JSON file instead of
 the cloud (api.ggui.ai). The file format is the one written by
@@ -374,7 +377,15 @@ export function parseRegisterFlags(args: readonly string[]): RegisterFlags {
 }
 
 async function runKeysRegister(args: readonly string[]): Promise<number> {
-  const flags = parseRegisterFlags(args);
+  // Peel the shared `--auth=bearer` / `--token` flags first (same
+  // router the publish verbs use), then parse the register-specific
+  // flags from the residue.
+  const authParsed = parseAuthFlags(args);
+  if ('error' in authParsed) {
+    process.stderr.write(`ggui keys register: ${authParsed.error}\n`);
+    return 2;
+  }
+  const flags = parseRegisterFlags(authParsed.rest);
   if (flags.help) {
     process.stdout.write(KEYS_HELP);
     return 0;
@@ -396,10 +407,14 @@ async function runKeysRegister(args: readonly string[]): Promise<number> {
     return 2;
   }
 
+  const authFlags = authParsed.flags;
   const outcome = await runRegisterAuthorKey(
     {
       scope: flags.scope,
       ...(flags.registry !== undefined ? { registry: flags.registry } : {}),
+      ...(authFlags.auth !== undefined || authFlags.token !== undefined
+        ? { auth: authFlags }
+        : {}),
     },
     {
       cwd: process.cwd(),

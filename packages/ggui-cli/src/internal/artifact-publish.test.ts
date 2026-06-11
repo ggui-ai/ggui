@@ -957,10 +957,11 @@ describe('runArtifactPublish', () => {
     expect(persisted?.accessExpiresAt).toBe(TEST_NOW + 900);
   });
 
-  // De-Cognito (2026-06-11): the hosted registry does not accept CLI
-  // login sessions server-side yet — a 401 while using the session
-  // credential must say so truthfully (vendor-neutrally) instead of
-  // masquerading as a conformance failure.
+  // De-Cognito (2026-06-11): a 401 while using the session credential
+  // is an auth problem (expired/revoked session — or a self-hosted
+  // registry that authenticates with a static publish token). It must
+  // surface truthfully (vendor-neutrally) instead of masquerading as
+  // a conformance failure.
   it('registry 401 with session auth → auth_failed naming the bearer alternative', async () => {
     seedGadgetRepo(env.repoDir);
     seedLoginSession();

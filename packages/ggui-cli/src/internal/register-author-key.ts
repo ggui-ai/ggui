@@ -12,17 +12,19 @@
  * with the same key is idempotent (200 OK).
  *
  * Auth + registry-URL resolution match the publish flow (the stored
- * `ggui login` session / `GGUI_REGISTRY` env / `ggui.json#registry`
- * chain works the same way operators are used to).
+ * `ggui login` session by default, `--auth=bearer --token <token>` /
+ * `GGUI_REGISTRY_TOKEN` for self-hosted registries; `GGUI_REGISTRY`
+ * env / `ggui.json#registry` URL chain works the same way operators
+ * are used to).
  */
 import { readFileSync } from 'node:fs';
 import { REGISTER_AUTHOR_KEY_ERROR_CODES } from '@ggui-ai/registry-core';
 import {
   acquireLoginSessionToken,
   type AuthFailed,
-  type AuthSuccess,
 } from './artifact-publish.js';
 import { resolveRegistryUrl } from './artifact-search.js';
+import { acquireAuthToken, type AuthFlags } from './auth-strategy.js';
 import { getPublicKeyPath, hasKeypair } from './key-store.js';
 
 /**
@@ -70,6 +72,11 @@ export type RegisterKeyOutcome =
 export interface RunRegisterKeyFlags {
   readonly scope: string;
   readonly registry?: string;
+  /** Auth strategy + bearer token. `undefined` → the stored `ggui
+   *  login` session; `{ auth: 'bearer', token? }` → explicit bearer
+   *  (self-hosted registries), token from the flag or
+   *  `GGUI_REGISTRY_TOKEN`. Mirrors the publish flow's `AuthFlags`. */
+  readonly auth?: AuthFlags;
 }
 
 export interface RunRegisterKeyDeps {
@@ -77,6 +84,18 @@ export interface RunRegisterKeyDeps {
   readonly env: NodeJS.ProcessEnv;
   readonly fetch: typeof fetch;
   readonly now: () => number;
+}
+
+/**
+ * Sentinel that carries the structured {@link AuthFailed} payload
+ * through `acquireAuthToken`'s throwing session callback — the
+ * register flow's never-throws contract maps it back to an outcome.
+ * Mirrors `SessionAuthError` in `artifact-publish.ts`.
+ */
+class SessionOutcomeError extends Error {
+  constructor(readonly payload: AuthFailed) {
+    super(payload.error.message);
+  }
 }
 
 /**
@@ -140,16 +159,37 @@ export async function runRegisterAuthorKey(
   }
   const publicKeyBase64 = publicKeyBytes.toString('base64');
 
-  // 3. The stored `ggui login` session — same chain as publish.
-  const auth: AuthSuccess | AuthFailed = await acquireLoginSessionToken({
-    now: deps.now,
-    fetchImpl: deps.fetch,
-  });
-  if (!auth.ok) {
+  // 3. Credential — same two-path strategy as publish:
+  //    --auth=bearer → token from the flag or GGUI_REGISTRY_TOKEN
+  //    default       → the stored `ggui login` session.
+  let accessToken: string;
+  try {
+    accessToken = await acquireAuthToken({
+      flags: flags.auth ?? {},
+      env: deps.env,
+      acquireSessionToken: async () => {
+        const auth = await acquireLoginSessionToken({
+          now: deps.now,
+          fetchImpl: deps.fetch,
+        });
+        if (!auth.ok) throw new SessionOutcomeError(auth);
+        return auth.accessToken;
+      },
+    });
+  } catch (err) {
+    if (err instanceof SessionOutcomeError) {
+      return {
+        ok: false,
+        code: err.payload.error.code,
+        message: err.payload.error.message,
+      };
+    }
+    // Bearer selected but no token supplied — `acquireAuthToken`
+    // throws with an operator-readable message naming the env var.
     return {
       ok: false,
-      code: auth.error.code,
-      message: auth.error.message,
+      code: 'auth_config_missing',
+      message: err instanceof Error ? err.message : String(err),
     };
   }
 
@@ -161,7 +201,7 @@ export async function runRegisterAuthorKey(
       method: 'POST',
       headers: {
         'content-type': 'application/json',
-        authorization: `Bearer ${auth.accessToken}`,
+        authorization: `Bearer ${accessToken}`,
       },
       body: JSON.stringify({ publicKeyBase64 }),
     });

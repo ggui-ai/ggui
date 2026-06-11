@@ -977,10 +977,10 @@ function describeRegistryAuthRejection(authKind: RegistryAuthKind, path: string)
   }
   return (
     'registry rejected the `ggui login` session token (HTTP 401 from ' +
-    `${path}). This registry does not accept CLI login sessions for ` +
-    'publishing yet — pass --auth=bearer --token <token> (or set ' +
-    'GGUI_REGISTRY_TOKEN), or re-run `ggui login` if your session may ' +
-    'have been revoked.'
+    `${path}). Re-run \`ggui login\` — the session may have expired ` +
+    'or been revoked. For self-hosted registries that authenticate ' +
+    'with a static publish token instead of login sessions, pass ' +
+    '--auth=bearer --token <token> (or set GGUI_REGISTRY_TOKEN).'
   );
 }
 
