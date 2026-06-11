@@ -113,7 +113,7 @@ export function validateServicePath(p: string): ServicePath {
  * MCP server with its own tool namespace.
  *
  * Use a **service** when the handler set is conceptually a distinct
- * MCP server (`mcp.ggui.ai/docs`, `mcp.ggui.ai/playground/todos`).
+ * MCP server (e.g. `<host>/docs`, `<host>/playground/todos`).
  * Use a **mount** when the handlers should appear alongside
  * ggui-native tools on the shared `/mcp` surface (fixtures, external
  * MCPs aggregated for one session's view).

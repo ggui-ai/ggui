@@ -34,8 +34,9 @@
  * `(render_id, seq >= fromSeq)` — this is fully persistent and
  * survives restart, equivalent to {@link InMemoryGguiSessionStore}.
  *
- * Live tailing is served by an in-process `EventEmitter`. That's
- * **intentionally narrower** than the interface allows:
+ * Live tailing is served by an in-process waiter set (one resolver per
+ * parked `observe` iterator). That's **intentionally narrower** than
+ * the interface allows:
  *
  *   - Within a single OSS server process, tail works identically to
  *     the in-memory impl — callers subscribed to `observe` see
@@ -55,8 +56,12 @@ import Database, {
   type Database as SqliteDatabase,
   type Statement as SqliteStatement,
 } from 'better-sqlite3';
-import { EventEmitter } from 'node:events';
-import type { GguiSession } from '@ggui-ai/protocol';
+import { isRecord } from '@ggui-ai/protocol';
+import type {
+  EndUserIdentity,
+  GguiSession,
+  HostContextProjection,
+} from '@ggui-ai/protocol';
 import type {
   AppendEventInput,
   CommitGguiSessionInput,
@@ -123,12 +128,16 @@ interface EventRow {
   seq: number;
   type: string;
   data: string;
-  /** ISO 8601 UTC timestamp stamped at append time. */
-  timestamp: string;
+  /**
+   * ISO 8601 UTC timestamp stamped at append time. Legacy rows
+   * (pre-Wave-7) stored a numeric ms-epoch; {@link rowToEvent} coerces
+   * those on read so consumers always see the ISO string.
+   */
+  timestamp: string | number;
 }
 
 /** Per-render tail waiter — parked on `waitForNext()` until an append
- *  or delete wakes them via the shared `EventEmitter`. */
+ *  or delete wakes it via the per-render waiter set. */
 type Waiter = (event: GguiSessionEvent | null) => void;
 
 export class SqliteGguiSessionStore implements GguiSessionStore {
@@ -141,20 +150,26 @@ export class SqliteGguiSessionStore implements GguiSessionStore {
   /** Fanout: sessionId → listeners waiting for the next append / close. */
   private readonly waiters = new Map<string, Set<Waiter>>();
 
-  /** Prepared statements — built once at construction for hot paths. */
+  /**
+   * Prepared statements — built once at construction for hot paths.
+   * Row-returning statements deliberately keep the default `unknown`
+   * result type: the database file is operator-mutable in self-hosted
+   * deployments, so every read narrows through {@link asGguiSessionRow} /
+   * {@link asEventRow} instead of asserting the row shape.
+   */
   private readonly stmts: {
     insertRender: SqliteStatement<unknown[]>;
     upsertRenderPayload: SqliteStatement<unknown[]>;
-    getGguiSession: SqliteStatement<unknown[], GguiSessionRow>;
-    listAll: SqliteStatement<unknown[], GguiSessionRow>;
+    getGguiSession: SqliteStatement<unknown[]>;
+    listAll: SqliteStatement<unknown[]>;
     updateTimestamps: SqliteStatement<unknown[]>;
     updateHostContext: SqliteStatement<unknown[]>;
     deleteRender: SqliteStatement<unknown[]>;
     deleteRenderEvents: SqliteStatement<unknown[]>;
     insertEvent: SqliteStatement<unknown[]>;
     bumpSequence: SqliteStatement<unknown[]>;
-    selectEventsFromSeq: SqliteStatement<unknown[], EventRow>;
-    selectEventsSinceLimited: SqliteStatement<unknown[], EventRow>;
+    selectEventsFromSeq: SqliteStatement<unknown[]>;
+    selectEventsSinceLimited: SqliteStatement<unknown[]>;
   };
 
   private idCounter = 0;
@@ -179,10 +194,10 @@ export class SqliteGguiSessionStore implements GguiSessionStore {
     this.stmts = {
       insertRender: this.db.prepare<unknown[]>(INSERT_RENDER_SQL),
       upsertRenderPayload: this.db.prepare<unknown[]>(UPSERT_RENDER_PAYLOAD_SQL),
-      getGguiSession: this.db.prepare<unknown[], GguiSessionRow>(
+      getGguiSession: this.db.prepare<unknown[]>(
         `SELECT * FROM renders WHERE id = ?`,
       ),
-      listAll: this.db.prepare<unknown[], GguiSessionRow>(
+      listAll: this.db.prepare<unknown[]>(
         `SELECT * FROM renders ORDER BY created_at ASC, id ASC`,
       ),
       updateTimestamps: this.db.prepare<unknown[]>(
@@ -201,14 +216,14 @@ export class SqliteGguiSessionStore implements GguiSessionStore {
       bumpSequence: this.db.prepare<unknown[]>(
         `UPDATE renders SET event_sequence = ?, last_activity_at = ? WHERE id = ?`,
       ),
-      selectEventsFromSeq: this.db.prepare<unknown[], EventRow>(
+      selectEventsFromSeq: this.db.prepare<unknown[]>(
         `SELECT * FROM render_events WHERE render_id = ? AND seq >= ? ORDER BY seq ASC`,
       ),
       // R7 — `listEventsSince(sessionId, sinceSeq, limit)` backing.
       // STRICT inequality (`seq > ?`) since callers pass their cursor
       // and want only events newer than what they've already seen.
       // We fetch `limit + 1` to compute `hasMore` in a single query.
-      selectEventsSinceLimited: this.db.prepare<unknown[], EventRow>(
+      selectEventsSinceLimited: this.db.prepare<unknown[]>(
         `SELECT * FROM render_events WHERE render_id = ? AND seq > ? ORDER BY seq ASC LIMIT ?`,
       ),
     };
@@ -224,7 +239,7 @@ export class SqliteGguiSessionStore implements GguiSessionStore {
 
   async create(input: CreateGguiSessionInput): Promise<StoredGguiSession> {
     const id = input.id ?? this.idGenerator();
-    const existing = this.stmts.getGguiSession.get(id) as GguiSessionRow | undefined;
+    const existing = asGguiSessionRow(this.stmts.getGguiSession.get(id));
     if (existing) {
       throw new Error(
         `SqliteGguiSessionStore.create: render already exists: ${id}`,
@@ -277,12 +292,14 @@ export class SqliteGguiSessionStore implements GguiSessionStore {
   }
 
   async get(id: string): Promise<StoredGguiSession | null> {
-    const row = this.stmts.getGguiSession.get(id) as GguiSessionRow | undefined;
+    const row = asGguiSessionRow(this.stmts.getGguiSession.get(id));
     return row ? rowToStored(row) : null;
   }
 
   async list(filter: GguiSessionFilter): Promise<StoredGguiSession[]> {
-    const rows = this.stmts.listAll.all() as GguiSessionRow[];
+    const rows = this.stmts.listAll
+      .all()
+      .map((raw) => requireGguiSessionRow(raw));
     const now = this.now();
     const filtered: StoredGguiSession[] = [];
     for (const row of rows) {
@@ -303,7 +320,7 @@ export class SqliteGguiSessionStore implements GguiSessionStore {
   }
 
   async update(id: string, patch: GguiSessionPatch): Promise<StoredGguiSession> {
-    const row = this.stmts.getGguiSession.get(id) as GguiSessionRow | undefined;
+    const row = asGguiSessionRow(this.stmts.getGguiSession.get(id));
     if (!row) {
       throw new Error(`SqliteGguiSessionStore.update: render not found: ${id}`);
     }
@@ -315,7 +332,7 @@ export class SqliteGguiSessionStore implements GguiSessionStore {
     if (patch.hostContext !== undefined) {
       this.stmts.updateHostContext.run(JSON.stringify(patch.hostContext), id);
     }
-    const updated = this.stmts.getGguiSession.get(id) as GguiSessionRow;
+    const updated = requireGguiSessionRow(this.stmts.getGguiSession.get(id));
     return rowToStored(updated);
   }
 
@@ -330,9 +347,9 @@ export class SqliteGguiSessionStore implements GguiSessionStore {
 
   async commit(input: CommitGguiSessionInput): Promise<StoredGguiSession> {
     const incoming = input.render;
-    const existing = this.stmts.getGguiSession.get(incoming.id) as
-      | GguiSessionRow
-      | undefined;
+    const existing = asGguiSessionRow(
+      this.stmts.getGguiSession.get(incoming.id),
+    );
     const t = this.now();
     if (existing) {
       // Replace visible-bits surface; preserve lifecycle (createdAt,
@@ -342,7 +359,9 @@ export class SqliteGguiSessionStore implements GguiSessionStore {
         t,
         incoming.id,
       );
-      const updated = this.stmts.getGguiSession.get(incoming.id) as GguiSessionRow;
+      const updated = requireGguiSessionRow(
+        this.stmts.getGguiSession.get(incoming.id),
+      );
       return rowToStored(updated);
     }
     // First-write — mint a fresh row using the supplied lifecycle slice.
@@ -381,9 +400,9 @@ export class SqliteGguiSessionStore implements GguiSessionStore {
     // concurrent appends can't both read `eventSequence = N` and
     // race on `N+1`.
     const txn = this.db.transaction((): { seq: number; event: GguiSessionEvent } => {
-      const row = this.stmts.getGguiSession.get(input.sessionId) as
-        | GguiSessionRow
-        | undefined;
+      const row = asGguiSessionRow(
+        this.stmts.getGguiSession.get(input.sessionId),
+      );
       if (!row) {
         throw new Error(
           `SqliteGguiSessionStore.appendEvent: render not found: ${input.sessionId}`,
@@ -428,18 +447,16 @@ export class SqliteGguiSessionStore implements GguiSessionStore {
     readonly hasMore: boolean;
     readonly horizonSeq: number;
   } | null> {
-    const row = this.stmts.getGguiSession.get(sessionId) as GguiSessionRow | undefined;
+    const row = asGguiSessionRow(this.stmts.getGguiSession.get(sessionId));
     if (!row) return null;
     const lastSequence = row.event_sequence;
     const horizonSeq = 0;
     if (sinceSeq < horizonSeq) {
       return { events: [], lastSequence, hasMore: false, horizonSeq };
     }
-    const fetched = this.stmts.selectEventsSinceLimited.all(
-      sessionId,
-      sinceSeq,
-      limit + 1,
-    ) as EventRow[];
+    const fetched = this.stmts.selectEventsSinceLimited
+      .all(sessionId, sinceSeq, limit + 1)
+      .map((raw) => requireEventRow(raw));
     let hasMore = false;
     let pageRows = fetched;
     if (fetched.length > limit) {
@@ -465,12 +482,12 @@ export class SqliteGguiSessionStore implements GguiSessionStore {
         return {
           async next(): Promise<IteratorResult<GguiSessionEvent>> {
             if (done) return { value: undefined, done: true };
-            const row = getStmt.get(id) as GguiSessionRow | undefined;
+            const row = asGguiSessionRow(getStmt.get(id));
             if (!row) {
               done = true;
               return { value: undefined, done: true };
             }
-            const backlog = selectStmt.get(id, nextSeq) as EventRow | undefined;
+            const backlog = asEventRow(selectStmt.get(id, nextSeq));
             if (backlog) {
               const event = rowToEvent(backlog);
               nextSeq = event.seq + 1;
@@ -524,11 +541,6 @@ export class SqliteGguiSessionStore implements GguiSessionStore {
     this.waiters.clear();
   }
 }
-
-// `EventEmitter` import kept reachable so its type surface stays valid
-// under `noUnusedLocals`. We don't use it directly — the per-render
-// waiter set above is purpose-built and cheaper.
-void EventEmitter;
 
 // ─────────────────────────────────────────────────────────────────────
 // Schema + SQL strings
@@ -586,15 +598,176 @@ UPDATE renders SET payload = ?, last_activity_at = ? WHERE id = ?
 `;
 
 // ─────────────────────────────────────────────────────────────────────
-// Row ↔ domain conversions
+// Row narrowing + row ↔ domain conversions
+//
+// The database file is operator-mutable in self-hosted deployments, so
+// SQLite reads are a trust boundary: every row is narrowed by checking
+// column types before assembly — never asserted via `as Row`. A row
+// whose columns don't match the schema fails LOUDLY (the file was
+// written by an incompatible schema or mutated externally); JSON
+// payload *columns* that parse but don't match their expected shape
+// degrade per-field (placeholder render / omitted optional field),
+// matching the long-standing unparseable-JSON posture.
 // ─────────────────────────────────────────────────────────────────────
+
+function isNullableString(value: unknown): value is string | null {
+  return value === null || typeof value === 'string';
+}
+
+function malformedRowError(table: string, id: unknown): Error {
+  const suffix = typeof id === 'string' ? ` (id=${id})` : '';
+  return new Error(
+    `SqliteGguiSessionStore: malformed \`${table}\` row${suffix} — column types do not match the expected schema. The database file was written by an incompatible schema version or mutated externally.`,
+  );
+}
+
+/** Narrow a raw `renders` row. `undefined` (no row) passes through. */
+function asGguiSessionRow(raw: unknown): GguiSessionRow | undefined {
+  if (raw === undefined) return undefined;
+  if (!isRecord(raw)) throw malformedRowError('renders', undefined);
+  const {
+    id,
+    app_id,
+    user_id,
+    payload,
+    event_sequence,
+    created_at,
+    last_activity_at,
+    expires_at,
+    end_user_identity,
+    theme_id,
+    host_context,
+    host_name,
+    host_session_id,
+  } = raw;
+  if (
+    typeof id !== 'string' ||
+    typeof app_id !== 'string' ||
+    !isNullableString(user_id) ||
+    typeof payload !== 'string' ||
+    typeof event_sequence !== 'number' ||
+    typeof created_at !== 'number' ||
+    typeof last_activity_at !== 'number' ||
+    typeof expires_at !== 'number' ||
+    !isNullableString(end_user_identity) ||
+    !isNullableString(theme_id) ||
+    !isNullableString(host_context) ||
+    !isNullableString(host_name) ||
+    !isNullableString(host_session_id)
+  ) {
+    throw malformedRowError('renders', raw.id);
+  }
+  return {
+    id,
+    app_id,
+    user_id,
+    payload,
+    event_sequence,
+    created_at,
+    last_activity_at,
+    expires_at,
+    end_user_identity,
+    theme_id,
+    host_context,
+    host_name,
+    host_session_id,
+  };
+}
+
+/** Like {@link asGguiSessionRow} but for reads that just wrote the row. */
+function requireGguiSessionRow(raw: unknown): GguiSessionRow {
+  const row = asGguiSessionRow(raw);
+  if (!row) throw malformedRowError('renders', undefined);
+  return row;
+}
+
+/** Narrow a raw `render_events` row. `undefined` (no row) passes through. */
+function asEventRow(raw: unknown): EventRow | undefined {
+  if (raw === undefined) return undefined;
+  if (!isRecord(raw)) throw malformedRowError('render_events', undefined);
+  const { render_id, seq, type, data, timestamp } = raw;
+  if (
+    typeof render_id !== 'string' ||
+    typeof seq !== 'number' ||
+    typeof type !== 'string' ||
+    typeof data !== 'string' ||
+    // Legacy rows (pre-Wave-7) store a numeric ms-epoch timestamp;
+    // `rowToEvent` coerces it to the ISO string the protocol promises.
+    !(typeof timestamp === 'string' || typeof timestamp === 'number')
+  ) {
+    throw malformedRowError('render_events', raw.render_id);
+  }
+  return { render_id, seq, type, data, timestamp };
+}
+
+function requireEventRow(raw: unknown): EventRow {
+  const row = asEventRow(raw);
+  if (!row) throw malformedRowError('render_events', undefined);
+  return row;
+}
+
+/**
+ * Structural narrower for the persisted wire-shape payload. The
+ * payload was serialized from a typed {@link GguiSession} at the
+ * `create`/`commit` seam, so this checks the union's load-bearing
+ * discriminants + identity fields rather than re-deriving the full
+ * protocol shape here (the deep field types are protocol-owned and
+ * were enforced at the write seam). A payload mutated into a different
+ * shape fails the guard and the read degrades to the placeholder
+ * render rebuilt from the validated columns.
+ */
+function isPersistedGguiSession(value: unknown): value is GguiSession {
+  if (!isRecord(value)) return false;
+  if (typeof value.id !== 'string') return false;
+  if (value.type === 'mcpApps') {
+    // McpAppsGguiSession carries locator metadata only — no server
+    // lifecycle fields on the wire shape.
+    return typeof value.createdAt === 'string' && isRecord(value.source);
+  }
+  if (
+    typeof value.appId !== 'string' ||
+    typeof value.eventSequence !== 'number' ||
+    typeof value.createdAt !== 'number' ||
+    typeof value.lastActivityAt !== 'number' ||
+    typeof value.expiresAt !== 'number'
+  ) {
+    return false;
+  }
+  if (value.type === 'system') return typeof value.kind === 'string';
+  // ComponentGguiSession: `type` is 'component' or absent.
+  return (
+    (value.type === undefined || value.type === 'component') &&
+    typeof value.componentCode === 'string'
+  );
+}
+
+function isEndUserIdentity(value: unknown): value is EndUserIdentity {
+  return (
+    isRecord(value) &&
+    typeof value.userId === 'string' &&
+    (value.provider === 'ggui' || value.provider === 'custom') &&
+    typeof value.authenticatedAt === 'string'
+  );
+}
+
+/**
+ * Every {@link HostContextProjection} field is optional; the
+ * load-bearing check is object-shape. Field-level validation happened
+ * at the wire ingress (`host_context_observed` handler) before the
+ * projection was persisted via `update()`.
+ */
+function isHostContextProjection(
+  value: unknown,
+): value is HostContextProjection {
+  return isRecord(value);
+}
 
 function rowToStored(row: GguiSessionRow): StoredGguiSession {
   const now = Date.now();
   const status: 'active' | 'expired' = row.expires_at <= now
     ? 'expired'
     : 'active';
-  const render = parseJson<GguiSession>(row.payload, {
+  const fallbackRender: GguiSession = {
     type: 'component',
     id: row.id,
     appId: row.app_id,
@@ -603,8 +776,18 @@ function rowToStored(row: GguiSessionRow): StoredGguiSession {
     createdAt: row.created_at,
     lastActivityAt: row.last_activity_at,
     expiresAt: row.expires_at,
-  } as GguiSession);
-  const stored: StoredGguiSession = {
+  };
+  const payload = parseJsonValue(row.payload);
+  const render: GguiSession = isPersistedGguiSession(payload)
+    ? payload
+    : fallbackRender;
+  const endUserIdentity = row.end_user_identity
+    ? parseJsonShaped(row.end_user_identity, isEndUserIdentity)
+    : undefined;
+  const hostContext = row.host_context
+    ? parseJsonShaped(row.host_context, isHostContextProjection)
+    : undefined;
+  return {
     id: row.id,
     appId: row.app_id,
     userId: row.user_id ?? undefined,
@@ -614,29 +797,18 @@ function rowToStored(row: GguiSessionRow): StoredGguiSession {
     expiresAt: row.expires_at,
     status,
     render,
+    ...(endUserIdentity !== undefined ? { endUserIdentity } : {}),
+    ...(row.theme_id ? { themeId: row.theme_id } : {}),
+    ...(hostContext !== undefined ? { hostContext } : {}),
+    ...(row.host_name && row.host_session_id
+      ? {
+          hostSession: {
+            hostName: row.host_name,
+            hostSessionId: row.host_session_id,
+          },
+        }
+      : {}),
   };
-  if (row.end_user_identity) {
-    const identity = parseJson<NonNullable<StoredGguiSession['endUserIdentity']> | null>(
-      row.end_user_identity,
-      null,
-    );
-    if (identity) (stored as { endUserIdentity?: unknown }).endUserIdentity = identity;
-  }
-  if (row.theme_id) (stored as { themeId?: string }).themeId = row.theme_id;
-  if (row.host_context) {
-    const ctx = parseJson<NonNullable<StoredGguiSession['hostContext']> | null>(
-      row.host_context,
-      null,
-    );
-    if (ctx) (stored as { hostContext?: unknown }).hostContext = ctx;
-  }
-  if (row.host_name && row.host_session_id) {
-    (stored as { hostSession?: unknown }).hostSession = {
-      hostName: row.host_name,
-      hostSessionId: row.host_session_id,
-    };
-  }
-  return stored;
 }
 
 function rowToEvent(row: EventRow): GguiSessionEvent {
@@ -651,16 +823,26 @@ function rowToEvent(row: EventRow): GguiSessionEvent {
     seq: row.seq,
     type: row.type,
     timestamp,
-    data: parseJson<unknown>(row.data, null),
+    data: parseJsonValue(row.data) ?? null,
   };
 }
 
-function parseJson<T>(raw: string, fallback: T): T {
+/** Parse JSON, returning `undefined` on syntax failure. */
+function parseJsonValue(raw: string): unknown {
   try {
-    return JSON.parse(raw) as T;
+    return JSON.parse(raw) as unknown;
   } catch {
-    return fallback;
+    return undefined;
   }
+}
+
+/** Parse JSON and narrow through `guard`; `undefined` on either failure. */
+function parseJsonShaped<T>(
+  raw: string,
+  guard: (value: unknown) => value is T,
+): T | undefined {
+  const parsed = parseJsonValue(raw);
+  return guard(parsed) ? parsed : undefined;
 }
 
 function computeRowStatus(

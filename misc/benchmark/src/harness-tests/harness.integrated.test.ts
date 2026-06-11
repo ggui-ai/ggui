@@ -23,7 +23,7 @@ import {
   type PatchFn,
   type TaskRunner,
   type LLMEvaluator,
-} from "@ggui-ai/ui-gen/harness/index";
+} from "@ggui-ai/ui-gen/harness";
 
 describe("harness integration — core flow", () => {
   it("createHarness → runHarness produces source via stub generate runner", async () => {

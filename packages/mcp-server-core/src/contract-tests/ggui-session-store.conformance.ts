@@ -5,11 +5,12 @@
  * MUST satisfy. The function below takes a factory returning a fresh
  * store + an optional teardown hook; real impls plug in:
  *
- * - `InMemoryGguiSessionStore` invokes from its existing test file.
- * - `SqliteGguiSessionStore` invokes with a temp-file db that gets cleaned
+ * - `InMemoryGguiSessionStore` invokes from
+ *   `../in-memory/ggui-session-store.test.ts`.
+ * - `SqliteGguiSessionStore` invokes from
+ *   `../sqlite/ggui-session-store.test.ts` with a temp-file db cleaned
  *   on teardown.
- * - Cloud `dynamoGguiSessionStore` invokes against a DynamoDB-Local mock
- *   (follow-up — needs Docker shim).
+ * - Any other backend plugs in the same way from its own test suite.
  *
  * The assertions focus on **known observed bug classes**, plus the
  * contract surface invariants. Each named bug class:

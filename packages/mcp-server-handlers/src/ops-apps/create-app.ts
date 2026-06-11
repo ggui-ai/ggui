@@ -34,6 +34,12 @@ const outputSchema = {
   systemPrompt: z.string().optional(),
   createdAt: z.string(),
   updatedAt: z.string(),
+  connectUrl: z
+    .string()
+    .optional()
+    .describe(
+      'Per-app MCP connect URL — present when the deployment exposes per-app ingress. Paste-ready for an MCP client config.',
+    ),
 } as const;
 
 export interface CreateAppOutput {
@@ -42,6 +48,12 @@ export interface CreateAppOutput {
   readonly systemPrompt?: string;
   readonly createdAt: string;
   readonly updatedAt: string;
+  /**
+   * Per-app MCP connect URL. Optional: emitted only by deployments
+   * that expose per-app ingress (this handler has no ingress
+   * knowledge, so the default composition never sets it).
+   */
+  readonly connectUrl?: string;
 }
 
 export interface CreateAppDeps {

@@ -54,8 +54,7 @@ interface ThemeProviderProps {
  *
  * @example
  * ```tsx
- * import { ThemeProvider } from '@ggui-ai/design/themes/ThemeProvider';
- * import { lightTheme } from '@ggui-ai/design/themes/defaults/light';
+ * import { ThemeProvider, lightTheme } from '@ggui-ai/design/themes';
  *
  * function App() {
  *   return (

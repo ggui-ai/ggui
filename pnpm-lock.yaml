@@ -273,9 +273,6 @@ importers:
 
   packages/agent-server:
     dependencies:
-      '@ggui-ai/dev-stack':
-        specifier: workspace:*
-        version: link:../dev-stack
       '@ggui-ai/protocol':
         specifier: workspace:*
         version: link:../protocol

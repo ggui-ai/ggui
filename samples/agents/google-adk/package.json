@@ -1,7 +1,7 @@
 {
   "name": "@ggui-samples/agent-google-adk",
   "version": "0.0.1",
-  "description": "Brand-agnostic Google ADK (TypeScript) backend. Boots an HTTP API (default port 6792) + sandbox-proxy server (default port 7792). Pure backend — no bundled frontend; pair with @ggui-samples/app-ggui-basic-web (or any MCP-Apps-spec frontend) via VITE_AGENT_ENDPOINT_URL. Real LLM via GEMINI_API_KEY. Not published.",
+  "description": "Brand-agnostic Google ADK (TypeScript) backend. Boots an HTTP API (default port 6790) + sandbox-proxy server (default port 7792). Pure backend — no bundled frontend; pair with @ggui-samples/app-ggui-basic-web (or any MCP-Apps-spec frontend) via VITE_AGENT_ENDPOINT_URL. Real LLM via GEMINI_API_KEY. Not published.",
   "private": true,
   "type": "module",
   "scripts": {

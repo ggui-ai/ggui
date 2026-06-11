@@ -1,23 +1,23 @@
 /**
- * `LLMCaller` — the decision engine's LLM dispatcher.
+ * `LLMCaller` — the negotiator's LLM dispatcher.
  *
  * Narrow abstraction over "call a chat model, optionally with a forced
  * tool-use schema for guaranteed-JSON structured output." Kept public
  * so OSS consumers of `@ggui-ai/negotiator` can bring their own LLM
  * provider (Anthropic direct, OpenAI, Google, a local model, a
- * community LiteLLM wrapper) without touching the decision-engine
+ * community LiteLLM wrapper) without touching the synthesis / judge
  * source.
  *
  * **Why this lives in `@ggui-ai/negotiator`, not
  * `@ggui-ai/mcp-server-core`.** `mcp-server-core` contains the
  * storage + runtime seams an MCP server implementer binds against
  * (`VectorStore`, `EmbeddingProvider`, `KeyValueStore`,
- * `BlueprintProvider`, `Negotiator`). `LLMCaller` is an
- * engine-internal dispatcher — one level below `Negotiator` — so
- * lifting it to `mcp-server-core` would grow the public seam count
- * speculatively. If a second consumer outside the negotiator
- * surfaces later, the "where does `LLMCaller` live?" question can be
- * re-opened at that point.
+ * `BlueprintProvider`). `LLMCaller` is an engine-internal
+ * dispatcher — one level below the synthesis + judge primitives this
+ * package exports — so lifting it to `mcp-server-core` would grow the
+ * public seam count speculatively. If a second consumer outside the
+ * negotiator surfaces later, the "where does `LLMCaller` live?"
+ * question can be re-opened at that point.
  *
  * Normative semantics:
  * - `call(systemPrompt, userMessage, maxTokens?)` returns the raw
@@ -43,7 +43,7 @@ export interface ToolSchema {
   input_schema: Record<string, unknown>;
 }
 
-/** Chat-model dispatcher consumed by the negotiator decision engine. */
+/** Chat-model dispatcher consumed by the negotiator's synthesis + judge primitives. */
 export interface LLMCaller {
   /**
    * Call the model in plain-text mode. `maxTokens` defaults to

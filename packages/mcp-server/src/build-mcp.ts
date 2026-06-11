@@ -11,6 +11,7 @@
 
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { registerAppTool } from '@modelcontextprotocol/ext-apps/server';
+import { isRecord } from '@ggui-ai/protocol';
 import { z, type ZodRawShape } from 'zod';
 import type {
   HandlerContext,
@@ -206,11 +207,13 @@ export function buildMcpServer(
       // deadline. Both ride the canonical context without leaking the
       // SDK type into the handlers package.
       const baseCtx = getContext();
+      // `_meta` is `unknown` at the SDK seam; per JSON-RPC it MUST be
+      // an object, so narrow with the validating predicate and DROP
+      // anything else rather than asserting.
+      const requestMeta = extra?._meta;
       const ctx: HandlerContext = {
         ...baseCtx,
-        ...(extra?._meta !== undefined
-          ? { requestMeta: extra._meta as Readonly<Record<string, unknown>> }
-          : {}),
+        ...(isRecord(requestMeta) ? { requestMeta } : {}),
         ...(extra?.signal !== undefined ? { signal: extra.signal } : {}),
       };
       const start = Date.now();
@@ -228,7 +231,7 @@ export function buildMcpServer(
           elapsedMs: Date.now() - start,
         });
         return {
-          structuredContent: validated as Record<string, unknown>,
+          structuredContent: validated,
           content: [
             { type: 'text' as const, text: JSON.stringify(validated) },
           ],

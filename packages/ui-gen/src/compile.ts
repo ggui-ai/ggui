@@ -76,7 +76,9 @@ async function loadEsbuild(): Promise<EsbuildModule> {
     esbuildPromise = (async () => {
       // String-literal specifier keeps bundlers from pulling esbuild in
       // at analyze time; it's only loaded when a compile is attempted.
-      const mod = (await import('esbuild')) as unknown as EsbuildModule;
+      // Plain assignment — the real esbuild module structurally
+      // satisfies the narrow `EsbuildModule` view, checked by tsc.
+      const mod: EsbuildModule = await import('esbuild');
       return mod;
     })();
   }

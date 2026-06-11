@@ -1,14 +1,14 @@
 {
   "name": "@ggui-ai/negotiator",
   "version": "0.3.0",
-  "description": "UI decision engine for ggui. Given an agent's signal and the current render state, decides which UI to render (create / update / replace) and synthesizes the data contract. Deployment-agnostic: concrete embedding and vector-store bindings plug in via the storage interfaces from @ggui-ai/mcp-server-core.",
+  "description": "Contract-synthesis + match-judge engine for ggui's handshake. Synthesizes or repairs a conforming DataContract from an agent's draft, judges blueprint-match candidates for reuse, and validates contract structure + novelty — the primitives composed by decideHandshake in @ggui-ai/mcp-server-handlers. Deployment-agnostic: concrete embedding and vector-store bindings plug in via the storage interfaces from @ggui-ai/mcp-server-core.",
   "license": "Apache-2.0",
   "keywords": [
     "ggui",
     "mcp",
     "generative-ui",
     "ai-agents",
-    "decision-engine"
+    "contract-synthesis"
   ],
   "homepage": "https://github.com/ggui-ai/ggui/tree/main/packages/negotiator",
   "repository": {

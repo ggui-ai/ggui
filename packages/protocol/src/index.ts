@@ -89,6 +89,7 @@ export * from "./errors/version-mismatch";
 export * from "./errors/unknown-permission-name";
 export * from "./validation/contract-validator";
 export * from "./validation/cross-references";
+export * from "./validation/is-record";
 export * from "./validation/hygiene-rules";
 export * from "./validation/lint-contract";
 export * from "./validation/name-invariants";

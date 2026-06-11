@@ -748,7 +748,10 @@ export class OpenAIAgent extends LLMAgent {
     // Log cache utilization
     const usage = response.usage;
     if (usage) {
-      const cached = (usage as unknown as Record<string, unknown>).input_tokens_details as { cached_tokens?: number } | undefined;
+      // Typed in the SDK as required, but widened to optional here —
+      // tolerate responses that omit the breakdown at runtime.
+      const cached: { cached_tokens?: number } | undefined =
+        usage.input_tokens_details;
       if (cached?.cached_tokens) {
         console.log(`[openai] session ${this.lastSessionId ? 'chained' : 'new'}: ${cached.cached_tokens} cached of ${usage.input_tokens} input`);
       }

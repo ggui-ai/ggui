@@ -40,6 +40,7 @@
  * owns — no sub-router, no second server surface.
  */
 import type { Express, Request, Response } from 'express';
+import { isRecord } from '@ggui-ai/protocol';
 import type { AuthAdapter, PairingService } from '@ggui-ai/mcp-server-core';
 import { resolveIdentity, UnauthenticatedError } from './auth.js';
 import type { Logger } from './logger.js';
@@ -124,7 +125,7 @@ export function mountPairingTransport(
   // stores verbatim.
   app.post(path, async (req: Request, res: Response) => {
     const reqLogger = opts.logger.child({ route: 'POST ' + path });
-    const body = (req.body ?? {}) as Record<string, unknown>;
+    const body: Record<string, unknown> = isRecord(req.body) ? req.body : {};
     const code = typeof body['code'] === 'string' ? body['code'] : undefined;
     const deviceName =
       typeof body['deviceName'] === 'string' ? body['deviceName'] : undefined;

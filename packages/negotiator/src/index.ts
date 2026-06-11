@@ -8,8 +8,8 @@
  *     handshake always returns a valid contract;
  *   - judges blueprint-match candidates for reuse (`rerankCandidates`);
  *   - validates contract structure + novelty (`contract-validators`);
- *   - derives intent identity + suggestion hygiene (`intent`,
- *     `suggestion`, `contract-hash`).
+ *   - hashes contracts into identity + variant keys (`hashContract`,
+ *     `buildVariant`) and normalizes untrusted drafts (`normalizeDraft`).
  *
  * The HANDSHAKE DECISION itself (find-similar → reuse vs synth-create)
  * lives in the shared `decideHandshake` core in

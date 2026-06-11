@@ -22,7 +22,7 @@
  */
 import WebSocket, { type RawData } from 'ws';
 
-import { isRecord } from './is-record.js';
+import { isRecord } from '@ggui-ai/protocol';
 import type { AuthConfig, WebSocketTransportConfig } from './types.js';
 
 /**

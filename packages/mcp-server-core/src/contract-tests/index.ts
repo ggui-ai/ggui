@@ -11,10 +11,12 @@
  * } from '@ggui-ai/mcp-server-core/contract-tests';
  * ```
  *
- * Requires `vitest` at test-runtime (same test framework the core package
- * uses). Jest consumers should wrap the factories in their own describe
- * blocks; the factory bodies use `describe`/`it`/`expect` globals that
- * both runners provide compatibly.
+ * Requires `vitest` at test-runtime: every suite in this subpath
+ * imports `describe`/`it`/`expect` explicitly from `'vitest'`
+ * (declared as an optional peer dependency — install it in your test
+ * environment to consume this subpath). The suites are not
+ * runner-portable; a Jest project would need vitest installed for the
+ * import specifiers to resolve.
  */
 
 export {

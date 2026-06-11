@@ -25,11 +25,15 @@ import { patchAppConfig, setAppProviderKey } from './api-client.js';
 
 // ─── shared fixture ───────────────────────────────────────────────────────────
 const SESSION: AuthSessionDocument = {
+  version: 1,
   endpoint: 'https://api.ggui.ai',
+  userId: 'user_test',
+  sessionId: 'sess_test',
   accessToken: 'cli_at_test',
   refreshToken: 'rt_test',
   accessExpiresAt: Math.floor(Date.now() / 1000) + 3600,
   refreshExpiresAt: Math.floor(Date.now() / 1000) + 86400,
+  clientName: 'vitest',
   writtenAt: new Date().toISOString(),
 };
 

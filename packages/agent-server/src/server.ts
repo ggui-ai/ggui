@@ -10,11 +10,11 @@
  */
 /* eslint-disable no-console */
 import { serve } from '@hono/node-server';
+import { createAgentApp } from './app.js';
 import {
   startSandboxProxyServer,
   type SandboxProxyServerHandle,
-} from '@ggui-ai/dev-stack';
-import { createAgentApp } from './app.js';
+} from './sandbox-proxy.js';
 import { createGuestTokenAuth, type AuthAdapter } from './auth.js';
 import { createInMemoryChatStore, type ChatStore } from './chat-store.js';
 import type { AgentAdapter, McpServerConfig } from './types.js';

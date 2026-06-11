@@ -35,6 +35,7 @@ import {
   type RegisteredConnector,
   type GguiSessionStore,
 } from '@ggui-ai/mcp-server-core';
+import { isRecord } from '@ggui-ai/protocol';
 import { isMcpAppsGguiSession } from '@ggui-ai/protocol/integrations/mcp-apps';
 import type { McpAppsGguiSession } from '@ggui-ai/protocol/integrations/mcp-apps';
 import type { Logger } from './logger.js';
@@ -232,15 +233,10 @@ export function installMcpAppsInbound(
   });
 
   app.post(`${path}/tools-call`, async (req: Request, res: Response) => {
-    const body = (req.body ?? {}) as {
-      session?: unknown;
-      item?: unknown;
-      tool?: unknown;
-      arguments?: unknown;
-    };
-    const sessionId = typeof body.session === 'string' ? body.session : '';
-    const itemId = typeof body.item === 'string' ? body.item : sessionId;
-    const toolName = typeof body.tool === 'string' ? body.tool : '';
+    const body: Record<string, unknown> = isRecord(req.body) ? req.body : {};
+    const sessionId = typeof body['session'] === 'string' ? body['session'] : '';
+    const itemId = typeof body['item'] === 'string' ? body['item'] : sessionId;
+    const toolName = typeof body['tool'] === 'string' ? body['tool'] : '';
     if (!sessionId || !toolName) {
       res.status(400).json({ error: 'missing_fields' });
       return;
@@ -292,7 +288,7 @@ export function installMcpAppsInbound(
       // (the tool name won't exist in THIS connector's tools-list).
       const result = await client.callTool({
         name: toolName,
-        arguments: (body.arguments as Record<string, unknown> | undefined) ?? {},
+        arguments: isRecord(body['arguments']) ? body['arguments'] : {},
       });
       res.status(200).json(result);
     } catch (err) {

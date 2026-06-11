@@ -18,6 +18,7 @@
  * real `MockEmbeddingProvider` so cache hits/misses behave exactly
  * like the production seam composition.
  */
+import { createHash } from 'node:crypto';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { Server as HttpServer } from 'node:http';
 import type {
@@ -28,7 +29,6 @@ import {
   InMemoryVectorStore,
   MockEmbeddingProvider,
 } from '@ggui-ai/mcp-server-core/in-memory';
-import { generationCacheKey } from '@ggui-ai/mcp-server-handlers';
 import {
   createGguiServer,
   type CreateGguiServerOptions,
@@ -84,6 +84,16 @@ async function boot(
 }
 
 /**
+ * Test-local deterministic key for an intent. The production
+ * `blueprintKey(contract)` produces a hex hash slug; here the value
+ * just has to be unique + stable per intent so seeded ids and probe
+ * expectations agree.
+ */
+function intentKey(intent: string): string {
+  return createHash('sha256').update(intent.trim()).digest('hex').slice(0, 16);
+}
+
+/**
  * Seed a blueprint-registry-shaped row directly via the fixture's
  * vector store. Mirrors what `registerBlueprint` writes (Slice 16d) so
  * the admin route's new-shape predicate matches.
@@ -99,7 +109,7 @@ async function seedCacheRow(
   },
 ): Promise<void> {
   const normalized = input.intent.trim();
-  const contractKey = generationCacheKey(normalized);
+  const contractKey = intentKey(normalized);
   const kind = 'template';
   const vector = await fixture.embedding.embed(normalized);
   await fixture.vectors.putVector(scope, {
@@ -151,7 +161,7 @@ describe('GET /ggui/console/blueprints/cached', () => {
     };
     expect(body.total).toBe(1);
     expect(body.entries[0]!.id).toBe(
-      `template:${generationCacheKey('weather card for Tokyo')}`,
+      `template:${intentKey('weather card for Tokyo')}`,
     );
     expect(body.entries[0]!.cachedIntent).toBe('weather card for Tokyo');
     expect(body.entries[0]!.cachedAt).toBe('2026-04-21T00:00:00Z');
@@ -199,7 +209,7 @@ describe('DELETE /ggui/console/blueprints/cached/:id', () => {
         sessionId: 'p',
         createdAt: '2026-04-21T00:00:00Z',
       });
-    const id = `template:${generationCacheKey('weather card')}`;
+    const id = `template:${intentKey('weather card')}`;
 
     const del = await fetch(
       `${f.url}/ggui/console/blueprints/cached/${encodeURIComponent(id)}`,

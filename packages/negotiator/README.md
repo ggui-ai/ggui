@@ -12,8 +12,8 @@ handshake composes to always return a valid contract.
 > lives in the shared `decideHandshake` core in
 > [`@ggui-ai/mcp-server-handlers`](../mcp-server-handlers), which composes
 > the primitives below. The former in-package `negotiate()` RAG+decision
-> pipeline was retired in favor of that unified, adapter-injected core
-> (one decision spine, an OSS BYOK adapter and a cloud Bedrock adapter).
+> pipeline was retired in favor of that unified, adapter-injected core —
+> one decision spine; LLM and storage bindings plug in per deployment.
 
 The package is deployment-agnostic. It composes the storage interfaces
 defined in `@ggui-ai/mcp-server-core` (`EmbeddingProvider`, `VectorStore`),

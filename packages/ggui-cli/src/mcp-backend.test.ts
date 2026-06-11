@@ -68,7 +68,10 @@ async function renderOverMcp(args: {
   readonly intent: string;
   readonly contract?: Record<string, unknown>;
   readonly id?: string;
-}): Promise<{ body: unknown; res: Response }> {
+}): Promise<{
+  body: { result?: unknown; error?: unknown };
+  res: Response;
+}> {
   const post = async (method: string, params: unknown, id: string) => {
     const r = await fetch(`${args.url}/mcp`, {
       method: 'POST',
@@ -502,32 +505,35 @@ describe('buildMcpServerBackend', () => {
     const theme: LoadedTheme = {
       source: 'file',
       path: '/tmp/app/theme.json',
+      mode: 'light',
       document: {
         color: {
           primary: { '500': { $type: 'color', $value: '#ff00ff' } },
           surface: { $type: 'color', $value: '#000000' },
         },
         spacing: { '4': { $type: 'dimension', $value: '16px' } },
-        typography: {
-          fontFamily: {
+        font: {
+          family: {
             sans: { $type: 'fontFamily', $value: 'Brand Sans' },
           },
-          fontSize: { md: { $type: 'dimension', $value: '16px' } },
-          fontWeight: {
+          size: { md: { $type: 'dimension', $value: '16px' } },
+          weight: {
             regular: { $type: 'fontWeight', $value: 400 },
           },
           lineHeight: { normal: { $type: 'number', $value: 1.5 } },
         },
-        radius: { md: { $type: 'dimension', $value: '8px' } },
-        shadow: {
-          sm: {
-            $type: 'shadow',
-            $value: {
-              offsetX: '0',
-              offsetY: '1px',
-              blur: '2px',
-              spread: '0',
-              color: 'rgba(0,0,0,.05)',
+        shape: {
+          radius: { md: { $type: 'dimension', $value: '8px' } },
+          shadow: {
+            sm: {
+              $type: 'shadow',
+              $value: {
+                offsetX: '0',
+                offsetY: '1px',
+                blur: '2px',
+                spread: '0',
+                color: 'rgba(0,0,0,.05)',
+              },
             },
           },
         },

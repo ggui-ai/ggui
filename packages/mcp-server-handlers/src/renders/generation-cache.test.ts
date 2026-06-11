@@ -13,14 +13,23 @@
  * Setup uses `vectorStore.putVector` directly so the tests don't
  * depend on any retired writer.
  */
+import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { InMemoryVectorStore } from '@ggui-ai/mcp-server-core/in-memory';
 import {
   clearGenerationCache,
-  generationCacheKey,
   invalidateGenerationCache,
   listGenerationCache,
 } from './generation-cache';
+
+/**
+ * Test-local deterministic key for an intent. The production
+ * `blueprintKey(contract)` produces a hex hash slug; here the value
+ * just has to be unique + stable per intent for the test predicate.
+ */
+function intentKey(intent: string): string {
+  return createHash('sha256').update(intent.trim()).digest('hex').slice(0, 16);
+}
 
 /**
  * Write a blueprint-registry-shaped row directly to the vector store.
@@ -45,11 +54,8 @@ function writeCacheRow(
 ): void {
   const normalized = input.intent.trim();
   // Derive a deterministic contractKey from the intent so each test
-  // entry has a stable id without a real contract. Mirrors what the
-  // production `blueprintKey(contract)` produces — a hex hash slug —
-  // but here we just reuse `generationCacheKey` since the value just
-  // has to be unique per intent for the test predicate.
-  const contractKey = input.contractKey ?? generationCacheKey(normalized);
+  // entry has a stable id without a real contract.
+  const contractKey = input.contractKey ?? intentKey(normalized);
   const kind = input.kind ?? 'template';
   vectorStore.putVector(scope, {
     key: `${kind}:${contractKey}`,
@@ -66,26 +72,6 @@ function writeCacheRow(
     },
   });
 }
-
-describe('generationCacheKey', () => {
-  it('is deterministic on trimmed input', () => {
-    expect(generationCacheKey('  weather  ')).toBe(
-      generationCacheKey('weather'),
-    );
-  });
-
-  it('returns a 16-char hex prefix', () => {
-    const key = generationCacheKey('weather');
-    expect(key).toHaveLength(16);
-    expect(/^[0-9a-f]+$/.test(key)).toBe(true);
-  });
-
-  it('produces different keys for different intents', () => {
-    expect(generationCacheKey('weather card')).not.toBe(
-      generationCacheKey('todo list'),
-    );
-  });
-});
 
 describe('listGenerationCache', () => {
   it('returns [] for an empty scope', async () => {
@@ -111,17 +97,17 @@ describe('listGenerationCache', () => {
     expect(entries).toHaveLength(2);
     const byIntent = new Map(entries.map((e) => [e.cachedIntent, e]));
     expect(byIntent.get('weather card')?.id).toBe(
-      `template:${generationCacheKey('weather card')}`,
+      `template:${intentKey('weather card')}`,
     );
     expect(byIntent.get('weather card')?.cachedAt).toBe(
       '2026-04-21T00:00:00Z',
     );
     expect(byIntent.get('weather card')?.contractKey).toBe(
-      generationCacheKey('weather card'),
+      intentKey('weather card'),
     );
     expect(byIntent.get('weather card')?.kind).toBe('template');
     expect(byIntent.get('todo list')?.id).toBe(
-      `template:${generationCacheKey('todo list')}`,
+      `template:${intentKey('todo list')}`,
     );
   });
 
@@ -163,7 +149,7 @@ describe('listGenerationCache', () => {
     const entries = await listGenerationCache({ vectorStore }, 'app-1');
     expect(entries).toHaveLength(1);
     expect(entries[0]!.id).toBe(
-      `template:${generationCacheKey('weather card')}`,
+      `template:${intentKey('weather card')}`,
     );
   });
 
@@ -198,7 +184,7 @@ describe('invalidateGenerationCache', () => {
     await invalidateGenerationCache(
       { vectorStore },
       'app-1',
-      `template:${generationCacheKey('weather card')}`,
+      `template:${intentKey('weather card')}`,
     );
 
     expect(await listGenerationCache({ vectorStore }, 'app-1')).toHaveLength(0);
@@ -224,7 +210,7 @@ describe('invalidateGenerationCache', () => {
     await invalidateGenerationCache(
       { vectorStore },
       'app-A',
-      `template:${generationCacheKey('shared')}`,
+      `template:${intentKey('shared')}`,
     );
     expect(await listGenerationCache({ vectorStore }, 'app-A')).toHaveLength(0);
     expect(await listGenerationCache({ vectorStore }, 'app-B')).toHaveLength(1);

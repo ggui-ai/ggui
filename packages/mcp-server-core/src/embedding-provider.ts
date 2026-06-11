@@ -7,8 +7,10 @@
  *
  * Reference implementations:
  *   - MockEmbeddingProvider     (tests; deterministic vectors)
- *   - OpenAIEmbeddingProvider   (OSS BYOK default; cloud-agnostic)
- *   - BedrockEmbeddingProvider  (hosted runtime — `cloud/`, closed)
+ *   - OpenAIEmbeddingProvider   (default; bring-your-own OpenAI key)
+ *
+ * Any other embedding backend (Bedrock Titan, a local
+ * sentence-transformers server, …) plugs in by implementing this seam.
  */
 
 export interface EmbeddingProvider {

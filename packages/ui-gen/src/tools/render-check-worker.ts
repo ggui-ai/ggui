@@ -23,12 +23,15 @@
  * The worker still uses `vm.Script` to run compiled CJS because the
  * component needs a tailored `require` (react / jsx-runtime /
  * @ggui-ai/design only). Host-level process isolation is the
- * sandbox; module-scoped `require` is the resolution policy.
+ * sandbox; module-scoped `require` is the resolution policy. The
+ * mechanical compile+vm pipeline is the shared
+ * `evaluateComponentSource` helper (also used by the in-loop probe's
+ * `loadComponent`); only the resolution policy lives here.
  */
 import { createRequire } from 'node:module';
-import { Script } from 'node:vm';
-import * as esbuild from 'esbuild';
 import type { JsonObject } from '@ggui-ai/protocol';
+import { evaluateComponentSource } from '../internal/evaluate-component-source.js';
+import { hostGlobals } from '../internal/open-record.js';
 
 interface WorkerInput {
   readonly sourceCode: string;
@@ -68,7 +71,7 @@ async function renderOnce(input: WorkerInput): Promise<WorkerOutput> {
   // components that touch either global don't crash on import. The
   // shims only need to exist for the render; they're torn down by
   // process exit.
-  const g = globalThis as unknown as Record<string, unknown>;
+  const g = hostGlobals();
   if (!('window' in globalThis)) {
     g.window = {
       addEventListener: () => {},
@@ -87,22 +90,8 @@ async function renderOnce(input: WorkerInput): Promise<WorkerOutput> {
     const React = await import('react');
     const ReactDOMServer = await import('react-dom/server');
 
-    const cjsResult = await esbuild.transform(input.sourceCode, {
-      loader: 'tsx',
-      target: 'es2020',
-      format: 'cjs',
-      jsx: 'automatic',
-      jsxImportSource: 'react',
-      sourcefile: 'Component.tsx',
-    });
-
     const require_ = createRequire(import.meta.url);
 
-    // `module.exports` gets REPLACED by esbuild's CJS output (the
-    // `module.exports = __toCommonJS(...)` line), so we keep the
-    // module object itself and read `.exports` after execution
-    // rather than trusting the initial reference.
-    const moduleObj = { exports: {} as Record<string, unknown> };
     const sandboxRequire = (id: string): unknown => {
       if (id === 'react/jsx-runtime' || id === 'react/jsx-dev-runtime') {
         return require_('react/jsx-runtime');
@@ -141,17 +130,12 @@ async function renderOnce(input: WorkerInput): Promise<WorkerOutput> {
       throw new Error(`Import not allowed: ${id}`);
     };
 
-    const wrappedCode = `(function(require, exports, module) {\n${cjsResult.code}\n})`;
+    const exportsRecord = await evaluateComponentSource(
+      input.sourceCode,
+      sandboxRequire,
+    );
 
-    const script = new Script(wrappedCode, { filename: 'Component.cjs' });
-    const fn = script.runInThisContext() as (
-      req: typeof sandboxRequire,
-      exports: Record<string, unknown>,
-      module: { exports: Record<string, unknown> },
-    ) => void;
-    fn(sandboxRequire, moduleObj.exports, moduleObj);
-
-    const Component = moduleObj.exports.default;
+    const Component = exportsRecord.default;
     if (typeof Component !== 'function') {
       return {
         ok: false,

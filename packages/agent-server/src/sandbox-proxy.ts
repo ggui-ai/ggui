@@ -14,15 +14,16 @@
  * `@mcp-ui/client`'s `<AppRenderer>` accepts a `sandbox: { url }` prop
  * pointing at a public URL serving `sandbox.html`. We ship that file +
  * its message-relay JS as a self-contained HTML string and serve it
- * over plain Node `http` on a separate port. Samples (and any consumer
- * of the dev-stack) boot this alongside their agent server.
+ * over plain Node `http` on a separate port. `startAgentServer` boots
+ * this alongside the agent HTTP app; standalone hosts can boot it
+ * directly.
  *
  * # Reference impl
  *
  * Adapted from
  * `github.com/modelcontextprotocol/ext-apps/examples/basic-host/`
  * (sandbox.html + src/sandbox.ts + serve.ts). Inlined into a single
- * HTML so the dev-stack doesn't need to bundle a static asset.
+ * HTML so the package doesn't need to bundle a static asset.
  *
  * # Security
  *
@@ -36,7 +37,7 @@
  * # Caller pattern
  *
  * ```ts
- * import { startSandboxProxyServer } from '@ggui-ai/dev-stack';
+ * import { startSandboxProxyServer } from '@ggui-ai/agent-server';
  * const proxy = await startSandboxProxyServer({ port: 7790 });
  * console.log('Sandbox proxy:', proxy.url);
  * // ... pass proxy.url to AppRenderer's sandbox.url prop ...
@@ -85,8 +86,8 @@ export interface SandboxProxyServerHandle {
 
 /**
  * CSP shape mirrored from `@modelcontextprotocol/ext-apps`'s
- * `McpUiResourceCsp`. Re-declared locally so dev-stack doesn't take a
- * peer dep on ext-apps for a single record shape.
+ * `McpUiResourceCsp`. Re-declared locally so this package doesn't take
+ * a peer dep on ext-apps for a single record shape.
  */
 interface McpUiResourceCsp {
   readonly resourceDomains?: readonly string[];

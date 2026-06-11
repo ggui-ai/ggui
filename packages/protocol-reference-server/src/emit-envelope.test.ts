@@ -30,7 +30,7 @@ import { describe, expect, it, beforeEach, afterEach } from 'vitest';
 import { WebSocket } from 'ws';
 
 import { createReferenceConformanceHost } from './conformance-host.js';
-import { isRecord } from './is-record.js';
+import { isRecord } from '@ggui-ai/protocol';
 import { ReferenceServer } from './server.js';
 
 describe('emit-envelope ConformanceHost directive', () => {

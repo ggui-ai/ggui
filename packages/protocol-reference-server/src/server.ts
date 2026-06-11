@@ -28,7 +28,7 @@ import {
   handleHostContextObserved,
   parseHostContextObservedFrame,
 } from './host-context.js';
-import { isRecord } from './is-record.js';
+import { isRecord } from '@ggui-ai/protocol';
 import {
   DEPLOYMENT_DEFAULT_APP_ID,
   GguiSessionStore,

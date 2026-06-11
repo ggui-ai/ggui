@@ -65,7 +65,7 @@ import type {
   SetupStep as HostSetupStep,
   TeardownStep as HostTeardownStep,
 } from './conformance-host.js';
-import { isRecord } from './is-record.js';
+import { isRecord } from '@ggui-ai/protocol';
 import { behaviorIs, deepEqual, matchBehavior, type MatchResult } from './match-behavior.js';
 import type {
   ActionSpecEntryDecl,

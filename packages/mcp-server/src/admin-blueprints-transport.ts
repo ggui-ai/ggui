@@ -61,6 +61,7 @@
  * pairing.
  */
 import type { Express, Request, Response } from 'express';
+import { isRecord } from '@ggui-ai/protocol';
 import type { AuthAdapter, BlueprintProvider } from '@ggui-ai/mcp-server-core';
 import { resolveIdentity, UnauthenticatedError } from './auth.js';
 import type { Logger } from './logger.js';
@@ -171,7 +172,7 @@ export function mountAdminBlueprintsTransport(
     // 2. Body validation. Minimum shape: {id: string, name: string}.
     //    Optional fields: description, category, tags (string[]),
     //    updatedAt (ISO string). Anything else is ignored.
-    const body = (req.body ?? {}) as Record<string, unknown>;
+    const body: Record<string, unknown> = isRecord(req.body) ? req.body : {};
     const id = typeof body['id'] === 'string' ? body['id'] : undefined;
     const name = typeof body['name'] === 'string' ? body['name'] : undefined;
     if (!id || !name) {

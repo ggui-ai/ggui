@@ -24,6 +24,7 @@
  * primary action.
  */
 import type { Express, Request, Response } from 'express';
+import { isRecord } from '@ggui-ai/protocol';
 import type {
   AuditEntry,
   AuditSink,
@@ -169,7 +170,7 @@ export function mountAdminOAuthProvidersTransport(
     const reqLogger = opts.logger.child({ route: 'PUT ' + basePath + '/:providerId' });
     if (!(await requireBuilder(req, res, reqLogger))) return;
     const providerId = singleParam(req.params['providerId']) ?? '';
-    const body = (req.body ?? {}) as Record<string, unknown>;
+    const body: Record<string, unknown> = isRecord(req.body) ? req.body : {};
     const clientId = typeof body['clientId'] === 'string' ? body['clientId'] : undefined;
     const clientSecret =
       typeof body['clientSecret'] === 'string' ? body['clientSecret'] : undefined;
@@ -245,7 +246,7 @@ export function mountAdminOAuthProvidersTransport(
       });
       if (!(await requireBuilder(req, res, reqLogger))) return;
       const providerId = singleParam(req.params['providerId']) ?? '';
-      const body = (req.body ?? {}) as Record<string, unknown>;
+      const body: Record<string, unknown> = isRecord(req.body) ? req.body : {};
       const enabled = typeof body['enabled'] === 'boolean' ? body['enabled'] : undefined;
       if (enabled === undefined) {
         res.status(400).json({

@@ -11,21 +11,25 @@
  * - **Compositions** (Organisms): Self-contained sections with logic/state (Header, Modal, DataTable)
  * - **Templates**: Full-screen agent interface layouts (Dashboard, ListDetail, ChatInterface)
  *
- * **Import path:** everything ships from the single bare barrel —
- * primitives, components, compositions, blueprints, and tokens all
- * resolve from `@ggui-ai/design`.
+ * **Import paths:** generated component code and app code use the bare
+ * barrel — primitives, components, compositions, blueprints, and tokens
+ * all resolve from `@ggui-ai/design`.
  * ```ts
  * import { Button, Input, SearchField, Modal, Dashboard } from '@ggui-ai/design';
  * import { colors, spacing } from '@ggui-ai/design';
  * ```
+ * Renderer integrators use the subpaths kept out of the barrel:
+ * `@ggui-ai/design/preview`, `/rendering`, `/module-loader`, `/inline`.
  *
  * @packageDocumentation
  */
 
-// The bare barrel is the ONE import path — for generated component code
-// and for human consumers alike. `import { Card, Grid, Modal, Clickable }
+// The bare barrel is the one import path for generated component code
+// and human consumers alike. `import { Card, Grid, Modal, Clickable }
 // from '@ggui-ai/design'` — no caller ever has to predict which internal
-// folder a name lives in.
+// folder a name lives in. Renderer-facing modules (preview / rendering /
+// module-loader / inline) deliberately stay OUT of the barrel and ship
+// as subpaths only.
 export * from './primitives';
 export * from './components';
 export * from './compositions';

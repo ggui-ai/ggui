@@ -201,7 +201,9 @@ export function generateBoilerplate(
       const required = spec.required !== false;
       const nullable = schema?.nullable === true;
       const tsType = schema
-        ? jsonSchemaTypeToTs(schema as unknown as JsonSchema)
+        ? // JsonSchema extends JsonObject, so this is a plain structural
+          // downcast (no `unknown` erasure) of already-shaped contract data.
+          jsonSchemaTypeToTs(schema as JsonSchema)
         : "unknown";
       const fullType = nullable ? `${tsType} | null` : tsType;
       // Build comment: description + default value hint

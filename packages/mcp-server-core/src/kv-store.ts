@@ -13,13 +13,12 @@
  * streamed; kv entries are transient and keyed.
  *
  * Reference implementations:
- *   - InMemoryKeyValueStore   (tests + OSS dev default)
- *   - SqliteKeyValueStore     (OSS persistence default; TTL at read time)
- *   - RedisKeyValueStore      (hosted runtime — `cloud/`, closed; ElastiCache)
+ *   - InMemoryKeyValueStore   (tests + dev default)
+ *   - SqliteKeyValueStore     (persistence default; TTL at read time)
  *
  * Community-buildable:
+ *   - Redis / Valkey / Dragonfly wrappers
  *   - Postgres UNLOGGED table + LISTEN/NOTIFY expiry
- *   - Valkey / Dragonfly wrappers
  */
 
 export interface KeyValueSetOptions {

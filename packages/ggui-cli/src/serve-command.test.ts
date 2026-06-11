@@ -411,6 +411,10 @@ describe('runServe', () => {
     port: 6781,
     host: '127.0.0.1',
     mcpOnly: true,
+    devAllowAll: false,
+    oauth: false,
+    publicDemo: false,
+    multiTenant: false,
   };
 
   /**
@@ -438,7 +442,6 @@ describe('runServe', () => {
       serverVersion: opts.serverVersion ?? '0.0.1',
       primitiveCatalogCount: 0,
       themeSource: 'default',
-      adapters: [],
       // Null pairing service — exercises the "embedding host opted
       // out" branch. `runServe` MUST NOT emit a PAIR_CODE beacon in
       // this case. Tests that want the pre-mint branch override this
@@ -559,7 +562,15 @@ describe('runServe', () => {
 
 describe('runServe — agent supervision', () => {
   /** Full-mode flags (not --mcp-only). Agent will be supervised. */
-  const FULL_FLAGS = { port: 6781, host: '127.0.0.1', mcpOnly: false };
+  const FULL_FLAGS = {
+    port: 6781,
+    host: '127.0.0.1',
+    mcpOnly: false,
+    devAllowAll: false,
+    oauth: false,
+    publicDemo: false,
+    multiTenant: false,
+  };
   const AGENT_RUNNING: AgentStatus = {
     kind: 'running',
     entry: './agent.ts',
@@ -578,7 +589,6 @@ describe('runServe — agent supervision', () => {
         serverVersion: '0.0.1',
         primitiveCatalogCount: 0,
         themeSource: 'default',
-        adapters: [],
         // Same rationale as `makeFake` in the sibling describe — null
         // means the fake backend opted out of pairing, so `runServe`
         // takes the "no pre-mint, no PAIR_CODE beacon" branch.

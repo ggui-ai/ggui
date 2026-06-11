@@ -15,6 +15,7 @@
 import { promises as fs } from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
+import { isRecord } from '@ggui-ai/protocol';
 import type { OAuthProviderConfigRecord } from './oauth-login-types.js';
 import type { Logger } from './logger.js';
 
@@ -166,15 +167,14 @@ async function readFileShape(
     });
     return { version: FILE_VERSION, providers: [] };
   }
-  if (!parsed || typeof parsed !== 'object') {
+  if (!isRecord(parsed)) {
     logger.warn('oauth_providers_file_corrupt', {
       filePath,
       reason: 'root_not_object',
     });
     return { version: FILE_VERSION, providers: [] };
   }
-  const obj = parsed as { version?: unknown; providers?: unknown };
-  if (!Array.isArray(obj.providers)) {
+  if (!Array.isArray(parsed['providers'])) {
     logger.warn('oauth_providers_file_corrupt', {
       filePath,
       reason: 'providers_not_array',
@@ -182,9 +182,9 @@ async function readFileShape(
     return { version: FILE_VERSION, providers: [] };
   }
   const providers: FileRecord[] = [];
-  for (const row of obj.providers) {
-    if (!row || typeof row !== 'object') continue;
-    const r = row as Record<string, unknown>;
+  for (const row of parsed['providers']) {
+    if (!isRecord(row)) continue;
+    const r = row;
     if (
       typeof r['providerId'] !== 'string' ||
       typeof r['clientId'] !== 'string' ||

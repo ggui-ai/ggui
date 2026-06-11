@@ -37,7 +37,7 @@ import {
   GoogleSdkAdapter,
   GeneratorAdapter,
   createGeneratorTools,
-} from '@ggui-ai/ui-gen/adapters/index';
+} from '@ggui-ai/ui-gen/adapters';
 import { BenchmarkRunner, calculateCost } from './runner';
 import { getBenchmarkCommit, BENCHMARK_COMMITS } from './commits';
 import { buildSystemPrompt } from '@ggui-ai/ui-gen/harness/runtime';

@@ -130,7 +130,7 @@ function jsonResponse(status: number, body: unknown): Response {
   });
 }
 
-function bytesResponse(status: number, bytes: Uint8Array): Response {
+function bytesResponse(status: number, bytes: Uint8Array<ArrayBuffer>): Response {
   return new Response(bytes, {
     status,
     headers: { 'content-type': 'application/javascript' },
@@ -180,7 +180,7 @@ function blueprintManifestFixture(
 
 /** Build a fake bundle + signature pair signed against a known SHA. */
 function buildArtifacts(bundleText: string): {
-  bundleBytes: Uint8Array;
+  bundleBytes: Uint8Array<ArrayBuffer>;
   bundleSri: string;
   signature: {
     algorithm: 'ed25519';
@@ -1151,6 +1151,7 @@ describe('runArtifactInstall', () => {
     const io = captureIO();
     await runArtifactInstall(
       {
+        kind: 'gadget',
         artifactId: '@my-org/weather-card',
         version: '0.1.0',
         registry: 'https://from-flag.example.com',
@@ -1190,6 +1191,7 @@ describe('runArtifactInstall', () => {
     const io = captureIO();
     await runArtifactInstall(
       {
+        kind: 'gadget',
         artifactId: '@my-org/foo',
         version: '0.1.0',
         noPrompt: true,
@@ -1221,6 +1223,7 @@ describe('runArtifactInstall', () => {
     const io = captureIO();
     await runArtifactInstall(
       {
+        kind: 'gadget',
         artifactId: '@my-org/foo',
         version: '0.1.0',
         noPrompt: true,

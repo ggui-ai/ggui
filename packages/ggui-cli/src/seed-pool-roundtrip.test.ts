@@ -60,13 +60,21 @@ describe('shared blueprint pool: full export → artifact → seed pool round tr
     // Build a read-only seed pool from the directory artifact — B has no
     // knowledge of A's registry; it only reads the artifact from disk.
     const pool = await buildSeedPool(new FileSystemSeedPoolSource(dir), { scope: 'shared' });
+    // `BlueprintPool.scope` is optional on the interface (omitted = per-app
+    // default), but `buildSeedPool` always stamps the fixed pool scope —
+    // narrow with a real guard so the query below is typed `string`.
+    const poolScope = pool.scope;
+    if (poolScope === undefined) {
+      throw new Error('buildSeedPool must stamp the fixed pool scope');
+    }
+    expect(poolScope).toBe('shared');
 
     // ── Exact-key reuse assertion (Option 1) ──────────────────────────────────
     // Query by the SAME canonical key a fresh deployment would compute from the
     // contract alone — this is the load-bearing cross-deployment reuse claim.
     const reused = await findBlueprintExact(
       { vectorStore: pool.registry.vectorStore, index: pool.registry.index },
-      pool.scope,        // 'shared'
+      poolScope,
       'template',
       blueprintKey(contract),
       variantKey({}),

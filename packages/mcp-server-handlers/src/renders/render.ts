@@ -197,19 +197,25 @@ export interface GenerationDeps {
    * Optional RAG retrieval + cache deps. Absent = generation always
    * runs (no cache lookup, every render hits the LLM).
    *
-   * When present, the handler runs a `lookupGenerationCache` on the
-   * story path BEFORE invoking the generator:
+   * When present, the handler resolves blueprint reuse on the story
+   * path BEFORE invoking the generator (the §6 point-read over the
+   * handshake's matched blueprint, or the exact
+   * `(contractKey, variantKey)` re-resolution on a variance override):
    *
-   *   - Hit (score ≥ threshold) → synthesize a `ComponentGguiSession` from
-   *     the cached componentCode, skip `uiGenerator.generate`, and emit
+   *   - Hit → synthesize a `ComponentGguiSession` from the stored
+   *     componentCode + contract projections via
+   *     `commitCachedGguiSession`, skip `uiGenerator.generate`, and emit
    *     `cache.hit:true` on the render output.
-   *   - Miss → run the existing generator path unchanged; on success,
-   *     `recordGenerationCache` upserts the new componentCode into
-   *     the scope so the next same-intent render hits.
+   *   - Miss → run the generator path; on success,
+   *     `safelyRegisterBlueprint` registers the produced blueprint so
+   *     future renders can hit Tier 1 (exact contract match) or Tier 2
+   *     (semantic neighbour).
    *
-   * Scope: `ctx.appId`. Key: `sha256(trimmed intent)[0..16]`. Metadata
-   * carries `componentCode` directly — a hit doesn't need a secondary
-   * blob lookup to rehydrate a `ComponentGguiSession`.
+   * Scope: `ctx.appId`. Identity: opaque `bp_<uuid>` rows resolved via
+   * the `(kind, contractKey, variantKey)` exact index — see
+   * `blueprint-registry.ts`. Row metadata carries `componentCode` + the
+   * full contract directly — a hit doesn't need a secondary blob
+   * lookup to rehydrate a `ComponentGguiSession`.
    *
    * The shape is intentionally optional-at-generation-level rather
    * than a top-level handler dep so the "generation off" default

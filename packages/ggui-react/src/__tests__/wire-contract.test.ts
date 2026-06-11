@@ -13,12 +13,12 @@
  *     today, but the validator's semantics match the server's
  *     `assertPropsContract` used in `ggui_update`.
  *
- * The allowlist gate (`EVENT_NOT_ALLOWED`) has NO client equivalent in
- * this slice — client dispatch only emits `data:submit` (always in
- * DEFAULT_SUBSCRIPTION), so the allowlist would be trivially
- * satisfied. If a future client hook surfaces arbitrary event types
- * to dev code, a client-side allowlist check can be added without
- * changing these three helpers.
+ * There is no event-allowlist gate on either side — inbound actions
+ * are gated by the action contract alone (the pre-Phase-B
+ * `subscription.events` allowlist was deleted with the session-stack
+ * collapse). If a future slice reinstates per-render event policy, a
+ * client-side check can be added without changing these three
+ * helpers.
  */
 import { describe, expect, it } from 'vitest';
 import type { ActionSpec, PropsSpec, StreamSpec } from '@ggui-ai/protocol';

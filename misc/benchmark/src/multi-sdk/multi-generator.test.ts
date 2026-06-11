@@ -22,7 +22,7 @@ import { describe, it, expect } from 'vitest';
 import {
   GeneratorAdapter,
   type GenerateParams,
-} from '@ggui-ai/ui-gen/adapters/index';
+} from '@ggui-ai/ui-gen/adapters';
 import type { AdapterResult, AdapterMode, ProviderName } from '@ggui-ai/ui-gen/adapters/types';
 import {
   BenchmarkRunner,

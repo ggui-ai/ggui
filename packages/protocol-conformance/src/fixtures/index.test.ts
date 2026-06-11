@@ -11,7 +11,7 @@ import {
 } from '@ggui-ai/protocol';
 import { describe, expect, it } from 'vitest';
 
-import { isRecord } from '../is-record.js';
+import { isRecord } from '@ggui-ai/protocol';
 import { behaviorIs } from '../match-behavior.js';
 import { parseInputEnvelope } from '../run-conformance.js';
 import {

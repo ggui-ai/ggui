@@ -50,6 +50,16 @@ const GGUI_PORT = Number.parseInt(process.env.GGUI_PORT ?? '6781', 10);
 const MCP_URL = `http://localhost:${GGUI_PORT}/mcp`;
 const HAS_KEY = !!process.env.ANTHROPIC_API_KEY;
 
+// Typed test-injected global — the postMessage interceptor below
+// stores every captured envelope here. Declared as an optional Window
+// property so the browser-context callbacks read/write it without
+// casts.
+declare global {
+  interface Window {
+    __capturedMessages?: unknown[];
+  }
+}
+
 describe.skipIf(!HAS_KEY)(
   'Scenario 10 — no-consumer pure-doorbell user-action',
   () => {
@@ -86,13 +96,9 @@ describe.skipIf(!HAS_KEY)(
         // the TOP window's array — that's where iframe→parent envelopes
         // land (the host wrapper page is the parent).
         await page.addInitScript(() => {
-          (
-            window as unknown as { __capturedMessages: unknown[] }
-          ).__capturedMessages = [];
+          window.__capturedMessages = [];
           window.addEventListener('message', (ev) => {
-            (
-              window as unknown as { __capturedMessages: unknown[] }
-            ).__capturedMessages.push(ev.data);
+            window.__capturedMessages?.push(ev.data);
           });
         });
 
@@ -120,11 +126,9 @@ describe.skipIf(!HAS_KEY)(
         // the consumerPresent:false response.
         await page.waitForTimeout(2_000);
 
-        const messages = await page.evaluate(() => {
-          return (
-            window as unknown as { __capturedMessages: unknown[] }
-          ).__capturedMessages;
-        });
+        const messages = await page.evaluate(
+          () => window.__capturedMessages ?? [],
+        );
 
         const uiMessageEnvelopes = (
           messages as Array<Record<string, unknown>>

@@ -3,18 +3,17 @@
  *
  * The live channel is where the typed-channel contract is enforced on
  * live traffic between the server and the user. It co-hosts on the
- * same Express server as `/mcp` and reuses the same
- * `@ggui-ai/mcp-server-handlers/renders` helpers that the
- * closed hosted server consumes.
+ * same Express server as `/mcp` and reuses the
+ * `@ggui-ai/mcp-server-handlers/renders` helpers, so every
+ * deployment of this server family enforces the same contracts.
  *
  * Scope:
  *
  *   - `subscribe` → auth, resolve-or-create render, register subscriber,
  *     reply `ack` with the render's current snapshot + sequence.
  *   - `action` → inbound user action carried as an {@link ActionEnvelope}.
- *     Gated through `assertEventAllowed` (allowlist) +
- *     `assertActionContract` (payload, for data:submit). Persisted to
- *     GguiSessionStore as a typed render event.
+ *     Gated through `assertActionContract` (payload, for data:submit).
+ *     Persisted to GguiSessionStore as a typed render event.
  *   - `ping`/`pong` → heartbeat parity with hosted.
  *   - `close`/socket-close → clean subscriber teardown.
  *   - `sendToGguiSession(sessionId, data)` → outbound fan-out API for
@@ -70,7 +69,7 @@ import {
   UPGRADE_REQUIRED,
 } from "@ggui-ai/protocol";
 import type { WebSocketMessage } from "@ggui-ai/protocol/transport/websocket";
-import { randomBytes, randomUUID } from "node:crypto";
+import { randomBytes } from "node:crypto";
 import type { IncomingMessage } from "node:http";
 import type { Duplex } from "node:stream";
 import { WebSocketServer, type WebSocket } from "ws";
@@ -80,27 +79,6 @@ import {
   UnauthenticatedError,
 } from "./auth.js";
 import type { Logger } from "./logger.js";
-
-// `assertEventAllowed` + `EventNotAllowedError` were removed from
-// `@ggui-ai/mcp-server-handlers/renders` in Phase B alongside
-// the session-stack collapse — the event-allowlist concept on a
-// `StackItem.subscription` no longer has a wire shape to bind to.
-// Local stand-ins keep the inbound-action allowlist call sites
-// compiling until the event-allowlist semantics are re-thought in a
-// follow-up slice (see "B.2d render-channel inbound-action allowlist
-// deferred" in the report).
-class EventNotAllowedError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = "EventNotAllowedError";
-  }
-}
-function assertEventAllowed(_subscription: unknown, _type: string): void {
-  // No-op: pre-Phase-B this read `StackItem.subscription` and rejected
-  // event types not on the allowlist. Post-collapse there's no
-  // subscription field on `GguiSession`; the gate is deferred to a follow-up
-  // slice that defines per-render event policy on the new wire shape.
-}
 
 /** Default URL path for the channel endpoint. Operators can override. */
 export const DEFAULT_RENDER_CHANNEL_PATH = "/ws";
@@ -316,7 +294,7 @@ export interface GguiSessionChannelBootstrap {
   /**
    * Refresh a (possibly-expired-but-signature-valid) bootstrap envelope
    * into a new envelope with a fresh TTL. Used by the
-   * `ggui_runtime_refresh_bootstrap` MCP tool — iframes that see their
+   * `ggui_runtime_refresh_ws_token` MCP tool — iframes that see their
    * bootstrap drift out of the TTL window swap in the refreshed
    * envelope without going back through `ggui_render`.
    *
@@ -389,8 +367,9 @@ export interface GguiSessionChannelOptions {
   readonly streamBuffer?: GguiSessionStreamBuffer;
   /**
    * Live-tail pub/sub for outbound live-channel frames. Defaults to a
-   * fresh `InProcessStreamFanout` (in-memory, single-process). Hosted
-   * deployments bind a `RedisPubSubFanout` here for multi-process
+   * fresh `InProcessStreamFanout` (in-memory, single-process).
+   * Multi-process deployments bind a pubsub-backed `StreamFanout`
+   * implementation (e.g. Redis) behind this seam for cross-process
    * fan-out.
    *
    * The channel server uses the seam to publish every fanout-eligible
@@ -680,8 +659,9 @@ export interface GguiSessionChannelServer {
    * `sessionId`. Skips replay-buffer stamping, GguiSessionStore lookups,
    * and contract validation — the caller is the one that originally
    * validated + persisted the underlying mutation. This surface is the
-   * cloud adapter's path for delivering already-validated frames that
-   * arrived via an external pubsub layer (Redis from another pod).
+   * delivery path for already-validated frames that arrived via an
+   * external pubsub layer (e.g. Redis from another process of a
+   * multi-process deployment).
    *
    * Internal adapter use only. NOT part of the published ggui
    * protocol, NOT stable across versions, NOT exposed to MCP / wire
@@ -713,7 +693,8 @@ export function createGguiSessionChannelServer(opts: GguiSessionChannelOptions):
   // Outbound stream buffer — owns seq assignment + bounded replay
   // storage. Default is in-memory; operators swap via `opts.streamBuffer`.
   const streamBuffer: GguiSessionStreamBuffer = opts.streamBuffer ?? new InMemoryGguiSessionStreamBuffer();
-  // Live-tail pub/sub. Default in-process; hosted binds RedisPubSubFanout.
+  // Live-tail pub/sub. Default in-process; multi-process deployments
+  // bind a pubsub-backed StreamFanout via `opts.streamFanout`.
   const streamFanout: StreamFanout = opts.streamFanout ?? new InProcessStreamFanout();
   // Channel-subscribe local-tool poll plumbing. Resolved once
   // at composition so the `channel_subscribe` handler doesn't pay the
@@ -743,8 +724,8 @@ export function createGguiSessionChannelServer(opts: GguiSessionChannelOptions):
   /**
    * Per-render local subscriber count. Drives the {@link
    * GguiSessionChannelOptions.onFirstSubscriber} / `onLastSubscriberGone`
-   * 0↔1 transition hooks used by cloud adapters for per-render
-   * cross-pod pub/sub channel scoping. Distinct from the
+   * 0↔1 transition hooks multi-process deployments use for per-render
+   * cross-process pub/sub channel scoping. Distinct from the
    * `renderCount` getter — that walks `wsSubscribers` on demand;
    * this map is the registration-time counter the hooks key off.
    */
@@ -1253,9 +1234,9 @@ export function createGguiSessionChannelServer(opts: GguiSessionChannelOptions):
     // queues synchronously inside publish(), so no real async hop. The
     // pump loop on each WS subscriber yields the envelope, applies the
     // per-sub replay-cursor filter, and sends to the WS. Fire-and-forget
-    // because publish() never throws on the in-process impl, and a hosted
-    // RedisPubSubFanout failure here would already be persisted to the
-    // GguiSessionStreamBuffer for replay-recovery on reconnect.
+    // because publish() never throws on the in-process impl, and an
+    // external pubsub-fanout failure here would already be persisted to
+    // the GguiSessionStreamBuffer for replay-recovery on reconnect.
     void streamFanout.publish({ sessionId: envelope.sessionId, envelope });
     return { seq: envelope.seq };
   }
@@ -1491,12 +1472,11 @@ export function createGguiSessionChannelServer(opts: GguiSessionChannelOptions):
    * Handle an inbound `action` message — the canonical flat
    * {@link ActionEnvelope} shape.
    *
-   * Two-step enforcement: (1) allowlist via {@link assertEventAllowed}
-   * against the active render's subscription allowlist (Phase B: no-op
-   * stub — GguiSession no longer carries `subscription.events`); (2)
-   * actionSpec payload check via {@link assertActionContract} for
-   * `data:submit` types. Both helpers are shared with the hosted
-   * `handle-action.ts` ingress.
+   * Inbound actions are gated by {@link assertActionContract} only —
+   * the actionSpec payload check for `data:submit` types. (The
+   * pre-Phase-B `subscription.events` allowlist gate was deleted with
+   * the session-stack collapse; per-render event policy needs a new
+   * wire shape before any second gate can exist.)
    *
    * Accepted envelopes dual-write, mirroring the
    * `ggui_runtime_submit_action` relay's posture:
@@ -1545,28 +1525,10 @@ export function createGguiSessionChannelServer(opts: GguiSessionChannelOptions):
     // resolved render itself is the active item.
     const activeItem = resolveActiveGguiSession(stored.render);
 
-    // ── Two-step enforcement ──
-    //   1. allowlist via assertEventAllowed (Phase B: no-op stub —
-    //      GguiSession no longer carries a `subscription` allowlist;
-    //      reinstating per-render event policy is deferred.)
-    //   2. actionSpec payload check via assertActionContract (data:submit)
-    // Envelope.payload for data:submit carries the ActionEventValue
-    // shape (`{action, data?, tool?}`).
-    try {
-      assertEventAllowed(undefined, envelope.type);
-    } catch (err) {
-      if (err instanceof EventNotAllowedError) {
-        opts.logger.warn("render_channel_event_not_allowed", {
-          sessionId: sub.sessionId,
-          envelope: "action",
-          error: err.message,
-        });
-        sendError(ws, "EVENT_NOT_ALLOWED", err.message, message.requestId);
-        return;
-      }
-      throw err;
-    }
-
+    // Contract enforcement: actionSpec payload check via
+    // assertActionContract (data:submit only). Envelope.payload for
+    // data:submit carries the ActionEventValue shape
+    // (`{action, data?, tool?}`).
     if (envelope.type === "data:submit") {
       try {
         const activeActionSpec =
@@ -1757,12 +1719,12 @@ export function createGguiSessionChannelServer(opts: GguiSessionChannelOptions):
         // Tamper / format / kind failures collapse into BOOTSTRAP_INVALID
         // (no refresh path); expired-but-signed envelopes emit the
         // dedicated BOOTSTRAP_EXPIRED so the client knows to call
-        // `ggui_runtime_refresh_bootstrap`.
+        // `ggui_runtime_refresh_ws_token`.
         if (verifyResult.reason === "expired") {
           sendError(
             ws,
             "BOOTSTRAP_EXPIRED",
-            "Bootstrap token expired — call ggui_runtime_refresh_bootstrap or re-handshake",
+            "Bootstrap token expired — call ggui_runtime_refresh_ws_token or re-handshake",
             message.requestId
           );
         } else {
@@ -2310,11 +2272,11 @@ export function createGguiSessionChannelServer(opts: GguiSessionChannelOptions):
     externalBroadcast(sessionId, frame) {
       // Walk the flat subscriber set; filter to matching sessionId.
       // `send()` already guards closed sockets and logs (but doesn't
-      // throw on) per-subscriber failures, so the caller (a cloud
+      // throw on) per-subscriber failures, so the caller (an external
       // pubsub on-message handler) can't be made to fail by a dead
       // WebSocket. No GguiSessionStore lookup — the publisher already
-      // validated; this seam is the cross-pod delivery path, not the
-      // re-validation point.
+      // validated; this seam is the cross-process delivery path, not
+      // the re-validation point.
       for (const sub of wsSubscribers) {
         if (sub.sessionId !== sessionId) continue;
         send(sub.ws, frame);
@@ -2375,9 +2337,4 @@ export function createGguiSessionChannelServer(opts: GguiSessionChannelOptions):
       });
     },
   };
-}
-
-/** Fabricate a request id for live-channel ops so logs correlate. */
-export function newRequestId(): string {
-  return randomUUID();
 }

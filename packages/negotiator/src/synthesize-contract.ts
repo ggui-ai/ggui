@@ -1353,8 +1353,7 @@ const SYNTH_TOTAL_BUDGET = 3_000;
 
 /**
  * Compose the "AVAILABLE GADGETS" section appended to synth's user
- * prompt (and the decision-engine user message — both paths share
- * this one composer). Flattens the package-keyed
+ * prompt. Flattens the package-keyed
  * {@link GadgetDescriptor} catalog into one line per export:
  *
  *     - hook `useGeolocation` (package `@ggui-ai/gadgets`) — <desc> (usage: <usage>)

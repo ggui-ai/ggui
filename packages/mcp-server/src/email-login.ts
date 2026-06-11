@@ -34,6 +34,7 @@
  */
 import type { Express, Request, Response } from 'express';
 import { randomBytes } from 'node:crypto';
+import { isRecord } from '@ggui-ai/protocol';
 import type { AuditEntry, AuditSink, AuthAdapter } from '@ggui-ai/mcp-server-core';
 import { formatUserSessionCookieHeader } from './user-session-auth.js';
 import { createConsoleLogger } from './logger.js';
@@ -277,10 +278,7 @@ export function mountEmailLoginRoutes(
   // email enumeration — see route docstring for why).
   app.post(startPath, async (req: Request, res: Response) => {
     const reqLogger = opts.logger.child({ route: 'POST ' + startPath });
-    const body =
-      typeof req.body === 'object' && req.body !== null
-        ? (req.body as Record<string, unknown>)
-        : {};
+    const body: Record<string, unknown> = isRecord(req.body) ? req.body : {};
     const rawEmail = typeof body['email'] === 'string' ? body['email'] : '';
     const email = rawEmail.trim().toLowerCase();
     if (!EMAIL_RE.test(email) || email.length > 254) {

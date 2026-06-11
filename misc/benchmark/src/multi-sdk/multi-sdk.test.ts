@@ -16,7 +16,7 @@ import {
   OpenAiSdkAdapter,
   GoogleRawAdapter,
   GoogleSdkAdapter,
-} from '@ggui-ai/ui-gen/adapters/index';
+} from '@ggui-ai/ui-gen/adapters';
 import { BENCHMARK_COMMITS, getBenchmarkCommit } from './commits';
 import { generateReport, renderReportMarkdown } from './reporter';
 import { calculateCost } from './runner';

@@ -6,11 +6,13 @@
  * card, or MCP-Apps iframe); there is no vessel that wraps a stack of
  * entries. The vessel concept (`Session`) is deleted from the protocol.
  *
- * Reference implementations:
- *   - InMemoryGguiSessionStore   (tests, dev)
- *   - SqliteGguiSessionStore     (OSS default; live tail via in-process EventEmitter)
- *   - PostgresGguiSessionStore   (optional; LISTEN/NOTIFY fanout)
- *   - DynamoGguiSessionStore     (hosted runtime; AppSync subscriptions)
+ * Reference implementations (both in this package):
+ *   - InMemoryGguiSessionStore   (`./in-memory` — tests, dev, zero-config default)
+ *   - SqliteGguiSessionStore     (`./sqlite` — persistent-mode default; in-process live tail)
+ *
+ * Other backends (Postgres, Redis, DynamoDB, …) are buildable against
+ * this contract; prove conformance with `gguiSessionStoreContract` +
+ * `runGguiSessionStoreConformance` from `./contract-tests`.
  *
  * Conversation-context lookups (sibling renders within one host
  * conversation) flow via the unchanged `hostSession` pair on each

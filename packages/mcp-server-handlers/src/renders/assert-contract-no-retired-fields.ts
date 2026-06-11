@@ -42,11 +42,17 @@ export class ContractRetiredFieldError extends Error {
  * mutation. Returns `void` on success.
  */
 export function assertContractNoRetiredFields(contract: DataContract): void {
-  const raw = contract as unknown as Record<string, unknown>;
-  const retired: string[] = [];
-  for (const key of Object.keys(RETIRED_CONTRACT_FIELDS)) {
-    if (raw[key] !== undefined) retired.push(key);
-  }
+  // Scan the contract's own (defined) keys against the retired
+  // vocabulary — key-presence iteration needs no shape assertion, so
+  // the typed contract never round-trips through a cast.
+  const presentKeys = new Set(
+    Object.entries(contract)
+      .filter(([, value]) => value !== undefined)
+      .map(([key]) => key),
+  );
+  const retired = Object.keys(RETIRED_CONTRACT_FIELDS).filter((key) =>
+    presentKeys.has(key),
+  );
   if (retired.length > 0) {
     throw new ContractRetiredFieldError(retired);
   }

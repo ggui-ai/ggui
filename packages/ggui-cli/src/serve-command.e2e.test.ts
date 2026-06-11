@@ -42,7 +42,6 @@ describe('runServe + createGguiServer (end-to-end)', () => {
       serverVersion: '0.0.1',
       primitiveCatalogCount: inner.primitiveCatalogs.length,
       themeSource: inner.theme.source,
-      adapters: inner.adapters,
       pairingService: inner.pairingService,
       adminToken: inner.adminToken,
       async listen(port, host) {
@@ -73,7 +72,15 @@ describe('runServe + createGguiServer (end-to-end)', () => {
     // flow `cli.ts` runs in production.
     const out: string[] = [];
     const servePromise = runServe({
-      flags: { port: 0, host: DEFAULT_SERVE_HOST, mcpOnly: true },
+      flags: {
+        port: 0,
+        host: DEFAULT_SERVE_HOST,
+        mcpOnly: true,
+        devAllowAll: false,
+        oauth: false,
+        publicDemo: false,
+        multiTenant: false,
+      },
       backendFactory: () => toBackend(server),
       agentStatus: { kind: 'disabled', reason: '--mcp-only' },
       stdout: { write: (chunk) => out.push(chunk) },

@@ -10,7 +10,7 @@
  *   - **WS token** — short-TTL signed envelope, minted by
  *     `ggui_render` (or equivalent), consumed at live-channel subscribe.
  *     The MCP Apps iframe receives it on the
- *     `_meta["ai.ggui/render"].token` slice. **Reusable within TTL**
+ *     `_meta["ai.ggui/render"].wsToken` slice field. **Reusable within TTL**
  *     (G14, 2026-05-23) so a transient WS drop can reconnect without a
  *     fresh handshake. After TTL expiry the client either refreshes
  *     the envelope via `ggui_runtime_refresh_ws_token` (allowed within
@@ -59,7 +59,7 @@ import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
  * a distinct verify surface — a ws token CAN'T verify as a session
  * token even with matching signature + payload.
  *
- *   - `'ws'`              — short-TTL, single-use, ggui_render → iframe.
+ *   - `'ws'`              — short-TTL, multi-use within TTL (G14), ggui_render → iframe.
  *   - `'session'`         — longer-TTL, reusable, reconnect credential.
  *   - `'console-session'` — longer-TTL, reusable, issued by the
  *     same-origin console cookie endpoint. Scoped narrowly: only
@@ -166,7 +166,7 @@ function mintToken(
  * Mint a short-TTL WS auth token.
  *
  * Intended for the live-channel auth flow: the token travels on the
- * `_meta["ai.ggui/render"].token` slice of a `ggui_render` tool result,
+ * `_meta["ai.ggui/render"].wsToken` slice field of a `ggui_render` tool result,
  * is consumed at iframe `subscribe`, and remains valid for `ttlSec`
  * (default 180s) to absorb transient WS drops without a fresh
  * handshake (G14, 2026-05-23). Post-TTL: the iframe MAY refresh via

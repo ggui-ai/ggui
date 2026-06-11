@@ -14,15 +14,23 @@ npm install @ggui-ai/design
 
 `react` and `react-dom` (v18 or v19) are peer dependencies.
 
-## One import path
+## Import paths
 
-Everything ships from the single bare barrel — there are no sub-path
-imports. Primitives, components, compositions, blueprints, and design
-tokens all resolve from `@ggui-ai/design`:
+Generated component code and app code use the single bare barrel —
+primitives, components, compositions, blueprints, and design tokens all
+resolve from `@ggui-ai/design`:
 
 ```tsx
 import { Card, Stack, Text, Button, Grid, colors, spacing } from "@ggui-ai/design";
 ```
+
+Renderer integrators (packages that mount generated components) use the
+subpaths that are deliberately kept **out** of the barrel:
+`@ggui-ai/design/preview`, `@ggui-ai/design/rendering`,
+`@ggui-ai/design/module-loader`, and `@ggui-ai/design/inline`. Per-layer
+subpaths (`/primitives`, `/components`, `/compositions`, `/tokens`,
+`/themes`, `/interact`) also exist for callers that want a narrower
+entry point; they re-export the same symbols the barrel carries.
 
 ## Usage
 

@@ -2,22 +2,24 @@
 //
 // Eval a compiled component source string into a real React component reference.
 //
-// Pattern (lifted from src/tools/render-check.ts::tryRender):
-//   1. Re-compile sourceCode → CJS with esbuild.transform
-//   2. Wrap in (function(require, exports, module) { ... })
-//   3. Run in vm.Script with a sandboxed require() that resolves:
-//        - react / react/jsx-runtime → real react
-//        - react-dom/* → real react-dom
-//        - @ggui-ai/wire → REAL wire package (we want real useAction etc.,
-//                         the probe is injected via WireConfig at provider level)
-//        - @ggui-ai/design/* → real design package
-//   4. Pluck `module.exports.default` as the Component
+// The mechanical compile+vm pipeline is the shared
+// `evaluateComponentSource` helper (also used by the render-smoke
+// subprocess worker); this module owns the in-loop probe's
+// module-resolution POLICY — a sandboxed require() that resolves:
+//   - caller-injected `moduleResolutions` first (single-realm React)
+//   - react / react/jsx-runtime → real react
+//   - react-dom/* → real react-dom
+//   - @ggui-ai/wire → REAL wire package (we want real useAction etc.,
+//                    the probe is injected via WireConfig at provider level)
+//   - @ggui-ai/design/* → real design package
+// then plucks `module.exports.default` as the Component.
 //
 // Why we evaluate sourceCode (not the pre-compiled bundle): the test runner
 // already has sourceCode handy, and re-compiling guarantees a CJS shape
 // the vm sandbox can run without ESM module-record juggling.
 
 import type { ComponentType } from "react";
+import { evaluateComponentSource } from "../../../internal/evaluate-component-source.js";
 
 export interface LoadComponentInput {
   /** The TSX source the agent emitted. We re-transform it to CJS. */
@@ -41,17 +43,6 @@ export interface LoadComponentResult {
 export async function loadComponent(input: LoadComponentInput): Promise<LoadComponentResult> {
   const { sourceCode, moduleResolutions = {} } = input;
   const { createRequire } = await import("module");
-  const { Script } = await import("vm");
-  const esbuild = await import("esbuild");
-
-  const cjsResult = await esbuild.transform(sourceCode, {
-    loader: "tsx",
-    target: "es2020",
-    format: "cjs",
-    jsx: "automatic",
-    jsxImportSource: "react",
-    sourcefile: "Component.tsx",
-  });
 
   const require_ = createRequire(import.meta.url);
 
@@ -104,23 +95,11 @@ export async function loadComponent(input: LoadComponentInput): Promise<LoadComp
     throw new Error(`Import not allowed in render-check sandbox: ${id}`);
   };
 
-  const moduleExports: Record<string, unknown> = {};
-  const sandboxModule = { exports: moduleExports };
+  const exportsRecord = await evaluateComponentSource(sourceCode, sandboxRequire);
 
-  const wrappedCode = `(function(require, exports, module) {\n${cjsResult.code}\n})`;
-  const script = new Script(wrappedCode, { filename: "Component.cjs" });
-  const fn = script.runInThisContext() as (
-    require: typeof sandboxRequire,
-    exports: Record<string, unknown>,
-    module: { exports: Record<string, unknown> },
-  ) => void;
-
-  fn(sandboxRequire, sandboxModule.exports, sandboxModule);
-
-  const Component = sandboxModule.exports.default as ComponentType<Record<string, unknown>> | undefined;
-  if (typeof Component !== "function") {
+  const candidate = exportsRecord.default;
+  if (typeof candidate !== "function") {
     throw new Error("Compiled component has no default-exported function");
   }
-
-  return { Component };
+  return { Component: candidate as ComponentType<Record<string, unknown>> };
 }

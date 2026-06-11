@@ -61,6 +61,7 @@ import {
   type ThreadHandlerContext,
 } from '@ggui-ai/mcp-server-handlers/threads';
 import type { ThreadStreamEvent } from '@ggui-ai/protocol';
+import { isRecord } from '@ggui-ai/protocol';
 import { resolveIdentity, UnauthenticatedError } from './auth.js';
 import type { Logger } from './logger.js';
 
@@ -330,8 +331,8 @@ export function mountThreadTransport(
   //
   // Body: `{ action: ThreadStateAction }`. PATCH picked (over POST
   // on `/:id/actions`) because the action is a state transition on
-  // the resource, not a new sub-resource, and that matches how the
-  // cloud adapter frames it (`updateThreadState` mutation).
+  // the resource, not a new sub-resource — the same framing the
+  // thread-adapter interface uses (`updateThreadState`).
   app.patch(`${prefix}/:id`, async (req, res) => {
     const routeLogger = opts.logger.child({
       route: 'PATCH ' + prefix + '/:id',
@@ -391,9 +392,8 @@ export function mountThreadTransport(
     const ctx = await requireOwnerContext(req, res, routeLogger);
     if (!ctx) return;
     try {
-      const body =
-        typeof req.body === 'object' && req.body !== null ? req.body : {};
-      const input = { ...(body as Record<string, unknown>), threadId: req.params.id };
+      const body: Record<string, unknown> = isRecord(req.body) ? req.body : {};
+      const input = { ...body, threadId: req.params.id };
       const message = await appendMessage(deps, input, ctx);
       res.status(201).json(message);
     } catch (err) {

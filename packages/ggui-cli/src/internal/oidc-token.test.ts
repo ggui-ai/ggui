@@ -19,6 +19,13 @@ function emptyEnv(): NodeJS.ProcessEnv {
   return {};
 }
 
+/**
+ * Fetch-mock signature matching the injected `typeof fetch` seam.
+ * Declaring the parameters on every `vi.fn` keeps `mock.calls`
+ * destructurable without casts.
+ */
+type FetchParams = [input: string | URL | Request, init?: RequestInit];
+
 describe('resolveOidcToken — precedence', () => {
   it('--identity-token flag wins over everything', async () => {
     const env: NodeJS.ProcessEnv = {
@@ -26,12 +33,12 @@ describe('resolveOidcToken — precedence', () => {
       ACTIONS_ID_TOKEN_REQUEST_TOKEN: 'gh-req-token',
       ACTIONS_ID_TOKEN_REQUEST_URL: 'https://gh.example/oidc',
     };
-    const fetchImpl = vi.fn(); // should not be called
+    const fetchImpl = vi.fn<(...args: FetchParams) => Promise<Response>>(); // should not be called
     const res = await resolveOidcToken({
       identityTokenFlag: 'flag-token',
       env,
       isTty: true,
-      fetch: fetchImpl as unknown as typeof fetch,
+      fetch: fetchImpl,
     });
     expect(res.source).toBe('flag');
     expect(res.token).toBe('flag-token');
@@ -44,11 +51,11 @@ describe('resolveOidcToken — precedence', () => {
       ACTIONS_ID_TOKEN_REQUEST_TOKEN: 'gh-req-token',
       ACTIONS_ID_TOKEN_REQUEST_URL: 'https://gh.example/oidc',
     };
-    const fetchImpl = vi.fn();
+    const fetchImpl = vi.fn<(...args: FetchParams) => Promise<Response>>();
     const res = await resolveOidcToken({
       env,
       isTty: false,
-      fetch: fetchImpl as unknown as typeof fetch,
+      fetch: fetchImpl,
     });
     expect(res.source).toBe('env');
     expect(res.token).toBe('env-token');
@@ -61,7 +68,7 @@ describe('resolveOidcToken — precedence', () => {
       ACTIONS_ID_TOKEN_REQUEST_URL: 'https://gh.example/oidc?api-version=2.0',
     };
     const fetchImpl = vi.fn(
-      async () =>
+      async (..._args: FetchParams) =>
         new Response(JSON.stringify({ value: 'gh-issued-jwt' }), {
           status: 200,
           headers: { 'Content-Type': 'application/json' },
@@ -70,16 +77,16 @@ describe('resolveOidcToken — precedence', () => {
     const res = await resolveOidcToken({
       env,
       isTty: false,
-      fetch: fetchImpl as unknown as typeof fetch,
+      fetch: fetchImpl,
     });
     expect(res.source).toBe('github-actions');
     expect(res.token).toBe('gh-issued-jwt');
     // Verify we appended audience=sigstore and used bearer auth.
     expect(fetchImpl).toHaveBeenCalledTimes(1);
-    const [url, init] = (fetchImpl.mock.calls[0] ?? []) as [string, RequestInit];
+    const [url, init] = fetchImpl.mock.calls[0];
     expect(url).toContain('audience=sigstore');
     expect(url).toContain('api-version=2.0'); // existing query preserved
-    const headers = init.headers as Record<string, string>;
+    const headers = init?.headers as Record<string, string>;
     expect(headers['Authorization']).toBe('bearer gh-req-token');
   });
 
@@ -89,13 +96,13 @@ describe('resolveOidcToken — precedence', () => {
       ACTIONS_ID_TOKEN_REQUEST_URL: 'https://gh.example/oidc',
     };
     const fetchImpl = vi.fn(
-      async () => new Response('boom', { status: 500 }),
+      async (..._args: FetchParams) => new Response('boom', { status: 500 }),
     );
     await expect(
       resolveOidcToken({
         env,
         isTty: false,
-        fetch: fetchImpl as unknown as typeof fetch,
+        fetch: fetchImpl,
       }),
     ).rejects.toMatchObject({
       name: 'OidcResolutionError',
@@ -109,7 +116,7 @@ describe('resolveOidcToken — precedence', () => {
       ACTIONS_ID_TOKEN_REQUEST_URL: 'https://gh.example/oidc',
     };
     const fetchImpl = vi.fn(
-      async () =>
+      async (..._args: FetchParams) =>
         new Response(JSON.stringify({ wrong: 'shape' }), {
           status: 200,
           headers: { 'Content-Type': 'application/json' },
@@ -119,7 +126,7 @@ describe('resolveOidcToken — precedence', () => {
       resolveOidcToken({
         env,
         isTty: false,
-        fetch: fetchImpl as unknown as typeof fetch,
+        fetch: fetchImpl,
       }),
     ).rejects.toMatchObject({
       name: 'OidcResolutionError',
@@ -192,7 +199,7 @@ describe('resolveOidcToken — empty strings', () => {
       ACTIONS_ID_TOKEN_REQUEST_URL: 'https://gh.example/oidc',
     };
     const fetchImpl = vi.fn(
-      async () =>
+      async (..._args: FetchParams) =>
         new Response(JSON.stringify({ value: 'gh-jwt' }), {
           status: 200,
           headers: { 'Content-Type': 'application/json' },
@@ -201,7 +208,7 @@ describe('resolveOidcToken — empty strings', () => {
     const res = await resolveOidcToken({
       env,
       isTty: false,
-      fetch: fetchImpl as unknown as typeof fetch,
+      fetch: fetchImpl,
     });
     expect(res.source).toBe('github-actions');
     expect(res.token).toBe('gh-jwt');

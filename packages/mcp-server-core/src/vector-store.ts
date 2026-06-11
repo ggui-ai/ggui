@@ -13,11 +13,9 @@
  *     by the negotiator for semantic retrieval. A rebuild from the
  *     underlying registry should always be possible.
  *
- * Reference implementations:
- *   - InMemoryVectorStore       (OSS dev default; cosine in memory)
- *   - SqliteVectorStore         (OSS persistence default; sqlite-vss or brute cosine)
- *   - FileVectorStore           (benchmarks; JSON per scope)
- *   - S3VectorsStore            (hosted runtime — `cloud/`, closed)
+ * Reference implementations (both in this package):
+ *   - InMemoryVectorStore       (`./in-memory` — dev default; cosine in memory)
+ *   - SqliteVectorStore         (`./sqlite` — persistence default; brute-force cosine)
  *
  * Community-buildable against this contract:
  *   - Postgres / pgvector

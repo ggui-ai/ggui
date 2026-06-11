@@ -683,6 +683,10 @@ function rowToThread(row: ThreadRow): Thread {
 }
 
 function rowToMessage(row: MessageRow): ThreadMessage {
+  // Validate array-ness instead of asserting it — the column is
+  // operator-mutable; a non-array JSON value degrades to [] the same
+  // way unparseable JSON always has.
+  const parsedBlocks = parseJsonOrNull(row.blocks);
   const out: ThreadMessage = {
     threadId: row.thread_id,
     key: row.key,
@@ -690,7 +694,7 @@ function rowToMessage(row: MessageRow): ThreadMessage {
     at: row.at,
     authorRole: row.author_role,
     kind: row.kind,
-    blocks: parseJsonOrNull(row.blocks) as unknown[] ?? [],
+    blocks: Array.isArray(parsedBlocks) ? parsedBlocks : [],
     textPreview: row.text_preview,
   };
   if (row.card_snapshot !== null) {

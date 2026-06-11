@@ -3,9 +3,9 @@
  *
  * A thin adapter over the SHARED handshake-decision core
  * (`decideHandshake` in `@ggui-ai/mcp-server-handlers`). This file owns
- * only the OSS-specific seams; the decision spine is shared verbatim
- * with the cloud pod's `createBedrockNegotiator` — same code, different
- * adapter.
+ * only this server's seams; the decision spine is shared verbatim
+ * across every negotiator binding of the server family — same code,
+ * different adapter.
  *
  * ## OSS adapter seams
  *
@@ -57,6 +57,7 @@ import {
 } from "@ggui-ai/mcp-server-handlers/renders";
 import type { LLMCaller } from "@ggui-ai/negotiator";
 import type { Blueprint } from "@ggui-ai/protocol";
+import { isRecord } from "@ggui-ai/protocol";
 import { selectAdapter } from "@ggui-ai/ui-gen/providers";
 
 /**
@@ -298,9 +299,9 @@ export function assembleHandshakePools(
  * LLM resolver (`resolveLlm` → `buildLlmCaller`) and a single per-app
  * blueprint pool (`deps.cache`, scope defaults to `ctx.appId`). The
  * decision spine (find-similar → coverage guard → judge → atomic
- * reuse, else synth-repair create) is shared verbatim with the cloud
- * pod's `createBedrockNegotiator`; only the injected adapter differs.
- * `selectVariant` is OSS-specific and stays on this binding.
+ * reuse, else synth-repair create) is shared verbatim across every
+ * negotiator binding; only the injected adapter differs.
+ * `selectVariant` is specific to this binding.
  *
  * @public
  */
@@ -544,10 +545,10 @@ async function runVariantSelectionLlm(
  *   `VariantSelectionResult.reason` for telemetry.
  */
 export function parseVariantSelectionResponse(raw: unknown): VariantSelectionDecision {
-  if (raw === null || typeof raw !== "object") {
+  if (!isRecord(raw)) {
     throw new Error("variant-selection: response is not an object");
   }
-  const obj = raw as Record<string, unknown>;
+  const obj = raw;
   const blueprintId = obj["blueprintId"];
   const confidence = obj["confidence"];
   const reason = obj["reason"];

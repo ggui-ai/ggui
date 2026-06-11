@@ -16,6 +16,16 @@ export {
   type AgentServerHandle,
 } from './server.js';
 
+// MCP-Apps sandbox proxy — second HTTP server on a different origin
+// that serves `sandbox.html` for `<AppRenderer>`'s two-iframe
+// sandboxing pattern (R5). Booted by `startAgentServer`; exported so
+// standalone hosts can boot it directly.
+export {
+  startSandboxProxyServer,
+  type SandboxProxyServerOptions,
+  type SandboxProxyServerHandle,
+} from './sandbox-proxy.js';
+
 export {
   createAgentApp,
   type AgentAppDeps,

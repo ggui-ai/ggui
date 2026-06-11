@@ -342,11 +342,10 @@ const DEFAULT_INFO: ServerInfo = {
  *
  * Encapsulates the in-memory-store-narrowing logic at one site so the
  * call site stays clean. When the store is `InMemoryBlueprintStore`,
- * we wire its `putCode` + `listAllForApp` hooks (the in-memory
- * equivalents of the cloud adapter's S3 putObject + `blueprintsByApp`
- * GSI query). Cloud stores omit both — their `BlueprintStore.put`
- * writes code to S3 directly, and their `BlueprintSearch` impl owns
- * the per-app enumeration.
+ * we wire its `putCode` + `listAllForApp` hooks. External
+ * `BlueprintStore` adapters omit both — their `put` writes code to
+ * durable storage directly, and their `BlueprintSearch` impl owns the
+ * per-app enumeration.
  */
 function buildOpsBlueprintDeps(input: {
   readonly registry: GeneratorRegistry;
@@ -464,10 +463,10 @@ export function defaultHandlers(deps: {
     /**
      * Optional render store. When bound, `ggui_handshake` validates
      * the wire render id against this store (existence + tenant
-     * ownership) before negotiating. OSS sets this to the same store
-     * the render-commit handler uses so the handshake catches unknown
-     * / cross-tenant ids at the earliest boundary; cloud pods omit and
-     * validate at render-commit time via their own DDB-backed path.
+     * ownership) before negotiating. This server sets it to the same
+     * store the render-commit handler uses so the handshake catches
+     * unknown / cross-tenant ids at the earliest boundary; deployments
+     * that omit it validate at render-commit time instead.
      */
     readonly renderStore?: GguiSessionStore;
     /**
@@ -672,7 +671,7 @@ export function defaultHandlers(deps: {
     readonly streamWebSocketLocalTools?: () => readonly string[] | undefined;
     /**
      * Optional bootstrap-refresh seam for the
-     * `ggui_runtime_refresh_bootstrap` tool (G14, 2026-05-23). When
+     * `ggui_runtime_refresh_ws_token` tool (G14, 2026-05-23). When
      * supplied, the tool registers and validates each refresh request
      * via this seam's HMAC check + refresh-window arithmetic. Typically
      * wired against the SAME `channelBootstrap.refresh` the
@@ -685,8 +684,9 @@ export function defaultHandlers(deps: {
      * a stateless refresh.
      *
      * `createGguiServer` wires this from the `mcpAppsEnabled` branch's
-     * `channelBootstrap.refresh` so the OSS factory's behavior matches
-     * the cloud pod's tool-side composition.
+     * `channelBootstrap.refresh` so the factory's behavior matches the
+     * tool-side composition every deployment of this server family
+     * uses.
      */
     readonly bootstrapRefresh?: import("@ggui-ai/mcp-server-handlers/renders").WsTokenRefreshSeam;
   };
@@ -1019,7 +1019,7 @@ export function defaultHandlers(deps: {
         renderStore: deps.render.renderStore,
       }) as SharedHandler<ZodRawShape, ZodRawShape>
     );
-    // `ggui_runtime_refresh_bootstrap` — G14 (2026-05-23) signed-
+    // `ggui_runtime_refresh_ws_token` — G14 (2026-05-23) signed-
     // envelope refresh tool. Registered only when a refresh seam is
     // wired (typically `channelBootstrap.refresh` from the
     // mcpAppsEnabled branch). Without the seam, the tool would always
@@ -1777,9 +1777,9 @@ export interface CreateGguiServerOptions {
 
   /**
    * Path the universal MCP endpoint mounts at. Defaults to `/mcp` per
-   * Streamable HTTP convention. Cloud `mcp.ggui.ai` overrides to `/`
-   * (bare root) so URLs are short — the domain already says "mcp",
-   * no need to repeat it in the path.
+   * Streamable HTTP convention. A deployment on a dedicated MCP
+   * domain may override to `/` (bare root) so URLs stay short — the
+   * domain already says "mcp", no need to repeat it in the path.
    *
    * Threaded into the well-known protected-resource metadata so OAuth
    * clients discover the right resource URL, and into the route table
@@ -1794,10 +1794,10 @@ export interface CreateGguiServerOptions {
    * `req.params[paramName]` and uses it as `ctx.appId`, overriding
    * `appIdFromIdentity` for that request.
    *
-   * Cloud `mcp.ggui.ai` deployments pass `{paramName: 'appId',
+   * A multi-tenant deployment passes e.g. `{paramName: 'appId',
    * paramPattern: '[A-Za-z0-9]{8}', pathPrefix: '/apps'}` so URLs
-   * like `mcp.ggui.ai/apps/aB3kP9xY` route to a session scoped to
-   * that specific GguiApp. The `/apps/` prefix segments the
+   * like `example.com/apps/aB3kP9xY` route to a session scoped to
+   * that specific app. The `/apps/` prefix segments the
    * namespace cleanly — no risk of an 8-char appId colliding with a
    * bare-root system route like `/health` or `/settings`.
    *
@@ -1816,12 +1816,12 @@ export interface CreateGguiServerOptions {
    * resolves but before session work begins, the handler invokes it
    * with the URL-supplied appId + identity. Throw to deny — the
    * handler converts to a 403 response and skips MCP processing.
-   * Cloud uses this to verify `GguiApp.userId === identity.userId`
-   * (raw-DDB readers in pod tools bypass AppSync owner-auth, so
-   * this is the boundary that prevents cross-user blueprint reads).
-   * OSS deployments that opt in to per-app routing without an
-   * authorize callback are TRUSTED — every authenticated caller can
-   * scope to any URL appId.
+   * Multi-tenant deployments use this to verify the resolved identity
+   * owns the URL-addressed app — this is the boundary that prevents
+   * cross-user blueprint reads when downstream stores don't enforce
+   * ownership themselves. Deployments that opt in to per-app routing
+   * without an authorize callback are TRUSTED — every authenticated
+   * caller can scope to any URL appId.
    */
   readonly perAppRouting?: {
     readonly paramName: string;
@@ -3698,7 +3698,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
               // G14 (2026-05-23) refresh seam. Same `channelBootstrap`
               // the WS upgrade path uses — sharing it means one HMAC
               // secret + one refresh-window policy across the verify
-              // path and the `ggui_runtime_refresh_bootstrap` tool.
+              // path and the `ggui_runtime_refresh_ws_token` tool.
               // Absent when MCP Apps isn't enabled or no bootstrap
               // secret is wired; the tool isn't registered in that case.
               ...(channelBootstrap
@@ -6099,8 +6099,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
     //
     // Enumeration gate: `listGenerationCache` + `clearGenerationCache`
     // require an EnumerableVectorStore. Every OSS default satisfies
-    // it (`InMemoryVectorStore`, `SqliteVectorStore`); the AWS-adapter
-    // bridge (`embeddingStorageToVectorStore`) doesn't. Hosted paths
+    // it (`InMemoryVectorStore`, `SqliteVectorStore`); deployments
     // that wire a non-enumerable backend get a honest `501` with a
     // reason code rather than a silent empty list or a runtime
     // throw.
@@ -6113,7 +6112,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
 
     // GET /ggui/console/blueprints/cached — list cached generation
     // entries. Rejects with 501 when the vector store doesn't
-    // support enumeration (AWS-adapter path). Empty scope returns
+    // support enumeration. Empty scope returns
     // `{entries: [], total: 0}` — not an error.
     app.get("/ggui/console/blueprints/cached", async (_req, res) => {
       applyDevtoolSecurityHeaders(res);

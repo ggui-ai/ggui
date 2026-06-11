@@ -150,7 +150,7 @@ export type {
 //
 // Sandbox-proxy hosting: consumers MUST mount a `sandbox.html` on a different
 // origin and pass that URL via `<AppRenderer sandbox={{url, ...}}>`.
-// `@ggui-ai/dev-stack`'s `startSandboxProxyServer` provides a dev-ready impl.
+// `@ggui-ai/agent-server`'s `startSandboxProxyServer` provides a ready impl.
 //
 // ggui's own helper for the AppRenderer toolResult envelope is
 // `buildAppRendererToolResult` (exported below).

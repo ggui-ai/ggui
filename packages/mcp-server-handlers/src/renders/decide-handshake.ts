@@ -327,8 +327,8 @@ export function buildCacheReuseResult(
       source: blueprint.source,
       // The MATCHED blueprint's own variance — what the cached UI carries,
       // surfaced so the agent sees the proposed variance before accepting
-      // (D5). Required on Blueprint (rowToBlueprint defaults legacy rows to
-      // {}), so no coalesce here.
+      // (D5). Required on Blueprint (rowToBlueprint resolves a malformed
+      // stored blob to {}), so no coalesce here.
       variance: blueprint.variance,
       selectedReason: reason,
     },

@@ -28,7 +28,7 @@
  */
 import { ContractViolationError, validateActionData } from '@ggui-ai/protocol';
 
-import { isRecord } from './is-record.js';
+import { isRecord } from '@ggui-ai/protocol';
 import { appendEvent, type GguiSession, type Subscriber } from './render.js';
 
 /**

@@ -9,7 +9,7 @@
 //   3. Skip when compile failed.
 
 import { describe, expect, it } from "vitest";
-import { runAxisChecks, REGISTRY } from "@ggui-ai/ui-gen/evaluation/axis-checks/index";
+import { runAxisChecks, REGISTRY } from "@ggui-ai/ui-gen/evaluation/axis-checks";
 import { classifyAxes } from "@ggui-ai/ui-gen/classifier";
 import type { DataContract } from "@ggui-ai/protocol";
 import type { EvalIssue } from "@ggui-ai/ui-gen/evaluation";

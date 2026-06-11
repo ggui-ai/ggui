@@ -499,7 +499,7 @@ describe('runArtifactPublish', () => {
     const io = captureIO();
 
     const conformance = vi.fn(async () => jsonResponse(200, { ok: true }));
-    const publish = vi.fn(async () =>
+    const publish = vi.fn(async (_url: string, _init?: RequestInit) =>
       jsonResponse(201, {
         artifactId: '@mapbox/map-gadget',
         version: '0.1.0',
@@ -758,7 +758,7 @@ describe('runArtifactPublish', () => {
     seedAuthConfig(env);
     const io = captureIO();
     const conformance = vi.fn(async () => jsonResponse(200, { ok: true }));
-    const publish = vi.fn(async () =>
+    const publish = vi.fn(async (_url: string, _init?: RequestInit) =>
       jsonResponse(201, {
         artifactId: '@mapbox/map-gadget',
         version: '0.1.0',
@@ -842,7 +842,7 @@ describe('runArtifactPublish', () => {
     seedAuthConfig(env);
     const io = captureIO();
     const conformance = vi.fn(async () => jsonResponse(200, { ok: true }));
-    const publish = vi.fn(async () =>
+    const publish = vi.fn(async (_url: string, _init?: RequestInit) =>
       jsonResponse(201, {
         artifactId: '@you/login-form',
         version: '1.0.0',

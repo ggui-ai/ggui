@@ -6,8 +6,11 @@
  * is in-process atomic: `seq` is allocated under the single-threaded
  * JS turn and is gap-free within a render.
  *
- * Production bindings (SQLite, Postgres LISTEN/NOTIFY, DDB+AppSync)
- * ship as separate packages and MUST pass `gguiSessionStoreContract`.
+ * The persistent sibling, `SqliteGguiSessionStore`, ships in this same
+ * package under `./sqlite`. Any other backend built against the
+ * contract MUST pass `gguiSessionStoreContract` (and SHOULD run
+ * `runGguiSessionStoreConformance`) from `./contract-tests` — this
+ * store and the sqlite one both do, in their `.test.ts` files.
  */
 import type { GguiSession } from '@ggui-ai/protocol';
 import type {

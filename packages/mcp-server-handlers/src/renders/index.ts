@@ -103,8 +103,6 @@ export {
 export { ChannelNotDeclaredError, InvalidCompleteError, GguiSessionNotFoundError } from "./errors.js";
 export {
   clearGenerationCache,
-  DEFAULT_CACHE_SIMILARITY_THRESHOLD,
-  generationCacheKey,
   invalidateGenerationCache,
   listGenerationCache,
   type GenerationCacheDeps,
@@ -187,7 +185,6 @@ export {
 } from "./sync-context.js";
 export {
   createGguiUpdateHandler,
-  UpdateUnsupportedError,
   type BillingGate,
   type GguiUpdateHandlerDeps,
   type PropsUpdateNotifier,

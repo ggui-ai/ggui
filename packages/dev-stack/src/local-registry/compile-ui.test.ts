@@ -9,7 +9,9 @@ function manifest(overrides: Partial<UiManifest> = {}): UiManifest {
   return {
     id: overrides.id ?? 'test',
     name: overrides.name ?? 'Test',
-    contract: overrides.contract ?? { intent: 'test' },
+    contract: overrides.contract ?? {
+      propsSpec: { properties: { label: { schema: { type: 'string' } } } },
+    },
     ...(overrides.entryPoint !== undefined ? { entryPoint: overrides.entryPoint } : {}),
   };
 }

@@ -7,19 +7,15 @@
  *
  * ## Why this adapter exists
  *
- * The hosted ggui pod (`mcp.ggui.ai`) needs a free-credit "pool" path
- * for end-users who haven't supplied a BYOK key. The earlier design
- * landed an Anthropic API key in AWS Secrets Manager + a lazy fetch on
- * first pool render; that worked but added operational surface
- * (operator-seed ceremony, key-rotation discipline, a misconfig mode
- * where the secret was empty). Bedrock removes all of it: IAM is the
- * auth boundary, AWS rotates IRSA credentials automatically, and a
- * misconfigured IAM role surfaces as a clear `AccessDeniedException`
- * the SDK funnels through `mapError`.
- *
- * OSS users get the same adapter — anyone running the generator on an
- * AWS-credentialed host (EC2, ECS, Lambda, EKS) can target Bedrock
- * without managing API keys.
+ * Anyone running the generator on an AWS-credentialed host (EC2, ECS,
+ * Lambda, EKS) can target Bedrock without managing API keys: IAM is
+ * the auth boundary, AWS rotates host credentials automatically, and
+ * a misconfigured IAM role surfaces as a clear `AccessDeniedException`
+ * the SDK funnels through `mapError`. The alternative — parking a
+ * provider API key in a secrets store and lazily fetching it on first
+ * render — works but adds operational surface (a seed ceremony,
+ * key-rotation discipline, a misconfig mode where the secret is
+ * empty); Bedrock removes all of it.
  *
  * ## Wire shape
  *
@@ -48,10 +44,10 @@
  *      empty string all pass.
  *
  * Option 2 wins on cost: ZERO callers, contract, or tests change.
- * The pod-generator passes a sentinel (`'bedrock-iam'`) so the model-
- * id check still gates on a non-empty value. Future work could add
- * the discriminator if a third auth mode (e.g. cross-account assume-
- * role for enterprise BYOK) lands.
+ * Callers pass a sentinel (e.g. `'bedrock-iam'`) so the model-id
+ * check still gates on a non-empty value. Future work could add the
+ * discriminator if a third auth mode (e.g. cross-account assume-role)
+ * lands.
  *
  * ## Model IDs — pass-through
  *
@@ -63,10 +59,9 @@
  *   - Bedrock cross-region inference profiles: `us.anthropic.claude-3-5-sonnet-20241022-v2:0`
  *
  * The adapter passes whatever `request.model` contains straight to
- * Bedrock — translation lives in the caller (model picker, pool-default
- * config, BYOK key router). The pod-generator's `DEFAULT_POOL_MODEL`
- * already uses the Bedrock-compatible `anthropic.claude-haiku-4-5`
- * shape; OSS users supply their preferred profile id.
+ * Bedrock — translation lives in the caller (model picker / deployment
+ * config). Supply a Bedrock foundation-model or inference-profile id,
+ * not a direct-API model name.
  *
  * ## Failure mapping
  *
@@ -191,8 +186,8 @@ export function createBedrockAdapter(
     /**
      * Validate Bedrock-specific config. Differs from
      * `defaultValidateConfig` because Bedrock has NO request-level
-     * API key — `request.apiKey` is ignored (the pod-generator passes
-     * a sentinel like `'bedrock-iam'` so the type contract holds).
+     * API key — `request.apiKey` is ignored (callers pass a sentinel
+     * like `'bedrock-iam'` so the type contract holds).
      * Only the model id is required to be non-empty; auth issues
      * surface from the SDK as `AccessDeniedException` at call time.
      */

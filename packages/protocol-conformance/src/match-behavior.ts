@@ -90,7 +90,7 @@
 import { PROTOCOL_SCHEMA_VERSION } from '@ggui-ai/protocol';
 import type { StreamEnvelope } from '@ggui-ai/protocol';
 
-import { isRecord } from './is-record.js';
+import { isRecord } from '@ggui-ai/protocol';
 import type {
   ActionAckBehavior,
   BootstrapSuccessBehavior,

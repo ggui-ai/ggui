@@ -8,10 +8,13 @@
  * --------------------------------------------------------------------
  * Blueprint provenance (`BlueprintSource` union + `PortableBlueprint`
  * v2) + retired-surface cleanup (2026-06-11, BREAKING, pre-launch).
- * One release, three strands: the bp* entries introduce provenance on
+ * One release, four strands: the bp* entries introduce provenance on
  * the wire; the rc* entries delete vocabulary that had no emitter;
  * the ab* entries close the action→consume loop on the WS transport
- * and collapse the duplicated client wire-config pipeline.
+ * and collapse the duplicated client wire-config pipeline; the hc*
+ * entries clean the helper-package published surfaces (dead exports,
+ * packaging, conformance execution, component re-homing — no wire
+ * change) plus the one additive ops-tool schema change (hc4).
  *
  *   bp1. **`BlueprintSource` discriminated union introduced**
  *      (`kind: 'llm' | 'user' | 'curated'`), replacing the flat
@@ -164,6 +167,59 @@
  *      native-controller story reintroduces a resolver WITH a real
  *      producer, per the protocol-and-contract bar.
  *
+ *   rc9. **MCP Apps thin shell emits the canonical
+ *      `MALFORMED_BOOTSTRAP` reason.** The `ui://ggui/render` shell's
+ *      `ggui:bootstrap-failed` postMessage carried the out-of-
+ *      vocabulary `BOOTSTRAP_MALFORMED` (transposed words) — outside
+ *      the SPEC §5.5.2 `BootstrapFailureReason` union, so spec-
+ *      conformant hosts switch-casing on `reason` misclassified the
+ *      known failure as unknown. The emit and its docstring now use
+ *      the canonical member. (The CSP script hash is derived from the
+ *      shell body at module load, so it tracks automatically.)
+ *
+ *   rc10. **`EVENT_NOT_ALLOWED` WS error code deleted** along with the
+ *      no-op `assertEventAllowed` stub and the never-thrown
+ *      `EventNotAllowedError` class in `@ggui-ai/mcp-server`. The
+ *      pre-Phase-B `subscription.events` allowlist lost its wire
+ *      shape in the session-stack collapse; the surviving ceremony
+ *      was a defined failure mode with no reachable emitter. Inbound
+ *      actions are gated by `assertActionContract` alone; docstrings
+ *      across protocol / handlers / SDKs now say so. Per-render event
+ *      policy, if wanted, re-enters as a designed slice with a real
+ *      wire shape.
+ *
+ *   rc11. **`BOOTSTRAP_EXPIRED` guidance message names the live
+ *      refresh tool.** The live channel's expired-credential error
+ *      message (and five server docstrings + the cloud e2e G14 spec)
+ *      still instructed callers to invoke the retired
+ *      `ggui_runtime_refresh_bootstrap` name (renamed in r4.1). All
+ *      now name `ggui_runtime_refresh_ws_token`; a grep-based
+ *      regression test in `@ggui-ai/mcp-server` locks the retired
+ *      name out of the package source.
+ *
+ *   rc12. **`UI_GEN_VERSION` deleted from `@ggui-ai/ui-gen`.** The
+ *      published constant claimed to be "kept in sync with
+ *      `package.json`" while shipping a stale value, and had zero
+ *      consumers repo-wide — a published-API lie with no reader. No
+ *      replacement; consumers that need the package version read it
+ *      from the package manifest.
+ *
+ *   rc13. **`@ggui-ai/ui-gen` export map pruned 55 → 37 subpaths.**
+ *      Fifteen never-imported subpath entries deleted
+ *      (`./evaluation/mcp-server`, `./evaluation/prompts`,
+ *      `./adapters/provider-router`, `./adapters/{claude,openai,
+ *      google}/raw`, `./coding-agent`, `./coding-agent/boilerplate`,
+ *      `./tools`, `./provider-adapter-mock`, `./compile`,
+ *      `./validation/ui-compiler`, `./design-system-docs`,
+ *      `./tools/get-wire`, `./tools/render-check`) plus the three
+ *      redundant `/index` duplicate aliases (`./harness/index`,
+ *      `./adapters/index`, `./evaluation/axis-checks/index` — the six
+ *      monorepo import sites retargeted to the bare forms). The
+ *      underlying modules stay (internal relative imports); only the
+ *      dead published surface dies. `./blueprint-hint`, `./strategy`,
+ *      `./user-request` are KEPT pending the predefined-match
+ *      pipeline existence decision.
+ *
  *   ab1. **WS `data:submit` action ingress now feeds the consume
  *      pipe.** The live channel's `handleInboundAction` dual-writes
  *      every accepted `data:submit` envelope: the retained
@@ -210,6 +266,53 @@
  *      one-way host-shell broadcast. React-Native twins unchanged —
  *      porting the shared builder + bus to RN is the pending RN
  *      WireProvider slice.
+ *
+ *   hc1. **`@ggui-ai/mcp-server-handlers` dead public surface deleted
+ *      (no wire change).** `UpdateUnsupportedError` (error class with
+ *      zero throw sites; its `update_unsupported` code appeared in no
+ *      spec or transport mapping); the empty `./contract-tests`
+ *      subpath (an `export {}` module promising a
+ *      `runRenderHandlerContract` battery that never landed) + the
+ *      vestigial `peerDependenciesMeta.vitest`; the retired
+ *      intent-keyed cache tail (`generationCacheKey`,
+ *      `DEFAULT_CACHE_SIMILARITY_THRESHOLD`,
+ *      `GenerationCacheDeps.similarityThreshold` — zero readers). The
+ *      live-LLM dev probe no longer compiles into the published dist
+ *      (tsconfig.build exclude).
+ *
+ *   hc2. **`@ggui-ai/mcp-server-core` contract-tests become executed
+ *      truth.** `gguiSessionStoreContract` +
+ *      `runGguiSessionStoreConformance` now RUN against both shipped
+ *      stores (in-memory + sqlite, temp-file db) from the stores' own
+ *      test files; `vitest` is declared as an optional peer dependency
+ *      (the `./contract-tests` subpath imports it explicitly — the
+ *      prior Jest-globals claim was false). Sqlite row reads narrow
+ *      through validating guards instead of `as Row` casts (operator-
+ *      mutable file = trust boundary); phantom impl names
+ *      (PostgresGguiSessionStore, S3VectorsStore, FileVectorStore)
+ *      leave the seam docstrings; ws-token prose names the real
+ *      `wsToken` slice field and the G14 multi-use-within-TTL posture.
+ *
+ *   hc3. **`startSandboxProxyServer` re-homed to
+ *      `@ggui-ai/agent-server`** (from `@ggui-ai/dev-stack`; module +
+ *      test suite moved verbatim, exported from the agent-server
+ *      barrel). agent-server drops its dev-stack dependency, so a
+ *      published agent install no longer eagerly pulls the dev-stack
+ *      toolchain (esbuild, chokidar). `@ggui-ai/dev-stack` also drops
+ *      its zero-consumer discovery re-export block — the canonical
+ *      home stays `@ggui-ai/project-config/node`. No compat
+ *      re-exports (pre-launch).
+ *
+ *   hc4. **`ggui_ops_create_app` output schema gains optional
+ *      `connectUrl`** (per-app MCP connect URL; emitted only by
+ *      deployments exposing per-app ingress — the default OSS
+ *      composition has no ingress knowledge and never sets it). The
+ *      cloud pod's variant converges onto the full OSS output shape
+ *      (`{appId, displayName, systemPrompt?, createdAt, updatedAt,
+ *      connectUrl?}`), and the pod tool-registry parity gate now pins
+ *      OUTPUT-schema identity (alongside input) for every shared wire
+ *      name, so host output drift is structurally caught. Additive —
+ *      existing callers unaffected.
  *
  * --------------------------------------------------------------------
  * Synchronous wired-action dispatch retired — agent-routed consume

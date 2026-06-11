@@ -6,7 +6,7 @@
  *   - envVarForProvider / readKeyFromEnv (GEMINI→GOOGLE fallback; absent→undefined)
  *   - runProviderKeyCommand (arg parse; key lookup; api call; output)
  */
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach, type MockInstance } from 'vitest';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -172,8 +172,8 @@ describe('readKeyFromEnv', () => {
 // ─── runProviderKeyCommand ────────────────────────────────────────────────────
 describe('runProviderKeyCommand', () => {
   let dir: string;
-  let stdoutSpy: ReturnType<typeof vi.spyOn>;
-  let stderrSpy: ReturnType<typeof vi.spyOn>;
+  let stdoutSpy: MockInstance<typeof process.stdout.write>;
+  let stderrSpy: MockInstance<typeof process.stderr.write>;
 
   beforeEach(() => {
     dir = mkdtempSync(join(tmpdir(), 'ggui-providerkey-test-'));

@@ -72,21 +72,9 @@
       "types": "./dist/evaluation/axis-checks/index.d.ts",
       "import": "./dist/evaluation/axis-checks/index.js"
     },
-    "./evaluation/axis-checks/index": {
-      "types": "./dist/evaluation/axis-checks/index.d.ts",
-      "import": "./dist/evaluation/axis-checks/index.js"
-    },
     "./evaluation/axis-checks/registry": {
       "types": "./dist/evaluation/axis-checks/registry.d.ts",
       "import": "./dist/evaluation/axis-checks/registry.js"
-    },
-    "./evaluation/mcp-server": {
-      "types": "./dist/evaluation/mcp-server.d.ts",
-      "import": "./dist/evaluation/mcp-server.js"
-    },
-    "./evaluation/prompts": {
-      "types": "./dist/evaluation/prompts.d.ts",
-      "import": "./dist/evaluation/prompts.js"
     },
     "./evaluation/types": {
       "types": "./dist/evaluation/types.d.ts",
@@ -101,10 +89,6 @@
       "import": "./dist/policy.js"
     },
     "./harness": {
-      "types": "./dist/harness/index.d.ts",
-      "import": "./dist/harness/index.js"
-    },
-    "./harness/index": {
       "types": "./dist/harness/index.d.ts",
       "import": "./dist/harness/index.js"
     },
@@ -140,10 +124,6 @@
       "types": "./dist/adapters/index.d.ts",
       "import": "./dist/adapters/index.js"
     },
-    "./adapters/index": {
-      "types": "./dist/adapters/index.d.ts",
-      "import": "./dist/adapters/index.js"
-    },
     "./adapters/base": {
       "types": "./dist/adapters/base.d.ts",
       "import": "./dist/adapters/base.js"
@@ -155,10 +135,6 @@
     "./adapters/generation-dispatch": {
       "types": "./dist/adapters/generation-dispatch.d.ts",
       "import": "./dist/adapters/generation-dispatch.js"
-    },
-    "./adapters/provider-router": {
-      "types": "./dist/adapters/provider-router.d.ts",
-      "import": "./dist/adapters/provider-router.js"
     },
     "./blueprint-hint": {
       "types": "./dist/blueprint-hint.d.ts",
@@ -172,26 +148,6 @@
       "types": "./dist/user-request.d.ts",
       "import": "./dist/user-request.js"
     },
-    "./adapters/claude/raw": {
-      "types": "./dist/adapters/claude/raw.d.ts",
-      "import": "./dist/adapters/claude/raw.js"
-    },
-    "./adapters/openai/raw": {
-      "types": "./dist/adapters/openai/raw.d.ts",
-      "import": "./dist/adapters/openai/raw.js"
-    },
-    "./adapters/google/raw": {
-      "types": "./dist/adapters/google/raw.d.ts",
-      "import": "./dist/adapters/google/raw.js"
-    },
-    "./coding-agent": {
-      "types": "./dist/coding-agent/index.d.ts",
-      "import": "./dist/coding-agent/index.js"
-    },
-    "./coding-agent/boilerplate": {
-      "types": "./dist/coding-agent/boilerplate.d.ts",
-      "import": "./dist/coding-agent/boilerplate.js"
-    },
     "./workflows": {
       "types": "./dist/workflows.d.ts",
       "import": "./dist/workflows.js"
@@ -199,10 +155,6 @@
     "./patch": {
       "types": "./dist/patch.d.ts",
       "import": "./dist/patch.js"
-    },
-    "./tools": {
-      "types": "./dist/tools.d.ts",
-      "import": "./dist/tools.js"
     },
     "./boilerplate": {
       "types": "./dist/boilerplate.d.ts",
@@ -212,10 +164,6 @@
       "types": "./dist/provider-adapter.d.ts",
       "import": "./dist/provider-adapter.js"
     },
-    "./provider-adapter-mock": {
-      "types": "./dist/provider-adapter-mock.d.ts",
-      "import": "./dist/provider-adapter-mock.js"
-    },
     "./provider-adapter-contract": {
       "types": "./dist/provider-adapter-contract.d.ts",
       "import": "./dist/provider-adapter-contract.js"
@@ -223,10 +171,6 @@
     "./providers": {
       "types": "./dist/providers/index.d.ts",
       "import": "./dist/providers/index.js"
-    },
-    "./compile": {
-      "types": "./dist/compile.d.ts",
-      "import": "./dist/compile.js"
     },
     "./check": {
       "types": "./dist/check/index.d.ts",
@@ -236,29 +180,13 @@
       "types": "./dist/validation/index.d.ts",
       "import": "./dist/validation/index.js"
     },
-    "./validation/ui-compiler": {
-      "types": "./dist/validation/ui-compiler.d.ts",
-      "import": "./dist/validation/ui-compiler.js"
-    },
-    "./design-system-docs": {
-      "types": "./dist/design-system-docs.d.ts",
-      "import": "./dist/design-system-docs.js"
-    },
     "./blueprint-validator": {
       "types": "./dist/blueprint-validator.d.ts",
       "import": "./dist/blueprint-validator.js"
     },
-    "./tools/get-wire": {
-      "types": "./dist/tools/get-wire.d.ts",
-      "import": "./dist/tools/get-wire.js"
-    },
     "./tools/get-primitives-ts": {
       "types": "./dist/tools/get-primitives-ts.d.ts",
       "import": "./dist/tools/get-primitives-ts.js"
-    },
-    "./tools/render-check": {
-      "types": "./dist/tools/render-check.d.ts",
-      "import": "./dist/tools/render-check.js"
     },
     "./advanced": {
       "types": "./dist/advanced/index.d.ts",

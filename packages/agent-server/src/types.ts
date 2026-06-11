@@ -170,8 +170,10 @@ export interface AgentInput {
  * Adapters MUST stay brand-agnostic: no imports of
  * `@ggui-ai/protocol/integrations/mcp-apps`, no awareness of
  * `sessionId` / `host-session`. The library is a pure prompt-forwarder
- * + host plumbing around the adapter — neither layer has ggui-protocol
- * knowledge.
+ * + host plumbing around the adapter — the adapter/prompt path has no
+ * ggui-protocol knowledge. (The library's own ggui coupling — render-
+ * resource inlining, tool-identity catalog declaration — lives outside
+ * this contract; it never leaks into the adapter.)
  */
 export interface AgentAdapter {
   /**

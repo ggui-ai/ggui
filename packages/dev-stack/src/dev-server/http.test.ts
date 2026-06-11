@@ -14,7 +14,7 @@ function makeGgui(include: string[]): GguiJsonV1 {
     app: { slug: 'smoke', name: 'Smoke' },
     blueprints: { include },
     primitives: { packages: ['@ggui-ai/design/primitives'], local: [] },
-    adapters: [],
+    mcpMounts: [],
   };
 }
 

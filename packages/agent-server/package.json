@@ -1,7 +1,7 @@
 {
   "name": "@ggui-ai/agent-server",
   "version": "0.3.0",
-  "description": "Brand-agnostic Hono-based HTTP backend for ggui-aware agents. Owns the wire shape, MCP discovery, tool-result resource inlining, server-allocated chat ids, and guest + bearer auth with chat ownership so per-SDK samples only have to implement a thin AgentAdapter (prompt + chatId in → NormalizedMessage stream out). The prompt is forwarded to the adapter verbatim — no ggui-protocol knowledge. Pairs with `@ggui-ai/react/chat-helpers` on the frontend.",
+  "description": "Brand-agnostic Hono-based HTTP backend for ggui-aware agents. Owns the wire shape, MCP discovery, tool-result resource inlining, server-allocated chat ids, and guest + bearer auth with chat ownership so per-SDK samples only have to implement a thin AgentAdapter (prompt + chatId in → NormalizedMessage stream out). The prompt is forwarded to the adapter verbatim — the prompt path has no ggui-protocol knowledge; the library itself implements the ggui runtime surface (render-resource inlining, tool-catalog declaration). Pairs with `@ggui-ai/react/chat-helpers` on the frontend.",
   "keywords": [
     "ggui",
     "mcp",
@@ -33,7 +33,6 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@ggui-ai/dev-stack": "workspace:*",
     "@ggui-ai/protocol": "workspace:*",
     "@hono/node-server": "^1.19.11",
     "hono": "^4.12.8"

@@ -24,19 +24,21 @@ import { HOOK_NAME_RE, listContractGadgets } from "@ggui-ai/protocol";
 import { createProbe, createProbeWireConfig, type Probe } from "./probe.js";
 import { loadComponent } from "./load-component.js";
 import { findWiring, type WiringDetection } from "./find-wiring.js";
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Minimal DOM types — declared locally so this module doesn't depend on the
-// DOM lib (some downstream packages, e.g. cloud/amplify, exclude DOM from
-// their tsconfig).
-// ─────────────────────────────────────────────────────────────────────────────
-
-interface MinimalElement {
-  readonly tagName: string;
-  readonly textContent: string | null;
-  getAttribute(name: string): string | null;
-  querySelectorAll<T extends MinimalElement = MinimalElement>(selector: string): Iterable<T>;
-}
+// All happy-dom / RTL / user-event narrowing flows through the typed
+// host boundary (one set of structural interfaces + validating guards;
+// DOM-lib-free — some downstream packages, e.g. cloud/amplify, exclude
+// DOM from their tsconfig).
+import {
+  buildClickUser,
+  editableSurface,
+  parentLink,
+  toEventDispatcher,
+  toMinimalElement,
+  type ClickUser,
+  type MinimalElement,
+  type ParentLink,
+} from "./host-boundary.js";
+import { hostGlobals, openRecord } from "../../../internal/open-record.js";
 
 /**
  * Module-namespace-shaped value injected into `loadComponent`'s
@@ -438,16 +440,10 @@ export async function runRenderCheck(
       return finalize(issues, t0, 0, 0);
     }
 
-    // RTL types `container` as HTMLElement; we use a structural MinimalElement
-    // to keep this module DOM-lib-free (some downstream tsconfigs exclude DOM).
-    const container = renderResult.container as unknown as MinimalElement;
-    const userEventModuleAny = userEvent as unknown as { setup?: () => { click: (el: unknown) => Promise<void> }; click?: (el: unknown) => Promise<void> };
-    const userInstance = userEventModuleAny.setup
-      ? userEventModuleAny.setup()
-      : (userEventModuleAny as { click: (el: unknown) => Promise<void> });
-    const user: { click: (el: MinimalElement) => Promise<void> } = {
-      click: (el: MinimalElement) => userInstance.click(el as unknown),
-    };
+    // RTL types `container` as HTMLElement; narrow it to the structural
+    // MinimalElement via the validated host boundary.
+    const container = toMinimalElement(renderResult.container);
+    const user: ClickUser = buildClickUser(userEvent);
 
     let actionsChecked = 0;
     let streamsChecked = 0;
@@ -469,7 +465,7 @@ export async function runRenderCheck(
             actionLabel: entry.label,
             wiring,
             probe,
-            user: user as { click: (el: MinimalElement) => Promise<void> },
+            user,
           });
           if (issue) issues.push(issue);
         }
@@ -713,7 +709,7 @@ function buildGadgetPackageProbeShim(packageName: string): ProbeModuleNamespace 
 // ─────────────────────────────────────────────────────────────────────────────
 
 async function setupHappyDom(): Promise<() => void> {
-  const g = globalThis as unknown as Record<string, unknown>;
+  const g = hostGlobals();
 
   // ── Async-teardown safety ───────────────────────────────────────────────
   // Generated components may call setTimeout/setInterval for polling,
@@ -734,12 +730,14 @@ async function setupHappyDom(): Promise<() => void> {
   const origSetInterval = globalThis.setInterval;
   const origClearTimeout = globalThis.clearTimeout;
   const origClearInterval = globalThis.clearInterval;
-  // @ts-expect-error — wrapping global timer typings for tracked variant
-  globalThis.setTimeout = (...args: Parameters<typeof origSetTimeout>) => {
+  // Same documented adaptation as the setInterval wrapper below: the
+  // arrow function satisfies the call signature but not Node's
+  // `__promisify__` brand, so a single structural cast closes the gap.
+  globalThis.setTimeout = ((...args: Parameters<typeof origSetTimeout>) => {
     const id = origSetTimeout(...args);
     pendingTimeouts.add(id);
     return id;
-  };
+  }) as typeof globalThis.setTimeout;
   globalThis.setInterval = ((...args: Parameters<typeof origSetInterval>) => {
     const id = origSetInterval(...args);
     pendingIntervals.add(id);
@@ -817,7 +815,7 @@ async function setupHappyDom(): Promise<() => void> {
 
   const { Window } = await import("happy-dom");
   const window = new Window({ url: "https://render-check.local" });
-  const windowAny = window as unknown as Record<string, unknown>;
+  const windowAny = openRecord(window);
 
   const keys = [
     "window",
@@ -1039,7 +1037,7 @@ async function dispatchTrigger(
       const form = closestForm(el);
       if (!form) return;
       const ev = new (globalThis as { Event: typeof Event }).Event("submit", { bubbles: true, cancelable: true });
-      (form as unknown as { dispatchEvent: (e: Event) => boolean }).dispatchEvent(ev);
+      toEventDispatcher(form).dispatchEvent(ev);
       return;
     }
     case "change": {
@@ -1049,7 +1047,7 @@ async function dispatchTrigger(
       // wiring is on a native element (input/select/textarea).
       setSyntheticValue(el);
       const ev = new (globalThis as { Event: typeof Event }).Event("change", { bubbles: true });
-      (el as unknown as { dispatchEvent: (e: Event) => boolean }).dispatchEvent(ev);
+      toEventDispatcher(el).dispatchEvent(ev);
       return;
     }
     case "keyboard-enter": {
@@ -1058,7 +1056,7 @@ async function dispatchTrigger(
       const KeyboardEventCtor = (globalThis as { KeyboardEvent?: new (type: string, init: object) => Event }).KeyboardEvent;
       if (KeyboardEventCtor) {
         const ev = new KeyboardEventCtor("keydown", { key: "Enter", bubbles: true });
-        (el as unknown as { dispatchEvent: (e: Event) => boolean }).dispatchEvent(ev);
+        toEventDispatcher(el).dispatchEvent(ev);
       }
       return;
     }
@@ -1084,12 +1082,7 @@ async function dispatchTrigger(
 function setSyntheticValue(el: MinimalElement): void {
   try {
     const tag = el.tagName.toLowerCase();
-    const node = el as unknown as {
-      value?: string;
-      checked?: boolean;
-      type?: string;
-      options?: ArrayLike<{ value: string }>;
-    };
+    const node = editableSurface(el);
 
     if (tag === "select") {
       const opts = node.options;
@@ -1131,15 +1124,15 @@ function setSyntheticValue(el: MinimalElement): void {
 
 function closestForm(el: MinimalElement): MinimalElement | null {
   // Climb via parentNode (happy-dom + native both expose this on Element).
-  let cur: { tagName?: string; parentNode?: unknown } | null = el as unknown as {
-    tagName?: string;
-    parentNode?: unknown;
-  };
+  let cur: ParentLink | null = parentLink(el);
   while (cur) {
     if (cur.tagName && cur.tagName.toLowerCase() === "form") {
-      return cur as unknown as MinimalElement;
+      return toMinimalElement(cur);
     }
-    cur = cur.parentNode as { tagName?: string; parentNode?: unknown } | null;
+    cur =
+      typeof cur.parentNode === "object" && cur.parentNode !== null
+        ? parentLink(cur.parentNode)
+        : null;
   }
   return null;
 }

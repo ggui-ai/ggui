@@ -46,7 +46,7 @@ import {
   type Blueprint,
 } from "@ggui-ai/mcp-server-handlers/renders";
 import type { GguiSession } from "@ggui-ai/protocol";
-import { deriveContextDefault, type ContextSpec } from "@ggui-ai/protocol";
+import { deriveContextDefault, isRecord, type ContextSpec } from "@ggui-ai/protocol";
 import {
   GGUI_RENDER_RESOURCE_MIME,
   GGUI_RENDER_RESOURCE_URI,
@@ -95,7 +95,7 @@ import { createHash } from "node:crypto";
  * surface to the parent via
  * `postMessage({type:'ggui:bootstrap-failed', reason, message}, '*')`:
  *
- *   - `BOOTSTRAP_MALFORMED` - the tool-result `_meta` slice arrived
+ *   - `MALFORMED_BOOTSTRAP` - the tool-result `_meta` slice arrived
  *     without a valid `ai.ggui/render` envelope or `runtimeUrl`.
  *   - `BUNDLE_FETCH_FAILED` - `<script src>` errored (network failure,
  *     404, CSP reject with an observable `error` event).
@@ -138,10 +138,11 @@ import { createHash } from "node:crypto";
  * whitespace inside). Concatenating this constant unchanged into the
  * shell HTML means the runtime hash and the constant-time hash agree.
  *
- * NEVER mutate this constant without also bumping
- * {@link GGUI_RENDER_SHELL_SCRIPT_HASH} — the
- * `mcp-apps-outbound.test.ts` drift test recomputes the hash and fails
- * loudly if they diverge.
+ * {@link GGUI_RENDER_SHELL_SCRIPT_HASH} is DERIVED from this constant
+ * at module load, so edits here propagate to the CSP hash
+ * automatically. The `mcp-apps-outbound.test.ts` drift test recomputes
+ * the hash from the assembled shell HTML and fails loudly if the body
+ * and the HTML assembly ever disagree.
  */
 const GGUI_RENDER_SHELL_SCRIPT_BODY = `
 (function(){'use strict';
@@ -204,7 +205,7 @@ async function mountFromMeta(envelope){
   var runtimeUrl=renderSlice&&renderSlice.runtimeUrl;
   if(!envelope||typeof runtimeUrl!=='string'){
     setOverlay('Bootstrap payload malformed.');
-    postBootstrapFailed('BOOTSTRAP_MALFORMED','Bootstrap payload malformed.');
+    postBootstrapFailed('MALFORMED_BOOTSTRAP','Bootstrap payload malformed.');
     return;
   }
   setOverlay('Loading UI…');
@@ -1124,13 +1125,7 @@ function pickComponentFromGguiSession(render: GguiSession | null | undefined): R
   if (!render) return null;
   if (render.type === "mcpApps") return null;
   const propsRaw = "props" in render ? render.props : undefined;
-  const props =
-    propsRaw !== undefined &&
-    propsRaw !== null &&
-    typeof propsRaw === "object" &&
-    !Array.isArray(propsRaw)
-      ? (propsRaw as Record<string, unknown>)
-      : undefined;
+  const props = isRecord(propsRaw) ? propsRaw : undefined;
   if (render.type === "system") {
     if (typeof render.kind === "string" && render.kind.length > 0) {
       return {

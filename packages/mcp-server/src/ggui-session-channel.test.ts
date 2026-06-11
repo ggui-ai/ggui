@@ -45,6 +45,7 @@ import type {
   ActionSpec,
   GguiConsumeOutput,
 } from '@ggui-ai/protocol';
+import { isRecord } from '@ggui-ai/protocol';
 import {
   InMemoryAuthAdapter,
   InMemoryGguiSessionStore,
@@ -83,18 +84,6 @@ function createRecordingLogger(loggedErrors: string[], loggedWarns: string[]): L
 }
 
 const APP_ID = 'app-channel-test';
-
-/**
- * Validating narrower for parsed WS frames — is `value` a non-null,
- * non-array object? Same predicate shape as the conformance kit's
- * shared `is-record.ts`; private here because `@ggui-ai/mcp-server`
- * has no shared copy. Every frame the channel server emits is a JSON
- * object, so a non-record frame is a server bug worth failing loudly
- * on rather than casting past.
- */
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === 'object' && !Array.isArray(value);
-}
 
 interface Fixture {
   readonly httpServer: HttpServer;

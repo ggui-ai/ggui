@@ -37,18 +37,12 @@ export type {
   GguiSession,
   SystemGguiSession,
 } from '@ggui-ai/protocol';
-export type {
-  GenerationCredentials,
-  GenerationDeps,
-} from '@ggui-ai/mcp-server-handlers';
-// No-credentials fallback helpers — re-exported so the OSS CLI can
+export type { GenerationDeps } from '@ggui-ai/mcp-server-handlers';
+// No-credentials fallback helper — re-exported so the OSS CLI can
 // build the no-credentials card render (pointing at the resolved
 // `/settings` URL) without taking a direct `@ggui-ai/mcp-server-handlers`
 // dependency.
-export {
-  NO_CREDENTIALS_SYSTEM_CARD_KIND,
-  buildNoCredentialsGguiSession,
-} from '@ggui-ai/mcp-server-handlers';
+export { buildNoCredentialsGguiSession } from '@ggui-ai/mcp-server-handlers';
 export { createGguiServer, defaultHandlers } from './server.js';
 export type {
   CreateGguiServerOptions,

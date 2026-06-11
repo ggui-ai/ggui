@@ -173,11 +173,11 @@ export interface CacheTraceEvent {
    */
   readonly intent: string;
   /**
-   * `generationCacheKey(intent)` (legacy) or `blueprintKey(contract)`
-   * (matcher) — the deterministic key a matching entry would use.
-   * Empty string when no contract was supplied (semantic strategy
-   * has no canonical key) or on the empty-intent short-circuit
-   * (no key could be computed before strategy selection).
+   * `blueprintKey(contract)` — the deterministic key a matching entry
+   * would use. Empty string when no contract was supplied (semantic
+   * strategy has no canonical key) or on the empty-intent
+   * short-circuit (no key could be computed before strategy
+   * selection).
    */
   readonly expectedKey: string;
   /** Cosine similarity threshold that drove the hit/miss decision. */

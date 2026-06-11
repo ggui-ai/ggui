@@ -1,30 +1,26 @@
 /**
- * Generation cache — legacy types + console-admin enumeration helpers.
+ * Generation cache — the blueprint-cache dep bundle, the cache-hit
+ * projection shape, and the console-admin enumeration helpers.
  *
- * The original intent-keyed cache was superseded by the
- * contract-keyed `blueprint-registry.ts` + `blueprint-matcher.ts`.
- * `render.ts` routes the production cache lookup through
- * `matchBlueprint` now; this module's `lookupGenerationCache` and
- * `recordGenerationCache` functions have been retired.
+ * Production cache traffic routes through the contract-keyed
+ * `blueprint-registry.ts` + `blueprint-matcher.ts`: `render.ts` resolves
+ * reuse via `matchBlueprint` / the §6 point-read and registers cold-gen
+ * output via `registerBlueprint`. This module carries the surrounding
+ * shapes:
  *
- * What still lives here:
- *
- *   - `GenerationCacheDeps` + `GenerationCacheHit` — projection shapes
- *     `render.ts` + `commitCachedGguiSession` read on the cache-hit commit
- *     path. The fields stay aligned with what the blueprint-matcher
- *     produces so the commit-site code is one shape regardless of
- *     which match path fired.
+ *   - `GenerationCacheDeps` — the `(embedding, vectorStore, index)`
+ *     storage bundle callers wire onto `GenerationDeps.cache`;
+ *     `render.ts` composes `BlueprintRegistryDeps` from it.
+ *   - `GenerationCacheHit` — projection shape `render.ts` builds from a
+ *     matched blueprint and `commitCachedGguiSession` reads on the
+ *     cache-hit commit path. Kept field-aligned with the cold-gen
+ *     render build so both paths emit one shape.
  *   - `GenerationCacheEntry` + `listGenerationCache` +
  *     `invalidateGenerationCache` + `clearGenerationCache` — admin
  *     route helpers backing `/ggui/console/blueprints/cached`. Project
  *     the blueprint-registry row shape so the console viewer sees
  *     live cache rows.
- *   - `DEFAULT_CACHE_SIMILARITY_THRESHOLD` + `generationCacheKey` —
- *     still exported for any future diagnostic that wants the legacy
- *     threshold constant or a stable per-intent hash; no live consumer
- *     today.
  */
-import { createHash } from 'node:crypto';
 import type {
   BlueprintIndex,
   EmbeddingProvider,
@@ -33,31 +29,18 @@ import type {
 } from '@ggui-ai/mcp-server-core';
 
 /**
- * Default cosine-similarity band above which a retrieval counts as a
- * cache hit. Matches `@ggui-ai/negotiator`'s `HIGH_CONFIDENCE_THRESHOLD`
- * so both seams agree on "exact match" semantics.
+ * Blueprint-cache storage bundle. Threaded into the
+ * `BlueprintRegistryDeps` the render handler composes so the matcher +
+ * registry share one vector store and one identity index instance.
  */
-export const DEFAULT_CACHE_SIMILARITY_THRESHOLD = 0.45;
-
-/** Dependencies for {@link lookupGenerationCache} + {@link recordGenerationCache}. */
 export interface GenerationCacheDeps {
   readonly embedding: EmbeddingProvider;
   readonly vectorStore: VectorStore;
   /**
-   * `(scope, exactKey) → blueprintId` identity index. Threaded into the
-   * `BlueprintRegistryDeps` the render handler composes from this bundle
-   * so the matcher + registry share one index instance. See
+   * `(scope, exactKey) → blueprintId` identity index. See
    * {@link BlueprintIndex}.
    */
   readonly index: BlueprintIndex;
-  /**
-   * Score above which a top-1 hit is treated as a cache hit. Defaults
-   * to {@link DEFAULT_CACHE_SIMILARITY_THRESHOLD}. Callers override
-   * when benchmarks tune the band for a specific embedding model
-   * (e.g. local bge-small may warrant a different knob than OpenAI's
-   * `text-embedding-3-small`).
-   */
-  readonly similarityThreshold?: number;
 }
 
 /** A cache hit the render handler can reconstruct a {@link ComponentGguiSession} from. */
@@ -73,52 +56,35 @@ export interface GenerationCacheHit {
   /** ISO timestamp the cached entry was written. Diagnostic-only. */
   readonly cachedAt: string;
   /**
-   * Optional contract projections on the cache hit. Today's writer
-   * ({@link recordGenerationCache}) does not persist contracts, so
-   * cache hits always emit these as `undefined`; they're declared
-   * here so the cached-commit path in
-   * `commitCachedGguiSession` can project them onto the ComponentGguiSession
-   * symmetrically with the cold-generation path. When the cache
-   * store evolves to persist contracts, only the writer + reader
-   * here change; the consumer site stays untouched.
+   * Contract projections on the cache hit. `registerBlueprint`
+   * persists the full contract in the row metadata, and `render.ts`
+   * projects each declared spec from the matched blueprint's contract
+   * when it builds the hit. `commitCachedGguiSession` lands them on the
+   * ComponentGguiSession symmetrically with the cold-generation path —
+   * both paths emit one shape, and bootstrap-meta derivation reads
+   * from one place. Absent only when the matched contract itself
+   * omitted the spec.
    */
   readonly actionSpec?: import('@ggui-ai/protocol').ActionSpec;
   readonly streamSpec?: import('@ggui-ai/protocol').StreamSpec;
   readonly propsSpec?: import('@ggui-ai/protocol').PropsSpec;
   readonly contextSpec?: import('@ggui-ai/protocol').ContextSpec;
   /**
-   * Agent's declared tool catalog. Used by `commitCachedGguiSession`
-   * to project onto the ComponentGguiSession so the schema-compat backstop
-   * recognizes cross-MCP tools (tools the agent declared in the
-   * contract catalog but doesn't expect to live on this server).
-   * Today's cache writer doesn't persist contracts, so cache hits
-   * surface `undefined`; declared here for symmetric commit-path
-   * shape.
+   * Agent's declared tool catalog, projected from the matched
+   * blueprint's contract. Used by `commitCachedGguiSession` so the
+   * schema-compat backstop recognizes cross-MCP tools (tools the agent
+   * declared in the contract catalog but doesn't expect to live on
+   * this server). Without it any reused blueprint whose
+   * `actionSpec.nextStep` names a domain (non-`ggui_*`) tool would
+   * fail "tool not registered".
    */
   readonly agentCapabilities?: import('@ggui-ai/protocol').AgentCapabilitiesSpec;
   /**
-   * `clientCapabilities` projection used by `commitCachedGguiSession`
-   * to derive the iframe's Permissions-Policy directive set. Today's
-   * cache writer doesn't persist contracts, so cache hits surface
-   * `undefined`; declared here for symmetric commit-path shape.
+   * `clientCapabilities` projection (from the matched blueprint's
+   * contract) used by `commitCachedGguiSession` to derive the iframe's
+   * Permissions-Policy directive set.
    */
   readonly clientCapabilities?: import('@ggui-ai/protocol').ClientCapabilitiesSpec;
-}
-
-/**
- * Compute the deterministic cache key for an intent. Exported so
- * consumers (tests, future handshake-negotiator integration) can read
- * the same shape the lookup + record paths write.
- *
- * Normalization: trim whitespace. No lowercasing yet — intents like
- * "Weather in Tokyo" vs "weather in tokyo" arguably should collide,
- * but the embedding-similarity band already absorbs small surface-
- * level differences; keeping the key case-sensitive avoids false
- * collisions on intents that legitimately differ in emphasis.
- */
-export function generationCacheKey(intent: string): string {
-  const normalized = intent.trim();
-  return createHash('sha256').update(normalized).digest('hex').slice(0, 16);
 }
 
 /**

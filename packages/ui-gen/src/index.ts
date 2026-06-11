@@ -79,8 +79,3 @@ export type { UserRequestOptions } from './user-request.js';
 // go through this helper instead of `new Anthropic(...)` so future
 // header / baseURL tweaks land in one place.
 export { createAnthropicClient } from './adapters/claude/client.js';
-
-/**
- * Semver string of this package. Kept in sync with `package.json`.
- */
-export const UI_GEN_VERSION = '0.1.0-rc.1';

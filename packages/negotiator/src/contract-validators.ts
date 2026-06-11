@@ -80,26 +80,27 @@ export interface ContractValidationResult {
 
 /**
  * Dependencies the novelty detector needs. Embedding provider + vector
- * store are the same seams the negotiator's RAG path uses, so the
- * novelty check operates over the production index without any extra
- * infrastructure.
+ * store are the same seams the handshake's find-similar retrieval uses,
+ * so the novelty check operates over the production index without any
+ * extra infrastructure.
  */
 export interface ContractValidationNoveltyDeps {
   readonly embedding: EmbeddingProvider;
   readonly vectorStore: VectorStore;
   /** Tenant / partition the nearest-neighbor query runs against. Same
-   * semantics as `RagSearchInput.scope`. */
+   * semantics as the `scope` argument on `VectorStore.query` — the
+   * tenant / index partition, typically `appId`. */
   readonly scope: string;
 }
 
 export interface ContractValidationNoveltyOptions {
   /**
    * Cosine distance threshold above which the contract is flagged as
-   * novel. Distance is `1 - cosine_similarity`. Default `0.8` —
-   * matches the negotiator's `RETRIEVAL_MIN_SCORE = 0.15` (=cosine
-   * similarity 0.15, distance 0.85) one-tail boundary, with a small
-   * buffer so contracts that hover near retrieval but slightly above
-   * still flag for review.
+   * novel. Distance is `1 - cosine_similarity`. Default `0.8`: a
+   * contract whose nearest stored neighbor sits beyond distance 0.8
+   * is effectively outside retrieval range, with a small buffer below
+   * the hard one-tail boundary (distance 0.85) so contracts that
+   * hover near retrieval but slightly above still flag for review.
    */
   readonly thresholdCosine?: number;
 }

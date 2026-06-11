@@ -165,7 +165,6 @@ export type ContractValidator = (
  * Distinct from contract-shape and access errors thrown elsewhere:
  *   - ContractViolationError      — runtime data violates a declared schema
  *   - GguiSessionNotFoundError         — target GguiSession id is missing
- *   - EventNotAllowedError        — event type not in the subscription allowlist
  *   - BlueprintRejectedError (this) — contract structure trips a fail-closed
  *                                     validator finding at registration time
  */
@@ -312,13 +311,13 @@ function blueprintToMetadata(
  */
 const droppedRowIds = new Set<string>();
 
-function warnDroppedRow(id: string): void {
+function warnDroppedRow(id: string, reason: string): void {
   if (droppedRowIds.has(id)) return;
   droppedRowIds.add(id);
   // eslint-disable-next-line no-console -- operator-visible invalidation notice
   console.warn(
-    `[ggui] blueprint registry: dropped row ${id} — missing or malformed provenance ` +
-      '(pre-provenance rows are invalidated, not migrated; the cache regenerates on next use)',
+    `[ggui] blueprint registry: dropped row ${id} — ${reason} ` +
+      '(legacy rows are invalidated, not migrated; the cache regenerates on next use)',
   );
 }
 
@@ -361,8 +360,12 @@ function readScalarNumber(
  *
  * A row that IS shaped like a blueprint but carries no valid
  * provenance (legacy `provenance` vocabulary, missing `sourceKind`)
- * is dropped WITH a log line — that is the rebuild posture for the
- * provenance schema change, not a silent foreign-row skip.
+ * OR no `variantKey` (written before the variant axis existed, or by
+ * a storage codec that dropped it) is dropped WITH a log line — that
+ * is the rebuild posture for registry schema changes, not a silent
+ * foreign-row skip. No compat read: defaulting a missing `variantKey`
+ * to the default-variant sentinel would silently collapse variant
+ * identity for every such row.
  */
 function rowToBlueprint(
   key: string,
@@ -400,18 +403,23 @@ function rowToBlueprint(
   }
   const source = flatToBlueprintSource(metadata);
   if (source === null) {
-    warnDroppedRow(key);
+    warnDroppedRow(key, 'missing or malformed provenance');
     return null;
   }
   const hitCount = readScalarNumber(metadata[METADATA_KEYS.hitCount]) ?? 0;
   const lastHitAt = readScalarString(metadata[METADATA_KEYS.lastHitAt]);
   const installed = metadata[METADATA_KEYS.installed] === true;
   const variance = readVariance(metadata[METADATA_KEYS.variance]);
-  // Legacy rows (written before the variant axis existed) lack a
-  // `variantKey`; default to the "default variant" sentinel so the row
-  // still reconstructs and slots under the empty-variance identity.
-  const variantKeyValue =
-    readScalarString(metadata[METADATA_KEYS.variantKey]) ?? variantKey(undefined);
+  // `variantKey` is identity-bearing — `blueprintToMetadata` always
+  // writes it, so a blueprint-shaped row without one is a legacy row
+  // (pre-variant-axis, or written through a codec that dropped it).
+  // Drop with a log line; defaulting would silently rebind the row to
+  // the default variant.
+  const variantKeyValue = readScalarString(metadata[METADATA_KEYS.variantKey]);
+  if (variantKeyValue === undefined) {
+    warnDroppedRow(key, 'missing variantKey');
+    return null;
+  }
   return {
     id: key,
     kind: kindStr,
@@ -431,10 +439,10 @@ function rowToBlueprint(
 
 /**
  * Reconstruct a {@link BlueprintVariance} from the stored JSON blob.
- * Legacy rows (no `variance` key) and malformed JSON both resolve to the
- * default variant `{}` — the self-normalizing `variantKey()` hash treats
- * absent / empty variance as one stable sentinel, so this default never
- * shifts a legacy row's identity.
+ * Defensive only — `blueprintToMetadata` always writes `variance`
+ * alongside the (required) `variantKey`, so an absent or malformed
+ * blob resolves to `{}` without shifting identity: the row's identity
+ * lives in the stored `variantKey` hash, never in this projection.
  */
 function readVariance(
   value: string | number | boolean | null | undefined,
@@ -513,9 +521,9 @@ export interface RegisterBlueprintOptions {
  * Eviction: when the (scope, kind) bucket is at capacity AND the new
  * key is NOT a re-write of an existing row, the lowest-hitCount entry
  * is deleted first. Ties break by oldest `createdAt`. Eviction needs an
- * `EnumerableVectorStore` to enumerate the bucket; non-enumerable
- * backends (e.g. hosted S3 Vectors) skip eviction — the hosted layer is
- * expected to manage its own GC.
+ * `EnumerableVectorStore` to enumerate the bucket; a deployment that
+ * wires a non-enumerable backend skips eviction and must bound the
+ * bucket's growth itself.
  */
 export async function registerBlueprint(
   deps: BlueprintRegistryDeps,
@@ -659,15 +667,22 @@ async function maybeEvictLowestHitBlueprint(
     // raced with another writer.
   }
   // Drop the victim's index binding so it doesn't dangle. Reconstruct
-  // the exact key from the victim's own metadata.
+  // the exact key from the victim's own metadata. A victim missing any
+  // identity segment (legacy row) skips the unbind — composing a
+  // defaulted key could delete a live sibling's binding, while a
+  // genuinely dangling binding self-heals on the next exact lookup.
   const victimKind = readBlueprintKind(victim.metadata[METADATA_KEYS.kind]);
   const victimContractKey = readScalarString(
     victim.metadata[METADATA_KEYS.contractKey],
   );
-  const victimVariantKey =
-    readScalarString(victim.metadata[METADATA_KEYS.variantKey]) ??
-    variantKey(undefined);
-  if (victimKind !== undefined && victimContractKey !== undefined) {
+  const victimVariantKey = readScalarString(
+    victim.metadata[METADATA_KEYS.variantKey],
+  );
+  if (
+    victimKind !== undefined &&
+    victimContractKey !== undefined &&
+    victimVariantKey !== undefined
+  ) {
     try {
       await deps.index.deleteId(
         scope,

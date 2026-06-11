@@ -209,16 +209,33 @@ function parseVector(raw: string): number[] | null {
   }
 }
 
+function isScalar(value: unknown): value is string | number | boolean | null {
+  return (
+    value === null ||
+    typeof value === 'string' ||
+    typeof value === 'number' ||
+    typeof value === 'boolean'
+  );
+}
+
 function parseMetadata(
   raw: string,
 ): Record<string, string | number | boolean | null> {
   try {
     const parsed = JSON.parse(raw) as unknown;
-    if (parsed === null || typeof parsed !== 'object') return {};
-    // The VectorStore contract constrains metadata to scalar values;
-    // we defensively cast here rather than re-validate every key —
-    // the adapter trusts what it wrote.
-    return parsed as Record<string, string | number | boolean | null>;
+    if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      return {};
+    }
+    // The VectorStore contract constrains metadata to scalar values.
+    // The column is operator-mutable (`cat` + `jq` editing is a
+    // supported workflow), so validate per key instead of asserting:
+    // non-scalar values are dropped rather than smuggled through the
+    // scalar-typed contract.
+    const out: Record<string, string | number | boolean | null> = {};
+    for (const [key, value] of Object.entries(parsed)) {
+      if (isScalar(value)) out[key] = value;
+    }
+    return out;
   } catch {
     return {};
   }

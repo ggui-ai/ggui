@@ -271,9 +271,9 @@ export function checkRenderSchemaCompat(
  * counts as a hard error (default-error semantics). The single
  * source of truth for the throw gate, shared by the internal
  * `'reject'`-mode gate above AND any external host that runs the
- * check in `'warn'` mode and owns its own enforcement (e.g. the
- * cloud pod's `ggui_render`). Keeping ONE predicate guarantees the
- * OSS and pod gates can never silently diverge.
+ * check in `'warn'` mode and owns its own `ggui_render` enforcement.
+ * Keeping ONE predicate guarantees the gates of every deployment of
+ * this server family can never silently diverge.
  */
 export function hasErrorFinding(report: SchemaCompatReport): boolean {
   return report.findings.some((f) => f.severity !== 'warn');

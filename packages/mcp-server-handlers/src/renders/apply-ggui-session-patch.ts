@@ -129,10 +129,9 @@ export function applyGguiSessionPatch<T extends GguiSessionTarget>(
   assertPropsContract(existing.propsSpec, finalProps);
 
   // Spread preserves T's other fields; the `props` override lands on
-  // top. Cast is required because TS can't prove {...T, props:
-  // JsonObject} is T (T's own props type isn't constrained here),
-  // but structurally it is.
-  const updatedSession = { ...existing, props: finalProps } as unknown as T;
+  // top. The spread infers `T & { props: JsonObject }`, which is
+  // assignable to `T` — no cast needed.
+  const updatedSession: T = { ...existing, props: finalProps };
 
   return {
     updatedSession,

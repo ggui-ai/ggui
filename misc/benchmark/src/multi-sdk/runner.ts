@@ -13,7 +13,7 @@ import {
   type ModelId,
 } from "@ggui-ai/protocol";
 import type { AnyAdapterConfig } from "@ggui-ai/ui-gen/adapters/base";
-import { GeneratorAdapter, createGeneratorTools } from "@ggui-ai/ui-gen/adapters/index";
+import { GeneratorAdapter, createGeneratorTools } from "@ggui-ai/ui-gen/adapters";
 import { dispatchGeneration } from "@ggui-ai/ui-gen/adapters/generation-dispatch";
 import type { AdapterResult } from "@ggui-ai/ui-gen/adapters/types";
 import { DEFAULT_QUALITY_CONFIG } from "@ggui-ai/ui-gen/evaluation";

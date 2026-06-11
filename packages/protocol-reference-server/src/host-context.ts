@@ -39,7 +39,7 @@ import type {
   McpUiDisplayMode,
 } from '@ggui-ai/protocol';
 
-import { isRecord } from './is-record.js';
+import { isRecord } from '@ggui-ai/protocol';
 import type { GguiSession } from './render.js';
 
 /**

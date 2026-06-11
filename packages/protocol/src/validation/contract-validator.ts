@@ -343,9 +343,9 @@ function getJsonType(value: unknown): string {
 /**
  * Validate an inbound {@link ActionEnvelope} against the target
  * render's {@link ActionSpec}. Payload-contract layer of live-channel
- * inbound enforcement — the allowlist gate (`assertEventAllowed` in
- * `@ggui-ai/mcp-server-handlers`) is a separate concern that runs
- * first.
+ * inbound enforcement — the ONLY gate on inbound actions today (the
+ * pre-Phase-B `subscription.events` allowlist gate was deleted with
+ * the session-stack collapse).
  *
  * Semantics:
  *   - `envelope.type !== 'data:submit'` → `{valid: true, violations: []}`.

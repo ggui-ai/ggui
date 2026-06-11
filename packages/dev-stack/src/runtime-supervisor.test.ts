@@ -102,10 +102,15 @@ describe('RuntimeSupervisor', () => {
     // Buffer keeps everything regardless of pipe state.
     expect(supervisor.snapshot().recentEvents.length).toBe(3);
     // Pipe skipped the first event (threw) but kept forwarding.
-    expect(forwarded.map((e) => (e.type === 'log' ? e.line : `status:${e.status}`))).toEqual([
-      'survived',
-      'status:ready',
-    ]);
+    expect(
+      forwarded.map((e) =>
+        e.type === 'log'
+          ? e.line
+          : e.type === 'status'
+            ? `status:${e.status}`
+            : `error:${e.message}`,
+      ),
+    ).toEqual(['survived', 'status:ready']);
     supervisor.close();
     await handle.stop();
   });

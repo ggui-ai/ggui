@@ -49,8 +49,8 @@
  * ## Storage
  *
  * Auth codes + DCR clients live in-memory ({@link InMemoryOAuthStorage}).
- * For multi-replica deployments (e.g. `mcp.ggui.ai` with 2+ pods),
- * either:
+ * For multi-replica deployments (2+ processes behind one load
+ * balancer), either:
  *   - Use nginx-ingress sticky sessions so the same pod handles both
  *     `/oauth/authorize` and `/oauth/token` (current sandbox posture).
  *   - Plug a Redis-backed {@link OAuthStorage} via the
@@ -63,8 +63,9 @@
 
 import { createHash, randomBytes } from 'node:crypto';
 import type { Request, Response } from 'express';
+import { isRecord } from '@ggui-ai/protocol';
 import type { AuthAdapter, PairingService } from '@ggui-ai/mcp-server-core';
-import { resolveIdentity, UnauthenticatedError } from './auth.js';
+import { resolveIdentityFromHeaders, UnauthenticatedError } from './auth.js';
 
 // =============================================================================
 // Config
@@ -72,7 +73,7 @@ import { resolveIdentity, UnauthenticatedError } from './auth.js';
 
 export interface OAuthConfig {
   /**
-   * Public origin of this server (e.g. `https://mcp.ggui.ai`). Used in
+   * Public origin of this server (e.g. `https://mcp.example.com`). Used in
    * discovery metadata, `WWW-Authenticate` headers, and OAuth redirects.
    * Should NOT have a trailing slash. When absent, the server derives
    * it from the request's `Host` header — fine for most deployments,
@@ -90,7 +91,7 @@ export interface OAuthConfig {
 
   /**
    * External consent UI to delegate the user-facing approval step to
-   * (e.g. `https://console.ggui.ai/oauth/consent`). When set,
+   * (e.g. `https://console.example.com/oauth/consent`). When set,
    * `GET /oauth/authorize` returns a 302 to this URL with every OAuth
    * query param forwarded verbatim — the consent UI then constructs an
    * HTML form that POSTs back to `<issuer>/oauth/authorize` with the
@@ -115,8 +116,8 @@ export interface OAuthConfig {
    * MCP endpoint on this deployment, `false` otherwise.
    *
    * For ggui this gates two shapes:
-   *   - Universal: `${issuer}` (cloud bare root) or
-   *     `${issuer}${universalMcpPath}` (OSS `/mcp`).
+   *   - Universal: `${issuer}` (bare-root mount) or
+   *     `${issuer}${universalMcpPath}` (the conventional `/mcp`).
    *   - Per-app:   `${issuer}${perAppRouting.pathPrefix}/<appId>`
    *     where `<appId>` matches `perAppRouting.paramPattern`.
    *
@@ -344,6 +345,26 @@ export function buildWwwAuthenticate(
 // PKCE
 // =============================================================================
 
+/**
+ * Narrow an untrusted params source (express `req.query`, parsed
+ * request body) to the string-valued record the OAuth handlers
+ * consume. Express query values can be `string | string[] | ParsedQs
+ * | ParsedQs[]` (duplicate keys yield arrays under both query
+ * parsers) and JSON bodies can carry arbitrary shapes — only single
+ * string values are meaningful OAuth params, so anything else is
+ * DROPPED at this trust boundary. The downstream required-param
+ * validation then rejects the request with a clean 400 instead of
+ * flowing a non-string through string-typed code.
+ */
+function toStringParams(source: unknown): Record<string, string | undefined> {
+  const out: Record<string, string | undefined> = {};
+  if (!isRecord(source)) return out;
+  for (const [key, value] of Object.entries(source)) {
+    if (typeof value === 'string') out[key] = value;
+  }
+  return out;
+}
+
 function sha256Base64Url(input: string): string {
   return createHash('sha256').update(input).digest('base64url');
 }
@@ -363,8 +384,9 @@ function verifyPkce(verifier: string, challenge: string): boolean {
  * in our case (we host both the resource AND the auth server).
  *
  * `mcpPath` (default `/mcp`) is the deployment's universal MCP route.
- * Cloud `mcp.ggui.ai` mounts at the bare root `/` so URLs are short
- * (the domain already says "mcp"); OSS keeps the conventional `/mcp`.
+ * A deployment on a dedicated MCP domain may mount at the bare root
+ * `/` so URLs stay short (the domain already says "mcp"); the
+ * conventional default is `/mcp`.
  * The trailing slash is normalized off when the path is `/` so the
  * resource URL is `${issuer}` (no trailing slash) rather than
  * `${issuer}/`.
@@ -421,11 +443,8 @@ export async function handleRegister(
   config: OAuthConfig,
   storage: OAuthStorage,
 ): Promise<void> {
-  const body = (req.body ?? {}) as {
-    redirect_uris?: unknown;
-    client_name?: unknown;
-  };
-  const redirectUrisRaw = body.redirect_uris;
+  const body: Record<string, unknown> = isRecord(req.body) ? req.body : {};
+  const redirectUrisRaw = body['redirect_uris'];
   if (!Array.isArray(redirectUrisRaw) || redirectUrisRaw.length === 0) {
     res.status(400).json({
       error: 'invalid_redirect_uri',
@@ -446,7 +465,7 @@ export async function handleRegister(
 
   const clientId = `mcp_client_${randomBytes(16).toString('base64url')}`;
   const clientName =
-    typeof body.client_name === 'string' ? body.client_name : undefined;
+    typeof body['client_name'] === 'string' ? body['client_name'] : undefined;
 
   await storage.putClient({
     clientId,
@@ -486,7 +505,7 @@ export async function handleAuthorizeGet(
   config: OAuthConfig,
   storage: OAuthStorage,
 ): Promise<void> {
-  const params = req.query as Record<string, string | undefined>;
+  const params = toStringParams(req.query);
   const issuer = resolveIssuerUrl(req, config.issuerUrl);
   const v = await validateAuthorizeParams(params, storage, config, issuer);
   if ('error' in v) {
@@ -540,7 +559,7 @@ export async function handleAuthorizePost(
   auth: AuthAdapter,
   pairingService?: PairingService | null,
 ): Promise<void> {
-  const params = (req.body ?? {}) as Record<string, string | undefined>;
+  const params = toStringParams(req.body);
   const issuer = resolveIssuerUrl(req, config.issuerUrl);
   const validation = await validateAuthorizeParams(
     params,
@@ -584,15 +603,14 @@ export async function handleAuthorizePost(
     return;
   }
 
-  // Validate the key by running the adapter's auth path. We synthesize a
-  // minimal Request shape — the adapter only reads `headers` for bearer
-  // extraction. Using the real `resolveIdentity()` keeps the validation
-  // semantics byte-identical to /mcp's auth gate.
-  const fakeReq = {
-    headers: { authorization: `Bearer ${apiKey}` },
-  } as unknown as Request;
+  // Validate the key by running the adapter's auth path. Using the
+  // same `resolveIdentityFromHeaders()` the `/mcp` and `/ws` ingress
+  // points funnel through keeps the validation semantics
+  // byte-identical to /mcp's auth gate — no synthetic Request needed.
   try {
-    await resolveIdentity(auth, fakeReq);
+    await resolveIdentityFromHeaders(auth, {
+      authorization: `Bearer ${apiKey}`,
+    });
   } catch (err) {
     if (err instanceof UnauthenticatedError) {
       res
@@ -681,7 +699,7 @@ export async function handleToken(
   res: Response,
   storage: OAuthStorage,
 ): Promise<void> {
-  const body = (req.body ?? {}) as Record<string, string | undefined>;
+  const body = toStringParams(req.body);
 
   if (body['grant_type'] !== 'authorization_code') {
     res.status(400).json({

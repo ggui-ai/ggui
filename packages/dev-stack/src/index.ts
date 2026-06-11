@@ -29,19 +29,6 @@ export {
   type BundleErrorLocation,
 } from './local-registry/local-registry.js';
 
-// Discovery — re-export from @ggui-ai/project-config/node for
-// consumers that have historically imported these symbols from the
-// dev-stack barrel. The canonical home is the schema-owner package;
-// dev-stack's `LocalUiRegistry` consumes the same helper directly.
-export {
-  discoverLocalUis,
-  discoverFromGguiJsonPath,
-  type DiscoveredUi,
-  type DiscoveryIssue,
-  type DiscoveryResult,
-  type DiscoverOptions,
-} from '@ggui-ai/project-config/node';
-
 // Compile-on-demand
 export {
   compileUiOnDemand,
@@ -94,15 +81,6 @@ export {
   type DevServerSecurityPolicy,
   type PolicyOutcome,
 } from './dev-server/auth.js';
-
-// MCP-Apps sandbox proxy — second HTTP server on a different origin
-// that serves `sandbox.html` for `<AppRenderer>`'s two-iframe
-// sandboxing pattern (R5; see ./dev-server/sandbox-proxy.ts).
-export {
-  startSandboxProxyServer,
-  type SandboxProxyServerOptions,
-  type SandboxProxyServerHandle,
-} from './dev-server/sandbox-proxy.js';
 
 // Orchestration — the seam every local-dev host composes against.
 export {

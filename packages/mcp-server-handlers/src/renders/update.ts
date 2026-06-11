@@ -82,24 +82,10 @@ export interface PropsUpdateNotifier {
   sendPropsUpdate(sessionId: string, props: JsonObject): Promise<void>;
 }
 
-/**
- * Thrown when ggui_update can't honor the requested shape — e.g.
- * malformed render row or a structural reject the wire schema couldn't
- * encode.
- *
- * Distinct from `GguiSessionNotFoundError` (render missing or cross-tenant)
- * and `ContractViolationError` (props validation fail). The transport
- * layer projects these three to distinct MCP error envelopes.
- */
-export class UpdateUnsupportedError extends Error {
-  readonly code = 'update_unsupported' as const;
-  constructor(message: string) {
-    super(message);
-    this.name = 'UpdateUnsupportedError';
-  }
-}
-
-/** Re-exported for callers that prefer to import the error from this module. */
+/** Re-exported for callers that prefer to import the error from this module.
+ *  These are the two typed failure shapes `ggui_update` throws:
+ *  `GguiSessionNotFoundError` (render missing or cross-tenant) and
+ *  `ContractViolationError` (props validation fail). */
 export { GguiSessionNotFoundError, ContractViolationError };
 
 /**
