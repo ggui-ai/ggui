@@ -28,7 +28,7 @@ import {
   summarize,
   type BenchOutcome,
 } from './run-bench.js';
-import { validateContractStructure } from '../contract-validators.js';
+import { validateContractRedundancy } from '../contract-validators.js';
 
 describe('synth-bench corpus integrity', () => {
   it('loads at least 50 entries', () => {
@@ -461,7 +461,7 @@ describe('validator alignment with bench', () => {
         },
       },
     };
-    const findings = validateContractStructure(buggyCounter).findings;
+    const findings = validateContractRedundancy(buggyCounter).findings;
     expect(findings.some((f) => f.kind === 'redundant-action')).toBe(true);
   });
 
@@ -471,7 +471,7 @@ describe('validator alignment with bench', () => {
         count: { schema: { type: 'number' }, default: 0 },
       },
     };
-    const findings = validateContractStructure(goodCounter).findings;
+    const findings = validateContractRedundancy(goodCounter).findings;
     expect(findings).toEqual([]);
   });
 
@@ -487,7 +487,7 @@ describe('validator alignment with bench', () => {
         },
       },
     };
-    const findings = validateContractStructure(form).findings;
+    const findings = validateContractRedundancy(form).findings;
     expect(findings).toEqual([]);
   });
 });

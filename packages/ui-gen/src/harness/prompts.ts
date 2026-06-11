@@ -74,8 +74,6 @@ export const PLANNER_PROMPT = `You are a senior UI architect for ggui.
 
 Read the available primitives and design system tokens. Then produce a DESIGN SPECIFICATION (not code) for the requested component.
 
-If get_predefined_components is available, call it to check for existing blueprints that match the request.
-
 CRITICAL: The component is a REUSABLE TEMPLATE. All request-specific data (task titles, names, values) MUST be prop defaults, not hardcoded constants. The same blueprint will render with different data.
 
 Your spec must cover:
@@ -621,4 +619,4 @@ export const CONTEXT_TOOL_NAMES = ['get_primitives', 'get_design_system', 'get_a
 export const BUILD_TOOL_NAMES = ['self_check', 'validate_component', 'compile_component'];
 
 /** Tool names for reference lookup in the coding agent's hybrid agentic loop. */
-export const REFERENCE_TOOL_NAMES = ['get_primitives', 'get_design_system', 'get_app_components', 'get_predefined_components'];
+export const REFERENCE_TOOL_NAMES = ['get_primitives', 'get_design_system', 'get_app_components'];

@@ -194,7 +194,6 @@ export async function runEnforcedCodingLoop(
               compiledCode: capture.compiledCode,
               originalPrompt: params.originalPrompt || params.userPrompt,
               themeTokens: 'Default ggui theme',
-              strategy: 'balanced',
             },
             {
               enabled: true,

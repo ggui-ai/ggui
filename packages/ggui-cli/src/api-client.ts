@@ -138,8 +138,9 @@ export async function postAuthPoll(
 export async function postAuthRefresh(
   endpoint: string,
   refreshToken: string,
+  fetchImpl: typeof fetch = globalThis.fetch.bind(globalThis),
 ): Promise<TokenResponse> {
-  const res = await fetch(`${endpoint}/v1/auth/refresh`, {
+  const res = await fetchImpl(`${endpoint}/v1/auth/refresh`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ refresh_token: refreshToken }),

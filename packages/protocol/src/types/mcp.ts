@@ -77,11 +77,11 @@ export interface GguiConsumeInput {
    */
   sessionId: string;
   /**
-   * Timeout in seconds for long-poll. Server-side wall-clock cap.
+   * Long-poll wait in seconds — integer in `[0, 25]` (SPEC §7.3).
    * - 0: immediate return (no waiting)
-   * - 1-25: synchronous long-poll (HTTP API, capped by 30s gateway limit)
-   * - 26-900: SSE streaming via server-sent events (up to 15 min)
-   * The MCP client SDK routes to the appropriate endpoint automatically.
+   * - 1-25: inline long-poll, returning as soon as events arrive
+   * Values outside the bound reject `INVALID_PARAMS`. Longer waits are
+   * the agent's loop: re-call `ggui_consume` on an empty result.
    * Default: 0 (immediate).
    */
   timeout?: number;

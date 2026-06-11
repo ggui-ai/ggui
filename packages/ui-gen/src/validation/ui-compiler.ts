@@ -165,9 +165,9 @@ export class UiBundleSizeError extends Error {
  * - UI register endpoint (bundle=false, transform only)
  * - Studio app
  *
- * The generator pipeline uses its own compile path (S3-based, with
- * @predefined/ resolution), but shares the same validation rules
- * via @ggui-ai/protocol.
+ * The generator pipeline uses its own compile path
+ * (`compileComponentCode` in compile.ts), but shares the same
+ * validation rules via @ggui-ai/protocol.
  */
 export async function compileUi(
   source: string,

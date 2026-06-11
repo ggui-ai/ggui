@@ -28,9 +28,9 @@ import type { BenchmarkRunResult } from './types';
 // =============================================================================
 
 describe('Benchmark Tool Definitions', () => {
-  it('creates 7 generator tools with correct names', () => {
+  it('creates 6 generator tools with correct names', () => {
     const tools = createGeneratorTools();
-    expect(tools).toHaveLength(7);
+    expect(tools).toHaveLength(6);
     expect(tools.map((t) => t.name)).toEqual([
       'get_primitives',
       'get_design_system',
@@ -38,14 +38,7 @@ describe('Benchmark Tool Definitions', () => {
       'validate_component',
       'self_check',
       'compile_component',
-      'get_predefined_components',
     ]);
-  });
-
-  it('creates 6 tools when predefined disabled', () => {
-    const tools = createGeneratorTools({ enablePredefinedComponents: false });
-    expect(tools).toHaveLength(6);
-    expect(tools.map((t) => t.name)).toContain('self_check');
   });
 
   it('get_primitives returns documentation string', async () => {
@@ -398,7 +391,7 @@ describe('Report Generator', () => {
       estimatedCostUsd: 0.015,
       timestamp: '2026-03-15T00:00:00Z',
       floor: 'oss',
-      pathUsage: { predefinedToolAvailable: false, predefinedToolCalls: 0, capHit: false },
+      pathUsage: { capHit: false },
       generator: 'ui-gen-default-haiku-4-5',
     },
     {
@@ -419,7 +412,7 @@ describe('Report Generator', () => {
       estimatedCostUsd: 0.027,
       timestamp: '2026-03-15T00:00:00Z',
       floor: 'oss',
-      pathUsage: { predefinedToolAvailable: false, predefinedToolCalls: 0, capHit: false },
+      pathUsage: { capHit: false },
       generator: 'ui-gen-default-haiku-4-5',
     },
     {
@@ -431,7 +424,7 @@ describe('Report Generator', () => {
       error: 'Timeout after 300000ms',
       timestamp: '2026-03-15T00:00:00Z',
       floor: 'oss',
-      pathUsage: { predefinedToolAvailable: false, predefinedToolCalls: 0, capHit: false },
+      pathUsage: { capHit: false },
       generator: 'ui-gen-default-haiku-4-5',
     },
   ];

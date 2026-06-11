@@ -4,7 +4,7 @@
  *   1. `applyFloor` helper — tag + suffix semantics, idempotence,
  *      undefined passthrough (preserves pre-floor behavior).
  *   2. `buildFloorSummaries` reporter — grouping, error-bucket sum,
- *      predefined-tool metrics, single-floor arrays.
+ *      cap-hit rate, single-floor arrays.
  *
  * Runner-level floor propagation is covered by the existing bench
  * integration — adding another real-LLM integration test here would
@@ -152,8 +152,6 @@ function mkRun(overrides: Partial<BenchmarkRunResult>): BenchmarkRunResult {
     timestamp: '2026-04-20T00:00:00Z',
     floor: 'oss',
     pathUsage: {
-      predefinedToolAvailable: false,
-      predefinedToolCalls: 0,
       capHit: false,
     },
     generator: 'ui-gen-default-haiku-4-5',
@@ -196,41 +194,11 @@ describe('buildFloorSummaries', () => {
     const capped = mkRun({
       floor: 'oss',
       pathUsage: {
-        predefinedToolAvailable: false,
-        predefinedToolCalls: 0,
         capHit: true,
       },
     });
     const summaries = buildFloorSummaries([capped, mkRun({ floor: 'oss' })]);
     expect(summaries[0]!.capHitRate).toBe(0.5);
-  });
-
-  it('predefinedToolCallRate — fraction of runs where the tool was called', () => {
-    const called = mkRun({
-      floor: 'hosted',
-      pathUsage: {
-        predefinedToolAvailable: true,
-        predefinedToolCalls: 2,
-        capHit: false,
-      },
-    });
-    const notCalled = mkRun({
-      floor: 'hosted',
-      pathUsage: {
-        predefinedToolAvailable: true,
-        predefinedToolCalls: 0,
-        capHit: false,
-      },
-    });
-    const summaries = buildFloorSummaries([called, notCalled]);
-    expect(summaries[0]!.predefinedToolCallRate).toBe(0.5);
-    expect(summaries[0]!.avgPredefinedToolCalls).toBe(1); // (2 + 0) / 2
-  });
-
-  it('oss floor always shows 0 predefined-tool metrics (tool structurally absent)', () => {
-    const [summary] = buildFloorSummaries([mkRun({ floor: 'oss' })]);
-    expect(summary!.predefinedToolCallRate).toBe(0);
-    expect(summary!.avgPredefinedToolCalls).toBe(0);
   });
 
   it('errorBuckets — sums breakdown.outcomes across runs on the same floor', () => {

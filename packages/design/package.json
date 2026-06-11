@@ -1,7 +1,7 @@
 {
   "name": "@ggui-ai/design",
   "version": "0.3.0",
-  "description": "ggui design system — themeable React primitives, components, compositions, blueprints, and design tokens. Bare-barrel import for component code, renderer-facing subpaths for integrators; runtime theming via DTCG token injection.",
+  "description": "ggui design system — themeable React primitives, components, compositions, and design tokens. Bare-barrel import for component code, renderer-facing subpaths for integrators; runtime theming via DTCG token injection.",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",

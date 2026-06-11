@@ -1,7 +1,7 @@
 /**
  * Tests for the programmatic contract validators. Three blocks:
  *
- *   1. `validateContractStructure` — counter / toggle / form / save
+ *   1. `validateContractRedundancy` — counter / toggle / form / save
  *      cases pin the heuristic's behavior on known patterns.
  *   2. Verb-list self-test — meta-check that pins the mutator-verb
  *      list against contracts that SHOULD and SHOULD NOT flag, so a
@@ -22,7 +22,7 @@ import {
 import {
   validateActionsVsContext,
   validateContractCoherence,
-  validateContractStructure,
+  validateContractRedundancy,
   validateContractNovelty,
   formatValidationFindings,
 } from './contract-validators.js';
@@ -33,7 +33,7 @@ const EMPTY_PAYLOAD_SCHEMA = {
   additionalProperties: false,
 } as const;
 
-describe('validateContractStructure — load-bearing counter case', () => {
+describe('validateContractRedundancy — load-bearing counter case', () => {
   it('flags increment + count (single slot, empty remainder)', () => {
     const contract: DataContract = {
       actionSpec: {
@@ -43,7 +43,7 @@ describe('validateContractStructure — load-bearing counter case', () => {
         count: { schema: { type: 'number' }, default: 0 },
       },
     };
-    const { findings } = validateContractStructure(contract);
+    const { findings } = validateContractRedundancy(contract);
     expect(findings).toHaveLength(1);
     const finding = findings[0];
     expect(finding).toBeDefined();
@@ -67,7 +67,7 @@ describe('validateContractStructure — load-bearing counter case', () => {
         count: { schema: { type: 'number' }, default: 0 },
       },
     };
-    const { findings } = validateContractStructure(contract);
+    const { findings } = validateContractRedundancy(contract);
     expect(findings.map((f) => f.actionName).sort()).toEqual([
       'decrement',
       'increment',
@@ -79,7 +79,7 @@ describe('validateContractStructure — load-bearing counter case', () => {
   });
 });
 
-describe('validateContractStructure — remainder/slot matching', () => {
+describe('validateContractRedundancy — remainder/slot matching', () => {
   it('flags toggle + isOpen via remainder containment', () => {
     const contract: DataContract = {
       actionSpec: {
@@ -89,7 +89,7 @@ describe('validateContractStructure — remainder/slot matching', () => {
         isOpen: { schema: { type: 'boolean' }, default: false },
       },
     };
-    const { findings } = validateContractStructure(contract);
+    const { findings } = validateContractRedundancy(contract);
     expect(findings).toHaveLength(1);
     expect(findings[0]?.actionName).toBe('toggleIsOpen');
     expect(findings[0]?.slotName).toBe('isOpen');
@@ -104,7 +104,7 @@ describe('validateContractStructure — remainder/slot matching', () => {
         items: { schema: { type: 'array' }, default: [] },
       },
     };
-    const { findings } = validateContractStructure(contract);
+    const { findings } = validateContractRedundancy(contract);
     expect(findings).toHaveLength(1);
     expect(findings[0]?.slotName).toBe('items');
   });
@@ -119,12 +119,12 @@ describe('validateContractStructure — remainder/slot matching', () => {
         items: { schema: { type: 'array' }, default: [] },
       },
     };
-    const { findings } = validateContractStructure(contract);
+    const { findings } = validateContractRedundancy(contract);
     expect(findings).toHaveLength(0);
   });
 });
 
-describe('validateContractStructure — non-mutator legitimate patterns', () => {
+describe('validateContractRedundancy — non-mutator legitimate patterns', () => {
   it('does NOT flag submit + formData (submit is not a mutator verb)', () => {
     const contract: DataContract = {
       actionSpec: {
@@ -137,7 +137,7 @@ describe('validateContractStructure — non-mutator legitimate patterns', () => 
         },
       },
     };
-    const { findings } = validateContractStructure(contract);
+    const { findings } = validateContractRedundancy(contract);
     expect(findings).toHaveLength(0);
   });
 
@@ -157,7 +157,7 @@ describe('validateContractStructure — non-mutator legitimate patterns', () => 
         items: { schema: { type: 'array' }, default: [] },
       },
     };
-    const { findings } = validateContractStructure(contract);
+    const { findings } = validateContractRedundancy(contract);
     expect(findings).toHaveLength(0);
   });
 
@@ -170,7 +170,7 @@ describe('validateContractStructure — non-mutator legitimate patterns', () => 
         draft: { schema: { type: 'string' }, default: '' },
       },
     };
-    const { findings } = validateContractStructure(contract);
+    const { findings } = validateContractRedundancy(contract);
     expect(findings).toHaveLength(0);
   });
 
@@ -180,7 +180,7 @@ describe('validateContractStructure — non-mutator legitimate patterns', () => 
         increment: { label: 'Inc', schema: EMPTY_PAYLOAD_SCHEMA  },
       },
     };
-    const { findings } = validateContractStructure(contract);
+    const { findings } = validateContractRedundancy(contract);
     expect(findings).toHaveLength(0);
   });
 
@@ -196,12 +196,12 @@ describe('validateContractStructure — non-mutator legitimate patterns', () => 
         score: { schema: { type: 'number' }, default: 0 },
       },
     };
-    const { findings } = validateContractStructure(contract);
+    const { findings } = validateContractRedundancy(contract);
     expect(findings).toHaveLength(0);
   });
 });
 
-describe('validateContractStructure — verb-list self-test', () => {
+describe('validateContractRedundancy — verb-list self-test', () => {
   // Each fixture is a (contract, expected) pair. SHOULD-flag fixtures
   // pin verbs that genuinely indicate mutation. SHOULD-NOT-flag
   // fixtures pin verbs deliberately kept OUT of the list (submit,
@@ -362,7 +362,7 @@ describe('validateContractStructure — verb-list self-test', () => {
 
   for (const fixture of SHOULD_FLAG) {
     it(`flags: ${fixture.name}`, () => {
-      const { findings } = validateContractStructure(fixture.contract);
+      const { findings } = validateContractRedundancy(fixture.contract);
       expect(findings.length).toBeGreaterThan(0);
       expect(findings[0]?.kind).toBe('redundant-action');
     });
@@ -370,7 +370,7 @@ describe('validateContractStructure — verb-list self-test', () => {
 
   for (const fixture of SHOULD_NOT_FLAG) {
     it(`does not flag: ${fixture.name}`, () => {
-      const { findings } = validateContractStructure(fixture.contract);
+      const { findings } = validateContractRedundancy(fixture.contract);
       expect(findings).toHaveLength(0);
     });
   }

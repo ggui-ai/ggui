@@ -1,8 +1,8 @@
 # @ggui-ai/design
 
 The ggui design system — a themeable React component library built for
-AI-generated UIs. Atomic-design primitives, components, compositions, and
-page-level blueprints, all styled with CSS custom properties so a theme can
+AI-generated UIs. Atomic-design primitives, components, and compositions,
+all styled with CSS custom properties so a theme can
 be swapped at runtime via [DTCG](https://design-tokens.github.io/community-group/format/)
 token injection.
 
@@ -17,7 +17,7 @@ npm install @ggui-ai/design
 ## Import paths
 
 Generated component code and app code use the single bare barrel —
-primitives, components, compositions, blueprints, and design tokens all
+primitives, components, compositions, and design tokens all
 resolve from `@ggui-ai/design`:
 
 ```tsx
@@ -52,12 +52,11 @@ function Example() {
 
 ## Component levels (atomic design)
 
-| Level            | What it is                                   | Examples                                   |
-| ---------------- | -------------------------------------------- | ------------------------------------------ |
-| **Primitives**   | Single-purpose building blocks               | `Button`, `Text`, `Card`, `Grid`           |
-| **Components**   | Functional units combining a few primitives  | `SearchField`, `FormField`, `Stat`         |
-| **Compositions** | Self-contained sections with their own logic | `Header`, `Modal`, `DataTable`             |
-| **Blueprints**   | Full-screen agent-interface layouts          | `Dashboard`, `ListDetail`, `ChatInterface` |
+| Level            | What it is                                   | Examples                           |
+| ---------------- | -------------------------------------------- | ---------------------------------- |
+| **Primitives**   | Single-purpose building blocks               | `Button`, `Text`, `Card`, `Grid`   |
+| **Components**   | Functional units combining a few primitives  | `SearchField`, `FormField`, `Stat` |
+| **Compositions** | Self-contained sections with their own logic | `Header`, `Modal`, `DataTable`     |
 
 ## Conventions
 

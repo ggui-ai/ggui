@@ -24,15 +24,13 @@ import { tryRender, generateSampleProps } from '../tools/render-check.js';
 
 /**
  * Context for creating generator tools.
- * Allows passing app-specific and predefined component docs.
+ * Allows passing app-specific component docs.
  */
 export interface GeneratorToolsContext {
   /** App-specific design context (DESIGN.md content) */
   designContext?: string;
   /** App-specific reusable component documentation */
   componentContext?: string;
-  /** Whether to include get_predefined_components tool (default: true) */
-  enablePredefinedComponents?: boolean;
   /** Data contract for validation (props, stream, actions) */
   contract?: DataContract;
   /** Sample props for render smoke test (realistic data matching the contract) */
@@ -46,8 +44,8 @@ export interface GeneratorToolsContext {
  * 1. get_primitives — available UI components
  * 2. get_design_system — CSS variable tokens
  * 3. get_app_components — app-specific reusable components
- * 4. get_predefined_components — pre-built patterns (LoginForm, etc.)
- * 5. validate_component — pre-compilation check
+ * 4. validate_component — pre-compilation check
+ * 5. self_check — typecheck + lint + render smoke test
  * 6. compile_component — TSX→JS via esbuild
  *
  * Each tool uses the exact same handlers as the production MCP server,
@@ -329,57 +327,6 @@ export function createGeneratorTools(context: GeneratorToolsContext = {}): ToolD
       },
     },
   ];
-
-  // Add predefined components tool if enabled
-  if (context.enablePredefinedComponents !== false) {
-    tools.push({
-      name: 'get_predefined_components',
-      description:
-        'CRITICAL: Call this tool FIRST before any other action. Returns pre-built, tested UI components. If any component matches your request, you MUST use it.',
-      inputSchema: z.object({
-        level: z
-          .enum(['primitive', 'component', 'composite', 'blueprint'])
-          .optional()
-          .describe('Filter by component level'),
-        category: z
-          .string()
-          .optional()
-          .describe('Filter by category (e.g., "forms", "navigation")'),
-      }),
-      handler: async (args): Promise<ToolResult> => {
-        // Dynamic import via runtime-only specifier — the predefined
-        // registry lives in `@ggui-cloud/generation-runtime` (cloud
-        // package, S3-backed), which the OSS package can't statically
-        // depend on. The string indirection hides the specifier from
-        // TypeScript's module resolver while keeping it visible to the
-        // runtime; consumers wiring this tool must have the cloud
-        // package installed in their dependency tree.
-        const cloudPredefinedSpecifier =
-          '@ggui-cloud/generation-runtime/predefined/registry';
-        type CloudPredefinedRegistry = {
-          initializePredefinedRegistry: () => Promise<void>;
-          getPredefinedRegistry: () => {
-            formatForPrompt: (filter: {
-              level?: 'primitive' | 'component' | 'composite' | 'blueprint';
-              category?: string;
-            }) => { markdown: string };
-          };
-        };
-        const cloudPredefinedMod = (await import(
-          /* @vite-ignore */ cloudPredefinedSpecifier
-        )) as CloudPredefinedRegistry;
-        const { initializePredefinedRegistry, getPredefinedRegistry } = cloudPredefinedMod;
-        type ComponentLevel = 'primitive' | 'component' | 'composite' | 'blueprint';
-        await initializePredefinedRegistry();
-        const registry = getPredefinedRegistry();
-        const result = registry.formatForPrompt({
-          level: args.level as ComponentLevel | undefined,
-          category: args.category as string | undefined,
-        });
-        return { content: [{ type: 'text', text: result.markdown }] };
-      },
-    });
-  }
 
   return tools;
 }

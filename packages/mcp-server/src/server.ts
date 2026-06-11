@@ -55,7 +55,6 @@ import type {
   EmbeddingProvider,
   GeneratorRegistry,
   KeyValueStore,
-  LlmProvider,
   PairingService,
   PendingEventConsumer,
   ProviderKeyStore,
@@ -68,9 +67,7 @@ import type {
   VectorStore,
 } from "@ggui-ai/mcp-server-core";
 import {
-  CODE_HASH_REGEX,
   createDeterministicBlueprintSelector,
-  isEnumerableVectorStore,
   isTokenRegisteringAuthAdapter,
   mintSessionToken,
   mintWsToken,
@@ -124,38 +121,21 @@ import {
 } from "@ggui-ai/mcp-server-handlers/ops-blueprint";
 import { setCacheTraceSink, setPayloadTraceSink } from "@ggui-ai/mcp-server-handlers/renders";
 import type { OperatorConfig, ThemeConfig } from "@ggui-ai/project-config";
-import { GguiJsonV1 } from "@ggui-ai/project-config";
 import type { DiscoveredPrimitiveCatalog, LoadedTheme } from "@ggui-ai/project-config/node";
-import { findGguiJson, loadTheme, safeLoadGguiJson } from "@ggui-ai/project-config/node";
-import type { Blueprint, GguiLifecyclePayload, GguiSession } from "@ggui-ai/protocol";
+import { loadTheme } from "@ggui-ai/project-config/node";
+import type { Blueprint, GguiLifecyclePayload } from "@ggui-ai/protocol";
 import { LIFECYCLE_CHANNEL } from "@ggui-ai/protocol";
-import {
-  GGUI_RENDER_RESOURCE_MIME,
-  GGUI_RENDER_RESOURCE_URI,
-  MCP_APP_AI_GGUI_RENDER_META_KEY,
-  type McpAppAiGguiRenderMeta,
-} from "@ggui-ai/protocol/integrations/mcp-apps";
 import { setLlmTraceSink } from "@ggui-ai/ui-gen/harness/llm-trace-sink";
 import { setValidatorTraceSink } from "@ggui-ai/ui-gen/harness/validator-trace-sink";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
-import express, { type Express, type Request, type Response } from "express";
-import type { ParamsDictionary } from "express-serve-static-core";
+import express, { type Express, type Request } from "express";
 import { AsyncLocalStorage } from "node:async_hooks";
-import { randomBytes, randomUUID } from "node:crypto";
-import { existsSync, readFileSync } from "node:fs";
+import { randomBytes } from "node:crypto";
 import { Server as NodeHttpServer } from "node:http";
 import path from "node:path";
-import { z, type ZodRawShape } from "zod";
-import {
-  CONSOLE_COOKIE_NAME,
-  mintDevtoolCookie,
-  readDevtoolCookieFromHeaders,
-  verifyDevtoolCookie,
-} from "./console-auth.js";
+import type { ZodRawShape } from "zod";
 import { BoundedCacheTraceSink, mountConsoleCacheRoutes } from "./console-cache.js";
 import { applyDevtoolSecurityHeaders } from "./console-headers.js";
-import { singleParam } from "./route-param.js";
 import { BoundedLlmTraceSink, mountConsoleLlmTraceRoutes } from "./console-llm-trace.js";
 import { BoundedPayloadTraceSink, mountConsolePayloadsRoutes } from "./console-payloads.js";
 import {
@@ -165,8 +145,6 @@ import {
 } from "./console-theme-routes.js";
 import { mountConsoleTimelineRoutes } from "./console-timeline.js";
 import { BoundedValidatorTraceSink, mountConsoleValidatorRoutes } from "./console-validator.js";
-import { renderWelcomeHtml } from "./console-welcome.js";
-import { GGUI_RENDER_SHELL_HTML } from "./mcp-apps-outbound.js";
 // Operator-class MCP handlers — twelve `ggui_ops_*` handlers across
 // four domains (apps / orgs / connector-keys / coupon). Every factory
 // binds a deps seam; deployments that don't wire the seam simply
@@ -201,7 +179,6 @@ import {
   type OrgsSource,
 } from "@ggui-ai/mcp-server-handlers/ops-orgs";
 import {
-  clearGenerationCache,
   createGguiConsumeHandler,
   createGguiDeclareToolCatalogHandler,
   createGguiEmitHandler,
@@ -215,14 +192,7 @@ import {
   createGguiUpdateHandler,
   InMemoryToolIdentityCatalogStore,
   createInMemoryProvisionalPreviewRegistry,
-  deriveContractBundle,
-  derivePublicEnvProjection,
-  deriveRenderMeta,
-  invalidateGenerationCache,
-  listBlueprints,
-  listGenerationCache,
   type ChannelNotifier,
-  type GenerationCacheEntry,
   type GenerationCredentials,
   type GenerationDeps,
   type BlueprintPool,
@@ -240,13 +210,26 @@ import {
   mountAdminBlueprintsTransport,
 } from "./admin-blueprints-transport.js";
 import { mountAdminOAuthProvidersTransport } from "./admin-oauth-providers-transport.js";
-import {
-  DEFAULT_BUILDER_APP_ID,
-  defaultAppIdFromIdentity,
-  resolveIdentity,
-  UnauthenticatedError,
-} from "./auth.js";
-import { buildMcpServer, type ServerInfo } from "./build-mcp.js";
+import { DEFAULT_BUILDER_APP_ID, defaultAppIdFromIdentity } from "./auth.js";
+import type { BuildMcpServerOptions, ServerInfo } from "./build-mcp.js";
+import { mountMcpEndpoints } from "./mcp-endpoint-routes.js";
+import { mountApiRendersRoutes } from "./api-renders-routes.js";
+import { mountConsoleBlueprintRoutes } from "./console-blueprint-routes.js";
+import { mountConsoleChatRoutes } from "./console-chat-routes.js";
+import { mountConsoleConfigRoutes } from "./console-config-routes.js";
+import { mountConsoleKeysRoutes } from "./console-keys-routes.js";
+import { mountConsoleLlmKeysRoutes } from "./console-llm-keys-routes.js";
+import { mountConsoleInfoRoutes } from "./console-info-routes.js";
+import { mountConsoleMcpToolsRoutes } from "./console-mcp-tools-routes.js";
+import { mountConsoleRegistryRoutes } from "./console-registry-routes.js";
+import { mountConsoleSessionRoutes } from "./console-session-routes.js";
+import { mountConsoleStaticRoutes } from "./console-static-routes.js";
+import { mountConsoleSessionsRoutes } from "./console-sessions-routes.js";
+import { mountCodeRoutes } from "./code-routes.js";
+import { mountHealthRoutes } from "./health-routes.js";
+import { mountOAuthAuthorizationServerRoutes } from "./oauth-as-routes.js";
+import { mountOAuthClientsRoutes } from "./oauth-clients-routes.js";
+import { mountRuntimeBundleRoute } from "./runtime-bundle-route.js";
 import { createCsrfMiddleware, mountCsrfTokenRoute } from "./csrf-middleware.js";
 import { mountEmailLoginRoutes, type EmailSender, type MagicLinkStore } from "./email-login.js";
 import { resolveMcpInstructions, type McpInstructionsValue } from "./instructions-presets.js";
@@ -264,19 +247,7 @@ import { mountOAuthLoginRoutes } from "./oauth-login.js";
 import { createOAuthProvidersStore } from "./oauth-providers-store.js";
 import { githubLoginProvider } from "./oauth-providers/github.js";
 import { googleLoginProvider } from "./oauth-providers/google.js";
-import {
-  buildWwwAuthenticate,
-  handleAuthorizationServerMetadata,
-  handleAuthorizeGet,
-  handleAuthorizePost,
-  handleProtectedResourceMetadata,
-  handleRegister,
-  handleToken,
-  InMemoryOAuthStorage,
-  resolveIssuerUrl,
-  type OAuthConfig,
-  type OAuthStorage,
-} from "./oauth.js";
+import { InMemoryOAuthStorage, type OAuthConfig, type OAuthStorage } from "./oauth.js";
 import {
   DEFAULT_PAIRING_ADMIN_INIT_PATH,
   DEFAULT_PAIRING_PATH,
@@ -292,7 +263,6 @@ import { composePreviewReservedValidator, mergeReservedValidators } from "./rese
 import {
   checkRenderSchemaCompat,
   DEFAULT_SCHEMA_COMPAT_MODE,
-  SchemaCompatError,
   type SchemaCompatMode,
 } from "./schema-compat.js";
 import { createSecurityHeadersMiddleware } from "./security-headers-middleware.js";
@@ -4124,68 +4094,27 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
   };
   const oauthStorage: OAuthStorage = oauthConfig.storage ?? new InMemoryOAuthStorage();
   if (oauthEnabled) {
-    // `trust proxy` so req.protocol + req.host honor X-Forwarded-Proto +
-    // X-Forwarded-Host. nginx-ingress + ALB both terminate TLS upstream;
-    // without trust-proxy the metadata advertises `http://` instead of
-    // `https://` which breaks PKCE (browsers refuse insecure flows).
-    app.set("trust proxy", true);
-
-    app.get("/.well-known/oauth-protected-resource", (req, res) =>
-      handleProtectedResourceMetadata(req, res, oauthConfig, opts.universalMcpPath ?? "/mcp")
-    );
-    // Per-app protected-resource metadata (RFC 9728 per-resource
-    // discovery). When `perAppRouting` is configured,
-    // mount a second well-known endpoint under the same path prefix
-    // the per-app `/mcp` handler lives on. Each `appId` gets its own
-    // metadata document with `resource: ${issuer}${pathPrefix}/${appId}`
-    // so claude.ai's discovery flow against `mcp.ggui.ai/apps/<appId>`
-    // sees a per-app resource rather than the universal one. The
-    // shared `authorization_servers: [issuer]` lets the auth server
-    // (also us) issue tokens bound to either resource via RFC 8707
-    // resource indicators.
-    if (opts.perAppRouting !== undefined) {
-      const { paramName, pathPrefix = "" } = opts.perAppRouting;
-      // `path-to-regexp` v8 (express@5) removed the `:param(pattern)`
-      // inline-regex route syntax — registering one throws at startup.
-      // Per-app routes now mount with a PLAIN named param; `paramPattern`
-      // is enforced by a single `app.param` validator (registered with
-      // the per-app MCP route below) that 404s any value failing a
-      // full-anchored match. Express resolves `app.param` callbacks at
-      // dispatch time for any route declaring the param, regardless of
-      // registration order, so this well-known route inherits the check
-      // even though the validator is wired further down.
-      //
-      // `req.params` can't be indexed by the runtime `paramName` under
-      // the v8 param-key inference, so pin the params type to the plain
-      // string dictionary (`ParamsDictionary`) — the legitimate
-      // single-value param shape — so the `paramName` lookup resolves
-      // to `string`.
-      app.get<ParamsDictionary>(
-        `${pathPrefix}/:${paramName}/.well-known/oauth-protected-resource`,
-        (req, res) => {
-          const appId = req.params[paramName];
-          if (typeof appId !== "string" || appId.length === 0) {
-            res.status(404).json({ error: "not_found" });
-            return;
+    // Discovery + auth + token endpoints — see `./oauth-as-routes.ts`.
+    // `getPairingService` late-binds: the pairing service is
+    // constructed below this mount, and the consent-submit handler
+    // only reads it per-request (after `listen()`).
+    mountOAuthAuthorizationServerRoutes({
+      app,
+      oauthConfig,
+      oauthStorage,
+      universalMcpPath: opts.universalMcpPath ?? "/mcp",
+      ...(opts.perAppRouting !== undefined
+        ? {
+            perAppRouting: {
+              paramName: opts.perAppRouting.paramName,
+              ...(opts.perAppRouting.pathPrefix !== undefined
+                ? { pathPrefix: opts.perAppRouting.pathPrefix }
+                : {}),
+            },
           }
-          handleProtectedResourceMetadata(req, res, oauthConfig, `${pathPrefix}/${appId}`);
-        }
-      );
-    }
-    app.get("/.well-known/oauth-authorization-server", (req, res) =>
-      handleAuthorizationServerMetadata(req, res, oauthConfig)
-    );
-    app.post("/oauth/register", (req, res) => {
-      void handleRegister(req, res, oauthConfig, oauthStorage);
-    });
-    app.get("/oauth/authorize", (req, res) => {
-      void handleAuthorizeGet(req, res, oauthConfig, oauthStorage);
-    });
-    app.post("/oauth/authorize", (req, res) => {
-      void handleAuthorizePost(req, res, oauthConfig, oauthStorage, auth, pairingService);
-    });
-    app.post("/oauth/token", (req, res) => {
-      void handleToken(req, res, oauthStorage);
+        : {}),
+      auth,
+      getPairingService: () => pairingService,
     });
   }
 
@@ -4194,545 +4123,157 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
   // closure can late-bind to it. /ggui/health reads the same ref to
   // surface live subscriber / render counts.
 
-  // 1s per-check timeout — a hung dependency must not block the K8s
-  // liveness probe, which itself runs on a short period. A timeout is
-  // treated as a failed check; the dependency is degraded either way.
-  const READINESS_CHECK_TIMEOUT_MS = 1_000;
-  const readinessChecks = opts.readinessChecks ?? [];
-
-  async function runReadinessChecks(): Promise<{
-    readonly allReady: boolean;
-    readonly results: Record<string, boolean>;
-  }> {
-    if (readinessChecks.length === 0) {
-      return { allReady: true, results: {} };
-    }
-    const results: Record<string, boolean> = {};
-    let allReady = true;
-    await Promise.all(
-      readinessChecks.map(async ({ name, check }) => {
-        try {
-          const ready = await Promise.race<boolean>([
-            Promise.resolve().then(() => check()),
-            new Promise<boolean>((resolve) =>
-              setTimeout(() => resolve(false), READINESS_CHECK_TIMEOUT_MS)
-            ),
-          ]);
-          results[name] = ready;
-          if (!ready) allReady = false;
-        } catch {
-          results[name] = false;
-          allReady = false;
+  // Liveness / readiness / authenticated-probe routes — see
+  // `./health-routes.ts` for the probe taxonomy (live vs health vs
+  // auth-check) and the K8s wiring guidance.
+  mountHealthRoutes({
+    app,
+    info,
+    toolCount: handlers.length,
+    readinessChecks: opts.readinessChecks ?? [],
+    getChannel: () => channelForHealth,
+    ...(opts.threads !== undefined
+      ? {
+          threads: {
+            ...(opts.threads.durability !== undefined
+              ? { durability: opts.threads.durability }
+              : {}),
+          },
         }
-      })
-    );
-    return { allReady, results };
-  }
-
-  /**
-   * Process-alive probe — answers 200 with a tiny JSON body whenever
-   * the Node event loop can run a handler, regardless of readiness.
-   *
-   * Why separate from `/ggui/health`: K8s livenessProbe + readinessProbe
-   * have distinct semantics. Liveness asks "is the process alive?" and
-   * a failure tells the kubelet to RESTART the pod. Readiness asks "is
-   * the pod ready to receive traffic?" and a failure tells the service
-   * to STOP ROUTING. Tying both probes to a single endpoint that gates
-   * on dependency health (Redis, DDB, RAG) means a transient
-   * upstream blip kills the pod entirely instead of just removing it
-   * from rotation.
-   *
-   * Self-hoster wiring (K8s):
-   *
-   *   livenessProbe:  { httpGet: { path: '/ggui/live',   port } }
-   *   readinessProbe: { httpGet: { path: '/ggui/health', port } }
-   *
-   * No body needed for the kubelet's HTTP check (status code is the
-   * signal), but a tiny JSON keeps the endpoint debuggable from a
-   * shell. No `readinessChecks` invoked — keeping this probe cheap
-   * is the point; any heavier work belongs in `/ggui/health`.
-   */
-  app.get("/ggui/live", (_req, res) => {
-    res.status(200).json({ status: "alive", server: info.name });
+      : {}),
+    auth,
+    oauthEnabled,
+    ...(oauthConfig.issuerUrl !== undefined ? { oauthIssuerUrl: oauthConfig.issuerUrl } : {}),
+    logger,
   });
 
-  app.get("/ggui/health", (_req, res) => {
-    void (async () => {
-      const { allReady, results } = await runReadinessChecks();
-      const body: Record<string, unknown> = {
-        status: allReady ? "ok" : "degraded",
-        server: info.name,
-        version: info.version,
-        tools: handlers.length,
-      };
-      if (channelForHealth) {
-        body.channel = {
-          path: channelForHealth.path,
-          subscribers: channelForHealth.subscriberCount,
-          renders: channelForHealth.renderCount,
-        };
-      }
-      // Thread-transport presence + durability claim. Absent when the
-      // server was booted without `threads:` (no persistent-chat routes
-      // mounted). When present, `durability` is exactly what the caller
-      // declared — 'ephemeral' by default so Portal does not silently
-      // hide its non-durable caveat.
-      if (opts.threads) {
-        body.threads = {
-          enabled: true,
-          durability: opts.threads.durability ?? "ephemeral",
-        };
-      }
-      if (Object.keys(results).length > 0) {
-        body.checks = results;
-      }
-      res.status(allReady ? 200 : 503).json(body);
-    })();
-  });
-
-  /**
-   * Authenticated liveness probe.
-   *
-   * Identical auth semantics to `/mcp` (same AuthAdapter, same Bearer-
-   * parsing) but with a flat 204 / 401 response shape, no body, no
-   * render state. Designed for clients that need to distinguish
-   * "server is up but my token is stale" from "server is unreachable".
-   *
-   * A Settings → Servers probe in a host client is the canonical
-   * consumer: it hits `/ggui/health` first (open), then
-   * `/ggui/auth-check` with the pairing token, and reports
-   * `token-invalid` when the first succeeds but the second returns 401.
-   *
-   * No response body to keep the endpoint cheap — a 401 is the signal.
-   * We deliberately skip the MCP error envelope shape used by `/mcp`
-   * because this route is explicitly NOT part of the MCP wire.
-   */
-  app.get("/ggui/auth-check", async (req: Request, res: Response) => {
-    try {
-      await resolveIdentity(auth, req);
-      res.status(204).end();
-    } catch (err) {
-      if (err instanceof UnauthenticatedError) {
-        if (oauthEnabled) {
-          // Auth-check is universal-only — no per-app variant route is
-          // mounted, so the WWW-Authenticate always points at the
-          // universal resource metadata. Symmetric with the universal
-          // /mcp handler's 401 behavior.
-          res.setHeader(
-            "WWW-Authenticate",
-            buildWwwAuthenticate(resolveIssuerUrl(req, oauthConfig.issuerUrl))
-          );
+  // Per-boot `buildMcpServer` options — every input below is fixed at
+  // composition time, so the bundle is assembled once and the MCP
+  // endpoint family spreads a fresh copy per request.
+  const buildMcpOptions: BuildMcpServerOptions = {
+    mcpAppsOutbound: mcpAppsEnabled,
+    // Caller-provided `shellHtml` overrides the default;
+    // `installMcpAppsOutbound` falls back to its baked
+    // `GGUI_RENDER_SHELL_HTML` constant when absent.
+    ...(mcpAppsConfig.shellHtml !== undefined ? { shellHtml: mcpAppsConfig.shellHtml } : {}),
+    // Forward the operator-supplied public origin so the static
+    // `ui://ggui/render` resource declares `_meta.ui.csp` for
+    // spec-compliant hosts (Claude Desktop / claude.ai Connector /
+    // Claude Code). Without this the host's restrictive default
+    // (`connect-src 'none'`) blocks the iframe from fetching the
+    // runtime bundle and opening the WebSocket.
+    ...(opts.publicBaseUrl !== undefined ? { publicBaseUrl: opts.publicBaseUrl } : {}),
+    // Per-render self-contained shell registration. Only wired
+    // when MCP Apps is on AND the render store is resolved —
+    // both preconditions for `ggui_render.resultMeta` stamping a
+    // per-call `ui://ggui/render/<sessionId>` URI a host can
+    // resolve here. Absent either, we register only the legacy
+    // static `ui://ggui/render` URI (postMessage shell).
+    ...(mcpAppsEnabled && renderStore
+      ? {
+          selfContained: {
+            renderStore,
+            runtimeUrl: runtimeBootstrapUrl,
+            // Forward operator-picked theme into the per-render
+            // self-contained shell. Without this, MCP-Apps hosts
+            // (claude.ai, Claude Desktop) that fetch the resource
+            // via `resources/read` always get the runtime's baked
+            // default theme — `ggui.json#theme: 'indigo'` would
+            // only take effect on the direct-browser `/r/<shortCode>`
+            // path. Same resolution as the `/r/...` route below.
+            ...(opts.theme !== undefined && opts.theme.source === "preset"
+              ? { themeId: opts.theme.preset }
+              : {}),
+            ...(opts.theme !== undefined && opts.theme.source !== "default"
+              ? { themeMode: opts.theme.mode }
+              : {}),
+            // Resume contract — registry-only fallback. Wired
+            // when the blueprint vector store is available so the
+            // resource handler can render a render-evicted
+            // rehydrate from the registered blueprint instead of
+            // the dead loading shell. `defaultAppIdFallback`
+            // bounds the registry lookup to the OSS single-tenant
+            // identity; multi-tenant deployments leave this
+            // undefined to fail-safe back to the loading shell
+            // (no way to derive the right tenant from a missing
+            // render).
+            ...(vectors
+              ? {
+                  vectorStore: vectors,
+                  // Shared blueprint index — same instance the
+                  // matcher reads — so the registry-only rehydrate
+                  // fallback resolves the resume URI's default-variant
+                  // exact key to the cached row's UUID.
+                  index,
+                  defaultAppIdFallback: DEFAULT_BUILDER_APP_ID,
+                }
+              : {}),
+            // T3-1 (2026-05-13) — content-addressable code delivery
+            // for the MCP-resource shell. Without these the handler
+            // emits the loading shell for compiled components; with
+            // them, it inlines a `codeUrl` the iframe-runtime fetches.
+            ...(opts.codeStore && opts.publicBaseUrl
+              ? {
+                  codeStore: opts.codeStore,
+                  codeBaseUrl: opts.publicBaseUrl,
+                }
+              : {}),
+            // Bind the app-metadata store so the resource
+            // handler can resolve App.publicEnv
+            // for the bootstrap projection. Symmetric with the
+            // `/r/<shortCode>` route's lookup. Defaults to
+            // `InMemoryAppMetadataStore` (created above) when
+            // opts.appMetadataStore is undefined.
+            ...(opts.appMetadataStore ? { appMetadataStore: opts.appMetadataStore } : {}),
+            // Stamp `_meta.ui.csp.{connectDomains,resourceDomains}`
+            // on every per-call resource response. Symmetric with
+            // the declaration on the static `ui://ggui/render`
+            // resource. Without it, claude.ai's cross-origin iframe
+            // CSP applies the host default (`connect-src 'none'`)
+            // and the `<script type="module" src=runtimeUrl>` tag
+            // fails with a generic "script error" — the bug
+            // diagnosed live on 2026-05-18 against the cloudflared
+            // tunnel.
+            ...(opts.publicBaseUrl !== undefined ? { publicBaseUrl: opts.publicBaseUrl } : {}),
+            // Live-channel wsToken minter — when wired, every
+            // per-render resource shell embeds `{wsUrl, wsToken}`
+            // so the iframe-runtime opens a WebSocket on mount and
+            // receives `props_update` frames for in-place
+            // re-renders. Without this the resource path mounts
+            // in static-component mode only — `ggui_update` server
+            // mutations never visibly reach the live iframe.
+            // Mirrors the per-tool `mintBootstrap` plumbed into
+            // the handler factory above.
+            ...(mintBootstrap ? { mintWsToken: mintBootstrap } : {}),
+          },
         }
-        res.status(401).end();
-        return;
-      }
-      logger.error("auth_check_unexpected_error", { error: String(err) });
-      res.status(500).end();
-    }
-  });
-
-  /**
-   * Audience filter — returns the subset of `handlers` whose
-   * `audience` tag intersects `allowed`. Read on route mounting so
-   * each MCP route exposes only its audience's tools.
-   *
-   * Handlers with `audience: undefined` default to ['agent'] — every
-   * such handler is agent-runtime callable.
-   */
-  const filterHandlersByAudience = (
-    set: ReadonlyArray<SharedHandler<ZodRawShape, ZodRawShape>>,
-    allowed: ReadonlyArray<"agent" | "runtime" | "protocol" | "ops">
-  ): ReadonlyArray<SharedHandler<ZodRawShape, ZodRawShape>> =>
-    set.filter((h) => {
-      const tags = h.audience ?? (["agent"] as const);
-      return tags.some((t) => allowed.includes(t));
-    });
-
-  const makeMcpHandler =
-    (
-      routeHandlers: ReadonlyArray<SharedHandler<ZodRawShape, ZodRawShape>>,
-      handlerOpts?: { readonly anonymous?: boolean }
-    ) =>
-    async (req: Request, res: Response): Promise<void> => {
-      const requestId =
-        typeof req.headers["x-request-id"] === "string"
-          ? req.headers["x-request-id"]
-          : randomUUID();
-      const reqLogger = logger.child({ requestId });
-
-      // Auth is OPTIONAL on anonymous services and REQUIRED otherwise.
-      // Always attempt to resolve a presented credential: an anonymous
-      // service with a valid bearer still resolves to the real identity
-      // (so it can offer authenticated capabilities — e.g. `/dev`'s ops
-      // tools read `ctx.userId`), while a missing/unauthenticated
-      // credential falls back to the synthesized anonymous builder so
-      // public reads (docs, protocol) work bearer-less. This is what makes
-      // `source: 'anonymous'` distinguishable from an authenticated caller,
-      // per the `McpService.anonymous` contract — resolving a present
-      // bearer is the only way a handler can tell the two apart.
-      let identity: AuthResult;
-      try {
-        identity = await resolveIdentity(auth, req);
-      } catch (err) {
-        if (err instanceof UnauthenticatedError) {
-          if (handlerOpts?.anonymous) {
-            identity = { identity: { kind: "builder" }, source: "anonymous" };
-          } else {
-            reqLogger.warn("auth_failed", { reason: err.message });
-            // OAuth-discovery clients (Claude Desktop, claude.ai, etc.)
-            // read this header to find the resource-metadata URL and
-            // begin the OAuth dance. Pure-bearer clients ignore it.
-            //
-            // Per-app routes point at the per-app resource-metadata
-            // document so RFC 9728 discovery resolves
-            // to a per-app `resource` URL. Universal routes keep the
-            // bare metadata path.
-            if (oauthEnabled) {
-              const wwwAuthResourcePath = resolveWwwAuthResourcePath(req, opts);
-              res.setHeader(
-                "WWW-Authenticate",
-                buildWwwAuthenticate(
-                  resolveIssuerUrl(req, oauthConfig.issuerUrl),
-                  wwwAuthResourcePath
-                )
-              );
-            }
-            res.status(401).json({
-              jsonrpc: "2.0",
-              error: { code: -32000, message: err.message },
-              id: null,
-            });
-            return;
-          }
-        } else {
-          reqLogger.error("auth_unexpected_error", { error: String(err) });
-          res.status(500).json({
-            jsonrpc: "2.0",
-            error: { code: -32603, message: "Internal server error" },
-            id: null,
-          });
-          return;
-        }
-      }
-
-      // Per-tenant URL routing. When `perAppRouting`
-      // is configured AND the request matched the per-app path
-      // `/:${paramName}/mcp`, Express populates `req.params[paramName]`
-      // with the validated tenant id. Use it as `ctx.appId` for this
-      // request, overriding `appIdFromIdentity`. The universal `/mcp`
-      // route doesn't have the param so it falls through to the
-      // identity-based resolution.
-      const urlAppId =
-        opts.perAppRouting !== undefined ? req.params[opts.perAppRouting.paramName] : undefined;
-      const hasUrlAppId = typeof urlAppId === "string" && urlAppId.length > 0;
-
-      // Per-app authorize hook — when the deployment configured
-      // `perAppRouting.authorize` AND the request matched the per-app
-      // path, invoke the callback. Throwing collapses to a 403 before
-      // the MCP handler ever sees the request, which is the boundary
-      // that prevents cross-user blueprint reads when pod tools bypass
-      // AppSync owner-auth via raw DDB. Universal-endpoint requests
-      // skip this entirely (no urlAppId).
-      if (hasUrlAppId && opts.perAppRouting?.authorize) {
-        try {
-          await opts.perAppRouting.authorize(urlAppId, identity);
-        } catch (err) {
-          reqLogger.warn("per_app_authorize_denied", {
-            urlAppId,
-            reason: err instanceof Error ? err.message : String(err),
-          });
-          res.status(403).json({
-            jsonrpc: "2.0",
-            error: { code: -32000, message: "Forbidden" },
-            id: null,
-          });
-          return;
-        }
-      }
-
-      const ctx: HandlerContext = {
-        appId: hasUrlAppId ? urlAppId : appIdFromIdentity(identity),
-        requestId,
-        // Identity is the canonical source of two mutually-exclusive
-        // hosted fields: `apiKeyHash` for kind=app, `userId` for kind=user.
-        // Threading them onto HandlerContext here means hosted handlers
-        // (the K8s ggui-protocol pod's billing gate + per-user blueprint
-        // scoping) can read identity directly without a parallel pod-only
-        // context shape; OSS handlers continue to ignore both fields.
-        ...(identity.identity.kind === "app" ? { apiKeyHash: identity.identity.apiKeyHash } : {}),
-        ...(identity.identity.kind === "user" ? { userId: identity.identity.userId } : {}),
-      };
-      reqLogger.debug?.("mcp_request", { appId: ctx.appId });
-
-      const mcp = buildMcpServer(info, routeHandlers, () => als.getStore() ?? ctx, reqLogger, {
-        mcpAppsOutbound: mcpAppsEnabled,
-        // Caller-provided `shellHtml` overrides the default;
-        // `installMcpAppsOutbound` falls back to its baked
-        // `GGUI_RENDER_SHELL_HTML` constant when absent.
-        ...(mcpAppsConfig.shellHtml !== undefined ? { shellHtml: mcpAppsConfig.shellHtml } : {}),
-        // Forward the operator-supplied public origin so the static
-        // `ui://ggui/render` resource declares `_meta.ui.csp` for
-        // spec-compliant hosts (Claude Desktop / claude.ai Connector /
-        // Claude Code). Without this the host's restrictive default
-        // (`connect-src 'none'`) blocks the iframe from fetching the
-        // runtime bundle and opening the WebSocket.
-        ...(opts.publicBaseUrl !== undefined ? { publicBaseUrl: opts.publicBaseUrl } : {}),
-        // Per-render self-contained shell registration. Only wired
-        // when MCP Apps is on AND the render store is resolved —
-        // both preconditions for `ggui_render.resultMeta` stamping a
-        // per-call `ui://ggui/render/<sessionId>` URI a host can
-        // resolve here. Absent either, we register only the legacy
-        // static `ui://ggui/render` URI (postMessage shell).
-        ...(mcpAppsEnabled && renderStore
-          ? {
-              selfContained: {
-                renderStore,
-                runtimeUrl: runtimeBootstrapUrl,
-                // Forward operator-picked theme into the per-render
-                // self-contained shell. Without this, MCP-Apps hosts
-                // (claude.ai, Claude Desktop) that fetch the resource
-                // via `resources/read` always get the runtime's baked
-                // default theme — `ggui.json#theme: 'indigo'` would
-                // only take effect on the direct-browser `/r/<shortCode>`
-                // path. Same resolution as the `/r/...` route below.
-                ...(opts.theme !== undefined && opts.theme.source === "preset"
-                  ? { themeId: opts.theme.preset }
-                  : {}),
-                ...(opts.theme !== undefined && opts.theme.source !== "default"
-                  ? { themeMode: opts.theme.mode }
-                  : {}),
-                // Resume contract — registry-only fallback. Wired
-                // when the blueprint vector store is available so the
-                // resource handler can render a render-evicted
-                // rehydrate from the registered blueprint instead of
-                // the dead loading shell. `defaultAppIdFallback`
-                // bounds the registry lookup to the OSS single-tenant
-                // identity; multi-tenant deployments leave this
-                // undefined to fail-safe back to the loading shell
-                // (no way to derive the right tenant from a missing
-                // render).
-                ...(vectors
-                  ? {
-                      vectorStore: vectors,
-                      // Shared blueprint index — same instance the
-                      // matcher reads — so the registry-only rehydrate
-                      // fallback resolves the resume URI's default-variant
-                      // exact key to the cached row's UUID.
-                      index,
-                      defaultAppIdFallback: DEFAULT_BUILDER_APP_ID,
-                    }
-                  : {}),
-                // T3-1 (2026-05-13) — content-addressable code delivery
-                // for the MCP-resource shell. Without these the handler
-                // emits the loading shell for compiled components; with
-                // them, it inlines a `codeUrl` the iframe-runtime fetches.
-                ...(opts.codeStore && opts.publicBaseUrl
-                  ? {
-                      codeStore: opts.codeStore,
-                      codeBaseUrl: opts.publicBaseUrl,
-                    }
-                  : {}),
-                // Bind the app-metadata store so the resource
-                // handler can resolve App.publicEnv
-                // for the bootstrap projection. Symmetric with the
-                // `/r/<shortCode>` route's lookup. Defaults to
-                // `InMemoryAppMetadataStore` (created above) when
-                // opts.appMetadataStore is undefined.
-                ...(opts.appMetadataStore ? { appMetadataStore: opts.appMetadataStore } : {}),
-                // Stamp `_meta.ui.csp.{connectDomains,resourceDomains}`
-                // on every per-call resource response. Symmetric with
-                // the declaration on the static `ui://ggui/render`
-                // resource. Without it, claude.ai's cross-origin iframe
-                // CSP applies the host default (`connect-src 'none'`)
-                // and the `<script type="module" src=runtimeUrl>` tag
-                // fails with a generic "script error" — the bug
-                // diagnosed live on 2026-05-18 against the cloudflared
-                // tunnel.
-                ...(opts.publicBaseUrl !== undefined ? { publicBaseUrl: opts.publicBaseUrl } : {}),
-                // Live-channel wsToken minter — when wired, every
-                // per-render resource shell embeds `{wsUrl, wsToken}`
-                // so the iframe-runtime opens a WebSocket on mount and
-                // receives `props_update` frames for in-place
-                // re-renders. Without this the resource path mounts
-                // in static-component mode only — `ggui_update` server
-                // mutations never visibly reach the live iframe.
-                // Mirrors the per-tool `mintBootstrap` plumbed into
-                // the handler factory above.
-                ...(mintBootstrap
-                  ? { mintWsToken: mintBootstrap }
-                  : {}),
-              },
-            }
-          : {}),
-        ...(opts.allowedKinds !== undefined ? { allowedKinds: opts.allowedKinds } : {}),
-        ...(resolvedInstructions !== undefined ? { instructions: resolvedInstructions } : {}),
-        ...(opts.extraResources !== undefined ? { extraResources: opts.extraResources } : {}),
-      });
-      const transport = new StreamableHTTPServerTransport({
-        sessionIdGenerator: undefined,
-      });
-
-      res.on("close", () => {
-        transport.close().catch(() => undefined);
-        mcp.close().catch(() => undefined);
-      });
-
-      try {
-        await mcp.connect(transport);
-        await als.run(ctx, () => transport.handleRequest(req, res, req.body));
-      } catch (err) {
-        reqLogger.error("mcp_handle_failed", { error: String(err) });
-        if (!res.headersSent) {
-          let mapped:
-            | { readonly status: number; readonly code: number; readonly message: string }
-            | undefined;
-          if (opts.errorMapper) {
-            try {
-              mapped = opts.errorMapper(err);
-            } catch (mapperErr) {
-              // Defensive: a thrown mapper degrades to the default 500
-              // rather than letting the inner failure escape the handler.
-              reqLogger.warn("error_mapper_failed", {
-                error: String(mapperErr),
-              });
-            }
-          }
-          if (mapped) {
-            res.status(mapped.status).json({
-              jsonrpc: "2.0",
-              error: { code: mapped.code, message: mapped.message },
-              id: null,
-            });
-          } else {
-            res.status(500).json({
-              jsonrpc: "2.0",
-              error: { code: -32603, message: "Internal server error" },
-              id: null,
-            });
-          }
-        }
-      }
-    };
-
-  const methodNotAllowed = (_req: Request, res: Response): void => {
-    res.status(405).json({
-      jsonrpc: "2.0",
-      error: {
-        code: -32000,
-        message: "Method not allowed (stateless server).",
-      },
-      id: null,
-    });
+      : {}),
+    ...(opts.allowedKinds !== undefined ? { allowedKinds: opts.allowedKinds } : {}),
+    ...(resolvedInstructions !== undefined ? { instructions: resolvedInstructions } : {}),
+    ...(opts.extraResources !== undefined ? { extraResources: opts.extraResources } : {}),
   };
 
-  // Three audience-filtered handler sets. Each set is the
-  // subset of `handlers` whose `audience` tag intersects the route's
-  // allowed list. Handlers without an explicit tag default to
-  // ['agent'] — every such handler is agent-runtime callable.
-  const agentRouteHandlers = filterHandlersByAudience(handlers, ["agent", "runtime"]);
-  const protocolRouteHandlers = filterHandlersByAudience(handlers, ["protocol"]);
-  const opsRouteHandlers = filterHandlersByAudience(handlers, ["ops"]);
-
-  const agentMcpHandler = makeMcpHandler(agentRouteHandlers);
-  const protocolMcpHandler = makeMcpHandler(protocolRouteHandlers);
-  const opsMcpHandler = makeMcpHandler(opsRouteHandlers);
-
-  // Universal endpoint — `appId` resolved from the auth identity via
-  // `appIdFromIdentity`. Cloud `mcp.ggui.ai` deployments resolve this
-  // to `User.defaultAppId` via the auth-adapter; OSS deployments fall
-  // through to userId / DEFAULT_BUILDER_APP_ID.
-  //
-  // Path defaults to `/mcp` (Streamable HTTP convention). Cloud
-  // `mcp.ggui.ai` overrides to `/` so the bare-root URL is the
-  // universal endpoint — domain already says "mcp", no path repeat.
-  // Exposes audience tags ['agent', 'runtime'] — runtime tools stay
-  // routable on the same endpoint but invisible to the agent's
-  // `tools/list` via the `_meta.ui.visibility: ['app']` filter.
+  // MCP wire endpoints (universal / per-app / protocol / ops /
+  // services) — see `./mcp-endpoint-routes.ts` for the shared request
+  // pipeline (auth, per-app authorize, per-request McpServer +
+  // transport) and the audience taxonomy.
   const universalMcpPath = opts.universalMcpPath ?? "/mcp";
-  app.post(universalMcpPath, agentMcpHandler);
-
-  // Per-tenant endpoint — only mounted when the deployment opts in
-  // via `perAppRouting`. The same handler reads `req.params[paramName]`
-  // and uses it as `ctx.appId` for the request.
-  //
-  // When `pathPrefix` is set, the route mounts at
-  // `${pathPrefix}/:${paramName}` — cloud uses `/apps` so URLs are
-  // `mcp.ggui.ai/apps/<appId>`. The prefix segments per-tenant traffic
-  // from system routes (`/health`, `/oauth/*`, `/.well-known/*`,
-  // `/r/*`) so an opaque appId can never shadow a future static path.
-  //
-  // Without `pathPrefix`, the route mounts bare. The `paramPattern`
-  // constraint is the only collision defense — fine when the pattern
-  // guarantees non-collision (e.g. UUIDs).
-  //
-  // `path-to-regexp` v8 (express@5) dropped the `:param(pattern)`
-  // inline-regex syntax, so the pattern is enforced via a single
-  // `app.param` validator (anchored full-match) rather than baked into
-  // the route string. Registered once here; Express resolves it at
-  // dispatch for EVERY route declaring `paramName` — the per-app
-  // well-known route above AND this MCP route — regardless of
-  // registration order. A value failing the pattern 404s before any
-  // handler runs.
-  if (opts.perAppRouting !== undefined) {
-    const { paramName, paramPattern, pathPrefix } = opts.perAppRouting;
-    const appIdPattern = new RegExp(`^(?:${paramPattern})$`);
-    app.param(paramName, (_req, res, next, val) => {
-      if (typeof val !== "string" || !appIdPattern.test(val)) {
-        res.status(404).json({ error: "not_found" });
-        return;
-      }
-      next();
-    });
-    const route = pathPrefix !== undefined ? `${pathPrefix}/:${paramName}` : `/:${paramName}`;
-    app.post(route, agentMcpHandler);
-  }
-
-  // /protocol — design-time spec/discovery surface.
-  // Hosts the `audience: ['protocol']` tools (`ggui_describe_*`,
-  // `ggui_get_example_blueprints`, `ggui_validate_blueprint`,
-  // `ggui_list_available_primitives`, `ggui_get_blueprint_boilerplate`).
-  // Strips spec-discovery noise off the agent's runtime `tools/list`
-  // — agents that need format docs hit `/protocol` explicitly.
-  // Always mounted; the route has the same auth chain as `/mcp` for
-  // v1 (operators MAY narrow auth in their own middleware later).
-  // Empty when the deployment didn't wire any protocol-tagged handlers.
-  app.post("/protocol", protocolMcpHandler);
-  app.get("/protocol", methodNotAllowed);
-  app.delete("/protocol", methodNotAllowed);
-
-  // /ops — operator-class management surface. Hosts the
-  // `audience: ['ops']` tools (`ggui_set_provider_key`, `ggui_get_credit_balance`,
-  // etc.). Always mounted; same auth chain as `/mcp`. Empty when the
-  // deployment didn't wire any ops-tagged handlers.
-  app.post("/ops", opsMcpHandler);
-  app.get("/ops", methodNotAllowed);
-  app.delete("/ops", methodNotAllowed);
-
-  // Isolated MCP services — each at its own HTTP path with its own
-  // tool namespace. Bypasses audience filtering (the path IS the
-  // audience). Each service builds its own MCP request handler via
-  // `makeMcpHandler(svc.handlers)`, reusing the same auth chain +
-  // identity-resolution as the canonical routes — the difference is
-  // ONLY the handler set the route exposes.
-  //
-  // Validation already ran above via `validateMcpServices`; here we
-  // just iterate the validated list.
-  for (const svc of mcpServices) {
-    // `anonymous: true` skips the auth chain and synthesizes a
-    // builder-kind identity with `source: 'anonymous'`. Default
-    // (undefined / false) preserves the auth-required posture of
-    // every canonical route.
-    const svcMcpHandler = makeMcpHandler(
-      svc.handlers,
-      svc.anonymous ? { anonymous: true } : undefined
-    );
-    app.post(svc.path, svcMcpHandler);
-    app.get(svc.path, methodNotAllowed);
-    app.delete(svc.path, methodNotAllowed);
-  }
-
-  app.get(universalMcpPath, methodNotAllowed);
-  app.delete(universalMcpPath, methodNotAllowed);
+  mountMcpEndpoints({
+    app,
+    logger,
+    auth,
+    info,
+    handlers,
+    mcpServices,
+    als,
+    appIdFromIdentity,
+    universalMcpPath,
+    ...(opts.perAppRouting !== undefined ? { perAppRouting: opts.perAppRouting } : {}),
+    oauthEnabled,
+    ...(oauthConfig.issuerUrl !== undefined ? { oauthIssuerUrl: oauthConfig.issuerUrl } : {}),
+    ...(opts.errorMapper !== undefined ? { errorMapper: opts.errorMapper } : {}),
+    buildMcpOptions,
+  });
 
   // Inbound MCP Apps proxy routes — resource fetch + tools/call
   // visibility gate. Mounts only when a ConnectorRegistry is
@@ -4746,27 +4287,9 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
     });
   }
 
-  // Iframe-runtime bundle static mount (C8 — plan §C8 Deliverable 2).
-  //
-  // Serves the `@ggui-ai/iframe-runtime` iframe runtime bundle from
-  // `runtimePath` (default `/_ggui/iframe-runtime.js`). The thin-shell
-  // HTML served from `ui://ggui/render` dynamic-script-loads this
-  // URL on boot — the rendering runtime is OUT of the shell and IN
-  // this separately-served file (C8 pivot, shrinking the shell from
-  // ~175 LOC inline JS to ~30 LOC wrapper).
-  //
-  // Routing discipline: registered BEFORE the console block below
-  // because console's default `path` is `/` and its `express.static`
-  // + SPA-fallback would otherwise match `/_ggui/iframe-runtime.js` first
-  // (Express route table is order-sensitive). Registering here keeps
-  // the runtime path from leaking into the console's `index.html`
-  // fallback on a missing-bundle day.
-  //
-  // Missing-bundle posture mirrors the console mount: 503 with a
-  // `pnpm --filter @ggui-ai/iframe-runtime build` remediation hint. Silent
-  // 404 would be mistaken for "renderer is broken" instead of
-  // "renderer bundle wasn't built" — same debugging trap console
-  // avoids.
+  // Iframe-runtime bundle static mount (C8) — see
+  // `./runtime-bundle-route.ts` for the route contract (cache, CORS,
+  // dotfiles, missing-bundle 503 posture).
   //
   // `runtimeEnabled === false` (operator set `runtime: false` OR
   // `mcpApps` is off): NO mount. Operator is on the hook for serving
@@ -4774,504 +4297,39 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
   // `runtime.url`. The bootstrap still carries a `runtimeUrl` so
   // the shell knows where to look — just not our HTTP listener.
   if (runtimeEnabled) {
-    if (existsSync(runtimeBundleFile)) {
-      app.get(runtimePath, (_req, res) => {
-        res.setHeader("Content-Type", "application/javascript; charset=utf-8");
-        // Short cache — operators iterating on the renderer want
-        // fresh copies after rebuild. Production hardening (etag,
-        // long-term caching with hashed filenames) is a follow-on
-        // concern; same posture console takes.
-        res.setHeader("Cache-Control", "no-cache");
-        // CORS: the bundle MUST be loadable from `<script type="module"
-        // src=...>` inside a sandboxed `srcdoc` iframe (the
-        // `<McpAppIframe>` mount path — see `packages/ggui-react/src/
-        // McpAppIframe/dispatch.ts::deriveResourceMountSource`). Such an
-        // iframe has the `null` origin and module-script fetches always
-        // run in CORS mode; without a permissive header browsers reject
-        // the response and the renderer never executes (Lane 1 specs
-        // pinning `data-ggui-mcp-app-iframe-lifecycle="code-ready"`
-        // hang to timeout). The bundle is public — it ships unmodified
-        // to anyone who fetched the page, so `*` is the right shape;
-        // there's no auth state on the renderer route to protect via a
-        // narrower origin allowlist. This pairs with the production
-        // `/ui://ggui/render` shell HTML setting `s.type='module'`
-        // (`mcp-apps-outbound.ts::GGUI_RENDER_SHELL_SCRIPT_BODY`).
-        res.setHeader("Access-Control-Allow-Origin", "*");
-        // `dotfiles: 'allow'` — express@5's `res.sendFile` (send@1.x)
-        // splits the FULL absolute path into segments and applies its
-        // default `dotfiles: 'ignore'` policy, which 404s any file whose
-        // path crosses a dot-prefixed directory segment (e.g. a checkout
-        // under `~/.local/...` or a git worktree under `.../.git/...`).
-        // `runtimeBundleFile` is a fixed, server-controlled absolute path
-        // — never derived from the request — so there is no traversal
-        // surface to protect; allow the bundle to serve regardless of
-        // where the package install tree happens to live. express@4's
-        // `sendFile` did not subject the parent directories to this check.
-        res.sendFile(runtimeBundleFile, { dotfiles: "allow" });
-      });
-    } else {
-      logger.warn("renderer_bundle_missing", {
-        bundleFile: runtimeBundleFile,
-        hint: "Run `pnpm --filter @ggui-ai/iframe-runtime build` to produce the bundle. Serving 503 from the mount point until it exists.",
-      });
-      app.get(runtimePath, (_req, res) => {
-        res
-          .status(503)
-          .type("text/plain")
-          .send("renderer bundle not built. Run:\n  pnpm --filter @ggui-ai/iframe-runtime build\n");
-      });
-    }
+    mountRuntimeBundleRoute({ app, runtimePath, runtimeBundleFile, logger });
   }
 
-  // R6 — GET /api/sessions/:sessionId/state?wsToken=<token>
-  //
-  // Auth'd snapshot read of the current render state, returning the
-  // same slice envelope as the wire `_meta` (a single
-  // `{"ai.ggui/render": {...}}` slice — Phase B collapsed the prior
-  // session + stack-item pair). Polling clients call this on a fixed
-  // interval (registry-level polling — see R6 library refactor) to
-  // pick up changes when WS is blocked at the host's CSP layer.
-  //
-  // wsToken-gated: same credential as the live-channel WS upgrade
-  // (`?wsToken=<token>` on `/ws`). Drift-free with the WS surface —
-  // the iframe-runtime already has the token from the bootstrap
-  // envelope; no separate refresh path needed.
-  //
-  // Distinct from `/r/:shortCode` (JSON branch):
-  //   - `/r/...` is shortCode-gated (bearer-by-obscurity; anyone with
-  //     the URL can read). R5 deletes that surface entirely.
-  //   - `/api/sessions/.../state` is wsToken-gated (HMAC-signed,
-  //     short-TTL, scoped to sessionId+appId). Survives R5.
-  //
-  // Distinct from R7's `/api/sessions/:id/events?sinceSequence=N`
-  // (planned): /state is a snapshot; /events is a cursor-replay. Both
-  // are gated identically (wsToken), unified under the GguiSessionEvent
-  // ledger cursor (`render.lastSequence`).
+  // R6 /state snapshot + R7 /events cursor-replay reads — see
+  // `./api-renders-routes.ts` for the wsToken auth posture, tenancy
+  // gates, and response taxonomy. Mounted only when MCP Apps is on,
+  // a render store is resolved, and a token secret exists (the same
+  // preconditions the credential minter needs).
   if (mcpAppsEnabled && renderStore && sharedTokenSecret !== undefined) {
-    const renderStoreForState = renderStore;
-    const stateSecret = sharedTokenSecret;
-    const appMetadataStoreForState = opts.appMetadataStore;
-    const stateThemeId =
-      opts.theme === undefined || opts.theme.source === "default"
-        ? undefined
-        : opts.theme.source === "preset"
-          ? opts.theme.preset
-          : undefined;
-    const stateThemeMode =
-      opts.theme === undefined || opts.theme.source === "default" ? undefined : opts.theme.mode;
-    app.get("/api/sessions/:sessionId/state", async (req, res) => {
-      const sessionId = req.params["sessionId"];
-      if (typeof sessionId !== "string" || sessionId.length === 0) {
-        res.status(400).type("text/plain").send("sessionId required");
-        return;
-      }
-      const wsTokenRaw = req.query["wsToken"];
-      const wsToken = typeof wsTokenRaw === "string" ? wsTokenRaw : "";
-      if (wsToken.length === 0) {
-        res.status(401).type("text/plain").send("wsToken query required");
-        return;
-      }
-      const verify = verifyToken(wsToken, stateSecret, "ws");
-      if (!verify.ok) {
-        // 410 Gone for expired (matches the `BOOTSTRAP_EXPIRED`
-        // semantics on the WS upgrade): the envelope was once valid
-        // but has aged out; the iframe-runtime branches on this to
-        // surface a refresh-vs-rehandshake prompt instead of treating
-        // it as a hostile request.
-        if (verify.reason === "expired") {
-          res.status(410).type("text/plain").send("wsToken expired");
-          return;
-        }
-        // 401 for tamper / wrong-kind / malformed / invalid-format —
-        // the caller is broken or hostile; no info leak.
-        res.status(401).type("text/plain").send("wsToken invalid");
-        return;
-      }
-      // Tenancy gate: the wsToken's claimed sessionId MUST match the
-      // URL's sessionId. A wsToken minted for render A MUST NOT read
-      // render B's state.
-      if (verify.claims.sessionId !== sessionId) {
-        res.status(401).type("text/plain").send("wsToken scope mismatch");
-        return;
-      }
-      let stored;
-      try {
-        stored = await renderStoreForState.get(sessionId);
-      } catch (err) {
-        logger.warn("state_read_failed", {
-          sessionId,
-          error: String(err),
-        });
-        res.status(500).type("text/plain").send("internal error");
-        return;
-      }
-      if (!stored) {
-        // 404: render evicted / never existed. Polling clients fold
-        // this into "stop polling" — distinct from 410 which signals
-        // "credential aged out, refresh".
-        res.status(404).type("text/plain").send("render not found");
-        return;
-      }
-      // Tenancy gate (round 2): the wsToken's appId MUST match the
-      // render's appId. Closes the case where a render is created
-      // under a different appId than the token was minted for.
-      if (verify.claims.appId !== stored.appId) {
-        res.status(401).type("text/plain").send("wsToken scope mismatch");
-        return;
-      }
-      // Phase B: a render IS the addressable unit. Pick directly from
-      // the resolved GguiSession (no stack walk).
-      const render = stored.render;
-      const isMcpApps = render.type === "mcpApps";
-      const isSystem = !isMcpApps && render.type === "system";
-      const renderKind =
-        isSystem && typeof (render as { kind?: string }).kind === "string"
-          ? (render as { kind: string }).kind
-          : undefined;
-      // Build render-slice meta. Mirror render.resultMeta's shape so
-      // the iframe-runtime parser admits identical envelopes regardless
-      // of which surface served them. `lastSequence` is the load-bearing
-      // R6 addition: polling clients use it to initialize the R7 /events
-      // cursor (`?sinceSequence=N`) aligned with the WS stream.
-      const view = !isMcpApps ? deriveRenderMeta(render) : undefined;
-      let statePublicEnv: Readonly<Record<string, string>> | undefined;
-      if (appMetadataStoreForState && !isMcpApps) {
-        try {
-          const appRecord = await appMetadataStoreForState.get(stored.appId);
-          statePublicEnv = derivePublicEnvProjection(render, appRecord?.publicEnv);
-        } catch {
-          // Silent — wrappers calling getPublicEnv throw clearly.
-        }
-      }
-      // Live-mode credential trio. Always minted fresh on /state reads
-      // so the iframe-runtime gets a long-TTL token + the host learns
-      // `wsUrl` (the CSP-permitted WebSocket origin). Without this,
-      // any caller of /state — including the restore-bootstrap path in
-      // every host (claude.ai, ChatGPT, our sample-agent) — receives a
-      // render slice missing `wsUrl`. CSP `connect-src` then omits the
-      // `ws://` scheme, the browser blocks the upgrade, and props_update
-      // never reaches the iframe. The render-commit handler already
-      // stamps this trio on its resultMeta; mirroring here closes the
-      // drift.
-      const liveTrio = mintBootstrap ? mintBootstrap(stored.id, stored.appId) : undefined;
-      // Polling URL — the iframe-runtime's R6 polling-fallback path
-      // composes its fetch URL from `render.pollingUrl`. The /state
-      // endpoint IS that URL, so we stamp it here; without it the
-      // iframe-runtime can't fall back when the WS upgrade fails.
-      const requestHostForPolling = req.get("host") ?? "";
-      const pollingBase = opts.publicBaseUrl
-        ? opts.publicBaseUrl.replace(/\/$/, "")
-        : `${req.protocol}://${requestHostForPolling}`;
-      const pollingUrl = `${pollingBase}/api/sessions/${encodeURIComponent(stored.id)}/state`;
-      // Static-component delivery via codeUrl (the same content-addressable
-      // channel /r/ uses). Polling clients are render-capable and need
-      // the URL to mount/refresh the static-component variant.
-      let renderCodeUrl: string | undefined;
-      let renderCodeHash: string | undefined;
-      let renderContractHash: string | undefined;
-      let renderValidatorsUrl: string | undefined;
-      if (!isSystem && !isMcpApps && opts.codeStore) {
-        const code = (render as { componentCode?: string }).componentCode;
-        if (typeof code === "string" && code.length > 0) {
-          try {
-            const hash = opts.codeStore.hashOf(code);
-            await opts.codeStore.put(hash, code);
-            renderCodeHash = hash;
-            const requestHost = req.get("host") ?? "";
-            const base = opts.publicBaseUrl
-              ? opts.publicBaseUrl.replace(/\/$/, "")
-              : `${req.protocol}://${requestHost}`;
-            renderCodeUrl = `${base}/code/${hash}.js`;
-          } catch {
-            // Silent — caller falls back to live-mode delivery.
-          }
-          try {
-            const bundle = await deriveContractBundle(render);
-            if (bundle) {
-              await opts.codeStore.put(bundle.contractHash, bundle.bundleSource);
-              renderContractHash = bundle.contractHash;
-              const requestHost = req.get("host") ?? "";
-              const base = opts.publicBaseUrl
-                ? opts.publicBaseUrl.replace(/\/$/, "")
-                : `${req.protocol}://${requestHost}`;
-              renderValidatorsUrl = `${base}/contract/${bundle.contractHash}.js`;
-            }
-          } catch {
-            // Silent — server-side gate remains authoritative.
-          }
-        }
-      }
-      // Phase B: single flat ai.ggui/render slice — render + visible-
-      // bits surface fields merged into one shape.
-      const renderMeta: McpAppAiGguiRenderMeta = {
-        sessionId: stored.id,
-        appId: stored.appId,
-        runtimeUrl: resolveRuntimeUrlForResultMeta(),
-        ...(liveTrio !== undefined
-          ? {
-              wsUrl: liveTrio.wsUrl,
-              wsToken: liveTrio.token,
-              expiresAt: liveTrio.expiresAt,
-            }
-          : {}),
-        pollingUrl,
-        ...(stateThemeId !== undefined ? { themeId: stateThemeId } : {}),
-        ...(stateThemeMode !== undefined ? { themeMode: stateThemeMode } : {}),
-        // Per-app theme overlay projected by `deriveRenderMeta` from the
-        // render's `theme` sidecar — same field the render result-meta
-        // carries, so a /state read returns the identical overlay.
-        ...(view?.theme !== undefined ? { theme: view.theme } : {}),
-        ...(view?.gadgets !== undefined && view.gadgets.length > 0
-          ? { gadgets: view.gadgets }
-          : {}),
-        ...(statePublicEnv !== undefined && Object.keys(statePublicEnv).length > 0
-          ? { publicEnv: statePublicEnv }
-          : {}),
-        ...(view?.permissionsPolicy !== undefined && view.permissionsPolicy.length > 0
-          ? { permissionsPolicy: view.permissionsPolicy }
-          : {}),
-        // R6 — load-bearing ledger cursor. Always stamped on /state
-        // reads so polling clients can position the R7 /events cursor.
-        lastSequence: stored.eventSequence,
-        // Visible-bits surface merged onto the single render slice.
-        ...(renderKind !== undefined ? { kind: renderKind } : {}),
-        ...(renderCodeUrl !== undefined
-          ? {
-              codeUrl: renderCodeUrl,
-              ...(renderCodeHash !== undefined ? { codeHash: renderCodeHash } : {}),
-            }
-          : {}),
-        ...(view?.propsJson !== undefined ? { propsJson: view.propsJson } : {}),
-        ...(view?.contextSlots !== undefined ? { contextSlots: view.contextSlots } : {}),
-        ...(renderContractHash !== undefined && renderValidatorsUrl !== undefined
-          ? {
-              contractHash: renderContractHash,
-              validatorsUrl: renderValidatorsUrl,
-            }
-          : {}),
-      };
-      res.setHeader("Access-Control-Allow-Origin", "*");
-      res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
-      res.setHeader("Content-Type", "application/json; charset=utf-8");
-      res.status(200).json({
-        [MCP_APP_AI_GGUI_RENDER_META_KEY]: renderMeta,
-      });
+    mountApiRendersRoutes({
+      app,
+      renderStore,
+      secret: sharedTokenSecret,
+      ...(opts.appMetadataStore ? { appMetadataStore: opts.appMetadataStore } : {}),
+      ...(opts.theme !== undefined && opts.theme.source === "preset"
+        ? { themeId: opts.theme.preset }
+        : {}),
+      ...(opts.theme !== undefined && opts.theme.source !== "default"
+        ? { themeMode: opts.theme.mode }
+        : {}),
+      ...(opts.codeStore ? { codeStore: opts.codeStore } : {}),
+      ...(opts.publicBaseUrl !== undefined ? { publicBaseUrl: opts.publicBaseUrl } : {}),
+      ...(mintBootstrap ? { mintBootstrap } : {}),
+      resolveRuntimeUrl: resolveRuntimeUrlForResultMeta,
+      logger,
     });
   }
 
-  // R7 — GET /api/sessions/:sessionId/events?wsToken=&sinceSequence=N&limit=M
-  //
-  // Cursor-replay read from the GguiSessionEvent ledger (`bc524f2f0` in
-  // cloud; in-memory + sqlite stores OSS). Returns events with
-  // `seq > sinceSequence`, up to `limit` (default 100, max 500).
-  //
-  // Unification: WS subscribe's `sinceSequence` cursor and this HTTP
-  // endpoint read from the SAME ledger via the same `listEventsSince`
-  // GguiSessionStore method. Different transports, same cursor model —
-  // that's R7's payoff.
-  //
-  // Auth: wsToken-gated, identical posture to /state.
-  //
-  // Responses:
-  //   - 200 — `{events, lastSequence, hasMore}` (matches
-  //     `EventsResponse` from @ggui-ai/protocol/integrations/mcp-apps).
-  //   - 401 — wsToken missing / invalid / wrong-scope.
-  //   - 404 — sessionId does not resolve.
-  //   - 410 — `{reason: 'REPLAY_HORIZON_PASSED', currentSequence}` when
-  //     `sinceSequence` is below the server's replay horizon OR strictly
-  //     greater than `lastSequence` (cursor is from a stale deployment
-  //     or the render was reset). Clients re-mount from /state.
-  if (mcpAppsEnabled && renderStore && sharedTokenSecret !== undefined) {
-    const renderStoreForEvents = renderStore;
-    const eventsSecret = sharedTokenSecret;
-    app.get("/api/sessions/:sessionId/events", async (req, res) => {
-      const sessionId = req.params["sessionId"];
-      if (typeof sessionId !== "string" || sessionId.length === 0) {
-        res.status(400).type("text/plain").send("sessionId required");
-        return;
-      }
-      const wsTokenRaw = req.query["wsToken"];
-      const wsToken = typeof wsTokenRaw === "string" ? wsTokenRaw : "";
-      if (wsToken.length === 0) {
-        res.status(401).type("text/plain").send("wsToken query required");
-        return;
-      }
-      const verify = verifyToken(wsToken, eventsSecret, "ws");
-      if (!verify.ok) {
-        if (verify.reason === "expired") {
-          res.status(410).type("text/plain").send("wsToken expired");
-          return;
-        }
-        res.status(401).type("text/plain").send("wsToken invalid");
-        return;
-      }
-      if (verify.claims.sessionId !== sessionId) {
-        res.status(401).type("text/plain").send("wsToken scope mismatch");
-        return;
-      }
-      // Parse + validate sinceSequence (required, non-negative integer)
-      // and limit (optional, 1..500, default 100).
-      //
-      // sinceSequence is REQUIRED — explicit cursor reads only. A missing
-      // query is a caller bug (no sensible default; `0` means "replay
-      // everything" which we don't want to fire unintentionally).
-      const sinceSequenceRaw = req.query["sinceSequence"];
-      if (typeof sinceSequenceRaw !== "string" || sinceSequenceRaw.length === 0) {
-        res
-          .status(400)
-          .type("text/plain")
-          .send("sinceSequence query required (non-negative integer)");
-        return;
-      }
-      const sinceSequence = Number(sinceSequenceRaw);
-      if (!Number.isInteger(sinceSequence) || sinceSequence < 0) {
-        res.status(400).type("text/plain").send("sinceSequence must be a non-negative integer");
-        return;
-      }
-      const limitRaw = req.query["limit"];
-      let limit = 100;
-      if (typeof limitRaw === "string" && limitRaw.length > 0) {
-        const parsed = Number(limitRaw);
-        if (!Number.isInteger(parsed) || parsed < 1 || parsed > 500) {
-          res.status(400).type("text/plain").send("limit must be an integer in [1, 500]");
-          return;
-        }
-        limit = parsed;
-      }
-      let result;
-      try {
-        result = await renderStoreForEvents.listEventsSince(sessionId, sinceSequence, limit);
-      } catch (err) {
-        logger.warn("events_read_failed", {
-          sessionId,
-          error: String(err),
-        });
-        res.status(500).type("text/plain").send("internal error");
-        return;
-      }
-      if (result === null) {
-        // 404 — render not found. Distinct from 410 (cursor stale on
-        // a live render) so polling clients can branch.
-        res.status(404).type("text/plain").send("render not found");
-        return;
-      }
-      // Tenancy gate (round 2): the wsToken's appId MUST match the
-      // render's appId. We need the render record to check — fetch
-      // it. listEventsSince validated the render exists.
-      const stored = await renderStoreForEvents.get(sessionId);
-      if (!stored) {
-        res.status(404).type("text/plain").send("render not found");
-        return;
-      }
-      if (verify.claims.appId !== stored.appId) {
-        res.status(401).type("text/plain").send("wsToken scope mismatch");
-        return;
-      }
-      // Replay-horizon gate. Two cases collapse to REPLAY_HORIZON_PASSED:
-      //   (a) sinceSequence < horizonSeq — events evicted (cloud TTL,
-      //       in-mem never).
-      //   (b) sinceSequence > lastSequence — cursor from a different
-      //       deployment / reset render; the server has no events
-      //       beyond what it knows, and we can't safely advance.
-      if (sinceSequence > result.lastSequence) {
-        res.status(410).type("application/json").json({
-          reason: "REPLAY_HORIZON_PASSED",
-          currentSequence: result.lastSequence,
-        });
-        return;
-      }
-      if (sinceSequence < result.horizonSeq) {
-        res.status(410).type("application/json").json({
-          reason: "REPLAY_HORIZON_PASSED",
-          currentSequence: result.lastSequence,
-        });
-        return;
-      }
-      // GguiSessionEvent is now the unified wire-shape ledger primitive
-      // (Wave 7 of flatten-render-identity, 2026-05-28). The store
-      // returns events in protocol-canonical shape (seq + type +
-      // timestamp[ISO] + data); no projection needed.
-      res.setHeader("Access-Control-Allow-Origin", "*");
-      res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
-      res.setHeader("Content-Type", "application/json; charset=utf-8");
-      res.status(200).json({
-        events: result.events,
-        lastSequence: result.lastSequence,
-        hasMore: result.hasMore,
-      });
-    });
-  }
-
-  // GET /code/:hash.js — content-addressable componentCode delivery.
-  // GET /contract/:hash.js — content-addressable contract-validator-bundle
-  //   delivery (#109).
-  //
-  // Both routes serve from the same {@link CodeStore} keyed by
-  // `sha256(bytes)`. The same store is safe to share — content-addressable
-  // hashes can't collide across kinds unless the bytes are identical
-  // (in which case the cached value is equally valid for either path).
-  // Two separate URLs exist for debuggability + protocol clarity: a
-  // request to `/code/<hash>.js` is unambiguously a component fetch;
-  // `/contract/<hash>.js` is unambiguously a validator-bundle fetch.
-  //
-  // Cache posture: `Cache-Control: public, max-age=31536000, immutable` —
-  // hash is content-derived, the bytes can NEVER change for a given URL,
-  // so browsers + CDNs cache forever (immutable means "don't even
-  // revalidate"). A second render with the same componentCode / contract
-  // hits browser cache for free.
-  //
-  // CORS: same `*` posture as `/r/:shortCode` (JSON branch) — bytes are
-  // public-by-shortCode anyway (the agent already shared the URL with
-  // the host), and the bytes carry no credentials.
-  //
-  // Validation: hash MUST match `[a-f0-9]{64}` — strict charset gate
-  // closes path-traversal (`..`, `/`) and other shenanigans before the
-  // store sees the parameter.
+  // Content-addressable code + contract-validator delivery — see
+  // `./code-routes.ts` for the route contract (cache posture, CORS,
+  // hash validation).
   if (opts.codeStore) {
-    const codeStoreForRoute = opts.codeStore;
-    const mountContentAddressableRoute = (mountPath: string, label: "code" | "contract"): void => {
-      app.get(mountPath, async (req: Request, res: Response) => {
-        res.setHeader("Access-Control-Allow-Origin", "*");
-        const hash = req.params["hash"];
-        if (typeof hash !== "string" || !CODE_HASH_REGEX.test(hash)) {
-          res.setHeader("Cache-Control", "no-store");
-          res.status(400).json({
-            error: {
-              code: "invalid_request",
-              message: "hash path parameter must be 64-char lowercase hex",
-            },
-          });
-          return;
-        }
-        try {
-          const code = await codeStoreForRoute.get(hash);
-          if (code === null) {
-            res.setHeader("Cache-Control", "no-store");
-            res.status(404).json({
-              error: {
-                code: "not_found",
-                message: `unknown ${label} hash`,
-              },
-            });
-            return;
-          }
-          res.setHeader("Content-Type", "application/javascript; charset=utf-8");
-          res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
-          res.status(200).send(code);
-        } catch (err) {
-          logger.warn(`${label}_route_failed`, { hash, error: String(err) });
-          res.setHeader("Cache-Control", "no-store");
-          res.status(500).json({
-            error: {
-              code: "internal",
-              message: `${label} fetch failed`,
-            },
-          });
-        }
-      });
-    };
-    mountContentAddressableRoute("/code/:hash.js", "code");
-    mountContentAddressableRoute("/contract/:hash.js", "contract");
+    mountCodeRoutes({ app, codeStore: opts.codeStore, logger });
   }
 
   // Pairing transport + auth bridge. Opt-in via `opts.pairing`. When
@@ -5661,633 +4719,32 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
       });
     }
 
-    // GET /ggui/console/blueprint/:id — same-origin HTTP mirror of
-    // the `ggui_render_blueprint` MCP tool. Resolves a manifest-declared
-    // blueprint id to its compiled bundle + metadata via the already-
-    // wired `opts.uiRegistry`; lets the SPA's `/preview/<id>` route mount the
-    // blueprint with a single fetch instead of negotiating a full MCP
-    // round-trip from the browser.
-    //
-    // Scope: registered only when a `UiRegistry` is present (same gate
-    // as the MCP render handler — no registry = no render path, no
-    // endpoint). No bearer auth: console routes are same-origin
-    // operator-facing; the operator already has OS access to the TSX
-    // sources this endpoint serves back.
-    //
-    // Failure shape: { error, message } with a matching HTTP code.
-    //   - 404 for unknown id OR known-id-no-bundle (source-only /
-    //     compile-failed). The operator's remediation is the same in
-    //     both cases (fix the manifest / fix the entry / fix the
-    //     compile); splitting codes would add noise without signal.
-    //   - 400 for malformed id parameters (empty, oversized).
-    //
-    // Shape symmetry: matches `GguiRenderBlueprintOutput` exactly, so
-    // the browser-side fetch can share a type import with MCP-tool
-    // callers without a translation layer.
+    // Blueprint resolve + try-live routes — see
+    // `./console-blueprint-routes.ts` for the gate taxonomy (registry
+    // required; render store + shortCode index unlock try-live) and
+    // the schema-compat posture.
     if (opts.uiRegistry) {
-      const uiRegistryForEndpoint = opts.uiRegistry;
-      // POST /ggui/console/blueprint/:id/try — create a render,
-      // compile the blueprint's componentCode, commit a render with
-      // its full contract (actionSpec/streamSpec/propsSpec from the
-      // manifest), mint a shortCode, and return `{sessionId, shortCode,
-      // url}`. The returned `/s/<shortCode>` lands on the console's
-      // render viewer + subscribes to the render over `/ws`, so the
-      // just-committed render arrives via `ack.render` on subscribe.
-      //
-      // Gates (all three required):
-      //   - `opts.uiRegistry`     — blueprint resolution
-      //   - `renderStore`        — render persistence
-      //   - `opts.shortCodeIndex` — shortCode → render binding
-      //
-      // Partial gate (uiRegistry alone) → 503 with a remediation hint.
-      // Same-origin console surface — no bearer auth; viewer inherits
-      // the operator's machine trust model.
-      if (renderStore && opts.shortCodeIndex) {
-        const renderStoreForTry = renderStore;
-        const shortCodeIndexForTry = opts.shortCodeIndex;
-        app.post("/ggui/console/blueprint/:id/try", async (req, res) => {
-          applyDevtoolSecurityHeaders(res);
-          const blueprintId = req.params["id"];
-          if (
-            typeof blueprintId !== "string" ||
-            blueprintId.length === 0 ||
-            blueprintId.length > 256
-          ) {
-            res.status(400).json({
-              error: "invalid_request",
-              message: "`id` path parameter must be a non-empty string (≤256 chars)",
-            });
-            return;
-          }
-          try {
-            const entry = await uiRegistryForEndpoint.get(blueprintId);
-            if (!entry) {
-              res.status(404).json({
-                error: "not_found",
-                message: `No blueprint registered with id "${blueprintId}". Check ggui.json#blueprints.include globs + ggui.ui.json#id values.`,
-              });
-              return;
-            }
-            const bundle = await uiRegistryForEndpoint.getBundle(blueprintId);
-            if (!bundle) {
-              res.status(404).json({
-                error: "bundle_not_available",
-                message: `Blueprint "${blueprintId}" (${entry.manifest.name}) has no bundle available. Either the TSX entry is missing or compile-on-demand failed.`,
-              });
-              return;
-            }
-            // Materialize streamed bundles to a string — the render
-            // stores componentCode inline. Same rule the sibling GET
-            // endpoint applies.
-            let code: string;
-            if (typeof bundle.code === "string") {
-              code = bundle.code;
-            } else {
-              const reader = bundle.code.getReader();
-              const decoder = new TextDecoder();
-              let out = "";
-              for (;;) {
-                const { done, value } = await reader.read();
-                if (done) break;
-                if (typeof value === "string") out += value;
-                else if (value instanceof Uint8Array)
-                  out += decoder.decode(value, { stream: true });
-              }
-              out += decoder.decode();
-              code = out;
-            }
-
-            // Same default appId the CLI's pairing-authenticated /mcp
-            // ingress resolves for single-tenant OSS — the render is
-            // scoped to the same tenant.
-            const appId = DEFAULT_BUILDER_APP_ID;
-            // Phase B: a render IS the addressable unit; the prior
-            // (sessionId, stackItemId) pair collapses to a single
-            // sessionId. The blueprint id makes a natural slug; a
-            // same-blueprint retry replaces the row.
-            const sessionId = `try-${blueprintId}-${randomUUID()}`;
-            const createdAt = Date.now();
-
-            const contract = entry.manifest.contract ?? {};
-            const render: GguiSession = {
-              id: sessionId,
-              appId,
-              type: "component",
-              componentCode: code,
-              contentType: bundle.contentType,
-              eventSequence: 0,
-              createdAt,
-              lastActivityAt: createdAt,
-              expiresAt: createdAt + 24 * 60 * 60 * 1000,
-              description: `Blueprint try-live: ${entry.manifest.name}`,
-              // Data contract fields from the manifest. Each is
-              // conditionally spread — absent on the manifest →
-              // absent on the GguiSession (keeps shape honest + avoids
-              // an empty-shape contract tripping structural
-              // validators downstream).
-              ...(contract.propsSpec ? { propsSpec: contract.propsSpec } : {}),
-              ...(contract.actionSpec ? { actionSpec: contract.actionSpec } : {}),
-              ...(contract.streamSpec ? { streamSpec: contract.streamSpec } : {}),
-            };
-
-            // Schema compatibility check. Fires BEFORE the render
-            // commits — if the blueprint's pre-declared actionSpec
-            // hints at a same-server tool whose schemas don't align,
-            // the operator gets a named `SCHEMA_MISMATCH_ERROR`
-            // response at registration time instead of an agent-side
-            // surprise on the first dispatched action. Mode sourced
-            // from `createGguiServer({schemaCompatCheck})`; defaults
-            // to `'reject'`. See `./schema-compat.ts`.
-            try {
-              const report = checkRenderSchemaCompat(
-                render,
-                handlers,
-                schemaCompatMode,
-                `console blueprint-try:${blueprintId}`
-              );
-              if (!report.compatible) {
-                // Non-throwing path (mode === 'warn'): log with full
-                // detail so the operator has an observable surface.
-                logger.warn("schema_compat_warn", {
-                  site: "console_blueprint_try",
-                  blueprintId,
-                  findingCount: report.findings.length,
-                  findings: report.findings.map((f) => ({
-                    kind: f.kind,
-                    specName: f.specName,
-                    toolName: f.toolName,
-                    reason: f.reason,
-                    violationCount: f.violations.length,
-                  })),
-                });
-              }
-            } catch (err) {
-              if (err instanceof SchemaCompatError) {
-                logger.warn("console_blueprint_try_schema_compat_rejected", {
-                  blueprintId,
-                  findingCount: err.report.findings.length,
-                });
-                res.status(422).json({
-                  error: "SCHEMA_MISMATCH_ERROR",
-                  message: err.message,
-                  findings: err.report.findings.map((f) => ({
-                    kind: f.kind,
-                    specName: f.specName,
-                    toolName: f.toolName,
-                    reason: f.reason,
-                    violationCount: f.violations.length,
-                  })),
-                });
-                return;
-              }
-              throw err;
-            }
-
-            try {
-              await renderStoreForTry.commit({ render, appId });
-            } catch (err) {
-              logger.warn("console_blueprint_try_commit_failed", {
-                blueprintId,
-                sessionId,
-                error: String(err),
-              });
-              res.status(500).json({
-                error: "commit_failed",
-                message: err instanceof Error ? err.message : String(err),
-              });
-              return;
-            }
-
-            // Mint the shortCode last — if earlier steps failed the
-            // client never sees a dangling mapping. Best-effort bind
-            // to match render.ts's posture (a put failure shouldn't
-            // fail the whole try-live — a 500 here would leave the
-            // render behind with no way to resolve from
-            // `/s/<shortCode>`, but the operator can still hit the
-            // render via `/ggui/console/sessions`).
-            const shortCode = generateTryLiveShortCode();
-            try {
-              await shortCodeIndexForTry.put(shortCode, {
-                sessionId,
-                appId,
-              });
-            } catch (err) {
-              logger.warn("console_blueprint_try_shortcode_failed", {
-                blueprintId,
-                sessionId,
-                shortCode,
-                error: String(err),
-              });
-              // Don't fail the response — the client can reopen via
-              // the renders list. Surface the issue in the payload
-              // so the SPA can show a degraded banner.
-              res.status(200).json({
-                sessionId,
-                shortCode: null,
-                url: null,
-                warning:
-                  "shortCode minted but not persisted; viewer link unavailable. Open via /ggui/console/sessions.",
-              });
-              return;
-            }
-
-            res.json({
-              sessionId,
-              shortCode,
-              url: `/s/${shortCode}`,
-            });
-          } catch (err) {
-            logger.warn("console_blueprint_try_failed", {
-              blueprintId,
-              error: String(err),
-            });
-            res.status(500).json({
-              error: "try_failed",
-              message: err instanceof Error ? err.message : String(err),
-            });
-          }
-        });
-      } else {
-        // Partial wiring — /try would attempt a render create that
-        // has nowhere to land. Surface with 503 + specific message
-        // so the operator knows which seam to add (console cookie +
-        // shortCodeIndex live on `console.sessionCookie: true`).
-        app.post("/ggui/console/blueprint/:id/try", (_req, res) => {
-          applyDevtoolSecurityHeaders(res);
-          res.status(503).json({
-            error: "try_not_wired",
-            message:
-              "POST /ggui/console/blueprint/:id/try requires `renderChannel: true` + `shortCodeIndex` on createGguiServer. The CLI enables both by default via `console.sessionCookie: true`.",
-          });
-        });
-      }
-      app.get("/ggui/console/blueprint/:id", async (req, res) => {
-        applyDevtoolSecurityHeaders(res);
-        const blueprintId = req.params["id"];
-        if (
-          typeof blueprintId !== "string" ||
-          blueprintId.length === 0 ||
-          blueprintId.length > 256
-        ) {
-          res.status(400).json({
-            error: "invalid_request",
-            message: "`id` path parameter must be a non-empty string (≤256 chars)",
-          });
-          return;
-        }
-        try {
-          const entry = await uiRegistryForEndpoint.get(blueprintId);
-          if (!entry) {
-            res.status(404).json({
-              error: "not_found",
-              message: `No blueprint registered with id "${blueprintId}". Check ggui.json#blueprints.include globs + ggui.ui.json#id values.`,
-            });
-            return;
-          }
-          const bundle = await uiRegistryForEndpoint.getBundle(blueprintId);
-          if (!bundle) {
-            res.status(404).json({
-              error: "bundle_not_available",
-              message: `Blueprint "${blueprintId}" (${entry.manifest.name}) has no bundle available. Either the TSX entry is missing or compile-on-demand failed — check the manifest directory.`,
-            });
-            return;
-          }
-          // Same string-materialization rule as the MCP render handler:
-          // collapse stream bundles to a plain string so the browser
-          // fetch can JSON-parse the response in one shot.
-          let code: string;
-          if (typeof bundle.code === "string") {
-            code = bundle.code;
-          } else {
-            const reader = bundle.code.getReader();
-            const decoder = new TextDecoder();
-            let out = "";
-            for (;;) {
-              const { done, value } = await reader.read();
-              if (done) break;
-              if (typeof value === "string") out += value;
-              else if (value instanceof Uint8Array) out += decoder.decode(value, { stream: true });
-            }
-            out += decoder.decode();
-            code = out;
-          }
-          res.json({
-            blueprintId,
-            blueprintName: entry.manifest.name,
-            code,
-            contentType: bundle.contentType,
-          });
-        } catch (err) {
-          logger.warn("console_blueprint_resolve_failed", {
-            blueprintId,
-            error: String(err),
-          });
-          res.status(500).json({
-            error: "resolve_failed",
-            message: err instanceof Error ? err.message : String(err),
-          });
-        }
+      mountConsoleBlueprintRoutes({
+        app,
+        uiRegistry: opts.uiRegistry,
+        ...(renderStore ? { renderStore } : {}),
+        ...(opts.shortCodeIndex ? { shortCodeIndex: opts.shortCodeIndex } : {}),
+        handlers,
+        schemaCompatMode,
+        logger,
       });
     }
 
-    // GET /ggui/console/registry — JSON catalog of the blueprints +
-    // primitives this server was booted with. Consumed by the SPA's
-    // `/registry` route to paint an operator-facing browser over what
-    // `ggui.json#blueprints.include` discovered + what primitive
-    // catalogs the server was composed with.
-    //
-    // Scope: read-only surface. No registration / upload / mutation —
-    // authoring happens on disk (`ggui.ui.json` + TSX) and the server
-    // re-reads on boot. Zero-config is an honest empty shape:
-    // `{blueprints: [], primitives: []}` when neither is wired.
-    //
-    // Sources:
-    //   - `blueprints[]`  ← `opts.uiRegistry?.list()` (full manifest
-    //     entries; surfaces `name` + `description?` + `category?`).
-    //     Same registry the `/ggui/console/blueprint/:id` endpoint
-    //     resolves against, so the /registry click-through to
-    //     /preview/<id> is guaranteed to hit the same dataset.
-    //   - `primitives[]` ← `opts.primitiveCatalogs` (`DiscoveredPrimitiveCatalog`
-    //     shape from `@ggui-ai/project-config`). Each entry flattens
-    //     one primitive per row, tagging it with its catalog's
-    //     `source` ('package' | 'local') + `import` specifier.
-    //
-    // No bearer auth (same rule as the other console endpoints —
-    // same-origin operator-facing). Output is stable-sorted by id /
-    // name so the SPA's filter-as-you-type UI doesn't need a second
-    // sort pass.
-    app.get("/ggui/console/registry", async (_req, res) => {
-      applyDevtoolSecurityHeaders(res);
-      interface BlueprintSummary {
-        readonly id: string;
-        readonly name: string;
-        readonly description?: string;
-        readonly category?: string;
-      }
-      interface PrimitiveSummary {
-        readonly name: string;
-        readonly source: "package" | "local";
-        readonly catalog: string;
-      }
-
-      const blueprints: BlueprintSummary[] = [];
-      if (opts.uiRegistry) {
-        try {
-          const entries = await opts.uiRegistry.list();
-          for (const entry of entries) {
-            const summary: BlueprintSummary = {
-              id: entry.id,
-              name: entry.manifest.name,
-              ...(entry.manifest.description !== undefined
-                ? { description: entry.manifest.description }
-                : {}),
-              ...(entry.manifest.category !== undefined
-                ? { category: entry.manifest.category }
-                : {}),
-            };
-            blueprints.push(summary);
-          }
-          blueprints.sort((a, b) => a.id.localeCompare(b.id));
-        } catch (err) {
-          logger.warn("console_registry_blueprint_list_failed", {
-            error: String(err),
-          });
-          res.status(500).json({
-            error: "registry_unavailable",
-            message:
-              err instanceof Error
-                ? `Blueprint registry failed to list — ${err.message}`
-                : `Blueprint registry failed to list — ${String(err)}`,
-          });
-          return;
-        }
-      }
-
-      const primitives: PrimitiveSummary[] = [];
-      for (const catalog of opts.primitiveCatalogs ?? []) {
-        for (const primitive of catalog.manifest.primitives) {
-          primitives.push({
-            name: primitive.name,
-            source: catalog.source,
-            catalog: catalog.import,
-          });
-        }
-      }
-      // Stable sort: primary by catalog import (packages first, then
-      // locals under their own groups), secondary by primitive name.
-      // Operator reads "everything from @ggui-ai/design" as one block
-      // rather than having @ggui-ai/design's Button interleaved with
-      // a local-catalog Button at the letter-b slot.
-      primitives.sort((a, b) => {
-        const byCatalog = a.catalog.localeCompare(b.catalog);
-        if (byCatalog !== 0) return byCatalog;
-        return a.name.localeCompare(b.name);
-      });
-
-      res.json({ blueprints, primitives });
-    });
-
-    // ─────────────────────────────────────────────────────────────────
-    // Blueprints page — cache + probe
-    //
-    // Four endpoints operator-facing from `/blueprints` (the merged
-    // page that also hosts declared blueprints + primitives). All
-    // scoped to `DEFAULT_BUILDER_APP_ID` because the OSS server is
-    // single-tenant by construction — same scope the render handler
-    // writes to, so list/invalidate/clear see what the real cache
-    // writes.
-    //
-    // Enumeration gate: `listGenerationCache` + `clearGenerationCache`
-    // require an EnumerableVectorStore. Every OSS default satisfies
-    // it (`InMemoryVectorStore`, `SqliteVectorStore`); deployments
-    // that wire a non-enumerable backend get a honest `501` with a
-    // reason code rather than a silent empty list or a runtime
-    // throw.
-    //
-    // Scope resolution: no auth-derived `appId` — the console is
-    // same-origin operator-facing and every other console endpoint
-    // uses the anchored `DEFAULT_BUILDER_APP_ID` scope too
-    // (matches the render.ts handler and the chat playground flow).
-    // ─────────────────────────────────────────────────────────────────
-
-    // GET /ggui/console/blueprints/cached — list cached generation
-    // entries. Rejects with 501 when the vector store doesn't
-    // support enumeration. Empty scope returns
-    // `{entries: [], total: 0}` — not an error.
-    app.get("/ggui/console/blueprints/cached", async (_req, res) => {
-      applyDevtoolSecurityHeaders(res);
-      if (!isEnumerableVectorStore(vectors)) {
-        res.status(501).json({
-          error: "enumeration_unsupported",
-          message:
-            "The configured vector store does not support enumeration. " +
-            "Wire an EnumerableVectorStore (default InMemoryVectorStore " +
-            "or SqliteVectorStore) to surface the cache in the console.",
-        });
-        return;
-      }
-      try {
-        const entries = await listGenerationCache({ vectorStore: vectors }, DEFAULT_BUILDER_APP_ID);
-        const payload: readonly GenerationCacheEntry[] = entries;
-        res.json({ entries: payload, total: payload.length });
-      } catch (err) {
-        logger.warn("console_blueprints_cached_list_failed", {
-          error: String(err),
-        });
-        res.status(500).json({
-          error: "cache_unavailable",
-          message:
-            err instanceof Error
-              ? `Generation cache failed to list — ${err.message}`
-              : `Generation cache failed to list — ${String(err)}`,
-        });
-      }
-    });
-
-    // DELETE /ggui/console/blueprints/cached/:id — invalidate one
-    // cached entry. Idempotent — 204 whether the id was present or
-    // not (same contract as VectorStore.deleteVector). No enumerable
-    // gate — delete works on every vector-store implementation.
-    app.delete("/ggui/console/blueprints/cached/:id", async (req, res) => {
-      applyDevtoolSecurityHeaders(res);
-      const id = req.params.id;
-      if (!id || id.length === 0) {
-        res.status(400).json({
-          error: "missing_id",
-          message: "Cache entry id required in path segment.",
-        });
-        return;
-      }
-      try {
-        await invalidateGenerationCache({ vectorStore: vectors }, DEFAULT_BUILDER_APP_ID, id);
-        res.status(204).end();
-      } catch (err) {
-        logger.warn("console_blueprints_cached_invalidate_failed", {
-          error: String(err),
-          id,
-        });
-        res.status(500).json({
-          error: "cache_invalidate_failed",
-          message:
-            err instanceof Error
-              ? `Invalidate failed — ${err.message}`
-              : `Invalidate failed — ${String(err)}`,
-        });
-      }
-    });
-
-    // POST /ggui/console/blueprints/cached/clear — bulk-delete every
-    // cached entry in the scope. Returns the count. Requires
-    // EnumerableVectorStore (we enumerate to find keys to delete).
-    app.post("/ggui/console/blueprints/cached/clear", async (_req, res) => {
-      applyDevtoolSecurityHeaders(res);
-      if (!isEnumerableVectorStore(vectors)) {
-        res.status(501).json({
-          error: "enumeration_unsupported",
-          message:
-            "Bulk-clear requires a vector store that supports " +
-            "enumeration. Invalidate entries individually via " +
-            "DELETE /ggui/console/blueprints/cached/:id, or wire an " +
-            "EnumerableVectorStore to unlock bulk-clear.",
-        });
-        return;
-      }
-      try {
-        const result = await clearGenerationCache({ vectorStore: vectors }, DEFAULT_BUILDER_APP_ID);
-        res.json(result);
-      } catch (err) {
-        logger.warn("console_blueprints_cached_clear_failed", {
-          error: String(err),
-        });
-        res.status(500).json({
-          error: "cache_clear_failed",
-          message:
-            err instanceof Error
-              ? `Clear failed — ${err.message}`
-              : `Clear failed — ${String(err)}`,
-        });
-      }
-    });
-
-    // GET /ggui/console/blueprints/registry — list every blueprint
-    // registered in the three-tier matcher's storage.
-    // Sibling of `/blueprints/cached` and intentionally distinct from
-    // the declared-blueprint catalog at `/ggui/console/registry`:
-    //   - `/registry` (existing) — operator-declared static catalog
-    //     (uiRegistry sources + primitiveCatalogs). Boot-time content.
-    //   - `/blueprints/cached` (legacy) — intent-keyed generation
-    //     cache. Retired.
-    //   - `/blueprints/registry` (this) — contract-keyed runtime
-    //     registry the matcher actually consults. Per-row tier
-    //     diagnostics: kind, contractKey, hitCount, lastHitAt.
-    //
-    // Optional `?kind=template|organism|molecule|atom` filter narrows
-    // by atomic-design level — kindless query returns everything.
-    app.get("/ggui/console/blueprints/registry", async (req, res) => {
-      applyDevtoolSecurityHeaders(res);
-      if (!isEnumerableVectorStore(vectors)) {
-        res.status(501).json({
-          error: "enumeration_unsupported",
-          message:
-            "The configured vector store does not support enumeration. " +
-            "Wire an EnumerableVectorStore (default InMemoryVectorStore " +
-            "or SqliteVectorStore) to surface the registry in the console.",
-        });
-        return;
-      }
-      const rawKind = typeof req.query.kind === "string" ? req.query.kind : undefined;
-      const allowedKinds = ["template", "organism", "molecule", "atom"] as const;
-      type AllowedKind = (typeof allowedKinds)[number];
-      const kind: AllowedKind | undefined =
-        rawKind !== undefined
-          ? (allowedKinds.find((k) => k === rawKind) as AllowedKind | undefined)
-          : undefined;
-      if (rawKind !== undefined && kind === undefined) {
-        res.status(400).json({
-          error: "invalid_kind",
-          message: `kind must be one of ${allowedKinds.join(", ")}; got '${rawKind}'.`,
-        });
-        return;
-      }
-      try {
-        const blueprints = await listBlueprints(
-          { vectorStore: vectors },
-          DEFAULT_BUILDER_APP_ID,
-          kind
-        );
-        // Project to a wire-friendly view — `componentCode` is large
-        // and not load-bearing for the operator listing; surface a
-        // length signal instead so the UI can show "12 KB" without
-        // parsing 12 KB.
-        const entries = blueprints.map((bp) => ({
-          id: bp.id,
-          kind: bp.kind,
-          contractKey: bp.contractKey,
-          intent: bp.intent,
-          createdAt: bp.createdAt,
-          hitCount: bp.hitCount,
-          ...(bp.lastHitAt !== undefined ? { lastHitAt: bp.lastHitAt } : {}),
-          // Surface provenance (the BlueprintSource union — llm rows
-          // carry engine slug + model) plus the install-bridge
-          // lifecycle marker so operators can distinguish cold-gen vs.
-          // operator-registered vs. marketplace-installed rows on
-          // `/ggui/console/blueprints/registry`. Matcher behaviour is
-          // unchanged — provenance is purely informational.
-          source: bp.source,
-          ...(bp.installed === true ? { installed: true } : {}),
-          componentCodeBytes: bp.componentCode.length,
-        }));
-        res.json({ entries, total: entries.length });
-      } catch (err) {
-        logger.warn("console_registry_list_failed", { error: String(err) });
-        res.status(500).json({
-          error: "registry_unavailable",
-          message:
-            err instanceof Error
-              ? `Registry list failed — ${err.message}`
-              : `Registry list failed — ${String(err)}`,
-        });
-      }
+    // Catalog + cache + runtime-registry read/maintenance routes —
+    // see `./console-registry-routes.ts` for the three-surface split
+    // (/registry vs /blueprints/cached vs /blueprints/registry) and
+    // the enumeration gate.
+    mountConsoleRegistryRoutes({
+      app,
+      ...(opts.uiRegistry ? { uiRegistry: opts.uiRegistry } : {}),
+      ...(opts.primitiveCatalogs ? { primitiveCatalogs: opts.primitiveCatalogs } : {}),
+      vectors,
+      logger,
     });
 
     // ──────────────────────────────────────────────────────────────────
@@ -6368,405 +4825,48 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
     // the route handlers tolerate that and return empty bodies.
     mountConsoleTimelineRoutes(app, renderStore, streamBuffer);
 
-    // GET /ggui/console/sessions?limit=<n> — active-render list for
-    // the console SPA's `/admin/sessions` page. Operator-facing "what's
-    // live right now?" surface, enriched with each render's current
-    // shortCode so rows can link through to `/s/<shortCode>` (the
-    // existing render viewer).
-    //
-    // Scope: active renders only. The `GguiSessionFilter.status`
-    // taxonomy ('active' | 'completed' | 'expired') requires the
-    // store's private `closed` bucket flag to disambiguate completed
-    // from expired — that flag isn't on the `GguiSession` protocol type,
-    // so exposing mixed-status listings honestly requires a seam
-    // extension we don't need for the "live right now" use case.
-    // Future slices (historical renders, closed-renders triage)
-    // can opt in via query-param.
-    //
-    // Sources:
-    //   - `renderStore.list({ status: 'active', limit })` — single
-    //     page, limit default 25, clamped to [1, 100].
-    //   - `shortCodeIndex.findBySessionId(render.id)` — best-effort
-    //     enrichment; absent shortCode is a valid row (displays
-    //     without a click-through link).
-    //
-    // Sort: most-recent `lastActivityAt` first — matches operator
-    // intent "show me what I was just looking at."
-    //
-    // Zero-config shape: `{ sessions: [], total: 0 }` when no
-    // renderStore is wired (e.g. pure-MCP dev boot with neither
-    // renderChannel nor mcpApps enabled).
-    app.get("/ggui/console/sessions", async (req, res) => {
-      applyDevtoolSecurityHeaders(res);
-      interface GguiSessionSummary {
-        readonly sessionId: string;
-        readonly shortCode?: string;
-        readonly appId: string;
-        readonly lastActivityAt: number;
-        readonly createdAt: number;
-        readonly status: "active";
-      }
-
-      const limitRaw = req.query["limit"];
-      let limit = 25;
-      if (typeof limitRaw === "string") {
-        const parsed = Number.parseInt(limitRaw, 10);
-        if (Number.isFinite(parsed) && parsed > 0) {
-          limit = Math.min(100, parsed);
-        }
-      }
-
-      if (!renderStore) {
-        res.json({ sessions: [], total: 0 });
-        return;
-      }
-
-      try {
-        const renders = await renderStore.list({
-          status: "active",
-          limit,
-        });
-        const summaries: GguiSessionSummary[] = [];
-        for (const render of renders) {
-          let shortCode: string | null = null;
-          if (opts.shortCodeIndex) {
-            try {
-              shortCode = await opts.shortCodeIndex.findBySessionId(render.id);
-            } catch (err) {
-              // Best-effort — the render row is still honest
-              // without a shortCode.
-              logger.warn("console_renders_shortcode_lookup_failed", {
-                sessionId: render.id,
-                error: String(err),
-              });
-            }
-          }
-          summaries.push({
-            sessionId: render.id,
-            ...(shortCode ? { shortCode } : {}),
-            appId: render.appId,
-            lastActivityAt: render.lastActivityAt,
-            createdAt: render.createdAt,
-            status: "active",
-          });
-        }
-        // Most-recent activity first. Tiebreak on sessionId for
-        // stability when multiple rows share the same ms timestamp.
-        summaries.sort((a, b) => {
-          const byRecency = b.lastActivityAt - a.lastActivityAt;
-          if (byRecency !== 0) return byRecency;
-          return a.sessionId.localeCompare(b.sessionId);
-        });
-        res.json({ sessions: summaries, total: summaries.length });
-      } catch (err) {
-        logger.warn("console_renders_list_failed", {
-          error: String(err),
-        });
-        res.status(500).json({
-          error: "renders_unavailable",
-          message:
-            err instanceof Error
-              ? `GguiSession store failed to list — ${err.message}`
-              : `GguiSession store failed to list — ${String(err)}`,
-        });
-      }
+    // Active-render list — see `./console-sessions-routes.ts` for the
+    // active-only scope rationale + zero-config empty shape.
+    mountConsoleSessionsRoutes({
+      app,
+      ...(renderStore ? { renderStore } : {}),
+      ...(opts.shortCodeIndex ? { shortCodeIndex: opts.shortCodeIndex } : {}),
+      logger,
     });
 
-    // GET /ggui/console/mcp/tools — registered MCP-tool inventory for
-    // the console SPA's `/mcp` page. Operator-facing "what tools does
-    // my server expose?" — same handler set the `/mcp` JSON-RPC
-    // endpoint surfaces via `tools/list`, but rendered as cards
-    // instead of curl output.
-    //
-    // Currently LIST-only — name + title? + description + input/output
-    // JSON Schema. A "test invoke" form is deferred — invoking a tool
-    // from the console needs a same-origin bearer claim story (console
-    // session cookie currently authenticates only the live-channel WS
-    // upgrade).
-    //
-    // Schema conversion: handlers carry Zod raw shapes; the wire
-    // needs JSON Schema. `z.toJSONSchema(z.object(rawShape))` does
-    // the conversion. Failure (e.g. an exotic Zod type the v4
-    // converter doesn't yet support) reports `{}` for that field
-    // and warn-logs — operators still see name + description, just
-    // without typed input/output detail.
-    app.get("/ggui/console/mcp/tools", async (_req, res) => {
-      applyDevtoolSecurityHeaders(res);
-      interface ToolInfo {
-        readonly name: string;
-        readonly title?: string;
-        readonly description: string;
-        readonly inputSchema: unknown;
-        readonly outputSchema: unknown;
-      }
+    // MCP-tool inventory — see `./console-mcp-tools-routes.ts` for
+    // the projection shape + schema-conversion degradation rule.
+    mountConsoleMcpToolsRoutes({ app, handlers, logger });
 
-      const safeToJsonSchema = (shape: ZodRawShape): unknown => {
-        try {
-          return z.toJSONSchema(z.object(shape));
-        } catch (err) {
-          logger.warn("console_mcp_tools_schema_conversion_failed", {
-            error: String(err),
-          });
-          return {};
-        }
-      };
+    // Manifest read surface — see `./console-config-routes.ts` for
+    // the three-state source-resolution contract.
+    mountConsoleConfigRoutes({ app, logger });
 
-      const tools: ToolInfo[] = handlers.map((h) => {
-        const summary: ToolInfo = {
-          name: h.name,
-          ...(h.title !== undefined ? { title: h.title } : {}),
-          description: h.description,
-          inputSchema: safeToJsonSchema(h.inputSchema),
-          outputSchema: safeToJsonSchema(h.outputSchema),
-        };
-        return summary;
-      });
-      // Stable sort by name for deterministic operator reading order
-      // — handlers are registered in module-import order, which is
-      // arbitrary from the operator's perspective.
-      tools.sort((a, b) => a.name.localeCompare(b.name));
-      res.json({ tools, total: tools.length });
+    // Server-info surface — see `./console-info-routes.ts` for the
+    // pairing / capabilities / storage block contracts.
+    mountConsoleInfoRoutes({
+      app,
+      info,
+      mode,
+      pairingEnabled,
+      pairingService,
+      toolCount: handlers.length,
+      ...(opts.uiRegistry ? { uiRegistry: opts.uiRegistry } : {}),
+      ...(opts.primitiveCatalogs ? { primitiveCatalogs: opts.primitiveCatalogs } : {}),
+      mcpAppsEnabled,
+      ...(opts.generation ? { generation: opts.generation } : {}),
+      storage: {
+        renderStore: opts.renderStore ? "custom" : "memory",
+        vectorStore: opts.vectors ? "custom" : "memory",
+      },
+      logger,
     });
 
-    // GET /ggui/console/config — VSCode-settings-style read of the
-    // resolved `ggui.json`. Returns the parsed manifest, the raw
-    // file contents for display, and the introspected v1 JSON Schema
-    // (which carries field descriptions via the `.describe()` calls
-    // on `GguiJsonV1`).
-    //
-    // Source resolution: walks up from `process.cwd()` to find the
-    // nearest `ggui.json`. Honest about three states:
-    //   - found + valid → `{source: {found:true, path}, manifest, raw, schema}`
-    //   - found + invalid → `{source: {found:true, path, error: {message}},
-    //     raw, schema}` (no manifest field — the operator inspects the raw
-    //     bytes + sees the validation error so they can fix the file)
-    //   - not found → `{source: {found:false, searchedFrom}, schema}`
-    //     (the schema still ships so operators can browse what would be
-    //     configurable IF a manifest existed)
-    //
-    // Read-only. Form controls on the same payload and a PATCH
-    // endpoint with atomic write + conflict detection layer on top.
-    app.get("/ggui/console/config", async (_req, res) => {
-      applyDevtoolSecurityHeaders(res);
-      const searchedFrom = process.cwd();
-      const safeSchema = (() => {
-        try {
-          // `unrepresentable: 'any'` keeps fields backed by `.transform()`
-          // (e.g. `generation.model`, parsed at the schema boundary into
-          // a typed `LlmRoute`) in the JSON Schema as `{}` instead of
-          // throwing. Transforms are runtime-only; the JSON-Schema view
-          // serves the console SPA as documentation, so a permissive
-          // shape is the honest projection.
-          return z.toJSONSchema(GguiJsonV1, { unrepresentable: "any" });
-        } catch (err) {
-          logger.warn("console_config_schema_conversion_failed", {
-            error: String(err),
-          });
-          return {};
-        }
-      })();
-      const path = findGguiJson(searchedFrom);
-      if (path === null) {
-        res.json({
-          source: { found: false as const, searchedFrom },
-          schema: safeSchema,
-        });
-        return;
-      }
-      let raw: string | null = null;
-      try {
-        raw = readFileSync(path, "utf-8");
-      } catch (err) {
-        logger.warn("console_config_read_failed", { path, error: String(err) });
-      }
-      const result = safeLoadGguiJson(path);
-      if (!result.success) {
-        const cause = result.error.cause;
-        const errorMessage = cause instanceof Error ? cause.message : result.error.message;
-        res.json({
-          source: {
-            found: true as const,
-            path,
-            error: { message: errorMessage },
-          },
-          ...(raw !== null ? { raw } : {}),
-          schema: safeSchema,
-        });
-        return;
-      }
-      res.json({
-        source: { found: true as const, path },
-        manifest: result.data,
-        ...(raw !== null ? { raw } : {}),
-        schema: safeSchema,
-      });
-    });
-
-    app.get("/ggui/console/info", async (_req, res) => {
-      applyDevtoolSecurityHeaders(res);
-      // Pairing block: `enabled` reflects whether the server was
-      // composed with `pairing: true|{...}`. `pending` is the current
-      // `activeInit()` read — null when no code is pending OR when
-      // pairing is disabled. The landing page renders three distinct
-      // copy paths against this shape (disabled / enabled-but-idle /
-      // enabled-with-pending) so the client never has to compose
-      // state from multiple optional fields.
-      let pending: Awaited<ReturnType<PairingService["activeInit"]>> = null;
-      if (pairingService) {
-        try {
-          pending = await pairingService.activeInit();
-        } catch (err) {
-          // `activeInit` is a read — failure here shouldn't 500 the
-          // landing page. Log + return null; operator sees "no pending
-          // pair code" which matches reality (we couldn't read one).
-          logger.warn("console_active_init_failed", {
-            error: String(err),
-          });
-          pending = null;
-        }
-      }
-
-      // Capabilities block (console status dashboard).
-      //   - `toolCount`: the number of MCP tool handlers this server
-      //     registered. Same value `server.toolCount` exposes and the
-      //     banner prints.
-      //   - `blueprintCount`: operator-scoped blueprint count from the
-      //     wired `uiRegistry.list()` — 0 when no registry is bound.
-      //     Best-effort on read (same contract as `/ggui/console/registry`).
-      //   - `primitiveCount`: sum across `primitiveCatalogs`.
-      //   - `agentWired`: whether the render-channel + mcpApps path is
-      //     live (the server can accept `ggui_render` + live-channel joins).
-      //   - `generationWired`: whether `opts.generation` was bound —
-      //     the `ggui_render` LLM path is active. Absent = render returns
-      //     `codeReady: false` honest placeholders.
-      //
-      // Provider/model specifics (`generation: { provider, model }`
-      // from the plan) are intentionally NOT surfaced yet — the
-      // `UiGenerator` contract doesn't expose a read-only identity
-      // on the handle. Adding that is a generator-package change; the
-      // dashboard card lands on the simpler `generationWired: boolean`
-      // until then.
-      let blueprintCount = 0;
-      if (opts.uiRegistry) {
-        try {
-          const list = await opts.uiRegistry.list();
-          blueprintCount = list.length;
-        } catch (err) {
-          logger.warn("console_info_blueprint_count_failed", {
-            error: String(err),
-          });
-        }
-      }
-      const primitiveCount = (opts.primitiveCatalogs ?? []).reduce(
-        (sum, c) => sum + c.manifest.primitives.length,
-        0
-      );
-      // Generation probe — `wired` reports dep binding; `hasCredentials`
-      // actually resolves BYOK credentials via the same seam the render
-      // handler uses, so the operator-facing pill can distinguish
-      // three honest states: off / needs-key / ready. The split avoids
-      // a green "wired" pill next to a "text-only" meta misleading
-      // operators when creds are missing.
-      //
-      // Probe is best-effort: resolveLlm failure (filesystem hiccup,
-      // malformed `~/.ggui/credentials.json`) reports
-      // `hasCredentials: false`, matching operator expectation
-      // "whatever is on disk, this won't fire right now." Absence of
-      // creds is a non-error path per the GenerationDeps contract.
-      let generationHasCredentials = false;
-      if (opts.generation) {
-        try {
-          const probeResult = await opts.generation.resolveLlm({
-            appId: DEFAULT_BUILDER_APP_ID,
-            requestId: `console-info-probe-${randomUUID()}`,
-          });
-          generationHasCredentials = probeResult !== null;
-        } catch (err) {
-          logger.warn("console_info_credential_probe_failed", {
-            error: String(err),
-          });
-        }
-      }
-
-      const capabilities = {
-        toolCount: handlers.length,
-        blueprintCount,
-        primitiveCount,
-        agentWired: mcpAppsEnabled,
-        generation: {
-          wired: opts.generation !== undefined,
-          hasCredentials: generationHasCredentials,
-        },
-      } as const;
-
-      // Storage block.
-      //   - `renderStore`: 'memory' when the server fell back to the
-      //     in-memory default, 'custom' when the operator passed one.
-      //   - `vectorStore`: same rule for vectors.
-      // Keeps the label taxonomy narrow — two states the operator can
-      // act on (swap to SQLite, swap to Postgres). Implementation-name
-      // leakage (e.g., "InMemoryGguiSessionStore") would couple the wire
-      // to class names that are not part of the public contract.
-      const storage = {
-        renderStore: (opts.renderStore ? "custom" : "memory") as "memory" | "custom",
-        vectorStore: (opts.vectors ? "custom" : "memory") as "memory" | "custom",
-      };
-
-      res.json({
-        server: info.name,
-        version: info.version,
-        ...(info.description !== undefined ? { description: info.description } : {}),
-        mode,
-        pairing: {
-          enabled: pairingEnabled,
-          pending,
-        },
-        capabilities,
-        storage,
-      });
-    });
-
-    // POST /ggui/console/chat/message — OSS dev chat round-trip.
-    //
-    // Routes the message through `ggui_render` whenever the server was
-    // composed with a real generator — turning the chat surface into
-    // the cohesive agent experience: every user message commits a
-    // render against a thread-scoped render; the render handler owns
-    // generation, cache, and provisional preview; the client renders
-    // the resulting render inline using `GguiSessionRenderer`.
-    //
-    // Shape: `{ text, threadId?, sessionId? }` →
-    // `{ threadId, userMessage, agentMessage, ui? }`.
-    //   - `ui` is populated only when the render handler is wired AND
-    //     the call succeeded. `ui.sessionId` is the render id the client
-    //     subscribes to over `/ws`; the committed render arrives via
-    //     the subscribe ack's single `render` field, which the client
-    //     mounts inline to show the agent's generated component.
-    //   - When the render handler is NOT wired (no `mcpApps`, placeholder
-    //     mode, or no BYOK), `ui` is absent and `agentMessage.text`
-    //     carries an honest text-only acknowledgment. This preserves
-    //     the text-only round-trip path so operators without a key can
-    //     still exercise the chat UI end-to-end.
-    //   - `sessionId` is echoed on every response and should be passed
-    //     back on subsequent messages so the thread reuses one render.
-    //
-    // Same-origin only — no bearer auth. The console surface is
-    // always the operator's own browser pointing at their own `ggui
-    // serve` instance; adding bearer auth here would block the
-    // dev-page-is-usable claim without meaningful security gain.
-    //
-    // The render invocation uses `DEFAULT_BUILDER_APP_ID` for tenant
-    // scope — same well-known value the `/mcp` endpoint collapses to
-    // in OSS single-user mode. Matches blueprint + vector scoping
-    // applied by the generator / cache seams.
-    //
-    // Gate on `generationWithCache`: without a generator wired, a render
-    // call would allocate a render + shortCode with empty componentCode
-    // (codeReady:false) per turn without any visible UI — honest
-    // behavior but useless. Falling through to the canned-text path
-    // keeps the chat surface usable without a BYOK key AND preserves
-    // the exact Lane-1 chat-page spec assertion (`/OSS agent
-    // generation/`) without a copy change.
+    // Dev-chat round-trip — see `./console-chat-routes.ts` for the
+    // render-turn shape + honest text-only fallbacks. Handler lookup
+    // is gated on `generationWithCache`: without a generator wired, a
+    // render call would allocate a render + shortCode with empty
+    // componentCode per turn without any visible UI.
     const renderHandlerForChat =
       generationWithCache !== undefined
         ? handlers.find((h) => h.name === "ggui_render")
@@ -6775,861 +4875,62 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
       renderHandlerForChat !== undefined
         ? handlers.find((h) => h.name === "ggui_handshake")
         : undefined;
-    app.post("/ggui/console/chat/message", async (req, res) => {
-      applyDevtoolSecurityHeaders(res);
-      const body = (req.body ?? {}) as {
-        text?: unknown;
-        threadId?: unknown;
-        sessionId?: unknown;
-      };
-      const text = typeof body.text === "string" ? body.text.trim() : "";
-      if (text.length === 0) {
-        res.status(400).json({
-          error: "invalid_request",
-          message: "`text` (non-empty string) is required",
-        });
-        return;
-      }
-      if (text.length > 4000) {
-        res.status(400).json({
-          error: "invalid_request",
-          message: "`text` must be <= 4000 chars",
-        });
-        return;
-      }
-      const threadId =
-        typeof body.threadId === "string" && body.threadId.length > 0
-          ? body.threadId
-          : `chat-${randomUUID()}`;
-      const now = Date.now();
-      const userMessage = {
-        id: `msg-${randomUUID()}`,
-        role: "user" as const,
-        text,
-        createdAt: now,
-      };
-
-      // Attempt real generation through `ggui_render` when wired.
-      // `renderHandlerForChat` is undefined when mcpApps was disabled or
-      // the operator built a custom handler set without render. The
-      // handler itself returns `codeReady:false` when generation deps
-      // aren't wired (no BYOK) — we surface that honestly on the
-      // agentMessage text without pretending a UI landed.
-      let ui:
-        | {
-            sessionId: string;
-            shortCode: string;
-            codeReady: boolean;
-            cache?: { hit: boolean; llmCallsAvoided: number };
+    mountConsoleChatRoutes({
+      app,
+      ...(renderHandlerForChat ? { renderHandler: renderHandlerForChat } : {}),
+      ...(handshakeHandlerForChat ? { handshakeHandler: handshakeHandlerForChat } : {}),
+      ...(sessionCookieEnabled && sharedTokenSecret !== undefined
+        ? {
+            sessionCookie: {
+              secret: sharedTokenSecret,
+              ...(sessionCookieConfig.ttlSec !== undefined
+                ? { ttlSec: sessionCookieConfig.ttlSec }
+                : {}),
+              secure: sessionCookieConfig.secure === true,
+            },
           }
-        | undefined;
-      let agentText: string | undefined;
-      if (renderHandlerForChat && handshakeHandlerForChat) {
-        try {
-          const requestId = randomUUID();
-          const handshakeInput: Record<string, unknown> = {
-            story: { intent: text, contract: {} },
-          };
-          const hsRaw = await handshakeHandlerForChat.handler(handshakeInput, {
-            appId: DEFAULT_BUILDER_APP_ID,
-            requestId,
-          });
-          const handshakeId = (hsRaw as { handshakeId: string }).handshakeId;
-          const raw = await renderHandlerForChat.handler(
-            { handshakeId, contract: {} },
-            { appId: DEFAULT_BUILDER_APP_ID, requestId }
-          );
-          const result = raw as {
-            sessionId: string;
-            shortCode: string;
-            codeReady: boolean;
-            cache?: { hit: boolean; llmCallsAvoided: number };
-          };
-          ui = {
-            sessionId: result.sessionId,
-            shortCode: result.shortCode,
-            codeReady: result.codeReady,
-            ...(result.cache ? { cache: result.cache } : {}),
-          };
-          // If console cookie auth is enabled, mint a session
-          // cookie so the chat can open the /ws subscription without
-          // a separate POST to /ggui/console/session-cookie. Single round-trip
-          // per turn; cookie is same-origin HttpOnly.
-          if (sessionCookieEnabled) {
-            const secret = sharedTokenSecret as string;
-            const cookieTtlSec =
-              typeof opts.console === "object" &&
-              opts.console !== null &&
-              typeof opts.console.sessionCookie === "object" &&
-              opts.console.sessionCookie !== null
-                ? opts.console.sessionCookie.ttlSec
-                : undefined;
-            const cookieSecure =
-              typeof opts.console === "object" &&
-              opts.console !== null &&
-              typeof opts.console.sessionCookie === "object" &&
-              opts.console.sessionCookie !== null &&
-              opts.console.sessionCookie.secure === true;
-            const mint = mintDevtoolCookie({
-              sessionId: result.sessionId,
-              appId: DEFAULT_BUILDER_APP_ID,
-              secret,
-              ...(cookieTtlSec !== undefined ? { ttlSec: cookieTtlSec } : {}),
-              secure: cookieSecure,
-            });
-            res.setHeader("Set-Cookie", mint.setCookieHeader);
-          }
-          if (result.codeReady) {
-            agentText = result.cache?.hit
-              ? "Reused a matching UI from cache for your request."
-              : "Generated a UI for your request.";
-          } else {
-            // Generator ran but produced no code (no BYOK, generator
-            // error, or placeholder mode). Honest text so the
-            // operator knows why the surface didn't render a UI.
-            agentText =
-              "I received your message, but generation did not produce a UI " +
-              "(no BYOK key configured, or the provider declined). Export " +
-              "ANTHROPIC_API_KEY / OPENAI_API_KEY / GOOGLE_API_KEY / " +
-              "OPENROUTER_API_KEY and retry.";
-            // Drop the ui payload — no code ready means nothing to
-            // render inline. The agent text carries the diagnosis.
-            ui = undefined;
-          }
-        } catch (err) {
-          logger.warn?.("console_chat_render_failed", {
-            threadId,
-            error: err instanceof Error ? err.message : String(err),
-          });
-          agentText =
-            "Generation failed: " +
-            (err instanceof Error ? err.message : String(err)) +
-            ". The chat surface is still live — retry or try a different prompt.";
-          ui = undefined;
-        }
-      }
-
-      const agentMessage = {
-        id: `msg-${randomUUID()}`,
-        role: "agent" as const,
-        text:
-          agentText ??
-          // No render handler at all — text-only fallback. Keeps the
-          // Lane-1 chat-page spec green by preserving the exact copy
-          // it asserts against.
-          "Message received. OSS agent generation is not yet wired — " +
-            "this is the text-only dev chat. Full responses " +
-            "and generated UIs arrive once the generator port lands.",
-        createdAt: now + 1,
-      };
-      logger.debug?.("console_chat_message", {
-        threadId,
-        userMessageId: userMessage.id,
-        textLength: text.length,
-        uiSessionId: ui?.sessionId,
-        uiCodeReady: ui?.codeReady,
-      });
-      res.status(200).json({
-        threadId,
-        userMessage,
-        agentMessage,
-        ...(ui ? { ui } : {}),
-      });
+        : {}),
+      logger,
     });
 
-    // Cookie-mint route + cookieAuth binding for the render channel.
-    // Both enabled only when `sessionCookie` is on (default when
+    // Cookie-mint + render-viewer session routes — see
+    // `./console-session-routes.ts` for the named parties + auth/scope
+    // gates. Enabled only when `sessionCookie` is on (default when
     // `console` is otherwise enabled). The preconditions checked
-    // earlier guarantee shortCodeIndex + renderChannel are present,
-    // so the below references are safe.
-    if (sessionCookieEnabled) {
-      const secret = sharedTokenSecret as string; // verified set above
-      const shortCodeIndex = opts.shortCodeIndex as ShortCodeIndex; // precondition
-      const cookieTtlSec = sessionCookieConfig.ttlSec; // undefined → helper default (8h)
-      const cookieSecure = sessionCookieConfig.secure === true;
-      const cookieLogger = logger.child({
-        component: "console-cookie",
-      });
-
-      app.post("/ggui/console/session-cookie", async (req: Request, res: Response) => {
-        applyDevtoolSecurityHeaders(res);
-        const body = (req.body ?? {}) as { shortCode?: unknown };
-        if (typeof body.shortCode !== "string" || body.shortCode.length === 0) {
-          res.status(400).json({
-            error: "invalid_request",
-            message: "`shortCode` (string) is required",
-          });
-          return;
-        }
-        let binding: Awaited<ReturnType<ShortCodeIndex["lookup"]>>;
-        try {
-          binding = await shortCodeIndex.lookup(body.shortCode);
-        } catch (err) {
-          cookieLogger.error("short_code_lookup_failed", {
-            error: String(err),
-          });
-          res.status(500).json({ error: "internal_error" });
-          return;
-        }
-        if (!binding) {
-          res.status(404).json({
-            error: "unknown_short_code",
-            message: "Short-code does not resolve to any render on this server",
-          });
-          return;
-        }
-        const mint = mintDevtoolCookie({
-          sessionId: binding.sessionId,
-          appId: binding.appId,
-          secret,
-          ...(cookieTtlSec !== undefined ? { ttlSec: cookieTtlSec } : {}),
-          secure: cookieSecure,
-        });
-        res.setHeader("Set-Cookie", mint.setCookieHeader);
-        res.json({
-          sessionId: mint.sessionId,
-          appId: mint.appId,
-          expiresAt: mint.expiresAt,
-        });
-      });
-
-      // Console render-resource pair. The console's `GguiSessionViewer`
-      // runs the production iframe path:
-      //
-      //   1. GET /ggui/console/session-resource?session=<sessionId>
-      //      → returns a `ResourceContents` blob whose `text` IS the
-      //      production thin-shell HTML (`GGUI_RENDER_SHELL_HTML`,
-      //      byte-identical to what Claude Desktop fetches via MCP
-      //      `resources/read ui://ggui/render`). The shell does NOT
-      //      carry an inlined bootstrap — same as production.
-      //
-      //   2. GET /ggui/console/sessions/:sessionId/meta
-      //      → returns `{ "ai.ggui/render": McpAppAiGguiRenderMeta }` JSON.
-      //      The console forwards this to the iframe as the `_meta`
-      //      slice of a spec-canonical `ui/notifications/tool-result`
-      //      notification (per `docs/protocol/extensions/ai.ggui-meta.md`).
-      //
-      // Earlier iterations used a wrapped-shell path
-      // (`buildDevtoolSessionResourceHtml`); that is gone — the
-      // console now boots the same shell any conformant MCP Apps host
-      // loads.
-      //
-      // Named parties (both routes):
-      //   - console (SPA caller) — holds the same-origin cookie.
-      //   - mcp-server (this handler) — gates auth + scope; mints the
-      //     bootstrap on the bootstrap route.
-      //   - host wrapper (bootstrap forwarder; `<AppRenderer>` on web,
-      //     `<McpAppIframe>` on RN) — receives the bootstrap JSON and
-      //     forwards it as a `ui/notifications/tool-result` `_meta` slice.
-      //   - renderer bundle (inside the iframe) — runs the same boot
-      //     code path as production; reads the single `ai.ggui/render`
-      //     slice meta.
-      //
-      // Auth + scope obligations (both routes — uniform):
-      //   - Cookie-auth via `readDevtoolCookieFromHeaders` +
-      //     `verifyDevtoolCookie`. Invalid / missing → 401.
-      //   - Scope: `cookie.sessionId` MUST equal `?session=`. Cross-
-      //     render access with a valid cookie → 403.
-      //   - GguiSession existence + appId match: 404 / 403 respectively.
-      //   - The bootstrap route additionally requires `mintBootstrap`
-      //     (`mcpApps: true` at construction); 503 otherwise.
-      //
-      // Failure-mode taxonomy + observable violations are unchanged
-      // from earlier iterations; the wire shape is what changed.
-
-      /**
-       * Shared auth + scope gate for the two console render routes.
-       * Returns the verified `(sessionId, appId)` pair on success or
-       * `null` after writing an HTTP error response on failure.
-       *
-       * Internal — closure-scoped to the route block; not exported.
-       */
-      const gateDevtoolRenderRequest = async (
-        req: Request,
-        res: Response,
-        explicitSessionId?: string
-      ): Promise<{ sessionId: string; appId: string } | null> => {
-        const sessionIdRaw =
-          explicitSessionId !== undefined ? explicitSessionId : req.query["session"];
-        if (typeof sessionIdRaw !== "string" || sessionIdRaw.length === 0) {
-          res.status(400).json({
-            error: "invalid_request",
-            message:
-              "`render` query parameter (or :sessionId path parameter on the meta route) is required",
-          });
-          return null;
-        }
-        const rawCookie = readDevtoolCookieFromHeaders(req.headers);
-        if (!rawCookie) {
-          res.status(401).json({
-            error: "missing_cookie",
-            message: `${CONSOLE_COOKIE_NAME} cookie required (mint via POST /ggui/console/session-cookie first)`,
-          });
-          return null;
-        }
-        const claims = verifyDevtoolCookie(rawCookie, secret);
-        if (!claims) {
-          res.status(401).json({
-            error: "invalid_cookie",
-            message: "Console cookie is invalid, expired, or for another server",
-          });
-          return null;
-        }
-        if (claims.sessionId !== sessionIdRaw) {
-          res.status(403).json({
-            error: "cookie_session_mismatch",
-            message: `Console cookie is bound to render '${claims.sessionId}' but request targets '${sessionIdRaw}'`,
-          });
-          return null;
-        }
-        // GguiSession existence + appId match — even on the static-shell
-        // route we honestly answer 404 instead of leaking an HTML blob
-        // for a render the server doesn't know about.
-        let render: Awaited<ReturnType<GguiSessionStore["get"]>> = null;
-        if (renderStore) {
-          try {
-            render = await renderStore.get(claims.sessionId);
-          } catch (err) {
-            cookieLogger.error("render_resource_store_failed", {
-              error: String(err),
-              sessionId: claims.sessionId,
-            });
-            res.status(500).json({ error: "internal_error" });
-            return null;
-          }
-        }
-        if (!render) {
-          res.status(404).json({
-            error: "session_not_found",
-            message: `GguiSession '${claims.sessionId}' is not on this server`,
-          });
-          return null;
-        }
-        if (render.appId !== claims.appId) {
-          res.status(403).json({
-            error: "app_mismatch",
-            message: `Cookie bound to app '${claims.appId}' but render is on app '${render.appId}'`,
-          });
-          return null;
-        }
-        return { sessionId: claims.sessionId, appId: claims.appId };
-      };
-
-      // GET /ggui/console/session-resource?session=<sessionId>
-      // → production thin-shell HTML, wrapped as a ResourceContents
-      //   blob. NO inlined bootstrap — console fetches the bootstrap
-      //   separately (route below) and replies to the iframe's
-      //   `ui/initialize` postMessage with it.
-      app.get("/ggui/console/session-resource", async (req: Request, res: Response) => {
-        applyDevtoolSecurityHeaders(res);
-        res.setHeader("Content-Type", "application/json; charset=utf-8");
-        const verified = await gateDevtoolRenderRequest(req, res);
-        if (!verified) return;
-        res.status(200).json({
-          contents: [
-            {
-              uri: GGUI_RENDER_RESOURCE_URI,
-              mimeType: GGUI_RENDER_RESOURCE_MIME,
-              text: GGUI_RENDER_SHELL_HTML,
-            },
-          ],
-        });
-      });
-
-      // GET /ggui/console/sessions/:sessionId/meta
-      // → slice-envelope JSON (`{ "ai.ggui/render": {...} }`, the same
-      //   shape as the wire `_meta`). Required when the console is
-      //   hosting the renderer in a srcdoc iframe and needs to feed
-      //   the iframe a meta payload via `ui/initialize`. `mcpApps:
-      //   true` is required (mintWsToken/mintBootstrap presence) —
-      //   503 otherwise.
-      app.get("/ggui/console/sessions/:sessionId/meta", async (req: Request, res: Response) => {
-        applyDevtoolSecurityHeaders(res);
-        res.setHeader("Content-Type", "application/json; charset=utf-8");
-        const sessionIdFromPath = singleParam(req.params["sessionId"]);
-        const verified = await gateDevtoolRenderRequest(req, res, sessionIdFromPath);
-        if (!verified) return;
-        if (!mintBootstrap) {
-          res.status(503).json({
-            error: "mcp_apps_disabled",
-            message:
-              "renders/:sessionId/meta requires mcpApps: true on the server so the renderer can receive a valid WS auth token. Enable `mcpApps` on createGguiServer() and retry.",
-          });
-          return;
-        }
-        const minted = mintBootstrap(verified.sessionId, verified.appId);
-        // Console/srcdoc absolute-URL fix: `<McpAppIframe>`
-        // mounts the resource via `srcdoc`, so the iframe's URL
-        // is `about:srcdoc` and any relative URL would resolve
-        // against that, not the dev server. Rewrite the
-        // same-origin `runtimeUrl` to absolute based on the
-        // request host. The `wsUrl` minted at server-boot
-        // defaults to `ws://localhost/ws` — also rewrite that
-        // to the request-host's actual host:port when its
-        // hostname is `localhost`, so the iframe's WebSocket
-        // open lands on the same listener. Operators who
-        // configured a CDN / external `wsUrl` / `runtime.url`
-        // are passed through unchanged.
-        const requestHost = req.get("host") ?? "";
-        const absoluteRendererUrl = /^https?:\/\//i.test(runtimeBootstrapUrl)
-          ? runtimeBootstrapUrl
-          : `${req.protocol}://${requestHost}${runtimeBootstrapUrl}`;
-        let resolvedWsUrl = minted.wsUrl;
-        try {
-          const wsParsed = new URL(minted.wsUrl);
-          if (
-            (wsParsed.hostname === "localhost" || wsParsed.hostname === "127.0.0.1") &&
-            requestHost.length > 0
-          ) {
-            const wsScheme = req.protocol === "https" ? "wss" : "ws";
-            resolvedWsUrl = `${wsScheme}://${requestHost}${wsParsed.pathname}${wsParsed.search}`;
-          }
-        } catch {
-          // Malformed `wsUrl` — leave it as-is so the renderer
-          // surfaces the failure through its own bootstrap-failed
-          // envelope rather than us silently rewriting a string
-          // we don't understand.
-        }
-        // Content-addressable contract-validator bundle (#109) for
-        // the active render. The renderer iframe's strict CSP
-        // forbids the `new Function` codegen `ajv.compile()` needs,
-        // so the server compiles + writes the bundle to its
-        // CodeStore at render time and threads the URL here. The
-        // iframe fetches the URL + dynamic-imports to resolve
-        // validators. Best-effort: a missing bundle degrades to no
-        // client-side validation; server-side `assertActionContract`
-        // remains authoritative.
-        let renderContractHash: string | undefined;
-        let renderValidatorsUrl: string | undefined;
-        if (renderStore && opts.codeStore) {
-          try {
-            const stored = await renderStore.get(verified.sessionId);
-            if (
-              stored !== null &&
-              stored.render.type !== "mcpApps" &&
-              stored.render.type !== "system" &&
-              typeof stored.render.componentCode === "string" &&
-              stored.render.componentCode.length > 0
-            ) {
-              const bundle = await deriveContractBundle(stored.render);
-              if (bundle) {
-                await opts.codeStore.put(bundle.contractHash, bundle.bundleSource);
-                renderContractHash = bundle.contractHash;
-                const baseForValidators = opts.publicBaseUrl
-                  ? opts.publicBaseUrl.replace(/\/$/, "")
-                  : `${req.protocol}://${requestHost}`;
-                renderValidatorsUrl = `${baseForValidators}/contract/${bundle.contractHash}.js`;
-              }
-            }
-          } catch (err) {
-            cookieLogger.warn("render_meta_validators_failed", {
-              error: String(err),
-              sessionId: verified.sessionId,
-            });
-          }
-        }
-        // Slice-envelope response (Phase B: single ai.ggui/render
-        // slice) — same shape as the wire `_meta` and the inline
-        // `__GGUI_META__` global the `/r/<shortCode>` shell carries.
-        // GguiSessionViewer parses with `parseMcpAppAiGguiRenderMeta`.
-        const renderMeta: McpAppAiGguiRenderMeta = {
-          sessionId: verified.sessionId,
-          appId: verified.appId,
-          runtimeUrl: absoluteRendererUrl,
-          wsUrl: resolvedWsUrl,
-          wsToken: minted.token,
-          expiresAt: minted.expiresAt,
-          ...(renderContractHash !== undefined && renderValidatorsUrl !== undefined
-            ? {
-                contractHash: renderContractHash,
-                validatorsUrl: renderValidatorsUrl,
-              }
-            : {}),
-        };
-        res.status(200).json({
-          [MCP_APP_AI_GGUI_RENDER_META_KEY]: renderMeta,
-        });
-      });
-
-      // GET /ggui/console/session?session=<sessionId>
-      // → `{render, eventSequence}` JSON.
-      //
-      // Console-only observation surface for `<GguiSessionViewer>` to mount
-      // `<RenderInspector>`. The iframe owns the live WS subscription
-      // + the bootstrap token (single-use), so the OUTER console DOM
-      // has no live source for render data — without this endpoint
-      // the inspector can't render contract / test-action panels.
-      //
-      // Named parties:
-      //   - console SPA (`GguiSessionViewer`) — holds the same-origin
-      //     cookie minted by `POST /ggui/console/session-cookie`.
-      //   - mcp-server (this handler) — gates auth + scope, reads the
-      //     authoritative render from `renderStore`.
-      //
-      // Auth + scope: identical to render-resource / render-bootstrap
-      // (cookie-auth + sessionId match + appId match).
-      //
-      // Failure modes:
-      //   - 401 missing/invalid cookie · 403 cross-render/app · 404
-      //     unknown render · 500 store failure (all delegated to
-      //     `gateDevtoolRenderRequest`).
-      //   - 503 if `renderStore` is not wired (zero-config server).
-      //
-      // Shape note: Phase B collapsed the prior session-stack array to
-      // a single `GguiSession` row. The response now returns the resolved
-      // `GguiSession` directly; console narrows on `render.type` before
-      // passing into `<RenderInspector>` (which only accepts the
-      // ComponentGguiSession variant since the inspector reads actionSpec /
-      // streamSpec / propsSpec — fields McpAppsGguiSession doesn't carry).
-      app.get("/ggui/console/session", async (req: Request, res: Response) => {
-        applyDevtoolSecurityHeaders(res);
-        res.setHeader("Content-Type", "application/json; charset=utf-8");
-        const verified = await gateDevtoolRenderRequest(req, res);
-        if (!verified) return;
-        if (!renderStore) {
-          res.status(503).json({
-            error: "session_store_unavailable",
-            message:
-              "GguiSession observation requires renderChannel: true on the server so the render store is wired. Enable `renderChannel` on createGguiServer() and retry.",
-          });
-          return;
-        }
-        let stored: Awaited<ReturnType<GguiSessionStore["get"]>> = null;
-        try {
-          stored = await renderStore.get(verified.sessionId);
-        } catch (err) {
-          cookieLogger.error("render_store_failed", {
-            error: String(err),
-            sessionId: verified.sessionId,
-          });
-          res.status(500).json({ error: "internal_error" });
-          return;
-        }
-        if (!stored) {
-          // Race: gate verified existence above but the render
-          // could expire between calls. Honest 404.
-          res.status(404).json({
-            error: "session_not_found",
-            message: `GguiSession '${verified.sessionId}' is not on this server`,
-          });
-          return;
-        }
-        res.status(200).json({
-          render: stored.render,
-          eventSequence: stored.eventSequence,
-        });
-      });
-
-      // Bind cookieAuth into the render channel. Declared `let`
-      // above so createGguiSessionChannelServer can reference it below.
-      consoleCookieAuth = {
-        readCookie: readDevtoolCookieFromHeaders,
-        verify: (cookieValue: string) => verifyDevtoolCookie(cookieValue, secret),
-      };
-
-      // Reference the cookie name to keep the export alive for
-      // downstream consumers + lint. The name is the single source
-      // of truth; avoid duplicating the string anywhere.
-      cookieLogger.debug?.("console_cookie_ready", {
-        cookieName: CONSOLE_COOKIE_NAME,
+    // earlier guarantee shortCodeIndex + renderChannel are present
+    // and that the shared token secret was minted.
+    if (sessionCookieEnabled && sharedTokenSecret !== undefined && opts.shortCodeIndex) {
+      consoleCookieAuth = mountConsoleSessionRoutes({
+        app,
+        secret: sharedTokenSecret,
+        shortCodeIndex: opts.shortCodeIndex,
+        ...(sessionCookieConfig.ttlSec !== undefined
+          ? { cookieTtlSec: sessionCookieConfig.ttlSec }
+          : {}),
+        cookieSecure: sessionCookieConfig.secure === true,
+        ...(renderStore ? { renderStore } : {}),
+        ...(mintBootstrap ? { mintBootstrap } : {}),
+        runtimeBootstrapUrl,
+        ...(opts.codeStore ? { codeStore: opts.codeStore } : {}),
+        ...(opts.publicBaseUrl !== undefined ? { publicBaseUrl: opts.publicBaseUrl } : {}),
+        logger,
       });
     }
 
-    // OAuth client management (the console's "Connected Apps" surface).
-    // Mounted only when both console + OAuth are enabled — there's
-    // nothing to manage if OAuth is off, and the management surface
-    // belongs to the operator-facing console plane (not the public
-    // OAuth metadata endpoints). Same-origin posture: no bearer auth,
-    // matches sibling console routes (`/ggui/console/registry`,
-    // `/ggui/console/blueprints/cached/...`).
-    //
-    // GET  /ggui/console/oauth-clients         — list (oldest-first by createdAt)
-    // DELETE /ggui/console/oauth-clients/:id   — revoke (idempotent)
-    //
-    // Revoke caveat — see OAuthStorage.deleteClient JSDoc: revoke
-    // deletes the registration but doesn't invalidate in-flight
-    // access tokens (the current paste-key flow has access_token ===
-    // paired bearer).
+    // Connected-Apps management surface — see
+    // `./oauth-clients-routes.ts` for the list/revoke contract.
     if (oauthEnabled) {
-      app.get("/ggui/console/oauth-clients", async (_req, res) => {
-        applyDevtoolSecurityHeaders(res);
-        try {
-          const clients = await oauthStorage.listClients();
-          // Project to a wire shape: explicitly list every field we
-          // intend to expose so an unrelated `ClientRecord` field
-          // addition doesn't accidentally leak through this endpoint.
-          res.json({
-            clients: clients.map((c) => ({
-              clientId: c.clientId,
-              clientName: c.clientName ?? null,
-              redirectUris: c.redirectUris,
-              createdAt: c.createdAt,
-            })),
-          });
-        } catch (err) {
-          logger.warn("console_oauth_clients_list_failed", {
-            error: String(err),
-          });
-          res.status(500).json({
-            error: "list_failed",
-            message:
-              err instanceof Error
-                ? `Client list failed — ${err.message}`
-                : `Client list failed — ${String(err)}`,
-          });
-        }
-      });
-
-      app.delete("/ggui/console/oauth-clients/:clientId", async (req, res) => {
-        applyDevtoolSecurityHeaders(res);
-        const clientId = req.params["clientId"];
-        if (typeof clientId !== "string" || clientId.length === 0) {
-          res.status(400).json({
-            error: "missing_client_id",
-            message:
-              "clientId required in path segment (e.g. DELETE /ggui/console/oauth-clients/abc123).",
-          });
-          return;
-        }
-        try {
-          await oauthStorage.deleteClient(clientId);
-          // 204 whether the id was present or not — `deleteClient`
-          // is idempotent at the storage layer (matches DELETE
-          // /blueprints/cached/:id semantics).
-          res.status(204).end();
-        } catch (err) {
-          logger.warn("console_oauth_clients_delete_failed", {
-            error: String(err),
-            clientId,
-          });
-          res.status(500).json({
-            error: "delete_failed",
-            message:
-              err instanceof Error
-                ? `Client delete failed — ${err.message}`
-                : `Client delete failed — ${String(err)}`,
-          });
-        }
-      });
+      mountOAuthClientsRoutes({ app, oauthStorage, logger });
     }
 
-    // ── Admin-gated keys plane ─────────────────────────────────────
-    //
-    // POST /ggui/console/admin-login    — bearer → cookie exchange.
-    // GET  /ggui/console/keys           — list pairings + plaintext token.
-    // POST /ggui/console/keys           — mint a new pairing programmatically.
-    // DELETE /ggui/console/keys/:id     — revoke a pairing (idempotent).
-    //
-    // Why the gate exists: the keys plane renders plaintext bearer
-    // tokens minted by the pairing service. The persistence file
-    // (`~/.ggui/keys.json` typically) already stores them in plaintext
-    // — single-operator local-host threat model — so showing them in
-    // a same-origin admin page is a UX, not a posture, change. BUT
-    // operators expose `ggui serve` over Cloudflare tunnels for
-    // claude.ai connector use, which removes "URL is unreachable from
-    // the open internet" from the threat model. The admin token gates
-    // the keys plane against random URL discovery.
-    //
-    // Scope discipline: the gate covers `/ggui/console/keys*` +
-    // `/ggui/console/admin-login` ONLY. Other console routes
-    // (registry, renders, cached blueprints, oauth-clients) are not
-    // re-gated here — that's a separate audit slice. Adding a single-
-    // path-prefix middleware avoids re-litigating the whole console
-    // posture in one go.
-    //
-    // Auth shape: `Authorization: Bearer <admin-token>` header OR the
-    // `ggui_console_admin` cookie (HttpOnly, sameSite=Lax, Secure when
-    // the request arrived over TLS). Cookie is minted by
-    // POST /ggui/console/admin-login on a successful token paste.
+    // Admin-gated keys plane — see `./console-keys-routes.ts` for the
+    // threat model + gate scope discipline.
     if (resolvedAdminToken !== null && pairingService) {
-      const adminTokenForGate = resolvedAdminToken;
-      const pairingForKeys = pairingService;
-      const ADMIN_COOKIE_NAME = "ggui_console_admin";
-
-      const requestHasAdminAuth = (req: Request): boolean => {
-        // Header path — `Authorization: Bearer <token>`. Constant-time
-        // compare not needed: this is single-tenant local-host with a
-        // local network attacker model; the token also has 72 bits of
-        // entropy, so a timing-side-channel attack would still need
-        // ~2^36 attempts on average to materialize. Skip the cost.
-        const authHeader = req.headers["authorization"];
-        if (typeof authHeader === "string") {
-          const match = /^Bearer\s+(.+)$/i.exec(authHeader.trim());
-          if (match && match[1] === adminTokenForGate) return true;
-        }
-        // Cookie path — same name the admin-login route sets.
-        const cookieHeader = req.headers["cookie"];
-        if (typeof cookieHeader === "string") {
-          for (const raw of cookieHeader.split(";")) {
-            const trimmed = raw.trim();
-            const eq = trimmed.indexOf("=");
-            if (eq <= 0) continue;
-            const name = trimmed.slice(0, eq);
-            if (name !== ADMIN_COOKIE_NAME) continue;
-            const value = decodeURIComponent(trimmed.slice(eq + 1));
-            if (value === adminTokenForGate) return true;
-          }
-        }
-        return false;
-      };
-
-      // Same-origin posture for cookie minting: req.secure is true when
-      // the connecting socket is TLS, OR when an upstream proxy set
-      // `X-Forwarded-Proto: https` AND express trust-proxy is enabled.
-      // For zero-config local-host, trust-proxy is OFF and req.secure
-      // reflects the literal socket. Operators behind a tunnel with
-      // TLS termination at the edge get the cookie WITHOUT Secure
-      // (intended — the in-pod request is plaintext HTTP). Browsers
-      // still scope it to the origin via SameSite, which is the
-      // primary CSRF protection here; Secure is a defense-in-depth
-      // attribute, not load-bearing for this token.
-      const buildAdminCookie = (req: Request, value: string): string => {
-        const attrs = [
-          `${ADMIN_COOKIE_NAME}=${encodeURIComponent(value)}`,
-          "Path=/",
-          // 8-hour TTL — same posture as the console session cookie.
-          // Operators staying in the keys page longer than that just
-          // re-paste the admin token (printed on the boot banner).
-          "Max-Age=28800",
-          "SameSite=Lax",
-          "HttpOnly",
-        ];
-        if (req.secure) attrs.push("Secure");
-        return attrs.join("; ");
-      };
-
-      // POST /ggui/console/admin-login — bearer-paste → cookie exchange.
-      // No auth gate: the request body IS the credential. On match,
-      // we set the cookie and 204; on mismatch we 401. Pre-launch no-
-      // backcompat: there's no rate-limiter wired in — this is a
-      // local-host route, lock-out via wider posture (tunnel access
-      // control, Cloudflare WAF) belongs to the operator.
-      app.post("/ggui/console/admin-login", (req, res) => {
-        applyDevtoolSecurityHeaders(res);
-        const body = req.body as { token?: unknown } | undefined;
-        const candidate = typeof body?.token === "string" ? body.token : "";
-        if (candidate.length === 0 || candidate !== adminTokenForGate) {
-          res.status(401).json({ error: "invalid_token" });
-          return;
-        }
-        res.setHeader("Set-Cookie", buildAdminCookie(req, adminTokenForGate));
-        res.status(204).end();
-      });
-
-      // Path-prefix gate. `app.use(path, mw)` runs `mw` for every
-      // request whose path starts with `path` — express normalizes
-      // trailing slashes / sub-paths so `/keys/abc` + `/keys` both
-      // hit. We only mount the keys routes BELOW this so the gate is
-      // genuinely the only ingress.
-      app.use("/ggui/console/keys", (req, res, next) => {
-        if (requestHasAdminAuth(req)) return next();
-        applyDevtoolSecurityHeaders(res);
-        res.status(401).json({ error: "admin_auth_required" });
-      });
-
-      // GET /ggui/console/keys — list pairings + plaintext bearer.
-      // Wire shape: `{ keys: [{pairingId, deviceName, createdAt,
-      // lastUsedAt?, token}] }`. Plaintext exposure is intentional;
-      // see PairingWithToken JSDoc for the threat model.
-      app.get("/ggui/console/keys", async (_req, res) => {
-        applyDevtoolSecurityHeaders(res);
-        try {
-          const rows = await pairingForKeys.listPairingsWithTokens();
-          res.json({
-            keys: rows.map((row) => ({
-              pairingId: row.pairingId,
-              deviceName: row.deviceName,
-              createdAt: row.createdAt,
-              ...(row.lastUsedAt !== undefined ? { lastUsedAt: row.lastUsedAt } : {}),
-              token: row.token,
-            })),
-          });
-        } catch (err) {
-          logger.warn("console_keys_list_failed", {
-            error: String(err),
-          });
-          res.status(500).json({
-            error: "list_failed",
-            message:
-              err instanceof Error
-                ? `Keys list failed — ${err.message}`
-                : `Keys list failed — ${String(err)}`,
-          });
-        }
-      });
-
-      // POST /ggui/console/keys — mint a fresh pairing without
-      // round-tripping `initPairing` + `completePairing` from the SPA.
-      // We do both server-side here: (1) initPairing to get a code,
-      // (2) completePairing to consume it. Idiomatic for an admin-only
-      // surface — the operator doesn't need a 6-digit-code typed in,
-      // they're already authenticated by the admin token. Returns the
-      // full `PairingCompletion` so the SPA can show the plaintext
-      // bearer in a one-time copy callout.
-      app.post("/ggui/console/keys", async (req, res) => {
-        applyDevtoolSecurityHeaders(res);
-        const body = req.body as { deviceName?: unknown } | undefined;
-        const deviceName = typeof body?.deviceName === "string" ? body.deviceName.trim() : "";
-        if (deviceName.length === 0 || deviceName.length > 256) {
-          res.status(400).json({
-            error: "invalid_device_name",
-            message: "`deviceName` is required (non-empty string, ≤256 chars).",
-          });
-          return;
-        }
-        try {
-          const init = await pairingForKeys.initPairing();
-          const completion = await pairingForKeys.completePairing({
-            code: init.code,
-            deviceName,
-          });
-          res.json({
-            pairingId: completion.pairingId,
-            token: completion.token,
-            serverName: completion.serverName,
-            deviceName: completion.deviceName,
-          });
-        } catch (err) {
-          logger.warn("console_keys_mint_failed", {
-            error: String(err),
-          });
-          res.status(500).json({
-            error: "mint_failed",
-            message:
-              err instanceof Error
-                ? `Mint failed — ${err.message}`
-                : `Mint failed — ${String(err)}`,
-          });
-        }
-      });
-
-      // DELETE /ggui/console/keys/:pairingId — revoke (idempotent).
-      app.delete("/ggui/console/keys/:pairingId", async (req, res) => {
-        applyDevtoolSecurityHeaders(res);
-        const pairingId = req.params["pairingId"];
-        if (typeof pairingId !== "string" || pairingId.length === 0) {
-          res.status(400).json({
-            error: "missing_pairing_id",
-            message: "pairingId required in path segment (e.g. DELETE /ggui/console/keys/pair-1).",
-          });
-          return;
-        }
-        try {
-          await pairingForKeys.revokePairing(pairingId);
-          res.status(204).end();
-        } catch (err) {
-          logger.warn("console_keys_revoke_failed", {
-            error: String(err),
-            pairingId,
-          });
-          res.status(500).json({
-            error: "revoke_failed",
-            message:
-              err instanceof Error
-                ? `Revoke failed — ${err.message}`
-                : `Revoke failed — ${String(err)}`,
-          });
-        }
+      mountConsoleKeysRoutes({
+        app,
+        adminToken: resolvedAdminToken,
+        pairing: pairingService,
+        logger,
       });
     }
 
@@ -7696,619 +4997,41 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
       });
     }
 
-    // ──────────────────────────────────────────────────────────────────
-    // BYOK LLM-keys plane — gated /ggui/console/llm-keys. Two postures:
-    //
-    //   - `providerKeysGate: 'admin-token'` (default — OSS-personal):
-    //     gate accepts the admin bearer. Single global keyset; the
-    //     /settings UI lets the operator paste keys for everyone.
-    //   - `providerKeysGate: 'auth-adapter'` (multi-tenant): gate
-    //     calls the server's `AuthAdapter`. Each user's keys are
-    //     scoped by `providerKeyScope` (default: `userId`/`appId`).
-    //
-    // Wire shape (same in both gates):
-    //   GET    /ggui/console/llm-keys           — list providers + presence
-    //   POST   /ggui/console/llm-keys           — set { provider, key }
-    //   DELETE /ggui/console/llm-keys/:provider — clear (idempotent)
-    //
-    // Plaintext is NEVER returned on GET — unlike pairing tokens, an LLM
-    // key is a one-way paste (operator already has the key elsewhere; the
-    // server is just persisting it). The presence + source signal is
-    // enough for the /settings UI.
+    // BYOK LLM-keys plane — see `./console-llm-keys-routes.ts` for the
+    // two gate postures (admin-token vs auth-adapter) + the wire shape.
     const providerKeysGateMode: "admin-token" | "auth-adapter" =
       opts.providerKeysGate ?? "admin-token";
     const mountLlmKeysRoute =
       opts.providerKeys !== undefined &&
       (providerKeysGateMode === "auth-adapter" || resolvedAdminToken !== null);
     if (mountLlmKeysRoute && opts.providerKeys) {
-      const providerKeyStore = opts.providerKeys;
-      const adminTokenForLlm = resolvedAdminToken;
-      const defaultScope = (_req: Request, identity: AuthResult | null): string => {
-        if (identity) {
-          if (identity.identity.kind === "user") {
-            return identity.identity.userId;
-          }
-          if (identity.identity.kind === "app") {
-            return identity.identity.appId;
-          }
-        }
-        return "global";
-      };
-      const scopeFromRequest = opts.providerKeyScope ?? defaultScope;
-      const ADMIN_COOKIE_NAME_LLM = "ggui_console_admin";
-
-      // The LLM_PROVIDERS allowlist matches `LlmProvider` minus `bedrock`
-      // (which is IAM-based and never paste-resolvable — see byok-resolver
-      // PROVIDER_ENV_NAMES bedrock note). Order is the operator-facing
-      // display order: anthropic first since the OSS triad ships claude
-      // as the default model.
-      const LLM_PROVIDERS: ReadonlyArray<Exclude<LlmProvider, "bedrock">> = [
-        "anthropic",
-        "openai",
-        "google",
-        "openrouter",
-      ];
-
-      // Mirror of `byok-resolver.ts::PROVIDER_ENV_NAMES` — env-var name
-      // ordered list per provider, first non-empty wins. Mirrored rather
-      // than imported because `@ggui-ai/cli` is downstream of this
-      // package and we can't depend back the other direction.
-      const PROVIDER_ENV_NAMES: Readonly<
-        Record<Exclude<LlmProvider, "bedrock">, readonly string[]>
-      > = {
-        anthropic: ["ANTHROPIC_API_KEY"],
-        google: ["GOOGLE_API_KEY", "GEMINI_API_KEY"],
-        openai: ["OPENAI_API_KEY"],
-        openrouter: ["OPENROUTER_API_KEY"],
-      };
-
-      const requestHasAdminAuthLlm = (req: Request): boolean => {
-        if (adminTokenForLlm === null) return false;
-        const authHeader = req.headers["authorization"];
-        if (typeof authHeader === "string") {
-          const match = /^Bearer\s+(.+)$/i.exec(authHeader.trim());
-          if (match && match[1] === adminTokenForLlm) return true;
-        }
-        const cookieHeader = req.headers["cookie"];
-        if (typeof cookieHeader === "string") {
-          for (const raw of cookieHeader.split(";")) {
-            const trimmed = raw.trim();
-            const eq = trimmed.indexOf("=");
-            if (eq <= 0) continue;
-            const name = trimmed.slice(0, eq);
-            if (name !== ADMIN_COOKIE_NAME_LLM) continue;
-            const value = decodeURIComponent(trimmed.slice(eq + 1));
-            if (value === adminTokenForLlm) return true;
-          }
-        }
-        return false;
-      };
-
-      // Per-request identity stash. Populated by the gate when in
-      // 'auth-adapter' mode; left null under 'admin-token'. Route
-      // handlers read it via `getRequestIdentity(req)` so the scope
-      // resolver receives the resolved AuthResult without re-running
-      // `resolveIdentity`.
-      const llmKeysIdentityByRequest = new WeakMap<Request, AuthResult>();
-      const getRequestIdentity = (req: Request): AuthResult | null =>
-        llmKeysIdentityByRequest.get(req) ?? null;
-
-      // Path-prefix gate.
-      //
-      //   admin-token → same shape as /keys (Bearer admin OR
-      //                 ggui_console_admin cookie).
-      //   auth-adapter → calls `resolveIdentity(auth, req)`. `kind:'builder'`
-      //                  is rejected with 401 — the multi-tenant posture
-      //                  is meaningless without a real per-caller id.
-      app.use("/ggui/console/llm-keys", (req, res, next) => {
-        if (providerKeysGateMode === "admin-token") {
-          if (requestHasAdminAuthLlm(req)) return next();
-          applyDevtoolSecurityHeaders(res);
-          res.status(401).json({ error: "admin_auth_required" });
-          return;
-        }
-        // 'auth-adapter' — the multi-tenant gate.
-        resolveIdentity(auth, req)
-          .then((identity) => {
-            if (identity.identity.kind === "builder") {
-              applyDevtoolSecurityHeaders(res);
-              res.status(401).json({
-                error: "tenant_required",
-                message:
-                  "Multi-tenant /llm-keys requires an end-user or app identity. " +
-                  'The configured AuthAdapter resolved kind:"builder" — pair a ' +
-                  'real user/app bearer or use providerKeysGate:"admin-token".',
-              });
-              return;
-            }
-            llmKeysIdentityByRequest.set(req, identity);
-            next();
-          })
-          .catch((err: unknown) => {
-            applyDevtoolSecurityHeaders(res);
-            if (err instanceof UnauthenticatedError) {
-              res.status(401).json({ error: "unauthenticated" });
-              return;
-            }
-            logger.warn("console_llm_keys_auth_failed", { error: String(err) });
-            res.status(500).json({ error: "auth_unexpected_error" });
-          });
-      });
-
-      // GET /ggui/console/llm-keys — list providers + presence.
-      // Each row reports:
-      //   - name:       'anthropic' | 'openai' | 'google' | 'openrouter'
-      //   - configured: boolean — true when EITHER env OR file has a key
-      //   - source:     'env' | 'file' | null — env wins on collision
-      //   - envName:    which env var fired (only present when source='env')
-      //   - envNames:   the env-var names this provider accepts
-      //                 (informational — the /settings UI shows them so
-      //                 operators know they can `export` instead of pasting)
-      app.get("/ggui/console/llm-keys", async (req, res) => {
-        applyDevtoolSecurityHeaders(res);
-        try {
-          const scope = scopeFromRequest(req, getRequestIdentity(req));
-          const filePresent = new Set(await providerKeyStore.listProviders(scope));
-          // Build rows with an optional 12-char prefix preview so the
-          // operator can confirm WHICH key is loaded without exposing
-          // the secret. 12 chars covers the discriminating prefix
-          // (`sk-ant-api03`, `sk-ant-oat01`, `sk-or-v1-…`, etc.) while
-          // staying safely under the entropy floor — these prefixes
-          // are not secret on their own.
-          const rows = await Promise.all(
-            LLM_PROVIDERS.map(async (provider) => {
-              const envNames = PROVIDER_ENV_NAMES[provider];
-              let envHit: string | undefined;
-              let envValue: string | undefined;
-              for (const name of envNames) {
-                const value = process.env[name];
-                if (value !== undefined && value.length > 0) {
-                  envHit = name;
-                  envValue = value;
-                  break;
-                }
-              }
-              const inFile = filePresent.has(provider);
-              const source: "env" | "file" | null =
-                envHit !== undefined ? "env" : inFile ? "file" : null;
-              let keyPreview: string | undefined;
-              if (envValue !== undefined) {
-                keyPreview = envValue.slice(0, 12);
-              } else if (inFile) {
-                try {
-                  const ref = await providerKeyStore.get(scope, provider);
-                  if (ref) keyPreview = ref.key.slice(0, 12);
-                } catch {
-                  // Best-effort — preview is advisory; never block the GET.
-                }
-              }
-              return {
-                name: provider,
-                configured: source !== null,
-                source,
-                ...(envHit !== undefined ? { envName: envHit } : {}),
-                envNames: [...envNames],
-                inFile,
-                ...(keyPreview !== undefined ? { keyPreview } : {}),
-              };
-            })
-          );
-          res.json({
-            providers: rows,
-            scope,
-          });
-        } catch (err) {
-          logger.warn("console_llm_keys_list_failed", {
-            error: String(err),
-          });
-          res.status(500).json({
-            error: "list_failed",
-            message:
-              err instanceof Error
-                ? `LLM keys list failed — ${err.message}`
-                : `LLM keys list failed — ${String(err)}`,
-          });
-        }
-      });
-
-      // POST /ggui/console/llm-keys — set a provider's key.
-      // Body: { provider: 'anthropic'|'openai'|..., key: string }.
-      // Returns: { provider, source: 'file', envOverridden: boolean }.
-      // `envOverridden: true` means the operator pasted a key but env
-      // var also set — the resolver still picks env. The /settings UI
-      // surfaces this so operators don't think their paste is in effect.
-      app.post("/ggui/console/llm-keys", async (req, res) => {
-        applyDevtoolSecurityHeaders(res);
-        const body = req.body as { provider?: unknown; key?: unknown } | undefined;
-        const provider = typeof body?.provider === "string" ? body.provider : "";
-        const key = typeof body?.key === "string" ? body.key.trim() : "";
-        if (!LLM_PROVIDERS.includes(provider as never)) {
-          res.status(400).json({
-            error: "invalid_provider",
-            message: `provider must be one of ${LLM_PROVIDERS.join(", ")}.`,
-          });
-          return;
-        }
-        if (key.length === 0 || key.length > 4096) {
-          res.status(400).json({
-            error: "invalid_key",
-            message: "`key` is required (non-empty string, ≤4096 chars).",
-          });
-          return;
-        }
-        try {
-          const typedProvider = provider as Exclude<LlmProvider, "bedrock">;
-          const scope = scopeFromRequest(req, getRequestIdentity(req));
-          await providerKeyStore.set(scope, typedProvider, key);
-          const envNames = PROVIDER_ENV_NAMES[typedProvider];
-          let envOverride: string | undefined;
-          for (const name of envNames) {
-            const value = process.env[name];
-            if (value !== undefined && value.length > 0) {
-              envOverride = name;
-              break;
-            }
-          }
-          res.json({
-            provider: typedProvider,
-            source: "file" as const,
-            envOverridden: envOverride !== undefined,
-            ...(envOverride !== undefined ? { envName: envOverride } : {}),
-          });
-        } catch (err) {
-          logger.warn("console_llm_keys_set_failed", {
-            error: String(err),
-            provider,
-          });
-          res.status(500).json({
-            error: "set_failed",
-            message:
-              err instanceof Error
-                ? `LLM key set failed — ${err.message}`
-                : `LLM key set failed — ${String(err)}`,
-          });
-        }
-      });
-
-      // DELETE /ggui/console/llm-keys/:provider — clear (idempotent).
-      // 204 even when the key wasn't set; mirrors `ProviderKeyStore.delete`
-      // contract. NEVER touches env — the operator owns env separately.
-      app.delete("/ggui/console/llm-keys/:provider", async (req, res) => {
-        applyDevtoolSecurityHeaders(res);
-        const provider = req.params["provider"];
-        if (!LLM_PROVIDERS.includes(provider as never)) {
-          res.status(400).json({
-            error: "invalid_provider",
-            message: `provider must be one of ${LLM_PROVIDERS.join(", ")}.`,
-          });
-          return;
-        }
-        try {
-          const typedProvider = provider as Exclude<LlmProvider, "bedrock">;
-          const scope = scopeFromRequest(req, getRequestIdentity(req));
-          await providerKeyStore.delete(scope, typedProvider);
-          res.status(204).end();
-        } catch (err) {
-          logger.warn("console_llm_keys_delete_failed", {
-            error: String(err),
-            provider,
-          });
-          res.status(500).json({
-            error: "delete_failed",
-            message:
-              err instanceof Error
-                ? `LLM key delete failed — ${err.message}`
-                : `LLM key delete failed — ${String(err)}`,
-          });
-        }
-      });
-
-      // POST /ggui/console/llm-keys/:provider/probe — auth-validation health
-      // probe for the configured key. Hits each provider's cheapest
-      // auth-checking endpoint with a 5s timeout. Status code is always
-      // 200 — the `ok` flag carries the verdict so the UI can paint a dot
-      // without branching on HTTP status. NEVER returns or logs the key
-      // value (latency + ok-flag + provider name only).
-      const probeProvider = async (
-        provider: Exclude<LlmProvider, "bedrock">,
-        key: string
-      ): Promise<{
-        ok: boolean;
-        latencyMs: number;
-        error?: string;
-      }> => {
-        const start = Date.now();
-        const ac = new AbortController();
-        const timer = setTimeout(() => {
-          ac.abort();
-        }, 5000);
-        try {
-          let url: string;
-          const headers: Record<string, string> = {};
-          if (provider === "anthropic") {
-            url = "https://api.anthropic.com/v1/models?limit=1";
-            headers["x-api-key"] = key;
-            headers["anthropic-version"] = "2023-06-01";
-          } else if (provider === "openai") {
-            url = "https://api.openai.com/v1/models";
-            headers["Authorization"] = `Bearer ${key}`;
-          } else if (provider === "google") {
-            // Google uses query-param key auth — no Authorization header.
-            url = `https://generativelanguage.googleapis.com/v1beta/models?pageSize=1&key=${encodeURIComponent(key)}`;
-          } else {
-            // openrouter — auth/key endpoint validates without listing.
-            url = "https://openrouter.ai/api/v1/auth/key";
-            headers["Authorization"] = `Bearer ${key}`;
-          }
-          const res = await globalThis.fetch(url, {
-            method: "GET",
-            headers,
-            signal: ac.signal,
-          });
-          const latencyMs = Date.now() - start;
-          if (res.ok) {
-            return { ok: true, latencyMs };
-          }
-          let detail = "";
-          try {
-            const body = (await res.json()) as {
-              error?: unknown;
-              message?: unknown;
-            };
-            const errField = body.error;
-            const errMessage =
-              typeof errField === "string"
-                ? errField
-                : errField !== null &&
-                    typeof errField === "object" &&
-                    "message" in errField &&
-                    typeof (errField as { message?: unknown }).message === "string"
-                  ? (errField as { message: string }).message
-                  : typeof body.message === "string"
-                    ? body.message
-                    : "";
-            if (errMessage.length > 0) detail = ` ${errMessage}`;
-          } catch {
-            // Non-JSON body — error code alone is enough for the dot.
-          }
-          return {
-            ok: false,
-            latencyMs,
-            error: `HTTP ${res.status}${detail}`.slice(0, 200),
-          };
-        } catch (err) {
-          const latencyMs = Date.now() - start;
-          return {
-            ok: false,
-            latencyMs,
-            error: String(err).slice(0, 200),
-          };
-        } finally {
-          clearTimeout(timer);
-        }
-      };
-
-      app.post("/ggui/console/llm-keys/:provider/probe", async (req, res) => {
-        applyDevtoolSecurityHeaders(res);
-        const provider = req.params["provider"];
-        if (!LLM_PROVIDERS.includes(provider as never)) {
-          res.status(400).json({
-            error: "invalid_provider",
-            message: `provider must be one of ${LLM_PROVIDERS.join(", ")}.`,
-          });
-          return;
-        }
-        try {
-          const typedProvider = provider as Exclude<LlmProvider, "bedrock">;
-          // Resolve env-first-then-file, mirroring the GET handler's
-          // source rule. Env wins on collision so the probe matches what
-          // the generation pipeline would actually send.
-          const envNames = PROVIDER_ENV_NAMES[typedProvider];
-          let resolvedKey: string | null = null;
-          for (const name of envNames) {
-            const value = process.env[name];
-            if (value !== undefined && value.length > 0) {
-              resolvedKey = value;
-              break;
-            }
-          }
-          if (resolvedKey === null) {
-            const scope = scopeFromRequest(req, getRequestIdentity(req));
-            const ref = await providerKeyStore.get(scope, typedProvider);
-            if (ref !== null && ref.key.length > 0) {
-              resolvedKey = ref.key;
-            }
-          }
-          if (resolvedKey === null) {
-            res.status(400).json({ ok: false, error: "not_configured" });
-            return;
-          }
-          const result = await probeProvider(typedProvider, resolvedKey);
-          logger.info("console_llm_keys_probe", {
-            provider: typedProvider,
-            ok: result.ok,
-            latencyMs: result.latencyMs,
-          });
-          res.json(result);
-        } catch (err) {
-          logger.warn("console_llm_keys_probe_failed", {
-            error: String(err),
-            provider,
-          });
-          res.status(500).json({
-            error: "probe_failed",
-            message:
-              err instanceof Error
-                ? `LLM key probe failed — ${err.message}`
-                : `LLM key probe failed — ${String(err)}`,
-          });
-        }
+      mountConsoleLlmKeysRoutes({
+        app,
+        providerKeys: opts.providerKeys,
+        gateMode: providerKeysGateMode,
+        adminToken: resolvedAdminToken,
+        auth,
+        ...(opts.providerKeyScope ? { scopeFromRequest: opts.providerKeyScope } : {}),
+        logger,
       });
     }
 
-    if (existsSync(consoleDistDir)) {
-      // Read + stamp `<meta name="ggui-mode" content="dev|prod">` into
-      // the SPA's `<head>` once at boot. The SPA's `mode.ts` reads the
-      // meta synchronously on first paint so `TopNav` renders the
-      // `/devtools` link without a `/info` round-trip flicker. Mode
-      // changes require a server restart — same shape as every other
-      // `CreateGguiServerOptions` field, no live-toggle ceremony.
-      const indexPath = path.join(consoleDistDir, "index.html");
-      const META_TAG = `<meta name="ggui-mode" content="${mode}">`;
-      let indexHtml: string;
-      try {
-        const raw = readFileSync(indexPath, "utf-8");
-        // Inject right after `<head>` so the meta is available before
-        // any subsequent `<script>` tag executes. Idempotent: if a
-        // previous build somehow already inlined the meta, the
-        // injection still produces a valid (duplicate but harmless)
-        // tag — `mode.ts` reads the first hit.
-        indexHtml = raw.includes("<head>")
-          ? raw.replace("<head>", `<head>${META_TAG}`)
-          : raw.replace(/^/, `${META_TAG}\n`);
-      } catch (err) {
-        logger.warn("console_index_read_failed", {
-          path: indexPath,
-          error: String(err),
-        });
-        indexHtml = `<!doctype html><html><head>${META_TAG}</head><body></body></html>`;
-      }
-      const sendConsoleHtml = (res: Response): void => {
-        applyDevtoolSecurityHeaders(res);
-        res.type("text/html").send(indexHtml);
-      };
-
-      // Welcome HTML — server-rendered landing for `consolePath === '/'`
-      // when the operator wires `welcomePage`. Identifies who runs
-      // the server (operator block; entirely hidden when unset),
-      // describes the public deep-link surfaces, and offers the
-      // operator-login affordance. No JS, no SPA mount, same security
-      // headers as `sendConsoleHtml`.
-      const welcomePageOpts = opts.welcomePage;
-      const welcomeEnabled = welcomePageOpts !== undefined && consolePath === "/";
-      const sendWelcomeHtml = welcomeEnabled
-        ? (res: Response): void => {
-            applyDevtoolSecurityHeaders(res);
-            res.type("text/html").send(renderWelcomeHtml(welcomePageOpts, info.name));
-          }
-        : null;
-
-      // Onboarding redirect — must run BEFORE express.static, which
-      // would otherwise serve `index.html` for `GET /` directly and
-      // never give the SPA fallback (or this redirect) a chance.
-      const landingRedirectFn =
-        typeof opts.console === "object" ? opts.console.landingRedirect : undefined;
-      app.get(consolePath, (req, res, next) => {
-        // Static middleware fires on the trailing-slash variant when
-        // consolePath !== '/'. Both shapes route here.
-        if (req.path !== consolePath && req.path !== `${consolePath}/`) {
-          return next();
-        }
-        if (landingRedirectFn) {
-          const target = landingRedirectFn();
-          if (target && target !== req.path) {
-            res.redirect(302, target);
-            return;
-          }
-        }
-        if (sendWelcomeHtml) {
-          sendWelcomeHtml(res);
-          return;
-        }
-        sendConsoleHtml(res);
-      });
-      app.use(
-        consolePath,
-        express.static(consoleDistDir, {
-          // index:false — explicit handler above owns `/` so the meta
-          // tag gets injected. Without this, express.static would
-          // race the handler and sometimes serve the raw file.
-          index: false,
-          // Short cache — operators iterating on their server want
-          // fresh copies after a rebuild; production-hardening
-          // (etag, long-term caching for /assets/*) is a slice-3 polish
-          // concern.
-          maxAge: 0,
-          fallthrough: true,
-          // Attach the console security header set to every
-          // static response. `setHeaders` runs for successful hits
-          // (HTML + JS + CSS + asset 200s); misses that fall through
-          // to the SPA fallback below are covered by the fallback's
-          // explicit `applyDevtoolSecurityHeaders` call.
-          setHeaders: applyDevtoolSecurityHeaders,
-        })
-      );
-      // Admin-HTML gate. The SPA's `/admin/*` and `/devtools/*` zones
-      // are operator-only — without this gate, every admin page is a
-      // GET away from anyone who guesses the path. The corresponding
-      // JSON APIs already gate at `/ggui/console/keys`, but the SPA
-      // shell itself was unauthenticated. Mounted only when the gate
-      // shape is available (admin token resolved + closure built).
-      //
-      // 302 to `/admin-login?next=<encoded-path>` on miss — the login
-      // page reads `next` from the query string and bounces back after
-      // a successful token paste. No client-side cookie set here; the
-      // existing `POST /ggui/console/admin-login` route owns minting.
-      //
-      // Scope:
-      //   - GATED: `/admin/*`, `/devtools/*`
-      //   - UNGATED: `/admin-login`, `/s/*`, `/preview/*`, `/` (welcome
-      //     when wired, SPA index otherwise)
-      //
-      // The welcome page (`/`) is intentionally public — it's the
-      // operator-identification surface, not an admin tool. Public
-      // deep-link surfaces stay reachable: a render viewer URL
-      // `/s/<shortCode>` and a blueprint preview URL `/preview/<id>`
-      // are how end-users / blueprint authors land on the server.
-      if (requestHasAdminAuthShared !== null) {
-        const adminAuth = requestHasAdminAuthShared;
-        app.get(/^\/(admin|devtools)(\/.*)?$/, (req, res, next) => {
-          if (req.path === "/admin-login") return next();
-          if (adminAuth(req)) return next();
-          applyDevtoolSecurityHeaders(res);
-          const next_ = encodeURIComponent(req.originalUrl || req.path);
-          res.redirect(302, `/admin-login?next=${next_}`);
-        });
-      }
-
-      // SPA fallback: the console client owns client-side routes
-      // (`/`, `/s/<shortCode>`, `/admin/*`, `/devtools/*`). An unknown
-      // sub-path under the mount must serve the rewritten
-      // `index.html` so the React router takes over.
-      //
-      // Express 5 / path-to-regexp v8 rejects the bare `'*'` and
-      // `'foo/*'` wildcard strings that worked in v6; named splats
-      // (`{*splat}`) or RegExp patterns are required. Using RegExp
-      // here matches the admin-gate pattern at L7738 above and
-      // avoids the parser-version churn.
-      const spaFallbackPattern =
-        consolePath === "/"
-          ? /^\/.*$/
-          : new RegExp(`^${consolePath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}/.*$`);
-      app.get(spaFallbackPattern, (req, res, next) => {
-        // Only fallback for GET of non-asset, non-API paths.
-        // `express.static` already served any asset that exists;
-        // an `/assets/foo.js` that doesn't exist SHOULD 404 rather
-        // than returning HTML.
-        if (req.path.startsWith("/ggui/")) return next();
-        if (req.path.startsWith(`${consolePath === "/" ? "" : consolePath}/assets/`)) {
-          return next();
-        }
-        sendConsoleHtml(res);
-      });
-    } else {
-      logger.warn("console_dist_missing", {
-        distDir: consoleDistDir,
-        hint: "Run `pnpm --filter @ggui-ai/console build` to produce the static bundle. Serving 503 from the mount point until the bundle exists.",
-      });
-      app.use(consolePath, (_req, res) => {
-        applyDevtoolSecurityHeaders(res);
-        res
-          .status(503)
-          .type("text/plain")
-          .send("console bundle not built. Run:\n  pnpm --filter @ggui-ai/console build\n");
-      });
-    }
+    // Static bundle + SPA serving — see `./console-static-routes.ts`
+    // for the mode-meta injection, welcome page, admin-HTML gate, and
+    // SPA-fallback contracts.
+    mountConsoleStaticRoutes({
+      app,
+      consolePath,
+      consoleDistDir,
+      mode,
+      serverName: info.name,
+      ...(opts.welcomePage !== undefined ? { welcomePage: opts.welcomePage } : {}),
+      ...(consoleConfig.landingRedirect !== undefined
+        ? { landingRedirect: consoleConfig.landingRedirect }
+        : {}),
+      requestHasAdminAuth: requestHasAdminAuthShared,
+      logger,
+    });
   }
 
   // Live-channel render endpoint. Defaults to disabled so consumers who
@@ -8504,24 +5227,6 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
   };
 }
 
-/**
- * 18-char URL-safe shortCode for `POST /ggui/console/blueprint/:id/try`
- * — visually distinct from the 16-char render-minted shortCodes in
- * `@ggui-ai/mcp-server-handlers/renders/render.ts` so operators
- * reading logs can tell a try-live render from an agent-rendered one
- * at a glance. Same confusable-free alphabet
- * (`[a-z0-9]` minus `1lI0Oo`) so the code stays hand-typable. Entropy
- * ≈ 18 × log₂(31) ≈ 89 bits.
- */
-function generateTryLiveShortCode(): string {
-  const alphabet = "abcdefghjkmnpqrstuvwxyz23456789";
-  const bytes = randomBytes(18);
-  let out = "";
-  for (let i = 0; i < 18; i += 1) {
-    out += alphabet[bytes[i] % alphabet.length];
-  }
-  return out;
-}
 
 /**
  * Build the {@link OAuthConfig.validateResource} callback from the
@@ -8573,29 +5278,3 @@ function buildResourceValidator(opts: {
   };
 }
 
-/**
- * Resolve the resource path that `WWW-Authenticate` should point at
- * for the current request. Per-app `/mcp` requests
- * get `${pathPrefix}/${appId}` so RFC 9728 discovery resolves to the
- * per-app metadata; universal-route requests get `''` which collapses
- * back to the universal `${issuer}/.well-known/oauth-protected-resource`.
- *
- * Inputs:
- *   - `req` — the failed-auth Express request. We read `req.params`
- *     to detect the matched per-app route, falling through to the
- *     universal case on miss.
- *   - `opts` — full options bundle so we can read `perAppRouting`
- *     (paramName + pathPrefix) without threading a separate config arg.
- *
- * Defense in depth: even when `perAppRouting` is configured, we
- * reject empty or whitespace-only `appId` values rather than emitting
- * an obviously-wrong `${pathPrefix}//.well-known/...` URL — falling
- * back to universal is the safer behavior.
- */
-function resolveWwwAuthResourcePath(req: Request, opts: CreateGguiServerOptions): string {
-  if (opts.perAppRouting === undefined) return "";
-  const { paramName, pathPrefix = "" } = opts.perAppRouting;
-  const appId = req.params[paramName];
-  if (typeof appId !== "string" || appId.length === 0) return "";
-  return `${pathPrefix}/${appId}`;
-}

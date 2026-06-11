@@ -343,19 +343,6 @@ importers:
         specifier: ^3.0.0
         version: 3.2.4(@types/node@24.12.2)(happy-dom@20.9.0)(jsdom@25.0.1)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3)
 
-  packages/chat-self-hosted:
-    dependencies:
-      '@ggui-ai/protocol':
-        specifier: workspace:*
-        version: link:../protocol
-    devDependencies:
-      typescript:
-        specifier: ^5.0.0
-        version: 5.9.3
-      vitest:
-        specifier: ^3.0.0
-        version: 3.2.4(@types/node@24.12.4)(happy-dom@20.9.0)(jsdom@25.0.1)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3)
-
   packages/console:
     dependencies:
       '@ggui-ai/design':
@@ -610,9 +597,6 @@ importers:
 
   packages/ggui-cli:
     dependencies:
-      '@aws-sdk/client-cognito-identity-provider':
-        specifier: ^3.600.0
-        version: 3.1049.0
       '@ggui-ai/agent-runtime':
         specifier: workspace:*
         version: link:../agent-runtime
@@ -1017,18 +1001,6 @@ importers:
       vitest:
         specifier: ^3.0.0
         version: 3.2.4(@types/node@24.12.2)(happy-dom@20.9.0)(jsdom@25.0.1)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3)
-
-  packages/predefined:
-    devDependencies:
-      ajv:
-        specifier: ^8.17.1
-        version: 8.20.0
-      esbuild:
-        specifier: ^0.25.0
-        version: 0.25.12
-      vitest:
-        specifier: ^3.0.0
-        version: 3.2.4(@types/node@24.12.4)(happy-dom@20.9.0)(jsdom@25.0.1)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3)
 
   packages/preview-a2ui:
     dependencies:
@@ -1727,10 +1699,6 @@ packages:
 
   '@aws-sdk/client-bedrock-runtime@3.1038.0':
     resolution: {integrity: sha512-oGiqs9v9WzPOdv7PDdm9iPibHgrbDvCDyNg43wFZn2PiiEUisFM+xUP2CRMsj41SmwZPhohmZkXiUu1+MghbAQ==}
-    engines: {node: '>=20.0.0'}
-
-  '@aws-sdk/client-cognito-identity-provider@3.1049.0':
-    resolution: {integrity: sha512-XiGPYS1a6C7zdW/msza5dnYqHP+/J8hSWtvOf4GXZF+Uxpsl3E1UTcVTWnAOep74iAazLg+97OJYuqDb78k2Vg==}
     engines: {node: '>=20.0.0'}
 
   '@aws-sdk/client-cognito-identity@3.1038.0':
@@ -9136,19 +9104,6 @@ snapshots:
     transitivePeerDependencies:
       - aws-crt
 
-  '@aws-sdk/client-cognito-identity-provider@3.1049.0':
-    dependencies:
-      '@aws-crypto/sha256-browser': 5.2.0
-      '@aws-crypto/sha256-js': 5.2.0
-      '@aws-sdk/core': 3.974.12
-      '@aws-sdk/credential-provider-node': 3.972.43
-      '@aws-sdk/types': 3.973.8
-      '@smithy/core': 3.24.3
-      '@smithy/fetch-http-handler': 5.4.3
-      '@smithy/node-http-handler': 4.7.3
-      '@smithy/types': 4.14.2
-      tslib: 2.8.1
-
   '@aws-sdk/client-cognito-identity@3.1038.0':
     dependencies:
       '@aws-crypto/sha256-browser': 5.2.0
@@ -10938,7 +10893,7 @@ snapshots:
   '@mikro-orm/mariadb@6.6.13(@mikro-orm/core@6.6.13)(better-sqlite3@12.9.0)(pg@8.20.0)':
     dependencies:
       '@mikro-orm/core': 6.6.13
-      '@mikro-orm/knex': 6.6.14(@mikro-orm/core@6.6.13)(better-sqlite3@12.9.0)(mariadb@3.4.5)(pg@8.20.0)(sqlite3@5.1.7)
+      '@mikro-orm/knex': 6.6.14(@mikro-orm/core@6.6.13)(better-sqlite3@12.9.0)(mariadb@3.4.5)(mysql2@3.20.0(@types/node@22.19.15))(pg@8.20.0)
       mariadb: 3.4.5
     transitivePeerDependencies:
       - better-sqlite3
@@ -10992,7 +10947,7 @@ snapshots:
   '@mikro-orm/postgresql@6.6.13(@mikro-orm/core@6.6.13)(better-sqlite3@12.9.0)(mariadb@3.4.5)':
     dependencies:
       '@mikro-orm/core': 6.6.13
-      '@mikro-orm/knex': 6.6.14(@mikro-orm/core@6.6.13)(better-sqlite3@12.9.0)(mariadb@3.4.5)(pg@8.20.0)(sqlite3@5.1.7)
+      '@mikro-orm/knex': 6.6.14(@mikro-orm/core@6.6.13)(better-sqlite3@12.9.0)(mariadb@3.4.5)(mysql2@3.20.0(@types/node@22.19.15))(pg@8.20.0)
       pg: 8.20.0
       postgres-array: 3.0.4
       postgres-date: 2.1.0

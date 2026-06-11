@@ -239,8 +239,6 @@ export class BenchmarkRunner {
     // success and failure paths (including catch, which the try's
     // local bindings don't reach) can emit complete results.
     const floor: BenchmarkFloor = variant.floor ?? DEFAULT_BENCHMARK_FLOOR;
-    const predefinedToolAvailable = floor === 'hosted';
-    let predefinedToolCalls = 0;
 
     // Resolve generator slug ahead of time so every return path
     // (adapter-missing, generator-missing, success, catch) can record
@@ -260,8 +258,6 @@ export class BenchmarkRunner {
         timestamp: new Date().toISOString(),
         floor,
         pathUsage: {
-          predefinedToolAvailable,
-          predefinedToolCalls,
           capHit: false,
         } satisfies PathUsageMetrics,
         generator: generatorSlug,
@@ -301,8 +297,6 @@ export class BenchmarkRunner {
           timestamp: new Date().toISOString(),
           floor,
           pathUsage: {
-            predefinedToolAvailable,
-            predefinedToolCalls,
             capHit: false,
           } satisfies PathUsageMetrics,
           generator: generatorSlug,
@@ -332,8 +326,6 @@ export class BenchmarkRunner {
         timestamp: new Date().toISOString(),
         floor,
         pathUsage: {
-          predefinedToolAvailable,
-          predefinedToolCalls,
           capHit: false,
         } satisfies PathUsageMetrics,
         generator: generatorSlug,
@@ -363,44 +355,18 @@ export class BenchmarkRunner {
       // prompt context block here.
 
       // ── Floor resolution (OSS vs hosted, v0 surface) ────
-      // Today's ONLY active divergence: hosted floor wires the
-      // `get_predefined_components` tool; OSS floor does not. Every
-      // other hosted/OSS divergence (blueprint-finder wiring, preview
-      // preamble, model-routing overrides, etc.) is reserved for later
-      // slices — when they land, they branch on `floor` here.
-      // See `./floor.md` for the full caveat list.
-      // `floor`, `predefinedToolAvailable`, `predefinedToolCalls` are
-      // hoisted to the method scope above so both catch + the
-      // adapter-missing early return can surface them.
+      // Floors currently share one tool wiring — every hosted/OSS
+      // divergence (blueprint-finder wiring, preview preamble,
+      // model-routing overrides, etc.) is reserved for later slices —
+      // when they land, they branch on `floor` here. See `./floor.md`
+      // for the full caveat list.
 
       // Build tools WITH contracts so self_check and compile_component can validate
       // Pass commit.props as sampleProps for render smoke test (realistic data, not synthesized)
       const allTools = createGeneratorTools({
-        enablePredefinedComponents: predefinedToolAvailable,
         contract,
         sampleProps: commit.props as JsonObject | undefined,
       });
-
-      // ── Path-usage observability ────────────────────────
-      // Wrap the `get_predefined_components` tool (when present) so
-      // the runner can count how many times the agent consulted it.
-      // This is the primary signal that makes the floor split
-      // interpretable — without it, two identical-looking numbers on
-      // the hosted floor could hide "agent never consulted the tool"
-      // vs "agent consulted it every run but still regenerated."
-      if (predefinedToolAvailable) {
-        const idx = allTools.findIndex((t) => t.name === 'get_predefined_components');
-        if (idx !== -1) {
-          const original = allTools[idx];
-          allTools[idx] = {
-            ...original,
-            handler: async (args) => {
-              predefinedToolCalls += 1;
-              return original.handler(args);
-            },
-          };
-        }
-      }
 
       // Pre-fetch context (primitives + design system) into the prompt
       // so all models have baseline context even if planner doesn't call tools.
@@ -611,8 +577,6 @@ export class BenchmarkRunner {
         postGeneration,
         floor,
         pathUsage: {
-          predefinedToolAvailable,
-          predefinedToolCalls,
           capHit: generation.turnsUsed >= BENCH_MAX_TURNS,
         } satisfies PathUsageMetrics,
         generator: generatorSlug,
@@ -631,8 +595,6 @@ export class BenchmarkRunner {
         timestamp: new Date().toISOString(),
         floor,
         pathUsage: {
-          predefinedToolAvailable,
-          predefinedToolCalls,
           // Errors short-circuit before `turnsUsed` is known — treat as
           // not-a-cap-hit. Timeouts surface via the error message on
           // this same result; they are NOT counted as cap-hits.

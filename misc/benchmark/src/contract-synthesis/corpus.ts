@@ -143,7 +143,7 @@ const COLD_CASES: readonly ContractSynthCase[] = [
 // The high-value half: each draft trips a specific deterministic validator,
 // so it forces at least one repair iteration. Healthy target: repaired in
 // ≤2 attempts. These map 1:1 to the failure modes lintContract +
-// validateContractStructure / validateActionsVsContext / coherence catch.
+// validateContractRedundancy / validateActionsVsContext / coherence catch.
 
 const REPAIR_CASES: readonly ContractSynthCase[] = [
   {

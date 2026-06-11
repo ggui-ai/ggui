@@ -1,8 +1,8 @@
 /**
  * `auth-strategy.ts` unit tests. Covers the explicit `--auth=bearer`
- * branch + the hosted-auth fallthrough. The hosted-auth implementation
- * is stubbed via `acquireHostedAuthJwt` — this test never reaches the
- * cloud-internal IdP code.
+ * branch + the login-session fallthrough. The session acquisition is
+ * stubbed via `acquireSessionToken` — this test never touches
+ * `~/.ggui/auth.json` or the network.
  */
 import { describe, expect, it, vi } from 'vitest';
 import {
@@ -85,69 +85,63 @@ describe('parseAuthFlags', () => {
 describe('acquireAuthToken', () => {
   const baseDeps = {
     env: {} as NodeJS.ProcessEnv,
-    cwd: '/tmp',
-    registryUrl: 'https://r.example.com',
   };
 
-  it('bearer + --token: returns the token verbatim, never calls hosted-auth', async () => {
-    const acquireHostedAuthJwt = vi.fn();
+  it('bearer + --token: returns the token verbatim, never touches the session', async () => {
+    const acquireSessionToken = vi.fn();
     const token = await acquireAuthToken({
       ...baseDeps,
       flags: { auth: 'bearer', token: 'token-from-flag' },
-      acquireHostedAuthJwt,
+      acquireSessionToken,
     });
     expect(token).toBe('token-from-flag');
-    expect(acquireHostedAuthJwt).not.toHaveBeenCalled();
+    expect(acquireSessionToken).not.toHaveBeenCalled();
   });
 
   it('bearer + GGUI_REGISTRY_TOKEN env: returns the env token', async () => {
-    const acquireHostedAuthJwt = vi.fn();
+    const acquireSessionToken = vi.fn();
     const token = await acquireAuthToken({
       ...baseDeps,
       env: { GGUI_REGISTRY_TOKEN: 'token-from-env' } as NodeJS.ProcessEnv,
       flags: { auth: 'bearer' },
-      acquireHostedAuthJwt,
+      acquireSessionToken,
     });
     expect(token).toBe('token-from-env');
-    expect(acquireHostedAuthJwt).not.toHaveBeenCalled();
+    expect(acquireSessionToken).not.toHaveBeenCalled();
   });
 
   it('bearer + --token + GGUI_REGISTRY_TOKEN: flag wins', async () => {
-    const acquireHostedAuthJwt = vi.fn();
+    const acquireSessionToken = vi.fn();
     const token = await acquireAuthToken({
       ...baseDeps,
       env: { GGUI_REGISTRY_TOKEN: 'from-env' } as NodeJS.ProcessEnv,
       flags: { auth: 'bearer', token: 'from-flag' },
-      acquireHostedAuthJwt,
+      acquireSessionToken,
     });
     expect(token).toBe('from-flag');
   });
 
   it('bearer without token (no flag, no env): throws with operator-readable message', async () => {
-    const acquireHostedAuthJwt = vi.fn();
+    const acquireSessionToken = vi.fn();
     await expect(
       acquireAuthToken({
         ...baseDeps,
         flags: { auth: 'bearer' },
-        acquireHostedAuthJwt,
+        acquireSessionToken,
       }),
     ).rejects.toThrow(/bearer auth requires --token .* or GGUI_REGISTRY_TOKEN/);
-    expect(acquireHostedAuthJwt).not.toHaveBeenCalled();
+    expect(acquireSessionToken).not.toHaveBeenCalled();
   });
 
-  it('default (no auth flag): delegates to acquireHostedAuthJwt', async () => {
-    const acquireHostedAuthJwt = vi.fn(async () => 'hosted-jwt');
+  it('default (no auth flag): delegates to acquireSessionToken', async () => {
+    const acquireSessionToken = vi.fn(async () => 'cli_at_session');
     const token = await acquireAuthToken({
       ...baseDeps,
       flags: {},
-      acquireHostedAuthJwt,
+      acquireSessionToken,
     });
-    expect(token).toBe('hosted-jwt');
-    expect(acquireHostedAuthJwt).toHaveBeenCalledWith({
-      registryUrl: 'https://r.example.com',
-      env: baseDeps.env,
-      cwd: '/tmp',
-    });
+    expect(token).toBe('cli_at_session');
+    expect(acquireSessionToken).toHaveBeenCalledTimes(1);
   });
 });
 

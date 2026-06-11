@@ -173,10 +173,10 @@ const visualProvider = getArg(['--visual-provider'], 'google');
 const visualModel = getArg(['--visual-model'], null);
 const qualityMode = getArg(['--quality'], 'fast');
 
-// Floor split (ui-gen bench OSS vs hosted). Default preserves today's
-// identical-to-pre-split behavior — OSS floor with no predefined tool.
-// `hosted` opts into the v0 divergence (predefined-components tool wired).
-// `both` runs every variant twice, once per floor, so the report's
+// Floor split (ui-gen bench OSS vs hosted). Both floors currently run
+// the identical path — the flag is the reporting seam for future
+// hosted-vs-OSS divergences (see multi-sdk/floor.md). `both` runs
+// every variant twice, once per floor, so the report's
 // `floorSummaries` shows side-by-side numbers.
 const floorRaw = getArg(['--floor'], 'oss');
 const FLOOR_VALUES = ['oss', 'hosted', 'both'];
@@ -453,14 +453,13 @@ const run = async () => {
   // floor) so the floor dimension is visible without opening JSON.
   if (report.floorSummaries && report.floorSummaries.length > 0) {
     console.log(`\n  Floor summary (v0 — see internal/benchmarks/src/multi-sdk/floor.md):`);
-    console.log(`    floor    runs  avgTime   avgScore  success  capHit   toolCalled/avg  buckets(pass/patchInv/selfCheck/diff)`);
+    console.log(`    floor    runs  avgTime   avgScore  success  capHit   buckets(pass/patchInv/selfCheck/diff)`);
     for (const fs of report.floorSummaries) {
       const pct = (n) => (n * 100).toFixed(0).padStart(3) + '%';
       const score = fs.avgScore < 0 ? '  n/a' : fs.avgScore.toFixed(1).padStart(5);
-      const toolMix = `${pct(fs.predefinedToolCallRate)}/${fs.avgPredefinedToolCalls.toFixed(1)}`;
       const b = fs.errorBuckets;
       console.log(
-        `    ${fs.floor.padEnd(7)} ${String(fs.runs).padStart(4)}  ${(fs.avgTimeMs / 1000).toFixed(1).padStart(5)}s   ${score}     ${pct(fs.successRate)}     ${pct(fs.capHitRate)}    ${toolMix.padEnd(14)} ${b.pass}/${b.patchInvalid}/${b.selfCheckFail}/${b.diffFail}`,
+        `    ${fs.floor.padEnd(7)} ${String(fs.runs).padStart(4)}  ${(fs.avgTimeMs / 1000).toFixed(1).padStart(5)}s   ${score}     ${pct(fs.successRate)}     ${pct(fs.capHitRate)}    ${b.pass}/${b.patchInvalid}/${b.selfCheckFail}/${b.diffFail}`,
       );
     }
     console.log('');

@@ -39,7 +39,7 @@ pnpm add @ggui-ai/negotiator
 - **`rerankCandidates(...)`** — LLM judge that re-ranks blueprint-match
   retrieval candidates (the semantic-match decision used by
   `decideHandshake`).
-- **`validateContractStructure` / `validateContractNovelty`** — advisory
+- **`validateContractRedundancy` / `validateContractNovelty`** — advisory
   validators for the actions-vs-context placement rule.
 
 ```ts

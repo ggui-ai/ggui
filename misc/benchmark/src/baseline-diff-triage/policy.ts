@@ -448,8 +448,6 @@ function classifyMultiSdkField(
         'notice', // notice-only, no alert threshold
       );
 
-    case 'predefinedToolCallRate':
-    case 'avgPredefinedToolCalls':
     case 'runs':
       return suppressedTinyScalar('multi-sdk', location, fieldName, delta);
 

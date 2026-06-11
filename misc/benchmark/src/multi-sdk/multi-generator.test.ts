@@ -288,8 +288,6 @@ function mkResult(overrides: Partial<BenchmarkRunResult> = {}): BenchmarkRunResu
     timestamp: '2026-05-12T00:00:00Z',
     floor: 'oss',
     pathUsage: {
-      predefinedToolAvailable: false,
-      predefinedToolCalls: 0,
       capHit: false,
     },
     generator: DEFAULT_GENERATOR_SLUG,

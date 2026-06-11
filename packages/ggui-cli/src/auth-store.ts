@@ -43,7 +43,7 @@ export interface AuthSessionDocument {
   readonly version: 1;
   /** API endpoint these tokens are bound to (origin only, no path). */
   readonly endpoint: string;
-  /** Cognito sub of the authenticated user. */
+  /** Server-side id of the authenticated user the tokens are bound to. */
   readonly userId: string;
   /** Stable session id grouping access + refresh on the server. */
   readonly sessionId: string;

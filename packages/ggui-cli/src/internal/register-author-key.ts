@@ -6,19 +6,19 @@
  * `aws dynamodb put-item` workflow that previously required raw IAM
  * credentials + registry table knowledge.
  *
- * The publisher's identity is the Cognito JWT's `sub` (server-side);
- * the body carries only `publicKeyBase64`. `keyId` is derived from the
- * public-key bytes on the server, so re-running with the same key is
- * idempotent (200 OK).
+ * The publisher's identity is derived server-side from the verified
+ * bearer credential; the body carries only `publicKeyBase64`. `keyId`
+ * is derived from the public-key bytes on the server, so re-running
+ * with the same key is idempotent (200 OK).
  *
- * Auth + registry-URL resolution match the publish flow (so the
- * cached token / `GGUI_REGISTRY` env / `ggui.json#registry` chain
- * works the same way operators are used to).
+ * Auth + registry-URL resolution match the publish flow (the stored
+ * `ggui login` session / `GGUI_REGISTRY` env / `ggui.json#registry`
+ * chain works the same way operators are used to).
  */
 import { readFileSync } from 'node:fs';
 import { REGISTER_AUTHOR_KEY_ERROR_CODES } from '@ggui-ai/registry-core';
 import {
-  acquireHostedAuthJwt,
+  acquireLoginSessionToken,
   type AuthFailed,
   type AuthSuccess,
 } from './artifact-publish.js';
@@ -31,7 +31,7 @@ import { getPublicKeyPath, hasKeypair } from './key-store.js';
  * branch on the registry's closed error set without parsing the human-
  * readable message:
  *
- *   - `unauthorized`     ← HTTP 401 (missing/invalid Cognito JWT).
+ *   - `unauthorized`     ← HTTP 401 (missing/invalid bearer credential).
  *   - `invalid_request`  ← HTTP 400 (malformed body or wrong key length).
  *   - `key_conflict`     ← HTTP 409 (collision against an existing row).
  *   - `http-error`       ← any other non-2xx (5xx or unexpected status).
@@ -140,12 +140,10 @@ export async function runRegisterAuthorKey(
   }
   const publicKeyBase64 = publicKeyBytes.toString('base64');
 
-  // 3. Hosted-auth Cognito JWT — same chain as publish.
-  const auth: AuthSuccess | AuthFailed = await acquireHostedAuthJwt({
-    registryUrl: resolved.url,
-    env: deps.env,
-    cwd: deps.cwd,
+  // 3. The stored `ggui login` session — same chain as publish.
+  const auth: AuthSuccess | AuthFailed = await acquireLoginSessionToken({
     now: deps.now,
+    fetchImpl: deps.fetch,
   });
   if (!auth.ok) {
     return {
@@ -163,7 +161,7 @@ export async function runRegisterAuthorKey(
       method: 'POST',
       headers: {
         'content-type': 'application/json',
-        authorization: `Bearer ${auth.token.idToken}`,
+        authorization: `Bearer ${auth.accessToken}`,
       },
       body: JSON.stringify({ publicKeyBase64 }),
     });

@@ -175,6 +175,6 @@ make test-scaffold-resolution          # full gate, all 3 SDKs
 SELFTEST=1 make test-scaffold-resolution  # falsification — MUST exit non-zero
 ```
 
-The gate is slow (full `pnpm build` + Verdaccio publish of ~35 packages + 3
+The gate is slow (full `pnpm build` + Verdaccio publish of ~33 packages + 3
 scaffold installs). Cold runs are typically 15–25 min. It is deterministic and
 keyless — safe to run in any environment with Docker and pnpm available.

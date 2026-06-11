@@ -50,29 +50,6 @@ export {
 } from './contract-context.js';
 export type { RenderingContext } from './contract-context.js';
 
-export type {
-  BlueprintHint,
-  BlueprintHintMatch,
-  BlueprintLevel,
-  BlueprintMatchConfidence,
-} from './blueprint-hint.js';
-
-export {
-  STRATEGIES,
-} from './strategy.js';
-export type {
-  BlueprintPolicy,
-  MatchType,
-  StrategyConfig,
-  StrategyName,
-} from './strategy.js';
-
-export {
-  buildBlueprintContextForStrategy,
-  buildUserRequest,
-} from './user-request.js';
-export type { UserRequestOptions } from './user-request.js';
-
 // ── Anthropic SDK construction ──────────────────────────────────────
 //
 // Single source of truth for the Anthropic SDK client. Adapters MUST

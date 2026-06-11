@@ -39,7 +39,7 @@ export { ensureConformingContract } from './ensure-conforming-contract.js';
 export type { EnsureConformingResult } from './ensure-conforming-contract.js';
 export { normalizeDraft } from './normalize-draft.js';
 export {
-  validateContractStructure,
+  validateContractRedundancy,
   validateContractNovelty,
   formatValidationFindings,
 } from './contract-validators.js';

@@ -2,12 +2,13 @@
  * Concrete {@link EmbeddingProvider} backed by `@huggingface/transformers`
  * running the quantized `Xenova/bge-small-en-v1.5` ONNX model locally.
  *
- * Pairs the {@link EmbeddingBootstrap} cold-start lifecycle from
- * this package with the inference path:
+ * The inference path:
  *
  *   1. `transformers.pipeline('feature-extraction', modelId, {cache_dir, dtype:'q8', revision})`
  *      loads the quantized ONNX model — ~33MB to disk, ~60-80MB
- *      ort-node wasm at runtime.
+ *      ort-node wasm at runtime. Transformers.js owns the download +
+ *      cache pipeline; the first call fetches the weights into
+ *      `cacheDir`, subsequent calls load from disk.
  *   2. Run-warmup embeds a dummy string on boot so the first
  *      real embedding doesn't pay the pipeline cold-start tax
  *      (200-400ms) — warmup at boot, never lazy.
@@ -27,10 +28,9 @@
  *
  * **What this provider is NOT:**
  *
- *   - NOT the downloader seam from {@link Downloader}. Transformers.js
- *     owns its own HTTP + cache pipeline when `cache_dir` is set;
- *     the bootstrap harness exists for pre-warmup + operator-visible
- *     progress reporting, not byte-level download control.
+ *   - NOT a byte-level download controller. Transformers.js owns its
+ *     own HTTP + cache pipeline when `cache_dir` is set; this
+ *     package does not interpose on it.
  *   - NOT a chunker. Inputs longer than `max_length` (512 for
  *     bge-small-v1.5) are truncated by the tokenizer. Callers that
  *     need long-text embedding chunk + average upstream.
@@ -38,11 +38,16 @@
  *     single `pipeline` instance; concurrent `embed()` calls serialize
  *     through the pipeline's internal queue.
  */
-import {
-  DEFAULT_MODEL_DIMENSIONS,
-  DEFAULT_MODEL_ID,
-  DEFAULT_MODEL_REVISION,
-} from './bootstrap.js';
+/** Locked default model id. Bump explicitly (not lazily). */
+export const DEFAULT_MODEL_ID = 'Xenova/bge-small-en-v1.5';
+/**
+ * Pinned revision — the HuggingFace ref transformers.js fetches.
+ * `'main'` is the conservative default; pin to a specific commit
+ * hash for fully reproducible cold-starts.
+ */
+export const DEFAULT_MODEL_REVISION = 'main';
+/** L2-normalized output dimensions for `bge-small-en-v1.5`. */
+export const DEFAULT_MODEL_DIMENSIONS = 384;
 
 /**
  * The `EmbeddingProvider` contract from `@ggui-ai/mcp-server-core`.
@@ -120,14 +125,13 @@ export interface LocalEmbeddingProviderOptions {
 }
 
 /**
- * Construct a {@link LocalEmbeddingProvider}.
+ * Construct a local embedding provider.
  *
  * The factory returns immediately; the pipeline load happens lazily
  * on the first `embed()` call UNLESS `warmup:true` is set (default).
- * Callers that want to observe download progress wire this together
- * with {@link EmbeddingBootstrap}: construct the bootstrap, await
- * `warmup()` for event-reporting, THEN construct the provider
- * (which will find the cache populated and load without progress).
+ * The first load downloads the model weights (~33MB) into
+ * `cacheDir`; subsequent constructions find the cache populated and
+ * load from disk.
  */
 export function createLocalEmbeddingProvider(
   options: LocalEmbeddingProviderOptions,
@@ -264,7 +268,7 @@ const defaultPipelineFactory: PipelineFactory = async ({
           "Install it in the host project:",
           "  pnpm add @huggingface/transformers",
           "  # or: npm install @huggingface/transformers",
-          'The default embedding model downloads roughly 120MB of weights on first run.',
+          'The default embedding model downloads roughly 33MB of weights on first run.',
         ].join('\n'),
       );
     }

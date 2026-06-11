@@ -32,7 +32,6 @@ const BENCH_HEADLINE_FIELDS: Record<string, readonly string[]> = {
     'avgTimeMs',
     'avgScore',
     'successRate',
-    'predefinedToolCallRate',
   ],
 };
 

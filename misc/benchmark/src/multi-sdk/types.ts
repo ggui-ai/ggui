@@ -24,12 +24,11 @@ export type { ProviderName, AdapterResult, AdapterMode };
  *            variant with no explicit floor is treated as `oss` so
  *            historical runs remain interpretable.
  *
- * `hosted` — hosted/default path enabled. Today the ONLY active divergence
- *            is that `get_predefined_components` tool is wired in, letting
- *            the agent consult the blueprint registry. Everything else
- *            (system prompt, criteria, runtime render, model routing) is
- *            still identical to OSS. As more hosted-vs-OSS differences
- *            land in the generation path they route through this flag.
+ * `hosted` — hosted/default path enabled. Today there is NO active
+ *            divergence — system prompt, tools, criteria, runtime render,
+ *            and model routing are identical to OSS. The flag is the
+ *            reporting seam: as hosted-vs-OSS differences land in the
+ *            generation path they route through it.
  *
  * See `./floor.md` for the full rationale + current caveat list.
  */
@@ -268,28 +267,12 @@ export interface BenchmarkRunResult {
 
 /**
  * Per-run observables for the floor dimension. Populated by the runner
- * from the tool-call trace + `generation.turnsUsed`.
- *
- * In floor v0 the only meaningful divergence is
- * `predefinedToolAvailable` + `predefinedToolCalls`. Other hosted-vs-OSS
- * observables are reserved on this type — they stay null until the
- * corresponding divergence lands. Keeping them in the shape now means
- * later additions don't churn `BenchmarkRunResult`.
+ * from `generation.turnsUsed`. Hosted-vs-OSS observables are reserved
+ * on this type — they stay absent until the corresponding divergence
+ * lands. Keeping the shape now means later additions don't churn
+ * `BenchmarkRunResult`.
  */
 export interface PathUsageMetrics {
-  /**
-   * Was the `get_predefined_components` tool wired in for this run?
-   * True iff `floor === 'hosted'` (today). Kept as its own boolean
-   * because future floors may decouple this from floor identity.
-   */
-  readonly predefinedToolAvailable: boolean;
-  /**
-   * How many times the agent called `get_predefined_components`.
-   * 0 = never consulted. >0 = consulted at least once. Does NOT
-   * prove the returned blueprint was actually used in generation —
-   * that's a separate inference we don't make in v0.
-   */
-  readonly predefinedToolCalls: number;
   /**
    * `true` when `generation.turnsUsed >= maxTurns` (the bench passes
    * 45 today). Aggregated per-floor as a regression signal — caps
@@ -438,15 +421,6 @@ export interface GeneratorSummary {
  *   - `capHitRate`: counts ALL runs (numerator = cap-hits, denominator
  *     = total runs including failures). A cap-hit that also timed out
  *     still counts as a cap-hit.
- *   - `predefinedToolCallRate`: fraction of runs where the agent called
- *     `get_predefined_components` at least once. Only meaningful on the
- *     `hosted` floor — on `oss` the tool isn't wired, so this is
- *     always 0. Included on both rows anyway so the side-by-side read
- *     is unambiguous (a zero on OSS is a legitimate reading, not a
- *     missing field).
- *   - `avgPredefinedToolCalls`: mean of `predefinedToolCalls` over all
- *     runs. Catches "called it 5 times per run" patterns that the
- *     boolean rate would smooth out.
  *   - `errorBuckets`: sum of `breakdown.outcomes.*` across all runs
  *     on this floor. Same fields as the existing variant breakdown —
  *     per-floor aggregation lets a reader see if one floor drives
@@ -459,8 +433,6 @@ export interface FloorSummary {
   readonly avgScore: number;
   readonly successRate: number;
   readonly capHitRate: number;
-  readonly predefinedToolCallRate: number;
-  readonly avgPredefinedToolCalls: number;
   readonly errorBuckets: {
     readonly pass: number;
     readonly patchInvalid: number;

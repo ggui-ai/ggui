@@ -14,7 +14,10 @@
  * and collapse the duplicated client wire-config pipeline; the hc*
  * entries clean the helper-package published surfaces (dead exports,
  * packaging, conformance execution, component re-homing — no wire
- * change) plus the one additive ops-tool schema change (hc4).
+ * change) plus the one additive ops-tool schema change (hc4) and one
+ * published-symbol rename (hc5); the cc1 entry restores the SPEC §7.3
+ * `ggui_consume` timeout bound on the wire; the pa1 entry de-vendors
+ * the CLI publish-auth surface (no wire change).
  *
  *   bp1. **`BlueprintSource` discriminated union introduced**
  *      (`kind: 'llm' | 'user' | 'curated'`), replacing the flat
@@ -313,6 +316,50 @@
  *      OUTPUT-schema identity (alongside input) for every shared wire
  *      name, so host output drift is structurally caught. Additive —
  *      existing callers unaffected.
+ *
+ *   hc5. **`@ggui-ai/negotiator` `validateContractStructure` →
+ *      `validateContractRedundancy`** (TS-symbol rename, no wire
+ *      change). The name collided with `@ggui-ai/protocol`'s normative
+ *      structural validator of the same name while carrying different
+ *      semantics (advisory warn-only redundant-action heuristic vs
+ *      `ContractViolation` list). Protocol remains the sole owner of
+ *      the `validateContractStructure` name; the negotiator export now
+ *      says what it detects. No compat alias (pre-launch).
+ *
+ *   cc1. **`ggui_consume.timeout` bound restored to SPEC §7.3
+ *      `[0, 25]`.** The shipped handler had drifted to a schema max of
+ *      600s with a silent server-side truncation to a 120s default cap
+ *      (and a `maxTimeoutSeconds` deployment override). All three die:
+ *      the input schema now enforces integer `[0, 25]`, out-of-range
+ *      values reject `INVALID_PARAMS` (-32602) at the tool-argument
+ *      validation layer instead of being silently truncated, and the
+ *      override knob is deleted (zero consumers; the bound is
+ *      normative). SPEC §7.3's output section is simultaneously
+ *      rewritten to the REAL drained-row shape — `ConsumeEventEntry`
+ *      `{type:'action', sessionId, intent, actionData, uiContext,
+ *      actionId, firedAt}` (+ the optional `client.hostContext` echo)
+ *      — replacing the stale `{events: ActionEnvelope[]}` claim; the
+ *      dedup guidance moves from `(sessionId, clientSeq)` (an ingress
+ *      key) to `(sessionId, actionId)`. Agents that long-polled with
+ *      `timeout > 25` MUST re-call `ggui_consume` in a loop instead.
+ *
+ *   pa1. **CLI publish-auth de-vendored (no wire change).** The
+ *      `ggui {gadget,blueprint} publish` / `ggui keys register`
+ *      default auth path no longer talks to an identity provider from
+ *      the CLI: the direct-IdP `USER_PASSWORD_AUTH` + refresh flows,
+ *      the `@aws-sdk/client-cognito-identity-provider` dependency (the
+ *      only AWS SDK in any published `@ggui-ai/*` package), the
+ *      `GGUI_REGISTRY_COGNITO_POOL_ID` /
+ *      `GGUI_REGISTRY_COGNITO_APP_CLIENT_ID` env surface, and the
+ *      per-registry `~/.ggui/auth/<host>/token.json` cache are all
+ *      deleted. The default credential is the stored `ggui login`
+ *      session (`~/.ggui/auth.json`), refreshed via
+ *      `POST /v1/auth/refresh`; `--auth=bearer` is unchanged. Auth
+ *      errors are rewritten vendor-neutrally, and an HTTP 401 from
+ *      the registry now surfaces as `auth_failed` with a credential-
+ *      kind-specific diagnosis (the hosted registry does not accept
+ *      CLI login sessions server-side yet — reported truthfully, no
+ *      fake success).
  *
  * --------------------------------------------------------------------
  * Synchronous wired-action dispatch retired — agent-routed consume

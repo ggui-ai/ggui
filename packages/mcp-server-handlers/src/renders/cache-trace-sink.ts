@@ -225,8 +225,8 @@ export interface CacheTraceEvent {
    */
   readonly synth?: CacheTraceSynth;
   /**
-   * Findings from the contract structural validator
-   * (`validateContractStructure`) — flags over-specified contracts
+   * Findings from the contract redundancy validator
+   * (`validateContractRedundancy`) — flags over-specified contracts
    * (e.g., empty-payload action whose name parses as a mutator of an
    * existing context slot, the counter-bug class). Empty array means
    * the validator ran clean; absent means the validator did NOT run

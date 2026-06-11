@@ -55,7 +55,7 @@ import {
   formatValidationFindings,
   validateActionsVsContext,
   validateContractCoherence,
-  validateContractStructure,
+  validateContractRedundancy,
   type ContractValidationFinding,
 } from './contract-validators.js';
 
@@ -96,7 +96,7 @@ export interface SynthesizeContractResult {
   readonly attempts: number;
   /**
    * Structural-validator findings produced when the synthesizer ran the
-   * `validateContractStructure` gate against its assembled contract.
+   * `validateContractRedundancy` gate against its assembled contract.
    * Empty when validator didn't run (early skip / decline). Surfaced
    * so callers (cache-trace emit site, ops dashboards) can render
    * findings without re-running the detector.
@@ -743,7 +743,7 @@ function pruneRedundantActions(contract: DataContract): DataContract {
   const actionSpec = contract.actionSpec;
   if (actionSpec === undefined) return contract;
   const redundant = new Set<string>();
-  for (const f of validateContractStructure(contract).findings) {
+  for (const f of validateContractRedundancy(contract).findings) {
     if (f.kind === 'redundant-action' && typeof f.actionName === 'string') {
       redundant.add(f.actionName);
     }
@@ -951,7 +951,7 @@ export async function synthesizeContract(
     const validatedContract = pruneRedundantActions(
       validated.data as DataContract,
     );
-    const structureSafety = validateContractStructure(validatedContract);
+    const structureSafety = validateContractRedundancy(validatedContract);
     const placementSafety = validateActionsVsContext(validatedContract);
     // Intent-aware coherence — the one validator that reads `trimmed`.
     // Catches the degenerate "actionSpec-only, no data surface"

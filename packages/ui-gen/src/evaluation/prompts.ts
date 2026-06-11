@@ -44,9 +44,6 @@ export function buildEvaluatorPrompt(context: EvaluationContext): string {
 
 ### Original User Prompt
 ${context.originalPrompt}
-
-### Strategy
-${context.strategy}
 `;
 
   if (context.designContext) {

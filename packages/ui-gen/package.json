@@ -136,18 +136,6 @@
       "types": "./dist/adapters/generation-dispatch.d.ts",
       "import": "./dist/adapters/generation-dispatch.js"
     },
-    "./blueprint-hint": {
-      "types": "./dist/blueprint-hint.d.ts",
-      "import": "./dist/blueprint-hint.js"
-    },
-    "./strategy": {
-      "types": "./dist/strategy.d.ts",
-      "import": "./dist/strategy.js"
-    },
-    "./user-request": {
-      "types": "./dist/user-request.d.ts",
-      "import": "./dist/user-request.js"
-    },
     "./workflows": {
       "types": "./dist/workflows.d.ts",
       "import": "./dist/workflows.js"

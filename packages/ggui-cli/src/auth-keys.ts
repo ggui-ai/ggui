@@ -405,11 +405,11 @@ async function runKeysRegister(args: readonly string[]): Promise<number> {
       cwd: process.cwd(),
       env: process.env,
       fetch,
-      // Unix-epoch SECONDS (matches the convention publish.ts uses for
-      // `expiresAt` in the registry-token cache — see auth-cache.ts:31).
-      // `Date.now()` returns milliseconds; passing it raw caused
-      // `isTokenFresh` to always return false against a real Cognito
-      // exp claim (also in seconds), forcing a re-auth on every run.
+      // Unix-epoch SECONDS — the login-session expiry fields
+      // (`accessExpiresAt` / `refreshExpiresAt` in auth-store.ts) are
+      // in seconds. `Date.now()` returns milliseconds; passing it raw
+      // would make every freshness check fail and force a refresh (or
+      // a spurious "session expired") on every run.
       now: () => Math.floor(Date.now() / 1000),
     },
   );

@@ -62,7 +62,6 @@ export {
   DEFAULT_EVAL_MAX_ROUNDS,
 } from './types.js';
 export type {
-  StrategyName,
   DimensionScores,
   EvaluationIssue,
   EvaluationResult,

@@ -1,8 +1,5 @@
 // packages/ui-gen/src/evaluation/types.ts
 
-export type { StrategyName } from '../strategy.js';
-import type { StrategyName } from '../strategy.js';
-
 /**
  * Per-dimension quality scores from the evaluator (0-100 each).
  */
@@ -113,6 +110,4 @@ export interface EvaluationContext {
   designContext?: string;
   /** CSS variable tokens for the app theme */
   themeTokens: string;
-  /** Generation strategy */
-  strategy: StrategyName;
 }

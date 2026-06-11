@@ -93,8 +93,6 @@ export const BENCH_DIFF_SPECS: Readonly<Record<BenchName, BenchDiffSpec>> = {
       { name: 'avgScore', kind: 'scalar' },
       { name: 'successRate', kind: 'scalar' },
       { name: 'capHitRate', kind: 'scalar' },
-      { name: 'predefinedToolCallRate', kind: 'scalar' },
-      { name: 'avgPredefinedToolCalls', kind: 'scalar' },
     ],
   },
 };

@@ -65,7 +65,7 @@ import {
 // can't bundle.
 import { blueprintKey, variantKey } from '@ggui-ai/protocol/blueprint-key';
 import {
-  validateContractStructure,
+  validateContractRedundancy,
   type ContractValidationFinding,
   type ContractValidationResult,
 } from '@ggui-ai/negotiator';
@@ -146,7 +146,7 @@ export interface Blueprint {
 }
 
 /**
- * Pluggable contract-validator. Defaults to {@link validateContractStructure}
+ * Pluggable contract-validator. Defaults to {@link validateContractRedundancy}
  * from `@ggui-ai/negotiator`. Tests inject custom validators to assert
  * fail-closed semantics on `severity: 'error'` findings; production wires
  * the default and lets the heuristic decide.
@@ -481,7 +481,7 @@ export interface RegisterBlueprintOptions {
   readonly maxPerKind?: number;
   /**
    * Override the default structural validator. Defaults to
-   * {@link validateContractStructure} from `@ggui-ai/negotiator`. Tests
+   * {@link validateContractRedundancy} from `@ggui-ai/negotiator`. Tests
    * inject custom validators to exercise the fail-closed branch on
    * `severity: 'error'` findings (today's heuristic only emits warnings,
    * so the fail-closed branch never fires under the default validator).
@@ -535,7 +535,7 @@ export async function registerBlueprint(
     throw new Error('registerBlueprint: intent cannot be empty');
   }
 
-  const validator = options.validator ?? validateContractStructure;
+  const validator = options.validator ?? validateContractRedundancy;
   const validation = validator(input.contract);
   const errorFindings = validation.findings.filter(
     (f) => f.severity === 'error',

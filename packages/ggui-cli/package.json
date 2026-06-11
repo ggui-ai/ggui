@@ -40,7 +40,6 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@aws-sdk/client-cognito-identity-provider": "^3.600.0",
     "@ggui-ai/agent-runtime": "workspace:*",
     "@ggui-ai/artifact-manifest": "workspace:*",
     "@ggui-ai/design": "workspace:*",

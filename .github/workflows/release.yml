@@ -256,7 +256,6 @@ jobs:
             shared
             ggui-react
             ggui-react-native
-            chat-self-hosted
             project-config
             ui-registry
             dev-stack
@@ -272,7 +271,6 @@ jobs:
             mcp-server
             create-agentic-app
             ggui-cli
-            predefined
             protocol-conformance
             protocol-reference-server
             registry-server
@@ -773,8 +771,8 @@ jobs:
           # ggui-react → @ggui-ai/react).
           PACKAGES=(
             protocol artifact-manifest gadget-signing wire live-channel
-            design gadgets ui-gen blueprint-probe predefined preview-a2ui
-            iframe-runtime react react-native chat-self-hosted agent-runtime
+            design gadgets ui-gen blueprint-probe preview-a2ui
+            iframe-runtime react react-native agent-runtime
             mcp-server mcp-server-handlers mcp-server-core negotiator
             registry-core registry-server ui-registry cli project-config
             dev-stack sandbox embedding-local console shared

@@ -3,9 +3,12 @@
  *
  * Two detectors live here:
  *
- *   - {@link validateContractStructure} — pure structural heuristics that
- *     flag over-specified contracts without any runtime dependency. The
- *     load-bearing finding is `redundant-action`: an empty-payload
+ *   - {@link validateContractRedundancy} — pure redundancy heuristics that
+ *     flag over-specified contracts without any runtime dependency.
+ *     (Deliberately NOT named `validateContractStructure` — that name is
+ *     owned by `@ggui-ai/protocol`'s normative structural validator,
+ *     which returns `ContractViolation`s; this one returns advisory
+ *     findings.) The load-bearing finding is `redundant-action`: an empty-payload
  *     `actionSpec` entry whose name parses as a mutator of an existing
  *     `contextSpec` slot. Real example that motivated this module: a
  *     synthesizer emitted both `actionSpec.increment` (empty payload)
@@ -252,20 +255,20 @@ function isEmptyPayloadSchema(schema: JsonSchema | undefined): boolean {
 }
 
 // =============================================================================
-// Structural validator (synchronous, dependency-free)
+// Redundancy validator (synchronous, dependency-free)
 // =============================================================================
 
 /**
- * Run the synchronous structural detectors against `contract`.
+ * Run the synchronous redundancy detector against `contract`.
  *
- * Currently:
+ * One finding kind:
  *   - `redundant-action`: empty-payload action whose name parses as a
  *     mutator of an existing context slot.
  *
- * Returns an empty findings array for contracts that don't trip any
+ * Returns an empty findings array for contracts that don't trip the
  * heuristic.
  */
-export function validateContractStructure(
+export function validateContractRedundancy(
   contract: DataContract,
 ): ContractValidationResult {
   const findings: ContractValidationFinding[] = [];

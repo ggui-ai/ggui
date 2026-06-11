@@ -189,7 +189,7 @@ Consumer-facing surface — what you `npm install`:
 | [`@ggui-ai/protocol`](./packages/protocol)              | Wire types (events, sessions, WebSocket, MCP envelopes)            | [![npm](https://img.shields.io/npm/v/@ggui-ai/protocol)](https://npmjs.com/package/@ggui-ai/protocol)         |
 | [`@ggui-ai/gadgets`](./packages/gadgets)                | Author wrappers for 3rd-party libs (Leaflet, Mapbox, …)            | [![npm](https://img.shields.io/npm/v/@ggui-ai/gadgets)](https://npmjs.com/package/@ggui-ai/gadgets)           |
 
-Plus ~30 supporting packages under [`packages/`](./packages) spanning the runtime (`@ggui-ai/mcp-server-core`, `@ggui-ai/mcp-server-handlers`, `@ggui-ai/ui-gen`, `@ggui-ai/negotiator`), authoring (`@ggui-ai/project-config`, `@ggui-ai/ui-registry`, `@ggui-ai/predefined`), registry (`@ggui-ai/registry-core`, `@ggui-ai/registry-server`), and dev tooling (`@ggui-ai/dev-stack`, `@ggui-ai/agent-runtime`, `@ggui-ai/console`). See each subdirectory for details.
+Plus 27 supporting packages under [`packages/`](./packages) spanning the runtime (`@ggui-ai/mcp-server-core`, `@ggui-ai/mcp-server-handlers`, `@ggui-ai/ui-gen`, `@ggui-ai/negotiator`), authoring (`@ggui-ai/project-config`, `@ggui-ai/ui-registry`), registry (`@ggui-ai/registry-core`, `@ggui-ai/registry-server`), and dev tooling (`@ggui-ai/dev-stack`, `@ggui-ai/agent-runtime`, `@ggui-ai/console`). See each subdirectory for details.
 
 ## Hosted providers
 

@@ -57,7 +57,6 @@ describe('buildEvaluatorPrompt', () => {
     compiledCode: 'import{jsx}from"react/jsx-runtime";export default function GeneratedComponent(){return jsx("div",{children:"Hello"})}',
     originalPrompt: 'A greeting component that says Hello',
     themeTokens: 'var(--ggui-color-primary-600, #0284c7)',
-    strategy: 'balanced',
   };
 
   it('includes the original prompt in its own section', () => {
@@ -80,11 +79,6 @@ describe('buildEvaluatorPrompt', () => {
   it('includes theme tokens', () => {
     const prompt = buildEvaluatorPrompt(baseContext);
     expect(prompt).toContain('--ggui-color-primary-600');
-  });
-
-  it('includes strategy', () => {
-    const prompt = buildEvaluatorPrompt(baseContext);
-    expect(prompt).toMatch(/### Strategy\nbalanced/);
   });
 
   it('includes DESIGN.md section with content when provided', () => {
@@ -118,14 +112,12 @@ describe('buildEvaluatorPrompt', () => {
     const prompt = buildEvaluatorPrompt(context);
 
     const promptIdx = prompt.indexOf('Original User Prompt');
-    const strategyIdx = prompt.indexOf('### Strategy');
     const designIdx = prompt.indexOf('### DESIGN.md');
     const sourceIdx = prompt.indexOf('### Source Code (TSX)');
     const compiledIdx = prompt.indexOf('### Compiled Code (JS)');
     const evalIdx = prompt.lastIndexOf('evaluate_score');
 
-    expect(promptIdx).toBeLessThan(strategyIdx);
-    expect(strategyIdx).toBeLessThan(designIdx);
+    expect(promptIdx).toBeLessThan(designIdx);
     expect(designIdx).toBeLessThan(sourceIdx);
     expect(sourceIdx).toBeLessThan(compiledIdx);
     expect(compiledIdx).toBeLessThan(evalIdx);

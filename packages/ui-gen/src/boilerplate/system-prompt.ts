@@ -501,23 +501,12 @@ ${primitivesDoc}
 }
 
 /**
- * Rich design-system guidance lifted from cloud's `getSystemPrompt`
- * (cloud/generation-runtime/src/sdk/prompts.ts). Lists prop-value
- * enums, branded color strategy, and responsive/parameterization
- * rules that make a generated component feel polished — the system
- * prompt without it would only list primitive *names*.
- *
- * Strip-list (kept out of OSS, was cloud-specific):
- *  - "Step 1-6 workflow" (cloud is multi-tool agent loop; OSS is one-shot)
- *  - \`get_predefined_components\` / \`compile_component\` / \`self_check\`
- *    tool references — those are agentic-mode, OSS validates inline
- *  - \`__GGUI_META__\` / \`__GGUI_STREAM_SPEC__\` markers — cloud
- *    post-processes; OSS uses contract injection upstream
- */
-/**
  * Hand-written design-system guidance embedded in every coding-agent
- * system prompt. Exported so `prompt-type-drift.test.ts` can verify
- * its enum claims against the auto-generated primitive catalog.
+ * system prompt. Lists prop-value enums, branded color strategy, and
+ * responsive/parameterization rules that make a generated component
+ * feel polished — the system prompt without it would only list
+ * primitive *names*. Exported so `prompt-type-drift.test.ts` can
+ * verify its enum claims against the auto-generated primitive catalog.
  */
 export const DESIGN_SYSTEM_GUIDANCE = `## Imports & Component Surface
 

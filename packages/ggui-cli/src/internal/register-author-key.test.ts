@@ -17,10 +17,10 @@
  *        - 2xx with malformed body (missing subject/keyId)
  *
  * Each `runRegisterAuthorKey` test pins its own temp `~/.ggui` via
- * `GGUI_CONFIG_DIR` so the operator's real keypair + token caches are
- * never touched. The hosted-auth path is short-circuited by pre-seeding
- * the registry-token cache with a fresh document — `acquireHostedAuthJwt`
- * returns the cached token without ever touching Cognito.
+ * `GGUI_CONFIG_DIR` so the operator's real keypair + login session are
+ * never touched. The auth path is satisfied by pre-seeding a fresh
+ * `ggui login` session at `~/.ggui/auth.json` — `acquireLoginSessionToken`
+ * returns the stored access token without any refresh round-trip.
  */
 import {
   afterEach,
@@ -34,7 +34,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { parseRegisterFlags } from '../auth-keys.js';
-import { saveRegistryToken } from './auth-cache.js';
+import { saveAuthSession } from '../auth-store.js';
 import { writePrivateKey } from './key-store.js';
 import {
   runRegisterAuthorKey,
@@ -144,18 +144,21 @@ function teardownTestEnv(env: TestEnv): void {
 
 const REGISTRY_URL = 'https://r.example';
 
-/** Pre-seed a fresh token cache so acquireHostedAuthJwt short-circuits. */
+/** Pre-seed a fresh `ggui login` session so acquireLoginSessionToken
+ * returns the stored access token without refreshing. */
 function seedFreshToken(): void {
-  saveRegistryToken({
+  saveAuthSession({
     version: 1,
-    registry: REGISTRY_URL,
-    idToken: 'id-token-abc',
-    accessToken: 'access-token-xyz',
-    refreshToken: 'refresh-token-123',
+    endpoint: 'https://api.example',
+    userId: 'user-123',
+    sessionId: 'sess-123',
+    accessToken: 'cli_at_fresh',
     // 2 hours in the future from the test's now() = 1_700_000_000s
-    expiresAt: 1_700_000_000 + 7200,
-    username: 'tester',
-    writtenAt: '2026-05-19T00:00:00.000Z',
+    accessExpiresAt: 1_700_000_000 + 7200,
+    refreshToken: 'cli_rt_fresh',
+    refreshExpiresAt: 1_700_000_000 + 30 * 24 * 3600,
+    clientName: 'test client',
+    writtenAt: '2026-06-11T00:00:00.000Z',
   });
 }
 
@@ -324,7 +327,7 @@ describe('runRegisterAuthorKey', () => {
     const fetchStub = makeFetchStub(() =>
       jsonResponse(401, {
         error: 'unauthorized',
-        message: 'missing or invalid Cognito JWT',
+        message: 'missing or invalid bearer credential',
       }),
     );
     const outcome = await runRegisterAuthorKey(
@@ -338,7 +341,7 @@ describe('runRegisterAuthorKey', () => {
     );
     assertOutcomeError(outcome, 'unauthorized');
     if (!outcome.ok) {
-      expect(outcome.message).toBe('missing or invalid Cognito JWT');
+      expect(outcome.message).toBe('missing or invalid bearer credential');
     }
   });
 

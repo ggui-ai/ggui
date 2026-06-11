@@ -37,7 +37,7 @@ import type { DataContract } from '@ggui-ai/protocol';
 import { listContractGadgets } from '@ggui-ai/protocol';
 import { synthesizeContract } from '../synthesize-contract.js';
 import {
-  validateContractStructure,
+  validateContractRedundancy,
   type ContractValidationFinding,
 } from '../contract-validators.js';
 import type { LLMCaller } from '../llm-caller.js';
@@ -367,7 +367,7 @@ export async function evaluateAgainstCorpus(
         synthReason: synth.reason,
       };
     } else {
-      const findings = validateContractStructure(synth.contract).findings;
+      const findings = validateContractRedundancy(synth.contract).findings;
       const score = scoreSynthesizedContract(synth.contract, entry.expected);
       outcome = {
         entry,

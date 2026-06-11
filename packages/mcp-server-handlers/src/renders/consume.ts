@@ -13,12 +13,11 @@
  *     cloud deployment wraps an atomic-read-and-clear datastore op.
  *   - `renderStore.get(sessionId)` resolves the render, tenancy-checks
  *     via `ctx.appId`, and reads TTL for the activity heartbeat.
- *   - Long-poll is server-side (1-900s, default cap 900s). The
- *     original 25s ceiling assumed an API Gateway 30s kill in front
- *     of the handler; that constraint went away when cloud migrated
- *     to ECS Fargate pods (no gateway) and OSS has always been
- *     gateway-free. Deployments that still front the handler with a
- *     short-killing proxy can lower the cap via `maxTimeoutSeconds`.
+ *   - Long-poll is server-side, bounded by the SPEC §7.3 timeout
+ *     domain `[0, 25]` seconds. Values outside the bound reject
+ *     `INVALID_PARAMS` at the schema layer — there is no silent
+ *     truncation and no deployment override. Agents that need to wait
+ *     longer re-call `ggui_consume` (the documented loop).
  *
  * Output schema mirrors the cloud handler verbatim:
  * `{events: ConsumeEventEntry[], status: GguiSessionStatus}`. Each row is
@@ -51,25 +50,21 @@ import type { HandlerContext, SharedHandler } from '../types.js';
 import { GguiSessionNotFoundError } from './errors.js';
 
 /**
- * Default server-side cap on the actual inline long-poll wait —
- * silently truncates requests above this value. Lowered to 120s on
- * 2026-05-13 after live claude.ai smoke: a 300s long-poll completed
- * server-side (`elapsedMs:300516, outcome:success`) but the host's
- * MCP client + LLM-session timer had both aborted the conversation
- * before the response reached the model, surfacing as opaque
- * "Error occurred during tool execution". 120s is empirically
- * tolerated end-to-end (the user's own observation post-fix: a 120s
- * poll AND its subsequent request both succeeded).
+ * SPEC §7.3 bound on the inline long-poll wait: `timeout` MUST be an
+ * integer in `[0, MAX_TIMEOUT_SECONDS]`. Out-of-range values reject
+ * `INVALID_PARAMS` (the MCP layer validates tool arguments against
+ * `inputSchema` before dispatch; the handler's own parse enforces the
+ * same bound for in-process callers).
  *
- * The schema-level cap (`timeout.max`) is set higher (600s) so the
- * agent CAN request more on deployments that override
- * `maxTimeoutSeconds` upward — but the default OSS posture caps to
- * 120s.
- *
- * Operators with stricter gateways override lower; operators with
- * looser transports (CLI agents, websocket) override higher.
+ * 25s exists because the handler must return within common
+ * infrastructure kill windows (API-gateway 30s HTTP limits, host MCP
+ * clients that abort long tool calls — live claude.ai smoke showed a
+ * 300s poll completing server-side AFTER the host had already aborted
+ * the conversation, surfacing as an opaque "Error occurred during
+ * tool execution"). Longer waits are the agent's loop, not a server
+ * knob: re-call `ggui_consume` on empty.
  */
-const DEFAULT_MAX_TIMEOUT_SECONDS = 120;
+const MAX_TIMEOUT_SECONDS = 25;
 /** Polling interval inside the long-poll loop. 1.5s balances
  *  perceived latency against read cost on cloud. OSS is in-memory
  *  but the same value keeps tests + behavior identical. */
@@ -86,10 +81,10 @@ const inputSchema = {
     .number()
     .int()
     .min(0)
-    .max(600)
+    .max(MAX_TIMEOUT_SECONDS)
     .optional()
     .describe(
-      'Inline long-poll seconds. 0 = immediate. **Recommended 60-120s.** Server caps at 120s by default (silently truncated). Values 300+ are empirically unsafe — host MCP clients (claude.ai, Claude Desktop) abort longer tool calls. Returns on first event OR timeout; re-call on empty to keep waiting.',
+      'Inline long-poll seconds, integer in [0, 25]. 0 = immediate. Values outside the bound reject INVALID_PARAMS. Returns on first event OR timeout; re-call on empty to keep waiting — longer waits are your loop, not a bigger timeout.',
     ),
 } as const;
 
@@ -164,15 +159,6 @@ export interface GguiConsumeHandlerDeps {
    *  no explicit ttl. Cloud reads from config; OSS reads from
    *  ggui.json. Falls back to ~1 day on absence. */
   readonly defaultRenderTtlSeconds?: number;
-  /**
-   * Upper bound on the inline long-poll wait, in seconds. Defaults
-   * to 30 (the schema's `timeout.max`, lowered from 900 on
-   * 2026-05-13 after live claude.ai smoke confirmed MCP host
-   * clients abort longer tool calls AND the LLM session). Override
-   * to an EVEN lower value only when fronted by a proxy that kills
-   * HTTP connections sooner.
-   */
-  readonly maxTimeoutSeconds?: number;
   /** Optional observer fan-out. Cloud-only by default. */
   readonly observerNotifier?: ObserverNotifier;
   /**
@@ -238,7 +224,7 @@ export function createGguiConsumeHandler(
     title: 'Consume',
     audience: ['agent'],
     description:
-      'Long-poll for buffered events on a GguiSession. CALL THIS RIGHT AFTER EVERY `ggui_render` THAT RETURNS `nextStep.tool === "ggui_consume"` — that hint is your cue to start listening for the user\'s gesture. Keyed by sessionId (global UUID); tenancy-checked via ctx.appId. Inline long-poll supported up to a deployment cap (default 30s — host MCP clients abort longer tool calls; pick 5-15s typical, 30s max). Returns `{events, status}` — each event carries `{intent, actionData, uiContext, actionId, firedAt}`: `actionData` is WHAT the user did, `uiContext` is the iframe-local snapshot of the contract\'s contextSpec slots AT THE MOMENT they did it. Both inform your reaction without a second round trip. Returns immediately when an action event arrives OR the render completes OR the timeout elapses. On timeout with no event, re-call ggui_consume to keep waiting.  THE LOOP: when `events` is non-empty, REACT, then re-call `ggui_consume` to wait for the next event. Exit only when status:"expired".  IMPORTANT — the iframe state is independent of your backend state: after you mutate via domain tools (todo_toggle, cart_add, etc.), the UI still shows the OLD props until you call `ggui_update`. If the events caused observable state changes the user is looking at, your reaction MUST include `ggui_update` somewhere before re-consuming; otherwise the user sees stale props (the #1 wire compliance bug). Pure-info events that don\'t change displayed state can skip ggui_update. You decide the call order and which tools you need — the protocol just guarantees that `ggui_update` is the way to refresh the iframe.  HOSTS WITH PROGRESSIVE TOOL DISCOVERY (claude.ai-style connectors): if a call here errors with "tool not loaded yet" or "wrong parameter names," call `tool_search({query:"ggui_consume"})` once to warm the tool, then retry with the same args. DO NOT skip the consume — silent gesture drops are the worst protocol failure.',
+      'Long-poll for buffered events on a GguiSession. CALL THIS RIGHT AFTER EVERY `ggui_render` THAT RETURNS `nextStep.tool === "ggui_consume"` — that hint is your cue to start listening for the user\'s gesture. Keyed by sessionId (global UUID); tenancy-checked via ctx.appId. Inline long-poll: `timeout` is an integer in [0, 25] seconds (values outside reject INVALID_PARAMS — host MCP clients abort longer tool calls; pick 5-15s typical, 25 max). Returns `{events, status}` — each event carries `{intent, actionData, uiContext, actionId, firedAt}`: `actionData` is WHAT the user did, `uiContext` is the iframe-local snapshot of the contract\'s contextSpec slots AT THE MOMENT they did it. Both inform your reaction without a second round trip. Returns immediately when an action event arrives OR the render completes OR the timeout elapses. On timeout with no event, re-call ggui_consume to keep waiting.  THE LOOP: when `events` is non-empty, REACT, then re-call `ggui_consume` to wait for the next event. Exit only when status:"expired".  IMPORTANT — the iframe state is independent of your backend state: after you mutate via domain tools (todo_toggle, cart_add, etc.), the UI still shows the OLD props until you call `ggui_update`. If the events caused observable state changes the user is looking at, your reaction MUST include `ggui_update` somewhere before re-consuming; otherwise the user sees stale props (the #1 wire compliance bug). Pure-info events that don\'t change displayed state can skip ggui_update. You decide the call order and which tools you need — the protocol just guarantees that `ggui_update` is the way to refresh the iframe.  HOSTS WITH PROGRESSIVE TOOL DISCOVERY (claude.ai-style connectors): if a call here errors with "tool not loaded yet" or "wrong parameter names," call `tool_search({query:"ggui_consume"})` once to warm the tool, then retry with the same args. DO NOT skip the consume — silent gesture drops are the worst protocol failure.',
     inputSchema,
     outputSchema,
     async handler(
@@ -263,13 +249,9 @@ export function createGguiConsumeHandler(
           throw new GguiSessionNotFoundError(sessionId);
         }
 
-        const maxTimeoutSeconds =
-          deps.maxTimeoutSeconds ?? DEFAULT_MAX_TIMEOUT_SECONDS;
-        const cappedTimeout = Math.min(
-          Math.max(timeout, 0),
-          maxTimeoutSeconds,
-        );
-        const deadline = Date.now() + cappedTimeout * 1000;
+        // `timeout` is schema-bounded to [0, MAX_TIMEOUT_SECONDS] —
+        // out-of-range values rejected INVALID_PARAMS before this line.
+        const deadline = Date.now() + timeout * 1000;
         const ttlMs = resolveTtlMs(
           stored,
           deps.defaultRenderTtlSeconds ?? DEFAULT_TTL_SECONDS,
@@ -288,7 +270,7 @@ export function createGguiConsumeHandler(
         // nothing AND the pipe is still active. Expired pipes
         // short-circuit because there will never be new events.
         if (
-          cappedTimeout > 0 &&
+          timeout > 0 &&
           result.events.length === 0 &&
           result.status !== 'expired'
         ) {
@@ -404,7 +386,7 @@ export function createGguiConsumeHandler(
             appId: ctx.appId,
             tool: 'ggui_consume',
             sessionId,
-            args: { timeout: cappedTimeout },
+            args: { timeout },
             result: {
               eventCount: events.length,
               eventTypes,

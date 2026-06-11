@@ -76,8 +76,6 @@ export interface FloorSummaryDisplay {
   avgScore: number;
   successRate: number;
   capHitRate: number;
-  predefinedToolCallRate: number;
-  avgPredefinedToolCalls: number;
   errorBuckets: {
     pass: number;
     patchInvalid: number;

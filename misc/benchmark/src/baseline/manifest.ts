@@ -224,11 +224,7 @@ export function extractMultiSdkSummary(report: unknown): BenchTopLineSummary {
             typeof s.avgScore === 'number' && s.avgScore >= 0
               ? s.avgScore.toFixed(1)
               : 'n/a';
-          const tool =
-            typeof s.predefinedToolCallRate === 'number'
-              ? `${Math.round(s.predefinedToolCallRate * 100)}%`
-              : 'n/a';
-          return `${floor}: ${runs}r t=${t} s=${score} tool=${tool}`;
+          return `${floor}: ${runs}r t=${t} s=${score}`;
         })
         .join(' | ')
     : undefined;

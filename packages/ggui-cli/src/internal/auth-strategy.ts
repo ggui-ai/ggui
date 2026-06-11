@@ -1,40 +1,36 @@
 /**
- * Vendor-neutral auth strategy for marketplace CLI verbs
+ * Auth strategy for marketplace CLI verbs
  * (`ggui {gadget,blueprint} publish`).
  *
  * Two strategies — explicit `--auth=bearer` for self-hosted and local
- * registries, and the (default) hosted-auth flow for the cloud
- * registry. The default flow is implemented behind a vendor-neutral
- * function name (`acquireHostedAuthJwt`) so this surface never names
- * any specific identity provider; the underlying implementation in
- * `artifact-publish` calls the cloud's hosted auth provider.
- *
- * The public surface (this file, its consumers, and the CLI help
- * text) stays vendor-neutral.
+ * registries, and the (default) `ggui login` session: the CLI reuses
+ * the credential the device flow stored at `~/.ggui/auth.json`,
+ * refreshing it when expired. The session acquisition itself lives in
+ * `artifact-publish` (`acquireLoginSessionToken`) and is injected here
+ * as a callback so this router stays IO-free.
  *
  * @example
  * ```ts
  * import { parseAuthFlags, acquireAuthToken } from './internal/auth-strategy.js';
  *
  * const authFlags = parseAuthFlags(args);
- * const jwt = await acquireAuthToken({
+ * const token = await acquireAuthToken({
  *   flags: authFlags,
  *   env: process.env,
- *   registryUrl,
- *   acquireHostedAuthJwt,
+ *   acquireSessionToken,
  * });
  * ```
  */
 
 /**
- * Parsed `--auth=<mode>` + `--token <token>` flags. Vendor-neutral.
+ * Parsed `--auth=<mode>` + `--token <token>` flags.
  *
- * `auth: undefined` means "use the default (hosted auth via the
- * registry)". The only public flag value is `'bearer'`.
+ * `auth: undefined` means "use the default (the stored `ggui login`
+ * session)". The only public flag value is `'bearer'`.
  */
 export interface AuthFlags {
   /** Auth mode. Only `'bearer'` is admitted as a public value; absent
-   * means "default = hosted auth via the configured registry". */
+   * means "default = the stored `ggui login` session". */
   readonly auth?: 'bearer';
   /** Explicit bearer token. Used only when `auth === 'bearer'`. */
   readonly token?: string;
@@ -42,17 +38,17 @@ export interface AuthFlags {
 
 /**
  * Help-text fragment for the auth flags, inlined into each subcommand's
- * help block. Vendor-neutral copy — never name the identity provider.
+ * help block.
  */
 export const AUTH_HELP_FRAGMENT = `Auth:
   --auth=bearer        Use a bearer token (for self-hosted or local
                        registries). Pair with --token <token> or set
                        GGUI_REGISTRY_TOKEN in the environment.
   --token <token>      Bearer token (paired with --auth=bearer).
-  (default)            Hosted auth via the configured registry —
-                       no flag needed; the CLI prompts for credentials
-                       on first publish and caches the resulting
-                       session at ~/.ggui/auth/<registry-host>/token.json.
+  (default)            Your \`ggui login\` session — the CLI reads
+                       ~/.ggui/auth.json and refreshes the token
+                       automatically when it has expired. Run
+                       \`ggui login\` first.
 `;
 
 /**
@@ -123,23 +119,19 @@ export function parseAuthFlags(
 }
 
 /**
- * Hosted-auth callback shape. Vendor-neutral by design — the caller
- * injects the actual implementation (which today calls the cloud
- * registry's hosted auth vendor).
+ * Login-session callback shape. The caller injects the actual
+ * implementation (`acquireLoginSessionToken` in `artifact-publish`,
+ * which reads `~/.ggui/auth.json` + refreshes when expired).
  *
- * Returns the bearer JWT the CLI sends as `Authorization: Bearer <jwt>`.
+ * Returns the bearer token the CLI sends as `Authorization: Bearer <token>`.
  */
-export type HostedAuthAcquirer = (deps: {
-  readonly registryUrl: string;
-  readonly env: NodeJS.ProcessEnv;
-  readonly cwd: string;
-}) => Promise<string>;
+export type SessionTokenAcquirer = () => Promise<string>;
 
 /**
  * Acquire the auth token to send to the registry. Routes:
  *
  *   - `flags.auth === 'bearer'` → use `flags.token` || `GGUI_REGISTRY_TOKEN`
- *   - otherwise → call `acquireHostedAuthJwt`
+ *   - otherwise → call `acquireSessionToken` (the stored `ggui login` session)
  *
  * Throws (with an operator-readable message) when bearer auth is
  * selected but no token is supplied; the message names the env var so
@@ -148,9 +140,7 @@ export type HostedAuthAcquirer = (deps: {
 export async function acquireAuthToken(deps: {
   readonly flags: AuthFlags;
   readonly env: NodeJS.ProcessEnv;
-  readonly cwd: string;
-  readonly registryUrl: string;
-  readonly acquireHostedAuthJwt: HostedAuthAcquirer;
+  readonly acquireSessionToken: SessionTokenAcquirer;
 }): Promise<string> {
   if (deps.flags.auth === 'bearer') {
     const fromFlag = deps.flags.token;
@@ -168,9 +158,5 @@ export async function acquireAuthToken(deps: {
     }
     return token;
   }
-  return deps.acquireHostedAuthJwt({
-    registryUrl: deps.registryUrl,
-    env: deps.env,
-    cwd: deps.cwd,
-  });
+  return deps.acquireSessionToken();
 }

@@ -3,14 +3,12 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   createLocalEmbeddingProvider,
   l2Normalize,
-  type PipelineFactory,
-  type TransformersPipelineFn,
-} from './index.js';
-import {
   DEFAULT_MODEL_DIMENSIONS,
   DEFAULT_MODEL_ID,
   DEFAULT_MODEL_REVISION,
-} from './bootstrap.js';
+  type PipelineFactory,
+  type TransformersPipelineFn,
+} from './index.js';
 
 // ─── l2Normalize ─────────────────────────────────────────────
 

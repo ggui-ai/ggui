@@ -323,7 +323,7 @@ async function generateSingle(
   const commit = getBenchmarkCommit(commitId);
   if (!commit) throw new Error(`Unknown commit: ${commitId}`);
 
-  const tools = createGeneratorTools({ enablePredefinedComponents: false });
+  const tools = createGeneratorTools();
   const systemPrompt = buildSystemPrompt(commit.prompt);
 
   console.log(`\n[benchmark] ${adapter.displayName} | ${model} × ${commitId} — starting...`);

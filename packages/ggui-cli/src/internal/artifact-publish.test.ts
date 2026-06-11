@@ -1,15 +1,17 @@
 /**
  * `ggui gadget publish` tests. Exercises the publish core end-to-end
- * with all network + cognito + key IO mocked. Each test pins its
- * own temp `~/.ggui` via `GGUI_CONFIG_DIR` so the operator's real
- * keys + token caches are never touched.
+ * with all network + key IO mocked. Each test pins its own temp
+ * `~/.ggui` via `GGUI_CONFIG_DIR` so the operator's real keys + login
+ * session are never touched.
  *
  * Coverage matrix (Slice 3.4 brief, §Tests):
  *   - Three-layer registry resolution: flag > env > ggui.json > error
  *   - Missing manifest → clear error
  *   - Invalid manifest → zod issue message
  *   - Conformance preflight fails → exit 1, no upload
- *   - Auth fails → exit 1
+ *   - Auth fails (no session / expired session / refresh rejected) → exit 1
+ *   - Login-session refresh path rotates + persists tokens
+ *   - Registry 401 → vendor-neutral auth diagnosis, per credential kind
  *   - Signing key missing → generate prompt OR error with hint
  *   - Server returns 501 → friendly message, exit 1
  *   - Server returns 201 → install command printed correctly
@@ -33,6 +35,7 @@ import {
   runArtifactPublish,
   type ArtifactPublishOptions,
 } from './artifact-publish.js';
+import { saveAuthSession, tryLoadAuthSession } from '../auth-store.js';
 import {
   generateEd25519Keypair,
   signBundleEd25519,
@@ -112,8 +115,6 @@ function setupTestEnv(): TestEnv {
 function teardownTestEnv(env: TestEnv): void {
   delete process.env['GGUI_CONFIG_DIR'];
   delete process.env['GGUI_REGISTRY'];
-  delete process.env['GGUI_REGISTRY_COGNITO_POOL_ID'];
-  delete process.env['GGUI_REGISTRY_COGNITO_APP_CLIENT_ID'];
   delete process.env['GGUI_OIDC_TOKEN'];
   delete process.env['ACTIONS_ID_TOKEN_REQUEST_TOKEN'];
   delete process.env['ACTIONS_ID_TOKEN_REQUEST_URL'];
@@ -141,22 +142,37 @@ function jsonResponse(status: number, body: unknown): Response {
   });
 }
 
-/** Cognito stub returning a fixed AuthenticationResult. */
-function makeCognitoStub(opts: { fail?: boolean } = {}): { send: Mock } {
-  const send = vi.fn(async () => {
-    if (opts.fail) {
-      throw new Error('NotAuthorizedException: Incorrect username or password.');
-    }
-    return {
-      AuthenticationResult: {
-        IdToken: 'id-token-abc',
-        AccessToken: 'access-token-xyz',
-        RefreshToken: 'refresh-token-123',
-        ExpiresIn: 3600,
-      },
-    };
+/**
+ * The fixed clock every publish test runs on (unix epoch SECONDS).
+ * Session fixtures below are expressed relative to it.
+ */
+const TEST_NOW = 1_700_000_000;
+
+/**
+ * Seed a fresh `ggui login` session at the temp `~/.ggui/auth.json`.
+ * Access token valid for another 2h relative to TEST_NOW — the
+ * publish flow uses it without refreshing.
+ */
+function seedLoginSession(
+  overrides: Partial<{
+    accessToken: string;
+    accessExpiresAt: number;
+    refreshToken: string;
+    refreshExpiresAt: number;
+  }> = {},
+): void {
+  saveAuthSession({
+    version: 1,
+    endpoint: 'https://api.example',
+    userId: 'user-123',
+    sessionId: 'sess-123',
+    accessToken: overrides.accessToken ?? 'cli_at_fresh',
+    accessExpiresAt: overrides.accessExpiresAt ?? TEST_NOW + 7200,
+    refreshToken: overrides.refreshToken ?? 'cli_rt_fresh',
+    refreshExpiresAt: overrides.refreshExpiresAt ?? TEST_NOW + 30 * 24 * 3600,
+    clientName: 'test client',
+    writtenAt: '2026-06-11T00:00:00.000Z',
   });
-  return { send };
 }
 
 /** Write a minimal valid gadget repo (manifest + entry). */
@@ -185,15 +201,6 @@ function seedPublicGadgetRepo(repoDir: string): void {
   );
   mkdirSync(join(repoDir, 'src'));
   writeFileSync(join(repoDir, 'src', 'index.ts'), SAMPLE_SOURCE);
-}
-
-function seedAuthConfig(env: TestEnv): void {
-  // Canonical env-var names locked by LOCKED-23 — the legacy unprefixed
-  // `GGUI_COGNITO_*` fallback was retired alongside the `ggui.json#registryAuth`
-  // field (auth out of git, period).
-  process.env['GGUI_REGISTRY_COGNITO_POOL_ID'] = 'us-east-1_test';
-  process.env['GGUI_REGISTRY_COGNITO_APP_CLIENT_ID'] = 'client-id-test';
-  void env;
 }
 
 /**
@@ -435,7 +442,7 @@ describe('runArtifactPublish', () => {
     if (!result.ok) expect(result.error.code).toBe('manifest_invalid');
   });
 
-  it('errors when auth config missing (no env vars present)', async () => {
+  it('errors with auth_config_missing when not signed in (no auth.json)', async () => {
     seedGadgetRepo(env.repoDir);
     const io = captureIO();
     const result = await runArtifactPublish({
@@ -445,26 +452,26 @@ describe('runArtifactPublish', () => {
       cwd: env.repoDir,
       stdout: io.stdoutFn,
       stderr: io.stderrFn,
-      hostedAuthClient: makeCognitoStub(),
-      prompt: vi.fn(async () => 'value'),
-      fetch: makeFetchStub({}),
     });
     expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.error.code).toBe('auth_config_missing');
+    if (!result.ok) {
+      expect(result.error.code).toBe('auth_config_missing');
+      // Vendor-neutral guidance: sign in OR bring a bearer token.
+      expect(result.error.message).toContain('ggui login');
+      expect(result.error.message).toContain('--auth=bearer');
+      expect(result.error.message).toContain('GGUI_REGISTRY_TOKEN');
+    }
   });
 
   it('manifest_kind_mismatch: `ggui gadget publish` on blueprint repo → friendly redirect', async () => {
     seedBlueprintRepo(env.repoDir);
-    seedAuthConfig(env);
+    seedLoginSession();
     const io = captureIO();
     const result = await runArtifactPublish(
       baseOpts({
         // kind defaults to 'gadget' in baseOpts; manifest in CWD is blueprint.
         stdout: io.stdoutFn,
         stderr: io.stderrFn,
-        hostedAuthClient: makeCognitoStub(),
-        prompt: vi.fn(async () => 'x'),
-        fetch: makeFetchStub({}),
       }),
     );
     expect(result.ok).toBe(false);
@@ -475,16 +482,13 @@ describe('runArtifactPublish', () => {
 
   it('manifest_kind_mismatch: `ggui blueprint publish` on gadget repo → friendly redirect', async () => {
     seedGadgetRepo(env.repoDir);
-    seedAuthConfig(env);
+    seedLoginSession();
     const io = captureIO();
     const result = await runArtifactPublish(
       baseOpts({
         kind: 'blueprint',
         stdout: io.stdoutFn,
         stderr: io.stderrFn,
-        hostedAuthClient: makeCognitoStub(),
-        prompt: vi.fn(async () => 'x'),
-        fetch: makeFetchStub({}),
       }),
     );
     expect(result.ok).toBe(false);
@@ -495,7 +499,7 @@ describe('runArtifactPublish', () => {
 
   it('happy path — gadget bundles, signs, posts, prints install command', async () => {
     seedGadgetRepo(env.repoDir);
-    seedAuthConfig(env);
+    seedLoginSession();
     const io = captureIO();
 
     const conformance = vi.fn(async () => jsonResponse(200, { ok: true }));
@@ -515,10 +519,6 @@ describe('runArtifactPublish', () => {
       baseOpts({
         stdout: io.stdoutFn,
         stderr: io.stderrFn,
-        hostedAuthClient: makeCognitoStub(),
-        prompt: vi.fn(async (label: string) =>
-          label.toLowerCase().includes('password') ? 'pw' : 'username',
-        ),
         fetch: makeFetchStub({
           '/conformance/check': conformance,
           '/publish': publish,
@@ -539,7 +539,7 @@ describe('runArtifactPublish', () => {
     const publishCall = publish.mock.calls[0];
     expect(publishCall[1]?.method).toBe('POST');
     const headers = publishCall[1]?.headers as Record<string, string>;
-    expect(headers?.['Authorization']).toBe('Bearer id-token-abc');
+    expect(headers?.['Authorization']).toBe('Bearer cli_at_fresh');
     const body = JSON.parse(publishCall[1]?.body as string);
     expect(body.manifest.kind).toBe('gadget');
     expect(typeof body.bundle).toBe('string'); // base64
@@ -553,7 +553,7 @@ describe('runArtifactPublish', () => {
 
   it('conformance preflight fails → exit 1, no POST to /publish', async () => {
     seedGadgetRepo(env.repoDir);
-    seedAuthConfig(env);
+    seedLoginSession();
     const io = captureIO();
     const conformance = vi.fn(async () =>
       jsonResponse(200, {
@@ -569,8 +569,6 @@ describe('runArtifactPublish', () => {
       baseOpts({
         stdout: io.stdoutFn,
         stderr: io.stderrFn,
-        hostedAuthClient: makeCognitoStub(),
-        prompt: vi.fn(async () => 'x'),
         fetch: makeFetchStub({
           '/conformance/check': conformance,
           '/publish': publish,
@@ -589,26 +587,58 @@ describe('runArtifactPublish', () => {
     expect(io.stderr.join('')).toContain('bundle_too_large');
   });
 
-  it('auth fails (bad password) → exit 1', async () => {
+  it('auth fails when the session refresh is rejected → exit 1, `ggui login` hint', async () => {
     seedGadgetRepo(env.repoDir);
-    seedAuthConfig(env);
+    // Access token already expired; refresh token still within TTL —
+    // the CLI attempts /v1/auth/refresh and the server rejects it.
+    seedLoginSession({ accessExpiresAt: TEST_NOW - 10 });
+    const io = captureIO();
+    const refresh = vi.fn(async () =>
+      jsonResponse(401, {
+        error: 'invalid_grant',
+        error_description: 'refresh token revoked',
+      }),
+    );
+    const result = await runArtifactPublish(
+      baseOpts({
+        stdout: io.stdoutFn,
+        stderr: io.stderrFn,
+        fetch: makeFetchStub({ '/v1/auth/refresh': refresh }),
+      }),
+    );
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('auth_failed');
+      expect(result.error.message).toContain('ggui login');
+    }
+    expect(refresh).toHaveBeenCalledTimes(1);
+  });
+
+  it('auth fails without a network call when the refresh token itself expired', async () => {
+    seedGadgetRepo(env.repoDir);
+    seedLoginSession({
+      accessExpiresAt: TEST_NOW - 100,
+      refreshExpiresAt: TEST_NOW - 10,
+    });
     const io = captureIO();
     const result = await runArtifactPublish(
       baseOpts({
         stdout: io.stdoutFn,
         stderr: io.stderrFn,
-        hostedAuthClient: makeCognitoStub({ fail: true }),
-        prompt: vi.fn(async () => 'x'),
+        // Empty stub — ANY fetch would throw "unexpected URL".
         fetch: makeFetchStub({}),
       }),
     );
     expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.error.code).toBe('auth_failed');
+    if (!result.ok) {
+      expect(result.error.code).toBe('auth_failed');
+      expect(result.error.message).toContain('ggui login');
+    }
   });
 
   it('server returns 501 → friendly message, exit 1', async () => {
     seedGadgetRepo(env.repoDir);
-    seedAuthConfig(env);
+    seedLoginSession();
     const io = captureIO();
     const conformance = vi.fn(async () => jsonResponse(200, { ok: true }));
     const publish = vi.fn(async () => new Response('', { status: 501 }));
@@ -617,8 +647,6 @@ describe('runArtifactPublish', () => {
       baseOpts({
         stdout: io.stdoutFn,
         stderr: io.stderrFn,
-        hostedAuthClient: makeCognitoStub(),
-        prompt: vi.fn(async () => 'x'),
         fetch: makeFetchStub({
           '/conformance/check': conformance,
           '/publish': publish,
@@ -633,7 +661,7 @@ describe('runArtifactPublish', () => {
 
   it('--dry-run → no POST to /publish', async () => {
     seedGadgetRepo(env.repoDir);
-    seedAuthConfig(env);
+    seedLoginSession();
     const io = captureIO();
     const conformance = vi.fn(async () => jsonResponse(200, { ok: true }));
     const publish = vi.fn();
@@ -643,8 +671,6 @@ describe('runArtifactPublish', () => {
         dryRun: true,
         stdout: io.stdoutFn,
         stderr: io.stderrFn,
-        hostedAuthClient: makeCognitoStub(),
-        prompt: vi.fn(async () => 'x'),
         fetch: makeFetchStub({
           '/conformance/check': conformance,
           '/publish': publish,
@@ -664,7 +690,7 @@ describe('runArtifactPublish', () => {
 
   it('first-publish generates a signing key + prints publicKeyId', async () => {
     seedGadgetRepo(env.repoDir);
-    seedAuthConfig(env);
+    seedLoginSession();
     const io = captureIO();
     const conformance = vi.fn(async () => jsonResponse(200, { ok: true }));
     const publish = vi.fn(async () =>
@@ -680,8 +706,6 @@ describe('runArtifactPublish', () => {
       baseOpts({
         stdout: io.stdoutFn,
         stderr: io.stderrFn,
-        hostedAuthClient: makeCognitoStub(),
-        prompt: vi.fn(async () => 'x'),
         fetch: makeFetchStub({
           '/conformance/check': conformance,
           '/publish': publish,
@@ -700,7 +724,7 @@ describe('runArtifactPublish', () => {
 
   it('--key path that does not exist → exit 1 with key_missing', async () => {
     seedGadgetRepo(env.repoDir);
-    seedAuthConfig(env);
+    seedLoginSession();
     const io = captureIO();
     const conformance = vi.fn(async () => jsonResponse(200, { ok: true }));
     const result = await runArtifactPublish(
@@ -708,8 +732,6 @@ describe('runArtifactPublish', () => {
         key: '/nonexistent/path/key',
         stdout: io.stdoutFn,
         stderr: io.stderrFn,
-        hostedAuthClient: makeCognitoStub(),
-        prompt: vi.fn(async () => 'x'),
         fetch: makeFetchStub({
           '/conformance/check': conformance,
         }),
@@ -755,7 +777,7 @@ describe('runArtifactPublish', () => {
     const { runArtifactPublish: runWithMock } = await import('./artifact-publish.js');
 
     seedPublicGadgetRepo(env.repoDir);
-    seedAuthConfig(env);
+    seedLoginSession();
     const io = captureIO();
     const conformance = vi.fn(async () => jsonResponse(200, { ok: true }));
     const publish = vi.fn(async (_url: string, _init?: RequestInit) =>
@@ -776,8 +798,6 @@ describe('runArtifactPublish', () => {
         registry: 'https://r.example',
         stdout: io.stdoutFn,
         stderr: io.stderrFn,
-        hostedAuthClient: makeCognitoStub(),
-        prompt: vi.fn(async () => 'x'),
         fetch: makeFetchStub({
           '/conformance/check': conformance,
           '/publish': publish,
@@ -803,7 +823,7 @@ describe('runArtifactPublish', () => {
   // surface a structured `oidc_resolution_failed` error.
   it('public gadget without resolvable OIDC token → oidc_resolution_failed', async () => {
     seedPublicGadgetRepo(env.repoDir);
-    seedAuthConfig(env);
+    seedLoginSession();
     const io = captureIO();
     const conformance = vi.fn(async () => jsonResponse(200, { ok: true }));
     const publish = vi.fn();
@@ -818,8 +838,6 @@ describe('runArtifactPublish', () => {
       baseOpts({
         stdout: io.stdoutFn,
         stderr: io.stderrFn,
-        hostedAuthClient: makeCognitoStub(),
-        prompt: vi.fn(async () => 'x'),
         fetch: makeFetchStub({
           '/conformance/check': conformance,
           '/publish': publish,
@@ -839,7 +857,7 @@ describe('runArtifactPublish', () => {
 
   it('blueprint manifest signs canonical JSON (no bundle)', async () => {
     seedBlueprintRepo(env.repoDir);
-    seedAuthConfig(env);
+    seedLoginSession();
     const io = captureIO();
     const conformance = vi.fn(async () => jsonResponse(200, { ok: true }));
     const publish = vi.fn(async (_url: string, _init?: RequestInit) =>
@@ -856,8 +874,6 @@ describe('runArtifactPublish', () => {
         kind: 'blueprint',
         stdout: io.stdoutFn,
         stderr: io.stderrFn,
-        hostedAuthClient: makeCognitoStub(),
-        prompt: vi.fn(async () => 'x'),
         fetch: makeFetchStub({
           '/conformance/check': conformance,
           '/publish': publish,
@@ -886,23 +902,27 @@ describe('runArtifactPublish', () => {
     if (!result.ok) expect(result.error.code).toBe('no_registry_resolved');
   });
 
-  // Schema-hardening (Bucket B, 2026-05-18, LOCKED-23): the
-  // `ggui.json#registryAuth` fallback is retired. Auth pool ids live
-  // in env vars exclusively, and only the canonical `GGUI_REGISTRY_COGNITO_*`
-  // prefix is honored — the unprefixed `GGUI_COGNITO_*` legacy fallback
-  // was also retired to eliminate env-var ambiguity.
-  it('reads cognito config from canonical GGUI_REGISTRY_COGNITO_* env vars', async () => {
+  // De-Cognito (2026-06-11): the publish flow's default credential is
+  // the `ggui login` session. An expired access token is refreshed
+  // against the session's OWN endpoint (auth.json#endpoint), never the
+  // registry, and the rotated tokens are persisted.
+  it('refreshes an expired login session and persists the rotated tokens', async () => {
     seedGadgetRepo(env.repoDir);
-    writeFileSync(
-      join(env.repoDir, 'ggui.json'),
-      JSON.stringify({
-        schema: '1',
-        registry: 'https://r.example',
-      }),
-    );
+    seedLoginSession({ accessExpiresAt: TEST_NOW - 10 });
     const io = captureIO();
+    const refresh = vi.fn(async (url: string) => {
+      // The refresh MUST hit the session's endpoint, not the registry.
+      expect(url).toBe('https://api.example/v1/auth/refresh');
+      return jsonResponse(200, {
+        access_token: 'cli_at_rotated',
+        refresh_token: 'cli_rt_rotated',
+        token_type: 'Bearer',
+        expires_in: 900,
+        session_id: 'sess-123',
+      });
+    });
     const conformance = vi.fn(async () => jsonResponse(200, { ok: true }));
-    const publish = vi.fn(async () =>
+    const publish = vi.fn(async (_url: string, _init?: RequestInit) =>
       jsonResponse(201, {
         artifactId: '@mapbox/map-gadget',
         version: '0.1.0',
@@ -911,47 +931,88 @@ describe('runArtifactPublish', () => {
       }),
     );
 
-    const restore = withEnv({
-      GGUI_REGISTRY_COGNITO_POOL_ID: 'us-east-1_fromenv',
-      GGUI_REGISTRY_COGNITO_APP_CLIENT_ID: 'client-fromenv',
-    });
-    try {
-      const result = await runArtifactPublish({
-        kind: 'gadget',
-        dryRun: false,
-        cwd: env.repoDir,
+    const result = await runArtifactPublish(
+      baseOpts({
         stdout: io.stdoutFn,
         stderr: io.stderrFn,
-        hostedAuthClient: makeCognitoStub(),
-        prompt: vi.fn(async () => 'x'),
+        fetch: makeFetchStub({
+          '/v1/auth/refresh': refresh,
+          '/conformance/check': conformance,
+          '/publish': publish,
+        }),
+      }),
+    );
+    expect(result.ok).toBe(true);
+    expect(refresh).toHaveBeenCalledTimes(1);
+    expect(io.stdout.join('')).toContain('(refreshed)');
+
+    // The registry calls carry the ROTATED access token.
+    const headers = publish.mock.calls[0][1]?.headers as Record<string, string>;
+    expect(headers?.['Authorization']).toBe('Bearer cli_at_rotated');
+
+    // The rotated session was persisted back to auth.json.
+    const persisted = tryLoadAuthSession();
+    expect(persisted?.accessToken).toBe('cli_at_rotated');
+    expect(persisted?.refreshToken).toBe('cli_rt_rotated');
+    expect(persisted?.accessExpiresAt).toBe(TEST_NOW + 900);
+  });
+
+  // De-Cognito (2026-06-11): the hosted registry does not accept CLI
+  // login sessions server-side yet — a 401 while using the session
+  // credential must say so truthfully (vendor-neutrally) instead of
+  // masquerading as a conformance failure.
+  it('registry 401 with session auth → auth_failed naming the bearer alternative', async () => {
+    seedGadgetRepo(env.repoDir);
+    seedLoginSession();
+    const io = captureIO();
+    const conformance = vi.fn(async () => jsonResponse(401, { message: 'Unauthorized' }));
+    const publish = vi.fn();
+    const result = await runArtifactPublish(
+      baseOpts({
+        stdout: io.stdoutFn,
+        stderr: io.stderrFn,
         fetch: makeFetchStub({
           '/conformance/check': conformance,
           '/publish': publish,
         }),
-        now: () => 1_700_000_000,
-      });
-      expect(result.ok).toBe(true);
-    } finally {
-      restore();
+      }),
+    );
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('auth_failed');
+      expect(result.error.message).toContain('ggui login');
+      expect(result.error.message).toContain('--auth=bearer');
+      // OSS purity: no identity-provider vendor in operator-facing text.
+      expect(result.error.message.toLowerCase()).not.toContain('cognito');
+    }
+    expect(publish).not.toHaveBeenCalled();
+  });
+
+  it('registry 401 with bearer auth → auth_failed pointing at the configured token', async () => {
+    seedGadgetRepo(env.repoDir);
+    const io = captureIO();
+    const conformance = vi.fn(async () => jsonResponse(401, { message: 'Unauthorized' }));
+    const result = await runArtifactPublish(
+      baseOpts({
+        auth: { auth: 'bearer', token: 'static-publish-token' },
+        stdout: io.stdoutFn,
+        stderr: io.stderrFn,
+        fetch: makeFetchStub({ '/conformance/check': conformance }),
+      }),
+    );
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('auth_failed');
+      expect(result.error.message).toContain('GGUI_REGISTRY_TOKEN');
     }
   });
 
-  // LOCKED-23 regression: the legacy unprefixed `GGUI_COGNITO_*` env-var
-  // pair was retired alongside `ggui.json#registryAuth`. Re-adding the
-  // fallback would silently revive env-var ambiguity, so we pin the
-  // negative behavior here.
-  it('does NOT honor legacy unprefixed GGUI_COGNITO_* env vars', async () => {
+  it('bearer auth works without any login session on disk', async () => {
     seedGadgetRepo(env.repoDir);
-    writeFileSync(
-      join(env.repoDir, 'ggui.json'),
-      JSON.stringify({
-        schema: '1',
-        registry: 'https://r.example',
-      }),
-    );
+    // NO seedLoginSession() — the bearer path must never read auth.json.
     const io = captureIO();
     const conformance = vi.fn(async () => jsonResponse(200, { ok: true }));
-    const publish = vi.fn(async () =>
+    const publish = vi.fn(async (_url: string, _init?: RequestInit) =>
       jsonResponse(201, {
         artifactId: '@mapbox/map-gadget',
         version: '0.1.0',
@@ -959,38 +1020,25 @@ describe('runArtifactPublish', () => {
         installCommand: 'i',
       }),
     );
-
-    const restore = withEnv({
-      GGUI_COGNITO_POOL_ID: 'us-east-1_legacy',
-      GGUI_COGNITO_APP_CLIENT_ID: 'client-legacy',
-    });
-    try {
-      const result = await runArtifactPublish({
-        kind: 'gadget',
-        dryRun: false,
-        cwd: env.repoDir,
+    const result = await runArtifactPublish(
+      baseOpts({
+        auth: { auth: 'bearer', token: 'static-publish-token' },
         stdout: io.stdoutFn,
         stderr: io.stderrFn,
-        hostedAuthClient: makeCognitoStub(),
-        prompt: vi.fn(async () => 'x'),
         fetch: makeFetchStub({
           '/conformance/check': conformance,
           '/publish': publish,
         }),
-        now: () => 1_700_000_000,
-      });
-      expect(result.ok).toBe(false);
-      if (!result.ok) {
-        expect(result.error.code).toBe('auth_config_missing');
-      }
-    } finally {
-      restore();
-    }
+      }),
+    );
+    expect(result.ok).toBe(true);
+    const headers = publish.mock.calls[0][1]?.headers as Record<string, string>;
+    expect(headers?.['Authorization']).toBe('Bearer static-publish-token');
   });
 
   it('publish 400 with structured server code → surfaces serverCode', async () => {
     seedGadgetRepo(env.repoDir);
-    seedAuthConfig(env);
+    seedLoginSession();
     const io = captureIO();
     const conformance = vi.fn(async () => jsonResponse(200, { ok: true }));
     const publish = vi.fn(async () =>
@@ -1000,8 +1048,6 @@ describe('runArtifactPublish', () => {
       baseOpts({
         stdout: io.stdoutFn,
         stderr: io.stderrFn,
-        hostedAuthClient: makeCognitoStub(),
-        prompt: vi.fn(async () => 'x'),
         fetch: makeFetchStub({
           '/conformance/check': conformance,
           '/publish': publish,

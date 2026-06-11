@@ -1,7 +1,7 @@
 {
   "name": "@ggui-ai/embedding-local",
   "version": "0.3.0",
-  "description": "Local-model text embeddings for self-hosted ggui. Provides a cold-start lifecycle (model download, cache resolution, warmup events) and a `@huggingface/transformers`-backed embedding provider running entirely on-device — no embedding API key required.",
+  "description": "Local-model text embeddings for self-hosted ggui. A `@huggingface/transformers`-backed embedding provider running entirely on-device — no embedding API key required.",
   "keywords": [
     "ggui",
     "embeddings",

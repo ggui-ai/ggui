@@ -154,11 +154,6 @@ const INTERACT_EXPORTS = [
   'Clickable', 'Hoverable', 'Pressable',
 ];
 
-// ── Template exports we expect ──
-const TEMPLATE_EXPORTS = [
-  'ChatInterface', 'Dashboard', 'ListDetail',
-];
-
 // ── Main ──
 async function main() {
   console.log('[inline-modules] Bundling design system for iframe sandboxes...');
@@ -204,16 +199,6 @@ async function main() {
   );
   console.log(`[inline-modules] interact.mjs: ${(interact.size / 1024).toFixed(1)} KB`);
 
-  // Bundle templates (sourced from src/blueprints/ post Template->Blueprint
-  // rename; exported constant name stays INLINE_TEMPLATES_MODULE for
-  // downstream stability — page-renderer.ts still consumes it under that
-  // name).
-  const templates = await bundleModule(
-    resolve(DIST_DIR, 'blueprints', 'index.js'),
-    'templates.mjs',
-  );
-  console.log(`[inline-modules] templates.mjs: ${(templates.size / 1024).toFixed(1)} KB`);
-
   // Validate exports
   const missingTokens = validateExports(tokens.code, TOKEN_EXPORTS);
   const missingPrimitives = validateExports(primitives.code, PRIMITIVE_EXPORTS);
@@ -251,13 +236,6 @@ async function main() {
     process.exit(1);
   }
 
-  const missingTemplates = validateExports(templates.code, TEMPLATE_EXPORTS);
-  if (missingTemplates.length > 0) {
-    console.error(`[inline-modules] ERROR: Missing template exports: ${missingTemplates.join(', ')}`);
-    console.error('[inline-modules] Update TEMPLATE_EXPORTS in this script or fix the source.');
-    process.exit(1);
-  }
-
   // Generate JS module with embedded strings (works in both Node.js and bundlers)
   const indexContent = `// AUTO-GENERATED — do not edit manually.
 // Run: pnpm --filter @ggui-ai/design build:inline
@@ -277,9 +255,6 @@ export declare const INLINE_COMPOSITIONS_MODULE: string;
 
 /** Self-contained ESM module string for @ggui-ai/design/interact */
 export declare const INLINE_INTERACT_MODULE: string;
-
-/** Self-contained ESM module string for @ggui-ai/design/templates */
-export declare const INLINE_TEMPLATES_MODULE: string;
 `;
 
   // Escape backticks and ${} in the module code so it can be embedded in template literals
@@ -304,9 +279,6 @@ export const INLINE_COMPOSITIONS_MODULE = \`${escapeForTemplate(compositions.cod
 
 /** Self-contained ESM module string for @ggui-ai/design/interact */
 export const INLINE_INTERACT_MODULE = \`${escapeForTemplate(interact.code)}\`;
-
-/** Self-contained ESM module string for @ggui-ai/design/templates */
-export const INLINE_TEMPLATES_MODULE = \`${escapeForTemplate(templates.code)}\`;
 `;
 
   writeFileSync(resolve(INLINE_DIR, 'index.d.ts'), indexContent);
@@ -317,7 +289,6 @@ export const INLINE_TEMPLATES_MODULE = \`${escapeForTemplate(templates.code)}\`;
   console.log(`  ${INLINE_DIR}/primitives.mjs`);
   console.log(`  ${INLINE_DIR}/components.mjs`);
   console.log(`  ${INLINE_DIR}/compositions.mjs`);
-  console.log(`  ${INLINE_DIR}/templates.mjs`);
   console.log(`  ${INLINE_DIR}/index.js (+ .d.ts)`);
   console.log('[inline-modules] Done. All exports validated.');
 }

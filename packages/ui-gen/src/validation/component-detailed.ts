@@ -54,9 +54,6 @@ export interface ValidationResult {
 const MAX_FILE_SIZE = 50 * 1024; // 50KB
 const MAX_LINE_COUNT = 500;
 
-// Valid @predefined/* subpaths (component levels)
-const VALID_PREDEFINED_LEVELS = ['primitives', 'components', 'composites', 'blueprints'];
-
 // Security patterns — single source of truth in @ggui-ai/protocol.
 // Re-exported here so existing consumers don't break.
 const DANGEROUS_PATTERNS = SHARED_DANGEROUS_PATTERNS;
@@ -164,17 +161,13 @@ export function validateComponentDetailed(code: string, options: ValidationOptio
   if (!options.skipImportValidation) {
   for (const imp of imports) {
     const isAllowed = isAllowedImport(imp.source);
-    // `@app/components` and `@predefined/*` are registered-/predefined-
-    // component mechanisms specific to this validator — kept local, not
-    // part of the shared design-system import allowlist.
+    // `@app/components` is the registered-component mechanism specific
+    // to this validator — kept local, not part of the shared
+    // design-system import allowlist.
     const isAppComponents =
       imp.source === '@app/components' ||
       imp.source.startsWith('@app/components/');
-    const isPredefined = imp.source.startsWith('@predefined/');
-    const isValidPredefined = isPredefined && VALID_PREDEFINED_LEVELS.some(
-      (level) => imp.source === `@predefined/${level}` || imp.source.startsWith(`@predefined/${level}/`)
-    );
-    if (!isAllowed && !isValidPredefined && !isAppComponents) {
+    if (!isAllowed && !isAppComponents) {
       errors.push({
         type: 'import',
         message: `Invalid import: "${imp.source}" is not allowed`,
@@ -209,11 +202,10 @@ export function validateComponentDetailed(code: string, options: ValidationOptio
   // Primitive validation
   const primitivesUsed = extractPrimitivesUsed(code);
 
-  // Check if any imports come from @app/components or @predefined/*
+  // Check if any imports come from @app/components
   const hasAppComponentImport = imports.some((i) => i.source.startsWith('@app/components'));
-  const hasPredefinedImport = imports.some((i) => i.source.startsWith('@predefined/'));
 
-  // Extract component names imported from @app/components and @predefined/*
+  // Extract component names imported from @app/components
   const importedComponentNames = new Set<string>();
 
   if (hasAppComponentImport) {
@@ -233,26 +225,9 @@ export function validateComponentDetailed(code: string, options: ValidationOptio
     }
   }
 
-  if (hasPredefinedImport) {
-    // Match named imports from @predefined/*: import { LoginForm } from '@predefined/organisms'
-    const predefinedNamedRegex = /import\s*\{([^}]+)\}\s*from\s*['"]@predefined\/[^'"]+['"]/g;
-    let match;
-    while ((match = predefinedNamedRegex.exec(code)) !== null) {
-      const names = match[1].split(',').map((n) => n.trim().split(' as ')[0].trim());
-      for (const name of names) {
-        if (name) importedComponentNames.add(name);
-      }
-    }
-    // Match default imports: import LoginForm from '@predefined/organisms/LoginForm'
-    const predefinedDefaultRegex = /import\s+(\w+)\s+from\s*['"]@predefined\/[^'"]+['"]/g;
-    while ((match = predefinedDefaultRegex.exec(code)) !== null) {
-      importedComponentNames.add(match[1]);
-    }
-  }
-
   for (const primitive of primitivesUsed) {
     if (!VALID_PRIMITIVES.includes(primitive as (typeof VALID_PRIMITIVES)[number])) {
-      // Check if it's imported from @app/components or @predefined/*
+      // Check if it's imported from @app/components
       if (importedComponentNames.has(primitive)) {
         continue; // Valid imported component
       }
@@ -263,7 +238,7 @@ export function validateComponentDetailed(code: string, options: ValidationOptio
         errors.push({
           type: 'primitive',
           message: `Unknown component: "${primitive}" is not a valid ggui primitive`,
-          suggestion: `Use one of the valid primitives: ${VALID_PRIMITIVES.slice(0, 10).join(', ')}... or import from @app/components or @predefined/*, or define it within this component.`,
+          suggestion: `Use one of the valid primitives: ${VALID_PRIMITIVES.slice(0, 10).join(', ')}... or import from @app/components, or define it within this component.`,
         });
       }
     }

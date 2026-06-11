@@ -213,8 +213,6 @@ export function buildFloorSummaries(
       .filter((s): s is number => typeof s === 'number');
     const times = generated.map((r) => r.generation!.generationTimeMs);
     const capHits = runs.filter((r) => r.pathUsage.capHit).length;
-    const predefinedCalls = runs.map((r) => r.pathUsage.predefinedToolCalls);
-    const predefinedCallers = predefinedCalls.filter((n) => n > 0).length;
 
     // Error buckets — sum across all runs on this floor that carry a
     // breakdown (the harness path populates it; older adapter-raw
@@ -238,10 +236,6 @@ export function buildFloorSummaries(
       avgScore: scores.length > 0 ? avg(scores) : -1,
       successRate: runs.length > 0 ? generated.length / runs.length : 0,
       capHitRate: runs.length > 0 ? capHits / runs.length : 0,
-      predefinedToolCallRate:
-        runs.length > 0 ? predefinedCallers / runs.length : 0,
-      avgPredefinedToolCalls:
-        runs.length > 0 ? avg(predefinedCalls) : 0,
       errorBuckets: buckets,
     });
   }

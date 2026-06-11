@@ -8,6 +8,8 @@
  * `StackItemNotFoundError` → `GguiSessionNotFoundError`.
  *
  * Covers the wire contract:
+ *   - timeout domain [0, 25] — out-of-range rejects (SPEC §7.3
+ *     INVALID_PARAMS bound; no silent truncation)
  *   - sessionId → tenancy gate via renderStore.get + appId cmp
  *   - tenancy mismatch + unknown render surface as GguiSessionNotFoundError
  *   - long-poll loop semantics (immediate, with-events, completed,
@@ -17,6 +19,7 @@
  *   - drain_ack + activeConsumerRegistry + slow-consume telemetry
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { ZodError } from 'zod';
 import type { ComponentGguiSession } from '@ggui-ai/protocol';
 import {
   InMemoryActiveConsumerRegistry,
@@ -162,6 +165,53 @@ describe('createGguiConsumeHandler', () => {
       );
       expect(result.events).toEqual([]);
       expect(result.status).toBe('active');
+    });
+  });
+
+  describe('timeout bound — SPEC §7.3 [0, 25] with INVALID_PARAMS rejection', () => {
+    // The wire-level INVALID_PARAMS (-32602) mapping is owned by the MCP
+    // SDK, which validates tool arguments against `inputSchema` before
+    // dispatch. These tests pin the schema bound itself (the handler's
+    // in-process parse enforces the same domain), so an out-of-range
+    // timeout can never reach the long-poll — no silent truncation.
+    it.each([26, 600, -1, 12.5])(
+      'rejects timeout=%s before touching any store or registry',
+      async (timeout) => {
+        await seedRender('render-1', 'app-1');
+        const registry = new InMemoryActiveConsumerRegistry();
+        const handler = createGguiConsumeHandler({
+          pendingEventConsumer: consumer,
+          renderStore,
+          activeConsumerRegistry: registry,
+        });
+        await expect(
+          handler.handler(
+            { sessionId: 'render-1', timeout },
+            { appId: 'app-1', requestId: 'r1' },
+          ),
+        ).rejects.toBeInstanceOf(ZodError);
+        // Rejection happens at parse time — no consumer was registered.
+        expect(registry.hasActive('render-1')).toBe(false);
+      },
+    );
+
+    it('accepts the boundary value timeout=25', async () => {
+      await seedRender('render-1', 'app-1');
+      await consumer.append('render-1', {
+        id: 'evt-1',
+        envelope: JSON.stringify({ type: 'submit' }),
+        sequence: 1,
+        createdAt: new Date().toISOString(),
+      });
+      const handler = createGguiConsumeHandler({
+        pendingEventConsumer: consumer,
+        renderStore,
+      });
+      const result = await handler.handler(
+        { sessionId: 'render-1', timeout: 25 },
+        { appId: 'app-1', requestId: 'r1' },
+      );
+      expect(result.events).toHaveLength(1);
     });
   });
 
@@ -569,9 +619,9 @@ describe('createGguiConsumeHandler', () => {
       // `notifications/cancelled` / transport close), the consume
       // long-poll must STOP — not keep polling to its deadline holding
       // `hasActive: true`, which would suppress the recovery doorbell on
-      // the user's post-reload gesture. With a 60s timeout the loop
-      // would normally run for a full minute; aborting after the first
-      // poll tick must release it in well under a second.
+      // the user's post-reload gesture. With a 25s timeout (the SPEC
+      // §7.3 max) the loop would normally run to its deadline; aborting
+      // after the first poll tick must release it in well under a second.
       await seedRender('render-1', 'app-1');
       const registry = new InMemoryActiveConsumerRegistry();
       const handler = createGguiConsumeHandler({
@@ -582,7 +632,7 @@ describe('createGguiConsumeHandler', () => {
       const controller = new AbortController();
       const start = Date.now();
       const promise = handler.handler(
-        { sessionId: 'render-1', timeout: 60 },
+        { sessionId: 'render-1', timeout: 25 },
         { appId: 'app-1', requestId: 'r1', signal: controller.signal },
       );
       // Yield so the handler runs up through `enter()` + into the loop.
@@ -593,7 +643,7 @@ describe('createGguiConsumeHandler', () => {
       controller.abort();
       const result = await promise;
       const elapsed = Date.now() - start;
-      // (a) Returns PROMPTLY — far below the 60_000ms deadline AND below
+      // (a) Returns PROMPTLY — far below the 25_000ms deadline AND below
       //     a single 1.5s poll tick (the mid-sleep abort short-circuit).
       expect(elapsed).toBeLessThan(1000);
       // (a') Clean empty result — no throw, no partial events; matches
@@ -619,7 +669,7 @@ describe('createGguiConsumeHandler', () => {
       controller.abort();
       const start = Date.now();
       const result = await handler.handler(
-        { sessionId: 'render-1', timeout: 60 },
+        { sessionId: 'render-1', timeout: 25 },
         { appId: 'app-1', requestId: 'r1', signal: controller.signal },
       );
       expect(Date.now() - start).toBeLessThan(500);

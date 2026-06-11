@@ -20,11 +20,11 @@
  *      platform=neutral) with manifest.peerDeps + react family
  *      hoisted to externals.
  *   4. Authenticate — either `--auth=bearer` (explicit token for self-
- *      hosted / local registries) OR the default hosted-auth flow via
- *      the configured registry. The hosted-auth implementation here
- *      talks to the cloud registry's hosted identity provider, but
- *      the public-surface naming stays vendor-neutral (see
- *      `./auth-strategy.ts`).
+ *      hosted / local registries) OR the default: reuse the session
+ *      `ggui login` already stored at `~/.ggui/auth.json`, refreshing
+ *      the access token via `POST /v1/auth/refresh` when it has
+ *      expired (see `./auth-strategy.ts` for the routing and
+ *      `../auth-store.ts` for the on-disk document).
  *   5. Conformance preflight — POST `/conformance/check` with the
  *      manifest + bundle text. Fail-fast so a malformed bundle
  *      doesn't hit S3.
@@ -42,7 +42,7 @@
  * **HTTP contract (locked).**
  *
  *   POST <registry>/publish
- *     Headers: `Authorization: Bearer <jwt>`, `Content-Type: application/json`
+ *     Headers: `Authorization: Bearer <token>`, `Content-Type: application/json`
  *     Body   : { manifest, bundle?, bundleSha384?, signature }
  *     201    : { artifactId, version, manifestUrl, bundleUrl?, signatureUrl?, installCommand }
  *     400    : { code: 'version_exists' | 'unknown_key' | 'conformance_failed' | … , message }
@@ -50,23 +50,13 @@
  *     501    : endpoint stubbed
  *
  *   POST <registry>/conformance/check
- *     Headers: `Authorization: Bearer <jwt>`, `Content-Type: application/json`
+ *     Headers: `Authorization: Bearer <token>`, `Content-Type: application/json`
  *     Body   : { manifest, bundle? }
  *     200    : { ok: true }
  *     200    : { ok: false, issues: [{code, message, path?}] }
  *     5xx    : transient — caller retries or surfaces
  */
 import { build as esbuild } from 'esbuild';
-// Cloud-internal hosted-auth implementation. The vendor SDK is named
-// here because this is the leaf implementation file the OSS-facing
-// `acquireHostedAuthJwt` wraps; the public surface (CLI flags, help
-// text, README, the auth-strategy module) is vendor-neutral.
-import {
-  CognitoIdentityProviderClient,
-  InitiateAuthCommand,
-  type InitiateAuthCommandInput,
-  type InitiateAuthCommandOutput,
-} from '@aws-sdk/client-cognito-identity-provider';
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
 import { URL } from 'node:url';
@@ -93,11 +83,10 @@ import {
 } from './oidc-token.js';
 import { sha384 } from '@noble/hashes/sha512.js';
 import {
-  isTokenFresh,
-  loadRegistryToken,
-  saveRegistryToken,
-  type RegistryTokenDocument,
-} from './auth-cache.js';
+  saveAuthSession,
+  tryLoadAuthSession,
+} from '../auth-store.js';
+import { ApiError, postAuthRefresh, type TokenResponse } from '../api-client.js';
 import {
   getPrivateKeyPath,
   hasKeypair,
@@ -139,28 +128,18 @@ export interface ArtifactPublishOptions {
    * Ignored for private-gadget publishes (which sign with Ed25519).
    */
   readonly identityToken?: string;
-  /** Auth strategy + bearer token. `auth === undefined` → hosted auth. */
+  /** Auth strategy + bearer token. `auth === undefined` → the stored
+   * `ggui login` session. */
   readonly auth?: AuthFlags;
   /** Starting directory; defaults to `process.cwd()`. */
   readonly cwd?: string;
   /**
    * Test seam: inject `fetch`. Production passes `globalThis.fetch`.
    * Typed deliberately as the `fetch` global so tests use a real
-   * `Response` object without leaking through `any`.
+   * `Response` object without leaking through `any`. Also used for the
+   * login-session refresh call (`POST /v1/auth/refresh`).
    */
   readonly fetch?: typeof fetch;
-  /**
-   * Test seam: inject a hosted-auth identity-provider client. Production
-   * constructs one per call. Vendor-neutral parameter name; the AWS SDK
-   * type is reused without leaking the vendor through the parameter
-   * name — see the cloud-internal hosted-auth implementation below.
-   */
-  readonly hostedAuthClient?: Pick<CognitoIdentityProviderClient, 'send'>;
-  /**
-   * Test seam: prompt for username + password. Production reads
-   * stdin (TTY) — tests stub the function.
-   */
-  readonly prompt?: (label: string, opts?: { hidden?: boolean }) => Promise<string>;
   /** Test seam: write status lines. Production = process.stdout.write. */
   readonly stdout?: (line: string) => void;
   /** Test seam: write error lines. Production = process.stderr.write. */
@@ -427,33 +406,25 @@ export async function runArtifactPublish(
   // ---- step 4: authenticate ----
   // Two paths:
   //   --auth=bearer → token from flag or GGUI_REGISTRY_TOKEN
-  //   default       → hosted auth via the configured registry (cloud)
-  let jwt: string;
+  //   default       → the `ggui login` session stored at ~/.ggui/auth.json
+  let token: string;
   const authFlags: AuthFlags = opts.auth ?? {};
+  const authKind: RegistryAuthKind = authFlags.auth === 'bearer' ? 'bearer' : 'session';
   try {
-    jwt = await acquireAuthToken({
+    token = await acquireAuthToken({
       flags: authFlags,
       env: process.env,
-      cwd,
-      registryUrl,
-      acquireHostedAuthJwt: async (deps) => {
-        const hosted = await acquireHostedAuthJwt({
-          registryUrl: deps.registryUrl,
-          env: deps.env,
-          cwd: deps.cwd,
-          hostedAuthClient: opts.hostedAuthClient,
-          prompt: opts.prompt,
-          now,
-        });
-        if (!hosted.ok) {
-          throw new HostedAuthError(hosted.error);
+      acquireSessionToken: async () => {
+        const session = await acquireLoginSessionToken({ now, fetchImpl });
+        if (!session.ok) {
+          throw new SessionAuthError(session.error);
         }
-        stdout(`auth: ${hosted.fromCache ? 'cached' : 'fresh'} JWT for ${hosted.token.username}\n`);
-        return hosted.token.idToken;
+        stdout(`auth: ggui login session${session.refreshed ? ' (refreshed)' : ''}\n`);
+        return session.accessToken;
       },
     });
   } catch (err) {
-    if (err instanceof HostedAuthError) {
+    if (err instanceof SessionAuthError) {
       stderr(`${verb}: ${err.payload.message}\n`);
       return { ok: false, exitCode: 1, error: err.payload };
     }
@@ -461,19 +432,25 @@ export async function runArtifactPublish(
     stderr(`${verb}: ${msg}\n`);
     return { ok: false, exitCode: 1, error: { code: 'auth_failed', message: msg } };
   }
-  if (authFlags.auth === 'bearer') {
-    stdout(`auth: bearer token (length=${jwt.length})\n`);
+  if (authKind === 'bearer') {
+    stdout(`auth: bearer token (length=${token.length})\n`);
   }
 
   // ---- step 5: conformance preflight ----
   const preflightRes = await runConformancePreflight({
     registryUrl,
-    jwt,
+    token,
+    authKind,
     manifest,
     bundleBytes,
     fetchImpl,
   });
   if (!preflightRes.ok) {
+    if (preflightRes.error.code === 'auth_failed') {
+      // 401 from the registry — an auth problem, not a conformance one.
+      stderr(`${verb}: ${preflightRes.error.message}\n`);
+      return { ok: false, exitCode: 1, error: preflightRes.error };
+    }
     stderr(`${verb}: conformance preflight failed\n`);
     if (preflightRes.error.code === 'conformance_failed' && preflightRes.error.issues) {
       for (const issue of preflightRes.error.issues) {
@@ -574,7 +551,8 @@ export async function runArtifactPublish(
 
   const publishRes = await postPublish({
     registryUrl,
-    jwt,
+    token,
+    authKind,
     manifest,
     bundleBytes,
     bundleSha384,
@@ -862,19 +840,28 @@ async function bundleGadget(
 }
 
 // ---------------------------------------------------------------------------
-// step 4 — hosted-auth JWT acquisition
+// step 4 — login-session token acquisition
 //
-// The cloud registry binds to a specific identity-provider vendor under
-// the hood; the OSS-facing function name (acquireHostedAuthJwt) stays
-// vendor-neutral. CLI help text + the auth-strategy module + this
-// public-facing function name all keep that posture; only the
-// implementation below names the vendor types it actually calls.
+// The default (non-`--auth=bearer`) path reuses the credential the
+// RFC 8628 device flow in `ggui login` already persisted to
+// `~/.ggui/auth.json`. No identity provider is contacted from here —
+// the only network call is the session-refresh endpoint
+// (`POST <session.endpoint>/v1/auth/refresh`) when the access token
+// has expired.
 // ---------------------------------------------------------------------------
+
+/** Which credential the publish flow is sending to the registry.
+ * Drives the 401 diagnostics — a rejected `ggui login` session points
+ * the operator at the session/bearer split; a rejected bearer token
+ * points at the registry's configured publish token. */
+export type RegistryAuthKind = 'bearer' | 'session';
 
 export interface AuthSuccess {
   readonly ok: true;
-  readonly token: RegistryTokenDocument;
-  readonly fromCache: boolean;
+  /** The `ggui login` access token, sent as `Authorization: Bearer <token>`. */
+  readonly accessToken: string;
+  /** True when the stored access token had expired and was refreshed. */
+  readonly refreshed: boolean;
 }
 export interface AuthFailed {
   readonly ok: false;
@@ -882,21 +869,10 @@ export interface AuthFailed {
 }
 
 /**
- * Cloud-internal hosted-auth identity-provider configuration. The
- * field names match the IdP vendor's terminology because this is the
- * leaf implementation file. Public surfaces upstream (CLI help, the
- * auth-strategy module, READMEs) stay vendor-neutral.
- */
-interface CognitoAuthConfig {
-  readonly poolId: string;
-  readonly appClientId: string;
-}
-
-/**
- * Sentinel error that lets the bearer/hosted strategy router surface
+ * Sentinel error that lets the bearer/session strategy router surface
  * a structured `PublishError` without leaking through `throw any`.
  */
-class HostedAuthError extends Error {
+class SessionAuthError extends Error {
   readonly payload: Extract<PublishError, { code: 'auth_failed' | 'auth_config_missing' }>;
   constructor(payload: Extract<PublishError, { code: 'auth_failed' | 'auth_config_missing' }>) {
     super(payload.message);
@@ -904,270 +880,108 @@ class HostedAuthError extends Error {
   }
 }
 
-export async function acquireHostedAuthJwt(opts: {
-  readonly registryUrl: string;
-  readonly env: NodeJS.ProcessEnv;
-  readonly cwd: string;
-  readonly hostedAuthClient?: Pick<CognitoIdentityProviderClient, 'send'>;
-  readonly prompt?: ArtifactPublishOptions['prompt'];
-  readonly now: () => number;
-}): Promise<AuthSuccess | AuthFailed> {
-  // 1. Cached?
-  const cached = loadRegistryToken(opts.registryUrl);
-  if (cached && cached.registry === opts.registryUrl && isTokenFresh(cached, opts.now())) {
-    return { ok: true, token: cached, fromCache: true };
-  }
+/** Safety margin (seconds) before access-token expiry at which the CLI
+ * proactively refreshes instead of racing a boundary rejection. */
+const ACCESS_TOKEN_FRESHNESS_MARGIN_SECONDS = 60;
 
-  // 2. Need auth config (Cognito pool id + client id). Personal
-  // credentials never go in source-controlled ggui.json: auth config
-  // lives in env vars or a user-level secret store. No fallback to
-  // project config.
-  const authConfig = resolveCognitoConfig(opts.env);
-  if (!authConfig) {
+/**
+ * Resolve the `ggui login` session token for registry calls.
+ *
+ * 1. Load `~/.ggui/auth.json` (written by `ggui login`). Missing /
+ *    malformed → `auth_config_missing` telling the operator to either
+ *    `ggui login` or use `--auth=bearer`.
+ * 2. Fresh access token → return it as-is.
+ * 3. Expired access token + live refresh token → `POST
+ *    <session.endpoint>/v1/auth/refresh`, persist the rotated session,
+ *    return the new access token.
+ * 4. Expired refresh token (or refresh rejected) → `auth_failed`
+ *    telling the operator to `ggui login` again.
+ */
+export async function acquireLoginSessionToken(opts: {
+  readonly now: () => number;
+  readonly fetchImpl: typeof fetch;
+}): Promise<AuthSuccess | AuthFailed> {
+  const session = tryLoadAuthSession();
+  if (!session) {
     return {
       ok: false,
       error: {
         code: 'auth_config_missing',
         message:
-          'registry hosted-auth config missing. Either:\n' +
-          '  - pass --auth=bearer --token <token> (for self-hosted / local registries), or\n' +
-          '  - set GGUI_REGISTRY_COGNITO_POOL_ID + GGUI_REGISTRY_COGNITO_APP_CLIENT_ID in your environment.',
+          'no registry credentials found. Either:\n' +
+          '  - run `ggui login` to sign in, or\n' +
+          '  - pass --auth=bearer --token <token> (or set GGUI_REGISTRY_TOKEN) for self-hosted / local registries.',
       },
     };
   }
 
-  // 3. Refresh-token path (cache exists but expired)
-  if (cached && cached.refreshToken) {
-    const refreshed = await tryRefresh({
-      ...(opts.hostedAuthClient ? { hostedAuthClient: opts.hostedAuthClient } : {}),
-      authConfig,
-      refreshToken: cached.refreshToken,
-      registryUrl: opts.registryUrl,
-      username: cached.username,
-      now: opts.now,
-    });
-    if (refreshed.ok) {
-      saveRegistryToken(refreshed.token);
-      return { ok: true, token: refreshed.token, fromCache: false };
-    }
-    // refresh failed — fall through to password flow
+  const nowSeconds = opts.now();
+  if (session.accessExpiresAt - nowSeconds > ACCESS_TOKEN_FRESHNESS_MARGIN_SECONDS) {
+    return { ok: true, accessToken: session.accessToken, refreshed: false };
   }
 
-  // 4. Password flow
-  const promptFn = opts.prompt ?? defaultPrompt;
-  let username: string;
-  let password: string;
-  try {
-    username = await promptFn('Registry username: ');
-    password = await promptFn('Registry password: ', { hidden: true });
-  } catch (err) {
+  if (session.refreshExpiresAt <= nowSeconds) {
     return {
       ok: false,
       error: {
         code: 'auth_failed',
-        message: `prompt failed: ${err instanceof Error ? err.message : String(err)}`,
+        message: 'login session expired. Run `ggui login` again.',
       },
     };
   }
-  const idp = opts.hostedAuthClient ?? new CognitoIdentityProviderClient({});
-  const auth = await runUserPasswordAuth({
-    hostedAuthClient: idp,
-    authConfig,
-    username,
-    password,
-  });
-  if (!auth.ok) {
-    return { ok: false, error: { code: 'auth_failed', message: auth.error } };
+
+  let tokens: TokenResponse;
+  try {
+    tokens = await postAuthRefresh(session.endpoint, session.refreshToken, opts.fetchImpl);
+  } catch (err) {
+    if (err instanceof ApiError && (err.status === 400 || err.status === 401)) {
+      return {
+        ok: false,
+        error: {
+          code: 'auth_failed',
+          message: 'login session expired or was revoked. Run `ggui login` again.',
+        },
+      };
+    }
+    return {
+      ok: false,
+      error: {
+        code: 'auth_failed',
+        message: `token refresh failed: ${err instanceof Error ? err.message : String(err)}`,
+      },
+    };
   }
-  const token: RegistryTokenDocument = {
-    version: 1,
-    registry: opts.registryUrl,
-    idToken: auth.idToken,
-    accessToken: auth.accessToken,
-    refreshToken: auth.refreshToken,
-    expiresAt: opts.now() + auth.expiresIn,
-    username,
+
+  const refreshedSession = {
+    ...session,
+    accessToken: tokens.access_token,
+    accessExpiresAt: nowSeconds + tokens.expires_in,
+    refreshToken: tokens.refresh_token,
     writtenAt: new Date().toISOString(),
   };
-  saveRegistryToken(token);
-  return { ok: true, token, fromCache: false };
+  saveAuthSession(refreshedSession);
+  return { ok: true, accessToken: refreshedSession.accessToken, refreshed: true };
 }
 
 /**
- * Resolve Cognito auth config from environment variables only.
- *
- * `ggui.json` is source-controlled, so personal credentials never go
- * in git. The publish CLI's auth config comes exclusively from the
- * canonical env-var pair:
- *
- *   `GGUI_REGISTRY_COGNITO_POOL_ID` + `GGUI_REGISTRY_COGNITO_APP_CLIENT_ID`
- *
- * The `GGUI_REGISTRY_` prefix matches other registry-scoped vars
- * (`GGUI_REGISTRY_TOKEN`, `GGUI_REGISTRY`). There is deliberately no
- * unprefixed `GGUI_COGNITO_*` fallback — a second accepted form would
- * re-introduce env-var ambiguity.
- *
- * No project-config fallback. Operators who want per-project auth
- * pinning use a per-project `.envrc` (direnv) or shell wrapper.
+ * Operator-facing diagnosis for an HTTP 401 from the registry,
+ * specialized on which credential was sent. Used by both the
+ * conformance preflight and the publish POST.
  */
-function resolveCognitoConfig(
-  env: NodeJS.ProcessEnv,
-): CognitoAuthConfig | null {
-  const poolId = env['GGUI_REGISTRY_COGNITO_POOL_ID'];
-  const appClientId = env['GGUI_REGISTRY_COGNITO_APP_CLIENT_ID'];
-  if (poolId && appClientId) {
-    return { poolId, appClientId };
+function describeRegistryAuthRejection(authKind: RegistryAuthKind, path: string): string {
+  if (authKind === 'bearer') {
+    return (
+      `registry rejected the bearer token (HTTP 401 from ${path}). ` +
+      'Check that --token / GGUI_REGISTRY_TOKEN matches the publish token the registry is configured with.'
+    );
   }
-  return null;
-}
-
-interface CognitoAuthOk {
-  readonly ok: true;
-  readonly idToken: string;
-  readonly accessToken: string;
-  readonly refreshToken: string;
-  readonly expiresIn: number;
-}
-interface CognitoAuthErr {
-  readonly ok: false;
-  readonly error: string;
-}
-
-async function runUserPasswordAuth(opts: {
-  readonly hostedAuthClient: Pick<CognitoIdentityProviderClient, 'send'>;
-  readonly authConfig: CognitoAuthConfig;
-  readonly username: string;
-  readonly password: string;
-}): Promise<CognitoAuthOk | CognitoAuthErr> {
-  const input: InitiateAuthCommandInput = {
-    AuthFlow: 'USER_PASSWORD_AUTH',
-    ClientId: opts.authConfig.appClientId,
-    AuthParameters: {
-      USERNAME: opts.username,
-      PASSWORD: opts.password,
-    },
-  };
-  try {
-    const cmd = new InitiateAuthCommand(input);
-    const res = await opts.hostedAuthClient.send(cmd);
-    return extractAuthResult(res);
-  } catch (err) {
-    return {
-      ok: false,
-      error: err instanceof Error ? err.message : String(err),
-    };
-  }
-}
-
-async function tryRefresh(opts: {
-  readonly hostedAuthClient?: Pick<CognitoIdentityProviderClient, 'send'>;
-  readonly authConfig: CognitoAuthConfig;
-  readonly refreshToken: string;
-  readonly registryUrl: string;
-  readonly username: string;
-  readonly now: () => number;
-}): Promise<{ ok: true; token: RegistryTokenDocument } | { ok: false; error: string }> {
-  const idp = opts.hostedAuthClient ?? new CognitoIdentityProviderClient({});
-  const input: InitiateAuthCommandInput = {
-    AuthFlow: 'REFRESH_TOKEN_AUTH',
-    ClientId: opts.authConfig.appClientId,
-    AuthParameters: {
-      REFRESH_TOKEN: opts.refreshToken,
-    },
-  };
-  try {
-    const res = await idp.send(new InitiateAuthCommand(input));
-    const extracted = extractAuthResult(res);
-    if (!extracted.ok) return { ok: false, error: extracted.error };
-    // Cognito's REFRESH_TOKEN flow returns a new RefreshToken only
-    // when rotation is enabled on the pool. When absent, reuse the
-    // existing refresh token (still valid until its TTL).
-    const refreshToken =
-      extracted.refreshToken.length > 0 ? extracted.refreshToken : opts.refreshToken;
-    return {
-      ok: true,
-      token: {
-        version: 1,
-        registry: opts.registryUrl,
-        idToken: extracted.idToken,
-        accessToken: extracted.accessToken,
-        refreshToken,
-        expiresAt: opts.now() + extracted.expiresIn,
-        username: opts.username,
-        writtenAt: new Date().toISOString(),
-      },
-    };
-  } catch (err) {
-    return { ok: false, error: err instanceof Error ? err.message : String(err) };
-  }
-}
-
-function extractAuthResult(res: InitiateAuthCommandOutput): CognitoAuthOk | CognitoAuthErr {
-  const result = res.AuthenticationResult;
-  if (!result) {
-    return {
-      ok: false,
-      error: `Cognito did not return AuthenticationResult (challenge=${res.ChallengeName ?? 'none'})`,
-    };
-  }
-  if (
-    typeof result.IdToken !== 'string' ||
-    typeof result.AccessToken !== 'string' ||
-    typeof result.ExpiresIn !== 'number'
-  ) {
-    return {
-      ok: false,
-      error: 'Cognito AuthenticationResult missing IdToken/AccessToken/ExpiresIn',
-    };
-  }
-  return {
-    ok: true,
-    idToken: result.IdToken,
-    accessToken: result.AccessToken,
-    refreshToken: typeof result.RefreshToken === 'string' ? result.RefreshToken : '',
-    expiresIn: result.ExpiresIn,
-  };
-}
-
-async function defaultPrompt(
-  label: string,
-  opts: { hidden?: boolean } = {},
-): Promise<string> {
-  // Minimal stdin reader. For hidden mode we toggle the TTY's `echo`
-  // off. The dependency-injected `prompt` in `runGadgetPublish` is
-  // the test seam — this is the fallback for real CLI use.
-  process.stdout.write(label);
-  const stdin = process.stdin;
-  if (!stdin.isTTY) {
-    throw new Error('stdin is not a TTY — pass --registry / set GGUI_REGISTRY and use a non-interactive auth path');
-  }
-  stdin.setEncoding('utf8');
-  if (opts.hidden) {
-    stdin.setRawMode(true);
-  }
-  let buf = '';
-  for await (const chunk of stdin) {
-    for (const ch of chunk) {
-      if (ch === '\r' || ch === '\n') {
-        if (opts.hidden) stdin.setRawMode(false);
-        process.stdout.write('\n');
-        return buf;
-      }
-      if (ch === '') {
-        // Ctrl-C — propagate via throw so the caller exits cleanly.
-        if (opts.hidden) stdin.setRawMode(false);
-        throw new Error('prompt cancelled');
-      }
-      if (ch === '' || ch === '\b') {
-        buf = buf.slice(0, -1);
-        continue;
-      }
-      buf += ch;
-      if (!opts.hidden) process.stdout.write(ch);
-    }
-  }
-  if (opts.hidden) stdin.setRawMode(false);
-  return buf;
+  return (
+    'registry rejected the `ggui login` session token (HTTP 401 from ' +
+    `${path}). This registry does not accept CLI login sessions for ` +
+    'publishing yet — pass --auth=bearer --token <token> (or set ' +
+    'GGUI_REGISTRY_TOKEN), or re-run `ggui login` if your session may ' +
+    'have been revoked.'
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -1179,12 +993,16 @@ interface ConformancePreflightOk {
 }
 interface ConformancePreflightErr {
   readonly ok: false;
-  readonly error: Extract<PublishError, { code: 'conformance_failed' | 'publish_failed' }>;
+  readonly error: Extract<
+    PublishError,
+    { code: 'conformance_failed' | 'publish_failed' | 'auth_failed' }
+  >;
 }
 
 async function runConformancePreflight(opts: {
   readonly registryUrl: string;
-  readonly jwt: string;
+  readonly token: string;
+  readonly authKind: RegistryAuthKind;
   readonly manifest: GadgetManifest | BlueprintManifest;
   readonly bundleBytes?: Uint8Array;
   readonly fetchImpl: typeof fetch;
@@ -1202,7 +1020,7 @@ async function runConformancePreflight(opts: {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${opts.jwt}`,
+        Authorization: `Bearer ${opts.token}`,
       },
       body,
     });
@@ -1212,6 +1030,15 @@ async function runConformancePreflight(opts: {
       error: {
         code: 'conformance_failed',
         message: `network error: ${err instanceof Error ? err.message : String(err)}`,
+      },
+    };
+  }
+  if (res.status === 401) {
+    return {
+      ok: false,
+      error: {
+        code: 'auth_failed',
+        message: describeRegistryAuthRejection(opts.authKind, '/conformance/check'),
       },
     };
   }
@@ -1382,7 +1209,10 @@ interface PublishOk {
 }
 interface PublishErr {
   readonly ok: false;
-  readonly error: Extract<PublishError, { code: 'publish_failed' | 'publish_stubbed' }>;
+  readonly error: Extract<
+    PublishError,
+    { code: 'publish_failed' | 'publish_stubbed' | 'auth_failed' }
+  >;
 }
 
 interface PublishResponseBody {
@@ -1396,7 +1226,8 @@ interface PublishResponseBody {
 
 async function postPublish(opts: {
   readonly registryUrl: string;
-  readonly jwt: string;
+  readonly token: string;
+  readonly authKind: RegistryAuthKind;
   readonly manifest: GadgetManifest | BlueprintManifest;
   readonly bundleBytes?: Uint8Array;
   readonly bundleSha384?: string;
@@ -1420,7 +1251,7 @@ async function postPublish(opts: {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${opts.jwt}`,
+        Authorization: `Bearer ${opts.token}`,
       },
       body,
     });
@@ -1430,6 +1261,15 @@ async function postPublish(opts: {
       error: {
         code: 'publish_failed',
         message: `network error: ${err instanceof Error ? err.message : String(err)}`,
+      },
+    };
+  }
+  if (res.status === 401) {
+    return {
+      ok: false,
+      error: {
+        code: 'auth_failed',
+        message: describeRegistryAuthRejection(opts.authKind, '/publish'),
       },
     };
   }

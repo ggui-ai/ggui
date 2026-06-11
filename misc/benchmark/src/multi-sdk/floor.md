@@ -22,36 +22,24 @@ reports stay comparable.
 
 ## What the floor ACTUALLY controls in v0
 
-**One thing, and it is documented here so that reviewers can verify it
-against code.**
+**Nothing, and it is documented here so that reviewers can verify it
+against code.** The original v0 divergence (a predefined-components
+lookup tool wired only on the hosted floor) was deleted along with the
+dead predefined-match pipeline — both floors now run the identical
+tool set, system prompt, criteria, and runtime render.
 
-| layer                                           | oss | hosted |
-| ----------------------------------------------- | --- | ------ |
-| `get_predefined_components` tool in coding loop | OFF | ON     |
-
-Branch point: `core/src/benchmarks/multi-sdk/runner.ts` —
-`enablePredefinedComponents: predefinedToolAvailable` where
-`predefinedToolAvailable = floor === 'hosted'`.
-
-Every other hosted-vs-OSS divergence (blueprint-finder wiring at
-dispatch, provisional-preview preamble, model-routing overrides,
-system-prompt fragments, criteria / evaluation, runtime-render) is
-**single-pathed today**. When those land, they route through this
-same `floor` flag — the reporting surface is already shaped for them.
+Every hosted-vs-OSS divergence (blueprint-finder wiring at dispatch,
+provisional-preview preamble, model-routing overrides, system-prompt
+fragments, criteria / evaluation, runtime-render) is **single-pathed
+today**. When those land, they route through this same `floor` flag —
+the reporting surface is already shaped for them.
 
 ---
 
 ## How to read the report
 
-Every report now carries `floorSummaries: FloorSummary[]` — one row
-per floor that was exercised. The console output prints them side-by-
-side as:
-
-```
-floor   runs  avgTime  avgScore  success  capHit  toolCalled/avg  buckets(pass/patchInv/selfCheck/diff)
-oss      27    38.2s    76.1      96%      4%      0%/0.0          81/5/3/1
-hosted   27    41.5s    77.8      93%      7%      89%/1.4         79/8/2/1
-```
+Every report carries `floorSummaries: FloorSummary[]` — one row per
+floor that was exercised, printed side-by-side in the console output.
 
 Field semantics (see `FloorSummary` in `types.ts` for the canonical
 definitions):
@@ -60,16 +48,9 @@ definitions):
   generation succeeded. Same convention as the existing
   `variantSummaries`.
 - **capHitRate** — fraction of ALL runs (including failures) where
-  `turnsUsed >= BENCH_MAX_TURNS` (45 today). A high rate on hosted
-  without a matching OSS rise would mean the predefined-tool path is
+  `turnsUsed >= BENCH_MAX_TURNS` (45 today). A high rate on one floor
+  without a matching rise on the other means that floor's path is
   causing churn, not saving work.
-- **predefinedToolCallRate** — fraction of runs where the agent
-  actually called `get_predefined_components`. On OSS this is
-  structurally 0 (tool isn't wired). On hosted, a low rate means the
-  agent isn't consulting the tool — which is a signal on its own,
-  separate from whether consulting it helped.
-- **avgPredefinedToolCalls** — mean call count per run. Catches
-  "called 5× per run" patterns that the boolean rate smooths over.
 - **errorBuckets** — sum of `breakdown.outcomes.*` across all runs on
   this floor. Per-floor aggregation lets you see whether one floor
   drives more patch-invalid churn or self-check failures.
@@ -114,7 +95,7 @@ pnpm --filter @ggui-ai/benchmark bench -p google -c weather-card --floor both
 
 ## When this section stops being honest
 
-The moment a second hosted-vs-OSS divergence lands (e.g.,
-provisional-preview preamble gated on hosted), **update this table
-first, land the code second**. Floors that secretly control two
-things without documentation here are worse than no floor split.
+The moment a hosted-vs-OSS divergence lands (e.g., provisional-preview
+preamble gated on hosted), **update this table first, land the code
+second**. Floors that secretly control two things without
+documentation here are worse than no floor split.
