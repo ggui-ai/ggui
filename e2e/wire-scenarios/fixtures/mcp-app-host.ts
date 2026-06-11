@@ -37,6 +37,14 @@
  * host's response — boot fails. (Observed live 2026-06-11.)
  */
 import { createServer, type Server } from 'node:http';
+import { readResource } from './mcp-client.js';
+
+/**
+ * Playwright selector for the host's app iframe — pair with
+ * `page.frameLocator(MCP_APP_IFRAME_SELECTOR)` to reach the rendered
+ * UI inside the resource document.
+ */
+export const MCP_APP_IFRAME_SELECTOR = 'iframe[data-ggui-mcp-app-iframe]';
 
 export interface McpAppHostOptions {
   /** Full ggui MCP endpoint `tools/call` is proxied to. */
@@ -206,4 +214,38 @@ export async function startMcpAppHost(
         server.close((err) => (err ? reject(err) : resolve()));
       }),
   };
+}
+
+export interface MountRenderResourceOptions {
+  /** Full ggui MCP endpoint (`resources/read` target + tools/call proxy). */
+  readonly mcpUrl: string;
+  /** Spec-canonical mount handle from `ggui_render` (`ui://ggui/render/...`). */
+  readonly resourceUri: string;
+  /** Optional bearer override — see {@link McpAppHostOptions.bearer}. */
+  readonly bearer?: string;
+}
+
+/**
+ * Resolve a render's MCP-App resource document via `resources/read`
+ * and boot the host stand-in around it — the full HOST-side mount
+ * dance every browser scenario shares. Open the returned handle's
+ * `url` in a browser and reach the rendered UI through
+ * {@link MCP_APP_IFRAME_SELECTOR}. Caller owns `close()`.
+ */
+export async function mountRenderResource(
+  opts: MountRenderResourceOptions,
+): Promise<McpAppHostHandle> {
+  const resource = await readResource(opts.mcpUrl, opts.resourceUri);
+  const resourceHtml = resource.result?.contents?.[0]?.text;
+  if (typeof resourceHtml !== 'string' || resourceHtml.length === 0) {
+    throw new Error(
+      `resources/read(${opts.resourceUri}) returned no text content: ` +
+        JSON.stringify(resource).slice(0, 400),
+    );
+  }
+  return startMcpAppHost({
+    mcpUrl: opts.mcpUrl,
+    resourceHtml,
+    ...(opts.bearer !== undefined ? { bearer: opts.bearer } : {}),
+  });
 }

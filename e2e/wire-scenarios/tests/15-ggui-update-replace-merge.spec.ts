@@ -10,14 +10,33 @@
  *   - `kind: 'merge'` — RFC 7396 JSON Merge Patch. Three sub-cases:
  *       (a) top-level shallow merge (replaces one key, preserves others)
  *       (b) nested deep merge (sibling fields preserved across depths)
- *       (c) null-delete (removes the field from the merged result)
+ *       (c) null-delete of a REQUIRED field (must reject; DOM unchanged)
+ *
+ * ## Obligation remapping (2026-06-11 retired-surfaces port)
+ *
+ * Every phase assertion (replace, merge shallow, merge nested-deep,
+ * merge contract-violation rejection) is UNCHANGED. What moved is the
+ * mount surface: the spec used to open the render's `/r/<shortCode>`
+ * URL — retired by R5, and `ggui_render`'s wire output carries no
+ * `url`. The spec-canonical mount handle is the `resourceUri` on the
+ * render's structuredContent, resolved via `resources/read` and framed
+ * by the minimal MCP-Apps host stand-in (fixtures/mcp-app-host.ts —
+ * same pattern as scenarios 07 + 12). The self-contained resource
+ * shell embeds the same live trio the retired bootstrap carried, so
+ * WS `props_update` delivery is unchanged; DOM polls now target the
+ * host's `data-ggui-mcp-app-iframe` frame instead of the page body.
  *
  * Parametric over the model-provider axis. See provider-matrix.ts.
  */
 import { afterEach, beforeEach, describe, expect, test } from 'vitest';
 import { callTool } from '../fixtures/mcp-client.js';
-import { renderKnownContract } from '../fixtures/render-contract.js';
 import { openBrowser, type BrowserHandle } from '../fixtures/browser.js';
+import {
+  MCP_APP_IFRAME_SELECTOR,
+  mountRenderResource,
+  type McpAppHostHandle,
+} from '../fixtures/mcp-app-host.js';
+import { renderKnownContract } from '../fixtures/render-contract.js';
 import { PROVIDERS, REQUIRE_ALL, providerSkip } from '../fixtures/provider-matrix.js';
 
 // Multi-prop contract — exercises BOTH the array path (todos) and the
@@ -95,17 +114,21 @@ for (const provider of PROVIDERS) {
       }
       const MCP_URL = provider.mcpUrl;
       let handle: BrowserHandle;
+      let host: McpAppHostHandle | undefined;
       beforeEach(async () => {
-        handle = await openBrowser();
+        // Relay OFF: the mcp-app-host wrapper page IS the host party.
+        handle = await openBrowser({ relayToolCallsToMcp: false });
       });
       afterEach(async () => {
         await handle.close();
+        await host?.close();
+        host = undefined;
       });
 
       test(
         'replace, merge shallow, merge nested-deep, and merge null-delete all reach the iframe DOM',
         async () => {
-          // 1. Render the initial contract.
+          // 1. Render the initial contract (blocks on cold-gen).
           const ref = await renderKnownContract({
             mcpUrl: MCP_URL,
             intent: INTENT,
@@ -114,12 +137,17 @@ for (const provider of PROVIDERS) {
             props: INITIAL_PROPS,
           });
 
-          // 2. Open the renderer.
+          // 2. Resolve + mount the per-render resource behind the host.
           const { page } = handle;
-          await page.goto(ref.url, { waitUntil: 'networkidle' });
+          host = await mountRenderResource({
+            mcpUrl: MCP_URL,
+            resourceUri: ref.resourceUri,
+          });
+          await page.goto(host.url, { waitUntil: 'networkidle' });
+          const appFrame = page.frameLocator(MCP_APP_IFRAME_SELECTOR);
+          const bodyText = async () => await appFrame.locator('body').innerText();
 
           // 3. Initial render check.
-          const bodyText = async () => await page.locator('body').innerText();
           await expect
             .poll(bodyText, { timeout: 90_000, interval: 500 })
             .toMatch(/my todos/i);
@@ -210,7 +238,9 @@ for (const provider of PROVIDERS) {
             .poll(bodyText, { timeout: 2_000, interval: 200 })
             .toMatch(/2 of 2 done/i);
         },
-        120_000,
+        // The render call itself blocks on cold-gen — 240s covers gen
+        // + mount + the four update phases across all three providers.
+        240_000,
       );
     },
   );

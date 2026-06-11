@@ -18,9 +18,13 @@
  * agent retrieves the gesture EXCLUSIVELY via `ggui_consume`, so the loop
  * is exactly-once by construction.
  *
- * Test choreography:
+ * Test choreography (post-R5 drive path — the rendered UI mounts via
+ * `resources/read` behind the MCP-Apps host stand-in; the doorbell is
+ * the iframe→HOST `ui/message` postMessage, captured on the host
+ * wrapper page's window):
  *   1. Render a contract with `actionSpec.save` (no agent listening).
- *   2. Open the renderer URL with a postMessage interceptor.
+ *   2. Resolve `resourceUri` + mount it behind the host stand-in with
+ *      a postMessage interceptor on the wrapper page.
  *   3. Click the Save button. (No `ggui_consume` long-poll runs in
  *      this test, so the server reports `consumerPresent: false`.)
  *   4. Assert a `ui/message` arrives whose TEXT carries the
@@ -35,6 +39,11 @@ import { afterEach, beforeEach, describe, expect, test } from 'vitest';
 import { callTool, unwrapStructured } from '../fixtures/mcp-client.js';
 import { renderKnownContract } from '../fixtures/render-contract.js';
 import { openBrowser, type BrowserHandle } from '../fixtures/browser.js';
+import {
+  MCP_APP_IFRAME_SELECTOR,
+  mountRenderResource,
+  type McpAppHostHandle,
+} from '../fixtures/mcp-app-host.js';
 import { SHARED_CONTRACT, SHARED_INTENT } from '../fixtures/shared-contract.js';
 
 const GGUI_PORT = Number.parseInt(process.env.GGUI_PORT ?? '6781', 10);
@@ -45,11 +54,15 @@ describe.skipIf(!HAS_KEY)(
   'Scenario 10 — no-consumer pure-doorbell user-action',
   () => {
     let handle: BrowserHandle;
+    let host: McpAppHostHandle | undefined;
     beforeEach(async () => {
-      handle = await openBrowser();
+      // Relay OFF: the mcp-app-host wrapper page IS the host party.
+      handle = await openBrowser({ relayToolCallsToMcp: false });
     });
     afterEach(async () => {
       await handle.close();
+      await host?.close();
+      host = undefined;
     });
 
     test(
@@ -62,10 +75,17 @@ describe.skipIf(!HAS_KEY)(
           contract: SHARED_CONTRACT,
         });
 
+        host = await mountRenderResource({
+          mcpUrl: MCP_URL,
+          resourceUri: ref.resourceUri,
+        });
         const { page } = handle;
 
         // postMessage interceptor BEFORE navigation so we capture every
         // outbound iframe envelope including the doorbell user-action.
+        // addInitScript runs in every frame; the assertion below reads
+        // the TOP window's array — that's where iframe→parent envelopes
+        // land (the host wrapper page is the parent).
         await page.addInitScript(() => {
           (
             window as unknown as { __capturedMessages: unknown[] }
@@ -77,8 +97,9 @@ describe.skipIf(!HAS_KEY)(
           });
         });
 
-        await page.goto(ref.url, { waitUntil: 'networkidle' });
-        const buttons = page.getByRole('button', { name: /save/i });
+        await page.goto(host.url, { waitUntil: 'networkidle' });
+        const appFrame = page.frameLocator(MCP_APP_IFRAME_SELECTOR);
+        const buttons = appFrame.getByRole('button', { name: /save/i });
         await buttons.first().waitFor({ state: 'visible', timeout: 90_000 });
 
         // Click ONCE — submit_action succeeds, pipe entry stored

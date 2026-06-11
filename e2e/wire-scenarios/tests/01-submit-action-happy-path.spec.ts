@@ -7,9 +7,13 @@
  * pipe → agent's `ggui_consume` long-poll drains it mid-turn.
  *
  * In this scenario the "agent" is the test runner: render a contract
- * with `actionSpec.save` (from the SHARED_CONTRACT fixture), open
- * the renderer URL, click the Save button, then call `ggui_consume`
- * and assert the action arrived.
+ * with `actionSpec.save` (from the SHARED_CONTRACT fixture), resolve
+ * the render's `resourceUri` via MCP `resources/read` and mount it
+ * behind the MCP-Apps host stand-in (the R5 retirement removed the
+ * `/r/<shortCode>` renderer-URL surface — `ggui_render`'s wire output
+ * carries no URL; the host stand-in plays the relay role claude.ai /
+ * the sample frontend play), click the Save button inside the host's
+ * iframe, then call `ggui_consume` and assert the action arrived.
  *
  * Gated on `ANTHROPIC_API_KEY` because render triggers component
  * generation.
@@ -18,6 +22,11 @@ import { afterEach, beforeEach, describe, expect, test } from 'vitest';
 import { callTool, unwrapStructured } from '../fixtures/mcp-client.js';
 import { renderKnownContract } from '../fixtures/render-contract.js';
 import { openBrowser, type BrowserHandle } from '../fixtures/browser.js';
+import {
+  MCP_APP_IFRAME_SELECTOR,
+  mountRenderResource,
+  type McpAppHostHandle,
+} from '../fixtures/mcp-app-host.js';
 import { SHARED_CONTRACT, SHARED_INTENT } from '../fixtures/shared-contract.js';
 
 const GGUI_PORT = Number.parseInt(process.env.GGUI_PORT ?? '6781', 10);
@@ -26,11 +35,18 @@ const HAS_KEY = !!process.env.ANTHROPIC_API_KEY;
 
 describe.skipIf(!HAS_KEY)('Scenario 1 — submit_action happy path', () => {
   let handle: BrowserHandle;
+  let host: McpAppHostHandle | undefined;
   beforeEach(async () => {
-    handle = await openBrowser();
+    // Relay OFF: the mcp-app-host wrapper page IS the host party
+    // (answers ui/initialize + relays tools/call). A second relay on
+    // the outer window would double-deliver every click's
+    // submit_action.
+    handle = await openBrowser({ relayToolCallsToMcp: false });
   });
   afterEach(async () => {
     await handle.close();
+    await host?.close();
+    host = undefined;
   });
 
   test(
@@ -53,15 +69,21 @@ describe.skipIf(!HAS_KEY)('Scenario 1 — submit_action happy path', () => {
         contract: SHARED_CONTRACT,
       });
 
-      // 2. Open the renderer URL.
+      // 2. Resolve the render's MCP-App resource (spec-canonical mount
+      //    handle) and open it behind the host stand-in.
+      host = await mountRenderResource({
+        mcpUrl: MCP_URL,
+        resourceUri: ref.resourceUri,
+      });
       const { page } = handle;
-      await page.goto(ref.url, { waitUntil: 'networkidle' });
+      await page.goto(host.url, { waitUntil: 'networkidle' });
+      const appFrame = page.frameLocator(MCP_APP_IFRAME_SELECTOR);
 
       // 3. Click every Save-named button in turn. Robust to LLMs
       //    that wrap the action in a modal — we click the trigger
       //    if present, then click "Save" inside. Multiple matches:
       //    click each until the pipe accepts an event.
-      const buttons = page.getByRole('button', { name: /save/i });
+      const buttons = appFrame.getByRole('button', { name: /save/i });
       // 90s: cold-gen + fetch(codeUrl) + dynamic import + react paint.
       // Cache is cleared between e2e runs (global-setup wipes
       // GGUI_CODE_CACHE_DIR), so this scenario always exercises the

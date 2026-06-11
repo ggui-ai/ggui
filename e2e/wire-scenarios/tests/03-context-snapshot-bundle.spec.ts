@@ -7,6 +7,11 @@
  * atomically. The pre-2026-05-14 top-level `contextSnapshot` on the
  * consume output was retired; `uiContext` now lives per-event.
  *
+ * Drive path (post-R5): the render's `resourceUri` is resolved via
+ * MCP `resources/read` and mounted behind the MCP-Apps host stand-in
+ * (fixtures/mcp-app-host.ts) — the retired `/r/<shortCode>` renderer
+ * URL no longer serves the iframe. Assertions are unchanged.
+ *
  * Parametric over the model-provider axis — one row per ggui-default-
  * <provider> instance. Each row skips cleanly when its key is missing;
  * `GGUI_E2E_REQUIRE_ALL_PROVIDERS=1` flips skip → hard-fail.
@@ -15,6 +20,11 @@ import { afterEach, beforeEach, describe, expect, test } from 'vitest';
 import { callTool, unwrapStructured } from '../fixtures/mcp-client.js';
 import { renderKnownContract } from '../fixtures/render-contract.js';
 import { openBrowser, type BrowserHandle } from '../fixtures/browser.js';
+import {
+  MCP_APP_IFRAME_SELECTOR,
+  mountRenderResource,
+  type McpAppHostHandle,
+} from '../fixtures/mcp-app-host.js';
 import { SHARED_CONTRACT, SHARED_INTENT } from '../fixtures/shared-contract.js';
 import { PROVIDERS, REQUIRE_ALL, providerSkip } from '../fixtures/provider-matrix.js';
 
@@ -36,11 +46,15 @@ for (const provider of PROVIDERS) {
       }
       const MCP_URL = provider.mcpUrl;
       let handle: BrowserHandle;
+      let host: McpAppHostHandle | undefined;
       beforeEach(async () => {
-        handle = await openBrowser();
+        // Relay OFF: the mcp-app-host wrapper page IS the host party.
+        handle = await openBrowser({ relayToolCallsToMcp: false });
       });
       afterEach(async () => {
         await handle.close();
+        await host?.close();
+        host = undefined;
       });
 
       test(
@@ -53,10 +67,15 @@ for (const provider of PROVIDERS) {
             contract: SHARED_CONTRACT,
           });
 
+          host = await mountRenderResource({
+            mcpUrl: MCP_URL,
+            resourceUri: ref.resourceUri,
+          });
           const { page } = handle;
-          await page.goto(ref.url, { waitUntil: 'networkidle' });
+          await page.goto(host.url, { waitUntil: 'networkidle' });
+          const appFrame = page.frameLocator(MCP_APP_IFRAME_SELECTOR);
 
-          const buttons = page.getByRole('button', { name: /save/i });
+          const buttons = appFrame.getByRole('button', { name: /save/i });
           // 90s: cold-gen first time the cache is fresh; warm hit (sub-
           // second) once the canonical contract is in the OSS in-memory
           // blueprint registry (01/02 render the same shape so this often

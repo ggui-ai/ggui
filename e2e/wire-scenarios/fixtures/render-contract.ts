@@ -7,17 +7,27 @@
  * to produce componentCode — see `ANTHROPIC_API_KEY` gating in each
  * scenario.
  *
- * Returns the rendered URL (`<server>/r/<shortCode>`) and the sessionId
- * so tests can open the iframe AND drive ggui_consume for the same
- * render.
+ * Returns the render's identity pair: `sessionId` (the agent's handle
+ * for `ggui_consume` / `ggui_update`) and `resourceUri` (the
+ * spec-canonical MCP-Apps mount handle, `ui://ggui/render/...`). The
+ * R5 retirement (2026-05-26) removed the `/r/<shortCode>` renderer-URL
+ * surface — `ggui_render`'s wire output carries NO browser URL.
+ * Browser scenarios resolve `resourceUri` via MCP `resources/read` and
+ * mount it behind the host stand-in: see `mountRenderResource` in
+ * fixtures/mcp-app-host.ts.
  */
 import { callTool, unwrapStructured } from './mcp-client.js';
 
 export interface RenderedContractRef {
   readonly handshakeId: string;
   readonly sessionId: string;
-  /** Absolute URL the renderer is served at. */
-  readonly url: string;
+  /**
+   * Spec-canonical MCP-Apps mount handle
+   * (`ui://ggui/render/{sessionId}[/{contractHash}]`). Resolve via
+   * `resources/read` + mount behind the MCP-Apps host stand-in
+   * (fixtures/mcp-app-host.ts `mountRenderResource`).
+   */
+  readonly resourceUri: string;
 }
 
 export interface RenderContractOptions {
@@ -35,8 +45,9 @@ export interface RenderContractOptions {
 
 /**
  * Run the full handshake → render chain with the supplied contract.
- * Returns enough to (a) open the renderer URL in a browser AND
- * (b) call `ggui_consume({sessionId})` to drain the pending-events pipe.
+ * Returns enough to (a) mount the render's MCP-App resource in a
+ * browser AND (b) call `ggui_consume({sessionId})` to drain the
+ * pending-events pipe.
  */
 export async function renderKnownContract(
   opts: RenderContractOptions,
@@ -55,9 +66,8 @@ export async function renderKnownContract(
   // non-deterministic. `props` is required on every render; default to
   // `{}` since these contracts declare no propsSpec.
   const render = unwrapStructured<{
-    sessionId: string;
-    renderUrl?: string;
-    url?: string;
+    sessionId?: unknown;
+    resourceUri?: unknown;
   }>(
     await callTool(opts.mcpUrl, 'ggui_render', {
       handshakeId: handshake.handshakeId,
@@ -66,27 +76,23 @@ export async function renderKnownContract(
     }),
   );
 
-  const url =
-    render.renderUrl ??
-    render.url ??
-    deriveRenderUrl(opts.mcpUrl, render.sessionId);
+  // Trust-boundary narrowing — the JSON-RPC body is untrusted wire
+  // input; validate the two identity fields instead of casting.
+  const { sessionId, resourceUri } = render;
+  if (
+    typeof sessionId !== 'string' ||
+    sessionId.length === 0 ||
+    typeof resourceUri !== 'string' ||
+    resourceUri.length === 0
+  ) {
+    throw new Error(
+      `ggui_render output missing sessionId/resourceUri: ${JSON.stringify(render).slice(0, 400)}`,
+    );
+  }
 
   return {
     handshakeId: handshake.handshakeId,
-    sessionId: render.sessionId,
-    url,
+    sessionId,
+    resourceUri,
   };
-}
-
-/**
- * Fallback URL derivation when the render response doesn't carry a
- * fully-resolved renderer URL. The OSS renderer serves at
- * `<server>/r/<shortCode>` where shortCode is derived from
- * `sessionId`. If render responses already include the URL (current
- * OSS behavior), this never runs.
- */
-function deriveRenderUrl(mcpUrl: string, sessionId: string): string {
-  const u = new URL(mcpUrl);
-  u.pathname = `/r/${sessionId}`;
-  return u.toString();
 }

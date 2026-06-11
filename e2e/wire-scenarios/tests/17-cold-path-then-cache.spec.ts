@@ -26,14 +26,15 @@
  *      STRICT cold-gen against the LITERAL draft (not the negotiator's
  *      potentially-amended effectiveContract) and registers
  *      `template:${blueprintKey(COLD_PATH_CONTRACT)}`.
- *      Capture `cold.bootstrap.codeHash`.
+ *      Capture the cold render's `codeHash` off its
+ *      `_meta["ai.ggui/render"]` slice.
  *   3. `ggui_handshake({intent: COLD_PATH_INTENT_PARAPHRASED,
  *      blueprintDraft: {contract: COLD_PATH_CONTRACT}})`.
  *      Assert: `suggestion.origin === 'cache'`,
  *      `blueprintMeta.codeHash` present.
  *   4. `ggui_render({handshakeId, props: {}})`  // accept: override omitted.
- *      Assert: `warm.bootstrap.codeHash === cold.bootstrap.codeHash`
- *      AND warm render latency < 5s.
+ *      Assert: warm render slice `codeHash` (and `codeUrl`) equal the
+ *      cold render's AND warm render latency < 5s.
  *
  * **Why override on step 2, not accept**: the OSS negotiator's synth
  * runs on every cold handshake and may amend the draft (e.g. add a
@@ -44,10 +45,32 @@
  * registered contract to the literal draft so step 3's handshake
  * exact-key matches.
  *
+ * ## Obligation remapping (2026-06-11 retired-surfaces port)
+ *
+ * All cold/warm assertions are UNCHANGED; what moved is where the
+ * render-side `codeHash`/`codeUrl` are read. This spec used to fetch
+ * the content-negotiated bootstrap JSON from the render's
+ * `/r/<shortCode>` URL — both retired: the R5 retirement removed the
+ * `/r/<shortCode>` HTTP surface, and `ggui_render`'s wire output
+ * carries no `url` (zod strips `codeUrl`/`codeHash` from
+ * `structuredContent`). The live surface is the render response's
+ * `_meta["ai.ggui/render"]` slice — the single `deriveRenderMeta`-fed
+ * projection (docs/principles/mcp-apps-compliance.md) — which carries
+ * the same `codeUrl` + `codeHash` the retired bootstrap JSON did.
+ * Narrowed at the trust boundary via the protocol's own
+ * `parseMcpAppAiGguiRenderMeta`. The handshake-side
+ * `suggestion.blueprintMeta.codeHash` reads are live, unretired wire
+ * fields and are untouched.
+ *
  * Gated on `ANTHROPIC_API_KEY` — step 2 cold-gens once.
  */
 import { describe, expect, test } from 'vitest';
-import { callTool, unwrapStructured } from '../fixtures/mcp-client.js';
+import { parseMcpAppAiGguiRenderMeta } from '@ggui-ai/protocol/integrations/mcp-apps';
+import {
+  callTool,
+  unwrapStructured,
+  type JsonRpcResponse,
+} from '../fixtures/mcp-client.js';
 import {
   COLD_PATH_CONTRACT,
   COLD_PATH_INTENT_CANONICAL,
@@ -79,44 +102,34 @@ interface HandshakeOut {
 
 interface RenderOut {
   sessionId: string;
-  url?: string;
 }
 
-interface BootstrapJson {
-  codeUrl?: string;
-  codeHash?: string;
+interface RenderCodeRef {
+  readonly codeUrl?: string;
+  readonly codeHash?: string;
 }
 
-function bootstrapUrlFromRenderUrl(renderUrl: string | undefined): string {
-  if (typeof renderUrl !== 'string') {
-    throw new Error(`render output missing url: ${String(renderUrl)}`);
-  }
-  const parsed = new URL(renderUrl);
-  const codeMatch = /^\/r\/([^/]+)$/.exec(parsed.pathname);
-  if (!codeMatch || typeof codeMatch[1] !== 'string') {
-    throw new Error(`url has no /r/<shortCode>: ${renderUrl}`);
-  }
-  return `http://localhost:${GGUI_PORT}/r/${codeMatch[1]}${parsed.search}`;
-}
-
-async function fetchBootstrap(renderUrl: string | undefined): Promise<BootstrapJson> {
-  const resp = await fetch(bootstrapUrlFromRenderUrl(renderUrl), {
-    headers: { Accept: 'application/json' },
-  });
-  if (!resp.ok) {
+/**
+ * Read `codeUrl` + `codeHash` off the render response's
+ * `_meta["ai.ggui/render"]` slice — the live replacement for the
+ * retired `/r/<shortCode>` bootstrap fetch. Same helper as scenarios
+ * 11 + 16 (spec-local; fixture-worthy once `fixtures/` reopens).
+ */
+function readRenderCodeRef(resp: JsonRpcResponse): RenderCodeRef {
+  const parsed = parseMcpAppAiGguiRenderMeta(resp.result?._meta);
+  if (!parsed.ok) {
     throw new Error(
-      `bootstrap fetch ${resp.status}: ${await resp.text().catch(() => '<no body>')}`,
+      `render response carries a malformed ai.ggui/render slice: ${JSON.stringify(resp.result?._meta).slice(0, 400)}`,
     );
   }
-  // R4: slice envelope — flatten the render slice into the legacy
-  // shape the test consumes.
-  const envelope = (await resp.json()) as Record<string, unknown>;
-  const renderSlice =
-    (envelope['ai.ggui/render'] as Record<string, unknown> | undefined) ??
-    {};
+  if (parsed.meta === undefined) {
+    throw new Error(
+      `render response missing the ai.ggui/render slice meta: ${JSON.stringify(resp.result?._meta).slice(0, 400)}`,
+    );
+  }
   return {
-    codeUrl: typeof renderSlice['codeUrl'] === 'string' ? renderSlice['codeUrl'] : undefined,
-    codeHash: typeof renderSlice['codeHash'] === 'string' ? renderSlice['codeHash'] : undefined,
+    ...(parsed.meta.codeUrl !== undefined ? { codeUrl: parsed.meta.codeUrl } : {}),
+    ...(parsed.meta.codeHash !== undefined ? { codeHash: parsed.meta.codeHash } : {}),
   };
 }
 
@@ -144,16 +157,20 @@ describe.skipIf(!HAS_KEY)(
         // Override avoids the synth-amended-contract trap; the
         // registry slot id is blueprintKey(COLD_PATH_CONTRACT) so
         // step 3's exact-key probe with the same draft must hit.
-        const coldRender = unwrapStructured<RenderOut>(
-          await callTool(MCP_URL, 'ggui_render', {
-            handshakeId: coldHandshake.handshakeId,
-            props: {},
-            override: { contract: COLD_PATH_CONTRACT },
-          }),
-        );
-        const coldBootstrap = await fetchBootstrap(coldRender.url);
-        expect(typeof coldBootstrap.codeHash).toBe('string');
-        expect(coldBootstrap.codeHash!.length).toBeGreaterThan(0);
+        const coldRenderResp = await callTool(MCP_URL, 'ggui_render', {
+          handshakeId: coldHandshake.handshakeId,
+          props: {},
+          override: { contract: COLD_PATH_CONTRACT },
+        });
+        unwrapStructured<RenderOut>(coldRenderResp);
+        const coldCode = readRenderCodeRef(coldRenderResp);
+        expect(typeof coldCode.codeHash).toBe('string');
+        const coldCodeHash = coldCode.codeHash;
+        if (coldCodeHash === undefined || coldCodeHash.length === 0) {
+          throw new Error(
+            'cold render carried no codeHash on its ai.ggui/render slice',
+          );
+        }
 
         // ── 3. Warm handshake — paraphrased intent, same draft ─────
         // The new fast path runs matchBlueprint exact-key on the
@@ -166,32 +183,31 @@ describe.skipIf(!HAS_KEY)(
         expect(typeof warmHandshake.suggestion.blueprintMeta.codeHash).toBe('string');
         expect(warmHandshake.suggestion.blueprintMeta.codeHash!.length).toBeGreaterThan(0);
 
-        // The bytes the handshake hashed are the SAME bytes that the
-        // bootstrap on step 2 served — both go through
+        // The bytes the handshake hashed are the SAME bytes the cold
+        // render's slice surfaced on step 2 — both go through
         // sha256(componentCode). Equality proves the fast path
         // matched the right slot (not, say, a stale row from another
         // scenario).
         expect(warmHandshake.suggestion.blueprintMeta.codeHash).toBe(
-          coldBootstrap.codeHash,
+          coldCodeHash,
         );
 
-        // Handshake on cache hit must skip LLM — see scenario 17 for
+        // Handshake on cache hit must skip LLM — see scenario 18 for
         // the same budget rationale.
         expect(warmHandshakeLatencyMs).toBeLessThan(3_000);
 
         // ── 4. Warm render (accept) — reuses cached bytes ──────────
         const warmRenderStart = Date.now();
-        const warmRender = unwrapStructured<RenderOut>(
-          await callTool(MCP_URL, 'ggui_render', {
-            handshakeId: warmHandshake.handshakeId,
-            props: {},
-          }),
-        );
+        const warmRenderResp = await callTool(MCP_URL, 'ggui_render', {
+          handshakeId: warmHandshake.handshakeId,
+          props: {},
+        });
+        unwrapStructured<RenderOut>(warmRenderResp);
         const warmRenderLatencyMs = Date.now() - warmRenderStart;
-        const warmBootstrap = await fetchBootstrap(warmRender.url);
+        const warmCode = readRenderCodeRef(warmRenderResp);
 
-        expect(warmBootstrap.codeHash).toBe(coldBootstrap.codeHash);
-        expect(warmBootstrap.codeUrl).toBe(coldBootstrap.codeUrl);
+        expect(warmCode.codeHash).toBe(coldCodeHash);
+        expect(warmCode.codeUrl).toBe(coldCode.codeUrl);
         expect(warmRenderLatencyMs).toBeLessThan(5_000);
       },
       300_000,

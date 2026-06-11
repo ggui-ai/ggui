@@ -24,8 +24,25 @@
  * it on its own when the contract declares a streamSpec, the bug is
  * in the protocol's self-teaching surface (tool description + server
  * instructions), NOT here.
+ *
+ * ## Obligation remapping (2026-06-11 retired-surfaces port)
+ *
+ * All assertions are UNCHANGED (toast text reaches the iframe DOM +
+ * `ggui_emit` on channel `toast` appears on the tool tape). Two
+ * surfaces moved:
+ *
+ *   - The prompt used to be typed into the sample frontend's chat
+ *     textbox at `/` — since c711a9236 the sample agents are pure
+ *     JSON backends. The prompt now rides the library's own wire
+ *     (`POST /auth/guest` → `POST /agent {kind:'chat'}` SSE) via
+ *     fixtures/agent-driver.ts, and the tool tape is read from the
+ *     validated SSE stream instead of a page-injected fetch hook.
+ *   - The iframe used to be discovered inside the sample frontend's
+ *     page. The render's `resourceUri` is now read off the SSE tape
+ *     (`ggui_render`'s tool result), resolved via `resources/read`,
+ *     and mounted behind the minimal MCP-Apps host stand-in
+ *     (fixtures/mcp-app-host.ts) — same pattern as scenario 07.
  */
-import { spawn, type ChildProcess } from 'node:child_process';
 import {
   afterAll,
   afterEach,
@@ -35,13 +52,34 @@ import {
   expect,
   test,
 } from 'vitest';
-import { callTool } from '../fixtures/mcp-client.js';
+import { callTool, readResource } from '../fixtures/mcp-client.js';
 import { openBrowser, type BrowserHandle } from '../fixtures/browser.js';
-import { cleanEnv } from '../fixtures/clean-env.js';
+import {
+  startMcpAppHost,
+  type McpAppHostHandle,
+} from '../fixtures/mcp-app-host.js';
+import {
+  mintGuestToken,
+  spawnSampleAgent,
+  startChat,
+  toolNames,
+  toolResultFor,
+  toolUses,
+  type SampleAgentHandle,
+} from '../fixtures/agent-driver.js';
 
 const GGUI_PORT = Number.parseInt(process.env.GGUI_PORT ?? '6781', 10);
 const TODO_PORT = Number.parseInt(process.env.TODO_PORT ?? '6782', 10);
-const SAMPLE_PORT = Number.parseInt(process.env.SAMPLE_PORT_14 ?? '6793', 10);
+// Own agent port — distinct from scenario 6's rows (6790/6792/6794)
+// and scenario 7's 6793, since SIGTERM port-release isn't fast enough
+// to reuse a port reliably when the suite runs back-to-back.
+const SAMPLE_PORT = Number.parseInt(process.env.SAMPLE_PORT_14 ?? '6796', 10);
+// Unique sandbox-proxy port (sample default is 7790; scenario 6 rows
+// use 7795-7797, scenario 7 uses 7799).
+const SANDBOX_PORT = Number.parseInt(
+  process.env.SANDBOX_PORT_14 ?? '7798',
+  10,
+);
 const TODO_MCP = `http://localhost:${TODO_PORT}/mcp`;
 const TODO_ADMIN = `http://localhost:${TODO_PORT}/admin`;
 
@@ -50,18 +88,6 @@ interface Todo {
   readonly text: string;
   readonly done: boolean;
   readonly createdAt: string;
-}
-
-async function waitForUrl(url: string, timeoutMs: number): Promise<void> {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    try {
-      const resp = await fetch(url);
-      if (resp.ok) return;
-    } catch { /* not ready yet */ }
-    await new Promise((r) => setTimeout(r, 250));
-  }
-  throw new Error(`Timed out waiting for ${url}`);
 }
 
 async function seedTodos(texts: ReadonlyArray<string>): Promise<ReadonlyArray<Todo>> {
@@ -75,10 +101,12 @@ async function seedTodos(texts: ReadonlyArray<string>): Promise<ReadonlyArray<To
   return created;
 }
 
-// SKIPPED 2026-05-14: this scenario asks the LLM to author a
+// SKIPPED 2026-05-14 (skip preserved through the 2026-06-11 retired-
+// surfaces port — the reasons below are model/triad prerequisites, not
+// surface retirement): this scenario asks the LLM to author a
 // streamSpec.toast channel AND emit on it from the agent side AFTER a
-// domain-tool toggle. Three load-bearing prerequisites that are NOT
-// yet pinned:
+// domain-tool toggle. Load-bearing prerequisites that are NOT yet
+// pinned:
 //   - haiku reliably extends the contract with streamSpec when prompted
 //     (currently nondeterministic);
 //   - the LLM-generated component subscribes to the streamSpec channel
@@ -86,46 +114,39 @@ async function seedTodos(texts: ReadonlyArray<string>): Promise<ReadonlyArray<To
 //     thin — see triad audit follow-up);
 //   - haiku calls ggui_emit after a domain-tool mutation (same model
 //     ceiling as scenario 07's missing ggui_update).
-// Re-enable after the planned ggui_update kind:'merge'|'replace'
-// redesign + streamSpec triad reinforcement.
+// NOTE: the third original prerequisite — the planned ggui_update
+// kind:'merge'|'replace' redesign — HAS since shipped (the update wire
+// is the kind-discriminated union now), so the skip should be
+// re-evaluated once the streamSpec triad reinforcement lands.
 describe.skip(
   'Scenario 14 — agent-driven ggui_emit toast on toggle',
   () => {
-    let sampleAgent: ChildProcess | undefined;
+    let sampleAgent: SampleAgentHandle | undefined;
     let handle: BrowserHandle;
 
     beforeAll(async () => {
       const reset = await fetch(`${TODO_ADMIN}/reset`, { method: 'POST' });
       expect(reset.ok).toBe(true);
 
-      sampleAgent = spawn(
-        'pnpm',
-        ['--filter', '@ggui-samples/agent-claude-sdk', 'start'],
-        {
-          env: {
-            ...cleanEnv(),
-            PORT: String(SAMPLE_PORT),
-            GGUI_MCP_URL: `http://localhost:${GGUI_PORT}/mcp`,
-            GGUI_TODO_MCP_URL: TODO_MCP,
-          },
-          stdio: 'pipe',
-        },
-      );
-      sampleAgent.stdout?.on('data', () => undefined);
-      sampleAgent.stderr?.on('data', () => undefined);
-      await waitForUrl(`http://localhost:${SAMPLE_PORT}/`, 30_000);
+      sampleAgent = await spawnSampleAgent({
+        pkg: '@ggui-samples/agent-claude-sdk',
+        port: SAMPLE_PORT,
+        sandboxProxyPort: SANDBOX_PORT,
+        gguiMcpUrl: `http://localhost:${GGUI_PORT}/mcp`,
+        todoMcpUrl: TODO_MCP,
+        adapterName: 'claude-agent-sdk',
+        logLabel: 'sample-agent-14',
+      });
     }, 60_000);
 
     afterAll(async () => {
-      if (sampleAgent && !sampleAgent.killed) {
-        sampleAgent.kill('SIGTERM');
-        await new Promise((r) => setTimeout(r, 500));
-      }
+      await sampleAgent?.stop();
     });
 
     beforeEach(async () => {
       await fetch(`${TODO_ADMIN}/reset`, { method: 'POST' });
       await seedTodos(['buy milk', 'walk the dog']);
+      // Relay OFF: the mcp-app-host wrapper page IS the host party.
       handle = await openBrowser({ relayToolCallsToMcp: false });
     });
 
@@ -136,55 +157,8 @@ describe.skip(
     test(
       'click → todo_toggle → agent emits toast on declared channel → iframe renders text',
       async () => {
+        if (!sampleAgent) throw new Error('sample agent not booted');
         const { page } = handle;
-
-        // SDK tape capture — same shape as scenarios 7/13.
-        await page.addInitScript(() => {
-          interface ChatHook { __chatSdkMessages?: unknown[] }
-          (window as unknown as ChatHook).__chatSdkMessages = [];
-          const origFetch = window.fetch;
-          window.fetch = async function instrumentedFetch(input, init) {
-            const resp = await origFetch(input, init);
-            const url =
-              typeof input === 'string'
-                ? input
-                : input instanceof URL
-                  ? input.href
-                  : (input as Request).url;
-            if (url.endsWith('/chat')) {
-              const cloned = resp.clone();
-              void (async () => {
-                const reader = cloned.body?.getReader();
-                if (!reader) return;
-                const decoder = new TextDecoder();
-                let buffer = '';
-                for (;;) {
-                  const { value, done } = await reader.read();
-                  if (done) break;
-                  buffer += decoder.decode(value, { stream: true });
-                  let split = buffer.indexOf('\n\n');
-                  while (split >= 0) {
-                    const frame = buffer.slice(0, split);
-                    buffer = buffer.slice(split + 2);
-                    const dataLine = frame.split('\n').find((l) => l.startsWith('data:'));
-                    if (dataLine) {
-                      try {
-                        const parsed = JSON.parse(dataLine.slice('data:'.length).trim());
-                        (window as unknown as ChatHook).__chatSdkMessages!.push(parsed);
-                      } catch { /* skip malformed */ }
-                    }
-                    split = buffer.indexOf('\n\n');
-                  }
-                }
-              })();
-            }
-            return resp;
-          };
-        });
-
-        await page.goto(`http://localhost:${SAMPLE_PORT}/`, {
-          waitUntil: 'networkidle',
-        });
 
         // Prompt steers the agent toward a contract with streamSpec.toast
         // AND nudges it to call ggui_emit after the toggle. Explicit
@@ -202,106 +176,137 @@ describe.skip(
           'confirmation banner. Use ggui_update or ggui_render to refresh',
           'the list visually too.',
         ].join(' ');
-        const promptBox = page.getByRole('textbox').first();
-        await promptBox.fill(prompt);
-        await page.getByRole('button', { name: /^send$/i }).click();
 
-        // Wait for the iframe to mount with buy-milk visible.
-        const iframeLocator = page.locator('iframe[data-ggui-mcp-app-iframe]');
-        await iframeLocator.first().waitFor({ state: 'attached', timeout: 120_000 });
-        const iframeFrame = iframeLocator.first().contentFrame();
-        if (!iframeFrame) throw new Error('iframe contentFrame() returned null');
-        await iframeFrame
-          .getByText(/buy milk/i)
-          .first()
-          .waitFor({ state: 'visible', timeout: 120_000 });
+        const token = await mintGuestToken(sampleAgent.baseUrl);
+        const chat = await startChat({
+          baseUrl: sampleAgent.baseUrl,
+          token,
+          prompt,
+        });
 
-        // Click "buy milk".
-        const clickTargets = [
-          iframeFrame.getByRole('checkbox', { name: /buy milk/i }).first(),
-          iframeFrame.locator('label').filter({ hasText: /buy milk/i }).first(),
-          iframeFrame.getByRole('listitem').filter({ hasText: /buy milk/i }).first(),
-          iframeFrame.getByText(/buy milk/i).first(),
-        ];
-        let clicked = false;
-        for (const target of clickTargets) {
-          try {
-            if (!(await target.isVisible({ timeout: 1000 }))) continue;
-            await target.click({ timeout: 5000 });
-            clicked = true;
-            break;
-          } catch { /* try next */ }
-        }
-        expect(clicked, 'no clickable "buy milk" element found in iframe').toBe(true);
-
-        // Poll the iframe DOM for the toast text. The agent should
-        // emit `text: "Marked buy milk done"` (or close variant) on
-        // the toast channel; the generated component renders it as a
-        // banner. Tolerate the LLM's phrasing variance.
-        const toastDeadline = Date.now() + 90_000;
-        let toastSeen = false;
-        let lastIframeText = '';
-        while (Date.now() < toastDeadline) {
-          const frames = await page.locator('iframe[data-ggui-mcp-app-iframe]').all();
-          const topFrame = frames[frames.length - 1]?.contentFrame();
-          if (!topFrame) {
-            await new Promise((r) => setTimeout(r, 500));
-            continue;
-          }
-          try {
-            const text = await topFrame.locator('body').innerText({ timeout: 500 }).catch(() => '');
-            lastIframeText = text;
-            // The emitted toast text references buy-milk + a done-state
-            // word. Accept "Marked buy milk done" / "buy milk done" /
-            // "buy milk completed" / similar.
-            if (/buy milk/i.test(text) && /(done|completed|marked|✓|checked)/i.test(text)) {
-              toastSeen = true;
-              break;
-            }
-          } catch { /* iframe transitioning */ }
-          await new Promise((r) => setTimeout(r, 500));
-        }
-        if (!toastSeen) {
-          // eslint-disable-next-line no-console
-          console.error(
-            '[scenario-14] toast text never rendered in iframe; last snapshot:',
-            lastIframeText.slice(0, 600),
+        let host: McpAppHostHandle | undefined;
+        try {
+          // Wait for a SUCCESSFUL ggui_render on the SSE tape and read
+          // the render's mount handle off its tool result (same pick as
+          // scenario 07).
+          const renderRef = await chat.waitFor(
+            (messages) => {
+              for (const use of toolUses(messages)) {
+                if (!/(^|__)ggui_render$/.test(use.name)) continue;
+                const result = toolResultFor(messages, use.id);
+                if (result === undefined || result.isError === true) continue;
+                const sid = result.structuredContent?.sessionId;
+                const uri = result.structuredContent?.resourceUri;
+                if (
+                  typeof sid === 'string' &&
+                  sid.length > 0 &&
+                  typeof uri === 'string' &&
+                  uri.length > 0
+                ) {
+                  return { sessionId: sid, resourceUri: uri };
+                }
+              }
+              return undefined;
+            },
+            120_000,
+            'successful ggui_render tool result with sessionId + resourceUri',
           );
-        }
-        expect(toastSeen).toBe(true);
 
-        // Wire-level evidence — ggui_emit was called on the toast channel.
-        interface AnthropicContent {
-          readonly type?: string;
-          readonly name?: string;
-          readonly input?: Record<string, unknown>;
-        }
-        interface SdkMessage {
-          readonly message?: { readonly content?: ReadonlyArray<AnthropicContent> };
-        }
-        const sdkMessages = (await page.evaluate(() => {
-          interface ChatHook { __chatSdkMessages?: unknown[] }
-          return (window as unknown as ChatHook).__chatSdkMessages ?? [];
-        })) as ReadonlyArray<SdkMessage>;
-
-        const toolUses: AnthropicContent[] = [];
-        for (const m of sdkMessages) {
-          for (const c of m.message?.content ?? []) {
-            if (c.type === 'tool_use') toolUses.push(c);
+          // Resolve + mount the render's resource behind the host.
+          const resource = await readResource(
+            `http://localhost:${GGUI_PORT}/mcp`,
+            renderRef.resourceUri,
+          );
+          const resourceHtml = resource.result?.contents?.[0]?.text;
+          if (typeof resourceHtml !== 'string' || resourceHtml.length === 0) {
+            throw new Error(
+              `resources/read(${renderRef.resourceUri}) returned no text content: ` +
+                JSON.stringify(resource).slice(0, 400),
+            );
           }
+          host = await startMcpAppHost({
+            mcpUrl: `http://localhost:${GGUI_PORT}/mcp`,
+            resourceHtml,
+          });
+          await page.goto(host.url, { waitUntil: 'networkidle' });
+          const appFrame = page.frameLocator('iframe[data-ggui-mcp-app-iframe]');
+          await appFrame
+            .getByText(/buy milk/i)
+            .first()
+            .waitFor({ state: 'visible', timeout: 120_000 });
+
+          // Click "buy milk".
+          const clickTargets = [
+            appFrame.getByRole('checkbox', { name: /buy milk/i }).first(),
+            appFrame.locator('label').filter({ hasText: /buy milk/i }).first(),
+            appFrame.getByRole('listitem').filter({ hasText: /buy milk/i }).first(),
+            appFrame.getByText(/buy milk/i).first(),
+          ];
+          let clicked = false;
+          for (const target of clickTargets) {
+            try {
+              if (!(await target.isVisible({ timeout: 1000 }))) continue;
+              await target.click({ timeout: 5000 });
+              clicked = true;
+              break;
+            } catch { /* try next */ }
+          }
+          expect(clicked, 'no clickable "buy milk" element found in iframe').toBe(true);
+
+          // Poll the iframe DOM for the toast text. The agent should
+          // emit `text: "Marked buy milk done"` (or close variant) on
+          // the toast channel; the generated component renders it as a
+          // banner. Tolerate the LLM's phrasing variance.
+          const toastDeadline = Date.now() + 90_000;
+          let toastSeen = false;
+          let lastIframeText = '';
+          while (Date.now() < toastDeadline) {
+            try {
+              const text = await appFrame
+                .locator('body')
+                .innerText({ timeout: 500 })
+                .catch(() => '');
+              lastIframeText = text;
+              // The emitted toast text references buy-milk + a done-state
+              // word. Accept "Marked buy milk done" / "buy milk done" /
+              // "buy milk completed" / similar.
+              if (/buy milk/i.test(text) && /(done|completed|marked|✓|checked)/i.test(text)) {
+                toastSeen = true;
+                break;
+              }
+            } catch { /* iframe transitioning */ }
+            await new Promise((r) => setTimeout(r, 500));
+          }
+          if (!toastSeen) {
+            // eslint-disable-next-line no-console
+            console.error(
+              '[scenario-14] toast text never rendered in iframe; last snapshot:',
+              lastIframeText.slice(0, 600),
+            );
+          }
+          expect(toastSeen).toBe(true);
+
+          // Wire-level evidence — ggui_emit was called on the toast
+          // channel. Read from the validated SSE tool tape (the page-
+          // injected fetch hook died with the chat textbox).
+          const uses = toolUses(chat.messages);
+          const emitCalls = uses.filter((u) => u.name === 'mcp__ggui__ggui_emit');
+          expect(
+            emitCalls.length,
+            `expected at least one ggui_emit call; saw [${toolNames(chat.messages).join(', ')}]`,
+          ).toBeGreaterThan(0);
+          const toastEmits = emitCalls.filter((u) => u.input.channel === 'toast');
+          expect(
+            toastEmits.length,
+            `expected ggui_emit on "toast" channel; channels seen: [${emitCalls.map((u) => String(u.input.channel)).join(', ')}]`,
+          ).toBeGreaterThan(0);
+        } finally {
+          // End the agent's turn (it may still be long-polling
+          // ggui_consume) and reclaim the socket + the host's port.
+          chat.abort();
+          await chat.done;
+          await host?.close();
         }
-        const emitCalls = toolUses.filter((u) => u.name === 'mcp__ggui__ggui_emit');
-        expect(
-          emitCalls.length,
-          `expected at least one ggui_emit call; saw [${toolUses.map((u) => u.name).join(', ')}]`,
-        ).toBeGreaterThan(0);
-        const toastEmits = emitCalls.filter(
-          (u) => (u.input as { channel?: string } | undefined)?.channel === 'toast',
-        );
-        expect(
-          toastEmits.length,
-          `expected ggui_emit on "toast" channel; channels seen: [${emitCalls.map((u) => (u.input as { channel?: string } | undefined)?.channel).join(', ')}]`,
-        ).toBeGreaterThan(0);
       },
       300_000,
     );

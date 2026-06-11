@@ -21,20 +21,35 @@
  * override is silently reading the stored effectiveContract (render.ts
  * bug).
  *
+ * ## Obligation remapping (2026-06-11 retired-surfaces port)
+ *
+ * The pass criterion is UNCHANGED; what moved is where `codeHash` is
+ * read. This spec used to fetch the content-negotiated bootstrap JSON
+ * from the render's `/r/<shortCode>` URL — both retired: the R5
+ * retirement removed the `/r/<shortCode>` HTTP surface, and
+ * `ggui_render`'s wire output carries no `url` (and zod strips
+ * `codeUrl`/`codeHash` from `structuredContent`). The live surface is
+ * the render response's `_meta["ai.ggui/render"]` slice — the single
+ * `deriveRenderMeta`-fed projection every transport composes from
+ * (see docs/principles/mcp-apps-compliance.md) — which carries the
+ * same `codeUrl` + `codeHash` the retired bootstrap JSON did. Narrowed
+ * at the trust boundary via the protocol's own
+ * `parseMcpAppAiGguiRenderMeta`.
+ *
  * Parametric over the model-provider axis. See provider-matrix.ts.
  */
 import { describe, expect, test } from 'vitest';
-import { callTool, unwrapStructured } from '../fixtures/mcp-client.js';
+import { parseMcpAppAiGguiRenderMeta } from '@ggui-ai/protocol/integrations/mcp-apps';
+import {
+  callTool,
+  unwrapStructured,
+  type JsonRpcResponse,
+} from '../fixtures/mcp-client.js';
 import { PROVIDERS, REQUIRE_ALL, providerSkip } from '../fixtures/provider-matrix.js';
 
-interface RenderOut {
-  sessionId: string;
-  url?: string;
-}
-
-interface BootstrapJson {
-  codeHash?: string;
-  codeUrl?: string;
+interface RenderCodeRef {
+  readonly codeUrl?: string;
+  readonly codeHash?: string;
 }
 
 /**
@@ -80,47 +95,39 @@ const OVERRIDE_DRAFT_CONTRACT = {
   },
 } as const;
 
-function bootstrapUrlFromRenderUrl(renderUrl: string | undefined): string {
-  if (typeof renderUrl !== 'string') {
-    throw new Error(`render output missing url: ${String(renderUrl)}`);
-  }
-  // Render URL shape: `<base>/r/<shortCode>?sig=...&exp=...`. Rewrite the
-  // path to `/r/<shortCode>` but PRESERVE the signed query —
-  // SEC-C.2rev's HMAC gate on /api/bootstrap rejects unsigned reads.
-  const parsed = new URL(renderUrl);
-  const codeMatch = /^\/r\/([^/]+)$/.exec(parsed.pathname);
-  if (!codeMatch || typeof codeMatch[1] !== 'string') {
-    throw new Error(`url has no /r/<shortCode>: ${renderUrl}`);
-  }
-  parsed.pathname = `/r/${codeMatch[1]}`;
-  return parsed.toString();
-}
-
-async function fetchBootstrap(renderUrl: string | undefined): Promise<BootstrapJson> {
-  const resp = await fetch(bootstrapUrlFromRenderUrl(renderUrl), {
-    headers: { Accept: 'application/json' },
-  });
-  if (!resp.ok) {
+/**
+ * Read `codeUrl` + `codeHash` off the render response's
+ * `_meta["ai.ggui/render"]` slice — the live replacement for the
+ * retired `/r/<shortCode>` bootstrap fetch. The `_meta` object is an
+ * untrusted wire payload, so it goes through the protocol's published
+ * validating parser instead of a structural cast.
+ *
+ * Spec-local for now — fixture-worthy once the shared `fixtures/`
+ * directory reopens for edits (scenarios 16 + 17 carry the same
+ * helper).
+ */
+function readRenderCodeRef(resp: JsonRpcResponse): RenderCodeRef {
+  const parsed = parseMcpAppAiGguiRenderMeta(resp.result?._meta);
+  if (!parsed.ok) {
     throw new Error(
-      `bootstrap fetch ${resp.status}: ${await resp.text().catch(() => '<no body>')}`,
+      `render response carries a malformed ai.ggui/render slice: ${JSON.stringify(resp.result?._meta).slice(0, 400)}`,
     );
   }
-  // R4: content-negotiated `/r/<shortCode>` returns the slice envelope.
-  // Flatten the render slice into the test's legacy shape.
-  const envelope = (await resp.json()) as Record<string, unknown>;
-  const renderSlice =
-    (envelope['ai.ggui/render'] as Record<string, unknown> | undefined) ??
-    {};
+  if (parsed.meta === undefined) {
+    throw new Error(
+      `render response missing the ai.ggui/render slice meta: ${JSON.stringify(resp.result?._meta).slice(0, 400)}`,
+    );
+  }
   return {
-    codeHash: typeof renderSlice['codeHash'] === 'string' ? renderSlice['codeHash'] : undefined,
-    codeUrl: typeof renderSlice['codeUrl'] === 'string' ? renderSlice['codeUrl'] : undefined,
+    ...(parsed.meta.codeUrl !== undefined ? { codeUrl: parsed.meta.codeUrl } : {}),
+    ...(parsed.meta.codeHash !== undefined ? { codeHash: parsed.meta.codeHash } : {}),
   };
 }
 
 async function handshakeAndRender(
   mcpUrl: string,
   opts: { seed: string; decision: 'accept' | 'override' },
-): Promise<BootstrapJson> {
+): Promise<RenderCodeRef> {
   const handshake = unwrapStructured<{ handshakeId: string }>(
     await callTool(mcpUrl, 'ggui_handshake', {
       intent:
@@ -144,18 +151,19 @@ async function handshakeAndRender(
   // doesn't read it post-Phase-B (the prior `ggui_new_session` seed sink
   // was deleted).
   void opts.seed;
-  const out = unwrapStructured<RenderOut>(
-    await callTool(mcpUrl, 'ggui_render', {
-      handshakeId: handshake.handshakeId,
-      props,
-      // accept = omit `override` (reuse the stored effectiveContract);
-      // override = pin our literal draft via `override.contract`.
-      ...(opts.decision === 'override'
-        ? { override: { contract: OVERRIDE_DRAFT_CONTRACT } }
-        : {}),
-    }),
-  );
-  return fetchBootstrap(out.url);
+  const renderResp = await callTool(mcpUrl, 'ggui_render', {
+    handshakeId: handshake.handshakeId,
+    props,
+    // accept = omit `override` (reuse the stored effectiveContract);
+    // override = pin our literal draft via `override.contract`.
+    ...(opts.decision === 'override'
+      ? { override: { contract: OVERRIDE_DRAFT_CONTRACT } }
+      : {}),
+  });
+  // Assert the render itself succeeded (throws on error envelopes)
+  // before reading the slice meta off the same response.
+  unwrapStructured<{ sessionId: string }>(renderResp);
+  return readRenderCodeRef(renderResp);
 }
 
 for (const provider of PROVIDERS) {
@@ -186,7 +194,7 @@ for (const provider of PROVIDERS) {
             decision: 'override',
           });
 
-          // Both must produce valid bootstraps.
+          // Both must produce valid code refs on the render slice.
           expect(typeof accepted.codeHash).toBe('string');
           expect(accepted.codeHash?.length).toBeGreaterThan(0);
           expect(typeof overridden.codeHash).toBe('string');
