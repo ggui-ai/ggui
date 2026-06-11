@@ -24,7 +24,7 @@ const inputSchema = {
     .max(120)
     .optional()
     .describe(
-      "Human-friendly label for the new app. Defaults to 'My ggui app' when absent — matches the auto-create path in `useGguiUser`.",
+      "Human-friendly label for the new app. Defaults to 'My ggui app' when absent — the same label the deployment's first-load auto-create uses.",
     ),
 } as const;
 
@@ -68,7 +68,7 @@ export function createCreateAppHandler(
     title: 'Create app',
     audience: ['ops'],
     description:
-      "Provision a fresh `GguiApp` owned by the calling user. Wraps the cloud's `provisionGguiApp` mutation: opaque base62 appId is minted server-side, the row is owned by the caller's Cognito sub, displayName defaults to 'My ggui app' when absent (cap 120 chars). Returns the persisted shape — call `ggui_ops_set_default_app({appId})` afterwards to promote the new app to the user's default.",
+      "Provision a fresh `GguiApp` owned by the calling user: an opaque base62 appId is minted server-side, the row is owned by the caller's identity, displayName defaults to 'My ggui app' when absent (cap 120 chars). Returns the persisted shape — call `ggui_ops_set_default_app({appId})` afterwards to promote the new app to the user's default.",
     inputSchema,
     outputSchema,
     async handler(
