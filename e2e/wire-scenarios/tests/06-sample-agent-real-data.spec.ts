@@ -4,10 +4,16 @@
  * The flagship integration test. Exercises the full agent loop:
  *   1. User prompts: "add a todo: buy milk"
  *   2. Agent calls `todo_add` on the todo MCP → state mutates
- *   3. Agent calls ggui handshake + render → a todo UI mounts
  *
  * Real backing state assertion: read `/admin/state` on the todo MCP
  * AFTER the flow completes and confirm the new todo is present.
+ *
+ * Driven BROWSERLESSLY: since c711a9236 the sample agents are pure
+ * JSON backends (no chat textbox at `/`), so the prompt rides the
+ * library's own wire — `POST /auth/guest` → `POST /agent
+ * {kind:'chat', prompt}` SSE (see fixtures/agent-driver.ts). The
+ * assertions are unchanged (admin-state mutation + `todo_list`
+ * cross-check); only the prompt-delivery mechanism moved.
  *
  * Parametric over the three reference agent SDKs — this is the
  * agent-framework axis of the e2e matrix. Each row spawns its own
@@ -17,12 +23,15 @@
  * set `GGUI_E2E_REQUIRE_ALL_PROVIDERS=1` to hard-fail instead (the
  * label-gated CI path).
  */
-import { spawn, type ChildProcess } from 'node:child_process';
-import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'vitest';
+import { afterAll, beforeAll, describe, expect, test } from 'vitest';
 import { callTool } from '../fixtures/mcp-client.js';
-import { openBrowser, type BrowserHandle } from '../fixtures/browser.js';
-import { cleanEnv } from '../fixtures/clean-env.js';
-import { OUTERMOST_WORKSPACE_ROOT } from '../fixtures/workspace-root.js';
+import {
+  mintGuestToken,
+  spawnSampleAgent,
+  startChat,
+  toolNames,
+  type SampleAgentHandle,
+} from '../fixtures/agent-driver.js';
 
 const TODO_PORT = Number.parseInt(process.env.TODO_PORT ?? '6782', 10);
 const TODO_MCP = `http://localhost:${TODO_PORT}/mcp`;
@@ -34,8 +43,16 @@ interface AgentRow {
   readonly sdk: string;
   /** Workspace package name spawned via `pnpm --filter`. */
   readonly pkg: string;
-  /** Default port the agent's chat UI listens on. */
+  /** Port the agent backend listens on. */
   readonly samplePort: number;
+  /**
+   * Sandbox-proxy port for the spawned agent. The samples ship FIXED
+   * defaults (7790/7791/7792) — a stale agent from a prior run holding
+   * its default port EADDRINUSE-kills the next boot, and the test then
+   * latches onto the stale (ggui-torn-down) agent. Unique per-row
+   * overrides away from the defaults dodge both.
+   */
+  readonly sandboxPort: number;
   /** API key env var the agent's LLM driver requires. */
   readonly apiKey: 'ANTHROPIC_API_KEY' | 'OPENAI_API_KEY' | 'GEMINI_API_KEY';
   /** Port of the matching ggui-default-<provider> instance (see global-setup.ts). */
@@ -50,13 +67,26 @@ const AGENTS: readonly AgentRow[] = [
       process.env.SAMPLE_PORT_CLAUDE ?? process.env.SAMPLE_PORT ?? '6790',
       10,
     ),
+    sandboxPort: Number.parseInt(
+      process.env.SANDBOX_PORT_CLAUDE ?? '7795',
+      10,
+    ),
     apiKey: 'ANTHROPIC_API_KEY',
     gguiPort: Number.parseInt(process.env.GGUI_PORT ?? '6781', 10),
   },
   {
     sdk: 'openai-agents-sdk',
     pkg: '@ggui-samples/agent-openai-sdk',
-    samplePort: Number.parseInt(process.env.SAMPLE_PORT_OPENAI ?? '6791', 10),
+    // 6794, NOT the openai sample's 6791 default: 6791 was the
+    // historic scenario-07 agent port, so stale claude agents from
+    // old runs squat exactly there (observed live 2026-06-11 — the
+    // squatter answered this row's probe while our own child died
+    // with EADDRINUSE).
+    samplePort: Number.parseInt(process.env.SAMPLE_PORT_OPENAI ?? '6794', 10),
+    sandboxPort: Number.parseInt(
+      process.env.SANDBOX_PORT_OPENAI ?? '7796',
+      10,
+    ),
     apiKey: 'OPENAI_API_KEY',
     gguiPort: Number.parseInt(process.env.GGUI_OPENAI_PORT ?? '6787', 10),
   },
@@ -64,24 +94,14 @@ const AGENTS: readonly AgentRow[] = [
     sdk: 'google-adk',
     pkg: '@ggui-samples/agent-google-adk',
     samplePort: Number.parseInt(process.env.SAMPLE_PORT_GOOGLE ?? '6792', 10),
+    sandboxPort: Number.parseInt(
+      process.env.SANDBOX_PORT_GOOGLE ?? '7797',
+      10,
+    ),
     apiKey: 'GEMINI_API_KEY',
     gguiPort: Number.parseInt(process.env.GGUI_GOOGLE_PORT ?? '6788', 10),
   },
 ];
-
-async function waitForUrl(url: string, timeoutMs: number): Promise<void> {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    try {
-      const resp = await fetch(url);
-      if (resp.ok) return;
-    } catch {
-      /* not ready yet */
-    }
-    await new Promise((r) => setTimeout(r, 250));
-  }
-  throw new Error(`Timed out waiting for ${url}`);
-}
 
 for (const agent of AGENTS) {
   const hasKey = !!process.env[agent.apiKey];
@@ -107,102 +127,96 @@ for (const agent of AGENTS) {
         return;
       }
 
-      let sampleAgent: ChildProcess | undefined;
-      let handle: BrowserHandle;
+      let sampleAgent: SampleAgentHandle | undefined;
 
       beforeAll(async () => {
         // Reset todo MCP state — every scenario row boots from an empty list.
         const reset = await fetch(`${TODO_ADMIN}/reset`, { method: 'POST' });
         expect(reset.ok).toBe(true);
 
-        sampleAgent = spawn('pnpm', ['--filter', agent.pkg, 'start'], {
-          // Spawn from the outermost workspace root: `oss/` carries a
-          // nested `pnpm-workspace.yaml`, so a `pnpm` run with CWD
-          // inside `oss/` resolves the empty `oss/node_modules` and
-          // can't find the hoisted `vite` bin. See
-          // fixtures/workspace-root.ts.
-          cwd: OUTERMOST_WORKSPACE_ROOT,
-          env: {
-            ...cleanEnv(),
-            PORT: String(agent.samplePort),
-            // Each row points at the matching ggui-default-<provider>
-            // instance so the full provider stack is exercised end-to-end
-            // (agent SDK ↔ ggui server's cold-gen LLM both share the
-            // same upstream LLM family per row).
-            GGUI_MCP_URL: `http://localhost:${agent.gguiPort}/mcp`,
-            GGUI_TODO_MCP_URL: TODO_MCP,
-          },
-          stdio: 'pipe',
-          // Own process group so afterAll can SIGTERM the whole tree
-          // (the `pnpm` wrapper + its `tsx`/node child). A bare kill on
-          // the wrapper leaves the server child orphaned on its port,
-          // which EADDRINUSE-crashes the next run.
-          detached: true,
+        // Each row points at the matching ggui-default-<provider>
+        // instance so the full provider stack is exercised end-to-end
+        // (agent SDK ↔ ggui server's cold-gen LLM both share the
+        // same upstream LLM family per row).
+        sampleAgent = await spawnSampleAgent({
+          pkg: agent.pkg,
+          port: agent.samplePort,
+          sandboxProxyPort: agent.sandboxPort,
+          gguiMcpUrl: `http://localhost:${agent.gguiPort}/mcp`,
+          todoMcpUrl: TODO_MCP,
+          // The row's sdk label IS the adapter name the backend
+          // manifests — the driver uses it to reject stale-agent
+          // port squatters.
+          adapterName: agent.sdk,
+          logLabel: agent.sdk,
         });
-        sampleAgent.stdout?.on('data', (chunk: Buffer) => {
-          process.stdout.write(`[${agent.sdk}] ${chunk.toString()}`);
-        });
-        sampleAgent.stderr?.on('data', (chunk: Buffer) => {
-          process.stderr.write(`[${agent.sdk}] ${chunk.toString()}`);
-        });
-
-        await waitForUrl(`http://localhost:${agent.samplePort}/`, 30_000);
       }, 60_000);
 
       afterAll(async () => {
-        if (sampleAgent?.pid !== undefined && !sampleAgent.killed) {
-          try {
-            process.kill(-sampleAgent.pid, 'SIGTERM');
-          } catch {
-            sampleAgent.kill('SIGTERM');
-          }
-          await new Promise((r) => setTimeout(r, 500));
-        }
-      });
-
-      beforeEach(async () => {
-        handle = await openBrowser();
+        await sampleAgent?.stop();
       });
 
       test(
         '"add a todo: buy milk" → agent calls todo_add → state mutates',
         async () => {
-          const { page } = handle;
-          await page.goto(`http://localhost:${agent.samplePort}/`, {
-            waitUntil: 'networkidle',
+          if (!sampleAgent) throw new Error('sample agent not booted');
+          const baseUrl = sampleAgent.baseUrl;
+
+          const token = await mintGuestToken(baseUrl);
+          const chat = await startChat({
+            baseUrl,
+            token,
+            prompt: 'add a todo with the text "buy milk"',
           });
 
-          const prompt = page.getByRole('textbox').first();
-          await prompt.fill('add a todo with the text "buy milk"');
-          await page.getByRole('button', { name: /send/i }).click();
-
-          // Poll todo MCP admin state until the new todo appears.
-          const deadline = Date.now() + 90_000;
-          let found = false;
-          while (Date.now() < deadline) {
-            const state = (await (
-              await fetch(`${TODO_ADMIN}/state`)
-            ).json()) as { todos: Array<{ text: string }> };
-            if (
-              state.todos.some((t) => t.text.toLowerCase().includes('buy milk'))
-            ) {
-              found = true;
-              break;
+          try {
+            // Poll todo MCP admin state until the new todo appears.
+            const deadline = Date.now() + 90_000;
+            let found = false;
+            while (Date.now() < deadline) {
+              const state = (await (
+                await fetch(`${TODO_ADMIN}/state`)
+              ).json()) as { todos: Array<{ text: string }> };
+              if (
+                state.todos.some((t) =>
+                  t.text.toLowerCase().includes('buy milk'),
+                )
+              ) {
+                found = true;
+                break;
+              }
+              await new Promise((r) => setTimeout(r, 1000));
             }
-            await new Promise((r) => setTimeout(r, 1000));
+            if (!found) {
+              // Surface what the agent actually did when the state
+              // never mutated — the SSE tape names every tool call.
+              // eslint-disable-next-line no-console
+              console.error(
+                `[scenario-6:${agent.sdk}] state never mutated; tape tool calls:`,
+                toolNames(chat.messages),
+                'streamError:',
+                chat.streamError(),
+              );
+            }
+            expect(found).toBe(true);
+
+            // Cross-check via the todo MCP's tools/call surface.
+            const list = await callTool(TODO_MCP, 'todo_list', {});
+            const todos = (
+              list.result?.structuredContent as {
+                todos: Array<{ text: string }>;
+              }
+            ).todos;
+            expect(
+              todos.some((t) => t.text.toLowerCase().includes('buy milk')),
+            ).toBe(true);
+          } finally {
+            // The agent may still be mid-turn (e.g. composing a render
+            // after the mutation); the assertion target is the state
+            // change, so end the turn and reclaim the socket.
+            chat.abort();
+            await chat.done;
           }
-          expect(found).toBe(true);
-
-          // Cross-check via the todo MCP's tools/call surface.
-          const list = await callTool(TODO_MCP, 'todo_list', {});
-          const todos = (
-            list.result?.structuredContent as { todos: Array<{ text: string }> }
-          ).todos;
-          expect(
-            todos.some((t) => t.text.toLowerCase().includes('buy milk')),
-          ).toBe(true);
-
-          await handle.close();
         },
         180_000,
       );
