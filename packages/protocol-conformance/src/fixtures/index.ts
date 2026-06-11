@@ -20,7 +20,7 @@
  *
  * ## Current coverage
  *
- * Four sub-modules with content (8 fixtures). Additional sub-modules
+ * Six sub-modules with content (10 fixtures). Additional sub-modules
  * (`data-contract`, `tool-name-uniqueness`, `contract-error-payload`)
  * are reserved for additive fixture expansion and not yet
  * materialized — adding fixtures there is a kit minor version.
@@ -35,18 +35,42 @@
  * caller-supplied function — there is no render, transport, or wire
  * frame to drive — so they do NOT belong in this behavioral fixture
  * catalog.
+ *
+ * ## What is NOT here — declared Path-A sequencing gap
+ *
+ * A `stream-delivery-roundtrip` fixture (an `emit-envelope`'d payload
+ * observed as a canonical `{type: 'data', payload: StreamEnvelope}`
+ * frame, graded by `stream-update`) is NOT authorable today without a
+ * false fail: the runner dispatches every setup directive BEFORE it
+ * opens the WebSocket and subscribes, and `emit-envelope` fans out to
+ * live subscribers only — a fresh, `fromSeq`-less subscribe replays
+ * nothing on declared channels (SPEC §12.2.1 invariant 1: "`fromSeq`
+ * absent always means empty replay"), so the setup-time emission is
+ * gone before the runner can observe it. The fixture's
+ * `inputEnvelope` cannot carry the emission either: an input envelope
+ * is by contract a Client→Server wire frame the runner sends on the
+ * transport, while emission is server-side (the agent's `ggui_emit`
+ * MCP tool) — routing a host directive through the wire-frame slot
+ * would conflate the two vocabularies. Honest grading needs either a
+ * post-subscribe host-directive phase (a runner-mechanism change) or
+ * an MCP-binding driver. Declared here rather than papered over with
+ * a fixture that fails conformant servers on sequencing alone.
  */
 
 export { bootstrapProtocolFixtures } from './bootstrap-protocol/index.js';
 export { consumeBufferFixtures } from './consume-buffer/index.js';
+export { hostContextFixtures } from './host-context/index.js';
 export { reservedChannelAuthorityFixtures } from './reserved-channel-authority/index.js';
 export { schemaVersionHandshakeFixtures } from './schema-version-handshake/index.js';
+export { subscribeTenancyFixtures } from './subscribe-tenancy/index.js';
 
 import type { TestCase } from '../types.js';
 import { bootstrapProtocolFixtures } from './bootstrap-protocol/index.js';
 import { consumeBufferFixtures } from './consume-buffer/index.js';
+import { hostContextFixtures } from './host-context/index.js';
 import { reservedChannelAuthorityFixtures } from './reserved-channel-authority/index.js';
 import { schemaVersionHandshakeFixtures } from './schema-version-handshake/index.js';
+import { subscribeTenancyFixtures } from './subscribe-tenancy/index.js';
 
 /**
  * Contract slugs — match the sub-module directory names. The
@@ -57,8 +81,10 @@ import { schemaVersionHandshakeFixtures } from './schema-version-handshake/index
 export type ContractSlug =
   | 'bootstrap-protocol'
   | 'consume-buffer'
+  | 'host-context'
   | 'reserved-channel-authority'
   | 'schema-version-handshake'
+  | 'subscribe-tenancy'
   | (string & {});
 
 /**
@@ -72,8 +98,10 @@ export type ContractSlug =
 export const fixturesByContract: Readonly<Record<ContractSlug, readonly TestCase[]>> = {
   'bootstrap-protocol': bootstrapProtocolFixtures,
   'consume-buffer': consumeBufferFixtures,
+  'host-context': hostContextFixtures,
   'reserved-channel-authority': reservedChannelAuthorityFixtures,
   'schema-version-handshake': schemaVersionHandshakeFixtures,
+  'subscribe-tenancy': subscribeTenancyFixtures,
 };
 
 /**

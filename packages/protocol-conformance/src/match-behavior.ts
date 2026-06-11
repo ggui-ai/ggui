@@ -49,6 +49,15 @@
  *     value as its `payload` body.
  *   - `no-op`          — no frames observed after input dispatch.
  *
+ * One kind is neither Path A nor Path B: `session-state` is a
+ * *stateful* obligation — the input message produces no wire response,
+ * so frames cannot prove it. This module returns `unmatchable-on-ws`
+ * for it; the RUNNER (`run-conformance.ts`) grades it after the
+ * observation window via `ConformanceHost.readSessionField`, reusing
+ * this module's exported {@link deepEqual}. A caller that routes a
+ * `session-state` behavior through the frame matcher gets the honest
+ * skip, never a frame-derived verdict.
+ *
  * v1 Path-B-only kinds (return `unmatchable-on-ws`):
  *
  *   - `bootstrap-failure` — the fault surface lives in the host's
@@ -138,6 +147,13 @@ export function matchBehavior(
       kind: 'unmatchable-on-ws',
       reason:
         'props-update is a Path-B (browser-host) claim — the assertion is on rendered DOM (selector + attribute/text), not on the `_ggui:props` WS frame in isolation. Matchable on WS only as "frame was emitted"; the fixture vocabulary asserts "DOM reflects the update". The Path-B driver is not yet packaged — this fixture skips until a browser-host adapter ships with the kit.',
+    };
+  }
+  if (behavior.kind === 'session-state') {
+    return {
+      kind: 'unmatchable-on-ws',
+      reason:
+        'session-state is a stateful obligation — its grade is a post-dispatch read-back of the GguiSession field via `ConformanceHost.readSessionField`, not a WS frame; frames cannot prove state. The runner (`run-conformance.ts`) grades this kind after the observation window; it never reaches the frame matcher there. Reaching here means a caller invoked `matchBehavior` directly on a session-state behavior.',
     };
   }
   // Extensibly-closed union catch — unknown `kind` = new fixture
@@ -285,7 +301,10 @@ function matchErrorFrame(
  * {@link StreamEnvelope} (from `@ggui-ai/protocol`) carries the
  * channel identity on `channel` and the delivery body on `payload`;
  * the matcher requires a `data` frame whose envelope names the
- * declared channel and whose body deep-equals the declared value.
+ * declared channel and whose body matches the declared value —
+ * exact deep-equal by default, or declared-keys-subset when the
+ * fixture authors `valueMatch: 'subset'` (see
+ * {@link deepMatchSubset}).
  *
  * Two near-miss frames deliberately do NOT match:
  *   - `{type: 'stream', payload: {sessionId, chunk, done}}` — the
@@ -303,9 +322,14 @@ function matchStreamUpdate(
     const body = f.parsed['payload'];
     return isStreamEnvelope(body) ? [body] : [];
   });
+  // `valueMatch: 'subset'` relaxes the value comparison to "every
+  // declared key is present + matching; extra observed keys ignored".
+  // Default ('exact' / absent) is the exact deep-equal.
+  const subset = behavior.valueMatch === 'subset';
+  const valueMatches = (observed: unknown): boolean =>
+    subset ? deepMatchSubset(behavior.value, observed) : deepEqual(observed, behavior.value);
   const match = envelopes.find(
-    (envelope) =>
-      envelope.channel === behavior.channel && deepEqual(envelope.payload, behavior.value),
+    (envelope) => envelope.channel === behavior.channel && valueMatches(envelope.payload),
   );
   if (match === undefined) {
     return {
@@ -313,11 +337,12 @@ function matchStreamUpdate(
       expected: {
         type: 'data',
         payload: { channel: behavior.channel, payload: behavior.value },
+        valueMatch: subset ? 'subset' : 'exact',
       },
       received: frames
         .filter((f) => f.kind === 'frame' && f.parsed['type'] === 'data')
         .map((f) => (f.kind === 'frame' ? f.parsed : f)),
-      message: `expected a \`data\` frame whose StreamEnvelope names channel '${behavior.channel}' and carries the declared value as its payload; none matched.`,
+      message: `expected a \`data\` frame whose StreamEnvelope names channel '${behavior.channel}' and carries the declared value as its payload (${subset ? 'subset match — every declared key present + matching' : 'exact match'}); none matched.`,
     };
   }
   return { kind: 'pass' };
@@ -390,7 +415,13 @@ function isStreamEnvelope(value: unknown): value is StreamEnvelope {
   return 'payload' in value;
 }
 
-function deepEqual(a: unknown, b: unknown): boolean {
+/**
+ * Exact deep-equal — objects must have identical key sets, arrays
+ * identical length + ordered contents. Exported so the runner grades
+ * `session-state` read-backs with the SAME comparison the frame
+ * matchers use — one equality, no matcher/runner drift.
+ */
+export function deepEqual(a: unknown, b: unknown): boolean {
   if (a === b) return true;
   if (typeof a !== typeof b) return false;
   if (a === null || b === null) return false;
@@ -407,4 +438,27 @@ function deepEqual(a: unknown, b: unknown): boolean {
   if (aKeys.length !== bKeys.length) return false;
   if (!aKeys.every((k, i) => k === bKeys[i])) return false;
   return aKeys.every((k) => deepEqual(aObj[k], bObj[k]));
+}
+
+/**
+ * Subset deep-match: every key in `expected` MUST be present and
+ * recursively matching in `actual`; extra keys on `actual` are
+ * ignored. Subset semantics relax ONLY object key sets — primitives
+ * and arrays fall back to exact {@link deepEqual} (an array with a
+ * missing element is a different array, not a subset).
+ *
+ * Backs `StreamUpdateBehavior.valueMatch === 'subset'`: a fixture
+ * pins only the deterministic keys of a payload that also carries
+ * non-deterministic fields (generated ids, timestamps) without
+ * wrongly rejecting a correct server over a random id.
+ */
+function deepMatchSubset(expected: unknown, actual: unknown): boolean {
+  if (!isRecord(expected)) {
+    // Primitives + arrays: exact match.
+    return deepEqual(expected, actual);
+  }
+  if (!isRecord(actual)) return false;
+  return Object.keys(expected).every(
+    (k) => k in actual && deepMatchSubset(expected[k], actual[k]),
+  );
 }

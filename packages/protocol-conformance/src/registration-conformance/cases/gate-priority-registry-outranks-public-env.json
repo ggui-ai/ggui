@@ -1,0 +1,22 @@
+{
+  "name": "gate-priority-registry-outranks-public-env",
+  "description": "A single push that fails BOTH gadget gates: it references an export absent from every registered package (`useTurnstile` under `@acme/turnstile`) AND a registered wrapper whose `requires` is unsatisfied (`useMapboxMap` under `@acme/mapbox`, requiring `GGUI_PUBLIC_APP_MAPBOX_TOKEN` while `App.publicEnv` is empty). SPEC §7.7.3 pins the order: the registry gate runs FIRST so the operator gets the right diagnostic when both fail — an author who referenced an unknown export needs the registration miss, not a downstream env complaint. The composed gate MUST reject with `gadget_not_registered`.",
+  "contract": {
+    "clientCapabilities": {
+      "gadgets": {
+        "@acme/turnstile": { "useTurnstile": {} },
+        "@acme/mapbox": { "useMapboxMap": {} }
+      }
+    }
+  },
+  "appGadgets": [
+    {
+      "package": "@acme/mapbox",
+      "version": "1.0.0",
+      "exports": [{ "hook": "useMapboxMap" }],
+      "requires": ["GGUI_PUBLIC_APP_MAPBOX_TOKEN"]
+    }
+  ],
+  "appPublicEnv": {},
+  "expect": { "outcome": "reject", "code": "gadget_not_registered" }
+}

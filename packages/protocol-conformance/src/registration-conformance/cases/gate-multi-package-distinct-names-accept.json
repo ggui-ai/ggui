@@ -1,0 +1,26 @@
+{
+  "name": "gate-multi-package-distinct-names-accept",
+  "description": "The duplicate-hook check fires on the same export NAME across packages — not on multi-package contracts per se. The contract declares two DIFFERENT export names from two different packages (`useCheckout` under `@stripe/ggui-checkout`, `useShippingEstimate` under `@acme/shipping`); both `(package, export)` pairs are registered and neither descriptor has `requires`. The composed gate MUST accept. Guards against an over-eager duplicate check that rejects any contract spanning more than one gadget package.",
+  "contract": {
+    "clientCapabilities": {
+      "gadgets": {
+        "@stripe/ggui-checkout": { "useCheckout": {} },
+        "@acme/shipping": { "useShippingEstimate": {} }
+      }
+    }
+  },
+  "appGadgets": [
+    {
+      "package": "@stripe/ggui-checkout",
+      "version": "1.0.0",
+      "exports": [{ "hook": "useCheckout" }]
+    },
+    {
+      "package": "@acme/shipping",
+      "version": "1.0.0",
+      "exports": [{ "hook": "useShippingEstimate" }]
+    }
+  ],
+  "appPublicEnv": {},
+  "expect": { "outcome": "accept" }
+}

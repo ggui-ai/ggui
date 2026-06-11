@@ -23,5 +23,6 @@
       ]
     }
   ],
+  "appPublicEnv": {},
   "expect": { "outcome": "reject", "code": "gadget_not_registered" }
 }

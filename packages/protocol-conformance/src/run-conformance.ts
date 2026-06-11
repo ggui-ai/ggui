@@ -7,7 +7,9 @@
  *   2. For each fixture (filtered by `config.only` if provided):
  *      a. If `fixture.skipReason !== null` → skip with the reason.
  *      b. Validate every authored setup/teardown directive against
- *         the closed `SetupStep` vocabulary (`parseSetupStep`).
+ *         the closed `SetupStep` vocabulary (`parseSetupStep`) and
+ *         the authored `inputEnvelope` against the closed input-
+ *         envelope dispatch vocabulary (`parseInputEnvelope`).
  *         Unknown / malformed directives are fixture-authoring
  *         errors — the runner throws, aborting the run loudly (NOT a
  *         skip, NOT a fail of the implementation under test).
@@ -19,11 +21,19 @@
  *      f. Send the canonical `subscribe` frame (the runner knows the
  *         wire shape — fixture's `inputEnvelope` is NOT the subscribe
  *         frame; subscribe is always runner-owned).
- *      g. If the fixture's `inputEnvelope.type === 'action'`, send
- *         it as a live-channel action frame AFTER subscribe.
+ *      g. If the fixture's `inputEnvelope` is a dispatchable C→S
+ *         frame (`action` live-channel dispatch, or
+ *         `host_context_observed` — the validated typed arm), send
+ *         it AFTER subscribe.
  *      h. Observe frames for `config.observationTimeoutMs` (default
  *         2000ms).
- *      i. Match observed frames against `fixture.expectedBehavior`.
+ *      i. Match observed frames against `fixture.expectedBehavior` —
+ *         EXCEPT `session-state`, a stateful obligation with no wire
+ *         response: the runner grades it after the observation window
+ *         by reading the GguiSession field back via
+ *         `host.readSessionField()` (`matchSessionState`). Absent
+ *         host / absent method / a throwing read → skip-with-reason,
+ *         never a weakened pass.
  *      j. Close the WS.
  *      k. Dispatch every teardown step via `host.dispatchTeardown()`.
  *         Throw → reporter warning; does NOT flip pass → fail.
@@ -36,16 +46,23 @@
  * failure, props-update) automatically skip via the matcher's
  * `unmatchable-on-ws` arm.
  */
+import type {
+  HostContextObservedPayload,
+  HostContextProjection,
+  McpUiDisplayMode,
+} from '@ggui-ai/protocol';
+
 import { allFixtures, fixturesByContract } from './fixtures/index.js';
 import type {
   ConformanceHost,
   SetupStep as HostSetupStep,
   TeardownStep as HostTeardownStep,
 } from './conformance-host.js';
-import { matchBehavior } from './match-behavior.js';
+import { deepEqual, matchBehavior, type MatchResult } from './match-behavior.js';
 import type {
   ActionSpecEntryDecl,
   AuthConfig,
+  SessionStateBehavior,
   StreamUpdateBehavior,
   TestCase,
   VersionMismatchBehavior,
@@ -193,11 +210,15 @@ async function runOneFixture(
   // Validate the authored directives BEFORE any host or transport
   // work. An unknown / malformed directive is a fixture-authoring
   // error, not a behavior of the implementation under test — the
-  // parse throws a descriptive error that aborts the whole run.
+  // parse throws a descriptive error that aborts the whole run. The
+  // input envelope goes through the same gate: a malformed
+  // `host_context_observed` frame is a fixture-authoring error, never
+  // a verdict on the server.
   const setupSteps = fixture.setup.map((step) => parseSetupStep(fixture.name, step));
   const teardownSteps: readonly HostTeardownStep[] = (fixture.teardown ?? []).map((step) =>
     parseTeardownStep(fixture.name, step),
   );
+  const inputDispatch = parseInputEnvelope(fixture.name, fixture.inputEnvelope);
 
   if (setupSteps.length > 0 && config.host === undefined) {
     return {
@@ -239,14 +260,29 @@ async function runOneFixture(
       requestId: `conformance-subscribe-${fixture.name}`,
     });
 
-    if (shouldDispatchInputEnvelope(fixture)) {
-      transport.send(fixture.inputEnvelope);
+    if (inputDispatch.kind !== 'none') {
+      transport.send(inputDispatch.envelope);
     }
 
     const frames = await transport.observe({
       timeoutMs: config.observationTimeoutMs ?? 2000,
     });
-    const match = matchBehavior(fixture.expectedBehavior, frames);
+
+    // `session-state` is a stateful obligation — the input message
+    // produced no wire response, so the grade is a post-observation-
+    // window read-back of the GguiSession field via the host, not a
+    // frame match. Every other behavior kind grades against observed
+    // frames. (Cast to the specific arm — the extensibly-closed
+    // `UnknownBehavior` in the union has `kind: string & {}` which
+    // widens narrowing; the literal was checked.)
+    const match: MatchResult =
+      fixture.expectedBehavior.kind === 'session-state'
+        ? await matchSessionState(
+            fixture.expectedBehavior as SessionStateBehavior,
+            sessionId,
+            config.host,
+          )
+        : matchBehavior(fixture.expectedBehavior, frames);
 
     // Dispatch teardown regardless of match outcome. Failures in
     // teardown surface as warnings; they do not flip pass → fail.
@@ -349,16 +385,356 @@ function extractSessionId(fixture: TestCase, setupSteps: readonly HostSetupStep[
   return fixture.name;
 }
 
+// =============================================================================
+// Input-envelope dispatch vocabulary
+// =============================================================================
+
 /**
- * Fixtures with `inputEnvelope.type === 'action'` (the live-channel
- * dispatch shape) get sent verbatim after subscribe. The other
- * authored envelope types (`render`, `handshake`, `props-update`) are
- * driven by the subscribe itself or by a Path-B host harness, so the
- * explicit send is skipped.
+ * Fixture-authored `host_context_observed` Client→Server frame — the
+ * wire shape from `@ggui-ai/protocol` (`transport/websocket`):
+ * `{type: 'host_context_observed', payload: {sessionId, hostContext}}`.
+ * The iframe-runtime emits it after `ui/initialize` resolves (and on
+ * every `host-context-changed` notification); the server's obligation
+ * is to persist `payload.hostContext` onto `GguiSession.hostContext`
+ * with no synchronous response — which is why fixtures authoring this
+ * envelope pair it with a `session-state` expectation, not a frame
+ * expectation.
  */
-function shouldDispatchInputEnvelope(fixture: TestCase): boolean {
-  const envelope = fixture.inputEnvelope;
-  return isRecord(envelope) && envelope['type'] === 'action';
+export interface HostContextObservedInputEnvelope {
+  readonly type: 'host_context_observed';
+  readonly requestId?: string;
+  readonly payload: HostContextObservedPayload;
+}
+
+/**
+ * Classification of a fixture's `inputEnvelope` into the CLOSED
+ * dispatch vocabulary — exactly the C→S frame types the shipped
+ * fixture catalog authors for explicit post-subscribe dispatch.
+ *
+ *   - `action` — the live-channel action dispatch shape, sent
+ *     VERBATIM. Deliberately untyped beyond the discriminator: action
+ *     fixtures may author adversarial payloads (undeclared action
+ *     names, malformed bodies) precisely because the server's
+ *     rejection path is what's under test — the kit MUST NOT
+ *     pre-validate away the inputs the contract is graded on.
+ *   - `host_context_observed` — the validated typed arm
+ *     ({@link HostContextObservedInputEnvelope}). The kit authors this
+ *     frame as a well-formed client, so a malformed one is a
+ *     fixture-authoring error, not a server probe.
+ *   - `none` — every other authored envelope (`render`, `handshake`,
+ *     `props-update`) is driven by the subscribe itself or by a
+ *     Path-B host harness; the explicit send is skipped.
+ */
+export type InputEnvelopeDispatch =
+  | { readonly kind: 'action'; readonly envelope: unknown }
+  | {
+      readonly kind: 'host_context_observed';
+      readonly envelope: HostContextObservedInputEnvelope;
+    }
+  | { readonly kind: 'none' };
+
+/**
+ * Validating classifier for the fixture's `inputEnvelope`. The fixture
+ * JSON enters the type system through a compile-time cast, so —
+ * exactly like {@link parseSetupStep} — the dispatchable arms are
+ * re-validated structurally here, and a malformed
+ * `host_context_observed` frame throws a descriptive fixture-authoring
+ * error (never a skip, never a fail of the implementation under test).
+ *
+ * Exported for unit tests; not part of the package's public API.
+ */
+export function parseInputEnvelope(
+  fixtureName: string,
+  envelope: unknown,
+): InputEnvelopeDispatch {
+  if (!isRecord(envelope) || typeof envelope['type'] !== 'string') {
+    return { kind: 'none' };
+  }
+  if (envelope['type'] === 'action') {
+    return { kind: 'action', envelope };
+  }
+  if (envelope['type'] === 'host_context_observed') {
+    return {
+      kind: 'host_context_observed',
+      envelope: parseHostContextObservedEnvelope(fixtureName, envelope),
+    };
+  }
+  return { kind: 'none' };
+}
+
+function parseHostContextObservedEnvelope(
+  fixtureName: string,
+  envelope: Record<string, unknown>,
+): HostContextObservedInputEnvelope {
+  const requestId = envelope['requestId'];
+  if (requestId !== undefined && typeof requestId !== 'string') {
+    throw malformedInputEnvelope(
+      fixtureName,
+      "'requestId' must be a string when present",
+      envelope,
+    );
+  }
+  const payload = envelope['payload'];
+  if (!isRecord(payload)) {
+    throw malformedInputEnvelope(
+      fixtureName,
+      "'payload' must be an object carrying {sessionId, hostContext}",
+      envelope,
+    );
+  }
+  const sessionId = payload['sessionId'];
+  if (typeof sessionId !== 'string' || sessionId.length === 0) {
+    throw malformedInputEnvelope(
+      fixtureName,
+      "'payload.sessionId' must be a non-empty string",
+      envelope,
+    );
+  }
+  const hostContext = parseHostContextProjection(fixtureName, payload['hostContext'], envelope);
+  return {
+    type: 'host_context_observed',
+    ...(requestId !== undefined ? { requestId } : {}),
+    payload: { sessionId, hostContext },
+  };
+}
+
+/**
+ * Validating narrower for the authored `hostContext` body against the
+ * live `HostContextProjection` (`@ggui-ai/protocol`,
+ * `types/host-context`). Every field is optional, so presence is never
+ * required — but a present field MUST carry the projection's shape,
+ * and unknown keys are REJECTED: a key outside the projection (e.g. a
+ * stale `theme` — theme flows through ggui's theming pipeline, not
+ * host context) is state no conformant server is obligated to read
+ * back, which would make the paired `session-state` grade dishonest.
+ */
+function parseHostContextProjection(
+  fixtureName: string,
+  value: unknown,
+  envelope: Record<string, unknown>,
+): HostContextProjection {
+  if (!isRecord(value)) {
+    throw malformedInputEnvelope(
+      fixtureName,
+      "'payload.hostContext' must be an object (the HostContextProjection wire shape)",
+      envelope,
+    );
+  }
+  const out: { -readonly [K in keyof HostContextProjection]: HostContextProjection[K] } = {};
+  for (const [key, field] of Object.entries(value)) {
+    switch (key) {
+      case 'availableDisplayModes': {
+        if (!Array.isArray(field)) {
+          throw malformedInputEnvelope(
+            fixtureName,
+            "'hostContext.availableDisplayModes' must be an array of display modes ('inline' | 'fullscreen' | 'pip')",
+            envelope,
+          );
+        }
+        const modes: McpUiDisplayMode[] = [];
+        for (const item of field) {
+          if (!isDisplayMode(item)) {
+            throw malformedInputEnvelope(
+              fixtureName,
+              `'hostContext.availableDisplayModes' carries ${JSON.stringify(item)} — display modes are 'inline' | 'fullscreen' | 'pip'`,
+              envelope,
+            );
+          }
+          modes.push(item);
+        }
+        out.availableDisplayModes = modes;
+        break;
+      }
+      case 'currentDisplayMode': {
+        if (!isDisplayMode(field)) {
+          throw malformedInputEnvelope(
+            fixtureName,
+            "'hostContext.currentDisplayMode' must be 'inline' | 'fullscreen' | 'pip'",
+            envelope,
+          );
+        }
+        out.currentDisplayMode = field;
+        break;
+      }
+      case 'containerDimensions': {
+        if (!isRecord(field)) {
+          throw malformedInputEnvelope(
+            fixtureName,
+            "'hostContext.containerDimensions' must be an object of numeric width/maxWidth/height/maxHeight",
+            envelope,
+          );
+        }
+        const dims: {
+          width?: number;
+          maxWidth?: number;
+          height?: number;
+          maxHeight?: number;
+        } = {};
+        for (const [dimKey, dimValue] of Object.entries(field)) {
+          if (
+            dimKey !== 'width' &&
+            dimKey !== 'maxWidth' &&
+            dimKey !== 'height' &&
+            dimKey !== 'maxHeight'
+          ) {
+            throw malformedInputEnvelope(
+              fixtureName,
+              `'hostContext.containerDimensions' carries unknown key '${dimKey}' — the projection knows width, maxWidth, height, maxHeight`,
+              envelope,
+            );
+          }
+          if (typeof dimValue !== 'number') {
+            throw malformedInputEnvelope(
+              fixtureName,
+              `'hostContext.containerDimensions.${dimKey}' must be a number`,
+              envelope,
+            );
+          }
+          dims[dimKey] = dimValue;
+        }
+        out.containerDimensions = dims;
+        break;
+      }
+      case 'platform': {
+        if (field !== 'web' && field !== 'desktop' && field !== 'mobile') {
+          throw malformedInputEnvelope(
+            fixtureName,
+            "'hostContext.platform' must be 'web' | 'desktop' | 'mobile'",
+            envelope,
+          );
+        }
+        out.platform = field;
+        break;
+      }
+      case 'deviceCapabilities': {
+        if (!isRecord(field)) {
+          throw malformedInputEnvelope(
+            fixtureName,
+            "'hostContext.deviceCapabilities' must be an object of boolean touch/hover",
+            envelope,
+          );
+        }
+        const caps: { touch?: boolean; hover?: boolean } = {};
+        for (const [capKey, capValue] of Object.entries(field)) {
+          if (capKey !== 'touch' && capKey !== 'hover') {
+            throw malformedInputEnvelope(
+              fixtureName,
+              `'hostContext.deviceCapabilities' carries unknown key '${capKey}' — the projection knows touch, hover`,
+              envelope,
+            );
+          }
+          if (typeof capValue !== 'boolean') {
+            throw malformedInputEnvelope(
+              fixtureName,
+              `'hostContext.deviceCapabilities.${capKey}' must be a boolean`,
+              envelope,
+            );
+          }
+          caps[capKey] = capValue;
+        }
+        out.deviceCapabilities = caps;
+        break;
+      }
+      case 'locale': {
+        if (typeof field !== 'string' || field.length === 0) {
+          throw malformedInputEnvelope(
+            fixtureName,
+            "'hostContext.locale' must be a non-empty string",
+            envelope,
+          );
+        }
+        out.locale = field;
+        break;
+      }
+      case 'timeZone': {
+        if (typeof field !== 'string' || field.length === 0) {
+          throw malformedInputEnvelope(
+            fixtureName,
+            "'hostContext.timeZone' must be a non-empty string",
+            envelope,
+          );
+        }
+        out.timeZone = field;
+        break;
+      }
+      default:
+        throw malformedInputEnvelope(
+          fixtureName,
+          `'hostContext' carries unknown key '${key}' — the HostContextProjection vocabulary is availableDisplayModes, currentDisplayMode, containerDimensions, platform, deviceCapabilities, locale, timeZone`,
+          envelope,
+        );
+    }
+  }
+  return out;
+}
+
+function isDisplayMode(value: unknown): value is McpUiDisplayMode {
+  return value === 'inline' || value === 'fullscreen' || value === 'pip';
+}
+
+function malformedInputEnvelope(
+  fixtureName: string,
+  problem: string,
+  envelope: Record<string, unknown>,
+): Error {
+  return new Error(
+    `protocol-conformance: fixture '${fixtureName}' authors a malformed 'host_context_observed' input envelope — ${problem}. Received: ${JSON.stringify(envelope)}`,
+  );
+}
+
+// =============================================================================
+// Session-state grading (the kit's third grading mechanism)
+// =============================================================================
+
+/**
+ * Grade a `session-state` expectation — the input message left no wire
+ * trace, so the honest verdict is a post-observation-window read-back
+ * of the mutated GguiSession field via
+ * {@link ConformanceHost.readSessionField}, compared with the SAME
+ * exact {@link deepEqual} the frame matchers use.
+ *
+ * A missing host, a host without `readSessionField`, or a read that
+ * throws all yield `unmatchable-on-ws` — the runner records a SKIP
+ * with the reason. The kit refuses to grade a stateful obligation it
+ * has no introspection seam for (a host that cannot read state cannot
+ * grade it); it never converts that gap into a pass or a fail.
+ *
+ * Exported for unit tests; not part of the package's public API.
+ */
+export async function matchSessionState(
+  behavior: SessionStateBehavior,
+  sessionId: string,
+  host: ConformanceHost | undefined,
+): Promise<MatchResult> {
+  if (host === undefined || host.readSessionField === undefined) {
+    return {
+      kind: 'unmatchable-on-ws',
+      reason:
+        host === undefined
+          ? 'session-state expectation needs a ConformanceHost with readSessionField() — no host was provided.'
+          : 'session-state expectation needs ConformanceHost.readSessionField() — the provided host does not implement it, so the kit cannot observe the GguiSession-field mutation. SKIP, not a pass.',
+    };
+  }
+  let actual: unknown;
+  try {
+    actual = await host.readSessionField(sessionId, behavior.field);
+  } catch (err) {
+    return {
+      kind: 'unmatchable-on-ws',
+      reason: `host.readSessionField('${sessionId}', '${behavior.field}') threw — a host that cannot read state cannot grade it: ${String(
+        (err as Error).message ?? err,
+      )}`,
+    };
+  }
+  if (deepEqual(actual, behavior.expected)) {
+    return { kind: 'pass' };
+  }
+  return {
+    kind: 'fail',
+    expected: { field: behavior.field, value: behavior.expected },
+    received: { field: behavior.field, value: actual },
+    message: `session field '${behavior.field}' did not hold the expected value after the input envelope was dispatched — the implementation under test may have dropped the message instead of persisting it.`,
+  };
 }
 
 function maybeSupportedVersions(
@@ -393,10 +769,14 @@ function slugToCriterion(slug: string): string {
       return 'Protocol #5 named failure modes — bootstrap contract';
     case 'consume-buffer':
       return 'Single action-routing model — consume-buffer persistence + declared-action contract';
+    case 'host-context':
+      return 'Host-context persistence — host_context_observed MUST persist onto GguiSession.hostContext';
     case 'reserved-channel-authority':
       return 'SPEC §4.4 reserved-channel authority';
     case 'schema-version-handshake':
       return 'Protocol #3 version negotiation';
+    case 'subscribe-tenancy':
+      return 'SPEC §12.2 subscribe tenancy — appId MUST match the bound app (§12.2.3 APP_MISMATCH)';
     default:
       return slug;
   }

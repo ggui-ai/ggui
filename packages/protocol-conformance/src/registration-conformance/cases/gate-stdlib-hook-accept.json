@@ -23,5 +23,6 @@
       ]
     }
   ],
+  "appPublicEnv": {},
   "expect": { "outcome": "accept" }
 }

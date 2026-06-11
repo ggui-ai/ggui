@@ -248,6 +248,7 @@ export type ExpectedBehavior =
   | BootstrapSuccessBehavior
   | VersionMismatchBehavior
   | PropsUpdateBehavior
+  | SessionStateBehavior
   | NoOpBehavior
   | UnknownBehavior;
 
@@ -301,6 +302,24 @@ export interface StreamUpdateBehavior {
   readonly kind: 'stream-update';
   readonly channel: string;
   readonly value: unknown;
+  /**
+   * How {@link value} is compared against the observed envelope's
+   * `payload` body.
+   *
+   *   - `'exact'` (default) — deep-equal. The observed body MUST have
+   *     exactly the declared keys, no more.
+   *   - `'subset'` — every key declared in {@link value} MUST be
+   *     present and matching in the observed body; extra observed keys
+   *     are ignored. Subset semantics relax object key sets only —
+   *     primitives and arrays still compare exact (an array with a
+   *     missing element is a different array, not a subset).
+   *
+   * Use `'subset'` when the real payload carries non-deterministic
+   * fields the fixture cannot pin (generated ids, timestamps). Pinning
+   * only the deterministic keys keeps the assertion honest without
+   * wrongly rejecting a correct server over a random id.
+   */
+  readonly valueMatch?: 'exact' | 'subset';
 }
 
 /**
@@ -355,6 +374,46 @@ export interface PropsUpdateBehavior {
     readonly attribute?: string;
     readonly expected: string;
   };
+}
+
+/**
+ * Expect a render-state mutation — the input message produced no wire
+ * response, but it MUST have changed observable GguiSession state.
+ *
+ * This is the kit's THIRD grading mechanism, alongside the Path-A WS
+ * fixtures (wire-observable) and the pure-function catalogs
+ * (deterministic validation): a *stateful* obligation. A
+ * Client→Server message like `host_context_observed` has no
+ * synchronous response envelope — its whole contract is the
+ * persistence onto the GguiSession. Asserting `no-op` (wire silence)
+ * would certify a server that drops the message entirely, so the
+ * honest grade reads the field back.
+ *
+ * The runner resolves this AFTER the observation window via
+ * {@link ConformanceHost.readSessionField} — it asks the host for the
+ * field's post-dispatch value and deep-equals it against
+ * {@link expected} (the same exact deep-equal the frame matchers
+ * use). A host that does not provide `readSessionField` makes the
+ * fixture SKIP (the kit cannot observe a mutation it has no
+ * introspection seam for) — never a silent pass. `matchBehavior`
+ * returns `unmatchable-on-ws` for this kind: frames cannot prove
+ * state.
+ */
+export interface SessionStateBehavior {
+  readonly kind: 'session-state';
+  /**
+   * The GguiSession field whose post-dispatch value the kit asserts
+   * (e.g. `hostContext`). Passed verbatim to
+   * {@link ConformanceHost.readSessionField}; the host owns the
+   * field-name recognition set.
+   */
+  readonly field: string;
+  /**
+   * The value the field MUST hold after the input message has been
+   * processed by the implementation under test. Compared with exact
+   * deep equality.
+   */
+  readonly expected: unknown;
 }
 
 /**

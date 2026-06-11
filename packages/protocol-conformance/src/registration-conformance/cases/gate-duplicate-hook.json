@@ -1,0 +1,26 @@
+{
+  "name": "gate-duplicate-hook",
+  "description": "The contract declares the SAME export name (`useCheckout`) under two different packages — `@stripe/ggui-checkout` and `@paypal/ggui-checkout` — and the app registers BOTH `(package, export)` pairs, so registry membership and public-env are clean; the only violation is the cross-package name collision. The boilerplate emits one `import { useCheckout }` per export name, so same-named exports collide in module scope regardless of package (SPEC §7.9). The gate MUST reject with `duplicate_gadget_hook`. Note the wire is package-keyed, so a name cannot repeat WITHIN one package; the hazard is strictly cross-package. Because every pair here resolves cleanly, this case pins NO priority between the duplicate check and the registry/env gates — a conformant implementation may run the checks in any order.",
+  "contract": {
+    "clientCapabilities": {
+      "gadgets": {
+        "@stripe/ggui-checkout": { "useCheckout": {} },
+        "@paypal/ggui-checkout": { "useCheckout": {} }
+      }
+    }
+  },
+  "appGadgets": [
+    {
+      "package": "@stripe/ggui-checkout",
+      "version": "1.0.0",
+      "exports": [{ "hook": "useCheckout" }]
+    },
+    {
+      "package": "@paypal/ggui-checkout",
+      "version": "1.0.0",
+      "exports": [{ "hook": "useCheckout" }]
+    }
+  ],
+  "appPublicEnv": {},
+  "expect": { "outcome": "reject", "code": "duplicate_gadget_hook" }
+}

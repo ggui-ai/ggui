@@ -1,0 +1,21 @@
+{
+  "name": "gate-public-env-satisfied-accept",
+  "description": "The positive counterpart of `gate-public-env-missing`. The contract references `useMapboxMap` under `@acme/mapbox`; the registered descriptor requires `GGUI_PUBLIC_APP_MAPBOX_TOKEN`; and `App.publicEnv` carries that exact key. Every declared wrapper's `requires` is satisfied, so the composed gate MUST accept. Paired with the reject case, this also proves the gate actually reads `appPublicEnv` — an env-blind gate passes one of the pair but never both.",
+  "contract": {
+    "clientCapabilities": {
+      "gadgets": {
+        "@acme/mapbox": { "useMapboxMap": {} }
+      }
+    }
+  },
+  "appGadgets": [
+    {
+      "package": "@acme/mapbox",
+      "version": "1.0.0",
+      "exports": [{ "hook": "useMapboxMap" }],
+      "requires": ["GGUI_PUBLIC_APP_MAPBOX_TOKEN"]
+    }
+  ],
+  "appPublicEnv": { "GGUI_PUBLIC_APP_MAPBOX_TOKEN": "pk.conformance-fixture-value" },
+  "expect": { "outcome": "accept" }
+}

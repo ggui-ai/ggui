@@ -8,7 +8,10 @@
  * with the expected `payload.code`, the generalized read the
  * `version-mismatch` arm narrows to `UPGRADE_REQUIRED`), and
  * `stream-update` (asserts the canonical channel-3 delivery frame
- * `{type:'data', payload: StreamEnvelope}`). Path-B kinds and unknown
+ * `{type:'data', payload: StreamEnvelope}`, with exact-vs-subset
+ * value matching via `valueMatch`). Path-B kinds, the stateful
+ * `session-state` kind (graded by the RUNNER via
+ * `ConformanceHost.readSessionField`, never from frames), and unknown
  * vocabulary remain `unmatchable-on-ws`; this file pins that contract
  * too.
  */
@@ -278,6 +281,120 @@ describe('matchBehavior — stream-update matches the canonical channel-3 data f
       }),
     ];
     expect(matchBehavior(behavior, frames).kind).toBe('fail');
+  });
+});
+
+describe('matchBehavior — stream-update valueMatch (exact vs subset)', () => {
+  /** Canonical channel-3 delivery frame whose envelope body carries
+   *  the declared keys PLUS a non-deterministic extra. */
+  function dataFrame(payload: Record<string, unknown>): ObservedFrame {
+    return frame({
+      type: 'data',
+      payload: {
+        sessionId: 'rnd-stream-2',
+        channel: 'progress',
+        mode: 'replace',
+        payload,
+      },
+    });
+  }
+
+  it('exact (default) rejects an observed body carrying extra keys', () => {
+    const behavior: StreamUpdateBehavior = {
+      kind: 'stream-update',
+      channel: 'progress',
+      value: { kind: 'started' },
+    };
+    const result = matchBehavior(behavior, [
+      dataFrame({ kind: 'started', handshakeId: 'hs-8f31' }),
+    ]);
+    expect(result.kind).toBe('fail');
+    if (result.kind !== 'fail') return;
+    expect(result.message).toContain('exact match');
+  });
+
+  it('subset accepts an observed body carrying extra keys when every declared key matches', () => {
+    const behavior: StreamUpdateBehavior = {
+      kind: 'stream-update',
+      channel: 'progress',
+      value: { kind: 'started' },
+      valueMatch: 'subset',
+    };
+    const result = matchBehavior(behavior, [
+      dataFrame({ kind: 'started', handshakeId: 'hs-8f31', startedAt: 1760000000000 }),
+    ]);
+    expect(result.kind).toBe('pass');
+  });
+
+  it('subset recurses into nested objects (declared nested keys match; nested extras ignored)', () => {
+    const behavior: StreamUpdateBehavior = {
+      kind: 'stream-update',
+      channel: 'progress',
+      value: { kind: 'started', detail: { step: 2 } },
+      valueMatch: 'subset',
+    };
+    const result = matchBehavior(behavior, [
+      dataFrame({ kind: 'started', detail: { step: 2, traceId: 't-1' }, extra: true }),
+    ]);
+    expect(result.kind).toBe('pass');
+  });
+
+  it('subset still fails when a declared key mismatches', () => {
+    const behavior: StreamUpdateBehavior = {
+      kind: 'stream-update',
+      channel: 'progress',
+      value: { kind: 'started' },
+      valueMatch: 'subset',
+    };
+    const result = matchBehavior(behavior, [
+      dataFrame({ kind: 'finished', handshakeId: 'hs-8f31' }),
+    ]);
+    expect(result.kind).toBe('fail');
+    if (result.kind !== 'fail') return;
+    expect(result.message).toContain('subset match');
+  });
+
+  it('subset still fails when a declared key is absent from the observed body', () => {
+    const behavior: StreamUpdateBehavior = {
+      kind: 'stream-update',
+      channel: 'progress',
+      value: { kind: 'started', step: 1 },
+      valueMatch: 'subset',
+    };
+    const result = matchBehavior(behavior, [
+      dataFrame({ kind: 'started', handshakeId: 'hs-8f31' }),
+    ]);
+    expect(result.kind).toBe('fail');
+  });
+
+  it('subset compares arrays exact — a shorter observed array is not a subset', () => {
+    const behavior: StreamUpdateBehavior = {
+      kind: 'stream-update',
+      channel: 'progress',
+      value: { steps: ['fetch', 'build', 'publish'] },
+      valueMatch: 'subset',
+    };
+    const result = matchBehavior(behavior, [
+      dataFrame({ steps: ['fetch', 'build'], handshakeId: 'hs-8f31' }),
+    ]);
+    expect(result.kind).toBe('fail');
+  });
+});
+
+describe('matchBehavior — session-state is unmatchable from frames', () => {
+  it('returns unmatchable-on-ws naming the runner read-back seam (frames cannot prove state)', () => {
+    const result = matchBehavior(
+      {
+        kind: 'session-state',
+        field: 'hostContext',
+        expected: { currentDisplayMode: 'inline' },
+      },
+      [SUBSCRIBE_ACK],
+    );
+    expect(result.kind).toBe('unmatchable-on-ws');
+    if (result.kind !== 'unmatchable-on-ws') return;
+    expect(result.reason).toContain('readSessionField');
+    expect(result.reason).toContain('frames cannot prove state');
   });
 });
 

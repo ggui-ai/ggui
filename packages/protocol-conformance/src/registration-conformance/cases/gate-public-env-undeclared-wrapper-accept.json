@@ -1,0 +1,26 @@
+{
+  "name": "gate-public-env-undeclared-wrapper-accept",
+  "description": "The env gate is scoped to wrappers the CONTRACT references, not the whole catalog. The contract declares only `useLeafletMap` under `@ggui-samples/leaflet` (registered, no `requires`). The app catalog ALSO registers `@acme/mapbox`, whose `requires` lists `GGUI_PUBLIC_APP_MAPBOX_TOKEN` — unsatisfied, since `App.publicEnv` is empty — but the contract never references that wrapper, so it cannot affect this render's iframe. SPEC §7.7.3 walks `requires` for every wrapper the contract references; registered-but-undeclared wrappers MUST NOT fail the push. The gate MUST accept. Guards against a gate that validates the operator's entire catalog instead of the declared subset.",
+  "contract": {
+    "clientCapabilities": {
+      "gadgets": {
+        "@ggui-samples/leaflet": { "useLeafletMap": {} }
+      }
+    }
+  },
+  "appGadgets": [
+    {
+      "package": "@ggui-samples/leaflet",
+      "version": "2.3.1",
+      "exports": [{ "hook": "useLeafletMap" }]
+    },
+    {
+      "package": "@acme/mapbox",
+      "version": "1.0.0",
+      "exports": [{ "hook": "useMapboxMap" }],
+      "requires": ["GGUI_PUBLIC_APP_MAPBOX_TOKEN"]
+    }
+  ],
+  "appPublicEnv": {},
+  "expect": { "outcome": "accept" }
+}

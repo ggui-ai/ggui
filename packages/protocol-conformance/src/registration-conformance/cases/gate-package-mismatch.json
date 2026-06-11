@@ -15,5 +15,6 @@
       "exports": [{ "hook": "useLeafletMap" }]
     }
   ],
+  "appPublicEnv": {},
   "expect": { "outcome": "reject", "code": "gadget_package_mismatch" }
 }

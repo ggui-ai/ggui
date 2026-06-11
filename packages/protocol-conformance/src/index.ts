@@ -41,6 +41,7 @@ export type {
   BootstrapSuccessBehavior,
   VersionMismatchBehavior,
   PropsUpdateBehavior,
+  SessionStateBehavior,
   NoOpBehavior,
   UnknownBehavior,
   // Authored protocol vocabulary copies
@@ -74,8 +75,10 @@ export {
   fixturesByContract,
   bootstrapProtocolFixtures,
   consumeBufferFixtures,
+  hostContextFixtures,
   reservedChannelAuthorityFixtures,
   schemaVersionHandshakeFixtures,
+  subscribeTenancyFixtures,
 } from './fixtures/index.js';
 export type { ContractSlug } from './fixtures/index.js';
 
@@ -96,9 +99,9 @@ export type {
   SchemaConformanceResult,
 } from './schema-conformance/index.js';
 
-// Registration-conformance — which `(contract, appGadgets)` pairs the
-// push-time gadget registry gate MUST accept / reject, with which
-// precise reject code.
+// Registration-conformance — which `(contract, appGadgets, appPublicEnv)`
+// triples the push-time gadget gate stack MUST accept / reject, with
+// which precise SPEC §7.9 reject code.
 export {
   gadgetRegistrationCases,
   runRegistrationConformance,
@@ -137,6 +140,11 @@ export type {
   ConformanceFailure,
   SkippedFixture,
   ConformanceReporter,
+  // Closed input-envelope dispatch vocabulary — the C→S frame types a
+  // fixture's `inputEnvelope` may author for explicit post-subscribe
+  // dispatch.
+  InputEnvelopeDispatch,
+  HostContextObservedInputEnvelope,
 } from './run-conformance.js';
 
 // Default reporter — stdout-based bar-scorecard implementation +

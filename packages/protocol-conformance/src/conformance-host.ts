@@ -156,4 +156,27 @@ export interface ConformanceHost {
    * the cleanup gap without corrupting the pass/fail tally.
    */
   dispatchTeardown(step: TeardownStep): Promise<void>;
+
+  /**
+   * Read one field off a live GguiSession — the introspection seam a
+   * `session-state` expectation (`./types`' `SessionStateBehavior`)
+   * grades against. The runner calls this AFTER the fixture's input
+   * envelope has been dispatched and the observation window has
+   * elapsed, then deep-equals the result against the fixture's
+   * `expected`.
+   *
+   * Optional. A host that does not provide it makes every
+   * `session-state` fixture SKIP — the kit cannot honestly grade a
+   * stateful obligation it has no way to observe. Throwing signals
+   * "this field is not exposed" and the runner records a SKIP with
+   * the error's message; a throw is never treated as a pass or a
+   * fail — a host that cannot read state cannot grade it.
+   *
+   * Honest-grade contract: the returned value MUST reflect the
+   * GguiSession's true post-dispatch state. A host that fabricates a
+   * passing value is cheating its own conformance audit — that is the
+   * implementer's integrity to keep, exactly as with every other
+   * host-mediated directive.
+   */
+  readSessionField?(sessionId: string, field: string): Promise<unknown>;
 }

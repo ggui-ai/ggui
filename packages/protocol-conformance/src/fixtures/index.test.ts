@@ -6,18 +6,22 @@
  */
 import { describe, expect, it } from 'vitest';
 
+import { parseInputEnvelope } from '../run-conformance.js';
+import type { SessionStateBehavior } from '../types.js';
 import {
   allFixtures,
   bootstrapProtocolFixtures,
   consumeBufferFixtures,
   fixturesByContract,
+  hostContextFixtures,
   reservedChannelAuthorityFixtures,
   schemaVersionHandshakeFixtures,
+  subscribeTenancyFixtures,
 } from './index.js';
 
 describe('fixtures catalog', () => {
-  it('ships 8 fixtures across four materialized sub-modules', () => {
-    expect(allFixtures.length).toBe(8);
+  it('ships 10 fixtures across six materialized sub-modules', () => {
+    expect(allFixtures.length).toBe(10);
     // Sanity: confirm the retired wired-dispatch / refresh /
     // observability fixtures are not in the catalog under their old
     // names — the synchronous wired-action path has exactly zero
@@ -47,20 +51,24 @@ describe('fixtures catalog', () => {
     expect(names.size).toBe(allFixtures.length);
   });
 
-  it('materializes the four expected sub-modules', () => {
+  it('materializes the six expected sub-modules', () => {
     expect(Object.keys(fixturesByContract).sort()).toEqual([
       'bootstrap-protocol',
       'consume-buffer',
+      'host-context',
       'reserved-channel-authority',
       'schema-version-handshake',
+      'subscribe-tenancy',
     ]);
   });
 
   it('each sub-module has its documented fixture count', () => {
     expect(bootstrapProtocolFixtures.length).toBe(3);
     expect(consumeBufferFixtures.length).toBe(2);
+    expect(hostContextFixtures.length).toBe(1);
     expect(reservedChannelAuthorityFixtures.length).toBe(1);
     expect(schemaVersionHandshakeFixtures.length).toBe(2);
+    expect(subscribeTenancyFixtures.length).toBe(1);
   });
 
   it('allFixtures is sorted lexicographically by name (deterministic)', () => {
@@ -99,13 +107,63 @@ describe('fixtures catalog', () => {
     expect(drivable.length).toBe(allFixtures.length);
     expect(drivable.sort()).toEqual([
       'action-ack-sequence',
+      'app-mismatch',
       'bootstrap-bundle-fetch-failed',
       'bootstrap-meta-missing',
       'bootstrap-success',
+      'host-context-observed-persists',
       'props-update-roundtrip',
       'undeclared-action-rejected',
       'version-match',
       'version-mismatch',
     ]);
+  });
+
+  it('host-context-observed-persists expects exactly the projection it authors (verbatim persistence)', () => {
+    // The first-party handler persists `payload.hostContext` AS
+    // RECEIVED (projection / trimming is iframe-side, before
+    // emission), so the fixture's session-state `expected` MUST be
+    // byte-for-byte the projection its input envelope carries — a
+    // drift between the two would grade a normalization step the
+    // protocol does not define.
+    const fixture = allFixtures.find((f) => f.name === 'host-context-observed-persists');
+    expect(fixture).toBeDefined();
+    if (fixture === undefined) return;
+
+    const dispatch = parseInputEnvelope(fixture.name, fixture.inputEnvelope);
+    expect(dispatch.kind).toBe('host_context_observed');
+    if (dispatch.kind !== 'host_context_observed') return;
+    // The envelope's payload names the same render the create-session
+    // setup step declares — the runner subscribes under that id and
+    // the server's tenancy guard requires the two to match.
+    expect(fixture.setup).toEqual([
+      { type: 'create-session', sessionId: dispatch.envelope.payload.sessionId },
+    ]);
+
+    expect(fixture.expectedBehavior.kind).toBe('session-state');
+    // Cast after the literal check — the extensibly-closed
+    // `UnknownBehavior` arm (`kind: string & {}`) widens narrowing.
+    const behavior = fixture.expectedBehavior as SessionStateBehavior;
+    expect(behavior.field).toBe('hostContext');
+    expect(behavior.expected).toEqual(dispatch.envelope.payload.hostContext);
+  });
+
+  it('app-mismatch binds the GguiSession to a different appId than the runner subscribes with', () => {
+    // The runner's subscribe frame always claims appId 'conformance';
+    // the fixture proves the §12.2 tenancy MUST only if its
+    // create-session directive binds something else.
+    const fixture = allFixtures.find((f) => f.name === 'app-mismatch');
+    expect(fixture).toBeDefined();
+    if (fixture === undefined) return;
+    expect(fixture.setup.length).toBe(1);
+    const step = fixture.setup[0];
+    expect(step.type).toBe('create-session');
+    if (step.type !== 'create-session') return;
+    expect(typeof step.appId).toBe('string');
+    expect(step.appId).not.toBe('conformance');
+    // The probe is the runner-owned subscribe — the input envelope is
+    // descriptive and must NOT classify as a dispatchable frame.
+    expect(parseInputEnvelope(fixture.name, fixture.inputEnvelope).kind).toBe('none');
+    expect(fixture.expectedBehavior).toEqual({ kind: 'error-frame', code: 'APP_MISMATCH' });
   });
 });

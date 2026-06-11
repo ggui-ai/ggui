@@ -1,0 +1,20 @@
+{
+  "name": "app-mismatch",
+  "description": "The GguiSession exists but is bound to a DIFFERENT app than the subscriber claims: `create-session` binds appId 'conformance-other', while the kit's runner always subscribes with appId 'conformance'. SPEC §12.2's subscribe-payload table makes the tenancy check a MUST — appId 'MUST match the GguiSession's bound appId or subscribe fails APP_MISMATCH' — and §12.2.3 keeps the code distinct from SESSION_NOT_FOUND (the GguiSession exists; it is reachable only from a different app), so clients route 'fix your appId / API key' differently from 're-handshake'. The runner-owned subscribe frame IS the probe (the inputEnvelope is descriptive, not dispatched); expected: an `error` frame with `payload.code === 'APP_MISMATCH'`.",
+  "skipReason": null,
+  "setup": [
+    {
+      "type": "create-session",
+      "sessionId": "ck-app-mismatch-1",
+      "appId": "conformance-other"
+    }
+  ],
+  "inputEnvelope": {
+    "type": "handshake",
+    "sessionId": "ck-app-mismatch-1"
+  },
+  "expectedBehavior": {
+    "kind": "error-frame",
+    "code": "APP_MISMATCH"
+  }
+}

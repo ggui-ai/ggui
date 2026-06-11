@@ -9,5 +9,6 @@
       "exports": [{ "hook": "useLeafletMap" }]
     }
   ],
+  "appPublicEnv": {},
   "expect": { "outcome": "accept" }
 }

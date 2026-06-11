@@ -1,0 +1,21 @@
+{
+  "name": "gate-public-env-missing",
+  "description": "The contract references `useMapboxMap` under `@acme/mapbox`, and the app registers that exact `(package, export)` pair — registry membership passes — but the registered descriptor's `requires` lists the public env key `GGUI_PUBLIC_APP_MAPBOX_TOKEN` and `App.publicEnv` carries no keys at all. The render-time env gate (SPEC §7.7.3 — `assertPublicEnvSatisfied`) MUST reject with code `gadget_public_env_missing`: without the key, the wrapper's `getPublicEnv()` would throw at hook-mount inside the iframe, so the gate surfaces the misconfiguration as a recoverable author/operator-time error instead. Recovery: stamp the key on the app's public env, or drop the wrapper binding from the contract.",
+  "contract": {
+    "clientCapabilities": {
+      "gadgets": {
+        "@acme/mapbox": { "useMapboxMap": {} }
+      }
+    }
+  },
+  "appGadgets": [
+    {
+      "package": "@acme/mapbox",
+      "version": "1.0.0",
+      "exports": [{ "hook": "useMapboxMap" }],
+      "requires": ["GGUI_PUBLIC_APP_MAPBOX_TOKEN"]
+    }
+  ],
+  "appPublicEnv": {},
+  "expect": { "outcome": "reject", "code": "gadget_public_env_missing" }
+}

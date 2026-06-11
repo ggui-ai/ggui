@@ -1,0 +1,34 @@
+{
+  "name": "host-context-observed-persists",
+  "description": "The iframe-runtime captures `McpUiHostContext` from the `ui/initialize` response, trims it IFRAME-SIDE to `HostContextProjection` (`projectHostContext` in `@ggui-ai/protocol` — `theme`/`styles` are deliberately not projection fields; they flow through ggui's theming pipeline), and echoes the projection via the `host_context_observed` Client→Server message. The server's obligation is purely stateful: persist `payload.hostContext` onto `GguiSession.hostContext` VERBATIM — the first-party handler patches the received projection as-is, with no server-side re-projection — so `ggui_handshake` / `ggui_consume` surface it to the agent on later turns. That is why this fixture's `expected` is exactly the projection it authors. There is no synchronous response frame, so a `no-op` (wire-silence) assertion would wrongly certify a server that drops the message; the kit grades the obligation by reading `hostContext` back through `ConformanceHost.readSessionField` after the observation window and deep-equalling it against `expected`. Hosts without that introspection seam SKIP — never a weakened pass.",
+  "skipReason": null,
+  "setup": [{ "type": "create-session", "sessionId": "ck-host-context-1" }],
+  "inputEnvelope": {
+    "type": "host_context_observed",
+    "payload": {
+      "sessionId": "ck-host-context-1",
+      "hostContext": {
+        "availableDisplayModes": ["inline", "fullscreen"],
+        "currentDisplayMode": "inline",
+        "containerDimensions": { "maxWidth": 480, "height": 320 },
+        "platform": "web",
+        "deviceCapabilities": { "touch": false, "hover": true },
+        "locale": "en-US",
+        "timeZone": "America/Los_Angeles"
+      }
+    }
+  },
+  "expectedBehavior": {
+    "kind": "session-state",
+    "field": "hostContext",
+    "expected": {
+      "availableDisplayModes": ["inline", "fullscreen"],
+      "currentDisplayMode": "inline",
+      "containerDimensions": { "maxWidth": 480, "height": 320 },
+      "platform": "web",
+      "deviceCapabilities": { "touch": false, "hover": true },
+      "locale": "en-US",
+      "timeZone": "America/Los_Angeles"
+    }
+  }
+}
