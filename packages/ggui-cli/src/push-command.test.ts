@@ -63,7 +63,7 @@ describe('parsePushFlags', () => {
 
 describe('buildBlueprintPushPayload', () => {
   it('builds one push record per blueprint with required fields', async () => {
-    const record = toPortableBlueprint({ contract, componentCode: CODE, variance: {} });
+    const record = toPortableBlueprint({ contract, componentCode: CODE, variance: {}, source: { kind: 'user' } });
     await writePoolArtifact(dir, [record]);
 
     const payload = await buildBlueprintPushPayload(dir);
@@ -89,7 +89,7 @@ describe('buildBlueprintPushPayload', () => {
   });
 
   it('artifactId encodes both contractHash and variantKey without truncation', async () => {
-    const record = toPortableBlueprint({ contract, componentCode: CODE, variance: {} });
+    const record = toPortableBlueprint({ contract, componentCode: CODE, variance: {}, source: { kind: 'user' } });
     await writePoolArtifact(dir, [record]);
 
     const payload = await buildBlueprintPushPayload(dir);

@@ -29,7 +29,13 @@ export interface GateInput {
   readonly contract: DataContract;
   /** Shipped key, for the catalog re-key check (omit when unknown). */
   readonly contractHash?: string;
-  readonly generatorProtocolVersion?: string;
+  /**
+   * Required: `fromPortableBlueprint` (the upstream artifact
+   * narrower) already hard-rejects unstamped records, so an
+   * unstamped value reaching this gate is not a real state — the
+   * gate checks era equality, never absence.
+   */
+  readonly generatorProtocolVersion: string;
   readonly toolIdentityCatalogHash?: string;
 }
 
@@ -61,13 +67,10 @@ export function gateImportedBlueprint(input: GateInput, ctx: ImportGateCtx): Imp
     };
   }
 
-  // 2. Generator era. Unstamped (pre-stamp) artifacts are accepted for
-  //    back-compat with a warning; a stamped-but-mismatched era is rejected.
-  if (input.generatorProtocolVersion === undefined) {
-    warnings.push(
-      'unstamped artifact (no generatorProtocolVersion) — accepted for back-compat',
-    );
-  } else if (input.generatorProtocolVersion !== ctx.protocolVersion) {
+  // 2. Generator era. The stamp is required upstream
+  //    (fromPortableBlueprint rejects unstamped records), so the only
+  //    check left is era equality.
+  if (input.generatorProtocolVersion !== ctx.protocolVersion) {
     return {
       ok: false,
       reason: `generator era mismatch: artifact ${input.generatorProtocolVersion} vs deployment ${ctx.protocolVersion}`,

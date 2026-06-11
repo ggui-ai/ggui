@@ -36,11 +36,15 @@ describe('gateImportedBlueprint', () => {
     expect(result.reason).toMatch(/retired/);
   });
 
-  it('(d) accepts an unstamped artifact (no generatorProtocolVersion) with a warning', () => {
-    const input: GateInput = { contract };
+  it('(d) accepts an unstamped CATALOG hash with a warning (the era stamp itself is required upstream)', () => {
+    // The old "unstamped generatorProtocolVersion → warn" arm is gone:
+    // fromPortableBlueprint hard-rejects unstamped records, so GateInput
+    // requires the stamp. The only remaining unstamped-with-warning case
+    // is the catalog hash (offline export cannot compute one).
+    const input: GateInput = { contract, generatorProtocolVersion: PROTOCOL_VERSION };
     const result = gateImportedBlueprint(input, ctx);
     expect(result.ok).toBe(true);
-    expect(result.warnings.some((w) => /unstamped/.test(w))).toBe(true);
+    expect(result.warnings.some((w) => /unstamped catalog hash/.test(w))).toBe(true);
   });
 
   it('(e) rejects a shipped catalog hash that diverges AND a contractHash that does not match the recompute', () => {

@@ -135,6 +135,7 @@ function fakeGenerator(componentCode: string) {
     },
     metadata: {
       provider: 'anthropic',
+      generator: 'fake-generator',
       model: 'fake',
       inputTokens: 0,
       outputTokens: 0,
@@ -278,7 +279,7 @@ async function buildAcceptCacheHarness(): Promise<{
       contract: CONTRACT,
       intent: 'a test card',
       componentCode: STORED_CODE,
-      provenance: 'synth',
+      source: { kind: 'llm', generator: 'fake-generator', model: 'fake' },
     },
     { mintId: () => storedUuid },
   );
@@ -345,7 +346,7 @@ async function buildAcceptCacheHarnessFor(
       contract,
       intent: 'a test card',
       componentCode: STORED_CODE,
-      provenance: 'synth',
+      source: { kind: 'llm', generator: 'fake-generator', model: 'fake' },
     },
     { mintId: () => storedUuid },
   );
@@ -547,6 +548,11 @@ describe('createGguiRenderHandler — cache-reuse point-read (Phase 2)', () => {
     const entries = await harness.vectorStore.listByScope(APP_ID);
     expect(entries).toHaveLength(1);
     expect(entries[0].key).toBe(out.blueprintId);
+    // The cold-gen mint stamps full engine provenance from the
+    // generator's own metadata claim (flat-encoded in storage).
+    expect(entries[0].metadata['sourceKind']).toBe('llm');
+    expect(entries[0].metadata['sourceGenerator']).toBe('fake-generator');
+    expect(entries[0].metadata['sourceModel']).toBe('fake');
   });
 
   it('(f) override.contract is the agent safety valve: cold-gens against the agents fresh draft, does NOT reuse the available proposed cached blueprint', async () => {
@@ -677,7 +683,7 @@ describe('createGguiRenderHandler — seed-pool-aware reuse point-read', () => {
         contract: opts.contract,
         intent: 'a test card',
         componentCode: opts.componentCode,
-        provenance: 'register',
+        source: { kind: 'user' },
       },
       { mintId: () => opts.uuid },
     );
@@ -719,7 +725,7 @@ describe('createGguiRenderHandler — seed-pool-aware reuse point-read', () => {
           contract: opts.contract,
           intent: 'a test card',
           componentCode: opts.perAppRow.componentCode,
-          provenance: 'synth',
+          source: { kind: 'llm', generator: 'fake-generator', model: 'fake' },
         },
         { mintId: () => opts.uuid },
       );
@@ -1045,7 +1051,7 @@ describe('createGguiRenderHandler — variance-aware input reshape (Tasks 6+7)',
         contract: CONTRACT,
         intent: 'a test card',
         componentCode: STORED_CODE,
-        provenance: 'synth',
+        source: { kind: 'llm', generator: 'fake-generator', model: 'fake' },
         variance: PERSONA_VARIANCE,
       },
       { mintId: () => personaUuid },

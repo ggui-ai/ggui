@@ -108,6 +108,7 @@ describe('matchBlueprint — exact-key strategy', () => {
       contract: NOTEPAD_CONTRACT,
       intent: 'live notepad',
       componentCode: 'export default () => null;',
+      source: { kind: 'user' },
     });
     const result = await matchBlueprint(
       { registry },
@@ -129,6 +130,7 @@ describe('matchBlueprint — exact-key strategy', () => {
       contract: NOTEPAD_CONTRACT,
       intent: 'notepad',
       componentCode: 'a',
+      source: { kind: 'user' },
     });
     // No contract → semantic strategy. Without LLM, judge skips.
     const result = await matchBlueprint({ registry }, SCOPE, {
@@ -151,6 +153,7 @@ describe('matchBlueprint — variance-aware exact-key strategy', () => {
       contract: NOTEPAD_CONTRACT,
       intent: 'notepad',
       componentCode: 'export default () => "a";',
+      source: { kind: 'user' },
       variance: { persona: 'a' },
     });
     const personaB = await registerBlueprint(registry, SCOPE, {
@@ -158,6 +161,7 @@ describe('matchBlueprint — variance-aware exact-key strategy', () => {
       contract: NOTEPAD_CONTRACT,
       intent: 'notepad',
       componentCode: 'export default () => "b";',
+      source: { kind: 'user' },
       variance: { persona: 'b' },
     });
     // Two distinct rows under the SAME contract — distinct variantKeys.
@@ -201,6 +205,7 @@ describe('matchBlueprint — semantic strategy (RAG + judge)', () => {
       contract: NOTEPAD_CONTRACT,
       intent: 'notepad',
       componentCode: 'a',
+      source: { kind: 'user' },
     });
     const result = await matchBlueprint(
       {
@@ -230,6 +235,7 @@ describe('matchBlueprint — semantic strategy (RAG + judge)', () => {
       contract: NOTEPAD_CONTRACT,
       intent: 'notepad',
       componentCode: 'a',
+      source: { kind: 'user' },
     });
     const result = await matchBlueprint(
       {
@@ -258,6 +264,7 @@ describe('matchBlueprint — semantic strategy (RAG + judge)', () => {
       contract: NOTEPAD_CONTRACT,
       intent: 'notepad',
       componentCode: 'a',
+      source: { kind: 'user' },
     });
     const result = await matchBlueprint(
       {
@@ -283,6 +290,7 @@ describe('matchBlueprint — semantic strategy (RAG + judge)', () => {
       contract: NOTEPAD_CONTRACT,
       intent: 'notepad',
       componentCode: 'a',
+      source: { kind: 'user' },
     });
     const result = await matchBlueprint(
       { registry },
@@ -308,6 +316,7 @@ describe('matchBlueprint — semantic strategy (RAG + judge)', () => {
       contract: NOTEPAD_CONTRACT,
       intent: 'notepad',
       componentCode: 'a',
+      source: { kind: 'user' },
     });
     let judgeCalled = false;
     const result = await matchBlueprint(
@@ -367,6 +376,7 @@ describe('matchBlueprint — kind isolation', () => {
       contract: NOTEPAD_CONTRACT,
       intent: 'an atomic thing',
       componentCode: 'a',
+      source: { kind: 'user' },
     });
     const result = await matchBlueprint(
       { registry },
@@ -385,6 +395,7 @@ describe('matchBlueprint — bumps hit count on hit', () => {
       contract: NOTEPAD_CONTRACT,
       intent: 'notepad',
       componentCode: 'a',
+      source: { kind: 'user' },
     });
     expect(initial.hitCount).toBe(0);
     await matchBlueprint({ registry }, SCOPE, {
@@ -407,6 +418,7 @@ describe('matchBlueprint — judge picks unknown id (defense)', () => {
       contract: NOTEPAD_CONTRACT,
       intent: 'notepad',
       componentCode: 'a',
+      source: { kind: 'user' },
     });
     const result = await matchBlueprint(
       {
@@ -460,6 +472,7 @@ describe('matchBlueprint — cache-trace emit (Slice 16g)', () => {
       contract: NOTEPAD_CONTRACT,
       intent: 'notepad',
       componentCode: 'a',
+      source: { kind: 'user' },
     });
     await matchBlueprint({ registry }, SCOPE, {
       intent: 'paraphrase',
@@ -511,6 +524,7 @@ describe('matchBlueprint — cache-trace emit (Slice 16g)', () => {
       contract: NOTEPAD_CONTRACT,
       intent: 'notepad',
       componentCode: 'a',
+      source: { kind: 'user' },
     });
     await matchBlueprint(
       { registry },
@@ -533,6 +547,7 @@ describe('matchBlueprint — cache-trace emit (Slice 16g)', () => {
       contract: NOTEPAD_CONTRACT,
       intent: 'notepad',
       componentCode: 'a',
+      source: { kind: 'user' },
     });
     await matchBlueprint(
       {
@@ -563,6 +578,7 @@ describe('matchBlueprint — cache-trace emit (Slice 16g)', () => {
       contract: NOTEPAD_CONTRACT,
       intent: 'notepad',
       componentCode: 'a',
+      source: { kind: 'user' },
     });
     // No setCacheTraceSink call — sink stays null.
     await matchBlueprint({ registry }, SCOPE, {
@@ -631,6 +647,7 @@ describe('matchBlueprint — coverage is informational (Path A)', () => {
       contract: COUNTER_TWO_ACTIONS,
       intent: 'a counter widget',
       componentCode: 'export default () => <div/>;',
+      source: { kind: 'user' },
     });
 
     let judgeCalled = false;
@@ -673,6 +690,7 @@ describe('matchBlueprint — coverage is informational (Path A)', () => {
       contract: COUNTER_THREE_ACTIONS,
       intent: 'three-action counter',
       componentCode: 'export default () => <div/>;',
+      source: { kind: 'user' },
     });
     const result = await matchBlueprint({ registry }, SCOPE, {
       intent: 'paraphrased — same contract',
@@ -695,6 +713,7 @@ describe('matchBlueprint — coverage is informational (Path A)', () => {
       contract: COUNTER_TWO_ACTIONS,
       intent: 'a counter',
       componentCode: 'export default () => <div/>;',
+      source: { kind: 'user' },
     });
     const result = await matchBlueprint(
       {
@@ -729,6 +748,7 @@ describe('matchBlueprint — coverage is informational (Path A)', () => {
       contract: COUNTER_THREE_ACTIONS,
       intent: 'a counter widget',
       componentCode: 'export default () => <div/>;',
+      source: { kind: 'user' },
     });
     const result = await matchBlueprint(
       {
@@ -773,6 +793,7 @@ describe('matchBlueprint — contract-bearing semantic fall-through (Phase 1)', 
       contract: TODO_CONTRACT_CACHED,
       intent: 'my todo items',
       componentCode: 'export default () => null;',
+      source: { kind: 'user' },
     });
 
     // Agent re-authored an equivalent-but-not-identical contract (LLM
@@ -808,6 +829,7 @@ describe('matchBlueprint — contract-bearing semantic fall-through (Phase 1)', 
       contract: TODO_CONTRACT_CACHED,
       intent: 'my todo items',
       componentCode: 'x',
+      source: { kind: 'user' },
     });
     let judgeCalled = false;
     const result = await matchBlueprint(
@@ -901,6 +923,7 @@ describe('matchBlueprint — A4 deterministic propose path (stub judge, no LLM)'
         contract: WEATHER_CACHED,
         intent: WEATHER_INTENT,
         componentCode: 'export default () => <div/>;',
+        source: { kind: 'user' },
       });
       // Stub the judge to ACCEPT the cached blueprint by its registry id at a
       // confidence above the default 0.5 threshold. This is the ONLY LLM
@@ -967,6 +990,7 @@ describe('decideHandshake — A4 deterministic propose path (real matcher, stub 
       contract: WEATHER_CACHED,
       intent: WEATHER_INTENT,
       componentCode: 'export default () => <div/>;',
+      source: { kind: 'user' },
     });
 
     // The forced judge accepts the cached blueprint (id is opaque per run, so

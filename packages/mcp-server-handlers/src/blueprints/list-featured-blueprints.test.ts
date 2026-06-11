@@ -57,7 +57,9 @@ describe('createListFeaturedBlueprintsHandler — ManifestBlueprintProvider wiri
       id: 'weather-card',
       name: 'Weather',
       description: 'City forecast',
-      source: 'user',
+      // ManifestBlueprintProvider mints the user arm of the
+      // BlueprintSource union (manifest-declared = hand-authored).
+      source: { kind: 'user' },
     });
   });
 

@@ -55,9 +55,10 @@
  *   callback (cheap — one DDB Query in the cloud bridge, one
  *   directory walk in OSS dev-stack); the compile sweep is the
  *   expensive part and IS still skipped on signature match. Orphan
- *   eviction at the end of the walk drops install-provenance rows
- *   whose contractKey isn't in the current entry set — closes the
- *   G4 stale-cache leak (uninstall → next handshake → cache hit).
+ *   eviction at the end of the walk drops bridge-owned
+ *   (`installed: true`) rows whose contractKey isn't in the current
+ *   entry set — closes the G4 stale-cache leak (uninstall → next
+ *   handshake → cache hit).
  */
 import { createHash } from 'node:crypto';
 import type { EnumerableVectorStore } from '@ggui-ai/mcp-server-core';
@@ -214,10 +215,11 @@ export interface InstalledBlueprintsProvider {
    *   - re-walk: compile + register every CURRENT entry (no-op for
    *     unchanged entries thanks to the underlying installToCache
    *     idempotency)
-   *   - **orphan eviction**: any install-provenance cache row at
-   *     this scope whose contractKey isn't in the current entry set
-   *     is deleted. Without this, uninstalled blueprints continue
-   *     serving cache hits on handshake — the G4 stale-cache leak.
+   *   - **orphan eviction**: any bridge-owned (`installed: true`)
+   *     cache row at this scope whose contractKey isn't in the
+   *     current entry set is deleted. Without this, uninstalled
+   *     blueprints continue serving cache hits on handshake — the
+   *     G4 stale-cache leak.
    *
    * Concurrent calls for the same scope share one ensure-walk via a
    * per-scope promise.
@@ -365,11 +367,13 @@ export function createInstalledBlueprintsProvider(
       }
     }
 
-    // Orphan eviction: drop install-provenance rows whose contractKey
-    // is NOT in the current entry set. Covers the G4 uninstall path —
-    // when an entry disappears between walks, its install-provenance
-    // cache row would otherwise serve hits forever. Synth-provenance
-    // and register-provenance rows survive untouched.
+    // Orphan eviction: drop bridge-owned (`installed: true`) rows
+    // whose contractKey is NOT in the current entry set. Covers the
+    // G4 uninstall path — when an entry disappears between walks, its
+    // installed cache row would otherwise serve hits forever. Rows the
+    // bridge does not own (cold-gen `llm` rows, operator-registered
+    // rows) survive untouched — eviction keys on the lifecycle
+    // marker, never on authorship.
     //
     // listByScope is a single enumeration call (S3VectorsStorage,
     // sqlite, in-memory all support it). Skip eviction when the
@@ -392,7 +396,7 @@ export function createInstalledBlueprintsProvider(
     }
     let cached: ReadonlyArray<{
       readonly id: string;
-      readonly provenance: string;
+      readonly installed?: boolean;
       readonly contractKey?: string;
     }>;
     try {
@@ -412,7 +416,7 @@ export function createInstalledBlueprintsProvider(
       return;
     }
     for (const row of cached) {
-      if (row.provenance !== 'install') continue;
+      if (row.installed !== true) continue;
       const key = row.contractKey;
       if (key !== undefined && liveKeys.has(key)) continue;
       // Orphan. Either we couldn't read the row's contractKey or it's
@@ -427,7 +431,7 @@ export function createInstalledBlueprintsProvider(
           id: row.id,
           manifestPath: scope,
           kind: 'stale-row-evicted',
-          message: `evicted orphan install-provenance row (contractKey=${
+          message: `evicted orphan installed row (contractKey=${
             key ?? '<unknown>'
           }) — entry no longer in the discovered set; caller likely uninstalled it`,
         });
@@ -515,18 +519,19 @@ export function createInstalledBlueprintsProvider(
 
 /**
  * When an installed blueprint fails the current boot's compile (or
- * register), evict any prior `provenance: 'install'` row at the same
- * canonical contractKey from the cache. Without this, persistent
- * vectorStore backends (sqlite, a cloud datastore) would continue
- * serving the previous boot's componentCode — drift between the
- * installed source on disk and the cached output matters more than
- * the matcher's "best-effort" no-write posture.
+ * register), evict any prior bridge-owned (`installed: true`) row at
+ * the same canonical contractKey from the cache. Without this,
+ * persistent vectorStore backends (sqlite, a cloud datastore) would
+ * continue serving the previous boot's componentCode — drift between
+ * the installed source on disk and the cached output matters more
+ * than the matcher's "best-effort" no-write posture.
  *
- * Eviction is precise: we only delete rows whose `provenance` is
- * `'install'`. Synth-provenance rows at the same contractKey
- * (legitimate cold-gen products from a different lifecycle) survive
- * untouched. Best-effort: a lookup or delete failure swallows; the
- * worst case is "stale row survives" which is the pre-fix state.
+ * Eviction is precise: we only delete rows the bridge owns (the
+ * `installed` lifecycle marker). Rows minted by other writers at the
+ * same contractKey (legitimate cold-gen products from a different
+ * lifecycle) survive untouched. Best-effort: a lookup or delete
+ * failure swallows; the worst case is "stale row survives" which is
+ * the pre-fix state.
  */
 async function evictStaleInstallRow(
   deps: BlueprintRegistryDeps,
@@ -551,7 +556,7 @@ async function evictStaleInstallRow(
   } catch {
     return;
   }
-  if (!existing || existing.provenance !== 'install') return;
+  if (!existing || existing.installed !== true) return;
   try {
     await deleteBlueprint(
       { vectorStore: deps.vectorStore, index: deps.index },
@@ -562,7 +567,7 @@ async function evictStaleInstallRow(
       id: entry.id,
       manifestPath: entry.manifestPath,
       kind: 'stale-row-evicted',
-      message: `evicted previously-cached install-provenance row (contractKey=${contractKey}) because the current boot's compile/register failed; the matcher will fall through to cold-gen until the operator fixes the on-disk source`,
+      message: `evicted previously-cached installed row (contractKey=${contractKey}) because the current boot's compile/register failed; the matcher will fall through to cold-gen until the operator fixes the on-disk source`,
     });
   } catch {
     // Best-effort — stale row survives if the store rejects the

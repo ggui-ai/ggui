@@ -406,7 +406,14 @@ export function createGguiOpsGenerateBlueprintHandler(
             contract,
             intent: intentForCache,
             componentCode,
-            provenance: "register",
+            // Operator-DISPATCHED but engine-GENERATED: the code came
+            // out of `generator.generate(...)`, so provenance is the
+            // llm arm, stamped from the engine's own metadata claim.
+            source: {
+              kind: "llm",
+              generator: result.metadata.generator,
+              model: result.metadata.model,
+            },
           });
         } catch (err) {
           try {

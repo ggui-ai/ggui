@@ -4,7 +4,7 @@ import {
   InMemoryVectorStore,
   MockEmbeddingProvider,
 } from '@ggui-ai/mcp-server-core/in-memory';
-import type { DataContract } from '@ggui-ai/protocol';
+import type { BlueprintSource, DataContract } from '@ggui-ai/protocol';
 import { blueprintKey, variantKey } from '@ggui-ai/protocol/blueprint-key';
 import type { ContractValidationResult } from '@ggui-ai/negotiator';
 import {
@@ -94,6 +94,7 @@ describe('registerBlueprint', () => {
       contract: NOTEPAD_CONTRACT,
       intent: 'Build a notepad',
       componentCode: 'export default () => null;',
+      source: { kind: 'user' },
     });
     // Identity is opaque — no longer derived from (kind, contractKey).
     expect(bp.id).toMatch(/^bp_[0-9a-f-]{36}$/);
@@ -111,12 +112,14 @@ describe('registerBlueprint', () => {
       contract: NOTEPAD_CONTRACT,
       intent: 'Build a notepad',
       componentCode: 'export default () => "first";',
+      source: { kind: 'user' },
     });
     const b = await registerBlueprint(deps, SCOPE, {
       kind: 'template',
       contract: NOTEPAD_CONTRACT, // same canonical shape, same (default) variance
       intent: 'A live notepad panel — different prose',
       componentCode: 'export default () => "newer";',
+      source: { kind: 'user' },
     });
     // Same UUID — the second registration is a dedup hit, not a new row.
     expect(b.id).toBe(a.id);
@@ -136,6 +139,7 @@ describe('registerBlueprint', () => {
       contract: NOTEPAD_CONTRACT,
       intent: 'notepad — minimalist',
       componentCode: 'a',
+      source: { kind: 'user' },
       variance: { persona: 'minimalist' },
     });
     const b = await registerBlueprint(deps, SCOPE, {
@@ -143,6 +147,7 @@ describe('registerBlueprint', () => {
       contract: NOTEPAD_CONTRACT, // same contract shape
       intent: 'notepad — data-dense',
       componentCode: 'b',
+      source: { kind: 'user' },
       variance: { persona: 'data-dense' },
     });
     // Distinct variance → distinct exact keys → distinct sibling rows.
@@ -160,12 +165,14 @@ describe('registerBlueprint', () => {
       contract: NOTEPAD_CONTRACT,
       intent: 'notepad',
       componentCode: 'a',
+      source: { kind: 'user' },
     });
     const b = await registerBlueprint(deps, SCOPE, {
       kind: 'template',
       contract: FEEDBACK_CONTRACT,
       intent: 'feedback',
       componentCode: 'b',
+      source: { kind: 'user' },
     });
     expect(a.id).not.toBe(b.id);
     const all = await listBlueprints(deps, SCOPE);
@@ -182,6 +189,7 @@ describe('registerBlueprint', () => {
         contract: NOTEPAD_CONTRACT,
         intent: 'notepad',
         componentCode: 'a',
+        source: { kind: 'user' },
       },
       { mintId: () => 'bp_injected-fixed-id' },
     );
@@ -196,48 +204,91 @@ describe('registerBlueprint', () => {
         contract: NOTEPAD_CONTRACT,
         intent: '   ',
         componentCode: 'a',
+        source: { kind: 'user' },
       }),
     ).rejects.toThrow(/intent cannot be empty/);
   });
 
-  // Slice 5 (2026-05-18): provenance round-trips through vector-store
-  // metadata. Default is 'synth' (the pre-Slice-5 cold-gen path was
-  // the only writer; legacy rows are necessarily synth-origin).
-  it('defaults provenance to "synth" when not supplied', async () => {
-    const deps = makeDeps();
-    const bp = await registerBlueprint(deps, SCOPE, {
-      kind: 'template',
-      contract: NOTEPAD_CONTRACT,
-      intent: 'Build a notepad',
-      componentCode: 'export default () => null;',
-    });
-    expect(bp.provenance).toBe('synth');
-    // List-side readback through the metadata layer must also surface
-    // 'synth' — guards against rowToBlueprint losing the field.
-    const all = await listBlueprints(deps, SCOPE);
-    expect(all[0]?.provenance).toBe('synth');
-  });
-
-  it('round-trips each provenance value through metadata', async () => {
-    const provenances = ['synth', 'register', 'install'] as const;
-    for (const provenance of provenances) {
+  // Provenance (BlueprintSource union) round-trips through the flat
+  // vector-store metadata encoding (sourceKind / sourceGenerator /
+  // sourceModel). No default exists — every mint site stamps the
+  // union explicitly.
+  it('round-trips each BlueprintSource arm through metadata', async () => {
+    const sources: readonly BlueprintSource[] = [
+      { kind: 'llm', generator: 'ui-gen-default-haiku-4-5', model: 'claude-haiku-4-5' },
+      { kind: 'user' },
+      { kind: 'curated' },
+    ];
+    for (const source of sources) {
       const deps = makeDeps();
       const bp = await registerBlueprint(deps, SCOPE, {
         kind: 'template',
         contract: NOTEPAD_CONTRACT,
-        intent: `Build a notepad (${provenance})`,
+        intent: `Build a notepad (${source.kind})`,
         componentCode: 'export default () => null;',
-        provenance,
+        source,
       });
-      expect(bp.provenance).toBe(provenance);
+      expect(bp.source).toEqual(source);
       const fetched = await findBlueprintExact(
         { vectorStore: deps.vectorStore, index: deps.index },
         SCOPE,
         'template',
         bp.contractKey,
       );
-      expect(fetched?.provenance).toBe(provenance);
+      expect(fetched?.source).toEqual(source);
+      // List-side readback through the metadata layer must also
+      // surface the union — guards against rowToBlueprint losing it.
+      const all = await listBlueprints(deps, SCOPE);
+      expect(all[0]?.source).toEqual(source);
     }
+  });
+
+  it('drops rows written under the retired flat provenance vocabulary (rebuild posture, no coercion)', async () => {
+    const deps = makeDeps();
+    // Simulate a pre-union row: blueprint-shaped metadata carrying the
+    // retired `provenance` scalar instead of sourceKind/…
+    await deps.vectorStore.putVector(SCOPE, {
+      key: 'bp_legacy',
+      vector: [0],
+      metadata: {
+        intent: 'legacy row',
+        componentCode: 'export default () => null;',
+        contract: JSON.stringify(NOTEPAD_CONTRACT),
+        contractKey: blueprintKey(NOTEPAD_CONTRACT),
+        variantKey: variantKey(undefined),
+        variance: JSON.stringify({}),
+        kind: 'template',
+        createdAt: '2026-01-01T00:00:00.000Z',
+        hitCount: 3,
+        provenance: 'synth',
+      },
+    });
+    const all = await listBlueprints(deps, SCOPE);
+    expect(all).toHaveLength(0);
+  });
+
+  it('drops an llm-kinded row missing its engine provenance scalars', async () => {
+    const deps = makeDeps();
+    // sourceKind says llm but the generator/model scalars are absent —
+    // not a real state; the validating narrower must drop, not coerce.
+    await deps.vectorStore.putVector(SCOPE, {
+      key: 'bp_hollow_llm',
+      vector: [0],
+      metadata: {
+        intent: 'hollow llm row',
+        componentCode: 'export default () => null;',
+        contract: JSON.stringify(NOTEPAD_CONTRACT),
+        contractKey: blueprintKey(NOTEPAD_CONTRACT),
+        variantKey: variantKey(undefined),
+        variance: JSON.stringify({}),
+        kind: 'template',
+        createdAt: '2026-01-01T00:00:00.000Z',
+        hitCount: 0,
+        sourceKind: 'llm',
+      },
+    });
+    const all = await listBlueprints(deps, SCOPE);
+    expect(all).toHaveLength(0);
   });
 });
 
@@ -260,6 +311,7 @@ describe('findBlueprintExact', () => {
       contract: NOTEPAD_CONTRACT,
       intent: 'notepad',
       componentCode: 'code-1',
+      source: { kind: 'user' },
     });
     const bp = await findBlueprintExact(
       deps,
@@ -279,6 +331,7 @@ describe('findBlueprintExact', () => {
       contract: NOTEPAD_CONTRACT,
       intent: 'notepad',
       componentCode: 'code',
+      source: { kind: 'user' },
     });
     // Looking up under kind='atom' should miss even with the same hash.
     const bp = await findBlueprintExact(
@@ -297,6 +350,7 @@ describe('findBlueprintExact', () => {
       contract: NOTEPAD_CONTRACT,
       intent: 'notepad',
       componentCode: 'A',
+      source: { kind: 'user' },
     });
     const bp = await findBlueprintExact(
       deps,
@@ -314,6 +368,7 @@ describe('findBlueprintExact', () => {
       contract: NOTEPAD_CONTRACT,
       intent: 'notepad — minimalist',
       componentCode: 'minimalist',
+      source: { kind: 'user' },
       variance: { persona: 'minimalist' },
     });
     const dense = await registerBlueprint(deps, SCOPE, {
@@ -321,6 +376,7 @@ describe('findBlueprintExact', () => {
       contract: NOTEPAD_CONTRACT,
       intent: 'notepad — data-dense',
       componentCode: 'dense',
+      source: { kind: 'user' },
       variance: { persona: 'data-dense' },
     });
     const contractKey = blueprintKey(NOTEPAD_CONTRACT);
@@ -391,12 +447,14 @@ describe('findBlueprintsByEmbedding', () => {
       contract: NOTEPAD_CONTRACT,
       intent: 'notepad',
       componentCode: 'a',
+      source: { kind: 'user' },
     });
     await registerBlueprint(deps, SCOPE, {
       kind: 'template',
       contract: FEEDBACK_CONTRACT,
       intent: 'feedback',
       componentCode: 'b',
+      source: { kind: 'user' },
     });
     const candidates = await findBlueprintsByEmbedding(deps, SCOPE, {
       intent: 'notepad',
@@ -421,6 +479,7 @@ describe('findBlueprintsByEmbedding', () => {
       contract: NOTEPAD_CONTRACT,
       intent: 'notepad',
       componentCode: 'a',
+      source: { kind: 'user' },
     });
     const templateOnly = await findBlueprintsByEmbedding(
       deps,
@@ -446,6 +505,7 @@ describe('findBlueprintsByEmbedding', () => {
         contract: { actionSpec: { [`act${i}`]: { label: `A${i}` } } },
         intent: `intent ${i}`,
         componentCode: `code-${i}`,
+        source: { kind: 'user' },
       });
     }
     const candidates = await findBlueprintsByEmbedding(
@@ -466,12 +526,14 @@ describe('listBlueprints', () => {
       contract: NOTEPAD_CONTRACT,
       intent: 'a',
       componentCode: 'a',
+      source: { kind: 'user' },
     });
     await registerBlueprint(deps, SCOPE, {
       kind: 'atom',
       contract: FEEDBACK_CONTRACT,
       intent: 'b',
       componentCode: 'b',
+      source: { kind: 'user' },
     });
     const all = await listBlueprints(deps, SCOPE);
     expect(all).toHaveLength(2);
@@ -484,12 +546,14 @@ describe('listBlueprints', () => {
       contract: NOTEPAD_CONTRACT,
       intent: 'a',
       componentCode: 'a',
+      source: { kind: 'user' },
     });
     await registerBlueprint(deps, SCOPE, {
       kind: 'atom',
       contract: FEEDBACK_CONTRACT,
       intent: 'b',
       componentCode: 'b',
+      source: { kind: 'user' },
     });
     const templates = await listBlueprints(deps, SCOPE, 'template');
     expect(templates).toHaveLength(1);
@@ -505,6 +569,7 @@ describe('recordBlueprintHit', () => {
       contract: NOTEPAD_CONTRACT,
       intent: 'notepad',
       componentCode: 'a',
+      source: { kind: 'user' },
     });
     await recordBlueprintHit(deps, SCOPE, bp.id);
     const after = await findBlueprintExact(
@@ -533,6 +598,7 @@ describe('deleteBlueprint', () => {
       contract: NOTEPAD_CONTRACT,
       intent: 'notepad',
       componentCode: 'a',
+      source: { kind: 'user' },
     });
     await deleteBlueprint(deps, SCOPE, bp.id);
     const all = await listBlueprints(deps, SCOPE);
@@ -574,6 +640,7 @@ describe('registerBlueprint — bucket eviction (Slice 16h)', () => {
         contract: uniqueContract(1),
         intent: 'one',
         componentCode: 'a',
+        source: { kind: 'user' },
       },
       { maxPerKind: cap },
     );
@@ -585,6 +652,7 @@ describe('registerBlueprint — bucket eviction (Slice 16h)', () => {
         contract: uniqueContract(2),
         intent: 'two',
         componentCode: 'b',
+        source: { kind: 'user' },
       },
       { maxPerKind: cap },
     );
@@ -596,6 +664,7 @@ describe('registerBlueprint — bucket eviction (Slice 16h)', () => {
         contract: uniqueContract(3),
         intent: 'three',
         componentCode: 'c',
+        source: { kind: 'user' },
       },
       { maxPerKind: cap },
     );
@@ -613,6 +682,7 @@ describe('registerBlueprint — bucket eviction (Slice 16h)', () => {
         contract: uniqueContract(4),
         intent: 'four',
         componentCode: 'd',
+        source: { kind: 'user' },
       },
       { maxPerKind: cap },
     );
@@ -637,6 +707,7 @@ describe('registerBlueprint — bucket eviction (Slice 16h)', () => {
         contract: uniqueContract(1),
         intent: 'first',
         componentCode: 'a',
+        source: { kind: 'user' },
       },
       { maxPerKind: cap },
     );
@@ -651,6 +722,7 @@ describe('registerBlueprint — bucket eviction (Slice 16h)', () => {
         contract: uniqueContract(2),
         intent: 'second',
         componentCode: 'b',
+        source: { kind: 'user' },
       },
       { maxPerKind: cap },
     );
@@ -664,6 +736,7 @@ describe('registerBlueprint — bucket eviction (Slice 16h)', () => {
         contract: uniqueContract(3),
         intent: 'third',
         componentCode: 'c',
+        source: { kind: 'user' },
       },
       { maxPerKind: cap },
     );
@@ -687,6 +760,7 @@ describe('registerBlueprint — bucket eviction (Slice 16h)', () => {
         contract: uniqueContract(1),
         intent: 'one',
         componentCode: 'v1',
+        source: { kind: 'user' },
       },
       { maxPerKind: cap },
     );
@@ -698,6 +772,7 @@ describe('registerBlueprint — bucket eviction (Slice 16h)', () => {
         contract: uniqueContract(2),
         intent: 'two',
         componentCode: 'v1',
+        source: { kind: 'user' },
       },
       { maxPerKind: cap },
     );
@@ -713,6 +788,7 @@ describe('registerBlueprint — bucket eviction (Slice 16h)', () => {
         contract: uniqueContract(1),
         intent: 'one revised',
         componentCode: 'v2',
+        source: { kind: 'user' },
       },
       { maxPerKind: cap },
     );
@@ -740,6 +816,7 @@ describe('registerBlueprint — bucket eviction (Slice 16h)', () => {
         contract: uniqueContract(1),
         intent: 'one',
         componentCode: 'a',
+        source: { kind: 'user' },
       },
       { maxPerKind: cap },
     );
@@ -759,6 +836,7 @@ describe('registerBlueprint — bucket eviction (Slice 16h)', () => {
         contract: uniqueContract(2),
         intent: 'two',
         componentCode: 'b',
+        source: { kind: 'user' },
       },
       { maxPerKind: cap },
     );
@@ -775,6 +853,7 @@ describe('registerBlueprint — bucket eviction (Slice 16h)', () => {
         contract: uniqueContract(1),
         intent: 'one again',
         componentCode: 'a2',
+        source: { kind: 'user' },
       },
       { maxPerKind: Number.POSITIVE_INFINITY },
     );
@@ -794,6 +873,7 @@ describe('registerBlueprint — bucket eviction (Slice 16h)', () => {
         contract: uniqueContract(1),
         intent: 'tmpl',
         componentCode: 't',
+        source: { kind: 'user' },
       },
       { maxPerKind: cap },
     );
@@ -806,6 +886,7 @@ describe('registerBlueprint — bucket eviction (Slice 16h)', () => {
         contract: uniqueContract(2),
         intent: 'atom 1',
         componentCode: 'a',
+        source: { kind: 'user' },
       },
       { maxPerKind: cap },
     );
@@ -817,6 +898,7 @@ describe('registerBlueprint — bucket eviction (Slice 16h)', () => {
         contract: uniqueContract(3),
         intent: 'atom 2',
         componentCode: 'a',
+        source: { kind: 'user' },
       },
       { maxPerKind: cap },
     );
@@ -830,6 +912,7 @@ describe('registerBlueprint — bucket eviction (Slice 16h)', () => {
         contract: uniqueContract(4),
         intent: 'atom 3',
         componentCode: 'a',
+        source: { kind: 'user' },
       },
       { maxPerKind: cap },
     );
@@ -852,6 +935,7 @@ describe('registerBlueprint — bucket eviction (Slice 16h)', () => {
           contract: uniqueContract(i),
           intent: `bp ${i}`,
           componentCode: 'x',
+          source: { kind: 'user' },
         },
         { maxPerKind: Number.POSITIVE_INFINITY },
       );
@@ -881,6 +965,7 @@ describe('registerBlueprint — contract structural validation', () => {
       contract: NOTEPAD_CONTRACT,
       intent: 'notepad',
       componentCode: 'export default () => null;',
+      source: { kind: 'user' },
     });
     expect(bp.validationWarnings).toBeUndefined();
     expect(bp.contractKey).toBe(blueprintKey(NOTEPAD_CONTRACT));
@@ -893,6 +978,7 @@ describe('registerBlueprint — contract structural validation', () => {
       contract: COUNTER_OVER_SPECIFIED,
       intent: 'counter that increments on click',
       componentCode: 'export default () => null;',
+      source: { kind: 'user' },
     });
     // Registration succeeds — heuristic is warn-only by default.
     const all = await listBlueprints(deps, SCOPE);
@@ -938,6 +1024,7 @@ describe('registerBlueprint — contract structural validation', () => {
           contract: COUNTER_OVER_SPECIFIED,
           intent: 'counter',
           componentCode: 'export default () => null;',
+          source: { kind: 'user' },
         },
         { validator: failClosed },
       );
@@ -965,6 +1052,7 @@ describe('registerBlueprint — contract structural validation', () => {
         contract: COUNTER_OVER_SPECIFIED,
         intent: 'counter',
         componentCode: 'export default () => null;',
+        source: { kind: 'user' },
       },
       { validator: noop },
     );

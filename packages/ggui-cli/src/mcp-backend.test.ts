@@ -599,7 +599,9 @@ describe('buildMcpServerBackend', () => {
     expect(result.structuredContent.blueprints[0]).toMatchObject({
       id: 'weather-card',
       name: 'Weather Card',
-      source: 'user',
+      // ManifestBlueprintProvider mints the user arm of the
+      // BlueprintSource union (manifest-declared = hand-authored).
+      source: { kind: 'user' },
     });
   });
 

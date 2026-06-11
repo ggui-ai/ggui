@@ -88,6 +88,7 @@ describe('host-simulator: Slice 16e blueprint-first registry', () => {
               },
               metadata: {
                 provider: 'anthropic',
+                generator: 'ui-gen-default-haiku-4-5',
                 model: 'claude-opus-4-7',
                 inputTokens: 10,
                 outputTokens: 20,

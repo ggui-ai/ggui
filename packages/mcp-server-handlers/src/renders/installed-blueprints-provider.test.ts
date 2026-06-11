@@ -85,7 +85,10 @@ describe('createInstalledBlueprintsProvider', () => {
     expect(compile).toHaveBeenCalledTimes(2);
     const list = await listBlueprints(deps, SCOPE);
     expect(list).toHaveLength(2);
-    expect(list.every((bp) => bp.provenance === 'install')).toBe(true);
+    // Installed artifacts carry no engine claim (user-arm provenance)
+    // and the bridge marks every row it owns.
+    expect(list.every((bp) => bp.source.kind === 'user')).toBe(true);
+    expect(list.every((bp) => bp.installed === true)).toBe(true);
   });
 
   it('is idempotent per scope — second ensureCached does not re-compile', async () => {
@@ -171,13 +174,13 @@ describe('createInstalledBlueprintsProvider', () => {
   });
 
   // Slice 5 follow-up (2026-05-18, H4): when an installed blueprint
-  // fails the current boot's compile, any prior `provenance: 'install'`
-  // row at the same contractKey is EVICTED. Without this, persistent
+  // fails the current boot's compile, any prior bridge-owned
+  // (`installed: true`) row at the same contractKey is EVICTED. Without this, persistent
   // vectorStores (sqlite, cloud DDB) keep serving stale componentCode
   // from a previous successful boot even after the operator broke or
   // uninstalled the source.
   describe('stale-row eviction on compile/register failure', () => {
-    it('evicts the prior install-provenance row when compile fails', async () => {
+    it('evicts the prior bridge-owned row when compile fails', async () => {
       // Seed the cache with a working install (simulates a prior boot
       // whose compile succeeded). Then re-run with a failing compile
       // (simulates broken source on the next boot).
@@ -188,7 +191,8 @@ describe('createInstalledBlueprintsProvider', () => {
         contract: COUNTER_CONTRACT,
         intent: 'prior-boot installed counter',
         componentCode: 'stale-component-code',
-        provenance: 'install',
+        source: { kind: 'user' },
+        installed: true,
       });
       expect((await listBlueprints(deps, SCOPE)).length).toBe(1);
 
@@ -215,11 +219,11 @@ describe('createInstalledBlueprintsProvider', () => {
         { id: 'vendor:counter:1.0.0', kind: 'compile-failed' },
         { id: 'vendor:counter:1.0.0', kind: 'stale-row-evicted' },
       ]);
-      // The previously-cached install-provenance row is GONE.
+      // The previously-cached bridge-owned row is GONE.
       expect((await listBlueprints(deps, SCOPE))).toEqual([]);
     });
 
-    it('does NOT evict a synth-provenance row at the same contractKey', async () => {
+    it('does NOT evict a non-bridge-owned row at the same contractKey', async () => {
       // Defensive: synth-cached rows at the same canonical key
       // (legitimate cold-gen products from a different lifecycle) MUST
       // survive an install-bridge failure. Eviction only targets
@@ -231,7 +235,7 @@ describe('createInstalledBlueprintsProvider', () => {
         contract: COUNTER_CONTRACT,
         intent: 'synth-cached counter',
         componentCode: 'synth-component-code',
-        provenance: 'synth',
+        source: { kind: 'llm', generator: 'ui-gen-default-haiku-4-5', model: 'claude-haiku-4-5' },
       });
 
       const provider = createInstalledBlueprintsProvider({
@@ -253,7 +257,8 @@ describe('createInstalledBlueprintsProvider', () => {
       // Synth row survives untouched.
       const list = await listBlueprints(deps, SCOPE);
       expect(list).toHaveLength(1);
-      expect(list[0]?.provenance).toBe('synth');
+      expect(list[0]?.source.kind).toBe('llm');
+      expect(list[0]?.installed).toBeUndefined();
       expect(list[0]?.componentCode).toBe('synth-component-code');
     });
 
@@ -265,7 +270,8 @@ describe('createInstalledBlueprintsProvider', () => {
         contract: COUNTER_CONTRACT,
         intent: 'prior-boot counter',
         componentCode: 'stale-code',
-        provenance: 'install',
+        source: { kind: 'user' },
+        installed: true,
       });
 
       const provider = createInstalledBlueprintsProvider({
@@ -375,7 +381,7 @@ describe('createInstalledBlueprintsProvider', () => {
   });
 
   describe('orphan eviction on entry-set change (G4 stale-cache fix)', () => {
-    it('evicts install-provenance rows when an entry disappears between walks', async () => {
+    it('evicts bridge-owned rows when an entry disappears between walks', async () => {
       const deps = makeDeps();
       // Two entries on first walk; one disappears on second.
       const callCount = { current: 0 };
@@ -424,17 +430,16 @@ describe('createInstalledBlueprintsProvider', () => {
       );
     });
 
-    it('preserves synth-provenance rows even when no installs remain', async () => {
+    it('preserves non-bridge-owned rows even when no installs remain', async () => {
       const deps = makeDeps();
-      // Manually seed a synth-provenance row (cold-gen product the
-      // matcher wrote).
+      // Manually seed a cold-gen row (llm-sourced, not bridge-owned).
       const { registerBlueprint } = await import('./blueprint-registry.js');
       await registerBlueprint(deps, SCOPE, {
         kind: 'template',
         contract: COUNTER_CONTRACT,
         componentCode: 'synth code',
         intent: 'synth-cached counter',
-        provenance: 'synth',
+        source: { kind: 'llm', generator: 'ui-gen-default-haiku-4-5', model: 'claude-haiku-4-5' },
       });
 
       const provider = createInstalledBlueprintsProvider({
@@ -444,11 +449,12 @@ describe('createInstalledBlueprintsProvider', () => {
       });
       await provider.ensureCached(SCOPE);
 
-      // Synth row survives — orphan eviction only targets install-
-      // provenance rows.
+      // Cold-gen row survives — orphan eviction only targets rows
+      // the bridge owns (`installed: true`).
       const cached = await listBlueprints(deps, SCOPE);
       expect(cached).toHaveLength(1);
-      expect(cached[0]!.provenance).toBe('synth');
+      expect(cached[0]!.source.kind).toBe('llm');
+      expect(cached[0]!.installed).toBeUndefined();
     });
 
     it('invalidate(scope) forces re-walk on next ensureCached', async () => {
@@ -513,7 +519,8 @@ describe('matchBlueprint + installedBlueprints integration', () => {
 
     expect(match.strategy).toBe('exact-key');
     if (match.strategy !== 'exact-key') return;
-    expect(match.blueprint.provenance).toBe('install');
+    expect(match.blueprint.source).toEqual({ kind: 'user' });
+    expect(match.blueprint.installed).toBe(true);
     expect(match.blueprint.componentCode).toBe(
       'export default () => "installed-component";',
     );
@@ -604,6 +611,7 @@ describe('matchBlueprint + installedBlueprints integration', () => {
       'template',
       blueprintKey(COUNTER_CONTRACT),
     );
-    expect(direct?.provenance).toBe('install');
+    expect(direct?.source).toEqual({ kind: 'user' });
+    expect(direct?.installed).toBe(true);
   });
 });

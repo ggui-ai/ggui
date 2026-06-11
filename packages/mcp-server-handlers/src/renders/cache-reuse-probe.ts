@@ -154,6 +154,7 @@ async function main(): Promise<void> {
     contract: TODO_CACHED,
     intent: 'my todo items',
     componentCode: 'export default () => null;',
+    source: { kind: 'user' },
   });
   const labelReuse = await matchBlueprint(
     { registry: r1, llm },
@@ -188,6 +189,7 @@ async function main(): Promise<void> {
     contract: COUNTER_2,
     intent: 'a counter widget',
     componentCode: 'export default () => null;',
+    source: { kind: 'user' },
   });
   const reject = await matchBlueprint(
     { registry: r2, llm },

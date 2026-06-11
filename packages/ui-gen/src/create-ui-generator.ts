@@ -190,7 +190,7 @@ export function createUiGenerator(
           env: baseEnv,
         });
       } catch (err) {
-        return failWithoutMetadata(input, startedAt, {
+        return failWithoutMetadata(input, identity.slug, startedAt, {
           code: 'PRODUCTION_FAILED',
           message: err instanceof Error ? err.message : String(err),
           details: { kind: 'route-resolution-failed' },
@@ -279,6 +279,7 @@ export function createUiGenerator(
 
         const metadata: GenerationMetadata = {
           provider: input.llm.provider,
+          generator: identity.slug,
           model: input.llm.model,
           inputTokens: result.tokens.input,
           outputTokens: result.tokens.output,
@@ -310,6 +311,7 @@ export function createUiGenerator(
           },
           metadata: {
             provider: input.llm.provider,
+            generator: identity.slug,
             model: input.llm.model,
             inputTokens: 0,
             outputTokens: 0,
@@ -390,6 +392,7 @@ function mapRendering(
 
 function failWithoutMetadata(
   input: UiGenerateInput,
+  generatorSlug: string,
   startedAt: number,
   error: GenerationError,
 ): UiGenerateResult {
@@ -398,6 +401,7 @@ function failWithoutMetadata(
     error,
     metadata: {
       provider: input.llm.provider,
+      generator: generatorSlug,
       model: input.llm.model,
       inputTokens: 0,
       outputTokens: 0,

@@ -2,8 +2,9 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { mkdtemp, rm, writeFile, mkdir, readFile, readdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { writePoolArtifact, readPoolArtifact } from './pool-artifact.js';
-import { toPortableBlueprint } from '@ggui-ai/protocol/blueprint-key';
+import { writePoolArtifact, readPoolArtifact, POOL_ARTIFACT_V1_REJECTION } from './pool-artifact.js';
+import { toPortableBlueprint, fromPortableBlueprint } from '@ggui-ai/protocol/blueprint-key';
+import type { PortableBlueprint } from '@ggui-ai/protocol';
 
 let dir: string;
 beforeEach(async () => { dir = await mkdtemp(join(tmpdir(), 'ggui-pool-')); });
@@ -13,13 +14,26 @@ const rec = toPortableBlueprint({
   contract: { propsSpec: { properties: { x: { schema: { type: 'string' } } } } },
   componentCode: 'export default () => null;',
   variance: {},
+  source: { kind: 'user' },
 });
 
 const rec2 = toPortableBlueprint({
   contract: { propsSpec: { properties: { y: { schema: { type: 'number' } } } } },
   componentCode: 'export default () => 42;',
   variance: {},
+  source: { kind: 'llm', generator: 'ui-gen-default-haiku-4-5', model: 'claude-haiku-4-5' },
 });
+
+/**
+ * Narrow a raw read-side record through the real artifact trust
+ * boundary. The codec returns `unknown` records by design — this is
+ * the same narrowing `buildSeedPool` performs.
+ */
+function mustParse(raw: unknown): PortableBlueprint {
+  const parsed = fromPortableBlueprint(raw);
+  if (!parsed.ok) throw new Error(`fixture record failed validation: ${parsed.reason}`);
+  return parsed.record;
+}
 
 describe('pool artifact codec', () => {
   it('round-trips records through a directory', async () => {
@@ -27,8 +41,10 @@ describe('pool artifact codec', () => {
     const { records, issues } = await readPoolArtifact(dir);
     expect(issues).toEqual([]);
     expect(records).toHaveLength(1);
-    expect(records[0]!.componentCode).toBe(rec.componentCode);
-    expect(records[0]!.contractHash).toBe(rec.contractHash);
+    const parsed = mustParse(records[0]);
+    expect(parsed.componentCode).toBe(rec.componentCode);
+    expect(parsed.contractHash).toBe(rec.contractHash);
+    expect(parsed.source).toEqual({ kind: 'user' });
   });
 
   it('reports a missing code body as an issue, not a throw', async () => {
@@ -46,14 +62,26 @@ describe('pool artifact codec', () => {
     await expect(readPoolArtifact(dir)).rejects.toThrow(/schemaVersion/i);
   });
 
-  it('round-trips two records — both survive', async () => {
+  it('rejects a schemaVersion-1 artifact with the re-export message (no migration shim)', async () => {
+    await mkdir(dir, { recursive: true });
+    await writeFile(join(dir, 'manifest.json'), JSON.stringify({ schemaVersion: 1, blueprints: [] }));
+    await expect(readPoolArtifact(dir)).rejects.toThrow(POOL_ARTIFACT_V1_REJECTION);
+  });
+
+  it('round-trips two records — both survive, provenance intact', async () => {
     await writePoolArtifact(dir, [rec, rec2]);
     const { records, issues } = await readPoolArtifact(dir);
     expect(issues).toEqual([]);
     expect(records).toHaveLength(2);
-    const byHash = new Map(records.map((r) => [r.contractHash, r.componentCode]));
-    expect(byHash.get(rec.contractHash)).toBe(rec.componentCode);
-    expect(byHash.get(rec2.contractHash)).toBe(rec2.componentCode);
+    const parsed = records.map(mustParse);
+    const byHash = new Map(parsed.map((r) => [r.contractHash, r]));
+    expect(byHash.get(rec.contractHash)?.componentCode).toBe(rec.componentCode);
+    expect(byHash.get(rec2.contractHash)?.componentCode).toBe(rec2.componentCode);
+    expect(byHash.get(rec2.contractHash)?.source).toEqual({
+      kind: 'llm',
+      generator: 'ui-gen-default-haiku-4-5',
+      model: 'claude-haiku-4-5',
+    });
   });
 
   it('rejects an adversarial codeRef without reading outside codes/', async () => {
@@ -65,7 +93,7 @@ describe('pool artifact codec', () => {
     await writeFile(
       join(dir, 'manifest.json'),
       JSON.stringify({
-        schemaVersion: 1,
+        schemaVersion: 2,
         blueprints: [{ record: { ...rec, componentCode: undefined }, codeRef: '../escape.tsx' }],
       }),
     );
@@ -74,12 +102,19 @@ describe('pool artifact codec', () => {
     expect(issues).toHaveLength(1);
     expect(issues[0]).toMatch(/invalid code reference/i);
     // Prove the escape target was never surfaced into a record.
-    expect(records.some((r) => r.componentCode === secret)).toBe(false);
+    expect(
+      records.some(
+        (r) =>
+          typeof r === 'object' &&
+          r !== null &&
+          (r as Record<string, unknown>)['componentCode'] === secret,
+      ),
+    ).toBe(false);
   });
 
   it('rejects a versioned manifest missing the blueprints array', async () => {
     await mkdir(dir, { recursive: true });
-    await writeFile(join(dir, 'manifest.json'), JSON.stringify({ schemaVersion: 1 }));
+    await writeFile(join(dir, 'manifest.json'), JSON.stringify({ schemaVersion: 2 }));
     await expect(readPoolArtifact(dir)).rejects.toThrow(/blueprints/i);
   });
 
@@ -89,12 +124,13 @@ describe('pool artifact codec', () => {
       contract: { propsSpec: { properties: { z: { schema: { type: 'string' } } } } },
       componentCode: tricky,
       variance: {},
+      source: { kind: 'user' },
     });
     await writePoolArtifact(dir, [utfRec]);
     const { records, issues } = await readPoolArtifact(dir);
     expect(issues).toEqual([]);
     expect(records).toHaveLength(1);
-    expect(records[0]!.componentCode).toBe(tricky);
+    expect(mustParse(records[0]).componentCode).toBe(tricky);
     // The on-disk body is the exact bytes too (no normalisation by the codec).
     const bodyFiles = await readdir(join(dir, 'codes'));
     expect(bodyFiles).toHaveLength(1);

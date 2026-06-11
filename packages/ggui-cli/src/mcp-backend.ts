@@ -221,8 +221,9 @@ export interface BuildMcpServerBackendOptions {
    * into `generation.installedBlueprints`. On the first
    * `matchBlueprint` call per scope, every entry with a contract is
    * compiled (esbuild) and registered into the cache with
-   * `provenance: 'install'` — so installed blueprints accelerate
-   * render the way synth-cached ones do.
+   * `source: {kind: 'user'}` + the `installed` lifecycle marker — so
+   * installed blueprints accelerate render the way cold-gen-cached
+   * ones do.
    *
    * Caller is responsible for filtering `entries` to actual
    * marketplace installs (typically: discovered UIs whose

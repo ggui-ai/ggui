@@ -156,7 +156,7 @@ describe('POST /admin/blueprints — happy path', () => {
       expect(rows[0]?.id).toBe('greet-card');
       expect(rows[0]?.name).toBe('Greeting Card');
       expect(rows[0]?.description).toBe('A tiny greeting UI.');
-      expect(rows[0]?.source).toBe('user');
+      expect(rows[0]?.source).toEqual({ kind: 'user' });
       // category + tags flow through — the seed type merges both.
       expect(rows[0]?.tags).toContain('display');
       expect(rows[0]?.tags).toContain('hello');

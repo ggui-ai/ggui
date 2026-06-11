@@ -121,10 +121,14 @@ interface RegistryEntry {
   hitCount: number;
   lastHitAt?: string;
   componentCodeBytes: number;
-  // Slice 5.3 (2026-05-18): surfaced for operator distinction
-  // between synth-cached / operator-registered / marketplace-
-  // installed rows.
-  provenance: 'synth' | 'register' | 'install';
+  // Surfaced for operator distinction between cold-gen (llm) /
+  // operator-registered (user) / curated rows; installed rows carry
+  // the install-bridge lifecycle marker alongside.
+  source:
+    | { kind: 'llm'; generator: string; model: string }
+    | { kind: 'user' }
+    | { kind: 'curated' };
+  installed?: boolean;
 }
 
 describe('GET /ggui/console/blueprints/registry', () => {
@@ -158,6 +162,11 @@ describe('GET /ggui/console/blueprints/registry', () => {
         contract: NOTEPAD_CONTRACT,
         intent: 'live notepad',
         componentCode: 'export default () => null;',
+        source: {
+          kind: 'llm',
+          generator: 'ui-gen-default-haiku-4-5',
+          model: 'claude-haiku-4-5',
+        },
       },
     );
     const res = await fetch(`${f.url}/ggui/console/blueprints/registry`);
@@ -179,20 +188,30 @@ describe('GET /ggui/console/blueprints/registry', () => {
     // componentCode itself MUST be omitted from the listing — it can
     // be 12+ KB and bloats the operator UI; bytes signal is enough.
     expect(entry).not.toHaveProperty('componentCode');
-    // Slice 5.3 (2026-05-18): provenance surfaces the cache-write
-    // origin. registerBlueprint without an explicit provenance
-    // defaults to 'synth' (the original cold-gen writer).
-    expect(entry.provenance).toBe('synth');
+    // Provenance surfaces the BlueprintSource union — this row was
+    // minted with full engine provenance.
+    expect(entry.source).toEqual({
+      kind: 'llm',
+      generator: 'ui-gen-default-haiku-4-5',
+      model: 'claude-haiku-4-5',
+    });
   });
 
-  // Slice 5.3 (2026-05-18): explicit provenance threading. Each of
-  // synth/register/install survives the wire projection so the SPA
-  // can group + label rows correctly.
-  it('threads each provenance value through the wire projection', async () => {
+  // Provenance threading: each BlueprintSource arm (plus the
+  // install-bridge lifecycle marker) survives the wire projection so
+  // the SPA can group + label rows correctly.
+  it('threads each BlueprintSource arm through the wire projection', async () => {
     const f = await boot();
     fixtures.push(f);
-    const provenances = ['synth', 'register', 'install'] as const;
-    for (const provenance of provenances) {
+    const rows = [
+      {
+        label: 'llm',
+        source: { kind: 'llm', generator: 'ui-gen-default-haiku-4-5', model: 'claude-haiku-4-5' },
+      },
+      { label: 'user', source: { kind: 'user' } },
+      { label: 'curated', source: { kind: 'curated' } },
+    ] as const;
+    for (const row of rows) {
       await registerBlueprint(
         { embedding: f.embedding, vectorStore: f.vectors, index: f.index },
         DEFAULT_BUILDER_APP_ID,
@@ -202,12 +221,13 @@ describe('GET /ggui/console/blueprints/registry', () => {
           // distinct contractKeys.
           contract: {
             contextSpec: {
-              [provenance]: { schema: { type: 'string' }, default: provenance },
+              [row.label]: { schema: { type: 'string' }, default: row.label },
             },
           },
-          intent: `${provenance} blueprint`,
+          intent: `${row.label} blueprint`,
           componentCode: 'export default () => null;',
-          provenance,
+          source: row.source,
+          ...(row.label === 'user' ? { installed: true } : {}),
         },
       );
     }
@@ -218,12 +238,18 @@ describe('GET /ggui/console/blueprints/registry', () => {
       total: number;
     };
     expect(body.total).toBe(3);
-    const byProvenance = new Map(
-      body.entries.map((e) => [e.provenance, e]),
-    );
-    expect(byProvenance.get('synth')?.intent).toBe('synth blueprint');
-    expect(byProvenance.get('register')?.intent).toBe('register blueprint');
-    expect(byProvenance.get('install')?.intent).toBe('install blueprint');
+    const byKind = new Map(body.entries.map((e) => [e.source.kind, e]));
+    expect(byKind.get('llm')?.intent).toBe('llm blueprint');
+    expect(byKind.get('llm')?.source).toEqual({
+      kind: 'llm',
+      generator: 'ui-gen-default-haiku-4-5',
+      model: 'claude-haiku-4-5',
+    });
+    expect(byKind.get('user')?.intent).toBe('user blueprint');
+    // The install-bridge lifecycle marker rides through the projection.
+    expect(byKind.get('user')?.installed).toBe(true);
+    expect(byKind.get('curated')?.intent).toBe('curated blueprint');
+    expect(byKind.get('curated')?.installed).toBeUndefined();
   });
 
   it('filters by ?kind=', async () => {
@@ -235,12 +261,14 @@ describe('GET /ggui/console/blueprints/registry', () => {
       contract: NOTEPAD_CONTRACT,
       intent: 'notepad',
       componentCode: 'a',
+      source: { kind: 'user' },
     });
     await registerBlueprint(deps, DEFAULT_BUILDER_APP_ID, {
       kind: 'atom',
       contract: WEATHER_CONTRACT,
       intent: 'an atom',
       componentCode: 'b',
+      source: { kind: 'user' },
     });
 
     const tplRes = await fetch(

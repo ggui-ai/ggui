@@ -53,7 +53,9 @@ import type {
 // into `@ggui-ai/mcp-server-core` directly.
 export type { BlueprintIndex } from '@ggui-ai/mcp-server-core';
 import {
+  parseBlueprintSource,
   summarizeContract,
+  type BlueprintSource,
   type BlueprintVariance,
   type DataContract,
 } from '@ggui-ai/protocol';
@@ -73,25 +75,6 @@ import {
  * reserved for future compositional decomposition.
  */
 export type BlueprintKind = 'template' | 'organism' | 'molecule' | 'atom';
-
-/**
- * How a blueprint entered the registry. This marker surfaces the
- * three distinct cache-write paths on the unified matcher pool —
- * same read surface, different lifecycles upstream.
- *
- *   - `'synth'`    — produced by `ggui_render` cold-gen + cached for reuse.
- *   - `'register'` — operator-written via the `ggui_ops_blueprint_*`
- *                    admin surface (hand-curated or imported).
- *   - `'install'`  — materialized from a marketplace artifact via
- *                    `ggui blueprint install` + compiled to bytecode
- *                    by the install bridge.
- *
- * Purely informational: the matcher ignores provenance and the field
- * never gates a hit. Surfaced on cache-list ops tooling so operators
- * can answer "which blueprints in this app came from the marketplace?"
- * without joining against external state.
- */
-export type BlueprintProvenance = 'synth' | 'register' | 'install';
 
 /** A blueprint as carried through the registry. */
 export interface Blueprint {
@@ -131,13 +114,25 @@ export interface Blueprint {
   /** ISO timestamp of the most recent hit. Absent until first hit. */
   readonly lastHitAt?: string;
   /**
-   * How this entry entered the registry. See {@link BlueprintProvenance}.
-   * Rows written before the provenance field existed lack it;
-   * {@link rowToBlueprint} defaults them to `'synth'` since the
-   * cold-gen path was the only writer at that point — strictly
-   * informational migration semantics, not a back-compat shim.
+   * Provenance of `componentCode` — the {@link BlueprintSource}
+   * union. `llm` rows carry the engine slug + model id of the
+   * generation that produced the code; `user` rows are
+   * developer-registered / hand-authored. Required: rows whose stored
+   * provenance fails the validating narrower (including every row
+   * written under the retired flat `provenance` vocabulary) do not
+   * reconstruct — {@link rowToBlueprint} drops them with a log line.
+   * A blueprint cache invalidates by regeneration; it never coerces.
    */
-  readonly provenance: BlueprintProvenance;
+  readonly source: BlueprintSource;
+  /**
+   * Lifecycle-owner marker for rows materialized by the marketplace
+   * install bridge (`installToCache`). Orthogonal to {@link source}
+   * (which records who authored the code): the install bridge owns
+   * these rows' lifecycle — orphan eviction on uninstall and
+   * stale-row eviction on compile failure key on this marker, never
+   * on authorship. Only the install bridge writes it.
+   */
+  readonly installed?: boolean;
   /**
    * Structural validator findings emitted at registration time. Only
    * `severity: 'warn'` findings reach this list — `severity: 'error'`
@@ -207,15 +202,19 @@ export interface RegisterBlueprintInput {
   readonly intent: string;
   readonly componentCode: string;
   /**
-   * How this blueprint entered the registry. Production callers
-   * SHOULD pass this explicitly so admin/cache/list can distinguish
-   * synth vs. operator-registered vs. marketplace-installed entries.
-   * Defaults to `'synth'` because the cold-gen path was the original
-   * (and once the only) writer; untagged rows pre-date the
-   * multi-provenance model and are necessarily from synth. The
-   * matcher ignores provenance; tagging is purely for observability.
+   * Provenance of `componentCode` — required, no default. Every mint
+   * site knows where its code came from: generation paths stamp
+   * `{kind: 'llm', generator, model}`, registration/import paths
+   * stamp `{kind: 'user'}`. The matcher ignores provenance; the field
+   * exists for observability and for export (PortableBlueprint v2
+   * requires it).
    */
-  readonly provenance?: BlueprintProvenance;
+  readonly source: BlueprintSource;
+  /**
+   * Lifecycle-owner marker — see {@link Blueprint.installed}. Only
+   * the install bridge (`installToCache`) passes `true`.
+   */
+  readonly installed?: boolean;
   /**
    * Design-time variance tags for this registration. Drives the variant
    * axis of the reuse key via `variantKey(variance)`. Omitted → the
@@ -258,6 +257,15 @@ export function composeEmbeddingInput(
   return `${summarizeContract(contract)}\nINTENT: ${intent.trim()}`;
 }
 
+/**
+ * Vector-store metadata layout. Provenance is flat-encoded as three
+ * scalar keys (`sourceKind` / `sourceGenerator` / `sourceModel`) —
+ * the union is the code shape; storage stays scalar. Rows written
+ * under the retired flat `provenance` vocabulary lack `sourceKind`
+ * and therefore fail {@link readSourceFromMetadata} — they stop
+ * reconstructing (rebuild posture: the cache regenerates; there is
+ * no migration shim).
+ */
 const METADATA_KEYS = {
   intent: 'intent',
   componentCode: 'componentCode',
@@ -269,7 +277,10 @@ const METADATA_KEYS = {
   createdAt: 'createdAt',
   hitCount: 'hitCount',
   lastHitAt: 'lastHitAt',
-  provenance: 'provenance',
+  sourceKind: 'sourceKind',
+  sourceGenerator: 'sourceGenerator',
+  sourceModel: 'sourceModel',
+  installed: 'installed',
 } as const;
 
 function blueprintToMetadata(
@@ -285,25 +296,56 @@ function blueprintToMetadata(
     [METADATA_KEYS.kind]: bp.kind,
     [METADATA_KEYS.createdAt]: bp.createdAt,
     [METADATA_KEYS.hitCount]: bp.hitCount,
-    [METADATA_KEYS.provenance]: bp.provenance,
+    [METADATA_KEYS.sourceKind]: bp.source.kind,
+    ...(bp.source.kind === 'llm'
+      ? {
+          [METADATA_KEYS.sourceGenerator]: bp.source.generator,
+          [METADATA_KEYS.sourceModel]: bp.source.model,
+        }
+      : {}),
+    ...(bp.installed === true ? { [METADATA_KEYS.installed]: true } : {}),
     ...(bp.lastHitAt !== undefined
       ? { [METADATA_KEYS.lastHitAt]: bp.lastHitAt }
       : {}),
   };
 }
 
-function readProvenance(
-  value: string | number | boolean | null | undefined,
-): BlueprintProvenance {
-  // Rows written before the provenance field existed have no
-  // `provenance` key in metadata. Default to 'synth' since the
-  // cold-gen path was the only writer at the time — operator
-  // surfaces label legacy entries accordingly. New writes always
-  // carry the field per `RegisterBlueprintInput`.
-  if (value === 'synth' || value === 'register' || value === 'install') {
-    return value;
-  }
-  return 'synth';
+/**
+ * Validating narrower at the row trust boundary: reassemble the flat
+ * `sourceKind` / `sourceGenerator` / `sourceModel` scalars into a
+ * canonical {@link BlueprintSource}, or `null` when the row carries
+ * no valid provenance (legacy rows written under the retired flat
+ * `provenance` vocabulary, foreign rows, malformed writes). Callers
+ * drop the row — coercing into an arm is banned.
+ *
+ * Exported for the export path (`export-registry.ts`), which reads
+ * the same metadata layout without reconstructing a full Blueprint.
+ */
+export function readSourceFromMetadata(
+  metadata: Record<string, string | number | boolean | null>,
+): BlueprintSource | null {
+  return parseBlueprintSource({
+    kind: metadata[METADATA_KEYS.sourceKind],
+    generator: metadata[METADATA_KEYS.sourceGenerator],
+    model: metadata[METADATA_KEYS.sourceModel],
+  });
+}
+
+/**
+ * Once-per-row-id guard for the dropped-row log so a lingering
+ * legacy row doesn't spam the log on every query/list pass. Bounded
+ * by the store's row count; cleared only on process restart.
+ */
+const droppedRowIds = new Set<string>();
+
+function warnDroppedRow(id: string): void {
+  if (droppedRowIds.has(id)) return;
+  droppedRowIds.add(id);
+  // eslint-disable-next-line no-console -- operator-visible invalidation notice
+  console.warn(
+    `[ggui] blueprint registry: dropped row ${id} — missing or malformed provenance ` +
+      '(pre-provenance rows are invalidated, not migrated; the cache regenerates on next use)',
+  );
 }
 
 function readScalarString(
@@ -342,6 +384,11 @@ function readScalarNumber(
  * when the row's shape doesn't match (defensive — same scope can
  * legitimately host other vector families today, and we silently
  * skip foreign rows rather than crashing on missing fields).
+ *
+ * A row that IS shaped like a blueprint but carries no valid
+ * provenance (legacy `provenance` vocabulary, missing `sourceKind`)
+ * is dropped WITH a log line — that is the rebuild posture for the
+ * provenance schema change, not a silent foreign-row skip.
  */
 function rowToBlueprint(
   key: string,
@@ -377,9 +424,14 @@ function rowToBlueprint(
   } catch {
     return null;
   }
+  const source = readSourceFromMetadata(metadata);
+  if (source === null) {
+    warnDroppedRow(key);
+    return null;
+  }
   const hitCount = readScalarNumber(metadata[METADATA_KEYS.hitCount]) ?? 0;
   const lastHitAt = readScalarString(metadata[METADATA_KEYS.lastHitAt]);
-  const provenance = readProvenance(metadata[METADATA_KEYS.provenance]);
+  const installed = metadata[METADATA_KEYS.installed] === true;
   const variance = readVariance(metadata[METADATA_KEYS.variance]);
   // Legacy rows (written before the variant axis existed) lack a
   // `variantKey`; default to the "default variant" sentinel so the row
@@ -397,7 +449,8 @@ function rowToBlueprint(
     componentCode,
     createdAt,
     hitCount,
-    provenance,
+    source,
+    ...(installed ? { installed: true } : {}),
     ...(lastHitAt !== undefined ? { lastHitAt } : {}),
   };
 }
@@ -541,7 +594,8 @@ export async function registerBlueprint(
     componentCode: input.componentCode,
     createdAt,
     hitCount: 0,
-    provenance: input.provenance ?? 'synth',
+    source: input.source,
+    ...(input.installed === true ? { installed: true } : {}),
     ...(warnFindings.length > 0
       ? { validationWarnings: warnFindings }
       : {}),

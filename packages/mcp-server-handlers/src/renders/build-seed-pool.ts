@@ -12,7 +12,7 @@ import { fromPortableBlueprint } from '@ggui-ai/protocol/blueprint-key';
 import { registerBlueprint } from './blueprint-registry.js';
 import { gateImportedBlueprint, type ImportGateCtx } from './import-gate.js';
 import type { BlueprintPool } from './decide-handshake.js';
-import type { BlueprintSource } from './blueprint-source.js';
+import type { SeedPoolSource } from './seed-pool-source.js';
 
 /** Embedding provider that never produces a meaningful vector. The seed
  *  pool is exact-key-only, so the vector is never used for similarity —
@@ -52,11 +52,15 @@ export interface BuildSeedPoolOptions {
 
 /**
  * Build a read-only, exact-key-only {@link BlueprintPool} from a
- * {@link BlueprintSource}. Records are loaded into a fresh in-memory
- * registry; keys are recomputed on load (shipped keys are advisory).
+ * {@link SeedPoolSource}. Raw records cross the artifact trust
+ * boundary here: each one runs through `fromPortableBlueprint`
+ * (the validating narrower) and a rejected record is SKIPPED with a
+ * log line — a rejected seed entry is just a cold-gen, never a
+ * coerced row. Keys are recomputed on load (shipped keys are
+ * advisory).
  */
 export async function buildSeedPool(
-  source: BlueprintSource,
+  source: SeedPoolSource,
   options: BuildSeedPoolOptions,
 ): Promise<BlueprintPool> {
   const scope = options.scope ?? 'shared';
@@ -64,10 +68,28 @@ export async function buildSeedPool(
   const index = new InMemoryBlueprintIndex();
   const registry = { embedding: INERT_EMBEDDING, vectorStore: inner, index };
 
-  for (const record of await source.loadAll()) {
-    // Persistence-contract gate (opt-in via options.ctx). A PortableBlueprint
-    // structurally satisfies GateInput. A failing record is skipped + reported
-    // — never silently served stale. When ctx is absent, gating is skipped.
+  for (const raw of await source.loadAll()) {
+    // Artifact trust boundary. Pool-load posture is skip-with-log on
+    // a rejected record (the documented PortableBlueprintImportResult
+    // policy) — one bad record never aborts the build, and a skipped
+    // seed entry degrades to a cold-gen.
+    const parsed = fromPortableBlueprint(raw);
+    if (!parsed.ok) {
+      // eslint-disable-next-line no-console -- operator-visible integrity warning
+      console.warn(`[ggui] seed pool: skipped a blueprint record — ${parsed.reason}`);
+      continue;
+    }
+    if (parsed.keyMismatch) {
+      // eslint-disable-next-line no-console -- operator-visible integrity warning
+      console.warn(
+        '[ggui] seed pool: a shipped blueprint key did not match recompute; using the recomputed key',
+      );
+    }
+    const record = parsed.record;
+    // Persistence-contract gate (opt-in via options.ctx). A validated
+    // PortableBlueprint structurally satisfies GateInput. A failing record is
+    // skipped + reported — never silently served stale. When ctx is absent,
+    // gating is skipped.
     if (options.ctx) {
       const gate = gateImportedBlueprint(record, options.ctx);
       for (const w of gate.warnings) {
@@ -82,13 +104,6 @@ export async function buildSeedPool(
         continue;
       }
     }
-    const { input, keyMismatch } = fromPortableBlueprint(record);
-    if (keyMismatch) {
-      // eslint-disable-next-line no-console -- operator-visible integrity warning
-      console.warn(
-        '[ggui] seed pool: a shipped blueprint key did not match recompute; using the recomputed key',
-      );
-    }
     // A blueprint is a completed template; 'template' is the constant the
     // match path keys on, so the loaded exactKey matches what the handshake computes.
     // Duplicate (contract, variance) records dedup to the first (registerBlueprint
@@ -98,18 +113,21 @@ export async function buildSeedPool(
       scope,
       {
         kind: 'template',
-        contract: input.contract,
+        contract: record.contract,
         // Coalesce on the first NON-EMPTY hint — `??` is nullish-only, so an
         // empty `seedPrompt`/`persona` would yield an empty intent and trip
         // registerBlueprint's "intent cannot be empty" guard, aborting the
         // whole build on one bad record.
         intent:
-          [input.variance.seedPrompt, input.variance.persona]
+          [record.variance.seedPrompt, record.variance.persona]
             .map((s) => s?.trim())
             .find((s): s is string => Boolean(s)) ?? 'shared blueprint',
-        componentCode: input.componentCode,
-        provenance: 'register',
-        variance: input.variance,
+        componentCode: record.componentCode,
+        // Provenance travels WITH the artifact (PortableBlueprint v2
+        // requires it) — an llm-minted record stays llm-sourced in
+        // the pool; importing never re-labels authorship.
+        source: record.source,
+        variance: record.variance,
       },
       // Seed pool is a fixed curated set — never evict.
       { maxPerKind: Infinity },

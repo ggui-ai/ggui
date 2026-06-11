@@ -49,6 +49,7 @@ import type {
   VectorStore,
 } from '@ggui-ai/mcp-server-core';
 import type { GguiSearchBlueprintsOutput } from '@ggui-ai/protocol';
+import { readSourceFromMetadata } from '../renders/blueprint-registry.js';
 import type { HandlerContext, SharedHandler } from '../types.js';
 
 /**
@@ -176,6 +177,13 @@ export function createSearchBlueprintsHandler(
  * same score-rounding. A manifest-only OSS boot with an empty vector
  * store returns `[]` here and all visible hits come from the manifest
  * branch.
+ *
+ * Rows are blueprint-registry rows (`blueprintToMetadata` layout):
+ * `description` reads the stored `intent`, and `category` surfaces the
+ * provenance discriminant (`llm` / `user` / `curated`). Rows without
+ * valid provenance — legacy flat-vocabulary rows, foreign vector
+ * families sharing the scope — are dropped at this trust boundary,
+ * never surfaced with coerced labels.
  */
 async function searchSemantic(
   deps: SearchBlueprintsDeps,
@@ -185,39 +193,28 @@ async function searchSemantic(
 ): Promise<MergedHit[]> {
   const vector = await deps.embedding.embed(query);
   const raw = await deps.vectors.query(scope, vector, limit);
-  return raw
-    .filter((r) => r.score >= MIN_SIMILARITY_SCORE)
-    .map((r) => {
-      const blueprintHash = r.key;
-      const prompt = asString(r.metadata.prompt);
-      const category = asString(r.metadata.category) || 'generated';
-      const props = parseJsonArray<{
-        name: string;
-        type: string;
-        required: boolean;
-        description: string;
-      }>(r.metadata.props);
-      const callbacks = parseJsonArray<string>(r.metadata.callbacks);
-      const featured = asBoolean(r.metadata.featured);
-      return {
-        id: blueprintHash.startsWith('p_') ? blueprintHash : `c_${blueprintHash}`,
-        name: blueprintHash.startsWith('p_')
-          ? `Predefined_${blueprintHash.substring(2)}`
-          : `Cached_${blueprintHash.substring(0, 8)}`,
-        description: prompt,
-        category,
-        props: props.map((p) => ({
-          name: p.name,
-          type: p.type,
-          required: p.required,
-          description: p.description,
-        })),
-        callbacks,
-        featured,
-        relevance: 'match' as const,
-        score: Math.round(r.score * 1000) / 1000,
-      };
+  const hits: MergedHit[] = [];
+  for (const r of raw) {
+    if (r.score < MIN_SIMILARITY_SCORE) continue;
+    const source = readSourceFromMetadata(r.metadata);
+    if (source === null) continue;
+    const key = r.key;
+    hits.push({
+      id: `c_${key}`,
+      name: `Cached_${key.substring(0, 8)}`,
+      description: asString(r.metadata.intent),
+      category: source.kind,
+      // Registry rows don't carry per-prop docs / callback lists /
+      // a featured flag — surface honest empties rather than parse
+      // keys no writer ever stamps.
+      props: [],
+      callbacks: [],
+      featured: false,
+      relevance: 'match' as const,
+      score: Math.round(r.score * 1000) / 1000,
     });
+  }
+  return hits;
 }
 
 /**
@@ -273,22 +270,4 @@ function asString(
   value: string | number | boolean | null | undefined,
 ): string {
   return typeof value === 'string' ? value : '';
-}
-
-function asBoolean(
-  value: string | number | boolean | null | undefined,
-): boolean {
-  return Boolean(value);
-}
-
-function parseJsonArray<T>(
-  value: string | number | boolean | null | undefined,
-): T[] {
-  if (typeof value !== 'string' || value.length === 0) return [];
-  try {
-    const parsed = JSON.parse(value) as unknown;
-    return Array.isArray(parsed) ? (parsed as T[]) : [];
-  } catch {
-    return [];
-  }
 }

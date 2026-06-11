@@ -259,7 +259,9 @@ export function createGguiOpsRegisterBlueprintHandler(
             contract,
             intent: intentForCache,
             componentCode,
-            provenance: "register",
+            // Operator-supplied bytes, no LLM dispatch — provenance
+            // is the user arm (no engine claim exists to record).
+            source: { kind: "user" },
           });
         } catch (err) {
           try {

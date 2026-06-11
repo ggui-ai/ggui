@@ -6255,12 +6255,14 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
           createdAt: bp.createdAt,
           hitCount: bp.hitCount,
           ...(bp.lastHitAt !== undefined ? { lastHitAt: bp.lastHitAt } : {}),
-          // Surface provenance so operators
-          // can distinguish synth-gen vs. operator-registered vs.
-          // marketplace-installed rows on `/ggui/console/blueprints/
-          // registry`. Matcher behaviour is unchanged — provenance is
-          // purely informational.
-          provenance: bp.provenance,
+          // Surface provenance (the BlueprintSource union — llm rows
+          // carry engine slug + model) plus the install-bridge
+          // lifecycle marker so operators can distinguish cold-gen vs.
+          // operator-registered vs. marketplace-installed rows on
+          // `/ggui/console/blueprints/registry`. Matcher behaviour is
+          // unchanged — provenance is purely informational.
+          source: bp.source,
+          ...(bp.installed === true ? { installed: true } : {}),
           componentCodeBytes: bp.componentCode.length,
         }));
         res.json({ entries, total: entries.length });

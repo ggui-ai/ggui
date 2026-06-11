@@ -59,6 +59,7 @@ function makeMockGenerator(
       };
       const metadata = {
         provider: "anthropic" as const,
+        generator: opts.slug ?? "ui-gen-default-haiku-4-5",
         model: "claude-haiku-4-5-20251001",
         inputTokens: 100,
         outputTokens: 200,

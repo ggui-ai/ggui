@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { build as esbuild } from 'esbuild';
 import { SANDBOX_EXTERNALS } from '@ggui-ai/dev-stack';
 import type { DataContract } from '@ggui-ai/protocol';
+import { fromPortableBlueprint } from '@ggui-ai/protocol/blueprint-key';
 import { readPoolArtifact } from './pool-artifact.js';
 import { findGguiJson, readGguiJson } from './internal/ggui-json.js';
 import { exportLocalPool } from './export-pool-command.js';
@@ -132,7 +133,18 @@ export async function compileTsx(code: string): Promise<string> {
 export async function buildBlueprintPushPayload(artifactDir: string): Promise<PushRecord[]> {
   const { records } = await readPoolArtifact(artifactDir);
   const payload: PushRecord[] = [];
-  for (const r of records) {
+  for (const raw of records) {
+    // Artifact trust boundary — raw records validate through
+    // `fromPortableBlueprint` before anything is compiled or pushed.
+    // Pool posture: skip-with-log; one rejected record never aborts
+    // the bulk push.
+    const parsed = fromPortableBlueprint(raw);
+    if (!parsed.ok) {
+      // eslint-disable-next-line no-console -- operator-visible integrity warning
+      console.warn(`[ggui] push: skipped a blueprint record — ${parsed.reason}`);
+      continue;
+    }
+    const r = parsed.record;
     const compiledBytes = await compileTsx(r.componentCode);
     // Full artifactId: contractHash-variantKey (no truncation — different
     // variantKeys on the same contractHash would collide on a prefix).
@@ -147,9 +159,9 @@ export async function buildBlueprintPushPayload(artifactDir: string): Promise<Pu
           : {}),
         // Carry the PortableBlueprint stamp fields so the cloud import gate
         // can verify generator era + tool-identity catalog at load time.
-        ...(r.generatorProtocolVersion !== undefined
-          ? { generatorProtocolVersion: r.generatorProtocolVersion }
-          : {}),
+        // v2 records always carry the era stamp; the catalog hash stays
+        // optional (offline export cannot compute one).
+        generatorProtocolVersion: r.generatorProtocolVersion,
         ...(r.toolIdentityCatalogHash !== undefined
           ? { toolIdentityCatalogHash: r.toolIdentityCatalogHash }
           : {}),

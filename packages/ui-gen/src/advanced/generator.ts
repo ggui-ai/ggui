@@ -458,9 +458,15 @@ function attachValidatorMetadata(
   // Future MVB phases will persist `validatorScore` to the blueprint
   // store via a separate side channel; for now we keep the
   // UiGenerator interface unchanged and tunnel through `attempts`.
+  //
+  // `generator` is re-stamped with the ADVANCED slug: the inner
+  // generator stamped its own identity, but the engine the operator
+  // dispatched (and the one blueprint provenance must name) is this
+  // advanced wrapper.
   const newAttempts = iterations.length;
   const metadata: GenerationMetadata = {
     ...result.metadata,
+    generator: ADVANCED_GENERATOR_SLUG,
     attempts: newAttempts,
   };
   // Stash diagnostics on the metadata via a structural pass-through.

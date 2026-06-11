@@ -50,7 +50,7 @@ async function seedProject(count: number): Promise<void> {
       },
       intent: `blueprint ${i}`,
       componentCode: CODE,
-      provenance: 'register',
+      source: { kind: 'user' },
       variance: {},
     });
   }

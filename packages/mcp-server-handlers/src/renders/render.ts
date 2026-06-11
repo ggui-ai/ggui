@@ -54,6 +54,7 @@ import {
   type GadgetDescriptor,
   type DataContract,
   type JsonObject,
+  type LlmBlueprintSource,
   type GguiSession,
   type ComponentGguiSession,
   type SystemGguiSession,
@@ -1798,7 +1799,7 @@ export function createGguiRenderHandler(
             // `(contractKey, variantKey)` identity the §6 re-resolution
             // and the wire output key on. Never the default sentinel when
             // an override re-aimed the variant.
-            if (outcome.ok && outcome.componentCode) {
+            if (outcome.ok && outcome.componentCode && outcome.source) {
               const registered = await safelyRegisterBlueprint(
                 {
                   embedding: deps.generation.cache.embedding,
@@ -1811,7 +1812,11 @@ export function createGguiRenderHandler(
                   contract: story.contract,
                   intent,
                   componentCode: outcome.componentCode,
-                  provenance: 'synth',
+                  // Engine provenance travels on the outcome — the
+                  // generator stamped its own slug + the resolved
+                  // model id into metadata, and a fresh generation
+                  // mints an `llm`-sourced row.
+                  source: outcome.source,
                   ...(effectiveVariance !== undefined
                     ? { variance: effectiveVariance }
                     : {}),
@@ -2255,6 +2260,16 @@ interface GenerationRunOutcome {
   readonly ok: boolean;
   readonly componentCode?: string;
   readonly createdAt: string;
+  /**
+   * Engine provenance of `componentCode` — present exactly when a
+   * generator produced code (`ok: true` with non-empty
+   * `componentCode`). Read from the generator's own
+   * `metadata.{generator, model}` stamp so the OSS path and the
+   * cloud override seam mint identical provenance. Absent on error
+   * outcomes and on hand-authored commits (no-credentials card),
+   * which never register a blueprint.
+   */
+  readonly source?: LlmBlueprintSource;
 }
 
 async function runGenerationIntoGguiSession(
@@ -2519,6 +2534,11 @@ async function runGenerationIntoGguiSession(
     ok: true,
     componentCode: result.response.componentCode,
     createdAt: nowIso,
+    source: {
+      kind: 'llm',
+      generator: result.metadata.generator,
+      model: result.metadata.model,
+    },
   };
 }
 

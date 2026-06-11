@@ -2,23 +2,33 @@ import { describe, it, expect, vi } from 'vitest';
 import { buildSeedPool } from './build-seed-pool.js';
 import { findBlueprintExact } from './blueprint-registry.js';
 import { findBlueprintsByEmbedding } from './blueprint-registry.js';
-import { blueprintKey, variantKey, toPortableBlueprint } from '@ggui-ai/protocol/blueprint-key';
+import {
+  blueprintKey,
+  variantKey,
+  toPortableBlueprint,
+  PORTABLE_BLUEPRINT_V1_REJECTION,
+} from '@ggui-ai/protocol/blueprint-key';
 import { PROTOCOL_VERSION } from '@ggui-ai/protocol';
-import type { BlueprintSource } from './blueprint-source.js';
+import type { SeedPoolSource } from './seed-pool-source.js';
 import type { ImportGateCtx } from './import-gate.js';
 import type { PortableBlueprint, DataContract } from '@ggui-ai/protocol';
 
 const contract: DataContract = {
   propsSpec: { properties: { title: { schema: { type: 'string' } } } },
 };
+const LLM_SOURCE = {
+  kind: 'llm',
+  generator: 'ui-gen-default-haiku-4-5',
+  model: 'claude-haiku-4-5',
+} as const;
 const record: PortableBlueprint = toPortableBlueprint({
-  contract, componentCode: 'export default () => null;', variance: {},
+  contract, componentCode: 'export default () => null;', variance: {}, source: LLM_SOURCE,
 });
-const source: BlueprintSource = { label: 'test', loadAll: async () => [record] };
+const poolSource: SeedPoolSource = { label: 'test', loadAll: async () => [record] };
 
 describe('buildSeedPool', () => {
   it('makes records reusable by exact key under the fixed scope', async () => {
-    const poolP = await buildSeedPool(source, { scope: 'shared' });
+    const poolP = await buildSeedPool(poolSource, { scope: 'shared' });
     const hit = await findBlueprintExact(
       { vectorStore: poolP.registry.vectorStore, index: poolP.registry.index },
       'shared', 'template', blueprintKey(contract), variantKey({}),
@@ -29,13 +39,13 @@ describe('buildSeedPool', () => {
   });
 
   it('is semantic-inert (vectorStore.query yields no candidates)', async () => {
-    const poolP = await buildSeedPool(source, { scope: 'shared' });
+    const poolP = await buildSeedPool(poolSource, { scope: 'shared' });
     const candidates = await findBlueprintsByEmbedding(poolP.registry, 'shared', { intent: 'a todo list' });
     expect(candidates).toEqual([]);
   });
 
   it('defaults the scope to "shared"', async () => {
-    expect((await buildSeedPool(source, {})).scope).toBe('shared');
+    expect((await buildSeedPool(poolSource, {})).scope).toBe('shared');
   });
 
   it('still builds + stays reusable when a shipped contractHash is tampered (keyMismatch warns)', async () => {
@@ -61,7 +71,7 @@ describe('buildSeedPool', () => {
   it('dedups two records with the same (contract, variance) without throwing', async () => {
     // Two distinct record objects, identical contract + variance — first-write-wins.
     const dup = toPortableBlueprint({
-      contract, componentCode: 'export default () => null;', variance: {},
+      contract, componentCode: 'export default () => null;', variance: {}, source: LLM_SOURCE,
     });
     const poolP = await buildSeedPool(
       { label: 'dup', loadAll: async () => [record, dup] },
@@ -87,6 +97,7 @@ describe('buildSeedPool', () => {
       contract: retiredContract,
       componentCode: 'export default () => null;',
       variance: {},
+      source: LLM_SOURCE,
     });
     const ctx: ImportGateCtx = { protocolVersion: PROTOCOL_VERSION, catalog: {} };
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
@@ -118,7 +129,8 @@ describe('buildSeedPool', () => {
   });
 
   it('without a ctx, applies NO gating (a retired-field record still registers)', async () => {
-    // Back-compat guard: today's `--seed-pool` usage passes no ctx → no gate.
+    // The persistence-contract GATE is opt-in via ctx; the v2 shape
+    // validation (fromPortableBlueprint) is not — it always runs.
     const retiredContract = {
       propsSpec: { properties: { title: { schema: { type: 'string' } } } },
       wiredTools: { foo: { name: 'foo' } },
@@ -127,6 +139,7 @@ describe('buildSeedPool', () => {
       contract: retiredContract,
       componentCode: 'export default () => null;',
       variance: {},
+      source: LLM_SOURCE,
     });
     const poolP = await buildSeedPool(
       { label: 'ungated', loadAll: async () => [bad] },
@@ -139,11 +152,48 @@ describe('buildSeedPool', () => {
     expect(hit).not.toBeNull();
   });
 
+  it('preserves the artifact record provenance on the loaded row', async () => {
+    const poolP = await buildSeedPool(poolSource, { scope: 'shared' });
+    const hit = await findBlueprintExact(
+      { vectorStore: poolP.registry.vectorStore, index: poolP.registry.index },
+      'shared', 'template', blueprintKey(contract), variantKey({}),
+    );
+    // An llm-minted record stays llm-sourced — importing never
+    // re-labels authorship.
+    expect(hit?.source).toEqual(LLM_SOURCE);
+  });
+
+  it('skips a schemaVersion-1 record with the canonical rejection message (pool load = skip-with-log)', async () => {
+    const v1Record: Record<string, unknown> = { ...record, schemaVersion: 1 };
+    delete v1Record['source'];
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const poolP = await buildSeedPool(
+        { label: 'mixed-era', loadAll: async () => [v1Record, record] },
+        { scope: 'shared' },
+      );
+      // The v2 record still loads — one rejected seed entry is just a
+      // cold-gen, never an aborted build.
+      const hit = await findBlueprintExact(
+        { vectorStore: poolP.registry.vectorStore, index: poolP.registry.index },
+        'shared', 'template', blueprintKey(contract), variantKey({}),
+      );
+      expect(hit).not.toBeNull();
+      const reported = warn.mock.calls
+        .map((c) => String(c[0]))
+        .some((m) => m.includes(PORTABLE_BLUEPRINT_V1_REJECTION));
+      expect(reported).toBe(true);
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
   it('does not throw on an empty seedPrompt and stays reusable', async () => {
     const emptyPrompt = toPortableBlueprint({
       contract,
       componentCode: 'export default () => null;',
       variance: { seedPrompt: '' },
+      source: LLM_SOURCE,
     });
     const poolP = await buildSeedPool(
       { label: 'empty-prompt', loadAll: async () => [emptyPrompt] },

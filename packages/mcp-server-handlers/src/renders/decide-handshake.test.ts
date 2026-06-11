@@ -65,7 +65,7 @@ function mkBlueprint(over: Partial<RegistryBlueprint> & { id: string }): Registr
     componentCode: over.componentCode ?? 'export default () => null;',
     createdAt: over.createdAt ?? '2026-05-30T00:00:00.000Z',
     hitCount: over.hitCount ?? 0,
-    provenance: over.provenance ?? 'synth',
+    source: over.source ?? { kind: 'user' },
   };
 }
 

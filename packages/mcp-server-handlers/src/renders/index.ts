@@ -212,13 +212,13 @@ export {
   findBlueprintExact,
   findBlueprintsByEmbedding,
   listBlueprints,
+  readSourceFromMetadata,
   recordBlueprintHit,
   registerBlueprint,
   type Blueprint,
   type BlueprintCandidate,
   type BlueprintIndex,
   type BlueprintKind,
-  type BlueprintProvenance,
   type BlueprintRegistryDeps,
   type ContractValidator,
   type RegisterBlueprintInput,
@@ -293,6 +293,6 @@ export {
   resolveGadgetUrls,
   type RenderMetaView,
 } from "./slice-meta-derivation.js";
-export type { BlueprintSource } from "./blueprint-source.js";
+export type { SeedPoolSource } from "./seed-pool-source.js";
 export { buildSeedPool, type BuildSeedPoolOptions } from "./build-seed-pool.js";
 export { listRegistryBlueprintsForExport, type ExportableBlueprint } from './export-registry.js';

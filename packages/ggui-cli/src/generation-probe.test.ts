@@ -188,7 +188,9 @@ describe('probeGenerationBinding', () => {
   it('threads the configured blueprints through to GenerationDeps', async () => {
     const blueprints: BlueprintProvider = {
       async list() {
-        return [{ id: 'x', name: 'x', source: 'curated', updatedAt: 'now' }];
+        return [
+          { id: 'x', name: 'x', source: { kind: 'curated' }, updatedAt: 'now' },
+        ];
       },
       async get() {
         return null;

@@ -906,12 +906,15 @@ describe('createGguiServer — MCP wire roundtrip', () => {
     const embedding = new MockEmbeddingProvider({ dimensions: 8 });
     const vectors = new InMemoryVectorStore();
     // Seed a single match under the default `builder` appId so the
-    // handler's `ctx.appId`-scoped query lands on it.
+    // handler's `ctx.appId`-scoped query lands on it. The row uses the
+    // blueprint-registry metadata layout (intent + flat provenance
+    // scalars) — rows without valid provenance are dropped at the
+    // handler's trust boundary.
     const vec = await embedding.embed('weather card');
     await vectors.putVector('builder', {
-      key: 'p_weather_card',
+      key: 'bp_weather_card',
       vector: vec,
-      metadata: { prompt: 'Show current weather', category: 'dashboards' },
+      metadata: { intent: 'Show current weather', sourceKind: 'user' },
     });
     fx = await boot({ embedding, vectors });
 
@@ -927,10 +930,10 @@ describe('createGguiServer — MCP wire roundtrip', () => {
       };
       expect(structured.total).toBeGreaterThan(0);
       const hit = structured.results.find(
-        (r) => r.id === 'p_weather_card',
+        (r) => r.id === 'c_bp_weather_card',
       );
       expect(hit).toBeDefined();
-      expect(hit?.name).toBe('Predefined_weather_card');
+      expect(hit?.name?.startsWith('Cached_')).toBe(true);
     } finally {
       await client.close();
     }

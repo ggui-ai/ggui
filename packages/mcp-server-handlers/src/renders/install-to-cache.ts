@@ -5,32 +5,35 @@
  * The `matchBlueprint` matcher reads the runtime cache, which is fed
  * by three writers:
  *
- *   1. `ggui_render` cold-gen — synth-time, `provenance: 'synth'`.
- *   2. `ggui_ops_blueprint_register` / `_generate` — operator hand-
- *      writes a blueprint, `provenance: 'register'`.
+ *   1. `ggui_render` cold-gen — `source: {kind: 'llm', generator,
+ *      model}` (engine provenance from the generation run).
+ *   2. `ggui_ops_blueprint_register` / `_generate` — operator
+ *      authorship via the ops surface.
  *   3. This bridge — marketplace-installed blueprints,
- *      `provenance: 'install'`.
+ *      `source: {kind: 'user'}` + the `installed` lifecycle marker.
  *
  * Marketplace-installed blueprints are materialized to disk by
  * `ggui blueprint install` under `.ggui/installed-blueprints/...`.
  * Without this bridge they would be a separate browsing surface the
  * matcher never sees — installing a blueprint would NOT accelerate
  * the next handshake/render. The bridge lands the install in the same
- * `vectorStore` the matcher already reads, tagged
- * `provenance: 'install'` so operator surfaces stay debuggable.
+ * `vectorStore` the matcher already reads, marked `installed: true`
+ * so operator surfaces stay debuggable and the provider's lifecycle
+ * sweeps (orphan + stale-row eviction) can find bridge-owned rows.
  * Matcher logic is unchanged — it never inspects provenance.
  *
  * ## Why a named bridge instead of a direct `registerBlueprint` call
  *
- *   1. **Provenance pinning.** Callers can't accidentally tag an
- *      install with `'synth'`. The bridge forces `'install'`.
+ *   1. **Lifecycle pinning.** Callers can't forget the `installed`
+ *      marker — the bridge forces it, so eviction sweeps always see
+ *      bridge-owned rows.
  *   2. **Grep target.** "How do installed blueprints reach the
  *      cache?" → `installToCache` is the single answer. The cloud
  *      bridge mirrors the same name on the server side.
  *   3. **Future extension.** Install-specific concerns (signature
- *      re-verification on hot path, manifest staleness checks, dual-
- *      write to a per-app `provenance: 'install'` index) hook here
- *      without touching every synth/register call site.
+ *      re-verification on hot path, manifest staleness checks)
+ *      hook here without touching every generation/register call
+ *      site.
  *
  * ## What this module does NOT do
  *
@@ -94,7 +97,9 @@ export interface InstallToCacheInput {
 
 /**
  * Bridge: install → cache. Writes a `'template'` blueprint into the
- * scope's vector store with `provenance: 'install'`.
+ * scope's vector store with `source: {kind: 'user'}` (an installed
+ * artifact carries no engine claim) and the `installed` lifecycle
+ * marker (the bridge owns the row's eviction lifecycle).
  *
  * Idempotent on `(scope, contractKey)` — re-installing the same
  * `(scope, name, version)` triple produces the same canonical
@@ -138,7 +143,8 @@ export async function installToCache(
       contract: input.contract,
       intent: input.intent,
       componentCode: input.componentCode,
-      provenance: 'install',
+      source: { kind: 'user' },
+      installed: true,
     },
     options,
   );

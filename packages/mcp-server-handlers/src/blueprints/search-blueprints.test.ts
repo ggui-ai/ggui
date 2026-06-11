@@ -33,6 +33,11 @@ function makeDeps(): {
   };
 }
 
+/**
+ * Seed a blueprint-registry-shaped row (the `blueprintToMetadata`
+ * layout): `intent` prose + flat provenance scalars. Tests that need
+ * a row WITHOUT valid provenance pass `sourceKind: ''` overrides.
+ */
 async function seed(
   embedding: MockEmbeddingProvider,
   vectors: InMemoryVectorStore,
@@ -42,7 +47,11 @@ async function seed(
   metadata: Record<string, string | number | boolean> = {},
 ): Promise<void> {
   const vec = await embedding.embed(text);
-  await vectors.putVector(scope, { key, vector: vec, metadata });
+  await vectors.putVector(scope, {
+    key,
+    vector: vec,
+    metadata: { intent: text, sourceKind: 'user', ...metadata },
+  });
 }
 
 describe('createSearchBlueprintsHandler', () => {
@@ -67,13 +76,12 @@ describe('createSearchBlueprintsHandler', () => {
   it('returns matches that clear the MIN_SIMILARITY_SCORE threshold', async () => {
     const { embedding, vectors } = makeDeps();
     // Seed two blueprints — one close to the query text, one orthogonal.
-    await seed(embedding, vectors, 'app-a', 'p_weather_card', 'weather card', {
-      prompt: 'Show current weather',
-      category: 'dashboards',
+    await seed(embedding, vectors, 'app-a', 'bp_weather', 'weather card', {
+      sourceKind: 'llm',
+      sourceGenerator: 'ui-gen-default-haiku-4-5',
+      sourceModel: 'claude-haiku-4-5',
     });
-    await seed(embedding, vectors, 'app-a', 'c_abc123', 'kanban board', {
-      prompt: 'Track tasks',
-    });
+    await seed(embedding, vectors, 'app-a', 'bp_kanban', 'kanban board');
     const handler = createSearchBlueprintsHandler({ embedding, vectors });
     const result = await handler.handler({ query: 'weather card' }, ctx);
     expect(result.total).toBeGreaterThan(0);
@@ -81,18 +89,17 @@ describe('createSearchBlueprintsHandler', () => {
     for (const r of result.results) {
       expect(r.score).toBeGreaterThanOrEqual(MIN_SIMILARITY_SCORE);
     }
-    // p_ prefix maps to Predefined_ naming.
-    const weatherHit = result.results.find((r) => r.id === 'p_weather_card');
+    // Intent prose surfaces as the description; category is the
+    // provenance discriminant.
+    const weatherHit = result.results.find((r) => r.id === 'c_bp_weather');
     expect(weatherHit).toBeDefined();
-    expect(weatherHit?.name).toBe('Predefined_weather_card');
-    expect(weatherHit?.category).toBe('dashboards');
+    expect(weatherHit?.description).toBe('weather card');
+    expect(weatherHit?.category).toBe('llm');
   });
 
-  it('maps c_* blueprint ids to Cached_ naming', async () => {
+  it('maps blueprint ids to c_*/Cached_ naming', async () => {
     const { embedding, vectors } = makeDeps();
-    await seed(embedding, vectors, 'app-a', 'abc123def', 'weather', {
-      prompt: 'Show weather',
-    });
+    await seed(embedding, vectors, 'app-a', 'abc123def', 'weather');
     const handler = createSearchBlueprintsHandler({ embedding, vectors });
     const result = await handler.handler({ query: 'weather' }, ctx);
     const hit = result.results[0];
@@ -102,9 +109,7 @@ describe('createSearchBlueprintsHandler', () => {
 
   it('scopes queries to the caller appId — cross-tenant data does not leak', async () => {
     const { embedding, vectors } = makeDeps();
-    await seed(embedding, vectors, 'app-b', 'p_secret', 'weather card', {
-      prompt: 'Other tenant',
-    });
+    await seed(embedding, vectors, 'app-b', 'bp_secret', 'weather card');
     const handler = createSearchBlueprintsHandler({ embedding, vectors });
     const result = await handler.handler({ query: 'weather card' }, ctx);
     expect(result.total).toBe(0);
@@ -113,47 +118,40 @@ describe('createSearchBlueprintsHandler', () => {
   it('honors the limit input', async () => {
     const { embedding, vectors } = makeDeps();
     for (let i = 0; i < 8; i++) {
-      await seed(embedding, vectors, 'app-a', `p_${i}`, 'weather card', {
-        prompt: `bp ${i}`,
-      });
+      await seed(embedding, vectors, 'app-a', `bp_${i}`, 'weather card');
     }
     const handler = createSearchBlueprintsHandler({ embedding, vectors });
     const result = await handler.handler({ query: 'weather card', limit: 3 }, ctx);
     expect(result.results.length).toBeLessThanOrEqual(3);
   });
 
-  it('parses JSON-encoded props/callbacks metadata', async () => {
+  it('surfaces honest empties for fields registry rows do not carry', async () => {
+    // Registry rows carry intent + provenance, not per-prop docs /
+    // callback lists / a featured flag — the handler must not invent
+    // them from metadata keys no writer ever stamps.
     const { embedding, vectors } = makeDeps();
-    await seed(embedding, vectors, 'app-a', 'p_rich', 'weather card', {
-      prompt: 'Weather with props',
-      props: JSON.stringify([
-        { name: 'city', type: 'string', required: true, description: 'City' },
-      ]),
-      callbacks: JSON.stringify(['onRefresh']),
-      featured: true,
-    });
-    const handler = createSearchBlueprintsHandler({ embedding, vectors });
-    const result = await handler.handler({ query: 'weather card' }, ctx);
-    const hit = result.results[0];
-    expect(hit?.props).toEqual([
-      { name: 'city', type: 'string', required: true, description: 'City' },
-    ]);
-    expect(hit?.callbacks).toEqual(['onRefresh']);
-    expect(hit?.featured).toBe(true);
-  });
-
-  it('tolerates malformed JSON metadata — returns empty arrays not crash', async () => {
-    const { embedding, vectors } = makeDeps();
-    await seed(embedding, vectors, 'app-a', 'p_bad', 'weather card', {
-      prompt: 'Weather',
-      props: 'not-json',
-      callbacks: '{also-not}',
-    });
+    await seed(embedding, vectors, 'app-a', 'bp_rich', 'weather card');
     const handler = createSearchBlueprintsHandler({ embedding, vectors });
     const result = await handler.handler({ query: 'weather card' }, ctx);
     const hit = result.results[0];
     expect(hit?.props).toEqual([]);
     expect(hit?.callbacks).toEqual([]);
+    expect(hit?.featured).toBe(false);
+  });
+
+  it('drops rows without valid provenance (legacy flat vocabulary / foreign vector families)', async () => {
+    const { embedding, vectors } = makeDeps();
+    // A legacy row carrying the retired flat `provenance` scalar and
+    // no sourceKind — must not surface under a coerced label.
+    const vec = await embedding.embed('weather card');
+    await vectors.putVector('app-a', {
+      key: 'bp_legacy',
+      vector: vec,
+      metadata: { intent: 'weather card', provenance: 'synth' },
+    });
+    const handler = createSearchBlueprintsHandler({ embedding, vectors });
+    const result = await handler.handler({ query: 'weather card' }, ctx);
+    expect(result.total).toBe(0);
   });
 
   it('rejects invalid input via zod', async () => {
@@ -166,7 +164,7 @@ describe('createSearchBlueprintsHandler', () => {
 
   it('rounds scores to three decimal places', async () => {
     const { embedding, vectors } = makeDeps();
-    await seed(embedding, vectors, 'app-a', 'p_x', 'weather', {});
+    await seed(embedding, vectors, 'app-a', 'bp_x', 'weather');
     const handler = createSearchBlueprintsHandler({ embedding, vectors });
     const result = await handler.handler({ query: 'weather' }, ctx);
     const score = result.results[0]?.score;
@@ -229,9 +227,7 @@ describe('createSearchBlueprintsHandler — manifest + semantic merge', () => {
     // entry. Both should appear; ordering by score has the manifest
     // exact-name match (1.0) ahead of whatever semantic score lands.
     const { embedding, vectors } = makeDeps();
-    await seed(embedding, vectors, 'app-a', 'cached-blueprint-hash', 'weather card', {
-      prompt: 'Show weather via cache',
-    });
+    await seed(embedding, vectors, 'app-a', 'cached-blueprint-hash', 'weather card');
     const blueprints = new ManifestBlueprintProvider({
       manifests: [
         {
@@ -262,9 +258,7 @@ describe('createSearchBlueprintsHandler — manifest + semantic merge', () => {
     // the same id the manifest uses. The merged row must carry the
     // manifest's author-curated name/description, not the cached one.
     const { embedding, vectors } = makeDeps();
-    await seed(embedding, vectors, 'app-a', 'shared-id', 'weather card', {
-      prompt: 'Cached description',
-    });
+    await seed(embedding, vectors, 'app-a', 'shared-id', 'weather card');
     const blueprints = new ManifestBlueprintProvider({
       manifests: [
         {
@@ -291,9 +285,7 @@ describe('createSearchBlueprintsHandler — manifest + semantic merge', () => {
   it('honors the limit on the merged result set', async () => {
     const { embedding, vectors } = makeDeps();
     for (let i = 0; i < 4; i++) {
-      await seed(embedding, vectors, 'app-a', `cached-${i}`, 'weather card', {
-        prompt: `cached ${i}`,
-      });
+      await seed(embedding, vectors, 'app-a', `cached-${i}`, 'weather card');
     }
     const blueprints = new ManifestBlueprintProvider({
       manifests: Array.from({ length: 4 }, (_, i) => ({
@@ -317,9 +309,7 @@ describe('createSearchBlueprintsHandler — manifest + semantic merge', () => {
     // branch must still partition so cached-gen entries from a
     // different tenant don't leak in.
     const { embedding, vectors } = makeDeps();
-    await seed(embedding, vectors, 'app-b', 'secret-cached', 'weather card', {
-      prompt: 'Other tenant secret',
-    });
+    await seed(embedding, vectors, 'app-b', 'secret-cached', 'weather card');
     const blueprints = new ManifestBlueprintProvider({
       manifests: [
         {

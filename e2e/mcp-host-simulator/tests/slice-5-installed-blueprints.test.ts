@@ -7,7 +7,8 @@
  * negotiator runs. The bridge (Slice 5.2) fires inside
  * `matchBlueprint`'s ensureCached hook on the first lookup; the
  * matcher's Tier-1 exact-key probe then hits the freshly-registered
- * row (provenance: 'install', Slice 5.1).
+ * row (source: { kind: 'user' } + the `installed` lifecycle marker,
+ * Slice 5.1).
  *
  * Pre-Slice-5, the same handshake would either fall through to LLM
  * synth (no cache hit) or, in the operator-registered case, hit a
@@ -117,6 +118,7 @@ describe("host-simulator: Slice 5 installed-blueprints unification", () => {
               },
               metadata: {
                 provider: "anthropic",
+                generator: "ui-gen-default-haiku-4-5",
                 model: "claude-opus-4-7",
                 inputTokens: 0,
                 outputTokens: 0,

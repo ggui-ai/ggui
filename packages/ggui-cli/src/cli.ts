@@ -64,7 +64,7 @@ import {
   type GenerationBinding,
 } from './generation-probe.js';
 import { buildMcpServerBackend, pickFreePort } from './mcp-backend.js';
-import { FileSystemBlueprintSource } from './filesystem-blueprint-source.js';
+import { FileSystemSeedPoolSource } from './filesystem-seed-pool-source.js';
 import { buildSeedPool } from '@ggui-ai/mcp-server-handlers';
 import type { BlueprintPool } from '@ggui-ai/mcp-server-handlers';
 import { createThemeWriter } from './theme-writer.js';
@@ -360,8 +360,8 @@ async function runServeCommand(args: string[]): Promise<number> {
     // secrets mint fresh per process). Without the flag, the
     // sqlite-backed VectorStore + GguiSessionStore persist across restarts
     // — note this means the install-to-cache bridge can serve stale
-    // install-provenance rows after a boot if the source TSX behind a
-    // cached row has been edited or uninstalled in the meantime.
+    // installed rows after a boot if the source TSX behind a cached
+    // row has been edited or uninstalled in the meantime.
     if (!parsed.ephemeral) {
       const persistentDir = getPersistentDir(plan.projectRoot);
       const manifestDeclaresRenders = plan.manifest?.storage?.renders !== undefined;
@@ -705,7 +705,7 @@ async function runServeCommand(args: string[]): Promise<number> {
   const seedPools: BlueprintPool[] = [];
   for (const dir of parsed.seedPools) {
     try {
-      seedPools.push(await buildSeedPool(new FileSystemBlueprintSource(dir), { scope: 'shared' }));
+      seedPools.push(await buildSeedPool(new FileSystemSeedPoolSource(dir), { scope: 'shared' }));
     } catch (err) {
       process.stderr.write(
         `ggui serve: --seed-pool "${dir}": ${err instanceof Error ? err.message : String(err)}\n`,
