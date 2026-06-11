@@ -1,5 +1,15 @@
 import type { DataContract } from "./data-contract.js";
 import type { BlueprintVariance } from "./blueprint.js";
+import type { BlueprintSource } from "./blueprint-source.js";
+
+/**
+ * Current `PortableBlueprint` record schema version. v2 (2026-06) made
+ * provenance non-negotiable: `source` + `generatorProtocolVersion` are
+ * required. v1 records are REJECTED by importers — a rejected seed
+ * entry is just a cold-gen, so the fix is to re-export the pool, never
+ * to coerce.
+ */
+export const PORTABLE_BLUEPRINT_SCHEMA_VERSION = 2;
 
 /**
  * One self-contained, JSON-serializable blueprint record in a
@@ -13,24 +23,32 @@ import type { BlueprintVariance } from "./blueprint.js";
  * recomputed on load.
  */
 export interface PortableBlueprint {
-  readonly schemaVersion: 1;
+  readonly schemaVersion: typeof PORTABLE_BLUEPRINT_SCHEMA_VERSION;
   readonly contract: DataContract;
   readonly componentCode: string;
   readonly variance: BlueprintVariance;
   readonly contractHash: string;
   readonly variantKey: string;
   /**
-   * Generator era at export time (`PROTOCOL_VERSION`). Importers reject
-   * blueprints whose generator era is incompatible with theirs rather than
-   * serve code generated against a different protocol shape. Optional for
-   * back-compat with pre-stamp artifacts (treated as "unknown → warn").
+   * Provenance of the component code. Required — an artifact that
+   * cannot say where its code came from is rejected at import, not
+   * tolerated as "unlabeled".
    */
-  readonly generatorProtocolVersion?: string;
+  readonly source: BlueprintSource;
   /**
-   * SHA256(16) of the tool-identity catalog used to canonicalize `contract`
-   * at export. Importers re-canonicalize against their own catalog and
-   * recompute the key; a divergence means the same intent would mis-key and
-   * silently cold-gen — so it is rejected. Optional for back-compat.
+   * Generator era at export time (`PROTOCOL_VERSION`). Required —
+   * importers reject blueprints whose generator era is incompatible
+   * with theirs rather than serve code generated against a different
+   * protocol shape.
+   */
+  readonly generatorProtocolVersion: string;
+  /**
+   * SHA256(16) of the tool-identity catalog used to canonicalize
+   * `contract` at export. Importers re-canonicalize against their own
+   * catalog and recompute the key; a divergence means the same intent
+   * would mis-key and silently cold-gen — so it is rejected. Optional
+   * because the catalog is a runtime artifact built from live MCP
+   * handshakes — an offline pool export has no catalog to hash.
    */
   readonly toolIdentityCatalogHash?: string;
 }

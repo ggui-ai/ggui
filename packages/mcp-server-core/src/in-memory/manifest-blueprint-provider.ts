@@ -90,11 +90,10 @@ export class ManifestBlueprintProvider implements BlueprintProvider {
     const entry: BlueprintEntry = {
       id: manifest.id,
       name: manifest.name,
-      // Keep `user` as the source tag — these are author-curated UIs
-      // declared in the operator's own `ggui.json`, not the hosted
-      // curated catalog. `BlueprintEntry.source = 'user'` already
-      // exists for exactly this case.
-      source: 'user',
+      // `{kind: 'user'}` — these are developer-authored UIs declared
+      // in the operator's own `ggui.json` (no engine produced them),
+      // which is exactly the `user` arm of `BlueprintSource`.
+      source: { kind: 'user' },
       updatedAt: manifest.updatedAt ?? new Date(this.now()).toISOString(),
       ...(manifest.description !== undefined
         ? { description: manifest.description }
@@ -108,7 +107,13 @@ export class ManifestBlueprintProvider implements BlueprintProvider {
     const q = filter.query?.trim().toLowerCase();
     const matches: BlueprintEntry[] = [];
     for (const entry of this.rows.values()) {
-      if (filter.source !== undefined && entry.source !== filter.source) continue;
+      if (filter.sourceKind !== undefined && entry.source.kind !== filter.sourceKind)
+        continue;
+      if (
+        filter.generator !== undefined &&
+        (entry.source.kind !== 'llm' || entry.source.generator !== filter.generator)
+      )
+        continue;
       if (filter.tag !== undefined && !(entry.tags ?? []).includes(filter.tag)) continue;
       if (q) {
         const haystack = `${entry.name} ${entry.description ?? ''}`.toLowerCase();
@@ -116,6 +121,7 @@ export class ManifestBlueprintProvider implements BlueprintProvider {
       }
       matches.push({
         ...entry,
+        source: { ...entry.source },
         ...(entry.tags ? { tags: entry.tags.slice() } : {}),
       });
     }

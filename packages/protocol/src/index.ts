@@ -74,6 +74,7 @@ export * from "./types/data-bindings";
 export * from "./types/feedback";
 export * from "./types/data-contract";
 export * from "./types/blueprint";
+export * from "./types/blueprint-source";
 export * from "./types/portable-blueprint";
 export * from "./schemas/blueprint";
 export * from "./types/handshake-suggestion";

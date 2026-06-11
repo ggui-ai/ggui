@@ -8,10 +8,11 @@
  *   - the intent, interaction mechanic, and a free-form layout hint
  *
  * Blueprints compile deterministically into {@link DataContract}. They are the
- * authoring surface of the Screen Designer pipeline — human-curated, heuristic,
- * or LLM-produced. All three producers emit the same shape.
+ * authoring surface of the Screen Designer pipeline — every producer emits the
+ * same shape and stamps its provenance as a {@link BlueprintSource}.
  */
 import type { JsonSchema } from "../types/data-contract.js";
+import type { BlueprintSource } from "../types/blueprint-source.js";
 
 /**
  * UI interaction mechanic hint. Tiny enum — generation uses it to select
@@ -19,15 +20,6 @@ import type { JsonSchema } from "../types/data-contract.js";
  * Layout details live in {@link ScreenBlueprint.layoutHint} (free text).
  */
 export type ScreenMechanic = "static" | "drag" | "swipe" | "live" | "form";
-
-/**
- * Provenance — who authored this blueprint. Same shape, different producers.
- *
- * - `curated`: hand-written TS in `cloud/amplify/data/screen-blueprints/*.ts`
- * - `heuristic`: rule-based composer ("every `list_*` → default list view")
- * - `llm`: LLM-driven designer for novel compositions
- */
-export type ScreenBlueprintSource = "curated" | "heuristic" | "llm";
 
 /**
  * Data source for a single prop slot. The tool's outputSchema becomes the
@@ -135,6 +127,7 @@ export type ScreenBlueprintAction =
  *     completeTask: { tool: "todoist_complete_task" },
  *   },
  *   layoutHint: "Left: task cards. Right: 7-day grid. Drag to schedule.",
+ *   source: { kind: "curated" },
  * });
  * ```
  */
@@ -163,9 +156,9 @@ export interface ScreenBlueprint {
   /** Free-form layout guidance passed to the generator as prompt context. */
   layoutHint?: string;
   /**
-   * Provenance. Set automatically by each producer (curated producer = this
-   * file's co-location; heuristic + llm producers set explicitly). Included
-   * here for the compiler's downstream use.
+   * Provenance — who authored this blueprint ({@link BlueprintSource}).
+   * Required: every producer stamps its own arm at mint time, and the
+   * match ranker weighs it. Unlabeled blueprints are not a real state.
    */
-  source?: ScreenBlueprintSource;
+  source: BlueprintSource;
 }

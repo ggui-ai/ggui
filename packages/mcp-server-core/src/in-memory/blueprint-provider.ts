@@ -10,8 +10,8 @@
  * Constructor accepts a seed array of `ScreenBlueprint` objects. The
  * `BlueprintEntry` rows returned by `list()` are derived from each
  * blueprint's fields — `displayName → name`, `intent → description`,
- * `source → source` (defaulting to `curated` when the blueprint omits
- * it), `updatedAt` pulled from an overlay map or stamped at construction.
+ * `source → source` (required provenance; never defaulted),
+ * `updatedAt` pulled from an overlay map or stamped at construction.
  */
 import type { ScreenBlueprint } from '@ggui-ai/protocol';
 import type {
@@ -69,7 +69,7 @@ export class InMemoryBlueprintProvider implements BlueprintProvider {
       id: blueprint.id,
       name: blueprint.displayName,
       description: blueprint.intent,
-      source: blueprint.source ?? 'curated',
+      source: { ...blueprint.source },
       updatedAt: resolved.updatedAt ?? new Date(this.now()).toISOString(),
       ...(resolved.tags ? { tags: resolved.tags.slice() } : {}),
     };
@@ -80,7 +80,13 @@ export class InMemoryBlueprintProvider implements BlueprintProvider {
     const q = filter.query?.trim().toLowerCase();
     const matches: BlueprintEntry[] = [];
     for (const { entry } of this.rows.values()) {
-      if (filter.source !== undefined && entry.source !== filter.source) continue;
+      if (filter.sourceKind !== undefined && entry.source.kind !== filter.sourceKind)
+        continue;
+      if (
+        filter.generator !== undefined &&
+        (entry.source.kind !== 'llm' || entry.source.generator !== filter.generator)
+      )
+        continue;
       if (filter.tag !== undefined && !(entry.tags ?? []).includes(filter.tag)) continue;
       if (q) {
         const haystack = `${entry.name} ${entry.description ?? ''}`.toLowerCase();
@@ -88,6 +94,7 @@ export class InMemoryBlueprintProvider implements BlueprintProvider {
       }
       matches.push({
         ...entry,
+        source: { ...entry.source },
         ...(entry.tags ? { tags: entry.tags.slice() } : {}),
       });
     }
@@ -110,6 +117,7 @@ function cloneBlueprint(b: ScreenBlueprint): ScreenBlueprint {
   return {
     ...b,
     data: { ...b.data },
+    source: { ...b.source },
     ...(b.actions ? { actions: { ...b.actions } } : {}),
   };
 }

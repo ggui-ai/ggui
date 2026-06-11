@@ -38,8 +38,10 @@ export { variantKey } from './variant-key.js';
 export {
   toPortableBlueprint,
   fromPortableBlueprint,
+  PORTABLE_BLUEPRINT_SCHEMA_VERSION,
+  PORTABLE_BLUEPRINT_V1_REJECTION,
   type PortableBlueprintSource,
-  type PortableBlueprintImport,
+  type PortableBlueprintImportResult,
 } from './portable-blueprint.js';
 
 // `computeToolCatalogHash` pulls `node:crypto`, so it lives behind this

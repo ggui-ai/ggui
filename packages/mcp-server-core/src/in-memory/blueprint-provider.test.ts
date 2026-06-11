@@ -25,7 +25,7 @@ describe('InMemoryBlueprintProvider — impl-specific', () => {
     displayName: 'Weather Card',
     intent: 'Show current weather',
     data: {},
-    source: 'curated',
+    source: { kind: 'curated' },
   };
   const kanban: ScreenBlueprint = {
     id: 'kanban-board',
@@ -33,7 +33,7 @@ describe('InMemoryBlueprintProvider — impl-specific', () => {
     displayName: 'Kanban Board',
     intent: 'Track tasks in columns',
     data: {},
-    source: 'llm',
+    source: { kind: 'llm', generator: 'gen-a', model: 'model-1' },
   };
 
   it('accepts plain ScreenBlueprint values as seeds', async () => {
@@ -42,12 +42,15 @@ describe('InMemoryBlueprintProvider — impl-specific', () => {
     expect(list.map((r) => r.id).sort()).toEqual(['kanban-board', 'weather-card']);
   });
 
-  it('defaults source to "curated" when blueprint omits it', async () => {
-    const p = new InMemoryBlueprintProvider({
-      seeds: [{ ...wx, source: undefined }],
-    });
+  it('derives entry.source from the blueprint provenance (independent copy)', async () => {
+    const p = new InMemoryBlueprintProvider({ seeds: [kanban] });
     const list = await p.list({});
-    expect(list[0]?.source).toBe('curated');
+    expect(list[0]?.source).toEqual({
+      kind: 'llm',
+      generator: 'gen-a',
+      model: 'model-1',
+    });
+    expect(list[0]?.source).not.toBe(kanban.source);
   });
 
   it('applies seed-provided updatedAt + tags', async () => {
@@ -100,7 +103,7 @@ describe('InMemoryBlueprintProvider — impl-specific', () => {
       displayName: `BP ${i}`,
       intent: 'test',
       data: {},
-      source: 'curated',
+      source: { kind: 'curated' },
     }));
     const p = new InMemoryBlueprintProvider({
       seeds: blueprints.map((b, i): BlueprintSeed => ({

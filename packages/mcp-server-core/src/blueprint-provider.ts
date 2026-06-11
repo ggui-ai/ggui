@@ -34,11 +34,10 @@
  * cloud, etc.) through the same search-seam interface.
  *
  * Reference implementations:
- *   - LocalBlueprintProvider    (OSS default; local blueprints folder + SQLite index)
- *   - HostedBlueprintProvider   (optional; read-through cache of the hosted-runtime curated catalog)
- *   - DynamoBlueprintProvider   (hosted runtime — `cloud/`, closed)
+ *   - InMemoryBlueprintProvider  (seeds from full `ScreenBlueprint` records)
+ *   - ManifestBlueprintProvider  (seeds from authored-UI `ggui.json` manifests)
  */
-import type { ScreenBlueprint } from '@ggui-ai/protocol';
+import type { BlueprintSource, ScreenBlueprint } from '@ggui-ai/protocol';
 
 /**
  * Catalog entry — list returns these; `get` returns the full
@@ -52,8 +51,8 @@ export interface BlueprintEntry {
   name: string;
   /** Optional description for the catalog browser / RAG hinting. */
   description?: string;
-  /** Source of truth — informs retrieval behavior. */
-  source: 'curated' | 'heuristic' | 'llm' | 'user';
+  /** Provenance ({@link BlueprintSource}) — informs retrieval behavior. */
+  source: BlueprintSource;
   /** ISO timestamp of last modification. */
   updatedAt: string;
   /** Free-form tags for filter/search. */
@@ -61,10 +60,18 @@ export interface BlueprintEntry {
 }
 
 /**
- * Filter for {@link BlueprintProvider.list}.
+ * Filter for {@link BlueprintProvider.list}. Kept flat — callers filter
+ * on the provenance discriminant (and optionally the generator slug)
+ * without constructing union values.
  */
 export interface BlueprintFilter {
-  source?: BlueprintEntry['source'];
+  /** Match entries whose `source.kind` equals this discriminant. */
+  sourceKind?: BlueprintSource['kind'];
+  /**
+   * Match `llm`-sourced entries produced by this generator slug.
+   * Entries of any other kind never match (they have no generator).
+   */
+  generator?: string;
   tag?: string;
   /** Full-text-ish match against name+description. Provider may ignore. */
   query?: string;

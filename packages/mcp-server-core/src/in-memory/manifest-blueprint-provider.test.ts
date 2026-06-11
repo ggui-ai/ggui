@@ -33,7 +33,7 @@ describe('ManifestBlueprintProvider — impl-specific', () => {
       id: 'weather-card',
       name: 'Weather',
       description: 'Shows a city forecast',
-      source: 'user',
+      source: { kind: 'user' },
       tags: ['data'],
     });
     expect(entries[0]?.updatedAt).toBe('2026-04-20T00:00:00.000Z');
@@ -61,15 +61,24 @@ describe('ManifestBlueprintProvider — impl-specific', () => {
     expect(entries.map((e) => e.id)).toEqual(['a', 'c', 'b']);
   });
 
-  it('filters by source', async () => {
+  it('filters by source kind', async () => {
     const p = new ManifestBlueprintProvider({
       now,
       manifests: [seed({ id: 'a' })],
     });
-    const userEntries = await p.list({ source: 'user' });
-    const curatedEntries = await p.list({ source: 'curated' });
+    const userEntries = await p.list({ sourceKind: 'user' });
+    const curatedEntries = await p.list({ sourceKind: 'curated' });
     expect(userEntries).toHaveLength(1);
     expect(curatedEntries).toHaveLength(0);
+  });
+
+  it('generator filter never matches user-sourced entries', async () => {
+    const p = new ManifestBlueprintProvider({
+      now,
+      manifests: [seed({ id: 'a' })],
+    });
+    const entries = await p.list({ generator: 'gen-a' });
+    expect(entries).toEqual([]);
   });
 
   it('filters by tag when category present', async () => {

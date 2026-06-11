@@ -4,9 +4,11 @@ import { matchBlueprint, type MatchableBlueprint } from "./match.js";
 const bp = (partial: Partial<MatchableBlueprint> & Pick<MatchableBlueprint, "blueprintId" | "dataTools">): MatchableBlueprint => ({
   serverId: "platform_test",
   status: "active",
-  source: "curated",
+  source: { kind: "curated" },
   ...partial,
 });
+
+const LLM = { kind: "llm", generator: "ui-gen-default", model: "test-model-1" } as const;
 
 describe("matchBlueprint — subset matching", () => {
   it("returns null when no candidate matches", () => {
@@ -54,34 +56,35 @@ describe("matchBlueprint — ranking", () => {
     expect(result?.blueprintId).toBe("plan-my-week");
   });
 
-  it("curated outranks llm outranks heuristic on equal overlap + score", () => {
-    const byHeuristic = matchBlueprint(
+  it("curated outranks llm on equal overlap + score", () => {
+    const result = matchBlueprint(
       [
-        bp({ blueprintId: "bp_h", dataTools: ["a"], source: "heuristic" }),
-        bp({ blueprintId: "bp_l", dataTools: ["a"], source: "llm" }),
-        bp({ blueprintId: "bp_c", dataTools: ["a"], source: "curated" }),
+        bp({ blueprintId: "bp_l", dataTools: ["a"], source: LLM }),
+        bp({ blueprintId: "bp_c", dataTools: ["a"], source: { kind: "curated" } }),
       ],
       ["a"],
     );
-    expect(byHeuristic?.blueprintId).toBe("bp_c");
+    expect(result?.blueprintId).toBe("bp_c");
+  });
 
-    const byLlm = matchBlueprint(
+  it("user (developer-registered) outranks llm — same trust class as curated", () => {
+    const result = matchBlueprint(
       [
-        bp({ blueprintId: "bp_h", dataTools: ["a"], source: "heuristic" }),
-        bp({ blueprintId: "bp_l", dataTools: ["a"], source: "llm" }),
+        bp({ blueprintId: "bp_l", dataTools: ["a"], source: LLM }),
+        bp({ blueprintId: "bp_u", dataTools: ["a"], source: { kind: "user" } }),
       ],
       ["a"],
     );
-    expect(byLlm?.blueprintId).toBe("bp_l");
+    expect(result?.blueprintId).toBe("bp_u");
   });
 
   it("a high-score llm blueprint can beat a low-overlap curated one", () => {
     const result = matchBlueprint(
       [
         // curated, overlap 1, score default (1): rank = 1 × 3 × 1 = 3
-        bp({ blueprintId: "curated_shallow", dataTools: ["a"], source: "curated" }),
+        bp({ blueprintId: "curated_shallow", dataTools: ["a"], source: { kind: "curated" } }),
         // llm, overlap 1, score 10: rank = 1 × 2 × 10 = 20
-        bp({ blueprintId: "llm_proven", dataTools: ["a"], source: "llm", score: 10 }),
+        bp({ blueprintId: "llm_proven", dataTools: ["a"], source: LLM, score: 10 }),
       ],
       ["a"],
     );

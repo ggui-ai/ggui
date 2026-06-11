@@ -3,9 +3,9 @@
  *
  * Narrowed surface (2026-04-18) — two read methods:
  *
- *   - `list(filter)` browses the catalog. Filters on `source`, `tag`,
- *     and `query` (optional — providers MAY ignore query). Paginates
- *     via opaque cursor.
+ *   - `list(filter)` browses the catalog. Filters on `sourceKind`,
+ *     `generator`, `tag`, and `query` (optional — providers MAY ignore
+ *     query). Paginates via opaque cursor.
  *   - `get(id)` returns the full `ScreenBlueprint` or null.
  *
  * Decision quality (did it rank the right blueprint?) is NOT part of
@@ -64,16 +64,35 @@ export function blueprintProviderContract(
         expect(full?.displayName).toBe('Weather Card');
       });
 
-      it('list filters by source', async () => {
+      it('list filters by source kind', async () => {
         const p = await makeProvider();
         await seed(p, [
-          blueprint('a', 'A', { source: 'curated' }),
-          blueprint('b', 'B', { source: 'llm' }),
+          blueprint('a', 'A', { source: { kind: 'curated' } }),
+          blueprint('b', 'B', {
+            source: { kind: 'llm', generator: 'gen-a', model: 'model-1' },
+          }),
         ]);
-        const curated = await p.list({ source: 'curated' });
+        const curated = await p.list({ sourceKind: 'curated' });
         expect(curated.map((r) => r.id)).toEqual(['a']);
-        const llm = await p.list({ source: 'llm' });
+        const llm = await p.list({ sourceKind: 'llm' });
         expect(llm.map((r) => r.id)).toEqual(['b']);
+      });
+
+      it('list filters llm entries by generator slug (other kinds never match)', async () => {
+        const p = await makeProvider();
+        await seed(p, [
+          blueprint('a', 'A', {
+            source: { kind: 'llm', generator: 'gen-a', model: 'model-1' },
+          }),
+          blueprint('b', 'B', {
+            source: { kind: 'llm', generator: 'gen-b', model: 'model-1' },
+          }),
+          blueprint('c', 'C', { source: { kind: 'user' } }),
+        ]);
+        const genA = await p.list({ generator: 'gen-a' });
+        expect(genA.map((r) => r.id)).toEqual(['a']);
+        const genUnknown = await p.list({ generator: 'gen-x' });
+        expect(genUnknown).toEqual([]);
       });
 
       it('list limit caps the result set', async () => {
@@ -110,6 +129,7 @@ function blueprint(
     displayName,
     intent: `Show a ${displayName}`,
     data: {},
+    source: { kind: 'curated' },
     ...overrides,
   };
 }

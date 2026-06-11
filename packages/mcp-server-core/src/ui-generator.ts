@@ -210,6 +210,17 @@ export interface UiGenerateInput {
  */
 export interface GenerationMetadata {
   provider: LlmProvider;
+  /**
+   * Slug of the {@link UiGenerator} that produced this result (the
+   * engine's own identity — `slug` on the implementing generator).
+   * Wrapper generators that delegate to an inner engine re-stamp
+   * their own registered slug on the way out so the result names the
+   * engine the operator dispatched. Required: blueprint provenance
+   * (`BlueprintSource`'s `llm` arm) is minted from this field, and an
+   * engine-generated result that cannot name its engine is not a real
+   * state.
+   */
+  generator: string;
   model: string;
   inputTokens: number;
   outputTokens: number;
