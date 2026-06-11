@@ -41,6 +41,19 @@
  * always advertises `PROTOCOL_SCHEMA_VERSION` — and this test does not
  * add a production seam just to drive the `version-mismatch` fixture;
  * that fixture skips honestly instead.
+ *
+ * ## Session-state read-back seam
+ *
+ * The kit's `session-state` expectations (stateful obligations with no
+ * response frame, e.g. `host-context-observed-persists`) grade via
+ * `ConformanceHost.readSessionField()`. This host implements it as an
+ * honest read of the harness's `InMemoryGguiSessionStore` — the SAME
+ * store instance the channel server persists into — so the verdict
+ * reflects the server's true post-dispatch state, never a fabricated
+ * value. The exposed field vocabulary is CLOSED to what the shipped
+ * catalog authors (`hostContext`); an unknown field throws, so a
+ * future-authored field surfaces as an honest skip to re-pin
+ * deliberately.
  */
 import { createServer, type Server as HttpServer } from 'node:http';
 import { runConformance, type ConformanceHost } from '@ggui-ai/protocol-conformance';
@@ -64,10 +77,13 @@ const silentLogger = {
 };
 
 /**
- * App id every render is scoped to. MUST match the `appId` the kit's
- * runner stamps on its subscribe frame — the channel rejects
+ * Default app id a render is scoped to when the fixture's
+ * `create-session` directive does not bind one. MUST match the `appId`
+ * the kit's runner stamps on its subscribe frame — the channel rejects
  * subscribes whose appId differs from the stored render's
- * (`APP_MISMATCH`).
+ * (`APP_MISMATCH`). The `app-mismatch` fixture exercises exactly that
+ * rejection by binding a DIFFERENT appId via the directive's `appId`
+ * field, which this host honors verbatim.
  */
 const CONFORMANCE_APP_ID = 'conformance';
 
@@ -90,10 +106,27 @@ const CONFORMANCE_APP_ID = 'conformance';
  *     from the declared actionSpec → `assertActionContract` throws and
  *     the server replies `error{payload.code:'CONTRACT_VIOLATION'}`
  *     echoing the `requestId`, appending nothing.
+ *   - `app-mismatch`: the `create-session` directive binds appId
+ *     `conformance-other`; the runner's subscribe always claims
+ *     `conformance` → the channel's subscribe handler looks the stored
+ *     render up, sees the bound appId differs, and replies
+ *     `error{payload.code:'APP_MISMATCH'}` — the SPEC §12.2 tenancy
+ *     MUST, enforced live (not the dev-mode provisioning branch, which
+ *     only runs when the render does not exist yet).
+ *   - `host-context-observed-persists`: the kit sends the canonical
+ *     `host_context_observed` C→S frame post-subscribe; the server's
+ *     handler patches `payload.hostContext` AS RECEIVED onto the
+ *     stored render (`update(sessionId, {hostContext})` — projection /
+ *     trimming is iframe-side, before emission). No response frame —
+ *     graded by the kit's session-state read-back through this host's
+ *     `readSessionField`, deep-equalling the persisted projection
+ *     against the fixture's authored value.
  */
 const EXPECTED_PASSING = [
   'action-ack-sequence',
+  'app-mismatch',
   'bootstrap-success',
+  'host-context-observed-persists',
   'undeclared-action-rejected',
   'version-match',
 ];
@@ -182,13 +215,24 @@ async function bootFirstPartyServer(): Promise<FirstPartyHarness> {
  *   - `create-session` → commit a `ComponentGguiSession` to the
  *     channel's `GguiSessionStore` (the same write `ggui_render`
  *     performs), carrying the directive's declared actionSpec as the
- *     render's action contract.
+ *     render's action contract and binding the directive's `appId`
+ *     verbatim when present (default `CONFORMANCE_APP_ID`) — the
+ *     `app-mismatch` fixture relies on that binding to probe the
+ *     subscribe handler's tenancy rejection.
  *   - `emit-envelope` → `channel.sendToGguiSession()` — the server's
  *     outbound fan-out API. The directive carries the envelope body;
  *     the server owns wire wrapping (seq stamp + `{type:'data'}`
  *     frame). Scoped to the most recent `create-session`, matching the
  *     fixture-authoring convention (the directive carries no
  *     sessionId).
+ *   - `readSessionField` → honest read-back off the harness's
+ *     `InMemoryGguiSessionStore` — the same store instance the channel
+ *     persists into. Exposes exactly the field vocabulary the shipped
+ *     session-state fixtures grade (`hostContext`, which the
+ *     `host_context_observed` handler patches via
+ *     `renderStore.update`); any other field throws so a
+ *     future-authored fixture skips loudly instead of being graded
+ *     against a fabricated read.
  *
  * Refuse (kit records SKIP with the thrown message):
  *   - `renderer-url-override` / `ui-initialize-response-override` —
@@ -266,6 +310,29 @@ function createFirstPartyConformanceHost(harness: FirstPartyHarness): Conformanc
       throw new Error(
         'first-party channel server does not implement any teardown directive — the kit defines no teardown vocabulary in this version',
       );
+    },
+
+    async readSessionField(sessionId, field): Promise<unknown> {
+      // Closed field vocabulary — exactly what the shipped catalog's
+      // session-state fixtures grade. An unknown field is refused
+      // loudly (the kit records a skip), never read via a dynamic
+      // index that could silently grade state this host never meant
+      // to expose.
+      if (field !== 'hostContext') {
+        throw new Error(
+          `first-party conformance host exposes only the 'hostContext' session field for session-state grading — field '${field}' is not implemented`,
+        );
+      }
+      const stored = await harness.store.get(sessionId);
+      if (stored === null) {
+        throw new Error(
+          `readSessionField: no GguiSession '${sessionId}' in the channel's store — cannot read state off a missing render`,
+        );
+      }
+      // May legitimately be undefined when the server dropped the
+      // frame instead of persisting it — that surfaces as the kit's
+      // deep-equal FAIL (the honest verdict), not as a throw.
+      return stored.hostContext;
     },
   };
 }
