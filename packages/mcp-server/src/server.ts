@@ -3317,18 +3317,14 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
   const generationWithCache = opts.generation
     ? {
         ...opts.generation,
-        cache:
-          opts.generation.cache ??
-          ({ embedding, vectorStore: vectors, index } as const),
+        cache: opts.generation.cache ?? ({ embedding, vectorStore: vectors, index } as const),
         // Thread the shared/seed pools into the generation deps so the
         // render handler's §6 reuse point-read can fall back to them on a
         // per-app miss. Same `opts.seedPools` fed to the negotiator below;
         // without this, the handshake PROPOSES a seed-pool blueprint
         // (origin:'cache') but render reads only the per-app store, misses,
         // and cold-regenerates — defeating cross-deployment reuse.
-        ...(opts.seedPools && opts.seedPools.length > 0
-          ? { seedPools: opts.seedPools }
-          : {}),
+        ...(opts.seedPools && opts.seedPools.length > 0 ? { seedPools: opts.seedPools } : {}),
       }
     : undefined;
 
@@ -4626,7 +4622,9 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
   // the console block below when `sessionCookie` is enabled, then
   // threaded into createGguiSessionChannelServer. Declared `let` here so
   // the declaration-order dance stays legible.
-  let consoleCookieAuth: import("./ggui-session-channel.js").GguiSessionChannelCookieAuth | undefined;
+  let consoleCookieAuth:
+    | import("./ggui-session-channel.js").GguiSessionChannelCookieAuth
+    | undefined;
   // Admin token resolution. Surfaced on `GguiServer.adminToken` when
   // console is on; `null` when it's off (no consumer for the gate).
   // Operator-supplied wins; otherwise we mint a fresh
@@ -5227,7 +5225,6 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
   };
 }
 
-
 /**
  * Build the {@link OAuthConfig.validateResource} callback from the
  * deployment shape (RFC 8707).
@@ -5277,4 +5274,3 @@ function buildResourceValidator(opts: {
     return re.test(resource);
   };
 }
-
