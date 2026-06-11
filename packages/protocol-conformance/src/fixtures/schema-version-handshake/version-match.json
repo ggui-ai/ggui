@@ -1,14 +1,17 @@
 {
   "name": "version-match",
-  "description": "Happy-path version handshake: server advertises a schemaVersion the client supports (same as current canonical). Renderer completes the handshake without emitting `ggui:upgrade-required`. Baseline for `version-mismatch`'s negative assertion — proves the handshake path itself is observable.",
+  "description": "Happy-path version handshake (SPEC §12.2.2): the runner's subscribe DECLARES `supportedVersions` resolved from the 'current' sentinel (the kit's compiled canonical, evergreen across version bumps), the server's advertised schemaVersion is in the declared set, and the ack ADVERTISES `payload.serverVersion` equal to that canonical. Both halves are graded: an always-reject server fails on the error frame, and a versionless ack (legacy-pass-through, no `serverVersion`) fails the ack-field assertion — the handshake must be observable, not merely not-rejected. The runner-owned subscribe IS the probe (the inputEnvelope is descriptive, not dispatched). Baseline for `version-mismatch`'s negative assertion.",
   "skipReason": null,
   "setup": [{ "type": "create-session", "sessionId": "ck-version-match-1" }],
+  "subscribe": {
+    "supportedVersions": "current"
+  },
   "inputEnvelope": {
     "type": "handshake",
-    "sessionId": "ck-version-match-1",
-    "clientAccepts": ["1.1"]
+    "sessionId": "ck-version-match-1"
   },
   "expectedBehavior": {
-    "kind": "bootstrap-success"
+    "kind": "bootstrap-success",
+    "serverVersion": "current"
   }
 }

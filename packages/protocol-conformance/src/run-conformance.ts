@@ -7,12 +7,15 @@
  *   2. For each fixture (filtered by `config.only` if provided):
  *      a. If `fixture.skipReason !== null` → skip with the reason.
  *      b. Validate every authored setup/teardown directive against
- *         the closed `SetupStep` vocabulary (`parseSetupStep`) and
- *         the authored `inputEnvelope` against the closed input-
- *         envelope dispatch vocabulary (`parseInputEnvelope`).
- *         Unknown / malformed directives are fixture-authoring
- *         errors — the runner throws, aborting the run loudly (NOT a
- *         skip, NOT a fail of the implementation under test).
+ *         the closed `SetupStep` vocabulary (`parseSetupStep`), the
+ *         authored `inputEnvelope` against the closed input-
+ *         envelope dispatch vocabulary (`parseInputEnvelope`), and
+ *         the authored `subscribe` shaping against the closed
+ *         `SubscribeFrameShaping` vocabulary
+ *         (`parseSubscribeShaping`). Unknown / malformed directives
+ *         are fixture-authoring errors — the runner throws, aborting
+ *         the run loudly (NOT a skip, NOT a fail of the
+ *         implementation under test).
  *      c. If `fixture.setup` non-empty AND `config.host` absent →
  *         skip with "no host provided".
  *      d. Dispatch every setup step via `host.dispatchSetup()`.
@@ -20,7 +23,10 @@
  *      e. Open a WS transport against `config.serverUrl`.
  *      f. Send the canonical `subscribe` frame (the runner knows the
  *         wire shape — fixture's `inputEnvelope` is NOT the subscribe
- *         frame; subscribe is always runner-owned).
+ *         frame; subscribe is always runner-owned), shaped by the
+ *         fixture's validated `subscribe` knob (`omitAppId`,
+ *         `supportedVersions` with the `'current'` sentinel resolved
+ *         to the kit's compiled `PROTOCOL_SCHEMA_VERSION`).
  *      g. If the fixture's `inputEnvelope` is a dispatchable C→S
  *         frame (`action` live-channel dispatch, or
  *         `host_context_observed` — the validated typed arm), send
@@ -46,6 +52,7 @@
  * failure, props-update) automatically skip via the matcher's
  * `unmatchable-on-ws` arm.
  */
+import { PROTOCOL_SCHEMA_VERSION } from '@ggui-ai/protocol';
 import type {
   HostContextObservedPayload,
   HostContextProjection,
@@ -221,6 +228,7 @@ async function runOneFixture(
     parseTeardownStep(fixture.name, step),
   );
   const inputDispatch = parseInputEnvelope(fixture.name, fixture.inputEnvelope);
+  const subscribeShaping = parseSubscribeShaping(fixture.name, fixture.subscribe);
 
   if (setupSteps.length > 0 && config.host === undefined) {
     return {
@@ -251,18 +259,22 @@ async function runOneFixture(
     transport = await openWsTransport({ kind: 'ws', url: wsUrl, auth: config.auth });
 
     const sessionId = extractSessionId(fixture, setupSteps);
-    // `subscribe.omitAppId` (SubscribeFrameShaping) drops the runner's
-    // conventional `appId: 'conformance'` stamp — the probe for SPEC
-    // §12.2's identity-default resolution (absent appId ⇒ the server
-    // resolves the caller's identity-default app).
-    const omitAppId = fixture.subscribe?.omitAppId === true;
+    // `subscribe` (SubscribeFrameShaping, validated above) shapes the
+    // runner-owned frame: `omitAppId` drops the conventional
+    // `appId: 'conformance'` stamp — the probe for SPEC §12.2's
+    // identity-default resolution — and `supportedVersions` declares
+    // the client half of §12.2.2's version handshake (the `'current'`
+    // sentinel already resolved to the kit's compiled
+    // PROTOCOL_SCHEMA_VERSION).
     transport.send({
       type: 'subscribe',
       payload: {
         sessionId,
-        ...(omitAppId ? {} : { appId: 'conformance' }),
+        ...(subscribeShaping.omitAppId ? {} : { appId: 'conformance' }),
         role: 'user',
-        ...(maybeSupportedVersions(fixture.expectedBehavior) ?? {}),
+        ...(subscribeShaping.supportedVersions !== undefined
+          ? { supportedVersions: subscribeShaping.supportedVersions }
+          : {}),
       },
       requestId: `conformance-subscribe-${fixture.name}`,
     });
@@ -740,16 +752,108 @@ export async function matchSessionState(
   };
 }
 
-function maybeSupportedVersions(
-  behavior: TestCase['expectedBehavior'],
-): { readonly supportedVersions: readonly string[] } | undefined {
-  // `behaviorIs` narrows to the specific arm — the extensibly-closed
-  // `UnknownBehavior` in the union has `kind: string & {}` which
-  // defeats bare literal narrowing.
-  if (behaviorIs(behavior, 'version-mismatch')) {
-    return { supportedVersions: behavior.clientAccepts };
+/**
+ * Resolved, runner-ready form of `SubscribeFrameShaping`: the
+ * `'current'` sentinel is already replaced by the kit's compiled
+ * `PROTOCOL_SCHEMA_VERSION`, so the subscribe-send site only ever
+ * sees a concrete declaration (or none).
+ */
+export interface ResolvedSubscribeShaping {
+  readonly omitAppId: boolean;
+  readonly supportedVersions?: readonly string[];
+}
+
+/**
+ * Validating narrower for the fixture-authored `subscribe` knob
+ * (`SubscribeFrameShaping`, types.ts). Same trust-boundary posture as
+ * {@link parseSetupStep}: the fixture JSON enters the type system
+ * through a compile-time cast, so the shape is re-validated
+ * structurally here and any malformed or unknown shaping is a
+ * fixture-authoring error the runner throws on — never a skip, never
+ * a fail of the implementation under test.
+ *
+ * The vocabulary is CLOSED — exactly the shaping fields the shipped
+ * catalog authors (`omitAppId`, `supportedVersions`); an unknown key
+ * is rejected so a typo'd knob can never silently no-op into a
+ * vacuous grade. `supportedVersions: 'current'` resolves to
+ * `[PROTOCOL_SCHEMA_VERSION]` (the kit's compiled canonical), keeping
+ * fixtures evergreen across protocol version bumps.
+ *
+ * Exported for unit tests; not part of the package's public API.
+ */
+export function parseSubscribeShaping(
+  fixtureName: string,
+  shaping: unknown,
+): ResolvedSubscribeShaping {
+  if (shaping === undefined) return { omitAppId: false };
+  if (!isRecord(shaping)) {
+    throw malformedSubscribeShaping(
+      fixtureName,
+      'expected an object carrying the SubscribeFrameShaping fields',
+      shaping,
+    );
   }
-  return undefined;
+  for (const key of Object.keys(shaping)) {
+    if (key !== 'omitAppId' && key !== 'supportedVersions') {
+      throw malformedSubscribeShaping(
+        fixtureName,
+        `unknown key '${key}' — the subscribe-shaping vocabulary is closed: omitAppId, supportedVersions`,
+        shaping,
+      );
+    }
+  }
+  const omitAppId = shaping['omitAppId'];
+  if (omitAppId !== undefined && typeof omitAppId !== 'boolean') {
+    throw malformedSubscribeShaping(
+      fixtureName,
+      "'omitAppId' must be a boolean when present",
+      shaping,
+    );
+  }
+  const supportedVersions = parseSupportedVersionsDecl(
+    fixtureName,
+    shaping,
+    shaping['supportedVersions'],
+  );
+  return {
+    omitAppId: omitAppId === true,
+    ...(supportedVersions !== undefined ? { supportedVersions } : {}),
+  };
+}
+
+function parseSupportedVersionsDecl(
+  fixtureName: string,
+  shaping: Record<string, unknown>,
+  decl: unknown,
+): readonly string[] | undefined {
+  if (decl === undefined) return undefined;
+  if (decl === 'current') {
+    // The evergreen sentinel — the version this kit release was
+    // compiled against, never a stale fixture literal.
+    return [PROTOCOL_SCHEMA_VERSION];
+  }
+  if (
+    Array.isArray(decl) &&
+    decl.length > 0 &&
+    decl.every((version) => typeof version === 'string' && version.length > 0)
+  ) {
+    return decl;
+  }
+  throw malformedSubscribeShaping(
+    fixtureName,
+    "'supportedVersions' must be the sentinel 'current' or a non-empty array of non-empty strings",
+    shaping,
+  );
+}
+
+function malformedSubscribeShaping(
+  fixtureName: string,
+  problem: string,
+  shaping: unknown,
+): Error {
+  return new Error(
+    `protocol-conformance: fixture '${fixtureName}' authors a malformed 'subscribe' frame shaping — ${problem}. Received: ${JSON.stringify(shaping)}`,
+  );
 }
 
 /**

@@ -1,6 +1,6 @@
 {
   "name": "version-mismatch",
-  "description": "Server advertises a protocol schemaVersion outside the client's accepted set. Renderer emits `{type:'ggui:upgrade-required', server, client}` to the parent host + a matching `ProtocolError{kind:'version'}`. Host SHOULD render an inline upgrade prompt — NOT treat this as a terminal failure.",
+  "description": "Rejection half of the version handshake (SPEC §12.2.2): the `server-version-override` directive makes the server advertise '99.99-unsupported' for this render, while the runner's subscribe declares `supportedVersions` resolved from the SAME 'current' sentinel as `version-match` — a set that excludes the override by construction (the override literal is never the canonical), so the rejection can only come from the override seam, never from the server's real version. Expected: an `error` frame with `payload.code === 'UPGRADE_REQUIRED'`. Servers on the default reject policy also close the connection; advisory-policy servers keep it open — both satisfy the frame assertion.",
   "skipReason": null,
   "setup": [
     { "type": "create-session", "sessionId": "ck-version-mismatch-1" },
@@ -10,16 +10,15 @@
       "advertiseVersion": "99.99-unsupported"
     }
   ],
+  "subscribe": {
+    "supportedVersions": "current"
+  },
   "inputEnvelope": {
-    "type": "render",
-    "sessionId": "ck-version-mismatch-1",
-    "resource": {
-      "uri": "ui://ggui/render"
-    }
+    "type": "handshake",
+    "sessionId": "ck-version-mismatch-1"
   },
   "expectedBehavior": {
     "kind": "version-mismatch",
-    "serverVersion": "99.99-unsupported",
-    "clientAccepts": ["1.1"]
+    "serverVersion": "99.99-unsupported"
   }
 }

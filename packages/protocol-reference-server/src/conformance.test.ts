@@ -56,17 +56,25 @@ import { ReferenceServer } from './server.js';
  *     `CONTRACT_VIOLATION`, nothing appended. Proves the SPEC §4.6
  *     receipt-validation half of the declared-action contract.
  *
- *   - `version-match`: subscribe without a version conflict completes
- *     the handshake — the ack arrives, no `UPGRADE_REQUIRED`. The
- *     happy-path half of Protocol #3.
+ *   - `version-match`: the kit's subscribe DECLARES
+ *     `supportedVersions` (the fixture's `'current'` sentinel,
+ *     resolved to the kit's compiled `PROTOCOL_SCHEMA_VERSION`); this
+ *     server's advertised version is in the set, so the handshake
+ *     completes AND the ack advertises `payload.serverVersion` equal
+ *     to that canonical — which the kit's `serverVersion: 'current'`
+ *     ack assertion requires. The happy-path half of Protocol #3,
+ *     graded for real: a versionless ack (or an always-reject server)
+ *     fails it.
  *
  *   - `version-mismatch`: declares a per-render
  *     `server-version-override` of `'99.99-unsupported'`. The kit's
- *     subscribe carries `supportedVersions: ['1.1']`; the WS handler
- *     reads the GguiSession-scoped override (set on the `GguiSession`
- *     record by `setVersionOverride()`), notices the advertised
- *     version is not in the client's accepted set, and emits the
- *     canonical `error{payload.code:'UPGRADE_REQUIRED',
+ *     subscribe carries the same `'current'`-resolved
+ *     `supportedVersions` declaration (which excludes the override by
+ *     construction); the WS handler reads the GguiSession-scoped
+ *     override (set on the `GguiSession` record by
+ *     `setVersionOverride()`), notices the advertised version is not
+ *     in the client's accepted set, and emits the canonical
+ *     `error{payload.code:'UPGRADE_REQUIRED',
  *     serverVersion}` frame. Proves the rejection half of Protocol #3
  *     with parallel-fixture isolation (other GguiSessions on the same
  *     server still advertise the canonical default).

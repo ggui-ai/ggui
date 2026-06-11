@@ -52,6 +52,6 @@ Prints `READY ws://127.0.0.1:3100/ws` when bound. Ctrl-C to stop.
 against it through a `ConformanceHost` adapter. Every drivable conformance fixture must
 pass (bootstrap-success, action-ack-sequence, undeclared-action-rejected,
 action-payload-schema-violation, version-match, version-mismatch, app-mismatch,
-host-context-observed-persists); directives outside this server's scope
+absent-appid-defaults, host-context-observed-persists); directives outside this server's scope
 (renderer-url-override, ui-initialize-response-override, and similar) skip cleanly per
 the kit's design.

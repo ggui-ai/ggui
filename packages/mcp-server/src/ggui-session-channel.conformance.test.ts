@@ -92,10 +92,16 @@ const CONFORMANCE_APP_ID = 'conformance';
  * module docstring for why exactness (not membership) is the
  * assertion.
  *
- *   - `bootstrap-success` / `version-match`: WS subscribe → `ack`
- *     round-trip, no error frame. (`version-match` carries no
- *     version-override setup; the kit grades it as the same
- *     subscribe-ack observation.)
+ *   - `bootstrap-success`: WS subscribe → `ack` round-trip, no error
+ *     frame.
+ *   - `version-match`: the kit's subscribe DECLARES
+ *     `supportedVersions` (the fixture's `'current'` sentinel,
+ *     resolved to the kit's compiled `PROTOCOL_SCHEMA_VERSION`) and
+ *     the grade requires the ack to advertise
+ *     `payload.serverVersion` equal to that canonical — which this
+ *     server stamps on every successful ack (SPEC §12.2.2). A
+ *     meaningful pass: a versionless ack would FAIL the fixture, not
+ *     coast on ack presence.
  *   - `action-ack-sequence`: the `create-session` directive installs
  *     `actionSpec: {toggleTask}`; the kit dispatches a canonical
  *     `data:submit` action; `handleInboundAction` validates against

@@ -4,12 +4,13 @@
  * and the WS-endpoint derivation. Pure unit-level: no transport, no
  * server; hosts are in-memory mocks.
  *
- * `parseSetupStep` / `parseInputEnvelope` are the seams where the
- * closed vocabularies are enforced: every directive / dispatchable
- * envelope the shipped catalog authors MUST parse, and unknown /
- * malformed ones MUST throw a descriptive fixture-authoring error
- * (never a silent skip). The parse-the-whole-catalog cases double as
- * the drift-catch between the fixture JSON and the authored unions.
+ * `parseSetupStep` / `parseInputEnvelope` / `parseSubscribeShaping`
+ * are the seams where the closed vocabularies are enforced: every
+ * directive / dispatchable envelope / subscribe-shaping knob the
+ * shipped catalog authors MUST parse, and unknown / malformed ones
+ * MUST throw a descriptive fixture-authoring error (never a silent
+ * skip). The parse-the-whole-catalog cases double as the drift-catch
+ * between the fixture JSON and the authored unions.
  *
  * `matchSessionState` is the kit's third grading mechanism — a
  * post-observation-window GguiSession-field read-back via
@@ -17,6 +18,7 @@
  * absent-method / throwing-read verdicts are pinned here with mock
  * hosts.
  */
+import { PROTOCOL_SCHEMA_VERSION } from '@ggui-ai/protocol';
 import { describe, expect, it } from 'vitest';
 
 import type { ConformanceHost } from './conformance-host.js';
@@ -26,6 +28,7 @@ import {
   matchSessionState,
   parseInputEnvelope,
   parseSetupStep,
+  parseSubscribeShaping,
 } from './run-conformance.js';
 
 describe('parseSetupStep — the shipped catalog parses against the closed union', () => {
@@ -255,6 +258,67 @@ describe('parseInputEnvelope — the closed input-envelope dispatch vocabulary',
         },
       }),
     ).toThrowError(/'hostContext\.containerDimensions\.width' must be a number/);
+  });
+});
+
+describe('parseSubscribeShaping — the closed subscribe-shaping vocabulary', () => {
+  it('every shipped fixture subscribe shaping parses (drift-catch)', () => {
+    for (const fixture of allFixtures) {
+      const shaping = parseSubscribeShaping(fixture.name, fixture.subscribe);
+      expect(typeof shaping.omitAppId).toBe('boolean');
+    }
+  });
+
+  it('absent shaping resolves to the conventional subscribe (appId stamped, no version declaration)', () => {
+    expect(parseSubscribeShaping('t', undefined)).toEqual({ omitAppId: false });
+  });
+
+  it("resolves the 'current' sentinel to the kit's compiled PROTOCOL_SCHEMA_VERSION — fixtures stay evergreen across version bumps", () => {
+    const shaping = parseSubscribeShaping('t', { supportedVersions: 'current' });
+    expect(shaping.supportedVersions).toEqual([PROTOCOL_SCHEMA_VERSION]);
+  });
+
+  it('passes an explicit version list through verbatim', () => {
+    const shaping = parseSubscribeShaping('t', {
+      supportedVersions: ['draft-2026-01-01', 'draft-2026-02-02'],
+    });
+    expect(shaping.supportedVersions).toEqual(['draft-2026-01-01', 'draft-2026-02-02']);
+  });
+
+  it('parses omitAppId alongside a version declaration', () => {
+    expect(
+      parseSubscribeShaping('t', { omitAppId: true, supportedVersions: 'current' }),
+    ).toEqual({ omitAppId: true, supportedVersions: [PROTOCOL_SCHEMA_VERSION] });
+  });
+
+  it('throws on an unknown shaping key — a typo can never silently no-op into a vacuous grade', () => {
+    expect(() => parseSubscribeShaping('fixture-x', { clientAccepts: ['1.1'] })).toThrowError(
+      /unknown key 'clientAccepts'.*omitAppId, supportedVersions/s,
+    );
+  });
+
+  it('throws on a non-boolean omitAppId', () => {
+    expect(() => parseSubscribeShaping('fixture-x', { omitAppId: 'yes' })).toThrowError(
+      /'omitAppId' must be a boolean/,
+    );
+  });
+
+  it("throws on a supportedVersions value that is neither 'current' nor a non-empty string array", () => {
+    expect(() => parseSubscribeShaping('fixture-x', { supportedVersions: 'latest' })).toThrowError(
+      /'supportedVersions' must be the sentinel 'current'/,
+    );
+    expect(() => parseSubscribeShaping('fixture-x', { supportedVersions: [] })).toThrowError(
+      /'supportedVersions' must be the sentinel 'current'/,
+    );
+    expect(() => parseSubscribeShaping('fixture-x', { supportedVersions: [42] })).toThrowError(
+      /'supportedVersions' must be the sentinel 'current'/,
+    );
+  });
+
+  it('throws on a non-object shaping', () => {
+    expect(() => parseSubscribeShaping('fixture-x', 'current')).toThrowError(
+      /malformed 'subscribe' frame shaping/,
+    );
   });
 });
 

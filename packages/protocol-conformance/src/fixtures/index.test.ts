@@ -4,7 +4,11 @@
  * `@ggui-ai/protocol-conformance/fixtures` reads these shapes; this
  * file is the drift-catch.
  */
-import { jsonSchemaSchema, validateActionData } from '@ggui-ai/protocol';
+import {
+  PROTOCOL_SCHEMA_VERSION,
+  jsonSchemaSchema,
+  validateActionData,
+} from '@ggui-ai/protocol';
 import { describe, expect, it } from 'vitest';
 
 import { isRecord } from '../is-record.js';
@@ -258,5 +262,53 @@ describe('fixtures catalog', () => {
     // the same value the runner stamps when it does NOT omit appId, so
     // the identity-default and the explicit path bind identically.
     expect(behavior.expected).toBe('conformance');
+  });
+
+  it('version-match declares the handshake on the wire AND asserts the ack advertisement — never a versionless subscribe→ack', () => {
+    // The de-vacuousing lock: the fixture only grades the SPEC
+    // §12.2.2 happy path if (a) the runner actually TRANSMITS a
+    // supportedVersions declaration (the historical bug: a dead
+    // `clientAccepts` literal on a never-dispatched inputEnvelope)
+    // and (b) the grade requires the ack to advertise serverVersion
+    // (an always-versionless server must FAIL, not coast on ack
+    // presence). Both knobs use the evergreen 'current' sentinel —
+    // no version literal to go stale.
+    const fixture = allFixtures.find((f) => f.name === 'version-match');
+    expect(fixture).toBeDefined();
+    if (fixture === undefined) return;
+    expect(fixture.subscribe).toEqual({ supportedVersions: 'current' });
+    // The probe is the runner-owned subscribe — the input envelope is
+    // descriptive and must NOT classify as a dispatchable frame (and
+    // must no longer carry the dead clientAccepts vocabulary).
+    expect(parseInputEnvelope(fixture.name, fixture.inputEnvelope).kind).toBe('none');
+    expect(isRecord(fixture.inputEnvelope) && 'clientAccepts' in fixture.inputEnvelope).toBe(
+      false,
+    );
+    expect(fixture.expectedBehavior).toEqual({
+      kind: 'bootstrap-success',
+      serverVersion: 'current',
+    });
+  });
+
+  it("version-mismatch overrides the advertised version to a value outside the 'current' declaration", () => {
+    // The rejection must be attributable to the override seam alone:
+    // the subscribe declares the SAME 'current' set as version-match,
+    // and the override value can never be the compiled canonical — so
+    // a server whose override seam silently no-ops acks and the
+    // fixture FAILS (no UPGRADE_REQUIRED), rather than passing on a
+    // rejection its real version would also have produced.
+    const fixture = allFixtures.find((f) => f.name === 'version-mismatch');
+    expect(fixture).toBeDefined();
+    if (fixture === undefined) return;
+    expect(fixture.subscribe).toEqual({ supportedVersions: 'current' });
+    const override = fixture.setup.find((s) => s.type === 'server-version-override');
+    expect(override).toBeDefined();
+    if (override === undefined || override.type !== 'server-version-override') return;
+    expect(override.advertiseVersion).not.toBe(PROTOCOL_SCHEMA_VERSION);
+    expect(parseInputEnvelope(fixture.name, fixture.inputEnvelope).kind).toBe('none');
+    const behavior = fixture.expectedBehavior;
+    expect(behavior.kind).toBe('version-mismatch');
+    if (!behaviorIs(behavior, 'version-mismatch')) return;
+    expect(behavior.serverVersion).toBe(override.advertiseVersion);
   });
 });

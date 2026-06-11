@@ -384,17 +384,46 @@ export interface BootstrapFailureBehavior {
  */
 export interface BootstrapSuccessBehavior {
   readonly kind: 'bootstrap-success';
+  /**
+   * Optional ack-field assertion — the server half of SPEC §12.2.2's
+   * version handshake. When authored, the subscribe `ack`'s
+   * `payload.serverVersion` MUST be present and equal the expected
+   * version; an ack that omits the field (legacy-pass-through) or
+   * advertises a different version FAILS the fixture.
+   *
+   * The only authored value is the `'current'` sentinel: the matcher
+   * resolves it to `PROTOCOL_SCHEMA_VERSION`, the canonical schema
+   * version this kit release was compiled against
+   * (`@ggui-ai/protocol`) — the same resolution
+   * {@link SubscribeFrameShaping.supportedVersions} uses, so the
+   * declared set and the asserted advertisement can never drift.
+   * Evergreen by construction; a fixture pinning a version literal
+   * would go stale at the next protocol bump. An explicit-literal arm
+   * can land additively if a fixture ever needs one.
+   *
+   * Absent → the assertion is ack presence alone (plus no error
+   * frame), the pre-handshake bootstrap claim.
+   */
+  readonly serverVersion?: 'current';
 }
 
 /**
- * Expect a version-handshake rejection. Maps to the
- * `{type:'ggui:upgrade-required', server, client}` postMessage
- * envelope + the renderer's {@link ProtocolError} kind `'version'`.
+ * Expect a version-handshake rejection — an `error` frame with
+ * `payload.code === 'UPGRADE_REQUIRED'` (SPEC §12.2.2) after the
+ * runner's subscribe. The client-side declaration that PROVOKES the
+ * rejection is NOT authored here — it lives on the fixture's
+ * {@link SubscribeFrameShaping.supportedVersions} knob, the single
+ * place the runner sources its subscribe declaration from.
  */
 export interface VersionMismatchBehavior {
   readonly kind: 'version-mismatch';
+  /**
+   * Version the server is expected to be advertising when it rejects
+   * — for the shipped fixture, the value its `server-version-override`
+   * setup directive installed. Surfaced in failure diagnostics so a
+   * miss names the version the override should have advertised.
+   */
   readonly serverVersion: string;
-  readonly clientAccepts: readonly string[];
 }
 
 /**
@@ -497,6 +526,25 @@ export interface SubscribeFrameShaping {
    * conventional `appId: 'conformance'`.
    */
   readonly omitAppId?: boolean;
+  /**
+   * Protocol schema versions the runner DECLARES on its subscribe
+   * payload (`SubscribePayload.supportedVersions`) — the client half
+   * of SPEC §12.2.2's opt-in version handshake.
+   *
+   *   - Absent → the runner declares nothing; the subscribe is
+   *     version-agnostic (legacy-pass-through), exactly as before the
+   *     handshake existed.
+   *   - `'current'` (sentinel) → the runner resolves the declaration
+   *     to `[PROTOCOL_SCHEMA_VERSION]`, the canonical schema version
+   *     this kit release was compiled against (`@ggui-ai/protocol`).
+   *     The sentinel keeps fixtures evergreen across protocol version
+   *     bumps — no fixture pins a version literal that goes stale.
+   *   - Explicit `string[]` → declared on the wire verbatim.
+   *
+   * The runner's validating parse rejects any other shape as a
+   * fixture-authoring error (closed vocabulary, like {@link SetupStep}).
+   */
+  readonly supportedVersions?: 'current' | readonly string[];
 }
 
 /**

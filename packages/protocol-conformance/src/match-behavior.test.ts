@@ -6,7 +6,10 @@
  * `action-ack` (asserts the action's ack frame carries the consume-
  * buffer append sequence), `error-frame` (asserts an `error` frame
  * with the expected `payload.code`, the generalized read the
- * `version-mismatch` arm narrows to `UPGRADE_REQUIRED`), and
+ * `version-mismatch` arm narrows to `UPGRADE_REQUIRED`),
+ * `bootstrap-success` (subscribe → ack, with the optional
+ * `serverVersion: 'current'` ack-advertisement assertion resolved
+ * against the kit's compiled `PROTOCOL_SCHEMA_VERSION`), and
  * `stream-update` (asserts the canonical channel-3 delivery frame
  * `{type:'data', payload: StreamEnvelope}`, with exact-vs-subset
  * value matching via `valueMatch`). Path-B kinds, the stateful
@@ -15,11 +18,13 @@
  * vocabulary remain `unmatchable-on-ws`; this file pins that contract
  * too.
  */
+import { PROTOCOL_SCHEMA_VERSION } from '@ggui-ai/protocol';
 import { describe, expect, it } from 'vitest';
 
 import { matchBehavior } from './match-behavior.js';
 import type {
   ActionAckBehavior,
+  BootstrapSuccessBehavior,
   ErrorFrameBehavior,
   StreamUpdateBehavior,
 } from './types.js';
@@ -29,10 +34,12 @@ function frame(parsed: Record<string, unknown>): ObservedFrame {
   return { kind: 'frame', raw: JSON.stringify(parsed), parsed };
 }
 
-/** The subscribe ack the runner's own subscribe frame produces. */
+/** The subscribe ack the runner's own subscribe frame produces —
+ *  advertising the canonical schema version, as first-party servers
+ *  do on every successful ack (SPEC §12.2.2). */
 const SUBSCRIBE_ACK: ObservedFrame = frame({
   type: 'ack',
-  payload: { serverVersion: '1.1' },
+  payload: { serverVersion: PROTOCOL_SCHEMA_VERSION },
   requestId: 'conformance-subscribe-fixture',
 });
 
@@ -164,11 +171,70 @@ describe('matchBehavior — version-mismatch rides the error-frame read', () => 
       {
         kind: 'version-mismatch',
         serverVersion: '99.99-unsupported',
-        clientAccepts: ['1.1'],
       },
       frames,
     );
     expect(result.kind).toBe('pass');
+  });
+});
+
+describe('matchBehavior — bootstrap-success', () => {
+  it('passes on an ack with no error frame (versionless claim)', () => {
+    const behavior: BootstrapSuccessBehavior = { kind: 'bootstrap-success' };
+    expect(matchBehavior(behavior, [SUBSCRIBE_ACK]).kind).toBe('pass');
+  });
+
+  it('fails when no ack is observed', () => {
+    const behavior: BootstrapSuccessBehavior = { kind: 'bootstrap-success' };
+    expect(matchBehavior(behavior, []).kind).toBe('fail');
+  });
+
+  it('fails when an error frame accompanies the observation window', () => {
+    const behavior: BootstrapSuccessBehavior = { kind: 'bootstrap-success' };
+    const frames: readonly ObservedFrame[] = [
+      frame({ type: 'error', payload: { code: 'SESSION_NOT_FOUND', message: 'gone' } }),
+    ];
+    expect(matchBehavior(behavior, frames).kind).toBe('fail');
+  });
+
+  describe("serverVersion: 'current' — the SPEC §12.2.2 ack-advertisement assertion", () => {
+    const behavior: BootstrapSuccessBehavior = {
+      kind: 'bootstrap-success',
+      serverVersion: 'current',
+    };
+
+    it('passes when the ack advertises the compiled canonical PROTOCOL_SCHEMA_VERSION', () => {
+      expect(matchBehavior(behavior, [SUBSCRIBE_ACK]).kind).toBe('pass');
+    });
+
+    it('fails when the ack omits payload.serverVersion — a versionless ack proves only the pre-handshake path', () => {
+      const frames: readonly ObservedFrame[] = [
+        frame({
+          type: 'ack',
+          payload: { sequence: 0, timestamp: 1760000000000 },
+          requestId: 'conformance-subscribe-version-match',
+        }),
+      ];
+      const result = matchBehavior(behavior, frames);
+      expect(result.kind).toBe('fail');
+      if (result.kind !== 'fail') return;
+      expect(result.message).toContain('does not advertise');
+      expect(result.message).toContain(PROTOCOL_SCHEMA_VERSION);
+    });
+
+    it('fails when the ack advertises a stale / different version', () => {
+      const frames: readonly ObservedFrame[] = [
+        frame({
+          type: 'ack',
+          payload: { serverVersion: '1.0-stale' },
+        }),
+      ];
+      const result = matchBehavior(behavior, frames);
+      expect(result.kind).toBe('fail');
+      if (result.kind !== 'fail') return;
+      expect(result.message).toContain('1.0-stale');
+      expect(result.message).toContain(PROTOCOL_SCHEMA_VERSION);
+    });
   });
 });
 

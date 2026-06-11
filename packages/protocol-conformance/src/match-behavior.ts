@@ -34,10 +34,17 @@
  *
  * v1 Path-A scope:
  *
- *   - `bootstrap-success` — subscribe produced an `ack` frame.
+ *   - `bootstrap-success` — subscribe produced an `ack` frame. When
+ *     the behavior authors `serverVersion: 'current'`, the ack MUST
+ *     additionally advertise `payload.serverVersion` equal to the
+ *     kit's compiled `PROTOCOL_SCHEMA_VERSION` — the server half of
+ *     SPEC §12.2.2's version handshake (the `version-match` fixture's
+ *     happy-path claim).
  *   - `version-mismatch` — subscribe produced an `error` frame with
  *     `code: 'UPGRADE_REQUIRED'` (the generic error-frame read
- *     narrowed to one code).
+ *     narrowed to one code). The provoking client declaration travels
+ *     on the fixture's `subscribe.supportedVersions` knob, not on
+ *     this behavior.
  *   - `action-ack`     — the action's `ack` frame (matched by echoed
  *     `requestId`) carries a numeric `payload.sequence` — proof the
  *     event persisted to the GguiSession's consume buffer.
@@ -80,6 +87,7 @@
  * cannot drive. Grading it needs an MCP-binding driver; that gap is
  * declared here rather than papered over with a weaker assertion.
  */
+import { PROTOCOL_SCHEMA_VERSION } from '@ggui-ai/protocol';
 import type { StreamEnvelope } from '@ggui-ai/protocol';
 
 import { isRecord } from './is-record.js';
@@ -186,7 +194,7 @@ export function matchBehavior(
 // =============================================================================
 
 function matchBootstrapSuccess(
-  _behavior: BootstrapSuccessBehavior,
+  behavior: BootstrapSuccessBehavior,
   frames: readonly ObservedFrame[],
 ): MatchResult {
   const ack = frames.find(
@@ -214,6 +222,27 @@ function matchBootstrapSuccess(
       message:
         'expected bootstrap-success but received an error frame — the subscribe was rejected.',
     };
+  }
+  // Optional ack-field assertion (`serverVersion: 'current'`) — the
+  // server half of SPEC §12.2.2: a successful ack MUST advertise
+  // `payload.serverVersion` equal to the kit's compiled canonical.
+  // An ack that omits the field is legacy-pass-through on the wire,
+  // but a fixture authoring this assertion is grading the handshake
+  // — silence does not satisfy it.
+  if (behavior.serverVersion === 'current') {
+    const payload = ack.kind === 'frame' ? ack.parsed['payload'] : undefined;
+    const advertised = isRecord(payload) ? payload['serverVersion'] : undefined;
+    if (advertised !== PROTOCOL_SCHEMA_VERSION) {
+      return {
+        kind: 'fail',
+        expected: { type: 'ack', payload: { serverVersion: PROTOCOL_SCHEMA_VERSION } },
+        received: { ackFrame: ack.kind === 'frame' ? ack.parsed : ack },
+        message:
+          advertised === undefined
+            ? `ack does not advertise \`payload.serverVersion\` — the fixture asserts the SPEC §12.2.2 server half (advertise '${PROTOCOL_SCHEMA_VERSION}' on every successful ack); a versionless ack proves only the pre-handshake subscribe path.`
+            : `ack advertises \`payload.serverVersion\` ${JSON.stringify(advertised)} but the kit's compiled canonical is '${PROTOCOL_SCHEMA_VERSION}'.`,
+      };
+    }
   }
   return { kind: 'pass' };
 }
