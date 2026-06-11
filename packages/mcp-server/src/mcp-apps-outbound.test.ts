@@ -18,6 +18,7 @@ import {
   GGUI_RENDER_RESOURCE_MIME,
   parseMcpAppAiGguiRenderMeta,
 } from '@ggui-ai/protocol/integrations/mcp-apps';
+import { isRecord } from '@ggui-ai/protocol';
 import { createHash } from 'node:crypto';
 import {
   GGUI_RENDER_SHELL_HTML,
@@ -233,8 +234,10 @@ describe('end-to-end outbound flow', () => {
     const result = await handshakeAndRender(client, 'test render');
 
     // structuredContent is model-facing — bootstrap fields must NOT appear.
-    const sc = result.structuredContent as Record<string, unknown>;
-    expect(sc).toBeDefined();
+    const sc = result.structuredContent;
+    if (!isRecord(sc)) {
+      throw new Error('expected a structuredContent object');
+    }
     const scKeys = Object.keys(sc);
     for (const bootstrapKey of [
       'wsUrl',

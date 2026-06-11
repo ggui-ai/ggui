@@ -390,8 +390,6 @@ describe('Report Generator', () => {
       },
       estimatedCostUsd: 0.015,
       timestamp: '2026-03-15T00:00:00Z',
-      floor: 'oss',
-      pathUsage: { capHit: false },
       generator: 'ui-gen-default-haiku-4-5',
     },
     {
@@ -411,8 +409,6 @@ describe('Report Generator', () => {
       },
       estimatedCostUsd: 0.027,
       timestamp: '2026-03-15T00:00:00Z',
-      floor: 'oss',
-      pathUsage: { capHit: false },
       generator: 'ui-gen-default-haiku-4-5',
     },
     {
@@ -423,8 +419,6 @@ describe('Report Generator', () => {
       estimatedCostUsd: 0,
       error: 'Timeout after 300000ms',
       timestamp: '2026-03-15T00:00:00Z',
-      floor: 'oss',
-      pathUsage: { capHit: false },
       generator: 'ui-gen-default-haiku-4-5',
     },
   ];

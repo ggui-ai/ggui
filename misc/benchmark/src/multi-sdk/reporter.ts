@@ -13,11 +13,9 @@ import type {
   SdkComparisonEntry,
 } from '@ggui-ai/shared';
 import type {
-  BenchmarkFloor,
   BenchmarkReport,
   BenchmarkRunResult,
   CommitSummary,
-  FloorSummary,
   GeneratorComparisonCell,
   GeneratorComparisonMatrix,
   GeneratorSummary,
@@ -54,7 +52,6 @@ export function generateReport(
     variantSummaries: buildVariantSummaries(results),
     commitSummaries: buildCommitSummaries(results),
     sdkComparison: buildSdkComparison(results),
-    floorSummaries: buildFloorSummaries(results),
     byGenerator: buildGeneratorComparisonMatrix(results),
     generatorSummaries: buildGeneratorSummaries(results),
   };
@@ -141,10 +138,10 @@ function aggregateGeneratorCell(input: {
 }
 
 /**
- * Build per-generator cross-(commit, sdk) summaries. Symmetric to
- * {@link buildFloorSummaries} but keyed by generator slug. One entry
- * per distinct slug; deterministic order with the default seed first
- * when present so side-by-side reads "default → advanced."
+ * Build per-generator cross-(commit, sdk) summaries, keyed by
+ * generator slug. One entry per distinct slug; deterministic order
+ * with the default seed first when present so side-by-side reads
+ * "default → advanced."
  */
 export function buildGeneratorSummaries(
   results: BenchmarkRunResult[],
@@ -184,74 +181,6 @@ export function buildGeneratorSummaries(
     return a.generator.localeCompare(b.generator);
   });
   return summaries;
-}
-
-/**
- * Build per-floor side-by-side summaries. Present on every report;
- * when the run only exercised one floor, the array is length 1.
- *
- * See `FloorSummary` in `types.ts` for field semantics — in particular
- * the "cap-hit rate counts all runs, generation metrics count only
- * successful runs" split that matches the existing `VariantSummary`
- * convention.
- */
-export function buildFloorSummaries(
-  results: BenchmarkRunResult[],
-): FloorSummary[] {
-  const byFloor = new Map<BenchmarkFloor, BenchmarkRunResult[]>();
-  for (const r of results) {
-    const bucket = byFloor.get(r.floor) ?? [];
-    bucket.push(r);
-    byFloor.set(r.floor, bucket);
-  }
-  const summaries: FloorSummary[] = [];
-  for (const [floor, runs] of byFloor) {
-    const generated = runs.filter((r) => r.generation !== null);
-    const evaluated = runs.filter((r) => r.evaluation !== null);
-    const scores = evaluated
-      .map((r) => r.evaluation!.finalScore)
-      .filter((s): s is number => typeof s === 'number');
-    const times = generated.map((r) => r.generation!.generationTimeMs);
-    const capHits = runs.filter((r) => r.pathUsage.capHit).length;
-
-    // Error buckets — sum across all runs on this floor that carry a
-    // breakdown (the harness path populates it; older adapter-raw
-    // paths may not). Runs without a breakdown contribute zero; they
-    // don't regress the aggregate.
-    const buckets = { pass: 0, patchInvalid: 0, selfCheckFail: 0, diffFail: 0 };
-    for (const r of runs) {
-      const gen = r.generation as { breakdown?: { outcomes: typeof buckets } } | null;
-      const o = gen?.breakdown?.outcomes;
-      if (!o) continue;
-      buckets.pass += o.pass;
-      buckets.patchInvalid += o.patchInvalid;
-      buckets.selfCheckFail += o.selfCheckFail;
-      buckets.diffFail += o.diffFail;
-    }
-
-    summaries.push({
-      floor,
-      runs: runs.length,
-      avgTimeMs: times.length > 0 ? avg(times) : 0,
-      avgScore: scores.length > 0 ? avg(scores) : -1,
-      successRate: runs.length > 0 ? generated.length / runs.length : 0,
-      capHitRate: runs.length > 0 ? capHits / runs.length : 0,
-      errorBuckets: buckets,
-    });
-  }
-  // Deterministic order: oss before hosted so side-by-side reads
-  // "baseline → hosted" left to right.
-  summaries.sort((a, b) => floorSortKey(a.floor) - floorSortKey(b.floor));
-  return summaries;
-}
-
-function floorSortKey(floor: BenchmarkFloor): number {
-  switch (floor) {
-    case 'oss':
-      return 0;
-    case 'hosted':
-      return 1;
-  }
 }
 
 /**
@@ -632,10 +561,6 @@ export function toDisplayReport(
     ),
     commitSummaries: report.commitSummaries.map(mapCommitSummary),
     sdkComparison: mapSdkComparison(report.sdkComparison),
-    // Propagate floorSummaries as-is — the internal and display
-    // shapes are intentionally identical (see `FloorSummary` in
-    // `./types.ts` vs `FloorSummaryDisplay` in `@ggui-ai/shared`).
-    floorSummaries: report.floorSummaries,
     // Propagate the per-generator breakdown as-is. Internal and
     // display shapes match by construction (see types.ts vs
     // `GeneratorComparisonCellDisplay` / `GeneratorSummaryDisplay`).

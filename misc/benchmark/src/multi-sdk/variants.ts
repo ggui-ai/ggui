@@ -1,40 +1,8 @@
 // core/src/benchmarks/multi-sdk/variants.ts
 
-import type { BenchmarkFloor, BenchmarkVariant } from './types';
+import type { BenchmarkVariant } from './types';
 import { ADVANCED_GENERATOR_SLUG, DEFAULT_GENERATOR_SLUG } from './types';
 import type { AdapterMode, ProviderName } from '@ggui-ai/ui-gen/adapters/types';
-
-/**
- * Return a copy of the given variants tagged with a floor. When the
- * floor is omitted, variants pass through unchanged — which preserves
- * the pre-floor default (OSS semantics, no id suffix). When a floor is
- * provided, each variant's `floor` field is set and its `id` is suffixed
- * with the floor so multi-floor runs produce unambiguously-named rows.
- *
- * Idempotent on the id: if a variant's id already ends with the floor
- * suffix (e.g., re-applying the same floor), the suffix is not doubled.
- *
- * This is the single choke-point for "add a floor dimension." Variants
- * built by {@link getDefaultVariants} etc. stay floor-unaware; the
- * bench entry script calls `applyFloor` once per configured floor and
- * concatenates. Keeping the decision in one place is what lets us
- * later extract to `@ggui-ai/benchmarks` without chasing scattered
- * `variant.id + '-' + floor` string-concats.
- */
-export function applyFloor(
-  variants: readonly BenchmarkVariant[],
-  floor: BenchmarkFloor | undefined,
-): BenchmarkVariant[] {
-  if (floor === undefined) {
-    return variants.map((v) => ({ ...v }));
-  }
-  const suffix = `-${floor}`;
-  return variants.map((v) => ({
-    ...v,
-    floor,
-    id: v.id.endsWith(suffix) ? v.id : v.id + suffix,
-  }));
-}
 
 /**
  * Default benchmark variants: 9 combinations (3 SDKs x 3 tiers).

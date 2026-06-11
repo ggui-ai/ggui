@@ -24,7 +24,12 @@
  *      per-session counter across emission sites.
  */
 import { describe, it, expect, vi } from 'vitest';
-import type { ActionEnvelope, ActionSpec, StreamEnvelope } from '@ggui-ai/protocol';
+import type {
+  ActionEnvelope,
+  ActionSpec,
+  StreamEnvelope,
+  ValidationResult,
+} from '@ggui-ai/protocol';
 import { PROTOCOL_SCHEMA_VERSION } from '@ggui-ai/protocol';
 import { buildWireConfig, StreamBus } from './wire-config';
 import type { BuildWireConfigOptions } from './wire-config';
@@ -154,10 +159,15 @@ describe('buildWireConfig — actionSpec resolution + validation', () => {
     // dispatch never trips the iframe's no-`unsafe-eval` CSP. The seam
     // contract: receives (resolved spec, built envelope), and its
     // verdict decides emit-vs-violate.
-    const validateEnvelope = vi.fn(() => ({
-      valid: false,
-      violations: [],
-    }));
+    const validateEnvelope = vi.fn(
+      (
+        _actionSpec: ActionSpec | undefined,
+        _envelope: ActionEnvelope,
+      ): ValidationResult => ({
+        valid: false,
+        violations: [],
+      }),
+    );
     const { emitted, violations, cfg } = makeConfig({
       getActiveActionSpec: () => SPEC_EMAIL,
       validateEnvelope,

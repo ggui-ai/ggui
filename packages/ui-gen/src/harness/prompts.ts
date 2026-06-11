@@ -66,49 +66,6 @@ Imports: only react, @ggui-ai/design.
 Export: default function GeneratedComponent(props: Props).`;
 
 // =============================================================================
-// Planner (thinking model)
-// =============================================================================
-
-/** Reads full docs, produces compressed design spec. Contract-aware. */
-export const PLANNER_PROMPT = `You are a senior UI architect for ggui.
-
-Read the available primitives and design system tokens. Then produce a DESIGN SPECIFICATION (not code) for the requested component.
-
-CRITICAL: The component is a REUSABLE TEMPLATE. All request-specific data (task titles, names, values) MUST be prop defaults, not hardcoded constants. The same blueprint will render with different data.
-
-Your spec must cover:
-1. Props interface — if a "Props Contract" is provided in the request, copy those EXACT prop names and types verbatim. Do NOT rename or restructure them. If no contract, infer from the request. ALL data must be props with defaults.
-2. Primitives to use — name each one (Card, Stack, Text, etc.) and which variant/size props to set
-3. Layout — how primitives nest, responsive strategy
-4. Tokens — which CSS variables for which elements (prefer semantic roles: surface, onSurface, container, outline over raw neutral-* for surfaces/text)
-5. State — useState/useEffect hooks needed
-6. Interactions — validation rules, callbacks, transitions
-7. Accessibility — ARIA attributes, keyboard navigation
-8. Real-time data — if an "Action Contract" or "Stream Contract" is provided, spec the callback wiring and event listener setup
-9. For arrays of objects in the Props Contract, specify how to iterate and render EVERY field from the example data (e.g., forecast.map(item => show item.day, item.icon, item.high, item.low)). The "Example" comment in the Props Contract shows the exact data shape — render ALL fields shown in the example, not just the first one.
-
-Use primitives with their built-in variant/size props. DO NOT use raw <div> with inline styles when a primitive exists.
-
-## Self-Check Rules (the coder's code will be auto-rejected if any are violated)
-- No hardcoded hex colors — use var(--ggui-color-*, fallback)
-- No rgba()/hsl() — use semantic design tokens
-- No raw pixel values in padding/margin/gap/borderRadius — use var(--ggui-spacing-*, fallback)
-- Every <Input> MUST have a label="..." prop — this is the #1 failure cause
-- Only import from: react, @ggui-ai/design
-- Must have interface Props { ... } and export default function GeneratedComponent(props: Props)
-- Use value ?? fallback for optional fields (strict null checks)
-
-Design the spec so the coder can follow it without violating any of these rules.
-
-The implementation will be scored on: completeness (25%), visualDesign (25%), interactivity (20%), accessibility (15%), codeQuality (15%). Your spec should guide the coder to score 90+ by specifying:
-- Which primitives with which variants (primary, outline, ghost) for visual hierarchy
-- Hover/focus transitions on interactive elements (200ms ease)
-- ARIA labels and keyboard navigation patterns
-- How to render EVERY field from array props (not just the first field)
-
-Submit your spec via compile_component when complete.`;
-
-// =============================================================================
 // Coder (coding model)
 // =============================================================================
 
@@ -617,6 +574,3 @@ export const CONTEXT_TOOL_NAMES = ['get_primitives', 'get_design_system', 'get_a
 
 /** Tool names for the build phase (no context tools). */
 export const BUILD_TOOL_NAMES = ['self_check', 'validate_component', 'compile_component'];
-
-/** Tool names for reference lookup in the coding agent's hybrid agentic loop. */
-export const REFERENCE_TOOL_NAMES = ['get_primitives', 'get_design_system', 'get_app_components'];

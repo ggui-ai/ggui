@@ -19,6 +19,7 @@
  * `packages/console/src/routes/GguiSessionViewer.test.tsx`.
  */
 import { afterEach, describe, expect, it } from 'vitest';
+import { isRecord } from '@ggui-ai/protocol';
 import type { Server as HttpServer } from 'node:http';
 import { InMemoryAuthAdapter } from '@ggui-ai/mcp-server-core/in-memory';
 import {
@@ -223,14 +224,17 @@ describe('GET /ggui/console/sessions/:sessionId/meta', () => {
       },
     );
     expect(res.status).toBe(200);
-    const envelope = (await res.json()) as Record<string, unknown>;
+    const rawEnvelope: unknown = await res.json();
+    if (!isRecord(rawEnvelope)) {
+      throw new Error('expected a JSON object envelope');
+    }
+    const envelope = rawEnvelope;
     // Phase B collapsed the previous `ai.ggui/session` + `ai.ggui/stack-item`
     // pair to a single flat `ai.ggui/render` slice. Fields the consoles
     // previously read from `envelope['ai.ggui/session'].*` now live
     // directly on `envelope['ai.ggui/render'].*`.
-    const renderSlice = envelope['ai.ggui/render'] as
-      | Record<string, unknown>
-      | undefined;
+    const rawSlice = envelope['ai.ggui/render'];
+    const renderSlice = isRecord(rawSlice) ? rawSlice : undefined;
     expect(renderSlice).toBeDefined();
     expect(renderSlice?.['sessionId']).toBe(fx.sessionId);
     expect(renderSlice?.['appId']).toBe(fx.appId);

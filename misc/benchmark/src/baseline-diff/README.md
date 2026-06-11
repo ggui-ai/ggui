@@ -38,11 +38,11 @@ previous snapshot. `baseline-diff` is the narrow comparison tool:
 
 The four benches measure four different things:
 
-| bench       | dimension                                        |
-| ----------- | ------------------------------------------------ |
-| `slo`       | user-facing `ggui_render` latency checkpoints    |
-| `multi-sdk` | ui-gen code quality (floor-split: OSS vs hosted) |
-| `a2ui`      | provisional-preview emission latency + validity  |
+| bench       | dimension                                       |
+| ----------- | ----------------------------------------------- |
+| `slo`       | user-facing `ggui_render` latency checkpoints   |
+| `multi-sdk` | ui-gen code quality                             |
+| `a2ui`      | provisional-preview emission latency + validity |
 
 A 10-point quality regression on `multi-sdk` and a 5ms latency
 regression on `slo` are not comparable. Averaging them into a
@@ -90,8 +90,7 @@ Baseline-Diff bench-baseline-diff.v0 — baseline-… vs baseline-…
     note: after bench failed with exit code 1
 
   [multi-sdk] success → success
-    = floor=oss               avgTimeMs=12300→13100 (+800) avgScore=75→78 (+3) …
-    = floor=hosted            avgTimeMs=12000→14500 (+2500) avgScore=83→81 (-2) …
+    = generator=ui-gen-default-haiku-4-5  avgTimeMs=12300→13100 (+800) avgScore=75→78 (+3) …
 
   [a2ui] success → success
     = intentShape=form        timeToFirstFrame=0→0 frameCount=4→4 totalParseFailures=0→0
@@ -165,8 +164,8 @@ value or a note.
 Each bench has a centralized `BenchDiffSpec` at
 `diff.ts → BENCH_DIFF_SPECS` that tells the diff:
 
-- Where the summary array lives (`summary` or `floorSummaries`)
-- Which field is the group key (`path` / `floor` / `intentShape` / `registryMode`)
+- Where the summary array lives (`summary` or `generatorSummaries`)
+- Which field is the group key (`path` / `generator` / `intentShape` / `registryMode`)
 - Which fields to surface, and whether each is `scalar` or `stat`
   (nested `{count, nullCount, min, median, max}`)
 

@@ -17,6 +17,7 @@ import {
   type ChildProcess,
   type SpawnOptions,
 } from 'node:child_process';
+import { DEFAULT_DEV_HOST, DEFAULT_DEV_PORT } from '@ggui-ai/dev-stack';
 import {
   buildAgentRuntime,
   resolveAgentCommand,
@@ -43,13 +44,15 @@ export interface ParsedDevFlags {
    */
   tunnel: boolean;
   agent?: string;
+  /** `'__help__'` for `--help` / `-h`; other strings = usage error. */
   error?: string;
 }
 
 /**
  * Parse the raw `ggui dev` argv tail. Returns a discriminated
  * shape — `error` field is non-undefined when the input was
- * malformed; callers render it and bail with exit code 1.
+ * malformed (`'__help__'` is the help sentinel, mirroring
+ * `parseServeFlags`); callers render it and bail with exit code 1.
  */
 export function parseDevFlags(args: readonly string[]): ParsedDevFlags {
   const out: ParsedDevFlags = { noServe: false, noOpen: false, tunnel: false };
@@ -91,10 +94,39 @@ export function parseDevFlags(args: readonly string[]): ParsedDevFlags {
       out.agent = v;
       continue;
     }
+    if (arg === '--help' || arg === '-h') {
+      return { ...out, error: '__help__' };
+    }
     return { ...out, error: `unknown flag "${arg ?? ''}"` };
   }
   return out;
 }
+
+/** Help text for `ggui dev` — printed on `--help` / `-h`. */
+export const DEV_HELP = `ggui dev — run the local development stack
+
+Boots the local dev hub (UI registry + dev server) and, when
+\`--agent\` is supplied, supervises your agent entry alongside it.
+Sets GGUI_MODE=dev (unless already set) so the server mounts the
+/devtools/* namespace and the SPA shows the link. In an interactive
+terminal the hub URL auto-opens in your browser (skipped in CI, when
+stdout is piped, with BROWSER=none, or with --no-open).
+
+Usage:
+  ggui dev [options]
+
+Options:
+  --port <n>        Bind port (default: ${DEFAULT_DEV_PORT}, 0 = OS-assigned).
+  --host <addr>     Bind host (default: ${DEFAULT_DEV_HOST}).
+  --agent <entry>   Agent entry file to supervise (e.g. src/agent.ts).
+                    Resolved before the socket binds — bad paths fail fast.
+  --no-serve        Do not bind the HTTP dev hub; run registry-only.
+  --no-open         Skip the browser auto-open.
+  --tunnel          Opt into managed-mode: after the local stack is
+                    listening, the configured tunnel provider exposes it
+                    remotely. The local loop runs unchanged either way.
+  --help, -h        Show this help.
+`;
 
 // Agent-entry resolution + adapter construction live in
 // `./agent-resolution.ts`. They are re-exported here so call sites

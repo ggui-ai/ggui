@@ -150,7 +150,12 @@ type WithProgress = BaseContract & {
 type WithTools = BaseContract & {
   readonly agentCapabilities: {
     readonly tools: {
-      readonly search: { readonly outputSchema: Record<string, never> };
+      readonly search: {
+        readonly toolInfo: {
+          readonly inputSchema: Record<string, never>;
+          readonly outputSchema: Record<string, never>;
+        };
+      };
     };
   };
   readonly clientCapabilities: {

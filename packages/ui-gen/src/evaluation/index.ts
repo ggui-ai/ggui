@@ -47,7 +47,7 @@ export type { EvaluationLoopOptions, EvaluationLoopResult } from './loop.js';
 export { runEvaluation } from './evaluator.js';
 export { createEvaluationToolsServer, computeEvaluationScore } from './mcp-server.js';
 export type { EvaluateScoreInput } from './mcp-server.js';
-export { getEvaluatorSystemPrompt, buildEvaluatorPrompt, buildFixPrompt } from './prompts.js';
+export { getEvaluatorSystemPrompt, buildFixPrompt } from './prompts.js';
 export {
   extractEvalResult,
   extractCompiledCode,

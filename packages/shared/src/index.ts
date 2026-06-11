@@ -32,6 +32,5 @@ export type {
   BenchmarkRunResultDisplay,
   VariantSummaryDisplay,
   CommitSummaryDisplay,
-  FloorSummaryDisplay,
   SdkComparisonEntry,
 } from './types/benchmark';

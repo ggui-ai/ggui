@@ -157,15 +157,15 @@ Default output path: `tmp-bench-logs/triage-<diff-basename>.json`.
 Every test case maps to a real calibration class from
 `tmp-bench-logs/calibration-manifest.md`:
 
-| test case                      | source class                              |
-| ------------------------------ | ----------------------------------------- |
-| `N↔N same-code noise`          | N1–N4 pairs                               |
-| `N→F1 silent internal failure` | N1 → F1                                   |
-| `N→F2 process-level failure`   | N1 → F2                                   |
-| `N→R1 counter regression`      | N1 → R1 (a2ui)                            |
-| `N→R1 stat regression`         | N1 → R1 (slo)                             |
-| `schema drift → informational` | B2 → B3 multi-sdk floorSummaries recovery |
-| `malformed input → exit 2`     | synthetic                                 |
+| test case                      | source class                                  |
+| ------------------------------ | --------------------------------------------- |
+| `N↔N same-code noise`          | N1–N4 pairs                                   |
+| `N→F1 silent internal failure` | N1 → F1                                       |
+| `N→F2 process-level failure`   | N1 → F2                                       |
+| `N→R1 counter regression`      | N1 → R1 (a2ui)                                |
+| `N→R1 stat regression`         | N1 → R1 (slo)                                 |
+| `schema drift → informational` | B2 → B3 multi-sdk generatorSummaries recovery |
+| `malformed input → exit 2`     | synthetic                                     |
 
 ---
 

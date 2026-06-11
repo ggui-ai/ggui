@@ -440,9 +440,9 @@ describe('BENCH_DIFF_SPECS', () => {
     ]);
   });
 
-  it('multi-sdk points at floorSummaries (not summary)', () => {
-    expect(BENCH_DIFF_SPECS['multi-sdk'].summaryPath).toBe('floorSummaries');
-    expect(BENCH_DIFF_SPECS['multi-sdk'].keyField).toBe('floor');
+  it('multi-sdk points at generatorSummaries (not summary)', () => {
+    expect(BENCH_DIFF_SPECS['multi-sdk'].summaryPath).toBe('generatorSummaries');
+    expect(BENCH_DIFF_SPECS['multi-sdk'].keyField).toBe('generator');
   });
 
   it('the others point at summary array', () => {

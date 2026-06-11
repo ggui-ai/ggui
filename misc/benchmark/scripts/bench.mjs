@@ -28,7 +28,6 @@
  *   --visual-model   Model override for visual evaluation
  *   --quality        Quality mode: fast (default), auto-improve, high-quality
  *   --preset         Named preset: quick, full, coding-agent
- *   --floor          Floor: oss (default), hosted, both — OSS vs hosted ui-gen path
  *   --list           List available commits and exit
  *   --help, -h       Show help
  */
@@ -173,19 +172,6 @@ const visualProvider = getArg(['--visual-provider'], 'google');
 const visualModel = getArg(['--visual-model'], null);
 const qualityMode = getArg(['--quality'], 'fast');
 
-// Floor split (ui-gen bench OSS vs hosted). Both floors currently run
-// the identical path — the flag is the reporting seam for future
-// hosted-vs-OSS divergences (see multi-sdk/floor.md). `both` runs
-// every variant twice, once per floor, so the report's
-// `floorSummaries` shows side-by-side numbers.
-const floorRaw = getArg(['--floor'], 'oss');
-const FLOOR_VALUES = ['oss', 'hosted', 'both'];
-if (!FLOOR_VALUES.includes(floorRaw)) {
-  console.error(`Unknown --floor value: ${floorRaw}. Allowed: ${FLOOR_VALUES.join(', ')}`);
-  process.exit(1);
-}
-const floorsRequested = floorRaw === 'both' ? ['oss', 'hosted'] : [floorRaw];
-
 // Harness selector retired 2026-04-27 (Step 4 of the cloud→OSS
 // migration). Pre-step-4 the bench dual-routed through cloud's hardened
 // `dispatchGeneration` OR the bare `createUiGenerator` via a `--harness`
@@ -285,7 +271,6 @@ const run = async () => {
   const { LocalStorage } = await import(resolve(BENCHMARKS_DIR, 'src/multi-sdk/storage/local.ts'));
   const { BENCHMARK_COMMITS } = await import(resolve(BENCHMARKS_DIR, 'src/multi-sdk/commits.ts'));
   const { toDisplayReport } = await import(resolve(BENCHMARKS_DIR, 'src/multi-sdk/reporter.ts'));
-  const { applyFloor } = await import(resolve(BENCHMARKS_DIR, 'src/multi-sdk/variants.ts'));
   const {
     ClaudeRawAdapter,
     OpenAiRawAdapter,
@@ -338,18 +323,6 @@ const run = async () => {
       variants.push(variant);
     }
   }
-
-  // Apply floor split. When `oss` is the only floor (default), pass
-  // floor=undefined to `applyFloor` — that preserves pre-floor variant
-  // ids for continuity with historical reports. When ANY explicit
-  // floor is requested (including `--floor oss`), we tag+suffix.
-  const shouldTagFloors = floorRaw !== 'oss'; // default path stays untagged
-  const flooredVariants = shouldTagFloors
-    ? floorsRequested.flatMap((f) => applyFloor(variants, f))
-    : variants;
-  // Runner reads variant.floor (or DEFAULT_BENCHMARK_FLOOR = 'oss') —
-  // the default-oss branch above therefore still produces floor='oss'
-  // on every result, just without the id suffix.
 
   // Filter commits — FAIL LOUDLY on unknown names. Previously the filter
   // silently dropped unmatched IDs, leading to "3/3 passed" on a 4-commit
@@ -424,7 +397,7 @@ const run = async () => {
   }
 
   // Run benchmark
-  const report = await runner.run({ variants: flooredVariants, commits: selectedCommits });
+  const report = await runner.run({ variants, commits: selectedCommits });
 
   // Convert to display format and save
   const displayReport = toDisplayReport(report, reportId, 'local');
@@ -448,22 +421,6 @@ const run = async () => {
   const { meta } = report;
   console.log(`\n  ✓ Complete! ${meta.successCount}/${meta.totalRuns} passed in ${(meta.totalDurationMs / 1000).toFixed(1)}s`);
   console.log(`  Report: ${outputDir}/${reportId}.json`);
-
-  // Floor summary — side-by-side. Printed on every run (even single-
-  // floor) so the floor dimension is visible without opening JSON.
-  if (report.floorSummaries && report.floorSummaries.length > 0) {
-    console.log(`\n  Floor summary (v0 — see internal/benchmarks/src/multi-sdk/floor.md):`);
-    console.log(`    floor    runs  avgTime   avgScore  success  capHit   buckets(pass/patchInv/selfCheck/diff)`);
-    for (const fs of report.floorSummaries) {
-      const pct = (n) => (n * 100).toFixed(0).padStart(3) + '%';
-      const score = fs.avgScore < 0 ? '  n/a' : fs.avgScore.toFixed(1).padStart(5);
-      const b = fs.errorBuckets;
-      console.log(
-        `    ${fs.floor.padEnd(7)} ${String(fs.runs).padStart(4)}  ${(fs.avgTimeMs / 1000).toFixed(1).padStart(5)}s   ${score}     ${pct(fs.successRate)}     ${pct(fs.capHitRate)}    ${b.pass}/${b.patchInvalid}/${b.selfCheckFail}/${b.diffFail}`,
-      );
-    }
-    console.log('');
-  }
 };
 
 run().catch((err) => {

@@ -286,10 +286,6 @@ function mkResult(overrides: Partial<BenchmarkRunResult> = {}): BenchmarkRunResu
     },
     estimatedCostUsd: 0.01,
     timestamp: '2026-05-12T00:00:00Z',
-    floor: 'oss',
-    pathUsage: {
-      capHit: false,
-    },
     generator: DEFAULT_GENERATOR_SLUG,
     ...overrides,
   };

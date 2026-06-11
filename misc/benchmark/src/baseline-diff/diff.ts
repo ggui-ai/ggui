@@ -82,17 +82,16 @@ export const BENCH_DIFF_SPECS: Readonly<Record<BenchName, BenchDiffSpec>> = {
     ],
   },
   'multi-sdk': {
-    // Shape differs — multi-sdk uses `floorSummaries` (optional on
-    // historical reports). The diff falls back to "missing" when the
-    // field isn't present; that's not a regression, just a note.
-    summaryPath: 'floorSummaries',
-    keyField: 'floor',
+    // Shape differs — multi-sdk uses `generatorSummaries` (optional
+    // on historical reports). The diff falls back to "missing" when
+    // the field isn't present; that's not a regression, just a note.
+    summaryPath: 'generatorSummaries',
+    keyField: 'generator',
     fields: [
       { name: 'runs', kind: 'scalar' },
       { name: 'avgTimeMs', kind: 'scalar' },
       { name: 'avgScore', kind: 'scalar' },
       { name: 'successRate', kind: 'scalar' },
-      { name: 'capHitRate', kind: 'scalar' },
     ],
   },
 };

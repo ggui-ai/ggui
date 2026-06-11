@@ -1,10 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import {
   getEvaluatorSystemPrompt,
-  buildEvaluatorPrompt,
   buildFixPrompt,
 } from '../prompts';
-import type { EvaluationContext, EvaluationResult } from '../types';
+import type { EvaluationResult } from '../types';
 
 // ========================================================================
 // getEvaluatorSystemPrompt
@@ -44,83 +43,6 @@ describe('getEvaluatorSystemPrompt', () => {
     expect(prompt).toMatch(/Critical.*missing core features|broken/i);
     expect(prompt).toMatch(/Major.*accessibility|layout/i);
     expect(prompt).toMatch(/Minor.*style|naming/i);
-  });
-});
-
-// ========================================================================
-// buildEvaluatorPrompt
-// ========================================================================
-
-describe('buildEvaluatorPrompt', () => {
-  const baseContext: EvaluationContext = {
-    sourceCode: 'export default function GeneratedComponent() { return <div>Hello</div>; }',
-    compiledCode: 'import{jsx}from"react/jsx-runtime";export default function GeneratedComponent(){return jsx("div",{children:"Hello"})}',
-    originalPrompt: 'A greeting component that says Hello',
-    themeTokens: 'var(--ggui-color-primary-600, #0284c7)',
-  };
-
-  it('includes the original prompt in its own section', () => {
-    const prompt = buildEvaluatorPrompt(baseContext);
-    // Prompt should appear under a header, not just anywhere
-    expect(prompt).toMatch(/### Original User Prompt\n.*A greeting component that says Hello/s);
-  });
-
-  it('wraps source code in a TSX fenced code block', () => {
-    const prompt = buildEvaluatorPrompt(baseContext);
-    // Source code must be in a tsx code fence
-    expect(prompt).toMatch(/```tsx\n.*GeneratedComponent.*\n```/s);
-  });
-
-  it('wraps compiled code in a JavaScript fenced code block', () => {
-    const prompt = buildEvaluatorPrompt(baseContext);
-    expect(prompt).toMatch(/```javascript\n.*jsx-runtime.*\n```/s);
-  });
-
-  it('includes theme tokens', () => {
-    const prompt = buildEvaluatorPrompt(baseContext);
-    expect(prompt).toContain('--ggui-color-primary-600');
-  });
-
-  it('includes DESIGN.md section with content when provided', () => {
-    const context: EvaluationContext = {
-      ...baseContext,
-      designContext: '# Design Language\n\nClean, minimal, professional.',
-    };
-    const prompt = buildEvaluatorPrompt(context);
-    // DESIGN.md should appear as a section header with content inside
-    expect(prompt).toMatch(/### DESIGN\.md\n.*Clean, minimal, professional\./s);
-  });
-
-  it('omits DESIGN.md section entirely when not provided', () => {
-    const prompt = buildEvaluatorPrompt(baseContext);
-    expect(prompt).not.toContain('DESIGN.md');
-  });
-
-  it('instructs to call evaluate_score at the end', () => {
-    const prompt = buildEvaluatorPrompt(baseContext);
-    // Instructions should appear after the code blocks
-    const codeBlockEnd = prompt.lastIndexOf('```');
-    const evalInstruction = prompt.indexOf('evaluate_score', codeBlockEnd);
-    expect(evalInstruction).toBeGreaterThan(codeBlockEnd);
-  });
-
-  it('sections appear in logical order: prompt → context → code → instructions', () => {
-    const context: EvaluationContext = {
-      ...baseContext,
-      designContext: '# Some design',
-    };
-    const prompt = buildEvaluatorPrompt(context);
-
-    const promptIdx = prompt.indexOf('Original User Prompt');
-    const designIdx = prompt.indexOf('### DESIGN.md');
-    const sourceIdx = prompt.indexOf('### Source Code (TSX)');
-    const compiledIdx = prompt.indexOf('### Compiled Code (JS)');
-    const evalIdx = prompt.lastIndexOf('evaluate_score');
-
-    expect(promptIdx).toBeLessThan(designIdx);
-    expect(designIdx).toBeLessThan(sourceIdx);
-    expect(sourceIdx).toBeLessThan(compiledIdx);
-    expect(compiledIdx).toBeLessThan(evalIdx);
   });
 });
 

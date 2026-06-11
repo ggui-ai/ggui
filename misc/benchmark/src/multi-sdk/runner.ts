@@ -26,17 +26,14 @@ import type {
   BenchmarkCommit,
   BenchmarkCommitVariance,
   BenchmarkConfig,
-  BenchmarkFloor,
   BenchmarkReport,
   BenchmarkRunnerConfig,
   BenchmarkRunResult,
   BenchmarkVariant,
-  PathUsageMetrics,
   PostGenerationResult,
 } from "./types.js";
 import {
   ADVANCED_GENERATOR_SLUG,
-  DEFAULT_BENCHMARK_FLOOR,
   DEFAULT_GENERATOR_SLUG,
 } from "./types.js";
 import type { BenchmarkStorage } from "./storage/types.js";
@@ -235,11 +232,6 @@ export class BenchmarkRunner {
     variant: BenchmarkVariant,
     commit: BenchmarkCommit
   ): Promise<BenchmarkRunResult> {
-    // Resolve floor + path-usage scaffolding OUTSIDE the try so both
-    // success and failure paths (including catch, which the try's
-    // local bindings don't reach) can emit complete results.
-    const floor: BenchmarkFloor = variant.floor ?? DEFAULT_BENCHMARK_FLOOR;
-
     // Resolve generator slug ahead of time so every return path
     // (adapter-missing, generator-missing, success, catch) can record
     // it. Default to the OSS seed; unknown slugs fall through to an
@@ -256,10 +248,6 @@ export class BenchmarkRunner {
         estimatedCostUsd: 0,
         error: `No adapter registered for ${variant.sdkName}${variant.mode ? `/${variant.mode}` : ""}`,
         timestamp: new Date().toISOString(),
-        floor,
-        pathUsage: {
-          capHit: false,
-        } satisfies PathUsageMetrics,
         generator: generatorSlug,
       };
     }
@@ -295,10 +283,6 @@ export class BenchmarkRunner {
           estimatedCostUsd: 0,
           error: msg,
           timestamp: new Date().toISOString(),
-          floor,
-          pathUsage: {
-            capHit: false,
-          } satisfies PathUsageMetrics,
           generator: generatorSlug,
         };
       }
@@ -324,10 +308,6 @@ export class BenchmarkRunner {
         estimatedCostUsd: 0,
         error: msg,
         timestamp: new Date().toISOString(),
-        floor,
-        pathUsage: {
-          capHit: false,
-        } satisfies PathUsageMetrics,
         generator: generatorSlug,
       };
     }
@@ -353,13 +333,6 @@ export class BenchmarkRunner {
       // The harness owns its own system prompt (buildSystemPrompt in
       // harness/runtime.ts); we only need to assemble tools + the user
       // prompt context block here.
-
-      // ── Floor resolution (OSS vs hosted, v0 surface) ────
-      // Floors currently share one tool wiring — every hosted/OSS
-      // divergence (blueprint-finder wiring, preview preamble,
-      // model-routing overrides, etc.) is reserved for later slices —
-      // when they land, they branch on `floor` here. See `./floor.md`
-      // for the full caveat list.
 
       // Build tools WITH contracts so self_check and compile_component can validate
       // Pass commit.props as sampleProps for render smoke test (realistic data, not synthesized)
@@ -575,10 +548,6 @@ export class BenchmarkRunner {
         estimatedCostUsd: generation.rawCostUsd ?? estimatedCostUsd,
         timestamp: new Date().toISOString(),
         postGeneration,
-        floor,
-        pathUsage: {
-          capHit: generation.turnsUsed >= BENCH_MAX_TURNS,
-        } satisfies PathUsageMetrics,
         generator: generatorSlug,
       };
     } catch (error) {
@@ -593,13 +562,6 @@ export class BenchmarkRunner {
         estimatedCostUsd: 0,
         error: message,
         timestamp: new Date().toISOString(),
-        floor,
-        pathUsage: {
-          // Errors short-circuit before `turnsUsed` is known — treat as
-          // not-a-cap-hit. Timeouts surface via the error message on
-          // this same result; they are NOT counted as cap-hits.
-          capHit: false,
-        } satisfies PathUsageMetrics,
         generator: generatorSlug,
       };
     }
@@ -625,10 +587,9 @@ export class BenchmarkRunner {
 // =============================================================================
 
 /**
- * Turn cap passed to the generation harness. Exposed so the cap-hit
- * observable on {@link PathUsageMetrics} can stay consistent when the
- * cap moves. NOT a user-tunable yet — if you change this, grep for
- * the constant to make sure downstream dashboards are aware.
+ * Turn cap passed to the generation harness. NOT a user-tunable yet —
+ * if you change this, grep for the constant to make sure downstream
+ * dashboards are aware.
  */
 export const BENCH_MAX_TURNS = 45;
 

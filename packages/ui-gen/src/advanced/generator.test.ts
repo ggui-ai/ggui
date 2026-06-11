@@ -119,6 +119,7 @@ function makeStubResult(opts: {
     },
     metadata: {
       provider: 'anthropic',
+      generator: 'stub-default',
       model: 'claude-opus-4-7',
       inputTokens: 100,
       outputTokens: 50,
@@ -219,6 +220,7 @@ describe('createAdvancedUiGenerator — producer failure pass-through', () => {
       },
       metadata: {
         provider: 'anthropic',
+        generator: 'stub-default',
         model: 'opus-4-7',
         inputTokens: 0,
         outputTokens: 0,

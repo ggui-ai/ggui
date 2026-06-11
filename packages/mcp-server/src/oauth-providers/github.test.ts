@@ -88,9 +88,9 @@ describe('githubLoginProvider.exchangeCode', () => {
     const [tokenUrl, tokenInit] = fetchMock.mock.calls[0]!;
     expect(tokenUrl).toBe('https://github.com/login/oauth/access_token');
     expect(tokenInit?.method).toBe('POST');
-    const tokenHeaders = tokenInit?.headers as Record<string, string>;
-    expect(tokenHeaders['Accept']).toBe('application/json');
-    expect(tokenHeaders['Content-Type']).toBe(
+    const tokenHeaders = new Headers(tokenInit?.headers);
+    expect(tokenHeaders.get('Accept')).toBe('application/json');
+    expect(tokenHeaders.get('Content-Type')).toBe(
       'application/x-www-form-urlencoded',
     );
     expect(typeof tokenInit?.body).toBe('string');
@@ -103,10 +103,10 @@ describe('githubLoginProvider.exchangeCode', () => {
 
     const [userUrl, userInit] = fetchMock.mock.calls[1]!;
     expect(userUrl).toBe('https://api.github.com/user');
-    const userHeaders = userInit?.headers as Record<string, string>;
-    expect(userHeaders['Authorization']).toBe('Bearer gho_xyz');
-    expect(userHeaders['Accept']).toBe('application/vnd.github+json');
-    expect(userHeaders['User-Agent']).toBe('ggui-oss-server');
+    const userHeaders = new Headers(userInit?.headers);
+    expect(userHeaders.get('Authorization')).toBe('Bearer gho_xyz');
+    expect(userHeaders.get('Accept')).toBe('application/vnd.github+json');
+    expect(userHeaders.get('User-Agent')).toBe('ggui-oss-server');
   });
 
   it('falls back to /user/emails when /user has null email and user:email is in scope', async () => {

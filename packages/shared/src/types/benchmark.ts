@@ -11,22 +11,13 @@ export interface BenchmarkReportDisplay {
   commitSummaries: CommitSummaryDisplay[];
   sdkComparison: Record<string, Record<string, SdkComparisonEntry>>;
   /**
-   * Per-floor summary view — OSS vs hosted. Optional because
-   * pre-floor-split reports (historical) don't carry it, and
-   * single-floor runs emit a length-1 array. Field shape matches
-   * `FloorSummary` in `@ggui-ai/benchmark/multi-sdk/types`;
-   * duplicated here instead of cross-imported so shared types stay
-   * free of the core workspace dep.
-   */
-  floorSummaries?: FloorSummaryDisplay[];
-  /**
    * Per-generator comparison matrix —
    * `byGenerator[slug][commitId][sdkName]` = aggregate metrics.
    * Optional because older reports don't carry it; single-generator
    * runs emit a one-key map. Field shape matches
    * `GeneratorComparisonMatrix` in `@ggui-ai/benchmark/multi-sdk/types`;
-   * duplicated here for the same dep-isolation reason as
-   * `floorSummaries`.
+   * duplicated here instead of cross-imported so shared types stay
+   * free of the core workspace dep.
    */
   byGenerator?: Record<
     string,
@@ -67,21 +58,6 @@ export interface GeneratorSummaryDisplay {
   avgTimeMs: number;
   avgCostUsd: number;
   successRate: number;
-}
-
-export interface FloorSummaryDisplay {
-  floor: 'oss' | 'hosted';
-  runs: number;
-  avgTimeMs: number;
-  avgScore: number;
-  successRate: number;
-  capHitRate: number;
-  errorBuckets: {
-    pass: number;
-    patchInvalid: number;
-    selfCheckFail: number;
-    diffFail: number;
-  };
 }
 
 export interface BenchmarkMeta {

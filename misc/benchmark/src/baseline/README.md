@@ -11,11 +11,11 @@ a snapshot, not a new scoring layer.
 
 ## What it runs
 
-| bench       | how                                                 |
-| ----------- | --------------------------------------------------- |
-| `slo`       | `pnpm bench:slo --runs 3`                           |
-| `multi-sdk` | `pnpm bench -p claude -c weather-card --floor both` |
-| `a2ui`      | `pnpm bench:a2ui --runs 3`                          |
+| bench       | how                                    |
+| ----------- | -------------------------------------- |
+| `slo`       | `pnpm bench:slo --runs 3`              |
+| `multi-sdk` | `pnpm bench -p claude -c weather-card` |
+| `a2ui`      | `pnpm bench:a2ui --runs 3`             |
 
 `multi-sdk` is the only bench requiring real LLM API keys
 (ANTHROPIC/OPENAI/GEMINI). When they're absent the bench fails; the
@@ -80,7 +80,7 @@ On failure:
 {
   "benchName": "multi-sdk",
   "status": "failed",
-  "command": "pnpm bench -p claude -c weather-card --floor both",
+  "command": "pnpm bench -p claude -c weather-card",
   "outputPath": null,
   "bundlePath": null,
   "exitCode": 1,
@@ -133,7 +133,7 @@ matrix (`multi-sdk`). Post-split, the stack is orthogonal layers,
 each answering a different question:
 
 - `slo` — does `ggui_render` hit its user-facing latency checkpoints?
-- `multi-sdk` — does ui-gen produce quality output? (floor-split: OSS vs hosted)
+- `multi-sdk` — does ui-gen produce quality output?
 - `a2ui` — does the provisional-preview path emit valid frames quickly?
 
 The baseline bundle is the authoritative cross-layer snapshot — a

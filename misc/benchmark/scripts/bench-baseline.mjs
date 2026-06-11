@@ -76,21 +76,12 @@ function buildSpecs(runs) {
     },
     {
       benchName: 'multi-sdk',
-      // Default multi-sdk baseline: single provider/commit under
-      // `--floor both` — gives OSS + hosted rows in one run without
-      // exploding the bench into a full matrix. The user can still
-      // invoke bench.mjs directly for a wider run.
-      command: 'pnpm bench -p claude -c weather-card --floor both',
-      argv: [
-        'pnpm',
-        'bench',
-        '-p',
-        'claude',
-        '-c',
-        'weather-card',
-        '--floor',
-        'both',
-      ],
+      // Default multi-sdk baseline: single provider/commit — keeps
+      // the baseline cheap without exploding the bench into a full
+      // matrix. The user can still invoke bench.mjs directly for a
+      // wider run.
+      command: 'pnpm bench -p claude -c weather-card',
+      argv: ['pnpm', 'bench', '-p', 'claude', '-c', 'weather-card'],
       // multi-sdk uses a different log prefix: "Report: <path>"
       stdoutPattern: /Report: (.+\.json)/,
       extractSummary: extractMultiSdkSummary,

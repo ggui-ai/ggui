@@ -31,7 +31,11 @@ import {
   STDLIB_GADGET_HOOKS,
   gadgetExportName,
 } from '@ggui-ai/protocol';
-import type { GadgetExport, GadgetStatus } from '@ggui-ai/protocol';
+import type {
+  GadgetExport,
+  GadgetHookExport,
+  GadgetStatus,
+} from '@ggui-ai/protocol';
 import * as gadgets from './index.js';
 
 /**
@@ -92,7 +96,7 @@ function allStdlibExports(): readonly GadgetExport[] {
 /** Hook-export names across every stdlib gadget package. */
 function allStdlibHookNames(): readonly string[] {
   return allStdlibExports()
-    .filter((exp) => 'hook' in exp)
+    .filter((exp): exp is GadgetHookExport => 'hook' in exp)
     .map((exp) => exp.hook);
 }
 

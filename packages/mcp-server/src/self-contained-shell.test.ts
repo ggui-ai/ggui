@@ -27,6 +27,7 @@ import { buildSelfContainedShell } from './mcp-apps-outbound.js';
 import {
   MCP_APP_AI_GGUI_RENDER_META_KEY,
 } from '@ggui-ai/protocol/integrations/mcp-apps';
+import { isRecord } from '@ggui-ai/protocol';
 
 /**
  * Pull the slice envelope out of the shell HTML's
@@ -45,9 +46,8 @@ function extractInlineRenderSlice(
   html: string,
 ): Record<string, unknown> | undefined {
   const envelope = extractInlineSliceEnvelope(html);
-  return envelope[MCP_APP_AI_GGUI_RENDER_META_KEY] as
-    | Record<string, unknown>
-    | undefined;
+  const slice = envelope[MCP_APP_AI_GGUI_RENDER_META_KEY];
+  return isRecord(slice) ? slice : undefined;
 }
 
 /**
@@ -69,7 +69,11 @@ function extractInlineSliceEnvelope(html: string): Record<string, unknown> {
     .replace(/\\u0026/g, '&')
     .replace(/\\u2028/g, '\\n')
     .replace(/\\u2029/g, '\\n');
-  return JSON.parse(raw) as Record<string, unknown>;
+  const parsed: unknown = JSON.parse(raw);
+  if (!isRecord(parsed)) {
+    throw new Error('inline bootstrap is not a JSON object');
+  }
+  return parsed;
 }
 
 const SAMPLE_RUNTIME_URL = '/_ggui/iframe-runtime.js';

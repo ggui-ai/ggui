@@ -8,7 +8,7 @@
  *     produces `null`, never a crash.
  *   - No normalization across benches. Each bench's summary is
  *     diffed against itself; rows match by the bench's own
- *     key field (`path`, `floor`, `intentShape`, `registryMode`).
+ *     key field (`path`, `generator`, `intentShape`, `registryMode`).
  *   - Exit code reflects invocation validity, NOT whether the
  *     after-bundle shows regressions. Regressions live in the
  *     JSON output.
@@ -79,7 +79,8 @@ export interface StatBand {
 
 /**
  * One group row's diff. `key` is whatever value occupied the group's
- * key field — for slo, e.g. `'blueprint_hit'`; for multi-sdk, `'oss'`.
+ * key field — for slo, e.g. `'blueprint_hit'`; for multi-sdk, a
+ * generator slug like `'ui-gen-default-haiku-4-5'`.
  *
  * `presence` is row-level: the row may exist on both sides, only the
  * after side (`'added'` — a new group surfaced), or only the before
@@ -105,7 +106,7 @@ export interface RowDiff {
  */
 export type SummaryDiff = {
   readonly kind: 'grouped';
-  /** Bench-specific key field name (`path`/`floor`/etc.). */
+  /** Bench-specific key field name (`path`/`generator`/etc.). */
   readonly keyField: string;
   readonly rows: readonly RowDiff[];
 };

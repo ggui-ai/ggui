@@ -9,8 +9,10 @@
  */
 import type { ChildProcess, SpawnOptions } from 'node:child_process';
 import { describe, expect, it, vi } from 'vitest';
+import { DEFAULT_DEV_HOST, DEFAULT_DEV_PORT } from '@ggui-ai/dev-stack';
 import {
   describeTunnelSession,
+  DEV_HELP,
   launchBrowser,
   openTunnel,
   parseDevFlags,
@@ -80,6 +82,11 @@ describe('parseDevFlags', () => {
   it('rejects unknown flags with a stable message', () => {
     const out = parseDevFlags(['--mystery']);
     expect(out.error).toBe('unknown flag "--mystery"');
+  });
+
+  it('surfaces --help / -h via the `__help__` sentinel', () => {
+    expect(parseDevFlags(['--help']).error).toBe('__help__');
+    expect(parseDevFlags(['-h']).error).toBe('__help__');
   });
 
   it('accepts compound flag sets', () => {
@@ -545,5 +552,26 @@ describe('describeTunnelSession', () => {
       '  tunnel skipped: login expired',
       '          hint: run `<your-cli> login`',
     ]);
+  });
+});
+
+describe('DEV_HELP', () => {
+  it('documents the default port + host', () => {
+    expect(DEV_HELP).toContain(`default: ${DEFAULT_DEV_PORT}`);
+    expect(DEV_HELP).toContain(`default: ${DEFAULT_DEV_HOST}`);
+  });
+
+  it('documents every real flag', () => {
+    for (const flag of [
+      '--port',
+      '--host',
+      '--agent',
+      '--no-serve',
+      '--no-open',
+      '--tunnel',
+      '--help',
+    ]) {
+      expect(DEV_HELP).toContain(flag);
+    }
   });
 });

@@ -24,7 +24,6 @@ export type {
   BenchmarkReport,
   VariantSummary,
   CommitSummary,
-  FloorSummary,
   BenchmarkRunResult,
   BenchmarkVariant,
   BenchmarkCommit,

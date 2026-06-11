@@ -24,6 +24,7 @@ import {
   MockEmbeddingProvider,
 } from '@ggui-ai/mcp-server-core/in-memory';
 import { createGguiServer, type GguiServer } from './server.js';
+import { isRecord } from '@ggui-ai/protocol';
 import type { HandlerContext } from '@ggui-ai/mcp-server-handlers';
 
 interface BootedFixture {
@@ -70,7 +71,11 @@ describe('createGguiServer — HTTP surface', () => {
     fx = await boot();
     const res = await fetch(`${fx.url}/ggui/health`);
     expect(res.status).toBe(200);
-    const body = (await res.json()) as Record<string, unknown>;
+    const rawBody: unknown = await res.json();
+    if (!isRecord(rawBody)) {
+      throw new Error('expected a JSON object body');
+    }
+    const body = rawBody;
     // Default boot registers 2 blueprint-read handlers (search + list).
     // `ggui_render_blueprint` is gated on a `uiRegistry` seam being
     // wired — absent registry ⇒ absent tool (no throwing shim).
@@ -194,7 +199,11 @@ describe('createGguiServer — HTTP surface', () => {
       fx = await boot();
       const res = await fetch(`${fx.url}/ggui/health`);
       expect(res.status).toBe(200);
-      const body = (await res.json()) as Record<string, unknown>;
+      const rawBody: unknown = await res.json();
+      if (!isRecord(rawBody)) {
+        throw new Error('expected a JSON object body');
+      }
+      const body = rawBody;
       expect(body.status).toBe('ok');
       expect(body.checks).toBeUndefined();
     });
@@ -649,9 +658,13 @@ describe('createGguiServer — RFC 8707 resource indicator (S4.2, 2026-05-06)', 
       headers: { 'content-type': 'application/x-www-form-urlencoded' },
       body: tokenForm.toString(),
     });
+    const tokBody: unknown = await tok.json();
+    if (!isRecord(tokBody)) {
+      throw new Error('expected a JSON object token response');
+    }
     return {
       status: tok.status,
-      body: (await tok.json()) as Record<string, unknown>,
+      body: tokBody,
     };
   }
 
@@ -1785,10 +1798,10 @@ describe('createGguiServer — ggui_handshake (Slice 5 preflight seam)', () => {
         },
       });
       expect(renderResult.isError).toBeFalsy();
-      const renderContent = renderResult.structuredContent as Record<
-        string,
-        unknown
-      >;
+      const renderContent = renderResult.structuredContent;
+      if (!isRecord(renderContent)) {
+        throw new Error('expected a structuredContent object');
+      }
       expect(renderContent.sessionId).toBeTruthy();
       expect(Object.keys(renderContent)).not.toContain('url');
     } finally {

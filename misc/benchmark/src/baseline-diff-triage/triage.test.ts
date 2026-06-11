@@ -162,13 +162,12 @@ describe('N→F1 silent internal failure', () => {
       mkEntry('multi-sdk', {
         summaryDiff: {
           kind: 'grouped',
-          keyField: 'floor',
+          keyField: 'generator',
           rows: [
-            mkRow('oss', {
+            mkRow('ui-gen-default-haiku-4-5', {
               avgScore: scalar(75.0, -1.0), // n/a sentinel
               avgTimeMs: scalar(12000, 0),
               successRate: scalar(1.0, 0.0),
-              capHitRate: scalar(0, 0),
               runs: scalar(1, 1),
             }),
           ],
@@ -197,13 +196,12 @@ describe('N→F1 silent internal failure', () => {
         statusChange: 'same-success',
         summaryDiff: {
           kind: 'grouped',
-          keyField: 'floor',
+          keyField: 'generator',
           rows: [
-            mkRow('oss', {
+            mkRow('ui-gen-default-haiku-4-5', {
               avgScore: scalar(75, -1),
               successRate: scalar(1, 0),
               avgTimeMs: scalar(12000, 0),
-              capHitRate: scalar(0, 0),
               runs: scalar(1, 1),
             }),
           ],
@@ -392,20 +390,19 @@ describe('schema drift', () => {
     const diff = mkDiff([
       mkEntry('multi-sdk', {
         notes: [
-          "before is missing 'floorSummaries' — showing after as 'added' rows",
+          "before is missing 'generatorSummaries' — showing after as 'added' rows",
         ],
         summaryDiff: {
           kind: 'grouped',
-          keyField: 'floor',
+          keyField: 'generator',
           rows: [
             mkRow(
-              'oss',
+              'ui-gen-default-haiku-4-5',
               {
                 runs: scalar(null, 1),
                 avgScore: scalar(null, 75),
                 avgTimeMs: scalar(null, 12000),
                 successRate: scalar(null, 1),
-                capHitRate: scalar(null, 0),
               },
               'added',
             ),
@@ -501,14 +498,13 @@ describe('provisional anchor surfacing', () => {
       mkEntry('multi-sdk', {
         summaryDiff: {
           kind: 'grouped',
-          keyField: 'floor',
+          keyField: 'generator',
           rows: [
-            mkRow('oss', {
+            mkRow('ui-gen-default-haiku-4-5', {
               avgScore: scalar(75, 70), // -5, alert (provisional)
               successRate: scalar(1, 1),
               avgTimeMs: scalar(12000, 12000),
               runs: scalar(1, 1),
-              capHitRate: scalar(0, 0),
             }),
           ],
         },

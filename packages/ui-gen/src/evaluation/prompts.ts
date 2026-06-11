@@ -1,6 +1,6 @@
 // packages/ui-gen/src/evaluation/prompts.ts
 
-import type { EvaluationContext, EvaluationResult } from './types';
+import type { EvaluationResult } from './types';
 
 /**
  * System prompt for the evaluator agent.
@@ -34,44 +34,6 @@ You evaluate ggui-generated React components. You MUST call the \`evaluate_score
 - **minor**: Style inconsistencies, naming conventions
 
 IMPORTANT: Call the \`evaluate_score\` tool immediately. Do not write analysis text first.`;
-}
-
-/**
- * Build the user prompt for the evaluator with full context.
- */
-export function buildEvaluatorPrompt(context: EvaluationContext): string {
-  let prompt = `## Evaluation Request
-
-### Original User Prompt
-${context.originalPrompt}
-`;
-
-  if (context.designContext) {
-    prompt += `
-### DESIGN.md
-${context.designContext}
-`;
-  }
-
-  prompt += `
-### Theme Tokens
-${context.themeTokens}
-
-### Source Code (TSX)
-\`\`\`tsx
-${context.sourceCode}
-\`\`\`
-
-### Compiled Code (JS)
-\`\`\`javascript
-${context.compiledCode}
-\`\`\`
-
----
-
-Call the \`evaluate_score\` tool now with scores for all 5 dimensions and any issues found.`;
-
-  return prompt;
 }
 
 /**

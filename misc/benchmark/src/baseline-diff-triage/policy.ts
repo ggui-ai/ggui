@@ -69,9 +69,6 @@ export const THRESHOLDS = {
   //    10+ second runs) ──
   multiSdkTimeRelAlert: 0.5, // +50%: likely a real slowdown
   multiSdkTimeRelNotice: 0.2, // +20%: drift worth a look
-
-  // ── multi-sdk cap-hit rate ──
-  multiSdkCapHitNotice: 0.10, // +10pp more runs cap-hit
 } as const;
 
 // ─── Severity resolution on status transitions ────────────────────
@@ -408,7 +405,7 @@ function classifyMultiSdkField(
       location,
       'field-missing',
       'provisional',
-      `${fieldName} missing on both sides — likely pre-floorSummaries report`,
+      `${fieldName} missing on both sides — likely pre-generatorSummaries report`,
       delta,
     );
   }
@@ -434,19 +431,6 @@ function classifyMultiSdkField(
 
     case 'avgTimeMs':
       return classifyMultiSdkTime(location, delta, rowContext);
-
-    case 'capHitRate':
-      return rateRule(
-        'multi-sdk',
-        location,
-        'multisdk-caphit-rise',
-        'provisional',
-        'capHitRate increased — turn cap being hit more often',
-        delta,
-        'up-only',
-        THRESHOLDS.multiSdkCapHitNotice,
-        'notice', // notice-only, no alert threshold
-      );
 
     case 'runs':
       return suppressedTinyScalar('multi-sdk', location, fieldName, delta);

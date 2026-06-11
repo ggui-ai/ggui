@@ -110,6 +110,7 @@ describe('withBrowserCompile', () => {
       },
       metadata: {
         provider: 'anthropic',
+        generator: 'ui-gen-default-test',
         model: 'claude-opus-4-7',
         inputTokens: 10,
         outputTokens: 20,
@@ -159,6 +160,7 @@ describe('withBrowserCompile', () => {
       },
       metadata: {
         provider: 'anthropic',
+        generator: 'ui-gen-default-test',
         model: 'claude-opus-4-7',
         inputTokens: 10,
         outputTokens: 20,
@@ -198,6 +200,7 @@ describe('withBrowserCompile', () => {
           },
           metadata: {
             provider: 'anthropic',
+            generator: 'ui-gen-default-test',
             model: 'claude-opus-4-7',
             inputTokens: 1,
             outputTokens: 1,

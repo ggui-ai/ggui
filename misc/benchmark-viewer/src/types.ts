@@ -19,7 +19,6 @@ import type {
   BenchmarkRunResultDisplay,
   VariantSummaryDisplay,
   CommitSummaryDisplay,
-  FloorSummaryDisplay,
   VariantInfo,
   CommitInfo,
 } from '@ggui-ai/shared';
@@ -28,7 +27,6 @@ export type BenchmarkReport = BenchmarkReportDisplay;
 export type BenchmarkRunResult = BenchmarkRunResultDisplay;
 export type VariantSummary = VariantSummaryDisplay;
 export type CommitSummary = CommitSummaryDisplay;
-export type FloorSummary = FloorSummaryDisplay;
 export type BenchmarkVariant = VariantInfo;
 export type BenchmarkCommit = CommitInfo;
 

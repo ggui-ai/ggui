@@ -143,6 +143,9 @@ export {
 export {
   createGguiRefreshWsTokenHandler,
   type GguiRefreshWsTokenHandlerDeps,
+  type GguiRefreshWsTokenOutput,
+  type RefreshAccepted,
+  type RefreshRejected,
   type WsTokenRefreshSeam,
 } from "./refresh-ws-token.js";
 export {

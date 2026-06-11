@@ -17,7 +17,7 @@ import {
   type McpService,
 } from './mcp-mounts.js';
 
-const noopHandler = async () => ({ ok: true }) as Record<string, unknown>;
+const noopHandler = async (): Promise<Record<string, unknown>> => ({ ok: true });
 
 /**
  * Build a valid mount handler with a non-empty `outputSchema`. The

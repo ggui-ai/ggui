@@ -94,13 +94,13 @@ const outputSchema = {
   expiresAt: z.string().optional(),
 } as const;
 
-interface RefreshAccepted {
+export interface RefreshAccepted {
   readonly ok: true;
   readonly envelope: string;
   readonly expiresAt: string;
 }
 
-interface RefreshRejected {
+export interface RefreshRejected {
   readonly ok: false;
   readonly code:
     | 'BOOTSTRAP_INVALID'
@@ -109,7 +109,13 @@ interface RefreshRejected {
   readonly message: string;
 }
 
-type RefreshOutput = RefreshAccepted | RefreshRejected;
+/**
+ * The `ggui_runtime_refresh_ws_token` output union — the wire shape
+ * `structuredContent` carries. Exported so callers (iframe runtime,
+ * e2e specs) type their reads against the handler's own contract
+ * instead of re-declaring it.
+ */
+export type GguiRefreshWsTokenOutput = RefreshAccepted | RefreshRejected;
 
 /**
  * Refresh seam — implementations receive the inbound envelope and
@@ -149,7 +155,7 @@ export interface GguiRefreshWsTokenHandlerDeps {
  */
 export function createGguiRefreshWsTokenHandler(
   deps: GguiRefreshWsTokenHandlerDeps = {},
-): SharedHandler<typeof inputSchema, typeof outputSchema, RefreshOutput> {
+): SharedHandler<typeof inputSchema, typeof outputSchema, GguiRefreshWsTokenOutput> {
   return {
     name: 'ggui_runtime_refresh_ws_token',
     title: '[runtime] Refresh WS Token',
@@ -165,7 +171,7 @@ export function createGguiRefreshWsTokenHandler(
         visibility: ['app'] as const,
       },
     },
-    async handler(input): Promise<RefreshOutput> {
+    async handler(input): Promise<GguiRefreshWsTokenOutput> {
       const parsed = z.object(inputSchema).safeParse(input);
       if (!parsed.success) {
         return {

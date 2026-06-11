@@ -11,6 +11,7 @@
 
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { registerAppTool } from '@modelcontextprotocol/ext-apps/server';
+import type { McpUiToolMeta } from '@modelcontextprotocol/ext-apps';
 import { isRecord } from '@ggui-ai/protocol';
 import { z, type ZodRawShape } from 'zod';
 import type {
@@ -264,14 +265,23 @@ export function buildMcpServer(
     // single canonical key only; the helper owns the back-compat
     // shape. Handlers without `_meta.ui` fall through to plain
     // `registerTool` — the ext-apps helper requires `_meta.ui` to be
-    // typed.
+    // typed. A declared-but-malformed `_meta.ui` is a programming
+    // error on the handler author's side — fail loud rather than
+    // silently registering the tool without its UI surface.
     if (handler._meta && 'ui' in handler._meta) {
+      const ui = handler._meta['ui'];
+      if (!isMcpUiToolMeta(ui)) {
+        throw new Error(
+          `Tool ${handler.name} declares _meta.ui with an invalid shape — ` +
+            `expected { resourceUri?: string; visibility?: ('model' | 'app')[] }.`,
+        );
+      }
       registerAppTool(
         server,
         handler.name,
         {
           ...baseConfig,
-          _meta: handler._meta as { ui: { resourceUri?: string; visibility?: readonly string[] } },
+          _meta: { ...handler._meta, ui },
         },
         cb,
       );
@@ -288,6 +298,29 @@ export function buildMcpServer(
   }
 
   return server;
+}
+
+/**
+ * Validating narrower for declaration-level MCP-Apps UI meta. The
+ * `SharedHandler` seam types `_meta` as `Record<string, unknown>`;
+ * `registerAppTool` requires `_meta.ui` typed as `McpUiToolMeta`.
+ * Validates the two fields the ext-apps helper actually reads —
+ * `resourceUri` (string when present) and `visibility`
+ * (`"model"`/`"app"` array when present) — instead of asserting
+ * blindly across the SDK seam.
+ */
+function isMcpUiToolMeta(value: unknown): value is McpUiToolMeta {
+  if (!isRecord(value)) return false;
+  if (value.resourceUri !== undefined && typeof value.resourceUri !== 'string') {
+    return false;
+  }
+  if (value.visibility !== undefined) {
+    if (!Array.isArray(value.visibility)) return false;
+    if (!value.visibility.every((v) => v === 'model' || v === 'app')) {
+      return false;
+    }
+  }
+  return true;
 }
 
 function errorClassName(err: unknown): string {

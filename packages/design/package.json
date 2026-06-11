@@ -71,7 +71,7 @@
     "!**/*.spec.tsx"
   ],
   "scripts": {
-    "build": "tsc && node ../scripts/fix-esm-imports.mjs dist && node scripts/generate-inline-modules.mjs && pnpm run generate:docs && pnpm run generate:docs-ts",
+    "build": "tsc -p tsconfig.build.json && node ../scripts/fix-esm-imports.mjs dist && node scripts/generate-inline-modules.mjs && pnpm run generate:docs && pnpm run generate:docs-ts",
     "build:inline": "node scripts/generate-inline-modules.mjs",
     "dev": "tsc --watch",
     "typecheck": "tsc --noEmit",

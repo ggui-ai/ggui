@@ -32,7 +32,7 @@ import {
   mintWsToken,
   type WsTokenClaims,
 } from '@ggui-ai/mcp-server-core';
-import type { JsonObject } from '@ggui-ai/protocol';
+import { isRecord, type JsonObject } from '@ggui-ai/protocol';
 import {
   MCP_APP_AI_GGUI_RENDER_META_KEY,
   type McpAppAiGguiRenderMeta,
@@ -134,7 +134,11 @@ describe('GET /api/sessions/:sessionId/state', () => {
     expect(res.headers.get('content-type')).toMatch(/application\/json/);
     expect(res.headers.get('access-control-allow-origin')).toBe('*');
 
-    const body = (await res.json()) as Record<string, unknown>;
+    const rawBody: unknown = await res.json();
+    if (!isRecord(rawBody)) {
+      throw new Error('expected a JSON object body');
+    }
+    const body = rawBody;
     const renderMeta = body[MCP_APP_AI_GGUI_RENDER_META_KEY] as
       | McpAppAiGguiRenderMeta
       | undefined;

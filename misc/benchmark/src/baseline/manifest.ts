@@ -197,24 +197,25 @@ export function extractA2uiSummary(report: unknown): BenchTopLineSummary {
 
 /**
  * The multi-sdk report is different shape — it groups by
- * `floorSummaries` (added in the floor split), plus variantSummaries.
- * Baseline top-line focuses on the floor view since that's the
- * new post-OSS-split signal.
+ * `generatorSummaries` (one row per generator slug; single-generator
+ * runs emit a length-1 array), plus variantSummaries. Baseline
+ * top-line focuses on the per-generator view since it's the
+ * whole-run aggregate.
  */
 export function extractMultiSdkSummary(report: unknown): BenchTopLineSummary {
   const r = isRecord(report) ? report : null;
   if (!r) return {};
   const meta = isRecord(r.meta) ? r.meta : undefined;
-  const floorSummaries = Array.isArray(r.floorSummaries)
-    ? r.floorSummaries
+  const generatorSummaries = Array.isArray(r.generatorSummaries)
+    ? r.generatorSummaries
     : undefined;
   const totalRuns =
     typeof meta?.totalRuns === 'number' ? meta.totalRuns : undefined;
-  const headline = floorSummaries
-    ? floorSummaries
+  const headline = generatorSummaries
+    ? generatorSummaries
         .filter(isRecord)
         .map((s) => {
-          const floor = typeof s.floor === 'string' ? s.floor : '?';
+          const generator = typeof s.generator === 'string' ? s.generator : '?';
           const runs = typeof s.runs === 'number' ? s.runs : 0;
           const t =
             typeof s.avgTimeMs === 'number'
@@ -224,7 +225,7 @@ export function extractMultiSdkSummary(report: unknown): BenchTopLineSummary {
             typeof s.avgScore === 'number' && s.avgScore >= 0
               ? s.avgScore.toFixed(1)
               : 'n/a';
-          return `${floor}: ${runs}r t=${t} s=${score}`;
+          return `${generator}: ${runs}r t=${t} s=${score}`;
         })
         .join(' | ')
     : undefined;

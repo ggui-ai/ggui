@@ -30,6 +30,7 @@ import { resolveAgentPlan, type ResolvedAgentPlan } from './serve-fallback.js';
 import {
   buildAgentRuntime,
   describeTunnelSession,
+  DEV_HELP,
   launchBrowser,
   openTunnel,
   parseDevFlags,
@@ -1127,6 +1128,10 @@ function narrowMcpMounts(
 
 async function runDevCommand(args: string[]): Promise<number> {
   const parsed = parseDevFlags(args);
+  if (parsed.error === '__help__') {
+    process.stdout.write(DEV_HELP);
+    return 0;
+  }
   if (parsed.error) {
     process.stderr.write(`ggui dev: ${parsed.error}\n`);
     return 1;

@@ -18,7 +18,11 @@ function buildManifest(id: string): UiManifest {
   return {
     id,
     name: 'Fixture Card',
-    contract: { intent: 'fixture' },
+    contract: {
+      contextSpec: {
+        view: { schema: { type: 'string' }, default: 'fixture' },
+      },
+    },
   };
 }
 

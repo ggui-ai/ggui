@@ -124,20 +124,20 @@ describe('extractA2uiSummary', () => {
 });
 
 describe('extractMultiSdkSummary', () => {
-  it('uses floorSummaries when present', () => {
+  it('uses generatorSummaries when present', () => {
     const s = extractMultiSdkSummary({
       meta: { totalRuns: 6 },
-      floorSummaries: [
-        { floor: 'oss', runs: 3, avgTimeMs: 30000, avgScore: 76.0 },
-        { floor: 'hosted', runs: 3, avgTimeMs: 42500, avgScore: 78.0 },
+      generatorSummaries: [
+        { generator: 'ui-gen-default-haiku-4-5', runs: 3, avgTimeMs: 30000, avgScore: 76.0 },
+        { generator: 'ui-gen-advanced-opus-4-7', runs: 3, avgTimeMs: 42500, avgScore: 78.0 },
       ],
     });
     expect(s.totalRuns).toBe(6);
-    expect(s.headline).toContain('oss: 3r t=30.0s s=76.0');
-    expect(s.headline).toContain('hosted: 3r t=42.5s s=78.0');
+    expect(s.headline).toContain('ui-gen-default-haiku-4-5: 3r t=30.0s s=76.0');
+    expect(s.headline).toContain('ui-gen-advanced-opus-4-7: 3r t=42.5s s=78.0');
   });
 
-  it('handles reports without floorSummaries (pre-floor-split reports)', () => {
+  it('handles reports without generatorSummaries (pre-generator-dimension reports)', () => {
     const s = extractMultiSdkSummary({
       meta: { totalRuns: 3 },
     });
@@ -148,8 +148,8 @@ describe('extractMultiSdkSummary', () => {
   it('negative avgScore → "n/a" (convention from multi-sdk reporter)', () => {
     const s = extractMultiSdkSummary({
       meta: { totalRuns: 1 },
-      floorSummaries: [
-        { floor: 'oss', runs: 1, avgTimeMs: 0, avgScore: -1 },
+      generatorSummaries: [
+        { generator: 'ui-gen-default-haiku-4-5', runs: 1, avgTimeMs: 0, avgScore: -1 },
       ],
     });
     expect(s.headline).toContain('s=n/a');

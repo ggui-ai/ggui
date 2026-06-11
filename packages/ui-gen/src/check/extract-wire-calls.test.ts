@@ -130,7 +130,12 @@ describe("collectExpectedWires", () => {
       // but NOT counted — the parser only enumerates @ggui-ai/wire hook surfaces.
       agentCapabilities: {
         tools: {
-          search: { outputSchema: { type: "object" } },
+          search: {
+            toolInfo: {
+              inputSchema: { type: "object" },
+              outputSchema: { type: "object" },
+            },
+          },
         },
       },
     };

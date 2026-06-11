@@ -102,8 +102,8 @@ describe('googleLoginProvider.exchangeCode', () => {
     const [url, init] = fetchMock.mock.calls[0]!;
     expect(url).toBe('https://oauth2.googleapis.com/token');
     expect(init?.method).toBe('POST');
-    const headers = init?.headers as Record<string, string>;
-    expect(headers['Content-Type']).toBe('application/x-www-form-urlencoded');
+    const headers = new Headers(init?.headers);
+    expect(headers.get('Content-Type')).toBe('application/x-www-form-urlencoded');
     expect(typeof init?.body).toBe('string');
     const body = new URLSearchParams(init?.body as string);
     expect(body.get('code')).toBe('auth-code');

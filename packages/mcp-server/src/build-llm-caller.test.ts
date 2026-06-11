@@ -100,12 +100,9 @@ describe('buildLlmCaller — anthropic callStructured wire shape', () => {
     );
 
     expect(captured.url).toBe('https://api.anthropic.com/v1/messages');
-    expect((captured.init?.headers as Record<string, string>)['x-api-key']).toBe(
-      'sk-ant-test',
-    );
-    expect(
-      (captured.init?.headers as Record<string, string>)['anthropic-version'],
-    ).toBe('2023-06-01');
+    const sentHeaders = new Headers(captured.init?.headers);
+    expect(sentHeaders.get('x-api-key')).toBe('sk-ant-test');
+    expect(sentHeaders.get('anthropic-version')).toBe('2023-06-01');
 
     const sentBody = JSON.parse(captured.init?.body as string) as {
       model: string;

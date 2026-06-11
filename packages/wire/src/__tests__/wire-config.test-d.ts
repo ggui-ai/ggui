@@ -63,15 +63,17 @@ const _weather = defineContract({
   agentCapabilities: {
     tools: {
       getForecast: {
-        inputSchema: {
-          type: 'object',
-          properties: { days: { type: 'number' } },
-          required: ['days'],
-        },
-        outputSchema: {
-          type: 'object',
-          properties: { temp: { type: 'number' } },
-          required: ['temp'],
+        toolInfo: {
+          inputSchema: {
+            type: 'object',
+            properties: { days: { type: 'number' } },
+            required: ['days'],
+          },
+          outputSchema: {
+            type: 'object',
+            properties: { temp: { type: 'number' } },
+            required: ['temp'],
+          },
         },
       },
     },

@@ -13,39 +13,11 @@ export { PROVIDER_DISPLAY_NAMES } from '@ggui-ai/ui-gen/adapters/types';
 export type { ProviderName, AdapterResult, AdapterMode };
 
 // =============================================================================
-// Benchmark Floor (OSS vs Hosted — the bench's public-interface split axis)
-// =============================================================================
-
-/**
- * Benchmark floor — which deployment-shape a variant represents.
- *
- * `oss`    — honest open-source baseline. No hosted blueprint registry
- *            path, no hosted-only defaults. Today's bench default — any
- *            variant with no explicit floor is treated as `oss` so
- *            historical runs remain interpretable.
- *
- * `hosted` — hosted/default path enabled. Today there is NO active
- *            divergence — system prompt, tools, criteria, runtime render,
- *            and model routing are identical to OSS. The flag is the
- *            reporting seam: as hosted-vs-OSS differences land in the
- *            generation path they route through it.
- *
- * See `./floor.md` for the full rationale + current caveat list.
- */
-export type BenchmarkFloor = 'oss' | 'hosted';
-
-/** Default floor when none is specified — preserves today's behavior. */
-export const DEFAULT_BENCHMARK_FLOOR: BenchmarkFloor = 'oss';
-
-// =============================================================================
 // Benchmark Variant (a single SDK + model combo)
 // =============================================================================
 
 export interface BenchmarkVariant {
-  /** Unique identifier (e.g., 'claude-fast', 'openai-balanced'). For
-   * floor-tagged variants the id is typically suffixed with the floor
-   * (e.g., 'claude-fast-hosted') — `applyFloor` in variants.ts does
-   * this automatically. */
+  /** Unique identifier (e.g., 'claude-fast', 'openai-balanced'). */
   id: string;
   /** Which SDK adapter to use */
   sdkName: ProviderName;
@@ -65,12 +37,6 @@ export interface BenchmarkVariant {
   rendering?: RenderingContext;
   /** Planning mode: 'stuffed' (default) or 'agentic' (tool-calling loop) */
   planningMode?: 'stuffed' | 'agentic';
-  /**
-   * Which deployment-shape this variant exercises. When omitted the
-   * runner treats it as {@link DEFAULT_BENCHMARK_FLOOR} (`oss`) so
-   * pre-floor variant definitions continue to behave as they did.
-   */
-  floor?: BenchmarkFloor;
 
   /**
    * UI generator slug. Identifies which registered `UiGenerator`
@@ -244,41 +210,11 @@ export interface BenchmarkRunResult {
   /** Post-generation analysis (metadata extraction, data-free check) */
   postGeneration?: PostGenerationResult;
   /**
-   * Which floor this run was executed under. Always set — `undefined`
-   * on the variant resolves to {@link DEFAULT_BENCHMARK_FLOOR} at run
-   * time, never propagates onto the result.
-   */
-  floor: BenchmarkFloor;
-  /**
-   * Path-usage observables — whether the hosted blueprint-tool path
-   * was enabled + actually consulted by the agent. These are the
-   * observables that make the floor dimension interpretable; the
-   * floor summary aggregates them.
-   */
-  pathUsage: PathUsageMetrics;
-  /**
    * Generator slug this run was executed under. Always set —
    * `undefined` on the variant resolves to {@link DEFAULT_GENERATOR_SLUG}
-   * at run time, never propagates onto the result. Mirrors the
-   * `floor` field's "default-on-resolve" pattern.
+   * at run time, never propagates onto the result.
    */
   generator: string;
-}
-
-/**
- * Per-run observables for the floor dimension. Populated by the runner
- * from `generation.turnsUsed`. Hosted-vs-OSS observables are reserved
- * on this type — they stay absent until the corresponding divergence
- * lands. Keeping the shape now means later additions don't churn
- * `BenchmarkRunResult`.
- */
-export interface PathUsageMetrics {
-  /**
-   * `true` when `generation.turnsUsed >= maxTurns` (the bench passes
-   * 45 today). Aggregated per-floor as a regression signal — caps
-   * are rarely the right answer for a healthy harness.
-   */
-  readonly capHit: boolean;
 }
 
 /**
@@ -337,13 +273,6 @@ export interface BenchmarkReport {
   variantSummaries: VariantSummary[];
   commitSummaries: CommitSummary[];
   sdkComparison: SdkComparisonMatrix;
-  /**
-   * Per-floor side-by-side summaries. Present on every report — when
-   * a run only exercised one floor, the array is length 1 (no blank
-   * rows). Aggregations respect runs where generation succeeded; cap-
-   * hit rate counts ALL runs including failures.
-   */
-  floorSummaries: FloorSummary[];
   /**
    * Per-generator breakdown. For each `(commit, sdk)` cell, the
    * report records every generator that ran the cell with its score
@@ -409,36 +338,6 @@ export interface GeneratorSummary {
   readonly avgTimeMs: number;
   readonly avgCostUsd: number;
   readonly successRate: number;
-}
-
-/**
- * Aggregate per-floor view across all variants + commits. The
- * interpretation handshake with the reader:
- *
- *   - `avgTimeMs` / `avgScore` / `successRate`: computed over the
- *     subset of runs that completed generation. These are the same
- *     definitions used by {@link VariantSummary}.
- *   - `capHitRate`: counts ALL runs (numerator = cap-hits, denominator
- *     = total runs including failures). A cap-hit that also timed out
- *     still counts as a cap-hit.
- *   - `errorBuckets`: sum of `breakdown.outcomes.*` across all runs
- *     on this floor. Same fields as the existing variant breakdown —
- *     per-floor aggregation lets a reader see if one floor drives
- *     more patch-invalid churn.
- */
-export interface FloorSummary {
-  readonly floor: BenchmarkFloor;
-  readonly runs: number;
-  readonly avgTimeMs: number;
-  readonly avgScore: number;
-  readonly successRate: number;
-  readonly capHitRate: number;
-  readonly errorBuckets: {
-    readonly pass: number;
-    readonly patchInvalid: number;
-    readonly selfCheckFail: number;
-    readonly diffFail: number;
-  };
 }
 
 export interface VariantSummary {
