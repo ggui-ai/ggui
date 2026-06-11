@@ -14,12 +14,19 @@
  *     monotonic per-session `sequence` the action ack echoes back;
  *   - an outbound stream-sequence cursor — the `emit-envelope`
  *     ConformanceHost directive stamps `StreamEnvelope.seq` on
- *     injected `{type:'data'}` frames from it.
+ *     injected `{type:'data'}` frames from it;
+ *   - an optional persisted `hostContext` — the
+ *     `host_context_observed` Client→Server handler
+ *     (`./host-context.ts`) overwrites it with the iframe-observed
+ *     `HostContextProjection`; the ConformanceHost's
+ *     `readSessionField` seam reads it back for `session-state`
+ *     grading.
  *
  * Wire-shape note: the conformance kit drives the reference server
  * over the SPEC §12.2 wire using the canonical render-identity field
  * `sessionId`.
  */
+import type { HostContextProjection } from '@ggui-ai/protocol';
 import type { ActionSpecEntryDecl } from '@ggui-ai/protocol-conformance';
 
 /**
@@ -63,6 +70,17 @@ export interface GguiSession {
    * counts OUTBOUND stream deliveries.
    */
   streamSeq: number;
+  /**
+   * Persisted `HostContextProjection` — written by the
+   * `host_context_observed` Client→Server handler
+   * (`./host-context.ts`) as an idempotent overwrite (re-delivery
+   * replaces, never merges). `undefined` until the client's first
+   * observation lands. Read back through the ConformanceHost's
+   * `readSessionField('hostContext')` introspection seam, which is how
+   * the kit's `session-state` fixtures grade the persistence
+   * obligation.
+   */
+  hostContext?: HostContextProjection;
   readonly subscribers: Set<Subscriber>;
   /**
    * Per-GguiSession protocol-version override. When set, the WS subscribe

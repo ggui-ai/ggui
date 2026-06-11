@@ -1,8 +1,10 @@
 /**
  * `ReferenceServer` — the minimal WS live-channel server this package
- * exports. Honest scope: SPEC §12.2 wire, version handshake, and the
- * single action-routing model (action → consume-buffer append → ack
- * with sequence; undeclared actions rejected with CONTRACT_VIOLATION).
+ * exports. Honest scope: SPEC §12.2 wire (subscribe incl. the §12.2
+ * appId-tenancy MUST → APP_MISMATCH), version handshake, the single
+ * action-routing model (action → consume-buffer append → ack with
+ * sequence; undeclared actions rejected with CONTRACT_VIOLATION), and
+ * `host_context_observed` persistence onto `GguiSession.hostContext`.
  * That's it.
  *
  * No auth (accepts any bearer). No persistence. No bundle loading.
@@ -21,6 +23,10 @@ import { PROTOCOL_SCHEMA_VERSION } from '@ggui-ai/protocol';
 import { WebSocketServer, type WebSocket } from 'ws';
 
 import { handleAction, parseActionFrame } from './action-router.js';
+import {
+  handleHostContextObserved,
+  parseHostContextObservedFrame,
+} from './host-context.js';
 import { GguiSessionStore, type Subscriber } from './render.js';
 
 export interface ReferenceServerOptions {
@@ -219,6 +225,21 @@ export class ReferenceServer {
       handleAction(parsed, { render, reply: ctx.subscriber });
       return;
     }
+    if (f['type'] === 'host_context_observed') {
+      // Fire-and-forget observation message — no response frame. The
+      // obligation is purely stateful: persist the validated
+      // projection onto the named render (idempotent overwrite). The
+      // first-party server scopes the write through its subscriber
+      // binding; this no-auth server's tenancy scope is the render
+      // lookup itself — malformed frames and unknown renders drop,
+      // mirroring the action path.
+      const parsed = parseHostContextObservedFrame(frame);
+      if (parsed === undefined) return; // malformed — silently drop
+      const render = this.renders.get(parsed.payload.sessionId);
+      if (render === undefined) return; // drop observations for unknown renders
+      handleHostContextObserved(parsed, render);
+      return;
+    }
     // Unrecognized type — silently drop (extensibly-closed; third
     // parties may send frame types we don't know about).
   }
@@ -279,11 +300,39 @@ export class ReferenceServer {
       return;
     }
 
-    // Add the subscriber + emit ack.
-    this.renders.addSubscriber(sessionId, ctx.subscriber);
-    // Preserve appId on first subscribe — create() is no-op if the
-    // render already exists from an earlier directive.
+    // SPEC §12.2 tenancy MUST: the subscribe's `appId` MUST match the
+    // GguiSession's bound appId or the subscribe fails APP_MISMATCH
+    // (§12.2.3). The code is deliberately distinct from
+    // SESSION_NOT_FOUND — the GguiSession EXISTS, it is reachable only
+    // from a different app, so the client's recovery is "fix your
+    // appId / API key", not "re-handshake". Only an existing render
+    // can mismatch: an unknown sessionId falls through to the
+    // provision-on-subscribe path below, which binds the subscribe's
+    // own appId (mirroring the first-party dev-mode posture: look up
+    // first; if not present, create). The mismatch rejects without
+    // registering a subscriber and without an ack; the socket stays
+    // open (matching the first-party handler).
+    if (existingRender !== undefined && existingRender.appId !== appId) {
+      ctx.subscriber.send({
+        type: 'error',
+        payload: {
+          code: 'APP_MISMATCH',
+          message: `GguiSession '${sessionId}' belongs to a different app`,
+        },
+        ...(requestId !== undefined ? { requestId } : {}),
+      });
+      return;
+    }
+
+    // Bind the render BEFORE registering the subscriber: create() is a
+    // no-op when the render already exists (preserving the appId an
+    // earlier directive bound), and for provision-on-subscribe it
+    // binds the subscribe payload's own appId. Ordering matters —
+    // `addSubscriber`'s create-if-missing fallback binds the default
+    // app, which would make this render reject the SAME client's next
+    // subscribe with APP_MISMATCH.
     this.renders.create(sessionId, appId);
+    this.renders.addSubscriber(sessionId, ctx.subscriber);
     ctx.onSubscribed(sessionId);
     ctx.subscriber.send({
       type: 'ack',

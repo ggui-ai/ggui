@@ -14,6 +14,15 @@ kit grounds the claim empirically rather than by assertion.
 - WebSocket transport matching the ggui live-channel wire.
 - In-memory render store with a consume-buffer event ledger (no persistence).
 - `schemaVersion` handshake with `UPGRADE_REQUIRED` on mismatch.
+- Subscribe tenancy: the subscribe's `appId` must match the GguiSession's
+  bound `appId` or the subscribe is rejected with an `error` frame, code
+  `APP_MISMATCH` (an unknown session id still provisions on subscribe,
+  binding the subscribe's own `appId`).
+- `host_context_observed` persistence: the client-observed
+  `HostContextProjection` is validated against the protocol shape and
+  persisted onto `GguiSession.hostContext` (idempotent overwrite, no
+  response frame); the conformance host reads it back via
+  `readSessionField('hostContext')`.
 - The single action-routing model:
   - a declared action appends to the GguiSession's consume buffer and the
     ack carries `payload.sequence` (validate → append → ack);
@@ -42,5 +51,6 @@ Prints `READY ws://127.0.0.1:3100/ws` when bound. Ctrl-C to stop.
 `src/conformance.test.ts` boots this server and runs `@ggui-ai/protocol-conformance`
 against it through a `ConformanceHost` adapter. Every drivable conformance fixture must
 pass (bootstrap-success, action-ack-sequence, undeclared-action-rejected, version-match,
-version-mismatch); directives outside this server's scope (renderer-url-override,
-ui-initialize-response-override, and similar) skip cleanly per the kit's design.
+version-mismatch, app-mismatch, host-context-observed-persists); directives outside this
+server's scope (renderer-url-override, ui-initialize-response-override, and similar) skip
+cleanly per the kit's design.

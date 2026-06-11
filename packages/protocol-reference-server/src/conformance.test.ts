@@ -8,7 +8,7 @@
  * kit — the vendor-neutrality claim is grounded.
  *
  * Expected outcome:
- *   - 5 fixtures PASS (see {@link EXPECTED_PASSING}).
+ *   - 7 fixtures PASS (see {@link EXPECTED_PASSING}).
  *   - 3 fixtures SKIP (see {@link EXPECTED_SKIPPED}) — browser-level
  *     directives the host throws on (`renderer-url-override`,
  *     `ui-initialize-response-override`) or the matcher's
@@ -60,10 +60,30 @@ import { ReferenceServer } from './server.js';
  *     serverVersion}` frame. Proves the rejection half of Protocol #3
  *     with parallel-fixture isolation (other GguiSessions on the same
  *     server still advertise the canonical default).
+ *
+ *   - `app-mismatch`: the `create-session` directive binds the render
+ *     to appId `'conformance-other'`; the runner's subscribe always
+ *     carries appId `'conformance'`. SPEC §12.2 makes the tenancy
+ *     check a MUST — the subscribe handler rejects with an `error`
+ *     frame, code `APP_MISMATCH` (§12.2.3), registering no subscriber
+ *     and emitting no ack. Proves the GguiSession-exists-but-different-
+ *     app rejection is distinct from SESSION_NOT_FOUND.
+ *
+ *   - `host-context-observed-persists`: the kit dispatches the
+ *     `host_context_observed` Client→Server observation frame; the
+ *     server validates it against the protocol's
+ *     `HostContextProjection` and persists `payload.hostContext` onto
+ *     `GguiSession.hostContext` (idempotent overwrite, no response
+ *     frame). The kit grades the stateful obligation through this
+ *     host's `readSessionField('hostContext')` introspection seam —
+ *     the kit's third grading mechanism (session-state), beside the
+ *     wire-frame matchers and the pure-function catalogs.
  */
 const EXPECTED_PASSING = [
   'action-ack-sequence',
+  'app-mismatch',
   'bootstrap-success',
+  'host-context-observed-persists',
   'undeclared-action-rejected',
   'version-match',
   'version-mismatch',

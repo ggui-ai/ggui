@@ -22,6 +22,13 @@
  * richer host harness. Throwing surfaces "directive not implemented"
  * with the error message as the skip reason.
  *
+ * Beyond directives, the host implements the kit's `readSessionField`
+ * introspection seam — `session-state` fixtures (stateful obligations
+ * with no wire response, e.g. `host-context-observed-persists`) grade
+ * by reading the GguiSession field back after the observation window.
+ * Readable fields: `hostContext`. Unknown fields throw with a clear
+ * message so the kit records an honest SKIP, never a weakened pass.
+ *
  * The kit validates every fixture-authored directive against its
  * closed `SetupStep` vocabulary before dispatch, so this adapter only
  * ever receives shape-valid steps of a known kind — narrowing is by
@@ -152,6 +159,28 @@ export function createReferenceConformanceHost({
         );
       }
       return unreachableSetupStep(step);
+    },
+
+    async readSessionField(sessionId: string, field: string): Promise<unknown> {
+      // Honest-grade contract: return the GguiSession's TRUE
+      // post-dispatch state. A render that never received the
+      // observation message returns `undefined` here — the kit's
+      // deep-equal then FAILS the fixture (a server that drops the
+      // message must not pass), while an unknown field throws so the
+      // kit records a SKIP ("cannot observe" is not "observed and
+      // matched").
+      const render = serverInstance.renders.get(sessionId);
+      if (render === undefined) {
+        throw new Error(
+          `reference server has no GguiSession '${sessionId}' — readSessionField cannot introspect a render that was never created`,
+        );
+      }
+      if (field === 'hostContext') {
+        return render.hostContext;
+      }
+      throw new Error(
+        `reference server does not expose GguiSession field '${field}' via readSessionField — readable fields: hostContext`,
+      );
     },
 
     async dispatchTeardown(): Promise<void> {
