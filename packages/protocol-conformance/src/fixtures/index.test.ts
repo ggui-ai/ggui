@@ -4,10 +4,12 @@
  * `@ggui-ai/protocol-conformance/fixtures` reads these shapes; this
  * file is the drift-catch.
  */
+import { jsonSchemaSchema, validateActionData } from '@ggui-ai/protocol';
 import { describe, expect, it } from 'vitest';
 
+import { isRecord } from '../is-record.js';
+import { behaviorIs } from '../match-behavior.js';
 import { parseInputEnvelope } from '../run-conformance.js';
-import type { SessionStateBehavior } from '../types.js';
 import {
   allFixtures,
   bootstrapProtocolFixtures,
@@ -20,8 +22,8 @@ import {
 } from './index.js';
 
 describe('fixtures catalog', () => {
-  it('ships 10 fixtures across six materialized sub-modules', () => {
-    expect(allFixtures.length).toBe(10);
+  it('ships 11 fixtures across six materialized sub-modules', () => {
+    expect(allFixtures.length).toBe(11);
     // Sanity: confirm the retired wired-dispatch / refresh /
     // observability fixtures are not in the catalog under their old
     // names — the synchronous wired-action path has exactly zero
@@ -64,7 +66,7 @@ describe('fixtures catalog', () => {
 
   it('each sub-module has its documented fixture count', () => {
     expect(bootstrapProtocolFixtures.length).toBe(3);
-    expect(consumeBufferFixtures.length).toBe(2);
+    expect(consumeBufferFixtures.length).toBe(3);
     expect(hostContextFixtures.length).toBe(1);
     expect(reservedChannelAuthorityFixtures.length).toBe(1);
     expect(schemaVersionHandshakeFixtures.length).toBe(2);
@@ -107,6 +109,7 @@ describe('fixtures catalog', () => {
     expect(drivable.length).toBe(allFixtures.length);
     expect(drivable.sort()).toEqual([
       'action-ack-sequence',
+      'action-payload-schema-violation',
       'app-mismatch',
       'bootstrap-bundle-fetch-failed',
       'bootstrap-meta-missing',
@@ -140,12 +143,74 @@ describe('fixtures catalog', () => {
       { type: 'create-session', sessionId: dispatch.envelope.payload.sessionId },
     ]);
 
-    expect(fixture.expectedBehavior.kind).toBe('session-state');
-    // Cast after the literal check — the extensibly-closed
-    // `UnknownBehavior` arm (`kind: string & {}`) widens narrowing.
-    const behavior = fixture.expectedBehavior as SessionStateBehavior;
+    // `behaviorIs` narrows after the literal check — the extensibly-
+    // closed `UnknownBehavior` arm (`kind: string & {}`) defeats bare
+    // literal narrowing. The expect above throws on mismatch, so the
+    // early return is unreachable on a green run.
+    const behavior = fixture.expectedBehavior;
+    expect(behavior.kind).toBe('session-state');
+    if (!behaviorIs(behavior, 'session-state')) return;
     expect(behavior.field).toBe('hostContext');
     expect(behavior.expected).toEqual(dispatch.envelope.payload.hostContext);
+  });
+
+  it('action-payload-schema-violation names a DECLARED action whose data genuinely violates the declared schema', () => {
+    // The fixture's whole point is the payload-schema half of the
+    // contract gate: name-membership alone MUST admit the dispatched
+    // ActionEventValue, and the declared entry schema MUST reject it.
+    // Graded here against the protocol's own arbiter
+    // (`validateActionData`) so the fixture can never drift into
+    // re-proving `undeclared-action-rejected` (wrong name) or into
+    // authoring data the schema actually accepts (vacuous pass).
+    const fixture = allFixtures.find((f) => f.name === 'action-payload-schema-violation');
+    expect(fixture).toBeDefined();
+    if (fixture === undefined) return;
+
+    // One create-session directive declaring one schema-carrying entry.
+    expect(fixture.setup.length).toBe(1);
+    const step = fixture.setup[0];
+    expect(step.type).toBe('create-session');
+    if (step.type !== 'create-session') return;
+    const actionSpec = step.actionSpec;
+    expect(actionSpec).toBeDefined();
+    if (actionSpec === undefined) return;
+
+    // The input envelope is a dispatchable action frame carrying an
+    // ActionEventValue whose `action` IS declared.
+    expect(parseInputEnvelope(fixture.name, fixture.inputEnvelope).kind).toBe('action');
+    const frame = fixture.inputEnvelope;
+    expect(isRecord(frame)).toBe(true);
+    if (!isRecord(frame)) return;
+    const envelope = frame['payload'];
+    expect(isRecord(envelope)).toBe(true);
+    if (!isRecord(envelope)) return;
+    expect(envelope['type']).toBe('data:submit');
+    const value = envelope['payload'];
+    expect(isRecord(value)).toBe(true);
+    if (!isRecord(value)) return;
+    const actionName = value['action'];
+    expect(typeof actionName).toBe('string');
+    if (typeof actionName !== 'string') return;
+    const entry = actionSpec[actionName];
+    expect(entry).toBeDefined();
+    if (entry === undefined) return;
+
+    // The declared schema parses under the protocol's JSON-Schema
+    // grammar (hosts install it via the same parse — a schema the
+    // grammar rejects would skip on every host, grading nothing).
+    const parsedSchema = jsonSchemaSchema.safeParse(entry.schema);
+    expect(parsedSchema.success).toBe(true);
+    if (!parsedSchema.success) return;
+
+    // Schema half rejects; name-membership half alone admits.
+    const withSchema = validateActionData(value, {
+      [actionName]: { label: actionName, schema: parsedSchema.data },
+    });
+    expect(withSchema.valid).toBe(false);
+    const nameOnly = validateActionData(value, {
+      [actionName]: { label: actionName },
+    });
+    expect(nameOnly.valid).toBe(true);
   });
 
   it('app-mismatch binds the GguiSession to a different appId than the runner subscribes with', () => {

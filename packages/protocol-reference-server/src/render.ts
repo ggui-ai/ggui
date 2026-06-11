@@ -8,7 +8,8 @@
  * Each GguiSession carries:
  *   - an optional declared `actionSpec` (installed by the
  *     `create-session` ConformanceHost directive) — the action
- *     handler (`./action-router.ts`) enforces name-membership for
+ *     handler (`./action-router.ts`) enforces the declared-action
+ *     contract (name membership + per-entry payload schema) for
  *     inbound `data:submit` envelopes against it;
  *   - an event ledger (the consume buffer) — appended actions get a
  *     monotonic per-session `sequence` the action ack echoes back;
@@ -26,8 +27,7 @@
  * over the SPEC §12.2 wire using the canonical render-identity field
  * `sessionId`.
  */
-import type { HostContextProjection } from '@ggui-ai/protocol';
-import type { ActionSpecEntryDecl } from '@ggui-ai/protocol-conformance';
+import type { ActionSpec, HostContextProjection } from '@ggui-ai/protocol';
 
 /**
  * One appended consume-buffer event. The ledger is the reference
@@ -50,13 +50,16 @@ export interface GguiSession {
   readonly sessionId: string;
   readonly appId: string;
   /**
-   * Declared actionSpec — action name → entry. `undefined` means no
-   * contract is declared and the action handler accepts every action
-   * (mirroring the first-party `assertActionContract` no-op on
-   * undeclared specs). Installed by the `create-session` directive's
-   * `actionSpec` field; never mutated after install.
+   * Declared actionSpec — the protocol's `ActionSpec` (action name →
+   * `ActionEntry`, including each entry's optional payload `schema`).
+   * `undefined` means no contract is declared and the action handler
+   * accepts every action (mirroring the first-party
+   * `assertActionContract` no-op on undeclared specs). Installed by
+   * the `create-session` directive's `actionSpec` field (the
+   * ConformanceHost adapter maps the kit's declaration onto the
+   * protocol type); never mutated after install.
    */
-  actionSpec?: Readonly<Record<string, ActionSpecEntryDecl>>;
+  actionSpec?: ActionSpec;
   /** Consume-buffer event ledger. Append via {@link appendEvent}. */
   readonly events: SessionEvent[];
   /**
@@ -193,10 +196,7 @@ export class GguiSessionStore {
    * identity, so the declaration rides session creation rather than a
    * separate registration directive.
    */
-  declareActionSpec(
-    sessionId: string,
-    actionSpec: Readonly<Record<string, ActionSpecEntryDecl>>,
-  ): void {
+  declareActionSpec(sessionId: string, actionSpec: ActionSpec): void {
     const render = this.create(sessionId, 'conformance');
     render.actionSpec = actionSpec;
   }

@@ -58,10 +58,12 @@ import type {
   SetupStep as HostSetupStep,
   TeardownStep as HostTeardownStep,
 } from './conformance-host.js';
-import { deepEqual, matchBehavior, type MatchResult } from './match-behavior.js';
+import { isRecord } from './is-record.js';
+import { behaviorIs, deepEqual, matchBehavior, type MatchResult } from './match-behavior.js';
 import type {
   ActionSpecEntryDecl,
   AuthConfig,
+  JsonSchemaDecl,
   SessionStateBehavior,
   StreamUpdateBehavior,
   TestCase,
@@ -272,17 +274,13 @@ async function runOneFixture(
     // produced no wire response, so the grade is a post-observation-
     // window read-back of the GguiSession field via the host, not a
     // frame match. Every other behavior kind grades against observed
-    // frames. (Cast to the specific arm — the extensibly-closed
-    // `UnknownBehavior` in the union has `kind: string & {}` which
-    // widens narrowing; the literal was checked.)
-    const match: MatchResult =
-      fixture.expectedBehavior.kind === 'session-state'
-        ? await matchSessionState(
-            fixture.expectedBehavior as SessionStateBehavior,
-            sessionId,
-            config.host,
-          )
-        : matchBehavior(fixture.expectedBehavior, frames);
+    // frames. (`behaviorIs` narrows to the specific arm — the
+    // extensibly-closed `UnknownBehavior` in the union has
+    // `kind: string & {}` which defeats bare literal narrowing.)
+    const expectedBehavior = fixture.expectedBehavior;
+    const match: MatchResult = behaviorIs(expectedBehavior, 'session-state')
+      ? await matchSessionState(expectedBehavior, sessionId, config.host)
+      : matchBehavior(expectedBehavior, frames);
 
     // Dispatch teardown regardless of match outcome. Failures in
     // teardown surface as warnings; they do not flip pass → fail.
@@ -740,12 +738,11 @@ export async function matchSessionState(
 function maybeSupportedVersions(
   behavior: TestCase['expectedBehavior'],
 ): { readonly supportedVersions: readonly string[] } | undefined {
-  if (behavior.kind === 'version-mismatch') {
-    // Cast to the specific arm — the extensibly-closed `UnknownBehavior`
-    // in the union has `kind: string & {}` which widens narrowing and
-    // makes TS forget it already checked the discriminant literal.
-    const narrow = behavior as VersionMismatchBehavior;
-    return { supportedVersions: narrow.clientAccepts };
+  // `behaviorIs` narrows to the specific arm — the extensibly-closed
+  // `UnknownBehavior` in the union has `kind: string & {}` which
+  // defeats bare literal narrowing.
+  if (behaviorIs(behavior, 'version-mismatch')) {
+    return { supportedVersions: behavior.clientAccepts };
   }
   return undefined;
 }
@@ -768,7 +765,7 @@ function slugToCriterion(slug: string): string {
     case 'bootstrap-protocol':
       return 'Protocol #5 named failure modes — bootstrap contract';
     case 'consume-buffer':
-      return 'Single action-routing model — consume-buffer persistence + declared-action contract';
+      return 'Single action-routing model — consume-buffer persistence + declared-action contract (name membership + payload schema)';
     case 'host-context':
       return 'Host-context persistence — host_context_observed MUST persist onto GguiSession.hostContext';
     case 'reserved-channel-authority':
@@ -820,7 +817,7 @@ export function parseSetupStep(fixtureName: string, step: unknown): HostSetupSte
         fixtureName,
         type,
         step,
-        "'actionSpec' must be an object mapping action names to entry objects when present",
+        "'actionSpec' must be an object mapping action names to entry objects (each entry's optional 'schema' a shape-valid JSON-Schema node) when present",
       );
     }
     return {
@@ -903,15 +900,77 @@ function malformedDirective(
   );
 }
 
-/** Validating narrower for `CreateGguiSessionStep.actionSpec`. */
+/**
+ * Validating narrower for `CreateGguiSessionStep.actionSpec`. Each
+ * entry must be an object whose optional `schema` field — when
+ * authored — is a shape-valid {@link JsonSchemaDecl} per
+ * {@link isJsonSchemaDecl}.
+ */
 function isActionSpecDecl(
   value: unknown,
 ): value is Readonly<Record<string, ActionSpecEntryDecl>> {
-  return isRecord(value) && Object.values(value).every((entry) => isRecord(entry));
+  return (
+    isRecord(value) &&
+    Object.values(value).every(
+      (entry) =>
+        isRecord(entry) &&
+        (entry['schema'] === undefined || isJsonSchemaDecl(entry['schema'])),
+    )
+  );
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === 'object' && !Array.isArray(value);
+/** The `type` keyword values the kit's authored JSON-Schema subset names. */
+const JSON_SCHEMA_DECL_TYPES: readonly unknown[] = [
+  'string',
+  'number',
+  'integer',
+  'boolean',
+  'array',
+  'object',
+  'null',
+];
+
+/**
+ * Validating parse for the typed core of {@link JsonSchemaDecl} —
+ * recursively checks that every keyword the kit's authored vocabulary
+ * names carries the shape the type declares. Keywords outside the
+ * typed core pass through verbatim (the implementation under test
+ * owns their interpretation), mirroring the index-signature tail on
+ * the declared type. A fixture authoring a malformed schema node is a
+ * fixture-authoring error the runner throws on — never a skip or a
+ * fail of the implementation under test.
+ */
+function isJsonSchemaDecl(value: unknown): value is JsonSchemaDecl {
+  if (!isRecord(value)) return false;
+  if (value['type'] !== undefined && !JSON_SCHEMA_DECL_TYPES.includes(value['type'])) {
+    return false;
+  }
+  if (value['description'] !== undefined && typeof value['description'] !== 'string') {
+    return false;
+  }
+  if (value['enum'] !== undefined && !Array.isArray(value['enum'])) return false;
+  if (value['items'] !== undefined && !isJsonSchemaDecl(value['items'])) return false;
+  const properties = value['properties'];
+  if (properties !== undefined) {
+    if (!isRecord(properties)) return false;
+    if (!Object.values(properties).every(isJsonSchemaDecl)) return false;
+  }
+  const required = value['required'];
+  if (
+    required !== undefined &&
+    !(Array.isArray(required) && required.every((name) => typeof name === 'string'))
+  ) {
+    return false;
+  }
+  const additionalProperties = value['additionalProperties'];
+  if (
+    additionalProperties !== undefined &&
+    typeof additionalProperties !== 'boolean' &&
+    !isJsonSchemaDecl(additionalProperties)
+  ) {
+    return false;
+  }
+  return true;
 }
 
 // Re-export the narrowed union types for callers building custom

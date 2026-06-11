@@ -39,6 +39,7 @@ import type {
   McpUiDisplayMode,
 } from '@ggui-ai/protocol';
 
+import { isRecord } from './is-record.js';
 import type { GguiSession } from './render.js';
 
 /**
@@ -188,8 +189,4 @@ function parseHostContextProjection(value: unknown): HostContextProjection | und
 
 function isDisplayMode(value: unknown): value is McpUiDisplayMode {
   return value === 'inline' || value === 'fullscreen' || value === 'pip';
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === 'object' && !Array.isArray(value);
 }

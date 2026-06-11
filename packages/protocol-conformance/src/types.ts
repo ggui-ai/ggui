@@ -140,13 +140,49 @@ export type SetupStep =
 
 /**
  * Declared-action entry for {@link CreateGguiSessionStep.actionSpec}.
- * The behavioral fixtures exercise the name-membership half of the
- * action contract — an empty entry declares a void-payload action.
- * `schema` is authoring-reserved for future payload-validation
- * fixtures; hosts MAY ignore it today.
+ * An empty entry declares a void-payload action — fixtures over it
+ * exercise the name-membership half of the action contract. An entry
+ * carrying `schema` ALSO declares the action's payload contract: the
+ * implementation under test MUST validate a `data:submit` payload's
+ * `data` against it at receipt (SPEC §4.6) and reject non-conforming
+ * payloads with a `CONTRACT_VIOLATION` error frame — the same wire
+ * surface as an undeclared name. A host that cannot install
+ * per-action payload schemas MUST refuse the directive (throw, so the
+ * fixture skips honestly) rather than silently downgrading the
+ * declaration to name-membership.
  */
 export interface ActionSpecEntryDecl {
-  readonly schema?: unknown;
+  readonly schema?: JsonSchemaDecl;
+}
+
+/**
+ * JSON-Schema node authored on {@link ActionSpecEntryDecl.schema} —
+ * the kit's decoupled copy of the protocol's JSON Schema draft-07
+ * subset (`JsonSchema` in `@ggui-ai/protocol`), same authoring
+ * posture as {@link ContractErrorCode}: fixtures compile against the
+ * kit's frozen vocabulary, never the live protocol types. The typed
+ * core names exactly the keywords the shipped fixtures author and
+ * the runner's validating parse recognizes; the index-signature tail
+ * carries any further draft-07 keyword verbatim — the implementation
+ * under test owns their interpretation, exactly as with tool names
+ * and contract error codes.
+ */
+export interface JsonSchemaDecl {
+  readonly [keyword: string]: unknown;
+  readonly type?:
+    | 'string'
+    | 'number'
+    | 'integer'
+    | 'boolean'
+    | 'array'
+    | 'object'
+    | 'null';
+  readonly description?: string;
+  readonly enum?: readonly unknown[];
+  readonly items?: JsonSchemaDecl;
+  readonly properties?: Readonly<Record<string, JsonSchemaDecl>>;
+  readonly required?: readonly string[];
+  readonly additionalProperties?: JsonSchemaDecl | boolean;
 }
 
 export interface CreateGguiSessionStep {
@@ -162,9 +198,11 @@ export interface CreateGguiSessionStep {
    * mirrors how a real ggui server derives the declared-action set
    * from the render's data contract (actions are part of the render's
    * identity, not separately registered). Servers MUST reject
-   * `data:submit` envelopes naming actions absent from this record
-   * with an `error` frame, code `CONTRACT_VIOLATION`. Omitting the
-   * field declares no contract — all actions are accepted.
+   * `data:submit` envelopes naming actions absent from this record —
+   * and, for entries that declare a `schema`, envelopes whose `data`
+   * does not conform to it (SPEC §4.6 receipt validation) — with an
+   * `error` frame, code `CONTRACT_VIOLATION`. Omitting the field
+   * declares no contract — all actions are accepted.
    */
   readonly actionSpec?: Readonly<Record<string, ActionSpecEntryDecl>>;
 }

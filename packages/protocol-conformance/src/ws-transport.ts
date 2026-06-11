@@ -22,6 +22,7 @@
  */
 import WebSocket, { type RawData } from 'ws';
 
+import { isRecord } from './is-record.js';
 import type { AuthConfig, WebSocketTransportConfig } from './types.js';
 
 /**
@@ -176,10 +177,10 @@ function safeParse(
   | { readonly ok: false; readonly error: string } {
   try {
     const parsed: unknown = JSON.parse(text);
-    if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    if (!isRecord(parsed)) {
       return { ok: false, error: 'frame is not a JSON object' };
     }
-    return { ok: true, value: parsed as Record<string, unknown> };
+    return { ok: true, value: parsed };
   } catch (err) {
     return { ok: false, error: String((err as Error).message ?? err) };
   }

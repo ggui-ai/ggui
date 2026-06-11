@@ -27,7 +27,7 @@ Path-A-matchable kinds (`matchBehavior` returns `pass` / `fail`):
 - `bootstrap-success` — subscribe → `ack` round-trip
 - `version-mismatch` — `error` frame with `code: UPGRADE_REQUIRED`
 - `action-ack` — the action's `ack` frame (matched by echoed `requestId`) carries a numeric `payload.sequence`, proving the action event persisted to the GguiSession's consume buffer before the ack
-- `error-frame` — `error` frame with the expected `payload.code` (e.g. `CONTRACT_VIOLATION` for an action absent from the declared actionSpec)
+- `error-frame` — `error` frame with the expected `payload.code` (e.g. `CONTRACT_VIOLATION` for an action absent from the declared actionSpec, or one whose `data` violates the declared entry's payload schema)
 - `stream-update` — canonical channel-3 delivery frame (`{type: 'data', payload: StreamEnvelope}`, SPEC §12.2) whose envelope names the declared channel and carries the declared value as its `payload` body — exact deep-equal by default, or declared-keys-subset when the fixture authors `valueMatch: 'subset'` (for payloads carrying non-deterministic fields like generated ids)
 - `no-op` — silence after input dispatch
 

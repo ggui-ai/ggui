@@ -38,7 +38,7 @@ const fullProjection = {
   timeZone: 'America/Los_Angeles',
 } as const;
 
-function frameWith(hostContext: unknown, sessionId = 'hc-1'): unknown {
+function frameWith(hostContext: unknown, sessionId = 'hc-1'): Record<string, unknown> {
   return {
     type: 'host_context_observed',
     payload: { sessionId, hostContext },
@@ -59,7 +59,7 @@ describe('parseHostContextObservedFrame', () => {
   });
 
   it('preserves a string requestId and drops the frame on a non-string one', () => {
-    const base = frameWith(fullProjection) as Record<string, unknown>;
+    const base = frameWith(fullProjection);
     expect(
       parseHostContextObservedFrame({ ...base, requestId: 'req-1' })?.requestId,
     ).toBe('req-1');

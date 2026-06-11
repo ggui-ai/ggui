@@ -32,6 +32,7 @@ import { describe, expect, it, beforeEach, afterEach } from 'vitest';
 import { WebSocket } from 'ws';
 
 import { createReferenceConformanceHost } from './conformance-host.js';
+import { isRecord } from './is-record.js';
 import { ReferenceServer } from './server.js';
 
 describe('emit-envelope ConformanceHost directive', () => {
@@ -268,8 +269,7 @@ async function captureFramesAfterAck(
 }
 
 function isAck(frame: unknown): boolean {
-  if (frame === null || typeof frame !== 'object') return false;
-  return (frame as { type?: unknown }).type === 'ack';
+  return isRecord(frame) && frame['type'] === 'ack';
 }
 
 /**

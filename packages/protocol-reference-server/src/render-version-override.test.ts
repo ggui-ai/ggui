@@ -115,7 +115,9 @@ async function firstFrame(baseUrl: string, send: unknown): Promise<unknown> {
         resolve(parsed);
       } catch (err) {
         ws.close();
-        reject(err as Error);
+        // JSON.parse only ever throws SyntaxError; the guard keeps the
+        // rejection an Error without asserting it.
+        reject(err instanceof Error ? err : new Error(String(err)));
       }
     });
     ws.on('error', (err) => {

@@ -50,7 +50,8 @@ Prints `READY ws://127.0.0.1:3100/ws` when bound. Ctrl-C to stop.
 
 `src/conformance.test.ts` boots this server and runs `@ggui-ai/protocol-conformance`
 against it through a `ConformanceHost` adapter. Every drivable conformance fixture must
-pass (bootstrap-success, action-ack-sequence, undeclared-action-rejected, version-match,
-version-mismatch, app-mismatch, host-context-observed-persists); directives outside this
-server's scope (renderer-url-override, ui-initialize-response-override, and similar) skip
-cleanly per the kit's design.
+pass (bootstrap-success, action-ack-sequence, undeclared-action-rejected,
+action-payload-schema-violation, version-match, version-mismatch, app-mismatch,
+host-context-observed-persists); directives outside this server's scope
+(renderer-url-override, ui-initialize-response-override, and similar) skip cleanly per
+the kit's design.

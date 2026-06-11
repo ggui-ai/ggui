@@ -1,0 +1,37 @@
+{
+  "name": "action-payload-schema-violation",
+  "description": "A `data:submit` action naming a DECLARED action whose `data` violates the entry's declared payload schema is rejected at receipt: the server replies an `error` frame with code CONTRACT_VIOLATION (echoing the action's requestId) and the envelope is NOT appended to the consume buffer. Proves the payload-schema half of the declared-action contract (SPEC Section 4.6 receipt validation) — name-membership alone does not admit an action whose payload breaks the contract.",
+  "skipReason": null,
+  "setup": [
+    {
+      "type": "create-session",
+      "sessionId": "ck-schema-violation-1",
+      "actionSpec": {
+        "toggleTask": {
+          "schema": {
+            "type": "object",
+            "properties": { "id": { "type": "string" } },
+            "required": ["id"]
+          }
+        }
+      }
+    }
+  ],
+  "inputEnvelope": {
+    "type": "action",
+    "requestId": "ck-schema-violation-1-req",
+    "payload": {
+      "sessionId": "ck-schema-violation-1",
+      "type": "data:submit",
+      "payload": {
+        "action": "toggleTask",
+        "data": { "id": 41 }
+      }
+    }
+  },
+  "expectedBehavior": {
+    "kind": "error-frame",
+    "code": "CONTRACT_VIOLATION",
+    "requestId": "ck-schema-violation-1-req"
+  }
+}

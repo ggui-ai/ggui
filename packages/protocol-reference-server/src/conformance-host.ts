@@ -7,7 +7,9 @@
  *
  *   Implement:
  *     - create-session            → `renders.create()` (+
- *       `renders.declareActionSpec()` when the directive carries one)
+ *       `renders.declareActionSpec()` when the directive carries one,
+ *       mapped onto the protocol's `ActionSpec` — declared entry
+ *       schemas included, via `toReferenceActionSpec`)
  *     - server-version-override   → `renders.setVersionOverride()`
  *     - emit-envelope             → wrap the directive's body in the
  *       SPEC §12.2 channel-3 delivery frame `{type:'data', payload:
@@ -40,7 +42,9 @@
  */
 import {
   DEFAULT_STREAM_CHANNEL_MODE,
+  jsonSchemaSchema,
   makeStreamEnvelope,
+  type ActionSpec,
   type JsonValue,
 } from '@ggui-ai/protocol';
 import type {
@@ -72,7 +76,10 @@ export function createReferenceConformanceHost({
       if (step.kind === 'create-session') {
         serverInstance.renders.create(step.sessionId, step.appId ?? 'conformance');
         if (step.actionSpec !== undefined) {
-          serverInstance.renders.declareActionSpec(step.sessionId, step.actionSpec);
+          serverInstance.renders.declareActionSpec(
+            step.sessionId,
+            toReferenceActionSpec(step.actionSpec),
+          );
         }
         return;
       }
@@ -207,6 +214,38 @@ function unreachableSetupStep(step: never): never {
   throw new Error(
     `reference server received a setup directive outside the kit's closed vocabulary: ${JSON.stringify(step)}`,
   );
+}
+
+/**
+ * Map the kit's declared actionSpec (name → `ActionSpecEntryDecl`)
+ * onto the protocol's `ActionSpec` the server's action router
+ * enforces with (`validateActionData`). `ActionEntry.label` is
+ * required by the protocol type, so the action name doubles as its
+ * label; an entry's declared `schema` installs as the action's
+ * payload contract (`ActionEntry.schema`) through the protocol's
+ * `jsonSchemaSchema` validating parse. A declared schema the
+ * protocol's grammar rejects throws — the kit records the fixture as
+ * SKIPPED — rather than silently downgrading the declaration to
+ * name-membership.
+ */
+function toReferenceActionSpec(
+  decl: Readonly<Record<string, { readonly schema?: unknown }>>,
+): ActionSpec {
+  const spec: ActionSpec = {};
+  for (const [action, entry] of Object.entries(decl)) {
+    if (entry.schema === undefined) {
+      spec[action] = { label: action };
+      continue;
+    }
+    const parsed = jsonSchemaSchema.safeParse(entry.schema);
+    if (!parsed.success) {
+      throw new Error(
+        `reference server cannot install the entry schema declared on action '${action}' — not a valid protocol JsonSchema node: ${parsed.error.message}`,
+      );
+    }
+    spec[action] = { label: action, schema: parsed.data };
+  }
+  return spec;
 }
 
 /**

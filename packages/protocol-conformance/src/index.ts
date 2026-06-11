@@ -26,6 +26,7 @@ export type {
   SetupStep,
   CreateGguiSessionStep,
   ActionSpecEntryDecl,
+  JsonSchemaDecl,
   RendererUrlOverrideStep,
   ServerVersionOverrideStep,
   UiInitializeResponseOverrideStep,

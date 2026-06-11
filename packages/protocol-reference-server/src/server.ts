@@ -3,7 +3,8 @@
  * exports. Honest scope: SPEC §12.2 wire (subscribe incl. the §12.2
  * appId-tenancy MUST → APP_MISMATCH), version handshake, the single
  * action-routing model (action → consume-buffer append → ack with
- * sequence; undeclared actions rejected with CONTRACT_VIOLATION), and
+ * sequence; undeclared actions AND schema-violating payloads rejected
+ * with CONTRACT_VIOLATION per SPEC §4.6 receipt validation), and
  * `host_context_observed` persistence onto `GguiSession.hostContext`.
  * That's it.
  *
@@ -27,6 +28,7 @@ import {
   handleHostContextObserved,
   parseHostContextObservedFrame,
 } from './host-context.js';
+import { isRecord } from './is-record.js';
 import { GguiSessionStore, type Subscriber } from './render.js';
 
 export interface ReferenceServerOptions {
@@ -204,18 +206,17 @@ export class ReferenceServer {
       return;
     }
 
-    if (frame === null || typeof frame !== 'object') return;
-    const f = frame as Record<string, unknown>;
+    if (!isRecord(frame)) return;
 
-    if (f['type'] === 'subscribe') {
-      this.handleSubscribe(f, {
+    if (frame['type'] === 'subscribe') {
+      this.handleSubscribe(frame, {
         subscriber: ctx.subscriber,
         onSubscribed: ctx.onSubscribed,
         socket: ctx.socket,
       });
       return;
     }
-    if (f['type'] === 'action') {
+    if (frame['type'] === 'action') {
       const parsed = parseActionFrame(frame);
       if (parsed === undefined) return; // malformed — silently drop
       const render = this.renders.get(parsed.payload.sessionId);
@@ -225,7 +226,7 @@ export class ReferenceServer {
       handleAction(parsed, { render, reply: ctx.subscriber });
       return;
     }
-    if (f['type'] === 'host_context_observed') {
+    if (frame['type'] === 'host_context_observed') {
       // Fire-and-forget observation message — no response frame. The
       // obligation is purely stateful: persist the validated
       // projection onto the named render (idempotent overwrite). The
@@ -253,15 +254,25 @@ export class ReferenceServer {
     },
   ): void {
     const payload = frame['payload'];
-    if (payload === null || typeof payload !== 'object') return;
-    const p = payload as Record<string, unknown>;
+    if (!isRecord(payload)) return;
     // GguiSession-identity field: the canonical SPEC field `sessionId`.
-    const sessionId = typeof p['sessionId'] === 'string' ? p['sessionId'] : undefined;
+    const sessionId = typeof payload['sessionId'] === 'string' ? payload['sessionId'] : undefined;
     if (sessionId === undefined) return;
-    const appId = typeof p['appId'] === 'string' ? p['appId'] : 'conformance';
+    // `appId` is REQUIRED on the subscribe payload (SPEC §12.2 field
+    // table), but the SPEC names no rejection outcome for its absence
+    // and the first-party server has no deterministic posture to
+    // mirror (absent appId falls down path-dependent accidental
+    // outcomes there). Pending that wire decision this server refuses
+    // to invent one: a subscribe missing a required field is a
+    // malformed frame and takes the same posture as the missing
+    // `sessionId` above — silently dropped, no error frame, no render
+    // provisioned.
+    const appId = typeof payload['appId'] === 'string' ? payload['appId'] : undefined;
+    if (appId === undefined) return;
     const requestId = typeof frame['requestId'] === 'string' ? frame['requestId'] : undefined;
-    const supportedVersions = Array.isArray(p['supportedVersions'])
-      ? (p['supportedVersions'] as readonly unknown[]).filter((v): v is string => typeof v === 'string')
+    const rawVersions = payload['supportedVersions'];
+    const supportedVersions = Array.isArray(rawVersions)
+      ? rawVersions.filter((v): v is string => typeof v === 'string')
       : undefined;
 
     // Version handshake — if the client declared `supportedVersions`

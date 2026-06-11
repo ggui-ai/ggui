@@ -57,7 +57,7 @@
  */
 import { createServer, type Server as HttpServer } from 'node:http';
 import { runConformance, type ConformanceHost } from '@ggui-ai/protocol-conformance';
-import type { ActionSpec, JsonValue } from '@ggui-ai/protocol';
+import { jsonSchemaSchema, type ActionSpec, type JsonValue } from '@ggui-ai/protocol';
 import {
   InMemoryAuthAdapter,
   InMemoryGguiSessionStore,
@@ -106,6 +106,16 @@ const CONFORMANCE_APP_ID = 'conformance';
  *     from the declared actionSpec → `assertActionContract` throws and
  *     the server replies `error{payload.code:'CONTRACT_VIOLATION'}`
  *     echoing the `requestId`, appending nothing.
+ *   - `action-payload-schema-violation`: the `create-session`
+ *     directive declares an entry WITH a payload schema (installed
+ *     verbatim as `ActionEntry.schema` via the protocol's
+ *     `jsonSchemaSchema` parse); the dispatched action names the
+ *     declared entry but its `data` violates the schema →
+ *     `assertActionContract` (`validateActionData`, AJV) throws and
+ *     the server replies the same
+ *     `error{payload.code:'CONTRACT_VIOLATION'}` echoing the
+ *     `requestId`, appending nothing. The SPEC §4.6 receipt-validation
+ *     half of the declared-action contract.
  *   - `app-mismatch`: the `create-session` directive binds appId
  *     `conformance-other`; the runner's subscribe always claims
  *     `conformance` → the channel's subscribe handler looks the stored
@@ -124,6 +134,7 @@ const CONFORMANCE_APP_ID = 'conformance';
  */
 const EXPECTED_PASSING = [
   'action-ack-sequence',
+  'action-payload-schema-violation',
   'app-mismatch',
   'bootstrap-success',
   'host-context-observed-persists',
@@ -339,27 +350,35 @@ function createFirstPartyConformanceHost(harness: FirstPartyHarness): Conformanc
 
 /**
  * Map the kit's declared actionSpec (name → `ActionSpecEntryDecl`)
- * onto the protocol's `ActionSpec`. The behavioral fixtures exercise
- * name-membership only; `ActionEntry.label` is required by the
- * protocol type, so the action name doubles as its label.
+ * onto the protocol's `ActionSpec`. `ActionEntry.label` is required
+ * by the protocol type, so the action name doubles as its label.
  *
- * `ActionSpecEntryDecl.schema` is authoring-reserved for future
- * payload-validation fixtures. This host does NOT install entry
- * schemas yet — if a fixture starts authoring one, refuse loudly (the
- * fixture skips) rather than silently grading name-membership where
- * the fixture means payload validation.
+ * An entry carrying a `schema` installs it as the action's payload
+ * contract (`ActionEntry.schema`) through the protocol's
+ * `jsonSchemaSchema` validating parse — the exact schema
+ * `handleInboundAction` then enforces against the inbound
+ * `data:submit` payload's `data` (`assertActionContract` →
+ * `validateActionData`, AJV-compiled), which is what the kit's
+ * `action-payload-schema-violation` fixture grades. A declared schema
+ * the protocol's grammar rejects is refused loudly (the fixture
+ * skips) — never silently downgraded to name-membership.
  */
 function toFirstPartyActionSpec(
   decl: Readonly<Record<string, { readonly schema?: unknown }>>,
 ): ActionSpec {
   const spec: ActionSpec = {};
   for (const [action, entry] of Object.entries(decl)) {
-    if (entry.schema !== undefined) {
+    if (entry.schema === undefined) {
+      spec[action] = { label: action };
+      continue;
+    }
+    const parsed = jsonSchemaSchema.safeParse(entry.schema);
+    if (!parsed.success) {
       throw new Error(
-        `first-party conformance host does not install actionSpec entry schemas yet (action '${action}' declares one) — name-membership only`,
+        `first-party conformance host cannot install the entry schema declared on action '${action}' — not a valid protocol JsonSchema node: ${parsed.error.message}`,
       );
     }
-    spec[action] = { label: action };
+    spec[action] = { label: action, schema: parsed.data };
   }
   return spec;
 }

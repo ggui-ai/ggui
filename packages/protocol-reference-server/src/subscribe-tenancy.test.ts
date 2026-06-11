@@ -14,7 +14,14 @@
  *     regression lock on the create-before-addSubscriber ordering
  *     (`addSubscriber`'s create-if-missing fallback binds the default
  *     app, which would make a fresh render reject the same client's
- *     next subscribe).
+ *     next subscribe);
+ *   - a subscribe MISSING `appId` (REQUIRED per the §12.2 field table,
+ *     no rejection outcome named by the SPEC) is treated as a
+ *     malformed frame: silently dropped — no ack, no error frame, no
+ *     render provisioned. Regression lock against the historical
+ *     default-to-`'conformance'` fallback, which masked the
+ *     requirement by acking and binding a tenant the client never
+ *     supplied.
  *
  * Mirrors the test-helper pattern from `emit-envelope.test.ts`.
  */
@@ -111,6 +118,18 @@ describe('SPEC §12.2 subscribe tenancy (APP_MISMATCH)', () => {
       payload: { code: 'APP_MISMATCH' },
     });
   });
+
+  it('drops a subscribe missing the required appId — no reply frame, no render provisioned', async () => {
+    const reply = await subscribeSilence(server.baseUrl, {
+      sessionId: 'tenancy-4',
+      requestId: 'tenancy-4-req',
+    });
+    expect(reply).toBeNull();
+    // The malformed frame provisioned nothing — in particular it did
+    // NOT bind a fallback app the way the historical
+    // default-to-'conformance' behavior did.
+    expect(server.renders.get('tenancy-4')).toBeUndefined();
+  });
 });
 
 // =============================================================================
@@ -163,6 +182,54 @@ async function subscribeOnce(
 
     ws.on('error', (err) => {
       clearTimeout(ceiling);
+      reject(err);
+    });
+  });
+}
+
+/**
+ * Open a WS, send one `subscribe` frame WITHOUT `appId`, and resolve
+ * `null` if the server stays silent for the observation window — the
+ * malformed-frame posture has no reply at all, so silence IS the
+ * asserted outcome. Resolves with the frame if one arrives (failing
+ * the caller's `toBeNull()`).
+ */
+async function subscribeSilence(
+  baseUrl: string,
+  payload: { sessionId: string; requestId: string },
+): Promise<unknown> {
+  const wsUrl = baseUrl.replace(/^http/, 'ws') + '/ws';
+  return await new Promise<unknown>((resolve, reject) => {
+    const ws = new WebSocket(wsUrl);
+    const window = setTimeout(() => {
+      ws.close();
+      resolve(null);
+    }, 400);
+
+    ws.on('open', () => {
+      ws.send(
+        JSON.stringify({
+          type: 'subscribe',
+          payload: { sessionId: payload.sessionId, role: 'user' },
+          requestId: payload.requestId,
+        }),
+      );
+    });
+
+    ws.on('message', (raw: Buffer) => {
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(raw.toString('utf8'));
+      } catch {
+        return;
+      }
+      clearTimeout(window);
+      ws.close();
+      resolve(parsed);
+    });
+
+    ws.on('error', (err) => {
+      clearTimeout(window);
       reject(err);
     });
   });

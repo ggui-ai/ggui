@@ -82,6 +82,7 @@
  */
 import type { StreamEnvelope } from '@ggui-ai/protocol';
 
+import { isRecord } from './is-record.js';
 import type {
   ActionAckBehavior,
   BootstrapSuccessBehavior,
@@ -109,31 +110,47 @@ export type MatchResult =
     }
   | { readonly kind: 'unmatchable-on-ws'; readonly reason: string };
 
+/**
+ * Discriminant narrowing for the extensibly-closed
+ * {@link ExpectedBehavior} union. The `UnknownBehavior` arm's
+ * `kind: string & {}` deliberately widens the discriminant (future
+ * fixture vocabulary must flow through as opaque records), which also
+ * stops TS narrowing on direct literal checks — so the kit dispatches
+ * through this predicate instead of per-site casts. The runtime check
+ * is exactly the literal comparison the predicate claims.
+ */
+export function behaviorIs<K extends ExpectedBehavior['kind']>(
+  behavior: ExpectedBehavior,
+  kind: K,
+): behavior is Extract<ExpectedBehavior, { readonly kind: K }> {
+  return behavior.kind === kind;
+}
+
 export function matchBehavior(
   behavior: ExpectedBehavior,
   frames: readonly ObservedFrame[],
 ): MatchResult {
-  // Dispatch on the `kind` discriminator with explicit casts because
-  // the extensibly-closed `UnknownBehavior` (`kind: string & {}`) in
-  // the union widens the discriminant, preventing TS from narrowing
-  // on literals. We checked the literal above — the cast is sound.
-  if (behavior.kind === 'bootstrap-success') {
-    return matchBootstrapSuccess(behavior as BootstrapSuccessBehavior, frames);
+  // Dispatch on the `kind` discriminator through `behaviorIs` — the
+  // extensibly-closed `UnknownBehavior` (`kind: string & {}`) in the
+  // union widens the discriminant, preventing TS from narrowing on
+  // bare literal checks.
+  if (behaviorIs(behavior, 'bootstrap-success')) {
+    return matchBootstrapSuccess(behavior, frames);
   }
-  if (behavior.kind === 'version-mismatch') {
-    return matchVersionMismatch(behavior as VersionMismatchBehavior, frames);
+  if (behaviorIs(behavior, 'version-mismatch')) {
+    return matchVersionMismatch(behavior, frames);
   }
-  if (behavior.kind === 'action-ack') {
-    return matchActionAck(behavior as ActionAckBehavior, frames);
+  if (behaviorIs(behavior, 'action-ack')) {
+    return matchActionAck(behavior, frames);
   }
-  if (behavior.kind === 'error-frame') {
-    return matchErrorFrame(behavior as ErrorFrameBehavior, frames);
+  if (behaviorIs(behavior, 'error-frame')) {
+    return matchErrorFrame(behavior, frames);
   }
-  if (behavior.kind === 'stream-update') {
-    return matchStreamUpdate(behavior as StreamUpdateBehavior, frames);
+  if (behaviorIs(behavior, 'stream-update')) {
+    return matchStreamUpdate(behavior, frames);
   }
-  if (behavior.kind === 'no-op') {
-    return matchNoOp(behavior as NoOpBehavior, frames);
+  if (behaviorIs(behavior, 'no-op')) {
+    return matchNoOp(behavior, frames);
   }
   if (behavior.kind === 'bootstrap-failure') {
     return {
@@ -160,7 +177,7 @@ export function matchBehavior(
   // vocabulary the runner doesn't recognize; skip cleanly.
   return {
     kind: 'unmatchable-on-ws',
-    reason: `Unknown expectedBehavior.kind='${(behavior as { readonly kind: string }).kind}' — kit runner does not recognize this behavior. Check kit version.`,
+    reason: `Unknown expectedBehavior.kind='${behavior.kind}' — kit runner does not recognize this behavior. Check kit version.`,
   };
 }
 
@@ -395,10 +412,6 @@ function findErrorFrame(
   );
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === 'object' && !Array.isArray(value);
-}
-
 /**
  * Validating narrower for {@link StreamEnvelope} — the body of a
  * channel-3 `data` frame. Field names come from `@ggui-ai/protocol`
@@ -431,13 +444,12 @@ export function deepEqual(a: unknown, b: unknown): boolean {
     if (a.length !== b.length) return false;
     return a.every((item, i) => deepEqual(item, b[i]));
   }
-  const aObj = a as Record<string, unknown>;
-  const bObj = b as Record<string, unknown>;
-  const aKeys = Object.keys(aObj).sort();
-  const bKeys = Object.keys(bObj).sort();
+  if (!isRecord(a) || !isRecord(b)) return false;
+  const aKeys = Object.keys(a).sort();
+  const bKeys = Object.keys(b).sort();
   if (aKeys.length !== bKeys.length) return false;
   if (!aKeys.every((k, i) => k === bKeys[i])) return false;
-  return aKeys.every((k) => deepEqual(aObj[k], bObj[k]));
+  return aKeys.every((k) => deepEqual(a[k], b[k]));
 }
 
 /**

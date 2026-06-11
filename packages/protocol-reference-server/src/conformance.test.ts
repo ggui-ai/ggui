@@ -8,7 +8,7 @@
  * kit — the vendor-neutrality claim is grounded.
  *
  * Expected outcome:
- *   - 7 fixtures PASS (see {@link EXPECTED_PASSING}).
+ *   - 8 fixtures PASS (see {@link EXPECTED_PASSING}).
  *   - 3 fixtures SKIP (see {@link EXPECTED_SKIPPED}) — browser-level
  *     directives the host throws on (`renderer-url-override`,
  *     `ui-initialize-response-override`) or the matcher's
@@ -46,6 +46,16 @@ import { ReferenceServer } from './server.js';
  *     (echoing the `requestId`) and appends nothing. Proves the
  *     declared-action contract gates the consume buffer.
  *
+ *   - `action-payload-schema-violation`: the `create-session`
+ *     directive declares an entry WITH a payload schema (the host
+ *     maps it onto the protocol's `ActionEntry.schema`); the
+ *     dispatched action names the declared entry but its `data`
+ *     violates the schema. The action router's `validateActionData`
+ *     (the protocol's own validator — the same one the first-party
+ *     server enforces with) rejects it: `error` frame, code
+ *     `CONTRACT_VIOLATION`, nothing appended. Proves the SPEC §4.6
+ *     receipt-validation half of the declared-action contract.
+ *
  *   - `version-match`: subscribe without a version conflict completes
  *     the handshake — the ack arrives, no `UPGRADE_REQUIRED`. The
  *     happy-path half of Protocol #3.
@@ -81,6 +91,7 @@ import { ReferenceServer } from './server.js';
  */
 const EXPECTED_PASSING = [
   'action-ack-sequence',
+  'action-payload-schema-violation',
   'app-mismatch',
   'bootstrap-success',
   'host-context-observed-persists',
