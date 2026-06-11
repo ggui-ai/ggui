@@ -3,8 +3,6 @@ import { defineConfig } from 'tsup';
 export default defineConfig({
   entry: [
     'src/index.ts',
-    'src/query/index.ts',
-    'src/testing/index.ts',
     'src/chat-helpers/index.ts',
     'src/chat-thread/index.ts',
     'src/chat-thread/shells/chat/index.ts',

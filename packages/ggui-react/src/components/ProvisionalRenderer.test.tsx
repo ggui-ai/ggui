@@ -3,18 +3,34 @@
  * pipeline end-to-end: root buffering, replace-by-id, deleteSurface
  * teardown, catalog-miss fallbacks, and disabled-control rendering.
  *
- * Envelopes are injected by dispatching `BRIDGE_EVENTS.AGENT_DATA` on
- * `window` — exactly the shape `GguiRender` fans out — so the tests
- * exercise the same contract as production.
+ * Envelopes are injected by emitting on a `StreamBus` provided through
+ * `StreamBusContext` — exactly the wiring `GguiRender` establishes —
+ * so the tests exercise the same contract as production (including
+ * the reserved-channel replay ring for late subscribers).
  */
-import { describe, it, expect } from 'vitest';
-import { act, render } from '@testing-library/react';
-import {
-  BRIDGE_EVENTS,
-  PREVIEW_CHANNEL,
-} from '@ggui-ai/protocol';
+import { describe, it, expect, beforeEach } from 'vitest';
+import { act, render, type RenderResult } from '@testing-library/react';
+import type { ReactElement } from 'react';
+import { PREVIEW_CHANNEL } from '@ggui-ai/protocol';
 import type { StreamEnvelope } from '@ggui-ai/protocol';
+import { StreamBus } from '@ggui-ai/wire';
+import { StreamBusContext } from '../internal/stream-bus-context.js';
 import { ProvisionalRenderer } from './ProvisionalRenderer.js';
+
+/** Fresh bus per test — replay-ring state must not leak across tests. */
+let bus: StreamBus;
+beforeEach(() => {
+  bus = new StreamBus();
+});
+
+/** Wrap in the same provider `<GguiRender>` establishes. */
+function withBus(ui: ReactElement): ReactElement {
+  return <StreamBusContext.Provider value={bus}>{ui}</StreamBusContext.Provider>;
+}
+
+function renderWithBus(ui: ReactElement): RenderResult {
+  return render(withBus(ui));
+}
 
 type A2UIPayload = unknown;
 
@@ -27,9 +43,7 @@ function sendPayload(payload: A2UIPayload, complete = false): void {
     ...(complete ? { complete: true } : {}),
   };
   act(() => {
-    window.dispatchEvent(
-      new CustomEvent(BRIDGE_EVENTS.AGENT_DATA, { detail: envelope }),
-    );
+    bus.emit(envelope);
   });
 }
 
@@ -59,7 +73,7 @@ function deleteSurface(surfaceId = 'stack-1'): void {
 
 describe('ProvisionalRenderer — root buffering', () => {
   it('renders the fallback before any envelopes arrive', () => {
-    const { container } = render(
+    const { container } = renderWithBus(
       <ProvisionalRenderer fallback={<div data-testid="fallback">loading</div>} />,
     );
     expect(container.querySelector('[data-testid="fallback"]')).not.toBeNull();
@@ -67,7 +81,7 @@ describe('ProvisionalRenderer — root buffering', () => {
   });
 
   it('renders the fallback when only createSurface has arrived (no root yet)', () => {
-    const { container } = render(
+    const { container } = renderWithBus(
       <ProvisionalRenderer fallback={<div data-testid="fallback">wait</div>} />,
     );
     createSurface();
@@ -76,7 +90,7 @@ describe('ProvisionalRenderer — root buffering', () => {
   });
 
   it('renders the PreviewSurface once root arrives', () => {
-    const { container } = render(<ProvisionalRenderer />);
+    const { container } = renderWithBus(<ProvisionalRenderer />);
     createSurface();
     updateComponents([
       { id: 'root', component: 'Text', text: 'Hello world' },
@@ -86,7 +100,7 @@ describe('ProvisionalRenderer — root buffering', () => {
   });
 
   it('uses a default Spinner fallback when none is provided', () => {
-    const { container } = render(<ProvisionalRenderer />);
+    const { container } = renderWithBus(<ProvisionalRenderer />);
     // No envelopes — any rendered content at all IS the fallback.
     expect(container.firstChild).not.toBeNull();
     expect(container.querySelector('[data-ggui-preview]')).toBeNull();
@@ -95,7 +109,7 @@ describe('ProvisionalRenderer — root buffering', () => {
 
 describe('ProvisionalRenderer — replace-by-id', () => {
   it('replaces a component when a later updateComponents re-emits its id', () => {
-    const { container } = render(<ProvisionalRenderer />);
+    const { container } = renderWithBus(<ProvisionalRenderer />);
     createSurface();
     updateComponents([{ id: 'root', component: 'Text', text: 'first' }]);
     expect(container.textContent).toContain('first');
@@ -106,7 +120,7 @@ describe('ProvisionalRenderer — replace-by-id', () => {
   });
 
   it('patches a single child without clobbering siblings', () => {
-    const { container } = render(<ProvisionalRenderer />);
+    const { container } = renderWithBus(<ProvisionalRenderer />);
     createSurface();
     updateComponents([
       {
@@ -132,7 +146,7 @@ describe('ProvisionalRenderer — replace-by-id', () => {
 
 describe('ProvisionalRenderer — surface lifecycle', () => {
   it('deleteSurface clears the tree and reverts to fallback', () => {
-    const { container } = render(
+    const { container } = renderWithBus(
       <ProvisionalRenderer fallback={<div data-testid="fallback">wait</div>} />,
     );
     createSurface();
@@ -145,7 +159,7 @@ describe('ProvisionalRenderer — surface lifecycle', () => {
   });
 
   it('ignores updateComponents for a surface that was never created', () => {
-    const { container } = render(
+    const { container } = renderWithBus(
       <ProvisionalRenderer fallback={<div data-testid="fallback">wait</div>} />,
     );
     updateComponents(
@@ -157,7 +171,7 @@ describe('ProvisionalRenderer — surface lifecycle', () => {
   });
 
   it('ignores updateComponents targeting a different surface id', () => {
-    const { container } = render(<ProvisionalRenderer />);
+    const { container } = renderWithBus(<ProvisionalRenderer />);
     createSurface('active-surface');
     // Second surface never became active; its components must not
     // leak into the first one's fragment map.
@@ -169,7 +183,7 @@ describe('ProvisionalRenderer — surface lifecycle', () => {
   });
 
   it('createSurface starts a fresh fragment map', () => {
-    const { container } = render(<ProvisionalRenderer />);
+    const { container } = renderWithBus(<ProvisionalRenderer />);
     createSurface('s1');
     updateComponents(
       [{ id: 'root', component: 'Text', text: 'before' }],
@@ -194,7 +208,7 @@ describe('ProvisionalRenderer — surface lifecycle', () => {
 
 describe('ProvisionalRenderer — malformed envelopes', () => {
   it('ignores envelopes that fail the A2UI parser', () => {
-    const { container } = render(<ProvisionalRenderer />);
+    const { container } = renderWithBus(<ProvisionalRenderer />);
     sendPayload({ version: 'v0.8', createSurface: { surfaceId: 's1' } });
     sendPayload({ random: 'garbage' });
     sendPayload(null);
@@ -206,7 +220,7 @@ describe('ProvisionalRenderer — malformed envelopes', () => {
 
 describe('ProvisionalRenderer — catalog mapping', () => {
   it('renders Row / Column / Card / Divider / List containers', () => {
-    const { container } = render(<ProvisionalRenderer />);
+    const { container } = renderWithBus(<ProvisionalRenderer />);
     createSurface();
     updateComponents([
       {
@@ -241,7 +255,7 @@ describe('ProvisionalRenderer — catalog mapping', () => {
   });
 
   it('renders a Text fragment with h1..h6 variant as a Heading', () => {
-    const { container } = render(<ProvisionalRenderer />);
+    const { container } = renderWithBus(<ProvisionalRenderer />);
     createSurface();
     updateComponents([
       { id: 'root', component: 'Text', text: 'Big Title', variant: 'h2' },
@@ -252,7 +266,7 @@ describe('ProvisionalRenderer — catalog mapping', () => {
   });
 
   it('renders disabled control shells (non-interactive in V1)', () => {
-    const { container } = render(<ProvisionalRenderer />);
+    const { container } = renderWithBus(<ProvisionalRenderer />);
     createSurface();
     updateComponents([
       {
@@ -304,7 +318,7 @@ describe('ProvisionalRenderer — catalog mapping', () => {
   });
 
   it('renders an Image with alt + an Icon by name', () => {
-    const { container } = render(<ProvisionalRenderer />);
+    const { container } = renderWithBus(<ProvisionalRenderer />);
     createSurface();
     updateComponents([
       {
@@ -327,7 +341,7 @@ describe('ProvisionalRenderer — catalog mapping', () => {
   });
 
   it('renders a neutral placeholder when a referenced child id is missing', () => {
-    const { container } = render(<ProvisionalRenderer />);
+    const { container } = renderWithBus(<ProvisionalRenderer />);
     createSurface();
     // `missing-child` is referenced but never sent — the tree must
     // still paint, with a neutral placeholder where the child would
@@ -347,29 +361,29 @@ describe('ProvisionalRenderer — catalog mapping', () => {
 
 describe('ProvisionalRenderer — suspended prop', () => {
   it('renders nothing when suspended, even after envelopes arrive', () => {
-    const { container, rerender } = render(<ProvisionalRenderer />);
+    const { container, rerender } = renderWithBus(<ProvisionalRenderer />);
     createSurface();
     updateComponents([{ id: 'root', component: 'Text', text: 'live' }]);
     expect(container.textContent).toContain('live');
 
-    rerender(<ProvisionalRenderer suspended />);
+    rerender(withBus(<ProvisionalRenderer suspended />));
     expect(container.firstChild).toBeNull();
   });
 
   it('resumes rendering when suspended flips back to false', () => {
-    const { container, rerender } = render(<ProvisionalRenderer suspended />);
+    const { container, rerender } = renderWithBus(<ProvisionalRenderer suspended />);
     createSurface();
     updateComponents([{ id: 'root', component: 'Text', text: 'hidden' }]);
     expect(container.firstChild).toBeNull();
 
-    rerender(<ProvisionalRenderer />);
+    rerender(withBus(<ProvisionalRenderer />));
     expect(container.textContent).toContain('hidden');
   });
 });
 
 describe('ProvisionalRenderer — accessibility', () => {
   it('marks the surface as aria-busy so assistive tech reads it as in-progress', () => {
-    const { container } = render(<ProvisionalRenderer />);
+    const { container } = renderWithBus(<ProvisionalRenderer />);
     createSurface();
     updateComponents([{ id: 'root', component: 'Text', text: 'busy' }]);
     const surface = container.querySelector('[data-ggui-preview]');

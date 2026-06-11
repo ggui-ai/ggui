@@ -7,8 +7,6 @@
  * `{type:'data', payload: StreamEnvelope}` — channel + body on the
  * protocol's envelope shape, with a per-render monotonic `seq` and
  * the render's advertised `schemaVersion` stamped by the host.
- * (`{type:'stream'}` is a DIFFERENT canonical frame — agent
- * text-chunk streaming — and never appears here.)
  *
  * Why this is a separate test file from `conformance.test.ts`:
  * `emit-envelope` has no kit fixture graded over pure WS today (the

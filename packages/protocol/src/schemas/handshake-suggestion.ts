@@ -19,7 +19,7 @@ import type {
   SuggestionOrigin,
 } from '../types/handshake-suggestion.js';
 import { dataContractSchema, jsonValueSchema } from './data-contract.js';
-import { blueprintVarianceSchema } from './blueprint.js';
+import { blueprintSourceSchema, blueprintVarianceSchema } from './blueprint.js';
 
 /** Three-mode routing enum on {@link HandshakeSuggestion.origin}. */
 export const suggestionOriginSchema: z.ZodType<SuggestionOrigin> = z.enum([
@@ -80,7 +80,7 @@ export const blueprintMetaSchema: z.ZodType<BlueprintMeta> = z
     blueprintId: z.string().min(1).optional(),
     contractHash: z.string().min(1),
     codeHash: z.string().optional(),
-    generator: z.string().min(1),
+    source: blueprintSourceSchema.optional(),
     variance: blueprintVarianceSchema,
     selectedReason: z.string().optional(),
   })

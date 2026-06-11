@@ -110,28 +110,28 @@ describe('validateInboundStreamPayload', () => {
 
   // ── Item 4 reserved-channel injection ────────────────────────────
   describe('reserved-channel injection (Item 4)', () => {
-    it('runs BUILTIN validator on _ggui:contract-error without an injected extras map', () => {
-      // A malformed contract-error payload fails even with no
+    it('runs BUILTIN validator on _ggui:lifecycle without an injected extras map', () => {
+      // A malformed lifecycle payload fails even with no
       // streamSpec AND no extras — the protocol ships the BUILTIN.
       const r = validateInboundStreamPayload(
         undefined,
-        '_ggui:contract-error',
-        { toolName: 'x' /* missing error + timestamp */ },
+        '_ggui:lifecycle',
+        { kind: 'render_started' /* missing sessionId + intent */ },
       );
       expect(r.valid).toBe(false);
       expect(r.violations.map((v) => v.field)).toEqual(
-        expect.arrayContaining(['error', 'timestamp']),
+        expect.arrayContaining(['sessionId', 'intent']),
       );
     });
 
-    it('accepts a canonical contract-error payload via BUILTIN', () => {
+    it('accepts a canonical lifecycle payload via BUILTIN', () => {
       const r = validateInboundStreamPayload(
         undefined,
-        '_ggui:contract-error',
+        '_ggui:lifecycle',
         {
-          toolName: 'my-tool',
-          error: { code: 'SCHEMA_VIOLATION', message: 'boom' },
-          timestamp: '2026-04-23T00:00:00.000Z',
+          kind: 'render_started',
+          sessionId: 'render-1',
+          intent: 'show weather',
         },
       );
       expect(r.valid).toBe(true);

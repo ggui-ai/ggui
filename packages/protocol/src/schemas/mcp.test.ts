@@ -151,7 +151,11 @@ describe('ggui_handshake — MVB-5 three-step handshake', () => {
           blueprintId: 'bp_existing_1',
           contractHash: 'hash_abc',
           codeHash: 'code_hash_abc',
-          generator: 'ui-gen-default-haiku-4-5',
+          source: {
+            kind: 'llm' as const,
+            generator: 'ui-gen-default-haiku-4-5',
+            model: 'claude-haiku-4-5',
+          },
           variance: {},
         },
       },
@@ -169,7 +173,6 @@ describe('ggui_handshake — MVB-5 three-step handshake', () => {
         blueprintMeta: {
           blueprintId: 'bp_provisional_xyz',
           contractHash: 'hash_xyz',
-          generator: 'ui-gen-default-haiku-4-5',
           variance: { persona: 'minimalist' },
         },
       },
@@ -189,7 +192,6 @@ describe('ggui_handshake — MVB-5 three-step handshake', () => {
         blueprintMeta: {
           blueprintId: 'bp_provisional_synth',
           contractHash: 'hash_amended',
-          generator: 'ui-gen-default-haiku-4-5',
           variance: {},
         },
         amendments: {
@@ -214,7 +216,11 @@ describe('ggui_handshake — MVB-5 three-step handshake', () => {
           blueprintId: 'bp_1',
           contractHash: 'hash_1',
           codeHash: 'code_1',
-          generator: 'ui-gen-default-haiku-4-5',
+          source: {
+            kind: 'llm' as const,
+            generator: 'ui-gen-default-haiku-4-5',
+            model: 'claude-haiku-4-5',
+          },
           variance: {},
         },
         validationFindings: [
@@ -260,7 +266,6 @@ describe('ggui_handshake — MVB-5 three-step handshake', () => {
           blueprintMeta: {
             blueprintId: 'bp_1',
             contractHash: 'h',
-            generator: 'ui-gen-default-haiku-4-5',
             variance: {},
           },
         },

@@ -13,7 +13,7 @@
  *      (normalized to `undefined`).
  *
  * Immutable fields (contractHash, appId, codeS3Url, codeHash,
- * generator, createdAt, createdBy) are NOT mutable through this
+ * source, createdAt, createdBy) are NOT mutable through this
  * tool — the schema doesn't accept them. Operators who want to
  * "replace" a row delete + re-generate.
  *
@@ -123,7 +123,7 @@ export function createGguiOpsUpdateBlueprintHandler(
     title: 'Update blueprint',
     audience: ['ops'],
     description:
-      'Patch the mutable surface of an existing blueprint: pin/unpin operator-default + merge variance tags. Immutable fields (contractHash, appId, codeS3Url, codeHash, generator, createdAt, createdBy) are absent from the schema — to "replace" a row, delete + re-generate. Partial-merge semantics: supplied variance keys overwrite, omitted keys preserve. Empty-string persona is removal.',
+      'Patch the mutable surface of an existing blueprint: pin/unpin operator-default + merge variance tags. Immutable fields (contractHash, appId, codeS3Url, codeHash, source, createdAt, createdBy) are absent from the schema — to "replace" a row, delete + re-generate. Partial-merge semantics: supplied variance keys overwrite, omitted keys preserve. Empty-string persona is removal.',
     inputSchema: opsInputSchema,
     outputSchema: opsOutputSchema,
     async handler(

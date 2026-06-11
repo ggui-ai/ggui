@@ -11,7 +11,7 @@
  *     `createdAt desc`.
  *   - `ggui_ops_update_blueprint` — toggle the operator-default flag
  *     and/or patch variance tags. Immutable fields (contractHash,
- *     appId, codeS3Url, codeHash, generator, createdAt, createdBy)
+ *     appId, codeS3Url, codeHash, source, createdAt, createdBy)
  *     never mutate; the tool MUST refuse them on input.
  *   - `ggui_ops_delete_blueprint` — idempotent removal. Second delete
  *     for the same id returns `{deleted: true}` — never throws.
@@ -28,7 +28,12 @@ import {
   dataContractSchema,
   jsonValueSchema,
 } from './data-contract.js';
-import { blueprintSchema, blueprintVarianceSchema } from './blueprint.js';
+import {
+  blueprintSchema,
+  blueprintVarianceSchema,
+  llmBlueprintSourceSchema,
+  userBlueprintSourceSchema,
+} from './blueprint.js';
 
 /**
  * `ggui_ops_generate_blueprint` input. Operator picks the contract +
@@ -110,10 +115,9 @@ export const opsGenerateBlueprintOutputSchema = z
       .describe(
         "Advanced generator's iterative-loop validator score (0-1). Absent for default-generator output.",
       ),
-    generator: z
-      .string()
-      .min(1)
-      .describe('Slug of the generator the dispatch resolved to.'),
+    source: llmBlueprintSourceSchema.describe(
+      'Provenance stamped on the persisted `Blueprint.source` — always the `llm` arm on this path: `generator` is the engine slug the dispatch resolved to (stamped from the engine\'s own metadata claim); `model` is the LLM model id the engine called.',
+    ),
   })
   .strict();
 
@@ -135,12 +139,13 @@ export const opsGenerateBlueprintOutputSchema = z
  * is replaced with a verbatim accept of the operator's
  * `componentCode` string.
  *
- * `generator` is OPTIONAL here too — when omitted, the handler stamps
- * the registry default's slug onto the persisted Blueprint so
- * downstream `*_list_blueprints` consumers see a stable provenance
- * field. `validatorScore` is never populated (no validator ran);
- * operators wanting validator metadata should round-trip through
- * `*_generate_*` instead.
+ * Provenance is STRUCTURAL on this path — the handler stamps
+ * `source: {kind: 'user'}` on the persisted Blueprint (operator-
+ * supplied bytes carry no engine claim, and fabricating one is
+ * banned), so the input carries no provenance field at all.
+ * `validatorScore` is never populated (no validator ran); operators
+ * wanting validator metadata should round-trip through `*_generate_*`
+ * instead.
  */
 export const opsRegisterBlueprintInputSchema = z
   .object({
@@ -150,13 +155,6 @@ export const opsRegisterBlueprintInputSchema = z
       .min(1)
       .describe(
         'Verbatim component-code body to persist. Stored as-is — no LLM call, no validator pass. Operator owns correctness; the handler computes the canonical sha256 codeHash and routes the bytes through the same persistence seams as `*_generate_*`.',
-      ),
-    generator: z
-      .string()
-      .min(1)
-      .optional()
-      .describe(
-        'Optional generator slug to stamp on the persisted Blueprint.generator field — purely an audit/provenance hint for downstream `*_list_blueprints` consumers. Defaults to the registry default slug.',
       ),
     persona: z
       .string()
@@ -205,12 +203,9 @@ export const opsRegisterBlueprintOutputSchema = z
       .describe(
         'Content hash of the persisted code body (full sha256 hex).',
       ),
-    generator: z
-      .string()
-      .min(1)
-      .describe(
-        'Resolved generator slug stamped on the Blueprint.generator field — either the supplied input or the registry default.',
-      ),
+    source: userBlueprintSourceSchema.describe(
+      'Provenance stamped on the persisted `Blueprint.source` — always `{kind: "user"}` on this path: operator-supplied bytes, no LLM dispatch, no engine claim to record.',
+    ),
   })
   .strict();
 
@@ -246,7 +241,7 @@ export const opsListBlueprintsInputSchema = z
       .min(1)
       .optional()
       .describe(
-        'Filter to blueprints produced by a specific generator slug.',
+        'Filter to engine-generated blueprints (`source.kind === "llm"`) whose `source.generator` equals this slug. `user`-sourced rows never match (they carry no engine provenance).',
       ),
     persona: z
       .string()
@@ -272,7 +267,7 @@ export const opsListBlueprintsOutputSchema = z
 /**
  * `ggui_ops_update_blueprint` input. Only mutable fields are present
  * here — `contractHash`, `appId`, `codeS3Url`, `codeHash`,
- * `generator`, `createdAt`, `createdBy` are immutable invariants
+ * `source`, `createdAt`, `createdBy` are immutable invariants
  * and the schema does NOT accept them. Operators who want to
  * "replace" a row delete + re-generate.
  */

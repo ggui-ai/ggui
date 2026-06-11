@@ -22,7 +22,7 @@ export interface GguiProviderProps {
   adapterImpls?: AdapterRegistry;
   /** Override auto-detected interface context */
   interfaceContext?: InterfaceContext;
-  /** Auth context for tools system */
+  /** Auth context surfaced to embedding hosts and renderer surfaces. */
   auth?: {
     currentUser?: EndUserIdentity;
     userId?: string;
@@ -32,20 +32,10 @@ export interface GguiProviderProps {
   /**
    * Conversation envelope identity. Forwarded by {@link useInvoke} as
    * the `X-Ggui-Host-Session-Id` header so the agent threads multi-turn
-   * invokes through its own keyed conversation state. Distinct from
-   * `sessionId` — this names the chat thread, not a render.
+   * invokes through its own keyed conversation state. Names the chat
+   * thread, not a render.
    */
   hostSessionId?: string;
-  /**
-   * Per-render scope identity for the client-side tool system. Used by
-   * `useTool` / `useBindings` as `ToolContext.sessionId` — scopes the
-   * in-memory fetch cache so two concurrent renders cannot leak each
-   * other's cached responses. Distinct from `hostSessionId` — this
-   * names a single render, not the conversation envelope.
-   */
-  sessionId?: string;
-  /** Base URL for API calls (used by fetch tool) */
-  apiBaseUrl?: string;
   /** React version for WebView import map (default: '18.2.0') */
   reactVersion?: string;
   /** Base URL for design system modules in WebView import map */
@@ -109,7 +99,7 @@ function detectRNInterfaceContext(): InterfaceContext {
  * </GguiProvider>
  * ```
  */
-export function GguiProvider({ appId, wsEndpoint, adapterImpls, interfaceContext: interfaceContextProp, auth, hostSessionId, sessionId, apiBaseUrl, reactVersion, designSystemUrl, permissionHandler, appConfig, children }: GguiProviderProps) {
+export function GguiProvider({ appId, wsEndpoint, adapterImpls, interfaceContext: interfaceContextProp, auth, hostSessionId, reactVersion, designSystemUrl, permissionHandler, appConfig, children }: GguiProviderProps) {
   const [adapterPermissions, setAdapterPermissions] = useState<AdapterPermissions>({});
 
   // Auto-detect interface context from React Native Dimensions
@@ -163,13 +153,11 @@ export function GguiProvider({ appId, wsEndpoint, adapterImpls, interfaceContext
       interfaceContext,
       auth,
       hostSessionId,
-      sessionId,
-      apiBaseUrl,
       reactVersion,
       designSystemUrl,
       appConfig,
     }),
-    [appId, wsEndpoint, adapterPermissions, resolvedAdapterImpls, requestPermission, interfaceContext, auth, hostSessionId, sessionId, apiBaseUrl, reactVersion, designSystemUrl, appConfig]
+    [appId, wsEndpoint, adapterPermissions, resolvedAdapterImpls, requestPermission, interfaceContext, auth, hostSessionId, reactVersion, designSystemUrl, appConfig]
   );
 
   return <GguiContext.Provider value={value}>{children}</GguiContext.Provider>;

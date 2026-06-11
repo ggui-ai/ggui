@@ -1,7 +1,7 @@
 /**
  * MVB-7 — variant-card focused tests.
  *
- * Asserts the badge surface (persona, generator, validatorScore,
+ * Asserts the badge surface (persona, source, validatorScore,
  * createdBy) + the three action buttons. Heavy interaction lives in
  * the list test; this file pins per-card semantics so future tweaks
  * to {@link BlueprintVariantCard} don't silently drop the metadata
@@ -21,7 +21,11 @@ function makeBlueprint(overrides: Partial<Blueprint> = {}): Blueprint {
     blueprintId: 'bp-test-1',
     contractHash: 'hash-a',
     appId: 'app-test',
-    generator: 'ui-gen-default-haiku-4-5',
+    source: {
+      kind: 'llm',
+      generator: 'ui-gen-default-haiku-4-5',
+      model: 'claude-haiku-4-5',
+    },
     variance: {},
     createdAt: '2026-05-12T00:00:00Z',
     createdBy: 'agent',
@@ -31,9 +35,13 @@ function makeBlueprint(overrides: Partial<Blueprint> = {}): Blueprint {
 }
 
 describe('BlueprintVariantCard — badges', () => {
-  it('shows persona, generator, validatorScore, and createdBy badges', () => {
+  it('shows persona, source (generator slug), validatorScore, and createdBy badges', () => {
     const blueprint = makeBlueprint({
-      generator: 'ui-gen-advanced-opus-4-7',
+      source: {
+        kind: 'llm',
+        generator: 'ui-gen-advanced-opus-4-7',
+        model: 'claude-opus-4-7',
+      },
       validatorScore: 0.87,
       createdBy: 'operator',
       variance: { persona: 'minimalist' },

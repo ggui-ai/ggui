@@ -27,7 +27,11 @@ function makeBlueprint(overrides: Partial<Blueprint> = {}): Blueprint {
     blueprintId: 'bp-test-1',
     contractHash: 'hash-a',
     appId: 'app-test',
-    generator: 'ui-gen-default-haiku-4-5',
+    source: {
+      kind: 'llm',
+      generator: 'ui-gen-default-haiku-4-5',
+      model: 'claude-haiku-4-5',
+    },
     variance: {},
     createdAt: '2026-05-12T00:00:00Z',
     createdBy: 'agent',

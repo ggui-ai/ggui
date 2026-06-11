@@ -19,14 +19,11 @@
  *     {@link BUILTIN_RESERVED_VALIDATORS} — the server composes the
  *     A2UI validator into `validateStreamData`'s
  *     `extraReservedValidators` parameter.
- *   - {@link CONTRACT_ERROR_CHANNEL} — canonical error envelope
- *     surface for runtime contract violations. A server emits a
- *     {@link ContractErrorPayload} when a tool-mediated contract
- *     obligation fails (e.g., a tool return violates the schema the
- *     contract declares for it).
+ *   - {@link LIFECYCLE_CHANNEL} — generation-progress lifecycle
+ *     envelopes the server emits for session-wide subscribers.
  *     Payload is a PROTOCOL-OWNED shape, so the structural validator
  *     ships inside this module as a built-in (see
- *     {@link validateContractErrorPayload} +
+ *     {@link validateGguiLifecyclePayload} +
  *     {@link BUILTIN_RESERVED_VALIDATORS}).
  *
  * Why here and not in `types/live-channel.ts`: `live-channel.ts` describes
@@ -34,7 +31,6 @@
  * file describes a NAMING POLICY that the contract-structure validator
  * enforces. Separate concerns — easier to audit the boundary.
  */
-import type { ContractErrorPayload } from '../types/data-contract';
 import type { ContractViolation, ValidationResult } from './contract-validator';
 
 /** Prefix that marks a channel as server-owned (reserved from agents). */
@@ -47,19 +43,6 @@ export const RESERVED_CHANNEL_PREFIX = '_ggui:';
  * and dispatches the A2UI payload through its preview surface.
  */
 export const PREVIEW_CHANNEL = '_ggui:preview';
-
-/**
- * Reserved channel for canonical contract-error envelopes. Body shape
- * is `ContractErrorPayload` (see `types/data-contract.ts`).
- * Agent-authored `streamSpec` MUST NOT declare this channel —
- * structural validation rejects it alongside every other
- * reserved-prefix name.
- *
- * If future work adds richer contract observability, each new name
- * joins this module with its own constant and the
- * {@link KNOWN_RESERVED_CHANNELS} set below.
- */
-export const CONTRACT_ERROR_CHANNEL = '_ggui:contract-error';
 
 /**
  * Reserved channel for generation-progress lifecycle envelopes —
@@ -93,7 +76,6 @@ export const LIFECYCLE_CHANNEL = '_ggui:lifecycle';
  */
 export const KNOWN_RESERVED_CHANNELS: ReadonlySet<string> = new Set([
   PREVIEW_CHANNEL,
-  CONTRACT_ERROR_CHANNEL,
   LIFECYCLE_CHANNEL,
 ]);
 
@@ -136,7 +118,7 @@ export function isKnownReservedChannel(name: string): boolean {
  *
  *   1. `BUILTIN_RESERVED_VALIDATORS` — the PROTOCOL-OWNED payloads.
  *      Shipped in `@ggui-ai/protocol` because the protocol defines the
- *      shape (`ContractErrorPayload` is authored here; the validator
+ *      shape (`GguiLifecyclePayload` is authored here; the validator
  *      belongs here too). Always active, no composition needed.
  *   2. `extraReservedValidators` — INJECTION POINT for payloads whose
  *      shape the protocol does NOT own. Primary consumer today:
@@ -156,117 +138,6 @@ export function isKnownReservedChannel(name: string): boolean {
 export type ReservedChannelValidator = (
   payload: unknown,
 ) => ValidationResult;
-
-/**
- * Structural validator for {@link ContractErrorPayload} — the body the
- * server emits on `_ggui:contract-error`. PROTOCOL-OWNED shape; ships
- * as a built-in (see {@link BUILTIN_RESERVED_VALIDATORS}).
- *
- * Semantics:
- *   - Payload MUST be a non-null object (arrays rejected).
- *   - Required fields: `toolName: string`, `error.code: string`,
- *     `error.message: string`, `timestamp: string`.
- *   - Optional fields: `error.causedBy: string`, `schemaVersion: string`.
- *   - `error.code` accepts ANY string — the {@link ContractErrorCode}
- *     type is extensibly-closed per Item 2 (`(string & {})` branch),
- *     so forward-compat codes like `BOOTSTRAP_FAILED` /
- *     `RATE_LIMIT_EXCEEDED` MUST NOT be rejected at this layer.
- *
- * Returns `{valid: true, violations: []}` on conformance. Reject sets
- * `valid: false` with one violation per missing-or-mistyped field.
- */
-export function validateContractErrorPayload(
-  payload: unknown,
-): ValidationResult {
-  const violations: ContractViolation[] = [];
-
-  if (typeof payload !== 'object' || payload === null || Array.isArray(payload)) {
-    return {
-      valid: false,
-      violations: [
-        {
-          field: 'payload',
-          message: `${CONTRACT_ERROR_CHANNEL} payload must be a non-null object`,
-          expected: 'object',
-          received: payload === null ? 'null' : Array.isArray(payload) ? 'array' : typeof payload,
-        },
-      ],
-    };
-  }
-
-  const p = payload as Partial<ContractErrorPayload> & Record<string, unknown>;
-
-  // ── Required: toolName ──
-  if (typeof p.toolName !== 'string') {
-    violations.push({
-      field: 'toolName',
-      message: "Required field 'toolName' must be a string",
-      expected: 'string',
-      received: p.toolName === undefined ? 'undefined' : typeof p.toolName,
-    });
-  }
-
-  // ── Required: error.code + error.message ──
-  if (typeof p.error !== 'object' || p.error === null || Array.isArray(p.error)) {
-    violations.push({
-      field: 'error',
-      message: "Required field 'error' must be a non-null object",
-      expected: 'object',
-      received: p.error === undefined ? 'undefined' : p.error === null ? 'null' : Array.isArray(p.error) ? 'array' : typeof p.error,
-    });
-  } else {
-    const err = p.error as Record<string, unknown>;
-    if (typeof err.code !== 'string') {
-      // Accepts any string — ContractErrorCode is extensibly-closed per
-      // Item 2. Rejecting by name-set here would force a version bump
-      // every time a new code ships.
-      violations.push({
-        field: 'error.code',
-        message: "Required field 'error.code' must be a string",
-        expected: 'string',
-        received: err.code === undefined ? 'undefined' : typeof err.code,
-      });
-    }
-    if (typeof err.message !== 'string') {
-      violations.push({
-        field: 'error.message',
-        message: "Required field 'error.message' must be a string",
-        expected: 'string',
-        received: err.message === undefined ? 'undefined' : typeof err.message,
-      });
-    }
-    if (err.causedBy !== undefined && typeof err.causedBy !== 'string') {
-      violations.push({
-        field: 'error.causedBy',
-        message: "Optional field 'error.causedBy' must be a string when present",
-        expected: 'string',
-        received: typeof err.causedBy,
-      });
-    }
-  }
-
-  // ── Required: timestamp ──
-  if (typeof p.timestamp !== 'string') {
-    violations.push({
-      field: 'timestamp',
-      message: "Required field 'timestamp' must be a string (ISO 8601)",
-      expected: 'string',
-      received: p.timestamp === undefined ? 'undefined' : typeof p.timestamp,
-    });
-  }
-
-  // ── Optional: schemaVersion ──
-  if (p.schemaVersion !== undefined && typeof p.schemaVersion !== 'string') {
-    violations.push({
-      field: 'schemaVersion',
-      message: "Optional field 'schemaVersion' must be a string when present",
-      expected: 'string',
-      received: typeof p.schemaVersion,
-    });
-  }
-
-  return { valid: violations.length === 0, violations };
-}
 
 /**
  * The PROTOCOL-OWNED reserved-channel validator registry.
@@ -289,7 +160,6 @@ export const BUILTIN_RESERVED_VALIDATORS: ReadonlyMap<
   string,
   ReservedChannelValidator
 > = new Map([
-  [CONTRACT_ERROR_CHANNEL, validateContractErrorPayload],
   [LIFECYCLE_CHANNEL, validateGguiLifecyclePayload],
   // PREVIEW_CHANNEL intentionally absent — injected at composition time.
 ]);

@@ -11,11 +11,27 @@
  * the prop shape collapsed from `{ stackItem: {...} }` to a flat
  * `{ render: {...} }` carrying the single mounted render.
  */
-import { describe, it, expect } from 'vitest';
-import { act, render } from '@testing-library/react';
-import { BRIDGE_EVENTS, PREVIEW_CHANNEL } from '@ggui-ai/protocol';
+import { describe, it, expect, beforeEach } from 'vitest';
+import { act, render, type RenderResult } from '@testing-library/react';
+import type { ReactElement } from 'react';
+import { PREVIEW_CHANNEL } from '@ggui-ai/protocol';
 import type { StreamEnvelope } from '@ggui-ai/protocol';
+import { StreamBus } from '@ggui-ai/wire';
+import { StreamBusContext } from '../internal/stream-bus-context.js';
 import { GguiSessionRenderer } from './DynamicComponent.js';
+
+/** Fresh bus per test — replay-ring state must not leak across tests. */
+let bus: StreamBus;
+beforeEach(() => {
+  bus = new StreamBus();
+});
+
+/** Wrap in the same provider `<GguiRender>` establishes. */
+function renderWithBus(ui: ReactElement): RenderResult {
+  return render(
+    <StreamBusContext.Provider value={bus}>{ui}</StreamBusContext.Provider>,
+  );
+}
 
 function sendPreview(payload: unknown): void {
   const envelope: StreamEnvelope = {
@@ -25,15 +41,13 @@ function sendPreview(payload: unknown): void {
     payload: payload as StreamEnvelope['payload'],
   };
   act(() => {
-    window.dispatchEvent(
-      new CustomEvent(BRIDGE_EVENTS.AGENT_DATA, { detail: envelope }),
-    );
+    bus.emit(envelope);
   });
 }
 
 describe('GguiSessionRenderer — provisional branching', () => {
   it('routes empty componentCode through ProvisionalRenderer and shows the caller fallback', () => {
-    const { container } = render(
+    const { container } = renderWithBus(
       <GguiSessionRenderer
         render={{ id: 'pending', componentCode: '' }}
         fallback={<div data-testid="loading">loading…</div>}
@@ -46,7 +60,7 @@ describe('GguiSessionRenderer — provisional branching', () => {
   });
 
   it('paints the provisional surface once preview envelopes arrive', () => {
-    const { container } = render(
+    const { container } = renderWithBus(
       <GguiSessionRenderer
         render={{ id: 'pending', componentCode: '' }}
       />,
@@ -73,7 +87,7 @@ describe('GguiSessionRenderer — provisional branching', () => {
   });
 
   it('does NOT route through the preview path when componentCode is present', () => {
-    const { container } = render(
+    const { container } = renderWithBus(
       <GguiSessionRenderer
         render={{
           id: 'ready',

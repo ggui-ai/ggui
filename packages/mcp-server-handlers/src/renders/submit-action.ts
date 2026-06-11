@@ -118,7 +118,7 @@ const outputSchema = {
   /** `true` when the envelope validated and was accepted; `false` on rejection (shape OR pipe missing). */
   ok: z.boolean(),
   /**
-   * On `ok:false`, the canonical contract-error code:
+   * On `ok:false`, the canonical rejection code:
    *   - `'INVALID_ACTION_KIND'` — top-level field validation failed
    *     OR per-kind payload shape mismatch.
    *   - `'PIPE_NOT_FOUND'` — `kind:"dispatch"` envelope arrived for a

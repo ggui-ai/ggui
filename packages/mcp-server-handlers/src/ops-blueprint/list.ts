@@ -22,8 +22,10 @@
  *
  * The `generator` filter is applied AFTER the dispatch (post-filter
  * over the returned rows) — both the indexed list and the search
- * return any-generator rows; the handler narrows to the requested
- * slug if present.
+ * return any-provenance rows; the handler narrows to engine-generated
+ * rows (`source.kind === 'llm'`) whose `source.generator` equals the
+ * requested slug. `user`-sourced rows never match the filter (they
+ * carry no engine provenance).
  *
  * ## Audience
  *
@@ -98,7 +100,7 @@ export function createGguiOpsListBlueprintsHandler(
     title: 'List blueprints',
     audience: ['ops'],
     description:
-      "Enumerate blueprint metadata under the caller's `appId`. Filters AND-compose: `contractHash` narrows to one group via the indexed lookup; `generator` post-filters; `persona` filters on normalized variance; `intentKeywords` activates semantic search via `BlueprintSearch`. Empty filter set returns every blueprint under the app, sorted by `createdAt desc`. Returns metadata only — code bodies live in the bound store, fetched via render on cache hit.",
+      "Enumerate blueprint metadata under the caller's `appId`. Filters AND-compose: `contractHash` narrows to one group via the indexed lookup; `generator` post-filters to `llm`-sourced rows by engine slug; `persona` filters on normalized variance; `intentKeywords` activates semantic search via `BlueprintSearch`. Empty filter set returns every blueprint under the app, sorted by `createdAt desc`. Returns metadata only — code bodies live in the bound store, fetched via render on cache hit.",
     inputSchema: opsInputSchema,
     outputSchema: opsOutputSchema,
     async handler(
@@ -155,10 +157,14 @@ export function createGguiOpsListBlueprintsHandler(
       // the indexed `list` returns every variant in the group, and
       // even the search may surface rows from a sibling generator
       // when its weighting picked them up on a non-`generator` axis.
+      // Provenance-aware: only `llm`-sourced rows can match an engine
+      // slug; `user` / `curated` rows carry no engine provenance.
       let filtered: readonly Blueprint[];
       if (parsed.generator !== undefined) {
         filtered = candidates.filter(
-          (row) => row.generator === parsed.generator,
+          (row) =>
+            row.source.kind === 'llm' &&
+            row.source.generator === parsed.generator,
         );
       } else {
         filtered = candidates;

@@ -39,7 +39,6 @@
 import type {
   AppMetadataStore,
   BlueprintStore,
-  GeneratorRegistry,
   TelemetrySink,
 } from "@ggui-ai/mcp-server-core";
 import {
@@ -48,6 +47,7 @@ import {
   type DataContract,
   type OpsRegisterBlueprintInput,
   type OpsRegisterBlueprintOutput,
+  type UserBlueprintSource,
 } from "@ggui-ai/protocol";
 import { blueprintKey } from "@ggui-ai/protocol/blueprint-key";
 import { createHash, randomUUID } from "node:crypto";
@@ -63,22 +63,23 @@ const opsInputSchema = opsRegisterBlueprintInputSchema.shape;
 const opsOutputSchema = z.object({
   blueprintId: z.string().min(1),
   codeHash: z.string().min(1),
-  generator: z.string().min(1),
+  source: z.object({ kind: z.literal("user") }).strict(),
 }).shape;
 
 /**
+ * Provenance stamped on every blueprint this handler persists:
+ * operator-supplied bytes, no LLM dispatch — the `user` arm carries
+ * no engine claim because none exists to record.
+ */
+const USER_SOURCE: UserBlueprintSource = { kind: "user" };
+
+/**
  * Deps for `ggui_ops_register_blueprint`. Mirrors `*_generate_*`'s
- * deps minus `resolveLlm` and `blueprints` (no generator dispatch).
+ * deps minus `resolveLlm`, `blueprints`, and `registry` (no generator
+ * dispatch — provenance is structurally `{kind: 'user'}`, so there is
+ * no slug to resolve).
  */
 export interface GguiOpsRegisterBlueprintDeps {
-  /**
-   * Generator registry — read for the default slug to stamp on the
-   * persisted Blueprint when the input omits `generator`. Same
-   * registry the `*_generate_*` handler dispatches through; reusing
-   * it here keeps the provenance field consistent across registration
-   * paths.
-   */
-  readonly registry: GeneratorRegistry;
   /**
    * Multi-variant blueprint persistence seam — same instance the
    * `*_generate_*` handler writes to.
@@ -143,7 +144,7 @@ export function createGguiOpsRegisterBlueprintHandler(
     title: "Register blueprint",
     audience: ["ops"],
     description:
-      "Register a pre-built blueprint variant (operator-supplied componentCode bytes, no LLM dispatch). Sibling of `ggui_ops_generate_blueprint` — same persistence + dual-write semantics, same variance + default-pin behavior. Use for fixture seeding, export/reimport round-trips, and manual recovery. Returns `{blueprintId, codeHash, generator}` where `generator` is the resolved registry-default slug or the supplied override (audit/provenance only — no code is generated).",
+      "Register a pre-built blueprint variant (operator-supplied componentCode bytes, no LLM dispatch). Sibling of `ggui_ops_generate_blueprint` — same persistence + dual-write semantics, same variance + default-pin behavior. Use for fixture seeding, export/reimport round-trips, and manual recovery. Returns `{blueprintId, codeHash, source}` where `source` is always `{kind: 'user'}` — hand-supplied bytes carry no engine claim, so none is recorded.",
     inputSchema: opsInputSchema,
     outputSchema: opsOutputSchema,
     async handler(
@@ -205,16 +206,7 @@ export function createGguiOpsRegisterBlueprintHandler(
         }
       }
 
-      // 2. Resolve generator slug to stamp on Blueprint.generator —
-      // provenance hint only, NOT dispatched. When the operator
-      // supplied `generator`, validate against the registry just like
-      // ops_generate would (so downstream consumers can trust the
-      // slug); when absent, use the registry default.
-      const resolvedGeneratorSlug: string = parsed.generator
-        ? (deps.registry.get(parsed.generator)?.slug ?? parsed.generator)
-        : deps.registry.defaultGenerator().slug;
-
-      // 3. Compute canonical hashes.
+      // 2. Compute canonical hashes.
       const contract: DataContract = parsed.contract;
       const contractHash = blueprintKey(contract);
       const componentCode = parsed.componentCode;
@@ -226,7 +218,10 @@ export function createGguiOpsRegisterBlueprintHandler(
         contractHash,
         appId: ctx.appId,
         codeHash,
-        generator: resolvedGeneratorSlug,
+        // Operator-supplied bytes, no LLM dispatch — provenance is the
+        // user arm on BOTH stores this handler writes (MVB row here,
+        // cache mirror below). No engine claim exists to record.
+        source: USER_SOURCE,
         variance: {
           ...(normalizedPersona !== undefined ? { persona: normalizedPersona } : {}),
           ...(parsed.aesthetic !== undefined ? { aesthetic: parsed.aesthetic } : {}),
@@ -238,13 +233,13 @@ export function createGguiOpsRegisterBlueprintHandler(
         contract,
       };
 
-      // 4. Persist the blueprint + code body.
+      // 3. Persist the blueprint + code body.
       await deps.blueprintStore.put(blueprint);
       if (deps.putCode) {
         await deps.putCode(codeHash, componentCode);
       }
 
-      // 4.5 Mirror into the cache vectorStore so the agent-facing
+      // 3.5 Mirror into the cache vectorStore so the agent-facing
       // matchBlueprint exact-key probe (handshake + render) finds this
       // operator-registered blueprint. Symmetric with ops_generate's
       // dual-write — see #358.
@@ -259,9 +254,9 @@ export function createGguiOpsRegisterBlueprintHandler(
             contract,
             intent: intentForCache,
             componentCode,
-            // Operator-supplied bytes, no LLM dispatch — provenance
-            // is the user arm (no engine claim exists to record).
-            source: { kind: "user" },
+            // Same user-arm provenance as the MVB row above — one
+            // handler call, one provenance claim across both stores.
+            source: USER_SOURCE,
           });
         } catch (err) {
           try {
@@ -283,7 +278,7 @@ export function createGguiOpsRegisterBlueprintHandler(
         }
       }
 
-      // 5. Pin as operator default when requested.
+      // 4. Pin as operator default when requested.
       if (parsed.setAsOperatorDefault === true) {
         await deps.blueprintStore.setOperatorDefault(blueprintId);
       }
@@ -297,7 +292,8 @@ export function createGguiOpsRegisterBlueprintHandler(
             requestId: ctx.requestId,
             blueprintId,
             contractHash,
-            generator: resolvedGeneratorSlug,
+            // Flat-codec provenance key — always 'user' on this path.
+            sourceKind: USER_SOURCE.kind,
             createdBy: "operator",
             setAsOperatorDefault: parsed.setAsOperatorDefault === true,
           },
@@ -309,7 +305,7 @@ export function createGguiOpsRegisterBlueprintHandler(
       return {
         blueprintId,
         codeHash,
-        generator: resolvedGeneratorSlug,
+        source: USER_SOURCE,
       };
     },
   };

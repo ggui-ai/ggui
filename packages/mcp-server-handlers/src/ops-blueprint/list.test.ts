@@ -20,7 +20,9 @@ function makeBlueprint(opts: {
   blueprintId: string;
   appId?: string;
   contract?: DataContract;
+  /** llm-arm engine slug shorthand; `source` wins when both are set. */
   generator?: string;
+  source?: Blueprint['source'];
   persona?: string;
   createdAt?: string;
 }): Blueprint {
@@ -29,7 +31,11 @@ function makeBlueprint(opts: {
     blueprintId: opts.blueprintId,
     contractHash: blueprintKey(contract),
     appId: opts.appId ?? 'app-1',
-    generator: opts.generator ?? 'ui-gen-default-haiku-4-5',
+    source: opts.source ?? {
+      kind: 'llm',
+      generator: opts.generator ?? 'ui-gen-default-haiku-4-5',
+      model: 'claude-haiku-4-5',
+    },
     variance: opts.persona !== undefined ? { persona: opts.persona } : {},
     createdAt: opts.createdAt ?? '2026-05-12T00:00:00.000Z',
     createdBy: 'operator',
@@ -134,6 +140,35 @@ describe('createGguiOpsListBlueprintsHandler — indexed list path', () => {
       makeCtx('app-1'),
     );
     expect(result.blueprints.map((b) => b.blueprintId)).toEqual(['opus']);
+  });
+
+  it('the generator filter never matches user-sourced rows (no engine provenance)', async () => {
+    const deps = defaultDeps();
+    const c1: DataContract = emptyContract();
+    await deps.blueprintStore.put(
+      makeBlueprint({
+        blueprintId: 'hand-authored',
+        contract: c1,
+        source: { kind: 'user' },
+      }),
+    );
+    await deps.blueprintStore.put(
+      makeBlueprint({
+        blueprintId: 'engine-made',
+        contract: c1,
+        generator: 'ui-gen-default-haiku-4-5',
+      }),
+    );
+
+    const handler = createGguiOpsListBlueprintsHandler(deps);
+    const result = await handler.handler(
+      {
+        contractHash: blueprintKey(c1),
+        generator: 'ui-gen-default-haiku-4-5',
+      },
+      makeCtx('app-1'),
+    );
+    expect(result.blueprints.map((b) => b.blueprintId)).toEqual(['engine-made']);
   });
 });
 

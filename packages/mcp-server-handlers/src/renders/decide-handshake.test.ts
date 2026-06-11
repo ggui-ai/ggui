@@ -37,7 +37,6 @@ import {
   type BlueprintPool,
   type HandshakeDecisionAdapter,
 } from './decide-handshake.js';
-import { DEFAULT_GENERATOR_SLUG } from './handshake.js';
 
 vi.mock('./blueprint-matcher.js', async (importOriginal) => {
   const actual = await importOriginal<typeof import('./blueprint-matcher.js')>();
@@ -96,7 +95,6 @@ function adapter(over: Partial<HandshakeDecisionAdapter> = {}): HandshakeDecisio
     resolveLlm: over.resolveLlm ?? (() => ({ async call() { return ''; } })),
     ...(over.pools !== undefined ? { pools: over.pools } : {}),
     ...(over.preMatch !== undefined ? { preMatch: over.preMatch } : {}),
-    ...(over.generatorSlug !== undefined ? { generatorSlug: over.generatorSlug } : {}),
     ...(over.warn !== undefined ? { warn: over.warn } : {}),
     ...(over.toolIdentityCatalog !== undefined
       ? { toolIdentityCatalog: over.toolIdentityCatalog }
@@ -121,6 +119,11 @@ describe('buildCacheReuseResult', () => {
       contextSpec: { count: { schema: { type: 'number' }, default: 0 } },
     };
     const code = 'export default () => null;';
+    const source = {
+      kind: 'llm',
+      generator: 'ui-gen-default-haiku-4-5',
+      model: 'claude-haiku-4-5',
+    } as const;
     const result = buildCacheReuseResult(
       {
         id: BP_UUID,
@@ -129,6 +132,7 @@ describe('buildCacheReuseResult', () => {
         componentCode: code,
         contract: cachedContract,
         variance: {},
+        source,
       },
       'match-semantic: judge matched (confidence=0.90)',
     );
@@ -142,7 +146,9 @@ describe('buildCacheReuseResult', () => {
     expect(result.suggestion.blueprintMeta.codeHash).toBe(
       createHash('sha256').update(code).digest('hex'),
     );
-    expect(result.suggestion.blueprintMeta.generator).toBe(DEFAULT_GENERATOR_SLUG);
+    // Provenance is the MATCHED row's own stored source — never a
+    // deployment-level slug.
+    expect(result.suggestion.blueprintMeta.source).toEqual(source);
     expect(result.reason).toMatch(/match-semantic/);
     // proposedContractSummary equals summarizeContract(cachedContract) —
     // the same lossy summary the matcher's judge feeds (one source of truth).
@@ -157,13 +163,20 @@ describe('buildCacheReuseResult', () => {
     });
   });
 
-  it('honors a custom generator slug', () => {
+  it("stamps a user-sourced row's provenance verbatim (no engine fabrication)", () => {
     const r = buildCacheReuseResult(
-      { id: 'x', contractKey: 'x', variantKey: 'vx', componentCode: 'a', contract: {}, variance: {} },
+      {
+        id: 'x',
+        contractKey: 'x',
+        variantKey: 'vx',
+        componentCode: 'a',
+        contract: {},
+        variance: {},
+        source: { kind: 'user' },
+      },
       'r',
-      'ui-gen-advanced-opus',
     );
-    expect(r.suggestion.blueprintMeta.generator).toBe('ui-gen-advanced-opus');
+    expect(r.suggestion.blueprintMeta.source).toEqual({ kind: 'user' });
   });
 
   it("projects the matched blueprint's variance onto blueprintMeta.variance (NOT {})", () => {
@@ -176,6 +189,7 @@ describe('buildCacheReuseResult', () => {
         componentCode: 'x',
         contract: {},
         variance,
+        source: { kind: 'user' },
       },
       'match-semantic',
     );
@@ -190,6 +204,7 @@ describe('buildCacheReuseResult', () => {
       componentCode: 'a',
       contract: {} as DataContract,
       variance: {},
+      source: { kind: 'user' } as const,
     };
     expect(buildCacheReuseResult(bp, 'r')).toEqual(buildCacheReuseResult(bp, 'r'));
   });
@@ -203,7 +218,9 @@ describe('buildCreateFallback', () => {
     expect(r.suggestion.origin).toBe('agent');
     expect(r.effectiveContract).toEqual(clean);
     expect(r.suggestion.validationFindings).toBeUndefined();
-    expect(r.suggestion.blueprintMeta.generator).toBe(DEFAULT_GENERATOR_SLUG);
+    // No source on create — provenance is minted at render-time
+    // registration, never at handshake (gen pending).
+    expect(r.suggestion.blueprintMeta.source).toBeUndefined();
     // No throwaway provisional id — blueprintId is minted ONLY at
     // render-time registration (absent on origin:agent).
     expect(r.suggestion.blueprintMeta.blueprintId).toBeUndefined();
@@ -225,11 +242,6 @@ describe('buildCreateFallback', () => {
     expect(r.suggestion.proposedContractSummary).toBe(summarizeContract({}));
   });
 
-  it('honors a custom generator slug', () => {
-    const r = buildCreateFallback({ propsSpec: { properties: {} } }, 'r', 'slug-z');
-    expect(r.suggestion.blueprintMeta.generator).toBe('slug-z');
-  });
-
   it('defaults blueprintMeta.variance to {} when no requestVariance is threaded', () => {
     const r = buildCreateFallback({ propsSpec: { properties: {} } }, 'r');
     expect(r.suggestion.blueprintMeta.variance).toEqual({});
@@ -240,7 +252,6 @@ describe('buildCreateFallback', () => {
     const r = buildCreateFallback(
       { propsSpec: { properties: {} } },
       'r',
-      DEFAULT_GENERATOR_SLUG,
       requestVariance,
     );
     expect(r.suggestion.blueprintMeta.variance).toEqual(requestVariance);
@@ -282,7 +293,15 @@ const miss: BlueprintMatchResult = { strategy: 'no-match', reason: 'no candidate
 describe('decideHandshake — pre-match', () => {
   it('short-circuits on a pre-match hit (find-similar never runs)', async () => {
     const preResult = buildCacheReuseResult(
-      { id: 'curated-1', contractKey: 'c1', variantKey: 'cv1', componentCode: 'x', contract: {}, variance: {} },
+      {
+        id: 'curated-1',
+        contractKey: 'c1',
+        variantKey: 'cv1',
+        componentCode: 'x',
+        contract: {},
+        variance: {},
+        source: { kind: 'curated' },
+      },
       'curated',
     );
     const preMatch = vi.fn(async () => preResult);
@@ -1221,16 +1240,16 @@ describe('decideHandshake — create / fallback', () => {
     expect(r.reason).toMatch(/negotiator-degraded/);
   });
 
-  it('stamps the adapter generator slug on the create suggestion', async () => {
+  it('the create suggestion carries NO provenance (source absent — gen pending)', async () => {
     mockMatch.mockResolvedValue(miss);
     mockEnsure.mockResolvedValue({
       contract: {}, origin: 'agent', method: 'verbatim', findings: [], reasoning: 'clean',
     });
     const r = await decideHandshake(
-      adapter({ pools: [pool()], generatorSlug: 'ui-gen-advanced-opus' }),
+      adapter({ pools: [pool()] }),
       { intent: 'i', blueprintDraft: DRAFT, ctx: CTX },
     );
-    expect(r.suggestion.blueprintMeta.generator).toBe('ui-gen-advanced-opus');
+    expect(r.suggestion.blueprintMeta.source).toBeUndefined();
   });
 
   it('the synth/create result carries the REQUEST variance on blueprintMeta.variance', async () => {

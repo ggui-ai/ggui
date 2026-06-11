@@ -6,7 +6,6 @@ import {
 
 const baseMeta = {
   contractHash: 'c0ffee00c0ffee00',
-  generator: 'ui-gen-default-haiku-4-5',
   variance: {},
 };
 
@@ -22,6 +21,39 @@ describe('blueprintMetaSchema — optional blueprintId (D4)', () => {
   it('parses WITHOUT a blueprintId (create — UUID minted at register-time)', () => {
     const parsed = blueprintMetaSchema.parse(baseMeta);
     expect(parsed.blueprintId).toBeUndefined();
+  });
+});
+
+describe('blueprintMetaSchema — optional source (cache-only provenance)', () => {
+  it('parses WITH a source (origin:cache — matched row provenance)', () => {
+    const parsed = blueprintMetaSchema.parse({
+      ...baseMeta,
+      blueprintId: 'bp_11111111-1111-1111-1111-111111111111',
+      source: {
+        kind: 'llm',
+        generator: 'ui-gen-default-haiku-4-5',
+        model: 'claude-haiku-4-5',
+      },
+    });
+    expect(parsed.source).toEqual({
+      kind: 'llm',
+      generator: 'ui-gen-default-haiku-4-5',
+      model: 'claude-haiku-4-5',
+    });
+  });
+
+  it('parses WITHOUT a source (agent/synth — gen pending, no provenance)', () => {
+    const parsed = blueprintMetaSchema.parse(baseMeta);
+    expect(parsed.source).toBeUndefined();
+  });
+
+  it('rejects a malformed source (llm arm missing model)', () => {
+    expect(() =>
+      blueprintMetaSchema.parse({
+        ...baseMeta,
+        source: { kind: 'llm', generator: 'ui-gen-default-haiku-4-5' },
+      }),
+    ).toThrow();
   });
 });
 

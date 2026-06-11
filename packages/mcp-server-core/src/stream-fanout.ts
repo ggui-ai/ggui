@@ -1,6 +1,6 @@
 /**
  * StreamFanout — pub/sub seam for live-channel stream delivery across
- * publisher→subscriber boundaries. It lets the `render-channel`
+ * publisher→subscriber boundaries. It lets the live-channel
  * server delegate fanout to an injectable implementation: in-process
  * for OSS, Redis pub/sub for hosted deployments (where publisher and
  * subscriber may live on different pods).
@@ -9,12 +9,13 @@
  *
  * **Parties:**
  * - Producer: the server code path that emits live-channel frames
- *   (e.g., `ggui_render` result handlers, `ggui_update` handlers, reserved
- *   `_ggui:contract-error` emitter in `render-channel.ts`). The producer
+ *   (e.g., the `ggui_emit` tool handler, `ggui_update` handlers, the
+ *   server's reserved `_ggui:lifecycle` emitter). The producer
  *   calls {@link StreamFanout.publish} AFTER the envelope has been stamped
  *   with its buffer-assigned `seq` (see {@link BufferedStreamEnvelope}).
  * - Consumer: the subscriber-side glue that forwards frames to concrete
- *   transports. In OSS: `render-channel.ts` pumps the async iterator
+ *   transports. In OSS: the live-channel server (`ggui-session-channel.ts`
+ *   in `@ggui-ai/mcp-server`) pumps the async iterator
  *   into each live WebSocket subscriber. In hosted: `bridge-gateway`
  *   pod pumps Redis pub/sub messages into API-Gateway WS connections.
  *
@@ -39,7 +40,7 @@
  *
  * **Failure mode:**
  * - `publish()` failure (network, backpressure, internal error) MUST
- *   throw. Producers decide retry policy; render-channel treats a
+ *   throw. Producers decide retry policy; the live-channel server treats a
  *   thrown publish as a log-and-continue event because the envelope
  *   has already been persisted to the {@link GguiSessionStreamBuffer} and
  *   will be recovered on the next subscriber reconnect.

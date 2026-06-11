@@ -358,8 +358,11 @@ export interface ConversationTurn<TToolArgs = JsonObject> {
 // =============================================================================
 
 /**
- * Progress update emitted by a producer during component production.
- * Delivered via the `ggui:logs` bridge event.
+ * Progress update emitted by a producer (UI generator) during component
+ * production. Producer-internal vocabulary — consumed by the server's
+ * generator seam (`@ggui-ai/mcp-server-core`), never delivered to
+ * clients directly. Client-visible generation progress flows as
+ * `{type: 'data'}` envelopes on the reserved `_ggui:lifecycle` channel.
  *
  * Post-Phase-B: collapsed from `{ sessionId, stackItemId }` to a single
  * `sessionId` (the two identifiers were the same value once each render

@@ -117,7 +117,7 @@ export function checkNameCollisions(
  * Validate that no `actionSpec` or `contextSpec` key uses the
  * `_ggui:` reserved namespace. `streamSpec` reserved-channel rejection
  * lives in `validateContractStructure` (the reserved namespace there
- * carries server-side semantics like the `_ggui:contract-error`
+ * carries server-side semantics like the `_ggui:lifecycle`
  * channel); this invariant extends the rule uniformly across the
  * other two inbound spec maps.
  *

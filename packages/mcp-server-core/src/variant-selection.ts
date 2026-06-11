@@ -37,7 +37,7 @@ export interface VariantSelectionContext {
   /**
    * Canonical RFC 8785 (JCS) hash of the agent's draft contract. Equal
    * hashes mean the candidates are byte-exact same-contract variants
-   * (different `generator` / `variance`); divergent hashes mean
+   * (different `source` / `variance`); divergent hashes mean
    * the candidates came from {@link BlueprintSearch.search} above a
    * shape-equivalence threshold.
    *

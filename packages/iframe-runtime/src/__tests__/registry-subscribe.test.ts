@@ -327,15 +327,15 @@ describe('connectViaRegistry — version handshake', () => {
 
   it('forwards post-resolution frames through registered handlers (not via a callback)', async () => {
     const registry = makeRegistry();
-    // Register a `progress` handler BEFORE bind so the registry routes
+    // Register a `url` handler BEFORE bind so the registry routes
     // post-ack frames to it. Note: `ack` + `error` handlers are added
     // by `connectViaRegistry` itself; we register one for an unrelated
     // frame type that arrives post-resolution.
-    const progressFrames: unknown[] = [];
+    const urlFrames: unknown[] = [];
     registry.register({
-      type: 'progress',
+      type: 'url',
       onMessage: (payload) => {
-        progressFrames.push(payload);
+        urlFrames.push(payload);
       },
     });
 
@@ -353,17 +353,16 @@ describe('connectViaRegistry — version handshake', () => {
     });
     await handlePromise;
 
-    // Post-resolution `progress` frame routes to the handler.
+    // Post-resolution `url` frame routes to the handler.
     MockWebSocket.instances[0]?.emit({
-      type: 'progress',
+      type: 'url',
       payload: {
         sessionId: 'render_001',
-        step: 'compiling',
-        message: 'still working',
+        shortCode: 'Xk9mQ2pL',
       },
     });
 
-    expect(progressFrames).toHaveLength(1);
-    expect((progressFrames[0] as { step?: string }).step).toBe('compiling');
+    expect(urlFrames).toHaveLength(1);
+    expect((urlFrames[0] as { shortCode?: string }).shortCode).toBe('Xk9mQ2pL');
   });
 });

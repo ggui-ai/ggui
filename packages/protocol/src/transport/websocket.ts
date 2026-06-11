@@ -29,9 +29,6 @@ import type {
   ErrorPayload,
   RenderPayload,
   StreamEnvelope,
-  StreamPayload,
-  ProgressPayload,
-  AgentMsgPayload,
   PropsUpdatePayload,
   UrlPayload,
   SystemPayload,
@@ -59,9 +56,6 @@ export type WebSocketMessageType =
   | 'error' // Server → Client: Error response
   | 'render' // Server → Client: Agent render event
   | 'data' // Server → Client: Agent data push (no regeneration)
-  | 'stream' // Server → Client: Agent streaming text chunk
-  | 'progress' // Server → Client: Generation progress
-  | 'agent-msg' // Server → Client: Agent message (thinking or chat)
   | 'props_update' // Server → Client: Props replaced on existing component
   | 'url' // Server → Client: Short URL notification
   | 'system' // Server → Client: System-level events (auth, credentials)
@@ -120,9 +114,6 @@ export type WebSocketMessage =
   | (WsMessageBase & { type: 'error'; payload: ErrorPayload })
   | (WsMessageBase & { type: 'render'; payload: RenderPayload })
   | (WsMessageBase & { type: 'data'; payload: StreamEnvelope })
-  | (WsMessageBase & { type: 'stream'; payload: StreamPayload })
-  | (WsMessageBase & { type: 'progress'; payload: ProgressPayload })
-  | (WsMessageBase & { type: 'agent-msg'; payload: AgentMsgPayload })
   | (WsMessageBase & { type: 'props_update'; payload: PropsUpdatePayload })
   | (WsMessageBase & { type: 'url'; payload: UrlPayload })
   | (WsMessageBase & { type: 'system'; payload: SystemPayload })

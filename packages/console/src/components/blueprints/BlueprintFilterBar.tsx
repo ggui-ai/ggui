@@ -6,7 +6,10 @@
  *   - **persona** — free-form substring match. Mirrors the
  *     `variance.persona` slot operators set when authoring variants.
  *   - **generator** — slug select (default-haiku-4-5 vs advanced-opus-
- *     4-7). Empty means any.
+ *     4-7). Empty means any. Provenance-aware: only `llm`-sourced
+ *     variants can match an engine slug — `user` / `curated` variants
+ *     carry no engine provenance (same rule as the
+ *     `ggui_ops_list_blueprints` filter).
  *   - **drafts only** — gates by `validatorScore` below the threshold
  *     so operators can find sub-pass variants stored but not selected.
  *
@@ -24,6 +27,7 @@
  *   - `data-ggui-variants-filter-drafts-only` on the drafts checkbox.
  */
 import type { ChangeEvent, ReactElement } from 'react';
+import type { BlueprintSource } from '@ggui-ai/protocol';
 
 /** Available generator slugs surfaced in the select. Pre-launch v1 ships
  *  two; the slug parser is liberal so future generators slot in here. */
@@ -157,7 +161,7 @@ export function BlueprintFilterBar({
 export function blueprintMatchesFilters<
   T extends {
     readonly variance: { readonly persona?: string };
-    readonly generator: string;
+    readonly source: BlueprintSource;
     readonly validatorScore?: number;
   },
 >(bp: T, filters: VariantFilters): boolean {
@@ -166,7 +170,10 @@ export function blueprintMatchesFilters<
     const persona = bp.variance.persona?.toLowerCase() ?? '';
     if (!persona.includes(needle)) return false;
   }
-  if (filters.generator.length > 0 && bp.generator !== filters.generator) {
+  if (
+    filters.generator.length > 0 &&
+    (bp.source.kind !== 'llm' || bp.source.generator !== filters.generator)
+  ) {
     return false;
   }
   if (filters.draftsOnly) {

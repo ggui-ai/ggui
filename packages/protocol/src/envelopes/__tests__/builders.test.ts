@@ -1,5 +1,5 @@
 /**
- * Unit tests for the three central envelope builders.
+ * Unit tests for the central envelope builders.
  *
  * Covers the semantic paths locked in the builder docstring:
  *   - default-stamps-current-version
@@ -14,16 +14,8 @@
  * breakage.
  */
 import { describe, expect, it } from 'vitest';
-import {
-  makeActionEnvelope,
-  makeContractErrorPayload,
-  makeStreamEnvelope,
-} from '../builders.js';
-import type {
-  ActionEnvelope,
-  ContractErrorPayload,
-  StreamEnvelope,
-} from '../../index.js';
+import { makeActionEnvelope, makeStreamEnvelope } from '../builders.js';
+import type { ActionEnvelope, StreamEnvelope } from '../../index.js';
 import { PROTOCOL_SCHEMA_VERSION } from '../../version.js';
 
 describe('makeActionEnvelope', () => {
@@ -168,70 +160,5 @@ describe('makeStreamEnvelope', () => {
       payload: null,
     });
     expect(env.sessionId).toBe('render-1');
-  });
-});
-
-describe('makeContractErrorPayload', () => {
-  const ISO = '2026-04-23T00:00:00.000Z';
-
-  it('default-stamps-current-version', () => {
-    const p = makeContractErrorPayload({
-      toolName: 'tool_a',
-      timestamp: ISO,
-      error: { code: 'SCHEMA_VIOLATION', message: 'boom' },
-    });
-    expect(p.schemaVersion).toBe(PROTOCOL_SCHEMA_VERSION);
-  });
-
-  it('explicit-override-respected', () => {
-    const p = makeContractErrorPayload({
-      toolName: 'tool_a',
-      timestamp: ISO,
-      error: { code: 'SCHEMA_VIOLATION', message: 'boom' },
-      schemaVersion: '99.99-future',
-    });
-    expect(p.schemaVersion).toBe('99.99-future');
-  });
-
-  it('explicit-undefined-omits-stamp (test-only pattern)', () => {
-    const p = makeContractErrorPayload({
-      toolName: 'tool_a',
-      timestamp: ISO,
-      error: { code: 'SCHEMA_VIOLATION', message: 'boom' },
-      schemaVersion: undefined,
-    });
-    expect('schemaVersion' in p).toBe(false);
-    expect(p.schemaVersion).toBeUndefined();
-  });
-
-  it('preserves all supplied fields verbatim', () => {
-    const p = makeContractErrorPayload({
-      toolName: 'tool_a',
-      error: {
-        code: 'SCHEMA_VIOLATION',
-        message: 'boom',
-        causedBy: 'Error: stack\n  at x',
-      },
-      timestamp: ISO,
-    });
-    expect(p).toEqual({
-      toolName: 'tool_a',
-      error: {
-        code: 'SCHEMA_VIOLATION',
-        message: 'boom',
-        causedBy: 'Error: stack\n  at x',
-      },
-      timestamp: ISO,
-      schemaVersion: PROTOCOL_SCHEMA_VERSION,
-    });
-  });
-
-  it('produced payload is assignable to ContractErrorPayload', () => {
-    const p: ContractErrorPayload = makeContractErrorPayload({
-      toolName: 'tool_a',
-      timestamp: ISO,
-      error: { code: 'SCHEMA_VIOLATION', message: 'boom' },
-    });
-    expect(p.toolName).toBe('tool_a');
   });
 });

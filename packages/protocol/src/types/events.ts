@@ -34,12 +34,14 @@ export interface ActionEventValue<TData = unknown> {
   data: TData;
   /**
    * MCP tool name populated SERVER-SIDE from the render's
-   * `actionSpec[action].nextStep` when the consume event is built.
-   * Absent when the action has no `nextStep` — the agent decides the
-   * next tool freely from broader context.
+   * `actionSpec[action].nextStep` when the retained `user.submitted`
+   * ledger event is built at WS-action ingress. Absent when the
+   * action has no `nextStep`.
    *
-   * Advisory hint, not binding: the agent sees it on `ggui_consume`
-   * and decides whether to honor it on its next turn.
+   * Advisory and ledger-only: operator surfaces (console timeline,
+   * inspector feeds) read it. The `ggui_consume` pipe entry is the
+   * separate `ConsumeEventEntry` shape, which carries no tool slot —
+   * agents read `nextStep` from the contract they authored.
    */
   tool?: string;
 }

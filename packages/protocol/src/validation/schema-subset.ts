@@ -4,9 +4,10 @@
  *
  * **Why this lives in the protocol package.** The schema-alignment
  * contract is enforced at render-time + blueprint-registration; the
- * canonical failure is {@link ContractErrorCode}
- * `'SCHEMA_MISMATCH_ERROR'` — same envelope shape + channel as every
- * other named contract violation. See the schema-compat docstrings
+ * canonical failure is the named `'SCHEMA_MISMATCH_ERROR'` rejection
+ * the push / registration call answers with — fail-loud at
+ * declaration time, before a malformed payload reaches the agentic
+ * loop. See the schema-compat docstrings
  * on {@link ActionEntry.schema} and {@link StreamChannelEntry.schema}
  * for the author-invariant the check enforces.
  *
@@ -71,7 +72,7 @@
  * **Determinism contract.** No randomness, no IO, no thrown
  * exceptions for normal violations. Every incompatibility is
  * reported as a {@link SubsetViolation} with enough field-path
- * context for the emitted `SCHEMA_MISMATCH_ERROR` to name the
+ * context for the `SCHEMA_MISMATCH_ERROR` rejection to name the
  * mismatch cleanly. Thrown errors are reserved for programmer-
  * bug conditions (a caller passes `null` where a JsonSchema is
  * expected).
@@ -135,7 +136,7 @@ export interface SubsetViolation {
    *  {@link SubsetViolation.superset}. */
   readonly subset?: string;
   /** Human-readable summary suitable for inclusion in a
-   *  `SCHEMA_MISMATCH_ERROR` envelope. Producers MAY ignore this
+   *  `SCHEMA_MISMATCH_ERROR` rejection. Producers MAY ignore this
    *  and render their own message from `path` + `reason` if they
    *  prefer a consistent localized format. */
   readonly message: string;

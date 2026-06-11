@@ -1,20 +1,21 @@
 // packages/protocol/src/validation/sanitize-error.ts
 //
-// Credential-leak sanitizer for `ContractErrorPayload.error.causedBy`.
+// Credential-leak sanitizer for stringified errors bound for the wire.
 //
-// The `causedBy` field on a contract-error envelope carries the
-// stringified original error — typically `Error.stack`. Stacks frequently
+// A diagnostic cause string carries the stringified original error —
+// typically `Error.stack`. Stacks frequently
 // contain URLs with query-param tokens (`?token=...`, `?api_key=...`),
 // Authorization header values captured by over-eager logging libraries,
-// and env-var dumps. The envelope flows on the reserved
-// `_ggui:contract-error` channel with `replay: 'all'`, so anything that
-// lands in `causedBy` persists in the session ring buffer and is visible
-// in operator tools (RenderInspector activity panels). If an operator
-// shares a bug report with that data, the credential leaks externally.
+// and env-var dumps. The primary consumer is the live channel's
+// `channel_error` frame: a `POLL_FAILED` emission threads the polled
+// tool's failure into the frame's `details` slot, where it is visible
+// to the subscribed client and in operator tools (RenderInspector
+// activity panels). If an operator shares a bug report with that data,
+// the credential leaks externally.
 //
 // This module's default posture is "sanitize before emission": every
 // producer pipes the raw `err.stack` through {@link sanitizeCausedBy}
-// before populating `causedBy`. Producers that need stricter
+// before putting it on the wire. Producers that need stricter
 // sanitization substitute their own {@link SanitizeCausedBy} function.
 //
 // Scope: this is a DEFENSE-IN-DEPTH belt, not the sole line. Libraries
@@ -24,8 +25,8 @@
 // rather redact conservatively than ship raw stacks.
 
 /**
- * Patterns stripped from stringified errors before emission on
- * `_ggui:contract-error`. The default set covers the common credential
+ * Patterns stripped from stringified errors before they ride a wire
+ * frame. The default set covers the common credential
  * shapes that show up in stack traces by accident (URLs with token query
  * params, Bearer headers captured by retry libraries, env-var dumps).
  *
@@ -55,7 +56,8 @@ export const TRUNCATION_MARKER = '\n…[truncated]';
 
 /**
  * Sanitize a stringified error (typically `err.stack`) before it's
- * written to `ContractErrorPayload.error.causedBy`.
+ * written to a wire-visible diagnostic slot (e.g. the `channel_error`
+ * frame's `details`).
  *
  * Applies every pattern in {@link DEFAULT_CREDENTIAL_PATTERNS} in order,
  * replacing matches with `[REDACTED]`. If the result exceeds `maxLength`,

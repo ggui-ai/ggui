@@ -22,8 +22,7 @@
  * places — (1) the in-iframe status line (operator-visible) and
  * (2) a parent-bound `postMessage({type:'ggui:bootstrap-failed', ...})`.
  * The post-message envelope is consumed by the `<McpAppIframe>` host
- * wrapper, which routes it to the host's `onError` callback. The
- * envelope also carries a live-channel contract-error path.
+ * wrapper, which routes it to the host's `onError` callback.
  */
 import type { ReactNode } from 'react';
 import type {
@@ -326,8 +325,7 @@ async function connectApp(app: App, transport: Transport): Promise<ConnectAppRes
 
 // =============================================================================
 // Failure surfacing. Two channels — the in-iframe status line + a
-// parent-bound `postMessage`. The live-channel contract-error
-// envelope (`_ggui:contract-error` on the WS) is a third path.
+// parent-bound `postMessage`.
 // =============================================================================
 
 /**

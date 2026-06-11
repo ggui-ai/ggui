@@ -44,11 +44,9 @@ import type {
   ClosePayload,
   ErrorPayload,
   InternalProgressPayload,
-  ProgressPayload,
   PropsUpdatePayload,
   RenderPayload,
   StreamEnvelope,
-  StreamPayload,
   SubscribePayload,
   SystemPayload,
   UrlPayload,
@@ -242,9 +240,6 @@ describe('websocket transport boundary — discriminator coverage', () => {
       'error',
       'render',
       'data',
-      'stream',
-      'progress',
-      'agent-msg',
       'props_update',
       'url',
       'system',
@@ -261,7 +256,7 @@ describe('websocket transport boundary — discriminator coverage', () => {
       // R7 — ledger replay frame.
       'render_event',
     ];
-    expect(types).toHaveLength(23);
+    expect(types).toHaveLength(20);
     // Structural lock: ConnectionStatus values also stable.
     const statuses: ConnectionStatus[] = [
       'connecting',
@@ -285,10 +280,8 @@ void (function _contractPayloadsStayOnRoot(): void {
   type _A = AckPayload;
   type _R = RenderPayload;
   type _SE = StreamEnvelope;
-  type _ST = StreamPayload;
   type _E = ErrorPayload;
   type _C = ClosePayload;
-  type _Pr = ProgressPayload;
   type _U = UrlPayload;
   type _Sys = SystemPayload;
   type _PU = PropsUpdatePayload;

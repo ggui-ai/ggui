@@ -12,16 +12,22 @@
  *   1. Action envelopes emitted by the config carry a single `sessionId`
  *      (no `stackItemId`/`stackIndex` companions) plus `clientSeq` +
  *      `schemaVersion`, and ride in a `{type:'action', payload: envelope}`
- *      WS frame. The payload is `action` + `data` ONLY — the agent's
- *      `tool` hint is server-derived at consume-event build time.
+ *      WS frame. The payload is `action` + `data` ONLY — the operator-
+ *      facing `tool` hint is server-derived at ledger-event build time.
  *   2. The active render's `actionSpec` resolves on every dispatch
  *      via `getCurrentGguiSession()` (validator stays coherent).
  *   3. Validation violations route through `onContractViolation` +
  *      block the outbound send.
- *   4. Stream fan-out goes through the in-renderer StreamBus; wire's
+ *   4. Stream fan-out goes through the shared StreamBus; wire's
  *      `useStream(channel)` subscribers wake up.
  *   5. Outbound emission targets `manager.send({type:'action',
  *      payload})` — no other wire frame goes out on dispatch.
+ *
+ * `StreamBus` itself (replay ring, channel keying, caps) is owned by
+ * `@ggui-ai/wire` since the F11 collapse — its behaviour suite lives
+ * in `wire/src/wire-config.test.ts`. This file pins the iframe-side
+ * ADAPTER: CSP-precompiled validation, violation dual-emission, and
+ * the tools/call-vs-WS transport seam.
  */
 import { describe, it, expect, vi } from 'vitest';
 import type {
@@ -29,7 +35,6 @@ import type {
   ActionSpec,
   ComponentGguiSession,
   GguiSession,
-  StreamEnvelope,
 } from '@ggui-ai/protocol';
 import type { WebSocketMessage } from '@ggui-ai/protocol/transport/websocket';
 import { PROTOCOL_SCHEMA_VERSION } from '@ggui-ai/protocol';
@@ -216,171 +221,6 @@ describe('buildRootWireConfig — outbound validation', () => {
 
     cfg.dispatch('submit', { email: 'a@b.com' });
     expect(messages).toHaveLength(1);
-  });
-});
-
-describe('StreamBus', () => {
-  it('delivers envelopes to subscribers keyed by channel', () => {
-    const bus = new StreamBus();
-    const handler = vi.fn();
-    const unsubscribe = bus.subscribe('progress', handler);
-
-    const env: StreamEnvelope = {
-      sessionId: 'render_001',
-      channel: 'progress',
-      mode: 'append',
-      payload: { percent: 50 },
-    };
-    bus.emit(env);
-    expect(handler).toHaveBeenCalledWith(env);
-
-    // Unsubscribe — no more deliveries.
-    unsubscribe();
-    bus.emit(env);
-    expect(handler).toHaveBeenCalledTimes(1);
-  });
-
-  it('does not deliver to subscribers on other channels', () => {
-    const bus = new StreamBus();
-    const progressHandler = vi.fn();
-    bus.subscribe('progress', progressHandler);
-
-    bus.emit({
-      sessionId: 'render_001',
-      channel: 'status',
-      mode: 'replace',
-      payload: 'ok',
-    });
-    expect(progressHandler).not.toHaveBeenCalled();
-  });
-
-  it('replays buffered reserved-channel envelopes to a late subscriber (`_ggui:preview` race)', () => {
-    // Mirrors the production race: server-side replay frames for
-    // `_ggui:preview` arrive on the WS BEFORE the renderer's dispatcher
-    // mounts `mountProvisional` and subscribes. Without
-    // late-subscriber replay, the preview surface stays stuck on the
-    // spinner and the user sees nothing.
-    const bus = new StreamBus();
-    const env1: StreamEnvelope = {
-      sessionId: 'render_001',
-      channel: '_ggui:preview',
-      mode: 'append',
-      payload: { createSurface: { surfaceId: 'sx' } },
-      seq: 1,
-    };
-    const env2: StreamEnvelope = {
-      sessionId: 'render_001',
-      channel: '_ggui:preview',
-      mode: 'append',
-      payload: {
-        updateComponents: { surfaceId: 'sx', components: [] },
-      },
-      seq: 2,
-    };
-
-    // Emit BEFORE any subscriber attaches.
-    bus.emit(env1);
-    bus.emit(env2);
-
-    const late = vi.fn();
-    bus.subscribe('_ggui:preview', late);
-
-    // Late subscriber sees both buffered envelopes synchronously,
-    // in arrival order.
-    expect(late).toHaveBeenNthCalledWith(1, env1);
-    expect(late).toHaveBeenNthCalledWith(2, env2);
-    expect(late).toHaveBeenCalledTimes(2);
-
-    // Live frames after subscribe still flow through.
-    const env3: StreamEnvelope = {
-      sessionId: 'render_001',
-      channel: '_ggui:preview',
-      mode: 'append',
-      payload: { deleteSurface: { surfaceId: 'sx' } },
-      seq: 3,
-    };
-    bus.emit(env3);
-    expect(late).toHaveBeenNthCalledWith(3, env3);
-  });
-
-  it('replays each new subscriber on `_ggui:preview` independently', () => {
-    // Two iframes that share the same StreamBus must each see the
-    // buffered preview frames — the buffer is replayed per subscribe,
-    // not consumed.
-    const bus = new StreamBus();
-    const env: StreamEnvelope = {
-      sessionId: 'render_001',
-      channel: '_ggui:preview',
-      mode: 'append',
-      payload: { createSurface: { surfaceId: 'sx' } },
-      seq: 1,
-    };
-    bus.emit(env);
-
-    const a = vi.fn();
-    const b = vi.fn();
-    bus.subscribe('_ggui:preview', a);
-    bus.subscribe('_ggui:preview', b);
-
-    expect(a).toHaveBeenCalledWith(env);
-    expect(b).toHaveBeenCalledWith(env);
-  });
-
-  it('does not buffer non-reserved (agent-declared) channels for late subscribers', () => {
-    // Agent-declared streamSpec channels are server-replayed via the
-    // `fromSeq` reconnect handshake; doubling that at the bus layer
-    // would change agent contract semantics.
-    const bus = new StreamBus();
-    bus.emit({
-      sessionId: 'render_001',
-      channel: 'progress',
-      mode: 'append',
-      payload: { percent: 50 },
-    });
-
-    const late = vi.fn();
-    bus.subscribe('progress', late);
-    expect(late).not.toHaveBeenCalled();
-  });
-
-  it('caps the reserved-channel replay ring (FIFO eviction past the cap)', () => {
-    // Boundary check on the bounded buffer — the precise cap is an
-    // implementation detail, but the `oldest evicted` invariant is
-    // load-bearing for the memory contract.
-    const bus = new StreamBus();
-    // Push a large number of frames; the cap is 256 (tests the
-    // boundary by emitting more than that and asserting the most
-    // recent few survive while a very-old one is gone).
-    for (let i = 0; i < 300; i += 1) {
-      bus.emit({
-        sessionId: 'render_001',
-        channel: '_ggui:preview',
-        mode: 'append',
-        payload: { i },
-        seq: i,
-      });
-    }
-    const late = vi.fn();
-    bus.subscribe('_ggui:preview', late);
-    // Strictly fewer than 300 replayed — cap took effect.
-    expect(late.mock.calls.length).toBeLessThan(300);
-    // The very-first frame (seq=0) was evicted; the most-recent
-    // frame (seq=299) survived.
-    const seqsReplayed = late.mock.calls.map(
-      (call) => (call[0] as StreamEnvelope).seq,
-    );
-    expect(seqsReplayed).not.toContain(0);
-    expect(seqsReplayed).toContain(299);
-  });
-
-  it('keeps the inlined reserved-channel prefix in lock-step with `@ggui-ai/protocol`', async () => {
-    // The bus inlines `'_ggui:'` to keep the bundle off the protocol
-    // root barrel (see provisional-renderer.ts for the same trick).
-    // This test locks the constant equality so a future protocol
-    // refactor that renames the prefix breaks here loudly instead of
-    // silently disabling reserved-channel buffering.
-    const protocol = await import('@ggui-ai/protocol');
-    expect(protocol.RESERVED_CHANNEL_PREFIX).toBe('_ggui:');
   });
 });
 

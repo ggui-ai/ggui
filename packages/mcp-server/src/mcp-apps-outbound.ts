@@ -102,9 +102,7 @@ import { createHash } from "node:crypto";
  *
  * Post-renderer failures (WS handshake / auth / render-mismatch) are
  * the renderer bundle's responsibility - `runtime.ts::postBootFailure`
- * emits the same `ggui:bootstrap-failed` envelope AND, for post-WS-open
- * failures, a `_ggui:contract-error` envelope on the live channel per
- * `ContractErrorCode` additions (C8 Commit 1/3).
+ * emits the same `ggui:bootstrap-failed` envelope.
  *
  * **Adapter boundary unchanged.** The preflight's `message` listener
  * routes ONLY responses to its own pending JSON-RPC ids. MCP Apps

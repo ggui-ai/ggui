@@ -53,9 +53,6 @@ function exhaust(err: ProtocolError): string {
       void okForeign;
       return typeof err.code === 'string' ? err.code : 'unknown';
     }
-    case 'contract':
-      expectTypeOf(err.payload).toHaveProperty('toolName');
-      return err.payload.toolName;
     case 'bootstrap':
       expectTypeOf(err.reason).toEqualTypeOf<BootstrapFailureReason>();
       return err.message;

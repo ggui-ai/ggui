@@ -57,7 +57,11 @@ function makeBlueprint(
     appId: overrides.appId ?? 'app-1',
     codeS3Url: overrides.codeS3Url,
     codeHash: overrides.codeHash,
-    generator: overrides.generator ?? 'ui-gen-default-haiku-4-5',
+    source: overrides.source ?? {
+      kind: 'llm',
+      generator: 'ui-gen-default-haiku-4-5',
+      model: 'claude-haiku-4-5',
+    },
     validatorScore: overrides.validatorScore,
     variance: overrides.variance ?? {},
     isOperatorDefault: overrides.isOperatorDefault,
@@ -325,20 +329,28 @@ export function runBlueprintSearchConformance(
     });
 
     describe('generator filter', () => {
-      it('excludes blueprints whose generator differs', async () => {
+      it('excludes blueprints whose llm-arm source.generator differs', async () => {
         await withSearch(async ({ store, search }) => {
           await store.put(
             makeBlueprint({
               blueprintId: 'bp-haiku',
               variance: { persona: 'minimalist' },
-              generator: 'ui-gen-default-haiku-4-5',
+              source: {
+                kind: 'llm',
+                generator: 'ui-gen-default-haiku-4-5',
+                model: 'claude-haiku-4-5',
+              },
             }),
           );
           await store.put(
             makeBlueprint({
               blueprintId: 'bp-opus',
               variance: { persona: 'minimalist' },
-              generator: 'ui-gen-advanced-opus-4-7',
+              source: {
+                kind: 'llm',
+                generator: 'ui-gen-advanced-opus-4-7',
+                model: 'claude-opus-4-7',
+              },
             }),
           );
           const result = await search.search({
@@ -348,6 +360,24 @@ export function runBlueprintSearchConformance(
           });
           expect(result).toHaveLength(1);
           expect(result[0]!.blueprint.blueprintId).toBe('bp-haiku');
+        });
+      });
+
+      it('never matches user-sourced rows (no engine provenance to filter on)', async () => {
+        await withSearch(async ({ store, search }) => {
+          await store.put(
+            makeBlueprint({
+              blueprintId: 'bp-user',
+              variance: { persona: 'minimalist' },
+              source: { kind: 'user' },
+            }),
+          );
+          const result = await search.search({
+            appId: 'app-1',
+            variance: { persona: 'minimalist' },
+            generator: 'ui-gen-default-haiku-4-5',
+          });
+          expect(result).toHaveLength(0);
         });
       });
     });

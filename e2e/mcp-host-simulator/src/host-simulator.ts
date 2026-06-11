@@ -153,7 +153,11 @@ export interface SuggestionBlueprintMeta {
   readonly blueprintId: string;
   readonly contractHash: string;
   readonly codeHash?: string;
-  readonly generator: string;
+  /** Provenance of the cached code — present iff `origin === 'cache'`. */
+  readonly source?:
+    | { readonly kind: "llm"; readonly generator: string; readonly model: string }
+    | { readonly kind: "user" }
+    | { readonly kind: "curated" };
   readonly variance: Record<string, unknown>;
   readonly selectedReason?: string;
 }

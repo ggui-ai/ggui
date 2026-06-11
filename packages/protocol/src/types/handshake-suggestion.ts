@@ -27,8 +27,8 @@
  * Locked decisions:
  *
  *   - `blueprintMeta` is ALWAYS present on a successful handshake
- *     (Option B from §D5). `codeHash` is the only field that's absent
- *     on non-cache origins.
+ *     (Option B from §D5). `codeHash` + `source` are absent on
+ *     non-cache origins (gen pending — no code, no provenance).
  *   - `amendments` is populated only on `origin: 'synth'`. On `cache`
  *     and `agent` origins it MUST be omitted.
  *   - `validationFindings` is populated only when validators ran AND
@@ -38,6 +38,7 @@
  *     telemetry only (synth's amendment already addressed them).
  */
 import type { Blueprint, BlueprintVariance } from './blueprint.js';
+import type { BlueprintSource } from './blueprint-source.js';
 import type { DataContract, JsonValue } from './data-contract.js';
 
 /**
@@ -126,8 +127,17 @@ export interface BlueprintMeta {
    * 'cache'`. Absent for `agent` / `synth` (gen pending).
    */
   readonly codeHash?: string;
-  /** Slug of the generator that produced (or will produce) the code. */
-  readonly generator: string;
+  /**
+   * Provenance of the cached code backing this suggestion — the single
+   * {@link BlueprintSource} vocabulary, read from the matched
+   * blueprint's stored row. Present iff `origin === 'cache'` (same
+   * presence rule as {@link codeHash}). ABSENT on `agent` / `synth`
+   * origins: generation has not happened yet, so no provenance exists
+   * to report — the paired render mints the real `llm` arm from the
+   * engine's own metadata stamp at registration time. Fabricating a
+   * value here is banned.
+   */
+  readonly source?: BlueprintSource;
   /** Variance tags carried through from the suggestion. */
   readonly variance: BlueprintVariance;
   /**

@@ -39,6 +39,7 @@ import type {
   AuthAdapter,
   AuthResult,
   BufferedStreamEnvelope,
+  PendingEventConsumer,
   GguiSessionPatch,
   GguiSessionStore,
   GguiSessionStreamBuffer,
@@ -54,6 +55,7 @@ import { assertActionContract, assertStreamContract } from "@ggui-ai/mcp-server-
 import type {
   AckPayload,
   ActionEnvelope,
+  ConsumeEventEntry,
   ErrorPayload,
   JsonObject,
   GguiSession,
@@ -68,7 +70,7 @@ import {
   UPGRADE_REQUIRED,
 } from "@ggui-ai/protocol";
 import type { WebSocketMessage } from "@ggui-ai/protocol/transport/websocket";
-import { randomUUID } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import type { IncomingMessage } from "node:http";
 import type { Duplex } from "node:stream";
 import { WebSocketServer, type WebSocket } from "ws";
@@ -332,6 +334,32 @@ export interface GguiSessionChannelOptions {
   /** Required — the render backing store (typically `InMemoryGguiSessionStore`). */
   readonly renderStore: GguiSessionStore;
   /**
+   * Optional pending-events pipe — the SAME `PendingEventConsumer`
+   * instance the `ggui_consume` handler drains and the
+   * `ggui_runtime_submit_action` relay appends to. When wired, the WS
+   * `action` ingress dual-writes every accepted `data:submit` envelope:
+   *
+   *   1. `renderStore.appendEvent({type:'user.submitted', …})` — the
+   *      append-only retained ledger (load-bearing for the ack `seq`
+   *      and reconnect resume, exactly as before).
+   *   2. `pendingEventConsumer.append(sessionId, {id, envelope,
+   *      createdAt})` — the queue that wakes the agent's `ggui_consume`
+   *      long-poll. The entry mirrors the relay's consume-entry shape
+   *      (`ConsumeEventEntry`), so WS-originated gestures and
+   *      tools/call-relayed gestures drain identically.
+   *
+   * A failed pipe append (e.g. the pipe was never opened because the
+   * render didn't come from `ggui_render`) degrades to ledger-only with
+   * a `render_channel_consume_append_failed` warn — ack semantics are
+   * unchanged either way.
+   *
+   * Absent → ledger-only ingress (audit-only deployments, conformance
+   * harnesses, and composers that registered no `ggui_consume`).
+   * `createGguiServer` threads its shared instance here whenever it
+   * composed the default handler set.
+   */
+  readonly pendingEventConsumer?: PendingEventConsumer;
+  /**
    * Required — the same `AuthAdapter` the `/mcp` endpoint uses. Any
    * failure during `subscribe` rejects the upgrade with HTTP 401.
    */
@@ -406,12 +434,12 @@ export interface GguiSessionChannelOptions {
    *
    * Lookup inside {@link validateStreamData} consults this map FIRST,
    * then the protocol-shipped `BUILTIN_RESERVED_VALIDATORS` (which
-   * validates `_ggui:contract-error`), then falls through to
+   * validates `_ggui:lifecycle`), then falls through to
    * `{valid: true}` when a known reserved channel has no validator.
    *
    * Absent = no `_ggui:preview` validation (documented degradation for
-   * implementations without the preview package); `_ggui:contract-
-   * error` is always validated via the built-in.
+   * implementations without the preview package); `_ggui:lifecycle`
+   * is always validated via the built-in.
    */
   readonly extraReservedValidators?: ReadonlyMap<string, ReservedChannelValidator>;
   /**
@@ -1212,8 +1240,8 @@ export function createGguiSessionChannelServer(opts: GguiSessionChannelOptions):
    *
    * Caller is responsible for validating `delivery.payload` against
    * the active streamSpec BEFORE calling — the fan-out here trusts
-   * its input. Reserved-channel deliveries (e.g. `_ggui:contract-
-   * error`) bypass the streamSpec check upstream via
+   * its input. Reserved-channel deliveries (e.g. `_ggui:lifecycle`)
+   * bypass the streamSpec check upstream via
    * `assertStreamContract`.
    */
   async function fanOut(
@@ -1365,14 +1393,18 @@ export function createGguiSessionChannelServer(opts: GguiSessionChannelOptions):
   }
 
   /**
-   * Stamp the agent-facing `tool` hint onto a `data:submit` envelope's
-   * `ActionEventValue` payload before it persists as a consume event.
+   * Stamp the `tool` hint onto a `data:submit` envelope's
+   * `ActionEventValue` payload before it persists onto the retained
+   * event ledger (`user.submitted`).
    *
    * The hint derives server-side from the active render's
    * `actionSpec[action].nextStep` — the single authoritative source —
    * and only fills the gap when the inbound payload carries no `tool`
-   * of its own. The hint is advisory: the agent sees it on
-   * `ggui_consume` and decides whether to honor it on its next turn.
+   * of its own. It rides the LEDGER copy only (operator surfaces —
+   * console timeline, inspector feeds — read it); the consume-pipe
+   * entry is the relay-identical {@link ConsumeEventEntry}, which
+   * carries no tool slot — the agent reads `nextStep` from the
+   * contract it authored.
    *
    * Pass-through (returns the envelope unchanged) when:
    *   - the envelope is not `data:submit`,
@@ -1404,6 +1436,58 @@ export function createGguiSessionChannelServer(opts: GguiSessionChannelOptions):
   }
 
   /**
+   * Project an accepted `data:submit` {@link ActionEnvelope} onto the
+   * canonical {@link ConsumeEventEntry} shape the pending-events pipe
+   * stores — the SAME shape `ggui_runtime_submit_action`'s dispatch
+   * branch appends, so `ggui_consume` drains WS-originated gestures
+   * and tools/call-relayed gestures identically.
+   *
+   * Field mapping:
+   *   - `intent`     ← `payload.action` (the actionSpec key).
+   *   - `actionData` ← `payload.data ?? null` (already validated by
+   *     {@link assertActionContract} when a spec is declared).
+   *   - `uiContext`  ← `{}` — WS clients don't mirror a contextSpec
+   *     snapshot (that's the iframe-runtime observer's job); the empty
+   *     object is the type's canonical "no slots mirrored" value.
+   *   - `actionId`   ← server-minted 8-hex correlation id. The WS wire
+   *     envelope carries none (only the iframe-runtime computes a
+   *     gesture-side FNV-1a hash); minting here keeps the pipe entry's
+   *     `drain_ack` keying well-formed.
+   *   - `firedAt`    ← server clock — the WS envelope deliberately
+   *     carries no client timestamp (see {@link ActionEnvelope}).
+   *
+   * Returns `null` when the payload lacks a non-empty string `action`
+   * (possible only on spec-less renders, where the contract gate is
+   * permissive) — there is no intent to key the entry on, so the
+   * gesture stays ledger-only.
+   */
+  function toConsumeEventEntry(
+    envelope: ActionEnvelope,
+    sessionId: string
+  ): ConsumeEventEntry | null {
+    const payload = envelope.payload;
+    if (
+      payload === null ||
+      payload === undefined ||
+      typeof payload !== "object" ||
+      Array.isArray(payload)
+    ) {
+      return null;
+    }
+    const action = payload.action;
+    if (typeof action !== "string" || action.length === 0) return null;
+    return {
+      type: "action",
+      sessionId,
+      intent: action,
+      actionData: payload.data ?? null,
+      uiContext: {},
+      actionId: randomBytes(4).toString("hex"),
+      firedAt: new Date().toISOString(),
+    };
+  }
+
+  /**
    * Handle an inbound `action` message — the canonical flat
    * {@link ActionEnvelope} shape.
    *
@@ -1413,6 +1497,18 @@ export function createGguiSessionChannelServer(opts: GguiSessionChannelOptions):
    * actionSpec payload check via {@link assertActionContract} for
    * `data:submit` types. Both helpers are shared with the hosted
    * `handle-action.ts` ingress.
+   *
+   * Accepted envelopes dual-write, mirroring the
+   * `ggui_runtime_submit_action` relay's posture:
+   *
+   *   1. The retained event ledger (`renderStore.appendEvent`) — the
+   *      ack's `seq` source; failure is the load-bearing
+   *      `APPEND_FAILED` path.
+   *   2. For `data:submit` only, the pending-events pipe
+   *      ({@link GguiSessionChannelOptions.pendingEventConsumer}) — the
+   *      queue `ggui_consume` drains, so the agent receives the gesture
+   *      mid-turn. Pipe failure degrades to ledger-only with a warn;
+   *      it never changes the ack.
    */
   async function handleInboundAction(
     ws: WebSocket,
@@ -1492,19 +1588,62 @@ export function createGguiSessionChannelServer(opts: GguiSessionChannelOptions):
       }
     }
 
-    // Persist the envelope. GguiSessionStore.appendEvent assigns a
-    // monotonic seq the client acks back with so reconnects can resume
-    // via `fromSeq`. The persisted envelope IS the consume event the
-    // agent drains, so this is the single authoritative build site for
-    // the agent-facing `tool` hint — see {@link withDerivedToolHint}.
-    let seq: number;
-    try {
-      seq = await opts.renderStore.appendEvent({
+    // Dual-write, mirroring `ggui_runtime_submit_action`'s dispatch
+    // branch (`createGguiSubmitActionHandler`):
+    //
+    //   1. Ledger — `GguiSessionStore.appendEvent` assigns a monotonic
+    //      seq the client acks back with so reconnects can resume via
+    //      `fromSeq`. This retained copy is also the single build site
+    //      for the operator-facing `tool` hint — see
+    //      {@link withDerivedToolHint}.
+    //   2. Pipe — for `data:submit` envelopes, the consume-entry
+    //      projection ({@link toConsumeEventEntry}) lands on the
+    //      pending-events pipe so the agent's `ggui_consume` long-poll
+    //      drains it mid-turn. The ledger and the pipe are two
+    //      different streams (queue vs append-only retained — see
+    //      `pending-event-consumer.ts`); without this write a WS
+    //      gesture would never reach the agent.
+    //
+    // Both writes fire concurrently via `Promise.allSettled` so each
+    // outcome is inspected independently: a ledger rejection is the
+    // load-bearing `APPEND_FAILED` error path (unchanged ack
+    // semantics); a pipe rejection (pipe never opened / already
+    // reaped) degrades to ledger-only with a warn — the WS client has
+    // no `ui/message` fallback to branch on, so a new error frame
+    // would be vocabulary without a consumer.
+    const consumeWrite: Promise<void> = (() => {
+      if (opts.pendingEventConsumer === undefined || envelope.type !== "data:submit") {
+        return Promise.resolve();
+      }
+      const entry = toConsumeEventEntry(envelope, sub.sessionId);
+      if (entry === null) return Promise.resolve();
+      return opts.pendingEventConsumer.append(sub.sessionId, {
+        // The pipe entry's stable id doubles as the `drain_ack` key —
+        // same convention as the relay path's iframe-supplied id.
+        id: entry.actionId,
+        envelope: entry,
+        createdAt: entry.firedAt,
+      });
+    })();
+    const [ledgerResult, pipeResult] = await Promise.allSettled([
+      opts.renderStore.appendEvent({
         sessionId: sub.sessionId,
         type: "user.submitted",
         data: withDerivedToolHint(envelope, activeItem),
+      }),
+      consumeWrite,
+    ]);
+    if (pipeResult.status === "rejected") {
+      opts.logger.warn("render_channel_consume_append_failed", {
+        sessionId: sub.sessionId,
+        error:
+          pipeResult.reason instanceof Error
+            ? pipeResult.reason.message
+            : String(pipeResult.reason),
       });
-    } catch (err) {
+    }
+    if (ledgerResult.status === "rejected") {
+      const err = ledgerResult.reason;
       opts.logger.error("render_channel_append_failed", {
         sessionId: sub.sessionId,
         error: String(err),
@@ -1517,6 +1656,7 @@ export function createGguiSessionChannelServer(opts: GguiSessionChannelOptions):
       );
       return;
     }
+    const seq: number = ledgerResult.value;
 
     send(ws, {
       type: "ack",

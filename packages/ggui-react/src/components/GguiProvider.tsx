@@ -26,8 +26,6 @@ export interface GguiProviderProps {
   adapterImpls?: AdapterRegistry;
   /** Override auto-detected interface context */
   interfaceContext?: InterfaceContext;
-  /** Optional TanStack QueryClient for tool caching */
-  queryClient?: GguiContextValue['queryClient'];
   /**
    * Custom handler for permission requests (e.g., camera, microphone).
    *
@@ -44,7 +42,7 @@ export interface GguiProviderProps {
    * @returns The resulting permission status
    */
   permissionHandler?: (permission: string) => Promise<PermissionStatus>;
-  /** Auth context for tools system */
+  /** Auth context surfaced to wire hooks (`useAuth`) via the renderer. */
   auth?: {
     currentUser?: EndUserIdentity;
     userId?: string;
@@ -54,19 +52,11 @@ export interface GguiProviderProps {
   /**
    * Conversation envelope identity. Forwarded by {@link useInvoke} as
    * the `X-Ggui-Host-Session-Id` header so the agent threads multi-turn
-   * invokes through its own keyed conversation state. Distinct from
-   * `sessionId` — this names the chat thread, not a GguiSession.
+   * invokes through its own keyed conversation state. Names the chat
+   * thread, not a GguiSession.
    */
   hostSessionId?: string;
-  /**
-   * Per-render scope identity for the client-side tool system. Used by
-   * `useTool` / `useBindings` as `ToolContext.sessionId` — scopes the
-   * in-memory fetch cache so two concurrent renders cannot leak each
-   * other's cached responses. Distinct from `hostSessionId` — this
-   * names a single GguiSession, not the conversation envelope.
-   */
-  sessionId?: string;
-  /** Base URL for API calls (used by fetch tool) */
+  /** Base URL for platform API calls (app-config fetch). */
   apiBaseUrl?: string;
   /** App metadata (name, description, icon). Passed to wire's useApp hook. */
   appMetadata?: {
@@ -93,7 +83,7 @@ export interface GguiProviderProps {
  * </GguiProvider>
  * ```
  */
-export function GguiProvider({ appId, wsEndpoint, adapterImpls, interfaceContext: interfaceContextProp, queryClient, permissionHandler, auth, hostSessionId, sessionId, apiBaseUrl, appMetadata, appConfig, children }: GguiProviderProps) {
+export function GguiProvider({ appId, wsEndpoint, adapterImpls, interfaceContext: interfaceContextProp, permissionHandler, auth, hostSessionId, apiBaseUrl, appMetadata, appConfig, children }: GguiProviderProps) {
   const [adapterPermissions, setAdapterPermissions] = useState<AdapterPermissions>({});
 
   // Auto-detect interface context from window, or use SSR default
@@ -167,15 +157,13 @@ export function GguiProvider({ appId, wsEndpoint, adapterImpls, interfaceContext
       adapterImpls: resolvedAdapterImpls,
       requestPermission,
       interfaceContext,
-      queryClient,
       auth,
       hostSessionId,
-      sessionId,
       apiBaseUrl,
       appMetadata,
       appConfig: resolvedAppConfig,
     }),
-    [appId, wsEndpoint, adapterPermissions, resolvedAdapterImpls, requestPermission, interfaceContext, queryClient, auth, hostSessionId, sessionId, apiBaseUrl, appMetadata, resolvedAppConfig]
+    [appId, wsEndpoint, adapterPermissions, resolvedAdapterImpls, requestPermission, interfaceContext, auth, hostSessionId, apiBaseUrl, appMetadata, resolvedAppConfig]
   );
 
   return <GguiContext.Provider value={value}>{children}</GguiContext.Provider>;

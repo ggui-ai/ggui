@@ -46,12 +46,7 @@
  */
 import type { ActionEnvelope, EventType } from '../types/events.js';
 import type { ErrorPayload, StreamEnvelope } from '../types/live-channel.js';
-import type {
-  ContractErrorCode,
-  ContractErrorPayload,
-  JsonValue,
-  StreamChannelMode,
-} from '../types/data-contract.js';
+import type { JsonValue, StreamChannelMode } from '../types/data-contract.js';
 import { PROTOCOL_SCHEMA_VERSION } from '../version.js';
 
 /** Input type for {@link makeActionEnvelope}. */
@@ -86,19 +81,6 @@ export interface MakeErrorPayloadInput {
   readonly code: string;
   readonly message: string;
   readonly details?: JsonValue;
-}
-
-/** Input type for {@link makeContractErrorPayload}. */
-export interface MakeContractErrorPayloadInput {
-  readonly toolName: string;
-  readonly error: {
-    readonly code: ContractErrorCode;
-    readonly message: string;
-    readonly causedBy?: string;
-  };
-  readonly timestamp: string;
-  /** See {@link MakeActionEnvelopeInput.schemaVersion}. */
-  readonly schemaVersion?: string;
 }
 
 /**
@@ -170,7 +152,7 @@ export function makeStreamEnvelope(
  * Does NOT stamp `schemaVersion` — `ErrorPayload` is the wire-level
  * error envelope (free-form `code: string`), not an envelope that
  * opts into the forward-compat stamp (see {@link ActionEnvelope} /
- * {@link StreamEnvelope} / {@link ContractErrorPayload}). Keeping
+ * {@link StreamEnvelope}). Keeping
  * `ErrorPayload` stamp-free preserves byte-equivalence with every
  * existing server-side error emission that pre-dates the central
  * builders.
@@ -187,25 +169,5 @@ export function makeErrorPayload(parts: MakeErrorPayloadInput): ErrorPayload {
     message: parts.message,
   };
   if (parts.details !== undefined) payload.details = parts.details;
-  return payload;
-}
-
-/**
- * Build a {@link ContractErrorPayload} with `schemaVersion` stamped
- * to {@link PROTOCOL_SCHEMA_VERSION} unless the caller overrides.
- *
- * Filters the `undefined` optional stamp so the emitted payload
- * carries no `schemaVersion` key on the test-only omit path.
- */
-export function makeContractErrorPayload(
-  parts: MakeContractErrorPayloadInput,
-): ContractErrorPayload {
-  const stamp = resolveSchemaVersion(parts);
-  const payload: ContractErrorPayload = {
-    toolName: parts.toolName,
-    error: parts.error,
-    timestamp: parts.timestamp,
-    ...(stamp !== undefined ? { schemaVersion: stamp } : {}),
-  };
   return payload;
 }

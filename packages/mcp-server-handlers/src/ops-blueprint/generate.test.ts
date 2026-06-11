@@ -149,7 +149,13 @@ describe("createGguiOpsGenerateBlueprintHandler — happy path", () => {
     const handler = createGguiOpsGenerateBlueprintHandler(deps);
     const result = await handler.handler({ contract: emptyContract() }, makeCtx("app-1"));
     expect(result.blueprintId).toBe("bp_test_1");
-    expect(result.generator).toBe("ui-gen-default-haiku-4-5");
+    // Provenance is the llm arm, stamped from the engine's own
+    // metadata claim (generator slug + model id).
+    expect(result.source).toEqual({
+      kind: "llm",
+      generator: "ui-gen-default-haiku-4-5",
+      model: "claude-haiku-4-5-20251001",
+    });
     expect(result.codeHash).toBeDefined();
     expect(result.codeHash?.length).toBe(32);
   });
@@ -173,7 +179,11 @@ describe("createGguiOpsGenerateBlueprintHandler — happy path", () => {
       },
       makeCtx("app-1")
     );
-    expect(result.generator).toBe("ui-gen-advanced-opus-4-7");
+    expect(result.source).toEqual({
+      kind: "llm",
+      generator: "ui-gen-advanced-opus-4-7",
+      model: "claude-haiku-4-5-20251001",
+    });
     expect(result.validatorScore).toBe(0.92);
   });
 
@@ -185,7 +195,13 @@ describe("createGguiOpsGenerateBlueprintHandler — happy path", () => {
     expect(persisted).not.toBeNull();
     expect(persisted?.createdBy).toBe("operator");
     expect(persisted?.appId).toBe("app-1");
-    expect(persisted?.generator).toBe("ui-gen-default-haiku-4-5");
+    // createdBy and source are DIFFERENT axes: operator-initiated,
+    // engine-generated.
+    expect(persisted?.source).toEqual({
+      kind: "llm",
+      generator: "ui-gen-default-haiku-4-5",
+      model: "claude-haiku-4-5-20251001",
+    });
     expect(persisted?.contractHash).toBe(blueprintKey(emptyContract()));
   });
 
@@ -331,7 +347,11 @@ describe("createGguiOpsGenerateBlueprintHandler — persona near-dup", () => {
       blueprintId: "bp_seed",
       contractHash: blueprintKey(emptyContract()),
       appId: "app-1",
-      generator: "ui-gen-default-haiku-4-5",
+      source: {
+        kind: "llm",
+        generator: "ui-gen-default-haiku-4-5",
+        model: "claude-haiku-4-5",
+      },
       variance: { persona: "minimalist" },
       createdAt: "2026-05-12T00:00:00.000Z",
       createdBy: "operator",
@@ -374,7 +394,11 @@ describe("createGguiOpsGenerateBlueprintHandler — persona near-dup", () => {
       blueprintId: "bp_seed",
       contractHash: blueprintKey(emptyContract()),
       appId: "app-1",
-      generator: "ui-gen-default-haiku-4-5",
+      source: {
+        kind: "llm",
+        generator: "ui-gen-default-haiku-4-5",
+        model: "claude-haiku-4-5",
+      },
       variance: { persona: "minimalist" },
       createdAt: "2026-05-12T00:00:00.000Z",
       createdBy: "operator",

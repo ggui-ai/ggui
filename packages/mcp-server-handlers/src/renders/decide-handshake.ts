@@ -8,8 +8,8 @@
  * deployments — the LLM (BYOK provider vs Bedrock), the blueprint pools
  * to search (sqlite/in-memory vs S3 Vectors; one per-app pool vs a
  * per-app + shared-catalog + org fan-out), an optional deployment-specific
- * pre-match (cloud's curated-blueprint tier-0), the generator slug, and an
- * operator-visible warn sink.
+ * pre-match (cloud's curated-blueprint tier-0), and an operator-visible
+ * warn sink.
  *
  * ## Decision spine (identical for every deployment)
  *
@@ -46,6 +46,7 @@ import {
   dataContractSchema,
   lintContract,
   summarizeContract,
+  type BlueprintSource,
   type BlueprintVariance,
   type DataContract,
   type HandshakeSuggestion,
@@ -66,10 +67,9 @@ import {
 import type { CoverageGap } from './blueprint-coverage.js';
 import { isFulfillable } from './blueprint-fulfillability.js';
 import type { BlueprintRegistryDeps } from './blueprint-registry.js';
-import {
-  DEFAULT_GENERATOR_SLUG,
-  type HandshakeNegotiator,
-  type HandshakeNegotiatorResult,
+import type {
+  HandshakeNegotiator,
+  HandshakeNegotiatorResult,
 } from './handshake.js';
 import type { InstalledBlueprintsProvider } from './installed-blueprints-provider.js';
 import { emitAgentCaps } from './agentcaps-measurement.js';
@@ -147,11 +147,6 @@ export interface HandshakeDecisionAdapter {
     | Promise<HandshakeNegotiatorResult | undefined>
     | HandshakeNegotiatorResult
     | undefined;
-  /**
-   * Generator slug stamped on every suggestion's `blueprintMeta.generator`.
-   * Defaults to {@link DEFAULT_GENERATOR_SLUG}.
-   */
-  readonly generatorSlug?: string;
   /**
    * Operator-visible sink for swallowed operational errors (pool probe
    * hiccup, pre-match backend flap). OSS passes `console.warn`; cloud
@@ -308,9 +303,9 @@ export function buildCacheReuseResult(
     readonly componentCode: string;
     readonly contract: DataContract;
     readonly variance: BlueprintVariance;
+    readonly source: BlueprintSource;
   },
   reason: string,
-  generatorSlug: string = DEFAULT_GENERATOR_SLUG,
 ): HandshakeNegotiatorResult {
   const codeHash = createHash('sha256')
     .update(blueprint.componentCode)
@@ -325,7 +320,11 @@ export function buildCacheReuseResult(
       blueprintId: blueprint.id,
       contractHash: blueprint.contractKey,
       codeHash,
-      generator: generatorSlug,
+      // The MATCHED blueprint's own stored provenance — cache-only on
+      // BlueprintMeta (same presence rule as codeHash). Never a
+      // deployment-level slug: the cached code may be engine-generated,
+      // operator-registered, or curated, and only the row knows which.
+      source: blueprint.source,
       // The MATCHED blueprint's own variance — what the cached UI carries,
       // surfaced so the agent sees the proposed variance before accepting
       // (D5). Required on Blueprint (rowToBlueprint defaults legacy rows to
@@ -361,7 +360,6 @@ export function buildCacheReuseResult(
 export function buildCreateFallback(
   draftContract: unknown,
   reason: string,
-  generatorSlug: string = DEFAULT_GENERATOR_SLUG,
   requestVariance?: BlueprintVariance,
 ): HandshakeNegotiatorResult {
   const lint = lintContract(draftContract);
@@ -377,11 +375,11 @@ export function buildCreateFallback(
   const suggestion: HandshakeSuggestion = {
     origin: 'agent',
     rationale: reason,
-    // No blueprintId — the durable UUID is minted at render-time
-    // registration, never at handshake. Absent on agent/synth (D4).
+    // No blueprintId, no source — the durable UUID and the real
+    // provenance are both minted at render-time registration, never at
+    // handshake. Absent on agent/synth (D4).
     blueprintMeta: {
       contractHash,
-      generator: generatorSlug,
       // The REQUEST variance — this contract was built for the request, so
       // the proposed variance is the request's. `?? {}` keeps the
       // no-variance default (D5).
@@ -408,7 +406,6 @@ export async function decideHandshake(
   input: HandshakeDecideInput,
 ): Promise<HandshakeNegotiatorResult> {
   const { intent, blueprintDraft, gadgets, ctx } = input;
-  const generatorSlug = adapter.generatorSlug ?? DEFAULT_GENERATOR_SLUG;
   // The agent's draft contract (untrusted). Reassigned in place to the
   // canonicalized contract by the Slice-2 step below so the create / repair
   // path (ensureConformingContract + buildCreateFallback) hashes the same
@@ -547,7 +544,6 @@ export async function decideHandshake(
           return buildCacheReuseResult(
             matchResult.blueprint,
             matchResult.reason,
-            generatorSlug,
           );
         }
         if (
@@ -576,11 +572,7 @@ export async function decideHandshake(
         if (aGap !== bGap) return aGap ? b : a; // empty-gap wins
         return (b.judgeConfidence ?? 0) > (a.judgeConfidence ?? 0) ? b : a;
       });
-      const reuse = buildCacheReuseResult(
-        best.blueprint,
-        best.reason,
-        generatorSlug,
-      );
+      const reuse = buildCacheReuseResult(best.blueprint, best.reason);
       // A gapped reuse carries COVERAGE_GAP warn findings so the agent sees
       // what the cached UI lacks before accepting; a variance-divergent
       // reuse additionally carries a VARIANCE_GAP warn finding so the agent
@@ -610,7 +602,6 @@ export async function decideHandshake(
     return buildCreateFallback(
       draftContract,
       'no-creds: no LLM available for the configured provider; ggui_render will surface the same error and the handshake stays a no-op create.',
-      generatorSlug,
       variance,
     );
   }
@@ -634,11 +625,10 @@ export async function decideHandshake(
     const suggestion: HandshakeSuggestion = {
       origin: conforming.origin,
       rationale: conforming.reasoning,
-      // No blueprintId — minted at render-time registration, not here.
-      // Absent on agent/synth origins (D4).
+      // No blueprintId, no source — both are minted at render-time
+      // registration, not here. Absent on agent/synth origins (D4).
       blueprintMeta: {
         contractHash: blueprintKey(conforming.contract),
-        generator: generatorSlug,
         // The synthesized contract was made for the request, so its
         // proposed variance is the REQUEST variance (D5).
         variance: variance ?? {},
@@ -660,7 +650,6 @@ export async function decideHandshake(
     return buildCreateFallback(
       draftContract,
       `negotiator-degraded: ${errorClass} during decision LLM call — ${errMessage(err)}. Falling back to bare-create; the paired ggui_render will still generate the UI.`,
-      generatorSlug,
       variance,
     );
   }

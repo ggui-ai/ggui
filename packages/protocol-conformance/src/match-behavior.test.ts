@@ -339,7 +339,11 @@ describe('matchBehavior — stream-update matches the canonical channel-3 data f
     expect(matchBehavior(behavior, frames).kind).toBe('fail');
   });
 
-  it("does not match the text-chunk streaming frame {type:'stream', payload:{sessionId, chunk, done}}", () => {
+  it("does not match the retired text-chunk frame {type:'stream', payload:{sessionId, chunk, done}}", () => {
+    // The text-chunk streaming frame left the protocol union
+    // draft-2026-06-11 (zero emitters). An implementation still
+    // speaking it must NOT satisfy a stream-update expectation —
+    // only the canonical `{type:'data'}` delivery frame counts.
     const frames: readonly ObservedFrame[] = [
       frame({
         type: 'stream',

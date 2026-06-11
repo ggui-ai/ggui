@@ -6,8 +6,9 @@
  * (`ggui_render` mints a `sessionId`) gets its own pipe: opened by
  * `markCreated(sessionId)` at render time, written by
  * `append(sessionId, event)` from `ggui_runtime_submit_action`
- * dispatch envelopes, drained by `consumeAndClear(sessionId)` from
- * `ggui_consume`.
+ * dispatch envelopes AND from the live channel's WS `data:submit`
+ * action ingress (both project onto the same `ConsumeEventEntry`
+ * shape), drained by `consumeAndClear(sessionId)` from `ggui_consume`.
  *
  * Per-render keying (rather than per-conversation) means two renders
  * in the same host conversation can each have unconsumed events

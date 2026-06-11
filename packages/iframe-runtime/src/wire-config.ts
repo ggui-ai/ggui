@@ -8,23 +8,20 @@
  * `actionSpec` is wired in via the {@link buildRootWireConfig}'s
  * `getCurrentGguiSession` thunk.
  *
- * Outbound dispatch uses `buildActionEnvelope` (from
- * `@ggui-ai/wire`) + `validateOutboundActionEnvelope` + a direct
- * `manager.send({type:'action', payload})`.
- *
- * The `WireConfig` shape lives in `@ggui-ai/wire`. This module
- * implements against that interface.
+ * The envelope-build → validate → emit pipeline and the bus-backed
+ * subscribe seam live in `@ggui-ai/wire`'s shared `buildWireConfig`
+ * (one implementation for every first-party renderer — see the MCP
+ * Apps Compliance principle). This module is the iframe-side adapter:
+ * it injects the CSP-safe precompiled outbound validator, the
+ * ProtocolError dual-emission policy, and the tools/call-vs-WS
+ * dispatch transport.
  */
-import type {
-  ActionEnvelope,
-  JsonValue,
-  GguiSession,
-  StreamEnvelope,
-} from '@ggui-ai/protocol';
+import type { ActionEnvelope, GguiSession } from '@ggui-ai/protocol';
 import type { GguiSessionSeedInput } from './types.js';
 import {
   ClientContractViolationError,
-  buildActionEnvelope,
+  buildWireConfig,
+  StreamBus,
   type WireConfig,
 } from '@ggui-ai/wire';
 import type { WebSocketMessage } from '@ggui-ai/protocol/transport/websocket';
@@ -51,129 +48,10 @@ import {
   type ProtocolErrorEmitter,
 } from './protocol-error.js';
 
-// =============================================================================
-// StreamBus — the in-renderer bridge between inbound `data` frames
-// and per-component `useStream(channel)` subscribers.
-// =============================================================================
-
-/**
- * Reserved-channel namespace prefix (mirror of
- * `@ggui-ai/protocol::RESERVED_CHANNEL_PREFIX`). Inlined to avoid
- * widening the protocol import surface here — the constant is
- * load-bearing for the late-subscriber replay rule below; equality
- * with the protocol export is locked by the StreamBus tests.
- */
-const RESERVED_CHANNEL_PREFIX = '_ggui:';
-
-/**
- * Per-channel ring cap for late-subscriber replay on reserved channels.
- * Mirrors the server-side `DEFAULT_SESSION_STREAM_BUFFER_MAX` posture:
- * bounded so a long-lived iframe can't grow memory unbounded if a
- * reserved channel emits in a hot loop.
- *
- * 256 is enough headroom for the deterministic A2UI emitter (one frame
- * per fragment, ~5–15 frames per render) plus several refresh cycles, and
- * still fits comfortably in memory.
- */
-const RESERVED_CHANNEL_REPLAY_MAX = 256;
-
-/**
- * Tiny fan-out bus keyed by channel name. `subscribe.ts`'s inbound-
- * message handler pushes validated `data` envelopes here; wire's
- * `useStream(channel)` subscribes per-component via the config's
- * `subscribe()` method.
- *
- * Late-subscriber replay for reserved channels:
- *
- *   The renderer iframe boots in a strict ordering:
- *   `subscribe()` → first `ack` → fold the render → mount
- *   `mountProvisional` → it then calls `streamBus.subscribe('_ggui:
- *   preview', …)`. Server-side replay frames for `_ggui:preview` (the
- *   provisional A2UI preamble fired during the agent's `ggui_render`
- *   BEFORE the user's browser navigated to the viewer) arrive over the
- *   WS in the window between ack-resolve and the provisional mount —
- *   they hit `emit()` before any listener has subscribed. Without a
- *   bounded reserved-channel ring, those frames vanish and the preview
- *   surface stays stuck on the spinner.
- *
- *   Server-owned `_ggui:*` channels are buffered in a per-channel ring
- *   capped at {@link RESERVED_CHANNEL_REPLAY_MAX}. New subscribers
- *   receive the buffered envelopes synchronously before the unsubscribe
- *   handle returns — same mental model as the server-side
- *   `GguiSessionStreamBuffer.replay(...)` walk over reserved channels at
- *   ack time, but mirrored at the inner bus boundary so the host
- *   transport stays portable (Claude Desktop / ChatGPT / Cursor /
- *   `<McpAppIframe>` all behave the same).
- *
- *   Agent-declared (non-reserved) channels are NOT buffered here. Their
- *   replay is the server's job — the renderer's `subscribe()` handshake
- *   pulls history per `streamSpec.replay` policy when reconnecting with
- *   `fromSeq`. Buffering them at this layer would double-count and
- *   change the semantics of agent contracts.
- *
- * No observable mutation outside the renderer boundary — the bus is
- * internal plumbing.
- */
-export class StreamBus {
-  private listeners = new Map<string, Set<(env: StreamEnvelope) => void>>();
-  /**
-   * Per-channel bounded ring of envelopes for reserved (`_ggui:*`)
-   * channels only. FIFO eviction at `RESERVED_CHANNEL_REPLAY_MAX`.
-   * Replayed to every new subscriber for that channel.
-   */
-  private reservedReplay = new Map<string, StreamEnvelope[]>();
-
-  subscribe(channel: string, listener: (env: StreamEnvelope) => void): () => void {
-    let bucket = this.listeners.get(channel);
-    if (bucket === undefined) {
-      bucket = new Set();
-      this.listeners.set(channel, bucket);
-    }
-    bucket.add(listener);
-    // Replay buffered reserved-channel envelopes BEFORE returning the
-    // unsubscribe handle so the new listener is fully caught up by the
-    // time `subscribe()` returns. Order matches arrival order at
-    // `emit()` (FIFO ring).
-    if (channel.startsWith(RESERVED_CHANNEL_PREFIX)) {
-      const ring = this.reservedReplay.get(channel);
-      if (ring !== undefined) {
-        for (const env of ring) {
-          listener(env);
-        }
-      }
-    }
-    return () => {
-      const current = this.listeners.get(channel);
-      if (current === undefined) return;
-      current.delete(listener);
-      if (current.size === 0) this.listeners.delete(channel);
-    };
-  }
-
-  emit(envelope: StreamEnvelope): void {
-    if (envelope.channel.startsWith(RESERVED_CHANNEL_PREFIX)) {
-      let ring = this.reservedReplay.get(envelope.channel);
-      if (ring === undefined) {
-        ring = [];
-        this.reservedReplay.set(envelope.channel, ring);
-      }
-      ring.push(envelope);
-      if (ring.length > RESERVED_CHANNEL_REPLAY_MAX) {
-        // FIFO drop — keeps the most recent
-        // `RESERVED_CHANNEL_REPLAY_MAX` frames. Late subscribers may
-        // miss the createSurface fragment if the ring overflows (would
-        // render as Spinner-stuck), but that's an upper-bound contract
-        // on a bounded buffer, not a silent failure mode in practice.
-        ring.shift();
-      }
-    }
-    const bucket = this.listeners.get(envelope.channel);
-    if (bucket === undefined) return;
-    for (const listener of bucket) {
-      listener(envelope);
-    }
-  }
-}
+// `StreamBus` (and its bounded reserved-channel replay ring) was
+// hoisted into `@ggui-ai/wire` so `<GguiRender>` and this runtime share
+// one implementation. Re-exported for the runtime's internal modules.
+export { StreamBus };
 
 // =============================================================================
 // Root WireConfig construction
@@ -201,7 +79,7 @@ export interface BuildRootWireConfigOptions {
    *
    * Prefer {@link onProtocolError} for new integrations — it receives
    * the widened {@link ProtocolError} union that covers every error
-   * the renderer classifies (transport, auth, protocol, contract,
+   * the renderer classifies (transport, auth, protocol,
    * bootstrap, version, unknown). The narrow `onContractViolation`
    * sink stays for in-renderer tests that assert the raw class shape;
    * every violation is ALSO forwarded through `onProtocolError` so
@@ -212,15 +90,12 @@ export interface BuildRootWireConfigOptions {
    * Optional sink for every typed {@link ProtocolError} the renderer
    * classifies. Default: {@link defaultProtocolErrorEmitter}
    * (`console.warn` with a grep-friendly tag). The `<McpAppIframe>`
-   * host wrapper wires this to its `onError` prop; render-bound
-   * variants are ALSO mirrored to the `_ggui:contract-error` WS
-   * envelope.
+   * host wrapper wires this to its `onError` prop.
    *
    * The emitter fires for CLIENT-side contract violations (via
    * `fromClientContractViolation`). Other sites (subscribe failures,
-   * upgrade-required, transport errors, server-emitted
-   * contract-error envelopes) plumb through the same emitter without
-   * a shape change.
+   * upgrade-required, transport errors) plumb through the same
+   * emitter without a shape change.
    */
   readonly onProtocolError?: ProtocolErrorEmitter;
   /**
@@ -229,23 +104,25 @@ export interface BuildRootWireConfigOptions {
    *
    * The WS live-channel exists for streamSpec subscriptions (inbound
    * `ggui_emit` fanout + `props_update` + `render` + `data`
-   * + `drain_ack` + `channel_payload`). Outbound user actions belong
-   * on a different pipe — per MCP-Apps spec §401, the iframe relays
+   * + `drain_ack` + `channel_payload`). For an MCP-Apps embed, user
+   * actions belong on the host relay: per spec §401 the iframe relays
    * `tools/call:ggui_runtime_submit_action` through the host (the
    * `_meta.ui.visibility:['app']` channel), and the server's MCP
    * handler appends to `pendingEventConsumer` so `ggui_consume`
-   * wakes the agent.
+   * wakes the agent. A cross-host iframe cannot assume a reachable
+   * WS endpoint at all, so production MCP-Apps callers MUST supply
+   * this option.
    *
-   * The default `manager.send({type:'action'})` path writes to the
-   * render ledger only — it has no bridge to `pendingEventConsumer`.
-   * Production callers MUST supply this option to reach the agent.
+   * The default WS-frame send reaches the agent only on servers whose
+   * live channel bridges WS `data:submit` actions onto the same
+   * pending-events pipe (first-party `createGguiServer` does — see
+   * `GguiSessionChannelOptions.pendingEventConsumer`); it remains the
+   * seam tests and direct-WS callers exercise.
    *
    * Called AFTER outbound validation passes. Receives the validated
    * {@link ActionEnvelope}; caller extracts payload.action +
    * payload.data + slice meta to route via the host's tools/call
    * relay (see iframe-runtime's `routeDispatch`).
-   *
-   * Tests omit this opt to exercise the legacy WS-frame path.
    */
   readonly onDispatchEnvelope?: (envelope: ActionEnvelope) => void;
 }
@@ -267,13 +144,6 @@ export interface BuildRootWireConfigOptions {
 export function buildRootWireConfig(
   opts: BuildRootWireConfigOptions,
 ): WireConfig {
-  const clientSeqBox = { current: 0 };
-
-  function nextSeq(): number {
-    clientSeqBox.current += 1;
-    return clientSeqBox.current;
-  }
-
   const emitProtocolError: ProtocolErrorEmitter =
     opts.onProtocolError ?? defaultProtocolErrorEmitter;
 
@@ -298,73 +168,40 @@ export function buildRootWireConfig(
     emitProtocolError(fromClientContractViolation(err));
   }
 
-  return {
+  return buildWireConfig({
     app: { appId: opts.appId, appName: opts.appId },
     render: { sessionId: opts.sessionId, isConnected: true },
     auth: { isAuthenticated: false },
-    dispatch: (actionName, data) => {
-      // Resolve the active render's actionSpec on every dispatch.
-      // Per-render lifecycle: props_update patches replace the render
-      // reference; reading through the thunk keeps the outbound
-      // validator coherent without rebuilding the config.
+    // Resolve the active render's actionSpec on every dispatch.
+    // Per-render lifecycle: props_update patches replace the render
+    // reference; reading through the thunk keeps the outbound
+    // validator coherent without rebuilding the config.
+    getActiveActionSpec: () => {
       const currentRender = opts.getCurrentGguiSession();
-      const activeActionSpec =
-        currentRender !== null &&
+      return currentRender !== null &&
         currentRender.type !== 'mcpApps' &&
         currentRender.type !== 'system'
-          ? currentRender.actionSpec
-          : undefined;
-
-      // The envelope carries `action` + `data` only. The agent-facing
-      // `tool` hint on the consume event is derived SERVER-side from
-      // the render's `actionSpec[name].nextStep` at event-build time.
-      const envelope = buildActionEnvelope({
-        sessionId: opts.sessionId,
-        type: 'data:submit',
-        payload: {
-          action: actionName,
-          data: data as JsonValue,
-        },
-        clientSeq: nextSeq(),
-      });
-      const result = validateOutboundActionEnvelope(activeActionSpec, envelope);
-      if (!result.valid) {
-        surfaceViolation(
-          new ClientContractViolationError('outbound-action', result.violations),
-        );
-        return;
-      }
+        ? currentRender.actionSpec
+        : undefined;
+    },
+    // The iframe's precompiled-validator variant — the dispatch never
+    // trips the iframe's no-`unsafe-eval` CSP.
+    validateEnvelope: validateOutboundActionEnvelope,
+    onViolation: surfaceViolation,
+    emitEnvelope: (envelope) => {
       if (opts.onDispatchEnvelope !== undefined) {
         // Spec-canonical path — the iframe-runtime's LIVE-mode boot
         // wires this to `routeDispatch`, which postMessages
         // `tools/call:ggui_runtime_submit_action` through the MCP-Apps
         // host relay. The default WS-frame send below is retained for
-        // tests + legacy callers that don't relay tools/call.
+        // tests + direct-WS callers that don't relay tools/call.
         opts.onDispatchEnvelope(envelope);
       } else {
         sendActionEnvelope(opts.manager, envelope);
       }
     },
-    subscribe: (channelName, handler) => {
-      return opts.streamBus.subscribe(channelName, (env) => {
-        // `WireConfig<DataContract>.subscribe`'s handler expects a
-        // `StreamDelivery<unknown>`; the bus ships the raw envelope
-        // payload unmodified. The type-level `unknown` narrowing
-        // lives on the caller's generic boundary (useStream /
-        // useContract).
-        handler({
-          payload: env.payload,
-          mode: env.mode,
-          ...(env.complete !== undefined ? { complete: env.complete } : {}),
-        });
-      });
-    },
-    // `callWiredTool` is retired — `agentTools` is now a catalog the
-    // AGENT invokes; the component never reaches the underlying tool
-    // from inside the renderer. Cross-refs surface via
-    // `actionSpec[*].nextStep` (event metadata) and
-    // `streamSpec[*].source.tool` (channel data source).
-  };
+    streamBus: opts.streamBus,
+  });
 }
 
 // =============================================================================
@@ -373,9 +210,9 @@ export function buildRootWireConfig(
 
 /**
  * Send a validated action envelope over the live channel. The WS frame shape
- * is `{type:'action', payload: envelope}` — matches today's
- * `useWebSocket.sendAction` exactly, so wire-emitted dispatches from
- * the renderer are byte-equivalent to `GguiRender`-emitted ones.
+ * is `{type:'action', payload: envelope}` — matches `useWebSocket.sendAction`
+ * exactly, so wire-emitted dispatches from the renderer are
+ * byte-equivalent to `GguiRender`-emitted ones.
  */
 function sendActionEnvelope(
   manager: RendererSendSurface,

@@ -230,8 +230,7 @@ jobs:
       # a package lives at `packages/<dir>/` after the subtree split strips
       # the `oss/` prefix. Keep this list ordered by dependency depth —
       # anything earlier in the list MAY be depended on by anything later,
-      # never the reverse. Private packages (e.g. host-streams) are built
-      # but not published, so they are deliberately absent.
+      # never the reverse.
       - name: Resolve publish filter
         id: resolve
         run: |

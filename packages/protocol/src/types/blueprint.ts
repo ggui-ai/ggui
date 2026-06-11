@@ -3,7 +3,7 @@
  * generated UI code that renders it.
  *
  * Multiple `Blueprint` records MAY share `(appId, contractHash)`; they
- * differ on `generator` and/or {@link BlueprintVariance}. The selector
+ * differ on `source` and/or {@link BlueprintVariance}. The selector
  * picks one at runtime (an LLM-driven pick layered atop the
  * deterministic fallback ladder; see
  * {@link BlueprintSelector} in `@ggui-ai/mcp-server-core`).
@@ -31,6 +31,7 @@
  *     source-of-truth divergence. Implementations MAY denormalize
  *     freely; consumers MUST treat `contractHash` as authoritative.
  */
+import type { BlueprintSource } from './blueprint-source.js';
 import type { DataContract, JsonObject } from './data-contract.js';
 
 /**
@@ -146,11 +147,16 @@ export interface Blueprint {
    */
   readonly codeHash?: string;
   /**
-   * Slug of the {@link UiGenerator} that produced this variant
-   * (e.g. `'ui-gen-default-haiku-4-5'`). The server's `GeneratorRegistry`
-   * is the authority for which slugs exist on a given deployment.
+   * Provenance of the component code — the single
+   * {@link BlueprintSource} vocabulary. Generation paths mint the
+   * `llm` arm (`{kind: 'llm', generator, model}`) from the engine's
+   * own metadata stamp; `ggui_ops_register_blueprint` stamps
+   * `{kind: 'user'}` for operator-supplied bytes (no engine claim
+   * exists to record). A DIFFERENT axis from {@link createdBy} (who
+   * initiated the mint): an `ggui_ops_generate_blueprint` row is
+   * `createdBy: 'operator'` AND `source.kind: 'llm'`.
    */
-  readonly generator: string;
+  readonly source: BlueprintSource;
   /**
    * Optional 0-1 validator score from the advanced generator's
    * iterative loop. Sub-threshold variants are stored but not selected

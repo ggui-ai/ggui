@@ -43,12 +43,9 @@
  *
  * `AUTH_REJECTED` is not a §12.2.3 channel-3 code at all. Failing
  * upgrade-auth rejects the HTTP upgrade itself (the WebSocket never
- * opens, so no error frame exists to match); the in-band `wsToken`
- * path rejects with the dedicated `BOOTSTRAP_INVALID` /
- * `BOOTSTRAP_EXPIRED` codes; and the `AUTH_REJECTED`
- * `ContractErrorCode` rides the `_ggui:contract-error` reserved
- * channel, whose server-side emission is an explicitly-declared gap
- * (SPEC §4.4 "No first-party emitter"). There is no wire surface on
+ * opens, so no error frame exists to match), and the in-band
+ * `wsToken` path rejects with the dedicated `BOOTSTRAP_INVALID` /
+ * `BOOTSTRAP_EXPIRED` codes. There is no wire surface on
  * which a failing-auth subscribe produces an `AUTH_REJECTED` frame
  * today, so no fixture ships and no fixture-level auth-override knob
  * was added — it would be dead vocabulary until such a surface

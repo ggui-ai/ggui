@@ -342,8 +342,8 @@ export function createLlmBackedHandshakeNegotiator(
 
     // LLM-driven variant selection. Reads each candidate's
     // `variance` + `validatorScore` + `isOperatorDefault` + the
-    // generator slug, asks the LLM to pick the best fit for the
-    // current request's `intent` + `variance`, and returns a
+    // provenance (`source`), asks the LLM to pick the best fit for
+    // the current request's `intent` + `variance`, and returns a
     // calibrated decision. The caller (`selectVariantWithLlm`)
     // thresholds on `confidence`.
     //
@@ -381,7 +381,7 @@ export const VARIANT_SELECTION_SYSTEM_PROMPT = `You are the variant selector for
 
 Each variant carries:
   - blueprintId: stable identity (you MUST echo back exactly one of these).
-  - generator: which generator built it (e.g. "ui-gen-default-haiku-4-5", "ui-gen-advanced-opus-4-7"). Advanced wins on visual polish; default wins on simplicity.
+  - source: provenance. {kind:"llm", generator, model} = engine-generated (advanced generators win on visual polish; default generators win on simplicity). {kind:"user"} = operator-registered hand-authored code. {kind:"curated"} = catalog-shipped system blueprint.
   - validatorScore: optional 0-1 self-assessed quality from the advanced generator's validators. Higher is better, undefined ⇒ unknown.
   - isOperatorDefault: true ⇒ the human operator pinned this as the default. Strong signal.
   - variance.persona: free-form tag ("minimalist", "data-dense", "mobile-first"…).
@@ -449,7 +449,7 @@ export function buildVariantSelectionUserMessage(
 ): string {
   const projectedCandidates = candidates.map((c) => ({
     blueprintId: c.blueprintId,
-    generator: c.generator,
+    source: c.source,
     ...(c.validatorScore !== undefined ? { validatorScore: c.validatorScore } : {}),
     ...(c.isOperatorDefault === true ? { isOperatorDefault: true } : {}),
     variance: {

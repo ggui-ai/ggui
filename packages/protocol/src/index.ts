@@ -68,7 +68,6 @@ export * from "./types/llm-route";
 export * from "./types/interface-context";
 export * from "./types/host-context";
 export * from "./types/lifecycle";
-export * from "./types/data-bindings";
 export * from "./types/data-contract";
 export * from "./types/blueprint";
 export * from "./types/blueprint-source";

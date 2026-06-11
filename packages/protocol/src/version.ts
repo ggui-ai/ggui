@@ -8,8 +8,10 @@
  * --------------------------------------------------------------------
  * Blueprint provenance (`BlueprintSource` union + `PortableBlueprint`
  * v2) + retired-surface cleanup (2026-06-11, BREAKING, pre-launch).
- * One release, two strands: the bp* entries introduce provenance on
- * the wire; the rc* entries delete vocabulary that had no emitter.
+ * One release, three strands: the bp* entries introduce provenance on
+ * the wire; the rc* entries delete vocabulary that had no emitter;
+ * the ab* entries close the action→consume loop on the WS transport
+ * and collapse the duplicated client wire-config pipeline.
  *
  *   bp1. **`BlueprintSource` discriminated union introduced**
  *      (`kind: 'llm' | 'user' | 'curated'`), replacing the flat
@@ -34,6 +36,29 @@
  *      on stored blueprint rows. Rows whose `source` does not parse
  *      are dropped at the load boundary, never coerced — blueprints
  *      are a cache (invalidation = regeneration, never data loss).
+ *
+ *   bp4. **MVB `Blueprint.generator` → `Blueprint.source`** — the
+ *      multi-variant blueprint record (and `blueprintSchema`) joins
+ *      the single provenance vocabulary; the bare engine slug dies.
+ *      `createdBy` is KEPT — a different axis (who initiated the
+ *      mint): an `ggui_ops_generate_blueprint` row is
+ *      `createdBy: 'operator'` AND `source.kind: 'llm'`. Ripples:
+ *      `BlueprintMeta.generator: string` (required) →
+ *      `BlueprintMeta.source?: BlueprintSource`, present iff
+ *      `origin === 'cache'` (the matched row's stored provenance);
+ *      absent on `agent`/`synth` — gen pending, nothing truthful to
+ *      report (the old field stamped a static deployment slug even
+ *      on cache hits, itself a fabrication). The
+ *      `HandshakeDecisionAdapter.generatorSlug` seam retires with
+ *      it. `ggui_ops_generate_blueprint` output `generator` →
+ *      `source` (llm arm, from the engine's own metadata stamp).
+ *      `ggui_ops_register_blueprint` input `generator` DELETED and
+ *      output `generator` → `source` (always `{kind: 'user'}`) —
+ *      the handler no longer fabricates a registry-default slug for
+ *      hand-authored bytes. `ggui_ops_list_blueprints` keeps the
+ *      `generator` filter, redefined to match `llm`-sourced rows
+ *      only. New Zod mirrors exported: `blueprintSourceSchema` +
+ *      per-arm `llm`/`user`/`curated` schemas.
  *
  *   rc1. **`SubscribePayload.appId` required → optional (widening).**
  *      Absent appId no longer flows through raw: the server resolves
@@ -77,6 +102,114 @@
  *      ZERO emitters or readers in either direction. The field, its
  *      boundary-test pin, and every docstring still teaching it as
  *      live are deleted; `wsToken` is the only subscribe credential.
+ *
+ *   rc6. **The `_ggui:contract-error` surface is deleted entirely.**
+ *      The channel was normative vocabulary with ZERO emitters
+ *      anywhere (SPEC carried an explicit "no first-party emitter"
+ *      gap since draft-2026-06-10); pre-launch, vocabulary nothing
+ *      produces is dead surface. Gone: `CONTRACT_ERROR_CHANNEL`, the
+ *      `ContractErrorPayload` type, the `ContractErrorCode` union,
+ *      `makeContractErrorPayload`, `validateContractErrorPayload` +
+ *      its `BUILTIN_RESERVED_VALIDATORS` entry, the iframe-runtime's
+ *      `fromContractErrorPayload` parser + the `ProtocolError`
+ *      `'contract'` variant, the conformance kit's authored
+ *      `ContractErrorCode` mirror, and SPEC §4.4's payload section +
+ *      §5.5.3's reserved-MAY dual-emission path. The reserved
+ *      `_ggui:` NAMESPACE policy survives unchanged (agents and
+ *      renderers MUST NOT author `_ggui:*` deliveries — SPEC §4.4 is
+ *      now that authority section); `_ggui:lifecycle` remains the
+ *      protocol-owned built-in-validated reserved channel. Codes the
+ *      union once named keep living on their REAL surfaces: WS error
+ *      frames (`SESSION_NOT_FOUND`, `AUTH_REJECTED`,
+ *      `CONTRACT_VIOLATION`), tool `structuredContent` rejections
+ *      (`INVALID_ACTION_KIND`, `PIPE_NOT_FOUND`, `CONTEXT_TOO_LARGE`),
+ *      and push-time schema-compat rejection (`SCHEMA_MISMATCH_ERROR`).
+ *      `sanitizeCausedBy` survives — its consumer is the
+ *      `channel_error` frame's `details` diagnostic, not this payload.
+ *
+ *   rc7. **`'stream'` / `'progress'` / `'agent-msg'` leave the WS
+ *      message union** (both `WebSocketMessageType` and the
+ *      `WebSocketMessage` variants). Frame census of every
+ *      first-party server send site: only `data` / `ack` / `render` /
+ *      `props_update` / `pong` / `error` / `drain_ack` / `channel_*`
+ *      are ever emitted — the three frames were pure vocabulary, and
+ *      client-visible generation progress already flows as
+ *      `{type:'data'}` envelopes on the reserved `_ggui:lifecycle`
+ *      channel (SPEC §4.5). Deleted with the members: the
+ *      `StreamPayload` / `ProgressPayload` / `AgentMsgPayload` /
+ *      `AgentMsgType` payload types (`ProgressStep` survives — it is
+ *      `InternalProgressPayload`'s vocabulary), the
+ *      `BRIDGE_EVENTS.AGENT_STREAM` / `AGENT_MSG` / `AGENT_LOGS`
+ *      CustomEvent names + every dispatch site, the SDKs'
+ *      `GguiRenderProps.onStream` / `onProgress` dead callbacks (and
+ *      the client-fabricated synthetic matchType "progress" event),
+ *      and the RN SDK's listener-with-no-emitter hook
+ *      `useGenerationProgress`. SPEC §2.8 (NDA) + §8.2 now teach the
+ *      lifecycle channel as the one progress mechanism. The
+ *      conformance kit's stream-update matcher behavior is unchanged
+ *      (it only ever accepted `{type:'data'}`); its docs/tests now
+ *      pin the text-chunk frame as retired rather than "a different
+ *      wire type".
+ *
+ *   rc8. **Client-side data-binding vocabulary leaves the protocol**
+ *      (`types/data-bindings.ts`: `ClientToolName`, `ClientToolConfig`,
+ *      `DataBindings`, `TypedToolConfig` + the per-tool config types).
+ *      No wire envelope ever carried these; the only consumers were
+ *      the two SDKs' orphaned client-side tools subsystems
+ *      (registry / hooks / resolver / built-ins, the `/query` TanStack
+ *      integration, and the `/testing` mock-tools helpers), deleted in
+ *      the same slice (`@ggui-ai/react` + `@ggui-ai/react-native` lose
+ *      the `tools`, `/query`, and `/testing` surfaces and the dead
+ *      `queryClient` / `sessionId` provider plumbing). A future
+ *      native-controller story reintroduces a resolver WITH a real
+ *      producer, per the protocol-and-contract bar.
+ *
+ *   ab1. **WS `data:submit` action ingress now feeds the consume
+ *      pipe.** The live channel's `handleInboundAction` dual-writes
+ *      every accepted `data:submit` envelope: the retained
+ *      `user.submitted` ledger event (ack `payload.sequence` source —
+ *      unchanged) AND a canonical consume entry
+ *      (`{intent, actionData, uiContext, actionId, firedAt}`, the
+ *      SAME shape `ggui_runtime_submit_action`'s dispatch branch
+ *      appends) on the sessionId-keyed pending-events pipe — so
+ *      `ggui_consume` drains WS-originated gestures identically to
+ *      tools/call-relayed ones. `uiContext` is `{}` on this transport
+ *      (WS clients mirror no contextSpec snapshot); `actionId` is a
+ *      server-minted 8-hex correlation id; `firedAt` is server clock.
+ *      New optional `GguiSessionChannelOptions.pendingEventConsumer`
+ *      seam (`@ggui-ai/mcp-server`); `createGguiServer` threads its
+ *      shared pipe instance whenever it composed the default handler
+ *      set. Pipe-append failure degrades to ledger-only with a
+ *      `render_channel_consume_append_failed` warn — ack semantics
+ *      unchanged. This makes the long-documented SDK promise ("the
+ *      agent receives actions via `ggui_consume`") TRUE on the WS
+ *      transport; the `tool` hint is clarified as LEDGER-only
+ *      vocabulary (operator surfaces) — consume entries carry no tool
+ *      slot on either transport (SPEC §nextStep routing + walkthrough
+ *      updated to the canonical drained shape).
+ *
+ *   ab2. **Client wire-config pipeline unified in `@ggui-ai/wire`.**
+ *      New exports `buildWireConfig` (the ONE envelope-build →
+ *      validate → emit dispatch pipeline + bus-backed subscribe) and
+ *      `StreamBus` (+ `RESERVED_CHANNEL_REPLAY_MAX`), hoisted from
+ *      `@ggui-ai/iframe-runtime`. `buildRootWireConfig` becomes an
+ *      iframe-side adapter injecting its CSP-precompiled validator,
+ *      ProtocolError dual-emission, and the tools/call-vs-WS
+ *      transport seam; `@ggui-ai/react`'s `<GguiRender>` builds its
+ *      `WireConfig` through the same shared pipeline (transport = WS
+ *      `action` frame, violations → `onError`, `clientSeq` shared
+ *      with `api.action`). `<GguiRender>` inbound `data` frames now
+ *      land on a per-render `StreamBus` with the bounded reserved-
+ *      channel replay ring — `_ggui:preview` frames arriving between
+ *      the subscribe ack and the provisional renderer's mount replay
+ *      to the late subscriber instead of dropping (behavior now
+ *      identical across both first-party renderers, per MCP Apps
+ *      Compliance). `useChannelStream` subscribes via the new
+ *      internal `StreamBusContext` instead of `window` CustomEvents;
+ *      the `BRIDGE_EVENTS.AGENT_DATA` window dispatch survives as a
+ *      one-way host-shell broadcast. React-Native twins unchanged —
+ *      porting the shared builder + bus to RN is the pending RN
+ *      WireProvider slice.
  *
  * --------------------------------------------------------------------
  * Synchronous wired-action dispatch retired — agent-routed consume
@@ -1783,7 +1916,7 @@ export const PROTOCOL_VERSION = "draft-2026-06-11";
 /**
  * Schema version stamped onto wire envelopes that opt into the
  * `schemaVersion` forward-compat field (see {@link ActionEnvelope},
- * {@link StreamEnvelope}, {@link ContractErrorPayload}).
+ * {@link StreamEnvelope}).
  *
  * Pre-launch semantics (current): producers SHOULD stamp; consumers
  * SHOULD NOT reject on mismatch — the field is advisory and lets old

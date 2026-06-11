@@ -49,7 +49,6 @@ export type {
   // Authored protocol vocabulary copies
   ProtocolError,
   BootstrapFailureReason,
-  ContractErrorCode,
 } from './types.js';
 
 // Conformance-host runtime surface — the adapter the implementation

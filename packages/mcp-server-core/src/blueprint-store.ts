@@ -6,7 +6,7 @@
  * inside `BlueprintProvider` and the render-time cache.
  *
  * Multiple {@link Blueprint} rows MAY share `(appId, contractHash)`.
- * They differ on {@link Blueprint.generator} and/or
+ * They differ on {@link Blueprint.source} and/or
  * {@link Blueprint.variance}. The selector picks one at runtime: a
  * deterministic fallback ladder
  * (`isOperatorDefault → validatorScore → createdAt → blueprintId`)

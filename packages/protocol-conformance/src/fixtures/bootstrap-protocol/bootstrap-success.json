@@ -1,6 +1,6 @@
 {
   "name": "bootstrap-success",
-  "description": "Happy-path boot: host reads `_meta.ui.resourceUri`, fetches `ui://ggui/render`, the thin shell loads the renderer bundle, `ui/initialize` returns valid `_meta.ggui.bootstrap.{wsUrl, token, sessionId, appId, runtimeUrl}`, WS handshake succeeds, the render mounts with `data-ggui-code-ready=\"true\"`. No bootstrap-failed postMessage, no contract-error, no upgrade-required.",
+  "description": "Happy-path boot: host reads `_meta.ui.resourceUri`, fetches `ui://ggui/render`, the thin shell loads the renderer bundle, `ui/initialize` returns valid `_meta.ggui.bootstrap.{wsUrl, token, sessionId, appId, runtimeUrl}`, WS handshake succeeds, the render mounts with `data-ggui-code-ready=\"true\"`. No bootstrap-failed postMessage, no upgrade-required.",
   "skipReason": null,
   "setup": [{ "type": "create-session", "sessionId": "ck-bootstrap-success-1" }],
   "inputEnvelope": {

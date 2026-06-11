@@ -1,7 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
   BUILTIN_RESERVED_VALIDATORS,
-  CONTRACT_ERROR_CHANNEL,
   KNOWN_RESERVED_CHANNELS,
   LIFECYCLE_CHANNEL,
   PREVIEW_CHANNEL,
@@ -9,22 +8,21 @@ import {
   isKnownReservedChannel,
   isReservedChannelName,
   validateGguiLifecyclePayload,
-  validateContractErrorPayload,
   type ReservedChannelValidator,
 } from './reserved-channels.js';
 import {
   validateContractStructure,
   validateStreamData,
 } from './contract-validator.js';
-import type { ContractErrorPayload, DataContract, StreamSpec } from '../types/data-contract.js';
+import type { DataContract, StreamSpec } from '../types/data-contract.js';
 
 describe('reserved-channels constants', () => {
   it('pins PREVIEW_CHANNEL to _ggui:preview', () => {
     expect(PREVIEW_CHANNEL).toBe('_ggui:preview');
   });
 
-  it('pins CONTRACT_ERROR_CHANNEL to _ggui:contract-error', () => {
-    expect(CONTRACT_ERROR_CHANNEL).toBe('_ggui:contract-error');
+  it('pins LIFECYCLE_CHANNEL to _ggui:lifecycle', () => {
+    expect(LIFECYCLE_CHANNEL).toBe('_ggui:lifecycle');
   });
 
   it('pins RESERVED_CHANNEL_PREFIX to _ggui:', () => {
@@ -35,14 +33,14 @@ describe('reserved-channels constants', () => {
     expect(isReservedChannelName(PREVIEW_CHANNEL)).toBe(true);
   });
 
-  it('CONTRACT_ERROR_CHANNEL falls inside the reserved namespace', () => {
-    expect(isReservedChannelName(CONTRACT_ERROR_CHANNEL)).toBe(true);
+  it('LIFECYCLE_CHANNEL falls inside the reserved namespace', () => {
+    expect(isReservedChannelName(LIFECYCLE_CHANNEL)).toBe(true);
   });
 
-  it('CONTRACT_ERROR_CHANNEL is distinct from PREVIEW_CHANNEL', () => {
+  it('LIFECYCLE_CHANNEL is distinct from PREVIEW_CHANNEL', () => {
     // Locks that the two reserved names don't collapse onto each
     // other — they address different server-owned surfaces.
-    expect(CONTRACT_ERROR_CHANNEL).not.toBe(PREVIEW_CHANNEL);
+    expect(LIFECYCLE_CHANNEL).not.toBe(PREVIEW_CHANNEL);
   });
 });
 
@@ -74,7 +72,7 @@ describe('isReservedChannelName', () => {
 describe('isKnownReservedChannel — closed set', () => {
   it('returns true for every name in KNOWN_RESERVED_CHANNELS', () => {
     expect(isKnownReservedChannel(PREVIEW_CHANNEL)).toBe(true);
-    expect(isKnownReservedChannel(CONTRACT_ERROR_CHANNEL)).toBe(true);
+    expect(isKnownReservedChannel(LIFECYCLE_CHANNEL)).toBe(true);
     for (const name of KNOWN_RESERVED_CHANNELS) {
       expect(isKnownReservedChannel(name)).toBe(true);
     }
@@ -84,17 +82,21 @@ describe('isKnownReservedChannel — closed set', () => {
     // The load-bearing F10 guarantee — a typo'd reserved name does NOT
     // bypass validation the way `isReservedChannelName` would.
     expect(isKnownReservedChannel('_ggui:preveiw')).toBe(false);
-    expect(isKnownReservedChannel('_ggui:contract_error')).toBe(false);
+    expect(isKnownReservedChannel('_ggui:lifecycel')).toBe(false);
     expect(isKnownReservedChannel('_ggui:preview-')).toBe(false);
-    expect(isKnownReservedChannel('_ggui:contract-err')).toBe(false);
+    expect(isKnownReservedChannel('_ggui:lifecycl')).toBe(false);
   });
 
   it('returns false for hypothetical future reserved names until added', () => {
     // Guards the audit rule: adding a reserved channel requires
     // adding it to KNOWN_RESERVED_CHANNELS. Until then, the runtime
-    // refuses to recognize it.
+    // refuses to recognize it. `_ggui:contract-error` is the retired
+    // draft-2026-06-11 vocabulary — gone from the closed set, so a
+    // would-be emitter surfaces as an unknown channel, not a silent
+    // no-op delivery.
     expect(isKnownReservedChannel('_ggui:wired-tool-invoked')).toBe(false);
     expect(isKnownReservedChannel('_ggui:session-restore')).toBe(false);
+    expect(isKnownReservedChannel('_ggui:contract-error')).toBe(false);
   });
 
   it('returns false for normal agent-authored channels', () => {
@@ -191,19 +193,19 @@ describe('validateContractStructure — reserved-channel rejection', () => {
     expect(result.violations[0].field).toBe('streamSpec._ggui:preview');
   });
 
-  it('rejects agent-declared _ggui:contract-error — it is server-owned', () => {
+  it('rejects agent-declared _ggui:lifecycle — it is server-owned', () => {
     const result = validateContractStructure(
       streamWith({
-        [CONTRACT_ERROR_CHANNEL]: { schema: VALID_PAYLOAD_SCHEMA },
+        [LIFECYCLE_CHANNEL]: { schema: VALID_PAYLOAD_SCHEMA },
       }),
     );
     expect(result.valid).toBe(false);
     expect(result.violations).toHaveLength(1);
     expect(result.violations[0].field).toBe(
-      `streamSpec.${CONTRACT_ERROR_CHANNEL}`,
+      `streamSpec.${LIFECYCLE_CHANNEL}`,
     );
     expect(result.violations[0].message).toContain(RESERVED_CHANNEL_PREFIX);
-    expect(result.violations[0].received).toBe(CONTRACT_ERROR_CHANNEL);
+    expect(result.violations[0].received).toBe(LIFECYCLE_CHANNEL);
   });
 });
 
@@ -211,169 +213,23 @@ describe('validateContractStructure — reserved-channel rejection', () => {
 // Item 4 — reserved-channel payload validation (injection pattern)
 // ───────────────────────────────────────────────────────────────────
 
-/** Canonical contract-error payload used across the block. */
-const CANONICAL_CONTRACT_ERROR: ContractErrorPayload = {
-  toolName: 'my-tool',
-  error: {
-    code: 'SCHEMA_VIOLATION',
-    message: 'tool return violates the declared channel schema',
-    causedBy: 'Error: boom',
-  },
-  timestamp: '2026-04-23T00:00:01.000Z',
-  schemaVersion: '1.0.0',
-};
-
-describe('validateContractErrorPayload', () => {
-  it('accepts the canonical payload with every field populated', () => {
-    const result = validateContractErrorPayload(CANONICAL_CONTRACT_ERROR);
-    expect(result.valid).toBe(true);
-    expect(result.violations).toEqual([]);
-  });
-
-  it('accepts the minimum-required-only shape', () => {
-    const minimal: ContractErrorPayload = {
-      toolName: 'my-tool',
-      error: { code: 'SCHEMA_VIOLATION', message: 'boom' },
-      timestamp: '2026-04-23T00:00:00.000Z',
-    };
-    const result = validateContractErrorPayload(minimal);
-    expect(result.valid).toBe(true);
-    expect(result.violations).toEqual([]);
-  });
-
-  it('rejects non-object payloads', () => {
-    expect(validateContractErrorPayload(null).valid).toBe(false);
-    expect(validateContractErrorPayload(undefined).valid).toBe(false);
-    expect(validateContractErrorPayload('string').valid).toBe(false);
-    expect(validateContractErrorPayload(42).valid).toBe(false);
-    expect(validateContractErrorPayload([]).valid).toBe(false);
-    const nullRes = validateContractErrorPayload(null);
-    expect(nullRes.violations[0].field).toBe('payload');
-    expect(nullRes.violations[0].received).toBe('null');
-    const arrRes = validateContractErrorPayload([]);
-    expect(arrRes.violations[0].received).toBe('array');
-  });
-
-  it('rejects missing toolName', () => {
-    const { toolName: _omit, ...partial } = CANONICAL_CONTRACT_ERROR;
-    void _omit;
-    const result = validateContractErrorPayload(partial);
-    expect(result.valid).toBe(false);
-    const v = result.violations.find((x) => x.field === 'toolName');
-    expect(v).toBeDefined();
-    expect(v?.received).toBe('undefined');
-  });
-
-  it('rejects non-string toolName', () => {
-    const result = validateContractErrorPayload({
-      ...CANONICAL_CONTRACT_ERROR,
-      toolName: 42 as unknown as string,
-    });
-    expect(result.valid).toBe(false);
-    expect(
-      result.violations.find((v) => v.field === 'toolName')?.received,
-    ).toBe('number');
-  });
-
-  it('rejects missing error field', () => {
-    const { error: _omit, ...partial } = CANONICAL_CONTRACT_ERROR;
-    void _omit;
-    const result = validateContractErrorPayload(partial);
-    expect(result.valid).toBe(false);
-    const v = result.violations.find((x) => x.field === 'error');
-    expect(v).toBeDefined();
-  });
-
-  it('rejects missing error.code', () => {
-    const result = validateContractErrorPayload({
-      ...CANONICAL_CONTRACT_ERROR,
-      error: { message: 'no code' },
-    });
-    expect(result.valid).toBe(false);
-    expect(result.violations.some((v) => v.field === 'error.code')).toBe(true);
-  });
-
-  it('rejects missing error.message', () => {
-    const result = validateContractErrorPayload({
-      ...CANONICAL_CONTRACT_ERROR,
-      error: { code: 'SCHEMA_VIOLATION' },
-    });
-    expect(result.valid).toBe(false);
-    expect(result.violations.some((v) => v.field === 'error.message')).toBe(true);
-  });
-
-  it('rejects missing timestamp', () => {
-    const { timestamp: _omit, ...partial } = CANONICAL_CONTRACT_ERROR;
-    void _omit;
-    const result = validateContractErrorPayload(partial);
-    expect(result.valid).toBe(false);
-    expect(result.violations.some((v) => v.field === 'timestamp')).toBe(true);
-  });
-
-  it('accepts any error.code string (extensibly-closed per Item 2)', () => {
-    for (const code of [
-      'SCHEMA_VIOLATION',
-      'SCHEMA_MISMATCH_ERROR',
-      'SESSION_NOT_FOUND',
-      'AUTH_REJECTED',
-      'BOOTSTRAP_FAILED',
-      'RATE_LIMIT_EXCEEDED',
-      'MCP_TRANSPORT_ERROR',
-      'FUTURE_CODE_NOBODY_HAS_INVENTED_YET',
-    ]) {
-      const result = validateContractErrorPayload({
-        ...CANONICAL_CONTRACT_ERROR,
-        error: { code, message: 'msg' },
-      });
-      expect(result.valid, `code=${code}`).toBe(true);
-    }
-  });
-
-  it('rejects non-string optional fields when present', () => {
-    const result = validateContractErrorPayload({
-      ...CANONICAL_CONTRACT_ERROR,
-      schemaVersion: true as unknown as string,
-      error: {
-        code: 'SCHEMA_VIOLATION',
-        message: 'msg',
-        causedBy: { not: 'a string' } as unknown as string,
-      },
-    });
-    expect(result.valid).toBe(false);
-    expect(result.violations.some((v) => v.field === 'schemaVersion')).toBe(true);
-    expect(result.violations.some((v) => v.field === 'error.causedBy')).toBe(true);
-  });
-
-  it('reports multiple violations on a deeply malformed payload', () => {
-    const result = validateContractErrorPayload({
-      // missing toolName, missing error.message, timestamp wrong type
-      error: { code: 'SCHEMA_VIOLATION' },
-      timestamp: 42,
-    });
-    expect(result.valid).toBe(false);
-    expect(result.violations.length).toBeGreaterThanOrEqual(3);
-    expect(result.violations.map((v) => v.field)).toEqual(
-      expect.arrayContaining(['toolName', 'error.message', 'timestamp']),
-    );
-  });
-});
+/** Canonical lifecycle payload used across the block. */
+const CANONICAL_LIFECYCLE = {
+  kind: 'render_started',
+  sessionId: 'render-1',
+  intent: 'show weather',
+} as const;
 
 describe('BUILTIN_RESERVED_VALIDATORS', () => {
   it('contains exactly the protocol-owned reserved-channel validators', () => {
-    // CONTRACT_ERROR_CHANNEL + LIFECYCLE_CHANNEL are protocol-owned.
+    // LIFECYCLE_CHANNEL is the only protocol-owned payload.
     // PREVIEW_CHANNEL intentionally absent — A2UI-shaped, injected at
     // composition time per Protocol #6 vendor-neutrality.
-    expect(BUILTIN_RESERVED_VALIDATORS.has(CONTRACT_ERROR_CHANNEL)).toBe(true);
     expect(BUILTIN_RESERVED_VALIDATORS.has(LIFECYCLE_CHANNEL)).toBe(true);
     expect(BUILTIN_RESERVED_VALIDATORS.has(PREVIEW_CHANNEL)).toBe(false);
-    expect(Array.from(BUILTIN_RESERVED_VALIDATORS.keys()).sort()).toEqual(
-      [CONTRACT_ERROR_CHANNEL, LIFECYCLE_CHANNEL].sort(),
-    );
-  });
-
-  it('exposes the contract-error validator under the canonical channel name', () => {
-    const validator = BUILTIN_RESERVED_VALIDATORS.get(CONTRACT_ERROR_CHANNEL);
-    expect(validator).toBe(validateContractErrorPayload);
+    expect(Array.from(BUILTIN_RESERVED_VALIDATORS.keys())).toEqual([
+      LIFECYCLE_CHANNEL,
+    ]);
   });
 
   it('exposes the lifecycle validator under LIFECYCLE_CHANNEL', () => {
@@ -386,7 +242,7 @@ describe('BUILTIN_RESERVED_VALIDATORS', () => {
     // `ReadonlyMap`. A `.set` call through the declared interface
     // is a type error; confirm structural immutability by running
     // the validator after any attempt to overwrite fails at compile.
-    const before = BUILTIN_RESERVED_VALIDATORS.get(CONTRACT_ERROR_CHANNEL);
+    const before = BUILTIN_RESERVED_VALIDATORS.get(LIFECYCLE_CHANNEL);
     expect(before).toBeDefined();
   });
 });
@@ -398,26 +254,26 @@ describe('validateStreamData — reserved-channel validator injection', () => {
     },
   };
 
-  it('runs the BUILTIN validator on _ggui:contract-error (no injection)', () => {
-    // A malformed contract-error payload hits the built-in validator
+  it('runs the BUILTIN validator on _ggui:lifecycle (no injection)', () => {
+    // A malformed lifecycle payload hits the built-in validator
     // even without any caller-provided injection. Locks that the
     // protocol-owned payloads are validated by default.
-    const malformed = { toolName: 'x' /* missing error + timestamp */ };
+    const malformed = { kind: 'render_started' /* missing sessionId + intent */ };
     const result = validateStreamData(
-      CONTRACT_ERROR_CHANNEL,
+      LIFECYCLE_CHANNEL,
       malformed,
       SPEC_WITH_UNRELATED_CHANNEL,
     );
     expect(result.valid).toBe(false);
     expect(
-      result.violations.some((v) => v.field === 'error' || v.field === 'timestamp'),
+      result.violations.some((v) => v.field === 'sessionId' || v.field === 'intent'),
     ).toBe(true);
   });
 
-  it('accepts a well-formed contract-error payload via BUILTIN', () => {
+  it('accepts a well-formed lifecycle payload via BUILTIN', () => {
     const result = validateStreamData(
-      CONTRACT_ERROR_CHANNEL,
-      CANONICAL_CONTRACT_ERROR,
+      LIFECYCLE_CHANNEL,
+      CANONICAL_LIFECYCLE,
       SPEC_WITH_UNRELATED_CHANNEL,
     );
     expect(result.valid).toBe(true);
@@ -425,9 +281,9 @@ describe('validateStreamData — reserved-channel validator injection', () => {
   });
 
   it('consults extraReservedValidators FIRST for a known reserved channel', () => {
-    // Injection map wins over BUILTIN on contract-error — useful for a
-    // hosting implementation that wants stricter validation than the
-    // structural default (e.g., reject any code outside a known set).
+    // Injection map wins over BUILTIN on the lifecycle channel —
+    // useful for a hosting implementation that wants stricter
+    // validation than the structural default.
     const strict: ReservedChannelValidator = (_payload) => ({
       valid: false,
       violations: [
@@ -435,10 +291,10 @@ describe('validateStreamData — reserved-channel validator injection', () => {
       ],
     });
     const result = validateStreamData(
-      CONTRACT_ERROR_CHANNEL,
-      CANONICAL_CONTRACT_ERROR,
+      LIFECYCLE_CHANNEL,
+      CANONICAL_LIFECYCLE,
       SPEC_WITH_UNRELATED_CHANNEL,
-      new Map([[CONTRACT_ERROR_CHANNEL, strict]]),
+      new Map([[LIFECYCLE_CHANNEL, strict]]),
     );
     expect(result.valid).toBe(false);
     expect(result.violations[0].field).toBe('injected');

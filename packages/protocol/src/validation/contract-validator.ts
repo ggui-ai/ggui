@@ -128,8 +128,8 @@ export function validatePropsData(
  *        validator for `_ggui:preview`. Consulted FIRST so callers can
  *        override or extend built-ins.
  *     2. `BUILTIN_RESERVED_VALIDATORS` — protocol-owned, always active.
- *        Ships the {@link validateContractErrorPayload} for
- *        `_ggui:contract-error`.
+ *        Ships the {@link validateGguiLifecyclePayload} for
+ *        `_ggui:lifecycle`.
  *     3. Fall-through: if no validator is registered for the known
  *        reserved channel, return `{valid: true}`. Preserves backward
  *        compatibility for any future reserved channel the runtime

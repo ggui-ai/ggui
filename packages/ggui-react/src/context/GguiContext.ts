@@ -1,9 +1,6 @@
 import { createContext, useContext } from 'react';
 import type { AdapterPermissions, PermissionStatus, InterfaceContext, AppDisplayConfig, EndUserIdentity } from '@ggui-ai/protocol';
 
-/** Structural QueryClient type to keep `@tanstack/react-query` an optional peer dependency. */
-type QueryClientLike = { getQueryData: (key: unknown[]) => unknown } | undefined;
-
 /**
  * Open interface — host runtime registry of **client/device adapter
  * implementations**. Empty on purpose: capability packages or host
@@ -37,8 +34,7 @@ export interface AdapterRegistry {}
  * Shape of the value provided by {@link GguiContext}.
  *
  * Contains app identity, WebSocket configuration, adapter permissions,
- * interface context, and optional auth/session/API state consumed by hooks
- * and the client-side tool system.
+ * interface context, and optional auth/session/API state consumed by hooks.
  */
 export interface GguiContextValue {
   appId: string;
@@ -53,9 +49,7 @@ export interface GguiContextValue {
   adapterImpls: AdapterRegistry;
   /** Current interface context (device/viewport info) */
   interfaceContext: InterfaceContext;
-  /** Optional TanStack QueryClient for tool caching. Provide via GguiQueryProvider. */
-  queryClient?: QueryClientLike;
-  /** Auth context for tools system */
+  /** Auth context surfaced to wire hooks (`useAuth`) via the renderer. */
   auth?: {
     currentUser?: EndUserIdentity;
     userId?: string;
@@ -65,20 +59,11 @@ export interface GguiContextValue {
   /**
    * Conversation envelope identity. Forwarded by {@link useInvoke} as
    * the `X-Ggui-Host-Session-Id` header so the agent threads multi-turn
-   * invokes through its own keyed conversation state. Distinct from
-   * {@link sessionId} — this names the chat thread, not a GguiSession.
+   * invokes through its own keyed conversation state. Names the chat
+   * thread, not a GguiSession.
    */
   hostSessionId?: string;
-  /**
-   * Per-render scope identity for the client-side tool system. Used by
-   * {@link useTool} / {@link useBindings} as `ToolContext.sessionId` —
-   * scopes the in-memory fetch cache so two concurrent renders cannot
-   * leak each other's cached responses. Distinct from
-   * {@link hostSessionId} — this names a single GguiSession, not the
-   * conversation envelope.
-   */
-  sessionId?: string;
-  /** Base URL for API calls (used by fetch tool) */
+  /** Base URL for platform API calls (app-config fetch). */
   apiBaseUrl?: string;
   /** Optional app metadata (name, description, icon). Passed through to wire hooks. */
   appMetadata?: {

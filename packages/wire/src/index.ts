@@ -23,3 +23,9 @@ export {
   validateInboundPropsPayload,
   type ClientContractDirection,
 } from './contract';
+export {
+  StreamBus,
+  RESERVED_CHANNEL_REPLAY_MAX,
+  buildWireConfig,
+  type BuildWireConfigOptions,
+} from './wire-config';

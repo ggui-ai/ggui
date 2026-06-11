@@ -11,9 +11,11 @@ import type { ContentBlock } from '@ggui-ai/protocol';
  * Returns `null` if no GguiSession can be found — caller falls back to
  * placeholder rendering.
  *
- * Post-Phase-B: the wrapper key was `stackItem` pre-collapse; now it's
- * `render`. Stack item ID and session ID are gone — every render
- * carries a single flat `sessionId`.
+ * Post-Phase-B: the legacy `stackItem` wrapper is gone — every tool
+ * result carries a single flat `sessionId`. This stays a tolerant
+ * heuristic over the remaining shapes (the `render` wrapper key plus
+ * the direct GguiSession object) rather than pinning one producer's
+ * envelope.
  */
 export function extractRenderFromToolResult(block: ContentBlock): unknown | null {
   if (block.type !== 'tool_result') return null;

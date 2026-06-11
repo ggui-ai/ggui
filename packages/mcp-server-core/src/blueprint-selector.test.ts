@@ -13,7 +13,11 @@ function bp(overrides: Partial<Blueprint> & { blueprintId: string }): Blueprint 
     appId: overrides.appId ?? 'app-1',
     codeS3Url: overrides.codeS3Url,
     codeHash: overrides.codeHash,
-    generator: overrides.generator ?? 'ui-gen-default-haiku-4-5',
+    source: overrides.source ?? {
+      kind: 'llm',
+      generator: 'ui-gen-default-haiku-4-5',
+      model: 'claude-haiku-4-5',
+    },
     validatorScore: overrides.validatorScore,
     variance: overrides.variance ?? {},
     isOperatorDefault: overrides.isOperatorDefault,

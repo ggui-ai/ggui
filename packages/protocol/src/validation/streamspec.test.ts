@@ -164,7 +164,8 @@ describe('streamSpec — validateStreamData', () => {
       // name, which silently swallowed typos (`_ggui:preveiw`) and
       // hypothetical-future names the runtime didn't actually emit
       // on. F10 tightened the bypass to a closed set:
-      // {PREVIEW_CHANNEL, CONTRACT_ERROR_CHANNEL}. Anything else in
+      // KNOWN_RESERVED_CHANNELS ({PREVIEW_CHANNEL, LIFECYCLE_CHANNEL}).
+      // Anything else in
       // the reserved namespace falls through to normal
       // "Unknown stream channel" rejection so the bug surfaces at
       // the emission site instead of the receiver.

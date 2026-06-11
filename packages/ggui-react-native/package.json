@@ -45,14 +45,6 @@
       "types": "./src/index.ts",
       "default": "./src/index.ts"
     },
-    "./query": {
-      "types": "./src/query/index.ts",
-      "default": "./src/query/index.ts"
-    },
-    "./testing": {
-      "types": "./src/testing/index.ts",
-      "default": "./src/testing/index.ts"
-    },
     "./chat-helpers": {
       "types": "./src/chat-helpers/index.ts",
       "default": "./src/chat-helpers/index.ts"
@@ -81,15 +73,9 @@
   "peerDependencies": {
     "@modelcontextprotocol/sdk": "^1.27.0",
     "@react-native-async-storage/async-storage": "^2.0.0",
-    "@tanstack/react-query": "^5.0.0",
     "react": "^18.0.0 || ^19.0.0",
     "react-native": ">=0.70.0 <1.0.0",
     "react-native-webview": "^13.0.0"
-  },
-  "peerDependenciesMeta": {
-    "@tanstack/react-query": {
-      "optional": true
-    }
   },
   "dependencies": {
     "@ggui-ai/design": "workspace:*",
@@ -102,7 +88,6 @@
   "devDependencies": {
     "@modelcontextprotocol/sdk": "^1.27.0",
     "@react-native-async-storage/async-storage": "^2.2.0",
-    "@tanstack/react-query": "^5.0.0",
     "@types/react": "^19.0.0",
     "react": "19.0.0",
     "react-native": "0.81.5",

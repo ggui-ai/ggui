@@ -293,7 +293,11 @@ export function createInMemoryBlueprintSearch(
       if (criteria.contractHash) {
         const exact = await blueprintStore.list(criteria.appId, criteria.contractHash);
         const filtered = criteria.generator
-          ? exact.filter((b) => b.generator === criteria.generator)
+          ? exact.filter(
+              (b) =>
+                b.source.kind === 'llm' &&
+                b.source.generator === criteria.generator,
+            )
           : exact;
         if (filtered.length > 0) {
           // The hash axis fires; every other axis sums to its own value
@@ -329,7 +333,11 @@ export function createInMemoryBlueprintSearch(
 
       const all = await blueprintStore.listAllForApp(criteria.appId);
       const filteredByGenerator = criteria.generator
-        ? all.filter((b) => b.generator === criteria.generator)
+        ? all.filter(
+            (b) =>
+              b.source.kind === 'llm' &&
+              b.source.generator === criteria.generator,
+          )
         : all;
 
       const scored: Array<BlueprintSearchResult> = [];

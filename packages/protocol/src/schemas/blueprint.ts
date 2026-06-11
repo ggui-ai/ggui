@@ -10,7 +10,49 @@ import type {
   Blueprint,
   BlueprintVariance,
 } from '../types/blueprint';
+import type {
+  BlueprintSource,
+  CuratedBlueprintSource,
+  LlmBlueprintSource,
+  UserBlueprintSource,
+} from '../types/blueprint-source';
 import { dataContractSchema, jsonValueSchema } from './data-contract.js';
+
+/**
+ * Zod mirror of {@link LlmBlueprintSource} — the engine-generated arm.
+ * Both provenance fields are REQUIRED: every generation mint site has
+ * them in scope, and an engine-generated artifact that cannot name its
+ * engine + model is not a real state.
+ */
+export const llmBlueprintSourceSchema: z.ZodType<LlmBlueprintSource> = z
+  .object({
+    kind: z.literal('llm'),
+    generator: z.string().min(1),
+    model: z.string().min(1),
+  })
+  .strict() as z.ZodType<LlmBlueprintSource>;
+
+/** Zod mirror of {@link UserBlueprintSource} — no engine claim exists. */
+export const userBlueprintSourceSchema: z.ZodType<UserBlueprintSource> = z
+  .object({ kind: z.literal('user') })
+  .strict() as z.ZodType<UserBlueprintSource>;
+
+/** Zod mirror of {@link CuratedBlueprintSource}. */
+export const curatedBlueprintSourceSchema: z.ZodType<CuratedBlueprintSource> = z
+  .object({ kind: z.literal('curated') })
+  .strict() as z.ZodType<CuratedBlueprintSource>;
+
+/**
+ * Zod mirror of {@link BlueprintSource} — the single provenance
+ * vocabulary for blueprints. Mirrors `parseBlueprintSource`'s arms;
+ * `.strict()` members so stray keys surface at the wire layer rather
+ * than riding through.
+ */
+export const blueprintSourceSchema: z.ZodType<BlueprintSource> = z.union([
+  llmBlueprintSourceSchema,
+  userBlueprintSourceSchema,
+  curatedBlueprintSourceSchema,
+]) as z.ZodType<BlueprintSource>;
 
 /**
  * Zod mirror of {@link BlueprintVariance}. The single shared variance
@@ -58,7 +100,7 @@ export const blueprintSchema: z.ZodType<Blueprint> = z
     appId: z.string().min(1),
     codeS3Url: z.string().optional(),
     codeHash: z.string().optional(),
-    generator: z.string().min(1),
+    source: blueprintSourceSchema,
     validatorScore: z.number().min(0).max(1).optional(),
     variance: blueprintVarianceSchema,
     // `true | undefined` — store-level invariant: at most one row per

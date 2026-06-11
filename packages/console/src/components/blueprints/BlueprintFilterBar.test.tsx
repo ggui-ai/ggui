@@ -76,7 +76,11 @@ describe('BlueprintFilterBar — emission', () => {
 
 describe('blueprintMatchesFilters', () => {
   const baseBlueprint = {
-    generator: 'ui-gen-default-haiku-4-5',
+    source: {
+      kind: 'llm',
+      generator: 'ui-gen-default-haiku-4-5',
+      model: 'claude-haiku-4-5',
+    } as const,
     variance: { persona: 'minimalist' as string | undefined },
     validatorScore: undefined as number | undefined,
   };
@@ -115,6 +119,26 @@ describe('blueprintMatchesFilters', () => {
         draftsOnly: false,
       }),
     ).toBe(false);
+  });
+
+  it('never matches non-llm-sourced variants against an engine slug', () => {
+    // Provenance rule (mirrors the ggui_ops_list_blueprints filter):
+    // `user` / `curated` rows carry no engine provenance, so an active
+    // generator filter excludes them even though they pass other axes.
+    const userSourced = {
+      ...baseBlueprint,
+      source: { kind: 'user' } as const,
+    };
+    expect(
+      blueprintMatchesFilters(userSourced, {
+        persona: '',
+        generator: 'ui-gen-default-haiku-4-5',
+        draftsOnly: false,
+      }),
+    ).toBe(false);
+    expect(
+      blueprintMatchesFilters(userSourced, EMPTY_VARIANT_FILTERS),
+    ).toBe(true);
   });
 
   it('draftsOnly excludes variants with no score', () => {

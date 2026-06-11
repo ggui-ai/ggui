@@ -31,9 +31,9 @@ export interface AdapterRegistry {}
  * Shape of the value provided by {@link GguiContext}.
  *
  * Contains app identity, WebSocket configuration, adapter permissions,
- * interface context, and optional auth/session/API state consumed by hooks
- * and the client-side tool system. Extends the web version with
- * `reactVersion` and `designSystemUrl` for WebView import map configuration.
+ * interface context, and optional auth/session state consumed by hooks.
+ * Extends the web version with `reactVersion` and `designSystemUrl` for
+ * WebView import map configuration.
  */
 export interface GguiContextValue {
   appId: string;
@@ -49,7 +49,7 @@ export interface GguiContextValue {
   adapterImpls: AdapterRegistry;
   /** Current interface context (device/viewport info) */
   interfaceContext: InterfaceContext;
-  /** Auth context for tools system */
+  /** Auth context surfaced to embedding hosts and renderer surfaces. */
   auth?: {
     currentUser?: EndUserIdentity;
     userId?: string;
@@ -59,21 +59,10 @@ export interface GguiContextValue {
   /**
    * Conversation envelope identity. Forwarded by {@link useInvoke} as
    * the `X-Ggui-Host-Session-Id` header so the agent threads multi-turn
-   * invokes through its own keyed conversation state. Distinct from
-   * {@link sessionId} — this names the chat thread, not a render.
+   * invokes through its own keyed conversation state. Names the chat
+   * thread, not a render.
    */
   hostSessionId?: string;
-  /**
-   * Per-render scope identity for the client-side tool system. Used by
-   * {@link useTool} / {@link useBindings} as `ToolContext.sessionId` —
-   * scopes the in-memory fetch cache so two concurrent renders cannot
-   * leak each other's cached responses. Distinct from
-   * {@link hostSessionId} — this names a single render, not the
-   * conversation envelope.
-   */
-  sessionId?: string;
-  /** Base URL for API calls (used by fetch tool) */
-  apiBaseUrl?: string;
   /** React version for WebView import map (default: '18.2.0') */
   reactVersion?: string;
   /** Base URL for design system modules in WebView import map */

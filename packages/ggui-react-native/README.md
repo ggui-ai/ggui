@@ -17,7 +17,6 @@ Peer dependencies (install the ones your app uses):
 - `react-native-webview` (>= 13) — used by the WebView renderer
 - `@react-native-async-storage/async-storage` (2.x) — offline thread storage
 - `@modelcontextprotocol/sdk`
-- `@tanstack/react-query` (optional — only for `@ggui-ai/react-native/query`)
 
 Network-state awareness is injected, not bundled: the package never
 imports `@react-native-community/netinfo`. If your app wants real
@@ -43,17 +42,14 @@ export function App() {
 
 The package also exports a React Native theme system (`ThemeProvider`,
 `useTheme`, mirroring the web design tokens), hooks (`useWebSocket`,
-`useInvoke`, `useAppState`, `useAgentStream`), a client-side
-data-binding tools system, and `<McpAppIframe>` for hosting any
+`useInvoke`, `useAppState`), and `<McpAppIframe>` for hosting any
 MCP Apps-conformant UI.
 
 ## Entry points
 
 | Import path                          | Contents                             |
 | ------------------------------------ | ------------------------------------ |
-| `@ggui-ai/react-native`              | Components, hooks, theme, tools      |
-| `@ggui-ai/react-native/query`        | TanStack Query integration           |
-| `@ggui-ai/react-native/testing`      | Test helpers and mock tools          |
+| `@ggui-ai/react-native`              | Components, hooks, theme             |
 | `@ggui-ai/react-native/chat-helpers` | Message-grouping helpers             |
 | `@ggui-ai/react-native/chat-thread`  | Thread-backed chat (`useChatThread`) |
 

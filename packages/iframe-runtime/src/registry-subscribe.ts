@@ -43,10 +43,7 @@
  */
 import { CLIENT_SUPPORTED_VERSIONS, UPGRADE_REQUIRED } from '@ggui-ai/protocol/version';
 import { UpgradeRequiredError } from '@ggui-ai/protocol/errors/version-mismatch';
-import type {
-  AckPayload,
-  ContractErrorPayload,
-} from '@ggui-ai/protocol';
+import type { AckPayload } from '@ggui-ai/protocol';
 import type { ConnectionStatus } from '@ggui-ai/protocol/transport/websocket';
 import type { McpAppAiGguiRenderMeta } from '@ggui-ai/protocol/integrations/mcp-apps';
 import type {
@@ -490,4 +487,4 @@ export type ConnectFn = typeof connectViaRegistry;
  * Type re-export for callers that want to thread the handle type
  * through their own seams (e.g. `bootSequence`'s shim attach).
  */
-export type { WsTransportHandle, ContractErrorPayload };
+export type { WsTransportHandle };

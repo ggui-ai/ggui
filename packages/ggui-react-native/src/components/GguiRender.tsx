@@ -1,3 +1,27 @@
+/**
+ * GguiRender (React Native) — mounts one ggui render over the live WS
+ * channel.
+ *
+ * ## Platform deltas vs the web twin
+ *
+ * Near-twin of `@ggui-ai/react`'s `components/GguiRender.tsx`. Mirror
+ * behavior-neutral changes to the twin. Load-bearing differences
+ * (everything else should match):
+ *
+ *   - Wire hooks: web wraps `children` in `GguiWireProvider`, so the
+ *     scoped wire hooks (`useAction`, channel subscriptions) resolve
+ *     through its `WireConfig`. RN renders children bare — the
+ *     WireProvider port is a pending RN slice; RN's `api.action`
+ *     validates against the active actionSpec inline instead.
+ *   - `GguiSessionApi`: web exposes `send`; RN omits it.
+ *   - Event bus: web dispatches/subscribes bridge events on `window`
+ *     CustomEvents unconditionally; RN gates every `window` touch
+ *     behind `Platform.OS === 'web'` (no DOM event bus on native).
+ *
+ * The byte-identical chat-thread / chat-helpers twins are pinned by
+ * `twin-parity.test.ts` in both SDKs; the eventual fix is hoisting
+ * the platform-neutral core into a shared package.
+ */
 import { useEffect, useCallback, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Platform } from 'react-native';
 import type { ConnectionStatus, WebSocketMessage } from '@ggui-ai/protocol/transport/websocket';
@@ -9,8 +33,6 @@ import type {
   GguiSession,
   ReservedChannelValidator,
   AckPayload,
-  StreamPayload,
-  ProgressPayload,
   SystemPayload,
 } from '@ggui-ai/protocol';
 import { BRIDGE_EVENTS, CLIENT_SUPPORTED_VERSIONS, UpgradeRequiredError } from '@ggui-ai/protocol';
@@ -62,8 +84,8 @@ export interface GguiSessionInfo {
 /**
  * Props for the {@link GguiRender} component.
  *
- * Provides lifecycle, data, interaction, progress, streaming, and error
- * hooks for fine-grained control over the mounted render.
+ * Provides lifecycle, data, interaction, and error hooks for
+ * fine-grained control over the mounted render.
  */
 export interface GguiRenderProps {
   sessionId: string;
@@ -85,12 +107,6 @@ export interface GguiRenderProps {
   // the envelope's `payload` carries the interaction-specific data.
   onInteraction?: (envelope: ActionEnvelope) => void;
 
-  // Progress hooks
-  onProgress?: (progress: ProgressPayload) => void;
-
-  // Streaming hooks
-  onStream?: (payload: StreamPayload) => void;
-
   // System hooks
   onSystemMessage?: (payload: SystemPayload) => void;
 
@@ -108,7 +124,7 @@ export interface GguiRenderProps {
    * operator may replace by key".
    *
    * Absent = only the A2UI validator runs on `_ggui:preview`.
-   * `_ggui:contract-error` is validated via the protocol's built-in
+   * `_ggui:lifecycle` is validated via the protocol's built-in
    * regardless of this prop.
    *
    * Pass `new Map()` (explicitly empty) to DISABLE the A2UI default —
@@ -144,7 +160,7 @@ export interface GguiSessionApi {
  *
  * Opens a WebSocket connection (if `wsEndpoint` is set on the provider),
  * subscribes to the render, and handles incoming server messages
- * (render, progress, data, stream, error). On web platform, dispatches
+ * (render, data, props_update, error). On web platform, dispatches
  * window CustomEvents for shell hooks compatibility.
  *
  * Post-Phase-B: a single render per component instance — no stack, no
@@ -172,8 +188,6 @@ export function GguiRender({
   onBeforeAction,
   onAfterAction,
   onInteraction,
-  onProgress,
-  onStream,
   onSystemMessage,
   onError,
   onRenderReceived,
@@ -198,10 +212,6 @@ export function GguiRender({
   onRenderEndRef.current = onRenderEnd;
   const onRenderReceivedRef = useRef(onRenderReceived);
   onRenderReceivedRef.current = onRenderReceived;
-  const onProgressRef = useRef(onProgress);
-  onProgressRef.current = onProgress;
-  const onStreamRef = useRef(onStream);
-  onStreamRef.current = onStream;
   const onSystemMessageRef = useRef(onSystemMessage);
   onSystemMessageRef.current = onSystemMessage;
 
@@ -275,29 +285,10 @@ export function GguiRender({
         }
       }
       if (message.type === 'render') {
-        const payload = message.payload as { session: GguiSession; matchType?: string };
+        const payload = message.payload as { session: GguiSession };
         if (payload.session) {
           setRender(payload.session);
           onRenderReceivedRef.current?.(payload.session);
-          // Forward matchType info as a synthetic progress event.
-          if (payload.matchType) {
-            const isHit = payload.matchType === 'cached' || payload.matchType === 'predefined' || payload.matchType === 'exact';
-            onProgressRef.current?.({
-              sessionId: payload.session.id,
-              step: 'compiling',
-              message: isHit ? 'Found matching blueprint' : 'No blueprint match found',
-            });
-          }
-        }
-      }
-      if (message.type === 'progress') {
-        const payload = message.payload;
-        onProgressRef.current?.(payload);
-        // Dispatch window events on web for shell hooks (useGenerationProgress etc.)
-        if (Platform.OS === 'web' && typeof window !== 'undefined') {
-          window.dispatchEvent(
-            new CustomEvent(BRIDGE_EVENTS.AGENT_LOGS, { detail: payload }),
-          );
         }
       }
       if (message.type === 'data') {
@@ -317,7 +308,7 @@ export function GguiRender({
           //   1. `extraReservedValidators` (caller-provided, composed
           //      with the A2UI default for `_ggui:preview`).
           //   2. `BUILTIN_RESERVED_VALIDATORS` from the protocol
-          //      (ships the `_ggui:contract-error` validator).
+          //      (ships the `_ggui:lifecycle` validator).
           //   3. Fall-through to `{valid: true}` for known-reserved
           //      channels without a registered validator.
           //
@@ -389,15 +380,6 @@ export function GguiRender({
             if (prev.type === 'mcpApps' || prev.type === 'system') return prev;
             return { ...prev, props } as GguiSession;
           });
-        }
-      }
-      if (message.type === 'stream') {
-        const payload = message.payload as StreamPayload;
-        onStreamRef.current?.(payload);
-        if (Platform.OS === 'web' && typeof window !== 'undefined') {
-          window.dispatchEvent(
-            new CustomEvent(BRIDGE_EVENTS.AGENT_STREAM, { detail: payload }),
-          );
         }
       }
       if (message.type === 'system') {
@@ -506,12 +488,12 @@ export function GguiRender({
   // send. Mirrors the web SDK's `action` semantics.
   //
   // NOTE: no GguiWireProvider wrap here — RN's render emitter
-  // doesn't go through a WireProvider's `useAction` path today (see
-  // `project_rn_contract_symmetry.md`), so there's no actionSpec
-  // round-trip from a scoped hook. Server still authoritative — any
-  // violation is rejected on ingress with CONTRACT_VIOLATION. The
-  // full actionSpec-validated path lands with the RN WireProvider
-  // port (separate slice).
+  // doesn't go through a WireProvider's `useAction` path today, so
+  // there's no actionSpec round-trip from a scoped hook. Server still
+  // authoritative — any violation is rejected on ingress with
+  // CONTRACT_VIOLATION. The full actionSpec-validated path lands with
+  // the RN WireProvider port (separate slice); see the platform-delta
+  // header at the top of this file.
   const action = useCallback(
     <T,>(data: T) => {
       try {

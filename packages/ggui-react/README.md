@@ -13,8 +13,6 @@ npm install @ggui-ai/react react react-dom
 
 `react` and `react-dom` are peer dependencies (React 18 or 19).
 `@modelcontextprotocol/sdk` is also a peer dependency.
-`@tanstack/react-query` is an optional peer — install it only if you
-use the `@ggui-ai/react/query` entry point.
 
 To host a render's sandboxed iframe you also need `@mcp-ui/client`
 (install it directly; ggui does not re-export it):
@@ -50,20 +48,17 @@ non-trivial (it implements the MCP Apps host contract). The complete,
 runnable reference — including auth — is the
 [`ggui-basic-web`](../../samples/apps/ggui-basic-web) sample. **Start there.**
 
-The package also exports hooks (`useWebSocket`, `useInvoke`) and a
-client-side data-binding tools system (`defineTool`, `useTool`,
-`useBindings`). It pairs with `<AppRenderer>` from `@mcp-ui/client`
-for hosting an MCP Apps render in a sandboxed iframe — install that
-package directly; ggui does not re-export it. (React Native's
-equivalent host is `<McpAppIframe>` from `@ggui-ai/react-native`.)
+The package also exports hooks (`useWebSocket`, `useInvoke`). It pairs
+with `<AppRenderer>` from `@mcp-ui/client` for hosting an MCP Apps
+render in a sandboxed iframe — install that package directly; ggui
+does not re-export it. (React Native's equivalent host is
+`<McpAppIframe>` from `@ggui-ai/react-native`.)
 
 ## Entry points
 
 | Import path                               | Contents                                      |
 | ----------------------------------------- | --------------------------------------------- |
-| `@ggui-ai/react`                          | Components, hooks, tools                      |
-| `@ggui-ai/react/query`                    | TanStack Query integration                    |
-| `@ggui-ai/react/testing`                  | Test helpers and mock tools                   |
+| `@ggui-ai/react`                          | Components and hooks                          |
 | `@ggui-ai/react/chat-helpers`             | Message-grouping and render helpers           |
 | `@ggui-ai/react/chat-thread`              | Thread-backed chat (`useChatThread`)          |
 | `@ggui-ai/react/chat-thread/shells/chat`  | Thread-backed reference chat UI (`ChatShell`) |

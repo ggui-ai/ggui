@@ -2,9 +2,8 @@
  * @ggui-ai/react - React SDK for ggui
  *
  * Provides React components, hooks, and utilities for embedding ggui agent
- * interfaces in web applications. Includes WebSocket session management,
- * dynamic component rendering in the React tree with wire hook support,
- * and client-side data tools.
+ * interfaces in web applications. Includes WebSocket session management and
+ * dynamic component rendering in the React tree with wire hook support.
  *
  * @packageDocumentation
  */
@@ -31,11 +30,8 @@ export type {
   PermissionStatus,
   SubscribePayload,
   AckPayload,
-  StreamPayload,
   StreamEnvelope,
   ErrorPayload,
-  ProgressStep,
-  ProgressPayload,
   RenderPayload,
   PropsUpdatePayload,
   UrlPayload,
@@ -46,18 +42,6 @@ export type {
   DeviceCategory,
   EndUserIdentity,
   UserAuthMode,
-  // Client tools types
-  ClientToolName,
-  ClientToolConfig,
-  DataBindings,
-  TypedToolConfig,
-  FetchToolConfig,
-  AuthToolConfig,
-  StorageToolConfig,
-  SubscriptionToolConfig,
-  ChainToolConfig,
-  TransformToolConfig,
-  MergeToolConfig,
   // System events (OAuth consent)
   SystemPayload,
   SystemAction,
@@ -202,44 +186,3 @@ export type { WebSocketManagerOptions } from './websocket/WebSocketManager';
 export { EventBuffer } from './websocket/EventBuffer';
 export type { EventBufferOptions } from './websocket/EventBuffer';
 
-// Client-side tools for data binding
-export {
-  // Registry
-  toolRegistry,
-  registerTool,
-  defineTool,
-  // Hooks
-  useTool,
-  useBindings,
-  useBinding,
-  // Resolver utilities
-  resolveBindings,
-  topologicalSort,
-  interpolateString,
-  interpolateConfig,
-  getNestedValue,
-  validateBindings,
-  // Built-in tools
-  fetchTool,
-  clearFetchCache,
-  authTool,
-  storageTool,
-  writeStorage,
-  removeStorage,
-  chainTool,
-  transformTool,
-  mergeTool,
-} from './tools/index';
-export type {
-  ToolContext,
-  ToolExecutor,
-  ToolDefinition,
-  UseToolReturn,
-  UseToolOptions,
-  ResolvedBindings,
-  UseBindingsOptions,
-  ToolResult,
-} from './tools/index';
-
-// TanStack Query integration — import from '@ggui-ai/react/query' instead.
-// Kept as a separate subpath to avoid forcing @tanstack/react-query on all consumers.

@@ -1,6 +1,6 @@
 # @ggui-ai/protocol
 
-TypeScript source of truth for the ggui protocol — the open wire format between agents and generated user interfaces. Ships the envelope types (`ActionEnvelope`, `StreamEnvelope`, `ContractErrorPayload`), the canonical error-code union, the WebSocket + MCP transport bindings, and the DTCG design-token contract.
+TypeScript source of truth for the ggui protocol — the open wire format between agents and generated user interfaces. Ships the envelope types (`ActionEnvelope`, `StreamEnvelope`), the canonical error-frame codes, the WebSocket + MCP transport bindings, and the DTCG design-token contract.
 
 The full normative spec lives at [docs.ggui.ai](https://docs.ggui.ai). This package is what an implementer actually imports.
 
@@ -23,7 +23,7 @@ Here is what happens when a user clicks "Add" on a generated todo UI:
 7. **Agent pushes the update** — the agent's update travels back to the UI on the live channel (`props_update`, or a `StreamEnvelope` on a declared stream channel).
 8. **UI absorbs the update** — props or the component's `useStream` callback update state, no regeneration.
 
-**No SDK glue.** Every step has a named, typed enforcement layer — schema-subset check at push time, `ContractErrorPayload` on `_ggui:contract-error` at runtime, `@ggui-ai/protocol-conformance` at CI time, TypeScript narrowing at author time. Nothing about this pipeline assumes a specific SDK: a third-party implementer honoring the envelope + channel contracts inherits all four enforcement tiers for free.
+**No SDK glue.** Every step has a named, typed enforcement layer — schema-subset check at push time, `CONTRACT_VIOLATION` error frames on the live channel at runtime, `@ggui-ai/protocol-conformance` at CI time, TypeScript narrowing at author time. Nothing about this pipeline assumes a specific SDK: a third-party implementer honoring the envelope + channel contracts inherits all four enforcement tiers for free.
 
 ## Implementer guide
 

@@ -30,13 +30,14 @@
  *     `TeardownStep` is the same posture with a currently-empty
  *     vocabulary.
  *   - `ExpectedBehavior['kind']` and `TransportConfig['kind']` carry a
- *     `(string & {})` tail — see SPEC §extensibility and
- *     `ContractErrorCode` in `@ggui-ai/protocol`. Runners that
+ *     `(string & {})` tail — see SPEC §11.4 (extensibly-closed
+ *     unions, e.g. `SubmitActionKind` in `@ggui-ai/protocol`). Runners
+ *     that
  *     receive a behavior kind they don't recognize SHOULD skip with a
  *     warning; an unrecognized transport kind is a configuration
  *     error.
  *
- * Everything else — tool names, envelope field names, contract error
+ * Everything else — tool names, envelope field names, wire error
  * codes — is passed verbatim and the implementation under test owns
  * the recognition set.
  *
@@ -54,8 +55,8 @@
  * pinned here, deliberately decoupled from the live source tree. A
  * drift check between these authored unions and the live protocol /
  * renderer types belongs in the kit's own meta-tests, NOT in this
- * file's import graph. If `@ggui-ai/protocol` adds a new
- * `ContractErrorCode` canonical member tomorrow, conformance kit
+ * file's import graph. If `@ggui-ai/protocol` adds a new canonical
+ * member to an extensibly-closed union tomorrow, conformance kit
  * consumers MUST NOT be forced to recompile — their fixtures
  * continue to reference the value they authored, and the runner's
  * extensible `(string & {})` tail handles recognition. This mirrors
@@ -78,8 +79,9 @@
  * unknown arms are accepted as opaque records so third-party runners
  * can extend without a package bump.
  *
- * Pattern mirrored from `ContractErrorCode` in
- * `@ggui-ai/protocol/types/data-contract`.
+ * Pattern mirrored from the protocol's extensibly-closed unions
+ * (e.g. `SubmitActionKind` in
+ * `@ggui-ai/protocol/integrations/mcp-apps`).
  */
 export type TransportConfig =
   | WebSocketTransportConfig
@@ -159,13 +161,14 @@ export interface ActionSpecEntryDecl {
  * JSON-Schema node authored on {@link ActionSpecEntryDecl.schema} —
  * the kit's decoupled copy of the protocol's JSON Schema draft-07
  * subset (`JsonSchema` in `@ggui-ai/protocol`), same authoring
- * posture as {@link ContractErrorCode}: fixtures compile against the
+ * posture as {@link BootstrapFailureReason}: fixtures compile against
+ * the
  * kit's frozen vocabulary, never the live protocol types. The typed
  * core names exactly the keywords the shipped fixtures author and
  * the runner's validating parse recognizes; the index-signature tail
  * carries any further draft-07 keyword verbatim — the implementation
  * under test owns their interpretation, exactly as with tool names
- * and contract error codes.
+ * and wire error codes.
  */
 export interface JsonSchemaDecl {
   readonly [keyword: string]: unknown;
@@ -332,9 +335,8 @@ export interface ErrorFrameBehavior {
  * `{type: 'data', payload: StreamEnvelope}` whose envelope names the
  * declared `channel` and whose `payload.payload` body deep-equals the
  * declared `value`. The `StreamEnvelope` shape is defined by
- * `@ggui-ai/protocol` (`types/live-channel`). Note `{type: 'stream'}`
- * is a different frame — agent text-chunk streaming — and does NOT
- * satisfy this expectation.
+ * `@ggui-ai/protocol` (`types/live-channel`). Frames of any other
+ * `type` never satisfy this expectation.
  */
 export interface StreamUpdateBehavior {
   readonly kind: 'stream-update';
@@ -614,32 +616,12 @@ export interface TestCase {
 // =============================================================================
 
 /**
- * Canonical contract-error codes. Mirrors `@ggui-ai/protocol`'s
- * `ContractErrorCode` at the time this kit version was authored. The
- * `(string & {})` tail lets fixtures reference codes introduced by
- * later protocol revisions without a kit bump — the runner's
- * recognition set is its own concern.
- *
- * Drift discipline: the kit ships a meta-test that walks
- * `@ggui-ai/protocol`'s `ContractErrorCode` union against this
- * declaration and warns when a new canonical member appears. The
- * runner's behaviour on unknown codes (skip with warning) is
- * additive-safe: adding a code here is a kit minor; removing one is
- * a major.
- */
-export type ContractErrorCode =
-  | 'SCHEMA_VIOLATION'
-  | 'SCHEMA_MISMATCH_ERROR'
-  | 'SESSION_NOT_FOUND'
-  | 'AUTH_REJECTED'
-  | (string & {});
-
-/**
  * Boot-path failure reasons. Mirrors `@ggui-ai/iframe-runtime`'s
  * `BootstrapFailureReason` — combines parse-time, post-parse
  * orchestration, and pre-WS transport-observable failures. Authored
- * copy for the same drift-decoupling reason as
- * {@link ContractErrorCode}.
+ * copy per the drift-decoupling posture in the module docstring:
+ * fixtures compile against the kit's frozen vocabulary, never the
+ * live protocol or renderer types.
  */
 export type BootstrapFailureReason =
   | 'MISSING_TOOL_OUTPUT'
@@ -686,19 +668,6 @@ export type ProtocolError =
         | (string & {});
       readonly message?: string;
       readonly details?: unknown;
-    }
-  | {
-      readonly kind: 'contract';
-      readonly payload: {
-        readonly toolName: string;
-        readonly error: {
-          readonly code: ContractErrorCode;
-          readonly message: string;
-          readonly causedBy?: string;
-        };
-        readonly timestamp: string;
-        readonly schemaVersion?: string;
-      };
     }
   | {
       readonly kind: 'bootstrap';

@@ -19,7 +19,7 @@
  *     postMessage envelope shape parents observe on boot failure.
  *   - `ProtocolError` — canonical typed union for every failure
  *     the renderer classifies outward, wired to the postMessage
- *     envelope and the `_ggui:contract-error` WS channel.
+ *     envelope.
  *   - `BootstrapFailureReason` — extensibly-closed union of every
  *     reason the 'bootstrap' variant can carry. Consolidates
  *     parse-time and post-parse codes in one place. (Wire-visible
@@ -54,7 +54,6 @@ export {
   defaultProtocolErrorEmitter,
   fromBootstrapFailure,
   fromClientContractViolation,
-  fromContractErrorPayload,
   fromTransportFailure,
   fromAuthFailure,
   fromUpgradeRequired,

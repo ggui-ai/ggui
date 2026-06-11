@@ -2,10 +2,14 @@
  * useChannelStream — internal seam for consuming a single channel's
  * {@link StreamEnvelope} sequence from within React.
  *
- * The hook listens for `BRIDGE_EVENTS.AGENT_DATA` CustomEvents
- * dispatched by {@link GguiRender} when the WebSocket delivers a
- * live-channel `data` message, filters them by channel name, and
- * accumulates the matching envelopes in arrival order.
+ * The hook subscribes to the ambient `<GguiRender>` `StreamBus` (via
+ * {@link StreamBusContext}), filters deliveries by channel name, and
+ * accumulates the matching envelopes in arrival order. Because the
+ * bus buffers reserved (`_ggui:*`) channels in a bounded replay ring,
+ * a consumer that mounts AFTER frames arrived — the `_ggui:preview`
+ * provisional renderer, which attaches only after the subscribe ack's
+ * session payload commits through React state — is caught up
+ * synchronously instead of losing the early frames.
  *
  * Scope (V1):
  *   - Internal-only seam for `ProvisionalRenderer` to consume the
@@ -16,20 +20,25 @@
  *   - Does NOT own any policy about WHAT the payload means. Downstream
  *     parsing (A2UI message validation, other schemas) happens in
  *     whichever component subscribes.
+ *   - Non-reserved channels are NOT replayed (the bus buffers only
+ *     `_ggui:*`); a late subscriber on an agent-declared channel sees
+ *     only frames arriving after mount — server-side `streamSpec`
+ *     replay policy owns that history.
  *
  * State shape is deliberately dumb — a flat, append-only list plus a
  * `complete` latch. Consumers reduce over the envelopes however they
  * need; the hook doesn't try to be clever about replace-by-id or any
  * other protocol semantics that don't exist in ggui core.
  *
- * SSR safety: returns the empty state when `window` is undefined so
- * the hook doesn't crash during Next.js server-side rendering.
- * Subscribing to a CustomEvent requires a DOM; there's nothing
- * meaningful to do before hydration.
+ * Outside a `<GguiRender>` (no bus in context — standalone preview
+ * mounts) the hook stays on the empty state: there is no live channel
+ * in that configuration, so there are no frames to deliver. Matches
+ * the standalone no-op `WireConfig` posture in `DynamicComponent`'s
+ * `EnsureWireContext`.
  */
-import { useEffect, useState } from 'react';
+import { useContext, useEffect, useState } from 'react';
 import type { StreamEnvelope } from '@ggui-ai/protocol';
-import { BRIDGE_EVENTS } from '@ggui-ai/protocol';
+import { StreamBusContext } from '../internal/stream-bus-context';
 
 /**
  * The accumulated state of a single channel subscription, returned
@@ -51,35 +60,35 @@ const EMPTY_STATE: ChannelStreamState = {
 
 /**
  * Subscribe to a single live-channel channel by name. The hook resets
- * state whenever `channelName` changes, mirroring the renderer's
- * expectation that switching channels means starting from zero.
+ * state whenever `channelName` (or the ambient bus) changes, mirroring
+ * the renderer's expectation that switching channels means starting
+ * from zero — reserved channels are then re-seeded from the bus's
+ * replay ring, so the reset is lossless for `_ggui:*` consumers.
  *
  * @internal
  */
 export function useChannelStream(channelName: string): ChannelStreamState {
+  const bus = useContext(StreamBusContext);
   const [state, setState] = useState<ChannelStreamState>(EMPTY_STATE);
 
   useEffect(() => {
-    // Reset when the target channel changes. The previous subscription
-    // was unmounted by the cleanup below; the new one starts fresh.
+    // Reset when the target channel (or bus) changes. The previous
+    // subscription was unmounted by the cleanup below; the new one
+    // starts fresh — reserved-channel history replays synchronously
+    // from the bus ring inside `subscribe()`.
     setState(EMPTY_STATE);
 
-    if (typeof window === 'undefined') {
+    if (bus === null) {
       return;
     }
 
-    const listener = (event: Event) => {
-      const detail = (event as CustomEvent).detail as StreamEnvelope | undefined;
-      if (!detail || detail.channel !== channelName) return;
+    return bus.subscribe(channelName, (envelope) => {
       setState((prev) => ({
-        envelopes: [...prev.envelopes, detail],
-        complete: prev.complete || detail.complete === true,
+        envelopes: [...prev.envelopes, envelope],
+        complete: prev.complete || envelope.complete === true,
       }));
-    };
-
-    window.addEventListener(BRIDGE_EVENTS.AGENT_DATA, listener);
-    return () => window.removeEventListener(BRIDGE_EVENTS.AGENT_DATA, listener);
-  }, [channelName]);
+    });
+  }, [bus, channelName]);
 
   return state;
 }

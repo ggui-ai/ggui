@@ -1145,8 +1145,10 @@ export interface McpAppBootstrapFailedMessage {
  * audit-fire posture so semantics stay uniform.
  *
  * Failure-mode note: a malformed envelope (unknown `kind` AND malformed
- * `payload`) lands as `INVALID_ACTION_KIND` on `_ggui:contract-error`.
- * See `ContractErrorCode` for the canonical extensibly-closed code set.
+ * `payload`) is rejected by the `ggui_runtime_submit_action` handler
+ * with `{ok: false, code: 'INVALID_ACTION_KIND'}` in
+ * `structuredContent` — the iframe observes the rejection through the
+ * host's `tools/call` relay response.
  */
 export type SubmitActionKind =
   | 'dispatch'

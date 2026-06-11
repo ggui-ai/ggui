@@ -110,10 +110,12 @@ export interface BlueprintSearchCriteria {
     readonly context?: JsonObject;
   };
   /**
-   * Filter on the {@link Blueprint.generator} slug. When set, the
-   * implementation MUST exclude blueprints whose `generator !==
-   * this` before scoring. Useful for ops paths that want to compare
-   * within a single generator's variants only.
+   * Filter on engine provenance. When set, the implementation MUST
+   * exclude — before scoring — every blueprint that is not
+   * `source.kind === 'llm'` with `source.generator` equal to this
+   * slug (`user` / `curated` rows carry no engine provenance and
+   * never match). Useful for ops paths that want to compare within
+   * a single generator's variants only.
    */
   readonly generator?: string;
   /**

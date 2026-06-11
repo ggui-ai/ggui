@@ -1,10 +1,15 @@
 /**
- * Live-channel unit tests — server-side derivation of the agent-facing
- * `tool` hint on consume events, plus per-socket inbound ordering.
+ * Live-channel unit tests — server-side derivation of the operator-
+ * facing `tool` hint on ledger events, per-socket inbound ordering,
+ * and the WS-action → pending-events-pipe bridge.
  *
- * The persisted `user.submitted` envelope IS the consume event the
- * agent drains, and `handleInboundAction`'s appendEvent call is the
- * single authoritative build site for `ActionEventValue.tool`:
+ * `handleInboundAction` dual-writes every accepted action: the
+ * retained `user.submitted` ledger event (ack seq source, and the
+ * single authoritative build site for `ActionEventValue.tool`) plus —
+ * for `data:submit`, when a `pendingEventConsumer` is wired — a
+ * canonical `ConsumeEventEntry` on the pipe `ggui_consume` drains.
+ *
+ * Tool-hint suite (ledger shape):
  *
  *   - inbound `data:submit` with NO client `tool` + an
  *     `actionSpec[action].nextStep` declaration → the persisted
@@ -20,6 +25,12 @@
  * events fire in one macrotask, and one rejecting frame never poisons
  * processing of later frames on the same socket.
  *
+ * The bridge suite boots the REAL drain side — the same
+ * `createGguiConsumeHandler` the server registers — against the same
+ * `InMemoryPendingEventConsumer` instance the channel writes to, and
+ * proves a WS `data:submit` action round-trips into the agent's
+ * `ggui_consume` result with unchanged ack semantics.
+ *
  * Lane 3 (in-process): real WS round-trip against a bare node http
  * server + `createGguiSessionChannelServer`, asserting on the
  * `InMemoryGguiSessionStore` event ledger after the action ack.
@@ -32,11 +43,14 @@ import type {
   ActionEnvelope,
   ActionEventValue,
   ActionSpec,
+  GguiConsumeOutput,
 } from '@ggui-ai/protocol';
 import {
   InMemoryAuthAdapter,
   InMemoryGguiSessionStore,
+  InMemoryPendingEventConsumer,
 } from '@ggui-ai/mcp-server-core/in-memory';
+import { createGguiConsumeHandler } from '@ggui-ai/mcp-server-handlers/renders';
 import type { Logger } from './logger.js';
 import { DEFAULT_BUILDER_APP_ID } from './auth.js';
 import {
@@ -45,16 +59,20 @@ import {
 } from './ggui-session-channel.js';
 
 /**
- * Silent logger that records `logger.error` event names in call order.
- * The inboundChain's per-link catch is observable ONLY as a
- * `render_channel_message_failed` error log — the recording is how the
- * poison-resistance test proves a frame genuinely threw (vs. being
- * handled gracefully inside onMessage).
+ * Silent logger that records `logger.error` and `logger.warn` event
+ * names in call order. The inboundChain's per-link catch is observable
+ * ONLY as a `render_channel_message_failed` error log — the recording
+ * is how the poison-resistance test proves a frame genuinely threw
+ * (vs. being handled gracefully inside onMessage). The warn recording
+ * is how the bridge suite proves a failed pipe append degraded loudly
+ * (`render_channel_consume_append_failed`) instead of silently.
  */
-function createRecordingLogger(loggedErrors: string[]): Logger {
+function createRecordingLogger(loggedErrors: string[], loggedWarns: string[]): Logger {
   const logger: Logger = {
     info: () => undefined,
-    warn: () => undefined,
+    warn: (event) => {
+      loggedWarns.push(event);
+    },
     error: (event) => {
       loggedErrors.push(event);
     },
@@ -89,6 +107,8 @@ interface Fixture {
   readonly frames: ReadonlyArray<Record<string, unknown>>;
   /** `logger.error` event names, in call order. */
   readonly loggedErrors: ReadonlyArray<string>;
+  /** `logger.warn` event names, in call order. */
+  readonly loggedWarns: ReadonlyArray<string>;
   readonly close: () => Promise<void>;
 }
 
@@ -103,7 +123,7 @@ interface Fixture {
  */
 type BootChannelExtras = Pick<
   GguiSessionChannelOptions,
-  'appIdFromIdentity' | 'bootstrap' | 'cookieAuth'
+  'appIdFromIdentity' | 'bootstrap' | 'cookieAuth' | 'pendingEventConsumer'
 >;
 
 /**
@@ -135,10 +155,11 @@ async function bootChannel(
   });
 
   const loggedErrors: string[] = [];
+  const loggedWarns: string[] = [];
   const channel = createGguiSessionChannelServer({
     renderStore: store,
     auth: new InMemoryAuthAdapter({ devAllowAll: true }),
-    logger: createRecordingLogger(loggedErrors),
+    logger: createRecordingLogger(loggedErrors, loggedWarns),
     ...(makeExtras !== undefined ? makeExtras(sessionId) : {}),
   });
 
@@ -195,6 +216,7 @@ async function bootChannel(
     nextFrame,
     frames,
     loggedErrors,
+    loggedWarns,
     close: async () => {
       ws.close();
       await channel.close();
@@ -209,8 +231,11 @@ async function bootChannel(
  * {@link bootChannel} + subscribe. Subscribe ack is already consumed
  * when this resolves.
  */
-async function bootSubscribed(actionSpec: ActionSpec): Promise<Fixture> {
-  const fx = await bootChannel(actionSpec);
+async function bootSubscribed(
+  actionSpec: ActionSpec,
+  makeExtras?: (sessionId: string) => BootChannelExtras,
+): Promise<Fixture> {
+  const fx = await bootChannel(actionSpec, makeExtras);
   fx.ws.send(
     JSON.stringify({
       type: 'subscribe',
@@ -556,5 +581,160 @@ describe('handleSubscribe — identity-default appId resolution (absent payload.
     const ack = await fx.nextFrame('ack');
     expect((ack['payload'] as { session?: { id?: string } }).session?.id).toBe(fx.sessionId);
     expect(fx.frames.filter((f) => f['type'] === 'error')).toEqual([]);
+  });
+});
+
+describe('handleInboundAction — WS action → pending-events pipe bridge (ggui_consume drains)', () => {
+  let fx: Fixture | null = null;
+  afterEach(async () => {
+    if (fx) {
+      await fx.close();
+      fx = null;
+    }
+  });
+
+  const ARCHIVE_SPEC: ActionSpec = {
+    archive: {
+      label: 'Archive',
+      nextStep: 'todo_archive',
+      schema: {
+        type: 'object',
+        properties: { id: { type: 'string' } },
+        required: ['id'],
+      },
+    },
+  };
+
+  /**
+   * Boot the REAL pieces end-to-end: the channel server with a
+   * `pendingEventConsumer` wired (as `createGguiServer` composes it),
+   * the pipe opened at render time (as `ggui_render`'s `markCreated`
+   * call does), and the REAL `createGguiConsumeHandler` draining the
+   * SAME consumer instance — the agent's side of the loop.
+   */
+  async function bootBridged(): Promise<{
+    fixture: Fixture;
+    consumer: InMemoryPendingEventConsumer;
+    drain: () => Promise<GguiConsumeOutput>;
+  }> {
+    const consumer = new InMemoryPendingEventConsumer();
+    const fixture = await bootSubscribed(ARCHIVE_SPEC, () => ({
+      pendingEventConsumer: consumer,
+    }));
+    consumer.markCreated(fixture.sessionId);
+    const consumeHandler = createGguiConsumeHandler({
+      pendingEventConsumer: consumer,
+      renderStore: fixture.store,
+    });
+    return {
+      fixture,
+      consumer,
+      drain: async () => {
+        const out = await consumeHandler.handler(
+          { sessionId: fixture.sessionId, timeout: 0 },
+          { appId: APP_ID, requestId: 'bridge-drain' },
+        );
+        return out as GguiConsumeOutput;
+      },
+    };
+  }
+
+  it('a WS data:submit action lands on the pipe and ggui_consume drains the canonical ConsumeEventEntry', async () => {
+    const { fixture, drain } = await bootBridged();
+    fx = fixture;
+
+    await submitAction(fx, { action: 'archive', data: { id: 't1' } });
+
+    const out = await drain();
+    expect(out.status).toBe('active');
+    expect(out.events).toHaveLength(1);
+    const entry = out.events[0]!;
+    expect(entry.type).toBe('action');
+    expect(entry.sessionId).toBe(fx.sessionId);
+    expect(entry.intent).toBe('archive');
+    expect(entry.actionData).toEqual({ id: 't1' });
+    // WS clients mirror no contextSpec snapshot — canonical empty object.
+    expect(entry.uiContext).toEqual({});
+    // Server-minted 8-hex correlation id + ISO firedAt (server clock).
+    expect(entry.actionId).toMatch(/^[0-9a-f]{8}$/);
+    expect(Number.isFinite(Date.parse(entry.firedAt))).toBe(true);
+    // The pipe entry is the relay-identical consume shape — the
+    // operator-facing `tool` hint lives ONLY on the retained ledger
+    // copy (see the tool-hint suite above).
+    expect('tool' in entry).toBe(false);
+
+    // Dual-write: the ledger copy is still there, with the hint.
+    const ledger = await persistedPayload(fx);
+    expect(ledger.action).toBe('archive');
+    expect(ledger.tool).toBe('todo_archive');
+
+    // Queue semantics: the drain cleared the pipe.
+    const second = await drain();
+    expect(second.events).toHaveLength(0);
+  });
+
+  it('ack semantics are unchanged by the bridge: sequence still comes from the ledger and increments per action', async () => {
+    const { fixture, drain } = await bootBridged();
+    fx = fixture;
+
+    const sequences: number[] = [];
+    for (const id of ['a1', 'a2']) {
+      fx.ws.send(
+        JSON.stringify({
+          type: 'action',
+          payload: {
+            sessionId: fx.sessionId,
+            type: 'data:submit',
+            payload: { action: 'archive', data: { id } },
+          },
+          requestId: randomUUID(),
+        }),
+      );
+      const ack = await fx.nextFrame('ack');
+      sequences.push((ack['payload'] as { sequence: number }).sequence);
+    }
+    expect(sequences[1]!).toBeGreaterThan(sequences[0]!);
+
+    const out = await drain();
+    expect(out.events.map((e) => e.actionData)).toEqual([{ id: 'a1' }, { id: 'a2' }]);
+  });
+
+  it('a missing pipe degrades to ledger-only with a warn — the ack is unaffected', async () => {
+    // Consumer wired but the pipe never opened (the render did not come
+    // from ggui_render) — append throws PendingPipeNotFoundError.
+    const consumer = new InMemoryPendingEventConsumer();
+    fx = await bootSubscribed(ARCHIVE_SPEC, () => ({
+      pendingEventConsumer: consumer,
+    }));
+
+    await submitAction(fx, { action: 'archive', data: { id: 't9' } });
+
+    expect(fx.loggedWarns).toContain('render_channel_consume_append_failed');
+    // Ledger write + ack happened regardless (submitAction asserted the
+    // ack); the retained event is intact.
+    const ledger = await persistedPayload(fx);
+    expect(ledger.data).toEqual({ id: 't9' });
+  });
+
+  it('non-data:submit envelopes stay ledger-only — the pipe never sees them', async () => {
+    const { fixture, drain } = await bootBridged();
+    fx = fixture;
+
+    fx.ws.send(
+      JSON.stringify({
+        type: 'action',
+        payload: {
+          sessionId: fx.sessionId,
+          type: 'lifecycle:focus',
+          payload: { focused: true },
+        },
+        requestId: randomUUID(),
+      }),
+    );
+    const ack = await fx.nextFrame('ack');
+    expect((ack['payload'] as { sequence: number }).sequence).toBeGreaterThan(0);
+
+    const out = await drain();
+    expect(out.events).toHaveLength(0);
   });
 });

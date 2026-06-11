@@ -303,18 +303,6 @@ export interface StreamEnvelope {
 }
 
 /**
- * Payload for stream message (Server → Client)
- * Delivers streaming text chunks from the agent in real-time.
- */
-export interface StreamPayload {
-  sessionId: string;
-  /** Text chunk from agent. Empty string on final (done=true) message. */
-  chunk: string;
-  /** Whether this is the final chunk in the stream. */
-  done: boolean;
-}
-
-/**
  * Payload for error message.
  * The `details` field is {@link JsonValue} to carry any JSON-safe diagnostic data.
  *
@@ -458,34 +446,13 @@ export interface ClosePayload {
 export type GenerationStrategy = 'strict' | 'balanced' | 'creative';
 
 /**
- * Progress step during UI generation
+ * Progress step during UI generation. Consumed by
+ * {@link InternalProgressPayload} (`internal:progress`, generator →
+ * handler) — never delivered to clients directly; client-visible
+ * generation progress flows as `{type: 'data'}` envelopes on the
+ * reserved `_ggui:lifecycle` channel.
  */
 export type ProgressStep = 'queued' | 'primitives' | 'writing' | 'compiling';
-
-/**
- * Payload for progress message (Server → Client)
- */
-export interface ProgressPayload {
-  sessionId: string;
-  step: ProgressStep;
-  message: string;
-}
-
-/**
- * Payload for agent thinking message (Server → Client).
- * Sent immediately when a user message is received, before the agent processes it.
- * Agent message payload — used for both thinking and final messages.
- */
-export type AgentMsgType = 'thinking' | 'chat';
-
-export interface AgentMsgPayload {
-  /** Message type — 'thinking' for status updates, 'chat' for final responses */
-  type: AgentMsgType;
-  /** Message text from the agent */
-  message: string;
-  /** GguiSession ID */
-  sessionId: string;
-}
 
 /**
  * Payload for props_update message (Server → Client).

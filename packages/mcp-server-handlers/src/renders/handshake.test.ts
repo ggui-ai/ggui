@@ -174,7 +174,9 @@ describe('createGguiHandshakeHandler — MVB-5', () => {
       expect(out.suggestion.origin).toBe('agent');
       expect(out.suggestion.blueprintMeta).toBeDefined();
       expect(out.suggestion.blueprintMeta.codeHash).toBeUndefined();
-      expect(out.suggestion.blueprintMeta.generator).toBe(DEFAULT_GENERATOR_SLUG);
+      // No provenance on agent origin — gen pending; the source is
+      // minted at render-time registration (cache-only field).
+      expect(out.suggestion.blueprintMeta.source).toBeUndefined();
     });
 
     it('carries proposedContractSummary and NO blueprintId (P2-18)', async () => {
@@ -234,13 +236,11 @@ describe('createGguiHandshakeHandler — MVB-5', () => {
       });
     });
 
-    it('honors the draft.generator hint when it matches a registered generator', async () => {
-      // Strict generator-validator (ea26d3481, 2026-05-18) is an
-      // allow-list against the deployment's `defaultGenerator` dep —
-      // unknown slugs fail at the wire boundary. To exercise the
-      // honor-the-hint path we inject the slug as the registered
-      // generator and re-assert; the value flows through to
-      // `blueprintMeta.generator`.
+    it('accepts a registered draft.generator hint without a GENERATOR_UNKNOWN finding', async () => {
+      // The dispatch hint stays on the INPUT (BlueprintDraft.generator)
+      // and is validated against the deployment's `defaultGenerator`
+      // dep. It is no longer echoed onto the suggestion — BlueprintMeta
+      // carries provenance (`source`, cache-only), not dispatch.
       const kvStore = new InMemoryKeyValueStore();
       const handler = createGguiHandshakeHandler({
         kvStore,
@@ -255,7 +255,12 @@ describe('createGguiHandshakeHandler — MVB-5', () => {
         }),
         { appId: 'app-1', requestId: 'r' },
       );
-      expect(out.suggestion.blueprintMeta.generator).toBe('custom-generator-slug');
+      const finding = out.suggestion.validationFindings?.find(
+        (f) => f.code === 'GENERATOR_UNKNOWN',
+      );
+      expect(finding).toBeUndefined();
+      // Agent origin ⇒ no provenance on the suggestion.
+      expect(out.suggestion.blueprintMeta.source).toBeUndefined();
     });
 
     it('forgivingly drops an unknown draft.generator — default used + GENERATOR_UNKNOWN finding', async () => {
@@ -276,14 +281,14 @@ describe('createGguiHandshakeHandler — MVB-5', () => {
         }),
         { appId: 'app-1', requestId: 'r' },
       );
-      // Did NOT throw: falls back to the server default generator…
-      expect(out.suggestion.blueprintMeta.generator).toBe(DEFAULT_GENERATOR_SLUG);
-      // …and surfaces a GENERATOR_UNKNOWN warn finding naming the slug.
+      // Did NOT throw — and surfaces a GENERATOR_UNKNOWN warn finding
+      // naming the slug + the default that replaced it.
       const finding = out.suggestion.validationFindings?.find(
         (f) => f.code === 'GENERATOR_UNKNOWN',
       );
       expect(finding?.severity).toBe('warn');
       expect(finding?.message).toMatch(/unregistered-slug/);
+      expect(finding?.message).toMatch(new RegExp(DEFAULT_GENERATOR_SLUG));
     });
   });
 
@@ -344,7 +349,11 @@ describe('createGguiHandshakeHandler — MVB-5', () => {
           blueprintId: 'bp_existing',
           contractHash: 'hash_cached',
           codeHash: 'code_hash_abc',
-          generator: 'ui-gen-default-haiku-4-5',
+          source: {
+            kind: 'llm',
+            generator: 'ui-gen-default-haiku-4-5',
+            model: 'claude-haiku-4-5',
+          },
           variance: {},
         },
       };
@@ -375,7 +384,6 @@ describe('createGguiHandshakeHandler — MVB-5', () => {
         blueprintMeta: {
           blueprintId: 'bp_provisional',
           contractHash: 'hash_amended',
-          generator: 'ui-gen-default-haiku-4-5',
           variance: {},
         },
         amendments: {
@@ -408,7 +416,11 @@ describe('createGguiHandshakeHandler — MVB-5', () => {
         blueprintId: 'bp_alt',
         contractHash: 'hash_alt',
         appId: 'app-1',
-        generator: 'ui-gen-default-haiku-4-5',
+        source: {
+          kind: 'llm',
+          generator: 'ui-gen-default-haiku-4-5',
+          model: 'claude-haiku-4-5',
+        },
         variance: { persona: 'data-dense' },
         createdAt: '2026-05-12T00:00:00.000Z',
         createdBy: 'agent',
@@ -420,7 +432,6 @@ describe('createGguiHandshakeHandler — MVB-5', () => {
         blueprintMeta: {
           blueprintId: 'bp_prim',
           contractHash: 'hash_prim',
-          generator: 'ui-gen-default-haiku-4-5',
           variance: {},
         },
       };
@@ -452,7 +463,11 @@ describe('createGguiHandshakeHandler — MVB-5', () => {
         blueprintMeta: {
           blueprintId: 'bp_existing',
           contractHash: 'hash_x',
-          generator: 'ui-gen-default-haiku-4-5',
+          source: {
+            kind: 'llm',
+            generator: 'ui-gen-default-haiku-4-5',
+            model: 'claude-haiku-4-5',
+          },
           variance: {},
         },
       };
@@ -486,7 +501,11 @@ describe('createGguiHandshakeHandler — MVB-5', () => {
             blueprintId: 'bp_11111111-1111-1111-1111-111111111111',
             contractHash: 'hash_cached',
             codeHash: 'code_hash_abc',
-            generator: 'ui-gen-default-haiku-4-5',
+            source: {
+              kind: 'llm',
+              generator: 'ui-gen-default-haiku-4-5',
+              model: 'claude-haiku-4-5',
+            },
             variance: {},
           },
         },
@@ -645,7 +664,11 @@ describe('createGguiHandshakeHandler — MVB-5', () => {
       expect(out.suggestion.blueprintMeta.blueprintId).toBeUndefined();
       expect(attrs['selectedBlueprintId']).toBeUndefined();
       expect(attrs['selectionReason']).toBeTruthy();
-      expect(attrs['generator']).toBe(DEFAULT_GENERATOR_SLUG);
+      // Agent origin ⇒ no provenance — the flat source keys are
+      // absent (cache-only on BlueprintMeta).
+      expect(attrs['sourceKind']).toBeUndefined();
+      expect(attrs['sourceGenerator']).toBeUndefined();
+      expect(attrs['sourceModel']).toBeUndefined();
       // No selectVariant ran ⇒ no confidence axis.
       expect(attrs['selectionConfidence']).toBeUndefined();
     });
@@ -667,7 +690,11 @@ describe('createGguiHandshakeHandler — MVB-5', () => {
         blueprintMeta: {
           blueprintId: 'bp_picked',
           contractHash: 'hash_x',
-          generator: 'ui-gen-advanced-opus-4-7',
+          source: {
+            kind: 'llm',
+            generator: 'ui-gen-advanced-opus-4-7',
+            model: 'claude-opus-4-7',
+          },
           variance: { persona: 'minimalist' },
           // Confidence encoded onto selectedReason per the MVB-6
           // convention (BlueprintMeta doesn't carry confidence as
@@ -698,7 +725,10 @@ describe('createGguiHandshakeHandler — MVB-5', () => {
       expect(attrs['selectedBlueprintId']).toBe('bp_picked');
       expect(attrs['selectionReason']).toContain('persona match');
       expect(attrs['selectionConfidence']).toBe(0.87);
-      expect(attrs['generator']).toBe('ui-gen-advanced-opus-4-7');
+      // Cache origin ⇒ provenance flattened through the shared codec.
+      expect(attrs['sourceKind']).toBe('llm');
+      expect(attrs['sourceGenerator']).toBe('ui-gen-advanced-opus-4-7');
+      expect(attrs['sourceModel']).toBe('claude-opus-4-7');
     });
 
     it('absent telemetrySink is a noop (no throw)', async () => {

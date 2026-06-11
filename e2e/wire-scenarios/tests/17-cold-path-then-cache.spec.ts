@@ -81,7 +81,10 @@ interface BlueprintMeta {
   blueprintId: string;
   contractHash: string;
   codeHash?: string;
-  generator: string;
+  source?:
+    | { kind: 'llm'; generator: string; model: string }
+    | { kind: 'user' }
+    | { kind: 'curated' };
 }
 
 interface HandshakeSuggestion {

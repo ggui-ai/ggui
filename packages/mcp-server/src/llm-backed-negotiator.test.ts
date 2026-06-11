@@ -30,7 +30,11 @@ function bp(overrides: Partial<Blueprint> & { blueprintId: string }): Blueprint 
     appId: overrides.appId ?? 'app-1',
     codeS3Url: overrides.codeS3Url,
     codeHash: overrides.codeHash,
-    generator: overrides.generator ?? 'ui-gen-default-haiku-4-5',
+    source: overrides.source ?? {
+      kind: 'llm',
+      generator: 'ui-gen-default-haiku-4-5',
+      model: 'claude-haiku-4-5',
+    },
     validatorScore: overrides.validatorScore,
     variance: overrides.variance ?? {},
     isOperatorDefault: overrides.isOperatorDefault,
@@ -43,6 +47,7 @@ function bp(overrides: Partial<Blueprint> & { blueprintId: string }): Blueprint 
 describe('VARIANT_SELECTION_SYSTEM_PROMPT', () => {
   it('emphasizes calibration and the fallback contract', () => {
     expect(VARIANT_SELECTION_SYSTEM_PROMPT).toContain('Calibrate confidence honestly');
+    expect(VARIANT_SELECTION_SYSTEM_PROMPT).toContain('source');
     expect(VARIANT_SELECTION_SYSTEM_PROMPT).toContain('isOperatorDefault');
     expect(VARIANT_SELECTION_SYSTEM_PROMPT).toContain('blueprintId');
     expect(VARIANT_SELECTION_SYSTEM_PROMPT).toContain('persona');
@@ -54,13 +59,17 @@ describe('buildVariantSelectionUserMessage', () => {
   it('projects candidate fields the matcher needs', () => {
     const a = bp({
       blueprintId: 'a',
-      generator: 'ui-gen-default-haiku-4-5',
+      source: {
+        kind: 'llm',
+        generator: 'ui-gen-default-haiku-4-5',
+        model: 'claude-haiku-4-5',
+      },
       validatorScore: 0.92,
       variance: { persona: 'minimalist', seedPrompt: 'clean form' },
     });
     const b = bp({
       blueprintId: 'b',
-      generator: 'ui-gen-advanced-opus-4-7',
+      source: { kind: 'user' },
       isOperatorDefault: true,
       variance: { persona: 'data-dense' },
     });
@@ -74,8 +83,11 @@ describe('buildVariantSelectionUserMessage', () => {
     expect(message).toContain('CANDIDATES:');
     expect(message).toContain('"blueprintId": "a"');
     expect(message).toContain('"blueprintId": "b"');
+    // Provenance union projected verbatim — llm arm with engine
+    // fields, user arm bare.
     expect(message).toContain('"generator": "ui-gen-default-haiku-4-5"');
-    expect(message).toContain('"generator": "ui-gen-advanced-opus-4-7"');
+    expect(message).toContain('"model": "claude-haiku-4-5"');
+    expect(message).toContain('"kind": "user"');
     expect(message).toContain('"validatorScore": 0.92');
     expect(message).toContain('"isOperatorDefault": true');
     expect(message).toContain('"persona": "minimalist"');

@@ -1350,7 +1350,6 @@ export function defaultHandlers(deps: {
     // seeding + export/reimport round-trips.
     handlers.push(
       createGguiOpsRegisterBlueprintHandler({
-        registry: deps.opsBlueprint.registry,
         blueprintStore: deps.opsBlueprint.blueprintStore,
         ...(deps.opsBlueprint.putCode ? { putCode: deps.opsBlueprint.putCode } : {}),
         ...(deps.opsBlueprint.listAllForApp
@@ -2018,7 +2017,7 @@ export interface CreateGguiServerOptions {
    * defaults, operator may replace by key".
    *
    * Absent = the server binds only the A2UI validator for
-   * `_ggui:preview` by default. `_ggui:contract-error` is validated
+   * `_ggui:preview` by default. `_ggui:lifecycle` is validated
    * via the protocol-shipped builtin regardless of this option.
    *
    * Pass `new Map()` (explicitly empty) to DISABLE the A2UI default —
@@ -3601,6 +3600,19 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
     };
   }
 
+  // Shared pending-events pipe — hoisted OUT of `defaultHandlers` so the
+  // live channel can dual-write WS `data:submit` actions onto the SAME
+  // instance `ggui_consume` drains (see
+  // `GguiSessionChannelOptions.pendingEventConsumer`). Passed down via
+  // `consume.pendingEventConsumer`, which `defaultHandlers` prefers over
+  // its own in-memory fallback; threaded into
+  // `createGguiSessionChannelServer` below ONLY when this server
+  // composed the default handler set — a caller-supplied `opts.handlers`
+  // list drains its own pipe (if any), and bridging the channel onto an
+  // instance nobody drains would buffer gestures into the void.
+  const pendingEventConsumer: PendingEventConsumer = new InMemoryPendingEventConsumer();
+  const usingDefaultHandlers = opts.handlers === undefined;
+
   // Default handler set. Opts override entirely — we don't merge, so an
   // explicit `handlers: []` means "expose no tools" (a valid state).
   // Callers who want to EXTEND the defaults (not replace) should use
@@ -3615,6 +3627,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
     defaultHandlers({
       embedding,
       vectors,
+      consume: { pendingEventConsumer },
       // WRITE side of tool-identity canonicalization — the SAME store
       // the handshake negotiator's `toolIdentityCatalog` resolver reads.
       // Registers `ggui_runtime_declare_tool_catalog`.
@@ -8306,7 +8319,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
   // Reserved-channel payload validators (Item 4 injection pattern): by
   // default the server binds the A2UI adapter for `_ggui:preview` so
   // malformed preview frames reject at the fan-out boundary instead of
-  // landing in subscribers. `_ggui:contract-error` is validated via
+  // landing in subscribers. `_ggui:lifecycle` is validated via
   // `@ggui-ai/protocol`'s built-in regardless of this composition.
   // Operators passing `extraReservedValidators` override the default A2UI
   // entry on key conflict — otherwise the two maps merge layer-wise.
@@ -8317,6 +8330,11 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
   const channel: GguiSessionChannelServer | null = opts.renderChannel
     ? createGguiSessionChannelServer({
         renderStore: renderStore ?? new InMemoryGguiSessionStore(),
+        // WS action → consume bridge. Only when this server composed the
+        // default handler set — that's when `ggui_consume` demonstrably
+        // drains THIS pipe instance (see the hoist comment above
+        // `baseHandlers`).
+        ...(usingDefaultHandlers ? { pendingEventConsumer } : {}),
         auth,
         // Same identity → appId mapping the `/mcp` endpoint resolved
         // above — subscribes that omit `payload.appId` resolve their

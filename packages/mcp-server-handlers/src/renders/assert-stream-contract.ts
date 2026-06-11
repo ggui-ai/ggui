@@ -11,7 +11,7 @@
  *     payload check runs through `validateStreamData`'s two-tier
  *     lookup (extras + builtins per Item 4 injection pattern), so a
  *     render without any user streamSpec still rejects malformed
- *     `_ggui:contract-error` / `_ggui:preview` emissions.
+ *     `_ggui:lifecycle` / `_ggui:preview` emissions.
  *   - User channels: `spec === undefined` → no-op (missing streamSpec
  *     is permissive; nothing to enforce at this boundary). Otherwise
  *     validate channel is declared + payload conforms; on failure

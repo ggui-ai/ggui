@@ -117,7 +117,7 @@ export function validateOutboundActionPayload(
  *     `streamSpec === undefined`, because the payload shape is
  *     server-owned (or injected). Runs through `validateStreamData`'s
  *     two-tier lookup: extras first, then BUILTIN
- *     (`_ggui:contract-error` ships a protocol-owned validator), then
+ *     (`_ggui:lifecycle` ships a protocol-owned validator), then
  *     fall-through to valid.
  *   - User channels retain the permissive behavior — no streamSpec =
  *     no contract to enforce on inbound.

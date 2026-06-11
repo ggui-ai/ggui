@@ -21,7 +21,7 @@
  * ## Current coverage
  *
  * Six sub-modules with content (12 fixtures). Additional sub-modules
- * (`data-contract`, `tool-name-uniqueness`, `contract-error-payload`)
+ * (`data-contract`, `tool-name-uniqueness`)
  * are reserved for additive fixture expansion and not yet
  * materialized — adding fixtures there is a kit minor version.
  *

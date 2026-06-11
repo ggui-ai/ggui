@@ -75,7 +75,7 @@ import gateTypoClassifiesAsNotRegistered from './cases/gate-typo-classifies-as-n
  * push into — the SPEC §7.9 Plane-2 slugs for the four gadget gate
  * rejections. Extensibly-closed `(string & {})` tail so a later
  * protocol revision's code rides through without a kit bump — same
- * discipline as `ContractErrorCode` in `../types.ts`.
+ * discipline as `BootstrapFailureReason` in `../types.ts`.
  */
 export type GadgetGateRejectCode =
   | 'gadget_not_registered'

@@ -30,7 +30,11 @@ function makeSeed(opts: {
     blueprintId: opts.blueprintId ?? 'bp_seed',
     contractHash: blueprintKey(contract),
     appId: opts.appId ?? 'app-1',
-    generator: 'ui-gen-default-haiku-4-5',
+    source: {
+      kind: 'llm',
+      generator: 'ui-gen-default-haiku-4-5',
+      model: 'claude-haiku-4-5',
+    },
     codeHash: 'codehash_abc',
     variance: {
       ...(opts.persona !== undefined ? { persona: opts.persona } : {}),
@@ -144,7 +148,7 @@ describe('createGguiOpsUpdateBlueprintHandler — operator default', () => {
 });
 
 describe('createGguiOpsUpdateBlueprintHandler — immutable fields', () => {
-  it('preserves contractHash + codeHash + generator + createdBy + createdAt', async () => {
+  it('preserves contractHash + codeHash + source + createdBy + createdAt', async () => {
     const blueprintStore = new InMemoryBlueprintStore();
     const seed = makeSeed({
       persona: 'minimalist',
@@ -161,7 +165,7 @@ describe('createGguiOpsUpdateBlueprintHandler — immutable fields', () => {
     const after = await blueprintStore.get('bp_seed');
     expect(after?.contractHash).toBe(seed.contractHash);
     expect(after?.codeHash).toBe(seed.codeHash);
-    expect(after?.generator).toBe(seed.generator);
+    expect(after?.source).toEqual(seed.source);
     expect(after?.createdBy).toBe(seed.createdBy);
     expect(after?.createdAt).toBe(seed.createdAt);
   });

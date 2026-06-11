@@ -247,7 +247,6 @@ function buildRecord(opts: {
       rationale: 'test',
       blueprintMeta: {
         contractHash: blueprintKey(CONTRACT),
-        generator: 'fake',
         variance: {},
       },
     },
@@ -366,7 +365,6 @@ async function buildAcceptCacheHarnessFor(
       rationale: 'test',
       blueprintMeta: {
         contractHash: blueprintKey(contract),
-        generator: 'fake',
         variance: {},
       },
     },
@@ -746,7 +744,6 @@ describe('createGguiRenderHandler — seed-pool-aware reuse point-read', () => {
         rationale: 'test',
         blueprintMeta: {
           contractHash: blueprintKey(opts.contract),
-          generator: 'fake',
           variance: {},
         },
       },
@@ -897,7 +894,6 @@ describe('createGguiRenderHandler — seed-pool-aware reuse point-read', () => {
         rationale: 'test',
         blueprintMeta: {
           contractHash: blueprintKey(SEED_CONTRACT),
-          generator: 'fake',
           variance: {},
         },
       },

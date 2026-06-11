@@ -41,6 +41,7 @@ import { isGeneratorRegistered } from './assert-generator.js';
 import { blueprintKey } from '@ggui-ai/protocol/blueprint-key';
 import {
   STDLIB_GADGETS,
+  blueprintSourceToFlat,
   validateContract,
   lintContract,
   summarizeContract,
@@ -49,6 +50,7 @@ import {
   type Blueprint,
   type BlueprintDraft,
   type BlueprintMeta,
+  type BlueprintSourceKind,
   type GadgetDescriptor,
   type DataContract,
   type HandshakeSuggestion,
@@ -116,9 +118,8 @@ export interface HandshakeStoredTarget {
  * Persisted handshake record. The paired `ggui_render` reads:
  *
  *   - `suggestion.blueprintMeta` — the provisional blueprintId +
- *     contractHash + (when cache) codeHash for accept-path delivery.
- *   - `suggestion.blueprintMeta.generator` — which generator slug to
- *     drive on gen.
+ *     contractHash + (when cache) codeHash + `source` (the matched
+ *     row's stored provenance) for accept-path delivery.
  *   - `input.blueprintDraft.contract` — the agent's original draft
  *     (only used for telemetry; accept-path runs gen against the
  *     suggestion's stored contract).
@@ -573,10 +574,7 @@ export function createGguiHandshakeHandler(
             ...(gadgets !== undefined ? { gadgets } : {}),
             ctx,
           })
-        : buildDefaultAgentSuggestion(
-            normalizedInput.blueprintDraft,
-            defaultGenerator,
-          );
+        : buildDefaultAgentSuggestion(normalizedInput.blueprintDraft);
 
       // Backstop: the negotiator's effectiveContract MUST pass the
       // single deterministic gate. For a bound negotiator this is
@@ -707,7 +705,6 @@ export function createGguiHandshakeHandler(
  */
 function buildDefaultAgentSuggestion(
   blueprintDraft: DraftInput,
-  defaultGenerator: string,
 ): HandshakeNegotiatorResult {
   const lint = lintContract(blueprintDraft.contract);
   const clean = lint.errors.length === 0;
@@ -721,12 +718,11 @@ function buildDefaultAgentSuggestion(
     path: e.path,
     message: e.message,
   }));
-  const generator = blueprintDraft.generator ?? defaultGenerator;
-  // No blueprintId — origin:'agent' (D4): the durable UUID is minted at
-  // render-time registration, never at handshake.
+  // No blueprintId, no source — origin:'agent' (D4): the durable UUID
+  // and the real provenance are both minted at render-time
+  // registration, never at handshake.
   const blueprintMeta: BlueprintMeta = {
     contractHash: blueprintKey(contract),
-    generator,
     variance: {
       ...(blueprintDraft.variance?.persona !== undefined
         ? { persona: blueprintDraft.variance.persona }
@@ -880,6 +876,11 @@ export const HANDSHAKE_DECIDED_EVENT = 'handshake.decided';
 
 /**
  * Telemetry attributes shape on `handshake.decided`.
+ *
+ * Provenance rides on the flat-codec keys (`sourceKind` /
+ * `sourceGenerator` / `sourceModel` — see `FLAT_BLUEPRINT_SOURCE_KEYS`
+ * in `@ggui-ai/protocol`), present iff the suggestion carries a
+ * cache-backed `blueprintMeta.source` (`origin === 'cache'`).
  */
 export interface HandshakeDecidedAttributes {
   readonly appId: string;
@@ -889,7 +890,9 @@ export interface HandshakeDecidedAttributes {
   readonly selectedBlueprintId: string;
   readonly selectionReason: string;
   readonly selectionConfidence?: number;
-  readonly generator: string;
+  readonly sourceKind?: BlueprintSourceKind;
+  readonly sourceGenerator?: string;
+  readonly sourceModel?: string;
 }
 
 /**
@@ -926,7 +929,9 @@ function emitHandshakeDecided(
     action: record.action,
     origin: record.suggestion.origin,
     selectionReason: reason,
-    generator: meta.generator,
+    // Provenance (cache origin only) — flattened through the shared
+    // codec so telemetry rows use the same key vocabulary as stores.
+    ...(meta.source ? blueprintSourceToFlat(meta.source) : {}),
   };
   // blueprintId is absent on agent/synth origins (D4) — the UUID is
   // minted at render-time registration, not at handshake. Only emit the

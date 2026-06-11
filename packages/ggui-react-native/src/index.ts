@@ -4,8 +4,8 @@
  * Provides React Native components, hooks, and utilities for embedding ggui
  * agent interfaces in mobile applications. Includes WebSocket session
  * management with AppState/NetInfo awareness, dynamic component rendering
- * (descriptor-based native or WebView fallback), client-side data tools,
- * and a React Native theme system that mirrors the web design tokens.
+ * (descriptor-based native or WebView fallback), and a React Native theme
+ * system that mirrors the web design tokens.
  *
  * @packageDocumentation
  */
@@ -51,11 +51,8 @@ export type {
   PermissionStatus,
   SubscribePayload,
   AckPayload,
-  StreamPayload,
   StreamEnvelope,
   ErrorPayload,
-  ProgressStep,
-  ProgressPayload,
   RenderPayload,
   PropsUpdatePayload,
   UrlPayload,
@@ -177,10 +174,14 @@ export type { UseInvokeOptions, UseInvokeReturn, ConversationMessage, InvokeErro
 export { useWebSocket } from './hooks/useWebSocket';
 export type { UseWebSocketOptions, UseWebSocketReturn } from './hooks/useWebSocket';
 export { useAppState } from './hooks/useAppState';
+// NOTE(F4 follow-up): `useAgentStream` listens for a `ggui:agent-stream`
+// CustomEvent that no longer has any dispatcher (the `{type:'stream'}`
+// WS frame and its bridge re-dispatch were retired draft-2026-06-11).
+// The hook file is kept for now because a parallel work stream has
+// in-flight changes on it — resolve its fate (delete or re-wire to a
+// real emitter) when that work lands.
 export { useAgentStream } from './hooks/useAgentStream';
 export type { UseAgentStreamOptions } from './hooks/useAgentStream';
-export { useGenerationProgress, STEP_PROGRESS } from './hooks/useGenerationProgress';
-export type { ProgressState } from './hooks/useGenerationProgress';
 
 // WebSocket
 export { WebSocketManager } from './websocket/WebSocketManager';
@@ -188,52 +189,3 @@ export type { WebSocketManagerOptions } from './websocket/WebSocketManager';
 export { EventBuffer } from './websocket/EventBuffer';
 export type { EventBufferOptions } from './websocket/EventBuffer';
 
-// Tools System
-export {
-  // Registry
-  toolRegistry,
-  registerTool,
-  defineTool,
-  // Hooks
-  useTool,
-  useBindings,
-  useBinding,
-  // Resolver utilities
-  resolveBindings,
-  topologicalSort,
-  interpolateString,
-  interpolateConfig,
-  getNestedValue,
-  validateBindings,
-  // Built-in tools
-  fetchTool,
-  clearFetchCache,
-  authTool,
-  storageTool,
-  writeStorage,
-  removeStorage,
-  chainTool,
-  transformTool,
-  mergeTool,
-} from './tools';
-export type {
-  ToolContext,
-  ToolExecutor,
-  ToolDefinition,
-  UseToolReturn,
-  UseToolOptions,
-  ResolvedBindings,
-  UseBindingsOptions,
-  ToolResult,
-  ClientToolName,
-  ClientToolConfig,
-  DataBindings,
-  TypedToolConfig,
-  FetchToolConfig,
-  AuthToolConfig,
-  StorageToolConfig,
-  SubscriptionToolConfig,
-  ChainToolConfig,
-  TransformToolConfig,
-  MergeToolConfig,
-} from './tools';

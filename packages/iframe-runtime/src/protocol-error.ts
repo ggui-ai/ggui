@@ -1,16 +1,14 @@
 /**
  * `ProtocolError` typed union — canonical shape for every error the
- * renderer surfaces OUTWARD: to the host page via postMessage, to the
- * render via the `_ggui:contract-error` channel, and to the
- * in-iframe status DOM.
+ * renderer surfaces OUTWARD: to the host page via postMessage and to
+ * the in-iframe status DOM.
  *
  * The transport wiring around this union:
  *
  *   - Boot-path failures reach the host page via the protocol-owned
  *     `postMessage({type:'ggui:bootstrap-failed', reason, message})`
- *     envelope (`MCP_APP_BOOTSTRAP_FAILED_TYPE`); the
- *     `_ggui:contract-error` envelope on the live channel carries
- *     render-bound failures. There is NO `ggui:protocol-error`
+ *     envelope (`MCP_APP_BOOTSTRAP_FAILED_TYPE`). There is NO
+ *     `ggui:protocol-error`
  *     postMessage envelope — the typed union itself travels only
  *     through the in-process {@link ProtocolErrorEmitter} seam.
  *   - `<McpAppIframe onError={(err: ProtocolError) => …}>` surfaces
@@ -30,7 +28,6 @@
  * fields) is fully closed — drift there is a real shape change, not
  * a new code.
  */
-import type { ContractErrorPayload } from '@ggui-ai/protocol';
 import { ClientContractViolationError } from '@ggui-ai/wire';
 
 // =============================================================================
@@ -100,10 +97,9 @@ export type BootstrapFailureReason =
  *                    Extensibly-closed on `code` because servers may
  *                    introduce new codes without a client bump.
  *                    `details` carries opaque structured context.
- *   - `contract`   — client-contract violation. Payload matches the
- *                    protocol-owned `ContractErrorPayload` so the
- *                    `_ggui:contract-error` envelope shape flows
- *                    unchanged through this variant.
+ *                    Client-side contract violations ride this variant
+ *                    as `code: 'CLIENT_CONTRACT_VIOLATION'` (see
+ *                    {@link fromClientContractViolation}).
  *   - `bootstrap`  — anything in {@link BootstrapFailureReason}.
  *   - `version`    — `UPGRADE_REQUIRED` path (handshake rejection).
  *                    `serverVersion` may be absent on the wire; callers
@@ -121,7 +117,6 @@ export type ProtocolError =
       readonly message?: string;
       readonly details?: unknown;
     }
-  | { readonly kind: 'contract'; readonly payload: ContractErrorPayload }
   | { readonly kind: 'bootstrap'; readonly reason: BootstrapFailureReason; readonly message: string }
   | { readonly kind: 'version'; readonly serverVersion?: string; readonly clientSupports: readonly string[]; readonly message?: string }
   | { readonly kind: 'unknown'; readonly raw: unknown };
@@ -135,9 +130,7 @@ export type ProtocolError =
  *
  * This is OPTIONAL on every emitter site — the default is a tagged
  * `console.warn` so operators see the error in dev. The
- * `<McpAppIframe>` host wrapper bridges this to its `onError` prop;
- * render-bound variants are ALSO routed to the
- * `_ggui:contract-error` envelope over the WebSocket.
+ * `<McpAppIframe>` host wrapper bridges this to its `onError` prop.
  *
  * Handlers MUST NOT throw — the emitter already fired the renderer's
  * own fallback path; a throwing handler would mask the real error.
@@ -167,18 +160,10 @@ export function defaultProtocolErrorEmitter(err: ProtocolError): void {
  * outbound action, or when an inbound stream / props payload fails the
  * local validator) onto a `ProtocolError`.
  *
- * Client-side violations do NOT ride the server-emitted
- * `_ggui:contract-error` envelope — that shape (`ContractErrorPayload`)
- * is server-authored vocabulary for contract failures the server
- * observes. A client-side violation is a DIFFERENT category: nothing
- * left the renderer. We surface it as `{kind: 'protocol'; code:
+ * A client-side violation never left the renderer — nothing reached
+ * the server. We surface it as `{kind: 'protocol'; code:
  * 'CLIENT_CONTRACT_VIOLATION'}` with structured `details` so hosts can
  * render the same summary that `console.warn` would have produced.
- *
- * Server-emitted `ContractErrorPayload` landing on
- * `_ggui:contract-error` rides the separate `{kind: 'contract'}`
- * variant — that path activates when the renderer observes the
- * reserved channel.
  */
 export function fromClientContractViolation(
   err: ClientContractViolationError,
@@ -192,19 +177,6 @@ export function fromClientContractViolation(
       violations: err.violations,
     },
   };
-}
-
-/**
- * Wrap a server-emitted `ContractErrorPayload` (received over the
- * reserved `_ggui:contract-error` channel) as the 'contract' variant.
- * Trivial wrapper — exists so call sites produce the union via a
- * factory rather than an object literal (keeps emission uniform and
- * makes grep for creation sites exact).
- */
-export function fromContractErrorPayload(
-  payload: ContractErrorPayload,
-): ProtocolError {
-  return { kind: 'contract', payload };
 }
 
 /**

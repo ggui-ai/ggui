@@ -353,8 +353,10 @@ function matchErrorFrame(
  * {@link deepMatchSubset}).
  *
  * Two near-miss frames deliberately do NOT match:
- *   - `{type: 'stream', payload: {sessionId, chunk, done}}` — the
- *     agent text-chunk streaming frame, a different wire type.
+ *   - Any frame whose `type` is not `data` — e.g. the retired
+ *     `{type: 'stream'}` text-chunk frame (left the protocol union
+ *     draft-2026-06-11; an implementation still emitting it never
+ *     satisfies a stream-update expectation).
  *   - Any `data` frame whose body fails the {@link StreamEnvelope}
  *     shape (missing `sessionId` / `channel` / `mode`) — a
  *     non-conformant envelope must not satisfy the assertion.

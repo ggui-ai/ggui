@@ -1,3 +1,32 @@
+/**
+ * GguiRender (web) — mounts one ggui render over the live WS channel.
+ *
+ * ## Platform deltas vs the React Native twin
+ *
+ * Near-twin of `@ggui-ai/react-native`'s `components/GguiRender.tsx`.
+ * Mirror behavior-neutral changes to the twin. Load-bearing
+ * differences (everything else should match):
+ *
+ *   - Wire hooks: web wraps `children` in `GguiWireProvider` with a
+ *     `WireConfig` built by `@ggui-ai/wire`'s shared `buildWireConfig`
+ *     (the same pipeline the iframe runtime composes), so the scoped
+ *     wire hooks (`useAction`, channel subscriptions) resolve through
+ *     it. RN renders children bare — the WireProvider port is a
+ *     pending RN slice; RN's `api.action` validates against the
+ *     active actionSpec inline instead.
+ *   - `GguiSessionApi`: web exposes `send`; RN omits it.
+ *   - Event bus: web delivers inbound `data` frames on a per-render
+ *     `StreamBus` (reserved-channel replay ring included) consumed by
+ *     wire subscriptions + `useChannelStream`, and ALSO broadcasts
+ *     them as `window` CustomEvents for host shells; RN gates every
+ *     `window` touch behind `Platform.OS === 'web'` (no DOM event bus
+ *     on native) and has no StreamBus yet — porting the bus + replay
+ *     ring is part of the same pending RN slice.
+ *
+ * The byte-identical chat-thread / chat-helpers twins are pinned by
+ * `twin-parity.test.ts` in both SDKs; the eventual fix is hoisting
+ * the platform-neutral core into a shared package.
+ */
 import { useEffect, useCallback, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { ConnectionStatus, WebSocketMessage } from '@ggui-ai/protocol/transport/websocket';
 import type {
@@ -6,21 +35,18 @@ import type {
   EventType,
   GguiSession,
   ReservedChannelValidator,
-  StreamEnvelope,
-  StreamPayload,
-  ProgressPayload,
   SystemPayload,
   JsonValue,
 } from '@ggui-ai/protocol';
 import { BRIDGE_EVENTS, CLIENT_SUPPORTED_VERSIONS, UpgradeRequiredError } from '@ggui-ai/protocol';
 import {
   buildActionEnvelope,
+  buildWireConfig,
   ClientContractViolationError,
   GguiWireProvider,
+  StreamBus,
   validateInboundPropsPayload,
   validateInboundStreamPayload,
-  validateOutboundActionEnvelope,
-  type StreamDelivery,
   type WireConfig,
 } from '@ggui-ai/wire';
 import { useGguiContext } from './GguiProvider';
@@ -29,6 +55,7 @@ import {
   composePreviewReservedValidator,
   mergeReservedValidators,
 } from '../internal/reserved-validators';
+import { StreamBusContext } from '../internal/stream-bus-context';
 
 /**
  * Minimal render metadata passed to lifecycle callbacks.
@@ -70,8 +97,8 @@ function surfaceContractViolation(
 /**
  * Props for the {@link GguiRender} component.
  *
- * Provides lifecycle, data, interaction, progress, streaming, and error
- * hooks for fine-grained control over the mounted render.
+ * Provides lifecycle, data, interaction, and error hooks for
+ * fine-grained control over the mounted render.
  */
 export interface GguiRenderProps {
   /**
@@ -98,12 +125,6 @@ export interface GguiRenderProps {
   // the envelope's `payload` carries the interaction-specific data.
   onInteraction?: (envelope: ActionEnvelope) => void;
 
-  // Progress hooks
-  onProgress?: (progress: ProgressPayload) => void;
-
-  // Streaming hooks
-  onStream?: (payload: StreamPayload) => void;
-
   // System hooks
   onSystemMessage?: (payload: SystemPayload) => void;
 
@@ -121,7 +142,7 @@ export interface GguiRenderProps {
    * operator may replace by key".
    *
    * Absent = only the A2UI validator runs on `_ggui:preview`.
-   * `_ggui:contract-error` is validated via the protocol's built-in
+   * `_ggui:lifecycle` is validated via the protocol's built-in
    * regardless of this prop.
    *
    * Pass `new Map()` (explicitly empty) to DISABLE the A2UI default —
@@ -151,8 +172,12 @@ export interface ActionMeta {
  *
  * - **action** — Submit user interaction data from a rendered UI component.
  *   Used when a user clicks a button or submits a form inside a generated
- *   component. Dispatches a `data:submit` event that the agent can receive
- *   via `ggui_consume`. Named "action" to match the data contract concept.
+ *   component. Dispatches a `data:submit` event over the live channel;
+ *   the server bridges it onto the pending-events pipe, so the agent
+ *   receives it via `ggui_consume`. Named "action" to match the data
+ *   contract concept. Requires a `GguiProvider` `wsEndpoint` — without
+ *   one there is no transport and the action is dropped with a console
+ *   warning.
  *
  * - **send** — Send a raw WebSocket message. Internal SDK use only
  *   (diagnostics). Not intended for application code.
@@ -166,8 +191,10 @@ export interface GguiSessionApi {
    * Submit user interaction data from a rendered UI component.
    *
    * Use for form submissions, button clicks, and other interactions
-   * originating from generated components. The agent receives these
-   * via `ggui_consume`. Named "action" to match data contract actions.
+   * originating from generated components. The envelope rides the WS
+   * live channel; the server's action ingress dual-writes it onto the
+   * pending-events pipe, so the agent receives it via `ggui_consume`.
+   * Named "action" to match data contract actions.
    *
    * @param data - Interaction payload (e.g., form data, action event)
    */
@@ -198,7 +225,7 @@ export interface GguiSessionApi {
  *
  * Opens a WebSocket connection (if `wsEndpoint` is set on the provider),
  * subscribes to the render, and handles incoming server messages
- * (render, progress, data, stream, error). Exposes a {@link GguiSessionApi}
+ * (render, data, props_update, error). Exposes a {@link GguiSessionApi}
  * via render props or provides it implicitly to child components.
  *
  * Post-Phase-B: a single render per component instance — no stack, no
@@ -229,8 +256,6 @@ export function GguiRender({
   onBeforeAction,
   onAfterAction,
   onInteraction,
-  onProgress,
-  onStream,
   onSystemMessage,
   onError,
   onRenderReceived,
@@ -255,10 +280,6 @@ export function GguiRender({
   onRenderEndRef.current = onRenderEnd;
   const onRenderReceivedRef = useRef(onRenderReceived);
   onRenderReceivedRef.current = onRenderReceived;
-  const onProgressRef = useRef(onProgress);
-  onProgressRef.current = onProgress;
-  const onStreamRef = useRef(onStream);
-  onStreamRef.current = onStream;
   const onSystemMessageRef = useRef(onSystemMessage);
   onSystemMessageRef.current = onSystemMessage;
 
@@ -280,6 +301,19 @@ export function GguiRender({
   // active contract without forcing wireConfig re-creation on every frame.
   const renderRef = useRef<GguiSession | undefined>(render);
   renderRef.current = render;
+
+  // Per-render inbound stream bus (shared `@ggui-ai/wire` StreamBus —
+  // the same class the iframe runtime boots with). Validated `data`
+  // frames are emitted here; `WireConfig.subscribe` (wire's
+  // `useStream`) and `useChannelStream` (via {@link StreamBusContext})
+  // both read from it. Reserved (`_ggui:*`) channels replay from the
+  // bus's bounded ring, so a late subscriber — e.g. the
+  // `_ggui:preview` provisional renderer, which mounts only after the
+  // ack's session payload commits through React state — is caught up
+  // synchronously instead of dropping the frames that arrived in the
+  // ack → mount window. Keyed by sessionId so replay never bleeds
+  // across renders.
+  const streamBus = useMemo(() => new StreamBus(), [sessionId]);
 
   // Handle incoming WebSocket messages from server
   const handleServerMessage = useCallback(
@@ -341,34 +375,10 @@ export function GguiRender({
         }
       }
       if (message.type === 'render') {
-        const { session: nextRender, matchType } = message.payload;
+        const { session: nextRender } = message.payload;
         if (nextRender) {
           setRender(nextRender);
           onRenderReceivedRef.current?.(nextRender);
-          // Forward matchType info as a synthetic progress event
-          if (matchType) {
-            const isHit = matchType === 'cached' || matchType === 'predefined' || matchType === 'exact';
-            onProgressRef.current?.({
-              sessionId: nextRender.id,
-              step: 'compiling',
-              message: isHit ? 'Found matching blueprint' : 'No blueprint match found',
-            });
-          }
-        }
-      }
-      if (message.type === 'progress') {
-        onProgressRef.current?.(message.payload);
-        if (typeof window !== 'undefined') {
-          window.dispatchEvent(
-            new CustomEvent(BRIDGE_EVENTS.AGENT_LOGS, { detail: message.payload }),
-          );
-        }
-      }
-      if (message.type === 'agent-msg') {
-        if (typeof window !== 'undefined') {
-          window.dispatchEvent(
-            new CustomEvent(BRIDGE_EVENTS.AGENT_MSG, { detail: message.payload }),
-          );
         }
       }
       if (message.type === 'data') {
@@ -389,7 +399,7 @@ export function GguiRender({
           //   1. `extraReservedValidators` prop (caller-provided) —
           //      composed with the A2UI default for `_ggui:preview`.
           //   2. `BUILTIN_RESERVED_VALIDATORS` from the protocol —
-          //      ships the `_ggui:contract-error` validator.
+          //      ships the `_ggui:lifecycle` validator.
           //   3. Fall-through to `{valid: true}` for known-reserved
           //      channels without a registered validator.
           // F10 closed-set still applies: a typo inside the reserved
@@ -416,20 +426,18 @@ export function GguiRender({
             );
             return;
           }
+          // Primary delivery: the per-render StreamBus —
+          // `WireConfig.subscribe` + `useChannelStream` consumers,
+          // with reserved-channel replay for late subscribers.
+          streamBus.emit(envelope);
+          // Host-shell broadcast: external (non-React-tree) listeners
+          // observe deliveries via the window bridge event. One-way —
+          // no first-party subscriber reads it anymore.
           if (typeof window !== 'undefined') {
             window.dispatchEvent(
               new CustomEvent(BRIDGE_EVENTS.AGENT_DATA, { detail: envelope }),
             );
           }
-        }
-      }
-      if (message.type === 'stream') {
-        const payload = message.payload as StreamPayload;
-        onStreamRef.current?.(payload);
-        if (typeof window !== 'undefined') {
-          window.dispatchEvent(
-            new CustomEvent(BRIDGE_EVENTS.AGENT_STREAM, { detail: payload }),
-          );
         }
       }
       if (message.type === 'props_update') {
@@ -471,7 +479,7 @@ export function GguiRender({
         onSystemMessageRef.current?.(message.payload as SystemPayload);
       }
     },
-    []
+    [streamBus]
   );
 
   // Initialize WebSocket connection (only if wsEndpoint is provided)
@@ -506,61 +514,34 @@ export function GguiRender({
   /**
    * Emit a fully-built envelope over the live channel AND fire the
    * `onInteraction` callback for `interaction:*` types. Single code
-   * path for every emission site; consumers MUST route their sends
-   * through here rather than calling `sendAction` directly so the
-   * interaction hook stays in sync.
+   * path for every emission site (the shared wire-config dispatch
+   * pipeline AND the imperative `api.action` / bridge-event paths);
+   * consumers MUST route their sends through here rather than calling
+   * `sendAction` directly so the interaction hook stays in sync.
+   *
+   * The WS send is what completes the documented action loop: the
+   * server's live channel bridges `data:submit` envelopes onto the
+   * pending-events pipe `ggui_consume` drains. Without a provider
+   * `wsEndpoint` there is no transport — warn loudly instead of
+   * dropping the user's gesture silently.
    */
   const emitEnvelope = useCallback(
     (envelope: ActionEnvelope) => {
       if (wsEndpoint) {
         sendAction(envelope);
+      } else {
+        // eslint-disable-next-line no-console
+        console.warn(
+          '[ggui] action dropped: GguiProvider has no `wsEndpoint`, so there ' +
+            'is no live channel to carry the envelope to the agent.',
+          { sessionId: envelope.sessionId, type: envelope.type },
+        );
       }
       if (envelope.type.startsWith('interaction:')) {
         onInteractionRef.current?.(envelope);
       }
     },
     [wsEndpoint, sendAction],
-  );
-
-  /**
-   * Build + validate + emit a canonical {@link ActionEnvelope} for a
-   * named user action. Validates against the supplied `actionSpec` via
-   * {@link validateOutboundActionEnvelope} — same check the server
-   * runs on ingress (saves the round-trip on locally-knowable
-   * violations). On violation: surface via `onError` (or fall back to
-   * console.warn) and skip the send.
-   */
-  const dispatchAction = useCallback(
-    (
-      actionName: string,
-      data: unknown,
-      actionSpec: ActionSpec | undefined,
-    ) => {
-      clientSeqRef.current += 1;
-      // The envelope carries `action` + `data` only. The agent-facing
-      // `tool` hint on the consume event is derived SERVER-side from
-      // the render's `actionSpec[name].nextStep` at event-build time.
-      const envelope = buildActionEnvelope({
-        sessionId,
-        type: 'data:submit',
-        payload: {
-          action: actionName,
-          data: data as JsonValue,
-        },
-        clientSeq: clientSeqRef.current,
-      });
-      const result = validateOutboundActionEnvelope(actionSpec, envelope);
-      if (!result.valid) {
-        const err = new ClientContractViolationError(
-          'outbound-action',
-          result.violations,
-        );
-        surfaceContractViolation(err, onErrorRef.current);
-        return;
-      }
-      emitEnvelope(envelope);
-    },
-    [sessionId, emitEnvelope],
   );
 
   /**
@@ -652,57 +633,57 @@ export function GguiRender({
     [action, send, connectionStatus, render, sessionId]
   );
 
-  const wireConfig = useMemo<WireConfig>(() => ({
-    app: {
-      appId,
-      appName: appMetadata?.appName ?? appId,
-      appDescription: appMetadata?.appDescription,
-      appIcon: appMetadata?.appIcon,
-    },
-    render: {
-      sessionId,
-      isConnected: connectionStatus === 'connected',
-    },
-    auth: {
-      userId: auth?.userId,
-      isAuthenticated: auth?.isAuthenticated ?? false,
-    },
-    // Single render per mount — no scope factory. Every dispatch
-    // resolves the actionSpec from the active render snapshot at the
-    // moment of dispatch (renderRef.current), keeping spec edits
-    // observed on `props_update` (which doesn't replace the spec but
-    // does refresh the snapshot identity) in sync.
-    dispatch: (actionName: string, data: unknown) => {
-      const actionSpec = resolveActiveActionSpec();
-      dispatchAction(actionName, data, actionSpec);
-    },
-    subscribe: <T = unknown>(
-      channelName: string,
-      handler: (delivery: StreamDelivery<T>) => void,
-    ) => {
-      const listener = (e: Event) => {
-        const detail = (e as CustomEvent).detail as StreamEnvelope | undefined;
-        if (detail?.channel === channelName) {
-          handler({
-            payload: detail.payload as T,
-            mode: detail.mode,
-            ...(detail.complete !== undefined ? { complete: detail.complete } : {}),
-          });
-        }
-      };
-      window.addEventListener(BRIDGE_EVENTS.AGENT_DATA, listener);
-      return () => window.removeEventListener(BRIDGE_EVENTS.AGENT_DATA, listener);
-    },
-    // There is no `callWiredTool` — the contract's `agentTools` is a
-    // catalog the AGENT invokes; the component never reaches the
-    // underlying tool. Cross-refs surface via `actionSpec[*].nextStep`
-    // (event hint) and `streamSpec[*].source.tool` (channel data
-    // source).
-  }), [appId, sessionId, connectionStatus, auth, appMetadata, dispatchAction, resolveActiveActionSpec]);
+  // Shared wire-config pipeline (`@ggui-ai/wire`'s `buildWireConfig`)
+  // — the SAME envelope-build → validate → emit implementation the
+  // iframe runtime's `buildRootWireConfig` composes, so the two
+  // first-party renderers cannot drift (MCP Apps Compliance). This
+  // component injects its own seams:
+  //   - actionSpec resolution reads the active render snapshot at
+  //     dispatch time (renderRef.current), keeping spec edits
+  //     observed on `props_update` in sync without a rebuild;
+  //   - violations surface through `onError` (console.warn fallback);
+  //   - transport is the live-channel WS `action` frame
+  //     (`emitEnvelope`), which the first-party server bridges onto
+  //     the `ggui_consume` pending-events pipe;
+  //   - `clientSeq` shares this component's counter so config
+  //     dispatches and imperative `api.action` emissions stay
+  //     monotonic on one sequence;
+  //   - `subscribe` reads the per-render StreamBus (reserved-channel
+  //     replay included).
+  const wireConfig = useMemo<WireConfig>(
+    () =>
+      buildWireConfig({
+        app: {
+          appId,
+          appName: appMetadata?.appName ?? appId,
+          appDescription: appMetadata?.appDescription,
+          appIcon: appMetadata?.appIcon,
+        },
+        render: {
+          sessionId,
+          isConnected: connectionStatus === 'connected',
+        },
+        auth: {
+          userId: auth?.userId,
+          isAuthenticated: auth?.isAuthenticated ?? false,
+        },
+        getActiveActionSpec: resolveActiveActionSpec,
+        onViolation: (err) => surfaceContractViolation(err, onErrorRef.current),
+        emitEnvelope,
+        streamBus,
+        nextClientSeq: () => {
+          clientSeqRef.current += 1;
+          return clientSeqRef.current;
+        },
+      }),
+    [appId, sessionId, connectionStatus, auth, appMetadata, resolveActiveActionSpec, emitEnvelope, streamBus],
+  );
 
   return (
-    <GguiWireProvider config={wireConfig}>
-      {typeof children === 'function' ? children(api) : children}
-    </GguiWireProvider>
+    <StreamBusContext.Provider value={streamBus}>
+      <GguiWireProvider config={wireConfig}>
+        {typeof children === 'function' ? children(api) : children}
+      </GguiWireProvider>
+    </StreamBusContext.Provider>
   );
 }

@@ -4,7 +4,8 @@
  * Renders one {@link Blueprint} as a `ggui-stack__entry` row with:
  *
  *   - persona badge (from `variance.persona`)
- *   - generator slug badge
+ *   - source badge (`llm` → the engine's generator slug; `user` /
+ *     `curated` → the provenance kind)
  *   - validatorScore badge (color-coded — high score = `live`, mid =
  *     `draft`, sub-threshold = `signal`)
  *   - operator-default star (★) when `isOperatorDefault === true`
@@ -21,7 +22,7 @@
  *     `"delete"` on the three buttons.
  */
 import type { ReactElement } from 'react';
-import type { Blueprint } from '@ggui-ai/protocol';
+import type { Blueprint, BlueprintSource } from '@ggui-ai/protocol';
 import { StatusBadge } from '../../brand/StatusBadge.js';
 import { DRAFT_VALIDATOR_THRESHOLD } from './BlueprintFilterBar.js';
 
@@ -46,6 +47,13 @@ function toneForScore(score: number): 'live' | 'draft' | 'signal' {
   if (score >= DRAFT_VALIDATOR_THRESHOLD) return 'live';
   if (score >= 0.5) return 'draft';
   return 'signal';
+}
+
+/** Badge label for a variant's provenance. `llm`-sourced rows carry the
+ *  engine's generator slug; `user` / `curated` rows have no engine
+ *  provenance, so the kind itself is the truthful label. */
+function sourceLabel(source: BlueprintSource): string {
+  return source.kind === 'llm' ? source.generator : source.kind;
 }
 
 export function BlueprintVariantCard({
@@ -84,7 +92,7 @@ export function BlueprintVariantCard({
         {persona ? (
           <StatusBadge tone="ink">persona: {persona}</StatusBadge>
         ) : null}
-        <StatusBadge tone="ink">{blueprint.generator}</StatusBadge>
+        <StatusBadge tone="ink">{sourceLabel(blueprint.source)}</StatusBadge>
         {typeof score === 'number' ? (
           <StatusBadge tone={toneForScore(score)}>
             score {score.toFixed(2)}

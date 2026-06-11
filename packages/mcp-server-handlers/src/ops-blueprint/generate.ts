@@ -56,6 +56,7 @@ import type {
   UiGenerator,
 } from "@ggui-ai/mcp-server-core";
 import {
+  blueprintSourceToFlat,
   opsGenerateBlueprintInputSchema,
   type Blueprint,
   type DataContract,
@@ -86,7 +87,13 @@ const opsOutputSchema = z.object({
   blueprintId: z.string().min(1),
   codeHash: z.string().optional(),
   validatorScore: z.number().min(0).max(1).optional(),
-  generator: z.string().min(1),
+  source: z
+    .object({
+      kind: z.literal("llm"),
+      generator: z.string().min(1),
+      model: z.string().min(1),
+    })
+    .strict(),
 }).shape;
 
 /**
@@ -240,7 +247,7 @@ export function createGguiOpsGenerateBlueprintHandler(
     title: "Generate blueprint",
     audience: ["ops"],
     description:
-      "Author a new blueprint variant for the caller's app. Dispatches through the registry's selected generator (defaults to `registry.defaultGenerator()` when the slug is omitted) and persists the resulting code body + metadata against a fresh `blueprintId`. Optionally pins the new blueprint as the operator default for its `(appId, contractHash)` group. Persona tags are normalized (lowercase + trim); near-duplicates surface a warning via telemetry. Returns the new id + content-hash + validator score + resolved generator slug — code body lives in the bound store, fetched via render's fast-path on cache hit.",
+      "Author a new blueprint variant for the caller's app. Dispatches through the registry's selected generator (defaults to `registry.defaultGenerator()` when the slug is omitted) and persists the resulting code body + metadata against a fresh `blueprintId`. Optionally pins the new blueprint as the operator default for its `(appId, contractHash)` group. Persona tags are normalized (lowercase + trim); near-duplicates surface a warning via telemetry. Returns the new id + content-hash + validator score + the stamped provenance (`source`, llm arm: engine generator slug + model, from the engine's own metadata stamp) — code body lives in the bound store, fetched via render's fast-path on cache hit.",
     inputSchema: opsInputSchema,
     outputSchema: opsOutputSchema,
     async handler(
@@ -365,13 +372,23 @@ export function createGguiOpsGenerateBlueprintHandler(
       // (which does) both round-trip cleanly.
       const validatorScore = readValidatorScore(result.metadata);
 
+      // Engine-GENERATED code: provenance is the llm arm, stamped from
+      // the engine's own metadata claim — the SAME values the cache-
+      // registry mirror below records, so the two stores can never
+      // disagree on where the bytes came from.
+      const source = {
+        kind: "llm",
+        generator: result.metadata.generator,
+        model: result.metadata.model,
+      } as const;
+
       const blueprintId = mintBlueprintId();
       const blueprint: Blueprint = {
         blueprintId,
         contractHash,
         appId: ctx.appId,
         codeHash,
-        generator: generator.slug,
+        source,
         variance: {
           ...(normalizedPersona !== undefined ? { persona: normalizedPersona } : {}),
           ...(parsed.context !== undefined ? { context: parsed.context } : {}),
@@ -408,12 +425,8 @@ export function createGguiOpsGenerateBlueprintHandler(
             componentCode,
             // Operator-DISPATCHED but engine-GENERATED: the code came
             // out of `generator.generate(...)`, so provenance is the
-            // llm arm, stamped from the engine's own metadata claim.
-            source: {
-              kind: "llm",
-              generator: result.metadata.generator,
-              model: result.metadata.model,
-            },
+            // llm arm — the same `source` stamped on the MVB row above.
+            source,
           });
         } catch (err) {
           try {
@@ -449,7 +462,10 @@ export function createGguiOpsGenerateBlueprintHandler(
             requestId: ctx.requestId,
             blueprintId,
             contractHash,
-            generator: generator.slug,
+            // Flat-codec provenance keys (sourceKind / sourceGenerator /
+            // sourceModel) — telemetry rows mix attributes, so the
+            // prefixed triple keeps provenance collision-free.
+            ...blueprintSourceToFlat(source),
             createdBy: "operator",
             setAsOperatorDefault: parsed.setAsOperatorDefault === true,
           },
@@ -461,7 +477,7 @@ export function createGguiOpsGenerateBlueprintHandler(
       const output: OpsGenerateBlueprintOutput = {
         blueprintId,
         codeHash,
-        generator: generator.slug,
+        source,
         ...(validatorScore !== undefined ? { validatorScore } : {}),
       };
       return output;

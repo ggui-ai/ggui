@@ -96,20 +96,20 @@ describe('assertStreamContract', () => {
       );
     });
 
-    it('runs the protocol BUILTIN validator for `_ggui:contract-error` even without spec or injection', () => {
-      // Protocol-owned validator for ContractErrorPayload fires from
+    it('runs the protocol BUILTIN validator for `_ggui:lifecycle` even without spec or injection', () => {
+      // Protocol-owned validator for GguiLifecyclePayload fires from
       // BUILTIN_RESERVED_VALIDATORS regardless of caller-provided
       // extras. Reserved-channel branch inside `validateStreamData`
       // runs before the declared-channel check, so a render with
-      // NO user streamSpec still rejects malformed contract-error
+      // NO user streamSpec still rejects malformed lifecycle
       // emissions.
       let err: unknown;
       try {
         assertStreamContract(
           undefined,
-          '_ggui:contract-error',
-          // missing toolName + error + timestamp
-          { actionName: 'submit' },
+          '_ggui:lifecycle',
+          // missing sessionId + intent
+          { kind: 'render_started' },
         );
       } catch (e) {
         err = e;
@@ -118,16 +118,16 @@ describe('assertStreamContract', () => {
       const cve = err as ContractViolationError;
       expect(cve.tool).toBe('ggui_emit');
       expect(cve.violations.map((v) => v.field)).toEqual(
-        expect.arrayContaining(['toolName', 'error', 'timestamp']),
+        expect.arrayContaining(['sessionId', 'intent']),
       );
     });
 
-    it('accepts a well-formed `_ggui:contract-error` payload via BUILTIN', () => {
+    it('accepts a well-formed `_ggui:lifecycle` payload via BUILTIN', () => {
       expect(() =>
-        assertStreamContract(SPEC, '_ggui:contract-error', {
-          toolName: 'my-tool',
-          error: { code: 'SCHEMA_VIOLATION', message: 'boom' },
-          timestamp: '2026-04-23T00:00:00.000Z',
+        assertStreamContract(SPEC, '_ggui:lifecycle', {
+          kind: 'render_started',
+          sessionId: 'render-1',
+          intent: 'show weather',
         }),
       ).not.toThrow();
     });

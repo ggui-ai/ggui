@@ -5,7 +5,7 @@
  * Events prefixed with `ggui:` are `CustomEvent` names (same-origin, dispatched on `window`).
  *
  * The bridge has three directions:
- * 1. **Agent to Component** (inbound): data, streams, progress
+ * 1. **Agent to Component** (inbound): data deliveries
  * 2. **Component to Agent** (outbound): user interactions (form submits, clicks)
  * 3. **Component to Host** (outbound): rendering lifecycle (resize, success, error)
  */
@@ -15,18 +15,6 @@ export const BRIDGE_EVENTS = {
   AGENT_DATA_POST: 'ggui-agent-data',
   /** `CustomEvent` name dispatched on `window` when agent data arrives. Components listen for this to receive real-time data from the agent (chat messages, typing indicators, etc.). */
   AGENT_DATA: 'ggui:agent-data',
-
-  // === Agent → Component (inbound via streaming) ===
-  /** `CustomEvent` name for streaming text chunks from the agent. Fired incrementally as the agent generates a response. */
-  AGENT_STREAM: 'ggui:agent-stream',
-
-  // === Agent → Shell (inbound agent messages) ===
-  /** `CustomEvent` name for agent messages. Payload includes `type: 'thinking' | 'chat'`. Thinking messages show what the agent is doing; chat messages are final responses. */
-  AGENT_MSG: 'ggui:agent-msg',
-
-  // === Platform → Shell (inbound via generation logs) ===
-  /** `CustomEvent` name for UI generation log updates. Debug/devtools only — not displayed to end users. */
-  AGENT_LOGS: 'ggui:logs',
 
   // === Component → Agent (outbound via user interaction) ===
   /** `postMessage` type for iframe-to-parent user interaction data. Carries form submissions and click events from generated components back to the host. */

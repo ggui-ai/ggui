@@ -64,7 +64,7 @@ const outputSchema = {
   /** `true` on a successful refresh; `false` on any rejection. */
   ok: z.boolean(),
   /**
-   * On `ok:false`, the canonical contract-error code:
+   * On `ok:false`, the canonical rejection code:
    *   - `'BOOTSTRAP_INVALID'` — signature mismatch, malformed envelope,
    *     wrong kind (e.g. a session token submitted for ws-token
    *     refresh). Iframe MUST re-handshake.

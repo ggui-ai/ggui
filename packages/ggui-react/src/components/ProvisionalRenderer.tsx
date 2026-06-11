@@ -6,7 +6,9 @@
  * Boundary discipline:
  *
  *   * Stream transport — `useChannelStream` (internal seam) subscribes
- *     to live-channel `data` events filtered to `_ggui:preview`.
+ *     to the ambient `<GguiRender>` StreamBus filtered to
+ *     `_ggui:preview`; the bus's reserved-channel replay ring catches
+ *     this component up even when it mounts after the frames arrived.
  *   * Message schema — `parseServerMessage` from `@ggui-ai/preview-a2ui`
  *     validates each envelope payload as a V1 A2UI server message.
  *     Messages that fail the parser are silently dropped (the stream
