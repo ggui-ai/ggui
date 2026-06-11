@@ -126,6 +126,7 @@ export class InvalidCompleteError extends Error {
  * pipeline did this fail" signal that each consumer relies on.
  */
 export type GadgetGateErrorCode =
+  | 'duplicate_gadget_hook'
   | 'gadget_not_registered'
   | 'gadget_package_mismatch'
   | 'gadget_public_env_missing'

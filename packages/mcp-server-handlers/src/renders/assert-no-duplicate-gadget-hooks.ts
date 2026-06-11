@@ -23,7 +23,8 @@
 import { listContractGadgets, type DataContract } from '@ggui-ai/protocol';
 
 export class DuplicateGadgetHookError extends Error {
-  readonly code = 'gadget_duplicate_hook' as const;
+  /** SPEC §7.9 Plane-2 slug — the wire literal consumers match on. */
+  readonly code = 'duplicate_gadget_hook' as const;
   readonly duplicates: ReadonlyArray<{
     package: string;
     firstSeenPackage: string;
@@ -41,7 +42,7 @@ export class DuplicateGadgetHookError extends Error {
         `  - export '${d.hook}' from '${d.package}' (already declared by '${d.firstSeenPackage}')`,
     );
     super(
-      `gadget_duplicate_hook: contract declares the same gadget export name under multiple packages. Each export name MUST mount once.\n${lines.join('\n')}`,
+      `duplicate_gadget_hook: contract declares the same gadget export name under multiple packages. Each export name MUST mount once.\n${lines.join('\n')}`,
     );
     this.name = 'DuplicateGadgetHookError';
     this.duplicates = duplicates;
