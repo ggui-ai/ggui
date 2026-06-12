@@ -47,17 +47,13 @@
  */
 import { z } from 'zod';
 import type { UiRegistry } from '@ggui-ai/ui-registry';
+import { renderBlueprintInputShape } from '@ggui-ai/protocol';
 import type { GguiRenderBlueprintOutput } from '@ggui-ai/protocol';
 import type { SharedHandler } from '../types.js';
 
-const inputSchema = {
-  blueprintId: z
-    .string()
-    .min(1)
-    .describe(
-      'The stable blueprint id declared via ggui.ui.json#id. Must match an entry in this server\'s UI registry.',
-    ),
-};
+// Canonical SSoT shape — authored once in `@ggui-ai/protocol`
+// (`schemas/mcp.ts`).
+const inputSchema = renderBlueprintInputShape;
 
 const outputSchema = {
   blueprintId: z.string(),

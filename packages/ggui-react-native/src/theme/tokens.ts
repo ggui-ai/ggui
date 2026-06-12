@@ -5,7 +5,15 @@
  * into React Native-compatible values (numbers, RN shadow format, etc.)
  */
 
-import { colors, semantic, focusRing, reducedMotion, highContrast } from '@ggui-ai/design/tokens';
+import {
+  colors,
+  semantic,
+  focusRing,
+  reducedMotion,
+  highContrast,
+  spacingValues,
+  nativeTokens,
+} from '@ggui-ai/design/tokens';
 import { Easing } from 'react-native';
 
 // --- Colors (already plain hex strings, pass through) ---
@@ -26,40 +34,14 @@ export const rnSemantic = semantic;
 
 // --- Spacing (numeric values for RN) ---
 
-export const rnSpacing = {
-  0: 0,
-  0.5: 2,
-  1: 4,
-  1.5: 6,
-  2: 8,
-  2.5: 10,
-  3: 12,
-  3.5: 14,
-  4: 16,
-  5: 20,
-  6: 24,
-  7: 28,
-  8: 32,
-  9: 36,
-  10: 40,
-  11: 44,
-  12: 48,
-  14: 56,
-  16: 64,
-  20: 80,
-  24: 96,
-} as const;
+// Two-Layer Theming: spacing tokens are platform constants owned by
+// `@ggui-ai/design` — re-exported here (NOT copied) so a scale change
+// in the design package propagates to RN automatically.
+export const rnSpacing = spacingValues;
 
-// Named spacing aliases for ergonomic use
-export const rnSpacingNamed = {
-  xs: 4,
-  sm: 8,
-  md: 16,
-  lg: 24,
-  xl: 32,
-  '2xl': 48,
-  '3xl': 64,
-} as const;
+// Named spacing aliases for ergonomic use — design's RN-numeric
+// native token set is the single source.
+export const rnSpacingNamed = nativeTokens.light.spacing;
 
 // --- Typography (numeric values for RN) ---
 

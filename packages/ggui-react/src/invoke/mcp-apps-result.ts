@@ -63,12 +63,6 @@ export function extractMcpAppAiGguiMeta(
 }
 
 /**
- * Back-compat alias for {@link extractMcpAppAiGguiMeta}. Name retained
- * pre-R4; downstream consumers (samples, app shells) keep working.
- */
-export const extractBootstrapMeta = extractMcpAppAiGguiMeta;
-
-/**
  * Build a {@link CallToolResult} carrying the `ai.ggui/render` slice
  * envelope on `_meta`, ready to hand to
  * `<AppRenderer toolResult={...}>` so it forwards the envelope to the

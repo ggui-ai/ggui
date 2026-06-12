@@ -1,23 +1,21 @@
 // packages/ui-gen/src/coding-agent/tools.ts
 //
-// Tool schemas and executor for the coding agent.
+// Tool executor for the harness coding loop (`harness/coding/
+// run-coding-turn.ts` advertises the tool surface and routes every
+// LLM tool call through `executeTool`).
 //
-// Key design: write and apply_diff include a commit_message field and
-// auto-commit + auto-self-check after execution. The LLM never calls
-// commit directly — it's implicit in every write/apply_diff.
+// Key design: write and apply_changes include a commit_message field
+// and auto-commit + auto-self-check after execution. The LLM never
+// calls commit directly — it's implicit in every mutation tool.
 
 import * as esbuild from 'esbuild';
 import { AgentWorkspace } from './workspace';
-// diff-processor imported dynamically in apply_diff case (legacy path)
 import { getSoftWarnings } from './self-check';
 import { runTier0Checks } from '../check/index.js';
 import { PRIMITIVES_DOCUMENTATION } from '../validation/index.js';
 import type { DataContract } from '@ggui-ai/protocol';
 import type {
-  ToolSchema,
   ToolResult,
-  ToolCall,
-  BatchResult,
   CommitMetadata,
 } from './types';
 
@@ -44,131 +42,7 @@ function getComponentDocumentation(name: string): string {
 }
 
 // =============================================================================
-// Tool Schemas
-// =============================================================================
-
-const writeSchema: ToolSchema = {
-  description:
-    'Write the complete ui.tsx file, then auto-compile and validate. Use for initial generation or full rewrites.',
-  input: {
-    type: 'object',
-    properties: {
-      code: { type: 'string', description: 'Complete TSX component source code' },
-      commit_message: { type: 'string', description: 'Short description of what you wrote/changed' },
-    },
-    required: ['code', 'commit_message'],
-  },
-};
-
-const applyDiffSchema: ToolSchema = {
-  description:
-    'Apply a unified diff patch to ui.tsx, then auto-compile and validate. Use for targeted fixes.',
-  input: {
-    type: 'object',
-    properties: {
-      diff: { type: 'string', description: 'Unified diff format string' },
-      commit_message: { type: 'string', description: 'Short description of what you fixed' },
-    },
-    required: ['diff', 'commit_message'],
-  },
-};
-
-const catSchema: ToolSchema = {
-  description: 'Read ui.tsx with line numbers. Optionally specify a line range.',
-  input: {
-    type: 'object',
-    properties: {
-      start_line: { type: 'number', description: 'Start line (1-indexed)' },
-      end_line: { type: 'number', description: 'End line (inclusive)' },
-    },
-  },
-};
-
-const grepSchema: ToolSchema = {
-  description: 'Search ui.tsx for a pattern. Returns matching lines with line numbers.',
-  input: {
-    type: 'object',
-    properties: {
-      pattern: { type: 'string', description: 'Regex search pattern' },
-      context: { type: 'number', description: 'Context lines around matches (default 0)' },
-    },
-    required: ['pattern'],
-  },
-};
-
-const getComponentsInfoSchema: ToolSchema = {
-  description:
-    'Get detailed prop types and usage examples for design system components. Call once with all components you need before writing code.',
-  input: {
-    type: 'object',
-    properties: {
-      names: {
-        type: 'array',
-        items: { type: 'string' },
-        description: 'Component names, e.g., ["Stack", "Card", "Text", "Heading"]',
-      },
-    },
-    required: ['names'],
-  },
-};
-
-const diffSchema: ToolSchema = {
-  description: 'Show uncommitted changes (working copy vs last commit).',
-  input: { type: 'object', properties: {} },
-};
-
-const logSchema: ToolSchema = {
-  description: 'Show commit history with OIDs and self-check status.',
-  input: {
-    type: 'object',
-    properties: {
-      depth: { type: 'number', description: 'Number of commits to show (default 10)' },
-    },
-  },
-};
-
-const showSchema: ToolSchema = {
-  description: 'Show the diff of a specific commit (what changed).',
-  input: {
-    type: 'object',
-    properties: {
-      oid: { type: 'string', description: 'Commit OID from log output' },
-    },
-    required: ['oid'],
-  },
-};
-
-const revertSchema: ToolSchema = {
-  description: 'Revert working copy to a previous commit.',
-  input: {
-    type: 'object',
-    properties: {
-      oid: { type: 'string', description: 'Commit OID to revert to' },
-    },
-    required: ['oid'],
-  },
-};
-
-/** Phase 1: write only (auto-commits) */
-export const initialToolSchemas: Record<string, ToolSchema> = {
-  write: writeSchema,
-};
-
-/** Phase 2: write + apply_diff (both auto-commit) + read-only tools */
-export const fullToolSchemas: Record<string, ToolSchema> = {
-  write: writeSchema,
-  apply_diff: applyDiffSchema,
-  get_components_info: getComponentsInfoSchema,
-  cat: catSchema,
-  grep: grepSchema,
-  diff: diffSchema,
-  log: logSchema,
-  show: showSchema,
-  revert: revertSchema,
-};
-
-// =============================================================================
-// Auto-commit helper (shared by write and apply_diff)
+// Auto-commit helper (shared by write and apply_changes)
 // =============================================================================
 
 async function autoCommit(
@@ -241,7 +115,6 @@ async function autoCommit(
   const selfCheckStart = Date.now();
   const tier0Issues = await runTier0Checks(
     formatted,
-    buildResult.compiledCode ?? null,
     contract,
     buildResult.errors,
     gadgetTypes,
@@ -309,10 +182,9 @@ export async function executeTool(
   /**
    * Optional context policy — when provided, `apply_changes` preflight
    * renders the PATCH_INVALID retry message according to policy. Callers
-   * that don't pass one get the legacy unlabeled feedback, preserving
-   * back-compat for the legacy coding-agent/agent.ts path and existing
-   * tests. Harness-driven callers (run-coding-turn) should pass
-   * `harness.policy.context` so the resolved policy wins.
+   * that don't pass one get unlabeled feedback. Harness-driven callers
+   * (run-coding-turn) should pass `harness.policy.context` so the
+   * resolved policy wins.
    */
   contextPolicy?: import("../harness/policy.js").ContextPolicy,
   /**
@@ -345,29 +217,6 @@ export async function executeTool(
 
       console.log(`[coding-agent] write: ${lineCount} lines → auto-commit`);
       return autoCommit(workspace, commitMeta, message, contract, contextPolicy, gadgetTypes);
-    }
-
-    case 'apply_diff': {
-      // Legacy unified diff path — kept for coding agent
-      const currentFile = workspace.read();
-      if (!currentFile && currentFile !== '') {
-        return { result: 'FAILED: No file exists.', error: true };
-      }
-      const { preProcessDiff: ppd, applyDiffToFile: adf } = await import('./diff-processor');
-      const diffStr = input.diff as string;
-      const preResult = ppd(diffStr, currentFile);
-      if (!preResult.success) {
-        return { result: `DIFF PRE-PROCESS FAILED:\n${preResult.error}`, error: true };
-      }
-      const applyResult = adf(currentFile, preResult.cleanDiff, preResult.parsed);
-      if (!applyResult.success) {
-        return { result: `DIFF APPLY FAILED:\n${applyResult.error}`, error: true };
-      }
-      workspace.write(applyResult.result);
-      await workspace.stage();
-      const diffMsg = (input.commit_message as string) || 'apply diff';
-      console.log(`[coding-agent] apply_diff: applied → auto-commit`);
-      return autoCommit(workspace, commitMeta, diffMsg, contract, contextPolicy, gadgetTypes);
     }
 
     case 'apply_changes': {
@@ -660,9 +509,8 @@ export async function executeTool(
     // `cat` is NOT advertised on the bench's coding-turn tool list —
     // `run-coding-turn.ts::selectTurnTools` omits it because every turn's
     // prompt already injects the current file as a `## Current File`
-    // block, so no read-tool is needed there. The case stays for the
-    // legacy `fullToolSchemas` registry (dev-agent workflows that don't
-    // auto-inject file content).
+    // block, so no read-tool is needed there. The case stays for
+    // dev-agent workflows that don't auto-inject file content.
     case 'cat':
       return {
         result: workspace.cat(
@@ -731,33 +579,4 @@ export async function executeTool(
     default:
       return { result: `Unknown tool: ${tool}`, error: true };
   }
-}
-
-// =============================================================================
-// Batch Executor
-// =============================================================================
-
-export async function executeToolBatch(
-  calls: ToolCall[],
-  workspace: AgentWorkspace,
-  commitMeta: Map<string, CommitMetadata>,
-): Promise<BatchResult> {
-  const results: ToolResult[] = [];
-
-  for (const call of calls) {
-    const result = await executeTool(workspace, call.tool, call.input, commitMeta);
-    results.push(result);
-
-    // Short-circuit: auto-commit passed → generation complete
-    if (result.done) {
-      return { results, done: true, compiledCode: result.compiledCode };
-    }
-
-    // Short-circuit: tool failed → LLM needs to see the error
-    if (result.error) {
-      return { results, done: false };
-    }
-  }
-
-  return { results, done: false };
 }

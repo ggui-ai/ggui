@@ -2,7 +2,12 @@ import { forwardRef, useState, type CSSProperties, type ReactNode, type MouseEve
 
 export interface ClickableProps {
   children?: ReactNode;
-  onClick?: (e: MouseEvent<HTMLDivElement>) => void;
+  /**
+   * Activation handler. Receives the `MouseEvent` for pointer clicks
+   * and the `KeyboardEvent` for Enter/Space keyboard activation — the
+   * union is honest about both delivery paths.
+   */
+  onClick?: (e: MouseEvent<HTMLDivElement> | KeyboardEvent<HTMLDivElement>) => void;
   onDoubleClick?: (e: MouseEvent<HTMLDivElement>) => void;
   /** Style applied on hover. Merged with base style. */
   hoverStyle?: CSSProperties;
@@ -64,7 +69,7 @@ export const Clickable = forwardRef<HTMLDivElement, ClickableProps>(function Cli
     if (disabled || !onClick) return;
     if (e.key === 'Enter' || e.key === ' ') {
       e.preventDefault();
-      onClick(e as unknown as MouseEvent<HTMLDivElement>);
+      onClick(e);
     }
   };
 

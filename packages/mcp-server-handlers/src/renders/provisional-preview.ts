@@ -207,11 +207,7 @@ export type ProvisionalPreviewOutcome =
  * kill-switch. The other reasons are per-render structural
  * disqualifications.
  */
-export type ProvisionalPreviewSkipReason =
-  | 'disabled'
-  | 'mcp-apps-render'
-  | 'no-story'
-  | 'predicate';
+export type ProvisionalPreviewSkipReason = 'disabled' | 'no-story' | 'predicate';
 
 /**
  * Deps the `ggui_render` handler accepts when provisional preview is
@@ -308,8 +304,6 @@ export type ProvisionalPreviewGate =
  */
 export interface ProvisionalPreviewGateInput {
   readonly story: { readonly intent: string } | undefined;
-  /** `true` when the render is an MCP Apps delivery. */
-  readonly isMcpAppsGguiSession: boolean;
 }
 
 /**
@@ -330,9 +324,6 @@ export function evaluateProvisionalPreviewGate(
 ): ProvisionalPreviewGate {
   if (!deps || !deps.config.enabled) {
     return { kind: 'skip', reason: 'disabled' };
-  }
-  if (input.isMcpAppsGguiSession) {
-    return { kind: 'skip', reason: 'mcp-apps-render' };
   }
   if (!input.story) {
     return { kind: 'skip', reason: 'no-story' };

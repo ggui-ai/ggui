@@ -5,7 +5,7 @@ import {
   statusToErrorKind,
   type ProviderErrorKind,
 } from './provider-adapter';
-import { createMockProviderAdapter } from './provider-adapter-mock';
+import { createMockProviderAdapter } from './provider-adapter-mock.test-util';
 import { providerAdapterContract } from './provider-adapter-contract';
 
 // ─── 1. Sanity unit tests on the helpers ───────────────────────────

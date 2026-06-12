@@ -32,6 +32,7 @@
  * enforces. Separate concerns — easier to audit the boundary.
  */
 import type { ContractViolation, ValidationResult } from './contract-validator';
+import { isRecord } from './is-record';
 
 /** Prefix that marks a channel as server-owned (reserved from agents). */
 export const RESERVED_CHANNEL_PREFIX = '_ggui:';
@@ -181,7 +182,7 @@ export function validateGguiLifecyclePayload(
   payload: unknown,
 ): ValidationResult {
   const violations: ContractViolation[] = [];
-  if (typeof payload !== 'object' || payload === null || Array.isArray(payload)) {
+  if (!isRecord(payload)) {
     return {
       valid: false,
       violations: [
@@ -194,7 +195,7 @@ export function validateGguiLifecyclePayload(
       ],
     };
   }
-  const p = payload as Record<string, unknown>;
+  const p = payload;
   if (typeof p.kind !== 'string') {
     return {
       valid: false,

@@ -27,7 +27,6 @@
  * Provider-subject is the strongest cross-provider primary key the
  * OAuth spec gives us. Future "link account" flows are explicit.
  */
-import type { AuthResult } from '@ggui-ai/mcp-server-core';
 
 /**
  * The runtime contract every concrete OAuth provider implements.
@@ -143,14 +142,6 @@ export interface OAuthProviderConfigRecord {
    */
   readonly enabled: boolean;
 }
-
-/**
- * The minimal AuthAdapter call shape OAuth callbacks use to mint a
- * bearer. `source: 'oauth'` is the canonical provenance string —
- * audit hooks branch on this to distinguish OAuth identity from
- * pairing-issued bearers.
- */
-export type OAuthAuthResult = AuthResult & { source: 'oauth' };
 
 /**
  * Compose the canonical user-id namespace for an OAuth identity.

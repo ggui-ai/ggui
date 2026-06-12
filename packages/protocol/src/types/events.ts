@@ -1,22 +1,18 @@
 import type { JsonValue } from './data-contract';
 
 /**
- * Event types that flow from user to agent
+ * Event type that flows from user to agent.
+ *
+ * One member by design (actions-vs-context): actions drive turns;
+ * context observes state — there is no third category. The pre-
+ * actionSpec multi-event vocabulary (`data:change`, `lifecycle:*`,
+ * `interaction:*`, `error:*`) was deleted in draft-2026-06-12 — no
+ * first-party producer ever constructed those members, and the server
+ * only pipes `data:submit` to the agent-facing consume queue. A future
+ * second category re-enters with a real producer + a real server-side
+ * consumer, never as speculative vocabulary.
  */
-export type EventType =
-  // Data events
-  | 'data:submit'
-  | 'data:change'
-  // Lifecycle events (render-level)
-  | 'lifecycle:focus'
-  | 'lifecycle:blur'
-  // Interaction events
-  | 'interaction:click'
-  | 'interaction:hover'
-  | 'interaction:scroll'
-  // Error events
-  | 'error:validation'
-  | 'error:connection';
+export type EventType = 'data:submit';
 
 /**
  * Payload shape for `data:submit` events emitted by `useAction()`.
@@ -78,16 +74,14 @@ export interface ActionEnvelope<TPayload = JsonValue> {
    */
   sessionId: string;
   /**
-   * Action / event type. Gated by the active render's
-   * `actionSpec` declarations.
+   * Action / event type — always `'data:submit'` (see {@link EventType}).
+   * Gated by the active render's `actionSpec` declarations.
    */
   type: EventType;
   /**
-   * Payload for the action. For `type: 'data:submit'` this carries the
-   * {@link ActionEventValue} shape (`{action, data?, tool?}`) where
-   * `data` is validated against the render's
-   * `actionSpec[action].schema`. For non-data:submit types the payload
-   * is free-form — no schema enforcement.
+   * Payload for the action. Carries the {@link ActionEventValue} shape
+   * (`{action, data?, tool?}`) where `data` is validated against the
+   * render's `actionSpec[action].schema`.
    */
   payload?: TPayload;
   /**

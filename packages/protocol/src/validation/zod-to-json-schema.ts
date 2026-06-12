@@ -45,6 +45,7 @@
  */
 import { z, type ZodRawShape, type ZodType } from 'zod';
 import type { JsonSchema } from '../types/data-contract.js';
+import { isRecord } from './is-record.js';
 
 /**
  * Convert a zod schema (or raw shape) to a {@link JsonSchema} suitable
@@ -79,15 +80,13 @@ export function zodToJsonSchema(input: ZodType | ZodRawShape): JsonSchema {
  */
 function normalize(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(normalize);
-  if (value === null || typeof value !== 'object') return value;
+  if (!isRecord(value)) return value;
   const out: Record<string, unknown> = {};
-  for (const [key, v] of Object.entries(value as Record<string, unknown>)) {
+  for (const [key, v] of Object.entries(value)) {
     if (key === '$schema') continue;
-    if (key === 'properties' && v !== null && typeof v === 'object') {
+    if (key === 'properties' && isRecord(v)) {
       const props: Record<string, unknown> = {};
-      for (const [pkey, pval] of Object.entries(
-        v as Record<string, unknown>,
-      )) {
+      for (const [pkey, pval] of Object.entries(v)) {
         props[pkey] = normalize(pval);
       }
       out[key] = props;

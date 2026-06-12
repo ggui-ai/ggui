@@ -55,7 +55,6 @@ export type {
   ErrorPayload,
   RenderPayload,
   PropsUpdatePayload,
-  UrlPayload,
   SystemPayload,
   SystemAction,
   ShellType,

@@ -51,7 +51,6 @@ import type {
   BlueprintSelector,
   BlueprintStore,
   CodeStore,
-  ConnectorRegistry,
   EmbeddingProvider,
   GeneratorRegistry,
   KeyValueStore,
@@ -235,7 +234,6 @@ import { mountEmailLoginRoutes, type EmailSender, type MagicLinkStore } from "./
 import { resolveMcpInstructions, type McpInstructionsValue } from "./instructions-presets.js";
 import { buildLlmCaller, createLlmBackedHandshakeNegotiator } from "./llm-backed-negotiator.js";
 import { createConsoleLogger, type Logger } from "./logger.js";
-import { installMcpAppsInbound } from "./mcp-apps-inbound.js";
 import {
   composeHandlersWithMounts,
   validateMcpServices,
@@ -517,12 +515,6 @@ export function defaultHandlers(deps: {
         }
       | undefined;
     /**
-     * Optional connector registry — required for accepting
-     * `shortcuts.mcpApps` render payloads (inbound MCP Apps hosting).
-     * Omitted = inbound path is rejected with a clear error.
-     */
-    readonly connectors?: ConnectorRegistry;
-    /**
      * Optional admission-control limiter. When present, `ggui_render`
      * gates every call through `rateLimiter.check({key:
      * 'ggui_render:<appId>', cost:1})` before doing any work; denial
@@ -542,9 +534,8 @@ export function defaultHandlers(deps: {
     /**
      * Optional provisional-preview wiring. When present, `ggui_render`
      * kicks off the configured emitter on every qualifying render (the
-     * `evaluateProvisionalPreviewGate` predicate filters MCP Apps
-     * renders + storyless calls automatically). Absent = no preview
-     * channel traffic.
+     * `evaluateProvisionalPreviewGate` predicate filters storyless
+     * calls automatically). Absent = no preview channel traffic.
      *
      * Constructed by `createGguiServer` from `opts.provisionalPreview`
      * plus the late-bound `GguiSessionChannelServer.sendToGguiSession`
@@ -709,8 +700,6 @@ export function defaultHandlers(deps: {
           readonly mode?: "light" | "dark";
         }
       | undefined;
-    /** Resolver for bootstrap.streamWebSocketLocalTools. */
-    readonly streamWebSocketLocalTools?: () => readonly string[] | undefined;
   };
   /**
    * Pending-events consumer wiring for `ggui_consume`. When `render`
@@ -1084,9 +1073,6 @@ export function defaultHandlers(deps: {
         ...(deps.update.themeProvider !== undefined
           ? { themeProvider: deps.update.themeProvider }
           : {}),
-        ...(deps.update.streamWebSocketLocalTools !== undefined
-          ? { streamWebSocketLocalTools: deps.update.streamWebSocketLocalTools }
-          : {}),
       }) as SharedHandler<ZodRawShape, ZodRawShape>
     );
   }
@@ -1246,7 +1232,6 @@ export function defaultHandlers(deps: {
         ...(deps.render.themeProvider !== undefined
           ? { themeProvider: deps.render.themeProvider }
           : {}),
-        ...(deps.render.connectors ? { connectors: deps.render.connectors } : {}),
         ...(deps.render.rateLimiter ? { rateLimiter: deps.render.rateLimiter } : {}),
         ...(deps.render.shortCodeIndex ? { shortCodeIndex: deps.render.shortCodeIndex } : {}),
         ...(deps.render.provisionalPreview
@@ -1724,18 +1709,12 @@ export interface CreateGguiServerOptions {
    * the callback writes to so a console save reaches the next render
    * without restarting the server.
    *
-   * `next` matches `ThemeConfig` from `@ggui-ai/project-config` —
+   * `next` is `ThemeConfig` from `@ggui-ai/project-config` —
    * one of: a string shorthand (`'indigo'`), a preset object
    * (`{ preset, mode?, overrides? }`), a file object
    * (`{ file, mode? }`), or `null` (cleared).
    */
-  readonly onThemeConfigChange?: (
-    next:
-      | string
-      | { preset: string; mode?: "light" | "dark"; overrides?: Record<string, string> }
-      | { file: string; mode?: "light" | "dark" }
-      | null
-  ) => void;
+  readonly onThemeConfigChange?: (next: ThemeConfig | null) => void;
 
   /**
    * Map a resolved identity to the `appId` used by handlers for tenant
@@ -2156,14 +2135,6 @@ export interface CreateGguiServerOptions {
         readonly distDir?: string;
         readonly url?: string;
       };
-
-  /**
-   * Connector registry for external MCP servers. Required to accept
-   * inbound MCP Apps render payloads (`shortcuts.mcpApps`) and for the
-   * `/mcp-apps/resource` proxy route to resolve source-server
-   * endpoints. Absent = inbound MCP Apps hosting disabled.
-   */
-  readonly connectors?: ConnectorRegistry;
 
   /**
    * HMAC secret used to sign bootstrap + session tokens. When the MCP
@@ -3698,7 +3669,6 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
               // without restarting the server. CLI owns the shared
               // state cell; this getter just reads it.
               ...(opts.themeProvider !== undefined ? { themeProvider: opts.themeProvider } : {}),
-              ...(opts.connectors ? { connectors: opts.connectors } : {}),
               // Only thread the limiter through when the operator
               // bound a real one — passing the NoopRateLimiter is a
               // wasted allocation and makes the wire-through noisy
@@ -4270,18 +4240,6 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
     ...(opts.errorMapper !== undefined ? { errorMapper: opts.errorMapper } : {}),
     buildMcpOptions,
   });
-
-  // Inbound MCP Apps proxy routes — resource fetch + tools/call
-  // visibility gate. Mounts only when a ConnectorRegistry is
-  // configured; without it, the server has no way to resolve source
-  // endpoints.
-  if (mcpAppsEnabled && opts.connectors && renderStore) {
-    installMcpAppsInbound(app, {
-      connectors: opts.connectors,
-      renderStore,
-      logger: logger.child({ component: "mcp-apps-inbound" }),
-    });
-  }
 
   // Iframe-runtime bundle static mount (C8) — see
   // `./runtime-bundle-route.ts` for the route contract (cache, CORS,

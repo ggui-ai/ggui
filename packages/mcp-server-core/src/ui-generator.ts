@@ -14,7 +14,6 @@ import type {
   UIGenerationRequest,
   UIGenerationResponse,
   GenerationError,
-  ProgressUpdate,
   LlmProvider,
   LlmRoute,
 } from '@ggui-ai/protocol';
@@ -251,23 +250,10 @@ export type UiGenerateResult =
   | { ok: false; error: GenerationError; metadata?: GenerationMetadata };
 
 /**
- * Events yielded during a streaming generation. The stream always terminates
- * with a `done` event carrying the final `UiGenerateResult`.
- */
-export type UiGenerateEvent =
-  | { type: 'progress'; progress: ProgressUpdate }
-  | { type: 'partial'; chunk: string }
-  | { type: 'done'; result: UiGenerateResult };
-
-/**
  * The contract. Implementations:
  *   - `@ggui-ai/ui-gen`       open-source package; real LLM harness
  *   - test doubles / mocks    for unit testing the server
  *   - custom self-hosted fork anyone replacing our harness
- *
- * `generate()` is required. `stream()` is OPTIONAL — servers may call it
- * opportunistically for live progress and fall back to `generate()` when
- * absent.
  *
  * Identity fields — required:
  *
@@ -290,5 +276,4 @@ export interface UiGenerator {
   /** Canonical model identifier this generator was registered for. */
   readonly model: string;
   generate(input: UiGenerateInput): Promise<UiGenerateResult>;
-  stream?(input: UiGenerateInput): AsyncIterable<UiGenerateEvent>;
 }

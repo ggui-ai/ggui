@@ -25,7 +25,8 @@
  *       usage: { input_tokens, output_tokens }
  *     }
  *
- * `stop_reason` → `finishReason` normalization:
+ * `stop_reason` → `finishReason` normalization (implemented in
+ * `./anthropic-wire.ts`, shared with the Bedrock adapter):
  *
  *   - `end_turn` / `stop_sequence`  → `'stop'`
  *   - `max_tokens`                  → `'length'`
@@ -43,10 +44,10 @@ import {
   type ProviderAdapter,
   type ProviderError,
   type ProviderRequest,
-  type ProviderResponse,
   type ProviderResult,
   type ProviderValidation,
 } from '../provider-adapter.js';
+import { parseAnthropicMessagesResponse } from './anthropic-wire.js';
 import {
   classifyFetchError,
   errorFromHttpResponse,
@@ -138,81 +139,11 @@ export function createAnthropicAdapter(
         };
       }
 
-      const parsed = parseAnthropicResponse(body.json);
+      // Success-envelope parsing is shared with the Bedrock adapter
+      // (same wire shape) — see `./anthropic-wire.ts`.
+      const parsed = parseAnthropicMessagesResponse(body.json, PROVIDER);
       if (!parsed.ok) return { ok: false, error: parsed.error };
       return { ok: true, response: parsed.response };
-    },
-  };
-}
-
-function parseAnthropicResponse(
-  raw: unknown,
-):
-  | { ok: true; response: ProviderResponse }
-  | { ok: false; error: ProviderError } {
-  if (!raw || typeof raw !== 'object') {
-    return {
-      ok: false,
-      error: makeProviderError({
-        kind: 'invalid-response',
-        provider: PROVIDER,
-        message: 'anthropic: response body was not an object',
-      }),
-    };
-  }
-  const obj = raw as Record<string, unknown>;
-  const content = obj['content'];
-  if (!Array.isArray(content)) {
-    return {
-      ok: false,
-      error: makeProviderError({
-        kind: 'invalid-response',
-        provider: PROVIDER,
-        message: 'anthropic: response missing `content` array',
-      }),
-    };
-  }
-
-  // Concatenate every text block. Anthropic sometimes splits a
-  // response across multiple text blocks (tool_use blocks are
-  // filtered out — this adapter does not support tool use).
-  const text = content
-    .map((block) => {
-      if (!block || typeof block !== 'object') return '';
-      const b = block as Record<string, unknown>;
-      if (b['type'] === 'text' && typeof b['text'] === 'string') {
-        return b['text'] as string;
-      }
-      return '';
-    })
-    .join('');
-
-  const usage = obj['usage'] as Record<string, unknown> | undefined;
-  const inputTokens =
-    usage && typeof usage['input_tokens'] === 'number'
-      ? (usage['input_tokens'] as number)
-      : 0;
-  const outputTokens =
-    usage && typeof usage['output_tokens'] === 'number'
-      ? (usage['output_tokens'] as number)
-      : 0;
-
-  const stopReason = obj['stop_reason'];
-  let finishReason: ProviderResponse['finishReason'];
-  if (stopReason === 'end_turn' || stopReason === 'stop_sequence') {
-    finishReason = 'stop';
-  } else if (stopReason === 'max_tokens') {
-    finishReason = 'length';
-  } else {
-    finishReason = 'other';
-  }
-
-  return {
-    ok: true,
-    response: {
-      text,
-      usage: { inputTokens, outputTokens },
-      finishReason,
     },
   };
 }

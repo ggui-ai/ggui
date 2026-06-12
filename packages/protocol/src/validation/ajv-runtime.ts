@@ -53,6 +53,7 @@ import equalImport from 'ajv/dist/runtime/equal.js';
 import ucs2lengthImport from 'ajv/dist/runtime/ucs2length.js';
 import type { JsonSchema } from '../types/data-contract';
 import type { ContractViolation } from './contract-validator';
+import { isRecord } from './is-record';
 
 /**
  * Resolve a runtime-helper module's exported function across the
@@ -476,8 +477,8 @@ function resolveAtPath(root: unknown, instancePath: string): unknown {
       const idx = Number(part);
       if (!Number.isInteger(idx)) return undefined;
       cur = cur[idx];
-    } else if (typeof cur === 'object') {
-      cur = (cur as Record<string, unknown>)[part];
+    } else if (isRecord(cur)) {
+      cur = cur[part];
     } else {
       return undefined;
     }

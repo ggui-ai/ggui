@@ -19,8 +19,9 @@
  *     `useAnimationKey` 2026-05-15.
  *
  * The test imports each subpath at runtime, dumps `Object.keys()`, and
- * asserts set-equality with the static allowlist. Failure prints the
- * symmetric diff so the fix is mechanical.
+ * asserts set-equality with the runtime allowlists imported from
+ * `rewrite-imports.ts` — the gate guards the real shim data, not a
+ * copy. Failure prints the symmetric diff so the fix is mechanical.
  *
  * The React export list is INTENTIONALLY a subset of the React module's
  * actual keys — we curate user-facing APIs only and skip internals
@@ -39,6 +40,21 @@ import * as compositionsMod from '../compositions/index';
 import * as interactMod from '../interact/index';
 import * as tokensMod from '../tokens/index';
 
+// The allowlists under test are the REAL runtime constants — imported
+// straight from `rewrite-imports.ts` so the dist-equality assertions
+// below guard the data the shim actually bakes into its
+// `export const X = M["X"];` lines (no comment-enforced copy in
+// between).
+import {
+  COMPONENTS_EXPORTS,
+  COMPOSITIONS_EXPORTS,
+  INTERACT_EXPORTS,
+  PRIMITIVES_EXPORTS,
+  REACT_EXPORTS,
+  TOKENS_EXPORTS,
+  WIRE_EXPORTS,
+} from './rewrite-imports';
+
 /**
  * Truth-source: every named export from a module's index. Excludes
  * `default` (a JS-ism with no allowlist representation) and TypeScript
@@ -50,70 +66,6 @@ function publicExportNames(mod: object): readonly string[] {
     .filter((k) => k !== 'default')
     .sort();
 }
-
-/**
- * Lifted from `rewrite-imports.ts` — the allowlists are not exported
- * (they're module-private). Re-declared here so the test can run
- * without modifying the runtime file's surface. KEEP THESE LISTS BYTE-
- * IDENTICAL to the rewrite-imports.ts constants — the assertions below
- * verify both lists against the dist.
- */
-const PRIMITIVES_EXPORTS = [
-  'Container', 'Card', 'Stack', 'Row', 'Grid', 'Box', 'Divider', 'Spacer',
-  'Text', 'Heading', 'Button', 'Input', 'TextArea', 'Select', 'Checkbox',
-  'Toggle', 'RadioGroup', 'Slider', 'Badge', 'Spinner', 'Skeleton', 'Avatar',
-  'Alert', 'Progress', 'Image', 'Icon', 'Link', 'Tooltip',
-  'Table', 'Tabs', 'Toast', 'Accordion',
-  'MotionKeyframes', 'useMotion', 'useAnimationKey',
-] as const;
-
-const COMPONENTS_EXPORTS = [
-  'SearchField', 'FormField', 'MenuItem', 'Tag', 'Dropdown',
-  'Autocomplete', 'Breadcrumb', 'Pagination', 'EmptyState', 'Stat',
-] as const;
-
-const COMPOSITIONS_EXPORTS = [
-  'Header', 'Sidebar', 'CardGrid', 'CommentThread', 'DataTable',
-  'ChatWindow', 'NavigationBar', 'FileUploader', 'UserProfileCard',
-  'NotificationCenter', 'Modal', 'CommandPalette', 'Footer', 'Hero',
-  'IncidentTimeline', 'MakeTabLayout',
-  'MarketingHero', 'MarketingCTA', 'MarketingFeatures',
-] as const;
-
-const INTERACT_EXPORTS = ['Clickable', 'Hoverable', 'Pressable'] as const;
-
-const TOKENS_EXPORTS = [
-  'animation', 'duration', 'easing', 'transition', 'keyframes',
-  'thinkingAnimation', 'thinkingKeyframes', 'thinkingPresets',
-  'THINKING_DEFAULT_STYLE', 'motionSafe', 'reducedMotion', 'reducedMotionCSS',
-  'colors', 'gray', 'primary', 'semantic', 'chartColors',
-  'success', 'warning', 'error', 'info', 'highContrast',
-  'typography', 'fontFamily', 'fontSize', 'fontSizeValues',
-  'fontWeight', 'lineHeight', 'letterSpacing',
-  'headingStyles', 'textStyles',
-  'spacing', 'spacingValues', 'radius', 'shadow', 'elevation',
-  'maxWidth', 'zIndex',
-  'accessibility', 'focusRing',
-  'nativeTokens', 'tokens',
-] as const;
-
-const REACT_EXPORTS = [
-  'useState', 'useEffect', 'useRef', 'useCallback', 'useMemo',
-  'useContext', 'useReducer', 'useId',
-  'use', 'useActionState', 'useOptimistic',
-  'useTransition', 'startTransition', 'useDeferredValue',
-  'useSyncExternalStore', 'useInsertionEffect', 'useLayoutEffect',
-  'useImperativeHandle', 'useDebugValue',
-  'createElement', 'Fragment', 'Children', 'cloneElement',
-  'createContext', 'forwardRef', 'memo', 'lazy', 'Suspense',
-  'Component', 'PureComponent', 'isValidElement', 'createRef',
-] as const;
-
-const WIRE_EXPORTS = [
-  'useAction', 'useStream', 'useAuth', 'useApp', 'useRender',
-  'useGguiContext', 'useContract', 'useWireContext',
-  'GguiWireProvider',
-] as const;
 
 /**
  * Set-equality diff with named sides for human-readable failures. The

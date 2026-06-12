@@ -34,7 +34,6 @@ export type {
   ErrorPayload,
   RenderPayload,
   PropsUpdatePayload,
-  UrlPayload,
   GenerationStrategy,
   ShellType,
   AppDisplayConfig,
@@ -173,7 +172,6 @@ export type { UseWebSocketOptions, UseWebSocketReturn } from './hooks/useWebSock
 export { useInvoke, parseSseStream } from './invoke/index';
 export type { UseInvokeOptions, UseInvokeReturn, ConversationMessage, InvokeError } from './invoke/index';
 export {
-  extractBootstrapMeta,
   extractMcpAppAiGguiMeta,
   buildAppRendererToolResult,
   extractUiMoments,

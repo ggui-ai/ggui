@@ -24,15 +24,12 @@ import type { ActionEnvelope } from '../types/events';
 import type { JsonObject } from '../types/data-contract';
 import type {
   SubscribePayload,
-  ClosePayload,
   AckPayload,
   ErrorPayload,
   RenderPayload,
   StreamEnvelope,
   PropsUpdatePayload,
-  UrlPayload,
   SystemPayload,
-  InternalProgressPayload,
   ChannelSubscribePayload,
   ChannelUnsubscribePayload,
   ChannelPayloadFrame,
@@ -49,7 +46,6 @@ import type { GguiSessionEvent } from '../types/ggui-session-event';
 export type WebSocketMessageType =
   | 'action' // Client → Server: ActionEnvelope (canonical inbound)
   | 'subscribe' // Client → Server: Subscribe to render
-  | 'close' // Client → Server: Close render
   | 'ping' // Client → Server: Heartbeat ping
   | 'pong' // Server → Client: Heartbeat pong response
   | 'ack' // Server → Client: Event acknowledged
@@ -57,9 +53,7 @@ export type WebSocketMessageType =
   | 'render' // Server → Client: Agent render event
   | 'data' // Server → Client: Agent data push (no regeneration)
   | 'props_update' // Server → Client: Props replaced on existing component
-  | 'url' // Server → Client: Short URL notification
   | 'system' // Server → Client: System-level events (auth, credentials)
-  | 'internal:progress' // Generator → Server: Progress update (internal)
   // ─── Channel-level subscribe (per-channel `streamSpec[*].source.tool` fan-out) ───
   | 'channel_subscribe' // Client → Server: subscribe to a streamSpec channel; server polls source.tool
   | 'channel_unsubscribe' // Client → Server: cancel a channel_subscribe (idempotent)
@@ -107,7 +101,6 @@ interface WsMessageBase {
 export type WebSocketMessage =
   | (WsMessageBase & { type: 'action'; payload: ActionEnvelope })
   | (WsMessageBase & { type: 'subscribe'; payload: SubscribePayload })
-  | (WsMessageBase & { type: 'close'; payload: ClosePayload })
   | (WsMessageBase & { type: 'ping'; payload: JsonObject })
   | (WsMessageBase & { type: 'pong'; payload: JsonObject })
   | (WsMessageBase & { type: 'ack'; payload: AckPayload })
@@ -115,9 +108,7 @@ export type WebSocketMessage =
   | (WsMessageBase & { type: 'render'; payload: RenderPayload })
   | (WsMessageBase & { type: 'data'; payload: StreamEnvelope })
   | (WsMessageBase & { type: 'props_update'; payload: PropsUpdatePayload })
-  | (WsMessageBase & { type: 'url'; payload: UrlPayload })
   | (WsMessageBase & { type: 'system'; payload: SystemPayload })
-  | (WsMessageBase & { type: 'internal:progress'; payload: InternalProgressPayload })
   // Channel-level subscribe transport — per `streamSpec[*].source.tool` fan-out.
   | (WsMessageBase & { type: 'channel_subscribe'; payload: ChannelSubscribePayload })
   | (WsMessageBase & { type: 'channel_unsubscribe'; payload: ChannelUnsubscribePayload })

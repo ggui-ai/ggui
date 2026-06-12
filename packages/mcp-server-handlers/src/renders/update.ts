@@ -56,8 +56,10 @@ import {
   type GguiSessionTarget,
 } from './apply-ggui-session-patch.js';
 import {
+  assembleRenderSliceBase,
   deriveRenderMeta,
   type RenderMetaView,
+  type RenderSliceMetaDeps,
 } from './slice-meta-derivation.js';
 import { GguiSessionNotFoundError } from './errors.js';
 import { emitPayloadTraceEvent } from './payload-trace-sink.js';
@@ -113,10 +115,21 @@ export interface BillingGate {
 }
 
 /**
- * Deps for the OSS `ggui_update` handler. Mirrors `GguiRenderHandlerDeps`
- * shape — a small narrow seam set, all optional parts marked as such.
+ * Deps for the OSS `ggui_update` handler — a small narrow seam set,
+ * all optional parts marked as such.
+ *
+ * Extends {@link RenderSliceMetaDeps} — the `ai.ggui/render`
+ * envelope-base plumbing (`mintWsToken` / `runtimeUrl` / `themeId` /
+ * `themeMode` / `themeProvider`) is declared ONCE and shared verbatim
+ * with `ggui_render`, so the two emitting tools cannot drift on the
+ * slice deps. When the minter is wired, the post-patch slice lets MCP
+ * Apps hosts that forward the full `CallToolResult` (including
+ * `_meta`) via `ui/notifications/tool-result` postMessage re-apply
+ * patched props to a still-mounted iframe WITHOUT re-subscribing.
+ * Minter absent = no `_meta` on update results; persistence + the
+ * live-channel `props_update` fan-out still fire.
  */
-export interface GguiUpdateHandlerDeps {
+export interface GguiUpdateHandlerDeps extends RenderSliceMetaDeps {
   /** GguiSession-backing store. Used to load + persist the patched render. */
   readonly renderStore: GguiSessionStore;
   /**
@@ -144,52 +157,12 @@ export interface GguiUpdateHandlerDeps {
    * default description below.
    */
   readonly description?: string;
-  /**
-   * Bootstrap-credential minter mirroring `GguiRenderHandlerDeps.mintWsToken`.
-   * When set, the handler's `resultMeta` emits the `ai.ggui/render` slice
-   * carrying the live trio (`wsUrl` + `token` + `expiresAt`) for the
-   * post-patch render. MCP Apps hosts that forward the full
-   * `CallToolResult` (including `_meta`) via
-   * `ui/notifications/tool-result` postMessage can re-apply the patched
-   * props to a still-mounted iframe WITHOUT the iframe re-subscribing —
-   * same single-source-of-truth derivation `ggui_render` uses, just
-   * sourced from the patched render.
-   *
-   * Absent = no `_meta` on update results (matches the legacy posture).
-   * Persistence + the live-channel `props_update` fan-out still fire; only
-   * the spec-compliant postMessage fallback path is unwired.
-   */
-  readonly mintWsToken?: (
-    sessionId: string,
-    appId: string,
-  ) => { wsUrl: string; token: string; expiresAt: string };
-  /**
-   * Iframe-runtime bundle URL forwarded onto the
-   * `ai.ggui/render.runtimeUrl` slice field.
-   * Required-when-set-with-mintWsToken; absent + minter absent = no
-   * slice meta at all (no field to populate). Mirrors
-   * {@link GguiRenderHandlerDeps.runtimeUrl}.
-   */
-  readonly runtimeUrl?: string | (() => string | undefined);
-  /** Theme preset id forwarded onto the `ai.ggui/render.themeId` slice field. */
-  readonly themeId?: string;
-  /** Theme mode forwarded onto the `ai.ggui/render.themeMode` slice field. */
-  readonly themeMode?: 'light' | 'dark';
-  /**
-   * Live theme getter (overrides static `themeId`/`themeMode` per-update).
-   * Lets a console "Save to ggui.json" reach the next update without a
-   * server restart. Same closure pattern `ggui_render` uses.
-   */
-  readonly themeProvider?: () => {
-    readonly id?: string;
-    readonly mode?: 'light' | 'dark';
-  } | undefined;
-  /**
-   * Resolver for the `ai.ggui/render.streamWebSocketLocalTools` slice
-   * field. Mirrors render's resolver so the post-update render slice
-   * agrees with what the iframe-runtime saw on initial mount.
-   */
-  readonly streamWebSocketLocalTools?: () => readonly string[] | undefined;
+  // `mintWsToken` / `runtimeUrl` / `themeId` / `themeMode` /
+  // `themeProvider` are inherited from {@link RenderSliceMetaDeps} —
+  // shared verbatim with `ggui_render`. (The former
+  // `streamWebSocketLocalTools` dep is deleted: the post-update slice
+  // is a deliberate props-only SUBSET that never emitted it — the
+  // field is mount-time bootstrap data owned by `ggui_render`.)
 }
 
 /**
@@ -498,32 +471,20 @@ export function createGguiUpdateHandler(
         return undefined;
       }
 
-      const runtimeUrlRaw =
-        typeof deps.runtimeUrl === 'function'
-          ? deps.runtimeUrl()
-          : deps.runtimeUrl;
-      const runtimeUrl = runtimeUrlRaw ?? '/_ggui/iframe-runtime.js';
-      // The minter's own return shape names the credential `token`
-      // (legacy); the render slice uses `wsToken`. Remap explicitly.
-      const mintedTrio = deps.mintWsToken
-        ? deps.mintWsToken(output.sessionId, ctx.appId)
-        : undefined;
-      const authFields: Partial<
-        Pick<McpAppAiGguiRenderMeta, 'wsUrl' | 'wsToken' | 'expiresAt'>
-      > = mintedTrio
-        ? {
-            wsUrl: mintedTrio.wsUrl,
-            wsToken: mintedTrio.token,
-            expiresAt: mintedTrio.expiresAt,
-          }
-        : {};
-      // 3-layer theme resolution. liveTheme > render > deps.themeId.
-      // First non-undefined wins. themeMode stays 2-layer because no
-      // agent surface sets it per-render today.
-      const liveTheme = deps.themeProvider?.();
-      const resolvedThemeId =
-        liveTheme?.id ?? renderThemeId ?? deps.themeId;
-      const resolvedThemeMode = liveTheme?.mode ?? deps.themeMode;
+      // Shared `ai.ggui/render` envelope base — runtimeUrl resolution,
+      // minted-trio `token`→`wsToken` remap, and the 3-layer theme
+      // resolution (liveTheme > render > deps.themeId) all live in ONE
+      // helper shared with `ggui_render`.
+      const {
+        runtimeUrl,
+        authFields,
+        themeId: resolvedThemeId,
+        themeMode: resolvedThemeMode,
+      } = assembleRenderSliceBase(deps, {
+        sessionId: output.sessionId,
+        appId: ctx.appId,
+        renderThemeId,
+      });
 
       const render: McpAppAiGguiRenderMeta = {
         sessionId: output.sessionId,

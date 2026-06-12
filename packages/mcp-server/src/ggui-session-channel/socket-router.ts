@@ -180,11 +180,6 @@ export function attachSocketRouter(wss: WebSocketServer, deps: SocketRouterDeps)
           ...(message.requestId ? { requestId: message.requestId } : {}),
         });
         return;
-      case "close":
-        // Explicit close from client — unregister + close the socket.
-        if (sub) deps.unregister(ws);
-        ws.close(1000, "client_close");
-        return;
       case "action":
         if (!sub) {
           deps.sendError(

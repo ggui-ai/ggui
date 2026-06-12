@@ -200,41 +200,6 @@ export type InferStreamPayload<T, N extends string> =
     : unknown;
 
 // =============================================================================
-// Context Inference
-// =============================================================================
-
-/**
- * Extract contextSpec slot names as a string literal union from a contract.
- *
- * Mirrors {@link InferActionNames} / {@link InferStreamNames}: when the
- * contract declares a `contextSpec` map, returns the keys as a literal
- * union; absent → `never` (so a context-slot lookup for a `'nonExistent'`
- * key against an empty contract is a compile error rather than a silent
- * broad-string fallback).
- */
-export type InferContextNames<T> =
-  T extends { readonly contextSpec: infer S }
-    ? Extract<keyof S, string>
-    : never;
-
-/**
- * Infer the value type for a specific contextSpec slot, narrowed by
- * its declared `schema`. Mirrors {@link InferActionPayload} /
- * {@link InferStreamPayload}.
- *
- * - Present `contextSpec` + known slot name → `SchemaToType<schema>`.
- * - Present `contextSpec` + unknown slot name → `never`.
- * - Absent `contextSpec` entirely → `unknown` (parallel to the
- *   payload-fallback posture on actionSpec / streamSpec).
- */
-export type InferContextValue<T, N extends string> =
-  T extends { readonly contextSpec: infer S }
-    ? N extends keyof S
-      ? S[N] extends { readonly schema: infer Sch } ? SchemaToType<Sch> : unknown
-      : never
-    : unknown;
-
-// =============================================================================
 // Agent Capabilities Inference
 // =============================================================================
 
@@ -415,10 +380,6 @@ export interface ContractTypeMap {
 
 // Manual type map extraction utilities
 
-/** Extract props from a manual ContractTypeMap. */
-export type PropsOf<C extends ContractTypeMap> =
-  C extends { props: infer P } ? P : JsonObject;
-
 /** Extract action names from a manual ContractTypeMap. */
 export type ActionNames<C extends ContractTypeMap> =
   C extends { actions: infer A } ? Extract<keyof A, string> : string;
@@ -449,13 +410,3 @@ export type StreamPayloadOf<C extends ContractTypeMap, N extends StreamNames<C>>
  */
 export type AgentToolNames<C extends ContractTypeMap> =
   C extends { agentCapabilities: infer T } ? Extract<keyof T, string> : string;
-
-/**
- * Extract gadget binding names from a manual ContractTypeMap.
- *
- * Libraries are declarations, not RPC, so there is no payload-type
- * inference. Value types are consumed via the runtime hook
- * (`GadgetHook<TOutput>`), not via a contract-level query.
- */
-export type GadgetNames<C extends ContractTypeMap> =
-  C extends { clientCapabilities: infer T } ? Extract<keyof T, string> : string;

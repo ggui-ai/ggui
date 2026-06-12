@@ -37,7 +37,7 @@ The fastest way to author one: copy `src/themes/definitions/claudic.ts`
 inner objects as JSON. Or export from Figma Tokens / Tokens Studio /
 Style Dictionary if your design system already lives there — the
 `DtcgTheme` shape is a strict subset of W3C DTCG, so most exports
-parse with minor tweaks (canvas + motion + name/description fields).
+parse with minor tweaks (motion + name/description fields).
 
 The picker will surface a "current selection is a file-form theme"
 warning when you switch presets, since selecting a preset overwrites
@@ -79,12 +79,6 @@ const auroraLight: DtcgTheme = {
   spacing: shared.spacing,
   shape: shared.shape,
   motion: shared.motion,
-  canvas: {
-    mode: { $value: "none", $type: "string" },
-    speed: { $value: 1.0, $type: "number" },
-    colors: { $value: [], $type: "array" },
-    background: { $value: "#…", $type: "color" },
-  },
 };
 
 const auroraDark: DtcgTheme = {
@@ -146,8 +140,6 @@ shape.radius
 shape.shadow
   sm, md, lg, xl
 motion.duration, motion.easing, motion.keyframes
-canvas
-  mode, speed, colors, background
 ```
 
 Spacing in particular ships **both** numeric (`1..12`) and named
@@ -161,13 +153,6 @@ something downstream breaks.
 through `--ggui-color-success` etc., not through the primary/neutral
 ramps. Pick hues that read against your `surface` regardless of the
 ladder you chose for `primary`.
-
-### Canvas
-
-`canvas.mode` defaults to `'none'`. Other values (`'wave' | 'flow' |
-'mesh' | 'constellation'`) drive the optional `GenerativeCanvas`
-backdrop in some app shells. Most consumers want `'none'` — the
-generative canvas is a deliberate brand statement, not a default.
 
 ---
 

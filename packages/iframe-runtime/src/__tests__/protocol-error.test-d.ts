@@ -35,7 +35,12 @@ function exhaust(err: ProtocolError): string {
       return err.code;
     case 'auth':
       expectTypeOf(err.code).toEqualTypeOf<
-        'SESSION_NOT_FOUND' | 'TOKEN_EXPIRED' | 'AUTH_REJECTED'
+        | 'SESSION_NOT_FOUND'
+        | 'BOOTSTRAP_EXPIRED'
+        | 'BOOTSTRAP_INVALID'
+        | 'BOOTSTRAP_SESSION_MISMATCH'
+        | 'BOOTSTRAP_APP_MISMATCH'
+        | 'UNAUTHENTICATED'
       >();
       return err.code;
     case 'protocol': {

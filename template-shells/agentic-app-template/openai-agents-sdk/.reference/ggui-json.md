@@ -9,7 +9,7 @@
 ```json
 {
   "schema": "1",
-  "protocol": "draft-2026-06-11",
+  "protocol": "draft-2026-06-12",
   "app": {
     "slug": "sample-ggui-default",
     "name": "Sample ggui — default"

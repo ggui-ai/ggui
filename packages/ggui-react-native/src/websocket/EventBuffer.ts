@@ -1,3 +1,22 @@
+/**
+ * EventBuffer — React Native twin of `@ggui-ai/react`'s
+ * `websocket/EventBuffer.ts`.
+ *
+ * The core queue mirrors the web buffer: bounded FIFO, overflow drops
+ * the oldest message with a console.warn + optional `onOverflow`
+ * callback, ordered `flush()`.
+ *
+ * Platform delta (every intentional divergence from the web copy):
+ *
+ *   - Optional AsyncStorage-compatible persistence (`setStorage` /
+ *     `loadPersisted` / per-`add` persist), so queued frames survive
+ *     app restarts during mobile network transitions.
+ *   - Deduplication by `type:payload` hash — mobile reconnect loops
+ *     re-enqueue the same frames; the web buffer keeps duplicates.
+ *
+ * Guarded by the structural twin gate in `../twin-parity.test.ts`
+ * (`DOCUMENTED_DELTA_TWINS`).
+ */
 import type { WebSocketMessage } from '@ggui-ai/protocol/transport/websocket';
 
 const PERSIST_KEY = 'ggui_event_buffer';

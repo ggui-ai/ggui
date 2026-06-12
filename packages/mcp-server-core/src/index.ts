@@ -77,7 +77,6 @@ export * from './ws-tokens.js';
 
 // Stable-identity registry for external MCP servers. General seam;
 // MCP Apps inbound hosting is today's primary consumer.
-export * from './connector-registry.js';
 
 // Key-management seams.
 //

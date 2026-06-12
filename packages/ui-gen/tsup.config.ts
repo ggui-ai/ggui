@@ -10,7 +10,7 @@ import { defineConfig } from 'tsup';
  *   - Both `src/` and `dist/` ship in the tarball (see package.json `files`)
  *     so consumers can step through source if they want.
  *
- * Subpath entrypoints (adapters, harness, evaluation, coding-agent,
+ * Subpath entrypoints (adapters, harness, evaluation,
  * design-system-docs, render-check, wire/primitive docs) are registered
  * in the `entry` array below.
  */
@@ -28,7 +28,6 @@ export default defineConfig({
     'src/tools.ts',
     'src/boilerplate.ts',
     'src/provider-adapter.ts',
-    'src/provider-adapter-mock.ts',
     'src/provider-adapter-contract.ts',
     'src/providers/index.ts',
     'src/compile.ts',
@@ -38,6 +37,12 @@ export default defineConfig({
     'src/design-system-docs.ts',
     // Blueprint validator orchestrator.
     'src/blueprint-validator.ts',
+    // Advanced generator (published `./advanced` subpath — see
+    // docs/protocol/migrations/2026-05-12-advanced-generator.md). Was
+    // never listed here; the exports-map target only resolved because a
+    // stale pre-tsup `dist/advanced/` orphan kept shipping. Clean
+    // builds (rm -rf dist) exposed the gap.
+    'src/advanced/index.ts',
     // Harness cluster.
     'src/harness/index.ts',
     'src/harness/types-public.ts',
@@ -66,9 +71,6 @@ export default defineConfig({
     'src/adapters/claude/raw.ts',
     'src/adapters/openai/raw.ts',
     'src/adapters/google/raw.ts',
-    // Coding-agent cluster.
-    'src/coding-agent/index.ts',
-    'src/coding-agent/boilerplate.ts',
     // Tool docs.
     'src/tools/get-wire.ts',
     'src/tools/get-primitives-ts.ts',
@@ -107,5 +109,18 @@ export default defineConfig({
     // import) — keeping external avoids bundling its native binary
     // resolution paths.
     'esbuild',
+    // Heavy provider SDKs + the visual-evaluator browser driver. All
+    // three are loaded via lazy `await import(...)` at adapter / probe
+    // time and are declared optional peerDependencies — tsup only
+    // auto-externalizes dependencies/peerDependencies it can see, and
+    // bundling these inlined their full transitive trees (~67MB of the
+    // 84.7MB unpacked tarball: @google/adk pulls @mikro-orm/core +
+    // lodash-es + google-auth-library; @openai/agents pulls
+    // @openai/agents-core; puppeteer-core pulls chromium-bidi +
+    // devtools-protocol). Consumers that use the Google / OpenAI
+    // adapters or the visual evaluator install the SDK themselves.
+    '@google/adk',
+    '@openai/agents',
+    'puppeteer-core',
   ],
 });

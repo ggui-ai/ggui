@@ -41,15 +41,12 @@ import type {
 // ── Positive locks: contract payloads reachable via the root barrel ────
 import type {
   AckPayload,
-  ClosePayload,
   ErrorPayload,
-  InternalProgressPayload,
   PropsUpdatePayload,
   RenderPayload,
   StreamEnvelope,
   SubscribePayload,
   SystemPayload,
-  UrlPayload,
 } from '../index.js';
 import type { ActionEnvelope } from '../types/events.js';
 
@@ -233,7 +230,6 @@ describe('websocket transport boundary — discriminator coverage', () => {
     const types: WebSocketMessageType[] = [
       'action',
       'subscribe',
-      'close',
       'ping',
       'pong',
       'ack',
@@ -241,9 +237,7 @@ describe('websocket transport boundary — discriminator coverage', () => {
       'render',
       'data',
       'props_update',
-      'url',
       'system',
-      'internal:progress',
       // EE+ 1b — channel-level subscribe variants.
       'channel_subscribe',
       'channel_unsubscribe',
@@ -256,7 +250,7 @@ describe('websocket transport boundary — discriminator coverage', () => {
       // R7 — ledger replay frame.
       'render_event',
     ];
-    expect(types).toHaveLength(20);
+    expect(types).toHaveLength(17);
     // Structural lock: ConnectionStatus values also stable.
     const statuses: ConnectionStatus[] = [
       'connecting',
@@ -281,9 +275,6 @@ void (function _contractPayloadsStayOnRoot(): void {
   type _R = RenderPayload;
   type _SE = StreamEnvelope;
   type _E = ErrorPayload;
-  type _C = ClosePayload;
-  type _U = UrlPayload;
   type _Sys = SystemPayload;
   type _PU = PropsUpdatePayload;
-  type _IP = InternalProgressPayload;
 });

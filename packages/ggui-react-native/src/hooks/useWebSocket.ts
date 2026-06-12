@@ -1,9 +1,31 @@
+/**
+ * useWebSocket — React Native twin of `@ggui-ai/react`'s
+ * `hooks/useWebSocket.ts`.
+ *
+ * Everything else mirrors the web hook, including the
+ * `sendAction` schemaVersion re-stamp via `makeActionEnvelope`.
+ *
+ * Platform delta (every intentional divergence from the web copy):
+ *
+ *   - `manager.connect()` is async on RN (persisted-buffer load), so
+ *     the mount effect attaches a `.catch` that surfaces connection
+ *     failures via `lastError`; the web manager connects
+ *     synchronously.
+ *   - The underlying `WebSocketManager` is the mobile-aware variant
+ *     (AppState / NetInfo monitoring, buffer persistence) — see
+ *     `../websocket/WebSocketManager.ts`.
+ *
+ * Guarded by the structural twin gate in `../twin-parity.test.ts`
+ * (`DOCUMENTED_DELTA_TWINS`): exported surface must match the web
+ * copy.
+ */
 import { useEffect, useRef, useState, useCallback } from 'react';
 import type {
   ConnectionStatus,
   WebSocketMessage,
 } from '@ggui-ai/protocol/transport/websocket';
 import type { ActionEnvelope } from '@ggui-ai/protocol';
+import { makeActionEnvelope } from '@ggui-ai/protocol';
 import { WebSocketManager } from '../websocket/WebSocketManager';
 
 /**
@@ -84,9 +106,28 @@ export function useWebSocket(options: UseWebSocketOptions): UseWebSocketReturn {
   }, [url, sessionId, appId]);
 
   const sendAction = useCallback((envelope: ActionEnvelope) => {
+    // Re-stamp via the central builder. Callers typically pass an
+    // envelope already built by `buildActionEnvelope` (which stamps);
+    // this path is the belt-and-suspenders for any third-party caller
+    // that skipped the builder. Semantics: if `envelope.schemaVersion`
+    // is a string, preserve it; if it's `undefined` (or the key is
+    // absent), stamp the default.
+    const restamped: ActionEnvelope =
+      envelope.schemaVersion !== undefined
+        ? envelope
+        : makeActionEnvelope({
+            sessionId: envelope.sessionId,
+            type: envelope.type,
+            ...(envelope.payload !== undefined
+              ? { payload: envelope.payload }
+              : {}),
+            ...(envelope.clientSeq !== undefined
+              ? { clientSeq: envelope.clientSeq }
+              : {}),
+          });
     managerRef.current?.send({
       type: 'action',
-      payload: envelope,
+      payload: restamped,
     });
   }, []);
 

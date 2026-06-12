@@ -1,3 +1,32 @@
+/**
+ * WebSocketManager — React Native twin of `@ggui-ai/react`'s
+ * `websocket/WebSocketManager.ts`.
+ *
+ * The core lifecycle mirrors the web manager: connect → subscribe on
+ * open (with `supportedVersions`), send-or-buffer, exponential-backoff
+ * reconnect with max-attempt error, 30s heartbeat pings.
+ *
+ * Platform delta (every intentional divergence from the web copy):
+ *
+ *   - AppState monitoring — disconnect + stop pings on background
+ *     (battery posture), reconnect on foreground when the network is
+ *     available.
+ *   - Optional NetInfo monitoring (`netInfoSubscribe`) — proactive
+ *     close on network loss, fresh reconnect on recovery. The RN-only
+ *     `NetInfoState` export supports it.
+ *   - Optional AsyncStorage-compatible buffer persistence (`storage`
+ *     option); `connect()` is async to load persisted events first.
+ *   - `sessionId` is REQUIRED here; the web manager's optional
+ *     sessionId + `subscribeToRender` deferred-subscribe path (the
+ *     start-invoke flow) has no RN consumer yet.
+ *   - No `disposed` guard — RN lifecycle reconnects after
+ *     `disconnect()` (foreground return), whereas the web manager
+ *     retires the instance permanently.
+ *
+ * Guarded by the structural twin gate in `../twin-parity.test.ts`
+ * (`DOCUMENTED_DELTA_TWINS`): exported surface must match the web
+ * copy (modulo the annotated `NetInfoState`).
+ */
 import { AppState, type AppStateStatus } from 'react-native';
 import type { ConnectionStatus, WebSocketMessage } from '@ggui-ai/protocol/transport/websocket';
 import { CLIENT_SUPPORTED_VERSIONS } from '@ggui-ai/protocol';

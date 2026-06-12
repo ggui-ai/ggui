@@ -68,10 +68,16 @@
     "!**/*.test-d.d.ts",
     "!**/__tests__/**",
     "!**/*.spec.ts",
-    "!**/*.spec.tsx"
+    "!**/*.spec.tsx",
+    "!**/*.stories.ts",
+    "!**/*.stories.tsx",
+    "!**/*.stories.js",
+    "!**/*.stories.js.map",
+    "!**/*.stories.d.ts",
+    "!**/*.stories.d.ts.map"
   ],
   "scripts": {
-    "build": "tsc -p tsconfig.build.json && node ../scripts/fix-esm-imports.mjs dist && node scripts/generate-inline-modules.mjs && pnpm run generate:docs && pnpm run generate:docs-ts",
+    "build": "rm -rf dist && tsc -p tsconfig.build.json && node ../scripts/fix-esm-imports.mjs dist && node scripts/generate-inline-modules.mjs && pnpm run generate:docs && pnpm run generate:docs-ts",
     "build:inline": "node scripts/generate-inline-modules.mjs",
     "dev": "tsc --watch",
     "typecheck": "tsc --noEmit",

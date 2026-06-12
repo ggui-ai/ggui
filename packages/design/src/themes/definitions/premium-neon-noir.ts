@@ -2,7 +2,6 @@
  * Premium Neon Noir Theme — light + dark variants
  *
  * Hot pink neon on near-black surfaces. Electric, bold, nocturnal.
- * Flow canvas with pink/magenta particle streams.
  *
  * Light variant: shipping configuration. Already noir-leaning — dark
  * surface with hot pink neon.
@@ -235,19 +234,6 @@ const neonNoirLight: DtcgTheme = {
   shape: shared.shape,
   motion: shared.motion,
 
-  canvas: {
-    mode: { $value: 'flow', $type: 'string' },
-    speed: { $value: 0.8, $type: 'number' },
-    colors: {
-      $value: [
-        'rgba(236, 72, 153, 0.18)',
-        'rgba(219, 39, 119, 0.12)',
-        'rgba(190, 24, 93, 0.08)',
-      ],
-      $type: 'array',
-    },
-    background: { $value: '#06060a', $type: 'color' },
-  },
 
   accessibility: {
     ...standardAccessibility.dark,
@@ -345,19 +331,6 @@ const neonNoirDark: DtcgTheme = {
   shape: shared.shape,
   motion: shared.motion,
 
-  canvas: {
-    mode: { $value: 'flow', $type: 'string' },
-    speed: { $value: 0.8, $type: 'number' },
-    colors: {
-      $value: [
-        'rgba(244, 114, 182, 0.24)', // brighter pink stream
-        'rgba(236, 72, 153, 0.16)',
-        'rgba(190, 24, 93, 0.10)',
-      ],
-      $type: 'array',
-    },
-    background: { $value: '#000000', $type: 'color' },
-  },
 
   accessibility: {
     ...standardAccessibility.dark,

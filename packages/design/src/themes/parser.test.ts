@@ -55,7 +55,6 @@ describe('parseTheme', () => {
     expect(parsed.cssVariables).toContain('--ggui-color-onSurface: #111827');
     expect(parsed.cssVariables).toContain('--ggui-motion-transition-fast');
     expect(parsed.cssVariables).toContain('--ggui-shape-radius-md: 8px');
-    expect(parsed.canvasConfig.mode).toBe('none');
   });
 
   // Shape-conformance gate across every registered theme × every mode.
@@ -112,7 +111,6 @@ describe('parseTheme', () => {
           // ParsedTheme metadata round-trips from the source theme.
           expect(parsed.id).toBe(id);
           expect(parsed.name).toBe(raw!.$name);
-          expect(parsed.canvasConfig.mode).toBe(raw!.canvas.mode.$value);
         });
       }
     }

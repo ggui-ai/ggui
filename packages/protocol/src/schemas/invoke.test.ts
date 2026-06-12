@@ -15,11 +15,15 @@ import {
   contentBlockSchema,
   invokeErrorCodeSchema,
 } from './invoke';
+import type { z } from 'zod';
 import type {
   InvokeEvent,
-  InvokeRequest,
   ContentBlock,
 } from '../types/invoke';
+
+// The published `InvokeRequest` alias was deleted in draft-2026-06-12
+// (zero consumers); the schema remains the contract — infer locally.
+type InvokeRequest = z.infer<typeof invokeRequestSchema>;
 
 // ── Fixtures — one per event type ────────────────────────────────────
 

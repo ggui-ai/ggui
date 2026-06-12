@@ -6,6 +6,296 @@
  * schema change; the most recent change anchors {@link PROTOCOL_VERSION}.
  *
  * --------------------------------------------------------------------
+ * Consolidated cleanliness release (2026-06-12, BREAKING, pre-launch).
+ * Four strands from the 2026-06-12 cleanliness + orphan audits, every
+ * finding adversarially re-verified before action: the dv* entries
+ * purge dead wire vocabulary and SSoT-wire the MCP tool input schemas;
+ * the ug* and dg* entries clean the `@ggui-ai/ui-gen` + `@ggui-ai/design`
+ * published artifacts (dead generation island, prompt-builder
+ * consolidation, packaging — no wire change); the tw* entries
+ * single-source twin/mirror surfaces across the react / react-native /
+ * server packages (no wire change).
+ *
+ *   dv1. **MCP tool input schemas are SSoT-wired.** `schemas/mcp.ts`'s
+ *      "the server handler imports these" docstring is now TRUE: the
+ *      handlers in `@ggui-ai/mcp-server-handlers` (+ the hosted pod's
+ *      `ggui_discover` / `ggui_request_credential`) import the new
+ *      `*InputShape` raw shapes (consume / emit / get-session /
+ *      list-featured / search / render-blueprint / discover /
+ *      request-credential / render) instead of hand-authoring mirrors.
+ *      The schemas reconciled TOWARD the shipped handler behavior (the
+ *      live wire): `sessionId` gains `.min(1)`, consume `timeout` is
+ *      `.int()`, search `limit` is int 1..100, render-blueprint loses
+ *      the never-read `props` field, list-featured + discover are
+ *      EMPTY shapes (the filter vocabulary died in the pre-launch
+ *      scrub), and the aspirational `.strict()` posture drops to match
+ *      the `z.object(shape)` strip-unknown-keys behavior every live
+ *      handler actually enforces. `renderInputSchema` — the one drift
+ *      case decided the other way, toward the truthful contract —
+ *      gains the live `themeId` + `infra.model` fields the published
+ *      schema was missing (it would have REJECTED valid live wire
+ *      calls), and the handler adopts the schema's richer handshakeId
+ *      validation messages. Hand types `GguiConsumeInput` /
+ *      `GguiGetSessionInput` / `GguiSearchBlueprintsInput` /
+ *      `GguiRenderBlueprintInput` / `GguiRequestCredentialInput` are
+ *      now `z.infer` of those schemas ("kept in sync by convention"
+ *      dies); `ggui_handshake` / `ggui_update` keep their documented
+ *      deliberate handler-side divergences (loose-on-purpose draft
+ *      contract; optional sessionId for in-process dispatch).
+ *
+ *   dv2. **`EventType` collapses to its one real member
+ *      `'data:submit'`** (actions-vs-context: actions drive turns;
+ *      there is no third category). The 8 producer-less members
+ *      (`data:change`, `lifecycle:focus`/`blur`,
+ *      `interaction:click`/`hover`/`scroll`, `error:validation`/
+ *      `connection`) are deleted along with their dead client lanes:
+ *      the RN WebViewRenderer's legacy bridge emissions and both SDKs'
+ *      never-firing `GguiRenderProps.onInteraction` callback. Server
+ *      runtime behavior is unchanged — non-submit wire envelopes were
+ *      already ledger-only and never reached `ggui_consume`.
+ *
+ *   dv3. **`'url'` / `'close'` / `'internal:progress'` leave the WS
+ *      message union** — pre-flatten vocabulary that survived the
+ *      rc4/rc7 frame purges. `'url'` + `UrlPayload`: zero emitters
+ *      since the post-R5 `/r/` short-code drop. `'close'` +
+ *      `ClosePayload`: SPEC §12.2 already records the close frame
+ *      deleted in draft-2026-05-27 ("no terminal close ceremony");
+ *      the server's consumer-with-no-emitter socket-router arm goes
+ *      with it — clients just close the socket. `'internal:progress'`
+ *      + `InternalProgressPayload` + `ProgressStep`: zero producers,
+ *      zero handler arms; rc7's "ProgressStep survives" retention was
+ *      circular (its only consumer was InternalProgressPayload).
+ *
+ *   dv4. **Emitterless union members deleted**: `GenerationStrategy`
+ *      loses `'creative'`; `ScreenMechanic` loses `'drag'` / `'swipe'`
+ *      (no authored blueprint ever used them; the generator infers
+ *      gesture mechanics from the prompt).
+ *
+ *   dv5. **Client pre-ack error classification matches the real
+ *      wire**: the iframe-runtime's `classifyPreAckError` /
+ *      `fromAuthFailure` / `ProtocolError`'s `auth` arm drop the
+ *      never-emitted `AUTH_REJECTED` / `TOKEN_EXPIRED` codes (`git
+ *      log -S` proves no first-party server ever minted them) in
+ *      favor of the codes servers actually send pre-ack:
+ *      `BOOTSTRAP_EXPIRED` / `BOOTSTRAP_INVALID` /
+ *      `BOOTSTRAP_SESSION_MISMATCH` / `BOOTSTRAP_APP_MISMATCH` /
+ *      `UNAUTHENTICATED` (+ the kept `SESSION_NOT_FOUND`). A real
+ *      ws-token expiry now classifies as `auth` instead of falling
+ *      into the generic `protocol` bucket. The conformance kit's
+ *      authored ProtocolError mirror follows. `AUTH_REJECTED` remains
+ *      ONLY on the §5.5.2 postMessage `BootstrapFailureReason` plane,
+ *      where SPEC documents it.
+ *
+ *   dv6. **Dead published exports pruned** (zero consumers + zero
+ *      docs — published-API ladder rung 3): the Streamable-Invoke
+ *      narrowing aliases (`TextDelta`, `InputJsonDelta`,
+ *      `ContentBlockDeltaPayload`, `MessageStartEvent`,
+ *      `ContentBlockStartEvent`, `ContentBlockDeltaEvent`,
+ *      `ContentBlockStopEvent`, `MessageDeltaEvent`,
+ *      `MessageStopEvent`, `PingEvent`, `ErrorEvent`, `InvokeRequest`
+ *      — the zod schemas in `schemas/invoke.ts` stay); the
+ *      model-catalog helpers (`PROVIDER_INFO`, `isValidModelId`,
+ *      `getModelsForProvider`, `getModelsForTier`, `selectModelByTier`
+ *      — `MODEL_REGISTRY` / `ModelId` / `DEFAULT_MODEL` stay);
+ *      `DESIGN_SYSTEM_VERSION` + the StyleFingerprint cluster
+ *      (`StyleFingerprintInput`, `computeStyleFingerprint`);
+ *      `DeclareToolCatalogInput` (the schema + Output type stay);
+ *      inference utilities `GadgetNames` / `InferContextNames` /
+ *      `InferContextValue` / `PropsOf`; and the featured-blueprints
+ *      wire-liars `GguiListFeaturedBlueprintsInput` / `...Output` +
+ *      `GguiDiscoverInput` / `GguiDiscoverOutput` (the live handlers'
+ *      shapes are the wire; the dead handler `category` filter branch
+ *      parsed from an empty schema dies too). Sibling-package prunes
+ *      in the same slice: `@ggui-ai/react` loses the explicit
+ *      back-compat alias `extractBootstrapMeta` (+ the unreachable
+ *      `SelfRepairBoundary` default export); `@ggui-ai/mcp-server`
+ *      loses dead auth fragments (`formatClearUserSessionCookieHeader`
+ *      with its false /logout docstrings, `OAuthAuthResult`);
+ *      `@ggui-ai/iframe-runtime` drops the dead `./runtime.js`
+ *      exports-map subpath.
+ *
+ *   dv7. **protocol src adopts its own `isRecord`** at ~20 guarded
+ *      `as Record<string, unknown>` cast sites (no wire change; one
+ *      deliberate tightening: `isGguiSubmitActionInput` now rejects
+ *      ARRAY payloads for unknown extension kinds — payload-object
+ *      presence is the documented invariant).
+ *
+ *   dv8. **The Component Bridge is now inbound-only** (SPEC §8
+ *      rewritten). The legacy user-data half — postMessage type
+ *      `'ggui-user-data'` (`BRIDGE_EVENTS.USER_DATA_POST`),
+ *      CustomEvent `'ggui:user-data'` (`BRIDGE_EVENTS.USER_DATA`),
+ *      lifecycle types `'ggui-resize'` / `'ggui-render-success'` /
+ *      `'ggui-render-error'` (`RESIZE` / `RENDER_SUCCESS` /
+ *      `RENDER_ERROR`), and the `SRCDOC_USER_DATA_BRIDGE` capture
+ *      snippet — is deleted end-to-end: zero injectors, zero
+ *      dispatchers, zero receivers existed (the consuming
+ *      IframeComponentRenderer died in the component-renderer
+ *      retirement; both SDKs' `GguiRender` listeners could never
+ *      fire). Outbound user interaction has ONE path: component
+ *      action hooks (`useAction`) → `data:submit` `ActionEnvelope`
+ *      over the live channel → consume buffer (§5, §7.3, §8.4).
+ *      `BRIDGE_EVENTS.AGENT_DATA_POST` / `AGENT_DATA` +
+ *      `SRCDOC_AGENT_DATA_BRIDGE` (the live agent→component half)
+ *      are unchanged.
+ *
+ *   dv9. **`ProgressUpdate` deleted** — the producer-internal
+ *      generation-progress type had exactly one consumer chain: the
+ *      never-implemented `UiGenerator.stream?()` /
+ *      `UiGenerateEvent` seam in `@ggui-ai/mcp-server-core`, which
+ *      dies in the same slice (the one consumer-position handler
+ *      documented that it deliberately ignores it; provisional
+ *      preview on `_ggui:preview` is the shipped
+ *      progress-visibility channel). Client-visible progress
+ *      vocabulary is unchanged.
+ *
+ *   dv10. **`'ggui:request-repair'` client event deleted** with its
+ *      whole dead seam: no listener has existed since the BaseShell
+ *      deletion (2026-04-23) — `GguiSessionRenderer`'s dispatch, the
+ *      never-supplied `onRequestRepair` option threading in
+ *      `@ggui-ai/react` (`ReactComponentRendererProps`) and
+ *      `@ggui-ai/iframe-runtime` (`RenderItemOptions` /
+ *      `ReactRootMountOptions`), and the false "render-item wires
+ *      this to the envelope it dispatches" docstring all go. The
+ *      `SelfRepairBoundary` tier (separate, honestly-`@experimental`
+ *      surface) is untouched.
+ *
+ *   dv11. **Inbound MCP-Apps hosting plumbing removed; the wire
+ *      variant stays.** The producer-less server island —
+ *      `CreateGguiServerOptions.connectors` (its forwarded value was
+ *      silently swallowed by a conditional spread into a handler
+ *      that never read it), the unmountable `/mcp-apps/resource` +
+ *      `/mcp-apps/tools-call` proxy module, `ConnectorRegistry` /
+ *      `InMemoryConnectorRegistry`, the never-set
+ *      `mcpAppsServerBaseUrl` renderer option, and the
+ *      hardcoded-false `isMcpAppsGguiSession` provisional-preview
+ *      gate input — is deleted (rebuild-from-git when a real
+ *      embedding customer materializes; the producing
+ *      `shortcuts.mcpApps` input died in the handshake-first
+ *      collapse). `McpAppsGguiSession` / `McpAppsSource` and every
+ *      union-forced client/handler guard branch REMAIN published
+ *      wire surface per SPEC §6 + the MCP-Apps composition strategy.
+ *
+ *   dv12. **`ggui.json#theme` (ThemeDocument) drops the optional
+ *      `canvas` group**, and `DtcgTheme` / `ParsedTheme` drop
+ *      `canvas` / `canvasConfig` + the `--ggui-canvas-*` CSS
+ *      variables (design-package + open file-format vocabulary, not
+ *      MCP wire). The consuming GenerativeCanvas shells left with
+ *      the guuey split; no renderer, prompt, or app shell read the
+ *      tokens since. Operator theme files carrying a `canvas` block
+ *      now fail strict parse — delete the block.
+ *
+ *   ug1. **`@ggui-ai/ui-gen` superseded coding-agent generation
+ *      island deleted** (no wire change — published npm surface +
+ *      dist bytes). The pre-harness virtual-git orchestration
+ *      (`coding-agent/{index,agent,planner,file-agent,boilerplate,
+ *      prompts,trace,context}.ts`, `runCodingAgent` / `runPlanner` /
+ *      `runFileAgent`), the legacy `apply_diff` unified-diff tool
+ *      case + `diff-processor.ts` (reachable only from the island),
+ *      the island-only `fullToolSchemas` / `initialToolSchemas` /
+ *      `executeToolBatch` registries, the text-only
+ *      `runEnforcedCodingLoop` / `buildFeedback` loop, and the
+ *      legacy prompt constants (`LEAN_PROMPT`, `CODER_PROMPT`,
+ *      `ENFORCED_CODER_PROMPT`, `SELF_CHECK_RULES`,
+ *      `buildEnforcedCoderPrompt`, `injectDesignSpec`,
+ *      `injectFeedback`, `CONTEXT_TOOL_NAMES`, `BUILD_TOOL_NAMES`)
+ *      are gone — all superseded by `harness/coding/run-coding-turn`
+ *      + `boilerplate/system-prompt`. The two stale tsup entries
+ *      that kept shipping unroutable `dist/coding-agent/*` bytes
+ *      after the rc13 subpath prune die with it. KEPT (live via
+ *      `harness/coding/*`): `workspace.ts`, `tools.ts`, `types.ts`
+ *      (pruned to its consumed members), `self-check.ts`,
+ *      `tag-balance.ts`.
+ *
+ *   ug2. **`@ggui-ai/ui-gen/harness/prompts` re-exports the
+ *      canonical prompt-context builders** from `contract-context.ts`
+ *      (the module the live `createUiGenerator` path uses) instead of
+ *      carrying a hand-maintained twin that had silently drifted (no
+ *      variance block, no stream `source.tool` annotation, hooks-only
+ *      gadget teaching). One module now owns the LLM-visible strings,
+ *      and the duplicate mutable `RenderingContext` in
+ *      `harness/result-types` collapses to a re-export of the
+ *      canonical readonly type. The LIVE generation path's emitted
+ *      prompt is byte-identical (snapshot-proven); the multi-sdk
+ *      benchmark's deep-import path now exercises production prompt
+ *      content instead of the drifted fork.
+ *
+ *   ug3. **`runTier0Checks` / `runTier0` (`@ggui-ai/ui-gen/check`)
+ *      drop the never-read `compiledCode` positional parameter.**
+ *      Compile failure has been signaled by `buildErrors` alone since
+ *      the S6 tier-0 migration; the documented-but-ignored parameter
+ *      was an unflagged contract gap on a published signature.
+ *
+ *   ug4. **`provider-adapter-mock` leaves the published artifact**
+ *      — relocated to `provider-adapter-mock.test-util.ts` (excluded
+ *      from the tarball), its stale tsup entry deleted. rc13 already
+ *      killed the `./provider-adapter-mock` subpath; the dist bytes
+ *      had been shipping with no exports route to reach them.
+ *
+ *   ug5. **`@ggui-ai/ui-gen` stops bundling provider SDKs**
+ *      (packaging only): `@google/adk`, `@openai/agents`,
+ *      `puppeteer-core` move devDependencies → optional
+ *      peerDependencies + tsup externals. They are lazy
+ *      `await import(...)`s in the Google/OpenAI adapters + visual
+ *      evaluator, but as devDeps tsup inlined their full transitive
+ *      trees into every entry chunk. Tarball: 84.7MB → 16.1MB
+ *      unpacked (17.7MB → 4.0MB packed). Consumers using those
+ *      adapters install the SDK themselves.
+ *
+ *   ug6. **`./advanced` subpath actually builds** (packaging only):
+ *      `src/advanced/index.ts` was never a tsup entry — the documented
+ *      `@ggui-ai/ui-gen/advanced` exports-map target only resolved
+ *      because a stale pre-tsup `dist/advanced/` orphan kept shipping,
+ *      and the clean-build hygiene in this release exposed the dangling
+ *      subpath. The entry is now registered (the DTS graph growth needs
+ *      an 8GB heap cap on the build script).
+ *
+ *   dg1. **`@ggui-ai/design` stops shipping Storybook stories**
+ *      (packaging only): `files[]` negations + `tsconfig.build.json`
+ *      excludes drop the 37 `src/*.stories.tsx` + their compiled dist
+ *      output (209 pack entries, incl. the orphaned
+ *      `dist/blueprints` / `dist/templates` story remnants of deleted
+ *      src dirs); pack list 891 → 601 files.
+ *
+ *   tw1. **`ai.ggui/render` slice deps single-sourced** (published
+ *      npm surface, no wire change). `@ggui-ai/mcp-server-handlers`
+ *      exports `RenderSliceMetaDeps` + `assembleRenderSliceBase`;
+ *      `GguiRenderHandlerDeps` and `GguiUpdateHandlerDeps` now
+ *      `extend` the shared interface instead of hand-mirroring
+ *      `mintWsToken` / `runtimeUrl` / `themeId` / `themeMode` /
+ *      `themeProvider`, and both handlers assemble the envelope base
+ *      (runtimeUrl fallback, `token`→`wsToken` remap, layered theme
+ *      resolution) through the one helper. DELETED with it: update's
+ *      vestigial `streamWebSocketLocalTools` dep (declared + plumbed
+ *      through `@ggui-ai/mcp-server`'s `UpdateDeps`, never read — the
+ *      post-update slice is a deliberate props-only subset that never
+ *      emitted the field; it remains mount-time bootstrap data owned
+ *      by `ggui_render`).
+ *
+ *   tw2. **`@ggui-ai/design` `ClickableProps.onClick` /
+ *      `PressableProps.onPress` widen to
+ *      `MouseEvent | KeyboardEvent`** (published type surface; runtime
+ *      unchanged). Enter/Space keyboard activation always delivered a
+ *      `KeyboardEvent` through a handler typed `MouseEvent` via a
+ *      double cast — the union makes the published type honest and
+ *      deletes both casts. Handlers annotating the event parameter as
+ *      bare `MouseEvent` must widen (or drop) the annotation.
+ *
+ *   tw3. **react ↔ react-native twin-parity gate extended** (test
+ *      infrastructure; both SDK suites). The websocket/provider
+ *      family (`WebSocketManager`, `EventBuffer`, `useWebSocket`,
+ *      `GguiProvider` + the two websocket test files) joins a new
+ *      `DOCUMENTED_DELTA_TWINS` structural gate (both copies exist,
+ *      RN file-top "Platform delta" header required, exported
+ *      surfaces equal modulo annotated platform-only exports), and
+ *      the reserved-validators A2UI adapter trio
+ *      (react / react-native / mcp-server) is pinned by a new
+ *      comment-stripped `CODE_IDENTICAL_MIRRORS` gate. One behavioral
+ *      convergence: the RN `useWebSocket.sendAction` now re-stamps
+ *      `schemaVersion` via `makeActionEnvelope` exactly like the web
+ *      hook (RN's docstring already claimed symmetry); RN gains the
+ *      formerly web-only `useWebSocket` test suite.
+ *
+ * --------------------------------------------------------------------
  * Blueprint provenance (`BlueprintSource` union + `PortableBlueprint`
  * v2) + retired-surface cleanup (2026-06-11, BREAKING, pre-launch).
  * One release, four strands: the bp* entries introduce provenance on
@@ -143,8 +433,9 @@
  *      `{type:'data'}` envelopes on the reserved `_ggui:lifecycle`
  *      channel (SPEC §4.5). Deleted with the members: the
  *      `StreamPayload` / `ProgressPayload` / `AgentMsgPayload` /
- *      `AgentMsgType` payload types (`ProgressStep` survives — it is
- *      `InternalProgressPayload`'s vocabulary), the
+ *      `AgentMsgType` payload types (`ProgressStep` survived this
+ *      purge as `InternalProgressPayload`'s vocabulary — circular;
+ *      dv3 above deletes both), the
  *      `BRIDGE_EVENTS.AGENT_STREAM` / `AGENT_MSG` / `AGENT_LOGS`
  *      CustomEvent names + every dispatch site, the SDKs'
  *      `GguiRenderProps.onStream` / `onProgress` dead callbacks (and
@@ -220,8 +511,11 @@
  *      monorepo import sites retargeted to the bare forms). The
  *      underlying modules stay (internal relative imports); only the
  *      dead published surface dies. `./blueprint-hint`, `./strategy`,
- *      `./user-request` are KEPT pending the predefined-match
- *      pipeline existence decision.
+ *      `./user-request` were initially KEPT pending the
+ *      predefined-match pipeline existence decision; that decision
+ *      landed within this same release (wave-2 approved forks): the
+ *      predefined-match pipeline was deleted and all three subpaths
+ *      were removed with it.
  *
  *   ab1. **WS `data:submit` action ingress now feeds the consume
  *      pipe.** The live channel's `handleInboundAction` dual-writes
@@ -2062,7 +2356,7 @@
  *      OSS-first; the cloud pod follows at its next image build. See
  *      `docs/protocol/migrations/2026-06-05-gguisession-reintroduction.md`.
  */
-export const PROTOCOL_VERSION = "draft-2026-06-11";
+export const PROTOCOL_VERSION = "draft-2026-06-12";
 
 /**
  * Schema version stamped onto wire envelopes that opt into the

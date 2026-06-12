@@ -82,7 +82,7 @@ export function MarketingHero({
           <h1
             style={{
               fontSize: 'var(--ggui-font-size-5xl, 48px)',
-              fontWeight: 'var(--ggui-font-weight-bold, 700)' as unknown as number,
+              fontWeight: 'var(--ggui-font-weight-bold, 700)',
               lineHeight: 1.1,
               letterSpacing: '-0.025em',
               color: isPatternVariant

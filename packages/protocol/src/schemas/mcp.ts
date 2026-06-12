@@ -3,7 +3,25 @@
  *
  * These schemas define the validation rules for MCP tool inputs.
  * TypeScript types in types/mcp.ts are derived from these via z.infer.
- * The server handler imports these for runtime validation.
+ *
+ * Two consumption patterns, both anchored here:
+ *
+ *   - **Wired raw shapes** (`*InputShape`): handlers in
+ *     `@ggui-ai/mcp-server-handlers` (and the hosted pod's
+ *     discover / request-credential tools) import the SHAPE directly as
+ *     their `inputSchema` and validate with `z.object(shape)` — unknown
+ *     keys are STRIPPED. The shape is the one authored copy of the
+ *     validation rules AND the agent-facing `.describe()` strings that
+ *     ship via `tools/list`.
+ *
+ *   - **Lifecycle triad** (`ggui_handshake` / `ggui_update`): the
+ *     handlers carry deliberate input divergences (handshake's
+ *     blueprintDraft contract is loose ON PURPOSE so the negotiator can
+ *     repair malformations; update's sessionId is optional for
+ *     in-process dispatch), so they author their own raw shapes. The
+ *     schemas here remain the canonical strict wire contract + the
+ *     `z.infer` source for the published types. `ggui_render` is wired:
+ *     its handler imports {@link renderInputShape}.
  */
 
 import { z } from 'zod';
@@ -33,61 +51,108 @@ export const interfaceContextSchema = z.object({
   reducedMotion: z.boolean().optional(),
 }).passthrough();
 
-// ── Other Tool Schemas ──
-
-// Input schemas: pre-launch posture is `.strict()` — unknown keys reject.
-// Pre-fix all of these had `.passthrough()` as forward-compat shims. Pre-
-// launch No Backward Compatibility (CLAUDE.md) supersedes — typos in agent
-// args (`renderid`, `redner_id`, etc.) surface immediately at the wire
-// boundary instead of silently no-op-ing because the server stripped them.
-
-export const consumeInputSchema = z.object({
-  sessionId: z.string().describe('GguiSession opaque id (UUID) — returned by ggui_render.'),
-  timeout: z.number().min(0).max(25).optional()
-    .describe('Long-poll timeout in seconds (default short; max 25).'),
-}).strict();
+// ── Wired Tool Input Shapes ──
+//
+// Raw zod shapes for the non-lifecycle tools. The SHAPE is the canonical
+// authored artifact: the live handlers register it as their `inputSchema`
+// (the transport layer projects it onto `tools/list`) and validate with
+// `z.object(shape)` — unknown keys are stripped at the wire boundary.
+// The derived `z.object(...)` schema next to each shape is the same
+// contract as a composed validator and the `z.infer` source for the
+// published input types in `types/mcp.ts`.
 
 /**
- * Input schema for `ggui_emit` — emit a stamped delivery on a declared
+ * `ggui_consume` input. The long-poll bound is SPEC §7.3: integer
+ * seconds in `[0, 25]` — the cap dodges infrastructure kill windows
+ * (API-gateway 30s HTTP limits, host MCP clients that abort long tool
+ * calls). Longer waits are the agent's loop, not a server knob.
+ */
+export const consumeInputShape = {
+  sessionId: z
+    .string()
+    .min(1)
+    .describe(
+      'Globally-unique sessionId to consume events from. Cross-tenant access surfaces uniformly as session_not_found.',
+    ),
+  timeout: z
+    .number()
+    .int()
+    .min(0)
+    .max(25)
+    .optional()
+    .describe(
+      'Inline long-poll seconds, integer in [0, 25]. 0 = immediate. Values outside the bound reject INVALID_PARAMS. Returns on first event OR timeout; re-call on empty to keep waiting — longer waits are your loop, not a bigger timeout.',
+    ),
+} as const;
+
+export const consumeInputSchema = z.object(consumeInputShape);
+
+/**
+ * `ggui_emit` input — emit a stamped delivery on a declared
  * `streamSpec[channel]`.
  */
-export const emitInputSchema = z.object({
-  sessionId: z.string().describe('GguiSession opaque id (UUID) — returned by ggui_render.'),
-  channel: z.string()
-    .describe('Channel name declared on the active GguiSession streamSpec.'),
-  payload: z.unknown().describe('Payload — must match streamSpec[channel].schema.'),
-  complete: z.boolean().optional()
-    .describe('True marks the stream complete; subsequent emits on this channel reject.'),
-}).strict();
+export const emitInputShape = {
+  sessionId: z.string().min(1),
+  channel: z.string().min(1),
+  payload: z.unknown(),
+  complete: z.boolean().optional(),
+} as const;
 
-export const getSessionInputSchema = z.object({
-  sessionId: z.string().describe('GguiSession opaque id (UUID) — returned by ggui_render.'),
-}).strict();
+export const emitInputSchema = z.object(emitInputShape);
 
-export const listFeaturedBlueprintsInputSchema = z.object({
-  level: z.enum(['primitive', 'component', 'composite', 'template']).optional(),
-  category: z.string().optional(),
-  tags: z.array(z.string()).optional(),
-  limit: z.number().optional(),
-}).strict();
+export const getSessionInputShape = {
+  sessionId: z
+    .string()
+    .min(1)
+    .describe('GguiSession opaque id (UUID) — returned by ggui_render.'),
+} as const;
 
-export const searchBlueprintsInputSchema = z.object({
-  query: z.string(),
-  limit: z.number().optional(),
-}).strict();
+export const getSessionInputSchema = z.object(getSessionInputShape);
 
-export const renderBlueprintInputSchema = z.object({
-  blueprintId: z.string(),
-  props: z.record(z.string(), z.unknown()).optional(),
-}).strict();
+/**
+ * `ggui_list_featured_blueprints` input — intentionally EMPTY. The
+ * pre-launch No-Backcompat scrub deleted the level/category/tags/limit
+ * filters (delete-until-wired); filters re-enter here when a real
+ * consumer passes them.
+ */
+export const listFeaturedBlueprintsInputShape = {} as const;
 
-export const discoverInputSchema = z.object({}).strict();
+export const listFeaturedBlueprintsInputSchema = z.object(
+  listFeaturedBlueprintsInputShape,
+);
 
-export const requestCredentialInputSchema = z.object({
-  serviceId: z.string().describe('OAuth service ID (e.g., "bashdoor", "ubot")'),
-  reason: z.string().optional().describe('Why the agent needs this credential (shown to user)'),
-  sessionId: z.string().optional().describe('Existing GguiSession id to render consent UI into.'),
-}).strict();
+export const searchBlueprintsInputShape = {
+  query: z
+    .string()
+    .min(1)
+    .describe("Natural-language description of the UI you're looking for"),
+  limit: z.number().int().min(1).max(100).optional(),
+} as const;
+
+export const searchBlueprintsInputSchema = z.object(searchBlueprintsInputShape);
+
+export const renderBlueprintInputShape = {
+  blueprintId: z
+    .string()
+    .min(1)
+    .describe(
+      "The stable blueprint id declared via ggui.ui.json#id. Must match an entry in this server's UI registry.",
+    ),
+} as const;
+
+export const renderBlueprintInputSchema = z.object(renderBlueprintInputShape);
+
+export const discoverInputShape = {} as const;
+
+export const discoverInputSchema = z.object(discoverInputShape);
+
+export const requestCredentialInputShape = {
+  serviceId: z.string().min(1),
+  reason: z.string().optional(),
+  sessionId: z.string().optional(),
+} as const;
+
+export const requestCredentialInputSchema = z.object(requestCredentialInputShape);
 
 // ── Post-Phase-B — canonical tool triad ──
 //
@@ -243,8 +308,14 @@ export const handshakeOutputSchema = z.object({
  * Post-Phase-B rename from `ggui_push` — the tool materialises a single
  * render (no stack of N to push onto); the new name reflects what the
  * tool does at the protocol surface.
+ *
+ * WIRED shape — `@ggui-ai/mcp-server-handlers`'s `ggui_render` registers
+ * {@link renderInputShape} as its `inputSchema` and validates with
+ * `z.object(shape)` (unknown top-level keys strip; `infra` / `override`
+ * sub-objects stay `.strict()` so typos inside them surface as clear zod
+ * paths).
  */
-export const renderInputSchema = z.object({
+export const renderInputShape = {
   handshakeId: z
     .string({
       message:
@@ -261,6 +332,42 @@ export const renderInputSchema = z.object({
    * propsSpec (the field is required, the value may be empty).
    */
   props: z.record(z.string(), z.unknown()),
+  /**
+   * Per-render theme override. When set, lands on the committed
+   * render and takes priority over `App.defaultThemeId` at
+   * bootstrap-projection time. Use sparingly — most renders should
+   * inherit the app default.
+   */
+  themeId: z
+    .string()
+    .min(1)
+    .optional()
+    .describe(
+      'Per-render theme override. Wins over App.defaultThemeId for THIS render. Omit to inherit the app theme.',
+    ),
+  /**
+   * Typed `infra` envelope. Today carries one field (`model`); future
+   * expansion (temperature, max_tokens, provider hints) lands here
+   * additively. `model` MUST be a provider-prefixed id
+   * (`provider/model-name`); a bound generator may also accept
+   * generator-specific prefixes for alternate transports.
+   *
+   * Strict — extra keys at `infra.*` are not silently dropped, so a
+   * typo (`infra.modelId`) surfaces as a clear zod path instead of a
+   * silent default-model fallback.
+   */
+  infra: z
+    .object({
+      model: z
+        .string()
+        .min(1)
+        .optional()
+        .describe(
+          'Provider-prefixed model id (e.g., `anthropic/claude-haiku-4-5`, `openai/gpt-5`). Generator-specific prefixes (e.g., `bedrock/...` for AWS Bedrock routing) supported when the bound generator handles them.',
+        ),
+    })
+    .strict()
+    .optional(),
   /**
    * Re-aim the handshake proposal (PATCH semantics). Omit to ACCEPT the
    * proposal as-is; provide to re-draft the contract and/or re-aim the
@@ -295,7 +402,9 @@ export const renderInputSchema = z.object({
     .describe(
       'Omit to ACCEPT the proposal as-is. Provide to re-aim contract and/or variance (PATCH semantics).',
     ),
-}).strict();
+} as const;
+
+export const renderInputSchema = z.object(renderInputShape);
 
 /**
  * Reuse outcome for a single `ggui_render` — surfaced on the wire so an

@@ -17,6 +17,7 @@
  */
 
 import { z } from 'zod';
+import { emitInputShape } from '@ggui-ai/protocol';
 import type {
   ComponentGguiSession,
   GguiEmitInput,
@@ -32,12 +33,9 @@ import {
   type SendEnvelopeFn,
 } from './handle-stream.js';
 
-const inputSchema = {
-  sessionId: z.string().min(1),
-  channel: z.string().min(1),
-  payload: z.unknown(),
-  complete: z.boolean().optional(),
-} as const;
+// Canonical SSoT shape — authored once in `@ggui-ai/protocol`
+// (`schemas/mcp.ts`).
+const inputSchema = emitInputShape;
 
 const outputSchema = {
   accepted: z.boolean(),

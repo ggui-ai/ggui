@@ -2,22 +2,28 @@ import type { z } from 'zod';
 import type { JsonObject, JsonSchema, JsonValue } from './data-contract';
 import type { GguiSession, GguiSessionStatus } from './render';
 import type {
+  consumeInputSchema,
+  getSessionInputSchema,
   handshakeInputSchema,
   handshakeOutputSchema,
+  renderBlueprintInputSchema,
   renderCacheMarkerSchema,
   renderInputSchema,
   renderOutputSchema,
+  requestCredentialInputSchema,
+  searchBlueprintsInputSchema,
   updateInputSchema,
   updateOutputSchema,
-  declareToolCatalogInputSchema,
   declareToolCatalogOutputSchema,
 } from '../schemas/mcp';
 
 export type { GguiSessionStatus } from './render';
-// Zod schemas in ../schemas/mcp.ts are the runtime validation source of truth.
-// These TypeScript types are the compile-time API surface with precise domain types
-// (DataContract, InterfaceContext, etc.) that Zod can't express.
-// Both define the same fields — kept in sync by convention.
+// Zod schemas in ../schemas/mcp.ts are the runtime validation source of
+// truth; tool input types here derive from them via `z.infer`. The few
+// hand-authored shapes that remain (`GguiEmitInput`, the Output types)
+// carry precise domain types (ConsumeEventEntry, GguiSession, etc.) that
+// the loose runtime output schemas don't express; `GguiEmitInput`'s key
+// set is drift-locked by `__tests__/ggui-emit.test-d.ts`.
 
 /** Target screen size category for responsive layout */
 export type Screen = 'mobile' | 'tablet' | 'desktop' | 'universal';
@@ -69,23 +75,12 @@ export interface PendingEvent {
  * captured at gesture time on the iframe; the top-level
  * `contextSnapshot` is intentionally absent from the output (see
  * {@link GguiConsumeOutput} / {@link ConsumeEventEntry}).
+ *
+ * Derived from `consumeInputSchema` — the schema (SPEC §7.3 timeout
+ * bound: integer seconds in `[0, 25]`, default 0 = immediate) is the
+ * source of truth.
  */
-export interface GguiConsumeInput {
-  /**
-   * GguiSession to consume events from. Globally unique (UUID).
-   * Cross-tenant access surfaces uniformly as `session_not_found`.
-   */
-  sessionId: string;
-  /**
-   * Long-poll wait in seconds — integer in `[0, 25]` (SPEC §7.3).
-   * - 0: immediate return (no waiting)
-   * - 1-25: inline long-poll, returning as soon as events arrive
-   * Values outside the bound reject `INVALID_PARAMS`. Longer waits are
-   * the agent's loop: re-call `ggui_consume` on an empty result.
-   * Default: 0 (immediate).
-   */
-  timeout?: number;
-}
+export type GguiConsumeInput = z.infer<typeof consumeInputSchema>;
 
 /**
  * Input for `ggui_emit` — emit a new delivery on a declared channel of the
@@ -155,12 +150,10 @@ export interface GguiEmitOutput {
 
 
 /**
- * Input for ggui_get_session tool - retrieves render state
+ * Input for ggui_get_session tool — retrieves render state.
+ * Derived from `getSessionInputSchema`.
  */
-export interface GguiGetSessionInput {
-  /** GguiSession ID to get state for */
-  sessionId: string;
-}
+export type GguiGetSessionInput = z.infer<typeof getSessionInputSchema>;
 
 /**
  * Output from ggui_get_session tool — full render snapshot.
@@ -243,51 +236,12 @@ export interface GguiConsumeOutput {
 }
 
 /**
- * Input for ggui_list_featured_blueprints tool - discovers available UI blueprints
+ * Input for ggui_search_blueprints tool — semantic search over
+ * blueprints. Derived from `searchBlueprintsInputSchema`.
  */
-export interface GguiListFeaturedBlueprintsInput {
-  /** Filter by component level. Canonical four-level hierarchy:
-   *  `primitive` (Button) → `component` (SearchField) → `composite`
-   *  (LoginForm, Modal) → `template` (ListDetail, Dashboard page). */
-  level?: 'primitive' | 'component' | 'composite' | 'template';
-  /** Filter by category */
-  category?: string;
-  /** Filter by tags (any match) */
-  tags?: string[];
-  /** Max results (default: 50) */
-  limit?: number;
-}
-
-/**
- * Output from ggui_list_featured_blueprints tool
- */
-export interface GguiListFeaturedBlueprintsOutput {
-  /** List of matching blueprints */
-  blueprints: Array<{
-    id: string;
-    name: string;
-    source: 'predefined' | 'cached';
-    description: string;
-    category: string;
-    level: string;
-    props: Array<{ name: string; type: string; required: boolean; description: string }>;
-    examples: string[];
-    tags: string[];
-    usageCount?: number;
-  }>;
-  /** Total number of matching blueprints */
-  total: number;
-}
-
-/**
- * Input for ggui_search_blueprints tool - semantic search over blueprints
- */
-export interface GguiSearchBlueprintsInput {
-  /** Natural language description of the UI you're looking for */
-  query: string;
-  /** Max results (default: 10) */
-  limit?: number;
-}
+export type GguiSearchBlueprintsInput = z.infer<
+  typeof searchBlueprintsInputSchema
+>;
 
 /**
  * Output from ggui_search_blueprints tool
@@ -301,7 +255,7 @@ export interface GguiSearchBlueprintsOutput {
     category: string;
     props: Array<{ name: string; type: string; required: boolean; description: string }>;
     callbacks: string[];
-    /** Whether this is a featured/predefined blueprint (curated by the app developer) */
+    /** Whether this is a featured blueprint (curated by the app developer) */
     featured: boolean;
     relevance: 'match';
     /** Cosine similarity score (0-1). Higher = better match. Agents can use this
@@ -315,15 +269,12 @@ export interface GguiSearchBlueprintsOutput {
 }
 
 /**
- * Input for ggui_render_blueprint tool - renders a specific blueprint.
- * Generic `TProps` defaults to {@link JsonObject} for blueprint props.
+ * Input for ggui_render_blueprint tool — renders a specific blueprint.
+ * Derived from `renderBlueprintInputSchema`.
  */
-export interface GguiRenderBlueprintInput<TProps = JsonObject> {
-  /** Blueprint ID to render */
-  blueprintId: string;
-  /** Props to pass to the blueprint */
-  props?: TProps;
-}
+export type GguiRenderBlueprintInput = z.infer<
+  typeof renderBlueprintInputSchema
+>;
 
 /**
  * Output from ggui_render_blueprint tool.
@@ -352,48 +303,6 @@ export interface GguiRenderBlueprintOutput {
   contentType: string;
 }
 
-/**
- * Input for ggui_discover tool - discovers platform capabilities
- */
-// eslint-disable-next-line @typescript-eslint/no-empty-object-type
-export interface GguiDiscoverInput {
-  /** Reserved for future use (e.g., filtering by capability category) */
-}
-
-/**
- * Output from ggui_discover tool - platform capabilities and app configuration
- */
-export interface GguiDiscoverOutput {
-  /** Protocol version (e.g., 'draft-2026-04-19'). Prelaunch drafts use
-   *  `draft-YYYY-MM-DD`; the first frozen release will be `1.0.0`. */
-  protocolVersion: string;
-  /** Supported content types (e.g., 'application/javascript+react') */
-  contentTypes: string[];
-  /** Available shell types (e.g., 'chat', 'fullscreen', 'spatial') */
-  shellTypes: string[];
-  /**
-   * Available component capabilities — informational catalog string list
-   * surfaced for discovery clients. The load-bearing per-app permission
-   * grant flows via `DataContract.clientCapabilities.gadgets[*].permission`
-   * (projected onto the bootstrap as `Permissions-Policy`); this field is
-   * not consulted at boot or dispatch time.
-   */
-  componentCapabilities: string[];
-  /** App-specific configuration (present when the app is found in the database) */
-  app?: {
-    /** Adapters enabled for this app */
-    enabledAdapters: string[];
-    /** Component capabilities granted to this app */
-    grantedCapabilities: string[];
-    /** Default shell type for new renders */
-    defaultShellType: string;
-    /** Authentication mode for end users */
-    authMode: string;
-    /** Rate limit in requests per minute (0 = unlimited) */
-    rateLimitPerMinute: number;
-  };
-}
-
 // =============================================================================
 // Credential Request Tool
 // =============================================================================
@@ -401,15 +310,11 @@ export interface GguiDiscoverOutput {
 /**
  * Input for ggui_request_credential — request OAuth consent from the user.
  * Called by agents when MCP proxy returns 401 (credential_required).
+ * Derived from `requestCredentialInputSchema`.
  */
-export interface GguiRequestCredentialInput {
-  /** OAuth service ID (e.g., "bashdoor", "ubot") */
-  serviceId: string;
-  /** Why the agent needs this credential (shown to user) */
-  reason?: string;
-  /** Existing GguiSession to render consent UI into */
-  sessionId?: string;
-}
+export type GguiRequestCredentialInput = z.infer<
+  typeof requestCredentialInputSchema
+>;
 
 /**
  * Output from ggui_request_credential — consent result.
@@ -561,12 +466,12 @@ export type GguiUpdateInput = z.infer<typeof updateInputSchema>;
 export type GguiUpdateOutput = z.infer<typeof updateOutputSchema>;
 
 /**
- * `ggui_runtime_declare_tool_catalog` input/output. Derived from
- * {@link declareToolCatalogInputSchema} / {@link declareToolCatalogOutputSchema}
- * — the schemas are the source of truth. See those for the
- * canonical-tool-identity rationale.
+ * `ggui_runtime_declare_tool_catalog` output. Derived from
+ * {@link declareToolCatalogOutputSchema} — the schema is the source of
+ * truth. See `declareToolCatalogInputSchema` for the
+ * canonical-tool-identity rationale (handlers consume that schema
+ * directly; no separate Input type alias is published).
  */
-export type DeclareToolCatalogInput = z.infer<typeof declareToolCatalogInputSchema>;
 export type DeclareToolCatalogOutput = z.infer<typeof declareToolCatalogOutputSchema>;
 
 // =============================================================================

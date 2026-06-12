@@ -10,6 +10,7 @@ import { blueprintKey, variantKey } from './blueprint-key.js';
 import { PROTOCOL_VERSION } from '../version.js';
 import type { ToolCatalogShape } from './blueprint-stamp.js';
 import { computeToolCatalogHash } from './blueprint-stamp.js';
+import { isRecord } from '../validation/is-record.js';
 
 export type { PortableBlueprint };
 export { PORTABLE_BLUEPRINT_SCHEMA_VERSION };
@@ -91,10 +92,10 @@ export function toPortableBlueprint(
  * silently trusted.
  */
 export function fromPortableBlueprint(record: unknown): PortableBlueprintImportResult {
-  if (typeof record !== 'object' || record === null || Array.isArray(record)) {
+  if (!isRecord(record)) {
     return { ok: false, reason: 'record is not an object' };
   }
-  const r = record as Record<string, unknown>;
+  const r = record;
 
   if (r['schemaVersion'] !== PORTABLE_BLUEPRINT_SCHEMA_VERSION) {
     if (r['schemaVersion'] === 1) {

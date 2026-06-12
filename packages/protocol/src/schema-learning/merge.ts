@@ -17,6 +17,7 @@
  * Pure — no I/O, no DB, no clock. Safe to call from Lambda, edge, or tests.
  */
 import type { JsonObject, JsonSchema, JsonValue } from "../types/data-contract.js";
+import { isRecord } from "../validation/is-record.js";
 
 /** Infer a JSON Schema from a single JSON value. */
 export function inferSchema(value: JsonValue): JsonSchema {
@@ -144,9 +145,9 @@ function dedupeAnyOf(list: JsonSchema[]): JsonSchema[] {
 
 /** Deterministic stable key — recursive, sorts object keys at every depth. */
 function canonicalKey(v: unknown): string {
-  if (v === null || typeof v !== "object") return JSON.stringify(v);
   if (Array.isArray(v)) return "[" + v.map(canonicalKey).join(",") + "]";
-  const obj = v as Record<string, unknown>;
+  if (!isRecord(v)) return JSON.stringify(v);
+  const obj = v;
   const keys = Object.keys(obj).sort();
   return "{" + keys.map((k) => JSON.stringify(k) + ":" + canonicalKey(obj[k])).join(",") + "}";
 }

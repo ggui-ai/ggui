@@ -22,9 +22,10 @@
  * The Bedrock SDK's `client.messages.create(...)` mirrors the direct
  * Anthropic API surface 1:1 — same request body fields (`model`,
  * `max_tokens`, `system`, `messages`), same response shape (`content[]`
- * with `{type:'text', text}` blocks, `stop_reason`, `usage`). That
- * means the response-parsing logic mirrors {@link parseAnthropicResponse}
- * in `./anthropic.ts` exactly. Streaming is supported by the SDK
+ * with `{type:'text', text}` blocks, `stop_reason`, `usage`). Both
+ * adapters therefore share ONE success-envelope parser —
+ * {@link parseAnthropicMessagesResponse} in `./anthropic-wire.ts`.
+ * Streaming is supported by the SDK
  * (`client.messages.stream(...)` returns an async iterable) but this
  * adapter uses the non-streaming `create(...)` call to match the
  * single-completion {@link ProviderAdapter} contract; higher layers
@@ -94,10 +95,10 @@ import {
   type ProviderAdapter,
   type ProviderError,
   type ProviderRequest,
-  type ProviderResponse,
   type ProviderResult,
   type ProviderValidation,
 } from '../provider-adapter.js';
+import { parseAnthropicMessagesResponse } from './anthropic-wire.js';
 import { classifyFetchError } from './http.js';
 
 /**
@@ -221,8 +222,8 @@ export function createBedrockAdapter(
       // The SDK's `Message` return type drifts between
       // `@anthropic-ai/sdk` versions (pnpm hoists multiple copies in
       // this workspace today). We type the captured value as
-      // `unknown` here and let `parseBedrockResponse` validate the
-      // narrow shape we actually consume — fields beyond
+      // `unknown` here and let `parseAnthropicMessagesResponse`
+      // validate the narrow shape we actually consume — fields beyond
       // `content` / `stop_reason` / `usage` are version-volatile
       // (thinking blocks, tool-use blocks, beta-feature additions)
       // and not load-bearing for the harness's single-completion
@@ -254,96 +255,16 @@ export function createBedrockAdapter(
         return { ok: false, error: mapError(err) };
       }
 
-      const parsed = parseBedrockResponse(raw);
+      // Success-envelope parsing is shared with the direct-API
+      // adapter — Bedrock's Anthropic-flavored endpoint returns the
+      // identical envelope as `api.anthropic.com/v1/messages`. See
+      // `./anthropic-wire.ts`. (Takes `unknown` rather than the SDK's
+      // `Message` type so the adapter is robust to SDK version drift
+      // across pnpm-hoisted copies — see the failure-mapping
+      // docstring above for context.)
+      const parsed = parseAnthropicMessagesResponse(raw, PROVIDER);
       if (!parsed.ok) return { ok: false, error: parsed.error };
       return { ok: true, response: parsed.response };
-    },
-  };
-}
-
-/**
- * Parse a Bedrock SDK response into the normalized
- * {@link ProviderResponse} shape. Mirrors `parseAnthropicResponse` in
- * `./anthropic.ts` — same wire shape on the success path because
- * Bedrock's Anthropic-flavored endpoint returns the identical
- * envelope as `api.anthropic.com/v1/messages`.
- *
- * Takes `unknown` (rather than the SDK's `Message` type) so the
- * adapter is robust to SDK version drift across pnpm-hoisted copies
- * — see the constructor docstring for context.
- */
-function parseBedrockResponse(
-  raw: unknown,
-):
-  | { ok: true; response: ProviderResponse }
-  | { ok: false; error: ProviderError } {
-  if (!raw || typeof raw !== 'object') {
-    return {
-      ok: false,
-      error: makeProviderError({
-        kind: 'invalid-response',
-        provider: PROVIDER,
-        message: 'bedrock: response body was not an object',
-      }),
-    };
-  }
-  const obj = raw as Record<string, unknown>;
-  const content = obj['content'];
-  if (!Array.isArray(content)) {
-    return {
-      ok: false,
-      error: makeProviderError({
-        kind: 'invalid-response',
-        provider: PROVIDER,
-        message: 'bedrock: response missing `content` array',
-      }),
-    };
-  }
-
-  // Concatenate every text block. Bedrock-via-Anthropic-SDK splits
-  // text the same way the direct API does; tool_use / thinking
-  // blocks (when present) are filtered out — the single-completion
-  // contract here doesn't surface them.
-  const text = content
-    .map((block) => {
-      if (!block || typeof block !== 'object') return '';
-      const b = block as Record<string, unknown>;
-      if (b['type'] === 'text' && typeof b['text'] === 'string') {
-        return b['text'] as string;
-      }
-      return '';
-    })
-    .join('');
-
-  const usage = obj['usage'] as Record<string, unknown> | undefined;
-  const inputTokens =
-    usage && typeof usage['input_tokens'] === 'number'
-      ? (usage['input_tokens'] as number)
-      : 0;
-  const outputTokens =
-    usage && typeof usage['output_tokens'] === 'number'
-      ? (usage['output_tokens'] as number)
-      : 0;
-
-  const stopReason = obj['stop_reason'];
-  let finishReason: ProviderResponse['finishReason'];
-  if (stopReason === 'end_turn' || stopReason === 'stop_sequence') {
-    finishReason = 'stop';
-  } else if (stopReason === 'max_tokens') {
-    finishReason = 'length';
-  } else {
-    // `tool_use`, `pause_turn`, `refusal`, future stop reasons all
-    // bucket here. Direct-API adapter does the same — content-filter
-    // is surfaced via 4xx errors on Anthropic, not stop_reason.
-    finishReason = 'other';
-  }
-
-  return {
-    ok: true,
-    response: {
-      text,
-      usage: { inputTokens, outputTokens },
-      finishReason,
     },
   };
 }

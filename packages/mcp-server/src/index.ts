@@ -129,7 +129,6 @@ export {
   cookieAuthMiddleware,
   extractUserSessionCookie,
   formatUserSessionCookieHeader,
-  formatClearUserSessionCookieHeader,
   readUserSessionCookie,
   readUserSessionCookieFromHeaders,
 } from './user-session-auth.js';
@@ -176,7 +175,6 @@ export type {
   ExchangeCodeInput,
   OAuthExchangeResult,
   OAuthProviderConfigRecord,
-  OAuthAuthResult,
 } from './oauth-login-types.js';
 export {
   DEFAULT_OAUTH_START_PATH,
@@ -353,7 +351,6 @@ export type {
   LlmRoute,
   LlmSelection,
   ProviderKeyRef,
-  UiGenerateEvent,
   UiGenerateInput,
   UiGenerateResult,
   UiGenerator,

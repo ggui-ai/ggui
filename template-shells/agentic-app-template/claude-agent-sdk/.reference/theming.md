@@ -49,7 +49,6 @@ strict** — an unknown key fails validation (so it's a typo guard).
 | **`motion`** | optional | Strict `{ duration, transition, easing?, keyframes? }`. `duration` → `duration`; `transition` → `transition` (string or `{ duration, timingFunction, property? }`); `easing` → `cubicBezier`. |
 | **`accessibility`** | optional | `{ focusRing?: {color,width,offset}, reducedMotion?: {duration}, highContrast?: {borderWidth,textColor,backgroundColor,linkColor} }`. |
 | **`zIndex`** | optional | Record of `number` tokens. |
-| **`canvas`** | optional | GenerativeCanvas background config (`mode`/`speed`/`colors`/`background`). |
 | `$name` `$description` `$metadata` | optional | DTCG metadata. |
 
 > Note: this is the **canonical** (DTCG-nested) shape — `radius`/`shadow` live

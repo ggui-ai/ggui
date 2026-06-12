@@ -56,6 +56,7 @@ import {
   fromAuthFailure,
   fromTransportFailure,
   fromUpgradeRequired,
+  type AuthFailureCode,
   type ProtocolErrorEmitter,
 } from './protocol-error.js';
 import type { ObservabilityEmitter } from './observability.js';
@@ -206,21 +207,37 @@ function normalizeObservedVersion(
 }
 
 /**
+ * Auth-class pre-ack codes — the §12.2.3 vocabulary first-party servers
+ * actually emit on the pre-ack error frame (ws-token verification +
+ * upgrade-auth failures). Replaced the phantom `AUTH_REJECTED` /
+ * `TOKEN_EXPIRED` arms in draft-2026-06-12 — a real ws-token expiry
+ * previously fell into the generic `'protocol'` bucket.
+ */
+const PRE_ACK_AUTH_CODES: ReadonlySet<string> = new Set<AuthFailureCode>([
+  'SESSION_NOT_FOUND',
+  'BOOTSTRAP_EXPIRED',
+  'BOOTSTRAP_INVALID',
+  'BOOTSTRAP_SESSION_MISMATCH',
+  'BOOTSTRAP_APP_MISMATCH',
+  'UNAUTHENTICATED',
+]);
+
+function isAuthFailureCode(code: string): code is AuthFailureCode {
+  return PRE_ACK_AUTH_CODES.has(code);
+}
+
+/**
  * Map a pre-ack `error` frame onto a non-UPGRADE_REQUIRED ProtocolError.
- * `SESSION_NOT_FOUND` / `AUTH_REJECTED` → `'auth'`; every other code
- * → `'protocol'` with the extensibly-closed tail carrying the wire code
- * verbatim.
+ * {@link PRE_ACK_AUTH_CODES} → `'auth'`; every other code → `'protocol'`
+ * with the extensibly-closed tail carrying the wire code verbatim.
  */
 function classifyPreAckError(payload: {
   readonly code: string;
   readonly message?: string;
   readonly details?: unknown;
 }): import('./protocol-error.js').ProtocolError {
-  if (payload.code === 'SESSION_NOT_FOUND' || payload.code === 'AUTH_REJECTED') {
+  if (isAuthFailureCode(payload.code)) {
     return fromAuthFailure(payload.code, payload.message);
-  }
-  if (payload.code === 'TOKEN_EXPIRED') {
-    return fromAuthFailure('TOKEN_EXPIRED', payload.message);
   }
   return {
     kind: 'protocol',

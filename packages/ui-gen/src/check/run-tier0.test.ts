@@ -32,8 +32,6 @@ export default function MyComponent({ title, count = 0 }: Props) {
 }
 `;
 
-const COMPILED_OUTPUT = '/* compiled JS output */';
-
 // =============================================================================
 // runTier0Checks — clean code
 // =============================================================================
@@ -43,7 +41,7 @@ describe('runTier0Checks', () => {
   // cold-start cost (module + check-harness warm-up). The default 5s
   // timeout flakes under CI load — give it generous headroom.
   it('clean code produces no fail issues', async () => {
-    const issues = await runTier0Checks(CLEAN_SOURCE, COMPILED_OUTPUT);
+    const issues = await runTier0Checks(CLEAN_SOURCE);
     const fails = issues.filter(i => i.result === 'fail');
     expect(fails).toHaveLength(0);
   }, 30_000);
@@ -57,7 +55,7 @@ export default function C(props: Props) {
   const result = eval("1+1");
   return <div>{result}</div>;
 }`;
-    const issues = await runTier0Checks(code, COMPILED_OUTPUT);
+    const issues = await runTier0Checks(code);
     const evalIssues = issues.filter(i => i.category === 'security' && i.subcategory === 'eval');
     expect(evalIssues).toHaveLength(1);
     expect(evalIssues[0].result).toBe('fail');
@@ -72,7 +70,7 @@ export default function C(props: Props) {
   fetch("/api/data").then(r => r.json());
   return <div>loading</div>;
 }`;
-    const issues = await runTier0Checks(code, COMPILED_OUTPUT);
+    const issues = await runTier0Checks(code);
     const fetchIssues = issues.filter(i => i.category === 'security' && i.subcategory === 'fetch');
     expect(fetchIssues).toHaveLength(1);
     expect(fetchIssues[0].result).toBe('fail');
@@ -86,7 +84,7 @@ export default function C(props: Props) {
 import axios from 'axios';
 interface Props { x: string }
 export default function C(props: Props) { return <div />; }`;
-    const issues = await runTier0Checks(code, COMPILED_OUTPUT);
+    const issues = await runTier0Checks(code);
     const importIssues = issues.filter(i => i.category === 'imports');
     expect(importIssues).toHaveLength(1);
     expect(importIssues[0].result).toBe('fail');
@@ -98,7 +96,7 @@ export default function C(props: Props) { return <div />; }`;
 import React, { useState } from 'react';
 interface Props { x: string }
 export default function C(props: Props) { return <div />; }`;
-    const issues = await runTier0Checks(code, COMPILED_OUTPUT);
+    const issues = await runTier0Checks(code);
     const importIssues = issues.filter(i => i.category === 'imports');
     expect(importIssues).toHaveLength(0);
   });
@@ -108,7 +106,7 @@ export default function C(props: Props) { return <div />; }`;
 import { Button } from '@ggui-ai/design/primitives';
 interface Props { x: string }
 export default function C(props: Props) { return <Button />; }`;
-    const issues = await runTier0Checks(code, COMPILED_OUTPUT);
+    const issues = await runTier0Checks(code);
     const importIssues = issues.filter(i => i.category === 'imports');
     expect(importIssues).toHaveLength(0);
   });
@@ -118,7 +116,7 @@ export default function C(props: Props) { return <Button />; }`;
 import { useWire } from '@ggui-ai/wire';
 interface Props { x: string }
 export default function C(props: Props) { return <div />; }`;
-    const issues = await runTier0Checks(code, COMPILED_OUTPUT);
+    const issues = await runTier0Checks(code);
     const importIssues = issues.filter(i => i.category === 'imports');
     expect(importIssues).toHaveLength(0);
   });
@@ -131,7 +129,7 @@ interface Props { x: string }
 export default function C(props: Props) {
   return <div style={{ color: '#ff0000' }}>red</div>;
 }`;
-    const issues = await runTier0Checks(code, COMPILED_OUTPUT);
+    const issues = await runTier0Checks(code);
     const hexIssues = issues.filter(i => i.category === 'tokens' && i.subcategory === 'hex-color');
     expect(hexIssues).toHaveLength(1);
     expect(hexIssues[0].result).toBe('fail');
@@ -146,7 +144,7 @@ interface Props { x: string }
 export default function C(props: Props) {
   return <div style={{ color: 'var(--ggui-color-primary, #0284c7)' }}>blue</div>;
 }`;
-    const issues = await runTier0Checks(code, COMPILED_OUTPUT);
+    const issues = await runTier0Checks(code);
     const hexIssues = issues.filter(i => i.category === 'tokens' && i.subcategory === 'hex-color');
     expect(hexIssues).toHaveLength(0);
   });
@@ -157,7 +155,7 @@ interface Props { x: string }
 export default function C(props: Props) {
   return <Stack gap="8px"><Text>{props.x}</Text></Stack>;
 }`;
-    const issues = await runTier0Checks(code, COMPILED_OUTPUT);
+    const issues = await runTier0Checks(code);
     const spacing = issues.filter(i => i.category === 'tokens' && i.subcategory === 'raw-spacing');
     expect(spacing).toHaveLength(1);
     expect(spacing[0].result).toBe('fail');
@@ -170,7 +168,7 @@ interface Props { x: string }
 export default function C(props: Props) {
   return <Stack gap="md"><Card padding={12}>{props.x}</Card></Stack>;
 }`;
-    const issues = await runTier0Checks(code, COMPILED_OUTPUT);
+    const issues = await runTier0Checks(code);
     const spacing = issues.filter(i => i.category === 'tokens' && i.subcategory === 'raw-spacing');
     expect(spacing).toHaveLength(0);
   });
@@ -181,7 +179,7 @@ interface Props { x: string }
 export default function C(props: Props) {
   return <div style={{ padding: '16px' }}>spaced</div>;
 }`;
-    const issues = await runTier0Checks(code, COMPILED_OUTPUT);
+    const issues = await runTier0Checks(code);
     const pxIssues = issues.filter(i => i.category === 'tokens' && i.subcategory === 'raw-pixels');
     expect(pxIssues).toHaveLength(1);
     expect(pxIssues[0].result).toBe('warn');
@@ -210,7 +208,7 @@ export default function C(props: Props) {
     </Stack>
   );
 }`;
-    const issues = await runTier0Checks(code, COMPILED_OUTPUT);
+    const issues = await runTier0Checks(code);
     const dwWarn = issues.filter((i) => i.subcategory === 'double-wired-action');
     expect(dwWarn).toHaveLength(1);
     expect(dwWarn[0].result).toBe('warn');
@@ -241,7 +239,7 @@ export default function C(props: Props) {
     </Box>
   );
 }`;
-    const issues = await runTier0Checks(code, COMPILED_OUTPUT);
+    const issues = await runTier0Checks(code);
     const dwFail = issues.filter(
       (i) => i.subcategory === 'double-wired-action:certain',
     );
@@ -265,7 +263,7 @@ export default function C(props: Props) {
     </Card>
   );
 }`;
-    const issues = await runTier0Checks(code, COMPILED_OUTPUT);
+    const issues = await runTier0Checks(code);
     const dwFail = issues.filter(
       (i) => i.subcategory === 'double-wired-action:certain',
     );
@@ -287,7 +285,7 @@ export default function C(props: Props) {
     </Card>
   );
 }`;
-    const issues = await runTier0Checks(code, COMPILED_OUTPUT);
+    const issues = await runTier0Checks(code);
     const dwFail = issues.filter(
       (i) => i.subcategory === 'double-wired-action:certain',
     );
@@ -308,7 +306,7 @@ export default function C(props: Props) {
     </Card>
   );
 }`;
-    const issues = await runTier0Checks(code, COMPILED_OUTPUT);
+    const issues = await runTier0Checks(code);
     const dwFail = issues.filter(
       (i) => i.subcategory === 'double-wired-action:certain',
     );
@@ -329,7 +327,7 @@ export default function C(props: Props) {
     </Card>
   );
 }`;
-    const issues = await runTier0Checks(code, COMPILED_OUTPUT);
+    const issues = await runTier0Checks(code);
     const dwFail = issues.filter(
       (i) => i.subcategory === 'double-wired-action:certain',
     );
@@ -351,7 +349,7 @@ export default function C(props: Props) {
     </Stack>
   );
 }`;
-    const issues = await runTier0Checks(code, COMPILED_OUTPUT);
+    const issues = await runTier0Checks(code);
     const dwFail = issues.filter(
       (i) => i.subcategory === 'double-wired-action:certain',
     );
@@ -382,7 +380,7 @@ export default function C(props: Props) {
     </Card>
   );
 }`;
-    const issues = await runTier0Checks(code, COMPILED_OUTPUT);
+    const issues = await runTier0Checks(code);
     const dwFail = issues.filter(
       (i) => i.subcategory === 'double-wired-action:certain',
     );
@@ -405,7 +403,7 @@ export default function C(props: Props) {
     </Stack>
   );
 }`;
-    const issues = await runTier0Checks(code, COMPILED_OUTPUT);
+    const issues = await runTier0Checks(code);
     expect(
       issues.filter((i) => i.subcategory === 'double-wired-action'),
     ).toHaveLength(0);
@@ -417,7 +415,7 @@ interface Props { x: string }
 export default function C(props: Props) {
   return <div style={{ background: 'rgba(0, 0, 0, 0.5)' }}>overlay</div>;
 }`;
-    const issues = await runTier0Checks(code, COMPILED_OUTPUT);
+    const issues = await runTier0Checks(code);
     const colorFnIssues = issues.filter(i => i.category === 'tokens' && i.subcategory === 'hardcoded-color-fn');
     expect(colorFnIssues).toHaveLength(1);
     expect(colorFnIssues[0].result).toBe('fail');
@@ -433,7 +431,7 @@ interface Props { x: string }
 export default function C(props: Props) {
   return <Box style={{ background: '#FF0000' }}>x</Box>;
 }`;
-      const issues = await runTier0Checks(code, COMPILED_OUTPUT);
+      const issues = await runTier0Checks(code);
       const hexIssues = issues.filter(
         (i) => i.category === 'tokens' && i.subcategory === 'hex-color',
       );
@@ -448,7 +446,7 @@ interface Props { x: string }
 export default function C(props: Props) {
   return <Box assetColor="#FF0000">x</Box>;
 }`;
-      const issues = await runTier0Checks(code, COMPILED_OUTPUT);
+      const issues = await runTier0Checks(code);
       const pairIssues = issues.filter(
         (i) => i.category === 'tokens' && i.subcategory === 'asset-color-pair',
       );
@@ -464,7 +462,7 @@ interface Props { x: string }
 export default function C(props: Props) {
   return <Box assetColor="#FF0000" assetSemantic="">x</Box>;
 }`;
-      const issues = await runTier0Checks(code, COMPILED_OUTPUT);
+      const issues = await runTier0Checks(code);
       const pairIssues = issues.filter(
         (i) => i.category === 'tokens' && i.subcategory === 'asset-color-pair',
       );
@@ -479,7 +477,7 @@ interface Props { x: string }
 export default function C(props: Props) {
   return <Box assetColor="#FF0000" assetSemantic="brand-stripe-purple">x</Box>;
 }`;
-      const issues = await runTier0Checks(code, COMPILED_OUTPUT);
+      const issues = await runTier0Checks(code);
       const tokenIssues = issues.filter((i) => i.category === 'tokens');
       // No hex / pair / colorFn / named-color failures from the typed escape.
       expect(tokenIssues.filter((i) => i.result === 'fail')).toHaveLength(0);
@@ -499,7 +497,7 @@ export default function C(props: Props) {
     </Box>
   );
 }`;
-      const issues = await runTier0Checks(code, COMPILED_OUTPUT);
+      const issues = await runTier0Checks(code);
       const tokenIssues = issues.filter(
         (i) => i.category === 'tokens' && i.result === 'fail',
       );
@@ -518,7 +516,7 @@ export default function C(props: Props) {
       const code = `
 interface Props { x: string }
 export default function C(props: Props) { return ${jsx}; }`;
-      const issues = await runTier0Checks(code, COMPILED_OUTPUT);
+      const issues = await runTier0Checks(code);
       const namedIssues = issues.filter(i => i.category === 'tokens' && i.subcategory === 'named-color');
       expect(namedIssues).toHaveLength(1);
       expect(namedIssues[0].result).toBe('fail');
@@ -536,7 +534,7 @@ interface Props { x: string }
 export default function C(props: Props) {
   return <div style={{ color: '${keyword}' }}>x</div>;
 }`;
-      const issues = await runTier0Checks(code, COMPILED_OUTPUT);
+      const issues = await runTier0Checks(code);
       const namedIssues = issues.filter(i => i.category === 'tokens' && i.subcategory === 'named-color');
       expect(namedIssues).toHaveLength(0);
     });
@@ -547,7 +545,7 @@ interface Props { x: string }
 export default function C(props: Props) {
   return <div style={{ color: 'primary' }}>x</div>;
 }`;
-      const issues = await runTier0Checks(code, COMPILED_OUTPUT);
+      const issues = await runTier0Checks(code);
       const namedIssues = issues.filter(i => i.category === 'tokens' && i.subcategory === 'named-color');
       expect(namedIssues).toHaveLength(0);
     });
@@ -555,14 +553,13 @@ export default function C(props: Props) {
 
   // ── Compile check ───────────────────────────────────────
 
-  it('fails on null compiledCode ONLY when buildErrors were captured', async () => {
-    // Pre-S6 behavior: `compiledCode === null` alone pushed a fail. That
-    // treated "compile not attempted" identically to "compile failed",
-    // which broke the S6 createUiGenerator wiring (that seam doesn't
-    // compile in-process — the separate `withBrowserCompile` wrapper
-    // does). Fix: fail only when the caller indicates compile was
-    // attempted by passing a non-empty `buildErrors` array.
-    const withErrors = await runTier0Checks(CLEAN_SOURCE, null, undefined, [
+  it('fails ONLY when buildErrors were captured', async () => {
+    // "Compile not attempted" must not be treated as "compile failed":
+    // the S6 createUiGenerator wiring doesn't compile in-process (the
+    // separate `withBrowserCompile` wrapper does). The check fails only
+    // when the caller indicates compile was attempted by passing a
+    // non-empty `buildErrors` array.
+    const withErrors = await runTier0Checks(CLEAN_SOURCE, undefined, [
       '<stdin>:10:5: ERROR: Unexpected token',
     ]);
     const withErrorsCompile = withErrors.filter((i) => i.category === 'compile');
@@ -572,7 +569,7 @@ export default function C(props: Props) {
     expect(withErrorsCompile[0].description).toContain('Line 10: Unexpected token');
 
     // Without buildErrors → no compile fail (compile not attempted).
-    const withoutErrors = await runTier0Checks(CLEAN_SOURCE, null);
+    const withoutErrors = await runTier0Checks(CLEAN_SOURCE);
     const withoutErrorsCompile = withoutErrors.filter((i) => i.category === 'compile');
     expect(withoutErrorsCompile).toHaveLength(0);
   });
@@ -584,7 +581,7 @@ export default function C(props: Props) {
 export default function C() {
   return <div>no props</div>;
 }`;
-    const issues = await runTier0Checks(code, COMPILED_OUTPUT);
+    const issues = await runTier0Checks(code);
     const typeIssues = issues.filter(i => i.category === 'types' && i.subcategory === 'props-interface');
     expect(typeIssues).toHaveLength(1);
     expect(typeIssues[0].result).toBe('fail');
@@ -596,7 +593,7 @@ interface Props { x: string }
 function C(props: Props) {
   return <div>{props.x}</div>;
 }`;
-    const issues = await runTier0Checks(code, COMPILED_OUTPUT);
+    const issues = await runTier0Checks(code);
     const exportIssues = issues.filter(i => i.category === 'compile' && i.subcategory === 'default-export');
     expect(exportIssues).toHaveLength(1);
     expect(exportIssues[0].result).toBe('fail');
@@ -620,7 +617,7 @@ export default function C({ name }: Props) {
         },
       },
     };
-    const issues = await runTier0Checks(code, COMPILED_OUTPUT, contract);
+    const issues = await runTier0Checks(code, contract);
     const contractIssues = issues.filter(i => i.category === 'contract');
     // Should flag missing required field 'email'
     expect(contractIssues.length).toBeGreaterThanOrEqual(1);
@@ -645,7 +642,7 @@ export default function C({ name }: Props) {
         },
       },
     };
-    const issues = await runTier0Checks(code, COMPILED_OUTPUT, contract);
+    const issues = await runTier0Checks(code, contract);
     const contractWarnings = issues.filter(i => i.category === 'contract' && i.result === 'warn');
     const bioWarning = contractWarnings.find(i => i.subcategory === 'bio');
     expect(bioWarning).toBeDefined();
@@ -672,7 +669,7 @@ export default function Component(props: Props) {
         submit: { label: 'Submit', description: 'form submit' },
       },
     };
-    const issues = await runTier0Checks(code, COMPILED_OUTPUT, contract);
+    const issues = await runTier0Checks(code, contract);
     const wireIssues = issues.filter(
       i => i.category === 'contract' && i.subcategory === 'wire_preservation:action:submit',
     );
@@ -699,7 +696,7 @@ export default function Component(props: Props) {
         submit: { label: 'Submit', description: 'form submit' },
       },
     };
-    const issues = await runTier0Checks(code, COMPILED_OUTPUT, contract);
+    const issues = await runTier0Checks(code, contract);
     const wireIssues = issues.filter(
       i => i.category === 'contract' && typeof i.subcategory === 'string' && i.subcategory.startsWith('wire_preservation:'),
     );
@@ -726,7 +723,7 @@ export default function Component(props: Props) {
       contextSpec: { view: { schema: { type: 'string' }, default: 'list' } },
       agentCapabilities: { tools: { baz: { toolInfo: { inputSchema: { type: 'object' }, description: 'baz tool' } } } },
     };
-    const issues = await runTier0Checks(code, COMPILED_OUTPUT, contract);
+    const issues = await runTier0Checks(code, contract);
     const wireIssues = issues.filter(
       i => i.category === 'contract' && typeof i.subcategory === 'string' && i.subcategory.startsWith('wire_preservation:'),
     );
@@ -749,7 +746,7 @@ export default function C() {
   eval("bad");
   return <div style={{ color: '#f00' }}>x</div>;
 }`;
-    const issues = await runTier0Checks(code, null);
+    const issues = await runTier0Checks(code);
     expect(issues.length).toBeGreaterThan(0);
     for (const issue of issues) {
       expect(issue.tier).toBe(0);
@@ -763,7 +760,7 @@ export default function C() {
 
 describe('runTier0', () => {
   it('clean code has no fail issues and core categories pass', async () => {
-    const result = await runTier0(CLEAN_SOURCE, COMPILED_OUTPUT);
+    const result = await runTier0(CLEAN_SOURCE);
     const fails = result.issues.filter(i => i.result === 'fail');
     expect(fails).toHaveLength(0);
     expect(result.pass).toContain('compile');
@@ -793,7 +790,7 @@ export default function MyComponent(props: Props) {
   return <Button>{props.center.join(',')}</Button>;
 }
 `;
-    const result = await runTier0(code, COMPILED_OUTPUT);
+    const result = await runTier0(code);
     const requireIssue = result.issues.find(
       (i) => i.subcategory === 'require_disallowed:@ggui-samples/gadget-leaflet',
     );
@@ -818,7 +815,7 @@ export default function C() {
   return null;
 }
 `;
-    const result = await runTier0(code, COMPILED_OUTPUT);
+    const result = await runTier0(code);
     const packages = result.issues
       .filter((i) => i.subcategory?.startsWith('require_disallowed:'))
       .map((i) => i.subcategory);
@@ -841,7 +838,7 @@ export default function C() {
   return null;
 }
 `;
-    const result = await runTier0(code, COMPILED_OUTPUT);
+    const result = await runTier0(code);
     const issues = result.issues.filter((i) =>
       i.subcategory?.startsWith('require_disallowed:'),
     );
@@ -872,7 +869,7 @@ export default function MyComponent(props: Props) {
         },
       },
     };
-    const result = await runTier0(code, COMPILED_OUTPUT, contract);
+    const result = await runTier0(code, contract);
     const issue = result.issues.find(
       (i) => i.subcategory === 'gadget_preservation:useLeafletMap',
     );
@@ -904,7 +901,7 @@ export default function MyComponent(props: Props) {
         },
       },
     };
-    const result = await runTier0(code, COMPILED_OUTPUT, contract);
+    const result = await runTier0(code, contract);
     const issue = result.issues.find(
       (i) => i.subcategory === 'gadget_preservation:useLeafletMap',
     );
@@ -928,7 +925,7 @@ export default function MyComponent(props: Props) {
         },
       },
     };
-    const result = await runTier0(code, COMPILED_OUTPUT, contract);
+    const result = await runTier0(code, contract);
     const issue = result.issues.find(
       (i) => i.subcategory === 'gadget_preservation:useLeafletMap',
     );
@@ -959,7 +956,7 @@ export default function MyComponent(props: Props) {
         },
       },
     };
-    const result = await runTier0(code, COMPILED_OUTPUT, contract);
+    const result = await runTier0(code, contract);
     const preservationFails = result.issues.filter((i) =>
       i.subcategory?.startsWith('gadget_preservation:'),
     );
@@ -986,7 +983,7 @@ export default function MyComponent(props: Props) {
         },
       },
     };
-    const result = await runTier0(code, COMPILED_OUTPUT, contract);
+    const result = await runTier0(code, contract);
     const preservationFails = result.issues.filter((i) =>
       i.subcategory?.startsWith('gadget_preservation:'),
     );
@@ -1009,7 +1006,7 @@ export default function MyComponent(props: Props) {
         },
       },
     };
-    const result = await runTier0(code, COMPILED_OUTPUT, contract);
+    const result = await runTier0(code, contract);
     const issue = result.issues.find(
       (i) => i.subcategory === 'gadget_preservation:LeafletMap',
     );
@@ -1037,7 +1034,7 @@ export default function MyComponent(props: Props) {
         },
       },
     };
-    const result = await runTier0(code, COMPILED_OUTPUT, contract);
+    const result = await runTier0(code, contract);
     const preservationFails = result.issues.filter((i) =>
       i.subcategory?.startsWith('gadget_preservation:'),
     );
@@ -1067,7 +1064,7 @@ export default function MyComponent(props: Props) {
         },
       },
     };
-    const result = await runTier0(code, COMPILED_OUTPUT, contract);
+    const result = await runTier0(code, contract);
     const importFails = result.issues.filter(
       (i) => i.category === 'imports' && i.result === 'fail',
     );
@@ -1094,7 +1091,7 @@ export default function MyComponent(props: Props) {
         },
       },
     };
-    const result = await runTier0(code, COMPILED_OUTPUT, contract);
+    const result = await runTier0(code, contract);
     const importFails = result.issues.filter(
       (i) => i.category === 'imports' && i.result === 'fail',
     );
@@ -1111,7 +1108,7 @@ export default function C(props: Props) {
   eval("bad");
   return <div />;
 }`;
-    const result = await runTier0(code, COMPILED_OUTPUT);
+    const result = await runTier0(code);
     expect(result.pass).not.toContain('security');
     expect(result.pass).toContain('compile');
     expect(result.pass).toContain('imports');

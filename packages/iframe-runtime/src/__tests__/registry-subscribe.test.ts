@@ -306,12 +306,15 @@ describe('connectViaRegistry — version handshake', () => {
 
     await vi.advanceTimersByTimeAsync(1);
 
+    // BOOTSTRAP_EXPIRED is the real §12.2.3 ws-token-expiry code —
+    // since draft-2026-06-12 it classifies as auth-kind instead of
+    // falling into the generic protocol bucket.
     MockWebSocket.instances[0]?.emit({
       type: 'error',
-      payload: { code: 'AUTH_REJECTED', message: 'token expired' },
+      payload: { code: 'BOOTSTRAP_EXPIRED', message: 'ws token expired' },
     });
 
-    await expect(handlePromise).rejects.toThrow('token expired');
+    await expect(handlePromise).rejects.toThrow('ws token expired');
     try {
       await handlePromise;
     } catch (err) {
@@ -321,21 +324,21 @@ describe('connectViaRegistry — version handshake', () => {
     const authErr = emitted.find((e) => e.kind === 'auth');
     expect(authErr).toBeDefined();
     if (authErr && authErr.kind === 'auth') {
-      expect(authErr.code).toBe('AUTH_REJECTED');
+      expect(authErr.code).toBe('BOOTSTRAP_EXPIRED');
     }
   });
 
   it('forwards post-resolution frames through registered handlers (not via a callback)', async () => {
     const registry = makeRegistry();
-    // Register a `url` handler BEFORE bind so the registry routes
+    // Register a `system` handler BEFORE bind so the registry routes
     // post-ack frames to it. Note: `ack` + `error` handlers are added
     // by `connectViaRegistry` itself; we register one for an unrelated
     // frame type that arrives post-resolution.
-    const urlFrames: unknown[] = [];
+    const systemFrames: unknown[] = [];
     registry.register({
-      type: 'url',
+      type: 'system',
       onMessage: (payload) => {
-        urlFrames.push(payload);
+        systemFrames.push(payload);
       },
     });
 
@@ -353,16 +356,16 @@ describe('connectViaRegistry — version handshake', () => {
     });
     await handlePromise;
 
-    // Post-resolution `url` frame routes to the handler.
+    // Post-resolution `system` frame routes to the handler.
     MockWebSocket.instances[0]?.emit({
-      type: 'url',
+      type: 'system',
       payload: {
-        sessionId: 'render_001',
-        shortCode: 'Xk9mQ2pL',
+        action: 'auth_required',
+        serviceId: 'svc_x',
       },
     });
 
-    expect(urlFrames).toHaveLength(1);
-    expect((urlFrames[0] as { shortCode?: string }).shortCode).toBe('Xk9mQ2pL');
+    expect(systemFrames).toHaveLength(1);
+    expect((systemFrames[0] as { serviceId?: string }).serviceId).toBe('svc_x');
   });
 });

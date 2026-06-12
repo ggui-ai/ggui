@@ -192,8 +192,8 @@ describe('createGguiServer — pairing lifecycle sink wiring', () => {
     // non-trivial — simpler: ask the default service and replace its
     // generator via monkey-patch on the instance. Acceptable in a
     // focused test; the production path stays untouched.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (server.pairingService as any).generateToken = () => longToken;
+    // @ts-expect-error — monkey-patching the impl-internal token generator (not on the PairingService contract) for test
+    server.pairingService.generateToken = () => longToken;
 
     const init = await server.pairingService!.initPairing();
     const completion = await server.pairingService!.completePairing({

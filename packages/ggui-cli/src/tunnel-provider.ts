@@ -213,12 +213,13 @@ export function createNullTunnelProvider(
 }
 
 /**
- * Contract a tunnel-provider module must satisfy for dynamic
- * discovery. Modules export either a default factory or a named
- * `createTunnelProvider` factory — both shapes are tried in that
- * order. The factory takes no arguments for the first slice; future
- * revisions MAY pass options (project identity, login snapshot)
- * behind a backwards-compatible shim.
+ * Contract a tunnel-provider plugin module must satisfy for dynamic
+ * discovery. Point `GGUI_TUNNEL_PROVIDER` at a module specifier; the
+ * module exports either a named `createTunnelProvider` factory or a
+ * default export (factory or provider instance) — both shapes are
+ * tried in that order. The factory takes no arguments today; if a
+ * future revision needs options (project identity, login snapshot)
+ * the contract version bumps with it.
  *
  * Kept as a module shape rather than a typed `require` because the
  * target module path is controlled by the user's env, not by the
@@ -228,7 +229,7 @@ export function createNullTunnelProvider(
 export interface TunnelProviderModule {
   /** Preferred shape. */
   readonly createTunnelProvider?: () => TunnelProvider | Promise<TunnelProvider>;
-  /** Backwards-compatible shape — default export returning the provider. */
+  /** Alternate shape — default export returning the provider. */
   readonly default?: TunnelProvider | (() => TunnelProvider | Promise<TunnelProvider>);
 }
 

@@ -2,7 +2,12 @@ import { forwardRef, useState, type CSSProperties, type ReactNode, type MouseEve
 
 export interface PressableProps {
   children?: ReactNode | ((state: { pressed: boolean; hovered: boolean }) => ReactNode);
-  onPress?: (e: MouseEvent<HTMLDivElement>) => void;
+  /**
+   * Press handler. Receives the `MouseEvent` for pointer presses and
+   * the `KeyboardEvent` for Enter/Space keyboard activation — the
+   * union is honest about both delivery paths.
+   */
+  onPress?: (e: MouseEvent<HTMLDivElement> | KeyboardEvent<HTMLDivElement>) => void;
   onLongPress?: (e: MouseEvent<HTMLDivElement>) => void;
   /** Long press duration in ms. @default 500 */
   longPressDelay?: number;
@@ -79,7 +84,7 @@ export const Pressable = forwardRef<HTMLDivElement, PressableProps>(function Pre
     if (disabled || !onPress) return;
     if (e.key === 'Enter' || e.key === ' ') {
       e.preventDefault();
-      onPress(e as unknown as MouseEvent<HTMLDivElement>);
+      onPress(e);
     }
   };
 

@@ -14,6 +14,13 @@
  * `@ggui-ai/protocol` stays vendor-neutral per Protocol #6 — this
  * composer lives here because that's where the A2UI dep graph is
  * allowed (react-native ships preview-a2ui as a prod dep).
+ *
+ * The three copies (react / react-native / mcp-server) are documented
+ * structural mirrors: docstrings may differ per package, but the
+ * EXECUTABLE CODE must stay identical — guarded by the
+ * comment-stripped mirror gate in `../twin-parity.test.ts`
+ * (`CODE_IDENTICAL_MIRRORS`). Apply code changes to all three copies
+ * in the same slice.
  */
 import {
   parseServerMessage,

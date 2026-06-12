@@ -53,7 +53,11 @@ export async function loadModule(code: string): Promise<Record<string, unknown>>
   const blob = new Blob([code], { type: 'application/javascript' });
   const url = URL.createObjectURL(blob);
   try {
-    return await import(/* webpackIgnore: true */ url);
+    // Both bundler pragmas: consumers of this shared loader are built
+    // by webpack (`webpackIgnore`), Vite (`@vite-ignore`), and esbuild
+    // (which ignores both). Pragmas are comments — inert wherever the
+    // matching bundler isn't in play.
+    return await import(/* webpackIgnore: true */ /* @vite-ignore */ url);
   } finally {
     URL.revokeObjectURL(url);
   }

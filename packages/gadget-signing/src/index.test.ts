@@ -23,6 +23,7 @@ const mockedVerify = vi.mocked(sigstoreModule.verify);
 
 import {
   derivePublicKeyId,
+  extractSigstoreLeafCertPem,
   generateEd25519Keypair,
   signBundleEd25519,
   signBundleSigstore,
@@ -539,5 +540,58 @@ describe("verifyBundleSigstore", () => {
       expectedIdentity: { subject: /\/alice$/ },
     });
     expect(result).toEqual({ valid: true });
+  });
+});
+
+describe("extractSigstoreLeafCertPem", () => {
+  function sigWithBundle(bundle: string): SigstoreSignature {
+    return {
+      algorithm: "sigstore-cosign",
+      bundleSha384: "dW51c2Vk",
+      bundle,
+      signedAt: "2026-06-12T00:00:00.000Z",
+    };
+  }
+
+  it("returns the leaf cert rawBytes from a chain-shaped bundle", () => {
+    const bundle = JSON.stringify({
+      verificationMaterial: {
+        x509CertificateChain: {
+          certificates: [{ rawBytes: "TEVBRi1DRVJU" }, { rawBytes: "SU5URVJNRURJQVRF" }],
+        },
+      },
+    });
+    expect(extractSigstoreLeafCertPem(sigWithBundle(bundle))).toBe("TEVBRi1DRVJU");
+  });
+
+  it("returns undefined for malformed JSON", () => {
+    expect(extractSigstoreLeafCertPem(sigWithBundle("{not json"))).toBeUndefined();
+  });
+
+  it("returns undefined when the cert chain is absent (single-certificate shape)", () => {
+    const bundle = JSON.stringify({
+      verificationMaterial: { certificate: { rawBytes: "TEVBRi1DRVJU" } },
+    });
+    expect(extractSigstoreLeafCertPem(sigWithBundle(bundle))).toBeUndefined();
+  });
+
+  it("returns undefined for an empty certificates array", () => {
+    const bundle = JSON.stringify({
+      verificationMaterial: { x509CertificateChain: { certificates: [] } },
+    });
+    expect(extractSigstoreLeafCertPem(sigWithBundle(bundle))).toBeUndefined();
+  });
+
+  it("returns undefined when rawBytes is empty or missing", () => {
+    const empty = JSON.stringify({
+      verificationMaterial: {
+        x509CertificateChain: { certificates: [{ rawBytes: "" }] },
+      },
+    });
+    expect(extractSigstoreLeafCertPem(sigWithBundle(empty))).toBeUndefined();
+    const missing = JSON.stringify({
+      verificationMaterial: { x509CertificateChain: { certificates: [{}] } },
+    });
+    expect(extractSigstoreLeafCertPem(sigWithBundle(missing))).toBeUndefined();
   });
 });

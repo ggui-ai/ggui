@@ -1,3 +1,17 @@
+/**
+ * WebSocketManager (RN) tests — twin of `@ggui-ai/react`'s
+ * `websocket/WebSocketManager.test.ts`.
+ *
+ * Platform delta: the shared lifecycle coverage (connect URL,
+ * send-or-buffer, malformed-message tolerance, reconnect backoff +
+ * max-attempt error, ping loop, pong filtering) mirrors the web
+ * suite; RN-only scenarios cover AppState background/foreground
+ * transitions, NetInfo loss/recovery, and ping suspension in the
+ * background. The web-only `subscribeToRender` deferred-subscribe
+ * tests have no RN counterpart (no such method here).
+ *
+ * Listed in `../twin-parity.test.ts` `DOCUMENTED_DELTA_TWINS`.
+ */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { WebSocketManager } from './WebSocketManager';
 import type { WebSocketMessage } from '@ggui-ai/protocol/transport/websocket';

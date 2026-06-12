@@ -35,7 +35,6 @@ export type {
   ManifestBlueprintSeed,
   ManifestBlueprintProviderOptions,
 } from './manifest-blueprint-provider.js';
-export { InMemoryConnectorRegistry } from './connector-registry.js';
 export { InMemoryProviderKeyStore } from './provider-key-store.js';
 export { InMemoryApiKeyProvider } from './api-key-provider.js';
 export type { InMemoryApiKeyProviderOptions } from './api-key-provider.js';

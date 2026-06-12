@@ -27,11 +27,11 @@ import {
 } from '@ggui-ai/artifact-manifest';
 import {
   canonicalJson,
+  extractSigstoreLeafCertPem,
   isGadgetSignature,
   verifyBundleEd25519,
   verifyBundleSigstore,
   type GadgetSignature,
-  type SigstoreSignature,
 } from '@ggui-ai/gadget-signing';
 import { bundleHostScheme } from '@ggui-ai/protocol';
 import { ZodError } from 'zod';
@@ -292,13 +292,10 @@ export async function publishArtifact(
       return error(400, 'signature_invalid', verifyResult.reason);
     }
     // Persist the leaf cert PEM on the version row so install
-    // consumers can render the signer identity. Extracted inline from
-    // the bundle's `verificationMaterial.x509CertificateChain.certificates[0]`
-    // for now — TODO: replace with `extractSigstoreLeafCertPem(signature)`
-    // from `@ggui-ai/gadget-signing` so the parsing logic lives next to
-    // the bundle-format knowledge (single source of truth for the
-    // cosign-bundle shape).
-    const leafCertPem = extractSigstoreLeafCertPemInline(input.signature);
+    // consumers can render the signer identity. The cosign-bundle
+    // parsing lives in `@ggui-ai/gadget-signing` next to the verify
+    // impl (single source of truth for the bundle shape).
+    const leafCertPem = extractSigstoreLeafCertPem(input.signature);
     if (leafCertPem === undefined) {
       return error(
         400,
@@ -533,43 +530,6 @@ function error(
     status,
     body: detail === undefined ? { error: code, message } : { error: code, message, detail },
   };
-}
-
-/**
- * Extract the Fulcio leaf cert's base64 raw bytes from a serialized
- * cosign bundle (per `@sigstore/bundle` v0.3 spec). Returns `undefined`
- * if the bundle is malformed or missing the cert chain.
- *
- * Inline today — TODO: pull this into `@ggui-ai/gadget-signing` as
- * `extractSigstoreLeafCertPem` so the bundle-format knowledge sits
- * next to the verify impl. The install CLI carries an identical
- * helper today; both should collapse to the single canonical export.
- */
-function extractSigstoreLeafCertPemInline(
-  signature: SigstoreSignature,
-): string | undefined {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(signature.bundle);
-  } catch {
-    return undefined;
-  }
-  if (parsed === null || typeof parsed !== 'object') return undefined;
-  const verificationMaterial = (parsed as { verificationMaterial?: unknown })
-    .verificationMaterial;
-  if (verificationMaterial === null || typeof verificationMaterial !== 'object') {
-    return undefined;
-  }
-  const chain = (verificationMaterial as { x509CertificateChain?: unknown })
-    .x509CertificateChain;
-  if (chain === null || typeof chain !== 'object') return undefined;
-  const certificates = (chain as { certificates?: unknown }).certificates;
-  if (!Array.isArray(certificates) || certificates.length === 0) return undefined;
-  const leaf = certificates[0];
-  if (leaf === null || typeof leaf !== 'object') return undefined;
-  const rawBytes = (leaf as { rawBytes?: unknown }).rawBytes;
-  if (typeof rawBytes !== 'string' || rawBytes.length === 0) return undefined;
-  return rawBytes;
 }
 
 /**

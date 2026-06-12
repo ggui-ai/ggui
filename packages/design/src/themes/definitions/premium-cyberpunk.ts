@@ -2,7 +2,7 @@
  * Premium Cyberpunk Theme — light + dark variants
  *
  * Neon-lit dystopian tech aesthetic. Cyan primary on near-black surfaces
- * with glitch animations and a constellation canvas evoking a neon network.
+ * with glitch animations.
  *
  * Light variant: pale chrome surface with cyan neon accents — keeps the
  * digital-rebellion feel without going full dark. The neon palette stays
@@ -159,7 +159,7 @@ const shared = {
 const cyberpunkLight: DtcgTheme = {
   $name: 'Cyberpunk',
   $description:
-    'Neon-lit dystopian tech — cyan neon on dark chrome with glitch animations and constellation canvas.',
+    'Neon-lit dystopian tech — cyan neon on dark chrome with glitch animations.',
   $metadata: {
     font: 'Orbitron',
     fontUrl:
@@ -275,19 +275,6 @@ const cyberpunkLight: DtcgTheme = {
   },
   zIndex: standardZIndex,
 
-  canvas: {
-    mode: { $value: 'constellation', $type: 'string' },
-    speed: { $value: 1.2, $type: 'number' },
-    colors: {
-      $value: [
-        'rgba(6, 182, 212, 0.25)',
-        'rgba(0, 255, 136, 0.12)',
-        'rgba(255, 34, 85, 0.08)',
-      ],
-      $type: 'array',
-    },
-    background: { $value: '#05050a', $type: 'color' },
-  },
 };
 
 // ── Cyberpunk — Dark ───────────────────────────────────────────────
@@ -414,19 +401,6 @@ const cyberpunkDark: DtcgTheme = {
   },
   zIndex: standardZIndex,
 
-  canvas: {
-    mode: { $value: 'constellation', $type: 'string' },
-    speed: { $value: 1.2, $type: 'number' },
-    colors: {
-      $value: [
-        'rgba(34, 211, 238, 0.32)', // brighter cyan
-        'rgba(0, 255, 136, 0.16)',
-        'rgba(255, 34, 85, 0.10)',
-      ],
-      $type: 'array',
-    },
-    background: { $value: '#000005', $type: 'color' },
-  },
 };
 
 /** Cyberpunk registration — both modes ship from day one. */

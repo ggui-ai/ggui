@@ -10,14 +10,11 @@ import type {
   InferActionPayload,
   InferStreamNames,
   InferStreamPayload,
-  InferContextNames,
-  InferContextValue,
   InferAgentToolNames,
   InferGadgetNames,
   TypedAction,
   TypedStreamEvent,
   ContractTypeMap,
-  PropsOf,
   ActionNames,
   ActionPayload,
 } from '../contract-inference';
@@ -222,7 +219,6 @@ interface MyManualContract extends ContractTypeMap {
   streams: { update: { temp: number } };
 }
 
-type _MP = Expect<Equal<PropsOf<MyManualContract>, { city: string; temp: number }>>;
 type _MAN = Expect<Equal<ActionNames<MyManualContract>, 'refresh' | 'changeUnit'>>;
 type _MAP = Expect<Equal<ActionPayload<MyManualContract, 'changeUnit'>, { unit: 'C' | 'F' }>>;
 
@@ -439,88 +435,6 @@ type CE = typeof _clientEmpty;
 type _CE_Name = Expect<Equal<InferGadgetNames<CE>, never>>;
 
 // =============================================================================
-// 10. contextSpec inference
-// =============================================================================
-//
-// Mirrors the actionSpec / streamSpec inference assertions:
-//   - present spec → literal-union names + schema-narrowed values
-//   - present-empty spec → `never` names + `never` values (inner branch)
-//   - absent spec → `never` names + `unknown` values (fallback branch,
-//     parallel to the post-3b actionSpec / streamSpec posture)
-
-// ── 10.1 Multi-slot contract → literal name union + per-slot value ─────────
-const _contextContract = defineContract({
-  contextSpec: {
-    currentStep: { schema: { type: 'number' } },
-    draft: {
-      schema: {
-        type: 'object',
-        properties: {
-          title: { type: 'string' },
-          body: { type: 'string' },
-        },
-        required: ['title', 'body'],
-      },
-    },
-    tab: { schema: { type: 'string', enum: ['inbox', 'sent', 'drafts'] } },
-  },
-} as const);
-type CState = typeof _contextContract;
-type _CState_Name = Expect<Equal<
-  InferContextNames<CState>,
-  'currentStep' | 'draft' | 'tab'
->>;
-type _CState_V1 = Expect<Equal<InferContextValue<CState, 'currentStep'>, number>>;
-type _CState_V2 = Expect<Equal<
-  InferContextValue<CState, 'draft'>,
-  { title: string; body: string }
->>;
-type _CState_V3 = Expect<Equal<
-  InferContextValue<CState, 'tab'>,
-  'inbox' | 'sent' | 'drafts'
->>;
-
-// ── 10.2 Single-slot — literal name (NOT broad string) ──────────────────────
-// Same regression-class guard as actionSpec / streamSpec single-member.
-const _singleContext = defineContract({
-  contextSpec: { hover: { schema: { type: 'boolean' } } },
-} as const);
-type CSS = typeof _singleContext;
-type _CSS_Name = Expect<Equal<InferContextNames<CSS>, 'hover'>>;
-type _CSS_Value = Expect<Equal<InferContextValue<CSS, 'hover'>, boolean>>;
-// Non-key lookup on present contextSpec → `never`.
-type _CSS_NonKey = Expect<Equal<InferContextValue<CSS, 'nonexistent'>, never>>;
-
-// ── 10.3 Slot WITHOUT schema (defensive) → `unknown` value ──────────────────
-// `ContextEntry.schema` is required at the runtime contract layer
-// (render-time validator rejects schemaless slots). Pin the inference
-// fallback against a hand-built shape to verify the conditional's
-// `S[N] extends { schema: ... }` branch falls through to `unknown`
-// rather than blowing up — defensive lock, not a real authoring path.
-type _ManualNoSchemaContract = {
-  readonly intent: 'test';
-  readonly contextSpec: {
-    readonly stale: { readonly description: 'no schema' };
-  };
-};
-type _CHNS_Value = Expect<Equal<
-  InferContextValue<_ManualNoSchemaContract, 'stale'>,
-  unknown
->>;
-
-// ── 10.4 Fallback lock — contextSpec ABSENT → never names + unknown values ──
-type _CAbsent_Name = Expect<Equal<InferContextNames<AA>, never>>;
-type _CAbsent_Value = Expect<Equal<InferContextValue<AA, 'anything'>, unknown>>;
-
-// ── 10.5 Fallback lock — contextSpec PRESENT-BUT-EMPTY → never both ─────────
-const _ctxEmpty = defineContract({
-  contextSpec: {},
-} as const);
-type CHE = typeof _ctxEmpty;
-type _CHE_Name = Expect<Equal<InferContextNames<CHE>, never>>;
-type _CHE_Value = Expect<Equal<InferContextValue<CHE, 'anything'>, never>>;
-
-// =============================================================================
 // 11. JSON Schema `required` array honor
 // =============================================================================
 //
@@ -647,27 +561,6 @@ type _StreamPayload = InferStreamPayload<typeof _streamWithRequired, 'update'>;
 type _Stream_Req = Expect<Equal<_StreamPayload, {
   temp: number;
   conditions?: string;
-}>>;
-
-// ── 11g — contextSpec object schema with required ───────────────────────────
-const _contextWithRequired = defineContract({
-  contextSpec: {
-    draft: {
-      schema: {
-        type: 'object',
-        properties: {
-          title: { type: 'string' },
-          body: { type: 'string' },
-        },
-        required: ['title'],
-      },
-    },
-  },
-} as const);
-type _CtxValue = InferContextValue<typeof _contextWithRequired, 'draft'>;
-type _Ctx_Req = Expect<Equal<_CtxValue, {
-  title: string;
-  body?: string;
 }>>;
 
 // ── 11h — agentTools catalog (input/output type inference retired) ─────────

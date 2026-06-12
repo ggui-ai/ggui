@@ -7,7 +7,6 @@ export type {
 } from './useInvoke';
 export { parseSseStream } from './sse-parse';
 export {
-  extractBootstrapMeta,
   extractMcpAppAiGguiMeta,
   buildAppRendererToolResult,
 } from './mcp-apps-result';

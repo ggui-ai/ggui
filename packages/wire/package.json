@@ -40,7 +40,7 @@
     "./package.json": "./package.json"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.build.json && node ../scripts/fix-esm-imports.mjs dist && pnpm run generate:docs",
+    "build": "rm -rf dist && tsc -p tsconfig.build.json && node ../scripts/fix-esm-imports.mjs dist && pnpm run generate:docs",
     "dev": "tsc --watch",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",

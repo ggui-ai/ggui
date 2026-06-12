@@ -2,7 +2,7 @@
  * Premium Botanical Theme — light + dark variants
  *
  * Natural greens and warm cream neutrals. Organic shapes, gentle motion
- * inspired by leaves and vines. Mesh canvas with green/cream blobs.
+ * inspired by leaves and vines.
  *
  * Light variant: cream surface, leaf-green primary — daytime garden.
  *
@@ -137,7 +137,7 @@ const shared = {
 const botanicalLight: DtcgTheme = {
   $name: 'Botanical',
   $description:
-    'Organic greens on warm cream — leaf-float animations, vine-grow motion, and a gentle mesh canvas.',
+    'Organic greens on warm cream — leaf-float animations and vine-grow motion.',
   $metadata: {
     font: 'Lora',
     fontUrl:
@@ -215,19 +215,6 @@ const botanicalLight: DtcgTheme = {
 
   zIndex: standardZIndex,
 
-  canvas: {
-    mode: { $value: 'mesh', $type: 'string' },
-    speed: { $value: 0.4, $type: 'number' },
-    colors: {
-      $value: [
-        'rgba(22, 163, 74, 0.10)',
-        'rgba(191, 170, 128, 0.08)',
-        'rgba(240, 228, 201, 0.06)',
-      ],
-      $type: 'array',
-    },
-    background: { $value: '#141210', $type: 'color' },
-  },
 };
 
 // ── Botanical — Dark ───────────────────────────────────────────────
@@ -315,19 +302,6 @@ const botanicalDark: DtcgTheme = {
 
   zIndex: standardZIndex,
 
-  canvas: {
-    mode: { $value: 'mesh', $type: 'string' },
-    speed: { $value: 0.4, $type: 'number' },
-    colors: {
-      $value: [
-        'rgba(74, 222, 128, 0.12)', // lifted leaf
-        'rgba(191, 170, 128, 0.09)',
-        'rgba(53, 46, 32, 0.06)',
-      ],
-      $type: 'array',
-    },
-    background: { $value: '#0a0907', $type: 'color' },
-  },
 };
 
 /** Botanical registration — both modes ship from day one. */

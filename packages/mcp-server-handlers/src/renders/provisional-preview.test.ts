@@ -108,7 +108,7 @@ function makeDeps(overrides: {
 
 describe('evaluateProvisionalPreviewGate', () => {
   const ctx = { appId: 'app-1', sessionId: 'sess-1' };
-  const storyInput = { story: { intent: 'go' }, isMcpAppsGguiSession: false };
+  const storyInput = { story: { intent: 'go' } };
 
   it('skips when deps undefined (preview not wired)', () => {
     expect(evaluateProvisionalPreviewGate(undefined, storyInput, ctx)).toEqual({
@@ -128,22 +128,12 @@ describe('evaluateProvisionalPreviewGate', () => {
     });
   });
 
-  it('skips with reason mcp-apps-render when the render is MCP Apps delivery', () => {
-    const { deps } = makeDeps({ emitter: { run: async () => {} } });
-    const result = evaluateProvisionalPreviewGate(
-      deps,
-      { story: { intent: 'go' }, isMcpAppsGguiSession: true },
-      ctx,
-    );
-    expect(result).toEqual({ kind: 'skip', reason: 'mcp-apps-render' });
-  });
-
   it('skips with reason no-story when story is absent', () => {
     const { deps } = makeDeps({ emitter: { run: async () => {} } });
     expect(
       evaluateProvisionalPreviewGate(
         deps,
-        { story: undefined, isMcpAppsGguiSession: false },
+        { story: undefined },
         ctx,
       ),
     ).toEqual({ kind: 'skip', reason: 'no-story' });
@@ -185,7 +175,7 @@ describe('evaluateProvisionalPreviewGate', () => {
     });
     evaluateProvisionalPreviewGate(
       deps,
-      { story: { intent: 'specific' }, isMcpAppsGguiSession: false },
+      { story: { intent: 'specific' } },
       ctx,
     );
     expect(predicate).toHaveBeenCalledWith({

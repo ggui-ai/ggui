@@ -51,6 +51,12 @@ import type {
 } from './types.js';
 import { projectHostContext } from '@ggui-ai/protocol';
 import { App, PostMessageTransport } from '@modelcontextprotocol/ext-apps';
+// Type-only contract on `@modelcontextprotocol/sdk` — no runtime
+// import (the esbuild bundle carries no sdk code). Declared as a
+// peerDependency (+ devDependency for local typecheck) because the
+// `Transport` reference survives into the shipped `dist/runtime.d.ts`,
+// which the main "." entry re-exports — TS consumers need the sdk
+// types resolvable. Matches `@ggui-ai/react`'s declaration posture.
 import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import type { ModuleNamespace, GadgetPackageRegistry } from './globals.js';

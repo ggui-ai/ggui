@@ -58,7 +58,7 @@ export function MarketingFeatures({
               <h2
                 style={{
                   fontSize: 'var(--ggui-font-size-3xl, 30px)',
-                  fontWeight: 'var(--ggui-font-weight-bold, 700)' as unknown as number,
+                  fontWeight: 'var(--ggui-font-weight-bold, 700)',
                   lineHeight: 1.2,
                   color: 'var(--ggui-color-onSurface, #18181b)',
                   margin: '0 0 16px 0',
@@ -151,7 +151,7 @@ function FeatureCard({ feature }: { feature: FeatureItem }) {
       <h3
         style={{
           fontSize: 'var(--ggui-font-size-xl, 20px)',
-          fontWeight: 'var(--ggui-font-weight-semibold, 600)' as unknown as number,
+          fontWeight: 'var(--ggui-font-weight-semibold, 600)',
           lineHeight: 1.3,
           color: 'var(--ggui-color-onSurface, #18181b)',
           margin: '0 0 8px 0',

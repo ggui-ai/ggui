@@ -656,7 +656,13 @@ export type ProtocolError =
     }
   | {
       readonly kind: 'auth';
-      readonly code: 'SESSION_NOT_FOUND' | 'TOKEN_EXPIRED' | 'AUTH_REJECTED';
+      readonly code:
+        | 'SESSION_NOT_FOUND'
+        | 'BOOTSTRAP_EXPIRED'
+        | 'BOOTSTRAP_INVALID'
+        | 'BOOTSTRAP_SESSION_MISMATCH'
+        | 'BOOTSTRAP_APP_MISMATCH'
+        | 'UNAUTHENTICATED';
       readonly message?: string;
     }
   | {

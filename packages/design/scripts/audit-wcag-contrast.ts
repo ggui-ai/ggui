@@ -100,8 +100,7 @@ function contrast(a: string, b: string): number | null {
 
 /**
  * Read the string `$value` from a token, returning `null` when the token
- * isn't a string (e.g. canvas mode/speed/colors are non-string). The
- * audit only operates on string color values.
+ * isn't a string. The audit only operates on string color values.
  */
 function tokenValue(token: DtcgToken<unknown> | undefined): string | null {
   if (!token) return null;

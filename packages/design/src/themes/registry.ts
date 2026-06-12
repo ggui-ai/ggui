@@ -71,7 +71,7 @@ function resolveMode(reg: ThemeRegistration, requested: ThemeMode): ThemeMode {
  *
  * @param id - Theme identifier (e.g., `'ggui'`, `'claudic'`)
  * @param mode - Color mode (default `'light'`)
- * @returns Parsed theme with CSS variables and canvas config, or `undefined`
+ * @returns Parsed theme with CSS variables, or `undefined`
  */
 export function getTheme(
   id: string,

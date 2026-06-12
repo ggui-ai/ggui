@@ -50,6 +50,7 @@ import type {
 } from '@ggui-ai/mcp-server-core';
 import {
   flatToBlueprintSource,
+  searchBlueprintsInputShape,
   type GguiSearchBlueprintsOutput,
 } from '@ggui-ai/protocol';
 import type { HandlerContext, SharedHandler } from '../types.js';
@@ -94,13 +95,9 @@ export interface SearchBlueprintsDeps {
   readonly blueprints?: BlueprintProvider;
 }
 
-const inputSchema = {
-  query: z
-    .string()
-    .min(1)
-    .describe("Natural-language description of the UI you're looking for"),
-  limit: z.number().int().min(1).max(100).optional(),
-};
+// Canonical SSoT shape — authored once in `@ggui-ai/protocol`
+// (`schemas/mcp.ts`).
+const inputSchema = searchBlueprintsInputShape;
 
 const outputSchema = {
   // `z.record(z.string(), z.unknown())` — zod v4 dropped the single-arg

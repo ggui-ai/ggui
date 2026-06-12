@@ -15,6 +15,7 @@ import type { ValidateFunction } from './ajv-runtime';
 export type { ValidateFunction } from './ajv-runtime';
 import { checkCrossReferences } from './cross-references';
 import { checkNameInvariants } from './name-invariants';
+import { isRecord } from './is-record';
 import { checkSchemaCompat } from './schema-compat-invariants';
 import {
   BUILTIN_RESERVED_VALIDATORS,
@@ -283,7 +284,7 @@ export function validateActionData(
 ): ValidationResult {
   const violations: ContractViolation[] = [];
 
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+  if (!isRecord(value)) {
     violations.push({
       field: 'value',
       message: 'Action payload must be an object with an `action` field',
@@ -293,7 +294,7 @@ export function validateActionData(
     return { valid: false, violations };
   }
 
-  const record = value as Record<string, unknown>;
+  const record = value;
   const actionId = record.action;
 
   if (typeof actionId !== 'string' || actionId.length === 0) {
@@ -349,9 +350,10 @@ function getJsonType(value: unknown): string {
  *
  * Semantics:
  *   - `envelope.type !== 'data:submit'` → `{valid: true, violations: []}`.
- *     Only action submissions carry payload contract today; other
- *     event types (lifecycle, interaction, error) have no schema
- *     enforcement on this layer.
+ *     {@link EventType} has exactly one member, so a TYPED caller never
+ *     hits this branch — it is a wire-trust guard: a rogue client's
+ *     envelope claiming an unknown type string is ledger-only upstream
+ *     and gets no payload enforcement on this layer.
  *   - `spec === undefined` → `{valid: true, violations: []}`. Renders
  *     without an actionSpec have no contract; legacy renders keep
  *     flowing.
@@ -496,10 +498,10 @@ function canonicalJsonStringify(value: unknown): string {
   if (Array.isArray(value)) {
     return `[${value.map(canonicalJsonStringify).join(',')}]`;
   }
-  if (typeof value === 'object') {
-    const keys = Object.keys(value as Record<string, unknown>).sort();
+  if (isRecord(value)) {
+    const keys = Object.keys(value).sort();
     const parts = keys.map(
-      (k) => `${JSON.stringify(k)}:${canonicalJsonStringify((value as Record<string, unknown>)[k])}`,
+      (k) => `${JSON.stringify(k)}:${canonicalJsonStringify(value[k])}`,
     );
     return `{${parts.join(',')}}`;
   }

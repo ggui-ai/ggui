@@ -430,29 +430,12 @@ export interface ChannelErrorPayload {
 }
 
 /**
- * Payload for close message (Client → Server: close render)
- */
-export interface ClosePayload {
-  sessionId: string;
-}
-
-/**
  * Generation strategy controls how ggui resolves UI generation requests.
  *
- * - `strict`   — Only use predefined/cached blueprints. Fails if no match found.
+ * - `strict`   — Only use cached/curated blueprints. Fails if no match found.
  * - `balanced` — Try blueprint matching first, fall back to LLM generation.
- * - `creative` — Always generate fresh UI via LLM (no blueprint matching).
  */
-export type GenerationStrategy = 'strict' | 'balanced' | 'creative';
-
-/**
- * Progress step during UI generation. Consumed by
- * {@link InternalProgressPayload} (`internal:progress`, generator →
- * handler) — never delivered to clients directly; client-visible
- * generation progress flows as `{type: 'data'}` envelopes on the
- * reserved `_ggui:lifecycle` channel.
- */
-export type ProgressStep = 'queued' | 'primitives' | 'writing' | 'compiling';
+export type GenerationStrategy = 'strict' | 'balanced';
 
 /**
  * Payload for props_update message (Server → Client).
@@ -463,15 +446,6 @@ export interface PropsUpdatePayload {
   sessionId: string;
   /** New props — full replacement */
   props: JsonObject;
-}
-
-/**
- * Payload for url message (Server → Client)
- * Note: shortCode is returned; client constructs full URL using renderUrl from amplify_outputs
- */
-export interface UrlPayload {
-  sessionId: string;
-  shortCode: string;
 }
 
 /**
@@ -503,14 +477,6 @@ export interface SystemPayload {
   appId?: string;
   /** GguiSession ID for WebSocket context (used with auth_required) */
   sessionId?: string;
-}
-
-/**
- * Payload for internal:progress message (generator → handler)
- */
-export interface InternalProgressPayload {
-  sessionId: string;
-  step: ProgressStep;
 }
 
 /**

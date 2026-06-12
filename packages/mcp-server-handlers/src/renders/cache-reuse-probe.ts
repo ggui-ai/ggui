@@ -1,18 +1,24 @@
 #!/usr/bin/env node
 /**
  * Live blueprint-reuse probe — exercises the resurrected handshake cache
- * path (find-similar → coverage guard → REAL LLM judge → atomic reuse)
- * end-to-end against a real Anthropic judge.
+ * path (find-similar → REAL LLM judge → atomic reuse, with informational
+ * coverage reported on every hit) end-to-end against a real Anthropic
+ * judge.
  *
  * Two scenarios:
  *   1. REUSE — register a "my todo items" blueprint, then match a
  *      DIFFERENTLY-authored todo contract for the same intent. Exact-key
- *      misses; the coverage guard passes (same action keyset); the real
+ *      misses; the coverage gap is empty (same action keyset); the real
  *      judge should accept → strategy 'semantic', reuse the cached one.
  *      This is the "my todo items twice → two blueprints" symptom, fixed.
- *   2. REJECT — register a 2-action counter, then match a 3-action
- *      counter. The coverage guard drops the subset BEFORE the judge →
- *      no-match (the 2026-05-09 missing-button bug stays fixed).
+ *   2. PROPOSE-WITH-GAP — register a 2-action counter, then match a
+ *      3-action counter. Post Path-A relaxation coverage is
+ *      INFORMATIONAL: the subset candidate is NOT dropped — the judge
+ *      (similarity-only, coverage-blind) proposes it and the matcher
+ *      reports the uncovered `decrement` action on `hit.coverage`, which
+ *      the decision layer projects as a `COVERAGE_GAP` warn finding.
+ *      Agent override is the safety valve (the 2026-05-09 missing-button
+ *      case surfaces as a visible warn, not a silent subset).
  *
  * Uses MockEmbeddingProvider + minCosineForRerank:-1 so retrieval always
  * reaches the judge (the embedder is audit-confirmed real in `ggui serve`;
@@ -182,7 +188,7 @@ async function main(): Promise<void> {
   );
   const reuse = labelReuse;
 
-  // Scenario 2 — REJECT subset.
+  // Scenario 2 — PROPOSE subset WITH a reported coverage gap.
   const r2 = { embedding: new MockEmbeddingProvider(), vectorStore: new InMemoryVectorStore(), index: new InMemoryBlueprintIndex() };
   await registerBlueprint(r2, SCOPE, {
     kind: 'template',
@@ -191,23 +197,27 @@ async function main(): Promise<void> {
     componentCode: 'export default () => null;',
     source: { kind: 'user' },
   });
-  const reject = await matchBlueprint(
+  const subset = await matchBlueprint(
     { registry: r2, llm },
     SCOPE,
     { intent: 'a counter widget', contract: COUNTER_3 },
     NO_COSINE_GATE,
   );
+  const subsetHit = subset.strategy === 'semantic' ? subset : undefined;
+  const subsetOk = subsetHit !== undefined && subsetHit.coverage.actions.includes('decrement');
   process.stdout.write(
-    `[2] REJECT 3-action counter vs cached 2-action → strategy=${reject.strategy}` +
-      (reject.strategy === 'no-match'
-        ? ` ✅ subset rejected by coverage guard\n`
-        : ` ❌ served a subset! (${reject.strategy})\n`),
+    `[2] 3-action counter vs cached 2-action → strategy=${subset.strategy}` +
+      (subsetOk && subsetHit !== undefined
+        ? ` ✅ subset proposed with coverage gap reported (missing actions: ${subsetHit.coverage.actions.join(', ')})\n`
+        : subsetHit !== undefined
+          ? ` ❌ proposed WITHOUT reporting the decrement gap (coverage.actions=${JSON.stringify(subsetHit.coverage.actions)})\n`
+          : ` ❌ ${subset.strategy} — ${subset.reason.slice(0, 80)}\n`),
   );
 
   process.stdout.write(
     `\nVerdict: ${
-      reuse.strategy === 'semantic' && reject.strategy === 'no-match'
-        ? '✅ find-similar + judge + coverage all working — same intent reuses, subsets rejected.'
+      reuse.strategy === 'semantic' && subsetOk
+        ? '✅ find-similar + judge + informational coverage all working — same intent reuses; subsets are proposed with the gap reported for COVERAGE_GAP warn projection.'
         : '❌ unexpected — inspect above.'
     }\n`,
   );

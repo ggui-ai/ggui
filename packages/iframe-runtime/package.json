@@ -28,13 +28,10 @@
       "types": "./dist/server.d.ts",
       "import": "./dist/server.js",
       "default": "./dist/server.js"
-    },
-    "./runtime.js": {
-      "default": "./dist/iframe-runtime.js"
     }
   },
   "scripts": {
-    "build": "node esbuild.config.mjs && tsc -p tsconfig.types.json && pnpm run check:bundle-size",
+    "build": "rm -rf dist && node esbuild.config.mjs && tsc -p tsconfig.types.json && pnpm run check:bundle-size",
     "check:bundle-size": "tsx scripts/check-bundle-size.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
@@ -52,7 +49,11 @@
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
   },
+  "peerDependencies": {
+    "@modelcontextprotocol/sdk": "^1.27.0"
+  },
   "devDependencies": {
+    "@modelcontextprotocol/sdk": "^1.27.0",
     "@testing-library/react": "^16.0.0",
     "@types/node": "^24.0.0",
     "@types/react": "^19.0.0",

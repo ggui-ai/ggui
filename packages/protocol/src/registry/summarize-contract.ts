@@ -46,6 +46,7 @@
  * Empty slots/actions/streams/props collapse to `∅`.
  */
 import type { DataContract } from '../types/data-contract.js';
+import { isRecord } from '../validation/is-record.js';
 
 /** Stable summary of `contract` for embedding + rerank input. */
 export function summarizeContract(
@@ -115,12 +116,12 @@ function readType(schema: unknown): string | null {
  *  or `null` when the action takes no payload. Empty `properties` →
  *  null (payload-less). */
 function readPayloadFields(schema: unknown): string | null {
-  if (typeof schema !== 'object' || schema === null) return null;
-  const props = (schema as { properties?: unknown }).properties;
-  if (typeof props !== 'object' || props === null || Array.isArray(props)) {
+  if (!isRecord(schema)) return null;
+  const props = schema.properties;
+  if (!isRecord(props)) {
     return null;
   }
-  const keys = Object.keys(props as Record<string, unknown>);
+  const keys = Object.keys(props);
   if (keys.length === 0) return null;
   return keys.sort().join(',');
 }

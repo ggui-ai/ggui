@@ -283,6 +283,7 @@ export {
 // resolved render without duplicating the actionSpec / contextSpec
 // walks.
 export {
+  assembleRenderSliceBase,
   deriveBundleOrigins,
   deriveContextSlots,
   deriveContractBundle,
@@ -291,6 +292,8 @@ export {
   deriveRenderMeta,
   resolveGadgetUrls,
   type RenderMetaView,
+  type RenderSliceBase,
+  type RenderSliceMetaDeps,
 } from "./slice-meta-derivation.js";
 export type { SeedPoolSource } from "./seed-pool-source.js";
 export { buildSeedPool, type BuildSeedPoolOptions } from "./build-seed-pool.js";

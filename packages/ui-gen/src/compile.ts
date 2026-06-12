@@ -166,11 +166,6 @@ export async function compileComponentCode(source: string): Promise<string> {
  * with the same "couldn't render" ergonomics as a provider failure.
  * Throwing out of `generate()` would break the handler's invariant that
  * the generator never rejects.
- *
- * Wrapping is additive on `stream()` — if the underlying generator
- * implements streaming, the wrapper forwards the iterator untouched.
- * Compilation happens only on the terminal `done` envelope / the
- * non-streaming `generate` path.
  */
 export function withBrowserCompile(generator: UiGenerator): UiGenerator {
   return {
@@ -215,11 +210,6 @@ export function withBrowserCompile(generator: UiGenerator): UiGenerator {
         metadata: raw.metadata,
       };
     },
-    // Forward `stream()` unchanged when present — compilation is a
-    // terminal concern, not an incremental one.
-    ...(typeof generator.stream === 'function'
-      ? { stream: generator.stream.bind(generator) }
-      : {}),
   };
 }
 

@@ -184,41 +184,4 @@ describe('withBrowserCompile', () => {
     expect(out.metadata?.latencyMs).toBe(1);
   });
 
-  it('does not call upstream stream() implicitly — generate path only compiles', async () => {
-    let streamCalls = 0;
-    const upstream: UiGenerator = {
-      slug: 'ui-gen-default-test',
-      tier: 'default',
-      model: 'test',
-      async generate() {
-        return {
-          ok: true as const,
-          response: {
-            sessionId: 'p-s',
-            componentCode: `export default () => null;`,
-            sourceCode: `export default () => null;`,
-          },
-          metadata: {
-            provider: 'anthropic',
-            generator: 'ui-gen-default-test',
-            model: 'claude-opus-4-7',
-            inputTokens: 1,
-            outputTokens: 1,
-            latencyMs: 1,
-            cacheHit: false,
-            attempts: 1,
-          },
-        };
-      },
-      async *stream() {
-        streamCalls += 1;
-        yield { type: 'done' as const, result: { ok: false, error: { code: 'PRODUCTION_FAILED', message: 'n/a' } } };
-      },
-    };
-    const wrapped = withBrowserCompile(upstream);
-    expect(typeof wrapped.stream).toBe('function');
-    await wrapped.generate(fakeInput());
-    // Calling generate must not route through stream.
-    expect(streamCalls).toBe(0);
-  });
 });

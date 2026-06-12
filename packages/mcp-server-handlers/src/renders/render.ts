@@ -115,8 +115,7 @@ import {
   validatePropsData,
   ContractViolationError,
   validateContract,
-  dataContractSchema,
-  blueprintVarianceSchema,
+  renderInputShape,
   resolveAppGadgets,
   renderOutputSchema,
   type GguiRenderOutput,
@@ -129,10 +128,12 @@ import {
 } from './cache-trace-sink.js';
 import { emitPayloadTraceEvent } from './payload-trace-sink.js';
 import {
+  assembleRenderSliceBase,
   deriveRenderMeta,
   derivePublicEnvProjection,
   deriveContractBundle,
   type RenderMetaView,
+  type RenderSliceMetaDeps,
 } from './slice-meta-derivation.js';
 
 /**
@@ -167,10 +168,9 @@ import {
  *   - Caching / negotiator decisions. Those layer on top of the
  *     same seam; the shape below doesn't need to change when they
  *     land.
- *   - Streaming partials. The optional `UiGenerator.stream()` is
- *     ignored by this handler — provisional preview already covers
- *     "something visible while generation runs", and streaming a
- *     second partial surface would duplicate that channel.
+ *   - Streaming partials. Provisional preview covers "something
+ *     visible while generation runs"; a second partial surface would
+ *     duplicate that channel.
  */
 export interface GenerationDeps {
   /** Concrete UiGenerator — typically built by
@@ -345,8 +345,14 @@ export interface GguiSessionPostSuccessArgs {
 
 /**
  * Deps for the OSS `ggui_render` handler.
+ *
+ * Extends {@link RenderSliceMetaDeps} — the `ai.ggui/render`
+ * envelope-base plumbing (`mintWsToken` / `runtimeUrl` / `themeId` /
+ * `themeMode` / `themeProvider`) is declared ONCE and shared verbatim
+ * with `ggui_update`, so the two emitting tools cannot drift on the
+ * slice deps.
  */
-export interface GguiRenderHandlerDeps {
+export interface GguiRenderHandlerDeps extends RenderSliceMetaDeps {
   /** GguiSession-backing store. Used to mint / replace renders on render. */
   readonly renderStore: GguiSessionStore;
   /**
@@ -375,83 +381,9 @@ export interface GguiRenderHandlerDeps {
    * `createGguiConsumeHandler` for the pipe to actually thread.
    */
   readonly pendingEventConsumer?: PendingEventConsumer;
-  /**
-   * Bootstrap-credential minter for the MCP Apps outbound path. When
-   * present, the handler's `resultMeta` emits the live-auth trio on
-   * the `ai.ggui/render` slice. When ABSENT, no auth fields are
-   * emitted — non-MCP-Apps hosts read `{sessionId}` straight off
-   * `structuredContent` and resolve the render-resource themselves.
-   *
-   * Returns the live-auth fields — `{wsUrl, token, expiresAt}`. The
-   * handler adds `sessionId` + `appId` from the render context itself,
-   * plus `runtimeUrl` from the separate `runtimeUrl` dep
-   * (server-level config, not minter-scoped).
-   *
-   * A minter that's wired AT ALL is by construction the live-mode
-   * minter, so the return shape pins them required so consumers don't
-   * have to narrow. Set this to `undefined` (omit the key) for
-   * self-contained / system-card-only deployments.
-   */
-  readonly mintWsToken?: (
-    sessionId: string,
-    appId: string,
-  ) => { wsUrl: string; token: string; expiresAt: string };
-  /**
-   * URL of the renderer bundle the thin shell should fetch. Padded
-   * onto {@link McpAppAiGguiRenderMeta.runtimeUrl} at `resultMeta` time
-   * alongside `sessionId` / `appId`. Separate dep (not a field on
-   * `mintWsToken`'s return) because the URL is a server-config value
-   * (same for every render), not a per-mint credential.
-   *
-   * Required when `mintWsToken` is set — the thin-shell HTML's boot
-   * path depends on it. Omitted + `mintWsToken` set is a configuration
-   * bug; we fall back to `/_ggui/iframe-runtime.js` (the same-origin
-   * OSS default) with a warning on first use. Callers composing the
-   * deps bundle inside `@ggui-ai/mcp-server` always supply this; it's
-   * optional here to preserve backward-compatible test construction
-   * where the bootstrap branch isn't exercised.
-   *
-   * Function form (request-aware): when the OSS server is fronted by
-   * a tunnel or reverse proxy, a static configured URL can't know
-   * the public host. The server passes a getter that resolves the
-   * URL against the current request's context (X-Forwarded-Host
-   * when the TCP peer is loopback). Either form is accepted; the
-   * handler invokes the function lazily inside the request scope.
-   */
-  readonly runtimeUrl?: string | (() => string | undefined);
-  /**
-   * Theme preset id resolved from `ggui.json#theme`. Forwarded onto
-   * the `ai.ggui/render.themeId` slice field so MCP Apps hosts
-   * (claude.ai web, Claude Desktop) that mount via
-   * `ui/notifications/tool-result` postMessage propagate the operator's
-   * theme into the iframe's `extractBootstrapFromToolResult` path.
-   * Without this, hosts that don't fetch the per-render resource via
-   * `resources/read` silently fall back to the iframe-runtime's baked
-   * default theme (`ggui`), even when `ggui.json#theme: 'indigo'` is set.
-   */
-  readonly themeId?: string;
-  /** Theme color mode resolved from `ggui.json#theme.mode`. */
-  readonly themeMode?: 'light' | 'dark';
-  /**
-   * Live theme getter — resolved per-render instead of per-boot. When
-   * set, supersedes the static `themeId` / `themeMode` deps for every
-   * result-meta computation, so a console save (which mutates the
-   * underlying state cell) reaches the next render without a server
-   * restart.
-   *
-   * Returns `undefined` when no theme is set (the default-theme
-   * path); returns `{ id, mode? }` when a preset is selected. The
-   * caller (CLI) constructs a closure that reads from a shared
-   * mutable ref the console-theme route also writes to on POST.
-   *
-   * Static `themeId` / `themeMode` survive as the no-getter fallback
-   * for embedding hosts that compose `createGguiServer` directly
-   * without dynamic theming — e.g. test fixtures.
-   */
-  readonly themeProvider?: () => {
-    readonly id?: string;
-    readonly mode?: 'light' | 'dark';
-  } | undefined;
+  // `mintWsToken` / `runtimeUrl` / `themeId` / `themeMode` /
+  // `themeProvider` are inherited from {@link RenderSliceMetaDeps} —
+  // shared verbatim with `ggui_update`.
   /**
    * Resolver for the bootstrap field `streamWebSocketLocalTools`.
    * Mirrors the same-named field on
@@ -793,101 +725,12 @@ export interface ChannelNotifier {
  *     conform); a `variance` re-aims the variant axis while keeping the
  *     agreed contract. At least one of the two MUST be set.
  */
-const inputSchema = {
-  handshakeId: z
-    .string({
-      message:
-        'ggui_render: handshakeId is REQUIRED. Call ggui_handshake({intent, blueprintDraft}) first to negotiate, then render with {handshakeId, props} (accept the suggestion as-is) or {handshakeId, props, override: {contract?, variance?}} (re-aim the contract and/or variance). Direct-render without a handshakeId is not supported.',
-    })
-    .min(1, 'ggui_render: handshakeId must be a non-empty string.'),
-  /**
-   * Runtime prop values for THIS render. Validated against the
-   * effective contract's `propsSpec`. Validation failures throw
-   * `ContractViolationError` (recoverable); the handshake remains
-   * alive so the agent can fix-and-retry on the same handshakeId.
-   *
-   * REQUIRED — pass `{}` when the effective contract declares no
-   * propsSpec (the field is required, the value may be empty).
-   */
-  props: z.record(z.string(), z.unknown()),
-  /**
-   * Per-render theme override. When set, lands on the committed
-   * render and takes priority over `App.defaultThemeId` at
-   * bootstrap-projection time. Use sparingly — most renders should
-   * inherit the app default. Set this when a single render needs a
-   * distinct look (urgent banner, hero marketing card) without
-   * retheming the rest of the chat.
-   */
-  themeId: z
-    .string()
-    .min(1)
-    .optional()
-    .describe(
-      'Per-render theme override. Wins over App.defaultThemeId for THIS render. Omit to inherit the app theme.',
-    ),
-  /**
-   * Typed `infra` envelope (added 2026-05-24). Today carries one
-   * field (`model`); future expansion (temperature, max_tokens,
-   * provider hints) lands here additively. `model` MUST be a
-   * provider-prefixed id (`provider/model-name`); a bound generator
-   * may also accept generator-specific prefixes for alternate
-   * transports (consult the generator's docs).
-   *
-   * Strict — extra keys at `infra.*` are not silently dropped, so
-   * a typo (`infra.modelId`) surfaces as a clear zod path instead of
-   * a silent default-model fallback.
-   */
-  infra: z
-    .object({
-      model: z
-        .string()
-        .min(1)
-        .optional()
-        .describe(
-          'Provider-prefixed model id (e.g., `anthropic/claude-haiku-4-5`, `openai/gpt-5`). Generator-specific prefixes (e.g., `bedrock/...` for AWS Bedrock routing) supported when the bound generator handles them.',
-        ),
-    })
-    .strict()
-    .optional(),
-  /**
-   * Re-aim the handshake proposal. PATCH semantics over the agreed
-   * suggestion:
-   *
-   *   - omit `override` — ACCEPT the proposal as-is (effective contract
-   *     + variance come from `suggestion.blueprintMeta`).
-   *   - `override.contract` — STRICT full re-draft of the contract. The
-   *     server does NOT repair it; it must already conform.
-   *   - `override.variance` — re-aim the variant axis (persona /
-   *     aesthetic / context / seedPrompt) while keeping the agreed
-   *     contract. A different variance resolves a distinct cached
-   *     component.
-   *
-   * `.refine` requires at least one of the two — an empty `override:{}`
-   * is rejected (omit `override` entirely to accept).
-   */
-  override: z
-    .object({
-      contract: dataContractSchema
-        .optional()
-        .describe(
-          'STRICT full re-draft of the contract — must already conform; the server will not repair it.',
-        ),
-      variance: blueprintVarianceSchema
-        .optional()
-        .describe(
-          'Re-aim the variant (persona/aesthetic/context/seedPrompt); keeps the agreed contract.',
-        ),
-    })
-    .strict()
-    .refine((o) => o.contract !== undefined || o.variance !== undefined, {
-      message:
-        'override must set contract and/or variance — omit override entirely to ACCEPT the handshake proposal as-is.',
-    })
-    .optional()
-    .describe(
-      'Omit to ACCEPT the proposal as-is. Provide to re-aim contract and/or variance (PATCH semantics).',
-    ),
-} as const;
+// Canonical SSoT shape — authored once in `@ggui-ai/protocol`
+// (`schemas/mcp.ts`, `renderInputShape`); registered verbatim so
+// `tools/list` and the handler parse share one copy. Field semantics
+// (props requiredness, themeId precedence, infra.model routing,
+// override PATCH rules) are documented on the shape.
+const inputSchema = renderInputShape;
 
 /**
  * Output raw-shape — minimum LLM-actionable surface (2026-05-13).
@@ -1382,10 +1225,7 @@ export function createGguiRenderHandler(
       // the final state.
       const previewGate = evaluateProvisionalPreviewGate(
         deps.provisionalPreview,
-        {
-          story,
-          isMcpAppsGguiSession: false,
-        },
+        { story },
         { appId: ctx.appId, sessionId },
       );
       if (previewGate.kind === 'skip') {
@@ -2066,30 +1906,21 @@ export function createGguiRenderHandler(
       } catch {
         // Silent — bootstrap stays minimal if the lookup fails.
       }
-      const runtimeUrlRaw =
-        typeof deps.runtimeUrl === 'function'
-          ? deps.runtimeUrl()
-          : deps.runtimeUrl;
-      const runtimeUrl = runtimeUrlRaw ?? '/_ggui/iframe-runtime.js';
-
-      // `mintWsToken` owns wsUrl + wsToken + expiresAt when wired. The
-      // minter's own return shape names the credential `token` (legacy);
-      // we rename to `wsToken` here so the render slice matches the
-      // wire field name. When absent we still emit a minimal
-      // `ai.ggui/render` slice carrying sessionId + appId + runtimeUrl
-      // so postMessage-mount paths work without a WS-token minter.
-      const mintedTrio = deps.mintWsToken
-        ? deps.mintWsToken(output.sessionId, ctx.appId)
-        : undefined;
-      const authFields: Partial<
-        Pick<McpAppAiGguiRenderMeta, 'wsUrl' | 'wsToken' | 'expiresAt'>
-      > = mintedTrio
-        ? {
-            wsUrl: mintedTrio.wsUrl,
-            wsToken: mintedTrio.token,
-            expiresAt: mintedTrio.expiresAt,
-          }
-        : {};
+      // Shared `ai.ggui/render` envelope base — runtimeUrl resolution,
+      // minted-trio `token`→`wsToken` remap, and the layered theme
+      // resolution (operator-debug-wins: live console pick beats the
+      // per-render `ggui_render.themeId` beats static deps) all live
+      // in ONE helper shared with `ggui_update`.
+      const {
+        runtimeUrl,
+        authFields,
+        themeId: resolvedThemeId,
+        themeMode: resolvedThemeMode,
+      } = assembleRenderSliceBase(deps, {
+        sessionId: output.sessionId,
+        appId: ctx.appId,
+        renderThemeId,
+      });
       // Surface the content-addressable code URL + hash on the
       // `ai.ggui/render` slice. The output object already carries
       // these (the handler body wrote to codeStore + composed the URL
@@ -2099,21 +1930,6 @@ export function createGguiRenderHandler(
         codeUrl?: string;
         codeHash?: string;
       };
-      // Layered theme resolution at slice-meta-projection time.
-      // Order is operator-debug-wins: `liveTheme` exists ONLY when an
-      // operator just picked a theme via the dev console picker, so
-      // it's their "show me what THIS looks like" intent — that has to
-      // beat agent-stored state.
-      //
-      //   1. liveTheme?.id   — process-shared live cell from the
-      //      console-theme POST.
-      //   2. renderThemeId   — per-render override the agent set on
-      //      `ggui_render.themeId` (rare; mostly omitted).
-      //   3. deps.themeId    — static boot-time fallback.
-      const liveTheme = deps.themeProvider?.();
-      const resolvedThemeId =
-        liveTheme?.id ?? renderThemeId ?? deps.themeId;
-      const resolvedThemeMode = liveTheme?.mode ?? deps.themeMode;
       // Mirror `serverCapabilities.streamWebSocketLocalTools` onto
       // the bootstrap.
       const streamWebSocketLocalTools = deps.streamWebSocketLocalTools?.();

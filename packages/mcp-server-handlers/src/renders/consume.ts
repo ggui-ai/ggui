@@ -35,6 +35,7 @@
 import { z } from 'zod';
 import { clientObservationsSchema } from './client-observations.js';
 import {
+  consumeInputShape,
   parsePendingEnvelope,
   type ConsumeEventEntry,
   type GguiConsumeOutput,
@@ -49,44 +50,24 @@ import {
 import type { HandlerContext, SharedHandler } from '../types.js';
 import { GguiSessionNotFoundError } from './errors.js';
 
-/**
- * SPEC §7.3 bound on the inline long-poll wait: `timeout` MUST be an
- * integer in `[0, MAX_TIMEOUT_SECONDS]`. Out-of-range values reject
- * `INVALID_PARAMS` (the MCP layer validates tool arguments against
- * `inputSchema` before dispatch; the handler's own parse enforces the
- * same bound for in-process callers).
- *
- * 25s exists because the handler must return within common
- * infrastructure kill windows (API-gateway 30s HTTP limits, host MCP
- * clients that abort long tool calls — live claude.ai smoke showed a
- * 300s poll completing server-side AFTER the host had already aborted
- * the conversation, surfacing as an opaque "Error occurred during
- * tool execution"). Longer waits are the agent's loop, not a server
- * knob: re-call `ggui_consume` on empty.
- */
-const MAX_TIMEOUT_SECONDS = 25;
 /** Polling interval inside the long-poll loop. 1.5s balances
  *  perceived latency against read cost on cloud. OSS is in-memory
  *  but the same value keeps tests + behavior identical. */
 const POLL_INTERVAL_MS = 1500;
 
-const inputSchema = {
-  sessionId: z
-    .string()
-    .min(1)
-    .describe(
-      'Globally-unique sessionId to consume events from. Cross-tenant access surfaces uniformly as session_not_found.',
-    ),
-  timeout: z
-    .number()
-    .int()
-    .min(0)
-    .max(MAX_TIMEOUT_SECONDS)
-    .optional()
-    .describe(
-      'Inline long-poll seconds, integer in [0, 25]. 0 = immediate. Values outside the bound reject INVALID_PARAMS. Returns on first event OR timeout; re-call on empty to keep waiting — longer waits are your loop, not a bigger timeout.',
-    ),
-} as const;
+/**
+ * Canonical SSoT shape — authored once in `@ggui-ai/protocol`
+ * (`schemas/mcp.ts`); registered verbatim so `tools/list` and the
+ * handler parse share one copy. The shape enforces the SPEC §7.3
+ * long-poll bound (`timeout` integer in `[0, 25]`; out-of-range
+ * rejects `INVALID_PARAMS`). The 25s cap exists because the handler
+ * must return within common infrastructure kill windows (API-gateway
+ * 30s HTTP limits, host MCP clients that abort long tool calls — live
+ * claude.ai smoke showed a 300s poll completing server-side AFTER the
+ * host had already aborted the conversation). Longer waits are the
+ * agent's loop, not a server knob: re-call `ggui_consume` on empty.
+ */
+const inputSchema = consumeInputShape;
 
 const outputSchema = {
   events: z.array(z.record(z.string(), z.unknown())),
@@ -249,7 +230,7 @@ export function createGguiConsumeHandler(
           throw new GguiSessionNotFoundError(sessionId);
         }
 
-        // `timeout` is schema-bounded to [0, MAX_TIMEOUT_SECONDS] —
+        // `timeout` is schema-bounded to [0, 25] (SPEC §7.3) —
         // out-of-range values rejected INVALID_PARAMS before this line.
         const deadline = Date.now() + timeout * 1000;
         const ttlMs = resolveTtlMs(

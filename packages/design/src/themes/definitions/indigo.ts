@@ -24,10 +24,6 @@
  * Shadow tokens use `color-mix()` against `--ggui-color-primary-500`
  * so elevation carries an indigo halo. Visible in both light and dark
  * — a pure-black shadow on midnight disappears.
- *
- * Canvas mode is `'ambient'`: a very subtle background motion (slow,
- * 8s breathing). On-brand for the "this is the flagship" feel
- * without being attention-stealing the way a wave gradient would be.
  */
 
 import type { DtcgTheme } from '../types';
@@ -284,17 +280,6 @@ const indigoLight: DtcgTheme = {
   shape: shared.shape,
   motion: shared.motion,
 
-  canvas: {
-    // Very subtle ambient breathing — primary-tinted halo gradient
-    // with low opacity, slow oscillation. Premium, never flashy.
-    mode: { $value: 'mesh', $type: 'string' },
-    speed: { $value: 0.5, $type: 'number' },
-    colors: {
-      $value: ['#eef2ff', '#fafaf7', '#e0e7ff'],
-      $type: 'array',
-    },
-    background: { $value: '#fafaf7', $type: 'color' }, // Paper
-  },
 
   // Override the default focus-ring with the indigo accent so it
   // reads as "this product's accent" not a generic sky-blue.
@@ -422,15 +407,6 @@ const indigoDark: DtcgTheme = {
   shape: shared.shape,
   motion: shared.motion,
 
-  canvas: {
-    mode: { $value: 'mesh', $type: 'string' },
-    speed: { $value: 0.5, $type: 'number' },
-    colors: {
-      $value: ['#1e1b4b', '#0c0b14', '#312e81'],
-      $type: 'array',
-    },
-    background: { $value: '#0c0b14', $type: 'color' },
-  },
 
   // Override the default focus-ring with the indigo accent. Use the
   // dark-mode lifted variant (primary-500 here = #818cf8) so it pops

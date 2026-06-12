@@ -20,6 +20,11 @@ import * as DesignComponents from '@ggui-ai/design/components';
 import * as DesignCompositions from '@ggui-ai/design/compositions';
 import * as DesignInteract from '@ggui-ai/design/interact';
 import * as Wire from '@ggui-ai/wire';
+// `hoistImports` / `loadModule` come from the dedicated subpath (the
+// `/rendering` barrel deliberately excludes them to keep blob-URL
+// loading out of React Native bundles) — same route the other
+// in-repo consumers of the compile pipeline use.
+import { hoistImports, loadModule } from '@ggui-ai/design/module-loader';
 import {
   rewriteImports,
   stripMarkers,
@@ -163,32 +168,6 @@ function findActionButton(
     if (txt === lc) return el;
   }
   return null;
-}
-
-async function loadModule(code: string): Promise<Record<string, unknown>> {
-  const blob = new Blob([code], { type: 'application/javascript' });
-  const url = URL.createObjectURL(blob);
-  try {
-    return await import(/* @vite-ignore */ url);
-  } finally {
-    URL.revokeObjectURL(url);
-  }
-}
-
-function hoistImports(code: string): string {
-  const parts = code.split(';');
-  const imports: string[] = [];
-  const rest: string[] = [];
-  for (const part of parts) {
-    const trimmed = part.trimStart();
-    if (trimmed.startsWith('import')) {
-      imports.push(part);
-    } else {
-      rest.push(part);
-    }
-  }
-  if (imports.length === 0) return code;
-  return imports.join(';') + ';' + rest.join(';');
 }
 
 async function evaluateComponent(

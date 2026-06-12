@@ -120,11 +120,6 @@ export interface GguiRenderProps {
   onBeforeAction?: <T>(data: T, meta: ActionMeta) => T | undefined;
   onAfterAction?: <T>(data: T, response: unknown) => void;
 
-  // Interaction hooks — receives the canonical {@link ActionEnvelope}
-  // that was emitted. Called only for `interaction:*` event types;
-  // the envelope's `payload` carries the interaction-specific data.
-  onInteraction?: (envelope: ActionEnvelope) => void;
-
   // System hooks
   onSystemMessage?: (payload: SystemPayload) => void;
 
@@ -255,7 +250,6 @@ export function GguiRender({
   onRenderEnd,
   onBeforeAction,
   onAfterAction,
-  onInteraction,
   onSystemMessage,
   onError,
   onRenderReceived,
@@ -268,8 +262,6 @@ export function GguiRender({
   // Stable refs for callbacks to avoid unnecessary effect re-runs
   const onErrorRef = useRef(onError);
   onErrorRef.current = onError;
-  const onInteractionRef = useRef(onInteraction);
-  onInteractionRef.current = onInteraction;
   const onBeforeActionRef = useRef(onBeforeAction);
   onBeforeActionRef.current = onBeforeAction;
   const onAfterActionRef = useRef(onAfterAction);
@@ -512,12 +504,11 @@ export function GguiRender({
   }, []);
 
   /**
-   * Emit a fully-built envelope over the live channel AND fire the
-   * `onInteraction` callback for `interaction:*` types. Single code
+   * Emit a fully-built envelope over the live channel. Single code
    * path for every emission site (the shared wire-config dispatch
    * pipeline AND the imperative `api.action` / bridge-event paths);
    * consumers MUST route their sends through here rather than calling
-   * `sendAction` directly so the interaction hook stays in sync.
+   * `sendAction` directly.
    *
    * The WS send is what completes the documented action loop: the
    * server's live channel bridges `data:submit` envelopes onto the
@@ -537,18 +528,14 @@ export function GguiRender({
           { sessionId: envelope.sessionId, type: envelope.type },
         );
       }
-      if (envelope.type.startsWith('interaction:')) {
-        onInteractionRef.current?.(envelope);
-      }
     },
     [wsEndpoint, sendAction],
   );
 
   /**
-   * Emit a non-action event (`lifecycle:*` / `interaction:*`) as a
-   * canonical envelope. No contract validation — those types don't
-   * carry an actionSpec-bound payload; server enforcement gates by
-   * `subscription.events` allowlist only.
+   * Build + emit a canonical typed envelope. {@link EventType} has one
+   * member (`'data:submit'`); the server validates the payload against
+   * the render's `actionSpec` at ingress.
    */
   const emitTyped = useCallback(
     (type: EventType, payload: JsonValue | undefined) => {
@@ -563,22 +550,6 @@ export function GguiRender({
     },
     [sessionId, emitEnvelope],
   );
-
-  // Forward user data from rendered components (via window CustomEvent)
-  // as a canonical data:submit ActionEnvelope.
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-
-    function handleUserData(event: Event) {
-      const detail = (event as CustomEvent).detail;
-      if (detail !== undefined) {
-        emitTyped('data:submit', detail as JsonValue);
-      }
-    }
-
-    window.addEventListener(BRIDGE_EVENTS.USER_DATA, handleUserData);
-    return () => window.removeEventListener(BRIDGE_EVENTS.USER_DATA, handleUserData);
-  }, [emitTyped]);
 
   // Reset render when sessionId changes
   useEffect(() => {

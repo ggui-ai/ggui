@@ -22,9 +22,8 @@
  *
  * Error handling — ErrorBoundary with auto-retry (AUTO_RETRY_LIMIT +
  * AUTO_RETRY_DELAY) matches the `ReactComponentRenderer` contract.
- * On terminal error, the callback `onRequestRepair` fires; the
- * render dispatcher (`render-item.ts`) wires this to the
- * `ggui:request-repair` live-channel envelope it dispatches.
+ * On terminal error, `onError` fires and the boundary paints the
+ * terminal error UI.
  *
  * No JSX in this file — the mount-root code uses
  * `React.createElement` + `React.Fragment` directly so the renderer's
@@ -81,14 +80,12 @@ interface ErrorBoundaryProps {
   // populates `this.props.children`.
   readonly children?: ReactNode;
   readonly onError?: (error: Error) => void;
-  readonly onRequestRepair?: (error: Error) => void;
 }
 
 interface ErrorBoundaryState {
   readonly error: Error | null;
   readonly catchCount: number;
   readonly autoRetrying: boolean;
-  readonly repairRequested: boolean;
 }
 
 class RcrErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
@@ -96,7 +93,6 @@ class RcrErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState>
     error: null,
     catchCount: 0,
     autoRetrying: false,
-    repairRequested: false,
   };
   private retryTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -117,10 +113,6 @@ class RcrErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState>
     }
 
     this.props.onError?.(error);
-    if (this.props.onRequestRepair && !this.state.repairRequested) {
-      this.setState({ repairRequested: true });
-      this.props.onRequestRepair(error);
-    }
   }
 
   componentWillUnmount(): void {
@@ -128,10 +120,10 @@ class RcrErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState>
   }
 
   render(): ReactNode {
-    const { error, autoRetrying, repairRequested, catchCount } = this.state;
+    const { error, autoRetrying, catchCount } = this.state;
     if (error === null) return this.props.children;
 
-    // The three fallback UIs match the host-SDK error boundary
+    // The two fallback UIs match the host-SDK error boundary
     // verbatim (same inline styles so operator-visible DOM is
     // identical between the host-SDK and iframe-renderer paths).
     const FONT = '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
@@ -163,41 +155,6 @@ class RcrErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState>
           },
         }),
         'Retrying...',
-        createElement('style', null, '@keyframes ggui-err-spin { to { transform: rotate(360deg); } }'),
-      );
-    }
-
-    if (repairRequested) {
-      return createElement(
-        'div',
-        {
-          style: {
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'center',
-            padding: '32px 24px',
-            minHeight: 120,
-            gap: 10,
-            textAlign: 'center',
-            fontFamily: FONT,
-          },
-        },
-        createElement('div', {
-          style: {
-            width: 16,
-            height: 16,
-            border: '2px solid rgba(139,92,246,0.2)',
-            borderTopColor: 'rgba(139,92,246,0.7)',
-            borderRadius: '50%',
-            animation: 'ggui-err-spin 0.8s linear infinite',
-          },
-        }),
-        createElement(
-          'div',
-          { style: { fontSize: 13, color: 'rgba(255,255,255,0.5)' } },
-          'Repairing component...',
-        ),
         createElement('style', null, '@keyframes ggui-err-spin { to { transform: rotate(360deg); } }'),
       );
     }
@@ -246,7 +203,7 @@ class RcrErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState>
       createElement(
         'button',
         {
-          onClick: () => this.setState({ error: null, catchCount: 0, repairRequested: false }),
+          onClick: () => this.setState({ error: null, catchCount: 0 }),
           style: {
             marginTop: 4,
             padding: '8px 20px',
@@ -309,7 +266,6 @@ export interface ReactRootMountOptions {
   };
   readonly cssOverrides?: string;
   readonly onError?: (error: Error) => void;
-  readonly onRequestRepair?: (error: Error) => void;
   /**
    * Children injected BETWEEN the mount DOM (scope + CSS) and the
    * evaluated component element. The caller's render dispatcher
@@ -464,7 +420,6 @@ export async function mountReactRoot(
           {
             key: currentCode?.length ?? 0,
             ...(opts.onError ? { onError: opts.onError } : {}),
-            ...(opts.onRequestRepair ? { onRequestRepair: opts.onRequestRepair } : {}),
           },
           createElement(Fragment, null, wrapped),
         ),

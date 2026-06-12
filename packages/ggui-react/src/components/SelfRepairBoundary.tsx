@@ -345,5 +345,3 @@ export class SelfRepairBoundary extends Component<
     return null;
   }
 }
-
-export default SelfRepairBoundary;

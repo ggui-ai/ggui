@@ -24,6 +24,7 @@
  */
 
 import { z } from 'zod';
+import { getSessionInputShape } from '@ggui-ai/protocol';
 import type { GguiSession, GguiGetSessionOutput } from '@ggui-ai/protocol';
 import type {
   GguiSessionStore,
@@ -32,12 +33,9 @@ import type {
 import type { HandlerContext, SharedHandler } from '../types.js';
 import { GguiSessionNotFoundError } from './errors.js';
 
-const inputSchema = {
-  sessionId: z
-    .string()
-    .min(1)
-    .describe('GguiSession opaque id (UUID) — returned by ggui_render.'),
-} as const;
+// Canonical SSoT shape — authored once in `@ggui-ai/protocol`
+// (`schemas/mcp.ts`).
+const inputSchema = getSessionInputShape;
 
 const outputSchema = {
   // `GguiSession` is a discriminated union; downstream typing comes from

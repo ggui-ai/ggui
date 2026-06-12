@@ -11,7 +11,7 @@ import {
  * field to isolate what's under test.
  *
  * Mirrors the canonical `DtcgTheme` shape: `color`/`font`/`spacing`/
- * `shape` are required; `motion`/`canvas`/`accessibility`/`zIndex`
+ * `shape` are required; `motion`/`accessibility`/`zIndex`
  * are optional.
  */
 const baseTheme: ThemeDocument = {
@@ -191,19 +191,6 @@ describe('parseThemeDocument — required groups', () => {
     });
     expect(parsed.motion?.easing?.default?.$value).toContain('cubic-bezier');
     expect(parsed.motion?.keyframes?.pulse).toBeDefined();
-  });
-
-  it('accepts an optional canvas group', () => {
-    const parsed = parseThemeDocument({
-      ...baseTheme,
-      canvas: {
-        mode: { $type: 'string', $value: 'wave' },
-        speed: { $type: 'number', $value: 1 },
-        colors: { $type: 'array', $value: ['#fff', '#000'] },
-        background: { $type: 'color', $value: '#0a0a0a' },
-      },
-    });
-    expect(parsed.canvas?.mode.$value).toBe('wave');
   });
 
   it('round-trips JSON.stringify → parse', () => {

@@ -85,6 +85,7 @@
 import canonicalize from 'canonicalize';
 import type { AgentToolEntry, DataContract } from '../types/data-contract.js';
 import type { BlueprintVariance } from '../types/blueprint.js';
+import { isRecord } from '../validation/is-record.js';
 
 /**
  * Informational-prose field names removed from the canonical form —
@@ -141,8 +142,8 @@ export function canonicalizeValue(
     }
     return out;
   }
-  if (t === 'object') {
-    const obj = value as Record<string, unknown>;
+  if (isRecord(value)) {
+    const obj = value;
     // NFC-normalize keys before sort so two contracts with the same
     // key in different normalization forms (precomposed "café" vs
     // decomposed "café") collapse to one identity. Keep the original

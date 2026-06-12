@@ -340,8 +340,8 @@ export const WRITE_PLAN_TOOL: LLMToolDef = {
  * scaffold state to preserve — write is equivalent semantically.
  *
  * Implementation note: `executeTool` in `coding-agent/tools.ts`
- * already handles the `write` case (the path used by
- * `initialToolSchemas`); the harness just needs to advertise it to the LLM.
+ * already handles the `write` case; the harness just needs to
+ * advertise it to the LLM.
  */
 export const REWRITE_TOOL: LLMToolDef = {
   name: "rewrite",

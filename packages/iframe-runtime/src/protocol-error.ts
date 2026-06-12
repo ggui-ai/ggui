@@ -82,6 +82,20 @@ export type BootstrapFailureReason =
 // =============================================================================
 
 /**
+ * Pre-ack auth-class error codes — the codes first-party servers
+ * ACTUALLY emit on the WS error frame before `ack` (SPEC §12.2.3).
+ * The phantom `AUTH_REJECTED` / `TOKEN_EXPIRED` arms (no first-party
+ * server ever minted them) were deleted in draft-2026-06-12.
+ */
+export type AuthFailureCode =
+  | 'SESSION_NOT_FOUND'
+  | 'BOOTSTRAP_EXPIRED'
+  | 'BOOTSTRAP_INVALID'
+  | 'BOOTSTRAP_SESSION_MISMATCH'
+  | 'BOOTSTRAP_APP_MISMATCH'
+  | 'UNAUTHENTICATED';
+
+/**
  * Every error the renderer surfaces outward flows through this union.
  *
  * Discriminated on `kind`:
@@ -89,10 +103,13 @@ export type BootstrapFailureReason =
  *   - `transport`  — WebSocket-level failure (DISCONNECTED / TIMEOUT).
  *                    Includes `retryable` so hosts can decide to reconnect
  *                    vs. give up.
- *   - `auth`       — session / token rejection pre-handshake.
- *                    `SESSION_NOT_FOUND` / `TOKEN_EXPIRED` /
- *                    `AUTH_REJECTED` — all terminal; hosts typically
- *                    escalate to a login flow.
+ *   - `auth`       — session / ws-token rejection pre-ack, carrying
+ *                    the server's REAL §12.2.3 vocabulary:
+ *                    `SESSION_NOT_FOUND`, the `BOOTSTRAP_*` ws-token
+ *                    family, and `UNAUTHENTICATED`. `BOOTSTRAP_EXPIRED`
+ *                    has a refresh path (`ggui_runtime_refresh_ws_token`);
+ *                    the rest are terminal — hosts typically escalate
+ *                    to a re-render / login flow.
  *   - `protocol`   — envelope / render-mismatch failures post-handshake.
  *                    Extensibly-closed on `code` because servers may
  *                    introduce new codes without a client bump.
@@ -110,7 +127,7 @@ export type BootstrapFailureReason =
  */
 export type ProtocolError =
   | { readonly kind: 'transport'; readonly code: 'DISCONNECTED' | 'TIMEOUT'; readonly retryable: boolean; readonly message?: string }
-  | { readonly kind: 'auth'; readonly code: 'SESSION_NOT_FOUND' | 'TOKEN_EXPIRED' | 'AUTH_REJECTED'; readonly message?: string }
+  | { readonly kind: 'auth'; readonly code: AuthFailureCode; readonly message?: string }
   | {
       readonly kind: 'protocol';
       readonly code: 'SESSION_MISMATCH' | 'APP_MISMATCH' | 'MALFORMED_ENVELOPE' | (string & {});
@@ -250,11 +267,11 @@ export function fromTransportFailure(
 }
 
 /**
- * Build a `ProtocolError` of kind 'auth' — session / token rejection
- * pre-handshake.
+ * Build a `ProtocolError` of kind 'auth' — session / ws-token rejection
+ * pre-ack (see {@link AuthFailureCode}).
  */
 export function fromAuthFailure(
-  code: 'SESSION_NOT_FOUND' | 'TOKEN_EXPIRED' | 'AUTH_REJECTED',
+  code: AuthFailureCode,
   message?: string,
 ): ProtocolError {
   return {

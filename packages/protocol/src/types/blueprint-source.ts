@@ -31,6 +31,8 @@
  * rows are dropped at the trust boundary, never coerced.
  */
 
+import { isRecord } from "../validation/is-record.js";
+
 /** Closed list of `BlueprintSource` discriminants. */
 export const BLUEPRINT_SOURCE_KINDS = ["llm", "user", "curated"] as const;
 
@@ -74,10 +76,10 @@ export type BlueprintSource =
  * into an arm is banned.
  */
 export function parseBlueprintSource(value: unknown): BlueprintSource | null {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+  if (!isRecord(value)) {
     return null;
   }
-  const v = value as Record<string, unknown>;
+  const v = value;
   switch (v["kind"]) {
     case "llm": {
       const generator = v["generator"];

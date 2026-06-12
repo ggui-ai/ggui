@@ -26,6 +26,8 @@
  * fields they know). Breaking changes require a protocol version bump.
  */
 
+import { isRecord } from '../validation/is-record.js';
+
 /**
  * Opaque identity owning a thread.
  *
@@ -237,7 +239,6 @@ export interface ThreadStreamEvent {
 }
 
 export function isThreadStreamEvent(value: unknown): value is ThreadStreamEvent {
-  if (typeof value !== 'object' || value === null) return false;
-  const v = value as Record<string, unknown>;
-  return v['type'] === 'thread-message' && typeof v['message'] === 'object';
+  if (!isRecord(value)) return false;
+  return value['type'] === 'thread-message' && typeof value['message'] === 'object';
 }

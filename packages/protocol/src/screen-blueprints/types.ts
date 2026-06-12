@@ -16,10 +16,13 @@ import type { BlueprintSource } from "../types/blueprint-source.js";
 
 /**
  * UI interaction mechanic hint. Tiny enum — generation uses it to select
- * primitives (draggable cards vs swipe stack vs live-polling hook).
- * Layout details live in {@link ScreenBlueprint.layoutHint} (free text).
+ * primitives (live-polling hook vs static form). Layout details live in
+ * {@link ScreenBlueprint.layoutHint} (free text). The `drag` / `swipe`
+ * members were deleted in draft-2026-06-12 — no authored blueprint ever
+ * used them (the generator's gesture classification infers drag/swipe
+ * from the prompt instead); they re-enter when a real blueprint does.
  */
-export type ScreenMechanic = "static" | "drag" | "swipe" | "live" | "form";
+export type ScreenMechanic = "static" | "live" | "form";
 
 /**
  * Data source for a single prop slot. The tool's outputSchema becomes the
@@ -113,7 +116,6 @@ export type ScreenBlueprintAction =
  *   server: "_composed",
  *   displayName: "Plan My Week",
  *   intent: "Drag tasks onto a weekly calendar to schedule focus blocks",
- *   mechanic: "drag",
  *   data: {
  *     tasks:  { tool: "todoist_list_tasks", pick: "tasks" },
  *     events: { tool: "gcal_list_events",    pick: "events" },

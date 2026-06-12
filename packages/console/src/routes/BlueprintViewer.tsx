@@ -171,7 +171,6 @@ function BlueprintMount({
       <div className="ggui-pane__body">
         <GguiSessionRenderer
           render={{
-            id: blueprint.blueprintId,
             componentCode: blueprint.code,
           }}
           fallback={

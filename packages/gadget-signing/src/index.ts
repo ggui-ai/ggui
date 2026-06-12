@@ -668,6 +668,51 @@ export async function verifyBundleSigstore(
 }
 
 /**
+ * Extract the Fulcio leaf cert's base64 raw bytes from a
+ * {@link SigstoreSignature}'s serialized cosign bundle (per
+ * `@sigstore/bundle` v0.3, `verificationMaterial.x509CertificateChain
+ * .certificates[0].rawBytes`). Returns `undefined` if the bundle is
+ * malformed or missing the cert chain.
+ *
+ * Lives here — next to {@link verifyBundleSigstore} — so cosign
+ * bundle-format knowledge has ONE home. Registries persist the
+ * returned value on the version row so install consumers can render
+ * the signer identity (`@ggui-ai/registry-core`'s publish op is the
+ * first-party caller).
+ *
+ * Walks the JSON structurally (no `@sigstore/bundle` parse) because
+ * callers run it AFTER {@link verifyBundleSigstore} has already
+ * validated the bundle cryptographically — this is a projection, not
+ * a verification.
+ */
+export function extractSigstoreLeafCertPem(
+  signature: SigstoreSignature,
+): string | undefined {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(signature.bundle);
+  } catch {
+    return undefined;
+  }
+  if (parsed === null || typeof parsed !== "object") return undefined;
+  const verificationMaterial = (parsed as { verificationMaterial?: unknown })
+    .verificationMaterial;
+  if (verificationMaterial === null || typeof verificationMaterial !== "object") {
+    return undefined;
+  }
+  const chain = (verificationMaterial as { x509CertificateChain?: unknown })
+    .x509CertificateChain;
+  if (chain === null || typeof chain !== "object") return undefined;
+  const certificates = (chain as { certificates?: unknown }).certificates;
+  if (!Array.isArray(certificates) || certificates.length === 0) return undefined;
+  const leaf = certificates[0];
+  if (leaf === null || typeof leaf !== "object") return undefined;
+  const rawBytes = (leaf as { rawBytes?: unknown }).rawBytes;
+  if (typeof rawBytes !== "string" || rawBytes.length === 0) return undefined;
+  return rawBytes;
+}
+
+/**
  * Reach into a serialized sigstore Bundle and pull the
  * `subjectAlternativeName` from the embedded X.509 cert (if any). Used
  * by the RegExp-identity pre-check; production verification still goes

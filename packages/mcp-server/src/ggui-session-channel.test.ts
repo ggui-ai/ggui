@@ -706,6 +706,10 @@ describe('handleInboundAction — WS action → pending-events pipe bridge (ggui
   });
 
   it('non-data:submit envelopes stay ledger-only — the pipe never sees them', async () => {
+    // `EventType` has exactly one member ('data:submit') since
+    // draft-2026-06-12 — this frame impersonates a ROGUE client sending
+    // a retired/unknown type string. The wire-trust posture: ledger-
+    // append + ack, but the agent-facing consume pipe never sees it.
     const { fixture, drain } = await bootBridged();
     fx = fixture;
 

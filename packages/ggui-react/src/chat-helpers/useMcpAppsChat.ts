@@ -1,4 +1,3 @@
-/* eslint-disable no-console */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type {
   ChatEntry,
@@ -512,6 +511,7 @@ export function useMcpAppsChat(
         // React tree boots into an empty conversation.
         if (res.status === 404 || cancelled) return;
         if (!res.ok) {
+          // eslint-disable-next-line no-console -- dev-visible signal; snapshot restore degrades to an empty conversation
           console.warn('[useMcpAppsChat] GET snapshot non-2xx', res.status);
           return;
         }
@@ -545,6 +545,7 @@ export function useMcpAppsChat(
           });
         }
       } catch (err) {
+        // eslint-disable-next-line no-console -- dev-visible signal; snapshot restore degrades to an empty conversation
         console.warn('[useMcpAppsChat] GET snapshot failed', err);
       }
     })();

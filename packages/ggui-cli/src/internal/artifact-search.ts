@@ -18,22 +18,22 @@
  * Returns a `SearchOutput` discriminated union; the CLI driver in
  * `gadget-command.ts` renders copy + picks the exit code.
  *
- * The wire shapes below mirror the registry's HTTP response types.
- * Adding fields is a minor change; removing or renaming a field is
- * breaking.
+ * The wire shapes (`SearchResultEntry` / `SearchResponse` /
+ * `ArtifactKind`) are imported from `@ggui-ai/registry-core` — the
+ * canonical owner of the registry HTTP response types — and
+ * re-exported for this module's consumers.
  */
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
-import { SEARCH_ERROR_CODES, type SearchErrorBody } from '@ggui-ai/registry-core';
+import {
+  SEARCH_ERROR_CODES,
+  type ArtifactKind,
+  type SearchErrorBody,
+  type SearchResponse,
+  type SearchResultEntry,
+} from '@ggui-ai/registry-core';
 
-/**
- * Artifact-kind discriminator. Mirrors the `gadgetManifestSchema` /
- * `blueprintManifestSchema` discriminators in
- * `@ggui-ai/artifact-manifest`. Inlined here because the manifest
- * package does not currently export a named `ArtifactKind` type — when
- * it does, swap to a structural `import type` from there.
- */
-export type ArtifactKind = 'gadget' | 'blueprint';
+export type { ArtifactKind, SearchResponse, SearchResultEntry };
 
 /**
  * Filename constant for the project manifest. Duplicated from
@@ -43,32 +43,6 @@ export type ArtifactKind = 'gadget' | 'blueprint';
 const GGUI_JSON_FILENAME = 'ggui.json';
 /** How many parent directories the upward walk will inspect. */
 const FIND_MAX_DEPTH = 8;
-
-/* -------------------------------------------------------------------------- */
-/* Wire shapes (mirrored from the registry's HTTP response types)
-/* -------------------------------------------------------------------------- */
-
-/**
- * One row of `GET /search?…` results. Mirrors the registry's
- * `SearchResultEntry` response type.
- */
-export interface SearchResultEntry {
-  readonly artifactId: string;
-  readonly latestVersion: string;
-  readonly kind: ArtifactKind;
-  readonly description?: string;
-  readonly tags?: readonly string[];
-  readonly publishedAt: string;
-}
-
-/**
- * `GET /search?…` response body. `nextCursor` is an opaque base64
- * string the client roundtrips verbatim — never inspected client-side.
- */
-export interface SearchResponse {
-  readonly results: readonly SearchResultEntry[];
-  readonly nextCursor?: string;
-}
 
 /* -------------------------------------------------------------------------- */
 /* Flag parsing                                                              */

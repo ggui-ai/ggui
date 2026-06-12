@@ -40,8 +40,6 @@ import type { McpAppsGguiSession } from '../integrations/mcp-apps';
 //   SystemStackItem           →  SystemGguiSession
 //   SessionStackEntry (union) →  GguiSession (the union)
 //   Action (interface)        →  DELETED (was already @deprecated)
-//   ProgressUpdate.sessionId +
-//   ProgressUpdate.stackItemId →  ProgressUpdate.sessionId (collapsed)
 //
 // Conversation-scoped lookups (sibling renders, host continuity) flow
 // via the unchanged `hostSessionId` channel — NOT by lifting fields
@@ -351,35 +349,4 @@ export interface ConversationTurn<TToolArgs = JsonObject> {
   content: string;
   toolCalls?: { name: string; args: TToolArgs }[];
   timestamp: string; // ISO 8601
-}
-
-// =============================================================================
-// Thinking Indicator Progress (Spec Section 2.8.2)
-// =============================================================================
-
-/**
- * Progress update emitted by a producer (UI generator) during component
- * production. Producer-internal vocabulary — consumed by the server's
- * generator seam (`@ggui-ai/mcp-server-core`), never delivered to
- * clients directly. Client-visible generation progress flows as
- * `{type: 'data'}` envelopes on the reserved `_ggui:lifecycle` channel.
- *
- * Post-Phase-B: collapsed from `{ sessionId, stackItemId }` to a single
- * `sessionId` (the two identifiers were the same value once each render
- * was its own thing).
- */
-export interface ProgressUpdate {
-  sessionId: string;
-  step:
-    | 'queued'
-    | 'negotiating'
-    | 'matching'
-    | 'generating'
-    | 'compiling'
-    | 'evaluating'
-    | 'complete'
-    | 'error';
-  label: string;
-  percent: number; // 0-100
-  message?: string;
 }

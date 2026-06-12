@@ -67,7 +67,7 @@ export type RewriteOptions = DataUrlOptions | ImportmapOptions;
  * the iframe. The `verify-shim-allowlists.test.ts` suite enforces that
  * every name here actually exists in the dist module and that every
  * public name in the dist is covered here. */
-const WIRE_EXPORTS = [
+export const WIRE_EXPORTS = [
   // Hooks
   'useAction',
   'useStream',
@@ -84,7 +84,7 @@ const WIRE_EXPORTS = [
 ] as const;
 
 /** Known exports from @ggui-ai/design/primitives */
-const PRIMITIVES_EXPORTS = [
+export const PRIMITIVES_EXPORTS = [
   'Container', 'Card', 'Stack', 'Row', 'Grid', 'Box', 'Divider', 'Spacer',
   'Text', 'Heading', 'Button', 'Input', 'TextArea', 'Select', 'Checkbox',
   'Toggle', 'RadioGroup', 'Slider', 'Badge', 'Spinner', 'Skeleton', 'Avatar',
@@ -94,7 +94,7 @@ const PRIMITIVES_EXPORTS = [
 ] as const;
 
 /** Known exports from @ggui-ai/design/components */
-const COMPONENTS_EXPORTS = [
+export const COMPONENTS_EXPORTS = [
   'SearchField', 'FormField', 'MenuItem', 'Tag', 'Dropdown',
   'Autocomplete', 'Breadcrumb', 'Pagination', 'EmptyState', 'Stat',
 ] as const;
@@ -112,7 +112,7 @@ const COMPONENTS_EXPORTS = [
  * `MarketingTestimonials`, `MarketingPricing` (never existed in dist) and
  * added missing `MarketingCTA`, `MarketingFeatures` (existed in dist but
  * were unreachable from generated code). */
-const COMPOSITIONS_EXPORTS = [
+export const COMPOSITIONS_EXPORTS = [
   'Header', 'Sidebar', 'CardGrid', 'CommentThread', 'DataTable',
   'ChatWindow', 'NavigationBar', 'FileUploader', 'UserProfileCard',
   'NotificationCenter', 'Modal', 'CommandPalette', 'Footer', 'Hero',
@@ -121,7 +121,7 @@ const COMPOSITIONS_EXPORTS = [
 ] as const;
 
 /** Known exports from @ggui-ai/design/interact */
-const INTERACT_EXPORTS = [
+export const INTERACT_EXPORTS = [
   'Clickable', 'Hoverable', 'Pressable',
 ] as const;
 
@@ -131,7 +131,7 @@ const INTERACT_EXPORTS = [
  * exports (`act`, `Profiler`, `__CLIENT_INTERNALS_*`, `__COMPILER_RUNTIME`,
  * `unstable_useCacheRefresh`, etc.) — they're not safe for LLM-generated
  * components and shipping them would normalize fragile patterns. */
-const REACT_EXPORTS = [
+export const REACT_EXPORTS = [
   // Classic hooks
   'useState',
   'useEffect',
@@ -180,7 +180,7 @@ const REACT_EXPORTS = [
  * 404, blanking the iframe.
  *
  * 2026-05-15 audit fix: previously NO shim existed for this subpath. */
-const TOKENS_EXPORTS = [
+export const TOKENS_EXPORTS = [
   // Animation
   'animation',
   'duration',

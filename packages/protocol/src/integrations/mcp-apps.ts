@@ -34,6 +34,7 @@ import type {
   JsonValue,
 } from '../types/data-contract.js';
 import { appThemeSchema, type AppTheme } from '../schemas/app-theme.js';
+import { isRecord } from '../validation/is-record.js';
 
 /**
  * MCP capability name ggui servers advertise in their MCP `initialize`
@@ -359,18 +360,17 @@ export type ParseMcpAppAiGguiRenderMetaResult =
 export function parseMcpAppAiGguiRenderMeta(
   meta: unknown,
 ): ParseMcpAppAiGguiRenderMetaResult {
-  if (meta === null || typeof meta !== 'object') {
+  if (!isRecord(meta)) {
     return { ok: true };
   }
-  const m = meta as Record<string, unknown>;
-  const raw = m[MCP_APP_AI_GGUI_RENDER_META_KEY];
+  const raw = meta[MCP_APP_AI_GGUI_RENDER_META_KEY];
   if (raw === undefined) {
     return { ok: true };
   }
-  if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) {
+  if (!isRecord(raw)) {
     return { ok: false, reason: 'MALFORMED_RENDER' };
   }
-  const s = raw as Record<string, unknown>;
+  const s = raw;
 
   // Identity — required when slice is present.
   if (
@@ -597,18 +597,17 @@ export type ParseMcpAppAiGguiHostSessionMetaResult =
 export function parseMcpAppAiGguiHostSessionMeta(
   meta: unknown,
 ): ParseMcpAppAiGguiHostSessionMetaResult {
-  if (meta === null || typeof meta !== 'object') {
+  if (!isRecord(meta)) {
     return { ok: true };
   }
-  const m = meta as Record<string, unknown>;
-  const raw = m[MCP_APP_AI_GGUI_HOST_SESSION_META_KEY];
+  const raw = meta[MCP_APP_AI_GGUI_HOST_SESSION_META_KEY];
   if (raw === undefined) {
     return { ok: true };
   }
-  if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) {
+  if (!isRecord(raw)) {
     return { ok: false, reason: 'MALFORMED_HOST_SESSION' };
   }
-  const r = raw as Record<string, unknown>;
+  const r = raw;
   if (
     typeof r.hostName !== 'string' ||
     r.hostName.length === 0 ||
@@ -694,8 +693,8 @@ export interface McpAppsContainerDimensions {
  * Locator for the source of an embedded MCP App.
  *
  * Persists STABLE identity (not a raw URL) so render state survives
- * source-server endpoint changes. The runtime `ConnectorRegistry`
- * resolves `connectorId` to the actual endpoint at render time.
+ * source-server endpoint changes. The hosting runtime resolves
+ * `connectorId` to the actual endpoint at render time.
  */
 export interface McpAppsSource {
   /** Stable connector id declared in the app's connector registry. */
@@ -799,19 +798,23 @@ export function isMcpAppsGguiSession(entry: unknown): entry is McpAppsGguiSessio
 export function validateMcpAppsGguiSession(
   input: unknown,
 ): McpAppsGguiSession | null {
-  if (input === null || typeof input !== 'object') return null;
-  const item = input as Record<string, unknown>;
-  if (item.type !== 'mcpApps') return null;
-  if (typeof item.id !== 'string' || item.id.length === 0) return null;
-  if (typeof item.createdAt !== 'string') return null;
-  const source = item.source as
-    | { connectorId?: unknown; toolName?: unknown; resourceUri?: unknown }
-    | undefined;
-  if (!source || typeof source !== 'object') return null;
-  if (typeof source.connectorId !== 'string' || source.connectorId.length === 0) return null;
-  if (typeof source.toolName !== 'string' || source.toolName.length === 0) return null;
-  if (typeof source.resourceUri !== 'string' || !source.resourceUri.startsWith('ui://')) return null;
-  return input as McpAppsGguiSession;
+  return hasMcpAppsGguiSessionShape(input) ? input : null;
+}
+
+/** Structural predicate behind {@link validateMcpAppsGguiSession}. */
+function hasMcpAppsGguiSessionShape(
+  input: unknown,
+): input is McpAppsGguiSession {
+  if (!isRecord(input)) return false;
+  if (input.type !== 'mcpApps') return false;
+  if (typeof input.id !== 'string' || input.id.length === 0) return false;
+  if (typeof input.createdAt !== 'string') return false;
+  const source = input.source;
+  if (!isRecord(source)) return false;
+  if (typeof source.connectorId !== 'string' || source.connectorId.length === 0) return false;
+  if (typeof source.toolName !== 'string' || source.toolName.length === 0) return false;
+  if (typeof source.resourceUri !== 'string' || !source.resourceUri.startsWith('ui://')) return false;
+  return true;
 }
 
 // =============================================================================
@@ -1280,18 +1283,20 @@ export const SUBMIT_ACTION_KINDS = [
 export function isGguiSubmitActionInput(
   value: unknown,
 ): value is GguiSubmitActionInput {
-  if (value === null || typeof value !== 'object') return false;
-  const v = value as Record<string, unknown>;
+  if (!isRecord(value)) return false;
+  const v = value;
   if (typeof v.kind !== 'string' || v.kind.length === 0) return false;
   if (typeof v.sessionId !== 'string' || v.sessionId.length === 0) return false;
   if (typeof v.appId !== 'string' || v.appId.length === 0) return false;
   if (typeof v.actionId !== 'string' || v.actionId.length === 0) return false;
   if (typeof v.firedAt !== 'string' || v.firedAt.length === 0) return false;
-  if (v.payload === null || typeof v.payload !== 'object') return false;
+  // Payload-object presence is the invariant: a JSON OBJECT, never an
+  // array — array payloads reject even for unknown extension kinds.
+  if (!isRecord(v.payload)) return false;
   // Per-kind payload narrowing for the closed primary set. Unknown
   // kinds pass through with whatever payload-object the caller supplied
   // — extension handlers own the validation.
-  const p = v.payload as Record<string, unknown>;
+  const p = v.payload;
   switch (v.kind) {
     case 'dispatch':
       if (typeof p.intent !== 'string' || p.intent.length === 0) return false;

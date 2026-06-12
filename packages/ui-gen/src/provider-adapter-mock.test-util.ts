@@ -1,11 +1,11 @@
 /**
- * Reference / fixture {@link ProviderAdapter} for tests.
+ * Reference / fixture {@link ProviderAdapter} for this package's own
+ * tests (`provider-adapter.test.ts`). Test infrastructure only — not
+ * built into dist and not published.
  *
  * Composes the helpers from `./provider-adapter.ts` so it satisfies
  * the {@link providerAdapterContract} test runner unmodified —
- * proving the contract is satisfiable AND giving consumers (concrete
- * provider adapters, downstream generator wiring) a reference to
- * compare against.
+ * proving the contract is satisfiable.
  *
  * Behavior is fully deterministic and configurable:
  *

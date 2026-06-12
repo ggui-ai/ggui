@@ -19,10 +19,11 @@
  * **Scope:**
  *
  *   - Defines the interface, the response shape, the error shape,
- *     a {@link MockProviderAdapter} for tests, and a contract test
- *     runner that asserts every adapter satisfies the seam.
- *   - Does NOT call any LLM. The contract is structural; the runner
- *     fakes responses + errors via the {@link MockProviderAdapter}.
+ *     and a contract test runner that asserts every adapter
+ *     satisfies the seam.
+ *   - Does NOT call any LLM. The contract is structural; this
+ *     package's own tests exercise the runner against a deterministic
+ *     fixture adapter (`provider-adapter-mock.test-util.ts`).
  *
  * **Design choices, locked:**
  *

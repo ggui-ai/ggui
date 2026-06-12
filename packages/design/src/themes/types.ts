@@ -6,8 +6,7 @@
  * Community Group) format with Material 3 semantic color roles plus
  * Tailwind-style 50-900 scales for primary/neutral/success/warning/
  * error/info, motion tokens (duration/easing/transition/keyframes),
- * accessibility tokens, z-index ladder, and canvas configuration for
- * the GenerativeCanvas background.
+ * accessibility tokens, and a z-index ladder.
  *
  * @see https://design-tokens.github.io/community-group/format/
  */
@@ -115,13 +114,6 @@ export interface DtcgTheme {
     keyframes: Record<string, DtcgToken>;
   };
 
-  canvas: {
-    mode: DtcgToken<'wave' | 'flow' | 'mesh' | 'constellation' | 'none'>;
-    speed: DtcgToken<number>;
-    colors: DtcgToken<string[]>;
-    background: DtcgToken;
-  };
-
   /**
    * WCAG-driven accessibility tokens. Operators can override per-theme
    * to tune focus ring contrast, reduced-motion duration, and
@@ -164,13 +156,6 @@ export interface ParsedTheme {
   cssKeyframes: string;
   /** Combined CSS (variables + keyframes) */
   css: string;
-  /** Canvas configuration for GenerativeCanvas component */
-  canvasConfig: {
-    mode: 'wave' | 'flow' | 'mesh' | 'constellation' | 'none';
-    speed: number;
-    colors: string[];
-    background: string;
-  };
 }
 
 /**

@@ -49,7 +49,7 @@ describe('GguiSessionRenderer — provisional branching', () => {
   it('routes empty componentCode through ProvisionalRenderer and shows the caller fallback', () => {
     const { container } = renderWithBus(
       <GguiSessionRenderer
-        render={{ id: 'pending', componentCode: '' }}
+        render={{ componentCode: '' }}
         fallback={<div data-testid="loading">loading…</div>}
       />,
     );
@@ -62,7 +62,7 @@ describe('GguiSessionRenderer — provisional branching', () => {
   it('paints the provisional surface once preview envelopes arrive', () => {
     const { container } = renderWithBus(
       <GguiSessionRenderer
-        render={{ id: 'pending', componentCode: '' }}
+        render={{ componentCode: '' }}
       />,
     );
     sendPreview({
@@ -90,7 +90,6 @@ describe('GguiSessionRenderer — provisional branching', () => {
     const { container } = renderWithBus(
       <GguiSessionRenderer
         render={{
-          id: 'ready',
           componentCode: 'export default function C() { return null; }',
         }}
         fallback={<div data-testid="loading">loading…</div>}

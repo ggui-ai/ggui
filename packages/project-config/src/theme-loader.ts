@@ -18,7 +18,7 @@
  *
  * The loader pre-renders the `:root { --ggui-*: value; }` CSS block
  * via `@ggui-ai/design/themes`: `parseTheme(id, DtcgTheme)` for the
- * preset / default paths (full DTCG with canvas + motion tokens) and
+ * preset / default paths (full DTCG with motion tokens) and
  * `generateCssVariables(ThemeDocument)` for the file path (the
  * duck-typed walker accepts the plain DTCG document without requiring
  * the strict {@link DtcgTheme} shape). Downstream consumers (console,
@@ -59,8 +59,8 @@ import { parseThemeDocument, type ThemeDocument } from './theme.js';
  *     `--ggui-*` CSS through `parseTheme`; every group required).
  *   - `file` → `ThemeDocument` (the strict-Zod schema for the open
  *     `ggui.json#theme` file format — same `color`/`font`/`spacing`/
- *     `shape`/`motion`/`canvas`/`accessibility`/`zIndex` vocabulary
- *     as `DtcgTheme`, but `motion`/`canvas`/`accessibility`/`zIndex`
+ *     `shape`/`motion`/`accessibility`/`zIndex` vocabulary
+ *     as `DtcgTheme`, but `motion`/`accessibility`/`zIndex`
  *     are optional so external tools that emit only a subset still
  *     parse).
  *

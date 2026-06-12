@@ -35,27 +35,6 @@
 import type { LlmProvider } from "./llm-route.js";
 
 // =============================================================================
-// Provider display metadata
-// =============================================================================
-
-/**
- * Display metadata keyed by `LlmProvider`. The `bedrock` entry is
- * synthesized for UI continuity — operators picking a bedrock route
- * still see a label. Pricing/key-prefix conventions for bedrock are
- * AWS-IAM driven and don't follow the API-key prefix shape.
- */
-export const PROVIDER_INFO: Record<
-  LlmProvider,
-  { displayName: string; keyPrefix: string }
-> = {
-  anthropic: { displayName: "Anthropic", keyPrefix: "sk-ant-" },
-  google: { displayName: "Google AI", keyPrefix: "AIza" },
-  openai: { displayName: "OpenAI", keyPrefix: "sk-" },
-  openrouter: { displayName: "OpenRouter", keyPrefix: "sk-or-" },
-  bedrock: { displayName: "AWS Bedrock", keyPrefix: "" },
-};
-
-// =============================================================================
 // Model Types (LiteLLM format: provider/model-name)
 // =============================================================================
 
@@ -213,39 +192,3 @@ export const MODEL_REGISTRY: Record<ModelId, ModelConfig> = {
  * Default model for generation
  */
 export const DEFAULT_MODEL: ModelId = "anthropic/claude-haiku-4-5";
-
-// =============================================================================
-// Helper Functions
-// =============================================================================
-
-export function isValidModelId(id: string): id is ModelId {
-  return id in MODEL_REGISTRY;
-}
-
-/**
- * Get all model IDs for a given provider.
- */
-export function getModelsForProvider(provider: LlmProvider): ModelId[] {
-  return (Object.values(MODEL_REGISTRY) as ModelConfig[])
-    .filter((m) => m.provider === provider)
-    .map((m) => m.id);
-}
-
-/**
- * Get all model IDs for a given tier.
- */
-export function getModelsForTier(tier: ModelTier): ModelId[] {
-  return (Object.values(MODEL_REGISTRY) as ModelConfig[])
-    .filter((m) => m.tier === tier)
-    .map((m) => m.id);
-}
-
-/**
- * Select the default model for a given tier.
- */
-export function selectModelByTier(tier: ModelTier): ModelId {
-  const models = getModelsForTier(tier);
-  // Prefer Anthropic models as default
-  const anthropic = models.find((m) => m.startsWith("anthropic/"));
-  return anthropic ?? models[0] ?? DEFAULT_MODEL;
-}

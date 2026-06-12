@@ -26,10 +26,6 @@
  * elevation carries a faint terracotta halo — matches the rest of the
  * registry and keeps dark-mode shadows readable (a pure-black shadow on
  * Charcoal disappears).
- *
- * Canvas mode is `'none'`: Claudic is meant to be quiet. The
- * GenerativeCanvas wave animation is on-brand for Indigo; here it
- * fights claude.ai's restraint.
  */
 
 import type { DtcgTheme } from '../types';
@@ -63,7 +59,7 @@ const claudicTransitions = {
 // ── shared (mode-agnostic) tokens ──────────────────────────────────
 //
 // Anything that doesn't change between light and dark — type stack,
-// spacing scale, radii, motion, canvas — lives here so the two
+// spacing scale, radii, motion — lives here so the two
 // variants stay in sync without copy-paste drift.
 const shared = {
   font: {
@@ -302,13 +298,6 @@ const claudicLight: DtcgTheme = {
   shape: shared.shape,
   motion: shared.motion,
 
-  canvas: {
-    // No animated background — Claudic is quiet by design.
-    mode: { $value: 'none', $type: 'string' },
-    speed: { $value: 0, $type: 'number' },
-    colors: { $value: [], $type: 'array' },
-    background: { $value: '#faf9f5', $type: 'color' }, // Ivory
-  },
 
   // Focus ring uses Crail (primary-500) so keyboard focus reads as
   // brand-aligned rather than the sky-blue WCAG default. Reduced-motion
@@ -439,12 +428,6 @@ const claudicDark: DtcgTheme = {
   shape: shared.shape,
   motion: shared.motion,
 
-  canvas: {
-    mode: { $value: 'none', $type: 'string' },
-    speed: { $value: 0, $type: 'number' },
-    colors: { $value: [], $type: 'array' },
-    background: { $value: '#1a1917', $type: 'color' },
-  },
 
   // Dark-mode focus ring uses the lifted Crail (primary-500 in the
   // dark ladder) so the keyboard-focus halo still reads as Claudic

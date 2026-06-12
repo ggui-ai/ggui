@@ -51,9 +51,9 @@ export const DynamicComponent = ReactComponentRenderer;
 /**
  * Render a single component-variant render.
  *
- * Loose input shape (id + componentCode + prompt + props) because
- * callers — preview routes, ad-hoc viewers — pass a fragment of
- * {@link ComponentGguiSession} rather than the full type. These four
+ * Loose input shape (componentCode + props) because callers — preview
+ * routes, ad-hoc viewers — pass a fragment of
+ * {@link ComponentGguiSession} rather than the full type. These two
  * fields are exactly what the renderer reads.
  *
  * @example
@@ -64,9 +64,7 @@ export const DynamicComponent = ReactComponentRenderer;
 export interface GguiSessionRendererProps {
   /** The render to display (component variant). */
   render: {
-    id?: string;
     componentCode: string;
-    prompt?: string;
     /** Props to pass to the component at render time */
     props?: Record<string, unknown>;
   };
@@ -87,21 +85,6 @@ export function GguiSessionRenderer({
   cssOverrides,
   themeId,
 }: GguiSessionRendererProps): React.JSX.Element {
-  const handleRepair = React.useCallback((error: Error) => {
-    // Dispatch repair request — picked up by host shells which forward
-    // it to the agent so it can re-generate with error context.
-    if (typeof window !== 'undefined' && render.id) {
-      window.dispatchEvent(new CustomEvent('ggui:request-repair', {
-        detail: {
-          sessionId: render.id,
-          prompt: render.prompt,
-          error: error.message,
-          componentCode: render.componentCode,
-        },
-      }));
-    }
-  }, [render.id, render.prompt, render.componentCode]);
-
   // Empty componentCode → the render is still being generated.
   // Route through `<ProvisionalRenderer>` so the reserved
   // `_ggui:preview` channel's A2UI envelopes (when the server preamble
@@ -125,7 +108,6 @@ export function GguiSessionRenderer({
         cssOverrides={cssOverrides}
         themeId={themeId}
         onError={onError}
-        onRequestRepair={handleRepair}
         fallback={fallback}
       />
     </EnsureWireContext>

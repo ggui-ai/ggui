@@ -78,7 +78,7 @@ import {
   type InstalledBlueprintEntry,
 } from "@ggui-ai/mcp-server-handlers/renders";
 import { createDeterministicPreviewEmitter } from "@ggui-ai/preview-a2ui/emitters";
-import type { UiManifest } from "@ggui-ai/project-config";
+import type { ThemeConfig, UiManifest } from "@ggui-ai/project-config";
 import type { UiRegistry } from "@ggui-ai/ui-registry";
 import { existsSync } from "node:fs";
 import { createServer as createNetServer } from "node:net";
@@ -182,14 +182,9 @@ export interface BuildMcpServerBackendOptions {
    * `mountDevtoolThemeRoutes`'s POST handlers when the operator
    * saves a new theme via the picker. Pair with `themeProvider` so
    * the render handler reads the live theme on every call.
+   * `null` = cleared.
    */
-  readonly onThemeConfigChange?: (
-    next:
-      | string
-      | { preset: string; mode?: "light" | "dark"; overrides?: Record<string, string> }
-      | { file: string; mode?: "light" | "dark" }
-      | null
-  ) => void;
+  readonly onThemeConfigChange?: (next: ThemeConfig | null) => void;
   /**
    * Generation wiring for `ggui_render`. When present, the OSS render
    * handler invokes the bound `UiGenerator` on every story-path

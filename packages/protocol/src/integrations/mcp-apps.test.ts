@@ -399,6 +399,14 @@ describe('Gesture-audit envelope (ggui_runtime_submit_action input contract)', (
         'requestDisplayMode with missing mode',
         { ...baseFields, kind: 'requestDisplayMode', payload: {} },
       ],
+      [
+        // Deliberate tightening (draft-2026-06-12 dv7): payload-object
+        // presence is the invariant — a JSON OBJECT, never an array —
+        // even for unknown extension kinds the per-kind narrowing
+        // doesn't cover.
+        'unknown extension kind with ARRAY payload',
+        { ...baseFields, kind: 'futureSubmitActionKind', payload: ['not', 'an', 'object'] },
+      ],
     ])('rejects %s', (_label, value) => {
       expect(isGguiSubmitActionInput(value)).toBe(false);
     });

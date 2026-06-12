@@ -1,7 +1,7 @@
 {
   "name": "@ggui-ai/ui-gen",
   "version": "0.3.0",
-  "description": "UI generation harness for ggui — the LLM system prompt, coding-agent loop, and evaluation engine that turn a DataContract into a React component. Implements the UiGenerator contract from @ggui-ai/mcp-server-core; consumed by @ggui-ai/mcp-server.",
+  "description": "UI generation harness for ggui — the LLM system prompt, multi-turn coding loop, and evaluation engine that turn a DataContract into a React component. Implements the UiGenerator contract from @ggui-ai/mcp-server-core; consumed by @ggui-ai/mcp-server.",
   "license": "Apache-2.0",
   "keywords": [
     "ggui",
@@ -38,7 +38,8 @@
     "!**/*.test-d.d.ts",
     "!**/__tests__/**",
     "!**/*.spec.ts",
-    "!**/*.spec.tsx"
+    "!**/*.spec.tsx",
+    "!**/*.test-util.ts"
   ],
   "type": "module",
   "main": "dist/index.js",
@@ -182,7 +183,7 @@
     }
   },
   "scripts": {
-    "build": "tsup",
+    "build": "NODE_OPTIONS=--max-old-space-size=8192 tsup",
     "dev": "tsup --watch",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
@@ -192,10 +193,22 @@
     "@ggui-ai/mcp-server-core": "workspace:*",
     "@ggui-ai/project-config": "workspace:*",
     "@ggui-ai/protocol": "workspace:*",
+    "@google/adk": "^0.5.0",
+    "@openai/agents": "^0.7.1",
+    "puppeteer-core": "^24.40.0",
     "react": "^18.0.0 || ^19.0.0",
     "react-dom": "^18.0.0 || ^19.0.0"
   },
   "peerDependenciesMeta": {
+    "@google/adk": {
+      "optional": true
+    },
+    "@openai/agents": {
+      "optional": true
+    },
+    "puppeteer-core": {
+      "optional": true
+    },
     "react": {
       "optional": true
     },

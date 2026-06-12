@@ -1,32 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { AgentWorkspace } from '../workspace';
-import {
-  executeTool,
-  executeToolBatch,
-  initialToolSchemas,
-  fullToolSchemas,
-} from '../tools';
-
-describe('Tool Schemas', () => {
-  it('initialToolSchemas has only write', () => {
-    const names = Object.keys(initialToolSchemas);
-    expect(names).toEqual(['write']);
-  });
-
-  it('fullToolSchemas has 9 tools (no separate commit)', () => {
-    const names = Object.keys(fullToolSchemas);
-    expect(names).toHaveLength(9);
-    expect(names).toContain('write');
-    expect(names).toContain('apply_diff');
-    expect(names).toContain('cat');
-    expect(names).toContain('grep');
-    expect(names).toContain('diff');
-    expect(names).toContain('log');
-    expect(names).toContain('show');
-    expect(names).toContain('revert');
-    expect(names).not.toContain('commit');
-  });
-});
+import { executeTool } from '../tools';
 
 describe('executeTool', () => {
   let ws: AgentWorkspace;
@@ -69,42 +43,6 @@ export default function Hello(props: Props) {
     const result = await executeTool(ws, 'write', { commit_message: 'oops' }, commitMeta);
     expect(result.error).toBe(true);
     expect(result.result).toContain('FAILED');
-  });
-
-  // ── apply_diff (auto-commits) ────────────────
-
-  it('apply_diff: valid diff → auto-commit', async () => {
-    ws.write('line 1\nline 2\nline 3\n');
-    await ws.commit('initial');
-
-    const diff = [
-      '--- a/ui.tsx',
-      '+++ b/ui.tsx',
-      '@@ -2,1 +2,1 @@',
-      '-line 2',
-      '+LINE TWO',
-    ].join('\n');
-
-    await executeTool(
-      ws,
-      'apply_diff',
-      { diff, commit_message: 'fix line 2' },
-      commitMeta,
-    );
-    // Commit happened (even if self-check fails on non-component code)
-    expect(commitMeta.size).toBe(1);
-    expect(ws.read()).toContain('LINE TWO');
-  });
-
-  it('apply_diff: no file → error', async () => {
-    const result = await executeTool(
-      ws,
-      'apply_diff',
-      { diff: '@@ bad', commit_message: 'x' },
-      commitMeta,
-    );
-    expect(result.error).toBe(true);
-    expect(result.result).toContain('No file');
   });
 
   // ── cat ──────────────────────────────────────
@@ -343,41 +281,5 @@ export default function C(props: Props) {
     expect(result.result).toContain('[P0-imports]');
     // And NOT the unlabeled form.
     expect(result.result).not.toMatch(/\[imports\][^-]/);
-  });
-});
-
-describe('executeToolBatch', () => {
-  let ws: AgentWorkspace;
-  const commitMeta = new Map();
-
-  beforeEach(async () => {
-    ws = new AgentWorkspace();
-    await ws.init();
-    commitMeta.clear();
-  });
-
-  it('write with valid code → done in one call', async () => {
-    const code = `interface Props { x: number; }
-export default function C(props: Props) {
-  return <div style={{ color: 'var(--ggui-color-primary-600)' }} aria-label="c">{props.x}</div>;
-}`;
-    const calls = [
-      { tool: 'write', input: { code, commit_message: 'test' } },
-    ];
-
-    const result = await executeToolBatch(calls, ws, commitMeta);
-    expect(result.done).toBe(true);
-    expect(result.compiledCode).toBeDefined();
-  });
-
-  it('error in tool → stops batch', async () => {
-    const calls = [
-      { tool: 'apply_diff', input: { diff: '@@ bad', commit_message: 'x' } },
-      { tool: 'write', input: { code: 'should not reach', commit_message: 'x' } },
-    ];
-
-    const result = await executeToolBatch(calls, ws, commitMeta);
-    expect(result.results.length).toBe(1);
-    expect(result.done).toBe(false);
   });
 });

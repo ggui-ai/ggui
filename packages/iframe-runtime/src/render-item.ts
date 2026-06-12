@@ -84,8 +84,6 @@ export interface RenderItemOptions {
    * this. STDLIB `@ggui-ai/gadgets` is always rewritten regardless.
    */
   readonly gadgetPackages?: readonly string[];
-  /** ggui-server base URL (for mcp-apps proxy). Empty = same-origin. */
-  readonly mcpAppsServerBaseUrl?: string;
   /** Theme id passed to ReactComponentRenderer for scoped CSS. */
   readonly themeId?: string;
   /**
@@ -106,7 +104,6 @@ export interface RenderItemOptions {
   };
   readonly cssOverrides?: string;
   readonly onError?: (err: Error) => void;
-  readonly onRequestRepair?: (err: Error) => void;
   /**
    * Optional outer wrapper applied AROUND the GguiWireProvider — used
    * by `bootProduction` to install the `<ContextStateHost>` provider
@@ -216,9 +213,6 @@ export async function mountRender(
       mcpMount = mountMcpAppIframe(container, {
         render,
         sessionId: currentOpts.sessionId,
-        ...(currentOpts.mcpAppsServerBaseUrl !== undefined
-          ? { serverBaseUrl: currentOpts.mcpAppsServerBaseUrl }
-          : {}),
       });
       currentKind = 'mcpApps';
       return;
@@ -294,9 +288,6 @@ export async function mountRender(
         ? { cssOverrides: currentOpts.cssOverrides }
         : {}),
       ...(currentOpts.onError !== undefined ? { onError: currentOpts.onError } : {}),
-      ...(currentOpts.onRequestRepair !== undefined
-        ? { onRequestRepair: currentOpts.onRequestRepair }
-        : {}),
       renderWrapper: wrapInScopedProvider,
     });
     currentKind = 'react';
@@ -367,9 +358,6 @@ export async function mountRender(
           ...(next.appTheme !== undefined ? { appTheme: next.appTheme } : {}),
           ...(next.cssOverrides !== undefined ? { cssOverrides: next.cssOverrides } : {}),
           ...(next.onError !== undefined ? { onError: next.onError } : {}),
-          ...(next.onRequestRepair !== undefined
-            ? { onRequestRepair: next.onRequestRepair }
-            : {}),
           renderWrapper: wrapInScopedProvider,
         });
         return;

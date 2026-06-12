@@ -172,14 +172,15 @@ function buildHtml(
 
       let RootComponent = Blueprint;
 
-      // Bridge callbacks — wire React props to the event bridge
+      // Bridge callbacks — wire React props to the event bridge.
+      // data:submit is the ONLY event vocabulary (draft-2026-06-12):
+      // the retired onChange/onClick bridge emissions dead-ended — the
+      // server pipes only data:submit to the agent-facing consume queue.
       const bridgeProps = {
         onSubmit: (data) => {
           window.__ggui_bridge._submitHandled = true;
           window.__ggui_bridge.sendEvent('data:submit', data);
         },
-        onChange: (data) => window.__ggui_bridge.sendEvent('data:change', data),
-        onClick: (data) => window.__ggui_bridge.sendEvent('interaction:click', data),
       };
 
       // Render with data props + bridge props injected

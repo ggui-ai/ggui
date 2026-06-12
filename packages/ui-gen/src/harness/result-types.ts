@@ -11,6 +11,7 @@
 
 import type { DataContract, JsonObject } from "@ggui-ai/protocol";
 import type { AdapterResult } from "../adapters/types.js";
+import type { RenderingContext } from "../contract-context.js";
 import type { EvaluationResult } from "../evaluation/types.js";
 import type { EvalResult } from "../evaluation/types-public.js";
 
@@ -116,18 +117,10 @@ export interface GenerationContext {
   evaluation?: EvaluationConfig;
 }
 
-/**
- * Rendering context — how and where the component will be displayed.
- * Affects layout strategy, sizing, and interaction patterns.
- */
-export interface RenderingContext {
-  /** Device category — affects touch targets, column count, density */
-  device: "mobile" | "tablet" | "desktop" | "spatial";
-  /** Shell type — the container the component renders in */
-  shell: "chat" | "fullscreen" | "partial";
-  /** Viewport dimensions in CSS pixels (optional) */
-  viewport?: { width: number; height: number };
-}
+// Rendering context — canonical definition lives in
+// `../contract-context.ts` (one type, one prompt-builder family).
+// Re-exported here because this subpath is the harness's type hub.
+export type { RenderingContext } from "../contract-context.js";
 
 // Data contract — re-exported from protocol (canonical types)
 export type {

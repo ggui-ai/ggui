@@ -22,6 +22,14 @@
  * catalog filtering, no surface-id checking — those live in the A2UI
  * runtime consumer. The adapter enforces only what `parseServerMessage`
  * enforces: message-shape conformance to the V1 write-path union.
+ *
+ * The three copies (mcp-server / react / react-native) are documented
+ * structural mirrors: docstrings may differ per package, but the
+ * EXECUTABLE CODE must stay identical — guarded by the
+ * comment-stripped mirror gate in the SDK twin-parity suites
+ * (`ggui-react{,-native}/src/twin-parity.test.ts`,
+ * `CODE_IDENTICAL_MIRRORS`). Apply code changes to all three copies
+ * in the same slice.
  */
 import {
   parseServerMessage,

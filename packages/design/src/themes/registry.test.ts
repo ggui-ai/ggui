@@ -116,13 +116,6 @@ describe('theme registry — dual-mode shape', () => {
       // Dark inverts: paper-as-CTA on ink-base canvas.
       expect(primary500?.$value).toBe('#f4f3ed');
     });
-
-    it('emits canvas mode "none" (GGUI is flat — no decorative flourish)', () => {
-      const light = getTheme('ggui', 'light');
-      const dark = getTheme('ggui', 'dark');
-      expect(light?.canvasConfig.mode).toBe('none');
-      expect(dark?.canvasConfig.mode).toBe('none');
-    });
   });
 
   describe('indigo preset (dual-mode)', () => {
@@ -179,13 +172,6 @@ describe('theme registry — dual-mode shape', () => {
       const raw = getRawTheme('claudic', 'light');
       const primary500 = raw?.color.primary['500'];
       expect(primary500?.$value).toBe('#cc785c');
-    });
-
-    it('emits canvas mode "none" (Claudic is quiet)', () => {
-      const light = getTheme('claudic', 'light');
-      const dark = getTheme('claudic', 'dark');
-      expect(light?.canvasConfig.mode).toBe('none');
-      expect(dark?.canvasConfig.mode).toBe('none');
     });
   });
 });

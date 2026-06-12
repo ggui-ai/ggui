@@ -22,11 +22,10 @@
  *   uses `border-radius: 2px` across components. Cards land at 4px so
  *   primitives don't read razor-edged at hero scale, but the family
  *   stays sharp relative to Indigo/Glow's 16px norm.
- * - Canvas mode is `'none'`. Per brand kit: "no decorative flourish."
  * - Shadows are flat — the brand kit relies on hairline borders, not
  *   elevation.
  *
- * Dark variant inverts paper ↔ ink so the canvas reads as ink-base
+ * Dark variant inverts paper ↔ ink so the background reads as ink-base
  * with paper-tinted text. Status hues lift slightly for AA contrast
  * against the dark surface.
  */
@@ -283,12 +282,6 @@ const gguiLight: DtcgTheme = {
   shape: shared.shape,
   motion: shared.motion,
 
-  canvas: {
-    mode: { $value: 'none', $type: 'string' },
-    speed: { $value: 1.0, $type: 'number' },
-    colors: { $value: [], $type: 'array' },
-    background: { $value: '#f4f3ed', $type: 'color' }, // paper
-  },
 
   // Brand-aligned focus ring: ink (#292929) instead of the standard
   // sky-blue accent — ggui has no accent hue, so the focus ring stays
@@ -419,12 +412,6 @@ const gguiDark: DtcgTheme = {
   shape: shared.shape,
   motion: shared.motion,
 
-  canvas: {
-    mode: { $value: 'none', $type: 'string' },
-    speed: { $value: 1.0, $type: 'number' },
-    colors: { $value: [], $type: 'array' },
-    background: { $value: '#1a1a1a', $type: 'color' }, // ink-base canvas
-  },
 
   // Brand-aligned focus ring: paper (#f4f3ed) instead of the standard
   // sky-blue accent — ggui dark inverts the ink/paper relationship and

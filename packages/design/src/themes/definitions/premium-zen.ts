@@ -2,8 +2,8 @@
  * Premium Zen Theme — light + dark variants
  *
  * Minimalist Japanese aesthetic inspired by wabi-sabi.
- * Stone/warm gray palette with subtle green accents, slow breathing
- * animations, and a soft mesh canvas.
+ * Stone/warm gray palette with subtle green accents and slow
+ * breathing animations.
  *
  * Light variant: warm stone ivory surface, restrained moss-green primary.
  *
@@ -244,19 +244,6 @@ const zenLight: DtcgTheme = {
   shape: shared.shape,
   motion: shared.motion,
 
-  canvas: {
-    mode: { $value: 'mesh', $type: 'string' },
-    speed: { $value: 0.3, $type: 'number' },
-    colors: {
-      $value: [
-        'rgba(92, 107, 76, 0.08)',
-        'rgba(185, 176, 164, 0.06)',
-        'rgba(213, 208, 200, 0.05)',
-      ],
-      $type: 'array',
-    },
-    background: { $value: '#1a1816', $type: 'color' },
-  },
 
   accessibility: {
     ...standardAccessibility.light,
@@ -378,19 +365,6 @@ const zenDark: DtcgTheme = {
   shape: shared.shape,
   motion: shared.motion,
 
-  canvas: {
-    mode: { $value: 'mesh', $type: 'string' },
-    speed: { $value: 0.3, $type: 'number' },
-    colors: {
-      $value: [
-        'rgba(147, 161, 124, 0.10)',
-        'rgba(185, 176, 164, 0.07)',
-        'rgba(213, 208, 200, 0.05)',
-      ],
-      $type: 'array',
-    },
-    background: { $value: '#1a1816', $type: 'color' },
-  },
 
   accessibility: {
     ...standardAccessibility.dark,

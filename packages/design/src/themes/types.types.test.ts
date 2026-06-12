@@ -48,13 +48,12 @@ describe('DtcgTheme required fields', () => {
     expectTypeOf<DtcgTheme>().toHaveProperty('$metadata');
   });
 
-  it('has color, font, spacing, shape, motion, canvas, accessibility, zIndex', () => {
+  it('has color, font, spacing, shape, motion, accessibility, zIndex', () => {
     expectTypeOf<DtcgTheme>().toHaveProperty('color');
     expectTypeOf<DtcgTheme>().toHaveProperty('font');
     expectTypeOf<DtcgTheme>().toHaveProperty('spacing');
     expectTypeOf<DtcgTheme>().toHaveProperty('shape');
     expectTypeOf<DtcgTheme>().toHaveProperty('motion');
-    expectTypeOf<DtcgTheme>().toHaveProperty('canvas');
     expectTypeOf<DtcgTheme>().toHaveProperty('accessibility');
     expectTypeOf<DtcgTheme>().toHaveProperty('zIndex');
   });
@@ -121,12 +120,6 @@ describe('DtcgTheme required fields', () => {
       Record<string, DtcgToken<number>>
     >();
   });
-
-  it('canvas.mode is a constrained union', () => {
-    expectTypeOf<DtcgTheme['canvas']['mode']['$value']>().toEqualTypeOf<
-      'wave' | 'flow' | 'mesh' | 'constellation' | 'none'
-    >();
-  });
 });
 
 describe('Shipped default themes structurally match DtcgTheme', () => {
@@ -155,8 +148,6 @@ describe('Supporting types', () => {
     expectTypeOf<ParsedTheme>().toHaveProperty('cssVariables');
     expectTypeOf<ParsedTheme>().toHaveProperty('cssKeyframes');
     expectTypeOf<ParsedTheme>().toHaveProperty('css');
-    expectTypeOf<ParsedTheme>().toHaveProperty('canvasConfig');
-    expectTypeOf<ParsedTheme['canvasConfig']>().toHaveProperty('mode');
   });
 
   it('ThemeEntry surfaces registry metadata only (no full theme)', () => {

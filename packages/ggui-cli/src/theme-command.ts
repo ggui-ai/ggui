@@ -176,7 +176,6 @@ function describeValidTheme(absPath: string, theme: ThemeDocument): string[] {
   if (theme.motion !== undefined) optional.push('motion');
   if (theme.accessibility !== undefined) optional.push('accessibility');
   if (theme.zIndex !== undefined) optional.push('zIndex');
-  if (theme.canvas !== undefined) optional.push('canvas');
   lines.push(
     optional.length === 0
       ? `  optional blocks: none`

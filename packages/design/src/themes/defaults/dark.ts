@@ -191,12 +191,6 @@ export const darkTheme: DtcgTheme = {
     keyframes: {},
   },
 
-  canvas: {
-    mode: { $type: 'string', $value: 'none' },
-    speed: { $type: 'number', $value: 0 },
-    colors: { $type: 'array', $value: [] },
-    background: { $type: 'color', $value: '#0f172a' },
-  },
 
   accessibility: {
     focusRing: {

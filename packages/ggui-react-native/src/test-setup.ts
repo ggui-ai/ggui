@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
+/* eslint-disable @typescript-eslint/no-explicit-any -- global native-module mocks (react-native / AsyncStorage / NetInfo / WebView) for plain-Node test runs; test-only, never ships */
 /**
  * Global test setup for @ggui-ai/react-native
  *

@@ -41,27 +41,6 @@ describe('validateActionEnvelope', () => {
     expect(result).toEqual({ valid: true, violations: [] });
   });
 
-  it("skips payload check for non-data:submit types — 'lifecycle:blur' passes without actionSpec lookup", () => {
-    const envelope: ActionEnvelope = {
-      sessionId: 'render-1',
-      type: 'lifecycle:blur',
-    };
-    // Even with an actionSpec that requires everything, lifecycle events
-    // don't carry action payloads.
-    const result = validateActionEnvelope(envelope, ACTION_SPEC);
-    expect(result).toEqual({ valid: true, violations: [] });
-  });
-
-  it('skips payload check for interaction:click', () => {
-    const envelope: ActionEnvelope = {
-      sessionId: 'render-1',
-      type: 'interaction:click',
-      payload: { anything: 'goes' },
-    };
-    const result = validateActionEnvelope(envelope, ACTION_SPEC);
-    expect(result.valid).toBe(true);
-  });
-
   it('accepts data:submit with a declared action + matching payload', () => {
     const envelope: ActionEnvelope = {
       sessionId: 'render-1',
@@ -184,7 +163,7 @@ describe('ActionEnvelope — type shape', () => {
     // Forces sessionId and type; allows absent optionals.
     const minimal: ActionEnvelope = {
       sessionId: 'r',
-      type: 'lifecycle:blur',
+      type: 'data:submit',
     };
     expect(minimal.payload).toBeUndefined();
     expect(minimal.clientSeq).toBeUndefined();

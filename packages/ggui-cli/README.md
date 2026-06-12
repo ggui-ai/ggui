@@ -52,6 +52,16 @@ ggui serve --mcp-only               # skip agent supervision
 
 Start the local UI registry + compile-on-demand dev hub, optionally supervising a local agent runtime. Run `ggui --help` for the flag list (agent adapter, tunnel provider, browser auto-open).
 
+#### Tunnel-provider plugins
+
+`ggui dev` exposes the local stack through a `TunnelProvider` seam. Real providers (cloudflared bindings, ngrok, hosted tunnels) plug in without changing the CLI:
+
+1. Set `GGUI_TUNNEL_PROVIDER=<module specifier>` (a package name or path resolvable from your project).
+2. The module exports a `createTunnelProvider()` factory (preferred) or a default export returning a `TunnelProvider`.
+3. Type the module against the published contract: `import type { TunnelProvider, TunnelProviderModule } from '@ggui-ai/cli/tunnel-provider'`.
+
+When the variable is unset, or the module fails shape validation, the CLI falls back to the null provider (`status: 'unavailable'` with a reason) instead of crashing the dev loop.
+
 ### Everything else
 
 | Command             | What it does                                                                                                                   |

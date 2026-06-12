@@ -1,3 +1,14 @@
+/**
+ * EventBuffer (RN) tests — twin of `@ggui-ai/react`'s
+ * `websocket/EventBuffer.test.ts`.
+ *
+ * Platform delta: the shared queue coverage (add/flush ordering,
+ * overflow drop + warn + `onOverflow`, size) mirrors the web suite;
+ * RN-only scenarios cover AsyncStorage persistence
+ * (`setStorage` / `loadPersisted`) and type+payload deduplication.
+ *
+ * Listed in `../twin-parity.test.ts` `DOCUMENTED_DELTA_TWINS`.
+ */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { EventBuffer } from './EventBuffer';
 import type { WebSocketMessage } from '@ggui-ai/protocol/transport/websocket';

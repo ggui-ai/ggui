@@ -316,14 +316,13 @@ function isGadgetExportImported(
 }
 
 /**
- * Run all tier 0 (deterministic, no-LLM) checks against source and compiled code.
+ * Run all tier 0 (deterministic, no-LLM) checks against component source.
  *
  * Wraps the same logic as runSelfChecks (adapters/tools.ts) but emits EvalIssue[].
  * Also runs contract validation when contract are provided.
  */
 export async function runTier0Checks(
   sourceCode: string,
-  compiledCode: string | null,
   contract?: DataContract,
   buildErrors?: string[],
   /**
@@ -342,12 +341,12 @@ export async function runTier0Checks(
   // ── Compile check ─────────────────────────────────────────
   //
   // Fail only when the caller ATTEMPTED compile and captured errors.
-  // A `compiledCode === null` without `buildErrors` means the caller
-  // hasn't run esbuild at all (e.g. OSS `createUiGenerator` which is
-  // sometimes wrapped by `withBrowserCompile` and sometimes not);
-  // degrade gracefully — downstream checks (security, forbidden
-  // imports, wire-import presence, react-linter, Props-interface,
-  // default-export) still fire on sourceCode alone.
+  // Absent `buildErrors` means the caller hasn't run esbuild at all
+  // (e.g. OSS `createUiGenerator` which is sometimes wrapped by
+  // `withBrowserCompile` and sometimes not); degrade gracefully —
+  // downstream checks (security, forbidden imports, wire-import
+  // presence, react-linter, Props-interface, default-export) still
+  // fire on sourceCode alone.
   if (buildErrors && buildErrors.length > 0) {
     const errorDetail = buildErrors
       .map((e) => {
@@ -1210,10 +1209,9 @@ export async function runTier0Checks(
  */
 export async function runTier0(
   sourceCode: string,
-  compiledCode: string | null,
   contract?: DataContract,
 ): Promise<EvalResult> {
-  const issues = await runTier0Checks(sourceCode, compiledCode, contract);
+  const issues = await runTier0Checks(sourceCode, contract);
   const pass: string[] = [];
 
   // Build pass list from categories that had no issues

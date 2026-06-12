@@ -14,14 +14,18 @@
  * manifest becomes discoverable through this tool.
  */
 import { z } from 'zod';
+import { listFeaturedBlueprintsInputShape } from '@ggui-ai/protocol';
 import type {
   BlueprintEntry,
   BlueprintProvider,
 } from '@ggui-ai/mcp-server-core';
 import type { SharedHandler } from '../types.js';
 
-const inputSchema = {
-};
+// Canonical SSoT shape — authored once in `@ggui-ai/protocol`
+// (`schemas/mcp.ts`). Intentionally EMPTY: the pre-launch No-Backcompat
+// scrub deleted the filter vocabulary; filters re-enter when a real
+// consumer passes them.
+const inputSchema = listFeaturedBlueprintsInputShape;
 
 const outputSchema = {
   // Two-arg `z.record(z.string(), z.unknown())` — zod v4 dropped the
@@ -64,15 +68,12 @@ export function createListFeaturedBlueprintsHandler(
       "Builder-curated featured blueprints. Returns entries declared via the server's blueprint catalog (typically ggui.json's `blueprints.include` for OSS deployments). Empty when no catalog is wired.",
     inputSchema,
     outputSchema,
-    async handler(rawInput: Record<string, unknown>) {
-      const { category } = z.object(inputSchema).parse(rawInput);
+    async handler() {
       const provider = deps.blueprints;
       if (!provider) {
         return { blueprints: [], total: 0 };
       }
-      const entries = await provider.list(
-        category !== undefined ? { tag: category } : {},
-      );
+      const entries = await provider.list({});
       return {
         blueprints: entries.map((entry) => ({ ...entry })),
         total: entries.length,

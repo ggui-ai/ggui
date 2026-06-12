@@ -61,9 +61,10 @@ import type { Request, RequestHandler } from 'express';
  * Cookie name. Distinct from `ggui_console_session` so cross-kind
  * confusion is impossible — a cookie value never gets misinterpreted
  * as a different auth artifact. Change carries a compat concern (the
- * `/login` mint endpoint, `cookieAuthMiddleware`, and `/logout` clear
- * read this exact name); keep this export as the single source of
- * truth.
+ * login mint endpoints and `cookieAuthMiddleware` read this exact
+ * name); keep this export as the single source of truth. NOTE: no
+ * server-side clear route exists today — the cookie expires via
+ * `Max-Age` only (8h default).
  */
 export const USER_SESSION_COOKIE_NAME = 'ggui_user_session';
 
@@ -118,31 +119,6 @@ export function formatUserSessionCookieHeader(
     `${USER_SESSION_COOKIE_NAME}=${encodeURIComponent(input.bearer)}`,
     `Path=${input.path ?? '/'}`,
     `Max-Age=${ttlSec}`,
-    `SameSite=${input.sameSite ?? 'Lax'}`,
-    `HttpOnly`,
-  ];
-  if (input.secure) attrs.push('Secure');
-  return attrs.join('; ');
-}
-
-/**
- * Format a `Set-Cookie` header that immediately invalidates the
- * user-session cookie. Used by `/logout` and `/revoke-bearer` so the
- * browser drops it without waiting for `Max-Age`.
- *
- * `Max-Age=0` is the canonical clear pattern; matching attrs (Path,
- * Secure) are required so the browser pairs this with the original
- * mint and replaces it.
- */
-export function formatClearUserSessionCookieHeader(input: {
-  readonly secure?: boolean;
-  readonly path?: string;
-  readonly sameSite?: 'Strict' | 'Lax' | 'None';
-}): string {
-  const attrs: string[] = [
-    `${USER_SESSION_COOKIE_NAME}=`,
-    `Path=${input.path ?? '/'}`,
-    `Max-Age=0`,
     `SameSite=${input.sameSite ?? 'Lax'}`,
     `HttpOnly`,
   ];
@@ -231,10 +207,9 @@ export function cookieAuthMiddleware(): RequestHandler {
 }
 
 /**
- * Read the user-session cookie off an Express request. Used by
- * `/logout` to know whether there's anything to clear, by
- * `/revoke-bearer` to identify the pairing to revoke, and by tests
- * that need to inspect the cookie without going through middleware.
+ * Read the user-session cookie off an Express request. Used by tests
+ * that need to inspect the cookie without going through middleware,
+ * and available to embedders composing their own session routes.
  */
 export function readUserSessionCookie(req: Request): string | null {
   return readUserSessionCookieFromHeaders(req.headers);

@@ -1,3 +1,27 @@
+/**
+ * GguiProvider — React Native twin of `@ggui-ai/react`'s
+ * `components/GguiProvider.tsx`.
+ *
+ * The provider surface mirrors the web copy: permission requests gate
+ * on `KNOWN_PERMISSION_NAMES`, `adapterImpls` is the runtime
+ * implementation slot only, and the context value shape feeds the
+ * same `GguiContext`.
+ *
+ * Platform delta (every intentional divergence from the web copy):
+ *
+ *   - Interface-context detection reads RN `Dimensions` / `PixelRatio`
+ *     (with rotation / split-screen change updates) instead of
+ *     `window`-based `detectInterfaceContext` + resize listener.
+ *   - RN-only props `reactVersion` / `designSystemUrl` feed the
+ *     WebView import map.
+ *   - No `apiBaseUrl` / `appMetadata` props and no app-config fetch —
+ *     RN hosts pass a pre-fetched `appConfig`; the web provider can
+ *     fetch it from the platform itself.
+ *
+ * Guarded by the structural twin gate in `../twin-parity.test.ts`
+ * (`DOCUMENTED_DELTA_TWINS`): exported surface must match the web
+ * copy.
+ */
 import { useState, useCallback, useEffect, useMemo, type ReactNode } from 'react';
 import { Dimensions, PixelRatio } from 'react-native';
 import type { AdapterPermissions, PermissionStatus, InterfaceContext, EndUserIdentity, AppDisplayConfig } from '@ggui-ai/protocol';

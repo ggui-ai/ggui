@@ -17,7 +17,7 @@
  * produce no preview or only a minimal one."
  *
  * When a truly-no-preview path exists (e.g., a case that routes
- * through the gate's `mcp-apps-render` or `no-story` skip), add it
+ * through the gate's `no-story` skip), add it
  * to the corpus with `emitterEnabled: false` and the runner will
  * wire the render WITHOUT provisional-preview deps.
  */

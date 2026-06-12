@@ -49,6 +49,7 @@ import {
 import {
   deriveContextName,
   type CompiledContractValidators,
+  type McpAppAiGguiRenderMeta,
 } from '@ggui-ai/protocol/integrations/mcp-apps';
 
 /**
@@ -842,5 +843,163 @@ export function deriveRenderMeta(
       : {}),
     ...(gadgets !== undefined ? { gadgets } : {}),
     ...(theme !== undefined ? { theme } : {}),
+  };
+}
+
+/**
+ * Deps fields powering the `ai.ggui/render` slice envelope, shared by
+ * every handler that emits the slice (`ggui_render`, `ggui_update`).
+ *
+ * ONE declaration on purpose — the MCP-Apps-compliance principle
+ * single-sources the render PROJECTION through {@link deriveRenderMeta};
+ * this interface single-sources the deps PLUMBING feeding the
+ * envelope, so a slice field added for one tool cannot silently go
+ * missing on the other. Handler-deps interfaces `extend` this and add
+ * their tool-specific fields.
+ */
+export interface RenderSliceMetaDeps {
+  /**
+   * Bootstrap-credential minter for the MCP Apps outbound path. When
+   * present, the handler's `resultMeta` emits the live-auth trio
+   * (`wsUrl` + `wsToken` + `expiresAt`) on the `ai.ggui/render` slice.
+   * When ABSENT, no auth fields are emitted — non-MCP-Apps hosts read
+   * `{sessionId}` straight off `structuredContent` and resolve the
+   * render-resource themselves.
+   *
+   * Returns the live-auth fields — `{wsUrl, token, expiresAt}`. The
+   * handler adds `sessionId` + `appId` from the render context
+   * itself, plus `runtimeUrl` from the separate `runtimeUrl` dep
+   * (server-level config, not minter-scoped). A minter that's wired
+   * AT ALL is by construction the live-mode minter, so the return
+   * shape pins the fields required. Omit the key for self-contained /
+   * system-card-only deployments.
+   */
+  readonly mintWsToken?: (
+    sessionId: string,
+    appId: string,
+  ) => { wsUrl: string; token: string; expiresAt: string };
+  /**
+   * URL of the renderer bundle the thin shell should fetch, emitted
+   * as {@link McpAppAiGguiRenderMeta.runtimeUrl}. Separate dep (not a
+   * field on `mintWsToken`'s return) because the URL is server config
+   * (same for every render), not a per-mint credential.
+   *
+   * Required when `mintWsToken` is set. Omitted + minter set is a
+   * configuration bug; the assembly falls back to
+   * `/_ggui/iframe-runtime.js` (the same-origin OSS default). Callers
+   * composing the deps bundle inside `@ggui-ai/mcp-server` always
+   * supply it; it's optional here to preserve test construction where
+   * the bootstrap branch isn't exercised.
+   *
+   * Function form (request-aware): when the OSS server sits behind a
+   * tunnel or reverse proxy a static URL can't know the public host —
+   * the server passes a getter resolved lazily inside the request
+   * scope (X-Forwarded-Host when the TCP peer is loopback).
+   */
+  readonly runtimeUrl?: string | (() => string | undefined);
+  /**
+   * Static theme preset id (from `ggui.json#theme`) forwarded onto
+   * the `ai.ggui/render.themeId` slice field so MCP Apps hosts that
+   * mount via `ui/notifications/tool-result` postMessage propagate the
+   * operator's theme into the iframe. Superseded per-call by
+   * `themeProvider` and by a per-render themeId where the tool
+   * supports one (see {@link assembleRenderSliceBase}).
+   */
+  readonly themeId?: string;
+  /** Static theme color mode (from `ggui.json#theme.mode`). */
+  readonly themeMode?: 'light' | 'dark';
+  /**
+   * Live theme getter — resolved per-call instead of per-boot. When
+   * set, supersedes the static `themeId` / `themeMode` deps on every
+   * result-meta computation, so a console save (which mutates the
+   * underlying state cell) reaches the next render/update without a
+   * server restart. Returns `undefined` when no theme is set; the
+   * caller (CLI) constructs a closure reading the shared mutable cell
+   * the console-theme route writes to on POST.
+   */
+  readonly themeProvider?: () =>
+    | {
+        readonly id?: string;
+        readonly mode?: 'light' | 'dark';
+      }
+    | undefined;
+}
+
+/**
+ * Envelope-base fields assembled from {@link RenderSliceMetaDeps} —
+ * the per-call slice plumbing every emitting handler shares.
+ */
+export interface RenderSliceBase {
+  /** Resolved renderer-bundle URL (with the same-origin OSS fallback). */
+  readonly runtimeUrl: string;
+  /**
+   * Live-auth trio remapped to the wire field names (`wsToken`, not
+   * the minter's legacy `token`). Empty object when no minter wired.
+   */
+  readonly authFields: Partial<
+    Pick<McpAppAiGguiRenderMeta, 'wsUrl' | 'wsToken' | 'expiresAt'>
+  >;
+  /** Resolved theme preset id, when any layer produced one. */
+  readonly themeId?: string;
+  /** Resolved theme mode, when any layer produced one. */
+  readonly themeMode?: 'light' | 'dark';
+}
+
+/**
+ * Assemble the shared `ai.ggui/render` envelope base from the shared
+ * deps. ONE implementation of the three formerly hand-mirrored
+ * sub-blocks (`ggui_render` / `ggui_update`):
+ *
+ *   1. `runtimeUrl` resolution — function form invoked lazily inside
+ *      the request scope; `/_ggui/iframe-runtime.js` fallback.
+ *   2. Minted-trio remap — the minter's return names the credential
+ *      `token` (legacy); the render slice uses `wsToken`.
+ *   3. Layered theme resolution — order is operator-debug-wins:
+ *      `themeProvider()` (live console pick) beats the per-render
+ *      `renderThemeId` (agent-set, rare) beats the static deps.
+ *      `themeMode` stays 2-layer (no agent surface sets it
+ *      per-render today).
+ *
+ * Each handler composes the full `McpAppAiGguiRenderMeta` itself —
+ * `ggui_update`'s post-update slice is intentionally a SUBSET (no
+ * gadgets / publicEnv / contract bundle); only this base is shared.
+ */
+export function assembleRenderSliceBase(
+  deps: RenderSliceMetaDeps,
+  call: {
+    readonly sessionId: string;
+    readonly appId: string;
+    /** Per-render theme override the agent set on the GguiSession. */
+    readonly renderThemeId?: string | undefined;
+  },
+): RenderSliceBase {
+  const runtimeUrlRaw =
+    typeof deps.runtimeUrl === 'function'
+      ? deps.runtimeUrl()
+      : deps.runtimeUrl;
+  const runtimeUrl = runtimeUrlRaw ?? '/_ggui/iframe-runtime.js';
+
+  const mintedTrio = deps.mintWsToken
+    ? deps.mintWsToken(call.sessionId, call.appId)
+    : undefined;
+  const authFields: Partial<
+    Pick<McpAppAiGguiRenderMeta, 'wsUrl' | 'wsToken' | 'expiresAt'>
+  > = mintedTrio
+    ? {
+        wsUrl: mintedTrio.wsUrl,
+        wsToken: mintedTrio.token,
+        expiresAt: mintedTrio.expiresAt,
+      }
+    : {};
+
+  const liveTheme = deps.themeProvider?.();
+  const themeId = liveTheme?.id ?? call.renderThemeId ?? deps.themeId;
+  const themeMode = liveTheme?.mode ?? deps.themeMode;
+
+  return {
+    runtimeUrl,
+    authFields,
+    ...(themeId !== undefined ? { themeId } : {}),
+    ...(themeMode !== undefined ? { themeMode } : {}),
   };
 }

@@ -1,6 +1,7 @@
 /**
- * Blueprint coverage guard — the deterministic safety floor for reusing
- * a cached blueprint against a contract-bearing request.
+ * Blueprint coverage report — the deterministic, INFORMATIONAL check
+ * attached to every reuse of a cached blueprint against a
+ * contract-bearing request.
  *
  * Reusing a cached blueprint for a request whose canonical contract
  * differs is safe ONLY when the cached blueprint COVERS the request's

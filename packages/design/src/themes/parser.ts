@@ -2,10 +2,9 @@
  * DTCG Theme Parser
  *
  * Converts a DtcgTheme definition into a ParsedTheme ready for CSS injection.
- * Handles three output artifacts:
+ * Handles two output artifacts:
  *   1. CSS custom properties (--ggui-* variables)
  *   2. @keyframes declarations
- *   3. Canvas configuration object
  */
 
 import type { DtcgTheme, DtcgToken, ParsedTheme } from './types';
@@ -26,7 +25,7 @@ import type { DtcgTheme, DtcgToken, ParsedTheme } from './types';
  *     → composes to `${property} ${duration} ${timingFunction}` (no
  *       property when absent)
  *
- * Arrays (e.g. canvas `colors`) are comma-joined.
+ * Arrays are comma-joined.
  */
 function formatValue(token: DtcgToken<unknown>): string {
   const v = token.$value;
@@ -95,11 +94,6 @@ function buildCssVariables(theme: DtcgTheme): string {
   walkTokens(theme.accessibility, 'accessibility', lines);
   walkTokens(theme.zIndex, 'zIndex', lines);
 
-  // Canvas tokens
-  lines.push(`  --ggui-canvas-mode: ${theme.canvas.mode.$value};`);
-  lines.push(`  --ggui-canvas-speed: ${theme.canvas.speed.$value};`);
-  lines.push(`  --ggui-canvas-background: ${theme.canvas.background.$value};`);
-
   return lines.join('\n');
 }
 
@@ -159,7 +153,7 @@ function buildCssKeyframes(theme: DtcgTheme): string {
  *
  * @param id - Unique theme identifier (e.g. "ggui", "premium-cyberpunk")
  * @param theme - Full DtcgTheme definition
- * @returns ParsedTheme with CSS strings and canvas config
+ * @returns ParsedTheme with CSS strings
  */
 export function parseTheme(id: string, theme: DtcgTheme): ParsedTheme {
   const cssVariablesBody = buildCssVariables(theme);
@@ -178,12 +172,6 @@ export function parseTheme(id: string, theme: DtcgTheme): ParsedTheme {
     cssVariables,
     cssKeyframes,
     css,
-    canvasConfig: {
-      mode: theme.canvas.mode.$value,
-      speed: theme.canvas.speed.$value,
-      colors: theme.canvas.colors.$value,
-      background: String(theme.canvas.background.$value),
-    },
   };
 }
 
@@ -193,7 +181,7 @@ export function parseTheme(id: string, theme: DtcgTheme): ParsedTheme {
 // `ThemeDocument` plain-DTCG file format from `@ggui-ai/project-config`)
 // without requiring the strict `DtcgTheme` shape. They power the
 // `loadTheme({ file })` path where operators ship Figma-Tokens /
-// Style-Dictionary output that may not include `motion`/`canvas`.
+// Style-Dictionary output that may not include `motion`.
 
 /**
  * Convert DTCG token path to CSS variable name.

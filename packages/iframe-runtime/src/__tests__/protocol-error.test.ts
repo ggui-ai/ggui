@@ -9,7 +9,8 @@
  *
  *   2. `connectViaRegistry` — pre-ack `error` frames:
  *        - UPGRADE_REQUIRED → `{kind: 'version'}`
- *        - SESSION_NOT_FOUND / AUTH_REJECTED → `{kind: 'auth'}`
+ *        - SESSION_NOT_FOUND / BOOTSTRAP_* / UNAUTHENTICATED →
+ *          `{kind: 'auth'}` (the §12.2.3 codes servers actually emit)
  *        - other → `{kind: 'protocol'}` with extensibly-closed code
  *      plus client-side version mismatch on the first ack.
  *
@@ -109,13 +110,17 @@ describe('protocol-error constructors', () => {
       code: 'SESSION_NOT_FOUND',
       message: 'gone',
     });
-    expect(fromAuthFailure('TOKEN_EXPIRED')).toEqual({
+    expect(fromAuthFailure('BOOTSTRAP_EXPIRED')).toEqual({
       kind: 'auth',
-      code: 'TOKEN_EXPIRED',
+      code: 'BOOTSTRAP_EXPIRED',
     });
-    expect(fromAuthFailure('AUTH_REJECTED')).toEqual({
+    expect(fromAuthFailure('BOOTSTRAP_INVALID')).toEqual({
       kind: 'auth',
-      code: 'AUTH_REJECTED',
+      code: 'BOOTSTRAP_INVALID',
+    });
+    expect(fromAuthFailure('UNAUTHENTICATED')).toEqual({
+      kind: 'auth',
+      code: 'UNAUTHENTICATED',
     });
   });
 

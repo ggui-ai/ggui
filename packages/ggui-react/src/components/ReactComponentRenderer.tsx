@@ -38,8 +38,6 @@ export interface ReactComponentRendererProps {
   fallback?: ReactNode;
   /** Error handler */
   onError?: (error: Error) => void;
-  /** Called when auto-retry fails — parent should trigger re-generation */
-  onRequestRepair?: (error: Error) => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -68,8 +66,6 @@ const AUTO_RETRY_DELAY = 500;
 interface ErrorBoundaryProps {
   children: ReactNode;
   onError?: (error: Error) => void;
-  /** Called when auto-retry exhausts — passes error for repair. */
-  onRequestRepair?: (error: Error) => void;
 }
 
 interface ErrorBoundaryState {
@@ -78,12 +74,10 @@ interface ErrorBoundaryState {
   catchCount: number;
   /** Whether we're in auto-retry delay */
   autoRetrying: boolean;
-  /** Whether repair was requested */
-  repairRequested: boolean;
 }
 
 class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {
-  state: ErrorBoundaryState = { error: null, catchCount: 0, autoRetrying: false, repairRequested: false };
+  state: ErrorBoundaryState = { error: null, catchCount: 0, autoRetrying: false };
   private retryTimer: ReturnType<typeof setTimeout> | null = null;
 
   static getDerivedStateFromError(error: Error): Partial<ErrorBoundaryState> {
@@ -101,12 +95,8 @@ class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundarySta
         this.setState({ error: null, autoRetrying: false });
       }, AUTO_RETRY_DELAY);
     } else {
-      // Auto-retries exhausted — request repair automatically
+      // Auto-retries exhausted — surface the error
       this.props.onError?.(error);
-      if (this.props.onRequestRepair && !this.state.repairRequested) {
-        this.setState({ repairRequested: true });
-        this.props.onRequestRepair(error);
-      }
     }
   }
 
@@ -115,7 +105,7 @@ class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundarySta
   }
 
   render(): ReactNode {
-    const { error, autoRetrying, repairRequested, catchCount } = this.state;
+    const { error, autoRetrying, catchCount } = this.state;
 
     if (!error) return this.props.children;
 
@@ -139,28 +129,7 @@ class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundarySta
       );
     }
 
-    // Repair requested — show repairing state
-    if (repairRequested) {
-      return (
-        <div style={{
-          display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-          padding: '32px 24px', minHeight: 120, gap: 10, textAlign: 'center',
-          fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-        }}>
-          <div style={{
-            width: 16, height: 16, border: '2px solid rgba(139,92,246,0.2)',
-            borderTopColor: 'rgba(139,92,246,0.7)', borderRadius: '50%',
-            animation: 'ggui-err-spin 0.8s linear infinite',
-          }} />
-          <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.5)' }}>
-            Repairing component...
-          </div>
-          <style>{`@keyframes ggui-err-spin { to { transform: rotate(360deg); } }`}</style>
-        </div>
-      );
-    }
-
-    // Exhausted retries, no repair available — show error UI
+    // Exhausted retries — show error UI
     return (
       <div style={{
         display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
@@ -181,7 +150,7 @@ class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundarySta
           This component encountered an error. Try asking for a different view.
         </div>
         <button
-          onClick={() => this.setState({ error: null, catchCount: 0, repairRequested: false })}
+          onClick={() => this.setState({ error: null, catchCount: 0 })}
           style={{
             marginTop: 4, padding: '8px 20px', borderRadius: 8,
             border: '1px solid rgba(255,255,255,0.15)', background: 'rgba(255,255,255,0.08)',
@@ -230,7 +199,6 @@ export function ReactComponentRenderer({
   cssOverrides,
   fallback = <div>Loading component...</div>,
   onError,
-  onRequestRepair,
 }: ReactComponentRendererProps): React.JSX.Element {
   const reactId = useId();
   const [scopeClass] = useState(() => makeScopeClass(reactId) || `ggui-rcr-${++scopeCounter}`);
@@ -376,7 +344,7 @@ export function ReactComponentRenderer({
   return (
     <div className={scopeClass}>
       <style>{themeCss}{cssOverrides ?? ''}</style>
-      <ErrorBoundary key={code.length} onError={onError} onRequestRepair={onRequestRepair}>
+      <ErrorBoundary key={code.length} onError={onError}>
         <Component {...props} />
       </ErrorBoundary>
     </div>
