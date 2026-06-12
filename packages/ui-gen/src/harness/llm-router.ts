@@ -28,6 +28,7 @@ import type { LLMToolDef } from '../llm.js';
 import type { AnthropicBedrock } from '@anthropic-ai/bedrock-sdk';
 import { createAnthropicClient } from '../adapters/claude/client.js';
 import { getBedrockModelId } from '../adapters/provider-router.js';
+import { toolArgsToJsonObject } from '../adapters/tool-bridge.js';
 import {
   emitLlmTraceEvent,
   newLlmTraceId,
@@ -252,24 +253,6 @@ export abstract class LLMAgent {
     // No-op by default — Anthropic doesn't need this (stateless + auto prompt cache)
   }
 
-  /**
-   * Retry an API call with circuit breaker.
-   *
-   * Per-call: up to 2 retries with exponential backoff + jitter.
-   * Cross-call: tracks consecutive transient failures across the agent session.
-   * After 3 consecutive failures, the circuit opens — all subsequent calls
-   * throw immediately without hitting the API. Since each generation session
-   * creates a fresh agent (createAgent), the circuit resets naturally.
-   *
-   * Retries on:
-   * - Network errors: fetch failed, ECONNRESET, ETIMEDOUT, UND_ERR_HEADERS_TIMEOUT
-   * - Rate limits: HTTP 429
-   * - Server errors: HTTP 500, 502, 503, 529 (overloaded)
-   *
-   * Does NOT retry on:
-   * - Client errors: HTTP 400, 401, 403, 404 (bad request, wrong key, etc.)
-   * - Content policy: HTTP 400 with safety/content filter
-   */
   /**
    * Execute an API call. No retry — if it fails, it fails.
    * Logs the error with provider context and re-throws.
@@ -865,6 +848,45 @@ export class OpenAIAgent extends LLMAgent {
 // GoogleAgent — uses Interactions API (server-side state, automatic caching)
 // =============================================================================
 
+/**
+ * Concatenate text across all `model_output` steps of an interaction
+ * (@google/genai >= 2.0.0 'steps' schema). Steps form a discriminated
+ * union — even at thinking_level 'minimal' a `thought` step is present,
+ * so iterate by discriminant and skip step types we don't consume.
+ */
+function interactionText(interaction: Interactions.Interaction): string {
+  let text = '';
+  for (const step of interaction.steps) {
+    if (step.type === 'model_output') {
+      for (const content of step.content ?? []) {
+        if (content.type === 'text') {
+          text += content.text;
+        }
+      }
+    }
+  }
+  return text;
+}
+
+/** Collect the function-call steps of an interaction. */
+function functionCallSteps(
+  interaction: Interactions.Interaction,
+): Interactions.FunctionCallStep[] {
+  return interaction.steps.filter(
+    (s): s is Interactions.FunctionCallStep => s.type === 'function_call',
+  );
+}
+
+/**
+ * Wrap a user prompt as a `user_input` step. In the 2.x request union a
+ * mixed input array is `Array<Step>` — bare `{type:'text'}` content is
+ * not a Step, so prompts sent alongside function_result steps must be
+ * wrapped.
+ */
+function toUserInputStep(text: string): Interactions.UserInputStep {
+  return { type: 'user_input', content: [{ type: 'text', text }] };
+}
+
 export class GoogleAgent extends LLMAgent {
   readonly provider = 'google' as const;
 
@@ -902,23 +924,15 @@ export class GoogleAgent extends LLMAgent {
 
     const interaction = await this.apiCall(() =>
       client.interactions.create({
-        model: this.resolveModel(model) as Interactions.Model,
+        model: this.resolveModel(model),
         system_instruction: systemPrompt,
         input: userPrompt,
         generation_config: maxTokens ? { max_output_tokens: maxTokens } : undefined,
       }),
     );
 
-    // Extract text from outputs
-    let text = '';
-    for (const output of interaction.outputs ?? []) {
-      if (output.type === 'text' && 'text' in output) {
-        text += (output as { text: string }).text;
-      }
-    }
-
     return {
-      text,
+      text: interactionText(interaction),
       inputTokens: interaction.usage?.total_input_tokens ?? 0,
       outputTokens: interaction.usage?.total_output_tokens ?? 0,
     };
@@ -949,14 +963,15 @@ export class GoogleAgent extends LLMAgent {
     }));
 
     // Chain off previous interaction if available — server has system prompt + tools
-    const resolvedModel = this.resolveModel(model) as Interactions.Model;
+    const resolvedModel = this.resolveModel(model);
 
     // Consume pending tool results — prepend them to the input so the API
-    // sees function_result + new prompt in one call (saves a round-trip)
+    // sees function_result + the new prompt (as a user_input step) in one
+    // call (saves a round-trip)
     const pending = this.pendingToolResults;
     this.pendingToolResults = [];
-    const input: Interactions.Interaction['input'] = pending.length > 0
-      ? [...pending, { type: 'text' as const, text: userPrompt }]
+    const input: string | Interactions.Step[] = pending.length > 0
+      ? [...pending, toUserInputStep(userPrompt)]
       : userPrompt;
 
     const createInteraction = () =>
@@ -996,7 +1011,7 @@ export class GoogleAgent extends LLMAgent {
                   model: resolvedModel,
                   previous_interaction_id: this.lastSessionId,
                   input: pending.length > 0
-                    ? [...pending, { type: 'text' as const, text: retryPrompt }]
+                    ? [...pending, toUserInputStep(retryPrompt)]
                     : retryPrompt,
                   tools: interactionTools,
                   generation_config: { max_output_tokens: 16384 },
@@ -1032,7 +1047,7 @@ export class GoogleAgent extends LLMAgent {
                     model: resolvedModel,
                     previous_interaction_id: this.lastSessionId,
                     input: pending.length > 0
-                      ? [...pending, { type: 'text' as const, text: scopedPrompt }]
+                      ? [...pending, toUserInputStep(scopedPrompt)]
                       : scopedPrompt,
                     tools: scopedInteractionTools,
                     generation_config: { max_output_tokens: 16384 },
@@ -1062,13 +1077,11 @@ export class GoogleAgent extends LLMAgent {
     // Save session ID for chaining subsequent calls
     this.lastSessionId = interaction.id;
 
-    const toolCalls = (interaction.outputs ?? [])
-      .filter((o): o is Interactions.FunctionCallContent => o.type === 'function_call')
-      .map((fc) => ({
-        id: fc.id,
-        name: fc.name,
-        input: (fc.arguments ?? {}) as JsonObject,
-      }));
+    const toolCalls = functionCallSteps(interaction).map((fc) => ({
+      id: fc.id,
+      name: fc.name,
+      input: toolArgsToJsonObject(fc.arguments),
+    }));
 
     return {
       toolCalls,
@@ -1078,7 +1091,7 @@ export class GoogleAgent extends LLMAgent {
   }
 
   // Pending tool results — stored by sendToolResult, consumed by next callTools
-  private pendingToolResults: Interactions.FunctionResultContent[] = [];
+  private pendingToolResults: Interactions.FunctionResultStep[] = [];
 
   override async sendToolResult(results: LLMToolResult[]): Promise<void> {
     // Store results locally — they'll be prepended to the next callTools input.
@@ -1117,7 +1130,7 @@ export class GoogleAgent extends LLMAgent {
     // Turn 1: system instruction + tools + user prompt
     let interaction = await this.apiCall(() =>
       client.interactions.create({
-        model: this.resolveModel(model) as Interactions.Model,
+        model: this.resolveModel(model),
         system_instruction: systemPrompt,
         tools: interactionTools,
         input: userPrompt,
@@ -1132,24 +1145,16 @@ export class GoogleAgent extends LLMAgent {
         totalOut += interaction.usage.total_output_tokens ?? 0;
       }
 
-      const outputs = interaction.outputs ?? [];
-
       // Collect text
-      for (const output of outputs) {
-        if (output.type === 'text' && 'text' in output) {
-          allText += (output as { text: string }).text;
-        }
-      }
+      allText += interactionText(interaction);
 
       // Collect function calls
-      const fnCalls = outputs.filter(
-        (o): o is Interactions.FunctionCallContent => o.type === 'function_call',
-      );
+      const fnCalls = functionCallSteps(interaction);
 
       if (fnCalls.length === 0) break;
 
       // Execute tools and build function_result inputs
-      const results: Interactions.FunctionResultContent[] = [];
+      const results: Interactions.FunctionResultStep[] = [];
       for (const fc of fnCalls) {
         const tool = tools.find((t) => t.name === fc.name);
         if (!tool) {
@@ -1162,7 +1167,7 @@ export class GoogleAgent extends LLMAgent {
           });
           continue;
         }
-        const result = await tool.handler(fc.arguments as JsonObject);
+        const result = await tool.handler(toolArgsToJsonObject(fc.arguments));
         results.push({
           type: 'function_result',
           call_id: fc.id,
@@ -1174,7 +1179,7 @@ export class GoogleAgent extends LLMAgent {
       // Next turn: only send function results — server has the history
       interaction = await this.apiCall(() =>
         client.interactions.create({
-          model: this.resolveModel(model) as Interactions.Model,
+          model: this.resolveModel(model),
           previous_interaction_id: interaction.id,
           input: results,
         }),

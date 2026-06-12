@@ -1222,8 +1222,8 @@ importers:
         specifier: workspace:*
         version: link:../wire
       '@google/genai':
-        specifier: ^1.45.0
-        version: 1.50.1(@modelcontextprotocol/sdk@1.27.1(zod@4.3.6))
+        specifier: ^2.8.0
+        version: 2.8.0(@modelcontextprotocol/sdk@1.27.1(zod@4.3.6))
       '@typescript-eslint/parser':
         specifier: ^8.0.0
         version: 8.59.1(eslint@8.57.1)(typescript@5.9.3)
@@ -2632,6 +2632,15 @@ packages:
 
   '@google/genai@1.50.1':
     resolution: {integrity: sha512-YbkX7H9+1Pt8wOt7DDREy8XSoiL6fRDzZQRyaVBarFf8MR3zHGqVdvM4cLbDXqPhxqvegZShgfxb8kw9C7YhAQ==}
+    engines: {node: '>=20.0.0'}
+    peerDependencies:
+      '@modelcontextprotocol/sdk': 1.27.1
+    peerDependenciesMeta:
+      '@modelcontextprotocol/sdk':
+        optional: true
+
+  '@google/genai@2.8.0':
+    resolution: {integrity: sha512-pc2ayxqO5+O7AvnHBqpNHIk7PAZkHZgL31tbyx0gJZBSS9qPYiQoqwK7oYOw/ePmG6QY4EMSu+304vD5QlhXAw==}
     engines: {node: '>=20.0.0'}
     peerDependencies:
       '@modelcontextprotocol/sdk': 1.27.1
@@ -10411,6 +10420,19 @@ snapshots:
       - supports-color
       - utf-8-validate
 
+  '@google/genai@2.8.0(@modelcontextprotocol/sdk@1.27.1(zod@4.3.6))':
+    dependencies:
+      google-auth-library: 10.6.2
+      p-retry: 4.6.2
+      protobufjs: 7.6.1
+      ws: 8.21.0
+    optionalDependencies:
+      '@modelcontextprotocol/sdk': 1.27.1(zod@4.3.6)
+    transitivePeerDependencies:
+      - bufferutil
+      - supports-color
+      - utf-8-validate
+
   '@grpc/grpc-js@1.14.4':
     dependencies:
       '@grpc/proto-loader': 0.8.1
@@ -10893,7 +10915,7 @@ snapshots:
   '@mikro-orm/mariadb@6.6.13(@mikro-orm/core@6.6.13)(better-sqlite3@12.9.0)(pg@8.20.0)':
     dependencies:
       '@mikro-orm/core': 6.6.13
-      '@mikro-orm/knex': 6.6.14(@mikro-orm/core@6.6.13)(better-sqlite3@12.9.0)(mariadb@3.4.5)(mysql2@3.20.0(@types/node@22.19.15))(pg@8.20.0)
+      '@mikro-orm/knex': 6.6.14(@mikro-orm/core@6.6.13)(better-sqlite3@12.9.0)(mariadb@3.4.5)(pg@8.20.0)(sqlite3@5.1.7)
       mariadb: 3.4.5
     transitivePeerDependencies:
       - better-sqlite3
@@ -10947,7 +10969,7 @@ snapshots:
   '@mikro-orm/postgresql@6.6.13(@mikro-orm/core@6.6.13)(better-sqlite3@12.9.0)(mariadb@3.4.5)':
     dependencies:
       '@mikro-orm/core': 6.6.13
-      '@mikro-orm/knex': 6.6.14(@mikro-orm/core@6.6.13)(better-sqlite3@12.9.0)(mariadb@3.4.5)(mysql2@3.20.0(@types/node@22.19.15))(pg@8.20.0)
+      '@mikro-orm/knex': 6.6.14(@mikro-orm/core@6.6.13)(better-sqlite3@12.9.0)(mariadb@3.4.5)(pg@8.20.0)(sqlite3@5.1.7)
       pg: 8.20.0
       postgres-array: 3.0.4
       postgres-date: 2.1.0

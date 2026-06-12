@@ -1,17 +1,17 @@
 // packages/ui-gen/src/adapters/google/raw.ts
 //
-// Google adapter using the Interactions API (@google/genai).
-// Uses interactions.create() with previous_interaction_id for server-side
-// state management. System prompt and tools sent on turn 1, subsequent turns
-// only send function_result inputs — server remembers context.
+// Google adapter using the Interactions API (@google/genai >= 2.0.0,
+// 'steps' schema). Uses interactions.create() with
+// previous_interaction_id for server-side state management. System
+// prompt and tools sent on turn 1, subsequent turns only send
+// function_result steps — server remembers context.
 
 import type { GoogleGenAI as GoogleGenAIType, Interactions } from '@google/genai';
 import { GeneratorAdapter, hasCredentials } from '../base';
 import type { AdapterConfig, GenerateParams } from '../base';
 import type { AdapterResult, ToolDefinition, ProviderName, AdapterMode } from '../types';
-import { zodToJsonSchema } from '../tool-bridge';
+import { zodToJsonSchema, toolArgsToJsonObject } from '../tool-bridge';
 import { createCapture, captureSourceCode, captureCompiledCode, captureMarkers } from '../extract-code';
-import type { JsonObject } from '@ggui-ai/protocol';
 
 async function loadGoogleGenAI() {
   return import('@google/genai');
@@ -63,7 +63,7 @@ export class GoogleRawAdapter extends GeneratorAdapter {
 
     // Turn 1: send system instruction + tools + user prompt
     let interaction = await this.client.interactions.create({
-      model: params.model as Interactions.Model,
+      model: params.model,
       system_instruction: params.systemPrompt,
       tools,
       input: params.userPrompt,
@@ -79,24 +79,29 @@ export class GoogleRawAdapter extends GeneratorAdapter {
         totalOutputTokens += interaction.usage.total_output_tokens ?? 0;
       }
 
-      const outputs = interaction.outputs ?? [];
-
-      // Scan text outputs for streamSpec/generatorMeta markers
-      for (const output of outputs) {
-        if (output.type === 'text' && 'text' in output) {
-          captureMarkers(capture, (output as { text: string }).text);
+      // Scan model-output text for streamSpec/generatorMeta markers.
+      // `steps` is a discriminated union — even at thinking_level
+      // 'minimal' a `thought` step is present, so iterate by
+      // discriminant and skip step types we don't consume.
+      for (const step of interaction.steps) {
+        if (step.type === 'model_output') {
+          for (const content of step.content ?? []) {
+            if (content.type === 'text') {
+              captureMarkers(capture, content.text);
+            }
+          }
         }
       }
 
       // Collect function calls
-      const functionCalls = outputs.filter(
-        (o): o is Interactions.FunctionCallContent => o.type === 'function_call',
+      const functionCalls = interaction.steps.filter(
+        (s): s is Interactions.FunctionCallStep => s.type === 'function_call',
       );
 
       if (functionCalls.length === 0) break;
 
       // Execute tools and build function_result inputs
-      const results: Interactions.FunctionResultContent[] = [];
+      const results: Interactions.FunctionResultStep[] = [];
 
       for (const fc of functionCalls) {
         const toolDef = params.tools.find((t) => t.name === fc.name);
@@ -111,7 +116,7 @@ export class GoogleRawAdapter extends GeneratorAdapter {
           continue;
         }
 
-        const args = (fc.arguments ?? {}) as JsonObject;
+        const args = toolArgsToJsonObject(fc.arguments);
         captureSourceCode(capture, fc.name, args);
 
         const result = await toolDef.handler(args);
@@ -127,7 +132,7 @@ export class GoogleRawAdapter extends GeneratorAdapter {
 
       // Next turn: only send function results — server has the history
       interaction = await this.client.interactions.create({
-        model: params.model as Interactions.Model,
+        model: params.model,
         previous_interaction_id: interaction.id,
         input: results,
         ...(generationConfig ? { generation_config: generationConfig } : {}),
