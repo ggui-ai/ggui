@@ -55,6 +55,8 @@ const FULL: BlueprintManifest = {
     context: { density: 'compact' },
     seedPrompt: 'one-line weather card',
   },
+  generatorProtocolVersion: 'draft-2026-05-27',
+  toolIdentityCatalogHash: 'a1b2c3d4e5f60718',
   description: 'A weather card blueprint.',
   tags: ['weather', 'card'],
   author: {
@@ -323,6 +325,38 @@ describe('ggui.blueprint.json — strict unknown-key rejection', () => {
     const result = safeParseBlueprintManifest({
       ...MINIMAL,
       somethingExtra: 'oops',
+    });
+    expect(result.success).toBe(false);
+  });
+});
+
+describe('ggui.blueprint.json — persistence-contract stamps', () => {
+  it('accepts a manifest stamped with generatorProtocolVersion (publish paths stamp before signing)', () => {
+    const parsed = parseBlueprintManifest({
+      ...MINIMAL,
+      generatorProtocolVersion: 'draft-2026-05-27',
+    });
+    expect(parsed.generatorProtocolVersion).toBe('draft-2026-05-27');
+  });
+
+  it('stamps are optional — an unstamped manifest still parses (import gates own the drop decision)', () => {
+    const parsed = parseBlueprintManifest(MINIMAL);
+    expect(parsed.generatorProtocolVersion).toBeUndefined();
+    expect(parsed.toolIdentityCatalogHash).toBeUndefined();
+  });
+
+  it('rejects an empty-string generatorProtocolVersion (min(1) — an empty era is a fake stamp)', () => {
+    const result = safeParseBlueprintManifest({
+      ...MINIMAL,
+      generatorProtocolVersion: '',
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects an empty-string toolIdentityCatalogHash', () => {
+    const result = safeParseBlueprintManifest({
+      ...MINIMAL,
+      toolIdentityCatalogHash: '',
     });
     expect(result.success).toBe(false);
   });

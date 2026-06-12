@@ -151,6 +151,22 @@ export const blueprintManifestSchema = z.strictObject({
       "Persona + aesthetic + context + seedPrompt hints that drive the LLM-driven variant selector when multiple blueprints share a `(appId, contractHash)` group. Mirrors `Blueprint.variance` in `@ggui-ai/protocol`.",
     ),
 
+  // ---- Persistence-contract stamps (mirrors `PortableBlueprint`) ----
+  generatorProtocolVersion: z
+    .string()
+    .min(1)
+    .optional()
+    .describe(
+      'PROTOCOL_VERSION of the toolchain that authored + signed this manifest. Import gates compare it against the importing deployment’s era before admitting the blueprint into a reuse pool — an era mismatch (or a missing stamp) drops the row loudly instead of serving code generated against a different protocol shape. Publishing tools stamp this automatically right before signing; deployments that consume installed blueprints into a matcher pool require it.',
+    ),
+  toolIdentityCatalogHash: z
+    .string()
+    .min(1)
+    .optional()
+    .describe(
+      'SHA256(16) of the tool-identity catalog used to canonicalize `contract` at authoring time. Importers re-canonicalize against their own catalog and recompute the key; a divergence means the same intent would mis-key and silently cold-gen, so it is rejected. Optional — most marketplace blueprints are authored without a live tool catalog, which leaves the import gate’s re-key check inert.',
+    ),
+
   // ---- Shared metadata ----
   ...sharedMetadataShape,
 });

@@ -42,6 +42,7 @@ import {
   derivePublicKeyId,
   publicKeyFromPrivate,
 } from '@ggui-ai/gadget-signing';
+import { PROTOCOL_VERSION } from '@ggui-ai/protocol';
 import { sha384 } from '@noble/hashes/sha512.js';
 
 // Mimic the agent's removed `computeSha384` helper using the same
@@ -886,6 +887,49 @@ describe('runArtifactPublish', () => {
     expect(body.bundle).toBeUndefined();
     expect(body.bundleSha384).toBeUndefined();
     expect(body.signature.algorithm).toBe('ed25519');
+    // Persistence-contract era stamp (step 2a): the publish path stamps
+    // the manifest BEFORE signing, so installed-blueprint import gates
+    // (which drop unstamped rows) admit registry-published blueprints.
+    expect(body.manifest.generatorProtocolVersion).toBe(PROTOCOL_VERSION);
+  });
+
+  it('blueprint publish overwrites a hand-authored generatorProtocolVersion with the signing toolchain era', async () => {
+    // An author cannot truthfully claim a DIFFERENT toolchain's era —
+    // the stamp is owned by the toolchain that validates + signs.
+    writeFileSync(
+      join(env.repoDir, 'ggui.blueprint.json'),
+      JSON.stringify(
+        { ...VALID_BLUEPRINT, generatorProtocolVersion: 'draft-1999-01-01' },
+        null,
+        2,
+      ),
+    );
+    seedLoginSession();
+    const io = captureIO();
+    const conformance = vi.fn(async () => jsonResponse(200, { ok: true }));
+    const publish = vi.fn(async (_url: string, _init?: RequestInit) =>
+      jsonResponse(201, {
+        artifactId: '@you/login-form',
+        version: '1.0.0',
+        manifestUrl: 'https://r.example/p/manifest.json',
+        installCommand: 'ggui install @you/login-form@1.0.0 --registry=https://r.example',
+      }),
+    );
+
+    const result = await runArtifactPublish(
+      baseOpts({
+        kind: 'blueprint',
+        stdout: io.stdoutFn,
+        stderr: io.stderrFn,
+        fetch: makeFetchStub({
+          '/conformance/check': conformance,
+          '/publish': publish,
+        }),
+      }),
+    );
+    expect(result.ok).toBe(true);
+    const body = JSON.parse(publish.mock.calls[0][1]?.body as string);
+    expect(body.manifest.generatorProtocolVersion).toBe(PROTOCOL_VERSION);
   });
 
   it('returns no_registry_resolved when none of flag/env/ggui.json is set', async () => {

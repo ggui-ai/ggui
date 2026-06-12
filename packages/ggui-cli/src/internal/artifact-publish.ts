@@ -77,6 +77,7 @@ import {
   signBundleSigstore,
   type GadgetSignature,
 } from '@ggui-ai/gadget-signing';
+import { PROTOCOL_VERSION } from '@ggui-ai/protocol';
 import {
   resolveOidcToken,
   OidcResolutionError,
@@ -368,9 +369,23 @@ export async function runArtifactPublish(
     }
     return { ok: false, exitCode: 1, error: manifestRes.error };
   }
-  const { manifest, manifestPath } = manifestRes;
+  const { manifestPath } = manifestRes;
+  // ---- step 2a: stamp the persistence-contract era (blueprints) ----
+  // `generatorProtocolVersion` is the import-gate era stamp (mirrors
+  // `PortableBlueprint`): deployments that feed installed blueprints
+  // into a matcher pool REQUIRE it and drop unstamped rows loudly.
+  // The SIGNING toolchain owns the claim — it validates the manifest
+  // against its own protocol era and signs the stamped bytes — so the
+  // stamp is set here, BEFORE the signature payload is computed, and
+  // overwrites any hand-authored value (an author cannot truthfully
+  // claim a different toolchain's era). Gadgets never enter a matcher
+  // pool; they stay unstamped.
+  const manifest =
+    manifestRes.manifest.kind === 'blueprint'
+      ? { ...manifestRes.manifest, generatorProtocolVersion: PROTOCOL_VERSION }
+      : manifestRes.manifest;
 
-  // ---- step 2a: enforce verb / manifest kind alignment ----
+  // ---- step 2b: enforce verb / manifest kind alignment ----
   if (manifest.kind !== opts.kind) {
     const foundFile =
       manifest.kind === 'blueprint'
