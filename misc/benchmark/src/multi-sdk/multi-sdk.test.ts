@@ -1,4 +1,4 @@
-// core/src/benchmarks/multi-sdk/multi-sdk.test.ts
+// oss/misc/benchmark/src/multi-sdk/multi-sdk.test.ts
 //
 // Unit tests for the multi-SDK benchmark infrastructure.
 // No API calls — tests tool definitions, cost calculation, reporting, etc.
@@ -21,7 +21,24 @@ import { BENCHMARK_COMMITS, getBenchmarkCommit } from './commits';
 import { generateReport, renderReportMarkdown } from './reporter';
 import { calculateCost } from './runner';
 import { getDefaultVariants, getSpeedVariants, getHybridVariants, getRawVsSdkVariants } from './variants';
-import type { BenchmarkRunResult } from './types';
+import type { BenchmarkRunResult, PostEvalResult } from './types';
+import { AESTHETIC_JUDGE_MODEL, AESTHETIC_PROMPT_VERSION } from './post-eval';
+
+/** Build a PostEvalResult-shaped fixture matching the runner's real output. */
+function mkEval(
+  score: number,
+  dimensions: PostEvalResult['dimensions'],
+): PostEvalResult {
+  return {
+    passed: score >= 70,
+    score,
+    dimensions,
+    judge: { model: AESTHETIC_JUDGE_MODEL, promptVersion: AESTHETIC_PROMPT_VERSION },
+    issues: [],
+    critique: 'fixture critique',
+    evalTimeMs: 1200,
+  };
+}
 
 // =============================================================================
 // Tool Definitions
@@ -264,12 +281,12 @@ describe('MODEL_REGISTRY', () => {
 // =============================================================================
 
 describe('Benchmark Variants', () => {
-  it('default variants cover all 12 SDK × tier combos', () => {
+  it('default variants cover all 9 SDK × tier combos', () => {
     const variants = getDefaultVariants();
-    expect(variants).toHaveLength(12);
+    expect(variants).toHaveLength(9);
 
     const combos = variants.map((v) => `${v.sdkName}-${v.tier}`);
-    for (const sdk of ['claude', 'openai', 'google', 'openrouter'] as const) {
+    for (const sdk of ['claude', 'openai', 'google'] as const) {
       for (const tier of ['fast', 'balanced', 'premium'] as const) {
         expect(combos).toContain(`${sdk}-${tier}`);
       }
@@ -382,12 +399,7 @@ describe('Report Generator', () => {
         generationTimeMs: 15000,
         turnsUsed: 8,
       },
-      evaluation: {
-        passed: true,
-        finalScore: 82,
-        dimensions: { completeness: 85, visualPolish: 80, interactivity: 75, accessibility: 90, codeQuality: 80 },
-        issues: [],
-      },
+      evaluation: mkEval(82, { layout: 85, designTokens: 80, hierarchy: 75, polish: 90, dataPresentation: 80 }),
       estimatedCostUsd: 0.015,
       timestamp: '2026-03-15T00:00:00Z',
       generator: 'ui-gen-default-haiku-4-5',
@@ -401,12 +413,7 @@ describe('Report Generator', () => {
         generationTimeMs: 12000,
         turnsUsed: 6,
       },
-      evaluation: {
-        passed: true,
-        finalScore: 78,
-        dimensions: { completeness: 80, visualPolish: 75, interactivity: 70, accessibility: 85, codeQuality: 80 },
-        issues: [],
-      },
+      evaluation: mkEval(78, { layout: 80, designTokens: 75, hierarchy: 70, polish: 85, dataPresentation: 80 }),
       estimatedCostUsd: 0.027,
       timestamp: '2026-03-15T00:00:00Z',
       generator: 'ui-gen-default-haiku-4-5',

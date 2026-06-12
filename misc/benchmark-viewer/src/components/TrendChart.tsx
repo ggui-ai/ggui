@@ -12,9 +12,16 @@ interface Props {
   maxRuns?: number;
 }
 
-interface ProviderTrend {
+interface VariantTrend {
+  /** Variant id — the trend key. Two variants on the same provider stay distinct lines. */
+  variantId: string;
+  /** Provider — drives line color only. */
   sdkName: string;
-  /** Aligned to the runs slice — undefined for runs missing this provider. */
+  /**
+   * Aligned to the runs slice — undefined for runs missing this
+   * variant AND for the −1 "not evaluated" sentinel (an unevaluated
+   * run is a gap in the line, not a zero score).
+   */
   scores: Array<number | undefined>;
 }
 
@@ -38,10 +45,13 @@ const PROVIDER_COLOR: Record<string, string> = {
 const FALLBACK_COLOR = '#3D3D3D';
 
 /**
- * Score-per-provider over time.
+ * Score-per-variant over time.
  *
- * Fetches recent reports (up to maxRuns) in parallel on mount, computes
- * per-provider avg score per run, renders pure SVG. No chart library.
+ * Fetches recent reports (up to maxRuns) in parallel on mount, plots
+ * each variant's avg score per run, renders pure SVG. No chart library.
+ * Keyed by variantId so a report carrying multiple variants per
+ * provider (e.g. fast/balanced/premium tiers) doesn't silently
+ * overwrite points; the −1 "not evaluated" sentinel renders as a gap.
  *
  * Network: N small fetches per visit, where N = min(maxRuns, runs.length).
  * Each report is ~50KB compressed; 14 runs ≈ 700KB. Acceptable on
@@ -82,22 +92,30 @@ export function TrendChart({ dataSource, runs, maxRuns = 14 }: Props) {
     };
   }, [dataSource, visibleRuns]);
 
-  const trends: ProviderTrend[] = useMemo(() => {
-    const byProvider = new Map<string, ProviderTrend>();
+  const trends: VariantTrend[] = useMemo(() => {
+    const byVariant = new Map<string, VariantTrend>();
     for (const run of visibleRuns) {
       const report = reports.get(run.date);
       if (!report) continue;
       for (const v of report.variantSummaries) {
-        let trend = byProvider.get(v.sdkName);
+        let trend = byVariant.get(v.variantId);
         if (!trend) {
-          trend = { sdkName: v.sdkName, scores: visibleRuns.map(() => undefined) };
-          byProvider.set(v.sdkName, trend);
+          trend = {
+            variantId: v.variantId,
+            sdkName: v.sdkName,
+            scores: visibleRuns.map(() => undefined),
+          };
+          byVariant.set(v.variantId, trend);
         }
         const idx = visibleRuns.findIndex((r) => r.date === run.date);
-        if (idx !== -1) trend.scores[idx] = v.avgScore;
+        // avgScore < 0 is the "not evaluated" sentinel — leave the
+        // point undefined so the line breaks instead of plotting 0.
+        if (idx !== -1 && v.avgScore >= 0) trend.scores[idx] = v.avgScore;
       }
     }
-    return Array.from(byProvider.values()).sort((a, b) => a.sdkName.localeCompare(b.sdkName));
+    return Array.from(byVariant.values()).sort((a, b) =>
+      a.variantId.localeCompare(b.variantId),
+    );
   }, [reports, visibleRuns]);
 
   if (visibleRuns.length === 0) {
@@ -107,7 +125,7 @@ export function TrendChart({ dataSource, runs, maxRuns = 14 }: Props) {
   return (
     <section className="mb-10">
       <div className="flex items-baseline justify-between mb-3">
-        <p className="eyebrow">trend · score by provider</p>
+        <p className="eyebrow">trend · score by variant</p>
         {loading && <span className="text-ink-4 font-mono text-xs">loading…</span>}
       </div>
 
@@ -117,7 +135,7 @@ export function TrendChart({ dataSource, runs, maxRuns = 14 }: Props) {
           className="w-full"
           style={{ minWidth: '480px', maxWidth: `${CHART_W}px` }}
           role="img"
-          aria-label="Score trend per provider over recent runs"
+          aria-label="Score trend per variant over recent runs"
         >
           {/* Y-axis grid + labels (0, 50, 100) */}
           {[0, 50, 100].map((y) => {
@@ -167,27 +185,25 @@ export function TrendChart({ dataSource, runs, maxRuns = 14 }: Props) {
               );
             })}
 
-          {/* Provider lines + dots */}
+          {/* Variant lines + dots. A gap (missing run or the −1
+              "not evaluated" sentinel) breaks the line into separate
+              segments instead of bridging across it. */}
           {trends.map((trend) => {
             const color = PROVIDER_COLOR[trend.sdkName] ?? FALLBACK_COLOR;
-            const points = trend.scores
-              .map((s, i) =>
-                s === undefined
-                  ? null
-                  : `${runIndexToX(i, visibleRuns.length)},${scoreToY(s)}`,
-              )
-              .filter((p): p is string => p !== null)
-              .join(' ');
+            const segments = toSegments(trend.scores, visibleRuns.length);
             return (
-              <g key={trend.sdkName}>
-                <polyline
-                  points={points}
-                  fill="none"
-                  stroke={color}
-                  strokeWidth={1.5}
-                  strokeLinejoin="round"
-                  strokeLinecap="round"
-                />
+              <g key={trend.variantId}>
+                {segments.map((points, segIdx) => (
+                  <polyline
+                    key={segIdx}
+                    points={points}
+                    fill="none"
+                    stroke={color}
+                    strokeWidth={1.5}
+                    strokeLinejoin="round"
+                    strokeLinecap="round"
+                  />
+                ))}
                 {trend.scores.map((s, i) =>
                   s === undefined ? null : (
                     <circle
@@ -197,7 +213,7 @@ export function TrendChart({ dataSource, runs, maxRuns = 14 }: Props) {
                       r={3}
                       fill={color}
                     >
-                      <title>{`${trend.sdkName} · ${visibleRuns[i]?.date} · ${formatScore(s)}`}</title>
+                      <title>{`${trend.variantId} · ${visibleRuns[i]?.date} · ${formatScore(s)}`}</title>
                     </circle>
                   ),
                 )}
@@ -207,19 +223,19 @@ export function TrendChart({ dataSource, runs, maxRuns = 14 }: Props) {
         </svg>
       </div>
 
-      {/* Legend — provider name + final score */}
+      {/* Legend — variant id + most recent score */}
       <ul className="flex flex-wrap gap-x-6 gap-y-1 mt-3 text-sm">
         {trends.map((trend) => {
           const lastScore = [...trend.scores].reverse().find((s) => s !== undefined);
           const color = PROVIDER_COLOR[trend.sdkName] ?? FALLBACK_COLOR;
           return (
-            <li key={trend.sdkName} className="flex items-center gap-2">
+            <li key={trend.variantId} className="flex items-center gap-2">
               <span
                 aria-hidden
                 className="inline-block w-3 h-0.5"
                 style={{ backgroundColor: color }}
               />
-              <span className="font-mono text-ink">{trend.sdkName}</span>
+              <span className="font-mono text-ink">{trend.variantId}</span>
               {lastScore !== undefined && (
                 <span className="font-mono text-ink-3 text-xs">{formatScore(lastScore)}</span>
               )}
@@ -229,6 +245,29 @@ export function TrendChart({ dataSource, runs, maxRuns = 14 }: Props) {
       </ul>
     </section>
   );
+}
+
+/**
+ * Split a score series into contiguous polyline point strings.
+ * `undefined` entries (missing run / not-evaluated sentinel) terminate
+ * the current segment — the chart shows a gap rather than a bridge.
+ */
+function toSegments(
+  scores: Array<number | undefined>,
+  total: number,
+): string[] {
+  const segments: string[] = [];
+  let current: string[] = [];
+  scores.forEach((s, i) => {
+    if (s === undefined) {
+      if (current.length > 0) segments.push(current.join(' '));
+      current = [];
+      return;
+    }
+    current.push(`${runIndexToX(i, total)},${scoreToY(s)}`);
+  });
+  if (current.length > 0) segments.push(current.join(' '));
+  return segments;
 }
 
 function scoreToY(score: number): number {

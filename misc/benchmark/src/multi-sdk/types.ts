@@ -1,16 +1,17 @@
-// core/src/benchmarks/multi-sdk/types.ts
+// oss/misc/benchmark/src/multi-sdk/types.ts
 
 import type { GadgetDescriptor, ModelTier, LlmProvider, DataContract, JsonObject } from '@ggui-ai/protocol';
-import type { DimensionScores, EvaluationResult } from '@ggui-ai/ui-gen/evaluation/types';
 import type { EvalResult } from '@ggui-ai/ui-gen/evaluation';
 import type { ProviderName, AdapterResult, AdapterMode } from '@ggui-ai/ui-gen/adapters/types';
-import type { ModelRoles, RenderingContext } from '@ggui-ai/ui-gen/harness/result-types';
+import type { GenerationResult, ModelRoles, RenderingContext } from '@ggui-ai/ui-gen/harness/result-types';
+import type { AestheticScores, JudgeDisclosure, PostEvalResult } from './post-eval.js';
 import type { BenchmarkStorage } from './storage/types.js';
 
 export { PROVIDER_DISPLAY_NAMES } from '@ggui-ai/ui-gen/adapters/types';
 
 // Re-export for use in this module
-export type { ProviderName, AdapterResult, AdapterMode };
+export type { ProviderName, AdapterResult, AdapterMode, GenerationResult };
+export type { AestheticScores, JudgeDisclosure, PostEvalResult };
 
 // =============================================================================
 // Benchmark Variant (a single SDK + model combo)
@@ -195,10 +196,16 @@ export interface BenchmarkRunResult {
   variant: BenchmarkVariant;
   /** Which commit input was used */
   commit: BenchmarkCommit;
-  /** Generation result (null if failed) */
-  generation: AdapterResult | null;
-  /** Quality evaluation (null if generation failed or skipped) */
-  evaluation: EvaluationResult | import('./post-eval').PostEvalResult | null;
+  /**
+   * Generation result (null if failed). The harness dispatch path
+   * returns the richer {@link GenerationResult} (breakdown, evalResult,
+   * passesUsed); direct adapter runs return the base
+   * {@link AdapterResult}. Narrow with `'breakdown' in generation` /
+   * `'evalResult' in generation` — never cast.
+   */
+  generation: GenerationResult | AdapterResult | null;
+  /** Post-gen aesthetic judge result (null if generation failed or eval skipped) */
+  evaluation: PostEvalResult | null;
   /** Three-tier evaluation result (tier 0 + LLM tier 1+2 + visual) */
   tierEvaluation?: EvalResult;
   /** Calculated cost in USD */
@@ -268,6 +275,12 @@ export interface BenchmarkReport {
     successCount: number;
     failureCount: number;
     successRate: number;
+    /**
+     * Disclosure of the aesthetic judge that produced every `score` in
+     * this report. Absent when no result carries an evaluation (e.g.
+     * `skipEvaluation` runs) — a report without scores has no judge.
+     */
+    judge?: JudgeDisclosure;
   };
   results: BenchmarkRunResult[];
   variantSummaries: VariantSummary[];
@@ -349,7 +362,8 @@ export interface VariantSummary {
   avgTimeMs: number;
   avgCostUsd: number;
   successRate: number;
-  dimensionAvgs: DimensionScores;
+  /** Per-dimension averages over the judge's 5 measured dimensions. */
+  dimensionAvgs: AestheticScores;
   /** Three-tier evaluation outcome counts */
   tierOutcomes?: {
     pass: number;   // runs with no fail issues
@@ -397,14 +411,23 @@ export interface BenchmarkConfig {
   claudeUseBedrock?: boolean;
   /** Progress callback for streaming updates to the viewer */
   onProgress?: (event: { completed: number; total: number; message?: string }) => void;
-  /** Visual evaluation config (screenshot + multimodal LLM scoring) */
+  /**
+   * Visual evaluation config (screenshot + multimodal LLM scoring),
+   * forwarded into `dispatchGeneration`. The visual judge model is the
+   * session's in-loop evaluation agent (`--eval` / `modelRoles.evaluation`,
+   * falling back to the coding agent) — it is not configurable here.
+   */
   visualEvaluation?: {
     enabled: boolean;
-    provider?: "claude" | "google";
-    model?: string;
     passThreshold?: number;
     viewport?: { width: number; height: number };
   };
+  /**
+   * Playwright module handle. Presence (an object with a `chromium`
+   * field) marks the advanced generator as runnable; absent, advanced
+   * variants short-circuit to a SKIP error result.
+   */
+  playwright?: { chromium?: unknown };
 }
 
 /**
@@ -434,12 +457,12 @@ export interface BenchmarkRunnerConfig {
   apiKeys?: Partial<Record<string, string>>;
   /** Use Bedrock for Claude */
   claudeUseBedrock?: boolean;
-  /** Visual evaluation config */
+  /** Visual evaluation config — see {@link BenchmarkConfig.visualEvaluation}. */
   visualEvaluation?: {
     enabled: boolean;
-    provider?: 'claude' | 'google';
-    model?: string;
     passThreshold?: number;
     viewport?: { width: number; height: number };
   };
+  /** Playwright module handle — see {@link BenchmarkConfig.playwright}. */
+  playwright?: { chromium?: unknown };
 }

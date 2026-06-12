@@ -140,7 +140,7 @@ function VariantRow({
       <td className="py-3 pl-6 text-right align-top">
         <span className="font-mono text-ink">{formatScore(variant.avgScore)}</span>
         <span className="block font-mono text-xs text-ink-4 mt-0.5">
-          {formatPercent(variant.passRate)} · {formatDurationMs(variant.avgTimeMs)} ·{' '}
+          {formatPercent(variant.successRate)} · {formatDurationMs(variant.avgTimeMs)} ·{' '}
           {formatCostUsd(variant.avgCostUsd)}
         </span>
       </td>
@@ -177,7 +177,10 @@ function ResultCell({
       aria-pressed={isSelected}
     >
       <span className="font-mono">
-        {failed ? 'fail' : evalScore !== null ? formatScore(evalScore) : 'pass'}
+        {/* No score ≠ pass — a cell without a readable score renders "—".
+            The judge's threshold verdict lives in `evaluation.passed`;
+            this cell shows the score itself or nothing. */}
+        {failed ? 'fail' : evalScore !== null ? formatScore(evalScore) : '—'}
       </span>
       <span
         className={`block font-mono text-xs mt-0.5 ${

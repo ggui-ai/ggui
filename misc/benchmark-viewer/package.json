@@ -13,7 +13,7 @@
   "repository": {
     "type": "git",
     "url": "https://github.com/ggui-ai/ggui.git",
-    "directory": "packages/benchmark-viewer"
+    "directory": "misc/benchmark-viewer"
   },
   "exports": {
     ".": "./src/index.ts",

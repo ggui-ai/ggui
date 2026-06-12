@@ -26,7 +26,9 @@ export function SummaryHeader({ report, date }: Props) {
           <dd className="font-mono text-base">{formatPercent(meta.successRate)}</dd>
         </div>
         <div>
-          <dt className="eyebrow">passed</dt>
+          {/* successCount = generation produced output without erroring —
+              NOT a quality-threshold pass count. Label accordingly. */}
+          <dt className="eyebrow">generated</dt>
           <dd className="font-mono text-base">
             {meta.successCount}/{meta.totalRuns}
           </dd>
@@ -42,6 +44,11 @@ export function SummaryHeader({ report, date }: Props) {
           </dd>
         </div>
       </dl>
+      {meta.judge && (
+        <p className="font-mono text-xs text-ink-4 mt-3">
+          scores judged by {meta.judge.model} ({meta.judge.promptVersion})
+        </p>
+      )}
     </header>
   );
 }

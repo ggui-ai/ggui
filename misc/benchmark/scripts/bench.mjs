@@ -17,15 +17,19 @@
  *   --commit, -c     Commit ID(s): weather-card, survey-form, etc. (comma-separated)
  *   --model, -m      Model override for coding phase (e.g., gemini-3.1-flash-lite)
  *   --think          Model override for planning phase
- *   --eval           Model override for evaluation phase
- *   --max-turns      Max coding attempts (default: 10)
+ *   --eval           Model override for the IN-LOOP evaluation agent (LLM eval
+ *                    rounds + eval-fix). Does NOT change the post-gen aesthetic
+ *                    judge — that is pinned and disclosed in the report's
+ *                    meta.judge (see src/multi-sdk/post-eval.ts).
+ *   --max-turns      Max coding attempts (default: 30)
  *   --max-eval       Max evaluation rounds (default: 3)
  *   --timeout        Timeout in ms (default: 300000)
  *   --threshold      Pass threshold 0-100 (default: 70)
- *   --no-eval        Skip evaluation phase
- *   --visual         Enable visual evaluation (screenshot + multimodal LLM scoring)
- *   --visual-provider  Provider for visual eval: claude or google (default: google)
- *   --visual-model   Model override for visual evaluation
+ *   --no-eval        Skip ALL evaluation: zeroes in-loop eval rounds AND skips
+ *                    the post-gen aesthetic judge (no Anthropic call, no score)
+ *   --visual         Enable in-loop visual evaluation (screenshot + multimodal
+ *                    LLM scoring during eval rounds). The visual judge is the
+ *                    in-loop evaluation agent (--eval), not a separate model.
  *   --quality        Quality mode: fast (default), auto-improve, high-quality
  *   --preset         Named preset: quick, full, coding-agent
  *   --list           List available commits and exit
@@ -124,10 +128,11 @@ const PRESETS = {
   },
   full: {
     providers: ['claude', 'openai', 'google'],
-    // Every benchmark commit — includes the gadget commits
-    // (kanban-board / chat-interface hook gadgets, leaflet-map /
-    // revenue-chart component gadgets) so a "full" run measures
-    // gadget generation, not just design-system primitives.
+    // Every benchmark commit — includes the two gadget commits
+    // (leaflet-map: registered <LeafletMap> component gadget;
+    // revenue-chart: <Chart> component + useChartTheme hook gadget)
+    // so a "full" run measures gadget generation, not just
+    // design-system primitives.
     commits: [
       'weather-card',
       'survey-form',
@@ -164,12 +169,14 @@ const codingModel = getArg(['--model', '-m'], preset?.model || null);
 const thinkModel = getArg(['--think'], null);
 const evalModel = getArg(['--eval'], null);
 const maxAttempts = parseInt(getArg(['--max-turns'], String(preset?.maxAttempts ?? 30)), 10);
-const maxEvalRounds = hasFlag(['--no-eval']) ? 0 : parseInt(getArg(['--max-eval'], String(preset?.maxEvalRounds ?? 3)), 10);
+// --no-eval kills BOTH evaluation surfaces: the in-loop eval rounds
+// (maxEvalRounds=0) and the post-gen aesthetic judge (skipEvaluation).
+// Pre-fix it only zeroed the rounds, so the judge still ran + billed.
+const skipEvaluation = hasFlag(['--no-eval']);
+const maxEvalRounds = skipEvaluation ? 0 : parseInt(getArg(['--max-eval'], String(preset?.maxEvalRounds ?? 3)), 10);
 const timeoutMs = parseInt(getArg(['--timeout'], String(preset?.timeout ?? 300000)), 10);
 const passThreshold = parseInt(getArg(['--threshold'], '70'), 10);
 const visualEnabled = hasFlag(['--visual']);
-const visualProvider = getArg(['--visual-provider'], 'google');
-const visualModel = getArg(['--visual-model'], null);
 const qualityMode = getArg(['--quality'], 'fast');
 
 // Harness selector retired 2026-04-27 (Step 4 of the cloud→OSS
@@ -202,13 +209,14 @@ console.log(`  Providers:    ${providers.join(', ')}`);
 console.log(`  Commits:      ${commits.join(', ')}`);
 if (codingModel) console.log(`  Coding model: ${codingModel}`);
 if (thinkModel) console.log(`  Think model:  ${thinkModel}`);
-if (evalModel) console.log(`  Eval model:   ${evalModel}`);
+if (evalModel) console.log(`  In-loop eval model: ${evalModel} (post-gen judge stays pinned)`);
 console.log(`  Max turns:    ${maxAttempts}`);
 console.log(`  Eval rounds:  ${maxEvalRounds}`);
+if (skipEvaluation) console.log(`  Evaluation:   SKIPPED (--no-eval: no eval rounds, no aesthetic judge)`);
 console.log(`  Timeout:      ${timeoutMs}ms`);
 console.log(`  Threshold:    ${passThreshold}`);
 console.log(`  Quality:      ${qualityMode}`);
-if (visualEnabled) console.log(`  Visual eval:  ${visualProvider}${visualModel ? ` (${visualModel})` : ''}`);
+if (visualEnabled) console.log(`  Visual eval:  enabled (judge = in-loop evaluation agent)`);
 console.log('');
 
 const totalRuns = providers.length * commits.length;
@@ -252,7 +260,6 @@ const DEFAULT_MODELS = {
   claude: 'anthropic/claude-haiku-4-5',
   openai: 'openai/gpt-5.4-mini',
   google: 'gemini/gemini-3.1-flash-lite',
-  openrouter: 'openrouter/anthropic/claude-haiku-4-5',
 };
 
 const SCREEN_MAP = {
@@ -350,6 +357,7 @@ const run = async () => {
     passThreshold,
     maxAttempts,
     maxEvalRounds,
+    skipEvaluation,
     qualityMode,
     onProgress: (event) => {
       const pct = event.total ? Math.round((event.completed / event.total) * 100) : 0;
@@ -358,8 +366,6 @@ const run = async () => {
     ...(visualEnabled ? {
       visualEvaluation: {
         enabled: true,
-        provider: visualProvider,
-        model: visualModel,
         passThreshold: Math.max(passThreshold - 20, 60),
       },
     } : {}),
@@ -419,7 +425,9 @@ const run = async () => {
   await storage.saveReport({ reportId, report: displayReport, compiledComponents });
 
   const { meta } = report;
-  console.log(`\n  ✓ Complete! ${meta.successCount}/${meta.totalRuns} passed in ${(meta.totalDurationMs / 1000).toFixed(1)}s`);
+  // successCount = generation produced output without erroring — not a
+  // quality-threshold pass count.
+  console.log(`\n  ✓ Complete! ${meta.successCount}/${meta.totalRuns} generated in ${(meta.totalDurationMs / 1000).toFixed(1)}s`);
   console.log(`  Report: ${outputDir}/${reportId}.json`);
 };
 

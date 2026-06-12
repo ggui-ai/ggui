@@ -1,6 +1,6 @@
 import type { BenchmarkRunResult } from '../types';
 import { formatCostUsd, formatDurationMs, formatScore } from '../format';
-import { readEvalScore, readDimensions } from '../eval-helpers';
+import { readEvalScore, readDimensions, readJudge } from '../eval-helpers';
 import { DimensionScores } from './DimensionScores';
 
 interface Props {
@@ -11,13 +11,15 @@ interface Props {
 /**
  * Inline detail panel for a selected (variant, commit) cell.
  *
- * Shows: prompt, top-line metrics, dimension scores, live preview iframe,
- * source code, compiled code. Robust to schema drift between bench
- * runner versions — falls back gracefully when fields are absent.
+ * Shows: top-line metrics (score, time, cost, turns, tokens), judge
+ * disclosure, the judge's 5-dimension breakdown, and the error when the
+ * cell failed. Robust to schema drift between bench runner versions —
+ * falls back gracefully when fields are absent.
  */
 export function ResultDetail({ result, onClose }: Props) {
   const evalScore = readEvalScore(result.evaluation);
   const dimensions = readDimensions(result.evaluation);
+  const judge = readJudge(result.evaluation);
   const tokens = result.generation?.tokens;
   const modelLabel = result.variant.modelId?.split('/').pop() ?? result.variant.tier;
   const generationTimeMs = result.generation?.generationTimeMs;
@@ -43,7 +45,7 @@ export function ResultDetail({ result, onClose }: Props) {
       </div>
 
       <dl className="grid grid-cols-2 sm:grid-cols-4 gap-x-8 gap-y-2 text-sm mb-6">
-        <Stat label="score" value={evalScore !== null ? formatScore(evalScore) : 'n/a'} />
+        <Stat label="score" value={evalScore !== null ? formatScore(evalScore) : '—'} />
         <Stat
           label="time"
           value={
@@ -61,6 +63,9 @@ export function ResultDetail({ result, onClose }: Props) {
             <Stat label="total tokens" value={tokens.total.toLocaleString()} />
           </>
         )}
+        {judge && (
+          <Stat label="judge" value={`${judge.model} (${judge.promptVersion})`} />
+        )}
       </dl>
 
       {dimensions && <DimensionScores scores={dimensions} />}
@@ -70,18 +75,6 @@ export function ResultDetail({ result, onClose }: Props) {
           <p className="eyebrow text-signal mb-1">error</p>
           <pre className="text-ink text-sm whitespace-pre-wrap">{result.error}</pre>
         </div>
-      )}
-
-      {result.compiledCodeS3Key && !result.error && (
-        <details className="mb-4">
-          <summary className="eyebrow cursor-pointer mb-2">compiled artifact</summary>
-          <p className="font-mono text-xs text-ink-3 break-all">
-            {result.compiledCodeS3Key}
-          </p>
-          {/* TODO: live preview via separate fetch from S3 (compiledCodeS3Key resolves under
-              the bucket's components/ prefix). Inline compiled/source code isn't carried in
-              the published JSON schema — runner uploads each compiled.js as its own object. */}
-        </details>
       )}
     </section>
   );
@@ -95,4 +88,3 @@ function Stat({ label, value }: { label: string; value: string }) {
     </div>
   );
 }
-

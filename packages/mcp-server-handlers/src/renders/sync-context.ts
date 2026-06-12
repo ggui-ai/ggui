@@ -56,11 +56,11 @@ import {
   CONTEXT_SLOT_VALUE_MAX_BYTES,
   CONTEXT_SNAPSHOT_MAX_BYTES,
   CONTEXT_SNAPSHOT_MAX_SLOTS,
+  jsonValueSchema,
   validateContextData,
   type ComponentGguiSession,
   type ContextSpec,
   type ContractViolation,
-  type JsonObject,
 } from '@ggui-ai/protocol';
 import type { GguiSessionStore } from '@ggui-ai/mcp-server-core';
 import type { SharedHandler } from '../types.js';
@@ -78,8 +78,15 @@ const inputSchema = {
     .describe(
       'Active app id — sourced from `_meta["ai.ggui/render"].appId` on the iframe boot envelope.',
     ),
+  // Values are validated as real JSON (`jsonValueSchema`), not
+  // `z.unknown()`: the snapshot lands on
+  // `ComponentGguiSession.contextSnapshot: JsonObject` and must
+  // round-trip the JSON wire on rehydrate. Wire callers always pass
+  // (JSON-RPC arguments ARE JSON); only an in-process caller could
+  // smuggle non-JSON values, and this parse rejects that instead of
+  // casting it into the store.
   snapshot: z
-    .record(z.string(), z.unknown())
+    .record(z.string(), jsonValueSchema)
     .describe(
       'Full current snapshot of every declared contextSpec slot. Last-write-wins; the server overwrites any prior `contextSnapshot` on the GguiSession with this map verbatim.',
     ),
@@ -221,7 +228,7 @@ export function createGguiSyncContextHandler(
       // mirroring, not an observable agent event.
       const updated: ComponentGguiSession = {
         ...stored.render,
-        contextSnapshot: snapshot as JsonObject,
+        contextSnapshot: snapshot,
       };
       await deps.renderStore.commit({
         render: updated,

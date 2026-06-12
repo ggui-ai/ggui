@@ -7,37 +7,38 @@ Supersedes the pre-Phase-5 3-mode state.
 
 ## Locked architectural decisions (do not re-litigate without bench evidence)
 
-- **Active default prompt:** A4-lite v2 (`core/src/harness/runtime.ts` → `buildSystemPrompt()` + turn-1 impl prompt). See `../ui-generation-experiments.md` entries #8-#11.
+- **Active default prompt:** A4-lite v2 (`oss/packages/ui-gen/src/harness/runtime.ts` → `buildSystemPrompt()` + turn-1 impl prompt). See `../ui-generation-experiments.md` entries #8-#11.
 - **Axis-based classification.** Contract+prompt+blueprint → `AxisVector` + `Classification.riskTier`. The 3-mode (`display | form | collection`) classifier is **retired in Phase 5** (2026-04-13).
   - AxisVector keys: `render`, `state`, `writes`, `writeTrigger`, `realtime`, `fetch`, `layout`, `tooling`
   - `Classification.riskTier ∈ {low, medium, high}` drives the eval bypass
 - **ProcessMode** orthogonal: `single_pass | staged`. Default `single_pass`; `staged` behind `GGUI_A1=1` env. Adaptive runtime fallback is future work.
-- **Prompt + boilerplate = axis-keyed `HarnessFragment`s.** Composed via `core/src/harness/compose.ts`. No per-mode boilerplate sections (`buildShapeSections` / `SHAPE_SECTIONS` are deleted).
-- **Self-eval = axis-gated `AxisCheck`s.** `core/src/evaluation/axis-checks/` replaces `mode-checks/` (deleted).
+- **Prompt + boilerplate = axis-keyed `HarnessFragment`s.** Composed via `oss/packages/ui-gen/src/compose.ts`. No per-mode boilerplate sections (`buildShapeSections` / `SHAPE_SECTIONS` are deleted).
+- **Self-eval = axis-gated `AxisCheck`s.** `oss/packages/ui-gen/src/evaluation/axis-checks/` replaces `mode-checks/` (deleted).
 - **No provider-specific harness logic.** Shipping harness is provider-agnostic; provider asymmetries handled via axis composition + runtime-signal process fallback.
 - **No fixed-layout scaffolds.** No per-commit harnesses. No benchmark-shaped UI templates.
 - **No generic helper additions** to `@ggui-ai/wire` (e.g., `useGroupedBy`, `useStreamMergeById`). Reverted after review.
 
 ## Current triad+process sources of truth
 
-The triad was split across open and closed packages in the 2026-04 cloud-split +
-core/-deletion refactor. **Open** = `packages/ui-gen/` (publishable as `@ggui-ai/ui-gen`).
-**Closed** = `cloud/generation-runtime/` (hosted-runtime-internal harness wrapping the open core).
+After the 2026-04 cloud-split + the later cloud→OSS realignment the whole
+triad lives **open** in `oss/packages/ui-gen/` (publishable as
+`@ggui-ai/ui-gen`). There is no closed `cloud/generation-runtime/` copy
+anymore — the cloud pod composes the open package.
 
-| Layer         | File                                                                                                    | Open/Closed | Notes                                                                                                                                                |
-| ------------- | ------------------------------------------------------------------------------------------------------- | ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Classifier    | `packages/ui-gen/src/classifier/classifier.ts`                                                          | open        | `classifyAxes({contract, prompt, blueprint})` → `Classification`                                                                                     |
-| Fragments     | `packages/ui-gen/src/fragments/{render,state,writes,writeTrigger,realtime,fetch,layout,tooling}.ts`     | open        | ~30 axis-keyed `HarnessFragment`s with `promptText` / `boilerplateMarker` / `cacheTier`                                                              |
-| Composer      | `packages/ui-gen/src/compose.ts`                                                                        | open        | `compose(classification) → ComposedHarness { promptText, boilerplateSections }`                                                                      |
-| System prompt | `packages/ui-gen/src/boilerplate/system-prompt.ts::buildSystemPrompt(inputs)`                           | open        | Pure skeleton + injection points. Closed wrapper `cloud/generation-runtime/src/harness/runtime.ts` pre-fills pitfalls/design-system/primitives docs. |
-| Boilerplate   | `packages/ui-gen/src/boilerplate/{generate.ts, render.ts, templates/base.tsx.tmpl, templates/layouts/}` | open        | `generateBoilerplate(prompt, contracts, shellType, screen, composedSections)` injects fragment markers                                               |
-| Tier-0 CHECK  | `packages/ui-gen/src/check/run-tier0.ts`                                                                | open        | 25+ deterministic checks (compile, security, imports, tokens, types, contracts, wire imports, wire preservation)                                     |
-| Axis checks   | `cloud/generation-runtime/src/evaluation/axis-checks/{checks/*, extras.ts, registry.ts, dispatch.ts}`   | closed      | 18 gated checks + 5 axis-only extras                                                                                                                 |
-| Eval tiers    | `cloud/generation-runtime/src/evaluation/{loop.ts, evaluator.ts, criteria.ts, llm-evaluator.ts}`        | closed      | Shared across all classifications; low-risk bypass driven by `riskTier === "low"`                                                                    |
+| Layer         | File                                                                                                        | Open/Closed | Notes                                                                                                                                |
+| ------------- | ----------------------------------------------------------------------------------------------------------- | ----------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| Classifier    | `oss/packages/ui-gen/src/classifier/classifier.ts`                                                          | open        | `classifyAxes({contract, prompt, blueprint})` → `Classification`                                                                     |
+| Fragments     | `oss/packages/ui-gen/src/fragments/{render,state,writes,realtime,fetch,layout,tooling}.ts`                  | open        | Axis-keyed `HarnessFragment`s with `promptText` / `boilerplateMarker` / `cacheTier` (writeTrigger fragments live inside `writes.ts`) |
+| Composer      | `oss/packages/ui-gen/src/compose.ts`                                                                        | open        | `compose(classification) → ComposedHarness { promptText, boilerplateSections }`                                                      |
+| System prompt | `oss/packages/ui-gen/src/boilerplate/system-prompt.ts::buildSystemPrompt(inputs)`                           | open        | Pure skeleton + injection points. `oss/packages/ui-gen/src/harness/runtime.ts` pre-fills pitfalls/design-system/primitives docs.     |
+| Boilerplate   | `oss/packages/ui-gen/src/boilerplate/{generate.ts, render.ts, templates/base.tsx.tmpl, templates/layouts/}` | open        | `generateBoilerplate(prompt, contracts, shellType, screen, composedSections)` injects fragment markers                               |
+| Tier-0 CHECK  | `oss/packages/ui-gen/src/check/run-tier0.ts`                                                                | open        | 25+ deterministic checks (compile, security, imports, tokens, types, contracts, wire imports, wire preservation)                     |
+| Axis checks   | `oss/packages/ui-gen/src/evaluation/axis-checks/{checks/*, extras.ts, registry.ts, dispatch.ts}`            | open        | Gated checks + axis-only extras                                                                                                      |
+| Eval tiers    | `oss/packages/ui-gen/src/evaluation/{loop.ts, evaluator.ts, llm-evaluator.ts}`                              | open        | Shared across all classifications; low-risk bypass driven by `riskTier === "low"`                                                    |
 
 ## Axis vocabulary (what the classifier emits)
 
-Defined in `packages/ui-gen/src/classifier/axes.ts`. Values that matter for slicing:
+Defined in `oss/packages/ui-gen/src/classifier/axes.ts`. Values that matter for slicing:
 
 | Axis           | Values                                                                 | Source of signal                                          |
 | -------------- | ---------------------------------------------------------------------- | --------------------------------------------------------- |
@@ -58,7 +59,7 @@ Defined in `packages/ui-gen/src/classifier/axes.ts`. Values that matter for slic
 
 ## Fixture classification snapshot (14 fixtures, 2026-04-13)
 
-See `core/src/classifier/classifier.test.ts` for the locked snapshot. Sample:
+See `oss/misc/benchmark/src/multi-sdk/fixtures/classifier-snapshot.test.ts` for the locked snapshot. Sample:
 
 | Fixture                                                  | Risk   | Dominant axes                                             |
 | -------------------------------------------------------- | ------ | --------------------------------------------------------- |
@@ -109,36 +110,35 @@ Sub-agents are **analysis-only**. May:
 
 - Read any code/log/result
 - Run benchmarks
-- Append to `internal/benchmarks/docs/harness-modes/experiments.md` (single chronological log)
+- Append to `oss/misc/benchmark/docs/harness-modes/experiments.md` (single chronological log)
 - Write scratch files under `tmp/` or `tmp-bench-logs/`
 
 Sub-agents **must not** edit:
 
-- `packages/ui-gen/src/boilerplate/system-prompt.ts`
-- `packages/ui-gen/src/boilerplate/generate.ts`
-- `packages/ui-gen/src/boilerplate/templates/**`
-- `packages/ui-gen/src/fragments/**`
-- `packages/ui-gen/src/compose.ts`
-- `packages/ui-gen/src/classifier/**`
-- `packages/ui-gen/src/check/run-tier0.ts`
-- `cloud/generation-runtime/src/harness/runtime.ts`
-- `cloud/generation-runtime/src/evaluation/criteria.ts`
-- `cloud/generation-runtime/src/evaluation/llm-evaluator.ts`
-- `cloud/generation-runtime/src/evaluation/axis-checks/**`
-- `cloud/generation-runtime/src/harness/coding/tools.ts` (or wherever the apply_changes tool lives)
+- `oss/packages/ui-gen/src/boilerplate/system-prompt.ts`
+- `oss/packages/ui-gen/src/boilerplate/generate.ts`
+- `oss/packages/ui-gen/src/boilerplate/templates/**`
+- `oss/packages/ui-gen/src/fragments/**`
+- `oss/packages/ui-gen/src/compose.ts`
+- `oss/packages/ui-gen/src/classifier/**`
+- `oss/packages/ui-gen/src/check/run-tier0.ts`
+- `oss/packages/ui-gen/src/harness/runtime.ts`
+- `oss/packages/ui-gen/src/evaluation/llm-evaluator.ts`
+- `oss/packages/ui-gen/src/evaluation/axis-checks/**`
+- `oss/packages/ui-gen/src/harness/coding/**` (the apply_changes / coding-turn loop)
 
 Main agent owns all shared-code edits.
 
 ## Shared analysis tooling
 
-`internal/benchmarks/src/analysis/`:
+`oss/misc/benchmark/src/analysis/`:
 
 - `compare.py` — per-(provider, commit) deltas, score filter. Update `MODE_COMMITS` if you add a new slice.
 - `turn-breakdown.py` — PATCH_INVALID class tally, turn phase mix.
 
 ## Experiment log
 
-Single chronological log: `internal/benchmarks/docs/harness-modes/experiments.md`. Per-mode
+Single chronological log: `oss/misc/benchmark/docs/harness-modes/experiments.md`. Per-mode
 dirs (`display/`, `form/`, `collection/`) remain as **historical archive**.
 Entry format per experiment: see `benchmark-runner` skill Step 7.
 

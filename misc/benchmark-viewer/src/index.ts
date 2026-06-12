@@ -12,10 +12,16 @@ export { VariantGrid, resultKey } from './components/VariantGrid';
 export { ResultDetail } from './components/ResultDetail';
 export { DimensionScores } from './components/DimensionScores';
 export { TrendChart } from './components/TrendChart';
-export { LiveRenderFrame } from './components/LiveRenderFrame';
 
 export { httpJsonSource } from './data-source';
 export type { BenchmarkDataSource } from './data-source';
+
+export {
+  readEvalScore,
+  readDimensions,
+  readJudge,
+} from './eval-helpers';
+export type { DimensionScoresShape, JudgeShape } from './eval-helpers';
 
 export type {
   BenchmarkIndex,

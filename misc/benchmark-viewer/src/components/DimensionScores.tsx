@@ -1,21 +1,15 @@
-interface DimensionScoresShape {
-  completeness: number;
-  visualPolish: number;
-  interactivity: number;
-  accessibility: number;
-  codeQuality: number;
-}
+import type { DimensionScoresShape } from '../eval-helpers';
 
 interface Props {
   scores: DimensionScoresShape;
 }
 
 const DIMENSIONS: ReadonlyArray<{ key: keyof DimensionScoresShape; label: string }> = [
-  { key: 'completeness', label: 'completeness' },
-  { key: 'visualPolish', label: 'visual polish' },
-  { key: 'interactivity', label: 'interactivity' },
-  { key: 'accessibility', label: 'accessibility' },
-  { key: 'codeQuality', label: 'code quality' },
+  { key: 'layout', label: 'layout' },
+  { key: 'designTokens', label: 'design tokens' },
+  { key: 'hierarchy', label: 'hierarchy' },
+  { key: 'polish', label: 'polish' },
+  { key: 'dataPresentation', label: 'data presentation' },
 ];
 
 /**

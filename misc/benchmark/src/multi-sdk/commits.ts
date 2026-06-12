@@ -1,4 +1,4 @@
-// core/src/benchmarks/multi-sdk/commits.ts
+// oss/misc/benchmark/src/multi-sdk/commits.ts
 //
 // Benchmark test cases — each entry models one generation invocation.
 // "Commit" here = the generation commit unit (a single benchmark run),

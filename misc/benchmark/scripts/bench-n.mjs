@@ -280,12 +280,39 @@ console.log(`[bench-n] manifest → ${manifestPath}`);
 // timing) or trailing prose for SKIP. Capture outcome + optional ms.
 const PROBE_LINE = /\[runtime-probe\][^:]*:\s+(PASS|FAIL|SKIP)(?:[^(]*\(.*?(\d+)ms\))?/;
 const cells = new Map();
+function cellSamples(provider, commit) {
+  const key = `${provider}|${commit}`;
+  if (!cells.has(key)) cells.set(key, []);
+  return cells.get(key);
+}
+// Aggregate over ALL attempted cells — a SIGKILLed / crashed cell that
+// never wrote a report is a FAILURE sample, not a silently-dropped row.
+// (Pre-fix, killed cells vanished from n entirely, so passed/n and the
+// score stats survivorship-biased toward the healthy outcomes.)
 for (const r of runs) {
-  if (!r.reportPath || !existsSync(r.reportPath)) continue;
-  let report;
-  try {
-    report = JSON.parse(readFileSync(r.reportPath, 'utf-8'));
-  } catch {
+  const hasReport = !!(r.reportPath && existsSync(r.reportPath));
+  let report = null;
+  if (hasReport) {
+    try {
+      report = JSON.parse(readFileSync(r.reportPath, 'utf-8'));
+    } catch {
+      report = null;
+    }
+  }
+  if (!report) {
+    // No (readable) report — count the cell against its own
+    // (provider, commit) bucket as an unreported failure.
+    cellSamples(r.provider, r.commit).push({
+      score: null,
+      totalMs: null,
+      turns: null,
+      passed: false,
+      reported: false,
+      run: r.run,
+      probeOutcome: null,
+      probeMs: null,
+      killReason: r.killReason ?? null,
+    });
     continue;
   }
   // Parse per-cell log for probe outcome + duration.
@@ -297,15 +324,34 @@ for (const r of runs) {
       const m = PROBE_LINE.exec(logBody);
       if (m) {
         probeOutcome = m[1];
-        probeMs = parseInt(m[2], 10);
+        // The modern probe line has no per-cell ms group — m[2] is
+        // undefined and parseInt yields NaN. Keep null over NaN so the
+        // mean below prints n/a instead of NaN.
+        const parsedMs = parseInt(m[2], 10);
+        probeMs = Number.isFinite(parsedMs) ? parsedMs : null;
       }
     } catch {
       /* probe data missing — that's fine, treat as null */
     }
   }
-  for (const result of report.results ?? []) {
-    const key = `${r.provider}|${result.commit?.id ?? '?'}`;
-    if (!cells.has(key)) cells.set(key, []);
+  const reportResults = report.results ?? [];
+  if (reportResults.length === 0) {
+    // Report exists but carries no per-cell result rows — still a
+    // failure sample, not a vanished cell.
+    cellSamples(r.provider, r.commit).push({
+      score: null,
+      totalMs: null,
+      turns: null,
+      passed: false,
+      reported: true,
+      run: r.run,
+      probeOutcome,
+      probeMs,
+      killReason: r.killReason ?? null,
+    });
+    continue;
+  }
+  for (const result of reportResults) {
     const score = result.evaluation?.score ?? null;
     const totalMs = result.generation?.generationTimeMs ?? null;
     const turns = result.generation?.turnsUsed ?? null;
@@ -321,13 +367,15 @@ for (const r of runs) {
     // probeOutcome === 'SKIP' or null (probe couldn't run / cell errored
     //   before probe) ⇒ inconclusive, treat as fail
     const passed = probeOutcome === 'PASS';
-    cells.get(key).push({ score, totalMs, turns, passed, run: r.run, probeOutcome, probeMs });
+    cellSamples(r.provider, result.commit?.id ?? r.commit).push({
+      score, totalMs, turns, passed, reported: true, run: r.run, probeOutcome, probeMs,
+    });
   }
 }
 
-console.log('\n=== aggregate (always shows BOTH score and time, with std dev) ===');
+console.log('\n=== aggregate (ALL attempted cells; missing reports count as failures) ===');
 console.log(
-  'provider | commit | n | passed/n | score_mean ± std (min..max) | time_s_mean ± std (min..max) | turns_mean | probe_pass/n probe_ms_mean',
+  'provider | commit | reported/attempted | passed/attempted | score_mean ± std (min..max) | time_s_mean ± std (min..max) | turns_mean | probe_pass/n probe_ms_mean',
 );
 function stat(arr) {
   if (arr.length === 0) return { mean: NaN, std: 0, min: NaN, max: NaN };
@@ -337,15 +385,21 @@ function stat(arr) {
 }
 for (const [key, samples] of [...cells.entries()].sort()) {
   const [provider, commit] = key.split('|');
-  const n = samples.length;
+  const attempted = samples.length;
+  const reported = samples.filter((s) => s.reported).length;
   const passed = samples.filter((s) => s.passed).length;
+  // Score/time/turn stats cover only reported samples (a killed cell has
+  // no measurement); the reported/attempted column discloses the gap.
   const scoreS = stat(samples.filter((s) => s.score !== null).map((s) => s.score));
   const timeS = stat(samples.filter((s) => s.totalMs !== null).map((s) => s.totalMs / 1000));
-  const meanTurns = (samples.reduce((s, x) => s + (x.turns ?? 0), 0) / n).toFixed(1);
+  const turnArr = samples.filter((s) => s.turns !== null).map((s) => s.turns);
+  const meanTurns = turnArr.length > 0
+    ? (turnArr.reduce((a, b) => a + b, 0) / turnArr.length).toFixed(1)
+    : 'n/a';
   const probeSamples = samples.filter((s) => s.probeOutcome !== null);
   const probePass = probeSamples.filter((s) => s.probeOutcome === 'PASS').length;
   const probeMsArr = probeSamples
-    .filter((s) => typeof s.probeMs === 'number')
+    .filter((s) => Number.isFinite(s.probeMs))
     .map((s) => s.probeMs);
   const probeMsMean = probeMsArr.length > 0
     ? (probeMsArr.reduce((a, b) => a + b, 0) / probeMsArr.length).toFixed(0)
@@ -355,5 +409,5 @@ for (const [key, samples] of [...cells.entries()].sort()) {
   const probeStr = probeSamples.length > 0
     ? `${probePass}/${probeSamples.length} ${probeMsMean}ms`
     : '—';
-  console.log(`${provider} | ${commit} | ${n} | ${passed}/${n} | ${scoreStr} | ${timeStr} | ${meanTurns} | ${probeStr}`);
+  console.log(`${provider} | ${commit} | ${reported}/${attempted} | ${passed}/${attempted} | ${scoreStr} | ${timeStr} | ${meanTurns} | ${probeStr}`);
 }

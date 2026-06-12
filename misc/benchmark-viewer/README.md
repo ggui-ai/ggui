@@ -40,30 +40,29 @@ Whatever URL you pass as the data-source root, the viewer expects:
         "reportPath": "2026-05-06/multi-sdk.json",
         "successRate": 0.92,
         "totalRuns": 25,
-        "headline": "claude 88 / openai 81 / google 75"
+        "headline": "claude 88 (n=8) / openai 81 (n=8) / google 75 (n=9) · judge claude-haiku-4-5-20251001 (aesthetic-eval.v1)"
       }
     }
   ]
 }
 ```
 
-`<date>/multi-sdk.json` is the runner's emitted `BenchmarkReport` (see
-`@ggui-ai/benchmark/multi-sdk/types`) — written verbatim by the runner.
+`<date>/multi-sdk.json` is the runner's emitted `BenchmarkReportDisplay`
+(see `@ggui-ai/shared` benchmark display types) — the serialization-safe
+shape `toDisplayReport` writes, not the runner-internal `BenchmarkReport`.
 
 ## Components
 
 - **`<BenchmarksDashboard>`** — top-level. Date selector + run grid + detail.
-- **`<TrendChart>`** — score-per-provider over time, pure SVG.
-- **`<VariantGrid>`** — provider × prompt grid; click any cell.
-- **`<ResultDetail>`** — selected-cell panel with prompt, top-line metrics,
-  **dimension scores breakdown** (5-axis bar rows), **live render iframe**,
-  source code, compiled code.
-- **`<DimensionScores>`** — 5-axis quality breakdown (completeness,
-  visualPolish, interactivity, accessibility, codeQuality).
-- **`<LiveRenderFrame>`** — iframe rendering compiled output via import
-  map (React from esm.sh, `@ggui-ai/design/{primitives,tokens}` from
-  pre-bundled local files). Caller is responsible for serving the
-  bundles at `/runtime/*.bundle.js`.
+- **`<TrendChart>`** — score-per-variant over time, pure SVG. Unevaluated
+  runs (`avgScore === -1`) render as gaps, not zero scores.
+- **`<VariantGrid>`** — variant × prompt grid; click any cell. Cells show
+  the judge score, `fail` on errored cells, and `—` when no score exists.
+- **`<ResultDetail>`** — selected-cell panel with top-line metrics
+  (score / time / cost / turns / tokens), judge disclosure, and the
+  **dimension scores breakdown** (5-axis bar rows).
+- **`<DimensionScores>`** — the 5 dimensions the aesthetic judge measures
+  (layout, designTokens, hierarchy, polish, dataPresentation).
 
 ## Local dev
 

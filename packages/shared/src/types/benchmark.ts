@@ -71,6 +71,17 @@ export interface BenchmarkMeta {
   failureCount: number;
   successRate: number;
   durationMs: number;
+  /**
+   * Disclosure of the LLM judge that produced every `score` in this
+   * report. Absent when no result was evaluated (skip-evaluation runs).
+   */
+  judge?: JudgeDisclosureDisplay;
+}
+
+/** Which model + prompt version produced the quality scores. */
+export interface JudgeDisclosureDisplay {
+  model: string;
+  promptVersion: string;
 }
 
 export interface VariantInfo {
@@ -93,10 +104,26 @@ export interface GenerationResultDisplay {
   passesUsed?: number;
 }
 
+/**
+ * The 5 dimensions the aesthetic judge actually measures. Mirrors
+ * `AestheticScores` in `@ggui-ai/benchmark/multi-sdk/post-eval`;
+ * duplicated here (named, not an index signature) so the compiler
+ * catches dimension drift between the runner and the viewer.
+ */
+export interface EvaluationDimensionsDisplay {
+  layout: number;
+  designTokens: number;
+  hierarchy: number;
+  polish: number;
+  dataPresentation: number;
+}
+
 export interface EvaluationResultDisplay {
   passed: boolean;
   score: number;
-  dimensions?: Record<string, number>;
+  dimensions: EvaluationDimensionsDisplay;
+  /** Which model + prompt version produced this score. */
+  judge: JudgeDisclosureDisplay;
   critique?: string;
   evalTimeMs?: number;
 }
@@ -142,8 +169,6 @@ export interface BenchmarkRunResultDisplay {
   error?: string;
   timestamp: string;
   postGeneration?: PostGenerationDisplay;
-  /** S3 key for the compiled component JS (so frontend can fetch directly) */
-  compiledCodeS3Key?: string;
 }
 
 export interface VariantSummaryDisplay {
@@ -154,7 +179,11 @@ export interface VariantSummaryDisplay {
   avgScore: number;
   avgTimeMs: number;
   avgCostUsd: number;
-  passRate: number;
+  /**
+   * Generation success rate (generation produced output without
+   * erroring) — NOT a quality-threshold pass rate.
+   */
+  successRate: number;
   totalRuns: number;
 }
 

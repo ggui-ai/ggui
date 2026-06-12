@@ -46,7 +46,28 @@ import {
   type BenchmarkRunResult,
   type BenchmarkVariant,
   type BenchmarkCommit,
+  type PostEvalResult,
 } from './types';
+import { AESTHETIC_JUDGE_MODEL, AESTHETIC_PROMPT_VERSION } from './post-eval';
+
+/** Build a PostEvalResult-shaped fixture matching the runner's real output. */
+function mkEval(score: number): PostEvalResult {
+  return {
+    passed: score >= 70,
+    score,
+    dimensions: {
+      layout: score,
+      designTokens: score,
+      hierarchy: score,
+      polish: score,
+      dataPresentation: score,
+    },
+    judge: { model: AESTHETIC_JUDGE_MODEL, promptVersion: AESTHETIC_PROMPT_VERSION },
+    issues: [],
+    critique: 'fixture critique',
+    evalTimeMs: 1000,
+  };
+}
 
 // =============================================================================
 // 1. Variant presets
@@ -272,18 +293,7 @@ function mkResult(overrides: Partial<BenchmarkRunResult> = {}): BenchmarkRunResu
       generationTimeMs: 1000,
       turnsUsed: 2,
     },
-    evaluation: {
-      passed: true,
-      finalScore: 80,
-      dimensions: {
-        completeness: 80,
-        visualPolish: 80,
-        interactivity: 80,
-        accessibility: 80,
-        codeQuality: 80,
-      },
-      issues: [],
-    },
+    evaluation: mkEval(80),
     estimatedCostUsd: 0.01,
     timestamp: '2026-05-12T00:00:00Z',
     generator: DEFAULT_GENERATOR_SLUG,
@@ -297,18 +307,7 @@ describe('buildGeneratorComparisonMatrix', () => {
       mkResult({ generator: DEFAULT_GENERATOR_SLUG }),
       mkResult({
         generator: ADVANCED_GENERATOR_SLUG,
-        evaluation: {
-          passed: true,
-          finalScore: 90,
-          dimensions: {
-            completeness: 90,
-            visualPolish: 90,
-            interactivity: 90,
-            accessibility: 90,
-            codeQuality: 90,
-          },
-          issues: [],
-        },
+        evaluation: mkEval(90),
       }),
     ];
     const matrix = buildGeneratorComparisonMatrix(results);

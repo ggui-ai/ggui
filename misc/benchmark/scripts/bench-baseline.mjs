@@ -15,8 +15,10 @@
 //
 //   pnpm bench:baseline                      # all benches, default args
 //   pnpm bench:baseline --skip multi-sdk     # skip multi-sdk (no API keys)
-//   pnpm bench:baseline --runs 5             # override --runs for the 3
-//                                            # deterministic benches
+//   pnpm bench:baseline --runs 5             # override --runs for the 2
+//                                            # deterministic benches (slo, a2ui);
+//                                            # multi-sdk always runs a single
+//                                            # non-deterministic LLM cell
 //
 // Output:
 //

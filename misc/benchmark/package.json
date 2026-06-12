@@ -8,6 +8,8 @@
   "files": [
     "dist",
     "src",
+    "!src/multi-sdk/reports",
+    "!src/a2ui/reports",
     "scripts",
     "litellm_config.yaml",
     "README.md"
@@ -15,7 +17,7 @@
   "repository": {
     "type": "git",
     "url": "https://github.com/ggui-ai/ggui.git",
-    "directory": "packages/benchmark"
+    "directory": "misc/benchmark"
   },
   "exports": {
     ".": "./src/index.ts",
@@ -34,7 +36,8 @@
     "bench:baseline-diff": "node --import tsx scripts/bench-baseline-diff.mjs",
     "bench:baseline-diff-triage": "node --import tsx scripts/bench-baseline-diff-triage.mjs",
     "bench:contract": "node --import tsx scripts/bench-contract-synthesis.mjs",
-    "probe": "node --import tsx scripts/probe-it.mjs"
+    "probe": "node --import tsx scripts/probe-it.mjs",
+    "sample-data": "node --import tsx scripts/generate-sample-data.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.32.0",

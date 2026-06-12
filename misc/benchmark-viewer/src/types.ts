@@ -3,11 +3,10 @@
  *
  * Run-level types (`BenchmarkReport`, `VariantSummary`, etc.) are
  * re-exported from `@ggui-ai/shared`'s **Display** schema — that's
- * the serialization-safe shape the runner emits to JSON. Importing
- * from the runner's internal types caused field-name drift (the
- * runner renames `successRate→passRate`, `totalDurationMs→durationMs`
- * during `toDisplayReport`, see `packages/benchmark/src/multi-sdk/
- * reporter.ts:430+`); the viewer has to read what's on disk.
+ * the serialization-safe shape the runner emits to JSON (the runner
+ * renames `totalDurationMs→durationMs` during `toDisplayReport`, see
+ * `oss/misc/benchmark/src/multi-sdk/reporter.ts`); the viewer has to
+ * read what's on disk.
  *
  * Index-level types (`BenchmarkIndex`, `BenchmarkRunMeta`) are owned
  * here — they describe the file-layout convention the data source

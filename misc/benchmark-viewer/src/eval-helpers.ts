@@ -1,27 +1,34 @@
 /**
- * Runtime accessors for the `evaluation` field on `BenchmarkRunResult`.
+ * Runtime accessors for the `evaluation` field on a benchmark report's
+ * run results.
  *
- * The field is `EvaluationResult | PostEvalResult | null` per the runner.
- * Both shapes expose `finalScore: number` + `dimensions: DimensionScores`,
- * but the union types live across multiple workspace packages and don't
- * always narrow cleanly across compilation boundaries. These helpers
- * read the fields with explicit runtime checks — robust against schema
- * drift between runner versions, robust against transitive-type
- * resolution failures.
+ * The on-disk display contract is `EvaluationResultDisplay`
+ * (`@ggui-ai/shared`): `score: number` + `dimensions` with the 5
+ * dimensions the aesthetic judge measures + `judge` disclosure. These
+ * helpers read those fields with explicit runtime checks — a report
+ * whose shape drifted (older runner, hand-edited fixture) degrades to
+ * `null` instead of rendering garbage.
  */
 
+/** The 5 measured dimensions — mirrors `EvaluationDimensionsDisplay`. */
 export interface DimensionScoresShape {
-  completeness: number;
-  visualPolish: number;
-  interactivity: number;
-  accessibility: number;
-  codeQuality: number;
+  layout: number;
+  designTokens: number;
+  hierarchy: number;
+  polish: number;
+  dataPresentation: number;
+}
+
+/** Judge disclosure — mirrors `JudgeDisclosureDisplay`. */
+export interface JudgeShape {
+  model: string;
+  promptVersion: string;
 }
 
 export function readEvalScore(evaluation: unknown): number | null {
   if (!evaluation || typeof evaluation !== 'object') return null;
-  const e = evaluation as { finalScore?: unknown };
-  return typeof e.finalScore === 'number' ? e.finalScore : null;
+  const e = evaluation as { score?: unknown };
+  return typeof e.score === 'number' ? e.score : null;
 }
 
 export function readDimensions(evaluation: unknown): DimensionScoresShape | null {
@@ -30,19 +37,30 @@ export function readDimensions(evaluation: unknown): DimensionScoresShape | null
   if (!e.dimensions || typeof e.dimensions !== 'object') return null;
   const d = e.dimensions as Partial<DimensionScoresShape>;
   if (
-    typeof d.completeness !== 'number' ||
-    typeof d.visualPolish !== 'number' ||
-    typeof d.interactivity !== 'number' ||
-    typeof d.accessibility !== 'number' ||
-    typeof d.codeQuality !== 'number'
+    typeof d.layout !== 'number' ||
+    typeof d.designTokens !== 'number' ||
+    typeof d.hierarchy !== 'number' ||
+    typeof d.polish !== 'number' ||
+    typeof d.dataPresentation !== 'number'
   ) {
     return null;
   }
   return {
-    completeness: d.completeness,
-    visualPolish: d.visualPolish,
-    interactivity: d.interactivity,
-    accessibility: d.accessibility,
-    codeQuality: d.codeQuality,
+    layout: d.layout,
+    designTokens: d.designTokens,
+    hierarchy: d.hierarchy,
+    polish: d.polish,
+    dataPresentation: d.dataPresentation,
   };
+}
+
+export function readJudge(evaluation: unknown): JudgeShape | null {
+  if (!evaluation || typeof evaluation !== 'object') return null;
+  const e = evaluation as { judge?: unknown };
+  if (!e.judge || typeof e.judge !== 'object') return null;
+  const j = e.judge as Partial<JudgeShape>;
+  if (typeof j.model !== 'string' || typeof j.promptVersion !== 'string') {
+    return null;
+  }
+  return { model: j.model, promptVersion: j.promptVersion };
 }

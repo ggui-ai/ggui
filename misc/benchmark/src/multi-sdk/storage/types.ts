@@ -2,7 +2,8 @@ import type { BenchmarkReportDisplay } from '@ggui-ai/shared';
 
 /**
  * Storage interface for benchmark reports.
- * Implemented by LocalStorage (CLI) and CloudStorage (Lambda).
+ * Implemented by LocalStorage (the CLI runner). Publishing to S3 is a
+ * separate concern handled by `scripts/run-and-publish.mjs`.
  */
 export interface BenchmarkStorage {
   /** Create a new report entry with initial status */

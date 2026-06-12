@@ -105,7 +105,7 @@ export type ValidationDiagnostic = ValidationIteration;
 export interface CreateAdvancedUiGeneratorOptions
   extends Pick<
     CreateUiGeneratorOptions,
-    'maxTurns' | 'maxAttempts' | 'maxEvalRounds' | 'qualityConfig'
+    'maxAttempts' | 'maxEvalRounds' | 'qualityConfig'
   > {
   /**
    * Playwright module. Required at GENERATE time — the factory itself
@@ -190,7 +190,6 @@ export function createAdvancedUiGenerator(
     createUiGenerator({
       tier: 'advanced',
       model: 'opus-4-7',
-      ...(options.maxTurns !== undefined ? { maxTurns: options.maxTurns } : {}),
       ...(options.maxAttempts !== undefined
         ? { maxAttempts: options.maxAttempts }
         : {}),

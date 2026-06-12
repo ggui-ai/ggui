@@ -501,7 +501,7 @@ describe('provisional anchor surfacing', () => {
           keyField: 'generator',
           rows: [
             mkRow('ui-gen-default-haiku-4-5', {
-              avgScore: scalar(75, 70), // -5, alert (provisional)
+              avgScore: scalar(75, 70), // -5 at n=1 → notice (provisional)
               successRate: scalar(1, 1),
               avgTimeMs: scalar(12000, 12000),
               runs: scalar(1, 1),
@@ -514,6 +514,74 @@ describe('provisional anchor surfacing', () => {
     expect(
       report.notes.some((n) =>
         n.includes('provisional'),
+      ),
+    ).toBe(true);
+  });
+});
+
+// ─── 9. multi-sdk score-drop rule is scoped to n ≥ 3 ──────────────
+
+describe('multi-sdk score-drop n-scoping', () => {
+  function scoreDropDiff(runsBefore: number, runsAfter: number) {
+    return mkDiff([
+      mkEntry('multi-sdk', {
+        summaryDiff: {
+          kind: 'grouped',
+          keyField: 'generator',
+          rows: [
+            mkRow('ui-gen-default-haiku-4-5', {
+              avgScore: scalar(82, 75), // -7, beyond alertDrop=3
+              successRate: scalar(1, 1),
+              avgTimeMs: scalar(12000, 12000),
+              runs: scalar(runsBefore, runsAfter),
+            }),
+          ],
+        },
+      }),
+    ]);
+  }
+
+  it('alerts on a ≥3-point drop when the row has n ≥ 3', () => {
+    const report = triageDiff(scoreDropDiff(3, 3));
+    const alert = report.items.find((i) => i.rule === 'multisdk-score-alertdrop');
+    expect(alert).toBeDefined();
+    expect(alert!.severity).toBe('alert');
+    expect(report.decision).toBe('fail');
+  });
+
+  it('downgrades the same drop to notice at n=1 — inside the documented judge noise band', () => {
+    const report = triageDiff(scoreDropDiff(1, 1));
+    const item = report.items.find(
+      (i) => i.rule === 'multisdk-score-alertdrop-lown',
+    );
+    expect(item).toBeDefined();
+    expect(item!.severity).toBe('notice');
+    // No score alert fires; with successRate/time stable the whole
+    // diff passes.
+    expect(report.decision).toBe('pass');
+  });
+
+  it('still alerts on the −1 sentinel collapse regardless of n', () => {
+    const diff = mkDiff([
+      mkEntry('multi-sdk', {
+        summaryDiff: {
+          kind: 'grouped',
+          keyField: 'generator',
+          rows: [
+            mkRow('ui-gen-default-haiku-4-5', {
+              avgScore: scalar(75, -1),
+              successRate: scalar(1, 1),
+              avgTimeMs: scalar(12000, 12000),
+              runs: scalar(1, 1),
+            }),
+          ],
+        },
+      }),
+    ]);
+    const report = triageDiff(diff);
+    expect(
+      report.items.some(
+        (i) => i.rule === 'multisdk-score-sentinel' && i.severity === 'alert',
       ),
     ).toBe(true);
   });

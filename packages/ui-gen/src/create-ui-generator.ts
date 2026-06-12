@@ -62,8 +62,6 @@ import type { RenderingContext } from './contract-context.js';
 import { resolveRoute, applyRouteToEnv } from './adapters/provider-router.js';
 import type { QualityConfig } from './evaluation/types-public.js';
 
-const DEFAULT_MAX_TURNS = 10;
-
 /** The slug for the OSS default seed generator. */
 const DEFAULT_TIER: GeneratorTier = 'default';
 const DEFAULT_MODEL = 'haiku-4-5';
@@ -80,8 +78,6 @@ export interface CreateUiGeneratorOptions {
    * enables it via dispatch's own default for stricter quality gating.
    */
   readonly enableRuntimeRender?: boolean;
-  /** Maximum coding turns. Default: 10. */
-  readonly maxTurns?: number;
   /** Maximum coding attempts per generation pass. */
   readonly maxAttempts?: number;
   /** Maximum evaluation rounds. */
@@ -149,7 +145,6 @@ export function createUiGenerator(
 ): UiGenerator {
   const {
     enableRuntimeRender = false,
-    maxTurns = DEFAULT_MAX_TURNS,
     maxAttempts,
     maxEvalRounds,
     qualityConfig,
@@ -258,7 +253,6 @@ export function createUiGenerator(
           userPrompt,
           model: route.model,
           tools,
-          maxTurns,
           ...(input.contract ? { contract: input.contract } : {}),
           originalPrompt: input.request.prompt,
           ...(maxAttempts !== undefined ? { maxAttempts } : {}),

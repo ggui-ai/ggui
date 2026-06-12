@@ -63,7 +63,6 @@ export interface GenerationDispatchParams {
   model: string;
   userPrompt: string;
   tools: ToolDefinition[];
-  maxTurns: number;
   models?: ModelRoles;
   originalPrompt?: string;
   /** Evaluation config — controls the evaluate-then-regenerate loop. */
@@ -74,15 +73,22 @@ export interface GenerationDispatchParams {
   shellType?: "chat" | "fullscreen" | "spatial";
   /** Target screen size for responsive layout */
   screen?: "mobile" | "tablet" | "desktop" | "universal";
-  /** Maximum coding attempts per generation pass (default: 50) */
+  /**
+   * Maximum coding attempts per generation pass (default: 8). This is
+   * the harness turn cap — there is no separate `maxTurns` knob.
+   */
   maxAttempts?: number;
   /** Maximum evaluation rounds (default: 10) */
   maxEvalRounds?: number;
-  /** Visual evaluation config (screenshot + multimodal LLM scoring) */
+  /**
+   * Visual evaluation config (screenshot + multimodal LLM scoring).
+   * The judge model is NOT configured here — visual eval runs on the
+   * session's evaluation agent (`models.evaluation`, falling back to
+   * the coding agent). See `resolveSessionAgents` in
+   * `harness/coding/init-session.ts`.
+   */
   visualEvaluation?: {
     enabled: boolean;
-    provider?: "claude" | "google";
-    model?: string;
     passThreshold?: number;
     sampleProps?: JsonObject;
     viewport?: { width: number; height: number };

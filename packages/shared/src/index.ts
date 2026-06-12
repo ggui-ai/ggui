@@ -23,9 +23,11 @@ export type {
 export type {
   BenchmarkReportDisplay,
   BenchmarkMeta,
+  JudgeDisclosureDisplay,
   VariantInfo,
   CommitInfo,
   GenerationResultDisplay,
+  EvaluationDimensionsDisplay,
   EvaluationResultDisplay,
   TierEvaluationDisplay,
   PostGenerationDisplay,

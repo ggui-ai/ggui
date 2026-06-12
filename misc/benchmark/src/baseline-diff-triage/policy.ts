@@ -64,6 +64,16 @@ export const THRESHOLDS = {
   // samples or a deliberate score regression bundle.
   multiSdkScoreAlertDrop: 3.0,
   multiSdkScoreNoticeDrop: 1.0,
+  /**
+   * Minimum per-row sample count for score-drop ALERTS. The bench's
+   * own variance docs (BENCH_N.md) put per-run judge noise at ±10–15
+   * points, so a 3-point delta at n=1 (the default baseline's
+   * multi-sdk leg) is inside the noise band — below this n the drop
+   * rules cap at `notice` instead of `alert`. Sentinel transitions
+   * (score → −1) stay alerts at any n: they signal silent failure,
+   * not judge noise.
+   */
+  multiSdkScoreMinRunsForAlert: 3,
 
   // ── multi-sdk latency (relative — absolute thresholds useless on
   //    10+ second runs) ──
@@ -427,7 +437,7 @@ function classifyMultiSdkField(
       );
 
     case 'avgScore':
-      return classifyMultiSdkScore(location, delta);
+      return classifyMultiSdkScore(location, delta, rowContext);
 
     case 'avgTimeMs':
       return classifyMultiSdkTime(location, delta, rowContext);
@@ -445,7 +455,9 @@ function classifyMultiSdkField(
  *   - If before ≥ 0 and after < 0 → F1 silent-failure signal. Alert.
  *     (multi-sdk reports avgScore = -1 when no runs produced a score.)
  *   - If both sides ≥ 0:
- *       drop ≥ alertDrop → alert
+ *       drop ≥ alertDrop AND row runs ≥ multiSdkScoreMinRunsForAlert → alert
+ *       drop ≥ alertDrop at lower n → notice (delta is inside the
+ *         documented ±10–15 point per-run judge noise band)
  *       drop ≥ noticeDrop → notice
  *       otherwise → suppressed
  *   - If before < 0 and after ≥ 0 → notice (recovery from n/a).
@@ -453,21 +465,44 @@ function classifyMultiSdkField(
 function classifyMultiSdkScore(
   location: string,
   delta: FieldDelta & { kind: 'scalar' },
+  rowContext: RowFieldContext,
 ): TriageItem {
   const b = delta.before;
   const a = delta.after;
   const d = delta.delta;
 
+  // Sample size backing the row's score, read from the sibling `runs`
+  // field. Unknown n is treated as low-n — never alert on a sample
+  // size we can't see.
+  const runsField = rowContext.siblingFields.runs;
+  const runsAfter =
+    runsField?.kind === 'scalar' && typeof runsField.after === 'number'
+      ? runsField.after
+      : null;
+  const enoughRunsForAlert =
+    runsAfter !== null && runsAfter >= THRESHOLDS.multiSdkScoreMinRunsForAlert;
+
   // Both real numbers → normal score-delta rule.
   if (b !== null && a !== null && b >= 0 && a >= 0) {
     if (d !== null && d <= -THRESHOLDS.multiSdkScoreAlertDrop) {
+      if (enoughRunsForAlert) {
+        return mkItem(
+          'multi-sdk',
+          location,
+          'multisdk-score-alertdrop',
+          'provisional',
+          'alert',
+          `avgScore dropped ${d.toFixed(1)} points (${b.toFixed(1)} → ${a.toFixed(1)}) at n=${runsAfter}`,
+          { before: b, after: a, delta: d },
+        );
+      }
       return mkItem(
         'multi-sdk',
         location,
-        'multisdk-score-alertdrop',
+        'multisdk-score-alertdrop-lown',
         'provisional',
-        'alert',
-        `avgScore dropped ${d.toFixed(1)} points (${b.toFixed(1)} → ${a.toFixed(1)})`,
+        'notice',
+        `avgScore dropped ${d.toFixed(1)} points (${b.toFixed(1)} → ${a.toFixed(1)}) but n=${runsAfter ?? '?'} < ${THRESHOLDS.multiSdkScoreMinRunsForAlert} — inside the per-run judge noise band, downgraded to notice`,
         { before: b, after: a, delta: d },
       );
     }

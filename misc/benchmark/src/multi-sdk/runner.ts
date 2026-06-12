@@ -1,4 +1,4 @@
-// core/src/benchmarks/multi-sdk/runner.ts
+// oss/misc/benchmark/src/multi-sdk/runner.ts
 //
 // Benchmark CLI runner — operator-facing console.log is the
 // legitimate output mechanism here (telemetry to stdout per row).
@@ -30,6 +30,7 @@ import type {
   BenchmarkRunnerConfig,
   BenchmarkRunResult,
   BenchmarkVariant,
+  GenerationResult,
   PostGenerationResult,
 } from "./types.js";
 import {
@@ -104,17 +105,16 @@ export class BenchmarkRunner {
       qualityMode: config.qualityMode ?? 'fast',
     };
 
-    // Presence of `playwright` config (or any object with a
-    // `chromium` field) flags the advanced generator as available.
+    // Presence of `playwright` config (an object with a `chromium`
+    // field) flags the advanced generator as available.
     // We do NOT instantiate it eagerly — the dispatch path stays
     // through dispatchGeneration; presence just gates the
     // advanced-variant SKIP behavior.
-    const cfg = config as { playwright?: { chromium?: unknown } };
     this.playwrightAvailable =
-      cfg.playwright !== undefined &&
-      cfg.playwright !== null &&
-      typeof cfg.playwright === 'object' &&
-      cfg.playwright.chromium !== undefined;
+      config.playwright !== undefined &&
+      config.playwright !== null &&
+      typeof config.playwright === 'object' &&
+      config.playwright.chromium !== undefined;
   }
 
   /**
@@ -191,7 +191,7 @@ export class BenchmarkRunner {
     for (const r of results) {
       if (!r) continue;
       if (!r.generation) continue;
-      const b = (r.generation as { breakdown?: import('@ggui-ai/ui-gen/harness/result-types').GenerationResult['breakdown'] }).breakdown;
+      const b = 'breakdown' in r.generation ? r.generation.breakdown : undefined;
       if (!b) continue;
       const key = r.variant.sdkName;
       const s = provSums.get(key) ?? {
@@ -385,14 +385,13 @@ export class BenchmarkRunner {
         ) +
         contextBlock +
         varianceBlock;
-      const generation: AdapterResult | import('@ggui-ai/ui-gen/harness/result-types').GenerationResult =
+      const generation: GenerationResult | AdapterResult =
         await withTimeout(
           dispatchGeneration({
             provider: variant.sdkName,
             userPrompt: harnessUserPrompt,
             model: nativeModelId,
             tools,
-            maxTurns: BENCH_MAX_TURNS,
             models: variant.modelRoles,
             contract,
             fixtureProps: commit.props as JsonObject | undefined,
@@ -402,6 +401,18 @@ export class BenchmarkRunner {
               passThreshold: this.config.passThreshold,
               provider: variant.sdkName,
             },
+            // In-loop visual evaluation (screenshot + multimodal LLM
+            // scoring during eval rounds). Threads the bench `--visual`
+            // config through; `sampleProps` reuses the commit's fixture
+            // props so the screenshot renders realistic data.
+            ...(this.config.visualEvaluation !== undefined
+              ? {
+                  visualEvaluation: {
+                    ...this.config.visualEvaluation,
+                    sampleProps: commit.props as JsonObject | undefined,
+                  },
+                }
+              : {}),
             maxAttempts: this.config.maxAttempts,
             maxEvalRounds: this.config.maxEvalRounds,
             qualityConfig: { ...DEFAULT_QUALITY_CONFIG, quality: this.config.qualityMode ?? 'fast' },
@@ -441,7 +452,7 @@ export class BenchmarkRunner {
 
       // Capture three-tier evaluation from harness result
       const tierEvaluation: EvalResult | undefined =
-        "evalResult" in generation ? (generation as { evalResult?: EvalResult }).evalResult : undefined;
+        'evalResult' in generation ? generation.evalResult : undefined;
 
       // ── Runtime-probe outcome extraction ──────────────────────────
       // 2026-04-27: probe runs INSIDE the harness during eval rounds
@@ -516,7 +527,7 @@ export class BenchmarkRunner {
           }` +
           evalSuffix
       );
-      const breakdown = (generation as { breakdown?: import('@ggui-ai/ui-gen/harness/result-types').GenerationResult['breakdown'] }).breakdown;
+      const breakdown = 'breakdown' in generation ? generation.breakdown : undefined;
       if (breakdown) {
         console.log(
           `  [breakdown] ${variant.id} × ${commit.id} | ` +
@@ -587,13 +598,6 @@ export class BenchmarkRunner {
 // =============================================================================
 
 /**
- * Turn cap passed to the generation harness. NOT a user-tunable yet —
- * if you change this, grep for the constant to make sure downstream
- * dashboards are aware.
- */
-export const BENCH_MAX_TURNS = 45;
-
-/**
  * Resolve the generator slug for a variant. The mapping is:
  *
  *   - `variant.generator` when present and non-empty
@@ -641,12 +645,27 @@ export function formatVarianceBlock(
   );
 }
 
+/** Model ids already flagged as unknown — warn once per id, not per cell. */
+const unknownCostModels = new Set<string>();
+
 /**
  * Calculate estimated cost from token usage and model ID.
+ *
+ * Unknown model ids return 0 but are flagged loudly — a silent $0
+ * would otherwise read as "free run" in every report row. Adapters
+ * that report real cost override this estimate via `rawCostUsd`.
  */
 export function calculateCost(modelId: string, tokens: { input: number; output: number }): number {
   const config = MODEL_REGISTRY[modelId as ModelId];
-  if (!config) return 0;
+  if (!config) {
+    if (!unknownCostModels.has(modelId)) {
+      unknownCostModels.add(modelId);
+      console.warn(
+        `[benchmark] calculateCost: model "${modelId}" is not in MODEL_REGISTRY — estimatedCostUsd recorded as $0 (rawCostUsd, when the adapter reports it, still applies)`,
+      );
+    }
+    return 0;
+  }
 
   const inputCost = (tokens.input / 1_000_000) * config.costs.inputPer1M;
   const outputCost = (tokens.output / 1_000_000) * config.costs.outputPer1M;

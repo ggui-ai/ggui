@@ -1,6 +1,5 @@
-// core/src/benchmarks/multi-sdk/reporter.ts
+// oss/misc/benchmark/src/multi-sdk/reporter.ts
 
-import type { DimensionScores } from '@ggui-ai/ui-gen/evaluation/types';
 import type {
   BenchmarkReportDisplay,
   BenchmarkRunResultDisplay,
@@ -13,12 +12,14 @@ import type {
   SdkComparisonEntry,
 } from '@ggui-ai/shared';
 import type {
+  AestheticScores,
   BenchmarkReport,
   BenchmarkRunResult,
   CommitSummary,
   GeneratorComparisonCell,
   GeneratorComparisonMatrix,
   GeneratorSummary,
+  JudgeDisclosure,
   ProviderName,
   SdkComparisonMatrix,
   VariantSummary,
@@ -37,6 +38,12 @@ export function generateReport(
 ): BenchmarkReport {
   const successResults = results.filter((r) => r.generation !== null);
 
+  // Judge disclosure: every PostEvalResult carries the pinned judge.
+  // Surface it once at meta level; absent when nothing was evaluated.
+  const judge: JudgeDisclosure | undefined = results.find(
+    (r) => r.evaluation !== null,
+  )?.evaluation?.judge;
+
   return {
     meta: {
       timestamp: new Date().toISOString(),
@@ -47,6 +54,7 @@ export function generateReport(
       successCount: successResults.length,
       failureCount: results.length - successResults.length,
       successRate: results.length > 0 ? successResults.length / results.length : 0,
+      ...(judge !== undefined ? { judge } : {}),
     },
     results,
     variantSummaries: buildVariantSummaries(results),
@@ -119,7 +127,7 @@ function aggregateGeneratorCell(input: {
   const generated = runs.filter((r) => r.generation !== null);
   const evaluated = runs.filter((r) => r.evaluation !== null);
   const scores = evaluated
-    .map((r) => r.evaluation!.finalScore)
+    .map((r) => r.evaluation!.score)
     .filter((s): s is number => typeof s === 'number');
   return {
     generator,
@@ -158,7 +166,7 @@ export function buildGeneratorSummaries(
     const generated = runs.filter((r) => r.generation !== null);
     const evaluated = runs.filter((r) => r.evaluation !== null);
     const scores = evaluated
-      .map((r) => r.evaluation!.finalScore)
+      .map((r) => r.evaluation!.score)
       .filter((s): s is number => typeof s === 'number');
     summaries.push({
       generator,
@@ -215,7 +223,7 @@ function buildVariantSummaries(results: BenchmarkRunResult[]): VariantSummary[] 
       continue;
     }
 
-    const scores = evaluated.map((r) => r.evaluation!.finalScore);
+    const scores = evaluated.map((r) => r.evaluation!.score);
     const times = generated.map((r) => r.generation!.generationTimeMs);
     const costs = generated.map((r) => r.estimatedCostUsd);
 
@@ -269,7 +277,7 @@ function buildCommitSummaries(results: BenchmarkRunResult[]): CommitSummary[] {
 
     // Rank by score if evaluated, otherwise by generation time (faster = better)
     const scored = evaluated.length > 0
-      ? evaluated.map((r) => ({ variantId: r.variant.id, score: r.evaluation!.finalScore }))
+      ? evaluated.map((r) => ({ variantId: r.variant.id, score: r.evaluation!.score }))
       : generated.map((r) => ({ variantId: r.variant.id, score: -1 }));
     scored.sort((a, b) => b.score - a.score);
 
@@ -314,7 +322,7 @@ function buildSdkComparison(results: BenchmarkRunResult[]): SdkComparisonMatrix 
 
       matrix[sdk][tier] = {
         avgScore: evaluated.length > 0
-          ? avg(evaluated.map((r) => r.evaluation!.finalScore))
+          ? avg(evaluated.map((r) => r.evaluation!.score))
           : -1,
         avgTimeMs: generated.length > 0
           ? avg(generated.map((r) => r.generation!.generationTimeMs))
@@ -491,24 +499,24 @@ function avg(values: number[]): number {
   return values.reduce((a, b) => a + b, 0) / values.length;
 }
 
-function zeroDimensions(): DimensionScores {
+function zeroDimensions(): AestheticScores {
   return {
-    completeness: 0,
-    visualPolish: 0,
-    interactivity: 0,
-    accessibility: 0,
-    codeQuality: 0,
+    layout: 0,
+    designTokens: 0,
+    hierarchy: 0,
+    polish: 0,
+    dataPresentation: 0,
   };
 }
 
-function avgDimensions(dims: DimensionScores[]): DimensionScores {
+function avgDimensions(dims: AestheticScores[]): AestheticScores {
   if (dims.length === 0) return zeroDimensions();
   return {
-    completeness: avg(dims.map((d) => d.completeness)),
-    visualPolish: avg(dims.map((d) => d.visualPolish)),
-    interactivity: avg(dims.map((d) => d.interactivity)),
-    accessibility: avg(dims.map((d) => d.accessibility)),
-    codeQuality: avg(dims.map((d) => d.codeQuality)),
+    layout: avg(dims.map((d) => d.layout)),
+    designTokens: avg(dims.map((d) => d.designTokens)),
+    hierarchy: avg(dims.map((d) => d.hierarchy)),
+    polish: avg(dims.map((d) => d.polish)),
+    dataPresentation: avg(dims.map((d) => d.dataPresentation)),
   };
 }
 
@@ -554,8 +562,9 @@ export function toDisplayReport(
       failureCount: report.meta.failureCount,
       successRate: report.meta.successRate,
       durationMs: report.meta.totalDurationMs,
+      ...(report.meta.judge !== undefined ? { judge: report.meta.judge } : {}),
     },
-    results: report.results.map((r) => mapRunResult(r, reportId)),
+    results: report.results.map(mapRunResult),
     variantSummaries: report.variantSummaries.map((v) =>
       mapVariantSummary(v, report.results),
     ),
@@ -569,13 +578,7 @@ export function toDisplayReport(
   };
 }
 
-function mapRunResult(r: BenchmarkRunResult, reportId?: string): BenchmarkRunResultDisplay {
-  // Build S3 key for compiled component if generation produced compiled code
-  const compiledCodeS3Key =
-    reportId && r.generation?.compiledCode
-      ? `components/${reportId}/${r.variant.id}/${r.commit.id}/compiled.js`
-      : undefined;
-
+function mapRunResult(r: BenchmarkRunResult): BenchmarkRunResultDisplay {
   return {
     variant: {
       id: r.variant.id,
@@ -595,7 +598,6 @@ function mapRunResult(r: BenchmarkRunResult, reportId?: string): BenchmarkRunRes
     error: r.error,
     timestamp: r.timestamp,
     postGeneration: mapPostGeneration(r),
-    compiledCodeS3Key,
   };
 }
 
@@ -608,9 +610,8 @@ function mapGeneration(r: BenchmarkRunResult): GenerationResultDisplay | null {
     tokens: { input: gen.tokens.input, output: gen.tokens.output, total: gen.tokens.total },
   };
   // GenerationResult extends AdapterResult with passesUsed.
-  const extended = gen as { passesUsed?: unknown };
-  if (typeof extended.passesUsed === 'number') {
-    result.passesUsed = extended.passesUsed;
+  if ('passesUsed' in gen && typeof gen.passesUsed === 'number') {
+    result.passesUsed = gen.passesUsed;
   }
   return result;
 }
@@ -618,24 +619,14 @@ function mapGeneration(r: BenchmarkRunResult): GenerationResultDisplay | null {
 function mapEvaluation(r: BenchmarkRunResult): EvaluationResultDisplay | null {
   if (!r.evaluation) return null;
   const ev = r.evaluation;
-  // EvaluationResult has finalScore + dimensions; PostEvalResult has score + evalTimeMs
-  if ('finalScore' in ev) {
-    const result: EvaluationResultDisplay = {
-      passed: ev.passed,
-      score: ev.finalScore,
-      critique: ev.critique,
-    };
-    if (ev.dimensions) {
-      result.dimensions = { ...ev.dimensions };
-    }
-    if ('evalTimeMs' in ev) {
-      result.evalTimeMs = (ev as { evalTimeMs: number }).evalTimeMs;
-    }
-    return result;
-  }
-  // Both EvaluationResult and PostEvalResult have finalScore, so this is unreachable.
-  // Keep return for exhaustiveness.
-  return null;
+  return {
+    passed: ev.passed,
+    score: ev.score,
+    dimensions: { ...ev.dimensions },
+    judge: { ...ev.judge },
+    critique: ev.critique,
+    evalTimeMs: ev.evalTimeMs,
+  };
 }
 
 function mapTierEvaluation(r: BenchmarkRunResult): TierEvaluationDisplay | undefined {
@@ -681,7 +672,7 @@ function mapVariantSummary(
     avgScore: v.avgScore,
     avgTimeMs: v.avgTimeMs,
     avgCostUsd: v.avgCostUsd,
-    passRate: v.successRate,
+    successRate: v.successRate,
     totalRuns,
   };
 }

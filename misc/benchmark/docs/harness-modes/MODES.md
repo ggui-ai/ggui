@@ -7,8 +7,8 @@
 
 Sub-agents and the main agent consult this for slice definitions, commit
 membership, current target, and active harness settings. Changes here must
-be mirrored in `packages/ui-gen/src/classifier/classifier.ts` + the fragment registry
-in `packages/ui-gen/src/fragments/`.
+be mirrored in `oss/packages/ui-gen/src/classifier/classifier.ts` + the fragment
+registry in `oss/packages/ui-gen/src/fragments/`.
 
 ## How to pick a slice
 
@@ -49,7 +49,7 @@ per sub-agent invocation.
 ### `risk:high`
 
 - **Definition:** Stream + write interaction, stateful merges, or gesture triggers. This is where latency budgets blow up.
-- **Commits:** `kanban-board`, `chat-interface`, `stock-ticker`, `plan-my-week`, `inbox-triage`
+- **Commits:** `kanban-board`, `chat-interface`, `stock-ticker` (gesture-trigger fixtures `plan-my-week` / `inbox-triage` are fixture-only — see below)
 - **Target:** avg **≤ 30s** across providers (aggressive). Currently 50–75s range — primary iteration target.
 - **Active harness settings:**
   - Fragments: `state=merge` (boilerplateMarker), `realtime=mixed` (boilerplateMarker), `writeTrigger=drag` (boilerplateMarker), `writes=per-item`, `writes=compose`.
@@ -63,7 +63,7 @@ per sub-agent invocation.
 
 ### `axis:state=merge`
 
-- **Commits:** `kanban-board`, `chat-interface`, `stock-ticker`, `plan-my-week`
+- **Commits:** `kanban-board`, `chat-interface`, `stock-ticker` (`plan-my-week` is fixture-only)
 - **Key fragments:** `state=merge` (prompt: "seed from props, merge by id"; marker: `── Live entity state (merge-by-id) ──`)
 - **Key axis-checks:** `state.merge.*` — seeded_from_props, no_hardcoded_entities, derived_view_memoized.
 - **Open questions:** Does the `merge-by-id` boilerplate marker meaningfully reduce turn count vs. prompt-only guidance on Google/OpenAI?
@@ -77,14 +77,14 @@ per sub-agent invocation.
 
 ### `axis:writeTrigger=drag`
 
-- **Commits:** `plan-my-week`
+- **Commits:** none in the bench matrix — `plan-my-week` (the only drag fixture) is fixture-only. Benching this slice requires promoting it first.
 - **Key fragments:** `writeTrigger=drag` (boilerplateMarker: `── Drag state ──`).
 - **Key extras:** `writeTrigger.drag.handlers_wired`.
 - **Open questions:** Is the drag marker load-bearing, or can prompt-only guidance suffice?
 
 ### `axis:writeTrigger=swipe`
 
-- **Commits:** `inbox-triage`
+- **Commits:** none in the bench matrix — `inbox-triage` (the only swipe fixture) is fixture-only.
 - **Key extras:** `writeTrigger.swipe.handlers_wired`.
 
 ### `axis:realtime=mixed`
@@ -95,7 +95,7 @@ per sub-agent invocation.
 
 ### `axis:writes=compose`
 
-- **Commits:** `plan-my-week` (cross-entity composition)
+- **Commits:** none in the bench matrix — `plan-my-week` (cross-entity composition) is fixture-only.
 - **Key extras:** `writes.compose.cross_entity_ids` (warn).
 
 ### `axis:layout=multi-step`
@@ -107,17 +107,27 @@ per sub-agent invocation.
 
 ## Fixture-only (not yet in bench commits)
 
-These live in `internal/benchmarks/src/multi-sdk/fixtures/` for classifier
+These live in `oss/misc/benchmark/src/multi-sdk/fixtures/` for classifier
 snapshot tests and compose tests, but are not yet part of the
 `commits.ts` bench matrix:
 
 - `activity-feed`, `flight-status`, `place-search`, `uber-ride`
+- `plan-my-week`, `inbox-triage` (the only drag / swipe / writes=compose
+  fixtures — the corresponding axis slices have no bench commit until
+  these are promoted)
+
+The bench matrix (`BENCHMARK_COMMITS` in
+`oss/misc/benchmark/src/multi-sdk/commits.ts`) currently carries:
+`weather-card`, `survey-form`, `kanban-board`, `periodic-table`,
+`product-page`, `chat-interface`, `stock-ticker`, `onboarding-wizard`,
+`leaflet-map`, `revenue-chart` (the last two are the gadget commits),
+plus the separate `PERSONALIZATION_COMMITS` pair
+(`greeting-card-minimalist` / `greeting-card-data-dense`).
 
 Promoting a fixture into the bench matrix requires adding it to
-`internal/benchmarks/src/multi-sdk/commits.ts` with full contract + sample
-props + expectedMinScore, then re-running classifier snapshot tests
-(`pnpm --filter @ggui-ai/ui-gen test src/classifier/` once the snapshot
-is restored — see STATE.md "missing classifier snapshot" note).
+`oss/misc/benchmark/src/multi-sdk/commits.ts` with full contract + sample
+props + expectedMinScore, then re-running the classifier snapshot test
+(`pnpm --filter @ggui-ai/benchmark test src/multi-sdk/fixtures/classifier-snapshot.test.ts`).
 
 ---
 
@@ -128,7 +138,7 @@ is restored — see STATE.md "missing classifier snapshot" note).
 - No provider-specific fragments. `cacheTier` governs cache reuse, not
   provider.
 - No fragments outside the 8 axes listed in
-  `packages/ui-gen/src/classifier/axes.ts` without first extending the AxisVector.
+  `oss/packages/ui-gen/src/classifier/axes.ts` without first extending the AxisVector.
 - No fragment may have `boilerplateMarker` without a corresponding
   `base.tsx.tmpl` injection point (or the marker is dead weight).
 
@@ -136,7 +146,7 @@ is restored — see STATE.md "missing classifier snapshot" note).
 
 - **Adding a fragment:** must name axis+value, cache tier, and rationale
   against cohort deltas. Follow the `benchmark-runner` skill Step 4.
-- **Adding an axis value:** update `packages/ui-gen/src/classifier/axes.ts` + the
+- **Adding an axis value:** update `oss/packages/ui-gen/src/classifier/axes.ts` + the
   classifier snapshot + this manifest in one PR.
 - **Retiring a fragment:** require bench evidence that no commit depends
   on it. Same-session control required for any Google signal.

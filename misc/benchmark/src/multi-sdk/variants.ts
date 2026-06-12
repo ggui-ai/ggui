@@ -1,4 +1,4 @@
-// core/src/benchmarks/multi-sdk/variants.ts
+// oss/misc/benchmark/src/multi-sdk/variants.ts
 
 import type { BenchmarkVariant } from './types';
 import { ADVANCED_GENERATOR_SLUG, DEFAULT_GENERATOR_SLUG } from './types';
@@ -68,26 +68,6 @@ export function getDefaultVariants(): BenchmarkVariant[] {
       sdkName: 'google',
       tier: 'premium',
       modelId: 'gemini/gemini-3.1-pro-preview', // No ultra available yet — use pro
-    },
-
-    // --- OpenRouter ---
-    {
-      id: 'openrouter-fast',
-      sdkName: 'openrouter',
-      tier: 'fast',
-      modelId: 'openrouter/anthropic/claude-haiku-4-5',
-    },
-    {
-      id: 'openrouter-balanced',
-      sdkName: 'openrouter',
-      tier: 'balanced',
-      modelId: 'openrouter/anthropic/claude-sonnet-4-6',
-    },
-    {
-      id: 'openrouter-premium',
-      sdkName: 'openrouter',
-      tier: 'premium',
-      modelId: 'openrouter/anthropic/claude-opus-4-6',
     },
   ];
 }
@@ -193,27 +173,6 @@ export function getRawVsSdkVariants(): BenchmarkVariant[] {
 }
 
 /**
- * OpenRouter-exclusive models not available via direct provider APIs.
- */
-export function getOpenRouterExclusiveVariants(): BenchmarkVariant[] {
-  return [
-    { id: 'or-deepseek-v3', sdkName: 'openrouter', tier: 'balanced', modelId: 'openrouter/deepseek/deepseek-chat-v3' },
-    { id: 'or-llama-4-maverick', sdkName: 'openrouter', tier: 'balanced', modelId: 'openrouter/meta-llama/llama-4-maverick' },
-    { id: 'or-mistral-large', sdkName: 'openrouter', tier: 'premium', modelId: 'openrouter/mistralai/mistral-large' },
-  ];
-}
-
-/**
- * Direct API vs OpenRouter comparison — same model, different route.
- */
-export function getDirectVsOpenRouterVariants(): BenchmarkVariant[] {
-  return [
-    { id: 'claude-sonnet-direct', sdkName: 'claude', tier: 'balanced', modelId: 'anthropic/claude-sonnet-4-6' },
-    { id: 'claude-sonnet-openrouter', sdkName: 'openrouter', tier: 'balanced', modelId: 'openrouter/anthropic/claude-sonnet-4-6' },
-  ];
-}
-
-/**
  * Multi-generator comparison variants. Pairs the two shipped
  * generator slugs on identical commits so a reader can see
  * `default-haiku vs advanced-opus` side-by-side on the same fixture.
@@ -226,7 +185,7 @@ export function getDirectVsOpenRouterVariants(): BenchmarkVariant[] {
  *     Requires Playwright in the bench env — the runner emits a clear
  *     log line + an error result when Playwright is missing.
  *
- * Use this with the `getDefaultCommits()` corpus (or a 1-2 commit
+ * Use this with the `BENCHMARK_COMMITS` corpus (or a 1-2 commit
  * subset for fast iteration) to drive the comparison matrix in the
  * report. See `BenchmarkReport.byGenerator` for the report shape.
  */

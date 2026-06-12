@@ -24,6 +24,7 @@ import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { S3Client, GetObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3';
+import { buildHeadline } from './headline.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const BENCH_ROOT = resolve(__dirname, '..');
@@ -208,9 +209,3 @@ function mergeIndex(existing, newRun) {
   };
 }
 
-function buildHeadline(report) {
-  if (!Array.isArray(report?.variantSummaries)) return undefined;
-  return report.variantSummaries
-    .map((v) => `${v.sdkName} ${Math.round(v.avgScore ?? 0)}`)
-    .join(' / ');
-}
