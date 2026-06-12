@@ -77,6 +77,8 @@ export interface ModelConfig {
 
 export const MODEL_REGISTRY: Record<ModelId, ModelConfig> = {
   // ── Anthropic Claude ──────────────────────────────────────────────
+  // Default generation model (ui-gen's default engine; see
+  // DEFAULT_MODEL below). Hosted pools default here too.
   "anthropic/claude-haiku-4-5": {
     id: "anthropic/claude-haiku-4-5",
     provider: "anthropic",
@@ -120,7 +122,7 @@ export const MODEL_REGISTRY: Record<ModelId, ModelConfig> = {
     supportsTools: true,
     supportsCaching: true,
   },
-  // Default generation model (platform-pool DEFAULT_POOL_MODEL).
+  // Google-lane reference model (cost-per-token floor).
   "gemini/gemini-3.1-flash-lite": {
     id: "gemini/gemini-3.1-flash-lite",
     provider: "google",
