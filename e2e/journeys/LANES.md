@@ -63,7 +63,7 @@ CI policy today: Lane 2 runs when `ANTHROPIC_API_KEY` is present in the environm
 
 Per strategy §4.2 + CLAUDE.md "Testing LLM-Generated UI":
 
-- **Semantic** DOM match, not strict selectors. Use `evaluateRendering()` / `discoverFormElements()` helpers when available, or assert structural invariants (`data-ggui-code-ready="true"` handoff, `ggui-rcr-*` scope mount, non-empty child count).
+- **Semantic** DOM match, not strict selectors. Assert structural invariants (`data-ggui-code-ready="true"` handoff, `ggui-rcr-*` scope mount, non-empty child count) or use `validateContractBehavior()` from `@ggui-ai/ui-visual-tester` for contract-level behavior.
 - **Blueprint-class match**: assert the generator picked `form` vs `list` vs `detail` — not exact markup.
 - **Cache marker match**: assert the structured `cache.hit` / `cache.llmCallsAvoided` fields — not latency alone.
 - **`retries: 1` allowed** for LLM nondeterminism.
