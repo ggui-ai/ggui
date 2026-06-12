@@ -19,7 +19,7 @@ import {
 } from '@ggui-ai/ui-gen/adapters';
 import { BENCHMARK_COMMITS, getBenchmarkCommit } from './commits';
 import { generateReport, renderReportMarkdown } from './reporter';
-import { calculateCost } from './runner';
+import { calculateCost, resolveCostModelId } from './runner';
 import { getDefaultVariants, getSpeedVariants, getHybridVariants, getRawVsSdkVariants } from './variants';
 import type { BenchmarkRunResult, PostEvalResult } from './types';
 import { AESTHETIC_JUDGE_MODEL, AESTHETIC_PROMPT_VERSION } from './post-eval';
@@ -236,6 +236,67 @@ describe('Cost Calculator', () => {
 
   it('returns 0 for unknown models', () => {
     expect(calculateCost('unknown/model', { input: 1000, output: 500 })).toBe(0);
+  });
+});
+
+// =============================================================================
+// Cost attribution — coding-role override (Exp 45 mis-pricing regression)
+// =============================================================================
+
+describe('resolveCostModelId', () => {
+  it('returns the base model when no roles are set', () => {
+    expect(resolveCostModelId(undefined, 'gemini/gemini-3.1-flash-lite')).toBe(
+      'gemini/gemini-3.1-flash-lite',
+    );
+    expect(resolveCostModelId({}, 'anthropic/claude-haiku-4-5')).toBe(
+      'anthropic/claude-haiku-4-5',
+    );
+  });
+
+  it('coding override wins over the variant base model (bare CLI form normalized to the registry key)', () => {
+    // `pnpm bench --model gemini-3.5-flash` stores the BARE id on
+    // modelRoles.coding; MODEL_REGISTRY is LiteLLM-keyed.
+    expect(
+      resolveCostModelId({ coding: 'gemini-3.5-flash' }, 'gemini/gemini-3.1-flash-lite'),
+    ).toBe('gemini/gemini-3.5-flash');
+  });
+
+  it('LiteLLM-prefixed coding override passes through unchanged', () => {
+    expect(
+      resolveCostModelId(
+        { coding: 'anthropic/claude-sonnet-4-6' },
+        'anthropic/claude-haiku-4-5',
+      ),
+    ).toBe('anthropic/claude-sonnet-4-6');
+  });
+
+  it('falls back to the default role when coding is absent', () => {
+    expect(
+      resolveCostModelId({ default: 'gemini-3.5-flash' }, 'gemini/gemini-3.1-flash-lite'),
+    ).toBe('gemini/gemini-3.5-flash');
+  });
+
+  it('passes unknown ids through so calculateCost flags them loudly', () => {
+    expect(
+      resolveCostModelId({ coding: 'totally-unknown-model' }, 'gemini/gemini-3.1-flash-lite'),
+    ).toBe('totally-unknown-model');
+  });
+
+  it('Exp-45 regression: an overridden run is priced at the OVERRIDE rate, not the base rate', () => {
+    const tokens = { input: 100_000, output: 200_000 };
+    const overridden = calculateCost(
+      resolveCostModelId({ coding: 'gemini-3.5-flash' }, 'gemini/gemini-3.1-flash-lite'),
+      tokens,
+    );
+    // flash: 0.1M × $1.5 + 0.2M × $9.0 = $1.95
+    expect(overridden).toBeCloseTo(
+      calculateCost('gemini/gemini-3.5-flash', tokens),
+      10,
+    );
+    // The base (flash-lite) rate would be $0.325 — the Exp 45 bug shape.
+    expect(overridden).toBeGreaterThan(
+      calculateCost('gemini/gemini-3.1-flash-lite', tokens) * 5,
+    );
   });
 });
 

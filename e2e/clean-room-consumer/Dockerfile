@@ -29,6 +29,11 @@ COPY . /build/
 #   PNPM_INSTALL_FLAGS=--no-frozen-lockfile make test-clean-room-consumer
 ARG PNPM_INSTALL_FLAGS=--frozen-lockfile
 RUN pnpm install ${PNPM_INSTALL_FLAGS}
+# @ggui-ai/ui-gen's tsup DTS build runs in a worker thread that OOMs at
+# the default heap on hosted runners (ERR_WORKER_OUT_OF_MEMORY). Same
+# bump as ci.yml — workers inherit --max-old-space-size as their default
+# heap limit.
+ENV NODE_OPTIONS=--max-old-space-size=6144
 RUN pnpm -r --filter "./packages/*" build
 
 WORKDIR /gate

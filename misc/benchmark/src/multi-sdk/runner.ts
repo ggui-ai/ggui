@@ -16,6 +16,7 @@ import type { AnyAdapterConfig } from "@ggui-ai/ui-gen/adapters/base";
 import { GeneratorAdapter, createGeneratorTools } from "@ggui-ai/ui-gen/adapters";
 import { dispatchGeneration } from "@ggui-ai/ui-gen/adapters/generation-dispatch";
 import type { AdapterResult } from "@ggui-ai/ui-gen/adapters/types";
+import type { ModelRoles } from "@ggui-ai/ui-gen/harness/result-types";
 import { DEFAULT_QUALITY_CONFIG } from "@ggui-ai/ui-gen/evaluation";
 import type { EvalResult } from "@ggui-ai/ui-gen/evaluation";
 import { injectContracts, injectRenderingContext } from "@ggui-ai/ui-gen/harness/prompts";
@@ -444,8 +445,15 @@ export class BenchmarkRunner {
           this.config.timeoutMs
         );
 
-      // Calculate cost
-      const estimatedCostUsd = calculateCost(modelId, generation.tokens);
+      // Calculate cost — keyed on the model that actually wrote the
+      // code (a `--model` / `modelRoles.coding` override wins over the
+      // variant BASE model). Pricing at the base rate silently
+      // mis-priced overridden runs (Exp 45: $0.376 reported vs $2.26
+      // real for a gemini-3.5-flash coding override).
+      const estimatedCostUsd = calculateCost(
+        resolveCostModelId(variant.modelRoles, modelId),
+        generation.tokens,
+      );
 
       // Post-generation analysis (lightweight, no AWS needed)
       const postGeneration = runPostGeneration(generation, commit);
@@ -643,6 +651,31 @@ export function formatVarianceBlock(
     lines.join('\n') +
     '\n'
   );
+}
+
+/**
+ * Resolve the model id that should be used for COST attribution.
+ *
+ * `variant.modelId` is the variant's BASE model, but a `--model` /
+ * `modelRoles.coding` override changes which model actually writes the
+ * code — the dominant token consumer. Keying `calculateCost` on the
+ * base model silently mis-prices overridden runs.
+ *
+ * Role values may be bare (`--model gemini-3.5-flash`) while
+ * `MODEL_REGISTRY` is keyed by LiteLLM `provider/model` ids — when the
+ * bare form misses the registry, normalize by unique suffix match.
+ * Unknown ids pass through so `calculateCost` flags them loudly.
+ */
+export function resolveCostModelId(
+  models: ModelRoles | undefined,
+  baseModelId: string,
+): string {
+  const effective = models?.coding ?? models?.default ?? baseModelId;
+  if (effective in MODEL_REGISTRY) return effective;
+  const bySuffix = (Object.keys(MODEL_REGISTRY) as ModelId[]).find((id) =>
+    id.endsWith(`/${effective}`),
+  );
+  return bySuffix ?? effective;
 }
 
 /** Model ids already flagged as unknown — warn once per id, not per cell. */
