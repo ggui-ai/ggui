@@ -100,12 +100,14 @@ import {
   AUTH_HELP_FRAGMENT,
   type AuthFlags,
 } from './auth-strategy.js';
+import type { ArtifactKind } from '@ggui-ai/registry-core';
 
-/** Artifact-kind discriminator. Mirrors the manifest schema's
- * `kind` field — passing a CLI verb's `kind` to the publish core lets
- * it bail with a friendly redirect when the on-disk manifest doesn't
+/** Artifact-kind discriminator (canonical type owned by
+ * `@ggui-ai/registry-core`). Mirrors the manifest schema's `kind`
+ * field — passing a CLI verb's `kind` to the publish core lets it
+ * bail with a friendly redirect when the on-disk manifest doesn't
  * match. */
-export type ArtifactKind = 'gadget' | 'blueprint';
+export type { ArtifactKind };
 
 /**
  * Shape of the resolved options the publish core consumes. Built from

@@ -181,8 +181,9 @@ export async function compileUi(
 ): Promise<UiCompileResult> {
   const { bundle = false, resolveDir } = options;
 
-  // 1. Validate using shared rules (from core/tools/validation, which
-  //    uses DANGEROUS_PATTERNS from @ggui-ai/protocol).
+  // 1. Validate using shared rules (validateComponentDetailed in
+  //    ./component-detailed.ts, which uses DANGEROUS_PATTERNS from
+  //    @ggui-ai/protocol).
   // In bundle mode, skip import allowlist validation — external imports
   // will be resolved by esbuild from local node_modules.
   // Security patterns (eval, fetch, etc.) are always enforced.

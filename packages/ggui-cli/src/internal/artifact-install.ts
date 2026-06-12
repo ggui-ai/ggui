@@ -75,7 +75,7 @@ import {
   verifyBundleSigstore,
 } from '@ggui-ai/gadget-signing';
 import type { GadgetDescriptor } from '@ggui-ai/protocol';
-import { READ_ERROR_CODES, type ReadErrorBody } from '@ggui-ai/registry-core';
+import { READ_ERROR_CODES, type ArtifactKind, type ReadErrorBody } from '@ggui-ai/registry-core';
 import {
   findGguiJson,
   readGguiJson,
@@ -83,10 +83,11 @@ import {
   type GguiJsonObject,
 } from './ggui-json.js';
 
-/** Artifact-kind discriminator — the verb the operator typed
+/** Artifact-kind discriminator (canonical type owned by
+ * `@ggui-ai/registry-core`) — the verb the operator typed
  * (`gadget` vs `blueprint`). Enforced against the registry-served
  * manifest's `kind` discriminator. */
-export type ArtifactKind = 'gadget' | 'blueprint';
+export type { ArtifactKind };
 
 /* -------------------------------------------------------------------------- */
 /* Defaults                                                                   */

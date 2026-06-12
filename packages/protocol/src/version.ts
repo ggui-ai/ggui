@@ -184,6 +184,17 @@
  *      tokens since. Operator theme files carrying a `canvas` block
  *      now fail strict parse — delete the block.
  *
+ *   dv13. **`checkSecurity` + `SecurityCheckResult` deleted;
+ *      `FULLSTACK_IMPORT_PREFIXES` un-exported** (published npm
+ *      surface, no wire change — DEAD-PROTO-04 follow-up). The
+ *      convenience checker had zero consumers repo-wide: every live
+ *      validation path runs `validateComponentDetailed` in
+ *      `@ggui-ai/ui-gen`, which imports `DANGEROUS_PATTERNS` directly
+ *      and emits richer per-violation diagnostics. The prefix list
+ *      stays as the internal input of the still-published
+ *      `classifyUi`. `DANGEROUS_PATTERNS` / `DangerousPattern` /
+ *      `UiClass` / `classifyUi` are unchanged.
+ *
  *   ug1. **`@ggui-ai/ui-gen` superseded coding-agent generation
  *      island deleted** (no wire change — published npm surface +
  *      dist bytes). The pre-harness virtual-git orchestration

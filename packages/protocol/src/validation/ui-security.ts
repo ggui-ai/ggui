@@ -2,9 +2,13 @@
 //
 // Shared UI security validation — single source of truth for dangerous
 // patterns and UI classification. Used by:
-//   - core/src/tools/validation.ts (generator pipeline)
-//   - core/src/validation/ui-compiler.ts (CLI compiler)
-//   - cloud/amplify/functions/rest-api/cli-api/ui-register-handler.ts (register endpoint)
+//   - @ggui-ai/ui-gen src/validation/component-detailed.ts
+//     (validateComponentDetailed — the generator/compiler validation
+//     pipeline, consumes DANGEROUS_PATTERNS)
+//   - @ggui-ai/ui-gen src/validation/ui-compiler.ts (standalone
+//     compileUi/validateUi — consumes classifyUi + UiClass)
+//   - @ggui-ai/project-config src/ui-manifest.ts (UiManifest schema —
+//     validates against the UiClass vocabulary owned here)
 //
 // This module is PUBLIC (@ggui-ai/protocol) — keep it dependency-free.
 
@@ -129,8 +133,11 @@ export const DANGEROUS_PATTERNS: DangerousPattern[] = [
 
 // ── UI Classification ───────────────────────────────────────────────
 
-/** Import prefixes that indicate a fullstack UI (requires client bundle). */
-export const FULLSTACK_IMPORT_PREFIXES = [
+/**
+ * Import prefixes that indicate a fullstack UI (requires client bundle).
+ * Internal input of {@link classifyUi} — not part of the published API.
+ */
+const FULLSTACK_IMPORT_PREFIXES = [
   '@ggui-ai/wire',
   '@ggui-ai/react',
   '@app/components',
@@ -161,36 +168,3 @@ export function classifyUi(code: string): UiClass {
 // Moved to `./content-hash` because it depends on `node:crypto`. Server-
 // only callers import it via `@ggui-ai/protocol/content-hash` — see that
 // file's header for rationale.
-
-// ── Security Validation ─────────────────────────────────────────────
-
-export interface SecurityCheckResult {
-  /** True if no dangerous patterns found. */
-  safe: boolean;
-  /** List of violations found. */
-  violations: Array<{
-    name: string;
-    suggestion: string;
-    line?: number;
-  }>;
-}
-
-/**
- * Check code for dangerous patterns.
- * Works on both source and compiled code.
- */
-export function checkSecurity(code: string): SecurityCheckResult {
-  const violations: SecurityCheckResult['violations'] = [];
-
-  for (const { pattern, name, suggestion } of DANGEROUS_PATTERNS) {
-    // Reset lastIndex for global regexes
-    const re = new RegExp(pattern.source, pattern.flags);
-    const match = re.exec(code);
-    if (match) {
-      const line = code.substring(0, match.index).split('\n').length;
-      violations.push({ name, suggestion, line });
-    }
-  }
-
-  return { safe: violations.length === 0, violations };
-}

@@ -10,9 +10,16 @@ import { defineConfig } from 'tsup';
  *   - Both `src/` and `dist/` ship in the tarball (see package.json `files`)
  *     so consumers can step through source if they want.
  *
- * Subpath entrypoints (adapters, harness, evaluation,
- * design-system-docs, render-check, wire/primitive docs) are registered
- * in the `entry` array below.
+ * Subpath entrypoints (adapters, harness, evaluation, wire/primitive
+ * docs) are registered in the `entry` array below.
+ *
+ * Entry ⇆ exports-map invariant: every entry here corresponds to a
+ * `package.json#exports` subpath, with ONE exception — `src/tools/
+ * render-check-worker.ts` is reached by file path (subprocess spawn),
+ * not by import specifier. Entries without an exports target ship
+ * unroutable dist bytes (Node blocks deep `dist/` imports once an
+ * exports map exists); modules consumed only internally are inlined
+ * into their importing entries by tsup and need no entry of their own.
  */
 export default defineConfig({
   entry: [
@@ -25,16 +32,12 @@ export default defineConfig({
     'src/policy.ts',
     'src/workflows.ts',
     'src/patch.ts',
-    'src/tools.ts',
     'src/boilerplate.ts',
     'src/provider-adapter.ts',
     'src/provider-adapter-contract.ts',
     'src/providers/index.ts',
-    'src/compile.ts',
     'src/check/index.ts',
     'src/validation/index.ts',
-    'src/validation/ui-compiler.ts',
-    'src/design-system-docs.ts',
     // Blueprint validator orchestrator.
     'src/blueprint-validator.ts',
     // Advanced generator (published `./advanced` subpath — see
@@ -55,11 +58,6 @@ export default defineConfig({
     // Evaluation cluster.
     'src/evaluation/index.ts',
     'src/evaluation/types.ts',
-    'src/evaluation/types-public.ts',
-    'src/evaluation/loop.ts',
-    'src/evaluation/evaluator.ts',
-    'src/evaluation/mcp-server.ts',
-    'src/evaluation/prompts.ts',
     'src/evaluation/axis-checks/index.ts',
     'src/evaluation/axis-checks/registry.ts',
     // Adapters cluster.
@@ -67,15 +65,11 @@ export default defineConfig({
     'src/adapters/base.ts',
     'src/adapters/types.ts',
     'src/adapters/generation-dispatch.ts',
-    'src/adapters/provider-router.ts',
-    'src/adapters/claude/raw.ts',
-    'src/adapters/openai/raw.ts',
-    'src/adapters/google/raw.ts',
     // Tool docs.
-    'src/tools/get-wire.ts',
     'src/tools/get-primitives-ts.ts',
-    'src/tools/render-check.ts',
-    // render-check.ts spawns this as a subprocess (`spawn(node, [workerPath])`),
+    // render-check.ts spawns this as a subprocess (`spawn(node, [workerPath])`)
+    // resolved by file path relative to whichever chunk inlined
+    // render-check (e.g. `dist/adapters/*` → `../tools/render-check-worker.js`),
     // so tsup can't statically pick it up via import-graph traversal —
     // it needs to be listed as an explicit entry to land in dist/.
     'src/tools/render-check-worker.ts',
