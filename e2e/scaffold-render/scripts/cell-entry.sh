@@ -61,7 +61,33 @@ export GGUI_CACHE_TRACE_STDERR=1
 
 # Pin the local-embedding model cache to a writable dir the scaffolded serve
 # inherits + reuses (the serve logs `[ggui:embedding] local … (cache: …)`).
-export GGUI_EMBEDDING_CACHE_DIR=/work/.ggui-embedding-cache
+# When the host mounts a persistent cache (make test-scaffold-render mounts
+# one at /models and exports GGUI_EMBEDDING_CACHE_DIR), respect it — that is
+# how CI persists the model across runs (actions/cache) so HF is never hit
+# on the steady-state path.
+export GGUI_EMBEDDING_CACHE_DIR="${GGUI_EMBEDDING_CACHE_DIR:-/work/.ggui-embedding-cache}"
+
+echo "[cell] prefetch the local-embedding model into $GGUI_EMBEDDING_CACHE_DIR"
+# One download per CONTAINER (instead of one per scaffolded-app boot), retried
+# with backoff: huggingface.co 429s hosted-CI egress IPs, and a missing model
+# silently downgrades every cache-hit scenario to mock embeddings / RAG
+# failures (2026-06-12 nightly). With a warm mounted cache this is a ~1s
+# disk-load no-op. Loud failure after the retries — better than the silent
+# downgrade.
+pnpm --filter @ggui-ai/embedding-local build
+for attempt in 1 2 3 4 5; do
+  if node oss/e2e/scaffold-render/scripts/prefetch-embedding-model.mjs; then
+    break
+  fi
+  if [ "$attempt" = 5 ]; then
+    echo "[cell] embedding-model prefetch failed after $attempt attempts — aborting (scenarios would silently lose semantic cache matching)" >&2
+    exit 1
+  fi
+  backoff=$((attempt * 30))
+  echo "[cell] prefetch attempt $attempt failed — retrying in ${backoff}s"
+  sleep "$backoff"
+done
+lap "embedding-model prefetch"
 
 echo "[cell] run scaffold-render scenarios (Verdaccio process → SKIP_VERDACCIO_BOOT=1)"
 # The harness's setup.sh inherits these: REGISTRY points at our process, and
