@@ -64,10 +64,33 @@ export const REQUIRE_ALL =
   process.env.GGUI_E2E_REQUIRE_ALL_PROVIDERS === '1';
 
 /**
- * `describe.skipIf` predicate that respects the REQUIRE_ALL flag.
- * Returns true when the row should be skipped (default behavior when
- * the key is missing and REQUIRE_ALL is off).
+ * `describe.skipIf` predicate. Returns true when the row should skip.
+ *
+ * Two distinct postures, because the shared `e2e` GitHub environment
+ * carries ALL THREE provider keys on every trigger (it is the same
+ * environment cloud-scenarios uses) — key-presence alone can't be the
+ * per-push gate, or the cross-provider rows fire on every push and the
+ * documented "per-push runs anthropic only" intent is defeated:
+ *
+ *   - **anthropic** is the per-push baseline. It runs whenever its key
+ *     resolves (REQUIRE_ALL has no bearing) — the always-on smoke row.
+ *   - **openai / google** are cross-provider rows. They run ONLY under
+ *     REQUIRE_ALL (the `run-all-providers` PR label or the nightly
+ *     schedule). On an unlabeled per-push they skip even though their
+ *     key is present in the shared environment. This keeps per-push
+ *     green on anthropic alone while preserving the labeled/nightly
+ *     cross-provider matrix — and is robust to whichever keys the
+ *     environment happens to expose.
+ *
+ * When a row DOES run, the per-spec `!hasKey` guard still hard-fails it
+ * if REQUIRE_ALL is on but the key turns out absent, so a genuinely
+ * missing credential on the labeled/nightly path is loud, not silent.
  */
 export function providerSkip(row: ProviderRow): boolean {
-  return !process.env[row.apiKey] && !REQUIRE_ALL;
+  // Anthropic baseline: gated purely on its own key, on every trigger.
+  if (row.name === 'anthropic') {
+    return !process.env[row.apiKey];
+  }
+  // Cross-provider rows: only when REQUIRE_ALL (labeled PR / nightly).
+  return !REQUIRE_ALL;
 }

@@ -24,7 +24,11 @@ export default function Hello(props: Props) {
     expect(result.compiledCode).toBeDefined();
     expect(result.compiledCode!.length).toBeGreaterThan(0);
     expect(commitMeta.size).toBe(1);
-  });
+    // Heaviest path in this file: real esbuild compile + tsc self-check + isolated
+    // git commit. Sub-second when run alone, but starves on the 2-core CI runner
+    // under full-suite contention (49 files concurrent) and crossed the default
+    // 5000ms there. Same reason runtime-render.test.ts pins its render tests to 30000ms.
+  }, 30000);
 
   it('write: invalid code → auto-commit → FAIL → violations returned', async () => {
     const result = await executeTool(

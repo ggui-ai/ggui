@@ -265,7 +265,11 @@ describe('createAdvancedUiGenerator — empty actionSpec skips slow stage', () =
     expect(result.ok).toBe(true);
     // The fake chromium.launch was never called.
     expect(FAKE_PLAYWRIGHT.chromium.launch).not.toHaveBeenCalled();
-  });
+    // Slow stage is skipped, but the fast stage still runs `runRenderCheck` for
+    // real (jsdom + React render + esbuild on COUNTER_SOURCE_GOOD). Sub-second
+    // locally, but on the 2-core CI runner under full-suite contention it crossed
+    // the default 5000ms. Pinned to match runtime-render.test.ts's 30000ms.
+  }, 30000);
 });
 
 describe('createAdvancedUiGenerator — iteration cap', () => {
