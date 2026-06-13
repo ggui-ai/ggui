@@ -63,7 +63,7 @@
     "@types/node": "^24.0.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
-    "esbuild": "^0.25.12",
+    "esbuild": "^0.28.1",
     "playwright-core": "^1.60.0",
     "typescript": "^5.0.0",
     "vitest": "^3.0.0"
