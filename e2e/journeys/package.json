@@ -22,7 +22,7 @@
     "@ggui-ai/protocol-reference-server": "workspace:*",
     "@ggui-ai/ui-gen": "workspace:*",
     "@modelcontextprotocol/sdk": "^1.27.0",
-    "@playwright/test": "^1.40.0",
+    "@playwright/test": "^1.60.0",
     "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^24.0.0",
     "@types/ws": "^8.5.0",
