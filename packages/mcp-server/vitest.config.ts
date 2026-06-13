@@ -7,7 +7,5 @@ export default defineConfig({
     // (mirrors @ggui-ai/ui-gen). A real hang still surfaces in-budget.
     testTimeout: 30_000,
     hookTimeout: 30_000,
-    include: ['src/**/*.test.ts'],
-    environment: 'node',
   },
 });

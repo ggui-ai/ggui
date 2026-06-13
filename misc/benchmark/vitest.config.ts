@@ -16,6 +16,12 @@ import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
   test: {
+    // Several suites do real esbuild compiles + ui-gen generation-harness
+    // stubs (compile_component, multi-generator dispatch) that cross
+    // vitest's 5000ms default under cold-cache 2-core CI concurrency.
+    // Match the genuine work; mirrors the @ggui-ai/ui-gen precedent.
+    testTimeout: 30_000,
+    hookTimeout: 30_000,
     include: ['src/**/*.test.ts', 'src/**/*.test.tsx'],
     exclude: [
       '**/node_modules/**',
