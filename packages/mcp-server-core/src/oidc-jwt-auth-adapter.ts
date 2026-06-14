@@ -46,7 +46,12 @@ export interface TrustedIssuerRow {
   /** Pre-built verifier (test/explicit path) OR JWKS config (prod path). */
   readonly verifier?: JwtVerifierLike;
   readonly jwksUrl?: string;
-  /** Per-issuer alg allowlist for the lazily-built prod verifier. */
+  /**
+   * Per-issuer alg allowlist for the lazily-built prod verifier. Enforced via
+   * the verifier's `customJwtCheck` hook — the JWT header `alg` MUST be a member
+   * (spec §A.4 step 3). When omitted, the library's built-in defaults still
+   * block `alg:none` and RS↔HS confusion.
+   */
   readonly alg?: readonly string[];
 }
 
@@ -166,22 +171,42 @@ export class OidcJwtAuthAdapter implements AuthAdapter {
       // Lazy require — aws-jwt-verify is an OPTIONAL peerDep (mirrors
       // better-sqlite3). Only deployments that federate an OIDC issuer
       // install it; everyone else never loads it.
+      //
+      // The cast mirrors the real `JwtVerifier.create` (aliased `JwtRsaVerifier`)
+      // signature: `create(verifyProperties, additionalProperties?)`. We pin the
+      // per-issuer alg allowlist via `customJwtCheck` (the only caller-supplied
+      // hook in v5 — there is no `algorithms`/`jwtVerifyOptions` option), which
+      // runs after the standard signature/iss/exp checks and throws to reject.
       // eslint-disable-next-line @typescript-eslint/no-require-imports
       const { JwtRsaVerifier } = require('aws-jwt-verify') as {
         JwtRsaVerifier: {
-          create(props: {
-            issuer: string;
-            audience: null; // we check aud via the row pattern ourselves
-            jwksUri: string;
-            jwtVerifyOptions?: { algorithms?: readonly string[] };
-          }): JwtVerifierLike;
+          create(
+            verifyProperties: {
+              issuer: string;
+              audience: string | string[] | null; // we check aud via the row pattern ourselves
+              jwksUri: string;
+              customJwtCheck?: (props: {
+                header: { alg?: string };
+              }) => Promise<void> | void;
+            },
+          ): JwtVerifierLike;
         };
       };
+      const allowedAlgs = row.alg;
       const v = JwtRsaVerifier.create({
         issuer: row.issuer,
         audience: null,
         jwksUri: row.jwksUrl,
-        jwtVerifyOptions: row.alg ? { algorithms: row.alg } : undefined,
+        customJwtCheck: allowedAlgs
+          ? ({ header }) => {
+              // Per-issuer alg pinning (spec §A.4 step 3). aws-jwt-verify
+              // already blocks `alg:none` and RS↔HS confusion by default;
+              // this narrows to the row's explicit allowlist (e.g. RS256-only).
+              if (!header.alg || !allowedAlgs.includes(header.alg)) {
+                throw new Error('jwt alg not in per-issuer allowlist');
+              }
+            }
+          : undefined,
       });
       this.built.set(row.issuer, v);
       return v;
