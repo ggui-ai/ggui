@@ -251,6 +251,50 @@ describe('Cost Calculator', () => {
   it('returns 0 for unknown models', () => {
     expect(calculateCost('unknown/model', { input: 1000, output: 500 })).toBe(0);
   });
+
+  it('prices Claude cache write/read at their own rates (Anthropic)', () => {
+    const cost = calculateCost('anthropic/claude-haiku-4-5', {
+      input: 10000,
+      output: 5000,
+      cacheCreation: 20000,
+      cacheRead: 100000,
+    });
+    // input: 10K × $1.0/1M    = $0.010
+    // output: 5K × $5.0/1M    = $0.025
+    // cacheWrite: 20K × $1.25 = $0.025
+    // cacheRead: 100K × $0.10 = $0.010
+    expect(cost).toBeCloseTo(0.07, 4);
+  });
+
+  it('cache tokens that are absent contribute $0 (input/output only)', () => {
+    const withCacheZero = calculateCost('anthropic/claude-sonnet-4-6', {
+      input: 10000,
+      output: 5000,
+      cacheCreation: 0,
+      cacheRead: 0,
+    });
+    const noCacheFields = calculateCost('anthropic/claude-sonnet-4-6', {
+      input: 10000,
+      output: 5000,
+    });
+    expect(withCacheZero).toBeCloseTo(noCacheFields, 10);
+  });
+
+  it('falls back to the input rate for a model with no cache rates', () => {
+    // Gemini flash-lite has no cacheWritePer1M/cacheReadPer1M → cache
+    // tokens price at the input rate ($0.25/1M).
+    const cost = calculateCost('gemini/gemini-3.1-flash-lite', {
+      input: 10000,
+      output: 5000,
+      cacheCreation: 4000,
+      cacheRead: 4000,
+    });
+    // input: 10K × $0.25/1M       = $0.0025
+    // output: 5K × $1.5/1M        = $0.0075
+    // cacheWrite: 4K × $0.25/1M   = $0.0010 (input-rate fallback)
+    // cacheRead: 4K × $0.25/1M    = $0.0010 (input-rate fallback)
+    expect(cost).toBeCloseTo(0.012, 4);
+  });
 });
 
 // =============================================================================

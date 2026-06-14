@@ -64,6 +64,18 @@ export interface ModelConfig {
   costs: {
     inputPer1M: number;
     outputPer1M: number;
+    /**
+     * Cache-write token rate (Anthropic prices a cache WRITE at ~1.25×
+     * the input rate). Omit if the provider doesn't bill prompt caching
+     * separately — consumers fall back to {@link inputPer1M}.
+     */
+    cacheWritePer1M?: number;
+    /**
+     * Cache-read token rate (Anthropic prices a cache READ at ~0.1× the
+     * input rate). Omit if the provider doesn't bill prompt caching
+     * separately — consumers fall back to {@link inputPer1M}.
+     */
+    cacheReadPer1M?: number;
   };
   maxTokens: number;
   supportsTools: boolean;
@@ -84,7 +96,12 @@ export const MODEL_REGISTRY: Record<ModelId, ModelConfig> = {
     provider: "anthropic",
     displayName: "Claude Haiku 4.5",
     tier: "fast",
-    costs: { inputPer1M: 1.0, outputPer1M: 5.0 },
+    costs: {
+      inputPer1M: 1.0,
+      outputPer1M: 5.0,
+      cacheWritePer1M: 1.25,
+      cacheReadPer1M: 0.1,
+    },
     maxTokens: 200000,
     supportsTools: true,
   },
@@ -93,7 +110,12 @@ export const MODEL_REGISTRY: Record<ModelId, ModelConfig> = {
     provider: "anthropic",
     displayName: "Claude Sonnet 4.6",
     tier: "balanced",
-    costs: { inputPer1M: 3.0, outputPer1M: 15.0 },
+    costs: {
+      inputPer1M: 3.0,
+      outputPer1M: 15.0,
+      cacheWritePer1M: 3.75,
+      cacheReadPer1M: 0.3,
+    },
     maxTokens: 200000,
     supportsTools: true,
   },
@@ -102,7 +124,12 @@ export const MODEL_REGISTRY: Record<ModelId, ModelConfig> = {
     provider: "anthropic",
     displayName: "Claude Opus 4.6",
     tier: "premium",
-    costs: { inputPer1M: 5.0, outputPer1M: 25.0 },
+    costs: {
+      inputPer1M: 5.0,
+      outputPer1M: 25.0,
+      cacheWritePer1M: 6.25,
+      cacheReadPer1M: 0.5,
+    },
     maxTokens: 1000000,
     supportsTools: true,
   },

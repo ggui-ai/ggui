@@ -450,9 +450,16 @@ export class BenchmarkRunner {
       // variant BASE model). Pricing at the base rate silently
       // mis-priced overridden runs (Exp 45: $0.376 reported vs $2.26
       // real for a gemini-3.5-flash coding override).
+      // Cache tokens (Claude prompt caching) ride on `generation` as
+      // siblings of `tokens`, not inside it — thread them in so the
+      // cache-aware estimate prices cache WRITE/READ at their own rates.
       const estimatedCostUsd = calculateCost(
         resolveCostModelId(variant.modelRoles, modelId),
-        generation.tokens,
+        {
+          ...generation.tokens,
+          cacheCreation: generation.cacheCreationTokens,
+          cacheRead: generation.cacheReadTokens,
+        },
       );
 
       // Post-generation analysis (lightweight, no AWS needed)
@@ -724,11 +731,22 @@ const unknownCostModels = new Set<string>();
 /**
  * Calculate estimated cost from token usage and model ID.
  *
+ * Prices the four token classes a cache-aware provider bills separately:
+ * fresh `input`, `output`, prompt-cache WRITE (`cacheCreation`), and
+ * prompt-cache READ (`cacheRead`). Anthropic charges a cache write at
+ * ~1.25× the input rate and a cache read at ~0.1×; those rates live on
+ * `config.costs.cacheWritePer1M` / `cacheReadPer1M`. Providers without
+ * separate caching pricing (or token sources that don't report cache
+ * counts) fall back to the input rate × 0 tokens — i.e. no effect.
+ *
  * Unknown model ids return 0 but are flagged loudly — a silent $0
  * would otherwise read as "free run" in every report row. Adapters
  * that report real cost override this estimate via `rawCostUsd`.
  */
-export function calculateCost(modelId: string, tokens: { input: number; output: number }): number {
+export function calculateCost(
+  modelId: string,
+  tokens: { input: number; output: number; cacheCreation?: number; cacheRead?: number },
+): number {
   const config = MODEL_REGISTRY[modelId as ModelId];
   if (!config) {
     if (!unknownCostModels.has(modelId)) {
@@ -742,7 +760,11 @@ export function calculateCost(modelId: string, tokens: { input: number; output: 
 
   const inputCost = (tokens.input / 1_000_000) * config.costs.inputPer1M;
   const outputCost = (tokens.output / 1_000_000) * config.costs.outputPer1M;
-  return inputCost + outputCost;
+  const cacheWriteRate = config.costs.cacheWritePer1M ?? config.costs.inputPer1M;
+  const cacheReadRate = config.costs.cacheReadPer1M ?? config.costs.inputPer1M;
+  const cacheWriteCost = ((tokens.cacheCreation ?? 0) / 1_000_000) * cacheWriteRate;
+  const cacheReadCost = ((tokens.cacheRead ?? 0) / 1_000_000) * cacheReadRate;
+  return inputCost + outputCost + cacheWriteCost + cacheReadCost;
 }
 
 /**
