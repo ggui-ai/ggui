@@ -111,29 +111,55 @@ console.log(`[run-and-publish] uploaded report: s3://${S3_BUCKET}/${reportKey}`)
 // ---------------------------------------------------------------------------
 
 const indexKey = `${S3_PREFIX}index.json`;
-const existingIndex = await tryFetchIndex(indexKey);
-const newRun = {
-  date: BENCH_DATE,
-  multiSdk: {
-    reportPath: `${BENCH_DATE}/multi-sdk.json`,
-    successRate: report?.meta?.successRate ?? 0,
-    totalRuns: report?.meta?.totalRuns ?? 0,
-    headline: buildHeadline(report),
-  },
-};
-
-const updatedIndex = mergeIndex(existingIndex, newRun);
-await s3.send(
-  new PutObjectCommand({
-    Bucket: S3_BUCKET,
-    Key: indexKey,
-    Body: JSON.stringify(updatedIndex, null, 2),
-    ContentType: 'application/json',
-    CacheControl: 'public, max-age=60',
-  }),
-);
+await updateIndexWithRetry(indexKey, newRunEntry());
 console.log(`[run-and-publish] uploaded index: s3://${S3_BUCKET}/${indexKey}`);
 console.log(`[run-and-publish] done.`);
+
+function newRunEntry() {
+  return {
+    date: BENCH_DATE,
+    multiSdk: {
+      reportPath: `${BENCH_DATE}/multi-sdk.json`,
+      successRate: report?.meta?.successRate ?? 0,
+      totalRuns: report?.meta?.totalRuns ?? 0,
+      headline: buildHeadline(report),
+    },
+  };
+}
+
+async function updateIndexWithRetry(key, runEntry, attempts = 5) {
+  for (let i = 0; i < attempts; i++) {
+    const { index, etag } = await tryFetchIndex(key);
+    const updated = mergeIndex(index, runEntry);
+    try {
+      await s3.send(
+        new PutObjectCommand({
+          Bucket: S3_BUCKET,
+          Key: key,
+          Body: JSON.stringify(updated, null, 2),
+          ContentType: 'application/json',
+          CacheControl: 'public, max-age=60',
+          // Conditional write: only succeed if the object is unchanged
+          // since our read (etag) — or absent (IfNoneMatch '*'). On a
+          // concurrent writer the precondition fails and we re-read+retry.
+          ...(etag ? { IfMatch: etag } : { IfNoneMatch: '*' }),
+        }),
+      );
+      return;
+    } catch (err) {
+      const code = err?.name ?? err?.Code;
+      const status = err?.$metadata?.httpStatusCode;
+      const isPrecondition =
+        code === 'PreconditionFailed' || status === 412 || status === 409;
+      if (isPrecondition && i < attempts - 1) {
+        console.log(`[run-and-publish] index changed under us, retrying (${i + 1}/${attempts})`);
+        continue;
+      }
+      throw err;
+    }
+  }
+  fail(`failed to update ${key} after ${attempts} attempts (persistent write contention)`);
+}
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -201,12 +227,12 @@ function pickNewestJsonReport(dir) {
 async function tryFetchIndex(key) {
   try {
     const out = await s3.send(new GetObjectCommand({ Bucket: S3_BUCKET, Key: key }));
-    if (!out.Body) return null;
+    if (!out.Body) return { index: null, etag: undefined };
     const buf = Buffer.from(await out.Body.transformToByteArray());
-    return JSON.parse(buf.toString('utf-8'));
+    return { index: JSON.parse(buf.toString('utf-8')), etag: out.ETag };
   } catch (err) {
     if (err && (err.name === 'NoSuchKey' || err.$metadata?.httpStatusCode === 404)) {
-      return null;
+      return { index: null, etag: undefined };
     }
     throw err;
   }
