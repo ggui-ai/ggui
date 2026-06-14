@@ -30,6 +30,22 @@ import {
 } from './types';
 
 /**
+ * Dedupe a list of judge disclosures by model id, preserving first-seen
+ * order. The panel runs one model per provider, so duplicates only arise
+ * from a degenerate config; dedup keeps the meta disclosure honest.
+ */
+function dedupeJudges(judges: JudgeDisclosure[]): JudgeDisclosure[] {
+  const seen = new Set<string>();
+  const out: JudgeDisclosure[] = [];
+  for (const j of judges) {
+    if (seen.has(j.model)) continue;
+    seen.add(j.model);
+    out.push(j);
+  }
+  return out;
+}
+
+/**
  * Generate a full benchmark report from individual run results.
  */
 export function generateReport(
@@ -38,11 +54,13 @@ export function generateReport(
 ): BenchmarkReport {
   const successResults = results.filter((r) => r.generation !== null);
 
-  // Judge disclosure: every PostEvalResult carries the pinned judge.
-  // Surface it once at meta level; absent when nothing was evaluated.
-  const judge: JudgeDisclosure | undefined = results.find(
-    (r) => r.evaluation !== null,
-  )?.evaluation?.judge;
+  // Judge disclosure: every PanelEvalResult carries its panel of
+  // judges. Surface the distinct panel models once at meta level (taken
+  // from the first evaluated result); absent when nothing was evaluated.
+  const firstEvaluated = results.find((r) => r.evaluation !== null)?.evaluation;
+  const judges: JudgeDisclosure[] | undefined = firstEvaluated
+    ? dedupeJudges(firstEvaluated.judges.map((j) => j.judge))
+    : undefined;
 
   return {
     meta: {
@@ -54,7 +72,7 @@ export function generateReport(
       successCount: successResults.length,
       failureCount: results.length - successResults.length,
       successRate: results.length > 0 ? successResults.length / results.length : 0,
-      ...(judge !== undefined ? { judge } : {}),
+      ...(judges !== undefined ? { judges } : {}),
     },
     results,
     variantSummaries: buildVariantSummaries(results),
@@ -562,7 +580,8 @@ export function toDisplayReport(
       failureCount: report.meta.failureCount,
       successRate: report.meta.successRate,
       durationMs: report.meta.totalDurationMs,
-      ...(report.meta.judge !== undefined ? { judge: report.meta.judge } : {}),
+      dataLicense: 'CC-BY-4.0',
+      ...(report.meta.judges !== undefined ? { judges: report.meta.judges } : {}),
     },
     results: report.results.map(mapRunResult),
     variantSummaries: report.variantSummaries.map((v) =>
@@ -621,9 +640,19 @@ function mapEvaluation(r: BenchmarkRunResult): EvaluationResultDisplay | null {
   const ev = r.evaluation;
   return {
     passed: ev.passed,
+    // Panel aggregate.
     score: ev.score,
     dimensions: { ...ev.dimensions },
-    judge: { ...ev.judge },
+    spread: ev.spread,
+    // Distinct judge disclosures on this panel.
+    judges: dedupeJudges(ev.judges.map((j) => j.judge)),
+    // Per-judge breakdown (tokens are cost-accounting internals, dropped here).
+    panel: ev.judges.map((j) => ({
+      judge: { ...j.judge },
+      score: j.score,
+      dimensions: { ...j.dimensions },
+      critique: j.critique,
+    })),
     critique: ev.critique,
     evalTimeMs: ev.evalTimeMs,
   };

@@ -21,20 +21,34 @@ import { BENCHMARK_COMMITS, getBenchmarkCommit } from './commits';
 import { generateReport, renderReportMarkdown } from './reporter';
 import { calculateCost, resolveCostModelId } from './runner';
 import { getDefaultVariants, getSpeedVariants, getHybridVariants, getRawVsSdkVariants } from './variants';
-import type { BenchmarkRunResult, PostEvalResult } from './types';
-import { AESTHETIC_JUDGE_MODEL, AESTHETIC_PROMPT_VERSION } from './post-eval';
+import type { BenchmarkRunResult, PanelEvalResult, AestheticScores } from './types';
+import { AESTHETIC_PROMPT_VERSION_PANEL } from './post-eval';
 
-/** Build a PostEvalResult-shaped fixture matching the runner's real output. */
+/** The 3-model judge panel used in fixtures — mirrors the real PANEL. */
+const FIXTURE_JUDGE_MODELS = ['claude-haiku-4-5-20251001', 'gpt-5.4-mini', 'gemini-3-flash-preview'] as const;
+
+/**
+ * Build a PanelEvalResult-shaped fixture matching the runner's real
+ * output: 3 judges all reporting the same score (so the panel mean is
+ * `score` and the spread is 0), each with token counts for cost.
+ */
 function mkEval(
   score: number,
-  dimensions: PostEvalResult['dimensions'],
-): PostEvalResult {
+  dimensions: AestheticScores,
+): PanelEvalResult {
   return {
     passed: score >= 70,
     score,
     dimensions,
-    judge: { model: AESTHETIC_JUDGE_MODEL, promptVersion: AESTHETIC_PROMPT_VERSION },
-    issues: [],
+    spread: 0,
+    judges: FIXTURE_JUDGE_MODELS.map((model) => ({
+      judge: { model, promptVersion: AESTHETIC_PROMPT_VERSION_PANEL },
+      score,
+      dimensions,
+      critique: 'fixture critique',
+      tokens: { input: 1200, output: 300 },
+    })),
+    promptVersion: AESTHETIC_PROMPT_VERSION_PANEL,
     critique: 'fixture critique',
     evalTimeMs: 1200,
   };
@@ -236,6 +250,50 @@ describe('Cost Calculator', () => {
 
   it('returns 0 for unknown models', () => {
     expect(calculateCost('unknown/model', { input: 1000, output: 500 })).toBe(0);
+  });
+
+  it('prices Claude cache write/read at their own rates (Anthropic)', () => {
+    const cost = calculateCost('anthropic/claude-haiku-4-5', {
+      input: 10000,
+      output: 5000,
+      cacheCreation: 20000,
+      cacheRead: 100000,
+    });
+    // input: 10K × $1.0/1M    = $0.010
+    // output: 5K × $5.0/1M    = $0.025
+    // cacheWrite: 20K × $1.25 = $0.025
+    // cacheRead: 100K × $0.10 = $0.010
+    expect(cost).toBeCloseTo(0.07, 4);
+  });
+
+  it('cache tokens that are absent contribute $0 (input/output only)', () => {
+    const withCacheZero = calculateCost('anthropic/claude-sonnet-4-6', {
+      input: 10000,
+      output: 5000,
+      cacheCreation: 0,
+      cacheRead: 0,
+    });
+    const noCacheFields = calculateCost('anthropic/claude-sonnet-4-6', {
+      input: 10000,
+      output: 5000,
+    });
+    expect(withCacheZero).toBeCloseTo(noCacheFields, 10);
+  });
+
+  it('falls back to the input rate for a model with no cache rates', () => {
+    // Gemini flash-lite has no cacheWritePer1M/cacheReadPer1M → cache
+    // tokens price at the input rate ($0.25/1M).
+    const cost = calculateCost('gemini/gemini-3.1-flash-lite', {
+      input: 10000,
+      output: 5000,
+      cacheCreation: 4000,
+      cacheRead: 4000,
+    });
+    // input: 10K × $0.25/1M       = $0.0025
+    // output: 5K × $1.5/1M        = $0.0075
+    // cacheWrite: 4K × $0.25/1M   = $0.0010 (input-rate fallback)
+    // cacheRead: 4K × $0.25/1M    = $0.0010 (input-rate fallback)
+    expect(cost).toBeCloseTo(0.012, 4);
   });
 });
 

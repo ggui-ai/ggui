@@ -1,6 +1,12 @@
 import type { BenchmarkRunResult } from '../types';
 import { formatCostUsd, formatDurationMs, formatScore } from '../format';
-import { readEvalScore, readDimensions, readJudge } from '../eval-helpers';
+import {
+  readEvalScore,
+  readDimensions,
+  readJudgePanel,
+  readSpread,
+  readCritique,
+} from '../eval-helpers';
 import { DimensionScores } from './DimensionScores';
 
 interface Props {
@@ -11,15 +17,18 @@ interface Props {
 /**
  * Inline detail panel for a selected (variant, commit) cell.
  *
- * Shows: top-line metrics (score, time, cost, turns, tokens), judge
- * disclosure, the judge's 5-dimension breakdown, and the error when the
- * cell failed. Robust to schema drift between bench runner versions —
- * falls back gracefully when fields are absent.
+ * Shows: top-line metrics (score, time, cost, turns, tokens, judge
+ * disagreement), the per-judge panel breakdown, the panel's 5-dimension
+ * means, the panel critique, and the error when the cell failed. Robust
+ * to schema drift between bench runner versions — falls back gracefully
+ * when fields are absent.
  */
 export function ResultDetail({ result, onClose }: Props) {
   const evalScore = readEvalScore(result.evaluation);
   const dimensions = readDimensions(result.evaluation);
-  const judge = readJudge(result.evaluation);
+  const panel = readJudgePanel(result.evaluation);
+  const spread = readSpread(result.evaluation);
+  const critique = readCritique(result.evaluation);
   const tokens = result.generation?.tokens;
   const modelLabel = result.variant.modelId?.split('/').pop() ?? result.variant.tier;
   const generationTimeMs = result.generation?.generationTimeMs;
@@ -63,12 +72,39 @@ export function ResultDetail({ result, onClose }: Props) {
             <Stat label="total tokens" value={tokens.total.toLocaleString()} />
           </>
         )}
-        {judge && (
-          <Stat label="judge" value={`${judge.model} (${judge.promptVersion})`} />
+        {spread !== null && (
+          <Stat
+            label="judge disagreement"
+            value={`±${formatScore(spread)}`}
+          />
         )}
       </dl>
 
+      {panel && (
+        <section className="mb-6">
+          <p className="eyebrow mb-3">judge panel</p>
+          <ul className="space-y-1 max-w-md text-sm">
+            {panel.map((j) => (
+              <li
+                key={j.model}
+                className="flex items-baseline justify-between gap-4 font-mono"
+              >
+                <span className="text-ink-3">{j.model}</span>
+                <span className="text-ink">{formatScore(j.score)}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
       {dimensions && <DimensionScores scores={dimensions} />}
+
+      {critique && (
+        <section className="mb-6 max-w-2xl">
+          <p className="eyebrow mb-2">critique</p>
+          <p className="text-ink-3 text-sm leading-relaxed italic">{critique}</p>
+        </section>
+      )}
 
       {result.error && (
         <div className="border border-signal bg-paper-2 px-4 py-3 mb-6">

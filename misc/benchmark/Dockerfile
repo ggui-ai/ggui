@@ -14,8 +14,10 @@
 #   make bench-push                    # sandbox: also pushes to ECR
 #
 # Runs daily on Fargate (apps/benchmarks/amplify/ — EventBridge rule).
-# Same image runs locally for OSS users:
-#   docker run --env-file .env ghcr.io/ggui-ai/benchmark:latest
+# Same image runs locally for OSS users — there is no published image;
+# build it from source, then run:
+#   docker build -t ggui-benchmark .
+#   docker run --env-file .env -e S3_BUCKET=… ggui-benchmark
 #
 # Required env at runtime:
 #   S3_BUCKET                 — destination bucket name

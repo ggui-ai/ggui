@@ -8,17 +8,27 @@ and cross-bench baseline manifests.
 
 ## Quick start
 
-```bash
-pnpm add -D @ggui-ai/benchmark
+The runner is source-available (not published to npm). Clone the monorepo
+and run a cell locally:
 
-# Run a quick smoke bench (one provider, one prompt)
-pnpm bench --preset quick
+```bash
+git clone https://github.com/ggui-ai/ggui && cd ggui
+pnpm install
+
+# set a provider key, then run a cell locally (writes JSON to benchmark-results/):
+ANTHROPIC_API_KEY=… pnpm --filter @ggui-ai/benchmark bench --provider claude --commit weather-card --threshold 70
 
 # Full corpus across providers
-pnpm bench --provider claude,openai,google --preset full
+pnpm --filter @ggui-ai/benchmark bench --provider claude,openai,google --commit weather-card,survey-form,kanban-board --threshold 70
+```
 
-# List available prompts
-pnpm bench --list
+### Publish your own dashboard
+
+Build the runner image and publish results to your own S3 bucket:
+
+```bash
+make bench-image
+docker run --env-file .env -e S3_BUCKET=… ggui-benchmark
 ```
 
 ## What this is NOT

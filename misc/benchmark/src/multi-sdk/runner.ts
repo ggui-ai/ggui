@@ -450,9 +450,16 @@ export class BenchmarkRunner {
       // variant BASE model). Pricing at the base rate silently
       // mis-priced overridden runs (Exp 45: $0.376 reported vs $2.26
       // real for a gemini-3.5-flash coding override).
+      // Cache tokens (Claude prompt caching) ride on `generation` as
+      // siblings of `tokens`, not inside it — thread them in so the
+      // cache-aware estimate prices cache WRITE/READ at their own rates.
       const estimatedCostUsd = calculateCost(
         resolveCostModelId(variant.modelRoles, modelId),
-        generation.tokens,
+        {
+          ...generation.tokens,
+          cacheCreation: generation.cacheCreationTokens,
+          cacheRead: generation.cacheReadTokens,
+        },
       );
 
       // Post-generation analysis (lightweight, no AWS needed)
@@ -510,15 +517,26 @@ export class BenchmarkRunner {
         }
       }
 
-      // Aesthetic evaluation (Haiku, ~1-2s, ~$0.001 per call)
+      // Aesthetic evaluation — 3-provider judge PANEL (Anthropic +
+      // OpenAI + Google), temp 0, mean score + spread.
       let aestheticEval = null;
       if (!this.config.skipEvaluation && generation.sourceCode) {
-        const { evaluateAesthetics } = await import("./post-eval.js");
-        aestheticEval = await evaluateAesthetics(generation.sourceCode, commit.prompt, undefined, commit.contract);
+        const { evaluateAestheticsPanel } = await import("./post-eval.js");
+        aestheticEval = await evaluateAestheticsPanel(generation.sourceCode, commit.prompt, commit.contract);
       }
 
+      // Judge-token cost: each panel judge is a separate LLM call billed
+      // independently of the coding adapter's rawCost. Price each judge's
+      // tokens against MODEL_REGISTRY and add on top of the coding cost.
+      const judgeCostUsd = aestheticEval
+        ? aestheticEval.judges.reduce(
+            (sum, j) => sum + calculateCost(resolveJudgeCostModelId(j.judge.model), j.tokens),
+            0,
+          )
+        : 0;
+
       const evalSuffix = aestheticEval
-        ? ` | score: ${aestheticEval.score}/100${aestheticEval.passed ? "" : " ⚠"}`
+        ? ` | score: ${aestheticEval.score}/100 (spread ${aestheticEval.spread}, n=${aestheticEval.judges.length})${aestheticEval.passed ? "" : " ⚠"}`
         : "";
       console.log(
         `[benchmark] ${variant.id} × ${commit.id}: ` +
@@ -564,7 +582,10 @@ export class BenchmarkRunner {
         generation,
         evaluation: aestheticEval,
         tierEvaluation,
-        estimatedCostUsd: generation.rawCostUsd ?? estimatedCostUsd,
+        // Coding-model cost (adapter rawCost when reported, else our
+        // estimate) PLUS the panel judges' token cost — judge calls are
+        // separate LLM calls, not part of the coding adapter's rawCost.
+        estimatedCostUsd: (generation.rawCostUsd ?? estimatedCostUsd) + judgeCostUsd,
         timestamp: new Date().toISOString(),
         postGeneration,
         generator: generatorSlug,
@@ -678,17 +699,54 @@ export function resolveCostModelId(
   return bySuffix ?? effective;
 }
 
+/**
+ * Resolve a PANEL judge's bare model id to a `MODEL_REGISTRY` key for
+ * cost attribution.
+ *
+ * Judge models are recorded bare (`claude-haiku-4-5-20251001`,
+ * `gpt-5.4-mini`, `gemini-3-flash-preview`) while `MODEL_REGISTRY` is
+ * keyed by LiteLLM `provider/model` ids. Resolution order:
+ *   1. exact key,
+ *   2. unique `/<model>` suffix match (`gpt-5.4-mini` →
+ *      `openai/gpt-5.4-mini`, `gemini-3-flash-preview` →
+ *      `gemini/gemini-3-flash-preview`),
+ *   3. strip a trailing `-YYYYMMDD` date pin and suffix-match again
+ *      (`claude-haiku-4-5-20251001` → `claude-haiku-4-5` →
+ *      `anthropic/claude-haiku-4-5`).
+ * Unknown ids pass through so `calculateCost` flags them loudly.
+ */
+export function resolveJudgeCostModelId(judgeModel: string): string {
+  const keys = Object.keys(MODEL_REGISTRY) as ModelId[];
+  if (judgeModel in MODEL_REGISTRY) return judgeModel;
+  const bySuffix = keys.find((id) => id.endsWith(`/${judgeModel}`));
+  if (bySuffix) return bySuffix;
+  const undated = judgeModel.replace(/-\d{8}$/, "");
+  const byUndatedSuffix = keys.find((id) => id.endsWith(`/${undated}`));
+  return byUndatedSuffix ?? judgeModel;
+}
+
 /** Model ids already flagged as unknown — warn once per id, not per cell. */
 const unknownCostModels = new Set<string>();
 
 /**
  * Calculate estimated cost from token usage and model ID.
  *
+ * Prices the four token classes a cache-aware provider bills separately:
+ * fresh `input`, `output`, prompt-cache WRITE (`cacheCreation`), and
+ * prompt-cache READ (`cacheRead`). Anthropic charges a cache write at
+ * ~1.25× the input rate and a cache read at ~0.1×; those rates live on
+ * `config.costs.cacheWritePer1M` / `cacheReadPer1M`. Providers without
+ * separate caching pricing (or token sources that don't report cache
+ * counts) fall back to the input rate × 0 tokens — i.e. no effect.
+ *
  * Unknown model ids return 0 but are flagged loudly — a silent $0
  * would otherwise read as "free run" in every report row. Adapters
  * that report real cost override this estimate via `rawCostUsd`.
  */
-export function calculateCost(modelId: string, tokens: { input: number; output: number }): number {
+export function calculateCost(
+  modelId: string,
+  tokens: { input: number; output: number; cacheCreation?: number; cacheRead?: number },
+): number {
   const config = MODEL_REGISTRY[modelId as ModelId];
   if (!config) {
     if (!unknownCostModels.has(modelId)) {
@@ -702,7 +760,11 @@ export function calculateCost(modelId: string, tokens: { input: number; output: 
 
   const inputCost = (tokens.input / 1_000_000) * config.costs.inputPer1M;
   const outputCost = (tokens.output / 1_000_000) * config.costs.outputPer1M;
-  return inputCost + outputCost;
+  const cacheWriteRate = config.costs.cacheWritePer1M ?? config.costs.inputPer1M;
+  const cacheReadRate = config.costs.cacheReadPer1M ?? config.costs.inputPer1M;
+  const cacheWriteCost = ((tokens.cacheCreation ?? 0) / 1_000_000) * cacheWriteRate;
+  const cacheReadCost = ((tokens.cacheRead ?? 0) / 1_000_000) * cacheReadRate;
+  return inputCost + outputCost + cacheWriteCost + cacheReadCost;
 }
 
 /**

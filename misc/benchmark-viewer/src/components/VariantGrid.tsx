@@ -120,7 +120,7 @@ function VariantRow({
       >
         <span className="font-mono text-ink">{variant.sdkName}</span>
         <span className="block font-mono text-xs text-ink-4 mt-0.5">
-          {variant.modelId.split('/').pop()}
+          {variant.modelId.split('/').pop()} · {variant.tier}
         </span>
       </th>
       {commits.map((c) => {

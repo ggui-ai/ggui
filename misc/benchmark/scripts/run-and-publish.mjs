@@ -39,7 +39,7 @@ const S3_PREFIX = process.env.S3_PREFIX ?? 'data/';
 const PROVIDERS = process.env.BENCH_PROVIDERS ?? 'claude,openai,google';
 const COMMITS =
   process.env.BENCH_COMMITS ??
-  'weather-card,survey-form,kanban-board,periodic-table,product-page,chat-interface,stock-ticker,onboarding-wizard';
+  'weather-card,survey-form,kanban-board,periodic-table,product-page,chat-interface,stock-ticker,onboarding-wizard,leaflet-map,revenue-chart';
 const THRESHOLD = process.env.BENCH_THRESHOLD ?? '70';
 const BENCH_DATE = process.env.BENCH_DATE ?? new Date().toISOString().slice(0, 10);
 
@@ -113,6 +113,31 @@ console.log(`[run-and-publish] uploaded report: s3://${S3_BUCKET}/${reportKey}`)
 const indexKey = `${S3_PREFIX}index.json`;
 await updateIndexWithRetry(indexKey, newRunEntry());
 console.log(`[run-and-publish] uploaded index: s3://${S3_BUCKET}/${indexKey}`);
+
+// ---------------------------------------------------------------------------
+// 5. Publish the dataset LICENSE alongside the data.
+// ---------------------------------------------------------------------------
+//
+// The published reports + index are a dataset distinct from the runner
+// code (Apache-2.0). Stamp the dataset with CC-BY-4.0 so consumers know
+// the terms. Must live under the data/ prefix — only data/* is
+// public-read and writable by the bench task role.
+const licenseKey = `${S3_PREFIX}LICENSE`;
+const LICENSE_TEXT =
+  'ggui benchmark dataset — Creative Commons Attribution 4.0 International (CC-BY-4.0).\n' +
+  'You are free to share and adapt this dataset with attribution.\n' +
+  'Full license: https://creativecommons.org/licenses/by/4.0/\n' +
+  'Source: https://github.com/ggui-ai/ggui\n';
+await s3.send(
+  new PutObjectCommand({
+    Bucket: S3_BUCKET,
+    Key: licenseKey,
+    Body: LICENSE_TEXT,
+    ContentType: 'text/plain',
+    CacheControl: 'public, max-age=3600',
+  }),
+);
+console.log(`[run-and-publish] uploaded license: s3://${S3_BUCKET}/${licenseKey}`);
 console.log(`[run-and-publish] done.`);
 
 function newRunEntry() {

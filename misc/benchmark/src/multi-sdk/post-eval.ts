@@ -4,10 +4,16 @@
  * Lightweight LLM-based evaluation that scores generated components on
  * ggui-specific quality criteria. Runs after generation, before reporting.
  *
- * Uses the Anthropic API directly (not Claude Agent SDK) for speed.
+ * {@link evaluateAestheticsPanel} — a 3-provider judge PANEL (Anthropic +
+ * OpenAI + Google) scored at temperature 0; reports the mean score and the
+ * spread (max−min) so a single biased self-judge can no longer dominate.
+ *
+ * Routes its LLM calls through `@ggui-ai/ui-gen/harness`'s `callLLM`,
+ * which reads provider keys from env (ANTHROPIC_API_KEY / OPENAI_API_KEY /
+ * GEMINI_API_KEY|GOOGLE_API_KEY).
  */
 
-import Anthropic from '@anthropic-ai/sdk';
+import { callLLM, type AgentConfig } from '@ggui-ai/ui-gen/harness';
 
 /**
  * Extract the first balanced JSON object from LLM output. Handles the case
@@ -56,44 +62,18 @@ export interface AestheticScores {
 }
 
 /**
- * Judge disclosure — recorded on every {@link PostEvalResult} and
+ * Judge disclosure — recorded on every {@link SingleJudgeResult} and
  * propagated into report meta + the published headline so readers know
  * which model and prompt produced the quality score.
  */
 export interface JudgeDisclosure {
   /** Pinned judge model id. */
   model: string;
-  /** Version tag of {@link AESTHETIC_EVAL_PROMPT}-derived scoring prompt. */
+  /** Version tag of the scoring prompt that produced this score. */
   promptVersion: string;
 }
 
-/**
- * The pinned aesthetic judge. `--eval` does NOT change this — that flag
- * only overrides the in-loop evaluation agent (`modelRoles.evaluation`).
- * Changing the judge invalidates score comparability across runs; bump
- * {@link AESTHETIC_PROMPT_VERSION} alongside any prompt change.
- */
-export const AESTHETIC_JUDGE_MODEL = 'claude-haiku-4-5-20251001';
-export const AESTHETIC_PROMPT_VERSION = 'aesthetic-eval.v1';
-
-export interface PostEvalResult {
-  /** Whether the component passed the quality threshold */
-  passed: boolean;
-  /** Weighted average score (0-100) */
-  score: number;
-  /** Per-dimension breakdown — exactly the 5 dimensions the judge measures. */
-  dimensions: AestheticScores;
-  /** Which model + prompt version produced this score. */
-  judge: JudgeDisclosure;
-  /** Specific issues — empty for post-eval (no issue extraction) */
-  issues: never[];
-  /** Brief critique text */
-  critique: string;
-  /** Evaluation time in ms */
-  evalTimeMs: number;
-}
-
-/** System prompt for the pinned aesthetic judge. Module-private — the only caller is {@link evaluateAesthetics}. */
+/** System prompt for the aesthetic judge panel. Module-private. */
 const AESTHETIC_EVAL_PROMPT = `You are a UI quality evaluator for ggui, a platform that generates React components.
 
 Score the following generated component source code on 5 aesthetic dimensions (0-100 each):
@@ -121,95 +101,190 @@ Respond with ONLY a JSON object, no markdown:
   "critique": "<2-3 sentences summarizing the main issues>"
 }`;
 
+/** Per-dimension weights — equal 20% each, summing to 100%. */
+const WEIGHTS = { layout: 0.2, designTokens: 0.2, hierarchy: 0.2, polish: 0.2, dataPresentation: 0.2 };
+
 /**
- * Run post-generation aesthetic evaluation on a component.
- * Uses Haiku for speed (~1-2s, ~$0.001).
- *
- * `contract` (optional): the commit's data contract. When passed, the eval
- * LLM sees the same shape `buildMotherPrompt` shows the generator —
- * stops the eval from hallucinating "missing X" against UNAMPUTATED
- * source.
+ * Build the judge user message: original prompt + (optional) data contract +
+ * the full component source. Full source/prompt are sent untruncated; an
+ * earlier slice(0, 8000)/slice(0, 500) clamp amputated mid-complexity
+ * components and led judges to hallucinate "incomplete code". The contract
+ * block lets the judge see the same shape the generator saw — stops "missing
+ * X" hallucinations against UNAMPUTATED source.
  */
-export async function evaluateAesthetics(
+function buildJudgeUserMessage(sourceCode: string, prompt: string, contract?: unknown): string {
+  const contractBlock = contract
+    ? `\n\nData contract:\n\`\`\`json\n${JSON.stringify(contract, null, 2).slice(0, 3000)}\n\`\`\``
+    : '';
+  return `Original prompt: ${prompt}${contractBlock}\n\nComponent source code:\n\`\`\`tsx\n${sourceCode}\n\`\`\``;
+}
+
+/** Compute the equal-weighted 5-dimension score, rounded to 1dp. */
+function weightedScore(scores: AestheticScores): number {
+  const raw =
+    scores.layout * WEIGHTS.layout +
+    scores.designTokens * WEIGHTS.designTokens +
+    scores.hierarchy * WEIGHTS.hierarchy +
+    scores.polish * WEIGHTS.polish +
+    scores.dataPresentation * WEIGHTS.dataPresentation;
+  return Math.round(raw * 10) / 10;
+}
+
+// =============================================================================
+// Panel evaluation (3-provider, avg + spread, temp 0)
+// =============================================================================
+
+export const AESTHETIC_PROMPT_VERSION_PANEL = 'aesthetic-eval.v2-panel';
+
+/** One judge's contribution to a panel. */
+export interface SingleJudgeResult {
+  judge: JudgeDisclosure;
+  /** Weighted score (0-100), 1dp. */
+  score: number;
+  dimensions: AestheticScores;
+  critique: string;
+  /** Token counts from the LLM call — needed for cost accounting. */
+  tokens: { input: number; output: number };
+}
+
+export interface PanelEvalResult {
+  passed: boolean;
+  score: number;
+  dimensions: AestheticScores;
+  /** max−min of the surviving judges' weighted scores (1dp) — disagreement signal. */
+  spread: number;
+  /** Per-judge breakdown (includes tokens) for the judges that responded. */
+  judges: SingleJudgeResult[];
+  promptVersion: string;
+  critique: string;
+  evalTimeMs: number;
+}
+
+/**
+ * The judge panel. One model per provider, scored at temperature 0 so a
+ * re-run is reproducible. Changing this set or the prompt invalidates score
+ * comparability across runs; bump {@link AESTHETIC_PROMPT_VERSION_PANEL}.
+ */
+const PANEL = [
+  { provider: 'anthropic', model: 'claude-haiku-4-5-20251001' },
+  { provider: 'openai', model: 'gpt-5.4-mini' },
+  { provider: 'google', model: 'gemini-3-flash-preview' },
+] as const;
+
+/**
+ * Run a single panel judge. Builds the shared judge user message and calls
+ * `callLLM` at temperature 0. Returns null (and logs) on any failure —
+ * empty/unparseable response or a thrown provider error — so a flaky judge
+ * doesn't sink the panel; the panel aggregator tolerates missing judges down
+ * to a 2-judge floor.
+ */
+async function runSingleJudge(
+  provider: AgentConfig['provider'],
+  model: string,
   sourceCode: string,
   prompt: string,
-  apiKey?: string,
   contract?: unknown,
-): Promise<PostEvalResult | null> {
-  const startTime = Date.now();
-
-  const key = apiKey || process.env.ANTHROPIC_API_KEY;
-  if (!key) return null;
-
+): Promise<SingleJudgeResult | null> {
   try {
-    // Bench runs under Node.js but the runtime-render probe pulls in
-    // happy-dom, which sets `window`/`document` globals. The Anthropic SDK's
-    // browser detection misfires in that hybrid state. Explicit allow-flag
-    // — we're server-side, key lives in process.env, not exposed to a
-    // real browser.
-    const client = new Anthropic({
-      apiKey: key,
-      baseURL: 'https://api.anthropic.com',
-      dangerouslyAllowBrowser: true,
-    });
+    const userMessage = buildJudgeUserMessage(sourceCode, prompt, contract);
+    const response = await callLLM(
+      { provider, model, temperature: 0 },
+      AESTHETIC_EVAL_PROMPT,
+      userMessage,
+      2000,
+    );
 
-    // Full source is sent untruncated; the previous slice(0, 8000) clamp
-    // amputated the post-line-135 region of medium-complexity components
-    // and the eval LLM hallucinated "incomplete code" against it. Same
-    // for prompt slice(0, 500) — kanban's prompt at char 600+ carries
-    // the "buttons or select dropdown" directive that, when amputated,
-    // led the eval to demand drag-and-drop. The sibling in-loop eval at
-    // `oss/packages/ui-gen/src/evaluation/llm-evaluator.ts` already
-    // sends full source; this matches that posture.
-    const contractBlock = contract
-      ? `\n\nData contract:\n\`\`\`json\n${JSON.stringify(contract, null, 2).slice(0, 3000)}\n\`\`\``
-      : '';
+    const jsonBlock = extractBalancedJson(response.text);
+    if (!jsonBlock) {
+      console.warn(`[post-eval] judge ${provider}/${model} failed: no JSON in response`);
+      return null;
+    }
 
-    const response = await client.messages.create({
-      model: AESTHETIC_JUDGE_MODEL,
-      max_tokens: 2000,
-      system: AESTHETIC_EVAL_PROMPT,
-      messages: [{
-        role: 'user',
-        content: `Original prompt: ${prompt}${contractBlock}\n\nComponent source code:\n\`\`\`tsx\n${sourceCode}\n\`\`\``,
-      }],
-    });
+    const parsed = JSON.parse(jsonBlock) as AestheticScores & { critique: string };
+    const dimensions: AestheticScores = {
+      layout: parsed.layout,
+      designTokens: parsed.designTokens,
+      hierarchy: parsed.hierarchy,
+      polish: parsed.polish,
+      dataPresentation: parsed.dataPresentation,
+    };
 
-    const text = response.content[0]?.type === 'text' ? response.content[0].text : '';
-    const jsonBlock = extractBalancedJson(text);
-    if (!jsonBlock) return null;
-
-    const scores = JSON.parse(jsonBlock) as AestheticScores & { critique: string };
-
-    const weights = { layout: 0.2, designTokens: 0.2, hierarchy: 0.2, polish: 0.2, dataPresentation: 0.2 };
-    const weightedScore =
-      scores.layout * weights.layout +
-      scores.designTokens * weights.designTokens +
-      scores.hierarchy * weights.hierarchy +
-      scores.polish * weights.polish +
-      scores.dataPresentation * weights.dataPresentation;
-
-    const roundedScore = Math.round(weightedScore * 10) / 10;
     return {
-      passed: weightedScore >= 70,
-      score: roundedScore,
-      issues: [],
-      dimensions: {
-        layout: scores.layout,
-        designTokens: scores.designTokens,
-        hierarchy: scores.hierarchy,
-        polish: scores.polish,
-        dataPresentation: scores.dataPresentation,
-      },
-      judge: {
-        model: AESTHETIC_JUDGE_MODEL,
-        promptVersion: AESTHETIC_PROMPT_VERSION,
-      },
-      critique: scores.critique,
-      evalTimeMs: Date.now() - startTime,
+      judge: { model, promptVersion: AESTHETIC_PROMPT_VERSION_PANEL },
+      score: weightedScore(dimensions),
+      dimensions,
+      critique: parsed.critique,
+      tokens: { input: response.inputTokens, output: response.outputTokens },
     };
   } catch (err) {
-    console.warn('[post-eval] Aesthetic evaluation failed:', err);
+    console.warn(`[post-eval] judge ${provider}/${model} failed:`, err);
     return null;
   }
+}
+
+/**
+ * Aggregate a panel of judge results into mean score + per-dim means + spread.
+ * Pure — no LLM, no clock — so it is unit-tested directly. A "panel" needs at
+ * least 2 judges; a lone surviving judge isn't a panel, so we return null.
+ */
+export function aggregatePanel(
+  results: SingleJudgeResult[],
+): { score: number; dimensions: AestheticScores; spread: number } | null {
+  if (results.length < 2) return null; // a 1-judge "panel" isn't one
+  const mean = (xs: number[]) => Math.round((xs.reduce((a, b) => a + b, 0) / xs.length) * 10) / 10;
+  const scores = results.map((r) => r.score);
+  return {
+    score: mean(scores),
+    dimensions: {
+      layout: mean(results.map((r) => r.dimensions.layout)),
+      designTokens: mean(results.map((r) => r.dimensions.designTokens)),
+      hierarchy: mean(results.map((r) => r.dimensions.hierarchy)),
+      polish: mean(results.map((r) => r.dimensions.polish)),
+      dataPresentation: mean(results.map((r) => r.dimensions.dataPresentation)),
+    },
+    spread: Math.round((Math.max(...scores) - Math.min(...scores)) * 10) / 10,
+  };
+}
+
+/**
+ * Run the 3-provider aesthetic judge panel. Fires all judges concurrently,
+ * drops any that fail, then aggregates the survivors. Returns null when fewer
+ * than 2 judges respond (no defensible panel score).
+ *
+ * `contract` (optional): the commit's data contract — see
+ * {@link buildJudgeUserMessage}.
+ */
+export async function evaluateAestheticsPanel(
+  sourceCode: string,
+  prompt: string,
+  contract?: unknown,
+): Promise<PanelEvalResult | null> {
+  const startTime = Date.now();
+
+  const settled = await Promise.all(
+    PANEL.map((p) => runSingleJudge(p.provider, p.model, sourceCode, prompt, contract)),
+  );
+  const survivors = settled.filter((r): r is SingleJudgeResult => r !== null);
+
+  const agg = aggregatePanel(survivors);
+  if (agg === null) {
+    console.warn(`[post-eval] panel failed: ${survivors.length} judges responded`);
+    return null;
+  }
+
+  // Critique = the LOWEST-scoring surviving judge's critique. The harshest
+  // judge surfaces the most actionable issues — a high-scoring judge tends to
+  // say "looks good" with nothing to act on.
+  const harshest = survivors.reduce((lo, r) => (r.score < lo.score ? r : lo), survivors[0]);
+
+  return {
+    passed: agg.score >= 70,
+    score: agg.score,
+    dimensions: agg.dimensions,
+    spread: agg.spread,
+    judges: survivors,
+    promptVersion: AESTHETIC_PROMPT_VERSION_PANEL,
+    critique: harshest.critique,
+    evalTimeMs: Date.now() - startTime,
+  };
 }

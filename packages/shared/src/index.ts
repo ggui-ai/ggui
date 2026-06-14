@@ -29,6 +29,7 @@ export type {
   GenerationResultDisplay,
   EvaluationDimensionsDisplay,
   EvaluationResultDisplay,
+  PanelJudgeBreakdownDisplay,
   TierEvaluationDisplay,
   PostGenerationDisplay,
   BenchmarkRunResultDisplay,
