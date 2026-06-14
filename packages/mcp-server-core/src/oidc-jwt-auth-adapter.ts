@@ -7,8 +7,9 @@
  * upstream). This module is the verifier-injected path — all adapter logic
  * (issuer selection, `aud` pattern + appId extraction, userId namespacing,
  * fixed minimal roles, collapse-to-null on any failure).
- * The production constructor that builds a verifier from JWKS config is added
- * separately (Task 4).
+ * The production path lazily builds a verifier from a row's JWKS config via
+ * the OPTIONAL `aws-jwt-verify` peerDep (mirrors `better-sqlite3`); deployments
+ * that never federate an OIDC issuer never load it.
  *
  * Security posture:
  *   - Exact `iss` registry match for verifier selection; the verifier then
@@ -42,10 +43,10 @@ export interface TrustedIssuerRow {
   readonly issuer: string;
   /** Anchored RegExp the `aud` claim must match (e.g. /^https:\/\/mcp\.ggui\.ai\/apps\/[A-Za-z0-9_-]+$/). */
   readonly audiencePattern: RegExp;
-  /** Pre-built verifier (test path) OR JWKS config (prod path, Task 4). */
+  /** Pre-built verifier (test/explicit path) OR JWKS config (prod path). */
   readonly verifier?: JwtVerifierLike;
   readonly jwksUrl?: string;
-  /** Per-issuer alg allowlist for the prod verifier (Task 4). */
+  /** Per-issuer alg allowlist for the lazily-built prod verifier. */
   readonly alg?: readonly string[];
 }
 
@@ -153,8 +154,39 @@ export class OidcJwtAuthAdapter implements AuthAdapter {
     return this.authenticate(token);
   }
 
-  /** Test path: row carries a pre-built verifier. Prod path (Task 4) builds one. */
+  private readonly built = new Map<string, JwtVerifierLike>();
+
+  /** Test path: row carries a pre-built verifier. Prod path: build one from JWKS config. */
   protected getVerifier(row: TrustedIssuerRow): JwtVerifierLike | null {
-    return row.verifier ?? null;
+    if (row.verifier) return row.verifier; // test/explicit path
+    if (!row.jwksUrl) return null;
+    const cached = this.built.get(row.issuer);
+    if (cached) return cached;
+    try {
+      // Lazy require — aws-jwt-verify is an OPTIONAL peerDep (mirrors
+      // better-sqlite3). Only deployments that federate an OIDC issuer
+      // install it; everyone else never loads it.
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { JwtRsaVerifier } = require('aws-jwt-verify') as {
+        JwtRsaVerifier: {
+          create(props: {
+            issuer: string;
+            audience: null; // we check aud via the row pattern ourselves
+            jwksUri: string;
+            jwtVerifyOptions?: { algorithms?: readonly string[] };
+          }): JwtVerifierLike;
+        };
+      };
+      const v = JwtRsaVerifier.create({
+        issuer: row.issuer,
+        audience: null,
+        jwksUri: row.jwksUrl,
+        jwtVerifyOptions: row.alg ? { algorithms: row.alg } : undefined,
+      });
+      this.built.set(row.issuer, v);
+      return v;
+    } catch {
+      return null; // aws-jwt-verify absent / build failed → auth-failure, never crash
+    }
   }
 }

@@ -51,10 +51,14 @@
     "@ggui-ai/protocol": "workspace:*"
   },
   "peerDependencies": {
+    "aws-jwt-verify": "^5.0.0",
     "better-sqlite3": "^11.0.0",
     "vitest": "^3.0.0"
   },
   "peerDependenciesMeta": {
+    "aws-jwt-verify": {
+      "optional": true
+    },
     "better-sqlite3": {
       "optional": true
     },
