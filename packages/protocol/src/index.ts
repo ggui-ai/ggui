@@ -69,6 +69,11 @@ export * from "./schemas/ops-blueprint";
 export * from "./types/contract-inference";
 export * from "./types/gadget";
 export * from "./types/app-config";
+// Canonical externally-issued user-id namespace (`'<providerId>:<subject>'`).
+// Shared by the OAuth-login routes and the OIDC verify adapter (which
+// can't import upward from mcp-server), so every consumer computes the
+// same id from one definition.
+export { composeOAuthUserId } from "./types/oauth-user-id.js";
 export * from "./iframe-bridge";
 export * from "./envelope-adapters";
 export * from "./envelopes/builders";
