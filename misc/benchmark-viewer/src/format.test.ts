@@ -20,6 +20,18 @@ describe('formatScore', () => {
   });
 });
 
+describe('formatScore null-safety', () => {
+  it('renders n/a for null (historical reports carry null avgScore)', () => {
+    expect(formatScore(null)).toBe('n/a');
+  });
+  it('renders n/a for undefined', () => {
+    expect(formatScore(undefined)).toBe('n/a');
+  });
+  it('still renders a real score', () => {
+    expect(formatScore(80)).toBe('80.0');
+  });
+});
+
 describe('formatCostUsd', () => {
   it('shows $0 for exactly zero', () => {
     expect(formatCostUsd(0)).toBe('$0');

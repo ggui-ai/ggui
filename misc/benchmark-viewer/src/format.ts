@@ -3,8 +3,8 @@
  * so the dashboard reads cleanly and changes flow through a single seam.
  */
 
-export function formatScore(score: number): string {
-  if (score < 0 || Number.isNaN(score)) return 'n/a';
+export function formatScore(score: number | null | undefined): string {
+  if (score == null || score < 0 || Number.isNaN(score)) return 'n/a';
   return score.toFixed(1);
 }
 
