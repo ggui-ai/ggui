@@ -127,6 +127,7 @@ import {
   truncateCacheTraceIntent,
 } from './cache-trace-sink.js';
 import { emitPayloadTraceEvent } from './payload-trace-sink.js';
+import { isVisibleToCaller } from './tenancy.js';
 import {
   assembleRenderSliceBase,
   deriveRenderMeta,
@@ -1136,15 +1137,16 @@ export function createGguiRenderHandler(
       // Resolve or mint the render id. The handshake negotiator MAY
       // suggest reusing an existing render via `target.sessionId` (the
       // cache / update path); absent ⇒ mint a fresh id. Reuse only
-      // counts when the existing render belongs to the same appId —
-      // cross-tenant id collisions fall back to mint.
+      // counts when the existing render is visible to the caller
+      // (same appId, and same userId when the stored row carries one) —
+      // cross-tenant / cross-user id collisions fall back to mint.
       const requestedId = handshakeRecord.target.sessionId;
       let sessionId: string;
       let action: RenderOutput['action'];
 
       if (requestedId) {
         const existing = await deps.renderStore.get(requestedId);
-        if (existing && existing.appId === ctx.appId) {
+        if (isVisibleToCaller(existing, ctx)) {
           sessionId = existing.id;
           action = 'reuse';
         } else {
@@ -1287,6 +1289,7 @@ export function createGguiRenderHandler(
           await deps.renderStore.commit({
             render: placeholder,
             appId: ctx.appId,
+            userId: ctx.userId, // per-user isolation (undefined for non-federated single-user)
           });
         } catch {
           // Defensive — a placeholder-commit failure is not fatal to
@@ -1346,6 +1349,7 @@ export function createGguiRenderHandler(
           await deps.renderStore.commit({
             render: probeRender,
             appId: ctx.appId,
+            userId: ctx.userId, // per-user isolation (undefined for non-federated single-user)
           });
           safelyNotifyGguiSessionCommit(deps.channelNotifier, sessionId, probeRender);
           generatedCodeReady = true;
@@ -1515,6 +1519,7 @@ export function createGguiRenderHandler(
             {
               sessionId,
               appId: ctx.appId,
+              userId: ctx.userId, // per-user isolation (undefined for non-federated single-user)
               story,
               cacheHit: {
                 cachedBlueprintId: blueprintHit.id,
@@ -1739,6 +1744,7 @@ export function createGguiRenderHandler(
             await deps.renderStore.commit({
               render: overlaid,
               appId: ctx.appId,
+              userId: ctx.userId, // per-user isolation (undefined for non-federated single-user)
             });
           }
         } catch (err) {
@@ -2180,6 +2186,7 @@ async function runGenerationIntoGguiSession(
       return commitErrorGguiSession(renderStore, previewDeps, channelNotifier, {
         sessionId,
         appId: ctx.appId,
+        userId: ctx.userId, // per-user isolation (undefined for non-federated single-user)
         story,
         nowIso,
         nowEpochMs,
@@ -2199,6 +2206,7 @@ async function runGenerationIntoGguiSession(
       return commitErrorGguiSession(renderStore, previewDeps, channelNotifier, {
         sessionId,
         appId: ctx.appId,
+        userId: ctx.userId, // per-user isolation (undefined for non-federated single-user)
         story,
         nowIso,
         nowEpochMs,
@@ -2230,6 +2238,7 @@ async function runGenerationIntoGguiSession(
             {
               sessionId,
               appId: ctx.appId,
+              userId: ctx.userId, // per-user isolation (undefined for non-federated single-user)
               nowIso,
               render: fallback,
             },
@@ -2239,6 +2248,7 @@ async function runGenerationIntoGguiSession(
       return commitErrorGguiSession(renderStore, previewDeps, channelNotifier, {
         sessionId,
         appId: ctx.appId,
+        userId: ctx.userId, // per-user isolation (undefined for non-federated single-user)
         story,
         nowIso,
         nowEpochMs,
@@ -2258,6 +2268,7 @@ async function runGenerationIntoGguiSession(
       return commitErrorGguiSession(renderStore, previewDeps, channelNotifier, {
         sessionId,
         appId: ctx.appId,
+        userId: ctx.userId, // per-user isolation (undefined for non-federated single-user)
         story,
         nowIso,
         nowEpochMs,
@@ -2341,6 +2352,7 @@ async function runGenerationIntoGguiSession(
     await renderStore.commit({
       render: componentRender,
       appId: ctx.appId,
+      userId: ctx.userId, // per-user isolation (undefined for non-federated single-user)
     });
   } catch {
     await safelyFinalizePreview(previewDeps, sessionId, 'commit-failed');
@@ -2385,6 +2397,8 @@ async function commitNoCredentialsCardGguiSession(
   args: {
     readonly sessionId: string;
     readonly appId: string;
+    /** Per-user isolation (undefined for non-federated single-user). */
+    readonly userId?: string;
     readonly nowIso: string;
     readonly render: GguiSession;
   },
@@ -2395,6 +2409,7 @@ async function commitNoCredentialsCardGguiSession(
     await renderStore.commit({
       render,
       appId: args.appId,
+      userId: args.userId,
     });
     committed = true;
   } catch {
@@ -2431,6 +2446,8 @@ async function commitErrorGguiSession(
   args: {
     readonly sessionId: string;
     readonly appId: string;
+    /** Per-user isolation (undefined for non-federated single-user). */
+    readonly userId?: string;
     readonly story: { readonly intent: string };
     readonly nowIso: string;
     readonly nowEpochMs: number;
@@ -2456,6 +2473,7 @@ async function commitErrorGguiSession(
     await renderStore.commit({
       render: errorRender,
       appId: args.appId,
+      userId: args.userId,
     });
     committed = true;
   } catch {
@@ -2554,6 +2572,8 @@ async function commitCachedGguiSession(
   args: {
     readonly sessionId: string;
     readonly appId: string;
+    /** Per-user isolation (undefined for non-federated single-user). */
+    readonly userId?: string;
     readonly story: { readonly intent: string };
     readonly cacheHit: GenerationCacheHit;
     /** Runtime prop values for THIS render. Validated against the
@@ -2633,6 +2653,7 @@ async function commitCachedGguiSession(
     await renderStore.commit({
       render: componentRender,
       appId: args.appId,
+      userId: args.userId,
     });
   } catch {
     await safelyFinalizePreview(previewDeps, args.sessionId, 'commit-failed');

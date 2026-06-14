@@ -49,6 +49,7 @@ import {
 } from '@ggui-ai/mcp-server-core';
 import type { HandlerContext, SharedHandler } from '../types.js';
 import { GguiSessionNotFoundError } from './errors.js';
+import { isVisibleToCaller } from './tenancy.js';
 
 /** Polling interval inside the long-poll loop. 1.5s balances
  *  perceived latency against read cost on cloud. OSS is in-memory
@@ -222,11 +223,12 @@ export function createGguiConsumeHandler(
       // decrements the count exactly once.
       deps.activeConsumerRegistry?.enter(sessionId);
       try {
-        // Resolve render. Cross-tenant + missing surface uniformly as
-        // session_not_found (don't leak whether the id exists in another
-        // tenant).
+        // Resolve render. Cross-tenant (appId) + cross-user + missing
+        // all surface uniformly as session_not_found (don't leak whether
+        // the id exists in another tenant / for another user).
         const stored = await deps.renderStore.get(sessionId);
-        if (!stored || stored.appId !== ctx.appId) {
+        if (!isVisibleToCaller(stored, ctx)) {
+          // `stored` is narrowed to StoredGguiSession past this guard.
           throw new GguiSessionNotFoundError(sessionId);
         }
 
