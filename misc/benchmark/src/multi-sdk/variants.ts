@@ -55,7 +55,9 @@ export function getDefaultVariants(): BenchmarkVariant[] {
       id: 'google-fast',
       sdkName: 'google',
       tier: 'fast',
-      modelId: 'gemini/gemini-3-flash-preview',
+      // Canonical google fast floor — priced in MODEL_REGISTRY, cheaper
+      // than gemini-3-flash-preview.
+      modelId: 'gemini/gemini-3.1-flash-lite',
     },
     {
       id: 'google-balanced',

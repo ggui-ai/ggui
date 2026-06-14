@@ -3,19 +3,31 @@
 /**
  * CLI Benchmark Runner
  *
+ * The variant matrix is the canonical 3-tier × 3-provider grid defined in
+ * `src/multi-sdk/variants.ts#getDefaultVariants()` — 9 cells, each pinned to
+ * a real per-tier SKU. `--provider` and `--tier` SUBSET this grid; they do
+ * NOT synthesize ad-hoc variants. The nightly run passes neither, so it runs
+ * the full 9-cell matrix.
+ *
  * Usage:
  *   pnpm bench                                          # defaults: google, weather-card
- *   pnpm bench --provider google --model gemini-3.1-flash-lite --commit weather-card
- *   pnpm bench --provider claude --commit survey-form
- *   pnpm bench --provider openai --commit kanban-board --max-turns 5
+ *   pnpm bench --commit weather-card                    # all 9 matrix cells, one commit
+ *   pnpm bench --provider claude --commit survey-form   # claude's 3 tiers
+ *   pnpm bench --tier fast --commit kanban-board        # fast tier across all 3 providers
  *   pnpm bench --provider google,claude --commit weather-card,survey-form
  *   pnpm bench --preset quick         # google flash-lite, weather-card
  *   pnpm bench --preset full          # all providers, all commits
  *
  * Options:
- *   --provider, -p   Provider(s): claude, openai, google (comma-separated)
+ *   --provider, -p   Provider(s): claude, openai, google (comma-separated).
+ *                    Subsets the matrix by SDK. Default: all three.
+ *   --tier           Tier(s): fast, balanced, premium (comma-separated).
+ *                    Subsets the matrix by tier. Default: all three.
  *   --commit, -c     Commit ID(s): weather-card, survey-form, etc. (comma-separated)
- *   --model, -m      Model override for coding phase (e.g., gemini-3.1-flash-lite)
+ *   --model, -m      IGNORED when running the matrix — the per-tier SKUs are
+ *                    the point of the grid, so a single coding-model override
+ *                    would flatten every tier onto one model. Kept only as a
+ *                    no-op alias for back-compat / preset wiring.
  *   --think          Model override for planning phase
  *   --eval           Model override for the IN-LOOP evaluation agent (LLM eval
  *                    rounds + eval-fix). Does NOT change the post-gen aesthetic
@@ -164,7 +176,12 @@ if (presetName && !preset) {
 // ---------------------------------------------------------------------------
 
 const providers = (getArg(['--provider', '-p'], null) || preset?.providers?.join(',') || 'google').split(',');
+// Tier subset of the matrix. Default = all three tiers (the full grid).
+const tiers = (getArg(['--tier'], null) || 'fast,balanced,premium').split(',');
 const commits = (getArg(['--commit', '-c'], null) || preset?.commits?.join(',') || 'weather-card').split(',');
+// --model is intentionally a no-op when running the matrix — the per-tier
+// SKUs from getDefaultVariants() are the point of the grid. Parsed only so
+// preset wiring / old invocations don't error; never injected into variants.
 const codingModel = getArg(['--model', '-m'], preset?.model || null);
 const thinkModel = getArg(['--think'], null);
 const evalModel = getArg(['--eval'], null);
@@ -188,15 +205,14 @@ const qualityMode = getArg(['--quality'], 'fast');
 // canonical bench path now: `dispatchGeneration` from
 // `@ggui-ai/ui-gen/adapters/generation-dispatch`.
 
-// Build model combos per provider
-const modelCombos = {};
-for (const provider of providers) {
-  const combo = { id: '1', enabled: true, thinking: '', coding: '', evaluation: '' };
-  if (thinkModel) combo.thinking = thinkModel;
-  if (codingModel) combo.coding = codingModel;
-  if (evalModel) combo.evaluation = evalModel;
-  modelCombos[provider] = [combo];
-}
+// Role overrides applied to EVERY matrix variant. `coding` is deliberately
+// excluded — the per-tier SKU (variant.modelId) IS the coding model, and
+// letting --model override it would collapse the grid. --think (planning)
+// and --eval (in-loop evaluation agent) are orthogonal roles, so they layer
+// on without flattening the tiers.
+const sharedModelRoles = {};
+if (thinkModel) sharedModelRoles.thinking = thinkModel;
+if (evalModel) sharedModelRoles.evaluation = evalModel;
 
 // ---------------------------------------------------------------------------
 // Display config
@@ -206,8 +222,9 @@ console.log('\n┌────────────────────�
 console.log('│           ggui Benchmark Runner              │');
 console.log('└─────────────────────────────────────────────┘\n');
 console.log(`  Providers:    ${providers.join(', ')}`);
+console.log(`  Tiers:        ${tiers.join(', ')}`);
 console.log(`  Commits:      ${commits.join(', ')}`);
-if (codingModel) console.log(`  Coding model: ${codingModel}`);
+if (codingModel) console.log(`  Coding model: ${codingModel} (IGNORED — matrix pins per-tier SKUs)`);
 if (thinkModel) console.log(`  Think model:  ${thinkModel}`);
 if (evalModel) console.log(`  In-loop eval model: ${evalModel} (post-gen judge stays pinned)`);
 console.log(`  Max turns:    ${maxAttempts}`);
@@ -218,9 +235,6 @@ console.log(`  Threshold:    ${passThreshold}`);
 console.log(`  Quality:      ${qualityMode}`);
 if (visualEnabled) console.log(`  Visual eval:  enabled (judge = in-loop evaluation agent)`);
 console.log('');
-
-const totalRuns = providers.length * commits.length;
-console.log(`  Total runs: ${totalRuns}\n`);
 
 // ---------------------------------------------------------------------------
 // Load .env files (no dotenv dependency)
@@ -256,28 +270,13 @@ loadEnvFile(resolve(WORKSPACE_ROOT, '.env.local'));
 //   * provider adapters live in @ggui-ai/ui-gen
 // Use direct path resolution because tsx loader needs filesystem URLs.
 
-const DEFAULT_MODELS = {
-  claude: 'anthropic/claude-haiku-4-5',
-  openai: 'openai/gpt-5.4-mini',
-  google: 'gemini/gemini-3.1-flash-lite',
-};
-
-const SCREEN_MAP = {
-  'mobile-chat': { device: 'mobile', shell: 'chat', viewport: { width: 390, height: 844 } },
-  'mobile-fullscreen': { device: 'mobile', shell: 'fullscreen', viewport: { width: 390, height: 844 } },
-  'tablet-chat': { device: 'tablet', shell: 'chat', viewport: { width: 768, height: 1024 } },
-  'tablet-fullscreen': { device: 'tablet', shell: 'fullscreen', viewport: { width: 768, height: 1024 } },
-  'desktop-chat': { device: 'desktop', shell: 'chat', viewport: { width: 1440, height: 900 } },
-  'desktop-fullscreen': { device: 'desktop', shell: 'fullscreen', viewport: { width: 1440, height: 900 } },
-  'none': null,
-};
-
 const run = async () => {
   // Dynamic imports of TypeScript modules (via tsx loader)
   const { BenchmarkRunner } = await import(resolve(BENCHMARKS_DIR, 'src/multi-sdk/runner.ts'));
   const { LocalStorage } = await import(resolve(BENCHMARKS_DIR, 'src/multi-sdk/storage/local.ts'));
   const { BENCHMARK_COMMITS } = await import(resolve(BENCHMARKS_DIR, 'src/multi-sdk/commits.ts'));
   const { toDisplayReport } = await import(resolve(BENCHMARKS_DIR, 'src/multi-sdk/reporter.ts'));
+  const { getDefaultVariants } = await import(resolve(BENCHMARKS_DIR, 'src/multi-sdk/variants.ts'));
   const {
     ClaudeRawAdapter,
     OpenAiRawAdapter,
@@ -297,39 +296,24 @@ const run = async () => {
   const uniq = `${process.pid}-${Math.random().toString(36).slice(2, 6)}`;
   const reportId = `benchmark-${tsStamp}-${providerTag}-${uniq}`;
 
-  // Build variants (provider x screen combos)
-  const screens = ['none'];
-  const variants = [];
-  let variantIndex = 0;
+  // Build variants from the canonical 3-tier × 3-provider matrix, then
+  // subset by --provider and --tier. The runner already does
+  // `variants × commits`, so feeding it the full 9-cell grid "just works".
+  // Apply --think / --eval role overrides (NOT --model: the per-tier SKU on
+  // each variant IS the coding model; overriding it would flatten the grid).
+  const hasSharedRoles = Object.keys(sharedModelRoles).length > 0;
+  const variants = getDefaultVariants()
+    .filter((v) => providers.includes(v.sdkName) && tiers.includes(v.tier))
+    .map((v) => (hasSharedRoles ? { ...v, modelRoles: { ...v.modelRoles, ...sharedModelRoles } } : v));
 
-  for (const provider of providers) {
-    const combo = modelCombos[provider]?.[0] || { id: 'default', enabled: true, thinking: '', coding: '', evaluation: '' };
-
-    for (const screenId of screens) {
-      const rendering = SCREEN_MAP[screenId] || undefined;
-      const modelId = DEFAULT_MODELS[provider];
-      const id = `${provider}${screenId !== 'none' ? `-${screenId}` : ''}-${variantIndex++}`;
-
-      const variant = {
-        id,
-        sdkName: provider,
-        tier: 'balanced',
-        modelId,
-        rendering: rendering || undefined,
-      };
-
-      // Add model role overrides
-      const roles = {};
-      if (combo.thinking) roles.thinking = combo.thinking;
-      if (combo.coding) roles.coding = combo.coding;
-      if (combo.evaluation) roles.evaluation = combo.evaluation;
-      if (Object.keys(roles).length > 0) {
-        variant.modelRoles = roles;
-      }
-
-      variants.push(variant);
-    }
+  if (variants.length === 0) {
+    console.error(`  ✗ No matrix cells for providers [${providers.join(', ')}] × tiers [${tiers.join(', ')}]`);
+    console.error(`  Providers: claude, openai, google.  Tiers: fast, balanced, premium.`);
+    process.exit(1);
   }
+
+  console.log(`  Matrix cells: ${variants.length} (${variants.map((v) => v.id).join(', ')})`);
+  console.log(`  Total runs:   ${variants.length * commits.length}\n`);
 
   // Filter commits — FAIL LOUDLY on unknown names. Previously the filter
   // silently dropped unmatched IDs, leading to "3/3 passed" on a 4-commit
