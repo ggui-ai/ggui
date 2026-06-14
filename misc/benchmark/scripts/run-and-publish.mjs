@@ -64,7 +64,7 @@ if (missing.length > 0) {
   fail(
     `missing API key(s) for requested provider(s): ${missing.join(', ')}. ` +
       `Refusing to publish a report that would record these as failures. ` +
-      `Set the key(s) in Secrets Manager (ggui-bench/*) or drop the provider from BENCH_PROVIDERS.`,
+      `Set the provider's API key in the environment (e.g. ANTHROPIC_API_KEY) or drop the provider from BENCH_PROVIDERS.`,
   );
 }
 
