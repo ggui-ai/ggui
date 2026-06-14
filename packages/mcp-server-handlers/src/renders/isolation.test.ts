@@ -13,9 +13,16 @@
  * `createGguiGetSessionHandler` is exercised through its tenancy gate.
  */
 import { beforeEach, describe, expect, it } from 'vitest';
-import type { ComponentGguiSession } from '@ggui-ai/protocol';
-import { InMemoryGguiSessionStore } from '@ggui-ai/mcp-server-core/in-memory';
+import type { ComponentGguiSession, DataContract } from '@ggui-ai/protocol';
+import { blueprintKey } from '@ggui-ai/protocol/blueprint-key';
+import {
+  InMemoryGguiSessionStore,
+  InMemoryKeyValueStore,
+} from '@ggui-ai/mcp-server-core/in-memory';
+import type { UiGenerateResult } from '@ggui-ai/mcp-server-core';
 import { createGguiGetSessionHandler } from './get-session.js';
+import { createGguiRenderHandler } from './render.js';
+import { handshakeRecordKey, type HandshakeRecord } from './handshake.js';
 import { GguiSessionNotFoundError } from './errors.js';
 import type { HandlerContext } from '../types.js';
 
@@ -104,5 +111,122 @@ describe('per-user-within-app isolation', () => {
     await expect(
       get.handler({ sessionId }, ctx('app-OTHER', 'guuey:userA')),
     ).rejects.toBeInstanceOf(GguiSessionNotFoundError);
+  });
+});
+
+/**
+ * Per-user isolation must hold on the GENERATION-FAILED commit path too,
+ * not only the happy commit path. The error-render the handler writes
+ * when generation returns `{ ok: false }` must stamp `ctx.userId` (Step
+ * 3a: EVERY commit site stamps it) — otherwise a user-B caller in the
+ * same app could read user-A's failed render through the back-compat arm
+ * of `isVisibleToCaller` (a `userId`-less row stays visible to anyone).
+ *
+ * These exercise the REAL `createGguiRenderHandler` through its real
+ * `runGenerationIntoGguiSession` → `commitErrorGguiSession` path (driven
+ * by a `generator` seam that returns `{ ok: false }`) against the real
+ * `InMemoryGguiSessionStore`, then read back through the real
+ * `createGguiGetSessionHandler` tenancy gate — so a missing `userId`
+ * stamp on the error commit is observable as a leak.
+ */
+const FAIL_CONTRACT: DataContract = { propsSpec: { properties: {} } };
+
+/**
+ * `generator` seam returning a generation failure. Hits the
+ * `generation-failed` `commitErrorGguiSession` site in
+ * `runGenerationIntoGguiSession` — the commit whose `userId` stamp this
+ * suite guards.
+ */
+const failingGenerator = async (): Promise<UiGenerateResult> => ({
+  ok: false,
+  error: { code: 'PRODUCTION_FAILED', message: 'forced generation failure' },
+});
+
+/** Seed an `origin: 'agent'` create handshake the render call consumes. */
+async function seedAgentHandshake(
+  store: InMemoryKeyValueStore,
+  appId: string,
+  handshakeId: string,
+): Promise<void> {
+  const record: HandshakeRecord = {
+    handshakeId,
+    action: 'create',
+    reason: 'test',
+    input: {
+      intent: 'a failing card',
+      blueprintDraft: { contract: FAIL_CONTRACT },
+    },
+    target: {},
+    suggestion: {
+      origin: 'agent',
+      rationale: 'test',
+      blueprintMeta: { contractHash: blueprintKey(FAIL_CONTRACT), variance: {} },
+    },
+    effectiveContract: FAIL_CONTRACT,
+    appId,
+    createdAt: new Date().toISOString(),
+  };
+  await store.set(handshakeRecordKey(appId, handshakeId), JSON.stringify(record));
+}
+
+/**
+ * Drive the real render handler through the generation-failed commit for
+ * `(appId, userId)` and return the minted error render's sessionId.
+ */
+async function renderFailingFor(
+  renderStore: InMemoryGguiSessionStore,
+  appId: string,
+  userId: string,
+): Promise<{ sessionId: string }> {
+  const handshakeStore = new InMemoryKeyValueStore();
+  const handshakeId = `hs-${userId}`;
+  await seedAgentHandshake(handshakeStore, appId, handshakeId);
+  const handler = createGguiRenderHandler({
+    handshakeStore,
+    renderStore,
+    generation: {
+      uiGenerator: {
+        slug: 'ui-gen-default-fake',
+        tier: 'default',
+        model: 'fake',
+        generate: failingGenerator,
+      },
+      resolveLlm: () => null,
+      blueprints: { get: async () => null, list: async () => [] },
+    },
+    generator: failingGenerator,
+  });
+  const out = await handler.handler(
+    { handshakeId, props: {} },
+    ctx(appId, userId),
+  );
+  return { sessionId: out.sessionId };
+}
+
+describe('per-user isolation on the generation-failed error-render commit', () => {
+  let store: InMemoryGguiSessionStore;
+
+  beforeEach(() => {
+    store = new InMemoryGguiSessionStore();
+  });
+
+  it('error render committed for user A is NOT readable by user B in the same app', async () => {
+    const { sessionId } = await renderFailingFor(store, 'app1', 'guuey:userA');
+    // Sanity: the error render really was committed.
+    const stored = await store.get(sessionId);
+    expect((stored?.render as ComponentGguiSession | undefined)?.error).toBe(
+      'forced generation failure',
+    );
+    const get = createGguiGetSessionHandler({ renderStore: store });
+    await expect(
+      get.handler({ sessionId }, ctx('app1', 'guuey:userB')),
+    ).rejects.toBeInstanceOf(GguiSessionNotFoundError);
+  });
+
+  it('the owner can still read their own failed render', async () => {
+    const { sessionId } = await renderFailingFor(store, 'app1', 'guuey:userA');
+    const get = createGguiGetSessionHandler({ renderStore: store });
+    const out = await get.handler({ sessionId }, ctx('app1', 'guuey:userA'));
+    expect(out.id).toBe(sessionId);
   });
 });

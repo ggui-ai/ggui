@@ -2285,6 +2285,7 @@ async function runGenerationIntoGguiSession(
     return commitErrorGguiSession(renderStore, previewDeps, channelNotifier, {
       sessionId,
       appId: ctx.appId,
+      userId: ctx.userId, // per-user isolation (undefined for non-federated single-user)
       story,
       nowIso,
       nowEpochMs,
