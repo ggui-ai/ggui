@@ -12,6 +12,7 @@ export { VariantGrid, resultKey } from './components/VariantGrid';
 export { ResultDetail } from './components/ResultDetail';
 export { DimensionScores } from './components/DimensionScores';
 export { TrendChart } from './components/TrendChart';
+export { MethodologySection } from './components/MethodologySection';
 
 export { httpJsonSource } from './data-source';
 export type { BenchmarkDataSource } from './data-source';
@@ -19,9 +20,16 @@ export type { BenchmarkDataSource } from './data-source';
 export {
   readEvalScore,
   readDimensions,
-  readJudge,
+  readJudges,
+  readCritique,
+  readSpread,
+  readJudgePanel,
 } from './eval-helpers';
-export type { DimensionScoresShape, JudgeShape } from './eval-helpers';
+export type {
+  DimensionScoresShape,
+  JudgeShape,
+  PanelJudgeShape,
+} from './eval-helpers';
 
 export type {
   BenchmarkIndex,

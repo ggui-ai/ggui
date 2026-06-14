@@ -17,6 +17,8 @@ interface VariantTrend {
   variantId: string;
   /** Provider — drives line color only. */
   sdkName: string;
+  /** Tier (fast/balanced/premium/…) — drives the dash pattern only. */
+  tier: string;
   /**
    * Aligned to the runs slice — undefined for runs missing this
    * variant AND for the −1 "not evaluated" sentinel (an unevaluated
@@ -43,6 +45,16 @@ const PROVIDER_COLOR: Record<string, string> = {
 };
 
 const FALLBACK_COLOR = '#3D3D3D';
+
+// Provider color disambiguates the family; tier disambiguates the line
+// WITHIN a family — 9 variants over 3 colors collide otherwise. Solid =
+// balanced (the headline tier), dashed = fast, dotted = premium. Unknown
+// tiers fall through to solid.
+const TIER_DASH: Record<string, string | undefined> = {
+  balanced: undefined,
+  fast: '4 3',
+  premium: '1 3',
+};
 
 /**
  * Score-per-variant over time.
@@ -103,6 +115,7 @@ export function TrendChart({ dataSource, runs, maxRuns = 14 }: Props) {
           trend = {
             variantId: v.variantId,
             sdkName: v.sdkName,
+            tier: v.tier,
             scores: visibleRuns.map(() => undefined),
           };
           byVariant.set(v.variantId, trend);
@@ -190,6 +203,7 @@ export function TrendChart({ dataSource, runs, maxRuns = 14 }: Props) {
               segments instead of bridging across it. */}
           {trends.map((trend) => {
             const color = PROVIDER_COLOR[trend.sdkName] ?? FALLBACK_COLOR;
+            const dash = TIER_DASH[trend.tier];
             const segments = toSegments(trend.scores, visibleRuns.length);
             return (
               <g key={trend.variantId}>
@@ -200,6 +214,7 @@ export function TrendChart({ dataSource, runs, maxRuns = 14 }: Props) {
                     fill="none"
                     stroke={color}
                     strokeWidth={1.5}
+                    strokeDasharray={dash}
                     strokeLinejoin="round"
                     strokeLinecap="round"
                   />
@@ -223,18 +238,27 @@ export function TrendChart({ dataSource, runs, maxRuns = 14 }: Props) {
         </svg>
       </div>
 
-      {/* Legend — variant id + most recent score */}
+      {/* Legend — variant id + most recent score. The swatch mirrors the
+          line's color (provider) AND dash pattern (tier) so collided
+          colors stay distinguishable. */}
       <ul className="flex flex-wrap gap-x-6 gap-y-1 mt-3 text-sm">
         {trends.map((trend) => {
           const lastScore = [...trend.scores].reverse().find((s) => s !== undefined);
           const color = PROVIDER_COLOR[trend.sdkName] ?? FALLBACK_COLOR;
+          const dash = TIER_DASH[trend.tier];
           return (
             <li key={trend.variantId} className="flex items-center gap-2">
-              <span
-                aria-hidden
-                className="inline-block w-3 h-0.5"
-                style={{ backgroundColor: color }}
-              />
+              <svg aria-hidden width={14} height={4} viewBox="0 0 14 4">
+                <line
+                  x1={0}
+                  y1={2}
+                  x2={14}
+                  y2={2}
+                  stroke={color}
+                  strokeWidth={1.5}
+                  strokeDasharray={dash}
+                />
+              </svg>
               <span className="font-mono text-ink">{trend.variantId}</span>
               {lastScore !== undefined && (
                 <span className="font-mono text-ink-3 text-xs">{formatScore(lastScore)}</span>

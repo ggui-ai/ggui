@@ -44,9 +44,9 @@ export function SummaryHeader({ report, date }: Props) {
           </dd>
         </div>
       </dl>
-      {meta.judge && (
+      {meta.judges && meta.judges.length > 0 && (
         <p className="font-mono text-xs text-ink-4 mt-3">
-          scores judged by {meta.judge.model} ({meta.judge.promptVersion})
+          scores judged by panel: {meta.judges.map((j) => j.model).join(', ')}
         </p>
       )}
     </header>

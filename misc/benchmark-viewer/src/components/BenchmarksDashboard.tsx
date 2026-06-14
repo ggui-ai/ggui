@@ -8,9 +8,17 @@ import { SummaryHeader } from './SummaryHeader';
 import { VariantGrid, resultKey } from './VariantGrid';
 import { ResultDetail } from './ResultDetail';
 import { TrendChart } from './TrendChart';
+import { MethodologySection } from './MethodologySection';
 
 interface Props {
   dataSource: BenchmarkDataSource;
+  /**
+   * Base URL of the data source, surfaced in the methodology section as a
+   * "raw data" link. The app passes the same URL it built `dataSource`
+   * from (`process.env.NEXT_PUBLIC_BENCHMARK_DATA_URL` or the dev
+   * fallback). Omitted → the methodology section renders without the link.
+   */
+  rawDataUrl?: string;
 }
 
 type AsyncState<T> =
@@ -27,7 +35,7 @@ type AsyncState<T> =
  * `httpJsonSource('https://bench.ggui.ai/data/')`; local dev passes
  * `httpJsonSource('http://localhost:8080/')`.
  */
-export function BenchmarksDashboard({ dataSource }: Props) {
+export function BenchmarksDashboard({ dataSource, rawDataUrl }: Props) {
   const [index, setIndex] = useState<AsyncState<BenchmarkIndex>>({ status: 'idle' });
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [report, setReport] = useState<AsyncState<BenchmarkReport>>({ status: 'idle' });
@@ -103,9 +111,17 @@ export function BenchmarksDashboard({ dataSource }: Props) {
       ? report.data.results.find((r) => resultKey(r) === selectedResultKey) ?? null
       : null;
 
+  const loadedReport = report.status === 'ready' ? report.data : null;
+
   return (
     <div>
       <TrendChart dataSource={dataSource} runs={index.data.runs} />
+
+      <MethodologySection
+        meta={loadedReport?.meta}
+        commits={loadedReport?.commitSummaries}
+        rawDataUrl={rawDataUrl}
+      />
 
       <DateSelector
         runs={index.data.runs}
