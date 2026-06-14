@@ -222,7 +222,11 @@ describe('dev server HTTP surface', () => {
       writeFileSync(join(tmp, 'ui/card/ggui.ui.tsx'), 'export default () => null; // v2');
     }, 50);
 
-    await readUntil((c) => c.includes('event: ui') && c.includes('"id":"card"'));
+    // Watcher-dependent: chokidar file-watch detection + SSE forward can
+    // take several seconds on a contended 2-core CI runner (passes ~instantly
+    // locally). Generous timeout absorbs the slow case without masking a real
+    // hang (the package testTimeout is 30s).
+    await readUntil((c) => c.includes('event: ui') && c.includes('"id":"card"'), 20_000);
 
     abort.abort();
     try {
