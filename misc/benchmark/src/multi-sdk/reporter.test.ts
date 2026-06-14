@@ -12,13 +12,20 @@ function outageRun(): BenchmarkRunResult {
   const now = new Date(0).toISOString();
   return {
     variant: { id: 'google-0', sdkName: 'google', tier: 'balanced', modelId: 'google/x' },
-    commit: { id: 'weather-card', name: 'Weather Card', complexity: 'medium' },
+    commit: {
+      id: 'weather-card',
+      name: 'Weather Card',
+      description: '',
+      prompt: '',
+      complexity: 'medium',
+      contract: {},
+    },
     generation: null,
     evaluation: null,
     estimatedCostUsd: 0,
     timestamp: now,
     generator: 'ui-gen-default-haiku-4-5',
-  } as unknown as BenchmarkRunResult;
+  };
 }
 
 describe('toDisplayReport outage handling', () => {
