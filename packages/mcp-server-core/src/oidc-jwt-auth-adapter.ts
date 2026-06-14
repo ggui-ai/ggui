@@ -1,12 +1,12 @@
 /**
  * OidcJwtAuthAdapter — neutral, config-driven JWT verify adapter.
  *
- * Mirrors the cloud `CognitoAuthAdapter` pattern: a structural
- * {@link JwtVerifierLike} lets tests inject a mock verifier, while the real
- * JWKS / signature / expiry verification is delegated to that verifier (its
- * library is tested upstream). This module is the verifier-injected path —
- * all adapter logic (issuer selection, `aud` pattern + appId extraction,
- * userId namespacing, fixed minimal roles, collapse-to-null on any failure).
+ * Uses structural verifier injection: a {@link JwtVerifierLike} lets tests
+ * inject a mock verifier, while the real JWKS / signature / expiry
+ * verification is delegated to that verifier (its library is tested
+ * upstream). This module is the verifier-injected path — all adapter logic
+ * (issuer selection, `aud` pattern + appId extraction, userId namespacing,
+ * fixed minimal roles, collapse-to-null on any failure).
  * The production constructor that builds a verifier from JWKS config is added
  * separately (Task 4).
  *
@@ -34,9 +34,9 @@ export interface JwtVerifierLike {
   verify(token: string): Promise<unknown>;
 }
 
-/** One trusted issuer. Neutral — guuey is supplied as one of these (in cloud config, B2). */
+/** One trusted issuer. Each deployment supplies its own set of these. */
 export interface TrustedIssuerRow {
-  /** Short stable id used to namespace userIds, e.g. 'guuey'. Colon-free. */
+  /** Short stable id used to namespace userIds, e.g. 'acme'. Colon-free. */
   readonly providerId: string;
   /** Exact `iss` this row matches. */
   readonly issuer: string;
