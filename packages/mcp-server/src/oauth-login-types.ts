@@ -143,15 +143,6 @@ export interface OAuthProviderConfigRecord {
   readonly enabled: boolean;
 }
 
-/**
- * Compose the canonical user-id namespace for an OAuth identity.
- * `userId = '${providerId}:${providerSubject}'`. Pure helper —
- * exported here so every consumer (routes, storage, audit hooks)
- * computes the same thing.
- */
-export function composeOAuthUserId(input: {
-  readonly providerId: string;
-  readonly providerSubject: string;
-}): string {
-  return `${input.providerId}:${input.providerSubject}`;
-}
+// composeOAuthUserId now lives in @ggui-ai/protocol (shared with the
+// OIDC verify adapter, which can't import upward from mcp-server).
+export { composeOAuthUserId } from "@ggui-ai/protocol";

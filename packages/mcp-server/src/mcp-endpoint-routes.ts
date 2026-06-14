@@ -150,7 +150,7 @@ export function mountMcpEndpoints(opts: MountOptions): void {
   const makeMcpHandler =
     (
       routeHandlers: ReadonlyArray<SharedHandler<ZodRawShape, ZodRawShape>>,
-      handlerOpts?: { readonly anonymous?: boolean }
+      handlerOpts?: { readonly anonymous?: boolean; readonly rejectFederated?: boolean }
     ) =>
     async (req: Request, res: Response): Promise<void> => {
       const requestId =
@@ -209,6 +209,21 @@ export function mountMcpEndpoints(opts: MountOptions): void {
           });
           return;
         }
+      }
+
+      // Operator-surface guard: federated end-user identities (source:'oidc',
+      // minted by the OIDC verify adapter) must never reach operator-class
+      // routes (/ops) or design-time spec routes (/protocol). Audience
+      // filtering only shapes tools/list; it does NOT stop a direct
+      // tools/call, so this is a route-level authorization gate.
+      if (handlerOpts?.rejectFederated && identity.source === "oidc") {
+        reqLogger.warn("federated_identity_rejected", { route: req.path });
+        res.status(403).json({
+          jsonrpc: "2.0",
+          error: { code: -32000, message: "federated identities are not permitted on this route" },
+          id: null,
+        });
+        return;
       }
 
       // Per-tenant URL routing. When `perAppRouting`
@@ -329,8 +344,8 @@ export function mountMcpEndpoints(opts: MountOptions): void {
   const opsRouteHandlers = filterHandlersByAudience(handlers, ["ops"]);
 
   const agentMcpHandler = makeMcpHandler(agentRouteHandlers);
-  const protocolMcpHandler = makeMcpHandler(protocolRouteHandlers);
-  const opsMcpHandler = makeMcpHandler(opsRouteHandlers);
+  const protocolMcpHandler = makeMcpHandler(protocolRouteHandlers, { rejectFederated: true });
+  const opsMcpHandler = makeMcpHandler(opsRouteHandlers, { rejectFederated: true });
 
   // Universal endpoint — `appId` resolved from the auth identity via
   // `appIdFromIdentity`. Cloud `mcp.ggui.ai` deployments resolve this

@@ -32,6 +32,7 @@ import type {
 } from '@ggui-ai/mcp-server-core';
 import type { HandlerContext, SharedHandler } from '../types.js';
 import { GguiSessionNotFoundError } from './errors.js';
+import { isVisibleToCaller } from './tenancy.js';
 
 // Canonical SSoT shape — authored once in `@ggui-ai/protocol`
 // (`schemas/mcp.ts`).
@@ -101,9 +102,10 @@ export function createGguiGetSessionHandler(
       const { sessionId } = z.object(inputSchema).parse(rawInput);
 
       const stored = await deps.renderStore.get(sessionId);
-      if (!stored || stored.appId !== ctx.appId) {
-        // Tenancy + missing both surface uniformly so cross-tenant
-        // existence is not leaked.
+      if (!isVisibleToCaller(stored, ctx)) {
+        // Tenancy (appId + per-user) + missing all surface uniformly so
+        // cross-tenant / cross-user existence is not leaked.
+        // `stored` is narrowed to StoredGguiSession past this guard.
         throw new GguiSessionNotFoundError(sessionId);
       }
 
