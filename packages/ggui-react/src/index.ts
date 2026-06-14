@@ -40,7 +40,6 @@ export type {
   InterfaceContext,
   DeviceCategory,
   EndUserIdentity,
-  UserAuthMode,
   // System events (OAuth consent)
   SystemPayload,
   SystemAction,

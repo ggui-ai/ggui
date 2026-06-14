@@ -11,7 +11,6 @@ export interface AppDisplayConfig {
   themeId: string;
   defaultScreenPrompt?: string;
   designSystemPreset?: string;
-  userAuthMode: string;
   /**
    * Agent invoke endpoint URL.
    *

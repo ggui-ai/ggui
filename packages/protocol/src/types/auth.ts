@@ -1,15 +1,6 @@
 import type { JsonObject } from './data-contract';
 
 /**
- * User authentication modes.
- *
- * - `anonymous`: no auth gate, cookie-based pseudonymous identity.
- * - `cognito`: ggui-managed Cognito identity (OAuth/OIDC handled by platform).
- * - `byo`: builder supplies their own JWT/OIDC issuer; platform validates against JWKS.
- */
-export type UserAuthMode = 'anonymous' | 'cognito' | 'byo';
-
-/**
  * Authenticated end-user identity.
  * Attached to renders and included in events consumed by agents.
  *

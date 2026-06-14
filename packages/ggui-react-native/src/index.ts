@@ -61,7 +61,6 @@ export type {
   InterfaceContext,
   DeviceCategory,
   EndUserIdentity,
-  UserAuthMode,
 } from '@ggui-ai/protocol';
 export { BRIDGE_EVENTS, detectInterfaceContext, getDeviceCategory } from '@ggui-ai/protocol';
 

@@ -38,7 +38,6 @@ function appConfig(): AppDisplayConfig {
     defaultShellType: 'chat',
     themeId: 'ggui',
     designSystemPreset: 'default',
-    userAuthMode: 'anonymous',
     endpointUrl: ENDPOINT_URL,
   };
 }
