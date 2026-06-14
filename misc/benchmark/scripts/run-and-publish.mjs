@@ -25,6 +25,7 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { S3Client, GetObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3';
 import { buildHeadline } from './headline.mjs';
+import { missingProviderKeys } from './preflight.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const BENCH_ROOT = resolve(__dirname, '..');
@@ -53,6 +54,19 @@ console.log(`  date=${BENCH_DATE}`);
 console.log(`  providers=${PROVIDERS}`);
 console.log(`  commits=${COMMITS}`);
 console.log(`  threshold=${THRESHOLD}`);
+
+// Preflight: refuse to publish if a requested provider has no key — a
+// keyless provider yields all-failed cells that look like a real
+// regression in the published data (2026-06-10 audit, runner-publish:21).
+const requestedProviders = PROVIDERS.split(',').map((p) => p.trim()).filter(Boolean);
+const missing = missingProviderKeys(requestedProviders, process.env);
+if (missing.length > 0) {
+  fail(
+    `missing API key(s) for requested provider(s): ${missing.join(', ')}. ` +
+      `Refusing to publish a report that would record these as failures. ` +
+      `Set the key(s) in Secrets Manager (ggui-bench/*) or drop the provider from BENCH_PROVIDERS.`,
+  );
+}
 
 const s3 = new S3Client({});
 

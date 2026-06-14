@@ -22,7 +22,7 @@ export default defineConfig({
     // Match the genuine work; mirrors the @ggui-ai/ui-gen precedent.
     testTimeout: 30_000,
     hookTimeout: 30_000,
-    include: ['src/**/*.test.ts', 'src/**/*.test.tsx'],
+    include: ['src/**/*.test.ts', 'src/**/*.test.tsx', 'scripts/**/*.test.ts'],
     exclude: [
       '**/node_modules/**',
       '**/dist/**',
