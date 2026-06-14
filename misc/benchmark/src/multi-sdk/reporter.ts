@@ -580,6 +580,7 @@ export function toDisplayReport(
       failureCount: report.meta.failureCount,
       successRate: report.meta.successRate,
       durationMs: report.meta.totalDurationMs,
+      dataLicense: 'CC-BY-4.0',
       ...(report.meta.judges !== undefined ? { judges: report.meta.judges } : {}),
     },
     results: report.results.map(mapRunResult),

@@ -77,6 +77,8 @@ export interface BenchmarkMeta {
    * result was evaluated (skip-evaluation runs).
    */
   judges?: JudgeDisclosureDisplay[];
+  /** SPDX id of the published dataset license. */
+  dataLicense?: string;
 }
 
 /** Which model + prompt version produced the quality scores. */
