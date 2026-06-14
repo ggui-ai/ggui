@@ -39,7 +39,7 @@ const S3_PREFIX = process.env.S3_PREFIX ?? 'data/';
 const PROVIDERS = process.env.BENCH_PROVIDERS ?? 'claude,openai,google';
 const COMMITS =
   process.env.BENCH_COMMITS ??
-  'weather-card,survey-form,kanban-board,periodic-table,product-page,chat-interface,stock-ticker,onboarding-wizard';
+  'weather-card,survey-form,kanban-board,periodic-table,product-page,chat-interface,stock-ticker,onboarding-wizard,leaflet-map,revenue-chart';
 const THRESHOLD = process.env.BENCH_THRESHOLD ?? '70';
 const BENCH_DATE = process.env.BENCH_DATE ?? new Date().toISOString().slice(0, 10);
 
