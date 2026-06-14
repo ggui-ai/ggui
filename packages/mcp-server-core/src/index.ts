@@ -56,6 +56,11 @@ export * from './thread-store.js';
 export * from './blueprint-provider.js';
 export * from './auth-adapter.js';
 export { CompositeAuthAdapter } from './composite-auth-adapter.js';
+export {
+  OidcJwtAuthAdapter,
+  type TrustedIssuerRow,
+  type JwtVerifierLike,
+} from './oidc-jwt-auth-adapter.js';
 export * from './pairing.js';
 // The `ggui.json` schema lives in `@ggui-ai/protocol`. It is a
 // protocol-layer portability primitive, not a server-side interface,
