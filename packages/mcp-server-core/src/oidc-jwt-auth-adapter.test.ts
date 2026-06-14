@@ -112,6 +112,42 @@ describe('OidcJwtAuthAdapter', () => {
   });
 });
 
+describe('OidcJwtAuthAdapter — adversarial', () => {
+  const row = (verify: (t: string) => Promise<unknown>) => ({
+    providerId: 'guuey',
+    issuer: ISS,
+    audiencePattern: AUD_PATTERN,
+    verifier: { verify },
+  });
+
+  it('rejects an aud array with >1 entry (not a single resource indicator)', async () => {
+    const a = new OidcJwtAuthAdapter([
+      row(async () => ({ iss: ISS, sub: 'x', aud: [AUD, 'https://mcp.ggui.ai/apps/other'] })),
+    ]);
+    expect(await a.authenticate(unsignedJwt({ iss: ISS, sub: 'x', aud: [AUD, 'x'] }))).toBeNull();
+  });
+
+  it('rejects a token whose unverified iss is a substring/lookalike of a trusted iss', async () => {
+    const a = new OidcJwtAuthAdapter([row(async () => ({ iss: ISS, sub: 'x', aud: AUD }))]);
+    expect(
+      await a.authenticate(
+        unsignedJwt({ iss: 'https://id.guuey.com.evil.test', sub: 'x', aud: AUD }),
+      ),
+    ).toBeNull();
+  });
+
+  it('does not read roles/workspaceId from token claims', async () => {
+    const a = new OidcJwtAuthAdapter([
+      row(async () => ({ iss: ISS, sub: 'x', aud: AUD, roles: ['ops'], workspaceId: 'w' })),
+    ]);
+    const res = await a.authenticate(unsignedJwt({ iss: ISS, sub: 'x', aud: AUD }));
+    if (res?.identity.kind === 'user') {
+      expect(res.identity.roles).toEqual([]);
+      expect(res.identity.workspaceId).toBeUndefined();
+    }
+  });
+});
+
 // Seam conformance (no seeder — OIDC can't register ad-hoc tokens).
 authAdapterContract(
   'OidcJwtAuthAdapter',
