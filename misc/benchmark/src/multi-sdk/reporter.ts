@@ -213,7 +213,7 @@ function buildVariantSummaries(results: BenchmarkRunResult[]): VariantSummary[] 
         sdkName: variant.sdkName,
         tier: variant.tier,
         modelId: variant.modelId ?? `${variant.sdkName}/${variant.tier}`,
-        avgScore: 0,
+        avgScore: -1, // -1 = not evaluated (outage); never publish 0 as a real score
         avgTimeMs: 0,
         avgCostUsd: 0,
         successRate: 0,
@@ -267,7 +267,7 @@ function buildCommitSummaries(results: BenchmarkRunResult[]): CommitSummary[] {
         commitId,
         commitName: commit.name,
         complexity: commit.complexity,
-        avgScore: 0,
+        avgScore: -1, // -1 = not evaluated (outage); never publish 0 as a real score
         bestVariantId: 'none',
         worstVariantId: 'none',
         tierOutcomes,
