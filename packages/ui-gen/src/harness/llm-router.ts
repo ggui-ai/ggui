@@ -47,6 +47,12 @@ export type { LLMToolDef };
 export interface AgentConfig {
   provider: 'anthropic' | 'openai' | 'google' | 'openrouter';
   model: string;
+  /**
+   * Sampling temperature. When defined it is threaded into the provider
+   * request; when undefined the provider default is used (unchanged
+   * behavior for all existing callers).
+   */
+  temperature?: number;
 }
 
 export interface LLMResponse {
@@ -185,6 +191,7 @@ export abstract class LLMAgent {
     systemPrompt: string,
     userPrompt: string,
     maxTokens?: number,
+    temperature?: number,
   ): Promise<LLMResponse>;
 
   /**
@@ -314,6 +321,7 @@ export class AnthropicAgent extends LLMAgent {
     systemPrompt: string,
     userPrompt: string,
     maxTokens?: number,
+    temperature?: number,
   ): Promise<LLMResponse> {
     const client = await this.getClient<Anthropic>();
     const traceId = newLlmTraceId();
@@ -336,6 +344,7 @@ export class AnthropicAgent extends LLMAgent {
           max_tokens: maxTokens ?? 4096,
           system,
           messages: [{ role: 'user', content: userPrompt }],
+          ...(temperature !== undefined && { temperature }),
         }),
       );
 
@@ -660,6 +669,7 @@ export class OpenAIAgent extends LLMAgent {
     systemPrompt: string,
     userPrompt: string,
     maxTokens?: number,
+    temperature?: number,
   ): Promise<LLMResponse> {
     const client = await this.getClient<OpenAI>();
     const response: OpenAIResponse = await this.apiCall(() =>
@@ -668,6 +678,7 @@ export class OpenAIAgent extends LLMAgent {
         instructions: systemPrompt,
         input: [{ role: 'user', content: userPrompt }],
         ...(maxTokens && { max_output_tokens: maxTokens }),
+        ...(temperature !== undefined && { temperature }),
       }),
     );
 
@@ -918,16 +929,22 @@ export class GoogleAgent extends LLMAgent {
     systemPrompt: string,
     userPrompt: string,
     maxTokens?: number,
+    temperature?: number,
   ): Promise<LLMResponse> {
     const client = await this.getClient<GoogleGenAI>();
 
+    const generationConfig: Interactions.GenerationConfig = {
+      ...(maxTokens ? { max_output_tokens: maxTokens } : {}),
+      ...(temperature !== undefined ? { temperature } : {}),
+    };
 
     const interaction = await this.apiCall(() =>
       client.interactions.create({
         model: this.resolveModel(model),
         system_instruction: systemPrompt,
         input: userPrompt,
-        generation_config: maxTokens ? { max_output_tokens: maxTokens } : undefined,
+        generation_config:
+          Object.keys(generationConfig).length > 0 ? generationConfig : undefined,
       }),
     );
 
@@ -1231,6 +1248,7 @@ export class OpenRouterAgent extends LLMAgent {
     systemPrompt: string,
     userPrompt: string,
     maxTokens?: number,
+    temperature?: number,
   ): Promise<LLMResponse> {
     type Client = import('../adapters/openrouter/client').OpenRouterClient;
     const client = await this.getClient<Client>();
@@ -1244,6 +1262,7 @@ export class OpenRouterAgent extends LLMAgent {
           { role: 'user', content: userPrompt },
         ],
         max_tokens: maxTokens ?? 4096,
+        ...(temperature !== undefined && { temperature }),
       }),
     );
 
@@ -1435,6 +1454,7 @@ export async function callLLM(
     systemPrompt,
     userPrompt,
     maxTokens,
+    config.temperature,
   );
   console.log(
     `[llm-router] ${config.provider}/${config.model} | ${Date.now() - start}ms | in=${result.inputTokens} out=${result.outputTokens}`,

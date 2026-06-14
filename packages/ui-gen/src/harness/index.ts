@@ -26,6 +26,8 @@ export type {
   DefaultTaskRunner,
 } from "./types-public.js";
 export { defaultApplyPatch, applyLineRanges } from "../patch.js";
+export { callLLM, createAgent } from "./llm-router.js";
+export type { AgentConfig, LLMResponse } from "./llm-router.js";
 export {
   computeHarnessId,
   computeHarnessName,
