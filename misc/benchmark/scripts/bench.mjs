@@ -405,8 +405,9 @@ const run = async () => {
   // Run benchmark
   const report = await runner.run({ variants, commits: selectedCommits });
 
-  // Convert to display format and save
-  const displayReport = toDisplayReport(report, reportId, 'local');
+  // Convert to display format and save. version = the runner image's build
+  // SHA (Dockerfile sets ENV GIT_SHA); 'local' only for uncontainerized runs.
+  const displayReport = toDisplayReport(report, reportId, process.env.GIT_SHA || 'local');
 
   // Extract compiled components from results
   const compiledComponents = new Map();
