@@ -31,8 +31,8 @@
  *   --think          Model override for planning phase
  *   --eval           Model override for the IN-LOOP evaluation agent (LLM eval
  *                    rounds + eval-fix). Does NOT change the post-gen aesthetic
- *                    judge — that is pinned and disclosed in the report's
- *                    meta.judge (see src/multi-sdk/post-eval.ts).
+ *                    judge panel — that is pinned and disclosed in the report's
+ *                    meta.judges (see src/multi-sdk/post-eval.ts).
  *   --max-turns      Max coding attempts (default: 30)
  *   --max-eval       Max evaluation rounds (default: 3)
  *   --timeout        Timeout in ms (default: 300000)
