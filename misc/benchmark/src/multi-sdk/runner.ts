@@ -510,15 +510,26 @@ export class BenchmarkRunner {
         }
       }
 
-      // Aesthetic evaluation (Haiku, ~1-2s, ~$0.001 per call)
+      // Aesthetic evaluation — 3-provider judge PANEL (Anthropic +
+      // OpenAI + Google), temp 0, mean score + spread.
       let aestheticEval = null;
       if (!this.config.skipEvaluation && generation.sourceCode) {
-        const { evaluateAesthetics } = await import("./post-eval.js");
-        aestheticEval = await evaluateAesthetics(generation.sourceCode, commit.prompt, undefined, commit.contract);
+        const { evaluateAestheticsPanel } = await import("./post-eval.js");
+        aestheticEval = await evaluateAestheticsPanel(generation.sourceCode, commit.prompt, commit.contract);
       }
 
+      // Judge-token cost: each panel judge is a separate LLM call billed
+      // independently of the coding adapter's rawCost. Price each judge's
+      // tokens against MODEL_REGISTRY and add on top of the coding cost.
+      const judgeCostUsd = aestheticEval
+        ? aestheticEval.judges.reduce(
+            (sum, j) => sum + calculateCost(resolveJudgeCostModelId(j.judge.model), j.tokens),
+            0,
+          )
+        : 0;
+
       const evalSuffix = aestheticEval
-        ? ` | score: ${aestheticEval.score}/100${aestheticEval.passed ? "" : " ⚠"}`
+        ? ` | score: ${aestheticEval.score}/100 (spread ${aestheticEval.spread}, n=${aestheticEval.judges.length})${aestheticEval.passed ? "" : " ⚠"}`
         : "";
       console.log(
         `[benchmark] ${variant.id} × ${commit.id}: ` +
@@ -564,7 +575,10 @@ export class BenchmarkRunner {
         generation,
         evaluation: aestheticEval,
         tierEvaluation,
-        estimatedCostUsd: generation.rawCostUsd ?? estimatedCostUsd,
+        // Coding-model cost (adapter rawCost when reported, else our
+        // estimate) PLUS the panel judges' token cost — judge calls are
+        // separate LLM calls, not part of the coding adapter's rawCost.
+        estimatedCostUsd: (generation.rawCostUsd ?? estimatedCostUsd) + judgeCostUsd,
         timestamp: new Date().toISOString(),
         postGeneration,
         generator: generatorSlug,
@@ -676,6 +690,32 @@ export function resolveCostModelId(
     id.endsWith(`/${effective}`),
   );
   return bySuffix ?? effective;
+}
+
+/**
+ * Resolve a PANEL judge's bare model id to a `MODEL_REGISTRY` key for
+ * cost attribution.
+ *
+ * Judge models are recorded bare (`claude-haiku-4-5-20251001`,
+ * `gpt-5.4-mini`, `gemini-3-flash-preview`) while `MODEL_REGISTRY` is
+ * keyed by LiteLLM `provider/model` ids. Resolution order:
+ *   1. exact key,
+ *   2. unique `/<model>` suffix match (`gpt-5.4-mini` →
+ *      `openai/gpt-5.4-mini`, `gemini-3-flash-preview` →
+ *      `gemini/gemini-3-flash-preview`),
+ *   3. strip a trailing `-YYYYMMDD` date pin and suffix-match again
+ *      (`claude-haiku-4-5-20251001` → `claude-haiku-4-5` →
+ *      `anthropic/claude-haiku-4-5`).
+ * Unknown ids pass through so `calculateCost` flags them loudly.
+ */
+export function resolveJudgeCostModelId(judgeModel: string): string {
+  const keys = Object.keys(MODEL_REGISTRY) as ModelId[];
+  if (judgeModel in MODEL_REGISTRY) return judgeModel;
+  const bySuffix = keys.find((id) => id.endsWith(`/${judgeModel}`));
+  if (bySuffix) return bySuffix;
+  const undated = judgeModel.replace(/-\d{8}$/, "");
+  const byUndatedSuffix = keys.find((id) => id.endsWith(`/${undated}`));
+  return byUndatedSuffix ?? judgeModel;
 }
 
 /** Model ids already flagged as unknown — warn once per id, not per cell. */

@@ -72,10 +72,11 @@ export interface BenchmarkMeta {
   successRate: number;
   durationMs: number;
   /**
-   * Disclosure of the LLM judge that produced every `score` in this
-   * report. Absent when no result was evaluated (skip-evaluation runs).
+   * Disclosure of the LLM judge PANEL that produced every `score` in
+   * this report — one entry per distinct judge model. Absent when no
+   * result was evaluated (skip-evaluation runs).
    */
-  judge?: JudgeDisclosureDisplay;
+  judges?: JudgeDisclosureDisplay[];
 }
 
 /** Which model + prompt version produced the quality scores. */
@@ -118,12 +119,31 @@ export interface EvaluationDimensionsDisplay {
   dataPresentation: number;
 }
 
-export interface EvaluationResultDisplay {
-  passed: boolean;
+/**
+ * One judge's contribution to the panel for a single evaluated run.
+ * Mirrors `SingleJudgeResult` (minus token counts, which are
+ * cost-accounting internals not surfaced to the viewer) from
+ * `@ggui-ai/benchmark/multi-sdk/post-eval`.
+ */
+export interface PanelJudgeBreakdownDisplay {
+  judge: JudgeDisclosureDisplay;
   score: number;
   dimensions: EvaluationDimensionsDisplay;
-  /** Which model + prompt version produced this score. */
-  judge: JudgeDisclosureDisplay;
+  critique?: string;
+}
+
+export interface EvaluationResultDisplay {
+  passed: boolean;
+  /** Panel aggregate score (mean of the surviving judges). */
+  score: number;
+  /** Panel aggregate per-dimension means. */
+  dimensions: EvaluationDimensionsDisplay;
+  /** Distinct judge disclosures (model + prompt version) on this panel. */
+  judges: JudgeDisclosureDisplay[];
+  /** Per-judge breakdown — one entry per judge that responded. */
+  panel: PanelJudgeBreakdownDisplay[];
+  /** max−min of the surviving judges' weighted scores — disagreement signal. */
+  spread: number;
   critique?: string;
   evalTimeMs?: number;
 }

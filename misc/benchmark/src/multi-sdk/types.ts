@@ -4,14 +4,14 @@ import type { GadgetDescriptor, ModelTier, LlmProvider, DataContract, JsonObject
 import type { EvalResult } from '@ggui-ai/ui-gen/evaluation';
 import type { ProviderName, AdapterResult, AdapterMode } from '@ggui-ai/ui-gen/adapters/types';
 import type { GenerationResult, ModelRoles, RenderingContext } from '@ggui-ai/ui-gen/harness/result-types';
-import type { AestheticScores, JudgeDisclosure, PostEvalResult } from './post-eval.js';
+import type { AestheticScores, JudgeDisclosure, PanelEvalResult } from './post-eval.js';
 import type { BenchmarkStorage } from './storage/types.js';
 
 export { PROVIDER_DISPLAY_NAMES } from '@ggui-ai/ui-gen/adapters/types';
 
 // Re-export for use in this module
 export type { ProviderName, AdapterResult, AdapterMode, GenerationResult };
-export type { AestheticScores, JudgeDisclosure, PostEvalResult };
+export type { AestheticScores, JudgeDisclosure, PanelEvalResult };
 
 // =============================================================================
 // Benchmark Variant (a single SDK + model combo)
@@ -204,8 +204,8 @@ export interface BenchmarkRunResult {
    * `'evalResult' in generation` — never cast.
    */
   generation: GenerationResult | AdapterResult | null;
-  /** Post-gen aesthetic judge result (null if generation failed or eval skipped) */
-  evaluation: PostEvalResult | null;
+  /** Post-gen aesthetic judge PANEL result (null if generation failed, eval skipped, or fewer than 2 judges responded) */
+  evaluation: PanelEvalResult | null;
   /** Three-tier evaluation result (tier 0 + LLM tier 1+2 + visual) */
   tierEvaluation?: EvalResult;
   /** Calculated cost in USD */
@@ -276,11 +276,12 @@ export interface BenchmarkReport {
     failureCount: number;
     successRate: number;
     /**
-     * Disclosure of the aesthetic judge that produced every `score` in
-     * this report. Absent when no result carries an evaluation (e.g.
-     * `skipEvaluation` runs) — a report without scores has no judge.
+     * Disclosure of the aesthetic judge PANEL that produced every
+     * `score` in this report — one entry per distinct judge model.
+     * Absent when no result carries an evaluation (e.g. `skipEvaluation`
+     * runs) — a report without scores has no judges.
      */
-    judge?: JudgeDisclosure;
+    judges?: JudgeDisclosure[];
   };
   results: BenchmarkRunResult[];
   variantSummaries: VariantSummary[];

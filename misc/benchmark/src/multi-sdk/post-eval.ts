@@ -4,14 +4,11 @@
  * Lightweight LLM-based evaluation that scores generated components on
  * ggui-specific quality criteria. Runs after generation, before reporting.
  *
- * Two surfaces:
- *  - {@link evaluateAesthetics} — single pinned Anthropic-Haiku judge (legacy,
- *    still the runner seam until the panel swap-in lands).
- *  - {@link evaluateAestheticsPanel} — a 3-provider judge PANEL (Anthropic +
- *    OpenAI + Google) scored at temperature 0; reports the mean score and the
- *    spread (max−min) so a single biased self-judge can no longer dominate.
+ * {@link evaluateAestheticsPanel} — a 3-provider judge PANEL (Anthropic +
+ * OpenAI + Google) scored at temperature 0; reports the mean score and the
+ * spread (max−min) so a single biased self-judge can no longer dominate.
  *
- * Both route their LLM calls through `@ggui-ai/ui-gen/harness`'s `callLLM`,
+ * Routes its LLM calls through `@ggui-ai/ui-gen/harness`'s `callLLM`,
  * which reads provider keys from env (ANTHROPIC_API_KEY / OPENAI_API_KEY /
  * GEMINI_API_KEY|GOOGLE_API_KEY).
  */
@@ -65,45 +62,18 @@ export interface AestheticScores {
 }
 
 /**
- * Judge disclosure — recorded on every {@link PostEvalResult} and
+ * Judge disclosure — recorded on every {@link SingleJudgeResult} and
  * propagated into report meta + the published headline so readers know
  * which model and prompt produced the quality score.
  */
 export interface JudgeDisclosure {
   /** Pinned judge model id. */
   model: string;
-  /** Version tag of {@link AESTHETIC_EVAL_PROMPT}-derived scoring prompt. */
+  /** Version tag of the scoring prompt that produced this score. */
   promptVersion: string;
 }
 
-/**
- * The pinned aesthetic judge for the legacy single-judge path. `--eval` does
- * NOT change this — that flag only overrides the in-loop evaluation agent
- * (`modelRoles.evaluation`). Changing the judge invalidates score
- * comparability across runs; bump {@link AESTHETIC_PROMPT_VERSION} alongside
- * any prompt change.
- */
-export const AESTHETIC_JUDGE_MODEL = 'claude-haiku-4-5-20251001';
-export const AESTHETIC_PROMPT_VERSION = 'aesthetic-eval.v1';
-
-export interface PostEvalResult {
-  /** Whether the component passed the quality threshold */
-  passed: boolean;
-  /** Weighted average score (0-100) */
-  score: number;
-  /** Per-dimension breakdown — exactly the 5 dimensions the judge measures. */
-  dimensions: AestheticScores;
-  /** Which model + prompt version produced this score. */
-  judge: JudgeDisclosure;
-  /** Specific issues — empty for post-eval (no issue extraction) */
-  issues: never[];
-  /** Brief critique text */
-  critique: string;
-  /** Evaluation time in ms */
-  evalTimeMs: number;
-}
-
-/** System prompt for the aesthetic judges. Module-private — used by both the legacy single judge and the panel. */
+/** System prompt for the aesthetic judge panel. Module-private. */
 const AESTHETIC_EVAL_PROMPT = `You are a UI quality evaluator for ggui, a platform that generates React components.
 
 Score the following generated component source code on 5 aesthetic dimensions (0-100 each):
@@ -317,75 +287,4 @@ export async function evaluateAestheticsPanel(
     critique: harshest.critique,
     evalTimeMs: Date.now() - startTime,
   };
-}
-
-// =============================================================================
-// Legacy single-judge evaluation (still the runner seam until the panel swap)
-// =============================================================================
-
-/**
- * Run post-generation aesthetic evaluation on a component with the single
- * pinned Anthropic-Haiku judge. Uses Haiku for speed (~1-2s, ~$0.001).
- *
- * `contract` (optional): the commit's data contract. When passed, the eval
- * LLM sees the same shape `buildMotherPrompt` shows the generator —
- * stops the eval from hallucinating "missing X" against UNAMPUTATED
- * source.
- *
- * NOTE: superseded by {@link evaluateAestheticsPanel}; the runner seam swaps
- * to the panel in a later task. Kept exported so this slice stays
- * self-contained and the build doesn't break.
- */
-export async function evaluateAesthetics(
-  sourceCode: string,
-  prompt: string,
-  apiKey?: string,
-  contract?: unknown,
-): Promise<PostEvalResult | null> {
-  const startTime = Date.now();
-
-  // callLLM reads ANTHROPIC_API_KEY from env. An explicit apiKey arg is no
-  // longer plumbed through (the router owns key resolution); a caller passing
-  // a key with no env key set would get a no-key failure inside callLLM.
-  if (!apiKey && !process.env.ANTHROPIC_API_KEY) return null;
-
-  try {
-    const userMessage = buildJudgeUserMessage(sourceCode, prompt, contract);
-
-    const response = await callLLM(
-      { provider: 'anthropic', model: AESTHETIC_JUDGE_MODEL, temperature: 0 },
-      AESTHETIC_EVAL_PROMPT,
-      userMessage,
-      2000,
-    );
-
-    const jsonBlock = extractBalancedJson(response.text);
-    if (!jsonBlock) return null;
-
-    const scores = JSON.parse(jsonBlock) as AestheticScores & { critique: string };
-    const dimensions: AestheticScores = {
-      layout: scores.layout,
-      designTokens: scores.designTokens,
-      hierarchy: scores.hierarchy,
-      polish: scores.polish,
-      dataPresentation: scores.dataPresentation,
-    };
-    const roundedScore = weightedScore(dimensions);
-
-    return {
-      passed: roundedScore >= 70,
-      score: roundedScore,
-      issues: [],
-      dimensions,
-      judge: {
-        model: AESTHETIC_JUDGE_MODEL,
-        promptVersion: AESTHETIC_PROMPT_VERSION,
-      },
-      critique: scores.critique,
-      evalTimeMs: Date.now() - startTime,
-    };
-  } catch (err) {
-    console.warn('[post-eval] Aesthetic evaluation failed:', err);
-    return null;
-  }
 }

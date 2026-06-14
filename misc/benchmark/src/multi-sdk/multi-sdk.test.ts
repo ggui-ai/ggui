@@ -21,20 +21,34 @@ import { BENCHMARK_COMMITS, getBenchmarkCommit } from './commits';
 import { generateReport, renderReportMarkdown } from './reporter';
 import { calculateCost, resolveCostModelId } from './runner';
 import { getDefaultVariants, getSpeedVariants, getHybridVariants, getRawVsSdkVariants } from './variants';
-import type { BenchmarkRunResult, PostEvalResult } from './types';
-import { AESTHETIC_JUDGE_MODEL, AESTHETIC_PROMPT_VERSION } from './post-eval';
+import type { BenchmarkRunResult, PanelEvalResult, AestheticScores } from './types';
+import { AESTHETIC_PROMPT_VERSION_PANEL } from './post-eval';
 
-/** Build a PostEvalResult-shaped fixture matching the runner's real output. */
+/** The 3-model judge panel used in fixtures — mirrors the real PANEL. */
+const FIXTURE_JUDGE_MODELS = ['claude-haiku-4-5-20251001', 'gpt-5.4-mini', 'gemini-3-flash-preview'] as const;
+
+/**
+ * Build a PanelEvalResult-shaped fixture matching the runner's real
+ * output: 3 judges all reporting the same score (so the panel mean is
+ * `score` and the spread is 0), each with token counts for cost.
+ */
 function mkEval(
   score: number,
-  dimensions: PostEvalResult['dimensions'],
-): PostEvalResult {
+  dimensions: AestheticScores,
+): PanelEvalResult {
   return {
     passed: score >= 70,
     score,
     dimensions,
-    judge: { model: AESTHETIC_JUDGE_MODEL, promptVersion: AESTHETIC_PROMPT_VERSION },
-    issues: [],
+    spread: 0,
+    judges: FIXTURE_JUDGE_MODELS.map((model) => ({
+      judge: { model, promptVersion: AESTHETIC_PROMPT_VERSION_PANEL },
+      score,
+      dimensions,
+      critique: 'fixture critique',
+      tokens: { input: 1200, output: 300 },
+    })),
+    promptVersion: AESTHETIC_PROMPT_VERSION_PANEL,
     critique: 'fixture critique',
     evalTimeMs: 1200,
   };
