@@ -8,7 +8,9 @@ import {
   PROVIDER_PROBE_ORDER,
   describeGenerationBinding,
   probeGenerationBinding,
+  resolveConfiguredRoute,
 } from './generation-probe.js';
+import type { LlmRoute } from '@ggui-ai/mcp-server';
 import type { ByokKeyResolution, ByokResolver } from './byok-resolver.js';
 
 // ─── Fixtures ────────────────────────────────────────────────
@@ -281,6 +283,96 @@ describe('probeGenerationBinding', () => {
     });
     expect(binding.keySource).toBe('credentials-file');
     expect(binding.keyEnvName).toBeUndefined();
+  });
+});
+
+// ─── resolveConfiguredRoute (env > manifest precedence) ──────
+
+describe('resolveConfiguredRoute', () => {
+  const manifestRoute: LlmRoute = {
+    provider: 'anthropic',
+    model: 'claude-haiku-4-5-20251001',
+  };
+
+  it('returns kind:none when neither env nor manifest is set', () => {
+    expect(
+      resolveConfiguredRoute({ envModel: undefined, manifestRoute: undefined }),
+    ).toEqual({ kind: 'none' });
+  });
+
+  it('falls back to the manifest route when env is unset', () => {
+    expect(
+      resolveConfiguredRoute({ envModel: undefined, manifestRoute }),
+    ).toEqual({ kind: 'route', route: manifestRoute, source: 'manifest' });
+  });
+
+  it('treats an empty/whitespace env value as unset (manifest wins)', () => {
+    expect(
+      resolveConfiguredRoute({ envModel: '   ', manifestRoute }),
+    ).toEqual({ kind: 'route', route: manifestRoute, source: 'manifest' });
+  });
+
+  it('env override (canonical form) takes precedence over the manifest', () => {
+    // This is the exact e2e provider-matrix case: the manifest pins
+    // anthropic, but the env override repoints to openai's gpt-5.4-mini.
+    expect(
+      resolveConfiguredRoute({
+        envModel: 'openai:gpt-5.4-mini',
+        manifestRoute,
+      }),
+    ).toEqual({
+      kind: 'route',
+      route: { provider: 'openai', model: 'gpt-5.4-mini' },
+      source: 'env',
+    });
+  });
+
+  it('env override accepts the LiteLLM form for google', () => {
+    // The google e2e instance can use either form — assert the
+    // LiteLLM `gemini/...` prefix maps to the `google` provider.
+    expect(
+      resolveConfiguredRoute({
+        envModel: 'gemini/gemini-3.1-flash-lite',
+        manifestRoute,
+      }),
+    ).toEqual({
+      kind: 'route',
+      route: { provider: 'google', model: 'gemini-3.1-flash-lite' },
+      source: 'env',
+    });
+  });
+
+  it('env override wins even when the manifest is absent', () => {
+    expect(
+      resolveConfiguredRoute({
+        envModel: 'google:gemini-3.1-flash-lite',
+        manifestRoute: undefined,
+      }),
+    ).toEqual({
+      kind: 'route',
+      route: { provider: 'google', model: 'gemini-3.1-flash-lite' },
+      source: 'env',
+    });
+  });
+
+  it('returns kind:invalid-env for a malformed env value (no silent fallback)', () => {
+    // A bad override must NOT silently fall through to the manifest —
+    // that would mask the operator's intent. The CLI hard-fails on this.
+    expect(
+      resolveConfiguredRoute({
+        envModel: 'not-a-real-route',
+        manifestRoute,
+      }),
+    ).toEqual({ kind: 'invalid-env', raw: 'not-a-real-route' });
+  });
+
+  it('rejects an unknown model for a known provider', () => {
+    expect(
+      resolveConfiguredRoute({
+        envModel: 'openai:gpt-does-not-exist',
+        manifestRoute: undefined,
+      }),
+    ).toEqual({ kind: 'invalid-env', raw: 'openai:gpt-does-not-exist' });
   });
 });
 

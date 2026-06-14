@@ -167,12 +167,23 @@ const SERVICES: readonly ServiceSpec[] = [
   // provider matrix; scenario 6 natural-pairs each agent SDK with the
   // matching ggui port. Both instances skip cleanly when their key is
   // missing — no need to set every provider's key to run the suite.
+  //
+  // The `ggui-default` manifest PINS `generation.model:
+  // anthropic:claude-haiku-4-5-...`. These two instances delete the
+  // anthropic key (via `providerOnlyEnv`), so the manifest pin alone
+  // would resolve the now-keyless anthropic provider → "Setup needed"
+  // card instead of a real render. `GGUI_GENERATION_MODEL` overrides
+  // the manifest (env > manifest precedence) so each instance generates
+  // with its own provider's flagship-but-cheap model.
   {
     name: 'ggui-default-openai',
     pkg: '@ggui-samples/ggui-default',
     port: Number.parseInt(process.env.GGUI_OPENAI_PORT ?? '6787', 10),
     healthPath: '/healthz',
-    envOverride: providerOnlyEnv('OPENAI_API_KEY'),
+    envOverride: {
+      ...providerOnlyEnv('OPENAI_API_KEY'),
+      GGUI_GENERATION_MODEL: 'openai:gpt-5.4-mini',
+    },
     skipIf: () => !process.env.OPENAI_API_KEY,
   },
   {
@@ -180,7 +191,10 @@ const SERVICES: readonly ServiceSpec[] = [
     pkg: '@ggui-samples/ggui-default',
     port: Number.parseInt(process.env.GGUI_GOOGLE_PORT ?? '6788', 10),
     healthPath: '/healthz',
-    envOverride: providerOnlyEnv('GEMINI_API_KEY'),
+    envOverride: {
+      ...providerOnlyEnv('GEMINI_API_KEY'),
+      GGUI_GENERATION_MODEL: 'google:gemini-3.1-flash-lite',
+    },
     skipIf: () => !process.env.GEMINI_API_KEY,
   },
 ];

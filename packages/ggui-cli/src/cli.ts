@@ -60,8 +60,10 @@ import { createByokResolver } from './byok-resolver.js';
 import { isInstalledBlueprintPath } from './internal/artifact-install.js';
 import {
   DEFAULT_ROUTE_BY_PROVIDER,
+  GENERATION_MODEL_ENV,
   describeGenerationBinding,
   probeGenerationBinding,
+  resolveConfiguredRoute,
   type GenerationBinding,
 } from './generation-probe.js';
 import { buildMcpServerBackend, pickFreePort } from './mcp-backend.js';
@@ -611,13 +613,34 @@ async function runServeCommand(args: string[]): Promise<number> {
   // re-prompt before the persisted GguiSession is GC'd.
   const NO_CREDENTIALS_CARD_TTL_MS = 60 * 60 * 1000;
 
-  // Resolve the operator's explicit `generation.model` route, if any.
-  // The schema-side `parseAnyLlmRoute` transform yields a typed
-  // `LlmRoute` directly — no string parsing here. Bedrock is
-  // hosted-only on the OSS path (no IAM resolver chain wired); reject
-  // explicitly with a clear error rather than silently failing at
-  // dispatch time.
-  const configuredRoute = plan.manifest?.generation?.model;
+  // Resolve the operator's explicit generation route, applying the
+  // precedence rule `GGUI_GENERATION_MODEL` env > `ggui.json#
+  // generation.model`. The env override is the ops escape hatch: it
+  // repoints a `ggui serve` instance at a different model without
+  // editing the manifest (and lets the e2e provider matrix boot the
+  // SAME sample under different providers). The manifest leg is
+  // already a typed `LlmRoute` from the schema transform; the env leg
+  // is parsed via `parseAnyLlmRoute` inside `resolveConfiguredRoute`.
+  const routeResolution = resolveConfiguredRoute({
+    envModel: process.env[GENERATION_MODEL_ENV],
+    manifestRoute: plan.manifest?.generation?.model,
+  });
+  if (routeResolution.kind === 'invalid-env') {
+    process.stderr.write(
+      `ggui serve: ${GENERATION_MODEL_ENV}="${routeResolution.raw}" is not a ` +
+        `valid model route. Accepted forms:\n` +
+        `  - canonical: "openai:gpt-5.4-mini"\n` +
+        `  - LiteLLM:   "gemini/gemini-3.1-flash-lite"\n` +
+        `See docs/principles/model-string-convention.md.\n`,
+    );
+    return 1;
+  }
+  const configuredRoute =
+    routeResolution.kind === 'route' ? routeResolution.route : undefined;
+  // Bedrock is hosted-only on the OSS path (no IAM resolver chain
+  // wired); reject explicitly with a clear error rather than silently
+  // failing at dispatch time. Covers both env + manifest sources since
+  // the check runs on the resolved route.
   if (configuredRoute?.provider === 'bedrock') {
     process.stderr.write(
       `ggui serve: ggui.json#generation.model declared a bedrock route ` +

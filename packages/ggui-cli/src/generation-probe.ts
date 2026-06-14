@@ -32,10 +32,13 @@
  * inputs so tests can supply fakes without mutating `process.env` /
  * touching the home directory.
  *
- * **Explicit non-scope:** provider override via env / config /
- * flag. The fixed priority is fine for current usage; a follow-up
- * can add `GGUI_GENERATION_PROVIDER` / `ggui.json#generation.model`
- * without re-shaping this seam.
+ * **Route precedence:** the dispatch route is chosen by
+ * {@link resolveConfiguredRoute} with precedence
+ * `GGUI_GENERATION_MODEL` env > `ggui.json#generation.model` >
+ * per-provider default. The env override is the ops escape hatch —
+ * it lets an operator point a `ggui serve` instance at a different
+ * model without editing the manifest (and lets the e2e provider
+ * matrix boot the SAME sample under different providers).
  */
 import type {
   BlueprintProvider,
@@ -47,6 +50,7 @@ import type {
   ProviderKeyRef,
   GguiSession,
 } from '@ggui-ai/mcp-server';
+import { parseAnyLlmRoute } from '@ggui-ai/protocol';
 import { createUiGenerator } from '@ggui-ai/ui-gen';
 import type {
   ByokKeyResolution,
@@ -91,6 +95,57 @@ export const DEFAULT_ROUTE_BY_PROVIDER: Readonly<
  */
 export const PROVIDER_PROBE_ORDER: readonly Exclude<LlmProvider, 'bedrock'>[] =
   ['anthropic', 'openai', 'google', 'openrouter'];
+
+/**
+ * Env-var name for the `ggui serve` generation-model override. When
+ * set, its parsed route takes precedence over `ggui.json#generation.model`.
+ */
+export const GENERATION_MODEL_ENV = 'GGUI_GENERATION_MODEL';
+
+/**
+ * Outcome of resolving the configured generation route from the env
+ * override + manifest declaration. The discriminated `kind` lets the
+ * CLI distinguish "no route configured" (fall through to the priority
+ * chain) from "an invalid override was supplied" (hard-fail with a
+ * clear operator message) without reaching for exceptions.
+ */
+export type ResolveConfiguredRouteResult =
+  | { readonly kind: 'route'; readonly route: LlmRoute; readonly source: 'env' | 'manifest' }
+  | { readonly kind: 'none' }
+  | { readonly kind: 'invalid-env'; readonly raw: string };
+
+/**
+ * Resolve the effective `configuredRoute` for `ggui serve`, applying
+ * the precedence rule **env > manifest**:
+ *
+ *   1. `GGUI_GENERATION_MODEL` (when set + non-empty) — parsed via
+ *      {@link parseAnyLlmRoute}, accepting both canonical
+ *      (`openai:gpt-5.4-mini`) and LiteLLM (`gemini/gemini-3.1-flash-lite`)
+ *      forms. A malformed value yields `kind: 'invalid-env'` so the
+ *      caller can hard-fail rather than silently ignore the operator's
+ *      intent.
+ *   2. The manifest's already-parsed `generation.model` route.
+ *   3. Neither → `kind: 'none'` (caller walks the priority chain).
+ *
+ * Bedrock routing is NOT rejected here — the CLI already gates bedrock
+ * (no OSS IAM resolver) on the resolved route, so a single check covers
+ * both the env and manifest sources.
+ */
+export function resolveConfiguredRoute(opts: {
+  readonly envModel: string | undefined;
+  readonly manifestRoute: LlmRoute | undefined;
+}): ResolveConfiguredRouteResult {
+  const trimmed = opts.envModel?.trim();
+  if (trimmed) {
+    const parsed = parseAnyLlmRoute(trimmed);
+    if (!parsed) return { kind: 'invalid-env', raw: trimmed };
+    return { kind: 'route', route: parsed, source: 'env' };
+  }
+  if (opts.manifestRoute) {
+    return { kind: 'route', route: opts.manifestRoute, source: 'manifest' };
+  }
+  return { kind: 'none' };
+}
 
 export interface ProbeGenerationBindingOptions {
   readonly resolver: ByokResolver;
