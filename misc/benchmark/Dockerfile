@@ -42,8 +42,12 @@ COPY deploy/ ./
 #   @huggingface/transformers ~48MB  — local embedding pipeline
 #   @img/sharp-libvips-*      ~33MB  — image processing
 #   turbo-linux-64            ~35MB  — build tool, not runtime
-#   happy-dom                 ~19MB  — only used by runtime-render-check probe
 #   vitest                    devDep — present via workspace hoist
+#
+# happy-dom retained (~19MB) — required at runtime by @ggui-ai/ui-gen's
+# runtime-render-check probe (render-check.ts does `await import("happy-dom")`);
+# stripping it silently degrades that eval tier to "skipped" while the cell
+# still reports PASS, so the runtime-render probe never actually runs.
 #
 # typescript STAYS — @ggui-ai/ui-gen/dist/adapters imports it at runtime
 # (despite ~23MB cost). Stripping breaks the bench at first generation.
@@ -58,7 +62,6 @@ RUN find node_modules/.pnpm \
        -o -name "@huggingface+transformers@*" \
        -o -name "@img+sharp-libvips-*" \
        -o -name "turbo-linux-64@*" \
-       -o -name "happy-dom@*" \
        -o -name "vitest@*" \
       \) \
       -exec rm -rf {} + \
