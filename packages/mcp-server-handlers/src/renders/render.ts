@@ -342,6 +342,12 @@ export interface GguiSessionPostSuccessArgs {
   readonly action: GguiRenderOutput['action'];
   /** Whether the render committed real componentCode. */
   readonly codeReady: boolean;
+  /**
+   * True when this render reused an existing blueprint (no LLM call);
+   * false on a cold generation or probe. Neutral observability field —
+   * cloud deployments use it for per-render metering.
+   */
+  readonly cacheHit: boolean;
 }
 
 /**
@@ -1836,6 +1842,10 @@ export function createGguiRenderHandler(
           intent: story.intent,
           action,
           codeReady: generatedCodeReady,
+          // Always defined + accurate: `result.cache` is assigned from
+          // `cacheMarker ?? { hit: false, … }`, set on BOTH the
+          // blueprint-reuse and cold-gen branches above.
+          cacheHit: result.cache.hit,
         });
       }
 

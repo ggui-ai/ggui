@@ -192,6 +192,12 @@ function buildHandler(opts: {
    * cross-MCP escape hatch to exercise the seam the cache path drops.
    */
   readonly checkRenderContracts?: GguiRenderHandlerDeps['checkRenderContracts'];
+  /**
+   * Optional per-render success seam. Threaded onto the handler deps so
+   * tests can capture the `GguiSessionPostSuccessArgs` bundle the handler
+   * hands the hook on BOTH the cache-hit and cold-gen paths.
+   */
+  readonly postSuccessHook?: GguiRenderHandlerDeps['postSuccessHook'];
 }): ReturnType<typeof createGguiRenderHandler> {
   return createGguiRenderHandler({
     handshakeStore: opts.handshakeStore,
@@ -199,6 +205,7 @@ function buildHandler(opts: {
     ...(opts.checkRenderContracts
       ? { checkRenderContracts: opts.checkRenderContracts }
       : {}),
+    ...(opts.postSuccessHook ? { postSuccessHook: opts.postSuccessHook } : {}),
     generation: {
       // `uiGenerator` is never reached — `generator` escape hatch wins.
       uiGenerator: {
@@ -259,7 +266,9 @@ function buildRecord(opts: {
 
 /** Cache harness — pre-seeds a Blueprint at a known UUID + an
  *  origin:'cache' handshake record that references it. */
-async function buildAcceptCacheHarness(): Promise<{
+async function buildAcceptCacheHarness(extraOpts: {
+  readonly postSuccessHook?: GguiRenderHandlerDeps['postSuccessHook'];
+} = {}): Promise<{
   readonly harness: Harness;
   readonly storedUuid: string;
   readonly handshakeId: string;
@@ -304,6 +313,9 @@ async function buildAcceptCacheHarness(): Promise<{
     vectorStore,
     index,
     coldCode: COLD_CODE,
+    ...(extraOpts.postSuccessHook
+      ? { postSuccessHook: extraOpts.postSuccessHook }
+      : {}),
   });
   return {
     harness: { handshakeStore, renderStore, vectorStore, index, handler },
@@ -398,7 +410,9 @@ async function buildAcceptCacheHarnessFor(
 
 /** Cold-gen harness — empty registry + an origin:'agent' handshake (no
  *  matchedBlueprint), so render falls through to generation. */
-async function buildColdGenHarness(): Promise<{
+async function buildColdGenHarness(extraOpts: {
+  readonly postSuccessHook?: GguiRenderHandlerDeps['postSuccessHook'];
+} = {}): Promise<{
   readonly harness: Harness;
   readonly handshakeId: string;
 }> {
@@ -420,6 +434,9 @@ async function buildColdGenHarness(): Promise<{
     vectorStore,
     index,
     coldCode: COLD_CODE,
+    ...(extraOpts.postSuccessHook
+      ? { postSuccessHook: extraOpts.postSuccessHook }
+      : {}),
   });
   return {
     harness: { handshakeStore, renderStore, vectorStore, index, handler },
@@ -600,6 +617,33 @@ describe('createGguiRenderHandler — cache-reuse point-read (Phase 2)', () => {
     const keys = entries.map((e) => e.key);
     expect(keys).toContain(storedUuid);
     expect(keys).toContain(out.blueprintId);
+  });
+
+  it('passes cacheHit to postSuccessHook (true on blueprint reuse, false on cold gen)', async () => {
+    const seen: boolean[] = [];
+    const postSuccessHook: GguiRenderHandlerDeps['postSuccessHook'] = async (
+      a,
+    ) => {
+      seen.push(a.cacheHit);
+    };
+
+    // Cache-hit path: ACCEPT + origin:'cache' reuses the stored blueprint.
+    const cache = await buildAcceptCacheHarness({ postSuccessHook });
+    await cache.harness.handler.handler(
+      { handshakeId: cache.handshakeId, props: {} },
+      CTX,
+    );
+    expect(typeof seen.at(-1)).toBe('boolean');
+    expect(seen.at(-1)).toBe(true);
+
+    // Cold-gen path: origin:'agent' with no matchedBlueprint → generation.
+    const cold = await buildColdGenHarness({ postSuccessHook });
+    await cold.harness.handler.handler(
+      { handshakeId: cold.handshakeId, props: {} },
+      CTX,
+    );
+    expect(typeof seen.at(-1)).toBe('boolean');
+    expect(seen.at(-1)).toBe(false);
   });
 
   // ── reuse × action-bearing contract (the SCHEMA_MISMATCH seam) ──────
