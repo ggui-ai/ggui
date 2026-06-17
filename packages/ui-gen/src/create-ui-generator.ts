@@ -280,6 +280,15 @@ export function createUiGenerator(
           latencyMs: Date.now() - startedAt,
           cacheHit: false,
           attempts: result.turnsUsed,
+          // Prompt-cache counters are provider-specific (Claude reports
+          // them; others omit). Pass through truthfully — absent on the
+          // adapter result stays absent here, never defaulted to 0.
+          ...(result.cacheReadTokens !== undefined
+            ? { cacheReadTokens: result.cacheReadTokens }
+            : {}),
+          ...(result.cacheCreationTokens !== undefined
+            ? { cacheCreationTokens: result.cacheCreationTokens }
+            : {}),
         };
 
         return {

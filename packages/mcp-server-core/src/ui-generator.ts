@@ -228,6 +228,10 @@ export interface GenerationMetadata {
   cacheHit: boolean;
   /** Retry / turn count. 0 means single-shot success. */
   attempts?: number;
+  /** Prompt-cache tokens read on this generation (provider-specific; absent when unsupported). Observability only. */
+  readonly cacheReadTokens?: number;
+  /** Prompt-cache tokens written on this generation (provider-specific; absent when unsupported). Observability only. */
+  readonly cacheCreationTokens?: number;
   /**
    * Optional generator-specific routing tag for finer-grained
    * telemetry. The bound generator decides the value space; consumers
