@@ -88,6 +88,13 @@ export interface LLMToolCallResponse {
   toolCalls: LLMToolCall[];
   inputTokens: number;
   outputTokens: number;
+  /**
+   * Tokens read from / written to the prompt cache, when the provider
+   * reports them. Optional because not every provider exposes
+   * prompt-cache accounting — absent means "unreported", never zero.
+   */
+  cacheReadTokens?: number;
+  cacheCreationTokens?: number;
 }
 
 // Backward compat alias
@@ -504,6 +511,8 @@ export class AnthropicAgent extends LLMAgent {
         toolCalls,
         inputTokens: response.usage.input_tokens,
         outputTokens: response.usage.output_tokens,
+        cacheReadTokens: cacheRead,
+        cacheCreationTokens: cacheCreated,
       };
     } catch (e) {
       const endedAt = Date.now();

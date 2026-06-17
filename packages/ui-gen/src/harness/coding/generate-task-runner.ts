@@ -63,6 +63,14 @@ export interface GenerateTelemetry {
   totalIn: number;
   /** Total output tokens billed across coding + eval. */
   totalOut: number;
+  /**
+   * Prompt-cache tokens accumulated across coding turns, when the
+   * provider reports them. Optional: stays `undefined` for providers
+   * that don't expose cache accounting (never defaulted to 0 here, so
+   * the boundary can distinguish "no cache reads" from "unreported").
+   */
+  cacheReadTokens?: number;
+  cacheCreationTokens?: number;
   /** Latest evalResult — undefined when eval was disabled or never ran. */
   evalResult: EvalResult | undefined;
   /** Latest compiled code — empty string until the first self-check pass. */
@@ -196,6 +204,17 @@ export function createGenerateTaskRunner(input: CreateGenerateRunnerInput): Task
 
       telemetry.totalIn += turn.tokens.input;
       telemetry.totalOut += turn.tokens.output;
+      // Accumulate prompt-cache counters only when the provider reported
+      // them this turn. Seeding from `undefined` on first report keeps the
+      // "unreported" providers' totals absent rather than 0.
+      if (turn.cacheReadTokens !== undefined) {
+        telemetry.cacheReadTokens =
+          (telemetry.cacheReadTokens ?? 0) + turn.cacheReadTokens;
+      }
+      if (turn.cacheCreationTokens !== undefined) {
+        telemetry.cacheCreationTokens =
+          (telemetry.cacheCreationTokens ?? 0) + turn.cacheCreationTokens;
+      }
       telemetry.cumulativeLlmMs += turn.llmMs;
       telemetry.cumulativeToolMs += turn.toolMs;
       iconNamesCache = turn.iconNamesCache;

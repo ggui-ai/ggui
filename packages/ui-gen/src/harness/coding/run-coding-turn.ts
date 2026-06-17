@@ -216,6 +216,13 @@ export interface CodingTurnResult {
   readonly outcome: CodingTurnOutcome | undefined;
   readonly phase: CodingTurnPhase | undefined;
   readonly tokens: { input: number; output: number };
+  /**
+   * Prompt-cache accounting for this turn, when the provider reports it.
+   * Optional because not every provider exposes cache tokens — absent
+   * means "unreported", never zero.
+   */
+  readonly cacheReadTokens?: number;
+  readonly cacheCreationTokens?: number;
   readonly llmMs: number;
   readonly toolMs: number;
   /** Updated state — caller stores back into its own variables for next turn. */
@@ -518,6 +525,17 @@ ${closingInstruction}`;
   }
 
   const tokens = { input: response.inputTokens, output: response.outputTokens };
+  // Prompt-cache counters travel separately — only some providers report
+  // them. Build a spread object so the four turn-return sites carry the
+  // optional fields without defaulting absent ones to 0.
+  const cacheTokens = {
+    ...(response.cacheReadTokens !== undefined
+      ? { cacheReadTokens: response.cacheReadTokens }
+      : {}),
+    ...(response.cacheCreationTokens !== undefined
+      ? { cacheCreationTokens: response.cacheCreationTokens }
+      : {}),
+  };
 
   const call = response.toolCalls[0];
   if (!call) {
@@ -551,6 +569,7 @@ ${closingInstruction}`;
       outcome: undefined,
       phase: undefined,
       tokens,
+      ...cacheTokens,
       llmMs,
       toolMs: 0,
       lastResultText: retryDirective,
@@ -593,6 +612,7 @@ ${closingInstruction}`;
       outcome: undefined,
       phase: undefined,
       tokens,
+      ...cacheTokens,
       llmMs,
       toolMs: 0,
       lastResultText: iconResult,
@@ -903,6 +923,7 @@ ${closingInstruction}`;
       outcome,
       phase,
       tokens,
+      ...cacheTokens,
       llmMs,
       toolMs,
       // Use the augmented text so the next turn's prompt gets the
@@ -941,6 +962,7 @@ ${closingInstruction}`;
     outcome,
     phase,
     tokens,
+    ...cacheTokens,
     llmMs,
     toolMs,
     lastResultText,

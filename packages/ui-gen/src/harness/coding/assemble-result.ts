@@ -100,6 +100,16 @@ export async function assembleGenerationResult(
       output: telemetry.totalOut,
       total: telemetry.totalIn + telemetry.totalOut,
     },
+    // Prompt-cache counters are provider-specific — pass through truthfully.
+    // Absent on the telemetry (provider didn't report) stays absent here,
+    // never defaulted to 0, so the downstream observability ratio reflects
+    // real cache activity instead of a structural zero.
+    ...(telemetry.cacheReadTokens !== undefined
+      ? { cacheReadTokens: telemetry.cacheReadTokens }
+      : {}),
+    ...(telemetry.cacheCreationTokens !== undefined
+      ? { cacheCreationTokens: telemetry.cacheCreationTokens }
+      : {}),
     generationTimeMs: totalMs,
     turnsUsed: telemetry.turnsUsed,
     passesUsed: 1,

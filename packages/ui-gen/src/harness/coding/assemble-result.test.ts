@@ -102,3 +102,45 @@ describe("assembleGenerationResult — timing breakdown", () => {
     expect(result.breakdown?.evalMs).toBe(5_000);
   });
 });
+
+// #retail-L1 review — prompt-cache observability passthrough.
+//
+// The cache-token counters (provider-specific; only some providers report
+// prompt-cache reads/writes) accumulate onto the telemetry during the
+// coding loop. The assembler must carry them onto the GenerationResult so
+// the downstream observability line that derives a cache-read ratio sees
+// real numbers instead of a structural zero. Absent on the telemetry
+// (providers that don't report them) → absent on the result, never
+// defaulted to 0 at this boundary.
+describe("assembleGenerationResult — cache-token passthrough", () => {
+  it("carries cacheReadTokens/cacheCreationTokens through when telemetry reports them", async () => {
+    const session = fakeSession();
+    const telemetry = createTelemetry();
+
+    telemetry.codingStartedAtMs = session.startedAtMs + 50;
+    telemetry.codingMs = 1_000;
+    telemetry.totalIn = 1_000;
+    telemetry.cacheReadTokens = 800;
+    telemetry.cacheCreationTokens = 200;
+
+    const result = await assembleGenerationResult({ session, telemetry, source: "" });
+
+    expect(result.cacheReadTokens).toBe(800);
+    expect(result.cacheCreationTokens).toBe(200);
+  });
+
+  it("leaves cache-token fields undefined when telemetry omits them (truthful absence)", async () => {
+    const session = fakeSession();
+    const telemetry = createTelemetry();
+
+    telemetry.codingStartedAtMs = session.startedAtMs + 50;
+    telemetry.codingMs = 1_000;
+    telemetry.totalIn = 1_000;
+    // No cacheReadTokens / cacheCreationTokens set — provider didn't report.
+
+    const result = await assembleGenerationResult({ session, telemetry, source: "" });
+
+    expect(result.cacheReadTokens).toBeUndefined();
+    expect(result.cacheCreationTokens).toBeUndefined();
+  });
+});
