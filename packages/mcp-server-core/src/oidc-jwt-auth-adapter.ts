@@ -109,30 +109,48 @@ export class OidcJwtAuthAdapter implements AuthAdapter {
     this.byIssuer = new Map(rows.map((r) => [r.issuer, r]));
   }
 
+  /**
+   * Server-side observability for a rejected federated token. NOT a caller
+   * leak — `authenticate` still returns `null` to the caller (the "collapse,
+   * no leak" posture holds); this only surfaces WHY in the host's logs so a
+   * misconfig / transit / claim issue is diagnosable instead of an opaque 401.
+   * Logs no secret — `iss`/`aud` are public, `error` is the verifier's reason.
+   */
+  private rejected(stage: string, extra?: Record<string, unknown>): null {
+    // eslint-disable-next-line no-console
+    console.warn('oidc_reject', { stage, ...extra });
+    return null;
+  }
+
   async authenticate(token: string): Promise<AuthResult | null> {
     if (!token) return null;
     const iss = unverifiedIss(token);
-    if (!iss) return null;
+    if (!iss) return this.rejected('unverified_iss_parse');
     const row = this.byIssuer.get(iss); // EXACT match only
-    if (!row) return null;
+    if (!row) return this.rejected('issuer_not_trusted', { iss });
     const verifier = this.getVerifier(row);
-    if (!verifier) return null;
+    if (!verifier) return this.rejected('verifier_unavailable', { iss });
 
     let payload: OidcPayloadShape;
     try {
       payload = (await verifier.verify(token)) as OidcPayloadShape;
-    } catch {
-      return null; // bad sig / expiry / wrong-iss → collapse (no leak)
+    } catch (e) {
+      // bad sig / expiry / wrong-iss / wrong-aud — collapse to null (no
+      // caller leak) but log the verifier's reason server-side.
+      return this.rejected('verify_threw', {
+        iss,
+        error: e instanceof Error ? `${e.name}: ${e.message}` : String(e),
+      });
     }
     if (!payload || typeof payload.sub !== 'string' || typeof payload.iss !== 'string') {
-      return null;
+      return this.rejected('payload_missing_sub_or_iss');
     }
-    if (payload.iss !== row.issuer) return null; // defense: verified iss must match the row
+    if (payload.iss !== row.issuer) return this.rejected('iss_mismatch', { iss }); // defense: verified iss must match the row
 
     const aud = audString(payload.aud);
-    if (aud === null) return null;
+    if (aud === null) return this.rejected('aud_not_single_string');
     const audMatch = row.audiencePattern.exec(aud);
-    if (!audMatch || !audMatch[1]) return null; // aud must match the row pattern
+    if (!audMatch || !audMatch[1]) return this.rejected('aud_pattern_no_match', { aud }); // aud must match the row pattern
     const appId = audMatch[1]; // capture group 1 = appId
 
     const identity: Identity = {

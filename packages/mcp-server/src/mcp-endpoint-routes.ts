@@ -189,6 +189,11 @@ export function mountMcpEndpoints(opts: MountOptions): void {
               reason: err.message,
               authHeaderPresent,
               authHeaderPrefix: authHeaderPresent ? rawAuth.slice(0, 12) : null,
+              // Bearer-stripped token length — a transit-truncation check
+              // (compare against the minted length); never the credential.
+              tokenLen: authHeaderPresent
+                ? rawAuth.replace(/^Bearer\s+/i, "").length
+                : 0,
               path: req.path,
             });
             // OAuth-discovery clients (Claude Desktop, claude.ai, etc.)
