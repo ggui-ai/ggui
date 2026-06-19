@@ -86,7 +86,7 @@
     "react-dom": "^19.0.0",
     "tsup": "^8.0.0",
     "typescript": "^5.0.0",
-    "vitest": "^1.0.0"
+    "vitest": "^3.2.6"
   },
   "bugs": {
     "url": "https://github.com/ggui-ai/ggui/issues"
