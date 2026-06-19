@@ -110,7 +110,7 @@
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "chromatic": "^11.0.0",
-    "esbuild": "^0.25.0",
+    "esbuild": "^0.28.1",
     "lucide": "^0.577.0",
     "storybook": "^8.4.0",
     "typescript": "^5.0.0",
