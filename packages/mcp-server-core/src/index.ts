@@ -56,12 +56,9 @@ export * from './thread-store.js';
 export * from './blueprint-provider.js';
 export * from './auth-adapter.js';
 export { CompositeAuthAdapter } from './composite-auth-adapter.js';
-export {
-  OidcJwtAuthAdapter,
-  type TrustedIssuerRow,
-  type JwtVerifierLike,
-  type VerifierFactory,
-} from './oidc-jwt-auth-adapter.js';
+// This package ships only the `AuthAdapter` port (above) + the generic
+// `CompositeAuthAdapter` combinator. Concrete federated-identity adapters
+// (e.g. OIDC/JWT) are closed features, not part of this open package.
 export * from './pairing.js';
 // The `ggui.json` schema lives in `@ggui-ai/protocol`. It is a
 // protocol-layer portability primitive, not a server-side interface,
