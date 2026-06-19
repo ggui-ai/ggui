@@ -92,9 +92,9 @@ describe('OidcJwtAuthAdapter', () => {
     expect(await a.getIdentity({ headers: { authorization: 'Basic abc' } })).toBeNull();
   });
 
-  it('a row with jwksUrl but no verifier lazily builds one (errors are caught → null without aws-jwt-verify installed in unit env)', async () => {
-    // In the unit env aws-jwt-verify may be absent; the lazy require throwing
-    // must collapse to null (auth-failure), never crash the server.
+  it('a row with jwksUrl but no injected factory/verifier → null (verifier_unavailable, fail-closed)', async () => {
+    // No `buildVerifier` factory and no per-row `verifier`: getVerifier returns
+    // null → the adapter rejects (verifier_unavailable). Fail-closed, never crash.
     const a = new OidcJwtAuthAdapter([
       {
         providerId: 'guuey',
@@ -106,8 +106,7 @@ describe('OidcJwtAuthAdapter', () => {
     ]);
     const b64 = (o: object) => Buffer.from(JSON.stringify(o)).toString('base64url');
     const tok = `${b64({ alg: 'RS256' })}.${b64({ iss: 'https://id.guuey.com', sub: 'x', aud: 'https://mcp.ggui.ai/apps/a' })}.sig`;
-    // Either aws-jwt-verify is installed and verify() throws on the fake sig → null,
-    // or it's absent and the require throws → null. Both paths: null, no throw.
+    // No verifier can be resolved (no factory, no row.verifier) → null, no throw.
     await expect(a.authenticate(tok)).resolves.toBeNull();
   });
 });

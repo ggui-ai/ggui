@@ -60,6 +60,7 @@ export {
   OidcJwtAuthAdapter,
   type TrustedIssuerRow,
   type JwtVerifierLike,
+  type VerifierFactory,
 } from './oidc-jwt-auth-adapter.js';
 export * from './pairing.js';
 // The `ggui.json` schema lives in `@ggui-ai/protocol`. It is a
