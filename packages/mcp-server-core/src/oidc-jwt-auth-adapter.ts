@@ -28,6 +28,17 @@ import type {
   Identity,
 } from './auth-adapter.js';
 import { composeOAuthUserId } from '@ggui-ai/protocol';
+import { createRequire } from 'node:module';
+
+// `aws-jwt-verify` is an OPTIONAL peerDep, loaded only by deployments that
+// federate an OIDC issuer. This package is ESM (`"type":"module"`), where the
+// bare CJS `require` global does NOT exist — a bare `require('aws-jwt-verify')`
+// throws `ReferenceError: require is not defined` at runtime, which the
+// getVerifier catch swallowed to null (→ every federated token rejected with
+// `verifier_unavailable`). Build an ESM-safe require via `createRequire`;
+// createRequire itself loads nothing — the lazy call inside getVerifier is
+// what still defers the optional dep.
+const esmRequire = createRequire(import.meta.url);
 
 /** Subset of a JWT verifier (e.g. aws-jwt-verify JwtRsaVerifier) the adapter uses. */
 export interface JwtVerifierLike {
@@ -195,8 +206,7 @@ export class OidcJwtAuthAdapter implements AuthAdapter {
       // per-issuer alg allowlist via `customJwtCheck` (the only caller-supplied
       // hook in v5 — there is no `algorithms`/`jwtVerifyOptions` option), which
       // runs after the standard signature/iss/exp checks and throws to reject.
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const { JwtRsaVerifier } = require('aws-jwt-verify') as {
+      const { JwtRsaVerifier } = esmRequire('aws-jwt-verify') as {
         JwtRsaVerifier: {
           create(
             verifyProperties: {
