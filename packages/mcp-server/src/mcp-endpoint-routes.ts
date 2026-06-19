@@ -177,7 +177,20 @@ export function mountMcpEndpoints(opts: MountOptions): void {
           if (handlerOpts?.anonymous) {
             identity = { identity: { kind: "builder" }, source: "anonymous" };
           } else {
-            reqLogger.warn("auth_failed", { reason: err.message });
+            // Diagnostic: did a Bearer credential actually reach the pod on
+            // this request? This splits "the client/transport never sent one"
+            // from "we received it but the adapter rejected it" — otherwise
+            // indistinguishable in `auth_failed`. Only a short, non-secret
+            // prefix is logged (a JWT header is public), never the credential.
+            const rawAuth = req.headers["authorization"];
+            const authHeaderPresent =
+              typeof rawAuth === "string" && rawAuth.length > 0;
+            reqLogger.warn("auth_failed", {
+              reason: err.message,
+              authHeaderPresent,
+              authHeaderPrefix: authHeaderPresent ? rawAuth.slice(0, 12) : null,
+              path: req.path,
+            });
             // OAuth-discovery clients (Claude Desktop, claude.ai, etc.)
             // read this header to find the resource-metadata URL and
             // begin the OAuth dance. Pure-bearer clients ignore it.
