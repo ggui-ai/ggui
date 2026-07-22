@@ -150,6 +150,13 @@ export const blueprintManifestSchema = z.strictObject({
     .describe(
       "Persona + aesthetic + context + seedPrompt hints that drive the LLM-driven variant selector when multiple blueprints share a `(appId, contractHash)` group. Mirrors `Blueprint.variance` in `@ggui-ai/protocol`.",
     ),
+  intent: z
+    .string()
+    .min(1)
+    .optional()
+    .describe(
+      'Author intent prose for this blueprint. Semantic matchers embed it alongside the contract summary when ranking reuse candidates; the exact-key match path ignores it. Optional — importers that require intent derive a fallback from `description`/`name` when absent.',
+    ),
 
   // ---- Persistence-contract stamps (mirrors `PortableBlueprint`) ----
   generatorProtocolVersion: z
