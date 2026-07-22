@@ -2205,6 +2205,7 @@ async function runGenerationIntoGguiSession(
             ? `generator threw: ${err.message}`
             : 'generator threw',
         reason: 'generator-threw',
+        ...(args.appTheme !== undefined ? { appTheme: args.appTheme } : {}),
       });
     }
   } else {
@@ -2225,6 +2226,7 @@ async function runGenerationIntoGguiSession(
             ? `credential resolution failed: ${err.message}`
             : 'credential resolution failed',
         reason: 'credential-resolution-failed',
+        ...(args.appTheme !== undefined ? { appTheme: args.appTheme } : {}),
       });
     }
     if (!creds) {
@@ -2265,6 +2267,7 @@ async function runGenerationIntoGguiSession(
         message:
           'no credentials available for the configured generation provider (expected env var or ~/.ggui/credentials.json entry)',
         reason: 'no-credentials',
+        ...(args.appTheme !== undefined ? { appTheme: args.appTheme } : {}),
       });
     }
 
@@ -2287,6 +2290,7 @@ async function runGenerationIntoGguiSession(
             ? `generator threw: ${err.message}`
             : 'generator threw',
         reason: 'generator-threw',
+        ...(args.appTheme !== undefined ? { appTheme: args.appTheme } : {}),
       });
     }
   }
@@ -2301,6 +2305,7 @@ async function runGenerationIntoGguiSession(
       nowEpochMs,
       message: result.error.message,
       reason: 'generation-failed',
+      ...(args.appTheme !== undefined ? { appTheme: args.appTheme } : {}),
     });
   }
 
@@ -2464,6 +2469,13 @@ async function commitErrorGguiSession(
     readonly nowEpochMs: number;
     readonly message: string;
     readonly reason: string;
+    /**
+     * App theme snapshot. Failure renders must carry it too — the
+     * `_meta["ai.ggui/render"]` slice derives theme from the committed
+     * render, and a theme-less error commit makes a generation failure
+     * observationally identical to a theme-projection bug downstream.
+     */
+    readonly appTheme?: AppTheme;
   },
 ): Promise<GenerationRunOutcome> {
   const errorRender: ComponentGguiSession = {
@@ -2478,6 +2490,7 @@ async function commitErrorGguiSession(
     lastActivityAt: args.nowEpochMs,
     expiresAt: args.nowEpochMs + DEFAULT_RENDER_TTL_MS,
     eventSequence: 0,
+    ...(args.appTheme !== undefined ? { theme: args.appTheme } : {}),
   };
   let committed = false;
   try {
