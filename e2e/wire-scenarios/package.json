@@ -15,7 +15,7 @@
     "@ggui-ai/registry-core": "workspace:*",
     "@ggui-ai/registry-server": "workspace:*",
     "playwright-core": "^1.60.0",
-    "vitest": "^3.2.4"
+    "vitest": "^3.2.6"
   },
   "devDependencies": {
     "@ggui-ai/protocol": "workspace:*",
