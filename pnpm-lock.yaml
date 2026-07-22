@@ -1245,6 +1245,9 @@ importers:
       eslint-plugin-react-hooks:
         specifier: ^5.0.0
         version: 5.2.0(eslint@8.57.1)
+      happy-dom:
+        specifier: ^20.8.9
+        version: 20.9.0
       isomorphic-git:
         specifier: ^1.37.4
         version: 1.37.6
@@ -1297,9 +1300,6 @@ importers:
       '@types/react-dom':
         specifier: ^19.0.0
         version: 19.2.3(@types/react@19.0.14)
-      happy-dom:
-        specifier: ^20.8.9
-        version: 20.9.0
       puppeteer-core:
         specifier: ^24.40.0
         version: 24.42.0
