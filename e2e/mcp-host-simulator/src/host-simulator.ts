@@ -599,7 +599,7 @@ export class HostSimulator {
    */
   async subscribeWith(
     meta: McpAppAiGguiRenderMeta,
-    opts: { keepOpen?: boolean } = {}
+    opts: { keepOpen?: boolean; openTimeoutMs?: number } = {}
   ): Promise<{ ack: SubscribeAck; ws?: WebSocket }> {
     if (!meta.wsUrl) {
       throw new Error(
@@ -616,7 +616,16 @@ export class HostSimulator {
     const upgradeUrl = meta.wsToken
       ? `${meta.wsUrl}${meta.wsUrl.includes("?") ? "&" : "?"}wsToken=${encodeURIComponent(meta.wsToken)}`
       : meta.wsUrl;
-    const ws = new WebSocket(upgradeUrl);
+    // 15s open budget (overridable per-call for tests) — an edge-side
+    // connect blackhole (TCP accepted upstream but the 101 upgrade
+    // never arrives, or the connect never reaches ingress at all) must
+    // fail fast and NAMED, not sit mute until the caller's test
+    // timeout. Nightly run 29995204909 hung g14 for 240s twice this
+    // way: pod forensics showed zero ingress `GET /ws` lines for the
+    // hang-boundary sessions — the connect never arrived — while the
+    // fixture's open await had no deadline.
+    const OPEN_TIMEOUT_MS = opts.openTimeoutMs ?? 15_000;
+    const ws = new WebSocket(upgradeUrl, { handshakeTimeout: OPEN_TIMEOUT_MS });
     // 15s ack budget — covers the cloud WS handler under bursty
     // 100-worker load (loadgen Phase 3b surfaced 5s as too tight).
     // OSS local server acks within ms; the higher ceiling only adds
@@ -663,8 +672,22 @@ export class HostSimulator {
     ackPromise.catch(() => undefined);
 
     await new Promise<void>((resolve, reject) => {
-      ws.once("open", () => resolve());
-      ws.once("error", reject);
+      const timer = setTimeout(() => {
+        ws.terminate();
+        reject(
+          new Error(
+            `WS open timeout (${OPEN_TIMEOUT_MS}ms) — upgrade to ${meta.wsUrl} never completed (token elided)`
+          )
+        );
+      }, OPEN_TIMEOUT_MS);
+      ws.once("open", () => {
+        clearTimeout(timer);
+        resolve();
+      });
+      ws.once("error", (err) => {
+        clearTimeout(timer);
+        reject(err);
+      });
     });
 
     // Wire shape per `mcp-apps-outbound.test.ts`:
