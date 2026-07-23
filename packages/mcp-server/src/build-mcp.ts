@@ -14,9 +14,10 @@ import { registerAppTool } from '@modelcontextprotocol/ext-apps/server';
 import type { McpUiToolMeta } from '@modelcontextprotocol/ext-apps';
 import { isRecord } from '@ggui-ai/protocol';
 import { z, type ZodRawShape } from 'zod';
-import type {
-  HandlerContext,
-  SharedHandler,
+import {
+  isHandlerFailure,
+  type HandlerContext,
+  type SharedHandler,
 } from '@ggui-ai/mcp-server-handlers';
 import type { Logger } from './logger.js';
 import {
@@ -220,6 +221,30 @@ export function buildMcpServer(
       const start = Date.now();
       try {
         const data = await handler.handler(input, ctx);
+        // First-class in-result failure channel. A handler that
+        // returns the `HandlerFailure` marker gets an `isError: true`
+        // TOOL RESULT (never a thrown/JSON-RPC error): the marker's
+        // `errorText` is the model-visible content, and its `data` is
+        // validated against the SAME outputSchema as a success — MCP
+        // SDK clients validate structuredContent against outputSchema
+        // even when isError is set, so the envelope stays
+        // schema-conformant. NO `_meta` on failures: `resultMeta` is
+        // not invoked, so no mount affordance / bootstrap slice is
+        // emitted for a failed call.
+        if (isHandlerFailure(data)) {
+          const validated = z.object(handler.outputSchema).parse(data.data);
+          logger.warn('tool_invoked', {
+            tool: handler.name,
+            appId: ctx.appId,
+            outcome: 'tool_error',
+            elapsedMs: Date.now() - start,
+          });
+          return {
+            isError: true as const,
+            structuredContent: validated,
+            content: [{ type: 'text' as const, text: data.errorText }],
+          };
+        }
         const validated = z.object(handler.outputSchema).parse(data);
         // Per-result `_meta` — NOT merged into structuredContent, so
         // agents that typecheck against the tool signature never see

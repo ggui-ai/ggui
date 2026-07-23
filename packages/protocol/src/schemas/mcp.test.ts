@@ -424,6 +424,83 @@ describe('ggui_render — variance-aware override reshape', () => {
       }),
     ).toThrow();
   });
+
+  it('accepts an output WITHOUT resourceUri — present iff mountable (failure envelope omits it)', () => {
+    const out = {
+      sessionId: 'render_1',
+      action: 'create' as const,
+      contractHash: '1c00b3ab282a45f6',
+      blueprintId: '',
+      variantKey: 'v_default',
+      cache: {
+        hit: false,
+        llmCallsAvoided: 0,
+        kind: 'cold' as const,
+        reason:
+          'cold: generation failed — no stored component was produced or reused',
+      },
+      error: {
+        code: 'PRODUCTION_FAILED' as const,
+        message: 'provider 500',
+      },
+    };
+    const parsed = renderOutputSchema.parse(out);
+    expect(parsed.resourceUri).toBeUndefined();
+    expect(parsed.error).toEqual({
+      code: 'PRODUCTION_FAILED',
+      message: 'provider 500',
+    });
+    expect(parsed.blueprintId).toBe('');
+  });
+
+  it('accepts every canonical error code on the failure envelope', () => {
+    for (const code of [
+      'PRODUCTION_FAILED',
+      'VALIDATION_ERROR',
+      'NO_PLATFORM_KEY',
+      'NO_CREDENTIALS',
+    ] as const) {
+      const parsed = renderOutputSchema.parse({
+        sessionId: 'render_1',
+        action: 'create',
+        contractHash: 'h',
+        blueprintId: '',
+        variantKey: 'v_default',
+        cache: { hit: false, llmCallsAvoided: 0, kind: 'cold' },
+        error: { code, message: 'm' },
+      });
+      expect(parsed.error?.code).toBe(code);
+    }
+  });
+
+  it('rejects a non-canonical error code — the enum is closed', () => {
+    expect(() =>
+      renderOutputSchema.parse({
+        sessionId: 'render_1',
+        action: 'create',
+        contractHash: 'h',
+        blueprintId: '',
+        variantKey: 'v_default',
+        cache: { hit: false, llmCallsAvoided: 0, kind: 'cold' },
+        error: { code: 'SOMETHING_ELSE', message: 'm' },
+      }),
+    ).toThrow();
+  });
+
+  it('success outputs carry no error field and keep resourceUri', () => {
+    const out = {
+      sessionId: 'render_1',
+      resourceUri: 'ui://ggui/render/render_1',
+      action: 'create' as const,
+      contractHash: '1c00b3ab282a45f6',
+      blueprintId: 'bp_x',
+      variantKey: 'v_default',
+      cache: { hit: false, llmCallsAvoided: 0, kind: 'cold' as const },
+    };
+    const parsed = renderOutputSchema.parse(out);
+    expect(parsed.error).toBeUndefined();
+    expect(parsed.resourceUri).toBe('ui://ggui/render/render_1');
+  });
 });
 
 describe('ggui_update', () => {
@@ -510,7 +587,18 @@ describe('ggui_update', () => {
   });
 
   it('round-trips an update output', () => {
-    const out = { sessionId: 'render_1', updated: true };
+    const out = {
+      sessionId: 'render_1',
+      updated: true,
+      // Same URI the initial render stamped — mirrored on the LLM-visible
+      // structuredContent (kept in sync with the update handler's wire
+      // shape, which always emits it).
+      resourceUri: 'ui://ggui/render/render_1',
+    };
     expect(updateOutputSchema.parse(out)).toEqual(out);
+  });
+
+  it('rejects an update output missing resourceUri', () => {
+    expect(() => updateOutputSchema.parse({ sessionId: 'render_1', updated: true })).toThrow();
   });
 });

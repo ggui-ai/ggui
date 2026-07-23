@@ -16,8 +16,19 @@
 
 export * from "./blueprints/index.js";
 export * from "./renders/index.js";
-export { AuthRequiredError } from "./types.js";
-export type { AudienceTag, HandlerContext, SharedHandler } from "./types.js";
+export {
+  AuthRequiredError,
+  HANDLER_FAILURE_MARKER,
+  handlerFailure,
+  isHandlerFailure,
+} from "./types.js";
+export type {
+  AudienceTag,
+  HandlerContext,
+  HandlerFailure,
+  SharedHandler,
+  SharedHandlerResult,
+} from "./types.js";
 // Persistent-chat handler family — thread storage and message
 // history MCP tools. Thin over @ggui-ai/mcp-server-core ThreadStore.
 // Available under `@ggui-ai/mcp-server-handlers/threads` subpath too.

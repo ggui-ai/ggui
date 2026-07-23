@@ -144,6 +144,91 @@ export interface HandlerContext {
 export type AudienceTag = 'agent' | 'runtime' | 'protocol' | 'ops';
 
 /**
+ * Marker key for {@link HandlerFailure}. A registry symbol
+ * (`Symbol.for`) so the check is stable across module instances, and a
+ * symbol (not a string field) so ordinary wire data — which can never
+ * carry symbol keys through JSON — can't collide with the marker.
+ */
+export const HANDLER_FAILURE_MARKER: unique symbol = Symbol.for(
+  'ai.ggui.handlerFailure',
+);
+
+/**
+ * First-class in-result failure channel for shared handlers.
+ *
+ * A handler opts in by widening its `OutputData` generic to
+ * `Data | HandlerFailure<Data>` and returning
+ * {@link handlerFailure | handlerFailure(data, errorText)} on a failed
+ * operation that still has a schema-conformant output to report. The
+ * transport layer (`buildMcpServer` in `@ggui-ai/mcp-server`) unwraps
+ * the marker into an MCP tool result with:
+ *
+ *   - `isError: true` — IN-RESULT, never a thrown error. MCP SDK
+ *     clients validate `structuredContent` against the declared
+ *     `outputSchema` even when `isError` is set, so {@link data} MUST
+ *     parse against the handler's `outputSchema`.
+ *   - `content: [{type: 'text', text: errorText}]` — the model-visible
+ *     self-correction surface.
+ *   - `structuredContent` — the zod-validated {@link data}.
+ *   - NO `_meta` — `resultMeta` is not invoked for failures; a failed
+ *     call exposes no mount affordance.
+ *
+ * Distinct from THROWING: a thrown error becomes an SDK-wrapped
+ * `isError` result WITHOUT structuredContent (breaking client-side
+ * outputSchema validation) or a JSON-RPC error, depending on the
+ * transport. Handlers whose failure still has a meaningful,
+ * schema-conformant output (e.g. `ggui_render` committing an error
+ * GguiSession) MUST use this channel instead.
+ */
+export interface HandlerFailure<OutputData = unknown> {
+  readonly [HANDLER_FAILURE_MARKER]: true;
+  /**
+   * Schema-conformant structuredContent for the failed call. Parsed
+   * (and unknown-key-stripped) against the handler's `outputSchema`
+   * by the transport before serialization — a non-conformant payload
+   * fails loudly at the transport, never silently on the wire.
+   */
+  readonly data: OutputData;
+  /**
+   * Model-visible failure text — becomes `content[0].text` on the
+   * tool result. This is the agent's self-correction surface: state
+   * the failure, whether the operation consumed its input, and the
+   * recovery step.
+   */
+  readonly errorText: string;
+}
+
+/** Union a handler's success shape with its opt-in failure marker. */
+export type SharedHandlerResult<OutputData> =
+  | OutputData
+  | HandlerFailure<OutputData>;
+
+/** Build a {@link HandlerFailure} result. */
+export function handlerFailure<OutputData>(
+  data: OutputData,
+  errorText: string,
+): HandlerFailure<OutputData> {
+  return { [HANDLER_FAILURE_MARKER]: true, data, errorText };
+}
+
+/**
+ * Narrowing guard for {@link HandlerFailure}. Accepts `unknown` so
+ * transports (which see handler results untyped) and concretely-typed
+ * in-process callers both narrow: on a
+ * `Success | HandlerFailure<Fail>` union the if-branch keeps the
+ * failure member and the else-branch keeps the success member.
+ */
+export function isHandlerFailure(
+  value: unknown,
+): value is HandlerFailure<unknown> {
+  if (typeof value !== 'object' || value === null) return false;
+  const marker = (value as { [HANDLER_FAILURE_MARKER]?: unknown })[
+    HANDLER_FAILURE_MARKER
+  ];
+  return marker === true;
+}
+
+/**
  * Shared tool-handler shape. A hosted server's tool-handler is a
  * `SharedHandler` re-export with a wider `ToolContext` — it can wrap a
  * `SharedHandler` with zero conversion cost. The only difference is

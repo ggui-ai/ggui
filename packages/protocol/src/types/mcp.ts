@@ -8,6 +8,8 @@ import type {
   handshakeOutputSchema,
   renderBlueprintInputSchema,
   renderCacheMarkerSchema,
+  renderErrorCodeSchema,
+  renderErrorSchema,
   renderInputSchema,
   renderOutputSchema,
   requestCredentialInputSchema,
@@ -462,6 +464,19 @@ export type GguiRenderOutput = z.infer<typeof renderOutputSchema>;
  */
 export type RenderCacheMarker = z.infer<typeof renderCacheMarkerSchema>;
 
+/**
+ * Canonical failure code for the in-result `ggui_render` failure
+ * envelope (SPEC §7.9 Plane 3). Derived from
+ * {@link renderErrorCodeSchema} — the schema is the source of truth.
+ */
+export type RenderErrorCode = z.infer<typeof renderErrorCodeSchema>;
+
+/**
+ * In-result failure marker on `GguiRenderOutput.error` — present iff the
+ * tool result is `isError: true`. Derived from {@link renderErrorSchema}.
+ */
+export type RenderError = z.infer<typeof renderErrorSchema>;
+
 export type GguiUpdateInput = z.infer<typeof updateInputSchema>;
 export type GguiUpdateOutput = z.infer<typeof updateOutputSchema>;
 
@@ -480,6 +495,14 @@ export type DeclareToolCatalogOutput = z.infer<typeof declareToolCatalogOutputSc
 
 /**
  * Core protocol error codes (per spec Section 7.9)
+ *
+ * `-32004` is RETIRED-RESERVED: it was assigned to `PRODUCTION_FAILED`,
+ * a phantom code no first-party implementation ever emitted as a
+ * JSON-RPC error. `PRODUCTION_FAILED` is now an in-result tool-error
+ * code on the `ggui_render` failure envelope (SPEC §7.9 Plane 3 /
+ * §7.1; see {@link RenderErrorCode}). The slot stays unassigned so a
+ * future canonical code can't silently collide with stale consumers —
+ * new canonical codes come at `-32006` onwards.
  */
 export const MCP_ERROR_CODES = {
   PARSE_ERROR: -32700,
@@ -487,11 +510,10 @@ export const MCP_ERROR_CODES = {
   METHOD_NOT_FOUND: -32601,
   INVALID_PARAMS: -32602,
   INTERNAL_ERROR: -32603,
-  // Protocol-specific error codes
+  // Protocol-specific error codes (-32004 retired-reserved — see above)
   UNAUTHORIZED: -32001,
   SESSION_NOT_FOUND: -32002,
   APP_NOT_FOUND: -32003,
-  PRODUCTION_FAILED: -32004,
   CAPABILITY_DENIED: -32005,
 } as const;
 

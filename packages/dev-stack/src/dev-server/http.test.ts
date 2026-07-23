@@ -205,10 +205,23 @@ describe('dev server HTTP surface', () => {
     async function readUntil(predicate: (chunk: string) => boolean, timeoutMs = 3000) {
       const start = Date.now();
       while (!predicate(buf)) {
-        if (Date.now() - start > timeoutMs) {
+        const remaining = timeoutMs - (Date.now() - start);
+        if (remaining <= 0) {
           throw new Error(`SSE stream never matched: ${buf}`);
         }
-        const { value, done } = await reader.read();
+        // Race the read against the remaining budget. Without the race
+        // the deadline is only checked BETWEEN chunks, so a silent
+        // stream parks forever inside `reader.read()` and the intended
+        // diagnostic above is replaced by an opaque vitest testTimeout
+        // kill at 30s — the shape of both 2026-07 CI flakes.
+        const result = await Promise.race([
+          reader.read(),
+          new Promise<'timeout'>((resolve) => setTimeout(() => resolve('timeout'), remaining)),
+        ]);
+        if (result === 'timeout') {
+          throw new Error(`SSE stream never matched: ${buf}`);
+        }
+        const { value, done } = result;
         if (done) break;
         buf += decoder.decode(value, { stream: true });
       }
@@ -217,16 +230,30 @@ describe('dev server HTTP surface', () => {
     // hello preamble first
     await readUntil((c) => c.includes('event: hello'));
 
-    // Trigger a change — watcher should emit a `changed` event.
-    setTimeout(() => {
-      writeFileSync(join(tmp, 'ui/card/ggui.ui.tsx'), 'export default () => null; // v2');
-    }, 50);
-
-    // Watcher-dependent: chokidar file-watch detection + SSE forward can
-    // take several seconds on a contended 2-core CI runner (passes ~instantly
-    // locally). Generous timeout absorbs the slow case without masking a real
-    // hang (the package testTimeout is 30s).
-    await readUntil((c) => c.includes('event: ui') && c.includes('"id":"card"'), 20_000);
+    // Trigger a change — and KEEP re-triggering until the watcher reports
+    // it. Root cause of the 2× 2026-07 CI flakes (30s testTimeout): the
+    // first `/events` subscribe lazy-STARTS chokidar (`LocalUiRegistry.
+    // subscribe → watcher.start`), and nothing awaits its ready before the
+    // SSE hello is written. A single one-shot write racing the initial
+    // scan on a contended runner is silently absorbed by
+    // `ignoreInitial: true` (the scan stats the file AFTER the write and
+    // counts it as initial state — no 'change' ever fires), so no timeout
+    // bump can help. Re-writing on an interval makes the trigger
+    // deterministic: the first write AFTER the scan completes always
+    // emits. The 500ms cadence stays above the watcher's awaitWriteFinish
+    // stabilityThreshold (100ms) so writes aren't coalesced forever.
+    let rev = 2;
+    const trigger = setInterval(() => {
+      writeFileSync(join(tmp, 'ui/card/ggui.ui.tsx'), `export default () => null; // v${rev++}`);
+    }, 500);
+    try {
+      // Still generous: chokidar detection + SSE forward can take several
+      // seconds on a contended 2-core CI runner (passes ~instantly
+      // locally); the deadline guards a real hang, not the trigger race.
+      await readUntil((c) => c.includes('event: ui') && c.includes('"id":"card"'), 20_000);
+    } finally {
+      clearInterval(trigger);
+    }
 
     abort.abort();
     try {

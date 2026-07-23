@@ -44,7 +44,10 @@
  * generation/`) without a copy change.
  */
 
-import type { SharedHandler } from "@ggui-ai/mcp-server-handlers";
+import {
+  isHandlerFailure,
+  type SharedHandler,
+} from "@ggui-ai/mcp-server-handlers";
 import type { Express } from "express";
 import { randomUUID } from "node:crypto";
 import type { ZodRawShape } from "zod";
@@ -149,6 +152,27 @@ export function mountConsoleChatRoutes(opts: MountOptions): void {
           { handshakeId, contract: {} },
           { appId: DEFAULT_BUILDER_APP_ID, requestId }
         );
+        if (isHandlerFailure(raw)) {
+          // In-result failure envelope (generation failed / rejected).
+          // The marker's errorText is the honest self-correction
+          // surface — reuse it verbatim; no ui payload (nothing
+          // mountable landed for this turn).
+          logger.warn?.("console_chat_render_failed", {
+            threadId,
+            error: raw.errorText,
+          });
+          res.status(200).json({
+            threadId,
+            userMessage,
+            agentMessage: {
+              id: `msg-${randomUUID()}`,
+              role: "agent" as const,
+              text: raw.errorText,
+              createdAt: now + 1,
+            },
+          });
+          return;
+        }
         const result = raw as {
           sessionId: string;
           shortCode: string;

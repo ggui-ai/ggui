@@ -148,6 +148,14 @@ export async function interceptToolResult(args: {
   const { message, mcpServers, signal, log, forceReinline = false } = args;
   if (message.type !== 'user') return message;
   const fullResult = message.tool_use_result;
+  // Failed tool results are never mountable. The ggui failure envelope
+  // (`isError: true`) carries NO `_meta` at all — no `ai.ggui/render`
+  // slice, no `ui.resourceUri` — so there is nothing to inline; the
+  // model self-corrects from `content[0].text`. Even if some other
+  // server DID stamp a resourceUri on an error result, issuing
+  // `resources/read` for a render that failed would be a wasted
+  // round-trip against a resource that may not exist. Skip early.
+  if (fullResult?.isError === true) return message;
   const uri = extractResourceUri(fullResult);
   if (uri === undefined || fullResult === undefined) return message;
 

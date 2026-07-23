@@ -120,9 +120,42 @@ export interface McpTransportOpts {
 }
 
 /**
+ * True iff `err` is undici's dead-keep-alive-socket failure: fetch
+ * rejects with a `TypeError: fetch failed` whose `cause` chain carries
+ * `code: 'UND_ERR_SOCKET'` / message `'other side closed'`. This fires
+ * when the server closed an idle pooled connection just as the next
+ * request went out on it — the request never reached the handler, so
+ * one resend is safe. Anything else (HTTP errors, JSON-RPC errors,
+ * DNS/refused) is NOT retriable here.
+ */
+function isDeadSocketError(err: unknown): boolean {
+  let cur: unknown = err;
+  for (let depth = 0; cur !== undefined && cur !== null && depth < 5; depth++) {
+    const e = cur as { code?: unknown; message?: unknown; cause?: unknown };
+    if (e.code === 'UND_ERR_SOCKET') return true;
+    if (typeof e.message === 'string' && e.message.includes('other side closed')) {
+      return true;
+    }
+    cur = e.cause;
+  }
+  return false;
+}
+
+/**
  * Minimal MCP JSON-RPC over Streamable-HTTP. Posts to `${gguiUrl}${mcpPath}`
  * (default `/mcp`) with a bearer (default `'dev'`); parses either a plain JSON
  * body or the first SSE `data:` frame.
+ *
+ * Dead-socket resilience: ONE retry (short backoff) when undici reports
+ * `UND_ERR_SOCKET` / `'other side closed'` — the keep-alive-reuse race
+ * where the request died on the wire before the server processed it
+ * (observed flaking the scaffold-render sub-tier-B specs against
+ * long-lived `ggui serve` processes). Safe for the calls this driver
+ * serves: `ggui_handshake` re-issues a fresh handshakeId, and a
+ * `ggui_render` whose request never left the socket was not consumed
+ * server-side. The retry does NOT fire on HTTP-level or JSON-RPC-level
+ * errors — those mean the server DID process something, and resending
+ * could double-consume a handshake.
  */
 export async function mcpCall(
   gguiUrl: string,
@@ -132,27 +165,38 @@ export async function mcpCall(
 ): Promise<McpEnvelope> {
   const bearer = opts.bearer ?? DEV_BEARER;
   const mcpPath = opts.mcpPath ?? '/mcp';
-  const res = await fetch(`${gguiUrl}${mcpPath}`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Accept: 'application/json, text/event-stream',
-      Authorization: `Bearer ${bearer}`,
-    },
-    body: JSON.stringify({ jsonrpc: '2.0', id: `turn-${Date.now()}`, method, params }),
-  });
-  if (!res.ok) throw new Error(`MCP ${method} → HTTP ${res.status}: ${await res.text()}`);
-  const ct = (res.headers.get('content-type') ?? '').toLowerCase();
-  if (ct.includes('text/event-stream')) {
-    const body = await res.text();
-    const data = body
-      .split('\n')
-      .map((l) => l.trim())
-      .find((l) => l.startsWith('data:'));
-    if (!data) throw new Error(`MCP ${method} SSE response had no data frame: ${body}`);
-    return JSON.parse(data.slice(5).trim()) as McpEnvelope;
+  const attempt = async (): Promise<McpEnvelope> => {
+    const res = await fetch(`${gguiUrl}${mcpPath}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json, text/event-stream',
+        Authorization: `Bearer ${bearer}`,
+      },
+      body: JSON.stringify({ jsonrpc: '2.0', id: `turn-${Date.now()}`, method, params }),
+    });
+    if (!res.ok) throw new Error(`MCP ${method} → HTTP ${res.status}: ${await res.text()}`);
+    const ct = (res.headers.get('content-type') ?? '').toLowerCase();
+    if (ct.includes('text/event-stream')) {
+      const body = await res.text();
+      const data = body
+        .split('\n')
+        .map((l) => l.trim())
+        .find((l) => l.startsWith('data:'));
+      if (!data) throw new Error(`MCP ${method} SSE response had no data frame: ${body}`);
+      return JSON.parse(data.slice(5).trim()) as McpEnvelope;
+    }
+    return (await res.json()) as McpEnvelope;
+  };
+  try {
+    return await attempt();
+  } catch (err) {
+    if (!isDeadSocketError(err)) throw err;
+    // Single retry after a short backoff — a fresh connection is
+    // established for the resend (the dead pooled socket is gone).
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    return attempt();
   }
-  return (await res.json()) as McpEnvelope;
 }
 
 /**

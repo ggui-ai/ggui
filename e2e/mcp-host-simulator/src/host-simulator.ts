@@ -95,12 +95,21 @@ export interface CallToolResult {
   readonly structuredContent?: unknown;
   readonly content: ReadonlyArray<unknown>;
   /**
-   * MCP-spec tool-level error flag. Set to `true` when the tool's
-   * handler threw — the MCP SDK auto-wraps the throw into a
-   * `{content:[{type:'text',text:msg}], isError:true}` result. Surfacing
-   * the flag here is the canonical signal callers (G2 + future
-   * error-envelope specs) read to distinguish a tool error from a
-   * normal result without parsing `content[*].text` heuristically.
+   * MCP-spec tool-level error flag. Two producers:
+   *
+   *   1. Handler throw — the MCP SDK auto-wraps the throw into a
+   *      `{content:[{type:'text',text:msg}], isError:true}` result
+   *      (validation gates like `gadget_not_registered` still surface
+   *      this way; no structuredContent).
+   *   2. First-class in-result failure envelope — a failed/rejected
+   *      `ggui_render` returns `isError: true` WITH schema-conformant
+   *      `structuredContent` (incl. `error: {code, message}`) and NO
+   *      `_meta` (so {@link meta} is absent → nothing to mount). The
+   *      model-visible fix guidance is `content[0].text`.
+   *
+   * Surfacing the flag here is the canonical signal callers read to
+   * distinguish a tool error from a normal result without parsing
+   * `content[*].text` heuristically.
    */
   readonly isError?: boolean;
   /**
@@ -422,12 +431,15 @@ export class HostSimulator {
     const parsed = parseMcpAppAiGguiRenderMeta(rawMeta);
     const meta: McpAppAiGguiRenderMeta | undefined =
       parsed.ok && parsed.meta !== undefined ? parsed.meta : undefined;
-    // Propagate the MCP-spec `isError` flag verbatim. The SDK sets it
-    // to `true` on tool-handler throws via `createToolError` (server/mcp.js
-    // §createToolError). Without surfacing it here, callers can't
-    // distinguish error envelopes from normal results without parsing
-    // `content[*].text` heuristically — the G2 spec workaround the
-    // 2026-05-23 cleanup retired.
+    // Propagate the MCP-spec `isError` flag verbatim. Two sources:
+    // tool-handler throws (SDK-wrapped via `createToolError`,
+    // server/mcp.js) AND the first-class in-result failure envelope a
+    // rejected `ggui_render` returns (isError + schema-conformant
+    // structuredContent carrying `error: {code, message}`, no _meta).
+    // Without surfacing it here, callers can't distinguish error
+    // envelopes from normal results without parsing `content[*].text`
+    // heuristically — the G2 spec workaround the 2026-05-23 cleanup
+    // retired.
     const isError = (result as { isError?: unknown }).isError === true;
 
     return {

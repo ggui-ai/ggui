@@ -59,7 +59,28 @@ import { registerBlueprint } from './blueprint-registry.js';
 import { handshakeRecordKey, type HandshakeRecord } from './handshake.js';
 import { createGguiRenderHandler, type GguiRenderHandlerDeps } from './render.js';
 import type { BlueprintPool } from './decide-handshake.js';
-import type { HandlerContext } from '../types.js';
+import {
+  isHandlerFailure,
+  type HandlerContext,
+  type HandlerFailure,
+} from '../types.js';
+
+/**
+ * Narrow a render invocation to the SUCCESS arm. The handler's result
+ * union carries the opt-in {@link HandlerFailure} failure envelope;
+ * these tests exercise success paths — a failure here is a test bug,
+ * surfaced with the envelope's own text. The failure-envelope suite
+ * below reads the raw union instead.
+ */
+function assertRenderSuccess<T>(
+  result: T,
+): asserts result is Exclude<T, HandlerFailure<unknown>> {
+  if (isHandlerFailure(result)) {
+    throw new Error(
+      `expected render success, got failure envelope: ${result.errorText}`,
+    );
+  }
+}
 
 const APP_ID = 'app-test';
 
@@ -451,6 +472,7 @@ describe('createGguiRenderHandler — cache-reuse point-read (Phase 2)', () => {
       { handshakeId, props: {} },
       CTX,
     );
+    assertRenderSuccess(out);
     expect(typeof out.blueprintId).toBe('string');
     expect(typeof out.contractHash).toBe('string');
     expect(typeof out.variantKey).toBe('string');
@@ -487,6 +509,7 @@ describe('createGguiRenderHandler — cache-reuse point-read (Phase 2)', () => {
       { handshakeId, props: {} },
       CTX,
     );
+    assertRenderSuccess(out);
     expect(out.cache.hit).toBe(true);
     expect(out.blueprintId).toBe(storedUuid);
     expect(out.cache.cachedBlueprintId).toBe(storedUuid);
@@ -540,6 +563,7 @@ describe('createGguiRenderHandler — cache-reuse point-read (Phase 2)', () => {
       CTX,
     );
     // Self-heal: falls through to cold-gen rather than throwing.
+    assertRenderSuccess(out);
     expect(out.cache.hit).toBe(false);
     const stored = await renderStore.get(out.sessionId);
     const render = stored?.render as ComponentGguiSession | undefined;
@@ -552,6 +576,7 @@ describe('createGguiRenderHandler — cache-reuse point-read (Phase 2)', () => {
       { handshakeId, props: {} },
       CTX,
     );
+    assertRenderSuccess(out);
     expect(out.cache.hit).toBe(false);
     // B1: a cold render carries a default-available reason indicating it
     // generated fresh rather than reusing a stored component.
@@ -596,6 +621,7 @@ describe('createGguiRenderHandler — cache-reuse point-read (Phase 2)', () => {
     );
 
     // Cold-genned — did NOT reuse the available cached blueprint.
+    assertRenderSuccess(out);
     expect(out.cache.hit).toBe(false);
     // A FRESH bp_<uuid> was minted, not the cached storedUuid.
     expect(out.blueprintId).not.toBe(storedUuid);
@@ -667,6 +693,7 @@ describe('createGguiRenderHandler — cache-reuse point-read (Phase 2)', () => {
       { handshakeId, props: {} },
       CTX,
     );
+    assertRenderSuccess(out);
     expect(out).toBeDefined();
     expect(out.cache.hit).toBe(true);
   });
@@ -838,6 +865,7 @@ describe('createGguiRenderHandler — seed-pool-aware reuse point-read', () => {
     });
 
     const out = await handler.handler({ handshakeId, props: {} }, CTX);
+    assertRenderSuccess(out);
 
     // The inverse of the dangling-id fall-through test: the per-app store
     // is empty, but the seed pool resolves the matched UUID, so render
@@ -972,6 +1000,7 @@ describe('createGguiRenderHandler — seed-pool-aware reuse point-read', () => {
     });
 
     const out = await handler.handler({ handshakeId, props: {} }, CTX);
+    assertRenderSuccess(out);
 
     // Reuse MUST have come from the seed pool.
     expect(out.cache.hit).toBe(true);
@@ -1004,6 +1033,7 @@ describe('createGguiRenderHandler — seed-pool-aware reuse point-read', () => {
     });
 
     const out = await handler.handler({ handshakeId, props: {} }, CTX);
+    assertRenderSuccess(out);
 
     expect(out.cache.hit).toBe(true);
     expect(out.blueprintId).toBe(uuid);
@@ -1104,6 +1134,7 @@ describe('createGguiRenderHandler — variance-aware input reshape (Tasks 6+7)',
 
     // Re-resolved to the persona-variant row, NOT the proposed default
     // one — reuse hit, and the wire variantKey is the new variant.
+    assertRenderSuccess(out);
     expect(out.cache.hit).toBe(true);
     expect(out.blueprintId).toBe(personaUuid);
     expect(out.variantKey).toBe(variantKey(PERSONA_VARIANCE));
@@ -1120,6 +1151,7 @@ describe('createGguiRenderHandler — variance-aware input reshape (Tasks 6+7)',
       CTX,
     );
 
+    assertRenderSuccess(out);
     expect(out.cache.hit).toBe(false);
     // A FRESH bp_<uuid> was minted — not the proposed default row.
     expect(out.blueprintId).not.toBe(storedUuid);
@@ -1305,5 +1337,269 @@ describe('createGguiRenderHandler — resultMeta forwards App.theme to the wire 
     expect(parsed.ok).toBe(true);
     if (!parsed.ok) return;
     expect(parsed.meta?.theme).toBeUndefined();
+  });
+});
+
+describe('createGguiRenderHandler — isError failure envelope (ruling B)', () => {
+  // Harness with a FAILING cloud-seam-shaped generator (the `generator`
+  // escape hatch — the same seam `render-factory-deps` binds), plus a
+  // capturing channel notifier so the "WS notify unchanged" promise is
+  // observable.
+  async function buildFailingHarness(
+    behavior:
+      | { readonly kind: 'result'; readonly error: import('@ggui-ai/protocol').GenerationError }
+      | { readonly kind: 'throw'; readonly message: string },
+  ): Promise<{
+    readonly handler: ReturnType<typeof createGguiRenderHandler>;
+    readonly renderStore: InMemoryGguiSessionStore;
+    readonly handshakeStore: InMemoryKeyValueStore;
+    readonly handshakeId: string;
+    readonly notified: Array<{ sessionId: string; error?: string }>;
+  }> {
+    const handshakeStore = new InMemoryKeyValueStore();
+    const renderStore = new InMemoryGguiSessionStore();
+    const vectorStore = new InMemoryVectorStore();
+    const index = new InMemoryBlueprintIndex();
+    const handshakeId = 'hs-fail-1';
+    await seedHandshake(
+      handshakeStore,
+      handshakeId,
+      buildRecord({ handshakeId, origin: 'agent' }),
+    );
+    const notified: Array<{ sessionId: string; error?: string }> = [];
+    const handler = createGguiRenderHandler({
+      handshakeStore,
+      renderStore,
+      channelNotifier: {
+        notifyGguiSessionCommit(sessionId, render) {
+          notified.push({
+            sessionId,
+            ...(render.type !== 'mcpApps' && render.type !== 'system' && render.error !== undefined
+              ? { error: render.error }
+              : {}),
+          });
+        },
+      },
+      generation: {
+        uiGenerator: {
+          slug: 'ui-gen-default-fake',
+          tier: 'default',
+          model: 'fake',
+          generate: fakeGenerator(COLD_CODE),
+        },
+        resolveLlm: () => null,
+        blueprints: { get: async () => null, list: async () => [] },
+        cache: {
+          embedding: fakeEmbedding,
+          vectorStore,
+          index,
+        },
+      },
+      generator: async () => {
+        if (behavior.kind === 'throw') throw new Error(behavior.message);
+        return { ok: false, error: behavior.error };
+      },
+    });
+    return { handler, renderStore, handshakeStore, handshakeId, notified };
+  }
+
+  // Harness with NO generator override and resolveLlm behavior injected —
+  // the OSS credential-resolution failure paths. No cache deps, so the
+  // failure cache marker exercises the ?? fallback branch.
+  async function buildNoCredsHarness(
+    resolveLlm: () => never | null,
+  ): Promise<{
+    readonly handler: ReturnType<typeof createGguiRenderHandler>;
+    readonly renderStore: InMemoryGguiSessionStore;
+    readonly handshakeId: string;
+  }> {
+    const handshakeStore = new InMemoryKeyValueStore();
+    const renderStore = new InMemoryGguiSessionStore();
+    const handshakeId = 'hs-nocreds-1';
+    await seedHandshake(
+      handshakeStore,
+      handshakeId,
+      buildRecord({ handshakeId, origin: 'agent' }),
+    );
+    const handler = createGguiRenderHandler({
+      handshakeStore,
+      renderStore,
+      generation: {
+        uiGenerator: {
+          slug: 'ui-gen-default-fake',
+          tier: 'default',
+          model: 'fake',
+          generate: fakeGenerator(COLD_CODE),
+        },
+        resolveLlm,
+        blueprints: { get: async () => null, list: async () => [] },
+      },
+    });
+    return { handler, renderStore, handshakeId };
+  }
+
+  it('generation failure returns the HandlerFailure marker with the pinned schema-conformant envelope', async () => {
+    const { handler, handshakeId } = await buildFailingHarness({
+      kind: 'result',
+      error: { code: 'PRODUCTION_FAILED', message: 'provider 500' },
+    });
+    const out = await handler.handler({ handshakeId, props: {} }, CTX);
+    expect(isHandlerFailure(out)).toBe(true);
+    if (!isHandlerFailure(out)) return;
+
+    // structuredContent stays schema-conformant (isError:true results
+    // are still validated against outputSchema by MCP SDK clients).
+    const parsed = renderOutputSchema.parse(out.data);
+    expect(parsed.error).toEqual({
+      code: 'PRODUCTION_FAILED',
+      message: 'provider 500',
+    });
+    // resourceUri ABSENT — nothing mountable.
+    expect(parsed.resourceUri).toBeUndefined();
+    // blueprintId '' — present-on-materialisation sentinel.
+    expect(parsed.blueprintId).toBe('');
+    expect(typeof parsed.variantKey).toBe('string');
+    expect(typeof parsed.contractHash).toBe('string');
+    expect(parsed.sessionId.length).toBeGreaterThan(0);
+    // Pinned cold failure marker.
+    expect(parsed.cache).toEqual({
+      hit: false,
+      llmCallsAvoided: 0,
+      kind: 'cold',
+      reason:
+        'cold: generation failed — no stored component was produced or reused',
+    });
+    // nextStep never lands on the failure envelope — the content text
+    // carries the recovery guidance instead.
+    expect(parsed.nextStep).toBeUndefined();
+    // Internal seams still ride the pre-parse data for in-process readers.
+    expect(out.data.codeReady).toBe(false);
+  });
+
+  it('content text follows the pinned guidance format', async () => {
+    const { handler, handshakeId } = await buildFailingHarness({
+      kind: 'result',
+      error: { code: 'PRODUCTION_FAILED', message: 'provider 500' },
+    });
+    const out = await handler.handler({ handshakeId, props: {} }, CTX);
+    if (!isHandlerFailure(out)) throw new Error('expected failure envelope');
+    expect(out.errorText.startsWith('PRODUCTION_FAILED: provider 500. ')).toBe(
+      true,
+    );
+    expect(out.errorText).toContain(
+      'Do not call ggui_render again with this handshakeId — it is consumed.',
+    );
+    expect(out.errorText).toContain('call ggui_handshake again once resolved.');
+  });
+
+  it('the handshake really is consumed — a retry on the same handshakeId rejects handshake_not_found', async () => {
+    const { handler, handshakeId } = await buildFailingHarness({
+      kind: 'result',
+      error: { code: 'PRODUCTION_FAILED', message: 'provider 500' },
+    });
+    const out = await handler.handler({ handshakeId, props: {} }, CTX);
+    expect(isHandlerFailure(out)).toBe(true);
+    await expect(
+      handler.handler({ handshakeId, props: {} }, CTX),
+    ).rejects.toMatchObject({ code: 'handshake_not_found' });
+  });
+
+  it('cloud seam codes map through: VALIDATION_ERROR and NO_PLATFORM_KEY verbatim, COMPILATION_ERROR folds to PRODUCTION_FAILED', async () => {
+    const cases = [
+      { in: 'VALIDATION_ERROR', outCode: 'VALIDATION_ERROR' },
+      { in: 'NO_PLATFORM_KEY', outCode: 'NO_PLATFORM_KEY' },
+      { in: 'COMPILATION_ERROR', outCode: 'PRODUCTION_FAILED' },
+    ] as const;
+    for (const kase of cases) {
+      const { handler, handshakeId } = await buildFailingHarness({
+        kind: 'result',
+        error: { code: kase.in, message: `m-${kase.in}` },
+      });
+      const out = await handler.handler({ handshakeId, props: {} }, CTX);
+      if (!isHandlerFailure(out)) throw new Error('expected failure envelope');
+      expect(out.data.error.code).toBe(kase.outCode);
+      expect(out.data.error.message).toBe(`m-${kase.in}`);
+      expect(out.errorText.startsWith(`${kase.outCode}: m-${kase.in}.`)).toBe(
+        true,
+      );
+    }
+  });
+
+  it('a throwing generator maps to PRODUCTION_FAILED', async () => {
+    const { handler, handshakeId } = await buildFailingHarness({
+      kind: 'throw',
+      message: 'esbuild exploded',
+    });
+    const out = await handler.handler({ handshakeId, props: {} }, CTX);
+    if (!isHandlerFailure(out)) throw new Error('expected failure envelope');
+    expect(out.data.error.code).toBe('PRODUCTION_FAILED');
+    expect(out.data.error.message).toContain('esbuild exploded');
+  });
+
+  it('resolveLlm returning null (no fallback card) maps to NO_CREDENTIALS, with the same pinned cache reason', async () => {
+    const { handler, handshakeId } = await buildNoCredsHarness(() => null);
+    const out = await handler.handler({ handshakeId, props: {} }, CTX);
+    if (!isHandlerFailure(out)) throw new Error('expected failure envelope');
+    expect(out.data.error.code).toBe('NO_CREDENTIALS');
+    // No cache deps on this harness — the ?? fallback pins the same reason.
+    expect(out.data.cache.reason).toBe(
+      'cold: generation failed — no stored component was produced or reused',
+    );
+  });
+
+  it('resolveLlm throwing maps to NO_CREDENTIALS', async () => {
+    const { handler, handshakeId } = await buildNoCredsHarness(() => {
+      throw new Error('keychain unreachable');
+    });
+    const out = await handler.handler({ handshakeId, props: {} }, CTX);
+    if (!isHandlerFailure(out)) throw new Error('expected failure envelope');
+    expect(out.data.error.code).toBe('NO_CREDENTIALS');
+    expect(out.data.error.message).toContain('keychain unreachable');
+  });
+
+  it('the error GguiSession is STILL committed and the live notify fired (session-channel archaeology intact)', async () => {
+    const { handler, renderStore, handshakeId, notified } =
+      await buildFailingHarness({
+        kind: 'result',
+        error: { code: 'PRODUCTION_FAILED', message: 'provider 500' },
+      });
+    const out = await handler.handler({ handshakeId, props: {} }, CTX);
+    if (!isHandlerFailure(out)) throw new Error('expected failure envelope');
+    const stored = await renderStore.get(out.data.sessionId);
+    const render = stored?.render;
+    expect(render).toBeDefined();
+    if (!render || render.type === 'mcpApps' || render.type === 'system') {
+      throw new Error('expected a ComponentGguiSession error render');
+    }
+    expect(render.componentCode).toBe('');
+    expect(render.error).toBe('provider 500');
+    // The commit notify fan-out fired for the error render.
+    expect(
+      notified.some(
+        (n) => n.sessionId === out.data.sessionId && n.error === 'provider 500',
+      ),
+    ).toBe(true);
+  });
+
+  it('NO _meta on failures — resultMeta yields undefined for the failure marker', async () => {
+    const { handler, handshakeId } = await buildFailingHarness({
+      kind: 'result',
+      error: { code: 'PRODUCTION_FAILED', message: 'provider 500' },
+    });
+    const out = await handler.handler({ handshakeId, props: {} }, CTX);
+    if (!isHandlerFailure(out)) throw new Error('expected failure envelope');
+    const meta = await handler.resultMeta?.(out, { handshakeId, props: {} }, CTX);
+    expect(meta).toBeUndefined();
+  });
+
+  it('success path is unchanged: resourceUri present, no error field, not a failure marker', async () => {
+    const { harness, handshakeId } = await buildColdGenHarness();
+    const out = await harness.handler.handler({ handshakeId, props: {} }, CTX);
+    expect(isHandlerFailure(out)).toBe(false);
+    assertRenderSuccess(out);
+    const parsed = renderOutputSchema.parse(out);
+    expect(typeof parsed.resourceUri).toBe('string');
+    expect((parsed.resourceUri ?? '').length).toBeGreaterThan(0);
+    expect(parsed.error).toBeUndefined();
   });
 });

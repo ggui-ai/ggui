@@ -191,6 +191,89 @@ describe('interceptToolResult', () => {
     expect(logs.some((l) => l.includes('resources/read'))).toBe(true);
   });
 
+  it('skips inlining on isError results — no resources/read is issued', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    // Defensive shape: an error result that (against the ggui failure
+    // envelope, which strips _meta entirely) still carries a
+    // resourceUri. isError must win — failed renders are not mountable
+    // and the read would be a wasted round-trip.
+    const errorResult: NormalizedMessage = {
+      type: 'user',
+      message: {
+        content: [
+          {
+            type: 'tool_result',
+            tool_use_id: 'tu_err',
+            content: [
+              {
+                type: 'text',
+                text: 'PRODUCTION_FAILED: generation failed.',
+              },
+            ],
+            is_error: true,
+          },
+        ],
+      },
+      tool_use_result: {
+        isError: true,
+        content: [
+          { type: 'text', text: 'PRODUCTION_FAILED: generation failed.' },
+        ],
+        structuredContent: { sessionId: 'r_err' },
+        _meta: { ui: { resourceUri: 'ui://ggui/render/r_err' } },
+      },
+    };
+
+    const out = await interceptToolResult({
+      message: errorResult,
+      mcpServers: SERVERS,
+    });
+    expect(out).toBe(errorResult);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('skips inlining on the canonical ggui failure envelope (isError, no _meta)', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    const failureEnvelope: NormalizedMessage = {
+      type: 'user',
+      message: {
+        content: [
+          {
+            type: 'tool_result',
+            tool_use_id: 'tu_fail',
+            content: [
+              {
+                type: 'text',
+                text: 'VALIDATION_ERROR: own key missing. Do not call ggui_render again with this handshakeId — it is consumed.',
+              },
+            ],
+            is_error: true,
+          },
+        ],
+      },
+      tool_use_result: {
+        isError: true,
+        content: [{ type: 'text', text: 'VALIDATION_ERROR: own key missing.' }],
+        structuredContent: {
+          sessionId: 'r_fail',
+          error: { code: 'VALIDATION_ERROR', message: 'own key missing' },
+        },
+        // No _meta on failures per the failure-envelope contract.
+      },
+    };
+
+    const out = await interceptToolResult({
+      message: failureEnvelope,
+      mcpServers: SERVERS,
+    });
+    expect(out).toBe(failureEnvelope);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it('is idempotent — second pass with resource already inlined skips fetch', async () => {
     const fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);

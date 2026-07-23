@@ -224,6 +224,71 @@ describe('useMcpAppsChat handleEvent — _meta.ui.displayMode extraction', () =>
     expect(captured.renders[0]?.toolUseId).toBe('call_7');
   });
 
+  it('failure envelope (isError, no _meta) → NO mount; degrades to is_error text rendering', () => {
+    // Pinned failure-envelope behavior: a rejected ggui_render returns
+    // isError: true with schema-conformant structuredContent (incl.
+    // `error: {code, message}`) but NO `_meta` — no `ai.ggui/render`
+    // slice, no `ui.resourceUri`. The chat hook must therefore mount
+    // nothing and instead patch the tool-call entry with the error
+    // result so the shell renders the block's text (the model-visible
+    // self-correction surface) via its is_error path.
+    const { captured, deps } = makeDeps();
+    const errorText =
+      'PRODUCTION_FAILED: generation failed. Do not call ggui_render again with this handshakeId — it is consumed. Call ggui_handshake again once resolved.';
+    const failureStructured = {
+      sessionId: 'r_err_1',
+      action: 'render',
+      contractHash: 'ch_1',
+      blueprintId: '',
+      variantKey: 'v1',
+      cache: {
+        hit: false,
+        llmCallsAvoided: 0,
+        kind: 'cold',
+        reason:
+          'cold: generation failed — no stored component was produced or reused',
+      },
+      error: { code: 'PRODUCTION_FAILED', message: 'generation failed' },
+    };
+    handleEvent(
+      'message',
+      {
+        type: 'user',
+        message: {
+          content: [
+            {
+              type: 'tool_result',
+              tool_use_id: 'call_err',
+              is_error: true,
+              content: [{ type: 'text', text: errorText }],
+            },
+          ],
+        },
+        tool_use_result: {
+          isError: true,
+          content: [{ type: 'text', text: errorText }],
+          structuredContent: failureStructured,
+          // No _meta on failures — the envelope strips the ui slice.
+        },
+      },
+      'base.err',
+      deps,
+    );
+    // No mount: nothing added to renders, no session entry appended.
+    expect(captured.renders).toHaveLength(0);
+    expect(captured.entries.filter((e) => e.kind === 'session')).toHaveLength(
+      0,
+    );
+    // No displayMode side effects either.
+    expect(captured.displayModes).toEqual([]);
+    // The tool-call entry IS patched with the error result so the
+    // shell's is_error text rendering has the full envelope to show.
+    expect(captured.patches).toHaveLength(1);
+    expect(captured.patches[0]?.toolUseId).toBe('call_err');
+    expect(captured.patches[0]?.isError).toBe(true);
+    expect(captured.patches[0]?.result).toEqual(failureStructured);
+  });
+
   it('updates hostDisplayMode on each new tool_result (latest wins)', () => {
     const { captured, deps } = makeDeps();
     handleEvent(

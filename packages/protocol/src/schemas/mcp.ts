@@ -440,9 +440,49 @@ export const renderCacheMarkerSchema = z.object({
 });
 
 /**
- * Wire-output shape — `{sessionId, resourceUri, action, contractHash,
- * cache, nextStep?}`. `contractHash` (data-contract identity) and `cache`
- * (reuse outcome) are required wire fields on this schema.
+ * Canonical failure codes for the in-result `ggui_render` failure
+ * envelope (SPEC §7.9 Plane 3). Closed enum — a failed render's
+ * `error.code` is always one of these four; finer-grained diagnostics
+ * ride on `error.message`.
+ *
+ *   - `PRODUCTION_FAILED` — generation ran but did not produce a
+ *     component (LLM/compile/commit failure).
+ *   - `VALIDATION_ERROR` — a server-side precondition rejected the
+ *     render before generation could run (misconfigured generation
+ *     route, unusable stored config).
+ *   - `NO_PLATFORM_KEY` — the server's managed provider-key
+ *     configuration has no key for the resolved route.
+ *   - `NO_CREDENTIALS` — no generation credentials are configured on
+ *     the server at all.
+ */
+export const renderErrorCodeSchema = z.enum([
+  'PRODUCTION_FAILED',
+  'VALIDATION_ERROR',
+  'NO_PLATFORM_KEY',
+  'NO_CREDENTIALS',
+]);
+
+/**
+ * In-result failure marker for `ggui_render`. Present on the wire
+ * output iff the tool result is `isError: true` — the structuredContent
+ * stays schema-conformant on failures, and this field carries the
+ * canonical failure classification.
+ */
+export const renderErrorSchema = z.object({
+  code: renderErrorCodeSchema.describe(
+    'Canonical failure class. PRODUCTION_FAILED: generation did not produce a component. VALIDATION_ERROR: a server-side precondition rejected the render before generation. NO_PLATFORM_KEY: the server\'s managed provider-key configuration has no key for the resolved route. NO_CREDENTIALS: no generation credentials are configured on the server.',
+  ),
+  message: z
+    .string()
+    .describe(
+      'Human-readable failure detail — fold into the next attempt or surface to the operator.',
+    ),
+});
+
+/**
+ * Wire-output shape — `{sessionId, resourceUri?, action, contractHash,
+ * cache, error?, nextStep?}`. `contractHash` (data-contract identity)
+ * and `cache` (reuse outcome) are required wire fields on this schema.
  * The handler carries `shortCode`, `codeReady`, `handshakeId`,
  * `decision`, `contract`, `codeUrl`, `codeHash`
  * on its internal `RenderOutput` TS shape for telemetry / post-classify
@@ -456,6 +496,12 @@ export const renderCacheMarkerSchema = z.object({
  * `render-resource/...`). Leaving a dead URL on the wire had the model
  * hallucinating links that resolve nowhere.
  *
+ * Failure envelope (SPEC §7.1): a failed/rejected generation returns
+ * this same schema-conformant shape on an `isError: true` tool result —
+ * `error` present, `resourceUri` absent (nothing mountable), no
+ * `_meta` on the result. The error GguiSession is still committed, so
+ * `sessionId` remains a live handle into the session channel.
+ *
  * Post-Phase-B the `'compose'` action enum value is gone — there is no
  * stack of N renders to compose against.
  */
@@ -468,8 +514,17 @@ export const renderOutputSchema = z.object({
    * tool_results (OpenAI Agents SDK, Google ADK) reach the mount URI;
    * SDKs that preserve `_meta` see the same value on both fields.
    * Mirrors the `resourceUri` field on `ggui_update`'s output.
+   *
+   * OPTIONAL — present iff the render is mountable. Absent on the
+   * failure envelope (`error` present): a failed render commits an
+   * error GguiSession but exposes no mount affordance.
    */
-  resourceUri: z.string(),
+  resourceUri: z
+    .string()
+    .optional()
+    .describe(
+      'MCP-Apps mount URI (ui://ggui/render/{id}). Present iff the render is mountable; absent on a failed render.',
+    ),
   action: z.enum(['create', 'reuse', 'update', 'replace', 'declined']),
   contractHash: z
     .string()
@@ -489,6 +544,17 @@ export const renderOutputSchema = z.object({
   cache: renderCacheMarkerSchema.describe(
     'Reuse outcome for this render: whether a stored component was served, its similarity, the matched component id, and how many generation calls that avoided.',
   ),
+  /**
+   * In-result failure marker — present iff the tool result is
+   * `isError: true`. The structuredContent stays schema-conformant on
+   * failures; this field carries the canonical `{code, message}`
+   * classification. Absent on every successful render.
+   */
+  error: renderErrorSchema
+    .optional()
+    .describe(
+      'Present iff the tool result is isError — canonical {code, message} for a failed/rejected generation. Absent on success.',
+    ),
   /**
    * Wire-shape recovery hint for the next call. Emitted ONLY when the
    * rendered contract has a non-empty `actionSpec` — i.e. the agent will
@@ -573,6 +639,14 @@ export const updateInputSchema = z.discriminatedUnion('kind', [
 export const updateOutputSchema = z.object({
   sessionId: z.string(),
   updated: z.boolean(),
+  /**
+   * Unchanged from the initial render — the same `ui://ggui/render/{id}`
+   * URI the mount stamped. Mirrored on the LLM-visible structuredContent
+   * so SDKs that strip `_meta` from tool_results can still reach the
+   * mount URI. Kept in sync with the update handler's wire shape —
+   * this export and the handler's inline schema must not drift.
+   */
+  resourceUri: z.string(),
 });
 
 /**

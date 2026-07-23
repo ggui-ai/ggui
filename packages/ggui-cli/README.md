@@ -45,7 +45,7 @@ ggui serve --mcp-only               # skip agent supervision
 
 - ✅ Local server, viewer, cookie-authenticated WebSocket subscribe/ack all work end-to-end.
 - ✅ `ggui_render` mints shortCodes and lands on the same-origin viewer.
-- ✅ Component-code generation is wired on the OSS path via `createUiGenerator()` from `@ggui-ai/ui-gen` — the same harness the hosted runtime uses. When no LLM credentials resolve (no `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` / etc.), `ggui_render` still lands a real render — a connect-your-key onboarding card with `codeReady: true` that walks the operator through supplying a key. `codeReady: false` is reserved for failures (generation errors, malformed credentials at boot).
+- ✅ Component-code generation is wired on the OSS path via `createUiGenerator()` from `@ggui-ai/ui-gen` — the same harness the hosted runtime uses. When no LLM credentials resolve (no `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` / etc.), `ggui_render` returns an `isError: true` tool result whose `structuredContent.error.code` is `NO_CREDENTIALS`, with a message naming which key to set; supply a key to get full generation locally.
 - 🔒 Default auth is strict pairing — only pair-minted bearer tokens authenticate `/mcp` (pair via the landing page or `POST /pair`). `--dev-allow-all` (local dev / tunnel smoke) and `--public-demo` (rate-limited, operator-paid public demo) relax `/mcp` to any-bearer; `--multi-tenant` keeps strict auth with per-user provider-key scoping; `--oauth` mounts the OAuth 2.1 + DCR routes MCP custom-connector hosts (claude.ai, ChatGPT) need. Custom adapters via `createGguiServer({ auth })`.
 
 ### `ggui dev`

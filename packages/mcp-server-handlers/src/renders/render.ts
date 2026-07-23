@@ -78,7 +78,13 @@ import type {
   UiGenerator,
 } from '@ggui-ai/mcp-server-core';
 import { RateLimitedError } from '@ggui-ai/mcp-server-core';
-import type { HandlerContext, SharedHandler } from '../types.js';
+import {
+  handlerFailure,
+  isHandlerFailure,
+  type HandlerContext,
+  type HandlerFailure,
+  type SharedHandler,
+} from '../types.js';
 import {
   consumeHandshakeRecord,
   peekHandshakeRecord,
@@ -118,8 +124,11 @@ import {
   renderInputShape,
   resolveAppGadgets,
   renderOutputSchema,
+  type GenerationError,
   type GguiRenderOutput,
   type RenderCacheMarker,
+  type RenderError,
+  type RenderErrorCode,
 } from '@ggui-ai/protocol';
 import {
   emitCacheTraceEvent,
@@ -765,14 +774,21 @@ const inputSchema = renderInputShape;
 const outputSchema = renderOutputSchema.shape;
 
 /**
- * Internal handler-output type — carries the FULL field set that
- * downstream seams need (resultMeta, postSuccessHook, cloud
- * persistence, test assertions). The LLM-visible serialization is
- * the `GguiRenderOutput` subset (`{sessionId, resourceUri, nextStep?,
- * action}`); zod's `.parse()` strips the extras (`shortCode`,
- * `codeReady`, etc.) before they land on `structuredContent`.
+ * Internal handler-output type (SUCCESS shape) — carries the FULL
+ * field set that downstream seams need (resultMeta, postSuccessHook,
+ * cloud persistence, test assertions). The LLM-visible serialization
+ * is the `GguiRenderOutput` subset (`{sessionId, resourceUri,
+ * nextStep?, action}`); zod's `.parse()` strips the extras
+ * (`shortCode`, `codeReady`, etc.) before they land on
+ * `structuredContent`.
+ *
+ * `resourceUri` is re-required here: the wire schema makes it optional
+ * (present iff mountable), and every SUCCESS render is mountable — the
+ * intersection keeps the success path's type exactly as strict as
+ * before the failure envelope landed.
  */
 type RenderOutput = GguiRenderOutput & {
+  resourceUri: string;
   // Internal seams (stripped from JSON-RPC envelope by outputSchema):
   shortCode: string;
   codeReady: boolean;
@@ -780,6 +796,73 @@ type RenderOutput = GguiRenderOutput & {
   codeUrl?: string;
   codeHash?: string;
 };
+
+/**
+ * Internal handler-output type (FAILURE shape) — the schema-conformant
+ * structuredContent of the `isError: true` failure envelope. `error`
+ * is re-required (the wire schema makes it optional — present iff
+ * isError); `resourceUri` is structurally ABSENT (a failed render is
+ * not mountable); `nextStep` never lands here (the content text
+ * carries the recovery guidance instead).
+ */
+type RenderFailureOutput = GguiRenderOutput & {
+  error: RenderError;
+  // Internal seams (stripped from JSON-RPC envelope by outputSchema):
+  shortCode: string;
+  codeReady: false;
+  handshakeId?: string;
+};
+
+/**
+ * Per-code recovery guidance folded into the failure envelope's
+ * model-visible content text. The seam's `error.message` carries the
+ * precise diagnostic; this sentence carries the generic next move.
+ */
+const RENDER_FAILURE_GUIDANCE: Record<RenderErrorCode, string> = {
+  PRODUCTION_FAILED:
+    'Simplify the contract or intent and retry, or try again later if the failure looks transient',
+  VALIDATION_ERROR: 'Fix the configuration or input named in the message',
+  NO_PLATFORM_KEY:
+    'Have the operator set a provider key for this app, or switch the app to a model whose key is configured',
+  NO_CREDENTIALS:
+    'Have the operator configure provider credentials on the server (environment variable or credentials file)',
+};
+
+/**
+ * Model-visible content text for the failure envelope. Pinned format:
+ * `<CODE>: <message>. Do not call ggui_render again with this
+ * handshakeId — it is consumed. <fix guidance>; call ggui_handshake
+ * again once resolved.`
+ */
+function buildRenderFailureText(failure: RenderError): string {
+  return (
+    `${failure.code}: ${failure.message}. ` +
+    'Do not call ggui_render again with this handshakeId — it is consumed. ' +
+    `${RENDER_FAILURE_GUIDANCE[failure.code]}; call ggui_handshake again once resolved.`
+  );
+}
+
+/**
+ * Project a generator-result {@link GenerationError} code onto the
+ * canonical render-failure enum. `COMPILATION_ERROR` is a
+ * finer-grained production failure, not a distinct wire class — it
+ * folds into `PRODUCTION_FAILED`; the other four members map 1:1.
+ */
+function toCanonicalRenderErrorCode(
+  code: GenerationError['code'],
+): RenderErrorCode {
+  switch (code) {
+    case 'VALIDATION_ERROR':
+      return 'VALIDATION_ERROR';
+    case 'NO_PLATFORM_KEY':
+      return 'NO_PLATFORM_KEY';
+    case 'NO_CREDENTIALS':
+      return 'NO_CREDENTIALS';
+    case 'PRODUCTION_FAILED':
+    case 'COMPILATION_ERROR':
+      return 'PRODUCTION_FAILED';
+  }
+}
 
 /**
  * 16-char URL-safe short-code — `[a-z0-9]` minus `1lI0Oo` confusables (31-char
@@ -802,10 +885,22 @@ function generateShortCode(): string {
  *
  * The handler's tool declaration carries `_meta.ui.resourceUri` +
  * `_meta.ui.visibility: ['model']` per the §2.4.1 entry-point lock.
+ *
+ * The `OutputData` generic is the union of the success shape and the
+ * opt-in {@link HandlerFailure} marker: a failed/rejected generation
+ * RETURNS `handlerFailure(<schema-conformant failure output>, <text>)`
+ * instead of throwing, and the transport (`buildMcpServer`) projects
+ * it to an `isError: true` tool result with validated
+ * structuredContent and NO `_meta`. In-process callers narrow with
+ * `isHandlerFailure`.
  */
 export function createGguiRenderHandler(
   deps: GguiRenderHandlerDeps,
-): SharedHandler<typeof inputSchema, typeof outputSchema, RenderOutput> {
+): SharedHandler<
+  typeof inputSchema,
+  typeof outputSchema,
+  RenderOutput | HandlerFailure<RenderFailureOutput>
+> {
   return {
     name: 'ggui_render',
     title: 'Render',
@@ -843,7 +938,10 @@ export function createGguiRenderHandler(
       // carry the canonical key only.
       ui: GGUI_RENDER_UI_META,
     },
-    async handler(input, ctx: HandlerContext): Promise<RenderOutput> {
+    async handler(
+      input,
+      ctx: HandlerContext,
+    ): Promise<RenderOutput | HandlerFailure<RenderFailureOutput>> {
       // Rendering is handshake-first. The wire input is just
       // {handshakeId, props, override?}; the generator input (intent,
       // context, schema, adapters, forceCreate) flows from the
@@ -1324,6 +1422,12 @@ export function createGguiRenderHandler(
       //     componentCode into the scope so the next same-intent
       //     render hits.
       let generatedCodeReady = false;
+      // Canonical failure carried off the cold-gen outcome. Set iff
+      // `runGenerationIntoGguiSession` returned `ok: false` — the ONLY
+      // path that produces the isError failure envelope. Placeholder
+      // mode (no generation deps), probe cards, and cache-hit commit
+      // rejections keep today's success-shaped envelope.
+      let generationFailure: RenderError | undefined;
       // Reuse outcome for this render — surfaced on the wire `cache` field.
       let cacheMarker: RenderCacheMarker | undefined;
       // Opaque component id surfaced on the wire `blueprintId` field. A
@@ -1637,6 +1741,9 @@ export function createGguiRenderHandler(
             },
           );
           generatedCodeReady = outcome.ok;
+          if (!outcome.ok) {
+            generationFailure = outcome.failure;
+          }
           if (deps.generation.cache) {
             cacheMarker = {
               hit: false,
@@ -1771,6 +1878,64 @@ export function createGguiRenderHandler(
       // output via `effectiveVariantKey` (computed once up top).
       const resolvedContractHash = blueprintKey(effectiveContract);
 
+      // ── Failure envelope (SPEC §7.1) ──────────────────────────────
+      //
+      // A failed/rejected generation returns the in-result failure
+      // marker instead of the success shape. The transport projects it
+      // to `isError: true` + the model-visible content text + the SAME
+      // schema-conformant structuredContent shape (with `error` set,
+      // `resourceUri` absent — nothing mountable, `nextStep` absent —
+      // the content text carries the recovery), and NO `_meta` (no
+      // mount affordance for a failed render).
+      //
+      // The error GguiSession was ALREADY committed by
+      // `runGenerationIntoGguiSession` (WS notify + render-resource
+      // unchanged) — `sessionId` on this envelope remains a live
+      // handle into the session channel's archaeology
+      // (`GguiSession.error` carries the failure message).
+      if (generationFailure) {
+        const failureResult: RenderFailureOutput = {
+          sessionId,
+          action,
+          shortCode,
+          codeReady: false,
+          handshakeId: handshakeRecord.handshakeId,
+          contractHash: resolvedContractHash,
+          // Present-on-materialisation (§9.1): no component
+          // materialised, so the id is the empty sentinel.
+          blueprintId: '',
+          variantKey: effectiveVariantKey,
+          cache: cacheMarker ?? {
+            hit: false,
+            llmCallsAvoided: 0,
+            kind: 'cold',
+            reason:
+              'cold: generation failed — no stored component was produced or reused',
+          },
+          error: generationFailure,
+        };
+        // Same side-effect seam as the success return: cloud's hook
+        // observes EVERY settled render (it already fires with
+        // `codeReady: false` today) — suppressing it here would
+        // silently drop cloud-side metering/cache side-effects.
+        if (deps.postSuccessHook) {
+          await deps.postSuccessHook({
+            ctx,
+            sessionId,
+            contract: effectiveContract,
+            contractHash: resolvedContractHash,
+            intent: story.intent,
+            action,
+            codeReady: false,
+            cacheHit: false,
+          });
+        }
+        return handlerFailure(
+          failureResult,
+          buildRenderFailureText(generationFailure),
+        );
+      }
+
       // Conditional `nextStep` — emit a consume-recovery hint ONLY when
       // the resolved contract has a non-empty `actionSpec`. Pure-display
       // renders (props only) get no `nextStep` because there's nothing
@@ -1852,6 +2017,12 @@ export function createGguiRenderHandler(
       return result;
     },
     resultMeta: async (output, _input, ctx) => {
+      // NO `_meta` on failures — a failed render exposes no mount
+      // affordance and no bootstrap slice. `buildMcpServer` never
+      // invokes resultMeta for a `HandlerFailure` result; this narrow
+      // keeps in-process callers honest too (and types the success
+      // shape for the rest of the builder).
+      if (isHandlerFailure(output)) return undefined;
       // Resource URI is the rehydrate handle — chat hosts persist this
       // and re-fetch on history reload. Reuses the URI already computed
       // by the handler (and surfaced on structuredContent for SDKs that
@@ -2094,21 +2265,36 @@ const DEFAULT_RENDER_TTL_MS = 60 * 60 * 1000;
  * cancel throwing) are swallowed — keeping the render channel +
  * transport intact matters more than re-raising.
  */
-interface GenerationRunOutcome {
-  readonly ok: boolean;
-  readonly componentCode?: string;
-  readonly createdAt: string;
-  /**
-   * Engine provenance of `componentCode` — present exactly when a
-   * generator produced code (`ok: true` with non-empty
-   * `componentCode`). Read from the generator's own
-   * `metadata.{generator, model}` stamp so the OSS path and the
-   * cloud override seam mint identical provenance. Absent on error
-   * outcomes and on hand-authored commits (no-credentials card),
-   * which never register a blueprint.
-   */
-  readonly source?: LlmBlueprintSource;
-}
+type GenerationRunOutcome =
+  | {
+      readonly ok: true;
+      readonly componentCode?: string;
+      readonly createdAt: string;
+      /**
+       * Engine provenance of `componentCode` — present exactly when a
+       * generator produced code (`ok: true` with non-empty
+       * `componentCode`). Read from the generator's own
+       * `metadata.{generator, model}` stamp so the OSS path and the
+       * cloud override seam mint identical provenance. Absent on
+       * hand-authored commits (no-credentials card), which never
+       * register a blueprint.
+       */
+      readonly source?: LlmBlueprintSource;
+    }
+  | {
+      readonly ok: false;
+      readonly createdAt: string;
+      /**
+       * Canonical failure classification for the isError failure
+       * envelope (SPEC §7.1). Cloud seam codes
+       * (`VALIDATION_ERROR` / `NO_PLATFORM_KEY` / `PRODUCTION_FAILED`)
+       * map through 1:1 via {@link toCanonicalRenderErrorCode}; OSS
+       * throws map to `PRODUCTION_FAILED` (generator threw) or
+       * `NO_CREDENTIALS` (credential resolution failed / returned
+       * null).
+       */
+      readonly failure: RenderError;
+    };
 
 async function runGenerationIntoGguiSession(
   generation: GenerationDeps,
@@ -2204,6 +2390,7 @@ async function runGenerationIntoGguiSession(
           err instanceof Error
             ? `generator threw: ${err.message}`
             : 'generator threw',
+        code: 'PRODUCTION_FAILED',
         reason: 'generator-threw',
         ...(args.appTheme !== undefined ? { appTheme: args.appTheme } : {}),
       });
@@ -2225,6 +2412,7 @@ async function runGenerationIntoGguiSession(
           err instanceof Error
             ? `credential resolution failed: ${err.message}`
             : 'credential resolution failed',
+        code: 'NO_CREDENTIALS',
         reason: 'credential-resolution-failed',
         ...(args.appTheme !== undefined ? { appTheme: args.appTheme } : {}),
       });
@@ -2266,6 +2454,7 @@ async function runGenerationIntoGguiSession(
         nowEpochMs,
         message:
           'no credentials available for the configured generation provider (expected env var or ~/.ggui/credentials.json entry)',
+        code: 'NO_CREDENTIALS',
         reason: 'no-credentials',
         ...(args.appTheme !== undefined ? { appTheme: args.appTheme } : {}),
       });
@@ -2289,6 +2478,7 @@ async function runGenerationIntoGguiSession(
           err instanceof Error
             ? `generator threw: ${err.message}`
             : 'generator threw',
+        code: 'PRODUCTION_FAILED',
         reason: 'generator-threw',
         ...(args.appTheme !== undefined ? { appTheme: args.appTheme } : {}),
       });
@@ -2304,6 +2494,10 @@ async function runGenerationIntoGguiSession(
       nowIso,
       nowEpochMs,
       message: result.error.message,
+      // Canonical projection — cloud seam codes (VALIDATION_ERROR /
+      // NO_PLATFORM_KEY / PRODUCTION_FAILED) map through 1:1;
+      // COMPILATION_ERROR folds into PRODUCTION_FAILED.
+      code: toCanonicalRenderErrorCode(result.error.code),
       reason: 'generation-failed',
       ...(args.appTheme !== undefined ? { appTheme: args.appTheme } : {}),
     });
@@ -2372,7 +2566,15 @@ async function runGenerationIntoGguiSession(
     });
   } catch {
     await safelyFinalizePreview(previewDeps, sessionId, 'commit-failed');
-    return { ok: false, createdAt: nowIso };
+    return {
+      ok: false,
+      createdAt: nowIso,
+      failure: {
+        code: 'PRODUCTION_FAILED',
+        message:
+          'generation succeeded but the produced component could not be committed to the render store',
+      },
+    };
   }
   // Live-subscriber notify. Cold-generation success — the entry reuses
   // an existing sessionId, so already-subscribed clients should see the
@@ -2445,7 +2647,15 @@ async function commitNoCredentialsCardGguiSession(
       : '';
   return committed
     ? { ok: true, componentCode: code, createdAt: args.nowIso }
-    : { ok: false, createdAt: args.nowIso };
+    : {
+        ok: false,
+        createdAt: args.nowIso,
+        failure: {
+          code: 'NO_CREDENTIALS',
+          message:
+            'no credentials available for the configured generation provider, and the fallback card could not be committed',
+        },
+      };
 }
 
 /**
@@ -2468,6 +2678,12 @@ async function commitErrorGguiSession(
     readonly nowIso: string;
     readonly nowEpochMs: number;
     readonly message: string;
+    /**
+     * Canonical failure classification threaded onto the outcome's
+     * `failure` — the render handler folds it into the isError
+     * failure envelope's `error.code`.
+     */
+    readonly code: RenderErrorCode;
     readonly reason: string;
     /**
      * App theme snapshot. Failure renders must carry it too — the
@@ -2509,7 +2725,11 @@ async function commitErrorGguiSession(
     safelyNotifyGguiSessionCommit(channelNotifier, args.sessionId, errorRender);
   }
   await safelyFinalizePreview(previewDeps, args.sessionId, args.reason);
-  return { ok: false, createdAt: args.nowIso };
+  return {
+    ok: false,
+    createdAt: args.nowIso,
+    failure: { code: args.code, message: args.message },
+  };
 }
 
 /**

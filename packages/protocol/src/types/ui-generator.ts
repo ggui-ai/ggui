@@ -56,9 +56,32 @@ export interface UIGenerationResponse {
 /**
  * Error during UI generation.
  * The `details` field is {@link JsonValue} to carry any JSON-safe diagnostic data.
+ *
+ * `code` vocabulary:
+ *
+ *   - `PRODUCTION_FAILED` — the generation pipeline ran but did not
+ *     produce a component.
+ *   - `COMPILATION_ERROR` — produced code failed to compile. Maps to
+ *     the canonical `PRODUCTION_FAILED` on the render failure envelope
+ *     (it is a finer-grained production failure, not a distinct wire
+ *     class).
+ *   - `VALIDATION_ERROR` — an input/config precondition rejected the
+ *     generation before the LLM was called.
+ *   - `NO_PLATFORM_KEY` — the server's managed provider-key
+ *     configuration has no key for the resolved route.
+ *   - `NO_CREDENTIALS` — no generation credentials are configured on
+ *     the server.
+ *
+ * The last four map 1:1 onto the render failure envelope's canonical
+ * codes (`renderErrorCodeSchema` in `schemas/mcp.ts`).
  */
 export interface GenerationError {
-  code: 'PRODUCTION_FAILED' | 'COMPILATION_ERROR' | 'VALIDATION_ERROR';
+  code:
+    | 'PRODUCTION_FAILED'
+    | 'COMPILATION_ERROR'
+    | 'VALIDATION_ERROR'
+    | 'NO_PLATFORM_KEY'
+    | 'NO_CREDENTIALS';
   message: string;
   /** Additional diagnostic information. Typed as {@link JsonValue} (any JSON-safe value). */
   details?: JsonValue;

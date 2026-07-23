@@ -24,7 +24,7 @@ import { createGguiGetSessionHandler } from './get-session.js';
 import { createGguiRenderHandler } from './render.js';
 import { handshakeRecordKey, type HandshakeRecord } from './handshake.js';
 import { GguiSessionNotFoundError } from './errors.js';
-import type { HandlerContext } from '../types.js';
+import { isHandlerFailure, type HandlerContext } from '../types.js';
 
 const NOW_MS = Date.parse('2026-06-14T00:00:00.000Z');
 
@@ -200,7 +200,13 @@ async function renderFailingFor(
     { handshakeId, props: {} },
     ctx(appId, userId),
   );
-  return { sessionId: out.sessionId };
+  // A failing generator settles as the in-result failure envelope —
+  // the committed error render's id rides on the envelope's `data`
+  // (the session channel keeps its archaeology).
+  if (!isHandlerFailure(out)) {
+    throw new Error('expected the failing generator to produce a failure envelope');
+  }
+  return { sessionId: out.data.sessionId };
 }
 
 describe('per-user isolation on the generation-failed error-render commit', () => {
