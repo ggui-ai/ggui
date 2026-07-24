@@ -22,6 +22,13 @@ export interface PortableBlueprintSource {
   readonly variance: BlueprintVariance;
   /** Provenance of `componentCode` — travels with the artifact. */
   readonly source: BlueprintSource;
+  /**
+   * Intent prose for semantic (Tier-2) matching at the import side.
+   * Optional: artifacts exported before this field existed (and rows
+   * without one) still import — importers fall back to their own
+   * intent derivation.
+   */
+  readonly intent?: string;
 }
 
 /**
@@ -79,6 +86,9 @@ export function toPortableBlueprint(
     variantKey: variantKey(src.variance),
     source: src.source,
     generatorProtocolVersion: PROTOCOL_VERSION,
+    ...(src.intent !== undefined && src.intent.length > 0
+      ? { intent: src.intent }
+      : {}),
     ...(opts?.catalog !== undefined
       ? { toolIdentityCatalogHash: computeToolCatalogHash(opts.catalog) }
       : {}),
@@ -145,6 +155,11 @@ export function fromPortableBlueprint(record: unknown): PortableBlueprintImportR
     return { ok: false, reason: 'malformed `toolIdentityCatalogHash` (expected string)' };
   }
 
+  const intent = r['intent'];
+  if (intent !== undefined && (typeof intent !== 'string' || intent.length === 0)) {
+    return { ok: false, reason: 'malformed `intent` (expected non-empty string when present)' };
+  }
+
   const contract = dataContractSchema.safeParse(r['contract']);
   if (!contract.success) {
     return { ok: false, reason: `malformed \`contract\`: ${contract.error.message}` };
@@ -170,6 +185,7 @@ export function fromPortableBlueprint(record: unknown): PortableBlueprintImportR
       variantKey: shippedVariantKey,
       source,
       generatorProtocolVersion,
+      ...(intent !== undefined ? { intent } : {}),
       ...(toolIdentityCatalogHash !== undefined ? { toolIdentityCatalogHash } : {}),
     },
     keyMismatch,

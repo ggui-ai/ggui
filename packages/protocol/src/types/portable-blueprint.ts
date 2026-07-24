@@ -43,6 +43,14 @@ export interface PortableBlueprint {
    */
   readonly generatorProtocolVersion: string;
   /**
+   * Intent prose the blueprint was registered under — the semantic
+   * (Tier-2) matching input at the import side. Optional: artifacts
+   * exported before this field existed still import, with the
+   * importer deriving intent from its own fallbacks. When present it
+   * MUST be non-empty.
+   */
+  readonly intent?: string;
+  /**
    * SHA256(16) of the tool-identity catalog used to canonicalize
    * `contract` at export. Importers re-canonicalize against their own
    * catalog and recompute the key; a divergence means the same intent

@@ -20,6 +20,14 @@ export interface ExportableBlueprint {
    * (see {@link listRegistryBlueprintsForExport}).
    */
   readonly source: BlueprintSource;
+  /**
+   * The row's intent prose — the semantic-matching (Tier-2) input.
+   * Optional defensively: registry rows always carry a non-empty
+   * intent, but the export must tolerate a legacy row without one.
+   * Dropped here pre-#342, which forced every pushed row onto the
+   * artifactId fallback — useless prose for semantic matching.
+   */
+  readonly intent?: string;
 }
 
 /**
@@ -74,7 +82,16 @@ export async function listRegistryBlueprintsForExport(
         /* default {} */
       }
     }
-    out.push({ contract, componentCode: codeRaw, variance, source });
+    const intentRaw = m['intent'];
+    out.push({
+      contract,
+      componentCode: codeRaw,
+      variance,
+      source,
+      ...(typeof intentRaw === 'string' && intentRaw.length > 0
+        ? { intent: intentRaw }
+        : {}),
+    });
   }
   return out;
 }

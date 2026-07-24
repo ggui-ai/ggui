@@ -42,6 +42,14 @@ describe('toPortableBlueprint', () => {
       toPortableBlueprint({ ...src, contract: { ...contract } }).contractHash,
     );
   });
+
+  it('carries intent when the source has one, omits it when absent/empty', () => {
+    expect(toPortableBlueprint({ ...src, intent: 'todo list with filters' }).intent).toBe(
+      'todo list with filters',
+    );
+    expect('intent' in toPortableBlueprint(src)).toBe(false);
+    expect('intent' in toPortableBlueprint({ ...src, intent: '' })).toBe(false);
+  });
 });
 
 describe('fromPortableBlueprint', () => {
@@ -54,6 +62,25 @@ describe('fromPortableBlueprint', () => {
     expect(result.record.componentCode).toBe(src.componentCode);
     expect(result.record.source).toEqual(src.source);
     expect(result.record.generatorProtocolVersion).toBe(PROTOCOL_VERSION);
+  });
+
+  it('round-trips intent and rejects a malformed one', () => {
+    const withIntent = fromPortableBlueprint(
+      toPortableBlueprint({ ...src, intent: 'todo list with filters' }),
+    );
+    expect(withIntent.ok).toBe(true);
+    if (withIntent.ok) {
+      expect(withIntent.record.intent).toBe('todo list with filters');
+    }
+    // Absent intent stays absent through the canonical rebuild.
+    const without = fromPortableBlueprint(toPortableBlueprint(src));
+    expect(without.ok).toBe(true);
+    if (without.ok) expect('intent' in without.record).toBe(false);
+    // Present-but-empty (or non-string) is malformed, not tolerated.
+    const empty = fromPortableBlueprint({ ...toPortableBlueprint(src), intent: '' });
+    expect(empty.ok).toBe(false);
+    const nonString = fromPortableBlueprint({ ...toPortableBlueprint(src), intent: 42 });
+    expect(nonString.ok).toBe(false);
   });
 
   it('recomputes keys and flags shipped-key mismatch', () => {

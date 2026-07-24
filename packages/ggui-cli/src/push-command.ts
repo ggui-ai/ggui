@@ -24,6 +24,13 @@ export interface PushRecord {
   readonly manifest: {
     readonly contract: DataContract;
     readonly description?: string;
+    /**
+     * Intent prose from the exported registry row — first choice of
+     * the server-side intent derivation (`intent ?? description ??
+     * name ?? artifactId`), so semantic (Tier-2) matching gets real
+     * prose instead of the artifactId fallback.
+     */
+    readonly intent?: string;
     /** Generator era this blueprint was built against — feeds the import gate. */
     readonly generatorProtocolVersion?: string;
     /** Tool-identity catalog hash at export — feeds the import gate's re-key check. */
@@ -157,6 +164,7 @@ export async function buildBlueprintPushPayload(artifactDir: string): Promise<Pu
         ...(r.variance.seedPrompt !== undefined
           ? { description: r.variance.seedPrompt }
           : {}),
+        ...(r.intent !== undefined ? { intent: r.intent } : {}),
         // Carry the PortableBlueprint stamp fields so the cloud import gate
         // can verify generator era + tool-identity catalog at load time.
         // v2 records always carry the era stamp; the catalog hash stays

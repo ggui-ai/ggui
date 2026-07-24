@@ -88,6 +88,34 @@ describe('buildBlueprintPushPayload', () => {
     expect(r!.version).toBe('1');
   });
 
+  it('threads intent from the pool artifact into the manifest (absent stays absent)', async () => {
+    const withIntent = toPortableBlueprint({
+      contract,
+      componentCode: CODE,
+      variance: {},
+      source: { kind: 'user' },
+      intent: 'status board with refresh',
+    });
+    await writePoolArtifact(dir, [withIntent]);
+
+    const payload = await buildBlueprintPushPayload(dir);
+    expect(payload).toHaveLength(1);
+    // First choice of the server-side derivation chain
+    // (`intent ?? description ?? name ?? artifactId`) — real prose for
+    // Tier-2 semantic matching instead of the artifactId fallback.
+    expect(payload[0]!.manifest.intent).toBe('status board with refresh');
+
+    const without = toPortableBlueprint({
+      contract,
+      componentCode: CODE,
+      variance: {},
+      source: { kind: 'user' },
+    });
+    await writePoolArtifact(dir, [without]);
+    const payload2 = await buildBlueprintPushPayload(dir);
+    expect('intent' in payload2[0]!.manifest).toBe(false);
+  });
+
   it('artifactId encodes both contractHash and variantKey without truncation', async () => {
     const record = toPortableBlueprint({ contract, componentCode: CODE, variance: {}, source: { kind: 'user' } });
     await writePoolArtifact(dir, [record]);
