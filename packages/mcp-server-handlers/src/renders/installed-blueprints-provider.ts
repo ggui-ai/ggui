@@ -67,6 +67,7 @@ import {
   type InstallToCacheInput,
 } from './install-to-cache.js';
 import {
+  composeExactKey,
   deleteBlueprint,
   findBlueprintExact,
   listBlueprints,
@@ -305,6 +306,21 @@ export function createInstalledBlueprintsProvider(
   }
   const ensured = new Map<string, ScopeState>();
 
+  // Bindings THIS provider instance registered, per scope:
+  // contractKey → the exact index key + row id it bound. The walk's
+  // orphan eviction sweeps the backing store's enumeration — but a
+  // replica whose enumeration lags a peer's delete (eventually-
+  // consistent listings) would keep serving Tier-1 hits from its own
+  // process-local index binding, which no enumeration-based sweep can
+  // see. Remembering what we bound lets the walk unbind by exact key
+  // and delete the row by id — no enumeration involved, so listing
+  // lag can't resurrect a hit on this instance. Per-process by
+  // design: each instance cleans the index it writes to.
+  const registeredBindings = new Map<
+    string,
+    Map<string, { readonly exactKey: string; readonly id: string }>
+  >();
+
   async function walkScope(
     scope: string,
     entries: readonly InstalledBlueprintEntry[],
@@ -351,10 +367,23 @@ export function createInstalledBlueprintsProvider(
       }
 
       try {
-        await installToCache(options.deps, scope, {
+        const registered = await installToCache(options.deps, scope, {
           contract: entry.contract,
           componentCode: compileResult.code,
           intent: entry.intent,
+        });
+        let bucket = registeredBindings.get(scope);
+        if (!bucket) {
+          bucket = new Map();
+          registeredBindings.set(scope, bucket);
+        }
+        bucket.set(registered.contractKey, {
+          exactKey: composeExactKey(
+            registered.kind,
+            registered.contractKey,
+            registered.variantKey,
+          ),
+          id: registered.id,
         });
       } catch (err) {
         options.onIssue?.({
@@ -375,15 +404,6 @@ export function createInstalledBlueprintsProvider(
     // rows) survive untouched — eviction keys on the lifecycle
     // marker, never on authorship.
     //
-    // listByScope is a single enumeration call (S3VectorsStorage,
-    // sqlite, in-memory all support it). Skip eviction when the
-    // backend isn't enumerable rather than fail — non-enumerable
-    // backends are rare (legacy hosted before Opt-B) and the symptom
-    // gracefully degrades to the pre-fix state for them.
-    const store = options.deps.vectorStore;
-    if (!('listByScope' in store) || typeof store.listByScope !== 'function') {
-      return;
-    }
     const liveKeys = new Set<string>();
     for (const entry of entries) {
       try {
@@ -393,6 +413,55 @@ export function createInstalledBlueprintsProvider(
         // walk; skip from the live-set so it doesn't accidentally
         // mask an orphan elsewhere.
       }
+    }
+
+    // Local binding sweep FIRST — unbind rows THIS instance
+    // registered whose contractKey left the discovered set, by
+    // remembered exact key + id. Runs before (and independent of)
+    // the enumeration-based scan below: it needs no enumeration, so
+    // it works on non-enumerable backends AND is immune to a lagging
+    // listing hiding a peer-deleted row. Without it, a Tier-1 index
+    // hit on this instance keeps re-validating against the lagging
+    // listing and serves the uninstalled blueprint until the lag
+    // clears (G4 pod-matcher failure, run 30072993411).
+    const bucket = registeredBindings.get(scope);
+    if (bucket) {
+      for (const [cKey, binding] of bucket) {
+        if (liveKeys.has(cKey)) continue;
+        try {
+          await options.deps.index.deleteId(scope, binding.exactKey);
+        } catch {
+          // Best-effort — a surviving binding self-heals only once
+          // the backing listing catches up; the issue line below
+          // still surfaces the attempt.
+        }
+        try {
+          await options.deps.vectorStore.deleteVector(scope, binding.id);
+        } catch {
+          // Best-effort — the enumeration-based scan retries when
+          // the row is visible.
+        }
+        bucket.delete(cKey);
+        options.onIssue?.({
+          id: binding.id,
+          manifestPath: scope,
+          kind: 'stale-row-evicted',
+          message:
+            `unbound locally-registered row (contractKey=${cKey}) — ` +
+            'entry no longer in the discovered set; caller likely uninstalled it',
+        });
+      }
+      if (bucket.size === 0) registeredBindings.delete(scope);
+    }
+
+    // listByScope is a single enumeration call (S3VectorsStorage,
+    // sqlite, in-memory all support it). Skip eviction when the
+    // backend isn't enumerable rather than fail — non-enumerable
+    // backends are rare (legacy hosted before Opt-B) and the symptom
+    // gracefully degrades to the pre-fix state for them.
+    const store = options.deps.vectorStore;
+    if (!('listByScope' in store) || typeof store.listByScope !== 'function') {
+      return;
     }
     let cached: ReadonlyArray<{
       readonly id: string;
