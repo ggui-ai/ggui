@@ -1,0 +1,37 @@
+# Verdaccio config for the samples-render harness.
+# @ggui-ai/* served locally only; everything else proxied to npmjs.
+# max_body_size raised to 50mb because @ggui-ai/ui-gen packs to ~18 MB.
+storage: /verdaccio/storage
+auth:
+  htpasswd:
+    file: /verdaccio/htpasswd
+    max_users: 100
+
+uplinks:
+  npmjs:
+    url: https://registry.npmjs.org/
+
+packages:
+  # @ggui-ai/* has NO `proxy:` ON PURPOSE — Verdaccio serves it from LOCAL
+  # storage only and 404s on any version not published this run. Load-bearing
+  # for gate validity: a fallthrough to an uplink would let the install silently
+  # resolve a real-npm prerelease and false-pass. Do NOT add a proxy/uplink here.
+  "@ggui-ai/*":
+    access: $all
+    publish: $all
+  "**":
+    access: $all
+    proxy: npmjs
+
+server:
+  keepAliveTimeout: 60
+
+# @ggui-ai/ui-gen packs to ~18 MB, so the default 10 MB limit must be raised.
+max_body_size: 50mb
+
+listen: 0.0.0.0:4873
+
+log:
+  type: stdout
+  format: pretty
+  level: warn

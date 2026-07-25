@@ -1,0 +1,15 @@
+{
+  "name": "@ggui-ai/e2e-samples-render",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Sub-tier B container e2e: render + cache-hit + seed-pool against an app COMPOSED directly from oss/samples/* (Verdaccio cohort → compose-app.mjs → pnpm dev).",
+  "scripts": {
+    "test": "playwright test",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.60.0",
+    "@types/node": "^24.0.0",
+    "dotenv": "^16.4.0"
+  }
+}

@@ -42,9 +42,15 @@ packages:
   - "e2e/mcp-host-simulator"
   # Sub-tier B container e2e — render + cache-hit against the SCAFFOLDED
   # published app (Verdaccio cohort → create-agentic-app → pnpm dev).
+  # Retires with the scaffolder (e2e re-architecture Phase 2).
   - "e2e/scaffold-render"
-  # Marketplace test fixtures — workspace-private published gadget /
-  # blueprint repos consumed by e2e to exercise publish→search→install.
+  # Sub-tier B container e2e (Phase-1 replacement) — render + cache-hit +
+  # seed-pool against an app COMPOSED directly from samples/*
+  # (Verdaccio cohort → compose-app.mjs → pnpm dev).
+  - "e2e/samples-render"
+  # Shared e2e fixtures — marketplace test repos (published gadget /
+  # blueprint repos exercising publish→search→install) and the
+  # dependency-free mcp-turn MCP turn-driver.
   - "e2e/fixtures/*"
   # Reference samples — one agent framework / gadget / ggui / mcp-server
   # per dir. Workspace-private; not published.

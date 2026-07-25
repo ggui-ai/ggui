@@ -1,12 +1,17 @@
 /**
- * Browserless MCP turn-driver for the scaffold-render sub-tier-B specs.
+ * Browserless MCP turn-driver — SHARED e2e fixture.
  *
- * Talks DIRECTLY to a scaffolded app's `ggui serve` HTTP/MCP endpoint (no
+ * Talks DIRECTLY to a booted app's `ggui serve` HTTP/MCP endpoint (no
  * browser): `ggui_handshake` → `ggui_render`, parsing both the JSON and SSE
- * transport shapes. Inlined (rather than importing the journeys harness) so the
- * Verdaccio sub-tier-B specs stay dependency-free — they speak to the published
- * app's own ggui server, not a workspace-spawned one, and pull in no import-time
- * filesystem-walking helpers.
+ * transport shapes. Self-contained by design (zero imports, rather than
+ * importing the journeys harness) so its consumers stay dependency-free —
+ * they speak to the published app's own ggui server, not a workspace-spawned
+ * one, and pull in no import-time filesystem-walking helpers.
+ *
+ * Consumers (all via relative import — keep this file import-free):
+ *   - oss/e2e/samples-render (seed-pool-reuse.spec.ts) — sub-tier B
+ *   - cloud/e2e/scenarios/scaffold-persist (spec pair + cli-rest-helpers)
+ *   - cloud/e2e/scenarios/scaffold-cloud-render
  *
  * Not a spec — no `.spec.`/`.test.` suffix, so Playwright's testMatch skips it.
  */

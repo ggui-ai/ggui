@@ -1,0 +1,14 @@
+# Workspace layout of the composed app (mirrors the shipped agentic-app
+# topology): one agent backend, one ggui server, domain MCP servers under
+# servers/mcps/*, frontend SPAs under apps/*.
+packages:
+  - "servers/agent"
+  - "servers/ggui"
+  - "servers/mcps/*"
+  - "apps/*"
+
+# pnpm 11 defaults that would otherwise prompt during `pnpm dev:*` runs in
+# non-TTY contexts (the container cell, CI).
+verifyDepsBeforeRun: false
+strictDepBuilds: false
+autoInstallPeers: true
