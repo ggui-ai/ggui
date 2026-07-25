@@ -22,3 +22,4 @@ dist/
 e2e-results/
 test-results/
 playwright-report/
+.silverprotocol-corpus/

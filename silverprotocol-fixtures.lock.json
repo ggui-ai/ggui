@@ -1,0 +1,32 @@
+{
+  "$comment": "Pinned-SHA consumption of the silverprotocol cassette corpus — the negotiated Phase 4 distribution (docs/plans/2026-07-22-e2e-rearchitecture-three-repo.md; silverprotocol/workspace#1). Cassettes are NON-NORMATIVE realism fixtures under the FIXTURES.md consumer contract: assert only on event types, ordering, tool names, scenario intent, and reduce() shape — never prose, ids, token counts, or timestamps. Read-only; refresh = bump `commit` + rehash via a reviewable PR (scripts/sync-silverprotocol-corpus.mjs --relock). Fetched into .silverprotocol-corpus/ (gitignored) by scripts/sync-silverprotocol-corpus.mjs.",
+  "repo": "silverprotocol/typescript-sdk",
+  "commit": "bb71e0c3f4b931b8e8ae56034c65e739db5afc22",
+  "basePath": "packages/e2e/corpus",
+  "files": [
+    {
+      "path": "app-spec-gemini36/adk.agjson.json",
+      "sha256": "59aa53a00f092599aeaf0f9ccba0123156428d493425391a612b8609d5af923d"
+    },
+    {
+      "path": "app-spec-gemini36/adk.native.json",
+      "sha256": "1d83db40f56deb45a336fe6a52d8ebac005e2ec2e7cadb159f91661c0ca2b9f3"
+    },
+    {
+      "path": "app-spec-gemini36/adk.provenance.json",
+      "sha256": "e7377aa4b559a415a6fda29b373919a9de5b430c4d6e9184824a00ba7fb053fe"
+    },
+    {
+      "path": "app-update-sonnet5/claude.agjson.json",
+      "sha256": "7eabfb56b74bca2e0f5275252b9e545424014aad0694a5ca1d5a3a18a81f15bb"
+    },
+    {
+      "path": "app-update-sonnet5/claude.native.json",
+      "sha256": "fbbb9eec80f179000438f5cf7af6a1754c237fee8e1346384aaf0c5067eaa356"
+    },
+    {
+      "path": "app-update-sonnet5/claude.provenance.json",
+      "sha256": "2fa97ad20f5b28e5877a8d273728a07cb2fed84115171fa676faea655eb1fe31"
+    }
+  ]
+}

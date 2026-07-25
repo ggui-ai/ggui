@@ -283,6 +283,9 @@ importers:
         specifier: ^4.12.18
         version: 4.12.19
     devDependencies:
+      '@silverprotocol/core':
+        specifier: ^0.3.7
+        version: 0.3.7
       '@types/node':
         specifier: ^24.0.0
         version: 24.12.4
@@ -692,6 +695,9 @@ importers:
       '@modelcontextprotocol/sdk':
         specifier: 1.27.1
         version: 1.27.1(zod@4.3.6)
+      '@silverprotocol/core':
+        specifier: ^0.3.7
+        version: 0.3.7
       '@testing-library/react':
         specifier: ^16.0.0
         version: 16.3.2(@testing-library/dom@10.4.0)(@types/react-dom@19.2.3(@types/react@19.0.14))(@types/react@19.0.14)(react-dom@19.0.0(react@19.0.0))(react@19.0.0)
@@ -3765,6 +3771,9 @@ packages:
   '@sigstore/verify@3.1.0':
     resolution: {integrity: sha512-mNe0Iigql08YupSOGv197YdHpPPr+EzDZmfCgMc7RPNaZTw5aLN01nBl6CHJOh3BGtnMIj83EeN4butBchc8Ag==}
     engines: {node: ^20.17.0 || >=22.9.0}
+
+  '@silverprotocol/core@0.3.7':
+    resolution: {integrity: sha512-nKubhCZUSnDwZ5Dms/aNnqe2hMjlcWl8MjJqtqqAgFi4XZUe4/9YjKV1yYIe8qDjcgNR5X4w7mVAbFTQjFk/rQ==}
 
   '@sinclair/typebox@0.27.10':
     resolution: {integrity: sha512-MTBk/3jGLNB2tVxv6uLlFh1iu64iYOQ2PbdOSK3NW8JZsmlaOh2q6sdtKowBhfw8QFLmYNzTW4/oK4uATIi6ZA==}
@@ -10921,7 +10930,7 @@ snapshots:
   '@mikro-orm/mariadb@6.6.13(@mikro-orm/core@6.6.13)(better-sqlite3@12.9.0)(pg@8.20.0)':
     dependencies:
       '@mikro-orm/core': 6.6.13
-      '@mikro-orm/knex': 6.6.14(@mikro-orm/core@6.6.13)(better-sqlite3@12.9.0)(mariadb@3.4.5)(mysql2@3.20.0(@types/node@22.19.15))(pg@8.20.0)
+      '@mikro-orm/knex': 6.6.14(@mikro-orm/core@6.6.13)(better-sqlite3@12.9.0)(mariadb@3.4.5)(pg@8.20.0)(sqlite3@5.1.7)
       mariadb: 3.4.5
     transitivePeerDependencies:
       - better-sqlite3
@@ -10975,7 +10984,7 @@ snapshots:
   '@mikro-orm/postgresql@6.6.13(@mikro-orm/core@6.6.13)(better-sqlite3@12.9.0)(mariadb@3.4.5)':
     dependencies:
       '@mikro-orm/core': 6.6.13
-      '@mikro-orm/knex': 6.6.14(@mikro-orm/core@6.6.13)(better-sqlite3@12.9.0)(mariadb@3.4.5)(mysql2@3.20.0(@types/node@22.19.15))(pg@8.20.0)
+      '@mikro-orm/knex': 6.6.14(@mikro-orm/core@6.6.13)(better-sqlite3@12.9.0)(mariadb@3.4.5)(pg@8.20.0)(sqlite3@5.1.7)
       pg: 8.20.0
       postgres-array: 3.0.4
       postgres-date: 2.1.0
@@ -11655,6 +11664,10 @@ snapshots:
       '@sigstore/bundle': 4.0.0
       '@sigstore/core': 3.2.0
       '@sigstore/protobuf-specs': 0.5.1
+
+  '@silverprotocol/core@0.3.7':
+    dependencies:
+      zod: 4.3.6
 
   '@sinclair/typebox@0.27.10': {}
 
