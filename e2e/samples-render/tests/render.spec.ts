@@ -79,7 +79,22 @@ for (const c of SDK_CASES) {
       // app-root .env.local).
       await page.goto(`${app.webUrl}/?agent=${encodeURIComponent(app.agentUrl)}`);
       // Fast-fail on the static chat shell (90s) rather than the test timeout.
-      await expect(page.getByRole('textbox')).toBeVisible({ timeout: 90_000 });
+      // The shell mounts only after the SPA's on-mount agent-manifest fetch
+      // succeeds (App.tsx gates <Chat> on sandboxProxyUrl), so an invisible
+      // textbox with a green readiness poll means the AGENT backend is not
+      // serving — dump the captured boot output before rethrowing, or the
+      // failure is undiagnosable from CI (ggui#367: the agent's `tsx watch`
+      // idles instead of exiting on a module-load crash, so dev.mjs never
+      // tears the tree down and only this log shows the crash line).
+      try {
+        await expect(page.getByRole('textbox')).toBeVisible({ timeout: 90_000 });
+      } catch (err) {
+        // eslint-disable-next-line no-console -- failure diagnostics for the run log.
+        console.log(
+          `[render:${c.sdk}] chat shell never mounted — app boot output (tail):\n${app.stdout().slice(-8000)}`,
+        );
+        throw err;
+      }
       await page.getByRole('textbox').fill(JOURNEY_PROMPT);
       await page.getByRole('button', { name: /send/i }).click();
 
