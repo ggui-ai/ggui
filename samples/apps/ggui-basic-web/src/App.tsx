@@ -51,21 +51,49 @@ export function App() {
   const [sandboxUrl, setSandboxUrl] = useState<string | null>(null);
   const [sandboxError, setSandboxError] = useState<string | null>(null);
 
+  // The dev servers start in parallel and the agent backend can bind
+  // noticeably later than the web server (a large SDK module graph — e.g.
+  // @google/adk — takes seconds to load under tsx). A one-shot fetch here
+  // turns that boot race into a PERMANENT error page that only a manual
+  // reload clears. So: retry network-level failures (backend not up yet)
+  // with a deadline, keeping the "Connecting…" state alive while it boots.
+  // A response that arrives but is wrong (non-OK status, non-manifest body)
+  // is terminal — the backend IS up, it just isn't an MCP-Apps agent.
   useEffect(() => {
+    const RETRY_MS = 1_500;
+    const DEADLINE_MS = 90_000;
     let cancelled = false;
     void (async () => {
-      try {
-        const res = await fetch(`${AGENT_ENDPOINT}/`, {
-          headers: { Accept: 'application/json' },
-        });
+      const deadline = Date.now() + DEADLINE_MS;
+      for (;;) {
+        let res: Response;
+        try {
+          res = await fetch(`${AGENT_ENDPOINT}/`, {
+            headers: { Accept: 'application/json' },
+          });
+        } catch (err) {
+          if (cancelled) return;
+          if (Date.now() >= deadline) {
+            setSandboxError(err instanceof Error ? err.message : String(err));
+            return;
+          }
+          await new Promise((r) => setTimeout(r, RETRY_MS));
+          if (cancelled) return;
+          continue;
+        }
         if (cancelled) return;
         if (!res.ok) {
           setSandboxError(`backend returned ${res.status}`);
           return;
         }
-        const body = (await res.json()) as {
-          readonly sandboxProxyUrl?: unknown;
-        };
+        let body: { readonly sandboxProxyUrl?: unknown };
+        try {
+          body = (await res.json()) as { readonly sandboxProxyUrl?: unknown };
+        } catch {
+          if (!cancelled) setSandboxError('backend manifest is not JSON');
+          return;
+        }
+        if (cancelled) return;
         if (
           typeof body.sandboxProxyUrl !== 'string' ||
           body.sandboxProxyUrl.length === 0
@@ -74,10 +102,7 @@ export function App() {
           return;
         }
         setSandboxUrl(body.sandboxProxyUrl);
-      } catch (err) {
-        if (!cancelled) {
-          setSandboxError(err instanceof Error ? err.message : String(err));
-        }
+        return;
       }
     })();
     return () => {
