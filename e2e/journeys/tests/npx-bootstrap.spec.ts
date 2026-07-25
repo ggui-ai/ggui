@@ -34,7 +34,7 @@
  *
  * The retired `/s/<shortCode>` console render-viewer step is gone: the
  * canonical render-delivery surface is the MCP-Apps iframe path, covered
- * by the scaffold-render container e2e. This spec stays boot-focused.
+ * by the samples-render container e2e. This spec stays boot-focused.
  *
  * WHAT THIS SPEC DOES **NOT** PROVE (and why):
  *   - Real component-code generation. The OSS `ggui_render` deliberately

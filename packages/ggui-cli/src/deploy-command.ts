@@ -260,7 +260,7 @@ export async function runDeployCommand(_args: readonly string[]): Promise<number
   if (!gguiJsonPath) {
     process.stderr.write(
       'ggui deploy: no ggui.json found in this directory or its parents.\n' +
-        '  Run from a scaffolded project directory (one created by `npx @ggui-ai/create-agentic-app`).\n',
+        '  Run from a project directory containing a ggui.json (start from the samples/ quickstart in the ggui repo README).\n',
     );
     return 1;
   }

@@ -9,7 +9,6 @@
 
 <p align="center">
   <a href="https://docs.ggui.ai">Docs</a> ·
-  <a href="https://github.com/ggui-ai/agentic-app-templates">Template repos</a> ·
   <a href="https://github.com/ggui-ai/ggui/releases">Releases</a>
 </p>
 
@@ -25,21 +24,29 @@ This repo is the **open protocol + reference runtime**. Self-host with `ggui ser
 
 ## Quick start — pick your path
 
-### 1. Build an agentic app from a template _(recommended for new apps)_
+### 1. Build an agentic app from the samples _(recommended for new apps)_
 
-The fastest path to **ship an agent end-to-end**. One command scaffolds a complete pnpm monorepo — chat UI + agent loop + a sample MCP server — pinned to your agent SDK; one more runs the whole thing.
+The fastest path to **ship an agent end-to-end**. The canonical samples are complete, runnable pieces of an agentic app — an agent backend per SDK, a stock ggui server config, a reference MCP server, and a web client. Compose them into a workspace and run the whole thing:
 
 ```bash
-npx @ggui-ai/create-agentic-app --agent claude-agent-sdk my-app
-# or:  --agent openai-agents-sdk   |   --agent google-adk
-cd my-app && pnpm install
-cp .env.example .env.local   # add your LLM API key
+git clone https://github.com/ggui-ai/ggui && cd ggui
+
+# your app = four samples composed into one pnpm workspace:
+#   samples/agents/<sdk>/        → servers/agent/     (claude-agent-sdk | openai-agents-sdk | google-adk)
+#   samples/gguis/default/       → servers/ggui/      (stock `ggui serve` config)
+#   samples/mcp-servers/todo/    → servers/mcps/todo/ (reference domain MCP)
+#   samples/apps/ggui-basic-web/ → apps/web/          (Vite + React chat client)
+# (e2e/samples-render/app-shell/ is the reference root wrapper — package.json
+#  with the dev scripts + pnpm-workspace.yaml + the `pnpm dev` orchestrator.)
+
+pnpm install
+# put your LLM API key in .env.local, then:
 pnpm dev                     # starts ggui + MCP servers + agent + web, then opens the app
 ```
 
-`pnpm dev` brings all four services up together and opens **`http://localhost:6890`** once it's ready — so you never have to guess which port to visit (server logs are hidden by default; `pnpm dev --verbose` streams them). The full loop runs locally: you type → the agent calls domain tools and renders a React UI → you click in that UI → the agent reacts.
+`pnpm dev` brings all four services up together and opens **`http://localhost:6890`** once it's ready — so you never have to guess which port to visit (server logs are hidden by default; `pnpm dev --verbose` streams them). The full loop runs locally: you type → the agent calls domain tools and renders a React UI → you click in that UI → the agent reacts. Each sample carries its own README with standalone run instructions.
 
-Each template subdir at [github.com/ggui-ai/agentic-app-templates](https://github.com/ggui-ai/agentic-app-templates) is a complete project with its own README + `CLAUDE.md` and a `/bootstrap` Claude Code command that walks you through customisation: the system prompt, your own MCP servers (drop a folder under `servers/mcps/` — it's auto-started by `pnpm dev` and auto-registered with the agent), blueprints, and gadgets.
+Building a hosted agent instead? See [guuey.com](https://guuey.com) — the managed platform for running agents (not a drop-in replacement for the samples path).
 
 ### 2. Self-host the OSS MCP server + test from claude.ai
 
@@ -89,7 +96,7 @@ Full CLI reference: [`@ggui-ai/cli` README](./packages/ggui-cli/README.md).
 [`samples/`](https://github.com/ggui-ai/ggui/tree/main/samples) holds end-to-end examples you can clone:
 
 - [`samples/gguis/`](https://github.com/ggui-ai/ggui/tree/main/samples/gguis) — ready-to-run project configs (`default`, `leaflet-demo`, `mapbox-demo`, `canvas-demo`) showing how a `ggui.json` is shaped.
-- [`samples/agents/`](https://github.com/ggui-ai/ggui/tree/main/samples/agents) — reference agents per SDK (Claude Agent SDK, OpenAI Agents SDK, Google ADK) talking to ggui as an MCP server. These same samples are what the template repo's `/bootstrap` fetches.
+- [`samples/agents/`](https://github.com/ggui-ai/ggui/tree/main/samples/agents) — reference agents per SDK (Claude Agent SDK, OpenAI Agents SDK, Google ADK) talking to ggui as an MCP server.
 - [`samples/gadgets/`](https://github.com/ggui-ai/ggui/tree/main/samples/gadgets) — example component / hook gadgets for the marketplace.
 - [`samples/mcp-servers/`](https://github.com/ggui-ai/ggui/tree/main/samples/mcp-servers) — minimal domain MCP servers (e.g. a todo server) you can pair against.
 

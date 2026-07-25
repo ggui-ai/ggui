@@ -11,7 +11,7 @@
  * Consumers (all via relative import — keep this file import-free):
  *   - oss/e2e/samples-render (seed-pool-reuse.spec.ts) — sub-tier B
  *   - cloud/e2e/scenarios/scaffold-persist (spec pair + cli-rest-helpers)
- *   - cloud/e2e/scenarios/scaffold-cloud-render
+ *   - cloud/e2e/scenarios/scaffold-cloud-render (cloud-render.spec.ts)
  *
  * Not a spec — no `.spec.`/`.test.` suffix, so Playwright's testMatch skips it.
  */
@@ -108,7 +108,7 @@ export interface GguiSessionOnceResult extends GguiSessionResult {
  * Per-call MCP transport options.
  *
  *  - `bearer` — the `Authorization: Bearer <…>` value. Defaults to
- *    {@link DEV_BEARER} (`'dev'`), which the local scaffolded `ggui serve
+ *    {@link DEV_BEARER} (`'dev'`), which the local composed app's `ggui serve
  *    --dev-allow-all` accepts as `builder`. The cross-deployment persistence
  *    capstone (cloud Phase B) passes a real app-scoped `ggui_user_*` key here.
  *  - `mcpPath` — the path segment appended to `gguiUrl`. Defaults to `'/mcp'`
@@ -116,8 +116,8 @@ export interface GguiSessionOnceResult extends GguiSessionResult {
  *    the bare root of its per-app endpoint (`/apps/<appId>`), so cloud callers
  *    pass `mcpPath: ''`.
  *
- * Both default to the existing local-scaffold behavior — back-compat for the
- * sub-tier-B scaffold-render callers, which omit `opts` entirely.
+ * Both default to the local composed-app behavior — the
+ * sub-tier-B samples-render callers omit `opts` entirely.
  */
 export interface McpTransportOpts {
   readonly bearer?: string;
@@ -154,7 +154,7 @@ function isDeadSocketError(err: unknown): boolean {
  * Dead-socket resilience: ONE retry (short backoff) when undici reports
  * `UND_ERR_SOCKET` / `'other side closed'` — the keep-alive-reuse race
  * where the request died on the wire before the server processed it
- * (observed flaking the scaffold-render sub-tier-B specs against
+ * (observed flaking the sub-tier-B render specs against
  * long-lived `ggui serve` processes). Safe for the calls this driver
  * serves: `ggui_handshake` re-issues a fresh handshakeId, and a
  * `ggui_render` whose request never left the socket was not consumed
@@ -205,7 +205,7 @@ export async function mcpCall(
 }
 
 /**
- * Drive ONE handshake → render turn against a scaffolded app's ggui server.
+ * Drive ONE handshake → render turn against a composed app's ggui server.
  *
  * `forceCreate` forces a cold generation on the handshake (turn-1). `intent` +
  * `contract` (+ optional request-time `variance`, threaded onto
@@ -222,7 +222,7 @@ export async function mcpCall(
  * Returns the parsed render output + the handshake suggestion + wall-clock ms.
  *
  * `transport` (optional) overrides the bearer + MCP path — see
- * {@link McpTransportOpts}. The local scaffold-render callers omit it (default
+ * {@link McpTransportOpts}. The local samples-render callers omit it (default
  * `Bearer dev` → `/mcp`); the cross-deployment persistence capstone passes
  * `{ bearer: <app key>, mcpPath: '' }` to drive the deployed cloud pod's
  * per-app endpoint.

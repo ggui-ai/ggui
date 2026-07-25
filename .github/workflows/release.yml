@@ -269,7 +269,6 @@ jobs:
             ui-gen
             mcp-server-handlers
             mcp-server
-            create-agentic-app
             ggui-cli
             protocol-conformance
             protocol-reference-server
@@ -777,7 +776,7 @@ jobs:
             registry-core registry-server ui-registry cli project-config
             dev-stack sandbox embedding-local console shared
             protocol-conformance protocol-reference-server ui-visual-tester
-            agent-server create-agentic-app
+            agent-server
           )
           DEADLINE=$(( $(date +%s) + 3600 ))   # +60 min
           attempt=0

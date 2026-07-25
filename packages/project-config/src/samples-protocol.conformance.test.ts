@@ -1,13 +1,13 @@
 /**
- * Drift guard: every shipped `ggui.json` sample (and the template shells'
- * `ggui-json.md` reference doc) MUST declare the CURRENT protocol version.
+ * Drift guard: every shipped `ggui.json` sample MUST declare the CURRENT
+ * protocol version.
  *
  * The schema deliberately validates `protocol` as pattern-only (see
  * {@link GguiJsonV1}), so a stale declaration parses silently — this test is
  * the membership check the schema defers. README contract: "`protocol` MUST
  * match `PROTOCOL_VERSION` exported by `@ggui-ai/protocol`". The samples are
- * also the source the template assembler copies into every published
- * agentic-app template, so drift here ships to every scaffolded project.
+ * also what the samples-render e2e harness composes into a runnable app
+ * (and the public starting point for self-hosters), so drift here ships.
  *
  * Paths are resolved relative to this package so the test works both in the
  * monorepo (`oss/packages/project-config` → `oss/samples`) and in the public
@@ -23,7 +23,6 @@ import { safeParseGguiJson } from './schema.js';
 
 const OSS_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
 const GGUIS_DIR = join(OSS_ROOT, 'samples/gguis');
-const SHELLS_DIR = join(OSS_ROOT, 'template-shells/agentic-app-template');
 
 describe('shipped ggui.json samples declare the current protocol', () => {
   it('finds the samples directory (repo-layout invariant)', () => {
@@ -51,37 +50,6 @@ describe('shipped ggui.json samples declare the current protocol', () => {
       if (parsed.success) {
         expect(parsed.data.protocol).toBe(PROTOCOL_VERSION);
       }
-    },
-  );
-});
-
-describe('template-shell ggui-json.md reference docs declare the current protocol', () => {
-  // The shells exist in the monorepo and the public mirror; if the layout
-  // ever changes, fail loud rather than silently skipping the doc check.
-  it('finds the template-shells directory (repo-layout invariant)', () => {
-    expect(existsSync(SHELLS_DIR)).toBe(true);
-  });
-
-  const shells = existsSync(SHELLS_DIR)
-    ? readdirSync(SHELLS_DIR).filter((d) =>
-        existsSync(join(SHELLS_DIR, d, '.reference/ggui-json.md')),
-      )
-    : [];
-
-  it('has at least one shell reference doc to check', () => {
-    expect(shells.length).toBeGreaterThan(0);
-  });
-
-  it.each(shells)(
-    '%s/.reference/ggui-json.md quotes the current protocol draft',
-    (shell) => {
-      const doc = readFileSync(
-        join(SHELLS_DIR, shell, '.reference/ggui-json.md'),
-        'utf8',
-      );
-      const quoted = /"protocol":\s*"([^"]+)"/.exec(doc);
-      expect(quoted, 'doc must quote a "protocol" field').not.toBeNull();
-      expect(quoted?.[1]).toBe(PROTOCOL_VERSION);
     },
   );
 });

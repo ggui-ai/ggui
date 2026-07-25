@@ -3,7 +3,7 @@
 Container e2e proving the **shipped** `@ggui-ai/*` cohort works end-to-end
 through a real agentic app — with **no scaffolder in the loop**. The harness
 composes the app **directly from the canonical samples** (successor to the
-earlier `create-agentic-app`-based scaffold-render harness):
+retired `create-agentic-app`-based scaffold-render harness):
 
 ```
 samples/agents/<sdk>/        → servers/agent/

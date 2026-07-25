@@ -793,7 +793,7 @@ export async function spawnGguiServeInCwd(
  * removed alongside the `/s/<shortCode>` console render-viewer specs
  * that were its only callers (`tasks-backed-generation.spec.ts`,
  * `notes-backed-generation.spec.ts`). Canonical render delivery is the
- * MCP-Apps iframe path, covered by the scaffold-render container e2e.
+ * MCP-Apps iframe path, covered by the samples-render container e2e.
  * The shared Tasks MCP fixture under `fixtures/mcps/tasks/` is unaffected
  * — surviving mount-via-serve fixtures still consume it. */
 
