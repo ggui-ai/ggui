@@ -149,7 +149,7 @@ export function createOpenAiAdapter(
  * Heuristic chosen over a hard model-list because new gpt-5.x variants
  * ship continuously; the prefix is the contract OpenAI exposes. Same
  * heuristic applies to OpenRouter which wires to backing models — when
- * a caller picks `gpt-5.4-mini` through OpenRouter the same rule fires.
+ * a caller picks `gpt-5.6-luna` through OpenRouter the same rule fires.
  */
 export function buildOpenAiBody(request: ProviderRequest): Record<string, unknown> {
   const body: Record<string, unknown> = {

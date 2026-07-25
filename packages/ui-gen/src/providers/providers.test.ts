@@ -264,6 +264,9 @@ describe('AnthropicAdapter — happy path', () => {
 describe('selectMaxTokensField', () => {
   it('picks max_completion_tokens for gpt-5.x / o1 / o3 / o4', () => {
     expect(selectMaxTokensField('gpt-5.4-mini')).toBe('max_completion_tokens');
+    // Novel named-suffix shape (no dot-separated tier) — the 5.6
+    // family's tier names must still ride the gpt-5 prefix rule.
+    expect(selectMaxTokensField('gpt-5.6-luna')).toBe('max_completion_tokens');
     expect(selectMaxTokensField('gpt-5')).toBe('max_completion_tokens');
     expect(selectMaxTokensField('o1-preview')).toBe('max_completion_tokens');
     expect(selectMaxTokensField('o3-mini')).toBe('max_completion_tokens');

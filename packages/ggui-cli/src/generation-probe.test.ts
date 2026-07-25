@@ -160,7 +160,7 @@ describe('probeGenerationBinding', () => {
       configuredRoute: {
         provider: 'openai',
         // Pinned model is intentionally NOT the per-provider default
-        // (`gpt-5.5-2026-04-23`) so a regression that ignored
+        // (`gpt-5.6-luna`) so a regression that ignored
         // configuredRoute would surface immediately.
         model: 'gpt-5.4-mini',
       },
@@ -314,15 +314,15 @@ describe('resolveConfiguredRoute', () => {
 
   it('env override (canonical form) takes precedence over the manifest', () => {
     // This is the exact e2e provider-matrix case: the manifest pins
-    // anthropic, but the env override repoints to openai's gpt-5.4-mini.
+    // anthropic, but the env override repoints to openai's gpt-5.6-luna.
     expect(
       resolveConfiguredRoute({
-        envModel: 'openai:gpt-5.4-mini',
+        envModel: 'openai:gpt-5.6-luna',
         manifestRoute,
       }),
     ).toEqual({
       kind: 'route',
-      route: { provider: 'openai', model: 'gpt-5.4-mini' },
+      route: { provider: 'openai', model: 'gpt-5.6-luna' },
       source: 'env',
     });
   });
@@ -332,12 +332,12 @@ describe('resolveConfiguredRoute', () => {
     // LiteLLM `gemini/...` prefix maps to the `google` provider.
     expect(
       resolveConfiguredRoute({
-        envModel: 'gemini/gemini-3.1-flash-lite',
+        envModel: 'gemini/gemini-3.5-flash-lite',
         manifestRoute,
       }),
     ).toEqual({
       kind: 'route',
-      route: { provider: 'google', model: 'gemini-3.1-flash-lite' },
+      route: { provider: 'google', model: 'gemini-3.5-flash-lite' },
       source: 'env',
     });
   });
@@ -345,12 +345,12 @@ describe('resolveConfiguredRoute', () => {
   it('env override wins even when the manifest is absent', () => {
     expect(
       resolveConfiguredRoute({
-        envModel: 'google:gemini-3.1-flash-lite',
+        envModel: 'google:gemini-3.5-flash-lite',
         manifestRoute: undefined,
       }),
     ).toEqual({
       kind: 'route',
-      route: { provider: 'google', model: 'gemini-3.1-flash-lite' },
+      route: { provider: 'google', model: 'gemini-3.5-flash-lite' },
       source: 'env',
     });
   });

@@ -182,7 +182,7 @@ const SERVICES: readonly ServiceSpec[] = [
     healthPath: '/healthz',
     envOverride: {
       ...providerOnlyEnv('OPENAI_API_KEY'),
-      GGUI_GENERATION_MODEL: 'openai:gpt-5.4-mini',
+      GGUI_GENERATION_MODEL: 'openai:gpt-5.6-luna',
     },
     skipIf: () => !process.env.OPENAI_API_KEY,
   },
@@ -193,7 +193,7 @@ const SERVICES: readonly ServiceSpec[] = [
     healthPath: '/healthz',
     envOverride: {
       ...providerOnlyEnv('GEMINI_API_KEY'),
-      GGUI_GENERATION_MODEL: 'google:gemini-3.1-flash-lite',
+      GGUI_GENERATION_MODEL: 'google:gemini-3.5-flash-lite',
     },
     skipIf: () => !process.env.GEMINI_API_KEY,
   },

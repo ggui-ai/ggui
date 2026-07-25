@@ -32,7 +32,7 @@ const APP_NAME = 'ggui-agent-google-adk';
 const DEFAULT_USER_ID = 'sample-user';
 
 export interface GoogleAdkAdapterOptions {
-  /** Default `gemini-3.5-flash`. */
+  /** Default `gemini-3.6-flash`. */
   readonly model?: string;
   /**
    * Default `process.env.GEMINI_API_KEY` (falls back to
@@ -83,7 +83,7 @@ export function createGoogleAdkAdapter(
   }
   // ADK reads GOOGLE_API_KEY from env at model-client construction.
   if (!process.env.GOOGLE_API_KEY) process.env.GOOGLE_API_KEY = apiKey;
-  const model = opts.model ?? 'gemini-3.5-flash';
+  const model = opts.model ?? 'gemini-3.6-flash';
 
   let sharedStateInit: Promise<SharedState> | null = null;
 

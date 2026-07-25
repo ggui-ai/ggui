@@ -59,8 +59,12 @@ export const MODELS = {
   anthropic: [
     // Wire-canonical IDs accepted by api.anthropic.com/v1/messages.
     // Per Anthropic's official models doc (claude.com/docs/about-claude/models/overview):
-    // 4.6/4.7 generation dropped the date suffix in the wire ID;
-    // Haiku 4.5 still uses the dated form.
+    // the Claude 5 family (2026-07: Opus 5, Sonnet 5, and the
+    // Mythos-class Fable 5) and the 4.6/4.7 generation carry undated
+    // wire IDs; Haiku 4.5 still uses the dated form.
+    'claude-fable-5',
+    'claude-opus-5',
+    'claude-sonnet-5',
     'claude-haiku-4-5-20251001',
     'claude-sonnet-4-6',
     'claude-opus-4-7',
@@ -70,6 +74,14 @@ export const MODELS = {
     // Per OpenAI's model registry (developers.openai.com/api/docs/models/all).
     // Both unversioned aliases AND dated snapshots are valid wire IDs;
     // we enumerate both because operators reasonably use either.
+    // GPT-5.6 family (2026-07): named-suffix tiers — `sol` (deepest
+    // reasoning), `terra` (balanced), `luna` (fast/cost). The bare
+    // `gpt-5.6` alias routes to Sol on OpenAI's side. No dated
+    // siblings registered at adoption time.
+    'gpt-5.6',
+    'gpt-5.6-sol',
+    'gpt-5.6-terra',
+    'gpt-5.6-luna',
     'gpt-5.5',
     'gpt-5.5-2026-04-23',
     'gpt-5.5-pro',
@@ -87,7 +99,9 @@ export const MODELS = {
     // Stable + the commonly-used previews. The `-preview` suffix is
     // load-bearing on the wire for preview models — Gemini's API
     // rejects the bare name for those.
+    'gemini-3.6-flash',
     'gemini-3.5-flash',
+    'gemini-3.5-flash-lite',
     'gemini-flash-latest',
     'gemini-3.1-flash-lite',
     'gemini-3.1-pro-preview',
@@ -138,16 +152,24 @@ export const MODELS = {
     // uses dash (`claude-haiku-4-5`) — preserve OpenRouter's wire form.
 
     // Anthropic family
+    'anthropic/claude-fable-5',
+    'anthropic/claude-opus-5',
+    'anthropic/claude-sonnet-5',
     'anthropic/claude-haiku-4.5',
     'anthropic/claude-sonnet-4.6',
     'anthropic/claude-opus-4.7',
     // OpenAI family
+    'openai/gpt-5.6-sol',
+    'openai/gpt-5.6-terra',
+    'openai/gpt-5.6-luna',
     'openai/gpt-5.5',
     'openai/gpt-5.5-pro',
     'openai/gpt-5.4-mini',
     'openai/gpt-5.4-nano',
     // Google family
+    'google/gemini-3.6-flash',
     'google/gemini-3.5-flash',
+    'google/gemini-3.5-flash-lite',
     'google/gemini-3.1-pro-preview',
     'google/gemini-3.1-flash-lite',
     // Frontier alternatives

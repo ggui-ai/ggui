@@ -82,8 +82,8 @@ export const DEFAULT_ROUTE_BY_PROVIDER: Readonly<
   Record<Exclude<LlmProvider, 'bedrock'>, LlmRoute>
 > = {
   anthropic: { provider: 'anthropic', model: 'claude-haiku-4-5-20251001' },
-  openai: { provider: 'openai', model: 'gpt-5.5-2026-04-23' },
-  google: { provider: 'google', model: 'gemini-3.1-flash-lite' },
+  openai: { provider: 'openai', model: 'gpt-5.6-luna' },
+  google: { provider: 'google', model: 'gemini-3.5-flash-lite' },
   openrouter: { provider: 'openrouter', model: 'anthropic/claude-haiku-4.5' },
 };
 
@@ -120,7 +120,7 @@ export type ResolveConfiguredRouteResult =
  *
  *   1. `GGUI_GENERATION_MODEL` (when set + non-empty) — parsed via
  *      {@link parseAnyLlmRoute}, accepting both canonical
- *      (`openai:gpt-5.4-mini`) and LiteLLM (`gemini/gemini-3.1-flash-lite`)
+ *      (`openai:gpt-5.6-luna`) and LiteLLM (`gemini/gemini-3.5-flash-lite`)
  *      forms. A malformed value yields `kind: 'invalid-env'` so the
  *      caller can hard-fail rather than silently ignore the operator's
  *      intent.

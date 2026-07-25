@@ -102,8 +102,8 @@ const AGENT_TARGET = 'servers/agent';
 // @ggui-ai/protocol's MODELS registry (providers: anthropic | openai | google).
 const GGUI_GENERATION_MODEL = /** @type {const} */ ({
   'claude-agent-sdk': 'anthropic:claude-haiku-4-5-20251001',
-  'openai-agents-sdk': 'openai:gpt-5.4-mini',
-  'google-adk': 'google:gemini-3.1-flash-lite',
+  'openai-agents-sdk': 'openai:gpt-5.6-luna',
+  'google-adk': 'google:gemini-3.5-flash-lite',
 });
 
 /**

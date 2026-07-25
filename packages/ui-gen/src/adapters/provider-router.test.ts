@@ -47,7 +47,7 @@ const ANT_ROUTE: LlmRoute = {
   provider: 'anthropic',
   model: 'claude-haiku-4-5-20251001',
 };
-const OAI_ROUTE: LlmRoute = { provider: 'openai', model: 'gpt-5.4-mini' };
+const OAI_ROUTE: LlmRoute = { provider: 'openai', model: 'gpt-5.6-luna' };
 const G_ROUTE: LlmRoute = { provider: 'google', model: 'gemini-3.5-flash' };
 const OR_ROUTE: LlmRoute = {
   provider: 'openrouter',
@@ -155,7 +155,7 @@ describe('resolveRoute — OpenAI', () => {
       apiKey: 'sk-openai-test',
       env: EMPTY_ENV,
     });
-    expect(route.model).toBe('gpt-5.4-mini');
+    expect(route.model).toBe('gpt-5.6-luna');
     expect(route.env.OPENAI_API_KEY).toBe('sk-openai-test');
   });
 
@@ -182,7 +182,7 @@ describe('resolveRoute — OpenAI', () => {
     ).toThrow(/API key/);
     expect(() =>
       resolveRoute({ route: OAI_ROUTE, env: EMPTY_ENV }),
-    ).toThrow(/openai:gpt-5\.4-mini/);
+    ).toThrow(/openai:gpt-5\.6-luna/);
   });
 });
 

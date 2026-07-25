@@ -629,8 +629,8 @@ async function runServeCommand(args: string[]): Promise<number> {
     process.stderr.write(
       `ggui serve: ${GENERATION_MODEL_ENV}="${routeResolution.raw}" is not a ` +
         `valid model route. Accepted forms:\n` +
-        `  - canonical: "openai:gpt-5.4-mini"\n` +
-        `  - LiteLLM:   "gemini/gemini-3.1-flash-lite"\n` +
+        `  - canonical: "openai:gpt-5.6-luna"\n` +
+        `  - LiteLLM:   "gemini/gemini-3.5-flash-lite"\n` +
         `See docs/principles/model-string-convention.md.\n`,
     );
     return 1;

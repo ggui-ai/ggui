@@ -219,7 +219,7 @@ function buildEvalResult(
 function getDefaultEvalModel(provider: string): string {
   switch (provider) {
     case 'claude': return 'claude-haiku-4-5-20251001';
-    case 'openai': return 'gpt-5.4-mini';
+    case 'openai': return 'gpt-5.6-luna';
     case 'google': return 'gemini-3-flash-preview';
     default: return 'claude-haiku-4-5-20251001';
   }
