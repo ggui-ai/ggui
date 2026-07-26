@@ -120,10 +120,13 @@ export { GguiSessionNotFoundError, ContractViolationError };
  * carrying a structured envelope; OSS deployments leave the gate
  * unbound and skip the check entirely).
  *
- * Cloud's traffic-class gate (kind=user vs kind=app vs playground vs
- * RENDER_ALLOW_NON_PLAYGROUND env override) plugs in here instead of
- * cloud's update.ts owning its own gate. The same interface is used
- * for kind-aware billing pre-checks (BYOK + credit pool) on render.
+ * As of ggui#386 (2026-07-27) no first-party deployment binds a gate on
+ * update — ggui_update performs no generation and no charge, so cloud's
+ * former Phase-3c traffic gate here was a category error and was
+ * deleted. The seam stays: it is the documented extension point for any
+ * deployment that DOES want a pre-mutation policy on update, and the
+ * alignment contract test uses it to pin that malformed input rejects
+ * before the gate ever runs.
  */
 export interface BillingGate {
   preCheck(input: {
