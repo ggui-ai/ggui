@@ -197,8 +197,13 @@ function composeOne(sdk, outDir) {
     copyTree(resolve(OSS_ROOT, sample), join(outDir, target));
   }
 
-  // 3b. Point ggui's UI generation at this SDK's own provider.
+  // 3b. Point ggui's UI generation at this SDK's own provider. Guard the
+  // map lookup: an SDK added to SDKS without a model entry would otherwise
+  // silently write `generation.model: undefined` into the composed config.
   const gguiModel = GGUI_GENERATION_MODEL[sdk];
+  if (!gguiModel) {
+    throw new Error(`compose-app: no GGUI_GENERATION_MODEL entry for "${sdk}"`);
+  }
   const gguiJsonPath = join(outDir, 'servers/ggui/ggui.json');
   const gguiCfg = JSON.parse(readFileSync(gguiJsonPath, 'utf8'));
   gguiCfg.generation = { ...gguiCfg.generation, model: gguiModel };
@@ -214,17 +219,84 @@ function composeOne(sdk, outDir) {
   console.log(`  ✓ app-shell + 4 samples + package-json rewrites`);
 }
 
+/**
+ * `--self-test`: prove the composer's pure logic can FAIL (evidence-tier
+ * parity with the repo's other assembly/drift gates). No filesystem writes.
+ * Asserts the pin-range form, the package.json rewrite rules (including the
+ * throw on an unknown `workspace:*` dep — the composer's only guard against
+ * silently linking unpublished source), and that every SDK has a
+ * well-formed `provider:model` generation-model mapping.
+ */
+function selfTest() {
+  const fail = (msg) => {
+    console.error(`✗ compose-app self-test: ${msg}`);
+    process.exit(1);
+  };
+
+  if (gguiAiPinRange('0.3.0') !== '^0.3.0-alpha.0') {
+    fail(`gguiAiPinRange('0.3.0') → ${gguiAiPinRange('0.3.0')}, expected ^0.3.0-alpha.0`);
+  }
+
+  const pkg = rewritePkgJson(
+    {
+      name: '@ggui-samples/probe',
+      dependencies: { '@ggui-ai/protocol': 'workspace:*', react: '^19.0.0' },
+      devDependencies: { '@ggui-ai/cli': 'workspace:*' },
+      peerDependencies: { '@ggui-samples/mcp-todo': 'workspace:*' },
+    },
+    '^9.9.9-alpha.0',
+  );
+  if (pkg.dependencies['@ggui-ai/protocol'] !== '^9.9.9-alpha.0') {
+    fail('dependencies @ggui-ai/* not rewritten to the pin range');
+  }
+  if (pkg.devDependencies['@ggui-ai/cli'] !== '^9.9.9-alpha.0') {
+    fail('devDependencies @ggui-ai/* not rewritten to the pin range');
+  }
+  if (pkg.peerDependencies['@ggui-samples/mcp-todo'] !== 'workspace:*') {
+    fail('@ggui-samples/* workspace dep must stay workspace:* (composed tree IS a workspace)');
+  }
+  if (pkg.dependencies.react !== '^19.0.0') {
+    fail('non-workspace dep must pass through untouched');
+  }
+
+  let threw = false;
+  try {
+    rewritePkgJson({ name: 'x', dependencies: { '@other/pkg': 'workspace:*' } }, '^1.0.0-alpha.0');
+  } catch {
+    threw = true;
+  }
+  if (!threw) {
+    fail('rewritePkgJson must THROW on an unknown workspace:* dep (seeded negative did not fire)');
+  }
+
+  const mapped = Object.keys(GGUI_GENERATION_MODEL).sort();
+  const sdks = [...SDKS].sort();
+  if (JSON.stringify(mapped) !== JSON.stringify(sdks)) {
+    fail(`GGUI_GENERATION_MODEL keys [${mapped}] must exactly equal SDKS [${sdks}]`);
+  }
+  for (const [sdk, model] of Object.entries(GGUI_GENERATION_MODEL)) {
+    if (!/^[a-z]+:[A-Za-z0-9._-]+$/.test(model)) {
+      fail(`generation model for ${sdk} ("${model}") is not provider:model shaped`);
+    }
+  }
+
+  console.log('✓ compose-app self-test: pin range, rewrite rules (incl. seeded throw), model map — all fire correctly');
+}
+
 function parseArgs(argv) {
-  const args = { sdk: null, out: null };
+  const args = { sdk: null, out: null, selfTest: false };
   for (const a of argv) {
-    if (a.startsWith('--sdk=')) args.sdk = a.slice('--sdk='.length);
+    if (a === '--self-test') args.selfTest = true;
+    else if (a.startsWith('--sdk=')) args.sdk = a.slice('--sdk='.length);
     else if (a.startsWith('--out=')) args.out = a.slice('--out='.length);
     else if (a === '--help' || a === '-h') {
       console.log(`Usage:
   node compose-app.mjs --sdk=<sdk> --out=<dir>
+  node compose-app.mjs --self-test
 
   --sdk=<sdk>   One of: ${SDKS.join(', ')}.
   --out=<dir>   Target dir (wiped + recreated).
+  --self-test   Prove the pure compose logic can fail (no fs writes).
 `);
       process.exit(0);
     } else {
@@ -232,8 +304,9 @@ function parseArgs(argv) {
       process.exit(1);
     }
   }
+  if (args.selfTest) return args;
   if (!args.sdk || !args.out) {
-    console.error('✗ pass --sdk=<sdk> and --out=<dir>');
+    console.error('✗ pass --sdk=<sdk> and --out=<dir> (or --self-test)');
     process.exit(1);
   }
   if (!SDKS.includes(args.sdk)) {
@@ -244,4 +317,8 @@ function parseArgs(argv) {
 }
 
 const args = parseArgs(process.argv.slice(2));
-composeOne(args.sdk, resolve(args.out));
+if (args.selfTest) {
+  selfTest();
+} else {
+  composeOne(args.sdk, resolve(args.out));
+}
