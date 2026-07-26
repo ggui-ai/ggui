@@ -68,7 +68,7 @@
     "@types/node": "^22.0.0",
     "better-sqlite3": "^12.9.0",
     "typescript": "^5.0.0",
-    "vitest": "^3.0.0"
+    "vitest": "^3.2.6"
   },
   "repository": {
     "type": "git",

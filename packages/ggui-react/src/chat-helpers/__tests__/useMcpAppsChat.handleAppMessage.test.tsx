@@ -30,10 +30,10 @@ function emptySseResponse(): Response {
 }
 
 describe('useMcpAppsChat handleAppMessage', () => {
-  let fetchMock: ReturnType<typeof vi.fn<[input: string, init?: RequestInit], Promise<Response>>>;
+  let fetchMock: ReturnType<typeof vi.fn<(input: string, init?: RequestInit) => Promise<Response>>>;
 
   beforeEach(() => {
-    fetchMock = vi.fn<[input: string, init?: RequestInit], Promise<Response>>(async () => emptySseResponse());
+    fetchMock = vi.fn<(input: string, init?: RequestInit) => Promise<Response>>(async () => emptySseResponse());
     vi.stubGlobal('fetch', fetchMock);
   });
 

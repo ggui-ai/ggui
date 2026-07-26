@@ -446,11 +446,11 @@ describe('cassette corpus — app-update-sonnet5/claude.agjson.json', () => {
 
 describe('agent-server SSE wire ↔ useMcpAppsChat ingest (cassette-driven)', () => {
   let fetchMock: ReturnType<
-    typeof vi.fn<[input: string, init?: RequestInit], Promise<Response>>
+    typeof vi.fn<(input: string, init?: RequestInit) => Promise<Response>>
   >;
 
   beforeEach(() => {
-    fetchMock = vi.fn<[input: string, init?: RequestInit], Promise<Response>>(
+    fetchMock = vi.fn<(input: string, init?: RequestInit) => Promise<Response>>(
       async () => sseResponse(''),
     );
     vi.stubGlobal('fetch', fetchMock);

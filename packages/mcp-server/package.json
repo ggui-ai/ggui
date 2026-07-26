@@ -57,7 +57,7 @@
     "@types/nodemailer": "^8.0.0",
     "@types/ws": "^8.5.10",
     "typescript": "^5.0.0",
-    "vitest": "^3.0.0"
+    "vitest": "^3.2.6"
   },
   "repository": {
     "type": "git",
