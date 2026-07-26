@@ -477,7 +477,7 @@ function getDefaultEvalModel(provider: string): string {
     case 'openai':
       return 'gpt-5.6-luna';
     case 'google':
-      return 'gemini-3-flash-preview';
+      return 'gemini-3.5-flash-lite';
     default:
       return 'claude-haiku-4-5-20251001';
   }
