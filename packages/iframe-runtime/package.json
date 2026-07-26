@@ -33,6 +33,7 @@
   "scripts": {
     "build": "rm -rf dist && node esbuild.config.mjs && tsc -p tsconfig.types.json && pnpm run check:bundle-size",
     "check:bundle-size": "tsx scripts/check-bundle-size.ts",
+    "check:bundle-size:self-test": "tsx scripts/check-bundle-size.ts --self-test",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest"

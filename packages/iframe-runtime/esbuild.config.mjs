@@ -21,7 +21,7 @@
  * ~140–150 KB gzipped per plan §C7a:47. Minification stays off
  * through C7b; C8 re-measures + re-locks budget with `measured + 20%`.
  */
-import { mkdir, readFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { execSync } from 'node:child_process';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -32,6 +32,13 @@ const pkgRoot = resolve(__dirname);
 
 const entry = join(pkgRoot, 'src/runtime.ts');
 const outfile = join(pkgRoot, 'dist/iframe-runtime.js');
+// Build metadata consumed by `scripts/check-bundle-size.ts`. It needs the
+// per-input module list to detect the same npm package bundled twice from
+// two different `node_modules/` paths — the failure mode that silently
+// added 85 KB gz (two copies of zod v4) and could only be seen as an
+// unexplained budget overrun. Not published: `dist/` is gitignored and
+// package.json#files ships only the bundle + types.
+const metafile = join(pkgRoot, 'dist/iframe-runtime.meta.json');
 
 await mkdir(dirname(outfile), { recursive: true });
 
@@ -70,6 +77,7 @@ const result = await build({
   // `import type` exclusively for protocol imports so esbuild emits no
   // runtime requires for it.
   external: [],
+  metafile: true,
   // Sourcemaps disabled in the published bundle — operators shouldn't
   // ship a 2x-sized artifact. Re-enable locally with the
   // `RENDERER_SOURCEMAP=1` env var when debugging boot regressions.
@@ -107,5 +115,7 @@ if (result.errors.length > 0) {
   }
   process.exit(1);
 }
+
+await writeFile(metafile, JSON.stringify(result.metafile), 'utf-8');
 
 console.log(`[iframe-runtime:esbuild] wrote ${outfile}`);
