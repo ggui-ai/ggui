@@ -1319,6 +1319,11 @@ export function createGguiRenderHandler(
         }
       }
 
+      // Set by the provisional-preview branch below when it commits its
+      // placeholder row, so the placeholder-mode branch after the
+      // generation gate doesn't commit an identical row twice (#365).
+      let placeholderCommitted = false;
+
       // Provisional preview kickoff. Runs ONLY when the handler was
       // built with `provisionalPreview` deps AND the gate passes.
       //
@@ -1395,6 +1400,7 @@ export function createGguiRenderHandler(
             appId: ctx.appId,
             userId: ctx.userId, // per-user isolation (undefined for non-federated single-user)
           });
+          placeholderCommitted = true;
         } catch {
           // Defensive — a placeholder-commit failure is not fatal to
           // the render. The sessionId + shortCode are already minted;
@@ -1789,6 +1795,51 @@ export function createGguiRenderHandler(
               resolvedBlueprintId = registered;
             }
           }
+        }
+      } else if (!placeholderCommitted) {
+        // Placeholder mode: no probe prefix, no generation deps (a
+        // keyless `ggui serve` / `bootOssServer`). Every branch above
+        // commits a row; without this one the render would return a
+        // sessionId that NOTHING backs — and the two tools that gate on
+        // `renderStore.get` (`ggui_consume`, `ggui_get_session`) would
+        // reject the very id `ggui_render` just handed the agent, while
+        // `markCreated` (unconditional, above) has already opened the
+        // pending-events pipe and `ggui_runtime_submit_action` happily
+        // appends to it. That asymmetry — gestures accepted into a pipe
+        // no consumer can ever drain — is issue #365.
+        //
+        // The row also carries the tenancy the consume path authorizes
+        // against (`appId` + `userId` → `isVisibleToCaller`), so there
+        // is no way to honor a keyless consume without it.
+        //
+        // `componentCode: ''` is the honest state: the surface exists
+        // and can receive gestures, but no code was generated. Callers
+        // read `codeReady: false` (unchanged). Committed only when the
+        // provisional-preview branch above did not already commit an
+        // identical placeholder for this sessionId.
+        const nowEpochMs = Date.now();
+        const placeholder: ComponentGguiSession = {
+          id: sessionId,
+          appId: ctx.appId,
+          type: 'component',
+          componentCode: '',
+          prompt: story.intent,
+          contentType: 'application/javascript+react',
+          createdAt: nowEpochMs,
+          lastActivityAt: nowEpochMs,
+          expiresAt: nowEpochMs + DEFAULT_RENDER_TTL_MS,
+          eventSequence: 0,
+        };
+        try {
+          await deps.renderStore.commit({
+            render: placeholder,
+            appId: ctx.appId,
+            userId: ctx.userId, // per-user isolation (undefined for non-federated single-user)
+          });
+        } catch {
+          // Defensive, matching the provisional-preview placeholder
+          // above: a failed commit leaves the pre-#365 behavior
+          // (consume rejects), not a failed render.
         }
       }
 

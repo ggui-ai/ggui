@@ -101,8 +101,20 @@ export interface SqliteGguiSessionStoreOptions {
   defaultTtlMs?: number;
 }
 
-/** Sentinel for "effectively infinite" TTL — `Number.MAX_SAFE_INTEGER` ms. */
-const EFFECTIVELY_INFINITE_TTL_MS = Number.MAX_SAFE_INTEGER;
+/**
+ * Sentinel for "effectively infinite" TTL — ~285 years in ms.
+ *
+ * NOT `Number.MAX_SAFE_INTEGER`: every expiry is computed as
+ * `now + defaultTtlMs`, so a MAX_SAFE_INTEGER sentinel overflowed the
+ * safe-integer range by exactly `now` (~1.78e12). `ggui_get_session`
+ * validates `expiresAt` with `z.number().int()`, whose safe-integer
+ * bound then REJECTED every render on a default-TTL store — the tool
+ * could not read back a session the server had just committed
+ * (surfaced by ggui#365's regression test). A far-future-but-safe
+ * sentinel keeps "never expires in practice" while staying an integer
+ * the wire schema accepts.
+ */
+const EFFECTIVELY_INFINITE_TTL_MS = 9_000_000_000_000;
 
 /** Shape of a raw `renders` row as stored in SQLite. */
 interface GguiSessionRow {
