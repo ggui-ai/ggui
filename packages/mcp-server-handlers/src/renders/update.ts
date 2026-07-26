@@ -6,18 +6,41 @@
  * populate the canonical `HandlerContext.sessionId` field instead; the
  * handler reads either source.
  *
- * Wire input (matches `updateInputSchema` in `@ggui-ai/protocol`):
+ * Wire input — the NORMATIVE contract is `updateInputSchema` in
+ * `@ggui-ai/protocol` (strict discriminated union, `sessionId` required
+ * on both arms; SPEC.md §7.1.2):
  *   - `{sessionId, kind:'replace', props}` — full props replacement.
  *   - `{sessionId, kind:'merge', patch}` — RFC 7396 JSON Merge Patch.
  *
+ * This handler's `inputSchema` is NOT that union — it is the flat
+ * tool-facing projection of it, and the difference is structural, not
+ * drift: MCP tool registration takes a `ZodRawShape` (a flat map of
+ * fields), which cannot express a top-level discriminated union. The
+ * handler therefore re-imposes the union semantics imperatively (the
+ * narrowing step below), so the ACCEPTED language is the same. Two
+ * declared, tested tolerances — see
+ * `update-input-alignment.contract.test.ts`, which mechanizes this
+ * paragraph:
+ *   - `sessionId` is optional on the flat shape ONLY so an in-process
+ *     dispatcher can thread it via `HandlerContext.sessionId` (the
+ *     carve-out above). Absent from both places → not-found error.
+ *   - Unknown keys: the MCP SDK transport parses args non-strictly and
+ *     STRIPS unknown keys before this handler runs, so wire callers get
+ *     tolerant-reader behavior. The handler's own parse is strict, so
+ *     in-process dispatchers face exactly the protocol contract.
+ *
  * Pure render-mutation flow:
- *   1. Validate union — surface "neither arm matched" before tenant work.
- *   2. Load + tenancy-gate the render via `renderStore.get` + `appId` cmp.
- *   3. Apply patch via the shared `applyGguiSessionPatch` helper:
+ *   1. Parse the flat shape (strict), then narrow the union — surface
+ *      "wrong fields for this kind" before the gate and before any
+ *      tenant work, so a malformed call costs zero store reads and zero
+ *      gate evaluations.
+ *   2. Pre-mutation `billingGate.preCheck` (cloud traffic-class gate).
+ *   3. Load + tenancy-gate the render via `renderStore.get` + `appId` cmp.
+ *   4. Apply patch via the shared `applyGguiSessionPatch` helper:
  *      - throws `ContractViolationError{tool:'ggui_update'}` on schema fail
- *   4. Persist the updated render via `renderStore.commit(...)` (upserts
+ *   5. Persist the updated render via `renderStore.commit(...)` (upserts
  *      by `render.id`, preserves lifecycle).
- *   5. Best-effort live delivery via the optional `propsUpdateNotifier`
+ *   6. Best-effort live delivery via the optional `propsUpdateNotifier`
  *      seam (closure forwarded by the host onto
  *      `GguiSessionChannelServer.sendPropsUpdate`). Failures are swallowed —
  *      the persistence write is the source of truth, the WS push is a
@@ -245,47 +268,18 @@ export function createGguiUpdateHandler(
     inputSchema,
     outputSchema,
     async handler(input, ctx: HandlerContext): Promise<UpdateOutput> {
-      const parsed = z.object(inputSchema).parse(input);
+      // Strict: in-process dispatchers face exactly the protocol
+      // contract (unknown keys reject, as `updateInputSchema` does). On
+      // the MCP wire path this is a no-op by construction — the SDK's
+      // own arg validation strips unknown keys before the handler runs.
+      const parsed = z.object(inputSchema).strict().parse(input);
 
-      // Pre-mutation gate. Throws to abort BEFORE any state change.
-      // OSS default: no gate bound, no-op. Cloud binds a traffic-class
-      // gate here.
-      if (deps.billingGate) {
-        await deps.billingGate.preCheck({ ctx, tool: 'ggui_update' });
-      }
-
-      // Resolve sessionId from wire OR threaded HandlerContext.
-      const sessionId: string | undefined =
-        parsed.sessionId ?? ctx.sessionId;
-      if (!sessionId) {
-        throw new GguiSessionNotFoundError(
-          '',
-          'ggui_update: sessionId is required on the wire (or threaded via HandlerContext for in-process dispatchers).',
-        );
-      }
-
-      // Tenancy gate. Cross-tenant + missing surface uniformly as
-      // GguiSessionNotFoundError so cross-tenant existence is not leaked.
-      const stored = await deps.renderStore.get(sessionId);
-      if (!stored || stored.appId !== ctx.appId) {
-        throw new GguiSessionNotFoundError(sessionId);
-      }
-
-      // Devtools payload trace. No-op when no sink is registered.
-      // Fires AFTER the tenancy gate so cross-tenant probes never leak
-      // into the trace. Payload is the validated wire shape.
-      emitPayloadTraceEvent({
-        direction: 'outbound-update',
-        sessionId,
-        appId: ctx.appId,
-        tool: 'ggui_update',
-        payload: parsed,
-      });
-
-      // Narrow on kind. Each branch enforces required-field + mutual-
-      // exclusion semantics that the flat raw-shape can't express.
-      // Mismatched fields throw before any persistence happens so the
-      // caller gets a clean error pre-mutation.
+      // Narrow on kind FIRST. Each branch enforces required-field +
+      // mutual-exclusion semantics that the flat raw-shape can't
+      // express. Runs before the billing gate and before any store
+      // read, so a malformed call costs nothing: no gate evaluation,
+      // no DynamoDB read, no trace emission — and the caller gets the
+      // contract error rather than whatever the gate would have said.
       const kind = parsed.kind;
       let patchInput:
         | { mode: 'replace'; props: JsonObject }
@@ -348,6 +342,41 @@ export function createGguiUpdateHandler(
         }
         patchInput = { mode: 'merge', patch: parsed.patch as JsonObject };
       }
+
+      // Pre-mutation gate. Throws to abort BEFORE any state change.
+      // OSS default: no gate bound, no-op. Cloud binds a traffic-class
+      // gate here.
+      if (deps.billingGate) {
+        await deps.billingGate.preCheck({ ctx, tool: 'ggui_update' });
+      }
+
+      // Resolve sessionId from wire OR threaded HandlerContext.
+      const sessionId: string | undefined =
+        parsed.sessionId ?? ctx.sessionId;
+      if (!sessionId) {
+        throw new GguiSessionNotFoundError(
+          '',
+          'ggui_update: sessionId is required on the wire (or threaded via HandlerContext for in-process dispatchers).',
+        );
+      }
+
+      // Tenancy gate. Cross-tenant + missing surface uniformly as
+      // GguiSessionNotFoundError so cross-tenant existence is not leaked.
+      const stored = await deps.renderStore.get(sessionId);
+      if (!stored || stored.appId !== ctx.appId) {
+        throw new GguiSessionNotFoundError(sessionId);
+      }
+
+      // Devtools payload trace. No-op when no sink is registered.
+      // Fires AFTER the tenancy gate so cross-tenant probes never leak
+      // into the trace. Payload is the validated wire shape.
+      emitPayloadTraceEvent({
+        direction: 'outbound-update',
+        sessionId,
+        appId: ctx.appId,
+        tool: 'ggui_update',
+        payload: parsed,
+      });
 
       // applyGguiSessionPatch throws ContractViolationError{tool:'ggui_update'}
       // on propsSpec fail (validated against the FINAL props — post-merge
