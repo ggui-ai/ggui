@@ -6,6 +6,41 @@
  * schema change; the most recent change anchors {@link PROTOCOL_VERSION}.
  *
  * --------------------------------------------------------------------
+ * Render failure envelope — in-result isError tool errors (2026-07-23,
+ * BREAKING, pre-launch). Ruling B. A `ggui_render` that fails or is
+ * rejected is a `tools/call` RESULT carrying `isError: true` — never a
+ * thrown JSON-RPC error. Before this, failures returned a
+ * SUCCESS-shaped envelope: an accident of the 2026-05-14 codeReady
+ * byte-trim, not a design, which mounted error renders as blank divs
+ * and let render meters count failures as billable.
+ *
+ *   rb1. Failures stay SCHEMA-CONFORMANT. MCP SDK clients validate
+ *        `structuredContent` against `outputSchema` even when
+ *        `isError` is set, so the failure envelope must satisfy
+ *        `renderOutputSchema` — it is not a free-form error shape.
+ *        SPEC §7.1 / §7.9 Plane 3.
+ *   rb2. `renderOutputSchema` gains optional `error: {code, message}`,
+ *        present iff `isError`. `code` is the closed enum
+ *        `RenderErrorCode` = PRODUCTION_FAILED | VALIDATION_ERROR |
+ *        NO_PLATFORM_KEY | NO_CREDENTIALS; `message` is agent-facing
+ *        guidance, not a stack.
+ *   rb3. `resourceUri` becomes OPTIONAL — present iff the render is
+ *        mountable. A failure carries no resource, so consumers must
+ *        stop assuming presence. `updateOutputSchema` was synced for
+ *        the same stripped-field class.
+ *   rb4. The phantom JSON-RPC error code -32004 (PRODUCTION_FAILED) is
+ *        RETIRED from `MCP_ERROR_CODES`. It was never emitted; the
+ *        in-result contract above replaces it.
+ *   rb5. NO `_meta` on failures (nothing to project), and the error
+ *        session still COMMITS — the handshakeId is consumed, so
+ *        recovery is re-handshake, not retry.
+ *
+ * Conformance-kit verdict: minor-intent while `draft-`, so
+ * PROTOCOL_VERSION is unchanged and no migration doc is required (see
+ * docs/protocol/VERSION-POLICY.md). Recorded here because the wire
+ * shape changed even though the stamp did not.
+ *
+ * --------------------------------------------------------------------
  * Consolidated cleanliness release (2026-06-12, BREAKING, pre-launch).
  * Four strands from the 2026-06-12 cleanliness + orphan audits, every
  * finding adversarially re-verified before action: the dv* entries
