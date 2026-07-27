@@ -342,7 +342,6 @@ const CORE_MODULES = [
   'types/live-channel.ts',
   'types/events.ts',
   'types/mcp.ts',
-  'types/capabilities.ts',
   'types/invoke.ts',
   'transport/websocket.ts',
   'index.ts',

@@ -1,6 +1,5 @@
 export * from "./version";
 export * from "./types/auth";
-export * from "./types/capabilities";
 export * from "./types/events";
 export * from "./types/render";
 export * from "./types/ggui-session-event";

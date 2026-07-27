@@ -1,4 +1,3 @@
-import type { CapabilityPermissions, QualityMetadata } from './capabilities';
 import type { KNOWN_PERMISSION_NAMES } from '../validation/hygiene-rules';
 import type {
   PropsSpec,
@@ -240,10 +239,6 @@ export interface ComponentGguiSession<TProps = JsonObject> extends GguiSessionBa
   readonly message?: string;
   /** JSON Schema for validating user-submitted form data. */
   readonly schema?: JsonSchema;
-  /** Capability permissions granted to this component. */
-  readonly capabilities?: CapabilityPermissions;
-  /** Quality evaluation metadata. */
-  readonly quality?: QualityMetadata;
   /** Generation error message (populated on failure). */
   readonly error?: string;
   /** Stream contract — describes what data the component accepts in

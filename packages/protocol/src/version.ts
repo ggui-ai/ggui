@@ -6,6 +6,34 @@
  * schema change; the most recent change anchors {@link PROTOCOL_VERSION}.
  *
  * --------------------------------------------------------------------
+ * Dead capability/quality vocabulary deleted (2026-07-27, pre-launch,
+ * ggui#394). `CapabilityPermissions`, `ComponentCapability`, and
+ * `QualityMetadata` are removed from the package's public API, along
+ * with the never-populated `capabilities?` / `quality?` fields on
+ * `ComponentGguiSession` (types/capabilities.ts deleted).
+ *
+ *   cp1. Census before delete: zero producers, zero consumers — the
+ *        only reference in the repo was the type-level field
+ *        declaration itself. The `capabilities` name was ALREADY
+ *        retired contract vocabulary (RETIRED_CONTRACT_FIELDS,
+ *        hygiene-rules.ts) and hard-rejected at the render/handshake
+ *        seams, so the surviving session-layer type contradicted the
+ *        shipped posture.
+ *   cp2. Not wired into `_meta.ui.csp` because no lossless mapping
+ *        exists: the live CSP model is origin LISTS derived from
+ *        publicBaseUrl + gadget descriptors; a six-verb grant list
+ *        carries no origin data, and hardware grants already flow
+ *        through per-gadget `permission` → Permissions-Policy.
+ *   cp3. Quality evaluation stays internal to @ggui-ai/ui-gen (its own
+ *        local QualityMetadata in evaluation/types.ts is untouched);
+ *        the protocol carries no scores because nothing downstream of
+ *        commit consumes them.
+ *
+ * Conformance-kit verdict: no wire-shape change (nothing ever emitted
+ * these fields) — PROTOCOL_VERSION unchanged. Package-API removal
+ * only, licensed by the pre-launch no-backward-compat rule.
+ *
+ * --------------------------------------------------------------------
  * Render failure envelope — in-result isError tool errors (2026-07-23,
  * BREAKING, pre-launch). Ruling B. A `ggui_render` that fails or is
  * rejected is a `tools/call` RESULT carrying `isError: true` — never a
