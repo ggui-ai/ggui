@@ -12,10 +12,26 @@
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
+  AGENT_SERVER_CLIENT_VERSION,
   buildAgentCatalog,
   callMcpInitialize,
   callMcpToolsList,
 } from './mcp-client.js';
+
+describe('CLIENT_INFO version parity', () => {
+  it('advertised clientInfo.version matches package.json', async () => {
+    // The 0.4.0-rc.0 cut found this constant still at 0.3.0 with only a
+    // "keep in sync with package.json" comment guarding it — the same
+    // docstring-without-mechanism class as STDLIB_GADGETS_VERSION,
+    // which DOES have a parity test and therefore failed the release
+    // gate loudly. This is the missing mechanism for the client
+    // identity every `initialize` advertises.
+    const pkg = (await import('../package.json', {
+      with: { type: 'json' },
+    })) as { default: { version: string } };
+    expect(AGENT_SERVER_CLIENT_VERSION).toBe(pkg.default.version);
+  });
+});
 
 afterEach(() => {
   vi.restoreAllMocks();

@@ -216,12 +216,17 @@ export async function callMcpToolsCall(args: {
  */
 const MCP_PROTOCOL_VERSION = '2025-06-18';
 
-/** This client's identity, sent as `clientInfo` on `initialize`. */
+/** This client's identity, sent as `clientInfo` on `initialize`.
+ *  `version` is pinned against package.json by a parity test in
+ *  mcp-client.test.ts — a release bump that misses this constant fails
+ *  CI instead of advertising a stale client identity. */
 const CLIENT_INFO = {
   name: '@ggui-ai/agent-server',
-  // keep in sync with package.json version
-  version: '0.3.0',
+  version: '0.4.0-rc.0',
 } as const;
+
+/** Exported for the package.json parity test only. */
+export const AGENT_SERVER_CLIENT_VERSION = CLIENT_INFO.version;
 
 /**
  * Issue an `initialize` JSON-RPC against an MCP endpoint and return the
