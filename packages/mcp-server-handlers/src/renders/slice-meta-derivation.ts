@@ -76,6 +76,20 @@ import {
  * a STDLIB-style hook that the iframe resolves via bare-specifier
  * `package` import alone, no bundle URL needed).
  *
+ * The parameter is `Partial<>` on purpose. `GadgetDescriptor` declares
+ * `package` + `version` REQUIRED because the registry stamps both at
+ * publish time — but this resolver is specified to defend against
+ * entries that lack them (a hand-authored `ggui.json` that skipped
+ * `strictGadgetDescriptorSchema`), and the two no-resolution branches
+ * above are exactly that defense. A non-`Partial` signature makes the
+ * behavior this function documents unexpressible at its own call sites,
+ * which is what previously forced `as never` on every unit-test entry
+ * and blocked the SPEC §7.7.2 conformance catalog's
+ * `resolve-package-only-no-version` case from being graded at all
+ * (see `./resolve-gadget-urls.conformance.test.ts`). Widening is
+ * caller-safe: every production caller passes a full
+ * `GadgetDescriptor`, which stays assignable.
+ *
  * Style URL resolution mirrors bundle resolution. `entry.styleUrl`
  * wins as the full-URL escape hatch; otherwise the same bundleHost
  * computation suffixes `style.css` instead of `bundle.js`.
@@ -88,9 +102,11 @@ import {
  * @public
  */
 export function resolveGadgetUrls(
-  entry: Pick<
-    GadgetDescriptor,
-    'bundleUrl' | 'bundleHost' | 'styleUrl' | 'package' | 'version'
+  entry: Partial<
+    Pick<
+      GadgetDescriptor,
+      'bundleUrl' | 'bundleHost' | 'styleUrl' | 'package' | 'version'
+    >
   >,
 ): { readonly bundleUrl?: string; readonly styleUrl?: string } {
   // Memoize on entry identity. `deriveBundleOrigins` and
@@ -126,9 +142,11 @@ const resolvedGadgetUrlsCache = new WeakMap<
 >();
 
 function resolveGadgetUrlsImpl(
-  entry: Pick<
-    GadgetDescriptor,
-    'bundleUrl' | 'bundleHost' | 'styleUrl' | 'package' | 'version'
+  entry: Partial<
+    Pick<
+      GadgetDescriptor,
+      'bundleUrl' | 'bundleHost' | 'styleUrl' | 'package' | 'version'
+    >
   >,
 ): { readonly bundleUrl?: string; readonly styleUrl?: string } {
   const { bundleUrl, bundleHost, styleUrl, package: pkg, version } = entry;

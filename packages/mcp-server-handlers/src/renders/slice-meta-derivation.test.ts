@@ -705,25 +705,27 @@ describe('deriveBundleOrigins — bundleUrl/styleUrl/connect → CSP origins (pl
   });
 
   // Note (Slice GG.6 migration): the original "skips bundleHost
-  // resolution when package or version is missing" case is no longer
-  // expressible — `GadgetDescriptor.package` and `.version` are now
-  // REQUIRED, so the prior scenario (missing trio) cannot be constructed
-  // without type erasure. The behaviour is now covered by the
-  // `resolveGadgetUrls` direct unit ("returns nothing when bundleHost is
-  // present but package+version missing") which uses `as never` against
-  // the resolver's narrower Pick<> signature.
+  // resolution when package or version is missing" case is not
+  // expressible AT THIS LEVEL — the `gadgetDescriptors` sidecar is typed
+  // `GadgetDescriptor[]`, where `package` and `.version` are REQUIRED.
+  // The behaviour is covered one layer down by the `resolveGadgetUrls`
+  // direct unit ("returns nothing when bundleHost is present but
+  // package+version missing"), whose parameter is `Partial<>` precisely
+  // so the defense it implements stays expressible.
 });
 
 describe('resolveGadgetUrls — bundleHost / bundleUrl / styleUrl precedence', () => {
   it('returns nothing when entry has neither bundleUrl nor a resolvable bundleHost', () => {
-    expect(resolveGadgetUrls({ hook: 'useStdlib' } as never)).toEqual({});
+    // No transport fields at all — the shape a STDLIB-style hook entry
+    // presents to this resolver (`hook` is not a field it reads).
+    expect(resolveGadgetUrls({})).toEqual({});
   });
 
   it('passes through explicit bundleUrl + styleUrl verbatim (escape hatch)', () => {
     const out = resolveGadgetUrls({
       bundleUrl: 'https://esm.sh/leaflet/dist/leaflet.js',
       styleUrl: 'https://esm.sh/leaflet/dist/leaflet.css',
-    } as never);
+    });
     expect(out.bundleUrl).toBe('https://esm.sh/leaflet/dist/leaflet.js');
     expect(out.styleUrl).toBe('https://esm.sh/leaflet/dist/leaflet.css');
   });
@@ -733,7 +735,7 @@ describe('resolveGadgetUrls — bundleHost / bundleUrl / styleUrl precedence', (
       package: '@ggui-samples/gadget-leaflet',
       version: '0.0.1',
       bundleHost: 'sandbox.registry.ggui.ai',
-    } as never);
+    });
     expect(out.bundleUrl).toBe(
       'https://sandbox.registry.ggui.ai/bundles/@ggui-samples/gadget-leaflet/0.0.1/bundle.js',
     );
@@ -746,7 +748,7 @@ describe('resolveGadgetUrls — bundleHost / bundleUrl / styleUrl precedence', (
     const out = resolveGadgetUrls({
       package: '@ggui-samples/gadget-leaflet',
       version: '0.0.1',
-    } as never);
+    });
     expect(out.bundleUrl).toBe(
       'https://registry.ggui.ai/bundles/@ggui-samples/gadget-leaflet/0.0.1/bundle.js',
     );
@@ -758,7 +760,7 @@ describe('resolveGadgetUrls — bundleHost / bundleUrl / styleUrl precedence', (
       version: '0.0.1',
       bundleHost: 'sandbox.registry.ggui.ai',
       bundleUrl: 'https://my-cdn.example/leaflet.js',
-    } as never);
+    });
     expect(out.bundleUrl).toBe('https://my-cdn.example/leaflet.js');
   });
 
@@ -768,7 +770,7 @@ describe('resolveGadgetUrls — bundleHost / bundleUrl / styleUrl precedence', (
       version: '0.0.1',
       bundleHost: 'sandbox.registry.ggui.ai',
       styleUrl: 'https://my-cdn.example/leaflet.css',
-    } as never);
+    });
     // bundle still computes from bundleHost; style takes the override.
     expect(out.bundleUrl).toBe(
       'https://sandbox.registry.ggui.ai/bundles/@ggui-samples/gadget-leaflet/0.0.1/bundle.js',
@@ -778,7 +780,7 @@ describe('resolveGadgetUrls — bundleHost / bundleUrl / styleUrl precedence', (
 
   it('returns nothing when bundleHost is present but package+version missing', () => {
     expect(
-      resolveGadgetUrls({ bundleHost: 'registry.ggui.ai' } as never),
+      resolveGadgetUrls({ bundleHost: 'registry.ggui.ai' }),
     ).toEqual({});
   });
 
@@ -797,7 +799,7 @@ describe('resolveGadgetUrls — bundleHost / bundleUrl / styleUrl precedence', (
       package: '@ggui-samples/gadget-leaflet',
       version: '0.0.1',
       bundleHost: host,
-    } as never);
+    });
     expect(out.bundleUrl).toBe(
       `http://${host}/bundles/@ggui-samples/gadget-leaflet/0.0.1/bundle.js`,
     );
@@ -814,7 +816,7 @@ describe('resolveGadgetUrls — bundleHost / bundleUrl / styleUrl precedence', (
       package: '@ggui-samples/gadget-leaflet',
       version: '0.0.1',
       bundleHost: 'localhost-evil.example.com',
-    } as never);
+    });
     expect(out.bundleUrl).toBe(
       'https://localhost-evil.example.com/bundles/@ggui-samples/gadget-leaflet/0.0.1/bundle.js',
     );

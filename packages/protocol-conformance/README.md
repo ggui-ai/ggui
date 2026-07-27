@@ -74,6 +74,28 @@ if (schema.failed.length + gate.failed.length + urls.failed.length > 0) {
 
 The `schema-conformance` meta-test binds its catalog to the live `@ggui-ai/protocol` `clientCapabilitiesSpecSchema` — a drift-catch if the wire schema diverges from the §7.7.2 obligations the catalog freezes. The `registration-conformance` and `resolution-conformance` meta-tests verify catalog coherence against faithful in-test implementations (the kit stays vendor-neutral — it does not depend on a server implementation); grading the _shipping_ gate / resolver is an implementation-side test that drives the corresponding runner.
 
+## Conformance status
+
+What is actually graded against shipping code today, and what is still awaiting a driver. This is an inventory, not a roadmap — a mechanism is listed as proven only if a test in the repo drives it against the real implementation on every push.
+
+Every test below is a plain `*.test.ts` inside a package's `src/`, so it runs in that package's ordinary vitest suite. The ggui repo's per-push CI runs `turbo run test` across all non-e2e packages, so **all five rows below are gated on every push** — the kit needs no dedicated workflow, and adopters wiring it into their own CI need nothing more than their existing unit-test task.
+
+| Obligation                          | Graded against                                                                             | Driver                                                                                   |
+| ----------------------------------- | ------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------- |
+| Gadget wire schema (§7.7.2)         | the shipping `@ggui-ai/protocol` `clientCapabilitiesSpecSchema`                            | this kit's own `src/schema-conformance/schema-conformance.test.ts`                       |
+| Registration gate (§7.7.3, §7.9)    | the shipping gate trio in `@ggui-ai/mcp-server-handlers`                                   | `mcp-server-handlers/src/renders/assert-gadgets.conformance.test.ts`                     |
+| Bundle-URL resolution (§7.7.2)      | the shipping `resolveGadgetUrls` in `@ggui-ai/mcp-server-handlers`                         | `mcp-server-handlers/src/renders/resolve-gadget-urls.conformance.test.ts`                |
+| Path-A WS fixtures — first-party    | the real `@ggui-ai/mcp-server` GguiSession channel, booted in-process on an ephemeral port | `mcp-server/src/ggui-session-channel.conformance.test.ts` — **8 pass / 4 skip / 0 fail** |
+| Path-A WS fixtures — vendor-neutral | `@ggui-ai/protocol-reference-server`                                                       | `protocol-reference-server/src/conformance.test.ts` — **9 pass / 3 skip / 0 fail**       |
+
+Both WS drivers pin their pass set _and_ their skip set as exact sets. A fixture silently degrading to a skip fails the build, and so does a skipped fixture that quietly starts passing — a skip set that can grow unnoticed is a false gate, and re-pinning it is meant to be a deliberate act.
+
+**Awaiting a driver:**
+
+- **Path-B browser-host fixtures** — `bootstrap-bundle-fetch-failed`, `bootstrap-meta-missing` (both need MCP-Apps-host fault injection) and `props-update-roundtrip` (assertion is on rendered DOM). No browser-host adapter ships with the kit, so these skip on every driver above. Honestly absent, not silently passing.
+- **`version-mismatch` on the first-party server** — needs a `server-version-override` seam the channel deliberately does not expose; adding a production seam with no production caller purely to drive a fixture was rejected. It passes on the reference server, which has a per-render override.
+- **The `ggui_consume` retrieval half of the action loop** — `action-ack-sequence` proves the append half; draining the buffer is an MCP tool call a WS-only runner cannot drive. Needs an MCP-binding driver, a future kit surface.
+
 ## Public API
 
 ```ts
