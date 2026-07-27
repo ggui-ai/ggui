@@ -77,13 +77,13 @@ For **production**, sign up at [ggui.ai](https://ggui.ai) → create an app → 
 
 `@ggui-ai/cli` ships the `ggui` binary — the single entrypoint for every OSS workflow. Five verbs cover the full lifecycle:
 
-| Verb             | What it does                                                                                                                                                                                                     |
-| ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ggui serve`     | Boot the OSS MCP server (`/mcp`), session viewer (`/r/<shortCode>`), pairing endpoints, and live-channel WebSocket. `--mcp-only` skips agent supervision — fastest first-run. `--port`, `--host` adjust binding. |
-| `ggui dev`       | Local UI registry + compile-on-demand dev hub for iterating on a `ggui.json` project. Optional tunnel, agent supervision, browser auto-open. Run `ggui --help` for the full flag list.                           |
-| `ggui blueprint` | Author + publish + install cached UI templates — `create`, `publish`, `install`. Blueprints make a known screen cheap, fast, and visually consistent by matching before falling back to full LLM generation.     |
-| `ggui gadget`    | Author + publish + install client-side libraries (maps, charts, camera, clipboard, anything) wrapped as ggui hooks/components so the generator can use them — `create`, `publish`, `install`.                    |
-| `ggui theme`     | Validate and inspect `ggui.json#theme` DTCG documents — `ggui theme validate <path>`. Catches schema errors before they reach the runtime.                                                                       |
+| Verb             | What it does                                                                                                                                                                                                       |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `ggui serve`     | Boot the OSS MCP server (`/mcp`), session viewer (`/r/<shortCode>`), pairing endpoints, and live-channel WebSocket. `--mcp-only` skips agent supervision — fastest first-run. `--port`, `--host` adjust binding.   |
+| `ggui dev`       | Local UI registry + compile-on-demand dev hub for iterating on a `ggui.json` project. Optional tunnel, agent supervision, browser auto-open. Run `ggui --help` for the full flag list.                             |
+| `ggui blueprint` | Author + publish + install cached UI templates — `create`, `publish`, `install`. Blueprints make a known screen cheap, repeatable, and visually consistent by matching before falling back to full LLM generation. |
+| `ggui gadget`    | Author + publish + install client-side libraries (maps, charts, camera, clipboard, anything) wrapped as ggui hooks/components so the generator can use them — `create`, `publish`, `install`.                      |
+| `ggui theme`     | Validate and inspect `ggui.json#theme` DTCG documents — `ggui theme validate <path>`. Catches schema errors before they reach the runtime.                                                                         |
 
 Plus auth verbs for the hosted path: `ggui login` / `ggui logout` / `ggui whoami` / `ggui keys`. Run `ggui --help` for the top-level overview, or `ggui <verb> --help` for per-command flags.
 
