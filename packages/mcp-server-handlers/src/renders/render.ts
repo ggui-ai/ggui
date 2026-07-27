@@ -439,13 +439,15 @@ export interface GguiRenderHandlerDeps extends RenderSliceMetaDeps {
    * {@link import('@ggui-ai/mcp-server-core').RateLimitDecision} to
    * HTTP 429 + `Retry-After` / `X-RateLimit-*` headers.
    *
-   * Key composition: `ggui_render:<appId>`. The handler does NOT
-   * widen the key shape on its own — per-identity-kind or per-user
-   * isolation is a policy decision the caller makes by supplying a
-   * different `RateLimiter` binding (e.g. a wrapping adapter that
-   * includes `ctx.requestId` tags). Keeping the key stable here
-   * means the OSS default policy is "per-app", which is the right
-   * coarse unit for admission control without extra config.
+   * Key composition: `ggui_render:<appId>:<apiKeyHash|anon>`. The
+   * key carries BOTH isolation units the seam knows about — the app
+   * and the calling credential — because the `RateLimitCheckInput`
+   * carries no other identity channel: a binding that only ever sees
+   * `key` can enforce per-app policy (aggregate on the middle
+   * segment) or per-API-key policy (bucket the full key) without
+   * this handler changing shape. Keyless callers collapse to the
+   * literal `anon` segment, so an OSS demo deployment still gets one
+   * shared bucket per app (the pre-widening behavior).
    *
    * Absence of this dep is the "unlimited / handler is not
    * broken when limiter is absent" invariant — the `NoopRateLimiter`
@@ -1088,12 +1090,13 @@ export function createGguiRenderHandler(
       // Admission check. Fires BEFORE state changes — a rate-limited
       // caller should get 429 without the server doing any real work.
       if (deps.rateLimiter) {
+        const limiterKey = `ggui_render:${ctx.appId}:${ctx.apiKeyHash ?? "anon"}`;
         const decision = await deps.rateLimiter.check({
-          key: `ggui_render:${ctx.appId}`,
+          key: limiterKey,
           cost: 1,
         });
         if (!decision.allowed) {
-          throw new RateLimitedError(`ggui_render:${ctx.appId}`, decision);
+          throw new RateLimitedError(limiterKey, decision);
         }
       }
 

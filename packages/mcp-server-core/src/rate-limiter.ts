@@ -41,9 +41,12 @@
  *     long"; callers MUST re-check, not blindly retry in-flight.
  *
  * **Key conventions (caller-owned):** the interface does not mandate
- * key shape. In practice OSS wiring uses `<handler>:<identity-kind>:<appId>`
- * (e.g. `ggui_render:builder:local`) for per-app admission. Hosted
- * deployments layer richer shapes as their identity model grows.
+ * key shape. In practice OSS wiring uses
+ * `<handler>:<appId>:<apiKeyHash|anon>` (e.g.
+ * `ggui_render:app_x:3f2a…` / `ggui_render:local:anon`) — the key
+ * carries both isolation units, so a binding can enforce per-app
+ * policy (aggregate on the middle segment) or per-API-key policy
+ * (bucket on the full key) without the handler changing shape.
  *
  * **OSS reference adapters (this slice):**
  *   - `NoopRateLimiter` — always allows. The shipped default for
@@ -125,8 +128,14 @@ export class RateLimitedError extends Error {
   readonly decision: RateLimitDecision;
   readonly key: string;
   constructor(key: string, decision: RateLimitDecision) {
+    // The MESSAGE is agent-visible: on the MCP tools/call path the
+    // SDK projects a thrown handler error into an in-result isError
+    // tool error verbatim. Bucket keys carry identity material
+    // (appId + apiKeyHash), so the key stays OFF the message — it
+    // rides the typed `key` field for transports and logs that want
+    // it.
     super(
-      `Rate limit exceeded for key "${key}" — retry after ${decision.retryAfterMs ?? 0}ms.`,
+      `Rate limit exceeded — retry after ${decision.retryAfterMs ?? 0}ms.`,
     );
     this.name = 'RateLimitedError';
     this.key = key;
