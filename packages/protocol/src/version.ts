@@ -68,6 +68,19 @@
  * docs/protocol/VERSION-POLICY.md). Recorded here because the wire
  * shape changed even though the stamp did not.
  *
+ * Stamp adjudication (re-examined 2026-07-27, pre-beta audit): the
+ * "two failure contracts share one stamp" concern was weighed and the
+ * stamp DELIBERATELY not rolled. PROTOCOL_VERSION gates the WS
+ * subscribe handshake (versionPolicy default 'reject' — a mismatch
+ * CLOSES the connection), and ruling B changed the MCP tools/call
+ * result surface while leaving every WS envelope untouched. Rolling
+ * the stamp would have forced a lockstep UPGRADE_REQUIRED break on
+ * every client pinned to 0.4.0-rc.0 at the next server deploy, to
+ * version a layer that did not change. MCP-path failure-contract
+ * discovery is by package version (exact pins are the pre-launch
+ * consumer contract), not by wire handshake. The stamp next moves
+ * when the WS envelope layer itself changes, or at the v1.0 freeze.
+ *
  * --------------------------------------------------------------------
  * Consolidated cleanliness release (2026-06-12, BREAKING, pre-launch).
  * Four strands from the 2026-06-12 cleanliness + orphan audits, every

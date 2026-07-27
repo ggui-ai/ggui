@@ -111,11 +111,11 @@ The simulator collapses the user-consent step (real claude.ai opens a browser) b
 
 ## Tests
 
-| File                                   | Covers                                                                     |
-| -------------------------------------- | -------------------------------------------------------------------------- |
-| `happy-path.test.ts`                   | initialize → tools/list pre-fetch → tools/call → ws ack                    |
-| `host-shapes.test.ts`                  | `claude-ai` / `claude-desktop` / `goose` preset parity                     |
-| `oauth-flow.test.ts`                   | full RFC discovery + DCR + PKCE code-grant chain                           |
-| `submit-action.test.ts`                | the 3-message submit-action bridge end-to-end                              |
-| `slice-5-installed-blueprints.test.ts` | installed-blueprint → handshake `origin: 'cache'` proof                    |
-| `slice-16e-blueprint-registry.test.ts` | blueprint-first registry over the wire (`describe.skip` — see file header) |
+| File                                   | Covers                                                                                                                                                                              |
+| -------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `happy-path.test.ts`                   | initialize → tools/list pre-fetch → tools/call → ws ack                                                                                                                             |
+| `host-shapes.test.ts`                  | `claude-ai` / `claude-desktop` / `goose` preset parity                                                                                                                              |
+| `oauth-flow.test.ts`                   | full RFC discovery + DCR + PKCE code-grant chain                                                                                                                                    |
+| `submit-action.test.ts`                | the 3-message submit-action bridge end-to-end                                                                                                                                       |
+| `slice-5-installed-blueprints.test.ts` | installed-blueprint → handshake `origin: 'cache'` proof                                                                                                                             |
+| `slice-16e-blueprint-registry.test.ts` | blueprint-first registry over the wire (LIVE on the current three-step handshake; one inner `it.skip` — a pre-D10 contract-less case whose coverage moved to `@ggui-ai/negotiator`) |

@@ -27,8 +27,10 @@ name: Release
 #       IN-RUNNER (never committed, never pushed) — this is the sole,
 #       deliberate exception to the immutability invariant above. The git
 #       tree keeps the stable base; the suffix lives only inside this run;
-#     - publishes under `--tag <channel>` so plain `npm i @ggui-ai/cli`
-#       keeps resolving to the latest STABLE — consumers opt in via `@alpha`.
+#     - publishes under `--tag <channel>` so a dispatch experiment never
+#       moves `latest` — consumers opt in via `@alpha`. (Committed versions
+#       are a different story: pre-launch, tag_for() maps them ALL to
+#       `latest` — see the single-tag policy comment at that function.)
 #       CAVEAT: npm pins `latest` to a package's VERY FIRST published version
 #       regardless of `--tag`. A package whose first-ever publish is a
 #       prerelease will have `latest` = that prerelease until a stable ships.
@@ -154,8 +156,9 @@ jobs:
             release)
               # Release event IS the human confirmation; no subset games.
               # Release events never use the auto-numbered prerelease channel —
-              # they publish committed versions (a committed `-`suffix maps to
-              # the `next` dist-tag in the publish step, unchanged).
+              # they publish committed versions, which the publish step's
+              # tag_for() maps to `latest` under the pre-launch single-tag
+              # policy (rc-suffixed or clean alike; FLIPS AT LAUNCH).
               REQ_PKGS="all"
               DRY_RUN="false"
               CONFIRM="yes"
