@@ -665,15 +665,32 @@ jobs:
           # each package.json's `repository.url` matching this repo. Dry-run
           # cannot mint provenance, so the GATE pass below omits it; only the
           # real pass carries `--provenance`.
-          # Dist-tag strategy (per package): prerelease channel (alpha/beta/rc)
-          # → `--tag <channel>` so plain `npm i @ggui-ai/cli` is untouched and
-          # consumers opt in via `@alpha`; stable `-`suffix → `next`; clean
-          # stable → `latest`. (A package whose FIRST-ever publish is a
-          # prerelease gets `latest` pinned to it by npm until a stable ships —
-          # seed new packages with a stable publish.)
+          # Dist-tag strategy (per package), PRE-LAUNCH single-tag policy
+          # (2026-07-27, owner ruling after the 0.4.0-rc.0 wave):
+          #
+          #   - dispatch prerelease channel (alpha/beta/rc experiments) →
+          #     `--tag <channel>` — throwaway iterations stay opt-in and
+          #     never touch `latest`;
+          #   - COMMITTED versions — rc-suffixed or clean — → `latest`.
+          #
+          # Rationale: pre-launch there is no stable line to protect, so
+          # the old committed-`-suffix` → `next` mapping just made every
+          # release-event wave invisible to plain `npm install`. The
+          # 0.4.0-rc.0 wave shipped under `next` while `latest` kept
+          # serving a tarball with a known wire-shape gap (ggui#385), and
+          # the owner had to hand-move `latest` + `rc` across 32 packages
+          # through per-write OTP challenges. npm moves exactly ONE tag
+          # per publish and `npm dist-tag` has no OIDC path (Trusted
+          # Publishing mints credentials inside `npm publish` only), so
+          # the only zero-token, zero-manual-step design is a single
+          # authoritative tag. `next`/`rc` are RETIRED as consumer
+          # surfaces — `latest` is the wave, exact pins are the contract.
+          #
+          # FLIPS AT LAUNCH (with the rest of the pre-launch rules): once
+          # a stable line exists, restore `[[ "$1" == *-* ]] → next` so
+          # rc waves stop moving `latest`.
           tag_for() {
             if [ "$PRERELEASE" != "none" ]; then printf '%s' "$PRERELEASE"
-            elif [[ "$1" == *-* ]]; then printf 'next'
             else printf 'latest'; fi
           }
 
