@@ -20,7 +20,8 @@
  * Package-json rewrites at compose time:
  *   1. Root `"name"` → `rendercell-<sdk>`.
  *   2. `"@ggui-ai/<pkg>": "workspace:*"` → the prerelease-inclusive caret
- *      range `^<base>-alpha.0` (base read from packages/protocol — the
+ *      range (`^<base>-alpha.0` for a stable base, `^<base>` when the base
+ *      is itself a prerelease; base read from packages/protocol — the
  *      lockstep cohort version), so the composed tree installs the PUBLISHED
  *      cohort from the harness's Verdaccio. This deliberately keeps the
  *      version-range-resolution coverage class alive (the
@@ -105,8 +106,18 @@ function readCohortBaseVersion() {
  * cohort at the committed base) the range always resolves to this run's
  * tarballs; the range form itself is what keeps the version-range-resolution
  * failure class observable.
+ *
+ * A base that is ITSELF a prerelease (`0.4.0-rc.0`) must NOT get the
+ * `-alpha.0` suffix: `0.4.0-rc.0-alpha.0` semver-sorts ABOVE `0.4.0-rc.0`
+ * (prerelease identifier `0-alpha` > `0`), so the published cohort falls
+ * OUTSIDE the range and the install dies with NO_MATCHING_VERSION — the
+ * exact 2026-07-27/28 nightly + samples-render failures after the
+ * 0.4.0-rc.0 version bump. A caret on the prerelease base is already
+ * prerelease-inclusive for its own version line, which is all the floor
+ * was buying.
  */
 function gguiAiPinRange(base) {
+  if (base.includes('-')) return `^${base}`;
   return `^${base}-alpha.0`;
 }
 
@@ -235,6 +246,11 @@ function selfTest() {
 
   if (gguiAiPinRange('0.3.0') !== '^0.3.0-alpha.0') {
     fail(`gguiAiPinRange('0.3.0') → ${gguiAiPinRange('0.3.0')}, expected ^0.3.0-alpha.0`);
+  }
+  // Prerelease base: no -alpha.0 suffix — `^0.4.0-rc.0-alpha.0` excludes
+  // the published 0.4.0-rc.0 cohort entirely (the 2026-07-28 nightly red).
+  if (gguiAiPinRange('0.4.0-rc.0') !== '^0.4.0-rc.0') {
+    fail(`gguiAiPinRange('0.4.0-rc.0') → ${gguiAiPinRange('0.4.0-rc.0')}, expected ^0.4.0-rc.0`);
   }
 
   const pkg = rewritePkgJson(
