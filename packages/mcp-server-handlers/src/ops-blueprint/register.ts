@@ -22,7 +22,7 @@
  *
  * ## Audience
  *
- * `['ops']` — registered on `/ops`. NOT visible to agents on `/mcp`.
+ * `['ops']` — served on `/control`. NOT visible to agents on `/mcp`.
  *
  * ## What this handler does NOT do
  *

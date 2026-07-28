@@ -1,5 +1,5 @@
 /**
- * Scenario 18 — warm path via `/ops` registration (zero-LLM priming).
+ * Scenario 18 — warm path via `/control` registration (zero-LLM priming).
  *
  * What this proves: `ggui_ops_register_blueprint` lands operator-
  * supplied componentCode bytes into BOTH the MVB BlueprintStore AND
@@ -18,8 +18,11 @@
  * verbatim instead of dispatched through a UiGenerator.
  *
  * Flow:
- *   1. POST `/ops` `ggui_ops_register_blueprint({contract, componentCode})`
- *      — no LLM, sub-second.
+ *   1. POST `/control`
+ *      `ggui_ops_register_blueprint({contract, componentCode, confirm})`
+ *      — no LLM, sub-second. `register` is state-changing, so the
+ *      control plane's confirmation gate requires `confirm: true`; an
+ *      omitted flag returns a preview and writes nothing.
  *   2. `/mcp` `ggui_handshake({intent: paraphrased,
  *      blueprintDraft: {contract: <same>}})`.
  *      Assert: `suggestion.origin === 'cache'`,
@@ -42,7 +45,7 @@ import { readRenderCodeRef } from '../fixtures/render-contract.js';
 
 const GGUI_PORT = Number.parseInt(process.env.GGUI_PORT ?? '6781', 10);
 const MCP_URL = `http://localhost:${GGUI_PORT}/mcp`;
-const OPS_URL = `http://localhost:${GGUI_PORT}/ops`;
+const CONTROL_URL = `http://localhost:${GGUI_PORT}/control`;
 
 interface BlueprintMeta {
   blueprintId: string;
@@ -98,7 +101,7 @@ const REGISTER_TEST_COMPONENT_CODE =
   "export default function PreBuiltCard() { return null; }\n";
 
 describe(
-  'Scenario 18 — warm path: /ops register (pre-built code) → handshake matches → render.accept',
+  'Scenario 18 — warm path: /control register (pre-built code) → handshake matches → render.accept',
   () => {
     test(
       'register tool lands componentCode in both registries; handshake + render.accept reuse it',
@@ -107,11 +110,23 @@ describe(
           .update(REGISTER_TEST_COMPONENT_CODE)
           .digest('hex');
 
-        // ── 1. /ops register — no LLM, sub-second ─────────────────
-        const ops = unwrapStructured<OpsRegisterOut>(
-          await callTool(OPS_URL, 'ggui_ops_register_blueprint', {
+        // ── 1. /control register — no LLM, sub-second ─────────────
+        // The un-confirmed call is the gate's whole point: it must
+        // preview and write nothing, so the priming below is provably
+        // the confirmed call's doing.
+        const preview = unwrapStructured<{ confirmationRequired?: boolean }>(
+          await callTool(CONTROL_URL, 'ggui_ops_register_blueprint', {
             contract: REGISTER_TEST_CONTRACT,
             componentCode: REGISTER_TEST_COMPONENT_CODE,
+          }),
+        );
+        expect(preview.confirmationRequired).toBe(true);
+
+        const ops = unwrapStructured<OpsRegisterOut>(
+          await callTool(CONTROL_URL, 'ggui_ops_register_blueprint', {
+            contract: REGISTER_TEST_CONTRACT,
+            componentCode: REGISTER_TEST_COMPONENT_CODE,
+            confirm: true,
           }),
         );
         expect(typeof ops.blueprintId).toBe('string');

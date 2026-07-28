@@ -43,11 +43,24 @@ export type { GenerationDeps } from '@ggui-ai/mcp-server-handlers';
 // `/settings` URL) without taking a direct `@ggui-ai/mcp-server-handlers`
 // dependency.
 export { buildNoCredentialsGguiSession } from '@ggui-ai/mcp-server-handlers';
-export { createGguiServer, defaultHandlers } from './server.js';
+export { buildOpsBundleHandlers, createGguiServer, defaultHandlers } from './server.js';
 export type {
   CreateGguiServerOptions,
   GguiServer,
+  OpsBundleDeps,
 } from './server.js';
+// Control plane (`/control`) — the composition that projects every
+// `protocol`- and `ops`-tagged handler onto one anonymous-capable
+// route with per-tool auth + confirmation gates. `createGguiServer`
+// mounts it automatically; the pieces are exported so deployments can
+// assert their own control surface at boot.
+export {
+  buildControlService,
+  CONTROL_PATH,
+  filterHandlersByAudience,
+  SINGLE_CALL_OPS,
+} from './control-service.js';
+export type { AudienceTag, BuildControlServiceArgs } from './control-service.js';
 // Content-addressable code delivery (2026-05-03). FileSystemCodeStore
 // is the OSS dev default; in-memory variant ships in
 // `@ggui-ai/mcp-server-core/in-memory` for tests + ephemeral runs.
@@ -64,7 +77,11 @@ export type { McpServerMount } from './mcp-mounts.js';
 // tools to the shared audience-filtered routes. Services bypass
 // audience filtering (the path IS the audience).
 export type { McpService, ServicePath } from './mcp-mounts.js';
-export { validateMcpServices, validateServicePath } from './mcp-mounts.js';
+export {
+  validateMcpServices,
+  validateServiceHandlers,
+  validateServicePath,
+} from './mcp-mounts.js';
 // Reserved-channel payload validator composition.
 // `composePreviewReservedValidator` binds the A2UI adapter
 // for `_ggui:preview`; `mergeReservedValidators` layers caller-provided

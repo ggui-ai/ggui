@@ -281,8 +281,7 @@ describe('validateServicePath', () => {
     for (const reserved of [
       '/',
       '/mcp',
-      '/protocol',
-      '/ops',
+      '/control',
       '/ws',
       '/health',
       '/.well-known',
@@ -353,7 +352,7 @@ describe('validateMcpServices', () => {
   it('rejects a reserved path', () => {
     expect(() =>
       validateMcpServices([
-        { name: 'shadow-ops', path: '/ops', handlers: [handler('any_tool')] },
+        { name: 'shadow-control', path: '/control', handlers: [handler('any_tool')] },
       ]),
     ).toThrow(/reserved built-in route/);
   });

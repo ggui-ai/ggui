@@ -31,7 +31,7 @@
  *
  * ## Audience
  *
- * `['ops']` — registered on `/ops`. NOT visible to agents on `/mcp`.
+ * `['ops']` — served on `/control`. NOT visible to agents on `/mcp`.
  * Every handler carries an `audience` tag that decides which route it
  * surfaces on; this is operator UX, not runtime authoring.
  *

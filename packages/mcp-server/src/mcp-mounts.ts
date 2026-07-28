@@ -64,8 +64,7 @@ export type ServicePath = string & { readonly __brand: "ServicePath" };
 const RESERVED_SERVICE_PATHS: ReadonlySet<string> = new Set([
   "/",
   "/mcp",
-  "/protocol",
-  "/ops",
+  "/control",
   "/ws",
   "/health",
   "/.well-known",
@@ -85,7 +84,7 @@ const SERVICE_PATH_REGEX = /^\/[a-zA-Z0-9_/-]+$/;
  * - May contain letters, digits, `-`, `_`, and `/` (no whitespace,
  *   no `.`, no path traversal).
  * - Must not end with `/` (prevents trailing-slash variant collisions).
- * - Must not equal a reserved built-in path (`/mcp`, `/protocol`, ...).
+ * - Must not equal a reserved built-in path (`/mcp`, `/control`, ...).
  */
 export function validateServicePath(p: string): ServicePath {
   if (!SERVICE_PATH_REGEX.test(p)) {
@@ -157,16 +156,18 @@ export interface McpService {
    */
   readonly handlers: ReadonlyArray<SharedHandler<ZodRawShape, ZodRawShape>>;
   /**
-   * When `true`, this service skips the auth chain — unauthenticated
-   * requests are let through with a synthesized identity
-   * (`{kind: 'builder'}`, `source: 'anonymous'`). Default `false`
-   * (auth required, same posture as `/mcp` / `/protocol` / `/ops`).
+   * When `true`, this service accepts unauthenticated requests with a
+   * synthesized identity (`{kind: 'builder'}`, `source: 'anonymous'`)
+   * instead of 401-ing. Default `false` (auth required, same posture as
+   * the data-plane routes).
    *
    * Use for first-touch public surfaces (docs MCP, landing-agent
-   * demos) where requiring a bearer token would block the use case.
-   * Handlers that need to distinguish anonymous from authenticated
-   * traffic read `ctx` for the synthesized identity OR check the
-   * underlying `source` via the broader request context.
+   * demos) where requiring a bearer token would block the use case,
+   * and for mixed surfaces like `/control` where only some handlers
+   * need auth. A presented credential is still resolved, so handlers
+   * that must distinguish anonymous from authenticated traffic read
+   * `ctx.authSource` and throw `AuthRequiredError` when it is
+   * `'anonymous'` — the identity fields alone cannot tell them apart.
    *
    * Anonymous services SHOULD plug into the `RateLimiter` seam
    * (per-IP + per-session keys) to prevent unbounded compute; the
@@ -207,31 +208,46 @@ export function validateMcpServices(
       );
     }
     seenPaths.add(svc.path);
-    const seenTools = new Set<string>();
-    for (const h of svc.handlers) {
-      if (
-        typeof h.outputSchema !== "object" ||
-        h.outputSchema === null ||
-        Object.keys(h.outputSchema).length === 0
-      ) {
-        throw new Error(
-          `createGguiServer: service "${svc.name}" handler "${h.name}" declares an empty \`outputSchema\` — this silently strips \`structuredContent\` at the MCP SDK boundary. Declare the fields the handler returns (e.g. \`outputSchema: { items: z.array(...) }\`).`
-        );
-      }
-      if (h.audience !== undefined) {
-        throw new Error(
-          `createGguiServer: service "${svc.name}" handler "${h.name}" sets \`audience\` (${JSON.stringify(h.audience)}). Services bypass audience filtering — the path "${svc.path}" IS the audience. Remove the \`audience\` field or move the handler to an aggregate mount.`
-        );
-      }
-      if (seenTools.has(h.name)) {
-        throw new Error(
-          `createGguiServer: service "${svc.name}" registers tool "${h.name}" twice. Tool names must be unique within a service (cross-service collisions ARE allowed).`
-        );
-      }
-      seenTools.add(h.name);
-    }
+    validateServiceHandlers(svc);
   }
   return services;
+}
+
+/**
+ * Validate one service's handler bundle: every handler declares a
+ * non-empty `outputSchema`, none carries an `audience` tag, and no tool
+ * name repeats within the bundle.
+ *
+ * Split out of {@link validateMcpServices} so the built-in `/control`
+ * plane — which mounts at a RESERVED path and therefore cannot go
+ * through the caller-facing `mcpServices` array — is held to the exact
+ * same handler invariants as an operator-supplied service. One
+ * validator, so the two can't drift.
+ */
+export function validateServiceHandlers(svc: McpService): void {
+  const seenTools = new Set<string>();
+  for (const h of svc.handlers) {
+    if (
+      typeof h.outputSchema !== "object" ||
+      h.outputSchema === null ||
+      Object.keys(h.outputSchema).length === 0
+    ) {
+      throw new Error(
+        `createGguiServer: service "${svc.name}" handler "${h.name}" declares an empty \`outputSchema\` — this silently strips \`structuredContent\` at the MCP SDK boundary. Declare the fields the handler returns (e.g. \`outputSchema: { items: z.array(...) }\`).`
+      );
+    }
+    if (h.audience !== undefined) {
+      throw new Error(
+        `createGguiServer: service "${svc.name}" handler "${h.name}" sets \`audience\` (${JSON.stringify(h.audience)}). Services bypass audience filtering — the path "${svc.path}" IS the audience. Remove the \`audience\` field or move the handler to an aggregate mount.`
+      );
+    }
+    if (seenTools.has(h.name)) {
+      throw new Error(
+        `createGguiServer: service "${svc.name}" registers tool "${h.name}" twice. Tool names must be unique within a service (cross-service collisions ARE allowed).`
+      );
+    }
+    seenTools.add(h.name);
+  }
 }
 
 /**

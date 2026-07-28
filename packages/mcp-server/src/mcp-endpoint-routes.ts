@@ -1,11 +1,13 @@
 /**
- * MCP wire endpoints — the audience-routed JSON-RPC surfaces.
+ * MCP wire endpoints — the JSON-RPC surfaces.
  *
- *   POST <universalMcpPath>            — agent+runtime tools (default `/mcp`)
- *   POST <pathPrefix>/:appId           — per-tenant variant (opt-in via
- *                                        `perAppRouting`)
- *   POST /protocol                     — design-time spec/discovery tools
- *   POST /ops                          — operator-class management tools
+ *   POST <universalMcpPath>            — DATA PLANE: agent+runtime tools
+ *                                        (default `/mcp`)
+ *   POST <pathPrefix>/:appId           — data plane, per-tenant variant
+ *                                        (opt-in via `perAppRouting`)
+ *   POST /control                      — CONTROL PLANE: design-time
+ *                                        spec/discovery (anonymous) +
+ *                                        operator management (authed)
  *   POST <service.path>                — isolated MCP services (path IS
  *                                        the audience)
  *   GET/DELETE on each                 — 405 (stateless server; no
@@ -13,12 +15,17 @@
  *                                        session-terminate verbs)
  *
  * Every route shares ONE request pipeline (`makeMcpHandler`): resolve
- * identity via the AuthAdapter (anonymous services synthesize a
+ * identity via the AuthAdapter (anonymous surfaces synthesize a
  * builder identity on missing/invalid bearers), apply the per-app
  * authorize hook, build a fresh `McpServer` + Streamable HTTP
  * transport per request (stateless), and dispatch under the
  * AsyncLocalStorage-scoped `HandlerContext`. The difference between
  * routes is ONLY the handler set each exposes.
+ *
+ * Audience TAGS remain the normative caller-class declaration; what
+ * they no longer do is mint one HTTP route each. `protocol` and `ops`
+ * both mount on `/control` — see `./control-service.ts` for why (one
+ * route carries one auth posture; the control plane needs two).
  *
  * See `docs/development/audience-routes.md` for the audience taxonomy
  * (`agent` / `runtime` / `protocol` / `ops`) and the wire-name prefix
@@ -34,6 +41,11 @@ import { randomUUID } from "node:crypto";
 import type { ZodRawShape } from "zod";
 import { resolveIdentity, UnauthenticatedError } from "./auth.js";
 import { buildMcpServer, type BuildMcpServerOptions, type ServerInfo } from "./build-mcp.js";
+import {
+  CONTROL_PATH,
+  DATA_PLANE_AUDIENCES,
+  filterHandlersByAudience,
+} from "./control-service.js";
 import type { Logger } from "./logger.js";
 import type { McpService } from "./mcp-mounts.js";
 import { buildWwwAuthenticate, resolveIssuerUrl } from "./oauth.js";
@@ -55,8 +67,15 @@ interface MountOptions {
   readonly auth: AuthAdapter;
   /** Server identity forwarded to every per-request `buildMcpServer`. */
   readonly info: ServerInfo;
-  /** Full composed handler list (audience filtering happens here). */
+  /** Full composed handler list (data-plane audience filtering happens here). */
   readonly handlers: ReadonlyArray<SharedHandler<ZodRawShape, ZodRawShape>>;
+  /**
+   * Control-plane handler set — already projected + wrapped by
+   * `buildControlService`. Passed pre-built rather than filtered here
+   * because the per-tool auth/confirm wrappers are composition, not
+   * transport.
+   */
+  readonly controlHandlers: ReadonlyArray<SharedHandler<ZodRawShape, ZodRawShape>>;
   /** Validated isolated-service list (`validateMcpServices` output). */
   readonly mcpServices: ReadonlyArray<McpService>;
   /** Request-scoped HandlerContext storage shared with the handlers. */
@@ -108,9 +127,9 @@ function resolveWwwAuthResourcePath(
 }
 
 /**
- * Mount the universal / per-app / protocol / ops / service MCP
- * endpoints onto the express app. Returns nothing — the routes
- * self-register.
+ * Mount the data-plane (universal / per-app), control-plane, and
+ * service MCP endpoints onto the express app. Returns nothing — the
+ * routes self-register.
  */
 export function mountMcpEndpoints(opts: MountOptions): void {
   const {
@@ -119,6 +138,7 @@ export function mountMcpEndpoints(opts: MountOptions): void {
     auth,
     info,
     handlers,
+    controlHandlers,
     mcpServices,
     als,
     appIdFromIdentity,
@@ -129,23 +149,6 @@ export function mountMcpEndpoints(opts: MountOptions): void {
     errorMapper,
     buildMcpOptions,
   } = opts;
-
-  /**
-   * Audience filter — returns the subset of `handlers` whose
-   * `audience` tag intersects `allowed`. Read on route mounting so
-   * each MCP route exposes only its audience's tools.
-   *
-   * Handlers with `audience: undefined` default to ['agent'] — every
-   * such handler is agent-runtime callable.
-   */
-  const filterHandlersByAudience = (
-    set: ReadonlyArray<SharedHandler<ZodRawShape, ZodRawShape>>,
-    allowed: ReadonlyArray<"agent" | "runtime" | "protocol" | "ops">
-  ): ReadonlyArray<SharedHandler<ZodRawShape, ZodRawShape>> =>
-    set.filter((h) => {
-      const tags = h.audience ?? (["agent"] as const);
-      return tags.some((t) => allowed.includes(t));
-    });
 
   const makeMcpHandler =
     (
@@ -159,16 +162,17 @@ export function mountMcpEndpoints(opts: MountOptions): void {
           : randomUUID();
       const reqLogger = logger.child({ requestId });
 
-      // Auth is OPTIONAL on anonymous services and REQUIRED otherwise.
+      // Auth is OPTIONAL on anonymous surfaces and REQUIRED otherwise.
       // Always attempt to resolve a presented credential: an anonymous
-      // service with a valid bearer still resolves to the real identity
-      // (so it can offer authenticated capabilities — e.g. `/dev`'s ops
-      // tools read `ctx.userId`), while a missing/unauthenticated
-      // credential falls back to the synthesized anonymous builder so
-      // public reads (docs, protocol) work bearer-less. This is what makes
-      // `source: 'anonymous'` distinguishable from an authenticated caller,
-      // per the `McpService.anonymous` contract — resolving a present
-      // bearer is the only way a handler can tell the two apart.
+      // surface with a valid bearer still resolves to the real identity
+      // (so it can offer authenticated capabilities — e.g. `/control`'s
+      // ops tools, gated on `ctx.authSource`), while a missing or
+      // unauthenticated credential falls back to the synthesized
+      // anonymous builder so public reads (docs, protocol) work
+      // bearer-less. Threading the resolved `source` onto the context is
+      // what makes `'anonymous'` distinguishable from an authenticated
+      // caller, per the `McpService.anonymous` contract — the identity
+      // FIELDS are identical for both.
       let identity: AuthResult;
       try {
         identity = await resolveIdentity(auth, req);
@@ -229,11 +233,12 @@ export function mountMcpEndpoints(opts: MountOptions): void {
         }
       }
 
-      // Operator-surface guard: federated end-user identities (source:'oidc',
-      // minted by the OIDC verify adapter) must never reach operator-class
-      // routes (/ops) or design-time spec routes (/protocol). Audience
-      // filtering only shapes tools/list; it does NOT stop a direct
-      // tools/call, so this is a route-level authorization gate.
+      // Control-plane guard: federated end-user identities
+      // (source:'oidc', minted by the OIDC verify adapter) must never
+      // reach the control plane — neither its operator half nor its
+      // design-time spec half. Audience filtering only shapes
+      // tools/list; it does NOT stop a direct tools/call, so this is a
+      // route-level authorization gate that runs before MCP dispatch.
       if (handlerOpts?.rejectFederated && identity.source === "oidc") {
         reqLogger.warn("federated_identity_rejected", { route: req.path });
         res.status(403).json({
@@ -282,6 +287,10 @@ export function mountMcpEndpoints(opts: MountOptions): void {
       const ctx: HandlerContext = {
         appId: hasUrlAppId ? urlAppId : appIdFromIdentity(identity),
         requestId,
+        // How this request proved itself. The control plane's per-tool
+        // auth gate reads it to refuse anonymous callers; no other
+        // handler should branch on the specific mechanism.
+        authSource: identity.source,
         // Identity is the canonical source of two mutually-exclusive
         // hosted fields: `apiKeyHash` for kind=app, `userId` for kind=user.
         // Threading them onto HandlerContext here means hosted handlers
@@ -353,17 +362,18 @@ export function mountMcpEndpoints(opts: MountOptions): void {
     });
   };
 
-  // Three audience-filtered handler sets. Each set is the
-  // subset of `handlers` whose `audience` tag intersects the route's
-  // allowed list. Handlers without an explicit tag default to
-  // ['agent'] — every such handler is agent-runtime callable.
-  const agentRouteHandlers = filterHandlersByAudience(handlers, ["agent", "runtime"]);
-  const protocolRouteHandlers = filterHandlersByAudience(handlers, ["protocol"]);
-  const opsRouteHandlers = filterHandlersByAudience(handlers, ["ops"]);
+  // Data plane — the subset of `handlers` whose `audience` tag
+  // intersects ['agent','runtime']. Handlers without an explicit tag
+  // default to ['agent'], so every untagged handler is agent-callable.
+  const agentRouteHandlers = filterHandlersByAudience(handlers, DATA_PLANE_AUDIENCES);
 
   const agentMcpHandler = makeMcpHandler(agentRouteHandlers);
-  const protocolMcpHandler = makeMcpHandler(protocolRouteHandlers, { rejectFederated: true });
-  const opsMcpHandler = makeMcpHandler(opsRouteHandlers, { rejectFederated: true });
+  // Control plane — anonymous-capable (design-time tools answer
+  // bearer-less) with each ops tool re-imposing auth for itself.
+  const controlMcpHandler = makeMcpHandler(controlHandlers, {
+    anonymous: true,
+    rejectFederated: true,
+  });
 
   // Universal endpoint — `appId` resolved from the auth identity via
   // `appIdFromIdentity`. Cloud `mcp.ggui.ai` deployments resolve this
@@ -414,26 +424,19 @@ export function mountMcpEndpoints(opts: MountOptions): void {
     app.post(route, agentMcpHandler);
   }
 
-  // /protocol — design-time spec/discovery surface.
-  // Hosts the `audience: ['protocol']` tools (`ggui_describe_*`,
-  // `ggui_get_example_blueprints`, `ggui_validate_blueprint`,
-  // `ggui_list_available_primitives`, `ggui_get_blueprint_boilerplate`).
-  // Strips spec-discovery noise off the agent's runtime `tools/list`
-  // — agents that need format docs hit `/protocol` explicitly.
-  // Always mounted; the route has the same auth chain as `/mcp` for
-  // v1 (operators MAY narrow auth in their own middleware later).
-  // Empty when the deployment didn't wire any protocol-tagged handlers.
-  app.post("/protocol", protocolMcpHandler);
-  app.get("/protocol", methodNotAllowed);
-  app.delete("/protocol", methodNotAllowed);
-
-  // /ops — operator-class management surface. Hosts the
-  // `audience: ['ops']` tools (`ggui_set_provider_key`, `ggui_get_credit_balance`,
-  // etc.). Always mounted; same auth chain as `/mcp`. Empty when the
-  // deployment didn't wire any ops-tagged handlers.
-  app.post("/ops", opsMcpHandler);
-  app.get("/ops", methodNotAllowed);
-  app.delete("/ops", methodNotAllowed);
+  // /control — the control plane. Hosts every `audience: ['protocol']`
+  // tool (design-time spec/discovery, anonymous) and every
+  // `audience: ['ops']` tool (operator management, auth-gated per tool,
+  // state-changing ones confirm-gated). Keeping both off the data plane
+  // strips spec-discovery and account-management noise from the agent's
+  // runtime `tools/list`.
+  //
+  // ALWAYS mounted — the control plane is part of what a ggui server
+  // IS, not an opt-in. It is empty only when a deployment wired no
+  // protocol- or ops-tagged handlers at all.
+  app.post(CONTROL_PATH, controlMcpHandler);
+  app.get(CONTROL_PATH, methodNotAllowed);
+  app.delete(CONTROL_PATH, methodNotAllowed);
 
   // Isolated MCP services — each at its own HTTP path with its own
   // tool namespace. Bypasses audience filtering (the path IS the

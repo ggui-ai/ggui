@@ -1,6 +1,6 @@
 /**
  * Zod input + output schemas for the operator-class blueprint tools.
- * Four tools, all `audience: 'ops'`, all served on `/ops`:
+ * Four tools, all `audience: 'ops'`, all served on `/control`:
  *
  *   - `ggui_ops_generate_blueprint` — author a new blueprint by
  *     dispatching through the registry's selected generator and

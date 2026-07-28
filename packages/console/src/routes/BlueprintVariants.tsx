@@ -22,8 +22,9 @@
  *   - generator slug
  *   - drafts-only toggle
  *
- * The browser sends an MCP JSON-RPC `tools/call` directly to `/ops`;
- * see `../components/blueprints/opsClient.ts` for the wire detail.
+ * The browser sends an MCP JSON-RPC `tools/call` directly to the
+ * `/control` plane; see `../components/blueprints/opsClient.ts` for the
+ * wire detail, including the confirmation flag the mutating calls pass.
  * Same-origin auth via the `ggui_console_admin` cookie.
  */
 import { useCallback, useEffect, useState, type ReactElement } from 'react';

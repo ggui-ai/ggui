@@ -1,7 +1,7 @@
 /**
  * Operator-class blueprint handler family.
  *
- * Four MCP tools, all `audience: ['ops']`, all served on `/ops`:
+ * Four MCP tools, all `audience: ['ops']`, all served on `/control`:
  *
  *   - `createGguiOpsGenerateBlueprintHandler` —
  *     `ggui_ops_generate_blueprint`. Author a new blueprint variant

@@ -1,7 +1,7 @@
 /**
  * Operator-class coupon handler family.
  *
- * One MCP tool, `audience: ['ops']`, served on `/ops`:
+ * One MCP tool, `audience: ['ops']`, served on `/control`:
  *
  *   - `createRedeemCouponHandler` → `ggui_ops_redeem_coupon`
  *

@@ -1,16 +1,16 @@
 /**
  * Route-level reject-federated gate (Federation B1, Task 5).
  *
- * `/ops` (operator-class) and `/protocol` (design-time spec) routes
- * MUST reject externally-federated end-user identities — those minted
- * by the OIDC verify adapter, carrying `source: 'oidc'`. Audience
+ * The `/control` plane — operator management AND design-time spec —
+ * MUST reject externally-federated end-user identities: those minted by
+ * the OIDC verify adapter, carrying `source: 'oidc'`. Audience
  * filtering only shapes `tools/list`; it does NOT stop a direct
  * `tools/call`, so this is a route-level authorization gate that runs
  * before MCP dispatch.
  *
  * Agents authenticate with `source: 'apikey'` / `'dev'` and MUST still
- * reach `/mcp` (and design-time discovery on `/protocol`/`/ops` for
- * non-federated callers) unaffected.
+ * reach the data plane (`/mcp`) and the control plane's design-time
+ * half unaffected.
  *
  * Mirrors the package's existing route-test harness in `server.test.ts`:
  * boot `createGguiServer` on an ephemeral port, then drive the real
@@ -77,34 +77,16 @@ function federatedAndAgentAuth(): InMemoryAuthAdapter {
   });
 }
 
-describe('mcp-endpoint-routes — reject-federated gate (/ops + /protocol)', () => {
+describe('mcp-endpoint-routes — reject-federated gate (/control)', () => {
   let fx: BootedFixture;
 
   afterEach(async () => {
     await fx.server.close();
   });
 
-  it('a source=oidc identity gets 403 at /ops', async () => {
+  it('a source=oidc identity gets 403 at /control', async () => {
     fx = await boot({ auth: federatedAndAgentAuth() });
-    const res = await fetch(`${fx.url}/ops`, {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        Authorization: `Bearer ${FEDERATED_TOKEN}`,
-      },
-      body: JSON.stringify({
-        jsonrpc: '2.0',
-        id: 1,
-        method: 'tools/list',
-        params: {},
-      }),
-    });
-    expect(res.status).toBe(403);
-  });
-
-  it('a source=oidc identity gets 403 at /protocol', async () => {
-    fx = await boot({ auth: federatedAndAgentAuth() });
-    const res = await fetch(`${fx.url}/protocol`, {
+    const res = await fetch(`${fx.url}/control`, {
       method: 'POST',
       headers: {
         'content-type': 'application/json',
@@ -141,10 +123,10 @@ describe('mcp-endpoint-routes — reject-federated gate (/ops + /protocol)', () 
     expect(true).toBe(true);
   });
 
-  it('an agent (source=apikey) identity is NOT rejected at /protocol', async () => {
+  it('an agent (source=apikey) identity is NOT rejected at /control', async () => {
     fx = await boot({ auth: federatedAndAgentAuth() });
     const transport = new StreamableHTTPClientTransport(
-      new URL(`${fx.url}/protocol`),
+      new URL(`${fx.url}/control`),
       {
         requestInit: {
           headers: { Authorization: `Bearer ${AGENT_TOKEN}` },
@@ -155,9 +137,32 @@ describe('mcp-endpoint-routes — reject-federated gate (/ops + /protocol)', () 
       { name: 'test-client', version: '0' },
       { capabilities: {} },
     );
-    // The /protocol route exposes design-time spec tools to agents; the
+    // The control plane exposes design-time spec tools to agents; the
     // gate only rejects federated end-users, so an apikey caller must
     // complete the handshake (and see the protocol-tagged tools).
+    await client.connect(transport);
+    try {
+      const { tools } = await client.listTools();
+      const names = tools.map((t) => t.name);
+      expect(names).toContain('ggui_protocol_validate_blueprint');
+    } finally {
+      await client.close();
+    }
+  });
+
+  // The control plane is anonymous-CAPABLE so design-time tools answer
+  // bearer-less. The federated gate must still fire on that path —
+  // otherwise an OIDC caller could reach it by simply not presenting
+  // its token, which the anonymous fallback would happily accept.
+  it('the design-time half answers with NO bearer at all', async () => {
+    fx = await boot({ auth: federatedAndAgentAuth() });
+    const transport = new StreamableHTTPClientTransport(
+      new URL(`${fx.url}/control`),
+    );
+    const client = new Client(
+      { name: 'test-client', version: '0' },
+      { capabilities: {} },
+    );
     await client.connect(transport);
     try {
       const { tools } = await client.listTools();

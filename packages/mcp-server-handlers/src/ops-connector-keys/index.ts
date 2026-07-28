@@ -1,7 +1,7 @@
 /**
  * Operator-class connector-keys handler family.
  *
- * Three MCP tools, all `audience: ['ops']`, all served on `/ops`. Pure
+ * Three MCP tools, all `audience: ['ops']`, all served on `/control`. Pure
  * over the {@link ConnectorKeysSource} seam.
  *
  *   - `createListConnectorKeysHandler` → `ggui_ops_list_connector_keys`

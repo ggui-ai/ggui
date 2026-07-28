@@ -787,9 +787,9 @@ describe('createGguiServer — MCP wire roundtrip', () => {
     try {
       const { tools } = await client.listTools();
       const names = tools.map((t) => t.name).sort();
-      // Phase 4.2 audience filter: `/mcp` exposes only `agent` + `runtime`
-      // tagged tools. The 6 spec/discovery handlers (audience: ['protocol'])
-      // are now mounted at `/protocol` and absent from this list.
+      // Data plane: `/mcp` exposes only `agent` + `runtime` tagged
+      // tools. The 6 spec/discovery handlers (audience: ['protocol'])
+      // live on the control plane and are absent from this list.
       // `ggui_render_blueprint` is still gated on a `uiRegistry` seam.
       expect(names).toEqual([
         'ggui_list_featured_blueprints',
@@ -803,14 +803,12 @@ describe('createGguiServer — MCP wire roundtrip', () => {
     }
   });
 
-  // Phase 4.2 — pin audience-filtered route mounting. `/protocol`
-  // hosts only `audience: ['protocol']` tools; `/mcp` hosts only
-  // `agent` + `runtime`. Cross-route requests MUST NOT see each
-  // other's tools.
-  it('audience filter: /protocol surfaces only protocol-tagged tools', async () => {
-    fx = await boot();
+  // Two surfaces, one projection. `/control` hosts every `protocol`-
+  // and `ops`-tagged tool; `/mcp` hosts only `agent` + `runtime`.
+  // Cross-plane requests MUST NOT see each other's tools.
+  async function connectControl(url: string): Promise<Client> {
     const transport = new StreamableHTTPClientTransport(
-      new URL(`${fx.url}/protocol`),
+      new URL(`${url}/control`),
       { requestInit: { headers: { Authorization: 'Bearer dev' } } },
     );
     const client = new Client(
@@ -818,11 +816,19 @@ describe('createGguiServer — MCP wire roundtrip', () => {
       { capabilities: {} },
     );
     await client.connect(transport);
+    return client;
+  }
+
+  it('control plane surfaces the protocol-tagged tools', async () => {
+    fx = await boot();
+    const client = await connectControl(fx.url);
     try {
       const { tools } = await client.listTools();
       const names = tools.map((t) => t.name).sort();
-      // The 6 spec/discovery factories tagged audience: ['protocol'],
-      // renamed in Phase 4.1 to carry the `ggui_protocol_*` prefix.
+      // A default OSS boot wires no ops deps, so the control plane is
+      // exactly the 6 spec/discovery factories tagged
+      // audience: ['protocol'] — all carrying the `ggui_protocol_*`
+      // prefix that encodes the audience on the wire name.
       expect(names).toEqual([
         'ggui_protocol_describe_blueprint_format',
         'ggui_protocol_describe_data_contract_format',
@@ -836,7 +842,7 @@ describe('createGguiServer — MCP wire roundtrip', () => {
     }
   });
 
-  it('audience filter: /mcp does NOT surface protocol-tagged tools', async () => {
+  it('data plane does NOT surface protocol-tagged tools', async () => {
     fx = await boot();
     const client = await connectClient(fx.url);
     try {
@@ -850,17 +856,9 @@ describe('createGguiServer — MCP wire roundtrip', () => {
     }
   });
 
-  it('audience filter: /protocol does NOT surface agent-tagged tools', async () => {
+  it('control plane does NOT surface agent-tagged tools', async () => {
     fx = await boot();
-    const transport = new StreamableHTTPClientTransport(
-      new URL(`${fx.url}/protocol`),
-      { requestInit: { headers: { Authorization: 'Bearer dev' } } },
-    );
-    const client = new Client(
-      { name: 'test-client', version: '0' },
-      { capabilities: {} },
-    );
-    await client.connect(transport);
+    const client = await connectControl(fx.url);
     try {
       const { tools } = await client.listTools();
       const names = tools.map((t) => t.name);
@@ -872,18 +870,13 @@ describe('createGguiServer — MCP wire roundtrip', () => {
     }
   });
 
-  it('audience filter: /ops route mounts even when no ops handlers wired (404-equivalent on tools/list)', async () => {
-    // Default OSS boot wires no ops handlers (provider-keys + credit
-    // factories are deps-conditional). The route still mounts so cloud
-    // and OSS share the same URL contract; tools/list surfaces the
-    // MCP-SDK "method not found" because no `tool()` calls registered
-    // the capability when the handler list is empty. When ops deps land,
-    // tools/list returns the expected ops surface — covered by
-    // contract tests that wire a fake ProviderKeyStore.
+  it('control plane answers design-time tools with no bearer at all', async () => {
+    // The route is anonymous-capable: an agent authoring a blueprint
+    // has no account yet, so spec/discovery must not require one. The
+    // ops half re-imposes auth per handler.
     fx = await boot();
     const transport = new StreamableHTTPClientTransport(
-      new URL(`${fx.url}/ops`),
-      { requestInit: { headers: { Authorization: 'Bearer dev' } } },
+      new URL(`${fx.url}/control`),
     );
     const client = new Client(
       { name: 'test-client', version: '0' },
@@ -891,7 +884,11 @@ describe('createGguiServer — MCP wire roundtrip', () => {
     );
     await client.connect(transport);
     try {
-      await expect(client.listTools()).rejects.toThrow(/Method not found/);
+      const r = await client.callTool({
+        name: 'ggui_protocol_list_available_primitives',
+        arguments: {},
+      });
+      expect(r.isError).not.toBe(true);
     } finally {
       await client.close();
     }
@@ -1324,9 +1321,9 @@ describe('createGguiServer — mcpMounts (Slice 6 runtime aggregation)', () => {
 describe('createGguiServer — mcpServices (Slice 8.0 isolated services)', () => {
   // Scope: prove that isolated services mounted via `mcpServices`:
   //   1. Reach the wire at their declared path with their own tool set.
-  //   2. Are isolated from each other and from the audience-filtered
-  //      `/mcp` / `/protocol` / `/ops` surfaces — clients connecting to
-  //      one path only see that path's tools.
+  //   2. Are isolated from each other and from the two canonical
+  //      surfaces (`/mcp` data plane, `/control` control plane) —
+  //      clients connecting to one path only see that path's tools.
   //   3. Reject misconfiguration at server-construction time, not at
   //      first `tools/call`.
   let fx: BootedFixture;
@@ -1470,7 +1467,7 @@ describe('createGguiServer — mcpServices (Slice 8.0 isolated services)', () =>
       createGguiServer({
         logger: silentLogger,
         mcpServices: [
-          { name: 'shadow-ops', path: '/ops', handlers: [docsTool] },
+          { name: 'shadow-control', path: '/control', handlers: [docsTool] },
         ],
       }),
     ).toThrow(/reserved built-in route/);
@@ -1563,9 +1560,9 @@ describe('createGguiServer — mcpServices (Slice 8.0 isolated services)', () =>
 
   // ── Auth-OPTIONAL on anonymous services ──
   // An anonymous service must still RESOLVE a presented bearer to its
-  // real identity (so it can offer authenticated capabilities, e.g.
-  // mcp.ggui.ai/dev's ops tools that read ctx.userId), falling back to the
-  // synthesized builder only when no/invalid credentials are presented.
+  // real identity (so it can offer authenticated capabilities, e.g. the
+  // /control plane's ops tools), falling back to the synthesized builder
+  // only when no/invalid credentials are presented.
   // Regression lock: a prior impl short-circuited to `builder` for EVERY
   // request on an anonymous service, silently dropping a valid bearer.
   const whoamiTool = {
@@ -1631,7 +1628,8 @@ describe('createGguiServer — mcpServices (Slice 8.0 isolated services)', () =>
     fx = await anonServiceBoot();
     // A bad token must NOT 401 the connect — it downgrades to anonymous so
     // docs/protocol reads work; an ops tool would then 401 via its own
-    // handler-level auth gate (ctx.userId absent), not at the transport.
+    // handler-level auth gate (ctx.authSource === 'anonymous'), not at
+    // the transport.
     const client = await connectAnonAt(fx.url, 'WRONG-TOKEN');
     try {
       const r = await client.callTool({ name: 'whoami', arguments: {} });

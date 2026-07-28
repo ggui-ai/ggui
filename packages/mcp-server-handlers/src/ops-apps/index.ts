@@ -1,7 +1,7 @@
 /**
  * Operator-class apps handler family.
  *
- * Six MCP tools, all `audience: ['ops']`, all served on `/ops`. Pure
+ * Six MCP tools, all `audience: ['ops']`, all served on `/control`. Pure
  * over the {@link AppsSource} + {@link UserDefaultAppSource} seams —
  * NO AWS imports. Cloud deployments bind AWS-backed adapters; tests
  * use in-memory fakes.

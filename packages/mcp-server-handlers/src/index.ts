@@ -42,7 +42,7 @@ export * from "./credits/index.js";
 // `@ggui-ai/mcp-server-handlers/app-discovery` subpath too.
 export * from "./app-discovery/index.js";
 // Operator-class blueprint handler family — `ggui_ops_*` tools
-// served on the `/ops` route. Available under
+// served on the `/control` plane. Available under
 // `@ggui-ai/mcp-server-handlers/ops-blueprint` subpath too.
 export * from "./ops-blueprint/index.js";
 // Operator-class apps, orgs, connector-keys, and coupon handler

@@ -1,7 +1,7 @@
 /**
  * Operator-class orgs handler family.
  *
- * Four MCP tools, all `audience: ['ops']`, all served on `/ops`. Pure
+ * Four MCP tools, all `audience: ['ops']`, all served on `/control`. Pure
  * over the {@link OrgsSource} + {@link OrgInvitesSource} seams — NO
  * AWS imports. Cloud deployments bind AWS-backed adapters; tests use
  * in-memory fakes.

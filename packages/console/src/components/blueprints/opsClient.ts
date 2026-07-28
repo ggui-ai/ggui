@@ -1,15 +1,15 @@
 /**
  * Thin MCP JSON-RPC client for the operator console — talks to the
- * server's stateless `/ops` endpoint (mounted in
+ * server's stateless `/control` plane (mounted in
  * `packages/mcp-server/src/server.ts`).
  *
  * **Why this exists.** The console SPA needs to invoke the four
  * `ggui_ops_*` blueprint tools — `generate`, `list`, `update`,
  * `delete`. Rather than minting REST proxy endpoints on `mcp-server`,
- * the SPA posts JSON-RPC `tools/call` requests directly to `/ops`,
+ * the SPA posts JSON-RPC `tools/call` requests directly to `/control`,
  * which is the canonical operator-tool surface.
  *
- * **Wire shape.** `/ops` runs the MCP Streamable HTTP transport in
+ * **Wire shape.** `/control` runs the MCP Streamable HTTP transport in
  * stateless mode (`sessionIdGenerator: undefined`). It accepts a
  * single JSON-RPC request body and responds with either a single JSON
  * object or an SSE stream depending on `Accept`. We send `application/
@@ -19,8 +19,17 @@
  * **Auth posture.** The console's same-origin cookie middleware
  * (`cookieAuthMiddleware`) injects the operator's bearer header from
  * the `ggui_console_admin` cookie before the request reaches the
- * `/ops` MCP handler. Browser specs land logged-in; bare curl gets
- * 401.
+ * `/control` MCP handler. The route is anonymous-capable (design-time
+ * spec tools answer bearer-less), but every `ggui_ops_*` tool re-imposes
+ * auth for itself — so a logged-out SPA gets a tool-level auth error
+ * rather than a transport 401.
+ *
+ * **Confirmation gate.** The control plane turns state-changing ops
+ * into a two-call sequence so an AGENT cannot mutate an account
+ * silently. The console is the human at the keyboard — the operator
+ * already confirmed by clicking — so the mutating calls below pass
+ * `confirm: true` and commit in one round-trip. `list` is a read and
+ * needs no flag.
  *
  * **Result envelope.** MCP tool calls return a `{content, isError?,
  * structuredContent?}` envelope — `structuredContent` carries the
@@ -108,7 +117,7 @@ async function parseMcpResponse<T>(res: Response): Promise<JsonRpcResponse<T>> {
     const match = /^data:\s*(.+)$/m.exec(text);
     if (!match || !match[1]) {
       throw new OpsCallError(
-        `Malformed SSE response from /ops — no data line`,
+        `Malformed SSE response from /control — no data line`,
         -32700,
         res.status,
       );
@@ -120,7 +129,7 @@ async function parseMcpResponse<T>(res: Response): Promise<JsonRpcResponse<T>> {
 }
 
 /**
- * Invoke an MCP `tools/call` against `/ops` and unwrap the result to
+ * Invoke an MCP `tools/call` against `/control` and unwrap the result to
  * the tool's typed `structuredContent` (or parse the text fallback).
  * Throws {@link OpsCallError} on JSON-RPC failure or HTTP error.
  */
@@ -151,14 +160,14 @@ async function callOpsTool<TArgs, TResult>(
   if (signal !== undefined) {
     fetchInit.signal = signal;
   }
-  const res = await fetch('/ops', fetchInit);
+  const res = await fetch('/control', fetchInit);
   if (!res.ok && res.status !== 200) {
     // The MCP transport returns 200 even for tool errors (errors live
     // in the JSON-RPC envelope). Any other status is a transport-level
     // failure — auth, route, server crash.
     const text = await res.text().catch(() => '');
     throw new OpsCallError(
-      `/ops returned HTTP ${res.status}${text ? ` — ${text}` : ''}`,
+      `/control returned HTTP ${res.status}${text ? ` — ${text}` : ''}`,
       -32000,
       res.status,
     );
@@ -191,9 +200,9 @@ export function callOpsGenerateBlueprint(
   input: OpsGenerateBlueprintInput,
   signal?: AbortSignal,
 ): Promise<OpsGenerateBlueprintOutput> {
-  return callOpsTool<OpsGenerateBlueprintInput, OpsGenerateBlueprintOutput>(
+  return callOpsTool<OpsGenerateBlueprintInput & { confirm: true }, OpsGenerateBlueprintOutput>(
     'ggui_ops_generate_blueprint',
-    input,
+    { ...input, confirm: true },
     signal,
   );
 }
@@ -213,9 +222,9 @@ export function callOpsUpdateBlueprint(
   input: OpsUpdateBlueprintInput,
   signal?: AbortSignal,
 ): Promise<OpsUpdateBlueprintOutput> {
-  return callOpsTool<OpsUpdateBlueprintInput, OpsUpdateBlueprintOutput>(
+  return callOpsTool<OpsUpdateBlueprintInput & { confirm: true }, OpsUpdateBlueprintOutput>(
     'ggui_ops_update_blueprint',
-    input,
+    { ...input, confirm: true },
     signal,
   );
 }
@@ -224,9 +233,9 @@ export function callOpsDeleteBlueprint(
   input: OpsDeleteBlueprintInput,
   signal?: AbortSignal,
 ): Promise<OpsDeleteBlueprintOutput> {
-  return callOpsTool<OpsDeleteBlueprintInput, OpsDeleteBlueprintOutput>(
+  return callOpsTool<OpsDeleteBlueprintInput & { confirm: true }, OpsDeleteBlueprintOutput>(
     'ggui_ops_delete_blueprint',
-    input,
+    { ...input, confirm: true },
     signal,
   );
 }

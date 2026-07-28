@@ -234,9 +234,11 @@ import { mountEmailLoginRoutes, type EmailSender, type MagicLinkStore } from "./
 import { resolveMcpInstructions, type McpInstructionsValue } from "./instructions-presets.js";
 import { buildLlmCaller, createLlmBackedHandshakeNegotiator } from "./llm-backed-negotiator.js";
 import { createConsoleLogger, type Logger } from "./logger.js";
+import { buildControlService } from "./control-service.js";
 import {
   composeHandlersWithMounts,
   validateMcpServices,
+  validateServiceHandlers,
   type McpServerMount,
   type McpService,
 } from "./mcp-mounts.js";
@@ -782,7 +784,7 @@ export function defaultHandlers(deps: {
    * Operator-class blueprint tool wiring. When
    * `generators` + `blueprintStore` + `blueprintSearch` are all
    * bound, `defaultHandlers` registers the four `ggui_ops_*`
-   * blueprint tools on `/ops`:
+   * blueprint tools on the `/control` plane:
    *
    *   - `ggui_ops_generate_blueprint` (requires `resolveLlm` +
    *     `blueprints` too — same deps the render generation path
@@ -845,32 +847,6 @@ export function defaultHandlers(deps: {
       readonly index: BlueprintIndex;
     };
   };
-  /**
-   * Per-domain dep bundles for the twelve operator-class `ggui_ops_*`
-   * handlers covering apps + orgs + connector-keys + coupons. Each
-   * domain is independently optional:
-   * deployments that don't wire the seam simply don't register that
-   * domain's tools (matching `ggui_ops_get_credit_balance`'s pattern).
-   *
-   * OSS deployments (no AppSync, no Cognito) leave these all
-   * undefined and the surface stays narrow. Cloud pods bind
-   * AppSync-backed adapters in a follow-up slice; the handlers ship
-   * here with deps seams only.
-   */
-  readonly opsApps?: {
-    readonly apps: AppsSource;
-    readonly userDefaultApp: UserDefaultAppSource;
-  };
-  readonly opsOrgs?: {
-    readonly orgs: OrgsSource;
-    readonly invites: OrgInvitesSource;
-  };
-  readonly opsConnectorKeys?: {
-    readonly connectorKeys: ConnectorKeysSource;
-  };
-  readonly opsCoupon?: {
-    readonly coupons: CouponRedeemSource;
-  };
 }): ReadonlyArray<SharedHandler<ZodRawShape, ZodRawShape>> {
   // Single shared pending-events pipe (Model C, sessionId-keyed).
   // render opens (`markCreated`), submit_action appends, consume drains,
@@ -904,8 +880,8 @@ export function defaultHandlers(deps: {
       deps.blueprints ? { blueprints: deps.blueprints } : {}
     ) as SharedHandler<ZodRawShape, ZodRawShape>,
     // Spec / discovery handlers — zero-deps. These may be tagged
-    // `audience: ['protocol']` and mounted on `/protocol`; today they
-    // ship on `/mcp` next to runtime tools.
+    // `audience: ['protocol']`, which mounts them on the `/control`
+    // plane rather than the agent-facing data plane.
     createDescribeBlueprintFormatHandler() as SharedHandler<ZodRawShape, ZodRawShape>,
     createDescribeDataContractFormatHandler() as SharedHandler<ZodRawShape, ZodRawShape>,
     createGetBlueprintBoilerplateHandler() as SharedHandler<ZodRawShape, ZodRawShape>,
@@ -1333,80 +1309,77 @@ export function defaultHandlers(deps: {
       }) as SharedHandler<ZodRawShape, ZodRawShape>
     );
   }
-  // Operator-class per-domain handlers for the console's apps + orgs
-  // + connector-keys + coupon surfaces. Each domain registers
-  // independently when its deps seam is bound; OSS deployments
-  // without these wired keep the smaller surface.
+  return handlers;
+}
+
+/**
+ * Per-domain dep seams for the operator-class `ggui_ops_*` handlers
+ * covering apps + orgs + connector-keys + coupons.
+ */
+export interface OpsBundleDeps {
+  readonly opsApps?: {
+    readonly apps: AppsSource;
+    readonly userDefaultApp: UserDefaultAppSource;
+  };
+  readonly opsOrgs?: {
+    readonly orgs: OrgsSource;
+    readonly invites: OrgInvitesSource;
+  };
+  readonly opsConnectorKeys?: {
+    readonly connectorKeys: ConnectorKeysSource;
+  };
+  readonly opsCoupon?: {
+    readonly coupons: CouponRedeemSource;
+  };
+}
+
+/**
+ * Build the operator-class handlers for the apps / orgs /
+ * connector-keys / coupon domains. Each domain materializes
+ * independently when its deps seam is bound; deployments that wired
+ * none get an empty list.
+ *
+ * Deliberately NOT part of {@link defaultHandlers}: these are bound by
+ * dedicated options, so a deployment that supplies its own base handler
+ * list (`CreateGguiServerOptions.handlers`) still gets the domains it
+ * explicitly wired. `createGguiServer` calls this on every path and
+ * composes the result onto whichever base list resolved — the caller's
+ * own handler wins any name collision, which is how a deployment ships
+ * a bespoke variant of one tool without losing the rest of its family.
+ */
+export function buildOpsBundleHandlers(
+  deps: OpsBundleDeps
+): ReadonlyArray<SharedHandler<ZodRawShape, ZodRawShape>> {
+  const handlers: Array<SharedHandler<ZodRawShape, ZodRawShape>> = [];
   if (deps.opsApps) {
+    const { apps, userDefaultApp } = deps.opsApps;
     handlers.push(
-      createListAppsHandler({
-        apps: deps.opsApps.apps,
-      }) as SharedHandler<ZodRawShape, ZodRawShape>
-    );
-    handlers.push(
-      createCreateAppHandler({
-        apps: deps.opsApps.apps,
-      }) as SharedHandler<ZodRawShape, ZodRawShape>
-    );
-    handlers.push(
-      createRenameAppHandler({
-        apps: deps.opsApps.apps,
-      }) as SharedHandler<ZodRawShape, ZodRawShape>
-    );
-    handlers.push(
-      createDeleteAppHandler({
-        apps: deps.opsApps.apps,
-      }) as SharedHandler<ZodRawShape, ZodRawShape>
-    );
-    handlers.push(
-      createSetDefaultAppHandler({
-        apps: deps.opsApps.apps,
-        userDefaultApp: deps.opsApps.userDefaultApp,
-      }) as SharedHandler<ZodRawShape, ZodRawShape>
-    );
-    handlers.push(
-      createUpdateAppSystemPromptHandler({
-        apps: deps.opsApps.apps,
-      }) as SharedHandler<ZodRawShape, ZodRawShape>
+      createListAppsHandler({ apps }) as SharedHandler<ZodRawShape, ZodRawShape>,
+      createCreateAppHandler({ apps }) as SharedHandler<ZodRawShape, ZodRawShape>,
+      createRenameAppHandler({ apps }) as SharedHandler<ZodRawShape, ZodRawShape>,
+      createDeleteAppHandler({ apps }) as SharedHandler<ZodRawShape, ZodRawShape>,
+      createSetDefaultAppHandler({ apps, userDefaultApp }) as SharedHandler<
+        ZodRawShape,
+        ZodRawShape
+      >,
+      createUpdateAppSystemPromptHandler({ apps }) as SharedHandler<ZodRawShape, ZodRawShape>
     );
   }
   if (deps.opsOrgs) {
+    const { orgs, invites } = deps.opsOrgs;
     handlers.push(
-      createListOrgsHandler({
-        orgs: deps.opsOrgs.orgs,
-      }) as SharedHandler<ZodRawShape, ZodRawShape>
-    );
-    handlers.push(
-      createCreateOrgHandler({
-        orgs: deps.opsOrgs.orgs,
-      }) as SharedHandler<ZodRawShape, ZodRawShape>
-    );
-    handlers.push(
-      createInviteToOrgHandler({
-        invites: deps.opsOrgs.invites,
-      }) as SharedHandler<ZodRawShape, ZodRawShape>
-    );
-    handlers.push(
-      createRevokeInviteHandler({
-        invites: deps.opsOrgs.invites,
-      }) as SharedHandler<ZodRawShape, ZodRawShape>
+      createListOrgsHandler({ orgs }) as SharedHandler<ZodRawShape, ZodRawShape>,
+      createCreateOrgHandler({ orgs }) as SharedHandler<ZodRawShape, ZodRawShape>,
+      createInviteToOrgHandler({ invites }) as SharedHandler<ZodRawShape, ZodRawShape>,
+      createRevokeInviteHandler({ invites }) as SharedHandler<ZodRawShape, ZodRawShape>
     );
   }
   if (deps.opsConnectorKeys) {
+    const { connectorKeys } = deps.opsConnectorKeys;
     handlers.push(
-      createListConnectorKeysHandler({
-        connectorKeys: deps.opsConnectorKeys.connectorKeys,
-      }) as SharedHandler<ZodRawShape, ZodRawShape>
-    );
-    handlers.push(
-      createIssueConnectorKeyHandler({
-        connectorKeys: deps.opsConnectorKeys.connectorKeys,
-      }) as SharedHandler<ZodRawShape, ZodRawShape>
-    );
-    handlers.push(
-      createRevokeConnectorKeyHandler({
-        connectorKeys: deps.opsConnectorKeys.connectorKeys,
-      }) as SharedHandler<ZodRawShape, ZodRawShape>
+      createListConnectorKeysHandler({ connectorKeys }) as SharedHandler<ZodRawShape, ZodRawShape>,
+      createIssueConnectorKeyHandler({ connectorKeys }) as SharedHandler<ZodRawShape, ZodRawShape>,
+      createRevokeConnectorKeyHandler({ connectorKeys }) as SharedHandler<ZodRawShape, ZodRawShape>
     );
   }
   if (deps.opsCoupon) {
@@ -2822,31 +2795,48 @@ export interface CreateGguiServerOptions {
   readonly extraResources?: ReadonlyArray<(server: McpServer) => void>;
 
   /**
-   * Per-domain dep seams for the twelve operator-class `ggui_ops_*`
-   * handlers covering the console's apps + orgs + connector-keys +
-   * coupon surfaces. Each domain is independently optional —
-   * `defaultHandlers` registers a domain's tools only when its seam
-   * is bound here. OSS deployments leave these undefined (the smaller
-   * surface); cloud pods bind AppSync-backed adapters.
+   * Per-domain dep seams for the operator-class `ggui_ops_*` handlers
+   * covering the console's apps + orgs + connector-keys + coupon
+   * surfaces. Each domain is independently optional —
+   * `buildOpsBundleHandlers` registers a domain's tools only when its
+   * seam is bound here. OSS deployments leave these undefined (the
+   * smaller surface); cloud pods bind their own adapters.
    *
    * Mirrors `creditBalance` + `creditTransactions`'s pattern — the
    * shared-handler layer is the same code path everywhere, and the
    * deps interface is the boundary between the open handler and the
    * deployment-specific implementation.
+   *
+   * These are honored even when {@link handlers} is set: they are
+   * explicit per-domain bindings, not part of the default handler set a
+   * custom list replaces. A tool the custom list already registers
+   * under the same name wins.
    */
-  readonly opsApps?: {
-    readonly apps: AppsSource;
-    readonly userDefaultApp: UserDefaultAppSource;
-  };
-  readonly opsOrgs?: {
-    readonly orgs: OrgsSource;
-    readonly invites: OrgInvitesSource;
-  };
-  readonly opsConnectorKeys?: {
-    readonly connectorKeys: ConnectorKeysSource;
-  };
-  readonly opsCoupon?: {
-    readonly coupons: CouponRedeemSource;
+  readonly opsApps?: OpsBundleDeps["opsApps"];
+  readonly opsOrgs?: OpsBundleDeps["opsOrgs"];
+  readonly opsConnectorKeys?: OpsBundleDeps["opsConnectorKeys"];
+  readonly opsCoupon?: OpsBundleDeps["opsCoupon"];
+
+  /**
+   * Control-plane tuning. The `/control` route itself is not optional —
+   * it is one of the server's two MCP surfaces (see
+   * `./control-service.ts`) — but a deployment that registers its own
+   * `ops`-tagged tools can describe them here.
+   */
+  readonly control?: {
+    /**
+     * Ops tool names that answer in ONE call. Every `ops`-tagged tool
+     * NOT listed here (and not in the built-in `SINGLE_CALL_OPS` set)
+     * is treated as state-changing and confirm-gated: the first call
+     * returns a preview, and only a second call carrying
+     * `confirm: true` runs it.
+     *
+     * The default is deny-by-omission on purpose — a state-changing
+     * tool nobody classified must not ship un-gated. List a
+     * deployment's own read-only ops tools here to spare them the
+     * extra round-trip.
+     */
+    readonly singleCallOps?: ReadonlyArray<string>;
   };
 
   /**
@@ -3909,14 +3899,6 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
             ...(generationWithCache?.cache ? { cacheRegistry: generationWithCache.cache } : {}),
           })
         : {}),
-      // Forward each operator-class per-domain dep bundle from the
-      // caller-supplied options. Domains land
-      // independently: callers can wire the apps surface without the
-      // orgs surface, and so on.
-      ...(opts.opsApps ? { opsApps: opts.opsApps } : {}),
-      ...(opts.opsOrgs ? { opsOrgs: opts.opsOrgs } : {}),
-      ...(opts.opsConnectorKeys ? { opsConnectorKeys: opts.opsConnectorKeys } : {}),
-      ...(opts.opsCoupon ? { opsCoupon: opts.opsCoupon } : {}),
       // ggui_emit resolves the channel via
       // a lazy getter so the handler captures whatever
       // `channelForHealth` ends up pointing at after
@@ -3932,15 +3914,42 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
       logger,
     });
 
-  const handlers = composeHandlersWithMounts(baseHandlers, opts.mcpMounts);
+  // Operator-class domain handlers (apps / orgs / connector-keys /
+  // coupon). Built on EVERY path — they hang off their own explicit
+  // options, so a deployment that supplies a custom base handler list
+  // still gets the domains it wired. A name already claimed by the base
+  // list wins: that's how the cloud pod ships its own
+  // `ggui_ops_create_app` while still picking up the rest of the family.
+  const baseHandlerNames = new Set(baseHandlers.map((h) => h.name));
+  const opsBundleHandlers = buildOpsBundleHandlers(opts).filter(
+    (h) => !baseHandlerNames.has(h.name)
+  );
+
+  const handlers = composeHandlersWithMounts(
+    opsBundleHandlers.length > 0 ? [...baseHandlers, ...opsBundleHandlers] : baseHandlers,
+    opts.mcpMounts
+  );
 
   // Isolated MCP services — validated at compose time so misconfig
   // (malformed path, reserved-path collision, empty outputSchema,
   // audience-tag-on-service-handler, within-service tool-name
   // collision, cross-service path collision) surfaces at server
   // construction instead of at first `tools/call`. The actual route
-  // mounting happens below alongside the audience routes.
+  // mounting happens below alongside the canonical routes.
   const mcpServices = validateMcpServices(opts.mcpServices);
+
+  // The control plane — every `protocol`- and `ops`-tagged handler,
+  // projected onto one anonymous-capable route with per-tool auth and
+  // confirmation gates. Built from the SAME composed `handlers` array
+  // the data plane filters, so a handler can never be visible on one
+  // plane and missing from the other. Held to the same handler
+  // invariants as an operator-supplied service; `/control` is a
+  // reserved path so it cannot go through `mcpServices` itself.
+  const controlService = buildControlService({
+    handlers,
+    ...(opts.control?.singleCallOps ? { singleCallOps: opts.control.singleCallOps } : {}),
+  });
+  validateServiceHandlers(controlService);
 
   // Schema compatibility check mode. Resolved once and
   // threaded into the console blueprint-try endpoint + the render
@@ -4222,10 +4231,11 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
     ...(opts.extraResources !== undefined ? { extraResources: opts.extraResources } : {}),
   };
 
-  // MCP wire endpoints (universal / per-app / protocol / ops /
-  // services) — see `./mcp-endpoint-routes.ts` for the shared request
-  // pipeline (auth, per-app authorize, per-request McpServer +
-  // transport) and the audience taxonomy.
+  // MCP wire endpoints (data plane: universal / per-app; control
+  // plane: /control; plus any isolated services) — see
+  // `./mcp-endpoint-routes.ts` for the shared request pipeline (auth,
+  // per-app authorize, per-request McpServer + transport) and the
+  // audience taxonomy.
   const universalMcpPath = opts.universalMcpPath ?? "/mcp";
   mountMcpEndpoints({
     app,
@@ -4233,6 +4243,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
     auth,
     info,
     handlers,
+    controlHandlers: controlService.handlers,
     mcpServices,
     als,
     appIdFromIdentity,

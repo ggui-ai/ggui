@@ -16,6 +16,7 @@
  * await handler.handler({ query: 'weather' }, { appId: 'a', requestId: 'r' });
  * ```
  */
+import type { AuthResult } from '@ggui-ai/mcp-server-core';
 import type { ZodRawShape } from 'zod';
 
 /**
@@ -73,6 +74,28 @@ export interface HandlerContext {
    * never neither when auth resolved.
    */
   readonly userId?: string;
+  /**
+   * How the caller's identity was proved, forwarded verbatim from the
+   * resolved `AuthResult.source` upstream of the handler.
+   *
+   * The one value handlers act on is `'anonymous'`, which the transport
+   * synthesizes for a request that reached an anonymous-capable surface
+   * without a credential the `AuthAdapter` accepted. Everything else
+   * means "this request was authenticated"; WHICH mechanism proved it
+   * is deployment-specific and handlers should not branch on it.
+   *
+   * This is the only way to tell an authenticated single-user builder
+   * (`source: 'dev'`, no `userId`, no `apiKeyHash`) apart from an
+   * anonymous one — the identity FIELDS are identical for both. Any
+   * handler on an anonymous-capable surface that must refuse
+   * unauthenticated callers reads this and throws
+   * {@link AuthRequiredError}.
+   *
+   * `undefined` for in-process invocations (console inspector, contract
+   * fixtures) where no request was authenticated at all. Handlers MUST
+   * treat that the same as anonymous — absence is not proof of auth.
+   */
+  readonly authSource?: AuthResult['source'];
   /**
    * Active render id, when the dispatcher knows it at invocation time.
    *
@@ -297,20 +320,27 @@ export interface SharedHandler<
    *     `'app'`). Hidden from agent's tools/list but routed on the same
    *     agent endpoint. Examples: `ggui_runtime_submit_action`,
    *     `ggui_runtime_sync_context`.
-   *   - `'protocol'` — design-time spec/discovery tools served on
-   *     `/protocol`. Strips spec-discovery noise off the agent's runtime
-   *     tools/list. Examples: `ggui_protocol_describe_*`,
+   *   - `'protocol'` — design-time spec/discovery tools. Served on the
+   *     `/control` plane, which keeps spec-discovery noise off the
+   *     agent's runtime tools/list. Answer anonymously: an agent
+   *     authoring a blueprint has no account yet. Examples:
+   *     `ggui_protocol_describe_*`,
    *     `ggui_protocol_get_example_blueprints`,
    *     `ggui_protocol_validate_blueprint`,
    *     `ggui_protocol_list_available_primitives`,
    *     `ggui_protocol_get_blueprint_boilerplate`.
-   *   - `'ops'` — operator-class management tools served on `/ops`.
-   *     Examples: `ggui_ops_set_provider_key`, `ggui_ops_get_credit_balance`,
-   *     `ggui_ops_generate_blueprint`.
+   *   - `'ops'` — operator-class management tools. Also served on
+   *     `/control`, but auth-gated per tool, and confirm-gated when
+   *     state-changing. Examples: `ggui_ops_set_provider_key`,
+   *     `ggui_ops_get_credit_balance`, `ggui_ops_generate_blueprint`.
+   *
+   * The tag is the normative caller-class declaration; it does NOT mint
+   * one HTTP route per value. Two surfaces exist: the data plane
+   * (`agent` + `runtime`) and the control plane (`protocol` + `ops`).
    *
    * Multi-audience tags (e.g. `['agent', 'runtime']`) are valid — a
-   * handler may surface on more than one route. The route mounter
-   * consults this field to decide which tools to expose per route.
+   * handler may surface on more than one caller class. The route
+   * mounter consults this field to decide which surface exposes it.
    *
    * Absent = the route mounter SHOULD treat the handler as `['agent']`
    * (the historical default — every handler that didn't have a tag was
