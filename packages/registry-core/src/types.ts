@@ -262,14 +262,11 @@ export interface SearchResponse {
  * uses its scan order. Callers MUST opt in to a deterministic order
  * via this field.
  *
- * **Scale ceiling.** The `recent` sort is implemented as an in-memory
- * pass on the page returned by {@link RegistryStorage.scanArtifacts}.
- * For pre-launch row counts (< ~1k artifacts, single-page scans with
- * `limit=200`) this gives a globally-correct order. Once the artifact
- * table grows past one scan page (~1 MiB of items), the order is only
- * page-local — clients paginating with `cursor` see per-page recency,
- * not global. A secondary index on `publishedAt` is the proper fix
- * and is planned as a follow-up.
+ * Ordering is served by the storage layer: the search op forwards the
+ * sort as {@link ArtifactScanFilter.order}, and every
+ * {@link RegistryStorage} impl MUST return a globally-correct
+ * newest-first order across the full cursor chain — not merely within
+ * one page.
  */
 export const SEARCH_SORT_OPTIONS = ['recent'] as const;
 export type SearchSort = (typeof SEARCH_SORT_OPTIONS)[number];
@@ -522,6 +519,15 @@ export interface ArtifactScanFilter {
   readonly author?: string;
   readonly limit?: number;
   readonly cursor?: string;
+  /**
+   * Optional result ordering. `'recent'` requires implementations to
+   * return rows ordered by {@link ArtifactsMetadataRow.publishedAt}
+   * descending (newest first), globally correct across the full
+   * cursor chain — not merely within one page. Combines with every
+   * other filter dimension (the ordered listing is filtered, not the
+   * other way around). Omitted → impl-defined ordering.
+   */
+  readonly order?: SearchSort;
 }
 
 /**

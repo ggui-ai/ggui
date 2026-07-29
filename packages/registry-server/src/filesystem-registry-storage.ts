@@ -32,12 +32,14 @@
  * ## Scan semantics
  *
  * {@link scanArtifacts} reads every metadata file, applies the same
- * AND-composition filter the memory impl does, and slices the result
- * to `[offset, offset+limit)`. Cursor is an integer offset encoded as
- * a base-10 string — opaque to consumers, identical to memory's
- * encoding. For typical OSS deployments (< 10k artifacts) the full
- * scan is sub-millisecond; large deployments should migrate to the
- * cloud DDB adapter.
+ * AND-composition filter the memory impl does, orders the full result
+ * set when `order: 'recent'` is requested (publishedAt DESC — globally
+ * correct across the cursor chain because ordering precedes slicing),
+ * and slices the result to `[offset, offset+limit)`. Cursor is an
+ * integer offset encoded as a base-10 string — opaque to consumers,
+ * identical to memory's encoding. For typical OSS deployments
+ * (< 10k artifacts) the full scan is sub-millisecond; large
+ * deployments should migrate to a database-backed adapter.
  *
  * ## Protocol & Contract Bar
  *
@@ -126,6 +128,17 @@ export function createFilesystemRegistryStorage(
     async scanArtifacts(filter) {
       const rows = await readAllMetadata(pluginsDir);
       const filtered = rows.filter((row) => rowMatchesFilter(row, filter));
+      if (filter.order === 'recent') {
+        // Newest first, globally correct across the offset-cursor chain
+        // because the FULL result set is ordered before slicing.
+        // ISO-8601 strings compare lexicographically === chronologically;
+        // artifactId tie-break keeps the cursor chain deterministic.
+        filtered.sort(
+          (a, b) =>
+            b.publishedAt.localeCompare(a.publishedAt) ||
+            a.artifactId.localeCompare(b.artifactId),
+        );
+      }
       const limit = clampLimit(filter.limit);
       const offset = parseCursor(filter.cursor);
       const page = filtered.slice(offset, offset + limit);

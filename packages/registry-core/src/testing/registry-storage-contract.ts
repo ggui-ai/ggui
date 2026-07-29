@@ -198,6 +198,99 @@ export function registryStorageContract(makeStorage: () => RegistryStorage): voi
         expect(page.rows.map((r) => r.artifactId)).toEqual(['@a/x']);
       });
 
+      it('order: recent returns rows newest-first by publishedAt', async () => {
+        const storage = makeStorage();
+        await storage.putArtifactMetadata(
+          makeMetadata({ artifactId: '@a/old', publishedAt: '2026-01-01T00:00:00.000Z' }),
+        );
+        await storage.putArtifactMetadata(
+          makeMetadata({ artifactId: '@a/new', publishedAt: '2026-05-01T00:00:00.000Z' }),
+        );
+        await storage.putArtifactMetadata(
+          makeMetadata({ artifactId: '@a/mid', publishedAt: '2026-03-01T00:00:00.000Z' }),
+        );
+        const page = await storage.scanArtifacts({ order: 'recent' });
+        expect(page.rows.map((r) => r.artifactId)).toEqual([
+          '@a/new',
+          '@a/mid',
+          '@a/old',
+        ]);
+      });
+
+      it('order: recent stays globally correct across the cursor chain', async () => {
+        const storage = makeStorage();
+        // Insert deliberately OUT of publish order so insertion order
+        // cannot masquerade as recency order.
+        const stamps = [
+          '2026-01-01T00:00:00.000Z',
+          '2026-05-01T00:00:00.000Z',
+          '2026-03-01T00:00:00.000Z',
+          '2026-04-01T00:00:00.000Z',
+          '2026-02-01T00:00:00.000Z',
+        ];
+        for (const [i, publishedAt] of stamps.entries()) {
+          await storage.putArtifactMetadata(
+            makeMetadata({ artifactId: `@a/p${String(i)}`, publishedAt }),
+          );
+        }
+        // Walk the FULL cursor chain with a page size smaller than the
+        // row count — the concatenation must be one globally-descending
+        // sequence (per-page recency is exactly the defect this
+        // obligation exists to rule out).
+        const collected: string[] = [];
+        let cursor: string | undefined;
+        let hops = 0;
+        do {
+          const page = await storage.scanArtifacts({
+            order: 'recent',
+            limit: 2,
+            cursor,
+          });
+          collected.push(...page.rows.map((r) => r.publishedAt));
+          cursor = page.nextCursor;
+          hops++;
+          if (hops > 10) throw new Error('cursor chain did not terminate');
+        } while (cursor !== undefined);
+        expect(collected).toHaveLength(stamps.length);
+        expect(collected).toEqual(
+          [...stamps].sort((a, b) => b.localeCompare(a)),
+        );
+      });
+
+      it('order: recent composes with filter dimensions', async () => {
+        const storage = makeStorage();
+        await storage.putArtifactMetadata(
+          makeMetadata({
+            artifactId: '@a/old-gadget',
+            kind: 'gadget',
+            publishedAt: '2026-01-01T00:00:00.000Z',
+          }),
+        );
+        await storage.putArtifactMetadata(
+          makeMetadata({
+            artifactId: '@a/bp',
+            kind: 'blueprint',
+            hook: undefined,
+            publishedAt: '2026-04-01T00:00:00.000Z',
+          }),
+        );
+        await storage.putArtifactMetadata(
+          makeMetadata({
+            artifactId: '@a/new-gadget',
+            kind: 'gadget',
+            publishedAt: '2026-03-01T00:00:00.000Z',
+          }),
+        );
+        const page = await storage.scanArtifacts({
+          order: 'recent',
+          kind: 'gadget',
+        });
+        expect(page.rows.map((r) => r.artifactId)).toEqual([
+          '@a/new-gadget',
+          '@a/old-gadget',
+        ]);
+      });
+
       it('filters by q (substring of name / description / tags)', async () => {
         const storage = makeStorage();
         await storage.putArtifactMetadata(

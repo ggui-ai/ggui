@@ -32,8 +32,10 @@
  *   failure (caller decides retry).
  * - {@link scanArtifacts} returns rows in arbitrary order
  *   (backing-store scan order; memory insertion order; filesystem
- *   directory order).
- *   Consumers MUST treat ordering as non-deterministic.
+ *   directory order) UNLESS the filter carries `order: 'recent'` — then
+ *   rows MUST come back ordered by `publishedAt` descending (newest
+ *   first), globally correct across the full cursor chain. Without an
+ *   `order`, consumers MUST treat ordering as non-deterministic.
  *
  * **Failure mode:**
  * - Transport-level failures (store throttling, disk full) throw.
@@ -45,7 +47,9 @@
  * - Contract test {@link registryStorageContract} covers:
  *   round-trip preservation, idempotent {@link putArtifactMetadata},
  *   `putArtifactVersionIfAbsent` rejects on collision, missing returns
- *   null, `listAuthorKeys` returns only keys for the queried subject.
+ *   null, `listAuthorKeys` returns only keys for the queried subject,
+ *   and `order: 'recent'` newest-first ordering (single page + across
+ *   the cursor chain).
  */
 import type {
   ArtifactScanFilter,
@@ -98,9 +102,13 @@ export interface RegistryStorage {
   /**
    * Scan the metadata-row family with paginated cursor + post-fetch
    * filter. The filter is applied per-row; impls MAY push it down
-   * (cloud GSI when available) or run it in-memory after a wide scan.
-   * `limit` is treated as a per-page ceiling; consumers may iterate
-   * via `nextCursor` for multi-page reads.
+   * (a backing-store index when available) or run it in-memory after a
+   * wide scan. `limit` is treated as a per-page ceiling; consumers may
+   * iterate via `nextCursor` for multi-page reads.
+   *
+   * When `filter.order` is `'recent'`, rows MUST be returned newest
+   * first by `publishedAt`, globally correct across the full cursor
+   * chain — see the Obligations section above.
    */
   scanArtifacts(filter: ArtifactScanFilter): Promise<{
     readonly rows: readonly ArtifactsMetadataRow[];

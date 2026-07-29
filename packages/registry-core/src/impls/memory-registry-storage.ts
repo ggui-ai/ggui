@@ -44,6 +44,17 @@ export function inMemoryRegistryStorage(): RegistryStorage {
     },
     async scanArtifacts(filter) {
       const rows = Array.from(metadata.values()).filter((row) => rowMatchesFilter(row, filter));
+      if (filter.order === 'recent') {
+        // Newest first, globally correct across the offset-cursor chain
+        // because the FULL result set is ordered before slicing.
+        // ISO-8601 strings compare lexicographically === chronologically;
+        // artifactId tie-break keeps the cursor chain deterministic.
+        rows.sort(
+          (a, b) =>
+            b.publishedAt.localeCompare(a.publishedAt) ||
+            a.artifactId.localeCompare(b.artifactId),
+        );
+      }
       const limit = clampLimit(filter.limit);
       const offset = parseCursor(filter.cursor);
       const page = rows.slice(offset, offset + limit);

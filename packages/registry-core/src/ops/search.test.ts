@@ -4,7 +4,12 @@
 import { describe, expect, it } from 'vitest';
 import { searchArtifacts } from './search.js';
 import { inMemoryRegistryStorage } from '../impls/memory-registry-storage.js';
-import { ARTIFACTS_METADATA_SK, type ArtifactsMetadataRow } from '../types.js';
+import type { RegistryStorage } from '../interfaces/registry-storage.js';
+import {
+  ARTIFACTS_METADATA_SK,
+  type ArtifactScanFilter,
+  type ArtifactsMetadataRow,
+} from '../types.js';
 
 function makeMetadata(overrides: Partial<ArtifactsMetadataRow> = {}): ArtifactsMetadataRow {
   return {
@@ -112,6 +117,58 @@ describe('searchArtifacts', () => {
         '@a/mid',
         '@a/old',
       ]);
+    });
+
+    it('forwards the sort to storage as the `order` filter (ordering is the port contract)', async () => {
+      const inner = inMemoryRegistryStorage();
+      let seenFilter: ArtifactScanFilter | undefined;
+      const storage: RegistryStorage = {
+        ...inner,
+        scanArtifacts: async (filter) => {
+          seenFilter = filter;
+          return inner.scanArtifacts(filter);
+        },
+      };
+      const result = await searchArtifacts({ sort: 'recent' }, { storage });
+      expect(result.ok).toBe(true);
+      expect(seenFilter?.order).toBe('recent');
+
+      const noSort = await searchArtifacts({}, { storage });
+      expect(noSort.ok).toBe(true);
+      expect(seenFilter?.order).toBeUndefined();
+    });
+
+    it('keeps recency order globally correct across cursor pages', async () => {
+      const storage = inMemoryRegistryStorage();
+      // Insert deliberately OUT of publish order.
+      const stamps = [
+        '2026-01-01T00:00:00.000Z',
+        '2026-05-01T00:00:00.000Z',
+        '2026-03-01T00:00:00.000Z',
+        '2026-04-01T00:00:00.000Z',
+        '2026-02-01T00:00:00.000Z',
+      ];
+      for (const [i, publishedAt] of stamps.entries()) {
+        await storage.putArtifactMetadata(
+          makeMetadata({ artifactId: `@a/p${String(i)}`, publishedAt }),
+        );
+      }
+      const collected: string[] = [];
+      let cursor: string | undefined;
+      let hops = 0;
+      do {
+        const result = await searchArtifacts(
+          { sort: 'recent', limit: 2, cursor },
+          { storage },
+        );
+        expect(result.ok).toBe(true);
+        if (!result.ok) return;
+        collected.push(...result.body.results.map((r) => r.publishedAt));
+        cursor = result.body.nextCursor;
+        hops++;
+        if (hops > 10) throw new Error('cursor chain did not terminate');
+      } while (cursor !== undefined);
+      expect(collected).toEqual([...stamps].sort((a, b) => b.localeCompare(a)));
     });
 
     it('rejects unknown sort value with 400', async () => {

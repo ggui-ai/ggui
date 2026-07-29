@@ -35,15 +35,13 @@ export interface SearchArtifactsInput {
   /**
    * Optional sort. `'recent'` orders results by `publishedAt` DESC; any
    * other string is a 400. Default (omitted) is impl-defined ordering —
-   * memory insertion order, filesystem directory order, or DDB Scan
-   * order. See {@link SearchSort} for the full enum.
+   * memory insertion order, filesystem directory order, or the backing
+   * store's scan order. See {@link SearchSort} for the full enum.
    *
-   * **Scale ceiling.** Implemented as an in-memory pass on the page
-   * returned by {@link RegistryStorage.scanArtifacts}. For small row
-   * counts (< ~1k artifacts, single-page scans) the order is globally
-   * correct. Past one Scan page (~1 MiB of items), the order is only
-   * page-local. A DDB GSI on `publishedAt` is the proper fix and is
-   * planned as a follow-up.
+   * Ordering is served by the storage layer: the op forwards the sort
+   * as `order` on the scan filter, and every
+   * {@link RegistryStorage.scanArtifacts} impl MUST return a
+   * globally-correct newest-first order across the full cursor chain.
    */
   readonly sort?: string;
 }
@@ -114,6 +112,7 @@ export async function searchArtifacts(
     author: nonEmpty(input.author),
     limit,
     cursor: nonEmpty(input.cursor),
+    order: sort,
   };
 
   let page: { rows: readonly ArtifactsMetadataRow[]; nextCursor?: string };
@@ -133,19 +132,11 @@ export async function searchArtifacts(
     visibleRows.push(row);
   }
 
-  // `sort=recent`: in-memory ORDER BY publishedAt DESC over the page.
-  // Pre-launch posture (see SearchArtifactsInput.sort docstring) —
-  // global order holds for single-page scans; multi-page scans get
-  // per-page recency. A DDB GSI on publishedAt is the proper fix.
-  const sortedRows = sort === 'recent'
-    ? [...visibleRows].sort((a, b) =>
-        // ISO-8601 strings compare lexicographically === chronologically.
-        // DESC: later (greater) publishedAt comes first.
-        b.publishedAt.localeCompare(a.publishedAt),
-      )
-    : visibleRows;
-
-  const results: SearchResultEntry[] = sortedRows.map(rowToEntry);
+  // `sort=recent` ordering is served by the storage layer (the filter
+  // carries `order: 'recent'`); rows arrive newest-first and are
+  // emitted verbatim — no re-sort here, so page order and cursor order
+  // cannot diverge.
+  const results: SearchResultEntry[] = visibleRows.map(rowToEntry);
 
   return {
     ok: true,
