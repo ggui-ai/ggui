@@ -111,6 +111,7 @@ export function filterHandlersByAudience(
  */
 export const SINGLE_CALL_OPS: ReadonlySet<string> = new Set<string>([
   "ggui_ops_get_credit_balance",
+  "ggui_ops_get_my_blueprint_source",
   "ggui_ops_get_org_balance",
   "ggui_ops_list_apps",
   "ggui_ops_list_blueprints",

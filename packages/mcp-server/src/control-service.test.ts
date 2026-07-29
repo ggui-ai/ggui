@@ -244,6 +244,7 @@ describe('SINGLE_CALL_OPS', () => {
       'ggui_ops_list_connector_keys',
       'ggui_ops_get_credit_balance',
       'ggui_ops_get_org_balance',
+      'ggui_ops_get_my_blueprint_source',
       'ggui_ops_list_blueprints',
       // setup_byok opens/lists the BYOK card (a read); set/remove are
       // separate tools. Confirm-gating it would break the card's inline
@@ -269,6 +270,8 @@ describe('SINGLE_CALL_OPS', () => {
       'ggui_ops_remove_org_member',
       'ggui_ops_register_blueprint',
       'ggui_ops_delete_blueprint',
+      'ggui_ops_update_my_blueprint',
+      'ggui_ops_delete_my_blueprint',
       // open_app writes the account-wide default app — a state change
       // despite the "open" name, the same mutation as set_default_app.
       'ggui_ops_open_app',
