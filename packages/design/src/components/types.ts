@@ -648,3 +648,53 @@ export interface StatProps extends BaseProps {
    */
   icon?: string | ReactNode;
 }
+
+/**
+ * Stepper -- a display-only step indicator for multi-step flows
+ * (wizards, checkouts, onboarding): numbered markers joined by
+ * connector lines, with completed (check), current (filled), and
+ * upcoming (outlined) states styled distinctly.
+ *
+ * Stepper renders step state; it never owns it. Declare the step
+ * labels as a top-level `const`, track the current index in
+ * `useState`, and advance it from your own Next/Back buttons (or
+ * `onStepClick`).
+ *
+ * @example
+ * const STEPS = ['Account', 'Profile', 'Review'];
+ * // In the component: const [step, setStep] = useState(0);
+ * <Stack gap="lg">
+ *   <Stepper steps={STEPS} current={step} />
+ *   {step === 0 && <AccountFields />}
+ *   <Row gap="sm" justify="end">
+ *     <Button variant="ghost" disabled={step === 0} onClick={() => setStep(step - 1)}>Back</Button>
+ *     <Button onClick={() => setStep(step + 1)}>Next</Button>
+ *   </Row>
+ * </Stack>
+ */
+export interface StepperProps extends BaseProps {
+  /**
+   * Ordered step labels, one per step. Declare as a top-level `const`
+   * array — never as state.
+   */
+  steps: string[];
+  /**
+   * Zero-based index of the active step. Steps before it render as
+   * completed (check mark), steps after it as upcoming.
+   */
+  current: number;
+  /**
+   * Flow direction. `'horizontal'` joins the markers with connector
+   * lines in a row; `'vertical'` stacks the steps with short connector
+   * columns — better for sidebars or long step labels.
+   * @default 'horizontal'
+   */
+  orientation?: 'horizontal' | 'vertical';
+  /**
+   * When provided, each step becomes a real button and clicks receive
+   * the step's zero-based index. Typical use: jumping back to a
+   * completed step; guard forward jumps in the handler if the flow
+   * validates per step.
+   */
+  onStepClick?: (index: number) => void;
+}

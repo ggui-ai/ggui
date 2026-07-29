@@ -19,7 +19,11 @@ const sizeStyles: Record<string, CSSProperties> = {
 };
 
 /**
- * Input - A text input primitive with label, error, and helper text support
+ * Input - A single-line input primitive with label, error, and helper
+ * text support. `type` selects the native control — text-like types
+ * plus `date` / `time` / `datetime-local`, whose browser pickers give
+ * locale formatting, keyboard navigation, and a11y for free while
+ * `value` stays an ISO string.
  *
  * IMPORTANT: onChange receives the value directly, not an event!
  * Example: onChange={(value) => setValue(value)} or onChange={setValue}

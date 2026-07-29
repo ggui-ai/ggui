@@ -9,10 +9,6 @@ const meta: Meta<typeof Text> = {
   },
   tags: ['autodocs'],
   argTypes: {
-    variant: {
-      control: 'select',
-      options: ['body', 'bodySmall', 'bodyLarge', 'caption', 'label', 'overline'],
-    },
     size: {
       control: 'select',
       options: ['xs', 'sm', 'base', 'lg', 'xl', '2xl', '3xl', '4xl'],
@@ -21,6 +17,7 @@ const meta: Meta<typeof Text> = {
       control: 'select',
       options: ['normal', 'medium', 'semibold', 'bold'],
     },
+    caps: { control: 'boolean' },
     align: {
       control: 'select',
       options: ['left', 'center', 'right'],
@@ -51,43 +48,48 @@ type Story = StoryObj<typeof meta>;
 
 export const Body: Story = {
   args: {
-    children: 'This is body text, the default variant for paragraphs and general content.',
-    variant: 'body',
+    children: 'This is body text, the default for paragraphs and general content.',
   },
 };
 
 export const BodySmall: Story = {
   args: {
     children: 'This is smaller body text, useful for secondary information.',
-    variant: 'bodySmall',
+    size: 'sm',
   },
 };
 
 export const BodyLarge: Story = {
   args: {
     children: 'This is larger body text, great for introductions or emphasis.',
-    variant: 'bodyLarge',
+    size: 'lg',
   },
 };
 
 export const Caption: Story = {
   args: {
     children: 'This is caption text for image descriptions or footnotes.',
-    variant: 'caption',
+    size: 'xs',
+    tone: 'muted',
   },
 };
 
 export const Label: Story = {
   args: {
     children: 'Form Label',
-    variant: 'label',
+    size: 'sm',
+    weight: 'medium',
   },
 };
 
+// The eyebrow/overline treatment — `caps` uppercases the content and
+// adds 0.05em letter-spacing; children stay written in normal case.
 export const Overline: Story = {
   args: {
-    children: 'OVERLINE TEXT',
-    variant: 'overline',
+    children: 'Overline text',
+    size: 'xs',
+    weight: 'semibold',
+    caps: true,
   },
 };
 
@@ -125,7 +127,7 @@ export const Truncated: Story = {
 export const AsLabel: Story = {
   render: () => (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-      <Text is="label" htmlFor="story-email" variant="label">
+      <Text is="label" htmlFor="story-email" size="sm" weight="medium">
         Email address
       </Text>
       <input
@@ -138,15 +140,17 @@ export const AsLabel: Story = {
   ),
 };
 
-export const AllVariants: Story = {
+// The common typographic roles, each composed from size/weight/caps —
+// there is no preset table; these three axes ARE the API.
+export const TypeRoles: Story = {
   render: () => (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-      <Text variant="overline">OVERLINE</Text>
-      <Text variant="caption">Caption text</Text>
-      <Text variant="label">Label text</Text>
-      <Text variant="bodySmall">Body small text</Text>
-      <Text variant="body">Body text (default)</Text>
-      <Text variant="bodyLarge">Body large text</Text>
+      <Text size="xs" weight="semibold" caps tone="muted">Overline</Text>
+      <Text size="xs" tone="muted">Caption text</Text>
+      <Text size="sm" weight="medium">Label text</Text>
+      <Text size="sm">Body small text</Text>
+      <Text>Body text (default)</Text>
+      <Text size="lg">Body large text</Text>
     </div>
   ),
 };

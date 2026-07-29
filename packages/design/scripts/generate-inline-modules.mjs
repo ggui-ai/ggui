@@ -96,7 +96,7 @@ const TOKEN_EXPORTS = [
   'spacing', 'spacingValues', 'maxWidth', 'radius', 'shadow', 'zIndex',
   // typography.ts
   'fontFamily', 'fontSize', 'fontSizeValues', 'fontWeight', 'lineHeight',
-  'letterSpacing', 'headingStyles', 'textStyles', 'typography',
+  'letterSpacing', 'headingStyles', 'typography',
   // transitions.ts
   'duration', 'easing', 'transition',
   // motion.ts
@@ -139,14 +139,15 @@ const PRIMITIVE_EXPORTS = [
 const COMPONENT_EXPORTS = [
   'SearchField', 'FormField', 'MenuItem', 'Tag',
   'Dropdown', 'Autocomplete', 'Breadcrumb', 'Pagination',
+  'EmptyState', 'Stat', 'Stepper',
 ];
 
 // ── Composition exports we expect ──
 const COMPOSITION_EXPORTS = [
   'Header', 'Sidebar', 'CardGrid', 'CommentThread',
   'DataTable', 'ChatWindow', 'NavigationBar', 'FileUploader',
-  'UserProfileCard', 'NotificationCenter', 'Modal', 'CommandPalette',
-  'Footer', 'Hero', 'IncidentTimeline',
+  'NotificationCenter', 'Modal', 'CommandPalette',
+  'Footer', 'Hero',
 ];
 
 // ── Interact exports we expect ──

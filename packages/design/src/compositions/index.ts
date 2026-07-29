@@ -13,17 +13,11 @@ export { DataTable } from './DataTable';
 export { ChatWindow } from './ChatWindow';
 export { NavigationBar } from './NavigationBar';
 export { FileUploader } from './FileUploader';
-export { UserProfileCard } from './UserProfileCard';
 export { NotificationCenter } from './NotificationCenter';
 export { Modal } from './Modal';
 export { CommandPalette } from './CommandPalette';
 export { Footer } from './Footer';
 export { Hero } from './Hero';
-export { IncidentTimeline } from './IncidentTimeline';
-export { MakeTabLayout } from './MakeTabLayout';
-
-// Marketing compositions
-export * from './marketing';
 
 // Re-export types
 export type {
@@ -41,7 +35,6 @@ export type {
   NavItem,
   FileUploaderProps,
   UploadedFile,
-  UserProfileCardProps,
   NotificationCenterProps,
   Notification,
   ModalProps,
@@ -53,10 +46,4 @@ export type {
   FooterSocialLink,
   HeroProps,
   HeroAction,
-  IncidentTimelineProps,
-  Incident,
-  IncidentUpdate,
-  IncidentSeverity,
-  IncidentStatus,
 } from './types';
-export type { MakeTabLayoutProps } from './MakeTabLayout';

@@ -126,44 +126,6 @@ export const headingStyles = {
   },
 } as const;
 
-/**
- * Text styles - preset typography for body text
- */
-export const textStyles = {
-  body: {
-    fontSize: fontSize.base,
-    fontWeight: fontWeight.normal,
-    lineHeight: lineHeight.normal,
-  },
-  bodySmall: {
-    fontSize: fontSize.sm,
-    fontWeight: fontWeight.normal,
-    lineHeight: lineHeight.normal,
-  },
-  bodyLarge: {
-    fontSize: fontSize.lg,
-    fontWeight: fontWeight.normal,
-    lineHeight: lineHeight.relaxed,
-  },
-  caption: {
-    fontSize: fontSize.xs,
-    fontWeight: fontWeight.normal,
-    lineHeight: lineHeight.normal,
-  },
-  label: {
-    fontSize: fontSize.sm,
-    fontWeight: fontWeight.medium,
-    lineHeight: lineHeight.normal,
-  },
-  overline: {
-    fontSize: fontSize.xs,
-    fontWeight: fontWeight.semibold,
-    lineHeight: lineHeight.normal,
-    letterSpacing: letterSpacing.wider,
-    textTransform: 'uppercase' as const,
-  },
-} as const;
-
 export const typography = {
   fontFamily,
   fontSize,
@@ -172,7 +134,6 @@ export const typography = {
   lineHeight,
   letterSpacing,
   headingStyles,
-  textStyles,
 } as const;
 
 export type Typography = typeof typography;

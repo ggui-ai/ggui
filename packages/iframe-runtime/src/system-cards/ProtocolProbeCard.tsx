@@ -489,7 +489,7 @@ function ProbeButtonRow({
         {statusBadge}
       </div>
       <Text
-        variant="caption"
+        size="xs"
         style={{
           color: 'var(--ggui-color-onSurfaceVariant, #52525b)',
           fontSize: 'var(--ggui-font-size-xs, 11px)',
@@ -629,7 +629,7 @@ export function ProtocolProbeCard({
           >
             <Heading level={4}>Receive log</Heading>
             <Text
-              variant="caption"
+              size="xs"
               style={{
                 color: 'var(--ggui-color-onSurfaceVariant, #52525b)',
                 fontSize: 'var(--ggui-font-size-xs, 11px)',
@@ -640,7 +640,7 @@ export function ProtocolProbeCard({
           </div>
           {log.length === 0 ? (
             <Text
-              variant="caption"
+              size="xs"
               style={{
                 color: 'var(--ggui-color-onSurfaceVariant, #52525b)',
                 fontStyle: 'italic',
@@ -707,7 +707,7 @@ export function ProtocolProbeCard({
 
         {intent ? (
           <Text
-            variant="caption"
+            size="xs"
             style={{
               color: 'var(--ggui-color-onSurfaceVariant, #52525b)',
               opacity: 0.7,

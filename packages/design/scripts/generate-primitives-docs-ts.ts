@@ -365,10 +365,6 @@ function main() {
   const primitiveExports = parseExportNames(primitivesIndexPath);
   const componentExports = parseExportNames(componentsIndexPath);
   const compositionExports = parseExportNames(compositionsIndexPath);
-  const marketingIndexPath = path.join(designRoot, 'src/compositions/marketing/index.ts');
-  if (fs.existsSync(marketingIndexPath)) {
-    compositionExports.push(...parseExportNames(marketingIndexPath));
-  }
 
   const output = `/**
  * AUTO-GENERATED from @ggui-ai/design JSDoc (TS-interface format).

@@ -97,6 +97,7 @@ export const PRIMITIVES_EXPORTS = [
 export const COMPONENTS_EXPORTS = [
   'SearchField', 'FormField', 'MenuItem', 'Tag', 'Dropdown',
   'Autocomplete', 'Breadcrumb', 'Pagination', 'EmptyState', 'Stat',
+  'Stepper',
 ] as const;
 
 /** Known exports from @ggui-ai/design/compositions.
@@ -108,16 +109,14 @@ export const COMPONENTS_EXPORTS = [
  * `SyntaxError: ... does not provide an export named '…'` at module-eval
  * (blanks the iframe).
  *
- * 2026-05-15 audit fix: dropped phantom `MarketingFeatureGrid`,
- * `MarketingTestimonials`, `MarketingPricing` (never existed in dist) and
- * added missing `MarketingCTA`, `MarketingFeatures` (existed in dist but
- * were unreachable from generated code). */
+ * 2026-07-29 composite-roster wave (#306): dropped the six zero-consumer
+ * composites (`MakeTabLayout`, `MarketingHero`, `MarketingFeatures`,
+ * `MarketingCTA`, `IncidentTimeline`, `UserProfileCard`) deleted from the
+ * design package in the same slice. */
 export const COMPOSITIONS_EXPORTS = [
   'Header', 'Sidebar', 'CardGrid', 'CommentThread', 'DataTable',
-  'ChatWindow', 'NavigationBar', 'FileUploader', 'UserProfileCard',
+  'ChatWindow', 'NavigationBar', 'FileUploader',
   'NotificationCenter', 'Modal', 'CommandPalette', 'Footer', 'Hero',
-  'IncidentTimeline', 'MakeTabLayout',
-  'MarketingHero', 'MarketingCTA', 'MarketingFeatures',
 ] as const;
 
 /** Known exports from @ggui-ai/design/interact */
@@ -175,7 +174,7 @@ export const REACT_EXPORTS = [
  * Tokens are static design-system constants (color scales, spacing values,
  * animation presets, typography styles). The LLM's prompt
  * (`packages/ui-gen/src/design-system-docs.ts`) teaches imports like
- * `import { animation, headingStyles, textStyles } from '@ggui-ai/design/tokens'`;
+ * `import { animation, headingStyles, fontSize } from '@ggui-ai/design/tokens'`;
  * without a shim handler, those bare specifiers escape to the browser and
  * 404, blanking the iframe.
  *
@@ -214,7 +213,6 @@ export const TOKENS_EXPORTS = [
   'lineHeight',
   'letterSpacing',
   'headingStyles',
-  'textStyles',
   // Layout / shape
   'spacing',
   'spacingValues',

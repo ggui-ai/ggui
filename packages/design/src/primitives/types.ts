@@ -88,7 +88,7 @@ export interface ContainerProps extends BaseProps {
  * @example
  * <Card shadow="md" padding="lg" radius="lg">
  *   <Stack gap="md">
- *     <Text variant="label">Settings</Text>
+ *     <Text size="sm" weight="medium">Settings</Text>
  *     <Input label="Name" value={name} onChange={setName} />
  *     <Button variant="primary">Save</Button>
  *   </Stack>
@@ -151,7 +151,7 @@ export interface CardProps extends BaseProps {
  * @example
  * <Stack gap="lg" align="center">
  *   <Heading level={2}>Profile</Heading>
- *   <Text variant="body">Edit your account details below.</Text>
+ *   <Text>Edit your account details below.</Text>
  *   <Stack direction="horizontal" gap="sm" justify="end">
  *     <Button variant="ghost">Cancel</Button>
  *     <Button variant="primary">Save</Button>
@@ -211,7 +211,7 @@ export interface StackProps extends BaseProps {
  *
  * @example
  * <Row gap="md" align="center" justify="between">
- *   <Text variant="label">Total</Text>
+ *   <Text size="sm" weight="medium">Total</Text>
  *   <Text weight="bold">$42.00</Text>
  * </Row>
  */
@@ -332,7 +332,7 @@ export interface SkeletonProps extends BaseProps {
  *
  * @example
  * <Box paddingX="xl" paddingY="lg" surface="accent" radius="lg">
- *   <Text variant="bodySmall" tone="emphasized">
+ *   <Text size="sm" tone="emphasized">
  *     Tip: You can customize your theme in Settings.
  *   </Text>
  * </Box>
@@ -525,18 +525,20 @@ export interface SpacerProps extends BaseProps {
 /**
  * Text -- Versatile typography primitive for body copy, captions, and labels.
  *
- * Renders as `<p>` by default (configurable via `is`). The `variant` prop
- * selects a preset typography style (font size, weight, line height). The
- * `size` and `weight` props override the variant values when specified.
+ * Renders as `<p>` by default (configurable via `is`). Typography is
+ * composed from three orthogonal axes: `size` (font size, with a
+ * matching line-height built in), `weight`, and `tone` (semantic
+ * color). `caps` adds the uppercase, letter-spaced treatment for tiny
+ * section labels (the classic overline/eyebrow look).
  *
  * Default text color: `var(--ggui-color-onSurface)`.
  * All text renders with `margin: 0` (no default paragraph spacing).
  *
  * @example
  * <Stack gap="var(--ggui-spacing-1)">
- *   <Text variant="overline">ACCOUNT</Text>
- *   <Text variant="bodyLarge">Welcome back, Jane.</Text>
- *   <Text variant="caption" tone="muted">
+ *   <Text size="xs" weight="semibold" caps tone="muted">Account</Text>
+ *   <Text size="lg">Welcome back, Jane.</Text>
+ *   <Text size="xs" tone="muted">
  *     Last login: 2 hours ago
  *   </Text>
  * </Stack>
@@ -544,41 +546,37 @@ export interface SpacerProps extends BaseProps {
 export interface TextProps extends BaseProps {
   children?: ReactNode;
   /**
-   * Preset typography style. Each variant maps to a fixed combination of
-   * font size, weight, and line height from the typography tokens:
-   * - `'body'` -- 16px / 400 / 1.5 line-height
-   * - `'bodySmall'` -- 14px / 400 / 1.5 line-height
-   * - `'bodyLarge'` -- 18px / 400 / 1.625 line-height (relaxed)
-   * - `'caption'` -- 12px / 400 / 1.5 line-height
-   * - `'label'` -- 14px / 500 (medium) / 1.5 line-height
-   * - `'overline'` -- 12px / 600 (semibold) / 1.5 line-height, uppercase, wider letter-spacing (0.05em)
-   * @default 'body'
-   */
-  variant?: 'body' | 'bodySmall' | 'bodyLarge' | 'caption' | 'label' | 'overline';
-  /**
-   * Font size override. When set, replaces the variant's font size.
-   * Maps to CSS variables with pixel fallbacks:
-   * - `'xs'` -- var(--ggui-font-size-xs)
-   * - `'sm'` -- var(--ggui-font-size-sm)
-   * - `'base'` -- var(--ggui-font-size-base)
-   * - `'lg'` -- var(--ggui-font-size-lg)
-   * - `'xl'` -- var(--ggui-font-size-xl)
-   * - `'2xl'` -- var(--ggui-font-size-2xl)
-   * - `'3xl'` -- var(--ggui-font-size-3xl)
-   * - `'4xl'` -- var(--ggui-font-size-4xl)
-   * @default undefined (uses variant's font size)
+   * Font size. Maps to CSS variables with pixel fallbacks; each size
+   * carries a matching line-height (1.5 for `xs`--`base`, 1.625 for
+   * `lg`, then tightening on display sizes: 1.375 at `xl`, 1.25 from
+   * `2xl` up):
+   * - `'xs'` -- var(--ggui-font-size-xs) (12px)
+   * - `'sm'` -- var(--ggui-font-size-sm) (14px)
+   * - `'base'` -- var(--ggui-font-size-base) (16px)
+   * - `'lg'` -- var(--ggui-font-size-lg) (18px)
+   * - `'xl'` -- var(--ggui-font-size-xl) (20px)
+   * - `'2xl'` -- var(--ggui-font-size-2xl) (24px)
+   * - `'3xl'` -- var(--ggui-font-size-3xl) (30px)
+   * - `'4xl'` -- var(--ggui-font-size-4xl) (36px)
+   * @default 'base'
    */
   size?: 'xs' | 'sm' | 'base' | 'lg' | 'xl' | '2xl' | '3xl' | '4xl';
   /**
-   * Font weight override. When set, replaces the variant's weight.
-   * Maps to CSS variables with numeric fallbacks:
+   * Font weight. Maps to CSS variables with numeric fallbacks:
    * - `'normal'` -- var(--ggui-font-weight-normal)
    * - `'medium'` -- var(--ggui-font-weight-medium)
    * - `'semibold'` -- var(--ggui-font-weight-semibold)
    * - `'bold'` -- var(--ggui-font-weight-bold)
-   * @default undefined (uses variant's weight)
+   * @default 'normal'
    */
   weight?: 'normal' | 'medium' | 'semibold' | 'bold';
+  /**
+   * When true, uppercases the text and adds 0.05em letter-spacing --
+   * the eyebrow/overline treatment for tiny section labels. Pair with
+   * `size="xs" weight="semibold" tone="muted"`.
+   * @default false
+   */
+  caps?: boolean;
   /**
    * Semantic color slot. Picks the right `var(--ggui-color-*)` token
    * from the active theme. The theme decides what each tone LOOKS
@@ -665,7 +663,7 @@ export interface TextProps extends BaseProps {
  *   <Heading level={3} tone="emphasized">
  *     Subsection
  *   </Heading>
- *   <Text variant="body">Body content goes here.</Text>
+ *   <Text>Body content goes here.</Text>
  * </Stack>
  */
 export interface HeadingProps extends BaseProps {
@@ -823,10 +821,14 @@ export interface InputProps extends BaseProps, Omit<InputHTMLAttributes<HTMLInpu
    */
   onChange?: (value: string) => void;
   /**
-   * HTML input type. Determines browser behavior (keyboard on mobile, validation, masking).
+   * HTML input type. Determines browser behavior (keyboard on mobile,
+   * validation, masking). The date/time types render the browser's
+   * native, localized, keyboard-accessible picker; their `value` stays
+   * an ISO string (`'2026-07-29'`, `'14:30'`, `'2026-07-29T14:30'`)
+   * delivered through the usual value-first `onChange`.
    * @default 'text'
    */
-  type?: 'text' | 'email' | 'password' | 'number' | 'tel' | 'url' | 'search';
+  type?: 'text' | 'email' | 'password' | 'number' | 'tel' | 'url' | 'search' | 'date' | 'time' | 'datetime-local';
   /**
    * Error message displayed below the input in `var(--ggui-color-error-500)`.
    * When set, the border turns red and the message element gets `role="alert"`.

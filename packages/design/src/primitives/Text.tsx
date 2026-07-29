@@ -1,6 +1,5 @@
 import { createElement, type CSSProperties, type ReactElement } from 'react';
 import type { TextProps } from './types';
-import { textStyles } from '../tokens/typography';
 import { resolveToneCss } from './color-slots';
 
 const sizeMap: Record<string, string> = {
@@ -22,8 +21,26 @@ const weightMap: Record<string, string> = {
 };
 
 /**
+ * Line height derives from `size`: reading sizes stay at the normal
+ * 1.5, `lg` relaxes slightly, and display sizes tighten the way the
+ * heading scale does (h3/h4 = 1.375, h1/h2 = 1.25).
+ */
+const lineHeightMap: Record<string, number> = {
+  xs: 1.5,
+  sm: 1.5,
+  base: 1.5,
+  lg: 1.625,
+  xl: 1.375,
+  '2xl': 1.25,
+  '3xl': 1.25,
+  '4xl': 1.25,
+};
+
+/**
  * Text — A versatile typography primitive for body text, captions, and
- * labels.
+ * labels. Style composes from three orthogonal axes — `size` (with a
+ * built-in line height), `weight`, `tone` — plus `caps` for the
+ * uppercase, letter-spaced eyebrow treatment.
  *
  * Text is a *content* primitive: its root is a semantic element
  * (`<p>` / `<span>` / `<div>` / `<label>`, chosen by `is`), not a
@@ -34,9 +51,9 @@ const weightMap: Record<string, string> = {
  */
 export function Text({
   children,
-  variant = 'body',
-  size,
-  weight,
+  size = 'base',
+  weight = 'normal',
+  caps = false,
   tone,
   align,
   truncate,
@@ -46,8 +63,6 @@ export function Text({
   style,
   className,
 }: TextProps): ReactElement {
-  const variantStyle = textStyles[variant] || textStyles.body;
-
   // `tone` is the only color-control prop — there is no raw `color`
   // escape; all color flows through theme tokens.
   const resolvedColor = tone
@@ -55,12 +70,16 @@ export function Text({
     : 'var(--ggui-color-onSurface, #18181b)';
 
   const textStyle = {
-    ...variantStyle,
-    fontSize: size ? sizeMap[size] || size : undefined,
-    fontWeight: weight ? weightMap[weight] : undefined,
+    fontSize: sizeMap[size],
+    fontWeight: weightMap[weight],
+    lineHeight: lineHeightMap[size],
     color: resolvedColor,
     textAlign: align,
     margin: 0,
+    ...(caps && {
+      textTransform: 'uppercase' as const,
+      letterSpacing: '0.05em',
+    }),
     ...(truncate && {
       overflow: 'hidden',
       textOverflow: 'ellipsis',

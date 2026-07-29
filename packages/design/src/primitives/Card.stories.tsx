@@ -45,8 +45,8 @@ export const WithContent: Story = {
   render: () => (
     <Card style={{ width: '320px' }}>
       <Stack gap={12}>
-        <Text variant="body" weight="semibold">Card Title</Text>
-        <Text variant="bodySmall" tone="muted">
+        <Text weight="semibold">Card Title</Text>
+        <Text size="sm" tone="muted">
           This is a card with more complex content including text and actions.
         </Text>
         <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
@@ -92,19 +92,19 @@ export const Radiuses: Story = {
   render: () => (
     <div style={{ display: 'flex', gap: '16px' }}>
       <Card radius="none" style={{ width: '120px' }}>
-        <Text variant="caption">None</Text>
+        <Text size="xs" tone="muted">None</Text>
       </Card>
       <Card radius="sm" style={{ width: '120px' }}>
-        <Text variant="caption">Small</Text>
+        <Text size="xs" tone="muted">Small</Text>
       </Card>
       <Card radius="md" style={{ width: '120px' }}>
-        <Text variant="caption">Medium</Text>
+        <Text size="xs" tone="muted">Medium</Text>
       </Card>
       <Card radius="lg" style={{ width: '120px' }}>
-        <Text variant="caption">Large</Text>
+        <Text size="xs" tone="muted">Large</Text>
       </Card>
       <Card radius="xl" style={{ width: '120px' }}>
-        <Text variant="caption">XL</Text>
+        <Text size="xs" tone="muted">XL</Text>
       </Card>
     </div>
   ),
@@ -126,7 +126,7 @@ export const ClickableCard: Story = {
       shadow="md"
       style={{ width: '320px' }}
     >
-      <Text variant="body">
+      <Text>
         A clickable card — `as={'{Clickable}'}` layers click, keyboard
         activation, and ARIA onto the card with no change to the tree.
       </Text>

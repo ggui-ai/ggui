@@ -141,7 +141,7 @@ function UnsupportedComponentShell({ name }: { name: string }): ReactNode {
   return createElement(
     Card,
     { padding: 12, shadow: 'none', border: true },
-    createElement(Text, { variant: 'caption' }, `[${name}]`),
+    createElement(Text, { size: 'xs', tone: 'muted' }, `[${name}]`),
   );
 }
 
@@ -232,12 +232,18 @@ function renderComponent(
           ),
         );
       }
-      const textVariant =
-        variant === 'label' || variant === 'caption' ? variant : 'body';
+      // A2UI 'caption' / 'label' map onto Text's size/weight/tone
+      // axes; anything else degrades to default body text.
+      const textProps =
+        variant === 'caption'
+          ? ({ size: 'xs', tone: 'muted' } as const)
+          : variant === 'label'
+            ? ({ size: 'sm', weight: 'medium' } as const)
+            : {};
       return wrap(
         createElement(
           Text,
-          { variant: textVariant },
+          textProps,
           createElement(StreamingText, null, component.text),
         ),
       );

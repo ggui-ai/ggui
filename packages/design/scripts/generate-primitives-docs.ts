@@ -392,13 +392,6 @@ function main() {
   const componentExports = parseExportNames(componentsIndexPath);
   const compositionExports = parseExportNames(compositionsIndexPath);
 
-  // Also parse marketing sub-exports
-  const marketingIndexPath = path.join(designRoot, 'src/compositions/marketing/index.ts');
-  if (fs.existsSync(marketingIndexPath)) {
-    const marketingExports = parseExportNames(marketingIndexPath);
-    compositionExports.push(...marketingExports);
-  }
-
   const allExports = [...primitiveExports, ...componentExports, ...compositionExports];
 
   // Build output TypeScript file

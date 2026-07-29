@@ -305,7 +305,7 @@ export function NoCredentialsCard({
                 />
               </div>
               <Text
-                variant="caption"
+                size="xs"
                 style={{
                   color: 'var(--ggui-color-onSurfaceVariant, #52525b)',
                   fontSize: 'var(--ggui-font-size-xs, 11px)',
@@ -325,7 +325,7 @@ export function NoCredentialsCard({
               }}
             >
               <Text
-                variant="caption"
+                size="xs"
                 style={{
                   color: 'var(--ggui-color-onSurfaceVariant, #52525b)',
                   fontWeight: 'var(--ggui-font-weight-semibold, 600)',
@@ -371,7 +371,7 @@ export function NoCredentialsCard({
                 </Button>
                 {ctaState === 'idle' || ctaState === 'working' ? (
                   <Text
-                    variant="caption"
+                    size="xs"
                     style={{
                       color: 'var(--ggui-color-onSurfaceVariant, #52525b)',
                       opacity: 0.85,
@@ -387,7 +387,7 @@ export function NoCredentialsCard({
 
         {intent ? (
           <Text
-            variant="caption"
+            size="xs"
             style={{
               color: 'var(--ggui-color-onSurfaceVariant, #52525b)',
               opacity: 0.7,

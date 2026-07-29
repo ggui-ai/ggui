@@ -33,7 +33,7 @@ export function Stat({
           ) : (
             icon
           ))}
-        <Text variant="overline" tone="muted">
+        <Text size="xs" weight="semibold" caps tone="muted">
           {label}
         </Text>
       </Row>

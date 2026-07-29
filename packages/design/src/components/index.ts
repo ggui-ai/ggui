@@ -15,6 +15,7 @@ export { Breadcrumb } from './Breadcrumb';
 export { Pagination } from './Pagination';
 export { EmptyState } from './EmptyState';
 export { Stat } from './Stat';
+export { Stepper } from './Stepper';
 
 // Re-export types
 export type {
@@ -31,4 +32,5 @@ export type {
   PaginationProps,
   EmptyStateProps,
   StatProps,
+  StepperProps,
 } from './types';

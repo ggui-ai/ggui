@@ -157,7 +157,7 @@ function UnresolvedPlaceholder(): ReactNode {
 function UnsupportedComponentShell({ name }: { name: string }): ReactNode {
   return (
     <Card padding={12} shadow="none" border>
-      <Text variant="caption">{`[${name}]`}</Text>
+      <Text size="xs" tone="muted">{`[${name}]`}</Text>
     </Card>
   );
 }
@@ -257,15 +257,19 @@ function renderComponent(
           </PreviewFragmentEnter>
         );
       }
-      // A2UI 'body' / 'caption' / 'label' map 1:1 onto the design
-      // system's `Text` variant vocabulary. Unknown variants degrade
-      // to default body text — it's a provisional preview, not a
-      // strict typography contract.
-      const textVariant =
-        variant === 'label' || variant === 'caption' ? variant : 'body';
+      // A2UI 'caption' / 'label' map onto the design system's Text
+      // size/weight/tone axes; anything else degrades to default body
+      // text — it's a provisional preview, not a strict typography
+      // contract.
+      const textProps =
+        variant === 'caption'
+          ? ({ size: 'xs', tone: 'muted' } as const)
+          : variant === 'label'
+            ? ({ size: 'sm', weight: 'medium' } as const)
+            : ({} as const);
       return (
         <PreviewFragmentEnter key={id}>
-          <Text variant={textVariant}>
+          <Text {...textProps}>
             <StreamingText>{component.text}</StreamingText>
           </Text>
         </PreviewFragmentEnter>
