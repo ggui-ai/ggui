@@ -274,11 +274,31 @@ console.log(`[bench-n] manifest → ${manifestPath}`);
 // + probe wall-clock alongside score/gen-time. The probe runs externally
 // (post-gen) per the final-check refactor, so its result lives in stdout
 // only — not the report JSON. Parsing the log is the simplest seam.
-// Match `[runtime-probe] <id> × <commit>: PASS|FAIL|SKIP` followed by
-// either `(fail=N warn=N)` (probe ran inside harness, no per-cell ms
+// Match `[runtime-probe] <variantId> × <commitId>: PASS|FAIL|SKIP` followed
+// by either `(fail=N warn=N)` (probe ran inside harness, no per-cell ms
 // measurement) or `(fail=N warn=N <ms>ms)` (legacy external probe with
-// timing) or trailing prose for SKIP. Capture outcome + optional ms.
-const PROBE_LINE = /\[runtime-probe\][^:]*:\s+(PASS|FAIL|SKIP)(?:[^(]*\(.*?(\d+)ms\))?/;
+// timing) or trailing prose for SKIP. Capture variant + commit + outcome +
+// optional ms. Exp 48: a cell log can carry MULTIPLE probe lines (one per
+// tier variant), so attribution must be per-(variant, commit), not
+// first-line-wins.
+const PROBE_LINE_G = /\[runtime-probe\]\s+(\S+)\s+×\s+(\S+):\s+(PASS|FAIL|SKIP)(?:[^(\n]*\(.*?(\d+)ms\))?/g;
+
+/**
+ * Parse EVERY probe line in a cell log into a lookup keyed
+ * `"<variantId>|<commitId>"`. When the same key repeats (eval re-runs),
+ * the LAST line wins — it reflects the final exit-probe outcome.
+ */
+function parseProbeLines(logBody) {
+  const byKey = new Map();
+  for (const m of logBody.matchAll(PROBE_LINE_G)) {
+    const parsedMs = Number.parseInt(m[4], 10);
+    byKey.set(`${m[1]}|${m[2]}`, {
+      outcome: m[3],
+      ms: Number.isFinite(parsedMs) ? parsedMs : null,
+    });
+  }
+  return byKey;
+}
 const cells = new Map();
 function cellSamples(provider, commit) {
   const key = `${provider}|${commit}`;
@@ -315,25 +335,23 @@ for (const r of runs) {
     });
     continue;
   }
-  // Parse per-cell log for probe outcome + duration.
-  let probeOutcome = null;
-  let probeMs = null;
+  // Parse per-cell log for probe outcomes — one entry per (variant,
+  // commit) so multi-variant cells attribute correctly (Exp 48).
+  let probeByKey = new Map();
   if (r.logFile && existsSync(r.logFile)) {
     try {
-      const logBody = readFileSync(r.logFile, 'utf-8');
-      const m = PROBE_LINE.exec(logBody);
-      if (m) {
-        probeOutcome = m[1];
-        // The modern probe line has no per-cell ms group — m[2] is
-        // undefined and parseInt yields NaN. Keep null over NaN so the
-        // mean below prints n/a instead of NaN.
-        const parsedMs = parseInt(m[2], 10);
-        probeMs = Number.isFinite(parsedMs) ? parsedMs : null;
-      }
+      probeByKey = parseProbeLines(readFileSync(r.logFile, 'utf-8'));
     } catch {
-      /* probe data missing — that's fine, treat as null */
+      /* probe data missing — that's fine, treat as empty */
     }
   }
+  // Whole-log fallback used for the no-report failure samples below and
+  // for logs whose variant ids don't line up with the report rows: when
+  // the log carries exactly ONE probe line, it unambiguously belongs to
+  // the cell.
+  const soleProbe = probeByKey.size === 1 ? [...probeByKey.values()][0] : null;
+  const probeOutcome = soleProbe?.outcome ?? null;
+  const probeMs = soleProbe?.ms ?? null;
   const reportResults = report.results ?? [];
   if (reportResults.length === 0) {
     // Report exists but carries no per-cell result rows — still a
@@ -366,9 +384,16 @@ for (const r of runs) {
     // probeOutcome === 'FAIL' ⇒ real wiring bug, cell failed
     // probeOutcome === 'SKIP' or null (probe couldn't run / cell errored
     //   before probe) ⇒ inconclusive, treat as fail
-    const passed = probeOutcome === 'PASS';
-    cellSamples(r.provider, result.commit?.id ?? r.commit).push({
-      score, totalMs, turns, passed, reported: true, run: r.run, probeOutcome, probeMs,
+    // Per-result attribution: exact (variant, commit) key first, then
+    // the sole-probe-line fallback for single-result logs.
+    const rowCommit = result.commit?.id ?? r.commit;
+    const rowProbe =
+      probeByKey.get(`${result.variant?.id}|${rowCommit}`) ?? soleProbe;
+    const rowOutcome = rowProbe?.outcome ?? null;
+    const passed = rowOutcome === 'PASS';
+    cellSamples(r.provider, rowCommit).push({
+      score, totalMs, turns, passed, reported: true, run: r.run,
+      probeOutcome: rowOutcome, probeMs: rowProbe?.ms ?? null,
     });
   }
 }

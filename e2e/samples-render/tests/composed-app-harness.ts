@@ -98,12 +98,18 @@ async function isAnswering(url: string): Promise<boolean> {
 }
 
 async function assertPortsFree(remoteGgui = false): Promise<void> {
-  // A stale server from a sibling worktree on 6781/6890 would make our
+  // A stale server from a sibling worktree on these ports would make our
   // readiness poll latch onto the WRONG process (a false green). Fail loudly
   // before booting. (See the e2e-stale-servers-across-worktrees hazard.) In
-  // remote-ggui (cloud) mode the local ggui (6781) is never booted, so only
-  // the web port matters.
-  const guardedPorts = remoteGgui ? [WEB_PORT] : [GGUI_PORT, WEB_PORT];
+  // remote-ggui (cloud) mode the local ggui (6781) is never booted, so it
+  // drops out of the guard — but the AGENT port stays guarded in BOTH
+  // modes: a stale agent-server on 6790 holds the PREVIOUS run's (torn
+  // down) app endpoint + connector key and an empty chat store, which
+  // reproduces the exact ggui#405 twin symptoms (relay failures + 404 on
+  // a just-allocated chat) as a phantom.
+  const guardedPorts = remoteGgui
+    ? [AGENT_PORT, WEB_PORT]
+    : [GGUI_PORT, AGENT_PORT, WEB_PORT];
   for (const port of guardedPorts) {
     if (await isAnswering(`http://localhost:${port}`)) {
       throw new Error(

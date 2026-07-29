@@ -23,9 +23,11 @@ import type { AgentAdapter, McpServerConfig } from './types.js';
  * Options for {@link startAgentServer}.
  *
  * Naming note: the public field is `mcpServers` — operator passes
- * the URL only; bearer falls back to `process.env.GGUI_MCP_BEARER`
- * (or `'dev'` for the `ggui serve --dev-allow-all` default) unless
- * the entry carries its own `bearer` override.
+ * the URL only. ONE bearer is resolved for every entry:
+ * `opts.bearer ?? process.env.GGUI_MCP_BEARER ?? 'dev'` — there is
+ * deliberately no per-entry bearer override (`McpServerConfig` carries
+ * only `url`; an earlier version of this comment claimed otherwise —
+ * ggui#405 doc-drift find).
  */
 export interface AgentServerOptions {
   readonly port: number;

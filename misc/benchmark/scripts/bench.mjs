@@ -54,15 +54,19 @@ import { existsSync, readFileSync } from 'fs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 // Two layouts to support — script must work in both:
-//   1. Workspace dev:    scripts/ is at packages/benchmark/scripts/
-//                        BENCHMARKS_DIR = packages/benchmark
-//                        UI_GEN_DIR    = packages/ui-gen (sibling)
+//   1. Workspace dev:    scripts/ is at oss/misc/benchmark/scripts/
+//                        BENCHMARKS_DIR = oss/misc/benchmark
+//                        UI_GEN_DIR    = node_modules/@ggui-ai/ui-gen
+//                        (workspace symlink → oss/packages/ui-gen; the
+//                        `../ui-gen` sibling probe below predates the
+//                        misc/ move and never resolves here)
 //   2. Container deploy: scripts/ is at /app/scripts/ (pnpm deploy flattened)
 //                        BENCHMARKS_DIR = /app
 //                        UI_GEN_DIR    = /app/node_modules/@ggui-ai/ui-gen
 //
 // Resolution: BENCHMARKS_DIR is always `scripts/..`. UI_GEN_DIR tries the
-// workspace-sibling path first, falls back to the deployed node_modules path.
+// legacy workspace-sibling path first, falls back to node_modules — which
+// is the live path in BOTH current layouts.
 const BENCHMARKS_DIR = resolve(__dirname, '..');
 const SIBLING_UI_GEN = resolve(BENCHMARKS_DIR, '../ui-gen');
 const NODE_MODULES_UI_GEN = resolve(

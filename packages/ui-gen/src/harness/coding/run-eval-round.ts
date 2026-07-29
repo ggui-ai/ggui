@@ -601,6 +601,24 @@ export async function runEvalRound(
         `[simple] eval round ${evalRoundsUsed}: stuck — all ${currFailFingerprints.size} ` +
           `fails recur from prior round, exiting eval-fix loop`,
       );
+      // The stuck exit still SHIPS the code, so it gets the same exit
+      // probe as every other exit path — issues merge for telemetry and
+      // the runtimeProbe stamp lands (Exp 48 found this exit surfacing
+      // as "SKIP — no runtimeProbe stamp" in the bench: honest, but a
+      // probe here is cheap and the shipped code deserves the signal).
+      // No feedback is granted — stuck means the LLM stopped converging.
+      const stuckExitProbe = await runProbeAtExit({
+        harness,
+        sourceCode: currentSource,
+        compiledCode,
+        contract,
+        fixtureProps,
+      });
+      evalResult = {
+        issues: [...evalResult.issues, ...stuckExitProbe.probeIssues],
+        pass: evalResult.pass,
+        runtimeProbe: stuckExitProbe.meta,
+      };
       return {
         control: "break",
         evalDone: false,
