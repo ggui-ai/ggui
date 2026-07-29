@@ -10,6 +10,7 @@ import {
   type KeyboardEvent,
 } from 'react';
 import { AppRenderer, type RequestHandlerExtra } from '@mcp-ui/client';
+import { UiFeedback, type UiFeedbackPayload } from '@ggui-ai/react';
 import {
   useMcpAppsChat,
   type ChatEntry,
@@ -59,6 +60,30 @@ interface ChatProps {
 // is URL-resident so cross-tab links land on the same conversation.
 const LS_GUEST_TOKEN = 'ggui-basic-web/guestToken';
 const URL_CHAT_PARAM = 'chat';
+
+/**
+ * Dev-only `ui_feedback` sink for the render shell's feedback
+ * affordance. The sample is brand-agnostic reference code, so it wires
+ * the callback to `console.debug` in dev builds only (the sample's
+ * existing console-logging pattern); in production builds the callback
+ * is absent and `<UiFeedback>` renders nothing. A host with an
+ * analytics client would pass its capture call here instead.
+ */
+const devUiFeedbackSink = import.meta.env.DEV
+  ? (feedback: UiFeedbackPayload): void => {
+      console.debug('[ui_feedback]', feedback);
+    }
+  : undefined;
+
+/**
+ * GguiSession id for feedback context — the tail of the spec-canonical
+ * `ui://ggui/render/{sessionId}` resource URI (same segment
+ * {@link shortLabel} falls back to for chrome labels).
+ */
+function sessionIdOf(item: GguiSessionRef): string | undefined {
+  const tail = item.resourceUri.split('/').filter(Boolean).pop();
+  return tail !== undefined && tail.length > 0 ? tail : undefined;
+}
 
 /**
  * Read the URL `?chat=<id>` — returns the chatId when present so the
@@ -628,6 +653,11 @@ function ResourceFrame({
       <div className="render-chrome">
         <span className="render-id">{shortLabel(item)}</span>
         <span className="render-action">{item.action}</span>
+        <UiFeedback
+          onUiFeedback={devUiFeedbackSink}
+          sessionId={sessionIdOf(item)}
+          toolName="ggui_render"
+        />
       </div>
       <div
         className="render-frame"

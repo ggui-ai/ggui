@@ -652,6 +652,12 @@ form button:disabled {
   font-size: 10px;
 }
 
+/* Feedback affordance (@ggui-ai/react <UiFeedback>) — right-align in
+   the chrome row via its public data-attribute styling hook. */
+.render-chrome [data-ggui-ui-feedback] {
+  margin-left: auto;
+}
+
 .render-link {
   margin-left: auto;
   text-decoration: none;

@@ -165,6 +165,16 @@ export type { SelfRepairBoundaryProps } from './components/SelfRepairBoundary';
 export { AgentBrowsePanel } from './components/AgentBrowsePanel';
 export type { AgentBrowsePanelProps } from './components/AgentBrowsePanel';
 
+// UI Feedback affordance — host-side render-shell chrome. Hidden
+// entirely unless the host wires `onUiFeedback`; the payload leaves
+// through that callback only (never the agent ↔ UI wire).
+export { UiFeedback } from './components/UiFeedback';
+export type {
+  UiFeedbackProps,
+  UiFeedbackPayload,
+  UiFeedbackVerdict,
+} from './components/UiFeedback';
+
 // Hooks
 export { useWebSocket } from './hooks/useWebSocket';
 export type { UseWebSocketOptions, UseWebSocketReturn } from './hooks/useWebSocket';
