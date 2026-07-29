@@ -139,7 +139,7 @@ All data must come from props — never hardcode weather data. Use CSS variables
 - Step 4: Textarea for open-ended comments (optional, with character counter, max 500 chars)
 
 Requirements:
-- Progress bar at the top showing current step (e.g., "Step 2 of 4")
+- Step indicator at the top showing the current step (e.g., "Step 2 of 4")
 - Back/Next navigation buttons (Next disabled until required fields valid)
 - Final review step showing all answers before submission
 - Call props.onSubmit with all collected answers as a structured object
@@ -747,7 +747,7 @@ Step 3 - Review & Confirm:
 - "Complete Setup" button to submit
 
 Requirements:
-- Step indicator at top showing current step (1/2/3) with progress bar
+- Step indicator at top showing current step (1/2/3)
 - Back/Next navigation (Next disabled until required fields valid)
 - Smooth transition between steps
 - Call props.onComplete with all collected data on final submit
