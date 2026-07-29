@@ -133,7 +133,7 @@ All data must come from props — never hardcode weather data. Use CSS variables
     shellType: 'fullscreen',
     screen: 'desktop',
     prompt: `Build a multi-step survey form with 4 steps:
-- Step 1: Text inputs for name (required) and email (required, must be valid email format) with inline validation
+- Step 1: Text inputs for name (required) and email (required, must be valid email format) with inline validation, plus a date input for preferred follow-up date (required, must not be in the past)
 - Step 2: Radio button group for satisfaction rating (1-5 scale with labels from props)
 - Step 3: Checkbox group for feature interests (options from props)
 - Step 4: Textarea for open-ended comments (optional, with character counter, max 500 chars)
@@ -153,7 +153,7 @@ Requirements:
         },
       },
       actionSpec: {
-        submit: { label: 'Submit Survey', description: 'Called with all collected answers as a structured object', nextStep: 'survey_submit_response', example: { name: 'John', email: 'john@example.com', satisfaction: 4, features: ['API Integration', 'Mobile App'], comments: 'Great product!' } },
+        submit: { label: 'Submit Survey', description: 'Called with all collected answers as a structured object', nextStep: 'survey_submit_response', example: { name: 'John', email: 'john@example.com', followUpDate: '2026-08-15', satisfaction: 4, features: ['API Integration', 'Mobile App'], comments: 'Great product!' } },
       },
     },
     props: {

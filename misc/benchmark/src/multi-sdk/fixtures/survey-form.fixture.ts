@@ -28,9 +28,10 @@ export const surveyForm = retrofit("survey-form", {
     },
   },
   evalGoals: [
-    "useState covers every submit payload key (name, email, satisfaction, features, comments)",
+    "useState covers every submit payload key (name, email, followUpDate, satisfaction, features, comments)",
     "Step state via useState<number>, starts at 1",
     "Each step renders only its fields",
+    "Follow-up date collected via Input type=\"date\" (ISO string value), validated as not in the past",
     "Next button disabled until current step validated",
     "Review step shows all collected values before submit",
     "submit invoked with assembled payload on final click",
