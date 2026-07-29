@@ -593,7 +593,11 @@ function ResourceFrame({
           }),
         });
         if (!resp.ok) {
-          console.warn('[ResourceFrame] relay non-2xx', resp.status);
+          // Read the body — on 502 it carries the agent-server's
+          // "relay error: <cause chain>" diagnostic; discarding it
+          // left lost-gesture triage blind (ggui#405).
+          const detail = await resp.text().catch(() => '');
+          console.warn('[ResourceFrame] relay non-2xx', resp.status, detail);
           return { isError: true, content: [] };
         }
         const jsonRpc = (await resp.json()) as {

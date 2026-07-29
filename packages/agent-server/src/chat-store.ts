@@ -61,6 +61,20 @@ export interface ChatStore {
   /** Return the record for `chatId`, or `undefined` if unknown. */
   get(chatId: string): ChatRecord | undefined;
   /**
+   * Create an EMPTY row for `chatId` owned by `ownerId` if none exists;
+   * no-op when the chat is already known (ownership untouched). Called
+   * at chat-ALLOCATION time, before the adapter run starts — without
+   * this, the row only materialized on the adapter's first yielded
+   * message, so a run that died pre-yield (remote MCP unreachable,
+   * ggui#405) left a chatId the client holds forever 404ing on
+   * GET /agent.
+   */
+  ensure(args: {
+    readonly chatId: string;
+    readonly ownerId: string;
+    readonly now?: number;
+  }): void;
+  /**
    * Create the row on first write with the given `ownerId`; append
    * the message to the snapshot. Implementations MUST be safe across
    * concurrent writers for the same chatId. The first append wins
@@ -81,6 +95,14 @@ export function createInMemoryChatStore(): ChatStore {
   return {
     get(chatId) {
       return map.get(chatId);
+    },
+    ensure({ chatId, ownerId, now }) {
+      if (map.has(chatId)) return;
+      const ts = now ?? Date.now();
+      map.set(chatId, {
+        row: { chatId, ownerId, createdAt: ts, updatedAt: ts },
+        snapshot: { chatId, messages: [] },
+      });
     },
     append({ chatId, ownerId, message, now }) {
       const ts = now ?? Date.now();

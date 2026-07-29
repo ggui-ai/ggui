@@ -750,3 +750,48 @@ describe('/auth/* surface', () => {
     expect(body.principal.guestId).toBe(guestId);
   });
 });
+
+describe('chat row materializes at allocation (ggui#405)', () => {
+  it('a run that dies before its first yield still leaves a queryable empty chat', async () => {
+    const throwingAdapter: AgentAdapter = {
+      name: 'throwing',
+      // eslint-disable-next-line require-yield -- dying pre-yield is the scenario under test
+      run: async function* () {
+        throw new Error('remote MCP unreachable');
+      },
+    };
+    const auth = createGuestTokenAuth({ signingSecret: SECRET });
+    const store = createInMemoryChatStore();
+    const app = createAgentApp({
+      adapter: throwingAdapter,
+      auth,
+      chatStore: store,
+      mcpServers: MCP_SERVERS,
+      systemPrompt: null,
+      sandboxProxyUrl: 'http://localhost:7790',
+    });
+    const { guestToken } = await mintGuestBearer(app);
+
+    const post = await app.request('http://localhost/agent', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${guestToken}`,
+      },
+      body: JSON.stringify({ kind: 'chat', prompt: 'hi', chatId: 'chat_dies' }),
+    });
+    // SSE response begins (chat-allocated) even though the run dies.
+    expect(post.status).toBe(200);
+    await post.text(); // drain the stream so the handler completes
+
+    // Pre-fix this was a 404 — the row only existed after a first yield.
+    const get = await app.request(
+      'http://localhost/agent?chatId=chat_dies',
+      { headers: { Authorization: `Bearer ${guestToken}` } },
+    );
+    expect(get.status).toBe(200);
+    const body = (await get.json()) as { chatId: string; messages: unknown[] };
+    expect(body.chatId).toBe('chat_dies');
+    expect(body.messages).toEqual([]);
+  });
+});

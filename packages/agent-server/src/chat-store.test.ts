@@ -93,3 +93,27 @@ describe('createInMemoryChatStore', () => {
     expect(store.get('chat_y')?.row.ownerId).toBe('guest_y');
   });
 });
+
+describe('ensure (ggui#405 — row at allocation time)', () => {
+  const ASSISTANT_MSG: NormalizedMessage = {
+    type: 'assistant',
+    message: { content: [{ type: 'text', text: 'hi' }] },
+  };
+
+  it('creates an empty owned row; later append fills it', () => {
+    const store = createInMemoryChatStore();
+    store.ensure({ chatId: 'chat_e', ownerId: 'guest_e' });
+    expect(store.get('chat_e')?.snapshot.messages).toEqual([]);
+    expect(store.get('chat_e')?.row.ownerId).toBe('guest_e');
+    store.append({ chatId: 'chat_e', ownerId: 'guest_e', message: ASSISTANT_MSG });
+    expect(store.get('chat_e')?.snapshot.messages).toEqual([ASSISTANT_MSG]);
+  });
+
+  it('is a no-op on an existing chat — ownership cannot be hijacked', () => {
+    const store = createInMemoryChatStore();
+    store.append({ chatId: 'chat_f', ownerId: 'guest_first', message: ASSISTANT_MSG });
+    store.ensure({ chatId: 'chat_f', ownerId: 'guest_second' });
+    expect(store.get('chat_f')?.row.ownerId).toBe('guest_first');
+    expect(store.get('chat_f')?.snapshot.messages).toEqual([ASSISTANT_MSG]);
+  });
+});

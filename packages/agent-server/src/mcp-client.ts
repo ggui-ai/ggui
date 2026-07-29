@@ -166,10 +166,74 @@ export async function callMcpResourcesRead(args: {
 }
 
 /**
+ * Error-cause codes that PROVE the request never left this process —
+ * DNS resolution failed, the TCP connect was refused, or the connect
+ * phase timed out before a socket existed. Retrying these can never
+ * duplicate a delivered request, so they are the ONLY retriable class:
+ * the pending-event pipe does NOT dedupe on entry id (ggui#405), so an
+ * ambiguous failure (ECONNRESET / `terminated` mid-body) must surface
+ * to the caller rather than risk double-enqueueing a user action.
+ */
+const PRE_SEND_FAILURE_CODES = new Set([
+  'ENOTFOUND',
+  'EAI_AGAIN',
+  'ECONNREFUSED',
+  'UND_ERR_CONNECT_TIMEOUT',
+]);
+
+/** Walk `err.cause` chains and collect every message + code — undici's
+ * top-level `fetch failed` TypeError hides the actual reason (e.g.
+ * `connect ECONNREFUSED`) one or two causes down. */
+export function describeFetchError(err: unknown): {
+  readonly message: string;
+  readonly codes: readonly string[];
+} {
+  const parts: string[] = [];
+  const codes: string[] = [];
+  let cur: unknown = err;
+  for (let depth = 0; depth < 5 && cur !== undefined && cur !== null; depth++) {
+    if (cur instanceof Error) {
+      parts.push(cur.message);
+      const code = (cur as Error & { code?: unknown }).code;
+      if (typeof code === 'string') codes.push(code);
+      cur = (cur as Error & { cause?: unknown }).cause;
+    } else {
+      parts.push(String(cur));
+      break;
+    }
+  }
+  return { message: parts.join(' ← '), codes };
+}
+
+function isPreSendFailure(err: unknown): boolean {
+  return describeFetchError(err).codes.some((c) => PRE_SEND_FAILURE_CODES.has(c));
+}
+
+/** Bounded backoff for the pre-send retry loop: attempt 1 is immediate,
+ * then 300ms / 900ms. Two extra attempts ride out a connection-drain /
+ * DNS blip without stretching a genuinely-down endpoint past ~1.2s. */
+const RELAY_RETRY_DELAYS_MS = [300, 900];
+
+/** Per-attempt wall-clock ceiling. Without it a hung connect/read holds
+ * the relay open for undici's ~300s body timeout while the browser's
+ * action spins (observed shape in ggui#405). */
+const RELAY_ATTEMPT_TIMEOUT_MS = 20_000;
+
+/**
  * Issue a `tools/call` JSON-RPC against an MCP endpoint. Returns the
  * parsed JSON-RPC envelope (caller handles error envelopes); kept
  * generic because the iframe → host relay forwards the result body
  * back to the browser as-is.
+ *
+ * Failure semantics (ggui#405):
+ *   - HTTP-level outcomes (401/429/5xx bodies) never throw — they parse
+ *     into JSON-RPC error envelopes the caller inspects.
+ *   - Thrown network failures whose cause proves the request was never
+ *     sent (DNS / connect-refused / connect-timeout) are retried up to
+ *     2 extra times with short backoff — safe by definition.
+ *   - Ambiguous network failures (reset / terminated mid-body) throw
+ *     immediately with the full cause chain in the message — the
+ *     request MAY have been delivered, and the pipe doesn't dedupe.
  */
 export async function callMcpToolsCall(args: {
   readonly url: string;
@@ -189,23 +253,46 @@ export async function callMcpToolsCall(args: {
     arguments: args.arguments,
   };
   if (args.meta !== undefined) params._meta = args.meta;
-  const response = await fetch(args.url, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Accept: 'application/json, text/event-stream',
-      Authorization: `Bearer ${args.bearer}`,
-    },
-    body: JSON.stringify({
-      jsonrpc: '2.0',
-      id: rpcId,
-      method: 'tools/call',
-      params,
-    }),
-    ...(args.signal ? { signal: args.signal } : {}),
+  const body = JSON.stringify({
+    jsonrpc: '2.0',
+    id: rpcId,
+    method: 'tools/call',
+    params,
   });
-  const text = await response.text();
-  return parseMcpResponse(text);
+
+  for (let attempt = 0; ; attempt++) {
+    // Compose the caller's signal with the per-attempt timeout; either
+    // aborting cancels the fetch.
+    const signals = [AbortSignal.timeout(RELAY_ATTEMPT_TIMEOUT_MS)];
+    if (args.signal) signals.push(args.signal);
+    try {
+      const response = await fetch(args.url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json, text/event-stream',
+          Authorization: `Bearer ${args.bearer}`,
+        },
+        body,
+        signal: AbortSignal.any(signals),
+      });
+      const text = await response.text();
+      return parseMcpResponse(text);
+    } catch (err) {
+      const canRetry =
+        attempt < RELAY_RETRY_DELAYS_MS.length &&
+        !args.signal?.aborted &&
+        isPreSendFailure(err);
+      if (!canRetry) {
+        const { message } = describeFetchError(err);
+        throw new Error(
+          `tools/call ${args.name} → ${args.url} failed${attempt > 0 ? ` after ${attempt + 1} attempts` : ''}: ${message}`,
+          { cause: err },
+        );
+      }
+      await new Promise((r) => setTimeout(r, RELAY_RETRY_DELAYS_MS[attempt]));
+    }
+  }
 }
 
 /**

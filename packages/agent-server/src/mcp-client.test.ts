@@ -272,3 +272,73 @@ describe('buildAgentCatalog', () => {
     );
   });
 });
+
+// ── ggui#405 — relay network-failure semantics ─────────────────────────────
+//
+// callMcpToolsCall only throws on network-level failures; HTTP error
+// bodies parse into envelopes. Of the throw class, only provably
+// PRE-SEND failures (DNS / connect-refused / connect-timeout) retry —
+// the pending-event pipe does not dedupe on entry id, so an ambiguous
+// mid-flight failure must never be replayed.
+
+import { callMcpToolsCall, describeFetchError } from './mcp-client.js';
+
+function networkError(code: string): TypeError {
+  const cause = Object.assign(new Error(`connect ${code} 1.2.3.4:443`), {
+    code,
+  });
+  return new TypeError('fetch failed', { cause });
+}
+
+describe('describeFetchError', () => {
+  it('walks the cause chain collecting messages + codes', () => {
+    const { message, codes } = describeFetchError(networkError('ECONNREFUSED'));
+    expect(message).toBe('fetch failed ← connect ECONNREFUSED 1.2.3.4:443');
+    expect(codes).toEqual(['ECONNREFUSED']);
+  });
+});
+
+describe('callMcpToolsCall network-failure semantics', () => {
+  const CALL = {
+    url: 'https://pod.example/apps/x',
+    bearer: 'k',
+    name: 'ggui_runtime_submit_action',
+    arguments: {},
+  };
+
+  it('retries a pre-send failure (ECONNREFUSED) and succeeds', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockRejectedValueOnce(networkError('ECONNREFUSED'))
+      .mockResolvedValue(
+        jsonResponse({ jsonrpc: '2.0', id: 1, result: { content: [] } }),
+      );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const rpc = await callMcpToolsCall(CALL);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(rpc.error).toBeUndefined();
+  });
+
+  it('does NOT retry an ambiguous mid-flight failure — throws with the cause chain', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockRejectedValue(new TypeError('terminated'));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(callMcpToolsCall(CALL)).rejects.toThrow(
+      /tools\/call ggui_runtime_submit_action .* failed: terminated/,
+    );
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('gives up after the bounded retries and reports the attempt count', async () => {
+    const fetchMock = vi.fn().mockRejectedValue(networkError('ENOTFOUND'));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(callMcpToolsCall(CALL)).rejects.toThrow(
+      /failed after 3 attempts: fetch failed ← connect ENOTFOUND/,
+    );
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+});

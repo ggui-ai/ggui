@@ -367,7 +367,13 @@ export function createAgentApp(
         });
         return c.json(rpc, 200);
       } catch (err) {
+        // callMcpToolsCall only throws on network-level failures (HTTP
+        // error bodies parse into JSON-RPC envelopes) and its message
+        // carries the full cause chain (ggui#405). Log server-side —
+        // the browser shell historically discarded the 502 body, so
+        // this line is the primary diagnostic for a lost user gesture.
         const message = err instanceof Error ? err.message : String(err);
+        log(`[agent-server] tool-call relay failed: ${message}`);
         return c.json({ error: `relay error: ${message}` }, 502);
       }
     }
@@ -402,6 +408,13 @@ export function createAgentApp(
     } else {
       chatId = mintChatId();
     }
+    // Materialize the row NOW, not at the adapter's first yield — a run
+    // that dies pre-yield (remote MCP unreachable, ggui#405) must leave
+    // a queryable empty chat, not a chatId the client holds forever
+    // 404ing. Ownership stamps to the current principal either way (for
+    // a client-supplied unknown id this is the same principal that
+    // would have won the first-append race).
+    chatStore.ensure({ chatId, ownerId });
 
     // Pure prompt-forwarder: the prompt feeds the adapter verbatim. The
     // server has ZERO ggui-protocol knowledge — when a user gesture
