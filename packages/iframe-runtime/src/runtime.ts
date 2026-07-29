@@ -949,7 +949,12 @@ export async function bootSequence(opts: BootSequenceOptions): Promise<BootSeque
         return { ok: false, mountedRender };
       }
       // A live trio is present — the WS ack will deliver the render.
-      // The seed was best-effort; fall through to subscribe.
+      // The seed was best-effort; fall through to subscribe. Warn so a
+      // degraded boot (slower first paint, ack-only delivery) is visible
+      // in host consoles instead of indistinguishable from the fast path.
+      console.warn(
+        `[ggui] static seed fetch failed (${message}); falling back to the live channel for render delivery`
+      );
       seed = null;
     }
     if (seed !== null) {
