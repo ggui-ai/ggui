@@ -73,22 +73,23 @@ const KNOWN_PRIMITIVE_SECTIONS = new Set<string>([
   "Table", "Tabs", "Toast", "Accordion",
   // Components
   "SearchField", "FormField", "MenuItem", "Tag", "Dropdown", "Autocomplete", "Breadcrumb", "Pagination",
+  "Stat", "Stepper",
   // Compositions
   "Header", "Sidebar", "CardGrid", "CommentThread", "DataTable", "ChatWindow", "NavigationBar",
-  "FileUploader", "UserProfileCard", "NotificationCenter", "Modal", "CommandPalette",
-  "Footer", "IncidentTimeline", "Hero",
+  "FileUploader", "NotificationCenter", "Modal", "CommandPalette",
+  "Footer", "Hero",
 ]);
 
 /** Axis-value → primitive additions. Union'd with CORE_PRIMITIVES. */
 const AXIS_PRIMITIVES: Readonly<Record<string, readonly string[]>> = {
   // render ────────────────────────────────────────────────────────
   "render:list":          ["Badge", "Avatar", "Spinner", "Link"],
-  "render:grid":          ["CardGrid", "Badge", "Image"],
+  "render:grid":          ["CardGrid", "Badge", "Image", "Stat"],
   "render:timeline":      ["Badge", "Avatar", "Spinner", "Link"],
   "render:master-detail": ["Sidebar", "SearchField", "Badge"],
   "render:spatial":       ["Image"],
-  "render:chart":         ["Progress", "Badge"],
-  "render:static":        [],
+  "render:chart":         ["Progress", "Badge", "Stat"],
+  "render:static":        ["Stat"],
   // state ─────────────────────────────────────────────────────────
   "state:payload":        ["Input", "TextArea", "Select", "Checkbox", "Toggle", "RadioGroup", "Slider", "FormField", "Alert"],
   "state:draft":          ["Input", "TextArea", "FormField", "Alert"],
@@ -122,7 +123,7 @@ const AXIS_PRIMITIVES: Readonly<Record<string, readonly string[]>> = {
   "fetch:refresh":        ["Spinner"],
   "fetch:none":           [],
   // layout ────────────────────────────────────────────────────────
-  "layout:multi-step":    ["Tabs", "Progress", "Breadcrumb"],
+  "layout:multi-step":    ["Stepper"],
   "layout:master-detail": ["Sidebar"],
   "layout:overlay":       ["Modal", "Tooltip"],
   "layout:modal":         ["Modal"],

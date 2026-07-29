@@ -21,10 +21,13 @@ export const layoutFragments: Record<string, HarnessFragment> = {
     // below; non-multi-step fixtures had 0 fails across the same benches.
     promptText:
       "## Layout: multi-step\n" +
-      "Wizard. Track `step` in useState (0-indexed). Render a progress " +
-      "indicator (e.g., '2 of 4') and Next/Back buttons. Keep all step " +
-      "state in a single payload object; do NOT reset previous-step data " +
-      "on navigation.\n\n" +
+      "Wizard. Track `step` in useState (0-indexed). Render " +
+      "`<Stepper steps={STEPS} current={step} />` as the progress " +
+      "indicator — do NOT hand-roll a '2 of 4' counter, and do NOT " +
+      "reach for Tabs/Progress/Breadcrumb. Stepper is display-only: " +
+      "your Next/Back buttons move `step`. Keep all step state in a " +
+      "single payload object; do NOT reset previous-step data on " +
+      "navigation.\n\n" +
       "### Anti-patterns that crash at runtime — DO NOT do these:\n\n" +
       "1. **No setState in render body** — causes 'Too many re-renders'.\n" +
       "```tsx\n" +

@@ -72,12 +72,26 @@ describe('VALID_PRIMITIVES', () => {
   it('should include component exports', () => {
     expect(VALID_PRIMITIVES).toContain('SearchField');
     expect(VALID_PRIMITIVES).toContain('Dropdown');
+    expect(VALID_PRIMITIVES).toContain('Stat');
+    expect(VALID_PRIMITIVES).toContain('Stepper');
   });
 
   it('should include composition exports', () => {
     expect(VALID_PRIMITIVES).toContain('Header');
     expect(VALID_PRIMITIVES).toContain('Modal');
-    expect(VALID_PRIMITIVES).toContain('MarketingHero');
+  });
+
+  it('should NOT include the composites deleted in the #306 roster wave', () => {
+    for (const removed of [
+      'MakeTabLayout',
+      'MarketingHero',
+      'MarketingFeatures',
+      'MarketingCTA',
+      'IncidentTimeline',
+      'UserProfileCard',
+    ]) {
+      expect(VALID_PRIMITIVES).not.toContain(removed);
+    }
   });
 });
 
@@ -85,10 +99,15 @@ describe('isValidPrimitive', () => {
   it('returns true for valid primitives', () => {
     expect(isValidPrimitive('Button')).toBe(true);
     expect(isValidPrimitive('Container')).toBe(true);
+    expect(isValidPrimitive('Stepper')).toBe(true);
   });
 
   it('returns false for invalid primitives', () => {
     expect(isValidPrimitive('NonExistent')).toBe(false);
+    // D2 (#306): date entry is Input type="date" — still no composite picker.
     expect(isValidPrimitive('DatePicker')).toBe(false);
+    // D7 (#306): deleted composites are no longer legal imports.
+    expect(isValidPrimitive('UserProfileCard')).toBe(false);
+    expect(isValidPrimitive('MarketingHero')).toBe(false);
   });
 });

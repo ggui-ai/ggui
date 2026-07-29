@@ -47,7 +47,9 @@ const RADIUS_SCALE = ['none', 'sm', 'md', 'lg', 'xl'] as const;
  * Numeric props (`Heading.level`) are out of scope — string enums only.
  */
 const PROMPT_ENUM_CLAIMS: readonly EnumClaim[] = [
-  { component: 'Text', prop: 'variant', values: ['body', 'bodySmall', 'bodyLarge', 'caption', 'label', 'overline'] },
+  // Text.variant was deleted in the #306 composite-roster wave —
+  // size/weight/tone (+ boolean `caps`, out of scope here) are the
+  // only typography axes.
   { component: 'Text', prop: 'size', values: ['xs', 'sm', 'base', 'lg', 'xl', '2xl', '3xl', '4xl'] },
   { component: 'Text', prop: 'weight', values: ['normal', 'medium', 'semibold', 'bold'] },
   { component: 'Text', prop: 'tone', values: TONE },
@@ -66,6 +68,7 @@ const PROMPT_ENUM_CLAIMS: readonly EnumClaim[] = [
   { component: 'Row', prop: 'justify', values: ['start', 'center', 'end', 'between', 'around', 'evenly'] },
   { component: 'Badge', prop: 'variant', values: ['default', 'primary', 'secondary', 'success', 'warning', 'error', 'info'] },
   { component: 'Stat', prop: 'trend', values: ['up', 'down', 'neutral'] },
+  { component: 'Stepper', prop: 'orientation', values: ['horizontal', 'vertical'] },
   // Spacing scale — gap (Stack / Row / Grid), padding (Card / Box / Container).
   { component: 'Stack', prop: 'gap', values: SPACING_SCALE },
   { component: 'Row', prop: 'gap', values: SPACING_SCALE },

@@ -520,17 +520,17 @@ Available primitives (all from \`@ggui-ai/design\`):
 - Composite: Accordion, Tabs, Table, Toast
 
 Available compound components (all from \`@ggui-ai/design\`):
-- Autocomplete, Breadcrumb, Dropdown, EmptyState, FormField, MenuItem, Pagination, SearchField, Stat, Tag
+- Autocomplete, Breadcrumb, Dropdown, EmptyState, FormField, MenuItem, Pagination, SearchField, Stat, Stepper, Tag
 
 **Choosing between similar components** — pick by intent, don't guess:
 - **Pick from options**: one value from a short fixed list (a form field) → \`Select\`. Type-to-filter a long list, then pick → \`Autocomplete\`. A menu of actions off a button (edit / delete / …) → \`Dropdown\`. A search box that filters displayed content → \`SearchField\`.
 - **Tabular data** → \`Table\`. Reach for \`DataTable\` ONLY when you need built-in sorting / pagination / row-selection.
 - **Messaging**: an inline message in the layout flow → \`Alert\`. A transient popup → \`Toast\`. A panel listing many notifications → \`NotificationCenter\`.
+- **Step progress**: a wizard's step indicator → \`Stepper\`. NOT \`Tabs\` (implies free navigation), NOT \`Progress\` (continuous bar), NOT \`Breadcrumb\` (hierarchy).
 - **Containers**: width-constrain a page region → \`Container\`. A visually-contained surface (background + shadow + border) → \`Card\`. Plain grouping / spacing with no chrome → \`Box\`.
 
 EXACT primitive prop values (other values are silently ignored — the design system maps them to defaults):
-- \`<Text variant="...">\` — ONLY \`body | bodySmall | bodyLarge | caption | label | overline\`. NEVER \`body-md\`, \`body-sm\`, \`display-lg\`, \`display\`, \`title\`.
-- \`<Text size="...">\` — ONLY \`xs | sm | base | lg | xl | 2xl | 3xl | 4xl\`. For a HUGE number/temperature, use \`<Text size="4xl" weight="bold">\`.
+- \`<Text size="...">\` — ONLY \`xs | sm | base | lg | xl | 2xl | 3xl | 4xl\`. For a HUGE number/temperature, use \`<Text size="4xl" weight="bold">\`. \`caps\` uppercases with letter-spacing — the eyebrow/overline label look is \`<Text size="xs" weight="semibold" caps tone="muted">\`.
 - \`<Text weight="...">\` — \`normal | medium | semibold | bold\`.
 - \`<Text tone="...">\` — typed semantic slot. \`default | muted | subtle | emphasized | loud | success | warning | error | info | inverse | inherit\`. The theme decides what each tone LOOKS like — \`muted\` is a quiet warm grey on Claudic, a cool slate on Indigo. \`tone\` is the ONLY way to set Text color; the legacy \`color="..."\` prop has been removed.
 - \`<Heading level={1|2|3|4|5|6}>\` — sizes are preset by level (h1 = 4xl bold, h2 = 3xl bold, h3 = 2xl semibold). Pass a number, not \`level="h1"\`. Heading uses the same \`tone\` slot vocabulary as Text.
@@ -542,6 +542,7 @@ EXACT primitive prop values (other values are silently ignored — the design sy
 - **Spacing scale** — \`gap\` (Stack / Row / Grid) and \`padding\` (Card / Box / Container) take a t-shirt size: \`none | xs | sm | md | lg | xl | 2xl\`. Each resolves to a \`--ggui-spacing-*\` token (xs≈4px, sm≈8px, md≈16px, lg≈24px, xl≈32px, 2xl≈48px). A bare number is treated as pixels. NEVER pass a raw CSS length such as \`gap="8px"\` — it is silently dropped by the browser and the gap collapses to 0; use the scale name (\`gap="sm"\`).
 - \`<Grid columns={N} gap="md">\` — 2-D layout (rows AND columns). Reach for it for card galleries, stat grids and dashboards — NEVER hand-roll \`style={{ display: 'grid' }}\`. When the request names exact per-breakpoint counts ("3 per row on desktop, 1 on mobile"), pass a map: \`<Grid columns={{ base: 1, md: 3 }}>\` (breakpoints \`sm\`/\`md\`/\`lg\`/\`xl\`; the design system emits the media queries). For an open-ended gallery where any column count is fine, use \`<Grid minColumnWidth={220}>\` — it fits as many equal columns as the width allows. \`radius\` (Card / Box / Image) takes the scale \`none | sm | md | lg | xl\`.
 - \`<Stat label="…" value="…" delta="+12%" trend="up">\` — KPI display (label + big value + trend-coloured delta + optional \`icon\`). \`trend\` is \`up | down | neutral\` (delta renders green / red / muted). Reach for it for any "show a number" UI; drop several into a \`<Grid>\` for a stat grid instead of hand-building label+value pairs.
+- \`<Stepper steps={STEPS} current={step} />\` — display-only step indicator for wizards/checkouts. \`steps\` is a top-level \`const\` array of labels; \`current\` is YOUR zero-indexed \`useState\` value; \`orientation\` is \`horizontal | vertical\`; optional \`onStepClick={(i) => …}\` makes steps clickable. Stepper never owns navigation state — your Next/Back handlers move \`current\`.
 - \`<Badge variant="...">\` — \`default | primary | secondary | success | warning | error | info\` for colored pills. Great for status/condition labels. There is NO \`neutral\` variant — use \`default\` (or \`secondary\`) for an un-tinted pill.
 
 **Color choice rule of thumb.** Reach for typed slots first: Button \`variant\`, Badge \`variant\`, Alert \`variant\`, Text/Heading/Icon/Spinner/Link/Divider \`tone\`, Box/Card \`surface\`. NEVER hardcode hex \`#XXXXXX\`, rgba, or hsl — tier-0 self-check rejects them with \`tokens:hex-color\` / \`tokens:hardcoded-color-fn\` and the LLM must remediate. Hardcoded colors break the operator's theme switch (Indigo → Claudic → Cyberpunk preset has zero effect on a card hardcoded with \`background: '#000'\`).
@@ -752,6 +753,8 @@ Hero sections should feel airy. Use \`padding="xl"\` (32px) on the main card, no
 - **Hero metric card** (weather, stock, score): hero number at \`size="4xl"\` (the max), icon/emoji at \`size="3xl"\` next to it (use \`<Row gap="md">\`), supporting label at \`size="sm"\` muted, branded gradient bg, \`shadow="lg"\`, \`padding="xl"\`.
 - **Stat grid** (3–6 quick metrics): \`<Grid columns={3} gap="md">\` of \`<Stat>\` — each \`<Stat label="…" value="…" delta="…" trend="…" />\` handles the label-on-top / value-below / trend-coloured-delta layout for you. Wrap each in a \`<Card padding="md" shadow="sm">\` if you want tile chrome.
 - **List item** (forecast day, todo, message): no card per item, use \`<Stack gap="md">\` with each row as \`<Row gap="md">\` of icon + content + meta. Add \`<Divider>\` between rows.
+- **Multi-step wizard** (survey, onboarding, checkout): \`<Stepper steps={STEPS} current={step} />\` at the top, the current step's fields below, Next/Back buttons that move \`step\`. Don't hand-roll a "2 of 4" indicator.
+- **Key-value rows** (specs, order summary, flight details): \`<Stack gap="sm">\` of \`<Row justify="between">\` — label as \`<Text size="sm" tone="muted">\`, value as \`<Text size="sm" weight="medium">\`.
 - **Section header**: \`<Heading level={2}>\` left-aligned, optional \`<Badge>\` to its right for count/status, optional muted caption below.
 - **CTA section**: ONE primary button. Other actions as ghost/outline. Don't stack three primary buttons.
 

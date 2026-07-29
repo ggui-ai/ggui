@@ -222,6 +222,10 @@ role, aria-*, label, or keyboard support — it is already there:
 - \`Spinner\` — \`role="status"\` + \`aria-label="Loading"\`.
 - \`Skeleton\` — \`aria-hidden\` (correctly decorative).
 - \`Tabs\` — full \`role="tablist"/"tab"/"tabpanel"\` + \`aria-selected/controls\`.
+- \`Stepper\` — \`<nav aria-label="Progress">\` + \`aria-current="step"\` on the
+  active step; steps become real buttons when \`onStepClick\` is passed. It is
+  display-only by design — the component owning the step index in its own
+  \`useState\` is CORRECT, never a gap.
 - \`Accordion\` — \`aria-expanded\` + \`aria-controls\` + \`role="region"\`.
 - \`Alert\` — \`role="alert"\`; \`Toast\` — \`role="alert"\` + \`aria-live\`.
 - \`Tooltip\` — \`role="tooltip"\`.

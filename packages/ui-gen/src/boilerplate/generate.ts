@@ -97,13 +97,15 @@ const ALL_COMPONENTS = [
   "Pagination",
   "EmptyState",
   "Stat",
+  "Stepper",
 ].join(", ");
 
-// 2026-05-15 audit fix: synced against actual @ggui-ai/design/compositions
-// dist exports. Previously omitted 5 names (IncidentTimeline, MakeTabLayout,
-// MarketingHero, MarketingCTA, MarketingFeatures) — the LLM didn't get them
-// pre-imported, reducing discoverability. The data-URL shim's allowlist
-// must mirror this list (enforced by verify-shim-allowlists.test.ts).
+// Mirrors the actual @ggui-ai/design compositions exports. The 2026-07-29
+// composite-roster wave (#306) deleted the six zero-consumer composites
+// (MakeTabLayout, MarketingHero/CTA/Features, IncidentTimeline,
+// UserProfileCard) from the design package; this list shrank with it.
+// The data-URL shim's allowlist must mirror this list (enforced by
+// verify-shim-allowlists.test.ts).
 const ALL_COMPOSITIONS = [
   "Header",
   "Sidebar",
@@ -113,17 +115,11 @@ const ALL_COMPOSITIONS = [
   "ChatWindow",
   "NavigationBar",
   "FileUploader",
-  "UserProfileCard",
   "NotificationCenter",
   "Modal",
   "CommandPalette",
   "Footer",
   "Hero",
-  "IncidentTimeline",
-  "MakeTabLayout",
-  "MarketingHero",
-  "MarketingCTA",
-  "MarketingFeatures",
 ].join(", ");
 
 const ALL_INTERACT = ["Clickable", "Hoverable", "Pressable"].join(", ");

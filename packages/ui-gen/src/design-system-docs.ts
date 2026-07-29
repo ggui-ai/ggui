@@ -314,13 +314,11 @@ import { elevation } from '@ggui-ai/design/tokens';
 | h5 | 18px | semibold (600) | 1.5 | 0 |
 | h6 | 16px | semibold (600) | 1.5 | 0 |
 
-### Text Styles (import { textStyles } from '@ggui-ai/design/tokens')
-- \`body\`: 16px / normal / 1.5
-- \`bodySmall\`: 14px / normal / 1.5
-- \`bodyLarge\`: 18px / normal / 1.625
-- \`caption\`: 12px / normal / 1.5
-- \`label\`: 14px / medium (500) / 1.5
-- \`overline\`: 12px / semibold / 1.5 / 0.05em / UPPERCASE
+### Text Sizing
+\`<Text>\` composes from \`size\` / \`weight\` / \`tone\` (+ \`caps\` for the
+uppercase eyebrow look) — there is no preset text-style table. Line
+height derives from \`size\` automatically (1.5 for xs-base, 1.625 at lg,
+tighter on display sizes).
 
 ### Letter Spacing Scale
 - \`tighter\`: -0.05em

@@ -57,12 +57,32 @@ describe("computePrimitiveAllowlist", () => {
     }
   });
 
-  it("render=grid adds CardGrid + Image", () => {
+  it("render=grid adds CardGrid + Image + Stat", () => {
     const allowlist = computePrimitiveAllowlist(
       fakeClassification({ render: "grid" }),
     );
     expect(allowlist).toContain("CardGrid");
     expect(allowlist).toContain("Image");
+    expect(allowlist).toContain("Stat");
+  });
+
+  it("Stat rides every KPI-shaped render axis (chart / grid / static) — #306 D1", () => {
+    for (const render of ["chart", "grid", "static"] as const) {
+      const allowlist = computePrimitiveAllowlist(
+        fakeClassification({ render }),
+      );
+      expect(allowlist, `render=${render} should include Stat`).toContain("Stat");
+    }
+  });
+
+  it("layout=multi-step adds Stepper — and not the old Tabs/Progress/Breadcrumb compensation", () => {
+    const allowlist = computePrimitiveAllowlist(
+      fakeClassification({ layout: "multi-step" }),
+    );
+    expect(allowlist).toContain("Stepper");
+    expect(allowlist).not.toContain("Tabs");
+    expect(allowlist).not.toContain("Progress");
+    expect(allowlist).not.toContain("Breadcrumb");
   });
 
   it("realtime=merge adds Spinner + Badge + Alert", () => {
@@ -212,5 +232,30 @@ Input description.
       minimalAllowlist,
     );
     expect(sliced).toContain("### Badge");
+  });
+
+  it("Stat and Stepper are sliceable sections — kept on their axes, dropped off them", () => {
+    // #306 roster-sync: a component missing from KNOWN_PRIMITIVE_SECTIONS
+    // would be treated as always-keep guidance — prompt waste on every
+    // sliced generation. Assert both directions for the two new entries.
+    const multiStep = computePrimitiveAllowlist(
+      fakeClassification({ layout: "multi-step" }),
+    );
+    const slicedMultiStep = slicePrimitiveDocumentation(
+      PRIMITIVES_DOCUMENTATION,
+      multiStep,
+    );
+    expect(slicedMultiStep).toContain("### Stepper");
+
+    // render=list / layout=single triggers neither component.
+    const listOnly = computePrimitiveAllowlist(
+      fakeClassification({ render: "list" }),
+    );
+    const slicedList = slicePrimitiveDocumentation(
+      PRIMITIVES_DOCUMENTATION,
+      listOnly,
+    );
+    expect(slicedList).not.toContain("### Stepper");
+    expect(slicedList).not.toContain("### Stat");
   });
 });
