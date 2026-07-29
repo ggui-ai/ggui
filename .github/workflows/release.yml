@@ -553,8 +553,12 @@ jobs:
     uses: ./.github/workflows/publish-gate.yml
     secrets: inherit
 
-  # ── Publish — gated by the `npm-publish` environment (configured with
-  # required-reviewer = wanseob + restricted to the `main` branch).
+  # ── Publish — runs in the `npm-publish` environment (restricted to
+  # the `main` branch; NO required reviewers — the human-approval gate
+  # was removed 2026-07-29 by owner decision: the release trigger is
+  # already an explicit owner action, and the publish-gate CI job is the
+  # machine gate). The environment reference itself is LOAD-BEARING even
+  # without reviewers: npm Trusted Publishing scopes OIDC to it.
   # `id-token: write` is required for npm provenance: npm requests an
   # OIDC token from GitHub at publish time and stores the resulting
   # attestation alongside the tarball, so each package on npm carries a
