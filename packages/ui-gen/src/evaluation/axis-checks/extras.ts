@@ -125,6 +125,39 @@ const multiStepHasState: AxisCheck = {
 };
 
 /**
+ * layout=multi-step → the design system's Stepper composite must be
+ * ADOPTED (rendered). D8 (Exp 47) measured adoption at 17/18 from
+ * fragment + JSDoc alone; this check gives the CHECK leg ownership of
+ * the mandate so a regression surfaces as a fix turn instead of
+ * silently shipping a wizard with no step affordance.
+ *
+ * Replaces the always-on `stepper-display-only` pitfall (deleted in the
+ * same slice): with adoption carried by the WHAT leg, a 6th always-on
+ * prompt rule was pure attention-dilution cost (the exp66 count-
+ * sensitivity class, ~+9s blended), while this check prices at zero
+ * outside multi-step cells. The pitfall's display-only guidance lives
+ * on in the fix string below — delivered only when a cell actually
+ * needs it.
+ */
+const stepperAdopted: AxisCheck = {
+  id: "layout.multi_step.stepper_adopted",
+  axis: "layout",
+  values: ["multi-step"],
+  run(input: AxisCheckInput): EvalIssue[] {
+    if (input.compiledCode === null) return [];
+    if (/<Stepper[\s/>]/.test(input.sourceCode)) return [];
+    return [
+      mkIssue(
+        "layout.multi_step.stepper_adopted",
+        "Classified as layout=multi-step but the design system's Stepper composite is never rendered.",
+        "Render <Stepper steps={STEPS} current={step} /> above the step body — STEPS is a top-level const array of step labels and `step` is your own useState index. Stepper is display-only: it never stores or advances the step itself.",
+        "fail",
+      ),
+    ];
+  },
+};
+
+/**
  * realtime=mixed → the contract declares multiple events of different
  * kinds. Each must have its own useStream call. We approximate by
  * requiring ≥ 2 useStream calls when the vector is mixed.
@@ -158,5 +191,6 @@ export const EXTRA_CHECKS: readonly AxisCheck[] = [
   swipeTriggerWired,
   composeCrossEntity,
   multiStepHasState,
+  stepperAdopted,
   mixedStreamsHaveHandlers,
 ];

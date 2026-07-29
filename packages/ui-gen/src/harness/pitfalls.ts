@@ -61,12 +61,17 @@ export const PITFALLS: readonly Pitfall[] = [
     why: "Duplicate imports cause TS errors; the boilerplate already resolves the full primitive surface.",
     foundIn: "pre-#61 baseline",
   },
-  {
-    id: "stepper-display-only",
-    rule: "`Stepper` is display-only: `steps` is a top-level `const` array and `current` is YOUR `useState` index — Stepper never stores or advances the step itself.",
-    why: "Data-vs-behavior: navigation state lives in generated code. The steps-as-state failure mode (useState-wrapped step arrays, expecting Stepper to self-advance) crashes with 'function is not iterable' or dead Next buttons.",
-    foundIn: "#306 composite-roster wave (multi-step fragment failure classes)",
-  },
+  // ─── stepper-display-only: retired to the CHECK leg (Exp 47 P2) ─────────
+  //
+  // The 6th always-on pitfall ("Stepper is display-only…") was added with
+  // the #306 roster wave, but D8 measured Stepper adoption at 17/18 from
+  // fragment + JSDoc alone — the always-on rule was demonstrably not
+  // load-bearing, and exp66's factorial showed pitfall COUNT (5→6+) is
+  // the dilution-sensitive lever (~+9s blended). Its guidance now ships
+  // as the fix string of the `layout.multi_step.stepper_adopted` axis
+  // check (evaluation/axis-checks/extras.ts) — delivered only to the
+  // multi-step cells that actually violate it.
+  //
   // ─── Provisional pitfalls considered + retired by exp66 n=6 factorial ───
   //
   // The 3 "new" pitfalls below were added in exp61 after OpenAI kanban
