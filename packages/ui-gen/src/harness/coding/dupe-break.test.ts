@@ -124,3 +124,36 @@ describe("createDupeBreakState", () => {
     expect(b.recentFailedPatches).toEqual([]);
   });
 });
+
+// ── ggui#404 — same-call circuit breaker ───────────────────────────────────
+
+import {
+  recordToolExchange,
+  SAME_EXCHANGE_BREAK_AT,
+} from "./dupe-break.js";
+
+describe("recordToolExchange (ggui#404)", () => {
+  it("counts consecutive identical (name, input, result) exchanges to the break threshold", () => {
+    const s = createDupeBreakState();
+    expect(recordToolExchange(s, "get_available_icons", {}, "icons: a, b")).toBe(1);
+    expect(recordToolExchange(s, "get_available_icons", {}, "icons: a, b")).toBe(2);
+    expect(recordToolExchange(s, "get_available_icons", {}, "icons: a, b")).toBe(
+      SAME_EXCHANGE_BREAK_AT,
+    );
+  });
+
+  it("identical input with a DIFFERENT result resets — a fresh result is progress", () => {
+    const s = createDupeBreakState();
+    expect(recordToolExchange(s, "read_file", { path: "a" }, "v1 contents")).toBe(1);
+    expect(recordToolExchange(s, "read_file", { path: "a" }, "v2 contents")).toBe(1);
+    expect(recordToolExchange(s, "read_file", { path: "a" }, "v2 contents")).toBe(2);
+  });
+
+  it("a different call breaks the chain", () => {
+    const s = createDupeBreakState();
+    recordToolExchange(s, "get_available_icons", {}, "icons");
+    recordToolExchange(s, "get_available_icons", {}, "icons");
+    expect(recordToolExchange(s, "apply_changes", { changes: [] }, "PASS")).toBe(1);
+    expect(recordToolExchange(s, "get_available_icons", {}, "icons")).toBe(1);
+  });
+});

@@ -34,6 +34,11 @@ import {
   type LLMToolDef,
 } from "../../tools.js";
 import { formatWithHashlines } from "../hashline.js";
+import {
+  recordToolExchange,
+  SAME_EXCHANGE_BREAK_AT,
+  SAME_EXCHANGE_NUDGE,
+} from "./dupe-break.js";
 
 /** Staged process-mode phase machine — also defined in runtime.ts. */
 export type A1Phase = "scaffold" | "fill" | "post";
@@ -603,8 +608,38 @@ ${closingInstruction}`;
       }
     }
     console.log(`[simple] turn ${turnsUsed}: get_available_icons`);
-    const iconResult = `Available Lucide icon names (use with <Icon name="...">):\n${iconNamesCache}`;
+    let iconResult = `Available Lucide icon names (use with <Icon name="...">):\n${iconNamesCache}`;
+    // ggui#404 same-call circuit breaker. The icon list is constant by
+    // construction, so every repeat is an identical exchange — record on
+    // the BASE text (pre-nudge) so the chain keys stay stable across the
+    // nudged turn. claude-balanced burned turns 5-15 on this exact loop.
+    let iconRepeats = 0;
+    if (ctx.dupeBreak) {
+      iconRepeats = recordToolExchange(ctx.dupeBreak, call.name, call.input, iconResult);
+      if (iconRepeats === 2) iconResult += SAME_EXCHANGE_NUDGE;
+    }
     await codingAgent.sendToolResult([{ callId: call.id, name: call.name, result: iconResult }]);
+    if (iconRepeats >= SAME_EXCHANGE_BREAK_AT) {
+      console.log(
+        `[coding-agent] SAME_EXCHANGE_BREAK | tool=${call.name} | repeats=${iconRepeats} — terminating run (ggui#404)`,
+      );
+      return {
+        control: "break",
+        compiledCode: "",
+        selfCheckPassed: false,
+        outcome: undefined,
+        phase: undefined,
+        tokens,
+        ...cacheTokens,
+        llmMs,
+        toolMs: 0,
+        lastResultText: iconResult,
+        lastDiffFailed: false,
+        isEvalFeedback: false,
+        iconNamesCache,
+        preWarmedContext,
+      };
+    }
     return {
       control: "continue",
       compiledCode: "",
@@ -872,6 +907,26 @@ ${closingInstruction}`;
     if (!result.error) ctx.dupeBreak.consecutiveBrokenApplies = 0;
   }
 
+  // ggui#404 same-call circuit breaker — record the (name, input, BASE
+  // result) exchange. Keying on the base `result.result` (not the
+  // augmented text, whose dupe-break prefaces vary) keeps the chain
+  // stable; identical input alone is NOT counted (a re-read after a
+  // patch legitimately repeats input with a fresh result). Second
+  // identical exchange gets one explicit recovery nudge; the third
+  // terminates the run below instead of burning the remaining turns.
+  let sameExchangeRepeats = 0;
+  if (ctx.dupeBreak) {
+    sameExchangeRepeats = recordToolExchange(
+      ctx.dupeBreak,
+      call.name,
+      call.input,
+      result.result,
+    );
+    if (sameExchangeRepeats === 2) {
+      augmentedResultText += SAME_EXCHANGE_NUDGE;
+    }
+  }
+
   // Send tool result back to close the API contract (Google/OpenAI/OpenRouter)
   // This enables proper session chaining on the next callTools() invocation.
   await codingAgent.sendToolResult([{
@@ -880,6 +935,28 @@ ${closingInstruction}`;
     result: augmentedResultText,
     isError: !!result.error,
   }]);
+
+  if (sameExchangeRepeats >= SAME_EXCHANGE_BREAK_AT) {
+    console.log(
+      `[coding-agent] SAME_EXCHANGE_BREAK | tool=${call.name} | repeats=${sameExchangeRepeats} — terminating run (ggui#404)`,
+    );
+    return {
+      control: "break",
+      compiledCode: "",
+      selfCheckPassed: false,
+      outcome: undefined,
+      phase: undefined,
+      tokens,
+      ...cacheTokens,
+      llmMs,
+      toolMs,
+      lastResultText: augmentedResultText,
+      lastDiffFailed: false,
+      isEvalFeedback: false,
+      iconNamesCache,
+      preWarmedContext,
+    };
+  }
 
   // Track whether the diff itself failed to apply (vs applied but had violations)
   const turnDiffFailed = !!result.error && result.result.includes("DIFF");
