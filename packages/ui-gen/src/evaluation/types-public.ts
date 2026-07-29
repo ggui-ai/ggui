@@ -60,9 +60,41 @@ export interface EvalIssue {
   line?: number;
 }
 
+/**
+ * Runtime-render probe execution status — three-valued so "the probe
+ * never ran" is never conflated with "the probe ran clean".
+ *
+ *   - `ran`           — probe executed; its findings (possibly none) are
+ *                       in the issue stream under `runtime:*` subcategories.
+ *   - `infra-skipped` — probe could NOT execute (environment failure:
+ *                       happy-dom load, user-event document capture,
+ *                       ESM/CJS interop). Carries ZERO probe evidence;
+ *                       consumers MUST NOT count it as a pass.
+ *   - `not-applicable`— nothing to probe (no compiled code, no contract
+ *                       surface, or no runtimeRender check configured).
+ */
+export type RuntimeProbeStatus = "ran" | "infra-skipped" | "not-applicable";
+
+/**
+ * Probe execution meta stamped onto an `EvalResult` at the exit-decision
+ * points that invoke the probe. Absence of this field means the eval
+ * path never reached a probe invocation at all — consumers treat that
+ * the same as not-run, never as a pass.
+ */
+export interface RuntimeProbeMeta {
+  readonly status: RuntimeProbeStatus;
+  /** Populated for `infra-skipped` / `not-applicable` — why the probe didn't run. */
+  readonly reason?: string;
+}
+
 export interface EvalResult {
   issues: EvalIssue[];
   pass: string[];
+  /**
+   * Runtime-render probe execution meta. Stamped by the exit-decision
+   * probe runner; absent on eval paths that never invoke the probe.
+   */
+  runtimeProbe?: RuntimeProbeMeta;
 }
 
 // ─── Quality mode ──────────────────────────────────────────────────────────

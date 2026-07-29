@@ -22,7 +22,7 @@ import { listContractGadgets } from "@ggui-ai/protocol";
 import type { Classification } from "../../classifier/index.js";
 import type { AgentWorkspace } from "../../coding-agent/workspace.js";
 import type { CostTracker } from "../../evaluation/cost-tracker.js";
-import type { EvalIssue, EvalResult } from "../../evaluation/types-public.js";
+import type { EvalIssue, EvalResult, RuntimeProbeMeta } from "../../evaluation/types-public.js";
 import { mapProviderForEvaluator } from "../enforced-coding.js";
 import { runCheck } from "../index.js";
 import { isRecoverableRenderCrash } from "../check/runtime-render/index.js";
@@ -156,6 +156,13 @@ interface ProbeAtExitResult {
   /** True when probe produced ≥1 fail with a class `classifyRenderCrashFix` recognizes. */
   readonly recoverableFail: boolean;
   readonly probeIssues: readonly EvalIssue[];
+  /**
+   * Execution meta for the `EvalResult.runtimeProbe` stamp — the channel
+   * that keeps "probe never ran" distinguishable from "probe ran clean"
+   * downstream (ggui#403: the bench scored infra-dead probes as PASS
+   * because zero `runtime:*` issues was its only signal).
+   */
+  readonly meta: RuntimeProbeMeta;
 }
 
 /**
@@ -177,24 +184,45 @@ async function runProbeAtExit(input: {
   const { harness, sourceCode, compiledCode, contract, fixtureProps } = input;
   const probe = harness.check.runtimeRender;
   if (!probe || !compiledCode) {
-    return { fired: false, recoverableFail: false, probeIssues: [] };
+    return {
+      fired: false,
+      recoverableFail: false,
+      probeIssues: [],
+      meta: {
+        status: "not-applicable",
+        reason: probe ? "no compiled code" : "no runtimeRender check configured",
+      },
+    };
   }
-  let probeIssues: readonly EvalIssue[];
+  let outcome: Awaited<ReturnType<typeof probe.run>>;
   try {
-    probeIssues = await probe.run({
+    outcome = await probe.run({
       sourceCode,
       compiledCode,
       contract,
       fixtureProps,
     });
   } catch (e) {
-    // Probe infra failure — same treatment as the in-adapter catch:
-    // log + skip silently, never penalize the LLM for env mismatch.
-    console.warn(
-      `[simple] in-loop probe at exit: infra failure — ${e instanceof Error ? e.message : String(e)}`,
-    );
-    return { fired: false, recoverableFail: false, probeIssues: [] };
+    // Probe infra failure that escaped even the adapter's catch — never
+    // penalize the LLM for env mismatch, but carry the did-not-run
+    // status so scoring can't mistake this for a clean pass.
+    const message = e instanceof Error ? e.message : String(e);
+    console.warn(`[simple] in-loop probe at exit: infra failure — ${message}`);
+    return {
+      fired: false,
+      recoverableFail: false,
+      probeIssues: [],
+      meta: { status: "infra-skipped", reason: message },
+    };
   }
+  const meta: RuntimeProbeMeta = {
+    status: outcome.status,
+    ...(outcome.reason !== undefined ? { reason: outcome.reason } : {}),
+  };
+  if (outcome.status !== "ran") {
+    return { fired: false, recoverableFail: false, probeIssues: [], meta };
+  }
+  const probeIssues = outcome.issues;
   const recoverableFail = probeIssues.some(
     (i) =>
       i.result === "fail" &&
@@ -203,7 +231,7 @@ async function runProbeAtExit(input: {
       typeof i.description === "string" &&
       isRecoverableRenderCrash(i.description),
   );
-  return { fired: true, recoverableFail, probeIssues };
+  return { fired: true, recoverableFail, probeIssues, meta };
 }
 
 /**
@@ -324,7 +352,7 @@ export async function runEvalRound(
         );
         const lines = runtimeFails.slice(0, MAX_FEEDBACK_ISSUES).map(formatRuntimeProbeFeedback);
         const allIssues = [...modeIssues, ...exitProbe.probeIssues];
-        evalResult = { issues: allIssues, pass: ["axis.low-risk"] };
+        evalResult = { issues: allIssues, pass: ["axis.low-risk"], runtimeProbe: exitProbe.meta };
         console.log(
           `[simple] eval round ${evalRoundsUsed}: low-risk bypass clean BUT ` +
             `runtime probe fail (recoverable) — granting +1 turn`,
@@ -347,10 +375,11 @@ export async function runEvalRound(
       evalResult = {
         issues: [...modeIssues, ...exitProbe.probeIssues],
         pass: ["axis.low-risk"],
+        runtimeProbe: exitProbe.meta,
       };
       console.log(
         `[simple] eval round ${evalRoundsUsed}: low-risk bypass ` +
-          `(axis-checks clean, tier-1/2 skipped${exitProbe.fired ? ", probe ran" : ""}) — PASS`,
+          `(axis-checks clean, tier-1/2 skipped${exitProbe.fired ? ", probe ran" : `, probe ${exitProbe.meta.status}`}) — PASS`,
       );
       return {
         control: "break",
@@ -497,7 +526,7 @@ export async function runEvalRound(
         );
         const lines = runtimeFails.slice(0, MAX_FEEDBACK_ISSUES).map(formatRuntimeProbeFeedback);
         const enrichedIssues = [...allIssues, ...exitProbe.probeIssues];
-        evalResult = { issues: enrichedIssues, pass: allPass };
+        evalResult = { issues: enrichedIssues, pass: allPass, runtimeProbe: exitProbe.meta };
         const enrichedFingerprints = new Set([
           ...currFailFingerprints,
           ...runtimeFails.map(fingerprintFail),
@@ -521,14 +550,14 @@ export async function runEvalRound(
           lastDiffFailed: false,
         };
       }
-      // Probe ran but didn't trip a recoverable fail — fold its issues
-      // into the merged result for telemetry and exit.
-      if (exitProbe.fired && exitProbe.probeIssues.length > 0) {
-        evalResult = {
-          issues: [...allIssues, ...exitProbe.probeIssues],
-          pass: allPass,
-        };
-      }
+      // Probe didn't trip a recoverable fail — fold its issues (if any)
+      // into the merged result and ALWAYS stamp its execution meta, so a
+      // did-not-run probe is visible downstream even on this clean exit.
+      evalResult = {
+        issues: [...allIssues, ...exitProbe.probeIssues],
+        pass: allPass,
+        runtimeProbe: exitProbe.meta,
+      };
       console.log(`[simple] eval round ${evalRoundsUsed}: no blocking issues — PASS`);
       return {
         control: "break",
@@ -623,14 +652,14 @@ export async function runEvalRound(
         hasRuntimeFail &&
         evalRoundsUsed < maxEvalRounds + RUNTIME_EXTENSION_BONUS;
       if (!allowRuntimeExtension) {
-        // Fold probe issues (if any) into evalResult for telemetry,
-        // even though we're not granting an extension.
-        if (exitProbe.fired && exitProbe.probeIssues.length > 0) {
-          evalResult = {
-            issues: [...evalResult.issues, ...exitProbe.probeIssues],
-            pass: evalResult.pass,
-          };
-        }
+        // Fold probe issues (if any) into evalResult for telemetry and
+        // ALWAYS stamp the probe's execution meta, even though we're not
+        // granting an extension — a did-not-run probe must stay visible.
+        evalResult = {
+          issues: [...evalResult.issues, ...exitProbe.probeIssues],
+          pass: evalResult.pass,
+          runtimeProbe: exitProbe.meta,
+        };
         console.log(`[simple] eval round ${evalRoundsUsed}: max eval rounds reached — stopping`);
         return {
           control: "break",
@@ -657,7 +686,7 @@ export async function runEvalRound(
         .slice(0, MAX_FEEDBACK_ISSUES)
         .map(formatRuntimeProbeFeedback);
       const enrichedIssues = [...evalResult.issues, ...exitProbe.probeIssues];
-      evalResult = { issues: enrichedIssues, pass: evalResult.pass };
+      evalResult = { issues: enrichedIssues, pass: evalResult.pass, runtimeProbe: exitProbe.meta };
       console.log(
         `[simple] eval round ${evalRoundsUsed}: runtime-probe fail active at cap — granting +1 retry (${maxEvalRounds + RUNTIME_EXTENSION_BONUS - evalRoundsUsed} of ${RUNTIME_EXTENSION_BONUS} bonus rounds remain)`,
       );

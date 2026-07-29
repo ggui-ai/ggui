@@ -14,10 +14,14 @@ export const DEFAULT_RUNTIME_RENDER_CHECK: RuntimeRenderCheck = {
   run: async input => {
     const { sourceCode, compiledCode, contract, fixtureProps } = input;
 
-    // Skip if compile failed — nothing to render.
-    if (compiledCode === null) return [];
-    // Skip if no contract — runtime check needs a contract surface to verify.
-    if (!contract) return [];
+    // Nothing to render / no contract surface to verify — the probe has
+    // no subject, which is different from the probe failing to run.
+    if (compiledCode === null) {
+      return { status: "not-applicable", issues: [], reason: "no compiled code" };
+    }
+    if (!contract) {
+      return { status: "not-applicable", issues: [], reason: "no contract surface" };
+    }
 
     const mockup = prepareMockupProps({ contract, fixtureProps });
 
@@ -36,25 +40,26 @@ export const DEFAULT_RUNTIME_RENDER_CHECK: RuntimeRenderCheck = {
       // Component-level failures are caught and emitted as `RenderCheckIssue`
       // entries from inside `runRenderCheck`; they don't propagate out.
       //
-      // Pre-fix: this branch emitted a tier-0 `crash` fail, which (1)
-      // dragged every score-below-80 cell's eval-fix loop with a phantom
-      // issue the coding agent couldn't fix, and (2) showed up correlated
-      // with score-just-below-threshold cells across the bench, since
-      // setup-only failures were being mis-attributed to the component.
-      //
-      // Post-fix: log the infra failure to stderr (devs see it) but emit
-      // ZERO eval issues. The probe is opportunistic — if it can't run,
-      // skip silently rather than penalize the LLM for an env mismatch.
+      // An infra failure must never become an eval issue (the coding
+      // agent can't fix the environment — pre-2026-04-27 that phantom
+      // issue dragged every score-below-80 cell's eval-fix loop), but it
+      // must also never be silent to scoring: ggui#403 found the bench
+      // reporting `probe_pass 3/3` on cells where this branch fired on
+      // every invocation. The `infra-skipped` status is the No-Silent-
+      // Block channel — consumers surface it as did-not-run, never pass.
       const message = e instanceof Error ? e.message : String(e);
       console.warn(
         `[runtime-render] probe skipped — infra failure: ${message}`,
       );
-      return [];
+      return { status: "infra-skipped", issues: [], reason: message };
     }
 
-    return result.issues
-      .map(toEvalIssue)
-      .filter((x): x is EvalIssue => x !== null);
+    return {
+      status: "ran",
+      issues: result.issues
+        .map(toEvalIssue)
+        .filter((x): x is EvalIssue => x !== null),
+    };
   },
 };
 

@@ -443,7 +443,10 @@ export async function runRenderCheck(
     // RTL types `container` as HTMLElement; narrow it to the structural
     // MinimalElement via the validated host boundary.
     const container = toMinimalElement(renderResult.container);
-    const user: ClickUser = buildClickUser(userEvent);
+    // Pass the live document explicitly — user-event's bare `setup()`
+    // binds the document captured at its module load, which is undefined
+    // when the module was pre-warmed before happy-dom stood up (ggui#403).
+    const user: ClickUser = buildClickUser(userEvent, hostGlobals().document);
 
     let actionsChecked = 0;
     let streamsChecked = 0;

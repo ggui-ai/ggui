@@ -154,15 +154,20 @@ export async function runCheck(input: RunCheckInput): Promise<CheckResult> {
       i => i.result === "fail" && (i.tier === 0 || i.tier === undefined),
     ).length;
     if (cheapTier0Failures === 0) {
-      firedIds.push(check.runtimeRender.id);
-      const runtimeIssues = await check.runtimeRender.run({
+      const outcome = await check.runtimeRender.run({
         sourceCode,
         compiledCode,
         contract,
         fixtureProps: input.fixtureProps,
       });
-      issues.push(...runtimeIssues);
-      runtimeRenderIssueCount = runtimeIssues.length;
+      // Only a probe that actually executed counts as a fired check —
+      // an infra-skipped / not-applicable outcome carries no evidence
+      // and must not appear in `firedCheckIds` as if it gated anything.
+      if (outcome.status === "ran") {
+        firedIds.push(check.runtimeRender.id);
+        issues.push(...outcome.issues);
+        runtimeRenderIssueCount = outcome.issues.length;
+      }
     }
   }
 

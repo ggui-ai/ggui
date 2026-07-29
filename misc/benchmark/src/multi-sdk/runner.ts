@@ -476,15 +476,29 @@ export class BenchmarkRunner {
       // probe-emitted.
       //
       // Three states:
-      //   - SKIP: tierEvaluation absent (eval rounds didn't run because
-      //     self-check failed and gen exited / maxEvalRounds=0)
-      //   - PASS: eval ran, no probe issues with result=fail
-      //   - FAIL: eval ran, ≥1 probe issue with result=fail
+      //   - SKIP: probe carries no evidence — tierEvaluation absent
+      //     (eval rounds didn't run), OR the eval result's `runtimeProbe`
+      //     stamp says the probe did not execute (`infra-skipped` /
+      //     `not-applicable`), OR the stamp is missing entirely (an eval
+      //     path that never reached a probe invocation). ggui#403: zero
+      //     `runtime:*` issues used to be the only signal, so an
+      //     infra-dead probe scored PASS on every cell.
+      //   - PASS: probe RAN, no probe issues with result=fail
+      //   - FAIL: probe RAN, ≥1 probe issue with result=fail
       let runtimeProbeResult: { passed: boolean; failures: number; warnings: number; skipped: boolean };
+      const probeMeta = tierEvaluation?.runtimeProbe;
       if (!tierEvaluation) {
         runtimeProbeResult = { passed: false, failures: 0, warnings: 0, skipped: true };
         console.log(
           `  [runtime-probe] ${variant.id} × ${commit.id}: SKIP — eval rounds did not run`,
+        );
+      } else if (!probeMeta || probeMeta.status !== 'ran') {
+        runtimeProbeResult = { passed: false, failures: 0, warnings: 0, skipped: true };
+        const why = probeMeta
+          ? `${probeMeta.status}${probeMeta.reason ? `: ${probeMeta.reason}` : ''}`
+          : 'no runtimeProbe stamp on eval result';
+        console.log(
+          `  [runtime-probe] ${variant.id} × ${commit.id}: SKIP — probe did not run (${why})`,
         );
       } else {
         const probeIssues = tierEvaluation.issues.filter((i) =>

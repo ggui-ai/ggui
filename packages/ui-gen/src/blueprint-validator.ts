@@ -240,19 +240,32 @@ async function runtimeTier(input: RuntimeTierInput): Promise<RuntimeResult> {
   // semantics carry through.
   let issues: readonly EvalIssue[];
   try {
-    issues = await DEFAULT_RUNTIME_RENDER_CHECK.run({
+    const outcome = await DEFAULT_RUNTIME_RENDER_CHECK.run({
       sourceCode: input.sourceCode,
       compiledCode: input.compiledCode,
       contract: input.contract,
       fixtureProps: asJsonObject(input.fixtureProps),
     });
+    if (outcome.status !== 'ran') {
+      // Probe did not execute — infra failure or nothing to probe.
+      // Surface as a warning rather than a hard error so a flaky probe
+      // doesn't permanently block legitimate blueprints — Claude can
+      // retry, and host-level logs record the diagnostic for ops review.
+      warnings.push({
+        _kind: 'warning',
+        tier: 'runtime',
+        code:
+          outcome.status === 'infra-skipped'
+            ? 'runtime:probe-infra-failure'
+            : 'runtime:probe-not-applicable',
+        message: `Runtime probe did not run (${outcome.status}): ${outcome.reason ?? 'no reason recorded'}`,
+      });
+      return { errors, warnings };
+    }
+    issues = outcome.issues;
   } catch (e) {
-    // Probe-internal infra failures (happy-dom load, ESM/CJS interop)
-    // are caught and logged inside the probe; anything that escapes
-    // here is a true bug. Surface as a warning rather than a hard
-    // error so a flaky probe doesn't permanently block legitimate
-    // blueprints — Claude can retry, and host-level logs record the
-    // diagnostic for ops review.
+    // Anything that escapes the probe's own catch is a true bug — same
+    // warning posture as an in-probe infra failure.
     const message = e instanceof Error ? e.message : String(e);
     warnings.push({
       _kind: 'warning',

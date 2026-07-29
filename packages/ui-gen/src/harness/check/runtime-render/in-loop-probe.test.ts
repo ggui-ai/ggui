@@ -22,7 +22,7 @@ import {
   isRecoverableRenderCrash,
 } from "./adapter.js";
 import type { EvalIssue } from "../../../evaluation/types-public.js";
-import type { Harness, RuntimeRenderCheck } from "../../types-public.js";
+import type { Harness, RuntimeRenderCheck, RuntimeRenderOutcome } from "../../types-public.js";
 import type {
   EvalRoundContext,
   EvalRoundInput,
@@ -209,17 +209,20 @@ function buildBaseInput(): EvalRoundInput {
 
 describe("runEvalRound — in-loop runtime probe trigger", () => {
   it("probe FAIL with recoverable class triggers [runtime] violation + grants extra turn", async () => {
-    const probeRun = vi.fn(async (): Promise<readonly EvalIssue[]> => [
-      {
-        tier: 0,
-        result: "fail",
-        category: "crash",
-        subcategory: "runtime:render-no-throw",
-        severity: "critical",
-        description: "Component crashed at runtime: Render threw: TypeError: function is not iterable",
-        fix: "Render iterated over a non-array. Default to [] before .map.",
-      },
-    ]);
+    const probeRun = vi.fn(async (): Promise<RuntimeRenderOutcome> => ({
+      status: "ran",
+      issues: [
+        {
+          tier: 0,
+          result: "fail",
+          category: "crash",
+          subcategory: "runtime:render-no-throw",
+          severity: "critical",
+          description: "Component crashed at runtime: Render threw: TypeError: function is not iterable",
+          fix: "Render iterated over a non-array. Default to [] before .map.",
+        },
+      ] satisfies readonly EvalIssue[],
+    }));
     const probe: RuntimeRenderCheck = {
       id: "stub-runtime-render",
       run: probeRun,
@@ -241,8 +244,8 @@ describe("runEvalRound — in-loop runtime probe trigger", () => {
     expect(result.lastResultText).toMatch(/Default to \[\] before \.map/);
   });
 
-  it("probe PASS skips silently — control: break, evalDone: true", async () => {
-    const probeRun = vi.fn(async (): Promise<readonly EvalIssue[]> => []); // no issues
+  it("probe PASS skips silently — control: break, evalDone: true, evalResult stamped ran", async () => {
+    const probeRun = vi.fn(async (): Promise<RuntimeRenderOutcome> => ({ status: "ran", issues: [] }));
     const probe: RuntimeRenderCheck = { id: "stub-runtime-render", run: probeRun };
     const harness = buildStubHarness(probe);
 
@@ -253,23 +256,29 @@ describe("runEvalRound — in-loop runtime probe trigger", () => {
     expect(result.evalDone).toBe(true);
     expect(result.lastResultText).toBe("");
     expect(result.isEvalFeedback).toBe(false);
+    // ggui#403: a clean pass must be distinguishable from a dead probe —
+    // the evalResult carries the probe's execution status.
+    expect(result.evalResult?.runtimeProbe?.status).toBe("ran");
   });
 
   it("probe FAIL with UNRECOGNIZED class falls through to silent break", async () => {
     // Pre-fix this would have erroneously granted +1 turn for any fail.
     // Post-fix: class must be recoverable (one of the recognized
     // patterns) for the orchestrator to return control: feedback.
-    const probeRun = vi.fn(async (): Promise<readonly EvalIssue[]> => [
-      {
-        tier: 0,
-        result: "fail",
-        category: "crash",
-        subcategory: "runtime:render-no-throw",
-        severity: "critical",
-        description: "Component crashed at runtime: RangeError: invalid array length",
-        fix: "Add null guards on optional props…",
-      },
-    ]);
+    const probeRun = vi.fn(async (): Promise<RuntimeRenderOutcome> => ({
+      status: "ran",
+      issues: [
+        {
+          tier: 0,
+          result: "fail",
+          category: "crash",
+          subcategory: "runtime:render-no-throw",
+          severity: "critical",
+          description: "Component crashed at runtime: RangeError: invalid array length",
+          fix: "Add null guards on optional props…",
+        },
+      ] satisfies readonly EvalIssue[],
+    }));
     const probe: RuntimeRenderCheck = { id: "stub-runtime-render", run: probeRun };
     const harness = buildStubHarness(probe);
 
@@ -290,7 +299,7 @@ describe("runEvalRound — in-loop runtime probe trigger", () => {
     // called exactly once. This regression guards against accidentally
     // probing twice (e.g., once at low-risk bypass AND once at clean
     // pass) within the same invocation.
-    const probeRun = vi.fn(async (): Promise<readonly EvalIssue[]> => []);
+    const probeRun = vi.fn(async (): Promise<RuntimeRenderOutcome> => ({ status: "ran", issues: [] }));
     const probe: RuntimeRenderCheck = { id: "stub-runtime-render", run: probeRun };
     const harness = buildStubHarness(probe);
 
@@ -319,5 +328,39 @@ describe("runEvalRound — in-loop runtime probe trigger", () => {
     // Infra failure must NOT block the harness from exiting cleanly.
     expect(result.control).toBe("break");
     expect(result.evalDone).toBe(true);
+    // …but it must be VISIBLE: the evalResult stamp says infra-skipped,
+    // so downstream scoring can never mistake it for a clean pass
+    // (ggui#403 — the bench scored infra-dead probes as probe_pass).
+    expect(result.evalResult?.runtimeProbe?.status).toBe("infra-skipped");
+    expect(result.evalResult?.runtimeProbe?.reason).toMatch(/happy-dom failed to load/);
+  });
+
+  it("probe self-reports infra-skipped — clean exit, stamp carries status + reason", async () => {
+    // The adapter's own catch converts an escaping env error into an
+    // `infra-skipped` outcome (rather than throwing). The orchestrator
+    // must treat that exactly like the throw case: exit clean, stamp
+    // the did-not-run status onto the evalResult.
+    const probeRun = vi.fn(async (): Promise<RuntimeRenderOutcome> => ({
+      status: "infra-skipped",
+      issues: [],
+      reason: "Cannot read properties of undefined (reading 'Symbol(Node prepared with document state workarounds)')",
+    }));
+    const probe: RuntimeRenderCheck = { id: "stub-runtime-render", run: probeRun };
+    const harness = buildStubHarness(probe);
+
+    const result = await runEvalRound(buildBaseCtx(harness), buildBaseInput());
+
+    expect(probeRun).toHaveBeenCalledTimes(1);
+    expect(result.control).toBe("break");
+    expect(result.evalDone).toBe(true);
+    expect(result.evalResult?.runtimeProbe?.status).toBe("infra-skipped");
+    expect(result.evalResult?.runtimeProbe?.reason).toMatch(/document state workarounds/);
+  });
+
+  it("no runtimeRender check configured — evalResult stamped not-applicable", async () => {
+    const harness = buildStubHarness(undefined);
+    const result = await runEvalRound(buildBaseCtx(harness), buildBaseInput());
+    expect(result.control).toBe("break");
+    expect(result.evalResult?.runtimeProbe?.status).toBe("not-applicable");
   });
 });

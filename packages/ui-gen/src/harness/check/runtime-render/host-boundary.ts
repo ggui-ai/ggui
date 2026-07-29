@@ -87,10 +87,21 @@ export function toMinimalElement(v: unknown): MinimalElement {
  * Validating narrower over the `@testing-library/user-event` module:
  * prefers the v14 `setup()` instance, falls back to the module-level
  * `click` (pre-v14 shape). Throws when neither surface exists.
+ *
+ * `doc` MUST be the live document the probe rendered into, passed as
+ * `setup({ document })`. user-event captures `globalThis.document` into
+ * its module-scope setup defaults AT MODULE LOAD (v14 `setup.js`
+ * `defaultOptionsSetup`), so a bare `setup()` binds whatever document
+ * existed when the module was FIRST imported — `undefined` when the
+ * import happened via `warmupRuntimeRenderProbe()` before any DOM was
+ * up, which then crashes every later probe with "Cannot read properties
+ * of undefined (reading 'Symbol(Node prepared with document state
+ * workarounds)')" (ggui#403). The module-level `click` fallback derives
+ * its document from the clicked node and doesn't need this.
  */
-export function buildClickUser(userEventModule: unknown): ClickUser {
+export function buildClickUser(userEventModule: unknown, doc: unknown): ClickUser {
   const setup = getMethod(userEventModule, "setup");
-  const instance: unknown = setup ? setup() : userEventModule;
+  const instance: unknown = setup ? setup({ document: doc }) : userEventModule;
   const click = getMethod(instance, "click");
   if (!click) {
     throw new Error(

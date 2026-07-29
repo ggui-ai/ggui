@@ -20,7 +20,7 @@
 
 import type { GadgetDescriptor, DataContract, JsonValue } from "@ggui-ai/protocol";
 import type { Classification } from "../classifier/axes.js";
-import type { EvalIssue, EvalTier, AxisCheck } from "../evaluation/types-public.js";
+import type { EvalIssue, EvalTier, AxisCheck, RuntimeProbeStatus } from "../evaluation/types-public.js";
 import type { LLMToolDef } from "../llm.js";
 import type { CacheTier, HarnessFragment } from "../fragments/index.js";
 import type { HarnessPolicy, ProcessMode } from "../policy.js";
@@ -135,6 +135,19 @@ export interface LLMEvaluator {
  * actually wires its declared contract surface (actions, streams,
  * context slots, client capabilities) to interactive DOM.
  */
+export interface RuntimeRenderOutcome {
+  /**
+   * Whether the probe actually executed. `issues` is only probe
+   * evidence when `status === "ran"` — an `infra-skipped` or
+   * `not-applicable` outcome carries zero evidence and MUST NOT be
+   * scored as a pass by any consumer.
+   */
+  readonly status: RuntimeProbeStatus;
+  readonly issues: readonly EvalIssue[];
+  /** Populated for `infra-skipped` / `not-applicable` — why the probe didn't run. */
+  readonly reason?: string;
+}
+
 export interface RuntimeRenderCheck {
   readonly id: string;
   readonly run: (input: {
@@ -143,7 +156,7 @@ export interface RuntimeRenderCheck {
     contract?: DataContract;
     /** Optional fixture props (e.g., from a benchmark commit) — wins over schema synthesis. */
     fixtureProps?: import("@ggui-ai/protocol").JsonObject;
-  }) => Promise<readonly EvalIssue[]>;
+  }) => Promise<RuntimeRenderOutcome>;
 }
 
 export interface CheckLeg {

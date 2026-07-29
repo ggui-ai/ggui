@@ -358,6 +358,26 @@ export default function Component(props: Props) {
 }
 `;
 
+describe("buildClickUser", () => {
+  it("passes the live document into user-event setup (ggui#403 pin)", async () => {
+    // user-event v14 freezes `globalThis.document` into its setup
+    // defaults at MODULE LOAD — a bare `setup()` after a DOM-less
+    // pre-warm crashes every probe. The boundary must therefore pass
+    // the probe's own document explicitly.
+    const seen: unknown[] = [];
+    const fakeModule = {
+      setup: (opts: { document?: unknown }) => {
+        seen.push(opts?.document);
+        return { click: async () => {} };
+      },
+    };
+    const docSentinel = { sentinel: "live-document" };
+    const { buildClickUser } = await import("./host-boundary.js");
+    buildClickUser(fakeModule, docSentinel);
+    expect(seen).toEqual([docSentinel]);
+  });
+});
+
 describe("runRenderCheck", () => {
   it("passes a well-wired component (action fires)", async () => {
     const contract: DataContract = {
