@@ -1,6 +1,6 @@
 {
   "name": "@ggui-ai/shared",
-  "version": "0.4.0-rc.0",
+  "version": "0.5.0-rc.0",
   "description": "Shared types for ggui SDK packages — self-repair, agent listings, benchmark report display",
   "license": "Apache-2.0",
   "keywords": [
