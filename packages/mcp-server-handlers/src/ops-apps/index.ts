@@ -8,19 +8,19 @@
  *
  *   - `createListAppsHandler` → `ggui_ops_list_apps`
  *   - `createCreateAppHandler` → `ggui_ops_create_app`
- *   - `createRenameAppHandler` → `ggui_ops_rename_app`
+ *   - `createUpdateAppHandler` → `ggui_ops_update_app`
+ *   - `createSetAppThemeHandler` → `ggui_ops_set_app_theme`
  *   - `createDeleteAppHandler` → `ggui_ops_delete_app`
  *   - `createSetDefaultAppHandler` → `ggui_ops_set_default_app`
- *   - `createUpdateAppSystemPromptHandler` →
- *     `ggui_ops_update_app_system_prompt`
  */
 
 export type {
   AppRecord,
   AppsSource,
+  AppUpdatePatch,
   UserDefaultAppSource,
 } from './types.js';
-export { OpsAppsAccessDeniedError } from './types.js';
+export { AppNotFoundError, OpsAppsAccessDeniedError } from './types.js';
 
 export { createListAppsHandler } from './list-apps.js';
 export type { ListAppsDeps, ListAppsOutput } from './list-apps.js';
@@ -28,8 +28,14 @@ export type { ListAppsDeps, ListAppsOutput } from './list-apps.js';
 export { createCreateAppHandler } from './create-app.js';
 export type { CreateAppDeps, CreateAppOutput } from './create-app.js';
 
-export { createRenameAppHandler, AppNotFoundError } from './rename-app.js';
-export type { RenameAppDeps, RenameAppOutput } from './rename-app.js';
+export { createUpdateAppHandler } from './update-app.js';
+export type { UpdateAppDeps, UpdateAppOutput } from './update-app.js';
+
+export { createSetAppThemeHandler } from './set-app-theme.js';
+export type {
+  SetAppThemeDeps,
+  SetAppThemeOutput,
+} from './set-app-theme.js';
 
 export { createDeleteAppHandler } from './delete-app.js';
 export type { DeleteAppDeps, DeleteAppOutput } from './delete-app.js';
@@ -39,9 +45,3 @@ export type {
   SetDefaultAppDeps,
   SetDefaultAppOutput,
 } from './set-default-app.js';
-
-export { createUpdateAppSystemPromptHandler } from './update-app-system-prompt.js';
-export type {
-  UpdateAppSystemPromptDeps,
-  UpdateAppSystemPromptOutput,
-} from './update-app-system-prompt.js';

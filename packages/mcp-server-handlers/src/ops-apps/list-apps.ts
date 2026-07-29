@@ -46,7 +46,7 @@ export function createListAppsHandler(
     title: 'List apps',
     audience: ['ops'],
     description:
-      "Enumerate every `GguiApp` row owned by the calling user. Returns metadata only (appId, displayName, optional systemPrompt, createdAt, updatedAt). Same data the console's Apps section renders. Use to discover ids before calling `ggui_ops_rename_app` / `ggui_ops_set_default_app` / `ggui_ops_delete_app`.",
+      "Enumerate every `GguiApp` row owned by the calling user. Returns metadata only (appId, displayName, optional systemPrompt, createdAt, updatedAt). Same data the console's Apps section renders. Use to discover ids before calling `ggui_ops_update_app` / `ggui_ops_set_default_app` / `ggui_ops_delete_app`.",
     inputSchema,
     outputSchema,
     async handler(

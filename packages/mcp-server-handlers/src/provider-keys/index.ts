@@ -1,9 +1,10 @@
 /**
  * Bring-your-own-key provider-key handler family.
  *
- * Three thin wrappers over the {@link ProviderKeyStore} seam. Cloud
- * deployments bind an AWS-backed store (database + KMS); tests bind
- * in-memory.
+ * Three thin wrappers over the {@link ProviderKeyStore} seam (plus
+ * the optional {@link AppScopedProviderKeyStore} sibling for
+ * deployments that store per-app keys). Cloud deployments bind an
+ * encrypting datastore-backed store; tests bind in-memory.
  *
  * All seam-pure: no AWS imports, no logging side-channel. NEVER
  * leaks plaintext or the encrypted ciphertext through any tool
@@ -14,10 +15,16 @@ export type {
   ProviderName,
   ProviderKeySummary,
   ProviderKeyStore,
+  AppScopedProviderKeyStore,
   SetProviderKeyInput,
   RemoveResult,
 } from './types.js';
-export { SUPPORTED_PROVIDERS, isProviderName } from './types.js';
+export {
+  AppScopedKeyAppNotFoundError,
+  AppScopedKeysUnavailableError,
+  SUPPORTED_PROVIDERS,
+  isProviderName,
+} from './types.js';
 
 export { createListProviderKeysHandler } from './list-provider-keys.js';
 export type {

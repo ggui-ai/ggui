@@ -6,6 +6,47 @@
  * schema change; the most recent change anchors {@link PROTOCOL_VERSION}.
  *
  * --------------------------------------------------------------------
+ * Ops-tool console-parity slice (2026-07-29, BREAKING on the ops
+ * surface only, pre-launch, ggui#400). Rename ledger — same treatment
+ * as the `ggui_ops_register_blueprint` → `ggui_ops_save_library_blueprint`
+ * split and the r4.1 `ggui_runtime_refresh_bootstrap` retirement:
+ *
+ *   op1. **`ggui_ops_rename_app` + `ggui_ops_update_app_system_prompt`
+ *      → consolidated `ggui_ops_update_app`.** One partial-update tool
+ *      carries `displayName?` + `systemPrompt?` + `rateLimitPerMinute?`
+ *      (at least one required). Clearing sentinels: `systemPrompt: ''`
+ *      clears the override (unchanged semantics); `rateLimitPerMinute:
+ *      0` clears the limit — the console client's empty/0 → null
+ *      normalization moves server-side so the stored column keeps ONE
+ *      "unlimited" representation. Both old wire names are appended to
+ *      the mcp-server RETIRED_TOOL_NAMES regression lock. No shims,
+ *      pre-launch delete-in-same-slice.
+ *
+ *   op2. **New ops wire names** (additive): `ggui_ops_set_app_theme`
+ *      (validates with the protocol's `appThemeSchema` — the same
+ *      validator every `GguiApp.theme` write surface runs),
+ *      `ggui_ops_rename_org` (owner-or-admin), `ggui_ops_remove_org_member`
+ *      (role-matrix enforced; owner never removable),
+ *      `ggui_ops_get_org_balance` (any-member read, allowlisted in
+ *      SINGLE_CALL_OPS), and the app-scoped `appId?` argument on
+ *      `ggui_ops_set_provider_key` / `ggui_ops_remove_provider_key`
+ *      (optional seam — deployments without app-scoped key storage
+ *      reject it with `app_scoped_keys_unavailable`).
+ *
+ *   op3. **My-blueprint curation trio** (additive, cloud-deployment
+ *      tools beside `ggui_ops_list_my_blueprints`):
+ *      `ggui_ops_update_my_blueprint` (rename + description/tags;
+ *      canonical kebab-case blueprint-name rule),
+ *      `ggui_ops_delete_my_blueprint`, and
+ *      `ggui_ops_get_my_blueprint_source` (returns the stored
+ *      `{source, contract?, fixtureProps?}` definition envelope;
+ *      allowlisted in SINGLE_CALL_OPS).
+ *
+ * Conformance-kit verdict: ops tools are not conformance-kit surface —
+ * NO protocol stamp roll. Recorded here because retired wire names are
+ * ledgered (retired-tool-names regression lock mirrors this entry).
+ *
+ * --------------------------------------------------------------------
  * Dead capability/quality vocabulary deleted (2026-07-27, pre-launch,
  * ggui#394). `CapabilityPermissions`, `ComponentCapability`, and
  * `QualityMetadata` are removed from the package's public API, along

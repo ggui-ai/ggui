@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { HandlerContext } from '../types.js';
 import { createSetDefaultAppHandler } from './set-default-app.js';
-import { AppNotFoundError } from './rename-app.js';
+import { AppNotFoundError } from './types.js';
 import {
   InMemoryAppsSource,
   InMemoryUserDefaultAppSource,

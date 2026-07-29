@@ -7,10 +7,17 @@
  * spec while the `.ts` extension keeps tsc happy.
  */
 
-import type { AppRecord, AppsSource, UserDefaultAppSource } from './types.js';
+import type { AppTheme } from '@ggui-ai/protocol';
+import type {
+  AppRecord,
+  AppsSource,
+  AppUpdatePatch,
+  UserDefaultAppSource,
+} from './types.js';
 
 export class InMemoryAppsSource implements AppsSource {
   private readonly rows = new Map<string, AppRecord>();
+  private readonly themes = new Map<string, AppTheme>();
   private idCounter = 0;
   private clock = 0;
 
@@ -57,18 +64,47 @@ export class InMemoryAppsSource implements AppsSource {
     return row;
   }
 
-  async rename(args: {
+  async update(args: {
     appId: string;
     ownerSub: string;
-    displayName: string;
+    patch: AppUpdatePatch;
   }): Promise<AppRecord> {
     const row = this.rows.get(args.appId);
     if (!row || row.ownerSub !== args.ownerSub) {
-      throw new Error(`InMemoryAppsSource.rename: not found ${args.appId}`);
+      throw new Error(`InMemoryAppsSource.update: not found ${args.appId}`);
     }
+    const { patch } = args;
+    if (
+      patch.displayName === undefined &&
+      patch.systemPrompt === undefined &&
+      patch.rateLimitPerMinute === undefined
+    ) {
+      throw new Error('InMemoryAppsSource.update: empty patch');
+    }
+    // Mirror the production normalization: clearing sentinels map onto
+    // field ABSENCE so reads stay single-valued.
+    const systemPrompt =
+      patch.systemPrompt === undefined
+        ? row.systemPrompt
+        : patch.systemPrompt === ''
+          ? undefined
+          : patch.systemPrompt;
+    const rateLimitPerMinute =
+      patch.rateLimitPerMinute === undefined
+        ? row.rateLimitPerMinute
+        : patch.rateLimitPerMinute === 0
+          ? undefined
+          : patch.rateLimitPerMinute;
     const next: AppRecord = {
-      ...row,
-      displayName: args.displayName,
+      appId: row.appId,
+      ownerSub: row.ownerSub,
+      displayName:
+        patch.displayName === undefined
+          ? row.displayName
+          : patch.displayName.trim(),
+      ...(systemPrompt !== undefined ? { systemPrompt } : {}),
+      ...(rateLimitPerMinute !== undefined ? { rateLimitPerMinute } : {}),
+      createdAt: row.createdAt,
       updatedAt: this.now(),
     };
     this.rows.set(args.appId, next);
@@ -80,26 +116,27 @@ export class InMemoryAppsSource implements AppsSource {
     if (!row) return;
     if (row.ownerSub !== args.ownerSub) return;
     this.rows.delete(args.appId);
+    this.themes.delete(args.appId);
   }
 
-  async setSystemPrompt(args: {
+  async setTheme(args: {
     appId: string;
     ownerSub: string;
-    systemPrompt: string;
-  }): Promise<AppRecord> {
+    theme: AppTheme;
+  }): Promise<{ appId: string; updatedAt: string }> {
     const row = this.rows.get(args.appId);
     if (!row || row.ownerSub !== args.ownerSub) {
-      throw new Error(
-        `InMemoryAppsSource.setSystemPrompt: not found ${args.appId}`,
-      );
+      throw new Error(`InMemoryAppsSource.setTheme: not found ${args.appId}`);
     }
-    const next: AppRecord = {
-      ...row,
-      systemPrompt: args.systemPrompt === '' ? undefined : args.systemPrompt,
-      updatedAt: this.now(),
-    };
+    const next: AppRecord = { ...row, updatedAt: this.now() };
     this.rows.set(args.appId, next);
-    return next;
+    this.themes.set(args.appId, args.theme);
+    return { appId: args.appId, updatedAt: next.updatedAt };
+  }
+
+  /** Test introspection: the last theme persisted for an app. */
+  getTheme(appId: string): AppTheme | undefined {
+    return this.themes.get(appId);
   }
 }
 

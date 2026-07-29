@@ -17,7 +17,14 @@ import { readdirSync, readFileSync, statSync } from 'node:fs';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const RETIRED_TOOL_NAMES = ['ggui_runtime_refresh_bootstrap'] as const;
+const RETIRED_TOOL_NAMES = [
+  'ggui_runtime_refresh_bootstrap',
+  // 2026-07-29 (#400): collapsed into the consolidated `ggui_ops_update_app`
+  // (displayName + systemPrompt + rateLimitPerMinute) — see the rename
+  // ledger entry in @ggui-ai/protocol src/version.ts.
+  'ggui_ops_rename_app',
+  'ggui_ops_update_app_system_prompt',
+] as const;
 
 const SRC_DIR = path.dirname(fileURLToPath(import.meta.url));
 /** This file legitimately names the retired tools — skip itself. */

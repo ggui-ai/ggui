@@ -42,6 +42,20 @@ export interface OrgMembershipRecord {
 }
 
 /**
+ * Prepaid credit balance of an org's shared wallet. Every member may
+ * read it (role does not gate visibility of the shared pool). A
+ * balance row that has never been written reads as zeros — the
+ * balance value is the contract, not the row's existence.
+ */
+export interface OrgBalanceRecord {
+  readonly orgId: string;
+  readonly balanceCents: number;
+  readonly lifetimeGrantedCents: number;
+  readonly lifetimeSpentCents: number;
+  readonly updatedAt: string;
+}
+
+/**
  * Pending-invite shape returned by `issue` + `list`. Persistent state
  * mirrors the `GguiOrgInvite` model.
  */
@@ -57,8 +71,8 @@ export interface OrgInviteRecord {
 }
 
 /**
- * Read+write seam for `GguiOrg`. The cloud pod implements this against
- * AppSync (`provisionGguiOrg` mutation + `fetchMyOrgs` query); tests
+ * Read+write seam for `GguiOrg` (+ its membership + balance rows).
+ * Cloud deployments bind a datastore-backed implementation; tests
  * implement it against in-memory state.
  *
  * Invariants:
@@ -67,6 +81,16 @@ export interface OrgInviteRecord {
  *   - `create({ ownerSub, name })` mints a fresh orgId server-side
  *     (ULID for cloud; any unique string for tests). NEVER honors
  *     argument-supplied orgIds.
+ *   - `rename` requires the caller to be owner OR admin of the org.
+ *     Non-members get `OrgNotFoundError` (uniform with a missing
+ *     orgId — no existence leak); member-role callers get
+ *     `OrgAccessDeniedError` (they can already see the org exists).
+ *   - `removeMember` enforces the role matrix (see
+ *     {@link OrgsSource.removeMember}); non-member callers get the
+ *     uniform `OrgNotFoundError`.
+ *   - `getBalance` requires ANY membership; non-members get the
+ *     uniform `OrgNotFoundError`. A missing balance row reads as
+ *     zeros, never as an error.
  */
 export interface OrgsSource {
   /** Return every org the caller belongs to, with the caller's role. */
@@ -75,12 +99,45 @@ export interface OrgsSource {
   ): Promise<readonly OrgMembershipRecord[]>;
   /** Provision a fresh org owned by the caller. */
   create(args: { ownerSub: string; name: string }): Promise<OrgRecord>;
+  /**
+   * Rename the org. Caller must be owner or admin. The name is
+   * trimmed and capped at 120 chars by the implementation.
+   */
+  rename(args: {
+    ownerSub: string;
+    orgId: string;
+    name: string;
+  }): Promise<{ orgId: string; name: string; updatedAt: string }>;
+  /**
+   * Remove a member row. Role matrix (caller's role × target's role):
+   *
+   *                 target=owner   target=admin   target=member
+   *   caller=owner     no             yes            yes
+   *   caller=admin     no             only-self      yes
+   *   caller=member    no             no             only-self
+   *
+   * The org owner can never be removed (`OrgMemberRemovalDeniedError`
+   * — ownership transfer is a separate flow); other matrix violations
+   * throw the same error class with the specific rule in the message.
+   * Removing an already-absent member resolves with
+   * `alreadyAbsent: true` (idempotent — a parallel removal is not an
+   * error).
+   */
+  removeMember(args: {
+    ownerSub: string;
+    orgId: string;
+    memberUserId: string;
+  }): Promise<{ orgId: string; memberUserId: string; alreadyAbsent: boolean }>;
+  /** Read the org's shared credit balance. Any membership role. */
+  getBalance(args: {
+    ownerSub: string;
+    orgId: string;
+  }): Promise<OrgBalanceRecord>;
 }
 
 /**
  * Read+write seam for `GguiOrgInvite`. Same posture as `OrgsSource` —
- * cloud binds `issueOrgInvite` + `revokeOrgInvite` AppSync mutations,
- * tests use in-memory state.
+ * cloud binds the invite mutations, tests use in-memory state.
  *
  * Invariants:
  *   - `issue` enforces the caller is owner/admin of the org. Members
@@ -103,6 +160,49 @@ export interface OrgInvitesSource {
     ownerSub: string;
     inviteId: string;
   }): Promise<{ invite: OrgInviteRecord; alreadyRevoked: boolean }>;
+}
+
+/**
+ * Uniform "not found" for org targets the caller cannot see — thrown
+ * both for genuinely missing orgIds and for orgs the caller is not a
+ * member of, so a probe can't learn whether an orgId exists.
+ */
+export class OrgNotFoundError extends Error {
+  readonly code = 'org_not_found' as const;
+  constructor(orgId: string) {
+    super(
+      `org_not_found: no org ${JSON.stringify(orgId)} reachable by the caller`,
+    );
+    this.name = 'OrgNotFoundError';
+  }
+}
+
+/**
+ * Thrown when a MEMBER of the org lacks the role an operation needs
+ * (e.g. member-role caller renaming the org). Distinct from
+ * {@link OrgNotFoundError}: members already know the org exists, so
+ * naming the missing role is not an existence leak.
+ */
+export class OrgAccessDeniedError extends Error {
+  readonly code = 'org_access_denied' as const;
+  constructor(message: string) {
+    super(message);
+    this.name = 'OrgAccessDeniedError';
+  }
+}
+
+/**
+ * Thrown when the member-removal role matrix denies the operation.
+ * The message names the specific rule that was hit (owner removal,
+ * admin-on-admin, member-on-other) so callers can surface it — the
+ * caller is a verified member, so specificity leaks nothing.
+ */
+export class OrgMemberRemovalDeniedError extends Error {
+  readonly code = 'org_member_removal_denied' as const;
+  constructor(message: string) {
+    super(message);
+    this.name = 'OrgMemberRemovalDeniedError';
+  }
 }
 
 export class OrgInviteAccessDeniedError extends Error {

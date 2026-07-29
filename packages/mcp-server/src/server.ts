@@ -153,9 +153,9 @@ import {
   createCreateAppHandler,
   createDeleteAppHandler,
   createListAppsHandler,
-  createRenameAppHandler,
+  createSetAppThemeHandler,
   createSetDefaultAppHandler,
-  createUpdateAppSystemPromptHandler,
+  createUpdateAppHandler,
   type AppsSource,
   type UserDefaultAppSource,
 } from "@ggui-ai/mcp-server-handlers/ops-apps";
@@ -171,8 +171,11 @@ import {
 } from "@ggui-ai/mcp-server-handlers/ops-coupon";
 import {
   createCreateOrgHandler,
+  createGetOrgBalanceHandler,
   createInviteToOrgHandler,
   createListOrgsHandler,
+  createRemoveOrgMemberHandler,
+  createRenameOrgHandler,
   createRevokeInviteHandler,
   type OrgInvitesSource,
   type OrgsSource,
@@ -1356,13 +1359,13 @@ export function buildOpsBundleHandlers(
     handlers.push(
       createListAppsHandler({ apps }) as SharedHandler<ZodRawShape, ZodRawShape>,
       createCreateAppHandler({ apps }) as SharedHandler<ZodRawShape, ZodRawShape>,
-      createRenameAppHandler({ apps }) as SharedHandler<ZodRawShape, ZodRawShape>,
+      createUpdateAppHandler({ apps }) as SharedHandler<ZodRawShape, ZodRawShape>,
+      createSetAppThemeHandler({ apps }) as SharedHandler<ZodRawShape, ZodRawShape>,
       createDeleteAppHandler({ apps }) as SharedHandler<ZodRawShape, ZodRawShape>,
       createSetDefaultAppHandler({ apps, userDefaultApp }) as SharedHandler<
         ZodRawShape,
         ZodRawShape
-      >,
-      createUpdateAppSystemPromptHandler({ apps }) as SharedHandler<ZodRawShape, ZodRawShape>
+      >
     );
   }
   if (deps.opsOrgs) {
@@ -1370,6 +1373,9 @@ export function buildOpsBundleHandlers(
     handlers.push(
       createListOrgsHandler({ orgs }) as SharedHandler<ZodRawShape, ZodRawShape>,
       createCreateOrgHandler({ orgs }) as SharedHandler<ZodRawShape, ZodRawShape>,
+      createRenameOrgHandler({ orgs }) as SharedHandler<ZodRawShape, ZodRawShape>,
+      createRemoveOrgMemberHandler({ orgs }) as SharedHandler<ZodRawShape, ZodRawShape>,
+      createGetOrgBalanceHandler({ orgs }) as SharedHandler<ZodRawShape, ZodRawShape>,
       createInviteToOrgHandler({ invites }) as SharedHandler<ZodRawShape, ZodRawShape>,
       createRevokeInviteHandler({ invites }) as SharedHandler<ZodRawShape, ZodRawShape>
     );

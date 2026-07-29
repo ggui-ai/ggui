@@ -14,7 +14,7 @@
 import { z } from 'zod';
 import type { HandlerContext, SharedHandler } from '../types.js';
 import { resolveOwnerSub } from './identity.js';
-import { AppNotFoundError } from './rename-app.js';
+import { AppNotFoundError } from './types.js';
 import type { AppsSource, UserDefaultAppSource } from './types.js';
 
 const inputSchema = {
