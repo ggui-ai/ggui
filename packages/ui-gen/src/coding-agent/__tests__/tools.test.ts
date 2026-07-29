@@ -287,3 +287,120 @@ export default function C(props: Props) {
     expect(result.result).not.toMatch(/\[imports\][^-]/);
   });
 });
+
+// ── ggui Exp 49 (P3) — patch-geometry diagnostics ──────────────────────────
+
+import { buildRangeContextAddendum } from '../tools';
+
+describe('buildRangeContextAddendum (Exp 49 P3.1)', () => {
+  const original = [
+    'interface Props { title: string; }',           // 1
+    'export default function Component(props: Props) {', // 2
+    '  const [step, setStep] = useState(0);',        // 3
+    '',                                              // 4
+    '  return (',                                    // 5
+    '    <div>',                                     // 6
+    '      <p>{props.title}</p>',                    // 7
+    '    </div>',                                    // 8
+    '  );',                                          // 9
+    '}',                                             // 10
+  ];
+
+  it('names shape (a): declaration payload with range starting inside returned JSX', () => {
+    const addendum = buildRangeContextAddendum(
+      6,
+      [{ startLine: 6, code: ['  const items = [];', '  return ('] }],
+      original,
+    );
+    expect(addendum).toContain('line 5 is `return (`');
+    expect(addendum).toContain('begins with a declaration (`const`)');
+  });
+
+  it('names shape (b): payload re-emits export default function below the existing one', () => {
+    const addendum = buildRangeContextAddendum(
+      6,
+      [{ startLine: 6, code: ['export default function Component() {', '  return null;', '}'] }],
+      original,
+    );
+    expect(addendum).toContain('second `export default function`');
+    expect(addendum).toContain('opens at line 2');
+  });
+
+  it('stays silent when the error is not at a range start', () => {
+    expect(
+      buildRangeContextAddendum(7, [{ startLine: 6, code: ['const x = 1;'] }], original),
+    ).toBe('');
+  });
+
+  it('stays silent when the preceding line is not `return (`', () => {
+    expect(
+      buildRangeContextAddendum(3, [{ startLine: 3, code: ['const x = 1;'] }], original),
+    ).toBe('');
+  });
+
+  it('stays silent with no error line', () => {
+    expect(buildRangeContextAddendum(undefined, [], original)).toBe('');
+  });
+});
+
+describe('apply_changes gutter-transcription reject (Exp 49 P3.3)', () => {
+  it('rejects a payload carrying the N│ gutter without touching the workspace', async () => {
+    const ws = new AgentWorkspace();
+    await ws.init();
+    const meta = new Map();
+    const good = `interface Props { name: string; }
+export default function Hello(props: Props) {
+  return <div aria-label="c">{props.name}</div>;
+}`;
+    await executeTool(ws, 'write', { code: good, commit_message: 'seed' }, meta);
+    const before = ws.read();
+
+    const result = await executeTool(
+      ws,
+      'apply_changes',
+      {
+        changes: [
+          {
+            startLine: 3,
+            endLine: 3,
+            code: ['3│  return <div aria-label="c">{props.name}</div>;'],
+            description: 'transcribed gutter',
+          },
+        ],
+        commit_message: 'broken',
+      },
+      meta,
+    );
+    expect(result.error).toBe(true);
+    expect(result.result).toContain('line-number gutter');
+    expect(ws.read()).toBe(before);
+  });
+
+  it('never fires on legitimate code', async () => {
+    const ws = new AgentWorkspace();
+    await ws.init();
+    const meta = new Map();
+    const good = `interface Props { name: string; }
+export default function Hello(props: Props) {
+  return <div aria-label="c">{props.name}</div>;
+}`;
+    await executeTool(ws, 'write', { code: good, commit_message: 'seed' }, meta);
+    const result = await executeTool(
+      ws,
+      'apply_changes',
+      {
+        changes: [
+          {
+            startLine: 3,
+            endLine: 3,
+            code: ['  return <div aria-label="x">{props.name}</div>;'],
+            description: 'fine',
+          },
+        ],
+        commit_message: 'ok',
+      },
+      meta,
+    );
+    expect(result.result).not.toContain('line-number gutter');
+  }, 30000);
+});

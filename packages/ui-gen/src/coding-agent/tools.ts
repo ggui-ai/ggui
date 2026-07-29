@@ -324,6 +324,30 @@ export async function executeTool(
         };
       }
 
+      // ── Gutter-transcription reject (P3.3, ggui Exp 49) ──
+      // The `## Current File` view renders `N│ content` (workspace.ts) and
+      // models occasionally transcribe that gutter into the patch payload
+      // verbatim — the payload is then unusable by construction, so this
+      // is the one pre-apply rejection that cannot misfire (real TSX never
+      // begins a line with `digits│`). Distinct from the deliberate
+      // apply-and-warn posture below, which is about *broken* code, not
+      // *decorated* code.
+      const gutterLine = normalizedChanges
+        .flatMap((c) => c.code)
+        .find((l) => /^\s*\d+(?::[0-9a-f]{2})?│/.test(l));
+      if (gutterLine !== undefined) {
+        console.log(
+          `[coding-agent] apply_changes: GUTTER_TRANSCRIBED | ${JSON.stringify(gutterLine.slice(0, 60))}`,
+        );
+        return {
+          result:
+            `PATCH_INVALID: your \`code\` contains the line-number gutter from the Current File view ` +
+            `(e.g. ${JSON.stringify(gutterLine.trim().slice(0, 40))}). The \`N│\` prefix is display decoration — ` +
+            `\`code\` must be raw file content only. Re-emit the patch without the gutter.`,
+          error: true,
+        };
+      }
+
       // ── Patch application — via harness.what.applyPatch when provided,
       // else fall back to the default pure engine. Both enforce the same
       // invariants (sort, non-overlap, line bounds, reverse apply).
@@ -466,13 +490,23 @@ export async function executeTool(
           ? `\n\nPatch tag-balance imbalance: ${tagImbalanceSummary}\n` +
             `(Net opens vs closes inside your edit ranges. If a tag has +N, you opened N more than you closed within the patch — verify each <Tag> has a matching </Tag> in your changes, or that the surrounding scaffold provides the closer.)`
           : '';
+        // P3.1 (ggui Exp 49) — when the error lands exactly on the first
+        // line of a patched range, the range and the payload usually
+        // disagree about syntactic context. Fires only on two unambiguous
+        // shapes; silent otherwise. Informational, never a gate — the
+        // #41–#44 lesson (information helps, compulsion hurts) stands.
+        const contextAddendum = buildRangeContextAddendum(
+          errLine,
+          changes,
+          currentFile.split('\n'),
+        );
         return {
           result:
             `${preflightPrefix}PATCH_APPLIED_BROKEN: patch applied but file has a syntax error. Workspace updated; no git commit yet.\n` +
             `Changed ranges: ${ranges}\n` +
             `esbuild error: ${errText}${typeof errLine === 'number' ? ` (line ${errLine}${typeof errCol === 'number' ? `, col ${errCol}` : ''})` : ''}\n\n` +
             `${sliceLabel}:\n${slice}\n\n` +
-            `The file now reflects your latest patch. Submit a follow-up apply_changes targeting the error location above to converge toward a compilable file.${imbalanceHint}`,
+            `The file now reflects your latest patch. Submit a follow-up apply_changes targeting the error location above to converge toward a compilable file.${contextAddendum}${imbalanceHint}`,
           error: false,
         };
       }
@@ -579,4 +613,65 @@ export async function executeTool(
     default:
       return { result: `Unknown tool: ${tool}`, error: true };
   }
+}
+
+/**
+ * P3.1 (ggui Exp 49) — structural-context diagnosis for
+ * `PATCH_APPLIED_BROKEN`. When esbuild's error line is exactly the FIRST
+ * line of a patched range, the dominant google failure shape (15/33 of
+ * its broken patches in the d8 cohort) is a range/payload context
+ * mismatch. Two unambiguous, always-genuinely-broken shapes are named
+ * factually; anything else returns '' (silence beats a wrong diagnosis).
+ *
+ * Exported for unit tests.
+ */
+export function buildRangeContextAddendum(
+  errLine: number | undefined,
+  changes: ReadonlyArray<{ startLine: number; code: readonly string[] }>,
+  originalLines: readonly string[],
+): string {
+  if (typeof errLine !== 'number') return '';
+  const hit = changes.find((c) => c.startLine === errLine);
+  if (!hit) return '';
+  const firstPayloadLine = hit.code.find((l) => l.trim().length > 0) ?? '';
+  const declMatch = /^\s*(const|let|var|function|type|interface)\b/.exec(
+    firstPayloadLine,
+  );
+
+  // Shape (a): payload opens with a declaration while the range starts
+  // just inside the returned JSX — the nearest non-blank ORIGINAL line
+  // above the range start ends with `return (`.
+  if (declMatch) {
+    for (let i = hit.startLine - 2; i >= 0; i--) {
+      const line = originalLines[i];
+      if (line === undefined || line.trim().length === 0) continue;
+      if (/\breturn\s*\($/.test(line.trim())) {
+        return (
+          `\n\nRange/context mismatch: line ${i + 1} is \`return (\` — your range starts at ` +
+          `${hit.startLine}, INSIDE the returned JSX expression, but your payload begins with a ` +
+          `declaration (\`${declMatch[1]}\`). Declarations cannot live inside JSX: start the range ` +
+          `at or before line ${i + 1} and re-emit \`return (\` after them.`
+        );
+      }
+      break; // nearest non-blank line is not `return (` — stay silent
+    }
+  }
+
+  // Shape (b): payload re-emits the component definition while the range
+  // starts below the existing `export default function` — producing a
+  // nested second definition.
+  if (hit.code.some((l) => l.includes('export default function'))) {
+    const existing = originalLines.findIndex((l) =>
+      l.includes('export default function'),
+    );
+    if (existing >= 0 && existing + 1 < hit.startLine) {
+      return (
+        `\n\nRange/context mismatch: your payload emits a second \`export default function\` but the ` +
+        `range starts at line ${hit.startLine}, INSIDE the existing component that opens at line ` +
+        `${existing + 1}. Patch within the existing function body — do not re-emit the component definition.`
+      );
+    }
+  }
+
+  return '';
 }
