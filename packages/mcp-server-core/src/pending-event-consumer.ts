@@ -110,6 +110,16 @@ export interface PendingEventConsumer {
    * appends per-`sessionId` so concurrent producers don't lose
    * events; ordering within a single render is FIFO.
    *
+   * IDEMPOTENCY (ggui#405): when `event.id` is a non-empty string,
+   * append MUST be idempotent per `(sessionId, event.id)` for the
+   * pipe's LIFETIME — a duplicate append is a silent no-op, including
+   * after the original entry was drained by `consumeAndClear`. This is
+   * what makes transport-level retries of `ggui_runtime_submit_action`
+   * safe: a relay that lost the RESPONSE (but whose request was
+   * delivered) can replay without double-firing the user's gesture.
+   * Events WITHOUT an `id` are appended unconditionally (the WS
+   * ingress may produce id-less entries; those carry no retry path).
+   *
    * @throws when the pipe row doesn't exist.
    */
   append(

@@ -320,16 +320,28 @@ describe('callMcpToolsCall network-failure semantics', () => {
     expect(rpc.error).toBeUndefined();
   });
 
-  it('does NOT retry an ambiguous mid-flight failure — throws with the cause chain', async () => {
+  it('retries an ambiguous mid-flight failure ONCE (pipe-side id dedupe absorbs duplicates)', async () => {
     const fetchMock = vi
       .fn()
-      .mockRejectedValue(new TypeError('terminated'));
+      .mockRejectedValueOnce(new TypeError('terminated'))
+      .mockResolvedValue(
+        jsonResponse({ jsonrpc: '2.0', id: 1, result: { content: [] } }),
+      );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const rpc = await callMcpToolsCall(CALL);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(rpc.error).toBeUndefined();
+  });
+
+  it('persistent ambiguous failure gives up after the single retry', async () => {
+    const fetchMock = vi.fn().mockRejectedValue(new TypeError('terminated'));
     vi.stubGlobal('fetch', fetchMock);
 
     await expect(callMcpToolsCall(CALL)).rejects.toThrow(
-      /tools\/call ggui_runtime_submit_action .* failed: terminated/,
+      /tools\/call ggui_runtime_submit_action .* failed after 2 attempts: terminated/,
     );
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
   it('gives up after the bounded retries and reports the attempt count', async () => {

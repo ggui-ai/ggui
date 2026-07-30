@@ -168,11 +168,13 @@ export async function callMcpResourcesRead(args: {
 /**
  * Error-cause codes that PROVE the request never left this process —
  * DNS resolution failed, the TCP connect was refused, or the connect
- * phase timed out before a socket existed. Retrying these can never
- * duplicate a delivered request, so they are the ONLY retriable class:
- * the pending-event pipe does NOT dedupe on entry id (ggui#405), so an
- * ambiguous failure (ECONNRESET / `terminated` mid-body) must surface
- * to the caller rather than risk double-enqueueing a user action.
+ * phase timed out before a socket existed. These get the full retry
+ * schedule. AMBIGUOUS failures (ECONNRESET / `terminated` mid-body —
+ * the request MAY have been delivered) get ONE retry: safe since the
+ * pending-event pipe deduplicates on the envelope's `id` for the
+ * pipe's lifetime (ggui#405 — enforced by all three implementations:
+ * in-memory, sqlite, and the pod's DDB `seenEventIds` set), so a
+ * replayed delivered gesture is a server-side no-op.
  */
 const PRE_SEND_FAILURE_CODES = new Set([
   'ENOTFOUND',
@@ -279,10 +281,10 @@ export async function callMcpToolsCall(args: {
       const text = await response.text();
       return parseMcpResponse(text);
     } catch (err) {
-      const canRetry =
-        attempt < RELAY_RETRY_DELAYS_MS.length &&
-        !args.signal?.aborted &&
-        isPreSendFailure(err);
+      // Pre-send failures: full schedule. Ambiguous failures: one
+      // retry (pipe-side id dedupe absorbs a delivered duplicate).
+      const maxRetries = isPreSendFailure(err) ? RELAY_RETRY_DELAYS_MS.length : 1;
+      const canRetry = attempt < maxRetries && !args.signal?.aborted;
       if (!canRetry) {
         const { message } = describeFetchError(err);
         throw new Error(

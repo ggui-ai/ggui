@@ -102,6 +102,7 @@ export class SqlitePendingEventConsumer implements PendingEventConsumer {
     selectEventsForPipe: SqliteStatement<unknown[], EventRow>;
     insertEvent: SqliteStatement<unknown[]>;
     nextSeq: SqliteStatement<unknown[], { next_seq: number }>;
+    markEventSeen: SqliteStatement<unknown[]>;
   };
 
   constructor(opts: SqlitePendingEventConsumerOptions = {}) {
@@ -152,6 +153,12 @@ export class SqlitePendingEventConsumer implements PendingEventConsumer {
         `SELECT COALESCE(MAX(seq), 0) + 1 AS next_seq
          FROM pending_events WHERE render_id = ?`,
       ),
+      // ggui#405 — INSERT OR IGNORE; `changes === 0` means the id was
+      // already seen and the append is a silent no-op.
+      markEventSeen: this.db.prepare<unknown[]>(
+        `INSERT OR IGNORE INTO pending_event_seen (render_id, event_id)
+         VALUES (?, ?)`,
+      ),
     };
   }
 
@@ -191,6 +198,14 @@ export class SqlitePendingEventConsumer implements PendingEventConsumer {
       const pipe = this.stmts.getPipe.get(sessionId);
       if (!pipe) {
         throw new PendingPipeNotFoundError(sessionId);
+      }
+      // Per-id idempotency (ggui#405) — the seen-ledger insert and the
+      // event insert share this transaction, so a duplicate can never
+      // slip between the check and the write.
+      const id = typeof event.id === 'string' && event.id.length > 0 ? event.id : null;
+      if (id !== null) {
+        const marked = this.stmts.markEventSeen.run(sessionId, id);
+        if (marked.changes === 0) return; // duplicate — silent no-op
       }
       const seqRow = this.stmts.nextSeq.get(sessionId);
       const seq = seqRow?.next_seq ?? 1;
@@ -250,4 +265,17 @@ CREATE TABLE IF NOT EXISTS pending_events (
 
 CREATE INDEX IF NOT EXISTS idx_pending_events_pipe
   ON pending_events(render_id, enqueued_at);
+
+-- ggui#405 — pipe-lifetime append idempotency ledger. One row per
+-- (render, event.id) EVER appended; survives consumeAndClear (the
+-- events table is drained, this one is not) so a transport retry that
+-- replays a delivered gesture after the drain still no-ops. Reaped
+-- with the pipe via the FK cascade.
+CREATE TABLE IF NOT EXISTS pending_event_seen (
+  render_id TEXT NOT NULL,
+  event_id TEXT NOT NULL,
+  PRIMARY KEY (render_id, event_id),
+  FOREIGN KEY (render_id) REFERENCES pending_event_pipes(render_id)
+    ON DELETE CASCADE
+);
 `;

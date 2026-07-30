@@ -33,6 +33,14 @@ interface PipeEntry {
   status: GguiSessionStatus;
   lastActivityAt: number;
   expiresAt: number;
+  /**
+   * ggui#405 — every `event.id` ever appended to this pipe, for the
+   * pipe's lifetime. A duplicate id is a silent no-op even after the
+   * original drained (transport retries must never double-fire a
+   * gesture). Bounded in practice: pipes are per-render, TTL'd, and
+   * ids arrive at user-gesture rate.
+   */
+  seenEventIds: Set<string>;
 }
 
 export class InMemoryPendingEventConsumer implements PendingEventConsumer {
@@ -67,6 +75,12 @@ export class InMemoryPendingEventConsumer implements PendingEventConsumer {
       if (!entry) {
         throw new PendingPipeNotFoundError(sessionId);
       }
+      // Per-id idempotency (ggui#405) — see the interface contract.
+      const id = typeof event.id === 'string' && event.id.length > 0 ? event.id : null;
+      if (id !== null) {
+        if (entry.seenEventIds.has(id)) return;
+        entry.seenEventIds.add(id);
+      }
       entry.events.push(event);
       entry.lastActivityAt = Date.now();
     });
@@ -83,6 +97,7 @@ export class InMemoryPendingEventConsumer implements PendingEventConsumer {
       status: 'active',
       lastActivityAt: now,
       expiresAt: now + ttlMs,
+      seenEventIds: new Set(),
     });
   }
 

@@ -129,3 +129,33 @@ describe('SqlitePendingEventConsumer', () => {
     });
   });
 });
+
+// ── ggui#405 — append idempotency per event.id (pipe lifetime) ─────────────
+
+describe('append idempotency (ggui#405)', () => {
+  it('a duplicate id is a silent no-op — even AFTER the original drained', async () => {
+    const pipe = new SqlitePendingEventConsumer({ filename: ':memory:' });
+    pipe.markCreated('s1');
+    await pipe.append('s1', { id: 'act-1', intent: 'toggle' });
+    await pipe.append('s1', { id: 'act-1', intent: 'toggle' });
+    const first = await pipe.consumeAndClear('s1', 60_000);
+    expect(first.events).toHaveLength(1);
+
+    await pipe.append('s1', { id: 'act-1', intent: 'toggle' });
+    const second = await pipe.consumeAndClear('s1', 60_000);
+    expect(second.events).toHaveLength(0);
+    pipe.close();
+  });
+
+  it('distinct ids and id-less events append normally', async () => {
+    const pipe = new SqlitePendingEventConsumer({ filename: ':memory:' });
+    pipe.markCreated('s2');
+    await pipe.append('s2', { id: 'a' });
+    await pipe.append('s2', { id: 'b' });
+    await pipe.append('s2', { note: 'no id' });
+    await pipe.append('s2', { note: 'no id' });
+    const res = await pipe.consumeAndClear('s2', 60_000);
+    expect(res.events).toHaveLength(4);
+    pipe.close();
+  });
+});
