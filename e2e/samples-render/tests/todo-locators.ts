@@ -45,7 +45,8 @@ export function findTodoToggleable(frame: FrameLocator, name: RegExp): Locator {
 export function findTodoCheckedIndicator(frame: FrameLocator, name: RegExp): Locator {
   const namedChecked = frame
     .getByRole('checkbox', { name, checked: true })
-    .or(frame.getByRole('switch', { name, checked: true }));
+    .or(frame.getByRole('switch', { name, checked: true }))
+    .or(frame.getByRole('button', { name, pressed: true }));
 
   const rowWithCheckbox = frame
     .getByText(name)
@@ -67,4 +68,68 @@ export function findTodoCheckedIndicator(frame: FrameLocator, name: RegExp): Loc
   );
 
   return namedChecked.or(rowChecked).or(completionTextNear).first();
+}
+
+/**
+ * True when the todo's text (or a near ancestor) is struck through. Agents
+ * sometimes emit a styled div-with-SVG checkbox — no role, no aria state, no
+ * "✓" text node — and mark completion ONLY via `line-through`. No ARIA/text
+ * locator can see that (the 2026-07-30 nightly capstone timed out with a
+ * fully-working checked UI on screen for exactly this reason).
+ */
+async function todoTextStruckThrough(frame: FrameLocator, name: RegExp): Promise<boolean> {
+  return frame
+    .getByText(name)
+    .first()
+    .evaluate(
+      (el) => {
+        let node: Element | null = el;
+        for (let depth = 0; node !== null && depth < 4; depth += 1) {
+          if (getComputedStyle(node).textDecorationLine.includes('line-through')) return true;
+          node = node.parentElement;
+        }
+        return false;
+      },
+      undefined,
+      { timeout: 1_000 },
+    )
+    // Absent text / mid-remount frame is a normal transient while polling.
+    .catch(() => false);
+}
+
+/**
+ * Wait until the todo named `name` visibly reads as completed, whichever way
+ * the agent chose to express it: races {@link findTodoCheckedIndicator}
+ * (ARIA roles / :checked / completion text) against a computed-style poll for
+ * strikethrough. Use this instead of a bare visibility wait on
+ * `findTodoCheckedIndicator` wherever a styled-div checkbox must count.
+ */
+export async function waitForTodoCheckedIndicator(
+  frame: FrameLocator,
+  name: RegExp,
+  timeout: number,
+): Promise<void> {
+  const deadline = Date.now() + timeout;
+  const locatorLeg = findTodoCheckedIndicator(frame, name).waitFor({
+    state: 'visible',
+    timeout,
+  });
+  const styleLeg = (async (): Promise<void> => {
+    for (;;) {
+      if (await todoTextStruckThrough(frame, name)) return;
+      if (Date.now() >= deadline) {
+        throw new Error(`no line-through on "${name.source}" within ${timeout}ms`);
+      }
+      await new Promise((r) => setTimeout(r, 500));
+    }
+  })();
+  try {
+    await Promise.any([locatorLeg, styleLeg]);
+  } catch (err) {
+    const errors = err instanceof AggregateError ? err.errors : [err];
+    throw new Error(
+      `todo "${name.source}" never showed a completed indicator — both legs failed: ` +
+        errors.map((e) => (e instanceof Error ? e.message : String(e))).join(' | '),
+    );
+  }
 }

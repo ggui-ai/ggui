@@ -20,7 +20,7 @@ import { test, expect } from '@playwright/test';
 import { spawnComposedApp, type ComposedAppHandle, type SdkId } from './composed-app-harness';
 // Toggleable/checked locators for agent-authored todo UIs (pure Playwright
 // locator builders). Self-contained in samples-render — see ./todo-locators.
-import { findTodoToggleable, findTodoCheckedIndicator } from './todo-locators';
+import { findTodoToggleable, waitForTodoCheckedIndicator } from './todo-locators';
 
 // The proven agent-loop prompt — the trailing "keep in sync" sentence is what
 // drives the click-loop (toggle → todo MCP update → ggui_update).
@@ -113,9 +113,7 @@ for (const c of SDK_CASES) {
       await findTodoToggleable(initialFrame, /buy milk/i).click({ timeout: 30_000 });
       // The agent may re-mount mid-update — read the LATEST iframe pair.
       const afterClickFrame = page.frameLocator('iframe').last().frameLocator('iframe').first();
-      await expect(findTodoCheckedIndicator(afterClickFrame, /buy milk/i)).toBeVisible({
-        timeout: 180_000,
-      });
+      await waitForTodoCheckedIndicator(afterClickFrame, /buy milk/i, 180_000);
       // The chat id must be in the URL — precondition for the reload-restore step.
       expect(page.url()).toMatch(/[?&]chat=/);
 
@@ -128,9 +126,7 @@ for (const c of SDK_CASES) {
       // assertion — the workspace agent-loop journey owned that extra step).
       await page.reload();
       const restoredFrame = page.frameLocator('iframe').first().frameLocator('iframe').first();
-      await expect(findTodoCheckedIndicator(restoredFrame, /buy milk/i)).toBeVisible({
-        timeout: 60_000,
-      });
+      await waitForTodoCheckedIndicator(restoredFrame, /buy milk/i, 60_000);
 
       // --- Slice 1+2 measurement (best-effort; LOG ONLY, never gates) ---
       // Two reads per run, both env-gated greppable stderr lines:
