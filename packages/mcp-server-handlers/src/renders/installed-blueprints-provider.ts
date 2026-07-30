@@ -52,9 +52,10 @@
  *   "ensured: true forever" to "ensured under signature S until
  *   the discovered entry set hashes to a different signature".
  *   ensureCached now ALWAYS invokes the installedBlueprints
- *   callback (cheap — one DDB Query in the cloud bridge, one
- *   directory walk in OSS dev-stack); the compile sweep is the
- *   expensive part and IS still skipped on signature match. Orphan
+ *   callback (a metadata-only discovery read — a directory walk, a
+ *   small datastore query — never the compiled code itself); the
+ *   compile sweep is the expensive part and IS still skipped on
+ *   signature match. Orphan
  *   eviction at the end of the walk drops bridge-owned
  *   (`installed: true`) rows whose contractKey isn't in the current
  *   entry set — closes the G4 stale-cache leak (uninstall → next
@@ -168,9 +169,12 @@ export type CompileResult =
 export interface CreateInstalledBlueprintsProviderOptions {
   /**
    * Yields the currently-discovered installed blueprints for the
-   * scope. Called lazily on first ensureCached per scope. Returning
-   * an empty array is fine — the provider records "ensured" and
-   * returns immediately.
+   * scope. Called on EVERY ensureCached (the signature of the returned
+   * set gates the compile walk), so it MUST stay metadata-cheap —
+   * entry ids + contracts + intent, never compiled code (the `compile`
+   * callback owns fetching that, and only runs on signature change).
+   * Returning an empty array is fine — the provider records "ensured"
+   * and returns immediately.
    */
   readonly installedBlueprints: (
     scope: string,
@@ -210,9 +214,11 @@ export interface InstalledBlueprintsProvider {
   /**
    * Ensure all installed blueprints for `scope` are present in the
    * cache. Idempotent within a signature: every call re-reads the
-   * installed list (cheap — typically one DDB Query) and skips the
-   * compile/install walk when the signature matches the previous
-   * walk. Signature change (install OR uninstall) triggers:
+   * installed list via the discovery callback — a metadata-only read
+   * (entry ids + contracts + intent prose; discovery MUST NOT haul
+   * compiled code, which only the `compile` callback fetches) — and
+   * skips the compile/install walk when the signature matches the
+   * previous walk. Signature change (install OR uninstall) triggers:
    *   - re-walk: compile + register every CURRENT entry (no-op for
    *     unchanged entries thanks to the underlying installToCache
    *     idempotency)

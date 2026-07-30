@@ -258,9 +258,12 @@ export async function matchBlueprint(
   //
   // If an installedBlueprints provider is wired, ensure marketplace-
   // installed entries for this scope have been compiled + cached
-  // before we consult the registry. Idempotent per scope; the first
-  // call pays the compile, subsequent calls are cheap no-ops.
-  // Best-effort: a provider error never sinks the match.
+  // before we consult the registry. Every call re-runs discovery (a
+  // metadata-only read — entry ids + contracts, never compiled code)
+  // so install/uninstall is detected on the next match; the expensive
+  // compile + register walk runs only when the discovered set's
+  // signature changed since the last walk. Best-effort: a provider
+  // error never sinks the match.
   if (deps.installedBlueprints) {
     try {
       const ensureArg =
