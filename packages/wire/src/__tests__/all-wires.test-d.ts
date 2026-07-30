@@ -25,7 +25,7 @@
  *      seeded. Bidirectional agreement is verified.
  *
  *   4. **Symmetric narrowing for `agentTools` / `clientCapabilities` when
- *      the contract DOES declare them.** `agentTools: { tools: { search:
+ *      the contract DOES declare them.** `agentCapabilities: { tools: { search:
  *      … } }` narrows to `Record<'search', true>`; missing / extra keys
  *      are rejected identically to actions. (The index-signature fallback
  *      on absent contract slots is the documented weakness — harmless

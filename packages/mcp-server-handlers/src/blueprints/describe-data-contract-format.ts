@@ -129,7 +129,7 @@ interface StreamEntry {
 \`\`\`
 
 In the source, declare with \`const stream = useStream<PayloadType>('channel')\`
-and read latest as \`stream.latest\` or iterate \`stream.history\`.
+and read latest as \`stream.latest\` or iterate \`stream.all\`.
 
 ## AgentCapabilitiesSpec entry
 

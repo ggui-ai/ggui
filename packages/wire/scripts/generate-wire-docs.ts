@@ -65,7 +65,7 @@ const hookFiles = [
   { filePath: path.join(wireRoot, 'src/useAction.ts'), hookName: 'useAction' },
   { filePath: path.join(wireRoot, 'src/useStream.ts'), hookName: 'useStream' },
   // useWiredTool retired 2026-05-11 alongside the EE+ wire-shape v2.
-  // agentTools is a catalog the AGENT invokes, not a component-side
+  // agentCapabilities.tools is a catalog the AGENT invokes, not a component-side
   // hook surface; user gestures use `useAction(name)` and the optional
   // `nextStep` field on the action entry names the tool the agent
   // SHOULD invoke on its next turn (no `useAgentTool` replacement).
@@ -351,7 +351,7 @@ const HOOK_EXAMPLES: Record<string, string> = {
 <Text>{progress.all.length} updates received</Text>`,
 
   // useWiredTool retired 2026-05-11 — no example shown because the
-  // hook no longer exists. agentTools entries are agent-invoked
+  // hook no longer exists. agentCapabilities.tools entries are agent-invoked
   // catalog declarations; the component fires a user gesture via
   // `useAction(name)` and the runtime forwards `nextStep` as the
   // agent's next-tool hint.
@@ -547,7 +547,7 @@ Import: \`import { useAction, useStream } from '@ggui-ai/wire'\``);
   // ── Communication hooks (the 2 core primitives) ──
   sections.push('## Communication Hooks');
   sections.push('');
-  sections.push('These are the wire primitives for component-agent communication. `useWiredTool` retired 2026-05-11 — agentTools is a catalog the AGENT invokes, not a component hook surface; user gestures use `useAction(name)` and the optional `nextStep` field on the action entry names the tool the agent SHOULD invoke next.');
+  sections.push('These are the wire primitives for component-agent communication. `useWiredTool` retired 2026-05-11 — agentCapabilities.tools is a catalog the AGENT invokes, not a component hook surface; user gestures use `useAction(name)` and the optional `nextStep` field on the action entry names the tool the agent SHOULD invoke next.');
 
   const commHookNames = ['useAction', 'useStream'];
   for (const hookName of commHookNames) {

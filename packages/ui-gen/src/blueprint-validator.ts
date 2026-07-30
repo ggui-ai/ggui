@@ -187,7 +187,7 @@ function selfCheckTier(source: string, contract?: DataContract): SelfCheckResult
   }
 
   if (contract?.propsSpec) {
-    const propNames = Object.keys((contract.propsSpec as { shape?: Record<string, unknown> }).shape ?? {});
+    const propNames = Object.keys(contract.propsSpec.properties ?? {});
     for (const propName of propNames) {
       if (!source.includes(propName)) {
         warnings.push({
