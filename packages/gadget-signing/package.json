@@ -40,7 +40,7 @@
     "@noble/ed25519": "^2.2.0",
     "@noble/hashes": "^1.6.0",
     "@sigstore/bundle": "^4.0.0",
-    "sigstore": "^4.0.0"
+    "sigstore": "^4.1.1"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",
