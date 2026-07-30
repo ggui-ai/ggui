@@ -1,7 +1,7 @@
 // packages/ui-gen/src/classifier/infer-tooling.ts
 //
 // tooling axis — derived purely from contract presence of
-// `agentCapabilities.tools` / `clientCapabilities.libraries`.
+// `agentCapabilities.tools` / `clientCapabilities.gadgets`.
 // Describes the *direction* of tool usage present on the contract:
 // wired = UI references an agent tool, client = UI declares a
 // browser-capability gadget hook.

@@ -80,7 +80,7 @@ export type WireStreamPayload<T, N extends string> =
  * shape via the conditional `WireDispatchData` / `WireStreamPayload`
  * aliases — no call-site break.
  *
- * The contract's `agentTools` catalog declares tools the AGENT
+ * The contract's `agentCapabilities.tools` catalog declares tools the AGENT
  * invokes (not the component); user gestures fire via
  * `dispatch(name, data)` and the optional `nextStep` field on the
  * action entry names the tool the agent SHOULD invoke next.

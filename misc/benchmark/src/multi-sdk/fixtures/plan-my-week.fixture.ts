@@ -109,7 +109,7 @@ Requirements:
   },
 
   blueprint: {
-    mechanic: "drag",
+    mechanic: "live",
     layoutHint: "master-detail-split",
   },
 

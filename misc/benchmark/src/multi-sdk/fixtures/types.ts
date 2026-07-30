@@ -52,12 +52,12 @@ export interface BenchmarkFixture {
 
   /**
    * Optional blueprint hint — when present, informs the presentation-axis
-   * inference (render, layout, writeTrigger). Real blueprints live in
-   * cloud/amplify/data/screen-blueprints/; this field is used only if
+   * inference (render, layout, writeTrigger). Real blueprints seed from
+   * backend/amplify/functions/shared/system-blueprints/; this field is used only if
    * we're testing blueprint-aware inference.
    */
   blueprint?: {
-    mechanic?: "static" | "drag" | "swipe" | "live" | "form";
+    mechanic?: "static" | "live" | "form";
     layoutHint?: string;
   };
 

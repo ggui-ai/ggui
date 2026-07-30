@@ -7,7 +7,7 @@
 //   1. Auto-inferred: pass a defineContract() value → types inferred from JSON Schema
 //   2. Manual: pass a ContractTypeMap as generic → types from the manual interface
 //
-// The contract's `agentTools` catalog declares tools the AGENT
+// The contract's `agentCapabilities.tools` catalog declares tools the AGENT
 // invokes; component code does NOT call them directly. There is NO
 // component hook for invoking agent tools — user gestures fire via
 // `useAction(name)`, and the optional `nextStep` field on the action

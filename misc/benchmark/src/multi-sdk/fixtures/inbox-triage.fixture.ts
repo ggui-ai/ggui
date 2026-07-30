@@ -113,7 +113,7 @@ Requirements:
   },
 
   blueprint: {
-    mechanic: "swipe",
+    mechanic: "live",
     layoutHint: "modal-card-stack",
   },
 

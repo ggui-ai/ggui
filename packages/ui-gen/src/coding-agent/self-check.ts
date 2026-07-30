@@ -72,7 +72,7 @@ export async function runCodingAgentSelfCheck(
   // will not fire the wire at runtime — but `pnpm typecheck` won't flag the
   // absence (a missing call is a missing side effect, not a type error).
   // This rule closes that gap at the deterministic self_check tier.
-  // `agentTools` (catalog declaration, NOT a hook) and `clientCapabilities`
+  // `agentCapabilities.tools` (catalog declaration, NOT a hook) and `clientCapabilities`
   // (vendor-package hooks, not @ggui-ai/wire) are intentionally excluded.
   if (contract) {
     try {

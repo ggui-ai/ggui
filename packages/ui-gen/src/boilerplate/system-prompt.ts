@@ -349,10 +349,10 @@ A \`DataContract\` declares everything a GguiSession exchanges with the outside 
 
 Props arrive via \`ggui_update\` and may be partial on first render. Stream channels start empty and fill over time. Context slots start at their declared default (often \`null\`). **Never assume a field exists before you read it.**
 
-- **Array iteration**: always default to \`[]\` before \`.map\`/\`.filter\`/\`.length\`. Use \`(props.items ?? []).map(...)\` not \`props.items.map(...)\`. Same for stream.history, stream.latest, etc.
+- **Array iteration**: always default to \`[]\` before \`.map\`/\`.filter\`/\`.length\`. Use \`(props.items ?? []).map(...)\` not \`props.items.map(...)\`. Same for stream.all, stream.latest, etc.
 - **Object access**: optional-chain through nested fields. \`props.user?.name ?? 'Anonymous'\` not \`props.user.name\`.
 - **Number ops**: default before arithmetic. \`(props.count ?? 0) + 1\` not \`props.count + 1\`.
-- **Stream latest**: \`useStream\` returns \`{latest: T | undefined, history: T[]}\`. The default \`history\` is \`[]\` so it's safe to map; \`latest\` is undefined until the first frame arrives — guard before reading \`.foo\`.
+- **Stream latest**: \`useStream\` returns \`{latest: T | null, all: T[], isComplete: boolean}\`. The default \`all\` is \`[]\` so it's safe to map; \`latest\` is null until the first frame arrives — guard before reading \`.foo\`.
 - **Stream reconciliation**: when a stream event carries an \`action\` discriminant (e.g. \`create | move | edit | delete\`), the channel is a CRUD feed — your handler MUST branch on EVERY value: append on \`create\`, drop on \`delete\`, replace-by-id on \`move\` / \`edit\`. Merging only the "edit" case silently loses created and deleted items. Reconcile into the SAME state that seeds from \`props\` (e.g. \`useState(() => props.tasks ?? [])\`) so the seed data and the live feed render as one list — and handle an event whose id is not yet present (a \`create\` for an unknown item) by inserting it, not ignoring it.
 - **Loading state**: while data is still absent, render \`<Skeleton>\` placeholders — never a blank screen. \`<Skeleton variant="text" />\` for a text line, \`variant="circle"\` for an avatar slot, default \`rect\` for a block.
 - **Empty state**: when a list or results array is empty, render \`<EmptyState title="…" description="…" />\` — a region that renders nothing when empty looks broken to the user.

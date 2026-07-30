@@ -89,9 +89,9 @@ export type LayoutShape =
 // =============================================================================
 
 export type ToolingShape =
-  | "none"    // contract has no agentCapabilities.tools and no clientCapabilities.libraries
+  | "none"    // contract has no agentCapabilities.tools and no clientCapabilities.gadgets
   | "wired"   // agentCapabilities.tools present (catalog referenced via actionSpec.nextStep / streamSpec.source.tool)
-  | "client"  // clientCapabilities.libraries present (browser-capability hooks the component imports)
+  | "client"  // clientCapabilities.gadgets present (browser-capability hooks the component imports)
   | "both";   // contract exposes both catalogs
 
 // =============================================================================

@@ -171,7 +171,7 @@ function hasGeoCoordsRecursive(node: unknown, depth = 0): boolean {
 
 export interface ActionEntryInfo {
   name: string;
-  tool?: string;
+  nextStep?: string;
   example?: Record<string, unknown>;
   /** Top-level keys in example whose value is scalar (string/number/boolean). */
   scalarKeys: string[];
@@ -299,8 +299,8 @@ export function inferStreamKindFromSchema(
 
 /**
  * Per-tool projection of the contract's `agentCapabilities.tools`
- * catalog. Also reused for `clientCapabilities.libraries` entries
- * (always with empty `requestKeys`) — libraries are pure declaration.
+ * catalog. Also reused for `clientCapabilities.gadgets` entries
+ * (always with empty `requestKeys`) — gadgets are pure declaration.
  */
 export interface AgentToolInfo {
   name: string;
@@ -319,8 +319,8 @@ export interface ContractSignals {
    *  fetch-axis classification. */
   agentTools: AgentToolInfo[];
   /**
-   * Binding names declared in `clientCapabilities.libraries`. The
-   * `requestKeys` field is always empty — libraries are
+   * Binding names declared in `clientCapabilities.gadgets`. The
+   * `requestKeys` field is always empty — gadgets are
    * declaration-only.
    */
   clientCapabilities: AgentToolInfo[];
@@ -405,7 +405,7 @@ export function inspect(contract: ClassifierInput): ContractSignals {
     (contract.actionSpec as Record<string, unknown> | undefined) ?? {};
   const actions: ActionEntryInfo[] = [];
   for (const [name, action] of Object.entries(actionsMap)) {
-    const a = action as { example?: Record<string, unknown>; tool?: string };
+    const a = action as { example?: Record<string, unknown>; nextStep?: string };
     const scalarKeys = scalarKeyCount(a?.example);
     const allKeys = allTopLevelKeys(a?.example);
     const referencedEntities = referencedEntitiesForPayload(
@@ -415,7 +415,7 @@ export function inspect(contract: ClassifierInput): ContractSignals {
     );
     actions.push({
       name,
-      tool: a?.tool,
+      nextStep: a?.nextStep,
       example: a?.example,
       scalarKeys,
       allKeys,

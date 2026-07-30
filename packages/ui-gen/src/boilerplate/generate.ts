@@ -30,7 +30,6 @@ import type {
   ContextSpec,
   DataContract,
   JsonObject,
-  JsonSchema,
   JsonValue,
   StreamSpec,
 } from "@ggui-ai/protocol";
@@ -185,40 +184,30 @@ export function generateBoilerplate(
   appGadgets?: readonly GadgetDescriptor[],
 ): string {
   // ── Props interface from data contract (data only — NO action callbacks) ──
-  // Contract shape: { properties: { fieldName: { schema, required, description } } }
+  // Contract shape (PropsSpec is ALWAYS the wrapper — never flat):
+  // { properties: { fieldName: { schema, required, description } } }
   const propsFields: string[] = [];
-  const propsData = contract?.propsSpec as JsonObject | undefined;
-  // Unwrap: contract.propsSpec may be { properties: { ... } } or flat { field: spec }
-  const propsProperties = (propsData?.properties as JsonObject) ?? propsData ?? {};
-  for (const [key, value] of Object.entries(propsProperties)) {
-    if (typeof value === "object" && value !== null) {
-      const spec = value as JsonObject;
-      const schema = spec.schema as JsonObject | undefined;
-      const required = spec.required !== false;
-      const nullable = schema?.nullable === true;
-      const tsType = schema
-        ? // JsonSchema extends JsonObject, so this is a plain structural
-          // downcast (no `unknown` erasure) of already-shaped contract data.
-          jsonSchemaTypeToTs(schema as JsonSchema)
-        : "unknown";
-      const fullType = nullable ? `${tsType} | null` : tsType;
-      // Build comment: description + default value hint
-      const parts: string[] = [];
-      if (spec.description) parts.push(String(spec.description));
-      if (spec.default !== undefined) parts.push(`(default: ${JSON.stringify(spec.default)})`);
-      const desc = parts.length > 0 ? ` // ${parts.join(' ')}` : "";
-      propsFields.push(`  ${key}${required ? "" : "?"}: ${fullType};${desc}`);
-    } else {
-      propsFields.push(`  ${key}: ${typeof value === "string" ? value : "unknown"};`);
-    }
+  const propsProperties = contract?.propsSpec?.properties ?? {};
+  for (const [key, entry] of Object.entries(propsProperties)) {
+    const required = entry.required !== false;
+    const nullable = entry.schema.nullable === true;
+    const tsType = jsonSchemaTypeToTs(entry.schema);
+    const fullType = nullable ? `${tsType} | null` : tsType;
+    // Build comment: description + default value hint
+    const parts: string[] = [];
+    if (entry.description) parts.push(entry.description);
+    if (entry.default !== undefined) parts.push(`(default: ${JSON.stringify(entry.default)})`);
+    const desc = parts.length > 0 ? ` // ${parts.join(' ')}` : "";
+    propsFields.push(`  ${key}${required ? "" : "?"}: ${fullType};${desc}`);
   }
 
   // ── Actions (useAction hooks — fire-and-forget to agent) ──
-  // Contract shape: { actionSpec: { actionName: { label, description, schema?, example?, tool? } } }
-  // ActionEntry.dispatch: when `kind === 'tool'`, this action routes to an
-  // MCP tool registered on this server (synchronous dispatch). Wire useAction
-  // normally — the platform handles tool dispatch. The tool name is
-  // informational (use it for button labels, icons, copy).
+  // Contract shape: { actionSpec: { actionName: { label, description, schema?, example?, nextStep? } } }
+  // ActionEntry.nextStep: optional hint naming the MCP tool the AGENT
+  // should invoke on its next turn after this action fires. Actions have
+  // exactly one routing target — the agent; there is NO synchronous
+  // server-side dispatch. The name is informational here (use it for
+  // button labels, icons, copy).
   const actionTypeAliases: string[] = [];
   const actionHookCalls: string[] = [];
   const actionReturnFields: string[] = [];
