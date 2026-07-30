@@ -11,7 +11,7 @@
  *      `dispatch<N extends InferActionNames<T>>` rejects names not in
  *      the actionSpec AND data that doesn't match the action's schema.
  *      Same discipline for subscribe. (`callWiredTool` / `useWiredTool`
- *      retired 2026-05-11 alongside the EE+ wire-shape v2 — agentTools
+ *      retired 2026-05-11 alongside the EE+ wire-shape v2 — agentCapabilities.tools
  *      is now a catalog the AGENT invokes, never a component-side hook
  *      surface; there is no `useAgentTool` replacement.)
  *
@@ -121,7 +121,7 @@ typedCfg.subscribe('nowhere', (_d) => {
 });
 
 // ── callWiredTool retired 2026-05-11 ────────────────────────────────────
-// `agentTools` is a catalog the AGENT invokes; the component never calls
+// `agentCapabilities.tools` is a catalog the AGENT invokes; the component never calls
 // these tools directly. The pre-EE+ `useWiredTool` + `callWiredTool`
 // surfaces are RETIRED — no `useAgentTool` replacement was introduced.
 // User gestures fire via `dispatch(name, data)`; if the action declares
@@ -174,7 +174,7 @@ type _WSP1 = Expect<Equal<WireStreamPayload<WeatherContract, 'tick'>, number>>;
 type _WSP2 = Expect<Equal<WireStreamPayload<WeatherContract, 'phantom'>, never>>;
 type _WSP3 = Expect<Equal<WireStreamPayload<import('@ggui-ai/protocol').DataContract, 'anything'>, unknown>>;
 
-// WireToolRequest / WireToolResponse retired 2026-05-11. agentTools is
+// WireToolRequest / WireToolResponse retired 2026-05-11. agentCapabilities.tools is
 // a catalog, not a component hook surface — there is no payload type
 // for component invocation because the component never invokes.
 

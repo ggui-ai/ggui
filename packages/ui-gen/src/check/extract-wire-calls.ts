@@ -212,8 +212,8 @@ export function extractWireImports(code: string): ReadonlySet<string> {
  * slots. Contract-key typing matches the `@ggui-ai/protocol` canonical
  * flat-map shape.
  *
- * `agentTools` and `clientCapabilities` are NOT enumerated:
- *   - `agentTools` is a catalog the AGENT invokes (no component hook).
+ * `agentCapabilities.tools` and `clientCapabilities` are NOT enumerated:
+ *   - `agentCapabilities.tools` is a catalog the AGENT invokes (no component hook).
  *     Cross-references surface via `actionSpec[*].nextStep` and
  *     `streamSpec[*].source.tool`, already covered by `action` / `stream`.
  *   - `clientCapabilities` are declarations of browser-capability hooks

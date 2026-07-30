@@ -475,8 +475,8 @@ export async function runRenderCheck(
       }
 
       // ── Check 3: Agent-tool wiring — RETIRED ──────────────────────────
-      // `useWiredTool` is retired. The contract's `agentTools` is a
-      // catalog of tools the AGENT invokes — there is no component hook
+      // `useWiredTool` is retired. The contract's `agentCapabilities.tools`
+      // is a catalog of tools the AGENT invokes — there is no component hook
       // surface. Cross-refs from actionSpec[*].nextStep /
       // streamSpec[*].source.tool ride through checks 2 (action wiring)
       // and 6 (stream re-render); the catalog itself has no
@@ -965,8 +965,8 @@ async function checkActionWiring(input: CheckActionInput): Promise<RenderCheckIs
 }
 
 // `checkWiredToolWiring` is retired — `useWiredTool` was removed; the
-// contract's `agentTools` is a catalog the AGENT invokes (no component
-// hook to verify). Cross-refs from `actionSpec[*].nextStep` and
+// contract's `agentCapabilities.tools` is a catalog the AGENT invokes
+// (no component hook to verify). Cross-refs from `actionSpec[*].nextStep` and
 // `streamSpec[*].source.tool` ride through the action / stream check
 // arms in `runRenderCheck` instead.
 

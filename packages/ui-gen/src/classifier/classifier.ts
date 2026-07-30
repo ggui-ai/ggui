@@ -23,7 +23,7 @@ export interface ClassifyInput {
   contract: ClassifierInput;
   prompt?: string;
   blueprint?: {
-    mechanic?: string;
+    mechanic?: import("@ggui-ai/protocol").ScreenMechanic;
     layoutHint?: string;
   };
 }
@@ -39,7 +39,7 @@ export function classifyAxes(input: ClassifyInput): Classification {
   const fetch = inferFetch(s);
   const render = inferRender(s, prompt, blueprint);
   const layout = inferLayout(s, prompt, blueprint);
-  const writeTrigger = inferWriteTrigger(s, prompt, blueprint);
+  const writeTrigger = inferWriteTrigger(s, prompt);
   const tooling = inferTooling(s);
 
   const vector: AxisVector = {

@@ -4,7 +4,7 @@ import type { AxisSource, LayoutShape } from "./axes";
 import type { ContractSignals } from "./inspect";
 
 interface BlueprintHint {
-  mechanic?: string;
+  mechanic?: import("@ggui-ai/protocol").ScreenMechanic;
   layoutHint?: string;
 }
 

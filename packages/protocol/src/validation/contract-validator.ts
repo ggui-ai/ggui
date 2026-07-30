@@ -684,7 +684,7 @@ export function validateContractStructure(contract: DataContract): ValidationRes
 
   // Schema-compat invariants: action.schema ⊆ tool.inputSchema and
   // channel.schema ⊇ tool.outputSchema, validated against the
-  // contract's OWN agentTools catalog. Distinct scope from the
+  // contract's OWN agentCapabilities.tools catalog. Distinct scope from the
   // server-level F4 check (which compares against the live tool
   // registry's zod schemas).
   for (const violation of checkSchemaCompat(contract)) {
