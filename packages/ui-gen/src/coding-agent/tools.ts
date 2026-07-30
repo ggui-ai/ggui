@@ -500,6 +500,13 @@ export async function executeTool(
           changes,
           currentFile.split('\n'),
         );
+        if (contextAddendum.length > 0) {
+          // Tool RESULT texts never reach bench logs — this line is the
+          // measurable fire signal (same rationale as tag-balance-diag).
+          console.log(
+            `[coding-agent] apply_changes: RANGE_CONTEXT_DIAG | line=${errLine} | ${JSON.stringify(contextAddendum.slice(0, 80))}`,
+          );
+        }
         return {
           result:
             `${preflightPrefix}PATCH_APPLIED_BROKEN: patch applied but file has a syntax error. Workspace updated; no git commit yet.\n` +
