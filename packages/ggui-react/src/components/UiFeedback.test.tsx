@@ -111,3 +111,54 @@ describe('UiFeedback', () => {
     expect(onUiFeedback).toHaveBeenCalledTimes(1);
   });
 });
+
+// ── ggui#244 — renderer-threaded affordance (2026-07-30) ──────────────────
+//
+// Renderer-only hosts (a platform portal whose whole surface IS
+// GguiSessionRenderer) own no chrome layer to mount the standalone
+// component into, so the renderer accepts the sink directly. The
+// zero-config contract must survive the threading: no callback ⇒ the
+// renderer gains NO chrome.
+
+import { GguiSessionRenderer } from './DynamicComponent';
+
+describe('GguiSessionRenderer × UiFeedback (#244)', () => {
+  const RENDER = {
+    componentCode:
+      'export default function C() { return React.createElement("p", null, "hi"); }',
+  };
+
+  it('renders no feedback affordance when no callback is wired', () => {
+    const { container } = render(<GguiSessionRenderer render={RENDER} />);
+    expect(container.querySelector('[data-ggui-ui-feedback]')).toBeNull();
+  });
+
+  it('mounts the affordance when a callback is wired', () => {
+    const { container } = render(
+      <GguiSessionRenderer render={RENDER} onUiFeedback={() => {}} />,
+    );
+    expect(container.querySelector('[data-ggui-ui-feedback]')).not.toBeNull();
+  });
+
+  it('stamps sessionId + toolName from the renderer props onto the payload', async () => {
+    const onUiFeedback = feedbackSink();
+    const { container } = render(
+      <GguiSessionRenderer
+        render={RENDER}
+        onUiFeedback={onUiFeedback}
+        feedbackSessionId="sess_42"
+        feedbackToolName="ggui_render"
+      />,
+    );
+    const love = container.querySelector<HTMLButtonElement>(
+      '[data-ggui-ui-feedback] button',
+    );
+    expect(love).not.toBeNull();
+    love!.click();
+    expect(onUiFeedback).toHaveBeenCalledTimes(1);
+    expect(onUiFeedback.mock.calls[0]?.[0]).toMatchObject({
+      sessionId: 'sess_42',
+      toolName: 'ggui_render',
+    });
+  });
+});

@@ -23,6 +23,7 @@ import {
 import { ReactComponentRenderer } from './ReactComponentRenderer';
 import type { ReactComponentRendererProps } from './ReactComponentRenderer';
 import { ProvisionalRenderer } from './ProvisionalRenderer';
+import { UiFeedback, type UiFeedbackPayload } from './UiFeedback';
 
 // ---------------------------------------------------------------------------
 // DynamicComponent — alias for ReactComponentRenderer
@@ -76,6 +77,25 @@ export interface GguiSessionRendererProps {
   cssOverrides?: string;
   /** Theme ID from the design system registry (e.g. 'ggui', 'premium-zen') */
   themeId?: string;
+  /**
+   * End-user feedback sink (ggui#244). ABSENT = nothing renders — a host
+   * that doesn't collect feedback never shows a dead affordance, and
+   * this component gains no chrome. When present, the `<UiFeedback>`
+   * affordance mounts BELOW the rendered component and every payload is
+   * stamped with `sessionId` / `toolName` when those are supplied.
+   *
+   * Threaded here (2026-07-30) because renderer-only hosts — e.g. a
+   * platform portal whose surface IS `<GguiSessionRenderer>` — own no
+   * separate chrome layer to mount the standalone component into.
+   * Feedback stays host-app chrome with ZERO wire surface: the agent
+   * cannot observe it (Data vs Behavior), which is why it leaves
+   * through this callback rather than a contract field.
+   */
+  onUiFeedback?: (feedback: UiFeedbackPayload) => void;
+  /** GguiSession id stamped onto emitted feedback payloads. */
+  feedbackSessionId?: string;
+  /** Producing tool name stamped onto emitted feedback payloads. */
+  feedbackToolName?: string;
 }
 
 export function GguiSessionRenderer({
@@ -84,6 +104,9 @@ export function GguiSessionRenderer({
   onError,
   cssOverrides,
   themeId,
+  onUiFeedback,
+  feedbackSessionId,
+  feedbackToolName,
 }: GguiSessionRendererProps): React.JSX.Element {
   // Empty componentCode → the render is still being generated.
   // Route through `<ProvisionalRenderer>` so the reserved
@@ -110,6 +133,17 @@ export function GguiSessionRenderer({
         onError={onError}
         fallback={fallback}
       />
+      {onUiFeedback ? (
+        <UiFeedback
+          onUiFeedback={onUiFeedback}
+          {...(feedbackSessionId !== undefined
+            ? { sessionId: feedbackSessionId }
+            : {})}
+          {...(feedbackToolName !== undefined
+            ? { toolName: feedbackToolName }
+            : {})}
+        />
+      ) : null}
     </EnsureWireContext>
   );
 }
