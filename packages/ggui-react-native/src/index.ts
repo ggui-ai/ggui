@@ -157,6 +157,16 @@ export type { ErrorBoundaryProps } from './components/ErrorBoundary';
 export { SelfRepairBoundary } from './components/SelfRepairBoundary';
 export type { SelfRepairBoundaryProps } from './components/SelfRepairBoundary';
 
+// UI Feedback affordance — host-side render-shell chrome. Hidden
+// entirely unless the host wires `onUiFeedback`; the payload leaves
+// through that callback only (never the agent ↔ UI wire).
+export { UiFeedback } from './components/UiFeedback';
+export type {
+  UiFeedbackProps,
+  UiFeedbackPayload,
+  UiFeedbackVerdict,
+} from './components/UiFeedback';
+
 // Re-export self-repair types from internal
 export type {
   ComponentErrorReport,

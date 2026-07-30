@@ -96,6 +96,7 @@ interface DeltaTwin {
 
 const DOCUMENTED_DELTA_TWINS: readonly DeltaTwin[] = [
   { rel: 'components/GguiProvider.tsx' },
+  { rel: 'components/UiFeedback.tsx' },
   { rel: 'hooks/useWebSocket.ts' },
   { rel: 'websocket/EventBuffer.ts' },
   { rel: 'websocket/EventBuffer.test.ts' },

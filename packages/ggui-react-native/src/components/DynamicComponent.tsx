@@ -22,6 +22,7 @@ import type { GguiSession } from '@ggui-ai/protocol';
 import { isMcpAppsGguiSession } from '@ggui-ai/protocol/integrations/mcp-apps';
 import { WebViewRenderer, type BridgeEvent } from './WebViewRenderer';
 import { ProvisionalRenderer } from './ProvisionalRenderer';
+import { UiFeedback, type UiFeedbackPayload } from './UiFeedback';
 
 /**
  * Component descriptor from the server — a serializable tree
@@ -229,6 +230,26 @@ export interface GguiSessionRendererProps {
   fallback?: ReactNode;
   onError?: (error: Error) => void;
   onEvent?: (event: BridgeEvent) => void;
+  /**
+   * End-user feedback sink (ggui#244). ABSENT = nothing renders — a host
+   * that doesn't collect feedback never shows a dead affordance, and
+   * this component gains no chrome. When present, the `<UiFeedback>`
+   * affordance mounts BELOW the rendered component (descriptor and
+   * WebView strategies alike) and every payload is stamped with
+   * `sessionId` / `toolName` when those are supplied.
+   *
+   * Threaded here (2026-07-30) because renderer-only hosts — an app
+   * screen whose whole surface IS `<GguiSessionRenderer>` — own no
+   * separate chrome layer to mount the standalone component into.
+   * Feedback stays host-app chrome with ZERO wire surface: the agent
+   * cannot observe it (Data vs Behavior), which is why it leaves
+   * through this callback rather than a contract field.
+   */
+  onUiFeedback?: (feedback: UiFeedbackPayload) => void;
+  /** GguiSession id stamped onto emitted feedback payloads. */
+  feedbackSessionId?: string;
+  /** Producing tool name stamped onto emitted feedback payloads. */
+  feedbackToolName?: string;
 }
 
 export function GguiSessionRenderer({
@@ -236,7 +257,24 @@ export function GguiSessionRenderer({
   fallback,
   onError,
   onEvent,
+  onUiFeedback,
+  feedbackSessionId,
+  feedbackToolName,
 }: GguiSessionRendererProps): React.JSX.Element {
+  // Mounted below the rendered component on both render strategies;
+  // null (no chrome at all) when the host wired no sink.
+  const feedbackChrome = onUiFeedback ? (
+    <UiFeedback
+      onUiFeedback={onUiFeedback}
+      {...(feedbackSessionId !== undefined
+        ? { sessionId: feedbackSessionId }
+        : {})}
+      {...(feedbackToolName !== undefined
+        ? { toolName: feedbackToolName }
+        : {})}
+    />
+  ) : null;
+
   // MCP Apps variant belongs to <McpAppIframe>, not this component.
   if (isMcpAppsGguiSession(render as unknown)) {
     const err = new Error(
@@ -262,12 +300,15 @@ export function GguiSessionRenderer({
   // Prefer descriptor-based rendering (native)
   if (componentItem.descriptor) {
     return (
-      <DynamicComponent
-        descriptor={componentItem.descriptor}
-        fallback={fallback}
-        onError={onError}
-        onEvent={onEvent}
-      />
+      <>
+        <DynamicComponent
+          descriptor={componentItem.descriptor}
+          fallback={fallback}
+          onError={onError}
+          onEvent={onEvent}
+        />
+        {feedbackChrome}
+      </>
     );
   }
 
@@ -284,13 +325,16 @@ export function GguiSessionRenderer({
 
   // Fall back to WebView-based rendering (compiled code)
   return (
-    <DynamicComponent
-      code={componentItem.componentCode}
-      props={componentItem.props}
-      fallback={fallback}
-      onError={onError}
-      onEvent={onEvent}
-    />
+    <>
+      <DynamicComponent
+        code={componentItem.componentCode}
+        props={componentItem.props}
+        fallback={fallback}
+        onError={onError}
+        onEvent={onEvent}
+      />
+      {feedbackChrome}
+    </>
   );
 }
 
