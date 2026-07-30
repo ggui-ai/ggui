@@ -551,6 +551,50 @@ describe('<McpAppIframe> — lifecycle envelope integration', () => {
 });
 
 // =============================================================================
+// <McpAppIframe> — ggui:observe envelope integration. The
+// ObservabilityEvent union is extensibly closed: arms this host's
+// typings postdate MUST forward opaquely through `onObserve` (no
+// narrowing, no throw). Pinned with the `ui-feedback` arm the
+// iframe-runtime's in-iframe feedback affordance emits (ggui#244).
+// =============================================================================
+
+describe('<McpAppIframe> — observe envelope integration', () => {
+  it('forwards a ui-feedback observe arm opaquely through onObserve', async () => {
+    const onObserve = vi.fn();
+    let tree!: ReactTestRenderer;
+    act(() => {
+      tree = create(
+        <McpAppIframe resource={makeResource()} onObserve={onObserve} />,
+      );
+    });
+    const event = {
+      kind: 'ui-feedback',
+      verdict: 'love',
+      sessionId: 'session-test',
+    };
+    await simulateFromWebView(tree, { type: 'ggui:observe', event });
+    expect(onObserve).toHaveBeenCalledTimes(1);
+    expect(onObserve.mock.calls[0]?.[0]).toEqual(event);
+    act(() => tree.unmount());
+  });
+
+  it('forwards an entirely unknown observe arm without throwing', async () => {
+    const onObserve = vi.fn();
+    let tree!: ReactTestRenderer;
+    act(() => {
+      tree = create(
+        <McpAppIframe resource={makeResource()} onObserve={onObserve} />,
+      );
+    });
+    const event = { kind: 'not-yet-invented', anything: { nested: true } };
+    await simulateFromWebView(tree, { type: 'ggui:observe', event });
+    expect(onObserve).toHaveBeenCalledTimes(1);
+    expect(onObserve.mock.calls[0]?.[0]).toEqual(event);
+    act(() => tree.unmount());
+  });
+});
+
+// =============================================================================
 // <McpAppIframe> — spec-canonical tool-result delivery integration.
 //
 // Verifies the host fires a `ui/notifications/tool-result` JSON-RPC

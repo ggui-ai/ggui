@@ -116,6 +116,7 @@ import {
   postObservabilityToParent,
   type ObservabilityEmitter,
 } from './observability.js';
+import { mountUiFeedbackChrome } from './ui-feedback-chrome.js';
 import {
   makeLifecycleEvent,
   postLifecycleToParent,
@@ -838,6 +839,20 @@ export async function bootSequence(opts: BootSequenceOptions): Promise<BootSeque
           ...(onObserve !== undefined ? { onObserve } : {}),
         })
       : null;
+
+  // In-iframe UI-feedback affordance (ggui#244) — mounted adjacent to
+  // the session root, gated inside the helper on `window.parent !==
+  // window` (top-level `/r/<shortCode>` tabs have no `ggui:observe`
+  // egress, so they get NO affordance). Interaction emits a
+  // `ui-feedback` ObservabilityEvent through the boot path's emitter;
+  // when no emitter was injected the postMessage-to-parent default
+  // still gives the mounted affordance a live sink (the gate already
+  // proved a parent exists). Fire-and-forget: chrome never blocks or
+  // fails the boot.
+  void mountUiFeedbackChrome(doc, {
+    emit: onObserve ?? postObservabilityToParent,
+    sessionId: meta.sessionId,
+  });
 
   setStatus(refs, `Connecting to ${meta.sessionId}…`, 'connecting');
 

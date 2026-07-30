@@ -15,6 +15,24 @@
  * it from the wire, so it is not protocol data), which is why the
  * payload leaves through a host callback rather than a contract spec.
  *
+ * Two mount surfaces exist for this affordance (ggui#244):
+ *
+ *   1. THIS component — chrome in the host's own tree, next to a
+ *      render surface the host controls; the payload leaves through
+ *      `onUiFeedback`.
+ *   2. The in-iframe twin the `@ggui-ai/iframe-runtime` boot path
+ *      mounts inside a served render iframe whenever a parent window
+ *      exists (`window.parent !== window` — top-level tabs get
+ *      neither surface); its payload leaves as a `ui-feedback`
+ *      observability event on the `ggui:observe` postMessage seam,
+ *      surfaced to hosts via `<McpAppIframe onObserve>`.
+ *
+ * Hosts wire exactly ONE surface — either pass `onUiFeedback` here
+ * and ignore the `ui-feedback` observe arm, or handle the observe arm
+ * and omit `onUiFeedback`. Wiring both shows the user two affordances
+ * for one render. The render-nothing-without-a-sink default makes the
+ * choice safe: omitting `onUiFeedback` fully disables this surface.
+ *
  * Styling follows the package idiom: inline styles with `--ggui-*`
  * CSS-variable hooks + neutral fallbacks (same pattern as
  * AgentBrowsePanel), so host themes restyle it via the variable layer.

@@ -159,7 +159,10 @@ export type { SelfRepairBoundaryProps } from './components/SelfRepairBoundary';
 
 // UI Feedback affordance — host-side render-shell chrome. Hidden
 // entirely unless the host wires `onUiFeedback`; the payload leaves
-// through that callback only (never the agent ↔ UI wire).
+// through that callback only (never the agent ↔ UI wire). An
+// in-iframe twin lives in `@ggui-ai/iframe-runtime` (emitting a
+// `ui-feedback` event on the `ggui:observe` seam) — hosts wire
+// exactly ONE of the two surfaces, never both.
 export { UiFeedback } from './components/UiFeedback';
 export type {
   UiFeedbackProps,

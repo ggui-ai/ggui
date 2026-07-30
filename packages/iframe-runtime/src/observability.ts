@@ -41,6 +41,7 @@ export type ObservabilityEvent =
   | ChannelTransportPickedEvent
   | ChannelTransportFallbackEvent
   | ChannelTransportResubscribedEvent
+  | UiFeedbackEvent
   | UnknownObservabilityEvent;
 
 /**
@@ -165,6 +166,45 @@ export interface ChannelTransportResubscribedEvent {
   readonly kind: 'channel-transport-resubscribed';
   readonly sessionId: string;
   readonly channelName: string;
+}
+
+/**
+ * Fired when the end user submits the runtime's in-iframe UI-feedback
+ * affordance ("did this generated UI work for you?"). Field semantics
+ * mirror `UiFeedbackPayload` in `@ggui-ai/react` / `@ggui-ai/react-native`
+ * (the host-chrome twin of this affordance):
+ *
+ *   - `verdict` — `'love'` / `'dislike'`, or `'other'` for the
+ *     free-text flow.
+ *   - `comment` — present only for `verdict: 'other'` with a non-empty
+ *     trimmed comment.
+ *   - `sessionId` / `toolName` — present exactly when the runtime knew
+ *     them at mount time.
+ *
+ * Observability-only — feedback is host-app chrome with ZERO wire
+ * surface: the agent cannot observe it (it is neither an action nor
+ * context), so it rides this renderer ↔ host seam instead of the
+ * agent ↔ UI contract.
+ *
+ * The affordance mounts only when the runtime document has a parent
+ * window (`window.parent !== window`) — a top-level tab has no
+ * `ggui:observe` egress, and a dead affordance must never render.
+ * Hosts that also own DOM chrome around the iframe MUST wire exactly
+ * ONE feedback surface: either their own chrome (the `onUiFeedback`
+ * host-callback component) or this event arm — never both, or the
+ * user sees two affordances for one render.
+ *
+ * @public
+ */
+export interface UiFeedbackEvent {
+  readonly kind: 'ui-feedback';
+  readonly verdict: 'love' | 'dislike' | 'other';
+  /** Trimmed free-text comment; only on `verdict: 'other'`, never empty. */
+  readonly comment?: string;
+  /** GguiSession id of the render the feedback is about. */
+  readonly sessionId?: string;
+  /** Tool that produced the render (e.g. `ggui_render`). */
+  readonly toolName?: string;
 }
 
 /**
