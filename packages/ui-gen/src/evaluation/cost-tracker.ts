@@ -11,8 +11,10 @@ const PRICE_PER_1K_TOKENS: Record<string, { input: number; output: number }> = {
   // Gemini 3.5 Flash-Lite — $0.30/$2.50 per MTok (ai.google.dev/gemini-api/docs/pricing).
   'gemini-3.5-flash-lite': { input: 0.0003, output: 0.0025 },
   'gpt-5.4-mini': { input: 0.0003, output: 0.0012 },
-  // $1.00 in / $6.00 out per MTok (OpenAI list, 2026-07) → per-1K.
-  'gpt-5.6-luna': { input: 0.001, output: 0.006 },
+  // $0.20 in / $1.20 out per MTok → per-1K. OpenAI cut Luna 80% and
+  // Terra 20% on 2026-07-30 (Sol unchanged); prior Luna list was
+  // $1.00/$6.00.
+  'gpt-5.6-luna': { input: 0.0002, output: 0.0012 },
 };
 
 export class CostTracker {
