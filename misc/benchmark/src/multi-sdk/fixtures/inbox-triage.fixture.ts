@@ -27,7 +27,7 @@ Each swipe removes the current card and reveals the next. Infinite scroll: when 
 
 Requirements:
 - Initial emails come from props.
-- Visual feedback during drag (card tilts, colored indicator showing disposition).
+- Visual feedback while swiping (card tilts, colored indicator showing disposition).
 - Use design system CSS variables.`,
 
   contract: {
@@ -133,7 +133,7 @@ Requirements:
       render: "blueprint",
       state: "contract",
       writes: "contract",
-      writeTrigger: "blueprint",
+      writeTrigger: "prompt",
       realtime: "contract",
       fetch: "contract",
       layout: "blueprint",
@@ -142,7 +142,9 @@ Requirements:
   },
 
   whyNotReducible: `
-    - writeTrigger=swipe: first fixture using swipe. No prior fixture exercises
+    - writeTrigger=swipe: first fixture using swipe. Sourced from the prompt text
+      (the blueprint mechanic hint no longer feeds trigger inference — draft-2026-06-12
+      retired drag/swipe from ScreenMechanic). No prior fixture exercises
       gesture-based write dispatch where the gesture direction selects one of N actions.
     - state=ui-affordance + writes=per-item: unusual combination. Current card
       index is ui-affordance state; dispositions are per-item actions. Not merge

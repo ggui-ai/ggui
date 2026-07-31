@@ -131,7 +131,7 @@ Requirements:
       // unscheduleEvent payload {eventId, taskId} references two entity
       // collections (events + tasks) — contract alone identifies compose.
       writes: "contract",
-      writeTrigger: "blueprint",
+      writeTrigger: "prompt",
       realtime: "contract",
       fetch: "contract",
       layout: "blueprint",
@@ -145,8 +145,9 @@ Requirements:
       one ActionEntry but the payload pulls from two entity collections (tasks AND
       events).
     - writeTrigger=drag: first drag-shaped fixture. kanban implicitly uses drag in
-      the prompt but the contract gives no gesture signal; this fixture uses the
-      blueprint field for the first time.
+      the prompt but the contract gives no gesture signal; this fixture's prompt
+      is the unambiguous drag signal (the blueprint mechanic hint no longer feeds
+      trigger inference — draft-2026-06-12 retired drag/swipe from ScreenMechanic).
     - render/layout=master-detail: no prior fixture splits into two panes.
     - state=merge without realtime: stock-ticker has merge via streams, kanban has
       merge via actions. plan-my-week has merge via both action types without any
