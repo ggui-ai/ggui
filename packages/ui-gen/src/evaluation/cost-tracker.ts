@@ -4,18 +4,44 @@
 // Records LLM token usage across all calls in a generation pipeline
 // and enforces an optional budget ceiling.
 
-const PRICE_PER_1K_TOKENS: Record<string, { input: number; output: number }> = {
-  'claude-sonnet-4-6': { input: 0.003, output: 0.015 },
-  'claude-haiku-4-5-20251001': { input: 0.0008, output: 0.004 },
-  'gemini-3-flash-preview': { input: 0.0001, output: 0.0004 },
-  // Gemini 3.5 Flash-Lite — $0.30/$2.50 per MTok (ai.google.dev/gemini-api/docs/pricing).
-  'gemini-3.5-flash-lite': { input: 0.0003, output: 0.0025 },
-  'gpt-5.4-mini': { input: 0.0003, output: 0.0012 },
-  // $0.20 in / $1.20 out per MTok → per-1K. OpenAI cut Luna 80% and
-  // Terra 20% on 2026-07-30 (Sol unchanged); prior Luna list was
-  // $1.00/$6.00.
-  'gpt-5.6-luna': { input: 0.0002, output: 0.0012 },
-};
+import { MODEL_REGISTRY, type ModelId } from '@ggui-ai/protocol';
+
+/**
+ * Resolve a bare wire model id (what the generation pipeline reports —
+ * `gpt-5.6-luna`, `claude-haiku-4-5-20251001`) to a LiteLLM-keyed
+ * {@link MODEL_REGISTRY} entry (`openai/gpt-5.6-luna`,
+ * `anthropic/claude-haiku-4-5`).
+ *
+ * This table used to hand-maintain its own per-1K prices, and drifted:
+ * on 2026-07-31 four of its six rows were wrong (Haiku 4.5 20% low,
+ * gemini-3-flash-preview 5-7x low, gpt-5.4-mini ~3x low, Luna 5x high
+ * after OpenAI's cut). Deriving from the registry — which the pod's
+ * pricing test now pins against the vendored LiteLLM snapshot — means
+ * one place to update and one place that can be wrong.
+ *
+ * Resolution order mirrors the benchmark harness's
+ * `resolveJudgeCostModelId`: exact key, unique `/<model>` suffix, then
+ * the same suffix match with a trailing `-YYYYMMDD` date pin stripped.
+ */
+function resolveRegistryId(model: string): ModelId | null {
+  const keys = Object.keys(MODEL_REGISTRY) as ModelId[];
+  if ((keys as string[]).includes(model)) return model as ModelId;
+  const bySuffix = keys.find((id) => id.endsWith(`/${model}`));
+  if (bySuffix) return bySuffix;
+  const undated = model.replace(/-\d{8}$/, '');
+  return keys.find((id) => id.endsWith(`/${undated}`)) ?? null;
+}
+
+/** Fallback when a model has no registry entry — Sonnet-class rates. */
+const FALLBACK_PER_1K = { input: 0.003, output: 0.015 };
+
+/** Per-1K input/output USD for a bare wire model id. */
+export function pricePer1k(model: string): { input: number; output: number } {
+  const id = resolveRegistryId(model);
+  if (id === null) return FALLBACK_PER_1K;
+  const { costs } = MODEL_REGISTRY[id];
+  return { input: costs.inputPer1M / 1000, output: costs.outputPer1M / 1000 };
+}
 
 export class CostTracker {
   private totalCost = 0;
@@ -23,7 +49,7 @@ export class CostTracker {
   constructor(private maxBudget: number | null) {}
 
   record(model: string, inputTokens: number, outputTokens: number): number {
-    const prices = PRICE_PER_1K_TOKENS[model] ?? { input: 0.003, output: 0.015 };
+    const prices = pricePer1k(model);
     const cost = (inputTokens / 1000) * prices.input + (outputTokens / 1000) * prices.output;
     this.totalCost += cost;
     return cost;
