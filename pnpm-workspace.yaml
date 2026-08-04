@@ -99,6 +99,9 @@ overrides:
   # Same invariant, NATIVE flavor — dual sharp = libvips soname collision
   # under hoisting; 0.35.x also satisfies GHSA-f88m-g3jw-g9cj.
   sharp: 0.35.3
+  # Same invariant — 24.42-vs-24.43 split: 24.43.1 narrowed a waitUntil
+  # union and ui-gen's visual evaluator stopped compiling in CI only.
+  puppeteer-core: 24.42.0
   "brace-expansion@>=5": ^5.0.7
   "fast-uri@<3.1.2": ^3.1.2
   "fast-xml-builder@<1.1.7": ^1.1.7
