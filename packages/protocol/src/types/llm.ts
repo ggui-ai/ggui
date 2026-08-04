@@ -25,7 +25,7 @@
  * `LLMProvider` (capital)) were deleted in the slice #43 close-out —
  * routing went through `parseAnyLlmRoute` + typed dispatch.
  *
- * Pricing last verified: 2026-07-31 (all three providers re-checked
+ * Pricing last verified: 2026-08-04 (all three providers re-checked
  * against the vendored LiteLLM snapshot + vendor announcements).
  * Sources:
  *   https://docs.anthropic.com/en/docs/about-claude/pricing
@@ -283,9 +283,10 @@ export const MODEL_REGISTRY: Record<ModelId, ModelConfig> = {
 
   // ── OpenAI ────────────────────────────────────────────────────────
   // GPT-5.6 family (2026-07). OpenAI cut Luna 80% and Terra 20% on
-  // 2026-07-30; Sol was left unchanged. Those two entries are AHEAD of
-  // the vendored LiteLLM snapshot, which still carries the pre-cut
-  // list — see PENDING_UPSTREAM in the pod's pricing-tables test.
+  // 2026-07-30; Sol was left unchanged. The 2026-08-04 re-vendor
+  // confirmed upstream LiteLLM has ingested both cuts, so these costs
+  // now agree with the vendored snapshot (no PENDING_UPSTREAM
+  // exemption needed).
   "openai/gpt-5.6-sol": {
     id: "openai/gpt-5.6-sol",
     provider: "openai",
