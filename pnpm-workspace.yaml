@@ -66,7 +66,15 @@ packages:
 # + ecosystem-wide bumps so the OSS publish wave's transitive graph is
 # unified and audit-clean.
 overrides:
-  "@types/react": ^19.0.0
+  # React floors are EXACT-SAME here and in the root pnpm-workspace.yaml
+  # on purpose — the two workspaces install over overlapping directories
+  # (hoisted), and a split between the trees makes tsc see two
+  # @types/react copies → "ReactNode is not assignable to ReactNode".
+  react: ^19.2.8
+  react-dom: ^19.2.8
+  "@types/react": ^19.2.18
+  "@types/react-dom": ^19.2.4
+  "zod@>=4": ^4.4.3
   "lodash@<4.18.0": ^4.18.1
   "picomatch@<2.3.2": ^2.3.2
   "picomatch@>=4.0.0 <4.0.4": ^4.0.4
@@ -92,7 +100,9 @@ overrides:
   handlebars: ^4.7.9
   shell-quote: ^1.9.0
   dompurify: ^3.4.6
-  nodemailer: ^8.0.8
+  # nodemailer override removed 2026-08-04 (lockstep with root): sole
+  # consumer is mcp-server's direct dep, bumped to ^9.0.1 — no patched
+  # 8.x exists for GHSA-p6gq-j5cr-w38f.
   undici: ^7.28.0
   "fast-xml-parser@>=4 <5": ^4.5.5
   "fast-xml-parser@>=5": ^5.8.0
@@ -126,6 +136,7 @@ confirmModulesPurge: false
 # Allowlist for native + post-install build scripts (matches pnpm 9
 # default-run behavior).
 allowBuilds:
+  "@google/genai": false # ships prebuilt dist; its `prepare` script file is not in the published tarball (lockstep with root)
   better-sqlite3: true # native SQLite bindings
   esbuild: true # native bundler binary
   onnxruntime-node: true # native ML runtime bindings
