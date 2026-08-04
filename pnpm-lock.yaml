@@ -24,6 +24,7 @@ overrides:
   uuid@<14.0.0: ^14.0.0
   '@modelcontextprotocol/sdk': 1.30.0
   '@google/genai@>=2': 2.15.0
+  react-native-webview: 13.16.1
   brace-expansion@>=5: ^5.0.7
   fast-uri@<3.1.2: ^3.1.2
   fast-xml-builder@<1.1.7: ^1.1.7
@@ -769,7 +770,7 @@ importers:
         specifier: 0.81.5
         version: 0.81.5(@babel/core@7.29.0)(@types/react@19.2.18)(react@19.2.8)
       react-native-webview:
-        specifier: ^13.16.0
+        specifier: 13.16.1
         version: 13.16.1(react-native@0.81.5(@babel/core@7.29.0)(@types/react@19.2.18)(react@19.2.8))(react@19.2.8)
       react-test-renderer:
         specifier: 19.0.0
