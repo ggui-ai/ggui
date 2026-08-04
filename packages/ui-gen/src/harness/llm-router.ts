@@ -876,7 +876,7 @@ export class OpenAIAgent extends LLMAgent {
  */
 function interactionText(interaction: Interactions.Interaction): string {
   let text = '';
-  for (const step of interaction.steps) {
+  for (const step of interaction.steps ?? []) {
     if (step.type === 'model_output') {
       for (const content of step.content ?? []) {
         if (content.type === 'text') {
@@ -892,7 +892,7 @@ function interactionText(interaction: Interactions.Interaction): string {
 function functionCallSteps(
   interaction: Interactions.Interaction,
 ): Interactions.FunctionCallStep[] {
-  return interaction.steps.filter(
+  return (interaction.steps ?? []).filter(
     (s): s is Interactions.FunctionCallStep => s.type === 'function_call',
   );
 }
