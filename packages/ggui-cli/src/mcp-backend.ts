@@ -553,9 +553,12 @@ export function buildMcpServerBackend(opts: BuildMcpServerBackendOptions): Serve
   console.warn(`[ggui:embedding] local ${embedding.id} (cache: ${embeddingCacheDir})`);
   embedding.embed("warmup").catch((err: unknown) => {
     const reason = err instanceof Error ? err.message : String(err);
+    // No provider swap happens here — the local provider stays bound and
+    // every embed() keeps failing, which search handlers absorb per-call
+    // (semantic branch degrades to zero hits; manifest search unaffected).
     // eslint-disable-next-line no-console -- one-shot boot signal; local model unavailable
     console.warn(
-      `[ggui:embedding] MockEmbeddingProvider fallback — local model unavailable: ${reason}`
+      `[ggui:embedding] semantic search degraded — local model unavailable (manifest/lexical search still active): ${reason}`
     );
   });
   // BYOK provider-key store — same `~/.ggui/credentials.json` that

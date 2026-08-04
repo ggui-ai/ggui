@@ -190,7 +190,19 @@ async function searchSemantic(
   query: string,
   limit: number,
 ): Promise<MergedHit[]> {
-  const vector = await deps.embedding.embed(query);
+  // An unavailable embedding provider (e.g. the local model failed its
+  // native load) must degrade to "no semantic hits", never fail the
+  // whole merged search — the manifest branch is embedding-independent
+  // by contract and its hits must survive. This branch races the
+  // manifest branch in a Promise.all, so a rejection here would
+  // otherwise discard the manifest's correct results (bit us 2026-08-04
+  // when a dual-sharp libvips collision broke the local embedder in CI).
+  let vector: number[];
+  try {
+    vector = await deps.embedding.embed(query);
+  } catch {
+    return [];
+  }
   const raw = await deps.vectors.query(scope, vector, limit);
   const hits: MergedHit[] = [];
   for (const r of raw) {

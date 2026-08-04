@@ -96,6 +96,9 @@ overrides:
   "@google/genai@>=2": 2.15.0
   # Same invariant — 13.16-vs-13.17 split broke RN <WebView> JSX in CI.
   react-native-webview: 13.16.1
+  # Same invariant, NATIVE flavor — dual sharp = libvips soname collision
+  # under hoisting; 0.35.x also satisfies GHSA-f88m-g3jw-g9cj.
+  sharp: 0.35.3
   "brace-expansion@>=5": ^5.0.7
   "fast-uri@<3.1.2": ^3.1.2
   "fast-xml-builder@<1.1.7": ^1.1.7

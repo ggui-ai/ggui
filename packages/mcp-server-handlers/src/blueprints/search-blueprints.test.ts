@@ -204,6 +204,40 @@ describe('createSearchBlueprintsHandler — manifest + semantic merge', () => {
     expect(hit?.score).toBe(MANIFEST_SUBSTRING_SCORE);
   });
 
+  it('returns manifest blueprints even when the embedding provider is BROKEN (semantic branch degrades, never fails the merge)', async () => {
+    // The semantic and manifest branches race in a Promise.all; a
+    // rejecting embed() must degrade to zero semantic hits, not sink the
+    // manifest branch's embedding-independent results. Regression pin for
+    // 2026-08-04: a dual-sharp libvips collision broke the local model's
+    // native load in CI and every search returned nothing.
+    const { vectors } = makeDeps();
+    const brokenEmbedding = {
+      id: 'broken-local',
+      dimensions: 16,
+      embed: (): Promise<number[]> =>
+        Promise.reject(new Error('ERR_DLOPEN_FAILED: libvips-cpp.so')),
+    };
+    const blueprints = new ManifestBlueprintProvider({
+      manifests: [
+        {
+          id: 'weather-card-fixture',
+          name: 'Weather Card Fixture',
+          description: 'A weather card declared via ggui.ui.json',
+          category: 'data',
+        },
+      ],
+    });
+    const handler = createSearchBlueprintsHandler({
+      embedding: brokenEmbedding,
+      vectors,
+      blueprints,
+    });
+    const result = await handler.handler({ query: 'weather' }, ctx);
+    const hit = result.results.find((r) => r.id === 'weather-card-fixture');
+    expect(hit).toBeDefined();
+    expect(hit?.score).toBe(MANIFEST_SUBSTRING_SCORE);
+  });
+
   it('stamps the exact-name-match score when query equals the manifest name (case-insensitive)', async () => {
     const { embedding, vectors } = makeDeps();
     const blueprints = new ManifestBlueprintProvider({
