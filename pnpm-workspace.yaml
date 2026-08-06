@@ -93,7 +93,10 @@ overrides:
   "form-data@>=2 <2.5.6": ^2.5.6
   "form-data@>=4 <4.0.6": ^4.0.6
   "@anthropic-ai/sdk@<0.91.1": ^0.91.1
-  "vite@<6.4.2": ^6.4.2
+  # Floor raised 2026-08-07 (advisories 247/248): plain update moved the
+  # direct consumers but @storybook/builder-vite's transitive contexts
+  # kept 6.4.2 — the floor is the only lever for those. Same-major.
+  "vite@<6.4.3": ^6.4.3
   "esbuild@<0.25.0": ^0.25.0
   "esbuild@>=0.27.3 <0.28.1": ^0.28.1
   "uuid@<14.0.0": ^14.0.0
@@ -136,6 +139,13 @@ overrides:
   "@mikro-orm/knex@<6.6.14": ^6.6.14
   "qs@>=6.11.1 <6.15.2": ^6.15.2
   "protobufjs@<7.6.5": ^7.6.5
+  # @opentelemetry/core <2.8.0 (advisory 256; root carries 282): every
+  # otel package exact-pins its sibling core (resources@2.1.0 →
+  # core@2.1.0), so plain update can't move it — a floor is the only
+  # lever. Same-major (2.x). Sole chains run through @google/adk
+  # (ui-gen devDeps + samples). Kept in lockstep with the root
+  # workspace's line (2026-08-07).
+  "@opentelemetry/core@<2.8.0": ^2.8.0
 
 # Resolution behavior. Migrated from .npmrc. e2e/journeys assumes a
 # hoisted node_modules layout (see workspace-paths.ts `hoistedBin`).
