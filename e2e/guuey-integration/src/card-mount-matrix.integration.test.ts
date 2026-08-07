@@ -39,10 +39,12 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import type { Server as HttpServer } from 'node:http';
 import { createGguiServer, type GguiServer } from '@ggui-ai/mcp-server';
-import { InMemoryAuthAdapter } from '@ggui-ai/mcp-server-core/in-memory';
+import { InMemoryAuthAdapter, InMemoryCodeStore, InMemoryGguiSessionStore } from '@ggui-ai/mcp-server-core/in-memory';
+import type { GguiSessionStore } from '@ggui-ai/mcp-server-core';
 import {
   MCP_APP_AI_GGUI_RENDER_META_KEY,
   toolResultGguiRender,
+  asGguiRenderBootstrap,
 } from '@ggui-ai/protocol/integrations/mcp-apps';
 import {
   Reducer,
@@ -79,8 +81,15 @@ let server: GguiServer;
 let httpServer: HttpServer;
 let baseUrl = '';
 let client: Client;
+let renderStore: GguiSessionStore;
 
 beforeAll(async () => {
+  const codeStore = new InMemoryCodeStore();
+  renderStore = new InMemoryGguiSessionStore();
+
+  // Create server with a placeholder publicBaseUrl first; after listening
+  // we'll know the real port and the handler will have been initialized.
+  // The codeBaseUrl is set during render, not at listen time, so this works.
   server = createGguiServer({
     logger: silentLogger,
     auth: new InMemoryAuthAdapter({
@@ -96,6 +105,11 @@ beforeAll(async () => {
     // bundle mount defaults on with it.
     mcpApps: true,
     renderChannel: true,
+    codeStore,
+    renderStore,
+    // Placeholder URL; the resource handler will use req.protocol + req.host
+    // if this doesn't match. The handler falls back gracefully.
+    publicBaseUrl: 'http://127.0.0.1',
   });
   httpServer = await server.listen(0, '127.0.0.1');
   const addr = httpServer.address();
@@ -371,5 +385,54 @@ describe('matrix 4 — persisted ggui bootstraps are honestly non-remountable to
     // `cardCardMount(snapshot)` stays undefined until the snapshot
     // carries a re-mintable locator, never a stale wsToken mount.
     expect(artifacts).toHaveLength(0);
+  });
+});
+
+// ───────────────────────────────────────────────────────────────────────
+// Matrix 5 — rehydration = resources/read of the persisted resourceUri
+// (spec: docs/superpowers/specs/2026-08-07-rehydration-access-control-design.md §2)
+// ───────────────────────────────────────────────────────────────────────
+
+describe("matrix 5 — rehydrate-by-refetch mints fresh credentials with current state", () => {
+  it("re-fetching resourceUri returns a mountable shell: same session, fresh wsToken", async () => {
+    const result = await renderOnce();
+    const live = toolResultGguiRender(result);
+    expect(live).toBeDefined();
+    const sessionId = live!.slice.sessionId as string;
+    const resourceUri = (result.structuredContent as { resourceUri?: string }).resourceUri;
+    expect(typeof resourceUri).toBe("string");
+
+    // Set mock componentCode on the render so the resource template can serve
+    // it. Without a generator in the fixture, we manually inject a minimal
+    // component to enable the live-mode shell path (wsUrl + wsToken).
+    const stored = await renderStore.get(sessionId);
+    expect(stored).toBeDefined();
+    if (stored && stored.render.type === 'component') {
+      await renderStore.commit({
+        render: {
+          ...stored.render,
+          componentCode: 'export default function Card(){return null;}',
+        },
+        appId: stored.appId as string,
+        ...(stored.userId !== undefined ? { userId: stored.userId } : {}),
+      });
+    }
+
+    // The rehydration contract: a persisted card re-fetches its
+    // resourceUri over the SAME authenticated MCP connection —
+    // no stored bootstrap is ever replayed.
+    const read = await client.readResource({ uri: resourceUri! });
+    const resourceContent = read.contents[0];
+    const shellHtml = resourceContent && 'text' in resourceContent ? resourceContent.text : undefined;
+    expect(typeof shellHtml).toBe("string");
+
+    const envelope = shellEnvelope(shellHtml as string);
+    const refetched = asGguiRenderBootstrap(envelope);
+    expect(refetched).toBeDefined();
+    // Same render identity…
+    expect(refetched!.slice.sessionId).toBe(live!.slice.sessionId);
+    // …fresh transport material: the wsToken is re-minted per fetch.
+    expect(typeof refetched!.slice.wsToken).toBe("string");
+    expect(refetched!.slice.wsToken).not.toBe(live!.slice.wsToken);
   });
 });
