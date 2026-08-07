@@ -73,7 +73,7 @@ const KNOWN_PRIMITIVE_SECTIONS = new Set<string>([
   "Table", "Tabs", "Toast", "Accordion",
   // Components
   "SearchField", "FormField", "MenuItem", "Tag", "Dropdown", "Autocomplete", "Breadcrumb", "Pagination",
-  "Stat", "Stepper",
+  "Stat", "Stepper", "Markdown",
   // Compositions
   "Header", "Sidebar", "CardGrid", "CommentThread", "DataTable", "ChatWindow", "NavigationBar",
   "FileUploader", "NotificationCenter", "Modal", "CommandPalette",

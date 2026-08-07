@@ -8,6 +8,9 @@ import {
 import { Heading } from '../primitives/Heading';
 import { Text } from '../primitives/Text';
 import { Link } from '../primitives/Link';
+import type { MarkdownProps } from './types';
+
+export type { MarkdownProps } from './types';
 
 /**
  * Markdown — agent-authored rich text inside a generated UI.
@@ -25,31 +28,17 @@ import { Link } from '../primitives/Link';
  * Streaming-tolerant by construction: any prefix of a longer input
  * parses to a stable AST (unclosed constructs carry `closed: false`
  * and render with their partial content) — re-render with a growing
- * `text` on each delta and completed constructs never change shape.
+ * `markdown` on each delta and completed constructs never change shape.
  *
  * Chat transcripts deliberately do NOT use this — chat text stays
  * plain (see the SDK docs); rich presentation belongs to generated
  * interfaces like the surface this component serves.
  *
- * Generation-triad gating: `MarkdownProps` intentionally lives HERE,
- * not in `components/types.ts` — the types files drive the JSDoc →
- * LLM prompt docs, so the model is not yet told to reach for this
- * component (the auto-generated validator allowlist does include it,
- * which is harmless). Promoting it into the prompt docs is the
- * benchmark-gated triad slice (ggui#424 slice 3); do not move the
- * props type before running that slice's benchmarks.
+ * `MarkdownProps` lives in `components/types.ts` — the types files
+ * drive the JSDoc → LLM prompt docs, so its docstring THERE is what
+ * the generation model reads (promoted in ggui#424 slice 3,
+ * benchmark-gated).
  */
-export interface MarkdownProps {
-  /**
-   * Markdown source — the conversational subset (bold / italic /
-   * inline code / fenced code blocks / lists / headings / links).
-   * May be a mid-stream prefix; parsing fails soft. Raw HTML displays
-   * as literal text, never markup.
-   */
-  markdown: string;
-  className?: string;
-  style?: CSSProperties;
-}
 
 const CODE_INLINE: CSSProperties = {
   fontFamily: 'var(--ggui-font-family-mono, ui-monospace, monospace)',

@@ -120,17 +120,17 @@ Keep entries terse. This is a log, not a report.
 - **Change under test**: none — same-session n=3 baseline across {kanban-board, chat-interface, stock-ticker} × {claude, openai, google}. (plan-my-week / inbox-triage not yet in `commits.ts`.)
 - **Cohort**: `tmp-bench-logs/33-risk-high-baseline-run{1,2,3}.log` + `core/benchmark-results/benchmark-2026-04-13T05-23-01-{072,085,102}Z.json`
 - **Results (n=3 per cell, 27 runs total)**:
-  | sdk | commit | avg ms | p50 ms | min-max ms | avg turns | avg score | pass@≥50 |
-  |--------|----------------|--------|--------|---------------|-----------|-----------|----------|
-  | claude | kanban-board | 52.8s | 52.7s | 28.2–77.4s | 4.3 | 72.9 | 3/3 |
-  | claude | chat-interface | 45.8s | 46.4s | 34.1–56.8s | 5.0 | 77.7 | 3/3 |
-  | claude | stock-ticker | 57.2s | 62.6s | 44.9–64.2s | 8.0 | 80.5 | 3/3 |
-  | openai | kanban-board | 56.0s | 56.8s | 41.0–70.2s | 6.3 | 33.5 | 0/3 |
-  | openai | chat-interface | 78.1s | 78.2s | 65.4–90.8s | 8.0 | 80.0 | 3/3 |
-  | openai | stock-ticker | 68.4s | 53.3s | 42.7–109.2s | 6.3 | 78.1 | 3/3 |
-  | google | kanban-board | 161.1s | 160.9s | 138.5–183.9s | 6.0 | 21.7 | 0/3 |
-  | google | chat-interface | 41.9s | 26.1s | 13.8–85.8s | 2.0 | 52.0 | 2/3 |
-  | google | stock-ticker | 51.4s | 60.5s | 19.5–74.2s | 5.7 | 78.7 | 3/3 |
+  | sdk    | commit         | avg ms | p50 ms | min-max ms   | avg turns | avg score | pass@≥50 |
+  | ------ | -------------- | ------ | ------ | ------------ | --------- | --------- | -------- |
+  | claude | kanban-board   | 52.8s  | 52.7s  | 28.2–77.4s   | 4.3       | 72.9      | 3/3      |
+  | claude | chat-interface | 45.8s  | 46.4s  | 34.1–56.8s   | 5.0       | 77.7      | 3/3      |
+  | claude | stock-ticker   | 57.2s  | 62.6s  | 44.9–64.2s   | 8.0       | 80.5      | 3/3      |
+  | openai | kanban-board   | 56.0s  | 56.8s  | 41.0–70.2s   | 6.3       | 33.5      | 0/3      |
+  | openai | chat-interface | 78.1s  | 78.2s  | 65.4–90.8s   | 8.0       | 80.0      | 3/3      |
+  | openai | stock-ticker   | 68.4s  | 53.3s  | 42.7–109.2s  | 6.3       | 78.1      | 3/3      |
+  | google | kanban-board   | 161.1s | 160.9s | 138.5–183.9s | 6.0       | 21.7      | 0/3      |
+  | google | chat-interface | 41.9s  | 26.1s  | 13.8–85.8s   | 2.0       | 52.0      | 2/3      |
+  | google | stock-ticker   | 51.4s  | 60.5s  | 19.5–74.2s   | 5.7       | 78.7      | 3/3      |
 - **Phase-outcome histogram (n=27)**: 43 patch→PATCH_INVALID · 33 patch→PASS · 17 eval-fix→PATCH_INVALID · 16 patch→SELF_CHECK_FAIL · 12 impl→PATCH_INVALID · 9 impl→SELF_CHECK_FAIL · 8 eval-fix→PASS · 6 eval-fix→SELF_CHECK_FAIL · 6 impl→PASS.
 - **PATCH_INVALID class histogram** (top 7): 8 `JSX:}` · 7 `Unexpected "}"` · 7 `Unexpected ")"` · 6 `closing Box≠Stack` · 6 `Unexpected ","` · 3 `Unexpected "="` · 3 `"stocks" already declared`.
 - **Diagnosis**: (1) patch-geometry errors dominate (70+ PATCH_INVALIDs across 27 runs) — not a prompt problem. (2) `realtime.mixed.handlers_per_event` axis-check has a regex bug: `useStream\s*\(` misses generic-typed `useStream<T>(...)` — fires on 15/15 chat-interface + stock-ticker runs (all 3 providers) as a pure false positive, burning eval-fix turns. (3) Google kanban-board 0/3 pass@≥50 reflects true patch-payload geometry failures (two of three runs hit duplicate-identifier loops; one still hit malformed_tool_call 3×).
@@ -191,17 +191,17 @@ Keep entries terse. This is a log, not a report.
   - Seal B (`no-unused-vars`) IS wired — `react-linter.ts::lintReactHooks` → `runTier0Checks` → `tools.ts` auto-commit. Fires in every cell.
   - HOW leg (system prompt + `prompts.ts` SELF_CHECK_RULES rule 13) tells the LLM about BOTH seals by name, including the `wire_preservation:<kind>:<name>` message. CHECK leg only delivers on half.
 - **Results (n=1, 9 cells)**:
-  | provider | commit | avgMs | turns | outcomes (pass/patchInv/selfCheck/diff) | score |
-  |---|---|---|---|---|---|
-  | claude | product-page | 26.8s | 2 | 1/0/1/0 | 78 |
-  | claude | survey-form | 78.1s | 5 | 3/0/2/0 | 79 |
-  | claude | onboarding-wizard | 67.7s | **8 (CAP)** | 3/0/5/0 | 73.6 |
-  | openai | product-page | 87.8s | 7 | 3/0/4/0 | 79 |
-  | openai | survey-form | **101.4s** | **21** | 3/0/**17**/0 | 76 |
-  | openai | onboarding-wizard | 55.2s | **8 (CAP)** | 3/0/5/0 | 78 |
-  | google | product-page | 13.7s | 2 | 0/0/1/0 | 75 |
-  | google | survey-form | 13.2s | 2 | 0/0/1/0 | 65 (0B compiled) |
-  | google | onboarding-wizard | 12.8s | 2 | 0/0/1/0 | 90 |
+  | provider | commit            | avgMs      | turns       | outcomes (pass/patchInv/selfCheck/diff) | score            |
+  | -------- | ----------------- | ---------- | ----------- | --------------------------------------- | ---------------- |
+  | claude   | product-page      | 26.8s      | 2           | 1/0/1/0                                 | 78               |
+  | claude   | survey-form       | 78.1s      | 5           | 3/0/2/0                                 | 79               |
+  | claude   | onboarding-wizard | 67.7s      | **8 (CAP)** | 3/0/5/0                                 | 73.6             |
+  | openai   | product-page      | 87.8s      | 7           | 3/0/4/0                                 | 79               |
+  | openai   | survey-form       | **101.4s** | **21**      | 3/0/**17**/0                            | 76               |
+  | openai   | onboarding-wizard | 55.2s      | **8 (CAP)** | 3/0/5/0                                 | 78               |
+  | google   | product-page      | 13.7s      | 2           | 0/0/1/0                                 | 75               |
+  | google   | survey-form       | 13.2s      | 2           | 0/0/1/0                                 | 65 (0B compiled) |
+  | google   | onboarding-wizard | 12.8s      | 2           | 0/0/1/0                                 | 90               |
 - **Turn-count p50/p90 (Claude+OpenAI excl. Google which single-shots and bails)**: p50=7, p90≈14. **Target was 3–5 p50**. Gate FAIL.
 - **Latency p50 (Claude+OpenAI)**: p50≈68s, p90≈98s. **Target was ~30s p50**. Gate FAIL.
 - **Failure-bucket classification**:
@@ -268,11 +268,11 @@ Keep entries terse. This is a log, not a report.
   - openai × kanban source: 14,870B → `slice(0,8000)` cuts at line 135 of 250. The amputated source never delivers lines 135–250 (CardGrid render: column header, task cards, move dropdown, edit/save UI, inline Add Task form, Create Task button, Container close).
   - 10/14 runs in this cohort have source > 8000B (claude × survey 5257B over, openai × kanban 6870B over, claude × product 3084B over, etc.). 6/8 commit prompts > 500 chars.
 - **Smoking-gun signal — `tierEvaluation` vs aesthetic `evaluation` disagree on the same artifact**:
-  | run | aesthetic.score | aesthetic.passed | tierEval.issues | tierEval.pass |
-  |---|---|---|---|---|
-  | openai × kanban | 65.4 | FAIL | **0** | **7 (functionality, crash, interactivity, accessibility, layout, loading, visual)** |
-  | google × kanban | 59 | FAIL | 23 (line-numbered, accurate) | 1 |
-  | google × product | 87.6 | PASS | 16 | 1 |
+  | run              | aesthetic.score | aesthetic.passed | tierEval.issues              | tierEval.pass                                                                       |
+  | ---------------- | --------------- | ---------------- | ---------------------------- | ----------------------------------------------------------------------------------- |
+  | openai × kanban  | 65.4            | FAIL             | **0**                        | **7 (functionality, crash, interactivity, accessibility, layout, loading, visual)** |
+  | google × kanban  | 59              | FAIL             | 23 (line-numbered, accurate) | 1                                                                                   |
+  | google × product | 87.6            | PASS             | 16                           | 1                                                                                   |
   - openai × kanban: the deterministic per-criterion evaluator (cloud/generation-runtime/src/evaluation/llm-evaluator.ts) sends FULL source with line numbers and the FULL contract — it returns 0 issues, all 7 criteria pass. The aesthetic evaluator (post-eval.ts) sends truncated source + truncated prompt + no contract — it returns score 65.4, claims "implementation is incomplete (code cuts off mid-description)" and "missing critical interactive elements like drag-and-drop for cards, move dropdowns, and inline editing UI". The source contains an explicit move-dropdown (`<Select label="Move" …>` line 195-200), inline editing UI (lines 170-194), and 6 different "Add Task" affordances. The eval is hallucinating against amputated context.
   - "drag-and-drop" specifically is a tell: kanban-board.fixture.ts:39 evalGoal locks `Move controls are explicit buttons/dropdowns (per prompt, not drag)`. The aesthetic eval invented drag because the truncated prompt severed the spec where it would have ruled drag out.
   - Per-dimension pattern: dimensions that need the JSX render block (polish, interactivity, dataPresentation) score 55–66 on truncated runs; dimensions visible from the imports/state region (designTokens, codeQuality) score 75. The score deficit lives entirely in the bytes the eval pipeline itself amputated.
@@ -603,3 +603,27 @@ This matters for the queued follow-ups: **P1 rewrites both wizard fixture prompt
 - **Validation run 1** (`p3-context`, 6 cells google-fast × wizards, --max-eval 3, vs p2 google-fast baseline): 6/6 pass, probe 3/3 real PASSes per pair, scores ≥ baseline; the P3.1 diagnostic went UNEXERCISED — 8 APPLIED-BROKENs, none in its two shapes. The shape-bearing fixtures are stock-ticker/chat-interface (as the d8 mining said), not the wizards.
 - **Validation run 2** (`p3-shapes`, 6 cells google-fast × stock-ticker,chat-interface): 6/6 pass; **two offset-0 `Unexpected "const"` occurrences including the EXACT d8 A/B geometry (`ranges=52-56`, line 51 = `return (`)**. Discovery: tool RESULT texts never reach bench logs, so the addendum fires invisibly — added a `RANGE_CONTEXT_DIAG` console line (tag-balance-diag idiom) for future fire-rate measurement. **Behavioral evidence it fired and worked**: the very next patch's commit message parrots the diagnosis ("Move state and effect hooks outside the return statement"), retargets the range to START at the `return (` line (51-70), and passes in ONE turn. The #404 breaker and the gutter reject fired 0 times across all 12 cells (no pathological loops present).
 - **#362 warm-stall class CONVICTED by the live profiler** (gha pod, 24h window): 431 `stall_attributed` events, verdict `js` on ALL 431, gapMs p50=544/p90=705/max=907, top frame `parseJsonBody@@aws-sdk/core` on 425 (GC on only 6 — the ts.Program-churn hypothesis is REFUTED). Mechanism: `consumePendingEvents` used `ReturnValues: ALL_OLD`, returning the ENTIRE render row — including the fat `render` JSON with componentCode — on every long-poll cycle; the SDK's synchronous response parse WAS the metronomic warm stall. Fix (same slice): `UPDATED_OLD` + a projected `renderStatus` GetItem — the drain response is now tiny regardless of component size. Boot warmup confirmed live + off the request path (`warmup_tier0_ms` 3339ms, issues 0, one benign boot-time attribution in cjs loader frames).
+
+## Experiment 50 — ggui#424 slice 3: MarkdownProps promotion into the prompt docs (2026-08-07) — slice=commits:weather-card,survey-form,kanban-board,periodic-table,product-page,chat-interface,stock-ticker,onboarding-wizard
+
+- **Hypothesis**: promoting `MarkdownProps` from `components/Markdown.tsx` into `design/src/components/types.ts` — which regenerates both prompt-doc surfaces and tells the generation model about `<Markdown markdown={…}>` for the first time — does not regress the 8-case triad roster.
+- **Change under test**: UNCOMMITTED working tree vs `56f2f01ac`. Diff: `design/components/types.ts` (+38, the promoted JSDoc'd interface), `design/components/Markdown.tsx` (−27/+9, re-export + gating-note rewrite), and the two regenerated doc surfaces `ui-gen/validation/primitives.ts` (+1,572 chars) + `ui-gen/tools/get-primitives-ts.ts` (+249 chars). Validator allowlist (`VALID_PRIMITIVES`) and the design shim allowlist (`design/rendering/rewrite-imports.ts:105`) already carried `Markdown`/`MarkdownInline` since 0.6.0 — unchanged by this slice.
+- **Baseline decision**: the d8-cohort (Exp 47) is **NOT usable** as before-state — `git diff --stat 1524d870f HEAD -- oss/packages/ui-gen oss/packages/design` is 51 files / +1,968 (pitfalls 6→5, `stepper_adopted` extras, P3 patch diagnostics in `coding-agent/tools.ts`, `run-coding-turn`/`run-eval-round` rewrites). A **same-session two-arm control** was built instead.
+- **Cohort**: control = detached worktree at `56f2f01ac` with in-arm `pnpm install` + `pnpm build`; wave = main tree. Both arms preflighted (ui-gen realpath inside arm, 214 src files scanned, dist newer than newest src, arm-discriminating marker `interface MarkdownProps` absent/present, design dist present) — 6/6 PASS each. Arms run CONCURRENTLY, `--n 3 --provider claude --tier fast --max-turns 15 --max-eval 3 --quality fast --threshold 70 --max-concurrent 6`. **24 cells/arm, 48/48 reported, 0 failures.** Spend $6.33.
+  - control: `<scratch>/arm-control/oss/misc/benchmark/{tmp-bench-logs/mdctl-*,benchmark-results/}`
+  - wave: `oss/misc/benchmark/{tmp-bench-logs/mdwave-*,benchmark-results/}`
+  - analyzers: `md-compare2.mjs` + `md-final.mjs` (manifest-driven — see LESSON)
+- **Results** (control → wave):
+  - **Markdown adoption 0/24 → 0/24.** No cell in either arm emitted `<Markdown>` or `<MarkdownInline>`; 0 imports, 0 used-without-import, 0 wrong-prop, 0 children-instead-of-prop. The four brief-named failure modes all measured ZERO.
+  - Blended score **78.7 → 78.6 (−0.1)**; pass@70 **22/24 → 24/24**; ms 26.2s → 26.9s (+3%).
+  - Turns **2.21 → 2.71 (+0.50)**, `turns>=6` 0 → 3 (kanban run3=8, product-page run2=6, stock-ticker run2=6). **Commit-stratified permutation test (N=20000): p = 0.29 — not significant.**
+  - Turn engine: impl 24→24, patch 19→30, evalFix 10→11, **patchInvalid 0→0**, selfCheckFail 19→30. Every high-turn cell is the pre-existing `SELF_CHECK_FAIL → patch` loop on `[types]` violations (extracted-subcomponent prop drift: `Property 'tasks' does not exist on type '(props: Props) => Element'`, `onDoubleClick' is missing in type`, `Cannot find name 'handleEditStart'`). **`grep -c Markdown` = 0 in all three logs** — the class is unrelated to the change.
+  - **Prompt cost**: `primitive-doc-ts-bytes` 63,302 → 63,553 = **+251 B ≈ +63 tok**, i.e. +0.40% of the primitives doc and ≈+0.12% of the ~54K-tok first-turn prompt. `primitiveDocFormat` defaults to `"ts"` (`policy.ts:197`), so the markdown surface's larger +1,572 B is **not shipped**. The doc sits in the Anthropic cached prefix (`created=38132` control / `read=38200` wave), so steady-state marginal cost ≈ 0 — the real cost is a ONE-TIME full prompt-cache invalidation on deploy.
+- **Structural findings (not regressions — gaps the promotion exposes)**:
+  1. **HOW lands without WHAT.** `boilerplate/generate.ts` `ALL_COMPONENTS` (→ `ALL_DESIGN`, the single `import {…} from '@ggui-ai/design'` line the starter emits) does **not** list `Markdown`/`MarkdownInline`. Verified against generated `source.tsx:13` — 57 identifiers, no Markdown. So the model is now TOLD to reach for `<Markdown>` but must edit the import line (a line it otherwise never touches) to use it. Cheapest fix is WHAT-leg (free, compiler-enforced), not more HOW.
+  2. **`primitive-slice.ts` `KNOWN_PRIMITIVE_SECTIONS` omits `Markdown`.** Per its own docstring, an unknown heading is treated as "guidance — always kept", so the new section can never be sliced out. Fail-open, and inert today (`primitiveDocSlice: "full"`), but it defeats slicing the moment slicing is enabled.
+  3. **Stale cross-reference**: `design/rendering/rewrite-imports.ts:104` still says "(see the gating note in components/Markdown.tsx)" — the note this slice deleted.
+  4. **The roster cannot measure the upside.** No fixture carries markdown-syntax sample data (scanned all 8: zero `**`/backtick/heading/list hits); the only genuine prose prop is `product-page.product.description`, plain text. The two "markdown" prompt hits are false positives ("formatted timestamp", "formatted with 2 decimals"). This bench is a **no-harm gate only**.
+- **Verdict**: **GO** — no regression. Score flat, pass-rate up, zero Markdown misuse, turn delta not significant (p=0.29), always-on prompt cost +63 tok in a cached prefix.
+- **LESSON (measurement)**: a timestamp-window filter over `benchmark-results/` silently dropped 6 control + 5 wave cells (the arms' first reports predate any cutoff late enough to exclude the wave dir's 34 pre-existing cohorts), yielding unequal n (2/3, 3/2) and a fake +7.0 kanban score delta. **Drive two-arm aggregation from the `bench-n` run manifest (`<tag>-runs.json`, exact `reportPath` per cell), never from mtime/`meta.timestamp`.**
+- **Next**: (P1) add `Markdown`/`MarkdownInline` to `generate.ts::ALL_COMPONENTS` + `primitive-slice.ts::KNOWN_PRIMITIVE_SECTIONS` and re-bench — this is the WHAT leg the promotion is missing. (P2) promote a markdown-bearing fixture into `commits.ts` so the upside is measurable at all. (P3) fix the stale `rewrite-imports.ts:104` comment.

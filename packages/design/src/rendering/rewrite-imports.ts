@@ -98,10 +98,9 @@ export const COMPONENTS_EXPORTS = [
   'SearchField', 'FormField', 'MenuItem', 'Tag', 'Dropdown',
   'Autocomplete', 'Breadcrumb', 'Pagination', 'EmptyState', 'Stat',
   'Stepper',
-  // Rich text (ggui#424): the shim serves these and the validator
-  // allows them, but the LLM prompt docs deliberately do NOT mention
-  // them yet — that promotion is the benchmark-gated triad slice
-  // (see the gating note in components/Markdown.tsx).
+  // Rich text (ggui#424): shim-served, validator-allowed, and — since
+  // the slice-3 promotion (benchmark-gated, Experiment 50) — documented
+  // in the LLM prompt via `MarkdownProps` in components/types.ts.
   'Markdown', 'MarkdownInline', 'renderRichTextInlines',
 ] as const;
 

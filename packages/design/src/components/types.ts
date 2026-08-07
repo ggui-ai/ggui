@@ -698,3 +698,41 @@ export interface StepperProps extends BaseProps {
    */
   onStepClick?: (index: number) => void;
 }
+
+/**
+ * Markdown -- renders markdown-formatted text as styled content:
+ * headings, paragraphs, **bold** / *italic*, `inline code`, fenced
+ * code blocks, bulleted and numbered lists, and links.
+ *
+ * Use it whenever a prop or context slot carries prose the agent
+ * authors in markdown -- article bodies, AI-generated explanations,
+ * descriptions, notes, help text. Pass the raw markdown string
+ * straight through; never pre-parse it, never split it into per-line
+ * `Text` elements, and never rebuild formatting with nested
+ * `<strong>`/`<em>` markup yourself.
+ *
+ * Safe by construction: raw HTML in the source displays as literal
+ * text (never markup), and links render inert unless their scheme is
+ * http(s)/mailto. Streaming-tolerant: a mid-stream prefix parses
+ * cleanly and completed constructs never change shape, so binding a
+ * growing string re-renders correctly.
+ *
+ * For a single line of formatted text INSIDE another element (a table
+ * cell, a list row, a caption), use `MarkdownInline` instead -- same
+ * `markdown` prop, inline-level constructs only (no headings, lists,
+ * or code fences), renders inside the parent's typography.
+ *
+ * @example
+ * <Stack gap="md">
+ *   <Markdown markdown={recipe.instructions} />
+ * </Stack>
+ */
+export interface MarkdownProps extends BaseProps {
+  /**
+   * Markdown source text, passed through verbatim. Supports the
+   * conversational subset: `#`-`###` headings, paragraphs, bold,
+   * italic, inline code, fenced code blocks, `-`/`1.` lists, and
+   * `[label](url)` links. Bind stateful or streamed prose directly.
+   */
+  markdown: string;
+}
