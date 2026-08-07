@@ -1,6 +1,6 @@
 {
   "name": "@ggui-ai/embedding-local",
-  "version": "0.6.0-rc.1",
+  "version": "0.6.0",
   "description": "Local-model text embeddings for self-hosted ggui. A `@huggingface/transformers`-backed embedding provider running entirely on-device — no embedding API key required.",
   "keywords": [
     "ggui",
