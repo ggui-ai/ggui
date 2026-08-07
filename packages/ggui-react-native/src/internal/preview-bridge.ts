@@ -12,8 +12,10 @@
  * Scope discipline:
  *
  *   - Internal-only. Not exported from the package root. Only the
- *     renderer's internal `useChannelStream` subscribes, and only
- *     `GguiRender` emits.
+ *     renderer's internal `useChannelStream` subscribes. The emitter
+ *     seat is VACANT since the legacy `GguiRender` WS path was
+ *     deleted (ggui#425) — the future native A2UI transport re-wires
+ *     it when it lands.
  *   - Knows nothing about A2UI, preview surfaces, or channel naming
  *     policies. It's a dumb fan-out over `StreamEnvelope` — reserved
  *     channel semantics live in `@ggui-ai/protocol`.
@@ -23,7 +25,7 @@
  *     already has.
  *
  * The module-level `Set<Listener>` is intentional: React contexts
- * would force every GguiRender consumer into a subscription, and
+ * would force every renderer consumer into a subscription, and
  * we want the fan-out to be opt-in per renderer call. Keeping the
  * emitter as a JS singleton matches the one-WebSocket-per-app
  * reality on native and keeps cross-platform parity trivial.
@@ -36,10 +38,11 @@ export type PreviewBridgeListener = (envelope: StreamEnvelope) => void;
 const listeners = new Set<PreviewBridgeListener>();
 
 /**
- * Broadcast a delivery to every subscriber. Called from the
- * `GguiRender` data-message handler after any reserved-channel
- * bypass / streamSpec validation has run — subscribers see only
- * envelopes the render decided to forward.
+ * Broadcast a delivery to every subscriber. The transport that owns
+ * the live channel calls this after any reserved-channel bypass /
+ * streamSpec validation has run — subscribers see only envelopes the
+ * transport decided to forward. (No production emitter exists today;
+ * see the header note.)
  */
 export function emitPreviewBridge(envelope: StreamEnvelope): void {
   // Copy the listener set before iterating so a listener that

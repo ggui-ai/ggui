@@ -29,9 +29,10 @@
  *     per-entry annotated one-sided exports) and requires the header,
  *     so undocumented drift in the public shape still fails fast.
  *   - header-only twins NOT listed in any manifest (e.g.
- *     `components/GguiRender.tsx`, `invoke/sse-parse.ts`) — they
- *     document their delta in a file-top header per the original
- *     convention.
+ *     `invoke/sse-parse.ts`) — they document their delta in a
+ *     file-top header per the original convention. (The former
+ *     example, `components/GguiRender.tsx`, is web-only since the RN
+ *     legacy render family was deleted — ggui#425.)
  *
  * `CODE_IDENTICAL_MIRRORS` extends the same gate beyond the SDK pair:
  * documented structural copies (e.g. the reserved-validators A2UI
@@ -97,11 +98,10 @@ interface DeltaTwin {
 const DOCUMENTED_DELTA_TWINS: readonly DeltaTwin[] = [
   { rel: 'components/GguiProvider.tsx' },
   { rel: 'components/UiFeedback.tsx' },
-  { rel: 'hooks/useWebSocket.ts' },
-  { rel: 'websocket/EventBuffer.ts' },
-  { rel: 'websocket/EventBuffer.test.ts' },
-  { rel: 'websocket/WebSocketManager.ts', rnOnlyExports: ['NetInfoState'] },
-  { rel: 'websocket/WebSocketManager.test.ts' },
+  // The websocket/useWebSocket delta-twin entries were pruned when the
+  // RN legacy render family (GguiRender/DynamicComponent/WebViewRenderer/
+  // NativeRegistry + its WS stack) was deleted — ggui#425. The web
+  // copies survive for the @ggui-ai/console debugger only.
 ];
 
 /** Marker every documented-delta RN copy must carry near the top. */
@@ -120,10 +120,11 @@ const CODE_IDENTICAL_MIRRORS: ReadonlyArray<{
   readonly files: readonly string[];
 }> = [
   {
-    label: 'reserved-validators A2UI adapter (react / react-native / mcp-server)',
+    // The ggui-react-native copy was deleted with the RN legacy render
+    // family (ggui#425) — only the legacy WS path consumed it there.
+    label: 'reserved-validators A2UI adapter (react / mcp-server)',
     files: [
       'ggui-react/src/internal/reserved-validators.ts',
-      'ggui-react-native/src/internal/reserved-validators.ts',
       'mcp-server/src/reserved-validators.ts',
     ],
   },

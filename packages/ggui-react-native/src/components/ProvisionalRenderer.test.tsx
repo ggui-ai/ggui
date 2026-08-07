@@ -1,8 +1,9 @@
 /**
  * ProvisionalRenderer (RN) — behaviour tests covering the reducer +
  * catalog mapping end-to-end. Envelopes are injected through the
- * cross-platform `preview-bridge` emitter, exactly the path
- * `GguiRender.tsx` fans out in production.
+ * cross-platform `preview-bridge` emitter — the seam any live
+ * transport fans out on (vacant in production since ggui#425; the
+ * future native A2UI transport re-wires it).
  */
 import { describe, it, expect, beforeEach } from 'vitest';
 import React from 'react';

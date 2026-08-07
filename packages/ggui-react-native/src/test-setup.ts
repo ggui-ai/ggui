@@ -79,8 +79,8 @@ vi.mock('@react-native-async-storage/async-storage', () => ({
 
 // NOTE: no NetInfo mock — the package never imports
 // `@react-native-community/netinfo`. Network state is injected by the
-// app (`useChatThread({ isOnline })` / WebSocketManager's
-// `netInfoSubscribe` option); tests inject their own subscribers.
+// app (`useChatThread({ isOnline })`); tests inject their own
+// subscribers.
 
 // --- react-native-webview mock ---
 

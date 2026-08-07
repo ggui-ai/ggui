@@ -2,10 +2,12 @@
  * @ggui-ai/react-native - React Native SDK for ggui
  *
  * Provides React Native components, hooks, and utilities for embedding ggui
- * agent interfaces in mobile applications. Includes WebSocket session
- * management with AppState/NetInfo awareness, dynamic component rendering
- * (descriptor-based native or WebView fallback), and a React Native theme
- * system that mirrors the web design tokens.
+ * agent interfaces in mobile applications. The host primitive is
+ * `<McpAppIframe>` — the WebView-backed MCP Apps host (RN analog of the
+ * web's `<AppRenderer>` from `@mcp-ui/client`) — surrounded by the
+ * thread-backed chat stack (`chat-thread` subpath), the Streamable
+ * Invoke hook (`useInvoke`), and a React Native theme system that
+ * mirrors the web design tokens.
  *
  * @packageDocumentation
  */
@@ -98,28 +100,6 @@ export { GguiProvider, useGguiContext, useAdapter } from './components/GguiProvi
 export type { GguiProviderProps } from './components/GguiProvider';
 export type { AdapterRegistry } from './context/GguiContext';
 
-// GguiSession
-export { GguiRender } from './components/GguiRender';
-export type { GguiRenderProps, GguiSessionApi, GguiSessionInfo } from './components/GguiRender';
-
-// Dynamic Component Rendering
-export {
-  DynamicComponent,
-  GguiSessionRenderer,
-  registerComponent,
-  getComponent,
-  clearRegistry,
-} from './components/DynamicComponent';
-export type {
-  DynamicComponentProps,
-  GguiSessionRendererProps,
-  ComponentDescriptor,
-} from './components/DynamicComponent';
-
-// WebView Renderer (for compiled code)
-export { WebViewRenderer } from './components/WebViewRenderer';
-export type { WebViewRendererProps, BridgeEvent } from './components/WebViewRenderer';
-
 // Shared host-role MCP-Apps bridge helpers — exported for composition by
 // callers that want to embed the bridge in a custom WebView wrapper
 // (e.g., custom error overlays, in-app navigation headers). The
@@ -145,9 +125,6 @@ export type {
   McpAppIframeDimensions,
   McpAppIframePermissions,
 } from './McpAppIframe/index';
-
-// Native Component Registry (built-in RN component mappings)
-export { registerBuiltinComponents } from './components/NativeRegistry';
 
 // Error Boundary
 export { ErrorBoundary } from './components/ErrorBoundary';
@@ -182,21 +159,5 @@ export { useInvoke, parseSseStream } from './invoke/index';
 export type { UseInvokeOptions, UseInvokeReturn, ConversationMessage, InvokeError } from './invoke/index';
 
 // Hooks
-export { useWebSocket } from './hooks/useWebSocket';
-export type { UseWebSocketOptions, UseWebSocketReturn } from './hooks/useWebSocket';
 export { useAppState } from './hooks/useAppState';
-// NOTE(F4 follow-up): `useAgentStream` listens for a `ggui:agent-stream`
-// CustomEvent that no longer has any dispatcher (the `{type:'stream'}`
-// WS frame and its bridge re-dispatch were retired draft-2026-06-11).
-// The hook file is kept for now because a parallel work stream has
-// in-flight changes on it — resolve its fate (delete or re-wire to a
-// real emitter) when that work lands.
-export { useAgentStream } from './hooks/useAgentStream';
-export type { UseAgentStreamOptions } from './hooks/useAgentStream';
-
-// WebSocket
-export { WebSocketManager } from './websocket/WebSocketManager';
-export type { WebSocketManagerOptions } from './websocket/WebSocketManager';
-export { EventBuffer } from './websocket/EventBuffer';
-export type { EventBufferOptions } from './websocket/EventBuffer';
 

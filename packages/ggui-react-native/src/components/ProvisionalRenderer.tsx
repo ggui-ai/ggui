@@ -31,8 +31,10 @@
  *     the final render.
  *
  * Nothing in this file knows that the final render will be a React
- * component bundle or a descriptor tree or anything else. Handoff is
- * driven externally by the GguiSessionRenderer branch.
+ * component bundle or a WebView shell or anything else. Handoff is
+ * driven externally by whichever host mounts the final render (today
+ * `<McpAppIframe>`; the legacy GguiSessionRenderer branch was deleted
+ * in ggui#425).
  */
 import { useMemo, type ReactNode } from 'react';
 import {

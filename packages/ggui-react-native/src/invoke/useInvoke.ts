@@ -179,7 +179,7 @@ export function useInvoke(options: UseInvokeOptions = {}): UseInvokeReturn {
   // Tracks the hostSessionId the agent surfaces via `tool_result` on turn 1
   // so subsequent `send()` calls can carry `X-Ggui-Host-Session-Id` —
   // without this the agent mints a new session per POST and turn-2 render
-  // events never reach the already-mounted `<GguiRender>`. Mirrors the web
+  // events never reach the already-mounted render host. Mirrors the web
   // hook's fix. Names the conversation envelope (the chat thread),
   // distinct from any per-render `sessionId`.
   const hostSessionIdRef = useRef<string | null>(options.hostSessionId ?? null);
