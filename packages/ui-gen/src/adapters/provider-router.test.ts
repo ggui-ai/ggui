@@ -290,7 +290,7 @@ describe('getBedrockModelId — Bedrock opt-in dot form', () => {
 
   it('passes ARN forms through verbatim', () => {
     const arn =
-      'arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-3-5-sonnet-20240620-v1:0';
+      'arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-haiku-4-5-20251001-v1:0';
     expect(getBedrockModelId(arn)).toBe(arn);
   });
 

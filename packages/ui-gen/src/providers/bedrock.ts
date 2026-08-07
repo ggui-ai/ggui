@@ -56,8 +56,8 @@
  * model id namespaces:
  *
  *   - Direct API: `claude-haiku-4-5`, `claude-opus-4-7`, etc.
- *   - Bedrock foundation models: `anthropic.claude-3-5-sonnet-20241022-v2:0`
- *   - Bedrock cross-region inference profiles: `us.anthropic.claude-3-5-sonnet-20241022-v2:0`
+ *   - Bedrock foundation models: `anthropic.claude-sonnet-4-6`
+ *   - Bedrock cross-region inference profiles: `us.anthropic.claude-haiku-4-5-20251001-v1:0`
  *
  * The adapter passes whatever `request.model` contains straight to
  * Bedrock — translation lives in the caller (model picker / deployment

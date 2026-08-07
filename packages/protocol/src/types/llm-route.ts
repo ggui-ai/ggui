@@ -346,7 +346,7 @@ export function isValidLlmRoute(provider: string, model: string): boolean {
 /**
  * Canonical wire format separator. `:` chosen over `/` because
  * `/` collides with OpenRouter's own `<author>/<model>` form
- * (`openrouter/anthropic/claude-3-5-sonnet` has TWO slashes; ambiguous
+ * (`openrouter/anthropic/claude-haiku-4.5` has TWO slashes; ambiguous
  * to split). Bedrock's model string also contains `.` and `:` — `:`
  * is fine as the OUTER separator because the inner `:` is always
  * preceded by a `.` or alphanumerics; the FIRST `:` in the serialized
@@ -364,8 +364,8 @@ const CANONICAL_SEPARATOR = ':';
  *     → `'anthropic:claude-haiku-4-5-20251001'`
  *   `{provider: 'bedrock', model: 'us.anthropic.claude-haiku-4-5-20251001-v1:0'}`
  *     → `'bedrock:us.anthropic.claude-haiku-4-5-20251001-v1:0'`
- *   `{provider: 'openrouter', model: 'anthropic/claude-3-5-sonnet'}`
- *     → `'openrouter:anthropic/claude-3-5-sonnet'`
+ *   `{provider: 'openrouter', model: 'anthropic/claude-haiku-4.5'}`
+ *     → `'openrouter:anthropic/claude-haiku-4.5'`
  */
 export function serializeLlmRoute(route: LlmRoute): string {
   return `${route.provider}${CANONICAL_SEPARATOR}${route.model}`;
@@ -445,8 +445,8 @@ const LITELLM_TO_WIRE: Partial<Record<LlmProvider, Record<string, string>>> = {
  *   - `gemini/gemini-3.5-flash`    → `{google, gemini-3.5-flash}`
  *   - `openai/gpt-5.5-...`         → `{openai, gpt-5.5-...}`
  *   - `bedrock/us.anthropic...`    → `{bedrock, us.anthropic...}`
- *   - `openrouter/anthropic/claude-3-5-sonnet`
- *     → `{openrouter, anthropic/claude-3-5-sonnet}`
+ *   - `openrouter/anthropic/claude-haiku-4.5`
+ *     → `{openrouter, anthropic/claude-haiku-4.5}`
  *
  * Used at wire boundaries (ggui.json parser, CLI flag, env var) so
  * existing operator configs keep working without a forced migration.
