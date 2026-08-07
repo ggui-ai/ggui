@@ -146,6 +146,8 @@ overrides:
   # (ui-gen devDeps + samples). Kept in lockstep with the root
   # workspace's line (2026-08-07).
   "@opentelemetry/core@<2.8.0": ^2.8.0
+  # BEGIN oss-lock-sync generated pins — do not hand-edit (scripts/oss-lock-sync.mjs, #420)
+  # END oss-lock-sync generated pins
 
 # Resolution behavior. Migrated from .npmrc. e2e/journeys assumes a
 # hoisted node_modules layout (see workspace-paths.ts `hoistedBin`).
