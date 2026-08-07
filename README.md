@@ -28,7 +28,7 @@ This repo is the **open protocol + reference runtime**. Self-host with `ggui ser
 
 One flow from a `guuey.json` to a rendered, interactive todo UI — every piece a published SDK. [guuey](https://guuey.com)'s dev tooling runs the agent (`@guuey/cli` + `@guuey/worker`), the ggui runtime is the dev router's injected MCP default, and the web client talks to the router with `@guuey/agent-client`. This path is **platform-composed**: it drives the ggui protocol through guuey's published SDKs. The protocol itself has no guuey dependency — paths 2–4 run without it, and the framework-native samples (path 2) stay first-class.
 
-Prerequisites: **Node.js 20+**, **pnpm**, and an **`ANTHROPIC_API_KEY`** (one key drives both the agent and ggui's UI generation).
+Prerequisites: **Node.js 22+**, **pnpm**, and an **`ANTHROPIC_API_KEY`** (one key drives both the agent and ggui's UI generation).
 
 ```bash
 git clone https://github.com/ggui-ai/ggui && cd ggui
