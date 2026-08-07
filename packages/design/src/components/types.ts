@@ -736,3 +736,24 @@ export interface MarkdownProps extends BaseProps {
    */
   markdown: string;
 }
+
+/**
+ * MarkdownInline -- renders ONE line of inline-level markdown (bold,
+ * italic, inline code, links) inside the parent's typography -- a table
+ * cell, a list row, a caption, a summary line. Same `markdown` prop as
+ * `Markdown`; block constructs (headings, lists, code fences) are not
+ * rendered -- reach for `Markdown` for multi-paragraph bodies.
+ *
+ * @example
+ * <Row gap="sm">
+ *   <Badge variant="success">stable</Badge>
+ *   <MarkdownInline markdown={release.summary} />
+ * </Row>
+ */
+export interface MarkdownInlineProps {
+  /**
+   * Inline markdown source -- bold, italic, inline code, and
+   * `[label](url)` links. Block-level syntax renders as plain text.
+   */
+  markdown: string;
+}

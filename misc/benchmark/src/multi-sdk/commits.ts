@@ -9,7 +9,7 @@ import type { BenchmarkCommit } from './types';
 /**
  * Standard UI Generation Benchmark Suite
  *
- * 10 commits designed to test different generation capabilities:
+ * 11 commits designed to test different generation capabilities:
  *
  * | #  | Commit             | Mode      | Complexity | Tests                                        |
  * |----|--------------------|-----------|------------|----------------------------------------------|
@@ -23,6 +23,7 @@ import type { BenchmarkCommit } from './types';
  * | 8  | Onboarding Wizard  | flow      | medium     | Multi-step, validation, step navigation      |
  * | 9  | Leaflet Map        | display   | medium     | Component gadget: registered `<LeafletMap>`  |
  * | 10 | Revenue Chart      | display   | medium     | Mixed gadget: `<Chart>` + `useChartTheme`    |
+ * | 11 | Release Notes      | display   | simple     | Markdown-bearing props → `<Markdown>` adoption |
  *
  * Each commit is parameterized via props (no hardcoded data) and includes
  * sample props for rendering realistic previews in the benchmarks app.
@@ -1044,6 +1045,93 @@ All data comes from props (report title, list of quarters with a label and a rev
     ],
     gadgetTypes: {
       '@ggui-samples/gadget-chart': CHART_GADGET_DTS,
+    },
+  },
+
+  // ── 11. SIMPLE: Markdown-Bearing Data Display ─────────────────────
+  // The only roster member whose sample data carries markdown syntax
+  // (ggui#424 slice 3b) — measures whether generation reaches for
+  // <Markdown> / <MarkdownInline> when the contract says a field is
+  // markdown, instead of dumping raw `**` / `###` source into <Text>.
+  {
+    id: 'release-notes',
+    name: 'Release Notes Viewer',
+    description: 'Changelog viewer whose summary/notes props carry markdown-formatted prose',
+    complexity: 'simple',
+    expectedMinScore: 65,
+    shellType: 'chat',
+    screen: 'universal',
+    prompt: `Build a release-notes viewer for a software product's changelog. It should display:
+- The product name and current version at the top
+- Each release as an entry in a vertical list, newest first: version number, release date, a channel badge (stable or beta), a one-line summary, and the full notes below it
+- The \`summary\` and \`notes\` fields are markdown-formatted text (headings, bold, inline code, bullet lists). Render them as formatted rich text — raw markdown syntax (\`**\`, \`###\`, backticks) must never be visible to the reader
+- Older releases start collapsed showing only version, date, badge, and summary; an expand/collapse affordance reveals the full notes. The newest release starts expanded
+
+All data must come from props — never hardcode releases. Use design-system components and CSS variables throughout.`,
+    contract: {
+      propsSpec: {
+        properties: {
+          productName: { schema: { type: 'string' }, required: true, description: 'Product name', example: 'Nimbus CLI' },
+          currentVersion: { schema: { type: 'string' }, required: true, description: 'Latest released version', example: '2.4.0' },
+          releases: {
+            schema: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  version: { type: 'string' },
+                  date: { type: 'string' },
+                  channel: { type: 'string' },
+                  summary: { type: 'string' },
+                  notes: { type: 'string' },
+                },
+              },
+            },
+            required: true,
+            description:
+              'Release entries, newest first. `channel` is "stable" or "beta". `summary` is a single line of markdown (bold, italic, inline code); `notes` is a multi-paragraph markdown body (### headings, bullet lists, bold, inline code).',
+            example: [
+              {
+                version: '2.4.0',
+                date: '2026-08-01',
+                channel: 'stable',
+                summary: 'Adds **bulk export** and a 3× faster `sync` engine',
+                notes: '### Highlights\n\n- **Bulk export** to CSV and JSON via `nimbus export --all`\n- Rewritten `sync` engine — cold syncs finish **3× faster**\n\n### Fixes\n\n- `nimbus login` no longer loops on expired refresh tokens',
+              },
+            ],
+          },
+        },
+      },
+    },
+    props: {
+      productName: 'Nimbus CLI',
+      currentVersion: '2.4.0',
+      releases: [
+        {
+          version: '2.4.0',
+          date: '2026-08-01',
+          channel: 'stable',
+          summary: 'Adds **bulk export** and a 3× faster `sync` engine',
+          notes:
+            '### Highlights\n\n- **Bulk export** to CSV and JSON via `nimbus export --all`\n- Rewritten `sync` engine — cold syncs finish **3× faster**\n\n### Fixes\n\n- `nimbus login` no longer loops on expired refresh tokens\n- Progress bars render correctly in narrow terminals',
+        },
+        {
+          version: '2.4.0-beta.2',
+          date: '2026-07-18',
+          channel: 'beta',
+          summary: 'Preview of the new `sync` engine — *opt-in* via `--engine=v2`',
+          notes:
+            '### Preview\n\nThe rewritten sync engine is available behind a flag:\n\n- Run `nimbus sync --engine=v2` to opt in\n- Falls back to v1 automatically on unsupported filesystems\n\n**Known issue**: symlinked directories are skipped silently.',
+        },
+        {
+          version: '2.3.1',
+          date: '2026-06-30',
+          channel: 'stable',
+          summary: 'Patch release — fixes `watch` mode CPU spikes',
+          notes:
+            '### Fixes\n\n- `nimbus watch` no longer pegs a core when a watched directory is deleted\n- Corrected exit code on partial upload failures (was `0`, now `3`)\n\n### Docs\n\n- New [troubleshooting guide](https://example.com/docs/troubleshooting) for proxy environments',
+        },
+      ],
     },
   },
 ];

@@ -181,10 +181,11 @@ ${ctx.designSystemSummary}`);
 - Editable fields should have save/cancel
 - Interactive components should have hover/focus feedback
 
-**accessibility**: Semantic HTML, labels, alt text, keyboard navigation.
+**accessibility**: Semantic HTML, labels, alt text, keyboard navigation, ARIA state.
 - Form inputs must have associated labels (label prop or aria-label)
 - Images need alt text
 - Interactive elements need keyboard support
+- Interactive controls expose their state (aria-checked / aria-selected / aria-expanded / aria-pressed), never styling alone
 - Proper heading hierarchy (h1 > h2 > h3)
 
 **layout**: Spacing, alignment, visual grouping.
@@ -238,6 +239,12 @@ role, aria-*, label, or keyboard support — it is already there:
 REAL accessibility gaps worth flagging:
 - A raw \`<div>\` / \`<span>\` used as a click target without \`as={Clickable}\`
   (no role, no keyboard) — or any hand-rolled interactive element.
+- A hand-rolled control whose state (checked / selected / expanded /
+  pressed) is conveyed ONLY by styling — e.g. a styled-div "checkbox"
+  with a check icon + strikethrough label but no \`role="checkbox"\` /
+  \`aria-checked\`. Note \`as={Clickable}\` adds button + keyboard
+  semantics but NOT state — \`aria-checked\` / \`aria-pressed\` /
+  \`aria-selected\` / \`aria-expanded\` must be passed explicitly.
 - An \`<img>\` / \`<Image>\` with no alt text.
 - \`<Input>\` / \`<Select>\` / \`<TextArea>\` used with NO \`label\` prop.
 - An icon-only \`<Button>\` (no text child) with no \`aria-label\`.

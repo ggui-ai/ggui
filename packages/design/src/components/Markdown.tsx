@@ -8,9 +8,9 @@ import {
 import { Heading } from '../primitives/Heading';
 import { Text } from '../primitives/Text';
 import { Link } from '../primitives/Link';
-import type { MarkdownProps } from './types';
+import type { MarkdownProps, MarkdownInlineProps } from './types';
 
-export type { MarkdownProps } from './types';
+export type { MarkdownProps, MarkdownInlineProps } from './types';
 
 /**
  * Markdown — agent-authored rich text inside a generated UI.
@@ -173,6 +173,6 @@ export function Markdown({ markdown, className, style }: MarkdownProps) {
  * `Text`/`Heading` (an A2UI Text component's block level comes from
  * `variant`, not from `#` syntax).
  */
-export function MarkdownInline({ markdown }: { markdown: string }) {
+export function MarkdownInline({ markdown }: MarkdownInlineProps) {
   return <>{renderRichTextInlines(parseInlineRichText(markdown))}</>;
 }

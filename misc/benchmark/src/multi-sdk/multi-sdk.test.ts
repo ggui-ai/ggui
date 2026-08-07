@@ -158,8 +158,8 @@ describe('Tool Bridge', () => {
 // =============================================================================
 
 describe('Benchmark Commits', () => {
-  it('has 10 benchmark commits (8 core + 2 component-gadget probes)', () => {
-    expect(BENCHMARK_COMMITS).toHaveLength(10);
+  it('has 11 benchmark commits (8 core + 2 component-gadget probes + 1 markdown-bearing)', () => {
+    expect(BENCHMARK_COMMITS).toHaveLength(11);
   });
 
   it('covers all complexity levels', () => {

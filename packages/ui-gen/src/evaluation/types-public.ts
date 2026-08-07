@@ -375,12 +375,13 @@ Only list MISSING interactive elements. Use 'fail' only for issues blocking core
     priority: "P2",
     tier: 2,
     failOutcome: "warn",
-    codingGuidance: "Add labels on form inputs, alt text on images, semantic HTML.",
-    evalInstruction: `Evaluate ACCESSIBILITY: missing labels, alt text, semantic HTML, keyboard support.
+    codingGuidance:
+      "Add labels on form inputs, alt text on images, semantic HTML, and state ARIA (aria-checked/pressed/selected/expanded) on hand-rolled interactive controls.",
+    evalInstruction: `Evaluate ACCESSIBILITY: missing labels, alt text, semantic HTML, keyboard support, ARIA state.
 
 ggui primitives bake in their own ARIA — see "Primitive Accessibility" in the Design System context above. NEVER flag a ggui primitive (Input/Select/TextArea, RadioGroup, Checkbox, Toggle, Progress, Slider, Spinner, Skeleton, Tabs, Accordion, Alert, Toast, Tooltip, Clickable, Icon) for a missing role / aria-* / label / keyboard handler — it is already there and not visible in the source you are reading.
 
-Flag ONLY real gaps: a raw div/span used as an interactive control; an image with no alt text; an Input/Select/TextArea with no \`label\` prop; an icon-only Button with no aria-label; live/streaming data not wrapped in an aria-live region; inverted heading hierarchy.
+Flag ONLY real gaps: a raw div/span used as an interactive control; a hand-rolled control whose checked/selected/expanded/pressed state is conveyed only by styling (strikethrough, color, a check icon) with no \`aria-checked\` / \`aria-pressed\` / \`aria-selected\` / \`aria-expanded\`; an image with no alt text; an Input/Select/TextArea with no \`label\` prop; an icon-only Button with no aria-label; live/streaming data not wrapped in an aria-live region; inverted heading hierarchy.
 
 Only list MISSING accessibility features. Use 'fail' only if it blocks delivery.`,
   },

@@ -35,5 +35,5 @@ export type {
   StepperProps,
 } from './types';
 export { Markdown, renderRichTextInlines } from './Markdown';
-export type { MarkdownProps } from './Markdown';
+export type { MarkdownProps, MarkdownInlineProps } from './Markdown';
 export { MarkdownInline } from './Markdown';

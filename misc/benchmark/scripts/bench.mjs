@@ -147,7 +147,8 @@ const PRESETS = {
     // Every benchmark commit — includes the two gadget commits
     // (leaflet-map: registered <LeafletMap> component gadget;
     // revenue-chart: <Chart> component + useChartTheme hook gadget)
-    // so a "full" run measures gadget generation, not just
+    // and the markdown-bearing release-notes commit, so a "full" run
+    // measures gadget generation and rich-text adoption, not just
     // design-system primitives.
     commits: [
       'weather-card',
@@ -160,6 +161,7 @@ const PRESETS = {
       'onboarding-wizard',
       'leaflet-map',
       'revenue-chart',
+      'release-notes',
     ],
     maxAttempts: 15,
     maxEvalRounds: 3,
