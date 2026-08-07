@@ -372,6 +372,14 @@ export interface GguiRenderHandlerDeps extends RenderSliceMetaDeps {
   /** GguiSession-backing store. Used to mint / replace renders on render. */
   readonly renderStore: GguiSessionStore;
   /**
+   * Render-row retention window in ms. Operators align this with
+   * chat-history lifetime so rehydration-by-refetch finds the row
+   * (spec: docs/superpowers/specs/2026-08-07-rehydration-access-control-design.md §4).
+   * Default: DEFAULT_RENDER_TTL_MS (1h) — the pre-existing memory-
+   * hygiene default for in-process stores.
+   */
+  readonly renderTtlMs?: number;
+  /**
    * Per-app metadata resolver — when bound, render reads
    * `app.gadgets` and runs `assertGadgetsRegistered`
    * before any state mutation. Every `(package, export name)` the
@@ -1394,7 +1402,7 @@ export function createGguiRenderHandler(
           contentType: 'application/javascript+react',
           createdAt: nowEpochMs,
           lastActivityAt: nowEpochMs,
-          expiresAt: nowEpochMs + DEFAULT_RENDER_TTL_MS,
+          expiresAt: nowEpochMs + (deps.renderTtlMs ?? DEFAULT_RENDER_TTL_MS),
           eventSequence: 0,
         };
         try {
@@ -1460,7 +1468,7 @@ export function createGguiRenderHandler(
           kind: 'mcp-apps-probe',
           createdAt: nowEpochMs,
           lastActivityAt: nowEpochMs,
-          expiresAt: nowEpochMs + DEFAULT_RENDER_TTL_MS,
+          expiresAt: nowEpochMs + (deps.renderTtlMs ?? DEFAULT_RENDER_TTL_MS),
           eventSequence: 0,
           props: { intent: story.intent },
         };
@@ -1635,6 +1643,7 @@ export function createGguiRenderHandler(
             deps.provisionalPreview,
             deps.channelNotifier,
             deps.checkRenderContracts,
+            deps.renderTtlMs,
             {
               sessionId,
               appId: ctx.appId,
@@ -1726,6 +1735,7 @@ export function createGguiRenderHandler(
             deps.channelNotifier,
             deps.checkRenderContracts,
             deps.generator,
+            deps.renderTtlMs,
             {
               ctx,
               sessionId,
@@ -1830,7 +1840,7 @@ export function createGguiRenderHandler(
           contentType: 'application/javascript+react',
           createdAt: nowEpochMs,
           lastActivityAt: nowEpochMs,
-          expiresAt: nowEpochMs + DEFAULT_RENDER_TTL_MS,
+          expiresAt: nowEpochMs + (deps.renderTtlMs ?? DEFAULT_RENDER_TTL_MS),
           eventSequence: 0,
         };
         try {
@@ -2363,6 +2373,12 @@ async function runGenerationIntoGguiSession(
       }) => void)
     | undefined,
   generatorOverride: GguiRenderHandlerDeps['generator'] | undefined,
+  /**
+   * Render-row retention window in ms — forwarded from
+   * `GguiRenderHandlerDeps.renderTtlMs`. `undefined` falls back to
+   * `DEFAULT_RENDER_TTL_MS` at each commit site below.
+   */
+  renderTtlMs: number | undefined,
   args: {
     readonly ctx: HandlerContext;
     readonly sessionId: string;
@@ -2433,7 +2449,7 @@ async function runGenerationIntoGguiSession(
     try {
       result = await generatorOverride(generateInputBase, ctx);
     } catch (err) {
-      return commitErrorGguiSession(renderStore, previewDeps, channelNotifier, {
+      return commitErrorGguiSession(renderStore, previewDeps, channelNotifier, renderTtlMs, {
         sessionId,
         appId: ctx.appId,
         userId: ctx.userId, // per-user isolation (undefined for non-federated single-user)
@@ -2455,7 +2471,7 @@ async function runGenerationIntoGguiSession(
     try {
       creds = await generation.resolveLlm(ctx);
     } catch (err) {
-      return commitErrorGguiSession(renderStore, previewDeps, channelNotifier, {
+      return commitErrorGguiSession(renderStore, previewDeps, channelNotifier, renderTtlMs, {
         sessionId,
         appId: ctx.appId,
         userId: ctx.userId, // per-user isolation (undefined for non-federated single-user)
@@ -2499,7 +2515,7 @@ async function runGenerationIntoGguiSession(
           );
         }
       }
-      return commitErrorGguiSession(renderStore, previewDeps, channelNotifier, {
+      return commitErrorGguiSession(renderStore, previewDeps, channelNotifier, renderTtlMs, {
         sessionId,
         appId: ctx.appId,
         userId: ctx.userId, // per-user isolation (undefined for non-federated single-user)
@@ -2521,7 +2537,7 @@ async function runGenerationIntoGguiSession(
         providerKey: creds.providerKey,
       });
     } catch (err) {
-      return commitErrorGguiSession(renderStore, previewDeps, channelNotifier, {
+      return commitErrorGguiSession(renderStore, previewDeps, channelNotifier, renderTtlMs, {
         sessionId,
         appId: ctx.appId,
         userId: ctx.userId, // per-user isolation (undefined for non-federated single-user)
@@ -2540,7 +2556,7 @@ async function runGenerationIntoGguiSession(
   }
 
   if (!result.ok) {
-    return commitErrorGguiSession(renderStore, previewDeps, channelNotifier, {
+    return commitErrorGguiSession(renderStore, previewDeps, channelNotifier, renderTtlMs, {
       sessionId,
       appId: ctx.appId,
       userId: ctx.userId, // per-user isolation (undefined for non-federated single-user)
@@ -2568,7 +2584,7 @@ async function runGenerationIntoGguiSession(
     contentType: 'application/javascript+react',
     createdAt: nowEpochMs,
     lastActivityAt: nowEpochMs,
-    expiresAt: nowEpochMs + DEFAULT_RENDER_TTL_MS,
+    expiresAt: nowEpochMs + (renderTtlMs ?? DEFAULT_RENDER_TTL_MS),
     eventSequence: 0,
     ...(result.response.warnings && result.response.warnings.length > 0
       ? { description: result.response.warnings[0] }
@@ -2723,6 +2739,8 @@ async function commitErrorGguiSession(
   renderStore: GguiSessionStore,
   previewDeps: ProvisionalPreviewDeps | undefined,
   channelNotifier: ChannelNotifier | undefined,
+  /** Forwarded from `GguiRenderHandlerDeps.renderTtlMs` (see there). */
+  renderTtlMs: number | undefined,
   args: {
     readonly sessionId: string;
     readonly appId: string;
@@ -2758,7 +2776,7 @@ async function commitErrorGguiSession(
     contentType: 'application/javascript+react',
     createdAt: args.nowEpochMs,
     lastActivityAt: args.nowEpochMs,
-    expiresAt: args.nowEpochMs + DEFAULT_RENDER_TTL_MS,
+    expiresAt: args.nowEpochMs + (renderTtlMs ?? DEFAULT_RENDER_TTL_MS),
     eventSequence: 0,
     ...(args.appTheme !== undefined ? { theme: args.appTheme } : {}),
   };
@@ -2867,6 +2885,8 @@ async function commitCachedGguiSession(
         readonly agentCapabilities?: { readonly tools?: Readonly<Record<string, unknown>> };
       }) => void)
     | undefined,
+  /** Forwarded from `GguiRenderHandlerDeps.renderTtlMs` (see there). */
+  renderTtlMs: number | undefined,
   args: {
     readonly sessionId: string;
     readonly appId: string;
@@ -2907,7 +2927,7 @@ async function commitCachedGguiSession(
     contentType: 'application/javascript+react',
     createdAt: nowEpochMs,
     lastActivityAt: nowEpochMs,
-    expiresAt: nowEpochMs + DEFAULT_RENDER_TTL_MS,
+    expiresAt: nowEpochMs + (renderTtlMs ?? DEFAULT_RENDER_TTL_MS),
     eventSequence: 0,
     ...(args.runtimeProps !== undefined
       ? { props: args.runtimeProps }

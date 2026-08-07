@@ -469,6 +469,12 @@ export function defaultHandlers(deps: {
   readonly render?: {
     readonly renderStore: GguiSessionStore;
     /**
+     * Render-row retention window in ms. Forwarded as-is to
+     * `createGguiRenderHandler`'s `renderTtlMs` dep. Absent = the
+     * handler's own `DEFAULT_RENDER_TTL_MS` (1h) fallback.
+     */
+    readonly renderTtlMs?: number;
+    /**
      * Optional bootstrap-credential minter. When present, `ggui_render`
      * (the renamed render-commit tool) results carry the
      * `ai.ggui/render` slice meta. When absent, they don't —
@@ -1194,6 +1200,9 @@ export function defaultHandlers(deps: {
     handlers.push(
       createGguiRenderHandler({
         renderStore: deps.render.renderStore,
+        ...(deps.render.renderTtlMs !== undefined
+          ? { renderTtlMs: deps.render.renderTtlMs }
+          : {}),
         // Plugin slice Commit 3 — render reads App.gadgets to
         // gate `clientCapabilities.gadgets[*].hook` references via
         // `assertGadgetsRegistered`. Same instance the
@@ -1871,6 +1880,19 @@ export interface CreateGguiServerOptions {
    * when they land.
    */
   readonly renderStore?: GguiSessionStore;
+
+  /**
+   * Render-row retention window in ms, forwarded to `ggui_render`'s
+   * `renderTtlMs` deps field. Operators align this with chat-history
+   * lifetime so rehydration-by-refetch (re-reading the `ui://ggui/render/*`
+   * resource after the agent's original render call) finds the row
+   * instead of a reaped one (spec:
+   * docs/superpowers/specs/2026-08-07-rehydration-access-control-design.md §4).
+   * Defaults to `ggui_render`'s own `DEFAULT_RENDER_TTL_MS` (1h) when
+   * unset — the pre-existing memory-hygiene default for in-process
+   * stores.
+   */
+  readonly renderTtlMs?: number;
 
   /**
    * Outbound stream replay buffer for the live-channel endpoint. Defaults
@@ -3630,6 +3652,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
         ? {
             render: {
               renderStore,
+              ...(opts.renderTtlMs !== undefined ? { renderTtlMs: opts.renderTtlMs } : {}),
               ...(mintBootstrap ? { mintBootstrap } : {}),
               // G14 (2026-05-23) refresh seam. Same `channelBootstrap`
               // the WS upgrade path uses — sharing it means one HMAC

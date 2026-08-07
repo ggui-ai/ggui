@@ -219,6 +219,13 @@ function buildHandler(opts: {
    * hands the hook on BOTH the cache-hit and cold-gen paths.
    */
   readonly postSuccessHook?: GguiRenderHandlerDeps['postSuccessHook'];
+  /**
+   * Optional render-row retention override. Threaded onto the handler
+   * deps' `renderTtlMs` so tests can assert the committed row's
+   * `expiresAt` reflects an operator-configured window instead of the
+   * `DEFAULT_RENDER_TTL_MS` (1h) fallback.
+   */
+  readonly renderTtlMs?: number;
 }): ReturnType<typeof createGguiRenderHandler> {
   return createGguiRenderHandler({
     handshakeStore: opts.handshakeStore,
@@ -227,6 +234,7 @@ function buildHandler(opts: {
       ? { checkRenderContracts: opts.checkRenderContracts }
       : {}),
     ...(opts.postSuccessHook ? { postSuccessHook: opts.postSuccessHook } : {}),
+    ...(opts.renderTtlMs !== undefined ? { renderTtlMs: opts.renderTtlMs } : {}),
     generation: {
       // `uiGenerator` is never reached — `generator` escape hatch wins.
       uiGenerator: {
@@ -433,6 +441,7 @@ async function buildAcceptCacheHarnessFor(
  *  matchedBlueprint), so render falls through to generation. */
 async function buildColdGenHarness(extraOpts: {
   readonly postSuccessHook?: GguiRenderHandlerDeps['postSuccessHook'];
+  readonly renderTtlMs?: number;
 } = {}): Promise<{
   readonly harness: Harness;
   readonly handshakeId: string;
@@ -457,6 +466,9 @@ async function buildColdGenHarness(extraOpts: {
     coldCode: COLD_CODE,
     ...(extraOpts.postSuccessHook
       ? { postSuccessHook: extraOpts.postSuccessHook }
+      : {}),
+    ...(extraOpts.renderTtlMs !== undefined
+      ? { renderTtlMs: extraOpts.renderTtlMs }
       : {}),
   });
   return {
@@ -593,6 +605,30 @@ describe('createGguiRenderHandler — cache-reuse point-read (Phase 2)', () => {
     expect(entries[0].metadata['sourceKind']).toBe('llm');
     expect(entries[0].metadata['sourceGenerator']).toBe('fake-generator');
     expect(entries[0].metadata['sourceModel']).toBe('fake');
+  });
+
+  // Retention knob (spec §4 re-cut): operators align render-row
+  // retention with chat-history lifetime so rehydration-by-refetch
+  // outlives the hard-coded `DEFAULT_RENDER_TTL_MS` (1h). Drives the
+  // same cold-gen happy path as (e) above, but with `renderTtlMs` set
+  // to a 90-day window, and asserts the COMMITTED render's own
+  // `expiresAt` (not the store's independent bucket-level TTL) reflects
+  // it.
+  it('renderTtlMs overrides the default 1h row expiry', async () => {
+    const NOW = Date.now();
+    const NINETY_DAYS_MS = 90 * 24 * 60 * 60 * 1000;
+    const { harness, handshakeId } = await buildColdGenHarness({
+      renderTtlMs: NINETY_DAYS_MS,
+    });
+    const out = await harness.handler.handler(
+      { handshakeId, props: {} },
+      CTX,
+    );
+    assertRenderSuccess(out);
+
+    const stored = await harness.renderStore.get(out.sessionId);
+    const render = stored?.render as ComponentGguiSession | undefined;
+    expect(render?.expiresAt).toBeGreaterThan(NOW + 89 * 24 * 60 * 60 * 1000);
   });
 
   it('(f) override.contract is the agent safety valve: cold-gens against the agents fresh draft, does NOT reuse the available proposed cached blueprint', async () => {
