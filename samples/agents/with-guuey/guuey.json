@@ -1,0 +1,11 @@
+{
+  "schema": "1",
+  "appId": "ggui-golden-path",
+  "worker": "guuey.worker.js",
+  "agent": {
+    "framework": "claude-agent-sdk",
+    "mcpServers": {
+      "todo": { "kind": "colocated", "source": "../../mcp-servers/todo", "devPort": 6740 }
+    }
+  }
+}
