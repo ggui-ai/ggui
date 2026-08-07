@@ -13,7 +13,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 // src/testing/ → src/ → agent-server/ → packages/ → oss/
-const CACHE = join(
+const FIXTURES = join(
   dirname(fileURLToPath(import.meta.url)),
   '..',
   '..',
@@ -22,8 +22,8 @@ const CACHE = join(
   'e2e',
   'fixtures',
   'silverprotocol',
-  '.cache',
 );
+const CACHE = join(FIXTURES, '.cache');
 
 export function loadLeg(scenario: string, framework: string) {
   const read = (kind: string): unknown =>
@@ -33,6 +33,28 @@ export function loadLeg(scenario: string, framework: string) {
   return {
     native: read('native') as unknown[],
     agjson: read('agjson') as unknown[],
+    provenance: read('provenance') as Record<string, unknown>,
+  };
+}
+
+/**
+ * Read a COMMITTED local leg — the ggui-authored Layer-B fixtures
+ * (e.g. `guest-gesture`) live BESIDE the gitignored `.cache/`, in the
+ * fixture directory itself; the cache only ever holds fetched legs.
+ * No `.agjson.json` golden: authored transcripts have no upstream
+ * normalized fold — the stable/incidental set is documented in the
+ * scenario's `ENROLLMENT.md` instead.
+ */
+export function loadLocalLeg(scenario: string, framework: string) {
+  const read = (kind: string): unknown =>
+    JSON.parse(
+      readFileSync(
+        join(FIXTURES, scenario, `${framework}.${kind}.json`),
+        'utf8',
+      ),
+    );
+  return {
+    native: read('native') as unknown[],
     provenance: read('provenance') as Record<string, unknown>,
   };
 }

@@ -1,0 +1,161 @@
+[
+  {
+    "jsonrpc": "2.0",
+    "id": 3,
+    "result": {
+      "structuredContent": {
+        "sessionId": "c1d7a9e2-4b6f-4f3a-8e5d-1a2b3c4d5e6f",
+        "resourceUri": "ui://ggui/render/c1d7a9e2-4b6f-4f3a-8e5d-1a2b3c4d5e6f/9f2e4b6c8d0a1357",
+        "action": "create",
+        "contractHash": "9f2e4b6c8d0a1357",
+        "blueprintId": "5f8e7d6c-3b2a-4190-8c7d-6e5f4a3b2c1d",
+        "variantKey": "0d1c2b3a49586776",
+        "cache": {
+          "hit": false,
+          "llmCallsAvoided": 0,
+          "kind": "cold",
+          "reason": "cold: no cache marker was set for this render"
+        },
+        "nextStep": {
+          "tool": "ggui_consume",
+          "description": "Drain the action pipe for this render — long-polls until a user gesture arrives or 15s timeout.",
+          "example": "ggui_consume({ sessionId: \"c1d7a9e2-4b6f-4f3a-8e5d-1a2b3c4d5e6f\" })",
+          "args": {
+            "sessionId": "c1d7a9e2-4b6f-4f3a-8e5d-1a2b3c4d5e6f"
+          }
+        }
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "{\"sessionId\":\"c1d7a9e2-4b6f-4f3a-8e5d-1a2b3c4d5e6f\",\"resourceUri\":\"ui://ggui/render/c1d7a9e2-4b6f-4f3a-8e5d-1a2b3c4d5e6f/9f2e4b6c8d0a1357\",\"action\":\"create\",\"contractHash\":\"9f2e4b6c8d0a1357\",\"blueprintId\":\"5f8e7d6c-3b2a-4190-8c7d-6e5f4a3b2c1d\",\"variantKey\":\"0d1c2b3a49586776\",\"cache\":{\"hit\":false,\"llmCallsAvoided\":0,\"kind\":\"cold\",\"reason\":\"cold: no cache marker was set for this render\"},\"nextStep\":{\"tool\":\"ggui_consume\",\"description\":\"Drain the action pipe for this render — long-polls until a user gesture arrives or 15s timeout.\",\"example\":\"ggui_consume({ sessionId: \\\"c1d7a9e2-4b6f-4f3a-8e5d-1a2b3c4d5e6f\\\" })\",\"args\":{\"sessionId\":\"c1d7a9e2-4b6f-4f3a-8e5d-1a2b3c4d5e6f\"}}}"
+        }
+      ],
+      "_meta": {
+        "ai.ggui/render": {
+          "sessionId": "c1d7a9e2-4b6f-4f3a-8e5d-1a2b3c4d5e6f",
+          "appId": "app_1",
+          "runtimeUrl": "/_ggui/iframe-runtime.js",
+          "lastSequence": 0,
+          "propsJson": "{\"notes\":[{\"id\":\"n_42\",\"title\":\"Quarterly review\",\"archived\":false}]}"
+        },
+        "ui": {
+          "resourceUri": "ui://ggui/render/c1d7a9e2-4b6f-4f3a-8e5d-1a2b3c4d5e6f/9f2e4b6c8d0a1357"
+        },
+        "ui/resourceUri": "ui://ggui/render/c1d7a9e2-4b6f-4f3a-8e5d-1a2b3c4d5e6f/9f2e4b6c8d0a1357"
+      }
+    }
+  },
+  {
+    "jsonrpc": "2.0",
+    "id": 512034867,
+    "method": "tools/call",
+    "params": {
+      "name": "ggui_runtime_submit_action",
+      "arguments": {
+        "kind": "dispatch",
+        "payload": {
+          "intent": "archive",
+          "actionData": {
+            "noteId": "n_42"
+          },
+          "uiContext": {
+            "filter": "inbox"
+          }
+        },
+        "sessionId": "c1d7a9e2-4b6f-4f3a-8e5d-1a2b3c4d5e6f",
+        "appId": "app_1",
+        "actionId": "7f3a9c21",
+        "firedAt": "2026-08-07T09:14:32.481Z"
+      }
+    }
+  },
+  {
+    "jsonrpc": "2.0",
+    "id": 512034867,
+    "result": {
+      "structuredContent": {
+        "ok": true,
+        "consumerPresent": false
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "{\"ok\":true,\"consumerPresent\":false}"
+        }
+      ]
+    }
+  },
+  {
+    "jsonrpc": "2.0",
+    "id": 728411952,
+    "method": "ui/message",
+    "params": {
+      "role": "user",
+      "content": [
+        {
+          "type": "text",
+          "text": "Your REQUIRED FIRST TOOL CALL is ggui_consume with arguments {\"sessionId\":\"c1d7a9e2-4b6f-4f3a-8e5d-1a2b3c4d5e6f\"}. Call it NOW to retrieve and process the pending interaction. Do not respond conversationally; do not summarize. Issue the tool call as your next action.\n\n<ggui_directive kind=\"user-action\">\n  <session_id>c1d7a9e2-4b6f-4f3a-8e5d-1a2b3c4d5e6f</session_id>\n  <next_tool>ggui_consume</next_tool>\n  <next_args>{\"sessionId\":\"c1d7a9e2-4b6f-4f3a-8e5d-1a2b3c4d5e6f\"}</next_args>\n</ggui_directive>\n\nThe user interacted with render c1d7a9e2-4b6f-4f3a-8e5d-1a2b3c4d5e6f while no ggui_consume long-poll was active. The gesture is queued on the consume pipe for that render — it is NOT in this message. After ggui_consume returns, react to the returned event with the appropriate domain tool, then call ggui_update on the SAME sessionId (c1d7a9e2-4b6f-4f3a-8e5d-1a2b3c4d5e6f).",
+          "_meta": {
+            "ai.ggui/userAction": {
+              "kind": "user-action",
+              "description": "User interacted with render c1d7a9e2-4b6f-4f3a-8e5d-1a2b3c4d5e6f; call ggui_consume to retrieve and process it.",
+              "sessionId": "c1d7a9e2-4b6f-4f3a-8e5d-1a2b3c4d5e6f",
+              "actionId": "7f3a9c21",
+              "submittedAt": "2026-08-07T09:14:32.481Z",
+              "intent": "archive",
+              "nextStep": {
+                "tool": "ggui_consume",
+                "args": {
+                  "sessionId": "c1d7a9e2-4b6f-4f3a-8e5d-1a2b3c4d5e6f"
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  },
+  {
+    "jsonrpc": "2.0",
+    "id": 4,
+    "method": "tools/call",
+    "params": {
+      "name": "ggui_consume",
+      "arguments": {
+        "sessionId": "c1d7a9e2-4b6f-4f3a-8e5d-1a2b3c4d5e6f",
+        "timeout": 15
+      }
+    }
+  },
+  {
+    "jsonrpc": "2.0",
+    "id": 4,
+    "result": {
+      "structuredContent": {
+        "events": [
+          {
+            "type": "action",
+            "sessionId": "c1d7a9e2-4b6f-4f3a-8e5d-1a2b3c4d5e6f",
+            "intent": "archive",
+            "actionData": {
+              "noteId": "n_42"
+            },
+            "uiContext": {
+              "filter": "inbox"
+            },
+            "actionId": "7f3a9c21",
+            "firedAt": "2026-08-07T09:14:32.481Z"
+          }
+        ],
+        "status": "active"
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "{\"events\":[{\"type\":\"action\",\"sessionId\":\"c1d7a9e2-4b6f-4f3a-8e5d-1a2b3c4d5e6f\",\"intent\":\"archive\",\"actionData\":{\"noteId\":\"n_42\"},\"uiContext\":{\"filter\":\"inbox\"},\"actionId\":\"7f3a9c21\",\"firedAt\":\"2026-08-07T09:14:32.481Z\"}],\"status\":\"active\"}"
+        }
+      ]
+    }
+  }
+]

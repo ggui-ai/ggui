@@ -10,7 +10,8 @@
  * structural fold shape (group kinds/counts). NEVER asserted: prose,
  * ids, token counts, timestamps, per-run metadata.
  */
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { act, renderHook } from '@testing-library/react';
 import { AgEvent } from '@silverprotocol/core';
 import type { ContentBlock } from '@ggui-ai/protocol';
 import type { ConversationMessage } from '../../invoke/useInvoke';
@@ -18,9 +19,10 @@ import {
   conversationMessagesToInvokeHistory,
   extractRenderFromToolResult,
   invokeMessageToContentGroups,
+  useMcpAppsChat,
   type ContentGroup,
 } from '../index';
-import { goldenUiToolDones, loadLeg } from './corpus';
+import { goldenUiToolDones, loadLeg, loadLocalLeg } from './corpus';
 
 const LEGS = [
   ['app-spec-gemini36', 'adk'],
@@ -388,5 +390,161 @@ describe('synthetic contract tier', () => {
       isStreaming: false,
     };
     expect(invokeMessageToContentGroups(orphan)).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Guest-gesture Layer-B fixture (ggui-authored, committed — not fetched).
+// ---------------------------------------------------------------------------
+
+/**
+ * Label a transcript frame by its stable kind. Stable-set vocabulary
+ * only: JSON-RPC method + tool name for calls, 'result' for responses.
+ * Fixture-reading plumbing (same tolerant-narrow idiom as the cassette
+ * mappers above) — the seam under test is imported from src.
+ */
+function frameKind(frame: unknown): string {
+  const f = asRecord(frame);
+  if (f === undefined) return 'unknown';
+  if (typeof f.method === 'string') {
+    if (f.method === 'tools/call') {
+      const name = asRecord(f.params)?.name;
+      return `tools/call:${typeof name === 'string' ? name : '?'}`;
+    }
+    return f.method;
+  }
+  return f.result !== undefined ? 'result' : 'unknown';
+}
+
+/** Build a Response whose body is an empty SSE stream (so the hook's
+ *  POST resolves) — the useMcpAppsChat harness idiom from
+ *  useMcpAppsChat.handleAppMessage.test.tsx. */
+function emptySseResponse(): Response {
+  const stream = new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.close();
+    },
+  });
+  return new Response(stream, {
+    status: 200,
+    headers: { 'Content-Type': 'text/event-stream' },
+  });
+}
+
+describe('guest-gesture Layer-B fixture (ggui-authored)', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  it('transcript is the documented round-trip: render result → gesture → doorbell → consume (types + ordering + tool names)', () => {
+    const leg = loadLocalLeg('guest-gesture', 'ggui');
+
+    // Stable set: frame types + ordering + tool/method names (the
+    // six-frame round-trip the ENROLLMENT.md stable set declares).
+    expect(leg.native.map(frameKind)).toEqual([
+      'result',
+      'tools/call:ggui_runtime_submit_action',
+      'result',
+      'ui/message',
+      'tools/call:ggui_consume',
+      'result',
+    ]);
+
+    // ggui's own extract (imported from src) recognizes the render
+    // result's `_meta.ui` bootstrap — the same oracle as the cassette
+    // tier, applied to the authored transcript.
+    const renderResult = asRecord(asRecord(leg.native[0])?.result);
+    expect(renderResult).toBeDefined();
+    expect(
+      extractRenderFromToolResult({
+        type: 'tool_result',
+        tool_use_id: 'render-frame',
+        content: renderResult,
+      }),
+    ).not.toBeNull();
+
+    // Correlation EQUALITIES (stable as equalities across frames; the
+    // literal id values are incidental): one sessionId threads render →
+    // gesture → consume, and the gesture's intent/actionId reappear on
+    // the drained ConsumeEventEntry.
+    const sessionId = asRecord(renderResult?.structuredContent)?.sessionId;
+    expect(typeof sessionId).toBe('string');
+    const gestureArgs = asRecord(
+      asRecord(asRecord(leg.native[1])?.params)?.arguments,
+    );
+    expect(gestureArgs?.kind).toBe('dispatch');
+    expect(gestureArgs?.sessionId).toBe(sessionId);
+    const consumeArgs = asRecord(
+      asRecord(asRecord(leg.native[4])?.params)?.arguments,
+    );
+    expect(consumeArgs?.sessionId).toBe(sessionId);
+    const consumeStructured = asRecord(
+      asRecord(asRecord(leg.native[5])?.result)?.structuredContent,
+    );
+    const events = consumeStructured?.events;
+    expect(Array.isArray(events)).toBe(true);
+    expect((events as unknown[]).length).toBe(1); // scenario intent: ONE gesture
+    const entry = asRecord((events as unknown[])[0]);
+    expect(entry?.type).toBe('action');
+    expect(entry?.sessionId).toBe(sessionId);
+    expect(entry?.intent).toBe(asRecord(gestureArgs?.payload)?.intent);
+    expect(entry?.actionId).toBe(gestureArgs?.actionId);
+  });
+
+  it('handleAppMessage forwards the doorbell: directive text AS the prompt, _meta opaquely', async () => {
+    const leg = loadLocalLeg('guest-gesture', 'ggui');
+    const doorbell = asRecord(asRecord(leg.native[3])?.params);
+    const blocks = Array.isArray(doorbell?.content) ? doorbell.content : [];
+    const block = asRecord(blocks[0]);
+    const text = typeof block?.text === 'string' ? block.text : '';
+    const meta = asRecord(block?._meta);
+    expect(text.length).toBeGreaterThan(0);
+    expect(meta).toBeDefined();
+
+    // The structured mirror (`GguiUserActionMeta` on the wire) points
+    // the agent at the transcript's follow-up tool — stable: tool name
+    // ties doorbell → consume frame. Tolerant narrow, same idiom as
+    // the cassette mappers.
+    const userAction = asRecord(meta?.['ai.ggui/userAction']);
+    expect(userAction?.kind).toBe('user-action');
+    const nextTool = asRecord(userAction?.nextStep)?.tool;
+    expect(frameKind(leg.native[4])).toBe(
+      `tools/call:${typeof nextTool === 'string' ? nextTool : '?'}`,
+    );
+
+    // The package's documented stance (chat-helpers/index.ts): the
+    // iframe-runtime authored the full directive; the hook forwards the
+    // text as the prompt and the content-block `_meta` OPAQUELY as
+    // `data.meta` — no synthesis, no key allow-list, no validation.
+    const fetchMock = vi.fn<
+      (input: string, init?: RequestInit) => Promise<Response>
+    >(async () => emptySseResponse());
+    vi.stubGlobal('fetch', fetchMock);
+    const { result } = renderHook(() =>
+      useMcpAppsChat({ chatEndpoint: 'http://x/agent' }),
+    );
+    let res: Record<string, unknown> = { isError: true };
+    await act(async () => {
+      res = await result.current.handleAppMessage({
+        role: typeof doorbell?.role === 'string' ? doorbell.role : undefined,
+        content: [{ type: 'text', text, _meta: meta }],
+      });
+    });
+    expect(res).toEqual({});
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const rawBody = fetchMock.mock.calls[0]?.[1]?.body;
+    const body = JSON.parse(typeof rawBody === 'string' ? rawBody : '{}') as {
+      kind?: string;
+      prompt?: string;
+      data?: { meta?: Record<string, unknown> };
+    };
+    expect(body.kind).toBe('chat');
+    // Forwarding EQUALITY input→output — not a prose-content pin: the
+    // fixture's directive text (whatever its wording) IS the prompt.
+    expect(body.prompt).toBe(text);
+    // Opaque `_meta` forwarding — deep-equal, `ai.ggui/userAction`
+    // key intact, nothing stripped or rewritten.
+    expect(body.data?.meta).toEqual(meta);
   });
 });

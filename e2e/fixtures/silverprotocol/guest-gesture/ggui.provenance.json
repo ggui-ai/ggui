@@ -1,0 +1,6 @@
+{
+  "kind": "authored",
+  "capturedAt": "2026-08-07T18:39:58.000Z",
+  "source": "ggui iframe-runtime + useMcpAppsChat, hand-assembled from the shapes the runtime actually emits",
+  "note": "Authored-from-real-shapes, NOT a live capture. Every frame shape is copied out of ggui's shipping source, not invented: the ui/message doorbell is the exact postToParent frame emitUserActionDoorbell posts (oss/packages/iframe-runtime/src/runtime.ts — directive text verbatim, content-block _meta['ai.ggui/userAction'] typed GguiUserActionMeta); the ggui_runtime_submit_action call carries dispatchSubmitAction's kind:'dispatch' envelope; the render/submit/consume results carry the handlers' zod wire schemas (@ggui-ai/mcp-server-handlers renders/{render,submit-action,consume}.ts) inside build-mcp.ts's {structuredContent, content:[stringified], _meta} success envelope. FIXTURES.md's acceptance filter is 'real framework wire' — the runtime IS the framework for this Layer-B scenario: no agent framework's server-side stream contains the client→host gesture round-trip, which is why authorship sits on ggui's side. Stable/incidental discipline for this transcript: see ENROLLMENT.md in this directory (the enrollment draft of record for silverprotocol/workspace)."
+}
