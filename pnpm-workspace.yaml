@@ -115,6 +115,7 @@ overrides:
   # Same invariant — 24.42-vs-24.43 split: 24.43.1 narrowed a waitUntil
   # union and ui-gen's visual evaluator stopped compiling in CI only.
   puppeteer-core: 24.42.0
+  "@smithy/types": ^4.14.0
   "brace-expansion@>=5": ^5.0.9
   "fast-uri@<3.1.4": ^3.1.4
   "fast-xml-builder@<1.1.7": ^1.1.7
@@ -146,6 +147,15 @@ overrides:
   # (ui-gen devDeps + samples). Kept in lockstep with the root
   # workspace's line (2026-08-07).
   "@opentelemetry/core@<2.8.0": ^2.8.0
+  # adm-zip <0.6.0 (advisory 395, root-lock only): sole consumer is
+  # @google/adk@1.5.0, which declares ^0.5.17 — hence the scoped
+  # override. Per-consumer judgement DONE 2026-08-07: adk's entire
+  # adm-zip surface (skills/loader.js — constructor(Buffer),
+  # getEntries(), entry.entryName / .isDirectory / .getData()) is
+  # unchanged in 0.6.0. Caret keeps future 0.7.x out per the
+  # multi-major note above.
+  "adm-zip@<0.6.0": ^0.6.0
+  "immutable@<3.8.3": ^3.8.3
   # BEGIN oss-lock-sync generated pins — do not hand-edit (scripts/oss-lock-sync.mjs, #420)
   # END oss-lock-sync generated pins
 
