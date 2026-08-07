@@ -10,11 +10,16 @@
 # (proven in the scaffolder-era sub-tier A; env-var registry/cache settings are
 # silently ignored by pnpm 11).
 #
+# The `with-guuey` SDK key takes its own branch below: guuey's layout (agent
+# half at the app root), standalone per-dir npm installs (scoped Verdaccio
+# registry), and a 3-process boot (ggui serve :6781 → `guuey dev --serve`
+# :6790 → web :6890) instead of the app-shell's `pnpm dev`.
+#
 # Inputs (env):
-#   SDK                (required) claude-agent-sdk | openai-agents-sdk | google-adk
+#   SDK                (required) claude-agent-sdk | openai-agents-sdk | google-adk | with-guuey
 #   APP_DIR            (required) where to compose the app
 #   REGISTRY           (default http://localhost:4874) the Verdaccio base URL
-#   ANTHROPIC_API_KEY  (required) drives ggui's UI generation AND the claude agent
+#   ANTHROPIC_API_KEY  (required) drives ggui's UI generation AND the claude/guuey agents
 #   OPENAI_API_KEY / GOOGLE_API_KEY  (optional) forwarded for the non-claude agents
 set -euo pipefail
 : "${SDK:?}" "${APP_DIR:?}"
@@ -27,14 +32,116 @@ COMPOSER="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/compose-app.mjs"
 REGISTRY_HOST_PORT="${REGISTRY#http://}"; REGISTRY_HOST_PORT="${REGISTRY_HOST_PORT%/}"
 APP_PARENT="$(dirname "$APP_DIR")"
 
-# The agent backend is unified to port 6790 across all SDK variants (dev.mjs).
-# The web SPA reaches it via VITE_AGENT_ENDPOINT_URL / the render scenario's
-# ?agent= param.
+# The agent backend is unified to port 6790 across all SDK variants — the
+# app-shell's dev.mjs for the framework lanes, and `guuey dev --serve`'s own
+# default for the with-guuey lane. The web SPA reaches it via
+# VITE_AGENT_ENDPOINT_URL / the render scenario's ?agent= param (framework
+# lanes) or its built-in localhost:6790 default (with-guuey).
 AGENT_PORT=6790
 
 rm -rf "$APP_DIR"
 echo "[boot] composing $SDK → $APP_DIR (from oss/samples/*)"
 node "$COMPOSER" --sdk="$SDK" --out="$APP_DIR"
+
+if [ "$SDK" = "with-guuey" ]; then
+  # ────────────────────────────────────────────────────────────────────────────
+  # CELL-AS-JAIL — a WRITTEN decision (spec §2 of the composed golden path),
+  # not an accident someone discovers:
+  #   guuey's dev path is UNJAILED on every platform, and the CLI forwards its
+  #   entire process env to the agent worker ({...process.env,
+  #   GUUEY_AGENT_SNAPSHOT}); @guuey/host auto-allows Bash + file tools
+  #   whenever FS layers are bound, assuming an EXTERNAL jail. Decision: the
+  #   throwaway docker cell IS the isolation boundary — one ephemeral
+  #   container per run, no secrets beyond the one API key, torn down after
+  #   the journey. That is why `guuey dev` below runs under `env -i` with ONLY
+  #   HOME/PATH/ANTHROPIC_API_KEY — never a developer-shaped environment. A
+  #   host-side run of this branch gets the same minimal-env posture but no
+  #   container wall: treat it as standard dev-server trust.
+  # ────────────────────────────────────────────────────────────────────────────
+
+  # Per-dir installs for the standalone halves — this composed tree is NOT a
+  # pnpm workspace. The .npmrc scopes ONLY @ggui-ai:registry to Verdaccio:
+  # the default registry stays real npm so the exact-pinned @guuey/* leaves
+  # resolve from the real registry rather than through the Verdaccio proxy.
+  # (The framework lanes' global `registry=` pin below is a pnpm-workspace
+  # idiom — deliberately NOT copied here.) compose-app.mjs already stripped
+  # the samples' committed package-lock.json from the copy: their `resolved`
+  # URLs point @ggui-ai/* at registry.npmjs.org, which would silently bypass
+  # THIS run's Verdaccio cohort — the exact false-green the gate exists to
+  # prevent. The per-run npm cache mirrors the pnpm cache-dir rationale:
+  # each run republishes @ggui-ai/* at the SAME cohort version, and a shared
+  # cache would serve a stale tarball or fail integrity.
+  for dir in . apps/web servers/ggui servers/mcps/todo; do
+    cat > "$APP_DIR/$dir/.npmrc" <<EOF
+@ggui-ai:registry=$REGISTRY/
+//$REGISTRY_HOST_PORT/:_authToken=samples-render-token
+cache=$APP_PARENT/npm-cache
+audit=false
+fund=false
+EOF
+    echo "[boot] npm install ($dir)"
+    ( cd "$APP_DIR/$dir" && npm install --no-progress --loglevel=error )
+  done
+
+  # Kill this branch's background boot legs before a failing exit so a broken
+  # boot never orphans servers holding 6781/6790 for the next run.
+  die_boot() {
+    echo "[boot] $1" >&2
+    # Word-splitting the PID list is the point here:
+    # shellcheck disable=SC2046
+    kill $(jobs -p) 2>/dev/null || true
+    exit 1
+  }
+
+  # Boot order (spec §1): ggui serve FIRST on 6781 — exactly where the guuey
+  # CLI's injected `ggui` mcpServer default points (the composed guuey.json
+  # declares no `ggui` entry on purpose; `guuey dev` injects
+  # http://localhost:6781/mcp when absent). It inherits this script's full
+  # env: ANTHROPIC_API_KEY for UI generation plus the harness's
+  # GGUI_CACHE_TRACE_STDERR / GGUI_EMBEDDING_CACHE_DIR diagnostics.
+  # PORT pinned explicitly (the sample's start script defaults to 6781, but a
+  # stray PORT env var — common on CI runners — would re-bind it).
+  echo "[boot] ggui serve --mcp-only on :6781 (servers/ggui, with-guuey)"
+  ( cd "$APP_DIR/servers/ggui" && exec env PORT=6781 npm run start ) &
+
+  # `guuey dev` treats the injection as config, not a health check — waiting
+  # here attributes a broken ggui boot to THIS step instead of a downstream
+  # invoke timeout. Any HTTP answer counts (the MCP mount 405s plain GETs).
+  for _ in $(seq 1 120); do
+    curl -s -o /dev/null "http://localhost:6781/mcp" && break
+    sleep 1
+  done
+  curl -s -o /dev/null "http://localhost:6781/mcp" \
+    || die_boot "ggui serve did not answer on :6781"
+
+  # MINIMAL ENV (see the jail note): the CLI forwards process.env wholesale
+  # to the agent worker, so it gets ONLY the one key + PATH/HOME hygiene.
+  # `guuey dev` spawns the colocated todo MCP itself (`pnpm run dev` in the
+  # rewritten guuey.json's source dir with PORT=6740) and reads the key from
+  # env first — no .env.local is written on this branch, so the key never
+  # lands on disk. --port pins the published default (6790) explicitly.
+  echo "[boot] guuey dev --serve on :$AGENT_PORT (minimal env — cell-as-jail)"
+  ( cd "$APP_DIR" \
+      && exec env -i HOME="$HOME" PATH="$PATH" ANTHROPIC_API_KEY="$ANTHROPIC_API_KEY" \
+        npx guuey dev --serve --port "$AGENT_PORT" ) &
+
+  for _ in $(seq 1 120); do
+    curl -sf "http://localhost:$AGENT_PORT/healthz" >/dev/null 2>&1 && break
+    sleep 1
+  done
+  curl -sf "http://localhost:$AGENT_PORT/healthz" >/dev/null 2>&1 \
+    || die_boot "guuey dev --serve did not answer /healthz on :$AGENT_PORT"
+
+  # Web half in the FOREGROUND on the harness's web port (6890 — also the
+  # vite config's own default; pinned explicitly so a stray PORT/CI env var
+  # can never re-bind it). The app's endpoint default is localhost:6790 and
+  # its vite config self-boots the second-origin sandbox proxy on 7890. The
+  # harness owns teardown of this whole process group; both background legs
+  # above are in it.
+  echo "[boot] web SPA (vite) on :6890, foreground (harness owns teardown)"
+  cd "$APP_DIR/apps/web"
+  exec env VITE_SERVER_PORT=6890 npm run dev
+fi
 
 # Project-level .npmrc pins the install to Verdaccio. A project .npmrc beats env
 # vars and is honored by the workspace pnpm install across every nested package.

@@ -6,7 +6,8 @@
  * template assembler performed, minus the template-shell wrappers (README,
  * railway.toml, .claude/, .reference/ — publish/DX artifacts, not behavior).
  *
- * Merge map (paths relative to the oss-root):
+ * Merge map (paths relative to the oss-root) — framework-native keys
+ * (claude-agent-sdk | openai-agents-sdk | google-adk):
  *
  *   samples/agents/<sdk>/        → servers/agent/
  *   samples/gguis/default/       → servers/ggui/
@@ -16,6 +17,24 @@
  * plus the harness-owned `app-shell/` at the root (root package.json,
  * pnpm-workspace.yaml, scripts/dev.mjs + stop-dev.mjs — the 4-server
  * `pnpm dev` boot).
+ *
+ * The `with-guuey` key composes the platform-composed (guuey-sdk) golden
+ * path instead — guuey's OWN layout, not the app-shell's:
+ *
+ *   samples/agents/with-guuey/    → .            (app root — guuey.json home;
+ *                                                 `guuey dev` walks up from
+ *                                                 cwd to find it)
+ *   samples/gguis/default/        → servers/ggui/ (the ggui runtime config)
+ *   samples/mcp-servers/todo/     → servers/mcps/todo/ (the colocated
+ *                                                 `source` guuey.json points
+ *                                                 at — rewritten at compose
+ *                                                 time, see below)
+ *   samples/apps/with-guuey-web/  → apps/web/
+ *
+ * NO app-shell: the with-guuey tree is NOT a pnpm workspace — its halves are
+ * standalone published-consumer npm projects installed per-dir, and the boot
+ * sequence (ggui serve :6781 → `guuey dev --serve` :6790 → web :6890) lives
+ * in compose-and-boot.sh's with-guuey branch, not scripts/dev.mjs.
  *
  * Package-json rewrites at compose time:
  *   1. Root `"name"` → `rendercell-<sdk>`.
@@ -36,7 +55,7 @@
  * needs ONE provider key family, not two.
  *
  * Usage:
- *   node compose-app.mjs --sdk=<claude-agent-sdk|openai-agents-sdk|google-adk> --out=<dir>
+ *   node compose-app.mjs --sdk=<claude-agent-sdk|openai-agents-sdk|google-adk|with-guuey> --out=<dir>
  *
  * Exit codes: 0 = success, 1 = bad args, 2 = source dir missing,
  * 3 = rewrite produced an invalid package.json.
@@ -60,15 +79,58 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const OSS_ROOT = resolve(HERE, '../../..');
 const APP_SHELL = resolve(HERE, '../app-shell');
 
-const SDKS = /** @type {const} */ (['claude-agent-sdk', 'openai-agents-sdk', 'google-adk']);
-
-const PLACEMENTS = /** @type {const} */ ([
-  { sample: 'samples/gguis/default', target: 'servers/ggui' },
-  { sample: 'samples/mcp-servers/todo', target: 'servers/mcps/todo' },
-  { sample: 'samples/apps/ggui-basic-web', target: 'apps/web' },
+const SDKS = /** @type {const} */ ([
+  'claude-agent-sdk',
+  'openai-agents-sdk',
+  'google-adk',
+  'with-guuey',
 ]);
 
-const AGENT_TARGET = 'servers/agent';
+/**
+ * Per-key merge map. Framework-native keys share the fixed 4-way layout
+ * (app-shell at the root, agent under servers/agent, pnpm-workspace tree);
+ * `with-guuey` composes guuey's own layout (agent half IS the root, no
+ * app-shell, standalone npm halves — see the header).
+ *
+ * `workspaceTree` drives the package-json rewrite rules: in a workspace tree
+ * `@ggui-samples/*` cross-deps stay `workspace:*` (the composed tree resolves
+ * them locally); in a non-workspace tree ANY surviving `workspace:*` is a
+ * compose-time error — a per-dir npm install would die on the unsupported
+ * spec, so fail at the rewrite with a message that says why.
+ */
+function frameworkPlan(sdk) {
+  return {
+    appShell: true,
+    workspaceTree: true,
+    agent: { sample: `samples/agents/${sdk}`, target: 'servers/agent' },
+    placements: [
+      { sample: 'samples/gguis/default', target: 'servers/ggui' },
+      { sample: 'samples/mcp-servers/todo', target: 'servers/mcps/todo' },
+      { sample: 'samples/apps/ggui-basic-web', target: 'apps/web' },
+    ],
+  };
+}
+
+const COMPOSE_PLAN = {
+  'claude-agent-sdk': frameworkPlan('claude-agent-sdk'),
+  'openai-agents-sdk': frameworkPlan('openai-agents-sdk'),
+  'google-adk': frameworkPlan('google-adk'),
+  'with-guuey': {
+    appShell: false,
+    workspaceTree: false,
+    agent: { sample: 'samples/agents/with-guuey', target: '.' },
+    placements: [
+      { sample: 'samples/gguis/default', target: 'servers/ggui' },
+      { sample: 'samples/mcp-servers/todo', target: 'servers/mcps/todo' },
+      { sample: 'samples/apps/with-guuey-web', target: 'apps/web' },
+    ],
+  },
+};
+
+/** Where the with-guuey guuey.json's colocated todo `source` must point in
+ *  the COMPOSED layout (`guuey dev` resolves colocated sources against the
+ *  guuey.json project root, i.e. the app root here). */
+const COMPOSED_TODO_SOURCE = './servers/mcps/todo';
 
 // Point the composed app's ggui UI-generation at the SAME provider as its
 // agent, so the app needs ONE API key family (its SDK's), not two. The shared
@@ -79,6 +141,10 @@ const GGUI_GENERATION_MODEL = /** @type {const} */ ({
   'claude-agent-sdk': 'anthropic:claude-haiku-4-5-20251001',
   'openai-agents-sdk': 'openai:gpt-5.6-luna',
   'google-adk': 'google:gemini-3.5-flash-lite',
+  // with-guuey's agent half runs framework claude-agent-sdk (worker mode —
+  // graceful `agent.entry` is google-adk-only under dev-serve), so the whole
+  // lane stays on the ANTHROPIC_API_KEY family, like its claude sibling.
+  'with-guuey': 'anthropic:claude-haiku-4-5-20251001',
 });
 
 /**
@@ -124,11 +190,15 @@ function gguiAiPinRange(base) {
 /**
  * Rewrite a parsed package.json's `workspace:*` deps:
  *   - `@ggui-ai/*` → `pinRange` (install the published cohort from Verdaccio)
- *   - `@ggui-samples/*` → stays `workspace:*` (the composed tree IS a workspace)
+ *   - `@ggui-samples/*` → stays `workspace:*` when the composed tree IS a
+ *     pnpm workspace (`workspaceTree: true` — sample cross-deps resolve
+ *     locally); in a NON-workspace tree (with-guuey's standalone halves) it
+ *     is an error — a per-dir npm install cannot resolve a `workspace:*`
+ *     spec, so fail at compose time with the reason instead of at install.
  *   - anything else → error (compose only knows how to rewrite these two)
  * Returns the mutated pkg object.
  */
-function rewritePkgJson(pkg, pinRange) {
+function rewritePkgJson(pkg, pinRange, workspaceTree = true) {
   for (const depField of ['dependencies', 'devDependencies', 'peerDependencies']) {
     const deps = pkg[depField];
     if (!deps || typeof deps !== 'object') continue;
@@ -141,10 +211,69 @@ function rewritePkgJson(pkg, pinRange) {
           `unexpected workspace:* dep "${name}" in ${pkg.name ?? '<unnamed>'} — ` +
             'compose-app only rewrites @ggui-ai/* and keeps @ggui-samples/* local',
         );
+      } else if (!workspaceTree) {
+        throw new Error(
+          `workspace:* dep "${name}" in ${pkg.name ?? '<unnamed>'} — the composed ` +
+            'with-guuey tree is NOT a pnpm workspace (standalone per-dir npm ' +
+            'installs); a workspace:* spec cannot resolve there',
+        );
       }
     }
   }
   return pkg;
+}
+
+/**
+ * Rewrite the with-guuey guuey.json for the composed layout: the todo MCP's
+ * colocated `source` is authored relative to the SAMPLES tree
+ * (`../../mcp-servers/todo`) and must point at the composed location
+ * instead. Throws when the expected entry is missing or shaped differently —
+ * a compose-time bug must fail loudly here: `guuey dev` would otherwise
+ * warn-and-drop the misconfigured server, leaving the agent tool-less at
+ * scenario time. Returns the mutated config object.
+ */
+function rewriteGuueyJsonTodoSource(cfg, composedSource) {
+  const todo = cfg?.agent?.mcpServers?.todo;
+  if (
+    todo === undefined ||
+    todo === null ||
+    todo.kind !== 'colocated' ||
+    typeof todo.source !== 'string' ||
+    typeof todo.devPort !== 'number'
+  ) {
+    throw new Error(
+      'guuey.json: expected agent.mcpServers.todo = { kind: "colocated", ' +
+        'source: <string>, devPort: <number> } — compose cannot rewrite the ' +
+        'colocated source for the composed layout',
+    );
+  }
+  todo.source = composedSource;
+  return cfg;
+}
+
+/**
+ * Delete every committed `package-lock.json` from the composed COPY (the
+ * samples keep theirs — self-hosters get reproducible standalone installs).
+ * The locks' `resolved` URLs point `@ggui-ai/*` at registry.npmjs.org; an
+ * install that honors them would silently bypass THIS run's Verdaccio cohort
+ * — the exact false-green the composed gate exists to prevent. A lock-less
+ * `npm install` re-resolves `@ggui-ai/*` against the scoped Verdaccio
+ * registry while the exact-pinned `@guuey/*` leaves still land on their
+ * published versions from real npm.
+ */
+function stripNpmLocks(rootDir) {
+  const visit = (dir) => {
+    for (const entry of readdirSync(dir)) {
+      const p = join(dir, entry);
+      if (statSync(p).isDirectory()) {
+        if (entry === 'node_modules') continue;
+        visit(p);
+      } else if (entry === 'package-lock.json') {
+        rmSync(p);
+      }
+    }
+  };
+  visit(rootDir);
 }
 
 function copyTree(src, dst) {
@@ -162,7 +291,7 @@ function copyTree(src, dst) {
   });
 }
 
-function rewriteAllPackageJsons(rootDir, pinRange) {
+function rewriteAllPackageJsons(rootDir, pinRange, workspaceTree) {
   const visit = (dir) => {
     for (const entry of readdirSync(dir)) {
       const p = join(dir, entry);
@@ -179,7 +308,7 @@ function rewriteAllPackageJsons(rootDir, pinRange) {
           console.error(`✗ invalid JSON in ${p}: ${String(e)}`);
           process.exit(3);
         }
-        rewritePkgJson(pkg, pinRange);
+        rewritePkgJson(pkg, pinRange, workspaceTree);
         writeFileSync(p, `${JSON.stringify(pkg, null, 2)}\n`);
       }
     }
@@ -188,7 +317,10 @@ function rewriteAllPackageJsons(rootDir, pinRange) {
 }
 
 function composeOne(sdk, outDir) {
-  const agentSampleAbs = resolve(OSS_ROOT, `samples/agents/${sdk}`);
+  const plan = COMPOSE_PLAN[sdk];
+  if (!plan) {
+    throw new Error(`compose-app: no COMPOSE_PLAN entry for "${sdk}"`);
+  }
   const pinRange = gguiAiPinRange(readCohortBaseVersion());
 
   console.log(`→ composing ${sdk} into ${outDir} (@ggui-ai/* pinned \`${pinRange}\`)`);
@@ -197,15 +329,30 @@ function composeOne(sdk, outDir) {
   rmSync(outDir, { recursive: true, force: true });
   mkdirSync(outDir, { recursive: true });
 
-  // 1. The harness-owned shell at the root (workspace wrapper + dev boot).
-  copyTree(APP_SHELL, outDir);
+  // 1. The harness-owned shell at the root (workspace wrapper + dev boot) —
+  // framework-native keys only; with-guuey's root IS its agent half.
+  if (plan.appShell) copyTree(APP_SHELL, outDir);
 
-  // 2. Agent sample → servers/agent/.
-  copyTree(agentSampleAbs, join(outDir, AGENT_TARGET));
+  // 2. Agent sample → its target (servers/agent/, or the root for with-guuey).
+  copyTree(resolve(OSS_ROOT, plan.agent.sample), join(outDir, plan.agent.target));
 
   // 3. Shared samples → their fixed destinations.
-  for (const { sample, target } of PLACEMENTS) {
+  for (const { sample, target } of plan.placements) {
     copyTree(resolve(OSS_ROOT, sample), join(outDir, target));
+  }
+
+  // 3a. with-guuey layout adjustments: point guuey.json's colocated todo
+  // `source` at the composed location, and strip the samples' committed npm
+  // locks from the COPY so `@ggui-ai/*` re-resolves against this run's
+  // Verdaccio cohort (see stripNpmLocks — a kept lock silently bypasses it).
+  if (!plan.workspaceTree) {
+    const guueyJsonPath = join(outDir, 'guuey.json');
+    const guueyCfg = rewriteGuueyJsonTodoSource(
+      JSON.parse(readFileSync(guueyJsonPath, 'utf8')),
+      COMPOSED_TODO_SOURCE,
+    );
+    writeFileSync(guueyJsonPath, `${JSON.stringify(guueyCfg, null, 2)}\n`);
+    stripNpmLocks(outDir);
   }
 
   // 3b. Point ggui's UI generation at this SDK's own provider. Guard the
@@ -225,9 +372,13 @@ function composeOne(sdk, outDir) {
   const rootPkg = JSON.parse(readFileSync(rootPkgPath, 'utf8'));
   rootPkg.name = `rendercell-${sdk}`;
   writeFileSync(rootPkgPath, `${JSON.stringify(rootPkg, null, 2)}\n`);
-  rewriteAllPackageJsons(outDir, pinRange);
+  rewriteAllPackageJsons(outDir, pinRange, plan.workspaceTree);
 
-  console.log(`  ✓ app-shell + 4 samples + package-json rewrites`);
+  console.log(
+    plan.appShell
+      ? `  ✓ app-shell + 4 samples + package-json rewrites`
+      : `  ✓ 4 samples (guuey layout, no app-shell) + guuey.json/package-json rewrites`,
+  );
 }
 
 /**
@@ -285,6 +436,34 @@ function selfTest() {
     fail('rewritePkgJson must THROW on an unknown workspace:* dep (seeded negative did not fire)');
   }
 
+  // Non-workspace tree (with-guuey): @ggui-ai/* still rewrites to the pin
+  // range, but a surviving @ggui-samples/* workspace dep must THROW — the
+  // standalone per-dir npm installs cannot resolve a workspace:* spec.
+  const standalone = rewritePkgJson(
+    { name: 'probe-standalone', dependencies: { '@ggui-ai/cli': 'workspace:*' } },
+    '^9.9.9-alpha.0',
+    false,
+  );
+  if (standalone.dependencies['@ggui-ai/cli'] !== '^9.9.9-alpha.0') {
+    fail('non-workspace tree: @ggui-ai/* workspace dep not rewritten to the pin range');
+  }
+  threw = false;
+  try {
+    rewritePkgJson(
+      { name: 'probe-standalone', dependencies: { '@ggui-samples/mcp-todo': 'workspace:*' } },
+      '^9.9.9-alpha.0',
+      false,
+    );
+  } catch {
+    threw = true;
+  }
+  if (!threw) {
+    fail(
+      'rewritePkgJson must THROW on a @ggui-samples/* workspace:* dep in a ' +
+        'NON-workspace tree (seeded negative did not fire)',
+    );
+  }
+
   const mapped = Object.keys(GGUI_GENERATION_MODEL).sort();
   const sdks = [...SDKS].sort();
   if (JSON.stringify(mapped) !== JSON.stringify(sdks)) {
@@ -296,7 +475,80 @@ function selfTest() {
     }
   }
 
-  console.log('✓ compose-app self-test: pin range, rewrite rules (incl. seeded throw), model map — all fire correctly');
+  // The merge map covers every SDK key, and the with-guuey plan composes
+  // guuey's layout: agent half at the ROOT (guuey.json home), no app-shell,
+  // non-workspace tree, with-guuey-web (not ggui-basic-web) at apps/web, and
+  // the todo MCP at the exact composed location the guuey.json rewrite
+  // points its colocated `source` at.
+  const planKeys = Object.keys(COMPOSE_PLAN).sort();
+  if (JSON.stringify(planKeys) !== JSON.stringify(sdks)) {
+    fail(`COMPOSE_PLAN keys [${planKeys}] must exactly equal SDKS [${sdks}]`);
+  }
+  const wg = COMPOSE_PLAN['with-guuey'];
+  if (wg.appShell !== false || wg.workspaceTree !== false) {
+    fail('with-guuey plan must have appShell:false and workspaceTree:false');
+  }
+  if (wg.agent.sample !== 'samples/agents/with-guuey' || wg.agent.target !== '.') {
+    fail('with-guuey plan must compose samples/agents/with-guuey at the app ROOT');
+  }
+  const wgTargets = Object.fromEntries(wg.placements.map((p) => [p.sample, p.target]));
+  if (wgTargets['samples/apps/with-guuey-web'] !== 'apps/web') {
+    fail('with-guuey plan must compose samples/apps/with-guuey-web at apps/web');
+  }
+  if (wgTargets['samples/gguis/default'] !== 'servers/ggui') {
+    fail('with-guuey plan must compose samples/gguis/default at servers/ggui');
+  }
+  const todoTarget = wgTargets['samples/mcp-servers/todo'];
+  if (todoTarget === undefined || COMPOSED_TODO_SOURCE !== `./${todoTarget}`) {
+    fail(
+      `with-guuey todo placement ("${todoTarget}") must match the guuey.json ` +
+        `colocated-source rewrite ("${COMPOSED_TODO_SOURCE}")`,
+    );
+  }
+  for (const fw of ['claude-agent-sdk', 'openai-agents-sdk', 'google-adk']) {
+    const p = COMPOSE_PLAN[fw];
+    if (p.appShell !== true || p.workspaceTree !== true || p.agent.target !== 'servers/agent') {
+      fail(`framework plan ${fw} must keep app-shell + workspace tree + servers/agent`);
+    }
+  }
+
+  // guuey.json colocated-source rewrite: happy path + seeded negative (a
+  // missing/misshapen todo entry must THROW, not silently drop — `guuey dev`
+  // would warn-and-drop the server, leaving the agent tool-less).
+  const rewritten = rewriteGuueyJsonTodoSource(
+    {
+      agent: {
+        framework: 'claude-agent-sdk',
+        mcpServers: {
+          todo: { kind: 'colocated', source: '../../mcp-servers/todo', devPort: 6740 },
+        },
+      },
+    },
+    COMPOSED_TODO_SOURCE,
+  );
+  if (rewritten.agent.mcpServers.todo.source !== COMPOSED_TODO_SOURCE) {
+    fail('rewriteGuueyJsonTodoSource did not rewrite the colocated source');
+  }
+  if (rewritten.agent.mcpServers.todo.devPort !== 6740) {
+    fail('rewriteGuueyJsonTodoSource must leave devPort untouched');
+  }
+  threw = false;
+  try {
+    rewriteGuueyJsonTodoSource({ agent: { mcpServers: {} } }, COMPOSED_TODO_SOURCE);
+  } catch {
+    threw = true;
+  }
+  if (!threw) {
+    fail(
+      'rewriteGuueyJsonTodoSource must THROW when the colocated todo entry is ' +
+        'missing (seeded negative did not fire)',
+    );
+  }
+
+  console.log(
+    '✓ compose-app self-test: pin range, rewrite rules (incl. seeded throws), ' +
+      'model map, compose plans (incl. with-guuey layout + guuey.json rewrite) — all fire correctly',
+  );
 }
 
 function parseArgs(argv) {

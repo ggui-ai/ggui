@@ -1,0 +1,31 @@
+{
+  "name": "with-guuey-web-sample",
+  "version": "0.0.1",
+  "description": "platform-composed (guuey-sdk) web half of the composed golden path: a Vite SPA on @guuey/agent-client (useAgentInvoke + the ggui-render dispatcher) talking to `guuey dev --serve`, mounting ggui cards through the MCP-Apps second-origin sandbox. Standalone on purpose — excluded from the repo's pnpm workspaces so its exact-pinned @guuey/* deps never share a hoist with workspace HEAD. Not published.",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "start": "vite build && vite preview",
+    "build": "vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@ggui-ai/design": "^0.6.1",
+    "@guuey/agent-client": "0.2.0",
+    "@mcp-ui/client": "^7.1.1",
+    "@modelcontextprotocol/sdk": "^1.27.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@ggui-ai/agent-server": "^0.6.1",
+    "@types/node": "^22.0.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@vitejs/plugin-react": "^4.3.4",
+    "typescript": "^5.0.0",
+    "vite": "^6.0.0"
+  }
+}

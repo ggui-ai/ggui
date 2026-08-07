@@ -53,6 +53,11 @@ packages:
   # Reference samples — one agent framework / gadget / ggui / mcp-server
   # per dir. Workspace-private; not published.
   - "samples/agents/*"
+  # Cell isolation (spec §2): pinned @guuey transitives must never hoist with workspace HEAD, #426.
+  # (samples/apps/* is not a workspace glob here today; the apps exclusion is
+  # belt-and-braces so a future glob addition can never pull the pinned dir in.)
+  - "!samples/agents/with-guuey"
+  - "!samples/apps/with-guuey-web"
   - "samples/gadgets/*"
   - "samples/gguis/*"
   - "samples/mcp-servers/*"

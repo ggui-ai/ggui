@@ -11,6 +11,14 @@
 # The RO mount + copy-to-/work means the container's fresh install/build never
 # mutates the host's node_modules. The image carries only the toolchain.
 #
+# CELL-AS-JAIL (with-guuey lane — a WRITTEN decision, spec §2 of the composed
+# golden path): guuey's dev path is unjailed on every platform and forwards
+# the full parent env to the agent worker; @guuey/host auto-allows Bash + file
+# tools whenever FS layers are bound, assuming an EXTERNAL jail. This
+# throwaway container IS that jail — one ephemeral cell per run, no secrets
+# beyond the one API key (compose-and-boot.sh's with-guuey branch passes
+# `guuey dev` a minimal env), torn down after the journey.
+#
 # Node 24 (the monorepo's root engines require `node >=24`; Playwright base
 # images bundle older Node (22.x) → pnpm install fails the engine check).
 # Sourced from mcr.microsoft.com (NOT docker.io `node:24`): docker.io pulls trip
