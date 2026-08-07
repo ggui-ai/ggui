@@ -612,9 +612,6 @@ importers:
       '@ggui-ai/wire':
         specifier: workspace:*
         version: link:../wire
-      '@silverprotocol/richtext':
-        specifier: 0.4.1
-        version: 0.4.1
       react:
         specifier: ^19.2.8
         version: 19.2.8
@@ -949,9 +946,6 @@ importers:
       '@ggui-ai/wire':
         specifier: workspace:*
         version: link:../wire
-      '@silverprotocol/richtext':
-        specifier: 0.4.1
-        version: 0.4.1
     devDependencies:
       '@modelcontextprotocol/sdk':
         specifier: 1.30.0
@@ -4037,9 +4031,6 @@ packages:
 
   '@silverprotocol/core@0.3.9':
     resolution: {integrity: sha512-yCyJpYGP7QI1IEWr5laOHwvnqtkoOqDODw4eAJ5E8RZPHloLXxxftUBVtnu4k5RpRZE6ga/xhPXLOIUDwtLKbg==}
-
-  '@silverprotocol/richtext@0.4.1':
-    resolution: {integrity: sha512-G/I+ejVRiYJ6RfVHDKkqCZYnmEawv/DvzBoh+t1BfQz04jBx80R0NblmZimhPrsAJK6z4J4Nrr8YqCo5WILuIg==}
 
   '@sinclair/typebox@0.27.12':
     resolution: {integrity: sha512-hhyNJ+nbR6ZR7pToHvllEFun9TL0sbL+tk/ON75lo+Xas054uez98qRbsuNt7MBCyZKK4+8Yli/OAGZhmfBZ/g==}
@@ -11494,8 +11485,6 @@ snapshots:
   '@silverprotocol/core@0.3.9':
     dependencies:
       zod: 4.4.3
-
-  '@silverprotocol/richtext@0.4.1': {}
 
   '@sinclair/typebox@0.27.12': {}
 

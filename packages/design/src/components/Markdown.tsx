@@ -4,7 +4,7 @@ import {
   parseRichText,
   type RichTextBlock,
   type RichTextInline,
-} from '@silverprotocol/richtext';
+} from '../richtext';
 import { Heading } from '../primitives/Heading';
 import { Text } from '../primitives/Text';
 import { Link } from '../primitives/Link';
@@ -12,13 +12,15 @@ import { Link } from '../primitives/Link';
 /**
  * Markdown — agent-authored rich text inside a generated UI.
  *
- * Renders the conversational markdown subset through
- * `@silverprotocol/richtext` (the shared headless block model): the
- * parse + safety policy live THERE, once — raw HTML has no AST node so
- * it can only ever display as literal text, and `href` is populated
- * only for allowlisted schemes. This component maps the AST onto the
- * design system's primitives; every string lands as React text
- * children (never markup), so nothing here can widen the policy.
+ * Renders the conversational markdown subset through the design
+ * system's own rich-text model (`../richtext` — ggui-owned; the
+ * MCP-native interface layer deliberately carries no dependency on
+ * agent-framework projects). The parse + safety policy live there,
+ * once: raw HTML has no AST node so it can only ever display as
+ * literal text, and `href` is populated only for allowlisted schemes.
+ * This component maps the AST onto the design system's primitives;
+ * every string lands as React text children (never markup), so
+ * nothing here can widen the policy.
  *
  * Streaming-tolerant by construction: any prefix of a longer input
  * parses to a stable AST (unclosed constructs carry `closed: false`
@@ -38,8 +40,13 @@ import { Link } from '../primitives/Link';
  * props type before running that slice's benchmarks.
  */
 export interface MarkdownProps {
-  /** Raw agent-authored text (may be a mid-stream prefix). */
-  text: string;
+  /**
+   * Markdown source — the conversational subset (bold / italic /
+   * inline code / fenced code blocks / lists / headings / links).
+   * May be a mid-stream prefix; parsing fails soft. Raw HTML displays
+   * as literal text, never markup.
+   */
+  markdown: string;
   className?: string;
   style?: CSSProperties;
 }
@@ -152,8 +159,8 @@ function renderBlock(block: RichTextBlock, key: number): ReactNode {
   }
 }
 
-export function Markdown({ text, className, style }: MarkdownProps) {
-  const blocks = parseRichText(text);
+export function Markdown({ markdown, className, style }: MarkdownProps) {
+  const blocks = parseRichText(markdown);
   return (
     <div
       className={className}
@@ -177,6 +184,6 @@ export function Markdown({ text, className, style }: MarkdownProps) {
  * `Text`/`Heading` (an A2UI Text component's block level comes from
  * `variant`, not from `#` syntax).
  */
-export function MarkdownInline({ text }: { text: string }) {
-  return <>{renderRichTextInlines(parseInlineRichText(text))}</>;
+export function MarkdownInline({ markdown }: { markdown: string }) {
+  return <>{renderRichTextInlines(parseInlineRichText(markdown))}</>;
 }

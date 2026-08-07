@@ -1,8 +1,8 @@
 /**
- * RichTextInlines — RN renderer for the @silverprotocol/richtext
- * INLINE subset. Twin-in-spirit of the web design system's
- * `renderRichTextInlines` (`@ggui-ai/design`): the parse + safety
- * policy live in the shared headless package (raw HTML has no AST
+ * RichTextInlines — RN renderer for the design system's rich-text
+ * INLINE subset (`@ggui-ai/design/richtext` — ggui-owned, headless,
+ * DOM-free). Twin-in-spirit of the web `renderRichTextInlines`: the
+ * parse + safety policy live in that one module (raw HTML has no AST
  * node; `href` is populated only for allowlisted schemes), and every
  * string lands as RN `<Text>` children — never markup.
  *
@@ -18,7 +18,7 @@
  */
 import React from 'react';
 import { Text, type StyleProp, type TextStyle } from 'react-native';
-import { parseInlineRichText, type RichTextInline } from '@silverprotocol/richtext';
+import { parseInlineRichText, type RichTextInline } from '@ggui-ai/design/richtext';
 
 const STYLES: Record<string, StyleProp<TextStyle>> = {
   strong: { fontWeight: 'bold' },
@@ -68,6 +68,6 @@ function renderNodes(inlines: RichTextInline[]): React.ReactNode[] {
   });
 }
 
-export function RichTextInlines({ text }: { text: string }): React.JSX.Element {
-  return <>{renderNodes(parseInlineRichText(text))}</>;
+export function RichTextInlines({ markdown }: { markdown: string }): React.JSX.Element {
+  return <>{renderNodes(parseInlineRichText(markdown))}</>;
 }

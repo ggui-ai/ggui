@@ -47,6 +47,10 @@
       "types": "./dist/rendering/index.d.ts",
       "import": "./dist/rendering/index.js"
     },
+    "./richtext": {
+      "types": "./dist/richtext/index.d.ts",
+      "import": "./dist/richtext/index.js"
+    },
     "./module-loader": {
       "types": "./dist/rendering/module-loader.d.ts",
       "import": "./dist/rendering/module-loader.js"
@@ -96,8 +100,7 @@
     "react-dom": "^18.0.0 || ^19.0.0"
   },
   "dependencies": {
-    "@ggui-ai/wire": "workspace:*",
-    "@silverprotocol/richtext": "0.4.1"
+    "@ggui-ai/wire": "workspace:*"
   },
   "devDependencies": {
     "@chromatic-com/storybook": "^3.2.0",

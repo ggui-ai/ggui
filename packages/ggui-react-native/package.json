@@ -83,8 +83,7 @@
     "@ggui-ai/preview-a2ui": "workspace:*",
     "@ggui-ai/protocol": "workspace:*",
     "@ggui-ai/shared": "workspace:*",
-    "@ggui-ai/wire": "workspace:*",
-    "@silverprotocol/richtext": "0.4.1"
+    "@ggui-ai/wire": "workspace:*"
   },
   "devDependencies": {
     "@modelcontextprotocol/sdk": "^1.27.0",

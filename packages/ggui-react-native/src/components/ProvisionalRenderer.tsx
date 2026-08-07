@@ -268,7 +268,7 @@ function renderComponent(
         <PreviewFragmentEnter key={id}>
           <Text style={variantStyle} accessibilityRole={resolveTextRole(variant)}>
             <StreamingText>
-              <RichTextInlines text={component.text} />
+              <RichTextInlines markdown={component.text} />
             </StreamingText>
           </Text>
         </PreviewFragmentEnter>

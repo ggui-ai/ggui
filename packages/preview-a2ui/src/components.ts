@@ -87,8 +87,9 @@ const DividerComponent = ComponentBase.extend({
 /**
  * Text block. A2UI supports Markdown inside `text` — the INLINE
  * conversational subset (bold/italic/code/links/breaks), parsed by
- * `@silverprotocol/richtext` and rendered by both provisional
- * renderers (web `iframe-runtime`, RN `ProvisionalRenderer`). Block
+ * the design system's rich-text model (`@ggui-ai/design/richtext`)
+ * and rendered by both provisional renderers (web `iframe-runtime`,
+ * RN `ProvisionalRenderer`). Block
  * semantics come from `variant` (`h1`..`h6`, `body`, `caption`,
  * `label`), never from `#` syntax inside `text`. We accept any
  * variant string since Haiku may produce variants we hadn't
