@@ -234,12 +234,36 @@ export function App(): JSX.Element {
   // Panel shows the newest card — same top-card rule as ggui-basic-web.
   const top = cards.length > 0 ? cards[cards.length - 1] : undefined;
 
+  // `foldCards` re-runs on every AgJSON frame (each `reduceResult` update),
+  // so `top` — and its `csp` arrays — get a FRESH object identity per frame
+  // even when the card is unchanged. AppRenderer's send-html effect depends
+  // on `sandbox.csp` by identity and re-sends
+  // `ui/notifications/sandbox-resource-ready` when it changes, which the
+  // sandbox page answers with doc.open()/write()/close() — a full reboot of
+  // the mounted ggui shell (flicker, in-card state loss, a fresh WS
+  // bootstrap). So the sandbox prop must be VALUE-keyed, not derived from
+  // `top`'s identity: fingerprint the CSP origin lists into primitives (URL
+  // origins cannot contain spaces) and rebuild the object only when the
+  // card or its CSP values actually change.
+  const topKey = top?.key;
+  const topResourceOrigins = top?.csp?.resourceDomains.join(' ');
+  const topConnectOrigins = top?.csp?.connectDomains.join(' ');
   const sandbox = useMemo(() => {
-    if (!top) return undefined;
-    return top.csp
-      ? { url: new URL(SANDBOX_URL), csp: top.csp }
-      : { url: new URL(SANDBOX_URL) };
-  }, [top]);
+    if (topKey === undefined) return undefined;
+    const url = new URL(SANDBOX_URL);
+    // Both origin lists are set together (ggui channel) or not at all
+    // (inline card) — see MountedCard.csp.
+    if (topResourceOrigins === undefined || topConnectOrigins === undefined) {
+      return { url };
+    }
+    return {
+      url,
+      csp: {
+        resourceDomains: topResourceOrigins.length > 0 ? topResourceOrigins.split(' ') : [],
+        connectDomains: topConnectOrigins.length > 0 ? topConnectOrigins.split(' ') : [],
+      },
+    };
+  }, [topKey, topResourceOrigins, topConnectOrigins]);
 
   const statusLabel =
     status === 'using-tool' && activeTool !== null ? `using tool: ${activeTool}` : status;
