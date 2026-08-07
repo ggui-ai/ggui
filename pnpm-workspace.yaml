@@ -160,8 +160,9 @@ overrides:
   # override. Per-consumer judgement DONE 2026-08-07: adk's entire
   # adm-zip surface (skills/loader.js — constructor(Buffer),
   # getEntries(), entry.entryName / .isDirectory / .getData()) is
-  # unchanged in 0.6.0. Caret keeps future 0.7.x out per the
-  # multi-major note above.
+  # unchanged in 0.6.0. Caret keeps future 0.7.x out — a bare floor
+  # would drag consumers across the next breaking line, which is
+  # exactly the breakage this file exists to avoid.
   "adm-zip@<0.6.0": ^0.6.0
   "immutable@<3.8.3": ^3.8.3
   # BEGIN oss-lock-sync generated pins — do not hand-edit (scripts/oss-lock-sync.mjs, #420)
