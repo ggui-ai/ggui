@@ -61,9 +61,18 @@ export function invokeMessageToContentGroups(message: ConversationMessage): Cont
       const resultBlock = paired ?? null;
       const cardSnapshot = resultBlock ? extractRenderFromToolResult(resultBlock) : null;
       const blocks: ContentBlock[] = resultBlock ? [b, resultBlock] : [b];
+      // A render-bearing result IS a card, whatever the tool was named —
+      // agent frameworks surface renders under their own tool names
+      // (`render_card`, `mcp__cards__update_card`, …) with the payload
+      // recognized by extractRenderFromToolResult. The name arm keeps
+      // ggui's own render tools folding as cards even when the result
+      // block is absent (e.g. still in flight).
       groups.push({
         key: `${message.id}-${i}`,
-        kind: b.name === 'ggui_render' || b.name === 'ggui_update' ? 'card' : 'other',
+        kind:
+          cardSnapshot !== null || b.name === 'ggui_render' || b.name === 'ggui_update'
+            ? 'card'
+            : 'other',
         authorRole,
         blocks,
         cardSnapshot,

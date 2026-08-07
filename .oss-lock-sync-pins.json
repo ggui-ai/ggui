@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-07T09:07:17.334Z",
+  "generatedAt": "2026-08-07T09:32:17.264Z",
   "pinnedNames": [
     "@a2a-js/sdk",
     "@adobe/css-tools",
@@ -262,8 +262,7 @@
     "@rollup/rollup-win32-ia32-msvc",
     "@rollup/rollup-win32-x64-gnu",
     "@rollup/rollup-win32-x64-msvc",
-    "@silverprotocol/core@0.3.x",
-    "@silverprotocol/core@0.4.x",
+    "@silverprotocol/core",
     "@sinclair/typebox",
     "@smithy/core",
     "@smithy/credential-provider-imds",

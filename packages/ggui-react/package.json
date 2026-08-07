@@ -59,7 +59,7 @@
     "build": "tsup",
     "dev": "tsup --watch",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run",
+    "test": "node ../../e2e/fixtures/silverprotocol/fetch-fixtures.mjs && vitest run",
     "test:watch": "vitest"
   },
   "peerDependencies": {
@@ -77,7 +77,7 @@
   "devDependencies": {
     "@ggui-ai/design": "workspace:*",
     "@modelcontextprotocol/sdk": "^1.27.0",
-    "@silverprotocol/core": "^0.3.7",
+    "@silverprotocol/core": "0.4.1",
     "@testing-library/react": "^16.0.0",
     "@types/node": "^22.0.0",
     "@types/react": "^19.0.0",

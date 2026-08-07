@@ -1,21 +1,28 @@
 import type { ContentBlock } from '@ggui-ai/protocol';
 
 /**
- * Pull a durable GguiSession-shaped object out of a `tool_result` block's
+ * Pull a durable render payload out of a `tool_result` block's
  * `content` payload. Tolerant of shapes:
  *   - Direct: { id, componentCode, props, ... }                (GguiSession itself)
  *   - Wrapped: { render: {...} }
  *   - Nested: { result: { render: {...} } }
  *   - Nested direct: { result: { id, componentCode, ... } }
+ *   - MCP-Apps bootstrap: { _meta: { ui: { resourceUri } }, ... }
+ *     (SEP-1865) — a tool result whose `_meta.ui.resourceUri` is set IS
+ *     a render; the result itself is the durable card payload (it
+ *     carries `structuredContent` plus the full `_meta.ui` block,
+ *     including any inlined resource). Same recognition rule as the
+ *     `useMcpAppsChat` walker — agent framework streams (Claude Agent
+ *     SDK, ADK, OpenAI Agents) deliver renders in exactly this shape.
  *
- * Returns `null` if no GguiSession can be found — caller falls back to
+ * Returns `null` if no render can be found — caller falls back to
  * placeholder rendering.
  *
  * Post-Phase-B: the legacy `stackItem` wrapper is gone — every tool
  * result carries a single flat `sessionId`. This stays a tolerant
- * heuristic over the remaining shapes (the `render` wrapper key plus
- * the direct GguiSession object) rather than pinning one producer's
- * envelope.
+ * heuristic over the remaining shapes (the `render` wrapper key, the
+ * direct GguiSession object, the spec-canonical `_meta.ui` bootstrap)
+ * rather than pinning one producer's envelope.
  */
 export function extractRenderFromToolResult(block: ContentBlock): unknown | null {
   if (block.type !== 'tool_result') return null;
@@ -24,6 +31,13 @@ export function extractRenderFromToolResult(block: ContentBlock): unknown | null
   const rec = content as Record<string, unknown>;
   if (rec.render && typeof rec.render === 'object') return rec.render;
   if (typeof rec.id === 'string' && typeof rec.componentCode === 'string') return rec;
+  if (rec._meta !== null && typeof rec._meta === 'object') {
+    const ui = (rec._meta as Record<string, unknown>).ui;
+    if (ui !== null && typeof ui === 'object') {
+      const uri = (ui as Record<string, unknown>).resourceUri;
+      if (typeof uri === 'string' && uri.length > 0) return rec;
+    }
+  }
   for (const v of Object.values(rec)) {
     if (typeof v === 'object' && v !== null) {
       const inner = v as Record<string, unknown>;
