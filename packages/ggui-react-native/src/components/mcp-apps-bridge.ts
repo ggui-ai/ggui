@@ -23,6 +23,10 @@
 
 import { Linking, Platform } from 'react-native';
 import type { McpAppsGguiSession } from '@ggui-ai/protocol/integrations/mcp-apps';
+import {
+  LATEST_PROTOCOL_VERSION,
+  type McpUiInitializeResult,
+} from '@modelcontextprotocol/ext-apps';
 
 interface JsonRpcRequest {
   jsonrpc?: '2.0';
@@ -44,20 +48,10 @@ interface JsonRpcNotification {
   params?: Record<string, unknown>;
 }
 
-/** Default permissive-but-safe theme parroted to views that don't override. */
-const DEFAULT_THEME: Record<string, string> = {
-  '--color-primary': '#0284c7',
-  '--color-surface': '#ffffff',
-  '--color-text': '#111111',
-  '--font-family': 'system-ui, -apple-system, sans-serif',
-  '--border-radius-md': '8px',
-};
-
 export interface HostBridgeContext {
   readonly sessionId: string;
   readonly render: McpAppsGguiSession;
   readonly toolsCallUrl: string;
-  readonly theme?: Record<string, string>;
   readonly locale?: string;
   readonly containerDimensions?: McpAppsGguiSession['containerDimensions'];
 }
@@ -89,18 +83,33 @@ export async function handleHostBridgeRequest(
       };
     }
     case 'ui/initialize': {
-      return {
-        jsonrpc: '2.0',
-        id: id ?? 0,
-        result: {
-          theme: ctx.theme ?? DEFAULT_THEME,
-          containerDimensions: ctx.containerDimensions ?? {},
+      // Spec-canonical `McpUiInitializeResult` — the ext-apps
+      // `App.connect` inside the embedded page zod-requires
+      // `protocolVersion` + `hostInfo` + `hostCapabilities` +
+      // `hostContext`; the pre-App draft shape fails that gate and
+      // kills the mount before the renderer boots. Adapter boundary —
+      // `hostContext` carries `{locale, containerDimensions}` ONLY,
+      // NO outer render state leaks here (ggui theming rides the
+      // `ai.ggui/render.theme` slice, never this handshake).
+      const requestedRaw = req.params?.protocolVersion;
+      const requested =
+        typeof requestedRaw === 'string' && requestedRaw.length > 0
+          ? requestedRaw
+          : LATEST_PROTOCOL_VERSION;
+      const result: McpUiInitializeResult = {
+        protocolVersion: requested,
+        // Diagnostic-only; no build-stamp machinery in this tsc-built
+        // package — see the McpAppIframe dispatcher's identical note.
+        hostInfo: { name: 'ggui-react-native', version: 'unstamped' },
+        hostCapabilities: {},
+        hostContext: {
           locale:
             ctx.locale ??
             (typeof navigator !== 'undefined' ? navigator.language : 'en-US'),
-          // Adapter boundary — NO outer render state leaks here.
+          containerDimensions: ctx.containerDimensions ?? {},
         },
       };
+      return { jsonrpc: '2.0', id: id ?? 0, result };
     }
     case 'ui/open-link': {
       // iframe asks the host to open a URL out-of-band (system browser

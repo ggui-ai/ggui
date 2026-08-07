@@ -37,6 +37,11 @@ import type {
 // base `ResourceContents`, structurally satisfied by both.
 type TestResource = ResourceContents | TextResourceContents | BlobResourceContents;
 import type { McpAppAiGguiRenderMeta } from '@ggui-ai/protocol/integrations/mcp-apps';
+import {
+  LATEST_PROTOCOL_VERSION,
+  McpUiInitializeResultSchema,
+  type McpUiInitializeResult,
+} from '@modelcontextprotocol/ext-apps';
 import { McpAppIframe } from './McpAppIframe';
 import {
   buildToolResultNotification,
@@ -71,12 +76,19 @@ function makeResource(overrides?: Partial<TestResource>): TestResource {
 
 function makeCtx(overrides?: Partial<HostBridgeContext>): HostBridgeContext {
   return {
-    theme: { '--color-primary': '#ff0000' },
     locale: 'en-US',
     containerDimensions: { width: 640, height: 480 },
     openLink: vi.fn(async () => undefined),
     ...overrides,
   };
+}
+
+/**
+ * Narrow an initialize response's `result` through the REAL ext-apps
+ * schema — the same zod gate `App.connect` applies in the WebView.
+ */
+function parseInitializeResult(result: unknown): McpUiInitializeResult {
+  return McpUiInitializeResultSchema.parse(result);
 }
 
 function findWebView(
@@ -112,42 +124,66 @@ describe('dispatchHostBridgeRequest (RN shared switch)', () => {
     expect(res).toEqual({ jsonrpc: '2.0', id: 7, result: { ok: true, pong: true } });
   });
 
-  it('ui/initialize ADAPTER BOUNDARY — result carries ONLY 3 keys', async () => {
+  it('ui/initialize returns a spec-valid McpUiInitializeResult (App.connect zod gate)', async () => {
+    // THE mount-breaking contract: `@modelcontextprotocol/ext-apps`
+    // `App.connect` validates the initialize response against
+    // `McpUiInitializeResultSchema`, which REQUIRES `protocolVersion`
+    // + `hostInfo` + `hostCapabilities` + `hostContext`. The pre-App
+    // draft shape (`{theme, containerDimensions, locale}` at the top
+    // level) fails that gate and kills EVERY WebView mount before the
+    // renderer boots — caught live by the npx-bootstrap e2e (ggui#425
+    // item 5) modeling this dispatcher.
     const res = await dispatchHostBridgeRequest(
       { jsonrpc: '2.0', id: 1, method: 'ui/initialize' },
       makeCtx(),
     );
-    expect(Object.keys(res?.result ?? {}).sort()).toEqual([
-      'containerDimensions',
-      'locale',
-      'theme',
-    ]);
-    expect(res?.result).not.toHaveProperty('toolOutput');
-    expect(res?.result).not.toHaveProperty('_meta');
-    for (const forbidden of ['stack', 'sessionId', 'appId', 'actionSpec', 'streamSpec']) {
-      expect(res?.result).not.toHaveProperty(forbidden);
-    }
+    expect(() => McpUiInitializeResultSchema.parse(res?.result)).not.toThrow();
   });
 
-  it('ui/initialize is invariant under ctx (Reading-B retired) — never carries toolOutput._meta', async () => {
-    // The dispatcher no longer accepts a `meta` on the context.
-    // Render-meta now flows through the separate spec-canonical
-    // `ui/notifications/tool-result` notification (see the
-    // `buildToolResultNotification` block below). This test pins the
-    // adapter-boundary posture by asserting the response is the same
-    // 3-key shape regardless of caller intent.
+  it('ui/initialize negotiates protocolVersion (echo request, fallback LATEST)', async () => {
+    const echoed = await dispatchHostBridgeRequest(
+      {
+        jsonrpc: '2.0',
+        id: 1,
+        method: 'ui/initialize',
+        params: { protocolVersion: '2026-01-26' },
+      },
+      makeCtx(),
+    );
+    const echoedResult = parseInitializeResult(echoed?.result);
+    expect(echoedResult.protocolVersion).toBe('2026-01-26');
+
+    const fallback = await dispatchHostBridgeRequest(
+      { jsonrpc: '2.0', id: 1, method: 'ui/initialize' },
+      makeCtx(),
+    );
+    expect(parseInitializeResult(fallback?.result).protocolVersion).toBe(
+      LATEST_PROTOCOL_VERSION,
+    );
+  });
+
+  it('ui/initialize ADAPTER BOUNDARY — hostContext carries locale + containerDimensions ONLY', async () => {
+    // Render-meta flows through the separate spec-canonical
+    // `ui/notifications/tool-result` notification (Reading-B retired);
+    // ggui theming rides the `ai.ggui/render.theme` slice, not the
+    // host handshake. No outer-app state leaks at any level.
     const res = await dispatchHostBridgeRequest(
       { jsonrpc: '2.0', id: 1, method: 'ui/initialize' },
       makeCtx(),
     );
-    const result = res?.result as Record<string, unknown>;
+    const result = parseInitializeResult(res?.result);
     expect(result).not.toHaveProperty('toolOutput');
     expect(result).not.toHaveProperty('_meta');
-    expect(Object.keys(result).sort()).toEqual([
+    expect(Object.keys(result.hostContext).sort()).toEqual([
       'containerDimensions',
       'locale',
-      'theme',
     ]);
+    expect(result.hostContext.locale).toBe('en-US');
+    expect(result.hostContext.containerDimensions).toEqual({ width: 640, height: 480 });
+    for (const forbidden of ['stack', 'sessionId', 'appId', 'actionSpec', 'streamSpec', 'theme']) {
+      expect(result).not.toHaveProperty(forbidden);
+      expect(result.hostContext).not.toHaveProperty(forbidden);
+    }
   });
 
   it('ui/open-link rejects non-http(s) schemes with unsupported-scheme', async () => {
@@ -684,12 +720,9 @@ describe('<McpAppIframe> — spec-canonical tool-result delivery', () => {
     const initResponse = extractDeliveredMessage(injectJavaScript.mock.calls[0]?.[0]);
     expect(initResponse['jsonrpc']).toBe('2.0');
     expect(initResponse['id']).toBe(1);
-    const initResult = initResponse['result'] as Record<string, unknown>;
-    expect(Object.keys(initResult).sort()).toEqual([
-      'containerDimensions',
-      'locale',
-      'theme',
-    ]);
+    // Spec-canonical McpUiInitializeResult delivered through the
+    // WebView bridge — the same zod gate App.connect applies.
+    const initResult = parseInitializeResult(initResponse['result']);
     expect(initResult).not.toHaveProperty('toolOutput');
     expect(initResult).not.toHaveProperty('_meta');
 

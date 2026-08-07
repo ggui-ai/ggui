@@ -30,7 +30,7 @@ import type {
 
 /**
  * Container-dimensions hint forwarded verbatim to the iframe via
- * `ui/initialize`'s `containerDimensions` field.
+ * `ui/initialize.result.hostContext.containerDimensions`.
  */
 export interface McpAppIframeDimensions {
   readonly width?: number;
@@ -86,21 +86,15 @@ export interface McpAppIframeProps {
   readonly resource: ResourceContents;
 
   /**
-   * Theme CSS-var bag forwarded to `ui/initialize.result.theme`. When
-   * absent, a minimal neutral default is forwarded.
-   */
-  readonly theme?: Record<string, string>;
-
-  /**
-   * Locale string forwarded to `ui/initialize.result.locale`. On RN,
-   * defaults to `'en-US'` when absent (no `navigator` available).
+   * Locale string forwarded to `ui/initialize.result.hostContext.locale`.
+   * On RN, defaults to `'en-US'` when absent (no `navigator` available).
    */
   readonly locale?: string;
 
   /**
    * Container-dimensions hint. Mirrored to the View element's style
    * AND echoed to the iframe via
-   * `ui/initialize.result.containerDimensions`.
+   * `ui/initialize.result.hostContext.containerDimensions`.
    */
   readonly containerDimensions?: McpAppIframeDimensions;
 

@@ -62,7 +62,6 @@ import {
   NATIVE_BRIDGE_ENVELOPE_KEY,
 } from '../components/mcp-apps-bridge';
 import {
-  DEFAULT_HOST_THEME,
   buildDispatchActionNotification,
   buildResourceTeardownNotification,
   buildToolResultNotification,
@@ -91,12 +90,6 @@ function resolveLocale(locale: string | undefined): string {
   return 'en-US';
 }
 
-function resolveTheme(
-  theme: Record<string, string> | undefined,
-): Readonly<Record<string, string>> {
-  return theme ?? DEFAULT_HOST_THEME;
-}
-
 async function openLinkNative(url: string): Promise<void> {
   await Linking.openURL(url);
 }
@@ -105,7 +98,6 @@ export const McpAppIframe = forwardRef<McpAppIframeRef, McpAppIframeProps>(
   function McpAppIframe(
     {
       resource,
-      theme,
       locale,
       containerDimensions,
       permissions,
@@ -131,7 +123,6 @@ export const McpAppIframe = forwardRef<McpAppIframeRef, McpAppIframeProps>(
     const mountSource = useMemo(() => deriveResourceMountSource(resource), [resource]);
 
     const ctxRef = useRef<HostBridgeContext>({
-      theme: resolveTheme(theme),
       locale: resolveLocale(locale),
       containerDimensions: resolveContainerDimensions(containerDimensions),
       openLink: openLinkNative,
@@ -139,13 +130,12 @@ export const McpAppIframe = forwardRef<McpAppIframeRef, McpAppIframeProps>(
     });
     useEffect(() => {
       ctxRef.current = {
-        theme: resolveTheme(theme),
         locale: resolveLocale(locale),
         containerDimensions: resolveContainerDimensions(containerDimensions),
         openLink: openLinkNative,
         onToolCall,
       };
-    }, [theme, locale, containerDimensions, onToolCall]);
+    }, [locale, containerDimensions, onToolCall]);
 
     // Track the current `meta` separately from `ctxRef`. `meta` no
     // longer rides on `ui/initialize` (Reading-B retired); the host

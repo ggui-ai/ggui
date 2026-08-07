@@ -9,9 +9,11 @@
  * The host responds to:
  *
  *   - `ping` → `{ok: true, pong: true}`.
- *   - `ui/initialize` → `{theme, containerDimensions, locale}` ONLY
- *     — the adapter-boundary rule (no outer-app state leaks). NEVER
- *     carries `toolOutput._meta` — see "Reading-B retired" note below.
+ *   - `ui/initialize` → a spec-canonical `McpUiInitializeResult`
+ *     whose `hostContext` carries `{locale, containerDimensions}`
+ *     ONLY — the adapter-boundary rule (no outer-app state leaks).
+ *     NEVER carries `toolOutput._meta` — see "Reading-B retired"
+ *     note below.
  *   - `ui/open-link` with http(s) URLs → caller opens externally;
  *     other schemes → reject `unsupported-scheme`.
  *   - `tools/call` → caller-provided handler, or reject
@@ -54,6 +56,10 @@ import {
   toMcpAppEnvelope,
   type McpAppAiGguiRenderMeta,
 } from '@ggui-ai/protocol/integrations/mcp-apps';
+import {
+  LATEST_PROTOCOL_VERSION,
+  type McpUiInitializeResult,
+} from '@modelcontextprotocol/ext-apps';
 import type {
   McpAppIframeDimensions,
   McpAppIframeProps,
@@ -80,20 +86,11 @@ export interface HostBridgeNotification {
 }
 
 export interface HostBridgeContext {
-  readonly theme: Readonly<Record<string, string>>;
   readonly locale: string;
   readonly containerDimensions: McpAppIframeDimensions;
   readonly openLink: (url: string) => Promise<void> | void;
   readonly onToolCall?: McpAppIframeProps['onToolCall'];
 }
-
-export const DEFAULT_HOST_THEME: Readonly<Record<string, string>> = {
-  '--color-primary': '#0284c7',
-  '--color-surface': '#ffffff',
-  '--color-text': '#111111',
-  '--font-family': 'system-ui, -apple-system, sans-serif',
-  '--border-radius-md': '8px',
-};
 
 function isJsonRpcRequest(value: unknown): value is HostBridgeRequest {
   if (value === null || typeof value !== 'object') return false;
@@ -139,17 +136,37 @@ export async function dispatchHostBridgeRequest(
       return { jsonrpc: '2.0', id, result: { ok: true, pong: true } };
     }
     case 'ui/initialize': {
-      // ADAPTER BOUNDARY. The result carries `{theme,
-      // containerDimensions, locale}` ONLY — no outer-app state
-      // leaks into the iframe. First-party `ai.ggui/render` meta is
-      // delivered via the separate spec-canonical
-      // `ui/notifications/tool-result` notification (see
-      // {@link buildToolResultNotification}), NOT via this initialize
-      // response.
-      const result: Record<string, unknown> = {
-        theme: ctx.theme,
-        containerDimensions: ctx.containerDimensions,
-        locale: ctx.locale,
+      // Spec-canonical `McpUiInitializeResult`. The `@modelcontextprotocol/
+      // ext-apps` `App.connect` running inside the WebView zod-validates
+      // this response, and `protocolVersion` + `hostInfo` +
+      // `hostCapabilities` + `hostContext` are ALL required — the
+      // pre-App draft shape (`{theme, containerDimensions, locale}` at
+      // the top level) fails that gate and kills every mount before
+      // the renderer boots.
+      //
+      // ADAPTER BOUNDARY. `hostContext` carries `{locale,
+      // containerDimensions}` ONLY — no outer-app state leaks into
+      // the iframe. ggui theming rides the `ai.ggui/render.theme`
+      // slice (two-layer theming), never this handshake; the spec's
+      // `hostContext.styles` variable set is a closed union of
+      // spec-defined keys that ggui's overlay deliberately does not
+      // claim. First-party `ai.ggui/render` meta is delivered via the
+      // separate spec-canonical `ui/notifications/tool-result`
+      // notification (see {@link buildToolResultNotification}), NOT
+      // via this initialize response.
+      const requested = paramString(req.params, 'protocolVersion');
+      const result: McpUiInitializeResult = {
+        protocolVersion: requested.length > 0 ? requested : LATEST_PROTOCOL_VERSION,
+        // `hostInfo.version` is diagnostic-only; this tsc-built package
+        // has no build-stamp machinery (unlike iframe-runtime's esbuild
+        // `define`), and a hand-maintained literal would silently drift
+        // from the published version at every release.
+        hostInfo: { name: 'ggui-react-native', version: 'unstamped' },
+        hostCapabilities: {},
+        hostContext: {
+          locale: ctx.locale,
+          containerDimensions: ctx.containerDimensions,
+        },
       };
       return { jsonrpc: '2.0', id, result };
     }

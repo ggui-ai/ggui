@@ -6,8 +6,9 @@
  *
  * The iframe plays the MCP Apps HOST role for the embedded content:
  *
- *   - `ui/initialize` → respond with minimal context (theme +
- *     containerDimensions + locale).
+ *   - `ui/initialize` → respond with a spec-canonical
+ *     `McpUiInitializeResult` whose `hostContext` carries minimal
+ *     context (locale + containerDimensions).
  *   - `tools/call` → forward to the ggui server's
  *     `/mcp-apps/tools-call` endpoint. The server enforces source
  *     connector scoping + `_meta.ui.visibility: ['app']`.
@@ -35,6 +36,10 @@
  * the iframe's `sandbox="allow-scripts"` attribute.
  */
 import type { McpAppsGguiSession } from '@ggui-ai/protocol/integrations/mcp-apps';
+import {
+  LATEST_PROTOCOL_VERSION,
+  type McpUiInitializeResult,
+} from '@modelcontextprotocol/ext-apps';
 
 // =============================================================================
 // JSON-RPC wire types (iframe postMessage bridge)
@@ -54,14 +59,13 @@ interface JsonRpcResponse {
   readonly error?: { readonly code: number; readonly message: string };
 }
 
-/** Default permissive-but-safe theme for iframes that don't override. */
-const DEFAULT_THEME: Readonly<Record<string, string>> = {
-  '--color-primary': '#0284c7',
-  '--color-surface': '#ffffff',
-  '--color-text': '#111111',
-  '--font-family': 'system-ui, -apple-system, sans-serif',
-  '--border-radius-md': '8px',
-};
+// Build-time-stamped bundle version — same esbuild `define` mechanism
+// as `runtime.ts`'s RENDERER_VERSION (declared locally to avoid the
+// runtime.ts → render-item.ts → this-module import cycle). Falls back
+// to 'dev' in non-bundled contexts (vitest).
+declare const __GGUI_RUNTIME_VERSION__: string;
+const EMBED_HOST_VERSION =
+  typeof __GGUI_RUNTIME_VERSION__ === 'string' ? __GGUI_RUNTIME_VERSION__ : 'dev';
 
 // =============================================================================
 // Mount options + handle
@@ -78,8 +82,6 @@ export interface McpAppIframeMountOptions {
    *  NOT have a trailing slash. Empty string = same-origin.
    */
   readonly serverBaseUrl?: string;
-  /** Optional theme override for the `ui/initialize` context. */
-  readonly theme?: Readonly<Record<string, string>>;
   /** Optional locale; defaults to `navigator.language` when
    *  available. */
   readonly locale?: string;
@@ -205,17 +207,30 @@ export function mountMcpAppIframe(
 
     switch (req.method) {
       case 'ui/initialize': {
-        response = {
-          jsonrpc: '2.0',
-          id,
-          result: {
-            theme: opts.theme ?? DEFAULT_THEME,
-            containerDimensions: dims,
+        // Spec-canonical `McpUiInitializeResult` — a spec-compliant
+        // embedded app connects via ext-apps `App.connect`, which
+        // zod-requires `protocolVersion` + `hostInfo` +
+        // `hostCapabilities` + `hostContext`; the pre-App draft shape
+        // fails that gate and kills the embedded mount. Adapter
+        // boundary — `hostContext` carries `{locale,
+        // containerDimensions}` ONLY (no outer ggui render state).
+        const requestedRaw = req.params?.['protocolVersion'];
+        const requested =
+          typeof requestedRaw === 'string' && requestedRaw.length > 0
+            ? requestedRaw
+            : LATEST_PROTOCOL_VERSION;
+        const result: McpUiInitializeResult = {
+          protocolVersion: requested,
+          hostInfo: { name: 'ggui-iframe-runtime-embed-host', version: EMBED_HOST_VERSION },
+          hostCapabilities: {},
+          hostContext: {
             locale:
               opts.locale ??
               (typeof navigator !== 'undefined' ? navigator.language : 'en-US'),
+            containerDimensions: dims,
           },
         };
+        response = { jsonrpc: '2.0', id, result };
         break;
       }
       case 'tools/call': {

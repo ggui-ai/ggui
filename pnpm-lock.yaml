@@ -266,6 +266,9 @@ importers:
       '@ggui-ai/preview-a2ui':
         specifier: workspace:*
         version: link:../../packages/preview-a2ui
+      '@ggui-ai/protocol':
+        specifier: workspace:*
+        version: link:../../packages/protocol
       '@ggui-ai/protocol-conformance':
         specifier: workspace:*
         version: link:../../packages/protocol-conformance
@@ -946,6 +949,9 @@ importers:
       '@ggui-ai/wire':
         specifier: workspace:*
         version: link:../wire
+      '@modelcontextprotocol/ext-apps':
+        specifier: 1.7.5
+        version: 1.7.5(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(zod@4.4.3)
     devDependencies:
       '@modelcontextprotocol/sdk':
         specifier: 1.30.0
