@@ -18,6 +18,7 @@
     "@ggui-ai/mcp-server-core": "workspace:*",
     "@ggui-ai/mcp-server-handlers": "workspace:*",
     "@ggui-ai/preview-a2ui": "workspace:*",
+    "@ggui-ai/protocol": "workspace:*",
     "@ggui-ai/protocol-conformance": "workspace:*",
     "@ggui-ai/protocol-reference-server": "workspace:*",
     "@ggui-ai/ui-gen": "workspace:*",

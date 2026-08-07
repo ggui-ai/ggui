@@ -31,10 +31,18 @@
  *   5. `GET /` serves the console landing bundle with the CSP /
  *      security-header set per `packages/console/README.md` §Security.
  *   6. `GET /ggui/console/info` returns the server-identity block.
+ *   7. The protocol host-helper (`toolResultGguiRender` + `gguiShellHtml`,
+ *      ggui#427) mounts the render's self-contained shell in a real
+ *      browser page: the iframe-runtime bundle boots from the CLI's
+ *      absolute `runtimeUrl` and authenticates the live `/ws` channel
+ *      with the slice's `wsToken` — the same bytes an RN
+ *      `<McpAppIframe>` / MCP-Apps host WebView mounts (ggui#425
+ *      item 5).
  *
  * The retired `/s/<shortCode>` console render-viewer step is gone: the
- * canonical render-delivery surface is the MCP-Apps iframe path, covered
- * by the samples-render container e2e. This spec stays boot-focused.
+ * canonical render-delivery surface is the MCP-Apps iframe path —
+ * step 7 above covers it host-side; the samples-render container e2e
+ * covers the served-shell side.
  *
  * WHAT THIS SPEC DOES **NOT** PROVE (and why):
  *   - Real component-code generation. The OSS `ggui_render` deliberately
@@ -61,6 +69,10 @@
  * Docker-backed specs in the same project.
  */
 
+import {
+  gguiShellHtml,
+  toolResultGguiRender,
+} from "@ggui-ai/protocol/integrations/mcp-apps";
 import { expect, test } from "@playwright/test";
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { existsSync } from "node:fs";
@@ -75,6 +87,7 @@ import { OUTERMOST_ROOT, packagePath } from "./workspace-paths";
 // `tarball-install-harness.ts`.
 const GGUI_CLI_DIST = packagePath("ggui-cli", "dist", "cli.js");
 const DEVTOOL_DIST = packagePath("console", "dist", "index.html");
+const IFRAME_RUNTIME_DIST = packagePath("iframe-runtime", "dist", "iframe-runtime.js");
 
 /** How long we wait for `ggui serve` to print `READY`. */
 const READY_TIMEOUT_MS = 15_000;
@@ -114,6 +127,13 @@ test.describe.serial("OSS hero path — `ggui serve` (real CLI bin)", () => {
       test.skip(
         true,
         `@ggui-ai/console dist missing at ${DEVTOOL_DIST}. Run \`pnpm --filter @ggui-ai/console build\` first.`
+      );
+      return;
+    }
+    if (!existsSync(IFRAME_RUNTIME_DIST)) {
+      test.skip(
+        true,
+        `@ggui-ai/iframe-runtime bundle missing at ${IFRAME_RUNTIME_DIST}. Run \`pnpm --filter @ggui-ai/iframe-runtime build\` first.`
       );
       return;
     }
@@ -251,7 +271,7 @@ test.describe.serial("OSS hero path — `ggui serve` (real CLI bin)", () => {
     }
   });
 
-  test("boot → MCP → ggui_render → console viewer", async () => {
+  test("boot → MCP → ggui_render → host-mounted live render", async ({ page }) => {
     test.setTimeout(TEST_TIMEOUT_MS);
 
     // ── 1. Health shape ────────────────────────────────────────────
@@ -401,22 +421,122 @@ test.describe.serial("OSS hero path — `ggui serve` (real CLI bin)", () => {
     expect(landing.headers.get("x-frame-options")).toBe("DENY");
     expect(landing.headers.get("x-content-type-options")).toBe("nosniff");
 
-    // ── 6. Live render viewer ─────────────────────────────────────
+    // ── 6. Host-mounted live render — host-helper drives a real boot ─
     //
-    // POST-R5 (fix-A 2026-05-26): the `/r/<shortCode>` SPA route was
-    // deleted; the cookie-mint-by-shortCode flow that depended on
-    // `out.url` is no longer reachable from this surface. The cookie
-    // → /ws subscribe → ack invariants moved to direct unit coverage
-    // (`mcp-server/src/console-cookie.test.ts`, `render-channel.test.ts`)
-    // since the spec-level driver no longer has a shortCode in hand.
-    //
-    // Restoring an end-to-end equivalent — `<McpAppIframe>` driving
-    // the render-resource endpoint (`/ggui/console/session-resource?session=...`)
-    // and a Playwright shell rendering the inner iframe — is queued
-    // for the post-R5 e2e refresh slice. This block is intentionally
-    // empty: the typecheck/lint surface stays clean, the spec still
-    // exercises the bootstrap path through step 5 above, and the
-    // deletion is a single git diff (no dead-code rot left behind).
+    // The RN `<McpAppIframe>` (and any MCP-Apps host) mounts a ggui
+    // card by building the self-contained shell from the tool result's
+    // `_meta["ai.ggui/render"]` slice and handing the HTML to a
+    // WebView / sandboxed iframe. This step exercises those exact
+    // bytes in a real browser: narrow the ggui_render result through
+    // the protocol host-helper (`toolResultGguiRender`), build the
+    // shell (`gguiShellHtml`), mount it as the page document, and
+    // prove the iframe-runtime bundle boots + authenticates the live
+    // channel end-to-end. Replaces the `/r/<shortCode>` viewer step
+    // retired in fix-A 2026-05-26 — the MCP-Apps iframe path IS the
+    // canonical render-delivery surface (mcp-apps-compliance.md).
+    const bootstrap = toolResultGguiRender(renderResult);
+    expect(bootstrap).toBeDefined();
+    // Task #382 contract: the CLI publishes an ABSOLUTE runtimeUrl so
+    // `srcdoc` / WebView mounts (about:-scheme document URLs) can
+    // resolve the bundle without operator action.
+    expect(bootstrap!.runtimeUrl).toBe(`${baseUrl}/_ggui/iframe-runtime.js`);
+
+    // Preflight the bundle route separately so a missing build fails
+    // with the server's 503 remediation hint instead of an opaque
+    // mount-timeout. ACAO:* is load-bearing — module-script fetches
+    // from a null / about: origin always run in CORS mode.
+    const bundleRes = await fetch(bootstrap!.runtimeUrl);
+    expect(bundleRes.status).toBe(200);
+    expect(bundleRes.headers.get("access-control-allow-origin")).toBe("*");
+
+    // 'transparent' is the host posture (hosts composit their own card
+    // chrome behind the shell); the 'surface' posture is what the
+    // server's own resources/read shells serve and is covered by the
+    // protocol + mcp-server unit suites.
+    const shellHtml = gguiShellHtml(bootstrap!, { background: "transparent" });
+
+    // Topology matters: the shell MUST mount as a CHILD frame with a
+    // host answering `ui/initialize` — the runtime's boot sequence
+    // mandates the MCP-Apps handshake regardless of how slice meta
+    // arrives (runtime.ts `preResolvedMeta` doc). Mounted top-level,
+    // `window.parent === window`, the runtime's own request loops back
+    // into its own listener and dies on `-32601 Method not found` — a
+    // failure mode no real host topology can produce. The responder
+    // below returns a spec-canonical `McpUiInitializeResult` — the
+    // `@modelcontextprotocol/ext-apps` `App.connect` zod-validates it,
+    // and `protocolVersion` / `hostInfo` / `hostCapabilities` /
+    // `hostContext` are ALL required (host-only fields like `theme`
+    // live INSIDE `hostContext`). The slice needs no
+    // `ui/notifications/tool-result` delivery because the shell
+    // inlines it at `globalThis.__GGUI_META__` (highest-priority boot
+    // source).
+    await page.setContent(
+      '<iframe id="host-frame" style="width:400px;height:600px;border:0"></iframe>'
+    );
+    await page.evaluate((shell: string) => {
+      const frame = document.getElementById("host-frame");
+      if (!(frame instanceof HTMLIFrameElement)) {
+        throw new Error("host-frame iframe missing");
+      }
+      const isRecord = (v: unknown): v is Record<string, unknown> =>
+        v !== null && typeof v === "object" && !Array.isArray(v);
+      window.addEventListener("message", (ev: MessageEvent) => {
+        const req: unknown = ev.data;
+        if (!isRecord(req)) return;
+        if (req.jsonrpc !== "2.0" || req.id === undefined || req.id === null) return;
+        if (req.method !== "ui/initialize") return;
+        frame.contentWindow?.postMessage(
+          {
+            jsonrpc: "2.0",
+            id: req.id,
+            result: {
+              protocolVersion: "2026-01-26",
+              hostInfo: { name: "npx-bootstrap-e2e-host", version: "0.0.1" },
+              hostCapabilities: {},
+              hostContext: {
+                theme: "light",
+                locale: "en",
+                containerDimensions: { width: 400, height: 600 },
+              },
+            },
+          },
+          "*"
+        );
+      });
+      // Set srcdoc strictly AFTER the responder is installed so the
+      // renderer's `ui/initialize` can never race it.
+      frame.srcdoc = shell;
+    }, shellHtml);
+
+    // The runtime appends its own `<ul data-ggui-session-root>` mount
+    // target to `<body>` at boot (iframe-runtime status-dom) — the
+    // first observable "renderer executed" signal, independent of what
+    // the session renders. `toBeAttached` (not visibility): on this
+    // codeReady:false hero path the mount root is an EMPTY `<ul>` with
+    // zero box height until session frames arrive, which Playwright's
+    // visibility check treats as hidden. Presence is the boot signal.
+    await expect(
+      page.frameLocator("#host-frame").locator("[data-ggui-session-root]")
+    ).toBeAttached({ timeout: 15_000 });
+
+    // Live-channel proof from the SERVER side: the runtime read
+    // `wsUrl` + `wsToken` off the slice, opened the WS, and the
+    // subscribe authenticated — the health channel block counts the
+    // registered subscriber. This closes the loop the old shortCode
+    // viewer step proved via cookies, now on the canonical wsToken
+    // path.
+    await expect
+      .poll(
+        async () => {
+          const res = await fetch(`${baseUrl}/ggui/health`);
+          const body = (await res.json()) as {
+            channel?: { subscribers: number };
+          };
+          return body.channel?.subscribers ?? 0;
+        },
+        { timeout: 15_000 }
+      )
+      .toBeGreaterThanOrEqual(1);
   });
 });
 
