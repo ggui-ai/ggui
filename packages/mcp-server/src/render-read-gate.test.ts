@@ -56,6 +56,21 @@ describe("renderReadAllowed", () => {
     ).toBe(false);
   });
 
+  it("denies an oauth-login user reading another subject's row (same app)", () => {
+    expect(
+      renderReadAllowed(subjectRow, ctx({ appId: APP, authSource: "oauth", userId: "guuey:g_bob" }))
+    ).toBe(false);
+  });
+
+  it("allows an email-login user reading their own subject-bound row", () => {
+    expect(
+      renderReadAllowed(
+        subjectRow,
+        ctx({ appId: APP, authSource: "email", userId: "guuey:g_alice" })
+      )
+    ).toBe(true);
+  });
+
   it("allows an app credential of the owning app without a subject check (tenant trust)", () => {
     expect(
       renderReadAllowed(subjectRow, ctx({ appId: APP, authSource: "apikey", apiKeyHash: "h" }))

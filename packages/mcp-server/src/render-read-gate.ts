@@ -19,8 +19,9 @@ export interface RenderReadRowView {
  * Rungs, in order (spec §3):
  *  1. Fail closed without a request context.
  *  2. App boundary — the row's appId must equal the caller's.
- *  3. Subject binding — a federated end user (source 'oidc') reading a
- *     subject-bound row must BE that subject.
+ *  3. Subject binding — a caller carrying an end-user identity (kind
+ *     'user', any auth source) reading a subject-bound row must BE
+ *     that subject.
  *  4. Everything else same-app passes: app credentials (tenant trust —
  *     the app is obligated to enforce its own user-ownership before
  *     fetching on a user's behalf), builder/anonymous single-tenant
@@ -36,7 +37,7 @@ export function renderReadAllowed(
 ): boolean {
   if (ctx === undefined) return false;
   if (ctx.appId !== row.appId) return false;
-  if (row.endUserIdentity !== undefined && ctx.authSource === "oidc" && ctx.userId !== undefined) {
+  if (row.endUserIdentity !== undefined && ctx.userId !== undefined) {
     return ctx.userId === row.endUserIdentity.userId;
   }
   return true;
