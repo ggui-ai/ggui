@@ -56,6 +56,7 @@ import {
   type ServerMessage,
 } from '@ggui-ai/preview-a2ui';
 import { useChannelStream } from '../hooks/useChannelStream';
+import { RichTextInlines } from './RichTextInlines';
 import {
   PreviewFragmentEnter,
   PreviewSurface,
@@ -261,10 +262,14 @@ function renderComponent(
     case 'Text': {
       const variant = component.variant ?? 'body';
       const variantStyle = resolveTextStyle(variant);
+      // A2UI Text carries INLINE markdown (block level comes from
+      // `variant`) — rendered through the shared richtext subset.
       return (
         <PreviewFragmentEnter key={id}>
           <Text style={variantStyle} accessibilityRole={resolveTextRole(variant)}>
-            <StreamingText>{component.text}</StreamingText>
+            <StreamingText>
+              <RichTextInlines text={component.text} />
+            </StreamingText>
           </Text>
         </PreviewFragmentEnter>
       );

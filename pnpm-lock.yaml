@@ -430,6 +430,9 @@ importers:
       '@ggui-ai/wire':
         specifier: workspace:*
         version: link:../wire
+      '@silverprotocol/richtext':
+        specifier: 0.4.1
+        version: 0.4.1
       react:
         specifier: ^19.2.8
         version: 19.2.8
@@ -764,6 +767,9 @@ importers:
       '@ggui-ai/wire':
         specifier: workspace:*
         version: link:../wire
+      '@silverprotocol/richtext':
+        specifier: 0.4.1
+        version: 0.4.1
     devDependencies:
       '@modelcontextprotocol/sdk':
         specifier: 1.30.0
@@ -1305,7 +1311,7 @@ importers:
         version: link:../protocol
       '@google/adk':
         specifier: ^0.5.0
-        version: 0.5.0(a9518e16c93829f93d2a686b8ab8b8af)
+        version: 0.5.0(cc512d94a3479d440edfadcbf7cf8034)
       '@openai/agents':
         specifier: ^0.7.1
         version: 0.7.2(ws@8.21.0)(zod@4.4.3)
@@ -1453,7 +1459,7 @@ importers:
         version: link:../../../packages/protocol
       '@google/adk':
         specifier: ^1.1.0
-        version: 1.1.0(@grpc/grpc-js@1.14.4)(@mikro-orm/mariadb@6.6.13(@mikro-orm/core@6.6.13)(better-sqlite3@12.9.0))(@mikro-orm/mssql@6.6.13(@mikro-orm/core@6.6.13)(better-sqlite3@12.9.0)(mariadb@3.4.5))(@mikro-orm/mysql@6.6.13(@mikro-orm/core@6.6.13)(@types/node@22.19.15)(better-sqlite3@12.9.0)(mariadb@3.4.5))(@mikro-orm/postgresql@6.6.13(@mikro-orm/core@6.6.13)(better-sqlite3@12.9.0)(mariadb@3.4.5))(@mikro-orm/sqlite@6.6.13(@mikro-orm/core@6.6.13)(better-sqlite3@12.9.0)(mariadb@3.4.5))(@opentelemetry/core@2.10.0(@opentelemetry/api@1.9.0))(encoding@0.1.13)
+        version: 1.1.0(@grpc/grpc-js@1.14.4)(@mikro-orm/mariadb@6.6.13(@mikro-orm/core@6.6.13)(better-sqlite3@12.9.0)(pg@8.20.0))(@mikro-orm/mssql@6.6.13(@mikro-orm/core@6.6.13)(better-sqlite3@12.9.0)(mariadb@3.4.5)(pg@8.20.0))(@mikro-orm/mysql@6.6.13(@mikro-orm/core@6.6.13)(@types/node@22.19.15)(better-sqlite3@12.9.0)(mariadb@3.4.5)(pg@8.20.0))(@mikro-orm/postgresql@6.6.13(@mikro-orm/core@6.6.13)(better-sqlite3@12.9.0)(mariadb@3.4.5))(@mikro-orm/sqlite@6.6.13(@mikro-orm/core@6.6.13)(better-sqlite3@12.9.0)(mariadb@3.4.5)(pg@8.20.0))(@opentelemetry/core@2.10.0(@opentelemetry/api@1.9.0))(encoding@0.1.13)
       '@google/genai':
         specifier: ^1.37.0
         version: 1.50.1(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))
@@ -3915,6 +3921,9 @@ packages:
 
   '@silverprotocol/core@0.3.7':
     resolution: {integrity: sha512-nKubhCZUSnDwZ5Dms/aNnqe2hMjlcWl8MjJqtqqAgFi4XZUe4/9YjKV1yYIe8qDjcgNR5X4w7mVAbFTQjFk/rQ==}
+
+  '@silverprotocol/richtext@0.4.1':
+    resolution: {integrity: sha512-G/I+ejVRiYJ6RfVHDKkqCZYnmEawv/DvzBoh+t1BfQz04jBx80R0NblmZimhPrsAJK6z4J4Nrr8YqCo5WILuIg==}
 
   '@sinclair/typebox@0.27.10':
     resolution: {integrity: sha512-MTBk/3jGLNB2tVxv6uLlFh1iu64iYOQ2PbdOSK3NW8JZsmlaOh2q6sdtKowBhfw8QFLmYNzTW4/oK4uATIi6ZA==}
@@ -10336,7 +10345,7 @@ snapshots:
       - encoding
       - supports-color
 
-  '@google/adk@0.5.0(a9518e16c93829f93d2a686b8ab8b8af)':
+  '@google/adk@0.5.0(cc512d94a3479d440edfadcbf7cf8034)':
     dependencies:
       '@a2a-js/sdk': 0.3.13(@grpc/grpc-js@1.14.4)(express@5.2.1)
       '@google-cloud/opentelemetry-cloud-monitoring-exporter': 0.21.0(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.10.0(@opentelemetry/api@1.9.0))(@opentelemetry/resources@2.7.0(@opentelemetry/api@1.9.0))(@opentelemetry/sdk-metrics@2.7.0(@opentelemetry/api@1.9.0))(encoding@0.1.13)
@@ -10376,7 +10385,7 @@ snapshots:
       - supports-color
       - utf-8-validate
 
-  '@google/adk@1.1.0(@grpc/grpc-js@1.14.4)(@mikro-orm/mariadb@6.6.13(@mikro-orm/core@6.6.13)(better-sqlite3@12.9.0))(@mikro-orm/mssql@6.6.13(@mikro-orm/core@6.6.13)(better-sqlite3@12.9.0)(mariadb@3.4.5))(@mikro-orm/mysql@6.6.13(@mikro-orm/core@6.6.13)(@types/node@22.19.15)(better-sqlite3@12.9.0)(mariadb@3.4.5))(@mikro-orm/postgresql@6.6.13(@mikro-orm/core@6.6.13)(better-sqlite3@12.9.0)(mariadb@3.4.5))(@mikro-orm/sqlite@6.6.13(@mikro-orm/core@6.6.13)(better-sqlite3@12.9.0)(mariadb@3.4.5))(@opentelemetry/core@2.10.0(@opentelemetry/api@1.9.0))(encoding@0.1.13)':
+  '@google/adk@1.1.0(@grpc/grpc-js@1.14.4)(@mikro-orm/mariadb@6.6.13(@mikro-orm/core@6.6.13)(better-sqlite3@12.9.0)(pg@8.20.0))(@mikro-orm/mssql@6.6.13(@mikro-orm/core@6.6.13)(better-sqlite3@12.9.0)(mariadb@3.4.5)(pg@8.20.0))(@mikro-orm/mysql@6.6.13(@mikro-orm/core@6.6.13)(@types/node@22.19.15)(better-sqlite3@12.9.0)(mariadb@3.4.5)(pg@8.20.0))(@mikro-orm/postgresql@6.6.13(@mikro-orm/core@6.6.13)(better-sqlite3@12.9.0)(mariadb@3.4.5))(@mikro-orm/sqlite@6.6.13(@mikro-orm/core@6.6.13)(better-sqlite3@12.9.0)(mariadb@3.4.5)(pg@8.20.0))(@opentelemetry/core@2.10.0(@opentelemetry/api@1.9.0))(encoding@0.1.13)':
     dependencies:
       '@a2a-js/sdk': 0.3.13(@grpc/grpc-js@1.14.4)(express@4.22.1)
       '@google-cloud/opentelemetry-cloud-monitoring-exporter': 0.21.0(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.10.0(@opentelemetry/api@1.9.0))(@opentelemetry/resources@2.7.0(@opentelemetry/api@1.9.0))(@opentelemetry/sdk-metrics@2.7.0(@opentelemetry/api@1.9.0))(encoding@0.1.13)
@@ -11727,6 +11736,8 @@ snapshots:
   '@silverprotocol/core@0.3.7':
     dependencies:
       zod: 4.4.3
+
+  '@silverprotocol/richtext@0.4.1': {}
 
   '@sinclair/typebox@0.27.10': {}
 

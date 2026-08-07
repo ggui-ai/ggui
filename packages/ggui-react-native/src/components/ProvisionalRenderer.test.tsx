@@ -70,22 +70,25 @@ function hasTestId(tree: ReactTestRenderer, id: string): boolean {
 function findTextNodes(tree: ReactTestRenderer): string[] {
   const texts: string[] = [];
   try {
+    // Walk RENDERED children (TestInstance.children), not element
+    // props — composite wrappers (StreamingText, RichTextInlines)
+    // carry text behind their own props, but the rendered tree always
+    // bottoms out in strings. Nested Text instances are visited via
+    // both the outer walk and findAllByType; duplicates are harmless
+    // to the .toContain-style assertions.
     for (const node of tree.root.findAllByType('Text')) {
-      const children = node.props.children;
       const walk = (child: unknown): void => {
         if (typeof child === 'string') texts.push(child);
         else if (Array.isArray(child)) child.forEach(walk);
         else if (
           child &&
           typeof child === 'object' &&
-          'props' in (child as Record<string, unknown>)
+          'children' in (child as Record<string, unknown>)
         ) {
-          walk(
-            (child as { props: { children?: unknown } }).props.children,
-          );
+          walk((child as { children: unknown }).children);
         }
       };
-      walk(children);
+      walk(node.children);
     }
   } catch {
     // no Text nodes in the tree
@@ -473,5 +476,41 @@ describe('ProvisionalRenderer (RN) — accessibility + suspension', () => {
     expect(findTextNodes(tree!)).not.toContain('hidden');
     // Suspended renderer returns null — the root of the tree is empty.
     expect(countByType(tree!, 'View')).toBe(0);
+  });
+});
+
+describe('ProvisionalRenderer (RN) — inline markdown in Text components', () => {
+  beforeEach(() => {
+    __resetPreviewBridgeForTests();
+  });
+
+  it('renders bold runs as nested Text with bold weight; literal HTML stays text', async () => {
+    let tree: ReactTestRenderer;
+    await act(async () => {
+      tree = create(React.createElement(ProvisionalRenderer));
+    });
+    await act(async () => {
+      createSurface();
+      updateComponents([
+        {
+          id: 'root',
+          component: 'Text',
+          text: 'stay **calm** and <b>literal</b>',
+        },
+      ]);
+    });
+    // The bold run renders as its own Text node carrying fontWeight bold.
+    const bold = tree!.root
+      .findAllByType('Text')
+      .filter((n) => {
+        const s = n.props.style;
+        const flat = Array.isArray(s) ? Object.assign({}, ...s.filter(Boolean)) : (s ?? {});
+        return flat.fontWeight === 'bold' || flat.fontWeight === '700';
+      });
+    expect(bold.length).toBeGreaterThan(0);
+    const texts = findTextNodes(tree!);
+    expect(texts).toContain('calm');
+    // Literal-content rule: raw HTML never becomes structure — it stays text.
+    expect(texts.join('')).toContain('<b>literal</b>');
   });
 });

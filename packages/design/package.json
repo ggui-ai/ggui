@@ -96,7 +96,8 @@
     "react-dom": "^18.0.0 || ^19.0.0"
   },
   "dependencies": {
-    "@ggui-ai/wire": "workspace:*"
+    "@ggui-ai/wire": "workspace:*",
+    "@silverprotocol/richtext": "0.4.1"
   },
   "devDependencies": {
     "@chromatic-com/storybook": "^3.2.0",

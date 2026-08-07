@@ -98,6 +98,11 @@ export const COMPONENTS_EXPORTS = [
   'SearchField', 'FormField', 'MenuItem', 'Tag', 'Dropdown',
   'Autocomplete', 'Breadcrumb', 'Pagination', 'EmptyState', 'Stat',
   'Stepper',
+  // Rich text (ggui#424): the shim serves these and the validator
+  // allows them, but the LLM prompt docs deliberately do NOT mention
+  // them yet — that promotion is the benchmark-gated triad slice
+  // (see the gating note in components/Markdown.tsx).
+  'Markdown', 'MarkdownInline', 'renderRichTextInlines',
 ] as const;
 
 /** Known exports from @ggui-ai/design/compositions.

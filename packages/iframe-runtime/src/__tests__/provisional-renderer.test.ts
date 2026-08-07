@@ -225,3 +225,52 @@ describe('mountProvisional — pre-mount pending queue', () => {
     mount.unmount();
   });
 });
+
+describe('mountProvisional — inline markdown in Text components', () => {
+  it('renders A2UI Text markdown through the shared richtext subset (bold as <strong>, literal HTML stays text)', async () => {
+    const container = makeContainer();
+    const mount = mountProvisional(container);
+    const surfaceId = 'smd';
+    const v0_9 = 'v0.9' as const;
+    mount.pushEnvelope({
+      sessionId: 'render_002',
+      channel: PREVIEW_CHANNEL,
+      mode: 'append',
+      payload: {
+        version: v0_9,
+        createSurface: { surfaceId, catalogId: 'a2ui-v0.9-default' },
+      },
+    });
+    mount.pushEnvelope({
+      sessionId: 'render_002',
+      channel: PREVIEW_CHANNEL,
+      mode: 'append',
+      payload: {
+        version: v0_9,
+        updateComponents: {
+          surfaceId,
+          components: [
+            { id: 'root', component: 'Column', children: ['t'], gap: '12', align: 'stretch' },
+            {
+              id: 't',
+              component: 'Text',
+              variant: 'body',
+              text: 'stay **calm** and <b>literal</b>',
+            },
+          ],
+        },
+      },
+    });
+
+    await flush();
+
+    const strong = container.querySelector('[data-ggui-preview] strong');
+    expect(strong).not.toBeNull();
+    expect(strong?.textContent).toBe('calm');
+    // Literal-content rule: raw HTML in agent text NEVER becomes markup.
+    expect(container.querySelector('[data-ggui-preview] b')).toBeNull();
+    expect(container.textContent).toContain('<b>literal</b>');
+
+    mount.unmount();
+  });
+});

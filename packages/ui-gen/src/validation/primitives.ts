@@ -60,6 +60,8 @@ export const VALID_PRIMITIVES = [
   'EmptyState',
   'Stat',
   'Stepper',
+  'Markdown',
+  'MarkdownInline',
   'Header',
   'Sidebar',
   'CardGrid',

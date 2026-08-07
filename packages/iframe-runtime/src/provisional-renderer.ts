@@ -72,6 +72,12 @@ import {
   PreviewSurface,
   StreamingText,
 } from '@ggui-ai/design/preview';
+// A2UI Text carries INLINE markdown (the block level comes from
+// `variant`) — rendered through the shared @silverprotocol/richtext
+// subset via the design system's inline renderer. Streaming-safe:
+// prefixes parse to stable ASTs, so re-emitting a longer `text`
+// only extends the trailing construct.
+import { MarkdownInline } from '@ggui-ai/design';
 
 const A2UI_ROOT_ID = 'root';
 
@@ -228,7 +234,7 @@ function renderComponent(
           createElement(
             Heading,
             { level },
-            createElement(StreamingText, null, component.text),
+            createElement(StreamingText, null, createElement(MarkdownInline, { text: component.text })),
           ),
         );
       }
@@ -244,7 +250,7 @@ function renderComponent(
         createElement(
           Text,
           textProps,
-          createElement(StreamingText, null, component.text),
+          createElement(StreamingText, null, createElement(MarkdownInline, { text: component.text })),
         ),
       );
     }

@@ -34,3 +34,6 @@ export type {
   StatProps,
   StepperProps,
 } from './types';
+export { Markdown, renderRichTextInlines } from './Markdown';
+export type { MarkdownProps } from './Markdown';
+export { MarkdownInline } from './Markdown';

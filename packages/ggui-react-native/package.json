@@ -79,11 +79,12 @@
   },
   "dependencies": {
     "@ggui-ai/design": "workspace:*",
-    "@ggui-ai/preview-a2ui": "workspace:*",
     "@ggui-ai/iframe-runtime": "workspace:*",
-    "@ggui-ai/shared": "workspace:*",
+    "@ggui-ai/preview-a2ui": "workspace:*",
     "@ggui-ai/protocol": "workspace:*",
-    "@ggui-ai/wire": "workspace:*"
+    "@ggui-ai/shared": "workspace:*",
+    "@ggui-ai/wire": "workspace:*",
+    "@silverprotocol/richtext": "0.4.1"
   },
   "devDependencies": {
     "@modelcontextprotocol/sdk": "^1.27.0",

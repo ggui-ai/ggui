@@ -85,11 +85,15 @@ const DividerComponent = ComponentBase.extend({
 });
 
 /**
- * Text block. A2UI supports Markdown inside `text` and uses `variant`
- * to carry semantic level (`h1`..`h6`, `body`, `caption`, `label`).
- * We accept any variant string since Haiku may produce variants we
- * hadn't anticipated — unknown variants degrade to default body text
- * in the renderer, not a parse failure.
+ * Text block. A2UI supports Markdown inside `text` — the INLINE
+ * conversational subset (bold/italic/code/links/breaks), parsed by
+ * `@silverprotocol/richtext` and rendered by both provisional
+ * renderers (web `iframe-runtime`, RN `ProvisionalRenderer`). Block
+ * semantics come from `variant` (`h1`..`h6`, `body`, `caption`,
+ * `label`), never from `#` syntax inside `text`. We accept any
+ * variant string since Haiku may produce variants we hadn't
+ * anticipated — unknown variants degrade to default body text in the
+ * renderer, not a parse failure.
  */
 const TextComponent = ComponentBase.extend({
   component: z.literal('Text'),
