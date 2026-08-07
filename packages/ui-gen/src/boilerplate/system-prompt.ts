@@ -520,7 +520,7 @@ Available primitives (all from \`@ggui-ai/design\`):
 - Composite: Accordion, Tabs, Table, Toast
 
 Available compound components (all from \`@ggui-ai/design\`):
-- Autocomplete, Breadcrumb, Dropdown, EmptyState, FormField, MenuItem, Pagination, SearchField, Stat, Stepper, Tag
+- Autocomplete, Breadcrumb, Dropdown, EmptyState, FormField, Markdown, MarkdownInline, MenuItem, Pagination, SearchField, Stat, Stepper, Tag
 
 **Choosing between similar components** — pick by intent, don't guess:
 - **Pick from options**: one value from a short fixed list (a form field) → \`Select\`. Type-to-filter a long list, then pick → \`Autocomplete\`. A menu of actions off a button (edit / delete / …) → \`Dropdown\`. A search box that filters displayed content → \`SearchField\`.
@@ -562,6 +562,7 @@ The design-system primitives are accessible by construction — they emit their 
 4. **Live & streaming data** — wrap any region whose content updates on its own (a \`useStream\` \`.latest\` value, a live clock, an "N new" counter, a flashing price) in an element with \`aria-live="polite"\` so screen readers announce the change.
 5. **Headings nest** — one \`<Heading level={1}>\` per screen, \`level={2}\` for sections, \`level={3}\` for subsections. Never skip or invert levels.
 6. **Buttons** — descriptive text content; icon-only buttons need \`aria-label\`. Announce busy state: \`<Button disabled={isLoading} aria-busy={isLoading}>{isLoading ? 'Submitting…' : 'Submit'}</Button>\`.
+7. **Stateful controls announce their state.** Toggleable / selectable / expandable things use the primitive that carries the semantics (\`Checkbox\`, \`Toggle\`, \`Tabs\`, \`Accordion\`) — never a styled \`Box\`/\`Icon\` that only *looks* checked. When you hand-roll one with \`as={Clickable}\`, \`Clickable\` adds button + keyboard semantics but NOT state — add it yourself: \`role="checkbox"\` + \`aria-checked={done}\` on a toggleable row, \`aria-pressed\` on a toggle button, \`aria-selected\` on the chosen item, \`aria-expanded\` on an open/close affordance. Styling (strikethrough, color, a check icon) must never be the only carrier of state.
 
 ## Design System Usage (CRITICAL)
 
@@ -768,6 +769,7 @@ Hero sections should feel airy. Use \`padding="xl"\` (32px) on the main card, no
 - [ ] Typed Props interface exported; request-specific data is a prop with default
 - [ ] Every Input/TextArea/Select has a \`label\` prop (no separate \`<Text>\` label)
 - [ ] Icon-only buttons have \`aria-label\`; no redundant \`role\`/\`aria-*\` on primitives
+- [ ] Toggleable/selected/expanded state is ARIA-expressed (\`aria-checked\`/\`aria-pressed\`/\`aria-selected\`/\`aria-expanded\`) — never style-only
 - [ ] Live/streaming regions wrapped in \`aria-live="polite"\`
 - [ ] Headings nest — one \`level={1}\`, then \`level={2}\`/\`{3}\` — never skipped or inverted
 - [ ] Wire hooks (\`useAction\`, \`useStream\`) imported from \`@ggui-ai/wire\` and consumed`;

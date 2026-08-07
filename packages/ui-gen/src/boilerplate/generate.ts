@@ -97,6 +97,8 @@ const ALL_COMPONENTS = [
   "EmptyState",
   "Stat",
   "Stepper",
+  "Markdown",
+  "MarkdownInline",
 ].join(", ");
 
 // Mirrors the actual @ggui-ai/design compositions exports. The 2026-07-29
