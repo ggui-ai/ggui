@@ -107,8 +107,15 @@ function MessageBody({ message }: { message: ChatThreadMessage }): ReactNode {
     <>
       {message.blocks.map((b, i) => {
         if (b.type === 'text') {
+          // Chat text is plain by design, but plain still respects authored
+          // whitespace — without pre-wrap, agents' paragraph breaks collapse
+          // into one line. (RN twin needs nothing: <Text> preserves \n.)
           return (
-            <p key={i} data-ggui-block="text" style={message.isPending ? { opacity: 0.6 } : undefined}>
+            <p
+              key={i}
+              data-ggui-block="text"
+              style={{ whiteSpace: 'pre-wrap', ...(message.isPending ? { opacity: 0.6 } : undefined) }}
+            >
               {b.text}
             </p>
           );
