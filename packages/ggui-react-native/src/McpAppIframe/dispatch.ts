@@ -58,6 +58,7 @@ import {
 } from '@ggui-ai/protocol/integrations/mcp-apps';
 import {
   LATEST_PROTOCOL_VERSION,
+  McpUiUpdateModelContextRequestSchema,
   type McpUiInitializeResult,
 } from '@modelcontextprotocol/ext-apps';
 import type {
@@ -90,6 +91,7 @@ export interface HostBridgeContext {
   readonly containerDimensions: McpAppIframeDimensions;
   readonly openLink: (url: string) => Promise<void> | void;
   readonly onToolCall?: McpAppIframeProps['onToolCall'];
+  readonly onUpdateModelContext?: McpAppIframeProps['onUpdateModelContext'];
 }
 
 function isJsonRpcRequest(value: unknown): value is HostBridgeRequest {
@@ -227,6 +229,33 @@ export async function dispatchHostBridgeRequest(
           },
         };
       }
+    }
+    case 'ui/update-model-context': {
+      // App → host context contribution (the renderer sends this on
+      // interaction). Forwarded to the caller when a handler is wired;
+      // WITHOUT one the honest answer stays `method_not_supported` —
+      // acking context we did not carry anywhere would mislead the app
+      // (first-integrator report, ggui#425 fourth finding).
+      if (ctx.onUpdateModelContext === undefined) {
+        return {
+          jsonrpc: '2.0',
+          id,
+          error: { code: -32601, message: 'method_not_supported' },
+        };
+      }
+      const parsed = McpUiUpdateModelContextRequestSchema.safeParse({
+        method: 'ui/update-model-context',
+        params: req.params,
+      });
+      if (!parsed.success) {
+        return {
+          jsonrpc: '2.0',
+          id,
+          error: { code: -32602, message: 'invalid ui/update-model-context params' },
+        };
+      }
+      await ctx.onUpdateModelContext(parsed.data.params);
+      return { jsonrpc: '2.0', id, result: {} };
     }
     default: {
       return {

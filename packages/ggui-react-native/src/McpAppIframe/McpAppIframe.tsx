@@ -103,6 +103,7 @@ export const McpAppIframe = forwardRef<McpAppIframeRef, McpAppIframeProps>(
       permissions,
       meta,
       onToolCall,
+      onUpdateModelContext,
       onError,
       onObserve,
       onLifecycle,
@@ -127,6 +128,7 @@ export const McpAppIframe = forwardRef<McpAppIframeRef, McpAppIframeProps>(
       containerDimensions: resolveContainerDimensions(containerDimensions),
       openLink: openLinkNative,
       onToolCall,
+      onUpdateModelContext,
     });
     useEffect(() => {
       ctxRef.current = {
@@ -134,8 +136,9 @@ export const McpAppIframe = forwardRef<McpAppIframeRef, McpAppIframeProps>(
         containerDimensions: resolveContainerDimensions(containerDimensions),
         openLink: openLinkNative,
         onToolCall,
+        onUpdateModelContext,
       };
-    }, [locale, containerDimensions, onToolCall]);
+    }, [locale, containerDimensions, onToolCall, onUpdateModelContext]);
 
     // Track the current `meta` separately from `ctxRef`. `meta` no
     // longer rides on `ui/initialize` (Reading-B retired); the host

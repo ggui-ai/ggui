@@ -92,6 +92,19 @@ export interface McpAppIframeProps {
   readonly locale?: string;
 
   /**
+   * Called when the embedded app sends `ui/update-model-context` —
+   * content the app wants added to the host's model/conversation
+   * context (the ggui renderer sends this on user interaction). When
+   * wired, the request is schema-validated and acked with an empty
+   * result; the host owns delivering the content to its agent. When
+   * absent, the host answers `method_not_supported` — the honest
+   * response for context it would not carry anywhere.
+   */
+  readonly onUpdateModelContext?: (
+    params: import('@modelcontextprotocol/ext-apps').McpUiUpdateModelContextRequest['params'],
+  ) => Promise<void> | void;
+
+  /**
    * Container-dimensions hint. Mirrored to the View element's style
    * AND echoed to the iframe via
    * `ui/initialize.result.hostContext.containerDimensions`.

@@ -186,6 +186,29 @@ describe('dispatchHostBridgeRequest (RN shared switch)', () => {
     }
   });
 
+  it('ui/update-model-context forwards to onUpdateModelContext and acks empty', async () => {
+    const seen: unknown[] = [];
+    const res = await dispatchHostBridgeRequest(
+      {
+        jsonrpc: '2.0',
+        id: 9,
+        method: 'ui/update-model-context',
+        params: { content: [{ type: 'text', text: 'selection changed' }] },
+      },
+      makeCtx({ onUpdateModelContext: (params) => void seen.push(params) }),
+    );
+    expect(res).toEqual({ jsonrpc: '2.0', id: 9, result: {} });
+    expect(seen).toHaveLength(1);
+  });
+
+  it('ui/update-model-context without a handler stays method_not_supported', async () => {
+    const res = await dispatchHostBridgeRequest(
+      { jsonrpc: '2.0', id: 10, method: 'ui/update-model-context', params: { content: [] } },
+      makeCtx(),
+    );
+    expect(res?.error?.code).toBe(-32601);
+  });
+
   it('ui/open-link rejects non-http(s) schemes with unsupported-scheme', async () => {
     for (const url of [
       'javascript:alert(1)',

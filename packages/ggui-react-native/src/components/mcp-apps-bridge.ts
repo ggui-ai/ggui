@@ -25,7 +25,9 @@ import { Linking, Platform } from 'react-native';
 import type { McpAppsGguiSession } from '@ggui-ai/protocol/integrations/mcp-apps';
 import {
   LATEST_PROTOCOL_VERSION,
+  McpUiUpdateModelContextRequestSchema,
   type McpUiInitializeResult,
+  type McpUiUpdateModelContextRequest,
 } from '@modelcontextprotocol/ext-apps';
 
 interface JsonRpcRequest {
@@ -54,6 +56,13 @@ export interface HostBridgeContext {
   readonly toolsCallUrl: string;
   readonly locale?: string;
   readonly containerDimensions?: McpAppsGguiSession['containerDimensions'];
+  /**
+   * Optional `ui/update-model-context` sink — see the McpAppIframe
+   * prop of the same name. Absent ⇒ the honest `method_not_supported`.
+   */
+  readonly onUpdateModelContext?: (
+    params: McpUiUpdateModelContextRequest['params'],
+  ) => Promise<void> | void;
 }
 
 /**
@@ -193,6 +202,32 @@ export async function handleHostBridgeRequest(
         };
       }
     }
+    case 'ui/update-model-context': {
+      // Forwarded to the caller's sink when wired; without one the
+      // honest answer stays `method_not_supported` — acking context
+      // we did not carry anywhere would mislead the app
+      // (first-integrator report, ggui#425 fourth finding).
+      if (ctx.onUpdateModelContext === undefined) {
+        return {
+          jsonrpc: '2.0',
+          id: id ?? 0,
+          error: { code: -32601, message: 'method_not_supported' },
+        };
+      }
+      const parsed = McpUiUpdateModelContextRequestSchema.safeParse({
+        method: 'ui/update-model-context',
+        params: req.params,
+      });
+      if (!parsed.success) {
+        return {
+          jsonrpc: '2.0',
+          id: id ?? 0,
+          error: { code: -32602, message: 'invalid ui/update-model-context params' },
+        };
+      }
+      await ctx.onUpdateModelContext(parsed.data.params);
+      return { jsonrpc: '2.0', id: id ?? 0, result: {} };
+    }
     default: {
       return {
         jsonrpc: '2.0',
@@ -249,6 +284,11 @@ export function buildInjectedBridgeScript(): string {
     window.postMessage = function(data /*, targetOrigin */) {
       forward(data);
     };
+    // ONE stable parent proxy — first-integrator device finding
+    // (ggui#425): a getter that mints a fresh object per access breaks
+    // every transport that checks \`event.source === window.parent\`
+    // (two reads can never be equal).
+    var parentProxy = { postMessage: forward };
     // Explicit \`parent.postMessage\` aliasing — some engines reify
     // \`window.parent\` lazily, so overriding it on \`window\` is the
     // canonical safety net.
@@ -256,7 +296,7 @@ export function buildInjectedBridgeScript(): string {
       Object.defineProperty(window, 'parent', {
         configurable: true,
         get: function() {
-          return { postMessage: forward };
+          return parentProxy;
         },
       });
     } catch (_e) {
@@ -264,6 +304,41 @@ export function buildInjectedBridgeScript(): string {
       // \`window.postMessage\` override in place — it covers the
       // \`window.parent === window\` loopback for us.
     }
+
+    // Host → page delivery channel. WebKit rejects a synthesized
+    // \`MessageEvent\` whose \`source\` is a plain object (must be a
+    // WindowProxy / MessagePort / null) — the TypeError was swallowed
+    // and no host response ever reached the renderer (first-integrator
+    // device finding, ggui#425). Sidestep event-construction legality
+    // entirely: capture \`message\` listeners at document-start (this
+    // script runs via injectedJavaScriptBeforeContentLoaded, so the
+    // wrappers are in place before any page script registers) and
+    // deliver by direct invocation with an event-shaped object whose
+    // \`source\` IS the stable parent proxy.
+    var messageListeners = [];
+    var origAdd = window.addEventListener ? window.addEventListener.bind(window) : null;
+    window.addEventListener = function(type, fn, opts) {
+      if (type === 'message' && typeof fn === 'function') messageListeners.push(fn);
+      if (origAdd) return origAdd(type, fn, opts);
+    };
+    var origRemove = window.removeEventListener ? window.removeEventListener.bind(window) : null;
+    window.removeEventListener = function(type, fn, opts) {
+      if (type === 'message') {
+        var i = messageListeners.indexOf(fn);
+        if (i !== -1) messageListeners.splice(i, 1);
+      }
+      if (origRemove) return origRemove(type, fn, opts);
+    };
+    window.__gguiDeliver = function(data) {
+      var ev = { type: 'message', data: data, source: parentProxy, origin: '' };
+      var snapshot = messageListeners.slice();
+      for (var i = 0; i < snapshot.length; i++) {
+        try { snapshot[i](ev); } catch (_e) {}
+      }
+      if (typeof window.onmessage === 'function') {
+        try { window.onmessage(ev); } catch (_e) {}
+      }
+    };
 
     // Mark that the shim loaded; tests and diagnostics may read this.
     window.__gguiMcpAppsBridge.ready = true;
@@ -274,10 +349,19 @@ true;
 }
 
 /**
- * Build a script that delivers a host → WebView JSON-RPC message via a
- * synthesized `MessageEvent` on `window`. Escaped for safe injection —
- * every caller-controlled string lands inside a JSON.parse'd literal,
- * never as a JS identifier.
+ * Build a script that delivers a host → WebView JSON-RPC message to the
+ * embedded page. Escaped for safe injection — every caller-controlled
+ * string lands inside a JSON.parse'd literal, never as a JS identifier.
+ *
+ * Delivery goes through the injected bridge's `window.__gguiDeliver`
+ * (direct listener invocation with `source` = the stable parent proxy)
+ * rather than a synthesized `MessageEvent`: WebKit rejects a
+ * `MessageEvent` whose `source` is a plain object, and the resulting
+ * TypeError was silently swallowed — no host response ever reached the
+ * renderer (first-integrator device finding, ggui#425). The
+ * `dispatchEvent` fallback below only runs when the bridge failed to
+ * inject; it omits `source` (null is legal everywhere) as a
+ * best-effort path for transports that don't check event provenance.
  */
 export function buildDeliveryScript(
   message: JsonRpcResponse | JsonRpcNotification,
@@ -291,8 +375,12 @@ export function buildDeliveryScript(
 (function() {
   try {
     var data = JSON.parse(${json});
-    var ev = new MessageEvent('message', { data: data, source: window.parent });
-    window.dispatchEvent(ev);
+    if (typeof window.__gguiDeliver === 'function') {
+      window.__gguiDeliver(data);
+    } else {
+      var ev = new MessageEvent('message', { data: data });
+      window.dispatchEvent(ev);
+    }
   } catch (_e) {}
 })();
 true;
