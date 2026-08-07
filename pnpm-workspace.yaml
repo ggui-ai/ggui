@@ -39,6 +39,9 @@ packages:
   - "e2e/journeys"
   - "e2e/wire-scenarios"
   - "e2e/mcp-host-simulator"
+  # guuey-interop matrix (ggui#429) — keyless proof of the render
+  # channel against @guuey/* at exact published pins.
+  - "e2e/guuey-integration"
   # Sub-tier B container e2e — render + cache-hit + seed-pool against an
   # app COMPOSED directly from samples/* (Verdaccio cohort →
   # compose-app.mjs → pnpm dev).

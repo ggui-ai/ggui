@@ -1,0 +1,24 @@
+{
+  "name": "@ggui-ai/e2e-guuey-integration",
+  "version": "0.0.0",
+  "description": "Standing keyless interop proof for the ggui × guuey render channel (ggui#429): ggui's card surfaces consumed through guuey's published SDK (@guuey/threads + @guuey/agent-client at EXACT pins) with zero hosted infrastructure. The matrix: live mount via a real in-process ggui server over the real MCP wire, persist→rehydrate equivalence through guuey's extracted ThreadStore, the provider-raw ui:// channel on both arms, and the honest non-remountability pin for persisted ggui bootstraps. The @guuey/* pins are exact because the suite tests ggui HEAD against the versions guuey actually shipped; the pins are dev-side test harness only — no published @ggui-ai/* package depends on anything above MCP.",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "devDependencies": {
+    "@ggui-ai/mcp-server": "workspace:*",
+    "@ggui-ai/mcp-server-core": "workspace:*",
+    "@ggui-ai/protocol": "workspace:*",
+    "@guuey/agent-client": "0.2.2",
+    "@guuey/threads": "0.2.2",
+    "@modelcontextprotocol/sdk": "^1.27.0",
+    "@silverprotocol/core": "0.4.1",
+    "@types/node": "^24.0.0",
+    "typescript": "^5.0.0",
+    "vitest": "^3.2.6"
+  }
+}
