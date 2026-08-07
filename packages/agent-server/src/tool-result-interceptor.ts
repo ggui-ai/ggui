@@ -55,19 +55,30 @@ export interface InterceptorMcpServers {
 /**
  * Look up the spec-canonical `_meta.ui.resourceUri` on a normalized
  * `tool_use_result`. Returns the URI when present + non-empty, else
- * `undefined`.
+ * `undefined`. Accepts `unknown` because the seam sees whatever an
+ * adapter hands it — every access is structurally guarded.
  */
-function extractResourceUri(
-  result: McpCallToolResult | undefined,
-): string | undefined {
+function extractResourceUri(result: unknown): string | undefined {
   if (!result || typeof result !== 'object') return undefined;
-  const meta = result._meta;
+  const meta = (result as { _meta?: unknown })._meta;
   if (meta === null || typeof meta !== 'object') return undefined;
   const ui = (meta as { ui?: unknown }).ui;
   if (ui === null || typeof ui !== 'object') return undefined;
   const uri = (ui as { resourceUri?: unknown }).resourceUri;
   if (typeof uri === 'string' && uri.length > 0) return uri;
   return undefined;
+}
+
+/**
+ * The seam's detection predicate: does this tool result carry the
+ * MCP-Apps `_meta.ui.resourceUri` bootstrap? Total over arbitrary
+ * input — `false`, never a throw, on non-CallToolResult shapes. One
+ * logic, two callers: `interceptToolResult` inlines the resource for
+ * exactly the results this predicate accepts, and the corpus seam
+ * contract tests replay real framework streams through it.
+ */
+export function toolResultCarriesUiResource(result: unknown): boolean {
+  return extractResourceUri(result) !== undefined;
 }
 
 /**

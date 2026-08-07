@@ -28,7 +28,7 @@
     "build": "rm -rf dist && tsc -p tsconfig.build.json",
     "dev": "tsc --watch",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run",
+    "test": "node ../../e2e/fixtures/silverprotocol/fetch-fixtures.mjs && vitest run",
     "test:watch": "vitest",
     "clean": "rm -rf dist"
   },
@@ -38,7 +38,7 @@
     "hono": "^4.12.8"
   },
   "devDependencies": {
-    "@silverprotocol/core": "^0.3.7",
+    "@silverprotocol/core": "0.4.1",
     "@types/node": "^24.0.0",
     "typescript": "^5.0.0",
     "vitest": "^3.2.6"
