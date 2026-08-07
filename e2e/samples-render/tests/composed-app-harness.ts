@@ -20,7 +20,14 @@ import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
-export type SdkId = 'claude-agent-sdk' | 'openai-agents-sdk' | 'google-adk';
+/**
+ * The composed lanes compose-app.mjs knows how to build. The three
+ * framework-native keys boot the app-shell's `pnpm dev` (4 servers);
+ * `with-guuey` boots guuey's own 3-process tree instead (`ggui serve`
+ * :6781 → `guuey dev --serve` :6790 → vite :6890, todo MCP :6740 spawned
+ * by the guuey CLI) — see compose-and-boot.sh's with-guuey branch.
+ */
+export type SdkId = 'claude-agent-sdk' | 'openai-agents-sdk' | 'google-adk' | 'with-guuey';
 
 export interface ComposedAppHandle {
   /** http://localhost:6890 — the Vite SPA (render scenario). */
@@ -57,8 +64,11 @@ const GGUI_PORT = 6781;
 // Agent backend port — unified to 6790 across all SDK variants (dev.mjs AGENT_PORT).
 const AGENT_PORT = 6790;
 // All ports the composed dev tree binds — checked on teardown so a leak is
-// caught before the next boot.
-const APP_PORTS: readonly number[] = [GGUI_PORT, 6782, AGENT_PORT, WEB_PORT];
+// caught before the next boot. 6740 (colocated todo MCP) and 7890 (the
+// with-guuey web half's self-booted sandbox proxy) are bound only by the
+// with-guuey lane; the framework lanes never bind them, so their teardown
+// wait sees those two free instantly.
+const APP_PORTS: readonly number[] = [GGUI_PORT, 6782, AGENT_PORT, WEB_PORT, 6740, 7890];
 
 // build + publish runs ONCE per worker process; latch the result.
 let setupDone = false;
