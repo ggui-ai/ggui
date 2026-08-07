@@ -39,7 +39,7 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import type { Server as HttpServer } from 'node:http';
 import { createGguiServer, type GguiServer } from '@ggui-ai/mcp-server';
-import { InMemoryAuthAdapter, InMemoryCodeStore, InMemoryGguiSessionStore } from '@ggui-ai/mcp-server-core/in-memory';
+import { InMemoryAuthAdapter, InMemoryGguiSessionStore } from '@ggui-ai/mcp-server-core/in-memory';
 import type { GguiSessionStore } from '@ggui-ai/mcp-server-core';
 import {
   MCP_APP_AI_GGUI_RENDER_META_KEY,
@@ -84,12 +84,10 @@ let client: Client;
 let renderStore: GguiSessionStore;
 
 beforeAll(async () => {
-  const codeStore = new InMemoryCodeStore();
+  // Held externally so the harness can commit mock componentCode into the
+  // same instance the server reads — no generator runs in this suite.
   renderStore = new InMemoryGguiSessionStore();
 
-  // Create server with a placeholder publicBaseUrl first; after listening
-  // we'll know the real port and the handler will have been initialized.
-  // The codeBaseUrl is set during render, not at listen time, so this works.
   server = createGguiServer({
     logger: silentLogger,
     auth: new InMemoryAuthAdapter({
@@ -105,11 +103,7 @@ beforeAll(async () => {
     // bundle mount defaults on with it.
     mcpApps: true,
     renderChannel: true,
-    codeStore,
     renderStore,
-    // Placeholder URL; the resource handler will use req.protocol + req.host
-    // if this doesn't match. The handler falls back gracefully.
-    publicBaseUrl: 'http://127.0.0.1',
   });
   httpServer = await server.listen(0, '127.0.0.1');
   const addr = httpServer.address();
