@@ -383,8 +383,9 @@ describe('matrix 4 — persisted ggui bootstraps are honestly non-remountable to
 });
 
 // ───────────────────────────────────────────────────────────────────────
-// Matrix 5 — rehydration = resources/read of the persisted resourceUri
-// (spec: docs/superpowers/specs/2026-08-07-rehydration-access-control-design.md §2)
+// Matrix 5 — rehydration = a fresh `resources/read` of the persisted
+// resourceUri over the same authenticated MCP connection, not a replay
+// of the originally-persisted (and by now expired) bootstrap.
 // ───────────────────────────────────────────────────────────────────────
 
 describe("matrix 5 — rehydrate-by-refetch mints fresh credentials with current state", () => {
@@ -407,7 +408,7 @@ describe("matrix 5 — rehydrate-by-refetch mints fresh credentials with current
           ...stored.render,
           componentCode: 'export default function Card(){return null;}',
         },
-        appId: stored.appId as string,
+        appId: stored.appId,
         ...(stored.userId !== undefined ? { userId: stored.userId } : {}),
       });
     }

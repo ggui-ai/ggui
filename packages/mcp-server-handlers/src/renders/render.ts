@@ -373,10 +373,11 @@ export interface GguiRenderHandlerDeps extends RenderSliceMetaDeps {
   readonly renderStore: GguiSessionStore;
   /**
    * Render-row retention window in ms. Operators align this with
-   * chat-history lifetime so rehydration-by-refetch finds the row
-   * (spec: docs/superpowers/specs/2026-08-07-rehydration-access-control-design.md §4).
-   * Default: DEFAULT_RENDER_TTL_MS (1h) — the pre-existing memory-
-   * hygiene default for in-process stores.
+   * chat-history lifetime so rehydration-by-refetch (re-reading the
+   * `ui://ggui/render/*` resource after the agent's original render
+   * call) finds the row instead of a reaped one. Default:
+   * DEFAULT_RENDER_TTL_MS (1h) — the pre-existing memory-hygiene
+   * default for in-process stores.
    */
   readonly renderTtlMs?: number;
   /**

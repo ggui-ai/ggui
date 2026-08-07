@@ -1886,11 +1886,9 @@ export interface CreateGguiServerOptions {
    * `renderTtlMs` deps field. Operators align this with chat-history
    * lifetime so rehydration-by-refetch (re-reading the `ui://ggui/render/*`
    * resource after the agent's original render call) finds the row
-   * instead of a reaped one (spec:
-   * docs/superpowers/specs/2026-08-07-rehydration-access-control-design.md §4).
-   * Defaults to `ggui_render`'s own `DEFAULT_RENDER_TTL_MS` (1h) when
-   * unset — the pre-existing memory-hygiene default for in-process
-   * stores.
+   * instead of a reaped one. Defaults to `ggui_render`'s own
+   * `DEFAULT_RENDER_TTL_MS` (1h) when unset — the pre-existing
+   * memory-hygiene default for in-process stores.
    */
   readonly renderTtlMs?: number;
 

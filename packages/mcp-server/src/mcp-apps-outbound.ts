@@ -1292,8 +1292,17 @@ export function registerGguiRenderResourceTemplate(
     ]);
 
     // Rehydration access control (spec §3): gate BEFORE any shell
-    // bytes, code hashing, or token mint. Deny is byte-identical to
-    // the missing-row response so reads cannot oracle sessionIds.
+    // bytes, code hashing, or token mint. Deny does NOT early-return —
+    // it nulls out row access into `accessibleStored` so every
+    // downstream branch (happy path, registry fallback, final loading
+    // shell) runs exactly as if the row were absent. A deny on the
+    // resume URI must fall through to the SAME registry-only fallback
+    // a genuine miss would hit (the fallback is keyed off the
+    // caller-supplied blueprintKey + registry defaults, never off the
+    // denied row) — otherwise deny would short-circuit to the loading
+    // shell while a miss of the same blueprintKey resolves the
+    // registry shell, leaking row existence to a same-probe attacker.
+    let accessibleStored = stored;
     if (stored !== null && stored !== undefined) {
       const callerCtx = opts.getContext?.();
       const fallbackCtx =
@@ -1320,14 +1329,14 @@ export function registerGguiRenderResourceTemplate(
           rowAppId: stored.appId,
           callerAppId: callerCtx?.appId,
         });
-        return loadingShell(uri, sessionId);
+        accessibleStored = null;
       }
     }
 
     // Happy path: render present and renderable. Mount with the live
     // state (current props, current contextSpec values).
-    if (stored) {
-      const picked = pickComponentFromGguiSession(stored.render);
+    if (accessibleStored) {
+      const picked = pickComponentFromGguiSession(accessibleStored.render);
       if (picked) {
         // Project the active render to the transport-agnostic bootstrap
         // view — same source of truth the render-mutation handler and
@@ -1389,7 +1398,7 @@ export function registerGguiRenderResourceTemplate(
         let resourcePublicEnv: Readonly<Record<string, string>> | undefined;
         if (opts.appMetadataStore) {
           try {
-            const appRecord = await opts.appMetadataStore.get(stored.appId);
+            const appRecord = await opts.appMetadataStore.get(accessibleStored.appId);
             resourcePublicEnv = derivePublicEnvProjection(picked.source, appRecord?.publicEnv);
           } catch {
             // Silent — wrappers calling getPublicEnv throw clearly.
@@ -1409,7 +1418,7 @@ export function registerGguiRenderResourceTemplate(
         let wsExpiresAt: string | undefined;
         if (opts.mintWsToken) {
           try {
-            const minted = opts.mintWsToken(sessionId, stored.appId);
+            const minted = opts.mintWsToken(sessionId, accessibleStored.appId);
             wsUrl = minted.wsUrl;
             wsToken = minted.token;
             // Forward the token TTL so the iframe-runtime can degrade to
@@ -1433,7 +1442,7 @@ export function registerGguiRenderResourceTemplate(
 
         const html = buildSelfContainedShell({
           sessionId,
-          appId: stored.appId,
+          appId: accessibleStored.appId,
           ...(isSystem
             ? { systemKind: picked.kind }
             : codeUrl !== undefined
@@ -1474,7 +1483,7 @@ export function registerGguiRenderResourceTemplate(
             ? { publicEnv: resourcePublicEnv }
             : {}),
           // R6 — ledger cursor stamp for polling-cursor alignment.
-          lastSequence: stored.eventSequence,
+          lastSequence: accessibleStored.eventSequence,
         });
         // Augment per-call CSP with gadget-declared bundle / style /
         // API origins. Without this, claude.ai's iframe CSP only allows
