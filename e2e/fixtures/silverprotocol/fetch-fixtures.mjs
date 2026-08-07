@@ -59,9 +59,17 @@ if (args.includes("--verify-only")) {
   process.exit(0);
 }
 
-if (!args.includes("--update-lock") && verify()) {
-  log("cache valid — no fetch needed");
-  process.exit(0);
+if (!args.includes("--update-lock")) {
+  // Plain mode self-heals a stale cache (e.g. right after a lock bump):
+  // the lock is the truth and the cache is disposable, so a checksum
+  // mismatch falls through to a refetch instead of hard-failing —
+  // hard-fail on mismatch belongs to --verify-only (no-network mode).
+  const sum = cacheChecksum();
+  if (sum !== null && sum === lock.sha256) {
+    log("cache valid — no fetch needed");
+    process.exit(0);
+  }
+  if (sum !== null) log(`cache stale (checksum ${sum.slice(0, 12)}… != lock) — refetching`);
 }
 
 log(`fetching ${lock.repo}@${lock.commit.slice(0, 9)} …`);
