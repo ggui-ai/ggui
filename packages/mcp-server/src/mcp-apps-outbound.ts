@@ -50,10 +50,13 @@ import { deriveContextDefault, isRecord, type ContextSpec } from "@ggui-ai/proto
 import {
   GGUI_RENDER_RESOURCE_MIME,
   GGUI_RENDER_RESOURCE_URI,
+  GGUI_RENDER_SHELL_SURFACE,
   MCP_APPS_UI_CAPABILITY,
-  MCP_APP_AI_GGUI_RENDER_META_KEY,
   MCP_APP_BOOTSTRAP_FAILED_TYPE,
+  asGguiRenderBootstrap,
   deriveContextName,
+  gguiShellHtml,
+  toMcpAppEnvelope,
   type McpAppAiGguiRenderMeta,
 } from "@ggui-ai/protocol/integrations/mcp-apps";
 import { ResourceTemplate, type McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -335,8 +338,10 @@ postRpc('ui/initialize',{
 // diverged. Painting the served document's own surface here removes the
 // dependency on a browser honoring iframe transparency.
 //
-// Value-resolution only — no `--ggui-*` token added or renamed.
-const GGUI_RENDER_SHELL_SURFACE = `var(--ggui-color-surface, #1e293b)`;
+// Value-resolution only — no `--ggui-*` token added or renamed. The
+// constant itself lives with the protocol host-helper (the shared
+// self-contained-shell assembler paints the same surface); imported
+// above and reused here for the thin postMessage shell + loading shell.
 
 // `#ggui-root` here is LOAD-BEARING for the shell script (NOT a React
 // mount target): the inline script grabs it as `rootEl` for the
@@ -586,7 +591,7 @@ export function advertiseMcpAppsUiCapability(server: McpServer): void {
 // iframe stays blank.
 //
 // **The fix.** Per-render HTML inlines the compiled componentCode +
-// render id as a `window.__GGUI_META__` global BEFORE the
+// render id as a `globalThis.__GGUI_META__` global BEFORE the
 // runtime bundle's `<script type="module">` runs. The runtime reads
 // the global synchronously, mounts the React component, and never
 // speaks postMessage / opens a WebSocket. The `ui://ggui/render/{
@@ -783,7 +788,7 @@ export interface SelfContainedShellInputs {
  * Build the self-contained shell HTML for a given render.
  *
  * The returned HTML is a complete, standalone document: it inlines the
- * compiled component (base64) + the render id in a `window.__GGUI_META__`
+ * compiled component (base64) + the render id in a `globalThis.__GGUI_META__`
  * global, then loads the iframe-runtime bundle via `<script type="module"
  * src={runtimeUrl}>`. The runtime takes over synchronously on import,
  * mounts the component, and the iframe paints WITHOUT any further server
@@ -794,12 +799,12 @@ export interface SelfContainedShellInputs {
  * bootstrap object's optional fields), which makes the output cacheable
  * and testable.
  *
- * Escapes that matter:
- *   - HTML-entity-escapes the bootstrap JSON for `<` `>` `&` so a
- *     malicious appId / sessionId can't break out of the script tag.
- *   - The componentCode is base64-encoded by the caller before the JSON
- *     stringification runs, so even a raw `</script>` sequence in the
- *     compiled source can't break the surrounding HTML.
+ * This builder owns SLICE COMPOSITION (server-side inputs → the typed
+ * `ai.ggui/render` slice); the envelope wrapping, script-safe escaping,
+ * and HTML assembly are delegated to the protocol host-helper
+ * (`gguiShellHtml` in `@ggui-ai/protocol/integrations/mcp-apps`) — the
+ * same assembler MCP-Apps hosts use, so served and host-built shells
+ * cannot drift.
  *
  * @public
  */
@@ -898,56 +903,24 @@ export function buildSelfContainedShell(opts: SelfContainedShellInputs): string 
       : {}),
   };
 
-  // Same wire shape as `_meta` — the iframe-runtime's global parser
-  // reuses `parseMcpAppAiGguiRenderMeta` for the single render slice.
-  const bootstrap: Record<string, unknown> = {
-    [MCP_APP_AI_GGUI_RENDER_META_KEY]: render,
-  };
-
-  // JSON.stringify produces valid JS, but `<` / `>` / `&` / `U+2028`
-  // / `U+2029` can break HTML or JS parsers when embedded inline.
-  // Escape them. `U+2028` / `U+2029` are JS-source line terminators
-  // that JSON allows but JS parsers historically choked on; modern
-  // engines accept them in strings but the escape is cheap insurance.
-  const json = JSON.stringify(bootstrap)
-    .replace(/</g, "\\u003c")
-    .replace(/>/g, "\\u003e")
-    .replace(/&/g, "\\u0026")
-    .replace(/\u2028/g, "\\u2028")
-    .replace(/\u2029/g, "\\u2029");
-
-  // HTML-escape the runtimeUrl for the `src` attribute. Server
-  // operators control this string but a defensive escape avoids any
-  // surprise if a future code path lets user-derived data flow here.
-  const safeRuntimeUrl = opts.runtimeUrl
-    .replace(/&/g, "&amp;")
-    .replace(/"/g, "&quot;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
-
-  // Standalone served-iframe document — paint its own surface backdrop
-  // so the canvas behind the rendered component never depends on a
-  // browser honoring iframe transparency (the Safari white-canvas bug).
-  // Same gating rationale as `GGUI_RENDER_SHELL_HTML`: this is ALWAYS a
-  // top-level iframe document (the `__GGUI_META__` self-contained shell
-  // for claude.ai / per-render resource shells), never inlined into a
-  // host page, so painting `html`/`body` here cannot regress inline
-  // embedding. `var(--ggui-color-surface, …)` resolves to the active
-  // theme's per-mode surface once the iframe-runtime injects the `:root`
-  // theme vars; the static dark fallback covers pre-resolve paint.
-  // No anchor div: the iframe-runtime never mounts into a server-
-  // provided container — it appends its own `<ul data-ggui-session-root>`
-  // mount target to `document.body` at boot (iframe-runtime
-  // `status-dom.ts#ensureStatusDom`). The thin postMessage shell's
-  // `#ggui-root` is different: its inline script uses that div for
-  // pre-mount overlays, which this shell has none of (the runtime boots
-  // synchronously from the inline `__GGUI_META__` global).
-  return `<!doctype html>
-<html lang="en" style="background-color:${GGUI_RENDER_SHELL_SURFACE}"><head><meta charset="utf-8"><title>ggui render</title></head>
-<body style="background-color:${GGUI_RENDER_SHELL_SURFACE}">
-<script>window.__GGUI_META__ = ${json};</script>
-<script type="module" crossorigin="anonymous" src="${safeRuntimeUrl}"></script>
-</body></html>`;
+  // Delegate envelope wrapping + HTML assembly to the protocol's
+  // host-helper (`gguiShellHtml`) — the SAME assembler MCP-Apps hosts
+  // consume — so the server-served shell and host-built shells cannot
+  // drift. Routing through `asGguiRenderBootstrap` also proves at
+  // build time that the composed slice passes the host-side
+  // mountability gate.
+  const bootstrap = asGguiRenderBootstrap(toMcpAppEnvelope(render));
+  if (bootstrap === undefined) {
+    throw new Error(
+      "buildSelfContainedShell: composed render slice failed the host mountability gate (empty runtimeUrl?)"
+    );
+  }
+  // 'surface' posture: this shell is ALWAYS the top-level document of a
+  // standalone served iframe (claude.ai per-render resource shells,
+  // `/r/<shortCode>`), never inlined into a host page — so it paints
+  // its own theme-surface backdrop. See `GguiShellHtmlOptions` for the
+  // Safari white-canvas rationale.
+  return gguiShellHtml(bootstrap, { background: "surface" });
 }
 
 /**

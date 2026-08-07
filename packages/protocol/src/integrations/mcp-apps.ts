@@ -1373,3 +1373,224 @@ export interface GguiUserActionMeta {
     readonly args: { readonly sessionId: string };
   };
 }
+
+// =============================================================================
+// Host helper — narrowing + self-contained shell for MCP Apps hosts.
+//
+// A host that receives a `ggui_render` tool result needs exactly two
+// things to mount the card without any ggui-specific runtime code of
+// its own:
+//
+//   1. Narrow the result's `_meta["ai.ggui/render"]` slice to "is this
+//      mountable at all?" — {@link toolResultGguiRender} /
+//      {@link asGguiRenderBootstrap}.
+//   2. Build the self-contained shell: HTML that inlines the slice
+//      envelope at `globalThis.__GGUI_META__` synchronously BEFORE the
+//      iframe-runtime bundle's `<script type="module">` evaluates —
+//      {@link gguiShellHtml}. The runtime reads the global at boot
+//      (its highest-priority delivery channel), mounts, and never
+//      needs a postMessage round-trip.
+//
+// Hosts previously carried private copies of both steps; this section
+// is the single owned export so shell-contract changes never need
+// mirror edits in host codebases.
+//
+// **The verbatim posture (load-bearing).** The narrowing here is a
+// MOUNTABILITY GATE, not a validator: it proves the slice carries a
+// non-empty `runtimeUrl` plus at least one mode discriminator, and
+// passes every other field through UNTOUCHED. It deliberately does NOT
+// route through {@link parseMcpAppAiGguiRenderMeta} — that parser
+// projects known fields only, and a host binary typically updates
+// slower than servers and runtimes do. A verbatim carrier lets an old
+// host deliver a newer server's fields to a newer runtime; a projecting
+// carrier would silently strip them. The runtime's own boot projector
+// is the authority on every field.
+// =============================================================================
+
+/**
+ * A mountable ggui render bootstrap: the runtime bundle URL (the one
+ * field the host layer reads), plus the WHOLE `ai.ggui/render` slice,
+ * verbatim, for {@link gguiShellHtml} to inline.
+ *
+ * `slice` is an open record ON PURPOSE — it is a pass-through of the
+ * wire slice whose authority is the iframe-runtime's boot projector,
+ * not a shaped value this layer owns. Typing it as
+ * {@link McpAppAiGguiRenderMeta} would invite projection and imply
+ * unchecked optional fields are known-good; the open record plus the
+ * verbatim guarantee is the honest contract (see the section banner).
+ *
+ * @public
+ */
+export interface GguiRenderBootstrap {
+  /** The slice's `runtimeUrl` — the ES-module bundle the shell loads. */
+  readonly runtimeUrl: string;
+  /** The verbatim `ai.ggui/render` slice, unprojected. */
+  readonly slice: Readonly<Record<string, unknown>>;
+}
+
+/**
+ * Does this slice carry at least one MOUNT MODE discriminator?
+ * Mirrors the iframe-runtime's `validateMeta`: the runtime needs
+ * `runtimeUrl` PLUS one of live mode (`wsUrl` + `wsToken` together),
+ * `codeUrl`, or `kind` — without one of those three the iframe has
+ * nothing to mount.
+ */
+function hasMountModeDiscriminator(slice: Record<string, unknown>): boolean {
+  const nonEmpty = (v: unknown): v is string =>
+    typeof v === 'string' && v.length > 0;
+  if (nonEmpty(slice.wsUrl) && nonEmpty(slice.wsToken)) return true;
+  if (nonEmpty(slice.codeUrl)) return true;
+  if (nonEmpty(slice.kind)) return true;
+  return false;
+}
+
+/**
+ * A `_meta` container → the ggui render bootstrap, or `undefined`.
+ *
+ * Two hard requirements, both of which the iframe-runtime's own boot
+ * validator enforces as `MALFORMED_BOOTSTRAP`: a non-empty
+ * `runtimeUrl`, AND at least one mode discriminator. A slice with
+ * `runtimeUrl` alone has a bundle to load but nothing for it to mount
+ * — the runtime would boot into a blank shell rather than a card, so
+ * that shape is unmountable here too.
+ *
+ * Everything else on the slice is carried verbatim — see the section
+ * banner for why this is deliberately NOT a projecting parse.
+ *
+ * @public
+ */
+export function asGguiRenderBootstrap(
+  meta: unknown,
+): GguiRenderBootstrap | undefined {
+  if (!isRecord(meta)) return undefined;
+  const slice = meta[MCP_APP_AI_GGUI_RENDER_META_KEY];
+  if (!isRecord(slice)) return undefined;
+  const runtimeUrl = slice.runtimeUrl;
+  if (typeof runtimeUrl !== 'string' || runtimeUrl.length === 0) {
+    return undefined;
+  }
+  if (!hasMountModeDiscriminator(slice)) return undefined;
+  return { runtimeUrl, slice };
+}
+
+/**
+ * A spec-canonical `CallToolResult` → the ggui render bootstrap it
+ * carries, or `undefined` for anything that is not a mountable ggui
+ * render. Slices ride the result's top-level `_meta` (the MCP Apps
+ * `ui/notifications/tool-result` delivery location).
+ *
+ * The input is `unknown` on purpose — hosts hold tool results in
+ * their own SDK's types (or as persisted JSON), and this narrowing is
+ * the boundary where those shapes meet ggui's wire contract.
+ *
+ * @public
+ */
+export function toolResultGguiRender(
+  result: unknown,
+): GguiRenderBootstrap | undefined {
+  if (!isRecord(result)) return undefined;
+  return asGguiRenderBootstrap(result._meta);
+}
+
+/**
+ * CSS background the shell paints on its own `html`/`body` in the
+ * default `'surface'` posture. Resolves to the active theme's exact
+ * per-mode surface color once the iframe-runtime injects the `:root`
+ * theme variables at boot; the static dark fallback covers the
+ * pre-resolve first paint.
+ *
+ * @public
+ */
+export const GGUI_RENDER_SHELL_SURFACE = 'var(--ggui-color-surface, #1e293b)';
+
+/**
+ * Options for {@link gguiShellHtml}.
+ *
+ * @public
+ */
+export interface GguiShellHtmlOptions {
+  /**
+   * What the shell document paints behind the rendered component.
+   *
+   *   - `'surface'` (default) — paint the theme surface
+   *     ({@link GGUI_RENDER_SHELL_SURFACE}). Right for standalone
+   *     served documents (`resources/read` shells, public render
+   *     pages): Safari renders a transparent iframe document's
+   *     backdrop as the opaque UA canvas color (white), so an
+   *     unpainted document diverges per-browser.
+   *   - `'transparent'` — let the host page composit behind the card.
+   *     Right for hosts that draw their own card chrome around the
+   *     iframe and accept the Safari canvas-color trade-off.
+   */
+  readonly background?: 'surface' | 'transparent';
+}
+
+/**
+ * Build the ggui **self-contained shell** for a render bootstrap.
+ *
+ * The returned HTML is a complete standalone document: a classic
+ * inline `<script>` sets `globalThis.__GGUI_META__` to the slice
+ * envelope, then a `<script type="module">` loads the iframe-runtime
+ * bundle from the bootstrap's `runtimeUrl`. Ordering is guaranteed
+ * twice over — the classic script runs during parse and module
+ * scripts are deferred by definition — so the global is always
+ * populated before the bundle evaluates and the runtime mounts
+ * without any postMessage round-trip.
+ *
+ * Pure function — no DOM access, no I/O, no randomness. Same inputs
+ * always produce identical bytes.
+ *
+ * Escapes that matter:
+ *   - The envelope JSON escapes `<` `>` `&` so a `</script>` sequence
+ *     inside any slice string cannot terminate the inline script, and
+ *     `U+2028`/`U+2029` (JS line terminators JSON allows raw) are
+ *     escaped at the codepoint level.
+ *   - The `runtimeUrl` is HTML-attribute-escaped for the `src`
+ *     attribute.
+ *
+ * The module script carries `crossorigin="anonymous"`: without it,
+ * cross-origin script errors are sanitized to a detail-free "script
+ * error", masking the real cause (CSP block, CORS reject,
+ * module-evaluation throw). The runtime bundle is served with
+ * `Access-Control-Allow-Origin: *`, so anonymous CORS mode costs
+ * nothing.
+ *
+ * @public
+ */
+export function gguiShellHtml(
+  bootstrap: GguiRenderBootstrap,
+  options?: GguiShellHtmlOptions,
+): string {
+  // `JSON.stringify` produces valid JS, but `<` / `>` / `&` /
+  // `U+2028` / `U+2029` can break HTML or JS parsers when embedded
+  // inline. Escaping `<` also neutralizes `</script>` and `<!--`
+  // sequences inside slice strings.
+  const json = JSON.stringify({
+    [MCP_APP_AI_GGUI_RENDER_META_KEY]: bootstrap.slice,
+  })
+    .replace(/</g, '\\u003c')
+    .replace(/>/g, '\\u003e')
+    .replace(/&/g, '\\u0026')
+    .replace(/\u2028/g, '\\u2028')
+    .replace(/\u2029/g, '\\u2029');
+
+  const safeRuntimeUrl = bootstrap.runtimeUrl
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+
+  // The shell never provides a mount container: the iframe-runtime
+  // appends its own mount target to `document.body` at boot. `margin:0`
+  // keeps the card flush with the iframe edges in both postures.
+  const background =
+    options?.background === 'transparent'
+      ? 'background:transparent'
+      : `background-color:${GGUI_RENDER_SHELL_SURFACE}`;
+  return `<!doctype html>
+<html lang="en" style="${background}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="color-scheme" content="light dark"><title>ggui render</title></head>
+<body style="margin:0;${background}">
+<script>globalThis.__GGUI_META__ = ${json};</script>
+<script type="module" crossorigin="anonymous" src="${safeRuntimeUrl}"></script>
+</body></html>`;
+}

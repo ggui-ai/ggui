@@ -31,7 +31,7 @@ import { isRecord } from '@ggui-ai/protocol';
 
 /**
  * Pull the slice envelope out of the shell HTML's
- * `<script>window.__GGUI_META__ = {...};</script>` line, then return
+ * `<script>globalThis.__GGUI_META__ = {...};</script>` line, then return
  * the single `ai.ggui/render` slice. Post-Phase-B the inline global
  * carries ONE flat slice (was: two — `ai.ggui/session` +
  * `ai.ggui/stack-item`).
@@ -53,13 +53,13 @@ function extractInlineRenderSlice(
 /**
  * Pull the raw slice envelope (slice key intact:
  * `{"ai.ggui/render": {...}}`) out of the shell HTML's
- * `window.__GGUI_META__` global. The slice-keyed shape is what
+ * `globalThis.__GGUI_META__` global. The slice-keyed shape is what
  * `parseMcpAppAiGguiRenderMeta` (and any wire `_meta` consumer)
  * expects; the destructured helper `extractInlineRenderSlice` derives
  * from this and offers ergonomic field access for the other tests.
  */
 function extractInlineSliceEnvelope(html: string): Record<string, unknown> {
-  const match = html.match(/window\.__GGUI_META__ = (.+?);<\/script>/);
+  const match = html.match(/globalThis\.__GGUI_META__ = (.+?);<\/script>/);
   if (!match) {
     throw new Error('inline bootstrap not found in shell HTML');
   }
