@@ -157,8 +157,12 @@ export function buildMcpServer(
   if (opts.mcpAppsOutbound) {
     installMcpAppsOutbound(server, {
       ...(opts.shellHtml !== undefined ? { shellHtml: opts.shellHtml } : {}),
+      // Thread the same per-request context accessor + logger the tool
+      // path uses (`getContext`, param 3 of `buildMcpServer`) so the
+      // per-session resource handler's render-read gate sees the
+      // caller (render-read-gate.ts).
       ...(opts.selfContained !== undefined
-        ? { selfContained: opts.selfContained }
+        ? { selfContained: { ...opts.selfContained, getContext, logger } }
         : {}),
       ...(opts.publicBaseUrl !== undefined
         ? { publicBaseUrl: opts.publicBaseUrl }

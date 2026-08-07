@@ -62,6 +62,10 @@ import {
 import { ResourceTemplate, type McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { registerAppResource } from "@modelcontextprotocol/ext-apps/server";
 import { createHash } from "node:crypto";
+import type { HandlerContext } from "@ggui-ai/mcp-server-handlers";
+import { renderReadAllowed } from "./render-read-gate.js";
+import { DEFAULT_BUILDER_APP_ID } from "./auth.js";
+import type { Logger } from "./logger.js";
 
 /**
  * Thin-shell body served from `ui://ggui/render` (C8 pivot).
@@ -1062,6 +1066,21 @@ export interface GguiRenderResourceTemplateOptions {
     readonly token: string;
     readonly expiresAt: string;
   };
+  /**
+   * Per-request handler-context accessor — the SAME AsyncLocalStorage
+   * read the tool path uses. The per-session resource handler gates
+   * reads on it (render-read-gate.ts). Absent ⇒ the handler fails
+   * closed for rows scoped to any app other than the single-tenant
+   * default (compose paths that cannot thread a context keep working
+   * for OSS single-tenant flows only).
+   */
+  readonly getContext?: () => HandlerContext | undefined;
+  /**
+   * Structured logger for warn-level denial audit lines
+   * (`render_resource_read_denied`). Absent ⇒ denials are silent
+   * server-side (still enforced — only the log line is skipped).
+   */
+  readonly logger?: Logger;
 }
 
 /**
@@ -1271,6 +1290,39 @@ export function registerGguiRenderResourceTemplate(
           )
         : Promise.resolve(null),
     ]);
+
+    // Rehydration access control (spec §3): gate BEFORE any shell
+    // bytes, code hashing, or token mint. Deny is byte-identical to
+    // the missing-row response so reads cannot oracle sessionIds.
+    if (stored !== null && stored !== undefined) {
+      const callerCtx = opts.getContext?.();
+      const fallbackCtx =
+        callerCtx === undefined && stored.appId === DEFAULT_BUILDER_APP_ID
+          ? {
+              appId: DEFAULT_BUILDER_APP_ID,
+              authSource: "anonymous" as const,
+              requestId: "resource-read",
+            }
+          : callerCtx;
+      if (
+        !renderReadAllowed(
+          {
+            appId: stored.appId,
+            ...(stored.endUserIdentity !== undefined
+              ? { endUserIdentity: stored.endUserIdentity }
+              : {}),
+          },
+          fallbackCtx
+        )
+      ) {
+        opts.logger?.warn("render_resource_read_denied", {
+          sessionId,
+          rowAppId: stored.appId,
+          callerAppId: callerCtx?.appId,
+        });
+        return loadingShell(uri, sessionId);
+      }
+    }
 
     // Happy path: render present and renderable. Mount with the live
     // state (current props, current contextSpec values).
