@@ -2260,6 +2260,67 @@ export function dispatchSubmitAction(args: {
 }
 
 /**
+ * Channel-transport router's `tools/call` invoker (ggui#440) —
+ * iframe-polling transport, `tools/call` against the parent MCP host
+ * via `app.callServerTool` (spec-canonical) when the App handle is
+ * set; falls back to raw postMessage pre-handshake or in tests.
+ * Direct call (no LLM consent loop). Returns the tool's
+ * structuredContent (or `content[0]` if that's where the payload
+ * landed) as a `JsonValue`. On RPC error we throw — the router
+ * catches and silently retries on the next tick.
+ *
+ * Once a REAL gesture has confirmed this host can't relay (the latch
+ * above — set only after {@link dispatchSubmitAction} actually tried
+ * and failed on a host with no `serverTools` advertised), every
+ * subsequent poll will fail identically, and the router retries
+ * silently on the next tick — an unbounded loop. Fail fast with a
+ * named reason instead.
+ *
+ * Keyed on the LATCH, not on `hostCanRelayToolCalls()` directly: raw
+ * advertisement absence never changes after boot, so gating on it
+ * here would throw pre-attempt for the LIFE OF THE SESSION on any
+ * host that under-advertises but genuinely proxies `tools/call`
+ * (ggui's own embed host pre-Task-2 is exactly this case) — silently
+ * killing working channel polls forever. That is "absence of a
+ * capability blocks an attempt", which the fail-safe constraint
+ * forbids. The latch implies `!hostCanRelayToolCalls()` (it only
+ * ever sets inside that guard), so testing it alone is sufficient —
+ * a host that never fails a real gesture never latches, and its
+ * channels keep working.
+ *
+ * Extracted to a named export (rather than an inline closure inside
+ * `bootProduction`) so unit tests can drive it directly through the
+ * lightweight `MockTransport` harness — `bootProduction` dynamic-
+ * imports the full react/design/wire module graph, which is too
+ * heavy to exercise from a spec file (see
+ * `boot-production-context.test.ts`'s docstring for precedent).
+ *
+ * @internal — exported for unit tests + production reuse.
+ */
+export async function channelToolsCall(args: {
+  readonly toolName: string;
+  readonly args: JsonObject;
+}): Promise<JsonValue> {
+  if (relayIncapabilityAnnounced) {
+    throw new Error(
+      'tools/call unavailable: host did not advertise serverTools',
+    );
+  }
+  const resp = await callServerToolSpec(args.toolName, args.args);
+  if (resp.error !== undefined) {
+    throw new Error(resp.error.message ?? 'tools/call failed');
+  }
+  const result = resp.result;
+  if (result === null || typeof result !== 'object') {
+    return null;
+  }
+  const structured = (result as { structuredContent?: unknown })
+    .structuredContent;
+  if (structured !== undefined) return structured as JsonValue;
+  return result as JsonValue;
+}
+
+/**
  * Resolve the name of the spec-canonical submit-action receiver tool
  * the dispatch path targets with `tools/call`.
  *
@@ -3165,41 +3226,11 @@ async function bootProduction(opts: {
             }
           : {}),
         send: (msg) => manager.send(msg),
-        toolsCall: async ({ toolName, args }) => {
-          // Iframe-polling transport — `tools/call` against the
-          // parent MCP host via `app.callServerTool` (spec-canonical)
-          // when the App handle is set; falls back to raw postMessage
-          // pre-handshake or in tests. Direct call (no LLM consent
-          // loop). Returns the tool's structuredContent (or
-          // `content[0]` if that's where the payload landed) as a
-          // JsonValue. On RPC error we throw — the router catches
-          // and silently retries on the next tick.
-          //
-          // A host that never advertised `serverTools` will fail every
-          // poll identically, and the router retries silently on the
-          // next tick — an unbounded loop. Fail fast with a named
-          // reason instead (ggui#440). Not fail-closed: this fires only
-          // after the capability was read at boot, and the dispatch
-          // path still attempts every gesture regardless.
-          if (!hostCanRelayToolCalls()) {
-            throw new Error(
-              'tools/call unavailable: host did not advertise serverTools',
-            );
-          }
-          const resp = await callServerToolSpec(toolName, args);
-          if (resp.error !== undefined) {
-            throw new Error(resp.error.message ?? 'tools/call failed');
-          }
-          const result = resp.result;
-          if (result === null || typeof result !== 'object') {
-            return null;
-          }
-          const structured = (
-            result as { structuredContent?: unknown }
-          ).structuredContent;
-          if (structured !== undefined) return structured as JsonValue;
-          return result as JsonValue;
-        },
+        // See `channelToolsCall`'s docstring (defined alongside
+        // `dispatchSubmitAction`, its sibling consumer of the
+        // relay-incapability latch) for the fail-fast + fail-safe
+        // rationale (ggui#440).
+        toolsCall: channelToolsCall,
         streamBus,
         ...(onObserve !== undefined
           ? {

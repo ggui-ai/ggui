@@ -46,6 +46,7 @@ import { App } from '@modelcontextprotocol/ext-apps';
 import {
   __resetAppForTest,
   __resetRelayNoticeForTest,
+  channelToolsCall,
   routeDispatch,
   setCurrentApp,
 } from '../runtime.js';
@@ -495,5 +496,55 @@ describe('relay-incapability is explained once, not per gesture (ggui#440)', () 
 
     const toast = document.getElementById('__ggui-action-toast__');
     expect(toast?.textContent).not.toMatch(/cannot relay|can't relay/i);
+  });
+});
+
+describe('channel-transport router toolsCall guard is confirmed-failure-keyed, not advertisement-keyed (ggui#440)', () => {
+  beforeEach(() => {
+    __resetHostCapabilitiesForTest();
+    __resetRelayNoticeForTest();
+  });
+
+  it('still ATTEMPTS the transport call on a host that advertised nothing and has had no failed gesture (fail-safe)', async () => {
+    // Under-advertising is common — ggui's own embed host did it pre-
+    // Task-2. Raw advertisement absence alone must never gate the
+    // channel router's poll attempt; only a CONFIRMED failure (a real
+    // gesture that actually failed) may.
+    transport.queueResponse('tools/call', {
+      result: { structuredContent: { ok: true } },
+    });
+    const result = await channelToolsCall({
+      toolName: 'some_channel_tool',
+      args: {},
+    });
+    expect(transport.methodsSeen).toContain('tools/call');
+    expect(result).toEqual({ ok: true });
+  });
+
+  it('fails fast without calling the transport once a gesture has confirmed the host cannot relay', async () => {
+    // Latch the relay-incapability notice via a REAL failed gesture
+    // first (mirrors the "latches a persistent explanation" test
+    // above), then assert the channel router's next poll fails fast.
+    transport.queueResponse('tools/call', {
+      error: { code: -32601, message: 'method not supported' },
+    });
+    routeDispatch({
+      actionName: 'archive',
+      data: {},
+      meta: { sessionId: 'sess_1', appId: 'app_1' },
+      dispatchToolName: 'ggui_runtime_submit_action',
+    });
+    await tick();
+    await tick();
+
+    const methodsSeenAfterLatch = transport.methodsSeen.length;
+    await expect(
+      channelToolsCall({ toolName: 'some_channel_tool', args: {} }),
+    ).rejects.toThrow(
+      'tools/call unavailable: host did not advertise serverTools',
+    );
+    // No new outbound message — the guard threw BEFORE calling
+    // `callServerToolSpec`, so the transport never saw this attempt.
+    expect(transport.methodsSeen.length).toBe(methodsSeenAfterLatch);
   });
 });
