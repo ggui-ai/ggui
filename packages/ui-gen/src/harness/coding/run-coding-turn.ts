@@ -540,6 +540,17 @@ ${closingInstruction}`;
     // round never widens a plain self-check patch turn's surface.
     isEvalFeedback ? (input.evalFindingCount ?? 0) : 0,
   );
+  // Exp 52 pick-rate observability: the H1 falsification metric is
+  // "does the model choose rewrite when OFFERED" — without this line
+  // an un-exercised offer and a threading bug are indistinguishable
+  // in bench logs.
+  if (tools.some((t) => t.name === "rewrite") && !forceEscape) {
+    console.log(
+      `[coding-agent] rewrite offered (turn ${turnsUsed}, ` +
+        `evalFindings=${isEvalFeedback ? (input.evalFindingCount ?? 0) : 0}, ` +
+        `consecutiveBroken=${consecutiveBrokenApplies})`,
+    );
+  }
   const llmStart = Date.now();
   const response = await codingAgent.callTools(
     codingModel,
