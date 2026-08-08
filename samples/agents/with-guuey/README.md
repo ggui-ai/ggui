@@ -35,8 +35,11 @@ npm run dev        # guuey dev --serve → http://localhost:6790
 The dev router serves `POST /agent/invoke` (SSE), `GET /healthz`, and a
 `GET /threads/:id/messages` history read (in-memory text rows) on port 6790. For the rendered-UI half, pair it with the web sample
 (`../../apps/with-guuey-web`) and a ggui runtime MCP on port 6781
-(`ggui serve --mcp-only --dev-allow-all` — the flag admits the web half's
-anonymous browser calls to serve's otherwise bearer-gated `/mcp`; the
+(`ggui serve --mcp-only --dev-allow-all` — the flag admits the anonymous
+dev callers to serve's otherwise bearer-gated `/mcp`: first this router's
+own ggui connection (it bears no dev token — only colocated servers get
+one — so `ggui_render` itself 401s without the flag), then the web half's
+browser relay and locator `resources/read`; the
 `../../gguis/default` sample's `npm run start` carries it) — the composed
 samples-render lane boots all three.
 
