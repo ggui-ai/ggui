@@ -116,7 +116,10 @@ import {
   type ObservabilityEmitter,
 } from './observability.js';
 import { mountUiFeedbackChrome } from './ui-feedback-chrome.js';
-import { setHostCapabilities } from './host-capabilities.js';
+import {
+  hostCanRelayToolCalls,
+  setHostCapabilities,
+} from './host-capabilities.js';
 import {
   makeLifecycleEvent,
   postLifecycleToParent,
@@ -2100,6 +2103,19 @@ function emitUserActionDoorbell(args: {
 }
 
 /**
+ * Latch for the relay-incapability notice (ggui#440). A host that
+ * cannot relay fails EVERY gesture, so the explanation is stated once
+ * and left standing; without the latch the user gets one identical
+ * toast per click, which is the #426 failure mode this closes.
+ */
+let relayIncapabilityAnnounced = false;
+
+/** @internal — exported for unit tests to reset module state. */
+export function __resetRelayNoticeForTest(): void {
+  relayIncapabilityAnnounced = false;
+}
+
+/**
  * Dispatch a submit-action via the empirically-validated bridge
  * chain (validated against claude.ai): a `tools/call` to
  * {@link toolName} (the `ggui_runtime_submit_action` receiver)
@@ -2153,7 +2169,15 @@ export function dispatchSubmitAction(args: {
   // immediately so they know the click was registered, even when
   // submit_action's HTTP round-trip takes a moment. State updates
   // when the response (or fallback) lands.
-  showActionToast(`→ ${intent}${dataPart}`, 'pending');
+  //
+  // Skipped once the relay-incapability notice has latched (ggui#440):
+  // we already know this host can't relay, so a fresh "sending…" flash
+  // would clobber the persistent explanation with a transient state
+  // that nothing downstream ever restores — the opposite of "left
+  // standing" (see the latch declaration + terminal branch below).
+  if (!relayIncapabilityAnnounced) {
+    showActionToast(`→ ${intent}${dataPart}`, 'pending');
+  }
 
   // (2) Try submit_action via host relay. Spec-compliant hosts
   // forward the tools/call to the MCP server's submit_action handler;
@@ -2213,9 +2237,24 @@ export function dispatchSubmitAction(args: {
       return;
     }
 
-    // Enqueue failed (pipe gone / transport error). The gesture is not
-    // on any pipe, so a doorbell would point at an empty queue. Surface
-    // the failure as a toast; no `ui/message` is emitted.
+    // Enqueue failed (pipe gone / transport error / host has no relay).
+    // The gesture is not on any pipe, so a doorbell would point at an
+    // empty queue; no `ui/message` is emitted either way.
+    //
+    // Separate the STRUCTURAL case from the transient one (ggui#440):
+    // when the host never advertised `serverTools`, every gesture will
+    // fail identically, so explain it once, persistently, instead of
+    // one identical error toast per click.
+    if (!hostCanRelayToolCalls()) {
+      if (!relayIncapabilityAnnounced) {
+        relayIncapabilityAnnounced = true;
+        showActionToast(
+          'This host cannot relay actions to the agent — interactive controls will not work here.',
+          'action_required',
+        );
+      }
+      return;
+    }
     showActionToast(`⚠ ${intent} — could not reach the agent`, 'error');
   })();
 }
@@ -3135,6 +3174,18 @@ async function bootProduction(opts: {
           // `content[0]` if that's where the payload landed) as a
           // JsonValue. On RPC error we throw — the router catches
           // and silently retries on the next tick.
+          //
+          // A host that never advertised `serverTools` will fail every
+          // poll identically, and the router retries silently on the
+          // next tick — an unbounded loop. Fail fast with a named
+          // reason instead (ggui#440). Not fail-closed: this fires only
+          // after the capability was read at boot, and the dispatch
+          // path still attempts every gesture regardless.
+          if (!hostCanRelayToolCalls()) {
+            throw new Error(
+              'tools/call unavailable: host did not advertise serverTools',
+            );
+          }
           const resp = await callServerToolSpec(toolName, args);
           if (resp.error !== undefined) {
             throw new Error(resp.error.message ?? 'tools/call failed');

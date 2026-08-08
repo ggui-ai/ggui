@@ -45,9 +45,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { App } from '@modelcontextprotocol/ext-apps';
 import {
   __resetAppForTest,
+  __resetRelayNoticeForTest,
   routeDispatch,
   setCurrentApp,
 } from '../runtime.js';
+import {
+  __resetHostCapabilitiesForTest,
+  setHostCapabilities,
+} from '../host-capabilities.js';
 import { buildBootHarness, tick } from './boot-helpers.js';
 import type { MockTransport } from './mock-transport.js';
 
@@ -404,5 +409,91 @@ describe('routeDispatch — submit-action bridge', () => {
       );
       expect(rawMethods).not.toContain('ui/message');
     });
+  });
+});
+
+describe('relay-incapability is explained once, not per gesture (ggui#440)', () => {
+  beforeEach(() => {
+    __resetHostCapabilitiesForTest();
+    __resetRelayNoticeForTest();
+  });
+
+  it('latches a persistent explanation when a host that never advertised serverTools fails the relay', async () => {
+    // Host advertised nothing; the relay call errors at transport.
+    // Expected: ONE persistent `action_required` notice explaining the
+    // host cannot relay — not a fresh `error` toast per click.
+    transport.queueResponse('tools/call', {
+      error: { code: -32601, message: 'method not supported' },
+    });
+    transport.queueResponse('tools/call', {
+      error: { code: -32601, message: 'method not supported' },
+    });
+
+    routeDispatch({
+      actionName: 'archive',
+      data: {},
+      meta: { sessionId: 'sess_1', appId: 'app_1' },
+      dispatchToolName: 'ggui_runtime_submit_action',
+    });
+    // Two ticks let the App round-trip the request + reply, matching
+    // the convention used by every other terminal-state assertion in
+    // this file (e.g. the consumerPresent tests above).
+    await tick();
+    await tick();
+    routeDispatch({
+      actionName: 'archive',
+      data: {},
+      meta: { sessionId: 'sess_1', appId: 'app_1' },
+      dispatchToolName: 'ggui_runtime_submit_action',
+    });
+    await tick();
+    await tick();
+
+    const toast = document.getElementById('__ggui-action-toast__');
+    expect(toast?.textContent).toMatch(/cannot relay|can't relay/i);
+    // The explanation must not name a specific host product (OSS Purity).
+    expect(toast?.textContent).not.toMatch(/guuey|claude\.ai|chatgpt/i);
+  });
+
+  it('still ATTEMPTS the relay on a host that advertised nothing (fail-safe)', async () => {
+    // Under-advertising is common — ggui's own embed host did it. The
+    // capability must never gate the attempt.
+    transport.queueResponse('tools/call', {
+      result: { structuredContent: { ok: true, consumerPresent: true } },
+    });
+    routeDispatch({
+      actionName: 'archive',
+      data: {},
+      meta: { sessionId: 'sess_1', appId: 'app_1' },
+      dispatchToolName: 'ggui_runtime_submit_action',
+    });
+    await tick();
+    expect(transport.methodsSeen).toContain('tools/call');
+  });
+
+  it('keeps the per-gesture transient toast when the host DID advertise serverTools', async () => {
+    // A capable host that failed one call is a transient failure, not a
+    // structural one — wording must not blame the host's capabilities.
+    // Boot this test's capability state as a fully-capable host so the
+    // guard on the terminal-failure branch reads false and falls
+    // through to the ordinary per-gesture toast.
+    setHostCapabilities({ serverTools: {} });
+    transport.queueResponse('tools/call', {
+      error: { code: -32603, message: 'internal error' },
+    });
+    routeDispatch({
+      actionName: 'archive',
+      data: {},
+      meta: { sessionId: 'sess_1', appId: 'app_1' },
+      dispatchToolName: 'ggui_runtime_submit_action',
+    });
+    // Two ticks let the App round-trip the request + reply so the
+    // assertion observes the terminal-branch toast, not the earlier
+    // `pending` state.
+    await tick();
+    await tick();
+
+    const toast = document.getElementById('__ggui-action-toast__');
+    expect(toast?.textContent).not.toMatch(/cannot relay|can't relay/i);
   });
 });
