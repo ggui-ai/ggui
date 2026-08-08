@@ -44,15 +44,24 @@ export interface RenderIdentityRecord {
   readonly updatedAt: number;
 }
 
+/**
+ * Record deletion is deliberately not part of this contract yet — the
+ * erasure and retention surface (delete-by-user, delete-by-app,
+ * per-app horizons) arrives with the retention substrate that first
+ * reads these records. Until then the only writers are best-effort
+ * put/refresh paths.
+ */
 export interface RenderIdentityStore {
   /**
    * Upsert by `record.sessionId`. Later writes win whole-record —
    * there is no field-level merge, so a caller refreshing part of a
    * record MUST read it, merge, and write the full result back.
    *
-   * Implementations MUST reject a record whose `sessionId` is empty:
-   * an unkeyed record can never be read back, and a silent accept
-   * turns that into a lookup miss much later.
+   * Implementations MUST reject a record whose `sessionId` is empty
+   * (the returned promise rejects): an unkeyed record can never be
+   * read back, and a silent accept turns that into a lookup miss much
+   * later. No typed error is specified — the sole writer treats every
+   * put failure identically (best-effort with a named log event).
    *
    * Writers treat the call as best-effort and do not block a render
    * on it, so implementations MUST tolerate overlapping writes on the
