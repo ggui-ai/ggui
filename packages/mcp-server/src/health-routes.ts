@@ -150,6 +150,12 @@ export function mountHealthRoutes(opts: MountOptions): void {
           path: channel.path,
           subscribers: channel.subscriberCount,
           renders: channel.renderCount,
+          // Pre-subscribe cap-hit counters (ggui#444) — operator
+          // signal for a credential-less abuse burst. Monotonic; all
+          // zero on a healthy server.
+          caps: {
+            preSubscribeRejections: channel.preSubscribeRejections,
+          },
         };
       }
       body.cors = {

@@ -19,6 +19,37 @@ import type { Outbound } from "./outbound.js";
 import type { SubscribeHandlers } from "./subscribe.js";
 import type { SubscriberLifecycle } from "./subscriber-lifecycle.js";
 
+/**
+ * Monotonic counters for pre-subscribe cap-driven closures/refusals.
+ * The channel server owns the object (so its health getter can read a
+ * live snapshot) and hands the same reference to the router, which
+ * increments a field on every enforced cap. See {@link PreSubscribeCaps}.
+ */
+export interface PreSubscribeRejectionCounters {
+  /** Oversized pre-subscribe frames rejected (1009). */
+  payload: number;
+  /** Pre-subscribe sockets closed for exceeding the idle window (1008). */
+  idle: number;
+  /** Upgrades refused for exceeding the pre-subscribe connection ceiling (1013). */
+  connection: number;
+}
+
+/**
+ * Resolved pre-subscribe cap thresholds (ggui#444). Each bounds only
+ * what a NOT-YET-SUBSCRIBED (unauthenticated / unregistered) socket can
+ * consume — a socket that has completed a valid `subscribe` is a
+ * legitimate long-lived subscriber and is exempt from all three. A
+ * value of `0` disables that cap.
+ */
+export interface PreSubscribeCaps {
+  /** Per-frame byte ceiling on pre-subscribe frames. 0 = disabled. */
+  readonly maxPayloadBytes: number;
+  /** Idle window (ms) a socket has to complete a valid subscribe. 0 = disabled. */
+  readonly idleMs: number;
+  /** Concurrent pending (pre-subscribe) socket ceiling. 0 = disabled. */
+  readonly maxConnections: number;
+}
+
 export interface SocketRouterDeps {
   readonly logger: Logger;
   /** GguiSession backing store — observation-message patches persist here. */
@@ -32,6 +63,10 @@ export interface SocketRouterDeps {
   readonly handleInboundAction: ActionIngress["handleInboundAction"];
   readonly handleChannelSubscribe: ChannelSubscriptions["handleChannelSubscribe"];
   readonly handleChannelUnsubscribe: ChannelSubscriptions["handleChannelUnsubscribe"];
+  /** Resolved pre-subscribe cap thresholds (ggui#444). */
+  readonly preSubscribeCaps: PreSubscribeCaps;
+  /** Shared monotonic counters incremented on each enforced cap. */
+  readonly preSubscribeRejections: PreSubscribeRejectionCounters;
 }
 
 /**
@@ -41,6 +76,61 @@ export interface SocketRouterDeps {
  * frame processing per socket.
  */
 export function attachSocketRouter(wss: WebSocketServer, deps: SocketRouterDeps): void {
+  const { preSubscribeCaps: caps, preSubscribeRejections: rejections } = deps;
+
+  // --- Pre-subscribe cap state (ggui#444) -------------------------------
+  //
+  // These bound what a socket can consume BEFORE it completes a valid
+  // `subscribe`. The distinguishing signal is `subscribersByWs.get(ws)`:
+  // unset = pre-subscribe (bounded), set = registered subscriber
+  // (exempt). All three caps target the pre-subscribe window only.
+
+  /** Live count of PENDING (pre-subscribe) sockets — never counts subscribers. */
+  let preSubscribeCount = 0;
+  /** Sockets currently counted against {@link preSubscribeCount}. */
+  const countedPending = new WeakSet<WebSocket>();
+  /** Per-socket idle-timeout handle, cleared on subscribe or close. */
+  const idleTimers = new WeakMap<WebSocket, ReturnType<typeof setTimeout>>();
+  /**
+   * Deduped cap-hit log keys. Capped so a flood cannot grow the set
+   * without bound; after the cap, rejections still enforce + count —
+   * they just stop logging. Mirrors the origin-rejection warn pattern.
+   */
+  const warnedCaps = new Set<string>();
+
+  function warnCapOnce(event: string, fields: Record<string, number>): void {
+    if (!warnedCaps.has(event) && warnedCaps.size < 100) {
+      warnedCaps.add(event);
+      deps.logger.warn(event, fields);
+    }
+  }
+
+  /** Drop a socket out of the pending count exactly once. */
+  function releasePending(ws: WebSocket): void {
+    if (countedPending.has(ws)) {
+      countedPending.delete(ws);
+      preSubscribeCount -= 1;
+    }
+  }
+
+  function clearIdleTimer(ws: WebSocket): void {
+    const timer = idleTimers.get(ws);
+    if (timer !== undefined) {
+      clearTimeout(timer);
+      idleTimers.delete(ws);
+    }
+  }
+
+  /**
+   * A socket that has become a registered subscriber is a legitimate
+   * long-lived connection: disarm its idle timer and stop counting it
+   * against the pre-subscribe ceiling. Idempotent.
+   */
+  function markSubscribed(ws: WebSocket): void {
+    clearIdleTimer(ws);
+    releasePending(ws);
+  }
+
   /**
    * Tenancy guard for client-emitted observation messages
    * (`host_context_observed` today). Returns `false`
@@ -112,6 +202,29 @@ export function attachSocketRouter(wss: WebSocketServer, deps: SocketRouterDeps)
 
   async function onMessage(ws: WebSocket, raw: string): Promise<void> {
     const sub = deps.subscribersByWs.get(ws);
+    // Pre-subscribe per-frame payload cap. Bounds what a not-yet-
+    // subscribed (unauthenticated / unregistered) socket can buffer per
+    // frame. Subscribed sockets are exempt — their `action` frames carry
+    // unbounded user form data and are governed only by the coarse
+    // ws-level `maxPayload` memory backstop, never this handshake-sized
+    // ceiling. Measured before JSON.parse so a giant frame is dropped
+    // without being interpreted.
+    if (
+      sub === undefined &&
+      caps.maxPayloadBytes > 0 &&
+      Buffer.byteLength(raw, "utf8") > caps.maxPayloadBytes
+    ) {
+      rejections.payload += 1;
+      warnCapOnce("render_channel_pre_subscribe_payload_rejected", {
+        limitBytes: caps.maxPayloadBytes,
+      });
+      try {
+        ws.close(1009, "pre_subscribe_payload_exceeded");
+      } catch {
+        /* best-effort: socket may already be closing */
+      }
+      return;
+    }
     let message: WebSocketMessage;
     try {
       message = JSON.parse(raw) as WebSocketMessage;
@@ -171,6 +284,14 @@ export function attachSocketRouter(wss: WebSocketServer, deps: SocketRouterDeps)
         await deps.handleSubscribe(ws, identity, message, cookieBound);
         pendingIdentity.delete(ws);
         pendingCookieBinding.delete(ws);
+        // A successful subscribe registers the subscriber (sets
+        // `subscribersByWs`). Only then does the socket graduate out of
+        // the pre-subscribe window: disarm its idle timer + free its
+        // ceiling slot. A REJECTED subscribe leaves it pending, so it
+        // stays bounded (and reapable) exactly as before.
+        if (deps.subscribersByWs.get(ws) !== undefined) {
+          markSubscribed(ws);
+        }
         return;
       }
       case "ping":
@@ -255,6 +376,58 @@ export function attachSocketRouter(wss: WebSocketServer, deps: SocketRouterDeps)
   const pendingCookieBinding = new WeakMap<WebSocket, { sessionId: string; appId: string }>();
 
   wss.on("connection", (ws, req) => {
+    // Pre-subscribe connection ceiling. Count only sockets that have
+    // NOT yet completed a valid subscribe — legitimate subscriber
+    // fan-out can be large and is never bounded here. Beyond the
+    // ceiling the socket is cleanly closed (1013 "try again later")
+    // without wiring any per-socket handlers or consuming a slot.
+    if (caps.maxConnections > 0 && preSubscribeCount >= caps.maxConnections) {
+      rejections.connection += 1;
+      warnCapOnce("render_channel_pre_subscribe_connection_rejected", {
+        limit: caps.maxConnections,
+      });
+      // This early-return path skips the normal per-socket wiring below,
+      // so attach a minimal `error` listener first: a `ws` is an
+      // EventEmitter and an unhandled `error` (a refused peer resetting
+      // mid-close is the likely case here) would otherwise crash the
+      // process — the abuse path must never take the server down.
+      ws.on("error", (err) => {
+        deps.logger.warn("render_channel_socket_error", { error: String(err) });
+      });
+      try {
+        ws.close(1013, "pre_subscribe_connection_ceiling");
+      } catch {
+        /* best-effort: socket may already be closing */
+      }
+      return;
+    }
+    preSubscribeCount += 1;
+    countedPending.add(ws);
+
+    // Pre-subscribe idle timeout. A socket that never completes a valid
+    // subscribe within the window is closed (1008). Armed here, cleared
+    // in `markSubscribed` on a successful subscribe, so a subscribed
+    // (long-idle / reconnecting) viewer is never reaped. `.unref()` so a
+    // pending timer never keeps the process alive on its own.
+    if (caps.idleMs > 0) {
+      const timer = setTimeout(() => {
+        idleTimers.delete(ws);
+        if (deps.subscribersByWs.get(ws) === undefined) {
+          rejections.idle += 1;
+          warnCapOnce("render_channel_pre_subscribe_idle_closed", {
+            idleMs: caps.idleMs,
+          });
+          try {
+            ws.close(1008, "pre_subscribe_idle_timeout");
+          } catch {
+            /* best-effort: socket may already be closing */
+          }
+        }
+      }, caps.idleMs);
+      timer.unref?.();
+      idleTimers.set(ws, timer);
+    }
+
     // Bind the resolved identity from the upgrade phase. It was
     // attached to the request object in handleUpgrade.
     const identity = (req as IncomingMessage & UpgradeBindings).__gguiIdentity;
@@ -292,6 +465,11 @@ export function attachSocketRouter(wss: WebSocketServer, deps: SocketRouterDeps)
     ws.on("close", () => {
       deps.unregister(ws);
       pendingIdentity.delete(ws);
+      // A pending socket that closes before subscribing frees its idle
+      // timer + ceiling slot. For a socket that already subscribed,
+      // `markSubscribed` cleared both — these are then no-ops.
+      clearIdleTimer(ws);
+      releasePending(ws);
     });
 
     ws.on("error", (err) => {

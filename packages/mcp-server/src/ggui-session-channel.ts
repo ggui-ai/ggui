@@ -90,6 +90,39 @@ import type { Logger } from "./logger.js";
 /** Default URL path for the channel endpoint. Operators can override. */
 export const DEFAULT_RENDER_CHANNEL_PATH = "/ws";
 
+/**
+ * Coarse ws-level `maxPayload` memory backstop applied to EVERY inbound
+ * frame on EVERY socket — generous enough (1 MiB) never to clip a
+ * legitimate post-subscribe `action` frame, but bounding the absolute
+ * per-frame buffer a hostile peer can force before the frame is even
+ * assembled. Distinct from the tight, pre-subscribe-only
+ * {@link DEFAULT_PRE_SUBSCRIBE_MAX_PAYLOAD_BYTES}. Disable with `0`.
+ */
+export const DEFAULT_WS_MAX_PAYLOAD_BYTES = 1_048_576;
+/**
+ * Per-frame byte ceiling on PRE-SUBSCRIBE frames (64 KiB). Pre-subscribe
+ * traffic is tiny (a subscribe carrying a JWT is under 1 KiB), so this
+ * is ~70x headroom yet caps a pre-auth memory-abuse frame. Enforced
+ * per-frame, keyed on "not yet a subscriber", so post-subscribe frames
+ * are exempt. Disable with `0`.
+ */
+export const DEFAULT_PRE_SUBSCRIBE_MAX_PAYLOAD_BYTES = 65_536;
+/**
+ * Grace window (30 s) an unauthenticated socket has to complete a valid
+ * subscribe before it is closed. Open→subscribe is normally sub-second;
+ * 30 s tolerates a slow bootstrap-token verify while bounding how long a
+ * credential-less socket holds a slot. Disable with `0`.
+ */
+export const DEFAULT_PRE_SUBSCRIBE_IDLE_MS = 30_000;
+/**
+ * Concurrent PENDING (pre-subscribe) socket ceiling (1024). Honest
+ * clients leave the pending state in under a second, so 1024 in-flight
+ * handshakes is far beyond any real burst yet bounds a credential-less
+ * connection flood. Counts pending sockets only — never subscribers.
+ * Disable with `0`.
+ */
+export const DEFAULT_MAX_PRE_SUBSCRIBE_CONNECTIONS = 1_024;
+
 // Channel-subscribe / source-poll family — the public options type
 // lives with its handler module and is re-exported here so the
 // package surface is unchanged.
@@ -272,6 +305,48 @@ export interface GguiSessionChannelOptions {
    * identically in both modes.
    */
   readonly versionPolicy?: "advisory" | "reject";
+  /**
+   * Coarse ws-level `maxPayload` memory backstop (bytes) applied to
+   * every inbound frame on every socket — the largest single frame the
+   * server will assemble before rejecting it (ws closes 1009). Distinct
+   * from {@link maxPreSubscribePayloadBytes}: this one is generous and
+   * global so it never clips a legitimate post-subscribe `action`
+   * frame; the pre-subscribe cap is the tight, credential-less bound.
+   *
+   * Defaults to {@link DEFAULT_WS_MAX_PAYLOAD_BYTES} (1 MiB). `0`
+   * disables the ws-level check (falls back to the ws library default).
+   */
+  readonly maxPayloadBytes?: number;
+  /**
+   * Per-frame byte ceiling for PRE-SUBSCRIBE (not-yet-registered)
+   * sockets. A pre-subscribe frame larger than this closes the socket
+   * (1009) before it is parsed. Subscribed sockets are exempt — only
+   * the coarse {@link maxPayloadBytes} backstop applies to them.
+   *
+   * Defaults to {@link DEFAULT_PRE_SUBSCRIBE_MAX_PAYLOAD_BYTES}
+   * (64 KiB). `0` disables the pre-subscribe payload cap.
+   */
+  readonly maxPreSubscribePayloadBytes?: number;
+  /**
+   * Grace window (ms) a socket has to complete a valid subscribe before
+   * it is closed (1008). Armed on connection, cleared on successful
+   * subscribe — a registered subscriber is never reaped, so long-idle
+   * and reconnecting viewers keep the existing keepalive behavior.
+   *
+   * Defaults to {@link DEFAULT_PRE_SUBSCRIBE_IDLE_MS} (30 s). `0`
+   * disables the idle timeout.
+   */
+  readonly preSubscribeIdleMs?: number;
+  /**
+   * Concurrent PENDING (pre-subscribe) socket ceiling. A new upgrade
+   * that would exceed it is cleanly closed (1013). Counts only sockets
+   * that have not completed a valid subscribe — subscriber fan-out is
+   * never bounded here.
+   *
+   * Defaults to {@link DEFAULT_MAX_PRE_SUBSCRIBE_CONNECTIONS} (1024).
+   * `0` disables the ceiling.
+   */
+  readonly maxPreSubscribeConnections?: number;
   /**
    * Optional hook fired synchronously when the local subscriber count
    * for `sessionId` transitions 0 → 1 (the first subscriber for that
@@ -456,6 +531,20 @@ export interface GguiSessionChannelServer {
   /** Number of distinct renders with at least one subscriber. */
   readonly renderCount: number;
   /**
+   * Monotonic counts of pre-subscribe cap-driven closures/refusals
+   * (ggui#444), surfaced on `/ggui/health` for operator diagnosis of a
+   * credential-less abuse burst. Each field only ever increases over
+   * the channel's lifetime:
+   *   - `payload` — oversized pre-subscribe frames rejected (1009).
+   *   - `idle` — sockets closed for never subscribing in time (1008).
+   *   - `connection` — upgrades refused past the pending ceiling (1013).
+   */
+  readonly preSubscribeRejections: {
+    readonly payload: number;
+    readonly idle: number;
+    readonly connection: number;
+  };
+  /**
    * Close every live subscriber + the underlying ws server. Idempotent.
    */
   close(): Promise<void>;
@@ -476,9 +565,28 @@ export function createGguiSessionChannelServer(
   // Live-tail pub/sub. Default in-process; multi-process deployments
   // bind a pubsub-backed StreamFanout via `opts.streamFanout`.
   const streamFanout: StreamFanout = opts.streamFanout ?? new InProcessStreamFanout();
+
+  // Pre-subscribe caps (ggui#444) — bound what a not-yet-subscribed
+  // (credential-less) socket can consume. Resolved once here; `0`
+  // disables a given cap. See the DEFAULT_* constants for rationale.
+  const wsMaxPayloadBytes = opts.maxPayloadBytes ?? DEFAULT_WS_MAX_PAYLOAD_BYTES;
+  const preSubscribeCaps = {
+    maxPayloadBytes: opts.maxPreSubscribePayloadBytes ?? DEFAULT_PRE_SUBSCRIBE_MAX_PAYLOAD_BYTES,
+    idleMs: opts.preSubscribeIdleMs ?? DEFAULT_PRE_SUBSCRIBE_IDLE_MS,
+    maxConnections: opts.maxPreSubscribeConnections ?? DEFAULT_MAX_PRE_SUBSCRIBE_CONNECTIONS,
+  };
+  // Live monotonic counters surfaced on `/ggui/health`. The router owns
+  // the increments; the health getter below reads a snapshot.
+  const preSubscribeRejections = { payload: 0, idle: 0, connection: 0 };
+
   // `noServer: true` means we own the upgrade wiring (see handleUpgrade);
-  // ws won't try to bind its own port.
-  const wss = new WebSocketServer({ noServer: true });
+  // ws won't try to bind its own port. `maxPayload` is the coarse global
+  // memory backstop; the tight pre-subscribe payload cap is enforced
+  // per-frame in the socket router. `0` → fall back to the ws default.
+  const wss =
+    wsMaxPayloadBytes > 0
+      ? new WebSocketServer({ noServer: true, maxPayload: wsMaxPayloadBytes })
+      : new WebSocketServer({ noServer: true });
 
   /**
    * Flat set of all live WS subscribers. Replaces the per-render
@@ -572,6 +680,8 @@ export function createGguiSessionChannelServer(
     handleInboundAction,
     handleChannelSubscribe,
     handleChannelUnsubscribe,
+    preSubscribeCaps,
+    preSubscribeRejections,
   });
 
   return {
@@ -628,6 +738,15 @@ export function createGguiSessionChannelServer(
       const renders = new Set<string>();
       for (const sub of wsSubscribers) renders.add(sub.sessionId);
       return renders.size;
+    },
+    get preSubscribeRejections() {
+      // Snapshot so callers can't mutate the live counters through the
+      // getter's return value.
+      return {
+        payload: preSubscribeRejections.payload,
+        idle: preSubscribeRejections.idle,
+        connection: preSubscribeRejections.connection,
+      };
     },
     async close() {
       // Close every open socket + drain its StreamFanout subscription.

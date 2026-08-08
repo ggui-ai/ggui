@@ -1998,6 +1998,38 @@ export interface CreateGguiServerOptions {
   readonly versionPolicy?: "advisory" | "reject";
 
   /**
+   * Live-channel pre-subscribe caps (ggui#444). Each bounds only what a
+   * NOT-YET-SUBSCRIBED (unauthenticated / unregistered) WebSocket can
+   * consume; a socket that has completed a valid subscribe is a
+   * legitimate long-lived subscriber and is exempt from all of them.
+   * Every cap is disable-able with `0` and ships a generous default so
+   * the zero-config quickstart + e2e journeys never trip. Forwarded
+   * verbatim to `createGguiSessionChannelServer`; only consulted when
+   * `renderChannel` is enabled.
+   *
+   *   - `wsMaxPayloadBytes` — coarse ws-level `maxPayload` memory
+   *     backstop for EVERY frame on EVERY socket (default 1 MiB, sized
+   *     so it never clips a legitimate post-subscribe `action` frame).
+   *     See `GguiSessionChannelOptions.maxPayloadBytes`.
+   *   - `wsMaxPreSubscribePayloadBytes` — tight per-frame ceiling for
+   *     pre-subscribe frames only (default 64 KiB). See
+   *     `GguiSessionChannelOptions.maxPreSubscribePayloadBytes`.
+   *   - `wsPreSubscribeIdleMs` — grace window to complete a valid
+   *     subscribe before the socket is closed (default 30 s). See
+   *     `GguiSessionChannelOptions.preSubscribeIdleMs`.
+   *   - `wsMaxPreSubscribeConnections` — concurrent pending-socket
+   *     ceiling (default 1024). See
+   *     `GguiSessionChannelOptions.maxPreSubscribeConnections`.
+   *
+   * Cap-driven closures/refusals are counted on `/ggui/health` under
+   * `channel.caps.preSubscribeRejections`.
+   */
+  readonly wsMaxPayloadBytes?: number;
+  readonly wsMaxPreSubscribePayloadBytes?: number;
+  readonly wsPreSubscribeIdleMs?: number;
+  readonly wsMaxPreSubscribeConnections?: number;
+
+  /**
    * Policy for the schema compat check. Checks that every
    * `actionSpec[name]` tool ref points at a tool whose
    * `inputSchema` is a superset of the
@@ -5162,6 +5194,18 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
           ? { extraReservedValidators: composedReservedValidators }
           : {}),
         ...(opts.versionPolicy !== undefined ? { versionPolicy: opts.versionPolicy } : {}),
+        // Pre-subscribe caps (ggui#444). Forwarded only when set — the
+        // channel resolves its own generous defaults otherwise.
+        ...(opts.wsMaxPayloadBytes !== undefined ? { maxPayloadBytes: opts.wsMaxPayloadBytes } : {}),
+        ...(opts.wsMaxPreSubscribePayloadBytes !== undefined
+          ? { maxPreSubscribePayloadBytes: opts.wsMaxPreSubscribePayloadBytes }
+          : {}),
+        ...(opts.wsPreSubscribeIdleMs !== undefined
+          ? { preSubscribeIdleMs: opts.wsPreSubscribeIdleMs }
+          : {}),
+        ...(opts.wsMaxPreSubscribeConnections !== undefined
+          ? { maxPreSubscribeConnections: opts.wsMaxPreSubscribeConnections }
+          : {}),
         ...(opts.onFirstSubscriber ? { onFirstSubscriber: opts.onFirstSubscriber } : {}),
         ...(opts.onLastSubscriberGone ? { onLastSubscriberGone: opts.onLastSubscriberGone } : {}),
         // Shared TelemetrySink — bound once at composition so future
