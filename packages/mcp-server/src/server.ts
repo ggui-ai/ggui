@@ -5307,10 +5307,15 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
             // always enforced. WebSocket handshakes are exempt from
             // the same-origin policy (any page can open a socket), so
             // an unchecked upgrade is a cross-site WS hijack surface.
+            // "ws-upgrade" additionally admits the opaque-origin
+            // ("null") Origin — this ingress is capability-gated by
+            // upgrade-time identity resolution regardless of Origin,
+            // see validateOriginHost's docstring for the full argument.
             const wsRejection = validateOriginHost(
               req.headers.host,
               typeof req.headers.origin === "string" ? req.headers.origin : undefined,
-              originHostPolicy
+              originHostPolicy,
+              "ws-upgrade"
             );
             if (wsRejection !== null) {
               logger.warn("origin_host_rejected", {

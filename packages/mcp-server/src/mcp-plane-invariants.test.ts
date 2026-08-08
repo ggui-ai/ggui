@@ -282,6 +282,27 @@ describe("WS upgrade ingress runs the same validator", () => {
       await close();
     }
   });
+
+  it('admits the opaque-origin ("null") handshake instead of 403ing it (ggui#438a regression)', async () => {
+    // A document with an opaque origin (srcdoc-mounted, about:-scheme,
+    // or similar sandboxed embeddings) serializes Origin as the literal
+    // string "null" on the WS upgrade — by spec, not by client choice.
+    // The Host check still runs (this request uses a valid loopback
+    // Host), so the only thing under test is that "null" no longer
+    // trips the origin-gate's 403. The handshake still has no minted
+    // credential, so it fails downstream at upgrade-time identity
+    // resolution (401) — a DIFFERENT gate than the one this test pins.
+    // Only a reappearance of the origin-gate's 403 would fail this.
+    const { server, port, close } = await bootServer({ renderChannel: true });
+    try {
+      const channel = server.renderChannel;
+      if (channel === null) throw new Error("renderChannel: true did not create a channel");
+      const response = await rawUpgrade(port, channel.path, `127.0.0.1:${port}`, "null");
+      expect(response).not.toMatch(/^HTTP\/1\.1 403/);
+    } finally {
+      await close();
+    }
+  });
 });
 
 describe("invariant: CSRF covers /mcp (booted server, real wiring)", () => {

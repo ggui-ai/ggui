@@ -136,15 +136,75 @@ describe("validateOriginHost — Origin header", () => {
     expect(validateOriginHost("192.168.1.50:6781", "https://evil.com", policy)).not.toBeNull();
   });
 
-  it('rejects the literal "null" origin on the MCP wire', () => {
+  it('rejects the literal "null" origin on the MCP wire (http ingress, the default)', () => {
     // Sandboxed iframes have the `null` origin and ARE legitimate
     // consumers of the runtime-bundle/code routes — but those routes
     // are outside the Origin-enforcement scope (see the middleware).
-    // On the MCP wire itself, `null` is indistinguishable from a
-    // hostile sandboxed page and is rejected.
+    // On the MCP HTTP plane itself, `null` still 403s: srcdoc pages
+    // have no business POSTing /mcp, so this ingress carries no
+    // opaque-origin admission.
     expect(validateOriginHost("localhost:6781", "null", LOOPBACK_POLICY)).toEqual({
       header: "origin",
       value: "null",
+    });
+  });
+});
+
+describe("validateOriginHost — opaque-origin (\"null\") admission on the ws-upgrade ingress (ggui#438a regression)", () => {
+  // A document with an OPAQUE origin (srcdoc-mounted, about:-scheme, or
+  // similar sandboxed embeddings) has no origin serialization other than
+  // the literal string "null" — that is how the Origin header spec
+  // requires it be sent, not a client choosing to omit identity. The WS
+  // surface is capability-gated end-to-end regardless of Origin:
+  // upgrade-time identity resolution rejects every credential-less
+  // upgrade with 401 across its auth planes, and the subscribe message
+  // itself requires a credential bound to the sessionId. An
+  // opaque-origin socket without a minted credential can do nothing, so
+  // admitting "null" here adds no exposure the capability gate doesn't
+  // already close — while rejecting it breaks a spec-legitimate
+  // embedding topology. The ws-upgrade ingress is the only ingress with
+  // this capability gate in front of it, so the admission is scoped to
+  // that ingress exactly.
+
+  it('admits the literal "null" origin on the ws-upgrade ingress', () => {
+    expect(validateOriginHost("localhost:6781", "null", LOOPBACK_POLICY, "ws-upgrade")).toBeNull();
+  });
+
+  it('keeps rejecting "null" on the http ingress, explicitly and by default', () => {
+    expect(validateOriginHost("localhost:6781", "null", LOOPBACK_POLICY, "http")).toEqual({
+      header: "origin",
+      value: "null",
+    });
+    expect(validateOriginHost("localhost:6781", "null", LOOPBACK_POLICY)).toEqual({
+      header: "origin",
+      value: "null",
+    });
+  });
+
+  it("passes an absent Origin on both ingresses", () => {
+    expect(validateOriginHost("localhost:6781", undefined, LOOPBACK_POLICY, "ws-upgrade")).toBeNull();
+    expect(validateOriginHost("localhost:6781", undefined, LOOPBACK_POLICY, "http")).toBeNull();
+  });
+
+  it("still 403s a present, non-allowlisted Origin on BOTH ingresses — the admission is null-only, not Origin-open", () => {
+    expect(
+      validateOriginHost("localhost:6781", "https://evil.example", LOOPBACK_POLICY, "ws-upgrade")
+    ).toEqual({
+      header: "origin",
+      value: "https://evil.example",
+    });
+    expect(
+      validateOriginHost("localhost:6781", "https://evil.example", LOOPBACK_POLICY, "http")
+    ).toEqual({
+      header: "origin",
+      value: "https://evil.example",
+    });
+  });
+
+  it("keeps the Host check enforced on the ws-upgrade ingress even with an opaque Origin", () => {
+    expect(validateOriginHost("evil.com:6781", "null", LOOPBACK_POLICY, "ws-upgrade")).toEqual({
+      header: "host",
+      value: "evil.com:6781",
     });
   });
 });

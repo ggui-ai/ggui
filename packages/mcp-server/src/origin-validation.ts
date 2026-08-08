@@ -151,17 +151,31 @@ export function buildOriginHostPolicy(input: {
 }
 
 /**
+ * The two ingresses this validator serves. They share every rule
+ * except one: the ws-upgrade ingress additionally admits the
+ * opaque-origin ("null") Origin — see the `ingress` param below.
+ */
+export type OriginValidationIngress = "http" | "ws-upgrade";
+
+/**
  * Validate one request's raw Host/Origin against the policy.
  * Returns `null` when the request passes.
  *
  * Pure by design: the Express middleware and the WebSocket `upgrade`
  * handler (a second ingress Express never sees) call the same function,
- * so the two ingresses cannot drift.
+ * so the two ingresses cannot drift. `ingress` is the one deliberate,
+ * documented point of difference between them — everything else is
+ * identical logic.
+ *
+ * @param ingress Defaults to `"http"`, so every existing HTTP call site
+ *   is unaffected. Pass `"ws-upgrade"` only from the WebSocket upgrade
+ *   handler.
  */
 export function validateOriginHost(
   rawHost: string | undefined,
   rawOrigin: string | undefined,
-  policy: OriginHostPolicy
+  policy: OriginHostPolicy,
+  ingress: OriginValidationIngress = "http"
 ): OriginHostRejection | null {
   if (policy.allowedHosts !== null) {
     if (rawHost === undefined || rawHost.length === 0) {
@@ -174,6 +188,24 @@ export function validateOriginHost(
 
   // Absent Origin passes: every non-browser client omits it.
   if (rawOrigin === undefined || rawOrigin.length === 0) return null;
+
+  // A document with an OPAQUE origin (a srcdoc-mounted document,
+  // an about:-scheme page, or an equivalent sandboxed embedding) has no
+  // per-origin identity to serialize — the Origin header spec requires
+  // browsers to send the literal value "null" in that case, not an
+  // absence of the header. On the ws-upgrade ingress ONLY, that value
+  // is admitted rather than rejected: this WS surface is
+  // capability-gated end-to-end regardless of Origin — upgrade-time
+  // identity resolution rejects every credential-less upgrade before it
+  // can do anything, and the subsequent subscribe message requires a
+  // credential bound to the sessionId. An opaque-origin socket without
+  // a minted credential is exactly as powerless as one with any other
+  // rejected Origin, so allowlisting adds no protection the capability
+  // gate doesn't already provide here — while rejecting "null" breaks a
+  // spec-legitimate embedding topology that has no way to send anything
+  // else. The HTTP ingress has no equivalent per-message capability
+  // gate in front of it, so it keeps rejecting "null" unconditionally.
+  if (ingress === "ws-upgrade" && rawOrigin.trim().toLowerCase() === "null") return null;
 
   const origin = rawOrigin.trim().toLowerCase().replace(/\/$/, "");
   // Loopback pages are allowed unconditionally so the zero-config
