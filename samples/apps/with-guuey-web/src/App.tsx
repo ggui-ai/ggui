@@ -1,4 +1,4 @@
-import { type JSX, useMemo, useState } from 'react';
+import { type JSX, useEffect, useMemo, useState } from 'react';
 import { AppRenderer } from '@mcp-ui/client';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
@@ -12,23 +12,30 @@ import { useAgentInvoke } from '@guuey/agent-client/react';
 import {
   AgentResponseError,
   createWebAdapters,
-  resourceHtml,
   toolNameFor,
-  toolResultCardMount,
-  toolResultGguiRender,
   type AgentInvokeAdapters,
   type AgMessage,
-  type CardMount,
-  type GguiRenderBootstrap,
   type InvokeRequest,
 } from '@guuey/agent-client';
+import {
+  createMcpUiResourceReader,
+  resourceHtml,
+  toolResultGguiRender,
+  toolResultViewMount,
+  type GguiRenderBootstrap,
+  type ResolvedViewMount,
+  type ViewMount,
+} from '@guuey/mcp-apps-host';
 
 /**
  * platform-composed (guuey-sdk) chat shell — the web half of the composed
  * golden path. Replaces the role `ggui-basic-web`'s 702-line hand-rolled
  * `Chat.tsx` plays in the framework-native lanes: `useAgentInvoke` owns the
- * SSE fold and per-turn lifecycle, and `@guuey/agent-client`'s card-mount
- * dispatcher owns generative-UI recognition — this file only renders.
+ * SSE fold and per-turn lifecycle, and `@guuey/mcp-apps-host`'s view-mount
+ * dispatcher owns generative-UI recognition — this file only renders, plus
+ * the two obligations the MCP Apps Host role leaves with the host: the guest
+ * `tools/call` relay and `ui://` locator rehydration (both over ONE MCP
+ * client to ggui serve — see `gguiRelayClient`).
  */
 
 /** guuey dev router base — `guuey dev --serve` binds 127.0.0.1:6790 by default. */
@@ -60,14 +67,18 @@ const INDIGO_DARK = getRawTheme('indigo', 'dark');
  * `createWebAdapters()`'s own transport always attaches exactly ONE identity
  * carrier — a `Authorization: Bearer`, an `x-guuey-guest` header, or cookie
  * credentials (`credentials: "include"`, its no-resolver fallback). The
- * published dev router (`@guuey/cli` 0.2.0) answers CORS with
+ * published dev router (`@guuey/cli` 0.3.0) answers CORS with
  * `Access-Control-Allow-Origin: *` + `Access-Control-Allow-Headers:
- * Content-Type` and never sets `Access-Control-Allow-Credentials`, so all
- * three carriers fail the browser's cross-origin checks (wildcard origin +
- * credentials is blocked outright; the two headers are not in the allow
- * list). The dev router is anonymous-only anyway (`authMode: "anonymous"`
- * on its session frame), so the honest transport for it is a
- * credential-less fetch: same streaming contract as the package's
+ * Content-Type, Authorization, x-guuey-guest` and still never sets
+ * `Access-Control-Allow-Credentials`. The two HEADER carriers would now pass
+ * the preflight (0.3.0 widened the allow list for its history reads), but
+ * this app configures neither resolver — the dev router is anonymous-only
+ * (`authMode: "anonymous"` on its session frame), and claiming a bearer or
+ * minting a guest secret purely to steer the transport off its cookie arm
+ * would put an identity on the wire the router ignores. Without a resolver
+ * the package transport falls to cookie credentials, which the wildcard
+ * origin blocks outright — so the honest transport for the dev router is
+ * still a credential-less fetch: same streaming contract as the package's
  * `fetchStreamTransport`, minus the identity carriers. Storage + id
  * generation still come from `createWebAdapters()` below — the transport is
  * the ONE adapter the dev router needs swapped, via the injection seam the
@@ -152,18 +163,29 @@ function foldAssistantTurns(foldMessages: AgMessage[]): AssistantTurn[] {
   return turns;
 }
 
-/** A mountable generative-UI card recognised on the fold, ready to render. */
+/** Sandbox-CSP origin lists for a ggui-channel mount. */
+interface SandboxCsp {
+  resourceDomains: string[];
+  connectDomains: string[];
+}
+
+/** A generative-UI card recognised on the fold (or restored from a persisted
+ *  locator), ready to render — or, on the `locator` arm, ready to RESOLVE:
+ *  a locator carries no mount material, only the durable `ui://` identity
+ *  the reader re-fetches fresh material for (see `readUiResource`). */
 interface MountedCard {
-  /** The render's real resource uri — stable React key. */
+  /** The render's real resource uri — stable React key AND the locator. */
   key: string;
   toolName: string;
-  mount: CardMount;
+  mount: ViewMount;
   /**
    * CSP domains for the sandbox page — present only on the ggui channel,
    * whose shell must load ggui's runtime bundle and open its WebSocket
    * (an inline card is self-contained HTML and needs no exceptions).
+   * Derived from the live render bootstrap, or carried by the persisted
+   * card memento for a restored locator (see `CardMemento`).
    */
-  csp?: { resourceDomains: string[]; connectDomains: string[] };
+  csp?: SandboxCsp;
 }
 
 /**
@@ -192,22 +214,25 @@ function gguiCsp(bootstrap: GguiRenderBootstrap): {
 }
 
 /**
- * Walk the fold for generative-UI cards through the package's card-mount
- * dispatcher (`toolResultCardMount` — inline mcp-ui resources first, ggui
- * renders second, one `McpUiResourcePayload` out either way). For ggui
- * mounts, re-narrow the descriptor to reach the bootstrap the CSP needs.
+ * Walk the fold for generative-UI cards through the host package's
+ * view-mount dispatcher (`toolResultViewMount` — inline mcp-ui resources
+ * first, ggui renders second, and a bare `ui://` LOCATOR when a block
+ * carries the durable identity but no mount material). For ggui mounts,
+ * re-narrow the descriptor to reach the bootstrap the CSP needs; a locator
+ * has neither material nor bootstrap — its key IS the uri, and the panel
+ * resolves it through `readUiResource` before anything can mount.
  */
 function foldCards(foldMessages: AgMessage[]): MountedCard[] {
   const cards: MountedCard[] = [];
   for (const m of foldMessages) {
     for (const block of m.content) {
       if (block.type !== 'tool-result') continue;
-      const mount = toolResultCardMount(block);
+      const mount = toolResultViewMount(block);
       if (!mount) continue;
       const bootstrap =
         mount.channel === 'ggui' ? toolResultGguiRender(block)?.bootstrap : undefined;
       cards.push({
-        key: mount.resource.uri,
+        key: mount.channel === 'locator' ? mount.resourceUri : mount.resource.uri,
         toolName: toolNameFor(m, block.toolCallId),
         mount,
         ...(bootstrap ? { csp: gguiCsp(bootstrap) } : {}),
@@ -215,6 +240,84 @@ function foldCards(foldMessages: AgMessage[]): MountedCard[] {
     }
   }
   return cards;
+}
+
+/**
+ * The last mounted ggui card's rehydration memento, persisted in
+ * `localStorage` (keyed per app, beside the SDK's own threadId store).
+ *
+ * WHY THE HOST PERSISTS THIS: a card's durable identity is its `ui://`
+ * locator — rehydration is a fresh `resources/read` of that uri, never a
+ * replay of stored mount material (whose live-channel credentials expire
+ * with the page). The dev router's history rows are text-only, so the
+ * locator has to survive somewhere the HOST owns; this sample keeps it in
+ * `localStorage`. The CSP origin lists ride along because they are host
+ * TRUST policy, not mount material: which origins the sandbox page may let
+ * a ggui shell load from — learned from the live bootstrap at first mount
+ * and stable per deployment. (A hosted platform persists the locator in its
+ * thread store instead and configures the trusted origins statically; the
+ * mechanics here are the same reader.)
+ */
+interface CardMemento {
+  /** The persisted `ui://` locator — the render's durable identity. */
+  resourceUri: string;
+  /** The tool that produced the render (panel chrome only). */
+  toolName: string;
+  /** Sandbox-CSP origins for the ggui channel (see the docblock). */
+  csp: SandboxCsp;
+}
+
+const CARD_MEMENTO_KEY = `with-guuey-web:card:${APP_ID}`;
+
+function isStringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((x) => typeof x === 'string');
+}
+
+/** Structural gate for a stored memento — a corrupt or foreign entry reads
+ *  as "no memento" (the same posture as a reader miss: placeholder, never
+ *  an error surface). */
+function parseCardMemento(raw: string): CardMemento | undefined {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return undefined; // corrupt entry == no memento
+  }
+  if (typeof parsed !== 'object' || parsed === null) return undefined;
+  if (!('resourceUri' in parsed) || typeof parsed.resourceUri !== 'string') return undefined;
+  if (!parsed.resourceUri.startsWith('ui://')) return undefined;
+  if (!('toolName' in parsed) || typeof parsed.toolName !== 'string') return undefined;
+  if (!('csp' in parsed) || typeof parsed.csp !== 'object' || parsed.csp === null) {
+    return undefined;
+  }
+  const csp = parsed.csp;
+  if (!('resourceDomains' in csp) || !isStringArray(csp.resourceDomains)) return undefined;
+  if (!('connectDomains' in csp) || !isStringArray(csp.connectDomains)) return undefined;
+  return {
+    resourceUri: parsed.resourceUri,
+    toolName: parsed.toolName,
+    csp: { resourceDomains: csp.resourceDomains, connectDomains: csp.connectDomains },
+  };
+}
+
+/** The restored card for a persisted memento: a `locator` mount the reader
+ *  resolves on demand — deliberately NOT stored mount material. */
+function restoredCardFromStorage(): MountedCard | undefined {
+  let raw: string | null;
+  try {
+    raw = window.localStorage.getItem(CARD_MEMENTO_KEY);
+  } catch {
+    return undefined; // private mode / blocked storage — nothing to restore
+  }
+  if (raw === null) return undefined;
+  const memento = parseCardMemento(raw);
+  if (memento === undefined) return undefined;
+  return {
+    key: memento.resourceUri,
+    toolName: memento.toolName,
+    mount: { channel: 'locator', resourceUri: memento.resourceUri },
+    csp: memento.csp,
+  };
 }
 
 export function App(): JSX.Element {
@@ -247,8 +350,71 @@ export function App(): JSX.Element {
     () => (reduceResult ? foldCards(reduceResult.messages) : []),
     [reduceResult],
   );
-  // Panel shows the newest card — same top-card rule as ggui-basic-web.
-  const top = cards.length > 0 ? cards[cards.length - 1] : undefined;
+  // The card restored from the persisted locator memento, if any — read once
+  // at mount. Live fold cards take precedence; Reset clears it (see resetAll).
+  const [restored, setRestored] = useState<MountedCard | undefined>(restoredCardFromStorage);
+  // Panel shows the newest card — same top-card rule as ggui-basic-web —
+  // falling back to the restored locator card while the fold is empty.
+  const top = cards.length > 0 ? cards[cards.length - 1] : restored;
+
+  // Locator resolution: when the top card is a bare `ui://` locator (a
+  // restored card, or a live fold whose `_meta` never reached us), resolve
+  // it through the reader exactly once per uri. `null` records a miss —
+  // deny == miss == placeholder, never an error surface, and no retry loop
+  // (a fresh mount or reload asks again).
+  const [resolved, setResolved] = useState<Record<string, ResolvedViewMount | null>>({});
+  const pendingLocator =
+    top !== undefined && top.mount.channel === 'locator' && resolved[top.key] === undefined
+      ? top.key
+      : undefined;
+  useEffect(() => {
+    if (pendingLocator === undefined) return undefined;
+    let cancelled = false;
+    // The reader never rejects — transport failures resolve `undefined`
+    // (the package's deny == miss rule), recorded here as a miss.
+    void readUiResource(pendingLocator).then((mount) => {
+      if (cancelled) return;
+      setResolved((prev) => ({ ...prev, [pendingLocator]: mount ?? null }));
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [pendingLocator]);
+
+  // The material actually mounted: resolved arms mount as-is; a locator
+  // mounts its reader result once resolved (placeholder until then, and on
+  // a miss).
+  const material: ResolvedViewMount | undefined =
+    top === undefined
+      ? undefined
+      : top.mount.channel !== 'locator'
+        ? top.mount
+        : (resolved[top.key] ?? undefined);
+
+  // Persist the newest LIVE ggui card's locator + sandbox-CSP origins as the
+  // rehydration memento (see CardMemento). Serialized in the memo so the
+  // write effect keys on VALUE — the fold rebuilds card objects every frame,
+  // but the JSON only changes when the card (or its CSP) does.
+  const mementoJson = useMemo(() => {
+    if (cards.length === 0) return undefined;
+    const live = cards[cards.length - 1];
+    if (live.mount.channel !== 'ggui' || live.csp === undefined) return undefined;
+    const memento: CardMemento = {
+      resourceUri: live.mount.resource.uri,
+      toolName: live.toolName,
+      csp: live.csp,
+    };
+    return JSON.stringify(memento);
+  }, [cards]);
+  useEffect(() => {
+    if (mementoJson === undefined) return;
+    try {
+      window.localStorage.setItem(CARD_MEMENTO_KEY, mementoJson);
+    } catch {
+      // Private mode / blocked storage: rehydration simply won't survive a
+      // reload — the same silent degradation as the SDK's own threadId store.
+    }
+  }, [mementoJson]);
 
   // `foldCards` re-runs on every AgJSON frame (each `reduceResult` update),
   // so `top` — and its `csp` arrays — get a FRESH object identity per frame
@@ -291,7 +457,19 @@ export function App(): JSX.Element {
     void send(text);
   };
 
-  const html = top ? resourceHtml(top.mount.resource) : undefined;
+  const resetAll = (): void => {
+    // Reset is a full fresh start: drop the persisted card memento and the
+    // restored card too, not just the transcript.
+    try {
+      window.localStorage.removeItem(CARD_MEMENTO_KEY);
+    } catch {
+      // Blocked storage: nothing was persisted to drop.
+    }
+    setRestored(undefined);
+    reset();
+  };
+
+  const html = material !== undefined ? resourceHtml(material.resource) : undefined;
 
   return (
     <ThemeProvider theme={INDIGO_DARK} mode="dark">
@@ -353,18 +531,25 @@ export function App(): JSX.Element {
                   Stop
                 </button>
               ) : (
-                <button type="button" onClick={reset} disabled={messages.length === 0}>
+                <button
+                  type="button"
+                  onClick={resetAll}
+                  disabled={messages.length === 0 && top === undefined}
+                >
                   Reset
                 </button>
               )}
             </form>
           </section>
           <aside className="panel">
-            {top !== undefined && html !== undefined && sandbox !== undefined ? (
+            {top !== undefined &&
+            material !== undefined &&
+            html !== undefined &&
+            sandbox !== undefined ? (
               <div className="render">
                 <div className="render-chrome">
                   <span className="render-tool">{top.toolName}</span>
-                  <span className="render-channel">{top.mount.channel}</span>
+                  <span className="render-channel">{material.channel}</span>
                 </div>
                 <div className="render-frame">
                   <AppRenderer
@@ -438,6 +623,34 @@ async function relayCallTool(params: CallToolRequest['params']): Promise<CallToo
     };
   }
 }
+
+/**
+ * Locator rehydration — the OTHER host obligation this shell carries (the
+ * guest tools/call relay above is the first). The host package's generic
+ * reader, assembled over the SAME MCP client the relay holds: one fresh
+ * `resources/read` of a persisted `ui://` locator. The package's trust
+ * rules apply as shipped — a deny, a miss, and a transport error all
+ * resolve `undefined` (the panel keeps its placeholder), and the sandbox
+ * channel derives from the REQUESTED uri, never from the response. ggui
+ * serve answers the read with a freshly minted shell for the render's
+ * CURRENT state — fresh live-channel credentials included — so a
+ * rehydrated card comes back live; stored mount material is never
+ * replayed.
+ */
+const readUiResource = createMcpUiResourceReader({
+  readResource: async (uri) => {
+    const client = await gguiRelayClient();
+    const result = await client.readResource({ uri });
+    const first = result.contents[0];
+    if (first === undefined) return undefined;
+    return {
+      uri: first.uri,
+      ...(typeof first.mimeType === 'string' ? { mimeType: first.mimeType } : {}),
+      ...('text' in first && typeof first.text === 'string' ? { text: first.text } : {}),
+      ...('blob' in first && typeof first.blob === 'string' ? { blob: first.blob } : {}),
+    };
+  },
+});
 
 /**
  * The transcript rows.

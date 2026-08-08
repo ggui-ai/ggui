@@ -14,22 +14,29 @@ A Vite SPA that:
   fold, the per-turn status lifecycle
   (`ready | connecting | thinking | using-tool | responding`), abort/reset,
   and the error surface;
-- recognises generative-UI cards with the package's card-mount dispatcher
-  (`toolResultCardMount` → inline mcp-ui resources first, ggui renders
-  second) and mounts them through the MCP-Apps **second-origin sandbox**
-  path with `@mcp-ui/client`'s `<AppRenderer>` — the ggui card arrives as
-  the package's self-contained shell (`gguiShellHtml` inlining the
-  `_meta["ai.ggui/render"]` bootstrap) and boots ggui's iframe runtime
-  with no host-side ggui code.
+- recognises generative-UI cards with `@guuey/mcp-apps-host`'s view-mount
+  dispatcher (`toolResultViewMount` → inline mcp-ui resources first, ggui
+  renders second, bare `ui://` locators last) and mounts them through the
+  MCP-Apps **second-origin sandbox** path with `@mcp-ui/client`'s
+  `<AppRenderer>` — the ggui card arrives as the package's self-contained
+  shell (`gguiShellHtml` inlining the `_meta["ai.ggui/render"]` bootstrap)
+  and boots ggui's iframe runtime with no host-side ggui code;
+- rehydrates a persisted card after a page reload: the host keeps the
+  render's durable `ui://` locator (plus its sandbox-CSP origins) in
+  `localStorage` and resolves it with the package's generic reader
+  (`createMcpUiResourceReader` over the same MCP client the guest
+  `tools/call` relay holds) — one fresh `resources/read`, fresh mount
+  material, never a replay of stored HTML.
 
 ## Before / after
 
 This app replaces the 702-line hand-rolled chat loop in
-`../ggui-basic-web/src/Chat.tsx` with `useAgentInvoke` + the card-mount
-dispatcher: the SSE parsing, per-turn status machine, transcript fold,
-resource narrowing, and generative-UI recognition all live in
-`@guuey/agent-client`, and what remains here is rendering — a ~450-line
-`App.tsx` that is mostly JSX and comments.
+`../ggui-basic-web/src/Chat.tsx` with `useAgentInvoke` + the view-mount
+dispatcher: the SSE parsing, per-turn status machine, and transcript fold
+live in `@guuey/agent-client`; resource narrowing, generative-UI
+recognition, and locator rehydration live in `@guuey/mcp-apps-host`; and
+what remains here is rendering — an `App.tsx` that is mostly JSX and
+comments.
 
 ## Quickstart
 
@@ -67,18 +74,24 @@ page's CSP is derived per-card from the render bootstrap — the runtime
 bundle origin and the live-channel (WebSocket) origin the wire announced,
 nothing hardcoded.
 
-## Known limitation: fresh sessions only
+## Known limitation: fresh transcripts, rehydrated cards
 
-`guuey dev --serve` keeps sessions in memory, serves no
-`GET /threads/:id/messages` history endpoint, and its `session` frame
-carries no `threadId` — so this app never persists a thread and every page
-load starts a fresh conversation. (The dev router additionally keys its
-in-memory context by a `sessionId` field the agent-client wire does not
-send, so under the dev router each turn reaches the agent without prior
-chat context; durable state belongs in your MCP servers — the todo list
-lives in the todo MCP and survives both turns and reloads.)
-Reload-repaint/history hydration is a hosted-platform feature, not a
-dev-server one.
+`guuey dev --serve` (0.3.0) keeps sessions in memory and now serves a
+`GET /threads/:id/messages` history read (text rows only), but its
+`session` frame still carries no `threadId` — and the agent-client hook
+speaks the `threadId` dialect — so this app never learns which dev session
+is "its" thread and every page load starts a fresh conversation. (The dev
+router keys its in-memory context by a `sessionId` field the agent-client
+wire does not send, so under the dev router each turn reaches the agent
+without prior chat context; durable state belongs in your MCP servers —
+the todo list lives in the todo MCP and survives both turns and reloads.)
+
+The **card** is the exception: a ggui render's `ui://` locator is its
+durable identity, and this host persists that locator itself (see the
+`CardMemento` note in `src/App.tsx`). After a reload the panel re-fetches
+fresh mount material via `resources/read` and the card comes back live
+with the render's current server-side state — while the text transcript,
+honestly, starts empty.
 
 ## Dev-server trust
 
