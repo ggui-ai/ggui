@@ -91,12 +91,28 @@ import type { Logger } from "./logger.js";
 export const DEFAULT_RENDER_CHANNEL_PATH = "/ws";
 
 /**
- * Coarse ws-level `maxPayload` memory backstop applied to EVERY inbound
- * frame on EVERY socket — generous enough (1 MiB) never to clip a
- * legitimate post-subscribe `action` frame, but bounding the absolute
- * per-frame buffer a hostile peer can force before the frame is even
- * assembled. Distinct from the tight, pre-subscribe-only
- * {@link DEFAULT_PRE_SUBSCRIBE_MAX_PAYLOAD_BYTES}. Disable with `0`.
+ * Coarse ws-level `maxPayload` memory backstop (1 MiB) applied to EVERY
+ * inbound frame on EVERY socket, INCLUDING already-subscribed ones —
+ * unlike the other three pre-subscribe caps in this file, this one is
+ * NOT subscriber-exempt. It bounds the absolute per-frame buffer a
+ * hostile peer can force before the frame is even assembled: a 100x
+ * reduction from the `ws` library's own ~100 MiB default, applied
+ * uniformly regardless of subscribe state.
+ *
+ * `ActionEnvelope` (the post-subscribe `action` payload) has no
+ * protocol-level max size, so this ceiling can NOT be sized to provably
+ * never clip a legitimate frame — it is a deliberately generous-but-
+ * finite backstop, not a guarantee. The closest documented protocol-
+ * level payload bound is `CONTEXT_SNAPSHOT_MAX_BYTES` (64 KiB, the
+ * `ggui_runtime_sync_context` MCP tool call — a related but distinct
+ * transport from this WS channel), which puts 1 MiB at roughly 16x
+ * headroom over the largest structured payload the protocol formally
+ * bounds. Operators whose legitimate `action` frames exceed 1 MiB
+ * (e.g. large form submissions) should raise {@link maxPayloadBytes},
+ * or set it to `0` to fall back to the `ws` library default. Distinct from
+ * the tight, pre-subscribe-only, subscriber-exempt
+ * {@link DEFAULT_PRE_SUBSCRIBE_MAX_PAYLOAD_BYTES}. Disable this one
+ * with `0`.
  */
 export const DEFAULT_WS_MAX_PAYLOAD_BYTES = 1_048_576;
 /**
@@ -307,14 +323,24 @@ export interface GguiSessionChannelOptions {
   readonly versionPolicy?: "advisory" | "reject";
   /**
    * Coarse ws-level `maxPayload` memory backstop (bytes) applied to
-   * every inbound frame on every socket — the largest single frame the
-   * server will assemble before rejecting it (ws closes 1009). Distinct
-   * from {@link maxPreSubscribePayloadBytes}: this one is generous and
-   * global so it never clips a legitimate post-subscribe `action`
-   * frame; the pre-subscribe cap is the tight, credential-less bound.
+   * EVERY inbound frame on EVERY socket, INCLUDING already-subscribed
+   * ones — the largest single frame the server will assemble before
+   * rejecting it (ws closes 1009). Distinct from
+   * {@link maxPreSubscribePayloadBytes}: that one is the tight,
+   * subscriber-exempt, credential-less bound; this one is a generous-
+   * but-finite global ceiling applied uniformly regardless of subscribe
+   * state.
+   *
+   * `ActionEnvelope` (the post-subscribe `action` payload) has no
+   * protocol-level max size, so this default can NOT be sized to
+   * provably never clip a legitimate frame — see
+   * {@link DEFAULT_WS_MAX_PAYLOAD_BYTES} for the sizing rationale.
+   * Operators expecting `action` frames larger than the default should
+   * raise this value.
    *
    * Defaults to {@link DEFAULT_WS_MAX_PAYLOAD_BYTES} (1 MiB). `0`
-   * disables the ws-level check (falls back to the ws library default).
+   * disables the ws-level check (falls back to the ws library's own
+   * ~100 MiB default).
    */
   readonly maxPayloadBytes?: number;
   /**

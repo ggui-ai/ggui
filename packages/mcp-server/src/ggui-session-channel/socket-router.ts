@@ -92,6 +92,17 @@ export function attachSocketRouter(wss: WebSocketServer, deps: SocketRouterDeps)
   /** Per-socket idle-timeout handle, cleared on subscribe or close. */
   const idleTimers = new WeakMap<WebSocket, ReturnType<typeof setTimeout>>();
   /**
+   * Sockets already closed for the pre-subscribe payload cap. A single
+   * abusive burst can deliver several oversized frames in one read
+   * before `ws.close()` settles the connection (each already-parsed
+   * frame still fires its own `message` event); without this guard
+   * every one of them would re-run the payload branch and re-increment
+   * `rejections.payload` for what is really one abusive socket. Holds
+   * no resource of its own, so it needs no explicit cleanup — the
+   * entry is collected once the socket is.
+   */
+  const payloadRejected = new WeakSet<WebSocket>();
+  /**
    * Deduped cap-hit log keys. Capped so a flood cannot grow the set
    * without bound; after the cap, rejections still enforce + count —
    * they just stop logging. Mirrors the origin-rejection warn pattern.
@@ -204,26 +215,33 @@ export function attachSocketRouter(wss: WebSocketServer, deps: SocketRouterDeps)
     const sub = deps.subscribersByWs.get(ws);
     // Pre-subscribe per-frame payload cap. Bounds what a not-yet-
     // subscribed (unauthenticated / unregistered) socket can buffer per
-    // frame. Subscribed sockets are exempt — their `action` frames carry
-    // unbounded user form data and are governed only by the coarse
-    // ws-level `maxPayload` memory backstop, never this handshake-sized
-    // ceiling. Measured before JSON.parse so a giant frame is dropped
-    // without being interpreted.
-    if (
-      sub === undefined &&
-      caps.maxPayloadBytes > 0 &&
-      Buffer.byteLength(raw, "utf8") > caps.maxPayloadBytes
-    ) {
-      rejections.payload += 1;
-      warnCapOnce("render_channel_pre_subscribe_payload_rejected", {
-        limitBytes: caps.maxPayloadBytes,
-      });
-      try {
-        ws.close(1009, "pre_subscribe_payload_exceeded");
-      } catch {
-        /* best-effort: socket may already be closing */
+    // frame. Subscribed sockets are exempt — their `action` frames have
+    // no protocol-level max size and are governed only by the coarse,
+    // global ws-level `maxPayload` memory backstop (see
+    // DEFAULT_WS_MAX_PAYLOAD_BYTES for its sizing rationale), never this
+    // tight handshake-sized ceiling. Measured before JSON.parse so a
+    // giant frame is dropped without being interpreted.
+    if (sub === undefined && caps.maxPayloadBytes > 0) {
+      // Already closed this socket for this cap: a same-segment burst
+      // can still deliver more already-parsed frames before
+      // `ws.close()` settles the connection. Drop them silently — one
+      // abusive socket is one rejection, not one per queued frame.
+      if (payloadRejected.has(ws)) {
+        return;
       }
-      return;
+      if (Buffer.byteLength(raw, "utf8") > caps.maxPayloadBytes) {
+        payloadRejected.add(ws);
+        rejections.payload += 1;
+        warnCapOnce("render_channel_pre_subscribe_payload_rejected", {
+          limitBytes: caps.maxPayloadBytes,
+        });
+        try {
+          ws.close(1009, "pre_subscribe_payload_exceeded");
+        } catch {
+          /* best-effort: socket may already be closing */
+        }
+        return;
+      }
     }
     let message: WebSocketMessage;
     try {

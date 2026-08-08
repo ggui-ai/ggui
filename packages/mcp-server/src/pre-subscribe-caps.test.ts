@@ -25,6 +25,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { request as httpRequest } from "node:http";
 import { randomUUID } from "node:crypto";
 import { WebSocket, type RawData } from "ws";
+import type { WebSocketMessage } from "@ggui-ai/protocol/transport/websocket";
 import { createGguiServer, type CreateGguiServerOptions, type GguiServer } from "./server.js";
 import type { Logger } from "./logger.js";
 
@@ -102,16 +103,28 @@ function waitClose(ws: WebSocket, timeoutMs = 2000): Promise<number> {
   });
 }
 
-function nextFrame(ws: WebSocket, type: string, timeoutMs = 3000): Promise<Record<string, unknown>> {
+/**
+ * Wait for the next frame of the given `type` on `ws`. The frame comes
+ * off the wire as untyped JSON, so — mirroring the server's own
+ * decode-then-validate boundary in `socket-router.ts` — this parses it
+ * as the real wire union (`WebSocketMessage`) and confirms the `type`
+ * discriminator honestly at runtime before treating it as validated,
+ * rather than erasing its shape to `Record<string, unknown>`.
+ */
+function nextFrame<T extends WebSocketMessage["type"]>(
+  ws: WebSocket,
+  type: T,
+  timeoutMs = 3000
+): Promise<Extract<WebSocketMessage, { type: T }>> {
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => reject(new Error(`timed out waiting for '${type}' frame`)), timeoutMs);
     timer.unref?.();
     const onMsg = (raw: RawData): void => {
-      const parsed: unknown = JSON.parse(String(raw));
-      if (parsed !== null && typeof parsed === "object" && (parsed as { type?: unknown }).type === type) {
+      const parsed = JSON.parse(String(raw)) as WebSocketMessage;
+      if (parsed !== null && typeof parsed === "object" && parsed.type === type) {
         ws.off("message", onMsg);
         clearTimeout(timer);
-        resolve(parsed as Record<string, unknown>);
+        resolve(parsed as Extract<WebSocketMessage, { type: T }>);
       }
     };
     ws.on("message", onMsg);
@@ -157,6 +170,27 @@ describe("pre-subscribe payload cap", () => {
     const closed = waitClose(ws);
     // > 256 bytes, sent BEFORE any subscribe.
     ws.send(JSON.stringify({ type: "ping", requestId: "x".repeat(400) }));
+    expect(await closed).toBe(1009);
+    const health = await getHealth(port);
+    expect(health.channel?.caps?.preSubscribeRejections.payload).toBe(1);
+  });
+
+  it("counts a burst of oversized frames on one socket exactly once", async () => {
+    const { server, port } = await boot({
+      renderChannel: true,
+      wsMaxPreSubscribePayloadBytes: 256,
+      wsPreSubscribeIdleMs: 0,
+    });
+    const ws = connect(port, server);
+    await waitOpen(ws);
+    const closed = waitClose(ws);
+    // Fire several oversized frames back-to-back, with no await between
+    // sends, so they queue up client-side and are likely to land in the
+    // same TCP segment before the first `ws.close(1009)` settles the
+    // connection — reproducing one abusive socket sending a burst of
+    // already-buffered oversized frames.
+    const oversized = JSON.stringify({ type: "ping", requestId: "x".repeat(400) });
+    for (let i = 0; i < 5; i += 1) ws.send(oversized);
     expect(await closed).toBe(1009);
     const health = await getHealth(port);
     expect(health.channel?.caps?.preSubscribeRejections.payload).toBe(1);
@@ -241,7 +275,7 @@ describe("pre-subscribe connection ceiling", () => {
     subscribe(ws2);
     // ws2 now gets its own ack rather than a 1013 refusal.
     const ack = await nextFrame(ws2, "ack");
-    expect(ack["type"]).toBe("ack");
+    expect(ack.type).toBe("ack");
   });
 });
 
@@ -252,7 +286,7 @@ describe("fail-safe: defaults never trip on the honest path", () => {
     await waitOpen(ws);
     subscribe(ws);
     const ack = await nextFrame(ws, "ack");
-    expect(ack["type"]).toBe("ack");
+    expect(ack.type).toBe("ack");
     const pong = nextFrame(ws, "pong");
     ws.send(JSON.stringify({ type: "ping", requestId: "p" }));
     await pong;

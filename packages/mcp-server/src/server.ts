@@ -1998,19 +1998,25 @@ export interface CreateGguiServerOptions {
   readonly versionPolicy?: "advisory" | "reject";
 
   /**
-   * Live-channel pre-subscribe caps (ggui#444). Each bounds only what a
-   * NOT-YET-SUBSCRIBED (unauthenticated / unregistered) WebSocket can
+   * Live-channel WS caps (ggui#444). Three of the four bound only what
+   * a NOT-YET-SUBSCRIBED (unauthenticated / unregistered) WebSocket can
    * consume; a socket that has completed a valid subscribe is a
-   * legitimate long-lived subscriber and is exempt from all of them.
-   * Every cap is disable-able with `0` and ships a generous default so
-   * the zero-config quickstart + e2e journeys never trip. Forwarded
-   * verbatim to `createGguiSessionChannelServer`; only consulted when
-   * `renderChannel` is enabled.
+   * legitimate long-lived subscriber and is exempt from those three.
+   * The fourth, `wsMaxPayloadBytes`, is the exception: a global backstop
+   * applied to EVERY frame on EVERY socket, subscribed or not. Every
+   * cap is disable-able with `0`; the three pre-subscribe caps ship
+   * generous defaults so the zero-config quickstart + e2e journeys
+   * never trip. Forwarded verbatim to `createGguiSessionChannelServer`;
+   * only consulted when `renderChannel` is enabled.
    *
    *   - `wsMaxPayloadBytes` — coarse ws-level `maxPayload` memory
-   *     backstop for EVERY frame on EVERY socket (default 1 MiB, sized
-   *     so it never clips a legitimate post-subscribe `action` frame).
-   *     See `GguiSessionChannelOptions.maxPayloadBytes`.
+   *     backstop for EVERY frame on EVERY socket, INCLUDING subscribed
+   *     ones (default 1 MiB — a 100x reduction from the `ws` library's
+   *     own ~100 MiB default). `ActionEnvelope` has no protocol-level
+   *     max size, so this is a deliberately generous-but-finite
+   *     backstop, not a guarantee it never clips a legitimate frame;
+   *     raise it if legitimate `action` frames exceed the default. See
+   *     `GguiSessionChannelOptions.maxPayloadBytes`.
    *   - `wsMaxPreSubscribePayloadBytes` — tight per-frame ceiling for
    *     pre-subscribe frames only (default 64 KiB). See
    *     `GguiSessionChannelOptions.maxPreSubscribePayloadBytes`.
