@@ -42,7 +42,12 @@ comments.
 
 Boot the agent half first (`../../agents/with-guuey` — `guuey dev --serve`
 on **6790**, plus a ggui runtime MCP on **6781** via `ggui serve
---mcp-only`; see that README), then:
+--mcp-only --dev-allow-all`; see that README). `--dev-allow-all` is what
+admits this page's anonymous browser calls in dev — the guest `tools/call`
+relay and the locator `resources/read` both hit serve's `/mcp`, which is
+bearer-gated without the flag (both would 401 and the panel would only
+ever show its placeholder). `../../gguis/default`'s `npm run start`
+already carries it. Then:
 
 ```bash
 cd oss/samples/apps/with-guuey-web

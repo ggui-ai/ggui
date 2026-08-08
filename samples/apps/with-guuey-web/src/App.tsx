@@ -254,9 +254,13 @@ function foldCards(foldMessages: AgMessage[]): MountedCard[] {
  * `localStorage`. The CSP origin lists ride along because they are host
  * TRUST policy, not mount material: which origins the sandbox page may let
  * a ggui shell load from — learned from the live bootstrap at first mount
- * and stable per deployment. (A hosted platform persists the locator in its
- * thread store instead and configures the trusted origins statically; the
- * mechanics here are the same reader.)
+ * and stable per deployment. They are GGUI-CHANNEL trust specifically:
+ * mementos are scoped to `ui://ggui/` locators (`parseCardMemento`), and
+ * the sandbox applies the lists only while the resolved material is the
+ * ggui channel — never over a mount the reader classified `inline`. (A
+ * hosted platform persists the locator in its thread store instead and
+ * configures the trusted origins statically; the mechanics here are the
+ * same reader.)
  */
 interface CardMemento {
   /** The persisted `ui://` locator — the render's durable identity. */
@@ -275,7 +279,10 @@ function isStringArray(value: unknown): value is string[] {
 
 /** Structural gate for a stored memento — a corrupt or foreign entry reads
  *  as "no memento" (the same posture as a reader miss: placeholder, never
- *  an error surface). */
+ *  an error surface). The locator must be `ui://ggui/` specifically, not
+ *  just `ui://`: the memento's CSP is GGUI-CHANNEL trust, and the reader
+ *  classifies any other uri as the `inline` channel — arbitrary tenant
+ *  HTML that must never mount in a page whose CSP names these origins. */
 function parseCardMemento(raw: string): CardMemento | undefined {
   let parsed: unknown;
   try {
@@ -285,7 +292,7 @@ function parseCardMemento(raw: string): CardMemento | undefined {
   }
   if (typeof parsed !== 'object' || parsed === null) return undefined;
   if (!('resourceUri' in parsed) || typeof parsed.resourceUri !== 'string') return undefined;
-  if (!parsed.resourceUri.startsWith('ui://')) return undefined;
+  if (!parsed.resourceUri.startsWith('ui://ggui/')) return undefined;
   if (!('toolName' in parsed) || typeof parsed.toolName !== 'string') return undefined;
   if (!('csp' in parsed) || typeof parsed.csp !== 'object' || parsed.csp === null) {
     return undefined;
@@ -427,15 +434,27 @@ export function App(): JSX.Element {
   // `top`'s identity: fingerprint the CSP origin lists into primitives (URL
   // origins cannot contain spaces) and rebuild the object only when the
   // card or its CSP values actually change.
+  //
+  // Applied trust follows the RESOLVED channel: the CSP exceptions mount
+  // ONLY when the material actually on screen is the ggui channel. The
+  // package derives a mount's channel from the uri it resolved (never from
+  // the response), and this host must not override that decision — carried
+  // csp on any non-ggui material is dropped, not applied.
   const topKey = top?.key;
   const topResourceOrigins = top?.csp?.resourceDomains.join(' ');
   const topConnectOrigins = top?.csp?.connectDomains.join(' ');
+  const materialChannel = material?.channel;
   const sandbox = useMemo(() => {
     if (topKey === undefined) return undefined;
     const url = new URL(SANDBOX_URL);
     // Both origin lists are set together (ggui channel) or not at all
-    // (inline card) — see MountedCard.csp.
-    if (topResourceOrigins === undefined || topConnectOrigins === undefined) {
+    // (inline card) — see MountedCard.csp. And they apply only when the
+    // resolved material IS the ggui channel (see the note above).
+    if (
+      materialChannel !== 'ggui' ||
+      topResourceOrigins === undefined ||
+      topConnectOrigins === undefined
+    ) {
       return { url };
     }
     return {
@@ -445,7 +464,7 @@ export function App(): JSX.Element {
         connectDomains: topConnectOrigins.length > 0 ? topConnectOrigins.split(' ') : [],
       },
     };
-  }, [topKey, topResourceOrigins, topConnectOrigins]);
+  }, [topKey, topResourceOrigins, topConnectOrigins, materialChannel]);
 
   const statusLabel =
     status === 'using-tool' && activeTool !== null ? `using tool: ${activeTool}` : status;
