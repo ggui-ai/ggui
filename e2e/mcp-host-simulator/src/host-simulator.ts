@@ -604,10 +604,12 @@ export class HostSimulator {
       openTimeoutMs?: number;
       /**
        * Resume cursor for live-channel outbound stream replay — mirrors
-       * `SubscribePayload.fromSeq`. Omit for a fresh subscribe (no
-       * replay, live tail only); pass `0` to replay everything the
-       * server still retains, or a specific seq to resume from
-       * `seq > fromSeq`.
+       * `SubscribePayload.fromSeq`. Omit for a fresh subscribe: the
+       * server still replays reserved channels (`_ggui:lifecycle`,
+       * `_ggui:preview`) that landed before attach, but declared
+       * `streamSpec` channels get nothing — pass `0` to also replay
+       * everything the server still retains for those, or a specific
+       * seq to resume from `seq > fromSeq`.
        */
       fromSeq?: number;
     } = {}

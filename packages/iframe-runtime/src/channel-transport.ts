@@ -177,10 +177,10 @@ export interface ChannelTransportRouterOptions {
 /**
  * Observability events the router emits. Hosts that wire `onObserve`
  * see these alongside the renderer's other observability events
- * (`subscribe-failed`, `schema-version-mismatch`, …). The arm interfaces live in
- * `observability.ts` (they are members of the exported
- * `ObservabilityEvent` union); this alias is the router-scoped subset,
- * so the two surfaces cannot drift.
+ * (`subscribe-failed`, `schema-version-mismatch`, …). The arm
+ * interfaces live in `observability.ts` (they are members of the
+ * exported `ObservabilityEvent` union); this alias is the
+ * router-scoped subset, so the two surfaces cannot drift.
  */
 export type ChannelTransportEvent =
   | ChannelTransportPickedEvent

@@ -285,13 +285,16 @@ export interface StreamEnvelope {
    *     `SubscribePayload.fromSeq`);
    *   - dedupe deliveries (at-least-once semantics).
    *
-   * OPTIONAL because the buffer seam itself is optional: any
-   * implementation backed by a `GguiSessionStreamBuffer` stamps it on
-   * every outbound delivery — OSS `@ggui-ai/mcp-server` (in-memory)
-   * and hosted cloud (Redis-backed) both do, through the same
-   * record-then-broadcast path. A deployment that binds no buffer
-   * emits deliveries without `seq`; clients treat those as single-shot
-   * with no replay possible.
+   * OPTIONAL because stamping is best-effort on two levels: the buffer
+   * seam itself is optional, and even a bound buffer only stamps on
+   * success. Any implementation backed by a `GguiSessionStreamBuffer`
+   * — OSS `@ggui-ai/mcp-server` (in-memory) and hosted cloud
+   * (Redis-backed) alike — stamps `seq` on every successfully
+   * buffered delivery through the same record-then-broadcast path,
+   * but a delivery whose buffer record fails degrades to unstamped
+   * rather than blocking the emit. A deployment that binds no buffer
+   * at all emits every delivery without `seq`. Clients treat any
+   * unstamped delivery as single-shot with no replay possible.
    */
   seq?: number;
   /**
