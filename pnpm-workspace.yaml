@@ -165,6 +165,11 @@ overrides:
   # exactly the breakage this file exists to avoid.
   "adm-zip@<0.6.0": ^0.6.0
   "immutable@<3.8.3": ^3.8.3
+  # Exact-pinned SAME as root (ggui#430): @guuey/threads 0.3.0
+  # exact-pins @guuey/mcp-apps-host 0.3.0 while the guuey-interop suite
+  # pins 0.3.1 (additive release) — force ONE dispatcher copy per tree,
+  # and the same one in both trees.
+  "@guuey/mcp-apps-host": 0.3.1
   # BEGIN oss-lock-sync generated pins — do not hand-edit (scripts/oss-lock-sync.mjs, #420)
   "@a2a-js/sdk": 0.3.14
   "@adobe/css-tools": 4.5.0
@@ -203,7 +208,6 @@ overrides:
   "@babel/runtime@^7": 7.29.7
   "@babel/runtime@^8": 8.0.0
   "@google-cloud/storage": 7.21.0
-  "@guuey/agent-client": 0.3.0
   "@guuey/threads": 0.3.0
   "@hono/node-server": 2.1.0
   "@huggingface/jinja": 0.5.9

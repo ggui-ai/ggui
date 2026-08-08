@@ -14,8 +14,9 @@
  *   - persistence is `@guuey/threads`' `ThreadStore` over
  *     `InMemoryThreadPersistence` — the verbatim-extracted hosted-pod
  *     logic (guuey#107), including the card projection (guuey#86);
- *   - mounting is `@guuey/mcp-apps-host`'s both-channel dispatcher
- *     (`toolResultViewMount` / `snapshotViewMount`).
+ *   - mounting is `@guuey/mcp-apps-host`'s three-channel dispatcher
+ *     (`toolResultViewMount` / `snapshotViewMount` — inline, ggui,
+ *     locator).
  *
  * Matrix (issue #429):
  *   1. live mount — ggui tool-result → fold → `toolResultViewMount`,
@@ -263,8 +264,13 @@ describe('matrix 1 — live ggui render mounts through guuey narrowing', () => {
 
     // The mounted shell inlines the slice envelope — parse it back out
     // and compare VERBATIM against ggui's own host-helper narrowing of
-    // the SAME wire result (ggui#427). Both sides must agree on every
-    // byte of the slice: guuey's copy and ggui's export cannot drift.
+    // the SAME wire result (ggui#427). Since 0.3.x guuey ships NO copy
+    // of the helpers — @guuey/mcp-apps-host re-exports them from the
+    // PUBLISHED @ggui-ai/protocol@0.6.3 pinned beneath it, while the
+    // `toolResultGguiRender` imported here resolves workspace HEAD. So
+    // byte-equality now detects ggui-HEAD-vs-published-pin drift: if
+    // HEAD's slice projection moves ahead of what guuey actually pins,
+    // it fails HERE, before it fails in guuey's host.
     const bootstrap = toolResultGguiRender(result);
     expect(bootstrap).toBeDefined();
     const envelope = shellEnvelope(mount.resource.text ?? '');
@@ -420,7 +426,9 @@ describe('matrix 4 — persisted ggui renders are honest locator placeholders, n
     // not re-asserted here.)
 
     // (a) the card projection emits exactly one artifact row for the
-    // render, carrying the durable ui:// identity and no content payload.
+    // render, carrying the durable ui:// identity. (The `content` check
+    // only proves the projection ADDS nothing of its own — the harness
+    // folds an empty tool.done content in to begin with.)
     const projected = uiCardArtifactsFromMessages(fold.messages);
     expect(projected).toHaveLength(1);
     const part = projected[0]!.parts.find(
@@ -437,7 +445,14 @@ describe('matrix 4 — persisted ggui renders are honest locator placeholders, n
     expect(resourceUri).toMatch(/^ui:\/\/ggui\/render\//);
 
     // (b) the `_meta` strip — "wsToken never persists": no `_meta` key
-    // survives anywhere in the persisted card row.
+    // survives anywhere in ANY persisted row (a strip that held on the
+    // card lane but lapsed on the message lane would still leak), and
+    // the live wsToken string appears in no persistence lane at all —
+    // the string scan is the belt to the key-walk's suspenders.
+    const bootstrap = toolResultGguiRender(result);
+    expect(bootstrap).toBeDefined();
+    const wsToken = bootstrap!.slice.wsToken;
+    expect(typeof wsToken).toBe('string');
     const db = new InMemoryThreadPersistence();
     const store = new ThreadStore(db);
     const threadId = await store.ensureThread({
@@ -455,7 +470,8 @@ describe('matrix 4 — persisted ggui renders are honest locator placeholders, n
     const cardRows = rows.filter((r) => r.kind === 'card' && r.cardSnapshot !== undefined);
     expect(cardRows).toHaveLength(1);
     const cardRow = cardRows[0]!;
-    expect(collectKeys(cardRow).has('_meta')).toBe(false);
+    expect(collectKeys(rows).has('_meta')).toBe(false);
+    expect(JSON.stringify(rows)).not.toContain(String(wsToken));
 
     // (c) "never a stale wsToken mount": the snapshot mounts as the
     // locator arm, which by construction (the 0.3.1 named LocatorViewMount
@@ -468,6 +484,9 @@ describe('matrix 4 — persisted ggui renders are honest locator placeholders, n
       throw new Error('expected the locator arm');
     }
     const locator: LocatorViewMount = mount;
+    // The named arm carries the locator and NOTHING else — no resource,
+    // no bootstrap, enforced on the actual runtime object.
+    expect(Object.keys(locator).sort()).toEqual(['channel', 'resourceUri']);
     expect(locator.resourceUri).toBe(resourceUri);
   });
 });
