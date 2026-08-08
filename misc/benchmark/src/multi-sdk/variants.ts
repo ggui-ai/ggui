@@ -35,7 +35,9 @@ export function getDefaultVariants(): BenchmarkVariant[] {
       id: 'openai-fast',
       sdkName: 'openai',
       tier: 'fast',
-      modelId: 'openai/gpt-5.4-nano',
+      // Fast-tier refresh (Exp 52a follow-up, 2026-08-08): luna replaces
+      // the retired-from-rotation 5.4-nano as the openai fast SKU.
+      modelId: 'openai/gpt-5.6-luna',
     },
     {
       id: 'openai-balanced',
@@ -56,8 +58,9 @@ export function getDefaultVariants(): BenchmarkVariant[] {
       sdkName: 'google',
       tier: 'fast',
       // Canonical google fast floor — priced in MODEL_REGISTRY, cheaper
-      // than gemini-3-flash-preview.
-      modelId: 'gemini/gemini-3.1-flash-lite',
+      // than gemini-3-flash-preview. Fast-tier refresh (2026-08-08):
+      // 3.5-flash-lite replaces 3.1.
+      modelId: 'gemini/gemini-3.5-flash-lite',
     },
     {
       id: 'google-balanced',
