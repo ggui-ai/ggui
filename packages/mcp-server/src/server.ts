@@ -58,6 +58,7 @@ import type {
   PendingEventConsumer,
   ProviderKeyStore,
   RateLimiter,
+  RenderIdentityStore,
   GguiSessionStore,
   GguiSessionStreamBuffer,
   ShortCodeIndex,
@@ -548,6 +549,15 @@ export function defaultHandlers(deps: {
      * enabled.
      */
     readonly shortCodeIndex?: ShortCodeIndex;
+    /**
+     * Optional durable render-identity side store. When present, every
+     * `ggui_render` commit also records the identity a
+     * `ui://ggui/render/{sessionId}/{contractKey}` locator needs to
+     * re-create the render after the render row is gone. Writes are
+     * best-effort — they never block or fail a render. Absent = the
+     * deployment's render rows are themselves durable enough.
+     */
+    readonly renderIdentityStore?: RenderIdentityStore;
     /**
      * Optional provisional-preview wiring. When present, `ggui_render`
      * kicks off the configured emitter on every qualifying render (the
@@ -1228,6 +1238,9 @@ export function defaultHandlers(deps: {
           : {}),
         ...(deps.render.rateLimiter ? { rateLimiter: deps.render.rateLimiter } : {}),
         ...(deps.render.shortCodeIndex ? { shortCodeIndex: deps.render.shortCodeIndex } : {}),
+        ...(deps.render.renderIdentityStore
+          ? { renderIdentityStore: deps.render.renderIdentityStore }
+          : {}),
         ...(deps.render.provisionalPreview
           ? { provisionalPreview: deps.render.provisionalPreview }
           : {}),
@@ -2654,6 +2667,22 @@ export interface CreateGguiServerOptions {
   readonly shortCodeIndex?: ShortCodeIndex;
 
   /**
+   * Durable side record of what each render WAS — its `blueprintId`,
+   * `contractKey`, `variantKey`, props, and event sequence at the last
+   * commit. `ggui_render` writes it at every commit; the record is what
+   * lets a `ui://ggui/render/{sessionId}/{contractKey}` locator
+   * re-create the render once the render row itself has aged out.
+   *
+   * Optional, and inert until something reads it: writes are
+   * best-effort (a rejecting store logs and the render proceeds), and
+   * with no store bound nothing is written and every read path behaves
+   * exactly as before. Deployments whose GguiSessionStore is already
+   * durable enough to outlive the renders it holds do not need one —
+   * the row still carries everything.
+   */
+  readonly renderIdentityStore?: RenderIdentityStore;
+
+  /**
    * Content-addressable code blob storage. When wired, this server
    * mounts `GET /code/<hash>.js` for the iframe runtime to fetch
    * compiled componentCode by content hash. The render handler writes
@@ -3775,6 +3804,12 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
               // index. Absent = hosted cloud (DDB side-table) / no
               // console consumer.
               ...(opts.shortCodeIndex ? { shortCodeIndex: opts.shortCodeIndex } : {}),
+              // Durable render-identity side record. Same opt-in
+              // posture: absent = no records written, every read path
+              // unchanged.
+              ...(opts.renderIdentityStore
+                ? { renderIdentityStore: opts.renderIdentityStore }
+                : {}),
               // Provisional A2UI preview. When `opts.provisionalPreview.enabled`
               // flipped on above, the deps object owns
               // `sendEnvelope` (late-bound to the live channel) +

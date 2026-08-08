@@ -72,8 +72,10 @@ import type {
   PendingEventConsumer,
   ProviderKeyRef,
   RateLimiter,
+  RenderIdentityStore,
   GguiSessionStore,
   ShortCodeIndex,
+  StoredGguiSession,
   UiGenerateInput,
   UiGenerator,
 } from '@ggui-ai/mcp-server-core';
@@ -102,6 +104,10 @@ import type {
   GenerationCacheHit,
 } from './generation-cache.js';
 import { assertNoDuplicateGadgetHooks } from './assert-no-duplicate-gadget-hooks.js';
+import {
+  backfillRenderIdentityBlueprintId,
+  writeRenderIdentity,
+} from './render-identity.js';
 import type { InstalledBlueprintsProvider } from './installed-blueprints-provider.js';
 import type { BlueprintPool } from './decide-handshake.js';
 import {
@@ -480,6 +486,25 @@ export interface GguiRenderHandlerDeps extends RenderSliceMetaDeps {
    * just aren't available.
    */
   readonly shortCodeIndex?: ShortCodeIndex;
+
+  /**
+   * Durable render-identity side store. When present, every render
+   * commit also writes the record that lets a
+   * `ui://ggui/render/{sessionId}/{contractKey}` locator re-create the
+   * render after the render row is gone — the identity
+   * (`blueprintId`, `contractKey`, `variantKey`) plus the props and
+   * event sequence at that commit.
+   *
+   * Writes are best-effort and never block or fail a render: the
+   * committed row is the source of truth, and this record is a
+   * durability optimization layered on it. A rejecting store logs
+   * `render_identity_write_failed` and the render returns normally.
+   *
+   * Absence of this dep is the "the render row itself is durable"
+   * signal — a deployment whose GguiSessionStore outlives the renders it
+   * holds already has everything a re-mint needs on the row.
+   */
+  readonly renderIdentityStore?: RenderIdentityStore;
 
   /**
    * Handshake record store. When bound, the handler accepts the
@@ -1077,6 +1102,30 @@ export function createGguiRenderHandler(
       // key on it, so reuse / registration stay on the same identity.
       const effectiveVariantKey = variantKey(effectiveVariance);
 
+      // Contract axis of that same reuse key. Pure over the effective
+      // contract, so it is computed ONCE here and read everywhere:
+      // the §6 exact re-resolution, the wire `contractHash` field, the
+      // resource-URI segment, and the durable identity record every
+      // commit site writes. Hoisted to handler scope because the
+      // identity write-through happens at commit time — well before
+      // the wire output is assembled.
+      const effectiveContractKey = blueprintKey(effectiveContract);
+
+      // Bind the identity slice a commit will record. The blueprint id
+      // is per-path (a reuse knows it up front; a cold gen mints it
+      // only after registration, so it commits `null` and backfills),
+      // which is why it is a parameter and the contract/variant axes
+      // are captured.
+      const identityWriterFor = (
+        blueprintId: string | null,
+      ): ((committed: StoredGguiSession) => Promise<void>) =>
+        (committed) =>
+          writeRenderIdentity(deps.renderIdentityStore, committed, {
+            blueprintId,
+            contractKey: effectiveContractKey,
+            variantKey: effectiveVariantKey,
+          });
+
       // Resolved gadget catalog, lifted to handler scope. When
       // `appMetadataStore` is bound, the registry-membership block
       // below captures the catalog (App record's `gadgets`, or
@@ -1407,12 +1456,16 @@ export function createGguiRenderHandler(
           eventSequence: 0,
         };
         try {
-          await deps.renderStore.commit({
+          const committed = await deps.renderStore.commit({
             render: placeholder,
             appId: ctx.appId,
             userId: ctx.userId, // per-user isolation (undefined for non-federated single-user)
           });
           placeholderCommitted = true;
+          // The placeholder is a real row a locator can address, so it
+          // gets a record too — the later in-place replacement
+          // overwrites it with the settled identity.
+          await identityWriterFor(null)(committed);
         } catch {
           // Defensive — a placeholder-commit failure is not fatal to
           // the render. The sessionId + shortCode are already minted;
@@ -1474,13 +1527,14 @@ export function createGguiRenderHandler(
           props: { intent: story.intent },
         };
         try {
-          await deps.renderStore.commit({
+          const committed = await deps.renderStore.commit({
             render: probeRender,
             appId: ctx.appId,
             userId: ctx.userId, // per-user isolation (undefined for non-federated single-user)
           });
           safelyNotifyGguiSessionCommit(deps.channelNotifier, sessionId, probeRender);
           generatedCodeReady = true;
+          await identityWriterFor(null)(committed);
         } catch {
           // Commit failure leaves codeReady=false; downstream synth
           // emits an empty bootstrap which the runtime renders as the
@@ -1624,7 +1678,7 @@ export function createGguiRenderHandler(
           // component for that exact variant if one exists (per-app first,
           // then seed pools — see fan-out comment above).
           const bp = await findExactAcrossPools(
-            blueprintKey(effectiveContract),
+            effectiveContractKey,
             effectiveVariantKey,
           );
           if (bp) {
@@ -1639,6 +1693,12 @@ export function createGguiRenderHandler(
         }
 
         if (blueprintHit) {
+          // Reuse → the stored UUID is the materialised component id.
+          // `cache.cachedBlueprintId === blueprintId` on a hit (§9.3).
+          // Resolved BEFORE the commit so the identity record written
+          // at that commit already carries the id (no backfill needed
+          // on this path).
+          resolvedBlueprintId = blueprintHit.id;
           generatedCodeReady = await commitCachedGguiSession(
             deps.renderStore,
             deps.provisionalPreview,
@@ -1650,6 +1710,7 @@ export function createGguiRenderHandler(
               appId: ctx.appId,
               userId: ctx.userId, // per-user isolation (undefined for non-federated single-user)
               story,
+              writeIdentity: identityWriterFor(blueprintHit.id),
               cacheHit: {
                 cachedBlueprintId: blueprintHit.id,
                 similarity: blueprintHit.cosine,
@@ -1713,9 +1774,6 @@ export function createGguiRenderHandler(
             kind: 'full-template',
             reason: `full-template: reused stored blueprint ${blueprintHit.id}; 1 generation call avoided`,
           };
-          // Reuse → the stored UUID is the materialised component id.
-          // `cache.cachedBlueprintId === blueprintId` on a hit (§9.3).
-          resolvedBlueprintId = blueprintHit.id;
         } else {
           // The `.d.ts` fetch is deferred to HERE — the cold-gen
           // branch — not done eagerly after the registry gate. On a
@@ -1741,6 +1799,10 @@ export function createGguiRenderHandler(
               ctx,
               sessionId,
               story,
+              // Cold gen commits BEFORE registration mints an id, so
+              // every commit inside this call records `null` and the
+              // backfill below sets the resolved id.
+              writeIdentity: identityWriterFor(null),
               ...(runtimeProps !== undefined
                 ? { runtimeProps: runtimeProps as JsonObject }
                 : {}),
@@ -1807,6 +1869,17 @@ export function createGguiRenderHandler(
                 },
               );
               resolvedBlueprintId = registered;
+              // Close the cold-gen gap: the record written at commit
+              // time carries `blueprintId: null` because the id did
+              // not exist yet. This is the single writer at this
+              // point, so a plain read-modify-write is enough.
+              if (registered !== undefined) {
+                await backfillRenderIdentityBlueprintId(
+                  deps.renderIdentityStore,
+                  { sessionId, appId: ctx.appId },
+                  registered,
+                );
+              }
             }
           }
         }
@@ -1845,11 +1918,12 @@ export function createGguiRenderHandler(
           eventSequence: 0,
         };
         try {
-          await deps.renderStore.commit({
+          const committed = await deps.renderStore.commit({
             render: placeholder,
             appId: ctx.appId,
             userId: ctx.userId, // per-user isolation (undefined for non-federated single-user)
           });
+          await identityWriterFor(null)(committed);
         } catch {
           // Defensive, matching the provisional-preview placeholder
           // above: a failed commit leaves the pre-#365 behavior
@@ -1919,11 +1993,16 @@ export function createGguiRenderHandler(
             top.type !== 'system'
           ) {
             const overlaid: ComponentGguiSession = { ...top, themeId: parsed.themeId };
-            await deps.renderStore.commit({
+            const committed = await deps.renderStore.commit({
               render: overlaid,
               appId: ctx.appId,
               userId: ctx.userId, // per-user isolation (undefined for non-federated single-user)
             });
+            // Last commit of the render when a theme override is in
+            // play, and every reuse / cold-gen path has settled by
+            // here — so this write carries the final blueprint id
+            // rather than re-running the cold-gen backfill.
+            await identityWriterFor(resolvedBlueprintId ?? null)(committed);
           }
         } catch (err) {
           // eslint-disable-next-line no-console -- one-shot warn, no logger dep on render handler today
@@ -1933,15 +2012,6 @@ export function createGguiRenderHandler(
           );
         }
       }
-
-      // Canonical-key of the resolved contract. Surface on output so
-      // downstream consumers (resultMeta builder, cache trace,
-      // resource URI minter) read from a single computed value
-      // instead of recomputing against the same canonicalization.
-      // This is the same hash the handshake returned as
-      // `contractHash`. The variant axis pairs with this on the wire
-      // output via `effectiveVariantKey` (computed once up top).
-      const resolvedContractHash = blueprintKey(effectiveContract);
 
       // ── Failure envelope (SPEC §7.1) ──────────────────────────────
       //
@@ -1965,7 +2035,7 @@ export function createGguiRenderHandler(
           shortCode,
           codeReady: false,
           handshakeId: handshakeRecord.handshakeId,
-          contractHash: resolvedContractHash,
+          contractHash: effectiveContractKey,
           // Present-on-materialisation (§9.1): no component
           // materialised, so the id is the empty sentinel.
           blueprintId: '',
@@ -1988,7 +2058,7 @@ export function createGguiRenderHandler(
             ctx,
             sessionId,
             contract: effectiveContract,
-            contractHash: resolvedContractHash,
+            contractHash: effectiveContractKey,
             intent: story.intent,
             action,
             codeReady: false,
@@ -2030,8 +2100,8 @@ export function createGguiRenderHandler(
       // structuredContent too lets agent SDKs that strip `_meta` from
       // tool_results (OpenAI Agents SDK, Google ADK) still hand a
       // mount handle to their frontend without the side-channel.
-      const blueprintSegmentForOutput = resolvedContractHash
-        ? `/${resolvedContractHash}`
+      const blueprintSegmentForOutput = effectiveContractKey
+        ? `/${effectiveContractKey}`
         : '';
       const resourceUriForOutput = `${GGUI_RENDER_UI_META.resourceUri}/${sessionId}${blueprintSegmentForOutput}`;
       const result: RenderOutput = {
@@ -2041,7 +2111,7 @@ export function createGguiRenderHandler(
         shortCode,
         codeReady: generatedCodeReady,
         handshakeId: handshakeRecord.handshakeId,
-        contractHash: resolvedContractHash,
+        contractHash: effectiveContractKey,
         // Reuse → stored UUID (§6 point-read); cold-gen → minted UUID
         // (`safelyRegisterBlueprint`). Empty only on the
         // genuinely-no-component branches (probe-card / generation-off),
@@ -2068,7 +2138,7 @@ export function createGguiRenderHandler(
           ctx,
           sessionId,
           contract: effectiveContract,
-          contractHash: resolvedContractHash,
+          contractHash: effectiveContractKey,
           intent: story.intent,
           action,
           codeReady: generatedCodeReady,
@@ -2303,6 +2373,18 @@ export function createGguiRenderHandler(
 const DEFAULT_RENDER_TTL_MS = 60 * 60 * 1000;
 
 /**
+ * Record the durable identity of a render the caller just committed.
+ *
+ * The commit helpers below know WHAT they persisted but not WHICH
+ * blueprint / contract / variant identity it carries, so the handler
+ * binds those and hands down this closure. Total by contract — see
+ * `./render-identity.ts`; a helper can await it without a guard.
+ */
+type RenderIdentityWriter = (
+  committed: StoredGguiSession,
+) => Promise<void>;
+
+/**
  * Invoke the bound {@link UiGenerator} for a story-path render and
  * commit the resulting {@link ComponentGguiSession}. Returns `true` when
  * real componentCode landed; `false` when no credentials were
@@ -2389,6 +2471,9 @@ async function runGenerationIntoGguiSession(
       readonly contract?: DataContract;
       readonly variance?: BlueprintVariance;
     };
+    /** Identity write-through for every commit this call makes —
+     *  the success render and each of its failure renders. */
+    readonly writeIdentity: RenderIdentityWriter;
     /** Runtime prop values for THIS render. Validated against
      *  `story.contract.props` (propsSpec) by the upstream caller
      *  before this function runs. */
@@ -2457,6 +2542,7 @@ async function runGenerationIntoGguiSession(
         story,
         nowIso,
         nowEpochMs,
+        writeIdentity: args.writeIdentity,
         message:
           err instanceof Error
             ? `generator threw: ${err.message}`
@@ -2479,6 +2565,7 @@ async function runGenerationIntoGguiSession(
         story,
         nowIso,
         nowEpochMs,
+        writeIdentity: args.writeIdentity,
         message:
           err instanceof Error
             ? `credential resolution failed: ${err.message}`
@@ -2512,6 +2599,7 @@ async function runGenerationIntoGguiSession(
               userId: ctx.userId, // per-user isolation (undefined for non-federated single-user)
               nowIso,
               render: fallback,
+              writeIdentity: args.writeIdentity,
             },
           );
         }
@@ -2523,6 +2611,7 @@ async function runGenerationIntoGguiSession(
         story,
         nowIso,
         nowEpochMs,
+        writeIdentity: args.writeIdentity,
         message:
           'no credentials available for the configured generation provider (expected env var or ~/.ggui/credentials.json entry)',
         code: 'NO_CREDENTIALS',
@@ -2545,6 +2634,7 @@ async function runGenerationIntoGguiSession(
         story,
         nowIso,
         nowEpochMs,
+        writeIdentity: args.writeIdentity,
         message:
           err instanceof Error
             ? `generator threw: ${err.message}`
@@ -2564,6 +2654,7 @@ async function runGenerationIntoGguiSession(
       story,
       nowIso,
       nowEpochMs,
+      writeIdentity: args.writeIdentity,
       message: result.error.message,
       // Canonical projection — cloud seam codes (VALIDATION_ERROR /
       // NO_PLATFORM_KEY / PRODUCTION_FAILED) map through 1:1;
@@ -2630,11 +2721,12 @@ async function runGenerationIntoGguiSession(
     }
   }
   try {
-    await renderStore.commit({
+    const committed = await renderStore.commit({
       render: componentRender,
       appId: ctx.appId,
       userId: ctx.userId, // per-user isolation (undefined for non-federated single-user)
     });
+    await args.writeIdentity(committed);
   } catch {
     await safelyFinalizePreview(previewDeps, sessionId, 'commit-failed');
     return {
@@ -2690,17 +2782,20 @@ async function commitNoCredentialsCardGguiSession(
     readonly userId?: string;
     readonly nowIso: string;
     readonly render: GguiSession;
+    /** Identity write-through for the card commit. */
+    readonly writeIdentity: RenderIdentityWriter;
   },
 ): Promise<GenerationRunOutcome> {
   const render: GguiSession = { ...args.render, id: args.sessionId } as GguiSession;
   let committed = false;
   try {
-    await renderStore.commit({
+    const stored = await renderStore.commit({
       render,
       appId: args.appId,
       userId: args.userId,
     });
     committed = true;
+    await args.writeIdentity(stored);
   } catch {
     // Commit rejected — preview teardown is the only honest recovery;
     // the render store is otherwise unchanged.
@@ -2765,6 +2860,9 @@ async function commitErrorGguiSession(
      * observationally identical to a theme-projection bug downstream.
      */
     readonly appTheme?: AppTheme;
+    /** Identity write-through for the error-render commit. An error
+     *  render is still an addressable row, so it still gets a record. */
+    readonly writeIdentity: RenderIdentityWriter;
   },
 ): Promise<GenerationRunOutcome> {
   const errorRender: ComponentGguiSession = {
@@ -2783,12 +2881,13 @@ async function commitErrorGguiSession(
   };
   let committed = false;
   try {
-    await renderStore.commit({
+    const stored = await renderStore.commit({
       render: errorRender,
       appId: args.appId,
       userId: args.userId,
     });
     committed = true;
+    await args.writeIdentity(stored);
   } catch {
     // Secondary failure — render store rejected the error record.
     // Nothing meaningful to do; preserve render channel integrity by
@@ -2913,6 +3012,8 @@ async function commitCachedGguiSession(
      * derivation surfaces it on the render slice.
      */
     readonly appTheme?: AppTheme;
+    /** Identity write-through for the cache-hit commit. */
+    readonly writeIdentity: RenderIdentityWriter;
   },
 ): Promise<boolean> {
   const nowEpochMs = Date.now();
@@ -2969,11 +3070,12 @@ async function commitCachedGguiSession(
     }
   }
   try {
-    await renderStore.commit({
+    const committed = await renderStore.commit({
       render: componentRender,
       appId: args.appId,
       userId: args.userId,
     });
+    await args.writeIdentity(committed);
   } catch {
     await safelyFinalizePreview(previewDeps, args.sessionId, 'commit-failed');
     return false;
