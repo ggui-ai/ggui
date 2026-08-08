@@ -68,6 +68,8 @@ export type {
   ChannelTransportPickedEvent,
   ChannelTransportFallbackEvent,
   ChannelTransportResubscribedEvent,
+  ChannelPollDegradedEvent,
+  ChannelPollRecoveredEvent,
   UiFeedbackEvent,
   RelayIncapabilityEvent,
   UnknownObservabilityEvent,

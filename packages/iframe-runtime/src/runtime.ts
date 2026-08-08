@@ -73,6 +73,7 @@ import {
   createChannelTransportRouter,
   type ChannelTransportRouter,
 } from './channel-transport.js';
+import { RelayIncapableError } from './relay-incapability.js';
 import { ChannelRegistry } from '@ggui-ai/live-channel';
 import {
   createChannelErrorHandler,
@@ -1901,7 +1902,11 @@ type ToastKind =
   | 'fallback' // legacy auto-dismissing fallback toast
   | 'action_required' // A8 — persistent "press send in chat to forward"
   | 'error';
-function showActionToast(text: string, kind: ToastKind): void {
+function showActionToast(
+  text: string,
+  kind: ToastKind,
+  onDismiss?: () => void,
+): void {
   if (typeof document === 'undefined') return;
   const w = window as unknown as { __GGUI_TOAST_DISABLED__?: boolean };
   if (w.__GGUI_TOAST_DISABLED__) return;
@@ -1954,12 +1959,17 @@ function showActionToast(text: string, kind: ToastKind): void {
   // but the user must press send for it to reach the agent. So the
   // toast can't auto-dismiss; doing so would imply the gesture went
   // through when it actually requires a user follow-up.
+  //
+  // `onDismiss` fires on that click — the only signal a caller gets
+  // that the user has read and closed a persistent notice. The relay
+  // notice uses it to arm the post-dismissal cue (ggui#442).
   if (kind === 'action_required') {
     el.onclick = () => {
       if (!el) return;
       el.style.opacity = '0';
       el.style.transform = 'translateX(-50%) translateY(8px)';
       el.onclick = null;
+      onDismiss?.();
     };
   } else {
     el.onclick = null;
@@ -2150,9 +2160,143 @@ function emitUserActionDoorbell(args: {
  */
 let relayIncapabilityAnnounced = false;
 
+/**
+ * Whether the user has manually dismissed the CURRENTLY-STANDING relay
+ * notice (ggui#442).
+ *
+ * "Dismissed the one explanation" is not "wants zero feedback forever",
+ * but it IS consent that the explanation itself has been read. So the
+ * dead zone this opens is filled with a per-gesture CUE, never with the
+ * notice again.
+ *
+ * Scoped to the notice, not to toasts in general: the doorbell's
+ * `action_required` toast is a different message with a different
+ * dismissal meaning, so the flag is set from the relay notice's own
+ * `onDismiss` callback rather than from `showActionToast` at large.
+ *
+ * Reset on BOTH latch edges — a re-latch shows a fresh notice nobody
+ * has dismissed yet, and a self-heal must leave no residue behind.
+ */
+let relayNoticeDismissed = false;
+
+/**
+ * Timestamp of the last fallback cue toast, for the throttle below.
+ * Reset alongside the latch so a new dead zone never inherits an old
+ * one's quiet period.
+ */
+let lastRelayCueToastAt = 0;
+
+/** Class carrying the pulse animation; also the `@keyframes` name. */
+const RELAY_CUE_CLASS = 'ggui-relay-cue-pulse';
+/** Stable id for the injected `<style>` — idempotent per document. */
+const RELAY_CUE_STYLE_ID = 'ggui-relay-cue-style';
+/** Pulse duration (ms). Brief enough to read as acknowledgement. */
+const RELAY_CUE_DURATION_MS = 400;
+/** At most one fallback cue toast per this window (ms). */
+const RELAY_CUE_TOAST_THROTTLE_MS = 5_000;
+
 /** @internal — exported for unit tests to reset module state. */
 export function __resetRelayNoticeForTest(): void {
   relayIncapabilityAnnounced = false;
+  relayNoticeDismissed = false;
+  lastRelayCueToastAt = 0;
+}
+
+/**
+ * Inject the pulse keyframes once per document. Mirrors how
+ * `react-renderer.ts` injects its theme CSS — `<style>` with a stable
+ * id on `<head>`, idempotent on repeat calls.
+ *
+ * Lazy rather than at boot: a session that never enters the dead zone
+ * never pays for the rule.
+ */
+function ensureRelayCueStyle(): void {
+  if (document.getElementById(RELAY_CUE_STYLE_ID) !== null) return;
+  const style = document.createElement('style');
+  style.id = RELAY_CUE_STYLE_ID;
+  // Opacity only. Anything touching geometry (scale, translate, outline
+  // width) would have to make assumptions about the generated markup it
+  // lands on — this cue is applied to whatever the user happened to
+  // focus, so it must be incapable of disturbing any layout.
+  style.textContent =
+    `@keyframes ${RELAY_CUE_CLASS}{0%,100%{opacity:1}50%{opacity:.45}}` +
+    `.${RELAY_CUE_CLASS}{animation:${RELAY_CUE_CLASS} ` +
+    `${RELAY_CUE_DURATION_MS}ms ease-in-out}`;
+  document.head.appendChild(style);
+}
+
+/**
+ * The element to pulse, or `null` when there isn't a usable one.
+ *
+ * Usable means: a real focused element that belongs to the render. A
+ * document with nothing focused reports `document.body`, which is not a
+ * control the user just pressed; and anything outside
+ * `[data-ggui-session-root]` (host chrome, the toast itself) is not
+ * ours to animate. Both fall through to the toast.
+ *
+ * The root ITSELF is excluded too. `contains` is reflexive, so a
+ * focused session root would otherwise pulse the whole render — the
+ * opposite of a cue pointing at one control. That is reachable: the
+ * root is reused if one already exists in the document (see
+ * `ensureStatusDom`), so a host or a generated tree can hand it a
+ * `tabindex` and focus it.
+ */
+function resolveRelayCueTarget(): Element | null {
+  const active = document.activeElement;
+  if (active === null || active === document.body) return null;
+  const root = document.querySelector('[data-ggui-session-root]');
+  if (root === null || active === root || !root.contains(active)) return null;
+  return active;
+}
+
+/**
+ * The dead-zone cue (ggui#442): the smallest honest "that did nothing"
+ * signal, for a gesture on a host already known — and already
+ * explained — to be relay-incapable.
+ *
+ * Component-agnostic by construction. It pulses whatever the user
+ * focused without knowing what that is, and falls back to the toast
+ * primitive when there is nothing to pulse.
+ */
+function showPostDismissalCue(intent: string): void {
+  if (typeof document === 'undefined') return;
+  const target = resolveRelayCueTarget();
+  if (target !== null) {
+    // A pulse already running on this element IS the acknowledgement
+    // for this gesture too. Re-adding a present class would not restart
+    // the animation anyway (that needs a reflow), and racing two
+    // removal timers on one element is how a class gets stranded.
+    if (target.classList.contains(RELAY_CUE_CLASS)) return;
+    ensureRelayCueStyle();
+    target.classList.add(RELAY_CUE_CLASS);
+    // Both cleanup routes cancel the other. Without the `clearTimeout`,
+    // a pulse ended early by `animationend` leaves its timer armed, and
+    // that timer later strips whatever class is on the element THEN —
+    // truncating the next pulse partway through. The window is the gap
+    // between the two, which widens on any host that ends the
+    // animation early.
+    const clear = (): void => {
+      target.classList.remove(RELAY_CUE_CLASS);
+      target.removeEventListener('animationend', clear);
+      // `timer` is declared below; `clear` only ever RUNS after that
+      // line, so it always reads an initialized id.
+      clearTimeout(timer);
+    };
+    target.addEventListener('animationend', clear, { once: true });
+    // Belt for real browsers, braces for everything that never fires
+    // `animationend`: jsdom, a display:none subtree, and any host whose
+    // reduced-motion policy skips the animation outright.
+    const timer = window.setTimeout(clear, RELAY_CUE_DURATION_MS + 100);
+    return;
+  }
+  const now = Date.now();
+  if (now - lastRelayCueToastAt < RELAY_CUE_TOAST_THROTTLE_MS) return;
+  lastRelayCueToastAt = now;
+  // The toast primitive's auto-dismissing variant — this is a cue, not
+  // a second explanation, so it must clear itself. Throttled because a
+  // per-click toast on a host that fails every click is the #426
+  // failure mode the latch exists to prevent.
+  showActionToast(`⚠ ${intent} — not delivered`, 'error');
 }
 
 /**
@@ -2215,8 +2359,16 @@ export function dispatchSubmitAction(args: {
   // would clobber the persistent explanation with a transient state
   // that nothing downstream ever restores — the opposite of "left
   // standing" (see the latch declaration + terminal branch below).
+  //
+  // Once that explanation has been DISMISSED, though, skipping leaves
+  // the gesture with no feedback at all — the dead zone ggui#442
+  // names. The cue fills it here, at dispatch time, because the
+  // element it pulses is the one the user has focused NOW; by the time
+  // the relay response settles, focus may have moved on.
   if (!relayIncapabilityAnnounced) {
     showActionToast(`→ ${intent}${dataPart}`, 'pending');
+  } else if (relayNoticeDismissed) {
+    showPostDismissalCue(intent);
   }
 
   // (2) Try submit_action via host relay. Spec-compliant hosts
@@ -2274,6 +2426,11 @@ export function dispatchSubmitAction(args: {
       !isRelayShapedFailure(resp)
     ) {
       relayIncapabilityAnnounced = false;
+      // Self-heal leaves NO cue residue (ggui#442): the dead zone is
+      // gone, so the state that armed the cue goes with it. A later
+      // re-latch starts from a clean slate.
+      relayNoticeDismissed = false;
+      lastRelayCueToastAt = 0;
       postObservabilityToParent({
         kind: 'relay-incapability',
         state: 'cleared',
@@ -2364,9 +2521,21 @@ export function dispatchSubmitAction(args: {
           kind: 'relay-incapability',
           state: 'latched',
         });
+        // Establish the flag's invariant where the notice it describes
+        // is created: a freshly-shown notice is undismissed, and its
+        // dead zone starts with an unspent throttle. Today every
+        // re-latch already passes through the clear edge above (which
+        // resets both), so this is the same value arriving by a second
+        // route — kept because the state belongs to THIS notice, and a
+        // future second latch-set path shouldn't have to know that.
+        relayNoticeDismissed = false;
+        lastRelayCueToastAt = 0;
         showActionToast(
           'This host cannot relay actions to the agent — interactive controls will not work here.',
           'action_required',
+          () => {
+            relayNoticeDismissed = true;
+          },
         );
       }
       return;
@@ -2392,17 +2561,22 @@ export function dispatchSubmitAction(args: {
  * not a well-formed `{ok:false}` result; see `isRelayShapedFailure`),
  * every subsequent poll will fail identically.
  *
- * This guard does NOT stop the router's retry loop — confirmed by
- * reading `channel-transport.ts`'s `startPolling`: its `catch {}`
- * swallows every thrown error unconditionally and `setInterval` keeps
- * ticking on the same cadence regardless of why the tick failed. What
- * this guard buys is a CHEAPER tick: once incapability is confirmed,
- * each poll skips the network round-trip through `callServerToolSpec`
- * and throws immediately instead. The named reason on the thrown
- * `Error` is not observable to anyone today — the same silent `catch`
- * discards it (a deliberate choice, so per-tick failures don't spam a
- * noisy bus during transient outages) — but it's there for whatever
- * future consumer inspects `Error.message`.
+ * This guard does NOT stop the router's poll loop, and nothing here
+ * should ever be written so that it could (ggui#443). It does two
+ * things. It makes each doomed tick CHEAP — the poll throws before
+ * the `callServerToolSpec` round-trip. And, by throwing the typed
+ * {@link RelayIncapableError} rather than a bare `Error`, it tells
+ * the router WHICH KIND of failure this is: `channel-transport.ts`'s
+ * tick classifies structural rejections apart from transient ones and
+ * drops the channel to a slow probe cadence, emitting one
+ * `channel-poll-degraded` event per transition. The first poll that
+ * succeeds after the latch clears restores the normal cadence and
+ * emits `channel-poll-recovered`.
+ *
+ * The channel keeps probing throughout, which is what makes that
+ * recovery possible: the latch clears only when a call succeeds, and
+ * only an attempt can discover that. A channel stopped on structural
+ * failure could never come back.
  *
  * Keyed on the LATCH, not on `hostCanRelayToolCalls()` directly: raw
  * advertisement absence never changes after boot, so gating on it
@@ -2430,9 +2604,7 @@ export async function channelToolsCall(args: {
   readonly args: JsonObject;
 }): Promise<JsonValue> {
   if (relayIncapabilityAnnounced) {
-    throw new Error(
-      'tools/call unavailable: host did not advertise serverTools',
-    );
+    throw new RelayIncapableError();
   }
   const resp = await callServerToolSpec(args.toolName, args.args);
   if (resp.error !== undefined) {
