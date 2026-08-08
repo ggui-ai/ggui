@@ -14,22 +14,22 @@
  *   - persistence is `@guuey/threads`' `ThreadStore` over
  *     `InMemoryThreadPersistence` — the verbatim-extracted hosted-pod
  *     logic (guuey#107), including the card projection (guuey#86);
- *   - mounting is `@guuey/agent-client`'s both-channel dispatcher
- *     (`toolResultCardMount` / `cardCardMount`).
+ *   - mounting is `@guuey/mcp-apps-host`'s both-channel dispatcher
+ *     (`toolResultViewMount` / `snapshotViewMount`).
  *
  * Matrix (issue #429):
- *   1. live mount — ggui tool-result → fold → `toolResultCardMount`,
+ *   1. live mount — ggui tool-result → fold → `toolResultViewMount`,
  *      plus VERBATIM slice parity against ggui's own protocol
  *      host-helper (`toolResultGguiRender`, ggui#427).
  *   2. persist → rehydrate — inline mcp-ui resource through
- *      `appendFold` → card row → `cardCardMount`; live ≍ rehydrated.
+ *      `appendFold` → card row → `snapshotViewMount`; live ≍ rehydrated.
  *   3. provider-raw channel — a `ui://` resource degraded into a
  *      `provider-raw` content part mounts on BOTH arms.
  *   4. ggui-channel snapshot honesty — pins today's deliberate
  *      behavior (persisted ggui bootstraps are not remountable); the
  *      re-mint design input lives on the issue.
  *
- * The `@guuey/*` pins are EXACT (0.2.2): the point is testing ggui
+ * The `@guuey/*` pins are EXACT (0.3.0): the point is testing ggui
  * HEAD against the versions guuey actually shipped. The pins are
  * dev-side test harness only — no published `@ggui-ai/*` package
  * depends on anything above MCP.
@@ -52,7 +52,7 @@ import {
   type AgReduceResult,
   type JsonValue,
 } from '@silverprotocol/core';
-import { cardCardMount, toolResultCardMount } from '@guuey/agent-client';
+import { snapshotViewMount, toolResultViewMount } from '@guuey/mcp-apps-host';
 import { InMemoryThreadPersistence, ThreadStore } from '@guuey/threads';
 
 // ───────────────────────────────────────────────────────────────────────
@@ -237,7 +237,7 @@ async function renderOnce(): Promise<Record<string, unknown>> {
 // ───────────────────────────────────────────────────────────────────────
 
 describe('matrix 1 — live ggui render mounts through guuey narrowing', () => {
-  it('real ggui_render result → Reducer fold → toolResultCardMount, slice verbatim', async () => {
+  it('real ggui_render result → Reducer fold → toolResultViewMount, slice verbatim', async () => {
     const result = await renderOnce();
 
     // The pod's Claude facet routes structuredContent → uiData and
@@ -247,9 +247,14 @@ describe('matrix 1 — live ggui render mounts through guuey narrowing', () => {
       meta: result._meta,
     });
 
-    const mount = toolResultCardMount(block);
+    const mount = toolResultViewMount(block);
     expect(mount).toBeDefined();
-    expect(mount!.channel).toBe('ggui');
+    expect(mount?.channel).toBe('ggui');
+    if (mount === undefined || mount.channel === 'locator') {
+      // Unreachable past the two expects above — narrows the 0.3.0
+      // ViewMount union to its resource-bearing arm.
+      throw new Error('expected a resource-bearing ggui mount');
+    }
 
     // The mounted shell inlines the slice envelope — parse it back out
     // and compare VERBATIM against ggui's own host-helper narrowing of
@@ -257,7 +262,7 @@ describe('matrix 1 — live ggui render mounts through guuey narrowing', () => {
     // byte of the slice: guuey's copy and ggui's export cannot drift.
     const bootstrap = toolResultGguiRender(result);
     expect(bootstrap).toBeDefined();
-    const envelope = shellEnvelope(mount!.resource.text ?? '');
+    const envelope = shellEnvelope(mount.resource.text ?? '');
     expect(envelope[MCP_APP_AI_GGUI_RENDER_META_KEY]).toEqual(bootstrap!.slice);
 
     // Live-mode slice sanity: the render channel minted real creds.
@@ -310,18 +315,26 @@ describe('matrix 2 — inline mcp-ui resource: live ≍ rehydrated', () => {
   it('the same fold mounts identically live and after ThreadStore persistence', async () => {
     const { fold, block } = foldToolDone({ uiData: INLINE_RESOURCE });
 
-    const live = toolResultCardMount(block);
+    const live = toolResultViewMount(block);
     expect(live).toBeDefined();
-    expect(live!.channel).toBe('inline');
-    expect(live!.resource.uri).toBe(INLINE_RESOURCE.uri);
-    expect(live!.resource.text).toBe(INLINE_RESOURCE.text);
+    expect(live?.channel).toBe('inline');
+    if (live === undefined || live.channel === 'locator') {
+      // Unreachable past the two expects above — narrows the 0.3.0
+      // ViewMount union to its resource-bearing arm.
+      throw new Error('expected an inline resource mount');
+    }
+    expect(live.resource.uri).toBe(INLINE_RESOURCE.uri);
+    expect(live.resource.text).toBe(INLINE_RESOURCE.text);
 
     const artifacts = await persistAndReadCards(fold);
     expect(artifacts).toHaveLength(1);
-    const rehydrated = cardCardMount(artifacts[0]!);
+    const rehydrated = snapshotViewMount(artifacts[0]!);
     expect(rehydrated).toBeDefined();
-    expect(rehydrated!.channel).toBe('inline');
-    expect(rehydrated!.resource).toEqual(live!.resource);
+    expect(rehydrated?.channel).toBe('inline');
+    if (rehydrated === undefined || rehydrated.channel === 'locator') {
+      throw new Error('expected an inline resource mount after rehydration');
+    }
+    expect(rehydrated.resource).toEqual(live.resource);
   });
 });
 
@@ -341,16 +354,25 @@ describe('matrix 3 — provider-raw-degraded ui:// resource mounts on both arms'
       ],
     });
 
-    const live = toolResultCardMount(block);
+    const live = toolResultViewMount(block);
     expect(live).toBeDefined();
-    expect(live!.channel).toBe('inline');
-    expect(live!.resource.uri).toBe(INLINE_RESOURCE.uri);
+    expect(live?.channel).toBe('inline');
+    if (live === undefined || live.channel === 'locator') {
+      // Unreachable past the two expects above — narrows the 0.3.0
+      // ViewMount union to its resource-bearing arm.
+      throw new Error('expected an inline resource mount');
+    }
+    expect(live.resource.uri).toBe(INLINE_RESOURCE.uri);
 
     const artifacts = await persistAndReadCards(fold);
     expect(artifacts).toHaveLength(1);
-    const rehydrated = cardCardMount(artifacts[0]!);
+    const rehydrated = snapshotViewMount(artifacts[0]!);
     expect(rehydrated).toBeDefined();
-    expect(rehydrated!.resource).toEqual(live!.resource);
+    expect(rehydrated?.channel).toBe('inline');
+    if (rehydrated === undefined || rehydrated.channel === 'locator') {
+      throw new Error('expected an inline resource mount after rehydration');
+    }
+    expect(rehydrated.resource).toEqual(live.resource);
   });
 });
 

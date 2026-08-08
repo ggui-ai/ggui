@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-07T09:32:17.264Z",
+  "generatedAt": "2026-08-08T06:51:26.429Z",
   "pinnedNames": [
     "@a2a-js/sdk",
     "@adobe/css-tools",
@@ -37,6 +37,8 @@
     "@babel/plugin-transform-react-jsx-source",
     "@babel/runtime",
     "@google-cloud/storage",
+    "@guuey/agent-client",
+    "@guuey/threads",
     "@hono/node-server",
     "@huggingface/jinja",
     "@jsonjoy.com/fs-core",
@@ -210,6 +212,8 @@
     "@babel/runtime@^7",
     "@babel/runtime@^8",
     "@google-cloud/storage",
+    "@guuey/agent-client",
+    "@guuey/threads",
     "@hono/node-server",
     "@huggingface/jinja",
     "@jsonjoy.com/fs-core",
