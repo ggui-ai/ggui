@@ -55,10 +55,12 @@ import {
   __resetHostCapabilitiesForTest,
   setHostCapabilities,
 } from '../host-capabilities.js';
+// Imported from the package entrypoint (not '../observability.js') to pin
+// that both types stay part of the published export surface.
 import type {
   ObservabilityMessage,
   RelayIncapabilityEvent,
-} from '../observability.js';
+} from '../index.js';
 import { buildBootHarness, tick } from './boot-helpers.js';
 import type { MockTransport } from './mock-transport.js';
 

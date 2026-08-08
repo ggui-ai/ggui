@@ -69,6 +69,7 @@ export type {
   ChannelTransportFallbackEvent,
   ChannelTransportResubscribedEvent,
   UiFeedbackEvent,
+  RelayIncapabilityEvent,
   UnknownObservabilityEvent,
 } from './observability.js';
 export { postObservabilityToParent } from './observability.js';
