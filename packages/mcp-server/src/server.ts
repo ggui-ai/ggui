@@ -237,7 +237,12 @@ import { mountEmailLoginRoutes, type EmailSender, type MagicLinkStore } from "./
 import { resolveMcpInstructions, type McpInstructionsValue } from "./instructions-presets.js";
 import { buildLlmCaller, createLlmBackedHandshakeNegotiator } from "./llm-backed-negotiator.js";
 import { createConsoleLogger, type Logger } from "./logger.js";
-import { buildControlService } from "./control-service.js";
+import { buildControlService, CONTROL_PATH } from "./control-service.js";
+import {
+  buildOriginHostPolicy,
+  createOriginHostValidationMiddleware,
+  validateOriginHost,
+} from "./origin-validation.js";
 import {
   composeHandlersWithMounts,
   validateMcpServices,
@@ -2148,6 +2153,38 @@ export interface CreateGguiServerOptions {
   readonly wsTokenSecret?: string;
 
   /**
+   * Bind host `listen()` will use, declared up front so boot-time
+   * wiring — the Origin/Host validation policy (ggui#438a) — sees the
+   * address the server will actually bind. `listen(port, host)`
+   * defaults its host argument to this value; passing a DIFFERENT
+   * host to `listen()` is a misuse (the validation policy would
+   * describe the wrong bind). Embedders who mount `.app` under their
+   * own HTTP server and never call `listen()` should set this to the
+   * host they bind. Default: `"127.0.0.1"`.
+   */
+  readonly host?: string;
+
+  /**
+   * Page origins permitted to reach the MCP wire from a browser.
+   *
+   * ONE list drives BOTH layers, deliberately: the Origin/Host
+   * validation gate (`./origin-validation.ts`) and the CORS response
+   * headers (`./browser-cors.ts`). Two lists would let an operator
+   * CORS-allow an origin that validation still 403s — a debugging trap
+   * with no upside.
+   *
+   * Loopback origins (`http://localhost:*`, `http://127.0.0.1:*`,
+   * `http://[::1]:*`), same-origin requests, and the `publicBaseUrl`
+   * origin are always allowed and need no entry, so the zero-config
+   * quickstart and tunnel deployments work untouched.
+   *
+   * This is NOT authentication: an allowlisted origin still presents a
+   * bearer. It controls which PAGES a browser lets talk to this
+   * server; non-browser clients ignore it entirely.
+   */
+  readonly browserOrigins?: ReadonlyArray<string>;
+
+  /**
    * Enable the pairing transport. Adds `POST /pair` (public, completes a
    * pairing handshake) and by default `POST /admin/pair/init` (builder-
    * authenticated, mints a one-shot code).
@@ -3995,6 +4032,38 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
   // (render/update resultMeta.runtimeUrl) can adapt to the tunnel host.
   // Trust gate lives inside the middleware — see request-context.ts.
   app.use(buildRequestContextMiddleware());
+
+  // DNS-rebinding defense (ggui#438a; Streamable HTTP spec §Security
+  // Warning). Mounted BEFORE the body parsers so a rejected request
+  // never allocates a parsed body, and before auth so the verdict does
+  // not depend on credentials. Reads RAW headers — see the module
+  // docstring for why the request-context-derived host is unsafe here.
+  //
+  // Origin enforcement is scoped to the MCP wire; the Host check is
+  // global. NOTE: per-app routing WITHOUT a pathPrefix mounts at
+  // `/:appId` — no distinguishing prefix exists, so those requests get
+  // the Host check only (which is the actual rebinding defense);
+  // enforcing Origin app-wide would 403 the public cross-origin read
+  // surfaces (runtime-bundle, /code, /api/renders).
+  const mcpOriginEnforcedPrefixes: string[] = [
+    opts.universalMcpPath ?? "/mcp",
+    CONTROL_PATH,
+    ...mcpServices.map((svc) => svc.path),
+    ...(opts.perAppRouting?.pathPrefix !== undefined ? [opts.perAppRouting.pathPrefix] : []),
+  ];
+  const originHostPolicy = buildOriginHostPolicy({
+    bindHost: opts.host ?? "127.0.0.1",
+    ...(opts.publicBaseUrl !== undefined ? { publicBaseUrl: opts.publicBaseUrl } : {}),
+    ...(opts.browserOrigins !== undefined ? { browserOrigins: opts.browserOrigins } : {}),
+  });
+  app.use(
+    createOriginHostValidationMiddleware({
+      policy: originHostPolicy,
+      enforceOriginPathPrefixes: mcpOriginEnforcedPrefixes,
+      logger: logger.child({ middleware: "origin-validation" }),
+    })
+  );
+
   app.use(express.json({ limit: bodyLimit }));
   // Form-urlencoded body parser for /oauth/token (RFC 6749 §4.1.3
   // requires application/x-www-form-urlencoded). JSON bodies still
@@ -5176,7 +5245,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
     blueprintStore,
     blueprintSelector,
     blueprintSearch,
-    async listen(port = 0, host = "127.0.0.1"): Promise<NodeHttpServer> {
+    async listen(port = 0, host = opts.host ?? "127.0.0.1"): Promise<NodeHttpServer> {
       return new Promise((resolve, reject) => {
         const server = app.listen(port, host, () => {
           const addr = server.address();
@@ -5201,6 +5270,27 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
         // other paths (or a future second WS endpoint) are rejected.
         if (channel) {
           server.on("upgrade", (req, socket, head) => {
+            // Second ingress (ggui#438a): upgrade requests never
+            // traverse Express middleware, so the same validator runs
+            // here explicitly. The channel is MCP-plane — Origin is
+            // always enforced. WebSocket handshakes are exempt from
+            // the same-origin policy (any page can open a socket), so
+            // an unchecked upgrade is a cross-site WS hijack surface.
+            const wsRejection = validateOriginHost(
+              req.headers.host,
+              typeof req.headers.origin === "string" ? req.headers.origin : undefined,
+              originHostPolicy
+            );
+            if (wsRejection !== null) {
+              logger.warn("origin_host_rejected", {
+                header: wsRejection.header,
+                value: wsRejection.value,
+                transport: "websocket",
+              });
+              socket.write("HTTP/1.1 403 Forbidden\r\n" + "Connection: close\r\n\r\n");
+              socket.destroy();
+              return;
+            }
             const url = new URL(req.url ?? "/", "http://localhost");
             if (url.pathname !== channel.path) {
               socket.write("HTTP/1.1 404 Not Found\r\n" + "Connection: close\r\n\r\n");
