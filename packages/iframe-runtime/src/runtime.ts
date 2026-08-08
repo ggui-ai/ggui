@@ -73,6 +73,7 @@ import {
   createChannelTransportRouter,
   type ChannelTransportRouter,
 } from './channel-transport.js';
+import { RelayIncapableError } from './relay-incapability.js';
 import { ChannelRegistry } from '@ggui-ai/live-channel';
 import {
   createChannelErrorHandler,
@@ -2392,17 +2393,22 @@ export function dispatchSubmitAction(args: {
  * not a well-formed `{ok:false}` result; see `isRelayShapedFailure`),
  * every subsequent poll will fail identically.
  *
- * This guard does NOT stop the router's retry loop — confirmed by
- * reading `channel-transport.ts`'s `startPolling`: its `catch {}`
- * swallows every thrown error unconditionally and `setInterval` keeps
- * ticking on the same cadence regardless of why the tick failed. What
- * this guard buys is a CHEAPER tick: once incapability is confirmed,
- * each poll skips the network round-trip through `callServerToolSpec`
- * and throws immediately instead. The named reason on the thrown
- * `Error` is not observable to anyone today — the same silent `catch`
- * discards it (a deliberate choice, so per-tick failures don't spam a
- * noisy bus during transient outages) — but it's there for whatever
- * future consumer inspects `Error.message`.
+ * This guard does NOT stop the router's poll loop, and nothing here
+ * should ever be written so that it could (ggui#443). It does two
+ * things. It makes each doomed tick CHEAP — the poll throws before
+ * the `callServerToolSpec` round-trip. And, by throwing the typed
+ * {@link RelayIncapableError} rather than a bare `Error`, it tells
+ * the router WHICH KIND of failure this is: `channel-transport.ts`'s
+ * tick classifies structural rejections apart from transient ones and
+ * drops the channel to a slow probe cadence, emitting one
+ * `channel-poll-degraded` event per transition. The first poll that
+ * succeeds after the latch clears restores the normal cadence and
+ * emits `channel-poll-recovered`.
+ *
+ * The channel keeps probing throughout, which is what makes that
+ * recovery possible: the latch clears only when a call succeeds, and
+ * only an attempt can discover that. A channel stopped on structural
+ * failure could never come back.
  *
  * Keyed on the LATCH, not on `hostCanRelayToolCalls()` directly: raw
  * advertisement absence never changes after boot, so gating on it
@@ -2430,9 +2436,7 @@ export async function channelToolsCall(args: {
   readonly args: JsonObject;
 }): Promise<JsonValue> {
   if (relayIncapabilityAnnounced) {
-    throw new Error(
-      'tools/call unavailable: host did not advertise serverTools',
-    );
+    throw new RelayIncapableError();
   }
   const resp = await callServerToolSpec(args.toolName, args.args);
   if (resp.error !== undefined) {

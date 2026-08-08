@@ -21,28 +21,42 @@
  *     duplicate state).
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import type { StreamEnvelope, StreamSpec } from '@ggui-ai/protocol';
+import type { JsonValue, StreamEnvelope, StreamSpec } from '@ggui-ai/protocol';
 import type { WebSocketMessage } from '@ggui-ai/protocol/transport/websocket';
 import {
   createChannelTransportRouter,
   DEFAULT_IFRAME_POLL_INTERVAL_MS,
+  DEFAULT_IFRAME_PROBE_POLL_INTERVAL_MS,
   type ChannelTransportEvent,
 } from '../channel-transport.js';
+import { RelayIncapableError } from '../relay-incapability.js';
 import { StreamBus } from '../wire-config.js';
 
 const RENDER_ID = 'render_test';
 const APP_ID = 'app_test';
 
+/**
+ * One scripted `tools/call` outcome. The script is consumed in order;
+ * once exhausted the LAST step repeats forever, so "this channel keeps
+ * failing structurally on every tick" is expressible in one entry.
+ */
+type ToolsCallStep =
+  | { readonly reject: Error }
+  | { readonly resolve: JsonValue };
+
 function makeRouter(opts: {
   readonly streamWebSocketLocalTools?: readonly string[];
   readonly defaultPollIntervalMs?: number;
+  readonly probePollIntervalMs?: number;
   readonly toolsCallResults?: Array<unknown>;
   readonly toolsCallReject?: boolean;
+  readonly toolsCallScript?: readonly ToolsCallStep[];
 }) {
   const sent: WebSocketMessage[] = [];
   const observed: ChannelTransportEvent[] = [];
   const calls: Array<{ toolName: string; args: Record<string, unknown> }> = [];
   const results = [...(opts.toolsCallResults ?? [])];
+  let scriptStep = 0;
   const bus = new StreamBus();
   const received: StreamEnvelope[] = [];
   bus.subscribe('weather', (env) => received.push(env));
@@ -62,12 +76,24 @@ function makeRouter(opts: {
       if (opts.toolsCallReject) {
         throw new Error('boom');
       }
+      const script = opts.toolsCallScript;
+      if (script !== undefined && script.length > 0) {
+        const step = script[Math.min(scriptStep, script.length - 1)];
+        scriptStep += 1;
+        if (step !== undefined) {
+          if ('reject' in step) throw step.reject;
+          return step.resolve;
+        }
+      }
       const next = results.shift();
       return (next ?? null) as never;
     },
     streamBus: bus,
     ...(opts.defaultPollIntervalMs !== undefined
       ? { defaultPollIntervalMs: opts.defaultPollIntervalMs }
+      : {}),
+    ...(opts.probePollIntervalMs !== undefined
+      ? { probePollIntervalMs: opts.probePollIntervalMs }
       : {}),
     onObserve: (e) => observed.push(e),
   });
@@ -528,6 +554,168 @@ describe('channel-transport router — dispose teardown', () => {
     router.dispose();
     await vi.advanceTimersByTimeAsync(5_000);
     expect(calls.length).toBe(beforeDispose);
+  });
+});
+
+describe('channel-transport router — classified poll failures (#443)', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  const pollEvents = (
+    observed: readonly ChannelTransportEvent[],
+    kind: 'channel-poll-degraded' | 'channel-poll-recovered',
+  ): ChannelTransportEvent[] => observed.filter((e) => e.kind === kind);
+
+  it('drops a structurally-failing channel to probe cadence, emitting ONE degraded event', async () => {
+    const { router, calls, observed } = makeRouter({
+      defaultPollIntervalMs: 1_000,
+      probePollIntervalMs: 10_000,
+      toolsCallScript: [{ reject: new RelayIncapableError() }],
+    });
+    router.applyRender({
+      sessionId: RENDER_ID,
+      streamSpec: STREAM_SPEC_POLL,
+    });
+    // Leading tick rejects structurally.
+    await vi.advanceTimersByTimeAsync(0);
+    expect(calls).toHaveLength(1);
+    expect(observed).toContainEqual({
+      kind: 'channel-poll-degraded',
+      sessionId: RENDER_ID,
+      channelName: 'quotes',
+      reason: 'relay-incapable',
+      probeIntervalMs: 10_000,
+    });
+
+    // Default cadence no longer fires — the channel is on probe cadence.
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(calls).toHaveLength(1);
+    await vi.advanceTimersByTimeAsync(8_999);
+    expect(calls).toHaveLength(1);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(calls).toHaveLength(2);
+
+    // FAIL-SAFE PIN: probing continues indefinitely — degradation is a
+    // cadence change, never a stop.
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(calls).toHaveLength(5);
+
+    // …and the transition is announced once, not once per tick.
+    expect(pollEvents(observed, 'channel-poll-degraded')).toHaveLength(1);
+    router.dispose();
+  });
+
+  it('leaves cadence and observability untouched on a transient poll failure', async () => {
+    const { router, calls, observed } = makeRouter({
+      defaultPollIntervalMs: 1_000,
+      probePollIntervalMs: 10_000,
+      toolsCallScript: [{ reject: new Error('network blip') }],
+    });
+    router.applyRender({
+      sessionId: RENDER_ID,
+      streamSpec: STREAM_SPEC_POLL,
+    });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(calls).toHaveLength(1);
+    await vi.advanceTimersByTimeAsync(3_000);
+    expect(calls).toHaveLength(4);
+    expect(pollEvents(observed, 'channel-poll-degraded')).toHaveLength(0);
+    expect(pollEvents(observed, 'channel-poll-recovered')).toHaveLength(0);
+    router.dispose();
+  });
+
+  it('restores default cadence and announces recovery on the first success after degradation', async () => {
+    const { router, calls, observed, received } = makeRouter({
+      defaultPollIntervalMs: 1_000,
+      probePollIntervalMs: 10_000,
+      toolsCallScript: [
+        { reject: new RelayIncapableError() },
+        { resolve: { q: 'back' } },
+      ],
+    });
+    router.applyRender({
+      sessionId: RENDER_ID,
+      streamSpec: STREAM_SPEC_POLL,
+    });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(pollEvents(observed, 'channel-poll-degraded')).toHaveLength(1);
+
+    // The probe tick succeeds.
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(calls).toHaveLength(2);
+    expect(received[0]).toEqual({
+      sessionId: RENDER_ID,
+      channel: 'quotes',
+      mode: 'append',
+      payload: { q: 'back' },
+    });
+    expect(observed).toContainEqual({
+      kind: 'channel-poll-recovered',
+      sessionId: RENDER_ID,
+      channelName: 'quotes',
+      pollIntervalMs: 1_000,
+    });
+
+    // Back on the default cadence.
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(calls).toHaveLength(3);
+
+    // Recovery is announced once, not on every subsequent success.
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(pollEvents(observed, 'channel-poll-recovered')).toHaveLength(1);
+    router.dispose();
+  });
+
+  it('FAIL-SAFE: a channel that never fails structurally never changes cadence', async () => {
+    const { router, calls, observed } = makeRouter({
+      defaultPollIntervalMs: 1_000,
+      probePollIntervalMs: 10_000,
+      toolsCallScript: [{ resolve: { ok: true } }],
+    });
+    router.applyRender({
+      sessionId: RENDER_ID,
+      streamSpec: STREAM_SPEC_POLL,
+    });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(calls).toHaveLength(1);
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(calls).toHaveLength(6);
+    expect(pollEvents(observed, 'channel-poll-degraded')).toHaveLength(0);
+    expect(pollEvents(observed, 'channel-poll-recovered')).toHaveLength(0);
+    router.dispose();
+  });
+
+  it('never probes FASTER than the channel already polls', async () => {
+    const { router, calls, observed } = makeRouter({
+      defaultPollIntervalMs: 60_000,
+      probePollIntervalMs: 10_000,
+      toolsCallScript: [{ reject: new RelayIncapableError() }],
+    });
+    router.applyRender({
+      sessionId: RENDER_ID,
+      streamSpec: STREAM_SPEC_POLL,
+    });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(observed).toContainEqual({
+      kind: 'channel-poll-degraded',
+      sessionId: RENDER_ID,
+      channelName: 'quotes',
+      reason: 'relay-incapable',
+      probeIntervalMs: 60_000,
+    });
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(calls).toHaveLength(1);
+    await vi.advanceTimersByTimeAsync(50_000);
+    expect(calls).toHaveLength(2);
+    router.dispose();
+  });
+
+  it('probe cadence default is exported as DEFAULT_IFRAME_PROBE_POLL_INTERVAL_MS', () => {
+    expect(DEFAULT_IFRAME_PROBE_POLL_INTERVAL_MS).toBe(30_000);
   });
 });
 

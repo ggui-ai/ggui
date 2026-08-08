@@ -40,6 +40,8 @@ export type ObservabilityEvent =
   | ChannelTransportPickedEvent
   | ChannelTransportFallbackEvent
   | ChannelTransportResubscribedEvent
+  | ChannelPollDegradedEvent
+  | ChannelPollRecoveredEvent
   | UiFeedbackEvent
   | RelayIncapabilityEvent
   | UnknownObservabilityEvent;
@@ -114,6 +116,52 @@ export interface ChannelTransportResubscribedEvent {
   readonly kind: 'channel-transport-resubscribed';
   readonly sessionId: string;
   readonly channelName: string;
+}
+
+/**
+ * Fired by the channel-transport router when a polling channel's
+ * `tools/call` fails for a reason the router classifies as STRUCTURAL
+ * — the failure will repeat identically until the underlying
+ * condition changes, so spending a full-cadence poll on it is waste.
+ *
+ * The channel drops to a slower probe cadence; it never stops. That
+ * distinction is the fail-safe: recovery is a property of the running
+ * loop, not of an external nudge, so a host that regains the missing
+ * capability sees its channels come back on their own.
+ *
+ * Emitted ONCE per healthy→degraded transition, never per probe tick
+ * — a channel degraded for an hour emits one event, not 120.
+ *
+ * @public
+ */
+export interface ChannelPollDegradedEvent {
+  readonly kind: 'channel-poll-degraded';
+  readonly sessionId: string;
+  readonly channelName: string;
+  /**
+   * What the router classified. `'relay-incapable'` = the runtime has
+   * confirmed this host cannot relay `tools/call` to the MCP server
+   * (see `RelayIncapableError`), so every poll fails before reaching
+   * the transport.
+   */
+  readonly reason: 'relay-incapable';
+  /** Cadence (ms) the channel probes at while degraded. */
+  readonly probeIntervalMs: number;
+}
+
+/**
+ * Fired by the channel-transport router when a previously-degraded
+ * channel's `tools/call` succeeds again. The channel returns to its
+ * normal cadence. Emitted once per degraded→healthy transition.
+ *
+ * @public
+ */
+export interface ChannelPollRecoveredEvent {
+  readonly kind: 'channel-poll-recovered';
+  readonly sessionId: string;
+  readonly channelName: string;
+  /** Cadence (ms) the channel returns to. */
+  readonly pollIntervalMs: number;
 }
 
 /**

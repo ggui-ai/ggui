@@ -60,10 +60,13 @@ import type {
 } from '@ggui-ai/protocol';
 import type { WebSocketMessage } from '@ggui-ai/protocol/transport/websocket';
 import type {
+  ChannelPollDegradedEvent,
+  ChannelPollRecoveredEvent,
   ChannelTransportFallbackEvent,
   ChannelTransportPickedEvent,
   ChannelTransportResubscribedEvent,
 } from './observability.js';
+import { isRelayIncapableError } from './relay-incapability.js';
 import type { StreamBus } from './wire-config.js';
 
 /**
@@ -75,6 +78,21 @@ import type { StreamBus } from './wire-config.js';
  * host's `tools/call` quota.
  */
 export const DEFAULT_IFRAME_POLL_INTERVAL_MS = 10_000;
+
+/**
+ * Cadence (ms) a channel falls back to once its `tools/call` has
+ * failed STRUCTURALLY — a failure the router knows will repeat
+ * identically on the next tick (see {@link ToolsCallInvoker}).
+ *
+ * Deliberately a slower cadence and NOT a stop. A structural failure
+ * is a statement about the host's current capability, not a permanent
+ * property of the universe: the relay-incapability latch upstream
+ * clears the moment a real call succeeds, and the only thing that can
+ * observe that is an attempt. A stopped channel could never recover
+ * on its own; a slow one recovers within one probe interval, for
+ * ~1/3 the cost of a healthy channel at the 10s default.
+ */
+export const DEFAULT_IFRAME_PROBE_POLL_INTERVAL_MS = 30_000;
 
 /**
  * One-channel subscription record. Tracks transport state across the
@@ -119,6 +137,15 @@ interface ChannelState {
    * on the polling path. Sticky for the channel's lifetime.
    */
   permanentPollFallback: boolean;
+  /**
+   * True iff the channel's last poll failed structurally and it is
+   * currently ticking at the probe cadence instead of the default.
+   * Cleared by the first successful poll. Survives stop/start cycles
+   * (a WS-disconnect fallback re-arms at the probe cadence, not the
+   * default) — the underlying condition is a property of the host,
+   * not of one timer.
+   */
+  pollDegraded: boolean;
 }
 
 /**
@@ -131,8 +158,29 @@ export type WsSender = (msg: WebSocketMessage) => void;
 /**
  * Iframe → parent `tools/call` invoker. Resolves with the tool's
  * structured-content output (parsed `JsonValue`) or rejects on
- * transport-level failure. The router will swallow the failure +
- * keep the poll loop running (next tick may succeed).
+ * failure.
+ *
+ * **Rejection contract.** The router classifies every rejection into
+ * exactly two kinds, and the invoker chooses which by the TYPE of the
+ * value it throws:
+ *
+ *   - **Structural** — reject with `RelayIncapableError` (see
+ *     `relay-incapability.ts`). Says: this failed for a reason that
+ *     will repeat identically on the next tick, so polling at full
+ *     cadence buys nothing. The router drops the channel to
+ *     {@link ChannelTransportRouterOptions.probePollIntervalMs} and
+ *     emits `channel-poll-degraded` once.
+ *   - **Transient** — reject with anything else. Says: the next tick
+ *     may well succeed. The router stays quiet and keeps the current
+ *     cadence; per-tick network jitter must not turn into bus noise
+ *     or a cadence change.
+ *
+ * Classification is by type only. An invoker cannot signal structural
+ * failure through an error MESSAGE, and re-wording a message cannot
+ * change how a channel is treated.
+ *
+ * Neither kind ever stops the loop — see
+ * {@link DEFAULT_IFRAME_PROBE_POLL_INTERVAL_MS}.
  */
 export type ToolsCallInvoker = (args: {
   readonly toolName: string;
@@ -167,8 +215,19 @@ export interface ChannelTransportRouterOptions {
    */
   readonly defaultPollIntervalMs?: number;
   /**
-   * Observability sink — fires once per transport pick + once per
-   * disconnect/reconnect-fallback transition. Optional; absent ⇒
+   * Cadence (ms) a channel probes at after a structural poll failure.
+   * Falls back to {@link DEFAULT_IFRAME_PROBE_POLL_INTERVAL_MS}.
+   *
+   * Clamped UP to the channel's normal cadence: degrading must never
+   * make a channel poll MORE often than it did while healthy, which a
+   * naive value would do for any deployment whose normal cadence is
+   * already slower than the probe default.
+   */
+  readonly probePollIntervalMs?: number;
+  /**
+   * Observability sink — fires once per transport pick, once per
+   * disconnect/reconnect-fallback transition, and once per
+   * poll-health transition in each direction. Optional; absent ⇒
    * silent.
    */
   readonly onObserve?: (event: ChannelTransportEvent) => void;
@@ -185,7 +244,9 @@ export interface ChannelTransportRouterOptions {
 export type ChannelTransportEvent =
   | ChannelTransportPickedEvent
   | ChannelTransportFallbackEvent
-  | ChannelTransportResubscribedEvent;
+  | ChannelTransportResubscribedEvent
+  | ChannelPollDegradedEvent
+  | ChannelPollRecoveredEvent;
 
 /**
  * Router handle returned by {@link createChannelTransportRouter}.
@@ -250,6 +311,12 @@ export function createChannelTransportRouter(
   const allowlist = new Set(opts.streamWebSocketLocalTools ?? []);
   const defaultPollMs =
     opts.defaultPollIntervalMs ?? DEFAULT_IFRAME_POLL_INTERVAL_MS;
+  // Clamped up — a degraded channel must never poll more eagerly than
+  // a healthy one. See `probePollIntervalMs`.
+  const probePollMs = Math.max(
+    defaultPollMs,
+    opts.probePollIntervalMs ?? DEFAULT_IFRAME_PROBE_POLL_INTERVAL_MS,
+  );
   /**
    * WS lifecycle flag. We start in `'connected'` because the router
    * is created AFTER the subscribe ack — the runtime's bootSequence
@@ -291,35 +358,114 @@ export function createChannelTransportRouter(
   }
 
   /**
+   * (Re-)arm a channel's recurring timer at `intervalMs`. Only ever
+   * called for a channel that is already polling — never resurrects a
+   * stopped loop.
+   */
+  function armTimer(state: ChannelState, intervalMs: number): void {
+    if (state.pollTimer !== null) clearInterval(state.pollTimer);
+    state.pollTimer = setInterval(() => {
+      void tick(state);
+    }, intervalMs);
+  }
+
+  /**
+   * Healthy → degraded. Slows the channel to the probe cadence and
+   * announces the transition ONCE.
+   *
+   * No-ops when the channel isn't polling: an in-flight call can
+   * resolve after `stopPolling` (WS payload arrived, channel removed,
+   * router disposed), and a degraded channel with no loop to slow
+   * down is not a transition worth announcing.
+   */
+  function degradePolling(state: ChannelState): void {
+    if (state.pollDegraded) return;
+    if (state.pollTimer === null) return;
+    state.pollDegraded = true;
+    armTimer(state, probePollMs);
+    observe({
+      kind: 'channel-poll-degraded',
+      sessionId: state.sessionId,
+      channelName: state.channelName,
+      reason: 'relay-incapable',
+      probeIntervalMs: probePollMs,
+    });
+  }
+
+  /**
+   * Degraded → healthy. Any successful poll proves the structural
+   * condition has lifted, so the channel returns to its normal
+   * cadence. Announced ONCE per recovery, not per subsequent success.
+   */
+  function restorePolling(state: ChannelState): void {
+    if (!state.pollDegraded) return;
+    state.pollDegraded = false;
+    if (state.pollTimer !== null) armTimer(state, defaultPollMs);
+    observe({
+      kind: 'channel-poll-recovered',
+      sessionId: state.sessionId,
+      channelName: state.channelName,
+      pollIntervalMs: defaultPollMs,
+    });
+  }
+
+  /**
+   * One poll of one channel: call the tool, classify the outcome,
+   * emit the payload.
+   *
+   * The two failure kinds are the `ToolsCallInvoker` rejection
+   * contract, classified by TYPE (never by message text):
+   *
+   *   - Structural (`RelayIncapableError`) — the next tick would fail
+   *     identically, so slow to the probe cadence and say so once.
+   *   - Transient (anything else) — stay quiet and keep the cadence.
+   *     The renderer's observability path already surfaces transport
+   *     failures via the WS error route; per-tool poll failures do
+   *     not also become bus noise during a passing outage.
+   *
+   * Neither kind stops the loop. That is the fail-safe: a channel
+   * whose host regains the ability to relay recovers on its own,
+   * within one probe interval, with no external nudge.
+   */
+  const tick = async (state: ChannelState): Promise<void> => {
+    if (disposed) return;
+    try {
+      const payload = await opts.toolsCall({
+        toolName: state.toolName,
+        args: { ...(state.args ?? {}) },
+      });
+      if (disposed) return;
+      // Restore BEFORE emitting: a throwing bus subscriber must not
+      // be mistaken for a failed poll (it would land in the catch
+      // below and read as transient), and it must not cost this
+      // channel its recovery.
+      restorePolling(state);
+      emitToBus(state, payload);
+    } catch (err) {
+      if (disposed) return;
+      if (isRelayIncapableError(err)) degradePolling(state);
+    }
+  };
+
+  /**
    * Start an iframe-polling loop for one channel. Idempotent — if a
    * timer is already running we leave it alone. Fires the first poll
    * IMMEDIATELY (no `setInterval` lead-in delay) so the first
    * `useStream` render isn't blocked on a 10-second wait.
+   *
+   * A channel that was already degraded when its loop last stopped
+   * re-arms at the probe cadence — the condition that degraded it
+   * belongs to the host, and a WS reconnect cycle is no evidence it
+   * has lifted. Only a successful poll is.
    */
   function startPolling(state: ChannelState): void {
     if (state.pollTimer !== null) return;
-    const tick = async (): Promise<void> => {
-      if (disposed) return;
-      try {
-        const payload = await opts.toolsCall({
-          toolName: state.toolName,
-          args: { ...(state.args ?? {}) },
-        });
-        if (disposed) return;
-        emitToBus(state, payload);
-      } catch {
-        // Swallow — next tick may succeed. The renderer's
-        // observability path already surfaces transport failures
-        // via the WS error route; per-tool poll failures stay quiet
-        // to avoid a noisy bus during transient outages.
-      }
-    };
     // Fire-and-forget the leading tick + schedule the recurring
     // ticks. Both are wrapped in the `disposed` guard above.
-    void tick();
+    void tick(state);
     state.pollTimer = setInterval(() => {
-      void tick();
-    }, defaultPollMs);
+      void tick(state);
+    }, state.pollDegraded ? probePollMs : defaultPollMs);
   }
 
   /**
@@ -445,6 +591,7 @@ export function createChannelTransportRouter(
           pollTimer: null,
           hasReceivedWsPayload: false,
           permanentPollFallback: false,
+          pollDegraded: false,
         };
         channels.set(k, state);
         activate(state);
