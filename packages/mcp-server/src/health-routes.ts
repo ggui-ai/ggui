@@ -75,6 +75,9 @@ interface MountOptions {
   readonly oauthIssuerUrl?: string;
   /** Structured logger for unexpected auth-check failures. */
   readonly logger: Logger;
+  /** Effective browser-origin allowlist, for operator diagnosis of CORS
+   *  failures — which are otherwise invisible server-side. */
+  readonly corsOrigins?: ReadonlyArray<string>;
 }
 
 /**
@@ -82,8 +85,18 @@ interface MountOptions {
  * express app. Returns nothing — the routes self-register.
  */
 export function mountHealthRoutes(opts: MountOptions): void {
-  const { app, info, toolCount, readinessChecks, getChannel, threads, auth, oauthEnabled, logger } =
-    opts;
+  const {
+    app,
+    info,
+    toolCount,
+    readinessChecks,
+    getChannel,
+    threads,
+    auth,
+    oauthEnabled,
+    logger,
+    corsOrigins,
+  } = opts;
 
   async function runReadinessChecks(): Promise<{
     readonly allReady: boolean;
@@ -139,6 +152,10 @@ export function mountHealthRoutes(opts: MountOptions): void {
           renders: channel.renderCount,
         };
       }
+      body.cors = {
+        loopback: true,
+        origins: corsOrigins === undefined ? [] : [...corsOrigins],
+      };
       // Thread-transport presence + durability claim. When present,
       // `durability` is exactly what the caller declared — 'ephemeral'
       // by default so Portal does not silently hide its non-durable

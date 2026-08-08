@@ -89,6 +89,7 @@ describe('createGguiServer — HTTP surface', () => {
       server: 'ggui-mcp-server',
       version: '0.0.1',
       tools: 11,
+      cors: { loopback: true, origins: [] },
     });
   });
 

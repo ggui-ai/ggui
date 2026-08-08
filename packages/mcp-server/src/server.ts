@@ -238,6 +238,7 @@ import { resolveMcpInstructions, type McpInstructionsValue } from "./instruction
 import { buildLlmCaller, createLlmBackedHandshakeNegotiator } from "./llm-backed-negotiator.js";
 import { createConsoleLogger, type Logger } from "./logger.js";
 import { buildControlService, CONTROL_PATH } from "./control-service.js";
+import { createBrowserCorsMiddleware } from "./browser-cors.js";
 import {
   buildOriginHostPolicy,
   createOriginHostValidationMiddleware,
@@ -4064,6 +4065,18 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
     })
   );
 
+  // Browser CORS (ggui#438b). Mounted app-wide and BEFORE auth:
+  // preflights carry no Authorization by spec, so an auth-gated OPTIONS
+  // would kill every authenticated browser session. One policy object
+  // covers every MCP surface — universal /mcp, the per-app route,
+  // /control, isolated services — and the OAuth discovery + token +
+  // registration routes a browser client must fetch to authenticate.
+  // Error responses (401/403/405) inherit the headers because the layer
+  // runs before the handlers that produce them. Routes that set their
+  // own ACAO (runtime-bundle, /code, /api/renders — all `*`) win: they
+  // setHeader later, which replaces this layer's value.
+  app.use(createBrowserCorsMiddleware({ policy: originHostPolicy }));
+
   app.use(express.json({ limit: bodyLimit }));
   // Form-urlencoded body parser for /oauth/token (RFC 6749 §4.1.3
   // requires application/x-www-form-urlencoded). JSON bodies still
@@ -4219,6 +4232,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
     oauthEnabled,
     ...(oauthConfig.issuerUrl !== undefined ? { oauthIssuerUrl: oauthConfig.issuerUrl } : {}),
     logger,
+    corsOrigins: originHostPolicy.allowedOrigins,
   });
 
   // Per-boot `buildMcpServer` options — every input below is fixed at

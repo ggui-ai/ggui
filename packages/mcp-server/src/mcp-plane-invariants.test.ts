@@ -364,3 +364,32 @@ describe("invariant: /mcp rejects non-JSON Content-Type before dispatch", () => 
     }
   });
 });
+
+describe("wired CORS: preflight is answered by the mounted layer, before auth", () => {
+  it("204s an OPTIONS /mcp with ACAO for an allowlisted origin and NO Authorization", async () => {
+    // Preflights carry NO Authorization by spec. This runs against the
+    // BOOTED server, so it pins the mount itself: if the CORS layer
+    // were mounted after route registration (or not at all), Express
+    // answers OPTIONS itself with 200 + Allow and no ACAO — and this
+    // fails. That is the regression a unit test of the middleware in
+    // isolation can never catch.
+    const { port, close } = await bootServer({ browserOrigins: ["https://app.guuey.com"] });
+    try {
+      const res = await rawRequest({
+        port,
+        method: "OPTIONS",
+        path: "/mcp",
+        headers: {
+          Host: `127.0.0.1:${port}`,
+          Origin: "https://app.guuey.com",
+          "Access-Control-Request-Method": "POST",
+          "Access-Control-Request-Headers": "authorization,content-type",
+        },
+      });
+      expect(res.status).toBe(204);
+      expect(res.headers["access-control-allow-origin"]).toBe("https://app.guuey.com");
+    } finally {
+      await close();
+    }
+  });
+});
