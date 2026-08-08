@@ -28,6 +28,7 @@ import {
   DEFAULT_IFRAME_POLL_INTERVAL_MS,
   DEFAULT_IFRAME_PROBE_POLL_INTERVAL_MS,
   type ChannelTransportEvent,
+  type ToolsCallInvoker,
 } from '../channel-transport.js';
 import { RelayIncapableError } from '../relay-incapability.js';
 import { StreamBus } from '../wire-config.js';
@@ -51,6 +52,12 @@ function makeRouter(opts: {
   readonly toolsCallResults?: Array<unknown>;
   readonly toolsCallReject?: boolean;
   readonly toolsCallScript?: readonly ToolsCallStep[];
+  /**
+   * Makes the invoker a NON-async function that throws before
+   * returning a promise — legal under `ToolsCallInvoker`, and the one
+   * shape whose failure reaches the tick's catch synchronously.
+   */
+  readonly toolsCallSyncReject?: Error;
 }) {
   const sent: WebSocketMessage[] = [];
   const observed: ChannelTransportEvent[] = [];
@@ -62,6 +69,36 @@ function makeRouter(opts: {
   bus.subscribe('weather', (env) => received.push(env));
   bus.subscribe('quotes', (env) => received.push(env));
   bus.subscribe('news', (env) => received.push(env));
+  const syncReject = opts.toolsCallSyncReject;
+  const toolsCall: ToolsCallInvoker =
+    syncReject !== undefined
+      ? ({ toolName, args }) => {
+          calls.push({
+            toolName,
+            args: { ...args } as Record<string, unknown>,
+          });
+          throw syncReject;
+        }
+      : async ({ toolName, args }) => {
+          calls.push({
+            toolName,
+            args: { ...args } as Record<string, unknown>,
+          });
+          if (opts.toolsCallReject) {
+            throw new Error('boom');
+          }
+          const script = opts.toolsCallScript;
+          if (script !== undefined && script.length > 0) {
+            const step = script[Math.min(scriptStep, script.length - 1)];
+            scriptStep += 1;
+            if (step !== undefined) {
+              if ('reject' in step) throw step.reject;
+              return step.resolve;
+            }
+          }
+          const next = results.shift();
+          return (next ?? null) as never;
+        };
   const router = createChannelTransportRouter({
     sessionId: RENDER_ID,
     appId: APP_ID,
@@ -71,23 +108,7 @@ function makeRouter(opts: {
     send: (msg) => {
       sent.push(msg);
     },
-    toolsCall: async ({ toolName, args }) => {
-      calls.push({ toolName, args: { ...args } as Record<string, unknown> });
-      if (opts.toolsCallReject) {
-        throw new Error('boom');
-      }
-      const script = opts.toolsCallScript;
-      if (script !== undefined && script.length > 0) {
-        const step = script[Math.min(scriptStep, script.length - 1)];
-        scriptStep += 1;
-        if (step !== undefined) {
-          if ('reject' in step) throw step.reject;
-          return step.resolve;
-        }
-      }
-      const next = results.shift();
-      return (next ?? null) as never;
-    },
+    toolsCall,
     streamBus: bus,
     ...(opts.defaultPollIntervalMs !== undefined
       ? { defaultPollIntervalMs: opts.defaultPollIntervalMs }
@@ -710,6 +731,84 @@ describe('channel-transport router — classified poll failures (#443)', () => {
     await vi.advanceTimersByTimeAsync(10_000);
     expect(calls).toHaveLength(1);
     await vi.advanceTimersByTimeAsync(50_000);
+    expect(calls).toHaveLength(2);
+    router.dispose();
+  });
+
+  it('keeps the degraded cadence across a stop/start cycle, without re-announcing', async () => {
+    // A WS-bound channel: it polls only as a disconnect fallback, so
+    // its loop legitimately stops and restarts. Degradation must
+    // survive that. A WS reconnect is no evidence the host regained
+    // the ability to relay — only a successful poll is — so re-arming
+    // at the default cadence would hand the doomed channel its full
+    // poll rate back on every reconnect.
+    const { router, calls, observed } = makeRouter({
+      streamWebSocketLocalTools: ['weather_now'],
+      defaultPollIntervalMs: 1_000,
+      probePollIntervalMs: 10_000,
+      toolsCallScript: [{ reject: new RelayIncapableError() }],
+    });
+    router.applyRender({ sessionId: RENDER_ID, streamSpec: STREAM_SPEC_WS });
+
+    // WS drops → poll fallback starts → leading tick degrades it.
+    router.onWsStatusChange('disconnected');
+    await vi.advanceTimersByTimeAsync(0);
+    expect(calls).toHaveLength(1);
+    expect(pollEvents(observed, 'channel-poll-degraded')).toHaveLength(1);
+
+    // WS comes back and delivers a payload → the poll loop STOPS.
+    router.onWsStatusChange('connected');
+    router.handleWsFrame({
+      type: 'channel_payload',
+      payload: {
+        sessionId: RENDER_ID,
+        appId: APP_ID,
+        channelName: 'weather',
+        seq: 1,
+        ts: new Date().toISOString(),
+        mode: 'replace',
+        payload: { temp: 71 },
+      },
+    });
+    await vi.advanceTimersByTimeAsync(20_000);
+    expect(calls).toHaveLength(1);
+
+    // WS drops again → the loop restarts AT PROBE CADENCE.
+    router.onWsStatusChange('disconnected');
+    await vi.advanceTimersByTimeAsync(0);
+    expect(calls).toHaveLength(2);
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(calls).toHaveLength(2);
+    await vi.advanceTimersByTimeAsync(9_000);
+    expect(calls).toHaveLength(3);
+
+    // Restarting a still-degraded channel is not a new transition.
+    expect(pollEvents(observed, 'channel-poll-degraded')).toHaveLength(1);
+    router.dispose();
+  });
+
+  it('degrades on the leading tick even when the invoker throws synchronously', async () => {
+    // `ToolsCallInvoker` is declared to return a promise, but a
+    // non-async implementation that throws before returning one
+    // satisfies that type. Such a throw lands in the tick's catch
+    // during `startPolling`'s own synchronous execution — so the
+    // channel's timer must already be armed by then, or the
+    // stopped-channel guard in `degradePolling` correctly ignores it
+    // and the channel silently burns a full degrade cycle.
+    const { router, calls, observed } = makeRouter({
+      defaultPollIntervalMs: 1_000,
+      probePollIntervalMs: 10_000,
+      toolsCallSyncReject: new RelayIncapableError(),
+    });
+    router.applyRender({ sessionId: RENDER_ID, streamSpec: STREAM_SPEC_POLL });
+
+    // No timer advance: the degrade already happened, synchronously.
+    expect(calls).toHaveLength(1);
+    expect(pollEvents(observed, 'channel-poll-degraded')).toHaveLength(1);
+
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(calls).toHaveLength(1);
+    await vi.advanceTimersByTimeAsync(9_000);
     expect(calls).toHaveLength(2);
     router.dispose();
   });

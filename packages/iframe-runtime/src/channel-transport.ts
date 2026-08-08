@@ -460,12 +460,23 @@ export function createChannelTransportRouter(
    */
   function startPolling(state: ChannelState): void {
     if (state.pollTimer !== null) return;
-    // Fire-and-forget the leading tick + schedule the recurring
-    // ticks. Both are wrapped in the `disposed` guard above.
+    // Arm BEFORE firing the leading tick. `ToolsCallInvoker` is
+    // declared to return a promise, but a non-async implementation
+    // that throws satisfies that type, and its failure reaches the
+    // tick's catch during THIS function's own synchronous execution.
+    // Arming second would leave `pollTimer` null at that moment, and
+    // `degradePolling`'s stopped-channel guard would (correctly, for
+    // what it can see) ignore it — costing the channel a full degrade
+    // cycle. Order here is the only thing that closes that window.
+    state.pollTimer = setInterval(
+      () => {
+        void tick(state);
+      },
+      state.pollDegraded ? probePollMs : defaultPollMs,
+    );
+    // Fire-and-forget the leading tick. Wrapped in the `disposed`
+    // guard above.
     void tick(state);
-    state.pollTimer = setInterval(() => {
-      void tick(state);
-    }, state.pollDegraded ? probePollMs : defaultPollMs);
   }
 
   /**

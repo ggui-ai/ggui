@@ -28,8 +28,13 @@
  */
 
 /**
- * Canonical code carried by {@link RelayIncapableError}. Stable —
- * hosts and tests may compare against it directly.
+ * Canonical code carried by {@link RelayIncapableError}.
+ *
+ * Package-internal. Nothing in this module reaches a host: it is not
+ * re-exported from `index.ts`, so an embedding app can neither catch
+ * this class nor read this code. The host-facing surface for the same
+ * information is the `channel-poll-degraded` / `channel-poll-recovered`
+ * observability pair, which IS exported.
  */
 export const RELAY_INCAPABLE = 'RELAY_INCAPABLE';
 

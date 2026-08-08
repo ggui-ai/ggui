@@ -61,6 +61,10 @@ import type {
   ObservabilityMessage,
   RelayIncapabilityEvent,
 } from '../index.js';
+import {
+  RelayIncapableError,
+  isRelayIncapableError,
+} from '../relay-incapability.js';
 import { buildBootHarness, tick } from './boot-helpers.js';
 import type { MockTransport } from './mock-transport.js';
 
@@ -801,6 +805,28 @@ describe('latch transitions — unlatch on ANY result envelope + edge observabil
     await tick();
     await tick();
   }
+
+  it('throws the TYPED structural error the router classifies on, not a bare Error (ggui#443)', async () => {
+    await latchViaFailedGesture();
+
+    // This is the thrower↔classifier seam. `channel-transport.ts`'s
+    // tick decides "drop to probe cadence" vs "stay quiet, next tick
+    // may succeed" from the TYPE of this rejection alone — it never
+    // reads the message. Swapping this throw back to a bare `Error`
+    // carrying the same text would leave every message-based
+    // assertion in this file green while silently restoring the #443
+    // defect: a doomed channel polling at full cadence forever.
+    const rejection: unknown = await channelToolsCall({
+      toolName: 'some_channel_tool',
+      args: {},
+    }).catch((err: unknown) => err);
+    expect(rejection).toBeInstanceOf(RelayIncapableError);
+    // …and the classifier's OWN predicate — the exact function the
+    // router's tick calls — agrees. Asserting the guard rather than
+    // only `instanceof` means a change to how the router classifies
+    // is caught here too, not just a change to what runtime throws.
+    expect(isRelayIncapableError(rejection)).toBe(true);
+  });
 
   it('a latched session receiving a well-formed {ok:false} result unlatches — channel polling attempts again and the per-gesture transient toast shows', async () => {
     await latchViaFailedGesture();
