@@ -35,12 +35,12 @@ import {
 const ENDPOINT = import.meta.env.VITE_GUUEY_ENDPOINT ?? 'http://localhost:6790';
 /**
  * ggui serve's MCP endpoint as the BROWSER reaches it — the target of
- * this host's guest tools/call relay. Default is the same-origin
- * `/ggui-mcp` dev proxy (vite.config.ts) because ggui serve's `/mcp`
- * route carries no CORS headers; a cross-origin URL here fails with
- * `Failed to fetch` before any MCP frame is sent. Overridable for
- * deployments that put the host and server on one origin (or once the
- * server grows /mcp CORS).
+ * this host's guest tools/call relay. Defaults to the same-origin
+ * `/ggui-mcp` dev proxy (vite.config.ts), which keeps the sample
+ * configuration-free. Serve also supports a direct cross-origin URL when
+ * the operator allowlists this page's origin
+ * (`ggui serve --browser-origin http://localhost:6890`) — set
+ * `VITE_GGUI_MCP_URL` to the absolute `/mcp` URL to use that path.
  */
 const GGUI_MCP_URL = import.meta.env.VITE_GGUI_MCP_URL ?? '/ggui-mcp';
 /** Matches `appId` in the agent half's guuey.json; namespaces the thread key. */

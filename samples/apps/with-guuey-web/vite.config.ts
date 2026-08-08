@@ -36,9 +36,8 @@ const SANDBOX_PROXY_PORT = Number(process.env.SANDBOX_PROXY_PORT ?? 7890);
  * ggui serve's MCP endpoint — the upstream of the `/ggui-mcp` dev proxy
  * below. The HOST half of this shell relays guest `tools/call` there
  * (App.tsx `relayCallTool`); the proxy makes that call same-origin from
- * the browser's perspective, because ggui serve's `/mcp` route carries
- * no CORS headers (unlike its bundle/render routes — tracked upstream).
- * Default matches the `ggui` mcpServer URL `guuey dev` injects.
+ * the browser's perspective. Default matches the `ggui` mcpServer URL
+ * `guuey dev` injects.
  */
 const GGUI_MCP_TARGET = process.env.VITE_GGUI_MCP_TARGET ?? 'http://localhost:6781';
 const EXTERNAL_SANDBOX_URL = process.env.VITE_SANDBOX_URL;
