@@ -87,29 +87,6 @@ function extractFailSignature(resultText: string): string {
   return "";
 }
 
-/**
- * Closing instruction for the patch / eval-fix prompt (Exp 52a H1').
- *
- * Tool naming here BINDS tool choice: with `rewrite` offered in the tool
- * list but this line saying "Produce ONE `apply_changes` call", the model
- * complied 10/10 (Exp 52a). So the instruction must match the turn's
- * actual tool surface — tool-neutral when rewrite is offered, the
- * original single-patch form when it isn't. `GGUI_BATCH_FIX=on` (exp61
- * env opt-in) is preserved verbatim and takes precedence.
- */
-export function evalFixClosingInstruction(
-  rewriteOffered: boolean,
-  batchFixForced: boolean,
-): string {
-  if (batchFixForced) {
-    return `**Fix EVERY error listed above in THIS single \`apply_changes\` call.** Emit multiple \`changes[]\` entries — one per range.`;
-  }
-  if (rewriteOffered) {
-    return `Fix ALL the issues: either ONE \`apply_changes\` call targeting the lines that need fixing, or a single \`rewrite\` of the full file if the fixes span many regions — pick whichever you can emit with correct syntax.`;
-  }
-  return `Produce ONE \`apply_changes\` call targeting only the lines that need fixing.`;
-}
-
 export function selectTurnTools(
   turnsUsed: number,
   forceEscape = false,
@@ -120,27 +97,9 @@ export function selectTurnTools(
   primitiveIndexPlanTurn = false,
   planFirstTurn = false,
   codeFormat: "array" | "flat" = "array",
-  evalFixFindingCount = 0,
 ): LLMToolDef[] {
-  // Hashline profile: swap the numeric-line apply_changes for the
-  // hash-verified variant. Independently, `codeFormat` picks the
-  // flat-code variant when "flat" — a shallower JSON schema that some
-  // model decoders handle more reliably.
-  const applyTool =
-    hashlineMode === "v2"
-      ? codeFormat === "flat"
-        ? APPLY_CHANGES_HASHLINE_TOOL_FLAT
-        : APPLY_CHANGES_HASHLINE_TOOL
-      : codeFormat === "flat"
-        ? APPLY_CHANGES_TOOL_FLAT
-        : APPLY_CHANGES_TOOL;
   if (forceEscape) return [APPLY_CHANGES_TOOL_SCOPED];
-  // Exp 52: the escape is NON-exclusive. The exclusive [REWRITE_TOOL]
-  // swap produced phantom turns (2/7 escapes emitted an off-schema
-  // `changes` payload against the rewrite schema) — the escape works
-  // because rewrite becomes AVAILABLE, not because apply becomes
-  // forbidden ("information helps, compulsion hurts").
-  if (consecutiveBrokenApplies >= 3) return [REWRITE_TOOL, applyTool];
+  if (consecutiveBrokenApplies >= 3) return [REWRITE_TOOL];
   // Plan-first turn (independent of index mode). When on, turn 1 is
   // write_plan only; turn 2+ is normal write tools.
   if (planFirstTurn && turnsUsed === 1) {
@@ -159,19 +118,23 @@ export function selectTurnTools(
   if (primitiveIndexPlanTurn && primitiveIndexMode !== "off" && turnsUsed === 2) {
     return [WRITE_PLAN_TOOL];
   }
+  // Hashline profile: swap the numeric-line apply_changes for the
+  // hash-verified variant. Independently, `codeFormat` picks the
+  // flat-code variant when "flat" — a shallower JSON schema that some
+  // model decoders handle more reliably.
+  const applyTool =
+    hashlineMode === "v2"
+      ? codeFormat === "flat"
+        ? APPLY_CHANGES_HASHLINE_TOOL_FLAT
+        : APPLY_CHANGES_HASHLINE_TOOL
+      : codeFormat === "flat"
+        ? APPLY_CHANGES_TOOL_FLAT
+        : APPLY_CHANGES_TOOL;
   const tools: LLMToolDef[] = [applyTool, GET_ICONS_TOOL];
   // Tool-driven primitive docs. Advertise the component-docs fetch
   // tool alongside the authoring tool so the LLM can pull full prop
   // APIs on demand when the compact index isn't enough signal.
   if (primitiveIndexMode !== "off") tools.push(GET_COMPONENTS_INFO_TOOL);
-  // Exp 52: on an eval-fix turn carrying >= 3 findings, offer rewrite
-  // ALONGSIDE apply. Multi-range eval-fix patches break at 49% (72% at
-  // 4+ ranges) while rewrite is geometry-free — a full-file payload has
-  // no coordinates to get wrong. At 1-2 findings the patch path is
-  // clearly better (24% break, ~40% of the output tokens), so the
-  // low-k surface stays untouched and rewrite is a choice, never a
-  // default.
-  if (evalFixFindingCount >= 3) tools.push(REWRITE_TOOL);
   return tools;
 }
 
@@ -222,14 +185,6 @@ export interface CodingTurnInput {
   readonly lastDiffFailed: boolean;
   /** True when lastResultText came from the eval round (vs self-check). */
   readonly isEvalFeedback: boolean;
-  /**
-   * Number of findings the eval round fed back in `lastResultText`
-   * (capped at MAX_FEEDBACK_ISSUES by run-eval-round). Meaningful only
-   * when {@link isEvalFeedback} is true; at >= 3 the turn offers
-   * `rewrite` alongside `apply_changes` (Exp 52 — multi-range eval-fix
-   * patches are the dominant SELF_CHECK_FAIL engine). Absent = 0.
-   */
-  readonly evalFindingCount?: number;
   /** Cached lucide icon name list (populated lazily on first get_icons call). */
   readonly iconNamesCache: string | null;
   readonly preWarmedContext: PreWarmedEvalContext | null | undefined;
@@ -514,13 +469,10 @@ ${issues}
       // the original short prompt. `GGUI_BATCH_FIX=on` preserved as
       // env-opt-in if future experimentation wants to revisit.
       const batchFixForced = typeof process !== "undefined" && process.env?.GGUI_BATCH_FIX === "on";
-      // Exp 52a H1': the closing instruction is the binding constraint on
-      // tool choice — with rewrite offered but this line naming
-      // apply_changes, the model picked apply 10/10. Neutralize it only
-      // on the turns where rewrite is actually in the tool list.
-      const rewriteOffered = isEvalFeedback && (input.evalFindingCount ?? 0) >= 3;
-      const closingInstruction = evalFixClosingInstruction(rewriteOffered, batchFixForced);
-      userPrompt = `Fix the issues below. Make **minimal, targeted changes**.${diffHint}
+      const closingInstruction = batchFixForced
+        ? `**Fix EVERY error listed above in THIS single \`apply_changes\` call.** Emit multiple \`changes[]\` entries — one per range.`
+        : `Produce ONE \`apply_changes\` call targeting only the lines that need fixing.`;
+      userPrompt = `Fix the issues below. Make **minimal, targeted changes** — do NOT rewrite the whole file.${diffHint}
 
 ${issueHeader}
 ${issues}
@@ -562,21 +514,7 @@ ${closingInstruction}`;
     primitiveIndexPlanTurn,
     planFirstTurn,
     codeFormat,
-    // Gated on isEvalFeedback so a stale count from an earlier eval
-    // round never widens a plain self-check patch turn's surface.
-    isEvalFeedback ? (input.evalFindingCount ?? 0) : 0,
   );
-  // Exp 52 pick-rate observability: the H1 falsification metric is
-  // "does the model choose rewrite when OFFERED" — without this line
-  // an un-exercised offer and a threading bug are indistinguishable
-  // in bench logs.
-  if (tools.some((t) => t.name === "rewrite") && !forceEscape) {
-    console.log(
-      `[coding-agent] rewrite offered (turn ${turnsUsed}, ` +
-        `evalFindings=${isEvalFeedback ? (input.evalFindingCount ?? 0) : 0}, ` +
-        `consecutiveBroken=${consecutiveBrokenApplies})`,
-    );
-  }
   const llmStart = Date.now();
   const response = await codingAgent.callTools(
     codingModel,

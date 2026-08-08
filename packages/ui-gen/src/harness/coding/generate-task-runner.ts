@@ -153,7 +153,6 @@ export function createGenerateTaskRunner(input: CreateGenerateRunnerInput): Task
   let lastResultText = "";
   let lastDiffFailed = false;
   let isEvalFeedback = false;
-  let evalFindingCount = 0;
   let iconNamesCache: string | null = null;
   let preWarmedContext: PreWarmedEvalContext | null | undefined;
   let prevModeSubcats = new Set<string>();
@@ -197,7 +196,6 @@ export function createGenerateTaskRunner(input: CreateGenerateRunnerInput): Task
           lastResultText,
           lastDiffFailed,
           isEvalFeedback,
-          evalFindingCount,
           iconNamesCache,
           preWarmedContext,
           preWarmPromise: session.preWarmPromise,
@@ -241,11 +239,6 @@ export function createGenerateTaskRunner(input: CreateGenerateRunnerInput): Task
         lastResultText = turn.lastResultText;
         lastDiffFailed = turn.lastDiffFailed;
         isEvalFeedback = turn.isEvalFeedback;
-        // A "continue" means the next turn's feedback is self-check
-        // output, not the eval round's — the count no longer describes
-        // lastResultText. (The isEvalFeedback gate in runCodingTurn
-        // also covers this; cleared here so the state can't go stale.)
-        if (!turn.isEvalFeedback) evalFindingCount = 0;
         continue;
       }
 
@@ -349,7 +342,6 @@ export function createGenerateTaskRunner(input: CreateGenerateRunnerInput): Task
         lastResultText = round.lastResultText;
         isEvalFeedback = round.isEvalFeedback;
         lastDiffFailed = round.lastDiffFailed;
-        evalFindingCount = round.evalFindingCount ?? 0;
       } else {
         // Eval not enabled or already done — exit loop.
         break;

@@ -116,13 +116,6 @@ export interface EvalRoundResult {
   readonly lastResultText: string;
   readonly isEvalFeedback: boolean;
   readonly lastDiffFailed: boolean;
-  /**
-   * Number of findings carried in `lastResultText` (post
-   * MAX_FEEDBACK_ISSUES cap). Only meaningful when control ===
-   * "feedback"; the coding turn uses >= 3 to offer `rewrite` alongside
-   * `apply_changes` (Exp 52).
-   */
-  readonly evalFindingCount?: number;
 }
 
 /** Cap feedback to N issues per eval-fix turn so the LLM stays surgical. */
@@ -377,7 +370,6 @@ export async function runEvalRound(
           lastResultText: lines.join("\n\n"),
           isEvalFeedback: true,
           lastDiffFailed: false,
-          evalFindingCount: lines.length,
         };
       }
       evalResult = {
@@ -556,7 +548,6 @@ export async function runEvalRound(
           lastResultText: lines.join("\n\n"),
           isEvalFeedback: true,
           lastDiffFailed: false,
-          evalFindingCount: lines.length,
         };
       }
       // Probe didn't trip a recoverable fail — fold its issues (if any)
@@ -733,7 +724,6 @@ export async function runEvalRound(
         lastResultText: probeLines.join("\n\n"),
         isEvalFeedback: true,
         lastDiffFailed: false,
-        evalFindingCount: probeLines.length,
       };
     }
 
@@ -788,7 +778,6 @@ export async function runEvalRound(
       lastResultText: issueLines.join("\n\n"),
       isEvalFeedback: true,
       lastDiffFailed: false,
-      evalFindingCount: issueLines.length,
     };
   } catch (e) {
     console.error("[simple] eval failed:", e instanceof Error ? e.message : e);
