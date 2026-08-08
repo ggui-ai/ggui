@@ -1,6 +1,44 @@
 {
   "kind": "authored",
   "capturedAt": "2026-08-07T18:39:58.000Z",
-  "source": "ggui iframe-runtime + useMcpAppsChat, hand-assembled from the shapes the runtime actually emits",
-  "note": "Authored-from-real-shapes, NOT a live capture. Every frame shape is copied out of ggui's shipping source, not invented: the ui/message doorbell is the exact postToParent frame emitUserActionDoorbell posts (oss/packages/iframe-runtime/src/runtime.ts — directive text verbatim, content-block _meta['ai.ggui/userAction'] typed GguiUserActionMeta); the ggui_runtime_submit_action call carries dispatchSubmitAction's kind:'dispatch' envelope; the render/submit/consume results carry the handlers' zod wire schemas (@ggui-ai/mcp-server-handlers renders/{render,submit-action,consume}.ts) inside build-mcp.ts's {structuredContent, content:[stringified], _meta} success envelope. FIXTURES.md's acceptance filter is 'real framework wire' — the runtime IS the framework for this Layer-B scenario: no agent framework's server-side stream contains the client→host gesture round-trip, which is why authorship sits on ggui's side. Stable/incidental discipline for this transcript: see ENROLLMENT.md in this directory (the enrollment draft of record for silverprotocol/workspace)."
+  "source": "ggui iframe-runtime + mcp-server handler wire schemas, hand-assembled from the shapes the shipping code emits",
+  "note": "Authored-from-real-shapes, NOT a live capture (FIXTURES.md Layer B, workspace#10). Every frame shape is copied out of ggui's shipping source, not invented — the per-frame map is `sourceMap` below. Stable/incidental discipline for this transcript: see ENROLLMENT.md in this directory (the enrollment draft of record for silverprotocol/workspace).",
+  "sourceMap": [
+    {
+      "frame": 0,
+      "frameType": "ggui_render tool result",
+      "emits": "the MCP-Apps bootstrap: wire shape (incl. the nextStep → ggui_consume hint) per the render handler's zod output schema, wrapped in the server's {structuredContent, content:[stringified], _meta} success envelope; the _meta['ai.ggui/render'] slice and _meta.ui.resourceUri are the deriveRenderMeta projection (the single projection function every ggui transport shares)",
+      "source": "oss/packages/mcp-server-handlers/src/renders/render.ts (renderOutputSchema) + oss/packages/mcp-server-handlers/src/renders/slice-meta-derivation.ts (deriveRenderMeta) + oss/packages/mcp-server/src/build-mcp.ts (success envelope)"
+    },
+    {
+      "frame": 1,
+      "frameType": "tools/call ggui_runtime_submit_action",
+      "emits": "the client-originated gesture: kind:'dispatch' envelope carrying intent + actionData + uiContext snapshot + actionId + firedAt, exactly as the iframe runtime dispatches it over the channel transport",
+      "source": "oss/packages/iframe-runtime/src/runtime.ts (dispatchSubmitAction)"
+    },
+    {
+      "frame": 2,
+      "frameType": "ggui_runtime_submit_action result",
+      "emits": "the accept-with-no-consumer report: {ok, consumerPresent:false} per the submit handler's zod output schema, in the same success envelope — consumerPresent:false is the doorbell's precondition",
+      "source": "oss/packages/mcp-server-handlers/src/renders/submit-action.ts (outputSchema.consumerPresent) + oss/packages/mcp-server/src/build-mcp.ts (success envelope)"
+    },
+    {
+      "frame": 3,
+      "frameType": "ui/message doorbell",
+      "emits": "the pure doorbell the iframe posts to the host: directive text (agent instruction, prose incidental) AND the content-block _meta['ai.ggui/userAction'] structured mirror (typed GguiUserActionMeta, kind:'user-action', actionId echo, nextStep → ggui_consume) — a verbatim copy of the production postToParent frame",
+      "source": "oss/packages/iframe-runtime/src/runtime.ts (emitUserActionDoorbell)"
+    },
+    {
+      "frame": 4,
+      "frameType": "tools/call ggui_consume",
+      "emits": "the drain call a fresh agent turn issues by obeying the doorbell directive: arguments per the consume handler's zod input schema (sessionId + timeout), matching the next_tool/next_args the doorbell text carries",
+      "source": "oss/packages/mcp-server-handlers/src/renders/consume.ts (inputSchema / consumeInputShape) + oss/packages/iframe-runtime/src/runtime.ts (emitUserActionDoorbell directive next_args)"
+    },
+    {
+      "frame": 5,
+      "frameType": "ggui_consume result",
+      "emits": "the drained gesture: {events:[ConsumeEventEntry {type:'action', sessionId, intent, actionData, uiContext, actionId, firedAt}], status} per the consume handler's zod output schema, in the same success envelope",
+      "source": "oss/packages/mcp-server-handlers/src/renders/consume.ts (outputSchema) + oss/packages/mcp-server/src/build-mcp.ts (success envelope)"
+    }
+  ]
 }
