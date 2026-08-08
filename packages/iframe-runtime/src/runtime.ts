@@ -117,6 +117,7 @@ import {
 } from './observability.js';
 import { mountUiFeedbackChrome } from './ui-feedback-chrome.js';
 import {
+  hostCanReceiveMessages,
   hostCanRelayToolCalls,
   setHostCapabilities,
 } from './host-capabilities.js';
@@ -2219,8 +2220,19 @@ export function dispatchSubmitAction(args: {
     if (resp !== null && classifySubmitActionResponse(resp) === 'success') {
       const consumerPresent = extractConsumerPresent(resp);
       if (consumerPresent === false) {
+        // No `ggui_consume` long-poll is draining this render's pipe,
+        // so the gesture needs a fresh agent turn. `ui/message` is the
+        // ONLY view→host method that can start one — a host that does
+        // not accept it cannot be woken by us at all, and the user has
+        // to send a message themselves (ggui#440).
+        //
+        // The doorbell is posted either way: capability absence is an
+        // unconfirmed signal, not a proven "cannot", and a dropped
+        // postMessage costs nothing.
         showActionToast(
-          `💬 ${intent}${dataPart} — agent not listening, sent to chat`,
+          hostCanReceiveMessages()
+            ? `💬 ${intent}${dataPart} — agent not listening, sent to chat`
+            : `💬 ${intent}${dataPart} — agent not listening. Send a message to continue.`,
           'action_required',
         );
         emitUserActionDoorbell({

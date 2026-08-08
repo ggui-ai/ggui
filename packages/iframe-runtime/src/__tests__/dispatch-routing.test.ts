@@ -413,6 +413,71 @@ describe('routeDispatch — submit-action bridge', () => {
   });
 });
 
+describe('doorbell honesty on a host without the message capability (ggui#440)', () => {
+  beforeEach(() => {
+    __resetHostCapabilitiesForTest();
+  });
+
+  it('still POSTS the doorbell when the host advertised nothing (fail-safe)', async () => {
+    // Boot with hostCapabilities {} ; relay succeeds, no consumer.
+    setHostCapabilities({});
+    transport.queueResponse('tools/call', {
+      result: { structuredContent: { ok: true, consumerPresent: false } },
+    });
+    routeDispatch({
+      actionName: 'archive',
+      data: {},
+      meta: { sessionId: 'sess_1', appId: 'app_1' },
+      dispatchToolName: 'ggui_runtime_submit_action',
+    });
+    await tick();
+
+    const doorbell = postMessageSpy.mock.calls.find(
+      ([msg]) => (msg as { method?: string }).method === 'ui/message',
+    );
+    expect(doorbell).toBeDefined();
+  });
+
+  it('does NOT tell the user it was sent to chat when the host cannot receive messages', async () => {
+    setHostCapabilities({});
+    transport.queueResponse('tools/call', {
+      result: { structuredContent: { ok: true, consumerPresent: false } },
+    });
+    routeDispatch({
+      actionName: 'archive',
+      data: {},
+      meta: { sessionId: 'sess_1', appId: 'app_1' },
+      dispatchToolName: 'ggui_runtime_submit_action',
+    });
+    await tick();
+
+    const toast = document.getElementById('__ggui-action-toast__');
+    expect(toast?.textContent).not.toMatch(/sent to chat/i);
+    // It must tell the user what to DO — the agent can only be woken
+    // by a message the user sends themselves on this host.
+    expect(toast?.textContent).toMatch(/send a message|message the agent/i);
+  });
+
+  it('keeps the "sent to chat" wording on a host that advertised message', async () => {
+    // Boot with hostCapabilities { message: {} } — the doorbell will
+    // actually arrive, so the original reassurance is accurate.
+    setHostCapabilities({ message: {} });
+    transport.queueResponse('tools/call', {
+      result: { structuredContent: { ok: true, consumerPresent: false } },
+    });
+    routeDispatch({
+      actionName: 'archive',
+      data: {},
+      meta: { sessionId: 'sess_1', appId: 'app_1' },
+      dispatchToolName: 'ggui_runtime_submit_action',
+    });
+    await tick();
+
+    const toast = document.getElementById('__ggui-action-toast__');
+    expect(toast?.textContent).toMatch(/sent to chat/i);
+  });
+});
+
 describe('relay-incapability is explained once, not per gesture (ggui#440)', () => {
   beforeEach(() => {
     __resetHostCapabilitiesForTest();
