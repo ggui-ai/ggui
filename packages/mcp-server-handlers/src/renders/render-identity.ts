@@ -48,11 +48,26 @@ export interface RenderIdentityFields {
 }
 
 /**
- * Named structured event for a failed identity write. Emitted as one
- * JSON line so log pipelines can filter on `msg` without parsing prose
- * (same shape as this package's other best-effort write events).
+ * Named structured events this module emits, as a closed set.
+ *
+ * Each is emitted as one JSON line so log pipelines can filter on
+ * `msg` without parsing prose (same shape as this package's other
+ * best-effort write events). Operators alert on these names, so they
+ * are a union rather than a bare `string`: a typo would produce a
+ * plausible-looking event that no alert ever matches, and nothing
+ * downstream could tell it from the write simply never failing.
+ *
+ *   - `render_identity_write_failed` — a first write (or the cold-gen
+ *     backfill) could not be persisted.
+ *   - `render_identity_refresh_failed` — a mutation path could not
+ *     refresh an existing record.
  */
-const WRITE_FAILED_EVENT = 'render_identity_write_failed';
+export type RenderIdentityFailureEvent =
+  | 'render_identity_write_failed'
+  | 'render_identity_refresh_failed';
+
+const WRITE_FAILED_EVENT: RenderIdentityFailureEvent =
+  'render_identity_write_failed';
 
 /**
  * Project a committed row + its identity slice into the durable
@@ -102,7 +117,7 @@ export async function writeRenderIdentity(
   store: RenderIdentityStore | undefined,
   session: StoredGguiSession,
   identity: RenderIdentityFields,
-  failureEvent: string = WRITE_FAILED_EVENT,
+  failureEvent: RenderIdentityFailureEvent = WRITE_FAILED_EVENT,
 ): Promise<void> {
   if (!store) return;
   try {
@@ -144,7 +159,7 @@ export async function backfillRenderIdentityBlueprintId(
 }
 
 function logRenderIdentityFailure(
-  event: string,
+  event: RenderIdentityFailureEvent,
   sessionId: string,
   appId: string,
   err: unknown,

@@ -1750,6 +1750,37 @@ describe('createGguiRenderHandler — durable render identity (#430 slice 1)', (
     expect(record.blueprintId).toMatch(/^bp_/);
   });
 
+  it('a themeId override re-commits LAST and its record keeps the backfilled blueprintId', async () => {
+    const renderIdentityStore = new InMemoryRenderIdentityStore();
+    const { harness, handshakeId } = await buildColdGenHarness({
+      renderIdentityStore,
+    });
+
+    const out = await harness.handler.handler(
+      { handshakeId, props: {}, themeId: 'dark' },
+      CTX,
+    );
+    assertRenderSuccess(out);
+
+    // Proves the overlay path actually ran — without the re-commit
+    // there is no last write for this test to be about.
+    const stored = await harness.renderStore.get(out.sessionId);
+    const render = stored?.render;
+    if (!render || render.type === 'mcpApps' || render.type === 'system') {
+      throw new Error('expected a ComponentGguiSession from cold gen');
+    }
+    expect(render.themeId).toBe('dark');
+
+    // The overlay commit lands AFTER cold-gen registration backfilled
+    // the id, so its record must carry that id forward. Writing `null`
+    // here (or reading a `resolvedBlueprintId` that has not settled
+    // yet) would silently erase the backfill.
+    const record = await readRecord(renderIdentityStore, out.sessionId);
+    expect(record.blueprintId).not.toBeNull();
+    expect(record.blueprintId).toBe(out.blueprintId);
+    expect(record.seqAtLastCommit).toBe(stored?.eventSequence);
+  });
+
   it('cache reuse writes the reused blueprint id straight through', async () => {
     const renderIdentityStore = new InMemoryRenderIdentityStore();
     const { harness, handshakeId, storedUuid } = await buildAcceptCacheHarness({
@@ -1766,7 +1797,7 @@ describe('createGguiRenderHandler — durable render identity (#430 slice 1)', (
     expect(record.contractKey).toHaveLength(16);
   });
 
-  it('no store bound — render succeeds and nothing is written', async () => {
+  it('no store bound — render succeeds', async () => {
     const { harness, handshakeId } = await buildColdGenHarness();
     const out = await harness.handler.handler({ handshakeId, props: {} }, CTX);
     assertRenderSuccess(out);
