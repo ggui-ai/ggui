@@ -276,6 +276,28 @@ function stripNpmLocks(rootDir) {
   visit(rootDir);
 }
 
+/**
+ * Delete every `pnpm-workspace.yaml` BELOW the composed root (the root's
+ * own file — the app-shell workspace wrapper — stays). Sample-carried
+ * copies (e.g. the todo sample's `allowBuilds` approval, which serves the
+ * standalone with-guuey lane) would otherwise make a workspace MEMBER a
+ * nested workspace root, which pnpm does not support.
+ */
+function stripNestedPnpmWorkspaceFiles(rootDir) {
+  const visit = (dir, depth) => {
+    for (const entry of readdirSync(dir)) {
+      const p = join(dir, entry);
+      if (statSync(p).isDirectory()) {
+        if (entry === 'node_modules') continue;
+        visit(p, depth + 1);
+      } else if (entry === 'pnpm-workspace.yaml' && depth > 0) {
+        rmSync(p);
+      }
+    }
+  };
+  visit(rootDir, 0);
+}
+
 function copyTree(src, dst) {
   if (!existsSync(src)) {
     console.error(`✗ source missing: ${src}`);
@@ -353,6 +375,16 @@ function composeOne(sdk, outDir) {
     );
     writeFileSync(guueyJsonPath, `${JSON.stringify(guueyCfg, null, 2)}\n`);
     stripNpmLocks(outDir);
+  } else {
+    // Workspace lanes: a sample may carry its own pnpm-workspace.yaml —
+    // the todo sample does (its `allowBuilds` approval is what lets the
+    // STANDALONE with-guuey lane's `pnpm install` run esbuild's
+    // postinstall under pnpm ≥11's fatal ignored-builds gate). Inside
+    // the composed WORKSPACE tree that same file would turn the member
+    // into a nested workspace root, so strip every copy below the
+    // app-shell's own root file; the root already carries the lanes'
+    // build posture (`strictDepBuilds: false`).
+    stripNestedPnpmWorkspaceFiles(outDir);
   }
 
   // 3b. Point ggui's UI generation at this SDK's own provider. Guard the

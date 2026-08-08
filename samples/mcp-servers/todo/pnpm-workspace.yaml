@@ -1,0 +1,10 @@
+# pnpm build-script approval (pnpm ≥11: `allowBuilds` in THIS file is the
+# only honored location — the package.json `pnpm` field is no longer read,
+# and v10's `onlyBuiltDependencies` key was removed). tsx depends on
+# esbuild, whose postinstall fetches/validates the platform binary; with
+# pnpm's fatal ignored-builds gate and no approval, a standalone
+# `pnpm install` in this dir exits 1 and the server never boots (the
+# with-guuey golden path spawns exactly that install — ggui#426).
+# npm installs ignore this file entirely.
+allowBuilds:
+  esbuild: true
