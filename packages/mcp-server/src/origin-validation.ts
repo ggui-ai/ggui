@@ -208,15 +208,23 @@ export function createOriginHostValidationMiddleware(opts: {
   readonly logger: Logger;
 }): RequestHandler {
   const { policy, enforceOriginPathPrefixes, logger } = opts;
+  // Lowercased once at middleware-creation time so a caller passing a
+  // mixed-case service path (e.g. perAppRouting.pathPrefix) is still
+  // matched correctly below — see the req.path.toLowerCase() comment.
+  const lowerEnforcePrefixes = enforceOriginPathPrefixes.map((p) => p.toLowerCase());
   // Dedupe log noise: a polling page would otherwise flood the log with
   // one identical warning per request. Capped so attacker-minted unique
   // header values cannot grow the set without bound; after the cap,
   // rejections still 403 — they just stop logging.
   const warned = new Set<string>();
   return (req, res, next) => {
-    const originEnforced = enforceOriginPathPrefixes.some(
-      (p) => req.path === p || req.path.startsWith(`${p}/`)
-    );
+    // Express routes case-insensitively by default (no `case sensitive
+    // routing` setting here), so `POST /MCP` reaches the same handler as
+    // `POST /mcp`. Comparing req.path as-is would let that case variant
+    // skip Origin enforcement entirely — the Origin MUST must not be
+    // case-bypassable — so both sides are lowercased before comparison.
+    const path = req.path.toLowerCase();
+    const originEnforced = lowerEnforcePrefixes.some((p) => path === p || path.startsWith(`${p}/`));
     const rejection = validateOriginHost(
       req.headers.host,
       originEnforced && typeof req.headers.origin === "string" ? req.headers.origin : undefined,

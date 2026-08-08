@@ -147,6 +147,27 @@ describe("Origin/Host validation is WIRED (mount order, not just the pure functi
     }
   });
 
+  it("403s a disallowed Origin on POST /MCP — Express routes case-insensitively, so the uppercase path must not bypass the check", async () => {
+    const { port, close } = await bootServer();
+    try {
+      const res = await rawRequest({
+        port,
+        method: "POST",
+        path: "/MCP",
+        headers: { ...JSON_HEADERS, Host: `127.0.0.1:${port}`, Origin: "https://evil.com" },
+        body: "{}",
+      });
+      expect(res.status).toBe(403);
+      expect(JSON.parse(res.body)).toEqual({
+        jsonrpc: "2.0",
+        error: { code: -32000, message: "Invalid Origin header: https://evil.com" },
+        id: null,
+      });
+    } finally {
+      await close();
+    }
+  });
+
   it("passes a loopback Origin through to the transport (not 403)", async () => {
     const { port, close } = await bootServer();
     try {
