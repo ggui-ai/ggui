@@ -989,3 +989,153 @@ describe('latch transitions — unlatch on ANY result envelope + edge observabil
     });
   });
 });
+
+describe('post-dismissal cue in the relay dead zone (ggui#442)', () => {
+  const CUE_CLASS = 'ggui-relay-cue-pulse';
+  const CUE_STYLE_ID = 'ggui-relay-cue-style';
+  const TOAST_ID = '__ggui-action-toast__';
+
+  beforeEach(() => {
+    __resetHostCapabilitiesForTest();
+    __resetRelayNoticeForTest();
+    document.getElementById(TOAST_ID)?.remove();
+    document.getElementById(CUE_STYLE_ID)?.remove();
+    document.querySelector('[data-ggui-session-root]')?.remove();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  function toastEl(): HTMLElement | null {
+    return document.getElementById(TOAST_ID);
+  }
+
+  /** A session root holding one focusable control, as a render would. */
+  function mountSessionRoot(): HTMLButtonElement {
+    const root = document.createElement('ul');
+    root.setAttribute('data-ggui-session-root', '');
+    const btn = document.createElement('button');
+    root.appendChild(btn);
+    document.body.appendChild(root);
+    return btn;
+  }
+
+  function fireGesture(): void {
+    routeDispatch({
+      actionName: 'archive',
+      data: {},
+      meta: { sessionId: 'sess_1', appId: 'app_1' },
+      dispatchToolName: 'ggui_runtime_submit_action',
+    });
+  }
+
+  /**
+   * Latch the notice the only legitimate way (a real relay-shaped
+   * gesture failure on a host that advertised nothing), then DISMISS it
+   * the only way a user can — by clicking the persistent toast. That
+   * click is the consent this issue defends: it must never be undone by
+   * re-showing the notice.
+   */
+  async function latchAndDismiss(): Promise<void> {
+    setHostCapabilities({});
+    transport.queueResponse('tools/call', {
+      error: { code: -32601, message: 'method not supported' },
+    });
+    fireGesture();
+    await tick();
+    await tick();
+    const el = toastEl();
+    expect(el?.textContent).toMatch(/cannot relay/i);
+    el?.click();
+    expect(el?.style.opacity).toBe('0');
+  }
+
+  it('pulses the focused in-root control, then removes the class', async () => {
+    await latchAndDismiss();
+    const btn = mountSessionRoot();
+    btn.focus();
+    expect(document.activeElement).toBe(btn);
+
+    vi.useFakeTimers();
+    fireGesture();
+
+    expect(btn.classList.contains(CUE_CLASS)).toBe(true);
+    // The keyframes ride an injected <style>, matching how the renderer
+    // injects its own theme CSS (stable id, idempotent, on <head>).
+    const style = document.getElementById(CUE_STYLE_ID);
+    expect(style).not.toBeNull();
+    expect(style?.textContent).toContain(`@keyframes ${CUE_CLASS}`);
+    // The persistent notice is NOT re-shown — dismissed consent stands.
+    expect(toastEl()?.style.opacity).toBe('0');
+
+    // jsdom never fires `animationend`, so the class comes off via the
+    // timeout belt. Real browsers take whichever fires first.
+    vi.advanceTimersByTime(1_000);
+    expect(btn.classList.contains(CUE_CLASS)).toBe(false);
+  });
+
+  it('falls back to one throttled micro-toast when no in-root control is focused', async () => {
+    await latchAndDismiss();
+    // Nothing focused: jsdom leaves `document.body` as activeElement,
+    // which is exactly the "no usable target" case.
+    expect(document.activeElement).toBe(document.body);
+
+    vi.useFakeTimers();
+    fireGesture();
+    const first = toastEl()?.textContent ?? '';
+    expect(first).toContain('archive');
+    expect(toastEl()?.style.opacity).toBe('1');
+
+    // A second gesture inside the throttle window adds nothing.
+    if (toastEl() !== null) toastEl()!.textContent = '';
+    vi.advanceTimersByTime(1_000);
+    fireGesture();
+    expect(toastEl()?.textContent).toBe('');
+
+    // Past the window, the cue is allowed to speak again.
+    vi.advanceTimersByTime(5_000);
+    fireGesture();
+    expect(toastEl()?.textContent).toBe(first);
+  });
+
+  it('arms only in the latched state — an unlatched gesture keeps the ordinary pending toast and cues nothing', async () => {
+    const btn = mountSessionRoot();
+    btn.focus();
+
+    fireGesture();
+
+    expect(toastEl()?.textContent).toBe('→ archive');
+    expect(btn.classList.contains(CUE_CLASS)).toBe(false);
+    expect(document.getElementById(CUE_STYLE_ID)).toBeNull();
+    await tick();
+  });
+
+  it('leaves no cue residue after the latch self-heals', async () => {
+    await latchAndDismiss();
+    const btn = mountSessionRoot();
+    btn.focus();
+
+    vi.useFakeTimers();
+    // A well-formed envelope clears the latch (ggui#440 self-heal).
+    transport.queueResponse('tools/call', {
+      result: { structuredContent: { ok: true, consumerPresent: true } },
+    });
+    fireGesture();
+    // This gesture was DISPATCHED inside the dead zone, so it is cued —
+    // at dispatch time the host was still believed relay-incapable.
+    expect(btn.classList.contains(CUE_CLASS)).toBe(true);
+
+    // Flush the response (clears the latch) and the cue's own cleanup.
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(btn.classList.contains(CUE_CLASS)).toBe(false);
+
+    // The next gesture is back on the normal path: ordinary pending
+    // toast, no pulse. Nothing the dead zone set is still armed — had
+    // `relayNoticeDismissed` survived the clear, a later re-latch would
+    // skip its own notice's dismissal and cue from the first gesture.
+    fireGesture();
+    expect(toastEl()?.textContent).toBe('→ archive');
+    expect(btn.classList.contains(CUE_CLASS)).toBe(false);
+  });
+});
