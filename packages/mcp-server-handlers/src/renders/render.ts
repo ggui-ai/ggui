@@ -1873,8 +1873,9 @@ export function createGguiRenderHandler(
               // time carries `blueprintId: null` because the id did
               // not exist yet. A plain read-modify-write is enough —
               // not because nothing else writes this record, but
-              // because the interleaving is benign: see the
-              // concurrency note on `backfillRenderIdentityBlueprintId`.
+              // because every other writer is field-targeted and
+              // cannot carry a stale `props`: see the concurrency note
+              // on `backfillRenderIdentityBlueprintId`.
               if (registered !== undefined) {
                 await backfillRenderIdentityBlueprintId(
                   deps.renderIdentityStore,

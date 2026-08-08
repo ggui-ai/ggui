@@ -167,14 +167,16 @@ export async function writeRenderIdentity(
  * and inventing a record from the id alone would be a record with no
  * identity — so we skip.
  *
- * Concurrency: this read-modify-write is NOT the only writer. A
- * deployment may also refresh the same record from paths that touch the
- * render row for other reasons, and those interleave with this one. The
- * posture is last-write-wins with commit authority: a whole-record
- * `put` from a commit is authoritative for the state at that commit and
- * simply wins, and a refresh that lands after it re-derives the
- * row-shaped fields from the row itself, so neither can leave the
- * record disagreeing with what was persisted. Nothing here needs a
+ * Concurrency: this read-modify-write is NOT the only writer, but it is
+ * the only one that writes WHOLE records. A deployment may also advance
+ * a record's sequence from paths that touch the render row for other
+ * reasons; those writers are field-targeted — they name the one or two
+ * fields they own in a conditional update and structurally cannot carry
+ * a stale `props` (it is not in their write expression at all). So the
+ * dangerous interleaving does not exist: no concurrent writer can
+ * resurrect props behind a commit. What remains is last-write-wins
+ * between whole-record writers, where a commit's `put` is authoritative
+ * for the state at that commit and simply wins. Nothing here needs a
  * conditional write.
  */
 export async function backfillRenderIdentityBlueprintId(
