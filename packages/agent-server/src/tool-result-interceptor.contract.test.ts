@@ -4,10 +4,10 @@
  * the tool-result interceptor that pre-resolves it via `resources/read`.
  *
  * The inputs are NOT synthetic: the `tool.done` payloads come from the
- * pinned silverprotocol cassette corpus
- * (`oss/.silverprotocol-corpus/`), captured from real SDK runs — Google
- * ADK (`app-spec-gemini36`) and Claude (`app-update-sonnet5`). The
- * corpus proves the exact wire shape real SDKs emit is the shape the
+ * pinned silverprotocol fixtures (`oss/e2e/fixtures/silverprotocol/`,
+ * `fixtures.lock.json`), captured from real SDK runs — Google ADK
+ * (`app-spec-gemini36`) and Claude (`app-update-sonnet5`). The corpus
+ * proves the exact wire shape real SDKs emit is the shape the
  * interceptor consumes.
  *
  * FIXTURES.md stability contract — this file asserts ONLY: event
@@ -20,56 +20,36 @@
  * `tool-result-interceptor.test.ts` — not duplicated here.
  */
 
-import { existsSync, readFileSync } from 'node:fs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { JsonValue, ingestAgEvents } from '@silverprotocol/core';
 import type { AgBlock, AgEvent } from '@silverprotocol/core';
+import { loadLeg } from './testing/corpus.js';
 import { interceptToolResult } from './tool-result-interceptor.js';
 import type { InterceptorMcpServers } from './tool-result-interceptor.js';
 import type { McpCallToolResult, NormalizedMessage } from './types.js';
 
-// ── Fail-LOUD corpus guard ──────────────────────────────────────────
-// Never describe.skipIf — a missing corpus is a broken dev setup, not
-// an optional feature; silent gates are banned (No Silent Block).
-
-const CORPUS_ROOT = new URL('../../../.silverprotocol-corpus/', import.meta.url);
-const APP_SPEC_GEMINI = new URL('app-spec-gemini36/adk.agjson.json', CORPUS_ROOT);
-const APP_UPDATE_SONNET = new URL('app-update-sonnet5/claude.agjson.json', CORPUS_ROOT);
-
-for (const cassette of [APP_SPEC_GEMINI, APP_UPDATE_SONNET]) {
-  if (!existsSync(cassette)) {
-    throw new Error(
-      'silverprotocol corpus missing — run: node oss/scripts/sync-silverprotocol-corpus.mjs',
-    );
-  }
-}
-
 // ── Cassette loading (all helpers stay in this file — no shared
 //    fixture modules; tsconfig.build only excludes *.test.ts) ────────
 
-function loadCassette(url: URL): { raw: JsonValue[]; events: AgEvent[] } {
-  const parsed: unknown = JSON.parse(readFileSync(url, 'utf8'));
-  if (!Array.isArray(parsed)) {
-    throw new Error(`cassette ${url.pathname} is not a JSON array of events`);
-  }
-  const raw = parsed.map((entry) => JsonValue.parse(entry));
+function loadCassette(scenario: string, framework: string): { raw: JsonValue[]; events: AgEvent[] } {
+  const { agjson } = loadLeg(scenario, framework);
+  const raw = agjson.map((entry) => JsonValue.parse(entry));
   const events = ingestAgEvents(raw);
   return { raw, events };
 }
 
-const gemini = loadCassette(APP_SPEC_GEMINI);
-const sonnet = loadCassette(APP_UPDATE_SONNET);
+const gemini = loadCassette('app-spec-gemini36', 'adk');
+const sonnet = loadCassette('app-update-sonnet5', 'claude');
 
-// NOTE (cross-artifact, deliberately NOT asserted here): core 0.3.7's
-// reduce() parks (needsResync: true) on the app-update-sonnet5
-// cassette — the Claude adapter reopens the same messageId across
-// beats (message.end seq 6 → message.start seq 7 with the same id)
-// and the reducer's tool.start handler degrades loudly when it can't
-// find the open message. Fold semantics are the reducer↔cassette
-// contract, owned by silverprotocol; this file's contract is the
-// interceptor seam, and the FIXTURES.md envelope (event types,
-// ordering, tool names, intent, structural shape) doesn't cover fold
-// outcomes.
+// NOTE (cross-artifact, deliberately NOT asserted here): fold
+// semantics (reduce()) are the reducer↔cassette contract, owned by
+// silverprotocol; this file's contract is the interceptor seam, and
+// the FIXTURES.md envelope (event types, ordering, tool names,
+// intent, structural shape) doesn't cover fold outcomes. (At the
+// bb71e0c pin the app-update-sonnet5 capture reopened the same
+// messageId across the reasoning→tool.start beat, parking the
+// reducer; the 3338932 cohort no longer does — each message.start
+// carries a distinct id.)
 
 // ── Typed narrowing helpers ─────────────────────────────────────────
 
@@ -314,8 +294,6 @@ describe('silverprotocol corpus — app-update-sonnet5/claude.agjson.json', () =
     'reasoning.delta',
     'reasoning.end',
     'reasoning.opaque',
-    'message.end',
-    'message.start',
     'tool.start',
     'tool.args.delta',
     'tool.args.assembled',

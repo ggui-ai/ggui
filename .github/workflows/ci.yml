@@ -23,17 +23,6 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      # Phase 4 consumption (ggui#360): the agent-server + ggui-react
-      # contract tests replay pinned silverprotocol cassettes as their
-      # realism tier, resolved from `.silverprotocol-corpus/` at the repo
-      # root (gitignored; pinned by silverprotocol-fixtures.lock.json).
-      # The tests fail LOUD when the corpus is absent — deliberately, per
-      # no-silent-block — so every workflow that runs `packages/*` tests
-      # MUST sync first. Omitting this step is what turned this CI red on
-      # every push from 2026-07-25 until 2026-07-27.
-      - name: Sync silverprotocol cassette corpus (pinned SHA)
-        run: node scripts/sync-silverprotocol-corpus.mjs
-
       # `@ggui-ai/ui-visual-tester` is a publishable package whose unit
       # tests launch a headless Chromium for behavioral contract
       # validation. Install the browser before the Test step or those 6

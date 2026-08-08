@@ -22,7 +22,6 @@ dist/
 e2e-results/
 test-results/
 playwright-report/
-.silverprotocol-corpus/
 
 # Pinned silverprotocol corpus cache (#426 Spec A) — fetched at the locked
 # SHA by e2e/fixtures/silverprotocol/fetch-fixtures.mjs; never committed.

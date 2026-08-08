@@ -18,12 +18,12 @@
  *   6. Unknown `_meta.*` / `_meta.ui.*` keys survive (forward-compat:
  *      the producer never validates or strips extension metadata).
  *
- * Realism tier: the silverprotocol cassette
- * `oss/.silverprotocol-corpus/app-update-sonnet5/claude.agjson.json`
- * (a real Claude render→update run) is ingested via
- * `@silverprotocol/core` and its `tool.done` events are projected into
- * `NormalizedMessage` tool results, then streamed through the real
- * producer.
+ * Realism tier: the silverprotocol fixture
+ * `app-update-sonnet5/claude.agjson.json` (pinned in
+ * `oss/e2e/fixtures/silverprotocol/fixtures.lock.json`, a real Claude
+ * render→update run) is ingested via `@silverprotocol/core` and its
+ * `tool.done` events are projected into `NormalizedMessage` tool
+ * results, then streamed through the real producer.
  *
  * FIXTURES stability contract — asserted here: event types, event
  * ordering, tool names, scenario intent (render rev 1 → update rev 2),
@@ -38,34 +38,22 @@
  * purpose — no shared fixture module (published-artifact leak risk:
  * tsconfig.build only excludes `*.test.ts`).
  */
-import { existsSync, readFileSync } from 'node:fs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  JsonValue,
   ingestAgEvents,
   type AgEvent,
-  type JsonValue,
 } from '@silverprotocol/core';
 import { createAgentApp, type ChatAllocatedEvent } from './app.js';
 import { createGuestTokenAuth } from './auth.js';
 import { createInMemoryChatStore } from './chat-store.js';
+import { loadLeg } from './testing/corpus.js';
 import type {
   AgentAdapter,
   AgentInput,
   McpCallToolResult,
   NormalizedMessage,
 } from './types.js';
-
-// ── Corpus guard — fail LOUD, never skip ────────────────────────────
-// src/ → agent-server/ → packages/ → oss/.silverprotocol-corpus/
-const CASSETTE_URL = new URL(
-  '../../../.silverprotocol-corpus/app-update-sonnet5/claude.agjson.json',
-  import.meta.url,
-);
-if (!existsSync(CASSETTE_URL)) {
-  throw new Error(
-    'silverprotocol corpus missing — run: node oss/scripts/sync-silverprotocol-corpus.mjs',
-  );
-}
 
 // ── Cassette loading (in-file, cached) ──────────────────────────────
 
@@ -82,12 +70,8 @@ let cassetteCache: LoadedCassette | undefined;
 
 function loadCassette(): LoadedCassette {
   if (cassetteCache) return cassetteCache;
-  const rawEvents: JsonValue[] = JSON.parse(readFileSync(CASSETTE_URL, 'utf8'));
-  if (!Array.isArray(rawEvents)) {
-    throw new Error(
-      'claude.agjson.json is not a JSON array — corpus corrupt? re-run: node oss/scripts/sync-silverprotocol-corpus.mjs',
-    );
-  }
+  const { agjson } = loadLeg('app-update-sonnet5', 'claude');
+  const rawEvents: JsonValue[] = agjson.map((entry) => JsonValue.parse(entry));
   // ingestAgEvents silently DROPS unparseable entries — the zero-drop
   // assertion lives in the tests; here we only load.
   cassetteCache = {
