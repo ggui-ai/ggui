@@ -202,6 +202,30 @@ describe("Origin/Host validation is WIRED (mount order, not just the pure functi
       await close();
     }
   });
+
+  it("listen(0) with no explicit host still feeds the policy a loopback bind (default stays policy-consistent)", async () => {
+    // No `host` in CreateGguiServerOptions AND no host argument to
+    // listen() — both fall back to the same "127.0.0.1" default, so
+    // the policy and the actual bind cannot diverge for the zero-config
+    // path. Pins that fallback chain end-to-end instead of trusting it
+    // by inspection.
+    const server = createGguiServer({ logger: silentLogger });
+    const httpServer = await server.listen(0);
+    try {
+      const addr = httpServer.address();
+      if (addr === null || typeof addr === "string") throw new Error("no port");
+      const res = await rawRequest({
+        port: addr.port,
+        method: "POST",
+        path: "/mcp",
+        headers: { ...JSON_HEADERS, Host: "evil.com:6781" },
+        body: "{}",
+      });
+      expect(res.status).toBe(403);
+    } finally {
+      await server.close();
+    }
+  });
 });
 
 describe("WS upgrade ingress runs the same validator", () => {
@@ -216,6 +240,23 @@ describe("WS upgrade ingress runs the same validator", () => {
       // Unauthenticated handshake may 101-then-close or 4xx — anything
       // but the validation 403.
       expect(allowed).not.toMatch(/^HTTP\/1\.1 403/);
+    } finally {
+      await close();
+    }
+  });
+
+  it("403s the handshake for a disallowed Origin on an otherwise-valid Host", async () => {
+    const { server, port, close } = await bootServer({ renderChannel: true });
+    try {
+      const channel = server.renderChannel;
+      if (channel === null) throw new Error("renderChannel: true did not create a channel");
+      const originRejected = await rawUpgrade(
+        port,
+        channel.path,
+        `127.0.0.1:${port}`,
+        "https://evil.com"
+      );
+      expect(originRejected).toMatch(/^HTTP\/1\.1 403/);
     } finally {
       await close();
     }

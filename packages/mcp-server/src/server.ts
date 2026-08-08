@@ -4045,7 +4045,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
   // the Host check only (which is the actual rebinding defense);
   // enforcing Origin app-wide would 403 the public cross-origin read
   // surfaces (runtime-bundle, /code, /api/renders).
-  const mcpOriginEnforcedPrefixes: string[] = [
+  const mcpOriginEnforcedPrefixes: ReadonlyArray<string> = [
     opts.universalMcpPath ?? "/mcp",
     CONTROL_PATH,
     ...mcpServices.map((svc) => svc.path),
@@ -5246,6 +5246,23 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
     blueprintSelector,
     blueprintSearch,
     async listen(port = 0, host = opts.host ?? "127.0.0.1"): Promise<NodeHttpServer> {
+      // The Origin/Host validation policy (ggui#438a) was built above
+      // from `opts.host ?? "127.0.0.1"` — the declared bind. A caller
+      // that passes an explicit, DIFFERENT host here binds somewhere
+      // the policy doesn't know about (e.g. a loopback-believing
+      // policy fronting a wide-open listener), silently reintroducing
+      // the rebinding gap the policy exists to close. Not thrown —
+      // some embedders call `listen()` directly without threading
+      // `CreateGguiServerOptions.host` — but always logged loudly so
+      // the divergence is visible in ops.
+      const declaredHost = opts.host ?? "127.0.0.1";
+      if (host !== declaredHost) {
+        logger.error("listen_host_policy_mismatch", {
+          declaredHost,
+          listenHost: host,
+          hint: "Pass the same host via CreateGguiServerOptions.host — the Origin/Host validation policy was built from it and now describes a different bind.",
+        });
+      }
       return new Promise((resolve, reject) => {
         const server = app.listen(port, host, () => {
           const addr = server.address();
