@@ -43,6 +43,7 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { App } from '@modelcontextprotocol/ext-apps';
+import { MCP_APP_OBSERVE_TYPE } from '@ggui-ai/protocol/integrations/mcp-apps';
 import {
   __resetAppForTest,
   __resetRelayNoticeForTest,
@@ -54,6 +55,10 @@ import {
   __resetHostCapabilitiesForTest,
   setHostCapabilities,
 } from '../host-capabilities.js';
+import type {
+  ObservabilityMessage,
+  RelayIncapabilityEvent,
+} from '../observability.js';
 import { buildBootHarness, tick } from './boot-helpers.js';
 import type { MockTransport } from './mock-transport.js';
 
@@ -734,5 +739,161 @@ describe('relay-shaped vs result-shaped failure — latch precision (ggui#440)',
     await expect(
       channelToolsCall({ toolName: 'some_channel_tool', args: {} }),
     ).resolves.toEqual({ ok: true });
+  });
+});
+
+describe('latch transitions — unlatch on ANY result envelope + edge observability (ggui#440 residuals)', () => {
+  beforeEach(() => {
+    __resetHostCapabilitiesForTest();
+    __resetRelayNoticeForTest();
+  });
+
+  /**
+   * All observability envelopes posted so far, any kind.
+   * `postObservabilityToParent` rides the same raw
+   * `window.parent.postMessage` as the doorbell, so the events land on
+   * `postMessageSpy` wrapped in the `ggui:observe` envelope — narrowed
+   * out of the heterogeneous spy traffic by the envelope discriminant.
+   */
+  function observabilityMessages(): ObservabilityMessage[] {
+    return postMessageSpy.mock.calls
+      .map(([msg]) => msg as { type?: unknown })
+      .filter(
+        (msg): msg is ObservabilityMessage => msg.type === MCP_APP_OBSERVE_TYPE,
+      );
+  }
+
+  /** Just the `relay-incapability` events, in emission order. */
+  function relayIncapabilityEvents(): RelayIncapabilityEvent[] {
+    return observabilityMessages()
+      .map((msg) => msg.event)
+      .filter(
+        (event): event is RelayIncapabilityEvent =>
+          event.kind === 'relay-incapability',
+      );
+  }
+
+  /**
+   * Latch the relay-incapability notice the only legitimate way: a
+   * REAL gesture that fails relay-shaped (JSON-RPC error envelope) on
+   * a host whose captured handshake advertised nothing.
+   */
+  async function latchViaFailedGesture(): Promise<void> {
+    setHostCapabilities({});
+    transport.queueResponse('tools/call', {
+      error: { code: -32601, message: 'method not supported' },
+    });
+    routeDispatch({
+      actionName: 'archive',
+      data: {},
+      meta: { sessionId: 'sess_1', appId: 'app_1' },
+      dispatchToolName: 'ggui_runtime_submit_action',
+    });
+    await tick();
+    await tick();
+  }
+
+  it('a latched session receiving a well-formed {ok:false} result unlatches — channel polling attempts again and the per-gesture transient toast shows', async () => {
+    await latchViaFailedGesture();
+    // Sanity: latched — persistent notice standing, channel router frozen.
+    expect(
+      document.getElementById('__ggui-action-toast__')?.textContent,
+    ).toMatch(/cannot relay|can't relay/i);
+    await expect(
+      channelToolsCall({ toolName: 'some_channel_tool', args: {} }),
+    ).rejects.toThrow(
+      'tools/call unavailable: host did not advertise serverTools',
+    );
+
+    // A well-formed {ok:false} RESULT envelope (expired pipe, the
+    // common case) is proof the host CAN relay — equally as much as an
+    // {ok:true} — so it must clear the latch, not just fail the
+    // gesture.
+    transport.queueResponse('tools/call', {
+      result: { structuredContent: { ok: false, code: 'PIPE_NOT_FOUND' } },
+    });
+    routeDispatch({
+      actionName: 'archive',
+      data: {},
+      meta: { sessionId: 'sess_1', appId: 'app_1' },
+      dispatchToolName: 'ggui_runtime_submit_action',
+    });
+    await tick();
+    await tick();
+
+    // The gesture still failed (enqueue-wise), but the feedback is the
+    // ordinary per-gesture transient toast — the persistent notice no
+    // longer applies to a host that just proved it can relay.
+    const toast = document.getElementById('__ggui-action-toast__');
+    expect(toast?.textContent).not.toMatch(/cannot relay|can't relay/i);
+    expect(toast?.textContent).toMatch(/could not reach the agent/i);
+
+    // The latch is cleared — the channel router attempts the transport
+    // again instead of throwing pre-transport.
+    transport.queueResponse('tools/call', {
+      result: { structuredContent: { ok: true } },
+    });
+    await expect(
+      channelToolsCall({ toolName: 'some_channel_tool', args: {} }),
+    ).resolves.toEqual({ ok: true });
+  });
+
+  it('emits exactly one relay-incapability observability event per transition edge — repeated failing gestures add no duplicate latched events', async () => {
+    await latchViaFailedGesture();
+    expect(relayIncapabilityEvents()).toEqual([
+      { kind: 'relay-incapability', state: 'latched' },
+    ]);
+
+    // A SECOND failing gesture while already latched is not a
+    // transition — no additional 'latched' event may fire.
+    transport.queueResponse('tools/call', {
+      error: { code: -32601, message: 'method not supported' },
+    });
+    routeDispatch({
+      actionName: 'archive',
+      data: {},
+      meta: { sessionId: 'sess_1', appId: 'app_1' },
+      dispatchToolName: 'ggui_runtime_submit_action',
+    });
+    await tick();
+    await tick();
+    expect(relayIncapabilityEvents()).toEqual([
+      { kind: 'relay-incapability', state: 'latched' },
+    ]);
+
+    // The clearing response is the other edge — exactly one 'cleared'.
+    transport.queueResponse('tools/call', {
+      result: { structuredContent: { ok: false, code: 'PIPE_NOT_FOUND' } },
+    });
+    routeDispatch({
+      actionName: 'archive',
+      data: {},
+      meta: { sessionId: 'sess_1', appId: 'app_1' },
+      dispatchToolName: 'ggui_runtime_submit_action',
+    });
+    await tick();
+    await tick();
+    expect(relayIncapabilityEvents()).toEqual([
+      { kind: 'relay-incapability', state: 'latched' },
+      { kind: 'relay-incapability', state: 'cleared' },
+    ]);
+  });
+
+  it('channel ticks while latched emit no observability events', async () => {
+    await latchViaFailedGesture();
+    const before = observabilityMessages().length;
+
+    // The router's poll loop keeps ticking while latched (its catch
+    // swallows the throw) — each tick fails fast pre-transport and
+    // must post NOTHING to the observability seam; the transition
+    // edges already carried the full information.
+    for (let i = 0; i < 3; i += 1) {
+      await expect(
+        channelToolsCall({ toolName: 'some_channel_tool', args: {} }),
+      ).rejects.toThrow(
+        'tools/call unavailable: host did not advertise serverTools',
+      );
+    }
+    expect(observabilityMessages().length).toBe(before);
   });
 });

@@ -41,6 +41,7 @@ export type ObservabilityEvent =
   | ChannelTransportFallbackEvent
   | ChannelTransportResubscribedEvent
   | UiFeedbackEvent
+  | RelayIncapabilityEvent
   | UnknownObservabilityEvent;
 
 /**
@@ -152,6 +153,34 @@ export interface UiFeedbackEvent {
   readonly sessionId?: string;
   /** Tool that produced the render (e.g. `ggui_render`). */
   readonly toolName?: string;
+}
+
+/**
+ * Fired at the two transition edges of the renderer's
+ * relay-incapability latch — the runtime's confirmed determination
+ * that the host cannot relay `tools/call` to the MCP server:
+ *
+ *   - `'latched'` — a real user gesture just failed relay-shaped (no
+ *     well-formed result envelope came back at all) on a host whose
+ *     captured capability handshake never advertised `serverTools`.
+ *     The runtime now treats relay as confirmed-unavailable: it shows
+ *     one persistent explanation instead of a per-gesture error toast,
+ *     and channel polls fail fast without a transport round-trip.
+ *   - `'cleared'` — a later well-formed result envelope arrived
+ *     (`ok:true` and `ok:false` alike — either proves the host relayed
+ *     the call there and back), so the determination no longer holds;
+ *     per-gesture feedback and channel transport attempts resume.
+ *
+ * Emitted once per edge, never per channel poll tick: repeated failing
+ * gestures while latched emit nothing further, and the router's
+ * fail-fast ticks emit nothing at all — the edges carry the full
+ * information.
+ *
+ * @public
+ */
+export interface RelayIncapabilityEvent {
+  readonly kind: 'relay-incapability';
+  readonly state: 'latched' | 'cleared';
 }
 
 /**

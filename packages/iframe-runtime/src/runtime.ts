@@ -2130,6 +2130,12 @@ function emitUserActionDoorbell(args: {
  * cannot relay fails EVERY gesture, so the explanation is stated once
  * and left standing; without the latch the user gets one identical
  * toast per click, which is the #426 failure mode this closes.
+ *
+ * Cleared by ANY well-formed result envelope — `{ok:true}` and
+ * `{ok:false}` alike, either proves the host can relay (see the
+ * response-arrival guard in {@link dispatchSubmitAction}). Both
+ * transition edges emit a `relay-incapability` observability event;
+ * nothing else about the latch is observable to the host.
  */
 let relayIncapabilityAnnounced = false;
 
@@ -2239,13 +2245,30 @@ export function dispatchSubmitAction(args: {
       showActionToast(`⚠ ${intent} — transport error`, 'error');
       resp = null;
     }
-    if (resp !== null && classifySubmitActionResponse(resp) === 'success') {
-      // Self-healing (ggui#440): a result envelope arriving at all is
-      // proof this host CAN relay, so any earlier (possibly false —
-      // see `isRelayShapedFailure`) "cannot relay" latch no longer
-      // holds. Clearing it here also un-freezes `channelToolsCall`'s
-      // guard, which reads this same latch.
+    // Self-healing (ggui#440): a result envelope arriving at all is
+    // proof this host CAN relay — `{ok:false, code:'PIPE_NOT_FOUND'}`
+    // (an otherwise-healthy relay, expired pipe) proves it exactly as
+    // much as `{ok:true}` — so any earlier (possibly false — see
+    // `isRelayShapedFailure`) "cannot relay" latch no longer holds.
+    // Cleared HERE, at response arrival, so the success path and the
+    // `{ok:false}` path below both release it; clearing also
+    // un-freezes `channelToolsCall`'s guard, which reads this same
+    // latch. Transition-edged: acts (and emits the observability
+    // edge) only when a latch was actually standing. No oscillation
+    // within one dispatch — the latch-set branch below requires
+    // `isRelayShapedFailure(resp)`, which this guard excludes.
+    if (
+      relayIncapabilityAnnounced &&
+      resp !== null &&
+      !isRelayShapedFailure(resp)
+    ) {
       relayIncapabilityAnnounced = false;
+      postObservabilityToParent({
+        kind: 'relay-incapability',
+        state: 'cleared',
+      });
+    }
+    if (resp !== null && classifySubmitActionResponse(resp) === 'success') {
       const consumerPresent = extractConsumerPresent(resp);
       if (consumerPresent === false) {
         // No `ggui_consume` long-poll is draining this render's pipe,
@@ -2298,7 +2321,8 @@ export function dispatchSubmitAction(args: {
     //     result (the common expired-pipe case) is proof the host DID
     //     relay the call there and back; latching on that would falsely
     //     brand a working relay as incapable and freeze the channel
-    //     router pre-attempt for the rest of the session. That case
+    //     router pre-attempt. That case has already CLEARED any
+    //     standing latch at the response-arrival guard above, and
     //     keeps routing to the ordinary per-gesture transient toast
     //     below instead.
     if (
@@ -2308,6 +2332,14 @@ export function dispatchSubmitAction(args: {
     ) {
       if (!relayIncapabilityAnnounced) {
         relayIncapabilityAnnounced = true;
+        // Transition edge — the paired 'cleared' edge lives at the
+        // response-arrival guard above. NEVER emit off-edge (e.g. per
+        // channel poll tick): the router ticks on an interval and
+        // would spam; the two edges carry the full information.
+        postObservabilityToParent({
+          kind: 'relay-incapability',
+          state: 'latched',
+        });
         showActionToast(
           'This host cannot relay actions to the agent — interactive controls will not work here.',
           'action_required',
