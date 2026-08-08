@@ -11,7 +11,7 @@
  * bound writes no records, and every existing read path keeps working
  * unchanged.
  */
-import type { ComponentGguiSession, EndUserIdentity } from '@ggui-ai/protocol';
+import type { ComponentGguiSession } from '@ggui-ai/protocol';
 
 /**
  * Durable per-session render identity — the record that lets a
@@ -24,9 +24,17 @@ import type { ComponentGguiSession, EndUserIdentity } from '@ggui-ai/protocol';
 export interface RenderIdentityRecord {
   readonly sessionId: string;
   readonly appId: string;
-  /** Owning user, when the deployment scopes renders to users. */
+  /**
+   * Owning user, when the deployment scopes renders to users. Written
+   * on every commit, and the subject a re-mint authorizes against.
+   *
+   * This is the ONLY user field on the record on purpose. A fuller
+   * identity block (email, provider, authenticated-at) would be
+   * personal data sitting on a record kept for as long as the render
+   * is addressable — indefinitely — to answer a question `userId`
+   * already answers.
+   */
   readonly userId?: string;
-  readonly endUserIdentity?: EndUserIdentity;
   /** Null until cold-gen registration backfills it. */
   readonly blueprintId: string | null;
   /**

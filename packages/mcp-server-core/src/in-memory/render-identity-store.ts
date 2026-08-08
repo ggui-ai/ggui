@@ -33,8 +33,8 @@ export class InMemoryRenderIdentityStore implements RenderIdentityStore {
     if (!sessionId) return null;
     const record = this.records.get(sessionId);
     if (!record) return null;
-    // Defensive copy — `props` and `endUserIdentity` are nested
-    // objects, so a shallow spread would still hand out shared state.
+    // Defensive copy — `props` is a nested object, so a shallow
+    // spread would still hand out shared state.
     return structuredClone(record);
   }
 

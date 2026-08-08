@@ -113,10 +113,12 @@ function projectRenderIdentityRecord(
   return {
     sessionId: session.id,
     appId: session.appId,
+    // `userId` is the record's whole user story: it is the subject a
+    // re-mint authorizes against, and the row carries it on every
+    // commit. The row's fuller `endUserIdentity` block is NOT copied
+    // here — it would be personal data on an indefinitely-retained
+    // record, answering a question `userId` already answers.
     ...(session.userId !== undefined ? { userId: session.userId } : {}),
-    ...(session.endUserIdentity !== undefined
-      ? { endUserIdentity: session.endUserIdentity }
-      : {}),
     blueprintId: identity.blueprintId,
     contractKey: identity.contractKey,
     variantKey: identity.variantKey,

@@ -892,10 +892,19 @@ export interface ClientCapabilitiesSpec {
 // after debouncing). Servers MUST NOT push values back to contextSpec
 // — agent-driven state changes use propsSpec or streamSpec instead.
 //
-// Persistence: ephemeral. The server does NOT persist contextSpec
-// values across iframe reconnects. On WS reattach the iframe re-emits
-// its current values; the LLM context catches up after at most one
-// debounce window.
+// Persistence: mirrored, but never restored from. The server DOES
+// keep the latest values on the live render (`ggui_runtime_sync_context`
+// commits them as `contextSnapshot`), so a resume that still finds
+// that render seeds each slot's `default` from the snapshot. They are
+// NOT a durable rehydration input: once the render is gone, a
+// re-created one boots from authoring-time defaults instead. On WS
+// reattach the iframe re-emits its current values either way, so the
+// LLM context catches up after at most one debounce window.
+//
+// The asymmetry is deliberate. Slot values are live client state —
+// a draft, a selection, a scroll offset — and replaying a
+// months-old one as if it were current would be worse than starting
+// clean.
 //
 // Validation: every slot declares a `schema` (required). The runtime
 // validates Provider values against the schema before posting; type

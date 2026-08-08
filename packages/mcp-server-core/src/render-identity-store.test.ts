@@ -17,12 +17,6 @@ function makeRecord(
     sessionId: 'render-1',
     appId: 'app-1',
     userId: 'user-1',
-    endUserIdentity: {
-      userId: 'user-1',
-      email: 'ada@example.com',
-      provider: 'custom',
-      authenticatedAt: '2026-08-08T00:00:00.000Z',
-    },
     blueprintId: null,
     contractKey: CONTRACT_KEY,
     variantKey: 'default',
@@ -93,7 +87,7 @@ describe('InMemoryRenderIdentityStore', () => {
     );
   });
 
-  it('round-trips a record with no tenancy fields — both are optional', async () => {
+  it('round-trips a record with no userId — an unscoped render still has an identity', async () => {
     const store = new InMemoryRenderIdentityStore();
     const anonymous: RenderIdentityRecord = {
       sessionId: 'render-1',
@@ -110,7 +104,6 @@ describe('InMemoryRenderIdentityStore', () => {
     const stored = expectStored(await store.get('render-1'));
     expect(stored).toEqual(anonymous);
     expect(stored.userId).toBeUndefined();
-    expect(stored.endUserIdentity).toBeUndefined();
   });
 
   it('round-trips absent props — a render need not carry any', async () => {
