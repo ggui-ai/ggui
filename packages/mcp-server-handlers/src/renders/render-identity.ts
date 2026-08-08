@@ -166,6 +166,16 @@ export async function writeRenderIdentity(
  * bound when the render committed. There is nothing to backfill onto,
  * and inventing a record from the id alone would be a record with no
  * identity — so we skip.
+ *
+ * Concurrency: this read-modify-write is NOT the only writer. A
+ * deployment may also refresh the same record from paths that touch the
+ * render row for other reasons, and those interleave with this one. The
+ * posture is last-write-wins with commit authority: a whole-record
+ * `put` from a commit is authoritative for the state at that commit and
+ * simply wins, and a refresh that lands after it re-derives the
+ * row-shaped fields from the row itself, so neither can leave the
+ * record disagreeing with what was persisted. Nothing here needs a
+ * conditional write.
  */
 export async function backfillRenderIdentityBlueprintId(
   store: RenderIdentityStore | undefined,

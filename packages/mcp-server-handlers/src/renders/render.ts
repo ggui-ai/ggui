@@ -1871,8 +1871,10 @@ export function createGguiRenderHandler(
               resolvedBlueprintId = registered;
               // Close the cold-gen gap: the record written at commit
               // time carries `blueprintId: null` because the id did
-              // not exist yet. This is the single writer at this
-              // point, so a plain read-modify-write is enough.
+              // not exist yet. A plain read-modify-write is enough —
+              // not because nothing else writes this record, but
+              // because the interleaving is benign: see the
+              // concurrency note on `backfillRenderIdentityBlueprintId`.
               if (registered !== undefined) {
                 await backfillRenderIdentityBlueprintId(
                   deps.renderIdentityStore,
