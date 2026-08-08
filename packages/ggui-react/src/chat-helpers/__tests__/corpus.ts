@@ -41,20 +41,18 @@ export function loadLeg(scenario: string, framework: string) {
 }
 
 /**
- * Read a COMMITTED local leg — the ggui-authored Layer-B fixtures
- * (e.g. `guest-gesture`) live BESIDE the gitignored `.cache/`, in the
- * fixture directory itself; the cache only ever holds fetched legs.
- * No `.agjson.json` golden: authored transcripts have no upstream
- * normalized fold — the stable/incidental set is documented in the
- * scenario's `ENROLLMENT.md` instead.
+ * Read a Layer-B leg from the fetched cache. Layer-B transcripts
+ * (workspace#10 — e.g. `guest-gesture`, ggui-authored, enrolled
+ * upstream via silverprotocol/workspace#12) are covered by the lock
+ * like any corpus member, but have no `.agjson.json` golden by
+ * construction: authored host-plane wire has no upstream normalized
+ * fold. The stable/incidental set lives in the upstream corpus entry
+ * (FIXTURES.md §Layer B + the transcript-contract gate).
  */
-export function loadLocalLeg(scenario: string, framework: string) {
+export function loadLayerBLeg(scenario: string, framework: string) {
   const read = (kind: string): unknown =>
     JSON.parse(
-      readFileSync(
-        join(FIXTURES, scenario, `${framework}.${kind}.json`),
-        'utf8',
-      ),
+      readFileSync(join(CACHE, scenario, `${framework}.${kind}.json`), 'utf8'),
     );
   return {
     native: read('native') as unknown[],

@@ -27,8 +27,11 @@ const fail = (m) => {
 };
 
 const lock = JSON.parse(readFileSync(LOCK_PATH, "utf8"));
+// A leg may override the global `files` triple — Layer-B legs
+// (workspace#10: authored host-plane wire) have no agjson golden by
+// construction, so they pin `["native", "provenance"]`.
 const legPaths = lock.legs.flatMap((l) =>
-  lock.files.map((f) => `${l.scenario}/${l.framework}.${f}.json`)
+  (l.files ?? lock.files).map((f) => `${l.scenario}/${l.framework}.${f}.json`)
 );
 
 function cacheChecksum() {

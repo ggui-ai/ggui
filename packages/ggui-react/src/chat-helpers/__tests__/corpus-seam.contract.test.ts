@@ -22,7 +22,7 @@ import {
   useMcpAppsChat,
   type ContentGroup,
 } from '../index';
-import { goldenUiToolDones, loadLeg, loadLocalLeg } from './corpus';
+import { goldenUiToolDones, loadLayerBLeg, loadLeg } from './corpus';
 
 const LEGS = [
   ['app-spec-gemini36', 'adk'],
@@ -438,10 +438,10 @@ describe('guest-gesture Layer-B fixture (ggui-authored)', () => {
   });
 
   it('transcript is the documented round-trip: render result → gesture → doorbell → consume (types + ordering + tool names)', () => {
-    const leg = loadLocalLeg('guest-gesture', 'ggui');
+    const leg = loadLayerBLeg('guest-gesture', 'ggui');
 
     // Stable set: frame types + ordering + tool/method names (the
-    // six-frame round-trip the ENROLLMENT.md stable set declares).
+    // six-frame round-trip the upstream enrollment (workspace#10) declares).
     expect(leg.native.map(frameKind)).toEqual([
       'result',
       'tools/call:ggui_runtime_submit_action',
@@ -493,7 +493,7 @@ describe('guest-gesture Layer-B fixture (ggui-authored)', () => {
   });
 
   it('handleAppMessage forwards the doorbell: directive text AS the prompt, _meta opaquely', async () => {
-    const leg = loadLocalLeg('guest-gesture', 'ggui');
+    const leg = loadLayerBLeg('guest-gesture', 'ggui');
     const doorbell = asRecord(asRecord(leg.native[3])?.params);
     const blocks = Array.isArray(doorbell?.content) ? doorbell.content : [];
     const block = asRecord(blocks[0]);
