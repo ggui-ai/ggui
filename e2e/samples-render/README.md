@@ -57,8 +57,9 @@ scenarios (absent ⇒ skipped).
   real npm always has it). Seeds those exact versions from real npm into the
   run's Verdaccio instead of adding an uplink proxy, which would false-green
   ANY missing local package. Loud both ways; no-op while cohort == all pins.
-  Pure decision function self-tested per-PR (`--self-test`,
-  samples-render.yml).
+  Pure decision function self-tested per-PR (`--self-test`) in
+  repo-guards.yml (guard 7 — this workflow itself is nightly/dispatch-only),
+  and re-run here as a pre-flight before the container run.
 - `scripts/compose-and-boot.sh` — per-SDK compose → `.npmrc` (Verdaccio pin)
   → `.env.local` → `pnpm install` → foreground `pnpm dev`.
 - `scripts/cell-entry.sh` + `Dockerfile` — the browser-in-cell container.

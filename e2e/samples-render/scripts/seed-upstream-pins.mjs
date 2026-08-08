@@ -139,49 +139,202 @@ function collectGuueyPins(root) {
   return pins;
 }
 
-/** `npm view <pkg>@<version> dependencies --json` against real npm. */
-function npmViewDependencies(name, version) {
-  const out = execFileSync(
-    'npm',
-    ['view', `${name}@${version}`, 'dependencies', '--json', '--registry', REAL_NPM],
-    { encoding: 'utf8' },
+/**
+ * One bounded retry for real-npm round-trips: a single re-attempt after a
+ * short backoff (a transient registry hiccup at setup time must not kill the
+ * whole nightly), then a LOUD final failure. Deliberately not a loop.
+ */
+const RETRY_BACKOFF_MS = 5_000;
+function withOneRetry(label, fn) {
+  try {
+    return fn();
+  } catch (firstErr) {
+    console.log(
+      `[seed] ${label} failed (${String(firstErr).split('\n')[0]}) — ` +
+        `retrying once in ${RETRY_BACKOFF_MS / 1000}s`,
+    );
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, RETRY_BACKOFF_MS);
+    try {
+      return fn();
+    } catch (secondErr) {
+      throw new Error(`${label} failed after 1 retry: ${String(secondErr)}`);
+    }
+  }
+}
+
+/**
+ * dependencies + peerDependencies of <pkg>@<version> on real npm, merged —
+ * a peer-declared @ggui-ai/* requirement 404s in the cell exactly like a
+ * regular one (npm ≥7 auto-installs peers), so both fields feed the pin
+ * scan. Reads the FULL version manifest (`npm view <spec> --json`) rather
+ * than field arguments: with 2+ field args npm UNWRAPS the output to the
+ * bare value whenever only one of them exists on the package, which
+ * silently dropped mcp-apps-host's (dependencies-only) protocol pin during
+ * verification of this very script. The manifest shape is unambiguous.
+ */
+function npmViewDepFields(name, version) {
+  const out = withOneRetry(`npm view ${name}@${version} manifest`, () =>
+    execFileSync('npm', ['view', `${name}@${version}`, '--json', '--registry', REAL_NPM], {
+      encoding: 'utf8',
+    }),
   ).trim();
-  if (out === '') return {};
-  return JSON.parse(out);
+  if (out === '') {
+    throw new Error(`npm view ${name}@${version} returned no manifest — version absent on ${REAL_NPM}?`);
+  }
+  const manifest = JSON.parse(out);
+  if (Array.isArray(manifest)) {
+    throw new Error(
+      `npm view ${name}@${version} returned ${manifest.length} manifests — ` +
+        'expected an exact version to match exactly one',
+    );
+  }
+  return { ...(manifest.dependencies ?? {}), ...(manifest.peerDependencies ?? {}) };
+}
+
+/**
+ * PURE semver compare (core triple, then absent-prerelease > present, then
+ * per-identifier prerelease rules: numeric < alphanumeric, numeric compared
+ * numerically, shorter identifier set lower). Hand-rolled because this
+ * script must run stdlib-only (repo-guards + the cell run it without a pnpm
+ * install). Throws on non-semver input — self-tested below.
+ */
+export function compareSemver(a, b) {
+  const parse = (v) => {
+    const m = /^(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?$/.exec(v);
+    if (!m) throw new Error(`compareSemver: "${v}" is not a semver version`);
+    return { nums: [Number(m[1]), Number(m[2]), Number(m[3])], pre: m[4] ?? null };
+  };
+  const pa = parse(a);
+  const pb = parse(b);
+  for (let i = 0; i < 3; i++) {
+    if (pa.nums[i] !== pb.nums[i]) return pa.nums[i] < pb.nums[i] ? -1 : 1;
+  }
+  if (pa.pre === null && pb.pre === null) return 0;
+  if (pa.pre === null) return 1;
+  if (pb.pre === null) return -1;
+  const ia = pa.pre.split('.');
+  const ib = pb.pre.split('.');
+  for (let i = 0; i < Math.max(ia.length, ib.length); i++) {
+    const x = ia[i];
+    const y = ib[i];
+    if (x === undefined) return -1;
+    if (y === undefined) return 1;
+    const xn = /^\d+$/.test(x);
+    const yn = /^\d+$/.test(y);
+    if (xn && yn) {
+      if (Number(x) !== Number(y)) return Number(x) < Number(y) ? -1 : 1;
+    } else if (xn !== yn) {
+      return xn ? -1 : 1;
+    } else if (x !== y) {
+      return x < y ? -1 : 1;
+    }
+  }
+  return 0;
+}
+
+/**
+ * PURE: highest version in a list (order-independent — npm packuments keep
+ * PUBLISH order, and a backport patch published after a newer minor would
+ * make "take the last element" wrong). Throws on an empty list: reachable
+ * from main() when a transitive range matches nothing on real npm.
+ */
+export function pickHighestVersion(versions) {
+  if (!Array.isArray(versions) || versions.length === 0) {
+    throw new Error('pickHighestVersion: empty version list — the range matched no published version');
+  }
+  return versions.reduce((hi, v) => (compareSemver(v, hi) > 0 ? v : hi));
+}
+
+/** Resolve a (possibly ranged) spec to the highest satisfying real-npm version. */
+function resolveVersionOnNpm(name, spec) {
+  if (EXACT_VERSION.test(spec)) return spec;
+  const out = withOneRetry(`npm view ${name}@${spec} version`, () =>
+    execFileSync('npm', ['view', `${name}@${spec}`, 'version', '--json', '--registry', REAL_NPM], {
+      encoding: 'utf8',
+    }),
+  ).trim();
+  if (out === '') {
+    throw new Error(`no published version of ${name} satisfies "${spec}" on ${REAL_NPM}`);
+  }
+  const parsed = JSON.parse(out);
+  return pickHighestVersion(Array.isArray(parsed) ? parsed : [parsed]);
 }
 
 /**
  * BFS the @guuey/* dependency closure on real npm (a pinned @guuey/cli pulls
  * further @guuey/* packages — any of them may carry an exact @ggui-ai pin),
  * returning every @ggui-ai/* dep spec found along the way.
+ *
+ * Two spec regimes, deliberately different:
+ *   - TOP-LEVEL pins (declared by the samples) must be exact — that is the
+ *     samples' own design contract (their dirs are excluded from the
+ *     workspaces precisely so the pins stay exact).
+ *   - TRANSITIVE @guuey/* deps are upstream's ordinary publishing choice —
+ *     a range there is legitimate and resolves to the highest satisfying
+ *     real-npm version (what npm itself would install).
+ *
+ * The walk is deliberately NARROW: only @guuey/* edges are traversed and
+ * only @ggui-ai/* deps are collected — @guuey/* is the SDK family the
+ * compose installs and today's only carrier of exact @ggui-ai pins. Any
+ * other scope (e.g. @silverprotocol/*) COULD in principle grow an exact
+ * @ggui-ai pin the cell's scoped .npmrc would route to the local-only
+ * registry, so every declined edge is logged (one line per scope, below) —
+ * the loud line is the tripwire that says the walk needs widening.
  */
 function resolveGguiPinsFromGuueyClosure(guueyPins) {
-  const queue = [...guueyPins];
+  const queue = guueyPins.map((p) => ({ ...p, topLevel: true }));
   const visited = new Set();
   const gguiPins = [];
+  /** scope (or "(unscoped)") → Set<dep name> of edges NOT traversed. */
+  const declined = new Map();
 
   while (queue.length > 0) {
-    const { name, spec } = queue.shift();
-    if (!EXACT_VERSION.test(spec)) {
-      // The samples' design contract is exact @guuey pins (their dirs are
-      // excluded from the workspaces precisely so the pins stay exact) — a
-      // range here means the contract broke upstream of this script.
+    const { name, spec, topLevel } = queue.shift();
+    let version;
+    if (EXACT_VERSION.test(spec)) {
+      version = spec;
+    } else if (topLevel) {
+      // The samples' design contract is exact @guuey pins — a range on a
+      // SAMPLE-DECLARED dep means the sample broke its own contract.
       throw new Error(
-        `@guuey pin "${name}@${spec}" is not an exact version — the with-guuey ` +
-          'samples pin @guuey/* exactly by design; fix the sample, not the seeder',
+        `sample-declared @guuey pin "${name}@${spec}" is not an exact version — ` +
+          'the with-guuey samples pin @guuey/* exactly by design; fix the sample, ' +
+          'not the seeder',
+      );
+    } else {
+      // A ranged TRANSITIVE dep is upstream's ordinary choice, not a sample
+      // defect — resolve it the way npm would.
+      version = resolveVersionOnNpm(name, spec);
+      console.log(
+        `[seed] transitive @guuey range ${name}@${spec} → ${version} ` +
+          '(highest satisfying on real npm)',
       );
     }
-    const key = `${name}@${spec}`;
+    const key = `${name}@${version}`;
     if (visited.has(key)) continue;
     visited.add(key);
 
-    for (const [dep, depSpec] of Object.entries(npmViewDependencies(name, spec))) {
+    for (const [dep, depSpec] of Object.entries(npmViewDepFields(name, version))) {
       if (dep.startsWith('@ggui-ai/')) {
         gguiPins.push({ name: dep, spec: depSpec, requiredBy: key });
       } else if (dep.startsWith('@guuey/')) {
-        queue.push({ name: dep, spec: depSpec });
+        queue.push({ name: dep, spec: depSpec, topLevel: false });
+      } else {
+        const scope = dep.startsWith('@') ? dep.split('/')[0] : '(unscoped)';
+        if (!declined.has(scope)) declined.set(scope, new Set());
+        declined.get(scope).add(dep);
       }
     }
+  }
+
+  // Nothing silent: name every dep edge the BFS declined to traverse, one
+  // line per scope. If a line ever names a scope known to carry @ggui-ai/*
+  // pins, the narrowing above is stale and must widen.
+  for (const [scope, names] of [...declined.entries()].sort()) {
+    console.log(
+      `[seed] declined BFS edges in ${scope} (not @guuey/*, not @ggui-ai/*): ` +
+        [...names].sort().join(', '),
+    );
   }
   return gguiPins;
 }
@@ -196,14 +349,35 @@ function readCohort() {
 
 /* ─────────────────────────────── seed (network) ───────────────────────────── */
 
-/** Is name@version already present in the target registry? (404 ⇒ absent) */
+/**
+ * Is name@version already present in the target registry?
+ * Only a genuine ABSENT answer may return false: exit 0 with empty output
+ * (package exists, version doesn't) or an E404 error (whole package absent —
+ * the normal fresh-Verdaccio case). Any OTHER failure (connection refused,
+ * 5xx, auth) throws loudly — treating it as "absent" would convert a
+ * transient error into an EPUBLISHCONFLICT death one step later.
+ */
 function presentInRegistry(name, version, registry) {
   const res = spawnSync(
     'npm',
     ['view', `${name}@${version}`, 'version', '--json', '--registry', registry],
     { encoding: 'utf8' },
   );
-  return res.status === 0 && res.stdout.trim() !== '';
+  const stdout = (res.stdout ?? '').trim();
+  if (res.status === 0) return stdout !== '';
+  let parsed = null;
+  try {
+    parsed = JSON.parse(stdout);
+  } catch {
+    // Non-JSON failure output — leave parsed null so the loud throw below
+    // fires; the parse miss itself is part of the "not an E404" evidence.
+  }
+  if (parsed?.error?.code === 'E404') return false;
+  throw new Error(
+    `presence check for ${name}@${version} against ${registry} failed ` +
+      `(exit ${res.status}) and is NOT an E404 — refusing to guess: ` +
+      (stdout || res.stderr || '<no output>'),
+  );
 }
 
 /**
@@ -292,7 +466,9 @@ function main() {
 /**
  * `--self-test`: prove the pure decision logic can FAIL (evidence-tier parity
  * with compose-app.mjs's self-test — every assembly/drift gate carries one).
- * No network, no fs writes. Run per-PR by samples-render.yml.
+ * No network, no fs writes. Runs per-PR in repo-guards.yml (guard 7 — the
+ * pure-node guard lane) and as a pre-flight in samples-render.yml's
+ * nightly/dispatch run.
  */
 function selfTest() {
   const fail = (msg) => {
@@ -353,8 +529,9 @@ function selfTest() {
     fail('duplicate pins must dedupe to one seed entry with merged requiredBy');
   }
 
-  // Seeded negative: a non-@ggui-ai pin must THROW (the seeder must never
-  // widen past the local-only scope).
+  // Defensive invariant (NOT reachable from main(), whose BFS only collects
+  // @ggui-ai/* names): a non-@ggui-ai pin must THROW so no future caller can
+  // widen the seeder past the local-only scope unnoticed.
   let threw = false;
   try {
     computeSeedList([{ name: '@guuey/host', spec: '0.3.0', requiredBy: 'x' }], {});
@@ -362,10 +539,53 @@ function selfTest() {
     threw = true;
   }
   if (!threw) {
-    fail('computeSeedList must THROW on a non-@ggui-ai pin (seeded negative did not fire)');
+    fail('computeSeedList must THROW on a non-@ggui-ai pin (defensive invariant did not fire)');
   }
 
-  console.log('✓ seed-upstream-pins self-test: decision logic (6 cases incl. seeded negative)');
+  // Version comparator — the transitive-range resolution path (FIX for
+  // upstream ranged @guuey deps) leans on it, so it gets the same treatment.
+  if (pickHighestVersion(['0.6.3', '0.7.0', '0.6.4']) !== '0.7.0') {
+    fail('pickHighestVersion must pick the semver max');
+  }
+  // Order-independent: a backport published AFTER a newer minor must not win.
+  if (pickHighestVersion(['0.7.0', '0.6.4']) !== '0.7.0') {
+    fail('pickHighestVersion must not depend on list order (backport-after case)');
+  }
+  if (compareSemver('0.4.0-rc.0', '0.4.0') >= 0) {
+    fail('a prerelease must sort below its release');
+  }
+  if (compareSemver('1.0.0-alpha.2', '1.0.0-alpha.10') >= 0) {
+    fail('numeric prerelease identifiers must compare numerically (2 < 10)');
+  }
+  if (compareSemver('1.0.0-alpha.1', '1.0.0-alpha.1.1') >= 0) {
+    fail('a longer prerelease identifier set with equal prefix must sort higher');
+  }
+  // Reachable negative: a transitive range matching NOTHING on real npm
+  // funnels an empty list here from resolveVersionOnNpm.
+  threw = false;
+  try {
+    pickHighestVersion([]);
+  } catch {
+    threw = true;
+  }
+  if (!threw) {
+    fail('pickHighestVersion must THROW on an empty list (reachable negative did not fire)');
+  }
+  threw = false;
+  try {
+    compareSemver('not-a-version', '1.0.0');
+  } catch {
+    threw = true;
+  }
+  if (!threw) {
+    fail('compareSemver must THROW on non-semver input');
+  }
+
+  console.log(
+    '✓ seed-upstream-pins self-test: decision logic (5 cases + the ' +
+      'non-@ggui-ai defensive invariant) + version comparator (7 cases incl. ' +
+      'reachable empty-range negative)',
+  );
 }
 
 const invokedDirectly =
