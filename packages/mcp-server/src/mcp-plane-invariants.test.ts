@@ -392,4 +392,50 @@ describe("wired CORS: preflight is answered by the mounted layer, before auth", 
       await close();
     }
   });
+
+  it("204s an OPTIONS /mcp with a MALFORMED JSON body — proves the mount precedes express.json, not just that a CORS layer exists", async () => {
+    // /mcp is registered method-specifically (app.post/app.get/app.delete,
+    // no app.all/app.options), so OPTIONS /mcp matches no route handler —
+    // Express's built-in auto-OPTIONS only fires after the ENTIRE
+    // middleware/route stack is exhausted with no match. That means a
+    // CORS layer mounted ANYWHERE before that point (even after
+    // express.json, even after the routes) would still be the one
+    // answering this preflight with 204 + ACAO — the previous test in
+    // this block cannot distinguish "mounted before body parsing" from
+    // "mounted anywhere before the fallback". A malformed JSON body
+    // breaks that ambiguity: if the CORS layer truly precedes
+    // express.json, this OPTIONS request is answered (204) before the
+    // body is ever parsed. If the mount ever migrates below
+    // express.json, the parser sees the malformed body first and 400s
+    // with a SyntaxError — this test goes red, which is the point: it
+    // test-locks mount ORDER, not just mount existence.
+    //
+    // Content-Length is set explicitly: node:http silently drops a
+    // body written via req.write()/req.end() on an OPTIONS request
+    // unless Content-Length (or Transfer-Encoding) is present, so
+    // without it the malformed body never reaches the wire at all and
+    // the probe can't discriminate anything.
+    const { port, close } = await bootServer({ browserOrigins: ["https://app.guuey.com"] });
+    try {
+      const malformedBody = "{";
+      const res = await rawRequest({
+        port,
+        method: "OPTIONS",
+        path: "/mcp",
+        headers: {
+          Host: `127.0.0.1:${port}`,
+          Origin: "https://app.guuey.com",
+          "Content-Type": "application/json",
+          "Content-Length": String(Buffer.byteLength(malformedBody)),
+          "Access-Control-Request-Method": "POST",
+          "Access-Control-Request-Headers": "authorization,content-type",
+        },
+        body: malformedBody,
+      });
+      expect(res.status).toBe(204);
+      expect(res.headers["access-control-allow-origin"]).toBe("https://app.guuey.com");
+    } finally {
+      await close();
+    }
+  });
 });
