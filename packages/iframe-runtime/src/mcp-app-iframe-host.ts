@@ -222,7 +222,14 @@ export function mountMcpAppIframe(
         const result: McpUiInitializeResult = {
           protocolVersion: requested,
           hostInfo: { name: 'ggui-iframe-runtime-embed-host', version: EMBED_HOST_VERSION },
-          hostCapabilities: {},
+          // Advertise exactly what the `switch` below implements
+          // (ggui#440). `serverTools`: the `tools/call` case proxies
+          // guest tool calls to the MCP server. NOT `message`: there is
+          // no `ui/message` case here, so a doorbell would be dropped —
+          // and the runtime now surfaces that to the user rather than
+          // claiming the gesture reached the agent. If a `ui/message`
+          // case is ever added, advertise `message` in the same change.
+          hostCapabilities: { serverTools: {} },
           hostContext: {
             locale:
               opts.locale ??

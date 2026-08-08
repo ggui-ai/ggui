@@ -87,3 +87,19 @@ describe('mountMcpAppIframe — ui/initialize host response', () => {
     expect(result.protocolVersion).toBe('2026-01-26');
   });
 });
+
+describe('ui/initialize advertises implemented capabilities (ggui#440)', () => {
+  it('advertises serverTools because the host proxies tools/call', async () => {
+    const raw = await initializeRoundTrip();
+    const result = McpUiInitializeResultSchema.parse(raw);
+    expect(result.hostCapabilities.serverTools).toBeDefined();
+  });
+
+  it('does NOT advertise message — this host has no ui/message case', async () => {
+    // Honesty matters more than completeness: a doorbell posted to this
+    // host goes nowhere, and the runtime now tells the user so.
+    const raw = await initializeRoundTrip();
+    const result = McpUiInitializeResultSchema.parse(raw);
+    expect(result.hostCapabilities.message).toBeUndefined();
+  });
+});
