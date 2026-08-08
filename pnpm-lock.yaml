@@ -252,6 +252,39 @@ importers:
 
   e2e/fixtures/mcp-turn: {}
 
+  e2e/guuey-integration:
+    devDependencies:
+      '@ggui-ai/mcp-server':
+        specifier: workspace:*
+        version: link:../../packages/mcp-server
+      '@ggui-ai/mcp-server-core':
+        specifier: workspace:*
+        version: link:../../packages/mcp-server-core
+      '@ggui-ai/protocol':
+        specifier: workspace:*
+        version: link:../../packages/protocol
+      '@guuey/agent-client':
+        specifier: 0.2.3
+        version: 0.2.3(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+      '@guuey/threads':
+        specifier: 0.2.3
+        version: 0.2.3(vitest@3.2.7(@types/node@24.13.3)(happy-dom@20.11.1)(jsdom@25.0.1)(terser@5.49.0)(tsx@4.23.5)(yaml@2.8.3))
+      '@modelcontextprotocol/sdk':
+        specifier: 1.30.0
+        version: 1.30.0(zod@4.4.3)
+      '@silverprotocol/core':
+        specifier: 0.4.1
+        version: 0.4.1
+      '@types/node':
+        specifier: ^24.0.0
+        version: 24.13.3
+      typescript:
+        specifier: ^5.0.0
+        version: 5.9.3
+      vitest:
+        specifier: ^3.2.6
+        version: 3.2.7(@types/node@24.13.3)(happy-dom@20.11.1)(jsdom@25.0.1)(terser@5.49.0)(tsx@4.23.5)(yaml@2.8.3)
+
   e2e/journeys:
     devDependencies:
       '@ggui-ai/mcp-server':
@@ -2709,6 +2742,10 @@ packages:
   '@gar/promisify@1.1.3':
     resolution: {integrity: sha512-k2Ty1JcVojjJFwrg/ThKi2ujJ7XNLYaFGNB/bWT9wGR+oSMJHMa5w+CUq6p/pVrKeNNgA7pCqEcjSnHVoqJQFw==}
 
+  '@ggui-ai/protocol@0.6.3':
+    resolution: {integrity: sha512-vMxyKaoUsBZvl5GewZVSa/WdalLtq1Gm8SdWj7szT2xeu86nqJ3eNTa1kOk1pccs4CcjwEu6kBeDgy63oWkzfg==}
+    engines: {node: '>=20.0.0'}
+
   '@google-cloud/opentelemetry-cloud-monitoring-exporter@0.21.0':
     resolution: {integrity: sha512-+lAew44pWt6rA4l8dQ1gGhH7Uo95wZKfq/GBf9aEyuNDDLQ2XppGEEReu6ujesSqTtZ8ueQFt73+7SReSHbwqg==}
     engines: {node: '>=18'}
@@ -2812,6 +2849,19 @@ packages:
     resolution: {integrity: sha512-wtF6h+DY6M3YaDBPAmvuuA6jV8Sif9MjtOI5euKFWRgCDl5PeDpPsHR9u2l6St5ceY8AZgoNDww5+HvEsXFsGg==}
     engines: {node: '>=6'}
     hasBin: true
+
+  '@guuey/agent-client@0.2.3':
+    resolution: {integrity: sha512-flQFWybW1lWhYWqV4OzcdPTmiLcET4sHC9jPXjjVpWtbTGKoaxHD9gipYK37oeETkjbNghIVphiQ4v9C5t8v0Q==}
+    peerDependencies:
+      react: ^19.2.8
+
+  '@guuey/threads@0.2.3':
+    resolution: {integrity: sha512-7534gcDWpwqM74yjxQJ+zmzE3wUhnccmVFAkhaWzat2itEh4379av16zhkcU0rMUzKiGNrLSaIDmNnYDAdX7Fw==}
+    peerDependencies:
+      vitest: ^3.0.0
+    peerDependenciesMeta:
+      vitest:
+        optional: true
 
   '@hono/node-server@2.1.0':
     resolution: {integrity: sha512-XovyyCCnBzW+zKu+z/zq8hwNs4KOR5rEMAOxo2f40Q5xoOI37IMm6MIg2COOUtUApo0i6850MTBKH2u4QLGIqg==}
@@ -9968,6 +10018,18 @@ snapshots:
   '@gar/promisify@1.1.3':
     optional: true
 
+  '@ggui-ai/protocol@0.6.3(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)':
+    dependencies:
+      '@modelcontextprotocol/ext-apps': 1.7.5(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(zod@4.4.3)
+      ajv: 8.20.0
+      ajv-formats: 3.0.1(ajv@8.20.0)
+      canonicalize: 2.1.0
+      zod: 4.4.3
+    transitivePeerDependencies:
+      - '@modelcontextprotocol/sdk'
+      - react
+      - react-dom
+
   '@google-cloud/opentelemetry-cloud-monitoring-exporter@0.21.0(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.10.0(@opentelemetry/api@1.9.0))(@opentelemetry/resources@2.10.0(@opentelemetry/api@1.9.0))(@opentelemetry/sdk-metrics@2.7.0(@opentelemetry/api@1.9.0))(encoding@0.1.13)':
     dependencies:
       '@google-cloud/opentelemetry-resource-util': 3.0.0(@opentelemetry/core@2.10.0(@opentelemetry/api@1.9.0))(@opentelemetry/resources@2.10.0(@opentelemetry/api@1.9.0))(encoding@0.1.13)
@@ -10196,6 +10258,21 @@ snapshots:
       long: 5.3.2
       protobufjs: 7.6.5
       yargs: 17.7.3
+
+  '@guuey/agent-client@0.2.3(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)':
+    dependencies:
+      '@ggui-ai/protocol': 0.6.3(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+      '@silverprotocol/core': 0.4.1
+      react: 19.2.8
+    transitivePeerDependencies:
+      - '@modelcontextprotocol/sdk'
+      - react-dom
+
+  '@guuey/threads@0.2.3(vitest@3.2.7(@types/node@24.13.3)(happy-dom@20.11.1)(jsdom@25.0.1)(terser@5.49.0)(tsx@4.23.5)(yaml@2.8.3))':
+    dependencies:
+      '@silverprotocol/core': 0.4.1
+    optionalDependencies:
+      vitest: 3.2.7(@types/node@24.13.3)(happy-dom@20.11.1)(jsdom@25.0.1)(terser@5.49.0)(tsx@4.23.5)(yaml@2.8.3)
 
   '@hono/node-server@2.1.0(hono@4.13.0)':
     dependencies:
@@ -10742,7 +10819,7 @@ snapshots:
   '@mikro-orm/mariadb@6.6.9(@mikro-orm/core@6.6.16)(better-sqlite3@12.11.1)(pg@8.19.0)':
     dependencies:
       '@mikro-orm/core': 6.6.16
-      '@mikro-orm/knex': 6.6.14(@mikro-orm/core@6.6.16)(better-sqlite3@12.11.1)(mariadb@3.4.5)(pg@8.19.0)(sqlite3@5.1.7)
+      '@mikro-orm/knex': 6.6.14(@mikro-orm/core@6.6.16)(better-sqlite3@12.11.1)(mariadb@3.4.5)(mysql2@3.19.0(@types/node@22.19.15))(pg@8.19.0)
       mariadb: 3.4.5
     transitivePeerDependencies:
       - better-sqlite3
@@ -10795,7 +10872,7 @@ snapshots:
   '@mikro-orm/postgresql@6.6.9(@mikro-orm/core@6.6.16)(better-sqlite3@12.11.1)(mariadb@3.4.5)':
     dependencies:
       '@mikro-orm/core': 6.6.16
-      '@mikro-orm/knex': 6.6.14(@mikro-orm/core@6.6.16)(better-sqlite3@12.11.1)(mariadb@3.4.5)(pg@8.19.0)(sqlite3@5.1.7)
+      '@mikro-orm/knex': 6.6.14(@mikro-orm/core@6.6.16)(better-sqlite3@12.11.1)(mariadb@3.4.5)(mysql2@3.19.0(@types/node@22.19.15))(pg@8.19.0)
       pg: 8.19.0
       postgres-array: 3.0.4
       postgres-date: 2.1.0
