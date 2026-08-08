@@ -1,6 +1,12 @@
 import { type JSX, useMemo, useState } from 'react';
 import { AppRenderer } from '@mcp-ui/client';
-import type { CallToolRequest, CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
+import {
+  CallToolResultSchema,
+  type CallToolRequest,
+  type CallToolResult,
+} from '@modelcontextprotocol/sdk/types.js';
 import { ThemeProvider, getRawTheme } from '@ggui-ai/design/themes';
 import { useAgentInvoke } from '@guuey/agent-client/react';
 import {
@@ -27,6 +33,16 @@ import {
 
 /** guuey dev router base — `guuey dev --serve` binds 127.0.0.1:6790 by default. */
 const ENDPOINT = import.meta.env.VITE_GUUEY_ENDPOINT ?? 'http://localhost:6790';
+/**
+ * ggui serve's MCP endpoint as the BROWSER reaches it — the target of
+ * this host's guest tools/call relay. Default is the same-origin
+ * `/ggui-mcp` dev proxy (vite.config.ts) because ggui serve's `/mcp`
+ * route carries no CORS headers; a cross-origin URL here fails with
+ * `Failed to fetch` before any MCP frame is sent. Overridable for
+ * deployments that put the host and server on one origin (or once the
+ * server grows /mcp CORS).
+ */
+const GGUI_MCP_URL = import.meta.env.VITE_GGUI_MCP_URL ?? '/ggui-mcp';
 /** Matches `appId` in the agent half's guuey.json; namespaces the thread key. */
 const APP_ID = import.meta.env.VITE_GUUEY_APP_ID ?? 'ggui-golden-path';
 /** Second-origin sandbox host page — injected by vite.config.ts (`define`). */
@@ -356,7 +372,7 @@ export function App(): JSX.Element {
                     toolName={top.toolName}
                     sandbox={sandbox}
                     html={html}
-                    onCallTool={defensiveCallTool}
+                    onCallTool={relayCallTool}
                     onError={(err) => console.warn('[with-guuey-web] AppRenderer error', err)}
                   />
                 </div>
@@ -374,24 +390,53 @@ export function App(): JSX.Element {
 }
 
 /**
- * The guest UI's interactions ride ggui's own WebSocket (the live channel
- * in the card's bootstrap) — `guuey dev --serve` exposes no tools/call
- * relay route this host could forward to. If a guest ever asks anyway,
- * answer honestly instead of hanging.
+ * Guest tools/call relay — the MCP-Apps HOST OBLIGATION this shell
+ * carries for its mounted cards. The card's runtime dispatches user
+ * actions as guest `tools/call` (`ggui_runtime_submit_action`) through
+ * its host; the live-channel WebSocket carries server→card updates,
+ * NOT card→server actions. A host that drops the relay silently
+ * swallows every card interaction (the toggle-never-round-tripped
+ * class, ggui#426): the runtime shows "transport error" and the
+ * server's eventSequence stays 0 forever.
+ *
+ * The relay is a lazy singleton MCP client straight to ggui serve —
+ * `guuey dev` holds its own connection to the same endpoint for the
+ * agent's tools; this one is the HOST's, for guest calls.
  */
-async function defensiveCallTool(params: CallToolRequest['params']): Promise<CallToolResult> {
-  console.warn('[with-guuey-web] guest tools/call has no relay under guuey dev:', params.name);
-  return {
-    isError: true,
-    content: [
-      {
-        type: 'text',
-        text:
-          'guuey dev serves no tools/call relay; ggui card interactions ride ' +
-          'the ggui live channel (WebSocket) instead.',
-      },
-    ],
-  };
+let relayClientPromise: Promise<Client> | null = null;
+
+function gguiRelayClient(): Promise<Client> {
+  relayClientPromise ??= (async () => {
+    const client = new Client({ name: 'with-guuey-web-host-relay', version: '0.0.1' });
+    await client.connect(
+      new StreamableHTTPClientTransport(new URL(GGUI_MCP_URL, window.location.origin)),
+    );
+    return client;
+  })().catch((err: unknown) => {
+    // Failed connects must not poison every later call — clear the
+    // slot so the next guest call retries the connect.
+    relayClientPromise = null;
+    throw err;
+  });
+  return relayClientPromise;
+}
+
+async function relayCallTool(params: CallToolRequest['params']): Promise<CallToolResult> {
+  try {
+    const client = await gguiRelayClient();
+    return CallToolResultSchema.parse(await client.callTool(params));
+  } catch (err) {
+    console.warn('[with-guuey-web] guest tools/call relay failed:', params.name, err);
+    return {
+      isError: true,
+      content: [
+        {
+          type: 'text',
+          text: `host relay to ggui serve (${GGUI_MCP_URL}) failed: ${String(err)}`,
+        },
+      ],
+    };
+  }
 }
 
 /**
