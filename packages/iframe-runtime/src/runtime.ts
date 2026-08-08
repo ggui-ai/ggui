@@ -119,6 +119,7 @@ import { mountUiFeedbackChrome } from './ui-feedback-chrome.js';
 import {
   hostCanReceiveMessages,
   hostCanRelayToolCalls,
+  hostCapabilitiesCaptured,
   setHostCapabilities,
 } from './host-capabilities.js';
 import {
@@ -1811,6 +1812,27 @@ function classifySubmitActionResponse(
 }
 
 /**
+ * Did the relay itself fail — as opposed to relaying successfully to a
+ * well-formed `{ok:false}` result (ggui#440)? `classifySubmitActionResponse`
+ * collapses BOTH into `'fallback'`, which is the right call for the
+ * generic "enqueue failed" toast (either way the gesture isn't on the
+ * pipe) but the WRONG call for the relay-incapability latch: a result
+ * envelope arriving at all — `{ok:false, code:'PIPE_NOT_FOUND'}` is the
+ * common case (an otherwise-healthy relay, expired pipe) — is proof the
+ * host DID relay the call to the server and back. Latching "cannot
+ * relay" on that evidence would be false: a host that plainly can relay
+ * would get permanently mislabeled from one stale-pipe response.
+ *
+ * `resp === null` covers the transport-throw / no-App-bound paths (the
+ * outer `catch` above resets `resp` to `null`); `resp.error !== undefined`
+ * covers the JSON-RPC error envelope. Neither carries a result envelope,
+ * so neither is evidence the relay worked.
+ */
+function isRelayShapedFailure(resp: JsonRpcResponse | null): boolean {
+  return resp === null || resp.error !== undefined;
+}
+
+/**
  * Extract `consumerPresent` from a successful submit_action response.
  * Returns the boolean if present + well-typed; `undefined` otherwise
  * (server didn't wire the registry, agnostic host stripped the field,
@@ -2218,6 +2240,12 @@ export function dispatchSubmitAction(args: {
       resp = null;
     }
     if (resp !== null && classifySubmitActionResponse(resp) === 'success') {
+      // Self-healing (ggui#440): a result envelope arriving at all is
+      // proof this host CAN relay, so any earlier (possibly false —
+      // see `isRelayShapedFailure`) "cannot relay" latch no longer
+      // holds. Clearing it here also un-freezes `channelToolsCall`'s
+      // guard, which reads this same latch.
+      relayIncapabilityAnnounced = false;
       const consumerPresent = extractConsumerPresent(resp);
       if (consumerPresent === false) {
         // No `ggui_consume` long-poll is draining this render's pipe,
@@ -2256,8 +2284,28 @@ export function dispatchSubmitAction(args: {
     // Separate the STRUCTURAL case from the transient one (ggui#440):
     // when the host never advertised `serverTools`, every gesture will
     // fail identically, so explain it once, persistently, instead of
-    // one identical error toast per click.
-    if (!hostCanRelayToolCalls()) {
+    // one identical error toast per click. Latching requires ALL of:
+    //
+    //   - `hostCapabilitiesCaptured()` — the handshake has actually
+    //     resolved. Before that, capability absence is "not asked
+    //     yet", not "advertised nothing"; a gesture that fails in the
+    //     mount-to-handshake window would otherwise falsely latch a
+    //     fully-capable host that just hasn't finished connecting.
+    //   - `!hostCanRelayToolCalls()` — the host never advertised
+    //     `serverTools`.
+    //   - `isRelayShapedFailure(resp)` — NO well-formed result
+    //     envelope arrived. A `{ok:false, code:'PIPE_NOT_FOUND'}`
+    //     result (the common expired-pipe case) is proof the host DID
+    //     relay the call there and back; latching on that would falsely
+    //     brand a working relay as incapable and freeze the channel
+    //     router pre-attempt for the rest of the session. That case
+    //     keeps routing to the ordinary per-gesture transient toast
+    //     below instead.
+    if (
+      hostCapabilitiesCaptured() &&
+      !hostCanRelayToolCalls() &&
+      isRelayShapedFailure(resp)
+    ) {
       if (!relayIncapabilityAnnounced) {
         relayIncapabilityAnnounced = true;
         showActionToast(
@@ -2283,10 +2331,22 @@ export function dispatchSubmitAction(args: {
  *
  * Once a REAL gesture has confirmed this host can't relay (the latch
  * above — set only after {@link dispatchSubmitAction} actually tried
- * and failed on a host with no `serverTools` advertised), every
- * subsequent poll will fail identically, and the router retries
- * silently on the next tick — an unbounded loop. Fail fast with a
- * named reason instead.
+ * and failed on a host with no `serverTools` advertised, with
+ * capabilities already captured, AND the failure was relay-shaped —
+ * not a well-formed `{ok:false}` result; see `isRelayShapedFailure`),
+ * every subsequent poll will fail identically.
+ *
+ * This guard does NOT stop the router's retry loop — confirmed by
+ * reading `channel-transport.ts`'s `startPolling`: its `catch {}`
+ * swallows every thrown error unconditionally and `setInterval` keeps
+ * ticking on the same cadence regardless of why the tick failed. What
+ * this guard buys is a CHEAPER tick: once incapability is confirmed,
+ * each poll skips the network round-trip through `callServerToolSpec`
+ * and throws immediately instead. The named reason on the thrown
+ * `Error` is not observable to anyone today — the same silent `catch`
+ * discards it (a deliberate choice, so per-tick failures don't spam a
+ * noisy bus during transient outages) — but it's there for whatever
+ * future consumer inspects `Error.message`.
  *
  * Keyed on the LATCH, not on `hostCanRelayToolCalls()` directly: raw
  * advertisement absence never changes after boot, so gating on it

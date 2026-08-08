@@ -24,12 +24,25 @@ import type { McpUiHostCapabilities } from "@modelcontextprotocol/ext-apps";
 let hostCapabilities: McpUiHostCapabilities | undefined;
 
 /**
+ * Has {@link setHostCapabilities} run yet? Distinct from "the host
+ * advertised nothing" — before boot's `connectApp` resolves, this is
+ * `false` AND `hostCanRelayToolCalls()` is `false`, which look
+ * identical to a silent host unless a caller checks this too. A
+ * gesture that fails in that mount-to-handshake window is a timing
+ * artifact, not evidence about the host, so callers that latch on
+ * confirmed incapability (ggui#440) MUST require this before trusting
+ * capability absence.
+ */
+let captured = false;
+
+/**
  * Record the host's advertised capabilities. Called once at boot, from
  * `bootSequence`, immediately after `connectApp` resolves — before that
  * point `App.getHostCapabilities()` returns `undefined`.
  */
 export function setHostCapabilities(caps: McpUiHostCapabilities | undefined): void {
   hostCapabilities = caps;
+  captured = true;
 }
 
 /**
@@ -52,7 +65,19 @@ export function hostCanReceiveMessages(): boolean {
   return hostCapabilities?.message !== undefined;
 }
 
+/**
+ * Has the handshake resolved capabilities at all yet? See {@link captured}.
+ * Callers that treat capability absence as confirmed incapability (as
+ * opposed to merely unconfirmed) must gate on this first — otherwise
+ * the pre-handshake window (where absence is just "not asked yet") is
+ * indistinguishable from a host that answered and advertised nothing.
+ */
+export function hostCapabilitiesCaptured(): boolean {
+  return captured;
+}
+
 /** @internal — exported for unit tests to reset module state. */
 export function __resetHostCapabilitiesForTest(): void {
   hostCapabilities = undefined;
+  captured = false;
 }

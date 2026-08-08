@@ -416,6 +416,10 @@ describe('routeDispatch — submit-action bridge', () => {
 describe('doorbell honesty on a host without the message capability (ggui#440)', () => {
   beforeEach(() => {
     __resetHostCapabilitiesForTest();
+    // Earlier tests in this file (PIPE_NOT_FOUND / RPC-error cases) can
+    // latch the relay-incapability notice; without this reset that
+    // state leaks into this describe's tests via the shared module.
+    __resetRelayNoticeForTest();
   });
 
   it('still POSTS the doorbell when the host advertised nothing (fail-safe)', async () => {
@@ -485,9 +489,12 @@ describe('relay-incapability is explained once, not per gesture (ggui#440)', () 
   });
 
   it('latches a persistent explanation when a host that never advertised serverTools fails the relay', async () => {
-    // Host advertised nothing; the relay call errors at transport.
-    // Expected: ONE persistent `action_required` notice explaining the
-    // host cannot relay — not a fresh `error` toast per click.
+    // Handshake resolved and the host advertised nothing — distinct
+    // from "hasn't connected yet" (see the pre-capture test below).
+    // The relay call errors at transport. Expected: ONE persistent
+    // `action_required` notice explaining the host cannot relay — not
+    // a fresh `error` toast per click.
+    setHostCapabilities({});
     transport.queueResponse('tools/call', {
       error: { code: -32601, message: 'method not supported' },
     });
@@ -587,9 +594,11 @@ describe('channel-transport router toolsCall guard is confirmed-failure-keyed, n
   });
 
   it('fails fast without calling the transport once a gesture has confirmed the host cannot relay', async () => {
+    // Handshake resolved and the host advertised nothing (captured).
     // Latch the relay-incapability notice via a REAL failed gesture
     // first (mirrors the "latches a persistent explanation" test
     // above), then assert the channel router's next poll fails fast.
+    setHostCapabilities({});
     transport.queueResponse('tools/call', {
       error: { code: -32601, message: 'method not supported' },
     });
@@ -611,5 +620,119 @@ describe('channel-transport router toolsCall guard is confirmed-failure-keyed, n
     // No new outbound message — the guard threw BEFORE calling
     // `callServerToolSpec`, so the transport never saw this attempt.
     expect(transport.methodsSeen.length).toBe(methodsSeenAfterLatch);
+  });
+});
+
+describe('relay-shaped vs result-shaped failure — latch precision (ggui#440)', () => {
+  beforeEach(() => {
+    __resetHostCapabilitiesForTest();
+    __resetRelayNoticeForTest();
+  });
+
+  it('a well-formed {ok:false} result does NOT latch — per-gesture toast stays transient, and channel polling still attempts', async () => {
+    // Handshake resolved; host advertised nothing. A RESULT envelope
+    // arrives — proof the relay itself worked; the pipe was simply
+    // gone (the common expired-pipe case). This must NOT be mistaken
+    // for "this host cannot relay".
+    setHostCapabilities({});
+    transport.queueResponse('tools/call', {
+      result: { structuredContent: { ok: false, code: 'PIPE_NOT_FOUND' } },
+    });
+    routeDispatch({
+      actionName: 'archive',
+      data: {},
+      meta: { sessionId: 'sess_1', appId: 'app_1' },
+      dispatchToolName: 'ggui_runtime_submit_action',
+    });
+    await tick();
+    await tick();
+
+    const toast = document.getElementById('__ggui-action-toast__');
+    // Ordinary transient wording, NOT the persistent "cannot relay" notice.
+    expect(toast?.textContent).not.toMatch(/cannot relay|can't relay/i);
+    expect(toast?.textContent).toMatch(/could not reach the agent/i);
+
+    // No false latch — the channel router must still ATTEMPT.
+    transport.queueResponse('tools/call', {
+      result: { structuredContent: { ok: true } },
+    });
+    await expect(
+      channelToolsCall({ toolName: 'some_channel_tool', args: {} }),
+    ).resolves.toEqual({ ok: true });
+  });
+
+  it('an error-shaped relay failure BEFORE capabilities were captured does NOT latch', async () => {
+    // Deliberately skip `setHostCapabilities(...)` — this simulates a
+    // gesture firing in the mount-to-handshake window, where capability
+    // absence means "not asked yet", not "advertised nothing".
+    transport.queueResponse('tools/call', {
+      error: { code: -32601, message: 'method not supported' },
+    });
+    routeDispatch({
+      actionName: 'archive',
+      data: {},
+      meta: { sessionId: 'sess_1', appId: 'app_1' },
+      dispatchToolName: 'ggui_runtime_submit_action',
+    });
+    await tick();
+    await tick();
+
+    const toast = document.getElementById('__ggui-action-toast__');
+    expect(toast?.textContent).not.toMatch(/cannot relay|can't relay/i);
+
+    // No false latch — the channel router must still ATTEMPT.
+    transport.queueResponse('tools/call', {
+      result: { structuredContent: { ok: true } },
+    });
+    await expect(
+      channelToolsCall({ toolName: 'some_channel_tool', args: {} }),
+    ).resolves.toEqual({ ok: true });
+  });
+
+  it('a successful gesture after a latch clears it — notice resets, channel polling attempts again', async () => {
+    // First: a REAL, captured, relay-shaped failure latches the notice.
+    setHostCapabilities({});
+    transport.queueResponse('tools/call', {
+      error: { code: -32601, message: 'method not supported' },
+    });
+    routeDispatch({
+      actionName: 'archive',
+      data: {},
+      meta: { sessionId: 'sess_1', appId: 'app_1' },
+      dispatchToolName: 'ggui_runtime_submit_action',
+    });
+    await tick();
+    await tick();
+
+    const toast = document.getElementById('__ggui-action-toast__');
+    expect(toast?.textContent).toMatch(/cannot relay|can't relay/i);
+    await expect(
+      channelToolsCall({ toolName: 'some_channel_tool', args: {} }),
+    ).rejects.toThrow(
+      'tools/call unavailable: host did not advertise serverTools',
+    );
+
+    // Now: a successful gesture — proof the relay actually works — must
+    // clear the (false) latch.
+    transport.queueResponse('tools/call', {
+      result: { structuredContent: { ok: true, consumerPresent: true } },
+    });
+    routeDispatch({
+      actionName: 'archive',
+      data: {},
+      meta: { sessionId: 'sess_1', appId: 'app_1' },
+      dispatchToolName: 'ggui_runtime_submit_action',
+    });
+    await tick();
+    await tick();
+
+    // The latch is cleared — the channel router attempts again instead
+    // of throwing.
+    transport.queueResponse('tools/call', {
+      result: { structuredContent: { ok: true } },
+    });
+    await expect(
+      channelToolsCall({ toolName: 'some_channel_tool', args: {} }),
+    ).resolves.toEqual({ ok: true });
   });
 });
