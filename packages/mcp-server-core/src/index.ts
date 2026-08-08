@@ -117,6 +117,11 @@ export * from './quota-store.js';
 // in `@ggui-ai/mcp-server-handlers` is the only writer today.
 export * from './short-code-index.js';
 
+// Optional durable side-record of what a render WAS, so a
+// `ui://ggui/render/…` locator can re-mint it after the session row
+// is gone. Nothing requires a binding — see the port's module comment.
+export * from './render-identity-store.js';
+
 // Scoped blob storage seam, so hosted (S3) and OSS (filesystem)
 // deployments bind one primitive.
 export * from './scoped-file-store.js';

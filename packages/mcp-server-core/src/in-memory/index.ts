@@ -53,6 +53,10 @@ export type { FixedWindowRateLimiterOptions } from './rate-limiter.js';
 // shortCode → render lookup.
 export { InMemoryShortCodeIndex } from './short-code-index.js';
 
+// Per-session render identity — in-memory variant. Interface lives
+// in `../render-identity-store.ts`.
+export { InMemoryRenderIdentityStore } from './render-identity-store.js';
+
 // Scoped blob storage seam reference.
 export {
   InMemoryScopedFileStore,
