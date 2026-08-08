@@ -116,6 +116,7 @@ import {
   type ObservabilityEmitter,
 } from './observability.js';
 import { mountUiFeedbackChrome } from './ui-feedback-chrome.js';
+import { setHostCapabilities } from './host-capabilities.js';
 import {
   makeLifecycleEvent,
   postLifecycleToParent,
@@ -712,6 +713,12 @@ export async function bootSequence(opts: BootSequenceOptions): Promise<BootSeque
     emitBootFailure('UI_INITIALIZE_FAILED', initResult.message);
     return { ok: false, mountedRender };
   }
+
+  // Record what this host said it can do (ggui#440). Earliest valid
+  // read: `getHostCapabilities()` is undefined until `connect()`
+  // resolves. Used to EXPLAIN failures (gesture relay, doorbell), never
+  // to pre-empt an attempt — see `./host-capabilities.ts`.
+  setHostCapabilities(app.getHostCapabilities());
 
   // Connected — expose the App on the module-level slot so outbound
   // `tools/call` (dispatchSubmitAction, channel-transport router)

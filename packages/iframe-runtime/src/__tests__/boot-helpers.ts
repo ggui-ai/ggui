@@ -26,12 +26,19 @@ export const DEFAULT_HOST_CONTEXT = {
  */
 export function buildHappyInitResult(overrides?: {
   readonly hostContext?: Record<string, unknown>;
+  /**
+   * Host capabilities to advertise. Defaults to `{}` — the
+   * advertise-nothing host, which is also what ggui's own embed host
+   * sends today. Pass `{ serverTools: {}, message: {} }` for a
+   * fully-capable host (ggui#440).
+   */
+  readonly hostCapabilities?: Record<string, unknown>;
 }): { readonly result: Record<string, unknown> } {
   return {
     result: {
       protocolVersion: PROTOCOL_VERSION,
       hostInfo: { name: 'test-host', version: '1.0' },
-      hostCapabilities: {},
+      hostCapabilities: overrides?.hostCapabilities ?? {},
       hostContext: overrides?.hostContext ?? { ...DEFAULT_HOST_CONTEXT },
     },
   };

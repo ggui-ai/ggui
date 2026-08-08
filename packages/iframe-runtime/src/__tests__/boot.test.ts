@@ -1,8 +1,13 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { GguiSession } from '@ggui-ai/protocol';
 import type { McpAppAiGguiRenderMeta } from '@ggui-ai/protocol/integrations/mcp-apps';
 import { bootSequence, type RendererBootFailedMessage } from '../runtime.js';
 import type { ConnectFn } from '../registry-subscribe.js';
+import {
+  hostCanReceiveMessages,
+  hostCanRelayToolCalls,
+  __resetHostCapabilitiesForTest,
+} from '../host-capabilities.js';
 import {
   buildBootHarness,
   buildHappyInitResult,
@@ -345,6 +350,70 @@ describe('bootSequence — failure paths', () => {
         message: expect.stringContaining('AUTH_REJECTED'),
       }),
     );
+  });
+});
+
+describe('bootSequence — host capability capture (ggui#440)', () => {
+  beforeEach(() => {
+    __resetHostCapabilitiesForTest();
+  });
+
+  it('records advertised capabilities off the ui/initialize result', async () => {
+    const dom = document.implementation.createHTMLDocument('renderer-test');
+    const initial = makeRender('render_001', 'cap-capture: full');
+
+    const { app, transport, pushToolResult } = buildBootHarness({
+      initResponse: buildHappyInitResult({
+        hostCapabilities: { serverTools: {}, message: {} },
+      }),
+    });
+    const { connectFn } = buildMockConnect(initial);
+    const notifyParent = vi.fn();
+
+    const bootPromise = bootSequence({
+      doc: dom,
+      app,
+      transport,
+      connectFn,
+      notifyParent,
+      toolResultTimeoutMs: 500,
+    });
+    await tick();
+    pushToolResult(VALID_META);
+
+    const result = await bootPromise;
+
+    expect(result.ok).toBe(true);
+    expect(hostCanRelayToolCalls()).toBe(true);
+    expect(hostCanReceiveMessages()).toBe(true);
+  });
+
+  it('records absence for an advertise-nothing host', async () => {
+    const dom = document.implementation.createHTMLDocument('renderer-test');
+    const initial = makeRender('render_001', 'cap-capture: none');
+
+    const { app, transport, pushToolResult } = buildBootHarness({
+      initResponse: buildHappyInitResult({ hostCapabilities: {} }),
+    });
+    const { connectFn } = buildMockConnect(initial);
+    const notifyParent = vi.fn();
+
+    const bootPromise = bootSequence({
+      doc: dom,
+      app,
+      transport,
+      connectFn,
+      notifyParent,
+      toolResultTimeoutMs: 500,
+    });
+    await tick();
+    pushToolResult(VALID_META);
+
+    const result = await bootPromise;
+
+    expect(result.ok).toBe(true);
+    expect(hostCanRelayToolCalls()).toBe(false);
+    expect(hostCanReceiveMessages()).toBe(false);
   });
 });
 
