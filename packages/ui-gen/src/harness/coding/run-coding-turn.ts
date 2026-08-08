@@ -87,6 +87,29 @@ function extractFailSignature(resultText: string): string {
   return "";
 }
 
+/**
+ * Closing instruction for the patch / eval-fix prompt (Exp 52a H1').
+ *
+ * Tool naming here BINDS tool choice: with `rewrite` offered in the tool
+ * list but this line saying "Produce ONE `apply_changes` call", the model
+ * complied 10/10 (Exp 52a). So the instruction must match the turn's
+ * actual tool surface — tool-neutral when rewrite is offered, the
+ * original single-patch form when it isn't. `GGUI_BATCH_FIX=on` (exp61
+ * env opt-in) is preserved verbatim and takes precedence.
+ */
+export function evalFixClosingInstruction(
+  rewriteOffered: boolean,
+  batchFixForced: boolean,
+): string {
+  if (batchFixForced) {
+    return `**Fix EVERY error listed above in THIS single \`apply_changes\` call.** Emit multiple \`changes[]\` entries — one per range.`;
+  }
+  if (rewriteOffered) {
+    return `Fix ALL the issues: either ONE \`apply_changes\` call targeting the lines that need fixing, or a single \`rewrite\` of the full file if the fixes span many regions — pick whichever you can emit with correct syntax.`;
+  }
+  return `Produce ONE \`apply_changes\` call targeting only the lines that need fixing.`;
+}
+
 export function selectTurnTools(
   turnsUsed: number,
   forceEscape = false,
@@ -491,9 +514,12 @@ ${issues}
       // the original short prompt. `GGUI_BATCH_FIX=on` preserved as
       // env-opt-in if future experimentation wants to revisit.
       const batchFixForced = typeof process !== "undefined" && process.env?.GGUI_BATCH_FIX === "on";
-      const closingInstruction = batchFixForced
-        ? `**Fix EVERY error listed above in THIS single \`apply_changes\` call.** Emit multiple \`changes[]\` entries — one per range.`
-        : `Produce ONE \`apply_changes\` call targeting only the lines that need fixing.`;
+      // Exp 52a H1': the closing instruction is the binding constraint on
+      // tool choice — with rewrite offered but this line naming
+      // apply_changes, the model picked apply 10/10. Neutralize it only
+      // on the turns where rewrite is actually in the tool list.
+      const rewriteOffered = isEvalFeedback && (input.evalFindingCount ?? 0) >= 3;
+      const closingInstruction = evalFixClosingInstruction(rewriteOffered, batchFixForced);
       userPrompt = `Fix the issues below. Make **minimal, targeted changes**.${diffHint}
 
 ${issueHeader}

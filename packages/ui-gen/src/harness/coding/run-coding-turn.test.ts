@@ -19,7 +19,7 @@
 // apply_changes like any other turn.
 
 import { describe, expect, it } from "vitest";
-import { selectTurnTools } from "./run-coding-turn";
+import { evalFixClosingInstruction, selectTurnTools } from "./run-coding-turn";
 
 describe("selectTurnTools", () => {
   it("turn 1: apply_changes + get_available_icons (no write/rewrite)", () => {
@@ -83,5 +83,30 @@ describe("selectTurnTools", () => {
   it("hashline escape pairs rewrite with the hashline apply variant", () => {
     const tools = selectTurnTools(5, false, 3, "v2");
     expect(tools.map((t) => t.name)).toEqual(["rewrite", "apply_changes"]);
+  });
+});
+
+// Exp 52a H1' — the closing instruction is the binding constraint on tool
+// choice (10/10 apply-picks with rewrite offered but the instruction
+// naming apply_changes). When rewrite is offered, the instruction must be
+// tool-NEUTRAL; when it isn't, the original single-patch instruction
+// stands (an instruction naming an unoffered tool is the H3 bug class).
+describe("evalFixClosingInstruction", () => {
+  it("default: the original single-apply instruction, naming no other tool", () => {
+    const s = evalFixClosingInstruction(false, false);
+    expect(s).toContain("apply_changes");
+    expect(s).not.toContain("rewrite");
+  });
+
+  it("rewrite offered: tool-neutral choice naming BOTH tools", () => {
+    const s = evalFixClosingInstruction(true, false);
+    expect(s).toContain("apply_changes");
+    expect(s).toContain("rewrite");
+  });
+
+  it("GGUI_BATCH_FIX opt-in wins unchanged (exp61 preservation)", () => {
+    const s = evalFixClosingInstruction(true, true);
+    expect(s).toContain("Fix EVERY error");
+    expect(s).not.toContain("rewrite");
   });
 });
