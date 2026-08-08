@@ -151,9 +151,13 @@ export function buildOriginHostPolicy(input: {
 }
 
 /**
- * The two ingresses this validator serves. They share every rule
- * except one: the ws-upgrade ingress additionally admits the
- * opaque-origin ("null") Origin — see the `ingress` param below.
+ * The two validation postures this function serves. They share every
+ * rule except one: `"ws-upgrade"` additionally admits the opaque-origin
+ * ("null") Origin — see the `ingress` param below. This is a posture
+ * selector, not a literal "which wire did this arrive on" tag: the WS
+ * upgrade handler in server.ts passes `"ws-upgrade"` only for upgrades
+ * that declare bootstrap intent (`?wsToken=` present); every other
+ * upgrade is validated as `"http"`.
  */
 export type OriginValidationIngress = "http" | "ws-upgrade";
 
@@ -168,8 +172,9 @@ export type OriginValidationIngress = "http" | "ws-upgrade";
  * identical logic.
  *
  * @param ingress Defaults to `"http"`, so every existing HTTP call site
- *   is unaffected. Pass `"ws-upgrade"` only from the WebSocket upgrade
- *   handler.
+ *   is unaffected. The WS upgrade handler passes `"ws-upgrade"` only
+ *   when the upgrade itself already declares bootstrap intent — see
+ *   {@link OriginValidationIngress}.
  */
 export function validateOriginHost(
   rawHost: string | undefined,
@@ -193,18 +198,24 @@ export function validateOriginHost(
   // an about:-scheme page, or an equivalent sandboxed embedding) has no
   // per-origin identity to serialize — the Origin header spec requires
   // browsers to send the literal value "null" in that case, not an
-  // absence of the header. On the ws-upgrade ingress ONLY, that value
-  // is admitted rather than rejected: this WS surface is
-  // capability-gated end-to-end regardless of Origin — upgrade-time
-  // identity resolution rejects every credential-less upgrade before it
-  // can do anything, and the subsequent subscribe message requires a
-  // credential bound to the sessionId. An opaque-origin socket without
-  // a minted credential is exactly as powerless as one with any other
-  // rejected Origin, so allowlisting adds no protection the capability
-  // gate doesn't already provide here — while rejecting "null" breaks a
-  // spec-legitimate embedding topology that has no way to send anything
-  // else. The HTTP ingress has no equivalent per-message capability
-  // gate in front of it, so it keeps rejecting "null" unconditionally.
+  // absence of the header. Passing `ingress: "ws-upgrade"` admits that
+  // value — but the caller (the WS upgrade handler in server.ts) only
+  // passes it when the upgrade URL already declares bootstrap intent
+  // (`?wsToken=` present); a bare opaque-origin socket with no
+  // bootstrap intent is validated as `"http"` and gets the ordinary
+  // rejection below.
+  //
+  // Admission here is NOT authentication. A bootstrap-intent socket
+  // still carries only an unverified placeholder identity at this
+  // point — the subscribe handler
+  // (`ggui-session-channel/subscribe.ts`) rejects it outright unless
+  // the `subscribe` message itself presents a credential that verifies.
+  // Origin-allowlisting a socket that can still do nothing until it
+  // clears that later gate adds no protection; rejecting "null"
+  // outright would instead break a spec-legitimate embedding topology
+  // that has no other way to send an Origin at all. The HTTP ingress
+  // has no equivalent post-admission gate, so it keeps rejecting
+  // "null" unconditionally.
   if (ingress === "ws-upgrade" && rawOrigin.trim().toLowerCase() === "null") return null;
 
   const origin = rawOrigin.trim().toLowerCase().replace(/\/$/, "");

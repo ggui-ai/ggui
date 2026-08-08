@@ -13,6 +13,7 @@
 import { describe, expect, it } from "vitest";
 import { request as httpRequest } from "node:http";
 import { connect } from "node:net";
+import { WebSocket } from "ws";
 import { createGguiServer, type CreateGguiServerOptions, type GguiServer } from "./server.js";
 
 export const silentLogger = {
@@ -283,22 +284,116 @@ describe("WS upgrade ingress runs the same validator", () => {
     }
   });
 
-  it('admits the opaque-origin ("null") handshake instead of 403ing it (ggui#438a regression)', async () => {
+  it('admits the opaque-origin ("null") handshake ONLY when the upgrade URL declares bootstrap intent (ggui#438a regression, narrowed by the C2 security-review fix)', async () => {
     // A document with an opaque origin (srcdoc-mounted, about:-scheme,
     // or similar sandboxed embeddings) serializes Origin as the literal
     // string "null" on the WS upgrade — by spec, not by client choice.
     // The Host check still runs (this request uses a valid loopback
     // Host), so the only thing under test is that "null" no longer
-    // trips the origin-gate's 403. The handshake still has no minted
-    // credential, so it fails downstream at upgrade-time identity
-    // resolution (401) — a DIFFERENT gate than the one this test pins.
-    // Only a reappearance of the origin-gate's 403 would fail this.
+    // trips the origin-gate's 403 — but ONLY for a socket that already
+    // declares bootstrap intent via `?wsToken=` on the upgrade URL, the
+    // srcdoc-bootstrap topology this admission exists to serve. The
+    // handshake still carries no VERIFIED credential (the query value
+    // here is never checked at upgrade time — see
+    // `resolveIdentityFromUpgrade`), so it is expected to fail
+    // downstream, either at upgrade-time identity resolution or at the
+    // subscribe-time gate — a DIFFERENT gate than the one this test
+    // pins. Only a reappearance of the origin-gate's 403 would fail
+    // this.
+    const { server, port, close } = await bootServer({ renderChannel: true });
+    try {
+      const channel = server.renderChannel;
+      if (channel === null) throw new Error("renderChannel: true did not create a channel");
+      const response = await rawUpgrade(
+        port,
+        `${channel.path}?wsToken=probe-token-value`,
+        `127.0.0.1:${port}`,
+        "null"
+      );
+      expect(response).not.toMatch(/^HTTP\/1\.1 403/);
+    } finally {
+      await close();
+    }
+  });
+
+  it('still 403s an opaque-origin ("null") handshake that declares NO bootstrap intent — the admission is not a blanket opaque-origin allowance', async () => {
     const { server, port, close } = await bootServer({ renderChannel: true });
     try {
       const channel = server.renderChannel;
       if (channel === null) throw new Error("renderChannel: true did not create a channel");
       const response = await rawUpgrade(port, channel.path, `127.0.0.1:${port}`, "null");
-      expect(response).not.toMatch(/^HTTP\/1\.1 403/);
+      expect(response).toMatch(/^HTTP\/1\.1 403/);
+    } finally {
+      await close();
+    }
+  });
+});
+
+describe("bootstrap-pending identity must authenticate at subscribe, not just at upgrade (ggui#438a security review, C1 + C4)", () => {
+  it("REJECTS a subscribe carrying no verifying wsToken on a bootstrap-gated, opaque-origin socket — no render is provisioned", async () => {
+    // Production shape: `mcpApps: true` auto-wires the bootstrap
+    // (ws-token) plumbing `resolveIdentityFromUpgrade`'s WS-token gate
+    // depends on — mirrors how `ggui serve` actually boots (see
+    // server.ts's `mcpAppsEnabled` block, which wires `channelBootstrap`
+    // whenever mcpApps is on). A bare `renderChannel: true` boot (no
+    // mcpApps) never reaches the vulnerable code path at all, which is
+    // why this pin needs the fuller shape, not the lighter one the
+    // other tests in this file use.
+    const { server, port, close } = await bootServer({
+      renderChannel: true,
+      mcpApps: true,
+      wsTokenSecret: "c4-regression-test-secret",
+    });
+    try {
+      const channel = server.renderChannel;
+      if (channel === null) throw new Error("renderChannel: true did not create a channel");
+      const renderCountBefore = channel.renderCount;
+
+      // C2 admits this opaque-origin socket ONLY because the upgrade
+      // URL declares bootstrap intent (`?wsToken=`) — exactly the
+      // srcdoc-mounted topology this gate exists to serve. The token
+      // value is never checked at upgrade time (URL-gate, not
+      // verification — see subscribe.ts's "WS-token gate" comment): the
+      // socket's identity is the unverified bootstrap-pending
+      // placeholder until `subscribe` proves otherwise.
+      const ws = new WebSocket(
+        `ws://127.0.0.1:${port}${channel.path}?wsToken=garbage-unverifiable-value`,
+        { origin: "null" }
+      );
+
+      const frame = await new Promise<{ type: string; payload: { code?: string } }>(
+        (resolve, reject) => {
+          ws.once("open", () => {
+            ws.send(
+              JSON.stringify({
+                type: "subscribe",
+                // C1's gap, exactly: bootstrap intent was declared at
+                // upgrade, but the subscribe payload presents NO
+                // wsToken to verify. Pre-fix, this fell through to
+                // dev-mode provisioning on the unverified placeholder
+                // identity, with an attacker-chosen sessionId/appId.
+                payload: {
+                  sessionId: "attacker-chosen-session-id",
+                  appId: "attacker-chosen-app-id",
+                },
+                requestId: "c4-probe",
+              })
+            );
+          });
+          ws.once("message", (raw) => {
+            resolve(JSON.parse(String(raw)) as { type: string; payload: { code?: string } });
+          });
+          ws.once("error", reject);
+        }
+      );
+
+      expect(frame.type).toBe("error");
+      expect(frame.payload.code).toBe("UNAUTHENTICATED");
+      // The rejection happened before any store work — no render was
+      // provisioned and no subscriber was registered for one.
+      expect(channel.renderCount).toBe(renderCountBefore);
+
+      ws.close();
     } finally {
       await close();
     }

@@ -154,17 +154,18 @@ describe("validateOriginHost — opaque-origin (\"null\") admission on the ws-up
   // A document with an OPAQUE origin (srcdoc-mounted, about:-scheme, or
   // similar sandboxed embeddings) has no origin serialization other than
   // the literal string "null" — that is how the Origin header spec
-  // requires it be sent, not a client choosing to omit identity. The WS
-  // surface is capability-gated end-to-end regardless of Origin:
-  // upgrade-time identity resolution rejects every credential-less
-  // upgrade with 401 across its auth planes, and the subscribe message
-  // itself requires a credential bound to the sessionId. An
-  // opaque-origin socket without a minted credential can do nothing, so
-  // admitting "null" here adds no exposure the capability gate doesn't
-  // already close — while rejecting it breaks a spec-legitimate
-  // embedding topology. The ws-upgrade ingress is the only ingress with
-  // this capability gate in front of it, so the admission is scoped to
-  // that ingress exactly.
+  // requires it be sent, not a client choosing to omit identity.
+  //
+  // This function's `ingress` param is a POSTURE the caller selects,
+  // not a raw "which wire did this arrive on" tag: the WS upgrade
+  // handler in server.ts passes `"ws-upgrade"` only for upgrades that
+  // already declare bootstrap intent (`?wsToken=` present) — the tests
+  // below exercise the pure function's contract for that posture
+  // directly, taking the caller's selection as given. Admission here is
+  // NOT authentication: an admitted socket still carries only an
+  // unverified placeholder identity, and the subscribe handler
+  // (`ggui-session-channel/subscribe.ts`) rejects it outright unless the
+  // `subscribe` message itself presents a credential that verifies.
 
   it('admits the literal "null" origin on the ws-upgrade ingress', () => {
     expect(validateOriginHost("localhost:6781", "null", LOOPBACK_POLICY, "ws-upgrade")).toBeNull();

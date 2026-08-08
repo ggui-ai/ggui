@@ -178,6 +178,22 @@ export interface SubscribeHandlers {
   ): Promise<void>;
 }
 
+/**
+ * Marker `userId` (and `workspaceId`) `resolveIdentityFromUpgrade`
+ * returns for a bootstrap-gated upgrade — see the "WS-token gate"
+ * comment there. It is a placeholder, not a verified identity:
+ * `handleSubscribe` MUST reject a subscribe on this identity outright
+ * unless the subscribe payload itself presents a `wsToken` that goes on
+ * to verify (ggui#438a security review, C1). Never treat this marker as
+ * authenticated for identity-default resolution or render provisioning.
+ */
+const BOOTSTRAP_PENDING_MARKER = "__bootstrap_pending__";
+
+/** Is `identity` the unverified upgrade-time placeholder above? */
+function isBootstrapPendingIdentity(identity: AuthResult): boolean {
+  return identity.identity.kind === "user" && identity.identity.userId === BOOTSTRAP_PENDING_MARKER;
+}
+
 export function createSubscribeHandlers(deps: SubscribeDeps): SubscribeHandlers {
   async function resolveIdentityFromUpgrade(req: IncomingMessage): Promise<AuthResult> {
     const url = new URL(req.url ?? "/", "http://localhost");
@@ -198,8 +214,8 @@ export function createSubscribeHandlers(deps: SubscribeDeps): SubscribeHandlers 
       return {
         identity: {
           kind: "user",
-          userId: "__bootstrap_pending__",
-          workspaceId: "__bootstrap_pending__",
+          userId: BOOTSTRAP_PENDING_MARKER,
+          workspaceId: BOOTSTRAP_PENDING_MARKER,
           roles: [],
         },
         source: "apikey",
@@ -316,6 +332,32 @@ export function createSubscribeHandlers(deps: SubscribeDeps): SubscribeHandlers 
           // best-effort — socket may already be closing
         }
       }
+      return;
+    }
+
+    // C1 (ggui#438a security review): `identity` may be the
+    // upgrade-time bootstrap-pending PLACEHOLDER (see
+    // `resolveIdentityFromUpgrade`'s "WS-token gate" comment and
+    // `isBootstrapPendingIdentity` above) — a "don't reject the
+    // upgrade" signal, not a verified identity. If the subscribe
+    // payload does not itself carry a `wsToken` to verify, this socket
+    // has proven nothing about itself and MUST be rejected here —
+    // never fall through to identity-default appId resolution or
+    // dev-mode render provisioning on an unverified placeholder. A
+    // present `payload.wsToken` is verified by the block immediately
+    // below, which returns on any verify failure — so by the time this
+    // function reaches appId resolution, every bootstrap-pending
+    // identity has either been rejected or replaced by a verified one.
+    if (
+      isBootstrapPendingIdentity(identity) &&
+      !(typeof payload.wsToken === "string" && payload.wsToken.length > 0)
+    ) {
+      deps.sendError(
+        ws,
+        "UNAUTHENTICATED",
+        "Bootstrap-gated socket did not present a wsToken to verify at subscribe",
+        message.requestId
+      );
       return;
     }
 

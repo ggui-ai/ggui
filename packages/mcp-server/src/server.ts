@@ -5307,15 +5307,24 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
             // always enforced. WebSocket handshakes are exempt from
             // the same-origin policy (any page can open a socket), so
             // an unchecked upgrade is a cross-site WS hijack surface.
-            // "ws-upgrade" additionally admits the opaque-origin
-            // ("null") Origin — this ingress is capability-gated by
-            // upgrade-time identity resolution regardless of Origin,
-            // see validateOriginHost's docstring for the full argument.
+            //
+            // Opaque-origin ("null") admission is narrowed to sockets
+            // that declare bootstrap intent via `?wsToken=` on the
+            // upgrade URL — the srcdoc-bootstrap topology it exists to
+            // serve. A bare opaque-origin socket with no bootstrap
+            // intent is validated as the ordinary "http" ingress and
+            // gets the standard rejection. Admission here is NOT
+            // authentication: the subscribe-time handler
+            // (`ggui-session-channel/subscribe.ts`) still rejects an
+            // admitted socket outright unless it goes on to present a
+            // verifying credential on the `subscribe` message itself.
+            const url = new URL(req.url ?? "/", "http://localhost");
+            const bootstrapIntentDeclared = url.searchParams.has("wsToken");
             const wsRejection = validateOriginHost(
               req.headers.host,
               typeof req.headers.origin === "string" ? req.headers.origin : undefined,
               originHostPolicy,
-              "ws-upgrade"
+              bootstrapIntentDeclared ? "ws-upgrade" : "http"
             );
             if (wsRejection !== null) {
               logger.warn("origin_host_rejected", {
@@ -5327,7 +5336,6 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
               socket.destroy();
               return;
             }
-            const url = new URL(req.url ?? "/", "http://localhost");
             if (url.pathname !== channel.path) {
               socket.write("HTTP/1.1 404 Not Found\r\n" + "Connection: close\r\n\r\n");
               socket.destroy();
