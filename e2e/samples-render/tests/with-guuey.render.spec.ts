@@ -3,9 +3,11 @@
  * golden path, end-to-end against the app COMPOSED from
  * `oss/samples/agents/with-guuey` + `oss/samples/apps/with-guuey-web`
  * (compose-app.mjs → per-dir npm installs → the 3-process boot in
- * compose-and-boot.sh: `ggui serve --mcp-only` :6781 → `guuey dev --serve`
- * :6790 → vite :6890, with the colocated todo MCP on :6740 spawned by the
- * guuey CLI itself).
+ * compose-and-boot.sh: `ggui serve --mcp-only --dev-allow-all` :6781 →
+ * `guuey dev --serve` :6790 → vite :6890, with the colocated todo MCP on
+ * :6740 spawned by the guuey CLI itself). `--dev-allow-all` is what admits
+ * the page's anonymous guest relay + locator resources/read (same note as
+ * cache-hit.spec / seed-pool-reuse.spec).
  *
  * A SEPARATE spec from render.spec.ts on purpose: the web half is a
  * different app (`@guuey/agent-client`'s `useAgentInvoke` +
@@ -342,11 +344,13 @@ test.describe('samples-render: with-guuey full journey against the composed publ
       dumpBootTail('rehydrated-card-never-appeared');
       throw err;
     }
-    // FRESH mount material, not a stale bootstrap replay: "buy milk"
+    // The card came back LIVE via the reader's fresh read: "buy milk"
     // mounts CHECKED with no invoke in flight. The turn-1 bootstrap
-    // predates the toggle (milk was asserted done:false back then), so a
-    // stale remount could only render it unchecked — the checked read is
-    // the freshness oracle.
+    // predates the toggle (milk was asserted done:false back then) AND its
+    // live-channel wsToken is long expired — a stale replay could neither
+    // carry the checked state nor resync to it over the WS. Checked here
+    // therefore proves a live remount from the render's current
+    // server-side state, which only the fresh resources/read can mint.
     try {
       await waitForTodoCheckedIndicator(rehydratedFrame, /buy milk/i, 60_000);
     } catch (err) {
@@ -354,7 +358,11 @@ test.describe('samples-render: with-guuey full journey against the composed publ
       throw err;
     }
     // And the transcript really did start over — the reload leg proves
-    // card rehydration, not a hidden history replay.
+    // card rehydration, not a hidden history replay. Point-in-time check
+    // by design: a negated toContainText samples the transcript as it is
+    // NOW and could not catch a hypothetically late-arriving replay — an
+    // honest bound, and sufficient here because the sample wires no
+    // history adapter at all (nothing exists to replay later).
     await expect(page.getByTestId('transcript')).not.toContainText(/buy milk/i);
   });
 });
