@@ -457,9 +457,14 @@ export interface BootSequenceOptions {
    *   - `channel-transport-*` — fired by the channel-transport router
    *     on per-channel transport picks / fallbacks / resubscribes.
    *
-   * Absent = observability emission skipped entirely (matches the
-   * ProtocolError posture; the `<McpAppIframe>` host wrapper decides
-   * whether to bind this via its `onObserve` prop).
+   * Absent = observability emission for the events above is skipped
+   * entirely (matches the ProtocolError posture; the `<McpAppIframe>`
+   * host wrapper decides whether to bind this via its `onObserve`
+   * prop). Exception: `relay-incapability` events do NOT flow through
+   * this seam — they originate in module-level gesture-dispatch code
+   * outside the boot graph (it runs independently of any given boot
+   * call) and always ride the postMessage-to-parent default, whether
+   * or not this option is bound.
    */
   readonly onObserve?: ObservabilityEmitter;
   /**
@@ -1824,12 +1829,18 @@ function classifySubmitActionResponse(
  * would get permanently mislabeled from one stale-pipe response.
  *
  * `resp === null` covers the transport-throw / no-App-bound paths (the
- * outer `catch` above resets `resp` to `null`); `resp.error !== undefined`
- * covers the JSON-RPC error envelope. Neither carries a result envelope,
- * so neither is evidence the relay worked.
+ * outer `catch` above resets `resp` to `null`); `resp.error !== undefined
+ * && resp.error !== null` covers the JSON-RPC error envelope. Neither
+ * carries a result envelope, so neither is evidence the relay worked.
  */
 function isRelayShapedFailure(resp: JsonRpcResponse | null): boolean {
-  return resp === null || resp.error !== undefined;
+  // Null-tolerant on `error`, matching `classifySubmitActionResponse`'s
+  // own check: an `{error:null, result:{...}}` envelope classifies as
+  // success there, so it must also read as NOT relay-shaped-failure
+  // here — otherwise the two predicates disagree on that shape and the
+  // response-arrival clear guard above would refuse to release a
+  // standing latch on an unambiguous success.
+  return resp === null || (resp.error !== undefined && resp.error !== null);
 }
 
 /**
@@ -2267,6 +2278,19 @@ export function dispatchSubmitAction(args: {
         kind: 'relay-incapability',
         state: 'cleared',
       });
+      // The (1.5) pending toast above was SKIPPED for this gesture —
+      // the latch was still standing at dispatch time — so a bare
+      // clear leaves the now-false "cannot relay" notice standing with
+      // no successor until a `drain_ack` frame that may never arrive
+      // in MCP-Apps relay contexts. On the success sub-case, replace
+      // it with the ordinary pending toast so the drain_ack dismissal
+      // chain below has a predecessor to dismiss. No equivalent is
+      // needed on the {ok:false} sub-case: that path always falls
+      // through to the terminal "could not reach the agent" toast a
+      // few lines down, which already replaces the stale notice.
+      if (classifySubmitActionResponse(resp) === 'success') {
+        showActionToast(`→ ${intent}${dataPart}`, 'pending');
+      }
     }
     if (resp !== null && classifySubmitActionResponse(resp) === 'success') {
       const consumerPresent = extractConsumerPresent(resp);

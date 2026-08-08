@@ -176,6 +176,10 @@ export interface UiFeedbackEvent {
  * fail-fast ticks emit nothing at all — the edges carry the full
  * information.
  *
+ * Always emitted via the postMessage-to-parent default — the emission
+ * sites live in module-level gesture-dispatch code outside the boot
+ * graph, so they never flow through an injected `onObserve` sink.
+ *
  * @public
  */
 export interface RelayIncapabilityEvent {

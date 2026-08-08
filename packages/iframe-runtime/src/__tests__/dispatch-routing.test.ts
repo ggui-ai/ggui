@@ -785,6 +785,13 @@ describe('latch transitions — unlatch on ANY result envelope + edge observabil
     transport.queueResponse('tools/call', {
       error: { code: -32601, message: 'method not supported' },
     });
+    // A preceding test in this file can leave the singleton
+    // `#__ggui-action-toast__` element standing in jsdom with
+    // "cannot relay" text of its own — removing it here means any
+    // later assertion matching that text can ONLY be satisfied by a
+    // transition THIS call produces, not inherited residual DOM
+    // (ggui#440 residuals Minor 6).
+    document.getElementById('__ggui-action-toast__')?.remove();
     routeDispatch({
       actionName: 'archive',
       data: {},
@@ -840,6 +847,39 @@ describe('latch transitions — unlatch on ANY result envelope + edge observabil
     ).resolves.toEqual({ ok: true });
   });
 
+  it('a successful gesture after a latch replaces the stale "cannot relay" notice with the normal pending toast (ggui#440 residuals Minor 1)', async () => {
+    await latchViaFailedGesture();
+    expect(
+      document.getElementById('__ggui-action-toast__')?.textContent,
+    ).toMatch(/cannot relay|can't relay/i);
+
+    // A successful gesture clears the latch (see the {ok:false} test
+    // above), but clearing alone leaves the stale persistent notice on
+    // screen with no successor: the initial `pending` toast at dispatch
+    // time was skipped because the latch was still standing when this
+    // gesture fired (see the "(1.5)" skip in `dispatchSubmitAction`).
+    // The clear guard must replace the stale notice with the ordinary
+    // pending toast so the normal drain_ack dismissal chain has a
+    // predecessor to dismiss — otherwise the now-false "cannot relay"
+    // notice stands until a `drain_ack` frame that may never arrive in
+    // MCP-Apps relay contexts.
+    transport.queueResponse('tools/call', {
+      result: { structuredContent: { ok: true, consumerPresent: true } },
+    });
+    routeDispatch({
+      actionName: 'archive',
+      data: {},
+      meta: { sessionId: 'sess_1', appId: 'app_1' },
+      dispatchToolName: 'ggui_runtime_submit_action',
+    });
+    await tick();
+    await tick();
+
+    const toast = document.getElementById('__ggui-action-toast__');
+    expect(toast?.textContent).not.toMatch(/cannot relay|can't relay/i);
+    expect(toast?.textContent).toBe('→ archive');
+  });
+
   it('emits exactly one relay-incapability observability event per transition edge — repeated failing gestures add no duplicate latched events', async () => {
     await latchViaFailedGesture();
     expect(relayIncapabilityEvents()).toEqual([
@@ -881,7 +921,7 @@ describe('latch transitions — unlatch on ANY result envelope + edge observabil
     ]);
   });
 
-  it('channel ticks while latched emit no observability events', async () => {
+  it('channel ticks while latched emit no observability events, and a later clearing gesture still emits exactly the cleared edge', async () => {
     await latchViaFailedGesture();
     const before = observabilityMessages().length;
 
@@ -897,5 +937,29 @@ describe('latch transitions — unlatch on ANY result envelope + edge observabil
       );
     }
     expect(observabilityMessages().length).toBe(before);
+
+    // Revert-sensitivity: the per-tick silence above is not, by
+    // itself, proof the latch machinery still works — a revert that
+    // also broke the clear-edge emission would pass the assertion
+    // above vacuously. A REAL clearing gesture after the silent ticks
+    // must add exactly one new observability event: the 'cleared' edge.
+    transport.queueResponse('tools/call', {
+      result: { structuredContent: { ok: false, code: 'PIPE_NOT_FOUND' } },
+    });
+    routeDispatch({
+      actionName: 'archive',
+      data: {},
+      meta: { sessionId: 'sess_1', appId: 'app_1' },
+      dispatchToolName: 'ggui_runtime_submit_action',
+    });
+    await tick();
+    await tick();
+
+    const afterEvents = observabilityMessages();
+    expect(afterEvents.length).toBe(before + 1);
+    expect(afterEvents[afterEvents.length - 1]?.event).toEqual({
+      kind: 'relay-incapability',
+      state: 'cleared',
+    });
   });
 });
