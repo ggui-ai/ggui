@@ -6,6 +6,47 @@
  * schema change; the most recent change anchors {@link PROTOCOL_VERSION}.
  *
  * --------------------------------------------------------------------
+ * Credential-broker surface retired (2026-08-08, BREAKING, pre-launch,
+ * ggui#436). The `system` frame's auth vocabulary and the
+ * `ggui_request_credential` tool leave the protocol entirely.
+ * Credential ceremony for an agent's own MCP tools is the AGENT HOST's
+ * responsibility — it owns the runtime, the user relationship, and the
+ * consent chrome. ggui's wire deliberately carries no auth frames.
+ *
+ *   rc1. **`SystemPayload` / `SystemAction` deleted**, and `'system'`
+ *      leaves `WebSocketMessageType` + the `WebSocketMessage` union.
+ *      The vocabulary was `auth_required` / `credential_ready` and
+ *      nothing else — with the broker gone there is no other action to
+ *      carry, so the frame class dies with it rather than surviving as
+ *      an empty discriminator.
+ *
+ *   rc2. **`requestCredentialInputSchema` /
+ *      `requestCredentialInputShape` / `GguiRequestCredentialInput` /
+ *      `GguiRequestCredentialOutput` deleted.** The only handler that
+ *      ever implemented the tool (the hosted pod's
+ *      `tools/request-credential.ts`) was deleted the day before in
+ *      the same issue: it pushed its consent overlay through an API
+ *      Gateway WebSocket leg the pod never had, so the tool could not
+ *      function. `ggui_request_credential` is appended to the
+ *      mcp-server RETIRED_TOOL_NAMES regression lock.
+ *
+ *   rc3. **Client lanes deleted, not stubbed.** `@ggui-ai/react`'s
+ *      `GguiRenderProps.onSystemMessage` (+ its dispatch arm),
+ *      `@ggui-ai/iframe-runtime`'s `channels/system.ts` handler and
+ *      its `auth-required` `ObservabilityEvent` arm
+ *      (`AuthRequiredEvent`), and both SDKs' `SystemPayload` /
+ *      `SystemAction` re-exports go. The observability event was a
+ *      projection of `SystemPayload` — with no payload to project it
+ *      has no producer.
+ *
+ * Conformance-kit verdict: no kit fixture asserted the `system` frame
+ * and no first-party server ever emitted one (the pod's broker was the
+ * only would-be emitter and it was pre-transport dead) — same posture
+ * as the 2026-07-27 dead-vocabulary entry. PROTOCOL_VERSION unchanged;
+ * rolling it would force a lockstep UPGRADE_REQUIRED break on every
+ * pinned client to version a frame class that never flew.
+ *
+ * --------------------------------------------------------------------
  * Ops-tool console-parity slice (2026-07-29, BREAKING on the ops
  * surface only, pre-launch, ggui#400). Rename ledger — same treatment
  * as the `ggui_ops_register_blueprint` → `ggui_ops_save_library_blueprint`

@@ -36,7 +36,7 @@ import {
  * Returns `null` when the content is missing / malformed / carries no
  * `ai.ggui/render` key. Consumers MUST handle the `null` path — a
  * tool_result of the non-bootstrap class (`ggui_update`,
- * `ggui_request_credential`, raw text, etc.) legitimately carries no
+ * `ggui_consume`, raw text, etc.) legitimately carries no
  * `ai.ggui/render` slice, and the shell should ignore it without
  * throwing.
  *

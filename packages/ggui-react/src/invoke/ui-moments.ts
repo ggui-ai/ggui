@@ -31,8 +31,7 @@
  * Precedence: the inline meta slice wins when both signals are present
  * (it is the richer payload). A tool_result with neither signal is not
  * a ggui UI moment — it drops silently (agents legitimately emit other
- * tool_results: `ggui_update`, `ggui_request_credential`, raw text,
- * etc.).
+ * tool_results: `ggui_update`, `ggui_consume`, raw text, etc.).
  *
  * The helper is pure — no React, no hooks. Shells call it inside a
  * `useMemo(() => extractUiMoments(messages, opts), [messages, opts])`

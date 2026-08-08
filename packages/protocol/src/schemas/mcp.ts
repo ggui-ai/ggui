@@ -146,14 +146,6 @@ export const discoverInputShape = {} as const;
 
 export const discoverInputSchema = z.object(discoverInputShape);
 
-export const requestCredentialInputShape = {
-  serviceId: z.string().min(1),
-  reason: z.string().optional(),
-  sessionId: z.string().optional(),
-} as const;
-
-export const requestCredentialInputSchema = z.object(requestCredentialInputShape);
-
 // ── Post-Phase-B — canonical tool triad ──
 //
 // `ggui_handshake` → `ggui_render` → `ggui_update` / `ggui_consume`.

@@ -111,7 +111,7 @@ describe('asGguiRenderBootstrap', () => {
       sessionId: 'render_0003',
       appId: 'APP00000',
       runtimeUrl: LIVE_SLICE.runtimeUrl,
-      kind: 'auth-required',
+      kind: 'no-credentials',
     };
     expect(asGguiRenderBootstrap(envelope(slice))?.slice).toEqual(slice);
   });

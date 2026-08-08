@@ -37,7 +37,6 @@ import { MCP_APP_OBSERVE_TYPE } from '@ggui-ai/protocol/integrations/mcp-apps';
 export type ObservabilityEvent =
   | SchemaVersionMismatchEvent
   | SubscribeFailedEvent
-  | AuthRequiredEvent
   | ChannelTransportPickedEvent
   | ChannelTransportFallbackEvent
   | ChannelTransportResubscribedEvent
@@ -70,58 +69,6 @@ export interface SchemaVersionMismatchEvent {
 export interface SubscribeFailedEvent {
   readonly kind: 'subscribe-failed';
   readonly reason: string;
-  readonly message?: string;
-}
-
-/**
- * Fired when the server emits a `system` frame with
- * `action: 'auth_required'` — the agent needs the end-user to authorize
- * an OAuth service (Google, Slack, etc.) before its tool call can
- * proceed. The host listens via `<McpAppIframe onObserve>` and renders
- * a consent overlay OUTSIDE the iframe, then redirects the user to
- * `authUrl` to complete the OAuth flow.
- *
- * Observability-only — the wire signal is already fully typed on
- * `@ggui-ai/protocol`'s `SystemPayload` (live-channel.ts). This event is a
- * renderer↔host projection of that payload, not a new protocol surface,
- * matching the vendor-neutral-separation posture of every
- * other `ObservabilityEvent` kind.
- *
- * Fields map 1:1 from `SystemPayload`:
- *   - `provider` ← `serviceId` (canonical identifier the credential
- *     store keys off — e.g., `"google"`, `"slack"`).
- *   - `authUrl` ← `consentUrl` (URL the host opens in a popup / new tab
- *     to initiate the OAuth consent flow).
- *   - `displayName` / `scopes` / `message` are optional hints the host
- *     can surface in the consent overlay; absent means "render with
- *     generic copy".
- *
- * @public
- */
-export interface AuthRequiredEvent {
-  readonly kind: 'auth-required';
-  /**
-   * Canonical identifier of the service needing authorization (e.g.
-   * `"google"`, `"slack"`). Maps to `SystemPayload.serviceId`.
-   */
-  readonly provider: string;
-  /**
-   * URL the host opens in a popup / new tab to initiate the OAuth
-   * consent flow. Maps to `SystemPayload.consentUrl`.
-   */
-  readonly authUrl: string;
-  /**
-   * Human-readable service name (e.g. `"Google"`, `"Slack"`). Optional
-   * — absent when the server doesn't supply one.
-   */
-  readonly displayName?: string;
-  /**
-   * OAuth scopes the agent is requesting. Optional.
-   */
-  readonly scopes?: readonly string[];
-  /**
-   * Human-readable message explaining why access is needed. Optional.
-   */
   readonly message?: string;
 }
 

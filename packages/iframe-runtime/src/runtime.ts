@@ -81,7 +81,6 @@ import {
   createDrainAckHandler,
   createPropsUpdateHandler,
   createRenderHandler,
-  createSystemHandler,
 } from './channels/index.js';
 import {
   connectViaRegistry,
@@ -449,8 +448,6 @@ export interface BootSequenceOptions {
    *     emission on UPGRADE_REQUIRED.
    *   - `subscribe-failed` — forwarded from subscribe's emission on
    *     transient reconnect transitions.
-   *   - `auth-required` — fired by the system channel handler when an
-   *     `auth_required` system frame arrives.
    *   - `channel-transport-*` — fired by the channel-transport router
    *     on per-channel transport picks / fallbacks / resubscribes.
    *
@@ -535,9 +532,8 @@ export interface RendererHooks {
    * with `StackRenderer`.
    *
    * `onObserve` — optional observability emitter threaded down to
-   * the channel handlers (system `auth-required`) and the
-   * channel-transport router (`channel-transport-*`). Absent = those
-   * sites run silent (the connect-time emission sites —
+   * the channel-transport router (`channel-transport-*`). Absent =
+   * those sites run silent (the connect-time emission sites —
    * `connectViaRegistry`'s version + subscribe events — still fire
    * via their own emitters).
    */
@@ -602,7 +598,7 @@ export interface RendererHandle {
   /**
    * Channel-client registry holding handlers for every WS frame type
    * the iframe routes (`render`, `data`, `props_update`, `drain_ack`,
-   * `channel_payload`, `channel_error`, `system`). The
+   * `channel_payload`, `channel_error`). The
    * registry-bound transport is the sole dispatch surface — frames
    * arrive directly through registered handlers, no longer through a
    * separate `onMessage` callback.
@@ -1182,15 +1178,13 @@ function createPlaceholderRegistry(params: {
  * Frame dispatch lives inside `@ggui-ai/live-channel`'s
  * `ChannelRegistry`. Every WS frame type (`render`, `data`,
  * `props_update`, `drain_ack`, `channel_payload`,
- * `channel_error`, `system`) has a registered handler in
- * `channels/*.ts`; the registry's bound transport routes inbound
- * frames directly to them. Observability emission (`auth-required`)
- * is inside the system handler.
+ * `channel_error`) has a registered handler in `channels/*.ts`; the
+ * registry's bound transport routes inbound frames directly to them.
  *
  * The pre-B3b helpers (`handleServerMessage`, `handleRendererMessage`,
- * `handleObservableMessage`, `emitAuthRequiredFromSystemFrame`,
- * `BufferedManagerShim`) lived here and have been retired — see
- * commit message + plan B3b for the full retirement notes.
+ * `handleObservableMessage`, `BufferedManagerShim`) lived here and
+ * have been retired — see commit message + plan B3b for the full
+ * retirement notes.
  */
 
 /**
@@ -3215,11 +3209,6 @@ async function bootProduction(opts: {
       channelRegistry.register(
         createChannelErrorHandler({
           getChannelTransport: () => channelTransport,
-        }),
-      );
-      channelRegistry.register(
-        createSystemHandler({
-          ...(onObserve !== undefined ? { onObserve } : {}),
         }),
       );
 

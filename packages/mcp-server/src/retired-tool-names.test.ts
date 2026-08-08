@@ -24,6 +24,10 @@ const RETIRED_TOOL_NAMES = [
   // ledger entry in @ggui-ai/protocol src/version.ts.
   'ggui_ops_rename_app',
   'ggui_ops_update_app_system_prompt',
+  // 2026-08-08 (#436): the credential broker is retired outright — no
+  // successor tool. Credential ceremony for an agent's own MCP tools
+  // belongs to the agent host, not the ggui wire.
+  'ggui_request_credential',
 ] as const;
 
 const SRC_DIR = path.dirname(fileURLToPath(import.meta.url));

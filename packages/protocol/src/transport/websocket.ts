@@ -29,7 +29,6 @@ import type {
   RenderPayload,
   StreamEnvelope,
   PropsUpdatePayload,
-  SystemPayload,
   ChannelSubscribePayload,
   ChannelUnsubscribePayload,
   ChannelPayloadFrame,
@@ -53,7 +52,6 @@ export type WebSocketMessageType =
   | 'render' // Server → Client: Agent render event
   | 'data' // Server → Client: Agent data push (no regeneration)
   | 'props_update' // Server → Client: Props replaced on existing component
-  | 'system' // Server → Client: System-level events (auth, credentials)
   // ─── Channel-level subscribe (per-channel `streamSpec[*].source.tool` fan-out) ───
   | 'channel_subscribe' // Client → Server: subscribe to a streamSpec channel; server polls source.tool
   | 'channel_unsubscribe' // Client → Server: cancel a channel_subscribe (idempotent)
@@ -108,7 +106,6 @@ export type WebSocketMessage =
   | (WsMessageBase & { type: 'render'; payload: RenderPayload })
   | (WsMessageBase & { type: 'data'; payload: StreamEnvelope })
   | (WsMessageBase & { type: 'props_update'; payload: PropsUpdatePayload })
-  | (WsMessageBase & { type: 'system'; payload: SystemPayload })
   // Channel-level subscribe transport — per `streamSpec[*].source.tool` fan-out.
   | (WsMessageBase & { type: 'channel_subscribe'; payload: ChannelSubscribePayload })
   | (WsMessageBase & { type: 'channel_unsubscribe'; payload: ChannelUnsubscribePayload })

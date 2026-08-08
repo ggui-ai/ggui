@@ -13,4 +13,3 @@ export {
   createChannelErrorHandler,
   type ChannelRouterHandlerDeps,
 } from './channel-payload.js';
-export { createSystemHandler, type SystemHandlerDeps } from './system.js';

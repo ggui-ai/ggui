@@ -35,7 +35,6 @@ import type {
   EventType,
   GguiSession,
   ReservedChannelValidator,
-  SystemPayload,
   JsonValue,
 } from '@ggui-ai/protocol';
 import { BRIDGE_EVENTS, CLIENT_SUPPORTED_VERSIONS, UpgradeRequiredError } from '@ggui-ai/protocol';
@@ -119,9 +118,6 @@ export interface GguiRenderProps {
   // Data hooks
   onBeforeAction?: <T>(data: T, meta: ActionMeta) => T | undefined;
   onAfterAction?: <T>(data: T, response: unknown) => void;
-
-  // System hooks
-  onSystemMessage?: (payload: SystemPayload) => void;
 
   // Error hooks — validation failures (inbound stream/props AND
   // outbound actions) surface here as ClientContractViolationError;
@@ -250,7 +246,6 @@ export function GguiRender({
   onRenderEnd,
   onBeforeAction,
   onAfterAction,
-  onSystemMessage,
   onError,
   onRenderReceived,
   extraReservedValidators,
@@ -272,8 +267,6 @@ export function GguiRender({
   onRenderEndRef.current = onRenderEnd;
   const onRenderReceivedRef = useRef(onRenderReceived);
   onRenderReceivedRef.current = onRenderReceived;
-  const onSystemMessageRef = useRef(onSystemMessage);
-  onSystemMessageRef.current = onSystemMessage;
 
   // Compose reserved-channel payload validators once per GguiRender
   // instance (Item 4 injection pattern — client side). Defaults ship
@@ -466,9 +459,6 @@ export function GguiRender({
             return { ...prev, props } as GguiSession;
           });
         }
-      }
-      if (message.type === 'system') {
-        onSystemMessageRef.current?.(message.payload as SystemPayload);
       }
     },
     [streamBus]

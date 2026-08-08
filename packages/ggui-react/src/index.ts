@@ -40,9 +40,6 @@ export type {
   InterfaceContext,
   DeviceCategory,
   EndUserIdentity,
-  // System events (OAuth consent)
-  SystemPayload,
-  SystemAction,
 } from '@ggui-ai/protocol';
 export { BRIDGE_EVENTS, detectInterfaceContext, getDeviceCategory } from '@ggui-ai/protocol';
 
@@ -76,15 +73,14 @@ export type {
   RendererBootFailedMessage,
   // `<AppRenderer onError>` emission union. Embedding apps
   // pattern-match on `event.kind` (`schema-version-mismatch` /
-  // `subscribe-failed` / `auth-required` / unknown tail). Re-exported
-  // here so host apps wiring the onError callback don't need a
-  // direct `@ggui-ai/iframe-runtime` import; same boundary posture as
+  // `subscribe-failed` / unknown tail). Re-exported here so host apps
+  // wiring the onError callback don't need a direct
+  // `@ggui-ai/iframe-runtime` import; same boundary posture as
   // `ProtocolError` above.
   ObservabilityEvent,
   ObservabilityMessage,
   SchemaVersionMismatchEvent,
   SubscribeFailedEvent,
-  AuthRequiredEvent,
   UiFeedbackEvent,
   UnknownObservabilityEvent,
 } from '@ggui-ai/iframe-runtime';

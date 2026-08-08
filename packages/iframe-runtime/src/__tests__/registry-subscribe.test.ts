@@ -330,15 +330,15 @@ describe('connectViaRegistry — version handshake', () => {
 
   it('forwards post-resolution frames through registered handlers (not via a callback)', async () => {
     const registry = makeRegistry();
-    // Register a `system` handler BEFORE bind so the registry routes
-    // post-ack frames to it. Note: `ack` + `error` handlers are added
-    // by `connectViaRegistry` itself; we register one for an unrelated
-    // frame type that arrives post-resolution.
-    const systemFrames: unknown[] = [];
+    // Register a `props_update` handler BEFORE bind so the registry
+    // routes post-ack frames to it. Note: `ack` + `error` handlers are
+    // added by `connectViaRegistry` itself; we register one for an
+    // unrelated frame type that arrives post-resolution.
+    const propsFrames: unknown[] = [];
     registry.register({
-      type: 'system',
+      type: 'props_update',
       onMessage: (payload) => {
-        systemFrames.push(payload);
+        propsFrames.push(payload);
       },
     });
 
@@ -356,16 +356,18 @@ describe('connectViaRegistry — version handshake', () => {
     });
     await handlePromise;
 
-    // Post-resolution `system` frame routes to the handler.
+    // Post-resolution `props_update` frame routes to the handler.
     MockWebSocket.instances[0]?.emit({
-      type: 'system',
+      type: 'props_update',
       payload: {
-        action: 'auth_required',
-        serviceId: 'svc_x',
+        sessionId: META.sessionId,
+        props: { label: 'svc_x' },
       },
     });
 
-    expect(systemFrames).toHaveLength(1);
-    expect((systemFrames[0] as { serviceId?: string }).serviceId).toBe('svc_x');
+    expect(propsFrames).toHaveLength(1);
+    expect((propsFrames[0] as { sessionId?: string }).sessionId).toBe(
+      META.sessionId,
+    );
   });
 });

@@ -57,8 +57,6 @@ export type {
   ErrorPayload,
   RenderPayload,
   PropsUpdatePayload,
-  SystemPayload,
-  SystemAction,
   ShellType,
   InterfaceContext,
   DeviceCategory,
