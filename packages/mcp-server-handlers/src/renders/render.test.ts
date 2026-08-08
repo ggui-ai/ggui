@@ -39,11 +39,14 @@ import { z } from 'zod';
 import {
   InMemoryBlueprintIndex,
   InMemoryKeyValueStore,
+  InMemoryRenderIdentityStore,
   InMemoryGguiSessionStore,
   InMemoryVectorStore,
 } from '@ggui-ai/mcp-server-core/in-memory';
 import type {
   EmbeddingProvider,
+  RenderIdentityRecord,
+  RenderIdentityStore,
   UiGenerateResult,
 } from '@ggui-ai/mcp-server-core';
 import {
@@ -226,6 +229,13 @@ function buildHandler(opts: {
    * `DEFAULT_RENDER_TTL_MS` (1h) fallback.
    */
   readonly renderTtlMs?: number;
+  /**
+   * Optional durable render-identity side store. Threaded onto the
+   * handler deps so tests can read back the record every commit site
+   * writes. Omitted = the "no store bound" posture (no records, every
+   * other path unchanged).
+   */
+  readonly renderIdentityStore?: RenderIdentityStore;
 }): ReturnType<typeof createGguiRenderHandler> {
   return createGguiRenderHandler({
     handshakeStore: opts.handshakeStore,
@@ -235,6 +245,9 @@ function buildHandler(opts: {
       : {}),
     ...(opts.postSuccessHook ? { postSuccessHook: opts.postSuccessHook } : {}),
     ...(opts.renderTtlMs !== undefined ? { renderTtlMs: opts.renderTtlMs } : {}),
+    ...(opts.renderIdentityStore
+      ? { renderIdentityStore: opts.renderIdentityStore }
+      : {}),
     generation: {
       // `uiGenerator` is never reached — `generator` escape hatch wins.
       uiGenerator: {
@@ -268,25 +281,28 @@ function buildRecord(opts: {
   readonly handshakeId: string;
   readonly origin: 'cache' | 'agent';
   readonly matchedBlueprint?: HandshakeRecord['matchedBlueprint'];
+  /** Agreed contract for the record. Defaults to {@link CONTRACT}. */
+  readonly contract?: DataContract;
 }): HandshakeRecord {
+  const contract = opts.contract ?? CONTRACT;
   return {
     handshakeId: opts.handshakeId,
     action: opts.origin === 'cache' ? 'reuse' : 'create',
     reason: 'test',
     input: {
       intent: 'a test card',
-      blueprintDraft: { contract: CONTRACT },
+      blueprintDraft: { contract },
     },
     target: {},
     suggestion: {
       origin: opts.origin,
       rationale: 'test',
       blueprintMeta: {
-        contractHash: blueprintKey(CONTRACT),
+        contractHash: blueprintKey(contract),
         variance: {},
       },
     },
-    effectiveContract: CONTRACT,
+    effectiveContract: contract,
     ...(opts.matchedBlueprint ? { matchedBlueprint: opts.matchedBlueprint } : {}),
     appId: APP_ID,
     createdAt: new Date().toISOString(),
@@ -297,6 +313,7 @@ function buildRecord(opts: {
  *  origin:'cache' handshake record that references it. */
 async function buildAcceptCacheHarness(extraOpts: {
   readonly postSuccessHook?: GguiRenderHandlerDeps['postSuccessHook'];
+  readonly renderIdentityStore?: RenderIdentityStore;
 } = {}): Promise<{
   readonly harness: Harness;
   readonly storedUuid: string;
@@ -344,6 +361,9 @@ async function buildAcceptCacheHarness(extraOpts: {
     coldCode: COLD_CODE,
     ...(extraOpts.postSuccessHook
       ? { postSuccessHook: extraOpts.postSuccessHook }
+      : {}),
+    ...(extraOpts.renderIdentityStore
+      ? { renderIdentityStore: extraOpts.renderIdentityStore }
       : {}),
   });
   return {
@@ -442,6 +462,9 @@ async function buildAcceptCacheHarnessFor(
 async function buildColdGenHarness(extraOpts: {
   readonly postSuccessHook?: GguiRenderHandlerDeps['postSuccessHook'];
   readonly renderTtlMs?: number;
+  readonly renderIdentityStore?: RenderIdentityStore;
+  /** Agreed contract for the seeded handshake. Defaults to {@link CONTRACT}. */
+  readonly contract?: DataContract;
 } = {}): Promise<{
   readonly harness: Harness;
   readonly handshakeId: string;
@@ -455,7 +478,11 @@ async function buildColdGenHarness(extraOpts: {
   await seedHandshake(
     handshakeStore,
     handshakeId,
-    buildRecord({ handshakeId, origin: 'agent' }),
+    buildRecord({
+      handshakeId,
+      origin: 'agent',
+      ...(extraOpts.contract ? { contract: extraOpts.contract } : {}),
+    }),
   );
 
   const handler = buildHandler({
@@ -469,6 +496,9 @@ async function buildColdGenHarness(extraOpts: {
       : {}),
     ...(extraOpts.renderTtlMs !== undefined
       ? { renderTtlMs: extraOpts.renderTtlMs }
+      : {}),
+    ...(extraOpts.renderIdentityStore
+      ? { renderIdentityStore: extraOpts.renderIdentityStore }
       : {}),
   });
   return {
@@ -1637,5 +1667,176 @@ describe('createGguiRenderHandler — isError failure envelope (ruling B)', () =
     expect(typeof parsed.resourceUri).toBe('string');
     expect((parsed.resourceUri ?? '').length).toBeGreaterThan(0);
     expect(parsed.error).toBeUndefined();
+  });
+});
+
+/**
+ * Durable render-identity write-through (#430 slice 1).
+ *
+ * Every render commit also writes the side record that lets a
+ * `ui://ggui/render/{sessionId}/{contractKey}` locator re-mint the
+ * render after the render row itself is gone. These assert the record
+ * the handler produces, not the store that holds it (that contract is
+ * covered by `@ggui-ai/mcp-server-core`'s own port suite).
+ *
+ * The domain pin is the load-bearing assertion: `contractKey` MUST
+ * equal `blueprintKey(effectiveContract)` — the 16-char
+ * blueprint-registry key — and never the 64-char validators-bundle
+ * contract hash. The two are different lengths AND different domains,
+ * so equality (not just length) is what catches a wrong-domain write.
+ */
+describe('createGguiRenderHandler — durable render identity (#430 slice 1)', () => {
+  /** Contract with a real declared prop, so "props verbatim" is observable. */
+  const PROPS_CONTRACT: DataContract = {
+    propsSpec: { properties: { title: { schema: { type: 'string' } } } },
+  };
+  /** Caller carrying a resolved user, so tenancy is observable on the record. */
+  const USER_CTX: HandlerContext = { ...CTX, userId: 'user-9' };
+
+  async function readRecord(
+    store: InMemoryRenderIdentityStore,
+    sessionId: string,
+  ): Promise<RenderIdentityRecord> {
+    const record = await store.get(sessionId);
+    if (!record) {
+      throw new Error(`expected a render-identity record for ${sessionId}`);
+    }
+    return record;
+  }
+
+  it('cold gen writes the full record — 16-char blueprintKey domain, variantKey, props, tenancy, seq', async () => {
+    const renderIdentityStore = new InMemoryRenderIdentityStore();
+    const { harness, handshakeId } = await buildColdGenHarness({
+      renderIdentityStore,
+      contract: PROPS_CONTRACT,
+    });
+
+    const out = await harness.handler.handler(
+      { handshakeId, props: { title: 'Hello' } },
+      USER_CTX,
+    );
+    assertRenderSuccess(out);
+
+    const record = await readRecord(renderIdentityStore, out.sessionId);
+    // Domain pin — EQUALITY with the blueprint key, plus its length.
+    expect(record.contractKey).toBe(blueprintKey(PROPS_CONTRACT));
+    expect(record.contractKey).toHaveLength(16);
+    expect(record.variantKey).toBe(variantKey(undefined));
+    expect(record.props).toEqual({ title: 'Hello' });
+    expect(record.sessionId).toBe(out.sessionId);
+    expect(record.appId).toBe(APP_ID);
+    expect(record.userId).toBe('user-9');
+
+    // `seqAtLastCommit` is sampled off the committed row, not guessed.
+    const stored = await harness.renderStore.get(out.sessionId);
+    expect(record.seqAtLastCommit).toBe(stored?.eventSequence);
+    expect(record.createdAt).toBe(stored?.createdAt);
+    expect(record.updatedAt).toBeGreaterThanOrEqual(record.createdAt);
+  });
+
+  it('cold gen backfills blueprintId once registration resolves it', async () => {
+    const renderIdentityStore = new InMemoryRenderIdentityStore();
+    const { harness, handshakeId } = await buildColdGenHarness({
+      renderIdentityStore,
+    });
+
+    const out = await harness.handler.handler({ handshakeId, props: {} }, CTX);
+    assertRenderSuccess(out);
+
+    const record = await readRecord(renderIdentityStore, out.sessionId);
+    expect(record.blueprintId).not.toBeNull();
+    // The backfilled id is the SAME one the wire surfaces.
+    expect(record.blueprintId).toBe(out.blueprintId);
+    expect(record.blueprintId).toMatch(/^bp_/);
+  });
+
+  it('a themeId override re-commits LAST and its record keeps the backfilled blueprintId', async () => {
+    const renderIdentityStore = new InMemoryRenderIdentityStore();
+    const { harness, handshakeId } = await buildColdGenHarness({
+      renderIdentityStore,
+    });
+
+    const out = await harness.handler.handler(
+      { handshakeId, props: {}, themeId: 'dark' },
+      CTX,
+    );
+    assertRenderSuccess(out);
+
+    // Proves the overlay path actually ran — without the re-commit
+    // there is no last write for this test to be about.
+    const stored = await harness.renderStore.get(out.sessionId);
+    const render = stored?.render;
+    if (!render || render.type === 'mcpApps' || render.type === 'system') {
+      throw new Error('expected a ComponentGguiSession from cold gen');
+    }
+    expect(render.themeId).toBe('dark');
+
+    // The overlay commit lands AFTER cold-gen registration backfilled
+    // the id, so its record must carry that id forward. Writing `null`
+    // here (or reading a `resolvedBlueprintId` that has not settled
+    // yet) would silently erase the backfill.
+    const record = await readRecord(renderIdentityStore, out.sessionId);
+    expect(record.blueprintId).not.toBeNull();
+    expect(record.blueprintId).toBe(out.blueprintId);
+    expect(record.seqAtLastCommit).toBe(stored?.eventSequence);
+  });
+
+  it('cache reuse writes the reused blueprint id straight through', async () => {
+    const renderIdentityStore = new InMemoryRenderIdentityStore();
+    const { harness, handshakeId, storedUuid } = await buildAcceptCacheHarness({
+      renderIdentityStore,
+    });
+
+    const out = await harness.handler.handler({ handshakeId, props: {} }, CTX);
+    assertRenderSuccess(out);
+    expect(out.blueprintId).toBe(storedUuid);
+
+    const record = await readRecord(renderIdentityStore, out.sessionId);
+    expect(record.blueprintId).toBe(storedUuid);
+    expect(record.contractKey).toBe(blueprintKey(CONTRACT));
+    expect(record.contractKey).toHaveLength(16);
+  });
+
+  it('no store bound — render succeeds', async () => {
+    const { harness, handshakeId } = await buildColdGenHarness();
+    const out = await harness.handler.handler({ handshakeId, props: {} }, CTX);
+    assertRenderSuccess(out);
+    expect(out.codeReady).toBe(true);
+  });
+
+  it('a rejecting store cannot fail the render — logs render_identity_write_failed', async () => {
+    const rejecting: RenderIdentityStore = {
+      put: async () => {
+        throw new Error('identity store offline');
+      },
+      get: async () => null,
+    };
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const { harness, handshakeId } = await buildColdGenHarness({
+        renderIdentityStore: rejecting,
+      });
+      const out = await harness.handler.handler({ handshakeId, props: {} }, CTX);
+      assertRenderSuccess(out);
+      expect(out.codeReady).toBe(true);
+
+      const events = warn.mock.calls
+        .map(([first]) => (typeof first === 'string' ? first : ''))
+        .filter((line) => line.includes('render_identity_write_failed'))
+        .map((line) => JSON.parse(line) as {
+          readonly msg: string;
+          readonly sessionId: string;
+          readonly appId: string;
+          readonly error: string;
+        });
+      expect(events.length).toBeGreaterThan(0);
+      const [event] = events;
+      expect(event?.msg).toBe('render_identity_write_failed');
+      expect(event?.sessionId).toBe(out.sessionId);
+      expect(event?.appId).toBe(APP_ID);
+      expect(event?.error).toBe('identity store offline');
+    } finally {
+      warn.mockRestore();
+    }
   });
 });

@@ -298,3 +298,16 @@ export {
 export type { SeedPoolSource } from "./seed-pool-source.js";
 export { buildSeedPool, type BuildSeedPoolOptions } from "./build-seed-pool.js";
 export { listRegistryBlueprintsForExport, type ExportableBlueprint } from './export-registry.js';
+// The render-identity event registry. Exported because storage backends
+// live outside this package and must emit the SAME names — importing
+// them is what keeps the set enumerable from one type and turns a
+// rename into a compile error rather than a silently-dead alert filter.
+export {
+  RENDER_IDENTITY_EVENTS,
+  type RenderIdentityCapacityEvent,
+  type RenderIdentityEvent,
+  type RenderIdentityFailureEvent,
+  type RenderIdentityFailureSource,
+  type RenderIdentitySkipReason,
+  type RenderIdentityUnreadableReason,
+} from './render-identity.js';

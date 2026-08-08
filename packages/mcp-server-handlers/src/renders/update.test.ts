@@ -9,7 +9,7 @@
  * `StackItemNotFoundError` matrix collapsed to one
  * `GguiSessionNotFoundError`.
  */
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   ContractViolationError,
   type ComponentGguiSession,
@@ -17,7 +17,14 @@ import {
   type PropsSpec,
 } from '@ggui-ai/protocol';
 import { parseMcpAppAiGguiRenderMeta } from '@ggui-ai/protocol/integrations/mcp-apps';
-import { InMemoryGguiSessionStore } from '@ggui-ai/mcp-server-core/in-memory';
+import {
+  InMemoryGguiSessionStore,
+  InMemoryRenderIdentityStore,
+} from '@ggui-ai/mcp-server-core/in-memory';
+import type {
+  RenderIdentityRecord,
+  RenderIdentityStore,
+} from '@ggui-ai/mcp-server-core';
 import {
   createGguiUpdateHandler,
   GguiSessionNotFoundError,
@@ -566,5 +573,236 @@ describe('createGguiUpdateHandler', () => {
       expect(parsed.meta?.themeId).toBe('indigo');
       expect(parsed.meta?.themeMode).toBe('dark');
     });
+  });
+});
+
+/**
+ * Durable render-identity refresh (#430 slice 1).
+ *
+ * `ggui_update` re-commits the render row, so the identity record's
+ * view of that row (props, sequence, freshness) goes stale unless the
+ * re-commit refreshes it. What it MUST NOT do is touch the identity
+ * itself: `blueprintKey` is not recomputable here — the agreed
+ * contract that produced it lived in the handshake this tool never
+ * sees — so a refresh that "helpfully" recomputed one would write a
+ * key pointing at nothing.
+ */
+describe('createGguiUpdateHandler — render-identity refresh (#430 slice 1)', () => {
+  /** 16-char blueprint-key domain, distinct from any real key. */
+  const CONTRACT_KEY = 'abcdef0123456789';
+  const BLUEPRINT_ID = 'bp_44444444-4444-4444-8444-444444444444';
+  const VARIANT_KEY = 'variant-fixed';
+
+  function seededRecord(sessionId: string): RenderIdentityRecord {
+    return {
+      sessionId,
+      appId: APP_A,
+      blueprintId: BLUEPRINT_ID,
+      contractKey: CONTRACT_KEY,
+      variantKey: VARIANT_KEY,
+      props: { count: 0 },
+      seqAtLastCommit: 0,
+      createdAt: NOW_MS,
+      // Deliberately stale so a refresh is observable.
+      updatedAt: NOW_MS,
+    };
+  }
+
+  /** A skipped refresh — no record to update, so no error either. */
+  interface SkippedEvent {
+    readonly msg: string;
+    readonly sessionId: string;
+    readonly reason: string;
+  }
+  /** A failed write — carries the caught error and its tenancy. */
+  interface FailedEvent {
+    readonly msg: string;
+    readonly sessionId: string;
+    readonly appId: string;
+    readonly error: string;
+  }
+
+  /** Structured single-line events this module emits, parsed back. */
+  function namedEvents<T>(
+    warn: ReturnType<typeof vi.spyOn>,
+    event: string,
+  ): readonly T[] {
+    return warn.mock.calls
+      .map(([first]) => (typeof first === 'string' ? first : ''))
+      .filter((line) => line.includes(event))
+      .map((line) => JSON.parse(line) as T);
+  }
+
+  it('refreshes props + sequence + updatedAt, leaving the identity fields untouched', async () => {
+    const store = new InMemoryGguiSessionStore();
+    const { sessionId } = await seedRender({ store });
+    const renderIdentityStore = new InMemoryRenderIdentityStore();
+    await renderIdentityStore.put(seededRecord(sessionId));
+
+    const handler = createGguiUpdateHandler({
+      renderStore: store,
+      renderIdentityStore,
+    });
+    await handler.handler(
+      { sessionId, kind: 'replace' as const, props: { count: 7 } },
+      ctx(),
+    );
+
+    const record = await renderIdentityStore.get(sessionId);
+    expect(record).not.toBeNull();
+    if (!record) return;
+
+    // Refreshed off the committed row.
+    const stored = await store.get(sessionId);
+    expect(record.props).toEqual({ count: 7 });
+    expect(record.seqAtLastCommit).toBe(stored?.eventSequence);
+    expect(record.updatedAt).toBeGreaterThan(NOW_MS);
+
+    // Identity carried forward verbatim — never recomputed.
+    expect(record.blueprintId).toBe(BLUEPRINT_ID);
+    expect(record.contractKey).toBe(CONTRACT_KEY);
+    expect(record.variantKey).toBe(VARIANT_KEY);
+    // `createdAt` tracks the ROW, not the write — so it is the same
+    // value a first write would have produced, and a refresh cannot
+    // drift it forward the way `updatedAt` moves.
+    expect(record.createdAt).toBe(stored?.createdAt);
+  });
+
+  it('no existing record — skips with render_identity_refresh_skipped and the update still succeeds', async () => {
+    const store = new InMemoryGguiSessionStore();
+    const { sessionId } = await seedRender({ store });
+    const renderIdentityStore = new InMemoryRenderIdentityStore();
+
+    // The skip is emitted at DEBUG, not warn — severity is part of the
+    // event's contract and this path is not actionable.
+    const debug = vi.spyOn(console, 'debug').mockImplementation(() => {});
+    try {
+      const handler = createGguiUpdateHandler({
+        renderStore: store,
+        renderIdentityStore,
+      });
+      const out = await handler.handler(
+        { sessionId, kind: 'replace' as const, props: { count: 7 } },
+        ctx(),
+      );
+      expect(out.updated).toBe(true);
+
+      // Nothing invented — identity fields are not recomputable here.
+      expect(await renderIdentityStore.get(sessionId)).toBeNull();
+
+      const events = namedEvents<SkippedEvent>(debug, 'render_identity_refresh_skipped');
+      expect(events).toHaveLength(1);
+      expect(events[0]?.sessionId).toBe(sessionId);
+      expect(events[0]?.reason).toBe('no-record');
+    } finally {
+      debug.mockRestore();
+    }
+  });
+
+  it('a rejecting identity store cannot fail the update — logs render_identity_refresh_failed', async () => {
+    const store = new InMemoryGguiSessionStore();
+    const { sessionId } = await seedRender({ store });
+    const rejecting: RenderIdentityStore = {
+      get: async () => seededRecord(sessionId),
+      put: async () => {
+        throw new Error('identity store offline');
+      },
+    };
+
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const handler = createGguiUpdateHandler({
+        renderStore: store,
+        renderIdentityStore: rejecting,
+      });
+      const out = await handler.handler(
+        { sessionId, kind: 'replace' as const, props: { count: 7 } },
+        ctx(),
+      );
+      expect(out.updated).toBe(true);
+
+      const events = namedEvents<FailedEvent>(warn, 'render_identity_refresh_failed');
+      expect(events).toHaveLength(1);
+      expect(events[0]?.sessionId).toBe(sessionId);
+      expect(events[0]?.appId).toBe(APP_A);
+      expect(events[0]?.error).toBe('identity store offline');
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it('a throwing get cannot fail the update — logs render_identity_refresh_failed', async () => {
+    const store = new InMemoryGguiSessionStore();
+    const { sessionId } = await seedRender({ store });
+    // The read half of get→merge→put. Caught separately from `put`:
+    // an uncaught throw here would escape a best-effort path and fail
+    // a patch that already persisted.
+    const throwingGet: RenderIdentityStore = {
+      get: async () => {
+        throw new Error('identity store unreachable');
+      },
+      put: async () => {},
+    };
+
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const handler = createGguiUpdateHandler({
+        renderStore: store,
+        renderIdentityStore: throwingGet,
+      });
+      const out = await handler.handler(
+        { sessionId, kind: 'replace' as const, props: { count: 7 } },
+        ctx(),
+      );
+      expect(out.updated).toBe(true);
+
+      const events = namedEvents<FailedEvent>(warn, 'render_identity_refresh_failed');
+      expect(events).toHaveLength(1);
+      expect(events[0]?.sessionId).toBe(sessionId);
+      expect(events[0]?.appId).toBe(APP_A);
+      expect(events[0]?.error).toBe('identity store unreachable');
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it('a record whose cold-gen backfill never landed keeps blueprintId null', async () => {
+    const store = new InMemoryGguiSessionStore();
+    const { sessionId } = await seedRender({ store });
+    const renderIdentityStore = new InMemoryRenderIdentityStore();
+    // The failed-backfill class: cold gen committed, registration never
+    // resolved an id. A re-mint needs this record to survive a refresh
+    // byte-for-byte, null included — coercing it to an empty sentinel
+    // would make "never registered" indistinguishable from "registered
+    // as ''".
+    await renderIdentityStore.put({ ...seededRecord(sessionId), blueprintId: null });
+
+    const handler = createGguiUpdateHandler({
+      renderStore: store,
+      renderIdentityStore,
+    });
+    await handler.handler(
+      { sessionId, kind: 'replace' as const, props: { count: 7 } },
+      ctx(),
+    );
+
+    const record = await renderIdentityStore.get(sessionId);
+    expect(record?.blueprintId).toBeNull();
+    // The rest of the identity is untouched alongside it.
+    expect(record?.contractKey).toBe(CONTRACT_KEY);
+    expect(record?.variantKey).toBe(VARIANT_KEY);
+    // …and the refresh still did its job.
+    expect(record?.props).toEqual({ count: 7 });
+  });
+
+  it('no identity store bound — the update still succeeds', async () => {
+    const store = new InMemoryGguiSessionStore();
+    const { sessionId } = await seedRender({ store });
+    const handler = createGguiUpdateHandler({ renderStore: store });
+    const out = await handler.handler(
+      { sessionId, kind: 'replace' as const, props: { count: 7 } },
+      ctx(),
+    );
+    expect(out.updated).toBe(true);
   });
 });
