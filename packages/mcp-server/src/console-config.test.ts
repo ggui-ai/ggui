@@ -17,7 +17,7 @@
  * tmp-dir fixtures for the manifest cases).
  */
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, realpathSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { Server as HttpServer } from 'node:http';
@@ -92,7 +92,9 @@ describe('GET /ggui/console/config', () => {
     // typically has no parent ggui.json on CI. The endpoint must
     // still ship the schema so operators can browse what would be
     // configurable if they created one.
-    tmpDir = mkdtempSync(join(tmpdir(), 'ggui-config-noop-'));
+    // realpathSync: macOS tmpdir is a symlink (/var → /private/var); the
+    // server canonicalizes its cwd, so the expectation side must too (#437).
+    tmpDir = realpathSync(mkdtempSync(join(tmpdir(), 'ggui-config-noop-')));
     process.chdir(tmpDir);
     fx = await boot({ console: {} });
     const res = await fetch(`${fx.url}/ggui/console/config`, { headers: { authorization: `Bearer ${fx.server.adminToken}` } });
@@ -116,7 +118,7 @@ describe('GET /ggui/console/config', () => {
   });
 
   it('returns manifest + raw + schema when a valid ggui.json is reachable', async () => {
-    tmpDir = mkdtempSync(join(tmpdir(), 'ggui-config-valid-'));
+    tmpDir = realpathSync(mkdtempSync(join(tmpdir(), 'ggui-config-valid-')));
     const manifest = {
       schema: '1',
       protocol: '1.1',
@@ -147,7 +149,7 @@ describe('GET /ggui/console/config', () => {
   });
 
   it('returns raw + error message (no manifest) when ggui.json fails validation', async () => {
-    tmpDir = mkdtempSync(join(tmpdir(), 'ggui-config-invalid-'));
+    tmpDir = realpathSync(mkdtempSync(join(tmpdir(), 'ggui-config-invalid-')));
     // Missing required `app` field — schema rejection.
     const badJson = JSON.stringify({ schema: '1', protocol: '1.1' }, null, 2);
     writeFileSync(join(tmpDir, 'ggui.json'), badJson, 'utf-8');
