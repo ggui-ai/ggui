@@ -2233,12 +2233,19 @@ function ensureRelayCueStyle(): void {
  * control the user just pressed; and anything outside
  * `[data-ggui-session-root]` (host chrome, the toast itself) is not
  * ours to animate. Both fall through to the toast.
+ *
+ * The root ITSELF is excluded too. `contains` is reflexive, so a
+ * focused session root would otherwise pulse the whole render — the
+ * opposite of a cue pointing at one control. That is reachable: the
+ * root is reused if one already exists in the document (see
+ * `ensureStatusDom`), so a host or a generated tree can hand it a
+ * `tabindex` and focus it.
  */
 function resolveRelayCueTarget(): Element | null {
   const active = document.activeElement;
   if (active === null || active === document.body) return null;
   const root = document.querySelector('[data-ggui-session-root]');
-  if (root === null || !root.contains(active)) return null;
+  if (root === null || active === root || !root.contains(active)) return null;
   return active;
 }
 
@@ -2262,15 +2269,24 @@ function showPostDismissalCue(intent: string): void {
     if (target.classList.contains(RELAY_CUE_CLASS)) return;
     ensureRelayCueStyle();
     target.classList.add(RELAY_CUE_CLASS);
+    // Both cleanup routes cancel the other. Without the `clearTimeout`,
+    // a pulse ended early by `animationend` leaves its timer armed, and
+    // that timer later strips whatever class is on the element THEN —
+    // truncating the next pulse partway through. The window is the gap
+    // between the two, which widens on any host that ends the
+    // animation early.
     const clear = (): void => {
       target.classList.remove(RELAY_CUE_CLASS);
       target.removeEventListener('animationend', clear);
+      // `timer` is declared below; `clear` only ever RUNS after that
+      // line, so it always reads an initialized id.
+      clearTimeout(timer);
     };
     target.addEventListener('animationend', clear, { once: true });
     // Belt for real browsers, braces for everything that never fires
     // `animationend`: jsdom, a display:none subtree, and any host whose
     // reduced-motion policy skips the animation outright.
-    window.setTimeout(clear, RELAY_CUE_DURATION_MS + 100);
+    const timer = window.setTimeout(clear, RELAY_CUE_DURATION_MS + 100);
     return;
   }
   const now = Date.now();

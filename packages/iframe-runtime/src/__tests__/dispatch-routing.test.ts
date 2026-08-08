@@ -1073,6 +1073,55 @@ describe('post-dismissal cue in the relay dead zone (ggui#442)', () => {
     // timeout belt. Real browsers take whichever fires first.
     vi.advanceTimersByTime(1_000);
     expect(btn.classList.contains(CUE_CLASS)).toBe(false);
+
+    // The session root itself is NOT a target: `contains` is reflexive,
+    // so without an explicit guard a focused root pulses the entire
+    // render instead of one control. Reachable because the root is
+    // reused when one already exists, so anything may give it a
+    // tabindex and focus it.
+    const root = btn.parentElement;
+    root?.setAttribute('tabindex', '-1');
+    (root as HTMLElement | null)?.focus();
+    expect(document.activeElement).toBe(root);
+    fireGesture();
+    expect(root?.classList.contains(CUE_CLASS)).toBe(false);
+    // …it falls through to the toast instead, like any other gesture
+    // with nothing usable focused.
+    expect(toastEl()?.textContent).toContain('archive');
+  });
+
+  it('does not let a finished pulse truncate the next one', async () => {
+    // When `animationend` wins the race, its timeout twin is still
+    // armed. If that stale timer is not cancelled it fires later and
+    // strips whatever class is on the element AT THAT MOMENT — which
+    // is the NEXT pulse, cut short partway through.
+    await latchAndDismiss();
+    const btn = mountSessionRoot();
+    btn.focus();
+
+    vi.useFakeTimers();
+    fireGesture();
+    expect(btn.classList.contains(CUE_CLASS)).toBe(true);
+
+    // Pulse 1 ends the way a real browser ends it. jsdom never emits
+    // this on its own, so dispatch it — that IS the race being pinned.
+    vi.advanceTimersByTime(400);
+    btn.dispatchEvent(new Event('animationend'));
+    expect(btn.classList.contains(CUE_CLASS)).toBe(false);
+
+    // Pulse 2, inside pulse 1's original timeout window.
+    vi.advanceTimersByTime(50);
+    fireGesture();
+    expect(btn.classList.contains(CUE_CLASS)).toBe(true);
+
+    // Past the moment pulse 1's timer would have fired. Pulse 2 must
+    // still be running.
+    vi.advanceTimersByTime(60);
+    expect(btn.classList.contains(CUE_CLASS)).toBe(true);
+
+    // …and it still ends on its own schedule.
+    vi.advanceTimersByTime(1_000);
+    expect(btn.classList.contains(CUE_CLASS)).toBe(false);
   });
 
   it('falls back to one throttled micro-toast when no in-root control is focused', async () => {
@@ -1137,5 +1186,43 @@ describe('post-dismissal cue in the relay dead zone (ggui#442)', () => {
     fireGesture();
     expect(toastEl()?.textContent).toBe('→ archive');
     expect(btn.classList.contains(CUE_CLASS)).toBe(false);
+  });
+
+  it('does not cue over a FRESH notice after a re-latch — dismissal does not carry across latch cycles', async () => {
+    // The residue this pins is only observable across a re-latch.
+    // Post-self-heal the latch is false, so the cue branch is
+    // unreachable and a stale `relayNoticeDismissed` hides; it becomes
+    // visible only once a SECOND dead zone opens, where it would
+    // suppress the new notice's own dismissal step and cue from the
+    // very first gesture.
+    await latchAndDismiss();
+
+    // Self-heal.
+    transport.queueResponse('tools/call', {
+      result: { structuredContent: { ok: true, consumerPresent: true } },
+    });
+    fireGesture();
+    await tick();
+    await tick();
+
+    // Re-latch: a fresh notice the user has NOT dismissed.
+    transport.queueResponse('tools/call', {
+      error: { code: -32601, message: 'method not supported' },
+    });
+    fireGesture();
+    await tick();
+    await tick();
+    expect(toastEl()?.textContent).toMatch(/cannot relay/i);
+    expect(toastEl()?.style.opacity).toBe('1');
+
+    const btn = mountSessionRoot();
+    btn.focus();
+    fireGesture();
+
+    // No cue. The user must READ the new notice; a subtle pulse in its
+    // place would silently downgrade an explanation they never saw.
+    expect(btn.classList.contains(CUE_CLASS)).toBe(false);
+    expect(toastEl()?.textContent).toMatch(/cannot relay/i);
+    expect(toastEl()?.style.opacity).toBe('1');
   });
 });
