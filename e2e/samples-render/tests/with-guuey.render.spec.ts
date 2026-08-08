@@ -3,18 +3,22 @@
  * golden path, end-to-end against the app COMPOSED from
  * `oss/samples/agents/with-guuey` + `oss/samples/apps/with-guuey-web`
  * (compose-app.mjs → per-dir npm installs → the 3-process boot in
- * compose-and-boot.sh: `ggui serve --mcp-only` :6781 → `guuey dev --serve`
- * :6790 → vite :6890, with the colocated todo MCP on :6740 spawned by the
- * guuey CLI itself).
+ * compose-and-boot.sh: `ggui serve --mcp-only --dev-allow-all` :6781 →
+ * `guuey dev --serve` :6790 → vite :6890, with the colocated todo MCP on
+ * :6740 spawned by the guuey CLI itself). `--dev-allow-all` is what admits
+ * the page's anonymous guest relay + locator resources/read (same note as
+ * cache-hit.spec / seed-pool-reuse.spec).
  *
  * A SEPARATE spec from render.spec.ts on purpose: the web half is a
- * different app (`@guuey/agent-client`'s `useAgentInvoke` + card-mount
- * dispatcher instead of ggui-basic-web's hand-rolled Chat.tsx), and the
- * journey asserts guuey's published dev-router wire contract — `POST
- * /agent/invoke` SSE + `GET /healthz` ONLY, sessionId-keyed in-memory
- * sessions, no manifest, no `/threads` (`@guuey/cli` 0.2.0 recon, design
- * spec "Recon basis"). The framework-native lanes in render.spec.ts are
- * untouched — they remain the wire-scenarios substrate.
+ * different app (`@guuey/agent-client`'s `useAgentInvoke` +
+ * `@guuey/mcp-apps-host`'s view-mount dispatcher instead of
+ * ggui-basic-web's hand-rolled Chat.tsx), and the journey asserts guuey's
+ * published dev-router wire contract — `POST /agent/invoke` SSE + `GET
+ * /healthz` + `GET /threads/:id/messages` (in-memory TEXT rows only — no
+ * card/artifact rows), sessionId-keyed in-memory sessions, no manifest
+ * (`@guuey/cli` 0.3.0 recon; 0.2.0 had no `/threads` route at all). The
+ * framework-native lanes in render.spec.ts are untouched — they remain
+ * the wire-scenarios substrate.
  *
  * Journey (adapted to the dev server's real contract):
  *
@@ -37,10 +41,20 @@
  *                 ggui_update-s the EXISTING render — the still-mounted
  *                 card flips to checked over the live channel, with no
  *                 page-side invoke in flight.
+ *   rehydrate   — reload the page. The transcript starts empty (the
+ *                 dev-router/hook threadId dialect gap — see the RELOAD
+ *                 LEG note at the bottom), but the CARD comes back: the
+ *                 host persisted the render's durable `ui://` locator and
+ *                 re-fetches fresh mount material via `resources/read` on
+ *                 its ggui relay (`@guuey/mcp-apps-host`'s reader). Fresh
+ *                 material, provably: the remounted card shows "buy milk"
+ *                 CHECKED — the turn-1 bootstrap predates the toggle, so
+ *                 a stale replay would render it unchecked.
  *
  * Assertions: same `sessionId` rides the second response's SSE `session`
  * frame; the toggle round-trips to the todo store (authoritative
- * `/admin/state` read); the first render's state persists in-page.
+ * `/admin/state` read); the first render's state persists in-page; the
+ * reloaded page remounts the card live via the locator reader.
  */
 import { existsSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
@@ -83,7 +97,9 @@ interface TodoAdminState {
   }>;
 }
 
-/** The dev router's SSE `session` frame (`@guuey/cli` 0.2.0 `handleInvoke`). */
+/** The dev router's SSE `session` frame (`@guuey/cli` 0.3.0 `handleInvoke` —
+ *  re-verified against the published 0.3.0 dist: shape unchanged from 0.2.0,
+ *  `{sessionId, userId, authMode}` with no `threadId`). */
 interface DevSessionFrame {
   readonly sessionId: string;
   readonly userId: string;
@@ -214,11 +230,12 @@ test.describe('samples-render: with-guuey full journey against the composed publ
 
     // ── STEP 2 — toggle (queues the action; nothing drains yet) ──────────
     await findTodoToggleable(initialFrame, /buy milk/i).click({ timeout: 30_000 });
-    // The action dispatch rides the card's WS to ggui serve; there is no
-    // page-observable ack (the runtime's user-action doorbell is a host
-    // `ui/message` this sample deliberately drops — guuey dev has no relay).
-    // Give the cross-process dispatch a beat before draining; a too-early
-    // drain finds an empty queue (retries: 1 absorbs a genuine race).
+    // The action dispatches as a guest `tools/call` through the HOST's
+    // relay to ggui serve (App.tsx `relayCallTool` — the live-channel WS
+    // carries server→card updates, never card→server actions) into the
+    // runtime's pending queue; there is no page-observable ack. Give the
+    // cross-process dispatch a beat before draining; a too-early drain
+    // finds an empty queue (retries: 1 absorbs a genuine race).
     await page.waitForTimeout(2_000);
 
     // ── STEP 3 — same-session sync over the wire ─────────────────────────
@@ -229,12 +246,13 @@ test.describe('samples-render: with-guuey full journey against the composed publ
     // speaks the hosted pod's `threadId` dialect (sends body.threadId,
     // reads session.threadId) — the dev router ignores the one and omits
     // the other, so a page-driven second prompt would mint a FRESH session
-    // (randomUUID) instead of continuing this one. The test is therefore
-    // the session-aware client: it replays the dev router's own contract
-    // (`body.sessionId`) and asserts the SAME sessionId rides the second
-    // response's SSE `session` frame — in-session continuity at the wire
-    // level (the worker's history fold sees turn 1) — while the page
-    // proves the in-page halves below.
+    // (randomUUID) instead of continuing this one. (Re-verified against
+    // `@guuey/cli` 0.3.0 + `@guuey/agent-client` 0.3.0: dialects unchanged
+    // on both sides.) The test is therefore the session-aware client: it
+    // replays the dev router's own contract (`body.sessionId`) and asserts
+    // the SAME sessionId rides the second response's SSE `session` frame —
+    // in-session continuity at the wire level (the worker's history fold
+    // sees turn 1) — while the page proves the in-page halves below.
     const resp = await request.post(`${app.agentUrl}/agent/invoke`, {
       data: { input: SYNC_PROMPT, sessionId },
       timeout: 300_000,
@@ -288,14 +306,63 @@ test.describe('samples-render: with-guuey full journey against the composed publ
     }
     await expect(page.getByTestId('transcript')).toContainText(/buy milk/i);
 
-    // NO RELOAD LEG — deliberate, not an oversight. `guuey dev --serve`
-    // serves ONLY `POST /agent/invoke` + `GET /healthz`: there is no
-    // `GET /threads/:id/messages`, so a reloaded page has nothing to
-    // rehydrate from (design spec §1 "History gap, honest" — fresh-thread
-    // sessions only; reload-repaint is a hosted-platform feature). The
-    // upstream courtesy issue (spec §6a, filed on withguuey/guuey-sdks at
-    // ship) asks for the history endpoint; when it lands and the sample
-    // grows a history adapter, a reload leg can join this journey. Do NOT
-    // "fix" the gap here with a hand-rolled /threads shim.
+    // ── STEP 5 — reload: locator rehydration through the host's reader ──
+    // FULL PAGE-RELOAD leg, not a re-fold: the card's durable identity is
+    // its persisted `ui://` locator (the host keeps it in localStorage —
+    // App.tsx `CardMemento`), and the reloaded page resolves it with
+    // `@guuey/mcp-apps-host`'s reader over the ggui relay — ONE fresh
+    // `resources/read`, which ggui serve answers with a newly minted shell
+    // for the render's CURRENT state (fresh live-channel credentials).
+    //
+    // What stays honestly absent: the TEXT transcript. The 0.3.0 courtesy
+    // history endpoint (`GET /threads/:id/messages`) landed, but its rows
+    // are text-only AND the dev router's session frame still carries no
+    // `threadId` for the hook to bind — so the transcript starts empty and
+    // the card alone rehydrates. Do NOT "fix" that gap here with a
+    // hand-rolled threadId shim.
+    await page.reload();
+    try {
+      await expect(page.getByRole('textbox')).toBeVisible({ timeout: 60_000 });
+    } catch (err) {
+      dumpBootTail('shell-never-remounted-after-reload');
+      throw err;
+    }
+    // The rehydrated card: reader fetch + shell boot only (no generation,
+    // no LLM turn) — the todos should reappear well inside 120s.
+    const rehydratedFrame = page
+      .frameLocator('iframe')
+      .last()
+      .frameLocator('iframe')
+      .first();
+    try {
+      for (const todo of EXPECTED_TODOS) {
+        await expect(rehydratedFrame.getByText(new RegExp(todo, 'i')).first()).toBeVisible({
+          timeout: 120_000,
+        });
+      }
+    } catch (err) {
+      dumpBootTail('rehydrated-card-never-appeared');
+      throw err;
+    }
+    // The card came back LIVE via the reader's fresh read: "buy milk"
+    // mounts CHECKED with no invoke in flight. The turn-1 bootstrap
+    // predates the toggle (milk was asserted done:false back then) AND its
+    // live-channel wsToken is long expired — a stale replay could neither
+    // carry the checked state nor resync to it over the WS. Checked here
+    // therefore proves a live remount from the render's current
+    // server-side state, which only the fresh resources/read can mint.
+    try {
+      await waitForTodoCheckedIndicator(rehydratedFrame, /buy milk/i, 60_000);
+    } catch (err) {
+      dumpBootTail('rehydrated-card-stale');
+      throw err;
+    }
+    // And the transcript really did start over — the reload leg proves
+    // card rehydration, not a hidden history replay. Point-in-time check
+    // by design: a negated toContainText samples the transcript as it is
+    // NOW and could not catch a hypothetically late-arriving replay — an
+    // honest bound, and sufficient here because the sample wires no
+    // history adapter at all (nothing exists to replay later).
+    await expect(page.getByTestId('transcript')).not.toContainText(/buy milk/i);
   });
 });

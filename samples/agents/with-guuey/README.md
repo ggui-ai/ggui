@@ -32,9 +32,16 @@ export ANTHROPIC_API_KEY=sk-ant-…
 npm run dev        # guuey dev --serve → http://localhost:6790
 ```
 
-The dev router serves `POST /agent/invoke` (SSE) and `GET /healthz` on port 6790. For the rendered-UI half, pair it with the web sample
+The dev router serves `POST /agent/invoke` (SSE), `GET /healthz`, and a
+`GET /threads/:id/messages` history read (in-memory text rows) on port 6790. For the rendered-UI half, pair it with the web sample
 (`../../apps/with-guuey-web`) and a ggui runtime MCP on port 6781
-(`ggui serve --mcp-only`) — the composed samples-render lane boots all three.
+(`ggui serve --mcp-only --dev-allow-all` — the flag admits the anonymous
+dev callers to serve's otherwise bearer-gated `/mcp`: first this router's
+own ggui connection (it bears no dev token — only colocated servers get
+one — so `ggui_render` itself 401s without the flag), then the web half's
+browser relay and locator `resources/read`; the
+`../../gguis/default` sample's `npm run start` carries it) — the composed
+samples-render lane boots all three.
 
 Conformance check for the worker file (no key needed to launch the probe):
 
@@ -53,7 +60,12 @@ treats the throwaway container as the isolation boundary.
 
 ## Known limitation: fresh-thread sessions only
 
-`guuey dev --serve` keeps sessions in memory and serves no
-`GET /threads/:id/messages` history endpoint — every page load starts a fresh
-thread. Reload-repaint/history hydration is a hosted-platform feature, not a
-dev-server one.
+`guuey dev --serve` keeps sessions in memory (per dev-server process) and
+its `session` frame carries no `threadId`, so the published web client
+cannot bind a page to a dev session across reloads — every page load starts
+a fresh thread, even though a `GET /threads/:id/messages` read of the
+in-memory text history exists. Full reload-repaint/history hydration is a
+hosted-platform feature, not a dev-server one. (The web half still
+rehydrates the rendered CARD across reloads — see its README: the card's
+durable identity is its `ui://` locator, which the web host persists and
+re-fetches itself.)

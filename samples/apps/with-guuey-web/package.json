@@ -1,7 +1,7 @@
 {
   "name": "with-guuey-web-sample",
   "version": "0.0.1",
-  "description": "platform-composed (guuey-sdk) web half of the composed golden path: a Vite SPA on @guuey/agent-client (useAgentInvoke + the ggui-render dispatcher) talking to `guuey dev --serve`, mounting ggui cards through the MCP-Apps second-origin sandbox. Standalone on purpose — excluded from the repo's pnpm workspaces so its exact-pinned @guuey/* deps never share a hoist with workspace HEAD. Not published.",
+  "description": "platform-composed (guuey-sdk) web half of the composed golden path: a Vite SPA on @guuey/agent-client (useAgentInvoke) + @guuey/mcp-apps-host (view-mount dispatch + ui:// locator rehydration) talking to `guuey dev --serve`, mounting ggui cards through the MCP-Apps second-origin sandbox. Standalone on purpose — excluded from the repo's pnpm workspaces so its exact-pinned @guuey/* deps never share a hoist with workspace HEAD. Not published.",
   "private": true,
   "type": "module",
   "scripts": {
@@ -13,7 +13,8 @@
   },
   "dependencies": {
     "@ggui-ai/design": "^0.6.1",
-    "@guuey/agent-client": "0.2.3",
+    "@guuey/agent-client": "0.3.0",
+    "@guuey/mcp-apps-host": "0.3.1",
     "@mcp-ui/client": "^7.1.1",
     "@modelcontextprotocol/sdk": "^1.27.0",
     "react": "^19.0.0",
