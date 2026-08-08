@@ -1,5 +1,12 @@
-import { describe, it, expect, beforeEach } from 'vitest';
-import { InMemoryGguiSessionStore } from '@ggui-ai/mcp-server-core/in-memory';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+import {
+  InMemoryGguiSessionStore,
+  InMemoryRenderIdentityStore,
+} from '@ggui-ai/mcp-server-core/in-memory';
+import type {
+  RenderIdentityRecord,
+  RenderIdentityStore,
+} from '@ggui-ai/mcp-server-core';
 import type {
   ComponentGguiSession,
   ContextSpec,
@@ -292,5 +299,160 @@ describe('createGguiSyncContextHandler', () => {
       );
       expect(out.ok).toBe(true);
     });
+  });
+});
+
+/**
+ * Durable render-identity refresh (#430 slice 1).
+ *
+ * Context sync re-commits the render row, so the identity record's
+ * freshness stamp has to follow. Note what it does NOT carry: the
+ * record has no `contextSnapshot` field, so the snapshot this tool
+ * just persisted is not part of the durable identity — only
+ * `updatedAt` (and, on a row whose props or sequence moved, those)
+ * change here.
+ *
+ * The identity fields stay frozen for the same reason as on update:
+ * `blueprintKey` is not recomputable from a render row.
+ */
+describe('createGguiSyncContextHandler — render-identity refresh (#430 slice 1)', () => {
+  const CONTRACT_KEY = 'fedcba9876543210';
+  const BLUEPRINT_ID = 'bp_55555555-5555-4555-8555-555555555555';
+  const VARIANT_KEY = 'variant-fixed';
+  const CONTEXT_SPEC: ContextSpec = {
+    count: { schema: { type: 'number' }, default: 0 },
+  };
+
+  function seededRecord(sessionId: string): RenderIdentityRecord {
+    return {
+      sessionId,
+      appId: 'app-1',
+      blueprintId: BLUEPRINT_ID,
+      contractKey: CONTRACT_KEY,
+      variantKey: VARIANT_KEY,
+      props: { count: 0 },
+      seqAtLastCommit: 0,
+      createdAt: NOW_MS,
+      updatedAt: NOW_MS,
+    };
+  }
+
+  /** A skipped refresh — no record to update, so no error either. */
+  interface SkippedEvent {
+    readonly msg: string;
+    readonly sessionId: string;
+    readonly reason: string;
+  }
+  /** A failed write — carries the caught error and its tenancy. */
+  interface FailedEvent {
+    readonly msg: string;
+    readonly sessionId: string;
+    readonly appId: string;
+    readonly error: string;
+  }
+
+  function namedEvents<T>(
+    warn: ReturnType<typeof vi.spyOn>,
+    event: string,
+  ): readonly T[] {
+    return warn.mock.calls
+      .map(([first]) => (typeof first === 'string' ? first : ''))
+      .filter((line) => line.includes(event))
+      .map((line) => JSON.parse(line) as T);
+  }
+
+  it('refreshes updatedAt off the committed row and leaves the identity fields untouched', async () => {
+    const store = new InMemoryGguiSessionStore();
+    const { sessionId } = await seedRender(store, { contextSpec: CONTEXT_SPEC });
+    const renderIdentityStore = new InMemoryRenderIdentityStore();
+    await renderIdentityStore.put(seededRecord(sessionId));
+
+    const h = createGguiSyncContextHandler({ renderStore: store, renderIdentityStore });
+    const out = await h.handler(
+      { sessionId, appId: 'app-1', snapshot: { count: 3 } },
+      { appId: 'app-1', requestId: 'r-1' },
+    );
+    expect(out.ok).toBe(true);
+
+    const record = await renderIdentityStore.get(sessionId);
+    expect(record).not.toBeNull();
+    if (!record) return;
+
+    const stored = await store.get(sessionId);
+    expect(record.updatedAt).toBeGreaterThan(NOW_MS);
+    expect(record.seqAtLastCommit).toBe(stored?.eventSequence);
+    expect(record.blueprintId).toBe(BLUEPRINT_ID);
+    expect(record.contractKey).toBe(CONTRACT_KEY);
+    expect(record.variantKey).toBe(VARIANT_KEY);
+    // `createdAt` tracks the ROW, not the write — a refresh cannot
+    // drift it forward the way `updatedAt` moves.
+    expect(record.createdAt).toBe(stored?.createdAt);
+  });
+
+  it('no existing record — skips with render_identity_refresh_skipped and the sync still succeeds', async () => {
+    const store = new InMemoryGguiSessionStore();
+    const { sessionId } = await seedRender(store, { contextSpec: CONTEXT_SPEC });
+    const renderIdentityStore = new InMemoryRenderIdentityStore();
+
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const h = createGguiSyncContextHandler({ renderStore: store, renderIdentityStore });
+      const out = await h.handler(
+        { sessionId, appId: 'app-1', snapshot: { count: 3 } },
+        { appId: 'app-1', requestId: 'r-1' },
+      );
+      expect(out.ok).toBe(true);
+      expect(await renderIdentityStore.get(sessionId)).toBeNull();
+
+      const events = namedEvents<SkippedEvent>(warn, 'render_identity_refresh_skipped');
+      expect(events).toHaveLength(1);
+      expect(events[0]?.sessionId).toBe(sessionId);
+      expect(events[0]?.reason).toBe('no-record');
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it('a rejecting identity store cannot fail the sync — logs render_identity_refresh_failed', async () => {
+    const store = new InMemoryGguiSessionStore();
+    const { sessionId } = await seedRender(store, { contextSpec: CONTEXT_SPEC });
+    const rejecting: RenderIdentityStore = {
+      get: async () => seededRecord(sessionId),
+      put: async () => {
+        throw new Error('identity store offline');
+      },
+    };
+
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const h = createGguiSyncContextHandler({
+        renderStore: store,
+        renderIdentityStore: rejecting,
+      });
+      const out = await h.handler(
+        { sessionId, appId: 'app-1', snapshot: { count: 3 } },
+        { appId: 'app-1', requestId: 'r-1' },
+      );
+      expect(out.ok).toBe(true);
+
+      const events = namedEvents<FailedEvent>(warn, 'render_identity_refresh_failed');
+      expect(events).toHaveLength(1);
+      expect(events[0]?.sessionId).toBe(sessionId);
+      expect(events[0]?.appId).toBe('app-1');
+      expect(events[0]?.error).toBe('identity store offline');
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it('no identity store bound — the sync still succeeds', async () => {
+    const store = new InMemoryGguiSessionStore();
+    const { sessionId } = await seedRender(store, { contextSpec: CONTEXT_SPEC });
+    const h = createGguiSyncContextHandler({ renderStore: store });
+    const out = await h.handler(
+      { sessionId, appId: 'app-1', snapshot: { count: 3 } },
+      { appId: 'app-1', requestId: 'r-1' },
+    );
+    expect(out.ok).toBe(true);
   });
 });

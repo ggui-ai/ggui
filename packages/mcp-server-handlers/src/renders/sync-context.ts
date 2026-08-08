@@ -62,8 +62,12 @@ import {
   type ContextSpec,
   type ContractViolation,
 } from '@ggui-ai/protocol';
-import type { GguiSessionStore } from '@ggui-ai/mcp-server-core';
+import type {
+  GguiSessionStore,
+  RenderIdentityStore,
+} from '@ggui-ai/mcp-server-core';
 import type { SharedHandler } from '../types.js';
+import { refreshRenderIdentity } from './render-identity.js';
 
 const inputSchema = {
   sessionId: z
@@ -121,6 +125,18 @@ type SyncContextOutput = SyncContextAccepted | SyncContextRejected;
 
 export interface CreateGguiSyncContextHandlerDeps {
   readonly renderStore: GguiSessionStore;
+  /**
+   * Durable render-identity side store. A snapshot sync re-commits the
+   * render row, so when a record exists its freshness stamp is
+   * refreshed off the committed row.
+   *
+   * Note what this does NOT persist: the record carries no
+   * `contextSnapshot`, so the snapshot itself stays on the render row
+   * alone. Identity fields are never recomputed here, and a render
+   * with no record yet is skipped rather than synthesized. Writes are
+   * best-effort and can never fail the sync.
+   */
+  readonly renderIdentityStore?: RenderIdentityStore;
 }
 
 /**
@@ -230,7 +246,7 @@ export function createGguiSyncContextHandler(
         ...stored.render,
         contextSnapshot: snapshot,
       };
-      await deps.renderStore.commit({
+      const committed = await deps.renderStore.commit({
         render: updated,
         appId: stored.appId,
         ...(stored.userId !== undefined ? { userId: stored.userId } : {}),
@@ -242,6 +258,11 @@ export function createGguiSyncContextHandler(
           ? { hostSession: stored.hostSession }
           : {}),
       });
+
+      // Keep the durable identity record's view of this row current.
+      // Reads the row the commit RETURNED so the record can't disagree
+      // with what was persisted.
+      await refreshRenderIdentity(deps.renderIdentityStore, committed);
       return { ok: true };
     },
   };

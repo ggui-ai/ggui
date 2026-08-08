@@ -72,8 +72,12 @@ import {
   toMcpAppEnvelope,
   type McpAppAiGguiRenderMeta,
 } from '@ggui-ai/protocol/integrations/mcp-apps';
-import type { GguiSessionStore } from '@ggui-ai/mcp-server-core';
+import type {
+  GguiSessionStore,
+  RenderIdentityStore,
+} from '@ggui-ai/mcp-server-core';
 import type { HandlerContext, SharedHandler } from '../types.js';
+import { refreshRenderIdentity } from './render-identity.js';
 import {
   applyGguiSessionPatch,
   type GguiSessionTarget,
@@ -158,6 +162,20 @@ export interface BillingGate {
 export interface GguiUpdateHandlerDeps extends RenderSliceMetaDeps {
   /** GguiSession-backing store. Used to load + persist the patched render. */
   readonly renderStore: GguiSessionStore;
+  /**
+   * Durable render-identity side store. When present, a successful
+   * patch refreshes the existing record's view of the row it just
+   * re-committed — props, the sequence at that commit, and the
+   * freshness stamp. The identity itself (`blueprintId`,
+   * `contractKey`, `variantKey`) is carried forward untouched; this
+   * tool never sees the agreed contract those keys were derived from,
+   * so it is in no position to recompute them.
+   *
+   * A render with no record yet (store wired after it was rendered) is
+   * skipped, not synthesized. Writes are best-effort and can never
+   * fail the patch. Absent = no refresh, everything else unchanged.
+   */
+  readonly renderIdentityStore?: RenderIdentityStore;
   /**
    * Optional live-subscriber notifier. When present, every successful
    * persistence fans a `{type:'props_update', payload:{sessionId, props}}`
@@ -400,7 +418,7 @@ export function createGguiUpdateHandler(
       // replaces visible-bits in place. Lifecycle fields owned by the
       // store (createdAt, eventSequence, hostSession) preserved across
       // the upsert.
-      await deps.renderStore.commit({
+      const committed = await deps.renderStore.commit({
         render: updatedSession,
         appId: stored.appId,
         ...(stored.userId !== undefined ? { userId: stored.userId } : {}),
@@ -412,6 +430,11 @@ export function createGguiUpdateHandler(
           ? { hostSession: stored.hostSession }
           : {}),
       });
+
+      // Keep the durable identity record's view of this row current.
+      // Reads the row the commit RETURNED so the record can't disagree
+      // with what was persisted.
+      await refreshRenderIdentity(deps.renderIdentityStore, committed);
 
       // Best-effort live delivery. Persistence is the source of truth;
       // the live-channel fan-out is a latency optimization. Errors are

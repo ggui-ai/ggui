@@ -66,8 +66,35 @@ export type RenderIdentityFailureEvent =
   | 'render_identity_write_failed'
   | 'render_identity_refresh_failed';
 
+/**
+ * Every named event this module emits — the failure pair above plus
+ * the one signal that is NOT a failure.
+ *
+ * `render_identity_refresh_skipped` is deliberately outside
+ * {@link RenderIdentityFailureEvent}: nothing went wrong when a
+ * refresh finds no record, so it carries a `reason` instead of an
+ * `error` and rides its own emitter. Folding it in would let a caller
+ * pass it where a caught error is expected and would tell an operator
+ * reading the type that a skip is something to page on.
+ */
+export type RenderIdentityEvent =
+  | RenderIdentityFailureEvent
+  | 'render_identity_refresh_skipped';
+
+/**
+ * Why a refresh wrote nothing. Closed for the same reason the event
+ * names are: it is a filterable field on a structured event.
+ */
+export type RenderIdentitySkipReason = 'no-record';
+
 const WRITE_FAILED_EVENT: RenderIdentityFailureEvent =
   'render_identity_write_failed';
+
+const REFRESH_FAILED_EVENT: RenderIdentityFailureEvent =
+  'render_identity_refresh_failed';
+
+const REFRESH_SKIPPED_EVENT: RenderIdentityEvent =
+  'render_identity_refresh_skipped';
 
 /**
  * Project a committed row + its identity slice into the durable
@@ -156,6 +183,74 @@ export async function backfillRenderIdentityBlueprintId(
       err,
     );
   }
+}
+
+/**
+ * Refresh an EXISTING record after a tool re-committed the render row
+ * — `ggui_update` mutating props, `ggui_runtime_sync_context`
+ * mirroring a context snapshot.
+ *
+ * Refreshes only what the row can answer for: props, the sequence at
+ * this commit, and `updatedAt`. The identity slice
+ * (`blueprintId` / `contractKey` / `variantKey`) is carried forward
+ * from the existing record VERBATIM, never recomputed. That is not
+ * caution — it is the only correct behaviour available here:
+ * `contractKey` is `blueprintKey(agreed contract)`, and the agreed
+ * contract lived in the handshake these tools never see. A render row
+ * carries its projected specs, not the contract that keyed it, so any
+ * key recomputed here would address a different blueprint (or none).
+ *
+ * For the same reason a MISSING record is skipped rather than
+ * created: a record needs an identity, and inventing one would write a
+ * locator that points at nothing — strictly worse than no record,
+ * because a re-mint would trust it. The skip is announced as
+ * `render_identity_refresh_skipped` so an operator who wired a store
+ * mid-flight can see which renders predate it.
+ *
+ * Best-effort throughout, like every write in this module: the tool
+ * call succeeds regardless.
+ */
+export async function refreshRenderIdentity(
+  store: RenderIdentityStore | undefined,
+  session: StoredGguiSession,
+): Promise<void> {
+  if (!store) return;
+  let existing: RenderIdentityRecord | null;
+  try {
+    existing = await store.get(session.id);
+  } catch (err) {
+    logRenderIdentityFailure(
+      REFRESH_FAILED_EVENT,
+      session.id,
+      session.appId,
+      err,
+    );
+    return;
+  }
+  if (!existing) {
+    logRenderIdentitySkipped(session.id, 'no-record');
+    return;
+  }
+  await writeRenderIdentity(
+    store,
+    session,
+    {
+      blueprintId: existing.blueprintId,
+      contractKey: existing.contractKey,
+      variantKey: existing.variantKey,
+    },
+    REFRESH_FAILED_EVENT,
+  );
+}
+
+function logRenderIdentitySkipped(
+  sessionId: string,
+  reason: RenderIdentitySkipReason,
+): void {
+  // eslint-disable-next-line no-console -- structured single-line event for log-pipeline pickup
+  console.warn(
+    JSON.stringify({ msg: REFRESH_SKIPPED_EVENT, sessionId, reason }),
+  );
 }
 
 function logRenderIdentityFailure(

@@ -692,6 +692,12 @@ export function defaultHandlers(deps: {
   readonly update?: {
     readonly renderStore: GguiSessionStore;
     /**
+     * Durable render-identity side store — the same instance `render`
+     * writes to. When present, a successful patch refreshes the
+     * existing record off the re-committed row. Absent = no refresh.
+     */
+    readonly renderIdentityStore?: RenderIdentityStore;
+    /**
      * Optional live-subscriber `props_update` notifier — typically a
      * thin closure over `GguiSessionChannelServer.sendPropsUpdate`.
      * Forwarded as-is to `createGguiUpdateHandler`. Hosts without a
@@ -977,6 +983,12 @@ export function defaultHandlers(deps: {
     handlers.push(
       createGguiSyncContextHandler({
         renderStore: deps.render.renderStore,
+        // Same store `ggui_render` writes identity records to — a
+        // snapshot sync re-commits the row, so the record's view of it
+        // is refreshed off the same seam.
+        ...(deps.render.renderIdentityStore
+          ? { renderIdentityStore: deps.render.renderIdentityStore }
+          : {}),
       }) as SharedHandler<ZodRawShape, ZodRawShape>
     );
     // `ggui_runtime_refresh_ws_token` — G14 (2026-05-23) signed-
@@ -1061,6 +1073,9 @@ export function defaultHandlers(deps: {
     handlers.push(
       createGguiUpdateHandler({
         renderStore: deps.update.renderStore,
+        ...(deps.update.renderIdentityStore
+          ? { renderIdentityStore: deps.update.renderIdentityStore }
+          : {}),
         ...(deps.update.propsUpdateNotifier
           ? { propsUpdateNotifier: deps.update.propsUpdateNotifier }
           : {}),
@@ -3955,6 +3970,11 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
         ? {
             update: {
               renderStore,
+              // Same instance the render deps got — one record per
+              // render, written by render and refreshed by update.
+              ...(opts.renderIdentityStore
+                ? { renderIdentityStore: opts.renderIdentityStore }
+                : {}),
               propsUpdateNotifier: {
                 sendPropsUpdate: async (sessionId, props) => {
                   if (!channelForHealth) return;
