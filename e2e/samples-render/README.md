@@ -48,7 +48,18 @@ scenarios (absent ⇒ skipped).
   What the retired template _shell_ used to provide, minus the publish/DX
   artifacts (README, railway.toml, `.claude/`, `.reference/`).
 - `scripts/compose-app.mjs` — the samples merge (see above).
-- `scripts/setup.sh` — build the cohort + publish to Verdaccio (once/run).
+- `scripts/setup.sh` — build the cohort + publish to Verdaccio + seed
+  upstream-pinned `@ggui-ai/*` versions (once/run).
+- `scripts/seed-upstream-pins.mjs` — the with-guuey compose installs
+  published `@guuey/*` packages from real npm, and those pin `@ggui-ai/*`
+  deps EXACTLY; once the local cohort bumps past a pin, the exact version
+  would 404 against the local-only `@ggui-ai/*` block (a harness artifact —
+  real npm always has it). Seeds those exact versions from real npm into the
+  run's Verdaccio instead of adding an uplink proxy, which would false-green
+  ANY missing local package. Loud both ways; no-op while cohort == all pins.
+  Pure decision function self-tested per-PR (`--self-test`) in
+  repo-guards.yml (guard 7 — this workflow itself is nightly/dispatch-only),
+  and re-run here as a pre-flight before the container run.
 - `scripts/compose-and-boot.sh` — per-SDK compose → `.npmrc` (Verdaccio pin)
   → `.env.local` → `pnpm install` → foreground `pnpm dev`.
 - `scripts/cell-entry.sh` + `Dockerfile` — the browser-in-cell container.

@@ -34,7 +34,7 @@ SKIP_VERDACCIO_BOOT="${SKIP_VERDACCIO_BOOT:-0}"
 _lap=$SECONDS
 lap() { echo "[setup] ⏱ $1: $((SECONDS - _lap))s"; _lap=$SECONDS; }
 
-echo "[setup 1/3] build @ggui-ai/* (dist must exist before publish)"
+echo "[setup 1/4] build @ggui-ai/* (dist must exist before publish)"
 # Scope to the publishable cohort ONLY (oss/packages — exactly what
 # publish-all.sh uploads). The root `pnpm build` also builds the
 # @ggui-apps/* Next apps, which can't resolve the sandbox-generated
@@ -44,9 +44,9 @@ echo "[setup 1/3] build @ggui-ai/* (dist must exist before publish)"
 lap "build cohort"
 
 if [ "$SKIP_VERDACCIO_BOOT" = "1" ]; then
-  echo "[setup 2/3] SKIP_VERDACCIO_BOOT=1 — using sibling Verdaccio at $REGISTRY"
+  echo "[setup 2/4] SKIP_VERDACCIO_BOOT=1 — using sibling Verdaccio at $REGISTRY"
 else
-  echo "[setup 2/3] start throwaway Verdaccio at $REGISTRY"
+  echo "[setup 2/4] start throwaway Verdaccio at $REGISTRY"
   docker rm -f "$CONTAINER" >/dev/null 2>&1 || true
   docker run -d --name "$CONTAINER" --rm -p 4874:4873 \
     -v "$VERDACCIO_CONFIG:/verdaccio/conf/config.yaml:ro" \
@@ -61,8 +61,20 @@ curl -sf "$REGISTRY/-/ping" >/dev/null 2>&1 || { echo "  Verdaccio unreachable a
 echo "  Verdaccio is up"
 lap "verdaccio ready"
 
-echo "[setup 3/3] publish the full @ggui-ai/* graph (leaf-first) to Verdaccio"
+echo "[setup 3/4] publish the full @ggui-ai/* graph (leaf-first) to Verdaccio"
 bash "$PUBLISH_ALL" "$REPO_ROOT/oss/packages" "$REGISTRY"
 lap "publish cohort"
+
+# The @ggui-ai/* block above is LOCAL-ONLY (no npm uplink — the
+# anti-fallthrough guarantee), but the with-guuey compose installs published
+# @guuey/* packages from real npm that pin @ggui-ai/* deps EXACTLY. Once the
+# local cohort bumps past such a pin, the exact version 404s in the cell — a
+# harness artifact, not a real-world failure. Seed those exact pinned
+# versions from real npm alongside the cohort instead of adding a proxy
+# (which would let ANY missing local package silently false-green). Loud in
+# both directions; a no-op while cohort == all pins.
+echo "[setup 4/4] seed upstream-pinned @ggui-ai/* versions (with-guuey compose deps)"
+node "$REPO_ROOT/oss/e2e/samples-render/scripts/seed-upstream-pins.mjs" --registry="$REGISTRY"
+lap "seed upstream pins"
 
 echo "setup-ok REGISTRY=$REGISTRY"
