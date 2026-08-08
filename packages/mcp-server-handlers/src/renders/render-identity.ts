@@ -210,7 +210,11 @@ export async function backfillRenderIdentityBlueprintId(
  * mid-flight can see which renders predate it.
  *
  * Best-effort throughout, like every write in this module: the tool
- * call succeeds regardless.
+ * call succeeds regardless. A consequence worth knowing: because the
+ * write rebuilds the WHOLE record from the current row rather than
+ * patching fields, any refresh self-heals drift left by an earlier one
+ * that failed — a later context sync repairs props and sequence a
+ * dropped update-refresh had gone stale on.
  */
 export async function refreshRenderIdentity(
   store: RenderIdentityStore | undefined,

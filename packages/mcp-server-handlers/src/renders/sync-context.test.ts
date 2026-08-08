@@ -445,6 +445,60 @@ describe('createGguiSyncContextHandler — render-identity refresh (#430 slice 1
     }
   });
 
+  it('a throwing get cannot fail the sync — logs render_identity_refresh_failed', async () => {
+    const store = new InMemoryGguiSessionStore();
+    const { sessionId } = await seedRender(store, { contextSpec: CONTEXT_SPEC });
+    // The read half of get→merge→put, caught separately from `put`.
+    const throwingGet: RenderIdentityStore = {
+      get: async () => {
+        throw new Error('identity store unreachable');
+      },
+      put: async () => {},
+    };
+
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const h = createGguiSyncContextHandler({
+        renderStore: store,
+        renderIdentityStore: throwingGet,
+      });
+      const out = await h.handler(
+        { sessionId, appId: 'app-1', snapshot: { count: 3 } },
+        { appId: 'app-1', requestId: 'r-1' },
+      );
+      expect(out.ok).toBe(true);
+
+      const events = namedEvents<FailedEvent>(warn, 'render_identity_refresh_failed');
+      expect(events).toHaveLength(1);
+      expect(events[0]?.sessionId).toBe(sessionId);
+      expect(events[0]?.appId).toBe('app-1');
+      expect(events[0]?.error).toBe('identity store unreachable');
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it('a record whose cold-gen backfill never landed keeps blueprintId null', async () => {
+    const store = new InMemoryGguiSessionStore();
+    const { sessionId } = await seedRender(store, { contextSpec: CONTEXT_SPEC });
+    const renderIdentityStore = new InMemoryRenderIdentityStore();
+    await renderIdentityStore.put({ ...seededRecord(sessionId), blueprintId: null });
+
+    const h = createGguiSyncContextHandler({
+      renderStore: store,
+      renderIdentityStore,
+    });
+    await h.handler(
+      { sessionId, appId: 'app-1', snapshot: { count: 3 } },
+      { appId: 'app-1', requestId: 'r-1' },
+    );
+
+    const record = await renderIdentityStore.get(sessionId);
+    expect(record?.blueprintId).toBeNull();
+    expect(record?.contractKey).toBe(CONTRACT_KEY);
+    expect(record?.variantKey).toBe(VARIANT_KEY);
+  });
+
   it('no identity store bound — the sync still succeeds', async () => {
     const store = new InMemoryGguiSessionStore();
     const { sessionId } = await seedRender(store, { contextSpec: CONTEXT_SPEC });
