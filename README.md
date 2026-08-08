@@ -30,7 +30,7 @@ One flow from a `guuey.json` to a rendered, interactive todo UI — every piece 
 
 Prerequisites: **Node.js 22+**, **pnpm**, and an **`ANTHROPIC_API_KEY`** (one key drives both the agent and ggui's UI generation).
 
-````bash
+```bash
 git clone https://github.com/ggui-ai/ggui && cd ggui
 pnpm install                        # workspace deps — `guuey dev` spawns the colocated
                                     # todo MCP from samples/mcp-servers/todo
@@ -39,33 +39,30 @@ export ANTHROPIC_API_KEY=sk-ant-…   # in every terminal below
 # terminal 1 — the ggui runtime MCP (guuey's dev router injects ggui → this port)
 npx -y @ggui-ai/cli serve --mcp-only     # http://127.0.0.1:6781/mcp
 
+# terminal 2 — the agent half: guuey.json + a Claude agent worker
+cd samples/agents/with-guuey
+npm install
+npm run dev                              # guuey dev --serve → http://localhost:6790
+
+# terminal 3 — the web half: chat + rendered ggui cards
+cd samples/apps/with-guuey-web
+npm install
+npm run dev                              # http://127.0.0.1:6890
+```
+
 **Browser-based clients.** Pages served from `localhost` reach the MCP
 endpoint out of the box. A page on any other origin — a deployed site,
 an Electron renderer — must be allowlisted:
 
 ```bash
 ggui serve --browser-origin https://app.example.com
-````
+```
 
 (repeatable; or `GGUI_BROWSER_ORIGINS=a,b`). The allowlist drives both
 MCP-wire Origin validation and the CORS response headers, so one flag
 covers both. It is not authentication — `/mcp` still requires a bearer.
 Non-browser clients (Claude Desktop, agents, curl) are unaffected: they
 connect server-to-server and ignore CORS entirely.
-
-# terminal 2 — the agent half: guuey.json + a Claude agent worker
-
-cd samples/agents/with-guuey
-npm install
-npm run dev # guuey dev --serve → http://localhost:6790
-
-# terminal 3 — the web half: chat + rendered ggui cards
-
-cd samples/apps/with-guuey-web
-npm install
-npm run dev # http://127.0.0.1:6890
-
-````
 
 Open **`http://127.0.0.1:6890`** and ask for your todos: the agent calls the todo MCP, renders an interactive todo UI through ggui, and your clicks flow back to the agent. Per-sample detail (ports, env vars, known limitations): [`samples/agents/with-guuey`](https://github.com/ggui-ai/ggui/tree/main/samples/agents/with-guuey) · [`samples/apps/with-guuey-web`](https://github.com/ggui-ai/ggui/tree/main/samples/apps/with-guuey-web). Prefer a scaffolded start? `npx @guuey/create-agentic-app` scaffolds a guuey agentic app of the same shape (agent + MCP + ggui + web) in one command.
 
@@ -89,7 +86,7 @@ git clone https://github.com/ggui-ai/ggui && cd ggui
 pnpm install
 # put your LLM API key in .env.local, then:
 pnpm dev                     # starts ggui + MCP servers + agent + web, then opens the app
-````
+```
 
 `pnpm dev` brings all four services up together and opens **`http://localhost:6890`** once it's ready — so you never have to guess which port to visit (server logs are hidden by default; `pnpm dev --verbose` streams them). The full loop runs locally: you type → the agent calls domain tools and renders a React UI → you click in that UI → the agent reacts. Each sample carries its own README with standalone run instructions.
 
@@ -99,10 +96,14 @@ Building a hosted agent instead? See [guuey.com](https://guuey.com) — the mana
 
 For **testing the ggui protocol against a real chat host**. Localhost won't work from claude.ai — you need a public HTTPS URL, which [cloudflared](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/) provides for free.
 
-````bash
+```bash
 # terminal 1 — boot the OSS MCP server
 npm install -g @ggui-ai/cli
 ANTHROPIC_API_KEY=sk-… ggui serve --mcp-only       # http://127.0.0.1:6781/mcp
+
+# terminal 2 — expose it to the public internet (no Cloudflare account needed)
+cloudflared tunnel --url http://127.0.0.1:6781     # prints https://<random>.trycloudflare.com
+```
 
 **Browser-based clients.** Pages served from `localhost` reach the MCP
 endpoint out of the box. A page on any other origin — a deployed site,
@@ -110,19 +111,13 @@ an Electron renderer — must be allowlisted:
 
 ```bash
 ggui serve --browser-origin https://app.example.com
-````
+```
 
 (repeatable; or `GGUI_BROWSER_ORIGINS=a,b`). The allowlist drives both
 MCP-wire Origin validation and the CORS response headers, so one flag
 covers both. It is not authentication — `/mcp` still requires a bearer.
 Non-browser clients (Claude Desktop, agents, curl) are unaffected: they
 connect server-to-server and ignore CORS entirely.
-
-# terminal 2 — expose it to the public internet (no Cloudflare account needed)
-
-cloudflared tunnel --url http://127.0.0.1:6781 # prints https://<random>.trycloudflare.com
-
-```
 
 Then in **claude.ai → Settings → Connectors → Add custom connector**, paste `https://<random>.trycloudflare.com/mcp`. Ask Claude to render any UI; the server generates the component and serves it back as a rich rendered card inside the chat.
 
@@ -174,16 +169,14 @@ Full CLI reference: [`@ggui-ai/cli` README](./packages/ggui-cli/README.md).
 ## How it works
 
 ```
-
-┌─────────┐ MCP Tools ┌──────────┐ WebSocket ┌──────────┐
-│ Your │ ────────────────→ │ ggui │ ────────────────→ │ User's │
-│ Agent │ ggui_render │ server │ real-time UI │ browser │
-│ │ ggui_update │ │ updates │ │
-│ │ ←──────────────── │ │ ←──────────────── │ │
-│ │ user events │ │ clicks, forms │ │
-└─────────┘ └──────────┘ └──────────┘
-
-````
+┌─────────┐     MCP Tools      ┌──────────┐     WebSocket     ┌──────────┐
+│  Your   │ ────────────────→  │  ggui    │ ────────────────→ │  User's  │
+│  Agent  │   ggui_render      │  server  │   real-time UI    │  browser │
+│         │   ggui_update      │          │   updates         │          │
+│         │ ←────────────────  │          │ ←──────────────── │          │
+│         │   user events      │          │   clicks, forms   │          │
+└─────────┘                    └──────────┘                   └──────────┘
+```
 
 Your agent uses MCP tools to push UIs and receive user events. The protocol is defined by `@ggui-ai/protocol`; the reference server lives in `@ggui-ai/mcp-server`; embedding primitives ship in `@ggui-ai/react`.
 
@@ -211,7 +204,7 @@ If your agent runtime supports MCP natively, skip the SDK entirely. Add `ggui se
     }
   }
 }
-````
+```
 
 The runtime's native tool-calling loop discovers `ggui_render`, `ggui_update`, `ggui_consume`, and the blueprint catalogue tools directly. Working examples per framework: [Claude](https://docs.ggui.ai/examples/claude-agent/), [OpenAI](https://docs.ggui.ai/examples/openai-agent/), [Gemini](https://docs.ggui.ai/examples/gemini-agent/), [generic MCP](https://docs.ggui.ai/examples/generic-mcp/).
 
