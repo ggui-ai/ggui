@@ -262,3 +262,105 @@ describe("WS upgrade ingress runs the same validator", () => {
     }
   });
 });
+
+describe("invariant: CSRF covers /mcp (booted server, real wiring)", () => {
+  /**
+   * `cookieAuthMiddleware` promotes the `ggui_user_session` cookie to
+   * `Authorization: Bearer` on every route, so /mcp is implicitly
+   * cookie-authed. What stops a hostile origin from riding that cookie
+   * is the CSRF middleware — NOT the never-Allow-Credentials rule,
+   * which only blocks response READS, never request execution. The
+   * CSRF layer keys on cookie PRESENCE, so a garbage session value
+   * still exercises it. If /mcp is ever added to the CSRF skipPaths,
+   * this 403 disappears — that regression must fail loudly here.
+   */
+  it("403s a cookie-session POST to /mcp with no X-Ggui-CSRF header", async () => {
+    const { port, close } = await bootServer();
+    try {
+      const res = await rawRequest({
+        port,
+        method: "POST",
+        path: "/mcp",
+        headers: {
+          ...JSON_HEADERS,
+          Host: `127.0.0.1:${port}`,
+          Cookie: "ggui_user_session=some-session-value",
+        },
+        body: "{}",
+      });
+      expect(res.status).toBe(403);
+    } finally {
+      await close();
+    }
+  });
+
+  it("does not CSRF-block a cookie-less request (claude.ai's connector path)", async () => {
+    const { port, close } = await bootServer();
+    try {
+      const res = await rawRequest({
+        port,
+        method: "POST",
+        path: "/mcp",
+        headers: { ...JSON_HEADERS, Host: `127.0.0.1:${port}` },
+        body: "{}",
+      });
+      // Reaches the transport; a bare "{}" is not a valid JSON-RPC
+      // message so the SDK answers 4xx-other — anything but the CSRF
+      // 403 proves CSRF stayed out of the way.
+      expect(res.status).not.toBe(403);
+    } finally {
+      await close();
+    }
+  });
+});
+
+describe("invariant: /mcp rejects non-JSON Content-Type before dispatch", () => {
+  /**
+   * A cross-origin page can POST `text/plain` with NO preflight; the
+   * SDK transport must answer 415 before any JSON-RPC dispatch
+   * (webStandardStreamableHttp.js — Content-Type gate at ~line 479).
+   * NOTE the Accept header: the SDK validates Accept BEFORE
+   * Content-Type, so the request must pass the Accept gate
+   * ("application/json, text/event-stream") to actually exercise the
+   * 415 branch — an Accept-less request 406s first.
+   */
+  it("415s a text/plain POST that passes the Accept gate", async () => {
+    const { port, close } = await bootServer();
+    try {
+      const res = await rawRequest({
+        port,
+        method: "POST",
+        path: "/mcp",
+        headers: {
+          "Content-Type": "text/plain",
+          Accept: "application/json, text/event-stream",
+          Host: `127.0.0.1:${port}`,
+        },
+        body: '{"jsonrpc":"2.0","method":"tools/list","id":1}',
+      });
+      expect(res.status).toBe(415);
+    } finally {
+      await close();
+    }
+  });
+
+  it("406s the Accept-less drive-by shape (the status a browser fetch actually gets)", async () => {
+    const { port, close } = await bootServer();
+    try {
+      const res = await rawRequest({
+        port,
+        method: "POST",
+        path: "/mcp",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "*/*",
+          Host: `127.0.0.1:${port}`,
+        },
+        body: '{"jsonrpc":"2.0","method":"tools/list","id":1}',
+      });
+      expect(res.status).toBe(406);
+    } finally {
+      await close();
+    }
+  });
+});
