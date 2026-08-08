@@ -295,6 +295,20 @@ export function createOutbound(deps: OutboundDeps): Outbound {
     // the re-validation point.
     for (const sub of deps.wsSubscribers) {
       if (sub.sessionId !== sessionId) continue;
+      // Mirror the in-process pump's replay-dedupe guard
+      // (subscriber-lifecycle.ts): a data frame whose per-session seq
+      // is <= the subscriber's replay snapshot was already delivered by
+      // subscribe-replay (policy 'all'/'latest') or is deliberately
+      // invisible to late subscribers (policy 'none') — never re-send.
+      // Unstamped frames were never buffered; replay cannot duplicate
+      // them, so they pass. Non-data frames carry no seq semantics.
+      if (
+        frame.type === "data" &&
+        typeof frame.payload.seq === "number" &&
+        frame.payload.seq <= sub.replayCompletedSeq
+      ) {
+        continue;
+      }
       send(sub.ws, frame);
     }
   }

@@ -2,9 +2,10 @@
  * Contract test: agent-server's SSE wire ↔ `useMcpAppsChat`'s ingest.
  *
  * Phase 4 cassette consumption (#360). The upstream half of this seam
- * is pinned by a silverprotocol (AgJSON) cassette captured against the
+ * is pinned by a silverprotocol (AgJSON) fixture captured against the
  * real mock `cards` MCP server: `app-update-sonnet5/claude.agjson.json`
- * — one turn, `render_card` then `update_card`, both `tool.done`s
+ * (pinned in `oss/e2e/fixtures/silverprotocol/fixtures.lock.json`) —
+ * one turn, `render_card` then `update_card`, both `tool.done`s
  * carrying the SAME `_meta.ui.resourceUri` with revisions 1 → 2. That
  * two-beat is exactly the shape `addRender`'s dedupe-by-resourceUri +
  * latest-inlinedResource-wins rule exists for, so this file replays the
@@ -25,10 +26,6 @@
  * counts, timestamps. Cassette-derived expectations are referential
  * (compared against the event's own fields), not hardcoded literals.
  */
-import { existsSync, readFileSync } from 'node:fs';
-import { dirname, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
-
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 import {
@@ -38,6 +35,7 @@ import {
   type AgBlock,
 } from '@silverprotocol/core';
 
+import { loadLeg } from './__tests__/corpus';
 import { handleEvent, useMcpAppsChat } from './useMcpAppsChat';
 import type {
   ChatEntry,
@@ -47,33 +45,16 @@ import type {
 } from './mcp-apps-chat-types';
 
 // ---------------------------------------------------------------------------
-// Corpus loading — fail LOUD when the cassette hasn't been synced.
+// Corpus loading.
 // ---------------------------------------------------------------------------
-
-const CASSETTE_PATH = resolve(
-  dirname(fileURLToPath(import.meta.url)),
-  '..',
-  '..',
-  '..',
-  '..',
-  '.silverprotocol-corpus',
-  'app-update-sonnet5',
-  'claude.agjson.json',
-);
-
-if (!existsSync(CASSETTE_PATH)) {
-  throw new Error(
-    'silverprotocol corpus missing — run: node oss/scripts/sync-silverprotocol-corpus.mjs',
-  );
-}
 
 /**
  * Raw JSON entries as recorded. Validated through the `JsonValue` zod
  * schema (exported by @silverprotocol/core as both a schema const and a
- * type) so no type assertion is needed on the `JSON.parse` output.
+ * type) so no type assertion is needed on the fetched fixture's output.
  */
 const rawCassette: JsonValue[] = JsonValue.array().parse(
-  JSON.parse(readFileSync(CASSETTE_PATH, 'utf8')),
+  loadLeg('app-update-sonnet5', 'claude').agjson,
 );
 
 /**

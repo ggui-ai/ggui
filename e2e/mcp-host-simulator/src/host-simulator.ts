@@ -599,7 +599,20 @@ export class HostSimulator {
    */
   async subscribeWith(
     meta: McpAppAiGguiRenderMeta,
-    opts: { keepOpen?: boolean; openTimeoutMs?: number } = {}
+    opts: {
+      keepOpen?: boolean;
+      openTimeoutMs?: number;
+      /**
+       * Resume cursor for live-channel outbound stream replay — mirrors
+       * `SubscribePayload.fromSeq`. Omit for a fresh subscribe: the
+       * server still replays reserved channels (`_ggui:lifecycle`,
+       * `_ggui:preview`) that landed before attach, but declared
+       * `streamSpec` channels get nothing — pass `0` to also replay
+       * everything the server still retains for those, or a specific
+       * seq to resume from `seq > fromSeq`.
+       */
+      fromSeq?: number;
+    } = {}
   ): Promise<{ ack: SubscribeAck; ws?: WebSocket }> {
     if (!meta.wsUrl) {
       throw new Error(
@@ -691,7 +704,7 @@ export class HostSimulator {
     });
 
     // Wire shape per `mcp-apps-outbound.test.ts`:
-    //   { type: 'subscribe', payload: { sessionId, appId, wsToken } }
+    //   { type: 'subscribe', payload: { sessionId, appId, wsToken, fromSeq? } }
     ws.send(
       JSON.stringify({
         type: "subscribe",
@@ -699,6 +712,7 @@ export class HostSimulator {
           sessionId: meta.sessionId,
           appId: meta.appId,
           wsToken: meta.wsToken,
+          ...(opts.fromSeq !== undefined ? { fromSeq: opts.fromSeq } : {}),
         },
       })
     );

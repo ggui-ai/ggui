@@ -1,7 +1,7 @@
 /**
- * Observability emission — C12 + Wave 3 §S2 unit tests.
+ * Observability emission — C12 unit tests.
  *
- * Covers each of the three renderer-side emission points:
+ * Covers both renderer-side emission points:
  *
  *   1. `schema-version-mismatch` — fires from `connectViaRegistry`'s
  *      UPGRADE_REQUIRED branches (client-side ack mismatch + server
@@ -9,19 +9,12 @@
  *   2. `subscribe-failed` — fires from `connectViaRegistry`'s wrapped
  *      `onStatusChange` whenever the transport transitions to
  *      `reconnecting`.
- *   3. `auth-required` (Wave 3 §S2) — fires from the system channel
- *      handler when a `system` frame arrives with
- *      `action: 'auth_required'` and a usable `consentUrl`.
  *
  * Post-B3b the runtime no longer fans frames through a separate
  * `onMessage` callback — frames flow through the channel-registry's
  * registered handlers. Tests therefore drive observability emission
- * by:
- *   - For `connectViaRegistry`-owned emissions: use the connectFn
- *     seam to inject a mock transport that emits frames through the
- *     registry's handlers post-bind.
- *   - For `system` channel emissions: invoke the channel handler
- *     directly with the test payload.
+ * through the connectFn seam: inject a mock transport that emits
+ * frames through the registry's handlers post-bind.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
@@ -36,7 +29,6 @@ import {
   type ObservabilityMessage,
 } from '../observability.js';
 import { connectViaRegistry } from '../registry-subscribe.js';
-import { createSystemHandler } from '../channels/index.js';
 
 // =============================================================================
 // postObservabilityToParent — default postMessage emitter
@@ -237,142 +229,6 @@ describe('connectViaRegistry — schema-version-mismatch emission', () => {
     expect(mismatch.observedBy).toBe('client');
     expect(mismatch.observedVersion).toBe('999.0.0');
     expect(mismatch.acceptedVersions).toEqual(CLIENT_SUPPORTED_VERSIONS);
-  });
-});
-
-// =============================================================================
-// system channel handler — auth-required emission (Wave 3 §S2)
-// =============================================================================
-
-describe('system handler — auth-required emission (Wave 3 §S2)', () => {
-  it('emits auth-required with all optional hints when server supplies them', () => {
-    const observed: ObservabilityEvent[] = [];
-    const handler = createSystemHandler({ onObserve: (e) => observed.push(e) });
-
-    void handler.onMessage({
-      action: 'auth_required',
-      serviceId: 'google',
-      displayName: 'Google',
-      scopes: ['https://www.googleapis.com/auth/calendar.readonly'],
-      consentUrl: 'https://credentials.example.com/oauth/initiate?service=google',
-      message: 'This agent needs access to your Google Calendar.',
-      appId: 'app-s2-auth',
-      sessionId: 'render-s2-auth',
-    });
-
-    const event = observed.find(
-      (e): e is Extract<ObservabilityEvent, { kind: 'auth-required' }> =>
-        e.kind === 'auth-required',
-    );
-    expect(event).toBeDefined();
-    if (event === undefined) return;
-    expect(event.provider).toBe('google');
-    expect(event.authUrl).toBe(
-      'https://credentials.example.com/oauth/initiate?service=google',
-    );
-    expect(event.displayName).toBe('Google');
-    expect(event.scopes).toEqual([
-      'https://www.googleapis.com/auth/calendar.readonly',
-    ]);
-    expect(event.message).toBe(
-      'This agent needs access to your Google Calendar.',
-    );
-  });
-
-  it('emits auth-required with only required fields when hints are absent', () => {
-    const observed: ObservabilityEvent[] = [];
-    const handler = createSystemHandler({ onObserve: (e) => observed.push(e) });
-
-    void handler.onMessage({
-      action: 'auth_required',
-      serviceId: 'slack',
-      consentUrl: 'https://credentials.example.com/oauth/initiate?service=slack',
-    });
-
-    const event = observed.find(
-      (e): e is Extract<ObservabilityEvent, { kind: 'auth-required' }> =>
-        e.kind === 'auth-required',
-    );
-    expect(event).toBeDefined();
-    if (event === undefined) return;
-    expect(event.provider).toBe('slack');
-    expect(event.authUrl).toBe(
-      'https://credentials.example.com/oauth/initiate?service=slack',
-    );
-    expect('displayName' in event).toBe(false);
-    expect('scopes' in event).toBe(false);
-    expect('message' in event).toBe(false);
-  });
-
-  it('skips emission when the system frame has no consentUrl', () => {
-    const observed: ObservabilityEvent[] = [];
-    const handler = createSystemHandler({ onObserve: (e) => observed.push(e) });
-
-    void handler.onMessage({
-      action: 'auth_required',
-      serviceId: 'google',
-      displayName: 'Google',
-    });
-
-    expect(observed.filter((e) => e.kind === 'auth-required')).toHaveLength(0);
-  });
-
-  it('skips emission on system frames with a different action (e.g. credential_ready)', () => {
-    const observed: ObservabilityEvent[] = [];
-    const handler = createSystemHandler({ onObserve: (e) => observed.push(e) });
-
-    void handler.onMessage({
-      action: 'credential_ready',
-      serviceId: 'google',
-      status: 'active',
-    });
-
-    expect(observed.filter((e) => e.kind === 'auth-required')).toHaveLength(0);
-  });
-
-  it('emits ONLY auth-required kinds on a system frame', () => {
-    const observed: ObservabilityEvent[] = [];
-    const handler = createSystemHandler({ onObserve: (e) => observed.push(e) });
-
-    void handler.onMessage({
-      action: 'auth_required',
-      serviceId: 'google',
-      consentUrl: 'https://credentials.example.com/oauth/initiate?service=google',
-    });
-
-    expect(
-      observed.filter((e) => e.kind !== 'auth-required'),
-    ).toHaveLength(0);
-  });
-});
-
-// =============================================================================
-// Union extensibility — auth-required arm is assignable via ObservabilityEmitter
-// =============================================================================
-
-describe('ObservabilityEvent — auth-required union arm', () => {
-  it('accepts auth-required assignments through the ObservabilityEmitter type', () => {
-    const observed: ObservabilityEvent[] = [];
-    const emit: import('../observability.js').ObservabilityEmitter = (e) =>
-      observed.push(e);
-    emit({
-      kind: 'auth-required',
-      provider: 'google',
-      authUrl: 'https://credentials.example.com/oauth/initiate?service=google',
-    });
-    emit({
-      kind: 'auth-required',
-      provider: 'slack',
-      authUrl: 'https://credentials.example.com/oauth/initiate?service=slack',
-      displayName: 'Slack',
-      scopes: ['chat:write'],
-      message: 'post to your workspace',
-    });
-    expect(observed).toHaveLength(2);
-    const first = observed[0];
-    const second = observed[1];
-    expect(first?.kind).toBe('auth-required');
-    expect(second?.kind).toBe('auth-required');
   });
 });
 

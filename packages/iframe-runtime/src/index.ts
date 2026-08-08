@@ -65,7 +65,6 @@ export type {
   ObservabilityMessage,
   SchemaVersionMismatchEvent,
   SubscribeFailedEvent,
-  AuthRequiredEvent,
   ChannelTransportPickedEvent,
   ChannelTransportFallbackEvent,
   ChannelTransportResubscribedEvent,

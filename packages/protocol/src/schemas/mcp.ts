@@ -7,12 +7,12 @@
  * Two consumption patterns, both anchored here:
  *
  *   - **Wired raw shapes** (`*InputShape`): handlers in
- *     `@ggui-ai/mcp-server-handlers` (and the hosted pod's
- *     discover / request-credential tools) import the SHAPE directly as
- *     their `inputSchema` and validate with `z.object(shape)` — unknown
- *     keys are STRIPPED. The shape is the one authored copy of the
- *     validation rules AND the agent-facing `.describe()` strings that
- *     ship via `tools/list`.
+ *     `@ggui-ai/mcp-server-handlers` (and the hosted pod's discover
+ *     tool) import the SHAPE directly as their `inputSchema` and
+ *     validate with `z.object(shape)` — unknown keys are STRIPPED.
+ *     The shape is the one authored copy of the validation rules AND
+ *     the agent-facing `.describe()` strings that ship via
+ *     `tools/list`.
  *
  *   - **Lifecycle triad** (`ggui_handshake` / `ggui_update`): the
  *     handlers carry deliberate input divergences (handshake's
@@ -145,14 +145,6 @@ export const renderBlueprintInputSchema = z.object(renderBlueprintInputShape);
 export const discoverInputShape = {} as const;
 
 export const discoverInputSchema = z.object(discoverInputShape);
-
-export const requestCredentialInputShape = {
-  serviceId: z.string().min(1),
-  reason: z.string().optional(),
-  sessionId: z.string().optional(),
-} as const;
-
-export const requestCredentialInputSchema = z.object(requestCredentialInputShape);
 
 // ── Post-Phase-B — canonical tool triad ──
 //

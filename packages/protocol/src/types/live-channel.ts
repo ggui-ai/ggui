@@ -58,9 +58,10 @@ export interface SubscribePayload {
    *     the last envelope the client observed.
    *
    * Honored only by implementations that expose
-   * `GguiSessionStreamBuffer`-backed replay. Hosted cloud does NOT
-   * yet honor `fromSeq` — the field is silently ignored there. OSS
-   * `@ggui-ai/mcp-server` honors it fully.
+   * `GguiSessionStreamBuffer`-backed replay. Both first-party
+   * deployments do: OSS `@ggui-ai/mcp-server` (in-memory buffer) and
+   * hosted cloud (Redis-backed buffer). A deployment that binds no
+   * buffer silently ignores the field.
    */
   fromSeq?: number;
   /**
@@ -284,11 +285,16 @@ export interface StreamEnvelope {
    *     `SubscribePayload.fromSeq`);
    *   - dedupe deliveries (at-least-once semantics).
    *
-   * OPTIONAL because hosted cloud does not yet stamp `seq`;
-   * implementations backed by `GguiSessionStreamBuffer`
-   * (OSS `@ggui-ai/mcp-server`) always populate it. When absent,
-   * clients treat deliveries as single-shot with no replay possible.
-   * This becomes required once the hosted runtime supports replay.
+   * OPTIONAL because stamping is best-effort on two levels: the buffer
+   * seam itself is optional, and even a bound buffer only stamps on
+   * success. Any implementation backed by a `GguiSessionStreamBuffer`
+   * — OSS `@ggui-ai/mcp-server` (in-memory) and hosted cloud
+   * (Redis-backed) alike — stamps `seq` on every successfully
+   * buffered delivery through the same record-then-broadcast path,
+   * but a delivery whose buffer record fails degrades to unstamped
+   * rather than blocking the emit. A deployment that binds no buffer
+   * at all emits every delivery without `seq`. Clients treat any
+   * unstamped delivery as single-shot with no replay possible.
    */
   seq?: number;
   /**
@@ -446,37 +452,6 @@ export interface PropsUpdatePayload {
   sessionId: string;
   /** New props — full replacement */
   props: JsonObject;
-}
-
-/**
- * System-level event actions sent from platform to client.
- *
- * - `auth_required` — Agent needs user to authorize an OAuth service.
- * - `credential_ready` — User completed OAuth; credential is available.
- */
-export type SystemAction = 'auth_required' | 'credential_ready';
-
-/**
- * Payload for system message (Server → Client).
- * Carries platform-level events such as OAuth consent requests.
- */
-export interface SystemPayload {
-  action: SystemAction;
-  serviceId: string;
-  /** Human-readable service name (e.g., "Google", "Slack") */
-  displayName?: string;
-  /** OAuth scopes the agent is requesting */
-  scopes?: string[];
-  /** URL the user should open to initiate the OAuth consent flow */
-  consentUrl?: string;
-  /** Human-readable message explaining why access is needed */
-  message?: string;
-  /** Status of the credential (used with credential_ready) */
-  status?: string;
-  /** App ID requesting access (used with auth_required for app-scoped grants) */
-  appId?: string;
-  /** GguiSession ID for WebSocket context (used with auth_required) */
-  sessionId?: string;
 }
 
 /**

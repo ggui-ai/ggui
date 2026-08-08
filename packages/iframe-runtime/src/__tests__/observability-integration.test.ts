@@ -35,10 +35,9 @@ import {
 
 // --- Consumer-side classifier (mirrors console/RenderInspector) ---
 
-type ActivityTab = 'All' | 'Auth' | 'Version' | 'Subscribe';
+type ActivityTab = 'All' | 'Version' | 'Subscribe';
 
 function observabilityCategoryOf(kind: string): ActivityTab | undefined {
-  if (kind === 'auth-required') return 'Auth';
   if (kind === 'schema-version-mismatch') return 'Version';
   if (kind === 'subscribe-failed') return 'Subscribe';
   return undefined;
@@ -47,8 +46,8 @@ function observabilityCategoryOf(kind: string): ActivityTab | undefined {
 describe('C12 observability integration — renderer → host → classifier', () => {
   /**
    * Stand up a host-side postMessage listener, run a renderer-side
-   * emit for each of the three canonical kinds, and assert every
-   * event lands in its declared tab bucket.
+   * emit for each canonical kind, and assert every event lands in its
+   * declared tab bucket.
    */
   it('every emitted kind reaches the classifier with the right category', async () => {
     const received: ObservabilityEvent[] = [];
@@ -67,11 +66,6 @@ describe('C12 observability integration — renderer → host → classifier', (
 
     try {
       const emissions: ObservabilityEvent[] = [
-        {
-          kind: 'auth-required',
-          provider: 'google',
-          authUrl: 'https://credentials.example.com/oauth/initiate?service=google',
-        },
         {
           kind: 'schema-version-mismatch',
           observedVersion: '99.0.0',
@@ -99,7 +93,6 @@ describe('C12 observability integration — renderer → host → classifier', (
         tab: observabilityCategoryOf(e.kind),
       }));
       expect(pairs).toEqual([
-        { kind: 'auth-required', tab: 'Auth' },
         { kind: 'schema-version-mismatch', tab: 'Version' },
         { kind: 'subscribe-failed', tab: 'Subscribe' },
       ]);

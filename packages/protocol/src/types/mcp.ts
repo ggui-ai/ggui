@@ -12,7 +12,6 @@ import type {
   renderErrorSchema,
   renderInputSchema,
   renderOutputSchema,
-  requestCredentialInputSchema,
   searchBlueprintsInputSchema,
   updateInputSchema,
   updateOutputSchema,
@@ -303,36 +302,6 @@ export interface GguiRenderBlueprintOutput {
    * pipeline; agents treat this as opaque.
    */
   contentType: string;
-}
-
-// =============================================================================
-// Credential Request Tool
-// =============================================================================
-
-/**
- * Input for ggui_request_credential — request OAuth consent from the user.
- * Called by agents when MCP proxy returns 401 (credential_required).
- * Derived from `requestCredentialInputSchema`.
- */
-export type GguiRequestCredentialInput = z.infer<
-  typeof requestCredentialInputSchema
->;
-
-/**
- * Output from ggui_request_credential — consent result.
- */
-export interface GguiRequestCredentialOutput {
-  /** Whether the user granted consent */
-  granted: boolean;
-  /** Grant mode (once or always) — only present when granted=true */
-  mode?: 'once' | 'always';
-  /** Service display info */
-  service?: {
-    name: string;
-    icon: string;
-  };
-  /** Reason for denial (timeout, user denied, error) */
-  reason?: string;
 }
 
 // =============================================================================
