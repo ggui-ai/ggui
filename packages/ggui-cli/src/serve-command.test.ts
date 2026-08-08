@@ -53,6 +53,7 @@ describe('parseServeFlags', () => {
       multiTenant: false,
       oauth: false,
       seedPools: [],
+      browserOrigins: [],
     });
   });
 
@@ -189,6 +190,31 @@ describe('parseServeFlags', () => {
   it('rejects unknown options by echoing the offender', () => {
     const parsed = parseServeFlags(['--weird-flag']);
     expect(parsed.error).toContain('--weird-flag');
+  });
+
+  describe('--browser-origin', () => {
+    it('defaults to an empty list', () => {
+      expect(parseServeFlags([]).browserOrigins).toEqual([]);
+    });
+
+    it('is repeatable', () => {
+      const flags = parseServeFlags([
+        '--browser-origin',
+        'https://app.guuey.com',
+        '--browser-origin',
+        'https://studio.guuey.com',
+      ]);
+      expect(flags.browserOrigins).toEqual([
+        'https://app.guuey.com',
+        'https://studio.guuey.com',
+      ]);
+    });
+
+    it('errors when the value is missing', () => {
+      expect(parseServeFlags(['--browser-origin']).error).toBe(
+        '--browser-origin requires an origin (e.g. https://app.example.com)',
+      );
+    });
   });
 });
 
@@ -340,6 +366,49 @@ describe('describeServeBanner', () => {
     });
     expect(lines.join('\n')).not.toMatch(/pair code/);
   });
+
+  it('shows configured browser origins and the loopback default', () => {
+    const base = {
+      port: 6781,
+      host: '127.0.0.1',
+      toolCount: 3,
+      serverName: 'ggui-mcp-server',
+      serverVersion: '1.2.3',
+      agent: AGENT_RUNNING,
+    };
+    expect(describeServeBanner(base).join('\n')).toContain(
+      'browser origins →  loopback only',
+    );
+    expect(
+      describeServeBanner({
+        ...base,
+        browserOrigins: ['https://app.guuey.com'],
+      }).join('\n'),
+    ).toContain('browser origins →  loopback (auto) + 1 allowed');
+  });
+
+  it('warns loudly when --dev-allow-all rides a non-loopback bind', () => {
+    const base = {
+      port: 6781,
+      host: '0.0.0.0',
+      toolCount: 3,
+      serverName: 'ggui-mcp-server',
+      serverVersion: '1.2.3',
+      agent: AGENT_RUNNING,
+    };
+    const joined = describeServeBanner({ ...base, devAllowAll: true }).join('\n');
+    // No bearer AND no Host check: any reachable device — or a
+    // DNS-rebound page — has full tool access. The combination is a
+    // documented residual (ggui#438a) and must never be silent.
+    expect(joined).toContain('--dev-allow-all on a non-loopback bind');
+    // Loopback dev mode stays quiet.
+    const quiet = describeServeBanner({
+      ...base,
+      host: '127.0.0.1',
+      devAllowAll: true,
+    }).join('\n');
+    expect(quiet).not.toContain('non-loopback bind');
+  });
 });
 
 describe('SERVE_HELP', () => {
@@ -415,6 +484,7 @@ describe('runServe', () => {
     oauth: false,
     publicDemo: false,
     multiTenant: false,
+    browserOrigins: [],
   };
 
   /**
@@ -570,6 +640,7 @@ describe('runServe — agent supervision', () => {
     oauth: false,
     publicDemo: false,
     multiTenant: false,
+    browserOrigins: [],
   };
   const AGENT_RUNNING: AgentStatus = {
     kind: 'running',

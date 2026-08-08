@@ -223,6 +223,14 @@ export interface ParsedServeFlags {
    * Surface = `--seed-pool <dir>` (repeatable).
    */
   seedPools: string[];
+  /**
+   * Page origins allowed past MCP-wire Origin validation (and, once
+   * the CORS layer ships, readable by browser pages at those origins).
+   * Loopback origins are always allowed and need no entry.
+   *
+   * Surface = `--browser-origin <origin>` (repeatable).
+   */
+  browserOrigins: string[];
   /** Populated when parsing failed; caller renders + bails with exit code 1. */
   error?: string;
 }
@@ -247,6 +255,7 @@ export function parseServeFlags(args: readonly string[]): ParsedServeFlags {
     multiTenant: false,
     oauth: false,
     seedPools: [],
+    browserOrigins: [],
   };
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
@@ -357,6 +366,17 @@ export function parseServeFlags(args: readonly string[]): ParsedServeFlags {
       const value = args[++i];
       if (value === undefined) return { ...out, error: '--seed-pool requires a path' };
       out.seedPools.push(value);
+      continue;
+    }
+    if (arg === '--browser-origin') {
+      const value = args[++i];
+      if (value === undefined) {
+        return {
+          ...out,
+          error: '--browser-origin requires an origin (e.g. https://app.example.com)',
+        };
+      }
+      out.browserOrigins.push(value);
       continue;
     }
     if (arg === '--all') {
@@ -510,6 +530,11 @@ export interface ServeBannerInputs {
    * fall back to MockEmbeddingProvider).
    */
   readonly embeddingModel?: string;
+  /**
+   * Effective browser-origin allowlist (flag or GGUI_BROWSER_ORIGINS).
+   * Absent/empty = loopback-only default.
+   */
+  readonly browserOrigins?: ReadonlyArray<string>;
 }
 
 export function describeServeBanner(input: ServeBannerInputs): string[] {
@@ -621,6 +646,22 @@ export function describeServeBanner(input: ServeBannerInputs): string[] {
         `         Paste the paired bearer on the consent page.`,
       );
     }
+  }
+  lines.push(
+    input.browserOrigins && input.browserOrigins.length > 0
+      ? `  browser origins →  loopback (auto) + ${input.browserOrigins.length} allowed`
+      : `  browser origins →  loopback only (add with --browser-origin <origin>)`,
+  );
+  if (input.devAllowAll && !['localhost', '127.0.0.1', '::1', '[::1]'].includes(input.host)) {
+    // Documented residual (ggui#438a): wide bind disables the Host
+    // check by design, and --dev-allow-all removes the bearer. The
+    // combination must never be silent.
+    lines.push(
+      '',
+      `  ⚠  --dev-allow-all on a non-loopback bind (${input.host}): no bearer AND no`,
+      '     Host check — anything that can reach this address (including a DNS-',
+      '     rebound page) has full tool access. Use only on trusted networks.',
+    );
   }
   lines.push('', `  Ctrl-C to stop.`, '');
   return lines;
@@ -899,6 +940,9 @@ export async function runServe(opts: RunServeOptions): Promise<number> {
     ...(backend.adminToken ? { adminToken: backend.adminToken } : {}),
     ...(opts.noLlmKey ? { noLlmKey: true } : {}),
     ...(backend.embeddingModel ? { embeddingModel: backend.embeddingModel } : {}),
+    ...(opts.flags.browserOrigins.length > 0
+      ? { browserOrigins: opts.flags.browserOrigins }
+      : {}),
   });
   opts.stdout.write(`${bannerLines.join('\n')}\n`);
 
@@ -1017,6 +1061,11 @@ Options:
                          resolve from the host's perspective. Without
                          this, URLs derive from --host:--port and only
                          work from the same machine.
+  --browser-origin <o>   Allow pages at this origin past MCP-wire Origin
+                         validation (repeatable; env GGUI_BROWSER_ORIGINS,
+                         comma-separated). Pages on localhost need no
+                         entry. NOT authentication — /mcp still requires
+                         a bearer. Non-browser clients are unaffected.
   --oauth                Mount OAuth 2.1 + PKCE + Dynamic Client
                          Registration routes (.well-known/oauth-* +
                          /oauth/{authorize,token,register}). Required

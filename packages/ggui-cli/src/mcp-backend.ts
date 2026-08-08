@@ -209,6 +209,13 @@ export interface BuildMcpServerBackendOptions {
   readonly seedPools?: readonly BlueprintPool[];
 
   /**
+   * Effective browser-origin allowlist (`--browser-origin` flags or
+   * GGUI_BROWSER_ORIGINS, resolved by the CLI). Drives BOTH MCP-wire
+   * Origin validation and (from #438b) the CORS response headers.
+   */
+  readonly browserOrigins?: ReadonlyArray<string>;
+
+  /**
    * Marketplace-install bridge data. When set, the backend
    * constructs an
    * {@link InstalledBlueprintsProvider} rooted on the same
@@ -776,6 +783,15 @@ export function buildMcpServerBackend(opts: BuildMcpServerBackendOptions): Serve
     auth,
     embedding,
     providerKeys,
+    // Declared bind host (ggui#438a) — the Origin/Host validation
+    // policy must see the address `listen()` will actually bind.
+    // `opts.host` already exists on this options type with exactly
+    // that contract ("Must be the same host the CLI then passes to
+    // listen()").
+    host: opts.host,
+    ...(opts.browserOrigins && opts.browserOrigins.length > 0
+      ? { browserOrigins: opts.browserOrigins }
+      : {}),
     // Seeded per-app metadata store. Threaded so the in-process
     // singleton is shared across `ggui_list_gadgets`,
     // `ggui_list_themes`, and the handshake (gadgets + theme default

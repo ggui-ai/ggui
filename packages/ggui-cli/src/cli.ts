@@ -738,6 +738,15 @@ async function runServeCommand(args: string[]): Promise<number> {
     }
   }
 
+  // Browser-origin allowlist (ggui#438). CLI flags win; the env var is
+  // the container/compose ergonomic. Resolved HERE so the banner, the
+  // backend, and the server all see the same effective list.
+  const envBrowserOrigins = (process.env['GGUI_BROWSER_ORIGINS'] ?? '')
+    .split(',')
+    .map((o) => o.trim())
+    .filter((o) => o.length > 0);
+  const browserOrigins = parsed.browserOrigins.length > 0 ? parsed.browserOrigins : envBrowserOrigins;
+
   try {
     return await runServe({
       flags: {
@@ -748,6 +757,7 @@ async function runServeCommand(args: string[]): Promise<number> {
         publicDemo: parsed.publicDemo,
         multiTenant: parsed.multiTenant,
         oauth: parsed.oauth,
+        browserOrigins,
         ...(parsed.publicBaseUrl !== undefined
           ? { publicBaseUrl: parsed.publicBaseUrl }
           : {}),
@@ -872,6 +882,7 @@ async function runServeCommand(args: string[]): Promise<number> {
           generation: generationBinding.generation,
           ...(mcpMounts.length > 0 ? { mcpMounts } : {}),
           ...(seedPools.length > 0 ? { seedPools } : {}),
+          ...(browserOrigins.length > 0 ? { browserOrigins } : {}),
           // Marketplace-install bridge. Pass the projectRoot +
           // filtered installed-blueprint subset so `buildMcpServerBackend`
           // can construct an `InstalledBlueprintsProvider` rooted on the

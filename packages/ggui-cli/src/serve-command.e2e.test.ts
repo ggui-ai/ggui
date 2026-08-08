@@ -80,6 +80,7 @@ describe('runServe + createGguiServer (end-to-end)', () => {
         oauth: false,
         publicDemo: false,
         multiTenant: false,
+        browserOrigins: [],
       },
       backendFactory: () => toBackend(server),
       agentStatus: { kind: 'disabled', reason: '--mcp-only' },
