@@ -91,7 +91,16 @@ export type RenderIdentityFailureEvent =
 export type RenderIdentityEvent =
   | RenderIdentityFailureEvent
   | 'render_identity_refresh_skipped'
-  | 'render_identity_row_unreadable';
+  | 'render_identity_row_unreadable'
+  | RenderIdentityCapacityEvent;
+
+/**
+ * A record written successfully but at a size worth watching. Neither a
+ * failure nor a skip — the write HAPPENED — so it sits in its own
+ * category: a sizing signal for the offload threshold, not something to
+ * page on.
+ */
+export type RenderIdentityCapacityEvent = 'render_props_over_cap';
 
 /**
  * Why a refresh wrote nothing. Closed for the same reason the event
@@ -139,6 +148,7 @@ export const RENDER_IDENTITY_EVENTS = {
   refreshFailed: 'render_identity_refresh_failed',
   refreshSkipped: 'render_identity_refresh_skipped',
   rowUnreadable: 'render_identity_row_unreadable',
+  propsOverCap: 'render_props_over_cap',
 } as const satisfies Record<string, RenderIdentityEvent>;
 
 const WRITE_FAILED_EVENT: RenderIdentityFailureEvent =
@@ -221,17 +231,22 @@ export async function writeRenderIdentity(
  * and inventing a record from the id alone would be a record with no
  * identity — so we skip.
  *
- * Concurrency: this read-modify-write is NOT the only writer, but it is
- * the only one that writes WHOLE records. A deployment may also advance
- * a record's sequence from paths that touch the render row for other
- * reasons; those writers are field-targeted — they name the one or two
- * fields they own in a conditional update and structurally cannot carry
- * a stale `props` (it is not in their write expression at all). So the
- * dangerous interleaving does not exist: no concurrent writer can
- * resurrect props behind a commit. What remains is last-write-wins
- * between whole-record writers, where a commit's `put` is authoritative
- * for the state at that commit and simply wins. Nothing here needs a
- * conditional write.
+ * Concurrency: three writers touch a record. {@link writeRenderIdentity}
+ * and {@link refreshRenderIdentity} write WHOLE records, as does this
+ * one; a deployment may additionally advance the sequence from paths
+ * that touch the render row for other reasons, and those are
+ * field-targeted — they name the one or two fields they own in a
+ * conditional update and structurally cannot carry a stale `props`.
+ *
+ * Between the whole-record writers it is last-write-wins, and that
+ * includes an honest narrow window HERE: if a commit's `put` lands
+ * between this function's `get` and its `put`, the merged record
+ * carries the props read before that commit, so fresher props are
+ * briefly overwritten. It is not silent and it is not durable — the id
+ * being backfilled is correct, and the next refresh on any mutation
+ * path reprojects `props` from the row and repairs it. Narrowing it
+ * further would mean a conditional write on a path that runs once per
+ * cold generation, which is not worth the machinery.
  */
 export async function backfillRenderIdentityBlueprintId(
   store: RenderIdentityStore | undefined,
@@ -319,8 +334,13 @@ function logRenderIdentitySkipped(
   sessionId: string,
   reason: RenderIdentitySkipReason,
 ): void {
+  // debug, not warn: severity is part of an alertable event's contract,
+  // and this one fires on paths where nothing is actionable — a render
+  // that predates the store has no record to refresh and never will.
+  // The cloud emitter uses debug for the same event; a shared name that
+  // pages on one backend and not the other is a broken contract.
   // eslint-disable-next-line no-console -- structured single-line event for log-pipeline pickup
-  console.warn(
+  console.debug(
     JSON.stringify({ msg: REFRESH_SKIPPED_EVENT, sessionId, reason }),
   );
 }

@@ -673,7 +673,9 @@ describe('createGguiUpdateHandler — render-identity refresh (#430 slice 1)', (
     const { sessionId } = await seedRender({ store });
     const renderIdentityStore = new InMemoryRenderIdentityStore();
 
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    // The skip is emitted at DEBUG, not warn — severity is part of the
+    // event's contract and this path is not actionable.
+    const debug = vi.spyOn(console, 'debug').mockImplementation(() => {});
     try {
       const handler = createGguiUpdateHandler({
         renderStore: store,
@@ -688,12 +690,12 @@ describe('createGguiUpdateHandler — render-identity refresh (#430 slice 1)', (
       // Nothing invented — identity fields are not recomputable here.
       expect(await renderIdentityStore.get(sessionId)).toBeNull();
 
-      const events = namedEvents<SkippedEvent>(warn, 'render_identity_refresh_skipped');
+      const events = namedEvents<SkippedEvent>(debug, 'render_identity_refresh_skipped');
       expect(events).toHaveLength(1);
       expect(events[0]?.sessionId).toBe(sessionId);
       expect(events[0]?.reason).toBe('no-record');
     } finally {
-      warn.mockRestore();
+      debug.mockRestore();
     }
   });
 

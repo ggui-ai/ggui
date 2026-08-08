@@ -304,6 +304,7 @@ export { listRegistryBlueprintsForExport, type ExportableBlueprint } from './exp
 // rename into a compile error rather than a silently-dead alert filter.
 export {
   RENDER_IDENTITY_EVENTS,
+  type RenderIdentityCapacityEvent,
   type RenderIdentityEvent,
   type RenderIdentityFailureEvent,
   type RenderIdentityFailureSource,

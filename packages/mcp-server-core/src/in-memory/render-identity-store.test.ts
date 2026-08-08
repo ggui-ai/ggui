@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { InMemoryRenderIdentityStore } from './in-memory/render-identity-store.js';
-import type { RenderIdentityRecord } from './render-identity-store.js';
+import { InMemoryRenderIdentityStore } from './render-identity-store.js';
+import type { RenderIdentityRecord } from '../render-identity-store.js';
 
 /**
  * Fixture discipline every later task copies: `contractKey` is the
