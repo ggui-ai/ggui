@@ -16,6 +16,10 @@ packages:
   # storage only and 404s on any version not published this run. Load-bearing
   # for gate validity: a fallthrough to an uplink would let the install silently
   # resolve a real-npm prerelease and false-pass. Do NOT add a proxy/uplink here.
+  # The one sanctioned exception is SEEDED, not proxied: setup.sh step 4
+  # (seed-upstream-pins.mjs) publishes the exact @ggui-ai/* versions the
+  # @guuey/* pins require into this local storage when the cohort has moved
+  # past them — known pins only, everything else still fails closed.
   "@ggui-ai/*":
     access: $all
     publish: $all
