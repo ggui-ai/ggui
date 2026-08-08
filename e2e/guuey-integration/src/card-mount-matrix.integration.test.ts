@@ -14,22 +14,23 @@
  *   - persistence is `@guuey/threads`' `ThreadStore` over
  *     `InMemoryThreadPersistence` — the verbatim-extracted hosted-pod
  *     logic (guuey#107), including the card projection (guuey#86);
- *   - mounting is `@guuey/agent-client`'s both-channel dispatcher
- *     (`toolResultCardMount` / `cardCardMount`).
+ *   - mounting is `@guuey/mcp-apps-host`'s three-channel dispatcher
+ *     (`toolResultViewMount` / `snapshotViewMount` — inline, ggui,
+ *     locator).
  *
  * Matrix (issue #429):
- *   1. live mount — ggui tool-result → fold → `toolResultCardMount`,
+ *   1. live mount — ggui tool-result → fold → `toolResultViewMount`,
  *      plus VERBATIM slice parity against ggui's own protocol
  *      host-helper (`toolResultGguiRender`, ggui#427).
  *   2. persist → rehydrate — inline mcp-ui resource through
- *      `appendFold` → card row → `cardCardMount`; live ≍ rehydrated.
+ *      `appendFold` → card row → `snapshotViewMount`; live ≍ rehydrated.
  *   3. provider-raw channel — a `ui://` resource degraded into a
  *      `provider-raw` content part mounts on BOTH arms.
- *   4. ggui-channel snapshot honesty — pins today's deliberate
- *      behavior (persisted ggui bootstraps are not remountable); the
- *      re-mint design input lives on the issue.
+ *   4. ggui-channel snapshot honesty — persisted ggui renders are
+ *      bootstrap-free locator placeholder rows (guuey#122): the durable
+ *      `ui://` identity survives, credentials never do (ggui#430).
  *
- * The `@guuey/*` pins are EXACT (0.2.2): the point is testing ggui
+ * The `@guuey/*` pins are EXACT (0.3.x): the point is testing ggui
  * HEAD against the versions guuey actually shipped. The pins are
  * dev-side test harness only — no published `@ggui-ai/*` package
  * depends on anything above MCP.
@@ -52,8 +53,13 @@ import {
   type AgReduceResult,
   type JsonValue,
 } from '@silverprotocol/core';
-import { cardCardMount, toolResultCardMount } from '@guuey/agent-client';
-import { InMemoryThreadPersistence, ThreadStore } from '@guuey/threads';
+import {
+  isJsonObject,
+  snapshotViewMount,
+  toolResultViewMount,
+  type LocatorViewMount,
+} from '@guuey/mcp-apps-host';
+import { InMemoryThreadPersistence, ThreadStore, uiCardArtifactsFromMessages } from '@guuey/threads';
 
 // ───────────────────────────────────────────────────────────────────────
 // ggui server fixture — real server, real wire
@@ -237,7 +243,7 @@ async function renderOnce(): Promise<Record<string, unknown>> {
 // ───────────────────────────────────────────────────────────────────────
 
 describe('matrix 1 — live ggui render mounts through guuey narrowing', () => {
-  it('real ggui_render result → Reducer fold → toolResultCardMount, slice verbatim', async () => {
+  it('real ggui_render result → Reducer fold → toolResultViewMount, slice verbatim', async () => {
     const result = await renderOnce();
 
     // The pod's Claude facet routes structuredContent → uiData and
@@ -247,17 +253,27 @@ describe('matrix 1 — live ggui render mounts through guuey narrowing', () => {
       meta: result._meta,
     });
 
-    const mount = toolResultCardMount(block);
+    const mount = toolResultViewMount(block);
     expect(mount).toBeDefined();
-    expect(mount!.channel).toBe('ggui');
+    expect(mount?.channel).toBe('ggui');
+    if (mount === undefined || mount.channel === 'locator') {
+      // Unreachable past the two expects above — narrows the 0.3.0
+      // ViewMount union to its resource-bearing arm.
+      throw new Error('expected a resource-bearing ggui mount');
+    }
 
     // The mounted shell inlines the slice envelope — parse it back out
     // and compare VERBATIM against ggui's own host-helper narrowing of
-    // the SAME wire result (ggui#427). Both sides must agree on every
-    // byte of the slice: guuey's copy and ggui's export cannot drift.
+    // the SAME wire result (ggui#427). Since 0.3.x guuey ships NO copy
+    // of the helpers — @guuey/mcp-apps-host re-exports them from the
+    // PUBLISHED @ggui-ai/protocol@0.6.3 pinned beneath it, while the
+    // `toolResultGguiRender` imported here resolves workspace HEAD. So
+    // byte-equality now detects ggui-HEAD-vs-published-pin drift: if
+    // HEAD's slice projection moves ahead of what guuey actually pins,
+    // it fails HERE, before it fails in guuey's host.
     const bootstrap = toolResultGguiRender(result);
     expect(bootstrap).toBeDefined();
-    const envelope = shellEnvelope(mount!.resource.text ?? '');
+    const envelope = shellEnvelope(mount.resource.text ?? '');
     expect(envelope[MCP_APP_AI_GGUI_RENDER_META_KEY]).toEqual(bootstrap!.slice);
 
     // Live-mode slice sanity: the render channel minted real creds.
@@ -310,18 +326,26 @@ describe('matrix 2 — inline mcp-ui resource: live ≍ rehydrated', () => {
   it('the same fold mounts identically live and after ThreadStore persistence', async () => {
     const { fold, block } = foldToolDone({ uiData: INLINE_RESOURCE });
 
-    const live = toolResultCardMount(block);
+    const live = toolResultViewMount(block);
     expect(live).toBeDefined();
-    expect(live!.channel).toBe('inline');
-    expect(live!.resource.uri).toBe(INLINE_RESOURCE.uri);
-    expect(live!.resource.text).toBe(INLINE_RESOURCE.text);
+    expect(live?.channel).toBe('inline');
+    if (live === undefined || live.channel === 'locator') {
+      // Unreachable past the two expects above — narrows the 0.3.0
+      // ViewMount union to its resource-bearing arm.
+      throw new Error('expected an inline resource mount');
+    }
+    expect(live.resource.uri).toBe(INLINE_RESOURCE.uri);
+    expect(live.resource.text).toBe(INLINE_RESOURCE.text);
 
     const artifacts = await persistAndReadCards(fold);
     expect(artifacts).toHaveLength(1);
-    const rehydrated = cardCardMount(artifacts[0]!);
+    const rehydrated = snapshotViewMount(artifacts[0]!);
     expect(rehydrated).toBeDefined();
-    expect(rehydrated!.channel).toBe('inline');
-    expect(rehydrated!.resource).toEqual(live!.resource);
+    expect(rehydrated?.channel).toBe('inline');
+    if (rehydrated === undefined || rehydrated.channel === 'locator') {
+      throw new Error('expected an inline resource mount after rehydration');
+    }
+    expect(rehydrated.resource).toEqual(live.resource);
   });
 });
 
@@ -341,44 +365,129 @@ describe('matrix 3 — provider-raw-degraded ui:// resource mounts on both arms'
       ],
     });
 
-    const live = toolResultCardMount(block);
+    const live = toolResultViewMount(block);
     expect(live).toBeDefined();
-    expect(live!.channel).toBe('inline');
-    expect(live!.resource.uri).toBe(INLINE_RESOURCE.uri);
+    expect(live?.channel).toBe('inline');
+    if (live === undefined || live.channel === 'locator') {
+      // Unreachable past the two expects above — narrows the 0.3.0
+      // ViewMount union to its resource-bearing arm.
+      throw new Error('expected an inline resource mount');
+    }
+    expect(live.resource.uri).toBe(INLINE_RESOURCE.uri);
 
     const artifacts = await persistAndReadCards(fold);
     expect(artifacts).toHaveLength(1);
-    const rehydrated = cardCardMount(artifacts[0]!);
+    const rehydrated = snapshotViewMount(artifacts[0]!);
     expect(rehydrated).toBeDefined();
-    expect(rehydrated!.resource).toEqual(live!.resource);
+    expect(rehydrated?.channel).toBe('inline');
+    if (rehydrated === undefined || rehydrated.channel === 'locator') {
+      throw new Error('expected an inline resource mount after rehydration');
+    }
+    expect(rehydrated.resource).toEqual(live.resource);
   });
 });
 
 // ───────────────────────────────────────────────────────────────────────
-// Matrix 4 — ggui-channel snapshots: today's deliberate non-projection
+// Matrix 4 — ggui-channel snapshots: honest locator placeholders
 // ───────────────────────────────────────────────────────────────────────
 
-describe('matrix 4 — persisted ggui bootstraps are honestly non-remountable today', () => {
-  it('a ggui-channel fold rehydrates to a placeholder, never a dead mount', async () => {
+/** Recursively collect every object key reachable from a value. */
+function collectKeys(value: unknown, into: Set<string> = new Set()): Set<string> {
+  if (Array.isArray(value)) {
+    for (const item of value) collectKeys(item, into);
+  } else if (value !== null && typeof value === 'object') {
+    for (const [key, child] of Object.entries(value)) {
+      into.add(key);
+      collectKeys(child, into);
+    }
+  }
+  return into;
+}
+
+describe('matrix 4 — persisted ggui renders are honest locator placeholders, never stale credentials', () => {
+  it('a ggui-channel fold persists ONE bootstrap-free locator row', async () => {
     const result = await renderOnce();
     const { fold } = foldToolDone({
       uiData: result.structuredContent,
       meta: result._meta,
     });
 
-    const artifacts = await persistAndReadCards(fold);
-    // 0.2.2's actual behavior, probed directly against
-    // `uiCardArtifactsFromMessages`: the card projection SKIPS
-    // ggui-channel results entirely (a resourceUri with no inline
-    // text/blob persists nothing). Pinned exactly — this harness pins
-    // @guuey/* to an exact version, so a future guuey that starts
-    // persisting ggui card rows fails HERE loudly and we revisit
-    // against the re-mint design (issue #429 item 4) instead of
-    // silently accepting dead-on-arrival bootstrap snapshots. If that
-    // future version persists rows, the invariant to enforce becomes:
-    // `cardCardMount(snapshot)` stays undefined until the snapshot
-    // carries a re-mintable locator, never a stale wsToken mount.
-    expect(artifacts).toHaveLength(0);
+    // The ratified 0.3.x invariant (guuey#122: locator placeholder rows +
+    // the persistence-lane `_meta` strip; ggui#430): a ggui render
+    // persists as exactly ONE bootstrap-free locator row — the durable
+    // `ui://` identity survives, the short-TTL wsToken bootstrap never
+    // does. Gate history: the 0.2.x pin asserted zero-projection, fired
+    // on the 0.3.0 bump (2026-08-08), and was ruled + rewritten the same
+    // day — ggui#430 comment 5225026230 carries the observed shape. Going
+    // forward this leg guards exactly that: rows persist as bootstrap-free
+    // locators, and any future guuey version that persists mount material
+    // or `_meta` on a ggui row fails HERE loudly. (The fresh-wsToken
+    // re-mint via `resources/read` is matrix 5's territory — deliberately
+    // not re-asserted here.)
+
+    // (a) the card projection emits exactly one artifact row for the
+    // render, carrying the durable ui:// identity. (The `content` check
+    // only proves the projection ADDS nothing of its own — the harness
+    // folds an empty tool.done content in to begin with.)
+    const projected = uiCardArtifactsFromMessages(fold.messages);
+    expect(projected).toHaveLength(1);
+    const part = projected[0]!.parts.find(
+      (p): p is Extract<AgBlock, { type: 'tool-result' }> => p.type === 'tool-result',
+    );
+    expect(part).toBeDefined();
+    expect(part!.content).toEqual([]);
+    const uiData = part!.uiData;
+    if (!isJsonObject(uiData)) {
+      throw new Error('projected ggui artifact carries no uiData object');
+    }
+    const resourceUri = uiData.resourceUri;
+    expect(typeof resourceUri).toBe('string');
+    expect(resourceUri).toMatch(/^ui:\/\/ggui\/render\//);
+
+    // (b) the `_meta` strip — "wsToken never persists": no `_meta` key
+    // survives anywhere in ANY persisted row (a strip that held on the
+    // card lane but lapsed on the message lane would still leak), and
+    // the live wsToken string appears in no persistence lane at all —
+    // the string scan is the belt to the key-walk's suspenders.
+    const bootstrap = toolResultGguiRender(result);
+    expect(bootstrap).toBeDefined();
+    const wsToken = bootstrap!.slice.wsToken;
+    expect(typeof wsToken).toBe('string');
+    const db = new InMemoryThreadPersistence();
+    const store = new ThreadStore(db);
+    const threadId = await store.ensureThread({
+      userId: 'g_interop',
+      appId: 'app_interop',
+      region: 'us-east-1',
+    });
+    await store.appendFold({
+      threadId,
+      userId: 'g_interop',
+      fold,
+      clientMessageIdBase: 'interop-turn-4',
+    });
+    const rows = await db.listRecentMessages(threadId, 50);
+    const cardRows = rows.filter((r) => r.kind === 'card' && r.cardSnapshot !== undefined);
+    expect(cardRows).toHaveLength(1);
+    const cardRow = cardRows[0]!;
+    expect(collectKeys(rows).has('_meta')).toBe(false);
+    expect(JSON.stringify(rows)).not.toContain(String(wsToken));
+
+    // (c) "never a stale wsToken mount": the snapshot mounts as the
+    // locator arm, which by construction (the 0.3.1 named LocatorViewMount
+    // arm) carries no resource and no bootstrap — only the uri from (a).
+    const mount = snapshotViewMount(toJsonValue(cardRow.cardSnapshot));
+    expect(mount).toBeDefined();
+    expect(mount?.channel).toBe('locator');
+    if (mount === undefined || mount.channel !== 'locator') {
+      // Unreachable past the two expects above — narrows to the locator arm.
+      throw new Error('expected the locator arm');
+    }
+    const locator: LocatorViewMount = mount;
+    // The named arm carries the locator and NOTHING else — no resource,
+    // no bootstrap, enforced on the actual runtime object.
+    expect(Object.keys(locator).sort()).toEqual(['channel', 'resourceUri']);
+    expect(locator.resourceUri).toBe(resourceUri);
   });
 });
 
