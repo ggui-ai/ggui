@@ -67,34 +67,74 @@ export type RenderIdentityFailureEvent =
   | 'render_identity_refresh_failed';
 
 /**
- * Every named event this module emits — the failure pair above plus
- * the one signal that is NOT a failure.
+ * The registry: every named event emitted about a render-identity
+ * record, by ANY writer — including storage backends outside this
+ * package, which import these rather than restating the literals.
+ * Enumerable from this one type is the property that makes it a
+ * registry; a backend that spells its own string loses it.
  *
- * `render_identity_refresh_skipped` is deliberately outside
- * {@link RenderIdentityFailureEvent}: nothing went wrong when a
- * refresh finds no record, so it carries a `reason` instead of an
- * `error` and rides its own emitter. Folding it in would let a caller
- * pass it where a caught error is expected and would tell an operator
- * reading the type that a skip is something to page on.
+ * Two members sit outside {@link RenderIdentityFailureEvent} on
+ * purpose, because neither carries a caught error:
+ *
+ *   - `render_identity_refresh_skipped` — nothing went wrong; there
+ *     was simply nothing to refresh. Carries a
+ *     {@link RenderIdentitySkipReason}.
+ *   - `render_identity_row_unreadable` — a stored record exists but
+ *     cannot be read back as a valid one. Not a failed operation and
+ *     not a miss: a data-integrity signal, carrying a
+ *     {@link RenderIdentityUnreadableReason}.
+ *
+ * Folding either into the failure union would let a caller pass it
+ * where an error is expected, and would tell an operator reading the
+ * type that both are things to page on.
  */
 export type RenderIdentityEvent =
   | RenderIdentityFailureEvent
-  | 'render_identity_refresh_skipped';
+  | 'render_identity_refresh_skipped'
+  | 'render_identity_row_unreadable';
 
 /**
  * Why a refresh wrote nothing. Closed for the same reason the event
  * names are: it is a filterable field on a structured event.
+ *
+ * `no-record-or-not-advanced` is the honest reason for a backend whose
+ * refresh is a single conditional write: the condition covers both
+ * "no record" and "sequence already at/past this value", and the store
+ * does not report which one rejected it.
  */
-export type RenderIdentitySkipReason = 'no-record';
+export type RenderIdentitySkipReason =
+  | 'no-record'
+  | 'no-record-or-not-advanced';
+
+/**
+ * Why a stored row could not be projected back into a record. Distinct
+ * from {@link RenderIdentitySkipReason}: a skip means there was
+ * nothing to act on, this means there WAS something and it was
+ * malformed.
+ */
+export type RenderIdentityUnreadableReason = 'unparseable-timestamp';
+
+/**
+ * The event names as values, so every emitter — in this package or a
+ * storage backend elsewhere — spells them from one place. Importing
+ * these is what turns a future rename into a compile error instead of
+ * an alert filter that silently stops matching.
+ */
+export const RENDER_IDENTITY_EVENTS = {
+  writeFailed: 'render_identity_write_failed',
+  refreshFailed: 'render_identity_refresh_failed',
+  refreshSkipped: 'render_identity_refresh_skipped',
+  rowUnreadable: 'render_identity_row_unreadable',
+} as const satisfies Record<string, RenderIdentityEvent>;
 
 const WRITE_FAILED_EVENT: RenderIdentityFailureEvent =
-  'render_identity_write_failed';
+  RENDER_IDENTITY_EVENTS.writeFailed;
 
 const REFRESH_FAILED_EVENT: RenderIdentityFailureEvent =
-  'render_identity_refresh_failed';
+  RENDER_IDENTITY_EVENTS.refreshFailed;
 
 const REFRESH_SKIPPED_EVENT: RenderIdentityEvent =
-  'render_identity_refresh_skipped';
+  RENDER_IDENTITY_EVENTS.refreshSkipped;
 
 /**
  * Project a committed row + its identity slice into the durable
