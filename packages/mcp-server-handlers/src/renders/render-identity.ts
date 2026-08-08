@@ -115,6 +115,20 @@ export type RenderIdentitySkipReason =
 export type RenderIdentityUnreadableReason = 'unparseable-timestamp';
 
 /**
+ * WHICH store a failure came from, on paths that touch two of them.
+ *
+ * A refresh reads the render's own sequence and then writes the
+ * identity record; both can fail, and the same event name covers both.
+ * Without this, a responder reading `render_identity_refresh_failed`
+ * cannot tell whether the render store or the identity store
+ * misbehaved, and starts in the wrong place. Closed, because it is a
+ * filterable field like the names themselves.
+ */
+export type RenderIdentityFailureSource =
+  | 'render-row-seq-read'
+  | 'identity-record-write';
+
+/**
  * The event names as values, so every emitter — in this package or a
  * storage backend elsewhere — spells them from one place. Importing
  * these is what turns a future rename into a compile error instead of

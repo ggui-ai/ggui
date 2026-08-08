@@ -306,6 +306,7 @@ export {
   RENDER_IDENTITY_EVENTS,
   type RenderIdentityEvent,
   type RenderIdentityFailureEvent,
+  type RenderIdentityFailureSource,
   type RenderIdentitySkipReason,
   type RenderIdentityUnreadableReason,
 } from './render-identity.js';
