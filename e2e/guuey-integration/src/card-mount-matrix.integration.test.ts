@@ -25,11 +25,11 @@
  *      `appendFold` → card row → `snapshotViewMount`; live ≍ rehydrated.
  *   3. provider-raw channel — a `ui://` resource degraded into a
  *      `provider-raw` content part mounts on BOTH arms.
- *   4. ggui-channel snapshot honesty — pins today's deliberate
- *      behavior (persisted ggui bootstraps are not remountable); the
- *      re-mint design input lives on the issue.
+ *   4. ggui-channel snapshot honesty — persisted ggui renders are
+ *      bootstrap-free locator placeholder rows (guuey#122): the durable
+ *      `ui://` identity survives, credentials never do (ggui#430).
  *
- * The `@guuey/*` pins are EXACT (0.3.0): the point is testing ggui
+ * The `@guuey/*` pins are EXACT (0.3.x): the point is testing ggui
  * HEAD against the versions guuey actually shipped. The pins are
  * dev-side test harness only — no published `@ggui-ai/*` package
  * depends on anything above MCP.
@@ -52,8 +52,13 @@ import {
   type AgReduceResult,
   type JsonValue,
 } from '@silverprotocol/core';
-import { snapshotViewMount, toolResultViewMount } from '@guuey/mcp-apps-host';
-import { InMemoryThreadPersistence, ThreadStore } from '@guuey/threads';
+import {
+  isJsonObject,
+  snapshotViewMount,
+  toolResultViewMount,
+  type LocatorViewMount,
+} from '@guuey/mcp-apps-host';
+import { InMemoryThreadPersistence, ThreadStore, uiCardArtifactsFromMessages } from '@guuey/threads';
 
 // ───────────────────────────────────────────────────────────────────────
 // ggui server fixture — real server, real wire
@@ -377,30 +382,93 @@ describe('matrix 3 — provider-raw-degraded ui:// resource mounts on both arms'
 });
 
 // ───────────────────────────────────────────────────────────────────────
-// Matrix 4 — ggui-channel snapshots: today's deliberate non-projection
+// Matrix 4 — ggui-channel snapshots: honest locator placeholders
 // ───────────────────────────────────────────────────────────────────────
 
-describe('matrix 4 — persisted ggui bootstraps are honestly non-remountable today', () => {
-  it('a ggui-channel fold rehydrates to a placeholder, never a dead mount', async () => {
+/** Recursively collect every object key reachable from a value. */
+function collectKeys(value: unknown, into: Set<string> = new Set()): Set<string> {
+  if (Array.isArray(value)) {
+    for (const item of value) collectKeys(item, into);
+  } else if (value !== null && typeof value === 'object') {
+    for (const [key, child] of Object.entries(value)) {
+      into.add(key);
+      collectKeys(child, into);
+    }
+  }
+  return into;
+}
+
+describe('matrix 4 — persisted ggui renders are honest locator placeholders, never stale credentials', () => {
+  it('a ggui-channel fold persists ONE bootstrap-free locator row', async () => {
     const result = await renderOnce();
     const { fold } = foldToolDone({
       uiData: result.structuredContent,
       meta: result._meta,
     });
 
-    const artifacts = await persistAndReadCards(fold);
-    // 0.2.2's actual behavior, probed directly against
-    // `uiCardArtifactsFromMessages`: the card projection SKIPS
-    // ggui-channel results entirely (a resourceUri with no inline
-    // text/blob persists nothing). Pinned exactly — this harness pins
-    // @guuey/* to an exact version, so a future guuey that starts
-    // persisting ggui card rows fails HERE loudly and we revisit
-    // against the re-mint design (issue #429 item 4) instead of
-    // silently accepting dead-on-arrival bootstrap snapshots. If that
-    // future version persists rows, the invariant to enforce becomes:
-    // `cardCardMount(snapshot)` stays undefined until the snapshot
-    // carries a re-mintable locator, never a stale wsToken mount.
-    expect(artifacts).toHaveLength(0);
+    // The ratified 0.3.x invariant (guuey#122: locator placeholder rows +
+    // the persistence-lane `_meta` strip; ggui#430): a ggui render
+    // persists as exactly ONE bootstrap-free locator row — the durable
+    // `ui://` identity survives, the short-TTL wsToken bootstrap never
+    // does. Gate history: the 0.2.x pin asserted zero-projection, fired
+    // on the 0.3.0 bump (2026-08-08), and was ruled + rewritten the same
+    // day — ggui#430 comment 5225026230 carries the observed shape. Going
+    // forward this leg guards exactly that: rows persist as bootstrap-free
+    // locators, and any future guuey version that persists mount material
+    // or `_meta` on a ggui row fails HERE loudly. (The fresh-wsToken
+    // re-mint via `resources/read` is matrix 5's territory — deliberately
+    // not re-asserted here.)
+
+    // (a) the card projection emits exactly one artifact row for the
+    // render, carrying the durable ui:// identity and no content payload.
+    const projected = uiCardArtifactsFromMessages(fold.messages);
+    expect(projected).toHaveLength(1);
+    const part = projected[0]!.parts.find(
+      (p): p is Extract<AgBlock, { type: 'tool-result' }> => p.type === 'tool-result',
+    );
+    expect(part).toBeDefined();
+    expect(part!.content).toEqual([]);
+    const uiData = part!.uiData;
+    if (!isJsonObject(uiData)) {
+      throw new Error('projected ggui artifact carries no uiData object');
+    }
+    const resourceUri = uiData.resourceUri;
+    expect(typeof resourceUri).toBe('string');
+    expect(resourceUri).toMatch(/^ui:\/\/ggui\/render\//);
+
+    // (b) the `_meta` strip — "wsToken never persists": no `_meta` key
+    // survives anywhere in the persisted card row.
+    const db = new InMemoryThreadPersistence();
+    const store = new ThreadStore(db);
+    const threadId = await store.ensureThread({
+      userId: 'g_interop',
+      appId: 'app_interop',
+      region: 'us-east-1',
+    });
+    await store.appendFold({
+      threadId,
+      userId: 'g_interop',
+      fold,
+      clientMessageIdBase: 'interop-turn-4',
+    });
+    const rows = await db.listRecentMessages(threadId, 50);
+    const cardRows = rows.filter((r) => r.kind === 'card' && r.cardSnapshot !== undefined);
+    expect(cardRows).toHaveLength(1);
+    const cardRow = cardRows[0]!;
+    expect(collectKeys(cardRow).has('_meta')).toBe(false);
+
+    // (c) "never a stale wsToken mount": the snapshot mounts as the
+    // locator arm, which by construction (the 0.3.1 named LocatorViewMount
+    // arm) carries no resource and no bootstrap — only the uri from (a).
+    const mount = snapshotViewMount(toJsonValue(cardRow.cardSnapshot));
+    expect(mount).toBeDefined();
+    expect(mount?.channel).toBe('locator');
+    if (mount === undefined || mount.channel !== 'locator') {
+      // Unreachable past the two expects above — narrows to the locator arm.
+      throw new Error('expected the locator arm');
+    }
+    const locator: LocatorViewMount = mount;
+    expect(locator.resourceUri).toBe(resourceUri);
   });
 });
 
