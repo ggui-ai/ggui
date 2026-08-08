@@ -255,7 +255,18 @@ test.describe('samples-render: with-guuey full journey against the composed publ
 
     // ── STEP 4 — the toggle round-tripped and the first render persists ──
     // Authoritative: the drained action reached the todo STORE.
-    await waitForTodoDoneInStore(/buy milk/i, 30_000);
+    try {
+      await waitForTodoDoneInStore(/buy milk/i, 30_000);
+    } catch (err) {
+      // The turn claimed clean completion (done, no WORKER_ERROR) yet the
+      // store never flipped — the two branches (drain found an empty
+      // queue vs. drained-but-fumbled tool sequence) are distinguishable
+      // only from the agent's own turn transcript + the servers' logs.
+      // eslint-disable-next-line no-console -- failure diagnostics for the run log.
+      console.log(`[with-guuey:toggle-never-round-tripped] sync turn SSE (tail):\n${sse.slice(-6000)}`);
+      dumpBootTail('toggle-never-round-tripped');
+      throw err;
+    }
     // In-page: the still-mounted card received the turn's ggui_update over
     // the live channel — checked state appears with NO page-side invoke in
     // flight. `.last()` mirrors render.spec's remount-tolerant read (this
