@@ -1413,7 +1413,10 @@ export function buildOpsBundleHandlers(
       createCreateAppHandler({ apps }) as SharedHandler<ZodRawShape, ZodRawShape>,
       createUpdateAppHandler({ apps }) as SharedHandler<ZodRawShape, ZodRawShape>,
       createSetAppThemeHandler({ apps }) as SharedHandler<ZodRawShape, ZodRawShape>,
-      createDeleteAppHandler({ apps }) as SharedHandler<ZodRawShape, ZodRawShape>,
+      createDeleteAppHandler({ apps, userDefaultApp }) as SharedHandler<
+        ZodRawShape,
+        ZodRawShape
+      >,
       createSetDefaultAppHandler({ apps, userDefaultApp }) as SharedHandler<
         ZodRawShape,
         ZodRawShape

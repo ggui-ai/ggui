@@ -20,7 +20,11 @@ export type {
   AppUpdatePatch,
   UserDefaultAppSource,
 } from './types.js';
-export { AppNotFoundError, OpsAppsAccessDeniedError } from './types.js';
+export {
+  AppNotFoundError,
+  DefaultAppDeleteBlockedError,
+  OpsAppsAccessDeniedError,
+} from './types.js';
 
 export { createListAppsHandler } from './list-apps.js';
 export type { ListAppsDeps, ListAppsOutput } from './list-apps.js';

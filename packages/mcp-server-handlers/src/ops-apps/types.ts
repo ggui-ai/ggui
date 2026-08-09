@@ -96,7 +96,23 @@ export interface AppsSource {
     ownerSub: string;
     patch: AppUpdatePatch;
   }): Promise<AppRecord>;
-  /** Hard delete. No-throw idempotent — second delete of the same id resolves. */
+  /**
+   * Hard delete. No-throw idempotent — a second delete of the same id
+   * resolves. Rejects cross-tenant.
+   *
+   * Scope of the obligation, stated because a caller cannot see it:
+   * this seam owns the APP RECORD and nothing else. Whatever other
+   * stores hold keyed by the same `appId` — saved blueprints, per-app
+   * provider keys, marketplace installs, issued keys — is outside it.
+   *
+   * An implementation MAY cascade those away inside its own `delete`.
+   * One that does NOT leaves them behind, and then MUST make that
+   * observable: a named, structured event naming the row classes it
+   * orphaned, emitted on the delete that orphaned them. Returning
+   * silently is the contract violation — not the orphaning itself.
+   * Orphaned rows an operator can enumerate are debt; orphaned rows
+   * nobody can find are loss.
+   */
   delete(args: { appId: string; ownerSub: string }): Promise<void>;
   /**
    * Replace the app's theme (validated {@link AppTheme}) in a single
@@ -134,6 +150,25 @@ export class AppNotFoundError extends Error {
   constructor(appId: string) {
     super(`app_not_found: no app ${JSON.stringify(appId)} for the calling user`);
     this.name = 'AppNotFoundError';
+  }
+}
+
+/**
+ * Thrown when the delete target IS the caller's default app.
+ *
+ * `defaultAppId` is what the universal route resolves on every
+ * request; deleting the app it names would leave that route pointing
+ * at a row that no longer exists. Same lock the console's Delete
+ * enforces — the operator picks a different default first, then
+ * deletes.
+ */
+export class DefaultAppDeleteBlockedError extends Error {
+  readonly code = 'default_app_delete_blocked' as const;
+  constructor(appId: string) {
+    super(
+      `default_app_delete_blocked: app ${JSON.stringify(appId)} is the calling user's default — set a different default app first, then delete this one`,
+    );
+    this.name = 'DefaultAppDeleteBlockedError';
   }
 }
 
