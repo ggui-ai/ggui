@@ -18,14 +18,15 @@
  *
  * Two probes are covered, matching spec §6 bullet 3 + the tenancy-gate
  * matrix intent:
- *   - blueprint-less (legacy single-segment URI): both denied-row and
- *     missing-row reads must return the loading shell.
+ *   - blueprint-less (legacy single-segment URI): neither read can
+ *     resolve anything, so both must FAIL, with the identical typed
+ *     JSON-RPC error.
  *   - registry-fallback (resume URI with a registered blueprint):
  *     both denied-row and missing-row reads of the SAME blueprintKey
  *     must return the byte-identical registry-fallback shell — this
- *     is the case that failed before fix 1 (deny early-returned the
- *     loading shell instead of falling through to the registry
- *     fallback the miss case reaches).
+ *     is the case that failed before fix 1 (deny early-returned
+ *     instead of falling through to the registry fallback the miss
+ *     case reaches).
  *
  * Comparison method: responses are compared after normalizing out the
  * caller-supplied `sessionId` (it necessarily differs between the two
@@ -39,6 +40,7 @@ import { randomUUID } from "node:crypto";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
+import { McpError } from "@modelcontextprotocol/sdk/types.js";
 import {
   InMemoryGguiSessionStore,
   InMemoryVectorStore,
@@ -146,27 +148,55 @@ function normalize(contents: unknown, sessionId: string): unknown {
   return JSON.parse(JSON.stringify(contents).split(sessionId).join("<SID>"));
 }
 
+interface ReadFailure {
+  readonly code: number;
+  readonly message: string;
+  readonly data: unknown;
+}
+
+/**
+ * Read a locator that must FAIL, and return the failure. Positive
+ * assertion rather than a bare throw-pin: a read that succeeded, or one
+ * that raised an untyped error, has to fail this helper rather than
+ * satisfy it.
+ */
+async function readFailure(client: Client, uri: string): Promise<ReadFailure> {
+  try {
+    await client.readResource({ uri });
+  } catch (err) {
+    if (err instanceof McpError) {
+      return { code: err.code, message: err.message, data: err.data };
+    }
+    throw err;
+  }
+  throw new Error(`read of ${uri} returned a result; expected a typed failure`);
+}
+
 describe("render-resource read gate — deny is byte-identical to miss", () => {
-  it("blueprint-less probe: denied row and missing row both return the loading shell", async () => {
+  it("blueprint-less probe: denied row and missing row fail with the identical typed error", async () => {
     const f = await boot({ registryFallback: false });
     try {
       const deniedSessionId = (await f.renderStore.create({ appId: ROW_APP_ID })).id;
       const missingSessionId = randomUUID();
 
-      const deniedRead = await f.client.readResource({
-        uri: `${GGUI_RENDER_RESOURCE_URI}/${deniedSessionId}`,
-      });
-      const missingRead = await f.client.readResource({
-        uri: `${GGUI_RENDER_RESOURCE_URI}/${missingSessionId}`,
-      });
-
-      expect(normalize(deniedRead.contents, deniedSessionId)).toEqual(
-        normalize(missingRead.contents, missingSessionId),
+      const deniedRead = await readFailure(
+        f.client,
+        `${GGUI_RENDER_RESOURCE_URI}/${deniedSessionId}`,
       );
-      // Sanity: both really are the loading shell, not some other
-      // shape both sides happen to agree on.
-      const text = (deniedRead.contents[0] as { text: string }).text;
-      expect(text).toContain('data-ggui-shell="loading"');
+      const missingRead = await readFailure(
+        f.client,
+        `${GGUI_RENDER_RESOURCE_URI}/${missingSessionId}`,
+      );
+
+      expect(normalize(deniedRead, deniedSessionId)).toEqual(
+        normalize(missingRead, missingSessionId),
+      );
+      // Sanity: both really carry a classification, not some empty
+      // shape both sides happen to agree on. This server keeps no
+      // durable record, which is a property it must state for the
+      // denied row too — a `NOT_FOUND` here and `NOT_SUPPORTED` there
+      // would rebuild the oracle out of the failure codes.
+      expect(deniedRead.data).toEqual({ code: "NOT_SUPPORTED" });
     } finally {
       await f.close();
     }
@@ -224,7 +254,10 @@ describe("render-resource read gate — deny is byte-identical to miss", () => {
     await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
     try {
       const deniedSessionId = (await renderStore.create({ appId: ROW_APP_ID })).id;
-      await client.readResource({ uri: `${GGUI_RENDER_RESOURCE_URI}/${deniedSessionId}` });
+      // The read now fails, but the server-side audit line is what this
+      // test is about: a refusal the caller cannot see must still be
+      // visible to the operator.
+      await readFailure(client, `${GGUI_RENDER_RESOURCE_URI}/${deniedSessionId}`);
       expect(warn).toHaveBeenCalledWith(
         "render_resource_read_denied",
         expect.objectContaining({

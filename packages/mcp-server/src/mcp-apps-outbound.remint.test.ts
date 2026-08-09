@@ -18,15 +18,18 @@
  * the same method `mcp-apps-outbound.render-read-gate.test.ts` uses for
  * the row path.
  *
- * Deployments that bind neither store keep today's behavior exactly;
- * that too is pinned, because "the new path is skipped" is the
- * property every existing deployment depends on.
+ * Deployments that bind neither store never touch either one — pinned
+ * by spying on the stores, because "the new path is skipped" is the
+ * property every existing deployment depends on. What such a server
+ * ANSWERS did change with the typed failures: it says NOT_SUPPORTED
+ * rather than handing back a shell that cannot paint.
  */
 import { describe, expect, it, vi } from "vitest";
 import { createHash, randomUUID } from "node:crypto";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
+import { McpError } from "@modelcontextprotocol/sdk/types.js";
 import {
   InMemoryBlueprintIndex,
   InMemoryBlueprintStore,
@@ -166,8 +169,8 @@ async function boot(
           index,
           defaultAppIdFallback: BUILDER_APP_ID,
           // `buildShellFromBlueprint` needs both to synthesize the
-          // registry-only shell; without them the fallback degrades to
-          // the loading shell and cannot be told from a miss.
+          // registry-only shell; without them the fallback fails typed
+          // and the probe never exercises a real response body.
           codeStore: new InMemoryCodeStore(),
           codeBaseUrl: "https://code.example",
         }
@@ -356,6 +359,35 @@ const failingAppMetadataStore: AppMetadataStore = {
     throw new Error("app metadata store unavailable");
   },
 };
+
+interface ReadFailure {
+  readonly code: number;
+  readonly message: string;
+  readonly data: unknown;
+}
+
+/**
+ * Read a locator that must FAIL, and return the failure. A positive
+ * assertion rather than a bare throw-pin: a read that succeeded, or one
+ * that raised an untyped error, fails this helper instead of passing
+ * through it.
+ */
+async function readFailure(client: Client, uri: string): Promise<ReadFailure> {
+  try {
+    await client.readResource({ uri });
+  } catch (err) {
+    if (err instanceof McpError) {
+      return { code: err.code, message: err.message, data: err.data };
+    }
+    throw err;
+  }
+  throw new Error(`read of ${uri} returned a result; expected a typed failure`);
+}
+
+/** MCP's resource-not-found number. */
+const SESSION_NOT_FOUND = -32002;
+/** The canonical code the other three failure classes ride on. */
+const MOUNT_UNAVAILABLE = -32006;
 
 function isLoadingShell(html: string): boolean {
   return html.includes('data-ggui-shell="loading"');
@@ -613,10 +645,12 @@ describe("resource read — re-mint refusals leave no trace", () => {
       await seedRecord(f.identityStore, sessionId, { blueprintId: null });
       await seedBlueprint(f);
 
-      const read = await f.client.readResource({
-        uri: `${RESOURCE_URI}/${sessionId}/${CONTRACT_KEY}`,
+      const failure = await readFailure(f.client, `${RESOURCE_URI}/${sessionId}/${CONTRACT_KEY}`);
+      expect(failure.code).toBe(MOUNT_UNAVAILABLE);
+      expect(failure.data).toEqual({
+        code: "BLUEPRINT_UNRESOLVABLE",
+        detail: "the record names no blueprint",
       });
-      expect(isLoadingShell(shellText(read.contents))).toBe(true);
       expect(await f.renderStore.get(sessionId)).toBeNull();
     } finally {
       await f.close();
@@ -632,10 +666,12 @@ describe("resource read — re-mint refusals leave no trace", () => {
       // gone, so nothing but the missing row can explain the refusal.
       await seedBody(f);
 
-      const read = await f.client.readResource({
-        uri: `${RESOURCE_URI}/${sessionId}/${CONTRACT_KEY}`,
+      const failure = await readFailure(f.client, `${RESOURCE_URI}/${sessionId}/${CONTRACT_KEY}`);
+      expect(failure.code).toBe(MOUNT_UNAVAILABLE);
+      expect(failure.data).toEqual({
+        code: "BLUEPRINT_UNRESOLVABLE",
+        detail: "the blueprint the record names is gone",
       });
-      expect(isLoadingShell(shellText(read.contents))).toBe(true);
       expect(await f.renderStore.get(sessionId)).toBeNull();
     } finally {
       await f.close();
@@ -651,10 +687,12 @@ describe("resource read — re-mint refusals leave no trace", () => {
       // so only the missing pointer can explain the refusal.
       await seedBlueprint(f, { withCodeHash: false });
 
-      const read = await f.client.readResource({
-        uri: `${RESOURCE_URI}/${sessionId}/${CONTRACT_KEY}`,
+      const failure = await readFailure(f.client, `${RESOURCE_URI}/${sessionId}/${CONTRACT_KEY}`);
+      expect(failure.code).toBe(MOUNT_UNAVAILABLE);
+      expect(failure.data).toEqual({
+        code: "BLUEPRINT_UNRESOLVABLE",
+        detail: "the blueprint stores no component reference",
       });
-      expect(isLoadingShell(shellText(read.contents))).toBe(true);
       expect(await f.renderStore.get(sessionId)).toBeNull();
     } finally {
       await f.close();
@@ -668,10 +706,12 @@ describe("resource read — re-mint refusals leave no trace", () => {
       await seedRecord(f.identityStore, sessionId);
       await seedBlueprint(f, { withBody: false });
 
-      const read = await f.client.readResource({
-        uri: `${RESOURCE_URI}/${sessionId}/${CONTRACT_KEY}`,
+      const failure = await readFailure(f.client, `${RESOURCE_URI}/${sessionId}/${CONTRACT_KEY}`);
+      expect(failure.code).toBe(MOUNT_UNAVAILABLE);
+      expect(failure.data).toEqual({
+        code: "BLUEPRINT_UNRESOLVABLE",
+        detail: "the component body behind the blueprint is gone",
       });
-      expect(isLoadingShell(shellText(read.contents))).toBe(true);
       expect(await f.renderStore.get(sessionId)).toBeNull();
     } finally {
       await f.close();
@@ -684,10 +724,9 @@ describe("resource read — re-mint refusals leave no trace", () => {
       const sessionId = randomUUID();
       await seedBlueprint(f);
 
-      const read = await f.client.readResource({
-        uri: `${RESOURCE_URI}/${sessionId}/${CONTRACT_KEY}`,
-      });
-      expect(isLoadingShell(shellText(read.contents))).toBe(true);
+      const failure = await readFailure(f.client, `${RESOURCE_URI}/${sessionId}/${CONTRACT_KEY}`);
+      expect(failure.code).toBe(SESSION_NOT_FOUND);
+      expect(failure.data).toEqual({ code: "NOT_FOUND" });
       expect(await f.renderStore.get(sessionId)).toBeNull();
     } finally {
       await f.close();
@@ -702,10 +741,9 @@ describe("resource read — the re-mint path is gated before it resolves anythin
       const sessionId = randomUUID();
       await seedRemintable(f, sessionId);
 
-      const read = await f.client.readResource({
-        uri: `${RESOURCE_URI}/${sessionId}/${CONTRACT_KEY}`,
-      });
-      expect(isLoadingShell(shellText(read.contents))).toBe(true);
+      const failure = await readFailure(f.client, `${RESOURCE_URI}/${sessionId}/${CONTRACT_KEY}`);
+      expect(failure.code).toBe(SESSION_NOT_FOUND);
+      expect(failure.data).toEqual({ code: "NOT_FOUND" });
       expect(await f.renderStore.get(sessionId)).toBeNull();
       expect(f.warn).toHaveBeenCalledWith(
         "render_resource_read_denied",
@@ -735,10 +773,9 @@ describe("resource read — the re-mint path is gated before it resolves anythin
       await seedRecord(f.identityStore, sessionId, { userId: "user-a" });
       await seedBlueprint(f);
 
-      const read = await f.client.readResource({
-        uri: `${RESOURCE_URI}/${sessionId}/${CONTRACT_KEY}`,
-      });
-      expect(isLoadingShell(shellText(read.contents))).toBe(true);
+      const failure = await readFailure(f.client, `${RESOURCE_URI}/${sessionId}/${CONTRACT_KEY}`);
+      expect(failure.code).toBe(SESSION_NOT_FOUND);
+      expect(failure.data).toEqual({ code: "NOT_FOUND" });
       expect(await f.renderStore.get(sessionId)).toBeNull();
     } finally {
       await f.close();
@@ -752,16 +789,22 @@ describe("resource read — the re-mint path is gated before it resolves anythin
       await seedRemintable(f, resolvableSessionId);
       const neverExistedSessionId = randomUUID();
 
-      const refused = await f.client.readResource({
-        uri: `${RESOURCE_URI}/${resolvableSessionId}/${CONTRACT_KEY}`,
-      });
-      const missing = await f.client.readResource({
-        uri: `${RESOURCE_URI}/${neverExistedSessionId}/${CONTRACT_KEY}`,
-      });
-
-      expect(normalize(refused.contents, resolvableSessionId)).toEqual(
-        normalize(missing.contents, neverExistedSessionId),
+      const refused = await readFailure(
+        f.client,
+        `${RESOURCE_URI}/${resolvableSessionId}/${CONTRACT_KEY}`,
       );
+      const missing = await readFailure(
+        f.client,
+        `${RESOURCE_URI}/${neverExistedSessionId}/${CONTRACT_KEY}`,
+      );
+
+      // The refused locator is fully re-mintable for its owner, and
+      // the other never existed at all — yet neither the code, the
+      // message, nor `data` may differ.
+      expect(normalize(refused, resolvableSessionId)).toEqual(
+        normalize(missing, neverExistedSessionId),
+      );
+      expect(refused.data).toEqual({ code: "NOT_FOUND" });
     } finally {
       await f.close();
     }
@@ -769,7 +812,7 @@ describe("resource read — the re-mint path is gated before it resolves anythin
 
   it("stays byte-identical when the registry fallback actually answers", async () => {
     // The variant that matters. With no registry wired, both probes
-    // return the same loading shell and the comparison is nearly free
+    // fail with the same typed error and the comparison is nearly free
     // — a regression could leak through the fallback and this pin
     // would not notice. Here a blueprint IS registered under the
     // fallback scope, so BOTH reads resolve a real registry shell, and
@@ -834,10 +877,12 @@ describe("resource read — the re-mint path is gated before it resolves anythin
       // render that is still being generated.
       await f.renderStore.create({ id: sessionId, appId: RECORD_APP_ID });
 
-      const read = await f.client.readResource({
-        uri: `${RESOURCE_URI}/${sessionId}/${CONTRACT_KEY}`,
+      const failure = await readFailure(f.client, `${RESOURCE_URI}/${sessionId}/${CONTRACT_KEY}`);
+      expect(failure.code).toBe(MOUNT_UNAVAILABLE);
+      expect(failure.data).toEqual({
+        code: "NOT_MOUNTABLE",
+        detail: "the render has not committed a component yet",
       });
-      expect(isLoadingShell(shellText(read.contents))).toBe(true);
       const untouched = (await f.renderStore.get(sessionId))
         ?.render as ComponentGguiSession;
       expect(untouched.componentCode).toBe("");
@@ -868,10 +913,9 @@ describe("resource read — the re-mint path is gated before it resolves anythin
       };
       await f.renderStore.commit({ render: live, appId: RECORD_APP_ID });
 
-      const read = await f.client.readResource({
-        uri: `${RESOURCE_URI}/${sessionId}/${CONTRACT_KEY}`,
-      });
-      expect(isLoadingShell(shellText(read.contents))).toBe(true);
+      const failure = await readFailure(f.client, `${RESOURCE_URI}/${sessionId}/${CONTRACT_KEY}`);
+      expect(failure.code).toBe(SESSION_NOT_FOUND);
+      expect(failure.data).toEqual({ code: "NOT_FOUND" });
       const stillTheirs = await f.renderStore.get(sessionId);
       expect(stillTheirs?.appId).toBe(RECORD_APP_ID);
       expect((stillTheirs?.render as ComponentGguiSession).componentCode).toBe(
@@ -914,7 +958,7 @@ describe("resource read — the re-mint path is gated before it resolves anythin
   });
 });
 
-describe("resource read — deployments that bind nothing are unchanged", () => {
+describe("resource read — deployments that bind nothing touch nothing", () => {
   it("skips the path entirely when the durable pair is absent", async () => {
     const f = await boot({ withoutDurableBlueprints: true });
     try {
@@ -922,10 +966,9 @@ describe("resource read — deployments that bind nothing are unchanged", () => 
       await seedRemintable(f, sessionId);
       const recordRead = vi.spyOn(f.identityStore, "get");
 
-      const read = await f.client.readResource({
-        uri: `${RESOURCE_URI}/${sessionId}/${CONTRACT_KEY}`,
-      });
-      expect(isLoadingShell(shellText(read.contents))).toBe(true);
+      const failure = await readFailure(f.client, `${RESOURCE_URI}/${sessionId}/${CONTRACT_KEY}`);
+      expect(failure.code).toBe(MOUNT_UNAVAILABLE);
+      expect(failure.data).toEqual({ code: "NOT_SUPPORTED" });
       expect(recordRead).not.toHaveBeenCalled();
       expect(await f.renderStore.get(sessionId)).toBeNull();
     } finally {
@@ -940,10 +983,9 @@ describe("resource read — deployments that bind nothing are unchanged", () => 
       await seedRemintable(f, sessionId);
       const blueprintRead = vi.spyOn(f.blueprintStore, "get");
 
-      const read = await f.client.readResource({
-        uri: `${RESOURCE_URI}/${sessionId}/${CONTRACT_KEY}`,
-      });
-      expect(isLoadingShell(shellText(read.contents))).toBe(true);
+      const failure = await readFailure(f.client, `${RESOURCE_URI}/${sessionId}/${CONTRACT_KEY}`);
+      expect(failure.code).toBe(MOUNT_UNAVAILABLE);
+      expect(failure.data).toEqual({ code: "NOT_SUPPORTED" });
       expect(blueprintRead).not.toHaveBeenCalled();
     } finally {
       await f.close();
