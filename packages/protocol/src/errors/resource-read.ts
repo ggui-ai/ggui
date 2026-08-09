@@ -29,17 +29,36 @@
  *
  * # Why `NOT_FOUND` loses its message
  *
- * A caller reading a locator that belongs to someone else and a caller
+ * A caller reading a locator it is not allowed to see and a caller
  * reading a locator that never existed MUST receive byte-identical
  * errors. Anything that varies between the two — a message naming a
- * session, a `detail` mentioning a denial — turns the read into an
+ * session, a `detail` mentioning a refusal — turns the read into an
  * oracle for the existence of other callers' renders. Rather than
  * leaving that to the discipline of every call site, this function
  * substitutes a constant message and drops `detail` whenever the code
- * is `NOT_FOUND`. Diagnostics for the denied case belong in the
+ * is `NOT_FOUND`. Diagnostics for the refused case belong in the
  * server's own logs, which the caller cannot read.
+ *
+ * # What this function CANNOT enforce — a server obligation
+ *
+ * Substituting the message closes only the message half of the problem.
+ * The code half stays with the caller: a server that runs its
+ * authorization check late can hand this function a `NOT_MOUNTABLE` or
+ * `BLUEPRINT_UNRESOLVABLE` for a locator the caller was never entitled
+ * to read, and the resulting `-32006` reveals that the locator exists —
+ * the same oracle, reached by a different route, with a mapper behaving
+ * perfectly.
+ *
+ * So the ordering is normative: a server using this projection MUST run
+ * the access check before any branch that can return a code other than
+ * `NOT_FOUND`, and MUST route a refusal through `NOT_FOUND`. Resolution
+ * work happens only after the check has passed.
  */
-import { MCP_ERROR_CODES, type ResourceReadError } from '../types/mcp.js';
+import {
+  MCP_ERROR_CODES,
+  type ResourceReadError,
+  type ResourceReadErrorCode,
+} from '../types/mcp.js';
 
 /**
  * The single message every `NOT_FOUND` read returns, whatever the
@@ -53,10 +72,16 @@ export const RESOURCE_NOT_FOUND_MESSAGE = 'Resource not found.';
  * is absent whenever `data.code` is `NOT_FOUND`.
  */
 export interface ResourceReadJsonRpcError {
-  readonly code: number;
+  /**
+   * Narrowed to the two numbers this projection can emit, so a consumer
+   * switching on it gets exhaustiveness rather than an open `number`.
+   */
+  readonly code:
+    | typeof MCP_ERROR_CODES.SESSION_NOT_FOUND
+    | typeof MCP_ERROR_CODES.MOUNT_UNAVAILABLE;
   readonly message: string;
   readonly data: {
-    readonly code: ResourceReadError['code'];
+    readonly code: ResourceReadErrorCode;
     readonly detail?: string;
   };
 }

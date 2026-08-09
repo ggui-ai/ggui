@@ -6,6 +6,58 @@
  * schema change; the most recent change anchors {@link PROTOCOL_VERSION}.
  *
  * --------------------------------------------------------------------
+ * Typed `resources/read` failures (2026-08-09, additive, pre-launch,
+ * ggui#430). A read of a render locator
+ * (`ui://ggui/render/{sessionId}/{blueprintKey}`) gains a closed failure
+ * union and a canonical JSON-RPC number, so the read has exactly two
+ * exits: a live mount, or a typed error. Before this, an unresolvable
+ * read returned a SUCCESS-shaped result carrying a loading shell that
+ * would never come alive — the same class of defect ruling B fixed for
+ * `ggui_render`, on the resource surface instead of the tool surface.
+ *
+ *   rr1. **New closed enum `ResourceReadErrorCode`** = NOT_FOUND |
+ *      BLUEPRINT_UNRESOLVABLE | NOT_SUPPORTED | NOT_MOUNTABLE, with
+ *      `resourceReadErrorSchema {code, message, detail?}`. Deliberately
+ *      NOT an extension of `renderErrorCodeSchema` (rb2): that enum
+ *      classifies a `ggui_render` tool call that ran and failed and
+ *      rides IN the tool result; this one classifies a resource read
+ *      and rides ON a JSON-RPC error. Two surfaces, two closed enums,
+ *      same UPPER_SNAKE house style.
+ *
+ *   rr2. **`-32006 MOUNT_UNAVAILABLE` claimed** — the first draw from
+ *      the `-32006` onwards range that rb4 reserved when it retired
+ *      `-32004`. The next free canonical slot is `-32007`. It covers
+ *      BLUEPRINT_UNRESOLVABLE / NOT_SUPPORTED / NOT_MOUNTABLE.
+ *      Deliberately NOT `INTERNAL_ERROR`: a component that is gone, a
+ *      server that keeps no durable record, and a render with no
+ *      delivery channel are all deterministic outcomes of a correctly
+ *      functioning server, and `-32603` would report a malfunction and
+ *      invite a retry that cannot succeed. The fine-grained class rides
+ *      on `error.data.code`.
+ *
+ *   rr3. **NOT_FOUND maps to `-32002`**, which MCP uses for a missing
+ *      resource and which this table already assigns to a missing
+ *      session — for a locator keyed by `sessionId` those are one
+ *      condition, not two.
+ *
+ *   rr4. **NOT_FOUND carries a CONSTANT body.** The mapper substitutes
+ *      a fixed message and drops `detail`, so a read refused by the
+ *      authorization check and a read of a locator that never existed
+ *      are byte-identical on the wire. Anything that varies between the
+ *      two makes the read an existence oracle for other callers'
+ *      renders. The mapper closes the message half; the ordering half
+ *      is a server obligation — the authorization check MUST precede
+ *      any branch that can return a non-NOT_FOUND code.
+ *
+ * Conformance-kit verdict: additive, minor-intent while `draft-`, so
+ * PROTOCOL_VERSION is unchanged — no WS envelope moved, and the change
+ * is confined to the MCP resource surface (same reasoning as rb's stamp
+ * adjudication). The kit cannot yet arbitrate this surface at all: it
+ * is WebSocket-only and self-declares the missing MCP-binding driver,
+ * so the `resources/read` fixture family lands with that driver before
+ * the package version is bumped for it.
+ *
+ * --------------------------------------------------------------------
  * Credential-broker surface retired (2026-08-08, BREAKING, pre-launch,
  * ggui#436). The `system` frame's auth vocabulary and the
  * `ggui_request_credential` tool leave the protocol entirely.
