@@ -36,19 +36,42 @@
  * frame to drive — so they do NOT belong in this behavioral fixture
  * catalog.
  *
- * ## What is NOT here — the MCP resource surface
+ * ## An MCP-binding driver EXISTS — `../resource-read-conformance`
  *
- * A `resources/read` of a render locator is a request/response on the
- * MCP binding: no WebSocket envelope, no subscribe, no frames to
- * observe. It is graded by `../resource-read-conformance`, which ships
- * its own case shape, its own runner and its own scenario-driver seam.
+ * This catalog used to declare the MCP-binding driver as missing. It is
+ * no longer missing. `../resource-read-conformance` ships a driver
+ * bound to the MCP **`resources/read`** method, with its own case
+ * shape, its own runner (`runResourceReadConformance`) and its own
+ * scenario-driver seam. It grades the typed-failure contract for a
+ * render locator (`ui://ggui/render/{sessionId}[/{blueprintKey}]`): the
+ * four failure classes on their canonical numbers, the constant
+ * `NOT_FOUND` body, the deny-equals-miss byte-identity obligation, and
+ * the invariant that any successful result declares a delivery channel.
  *
- * It is NOT registered in the map below, and that is deliberate. Every
- * entry here is driven by `runConformance()` over a live channel, so an
- * MCP case landing in this catalog would be a permanent skip on every
- * WebSocket run — a skip that can never become a pass on that
- * transport, which is exactly the false gate this kit's exact skip-set
- * pinning exists to prevent.
+ * Its cases are NOT registered in the map below, and that is
+ * deliberate. Every entry here is driven by `runConformance()` over a
+ * live channel, so an MCP case landing in this catalog would be a
+ * permanent skip on every WebSocket run — a skip that can never become
+ * a pass on that transport, which is exactly the false gate this kit's
+ * exact skip-set pinning exists to prevent.
+ *
+ * ### Precisely what that driver does NOT close
+ *
+ * It binds ONE MCP method. `tools/call` has no driver, so both of these
+ * remain open and neither is addressed by it:
+ *
+ *   - **`stream-delivery-roundtrip`** — see the next section. Needs
+ *     `ggui_emit`.
+ *   - **The `ggui_consume` retrieval half of the action loop** —
+ *     `action-ack-sequence` proves the append half; draining the buffer
+ *     is `ggui_consume`.
+ *
+ * `resources/read` and `tools/call` are different methods with
+ * different seams: the former is a stateless read of a URI the kit can
+ * construct, the latter is an invocation whose arguments and effects
+ * are the agent's vocabulary. A driver for one is not a driver for the
+ * other, and saying "the kit now has an MCP driver" without that
+ * qualifier would read as closing gaps it does not touch.
  *
  * ## What is NOT here — declared Path-A sequencing gap
  *
@@ -66,15 +89,10 @@
  * transport, while emission is server-side (the agent's `ggui_emit`
  * MCP tool) — routing a host directive through the wire-frame slot
  * would conflate the two vocabularies. Honest grading needs either a
- * post-subscribe host-directive phase (a runner-mechanism change) or
- * an MCP-binding driver.
- *
- * The resource-read driver does NOT close this. It binds
- * `resources/read` and nothing else; `ggui_emit` and `ggui_consume` are
- * `tools/call`, a different MCP method with a different seam. This gap
- * and the `ggui_consume` retrieval half of the action loop both still
- * await a tool-call driver. Declared here rather than papered over with
- * a fixture that fails conformant servers on sequencing alone.
+ * post-subscribe host-directive phase (a runner-mechanism change) or a
+ * driver bound to `tools/call`. The `resources/read` driver above is
+ * NOT that driver. Declared here rather than papered over with a
+ * fixture that fails conformant servers on sequencing alone.
  */
 
 export { bootstrapProtocolFixtures } from './bootstrap-protocol/index.js';

@@ -100,6 +100,12 @@ function projectRenderMeta(html: string): ResourceReadRenderMeta {
   };
 }
 
+/** Every locator the kit asked this server to serve, across a whole run. */
+const urisRead: string[] = [];
+
+/** The resource templates each prepared server advertised, by case name. */
+const advertisedTemplates = new Map<string, readonly string[]>();
+
 /**
  * Bring this server up in the shape the catalog declares, apply the
  * seeds, and hand back a reader over a real MCP client/server pair.
@@ -233,9 +239,16 @@ async function prepare(
   const client = new Client({ name: "resource-read-conformance-client", version: "0.0.1" });
   await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
 
+  const advertised = await client.listResourceTemplates();
+  advertisedTemplates.set(
+    scenario.caseName,
+    advertised.resourceTemplates.map((template) => template.uriTemplate),
+  );
+
   return {
     registeredKeys,
     read: async (uri: string): Promise<ResourceReadOutcome> => {
+      urisRead.push(uri);
       const before = frames.length;
       try {
         const result = await client.readResource({ uri });
@@ -264,6 +277,7 @@ async function prepare(
 
 describe("first-party resources/read passes @ggui-ai/protocol-conformance", () => {
   it("passes every case in the resource-read catalog, with nothing skipped", async () => {
+    urisRead.length = 0;
     const result = await runResourceReadConformance(prepare);
     const diagnostic = JSON.stringify(
       { failed: result.failed, skipped: result.skipped },
@@ -282,11 +296,50 @@ describe("first-party resources/read passes @ggui-ai/protocol-conformance", () =
     expect([...result.passed].sort(), diagnostic).toEqual(
       resourceReadCases.map((c) => c.name).sort(),
     );
+
+    // BOTH registered URI shapes were actually driven. The registration
+    // under test registers two templates — the single-segment legacy
+    // shape and the two-segment resume shape — and they take different
+    // paths through the handler (only the two-segment one can reach the
+    // blueprint-registry fallback). A catalog that happened to exercise
+    // just one would grade half the surface while reading as if it
+    // graded all of it.
+    const prefix = "ui://ggui/render/";
+    const locators = urisRead
+      .filter((uri) => uri.startsWith(prefix))
+      .map((uri) => uri.slice(prefix.length).split("/"))
+      // Drops the malformed-URI probes, which name no locator at all.
+      .filter((segments) => segments.every((segment) => segment.length > 0));
+    expect(locators.length).toBeGreaterThan(0);
+    expect(locators.some((segments) => segments.length === 1)).toBe(true);
+    expect(locators.some((segments) => segments.length === 2)).toBe(true);
   }, 30_000);
 
   it("grades a non-empty catalog", () => {
     // A run of zero cases passes every assertion above while proving
     // nothing.
     expect(resourceReadCases.length).toBeGreaterThan(0);
+  });
+
+  it("drives the shipping registration, which really does register both templates", async () => {
+    // The driver above calls `registerGguiRenderResourceTemplate`
+    // directly — the same registration Task 3 rewrote — rather than
+    // standing up a synthetic reader that mimics its answers. Asserted
+    // through the server's own advertised surface, so the claim rests
+    // on what the registration produced rather than on reading the
+    // import line.
+    const prepared = await prepare({
+      caseName: "template-registration-probe",
+      server: { durableSubstrate: "all", liveChannel: true },
+      caller: "owner",
+      seeds: [],
+    });
+    try {
+      const advertised = advertisedTemplates.get("template-registration-probe") ?? [];
+      expect(advertised).toContain("ui://ggui/render/{sessionId}");
+      expect(advertised).toContain("ui://ggui/render/{sessionId}/{blueprintKey}");
+    } finally {
+      await prepared.dispose?.();
+    }
   });
 });
