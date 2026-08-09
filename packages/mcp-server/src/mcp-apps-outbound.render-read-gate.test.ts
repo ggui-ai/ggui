@@ -217,12 +217,15 @@ describe("render-resource read gate — deny is byte-identical to miss", () => {
         uri: `${GGUI_RENDER_RESOURCE_URI}/${missingSessionId}/${key}`,
       });
 
-      // Neither side may fall back to the dead loading shell — the
-      // blueprint is registered under `defaultAppIdFallback` and keyed
-      // only by the URI's blueprintKey, so BOTH probes should resolve
-      // the registry-only rehydrate shell.
+      // Neither side may fall back to a failure — the blueprint is
+      // registered under `defaultAppIdFallback` and keyed only by the
+      // URI's blueprintKey, so BOTH probes should resolve the
+      // registry-only rehydrate shell. Asserted as a positive: the
+      // shell has to carry the static component URL the registry path
+      // mints. ("Not the loading shell" would be vacuous now — that
+      // shell no longer exists to be returned.)
       const missingText = (missingRead.contents[0] as { text: string }).text;
-      expect(missingText).not.toContain('data-ggui-shell="loading"');
+      expect(missingText).toContain('"codeUrl"');
 
       expect(normalize(deniedRead.contents, deniedSessionId)).toEqual(
         normalize(missingRead.contents, missingSessionId),

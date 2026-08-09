@@ -389,8 +389,32 @@ const SESSION_NOT_FOUND = -32002;
 /** The canonical code the other three failure classes ride on. */
 const MOUNT_UNAVAILABLE = -32006;
 
-function isLoadingShell(html: string): boolean {
-  return html.includes('data-ggui-shell="loading"');
+/**
+ * Does this shell carry enough to paint something? One of the three
+ * delivery channels the runtime knows.
+ *
+ * Replaces the old "is not the loading shell" check, which became
+ * VACUOUS once that shell was deleted: no production path can emit its
+ * marker any more, so the assertion could no longer fail. A positive
+ * check for a channel is what those lines were reaching for, and can
+ * still go red.
+ */
+function declaresDeliveryChannel(meta: McpAppAiGguiRenderMeta): boolean {
+  if (typeof meta.codeUrl === "string" && meta.codeUrl.length > 0) return true;
+  if (typeof meta.kind === "string" && meta.kind.length > 0) return true;
+  return (
+    typeof meta.wsUrl === "string" &&
+    meta.wsUrl.length > 0 &&
+    typeof meta.wsToken === "string" &&
+    meta.wsToken.length > 0
+  );
+}
+
+/** Assert a read produced a mountable shell, and return its bootstrap. */
+function expectMountable(html: string): McpAppAiGguiRenderMeta {
+  const meta = parseMeta(html);
+  expect(declaresDeliveryChannel(meta)).toBe(true);
+  return meta;
 }
 
 /** Strip the caller-supplied sessionId before byte-comparing two reads. */
@@ -411,7 +435,7 @@ describe("resource read — re-mint from the durable record", () => {
         uri: `${RESOURCE_URI}/${sessionId}/${CONTRACT_KEY}`,
       });
       const html = shellText(read.contents);
-      expect(isLoadingShell(html)).toBe(false);
+      expectMountable(html);
 
       const meta = parseMeta(html);
       // Same locator identity.
@@ -447,7 +471,7 @@ describe("resource read — re-mint from the durable record", () => {
       const second = await f.client.readResource({
         uri: `${RESOURCE_URI}/${sessionId}/${CONTRACT_KEY}`,
       });
-      expect(isLoadingShell(shellText(second.contents))).toBe(false);
+      expectMountable(shellText(second.contents));
       expect(parseMeta(shellText(second.contents)).wsToken).toBe(
         `ws-token-for-${sessionId}`,
       );
@@ -555,7 +579,7 @@ describe("resource read — re-mint from the durable record", () => {
         uri: `${RESOURCE_URI}/${sessionId}/${CONTRACT_KEY}`,
       });
       const html = shellText(read.contents);
-      expect(isLoadingShell(html)).toBe(false);
+      expectMountable(html);
       const meta = parseMeta(html);
       expect(meta.wsToken).toBe(`ws-token-for-${sessionId}`);
       expect(parseProps(meta)).toEqual(RECORD_PROPS);
@@ -583,7 +607,7 @@ describe("resource read — re-mint from the durable record", () => {
       });
       const html = shellText(read.contents);
       // Still a live mount — absent props are not a resolution failure.
-      expect(isLoadingShell(html)).toBe(false);
+      expectMountable(html);
       const meta = parseMeta(html);
       expect(meta.wsToken).toBe(`ws-token-for-${sessionId}`);
       // No props on the slice, and none on the committed row.
@@ -610,7 +634,7 @@ describe("resource read — re-mint from the durable record", () => {
 
       const read = await f.client.readResource({ uri: `${RESOURCE_URI}/${sessionId}` });
       const html = shellText(read.contents);
-      expect(isLoadingShell(html)).toBe(false);
+      expectMountable(html);
       expect(parseProps(parseMeta(html))).toEqual(RECORD_PROPS);
     } finally {
       await f.close();
@@ -628,7 +652,7 @@ describe("resource read — re-mint from the durable record", () => {
         uri: `${RESOURCE_URI}/${sessionId}/${CONTRACT_KEY}`,
       });
       const html = shellText(read.contents);
-      expect(isLoadingShell(html)).toBe(false);
+      expectMountable(html);
       expect(parseMeta(html).appId).toBe(BUILDER_APP_ID);
       expect(parseProps(parseMeta(html))).toEqual(RECORD_PROPS);
     } finally {
@@ -850,10 +874,12 @@ describe("resource read — the re-mint path is gated before it resolves anythin
         uri: `${RESOURCE_URI}/${neverExistedSessionId}/${registryKey}`,
       });
 
-      // Both really did resolve the registry shell — otherwise this is
-      // the loading-shell comparison again under a longer name.
-      expect(isLoadingShell(shellText(refused.contents))).toBe(false);
-      expect(isLoadingShell(shellText(missing.contents))).toBe(false);
+      // Both really did resolve the registry shell, rather than both
+      // failing — a read that resolves nothing now throws, so a
+      // comparison of two successful responses has to be of two real
+      // ones, each carrying a delivery channel.
+      expectMountable(shellText(refused.contents));
+      expectMountable(shellText(missing.contents));
       // And nothing from the record's owner leaked into the refused one.
       expect(shellText(refused.contents)).not.toContain(RECORD_APP_ID);
 
@@ -1014,7 +1040,7 @@ describe("resource read — blueprint-registry lookup is post-gate only", () => 
       const read = await f.client.readResource({
         uri: `${RESOURCE_URI}/${sessionId}/${CONTRACT_KEY}`,
       });
-      expect(isLoadingShell(shellText(read.contents))).toBe(false);
+      expectMountable(shellText(read.contents));
       expect(indexRead).not.toHaveBeenCalled();
     } finally {
       await f.close();
@@ -1031,7 +1057,7 @@ describe("resource read — blueprint-registry lookup is post-gate only", () => 
       const read = await f.client.readResource({
         uri: `${RESOURCE_URI}/${sessionId}/${CONTRACT_KEY}`,
       });
-      expect(isLoadingShell(shellText(read.contents))).toBe(false);
+      expectMountable(shellText(read.contents));
       expect(indexRead).not.toHaveBeenCalled();
     } finally {
       await f.close();
