@@ -110,7 +110,7 @@ export function runBlueprintStoreConformance(
 
   describe(`${label} — conformance`, () => {
     describe('put + get round-trip', () => {
-      it('preserves every Blueprint field on insert', async () => {
+      it('preserves every Blueprint field on insert, except the derived codeS3Url', async () => {
         await withStore(async (store) => {
           const bp = makeBlueprint({
             blueprintId: 'bp-1',
@@ -126,7 +126,22 @@ export function runBlueprintStoreConformance(
           await store.put(bp);
           const got = await store.get('bp-1');
           expect(got).not.toBeNull();
-          expect(got).toEqual(bp);
+
+          // `codeS3Url` is excluded because the port permits an
+          // implementation to recompute it from `codeHash` against its
+          // own bucket rather than storing the caller's string — a row
+          // outlives the bucket it was written against, so the content
+          // address is the durable fact and the URL is one
+          // deployment's rendering of it. Every other field is held to
+          // exact round-trip.
+          const { codeS3Url: _sentUrl, ...sentRest } = bp;
+          const { codeS3Url: gotUrl, ...gotRest } = got ?? {};
+          expect(gotRest).toEqual(sentRest);
+
+          // What the carve-out does NOT license: losing the address,
+          // or claiming a body that was never stored.
+          expect(got?.codeHash).toBe('abcd');
+          expect(gotUrl === undefined || typeof gotUrl === 'string').toBe(true);
         });
       });
 

@@ -133,9 +133,21 @@ export interface BlueprintStore {
    * `put` under the hood).
    *
    * Implementations MUST persist every field of {@link Blueprint}
-   * losslessly. A database-backed adapter normalizes optional
-   * `undefined` fields to "absent column" at the row projection site
-   * so reads round-trip.
+   * losslessly, with ONE carve-out: {@link Blueprint.codeS3Url}. A
+   * database-backed adapter normalizes optional `undefined` fields to
+   * "absent column" at the row projection site so reads round-trip.
+   *
+   * `codeS3Url` is a derived, deployment-scoped projection, and an
+   * implementation MAY recompute it on read from
+   * {@link Blueprint.codeHash} rather than storing what the caller
+   * passed. A blueprint row can outlive the bucket it was written
+   * against — renamed, moved between accounts — and a row that
+   * hard-coded a location would go quietly wrong at exactly the moment
+   * it was needed. What MUST survive is `codeHash`: the content
+   * address is the durable fact, the URL is one deployment's rendering
+   * of it. An implementation that stores the URL verbatim is equally
+   * conformant; callers MUST NOT depend on either behavior beyond
+   * "present iff a body is stored".
    *
    * `blueprint.contractHash` MUST already be the 16-char
    * `blueprintKey(blueprint.contract)` value — the store keys the

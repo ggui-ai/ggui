@@ -50,7 +50,7 @@ import type { EmbeddingProvider } from '../embedding-provider.js';
  *   - {@link InMemoryBlueprintStore} carries a secondary
  *     `Map<appId, Set<blueprintId>>` index — see this package's
  *     `./blueprint-store.ts` mixin.
- *   - The cloud `DynamoBlueprintStore` uses a `blueprintsByApp` GSI.
+ *   - A hosted adapter uses an app-partitioned secondary index.
  */
 export interface AppListableBlueprintStore extends BlueprintStore {
   /**
