@@ -407,6 +407,19 @@ function postBootFailure(reason: RendererBootFailureReason, message: string): vo
 // =============================================================================
 
 export interface BootSequenceOptions {
+  /**
+   * Document the boot path mounts into — the render root, and the
+   * toast announcer's live regions.
+   *
+   * MUST be the global `document` in any real deployment. The toast +
+   * cue surface reads the global directly, and production passes the
+   * global here (see `runBootProduction`), so the two are one object.
+   * A caller handing a DIFFERENT document pre-registers the live
+   * regions somewhere no announcement will ever reach; the surface then
+   * falls back to creating them in the global document at the moment of
+   * the first message, which is precisely the same-tick creation that
+   * loses that first announcement.
+   */
   readonly doc: Document;
   /**
    * Spec-canonical {@link App} instance + its {@link Transport}.
@@ -2389,6 +2402,24 @@ let lastRelayCueToastAt = 0;
  */
 let lastRelayCueAnnouncedAt = 0;
 
+/**
+ * Intent named by the standing spoken cue, or `null` when none is.
+ *
+ * The throttle is keyed on this as well as the clock. A quiet period
+ * that ignores WHICH action was attempted does not merely withhold the
+ * second cue — it leaves the region still naming the FIRST one, so a
+ * screen reader asked to re-read it reports the wrong action as the
+ * thing that just failed. Silence is a defensible answer to a repeat;
+ * it is never a defensible answer to a different gesture.
+ */
+let lastRelayCueAnnouncedIntent: string | null = null;
+
+/**
+ * Expiry timer for the standing spoken cue, held so a repeat can cancel
+ * its predecessor instead of racing it.
+ */
+let relayCueAnnounceTimer: number | undefined;
+
 /** Class carrying the pulse animation; also the `@keyframes` name. */
 const RELAY_CUE_CLASS = 'ggui-relay-cue-pulse';
 /** Stable id for the injected `<style>` — idempotent per document. */
@@ -2397,15 +2428,34 @@ const RELAY_CUE_STYLE_ID = 'ggui-relay-cue-style';
 const RELAY_CUE_DURATION_MS = 400;
 /** At most one fallback cue toast, and one spoken cue, per window (ms). */
 const RELAY_CUE_THROTTLE_MS = 5_000;
+/**
+ * How long a spoken cue stands before it is retracted (ms).
+ *
+ * Matches the toast's own auto-dismiss cadence, and deliberately
+ * outlasts the 400ms pulse by a wide margin: content pulled out of a
+ * live region too soon after it lands can be dropped before the screen
+ * reader gets to it, so retracting at pulse-end would trade a stale
+ * announcement for a missing one.
+ */
+const RELAY_CUE_ANNOUNCE_TTL_MS = 2_500;
 
 /**
  * Give the dead zone a fresh quiet period. Called on both latch edges
  * and from the test reset — every throttle belongs to the notice that
  * is standing NOW, so a new one never inherits an old one's silence.
+ *
+ * The pending expiry goes too. Left armed, it outlives the cue it was
+ * scheduled for and retracts the NEXT one early, whenever that next cue
+ * happens to name the same action.
  */
 function resetRelayCueThrottles(): void {
   lastRelayCueToastAt = 0;
   lastRelayCueAnnouncedAt = 0;
+  lastRelayCueAnnouncedIntent = null;
+  if (relayCueAnnounceTimer !== undefined) {
+    clearTimeout(relayCueAnnounceTimer);
+    relayCueAnnounceTimer = undefined;
+  }
 }
 
 /** @internal — exported for unit tests to reset module state. */
@@ -2476,17 +2526,52 @@ function resolveRelayCueTarget(): Element | null {
  * way. Announcing on the same condition as the visual keeps the two
  * cues telling the same story.
  *
- * Throttled on its own clock, unlike the pulse. A flash repeating on
- * every gesture costs a sighted user nothing to ignore; the same
- * sentence read aloud on every gesture buries whatever else the screen
- * reader was saying, and the message never changes. The two cues share
- * a meaning, not a rate.
+ * Throttled on its own clock, unlike the pulse — but only against
+ * IDENTICAL repeats. A flash repeating on every gesture costs a sighted
+ * user nothing to ignore, while the same sentence read aloud each time
+ * buries whatever else the screen reader was saying and carries no new
+ * information. A DIFFERENT action is new information: withholding it
+ * would leave the region naming the previous gesture, which reads as a
+ * confident answer about the wrong thing. The two cues share a meaning,
+ * not a rate.
+ *
+ * The cue also expires. A live region is a description of what is
+ * happening now, and a 400ms pulse that leaves a sentence standing for
+ * the rest of the session is the same stale-announcement defect the
+ * toast half avoids by clearing on hide.
  */
 function announceRelayCue(intent: string): void {
   const now = Date.now();
-  if (now - lastRelayCueAnnouncedAt < RELAY_CUE_THROTTLE_MS) return;
+  if (
+    intent === lastRelayCueAnnouncedIntent &&
+    now - lastRelayCueAnnouncedAt < RELAY_CUE_THROTTLE_MS
+  ) {
+    return;
+  }
   lastRelayCueAnnouncedAt = now;
-  announceToast(`⚠ ${intent} — not delivered`, 'error');
+  lastRelayCueAnnouncedIntent = intent;
+  const text = `⚠ ${intent} — not delivered`;
+  announceToast(text, 'error');
+  if (relayCueAnnounceTimer !== undefined) clearTimeout(relayCueAnnounceTimer);
+  relayCueAnnounceTimer = window.setTimeout(() => {
+    relayCueAnnounceTimer = undefined;
+    retractRelayCueAnnouncement(text);
+  }, RELAY_CUE_ANNOUNCE_TTL_MS);
+}
+
+/**
+ * Take a spoken cue back down once it has been heard.
+ *
+ * Retracts ONLY the sentence it was scheduled for. Anything else in the
+ * region belongs to a toast that spoke in the meantime and is still
+ * describing something on screen — clearing that would silence a live
+ * message to tidy up a dead one.
+ */
+function retractRelayCueAnnouncement(text: string): void {
+  if (typeof document === 'undefined') return;
+  const regions = ensureToastAnnouncer(document);
+  if (regions === null || regions.assertive.textContent !== text) return;
+  regions.assertive.textContent = '';
 }
 
 /**

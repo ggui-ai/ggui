@@ -104,9 +104,9 @@ function region(politeness: 'polite' | 'assertive'): HTMLElement | null {
   );
 }
 
-function fireGesture(): void {
+function fireGesture(actionName = 'archive'): void {
   routeDispatch({
-    actionName: 'archive',
+    actionName,
     data: {},
     meta: { sessionId: 'sess_1', appId: 'app_1' },
     dispatchToolName: 'ggui_runtime_submit_action',
@@ -417,7 +417,7 @@ describe('relay dead-zone cue — the pulse speaks (ggui#442 + ggui#447)', () =>
     );
   });
 
-  it('throttles the spoken cue while the pulse stays per-gesture', async () => {
+  it('throttles an IDENTICAL repeat while the pulse stays per-gesture', async () => {
     await latchAndDismiss();
     const btn = mountSessionRoot();
     btn.focus();
@@ -425,13 +425,15 @@ describe('relay dead-zone cue — the pulse speaks (ggui#442 + ggui#447)', () =>
     vi.useFakeTimers();
     fireGesture();
     const spoken = region('assertive')?.textContent ?? '';
-    expect(spoken).toMatch(/not delivered/i);
+    expect(spoken).toMatch(/archive.*not delivered/i);
 
-    // Let the first pulse finish so the next gesture is a real second
-    // cue and not the in-flight-pulse short circuit.
-    vi.advanceTimersByTime(1_000);
+    // Past the pulse AND past the cue's own expiry, so the next gesture
+    // is a real second cue and the region is empty because PRODUCTION
+    // retracted it — a spec that hand-clears here is testing its own
+    // cleanup, not the runtime's.
+    vi.advanceTimersByTime(2_500);
     expect(btn.classList.contains(CUE_CLASS)).toBe(false);
-    if (region('assertive') !== null) region('assertive')!.textContent = '';
+    expect(region('assertive')?.textContent).toBe('');
 
     fireGesture();
     // Pulsed again — a flash costs a sighted user nothing to ignore…
@@ -445,6 +447,118 @@ describe('relay dead-zone cue — the pulse speaks (ggui#442 + ggui#447)', () =>
     vi.advanceTimersByTime(5_000);
     fireGesture();
     expect(region('assertive')?.textContent).toBe(spoken);
+  });
+
+  it('never lets the quiet period leave the WRONG action standing', async () => {
+    await latchAndDismiss();
+    const btn = mountSessionRoot();
+    btn.focus();
+
+    vi.useFakeTimers();
+    fireGesture('archive');
+    expect(region('assertive')?.textContent).toMatch(/archive/i);
+
+    // A second, DIFFERENT gesture inside the quiet period. Let the
+    // first pulse finish so this is a real cue and not the in-flight
+    // short circuit.
+    vi.advanceTimersByTime(1_000);
+    fireGesture('delete-permanently');
+
+    // Throttling on the clock alone would suppress this one and leave
+    // the region still naming `archive` — a confident, spoken answer
+    // about an action the user did not just attempt. That is worse than
+    // silence, so a changed intent always speaks.
+    expect(btn.classList.contains(CUE_CLASS)).toBe(true);
+    expect(region('assertive')?.textContent).toMatch(/delete-permanently/i);
+    expect(region('assertive')?.textContent).not.toMatch(/archive/i);
+  });
+
+  it('retracts the spoken cue instead of leaving it standing forever', async () => {
+    await latchAndDismiss();
+    const btn = mountSessionRoot();
+    btn.focus();
+
+    vi.useFakeTimers();
+    fireGesture();
+    expect(region('assertive')?.textContent).toMatch(/not delivered/i);
+
+    // The pulse is 400ms. A live region describes what is happening
+    // NOW, so the sentence must not outlive the thing it describes for
+    // the rest of the session.
+    vi.advanceTimersByTime(2_500);
+    expect(region('assertive')?.textContent).toBe('');
+  });
+
+  it('a superseded cue’s expiry does not silence the one that replaced it', async () => {
+    await latchAndDismiss();
+    const btn = mountSessionRoot();
+    btn.focus();
+
+    vi.useFakeTimers();
+    fireGesture('archive');
+    // Second cue lands 1s in, so the FIRST cue's retraction is still
+    // pending and due before the second one's.
+    vi.advanceTimersByTime(1_000);
+    fireGesture('delete-permanently');
+    expect(region('assertive')?.textContent).toMatch(/delete-permanently/i);
+
+    // Past the first cue's original deadline. An uncancelled timer — or
+    // one that cleared the region unconditionally — would retract a
+    // message that is only 1.5s old and still describing a live pulse.
+    vi.advanceTimersByTime(1_600);
+    expect(region('assertive')?.textContent).toMatch(/delete-permanently/i);
+
+    // It goes on its own schedule, not its predecessor's.
+    vi.advanceTimersByTime(1_000);
+    expect(region('assertive')?.textContent).toBe('');
+  });
+
+  it('a returning intent is not cut short by its own earlier expiry', async () => {
+    // The case the text guard alone cannot catch: intent A, then B,
+    // then A again. The first A's retraction is still pending and its
+    // remembered sentence matches the one now standing, so it clears a
+    // message that is 600ms old unless the timer was cancelled when B
+    // superseded it.
+    await latchAndDismiss();
+    const btn = mountSessionRoot();
+    btn.focus();
+
+    vi.useFakeTimers();
+    fireGesture('archive');
+    vi.advanceTimersByTime(1_000);
+    fireGesture('delete-permanently');
+    vi.advanceTimersByTime(1_000);
+    fireGesture('archive');
+    expect(region('assertive')?.textContent).toMatch(/archive/i);
+
+    // Past the FIRST archive cue's deadline, well inside the third's.
+    vi.advanceTimersByTime(600);
+    expect(region('assertive')?.textContent).toMatch(/archive/i);
+  });
+
+  it('a cue’s expiry does not silence a toast that is still on screen', async () => {
+    await latchAndDismiss();
+    const btn = mountSessionRoot();
+    btn.focus();
+
+    vi.useFakeTimers();
+    fireGesture('archive');
+    expect(region('assertive')?.textContent).toMatch(/archive/i);
+
+    // Same dead zone, but nothing focused now, so this gesture takes
+    // the other cue shape: a real micro-toast, with its own 2.5s life.
+    btn.blur();
+    vi.advanceTimersByTime(1_000);
+    fireGesture('publish');
+    expect(toastEl()?.textContent).toMatch(/publish/i);
+    expect(region('assertive')?.textContent).toMatch(/publish/i);
+
+    // The earlier cue's retraction comes due here. It must not tidy up
+    // by clearing the region wholesale — the sentence in there now
+    // belongs to a toast the user can still see.
+    vi.advanceTimersByTime(1_600);
+    expect(toastEl()?.style.opacity).toBe('1');
+    expect(region('assertive')?.textContent).toMatch(/publish/i);
   });
 
   it('speaks through the toast primitive when there is nothing to pulse', async () => {
