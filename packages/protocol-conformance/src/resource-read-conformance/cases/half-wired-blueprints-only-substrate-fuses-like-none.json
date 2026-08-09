@@ -1,0 +1,29 @@
+{
+  "name": "half-wired-blueprints-only-substrate-fuses-like-none",
+  "description": "The other half-wired shape: blueprint and component storage bound, no record of what any render was. Without the record there is nothing to look a blueprint up BY, so this server restores nothing either and owes the same fused answer as one wired for nothing at all.",
+  "server": { "durableSubstrate": "blueprints-only", "liveChannel": true },
+  "caller": "other",
+  "seeds": [{ "kind": "committed-render", "session": "3f1a9c22-7b4e-4d18-9a05-6c2e8b1d4f70" }],
+  "reads": [
+    {
+      "as": "refused",
+      "locator": { "kind": "render", "session": "3f1a9c22-7b4e-4d18-9a05-6c2e8b1d4f70" },
+      "expect": {
+        "kind": "typed-error",
+        "jsonRpcCode": -32006,
+        "dataCode": "NOT_SUPPORTED"
+      }
+    },
+    {
+      "as": "miss",
+      "locator": { "kind": "render", "session": "8d5b0e41-2c96-4a7f-b3d8-1e07f9a2c645" },
+      "expect": {
+        "kind": "typed-error",
+        "jsonRpcCode": -32006,
+        "dataCode": "NOT_SUPPORTED"
+      }
+    }
+  ],
+  "indistinguishable": ["refused", "miss"],
+  "disclosesNothing": ["3f1a9c22-7b4e-4d18-9a05-6c2e8b1d4f70"]
+}

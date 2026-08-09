@@ -20,7 +20,7 @@
  *
  * ## Current coverage
  *
- * Six sub-modules with content (12 fixtures). Additional sub-modules
+ * Six WebSocket sub-modules with content (12 fixtures). Additional sub-modules
  * (`data-contract`, `tool-name-uniqueness`)
  * are reserved for additive fixture expansion and not yet
  * materialized — adding fixtures there is a kit minor version.
@@ -35,6 +35,20 @@
  * caller-supplied function — there is no render, transport, or wire
  * frame to drive — so they do NOT belong in this behavioral fixture
  * catalog.
+ *
+ * ## What is NOT here — the MCP resource surface
+ *
+ * A `resources/read` of a render locator is a request/response on the
+ * MCP binding: no WebSocket envelope, no subscribe, no frames to
+ * observe. It is graded by `../resource-read-conformance`, which ships
+ * its own case shape, its own runner and its own scenario-driver seam.
+ *
+ * It is NOT registered in the map below, and that is deliberate. Every
+ * entry here is driven by `runConformance()` over a live channel, so an
+ * MCP case landing in this catalog would be a permanent skip on every
+ * WebSocket run — a skip that can never become a pass on that
+ * transport, which is exactly the false gate this kit's exact skip-set
+ * pinning exists to prevent.
  *
  * ## What is NOT here — declared Path-A sequencing gap
  *
@@ -53,7 +67,13 @@
  * MCP tool) — routing a host directive through the wire-frame slot
  * would conflate the two vocabularies. Honest grading needs either a
  * post-subscribe host-directive phase (a runner-mechanism change) or
- * an MCP-binding driver. Declared here rather than papered over with
+ * an MCP-binding driver.
+ *
+ * The resource-read driver does NOT close this. It binds
+ * `resources/read` and nothing else; `ggui_emit` and `ggui_consume` are
+ * `tools/call`, a different MCP method with a different seam. This gap
+ * and the `ggui_consume` retrieval half of the action loop both still
+ * await a tool-call driver. Declared here rather than papered over with
  * a fixture that fails conformant servers on sequencing alone.
  */
 

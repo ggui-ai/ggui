@@ -1,0 +1,19 @@
+{
+  "name": "malformed-locator-stays-outside-the-typed-set",
+  "description": "A URI with an empty session segment names no render locator, so it is not a read of one and the four classifications do not apply to it. It must not come back as NOT_FOUND: that would make a malformed request indistinguishable from a real miss and would tell a host to stop retrying a request it should fix instead. Which number a malformed URI DOES receive belongs to the transport binding and is deliberately not pinned here.",
+  "server": { "durableSubstrate": "all", "liveChannel": true },
+  "caller": "owner",
+  "seeds": [],
+  "reads": [
+    {
+      "as": "empty-session",
+      "locator": { "kind": "raw", "uri": "ui://ggui/render/" },
+      "expect": { "kind": "outside-typed-set" }
+    },
+    {
+      "as": "empty-session-with-key",
+      "locator": { "kind": "raw", "uri": "ui://ggui/render//fedcba9876543210" },
+      "expect": { "kind": "outside-typed-set" }
+    }
+  ]
+}

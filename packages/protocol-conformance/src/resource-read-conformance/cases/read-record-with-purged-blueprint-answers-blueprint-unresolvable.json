@@ -1,0 +1,29 @@
+{
+  "name": "read-record-with-purged-blueprint-answers-blueprint-unresolvable",
+  "description": "A durable record survives its render and names a blueprint, but the blueprint is gone. The read answers BLUEPRINT_UNRESOLVABLE on -32006 — not an internal error. Nothing malfunctioned: the record kept its promise and the thing it pointed at was reaped. A host reading -32006 knows a retry of this locator cannot succeed, which -32603 would have told it the opposite of.",
+  "server": { "durableSubstrate": "all", "liveChannel": true },
+  "caller": "owner",
+  "seeds": [
+    {
+      "kind": "identity-record",
+      "session": "3f1a9c22-7b4e-4d18-9a05-6c2e8b1d4f70",
+      "key": "fedcba9876543210",
+      "blueprint": "named"
+    }
+  ],
+  "reads": [
+    {
+      "as": "evicted",
+      "locator": {
+        "kind": "render",
+        "session": "3f1a9c22-7b4e-4d18-9a05-6c2e8b1d4f70",
+        "key": { "kind": "literal", "value": "fedcba9876543210" }
+      },
+      "expect": {
+        "kind": "typed-error",
+        "jsonRpcCode": -32006,
+        "dataCode": "BLUEPRINT_UNRESOLVABLE"
+      }
+    }
+  ]
+}

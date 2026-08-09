@@ -1,0 +1,22 @@
+{
+  "name": "read-on-a-substrate-less-server-answers-not-supported",
+  "description": "A server that keeps no durable record cannot restore an evicted render for anybody, so a read it cannot serve answers NOT_SUPPORTED on -32006. This is a property of the deployment, not of the locator — which is why the catalog does not grade WHEN the answer is produced. A substrate-less server may answer immediately, before any per-locator work.",
+  "server": { "durableSubstrate": "none", "liveChannel": true },
+  "caller": "owner",
+  "seeds": [],
+  "reads": [
+    {
+      "as": "evicted",
+      "locator": {
+        "kind": "render",
+        "session": "8d5b0e41-2c96-4a7f-b3d8-1e07f9a2c645",
+        "key": { "kind": "literal", "value": "fedcba9876543210" }
+      },
+      "expect": {
+        "kind": "typed-error",
+        "jsonRpcCode": -32006,
+        "dataCode": "NOT_SUPPORTED"
+      }
+    }
+  ]
+}

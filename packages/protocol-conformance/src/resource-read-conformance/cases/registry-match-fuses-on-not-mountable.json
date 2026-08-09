@@ -1,0 +1,40 @@
+{
+  "name": "registry-match-fuses-on-not-mountable",
+  "description": "The one place a server keeping no durable record answers something other than NOT_SUPPORTED for a read it cannot mount: the blueprint registry MATCHED the caller's key, so what the read found is a component it has no channel to deliver. The answer is NOT_MOUNTABLE — and because the match depends on the key rather than on the row, it is still identical for a refused read and a miss.",
+  "server": { "durableSubstrate": "none", "blueprintRegistry": true, "liveChannel": true },
+  "caller": "other",
+  "seeds": [
+    { "kind": "registered-blueprint", "as": "fallback" },
+    { "kind": "committed-render", "session": "3f1a9c22-7b4e-4d18-9a05-6c2e8b1d4f70" }
+  ],
+  "reads": [
+    {
+      "as": "refused",
+      "locator": {
+        "kind": "render",
+        "session": "3f1a9c22-7b4e-4d18-9a05-6c2e8b1d4f70",
+        "key": { "kind": "registered", "seed": "fallback" }
+      },
+      "expect": {
+        "kind": "typed-error",
+        "jsonRpcCode": -32006,
+        "dataCode": "NOT_MOUNTABLE"
+      }
+    },
+    {
+      "as": "miss",
+      "locator": {
+        "kind": "render",
+        "session": "8d5b0e41-2c96-4a7f-b3d8-1e07f9a2c645",
+        "key": { "kind": "registered", "seed": "fallback" }
+      },
+      "expect": {
+        "kind": "typed-error",
+        "jsonRpcCode": -32006,
+        "dataCode": "NOT_MOUNTABLE"
+      }
+    }
+  ],
+  "indistinguishable": ["refused", "miss"],
+  "disclosesNothing": ["3f1a9c22-7b4e-4d18-9a05-6c2e8b1d4f70"]
+}
