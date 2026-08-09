@@ -52,6 +52,17 @@ import type { GguiSessionStore } from '../ggui-session-store.js';
 export interface GguiSessionStoreConformanceFactory {
   readonly create: () => Promise<GguiSessionStore>;
   readonly cleanup?: (store: GguiSessionStore) => Promise<void> | void;
+  /**
+   * Whether the impl implements `delete`. Default `'implemented'`.
+   *
+   * `'declared-out-of-scope'` is for deployments that route deletion
+   * through a different, typed surface and deliberately refuse it on
+   * this port. The exclusion is GRADED, not skipped: the suite then
+   * pins that `delete` refuses loudly (rejects) rather than silently
+   * succeeding while removing nothing — the silent no-op is the bug
+   * class; a loud refusal is a documented boundary.
+   */
+  readonly deletion?: 'implemented' | 'declared-out-of-scope';
 }
 
 /**
@@ -300,14 +311,27 @@ export function runGguiSessionStoreConformance(
     });
 
     describe('delete', () => {
-      it('is observable on subsequent get', async () => {
-        await withStore(async (store) => {
-          await store.create({ id: 'render-1', appId: 'app-1' });
-          await store.delete('render-1');
-          const got = await store.get('render-1');
-          expect(got).toBeNull();
+      if (factory.deletion === 'declared-out-of-scope') {
+        it('declares deletion out of scope and refuses loudly', async () => {
+          await withStore(async (store) => {
+            await store.create({ id: 'render-1', appId: 'app-1' });
+            // The graded contract for an out-of-scope delete: it must
+            // REJECT — a delete that resolves while removing nothing
+            // would let callers believe data is gone.
+            await expect(store.delete('render-1')).rejects.toThrow();
+            expect((await store.get('render-1'))?.id).toBe('render-1');
+          });
         });
-      });
+      } else {
+        it('is observable on subsequent get', async () => {
+          await withStore(async (store) => {
+            await store.create({ id: 'render-1', appId: 'app-1' });
+            await store.delete('render-1');
+            const got = await store.get('render-1');
+            expect(got).toBeNull();
+          });
+        });
+      }
     });
 
     describe('status (bug class: precedence)', () => {
