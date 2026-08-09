@@ -85,19 +85,25 @@ describe('createDeleteAppHandler — tenancy', () => {
     expect(list).toHaveLength(1);
   });
 
-  it('answers the uniform shape for ANOTHER user’s default app', async () => {
-    // The lock is checked after ownership, against the caller's own
-    // default — so probing a foreign default must not surface the
-    // distinguishable `default_app_delete_blocked` error. If it did,
-    // an attacker could learn both that the id exists and that it is
-    // someone's default.
+  it('answers the uniform shape when the caller’s OWN default names a foreign app', async () => {
+    // The one state where the lock's placement is observable, so the
+    // only one that pins it. `getDefault` reads the caller's own row
+    // and could never return another tenant's default, whatever the
+    // ordering — what ordering decides is which SHAPE comes back here.
+    // Ownership-first answers with the uniform `{deleted: true}` every
+    // foreign id gets; lock-first answers `default_app_delete_blocked`,
+    // and that difference is itself the signal.
+    //
+    // A stale default pointing at someone else's app is reachable in
+    // practice: the app was deleted and its id reused, or the column
+    // was written before ownership moved.
     const { apps, userDefaultApp, handler } = makeHandler();
     const theirs = await apps.create({
       ownerSub: 'user-2',
       displayName: 'Theirs',
     });
     await userDefaultApp.setDefault({
-      ownerSub: 'user-2',
+      ownerSub: 'user-1',
       appId: theirs.appId,
     });
 

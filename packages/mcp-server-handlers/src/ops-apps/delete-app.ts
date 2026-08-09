@@ -8,10 +8,17 @@
  *
  * Default-app lock: REJECTED when the target is the caller's default
  * app. `defaultAppId` is what the universal route resolves on every
- * request, so deleting the app it names strands that route. The
- * check runs AFTER the ownership read, against the caller's OWN
- * default — a cross-tenant probe returns the uniform success shape
- * before it is ever reached, so the lock leaks nothing.
+ * request, so deleting the app it names strands that route.
+ *
+ * The check runs AFTER the ownership read. `getDefault(ownerSub)`
+ * only ever reads the caller's own row, so ordering is not what keeps
+ * another tenant's default secret — nothing here could read it under
+ * any ordering. What ordering buys is SHAPE UNIFORMITY in the one
+ * state where the two branches disagree: the caller's own default
+ * naming an app the caller does not own. Ownership first answers that
+ * with the same `{deleted: true}` every other foreign id gets;
+ * lock-first would answer with a distinguishable error, and the
+ * difference is itself the signal.
  *
  * Scope: this handler removes the APP RECORD, through
  * {@link AppsSource.delete}, and claims nothing beyond it. Whether
@@ -80,9 +87,9 @@ export function createDeleteAppHandler(
         // "cross-tenant" prevents id-existence leak.
         return { deleted: true };
       }
-      // Ownership is established by this point, so reading the
-      // caller's own default and comparing ids reveals nothing about
-      // anyone else's account.
+      // AFTER the ownership read, so a caller whose own default names
+      // a foreign app gets the same uniform shape as any other foreign
+      // id rather than a distinguishable lock error.
       const currentDefault = await deps.userDefaultApp.getDefault(ownerSub);
       if (currentDefault === parsed.appId) {
         throw new DefaultAppDeleteBlockedError(parsed.appId);
