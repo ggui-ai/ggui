@@ -556,6 +556,68 @@ describe("resource read — a refused read is byte-identical to a miss", () => {
     }
   });
 
+  it("fuses on a substrate-less server whose registry fallback matches nothing", async () => {
+    // The registry fallback fires for a refused read and a miss alike,
+    // so wiring it must not open a gap between them: with no blueprint
+    // under the key, both fall past it to the same terminal failure.
+    const f = await boot({
+      liveChannel: true,
+      registryFallback: true,
+      getContext: () => intruderCtx,
+    });
+    try {
+      const refusedSessionId = (await f.renderStore.create({ appId: OWNER_APP_ID })).id;
+      const neverExisted = randomUUID();
+      const unregisteredKey = "0000000000000000";
+
+      const refused = await readFailure(
+        f.client,
+        `${RESOURCE_URI}/${refusedSessionId}/${unregisteredKey}`,
+      );
+      expect(refused.data).toEqual({ code: "NOT_SUPPORTED" });
+
+      await readFailure(f.client, `${RESOURCE_URI}/${neverExisted}/${unregisteredKey}`);
+      const errors = wireErrors(f.frames);
+      expect(errors).toHaveLength(2);
+      expect(errors[0]).toEqual(errors[1]);
+    } finally {
+      await f.close();
+    }
+  });
+
+  it("fuses on NOT_MOUNTABLE when the registry matches but cannot deliver", async () => {
+    // The one place a substrate-less server answers something other
+    // than NOT_SUPPORTED for a read that mounts nothing: a blueprint
+    // DID match the caller's key, so what the read found is a component
+    // it cannot deliver. Still row-independent, so still fused.
+    const f = await boot({
+      liveChannel: true,
+      registryFallback: true,
+      getContext: () => intruderCtx,
+    });
+    try {
+      const key = await registerFallbackBlueprint(f);
+      const refusedSessionId = (await f.renderStore.create({ appId: OWNER_APP_ID })).id;
+      const neverExisted = randomUUID();
+
+      const refused = await readFailure(
+        f.client,
+        `${RESOURCE_URI}/${refusedSessionId}/${key}`,
+      );
+      expect(refused.data).toEqual({
+        code: "NOT_MOUNTABLE",
+        detail: "the matched blueprint has no delivery channel",
+      });
+
+      await readFailure(f.client, `${RESOURCE_URI}/${neverExisted}/${key}`);
+      const errors = wireErrors(f.frames);
+      expect(errors).toHaveLength(2);
+      expect(errors[0]).toEqual(errors[1]);
+    } finally {
+      await f.close();
+    }
+  });
+
   for (const wiring of ["identityOnly", "blueprintsOnly"] as const) {
     it(`stays identical on a server whose substrate is only half wired (${wiring})`, async () => {
       // The half-wired shapes are where this is easiest to get wrong.
@@ -591,6 +653,31 @@ describe("resource read — a refused read is byte-identical to a miss", () => {
 describe("resource read — a row the caller owns but cannot mount", () => {
   it("reports a row whose generation has not committed a component as NOT_MOUNTABLE", async () => {
     const f = await boot({ durable: true, liveChannel: true });
+    try {
+      const sessionId = randomUUID();
+      await f.renderStore.create({ id: sessionId, appId: OWNER_APP_ID });
+
+      const failure = await readFailure(
+        f.client,
+        `${RESOURCE_URI}/${sessionId}/${CONTRACT_KEY}`,
+      );
+      expect(failure.code).toBe(MOUNT_UNAVAILABLE);
+      expect(failure.data).toEqual({
+        code: "NOT_MOUNTABLE",
+        detail: "the render has not committed a component yet",
+      });
+    } finally {
+      await f.close();
+    }
+  });
+
+  it("reports it as NOT_MOUNTABLE even on a server that keeps no durable record", async () => {
+    // The boundary of the deployment-global NOT_SUPPORTED rule. "This
+    // server cannot rehydrate" is true here, but it is not the useful
+    // truth for the row's own owner — the row is right there, it just
+    // has no component yet. Only the owner can reach this branch, so
+    // being specific costs no disclosure.
+    const f = await boot({ liveChannel: true });
     try {
       const sessionId = randomUUID();
       await f.renderStore.create({ id: sessionId, appId: OWNER_APP_ID });
@@ -666,6 +753,74 @@ describe("resource read — a row the caller owns but cannot mount", () => {
     } finally {
       await f.close();
     }
+  });
+});
+
+describe("resource read — NOT_SUPPORTED is exactly the substrate-less answer", () => {
+  it("never appears on a server that wires the durable substrate", async () => {
+    // The converse of the fusion rule. NOT_SUPPORTED describes a server
+    // that cannot rehydrate; a server that CAN must never reach for it,
+    // or the code stops meaning anything a host can route on.
+    const states: ReadonlyArray<{
+      readonly name: string;
+      readonly options: BootOptions;
+      readonly setup: (f: Fixture, sessionId: string) => Promise<string>;
+    }> = [
+      {
+        name: "locator that never existed",
+        options: { durable: true, liveChannel: true },
+        setup: async (_f, sessionId) => `${RESOURCE_URI}/${sessionId}/${CONTRACT_KEY}`,
+      },
+      {
+        name: "row the caller may not read",
+        options: { durable: true, liveChannel: true, getContext: () => intruderCtx },
+        setup: async (f, sessionId) => {
+          await seedLiveRow(f, sessionId);
+          return `${RESOURCE_URI}/${sessionId}/${CONTRACT_KEY}`;
+        },
+      },
+      {
+        name: "row whose generation has not committed",
+        options: { durable: true, liveChannel: true },
+        setup: async (f, sessionId) => {
+          await f.renderStore.create({ id: sessionId, appId: OWNER_APP_ID });
+          return `${RESOURCE_URI}/${sessionId}/${CONTRACT_KEY}`;
+        },
+      },
+      {
+        name: "record whose blueprint is gone",
+        options: { durable: true, liveChannel: true },
+        setup: async (f, sessionId) => {
+          await seedRecord(f.identityStore, sessionId);
+          return `${RESOURCE_URI}/${sessionId}/${CONTRACT_KEY}`;
+        },
+      },
+      {
+        name: "render with no delivery channel",
+        options: { durable: true },
+        setup: async (f, sessionId) => {
+          await seedLiveRow(f, sessionId);
+          return `${RESOURCE_URI}/${sessionId}/${CONTRACT_KEY}`;
+        },
+      },
+    ];
+
+    const seen: string[] = [];
+    for (const state of states) {
+      const f = await boot(state.options);
+      try {
+        const uri = await state.setup(f, randomUUID());
+        const failure = await readFailure(f.client, uri);
+        expect(failure.data).not.toEqual(
+          expect.objectContaining({ code: "NOT_SUPPORTED" }),
+        );
+        seen.push(state.name);
+      } finally {
+        await f.close();
+      }
+    }
+    // Non-vacuity: every state really did produce a failure to inspect.
+    expect(seen).toEqual(states.map((s) => s.name));
   });
 });
 

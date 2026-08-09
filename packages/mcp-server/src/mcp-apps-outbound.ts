@@ -1118,12 +1118,14 @@ export interface GguiRenderResourceTemplateOptions {
    * re-created from it and mounts live, with the props it last
    * carried.
    *
-   * Absent ⇒ neither store is consulted, and a read that resolves
-   * nothing fails with `NOT_SUPPORTED` rather than `NOT_FOUND` — the
-   * honest answer for a server on which an evicted locator can never
-   * come back. That answer is given for EVERY locator, including ones
-   * whose row exists but the caller may not read, so the choice of code
-   * says nothing about which locators exist.
+   * Absent ⇒ neither store is consulted, and `NOT_SUPPORTED` takes
+   * `NOT_FOUND`'s place wholesale — the honest answer for a server on
+   * which an evicted locator can never come back. Wholesale is the
+   * load-bearing word: it answers for a locator that never existed AND
+   * for one whose row exists but the caller may not read, so the choice
+   * of code says nothing about which locators exist. Reads that get far
+   * enough to fail `NOT_MOUNTABLE` still do — that verdict is about the
+   * caller's own render, not about this server's memory.
    *
    * Binding a store whose records do not outlive the render rows
    * themselves buys nothing — the record is read precisely when the
@@ -1318,6 +1320,12 @@ function pickComponentFromGguiSession(render: GguiSession | null | undefined): R
  *
  * # Failure modes
  *
+ * Which code a given read produces is fully predictable from two facts:
+ * whether this server binds a durable substrate (both
+ * {@link GguiRenderResourceTemplateOptions.renderIdentityStore} and
+ * {@link GguiRenderResourceTemplateOptions.durableBlueprints} — either
+ * one alone is as good as neither), and how far the read got.
+ *
  *   - `NOT_FOUND` (`-32002`) — nothing resolved the locator, **and** the
  *     response for a caller who may not read a locator that DOES
  *     resolve. Those two are byte-identical by construction: both route
@@ -1325,19 +1333,33 @@ function pickComponentFromGguiSession(render: GguiSession | null | undefined): R
  *     message and drops `detail`. A distinguishable refusal would turn
  *     this read into an oracle for the existence of other callers'
  *     renders, so the equality is a security property, not a courtesy.
+ *   - `NOT_SUPPORTED` (`-32006`) — the same two cases, on a server with
+ *     no durable substrate: an evicted locator can never be restored
+ *     here, so saying "not found" would understate it. It takes
+ *     `NOT_FOUND`'s place WHOLESALE on such a server rather than
+ *     answering for some locators and not others — a server that said
+ *     `NOT_FOUND` for a row it refused and `NOT_SUPPORTED` for one that
+ *     never existed would have rebuilt the same oracle out of the two
+ *     codes. Correspondingly, a server that DOES bind the substrate
+ *     never emits it.
  *   - `BLUEPRINT_UNRESOLVABLE` (`-32006`) — a record named the render
- *     but its component is gone. Reachable only after the access check.
- *   - `NOT_SUPPORTED` (`-32006`) — this server keeps no durable record,
- *     so an evicted locator can never be restored here. A property of
- *     the server: it answers for every locator, including ones whose
- *     row exists but the caller may not read, precisely so that it
- *     cannot be used to tell those cases apart.
- *   - `NOT_MOUNTABLE` (`-32006`) — something resolved, but this server
- *     has no channel to deliver it (neither
- *     {@link GguiRenderResourceTemplateOptions.codeStore} nor
- *     {@link GguiRenderResourceTemplateOptions.mintWsToken}), or the
- *     row's generation has not committed a component yet. Reachable
- *     only after the access check.
+ *     but its component is gone; `detail` names which link broke.
+ *     Reachable only after the access check.
+ *   - `NOT_MOUNTABLE` (`-32006`) — something resolved, but nothing
+ *     mountable can be produced from it: no delivery channel is wired
+ *     (neither {@link GguiRenderResourceTemplateOptions.codeStore} nor
+ *     {@link GguiRenderResourceTemplateOptions.mintWsToken}), the row's
+ *     generation has not committed a component yet, or a registry
+ *     blueprint matched but cannot be delivered. Unlike the pair above,
+ *     this one does NOT vary with the substrate: it is what the
+ *     caller's OWN row gets on every server, because "this server
+ *     cannot rehydrate" is not the useful truth for a row that is
+ *     sitting right there. Reachable only after the access check, or —
+ *     for the registry case — off the caller's own supplied key, so it
+ *     discloses nothing either way.
+ *
+ * A URI matching neither template never reaches any of this: the
+ * transport rejects it as invalid params, outside these four codes.
  *
  * Returns nothing; mutates the server in place.
  *
@@ -1992,7 +2014,7 @@ export function registerGguiRenderResourceTemplate(
     {
       title: "ggui render (self-contained, legacy URI)",
       description:
-        "Per-render self-contained shell — single-segment URI shape predating the resume contract. A read returns a mountable shell or a typed JSON-RPC error, never a shell that cannot paint. Carrying no blueprintKey, this shape cannot reach the blueprint-registry fallback; a server that keeps durable identity records still re-mints it, since that path is keyed by sessionId alone.",
+        "Per-render self-contained shell — single-segment URI shape predating the resume contract. A read returns a mountable shell or exactly one typed JSON-RPC error, never a shell that cannot paint. Carrying no blueprintKey, this shape cannot reach the blueprint-registry fallback; a server that keeps durable identity records still re-mints it, since that path is keyed by sessionId alone. Failures: NOT_FOUND (-32002) when nothing resolves the locator, and identically when the caller may not read one that does; NOT_SUPPORTED (-32006) in place of NOT_FOUND on a server that keeps no durable record, for both of those cases alike; BLUEPRINT_UNRESOLVABLE (-32006) when a record names a component that is gone; NOT_MOUNTABLE (-32006) when the caller's own render resolved but nothing mountable can be produced from it, on any server.",
       mimeType: GGUI_RENDER_RESOURCE_MIME,
     },
     handle
@@ -2004,7 +2026,7 @@ export function registerGguiRenderResourceTemplate(
     {
       title: "ggui render (self-contained, resume URI)",
       description:
-        "Per-render self-contained shell — two-segment URI shape carrying both sessionId AND blueprintKey. A read returns a mountable shell or a typed JSON-RPC error, never a shell that cannot paint. When the render has been evicted the handler tries, in order and only after the access check: a re-mint from the durable identity record, then a registry-only static render from the blueprintKey.",
+        "Per-render self-contained shell — two-segment URI shape carrying both sessionId AND blueprintKey. A read returns a mountable shell or exactly one typed JSON-RPC error, never a shell that cannot paint. When the render has been evicted the handler tries, in order and only after the access check: a re-mint from the durable identity record, then a registry-only static render from the blueprintKey. Failures: NOT_FOUND (-32002) when neither resolves the locator, and identically when the caller may not read one that does; NOT_SUPPORTED (-32006) in place of NOT_FOUND on a server that keeps no durable record, for both of those cases alike; BLUEPRINT_UNRESOLVABLE (-32006) when a record names a component that is gone; NOT_MOUNTABLE (-32006) when the caller's own render, or a blueprint matching the supplied key, resolved but nothing mountable can be produced from it, on any server.",
       mimeType: GGUI_RENDER_RESOURCE_MIME,
     },
     handle
