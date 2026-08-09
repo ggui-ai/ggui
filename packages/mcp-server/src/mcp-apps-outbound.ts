@@ -1800,8 +1800,9 @@ export function registerGguiRenderResourceTemplate(
     // parity with the `/r/<shortCode>` path. (See the gate after the
     // mint.) This matters for deployments that wire `mintWsToken` but no
     // `codeStore`/`codeBaseUrl` (e.g. the cloud pod): the agent-server
-    // inlines THIS resource, so without the fallback every cloud render
-    // hung on the dead "Generating UI…" shell.
+    // inlines THIS resource, so without live-mode every render on such a
+    // deployment would resolve fine and then be reported as having no
+    // way to be delivered.
 
     // Project the wrapper catalog AND the union-filtered
     // publicEnv onto the inline bootstrap so the resource-served
