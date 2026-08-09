@@ -72,7 +72,30 @@ export function Toast({
     return () => clearTimeout(timer);
   }, [visible, duration, onClose]);
 
-  if (!visible) return null;
+  if (!visible) {
+    // The live region PERSISTS while hidden — empty and visually
+    // collapsed, never unmounted and never `display:none` (both drop
+    // it from the accessibility tree, so the next message would land
+    // in a region created in the same tick and may not be announced;
+    // assistive tech reads politeness at region registration). Same
+    // element type at the same position, so React reuses the node and
+    // the visible flip is a content MUTATION — the announced kind.
+    return (
+      <div
+        role="alert"
+        aria-live="assertive"
+        className={className}
+        style={{
+          position: 'absolute',
+          width: '1px',
+          height: '1px',
+          overflow: 'hidden',
+          clipPath: 'inset(50%)',
+          whiteSpace: 'nowrap',
+        }}
+      />
+    );
+  }
 
   const vs = variantStyles[variant];
 
