@@ -1559,6 +1559,19 @@ export function registerGguiRenderResourceTemplate(
    * would have done anyway. It is logged rather than swallowed,
    * because a row that could not be extended is now living on borrowed
    * time and nothing else will say so.
+   *
+   * One asymmetry worth knowing about: this moves the row's OWN
+   * `expiresAt`, and the render payload stored inside it keeps the
+   * value stamped at the last commit. Two spellings of one fact,
+   * briefly disagreeing. Which one a reader sees is the store's
+   * business — a store that re-projects lifecycle columns onto the
+   * payload heals it on the very next read, one that stores the payload
+   * verbatim carries the stale copy until the next commit. The
+   * authoritative field is the row's, which is what the lifecycle
+   * gates and the reaper both read; the payload's copy is a projection
+   * for the wire. Extending both here would mean rewriting the payload
+   * on a read, which is a much larger write for a field nothing gates
+   * on.
    */
   async function extendExpiredRow(
     sessionId: string,
@@ -1806,11 +1819,19 @@ export function registerGguiRenderResourceTemplate(
   ): Promise<{ contents: ShellContent[] } | null> {
     const picked = pickComponentFromGguiSession(accessibleStored.render);
     if (!picked) return null;
-    // Put an expired-but-still-readable row back on a full lifetime
-    // before anything mints against it. Ordering is the whole point:
-    // the live-channel token minted below must not outlive the row it
-    // addresses, and after the `picked` check because a row with
-    // nothing to mount issues no token and needs no extension.
+    // Put an expired-but-still-readable row back on a full lifetime.
+    //
+    // The reason is that a caller entitled to this row has just proved
+    // they are using it, which is the same signal every other
+    // touch-and-extend path acts on. The live-channel token is the
+    // sharpest case rather than the only one — it turns "the row dies
+    // soon" into "the thing I just handed you outlives what it points
+    // at" — which is why this sits ahead of the mint below. But a
+    // deployment with no minter wired reaches here too, and its row
+    // deserves the same extension: the read was just as real.
+    //
+    // After the `picked` check, because a row with nothing to mount is
+    // not a row anyone is using yet.
     await extendExpiredRow(sessionId, accessibleStored);
     // Project the active render to the transport-agnostic bootstrap
     // view — same source of truth the render-mutation handler and
