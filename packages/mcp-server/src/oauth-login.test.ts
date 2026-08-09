@@ -39,6 +39,12 @@ import { USER_SESSION_COOKIE_NAME } from './user-session-auth.js';
 import { createConsoleLogger } from './logger.js';
 import { createHmac } from 'node:crypto';
 
+// Loopback round-trip suite: every request in this file spins a
+// throwaway `app.listen(0)` and awaits one localhost round-trip with no
+// timeout of its own. 60s rather than the package-wide 30s — see the
+// LOOPBACK ROUND-TRIP CARVE-OUT note in vitest.config.ts (#458).
+vi.setConfig({ testTimeout: 60_000 });
+
 const STATE_SECRET = 'unit-test-state-secret-32-bytes-min!!';
 const PUBLIC_BASE_URL = 'http://127.0.0.1:9999';
 

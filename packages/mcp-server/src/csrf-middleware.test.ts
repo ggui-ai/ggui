@@ -2,7 +2,7 @@
  * CSRF middleware tests — Slice B C5
  * (`docs/plans/2026-05-01-end-user-auth-slices.md`).
  */
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import express from 'express';
 import {
   CSRF_HEADER_NAME,
@@ -13,6 +13,12 @@ import {
 } from './csrf-middleware.js';
 import { USER_SESSION_COOKIE_NAME } from './user-session-auth.js';
 import { createConsoleLogger } from './logger.js';
+
+// Loopback round-trip suite: every request in this file spins a
+// throwaway `app.listen(0)` and awaits one localhost round-trip with no
+// timeout of its own. 60s rather than the package-wide 30s — see the
+// LOOPBACK ROUND-TRIP CARVE-OUT note in vitest.config.ts (#458).
+vi.setConfig({ testTimeout: 60_000 });
 
 const SECRET = 'test-csrf-secret-bytes-very-long-please';
 

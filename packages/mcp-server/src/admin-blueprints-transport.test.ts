@@ -18,7 +18,7 @@
  * proves the server-level mount + auth adapter binding pattern;
  * adding a second copy here would duplicate without adding signal).
  */
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { Server as HttpServer } from 'node:http';
 import express from 'express';
 import type { AuthAdapter, AuthResult } from '@ggui-ai/mcp-server-core';
@@ -28,6 +28,12 @@ import {
   mountAdminBlueprintsTransport,
   providerAcceptsManifests,
 } from './admin-blueprints-transport.js';
+
+// Loopback round-trip suite: every request in this file spins a
+// throwaway `app.listen(0)` and awaits one localhost round-trip with no
+// timeout of its own. 60s rather than the package-wide 30s — see the
+// LOOPBACK ROUND-TRIP CARVE-OUT note in vitest.config.ts (#458).
+vi.setConfig({ testTimeout: 60_000 });
 
 /** Silent no-op logger — the transport emits debug/info/warn per request. */
 const silentLogger = {
