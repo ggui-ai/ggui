@@ -1404,16 +1404,28 @@ export function registerGguiRenderResourceTemplate(
     // carried on the record: gadget descriptors and the theme overlay
     // are the operator's current configuration, and a re-minted render
     // should mount under it, not under a snapshot of what it was.
+    //
+    // Degrades rather than fails, matching the same lookup on the mount
+    // path below: these are presentation sidecars, so a metadata store
+    // having a bad moment costs the render its theme and its wrapper
+    // catalog — it must not cost the render its rehydrate. The body and
+    // the props, which a mount cannot do without, were already resolved
+    // above and are NOT part of this tolerance.
     let gadgetDescriptors: ComponentGguiSession["gadgetDescriptors"];
     let theme: ComponentGguiSession["theme"];
     if (opts.appMetadataStore) {
-      const appRecord = await opts.appMetadataStore.get(record.appId);
-      const resolved = filterDescriptorsToContract(
-        blueprint.contract,
-        resolveAppGadgets(appRecord?.gadgets)
-      );
-      if (resolved.length > 0) gadgetDescriptors = resolved;
-      theme = appRecord?.theme;
+      try {
+        const appRecord = await opts.appMetadataStore.get(record.appId);
+        const resolved = filterDescriptorsToContract(
+          blueprint.contract,
+          resolveAppGadgets(appRecord?.gadgets)
+        );
+        if (resolved.length > 0) gadgetDescriptors = resolved;
+        theme = appRecord?.theme;
+      } catch {
+        // Silent — the render mounts with the renderer's default theme
+        // and a STDLIB-only wrapper catalog.
+      }
     }
 
     const now = Date.now();
@@ -1425,8 +1437,17 @@ export function registerGguiRenderResourceTemplate(
       componentCode,
       contentType: "application/javascript+react",
       // The props the render last carried — the whole point of the
-      // record. Authoring-time defaults would silently discard the
-      // state the user was looking at.
+      // record — restored verbatim, including their ABSENCE. A record
+      // with no props describes a render that had none, so the re-mint
+      // gives it none: `props` is optional on the wire shape and the
+      // record round-trips the distinction.
+      //
+      // The one thing this must never do is substitute authoring-time
+      // defaults for missing props. Nothing repopulates a
+      // defaults-booted card afterwards — props travel the session
+      // channel, and no agent turn runs at rehydration — so it would
+      // show plausible-looking wrong state indefinitely, which is
+      // worse than showing none.
       ...(record.props !== undefined ? { props: record.props } : {}),
       ...(contract.propsSpec ? { propsSpec: contract.propsSpec } : {}),
       ...(contract.actionSpec ? { actionSpec: contract.actionSpec } : {}),
@@ -1454,6 +1475,14 @@ export function registerGguiRenderResourceTemplate(
       // above where the record says it last was, so a reader still
       // holding a cursor from before the eviction sees the new events
       // instead of filtering them out as already-seen.
+      //
+      // "Where the record says it last was" is the honest bound. The
+      // record samples the sequence at COMMIT, so events appended
+      // between the last commit and the eviction are not reflected and
+      // their numbers do get reissued. This narrows sequence reuse to
+      // that window rather than eliminating it — which is the best any
+      // record-based resume can do, and still strictly better than
+      // restarting the ledger at zero.
       seqFloor: record.seqAtLastCommit,
     });
   }

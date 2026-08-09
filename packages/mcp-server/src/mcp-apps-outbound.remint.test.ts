@@ -34,9 +34,21 @@ import {
   InMemoryGguiSessionStore,
   InMemoryRenderIdentityStore,
   InMemoryVectorStore,
+  MockEmbeddingProvider,
 } from "@ggui-ai/mcp-server-core/in-memory";
-import type { RenderIdentityRecord } from "@ggui-ai/mcp-server-core";
-import type { Blueprint, ComponentGguiSession, DataContract } from "@ggui-ai/protocol";
+import type {
+  App,
+  AppMetadataStore,
+  RenderIdentityRecord,
+} from "@ggui-ai/mcp-server-core";
+import { registerBlueprint } from "@ggui-ai/mcp-server-handlers";
+import type {
+  AppTheme,
+  Blueprint,
+  ComponentGguiSession,
+  DataContract,
+} from "@ggui-ai/protocol";
+import type { McpAppAiGguiRenderMeta } from "@ggui-ai/protocol/integrations/mcp-apps";
 import type { HandlerContext } from "@ggui-ai/mcp-server-handlers";
 import { registerGguiRenderResourceTemplate } from "./mcp-apps-outbound.js";
 
@@ -103,6 +115,7 @@ interface Fixture {
   readonly blueprintStore: InMemoryBlueprintStore;
   readonly durableCodeStore: InMemoryCodeStore;
   readonly index: InMemoryBlueprintIndex;
+  readonly vectorStore: InMemoryVectorStore;
   readonly warn: ReturnType<typeof vi.fn>;
   readonly close: () => Promise<void>;
 }
@@ -116,6 +129,8 @@ async function boot(
     readonly withoutDurableBlueprints?: boolean;
     /** Wire the registry-only fallback deps alongside the re-mint deps. */
     readonly withRegistryFallback?: boolean;
+    /** Per-app metadata source the re-mint reads its sidecars from. */
+    readonly appMetadataStore?: AppMetadataStore;
   } = {},
 ): Promise<Fixture> {
   const renderStore = new InMemoryGguiSessionStore();
@@ -123,6 +138,7 @@ async function boot(
   const blueprintStore = new InMemoryBlueprintStore();
   const durableCodeStore = new InMemoryCodeStore();
   const index = new InMemoryBlueprintIndex();
+  const vectorStore = new InMemoryVectorStore();
   const warn = vi.fn();
   const server = new McpServer({ name: "remint-test", version: "0.0.1" });
 
@@ -145,10 +161,18 @@ async function boot(
       : { durableBlueprints: { blueprintStore, codeStore: durableCodeStore } }),
     ...(options.withRegistryFallback
       ? {
-          vectorStore: new InMemoryVectorStore(),
+          vectorStore,
           index,
           defaultAppIdFallback: BUILDER_APP_ID,
+          // `buildShellFromBlueprint` needs both to synthesize the
+          // registry-only shell; without them the fallback degrades to
+          // the loading shell and cannot be told from a miss.
+          codeStore: new InMemoryCodeStore(),
+          codeBaseUrl: "https://code.example",
         }
+      : {}),
+    ...(options.appMetadataStore !== undefined
+      ? { appMetadataStore: options.appMetadataStore }
       : {}),
   });
 
@@ -163,6 +187,7 @@ async function boot(
     blueprintStore,
     durableCodeStore,
     index,
+    vectorStore,
     warn,
     close: async () => {
       await client.close();
@@ -226,19 +251,75 @@ async function seedRemintable(f: Fixture, sessionId: string): Promise<void> {
   await seedBlueprint(f);
 }
 
-function shellText(contents: readonly unknown[]): string {
-  return (contents[0] as { text: string }).text;
+/**
+ * A resource-read content block, narrowed to what these tests read.
+ * `uri` is on both arms of the SDK's text/blob union; `text` only on
+ * the arm a shell response takes, so an accidental blob response fails
+ * loudly in `shellText` instead of reading as an empty string.
+ */
+interface ShellContent {
+  readonly uri: string;
+  readonly text?: string;
 }
 
-/** Parse the shell's inline bootstrap slice. */
-function parseMeta(html: string): Record<string, unknown> {
+function shellText(contents: readonly ShellContent[]): string {
+  const text = contents[0]?.text;
+  if (typeof text !== "string") {
+    throw new Error("resource response carries no shell text");
+  }
+  return text;
+}
+
+/**
+ * Parse the shell's inline bootstrap slice. Typed as the wire shape the
+ * server emits, so a field rename shows up here as a compile error
+ * rather than an assertion that silently reads `undefined`.
+ */
+function parseMeta(html: string): McpAppAiGguiRenderMeta {
   const match = /globalThis\.__GGUI_META__ = (.*?);<\/script>/s.exec(html);
   if (match === null) {
     throw new Error("shell carries no __GGUI_META__ bootstrap");
   }
-  const envelope = JSON.parse(match[1] as string) as Record<string, unknown>;
-  return envelope[RENDER_META_KEY] as Record<string, unknown>;
+  const envelope: unknown = JSON.parse(match[1] as string);
+  if (typeof envelope !== "object" || envelope === null) {
+    throw new Error("__GGUI_META__ is not an envelope");
+  }
+  const slice = (envelope as Record<string, McpAppAiGguiRenderMeta | undefined>)[
+    RENDER_META_KEY
+  ];
+  if (slice === undefined) {
+    throw new Error(`envelope carries no ${RENDER_META_KEY} slice`);
+  }
+  return slice;
 }
+
+/** Props as the shell carries them — JSON text on the slice. */
+function parseProps(meta: McpAppAiGguiRenderMeta): unknown {
+  if (meta.propsJson === undefined) return undefined;
+  return JSON.parse(meta.propsJson);
+}
+
+const APP_THEME: AppTheme = {
+  mode: "dark",
+  cssVariables: { "--ggui-color-accent": "#ff00aa" },
+  name: "operator-overlay",
+};
+
+/** App-metadata source that answers with a themed app record. */
+const themedAppMetadataStore: AppMetadataStore = {
+  get: async (appId: string): Promise<App | null> => ({
+    id: appId,
+    gadgets: [],
+    theme: APP_THEME,
+  }),
+};
+
+/** App-metadata source having a bad moment. */
+const failingAppMetadataStore: AppMetadataStore = {
+  get: async (): Promise<App | null> => {
+    throw new Error("app metadata store unavailable");
+  },
+};
 
 function isLoadingShell(html: string): boolean {
   return html.includes('data-ggui-shell="loading"');
@@ -266,13 +347,13 @@ describe("resource read — re-mint from the durable record", () => {
 
       const meta = parseMeta(html);
       // Same locator identity.
-      expect(meta["sessionId"]).toBe(sessionId);
-      expect(meta["appId"]).toBe(RECORD_APP_ID);
+      expect(meta.sessionId).toBe(sessionId);
+      expect(meta.appId).toBe(RECORD_APP_ID);
       // A LIVE mount: freshly minted live-channel trio.
-      expect(meta["wsToken"]).toBe(`ws-token-for-${sessionId}`);
-      expect(meta["wsUrl"]).toBe(`wss://live.example/${RECORD_APP_ID}`);
+      expect(meta.wsToken).toBe(`ws-token-for-${sessionId}`);
+      expect(meta.wsUrl).toBe(`wss://live.example/${RECORD_APP_ID}`);
       // The record's props, NOT the contract's authoring defaults.
-      expect(JSON.parse(meta["propsJson"] as string)).toEqual(RECORD_PROPS);
+      expect(parseProps(meta)).toEqual(RECORD_PROPS);
       expect(html).not.toContain(CONTRACT_DEFAULT_CITY);
     } finally {
       await f.close();
@@ -299,7 +380,7 @@ describe("resource read — re-mint from the durable record", () => {
         uri: `${RESOURCE_URI}/${sessionId}/${CONTRACT_KEY}`,
       });
       expect(isLoadingShell(shellText(second.contents))).toBe(false);
-      expect(parseMeta(shellText(second.contents))["wsToken"]).toBe(
+      expect(parseMeta(shellText(second.contents)).wsToken).toBe(
         `ws-token-for-${sessionId}`,
       );
     } finally {
@@ -316,7 +397,7 @@ describe("resource read — re-mint from the durable record", () => {
       const read = await f.client.readResource({
         uri: `${RESOURCE_URI}/${sessionId}/${CONTRACT_KEY}`,
       });
-      expect(parseMeta(shellText(read.contents))["lastSequence"]).toBe(
+      expect(parseMeta(shellText(read.contents)).lastSequence).toBe(
         SEQ_AT_LAST_COMMIT,
       );
     } finally {
@@ -339,6 +420,85 @@ describe("resource read — re-mint from the durable record", () => {
     }
   });
 
+  it("re-resolves the theme sidecar from the live app record", async () => {
+    // Sidecars are the operator's CURRENT configuration, not a
+    // snapshot of what the render had — so a re-mint mounts under
+    // whatever the app record says today.
+    const f = await boot({ appMetadataStore: themedAppMetadataStore });
+    try {
+      const sessionId = randomUUID();
+      await seedRemintable(f, sessionId);
+
+      const read = await f.client.readResource({
+        uri: `${RESOURCE_URI}/${sessionId}/${CONTRACT_KEY}`,
+      });
+      const meta = parseMeta(shellText(read.contents));
+      expect(meta.theme).toEqual(APP_THEME);
+      // And it reached the durable row, not just this one response.
+      const committed = (await f.renderStore.get(sessionId))
+        ?.render as ComponentGguiSession;
+      expect(committed.theme).toEqual(APP_THEME);
+    } finally {
+      await f.close();
+    }
+  });
+
+  it("still re-mints when the app-metadata store is unavailable, minus the sidecars", async () => {
+    // The sidecars are presentation. A metadata store having a bad
+    // moment must cost the render its theme, never its rehydrate —
+    // the body and props, which a mount cannot do without, were
+    // resolved before this lookup runs.
+    const f = await boot({ appMetadataStore: failingAppMetadataStore });
+    try {
+      const sessionId = randomUUID();
+      await seedRemintable(f, sessionId);
+
+      const read = await f.client.readResource({
+        uri: `${RESOURCE_URI}/${sessionId}/${CONTRACT_KEY}`,
+      });
+      const html = shellText(read.contents);
+      expect(isLoadingShell(html)).toBe(false);
+      const meta = parseMeta(html);
+      expect(meta.wsToken).toBe(`ws-token-for-${sessionId}`);
+      expect(parseProps(meta)).toEqual(RECORD_PROPS);
+      expect(meta.theme).toBeUndefined();
+    } finally {
+      await f.close();
+    }
+  });
+
+  it("restores an absence of props as an absence, never as contract defaults", async () => {
+    // `props` is optional on both the record and the wire shape, so a
+    // record with none describes a render that had none. Booting the
+    // contract's authoring-time defaults instead would show
+    // plausible-looking wrong state that nothing ever corrects —
+    // props travel the session channel, and no agent turn runs at
+    // rehydration.
+    const f = await boot();
+    try {
+      const sessionId = randomUUID();
+      await seedRecord(f.identityStore, sessionId, { props: undefined });
+      await seedBlueprint(f);
+
+      const read = await f.client.readResource({
+        uri: `${RESOURCE_URI}/${sessionId}/${CONTRACT_KEY}`,
+      });
+      const html = shellText(read.contents);
+      // Still a live mount — absent props are not a resolution failure.
+      expect(isLoadingShell(html)).toBe(false);
+      const meta = parseMeta(html);
+      expect(meta.wsToken).toBe(`ws-token-for-${sessionId}`);
+      // No props on the slice, and none on the committed row.
+      expect(meta.propsJson).toBeUndefined();
+      expect(html).not.toContain(CONTRACT_DEFAULT_CITY);
+      const committed = (await f.renderStore.get(sessionId))
+        ?.render as ComponentGguiSession;
+      expect(committed.props).toBeUndefined();
+    } finally {
+      await f.close();
+    }
+  });
+
   it("re-mints a legacy single-segment locator too", async () => {
     // The record is keyed by sessionId alone, so the URI shape that
     // predates the resume contract — and carries no blueprintKey —
@@ -353,7 +513,7 @@ describe("resource read — re-mint from the durable record", () => {
       const read = await f.client.readResource({ uri: `${RESOURCE_URI}/${sessionId}` });
       const html = shellText(read.contents);
       expect(isLoadingShell(html)).toBe(false);
-      expect(JSON.parse(parseMeta(html)["propsJson"] as string)).toEqual(RECORD_PROPS);
+      expect(parseProps(parseMeta(html))).toEqual(RECORD_PROPS);
     } finally {
       await f.close();
     }
@@ -371,8 +531,8 @@ describe("resource read — re-mint from the durable record", () => {
       });
       const html = shellText(read.contents);
       expect(isLoadingShell(html)).toBe(false);
-      expect(parseMeta(html)["appId"]).toBe(BUILDER_APP_ID);
-      expect(JSON.parse(parseMeta(html)["propsJson"] as string)).toEqual(RECORD_PROPS);
+      expect(parseMeta(html).appId).toBe(BUILDER_APP_ID);
+      expect(parseProps(parseMeta(html))).toEqual(RECORD_PROPS);
     } finally {
       await f.close();
     }
@@ -541,6 +701,61 @@ describe("resource read — the re-mint path is gated before it resolves anythin
     }
   });
 
+  it("stays byte-identical when the registry fallback actually answers", async () => {
+    // The variant that matters. With no registry wired, both probes
+    // return the same loading shell and the comparison is nearly free
+    // — a regression could leak through the fallback and this pin
+    // would not notice. Here a blueprint IS registered under the
+    // fallback scope, so BOTH reads resolve a real registry shell, and
+    // byte-identity has to survive a response with content in it.
+    const f = await boot({
+      getContext: () => intruderCtx,
+      withRegistryFallback: true,
+    });
+    try {
+      const registered = await registerBlueprint(
+        {
+          embedding: new MockEmbeddingProvider(),
+          vectorStore: f.vectorStore,
+          index: f.index,
+        },
+        BUILDER_APP_ID,
+        {
+          kind: "template",
+          contract: {},
+          intent: "registry-fallback probe",
+          componentCode: "export default function Fallback(){return null;}",
+          source: { kind: "user" },
+        },
+      );
+      const registryKey = registered.contractKey;
+
+      const resolvableSessionId = randomUUID();
+      await seedRemintable(f, resolvableSessionId);
+      const neverExistedSessionId = randomUUID();
+
+      const refused = await f.client.readResource({
+        uri: `${RESOURCE_URI}/${resolvableSessionId}/${registryKey}`,
+      });
+      const missing = await f.client.readResource({
+        uri: `${RESOURCE_URI}/${neverExistedSessionId}/${registryKey}`,
+      });
+
+      // Both really did resolve the registry shell — otherwise this is
+      // the loading-shell comparison again under a longer name.
+      expect(isLoadingShell(shellText(refused.contents))).toBe(false);
+      expect(isLoadingShell(shellText(missing.contents))).toBe(false);
+      // And nothing from the record's owner leaked into the refused one.
+      expect(shellText(refused.contents)).not.toContain(RECORD_APP_ID);
+
+      expect(normalize(refused.contents, resolvableSessionId)).toEqual(
+        normalize(missing.contents, neverExistedSessionId),
+      );
+    } finally {
+      await f.close();
+    }
+  });
+
   it("never commits over a row whose generation is still in flight", async () => {
     const f = await boot();
     try {
@@ -623,7 +838,7 @@ describe("resource read — the re-mint path is gated before it resolves anythin
         uri: `${RESOURCE_URI}/${sessionId}/${CONTRACT_KEY}`,
       });
       const meta = parseMeta(shellText(read.contents));
-      expect(JSON.parse(meta["propsJson"] as string)).toEqual({ city: "Live" });
+      expect(parseProps(meta)).toEqual({ city: "Live" });
 
       const stillLive = (await f.renderStore.get(sessionId))?.render as ComponentGguiSession;
       expect(stillLive.componentCode).toBe(LIVE_ROW_CODE);

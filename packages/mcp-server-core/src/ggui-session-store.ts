@@ -254,13 +254,18 @@ export interface CommitGguiSessionInput {
    * Absent — the normal case — means zero: a new render's ledger
    * starts empty. Supply it when a session RESUMES from a durable
    * record rather than starting fresh, so the render continues its
-   * event ledger instead of restarting it. Pass the sequence the
-   * earlier life reached; a ledger that counted from zero again would
-   * reissue numbers that render already used, and a reader holding a
-   * cursor from before the resume (a `observe` `fromSeq`, a
-   * {@link GguiSessionStore.listEventsSince} cursor) filters
-   * everything at or below its cursor — so the resumed render's events
-   * would never reach it.
+   * event ledger instead of restarting it. A ledger that counted from
+   * zero again would reissue numbers the render already used, and a
+   * reader holding a cursor from before the resume (an `observe`
+   * `fromSeq`, a {@link GguiSessionStore.listEventsSince} cursor)
+   * filters everything at or below its cursor — so the resumed
+   * render's events would never reach it.
+   *
+   * The store honors the floor it is given and cannot check it. How
+   * much reuse a resume actually avoids is therefore the caller's
+   * property, not this seam's: a floor below where the session really
+   * got to still reissues the numbers in between. Callers reading a
+   * durable record should know how current that record's sequence is.
    *
    * Ignored on the replace branch, and that is a requirement rather
    * than an optimization: two commits racing to resume the same
