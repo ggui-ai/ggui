@@ -1284,8 +1284,9 @@ export function defaultHandlers(deps: {
           : {}),
         // Content-addressable code store. Both fields are forwarded
         // together; the render handler
-        // requires both to emit `codeUrl`. Absent or partial =
-        // inline-base64 fallback (see render.ts handler body).
+        // requires both to emit `codeUrl`. Absent or partial = no
+        // static delivery channel, so the bootstrap mounts through the
+        // live trio instead (see render.ts handler body).
         ...(deps.render.codeStore && deps.render.codeBaseUrl
           ? {
               codeStore: deps.render.codeStore,
@@ -2722,9 +2723,11 @@ export interface CreateGguiServerOptions {
    * to the store before emitting `codeUrl` on the `ai.ggui/render`
    * slice.
    *
-   * Defaults: when omitted the route is NOT mounted; the render
-   * handler falls back to inline base64 `componentCode` on the
-   * `ai.ggui/render` slice (legacy delivery channel).
+   * Defaults: when omitted the route is NOT mounted and the
+   * `ai.ggui/render` slice carries no `codeUrl` — there is no second
+   * static channel behind it. Such a deployment delivers renders
+   * through the live trio (`wsUrl` + `wsToken`); one that wires
+   * neither cannot mount a static component at all.
    *
    * OSS dev wires `FileSystemCodeStore` (rooted at `~/.ggui/code-cache/`)
    * via `ggui-cli/buildMcpServerBackend`. Tests wire
@@ -3944,9 +3947,11 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
               // handler along with the base
               // URL the code-blob route resolves to. We prefer the
               // explicit `--public-base-url` (so the URL is reachable
-              // from claude.ai's iframe sandbox); when absent we fall
-              // back to "no codeUrl emission" — the inline-base64
-              // path still mounts the iframe successfully via Path B.
+              // from a remote host's iframe sandbox); when absent we
+              // fall back to "no codeUrl emission" — the iframe then
+              // mounts through the live trio and the WS subscribe
+              // carries the render body, which is the delivery path a
+              // render-channel deployment already has.
               ...(opts.codeStore && opts.publicBaseUrl
                 ? {
                     codeStore: opts.codeStore,

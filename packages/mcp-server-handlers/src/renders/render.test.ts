@@ -38,12 +38,14 @@ import { describe, it, expect, vi } from 'vitest';
 import { z } from 'zod';
 import {
   InMemoryBlueprintIndex,
+  InMemoryCodeStore,
   InMemoryKeyValueStore,
   InMemoryRenderIdentityStore,
   InMemoryGguiSessionStore,
   InMemoryVectorStore,
 } from '@ggui-ai/mcp-server-core/in-memory';
 import type {
+  CodeStore,
   EmbeddingProvider,
   RenderIdentityRecord,
   RenderIdentityStore,
@@ -55,10 +57,14 @@ import {
   type DataContract,
   type ComponentGguiSession,
 } from '@ggui-ai/protocol';
-import { parseMcpAppAiGguiRenderMeta } from '@ggui-ai/protocol/integrations/mcp-apps';
+import {
+  asGguiRenderBootstrap,
+  parseMcpAppAiGguiRenderMeta,
+} from '@ggui-ai/protocol/integrations/mcp-apps';
 import { blueprintKey, variantKey } from '@ggui-ai/protocol/blueprint-key';
 import * as matcherModule from './blueprint-matcher.js';
 import { registerBlueprint } from './blueprint-registry.js';
+import { CODE_DELIVERY_EVENTS } from './code-delivery-events.js';
 import { handshakeRecordKey, type HandshakeRecord } from './handshake.js';
 import { createGguiRenderHandler, type GguiRenderHandlerDeps } from './render.js';
 import type { BlueprintPool } from './decide-handshake.js';
@@ -236,6 +242,20 @@ function buildHandler(opts: {
    * other path unchanged).
    */
   readonly renderIdentityStore?: RenderIdentityStore;
+  /**
+   * Optional content-addressable code-delivery pair. Both must be
+   * present for the handler to mint a `codeUrl`; the code-delivery
+   * suite below wires a rejecting store to exercise the arm where the
+   * mint fails.
+   */
+  readonly codeStore?: GguiRenderHandlerDeps['codeStore'];
+  readonly codeBaseUrl?: string;
+  /**
+   * Optional live-channel credential minter. Presence is what decides
+   * whether a lost `codeUrl` leaves the envelope mountable, so the
+   * code-delivery suite drives both postures through this seam.
+   */
+  readonly mintWsToken?: GguiRenderHandlerDeps['mintWsToken'];
 }): ReturnType<typeof createGguiRenderHandler> {
   return createGguiRenderHandler({
     handshakeStore: opts.handshakeStore,
@@ -248,6 +268,11 @@ function buildHandler(opts: {
     ...(opts.renderIdentityStore
       ? { renderIdentityStore: opts.renderIdentityStore }
       : {}),
+    ...(opts.codeStore ? { codeStore: opts.codeStore } : {}),
+    ...(opts.codeBaseUrl !== undefined
+      ? { codeBaseUrl: opts.codeBaseUrl }
+      : {}),
+    ...(opts.mintWsToken ? { mintWsToken: opts.mintWsToken } : {}),
     generation: {
       // `uiGenerator` is never reached — `generator` escape hatch wins.
       uiGenerator: {
@@ -465,6 +490,11 @@ async function buildColdGenHarness(extraOpts: {
   readonly renderIdentityStore?: RenderIdentityStore;
   /** Agreed contract for the seeded handshake. Defaults to {@link CONTRACT}. */
   readonly contract?: DataContract;
+  /** Content-addressable code-delivery pair — see {@link buildHandler}. */
+  readonly codeStore?: GguiRenderHandlerDeps['codeStore'];
+  readonly codeBaseUrl?: string;
+  /** Live-channel credential minter — see {@link buildHandler}. */
+  readonly mintWsToken?: GguiRenderHandlerDeps['mintWsToken'];
 } = {}): Promise<{
   readonly harness: Harness;
   readonly handshakeId: string;
@@ -500,6 +530,11 @@ async function buildColdGenHarness(extraOpts: {
     ...(extraOpts.renderIdentityStore
       ? { renderIdentityStore: extraOpts.renderIdentityStore }
       : {}),
+    ...(extraOpts.codeStore ? { codeStore: extraOpts.codeStore } : {}),
+    ...(extraOpts.codeBaseUrl !== undefined
+      ? { codeBaseUrl: extraOpts.codeBaseUrl }
+      : {}),
+    ...(extraOpts.mintWsToken ? { mintWsToken: extraOpts.mintWsToken } : {}),
   });
   return {
     harness: { handshakeStore, renderStore, vectorStore, index, handler },
@@ -1835,6 +1870,178 @@ describe('createGguiRenderHandler — durable render identity (#430 slice 1)', (
       expect(event?.sessionId).toBe(out.sessionId);
       expect(event?.appId).toBe(APP_ID);
       expect(event?.error).toBe('identity store offline');
+    } finally {
+      warn.mockRestore();
+    }
+  });
+});
+
+/**
+ * Content-addressable code delivery — what a lost `codeUrl` costs.
+ *
+ * `codeUrl` is the only STATIC delivery channel a render envelope has:
+ * a bootstrap mounts on `codeUrl`, on a system-card `kind`, or on the
+ * live trio, and nothing sits behind any of them. So a rejected store
+ * write does not fall back onto some second static path — it changes
+ * what the envelope can do, in a way that is invisible on the wire
+ * (the render reports success either way).
+ *
+ * Three things are pinned. The DEGRADE: the render still succeeds and,
+ * when the deployment mints live-channel credentials, the envelope is
+ * still mountable. The CONSEQUENCE: without those credentials the
+ * envelope is NOT mountable — asserted through the host-facing
+ * narrowing (`asGguiRenderBootstrap`) rather than by inspecting fields,
+ * because that function IS how a host decides. And the SIGNAL: the
+ * failure is named, with the live-channel posture on it, so the
+ * difference between "slower first paint" and "nothing mounts" is
+ * readable in the log.
+ */
+describe('createGguiRenderHandler — code-delivery channel', () => {
+  const CODE_BASE_URL = 'https://renders.example.com';
+
+  /** A code store whose every `put` rejects. */
+  function rejectingCodeStore(message: string): CodeStore {
+    return {
+      put: async () => {
+        throw new Error(message);
+      },
+      get: async () => null,
+      delete: async () => {},
+      hashOf: () => 'a'.repeat(64),
+    };
+  }
+
+  const MINT_WS: NonNullable<GguiRenderHandlerDeps['mintWsToken']> = () => ({
+    wsUrl: 'wss://renders.example.com/ws',
+    token: 'ws-token-1',
+    expiresAt: new Date(Date.now() + 60_000).toISOString(),
+  });
+
+  /** Silence + capture `console.warn` for the duration of one test. */
+  function spyOnWarn() {
+    return vi.spyOn(console, 'warn').mockImplementation(() => {});
+  }
+
+  /** The `render_code_write_failed` events emitted during a spy window. */
+  function codeWriteEvents(
+    warn: ReturnType<typeof spyOnWarn>,
+  ): ReadonlyArray<{
+    readonly msg: string;
+    readonly sessionId: string;
+    readonly appId: string;
+    readonly liveChannelWired: boolean;
+    readonly error: string;
+  }> {
+    return warn.mock.calls
+      .map(([first]) => (typeof first === 'string' ? first : ''))
+      .filter((line) => line.includes(CODE_DELIVERY_EVENTS.renderCodeWriteFailed))
+      .map(
+        (line) =>
+          JSON.parse(line) as {
+            readonly msg: string;
+            readonly sessionId: string;
+            readonly appId: string;
+            readonly liveChannelWired: boolean;
+            readonly error: string;
+          },
+      );
+  }
+
+  it('mints codeUrl from the store hash and emits nothing when the write lands', async () => {
+    const warn = spyOnWarn();
+    try {
+      const codeStore = new InMemoryCodeStore();
+      const { harness, handshakeId } = await buildColdGenHarness({
+        codeStore,
+        codeBaseUrl: CODE_BASE_URL,
+      });
+      const out = await harness.handler.handler({ handshakeId, props: {} }, CTX);
+      assertRenderSuccess(out);
+
+      const expectedHash = codeStore.hashOf(COLD_CODE);
+      expect(out.codeHash).toBe(expectedHash);
+      expect(out.codeUrl).toBe(`${CODE_BASE_URL}/code/${expectedHash}.js`);
+      expect(await codeStore.get(expectedHash)).toBe(COLD_CODE);
+      // A healthy write is not an event. Asserting the empty case is
+      // what keeps the failure arm below meaningful.
+      expect(codeWriteEvents(warn)).toEqual([]);
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it('a rejecting store cannot fail the render — no codeUrl, and render_code_write_failed names it', async () => {
+    const warn = spyOnWarn();
+    try {
+      const { harness, handshakeId } = await buildColdGenHarness({
+        codeStore: rejectingCodeStore('code store offline'),
+        codeBaseUrl: CODE_BASE_URL,
+      });
+      const out = await harness.handler.handler({ handshakeId, props: {} }, CTX);
+      assertRenderSuccess(out);
+      expect(out.codeReady).toBe(true);
+      expect(out.codeUrl).toBeUndefined();
+      expect(out.codeHash).toBeUndefined();
+
+      const events = codeWriteEvents(warn);
+      expect(events).toHaveLength(1);
+      const [event] = events;
+      expect(event?.msg).toBe('render_code_write_failed');
+      expect(event?.sessionId).toBe(out.sessionId);
+      expect(event?.appId).toBe(APP_ID);
+      expect(event?.error).toBe('code store offline');
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it('without a live channel the envelope stops being mountable — the event says so', async () => {
+    const warn = spyOnWarn();
+    try {
+      const { harness, handshakeId } = await buildColdGenHarness({
+        codeStore: rejectingCodeStore('code store offline'),
+        codeBaseUrl: CODE_BASE_URL,
+      });
+      const out = await harness.handler.handler({ handshakeId, props: {} }, CTX);
+      assertRenderSuccess(out);
+
+      // The host-facing narrowing is the authority on "can this mount":
+      // runtimeUrl plus one mode discriminator. With no codeUrl and no
+      // live trio there is none, so a host reads this result as not a
+      // mountable ggui render.
+      const meta = await harness.handler.resultMeta?.(out, {}, CTX);
+      expect(asGguiRenderBootstrap(meta)).toBeUndefined();
+
+      const [event] = codeWriteEvents(warn);
+      expect(event?.liveChannelWired).toBe(false);
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it('with a live channel the envelope still mounts — the WS subscribe carries the render', async () => {
+    const warn = spyOnWarn();
+    try {
+      const { harness, handshakeId } = await buildColdGenHarness({
+        codeStore: rejectingCodeStore('code store offline'),
+        codeBaseUrl: CODE_BASE_URL,
+        mintWsToken: MINT_WS,
+      });
+      const out = await harness.handler.handler({ handshakeId, props: {} }, CTX);
+      assertRenderSuccess(out);
+      expect(out.codeUrl).toBeUndefined();
+
+      const meta = await harness.handler.resultMeta?.(out, {}, CTX);
+      const bootstrap = asGguiRenderBootstrap(meta);
+      expect(bootstrap).toBeDefined();
+      // Mountable through the live trio specifically — not through a
+      // codeUrl that quietly survived.
+      expect(bootstrap?.slice.wsUrl).toBe('wss://renders.example.com/ws');
+      expect(bootstrap?.slice.wsToken).toBe('ws-token-1');
+      expect(bootstrap?.slice.codeUrl).toBeUndefined();
+
+      const [event] = codeWriteEvents(warn);
+      expect(event?.liveChannelWired).toBe(true);
     } finally {
       warn.mockRestore();
     }
