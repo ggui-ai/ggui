@@ -36,7 +36,7 @@
  * frame to drive — so they do NOT belong in this behavioral fixture
  * catalog.
  *
- * ## An MCP-binding driver EXISTS — `../resource-read-conformance`
+ * ## An MCP-binding driver EXISTS for `resources/read` — `../resource-read-conformance`
  *
  * This catalog used to declare the MCP-binding driver as missing. It is
  * no longer missing. `../resource-read-conformance` ships a driver

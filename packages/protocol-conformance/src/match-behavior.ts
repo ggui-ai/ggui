@@ -84,8 +84,10 @@
  * `action-ack` proves the append half of the consume-buffer contract.
  * The retrieval half — the agent draining the buffer via
  * `ggui_consume({sessionId})` — is an MCP tool call a WS-only runner
- * cannot drive. Grading it needs an MCP-binding driver; that gap is
- * declared here rather than papered over with a weaker assertion.
+ * cannot drive. Grading it needs a driver bound to `tools/call`. The
+ * kit's `resources/read` driver (`../resource-read-conformance`) does
+ * NOT reach it: different method, different seam. That gap is declared
+ * here rather than papered over with a weaker assertion.
  */
 import { PROTOCOL_SCHEMA_VERSION } from '@ggui-ai/protocol';
 import type { StreamEnvelope } from '@ggui-ai/protocol';

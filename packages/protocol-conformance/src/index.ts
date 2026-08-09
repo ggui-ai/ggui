@@ -130,9 +130,10 @@ export type {
   ResolutionConformanceResult,
 } from './resolution-conformance/index.js';
 
-// Resource-read conformance — the kit's first MCP-binding driver. A
-// read of a render locator has exactly two exits: a result whose
-// contents declare a delivery channel, or one typed JSON-RPC error.
+// Resource-read conformance — the kit's first MCP-binding driver, and
+// it binds `resources/read` ONLY (`tools/call` has none). A read of a
+// render locator has exactly two exits: a result whose contents
+// declare a delivery channel, or one typed JSON-RPC error.
 // Unlike the three catalogs above this one drives a live server, so
 // the caller supplies a scenario driver rather than a pure function.
 export {

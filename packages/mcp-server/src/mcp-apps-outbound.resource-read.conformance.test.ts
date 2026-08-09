@@ -48,6 +48,7 @@ import {
   type ResourceReadOutcome,
   type ResourceReadRenderMeta,
   type ResourceReadScenario,
+  type ResourceReadScenarioDriver,
 } from "@ggui-ai/protocol-conformance/resource-read-conformance";
 import type { Blueprint, ComponentGguiSession, DataContract } from "@ggui-ai/protocol";
 import type { McpAppAiGguiRenderMeta } from "@ggui-ai/protocol/integrations/mcp-apps";
@@ -100,19 +101,28 @@ function projectRenderMeta(html: string): ResourceReadRenderMeta {
   };
 }
 
-/** Every locator the kit asked this server to serve, across a whole run. */
-const urisRead: string[] = [];
-
-/** The resource templates each prepared server advertised, by case name. */
-const advertisedTemplates = new Map<string, readonly string[]>();
+/** A server brought up in a declared shape, plus the seams a test needs. */
+interface BootedServer {
+  readonly client: Client;
+  readonly registeredKeys: Readonly<Record<string, string>>;
+  read(uri: string): Promise<ResourceReadOutcome>;
+  close(): Promise<void>;
+}
 
 /**
  * Bring this server up in the shape the catalog declares, apply the
- * seeds, and hand back a reader over a real MCP client/server pair.
+ * seeds, and hand back a real MCP client/server pair.
+ *
+ * Returns the `Client` itself so a test can ask the server questions
+ * the kit's driver seam does not carry — the advertised resource
+ * templates, for one. Nothing is stashed in module state: a test that
+ * wants to observe a run passes `onRead` and owns the recording, so no
+ * assertion depends on another test having run first.
  */
-async function prepare(
+async function boot(
   scenario: ResourceReadScenario,
-): Promise<PreparedResourceReadScenario> {
+  onRead?: (uri: string) => void,
+): Promise<BootedServer> {
   const renderStore = new InMemoryGguiSessionStore();
   const identityStore = new InMemoryRenderIdentityStore();
   const blueprintStore = new InMemoryBlueprintStore();
@@ -239,16 +249,11 @@ async function prepare(
   const client = new Client({ name: "resource-read-conformance-client", version: "0.0.1" });
   await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
 
-  const advertised = await client.listResourceTemplates();
-  advertisedTemplates.set(
-    scenario.caseName,
-    advertised.resourceTemplates.map((template) => template.uriTemplate),
-  );
-
   return {
+    client,
     registeredKeys,
     read: async (uri: string): Promise<ResourceReadOutcome> => {
-      urisRead.push(uri);
+      onRead?.(uri);
       const before = frames.length;
       try {
         const result = await client.readResource({ uri });
@@ -268,17 +273,32 @@ async function prepare(
         return { kind: "error", error: frame.error };
       }
     },
-    dispose: async () => {
+    close: async () => {
       await client.close();
       await server.close();
     },
   };
 }
 
+/**
+ * The kit's driver seam, over {@link boot}. `onRead` is threaded so the
+ * caller — not module state — owns any recording of what a run read.
+ */
+function makePrepare(onRead?: (uri: string) => void): ResourceReadScenarioDriver {
+  return async (scenario: ResourceReadScenario): Promise<PreparedResourceReadScenario> => {
+    const booted = await boot(scenario, onRead);
+    return {
+      registeredKeys: booted.registeredKeys,
+      read: booted.read,
+      dispose: booted.close,
+    };
+  };
+}
+
 describe("first-party resources/read passes @ggui-ai/protocol-conformance", () => {
   it("passes every case in the resource-read catalog, with nothing skipped", async () => {
-    urisRead.length = 0;
-    const result = await runResourceReadConformance(prepare);
+    const urisRead: string[] = [];
+    const result = await runResourceReadConformance(makePrepare((uri) => urisRead.push(uri)));
     const diagnostic = JSON.stringify(
       { failed: result.failed, skipped: result.skipped },
       null,
@@ -305,14 +325,30 @@ describe("first-party resources/read passes @ggui-ai/protocol-conformance", () =
     // just one would grade half the surface while reading as if it
     // graded all of it.
     const prefix = "ui://ggui/render/";
-    const locators = urisRead
+    const wellFormed = urisRead
       .filter((uri) => uri.startsWith(prefix))
-      .map((uri) => uri.slice(prefix.length).split("/"))
-      // Drops the malformed-URI probes, which name no locator at all.
-      .filter((segments) => segments.every((segment) => segment.length > 0));
-    expect(locators.length).toBeGreaterThan(0);
-    expect(locators.some((segments) => segments.length === 1)).toBe(true);
-    expect(locators.some((segments) => segments.length === 2)).toBe(true);
+      .filter((uri) =>
+        uri
+          .slice(prefix.length)
+          .split("/")
+          .every((segment) => segment.length > 0),
+      );
+    const segmentCount = (uri: string): number => uri.slice(prefix.length).split("/").length;
+
+    expect(wellFormed.length).toBeGreaterThan(0);
+    expect(wellFormed.some((uri) => segmentCount(uri) === 1)).toBe(true);
+    expect(wellFormed.some((uri) => segmentCount(uri) === 2)).toBe(true);
+
+    // And the filter dropped exactly what it was meant to. Without this
+    // the two assertions above hold for a filter that silently discarded
+    // something else — proving the surviving list has both shapes says
+    // nothing about what left it.
+    const malformed = ["ui://ggui/render/", "ui://ggui/render//fedcba9876543210"];
+    for (const uri of malformed) {
+      expect(urisRead, `the run never read the malformed probe ${uri}`).toContain(uri);
+      expect(wellFormed, `${uri} names no locator and must not count as one`).not.toContain(uri);
+    }
+    expect(wellFormed).toHaveLength(urisRead.length - malformed.length);
   }, 30_000);
 
   it("grades a non-empty catalog", () => {
@@ -324,22 +360,24 @@ describe("first-party resources/read passes @ggui-ai/protocol-conformance", () =
   it("drives the shipping registration, which really does register both templates", async () => {
     // The driver above calls `registerGguiRenderResourceTemplate`
     // directly — the shipping registration itself — rather than
-    // standing up a synthetic reader that mimics its answers. Asserted
-    // through the server's own advertised surface, so the claim rests
-    // on what the registration produced rather than on reading the
-    // import line.
-    const prepared = await prepare({
+    // standing up a synthetic reader that mimics its answers. Asked of
+    // the server on this test's OWN client, so the claim rests on what
+    // the registration advertises rather than on reading the import
+    // line, and on nothing another test left behind.
+    const booted = await boot({
       caseName: "template-registration-probe",
       server: { durableSubstrate: "all", liveChannel: true },
       caller: "owner",
       seeds: [],
     });
     try {
-      const advertised = advertisedTemplates.get("template-registration-probe") ?? [];
+      const advertised = (await booted.client.listResourceTemplates()).resourceTemplates.map(
+        (template) => template.uriTemplate,
+      );
       expect(advertised).toContain("ui://ggui/render/{sessionId}");
       expect(advertised).toContain("ui://ggui/render/{sessionId}/{blueprintKey}");
     } finally {
-      await prepared.dispose?.();
+      await booted.close();
     }
   });
 });
