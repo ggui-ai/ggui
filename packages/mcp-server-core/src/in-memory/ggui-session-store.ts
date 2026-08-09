@@ -198,6 +198,14 @@ export class InMemoryGguiSessionStore implements GguiSessionStore {
       // at create time).
       const merged: StoredGguiSession = {
         ...existing.stored,
+        // If-not-exists on the SUBJECT (#446). A row first minted by
+        // the WS dev path carries no subject; the agent's later commit
+        // supplies it. An existing subject is never overwritten — that
+        // would let a second caller re-point someone else's render at
+        // themselves.
+        ...(existing.stored.userId === undefined && input.userId !== undefined
+          ? { userId: input.userId }
+          : {}),
         lastActivityAt: t,
         render: incoming,
       };

@@ -33,6 +33,8 @@
  * Plus the contract surface invariants every impl must hold:
  *
  * - create + get round-trip preserves id / appId / userId.
+ * - commit fills an ABSENT userId and never overwrites a present one
+ *   (#446 — the subject the render-read gate binds on).
  * - commit on new id mints the row; commit on existing id replaces in
  *   place.
  * - delete is observable on subsequent get.
@@ -103,6 +105,33 @@ export function runGguiSessionStoreConformance(
           const got = await store.get('render-1');
           expect(got?.id).toBe('render-1');
           expect(got?.appId).toBe('app-1');
+        });
+      });
+
+      it('commit fills an absent userId, and never overwrites one', async () => {
+        await withStore(async (store) => {
+          // #446 — if-not-exists on the SUBJECT. A row minted without
+          // one (the WS dev path does exactly this) acquires it from
+          // the agent's later commit; a row that already has one must
+          // never have it re-pointed, or a second caller could claim
+          // someone else's render.
+          await store.create({ id: 'render-fill', appId: 'app-1' });
+          expect((await store.get('render-fill'))?.userId).toBeUndefined();
+
+          await store.commit({
+            appId: 'app-1',
+            userId: 'u-42',
+            render: makeComponentGguiSession('render-fill', 'app-1', ''),
+          });
+          expect((await store.get('render-fill'))?.userId).toBe('u-42');
+
+          // Second commit under a DIFFERENT subject must not re-point.
+          await store.commit({
+            appId: 'app-1',
+            userId: 'u-99',
+            render: makeComponentGguiSession('render-fill', 'app-1', ''),
+          });
+          expect((await store.get('render-fill'))?.userId).toBe('u-42');
         });
       });
 

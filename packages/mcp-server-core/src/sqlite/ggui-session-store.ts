@@ -369,6 +369,7 @@ export class SqliteGguiSessionStore implements GguiSessionStore {
       this.stmts.upsertRenderPayload.run(
         JSON.stringify(incoming),
         t,
+        input.userId ?? null,
         incoming.id,
       );
       const updated = requireGguiSessionRow(
@@ -605,8 +606,14 @@ INSERT INTO renders (
 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 `;
 
+// `user_id = COALESCE(user_id, ?)` is if-not-exists semantics for the
+// row's SUBJECT (#446): a row first minted by the WS dev path has no
+// subject, and the agent's later commit is what supplies it — but a
+// row that already HAS one must never have it overwritten, or a second
+// caller could re-point someone else's render at themselves. Matches
+// the cloud adapter's conditional write.
 const UPSERT_RENDER_PAYLOAD_SQL = `
-UPDATE renders SET payload = ?, last_activity_at = ? WHERE id = ?
+UPDATE renders SET payload = ?, last_activity_at = ?, user_id = COALESCE(user_id, ?) WHERE id = ?
 `;
 
 // ─────────────────────────────────────────────────────────────────────

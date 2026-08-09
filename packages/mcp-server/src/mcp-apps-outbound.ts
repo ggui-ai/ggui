@@ -1317,9 +1317,11 @@ export function registerGguiRenderResourceTemplate(
         !renderReadAllowed(
           {
             appId: stored.appId,
-            ...(stored.endUserIdentity !== undefined
-              ? { endUserIdentity: stored.endUserIdentity }
-              : {}),
+            // #446 — the row's SUBJECT is `userId`, written at commit.
+            // This used to project `endUserIdentity`, which nothing has
+            // written since the repo split, so the subject rung never
+            // bound.
+            ...(stored.userId !== undefined ? { userId: stored.userId } : {}),
           },
           fallbackCtx
         )

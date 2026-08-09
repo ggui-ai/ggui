@@ -491,6 +491,15 @@ export function createSubscribeHandlers(deps: SubscribeDeps): SubscribeHandlers 
       }
     } else {
       try {
+        // NO `userId` here, deliberately (#446). `effectiveIdentity`
+        // above may be the bootstrap-synthesized identity whose
+        // `userId` IS the sessionId — a render-scoped credential every
+        // holder of the bootstrap token presents, not a person.
+        // Threading it onto the row would bind the row's SUBJECT to
+        // that credential, and the render-read gate would then pass
+        // every bearer of the token as "the subject". The row acquires
+        // its real subject later, from the agent's commit, via the
+        // stores' if-not-exists semantics.
         stored = await deps.renderStore.create({
           id: payload.sessionId,
           appId: effectiveAppId,

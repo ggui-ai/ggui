@@ -111,15 +111,17 @@ export interface CreateGguiSessionInput {
    */
   id?: string;
   /**
-   * Optional structured authenticated end-user identity, populated by
-   * the auth gate before the render is materialized. When supplied,
+   * Optional structured end-user identity block. When supplied,
    * implementations MUST persist it as-is and surface it on
    * subsequent `get()` calls.
    *
-   * Cloud's dynamoGguiSessionStore reads this via a separate auth-gate
-   * write path today; threading it through `create()` here unifies
-   * the surface and enables the conformance suite to pin round-trip
-   * parity uniformly across impls.
+   * NOT the row's subject. The render-read gate binds on
+   * {@link StoredGguiSession.userId}, which is written at commit; this
+   * field is supplementary detail for logging and roster inspection.
+   * An earlier version of this docstring described a separate auth-gate
+   * write path that populated it — that writer no longer exists, and
+   * the mismatch is what let an access-control check read a field
+   * nothing was writing.
    */
   endUserIdentity?: import('@ggui-ai/protocol').EndUserIdentity;
   /**
