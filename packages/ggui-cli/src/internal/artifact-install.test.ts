@@ -1499,11 +1499,11 @@ describe('runArtifactInstall', () => {
     });
   });
 
-  it('distinct versions: installing v0.1.0 then v0.2.0 of the same package keeps both rows', async () => {
-    // `appendGadget` dedups on the FULL `(package, version)` identity
-    // tuple — a different version is a different row. Installing two
-    // versions of the same package therefore yields TWO catalog
-    // entries (not a replace).
+  it('replaces the existing row when installing a DIFFERENT version of the same package (one row per package)', async () => {
+    // `appendGadget` dedups on `package` ALONE — the catalog holds at
+    // most one descriptor per package (`LINT_GADGET_DUPLICATE_PACKAGE`
+    // is fatal), so installing a different version REPLACES the
+    // existing row instead of accumulating a second one.
     const v1 = buildArtifacts('v0.1.0 bundle');
     const readPkgV1 = {
       manifest: gadgetManifestFixture({ version: '0.1.0' }),
@@ -1579,12 +1579,275 @@ describe('runArtifactInstall', () => {
     const written = JSON.parse(
       readFileSync(join(workDir, 'ggui.json'), 'utf-8'),
     ) as { app: { gadgets: Array<Record<string, unknown>> } };
-    // TWO distinct rows — one per version.
-    expect(written.app.gadgets).toHaveLength(2);
-    const versions = written.app.gadgets
-      .map((g) => g['version'])
-      .sort();
-    expect(versions).toEqual(['0.1.0', '0.2.0']);
+    // Exactly ONE row for the package — the v0.2.0 install replaced
+    // the v0.1.0 row.
+    expect(written.app.gadgets).toHaveLength(1);
+    expect(written.app.gadgets[0]).toMatchObject({
+      package: '@my-org/weather-card',
+      version: '0.2.0',
+      bundleUrl: 'https://cdn.example/bundle-0.2.0.js',
+    });
+  });
+
+  it('aborts without writing when the post-append catalog trips a fatal lint (duplicate export name)', async () => {
+    // Seed ggui.json with a strict-VALID declared gadget whose export
+    // name collides with the incoming manifest's `useWeatherCard`.
+    // The post-append array then trips the fatal
+    // LINT_GADGET_DUPLICATE_EXPORT_IN_CATALOG code — install must
+    // abort with exit 1 and leave ggui.json byte-identical.
+    const seeded = {
+      schema: '1',
+      app: {
+        slug: 'demo',
+        name: 'Demo',
+        gadgets: [
+          {
+            package: '@other/maps',
+            version: '3.1.0',
+            exports: [
+              {
+                hook: 'useWeatherCard',
+                description: 'Pre-existing export of the same name.',
+                usage: 'Collides with the incoming install.',
+                example: { call: 'useWeatherCard()' },
+              },
+            ],
+          },
+        ],
+      },
+    };
+    writeFileSync(join(workDir, 'ggui.json'), JSON.stringify(seeded));
+
+    const { bundleBytes, bundleSri, signature } = buildArtifacts(
+      'export const useWeatherCard = () => null;',
+    );
+    const readPkg = {
+      manifest: gadgetManifestFixture(),
+      bundleUrl: 'https://cdn.example/bundle.js',
+      bundleSri,
+      signatureUrl: 'https://cdn.example/bundle.js.sig',
+      publishedAt: '2026-05-17T00:00:00Z',
+      publishedBy: 'cognito-sub-xyz',
+    };
+    const fetchStub = makeFetchStub([
+      {
+        matches: (url) => url.endsWith('/pkg/my-org/weather-card/0.1.0'),
+        response: jsonResponse(200, readPkg),
+      },
+      {
+        matches: (url) => url === 'https://cdn.example/bundle.js',
+        response: bytesResponse(200, bundleBytes),
+      },
+      {
+        matches: (url) => url === 'https://cdn.example/bundle.js.sig',
+        response: jsonResponse(200, signature),
+      },
+    ]);
+
+    const io = captureIO();
+    const code = await runArtifactInstall(
+      io.flags({ artifactId: '@my-org/weather-card', version: '0.1.0' }),
+      {
+        cwd: workDir,
+        env: {},
+        fetch: fetchStub,
+        stdout: (s) => io.stdout.push(s),
+        stderr: (s) => io.stderr.push(s),
+      },
+    );
+
+    expect(code).toBe(1);
+    expect(
+      io.stderr.some((line) =>
+        line.includes('LINT_GADGET_DUPLICATE_EXPORT_IN_CATALOG'),
+      ),
+    ).toBe(true);
+    // ggui.json untouched — the seeded catalog survives verbatim.
+    const written = JSON.parse(
+      readFileSync(join(workDir, 'ggui.json'), 'utf-8'),
+    ) as typeof seeded;
+    expect(written).toEqual(seeded);
+  });
+
+  it('aborts without writing when the installed gadget re-exports a stdlib export name (resolved-union lint)', async () => {
+    // The declared array alone is clean (one package, one export) —
+    // the collision only exists in the RESOLVED union with the stdlib
+    // floor. Installing it would brick generation, so the install gate
+    // must lint the union too.
+    const { bundleBytes, bundleSri, signature } = buildArtifacts(
+      'export const useCamera = () => null;',
+    );
+    const readPkg = {
+      manifest: gadgetManifestFixture({
+        exports: [
+          {
+            hook: 'useCamera',
+            description: 'Clashes with the stdlib camera hook.',
+            usage: 'Must abort at install time.',
+            example: { call: 'useCamera()' },
+          },
+        ],
+      }),
+      bundleUrl: 'https://cdn.example/bundle.js',
+      bundleSri,
+      signatureUrl: 'https://cdn.example/bundle.js.sig',
+      publishedAt: '2026-05-17T00:00:00Z',
+      publishedBy: 'cognito-sub-xyz',
+    };
+    const fetchStub = makeFetchStub([
+      {
+        matches: (url) => url.endsWith('/pkg/my-org/weather-card/0.1.0'),
+        response: jsonResponse(200, readPkg),
+      },
+      {
+        matches: (url) => url === 'https://cdn.example/bundle.js',
+        response: bytesResponse(200, bundleBytes),
+      },
+      {
+        matches: (url) => url === 'https://cdn.example/bundle.js.sig',
+        response: jsonResponse(200, signature),
+      },
+    ]);
+
+    const io = captureIO();
+    const code = await runArtifactInstall(
+      io.flags({ artifactId: '@my-org/weather-card', version: '0.1.0' }),
+      {
+        cwd: workDir,
+        env: {},
+        fetch: fetchStub,
+        stdout: (s) => io.stdout.push(s),
+        stderr: (s) => io.stderr.push(s),
+      },
+    );
+
+    expect(code).toBe(1);
+    expect(
+      io.stderr.some((line) =>
+        line.includes('LINT_GADGET_DUPLICATE_EXPORT_IN_CATALOG'),
+      ),
+    ).toBe(true);
+    const written = JSON.parse(
+      readFileSync(join(workDir, 'ggui.json'), 'utf-8'),
+    ) as { app: { gadgets?: unknown[] } };
+    expect(written.app.gadgets).toBeUndefined();
+  });
+
+  it('prints an old → new replace notice when installing a DIFFERENT version (downgrades are visible)', async () => {
+    // Install 0.2.0 first, then 0.1.0 — the package-keyed replace is
+    // silent data loss for the newer row unless the CLI says what it
+    // replaced.
+    const installVersion = async (version: string): Promise<string[]> => {
+      const { bundleBytes, bundleSri, signature } = buildArtifacts(
+        `bundle-${version}`,
+      );
+      const readPkg = {
+        manifest: gadgetManifestFixture({ version }),
+        bundleUrl: `https://cdn.example/bundle-${version}.js`,
+        bundleSri,
+        signatureUrl: `https://cdn.example/bundle-${version}.js.sig`,
+        publishedAt: '2026-05-17T00:00:00Z',
+        publishedBy: 'cognito-sub-xyz',
+      };
+      const fetchStub = makeFetchStub([
+        {
+          matches: (url) =>
+            url.endsWith(`/pkg/my-org/weather-card/${version}`),
+          response: jsonResponse(200, readPkg),
+        },
+        {
+          matches: (url) => url === `https://cdn.example/bundle-${version}.js`,
+          response: bytesResponse(200, bundleBytes),
+        },
+        {
+          matches: (url) =>
+            url === `https://cdn.example/bundle-${version}.js.sig`,
+          response: jsonResponse(200, signature),
+        },
+      ]);
+      const io = captureIO();
+      const code = await runArtifactInstall(
+        io.flags({ artifactId: '@my-org/weather-card', version }),
+        {
+          cwd: workDir,
+          env: {},
+          fetch: fetchStub,
+          stdout: (s) => io.stdout.push(s),
+          stderr: (s) => io.stderr.push(s),
+        },
+      );
+      expect(code).toBe(0);
+      return io.stdout;
+    };
+
+    const firstOut = await installVersion('0.2.0');
+    expect(firstOut.join('')).not.toContain('replaced:');
+
+    const secondOut = await installVersion('0.1.0');
+    expect(secondOut.join('')).toContain(
+      'replaced: @my-org/weather-card 0.2.0 → 0.1.0',
+    );
+
+    const written = JSON.parse(
+      readFileSync(join(workDir, 'ggui.json'), 'utf-8'),
+    ) as { app: { gadgets: Array<Record<string, unknown>> } };
+    expect(written.app.gadgets).toHaveLength(1);
+    expect(written.app.gadgets[0]).toMatchObject({ version: '0.1.0' });
+  });
+
+  it('aborts without writing when the registry manifest composes to a strict-invalid row', async () => {
+    // `connect[]` is the manifest↔descriptor divergence seam: the
+    // manifest schema accepts any non-empty string, the strict
+    // descriptor schema requires full URLs. A manifest that parses
+    // clean can therefore compose to a row the catalog schema
+    // rejects — the write boundary must catch it.
+    const { bundleBytes, bundleSri, signature } = buildArtifacts(
+      'export const useWeatherCard = () => null;',
+    );
+    const readPkg = {
+      manifest: gadgetManifestFixture({ connect: ['not a url'] }),
+      bundleUrl: 'https://cdn.example/bundle.js',
+      bundleSri,
+      signatureUrl: 'https://cdn.example/bundle.js.sig',
+      publishedAt: '2026-05-17T00:00:00Z',
+      publishedBy: 'cognito-sub-xyz',
+    };
+    const fetchStub = makeFetchStub([
+      {
+        matches: (url) => url.endsWith('/pkg/my-org/weather-card/0.1.0'),
+        response: jsonResponse(200, readPkg),
+      },
+      {
+        matches: (url) => url === 'https://cdn.example/bundle.js',
+        response: bytesResponse(200, bundleBytes),
+      },
+      {
+        matches: (url) => url === 'https://cdn.example/bundle.js.sig',
+        response: jsonResponse(200, signature),
+      },
+    ]);
+
+    const io = captureIO();
+    const code = await runArtifactInstall(
+      io.flags({ artifactId: '@my-org/weather-card', version: '0.1.0' }),
+      {
+        cwd: workDir,
+        env: {},
+        fetch: fetchStub,
+        stdout: (s) => io.stdout.push(s),
+        stderr: (s) => io.stderr.push(s),
+      },
+    );
+
+    expect(code).toBe(1);
+    // stderr names the offending field so the operator can fix the
+    // published manifest.
+    expect(io.stderr.some((line) => line.includes('connect'))).toBe(true);
+    // ggui.json untouched — no gadget row was written.
+    const written = JSON.parse(
+      readFileSync(join(workDir, 'ggui.json'), 'utf-8'),
+    ) as { app: { gadgets?: unknown[] } };
+    expect(written.app.gadgets).toBeUndefined();
   });
 
   // ── Bucket B'' B''.5 — sigstore signature branch ──────────────────

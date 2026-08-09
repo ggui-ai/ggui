@@ -38,13 +38,13 @@ vi.mock('./api-client.js', () => ({
 
 // Import AFTER vi.mock so the mock is in place.
 import {
-  readGadgetsFromGguiJson,
   readPublicEnvFromGguiJson,
   readGenerationFromGguiJson,
   readThemeFromGguiJson,
   assertGadgetBundlesReachable,
   runConfigPushStep,
 } from './config-push.js';
+import { readGadgetsFromGguiJson } from './internal/ggui-json.js';
 import { appThemeSchema } from '@ggui-ai/protocol';
 import type { GguiJsonV1, ThemeConfig } from '@ggui-ai/project-config';
 
@@ -78,30 +78,44 @@ function makeGadget(pkg: string, overrides: Partial<GadgetDescriptor> = {}): Gad
   };
 }
 
-// ─── readGadgetsFromGguiJson ──────────────────────────────────────────────────
+// ─── readGadgetsFromGguiJson (shared reader in internal/ggui-json.ts) ────────
 describe('readGadgetsFromGguiJson', () => {
-  it('returns [] when app.gadgets is absent', () => {
-    expect(readGadgetsFromGguiJson({})).toEqual([]);
-    expect(readGadgetsFromGguiJson({ app: {} })).toEqual([]);
+  it('returns ok with [] when app.gadgets is absent', () => {
+    expect(readGadgetsFromGguiJson({})).toEqual({ ok: true, gadgets: [] });
+    expect(readGadgetsFromGguiJson({ app: {} })).toEqual({
+      ok: true,
+      gadgets: [],
+    });
   });
 
-  it('returns typed array when app.gadgets is valid', () => {
+  it('returns ok with a typed array when app.gadgets is valid', () => {
     const descriptor = structuredClone(STDLIB_GADGETS[0]!);
     const input = { app: { gadgets: [descriptor] } };
     const result = readGadgetsFromGguiJson(input);
-    expect(result).toHaveLength(1);
-    expect(result[0]!.package).toBe(descriptor.package);
-    expect(result[0]!.version).toBe(descriptor.version);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.gadgets).toHaveLength(1);
+      expect(result.gadgets[0]!.package).toBe(descriptor.package);
+      expect(result.gadgets[0]!.version).toBe(descriptor.version);
+    }
   });
 
-  it('throws a clear Error when a gadget descriptor is malformed', () => {
+  it('returns a row-indexed error when a gadget descriptor is malformed', () => {
     const bad = { app: { gadgets: [{ package: 'not-a-valid-npm-name!' }] } };
-    expect(() => readGadgetsFromGguiJson(bad)).toThrow();
+    const result = readGadgetsFromGguiJson(bad);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      // The message blames the offending ROW by index and points at
+      // editing ggui.json — install must never imply it caused this.
+      expect(result.error).toContain('app.gadgets[0]');
+      expect(result.error).toContain('ggui.json');
+    }
   });
 
-  it('throws when app.gadgets is not an array', () => {
+  it('returns an error when app.gadgets is not an array', () => {
     const bad = { app: { gadgets: 'not-an-array' } };
-    expect(() => readGadgetsFromGguiJson(bad)).toThrow();
+    const result = readGadgetsFromGguiJson(bad);
+    expect(result.ok).toBe(false);
   });
 });
 

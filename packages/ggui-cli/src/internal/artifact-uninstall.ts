@@ -9,8 +9,12 @@
  *   installed-blueprint subdir — strips the `INSTALLED_BLUEPRINTS_GLOB`
  *   entry from `ggui.json#blueprints.include` so a future `ggui serve`
  *   doesn't walk an empty glob.
- * - **gadget** — removes the matching `(package, version)` row from
+ * - **gadget** — removes the PACKAGE's row from
  *   `ggui.json#app.gadgets` (the row `runArtifactInstall` appended).
+ *   Rows are keyed by package — one row per package is the catalog
+ *   invariant, and install replaces the row on a version change — so
+ *   the supplied version does not gate the match; when it differs
+ *   from the installed one, the actual removed version is reported.
  *   When it was the last row, the empty `gadgets` array is dropped
  *   too, keeping the manifest tidy. Nothing on disk to delete —
  *   gadget installs never materialize files.
@@ -71,8 +75,10 @@ Caveats:
     lifetime). Restart to reclaim the cache slot.
   - This is local-only. The published marketplace artifact is unchanged.
 `
-      : `  - Removes the matching \`(package, version)\` entry from
-    \`ggui.json#app.gadgets\` (the entry install appended). When it was
+      : `  - Removes the package's entry from \`ggui.json#app.gadgets\`
+    (the entry install appended). Entries are keyed by package — if the
+    installed version differs from the one you supply, the entry is
+    still removed and the actual version is reported. When it was
     the last entry, the empty \`gadgets\` array is dropped too. Other
     entries are preserved verbatim.
   - Idempotent: uninstalling a never-installed identifier exits 0
@@ -205,23 +211,40 @@ export async function runArtifactUninstall(
 
   // ---- gadget branch: remove the ggui.json#app.gadgets row ----
   // Gadget installs never materialize files; the whole install effect
-  // is the `(package, version)` row `appendGadget` wrote. Reverse it.
+  // is the package-keyed row `appendGadget` wrote. Reverse it: rows
+  // are keyed by PACKAGE (one row per package is the catalog
+  // invariant, and install replaces the row on a version change), so
+  // uninstall matches by package alone — otherwise uninstalling the
+  // originally-installed version after an upgrade would report
+  // "nothing to remove" while the row is still live.
   if (flags.kind === 'gadget') {
-    const rowRes = removeGadgetRow(gguiJson, flags.artifactId, flags.version);
+    const rowRes = removeGadgetRow(gguiJson, flags.artifactId);
     if ('error' in rowRes) {
       stderr(`${verb}: ${rowRes.error}\n`);
       return { exitCode: 1, removed: false, globRemoved: false };
     }
     if (!rowRes.removed) {
       stderr(
-        `${verb}: ${flags.artifactId}@${flags.version} is not installed (no matching entry in ${gguiPath}#app.gadgets) — nothing to remove.\n`,
+        `${verb}: ${flags.artifactId} is not installed (no matching entry in ${gguiPath}#app.gadgets) — nothing to remove.\n`,
       );
       return { exitCode: 0, removed: false, globRemoved: false };
     }
     writeGguiJson(gguiPath, gguiJson);
-    stdout(
-      `removed: ${flags.artifactId}@${flags.version} from ggui.json#app.gadgets\n`,
+    for (const v of rowRes.removedVersions) {
+      stdout(
+        `removed: ${flags.artifactId}@${v} from ggui.json#app.gadgets\n`,
+      );
+    }
+    const mismatched = rowRes.removedVersions.filter(
+      (v) => v !== flags.version,
     );
+    if (mismatched.length > 0) {
+      stdout(
+        `note: you supplied @${flags.version}, but the installed version was ${mismatched.join(
+          ', ',
+        )} — gadget rows are keyed by package (one row per package), so the package's row was removed.\n`,
+      );
+    }
     stdout(`\nUninstall complete.\n`);
     return { exitCode: 0, removed: true, globRemoved: false };
   }
@@ -295,11 +318,14 @@ export async function runArtifactUninstall(
 }
 
 /**
- * Remove every `(package, version)` row install's `appendGadget` wrote
- * to `ggui.json#app.gadgets`. Exact reverse of the append: the identity
- * tuple is `(package, version)` — the same package at a DIFFERENT
- * version is a different row and survives. Install keeps the tuple
- * unique, but hand-edited manifests can carry duplicates — uninstall
+ * Remove every row of `artifactId`'s PACKAGE from
+ * `ggui.json#app.gadgets`. Exact reverse of the append: rows are keyed
+ * by package (one row per package is the catalog invariant, and
+ * install replaces the row on any version change), so the supplied
+ * version is NOT part of the match — uninstalling with a stale version
+ * still removes the package's row; the caller reports the versions
+ * that actually went away. Install keeps the catalog at one row per
+ * package, but hand-edited manifests can carry duplicates — uninstall
  * removes ALL matches so "Uninstall complete" is never a half-truth.
  * When the removal empties the array, the `gadgets` key is dropped so
  * the manifest stays tidy (mirrors the blueprint branch's last-install
@@ -311,31 +337,39 @@ export async function runArtifactUninstall(
 function removeGadgetRow(
   gguiJson: GguiJsonObject,
   artifactId: string,
-  version: string,
-): { removed: boolean } | { error: string } {
+):
+  | { removed: boolean; removedVersions: string[] }
+  | { error: string } {
   const app = gguiJson['app'];
-  if (app === undefined) return { removed: false };
+  if (app === undefined) return { removed: false, removedVersions: [] };
   if (typeof app !== 'object' || app === null || Array.isArray(app)) {
     return { error: 'ggui.json#app must be an object' };
   }
   const appObj = app as GguiJsonObject;
   const gadgets = appObj['gadgets'];
-  if (gadgets === undefined) return { removed: false };
+  if (gadgets === undefined) return { removed: false, removedVersions: [] };
   if (!Array.isArray(gadgets)) {
     return { error: 'ggui.json#app.gadgets must be an array' };
   }
+  const removedVersions: string[] = [];
   const remaining = gadgets.filter((e: unknown) => {
     if (e === null || typeof e !== 'object') return true;
     const cand = e as { package?: unknown; version?: unknown };
-    return !(cand.package === artifactId && cand.version === version);
+    if (cand.package !== artifactId) return true;
+    removedVersions.push(
+      typeof cand.version === 'string' ? cand.version : '(unknown)',
+    );
+    return false;
   });
-  if (remaining.length === gadgets.length) return { removed: false };
+  if (remaining.length === gadgets.length) {
+    return { removed: false, removedVersions: [] };
+  }
   if (remaining.length === 0) {
     delete appObj['gadgets'];
   } else {
     appObj['gadgets'] = remaining;
   }
-  return { removed: true };
+  return { removed: true, removedVersions };
 }
 
 /**

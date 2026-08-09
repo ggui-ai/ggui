@@ -22,16 +22,24 @@
  * ## What `list()` guarantees (closes audit R5 — `lintGadgetCatalog`
  * wired)
  *
- *   1. **Schema** — every descriptor is re-parsed against
- *      `registeredGadgetDescriptorSchema` (registration-strict:
- *      teaching text required, permission enum-tight, `typesUrl`
- *      required for non-stdlib). A malformed descriptor throws a
- *      {@link GadgetCatalogIntegrityError} naming the offending index.
- *   2. **Catalog lint** — `lintGadgetCatalog` runs across the whole
- *      array; any warning whose code is in `FATAL_CATALOG_LINT_CODES`
- *      (duplicate hook, immutable-bundle mutation) throws. Soft
- *      warnings are not surfaced here — they ride the authoring-tool
- *      path, not the read path.
+ *   1. **Schema** — every DECLARED descriptor is re-parsed against
+ *      `strictGadgetDescriptorSchema` (teaching text required,
+ *      permission enum-tight) — the same posture the write path and
+ *      the read projections validate against, so a descriptor
+ *      accepted at write time is never rejected here. A malformed
+ *      descriptor throws a {@link GadgetCatalogIntegrityError}
+ *      naming the offending index.
+ *   2. **Catalog lint** — `lintGadgetCatalog` runs over the RESOLVED
+ *      catalog (the union `list()` actually serves), so cross-floor
+ *      collisions — a declared export name clashing with a stdlib
+ *      export — are caught. Any warning whose code is in
+ *      `FATAL_CATALOG_LINT_CODES` throws. Raw-level fatal codes
+ *      (duplicate package, immutable-bundle mutation) are enforced at
+ *      the WRITE boundaries instead (CLI install gate, cloud config
+ *      write gate): both shipped stores pre-resolve via `composeApp`,
+ *      so this read path never sees raw declared rows in production.
+ *      Soft warnings are not surfaced here — they ride the
+ *      authoring-tool path, not the read path.
  *
  * The adapter NEVER returns a partially-valid catalog: either every
  * descriptor passes or `list()` throws. This matches the
@@ -42,8 +50,8 @@
 import {
   FATAL_CATALOG_LINT_CODES,
   lintGadgetCatalog,
-  registeredGadgetDescriptorSchema,
   resolveAppGadgets,
+  strictGadgetDescriptorSchema,
   type GadgetDescriptor,
 } from '@ggui-ai/protocol';
 import type { AppMetadataStore } from './app-metadata-store.js';
@@ -115,16 +123,17 @@ export class AppMetadataGadgetCatalog {
    * `appId`. Falls back to `STDLIB_GADGETS` when the store has no
    * record for the app (matching the store's own default-on-read
    * behavior). Throws {@link GadgetCatalogIntegrityError} on any
-   * schema failure or fatal lint finding.
+   * schema failure or fatal lint finding on the RESOLVED catalog
+   * (see the module docstring for why raw-level fatal codes are
+   * enforced at write boundaries instead).
    */
   async list(appId: string): Promise<readonly GadgetDescriptor[]> {
     const app = await this.#store.get(appId);
-    const descriptors = resolveAppGadgets(app?.gadgets);
+    const declared = app?.gadgets ?? [];
 
     const violations: GadgetCatalogViolation[] = [];
-
-    descriptors.forEach((entry, index) => {
-      const parsed = registeredGadgetDescriptorSchema.safeParse(entry);
+    declared.forEach((entry, index) => {
+      const parsed = strictGadgetDescriptorSchema.safeParse(entry);
       if (!parsed.success) {
         for (const issue of parsed.error.issues) {
           violations.push({
@@ -143,7 +152,16 @@ export class AppMetadataGadgetCatalog {
       throw new GadgetCatalogIntegrityError(appId, violations);
     }
 
-    const fatal = lintGadgetCatalog(descriptors).filter((w) =>
+    // Lint the RESOLVED catalog — the union `list()` actually serves
+    // to the generator, so cross-floor collisions (a declared export
+    // name clashing with a stdlib export) are caught here. Raw-level
+    // fatal codes (duplicate package, immutable-bundle mutation) are
+    // NOT re-checked on this path: both shipped stores pre-resolve via
+    // `composeApp`, so `list()` never sees raw declared rows in
+    // production — those codes are enforced where WRITES happen (the
+    // CLI install gate and the cloud config write gate).
+    const resolved = resolveAppGadgets(declared);
+    const fatal = lintGadgetCatalog(resolved).filter((w) =>
       FATAL_CATALOG_LINT_CODES.has(w.code),
     );
     if (fatal.length > 0) {
@@ -157,6 +175,6 @@ export class AppMetadataGadgetCatalog {
       );
     }
 
-    return descriptors;
+    return resolved;
   }
 }

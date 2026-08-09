@@ -2,10 +2,12 @@
  * Minimal ggui.json read/write helpers shared by gadget subcommands.
  *
  * Shared by the publish and install subcommands so neither has to
- * duplicate the path-walk + JSON IO scaffolding. The parser is
- * deliberately structural (no schema parse): install touches
+ * duplicate the path-walk + JSON IO scaffolding. The file-level parser
+ * is deliberately structural (no schema parse): install touches
  * `app.gadgets` only, so a malformed `theme` block elsewhere in the
- * file shouldn't prevent an install from rewriting the array.
+ * file shouldn't prevent an install from rewriting the array. The one
+ * schema-validating helper here is {@link readGadgetsFromGguiJson} —
+ * the package's single gadget-catalog reader (install + deploy).
  *
  * The shape returned is the raw decoded JSON. Callers narrow the
  * sub-objects they touch (e.g. `app.gadgets`) and run the
@@ -18,6 +20,11 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
+import {
+  strictGadgetDescriptorSchema,
+  type GadgetDescriptor,
+} from '@ggui-ai/protocol';
+import { z } from 'zod';
 
 /** Canonical filename — duplicated from `@ggui-ai/project-config` so
  * this helper stays free of that dependency. The constant lives in one
@@ -111,4 +118,60 @@ export function readGguiJson(
  */
 export function writeGguiJson(path: string, value: GguiJsonObject): void {
   writeFileSync(path, `${JSON.stringify(value, null, 2)}\n`, 'utf-8');
+}
+
+/**
+ * Result of {@link readGadgetsFromGguiJson}: the validated catalog, or
+ * a row-indexed error string ready for stderr.
+ */
+export type GadgetsReadResult =
+  | { readonly ok: true; readonly gadgets: GadgetDescriptor[] }
+  | { readonly ok: false; readonly error: string };
+
+/**
+ * THE one ggui.json gadget-catalog reader for this package — the
+ * install write gate and the `ggui deploy` config push both call it,
+ * so the two surfaces cannot drift on optionality or error shape.
+ *
+ * Navigates to `app.gadgets` via a nested non-strict schema (other
+ * manifest fields ride through untouched) and strict-parses every row
+ * (`strictGadgetDescriptorSchema` — the same posture every other
+ * catalog boundary applies). Absent `app` / `app.gadgets` reads as an
+ * empty catalog.
+ *
+ * On failure the error names the offending ROW by index and points at
+ * editing `ggui.json` — callers surface it verbatim, plus their own
+ * context, and MUST NOT imply the current command created the row.
+ */
+export function readGadgetsFromGguiJson(gguiJson: unknown): GadgetsReadResult {
+  const schema = z.object({
+    app: z
+      .object({
+        gadgets: z.array(strictGadgetDescriptorSchema).optional(),
+      })
+      .optional(),
+  });
+  const result = schema.safeParse(gguiJson);
+  if (!result.success) {
+    const issue = result.error.issues[0];
+    // `issue.path` is ['app', 'gadgets', <rowIndex>, ...rest] when a
+    // row failed; shallower when the container itself is malformed.
+    const path =
+      issue !== undefined && issue.path.length > 0
+        ? issue.path
+            .map((p, i) =>
+              typeof p === 'number'
+                ? `[${p}]`
+                : i === 0
+                  ? String(p)
+                  : `.${String(p)}`,
+            )
+            .join('')
+        : 'app.gadgets';
+    return {
+      ok: false,
+      error: `ggui.json#${path} failed validation — ${issue?.message ?? 'malformed descriptor'}. Edit ggui.json#app.gadgets to fix or remove the offending entry.`,
+    };
+  }
+  return { ok: true, gadgets: [...(result.data.app?.gadgets ?? [])] };
 }

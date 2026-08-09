@@ -361,7 +361,11 @@ describe('runArtifactUninstall', () => {
       expect(manifest.app.gadgets[0].package).toBe('@vendor/chart-hook');
     });
 
-    it('matches on the FULL (package, version) tuple — other versions survive', async () => {
+    it('matches by PACKAGE — a stale supplied version still removes the package rows (with a notice)', async () => {
+      // Hand-edited duplicate-package state: both versions present.
+      // Rows are keyed by package (one row per package is the catalog
+      // invariant), so uninstall removes them ALL and names the
+      // versions that were actually removed.
       const ctx = setupProject({
         manifest: {
           app: {
@@ -376,26 +380,65 @@ describe('runArtifactUninstall', () => {
       });
       cleanup = ctx.cleanup;
 
+      const out: string[] = [];
       const result = await runArtifactUninstall(
         {
           kind: 'gadget',
           artifactId: '@vendor/map-hook',
           version: '1.0.0',
         },
-        { cwd: ctx.cwd, stdout: () => {}, stderr: () => {} },
+        { cwd: ctx.cwd, stdout: (s) => out.push(s), stderr: () => {} },
       );
       expect(result.exitCode).toBe(0);
       expect(result.removed).toBe(true);
 
       const manifest = JSON.parse(readFileSync(join(ctx.cwd, 'ggui.json'), 'utf8'));
-      expect(manifest.app.gadgets).toHaveLength(1);
-      expect(manifest.app.gadgets[0].version).toBe('2.0.0');
+      // BOTH rows gone — package-keyed removal; empty array dropped.
+      expect(manifest.app.gadgets).toBeUndefined();
+      // The notice names the row that did not match the supplied version.
+      expect(out.join('')).toContain('2.0.0');
     });
 
-    it('removes ALL duplicate (package, version) rows, not just the first', async () => {
-      // Install keeps the tuple unique, but hand-edited manifests can
-      // carry duplicates — a findIndex+splice would remove one row and
-      // still print "Uninstall complete" with the twin left behind.
+    it('removes the upgraded row when the user supplies the originally-installed version', async () => {
+      // install v1 → upgrade to v2 leaves ONE row at 2.0.0. Uninstalling
+      // with the remembered `@1.0.0` must still remove the package's
+      // row (rows are keyed by package) and tell the user which version
+      // actually went away.
+      const ctx = setupProject({
+        manifest: {
+          app: {
+            slug: 'demo',
+            name: 'Demo',
+            gadgets: [gadgetRow('@vendor/map-hook', '2.0.0')],
+          },
+        },
+      });
+      cleanup = ctx.cleanup;
+
+      const out: string[] = [];
+      const result = await runArtifactUninstall(
+        {
+          kind: 'gadget',
+          artifactId: '@vendor/map-hook',
+          version: '1.0.0',
+        },
+        { cwd: ctx.cwd, stdout: (s) => out.push(s), stderr: () => {} },
+      );
+      expect(result.exitCode).toBe(0);
+      expect(result.removed).toBe(true);
+
+      const manifest = JSON.parse(readFileSync(join(ctx.cwd, 'ggui.json'), 'utf8'));
+      expect(manifest.app.gadgets).toBeUndefined();
+      const joined = out.join('');
+      expect(joined).toContain('removed: @vendor/map-hook@2.0.0');
+      expect(joined).toContain('1.0.0');
+    });
+
+    it('removes ALL rows of the package, not just the first', async () => {
+      // Install keeps the catalog at one row per package, but
+      // hand-edited manifests can carry duplicates — a findIndex+splice
+      // would remove one row and still print "Uninstall complete" with
+      // the twin left behind.
       const ctx = setupProject({
         manifest: {
           app: {

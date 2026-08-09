@@ -14,9 +14,13 @@
  * Behavior:
  *   - Stdlib (`@ggui-ai/gadgets`) is skipped — the sandbox VFS already
  *     carries its types directly.
- *   - Descriptors without a `typesUrl` are skipped (pre-launch the
- *     `registeredGadgetDescriptorSchema` makes `typesUrl` required for
- *     non-stdlib, so this only spares a stdlib / hand-authored ref).
+ *   - Descriptors without a `typesUrl` are skipped — the catalog's
+ *     `strict` posture keeps `typesUrl` optional (nothing in the
+ *     publish→install chain stamps it yet), so generation degrades
+ *     gracefully to no-types codegen for such packages. The
+ *     types-pipeline follow-up (publish stamps `typesUrl` + `typesSri`;
+ *     `registeredGadgetDescriptorSchema` becomes the registration
+ *     posture again) turns this skip back into a rare case.
  *   - Unique `typesUrl`s are fetched in parallel (`Promise.all`).
  *   - Each fetched body is SHA-384-verified against the descriptor's
  *     `typesSri` when present — a CDN-compromise defense symmetric

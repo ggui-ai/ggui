@@ -45,10 +45,14 @@ import type { GadgetDescriptor } from '@ggui-ai/protocol';
  *
  * The helper:
  *   1. Validates each descriptor against
- *      `registeredGadgetDescriptorSchema` (every registered descriptor
- *      MUST pass — same gate the `App.gadgets` registration handler
- *      applies, including the `typesUrl`-required refinement for
- *      non-stdlib gadgets).
+ *      `registeredGadgetDescriptorSchema` — strict validation PLUS the
+ *      `typesUrl`-required refinement for non-stdlib gadgets. This
+ *      build helper is that schema's one live consumer: it runs after
+ *      the wrapper build has emitted the `.d.ts` and stamped
+ *      `typesUrl` + `typesSri`, so requiring them is coherent HERE.
+ *      (Catalog boundaries — registration writes, reads, generation —
+ *      validate with `strictGadgetDescriptorSchema`, where `typesUrl`
+ *      stays optional until the types-pipeline follow-up lands.)
  *   2. Writes a JSON document `{ version: 'gg2', descriptors: [...] }`.
  */
 export interface WriteDescriptorJsonInput {

@@ -14,10 +14,13 @@
  *      `typesUrl`) must be full URLs — plus a non-function `hookImpl`
  *      check the schema can't see. Throws
  *      {@link WrapperConformanceError} with field-level paths on any
- *      violation. (`typesUrl` is not required HERE — at author time
- *      the build hasn't emitted a `.d.ts` yet — but registration via
- *      `registeredGadgetDescriptorSchema` requires it for every
- *      non-stdlib package.)
+ *      violation. (`typesUrl` is optional here AND at every catalog
+ *      boundary — the `strict` posture is the one live validator;
+ *      generation degrades gracefully to no-types codegen when it is
+ *      absent. The build helper `writeDescriptorJson` still requires
+ *      it via `registeredGadgetDescriptorSchema`, since the wrapper
+ *      build HAS just emitted a `.d.ts` — the front half of the
+ *      types-pipeline follow-up.)
  *   2. Returns the React hook function as the primary export, with
  *      the serializable {@link GadgetDescriptor} descriptor attached
  *      as `.descriptor`. Single export, dual purpose:

@@ -9,7 +9,6 @@
 import process from 'node:process';
 import { dirname } from 'node:path';
 import {
-  strictGadgetDescriptorSchema,
   appPublicEnvSchema,
   appThemeSchema,
   LOOPBACK_HOST_RE,
@@ -19,41 +18,20 @@ import {
 import { loadTheme, parseGguiJson } from '@ggui-ai/project-config/node';
 import { z } from 'zod';
 import { patchAppConfig } from './api-client.js';
-import { findGguiJson, readGguiJson } from './internal/ggui-json.js';
+import {
+  findGguiJson,
+  readGadgetsFromGguiJson,
+  readGguiJson,
+} from './internal/ggui-json.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Readers
 // ─────────────────────────────────────────────────────────────────────────────
 
-/**
- * Extract and validate `app.gadgets` from a decoded ggui.json value.
- *
- * Returns `[]` when the field is absent.
- * Throws with a descriptive message when any descriptor is malformed
- * (schema parse fails).
- */
-export function readGadgetsFromGguiJson(gguiJson: unknown): GadgetDescriptor[] {
-  // Navigate to `app.gadgets` via a nested schema rather than casting +
-  // index access. `z.object` is non-strict by default, so ggui.json's other
-  // fields (schema / protocol / generation / app.publicEnv / …) ride through
-  // as allowed-and-stripped extras — only `app.gadgets` is validated here.
-  const schema = z.object({
-    app: z
-      .object({
-        gadgets: z.array(strictGadgetDescriptorSchema).optional(),
-      })
-      .optional(),
-  });
-  const result = schema.safeParse(gguiJson);
-  if (!result.success) {
-    throw new Error(
-      `ggui.json: app.gadgets is invalid — ${result.error.issues[0]?.message ?? 'malformed descriptor'}`,
-    );
-  }
-  // result.data.app?.gadgets is GadgetDescriptor[] — strictGadgetDescriptorSchema
-  // parses to the same shape as GadgetDescriptor. Spread to a fresh mutable array.
-  return [...(result.data.app?.gadgets ?? [])];
-}
+// The gadget-catalog reader lives in `./internal/ggui-json.ts`
+// (`readGadgetsFromGguiJson`) — ONE reader shared with the install
+// write gate so deploy and install cannot drift on optionality or
+// error shape.
 
 /**
  * Extract and validate `app.publicEnv` from a decoded ggui.json value.
@@ -279,19 +257,16 @@ export async function runConfigPushStep(
     return 1;
   }
 
-  let gadgets: GadgetDescriptor[];
   let publicEnv: Record<string, string>;
   let generation: { model: string; keySource: 'own' | 'managed' } | undefined;
   let theme: AppTheme | undefined;
 
-  try {
-    gadgets = readGadgetsFromGguiJson(readResult.value);
-  } catch (err) {
-    process.stderr.write(
-      `ggui deploy: ${err instanceof Error ? err.message : String(err)}\n`,
-    );
+  const gadgetsRead = readGadgetsFromGguiJson(readResult.value);
+  if (!gadgetsRead.ok) {
+    process.stderr.write(`ggui deploy: ${gadgetsRead.error}\n`);
     return 1;
   }
+  const gadgets: GadgetDescriptor[] = gadgetsRead.gadgets;
 
   try {
     publicEnv = readPublicEnvFromGguiJson(readResult.value);

@@ -22,6 +22,7 @@
  *   10. Return 201 with the wire-locked {@link PublishResponseBody}.
  */
 import {
+  manifestToRegistryEntry,
   parseArtifactManifest,
   type ArtifactManifest,
 } from '@ggui-ai/artifact-manifest';
@@ -33,7 +34,7 @@ import {
   verifyBundleSigstore,
   type GadgetSignature,
 } from '@ggui-ai/gadget-signing';
-import { bundleHostScheme } from '@ggui-ai/protocol';
+import { bundleHostScheme, strictGadgetDescriptorSchema } from '@ggui-ai/protocol';
 import { ZodError } from 'zod';
 import type {
   ArtifactVersionRow,
@@ -207,6 +208,39 @@ export async function publishArtifact(
         'bundle_hash_mismatch',
         'server-computed SHA-384 of the bundle does not match the client-supplied `bundleSha384`',
         { expected: recomputed, received: input.bundleSha384 },
+      );
+    }
+
+    // 4b. Projection viability — the install path projects this
+    // manifest into a catalog row (`manifestToRegistryEntry` →
+    // `strictGadgetDescriptorSchema`). The two schemas are separate
+    // validators (e.g. manifest `connect[]` entries are free-form
+    // strings while catalog `connect[]` entries must be full URLs),
+    // and a published version is immutable — a manifest that projects
+    // to an invalid row would be PERMANENTLY uninstallable. Reject it
+    // now, naming the offending field, while the author can still fix
+    // and republish.
+    const projected = manifestToRegistryEntry(manifest, {
+      version: manifest.version,
+      // Representative install-time computed fields: the bundle URL is
+      // stamped by storage later, so a syntactically valid placeholder
+      // stands in; the SRI is the real digest verified above.
+      bundleUrl: 'https://registry.invalid/bundle.js',
+      bundleSri: `sha384-${recomputed}`,
+    });
+    const projectionCheck = strictGadgetDescriptorSchema.safeParse(projected);
+    if (!projectionCheck.success) {
+      const first = projectionCheck.error.issues[0];
+      const path = (first?.path ?? [])
+        .map((seg) => String(seg))
+        .join('.');
+      return error(
+        400,
+        'manifest_invalid',
+        `manifest projects to an invalid gadget catalog row at \`${path}\`: ${
+          first?.message ?? 'schema violation'
+        } — installs would reject this artifact, and published versions are immutable. Fix the field and republish.`,
+        { path, issues: projectionCheck.error.issues },
       );
     }
   }

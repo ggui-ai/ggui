@@ -198,6 +198,34 @@ describe('publishArtifact', () => {
     expect(result.body.error).toBe('manifest_invalid');
   });
 
+  it('rejects a manifest whose descriptor projection is invalid (non-URL connect entry) — publish never freezes an uninstallable artifact', async () => {
+    // The manifest schema accepts any non-empty string in `connect[]`,
+    // but the installed catalog row requires full URLs. A published
+    // version is immutable, so a manifest that projects to an invalid
+    // row would be PERMANENTLY uninstallable — reject it at publish.
+    const f = await makeFixture();
+    const result = await publishArtifact(
+      {
+        manifest: { ...GADGET_MANIFEST, connect: ['not a url'] },
+        bundle: f.bundleB64,
+        bundleSha384: f.bundleSha384,
+        signature: f.signature,
+      },
+      {
+        storage: f.storage,
+        bundleStorage: f.bundleStorage,
+        authn: { subject: f.subject },
+        clock: () => new Date(),
+        registryHostname: 'localhost:9001',
+      },
+    );
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.status).toBe(400);
+    expect(result.body.error).toBe('manifest_invalid');
+    expect(result.body.message).toContain('connect');
+  });
+
   it('rejects with `bundle_required` for gadget publish without bundle', async () => {
     const f = await makeFixture();
     const result = await publishArtifact(

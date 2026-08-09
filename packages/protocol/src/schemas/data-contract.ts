@@ -552,27 +552,33 @@ export const strictGadgetDescriptorSchema = z
   .strict();
 
 /**
- * Registration-ready descriptor validator.
- * {@link strictGadgetDescriptorSchema} plus the refinement that
- * every non-stdlib package MUST carry a `typesUrl`.
+ * Types-pipeline descriptor validator — PARKED (2026-08-09 gadget
+ * catalog foundations): no catalog-serving boundary consumes it.
+ * {@link strictGadgetDescriptorSchema} plus the refinement that every
+ * non-stdlib package MUST carry a `typesUrl`.
  *
- * Two boundaries, two schemas:
+ * Every live catalog boundary — descriptor writes, catalog reads, and
+ * the generation-time catalog adapter — validates with
+ * `strictGadgetDescriptorSchema`, where `typesUrl` is optional:
+ * nothing in the publish→install chain stamps `typesUrl` yet, and the
+ * types fetcher already skips descriptors without one, so generation
+ * degrades gracefully to no-types codegen.
  *
- *   - `strictGadgetDescriptorSchema` — **author time**. The
- *     `createGguiGadget` SDK factory validates a wrapper spec at
- *     module load, BEFORE the build emits a `.d.ts` — `typesUrl`
- *     doesn't exist yet, so it can't be required here.
- *   - `registeredGadgetDescriptorSchema` — **registration time**.
- *     The build helper (`writeDescriptorJson`) and the `App.gadgets`
- *     registration handlers validate here, AFTER the build has
- *     emitted the `.d.ts`, computed its SRI, and stamped
- *     `typesUrl` + `typesSri` on the descriptor.
+ * The one surviving consumer is the wrapper-author build helper
+ * (`writeDescriptorJson` in `@ggui-ai/gadgets/codegen`) — the
+ * authoring-side front half of the types pipeline, where the wrapper
+ * build HAS just emitted a `.d.ts` and stamped `typesUrl` +
+ * `typesSri`, so requiring them is coherent there.
  *
- * The code-gen sandbox loads the `.d.ts` the URL points at to
+ * The export stays because it is the already-written contract for the
+ * types-pipeline follow-up: publish stamps `typesUrl` + `typesSri` on
+ * the descriptor after the build emits the `.d.ts`, descriptor
+ * projections carry both fields through, and the generation-time
+ * catalog adapter adopts this schema as its posture again — the
+ * code-gen sandbox then loads the `.d.ts` the URL points at to
  * typecheck generated component code against the package's real
  * export signatures. Stdlib (`@ggui-ai/gadgets`) is exempt — the
- * sandbox loads its types directly. No permissive fallback:
- * pre-launch posture forces strict typing across the board.
+ * sandbox loads its types directly.
  */
 export const registeredGadgetDescriptorSchema =
   strictGadgetDescriptorSchema.refine(

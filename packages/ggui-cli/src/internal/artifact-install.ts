@@ -76,11 +76,19 @@ import {
   verifyBundleEd25519,
   verifyBundleSigstore,
 } from '@ggui-ai/gadget-signing';
-import type { GadgetDescriptor } from '@ggui-ai/protocol';
+import {
+  FATAL_CATALOG_LINT_CODES,
+  lintGadgetCatalog,
+  resolveAppGadgets,
+  strictGadgetDescriptorSchema,
+  type GadgetDescriptor,
+} from '@ggui-ai/protocol';
+import { z } from 'zod';
 import { READ_ERROR_CODES, type ArtifactKind, type ReadErrorBody } from '@ggui-ai/registry-core';
 import {
   FIND_MAX_DEPTH,
   findGguiJson,
+  readGadgetsFromGguiJson,
   readGguiJson,
   writeGguiJson,
   type GguiJsonObject,
@@ -877,10 +885,79 @@ export async function runArtifactInstall(
       ...(readPkg.bundleSri !== undefined ? { bundleSri: readPkg.bundleSri } : {}),
     });
 
+    // Write-boundary validation (gadget catalog foundations,
+    // 2026-08-09): the composed row is checked BEFORE it touches the
+    // in-memory catalog. The manifest schema and the descriptor schema
+    // are separate validators (e.g. manifest `connect[]` entries are
+    // free-form strings while descriptor `connect[]` entries must be
+    // full URLs), so a manifest that parsed clean can still compose to
+    // a row the catalog schema rejects.
+    const composedCheck = strictGadgetDescriptorSchema.safeParse(entry);
+    if (!composedCheck.success) {
+      stderr(
+        `${verb}: composed descriptor failed validation: ${formatZodIssues(composedCheck.error)}\n`,
+      );
+      return 1;
+    }
+
     const writeRes = appendGadget(gguiJson, entry);
     if ('error' in writeRes) {
       stderr(`${verb}: ${writeRes.error}\n`);
       return 1;
+    }
+
+    // Post-append catalog lint — any fatal `lintGadgetCatalog` code
+    // aborts the install BEFORE `writeGguiJson`, so a failing install
+    // leaves ggui.json untouched. Two sequential checks, each
+    // reporting paths in its OWN array: first the declared array
+    // (duplicate package, immutable-bundle mutation), then the
+    // RESOLVED union with the first-party stdlib floor (a gadget
+    // re-exporting a stdlib export name is only a collision
+    // post-union — installing it would break every later generation).
+    const postAppendRead = readGadgetsFromGguiJson(gguiJson);
+    if (!postAppendRead.ok) {
+      // The freshly composed row was already validated above, so the
+      // offending row predates this install.
+      stderr(
+        `${verb}: ${postAppendRead.error} (This entry was already present before this install — nothing was written.)\n`,
+      );
+      return 1;
+    }
+    const postAppend = postAppendRead.gadgets;
+    const declaredFatal = lintGadgetCatalog(postAppend).filter((w) =>
+      FATAL_CATALOG_LINT_CODES.has(w.code),
+    );
+    if (declaredFatal.length > 0) {
+      stderr(
+        `${verb}: install would corrupt the gadget catalog:\n${declaredFatal
+          .map((w) => `  ${w.code} ${w.path}: ${w.message}`)
+          .join('\n')}\n`,
+      );
+      return 1;
+    }
+    const resolvedFatal = lintGadgetCatalog(
+      resolveAppGadgets(postAppend),
+    ).filter((w) => FATAL_CATALOG_LINT_CODES.has(w.code));
+    if (resolvedFatal.length > 0) {
+      stderr(
+        `${verb}: install would corrupt the RESOLVED gadget catalog (declared extensions + the first-party stdlib floor):\n${resolvedFatal
+          .map((w) => `  ${w.code} ${w.path}: ${w.message}`)
+          .join('\n')}\n`,
+      );
+      return 1;
+    }
+
+    // Version-replace notice — rows are keyed by package, so
+    // installing any version replaces the existing row. When the
+    // versions differ (upgrade OR downgrade), say what was replaced;
+    // a silent downgrade is data loss the operator should see.
+    if (
+      writeRes.replacedVersion !== undefined &&
+      writeRes.replacedVersion !== entry.version
+    ) {
+      stdout(
+        `replaced: ${entry.package} ${writeRes.replacedVersion} → ${entry.version}\n`,
+      );
     }
 
     // Required public-env keys. Gadget's `requires[]` lists the
@@ -961,14 +1038,15 @@ export async function runArtifactInstall(
  * via `resolveAppGadgets` in `@ggui-ai/protocol` — so declaring an
  * extension never drops stdlib hooks from the generated UI.
  *
- * Idempotent on `(scope, name, version)` — re-running install on the
- * same identifier replaces the existing row rather than adding a
- * duplicate.
+ * Idempotent per PACKAGE — the catalog holds at most one descriptor
+ * per package (`LINT_GADGET_DUPLICATE_PACKAGE` is fatal); re-installing
+ * ANY version of an already-declared package replaces the package's
+ * row. A version upgrade is a replace, never a second row.
  */
 function appendGadget(
   gguiJson: GguiJsonObject,
   entry: GadgetDescriptor,
-): { ok: true } | { error: string } {
+): { ok: true; replacedVersion?: string } | { error: string } {
   const app = gguiJson['app'];
   if (app === undefined) {
     // No app block — bail; the schema requires one and we don't want
@@ -993,22 +1071,44 @@ function appendGadget(
     return { error: 'ggui.json#app.gadgets must be an array' };
   }
 
-  // Idempotent replace by `(package, version)` — a gadget descriptor
-  // is a PACKAGE, and `(package, version)` is its frozen registry
-  // identity tuple. Re-installing the same package version replaces
-  // the existing row rather than adding a duplicate.
+  // Idempotent replace by `package` ALONE — an app's catalog holds at
+  // most ONE descriptor per package (the wire references a package by
+  // name and the server resolves exactly one descriptor; two rows for
+  // one package trip the fatal `LINT_GADGET_DUPLICATE_PACKAGE` lint).
+  // Re-installing any version of an already-declared package replaces
+  // its row, so a version upgrade never accumulates the older row.
   const existingIdx = libs.findIndex((e: unknown) => {
     if (e === null || typeof e !== 'object') return false;
-    const cand = e as { package?: unknown; version?: unknown };
-    return cand.package === entry.package && cand.version === entry.version;
+    const cand = e as { package?: unknown };
+    return cand.package === entry.package;
   });
   if (existingIdx >= 0) {
+    const prior = libs[existingIdx] as { version?: unknown };
+    const replacedVersion =
+      typeof prior.version === 'string' ? prior.version : undefined;
     libs[existingIdx] = entry;
-  } else {
-    libs.push(entry);
+    return {
+      ok: true,
+      ...(replacedVersion !== undefined ? { replacedVersion } : {}),
+    };
   }
+  libs.push(entry);
   return { ok: true };
 }
+
+/**
+ * Format a zod error's issues as a one-line `path: message` list for
+ * stderr diagnostics.
+ */
+function formatZodIssues(error: z.ZodError): string {
+  return error.issues
+    .map((issue) => `${issue.path.join('.')}: ${issue.message}`)
+    .join('; ');
+}
+
+// The post-append catalog read routes through the package's ONE
+// gadget-catalog reader — `readGadgetsFromGguiJson` in
+// `./ggui-json.ts`, shared with the `ggui deploy` config push.
 
 /* -------------------------------------------------------------------------- */
 /* publicEnv prompts                                                          */
