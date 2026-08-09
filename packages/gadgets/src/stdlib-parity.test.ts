@@ -158,12 +158,12 @@ describe('@ggui-ai/gadgets ↔ STDLIB_GADGETS parity', () => {
   });
 
   it('STDLIB_GADGETS_VERSION matches this package\'s version', async () => {
-    // A stdlib gadget's identity is `(hook, package, version)`. Every
-    // wire ref + descriptor for a stdlib gadget carries
-    // `STDLIB_GADGETS_VERSION`; this test pins it against
+    // `(package, version)` is the registry's identity tuple (the wire
+    // references packages by name only). Every stdlib descriptor
+    // carries `STDLIB_GADGETS_VERSION`; this test pins it against
     // `packages/gadgets/package.json#version` so a runtime-package
     // bump without updating the constant fails CI instead of silently
-    // breaking every wire ref's identity tuple.
+    // breaking the registered catalog's identity tuple.
     const pkg = (await import('../package.json', { with: { type: 'json' } })) as {
       default: { version: string };
     };

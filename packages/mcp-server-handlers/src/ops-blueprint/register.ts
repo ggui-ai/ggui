@@ -165,8 +165,9 @@ export function createGguiOpsRegisterBlueprintHandler(
       assertContractNoRetiredFields(parsed.contract);
 
       // Every `contract.clientCapabilities.gadgets[*]` MUST resolve
-      // in `App.gadgets` by the full `(hook, package, version)`
-      // tuple. Fails fast with a precise reject before any state
+      // in `App.gadgets` by `(package, export name)` — the wire
+      // carries no version; the operator's catalog is the version
+      // pin. Fails fast with a precise reject before any state
       // mutation. No-op when no `appMetadataStore` is bound.
       if (deps.appMetadataStore) {
         const appRecord = await deps.appMetadataStore.get(ctx.appId);

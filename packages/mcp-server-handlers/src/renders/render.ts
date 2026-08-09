@@ -3011,9 +3011,10 @@ async function commitCachedGguiSession(
     /**
      * Resolved descriptor subset (filtered from `App.gadgets` to
      * those referenced by the contract's wire-side
-     * `(hook, package, version)` tuples). Persisted on the render as
-     * `gadgetDescriptors` so the bootstrap-meta derivation reads
-     * descriptor metadata without re-resolving.
+     * `(package, export name)` pairs — the wire carries no version).
+     * Persisted on the render as `gadgetDescriptors` so the
+     * bootstrap-meta derivation reads descriptor metadata without
+     * re-resolving.
      */
     readonly appGadgets?: readonly GadgetDescriptor[];
     /**

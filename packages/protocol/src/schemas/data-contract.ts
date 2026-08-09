@@ -539,7 +539,7 @@ export const gadgetDescriptorSchema = z
  * Used by:
  *   - `createGguiGadget` SDK factory (validates wrapper specs).
  *   - `App.gadgets` registration handlers (ggui.json seed,
- *     ops_register_gadget, etc.).
+ *     `ggui gadget install`, config push).
  *
  * Same TS interface as the wire schema — the strictness lives in zod
  * refinements, not the type system.
@@ -586,10 +586,11 @@ export const registeredGadgetDescriptorSchema =
     },
   );
 
-// `package` + `version` are required on every descriptor (mirroring
-// the wire's `(hook, package, version)` identity tuple), so there is
-// no "at least one of package / bundleUrl / bundleHost" refinement
-// and no "bundleHost requires package + version" refinement.
+// `package` + `version` are required on every descriptor —
+// `(package, version)` is the registry's frozen identity tuple; the
+// wire references packages by name only — so there is no "at least
+// one of package / bundleUrl / bundleHost" refinement and no
+// "bundleHost requires package + version" refinement.
 
 /**
  * Wire-side per-export USE entry on `clientCapabilities.gadgets`.

@@ -268,8 +268,9 @@ export function createGguiOpsGenerateBlueprintHandler(
       assertContractNoRetiredFields(parsed.contract);
 
       // 0. Every `contract.clientCapabilities.gadgets[*]` MUST
-      // resolve in `App.gadgets` by the full `(hook, package,
-      // version)` tuple. Throws a precise reject when an
+      // resolve in `App.gadgets` by `(package, export name)` — the
+      // wire carries no version; the operator's catalog is the
+      // version pin. Throws a precise reject when an
       // unregistered wrapper is referenced. No-op when
       // `appMetadataStore` is unset.
       //

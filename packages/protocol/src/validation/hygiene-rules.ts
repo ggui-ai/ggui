@@ -436,8 +436,8 @@ export function checkDuplicateGadgetHooks(
 
 /**
  * Registry-side catalog lint — runs on an `App.gadgets` descriptor
- * array at registration time (ggui.json load, `ops_register_gadget`,
- * registry install). Pure function; returns warnings. The caller
+ * array at registration time (ggui.json load, config push,
+ * `ggui gadget install`). Pure function; returns warnings. The caller
  * (registration handler) treats any code in
  * {@link FATAL_CATALOG_LINT_CODES} as a hard reject.
  *
