@@ -113,6 +113,10 @@ export {
 } from './impls/memory-bundle-storage.js';
 
 // Utils
+export {
+  installCommand,
+  type InstallCommandOptions,
+} from './install-command.js';
 export { compareSemver } from './utils/semver.js';
 export { base64Encode, safeBase64Decode, sha384Base64 } from './utils/base64.js';
 

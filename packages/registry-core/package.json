@@ -34,6 +34,11 @@
       "import": "./dist/types.js",
       "default": "./dist/types.js"
     },
+    "./install-command": {
+      "types": "./dist/install-command.d.ts",
+      "import": "./dist/install-command.js",
+      "default": "./dist/install-command.js"
+    },
     "./interfaces/registry-storage": {
       "types": "./dist/interfaces/registry-storage.d.ts",
       "import": "./dist/interfaces/registry-storage.js",
