@@ -59,6 +59,12 @@ export type { GguiSessionStoreConformanceFactory } from './ggui-session-store.co
 export { runPendingEventConsumerConformance } from './pending-event-consumer.conformance.js';
 export type { PendingEventConsumerConformanceFactory } from './pending-event-consumer.conformance.js';
 
+// Content-addressed code-body seam. Every implementation that removes
+// content runs this; see the suite header for why there is no
+// "never removes" option yet.
+export { runCodeStoreConformance } from './code-store.conformance.js';
+export type { CodeStoreConformanceFactory } from './code-store.conformance.js';
+
 // Blueprint conformance — store + search seams.
 export { runBlueprintStoreConformance } from './blueprint-store.conformance.js';
 export type { BlueprintStoreConformanceFactory } from './blueprint-store.conformance.js';

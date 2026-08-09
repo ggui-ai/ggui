@@ -81,13 +81,14 @@
  *   render-path one.
  *
  * **Observable violation:**
- * - Each reference implementation carries the battery:
- *   `in-memory/code-store.test.ts` (this package) and
- *   `code-store-fs.test.ts` (`@ggui-ai/mcp-server`) both assert
- *   round-trip preserves bytes; idempotent put-twice; missing returns
- *   null; hashOf is deterministic + matches sha256(code);
- *   delete-then-get misses, double-delete resolves, and delete leaves
- *   sibling hashes intact.
+ * - Contract test `runCodeStoreConformance(label, factory)`
+ *   (`@ggui-ai/mcp-server-core/contract-tests`) covers every
+ *   obligation above: round-trip preserves bytes; idempotent
+ *   put-twice; missing returns null; hashOf is deterministic +
+ *   matches sha256(code); delete-then-get misses, double-delete
+ *   resolves, and delete leaves sibling hashes intact. Every
+ *   implementation runs it — impl-specific behavior (on-disk layout,
+ *   malformed-hash rejection) stays in the impl's own suite.
  * - Route-level: `code-route.test.ts` (`@ggui-ai/mcp-server`) asserts
  *   404 on a hash that was never `put` and 400 on a malformed one.
  *
