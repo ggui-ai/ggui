@@ -22,6 +22,8 @@ import {
   renderCacheMarkerSchema,
   renderInputSchema,
   renderOutputSchema,
+  resourceReadErrorCodeSchema,
+  resourceReadErrorSchema,
   updateInputSchema,
   updateOutputSchema,
 } from './mcp';
@@ -600,5 +602,66 @@ describe('ggui_update', () => {
 
   it('rejects an update output missing resourceUri', () => {
     expect(() => updateOutputSchema.parse({ sessionId: 'render_1', updated: true })).toThrow();
+  });
+});
+
+describe('resourceReadErrorCodeSchema', () => {
+  it('is the closed four-value set, in declaration order', () => {
+    expect(resourceReadErrorCodeSchema.options).toEqual([
+      'NOT_FOUND',
+      'BLUEPRINT_UNRESOLVABLE',
+      'NOT_SUPPORTED',
+      'NOT_MOUNTABLE',
+    ]);
+  });
+
+  it('accepts each member', () => {
+    for (const code of resourceReadErrorCodeSchema.options) {
+      expect(resourceReadErrorCodeSchema.parse(code)).toBe(code);
+    }
+  });
+
+  // `safeParse` rather than `expect(...).toThrow()` on purpose: a missing
+  // or renamed schema makes `.parse` throw a TypeError, which `toThrow()`
+  // happily accepts — the rejection pin would pass while proving nothing.
+  it('rejects an unknown code — the enum is closed, not advisory', () => {
+    // `contract_mismatch` was a candidate that got ruled out; if the enum
+    // were ever loosened it is the shape most likely to slip back in.
+    expect(resourceReadErrorCodeSchema.safeParse('CONTRACT_MISMATCH').success).toBe(false);
+    expect(resourceReadErrorCodeSchema.safeParse('SOMETHING_ELSE').success).toBe(false);
+  });
+
+  it('rejects a lowercase spelling — the wire form is UPPER_SNAKE', () => {
+    expect(resourceReadErrorCodeSchema.safeParse('not_found').success).toBe(false);
+  });
+});
+
+describe('resourceReadErrorSchema', () => {
+  it('round-trips a minimal failure', () => {
+    const err = { code: 'NOT_FOUND' as const, message: 'Resource not found.' };
+    expect(resourceReadErrorSchema.parse(err)).toEqual(err);
+  });
+
+  it('round-trips a failure carrying operator detail', () => {
+    const err = {
+      code: 'BLUEPRINT_UNRESOLVABLE' as const,
+      message: 'The component behind this render is gone.',
+      detail: 'blueprint bp_abc resolved, code body absent',
+    };
+    expect(resourceReadErrorSchema.parse(err)).toEqual(err);
+  });
+
+  it('requires code and message', () => {
+    expect(resourceReadErrorSchema.safeParse({ message: 'no code' }).success).toBe(false);
+    expect(resourceReadErrorSchema.safeParse({ code: 'NOT_FOUND' }).success).toBe(false);
+  });
+
+  it('rejects an out-of-enum code on the composed shape', () => {
+    // A `ggui_render` tool-envelope code must not validate here — the two
+    // failure surfaces are separate closed enums.
+    expect(
+      resourceReadErrorSchema.safeParse({ code: 'PRODUCTION_FAILED', message: 'wrong surface' })
+        .success,
+    ).toBe(false);
   });
 });

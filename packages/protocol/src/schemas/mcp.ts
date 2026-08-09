@@ -472,6 +472,64 @@ export const renderErrorSchema = z.object({
 });
 
 /**
+ * Canonical failure codes for a `resources/read` on a render locator
+ * (`ui://ggui/render/{sessionId}/{blueprintKey}`). Closed enum.
+ *
+ * This is a DIFFERENT surface from {@link renderErrorCodeSchema}: that
+ * one classifies a `ggui_render` tool call that ran and failed, and
+ * rides in the tool result. This one classifies a resource read that
+ * cannot return a mount, and rides on a JSON-RPC error — a read either
+ * yields a live mount or fails, never a successful result wrapping a
+ * dead shell. That is what makes the contract host-checkable.
+ *
+ *   - `NOT_FOUND` — no live render and no restorable record. The
+ *     locator never existed, aged out, was erased, or the caller may
+ *     not read it. Denial is deliberately reported as absence: a
+ *     distinguishable "denied" would turn the read into an oracle for
+ *     the existence of other callers' renders.
+ *   - `BLUEPRINT_UNRESOLVABLE` — a record exists, but the component
+ *     behind it cannot be resolved: removed, taken down, or the record
+ *     carries no component reference at all.
+ *   - `NOT_SUPPORTED` — this deployment keeps no durable record, so an
+ *     evicted locator can never be restored. A property of the server,
+ *     identical for every caller and every locator.
+ *   - `NOT_MOUNTABLE` — the render resolved, but no delivery channel is
+ *     available to mount it.
+ */
+export const resourceReadErrorCodeSchema = z.enum([
+  'NOT_FOUND',
+  'BLUEPRINT_UNRESOLVABLE',
+  'NOT_SUPPORTED',
+  'NOT_MOUNTABLE',
+]);
+
+/**
+ * Failure shape for a `resources/read` that cannot return a mount.
+ * Projected onto a JSON-RPC error by `resourceReadErrorToJsonRpc` —
+ * `code` lands on `error.data.code`, so hosts can branch on the
+ * classification without parsing prose.
+ *
+ * `message` is caller-facing and `detail` is operator-facing. NEITHER
+ * is preserved on `NOT_FOUND`: the mapper substitutes a constant there
+ * so a denied read and a genuine miss are byte-identical on the wire.
+ * Put diagnostics for that case in the server's own logs.
+ */
+export const resourceReadErrorSchema = z.object({
+  code: resourceReadErrorCodeSchema.describe(
+    'Canonical failure class. NOT_FOUND: no live render and no restorable record (also the response when the caller may not read this locator). BLUEPRINT_UNRESOLVABLE: a record exists but the component behind it is gone. NOT_SUPPORTED: this server keeps no durable record, so an evicted locator can never be restored. NOT_MOUNTABLE: the render resolved but no delivery channel is available.',
+  ),
+  message: z
+    .string()
+    .describe('Human-readable failure detail. Replaced by a constant on NOT_FOUND.'),
+  detail: z
+    .string()
+    .optional()
+    .describe(
+      'Extra diagnostic context for operators. Dropped on NOT_FOUND so a denied read cannot be told apart from a miss.',
+    ),
+});
+
+/**
  * Wire-output shape — `{sessionId, resourceUri?, action, contractHash,
  * cache, error?, nextStep?}`. `contractHash` (data-contract identity)
  * and `cache` (reuse outcome) are required wire fields on this schema.
