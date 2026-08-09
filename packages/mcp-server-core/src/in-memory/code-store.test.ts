@@ -69,4 +69,45 @@ describe('InMemoryCodeStore', () => {
     await store.put(hash, code);
     expect(await store.get(hash)).toBe(code);
   });
+
+  describe('delete', () => {
+    it('removes the bundle — get returns null afterwards', async () => {
+      const store = new InMemoryCodeStore();
+      await store.put(SAMPLE_HASH, SAMPLE);
+      await store.delete(SAMPLE_HASH);
+      expect(await store.get(SAMPLE_HASH)).toBeNull();
+      expect(store.size).toBe(0);
+    });
+
+    it('is idempotent — a second delete of the same hash resolves', async () => {
+      const store = new InMemoryCodeStore();
+      await store.put(SAMPLE_HASH, SAMPLE);
+      await store.delete(SAMPLE_HASH);
+      await expect(store.delete(SAMPLE_HASH)).resolves.toBeUndefined();
+    });
+
+    it('resolves for a hash that was never put', async () => {
+      const store = new InMemoryCodeStore();
+      await expect(store.delete(SAMPLE_HASH)).resolves.toBeUndefined();
+    });
+
+    it('leaves other bundles intact', async () => {
+      const store = new InMemoryCodeStore();
+      const other = 'const B = 2;';
+      const otherHash = store.hashOf(other);
+      await store.put(SAMPLE_HASH, SAMPLE);
+      await store.put(otherHash, other);
+      await store.delete(SAMPLE_HASH);
+      expect(await store.get(otherHash)).toBe(other);
+      expect(store.size).toBe(1);
+    });
+
+    it('re-put after delete restores the bundle', async () => {
+      const store = new InMemoryCodeStore();
+      await store.put(SAMPLE_HASH, SAMPLE);
+      await store.delete(SAMPLE_HASH);
+      await store.put(SAMPLE_HASH, SAMPLE);
+      expect(await store.get(SAMPLE_HASH)).toBe(SAMPLE);
+    });
+  });
 });

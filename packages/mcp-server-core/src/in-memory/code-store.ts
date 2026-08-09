@@ -37,6 +37,12 @@ export class InMemoryCodeStore implements CodeStore {
     return this.store.get(hash) ?? null;
   }
 
+  async delete(hash: string): Promise<void> {
+    // `Map.delete` already returns false rather than throwing for an
+    // absent key, which is exactly the port's idempotency obligation.
+    this.store.delete(hash);
+  }
+
   hashOf(code: string): string {
     return sha256Hex(code);
   }

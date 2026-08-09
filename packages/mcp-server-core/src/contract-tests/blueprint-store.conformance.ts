@@ -18,13 +18,16 @@
  *   - setOperatorDefault is idempotent: same target twice = same state.
  *   - delete removes the row + is idempotent on second delete.
  *   - delete clears the row from list output.
+ *   - `contractHash` round-trips in its declared domain: the 16-char
+ *     `blueprintKey(contract)` value, not some other contract digest.
  *
  * Implementations layer their own adapter-specific tests on top (e.g.
  * the DDB+S3 adapter additionally asserts the code body in S3 is
  * cleaned up on delete when no other row references the hash).
  */
 
-import type { Blueprint } from '@ggui-ai/protocol';
+import type { Blueprint, DataContract } from '@ggui-ai/protocol';
+import { blueprintKey } from '@ggui-ai/protocol/blueprint-key';
 import { describe, expect, it } from 'vitest';
 import {
   BlueprintAlreadyExistsError,
@@ -37,6 +40,30 @@ export interface BlueprintStoreConformanceFactory {
   readonly create: () => Promise<BlueprintStore>;
   readonly cleanup?: (store: BlueprintStore) => Promise<void> | void;
 }
+
+/**
+ * Two contract shapes whose canonical forms differ, so
+ * `blueprintKey` maps them to different keys. Used by the
+ * `contractHash` domain pin below.
+ */
+const CONTRACT_A: DataContract = {
+  propsSpec: {
+    properties: {
+      title: { schema: { type: 'string' }, required: true },
+    },
+  },
+};
+
+const CONTRACT_B: DataContract = {
+  propsSpec: {
+    properties: {
+      total: { schema: { type: 'number' }, required: true },
+    },
+  },
+};
+
+/** Shape every value in the `contractHash` domain has: 16 lowercase hex. */
+const BLUEPRINT_KEY_REGEX = /^[0-9a-f]{16}$/;
 
 function makeBlueprint(overrides: Partial<Blueprint> & { blueprintId: string }): Blueprint {
   return {
@@ -247,6 +274,72 @@ export function runBlueprintStoreConformance(
       it('is a no-op on unknown id', async () => {
         await withStore(async (store) => {
           await expect(store.delete('bp-missing')).resolves.toBeUndefined();
+        });
+      });
+    });
+
+    // The `contractHash` parameter names a specific domain: the
+    // 16-char `blueprintKey(contract)` value. Nothing in the type
+    // system says so — `string` accepts any digest — so the domain is
+    // pinned here, where every implementation runs it. A store that
+    // truncates, re-cases, or re-hashes the key on the write path
+    // fails the round-trip; a caller that starts passing some other
+    // contract digest fails the shape assertion.
+    describe('contractHash domain — 16-char blueprintKey', () => {
+      it('blueprintKey yields 16 lowercase hex chars', () => {
+        expect(blueprintKey(CONTRACT_A)).toMatch(BLUEPRINT_KEY_REGEX);
+        expect(blueprintKey(CONTRACT_B)).toMatch(BLUEPRINT_KEY_REGEX);
+      });
+
+      it('distinct contract shapes yield distinct keys', () => {
+        expect(blueprintKey(CONTRACT_A)).not.toBe(blueprintKey(CONTRACT_B));
+      });
+
+      it('round-trips a real blueprintKey through put + get + list', async () => {
+        await withStore(async (store) => {
+          const key = blueprintKey(CONTRACT_A);
+          await store.put(
+            makeBlueprint({
+              blueprintId: 'bp-key-a',
+              contractHash: key,
+              contract: CONTRACT_A,
+            }),
+          );
+
+          const got = await store.get('bp-key-a');
+          expect(got?.contractHash).toBe(key);
+          expect(got?.contractHash).toMatch(BLUEPRINT_KEY_REGEX);
+
+          const listed = await store.list('app-1', key);
+          expect(listed.map((b) => b.blueprintId)).toEqual(['bp-key-a']);
+        });
+      });
+
+      it('groups rows by the key, not by the stored contract copy', async () => {
+        await withStore(async (store) => {
+          const keyA = blueprintKey(CONTRACT_A);
+          const keyB = blueprintKey(CONTRACT_B);
+          await store.put(
+            makeBlueprint({
+              blueprintId: 'bp-key-a',
+              contractHash: keyA,
+              contract: CONTRACT_A,
+            }),
+          );
+          await store.put(
+            makeBlueprint({
+              blueprintId: 'bp-key-b',
+              contractHash: keyB,
+              contract: CONTRACT_B,
+            }),
+          );
+
+          expect((await store.list('app-1', keyA)).map((b) => b.blueprintId)).toEqual(
+            ['bp-key-a'],
+          );
+          expect((await store.list('app-1', keyB)).map((b) => b.blueprintId)).toEqual(
+            ['bp-key-b'],
+          );
         });
       });
     });

@@ -50,6 +50,11 @@
  *   `put`. No transformation (compression, transpilation) on read.
  * - {@link CodeStore.get} on a missing hash MUST return `null`.
  *   Throwing for missing-hash is a contract violation.
+ * - {@link CodeStore.delete} MUST be idempotent — an absent hash
+ *   (never stored, or already removed) resolves rather than throws.
+ *   Stores that actually remove content MUST make {@link CodeStore.get}
+ *   return `null` for that hash afterwards; a deployment that keeps
+ *   every bundle MAY implement it as a no-op.
  * - Underlying errors (filesystem IO, network, S3 5xx) MUST throw —
  *   callers decide retry policy.
  * - Hashes MUST match `[a-f0-9]{64}` (full sha256 hex) when emitted by
@@ -69,12 +74,22 @@
  *   normal outcome (server restart with in-memory store, expired
  *   filesystem cache, etc.); the iframe runtime falls back to
  *   inline `componentCode` if the bootstrap carries one.
+ * - A removed hash reads exactly like one that was never stored: `get`
+ *   returns `null`, the route 404s. `delete` therefore has no distinct
+ *   read-side failure mode, and callers cannot tell removal from a
+ *   cold store — which is why removal is an operator action, never a
+ *   render-path one.
  *
  * **Observable violation:**
- * - Contract test `codeStoreContract(impl)` covers: round-trip preserves
- *   bytes; idempotent put-twice; missing returns null; hashOf is
- *   deterministic + matches sha256(code); the route 404s on a hash that
- *   was never `put`.
+ * - Each reference implementation carries the battery:
+ *   `in-memory/code-store.test.ts` (this package) and
+ *   `code-store-fs.test.ts` (`@ggui-ai/mcp-server`) both assert
+ *   round-trip preserves bytes; idempotent put-twice; missing returns
+ *   null; hashOf is deterministic + matches sha256(code);
+ *   delete-then-get misses, double-delete resolves, and delete leaves
+ *   sibling hashes intact.
+ * - Route-level: `code-route.test.ts` (`@ggui-ai/mcp-server`) asserts
+ *   404 on a hash that was never `put` and 400 on a malformed one.
  *
  * ## Reference implementations
  *
@@ -89,10 +104,13 @@
  *
  * ## Out of scope (deliberate)
  *
- * - Eviction. Filesystem impl grows unbounded; operators can `rm -rf`
- *   the cache root any time (the `Cache-Control: immutable` contract
- *   means stale URLs are NEVER revalidated, only re-fetched, so a
- *   missing cached file just rerenders the upstream once).
+ * - Eviction *policy*. {@link CodeStore.delete} is the removal
+ *   primitive, but nothing in the seam decides what to remove or when
+ *   — no LRU, no TTL, no size cap. The filesystem impl grows unbounded
+ *   until someone acts; operators can also `rm -rf` the cache root any
+ *   time (the `Cache-Control: immutable` contract means stale URLs are
+ *   NEVER revalidated, only re-fetched, so a missing cached file just
+ *   rerenders the upstream once).
  * - Range reads / streaming. componentCode is small; whole-blob is fine.
  * - Compression. node serves with content-encoding identity; if
  *   operators care, a CDN in front of the route handles it transparently.
@@ -121,6 +139,23 @@ export interface CodeStore {
    * exact UTF-8 string that was `put`. No transformation.
    */
   get(hash: string): Promise<string | null>;
+
+  /**
+   * Remove a stored bundle. Deployments that never remove content may
+   * implement this as a no-op.
+   *
+   * Idempotent — a hash that was never stored, or was already removed,
+   * MUST resolve rather than throw. Implementations that do remove
+   * MUST make {@link CodeStore.get} return `null` for the hash
+   * afterwards, and MUST leave every other hash untouched.
+   *
+   * Malformed hashes are not an error either: an implementation that
+   * derives a storage path from the hash MUST reject the key before
+   * touching storage (the same narrowing {@link CODE_HASH_REGEX}
+   * gives the read path) and resolve, so a bad key can never remove
+   * something outside the store.
+   */
+  delete(hash: string): Promise<void>;
 
   /**
    * Compute the canonical hash for `code`. Defaults to

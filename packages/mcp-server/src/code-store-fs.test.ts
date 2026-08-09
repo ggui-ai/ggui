@@ -86,6 +86,79 @@ describe('FileSystemCodeStore', () => {
     expect(await store.get(sha256Hex(codeB))).toBe(codeB);
   });
 
+  describe('delete', () => {
+    it('removes the bundle — get returns null afterwards', async () => {
+      const store = new FileSystemCodeStore({ root });
+      await store.put(SAMPLE_HASH, SAMPLE);
+      await store.delete(SAMPLE_HASH);
+      expect(await store.get(SAMPLE_HASH)).toBeNull();
+    });
+
+    it('removes the on-disk file, not just the read path', async () => {
+      const store = new FileSystemCodeStore({ root });
+      await store.put(SAMPLE_HASH, SAMPLE);
+      await store.delete(SAMPLE_HASH);
+      const fs = await import('node:fs/promises');
+      const absPath = join(
+        root,
+        SAMPLE_HASH.slice(0, 2),
+        `${SAMPLE_HASH.slice(2)}.js`,
+      );
+      await expect(fs.stat(absPath)).rejects.toMatchObject({ code: 'ENOENT' });
+    });
+
+    it('is idempotent — a second delete of the same hash resolves', async () => {
+      const store = new FileSystemCodeStore({ root });
+      await store.put(SAMPLE_HASH, SAMPLE);
+      await store.delete(SAMPLE_HASH);
+      await expect(store.delete(SAMPLE_HASH)).resolves.toBeUndefined();
+    });
+
+    it('resolves for a hash that was never put', async () => {
+      const store = new FileSystemCodeStore({ root });
+      await expect(store.delete(SAMPLE_HASH)).resolves.toBeUndefined();
+    });
+
+    it('leaves other bundles intact', async () => {
+      const store = new FileSystemCodeStore({ root });
+      const other = 'const B = 2;';
+      const otherHash = sha256Hex(other);
+      await store.put(SAMPLE_HASH, SAMPLE);
+      await store.put(otherHash, other);
+      await store.delete(SAMPLE_HASH);
+      expect(await store.get(otherHash)).toBe(other);
+    });
+
+    it('re-put after delete restores the bundle', async () => {
+      const store = new FileSystemCodeStore({ root });
+      await store.put(SAMPLE_HASH, SAMPLE);
+      await store.delete(SAMPLE_HASH);
+      await store.put(SAMPLE_HASH, SAMPLE);
+      expect(await store.get(SAMPLE_HASH)).toBe(SAMPLE);
+    });
+
+    it('never unlinks a path derived from a malformed hash (traversal defense)', async () => {
+      const fs = await import('node:fs/promises');
+      // Cache root one level down, with a file the sharded layout can
+      // never own sitting outside it. `'../bystander'` is exactly the
+      // hash an unvalidated `absPath` would resolve onto that file.
+      const cacheRoot = join(root, 'cache');
+      await fs.mkdir(cacheRoot, { recursive: true });
+      const bystander = join(root, 'bystander.js');
+      await fs.writeFile(bystander, 'keep me', { encoding: 'utf-8' });
+
+      const store = new FileSystemCodeStore({ root: cacheRoot });
+      await expect(store.delete('../bystander')).resolves.toBeUndefined();
+      await expect(store.delete('not-a-hash')).resolves.toBeUndefined();
+      await expect(
+        store.delete(SAMPLE_HASH.toUpperCase()),
+      ).resolves.toBeUndefined();
+      expect(await fs.readFile(bystander, { encoding: 'utf-8' })).toBe(
+        'keep me',
+      );
+    });
+  });
+
   it('writes via temp-file + rename (no partial reads)', async () => {
     // We can't easily race here without instrumenting fs, but we can
     // assert the final committed file path matches the expected

@@ -29,7 +29,10 @@
  * The store grows unbounded. Operators who care can periodically
  * `rm -rf ~/.ggui/code-cache/` — every entry is content-addressable
  * and immutable, so a re-fetch will repopulate from upstream code on
- * next render. There is no eviction policy in the seam itself.
+ * next render. `delete(hash)` removes one entry (unlink, ENOENT
+ * tolerated) for operators who need to act on a single bundle rather
+ * than the whole root. There is no eviction policy in the seam itself
+ * — nothing here decides what to remove or when.
  *
  * ## Permissions
  *
@@ -45,6 +48,7 @@ import {
   mkdir,
   readFile,
   rename,
+  unlink,
   writeFile,
 } from 'node:fs/promises';
 import { homedir } from 'node:os';
@@ -102,6 +106,22 @@ export class FileSystemCodeStore implements CodeStore {
       return await readFile(this.absPath(hash), { encoding: 'utf-8' });
     } catch (err) {
       if ((err as NodeJS.ErrnoException).code === 'ENOENT') return null;
+      throw err;
+    }
+  }
+
+  async delete(hash: string): Promise<void> {
+    // Validate before deriving a path: an unchecked hash could carry
+    // `..` segments and unlink a file outside the cache root. Same
+    // narrowing `get` applies, and like `get` a malformed key is not
+    // an error — there is simply nothing here under that name.
+    if (!CODE_HASH_REGEX.test(hash)) return;
+    try {
+      await unlink(this.absPath(hash));
+    } catch (err) {
+      // Absent file = already removed. The shard directory is left in
+      // place; empty dirs cost one inode and the next put refills them.
+      if ((err as NodeJS.ErrnoException).code === 'ENOENT') return;
       throw err;
     }
   }
