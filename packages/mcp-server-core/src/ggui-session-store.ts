@@ -246,36 +246,51 @@ export interface CommitGguiSessionInput {
     readonly hostName: string;
     readonly hostSessionId: string;
   };
+  /**
+   * Event-ledger floor for a commit that MINTS the row. The new row's
+   * `eventSequence` starts here, and the next `appendEvent` lands
+   * ABOVE it.
+   *
+   * Absent — the normal case — means zero: a new render's ledger
+   * starts empty. Supply it when a session RESUMES from a durable
+   * record rather than starting fresh, so the render continues its
+   * event ledger instead of restarting it. Pass the sequence the
+   * earlier life reached; a ledger that counted from zero again would
+   * reissue numbers that render already used, and a reader holding a
+   * cursor from before the resume (a `observe` `fromSeq`, a
+   * {@link GguiSessionStore.listEventsSince} cursor) filters
+   * everything at or below its cursor — so the resumed render's events
+   * would never reach it.
+   *
+   * Ignored on the replace branch, and that is a requirement rather
+   * than an optimization: two commits racing to resume the same
+   * session put the second one on that branch, and honoring a floor
+   * there could move a counter that is already live.
+   *
+   * Anything that is not a positive safe integer means zero. The field
+   * aligns cursors; failing a commit over a malformed one would lose a
+   * working render to a caller-side bug.
+   */
+  seqFloor?: number;
 }
 
 /**
  * The `eventSequence` a FIRST-WRITE {@link GguiSessionStore.commit}
- * mints the row with. Implementations MUST route their create branch
- * through this rather than hard-coding zero; the replace branch is
- * unaffected and keeps preserving the existing row's sequence.
+ * mints the row with — {@link CommitGguiSessionInput.seqFloor}
+ * normalized. Implementations MUST route their create branch through
+ * this rather than hard-coding zero, and MUST NOT consult it on the
+ * replace branch, which keeps preserving the existing row's sequence.
  *
- * Normally the answer is zero — a new render's ledger starts empty,
- * and every producer of a fresh payload says so. The exception is a
- * render RE-created under a sessionId that already had a life: a
- * locator rebuilt from a durable record after its row aged out. Its
- * ledger MUST continue above the sequence the earlier life reached,
- * because a cursor persisted from that life (a WS `fromSeq`, a polling
- * cursor) filters out everything at or below it — the new life's
- * events would arrive numbered as already-seen and be dropped.
- *
- * Anything that is not a positive safe integer means zero rather than
- * an error: the field only aligns cursors, and failing a commit over
- * it would lose a working render to a caller-side bug.
+ * One spelling of the normalization so every backend agrees on what a
+ * malformed floor means, rather than each deciding for itself.
  */
 export function firstWriteEventSequence(
   input: CommitGguiSessionInput,
 ): number {
-  // The embedded-MCP-App variant carries no ledger field at all — it
-  // is not a variant a re-mint produces, so zero is the whole answer
-  // for it.
-  const seq =
-    'eventSequence' in input.render ? input.render.eventSequence : 0;
-  return Number.isSafeInteger(seq) && seq > 0 ? seq : 0;
+  const floor = input.seqFloor;
+  return floor !== undefined && Number.isSafeInteger(floor) && floor > 0
+    ? floor
+    : 0;
 }
 
 export interface GguiSessionStore {

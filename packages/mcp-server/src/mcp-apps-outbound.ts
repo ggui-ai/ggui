@@ -1442,15 +1442,19 @@ export function registerGguiRenderResourceTemplate(
       createdAt: record.createdAt,
       lastActivityAt: now,
       expiresAt: now + REMINTED_RENDER_TTL_MS,
-      // Resumed rather than restarted — a reused sessionId whose
-      // ledger counts from zero again would hand out sequence numbers
-      // the render already used.
+      // States the same fact as the `seqFloor` below, which is what
+      // the store actually seeds the row's ledger from.
       eventSequence: record.seqAtLastCommit,
     };
     return await opts.renderStore.commit({
       render,
       appId: record.appId,
       ...(record.userId !== undefined ? { userId: record.userId } : {}),
+      // The render resumes rather than restarts: its ledger continues
+      // above where the record says it last was, so a reader still
+      // holding a cursor from before the eviction sees the new events
+      // instead of filtering them out as already-seen.
+      seqFloor: record.seqAtLastCommit,
     });
   }
 
