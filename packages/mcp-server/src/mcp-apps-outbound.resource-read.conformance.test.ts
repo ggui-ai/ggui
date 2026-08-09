@@ -323,7 +323,7 @@ describe("first-party resources/read passes @ggui-ai/protocol-conformance", () =
 
   it("drives the shipping registration, which really does register both templates", async () => {
     // The driver above calls `registerGguiRenderResourceTemplate`
-    // directly — the same registration Task 3 rewrote — rather than
+    // directly — the shipping registration itself — rather than
     // standing up a synthetic reader that mimics its answers. Asserted
     // through the server's own advertised surface, so the claim rests
     // on what the registration produced rather than on reading the

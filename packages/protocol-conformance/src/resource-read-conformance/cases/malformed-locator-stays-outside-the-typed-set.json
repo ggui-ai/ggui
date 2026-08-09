@@ -1,6 +1,6 @@
 {
   "name": "malformed-locator-stays-outside-the-typed-set",
-  "description": "A URI with an empty session segment names no render locator, so it is not a read of one and the four classifications do not apply to it. It must not come back as NOT_FOUND: that would make a malformed request indistinguishable from a real miss and would tell a host to stop retrying a request it should fix instead. Which number a malformed URI DOES receive belongs to the transport binding and is deliberately not pinned here.",
+  "description": "A URI with an empty session segment names no render locator, so it is not a read of one and the four classifications do not apply. The graded law is exactly one negative: the error carries NO resource-read code on error.data.code. The NUMBER is not graded, not even negatively — MCP assigns the resource-missing number to a resources/read of a URI the server does not serve, so a framework mapping every unrecognized URI onto it is correct and must not fail here. The classification alone keeps the two apart: a genuine miss carries NOT_FOUND and the constant message, a malformed URI carries no classification at all.",
   "server": { "durableSubstrate": "all", "liveChannel": true },
   "caller": "owner",
   "seeds": [],

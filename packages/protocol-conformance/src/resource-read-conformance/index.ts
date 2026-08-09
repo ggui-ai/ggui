@@ -82,11 +82,16 @@
  *   - **Internal-error message text.** A `-32603` carries whatever the
  *     operator's own store or runtime produced. No case asserts its
  *     content, and none should — it is not protocol surface.
- *   - **The number a URI naming no locator receives.** That belongs to
- *     the transport binding, not to this protocol. What is graded is
- *     the negative: such a URI MUST NOT be answered with one of the
- *     four resource-read codes, because the four classify reads of a
- *     locator and this is not one.
+ *   - **The number a URI naming no locator receives — including
+ *     negatively.** MCP assigns the resource-missing number to a
+ *     `resources/read` of a URI the server does not serve, so a
+ *     framework that maps every unrecognized URI onto it is behaving
+ *     correctly; a catalog that banned that number would fail it
+ *     forever. What IS graded is the classification: such a URI MUST
+ *     NOT carry one of the four resource-read codes on
+ *     `error.data.code`, because the four classify reads that name a
+ *     locator and this names none. The two stay distinguishable on
+ *     that alone.
  *   - **The shell's markup.** Success is graded on the projected render
  *     meta — the delivery channel it declares — never on DOM or HTML
  *     shape, which is a server's own presentation concern.
@@ -265,10 +270,16 @@ export type ResourceReadExpectation =
     }
   | {
       /**
-       * An error the resource-read classification does not reach: the
-       * numeric code is neither canonical number, and `data` carries no
-       * resource-read code. The number itself is the transport
-       * binding's business and is deliberately not pinned.
+       * An error the resource-read classification does not reach:
+       * `data` carries no resource-read code.
+       *
+       * The NUMBER is deliberately not pinned — not even negatively.
+       * MCP assigns the resource-missing number to a `resources/read`
+       * of a URI the server does not serve, so a framework that maps
+       * every unrecognized URI onto it is correct, and banning that
+       * number here would fail it forever. The classification is what
+       * separates the two cases, and it is enough: a genuine miss
+       * carries one, a malformed URI carries none.
        */
       readonly kind: 'outside-typed-set';
     }
@@ -559,14 +570,24 @@ export async function runResourceReadConformance(
       continue;
     }
 
+    let verdict: CaseVerdict;
     try {
-      const verdict = await gradeCase(testCase, prepared);
-      if (verdict.kind === 'pass') passed.push(testCase.name);
-      else if (verdict.kind === 'fail') failed.push(verdict.failure);
-      else skipped.push({ name: testCase.name, reason: verdict.reason });
+      verdict = await gradeCase(testCase, prepared);
     } finally {
-      if (prepared.dispose !== undefined) await prepared.dispose();
+      // A teardown that throws costs THIS case its cleanup and nothing
+      // else. Unguarded, one flaky dispose propagates out of the loop
+      // and takes the whole scorecard with it — every case after it
+      // goes ungraded, and the run reports nothing rather than the
+      // verdicts it had already earned. Cleanup is not a verdict, so it
+      // cannot produce one either: the throw is dropped here, not
+      // recorded as a failure of the server.
+      if (prepared.dispose !== undefined) {
+        await prepared.dispose().catch(() => undefined);
+      }
     }
+    if (verdict.kind === 'pass') passed.push(testCase.name);
+    else if (verdict.kind === 'fail') failed.push(verdict.failure);
+    else skipped.push({ name: testCase.name, reason: verdict.reason });
   }
 
   return { passed, failed, skipped };
@@ -674,21 +695,23 @@ function gradeProbe(
   const dataCode = readDataCode(outcome.error.data);
 
   if (probe.expect.kind === 'outside-typed-set') {
+    // The NUMBER is deliberately not graded here, and an earlier draft
+    // of this arm got it wrong by banning the two canonical ones. MCP
+    // itself assigns the resource-missing number to a `resources/read`
+    // of a URI the server does not serve, so a framework that maps every
+    // unrecognized URI onto it is behaving correctly and would fail such
+    // a check forever. What survives is the classification: the four
+    // codes classify reads that NAME a locator, and this URI names none.
+    //
+    // That still leaves the two distinguishable, which is the point —
+    // a genuine miss carries the resource-read classification and the
+    // constant message; a malformed URI carries no classification at
+    // all, whatever number it rides on.
     if (dataCode !== undefined) {
       return fail(
         'the four resource-read codes classify reads of a locator; a URI that names none is not one',
-        'an error carrying no resource-read code',
-        `reading '${uri}' — which names no render locator — was classified as '${dataCode}'. The classification applies to reads of a locator; this is a malformed request, and answering it with a locator verdict makes it indistinguishable from a real miss.`,
-      );
-    }
-    if (
-      outcome.error.code === CANONICAL_NUMBERS.NOT_FOUND ||
-      outcome.error.code === CANONICAL_NUMBERS.MOUNT_UNAVAILABLE
-    ) {
-      return fail(
-        'the four resource-read codes classify reads of a locator; a URI that names none is not one',
-        'an error whose number is neither canonical resource-read number',
-        `reading '${uri}' — which names no render locator — answered on ${outcome.error.code}, a number reserved for reads that DO name one.`,
+        'an error carrying no resource-read classification on error.data.code',
+        `reading '${uri}' — which names no render locator — was classified as '${dataCode}'. That classification is for reads of a locator; this is a malformed request, and giving it a locator verdict tells a host to stop retrying a request it should fix instead.`,
       );
     }
     return null;
@@ -708,11 +731,19 @@ function gradeProbe(
       `reading '${uri}' carried data.code ${dataCode === undefined ? '(absent)' : `'${dataCode}'`}; the catalog expects '${probe.expect.dataCode}'.`,
     );
   }
-  if (typeof outcome.error.message !== 'string' || outcome.error.message.length === 0) {
+  if (typeof outcome.error.message !== 'string') {
+    // Presence-and-type only, and NOT a ggui obligation: JSON-RPC 2.0
+    // requires an error object to carry a string `message`. An earlier
+    // draft required it to be non-empty, which is a rule no ruling
+    // establishes — a server whose constant message is the empty string
+    // is conformant, however unhelpful. Kept because the fusion
+    // comparison serializes this field, so a frame missing it entirely
+    // is malformed at the transport level before this catalog has an
+    // opinion.
     return fail(
-      'every error carries a message a person can read',
-      'a non-empty message',
-      `reading '${uri}' answered with an empty message.`,
+      "JSON-RPC requires an error object to carry a string 'message'",
+      'a string message field',
+      `reading '${uri}' answered with an error carrying no string message.`,
     );
   }
   if (probe.expect.detailAbsent === true && dataHasDetail(outcome.error.data)) {
@@ -813,13 +844,13 @@ const CANONICAL_NUMBERS = {
 } as const;
 
 function readDataCode(data: unknown): string | undefined {
-  if (typeof data !== 'object' || data === null) return undefined;
-  const code = (data as { code?: unknown }).code;
+  if (!isRecord(data)) return undefined;
+  const code = data['code'];
   return typeof code === 'string' ? code : undefined;
 }
 
 function dataHasDetail(data: unknown): boolean {
-  return typeof data === 'object' && data !== null && 'detail' in data;
+  return isRecord(data) && 'detail' in data;
 }
 
 function errorText(err: unknown): string {
@@ -873,7 +904,11 @@ const EXPECTATION_KINDS: readonly string[] = [
  * the run loudly. It is never a skip and never a fail — those verdicts
  * describe the server under test, not the catalog.
  *
- * Exported for the kit's own meta-tests; not part of the public API.
+ * Exported for the kit's own meta-tests and reachable from the
+ * `./resource-read-conformance` subpath, but NOT re-exported from the
+ * package root — the runner calls it for you, and a consumer needing it
+ * directly is authoring their own catalog rather than grading against
+ * this one.
  */
 export function parseCase(input: unknown): ResourceReadConformanceCase {
   if (!isRecord(input) || typeof input['name'] !== 'string' || input['name'].length === 0) {
@@ -885,11 +920,13 @@ export function parseCase(input: unknown): ResourceReadConformanceCase {
   const bad = (problem: string): Error =>
     new Error(`protocol-conformance: resource-read case '${name}' is malformed — ${problem}.`);
 
+  rejectUnknownKeys(bad, input, CASE_KEYS, 'the case');
   if (typeof input['description'] !== 'string' || input['description'].length === 0) {
     throw bad("'description' must be a non-empty string — it is what a failure report names");
   }
   const server = input['server'];
   if (!isRecord(server)) throw bad("'server' must be an object declaring the deployment shape");
+  rejectUnknownKeys(bad, server, SERVER_KEYS, "'server'");
   for (const flag of ['blueprintRegistry', 'staticDelivery', 'liveChannel']) {
     if (server[flag] !== undefined && typeof server[flag] !== 'boolean') {
       throw bad(`'server.${flag}' must be a boolean when present`);
@@ -959,6 +996,75 @@ export function parseCase(input: unknown): ResourceReadConformanceCase {
 
 type BadFn = (problem: string) => Error;
 
+/**
+ * Reject any key outside the authored vocabulary.
+ *
+ * A typo is otherwise SILENT and expensive: `"liveChanel": true` leaves
+ * the flag undefined, so the case brings up a server with no live
+ * channel and grades that instead — passing, while asserting something
+ * other than what it reads as asserting. Every closed shape in this
+ * module is checked, because each one is a scenario the catalog claims
+ * to have graded.
+ */
+function rejectUnknownKeys(
+  bad: BadFn,
+  value: Readonly<Record<string, unknown>>,
+  known: readonly string[],
+  what: string,
+): void {
+  for (const key of Object.keys(value)) {
+    if (!known.includes(key)) {
+      throw bad(
+        `${what} carries unknown key '${key}' — the vocabulary is closed: ${known.join(', ')}`,
+      );
+    }
+  }
+}
+
+const CASE_KEYS: readonly string[] = [
+  'name',
+  'description',
+  'server',
+  'caller',
+  'seeds',
+  'reads',
+  'indistinguishable',
+  'disclosesNothing',
+];
+
+const SERVER_KEYS: readonly string[] = [
+  'durableSubstrate',
+  'blueprintRegistry',
+  'staticDelivery',
+  'liveChannel',
+];
+
+const PROBE_KEYS: readonly string[] = ['as', 'locator', 'expect'];
+
+const SEED_KEYS: Readonly<Record<string, readonly string[]>> = {
+  'identity-record': ['kind', 'session', 'key', 'blueprint'],
+  'durable-blueprint': ['kind', 'componentRef', 'body'],
+  'committed-render': ['kind', 'session'],
+  'uncommitted-render': ['kind', 'session'],
+  'registered-blueprint': ['kind', 'as'],
+};
+
+const LOCATOR_KEYS: Readonly<Record<string, readonly string[]>> = {
+  render: ['kind', 'session', 'key'],
+  raw: ['kind', 'uri'],
+};
+
+const KEY_KEYS: Readonly<Record<string, readonly string[]>> = {
+  literal: ['kind', 'value'],
+  registered: ['kind', 'seed'],
+};
+
+const EXPECTATION_KEYS: Readonly<Record<string, readonly string[]>> = {
+  'typed-error': ['kind', 'jsonRpcCode', 'dataCode', 'detailAbsent'],
+  'outside-typed-set': ['kind'],
+  'live-mount': ['kind'],
+};
+
 function parseSubstrate(bad: BadFn, value: unknown): DurableSubstrateWiring {
   switch (value) {
     case 'all':
@@ -982,6 +1088,8 @@ function requireText(bad: BadFn, value: unknown, what: string): string {
 
 function parseSeed(bad: BadFn, seed: unknown): ResourceReadSeed {
   if (!isRecord(seed)) throw bad(`a seed must be an object. Received: ${JSON.stringify(seed)}`);
+  const seedKeys = SEED_KEYS[String(seed['kind'])];
+  if (seedKeys !== undefined) rejectUnknownKeys(bad, seed, seedKeys, `a '${String(seed['kind'])}' seed`);
   switch (seed['kind']) {
     case 'identity-record': {
       const blueprint = seed['blueprint'];
@@ -1031,6 +1139,7 @@ function parseSeed(bad: BadFn, seed: unknown): ResourceReadSeed {
 function parseProbe(bad: BadFn, probe: unknown): ResourceReadProbe {
   if (!isRecord(probe)) throw bad(`a probe must be an object. Received: ${JSON.stringify(probe)}`);
   const as = requireText(bad, probe['as'], "a probe's 'as' name");
+  rejectUnknownKeys(bad, probe, PROBE_KEYS, `probe '${as}'`);
   return {
     as,
     locator: parseLocator(bad, as, probe['locator']),
@@ -1040,6 +1149,10 @@ function parseProbe(bad: BadFn, probe: unknown): ResourceReadProbe {
 
 function parseLocator(bad: BadFn, as: string, locator: unknown): ResourceReadLocator {
   if (!isRecord(locator)) throw bad(`probe '${as}' authors no locator`);
+  const locatorKeys = LOCATOR_KEYS[String(locator['kind'])];
+  if (locatorKeys !== undefined) {
+    rejectUnknownKeys(bad, locator, locatorKeys, `probe '${as}' locator`);
+  }
   switch (locator['kind']) {
     case 'render': {
       const session = requireText(bad, locator['session'], `probe '${as}' locator 'session'`);
@@ -1058,6 +1171,8 @@ function parseLocator(bad: BadFn, as: string, locator: unknown): ResourceReadLoc
 
 function parseKey(bad: BadFn, as: string, key: unknown): ResourceReadKey {
   if (!isRecord(key)) throw bad(`probe '${as}' authors a malformed blueprint key`);
+  const keyKeys = KEY_KEYS[String(key['kind'])];
+  if (keyKeys !== undefined) rejectUnknownKeys(bad, key, keyKeys, `probe '${as}' blueprint key`);
   switch (key['kind']) {
     case 'literal':
       return { kind: 'literal', value: requireText(bad, key['value'], `probe '${as}' key value`) };
@@ -1075,6 +1190,10 @@ function parseKey(bad: BadFn, as: string, key: unknown): ResourceReadKey {
 
 function parseExpectation(bad: BadFn, as: string, expect: unknown): ResourceReadExpectation {
   if (!isRecord(expect)) throw bad(`probe '${as}' authors no expectation`);
+  const expectKeys = EXPECTATION_KEYS[String(expect['kind'])];
+  if (expectKeys !== undefined) {
+    rejectUnknownKeys(bad, expect, expectKeys, `probe '${as}' expectation`);
+  }
   switch (expect['kind']) {
     case 'outside-typed-set':
       return { kind: 'outside-typed-set' };

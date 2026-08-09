@@ -1,7 +1,7 @@
 {
   "name": "registry-match-fuses-on-not-mountable",
-  "description": "The one place a server keeping no durable record answers something other than NOT_SUPPORTED for a read it cannot mount: the blueprint registry MATCHED the caller's key, so what the read found is a component it has no channel to deliver. The answer is NOT_MOUNTABLE — and because the match depends on the key rather than on the row, it is still identical for a refused read and a miss.",
-  "server": { "durableSubstrate": "none", "blueprintRegistry": true, "liveChannel": true },
+  "description": "The one place a server keeping no durable record answers something other than NOT_SUPPORTED for a read it cannot mount: the blueprint registry MATCHED the caller's key, so what the read found is a component it has no channel to deliver. The answer is NOT_MOUNTABLE — and because the match depends on the key rather than on the row, it is still identical for a refused read and a miss. This server wires NO delivery channel at all, which is what makes undeliverability follow from the declared shape rather than from any one implementation's choice about how it serves a registry match.",
+  "server": { "durableSubstrate": "none", "blueprintRegistry": true },
   "caller": "other",
   "seeds": [
     { "kind": "registered-blueprint", "as": "fallback" },

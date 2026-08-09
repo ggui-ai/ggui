@@ -19,6 +19,7 @@
  * must go red, not merely that something did.
  */
 import { describe, expect, it } from 'vitest';
+import { isRecord } from '@ggui-ai/protocol';
 import {
   declaresDeliveryChannel,
   parseCase,
@@ -69,7 +70,13 @@ type Flaw =
   /** Returns a success-shaped result declaring no delivery channel. */
   | 'dead-shell-on-success'
   /** A substrate-less server that answers a miss with NOT_FOUND. */
-  | 'substrate-less-answers-not-found';
+  | 'substrate-less-answers-not-found'
+  /**
+   * The one flaw only the byte-identity check can see: correct number,
+   * correct classification, nothing disclosed — but one field differs
+   * between the two fused reads.
+   */
+  | 'varies-one-field-between-reads';
 
 interface SeededState {
   readonly identityRecords: Map<string, { readonly key: string; readonly named: boolean }>;
@@ -210,7 +217,36 @@ function makeDriver(flaw: Flaw = 'none'): ResourceReadScenarioDriver {
     // ownership is folded into visibility rather than branched on later.
     const owns = scenario.caller === 'owner' || flaw === 'refusal-answers-a-resolution-code';
 
+    let readCount = 0;
+
+    /**
+     * Stamp a benign extra field onto every error after the first.
+     *
+     * Chosen to slip past every OTHER check: the number is untouched,
+     * `data.code` is untouched, it is not `detail` (so `detailAbsent`
+     * does not see it), and it names nothing a case declares as a
+     * secret. The only thing left that can notice is the byte
+     * comparison between the fused probes — which is the point.
+     */
+    const varyIfNotFirst = (outcome: ResourceReadOutcome): ResourceReadOutcome => {
+      if (flaw !== 'varies-one-field-between-reads') return outcome;
+      if (readCount <= 1 || outcome.kind !== 'error') return outcome;
+      const data = outcome.error.data;
+      return {
+        kind: 'error',
+        error: {
+          ...outcome.error,
+          data: isRecord(data) ? { ...data, attempt: readCount } : data,
+        },
+      };
+    };
+
     const read = async (uri: string): Promise<ResourceReadOutcome> => {
+      readCount += 1;
+      return varyIfNotFirst(await readOnce(uri));
+    };
+
+    const readOnce = async (uri: string): Promise<ResourceReadOutcome> => {
       const parsed = parseLocator(uri);
       if (parsed === null) {
         if (flaw === 'malformed-uri-answers-not-found') return notFound(flaw, uri);
@@ -329,6 +365,35 @@ describe('resources/read catalog', () => {
       expect(new Set(probes).size, `case '${testCase.name}' repeats a probe name`).toBe(
         probes.length,
       );
+    }
+  });
+
+  it('pins EXACTLY which cases carry the byte-identity obligation', () => {
+    // Deleting `indistinguishable` from a case JSON is otherwise silent:
+    // the case keeps passing, having quietly stopped asserting the one
+    // thing it exists for. Pinned as an exact set so both directions are
+    // a deliberate act — losing it fails here, and adding it to a new
+    // case has to be recorded here too.
+    const fused = resourceReadCases
+      .filter((c) => (c.indistinguishable ?? []).length > 0)
+      .map((c) => c.name)
+      .sort();
+    expect(fused).toEqual([
+      'half-wired-blueprints-only-substrate-fuses-like-none',
+      'half-wired-identity-only-substrate-fuses-like-none',
+      'read-refusal-is-indistinguishable-from-a-miss',
+      'registry-match-fuses-on-not-mountable',
+      'substrate-less-fusion-of-refusal-and-miss',
+    ]);
+  });
+
+  it('gives every fused case at least two probes to compare', () => {
+    // A group naming one probe compares nothing; `parseCase` rejects
+    // that shape, and this is the catalog-side half of the same rule.
+    for (const testCase of resourceReadCases) {
+      const group = testCase.indistinguishable ?? [];
+      if (group.length === 0) continue;
+      expect(group.length, `case '${testCase.name}'`).toBeGreaterThanOrEqual(2);
     }
   });
 
@@ -468,10 +533,61 @@ describe('parseCase — a malformed case aborts the run, never grades a server',
   it('drops nothing the runner grades on', () => {
     // The parse CONSTRUCTS its result rather than passing the input
     // through, so a field it forgets to copy would silently stop being
-    // graded.
-    const parsed = parseCase(resourceReadCases[4]);
-    const original = resourceReadCases[4];
-    expect(parsed).toEqual(original);
+    // graded. Looked up BY NAME: reordering the catalog must not
+    // quietly move this assertion onto a case with fewer fields.
+    const name = 'read-refusal-is-indistinguishable-from-a-miss';
+    const original = resourceReadCases.find((c) => c.name === name);
+    expect(original, `case '${name}' is missing from the catalog`).toBeDefined();
+    // The richest case in the catalog — seeds of two kinds, two probes,
+    // a fusion group and a disclosure list — so every optional field
+    // the constructor could forget is present in this one.
+    expect(original?.indistinguishable ?? []).not.toEqual([]);
+    expect(original?.disclosesNothing ?? []).not.toEqual([]);
+    expect(parseCase(original)).toEqual(original);
+  });
+
+  it('rejects an unknown key on the server shape', () => {
+    // The expensive typo: `liveChanel` leaves the flag undefined, so the
+    // case brings up a server with no live channel and grades THAT,
+    // passing while asserting something other than what it reads as.
+    expect(() =>
+      parseCase({ ...base, server: { durableSubstrate: 'all', liveChanel: true } }),
+    ).toThrow(/unknown key 'liveChanel'/);
+  });
+
+  it('rejects an unknown key on a case, a seed, a probe and an expectation', () => {
+    expect(() => parseCase({ ...base, indistinguishible: ['only'] })).toThrow(
+      /unknown key 'indistinguishible'/,
+    );
+    expect(() =>
+      parseCase({
+        ...base,
+        seeds: [{ kind: 'committed-render', session: 's', appId: 'nope' }],
+      }),
+    ).toThrow(/unknown key 'appId'/);
+    expect(() =>
+      parseCase({
+        ...base,
+        reads: [{ ...base.reads[0], timeoutMs: 100 }],
+      }),
+    ).toThrow(/unknown key 'timeoutMs'/);
+    expect(() =>
+      parseCase({
+        ...base,
+        reads: [
+          {
+            as: 'only',
+            locator: { kind: 'render', session: 's' },
+            expect: {
+              kind: 'typed-error',
+              jsonRpcCode: NOT_FOUND_CODE,
+              dataCode: 'NOT_FOUND',
+              messageContains: 'not found',
+            },
+          },
+        ],
+      }),
+    ).toThrow(/unknown key 'messageContains'/);
   });
 
   it('rejects a classification outside the closed set', () => {
@@ -658,6 +774,51 @@ describe('runResourceReadConformance — rejection pins', () => {
     expect(failed).toContain('substrate-less-fusion-of-refusal-and-miss');
     expect(failed).toContain('half-wired-identity-only-substrate-fuses-like-none');
     expect(failed).toContain('half-wired-blueprints-only-substrate-fuses-like-none');
+  });
+
+  it('fails the fused cases when ONE field varies between the two reads', async () => {
+    // The byte-identity arm is the catalog's core obligation, and until
+    // this flaw existed it was graded by nothing: every other flaw trips
+    // a per-probe check or the disclosure check first, so
+    // `gradeIndistinguishable` could have been `return null` with the
+    // whole repo green.
+    //
+    // This server gets the number right, the classification right, and
+    // discloses nothing — it just does not answer the same bytes twice.
+    const failed = await failedNames('varies-one-field-between-reads');
+    expect(failed).toContain('read-refusal-is-indistinguishable-from-a-miss');
+    expect(failed).toContain('substrate-less-fusion-of-refusal-and-miss');
+    expect(failed).toContain('half-wired-identity-only-substrate-fuses-like-none');
+    expect(failed).toContain('half-wired-blueprints-only-substrate-fuses-like-none');
+    expect(failed).toContain('registry-match-fuses-on-not-mountable');
+  });
+
+  it('attributes that failure to the byte-identity obligation, not another check', async () => {
+    // Otherwise the case above could pass because some unrelated check
+    // happened to fire, leaving the arm untested after all.
+    const result = await runResourceReadConformance(
+      makeDriver('varies-one-field-between-reads'),
+    );
+    const failure = result.failed.find(
+      (f) => f.name === 'read-refusal-is-indistinguishable-from-a-miss',
+    );
+    expect(failure?.obligation).toBe(
+      'a refused read and a read of a locator that never existed are the same bytes',
+    );
+  });
+
+  it('leaves the single-probe cases alone under that flaw', async () => {
+    // Non-vacuity for the flaw itself: it varies a field only BETWEEN
+    // reads, so a case that reads once has nothing to differ from and
+    // must stay green. If those failed too, the flaw would be tripping
+    // some per-probe check and would prove nothing about fusion.
+    const failed = await failedNames('varies-one-field-between-reads');
+    expect(failed).not.toContain('read-miss-answers-not-found');
+    expect(failed).not.toContain('read-on-a-substrate-less-server-answers-not-supported');
+    expect(failed).not.toContain(
+      'read-record-with-purged-blueprint-answers-blueprint-unresolvable',
+    );
+    expect(failed).not.toContain('read-without-a-delivery-channel-answers-not-mountable');
   });
 
   it('names the violated obligation, not just the case', async () => {
