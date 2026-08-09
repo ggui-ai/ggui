@@ -1674,7 +1674,7 @@ describe('createGguiRenderHandler — isError failure envelope (ruling B)', () =
  * Durable render-identity write-through (#430 slice 1).
  *
  * Every render commit also writes the side record that lets a
- * `ui://ggui/render/{sessionId}/{contractKey}` locator re-mint the
+ * `ui://ggui/render/{sessionId}/{blueprintKey}` locator re-mint the
  * render after the render row itself is gone. These assert the record
  * the handler produces, not the store that holds it (that contract is
  * covered by `@ggui-ai/mcp-server-core`'s own port suite).

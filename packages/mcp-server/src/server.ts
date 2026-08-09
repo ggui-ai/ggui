@@ -560,7 +560,7 @@ export function defaultHandlers(deps: {
     /**
      * Optional durable render-identity side store. When present, every
      * `ggui_render` commit also records the identity a
-     * `ui://ggui/render/{sessionId}/{contractKey}` locator needs to
+     * `ui://ggui/render/{sessionId}/{blueprintKey}` locator needs to
      * re-create the render after the render row is gone. Writes are
      * best-effort — they never block or fail a render. Absent = the
      * deployment's render rows are themselves durable enough.
@@ -2700,8 +2700,11 @@ export interface CreateGguiServerOptions {
    * Durable side record of what each render WAS — its `blueprintId`,
    * `contractKey`, `variantKey`, props, and event sequence at the last
    * commit. `ggui_render` writes it at every commit; the record is what
-   * lets a `ui://ggui/render/{sessionId}/{contractKey}` locator
-   * re-create the render once the render row itself has aged out.
+   * lets a `ui://ggui/render/{sessionId}/{blueprintKey}` locator
+   * re-create the render once the render row itself has aged out. The
+   * record's field is `contractKey` and the locator's segment is
+   * `blueprintKey`: one value, named for the record on one side and for
+   * its domain on the other.
    *
    * Optional, and inert until something reads it: writes are
    * best-effort (a rejecting store logs and the render proceeds), and

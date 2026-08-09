@@ -3,8 +3,9 @@
  * accompanies every render commit.
  *
  * The record it produces is what lets a
- * `ui://ggui/render/{sessionId}/{contractKey}` locator re-create a
- * render after the render row itself is gone. Writing it is optional
+ * `ui://ggui/render/{sessionId}/{blueprintKey}` locator re-create a
+ * render after the render row itself is gone (the locator's segment is
+ * named for its domain; the record's field is `contractKey`). Writing it is optional
  * everywhere: with no {@link RenderIdentityStore} bound, every helper
  * here is a no-op and the render path is byte-for-byte what it was.
  *
