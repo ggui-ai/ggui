@@ -77,7 +77,8 @@ export class FileSystemCodeStore implements CodeStore {
   /** Absolute on-disk path for a given hash. Two-level sharded layout. */
   private absPath(hash: string): string {
     // Sharding: `<root>/<hash[0..2]>/<hash[2..]>.js`. Validation on
-    // every put + get below means `hash` is always 64 lowercase hex.
+    // every put + get + delete below means `hash` is always 64
+    // lowercase hex.
     return join(this.root, hash.slice(0, 2), `${hash.slice(2)}.js`);
   }
 

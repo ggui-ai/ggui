@@ -20,6 +20,9 @@
  *   - delete clears the row from list output.
  *   - `contractHash` round-trips in its declared domain: the 16-char
  *     `blueprintKey(contract)` value, not some other contract digest.
+ *   - the store indexes on the `contractHash` it was handed, never on
+ *     a `blueprintKey` it recomputes from the row's `contract` copy
+ *     (pinned with a deliberately mismatched pair — see that case).
  *
  * Implementations layer their own adapter-specific tests on top (e.g.
  * the DDB+S3 adapter additionally asserts the code body in S3 is
@@ -315,7 +318,7 @@ export function runBlueprintStoreConformance(
         });
       });
 
-      it('groups rows by the key, not by the stored contract copy', async () => {
+      it('keeps rows under distinct keys in distinct groups', async () => {
         await withStore(async (store) => {
           const keyA = blueprintKey(CONTRACT_A);
           const keyB = blueprintKey(CONTRACT_B);
@@ -340,6 +343,34 @@ export function runBlueprintStoreConformance(
           expect((await store.list('app-1', keyB)).map((b) => b.blueprintId)).toEqual(
             ['bp-key-b'],
           );
+        });
+      });
+
+      it('indexes the row by its stored contractHash, never by a re-derivation from its contract', async () => {
+        await withStore(async (store) => {
+          const keyA = blueprintKey(CONTRACT_A);
+          const keyB = blueprintKey(CONTRACT_B);
+
+          // The mismatch is deliberate, and it is the only shape that
+          // catches the bug: a row whose stored `contract` is A but
+          // whose `contractHash` says B. Every consistent fixture
+          // passes for a store that ignores the field and recomputes
+          // `blueprintKey(row.contract)` on the write path — the two
+          // values agree, so both routes land on the same group. Here
+          // they disagree, so a recomputing store files this row under
+          // keyA and both assertions below flip.
+          await store.put(
+            makeBlueprint({
+              blueprintId: 'bp-mismatched',
+              contractHash: keyB,
+              contract: CONTRACT_A,
+            }),
+          );
+
+          expect(
+            (await store.list('app-1', keyB)).map((b) => b.blueprintId),
+          ).toEqual(['bp-mismatched']);
+          expect(await store.list('app-1', keyA)).toEqual([]);
         });
       });
     });
