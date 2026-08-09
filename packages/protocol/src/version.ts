@@ -6,6 +6,130 @@
  * schema change; the most recent change anchors {@link PROTOCOL_VERSION}.
  *
  * --------------------------------------------------------------------
+ * Typed `resources/read` failures (2026-08-09, additive, pre-launch,
+ * ggui#430). A read of a render locator
+ * (`ui://ggui/render/{sessionId}/{blueprintKey}`) gains a closed failure
+ * union and a canonical JSON-RPC number, so the read has exactly two
+ * exits: a live mount, or a typed error. Before this, an unresolvable
+ * read returned a SUCCESS-shaped result carrying a loading shell that
+ * would never come alive — the same class of defect ruling B fixed for
+ * `ggui_render`, on the resource surface instead of the tool surface.
+ *
+ *   rr1. **New closed enum `ResourceReadErrorCode`** = NOT_FOUND |
+ *      BLUEPRINT_UNRESOLVABLE | NOT_SUPPORTED | NOT_MOUNTABLE, with
+ *      `resourceReadErrorSchema {code, message, detail?}`. Deliberately
+ *      NOT an extension of `renderErrorCodeSchema` (rb2): that enum
+ *      classifies a `ggui_render` tool call that ran and failed and
+ *      rides IN the tool result; this one classifies a resource read
+ *      and rides ON a JSON-RPC error. Two surfaces, two closed enums,
+ *      same UPPER_SNAKE house style.
+ *
+ *   rr2. **`-32006 MOUNT_UNAVAILABLE` claimed** — the first draw from
+ *      the `-32006` onwards range that rb4 reserved when it retired
+ *      `-32004`. The next free canonical slot is `-32007`. It covers
+ *      BLUEPRINT_UNRESOLVABLE / NOT_SUPPORTED / NOT_MOUNTABLE.
+ *      Deliberately NOT `INTERNAL_ERROR`: a component that is gone, a
+ *      server that keeps no durable record, and a render with no
+ *      delivery channel are all deterministic outcomes of a correctly
+ *      functioning server, and `-32603` would report a malfunction and
+ *      invite a retry that cannot succeed. The fine-grained class rides
+ *      on `error.data.code`.
+ *
+ *   rr3. **NOT_FOUND maps to `-32002`**, which MCP uses for a missing
+ *      resource and which this table already assigns to a missing
+ *      session — for a locator keyed by `sessionId` those are one
+ *      condition, not two.
+ *
+ *   rr4. **NOT_FOUND carries a CONSTANT body.** The mapper substitutes
+ *      a fixed message and drops `detail`, so a read refused by the
+ *      authorization check and a read of a locator that never existed
+ *      are byte-identical on the wire. Anything that varies between the
+ *      two makes the read an existence oracle for other callers'
+ *      renders. The mapper closes the message half; the ordering half
+ *      is a server obligation — a branch whose outcome VARIES WITH THE
+ *      LOCATOR MUST NOT run before the authorization check, because
+ *      reaching one tells the caller the locator resolved for somebody.
+ *      A deployment-global answer is not such a branch: NOT_SUPPORTED
+ *      is identical for every locator on the server that emits it, so
+ *      answering it early discloses nothing. (Scoped this way in the
+ *      same slice the conformance catalog landed, which grades the
+ *      indistinguishability the rule exists to produce and deliberately
+ *      does not grade ordering. The unscoped form would have declared
+ *      a correct substrate-less server non-conformant.)
+ *
+ *   rr5. **A read that cannot mount is now an ERROR, not a
+ *      success-shaped shell.** This is the observable wire change, and
+ *      it is what rr1–rr4 exist to give a shape to. Every failure
+ *      branch of the render-locator read used to return a result whose
+ *      `contents` carried a loading shell — a page that waited forever
+ *      for a render that was never coming. Those branches now throw,
+ *      and the transport serializes them as the JSON-RPC errors above;
+ *      the shell builder behind them is DELETED rather than left
+ *      unreferenced, so no branch can produce one. Reads that CAN
+ *      mount are unchanged byte for byte. A host that treated any
+ *      successful read as mountable was right only by accident and is
+ *      now right by construction; a host that never handled the error
+ *      exit at all now has one to handle. The invariant this buys is
+ *      the whole point: any successful `contents` result IS a live
+ *      mount.
+ *
+ * Conformance-kit verdict: additive, minor-intent while `draft-`, so
+ * PROTOCOL_VERSION is unchanged — no WS envelope moved, and the change
+ * is confined to the MCP resource surface (same reasoning as rb's stamp
+ * adjudication).
+ *
+ * The kit arbitrates this surface now. `resource-read-conformance` in
+ * `@ggui-ai/protocol-conformance` binds the `resources/read` method:
+ * `runResourceReadConformance()` drives an adopter-supplied scenario
+ * driver through a 12-case catalog and grades the two numbers (rr1–rr3),
+ * the closed classification on `error.data.code`, NOT_FOUND's absent
+ * `detail` and constant message (rr4), the refused-equals-missing byte
+ * identity across every server shape, and rr5's invariant on a live row
+ * and a re-minted one alike. What it does NOT arbitrate is `tools/call`:
+ * no driver is bound to that method, so the `ggui_consume` and
+ * `ggui_emit` obligations stay kit-invisible and this entry closes
+ * nothing for them.
+ *
+ * Because that catalog exists and ships, the package-version decision
+ * below is stated outright rather than made conditional on a driver
+ * that has yet to arrive.
+ *
+ * Five things stay ungraded on purpose and MUST NOT be read as
+ * obligations: the ORDER in which a substrate-less server answers
+ * NOT_SUPPORTED; `detail` wording on any code; the NOT_FOUND message
+ * literal (its constancy is the obligation, not its prose); `-32603`
+ * message text; and the NUMBER a URI naming no locator receives —
+ * including negatively, since MCP itself assigns the resource-missing
+ * number to a read of a URI a server does not serve, and banning it
+ * would make every framework that leans on that assignment
+ * non-conformant. On that last one the law is classification-only:
+ * such a URI MUST NOT carry one of the four codes on `error.data.code`.
+ *
+ * Package version — the classification is MADE here, not deferred.
+ * The resource-read surface and the new canonical code are a MINOR for
+ * the `@ggui-ai/*` wave: additive under the version policy's minor rule
+ * (every fixture that passed against the current wave still passes; the
+ * delta is new surface), pre-1.0 and pre-launch. TWO packages carry
+ * minor-class changes into that wave — `@ggui-ai/protocol` (the closed
+ * enum, the canonical number, the projection) and
+ * `@ggui-ai/protocol-conformance` (the catalog that decides them).
+ *
+ * What is deferred is only the mechanical write. Every `@ggui-ai/*`
+ * package carries ONE wave version, and a wave cut moves all of them to
+ * it in a single commit — no package's number can move on its own — so
+ * the release owner takes both bumps together at the next cut. One
+ * deferral, one owner, two named packages. Nothing about what the
+ * change IS remains open.
+ *
+ * On the kit's half, one thing is worth saying plainly rather than
+ * calling its delta "purely additive": `parseCase` rejects unknown
+ * keys, so a case file with a typo'd key throws instead of being
+ * quietly ignored. That strictness is free on a sub-module with no
+ * prior published version — nothing can be built against it yet — but
+ * extending it over the existing fixture catalog would be a MAJOR, not
+ * a minor, and must be adjudicated as one.
+ *
+ * --------------------------------------------------------------------
  * Credential-broker surface retired (2026-08-08, BREAKING, pre-launch,
  * ggui#436). The `system` frame's auth vocabulary and the
  * `ggui_request_credential` tool leave the protocol entirely.

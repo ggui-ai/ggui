@@ -62,6 +62,7 @@ import type {
   GguiSession,
   HostContextProjection,
 } from '@ggui-ai/protocol';
+import { firstWriteEventSequence } from '../ggui-session-store.js';
 import type {
   AppendEventInput,
   CommitGguiSessionInput,
@@ -385,7 +386,7 @@ export class SqliteGguiSessionStore implements GguiSessionStore {
       ...(input.endUserIdentity ? { endUserIdentity: input.endUserIdentity } : {}),
       ...(input.themeId !== undefined ? { themeId: input.themeId } : {}),
       ...(input.hostSession !== undefined ? { hostSession: input.hostSession } : {}),
-      eventSequence: 0,
+      eventSequence: firstWriteEventSequence(input),
       createdAt: t,
       lastActivityAt: t,
       expiresAt: t + this.defaultTtlMs,

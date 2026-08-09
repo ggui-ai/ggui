@@ -1,0 +1,47 @@
+{
+  "name": "read-refusal-is-indistinguishable-from-a-miss",
+  "description": "The core disclosure obligation. A caller with no claim to a render reads a locator that fully resolves for its owner, and reads one that never existed. Both answers must be the same bytes. Anything that varies — a message naming the session, a detail explaining the refusal, a different code because the access check ran late — answers 'does this render exist?' for someone with no right to ask.",
+  "server": { "durableSubstrate": "all", "liveChannel": true },
+  "caller": "other",
+  "seeds": [
+    {
+      "kind": "identity-record",
+      "session": "3f1a9c22-7b4e-4d18-9a05-6c2e8b1d4f70",
+      "key": "fedcba9876543210",
+      "blueprint": "named"
+    },
+    { "kind": "durable-blueprint", "componentRef": "present", "body": "stored" }
+  ],
+  "reads": [
+    {
+      "as": "refused",
+      "locator": {
+        "kind": "render",
+        "session": "3f1a9c22-7b4e-4d18-9a05-6c2e8b1d4f70",
+        "key": { "kind": "literal", "value": "fedcba9876543210" }
+      },
+      "expect": {
+        "kind": "typed-error",
+        "jsonRpcCode": -32002,
+        "dataCode": "NOT_FOUND",
+        "detailAbsent": true
+      }
+    },
+    {
+      "as": "miss",
+      "locator": {
+        "kind": "render",
+        "session": "8d5b0e41-2c96-4a7f-b3d8-1e07f9a2c645",
+        "key": { "kind": "literal", "value": "fedcba9876543210" }
+      },
+      "expect": {
+        "kind": "typed-error",
+        "jsonRpcCode": -32002,
+        "dataCode": "NOT_FOUND",
+        "detailAbsent": true
+      }
+    }
+  ],
+  "indistinguishable": ["refused", "miss"],
+  "disclosesNothing": ["3f1a9c22-7b4e-4d18-9a05-6c2e8b1d4f70"]
+}

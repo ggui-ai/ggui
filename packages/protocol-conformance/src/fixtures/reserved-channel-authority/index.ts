@@ -21,8 +21,10 @@
  * are Server→Client only). Agent emission enters through the
  * `ggui_emit` MCP tool, so both the violation and the rejection that
  * grades it are observable only on the MCP binding. That fixture
- * belongs to a future MCP-binding driver — the gap is declared here
- * rather than faked with a frame the wire cannot carry.
+ * belongs to a future driver bound to `tools/call` — the kit's
+ * `resources/read` driver (`../../resource-read-conformance`) binds a
+ * different method and does not reach `ggui_emit`. The gap is declared
+ * here rather than faked with a frame the wire cannot carry.
  */
 import propsUpdateRoundtrip from './props-update-roundtrip.json' with { type: 'json' };
 

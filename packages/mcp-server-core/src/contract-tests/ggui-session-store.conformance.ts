@@ -41,7 +41,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import type { GguiSession } from '@ggui-ai/protocol';
+import type { ComponentGguiSession } from '@ggui-ai/protocol';
 import type { GguiSessionStore } from '../ggui-session-store.js';
 
 /**
@@ -84,7 +84,7 @@ export function runGguiSessionStoreConformance(
     id: string,
     appId: string,
     componentCode = '/* placeholder */',
-  ): GguiSession {
+  ): ComponentGguiSession {
     return {
       type: 'component',
       id,
@@ -210,6 +210,91 @@ export function runGguiSessionStoreConformance(
           expect(second?.createdAt).toBe(first?.createdAt);
           // eventSequence carried across upserts.
           expect(second?.eventSequence).toBe(first?.eventSequence);
+        });
+      });
+
+      it('mints the ledger at zero when no seqFloor is supplied', async () => {
+        await withStore(async (store) => {
+          await store.commit({
+            appId: 'app-1',
+            render: makeComponentGguiSession('render-fresh', 'app-1'),
+          });
+          expect((await store.get('render-fresh'))?.eventSequence).toBe(0);
+        });
+      });
+
+      it('mints the ledger AT the seqFloor, and appends land above it', async () => {
+        // A session resuming from a durable record continues its event
+        // ledger. The floor is the sequence the earlier life reached,
+        // so the row starts AT it and the next append is the first
+        // number that life never used. Restarting at zero would reissue
+        // numbers the session already used, and a reader holding a
+        // cursor from before the resume filters everything at or below
+        // it — the resumed session's events would never arrive.
+        await withStore(async (store) => {
+          await store.commit({
+            appId: 'app-1',
+            seqFloor: 12,
+            render: makeComponentGguiSession('render-resumed', 'app-1'),
+          });
+          expect((await store.get('render-resumed'))?.eventSequence).toBe(12);
+
+          const seq = await store.appendEvent({
+            sessionId: 'render-resumed',
+            type: 'ui.committed',
+            data: {},
+          });
+          expect(seq).toBe(13);
+          expect((await store.get('render-resumed'))?.eventSequence).toBe(13);
+        });
+      });
+
+      it('treats a floor that is not a positive whole number as zero', async () => {
+        // The field aligns cursors. Rejecting the commit over a
+        // malformed one would lose a working render to a caller-side
+        // bug, so every backend degrades the same way rather than each
+        // deciding for itself.
+        await withStore(async (store) => {
+          await store.commit({
+            appId: 'app-1',
+            seqFloor: -5,
+            render: makeComponentGguiSession('render-negative', 'app-1'),
+          });
+          expect((await store.get('render-negative'))?.eventSequence).toBe(0);
+
+          await store.commit({
+            appId: 'app-1',
+            seqFloor: 2.5,
+            render: makeComponentGguiSession('render-fractional', 'app-1'),
+          });
+          expect((await store.get('render-fractional'))?.eventSequence).toBe(0);
+        });
+      });
+
+      it('ignores seqFloor on the replace branch — a live counter never moves', async () => {
+        // Two commits racing to resume the same session put the second
+        // one here. Honoring a floor on this branch could reset or
+        // raise a counter that is already live, which is why the field
+        // is mint-only rather than merely "usually mint".
+        await withStore(async (store) => {
+          await store.commit({
+            appId: 'app-1',
+            seqFloor: 12,
+            render: makeComponentGguiSession('render-replaced', 'app-1'),
+          });
+          await store.appendEvent({
+            sessionId: 'render-replaced',
+            type: 'ui.committed',
+            data: {},
+          });
+          expect((await store.get('render-replaced'))?.eventSequence).toBe(13);
+
+          await store.commit({
+            appId: 'app-1',
+            seqFloor: 99,
+            render: makeComponentGguiSession('render-replaced', 'app-1', '/* v2 */'),
+          });
+          expect((await store.get('render-replaced'))?.eventSequence).toBe(13);
         });
       });
     });

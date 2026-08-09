@@ -130,6 +130,42 @@ export type {
   ResolutionConformanceResult,
 } from './resolution-conformance/index.js';
 
+// Resource-read conformance — the kit's first MCP-binding driver, and
+// it binds `resources/read` ONLY (`tools/call` has none). A read of a
+// render locator has exactly two exits: a result whose contents
+// declare a delivery channel, or one typed JSON-RPC error.
+// Unlike the three catalogs above this one drives a live server, so
+// the caller supplies a scenario driver rather than a pure function.
+export {
+  declaresDeliveryChannel,
+  renderLocatorUri,
+  resourceReadCases,
+  runResourceReadConformance,
+  GGUI_RENDER_RESOURCE_URI,
+} from './resource-read-conformance/index.js';
+export type {
+  DurableSubstrateWiring,
+  JsonRpcErrorFrame,
+  PreparedResourceReadScenario,
+  ResourceReadCaller,
+  ResourceReadConformanceCase,
+  ResourceReadConformanceFailure,
+  ResourceReadConformanceResult,
+  ResourceReadConformanceSkip,
+  ResourceReadErrorCodeDecl,
+  ResourceReadExpectation,
+  ResourceReadKey,
+  ResourceReadLocator,
+  ResourceReadOutcome,
+  ResourceReadProbe,
+  ResourceReadRenderMeta,
+  ResourceReadScenario,
+  ResourceReadScenarioDriver,
+  ResourceReadSeed,
+  ResourceReadServerShape,
+  RunResourceReadConformanceOptions,
+} from './resource-read-conformance/index.js';
+
 // Runtime loader — look up a fixture by name from the inlined catalog.
 export { loadFixture, listFixtures, loadAllFixtures } from './loader.js';
 

@@ -560,7 +560,7 @@ export function defaultHandlers(deps: {
     /**
      * Optional durable render-identity side store. When present, every
      * `ggui_render` commit also records the identity a
-     * `ui://ggui/render/{sessionId}/{contractKey}` locator needs to
+     * `ui://ggui/render/{sessionId}/{blueprintKey}` locator needs to
      * re-create the render after the render row is gone. Writes are
      * best-effort — they never block or fail a render. Absent = the
      * deployment's render rows are themselves durable enough.
@@ -1924,13 +1924,20 @@ export interface CreateGguiServerOptions {
   readonly renderStore?: GguiSessionStore;
 
   /**
-   * Render-row retention window in ms, forwarded to `ggui_render`'s
-   * `renderTtlMs` deps field. Operators align this with chat-history
-   * lifetime so rehydration-by-refetch (re-reading the `ui://ggui/render/*`
-   * resource after the agent's original render call) finds the row
-   * instead of a reaped one. Defaults to `ggui_render`'s own
-   * `DEFAULT_RENDER_TTL_MS` (1h) when unset — the pre-existing
-   * memory-hygiene default for in-process stores.
+   * Render-row retention window in ms. Operators align this with
+   * chat-history lifetime so rehydration-by-refetch (re-reading the
+   * `ui://ggui/render/*` resource after the agent's original render
+   * call) finds the row instead of a reaped one.
+   *
+   * One knob, three consumers, all of them lifecycle decisions about a
+   * render row: `ggui_render` stamps new renders with it, a re-mint
+   * commits its reconstructed row with it, and a read of a row that is
+   * present but past its expiry gives the row this lifetime again so
+   * the live-channel token minted in the same read cannot outlive it.
+   *
+   * Defaults to 1h when unset — the pre-existing memory-hygiene
+   * default for in-process stores, and the same value each consumer
+   * falls back to independently.
    */
   readonly renderTtlMs?: number;
 
@@ -2693,8 +2700,11 @@ export interface CreateGguiServerOptions {
    * Durable side record of what each render WAS — its `blueprintId`,
    * `contractKey`, `variantKey`, props, and event sequence at the last
    * commit. `ggui_render` writes it at every commit; the record is what
-   * lets a `ui://ggui/render/{sessionId}/{contractKey}` locator
-   * re-create the render once the render row itself has aged out.
+   * lets a `ui://ggui/render/{sessionId}/{blueprintKey}` locator
+   * re-create the render once the render row itself has aged out. The
+   * record's field is `contractKey` and the locator's segment is
+   * `blueprintKey`: one value, named for the record on one side and for
+   * its domain on the other.
    *
    * Optional, and inert until something reads it: writes are
    * best-effort (a rejecting store logs and the render proceeds), and
@@ -4410,14 +4420,21 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
               : {}),
             // Resume contract — registry-only fallback. Wired
             // when the blueprint vector store is available so the
-            // resource handler can render a render-evicted
-            // rehydrate from the registered blueprint instead of
-            // the dead loading shell. `defaultAppIdFallback`
-            // bounds the registry lookup to the OSS single-tenant
-            // identity; multi-tenant deployments leave this
-            // undefined to fail-safe back to the loading shell
-            // (no way to derive the right tenant from a missing
-            // render).
+            // resource handler can rehydrate a render-evicted
+            // locator from the registered blueprint instead of
+            // failing the read. `defaultAppIdFallback` bounds the
+            // registry lookup to the OSS single-tenant identity.
+            //
+            // Leaving it undefined does not soften the response —
+            // there is no placeholder shell to fall back to any more.
+            // It removes the fallback, and reads it would have served
+            // fail typed instead. The reason to leave it undefined is
+            // that the lookup answers "a blueprint with this key
+            // exists under this scope" to whoever asks, which a
+            // deployment serving several tenants from one scope may
+            // not want, and which it could not scope correctly anyway
+            // (a missing render carries no way to derive whose it
+            // was).
             ...(vectors
               ? {
                   vectorStore: vectors,
@@ -4430,9 +4447,15 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
                 }
               : {}),
             // T3-1 (2026-05-13) — content-addressable code delivery
-            // for the MCP-resource shell. Without these the handler
-            // emits the loading shell for compiled components; with
-            // them, it inlines a `codeUrl` the iframe-runtime fetches.
+            // for the MCP-resource shell. One of the handler's two
+            // delivery channels: with these it inlines a `codeUrl` the
+            // iframe-runtime fetches, and `mintWsToken` below is the
+            // other. A compiled component needs at least one, and a
+            // read that resolves a render this server can deliver by
+            // neither fails NOT_MOUNTABLE rather than returning a
+            // shell that would never paint. Wiring both (the shape
+            // this factory produces) also means a fault on one
+            // degrades to the other instead of failing the read.
             ...(opts.codeStore && opts.publicBaseUrl
               ? {
                   codeStore: opts.codeStore,
@@ -4456,6 +4479,32 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
             // diagnosed live on 2026-05-18 against the cloudflared
             // tunnel.
             ...(opts.publicBaseUrl !== undefined ? { publicBaseUrl: opts.publicBaseUrl } : {}),
+            // #430 slice 3 — the durable substrate, forwarded to the
+            // READ side. Both stores are single top-level options with
+            // two consumers: the write paths above spend them keeping
+            // a record, and this is where the record is spent. A
+            // factory that accepts them and forwards neither here
+            // boots, compiles, and answers every evicted locator as
+            // though the operator had wired nothing — which is what a
+            // record-less server is supposed to do, so the regression
+            // is invisible in the response.
+            //
+            // Forwarded independently, never as a pair: the template's
+            // own accessor requires all three stores before it will
+            // consult any of them, so a half-wired deployment is
+            // already handled there, in one place.
+            ...(opts.renderIdentityStore
+              ? { renderIdentityStore: opts.renderIdentityStore }
+              : {}),
+            ...(opts.durableBlueprints !== undefined
+              ? { durableBlueprints: opts.durableBlueprints }
+              : {}),
+            // Same retention knob `ggui_render` stamps new renders
+            // with. The read path spends it on the row a re-mint
+            // commits and on an expired-but-readable row it puts back
+            // into service; unforwarded, both silently fall back to an
+            // hour on a deployment whose renders live far longer.
+            ...(opts.renderTtlMs !== undefined ? { renderTtlMs: opts.renderTtlMs } : {}),
             // Live-channel wsToken minter — when wired, every
             // per-render resource shell embeds `{wsUrl, wsToken}`
             // so the iframe-runtime opens a WebSocket on mount and

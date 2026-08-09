@@ -1,0 +1,29 @@
+{
+  "name": "half-wired-identity-only-substrate-fuses-like-none",
+  "description": "A server holding the record store and nothing else can restore no render, so it is as substrate-less as one holding nothing. This is where the fusion is easiest to get wrong: the re-mint is consulted only when the row is absent, so a verdict derived from a partial substrate check answers NOT_FOUND for a row that exists and NOT_SUPPORTED for one that never did — the existence oracle, rebuilt out of a provisioning mistake.",
+  "server": { "durableSubstrate": "identity-only", "liveChannel": true },
+  "caller": "other",
+  "seeds": [{ "kind": "committed-render", "session": "3f1a9c22-7b4e-4d18-9a05-6c2e8b1d4f70" }],
+  "reads": [
+    {
+      "as": "refused",
+      "locator": { "kind": "render", "session": "3f1a9c22-7b4e-4d18-9a05-6c2e8b1d4f70" },
+      "expect": {
+        "kind": "typed-error",
+        "jsonRpcCode": -32006,
+        "dataCode": "NOT_SUPPORTED"
+      }
+    },
+    {
+      "as": "miss",
+      "locator": { "kind": "render", "session": "8d5b0e41-2c96-4a7f-b3d8-1e07f9a2c645" },
+      "expect": {
+        "kind": "typed-error",
+        "jsonRpcCode": -32006,
+        "dataCode": "NOT_SUPPORTED"
+      }
+    }
+  ],
+  "indistinguishable": ["refused", "miss"],
+  "disclosesNothing": ["3f1a9c22-7b4e-4d18-9a05-6c2e8b1d4f70"]
+}

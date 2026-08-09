@@ -1,0 +1,19 @@
+{
+  "name": "malformed-locator-stays-outside-the-typed-set",
+  "description": "A URI with an empty session segment names no render locator, so it is not a read of one and the four classifications do not apply. The graded law is exactly one negative: the error carries NO resource-read code on error.data.code. The NUMBER is not graded, not even negatively — MCP assigns the resource-missing number to a resources/read of a URI the server does not serve, so a framework mapping every unrecognized URI onto it is correct and must not fail here. The classification alone keeps the two apart: a genuine miss carries NOT_FOUND and the constant message, a malformed URI carries no classification at all.",
+  "server": { "durableSubstrate": "all", "liveChannel": true },
+  "caller": "owner",
+  "seeds": [],
+  "reads": [
+    {
+      "as": "empty-session",
+      "locator": { "kind": "raw", "uri": "ui://ggui/render/" },
+      "expect": { "kind": "outside-typed-set" }
+    },
+    {
+      "as": "empty-session-with-key",
+      "locator": { "kind": "raw", "uri": "ui://ggui/render//fedcba9876543210" },
+      "expect": { "kind": "outside-typed-set" }
+    }
+  ]
+}

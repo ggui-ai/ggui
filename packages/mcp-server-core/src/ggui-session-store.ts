@@ -219,7 +219,8 @@ export interface AppendEventInput {
  * Behavior:
  *
  *   - If no row with `render.id` exists, create one (with the standard
- *     lifecycle fields populated from `now`).
+ *     lifecycle fields populated from `now`, and the ledger seeded per
+ *     {@link firstWriteEventSequence}).
  *   - If a row with `render.id` exists, replace its visible-bits surface
  *     in place; lifecycle fields (`createdAt`, `eventSequence`,
  *     `hostSession`) are preserved across the upsert. `lastActivityAt`
@@ -245,6 +246,56 @@ export interface CommitGguiSessionInput {
     readonly hostName: string;
     readonly hostSessionId: string;
   };
+  /**
+   * Event-ledger floor for a commit that MINTS the row. The new row's
+   * `eventSequence` starts here, and the next `appendEvent` lands
+   * ABOVE it.
+   *
+   * Absent — the normal case — means zero: a new render's ledger
+   * starts empty. Supply it when a session RESUMES from a durable
+   * record rather than starting fresh, so the render continues its
+   * event ledger instead of restarting it. A ledger that counted from
+   * zero again would reissue numbers the render already used, and a
+   * reader holding a cursor from before the resume (an `observe`
+   * `fromSeq`, a {@link GguiSessionStore.listEventsSince} cursor)
+   * filters everything at or below its cursor — so the resumed
+   * render's events would never reach it.
+   *
+   * The store honors the floor it is given and cannot check it. How
+   * much reuse a resume actually avoids is therefore the caller's
+   * property, not this seam's: a floor below where the session really
+   * got to still reissues the numbers in between. Callers reading a
+   * durable record should know how current that record's sequence is.
+   *
+   * Ignored on the replace branch, and that is a requirement rather
+   * than an optimization: two commits racing to resume the same
+   * session put the second one on that branch, and honoring a floor
+   * there could move a counter that is already live.
+   *
+   * Anything that is not a positive safe integer means zero. The field
+   * aligns cursors; failing a commit over a malformed one would lose a
+   * working render to a caller-side bug.
+   */
+  seqFloor?: number;
+}
+
+/**
+ * The `eventSequence` a FIRST-WRITE {@link GguiSessionStore.commit}
+ * mints the row with — {@link CommitGguiSessionInput.seqFloor}
+ * normalized. Implementations MUST route their create branch through
+ * this rather than hard-coding zero, and MUST NOT consult it on the
+ * replace branch, which keeps preserving the existing row's sequence.
+ *
+ * One spelling of the normalization so every backend agrees on what a
+ * malformed floor means, rather than each deciding for itself.
+ */
+export function firstWriteEventSequence(
+  input: CommitGguiSessionInput,
+): number {
+  const floor = input.seqFloor;
+  return floor !== undefined && Number.isSafeInteger(floor) && floor > 0
+    ? floor
+    : 0;
 }
 
 export interface GguiSessionStore {

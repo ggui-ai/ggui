@@ -1,0 +1,26 @@
+{
+  "name": "evicted-row-remints-from-the-durable-record",
+  "description": "The success half on the path the durable substrate exists for. The render row is gone, but the record naming what it was survives, the blueprint it names is stored, and the component body behind that blueprint is still there — so the read restores it and hands back real mount material. Without this case the catalog would grade a server that answers every evicted locator with a typed error as fully conformant, which is the direction a broken re-mint fails in.",
+  "server": { "durableSubstrate": "all", "liveChannel": true },
+  "caller": "owner",
+  "seeds": [
+    {
+      "kind": "identity-record",
+      "session": "3f1a9c22-7b4e-4d18-9a05-6c2e8b1d4f70",
+      "key": "fedcba9876543210",
+      "blueprint": "named"
+    },
+    { "kind": "durable-blueprint", "componentRef": "present", "body": "stored" }
+  ],
+  "reads": [
+    {
+      "as": "reminted",
+      "locator": {
+        "kind": "render",
+        "session": "3f1a9c22-7b4e-4d18-9a05-6c2e8b1d4f70",
+        "key": { "kind": "literal", "value": "fedcba9876543210" }
+      },
+      "expect": { "kind": "live-mount" }
+    }
+  ]
+}

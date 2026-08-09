@@ -1,0 +1,29 @@
+{
+  "name": "substrate-less-fusion-of-refusal-and-miss",
+  "description": "The disclosure obligation restated for a server that keeps no durable record. NOT_SUPPORTED describes the server, so it must answer for a refused row too. A deployment that reported NOT_FOUND for rows that exist and NOT_SUPPORTED for ones that never did would have rebuilt the existence oracle out of its own wiring.",
+  "server": { "durableSubstrate": "none", "liveChannel": true },
+  "caller": "other",
+  "seeds": [{ "kind": "committed-render", "session": "3f1a9c22-7b4e-4d18-9a05-6c2e8b1d4f70" }],
+  "reads": [
+    {
+      "as": "refused",
+      "locator": { "kind": "render", "session": "3f1a9c22-7b4e-4d18-9a05-6c2e8b1d4f70" },
+      "expect": {
+        "kind": "typed-error",
+        "jsonRpcCode": -32006,
+        "dataCode": "NOT_SUPPORTED"
+      }
+    },
+    {
+      "as": "miss",
+      "locator": { "kind": "render", "session": "8d5b0e41-2c96-4a7f-b3d8-1e07f9a2c645" },
+      "expect": {
+        "kind": "typed-error",
+        "jsonRpcCode": -32006,
+        "dataCode": "NOT_SUPPORTED"
+      }
+    }
+  ],
+  "indistinguishable": ["refused", "miss"],
+  "disclosesNothing": ["3f1a9c22-7b4e-4d18-9a05-6c2e8b1d4f70"]
+}

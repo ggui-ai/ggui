@@ -78,6 +78,9 @@ export * from "./envelope-adapters";
 export * from "./envelopes/builders";
 export * from "./errors/version-mismatch";
 export * from "./errors/unknown-permission-name";
+// Typed `resources/read` failures → JSON-RPC. The single exit for every
+// non-mount outcome of a render-locator read.
+export * from "./errors/resource-read";
 export * from "./validation/contract-validator";
 export * from "./validation/cross-references";
 export * from "./validation/is-record";

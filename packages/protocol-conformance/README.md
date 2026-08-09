@@ -1,22 +1,25 @@
 # @ggui-ai/protocol-conformance
 
-Conformance test kit for the ggui protocol. Ships a JSON fixture catalog + a runner that drives each fixture against a live implementation over WebSocket and reports scorecard-style pass / fail / skip output.
+Conformance test kit for the ggui protocol. Ships JSON case catalogs + runners that drive them against a live implementation — the behavioral fixtures over WebSocket, the `resources/read` cases over the MCP binding — and report scorecard-style pass / fail / skip output.
 
 This kit is the protocol's conformance surface: it lets a third-party MCP builder prove their implementation is protocol-conformant without reimplementing the test harness.
 
 ## Grading mechanisms
 
-The kit grades protocol obligations through **three mechanisms**, each matched to where the obligation is observable:
+The kit grades protocol obligations through **four mechanisms**, each matched to where the obligation is observable:
 
 1. **Path-A WS fixtures** — wire-observable behaviors graded from frames the runner collects over the live channel (acks, error frames, canonical `data` deliveries).
 2. **Pure-function catalogs** — deterministic validation obligations (the SPEC §7.7.2 gadget obligations) graded against a caller-supplied function; no host, render, or transport.
 3. **Session-state host read-back** — stateful obligations with no wire response (e.g. `host_context_observed` persisting onto `GguiSession.hostContext`): the runner dispatches the C→S frame, waits out the observation window, then reads the GguiSession field back through `ConformanceHost.readSessionField()` and deep-equals it against the fixture's `expected`. No host (or a host without the method, or a read that throws) → the fixture SKIPS with the reason — a host that cannot read state cannot grade it, and the kit never converts that gap into a pass.
+4. **MCP-binding scenario driver** — request/response obligations on the MCP surface, where the deployment shape is part of what is under test. The `resources/read` catalog is the first: a case declares a server shape, a caller identity and a seed set, the adopter's driver brings a server up that way, and the kit reads locators against it and grades the raw JSON-RPC frames. A driver that cannot express a scenario throws, and the case SKIPS — never passes.
 
-A fourth surface — the **Path-B browser-host driver** for DOM-level claims (`bootstrap-failure`, `props-update`) — is honestly absent: it is not yet packaged, and those fixtures skip wherever the kit runs (see below).
+A fifth surface — the **Path-B browser-host driver** for DOM-level claims (`bootstrap-failure`, `props-update`) — is honestly absent: it is not yet packaged, and those fixtures skip wherever the kit runs (see below).
 
 ## Transport
 
-**v1.0 is WebSocket-only.** The canonical ggui transport is WS (see SPEC §12 Transport Bindings). `TransportConfig` is shaped as an extensibly-closed union so later transports (stdio MCP, HTTP long-poll) can be added post-v1.1 without breaking the public API.
+**The behavioral fixture catalog is WebSocket-only.** The canonical ggui live-channel transport is WS (see SPEC §12 Transport Bindings). `TransportConfig` is shaped as an extensibly-closed union so later live-channel transports (HTTP long-poll) can be added without breaking the public API.
+
+The MCP surface is graded separately, by catalog rather than by transport config — see `resource-read-conformance` below. Its cases are deliberately NOT registered in `fixturesByContract`: everything in that map is driven over a WebSocket, so an MCP case there would be a permanent skip on every WS run, which is the false gate the kit's exact skip-set pinning exists to prevent. `resources/read` is the only MCP method bound today; `tools/call` has no driver yet.
 
 ## Path-A vs Path-B matchability
 
@@ -42,7 +45,7 @@ The Path-B driver is not yet packaged — no browser-host harness ships with the
 
 The partition is intentional: Path-A FAILs are vendor-neutrality bugs the server owns; Path-B SKIPs are not fails — they are claims a different driver is responsible for.
 
-One declared grading gap on the action loop: `action-ack` proves the append half of the consume-buffer contract; the retrieval half (the agent draining the buffer via `ggui_consume`) is an MCP tool call a WS-only runner cannot drive. Grading it needs an MCP-binding driver — a future kit surface, not a weaker WS assertion.
+One declared grading gap on the action loop: `action-ack` proves the append half of the consume-buffer contract; the retrieval half (the agent draining the buffer via `ggui_consume`) is an MCP **tool call**, which a WS runner cannot drive. The resource-read catalog below does not close it — that driver binds `resources/read`, and `tools/call` is a different method with a different seam. Grading it needs a tool-call driver, not a weaker WS assertion.
 
 ## Pure-function conformance catalogs
 
@@ -74,27 +77,62 @@ if (schema.failed.length + gate.failed.length + urls.failed.length > 0) {
 
 The `schema-conformance` meta-test binds its catalog to the live `@ggui-ai/protocol` `clientCapabilitiesSpecSchema` — a drift-catch if the wire schema diverges from the §7.7.2 obligations the catalog freezes. The `registration-conformance` and `resolution-conformance` meta-tests verify catalog coherence against faithful in-test implementations (the kit stays vendor-neutral — it does not depend on a server implementation); grading the _shipping_ gate / resolver is an implementation-side test that drives the corresponding runner.
 
+## Resource-read conformance — the MCP binding
+
+A read of a render locator (`ui://ggui/render/{sessionId}` or `ui://ggui/render/{sessionId}/{blueprintKey}`) has exactly **two exits**: a result whose contents declare a delivery channel — a live mount — or one typed JSON-RPC error. There is no third outcome, and in particular no successful result carrying a shell that can never paint anything.
+
+That is what makes the read host-checkable. A host that gets `contents` back can mount them without inspecting anything; a host that gets an error routes on `error.data.code` — "come back never" versus "come back with a fresh render" — without parsing prose.
+
+```ts
+import { runResourceReadConformance } from "@ggui-ai/protocol-conformance/resource-read-conformance";
+
+const result = await runResourceReadConformance(async (scenario) => {
+  // Bring YOUR server up in `scenario.server`'s shape, as
+  // `scenario.caller`, with `scenario.seeds` applied.
+  const server = await bootMyServer(scenario);
+  return {
+    // Keys your registry assigned to `registered-blueprint` seeds.
+    registeredKeys: server.registeredKeys,
+    // MUST resolve. A protocol failure is `{kind: 'error'}` carrying
+    // the RAW frame — an MCP client's reconstructed error rewrites
+    // `message`, and the disclosure obligation is graded on bytes.
+    read: (uri) => server.readResource(uri),
+    dispose: () => server.close(),
+  };
+});
+
+if (result.failed.length > 0 || result.passed.length === 0) process.exit(1);
+```
+
+Throwing from the driver means "I cannot express this scenario" and the case **skips** with that reason — never passes. Throwing from `read` is a **fail**, because the read is the thing under test.
+
+The catalog grades all four failure classes (`NOT_FOUND` on `-32002`; `BLUEPRINT_UNRESOLVABLE` / `NOT_SUPPORTED` / `NOT_MOUNTABLE` on `-32006`), the mount half on both a live row and a re-minted one, and the disclosure obligation: a read refused for lack of entitlement and a read of a locator that never existed must be **byte-identical**, on a server that keeps durable records, on one that keeps none, on the two half-wired shapes in between, and on one whose blueprint registry matches the probed key.
+
+It deliberately does **not** grade: the order in which a substrate-less server answers (`NOT_SUPPORTED` describes the deployment, so answering it immediately is correct); `detail` wording on any code; the `NOT_FOUND` message literal (its _constancy_ is what is normative); internal-error message text; the number a URI naming no locator receives (that belongs to the transport binding — only the negative is graded, that it must not be one of the four); and the shell's markup (success is graded on the projected render meta, never on DOM shape).
+
 ## Conformance status
 
 What is actually graded against shipping code today, and what is still awaiting a driver. This is an inventory, not a roadmap — a mechanism is listed as proven only if a test in the repo drives it against the real implementation on every push.
 
-Every test below is a plain `*.test.ts` inside a package's `src/`, so it runs in that package's ordinary vitest suite. The ggui repo's per-push CI runs `turbo run test` across all non-e2e packages, so **all five rows below are gated on every push** — the kit needs no dedicated workflow, and adopters wiring it into their own CI need nothing more than their existing unit-test task.
+Every test below is a plain `*.test.ts` inside a package's `src/`, so it runs in that package's ordinary vitest suite. The ggui repo's per-push CI runs `turbo run test` across all non-e2e packages, so **all six rows below are gated on every push** — the kit needs no dedicated workflow, and adopters wiring it into their own CI need nothing more than their existing unit-test task.
 
-| Obligation                          | Graded against                                                                             | Driver                                                                                   |
-| ----------------------------------- | ------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------- |
-| Gadget wire schema (§7.7.2)         | the shipping `@ggui-ai/protocol` `clientCapabilitiesSpecSchema`                            | this kit's own `src/schema-conformance/schema-conformance.test.ts`                       |
-| Registration gate (§7.7.3, §7.9)    | the shipping gate trio in `@ggui-ai/mcp-server-handlers`                                   | `mcp-server-handlers/src/renders/assert-gadgets.conformance.test.ts`                     |
-| Bundle-URL resolution (§7.7.2)      | the shipping `resolveGadgetUrls` in `@ggui-ai/mcp-server-handlers`                         | `mcp-server-handlers/src/renders/resolve-gadget-urls.conformance.test.ts`                |
-| Path-A WS fixtures — first-party    | the real `@ggui-ai/mcp-server` GguiSession channel, booted in-process on an ephemeral port | `mcp-server/src/ggui-session-channel.conformance.test.ts` — **8 pass / 4 skip / 0 fail** |
-| Path-A WS fixtures — vendor-neutral | `@ggui-ai/protocol-reference-server`                                                       | `protocol-reference-server/src/conformance.test.ts` — **9 pass / 3 skip / 0 fail**       |
+| Obligation                                        | Graded against                                                                             | Driver                                                                                               |
+| ------------------------------------------------- | ------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------- |
+| Gadget wire schema (§7.7.2)                       | the shipping `@ggui-ai/protocol` `clientCapabilitiesSpecSchema`                            | this kit's own `src/schema-conformance/schema-conformance.test.ts`                                   |
+| Registration gate (§7.7.3, §7.9)                  | the shipping gate trio in `@ggui-ai/mcp-server-handlers`                                   | `mcp-server-handlers/src/renders/assert-gadgets.conformance.test.ts`                                 |
+| Bundle-URL resolution (§7.7.2)                    | the shipping `resolveGadgetUrls` in `@ggui-ai/mcp-server-handlers`                         | `mcp-server-handlers/src/renders/resolve-gadget-urls.conformance.test.ts`                            |
+| Path-A WS fixtures — first-party                  | the real `@ggui-ai/mcp-server` GguiSession channel, booted in-process on an ephemeral port | `mcp-server/src/ggui-session-channel.conformance.test.ts` — **8 pass / 4 skip / 0 fail**             |
+| Path-A WS fixtures — vendor-neutral               | `@ggui-ai/protocol-reference-server`                                                       | `protocol-reference-server/src/conformance.test.ts` — **9 pass / 3 skip / 0 fail**                   |
+| `resources/read` typed failures + mount invariant | the shipping `registerGguiRenderResourceTemplate` in `@ggui-ai/mcp-server`                 | `mcp-server/src/mcp-apps-outbound.resource-read.conformance.test.ts` — **12 pass / 0 skip / 0 fail** |
 
-Both WS drivers pin their pass set _and_ their skip set as exact sets. A fixture silently degrading to a skip fails the build, and so does a skipped fixture that quietly starts passing — a skip set that can grow unnoticed is a false gate, and re-pinning it is meant to be a deliberate act.
+Both WS drivers pin their pass set _and_ their skip set as exact sets, and the resource-read driver pins its skip set as exactly empty. A fixture silently degrading to a skip fails the build, and so does a skipped fixture that quietly starts passing — a skip set that can grow unnoticed is a false gate, and re-pinning it is meant to be a deliberate act.
 
 **Awaiting a driver:**
 
-- **Path-B browser-host fixtures** — `bootstrap-bundle-fetch-failed`, `bootstrap-meta-missing` (both need MCP-Apps-host fault injection) and `props-update-roundtrip` (assertion is on rendered DOM). No browser-host adapter ships with the kit, so these skip on every driver above. Honestly absent, not silently passing.
+- **Path-B browser-host fixtures** — `bootstrap-bundle-fetch-failed`, `bootstrap-meta-missing` (both need MCP-Apps-host fault injection) and `props-update-roundtrip` (assertion is on rendered DOM). No browser-host adapter ships with the kit, so these skip on every WS driver above. Honestly absent, not silently passing.
 - **`version-mismatch` on the first-party server** — needs a `server-version-override` seam the channel deliberately does not expose; adding a production seam with no production caller purely to drive a fixture was rejected. It passes on the reference server, which has a per-render override.
-- **The `ggui_consume` retrieval half of the action loop** — `action-ack-sequence` proves the append half; draining the buffer is an MCP tool call a WS-only runner cannot drive. Needs an MCP-binding driver, a future kit surface.
+- **The `ggui_consume` retrieval half of the action loop, and `stream-delivery-roundtrip`** — both are `tools/call` obligations (`ggui_consume`, `ggui_emit`). The resource-read driver binds `resources/read` only, so neither is closed by it; both await a tool-call driver.
+- **`resources/read` on a second implementation** — the catalog is vendor-neutral by construction (the kit imports no server; the adopter supplies the driver), but it is graded against one implementation today. A second binding is what would ground the vendor-neutrality claim empirically, the way `protocol-reference-server` does for the WS catalog.
 
 ## Public API
 

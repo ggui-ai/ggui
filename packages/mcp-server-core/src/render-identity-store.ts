@@ -15,8 +15,11 @@ import type { ComponentGguiSession } from '@ggui-ai/protocol';
 
 /**
  * Durable per-session render identity — the record that lets a
- * `ui://ggui/render/{sessionId}/{contractKey}` locator re-mint after
- * the session store's own row is gone. Deployments whose session
+ * `ui://ggui/render/{sessionId}/{blueprintKey}` locator re-mint after
+ * the session store's own row is gone. The locator's second SEGMENT is
+ * named for its domain (the blueprint key); this record's FIELD keeps
+ * the name `contractKey`. Same value, two namespaces — see the field's
+ * own docstring for which digest it is. Deployments whose session
  * store is itself durable (the CLI's persistent sqlite default) do
  * not need one: the row already carries everything. Optional
  * everywhere; when absent, locator reads simply require the row.

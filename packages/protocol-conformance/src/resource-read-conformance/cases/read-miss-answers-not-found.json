@@ -1,0 +1,23 @@
+{
+  "name": "read-miss-answers-not-found",
+  "description": "A read of a locator that never existed, on a server that keeps durable records and could have restored one, answers NOT_FOUND on -32002 with a body carrying no detail. -32002 is the number a missing resource already rides on, and for a locator keyed by session id a missing session and a missing resource are one condition. The absent detail is what keeps this answer identical to a refusal.",
+  "server": { "durableSubstrate": "all", "liveChannel": true },
+  "caller": "owner",
+  "seeds": [],
+  "reads": [
+    {
+      "as": "miss",
+      "locator": {
+        "kind": "render",
+        "session": "8d5b0e41-2c96-4a7f-b3d8-1e07f9a2c645",
+        "key": { "kind": "literal", "value": "fedcba9876543210" }
+      },
+      "expect": {
+        "kind": "typed-error",
+        "jsonRpcCode": -32002,
+        "dataCode": "NOT_FOUND",
+        "detailAbsent": true
+      }
+    }
+  ]
+}

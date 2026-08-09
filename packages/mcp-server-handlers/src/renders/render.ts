@@ -490,10 +490,11 @@ export interface GguiRenderHandlerDeps extends RenderSliceMetaDeps {
   /**
    * Durable render-identity side store. When present, every render
    * commit also writes the record that lets a
-   * `ui://ggui/render/{sessionId}/{contractKey}` locator re-create the
+   * `ui://ggui/render/{sessionId}/{blueprintKey}` locator re-create the
    * render after the render row is gone — the identity
    * (`blueprintId`, `contractKey`, `variantKey`) plus the props and
-   * event sequence at that commit.
+   * event sequence at that commit. The locator segment is named for its
+   * domain; the record field it comes from is `contractKey`.
    *
    * Writes are best-effort and never block or fail a render: the
    * committed row is the source of truth, and this record is a

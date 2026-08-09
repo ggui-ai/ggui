@@ -35,6 +35,7 @@
 import type {
   BlueprintIndex,
   GguiSessionStore,
+  StoredGguiSession,
   VectorStore,
 } from "@ggui-ai/mcp-server-core";
 import {
@@ -42,11 +43,25 @@ import {
   deriveContractBundle,
   derivePublicEnvProjection,
   deriveRenderMeta,
+  filterDescriptorsToContract,
   findBlueprintExact,
   type Blueprint,
+  type BlueprintDurabilityDeps,
 } from "@ggui-ai/mcp-server-handlers/renders";
-import type { GguiSession } from "@ggui-ai/protocol";
-import { deriveContextDefault, isRecord, type ContextSpec } from "@ggui-ai/protocol";
+import type {
+  ComponentGguiSession,
+  GguiSession,
+  ResourceReadError,
+  ResourceReadJsonRpcError,
+} from "@ggui-ai/protocol";
+import {
+  RESOURCE_NOT_FOUND_MESSAGE,
+  deriveContextDefault,
+  isRecord,
+  resolveAppGadgets,
+  resourceReadErrorToJsonRpc,
+  type ContextSpec,
+} from "@ggui-ai/protocol";
 import {
   GGUI_RENDER_RESOURCE_MIME,
   GGUI_RENDER_RESOURCE_URI,
@@ -63,7 +78,7 @@ import { ResourceTemplate, type McpServer } from "@modelcontextprotocol/sdk/serv
 import { registerAppResource } from "@modelcontextprotocol/ext-apps/server";
 import { createHash } from "node:crypto";
 import type { HandlerContext } from "@ggui-ai/mcp-server-handlers";
-import { renderReadAllowed } from "./render-read-gate.js";
+import { renderReadAllowed, type RenderReadRowView } from "./render-read-gate.js";
 import { DEFAULT_BUILDER_APP_ID } from "./auth.js";
 import type { Logger } from "./logger.js";
 
@@ -345,7 +360,7 @@ postRpc('ui/initialize',{
 // Value-resolution only — no `--ggui-*` token added or renamed. The
 // constant itself lives with the protocol host-helper (the shared
 // self-contained-shell assembler paints the same surface); imported
-// above and reused here for the thin postMessage shell + loading shell.
+// above and reused here for the thin postMessage shell.
 
 // `#ggui-root` here is LOAD-BEARING for the shell script (NOT a React
 // mount target): the inline script grabs it as `rootEl` for the
@@ -928,32 +943,126 @@ export function buildSelfContainedShell(opts: SelfContainedShellInputs): string 
 }
 
 /**
- * Minimal "loading" HTML served when a per-render resource is fetched
- * for a render whose visible-bits surface has no componentCode yet
- * (placeholder, generation in flight). Renders a tiny status surface
- * so hosts that pin lifecycle selectors don't see a blank document.
+ * A `resources/read` on a render locator that cannot return a mount.
  *
- * Hosts SHOULD re-fetch when they observe additional `ggui_render`
- * results on the same render — the per-call `_meta.ui.resourceUri`
- * value stays stable across commits for a render, so re-fetching the
- * same URI returns fresher HTML on the second try.
+ * Thrown rather than returned: the MCP transport turns a thrown error
+ * carrying a numeric `code` into a JSON-RPC error response, and a
+ * JSON-RPC error is the only exit from the handler that is not a
+ * successful result. That is what makes "any successful `contents`
+ * result IS a mountable shell" checkable by a host instead of a claim
+ * in a docstring.
  *
- * @public
+ * The wire body comes from {@link resourceReadErrorToJsonRpc} and
+ * nowhere else. Routing every branch through the protocol's projection
+ * is what keeps a refused read and a read of a locator that never
+ * existed byte-identical: the projection substitutes a constant message
+ * and drops `detail` on `NOT_FOUND`, so no call site can leak a
+ * diagnostic by writing a more helpful message.
  */
-export function buildSelfContainedLoadingShell(sessionId: string): string {
-  // Standalone served-iframe loading document — same surface-backdrop
-  // paint + gating as the thin/self-contained shells so the canvas is
-  // dark while the render is still in flight (no Safari white flash).
-  return `<!doctype html>
-<html lang="en" style="background-color:${GGUI_RENDER_SHELL_SURFACE}"><head><meta charset="utf-8"><title>ggui render</title></head>
-<body style="background-color:${GGUI_RENDER_SHELL_SURFACE}">
-<div id="ggui-root" data-ggui-shell="loading" data-ggui-session-id="${sessionId
-    .replace(/&/g, "&amp;")
-    .replace(/"/g, "&quot;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")}">Generating UI…</div>
-</body></html>`;
+class ResourceReadFailure extends Error {
+  /** JSON-RPC error number — read off this instance by the transport. */
+  readonly code: ResourceReadJsonRpcError["code"];
+  /** JSON-RPC `error.data` — the closed classification plus optional detail. */
+  readonly data: ResourceReadJsonRpcError["data"];
+
+  constructor(failure: ResourceReadError) {
+    const wire = resourceReadErrorToJsonRpc(failure);
+    super(wire.message);
+    this.name = "ResourceReadFailure";
+    this.code = wire.code;
+    this.data = wire.data;
+  }
 }
+
+/**
+ * The terminal failure for a read that resolved nothing, on a server
+ * that DOES keep durable records. One constant, so the branches that
+ * must stay indistinguishable — a locator that never existed, one whose
+ * record is gone, and one the caller may not read — have no shape in
+ * which to differ. The message is stated rather than left blank because
+ * the projection substitutes it anyway; writing it makes the call sites
+ * honest about what goes on the wire.
+ */
+const NOT_FOUND_FAILURE: ResourceReadError = {
+  code: "NOT_FOUND",
+  message: RESOURCE_NOT_FOUND_MESSAGE,
+};
+
+/**
+ * The terminal failure for the same reads on a server that keeps no
+ * durable record. It replaces {@link NOT_FOUND_FAILURE} for EVERY
+ * locator on such a server, never for some of them: it describes the
+ * server, so a read that answered it for a missing locator and
+ * `NOT_FOUND` for an existing-but-refused one would tell a caller which
+ * locators exist — the disclosure the access check exists to prevent.
+ */
+const NOT_SUPPORTED_FAILURE: ResourceReadError = {
+  code: "NOT_SUPPORTED",
+  message:
+    "This server keeps no durable record of a render, so a locator whose render is gone cannot be restored.",
+};
+
+/**
+ * The three ways a resolved locator still yields nothing to mount. One
+ * caller-facing message per code, with `detail` carrying the
+ * discrimination — a host's decision is the same for all three, while
+ * an operator needs to know which link is missing.
+ */
+const notMountable = (detail: string): ResourceReadError => ({
+  code: "NOT_MOUNTABLE",
+  message: "This locator resolved, but nothing mountable can be produced for it.",
+  detail,
+});
+
+/** Neither delivery channel is wired, so a component cannot reach an iframe. */
+const NO_DELIVERY_CHANNEL_FAILURE = notMountable(
+  "no static component URL and no live channel is wired"
+);
+
+/** The row exists and is the caller's, but its generation has not landed. */
+const NOT_YET_COMMITTED_FAILURE = notMountable(
+  "the render has not committed a component yet"
+);
+
+/** A blueprint matched the locator's key, but its code cannot be delivered. */
+const BLUEPRINT_UNDELIVERABLE_FAILURE = notMountable(
+  "the matched blueprint has no delivery channel"
+);
+
+/**
+ * The four ways a durable record stops short of a component. Same
+ * shape and the same reasoning as {@link notMountable} above. All four
+ * are reachable only after the access check has passed, so naming the
+ * step discloses nothing about a locator the caller cannot read.
+ */
+const blueprintUnresolvable = (detail: string): ResourceReadError => ({
+  code: "BLUEPRINT_UNRESOLVABLE",
+  message: "The record for this locator no longer resolves to a component.",
+  detail,
+});
+
+/** What a re-mint attempt produced: the committed row, or why not. */
+type RemintOutcome =
+  | { readonly ok: true; readonly row: StoredGguiSession }
+  | { readonly ok: false; readonly failure: ResourceReadError };
+
+/**
+ * The single value returned for BOTH "no record was ever written" and
+ * "the caller is not entitled to this record". One shared constant
+ * rather than two equal literals: the two branches cannot drift apart
+ * later, because there is only one of them to change.
+ */
+const RECORD_UNAVAILABLE: RemintOutcome = { ok: false, failure: NOT_FOUND_FAILURE };
+
+/**
+ * Retention this read path assumes when the operator names none —
+ * deliberately the same hour `ggui_render` falls back to, so a
+ * deployment that has never set the knob gets one answer rather than
+ * two. Every use of it is behind
+ * {@link GguiRenderResourceTemplateOptions.renderTtlMs}, which is where
+ * a real deployment's retention comes from.
+ */
+const FALLBACK_RENDER_TTL_MS = 60 * 60 * 1000;
 
 /**
  * Options for {@link registerGguiRenderResourceTemplate}.
@@ -970,10 +1079,13 @@ export interface GguiRenderResourceTemplateOptions {
    * Content-addressable code-blob store. When wired alongside
    * {@link codeBaseUrl}, the resource template hashes the render's
    * componentCode, writes it to the store, and inlines the resulting
-   * `codeUrl` into the shell bootstrap. Without these deps the
-   * resource path emits the loading shell when the render is a
-   * compiled component (the static-component channel cannot deliver
-   * without a URL).
+   * `codeUrl` into the shell bootstrap.
+   *
+   * This is one of the two delivery channels; {@link mintWsToken} is
+   * the other, and a compiled component needs at least one of them. A
+   * read that resolves a render this server can deliver by neither
+   * fails with `NOT_MOUNTABLE` rather than returning a shell that would
+   * never paint.
    */
   readonly codeStore?: import("@ggui-ai/mcp-server-core").CodeStore;
   /**
@@ -1000,15 +1112,82 @@ export interface GguiRenderResourceTemplateOptions {
    */
   readonly appMetadataStore?: import("@ggui-ai/mcp-server-core").AppMetadataStore;
   /**
+   * Durable per-session identity records. When wired alongside
+   * {@link durableBlueprints}, a read of a locator whose render row is
+   * GONE resolves the record instead of giving up: the render is
+   * re-created from it and mounts live, with the props it last
+   * carried.
+   *
+   * Absent ⇒ neither store is consulted, and `NOT_SUPPORTED` takes
+   * `NOT_FOUND`'s place wholesale — the honest answer for a server on
+   * which an evicted locator can never come back. Wholesale is the
+   * load-bearing word: it answers for a locator that never existed AND
+   * for one whose row exists but the caller may not read, so the choice
+   * of code says nothing about which locators exist. Reads that get far
+   * enough to fail `NOT_MOUNTABLE` still do — that verdict is about the
+   * caller's own render, not about this server's memory.
+   *
+   * Binding a store whose records do not outlive the render rows
+   * themselves buys nothing — the record is read precisely when the
+   * row is gone.
+   */
+  readonly renderIdentityStore?: import("@ggui-ai/mcp-server-core").RenderIdentityStore;
+  /**
+   * Durable blueprint pair — row metadata plus the compiled body
+   * behind its content hash. The re-mint path needs BOTH halves: the
+   * record names a blueprint, the blueprint names a body, and the body
+   * is what a re-created render mounts. A pair carrying only
+   * `blueprintStore` persists metadata for other consumers but cannot
+   * complete a re-mint, so the path skips as if unwired.
+   *
+   * Same shape the registration path writes through, so a deployment
+   * threads one pair to both ends.
+   */
+  readonly durableBlueprints?: BlueprintDurabilityDeps;
+  /**
+   * Render-row retention window in ms — the SAME operator knob
+   * `ggui_render` stamps new renders with. The read path spends it in
+   * two places, and both are lifecycle decisions about a row this
+   * handler is putting back into service:
+   *
+   *   - a re-mint commits its reconstructed row with this lifetime;
+   *   - a read of a row that is present but PAST its expiry gives the
+   *     row this lifetime again, so the live-channel token minted in
+   *     the same read cannot outlive the row it addresses.
+   *
+   * Absent ⇒ one hour, matching `ggui_render`'s own fallback. Setting
+   * it on a deployment whose renders live far longer than an hour is
+   * what stops a rehydrated render from being quietly demoted to a
+   * fraction of its neighbours' lifetime.
+   */
+  readonly renderTtlMs?: number;
+  /**
    * Vector store backing the blueprint registry. When wired alongside
    * `defaultAppIdFallback`, the resource handler runs a registry-only
    * rehydrate fallback for the two-segment URI shape
    * (`ui://ggui/render/{sessionId}/{blueprintKey}`): if the render is
    * gone but the blueprint registry still holds the entry, return the
    * static initial render (default props + default context) instead of
-   * the dead "Generating UI…" loading shell. Single-tenant OSS sees
-   * meaningful improvement; multi-tenant deployments leave both options
-   * undefined to keep the loading-shell behavior on render miss.
+   * failing the read.
+   *
+   * The lookup is keyed by the caller-supplied `blueprintKey` under
+   * `defaultAppIdFallback` alone — it never reads the render row — so
+   * it answers the same for a caller who may not read the row as for
+   * one probing a locator that never existed. That is what keeps it
+   * safe to run on a refused read, which it must, or refusal would
+   * become distinguishable from a miss.
+   *
+   * Leaving both options undefined does NOT return callers to a
+   * placeholder shell — there is no longer one to return. It removes
+   * the third resolution, so a read that neither the row nor a re-mint
+   * can serve fails typed: `NOT_FOUND`, or `NOT_SUPPORTED` on a
+   * deployment that also keeps no durable record, or `NOT_MOUNTABLE`
+   * where the row is the caller's own and simply has no component yet.
+   * Deployments serving
+   * more than one tenant from one registry scope are the reason the
+   * option exists at all: the fallback discloses whether a blueprint
+   * key exists under that scope, so leave it unset if that is not
+   * acceptable.
    */
   readonly vectorStore?: VectorStore;
   /**
@@ -1023,10 +1202,17 @@ export interface GguiRenderResourceTemplateOptions {
   /**
    * App-id used for blueprint-registry scoping when the render has
    * been evicted. The registry is per-`appId`, but a missing render
-   * has no way to derive its tenant — multi-tenant deployments leave
-   * this undefined to fail-safe back to the loading shell. Single-
-   * tenant OSS sets `'builder'` (the universal-MCP default identity)
-   * and rehydrate works across render expiry / process restart.
+   * has no way to derive whose it was, so the fallback needs one scope
+   * named up front. Set to `'builder'` (the universal-MCP default
+   * identity) and rehydrate works across render expiry / process
+   * restart.
+   *
+   * Leaving it undefined disables the fallback entirely — the reads it
+   * would have served fail typed instead (`NOT_FOUND`, or
+   * `NOT_SUPPORTED` where no durable record is kept). That is the
+   * setting for a deployment that cannot accept the fallback answering
+   * "a blueprint with this key exists under this scope" to whoever
+   * asks; it is not a way to get a gentler response.
    */
   readonly defaultAppIdFallback?: string;
   /**
@@ -1153,11 +1339,79 @@ function pickComponentFromGguiSession(render: GguiSession | null | undefined): R
  * legacy postMessage shell at the static URI, self-contained shell at
  * the templated URI.
  *
- * Failure modes:
- *   - GguiSession not found → loading shell (host re-fetches; absent
- *     render is a transient state immediately after `ggui_render`).
- *   - GguiSession found, no componentCode yet → loading shell.
- *   - GguiSession found, componentCode present → self-contained shell.
+ * # The obligation
+ *
+ * A read returns EITHER a shell carrying mount material — a static
+ * component URL, a live channel, or a system card — OR exactly one
+ * typed JSON-RPC error. There is no third outcome, and in particular no
+ * successful result wrapping a shell that can never paint anything. A
+ * host can check this without trusting the server: if it got
+ * `contents`, it got something mountable.
+ *
+ * The obligation covers outcomes this server can DECIDE. A malfunction
+ * still reaches the caller as an internal error (`-32603`) carrying
+ * none of the four codes: a template wired with an empty `runtimeUrl`,
+ * or a delivery channel that faults **and leaves the read with no other
+ * channel to mount through**. A fault the read survives — the usual
+ * case on a deployment wiring both channels — is not an outcome at all;
+ * the render mounts through whatever is left. That split is deliberate:
+ * `-32603` says "something is broken here", which the four codes must
+ * never be diluted into claiming, and equally must not be raised over a
+ * blip the server routed around.
+ *
+ * Three resolutions are tried, in this order, and any of them can
+ * produce the mount:
+ *
+ *   1. The render row itself.
+ *   2. A re-mint from the durable identity record, when the row is gone
+ *      and this server keeps one ({@link GguiRenderResourceTemplateOptions.renderIdentityStore}
+ *      + {@link GguiRenderResourceTemplateOptions.durableBlueprints}).
+ *   3. The blueprint registry, keyed by the locator's own `blueprintKey`
+ *      — the original component with its authoring-time defaults rather
+ *      than the state the render last held.
+ *
+ * # Failure modes
+ *
+ * Which code a given read produces is fully predictable from two facts:
+ * whether this server binds a durable substrate (both
+ * {@link GguiRenderResourceTemplateOptions.renderIdentityStore} and
+ * {@link GguiRenderResourceTemplateOptions.durableBlueprints} — either
+ * one alone is as good as neither), and how far the read got.
+ *
+ *   - `NOT_FOUND` (`-32002`) — nothing resolved the locator, **and** the
+ *     response for a caller who may not read a locator that DOES
+ *     resolve. Those two are byte-identical by construction: both route
+ *     through the protocol's projection, which substitutes a constant
+ *     message and drops `detail`. A distinguishable refusal would turn
+ *     this read into an oracle for the existence of other callers'
+ *     renders, so the equality is a security property, not a courtesy.
+ *   - `NOT_SUPPORTED` (`-32006`) — the same two cases, on a server with
+ *     no durable substrate: an evicted locator can never be restored
+ *     here, so saying "not found" would understate it. It takes
+ *     `NOT_FOUND`'s place WHOLESALE on such a server rather than
+ *     answering for some locators and not others — a server that said
+ *     `NOT_FOUND` for a row it refused and `NOT_SUPPORTED` for one that
+ *     never existed would have rebuilt the same oracle out of the two
+ *     codes. Correspondingly, a server that DOES bind the substrate
+ *     never emits it.
+ *   - `BLUEPRINT_UNRESOLVABLE` (`-32006`) — a record named the render
+ *     but its component is gone; `detail` names which link broke.
+ *     Reachable only after the access check.
+ *   - `NOT_MOUNTABLE` (`-32006`) — something resolved, but nothing
+ *     mountable can be produced from it: no delivery channel is wired
+ *     (neither {@link GguiRenderResourceTemplateOptions.codeStore} nor
+ *     {@link GguiRenderResourceTemplateOptions.mintWsToken}), the row's
+ *     generation has not committed a component yet, or a registry
+ *     blueprint matched but cannot be delivered. Unlike the pair above,
+ *     this one does NOT vary with the substrate: it is what the
+ *     caller's OWN row gets on every server, because "this server
+ *     cannot rehydrate" is not the useful truth for a row that is
+ *     sitting right there. Reachable only after the access check, or —
+ *     for the registry case — off the caller's own supplied key, so it
+ *     discloses nothing either way.
+ *
+ * A URI matching neither template never reaches any of this: the
+ * transport rejects it as invalid params, outside these four codes.
  *
  * Returns nothing; mutates the server in place.
  *
@@ -1172,16 +1426,20 @@ export function registerGguiRenderResourceTemplate(
   //   1. Single-segment legacy URI — `ui://ggui/render/{sessionId}`.
   //      Pre-resume-contract chats in claude.ai's history persisted
   //      this shape; we keep the registration so historical messages
-  //      still rehydrate (loading shell on render miss).
+  //      still rehydrate.
   //
   //   2. Two-segment resume URI — `ui://ggui/render/{sessionId}/
   //      {blueprintKey}`. Stamped by every render since the resume
-  //      contract landed. Carries enough state for the handler to do:
-  //      (a) parallel render + blueprint registry lookup (no data
-  //      dependency between them), (b) registry-only fallback when
-  //      the render is gone but the blueprint is still cached
-  //      (renders the original card with default props/context
-  //      instead of the dead loading shell).
+  //      contract landed. Carries enough state for the handler to
+  //      fall back to a registry-only render when the render is gone
+  //      but the blueprint is still cached (the original card with
+  //      default props/context instead of a typed failure).
+  //
+  //      Both shapes ALSO re-mint from a durable identity record when
+  //      the deployment keeps one — that path is keyed by sessionId
+  //      alone and needs no blueprintKey, so it serves the legacy
+  //      shape too. Every lookup either shape triggers happens after
+  //      the access check, never in parallel with it.
   const legacyTemplate = new ResourceTemplate(`${GGUI_RENDER_RESOURCE_URI}/{sessionId}`, {
     // No list-callback — the resource set is unbounded per render
     // count, and `resources/list` would leak render ids across
@@ -1252,8 +1510,536 @@ export function registerGguiRenderResourceTemplate(
       },
     ],
   });
-  const loadingShell = (uri: URL, sessionId: string) =>
-    shellContents(uri, buildSelfContainedLoadingShell(sessionId));
+  /**
+   * The three stores a re-mint needs, or `null` when this server keeps
+   * no durable record of a render.
+   *
+   * Read through ONE accessor because two callers depend on the same
+   * answer: the re-mint itself, and the handler's choice of terminal
+   * failure. Deriving that choice separately is how a server could end
+   * up answering `NOT_SUPPORTED` for some locators and `NOT_FOUND` for
+   * others, which is a disclosure rather than a cosmetic difference.
+   */
+  function durableSubstrate(): {
+    readonly identityStore: NonNullable<
+      GguiRenderResourceTemplateOptions["renderIdentityStore"]
+    >;
+    readonly blueprintStore: NonNullable<BlueprintDurabilityDeps["blueprintStore"]>;
+    readonly bodyStore: NonNullable<BlueprintDurabilityDeps["codeStore"]>;
+  } | null {
+    const identityStore = opts.renderIdentityStore;
+    const blueprintStore = opts.durableBlueprints?.blueprintStore;
+    const bodyStore = opts.durableBlueprints?.codeStore;
+    if (!identityStore || !blueprintStore || !bodyStore) return null;
+    return { identityStore, blueprintStore, bodyStore };
+  }
+
+  /** Operator retention, or the shared fallback. Read in both places. */
+  const renderTtlMs = opts.renderTtlMs ?? FALLBACK_RENDER_TTL_MS;
+
+  /**
+   * Give a row that has outlived its `expiresAt` a full lifetime again.
+   *
+   * A store may keep a row readable past its expiry — the reaper runs
+   * on its own schedule, and some stamp the deletion deadline with a
+   * grace window on top. A read landing in that window mounts the row
+   * and mints a live-channel token against it, and the token then
+   * addresses a render the next reaper pass deletes. Extending here
+   * keeps the token's promise rather than weakening the token.
+   *
+   * CONDITIONAL, and that is the load-bearing half: a resource read is
+   * the hottest path this handler has, so extending a row that is
+   * already live would put a store write on every read of every render
+   * for nothing.
+   *
+   * A failure does not fail the read. The caller owns this render and
+   * the handler can mount it; refusing over an extension would turn a
+   * store's bad moment into a dead card, and the pre-extension
+   * behavior — a token that may outlive its row — is what the read
+   * would have done anyway. It is logged rather than swallowed,
+   * because a row that could not be extended is now living on borrowed
+   * time and nothing else will say so.
+   *
+   * One asymmetry worth knowing about: this moves the row's OWN
+   * `expiresAt`, and the render payload stored inside it keeps the
+   * value stamped at the last commit. Two spellings of one fact,
+   * briefly disagreeing. Which one a reader sees is the store's
+   * business — a store that re-projects lifecycle columns onto the
+   * payload heals it on the very next read, one that stores the payload
+   * verbatim carries the stale copy until the next commit. The
+   * authoritative field is the row's, which is what the lifecycle
+   * gates and the reaper both read; the payload's copy is a projection
+   * for the wire. Extending both here would mean rewriting the payload
+   * on a read, which is a much larger write for a field nothing gates
+   * on.
+   */
+  async function extendExpiredRow(
+    sessionId: string,
+    stored: StoredGguiSession,
+  ): Promise<void> {
+    const now = Date.now();
+    if (stored.expiresAt > now) return;
+    try {
+      await opts.renderStore.update(sessionId, { expiresAt: now + renderTtlMs });
+    } catch (cause) {
+      opts.logger?.warn("render_resource_ttl_extend_failed", {
+        sessionId,
+        expiredAt: stored.expiresAt,
+        error: cause instanceof Error ? cause.message : String(cause),
+      });
+    }
+  }
+
+  /**
+   * Rehydration access control (spec §3), applied to ONE read
+   * candidate — a render row, or the durable identity record that
+   * stands in for an evicted one. Both carry the same two gated
+   * fields, so both go through here.
+   *
+   * The anonymous-context synthesis is why this is shared rather than
+   * inlined twice: a compose path that cannot thread a request context
+   * still reads renders owned by the default builder identity, because
+   * a candidate owned by THAT identity is attributed to an anonymous
+   * caller. Anything else fails closed — `renderReadAllowed` denies a
+   * missing context outright. Losing the synthesis on the record path
+   * would break exactly the deployments the re-mint exists to help.
+   *
+   * Refusal is never an early return at the call sites: it collapses
+   * the candidate to "absent" so every downstream branch runs as it
+   * would for a locator that never existed. The refusal is observable
+   * only server-side, on the audit line below — whose `rowAppId` names
+   * the render's owner whichever store answered for it.
+   */
+  function readAllowed(sessionId: string, candidate: RenderReadRowView): boolean {
+    const callerCtx = opts.getContext?.();
+    const fallbackCtx =
+      callerCtx === undefined && candidate.appId === DEFAULT_BUILDER_APP_ID
+        ? {
+            appId: DEFAULT_BUILDER_APP_ID,
+            authSource: "anonymous" as const,
+            requestId: "resource-read",
+          }
+        : callerCtx;
+    if (renderReadAllowed(candidate, fallbackCtx)) return true;
+    opts.logger?.warn("render_resource_read_denied", {
+      sessionId,
+      rowAppId: candidate.appId,
+      callerAppId: callerCtx?.appId,
+    });
+    return false;
+  }
+
+  /**
+   * Re-mint an evicted locator from its durable identity record: the
+   * record names the blueprint, the blueprint names the body, and the
+   * body is committed back onto a FRESH row under the same sessionId.
+   * Returns the committed row, or the failure that stopped it.
+   *
+   * The two branches that must stay indistinguishable — no record was
+   * ever written, and the caller is not entitled to the one that was —
+   * return the SAME constant, so there is no shape in which they could
+   * differ. Every other failure is reachable only after the access
+   * check has passed, and so may say what went wrong.
+   *
+   * Ordering is load-bearing. The record's own owner gates the read
+   * before ANY blueprint or body lookup runs, and every lookup is
+   * keyed by the record's `blueprintId` under the record's own owner —
+   * never by a caller-supplied key. A resolution step reachable before
+   * the check would let a caller distinguish a resolvable locator from
+   * one that never existed, which is the same disclosure the gate
+   * exists to prevent.
+   *
+   * The body is INLINED onto the committed row rather than delivered
+   * by URL: a row carrying its own component code is self-sufficient,
+   * so the existing mount path serves it with no extra wiring, and
+   * deployments with no content-addressed delivery channel re-mint
+   * just as well as those with one.
+   *
+   * Store faults are not caught. A rejecting store is a malfunction,
+   * and swallowing it here would report a working render as
+   * unresolvable — indistinguishable from one that was genuinely
+   * purged, and it would stay that way on every retry.
+   */
+  async function remintFromRecord(sessionId: string): Promise<RemintOutcome> {
+    const substrate = durableSubstrate();
+    if (substrate === null) return { ok: false, failure: NOT_SUPPORTED_FAILURE };
+    const { identityStore, blueprintStore, bodyStore } = substrate;
+
+    const record = await identityStore.get(sessionId);
+    if (record === null) return RECORD_UNAVAILABLE;
+
+    if (
+      !readAllowed(sessionId, {
+        appId: record.appId,
+        // The record's SUBJECT — the same field the row's gate binds
+        // on, written by the same commit.
+        ...(record.userId !== undefined ? { userId: record.userId } : {}),
+      })
+    ) {
+      return RECORD_UNAVAILABLE;
+    }
+
+    // Everything below can only be reached by a caller entitled to
+    // this locator. A record whose `blueprintId` is still null never
+    // had its cold-generation registration backfilled, so it names
+    // nothing to resolve.
+    if (record.blueprintId === null) {
+      return { ok: false, failure: blueprintUnresolvable("the record names no blueprint") };
+    }
+    const blueprint = await blueprintStore.get(record.blueprintId);
+    if (blueprint === null) {
+      return {
+        ok: false,
+        failure: blueprintUnresolvable("the blueprint the record names is gone"),
+      };
+    }
+    const codeHash = blueprint.codeHash;
+    if (codeHash === undefined) {
+      return {
+        ok: false,
+        failure: blueprintUnresolvable("the blueprint stores no component reference"),
+      };
+    }
+    const componentCode = await bodyStore.get(codeHash);
+    if (componentCode === null || componentCode.length === 0) {
+      return {
+        ok: false,
+        failure: blueprintUnresolvable("the component body behind the blueprint is gone"),
+      };
+    }
+
+    // Sidecars are re-resolved from the live app record rather than
+    // carried on the record: gadget descriptors and the theme overlay
+    // are the operator's current configuration, and a re-minted render
+    // should mount under it, not under a snapshot of what it was.
+    //
+    // Degrades rather than fails, matching the same lookup on the mount
+    // path below: these are presentation sidecars, so a metadata store
+    // having a bad moment costs the render its theme and its wrapper
+    // catalog — it must not cost the render its rehydrate. The body and
+    // the props, which a mount cannot do without, were already resolved
+    // above and are NOT part of this tolerance.
+    let gadgetDescriptors: ComponentGguiSession["gadgetDescriptors"];
+    let theme: ComponentGguiSession["theme"];
+    if (opts.appMetadataStore) {
+      try {
+        const appRecord = await opts.appMetadataStore.get(record.appId);
+        const resolved = filterDescriptorsToContract(
+          blueprint.contract,
+          resolveAppGadgets(appRecord?.gadgets)
+        );
+        if (resolved.length > 0) gadgetDescriptors = resolved;
+        theme = appRecord?.theme;
+      } catch {
+        // Silent — the render mounts with the renderer's default theme
+        // and a STDLIB-only wrapper catalog.
+      }
+    }
+
+    const now = Date.now();
+    const contract = blueprint.contract;
+    const render: ComponentGguiSession = {
+      type: "component",
+      id: sessionId,
+      appId: record.appId,
+      componentCode,
+      contentType: "application/javascript+react",
+      // The props the render last carried — the whole point of the
+      // record — restored verbatim, including their ABSENCE. A record
+      // with no props describes a render that had none, so the re-mint
+      // gives it none: `props` is optional on the wire shape and the
+      // record round-trips the distinction.
+      //
+      // The one thing this must never do is substitute authoring-time
+      // defaults for missing props. Nothing repopulates a
+      // defaults-booted card afterwards — props travel the session
+      // channel, and no agent turn runs at rehydration — so it would
+      // show plausible-looking wrong state indefinitely, which is
+      // worse than showing none.
+      ...(record.props !== undefined ? { props: record.props } : {}),
+      ...(contract.propsSpec ? { propsSpec: contract.propsSpec } : {}),
+      ...(contract.actionSpec ? { actionSpec: contract.actionSpec } : {}),
+      ...(contract.streamSpec ? { streamSpec: contract.streamSpec } : {}),
+      ...(contract.contextSpec ? { contextSpec: contract.contextSpec } : {}),
+      ...(contract.clientCapabilities
+        ? { clientCapabilities: contract.clientCapabilities }
+        : {}),
+      ...(gadgetDescriptors !== undefined ? { gadgetDescriptors } : {}),
+      ...(theme !== undefined ? { theme } : {}),
+      // Carried from the record so a re-minted render does not present
+      // itself as newly created.
+      createdAt: record.createdAt,
+      lastActivityAt: now,
+      expiresAt: now + renderTtlMs,
+      // States the same fact as the `seqFloor` below, which is what
+      // the store actually seeds the row's ledger from.
+      eventSequence: record.seqAtLastCommit,
+    };
+    const row = await opts.renderStore.commit({
+      render,
+      appId: record.appId,
+      ...(record.userId !== undefined ? { userId: record.userId } : {}),
+      // The render resumes rather than restarts: its ledger continues
+      // above where the record says it last was, so a reader still
+      // holding a cursor from before the eviction sees the new events
+      // instead of filtering them out as already-seen.
+      //
+      // "Where the record says it last was" is the honest bound. The
+      // record samples the sequence at COMMIT, so events appended
+      // between the last commit and the eviction are not reflected and
+      // their numbers do get reissued. This narrows sequence reuse to
+      // that window rather than eliminating it — which is the best any
+      // record-based resume can do, and still strictly better than
+      // restarting the ledger at zero.
+      seqFloor: record.seqAtLastCommit,
+    });
+    return { ok: true, row };
+  }
+
+  /**
+   * Serve the self-contained shell for a render row — the mount path,
+   * shared by rows read from the store and rows a re-mint just
+   * committed.
+   *
+   * Three exits, and the caller has to handle all three:
+   *
+   *   - a response, when the row resolved to something mountable;
+   *   - `null`, when the row carries no renderable visible-bits surface
+   *     (a placeholder whose generation has not committed yet), so the
+   *     caller can go on looking;
+   *   - a thrown {@link ResourceReadFailure}, when a render DID resolve
+   *     but no channel can deliver it. That one is terminal by design —
+   *     it is the deepest the read gets, so there is nothing left for
+   *     the caller to try.
+   */
+  async function serveMount(
+    uri: URL,
+    sessionId: string,
+    accessibleStored: StoredGguiSession
+  ): Promise<{ contents: ShellContent[] } | null> {
+    const picked = pickComponentFromGguiSession(accessibleStored.render);
+    if (!picked) return null;
+    // Put an expired-but-still-readable row back on a full lifetime.
+    //
+    // The reason is that a caller entitled to this row has just proved
+    // they are using it, which is the same signal every other
+    // touch-and-extend path acts on. The live-channel token is the
+    // sharpest case rather than the only one — it turns "the row dies
+    // soon" into "the thing I just handed you outlives what it points
+    // at" — which is why this sits ahead of the mint below. But a
+    // deployment with no minter wired reaches here too, and its row
+    // deserves the same extension: the read was just as real.
+    //
+    // After the `picked` check, because a row with nothing to mount is
+    // not a row anyone is using yet.
+    await extendExpiredRow(sessionId, accessibleStored);
+    // Project the active render to the transport-agnostic bootstrap
+    // view — same source of truth the render-mutation handler and
+    // `/r/<shortCode>` consume. Carries permissionsPolicy when
+    // clientCapabilities declares permissions. The MCP Apps
+    // resource path emits this only into the inline bootstrap
+    // (the browser-enforced gate ultimately comes from the host's
+    // `allow=""` attribute when the host translates
+    // `_meta.ui.permissions` — set by McpAppIframe consumers).
+    const view = deriveRenderMeta(picked.source);
+    const isSystem = picked.kind !== undefined;
+
+    // A fault on EITHER delivery channel, held rather than acted on.
+    //
+    // Two things have to stay true at once. A channel that faulted must
+    // never be reported as a channel that was never wired — that is
+    // NOT_MOUNTABLE, which rides -32006 and tells the host the outcome
+    // is deterministic and a retry cannot succeed, when a store having
+    // a bad moment is the one thing that is not. But most deployments
+    // wire BOTH channels, and there a fault on one is survivable: the
+    // other still carries the mount, and failing the read would throw
+    // away a perfectly good delivery path.
+    //
+    // So the fault is remembered here and consulted at the mount-mode
+    // gate, which is the only place that knows whether anything
+    // survived. If a channel did, the render mounts through it and the
+    // fault costs the read nothing. If none did, the fault is thrown in
+    // place of NOT_MOUNTABLE and reaches the caller as an internal
+    // error — the honest answer for a blip, and the same policy the
+    // re-mint path applies to its own stores.
+    //
+    // Wrapped in an object so a thrown `undefined` is still recorded as
+    // a fault, and `??=` keeps the FIRST one when both channels break.
+    let channelFault: { readonly cause: unknown } | undefined;
+
+    // Static-component delivery via codeUrl. The compiled-component
+    // path mints a content-addressable URL the iframe-runtime fetches
+    // at boot. When codeStore + codeBaseUrl aren't wired this channel
+    // simply does not exist, and the live channel below has to carry
+    // the mount.
+    let codeUrl: string | undefined;
+    let codeHash: string | undefined;
+    let contractHash: string | undefined;
+    let validatorsUrl: string | undefined;
+    if (!isSystem && opts.codeStore && opts.codeBaseUrl) {
+      try {
+        const hash = opts.codeStore.hashOf(picked.componentCode);
+        await opts.codeStore.put(hash, picked.componentCode);
+        codeHash = hash;
+        const base = opts.codeBaseUrl.replace(/\/$/, "");
+        codeUrl = `${base}/code/${hash}.js`;
+      } catch (cause) {
+        channelFault ??= { cause };
+      }
+      // Content-addressable contract-validator bundle (#109).
+      try {
+        const bundle = await deriveContractBundle(picked.source);
+        if (bundle) {
+          await opts.codeStore.put(bundle.contractHash, bundle.bundleSource);
+          contractHash = bundle.contractHash;
+          const base = opts.codeBaseUrl.replace(/\/$/, "");
+          validatorsUrl = `${base}/contract/${bundle.contractHash}.js`;
+        }
+      } catch {
+        // Silent, and unlike the two channel faults this one stays
+        // that way: validators are an optional client-side courtesy,
+        // the server-side gate is authoritative, and losing them costs
+        // the read nothing it needs to mount. It cannot be mistaken for
+        // an absent channel, which is what makes swallowing it safe
+        // here and not above.
+      }
+    }
+    // The codeUrl gate is applied AFTER the live-channel mint below, so
+    // a render with no static codeUrl still mounts via live-mode
+    // (wsUrl + wsToken) instead of failing as undeliverable —
+    // parity with the `/r/<shortCode>` path. (See the gate after the
+    // mint.) This matters for deployments that wire `mintWsToken` but no
+    // `codeStore`/`codeBaseUrl` (e.g. the cloud pod): the agent-server
+    // inlines THIS resource, so without live-mode every render on such a
+    // deployment would resolve fine and then be reported as having no
+    // way to be delivered.
+
+    // Project the wrapper catalog AND the union-filtered
+    // publicEnv onto the inline bootstrap so the resource-served
+    // iframe matches the MCP-Apps postMessage path. Without this,
+    // wrapper-using contracts rendered through `resources/read`
+    // mount as STDLIB-only.
+    let resourcePublicEnv: Readonly<Record<string, string>> | undefined;
+    if (opts.appMetadataStore) {
+      try {
+        const appRecord = await opts.appMetadataStore.get(accessibleStored.appId);
+        resourcePublicEnv = derivePublicEnvProjection(picked.source, appRecord?.publicEnv);
+      } catch {
+        // Silent — wrappers calling getPublicEnv throw clearly.
+      }
+    }
+    // Live-channel bootstrap — when the operator wired
+    // {@link GguiRenderResourceTemplateOptions.mintWsToken}, mint a
+    // wsToken for this render so the iframe-runtime opens a
+    // WebSocket on mount and receives `props_update` frames.
+    // Without this, the resource shell renders in static-component
+    // mode only — `ggui_update` server-side mutations never
+    // visibly reach the live iframe (hosts must re-fetch
+    // `resources/read` after every update tool result to see new
+    // state).
+    //
+    // A mint FAULT is held the same way the code-store write above is,
+    // for the same reason: `wsToken` left undefined is indistinguishable
+    // from "no live channel is wired" by the time the gate reads it.
+    let wsUrl: string | undefined;
+    let wsToken: string | undefined;
+    let wsExpiresAt: string | undefined;
+    if (opts.mintWsToken) {
+      try {
+        const minted = opts.mintWsToken(sessionId, accessibleStored.appId);
+        wsUrl = minted.wsUrl;
+        wsToken = minted.token;
+        // Forward the token TTL so the iframe-runtime can degrade to
+        // static-only mode once it lapses (parity with the render-tool
+        // slice projection, render.ts). Dropping it left the live-mode
+        // resource shell unable to know when its WS token expired.
+        wsExpiresAt = minted.expiresAt;
+      } catch (cause) {
+        channelFault ??= { cause };
+      }
+    }
+
+    // Mount-mode gate (below the live-channel mint): a compiled
+    // component needs ONE of the two channels. A deployment that wires
+    // no codeStore (codeUrl === undefined) but DOES wire mintWsToken
+    // mounts via live-mode; one that wires neither has resolved a
+    // render it cannot deliver, and says so.
+    //
+    // Terminal, deliberately: this is the deepest the read gets, so
+    // there is nothing left to try. It also has to stay AHEAD of
+    // `buildSelfContainedShell`, which throws a plain Error on the same
+    // condition — that would reach the caller as an untyped internal
+    // error announcing a malfunction where the server is behaving
+    // exactly as configured.
+    //
+    // Reaching here having FAULTED is the one case that is not the
+    // server behaving as configured, and it is the only place with
+    // enough information to tell: a fault matters exactly when nothing
+    // else produced a channel. Anywhere above this line the same fault
+    // may have been survivable, and on a deployment wiring both
+    // channels it usually is.
+    if (!isSystem && codeUrl === undefined && (wsUrl === undefined || wsToken === undefined)) {
+      if (channelFault !== undefined) throw channelFault.cause;
+      throw new ResourceReadFailure(NO_DELIVERY_CHANNEL_FAILURE);
+    }
+
+    const html = buildSelfContainedShell({
+      sessionId,
+      appId: accessibleStored.appId,
+      ...(isSystem
+        ? { systemKind: picked.kind }
+        : codeUrl !== undefined
+          ? {
+              codeUrl,
+              ...(codeHash !== undefined ? { codeHash } : {}),
+            }
+          : // No static codeUrl → live-mode (wsUrl + token spread below)
+            // carries the render; buildSelfContainedShell accepts
+            // live-mode without codeUrl.
+            {}),
+      runtimeUrl: opts.runtimeUrl,
+      ...(wsUrl !== undefined && wsToken !== undefined
+        ? {
+            wsUrl,
+            token: wsToken,
+            ...(wsExpiresAt !== undefined ? { expiresAt: wsExpiresAt } : {}),
+          }
+        : {}),
+      ...(opts.themeId !== undefined ? { themeId: opts.themeId } : {}),
+      ...(opts.themeMode !== undefined ? { themeMode: opts.themeMode } : {}),
+      // Per-app theme overlay projected by `deriveRenderMeta` from
+      // the render's `theme` sidecar — forwarded so the
+      // resource-served iframe matches the postMessage path.
+      ...(view.theme !== undefined ? { theme: view.theme } : {}),
+      ...(view.propsJson !== undefined ? { propsJson: view.propsJson } : {}),
+      ...(view.contextSlots !== undefined ? { contextSlots: view.contextSlots } : {}),
+      ...(view.permissionsPolicy !== undefined
+        ? { permissionsPolicy: view.permissionsPolicy }
+        : {}),
+      ...(view.gadgets !== undefined && view.gadgets.length > 0
+        ? { gadgets: view.gadgets }
+        : {}),
+      ...(contractHash !== undefined && validatorsUrl !== undefined
+        ? { contractHash, validatorsUrl }
+        : {}),
+      ...(resourcePublicEnv !== undefined && Object.keys(resourcePublicEnv).length > 0
+        ? { publicEnv: resourcePublicEnv }
+        : {}),
+      // R6 — ledger cursor stamp for polling-cursor alignment.
+      lastSequence: accessibleStored.eventSequence,
+    });
+    // Augment per-call CSP with gadget-declared bundle / style /
+    // API origins. Without this, claude.ai's iframe CSP only allows
+    // the publicBaseUrl origin, so Leaflet wrapper bundles fetched
+    // from registry.ggui.ai, leaflet.css fetched from same, and
+    // OSM tile requests to tile.openstreetmap.org all get blocked
+    // → the component throws and the React error boundary renders
+    // "Something went wrong." The /r/<shortCode> HTTP path already
+    // derives these via deriveBundleOrigins; this is the per-call
+    // resource mirror.
+    const gadgetOrigins = deriveBundleOrigins(picked.source);
+    return shellContents(uri, html, augmentCspMeta(gadgetOrigins));
+  }
 
   // Single shared handler powers both templates. `blueprintKey` is
   // optional in the variables map — present for the resume URI shape,
@@ -1265,239 +2051,76 @@ export function registerGguiRenderResourceTemplate(
     const sessionIdRaw = variables["sessionId"];
     const sessionId = Array.isArray(sessionIdRaw) ? sessionIdRaw[0] : sessionIdRaw;
     if (typeof sessionId !== "string" || sessionId.length === 0) {
-      return loadingShell(uri, "unknown");
+      // A URI with no session segment names no locator, which is the
+      // same thing as naming one that does not exist.
+      throw new ResourceReadFailure(NOT_FOUND_FAILURE);
     }
     const blueprintKeyRaw = variables["blueprintKey"];
     const blueprintKey = Array.isArray(blueprintKeyRaw) ? blueprintKeyRaw[0] : blueprintKeyRaw;
     const hasResumeKey = typeof blueprintKey === "string" && blueprintKey.length > 0;
 
-    // Parallel lookup. The render and the blueprint registry are
-    // independent — even though the render's componentCode could feed
-    // the renderable directly, we ALSO want the blueprint entry as a
-    // registry-only fallback when the render is gone but the blueprint
-    // is still cached (chat-history rehydrate after render TTL or
-    // process restart).
-    const [stored, blueprint] = await Promise.all([
-      opts.renderStore.get(sessionId),
-      hasResumeKey && opts.vectorStore && opts.index && opts.defaultAppIdFallback
-        ? findBlueprintExact(
-            { vectorStore: opts.vectorStore, index: opts.index },
-            opts.defaultAppIdFallback,
-            "template",
-            // Resume URI carries only a contract hash — omit variantKey
-            // so the lookup resolves the default variant.
-            blueprintKey
-          )
-        : Promise.resolve(null),
-    ]);
+    // The failure this read ends in if nothing mounts. Seeded from a
+    // property of the SERVER, never of the locator, so a caller cannot
+    // read the answer as a statement about which locators exist; the
+    // branches below refine it only where the access check has already
+    // passed.
+    let failure: ResourceReadError =
+      durableSubstrate() === null ? NOT_SUPPORTED_FAILURE : NOT_FOUND_FAILURE;
+
+    const stored = await opts.renderStore.get(sessionId);
 
     // Rehydration access control (spec §3): gate BEFORE any shell
-    // bytes, code hashing, or token mint. Deny does NOT early-return —
-    // it nulls out row access into `accessibleStored` so every
-    // downstream branch (happy path, registry fallback, final loading
-    // shell) runs exactly as if the row were absent. A deny on the
-    // resume URI must fall through to the SAME registry-only fallback
-    // a genuine miss would hit (the fallback is keyed off the
-    // caller-supplied blueprintKey + registry defaults, never off the
-    // denied row) — otherwise deny would short-circuit to the loading
-    // shell while a miss of the same blueprintKey resolves the
-    // registry shell, leaking row existence to a same-probe attacker.
-    let accessibleStored = stored;
-    if (stored !== null && stored !== undefined) {
-      const callerCtx = opts.getContext?.();
-      const fallbackCtx =
-        callerCtx === undefined && stored.appId === DEFAULT_BUILDER_APP_ID
-          ? {
-              appId: DEFAULT_BUILDER_APP_ID,
-              authSource: "anonymous" as const,
-              requestId: "resource-read",
-            }
-          : callerCtx;
-      if (
-        !renderReadAllowed(
-          {
-            appId: stored.appId,
-            // #446 — the row's SUBJECT is `userId`, written at commit.
-            // This used to project `endUserIdentity`, which nothing has
-            // written since the repo split, so the subject rung never
-            // bound.
-            ...(stored.userId !== undefined ? { userId: stored.userId } : {}),
-          },
-          fallbackCtx
-        )
-      ) {
-        opts.logger?.warn("render_resource_read_denied", {
-          sessionId,
-          rowAppId: stored.appId,
-          callerAppId: callerCtx?.appId,
-        });
-        accessibleStored = null;
-      }
+    // bytes, code hashing, or token mint. Refusal does NOT
+    // early-return — it nulls out row access into `accessibleStored`
+    // so every downstream branch (mount, re-mint, registry fallback,
+    // terminal failure) runs exactly as if the row were absent. A
+    // refusal on the resume URI must fall through to the SAME
+    // registry-only fallback a genuine miss would hit (the fallback is
+    // keyed off the caller-supplied blueprintKey + registry defaults,
+    // never off the refused row) — otherwise refusal would
+    // short-circuit to its own error while a miss of the same
+    // blueprintKey resolves the registry shell, leaking row existence
+    // to a same-probe attacker.
+    const accessibleStored =
+      stored !== null &&
+      stored !== undefined &&
+      readAllowed(sessionId, {
+        appId: stored.appId,
+        // #446 — the row's SUBJECT is `userId`, written at commit.
+        // This used to project `endUserIdentity`, which nothing has
+        // written since the repo split, so the subject rung never
+        // bound.
+        ...(stored.userId !== undefined ? { userId: stored.userId } : {}),
+      })
+        ? stored
+        : null;
+
+    // Live state first: render present and renderable mounts with the
+    // current props + current contextSpec values.
+    if (accessibleStored) {
+      const served = await serveMount(uri, sessionId, accessibleStored);
+      if (served !== null) return served;
+      // The row is here and the caller may read it; it simply has no
+      // component yet, because the generation that will fill it has not
+      // committed. Safe to say so — this branch is past the check, so
+      // it can only ever describe a locator the caller is entitled to.
+      failure = NOT_YET_COMMITTED_FAILURE;
     }
 
-    // Happy path: render present and renderable. Mount with the live
-    // state (current props, current contextSpec values).
-    if (accessibleStored) {
-      const picked = pickComponentFromGguiSession(accessibleStored.render);
-      if (picked) {
-        // Project the active render to the transport-agnostic bootstrap
-        // view — same source of truth the render-mutation handler and
-        // `/r/<shortCode>` consume. Carries permissionsPolicy when
-        // clientCapabilities declares permissions. The MCP Apps
-        // resource path emits this only into the inline bootstrap
-        // (the browser-enforced gate ultimately comes from the host's
-        // `allow=""` attribute when the host translates
-        // `_meta.ui.permissions` — set by McpAppIframe consumers).
-        const view = deriveRenderMeta(picked.source);
-        const isSystem = picked.kind !== undefined;
-
-        // Static-component delivery via codeUrl. The compiled-component
-        // path mints a content-addressable URL the iframe-runtime
-        // fetches at boot; the loading shell takes over when codeStore +
-        // codeBaseUrl aren't wired.
-        let codeUrl: string | undefined;
-        let codeHash: string | undefined;
-        let contractHash: string | undefined;
-        let validatorsUrl: string | undefined;
-        if (!isSystem && opts.codeStore && opts.codeBaseUrl) {
-          try {
-            const hash = opts.codeStore.hashOf(picked.componentCode);
-            await opts.codeStore.put(hash, picked.componentCode);
-            codeHash = hash;
-            const base = opts.codeBaseUrl.replace(/\/$/, "");
-            codeUrl = `${base}/code/${hash}.js`;
-          } catch {
-            // Silent — falls through to loading shell below.
-          }
-          // Content-addressable contract-validator bundle (#109).
-          try {
-            const bundle = await deriveContractBundle(picked.source);
-            if (bundle) {
-              await opts.codeStore.put(bundle.contractHash, bundle.bundleSource);
-              contractHash = bundle.contractHash;
-              const base = opts.codeBaseUrl.replace(/\/$/, "");
-              validatorsUrl = `${base}/contract/${bundle.contractHash}.js`;
-            }
-          } catch {
-            // Silent — bundle write failure degrades to no client-side
-            // validators (server-side gate is authoritative).
-          }
-        }
-        // The codeUrl gate is applied AFTER the live-channel mint below, so
-        // a render with no static codeUrl still mounts via live-mode
-        // (wsUrl + wsToken) instead of stalling on the loading shell —
-        // parity with the `/r/<shortCode>` path. (See the gate after the
-        // mint.) This matters for deployments that wire `mintWsToken` but no
-        // `codeStore`/`codeBaseUrl` (e.g. the cloud pod): the agent-server
-        // inlines THIS resource, so without the fallback every cloud render
-        // hung on the dead "Generating UI…" shell.
-
-        // Project the wrapper catalog AND the union-filtered
-        // publicEnv onto the inline bootstrap so the resource-served
-        // iframe matches the MCP-Apps postMessage path. Without this,
-        // wrapper-using contracts rendered through `resources/read`
-        // mount as STDLIB-only.
-        let resourcePublicEnv: Readonly<Record<string, string>> | undefined;
-        if (opts.appMetadataStore) {
-          try {
-            const appRecord = await opts.appMetadataStore.get(accessibleStored.appId);
-            resourcePublicEnv = derivePublicEnvProjection(picked.source, appRecord?.publicEnv);
-          } catch {
-            // Silent — wrappers calling getPublicEnv throw clearly.
-          }
-        }
-        // Live-channel bootstrap — when the operator wired
-        // {@link GguiRenderResourceTemplateOptions.mintWsToken}, mint a
-        // wsToken for this render so the iframe-runtime opens a
-        // WebSocket on mount and receives `props_update` frames.
-        // Without this, the resource shell renders in static-component
-        // mode only — `ggui_update` server-side mutations never
-        // visibly reach the live iframe (hosts must re-fetch
-        // `resources/read` after every update tool result to see new
-        // state).
-        let wsUrl: string | undefined;
-        let wsToken: string | undefined;
-        let wsExpiresAt: string | undefined;
-        if (opts.mintWsToken) {
-          try {
-            const minted = opts.mintWsToken(sessionId, accessibleStored.appId);
-            wsUrl = minted.wsUrl;
-            wsToken = minted.token;
-            // Forward the token TTL so the iframe-runtime can degrade to
-            // static-only mode once it lapses (parity with the render-tool
-            // slice projection, render.ts). Dropping it left the live-mode
-            // resource shell unable to know when its WS token expired.
-            wsExpiresAt = minted.expiresAt;
-          } catch {
-            // Silent — falls back to static-component mode.
-          }
-        }
-
-        // Mount-mode gate (moved below the live-channel mint): emit the
-        // loading shell ONLY when NEITHER a static codeUrl channel NOR a
-        // live-channel wsToken is available. A deployment that wires no
-        // codeStore (codeUrl === undefined) but DOES wire mintWsToken now
-        // mounts via live-mode rather than hanging on "Generating UI…".
-        if (!isSystem && codeUrl === undefined && (wsUrl === undefined || wsToken === undefined)) {
-          return loadingShell(uri, sessionId);
-        }
-
-        const html = buildSelfContainedShell({
-          sessionId,
-          appId: accessibleStored.appId,
-          ...(isSystem
-            ? { systemKind: picked.kind }
-            : codeUrl !== undefined
-              ? {
-                  codeUrl,
-                  ...(codeHash !== undefined ? { codeHash } : {}),
-                }
-              : // No static codeUrl → live-mode (wsUrl + token spread below)
-                // carries the render; buildSelfContainedShell accepts
-                // live-mode without codeUrl.
-                {}),
-          runtimeUrl: opts.runtimeUrl,
-          ...(wsUrl !== undefined && wsToken !== undefined
-            ? {
-                wsUrl,
-                token: wsToken,
-                ...(wsExpiresAt !== undefined ? { expiresAt: wsExpiresAt } : {}),
-              }
-            : {}),
-          ...(opts.themeId !== undefined ? { themeId: opts.themeId } : {}),
-          ...(opts.themeMode !== undefined ? { themeMode: opts.themeMode } : {}),
-          // Per-app theme overlay projected by `deriveRenderMeta` from
-          // the render's `theme` sidecar — forwarded so the
-          // resource-served iframe matches the postMessage path.
-          ...(view.theme !== undefined ? { theme: view.theme } : {}),
-          ...(view.propsJson !== undefined ? { propsJson: view.propsJson } : {}),
-          ...(view.contextSlots !== undefined ? { contextSlots: view.contextSlots } : {}),
-          ...(view.permissionsPolicy !== undefined
-            ? { permissionsPolicy: view.permissionsPolicy }
-            : {}),
-          ...(view.gadgets !== undefined && view.gadgets.length > 0
-            ? { gadgets: view.gadgets }
-            : {}),
-          ...(contractHash !== undefined && validatorsUrl !== undefined
-            ? { contractHash, validatorsUrl }
-            : {}),
-          ...(resourcePublicEnv !== undefined && Object.keys(resourcePublicEnv).length > 0
-            ? { publicEnv: resourcePublicEnv }
-            : {}),
-          // R6 — ledger cursor stamp for polling-cursor alignment.
-          lastSequence: accessibleStored.eventSequence,
-        });
-        // Augment per-call CSP with gadget-declared bundle / style /
-        // API origins. Without this, claude.ai's iframe CSP only allows
-        // the publicBaseUrl origin, so Leaflet wrapper bundles fetched
-        // from registry.ggui.ai, leaflet.css fetched from same, and
-        // OSM tile requests to tile.openstreetmap.org all get blocked
-        // → the component throws and the React error boundary renders
-        // "Something went wrong." The /r/<shortCode> HTTP path already
-        // derives these via deriveBundleOrigins; this is the per-call
-        // resource mirror.
-        const gadgetOrigins = deriveBundleOrigins(picked.source);
-        return shellContents(uri, html, augmentCspMeta(gadgetOrigins));
+    // Re-mint: the row is GONE and the deployment keeps a durable
+    // record of what it was. Gated on the row being genuinely absent
+    // rather than merely unreadable — a re-mint COMMITS, and a commit
+    // fired while a row exists would overwrite live state (or another
+    // party's) with a reconstruction. A refused read still reaches the
+    // same fallback and the same terminal failure a miss reaches, so
+    // nothing here tells the two apart.
+    if (stored === null || stored === undefined) {
+      const reminted = await remintFromRecord(sessionId);
+      if (reminted.ok) {
+        const served = await serveMount(uri, sessionId, reminted.row);
+        if (served !== null) return served;
+      } else {
+        failure = reminted.failure;
       }
     }
 
@@ -1505,8 +2128,30 @@ export function registerGguiRenderResourceTemplate(
     // blueprint is still in the registry. Synthesize the shell from
     // the blueprint's componentCode + propsSpec defaults — strictly
     // worse than the live mount (no current props, no preserved
-    // context state), but strictly better than the dead loading
-    // shell.
+    // context state), but a real mount rather than a failure.
+    //
+    // It runs on EVERY path that has not mounted, including a refused
+    // one, and that is load-bearing: it is keyed by the caller-supplied
+    // blueprintKey under the registry default and never by the row, so
+    // a refusal and a miss of the same key resolve the same shell. A
+    // refusal that skipped it would be distinguishable from a miss.
+    //
+    // The lookup runs HERE, not before the gate. It is keyed by a
+    // caller-supplied blueprintKey under a registry default, so firing
+    // it ahead of the access check spent a lookup on every read and
+    // put blueprint-existence work in front of the one check that
+    // decides whether the caller may learn anything at all.
+    const blueprint =
+      hasResumeKey && opts.vectorStore && opts.index && opts.defaultAppIdFallback
+        ? await findBlueprintExact(
+            { vectorStore: opts.vectorStore, index: opts.index },
+            opts.defaultAppIdFallback,
+            "template",
+            // Resume URI carries only a contract hash — omit variantKey
+            // so the lookup resolves the default variant.
+            blueprintKey
+          )
+        : null;
     if (blueprint && opts.defaultAppIdFallback) {
       const html = await buildShellFromBlueprint({
         sessionId,
@@ -1521,10 +2166,16 @@ export function registerGguiRenderResourceTemplate(
       if (html !== undefined) {
         return shellContents(uri, html);
       }
-      // Fallthrough to loading shell when codeStore isn't wired.
+      // A blueprint matched, but `buildShellFromBlueprint` needs the
+      // static-delivery pair to turn one into a shell. Its own failure,
+      // not the one held above: what the read found is a component it
+      // cannot deliver, and that answer depends only on the
+      // caller-supplied key and this server's wiring — identical for a
+      // refused read and a miss of the same key.
+      throw new ResourceReadFailure(BLUEPRINT_UNDELIVERABLE_FAILURE);
     }
 
-    return loadingShell(uri, sessionId);
+    throw new ResourceReadFailure(failure);
   }
 
   server.registerResource(
@@ -1533,7 +2184,7 @@ export function registerGguiRenderResourceTemplate(
     {
       title: "ggui render (self-contained, legacy URI)",
       description:
-        "Per-render self-contained shell — single-segment URI shape predating the resume contract. Falls back to loading shell when the render is gone (no blueprintKey to do registry-only render).",
+        "Per-render self-contained shell — single-segment URI shape predating the resume contract. A read returns a mountable shell or exactly one typed JSON-RPC error, never a shell that cannot paint. Carrying no blueprintKey, this shape cannot reach the blueprint-registry fallback; a server that keeps durable identity records still re-mints it, since that path is keyed by sessionId alone. Failures: NOT_FOUND (-32002) when nothing resolves the locator, and identically when the caller may not read one that does; NOT_SUPPORTED (-32006) in place of NOT_FOUND on a server that keeps no durable record, for both of those cases alike; BLUEPRINT_UNRESOLVABLE (-32006) when a record names a component that is gone; NOT_MOUNTABLE (-32006) when the caller's own render resolved but nothing mountable can be produced from it, on any server.",
       mimeType: GGUI_RENDER_RESOURCE_MIME,
     },
     handle
@@ -1545,7 +2196,7 @@ export function registerGguiRenderResourceTemplate(
     {
       title: "ggui render (self-contained, resume URI)",
       description:
-        "Per-render self-contained shell — two-segment URI shape carrying both sessionId AND blueprintKey. Resource handler runs Promise.all over render + registry; falls back to registry-only static render when the render has been evicted but the blueprint is still cached.",
+        "Per-render self-contained shell — two-segment URI shape carrying both sessionId AND blueprintKey. A read returns a mountable shell or exactly one typed JSON-RPC error, never a shell that cannot paint. When the render has been evicted the handler tries, in order and only after the access check: a re-mint from the durable identity record, then a registry-only static render from the blueprintKey. Failures: NOT_FOUND (-32002) when neither resolves the locator, and identically when the caller may not read one that does; NOT_SUPPORTED (-32006) in place of NOT_FOUND on a server that keeps no durable record, for both of those cases alike; BLUEPRINT_UNRESOLVABLE (-32006) when a record names a component that is gone; NOT_MOUNTABLE (-32006) when the caller's own render, or a blueprint matching the supplied key, resolved but nothing mountable can be produced from it, on any server.",
       mimeType: GGUI_RENDER_RESOURCE_MIME,
     },
     handle

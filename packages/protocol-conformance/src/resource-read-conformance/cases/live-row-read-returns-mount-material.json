@@ -1,0 +1,18 @@
+{
+  "name": "live-row-read-returns-mount-material",
+  "description": "The success half of the invariant, on the simplest path: the render is still live and the caller owns it. The result's contents must declare a delivery channel — a component URL, a live channel carrying BOTH an endpoint and a token, or a server-emitted system card. Graded on the projected render meta, never on markup: what the shell looks like is a server's own presentation concern. Note the blueprintKey segment names nothing this server has ever stored, and the read succeeds anyway — that is deliberate, and it makes a second obligation graded here: when the row is present and readable, the ROW is what gets mounted and the supplied key is not consulted. A server that validated the key against its own records and refused the mismatch would fail this case, correctly, because a resume locator's key exists to resolve a render that is GONE.",
+  "server": { "durableSubstrate": "all", "liveChannel": true },
+  "caller": "owner",
+  "seeds": [{ "kind": "committed-render", "session": "3f1a9c22-7b4e-4d18-9a05-6c2e8b1d4f70" }],
+  "reads": [
+    {
+      "as": "live",
+      "locator": {
+        "kind": "render",
+        "session": "3f1a9c22-7b4e-4d18-9a05-6c2e8b1d4f70",
+        "key": { "kind": "literal", "value": "fedcba9876543210" }
+      },
+      "expect": { "kind": "live-mount" }
+    }
+  ]
+}

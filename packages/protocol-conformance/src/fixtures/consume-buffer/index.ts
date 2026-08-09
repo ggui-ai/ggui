@@ -20,7 +20,10 @@
  *
  * The retrieval half — the agent draining the buffer via
  * `ggui_consume` — is an MCP tool call a WS-only runner cannot drive;
- * that obligation belongs to an MCP-binding driver, not this catalog.
+ * that obligation belongs to a driver bound to `tools/call`, not this
+ * catalog. The kit's `resources/read` driver
+ * (`../../resource-read-conformance`) binds a different method and does
+ * not close it.
  * Same declared-gap posture for the schema-validity meta-check on the
  * DECLARED schema itself: a malformed authored schema is a fixture-
  * authoring error the runner throws on (validating parse), while a

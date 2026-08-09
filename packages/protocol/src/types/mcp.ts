@@ -12,6 +12,8 @@ import type {
   renderErrorSchema,
   renderInputSchema,
   renderOutputSchema,
+  resourceReadErrorCodeSchema,
+  resourceReadErrorSchema,
   searchBlueprintsInputSchema,
   updateInputSchema,
   updateOutputSchema,
@@ -446,6 +448,21 @@ export type RenderErrorCode = z.infer<typeof renderErrorCodeSchema>;
  */
 export type RenderError = z.infer<typeof renderErrorSchema>;
 
+/**
+ * Canonical failure code for a `resources/read` on a render locator
+ * (SPEC §7.9 Plane 1). Derived from
+ * {@link resourceReadErrorCodeSchema} — the schema is the source of
+ * truth. Distinct from {@link RenderErrorCode}, which classifies a
+ * `ggui_render` tool call rather than a resource read.
+ */
+export type ResourceReadErrorCode = z.infer<typeof resourceReadErrorCodeSchema>;
+
+/**
+ * Failure shape for a `resources/read` that cannot return a mount.
+ * Derived from {@link resourceReadErrorSchema}.
+ */
+export type ResourceReadError = z.infer<typeof resourceReadErrorSchema>;
+
 export type GguiUpdateInput = z.infer<typeof updateInputSchema>;
 export type GguiUpdateOutput = z.infer<typeof updateOutputSchema>;
 
@@ -470,8 +487,10 @@ export type DeclareToolCatalogOutput = z.infer<typeof declareToolCatalogOutputSc
  * JSON-RPC error. `PRODUCTION_FAILED` is now an in-result tool-error
  * code on the `ggui_render` failure envelope (SPEC §7.9 Plane 3 /
  * §7.1; see {@link RenderErrorCode}). The slot stays unassigned so a
- * future canonical code can't silently collide with stale consumers —
- * new canonical codes come at `-32006` onwards.
+ * future canonical code can't silently collide with stale consumers.
+ *
+ * `-32006` is assigned to `MOUNT_UNAVAILABLE`; new canonical codes come
+ * at `-32007` onwards.
  */
 export const MCP_ERROR_CODES = {
   PARSE_ERROR: -32700,
@@ -484,6 +503,21 @@ export const MCP_ERROR_CODES = {
   SESSION_NOT_FOUND: -32002,
   APP_NOT_FOUND: -32003,
   CAPABILITY_DENIED: -32005,
+  /**
+   * A `resources/read` identified the resource but cannot return a
+   * mount for it — the component behind it is gone, the server keeps no
+   * durable record to restore from, or nothing can deliver it. See
+   * {@link ResourceReadErrorCode} for the classification carried on
+   * `error.data.code`.
+   *
+   * Deliberately NOT `INTERNAL_ERROR`. These outcomes are deterministic
+   * and correctly served: the server is working, and retrying the same
+   * read will fail the same way. Reporting them as `-32603` would tell
+   * hosts the server malfunctioned and invite a retry that cannot
+   * succeed. A read for a resource that does not exist (or that the
+   * caller may not see) is `SESSION_NOT_FOUND` instead.
+   */
+  MOUNT_UNAVAILABLE: -32006,
 } as const;
 
 /**
