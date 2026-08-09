@@ -1924,13 +1924,20 @@ export interface CreateGguiServerOptions {
   readonly renderStore?: GguiSessionStore;
 
   /**
-   * Render-row retention window in ms, forwarded to `ggui_render`'s
-   * `renderTtlMs` deps field. Operators align this with chat-history
-   * lifetime so rehydration-by-refetch (re-reading the `ui://ggui/render/*`
-   * resource after the agent's original render call) finds the row
-   * instead of a reaped one. Defaults to `ggui_render`'s own
-   * `DEFAULT_RENDER_TTL_MS` (1h) when unset — the pre-existing
-   * memory-hygiene default for in-process stores.
+   * Render-row retention window in ms. Operators align this with
+   * chat-history lifetime so rehydration-by-refetch (re-reading the
+   * `ui://ggui/render/*` resource after the agent's original render
+   * call) finds the row instead of a reaped one.
+   *
+   * One knob, three consumers, all of them lifecycle decisions about a
+   * render row: `ggui_render` stamps new renders with it, a re-mint
+   * commits its reconstructed row with it, and a read of a row that is
+   * present but past its expiry gives the row this lifetime again so
+   * the live-channel token minted in the same read cannot outlive it.
+   *
+   * Defaults to 1h when unset — the pre-existing memory-hygiene
+   * default for in-process stores, and the same value each consumer
+   * falls back to independently.
    */
   readonly renderTtlMs?: number;
 
@@ -4469,6 +4476,32 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
             // diagnosed live on 2026-05-18 against the cloudflared
             // tunnel.
             ...(opts.publicBaseUrl !== undefined ? { publicBaseUrl: opts.publicBaseUrl } : {}),
+            // #430 slice 3 — the durable substrate, forwarded to the
+            // READ side. Both stores are single top-level options with
+            // two consumers: the write paths above spend them keeping
+            // a record, and this is where the record is spent. A
+            // factory that accepts them and forwards neither here
+            // boots, compiles, and answers every evicted locator as
+            // though the operator had wired nothing — which is what a
+            // record-less server is supposed to do, so the regression
+            // is invisible in the response.
+            //
+            // Forwarded independently, never as a pair: the template's
+            // own accessor requires all three stores before it will
+            // consult any of them, so a half-wired deployment is
+            // already handled there, in one place.
+            ...(opts.renderIdentityStore
+              ? { renderIdentityStore: opts.renderIdentityStore }
+              : {}),
+            ...(opts.durableBlueprints !== undefined
+              ? { durableBlueprints: opts.durableBlueprints }
+              : {}),
+            // Same retention knob `ggui_render` stamps new renders
+            // with. The read path spends it on the row a re-mint
+            // commits and on an expired-but-readable row it puts back
+            // into service; unforwarded, both silently fall back to an
+            // hour on a deployment whose renders live far longer.
+            ...(opts.renderTtlMs !== undefined ? { renderTtlMs: opts.renderTtlMs } : {}),
             // Live-channel wsToken minter — when wired, every
             // per-render resource shell embeds `{wsUrl, wsToken}`
             // so the iframe-runtime opens a WebSocket on mount and

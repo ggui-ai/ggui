@@ -1055,14 +1055,14 @@ type RemintOutcome =
 const RECORD_UNAVAILABLE: RemintOutcome = { ok: false, failure: NOT_FOUND_FAILURE };
 
 /**
- * Lifetime stamped on the `expiresAt` field of a re-minted render's
- * wire shape. The authoritative expiry belongs to the session store,
- * which owns the row's lifecycle columns and stamps them at commit —
- * this only fills the required wire field, the same role the render
- * handler's own default TTL plays. 1 hour matches the in-memory
- * reference store's default.
+ * Retention this read path assumes when the operator names none —
+ * deliberately the same hour `ggui_render` falls back to, so a
+ * deployment that has never set the knob gets one answer rather than
+ * two. Every use of it is behind
+ * {@link GguiRenderResourceTemplateOptions.renderTtlMs}, which is where
+ * a real deployment's retention comes from.
  */
-const REMINTED_RENDER_TTL_MS = 60 * 60 * 1000;
+const FALLBACK_RENDER_TTL_MS = 60 * 60 * 1000;
 
 /**
  * Options for {@link registerGguiRenderResourceTemplate}.
@@ -1144,6 +1144,23 @@ export interface GguiRenderResourceTemplateOptions {
    * threads one pair to both ends.
    */
   readonly durableBlueprints?: BlueprintDurabilityDeps;
+  /**
+   * Render-row retention window in ms — the SAME operator knob
+   * `ggui_render` stamps new renders with. The read path spends it in
+   * two places, and both are lifecycle decisions about a row this
+   * handler is putting back into service:
+   *
+   *   - a re-mint commits its reconstructed row with this lifetime;
+   *   - a read of a row that is present but PAST its expiry gives the
+   *     row this lifetime again, so the live-channel token minted in
+   *     the same read cannot outlive the row it addresses.
+   *
+   * Absent ⇒ one hour, matching `ggui_render`'s own fallback. Setting
+   * it on a deployment whose renders live far longer than an hour is
+   * what stops a rehydrated render from being quietly demoted to a
+   * fraction of its neighbours' lifetime.
+   */
+  readonly renderTtlMs?: number;
   /**
    * Vector store backing the blueprint registry. When wired alongside
    * `defaultAppIdFallback`, the resource handler runs a registry-only
@@ -1517,6 +1534,49 @@ export function registerGguiRenderResourceTemplate(
     return { identityStore, blueprintStore, bodyStore };
   }
 
+  /** Operator retention, or the shared fallback. Read in both places. */
+  const renderTtlMs = opts.renderTtlMs ?? FALLBACK_RENDER_TTL_MS;
+
+  /**
+   * Give a row that has outlived its `expiresAt` a full lifetime again.
+   *
+   * A store may keep a row readable past its expiry — the reaper runs
+   * on its own schedule, and some stamp the deletion deadline with a
+   * grace window on top. A read landing in that window mounts the row
+   * and mints a live-channel token against it, and the token then
+   * addresses a render the next reaper pass deletes. Extending here
+   * keeps the token's promise rather than weakening the token.
+   *
+   * CONDITIONAL, and that is the load-bearing half: a resource read is
+   * the hottest path this handler has, so extending a row that is
+   * already live would put a store write on every read of every render
+   * for nothing.
+   *
+   * A failure does not fail the read. The caller owns this render and
+   * the handler can mount it; refusing over an extension would turn a
+   * store's bad moment into a dead card, and the pre-extension
+   * behavior — a token that may outlive its row — is what the read
+   * would have done anyway. It is logged rather than swallowed,
+   * because a row that could not be extended is now living on borrowed
+   * time and nothing else will say so.
+   */
+  async function extendExpiredRow(
+    sessionId: string,
+    stored: StoredGguiSession,
+  ): Promise<void> {
+    const now = Date.now();
+    if (stored.expiresAt > now) return;
+    try {
+      await opts.renderStore.update(sessionId, { expiresAt: now + renderTtlMs });
+    } catch (cause) {
+      opts.logger?.warn("render_resource_ttl_extend_failed", {
+        sessionId,
+        expiredAt: stored.expiresAt,
+        error: cause instanceof Error ? cause.message : String(cause),
+      });
+    }
+  }
+
   /**
    * Rehydration access control (spec §3), applied to ONE read
    * candidate — a render row, or the durable identity record that
@@ -1697,7 +1757,7 @@ export function registerGguiRenderResourceTemplate(
       // itself as newly created.
       createdAt: record.createdAt,
       lastActivityAt: now,
-      expiresAt: now + REMINTED_RENDER_TTL_MS,
+      expiresAt: now + renderTtlMs,
       // States the same fact as the `seqFloor` below, which is what
       // the store actually seeds the row's ledger from.
       eventSequence: record.seqAtLastCommit,
@@ -1746,6 +1806,12 @@ export function registerGguiRenderResourceTemplate(
   ): Promise<{ contents: ShellContent[] } | null> {
     const picked = pickComponentFromGguiSession(accessibleStored.render);
     if (!picked) return null;
+    // Put an expired-but-still-readable row back on a full lifetime
+    // before anything mints against it. Ordering is the whole point:
+    // the live-channel token minted below must not outlive the row it
+    // addresses, and after the `picked` check because a row with
+    // nothing to mount issues no token and needs no extension.
+    await extendExpiredRow(sessionId, accessibleStored);
     // Project the active render to the transport-agnostic bootstrap
     // view — same source of truth the render-mutation handler and
     // `/r/<shortCode>` consume. Carries permissionsPolicy when
