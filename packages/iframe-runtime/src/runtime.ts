@@ -1992,6 +1992,13 @@ function announceToast(text: string, kind: ToastKind): void {
   if (typeof document === 'undefined') return;
   const regions = ensureToastAnnouncer(document);
   if (regions === null) return;
+  // Whatever speaks last owns the region. A retraction scheduled for an
+  // earlier relay cue would otherwise come due in the middle of THIS
+  // message and take it down instead — and it could not be filtered out
+  // by comparing text, because a cue and the fallback cue toast for the
+  // same intent are character-identical. (Declared below; this only
+  // ever runs long after module init.)
+  cancelRelayCueRetraction();
   const interrupts = kind === 'error' || kind === 'action_required';
   const target = interrupts ? regions.assertive : regions.polite;
   const idle = interrupts ? regions.polite : regions.assertive;
@@ -2440,22 +2447,27 @@ const RELAY_CUE_THROTTLE_MS = 5_000;
 const RELAY_CUE_ANNOUNCE_TTL_MS = 2_500;
 
 /**
+ * Drop the retraction a standing spoken cue has pending, because
+ * something newer is about to own the region — another cue, a toast, or
+ * a latch edge that ends the dead zone entirely. Left armed, it comes
+ * due mid-message and clears whatever is in the region then.
+ */
+function cancelRelayCueRetraction(): void {
+  if (relayCueAnnounceTimer === undefined) return;
+  clearTimeout(relayCueAnnounceTimer);
+  relayCueAnnounceTimer = undefined;
+}
+
+/**
  * Give the dead zone a fresh quiet period. Called on both latch edges
  * and from the test reset — every throttle belongs to the notice that
  * is standing NOW, so a new one never inherits an old one's silence.
- *
- * The pending expiry goes too. Left armed, it outlives the cue it was
- * scheduled for and retracts the NEXT one early, whenever that next cue
- * happens to name the same action.
  */
 function resetRelayCueThrottles(): void {
   lastRelayCueToastAt = 0;
   lastRelayCueAnnouncedAt = 0;
   lastRelayCueAnnouncedIntent = null;
-  if (relayCueAnnounceTimer !== undefined) {
-    clearTimeout(relayCueAnnounceTimer);
-    relayCueAnnounceTimer = undefined;
-  }
+  cancelRelayCueRetraction();
 }
 
 /** @internal — exported for unit tests to reset module state. */
@@ -2550,27 +2562,33 @@ function announceRelayCue(intent: string): void {
   }
   lastRelayCueAnnouncedAt = now;
   lastRelayCueAnnouncedIntent = intent;
-  const text = `⚠ ${intent} — not delivered`;
-  announceToast(text, 'error');
-  if (relayCueAnnounceTimer !== undefined) clearTimeout(relayCueAnnounceTimer);
+  // `announceToast` cancels any retraction still pending, so the timer
+  // armed here is always the only one in flight.
+  announceToast(`⚠ ${intent} — not delivered`, 'error');
   relayCueAnnounceTimer = window.setTimeout(() => {
     relayCueAnnounceTimer = undefined;
-    retractRelayCueAnnouncement(text);
+    retractRelayCueAnnouncement();
   }, RELAY_CUE_ANNOUNCE_TTL_MS);
 }
 
 /**
  * Take a spoken cue back down once it has been heard.
  *
- * Retracts ONLY the sentence it was scheduled for. Anything else in the
- * region belongs to a toast that spoke in the meantime and is still
- * describing something on screen — clearing that would silence a live
- * message to tidy up a dead one.
+ * Unconditional, because by the time it runs the region can only hold
+ * this cue's own sentence or nothing at all: every other write to the
+ * region goes through {@link announceToast}, which cancels this
+ * retraction before it speaks.
+ *
+ * That cancellation is the whole mechanism — comparing text here could
+ * not substitute for it. The pulse cue and the fallback cue toast build
+ * their sentences from the SAME template, so for one intent the two are
+ * character-identical and no comparison can tell a dead cue from a live
+ * toast.
  */
-function retractRelayCueAnnouncement(text: string): void {
+function retractRelayCueAnnouncement(): void {
   if (typeof document === 'undefined') return;
   const regions = ensureToastAnnouncer(document);
-  if (regions === null || regions.assertive.textContent !== text) return;
+  if (regions === null) return;
   regions.assertive.textContent = '';
 }
 

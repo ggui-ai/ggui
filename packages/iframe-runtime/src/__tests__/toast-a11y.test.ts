@@ -542,6 +542,11 @@ describe('relay dead-zone cue — the pulse speaks (ggui#442 + ggui#447)', () =>
     btn.focus();
 
     vi.useFakeTimers();
+    // SAME intent throughout — the collision case. The pulse cue and
+    // the fallback cue toast build their sentences from one template,
+    // so these two announcements are character-identical and nothing
+    // read out of the region can tell the dead one from the live one.
+    // Only cancelling the retraction when the toast speaks works.
     fireGesture('archive');
     expect(region('assertive')?.textContent).toMatch(/archive/i);
 
@@ -549,16 +554,22 @@ describe('relay dead-zone cue — the pulse speaks (ggui#442 + ggui#447)', () =>
     // the other cue shape: a real micro-toast, with its own 2.5s life.
     btn.blur();
     vi.advanceTimersByTime(1_000);
-    fireGesture('publish');
-    expect(toastEl()?.textContent).toMatch(/publish/i);
-    expect(region('assertive')?.textContent).toMatch(/publish/i);
+    fireGesture('archive');
+    expect(toastEl()?.textContent).toMatch(/archive/i);
+    expect(region('assertive')?.textContent).toMatch(/archive/i);
 
-    // The earlier cue's retraction comes due here. It must not tidy up
-    // by clearing the region wholesale — the sentence in there now
-    // belongs to a toast the user can still see.
+    // The earlier cue's retraction comes due here. The toast is still
+    // on screen for another 900ms, so the region must still describe
+    // it — a visible message with an empty announcer is the same defect
+    // in the other direction.
     vi.advanceTimersByTime(1_600);
     expect(toastEl()?.style.opacity).toBe('1');
-    expect(region('assertive')?.textContent).toMatch(/publish/i);
+    expect(region('assertive')?.textContent).toMatch(/archive/i);
+
+    // And it goes when the toast itself goes, not before.
+    vi.advanceTimersByTime(1_000);
+    expect(toastEl()?.style.opacity).toBe('0');
+    expect(region('assertive')?.textContent).toBe('');
   });
 
   it('speaks through the toast primitive when there is nothing to pulse', async () => {
