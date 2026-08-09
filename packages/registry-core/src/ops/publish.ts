@@ -6,6 +6,9 @@
  *   1.  Validate {@link AuthnContext} present (transport enforces auth
  *       before calling; this is defense-in-depth).
  *   2.  Parse + validate the manifest via `parseArtifactManifest`.
+ *   2b. Enforce the visibility ↔ signature-algorithm pairing
+ *       (`public` ⇒ `sigstore-cosign`, `private` ⇒ `ed25519`) —
+ *       cheap field comparison, before any decode or verify work.
  *   3.  Decode + size-check the bundle (gadgets only).
  *   4.  Recompute SHA-384 of the bundle bytes; compare to client claim.
  *   5.  Re-run the conformance gate ({@link checkConformance}).
@@ -169,6 +172,31 @@ export async function publishArtifact(
 
   const artifactId = `${manifest.scope}/${manifest.name}`;
   const version = manifest.version;
+
+  // 2b. Visibility ↔ signature-algorithm pairing. The two algorithms
+  // carry different trust models: sigstore keyless signing records
+  // every publish in a public transparency log — the third-party
+  // auditability that makes an artifact safe to list publicly — while
+  // an Ed25519 author key leaves no public record, which is the point
+  // for private artifacts. Clients pair them at signing time, but the
+  // server cannot trust a hand-rolled request: an unenforced
+  // public+Ed25519 publish would become publicly listable with no
+  // transparency-log entry. Cheap field comparison — runs before any
+  // bundle decode, conformance, or cryptographic verify work.
+  if (manifest.visibility === 'public' && input.signature.algorithm === 'ed25519') {
+    return error(
+      400,
+      'visibility_algorithm_mismatch',
+      "`visibility: 'public'` requires a sigstore keyless signature (`algorithm: 'sigstore-cosign'`) so the publish is recorded in a public transparency log. Ed25519 author-key signatures pair with `visibility: 'private'` — re-sign with sigstore, or publish as private.",
+    );
+  }
+  if (manifest.visibility === 'private' && input.signature.algorithm === 'sigstore-cosign') {
+    return error(
+      400,
+      'visibility_algorithm_mismatch',
+      "`visibility: 'private'` requires an Ed25519 author-key signature. Sigstore keyless signing (`algorithm: 'sigstore-cosign'`) records the publish in a public transparency log and pairs with `visibility: 'public'` — re-sign with your Ed25519 author key, or publish as public.",
+    );
+  }
 
   // 3. Bundle decode + size (gadgets only)
   let bundleBytes: Uint8Array | undefined;

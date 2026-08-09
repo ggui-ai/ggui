@@ -9,20 +9,27 @@
  *      authn (token = `test-token`).
  *   2. Generate a fresh Ed25519 keypair; register the public key
  *      under the fixture's test subject.
- *   3. Read the fixture's manifest + pre-built bundle from disk.
+ *   3. Read the fixture's manifest + pre-built bundle from disk. The
+ *      fixture declares `visibility: 'private'` — the registry
+ *      enforces the visibility ↔ algorithm pairing (public ⇒ sigstore
+ *      keyless, private ⇒ Ed25519 author key), and this suite signs
+ *      with a real Ed25519 key.
  *   4. Sign the bundle bytes; POST /publish with bearer token.
  *   5. Verify 201 + the locked `PublishResponseBody` shape — in
  *      particular `installCommand` must say `ggui gadget install` and
  *      include the registry hostname.
- *   6. GET /search?kind=gadget — assert the published gadget is
- *      listed with the lightweight summary projection.
- *   7. GET /pkg/{scope}/{name}/{version} — assert the full read
- *      response carries the manifest + bundleUrl + bundleSri +
- *      signatureUrl + authorPublicKey.
+ *   6. GET /search?kind=gadget — assert the private row does NOT
+ *      surface (search lists only public rows).
+ *   7. GET /pkg/{scope}/{name}/{version} — 403 without auth; with the
+ *      bearer, assert the full read response carries the manifest +
+ *      bundleUrl + bundleSri + signatureUrl + authorPublicKey.
  *   8. Fetch the bundle URL — assert the bytes round-trip + the
  *      Cache-Control header is the cache-immutable contract.
  *
  * What this scenario does NOT cover (deferred to a follow-up):
+ *   - The public lane (sigstore keyless signing + public search
+ *     listing) — requires Fulcio/Rekor (or `@sigstore/mock`), which
+ *     lands with the real-sigstore coverage slice (F3).
  *   - CLI subprocess invocation of `ggui gadget publish` / `install`
  *     (the CLI surface has its own test suite at
  *     `packages/ggui-cli/src/internal/artifact-*.test.ts`).
@@ -74,7 +81,7 @@ describe('21 — marketplace gadget lifecycle', () => {
     await registry.stop();
   });
 
-  test('publish → search → read → bundle fetch — full HTTP lifecycle', async () => {
+  test('publish → hidden from search → authed read → bundle fetch — private-lane HTTP lifecycle', async () => {
     // ── 1. Generate keypair + register the author key ──────────────
     const keypair = await generateEd25519Keypair();
     await registry.storage.putAuthorKey({
@@ -124,24 +131,30 @@ describe('21 — marketplace gadget lifecycle', () => {
     expect(publishBody.signatureUrl).toContain('.sig');
 
     // ── 5. GET /search ─────────────────────────────────────────────
+    // The fixture is private — /search lists only public rows, so the
+    // publish MUST NOT surface here. (The public lane needs sigstore
+    // keyless signing; covered when F3 lands real-sigstore fixtures.)
     const searchResp = await fetch(`${registry.url}/search?kind=gadget`);
     expect(searchResp.status).toBe(200);
     const searchBody = await searchResp.json();
-    expect(searchBody.results).toHaveLength(1);
-    const entry = searchBody.results[0];
-    expect(entry).toMatchObject({
-      artifactId: '@ggui-test/probe-gadget',
-      latestVersion: '0.0.1',
-      kind: 'gadget',
-    });
-    // tags should round-trip
-    expect(entry.tags).toContain('test');
+    const listedIds = searchBody.results.map(
+      (r: { artifactId: string }) => r.artifactId,
+    );
+    expect(listedIds).not.toContain('@ggui-test/probe-gadget');
 
     // ── 6. GET /pkg/{scope}/{name}/{version} ───────────────────────
     // API GW route convention drops the leading @ — registry-server
     // accepts either, but use the dropped form to match the cloud.
+    // Private row: unauthenticated read is refused…
+    const unauthedReadResp = await fetch(
+      `${registry.url}/pkg/ggui-test/probe-gadget/0.0.1`,
+    );
+    expect(unauthedReadResp.status).toBe(403);
+
+    // …and the bearer-authed read returns the full row.
     const readResp = await fetch(
       `${registry.url}/pkg/ggui-test/probe-gadget/0.0.1`,
+      { headers: { authorization: `Bearer ${TEST_REGISTRY_TOKEN}` } },
     );
     expect(readResp.status).toBe(200);
     const readBody = await readResp.json();

@@ -44,13 +44,16 @@ vi.mock('@ggui-ai/gadget-signing', async () => {
   };
 });
 
+// Default fixture pairs `visibility: 'private'` with the Ed25519
+// signatures `makeFixture` produces — the server enforces the pairing
+// (public ⇒ sigstore-cosign, private ⇒ ed25519), see the F1 suite.
 const GADGET_MANIFEST: ArtifactManifest = {
   kind: 'gadget',
   scope: '@test',
   name: 'weather',
   version: '1.0.0',
   bundle: 'src/index.ts',
-  visibility: 'public',
+  visibility: 'private',
   description: 'A test weather gadget',
   exports: [
     {
@@ -60,6 +63,12 @@ const GADGET_MANIFEST: ArtifactManifest = {
       example: { city: 'SF' },
     },
   ],
+} as ArtifactManifest;
+
+/** Public variant for the sigstore-signed suites. */
+const PUBLIC_GADGET_MANIFEST: ArtifactManifest = {
+  ...GADGET_MANIFEST,
+  visibility: 'public',
 } as ArtifactManifest;
 
 const VALID_BUNDLE_TEXT = `
@@ -399,7 +408,7 @@ describe('publishArtifact', () => {
       scope: '@test',
       name: 'login',
       version: '0.1.0',
-      visibility: 'public',
+      visibility: 'private',
       description: 'A test blueprint',
       source: 'export default function Login(){ return <div>Login</div>; }',
       variance: { persona: 'casual-shopper', seedPrompt: 'A simple login form' },
@@ -523,7 +532,7 @@ describe('publishArtifact', () => {
       scope: '@test',
       name: 'login',
       version: '0.1.0',
-      visibility: 'public',
+      visibility: 'private',
       description: 'A test blueprint',
       source: 'export default function Login(){ return <div>Login</div>; }',
       variance: { persona: 'casual-shopper', seedPrompt: 'A simple login form' },
@@ -573,7 +582,7 @@ describe('publishArtifact', () => {
       scope: '@test',
       name: 'broken',
       version: '0.1.0',
-      visibility: 'public',
+      visibility: 'private',
       description: 'broken',
       // Syntactically invalid TSX (unterminated JSX).
       source: 'export default function B() { return <div is not valid; }',
@@ -610,7 +619,7 @@ describe('publishArtifact', () => {
       scope: '@test',
       name: 'shared',
       version: '0.1.0',
-      visibility: 'public',
+      visibility: 'private',
       description: 'shared blueprint',
       source: sharedSource,
       variance: { persona: 'casual-shopper', seedPrompt: 'shared' },
@@ -662,6 +671,174 @@ describe('publishArtifact', () => {
     expect(blob2?.refCount).toBe(2);
   });
 
+  // ── F1 — visibility ↔ algorithm pairing gate ──────────────────────
+  //
+  // The algorithm bifurcation is a trust-model contract: `public`
+  // artifacts sign via sigstore keyless so every public publish lands
+  // in a public transparency log; `private` artifacts sign with a
+  // registered Ed25519 author key. The CLI pairs them client-side,
+  // but a hand-rolled request can lie — the SERVER must enforce the
+  // pairing or a public+Ed25519 publish becomes publicly listable
+  // with no transparency-log entry. The gate is a cheap field
+  // comparison and MUST fire before any signature verification work.
+  describe('visibility ↔ algorithm pairing (F1)', () => {
+    beforeEach(() => {
+      sigstoreMocks.verifyBundleSigstore.mockReset();
+    });
+
+    it('rejects `visibility: public` + Ed25519 signature with 400 visibility_algorithm_mismatch', async () => {
+      const publicManifest: ArtifactManifest = {
+        ...GADGET_MANIFEST,
+        visibility: 'public',
+      } as ArtifactManifest;
+      const f = await makeFixture(publicManifest);
+      const result = await publishArtifact(
+        {
+          manifest: publicManifest,
+          bundle: f.bundleB64,
+          bundleSha384: f.bundleSha384,
+          signature: f.signature,
+        },
+        {
+          storage: f.storage,
+          bundleStorage: f.bundleStorage,
+          authn: { subject: f.subject },
+          clock: () => new Date(),
+          registryHostname: 'localhost:9001',
+        },
+      );
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.status).toBe(400);
+      expect(result.body.error).toBe('visibility_algorithm_mismatch');
+      expect(result.body.message).toContain('sigstore');
+      expect(result.body.message).toContain('transparency log');
+      // No version row must be written for a rejected publish.
+      const row = await f.storage.getArtifactVersion('@test/weather', '1.0.0');
+      expect(row).toBeNull();
+    });
+
+    it('rejects `visibility: private` + sigstore signature with 400 visibility_algorithm_mismatch — before verification runs', async () => {
+      const privateManifest: ArtifactManifest = {
+        ...GADGET_MANIFEST,
+        visibility: 'private',
+      } as ArtifactManifest;
+      const bundleBytes = new TextEncoder().encode(VALID_BUNDLE_TEXT);
+      const sha = sha384Base64(bundleBytes);
+      const sigstoreSignature: SigstoreSignature = {
+        algorithm: 'sigstore-cosign',
+        bundleSha384: sha,
+        bundle: JSON.stringify({
+          mediaType: 'application/vnd.dev.sigstore.bundle+json;version=0.3',
+          verificationMaterial: {
+            x509CertificateChain: {
+              certificates: [{ rawBytes: 'AAAA' }],
+            },
+          },
+          messageSignature: {
+            messageDigest: { algorithm: 'SHA2_256', digest: 'AAAA' },
+            signature: 'BBBB',
+          },
+        }),
+        signedAt: '2026-08-09T00:00:00.000Z',
+      };
+      const result = await publishArtifact(
+        {
+          manifest: privateManifest,
+          bundle: base64Encode(bundleBytes),
+          bundleSha384: sha,
+          signature: sigstoreSignature,
+        },
+        {
+          storage: inMemoryRegistryStorage(),
+          bundleStorage: inMemoryBundleStorage({ bundleHost: 'http://localhost:9001' }),
+          authn: { subject: 'user-1' },
+          clock: () => new Date(),
+          registryHostname: 'localhost:9001',
+        },
+      );
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.status).toBe(400);
+      expect(result.body.error).toBe('visibility_algorithm_mismatch');
+      expect(result.body.message).toContain('Ed25519');
+      // Placement: the pairing gate is a cheap field comparison and
+      // fires BEFORE the cryptographic verify dispatch.
+      expect(sigstoreMocks.verifyBundleSigstore).not.toHaveBeenCalled();
+    });
+
+    it('accepts the private + Ed25519 pairing (201)', async () => {
+      const privateManifest: ArtifactManifest = {
+        ...GADGET_MANIFEST,
+        visibility: 'private',
+      } as ArtifactManifest;
+      const f = await makeFixture(privateManifest);
+      const result = await publishArtifact(
+        {
+          manifest: privateManifest,
+          bundle: f.bundleB64,
+          bundleSha384: f.bundleSha384,
+          signature: f.signature,
+        },
+        {
+          storage: f.storage,
+          bundleStorage: f.bundleStorage,
+          authn: { subject: f.subject },
+          clock: () => new Date(),
+          registryHostname: 'localhost:9001',
+        },
+      );
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.status).toBe(201);
+    });
+
+    it('accepts the public + sigstore pairing (201)', async () => {
+      sigstoreMocks.verifyBundleSigstore.mockResolvedValue({ valid: true });
+      const publicManifest: ArtifactManifest = {
+        ...GADGET_MANIFEST,
+        visibility: 'public',
+      } as ArtifactManifest;
+      const bundleBytes = new TextEncoder().encode(VALID_BUNDLE_TEXT);
+      const sha = sha384Base64(bundleBytes);
+      const sigstoreSignature: SigstoreSignature = {
+        algorithm: 'sigstore-cosign',
+        bundleSha384: sha,
+        bundle: JSON.stringify({
+          mediaType: 'application/vnd.dev.sigstore.bundle+json;version=0.3',
+          verificationMaterial: {
+            x509CertificateChain: {
+              certificates: [{ rawBytes: 'AAAA' }],
+            },
+          },
+          messageSignature: {
+            messageDigest: { algorithm: 'SHA2_256', digest: 'AAAA' },
+            signature: 'BBBB',
+          },
+        }),
+        signedAt: '2026-08-09T00:00:00.000Z',
+      };
+      const result = await publishArtifact(
+        {
+          manifest: publicManifest,
+          bundle: base64Encode(bundleBytes),
+          bundleSha384: sha,
+          signature: sigstoreSignature,
+        },
+        {
+          storage: inMemoryRegistryStorage(),
+          bundleStorage: inMemoryBundleStorage({ bundleHost: 'http://localhost:9001' }),
+          authn: { subject: 'user-1' },
+          clock: () => new Date(),
+          registryHostname: 'localhost:9001',
+        },
+      );
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.status).toBe(201);
+    });
+  });
+
   // ── Bucket B'' B''.5 — sigstore branch dispatch ───────────────────
   //
   // The verify impl lives in `@ggui-ai/gadget-signing` (mocked above).
@@ -688,7 +865,7 @@ describe('publishArtifact', () => {
     };
 
     async function makeSigstoreFixture(
-      manifest: ArtifactManifest = GADGET_MANIFEST,
+      manifest: ArtifactManifest = PUBLIC_GADGET_MANIFEST,
     ): Promise<{
       storage: RegistryStorage;
       bundleStorage: BundleStorage;
@@ -732,7 +909,7 @@ describe('publishArtifact', () => {
       const f = await makeSigstoreFixture();
       const result = await publishArtifact(
         {
-          manifest: GADGET_MANIFEST,
+          manifest: PUBLIC_GADGET_MANIFEST,
           bundle: f.bundleB64,
           bundleSha384: f.bundleSha384,
           signature: f.signature,
@@ -769,7 +946,7 @@ describe('publishArtifact', () => {
       const f = await makeSigstoreFixture();
       const result = await publishArtifact(
         {
-          manifest: GADGET_MANIFEST,
+          manifest: PUBLIC_GADGET_MANIFEST,
           bundle: f.bundleB64,
           bundleSha384: f.bundleSha384,
           signature: f.signature,
@@ -805,7 +982,7 @@ describe('publishArtifact', () => {
       };
       const result = await publishArtifact(
         {
-          manifest: GADGET_MANIFEST,
+          manifest: PUBLIC_GADGET_MANIFEST,
           bundle: f.bundleB64,
           bundleSha384: f.bundleSha384,
           signature: corruptedSignature,

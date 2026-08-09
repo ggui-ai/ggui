@@ -13,9 +13,13 @@
  *   4. Sign `canonicalJson(manifest)` with the private key.
  *   5. POST /publish with bearer token — assert 201 +
  *      `installCommand` says `ggui blueprint install`.
- *   6. GET /search?kind=blueprint — confirm the entry surfaces.
- *   7. GET /pkg/.../{version} — assert the read response's
- *      `manifest.source` carries the inline TSX and there is NO `bundleUrl`.
+ *   6. GET /search?kind=blueprint — the fixture is private
+ *      (visibility ↔ algorithm pairing: Ed25519 ⇒ private), so the
+ *      entry MUST NOT surface; public-lane listing needs sigstore
+ *      keyless signing (F3).
+ *   7. GET /pkg/.../{version} — 403 without auth; with the bearer,
+ *      assert the read response's `manifest.source` carries the
+ *      inline TSX and there is NO `bundleUrl`.
  *
  * What this scenario does NOT cover (deferred):
  *   - CLI subprocess (`ggui blueprint publish`, `install`).
@@ -58,7 +62,7 @@ describe('22 — marketplace blueprint lifecycle', () => {
     await registry.stop();
   });
 
-  test('publish → search → read — full HTTP lifecycle (no bundle)', async () => {
+  test('publish → hidden from search → authed read — private-lane HTTP lifecycle (no bundle)', async () => {
     // ── 1. Generate keypair + register the author key ──────────────
     const keypair = await generateEd25519Keypair();
     await registry.storage.putAuthorKey({
@@ -101,18 +105,26 @@ describe('22 — marketplace blueprint lifecycle', () => {
     expect(publishBody.manifestUrl).toContain('/manifest.json');
 
     // ── 5. GET /search?kind=blueprint ──────────────────────────────
+    // Private row (Ed25519 lane) — search lists only public rows.
     const searchResp = await fetch(`${registry.url}/search?kind=blueprint`);
     expect(searchResp.status).toBe(200);
     const searchBody = await searchResp.json();
     const entry = searchBody.results.find(
       (r: { artifactId: string }) => r.artifactId === '@ggui-test/probe-blueprint',
     );
-    expect(entry).toBeDefined();
-    expect(entry.kind).toBe('blueprint');
+    expect(entry).toBeUndefined();
 
     // ── 6. GET /pkg/{scope}/{name}/{version} ───────────────────────
+    // Unauthed read of a private row is refused…
+    const unauthedReadResp = await fetch(
+      `${registry.url}/pkg/ggui-test/probe-blueprint/0.0.1`,
+    );
+    expect(unauthedReadResp.status).toBe(403);
+
+    // …and the bearer-authed read returns the full row.
     const readResp = await fetch(
       `${registry.url}/pkg/ggui-test/probe-blueprint/0.0.1`,
+      { headers: { authorization: `Bearer ${TEST_REGISTRY_TOKEN}` } },
     );
     expect(readResp.status).toBe(200);
     const readBody = await readResp.json();

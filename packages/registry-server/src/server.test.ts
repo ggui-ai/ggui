@@ -23,6 +23,14 @@
  *   - `/conformance/check` 200 with `ok: false` on invalid manifest
  *   - `/bundles/.../bundle.js` 200 + Cache-Control: immutable
  *   - `/bundles/.../bundle.js` 404 on miss
+ *
+ * Publish journeys use `visibility: 'private'` + Ed25519 — the server
+ * enforces the visibility ↔ algorithm pairing (public ⇒ sigstore
+ * keyless, private ⇒ Ed25519 author key), and real sigstore signing
+ * needs Fulcio/Rekor, out of scope for this in-process suite (F3
+ * brings `@sigstore/mock` coverage). Reads of the private rows carry
+ * the bearer; `/search` visibility tests seed public metadata rows
+ * directly.
  */
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
@@ -31,6 +39,7 @@ import {
   type Ed25519Signature,
 } from '@ggui-ai/gadget-signing';
 import {
+  ARTIFACTS_METADATA_SK,
   inMemoryBundleStorage,
   inMemoryRegistryStorage,
   type AuthorKeyRow,
@@ -101,7 +110,9 @@ function makeGadgetManifest(overrides: Partial<GadgetManifest> = {}): GadgetMani
     name: 'probe',
     version: '0.1.0',
     description: 'a test gadget',
-    visibility: 'public',
+    // Pairs with the Ed25519 signature `signedPublishBody` produces —
+    // the publish op rejects public+Ed25519 (pairing gate, F1).
+    visibility: 'private',
     bundle: 'src/index.ts',
     exports: [
       {
@@ -235,18 +246,52 @@ describe('OSS registry server', () => {
     expect(respBody.installCommand).toContain('@test/probe@0.1.0');
   });
 
+  // ── /publish pairing gate (F1) ──
+  it('POST /publish with visibility public + Ed25519 returns 400 visibility_algorithm_mismatch', async () => {
+    // Wire-level pin of the server-side pairing gate: public artifacts
+    // MUST carry a sigstore keyless signature (public transparency
+    // log); an Ed25519-signed public publish is rejected outright.
+    const manifest = makeGadgetManifest({ name: 'mismatched', visibility: 'public' });
+    const body = await signedPublishBody(manifest, SIMPLE_BUNDLE, harness.keypair);
+
+    const res = await fetch(`${harness.baseUrl}/publish`, {
+      method: 'POST',
+      headers: {
+        authorization: harness.authHeader,
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify(body),
+    });
+    expect(res.status).toBe(400);
+    const respBody = (await res.json()) as { error: string; message: string };
+    expect(respBody.error).toBe('visibility_algorithm_mismatch');
+    expect(respBody.message).toContain('transparency log');
+  });
+
   // ── /pkg/:scope/:name/:version ──
   it('GET /pkg/:scope/:name/:version after publish returns 200 + manifest', async () => {
-    // (Depends on the publish test above.)
-    const res = await fetch(`${harness.baseUrl}/pkg/test/probe/0.1.0`);
+    // (Depends on the publish test above. The row is private, so the
+    // read carries the bearer.)
+    const res = await fetch(`${harness.baseUrl}/pkg/test/probe/0.1.0`, {
+      headers: { authorization: harness.authHeader },
+    });
     expect(res.status).toBe(200);
     const body = (await res.json()) as { manifest: { kind: string; scope: string } };
     expect(body.manifest.kind).toBe('gadget');
     expect(body.manifest.scope).toBe('@test');
   });
 
+  it('GET /pkg/:scope/:name/:version of a private row without auth returns 403', async () => {
+    const res = await fetch(`${harness.baseUrl}/pkg/test/probe/0.1.0`);
+    expect(res.status).toBe(403);
+    const body = (await res.json()) as { error: string };
+    expect(body.error).toBe('forbidden');
+  });
+
   it('GET /pkg/:scope/:name/:version with leading @ also works', async () => {
-    const res = await fetch(`${harness.baseUrl}/pkg/@test/probe/0.1.0`);
+    const res = await fetch(`${harness.baseUrl}/pkg/@test/probe/0.1.0`, {
+      headers: { authorization: harness.authHeader },
+    });
     expect(res.status).toBe(200);
   });
 
@@ -275,7 +320,10 @@ describe('OSS registry server', () => {
       expect(res.status).toBe(201);
     }
 
-    const res = await fetch(`${harness.baseUrl}/pkg/test/probe`);
+    // Private rows only surface for authed callers.
+    const res = await fetch(`${harness.baseUrl}/pkg/test/probe`, {
+      headers: { authorization: harness.authHeader },
+    });
     expect(res.status).toBe(200);
     const body = (await res.json()) as {
       artifactId: string;
@@ -294,7 +342,9 @@ describe('OSS registry server', () => {
   });
 
   it('GET /pkg/:scope/:name with leading @ also works', async () => {
-    const res = await fetch(`${harness.baseUrl}/pkg/@test/probe`);
+    const res = await fetch(`${harness.baseUrl}/pkg/@test/probe`, {
+      headers: { authorization: harness.authHeader },
+    });
     expect(res.status).toBe(200);
   });
 
@@ -307,39 +357,31 @@ describe('OSS registry server', () => {
 
   // ── /search?sort=recent (Slice 7.5-fu L3) ──
   it('GET /search?sort=recent orders by publishedAt DESC', async () => {
-    // The storage at this point has at least 3 versions of @test/probe.
-    // Metadata is one row per artifactId, latest-version wins —
-    // publishedAt on the metadata reflects the latest publish.
-    //
-    // Add a SECOND artifact with an earlier publishedAt to verify the
-    // ordering across artifacts.
-    const earlierBody = await signedPublishBody(
-      makeGadgetManifest({
-        name: 'earlier',
-        version: '0.1.0',
-        description: 'an earlier-published artifact',
-        exports: [
-          {
-            hook: 'useEarlier',
-            description: 'an earlier-published artifact',
-            usage:
-              'A probe gadget used by the recency-sort test in the registry-server integration tests',
-            example: { props: {} },
-          },
-        ],
-      }),
-      SIMPLE_BUNDLE,
-      harness.keypair,
-    );
-    const earlierRes = await fetch(`${harness.baseUrl}/publish`, {
-      method: 'POST',
-      headers: {
-        authorization: harness.authHeader,
-        'content-type': 'application/json',
-      },
-      body: JSON.stringify(earlierBody),
+    // `/search` exposes only `visibility: 'public'` rows, and the
+    // publish journeys in this suite are private (pairing gate: a
+    // public publish would need a sigstore signature — Fulcio/Rekor is
+    // out of scope here). Seed two public metadata rows directly with
+    // distinct publishedAt values to pin the recency ordering.
+    await harness.storage.putArtifactMetadata({
+      artifactId: '@test/earlier',
+      sk: ARTIFACTS_METADATA_SK,
+      kind: 'gadget',
+      latestVersion: '0.1.0',
+      description: 'an earlier-published artifact',
+      visibility: 'public',
+      publishedAt: '2026-05-01T00:00:00.000Z',
+      publishedBy: TEST_SUBJECT,
     });
-    expect(earlierRes.status).toBe(201);
+    await harness.storage.putArtifactMetadata({
+      artifactId: '@test/later',
+      sk: ARTIFACTS_METADATA_SK,
+      kind: 'gadget',
+      latestVersion: '0.1.0',
+      description: 'a later-published artifact',
+      visibility: 'public',
+      publishedAt: '2026-05-02T00:00:00.000Z',
+      publishedBy: TEST_SUBJECT,
+    });
 
     const res = await fetch(`${harness.baseUrl}/search?sort=recent`);
     expect(res.status).toBe(200);
@@ -347,6 +389,7 @@ describe('OSS registry server', () => {
       results: ReadonlyArray<{ artifactId: string; publishedAt: string }>;
     };
     expect(body.results.length).toBeGreaterThanOrEqual(2);
+    expect(body.results.map((r) => r.artifactId)).toContain('@test/later');
     // Each pair in publishedAt-DESC order.
     for (let i = 0; i < body.results.length - 1; i++) {
       const a = body.results[i]!;

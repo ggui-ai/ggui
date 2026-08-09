@@ -4,7 +4,7 @@
   "name": "probe-gadget",
   "version": "0.0.1",
   "bundle": "dist/index.js",
-  "visibility": "public",
+  "visibility": "private",
   "description": "Test gadget emitting a deterministic postMessage probe on first render.",
   "exports": [
     {

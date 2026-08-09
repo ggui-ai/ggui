@@ -356,6 +356,7 @@ export const PUBLISH_ERROR_CODES = [
   'bundle_too_large',
   'conformance_failed',
   'bundle_hash_mismatch',
+  'visibility_algorithm_mismatch',
   'unknown_key',
   'signature_invalid',
   'version_exists',
