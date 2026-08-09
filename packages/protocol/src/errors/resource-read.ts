@@ -49,10 +49,17 @@
  * the same oracle, reached by a different route, with a mapper behaving
  * perfectly.
  *
- * So the ordering is normative: a server using this projection MUST run
- * the access check before any branch that can return a code other than
- * `NOT_FOUND`, and MUST route a refusal through `NOT_FOUND`. Resolution
- * work happens only after the check has passed.
+ * So the ordering is normative, scoped to the branches that can leak:
+ * a server using this projection MUST route a refusal through
+ * `NOT_FOUND`, and MUST NOT run a branch whose outcome VARIES WITH THE
+ * LOCATOR before the access check — reaching one of those is itself the
+ * disclosure. Resolution work is exactly such a branch, so it happens
+ * only after the check has passed.
+ *
+ * A deployment-global answer is not such a branch. `NOT_SUPPORTED`
+ * describes the server and is identical for every locator on a server
+ * that emits it, so answering it before any per-locator work — the
+ * access check included — reveals nothing and is permitted.
  */
 import {
   MCP_ERROR_CODES,

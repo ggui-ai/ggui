@@ -46,16 +46,75 @@
  *      are byte-identical on the wire. Anything that varies between the
  *      two makes the read an existence oracle for other callers'
  *      renders. The mapper closes the message half; the ordering half
- *      is a server obligation — the authorization check MUST precede
- *      any branch that can return a non-NOT_FOUND code.
+ *      is a server obligation — a branch whose outcome VARIES WITH THE
+ *      LOCATOR MUST NOT run before the authorization check, because
+ *      reaching one tells the caller the locator resolved for somebody.
+ *      A deployment-global answer is not such a branch: NOT_SUPPORTED
+ *      is identical for every locator on the server that emits it, so
+ *      answering it early discloses nothing. (Scoped this way in the
+ *      same slice the conformance catalog landed, which grades the
+ *      indistinguishability the rule exists to produce and deliberately
+ *      does not grade ordering. The unscoped form would have declared
+ *      a correct substrate-less server non-conformant.)
+ *
+ *   rr5. **A read that cannot mount is now an ERROR, not a
+ *      success-shaped shell.** This is the observable wire change, and
+ *      it is what rr1–rr4 exist to give a shape to. Every failure
+ *      branch of the render-locator read used to return a result whose
+ *      `contents` carried a loading shell — a page that waited forever
+ *      for a render that was never coming. Those branches now throw,
+ *      and the transport serializes them as the JSON-RPC errors above;
+ *      the shell builder behind them is DELETED rather than left
+ *      unreferenced, so no branch can produce one. Reads that CAN
+ *      mount are unchanged byte for byte. A host that treated any
+ *      successful read as mountable was right only by accident and is
+ *      now right by construction; a host that never handled the error
+ *      exit at all now has one to handle. The invariant this buys is
+ *      the whole point: any successful `contents` result IS a live
+ *      mount.
  *
  * Conformance-kit verdict: additive, minor-intent while `draft-`, so
  * PROTOCOL_VERSION is unchanged — no WS envelope moved, and the change
  * is confined to the MCP resource surface (same reasoning as rb's stamp
- * adjudication). The kit cannot yet arbitrate this surface at all: it
- * is WebSocket-only and self-declares the missing MCP-binding driver,
- * so the `resources/read` fixture family lands with that driver before
- * the package version is bumped for it.
+ * adjudication).
+ *
+ * The kit arbitrates this surface now. `resource-read-conformance` in
+ * `@ggui-ai/protocol-conformance` binds the `resources/read` method:
+ * `runResourceReadConformance()` drives an adopter-supplied scenario
+ * driver through a 12-case catalog and grades the two numbers (rr1–rr3),
+ * the closed classification on `error.data.code`, NOT_FOUND's absent
+ * `detail` and constant message (rr4), the refused-equals-missing byte
+ * identity across every server shape, and rr5's invariant on a live row
+ * and a re-minted one alike. What it does NOT arbitrate is `tools/call`:
+ * no driver is bound to that method, so the `ggui_consume` and
+ * `ggui_emit` obligations stay kit-invisible and this entry closes
+ * nothing for them.
+ *
+ * Five things stay ungraded on purpose and MUST NOT be read as
+ * obligations: the ORDER in which a substrate-less server answers
+ * NOT_SUPPORTED; `detail` wording on any code; the NOT_FOUND message
+ * literal (its constancy is the obligation, not its prose); `-32603`
+ * message text; and the NUMBER a URI naming no locator receives —
+ * including negatively, since MCP itself assigns the resource-missing
+ * number to a read of a URI a server does not serve, and banning it
+ * would make every framework that leans on that assignment
+ * non-conformant. On that last one the law is classification-only:
+ * such a URI MUST NOT carry one of the four codes on `error.data.code`.
+ *
+ * Package version: this surface warrants a MINOR — a new closed enum,
+ * a new canonical number, and a read contract the kit can now decide,
+ * with no prior fixture invalidated. The bump is NOT taken in this
+ * entry. Every `@ggui-ai/*` package carries one wave version, so this
+ * package's number moves when the wave's does; the classification here
+ * is the decision, and executing it belongs to the release owner at
+ * the next wave cut. The kit's own delta rides the same wave and the
+ * same reasoning, with one thing worth saying plainly rather than
+ * calling it "purely additive": its `parseCase` rejects unknown keys,
+ * so a case file with a typo'd key throws instead of being quietly
+ * ignored. That strictness is free on a sub-module that has no prior
+ * published version — nothing can be built against it yet — but
+ * extending it over the existing fixture catalog would be a MAJOR, not
+ * a minor, and must be adjudicated as one.
  *
  * --------------------------------------------------------------------
  * Credential-broker surface retired (2026-08-08, BREAKING, pre-launch,
