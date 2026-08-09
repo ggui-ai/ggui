@@ -35,6 +35,7 @@
 import type {
   BlueprintIndex,
   GguiSessionStore,
+  StoredGguiSession,
   VectorStore,
 } from "@ggui-ai/mcp-server-core";
 import {
@@ -42,11 +43,18 @@ import {
   deriveContractBundle,
   derivePublicEnvProjection,
   deriveRenderMeta,
+  filterDescriptorsToContract,
   findBlueprintExact,
   type Blueprint,
+  type BlueprintDurabilityDeps,
 } from "@ggui-ai/mcp-server-handlers/renders";
-import type { GguiSession } from "@ggui-ai/protocol";
-import { deriveContextDefault, isRecord, type ContextSpec } from "@ggui-ai/protocol";
+import type { ComponentGguiSession, GguiSession } from "@ggui-ai/protocol";
+import {
+  deriveContextDefault,
+  isRecord,
+  resolveAppGadgets,
+  type ContextSpec,
+} from "@ggui-ai/protocol";
 import {
   GGUI_RENDER_RESOURCE_MIME,
   GGUI_RENDER_RESOURCE_URI,
@@ -63,7 +71,7 @@ import { ResourceTemplate, type McpServer } from "@modelcontextprotocol/sdk/serv
 import { registerAppResource } from "@modelcontextprotocol/ext-apps/server";
 import { createHash } from "node:crypto";
 import type { HandlerContext } from "@ggui-ai/mcp-server-handlers";
-import { renderReadAllowed } from "./render-read-gate.js";
+import { renderReadAllowed, type RenderReadRowView } from "./render-read-gate.js";
 import { DEFAULT_BUILDER_APP_ID } from "./auth.js";
 import type { Logger } from "./logger.js";
 
@@ -956,6 +964,16 @@ export function buildSelfContainedLoadingShell(sessionId: string): string {
 }
 
 /**
+ * Lifetime stamped on the `expiresAt` field of a re-minted render's
+ * wire shape. The authoritative expiry belongs to the session store,
+ * which owns the row's lifecycle columns and stamps them at commit —
+ * this only fills the required wire field, the same role the render
+ * handler's own default TTL plays. 1 hour matches the in-memory
+ * reference store's default.
+ */
+const REMINTED_RENDER_TTL_MS = 60 * 60 * 1000;
+
+/**
  * Options for {@link registerGguiRenderResourceTemplate}.
  *
  * @public
@@ -999,6 +1017,31 @@ export interface GguiRenderResourceTemplateOptions {
    * at hook-mount with a clear "not provided" message).
    */
   readonly appMetadataStore?: import("@ggui-ai/mcp-server-core").AppMetadataStore;
+  /**
+   * Durable per-session identity records. When wired alongside
+   * {@link durableBlueprints}, a read of a locator whose render row is
+   * GONE resolves the record instead of giving up: the render is
+   * re-created from it and mounts live, with the props it last
+   * carried. Absent ⇒ that path is skipped entirely and a missing row
+   * behaves exactly as it does today.
+   *
+   * Binding a store whose records do not outlive the render rows
+   * themselves buys nothing — the record is read precisely when the
+   * row is gone.
+   */
+  readonly renderIdentityStore?: import("@ggui-ai/mcp-server-core").RenderIdentityStore;
+  /**
+   * Durable blueprint pair — row metadata plus the compiled body
+   * behind its content hash. The re-mint path needs BOTH halves: the
+   * record names a blueprint, the blueprint names a body, and the body
+   * is what a re-created render mounts. A pair carrying only
+   * `blueprintStore` persists metadata for other consumers but cannot
+   * complete a re-mint, so the path skips as if unwired.
+   *
+   * Same shape the registration path writes through, so a deployment
+   * threads one pair to both ends.
+   */
+  readonly durableBlueprints?: BlueprintDurabilityDeps;
   /**
    * Vector store backing the blueprint registry. When wired alongside
    * `defaultAppIdFallback`, the resource handler runs a registry-only
@@ -1176,12 +1219,16 @@ export function registerGguiRenderResourceTemplate(
   //
   //   2. Two-segment resume URI — `ui://ggui/render/{sessionId}/
   //      {blueprintKey}`. Stamped by every render since the resume
-  //      contract landed. Carries enough state for the handler to do:
-  //      (a) parallel render + blueprint registry lookup (no data
-  //      dependency between them), (b) registry-only fallback when
-  //      the render is gone but the blueprint is still cached
-  //      (renders the original card with default props/context
-  //      instead of the dead loading shell).
+  //      contract landed. Carries enough state for the handler to
+  //      fall back to a registry-only render when the render is gone
+  //      but the blueprint is still cached (the original card with
+  //      default props/context instead of the dead loading shell).
+  //
+  //      Both shapes ALSO re-mint from a durable identity record when
+  //      the deployment keeps one — that path is keyed by sessionId
+  //      alone and needs no blueprintKey, so it serves the legacy
+  //      shape too. Every lookup either shape triggers happens after
+  //      the access check, never in parallel with it.
   const legacyTemplate = new ResourceTemplate(`${GGUI_RENDER_RESOURCE_URI}/{sessionId}`, {
     // No list-callback — the resource set is unbounded per render
     // count, and `resources/list` would leak render ids across
@@ -1255,6 +1302,334 @@ export function registerGguiRenderResourceTemplate(
   const loadingShell = (uri: URL, sessionId: string) =>
     shellContents(uri, buildSelfContainedLoadingShell(sessionId));
 
+  /**
+   * Rehydration access control (spec §3), applied to ONE read
+   * candidate — a render row, or the durable identity record that
+   * stands in for an evicted one. Both carry the same two gated
+   * fields, so both go through here.
+   *
+   * The anonymous-context synthesis is why this is shared rather than
+   * inlined twice: a compose path that cannot thread a request context
+   * still reads renders owned by the default builder identity, because
+   * a candidate owned by THAT identity is attributed to an anonymous
+   * caller. Anything else fails closed — `renderReadAllowed` denies a
+   * missing context outright. Losing the synthesis on the record path
+   * would break exactly the deployments the re-mint exists to help.
+   *
+   * Refusal is never an early return at the call sites: it collapses
+   * the candidate to "absent" so every downstream branch runs as it
+   * would for a locator that never existed. The refusal is observable
+   * only server-side, on the audit line below — whose `rowAppId` names
+   * the render's owner whichever store answered for it.
+   */
+  function readAllowed(sessionId: string, candidate: RenderReadRowView): boolean {
+    const callerCtx = opts.getContext?.();
+    const fallbackCtx =
+      callerCtx === undefined && candidate.appId === DEFAULT_BUILDER_APP_ID
+        ? {
+            appId: DEFAULT_BUILDER_APP_ID,
+            authSource: "anonymous" as const,
+            requestId: "resource-read",
+          }
+        : callerCtx;
+    if (renderReadAllowed(candidate, fallbackCtx)) return true;
+    opts.logger?.warn("render_resource_read_denied", {
+      sessionId,
+      rowAppId: candidate.appId,
+      callerAppId: callerCtx?.appId,
+    });
+    return false;
+  }
+
+  /**
+   * Re-mint an evicted locator from its durable identity record: the
+   * record names the blueprint, the blueprint names the body, and the
+   * body is committed back onto a FRESH row under the same sessionId.
+   * Returns the committed row, or `null` when this deployment keeps no
+   * durable substrate, the caller is not entitled to the record, or
+   * the render is no longer resolvable from it.
+   *
+   * Ordering is load-bearing. The record's own owner gates the read
+   * before ANY blueprint or body lookup runs, and every lookup is
+   * keyed by the record's `blueprintId` under the record's own owner —
+   * never by a caller-supplied key. A resolution step reachable before
+   * the check would let a caller distinguish a resolvable locator from
+   * one that never existed, which is the same disclosure the gate
+   * exists to prevent.
+   *
+   * The body is INLINED onto the committed row rather than delivered
+   * by URL: a row carrying its own component code is self-sufficient,
+   * so the existing mount path serves it with no extra wiring, and
+   * deployments with no content-addressed delivery channel re-mint
+   * just as well as those with one.
+   *
+   * Store faults are not caught. A rejecting store is a malfunction,
+   * and swallowing it here would report a working render as
+   * unresolvable — indistinguishable from one that was genuinely
+   * purged, and it would stay that way on every retry.
+   */
+  async function remintFromRecord(sessionId: string): Promise<StoredGguiSession | null> {
+    const identityStore = opts.renderIdentityStore;
+    const blueprintStore = opts.durableBlueprints?.blueprintStore;
+    const bodyStore = opts.durableBlueprints?.codeStore;
+    if (!identityStore || !blueprintStore || !bodyStore) return null;
+
+    const record = await identityStore.get(sessionId);
+    if (record === null) return null;
+
+    if (
+      !readAllowed(sessionId, {
+        appId: record.appId,
+        // The record's SUBJECT — the same field the row's gate binds
+        // on, written by the same commit.
+        ...(record.userId !== undefined ? { userId: record.userId } : {}),
+      })
+    ) {
+      return null;
+    }
+
+    // Everything below can only be reached by a caller entitled to
+    // this locator. A record whose `blueprintId` is still null never
+    // had its cold-generation registration backfilled, so it names
+    // nothing to resolve.
+    if (record.blueprintId === null) return null;
+    const blueprint = await blueprintStore.get(record.blueprintId);
+    if (blueprint === null) return null;
+    const codeHash = blueprint.codeHash;
+    if (codeHash === undefined) return null;
+    const componentCode = await bodyStore.get(codeHash);
+    if (componentCode === null || componentCode.length === 0) return null;
+
+    // Sidecars are re-resolved from the live app record rather than
+    // carried on the record: gadget descriptors and the theme overlay
+    // are the operator's current configuration, and a re-minted render
+    // should mount under it, not under a snapshot of what it was.
+    let gadgetDescriptors: ComponentGguiSession["gadgetDescriptors"];
+    let theme: ComponentGguiSession["theme"];
+    if (opts.appMetadataStore) {
+      const appRecord = await opts.appMetadataStore.get(record.appId);
+      const resolved = filterDescriptorsToContract(
+        blueprint.contract,
+        resolveAppGadgets(appRecord?.gadgets)
+      );
+      if (resolved.length > 0) gadgetDescriptors = resolved;
+      theme = appRecord?.theme;
+    }
+
+    const now = Date.now();
+    const contract = blueprint.contract;
+    const render: ComponentGguiSession = {
+      type: "component",
+      id: sessionId,
+      appId: record.appId,
+      componentCode,
+      contentType: "application/javascript+react",
+      // The props the render last carried — the whole point of the
+      // record. Authoring-time defaults would silently discard the
+      // state the user was looking at.
+      ...(record.props !== undefined ? { props: record.props } : {}),
+      ...(contract.propsSpec ? { propsSpec: contract.propsSpec } : {}),
+      ...(contract.actionSpec ? { actionSpec: contract.actionSpec } : {}),
+      ...(contract.streamSpec ? { streamSpec: contract.streamSpec } : {}),
+      ...(contract.contextSpec ? { contextSpec: contract.contextSpec } : {}),
+      ...(contract.clientCapabilities
+        ? { clientCapabilities: contract.clientCapabilities }
+        : {}),
+      ...(gadgetDescriptors !== undefined ? { gadgetDescriptors } : {}),
+      ...(theme !== undefined ? { theme } : {}),
+      // Carried from the record so a re-minted render does not present
+      // itself as newly created.
+      createdAt: record.createdAt,
+      lastActivityAt: now,
+      expiresAt: now + REMINTED_RENDER_TTL_MS,
+      // Resumed rather than restarted — a reused sessionId whose
+      // ledger counts from zero again would hand out sequence numbers
+      // the render already used.
+      eventSequence: record.seqAtLastCommit,
+    };
+    return await opts.renderStore.commit({
+      render,
+      appId: record.appId,
+      ...(record.userId !== undefined ? { userId: record.userId } : {}),
+    });
+  }
+
+  /**
+   * Serve the self-contained shell for a render row — the mount path,
+   * shared by rows read from the store and rows a re-mint just
+   * committed.
+   *
+   * Returns `null` when the row carries no renderable visible-bits
+   * surface (a placeholder whose generation has not committed yet), so
+   * the caller can go on looking. Every other outcome is a response.
+   */
+  async function serveMount(
+    uri: URL,
+    sessionId: string,
+    accessibleStored: StoredGguiSession
+  ): Promise<{ contents: ShellContent[] } | null> {
+    const picked = pickComponentFromGguiSession(accessibleStored.render);
+    if (!picked) return null;
+    // Project the active render to the transport-agnostic bootstrap
+    // view — same source of truth the render-mutation handler and
+    // `/r/<shortCode>` consume. Carries permissionsPolicy when
+    // clientCapabilities declares permissions. The MCP Apps
+    // resource path emits this only into the inline bootstrap
+    // (the browser-enforced gate ultimately comes from the host's
+    // `allow=""` attribute when the host translates
+    // `_meta.ui.permissions` — set by McpAppIframe consumers).
+    const view = deriveRenderMeta(picked.source);
+    const isSystem = picked.kind !== undefined;
+
+    // Static-component delivery via codeUrl. The compiled-component
+    // path mints a content-addressable URL the iframe-runtime
+    // fetches at boot; the loading shell takes over when codeStore +
+    // codeBaseUrl aren't wired.
+    let codeUrl: string | undefined;
+    let codeHash: string | undefined;
+    let contractHash: string | undefined;
+    let validatorsUrl: string | undefined;
+    if (!isSystem && opts.codeStore && opts.codeBaseUrl) {
+      try {
+        const hash = opts.codeStore.hashOf(picked.componentCode);
+        await opts.codeStore.put(hash, picked.componentCode);
+        codeHash = hash;
+        const base = opts.codeBaseUrl.replace(/\/$/, "");
+        codeUrl = `${base}/code/${hash}.js`;
+      } catch {
+        // Silent — falls through to loading shell below.
+      }
+      // Content-addressable contract-validator bundle (#109).
+      try {
+        const bundle = await deriveContractBundle(picked.source);
+        if (bundle) {
+          await opts.codeStore.put(bundle.contractHash, bundle.bundleSource);
+          contractHash = bundle.contractHash;
+          const base = opts.codeBaseUrl.replace(/\/$/, "");
+          validatorsUrl = `${base}/contract/${bundle.contractHash}.js`;
+        }
+      } catch {
+        // Silent — bundle write failure degrades to no client-side
+        // validators (server-side gate is authoritative).
+      }
+    }
+    // The codeUrl gate is applied AFTER the live-channel mint below, so
+    // a render with no static codeUrl still mounts via live-mode
+    // (wsUrl + wsToken) instead of stalling on the loading shell —
+    // parity with the `/r/<shortCode>` path. (See the gate after the
+    // mint.) This matters for deployments that wire `mintWsToken` but no
+    // `codeStore`/`codeBaseUrl` (e.g. the cloud pod): the agent-server
+    // inlines THIS resource, so without the fallback every cloud render
+    // hung on the dead "Generating UI…" shell.
+
+    // Project the wrapper catalog AND the union-filtered
+    // publicEnv onto the inline bootstrap so the resource-served
+    // iframe matches the MCP-Apps postMessage path. Without this,
+    // wrapper-using contracts rendered through `resources/read`
+    // mount as STDLIB-only.
+    let resourcePublicEnv: Readonly<Record<string, string>> | undefined;
+    if (opts.appMetadataStore) {
+      try {
+        const appRecord = await opts.appMetadataStore.get(accessibleStored.appId);
+        resourcePublicEnv = derivePublicEnvProjection(picked.source, appRecord?.publicEnv);
+      } catch {
+        // Silent — wrappers calling getPublicEnv throw clearly.
+      }
+    }
+    // Live-channel bootstrap — when the operator wired
+    // {@link GguiRenderResourceTemplateOptions.mintWsToken}, mint a
+    // wsToken for this render so the iframe-runtime opens a
+    // WebSocket on mount and receives `props_update` frames.
+    // Without this, the resource shell renders in static-component
+    // mode only — `ggui_update` server-side mutations never
+    // visibly reach the live iframe (hosts must re-fetch
+    // `resources/read` after every update tool result to see new
+    // state).
+    let wsUrl: string | undefined;
+    let wsToken: string | undefined;
+    let wsExpiresAt: string | undefined;
+    if (opts.mintWsToken) {
+      try {
+        const minted = opts.mintWsToken(sessionId, accessibleStored.appId);
+        wsUrl = minted.wsUrl;
+        wsToken = minted.token;
+        // Forward the token TTL so the iframe-runtime can degrade to
+        // static-only mode once it lapses (parity with the render-tool
+        // slice projection, render.ts). Dropping it left the live-mode
+        // resource shell unable to know when its WS token expired.
+        wsExpiresAt = minted.expiresAt;
+      } catch {
+        // Silent — falls back to static-component mode.
+      }
+    }
+
+    // Mount-mode gate (moved below the live-channel mint): emit the
+    // loading shell ONLY when NEITHER a static codeUrl channel NOR a
+    // live-channel wsToken is available. A deployment that wires no
+    // codeStore (codeUrl === undefined) but DOES wire mintWsToken now
+    // mounts via live-mode rather than hanging on "Generating UI…".
+    if (!isSystem && codeUrl === undefined && (wsUrl === undefined || wsToken === undefined)) {
+      return loadingShell(uri, sessionId);
+    }
+
+    const html = buildSelfContainedShell({
+      sessionId,
+      appId: accessibleStored.appId,
+      ...(isSystem
+        ? { systemKind: picked.kind }
+        : codeUrl !== undefined
+          ? {
+              codeUrl,
+              ...(codeHash !== undefined ? { codeHash } : {}),
+            }
+          : // No static codeUrl → live-mode (wsUrl + token spread below)
+            // carries the render; buildSelfContainedShell accepts
+            // live-mode without codeUrl.
+            {}),
+      runtimeUrl: opts.runtimeUrl,
+      ...(wsUrl !== undefined && wsToken !== undefined
+        ? {
+            wsUrl,
+            token: wsToken,
+            ...(wsExpiresAt !== undefined ? { expiresAt: wsExpiresAt } : {}),
+          }
+        : {}),
+      ...(opts.themeId !== undefined ? { themeId: opts.themeId } : {}),
+      ...(opts.themeMode !== undefined ? { themeMode: opts.themeMode } : {}),
+      // Per-app theme overlay projected by `deriveRenderMeta` from
+      // the render's `theme` sidecar — forwarded so the
+      // resource-served iframe matches the postMessage path.
+      ...(view.theme !== undefined ? { theme: view.theme } : {}),
+      ...(view.propsJson !== undefined ? { propsJson: view.propsJson } : {}),
+      ...(view.contextSlots !== undefined ? { contextSlots: view.contextSlots } : {}),
+      ...(view.permissionsPolicy !== undefined
+        ? { permissionsPolicy: view.permissionsPolicy }
+        : {}),
+      ...(view.gadgets !== undefined && view.gadgets.length > 0
+        ? { gadgets: view.gadgets }
+        : {}),
+      ...(contractHash !== undefined && validatorsUrl !== undefined
+        ? { contractHash, validatorsUrl }
+        : {}),
+      ...(resourcePublicEnv !== undefined && Object.keys(resourcePublicEnv).length > 0
+        ? { publicEnv: resourcePublicEnv }
+        : {}),
+      // R6 — ledger cursor stamp for polling-cursor alignment.
+      lastSequence: accessibleStored.eventSequence,
+    });
+    // Augment per-call CSP with gadget-declared bundle / style /
+    // API origins. Without this, claude.ai's iframe CSP only allows
+    // the publicBaseUrl origin, so Leaflet wrapper bundles fetched
+    // from registry.ggui.ai, leaflet.css fetched from same, and
+    // OSM tile requests to tile.openstreetmap.org all get blocked
+    // → the component throws and the React error boundary renders
+    // "Something went wrong." The /r/<shortCode> HTTP path already
+    // derives these via deriveBundleOrigins; this is the per-call
+    // resource mirror.
+    const gadgetOrigins = deriveBundleOrigins(picked.source);
+    return shellContents(uri, html, augmentCspMeta(gadgetOrigins));
+  }
+
   // Single shared handler powers both templates. `blueprintKey` is
   // optional in the variables map — present for the resume URI shape,
   // absent for the legacy single-segment shape.
@@ -1271,233 +1646,53 @@ export function registerGguiRenderResourceTemplate(
     const blueprintKey = Array.isArray(blueprintKeyRaw) ? blueprintKeyRaw[0] : blueprintKeyRaw;
     const hasResumeKey = typeof blueprintKey === "string" && blueprintKey.length > 0;
 
-    // Parallel lookup. The render and the blueprint registry are
-    // independent — even though the render's componentCode could feed
-    // the renderable directly, we ALSO want the blueprint entry as a
-    // registry-only fallback when the render is gone but the blueprint
-    // is still cached (chat-history rehydrate after render TTL or
-    // process restart).
-    const [stored, blueprint] = await Promise.all([
-      opts.renderStore.get(sessionId),
-      hasResumeKey && opts.vectorStore && opts.index && opts.defaultAppIdFallback
-        ? findBlueprintExact(
-            { vectorStore: opts.vectorStore, index: opts.index },
-            opts.defaultAppIdFallback,
-            "template",
-            // Resume URI carries only a contract hash — omit variantKey
-            // so the lookup resolves the default variant.
-            blueprintKey
-          )
-        : Promise.resolve(null),
-    ]);
+    const stored = await opts.renderStore.get(sessionId);
 
     // Rehydration access control (spec §3): gate BEFORE any shell
-    // bytes, code hashing, or token mint. Deny does NOT early-return —
-    // it nulls out row access into `accessibleStored` so every
-    // downstream branch (happy path, registry fallback, final loading
-    // shell) runs exactly as if the row were absent. A deny on the
-    // resume URI must fall through to the SAME registry-only fallback
-    // a genuine miss would hit (the fallback is keyed off the
-    // caller-supplied blueprintKey + registry defaults, never off the
-    // denied row) — otherwise deny would short-circuit to the loading
-    // shell while a miss of the same blueprintKey resolves the
-    // registry shell, leaking row existence to a same-probe attacker.
-    let accessibleStored = stored;
-    if (stored !== null && stored !== undefined) {
-      const callerCtx = opts.getContext?.();
-      const fallbackCtx =
-        callerCtx === undefined && stored.appId === DEFAULT_BUILDER_APP_ID
-          ? {
-              appId: DEFAULT_BUILDER_APP_ID,
-              authSource: "anonymous" as const,
-              requestId: "resource-read",
-            }
-          : callerCtx;
-      if (
-        !renderReadAllowed(
-          {
-            appId: stored.appId,
-            // #446 — the row's SUBJECT is `userId`, written at commit.
-            // This used to project `endUserIdentity`, which nothing has
-            // written since the repo split, so the subject rung never
-            // bound.
-            ...(stored.userId !== undefined ? { userId: stored.userId } : {}),
-          },
-          fallbackCtx
-        )
-      ) {
-        opts.logger?.warn("render_resource_read_denied", {
-          sessionId,
-          rowAppId: stored.appId,
-          callerAppId: callerCtx?.appId,
-        });
-        accessibleStored = null;
-      }
+    // bytes, code hashing, or token mint. Refusal does NOT
+    // early-return — it nulls out row access into `accessibleStored`
+    // so every downstream branch (mount, re-mint, registry fallback,
+    // final loading shell) runs exactly as if the row were absent. A
+    // refusal on the resume URI must fall through to the SAME
+    // registry-only fallback a genuine miss would hit (the fallback is
+    // keyed off the caller-supplied blueprintKey + registry defaults,
+    // never off the refused row) — otherwise refusal would
+    // short-circuit to the loading shell while a miss of the same
+    // blueprintKey resolves the registry shell, leaking row existence
+    // to a same-probe attacker.
+    const accessibleStored =
+      stored !== null &&
+      stored !== undefined &&
+      readAllowed(sessionId, {
+        appId: stored.appId,
+        // #446 — the row's SUBJECT is `userId`, written at commit.
+        // This used to project `endUserIdentity`, which nothing has
+        // written since the repo split, so the subject rung never
+        // bound.
+        ...(stored.userId !== undefined ? { userId: stored.userId } : {}),
+      })
+        ? stored
+        : null;
+
+    // Live state first: render present and renderable mounts with the
+    // current props + current contextSpec values.
+    if (accessibleStored) {
+      const served = await serveMount(uri, sessionId, accessibleStored);
+      if (served !== null) return served;
     }
 
-    // Happy path: render present and renderable. Mount with the live
-    // state (current props, current contextSpec values).
-    if (accessibleStored) {
-      const picked = pickComponentFromGguiSession(accessibleStored.render);
-      if (picked) {
-        // Project the active render to the transport-agnostic bootstrap
-        // view — same source of truth the render-mutation handler and
-        // `/r/<shortCode>` consume. Carries permissionsPolicy when
-        // clientCapabilities declares permissions. The MCP Apps
-        // resource path emits this only into the inline bootstrap
-        // (the browser-enforced gate ultimately comes from the host's
-        // `allow=""` attribute when the host translates
-        // `_meta.ui.permissions` — set by McpAppIframe consumers).
-        const view = deriveRenderMeta(picked.source);
-        const isSystem = picked.kind !== undefined;
-
-        // Static-component delivery via codeUrl. The compiled-component
-        // path mints a content-addressable URL the iframe-runtime
-        // fetches at boot; the loading shell takes over when codeStore +
-        // codeBaseUrl aren't wired.
-        let codeUrl: string | undefined;
-        let codeHash: string | undefined;
-        let contractHash: string | undefined;
-        let validatorsUrl: string | undefined;
-        if (!isSystem && opts.codeStore && opts.codeBaseUrl) {
-          try {
-            const hash = opts.codeStore.hashOf(picked.componentCode);
-            await opts.codeStore.put(hash, picked.componentCode);
-            codeHash = hash;
-            const base = opts.codeBaseUrl.replace(/\/$/, "");
-            codeUrl = `${base}/code/${hash}.js`;
-          } catch {
-            // Silent — falls through to loading shell below.
-          }
-          // Content-addressable contract-validator bundle (#109).
-          try {
-            const bundle = await deriveContractBundle(picked.source);
-            if (bundle) {
-              await opts.codeStore.put(bundle.contractHash, bundle.bundleSource);
-              contractHash = bundle.contractHash;
-              const base = opts.codeBaseUrl.replace(/\/$/, "");
-              validatorsUrl = `${base}/contract/${bundle.contractHash}.js`;
-            }
-          } catch {
-            // Silent — bundle write failure degrades to no client-side
-            // validators (server-side gate is authoritative).
-          }
-        }
-        // The codeUrl gate is applied AFTER the live-channel mint below, so
-        // a render with no static codeUrl still mounts via live-mode
-        // (wsUrl + wsToken) instead of stalling on the loading shell —
-        // parity with the `/r/<shortCode>` path. (See the gate after the
-        // mint.) This matters for deployments that wire `mintWsToken` but no
-        // `codeStore`/`codeBaseUrl` (e.g. the cloud pod): the agent-server
-        // inlines THIS resource, so without the fallback every cloud render
-        // hung on the dead "Generating UI…" shell.
-
-        // Project the wrapper catalog AND the union-filtered
-        // publicEnv onto the inline bootstrap so the resource-served
-        // iframe matches the MCP-Apps postMessage path. Without this,
-        // wrapper-using contracts rendered through `resources/read`
-        // mount as STDLIB-only.
-        let resourcePublicEnv: Readonly<Record<string, string>> | undefined;
-        if (opts.appMetadataStore) {
-          try {
-            const appRecord = await opts.appMetadataStore.get(accessibleStored.appId);
-            resourcePublicEnv = derivePublicEnvProjection(picked.source, appRecord?.publicEnv);
-          } catch {
-            // Silent — wrappers calling getPublicEnv throw clearly.
-          }
-        }
-        // Live-channel bootstrap — when the operator wired
-        // {@link GguiRenderResourceTemplateOptions.mintWsToken}, mint a
-        // wsToken for this render so the iframe-runtime opens a
-        // WebSocket on mount and receives `props_update` frames.
-        // Without this, the resource shell renders in static-component
-        // mode only — `ggui_update` server-side mutations never
-        // visibly reach the live iframe (hosts must re-fetch
-        // `resources/read` after every update tool result to see new
-        // state).
-        let wsUrl: string | undefined;
-        let wsToken: string | undefined;
-        let wsExpiresAt: string | undefined;
-        if (opts.mintWsToken) {
-          try {
-            const minted = opts.mintWsToken(sessionId, accessibleStored.appId);
-            wsUrl = minted.wsUrl;
-            wsToken = minted.token;
-            // Forward the token TTL so the iframe-runtime can degrade to
-            // static-only mode once it lapses (parity with the render-tool
-            // slice projection, render.ts). Dropping it left the live-mode
-            // resource shell unable to know when its WS token expired.
-            wsExpiresAt = minted.expiresAt;
-          } catch {
-            // Silent — falls back to static-component mode.
-          }
-        }
-
-        // Mount-mode gate (moved below the live-channel mint): emit the
-        // loading shell ONLY when NEITHER a static codeUrl channel NOR a
-        // live-channel wsToken is available. A deployment that wires no
-        // codeStore (codeUrl === undefined) but DOES wire mintWsToken now
-        // mounts via live-mode rather than hanging on "Generating UI…".
-        if (!isSystem && codeUrl === undefined && (wsUrl === undefined || wsToken === undefined)) {
-          return loadingShell(uri, sessionId);
-        }
-
-        const html = buildSelfContainedShell({
-          sessionId,
-          appId: accessibleStored.appId,
-          ...(isSystem
-            ? { systemKind: picked.kind }
-            : codeUrl !== undefined
-              ? {
-                  codeUrl,
-                  ...(codeHash !== undefined ? { codeHash } : {}),
-                }
-              : // No static codeUrl → live-mode (wsUrl + token spread below)
-                // carries the render; buildSelfContainedShell accepts
-                // live-mode without codeUrl.
-                {}),
-          runtimeUrl: opts.runtimeUrl,
-          ...(wsUrl !== undefined && wsToken !== undefined
-            ? {
-                wsUrl,
-                token: wsToken,
-                ...(wsExpiresAt !== undefined ? { expiresAt: wsExpiresAt } : {}),
-              }
-            : {}),
-          ...(opts.themeId !== undefined ? { themeId: opts.themeId } : {}),
-          ...(opts.themeMode !== undefined ? { themeMode: opts.themeMode } : {}),
-          // Per-app theme overlay projected by `deriveRenderMeta` from
-          // the render's `theme` sidecar — forwarded so the
-          // resource-served iframe matches the postMessage path.
-          ...(view.theme !== undefined ? { theme: view.theme } : {}),
-          ...(view.propsJson !== undefined ? { propsJson: view.propsJson } : {}),
-          ...(view.contextSlots !== undefined ? { contextSlots: view.contextSlots } : {}),
-          ...(view.permissionsPolicy !== undefined
-            ? { permissionsPolicy: view.permissionsPolicy }
-            : {}),
-          ...(view.gadgets !== undefined && view.gadgets.length > 0
-            ? { gadgets: view.gadgets }
-            : {}),
-          ...(contractHash !== undefined && validatorsUrl !== undefined
-            ? { contractHash, validatorsUrl }
-            : {}),
-          ...(resourcePublicEnv !== undefined && Object.keys(resourcePublicEnv).length > 0
-            ? { publicEnv: resourcePublicEnv }
-            : {}),
-          // R6 — ledger cursor stamp for polling-cursor alignment.
-          lastSequence: accessibleStored.eventSequence,
-        });
-        // Augment per-call CSP with gadget-declared bundle / style /
-        // API origins. Without this, claude.ai's iframe CSP only allows
-        // the publicBaseUrl origin, so Leaflet wrapper bundles fetched
-        // from registry.ggui.ai, leaflet.css fetched from same, and
-        // OSM tile requests to tile.openstreetmap.org all get blocked
-        // → the component throws and the React error boundary renders
-        // "Something went wrong." The /r/<shortCode> HTTP path already
-        // derives these via deriveBundleOrigins; this is the per-call
-        // resource mirror.
-        const gadgetOrigins = deriveBundleOrigins(picked.source);
-        return shellContents(uri, html, augmentCspMeta(gadgetOrigins));
+    // Re-mint: the row is GONE and the deployment keeps a durable
+    // record of what it was. Gated on the row being genuinely absent
+    // rather than merely unreadable — a re-mint COMMITS, and a commit
+    // fired while a row exists would overwrite live state (or another
+    // party's) with a reconstruction. A refused read still reaches the
+    // same fallback + loading shell a miss reaches, so nothing here
+    // tells the two apart.
+    if (stored === null || stored === undefined) {
+      const reminted = await remintFromRecord(sessionId);
+      if (reminted !== null) {
+        const served = await serveMount(uri, sessionId, reminted);
+        if (served !== null) return served;
       }
     }
 
@@ -1507,6 +1702,23 @@ export function registerGguiRenderResourceTemplate(
     // worse than the live mount (no current props, no preserved
     // context state), but strictly better than the dead loading
     // shell.
+    //
+    // The lookup runs HERE, not before the gate. It is keyed by a
+    // caller-supplied blueprintKey under a registry default, so firing
+    // it ahead of the access check spent a lookup on every read and
+    // put blueprint-existence work in front of the one check that
+    // decides whether the caller may learn anything at all.
+    const blueprint =
+      hasResumeKey && opts.vectorStore && opts.index && opts.defaultAppIdFallback
+        ? await findBlueprintExact(
+            { vectorStore: opts.vectorStore, index: opts.index },
+            opts.defaultAppIdFallback,
+            "template",
+            // Resume URI carries only a contract hash — omit variantKey
+            // so the lookup resolves the default variant.
+            blueprintKey
+          )
+        : null;
     if (blueprint && opts.defaultAppIdFallback) {
       const html = await buildShellFromBlueprint({
         sessionId,
