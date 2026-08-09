@@ -360,7 +360,7 @@ postRpc('ui/initialize',{
 // Value-resolution only — no `--ggui-*` token added or renamed. The
 // constant itself lives with the protocol host-helper (the shared
 // self-contained-shell assembler paints the same surface); imported
-// above and reused here for the thin postMessage shell + loading shell.
+// above and reused here for the thin postMessage shell.
 
 // `#ggui-root` here is LOAD-BEARING for the shell script (NOT a React
 // mount target): the inline script grabs it as `rootEl` for the
@@ -1151,9 +1151,24 @@ export interface GguiRenderResourceTemplateOptions {
    * (`ui://ggui/render/{sessionId}/{blueprintKey}`): if the render is
    * gone but the blueprint registry still holds the entry, return the
    * static initial render (default props + default context) instead of
-   * the dead "Generating UI…" loading shell. Single-tenant OSS sees
-   * meaningful improvement; multi-tenant deployments leave both options
-   * undefined to keep the loading-shell behavior on render miss.
+   * failing the read.
+   *
+   * The lookup is keyed by the caller-supplied `blueprintKey` under
+   * `defaultAppIdFallback` alone — it never reads the render row — so
+   * it answers the same for a caller who may not read the row as for
+   * one probing a locator that never existed. That is what keeps it
+   * safe to run on a refused read, which it must, or refusal would
+   * become distinguishable from a miss.
+   *
+   * Leaving both options undefined does NOT return callers to a
+   * placeholder shell — there is no longer one to return. It removes
+   * the third resolution, so a read that neither the row nor a re-mint
+   * can serve fails typed: `NOT_FOUND`, or `NOT_SUPPORTED` on a
+   * deployment that also keeps no durable record. Deployments serving
+   * more than one tenant from one registry scope are the reason the
+   * option exists at all: the fallback discloses whether a blueprint
+   * key exists under that scope, so leave it unset if that is not
+   * acceptable.
    */
   readonly vectorStore?: VectorStore;
   /**
@@ -1168,10 +1183,17 @@ export interface GguiRenderResourceTemplateOptions {
   /**
    * App-id used for blueprint-registry scoping when the render has
    * been evicted. The registry is per-`appId`, but a missing render
-   * has no way to derive its tenant — multi-tenant deployments leave
-   * this undefined to fail-safe back to the loading shell. Single-
-   * tenant OSS sets `'builder'` (the universal-MCP default identity)
-   * and rehydrate works across render expiry / process restart.
+   * has no way to derive whose it was, so the fallback needs one scope
+   * named up front. Set to `'builder'` (the universal-MCP default
+   * identity) and rehydrate works across render expiry / process
+   * restart.
+   *
+   * Leaving it undefined disables the fallback entirely — the reads it
+   * would have served fail typed instead (`NOT_FOUND`, or
+   * `NOT_SUPPORTED` where no durable record is kept). That is the
+   * setting for a deployment that cannot accept the fallback answering
+   * "a blueprint with this key exists under this scope" to whoever
+   * asks; it is not a way to get a gentler response.
    */
   readonly defaultAppIdFallback?: string;
   /**
@@ -1306,6 +1328,13 @@ function pickComponentFromGguiSession(render: GguiSession | null | undefined): R
  * successful result wrapping a shell that can never paint anything. A
  * host can check this without trusting the server: if it got
  * `contents`, it got something mountable.
+ *
+ * The obligation covers outcomes this server can DECIDE. A malfunction
+ * still reaches the caller as an internal error (`-32603`) carrying
+ * none of the four codes: a store that faults mid-read, or a template
+ * wired with an empty `runtimeUrl`. That is deliberate — `-32603` says
+ * "something is broken here", which is exactly what those are and what
+ * the four codes must never be diluted into claiming.
  *
  * Three resolutions are tried, in this order, and any of them can
  * produce the mount:
@@ -1693,9 +1722,16 @@ export function registerGguiRenderResourceTemplate(
    * shared by rows read from the store and rows a re-mint just
    * committed.
    *
-   * Returns `null` when the row carries no renderable visible-bits
-   * surface (a placeholder whose generation has not committed yet), so
-   * the caller can go on looking. Every other outcome is a response.
+   * Three exits, and the caller has to handle all three:
+   *
+   *   - a response, when the row resolved to something mountable;
+   *   - `null`, when the row carries no renderable visible-bits surface
+   *     (a placeholder whose generation has not committed yet), so the
+   *     caller can go on looking;
+   *   - a thrown {@link ResourceReadFailure}, when a render DID resolve
+   *     but no channel can deliver it. That one is terminal by design —
+   *     it is the deepest the read gets, so there is nothing left for
+   *     the caller to try.
    */
   async function serveMount(
     uri: URL,
@@ -1716,23 +1752,30 @@ export function registerGguiRenderResourceTemplate(
     const isSystem = picked.kind !== undefined;
 
     // Static-component delivery via codeUrl. The compiled-component
-    // path mints a content-addressable URL the iframe-runtime
-    // fetches at boot; the loading shell takes over when codeStore +
-    // codeBaseUrl aren't wired.
+    // path mints a content-addressable URL the iframe-runtime fetches
+    // at boot. When codeStore + codeBaseUrl aren't wired this channel
+    // simply does not exist, and the live channel below has to carry
+    // the mount.
+    //
+    // A FAULT here is not the same thing as the channel being absent,
+    // and is deliberately not caught. Swallowing it would leave
+    // `codeUrl` undefined, which the mount-mode gate reads as "no
+    // static channel is wired" and reports as NOT_MOUNTABLE — a code
+    // that rides -32006 and tells the host the outcome is deterministic
+    // and a retry cannot succeed. A store having a bad moment is the
+    // one thing that is NOT deterministic. Letting it propagate reaches
+    // the caller as an internal error, which is the honest answer for a
+    // blip and the same policy the re-mint path applies to its stores.
     let codeUrl: string | undefined;
     let codeHash: string | undefined;
     let contractHash: string | undefined;
     let validatorsUrl: string | undefined;
     if (!isSystem && opts.codeStore && opts.codeBaseUrl) {
-      try {
-        const hash = opts.codeStore.hashOf(picked.componentCode);
-        await opts.codeStore.put(hash, picked.componentCode);
-        codeHash = hash;
-        const base = opts.codeBaseUrl.replace(/\/$/, "");
-        codeUrl = `${base}/code/${hash}.js`;
-      } catch {
-        // Silent — falls through to loading shell below.
-      }
+      const hash = opts.codeStore.hashOf(picked.componentCode);
+      await opts.codeStore.put(hash, picked.componentCode);
+      codeHash = hash;
+      const base = opts.codeBaseUrl.replace(/\/$/, "");
+      codeUrl = `${base}/code/${hash}.js`;
       // Content-addressable contract-validator bundle (#109).
       try {
         const bundle = await deriveContractBundle(picked.source);
@@ -1743,13 +1786,17 @@ export function registerGguiRenderResourceTemplate(
           validatorsUrl = `${base}/contract/${bundle.contractHash}.js`;
         }
       } catch {
-        // Silent — bundle write failure degrades to no client-side
-        // validators (server-side gate is authoritative).
+        // Silent, and unlike the two channel faults this one stays
+        // that way: validators are an optional client-side courtesy,
+        // the server-side gate is authoritative, and losing them costs
+        // the read nothing it needs to mount. It cannot be mistaken for
+        // an absent channel, which is what makes swallowing it safe
+        // here and not above.
       }
     }
     // The codeUrl gate is applied AFTER the live-channel mint below, so
     // a render with no static codeUrl still mounts via live-mode
-    // (wsUrl + wsToken) instead of stalling on the loading shell —
+    // (wsUrl + wsToken) instead of failing as undeliverable —
     // parity with the `/r/<shortCode>` path. (See the gate after the
     // mint.) This matters for deployments that wire `mintWsToken` but no
     // `codeStore`/`codeBaseUrl` (e.g. the cloud pod): the agent-server
@@ -1779,22 +1826,23 @@ export function registerGguiRenderResourceTemplate(
     // visibly reach the live iframe (hosts must re-fetch
     // `resources/read` after every update tool result to see new
     // state).
+    //
+    // A mint FAULT propagates, for the same reason the code-store write
+    // above does: it would otherwise leave `wsToken` undefined, which
+    // the gate cannot tell from "no live channel is wired" and would
+    // report as a deterministic NOT_MOUNTABLE.
     let wsUrl: string | undefined;
     let wsToken: string | undefined;
     let wsExpiresAt: string | undefined;
     if (opts.mintWsToken) {
-      try {
-        const minted = opts.mintWsToken(sessionId, accessibleStored.appId);
-        wsUrl = minted.wsUrl;
-        wsToken = minted.token;
-        // Forward the token TTL so the iframe-runtime can degrade to
-        // static-only mode once it lapses (parity with the render-tool
-        // slice projection, render.ts). Dropping it left the live-mode
-        // resource shell unable to know when its WS token expired.
-        wsExpiresAt = minted.expiresAt;
-      } catch {
-        // Silent — falls back to static-component mode.
-      }
+      const minted = opts.mintWsToken(sessionId, accessibleStored.appId);
+      wsUrl = minted.wsUrl;
+      wsToken = minted.token;
+      // Forward the token TTL so the iframe-runtime can degrade to
+      // static-only mode once it lapses (parity with the render-tool
+      // slice projection, render.ts). Dropping it left the live-mode
+      // resource shell unable to know when its WS token expired.
+      wsExpiresAt = minted.expiresAt;
     }
 
     // Mount-mode gate (below the live-channel mint): a compiled

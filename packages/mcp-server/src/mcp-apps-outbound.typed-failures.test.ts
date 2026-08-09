@@ -113,8 +113,6 @@ interface BootOptions {
   readonly staticDelivery?: boolean;
   /** Bind the live delivery channel (`mintWsToken`). */
   readonly liveChannel?: boolean;
-  /** Hand `buildSelfContainedShell` a runtimeUrl it must reject. */
-  readonly emptyRuntimeUrl?: boolean;
   readonly getContext?: () => HandlerContext | undefined;
 }
 
@@ -142,7 +140,7 @@ async function boot(options: BootOptions = {}): Promise<Fixture> {
 
   registerGguiRenderResourceTemplate(server, {
     renderStore,
-    runtimeUrl: options.emptyRuntimeUrl === true ? "" : "https://runtime.example/bundle.js",
+    runtimeUrl: "https://runtime.example/bundle.js",
     getContext: options.getContext ?? (() => ownerCtx),
     logger: silentLogger,
     ...(options.durable === true || options.durable === "identityOnly"
@@ -412,6 +410,52 @@ describe("resource read — one typed failure per class", () => {
         code: "NOT_MOUNTABLE",
         detail: "no static component URL and no live channel is wired",
       });
+    } finally {
+      await f.close();
+    }
+  });
+});
+
+describe("resource read — the whole error frame, not just its code", () => {
+  // `data` is what a host branches on and is asserted throughout this
+  // file. `message` is what a PERSON reads, and until these two pins it
+  // travelled to the wire unasserted — the projection could have
+  // swapped, truncated, or templated it and every other test here would
+  // still have passed.
+
+  it("puts the constant NOT_FOUND body on the wire, verbatim", async () => {
+    const f = await boot({ durable: true, liveChannel: true });
+    try {
+      await readFailure(f.client, `${RESOURCE_URI}/${randomUUID()}/${CONTRACT_KEY}`);
+      expect(wireErrors(f.frames)).toEqual([
+        {
+          code: SESSION_NOT_FOUND,
+          message: "Resource not found.",
+          data: { code: "NOT_FOUND" },
+        },
+      ]);
+    } finally {
+      await f.close();
+    }
+  });
+
+  it("puts the full NOT_MOUNTABLE body on the wire, message included", async () => {
+    const f = await boot({ durable: true });
+    try {
+      const sessionId = randomUUID();
+      await seedLiveRow(f, sessionId);
+
+      await readFailure(f.client, `${RESOURCE_URI}/${sessionId}/${CONTRACT_KEY}`);
+      expect(wireErrors(f.frames)).toEqual([
+        {
+          code: MOUNT_UNAVAILABLE,
+          message: "This locator resolved, but nothing mountable can be produced for it.",
+          data: {
+            code: "NOT_MOUNTABLE",
+            detail: "no static component URL and no live channel is wired",
+          },
+        },
+      ]);
     } finally {
       await f.close();
     }
@@ -752,6 +796,99 @@ describe("resource read — a row the caller owns but cannot mount", () => {
       expect(failure.message).not.toContain("buildSelfContainedShell");
     } finally {
       await f.close();
+    }
+  });
+});
+
+describe("resource read — a faulting channel is a malfunction, not a verdict", () => {
+  /**
+   * The distinction these two pin: a channel that is NOT WIRED is a
+   * deterministic property of the deployment, and `NOT_MOUNTABLE`
+   * (-32006) tells the host a retry cannot succeed. A channel that is
+   * wired and FAULTED is the one thing that is not deterministic. If
+   * the fault were swallowed the gate would see an absent channel and
+   * report the deterministic verdict, telling a host to give up on a
+   * render that would mount fine a second later.
+   */
+  const INTERNAL_ERROR = -32603;
+
+  it("surfaces a faulting code-store write as an internal error", async () => {
+    const renderStore = new InMemoryGguiSessionStore();
+    const server = new McpServer({ name: "fault-test", version: "0.0.1" });
+    const faultingCodeStore = new InMemoryCodeStore();
+    // Wired, and broken — not the same as absent.
+    faultingCodeStore.put = async (): Promise<void> => {
+      throw new Error("code store unavailable");
+    };
+    registerGguiRenderResourceTemplate(server, {
+      renderStore,
+      runtimeUrl: "https://runtime.example/bundle.js",
+      getContext: () => ownerCtx,
+      logger: silentLogger,
+      codeStore: faultingCodeStore,
+      codeBaseUrl: "https://code.example",
+    });
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    const client = new Client({ name: "fault-client", version: "0.0.1" });
+    await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+    try {
+      const sessionId = randomUUID();
+      const live: ComponentGguiSession = {
+        type: "component",
+        id: sessionId,
+        appId: OWNER_APP_ID,
+        componentCode: LIVE_ROW_CODE,
+        eventSequence: 0,
+        createdAt: 1_700_000_000_000,
+        lastActivityAt: 1_700_000_000_000,
+        expiresAt: 1_900_000_000_000,
+      };
+      await renderStore.commit({ render: live, appId: OWNER_APP_ID });
+
+      const failure = await readFailure(client, `${RESOURCE_URI}/${sessionId}/${CONTRACT_KEY}`);
+      expect(failure.code).toBe(INTERNAL_ERROR);
+      expect(failure.data).toBeUndefined();
+    } finally {
+      await client.close();
+      await server.close();
+    }
+  });
+
+  it("surfaces a faulting live-channel mint as an internal error", async () => {
+    const renderStore = new InMemoryGguiSessionStore();
+    const server = new McpServer({ name: "fault-test-2", version: "0.0.1" });
+    registerGguiRenderResourceTemplate(server, {
+      renderStore,
+      runtimeUrl: "https://runtime.example/bundle.js",
+      getContext: () => ownerCtx,
+      logger: silentLogger,
+      mintWsToken: () => {
+        throw new Error("token signer unavailable");
+      },
+    });
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    const client = new Client({ name: "fault-client-2", version: "0.0.1" });
+    await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+    try {
+      const sessionId = randomUUID();
+      const live: ComponentGguiSession = {
+        type: "component",
+        id: sessionId,
+        appId: OWNER_APP_ID,
+        componentCode: LIVE_ROW_CODE,
+        eventSequence: 0,
+        createdAt: 1_700_000_000_000,
+        lastActivityAt: 1_700_000_000_000,
+        expiresAt: 1_900_000_000_000,
+      };
+      await renderStore.commit({ render: live, appId: OWNER_APP_ID });
+
+      const failure = await readFailure(client, `${RESOURCE_URI}/${sessionId}/${CONTRACT_KEY}`);
+      expect(failure.code).toBe(INTERNAL_ERROR);
+      expect(failure.data).toBeUndefined();
+    } finally {
+      await client.close();
+      await server.close();
     }
   });
 });
