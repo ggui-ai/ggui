@@ -407,6 +407,19 @@ function postBootFailure(reason: RendererBootFailureReason, message: string): vo
 // =============================================================================
 
 export interface BootSequenceOptions {
+  /**
+   * Document the boot path mounts into — the render root, and the
+   * toast announcer's live regions.
+   *
+   * MUST be the global `document` in any real deployment. The toast +
+   * cue surface reads the global directly, and production passes the
+   * global here (see `runBootProduction`), so the two are one object.
+   * A caller handing a DIFFERENT document pre-registers the live
+   * regions somewhere no announcement will ever reach; the surface then
+   * falls back to creating them in the global document at the moment of
+   * the first message, which is precisely the same-tick creation that
+   * loses that first announcement.
+   */
   readonly doc: Document;
   /**
    * Spec-canonical {@link App} instance + its {@link Transport}.
@@ -681,6 +694,14 @@ export async function bootSequence(opts: BootSequenceOptions): Promise<BootSeque
   };
 
   const refs = ensureStatusDom(doc);
+  // Live regions up BEFORE anything can announce through them
+  // (ggui#447). A region created in the same tick as its first message
+  // is a region no screen reader was watching yet, and that first
+  // message — the one telling the user their very first gesture was
+  // received — is the one that gets lost. Mounted here, alongside the
+  // render root, because every toast is at minimum a user gesture away
+  // from this point.
+  ensureToastAnnouncer(doc);
   // The mounted render is established after the first ack lands —
   // populated by `applyAck` below + read back by every channel handler
   // that needs `propsSpec` / `streamSpec`. Tracked as a closure-scoped
@@ -1868,6 +1889,164 @@ function extractConsumerPresent(
   return typeof flag === 'boolean' ? flag : undefined;
 }
 
+/** Container id for the announcer holding both live regions. */
+const TOAST_ANNOUNCER_ID = '__ggui-toast-announcer__';
+
+/**
+ * The announcer's two live regions, keyed by politeness (ggui#447).
+ *
+ * Two regions rather than one with a swapped `aria-live`: politeness is
+ * read when a region is REGISTERED, so a screen reader that already
+ * mapped a node as polite is not guaranteed to notice it turning
+ * assertive in the same mutation that delivers the text. Fixed
+ * politeness per node removes the question.
+ */
+interface ToastLiveRegions {
+  /** `role="status"` — queued behind whatever is being read. */
+  readonly polite: HTMLElement;
+  /** `role="alert"` — interrupts. Failure + action-required classes. */
+  readonly assertive: HTMLElement;
+}
+
+/**
+ * Ensure the pair of live regions the toast surface announces through.
+ *
+ * MUST be called before the first message can land — a live region
+ * created in the same tick as its first content is a region the screen
+ * reader was never watching, and that first announcement is lost. The
+ * boot path calls this at the same point it mounts the render root, so
+ * every toast (at minimum a user gesture away) lands in a region that
+ * has been registered for many frames. The toast + cue paths call it
+ * again defensively; it is idempotent per document.
+ *
+ * Visually hidden rather than `display:none`: a region that is not
+ * rendered is not in the accessibility tree, and content added to it is
+ * never announced. The clip rectangle keeps it out of the visual layout
+ * while leaving it live.
+ *
+ * Returns `null` when the document has no body yet — nothing to attach
+ * to, and no announcement is possible.
+ *
+ * @internal — exported for unit tests.
+ */
+export function ensureToastAnnouncer(doc: Document): ToastLiveRegions | null {
+  if (doc.body === null) return null;
+  const existing = doc.getElementById(TOAST_ANNOUNCER_ID);
+  if (existing !== null) {
+    const polite = existing.querySelector<HTMLElement>(
+      '[data-ggui-toast-announce="polite"]',
+    );
+    const assertive = existing.querySelector<HTMLElement>(
+      '[data-ggui-toast-announce="assertive"]',
+    );
+    if (polite !== null && assertive !== null) return { polite, assertive };
+    // Half a container is worse than none — it looks mounted to the
+    // idempotence check while announcing nothing. Rebuild whole.
+    existing.remove();
+  }
+  const host = doc.createElement('div');
+  host.id = TOAST_ANNOUNCER_ID;
+  host.style.cssText = [
+    'position:absolute',
+    'width:1px',
+    'height:1px',
+    'margin:-1px',
+    'padding:0',
+    'border:0',
+    'overflow:hidden',
+    'clip:rect(0 0 0 0)',
+    'clip-path:inset(50%)',
+    'white-space:nowrap',
+  ].join(';');
+  const makeRegion = (politeness: 'polite' | 'assertive'): HTMLElement => {
+    const region = doc.createElement('div');
+    region.setAttribute('data-ggui-toast-announce', politeness);
+    // Role and `aria-live` together: the role is the semantic, the
+    // explicit `aria-live` is the belt for assistive technology that
+    // does not map `role="status"` to a politeness on its own.
+    region.setAttribute('role', politeness === 'polite' ? 'status' : 'alert');
+    region.setAttribute('aria-live', politeness);
+    // Toast text is one sentence that only makes sense whole — read the
+    // region, not the diff.
+    region.setAttribute('aria-atomic', 'true');
+    host.appendChild(region);
+    return region;
+  };
+  const polite = makeRegion('polite');
+  const assertive = makeRegion('assertive');
+  doc.body.appendChild(host);
+  return { polite, assertive };
+}
+
+/**
+ * Speak a toast message. `error` + `action_required` interrupt (a
+ * gesture failed, or needs the user to act); everything else queues.
+ *
+ * Exactly one region carries text at a time — the other is cleared, so
+ * a user who navigates to the announcer afterwards finds the current
+ * message and not a transcript. Clearing is silent: assistive
+ * technology announces content arriving in a live region, not content
+ * leaving one.
+ */
+function announceToast(text: string, kind: ToastKind): void {
+  if (typeof document === 'undefined') return;
+  const regions = ensureToastAnnouncer(document);
+  if (regions === null) return;
+  // Whatever speaks last owns the region. A retraction scheduled for an
+  // earlier relay cue would otherwise come due in the middle of THIS
+  // message and take it down instead — and it could not be filtered out
+  // by comparing text, because a cue and the fallback cue toast for the
+  // same intent are character-identical. (Declared below; this only
+  // ever runs long after module init.)
+  cancelRelayCueRetraction();
+  const interrupts = kind === 'error' || kind === 'action_required';
+  const target = interrupts ? regions.assertive : regions.polite;
+  const idle = interrupts ? regions.polite : regions.assertive;
+  idle.textContent = '';
+  target.textContent = text;
+}
+
+/**
+ * Empty both live regions. Paired with every route that takes the
+ * visible toast away, so the spoken surface and the visual one carry
+ * the same message at the same time — including "nothing".
+ */
+function clearToastAnnouncement(): void {
+  if (typeof document === 'undefined') return;
+  const host = document.getElementById(TOAST_ANNOUNCER_ID);
+  if (host === null) return;
+  for (const region of Array.from(host.children)) {
+    region.textContent = '';
+  }
+}
+
+/**
+ * Take the visible toast away, on every route that does so (auto-
+ * dismiss timer, user dismissal, `drain_ack` resolution).
+ *
+ * A hidden toast must be inert to pointer, keyboard AND assistive
+ * technology alike: the element keeps its fixed position over the top
+ * of the render for the rest of the session, so anything left behind —
+ * a live click target, a tab stop, an announced sentence — outlives the
+ * message it belonged to.
+ */
+function hideToast(el: HTMLElement): void {
+  el.style.opacity = '0';
+  el.style.transform = 'translateX(-50%) translateY(8px)';
+  el.style.pointerEvents = 'none';
+  el.onclick = null;
+  el.onkeydown = null;
+  // Blur BEFORE `aria-hidden` lands: hiding the focused element from
+  // the accessibility tree strands the screen reader's cursor on a node
+  // it can no longer describe.
+  if (el.ownerDocument.activeElement === el) el.blur();
+  el.removeAttribute('role');
+  el.removeAttribute('tabindex');
+  el.removeAttribute('aria-label');
+  el.setAttribute('aria-hidden', 'true');
+  clearToastAnnouncement();
+}
+
 /**
  * Lightweight toast UX surface for dispatched actions. Renders a
  * fixed-position element at the bottom of the iframe so the user
@@ -1890,9 +2069,20 @@ function extractConsumerPresent(
  * `success` / `fallback` outcomes; the `pending` state holds
  * indefinitely until a follow-up call updates it.
  *
+ * The visible element is only half the surface (ggui#447). Every
+ * message is also spoken through {@link ensureToastAnnouncer}'s live
+ * regions, and the element itself is hidden from the accessibility
+ * tree so the sentence is not read twice. The one exception is
+ * `action_required`, the only toast the user must OPERATE: it re-enters
+ * the tree as a named button with a tab stop, because a dismissal that
+ * needs a mouse is a dismissal some users cannot perform.
+ *
  * Operator override: set `window.__GGUI_TOAST_DISABLED__ = true`
  * before the runtime boots to suppress (e.g., for first-party hosts
- * that want their own toast UI).
+ * that want their own toast UI). Suppression covers both halves —
+ * announcements mirror the visual feedback that actually happened, so
+ * a host rendering its own toast chrome does not get a second, spoken
+ * copy of ours.
  *
  * @internal — runtime-layer concern.
  */
@@ -1949,12 +2139,22 @@ function showActionToast(
   el.textContent = text;
   el.style.opacity = '1';
   el.style.transform = 'translateX(-50%) translateY(0)';
+  // Reset to the non-interactive posture every time, so a toast that
+  // follows an `action_required` notice does not inherit its tab stop
+  // and name. The `action_required` branch below re-applies them.
+  el.setAttribute('aria-hidden', 'true');
+  el.removeAttribute('role');
+  el.removeAttribute('tabindex');
+  el.removeAttribute('aria-label');
+  el.style.pointerEvents = 'none';
+  el.onkeydown = null;
+  announceToast(text, kind);
   // Clear any prior auto-dismiss timer so a fresh pending toast
   // doesn't get hidden mid-flight.
   const elWithTimer = el as HTMLElement & { __toastTimer?: number };
   if (elWithTimer.__toastTimer) clearTimeout(elWithTimer.__toastTimer);
-  // `action_required` PERSISTS until the user clicks the toast
-  // (manual dismiss). Per MCP Apps spec, `ui/message` is a
+  // `action_required` PERSISTS until the user dismisses the toast
+  // (click, Enter or Space). Per MCP Apps spec, `ui/message` is a
   // PREPARED user prompt — the host renders it into the chat input
   // but the user must press send for it to reach the agent. So the
   // toast can't auto-dismiss; doing so would imply the gesture went
@@ -1964,20 +2164,34 @@ function showActionToast(
   // that the user has read and closed a persistent notice. The relay
   // notice uses it to arm the post-dismissal cue (ggui#442).
   if (kind === 'action_required') {
-    el.onclick = () => {
-      if (!el) return;
-      el.style.opacity = '0';
-      el.style.transform = 'translateX(-50%) translateY(8px)';
-      el.onclick = null;
+    // The dismissal is a real control, so it carries real control
+    // semantics: a role, an accessible name that says what activating
+    // it does, a tab stop, and the two keys a button responds to. The
+    // announcement already carried the message; this carries the way
+    // out of it.
+    const target = el;
+    target.removeAttribute('aria-hidden');
+    target.setAttribute('role', 'button');
+    target.setAttribute('tabindex', '0');
+    target.setAttribute('aria-label', `${text} Activate to dismiss.`);
+    target.style.pointerEvents = 'auto';
+    const dismiss = (): void => {
+      hideToast(target);
       onDismiss?.();
+    };
+    target.onclick = dismiss;
+    target.onkeydown = (ev: KeyboardEvent): void => {
+      if (ev.key !== 'Enter' && ev.key !== ' ') return;
+      // Space scrolls the page by default; a button must not.
+      ev.preventDefault();
+      dismiss();
     };
   } else {
     el.onclick = null;
     if (kind === 'success' || kind === 'fallback' || kind === 'error') {
+      const target = el;
       elWithTimer.__toastTimer = window.setTimeout(() => {
-        if (!el) return;
-        el.style.opacity = '0';
-        el.style.transform = 'translateX(-50%) translateY(8px)';
+        hideToast(target);
       }, 2500);
     }
   }
@@ -1992,8 +2206,7 @@ function dismissActionToast(): void {
   if (typeof document === 'undefined') return;
   const el = document.getElementById('__ggui-action-toast__');
   if (!el) return;
-  el.style.opacity = '0';
-  el.style.transform = 'translateX(-50%) translateY(8px)';
+  hideToast(el);
   const elWithTimer = el as HTMLElement & { __toastTimer?: number };
   if (elWithTimer.__toastTimer) {
     clearTimeout(elWithTimer.__toastTimer);
@@ -2186,20 +2399,82 @@ let relayNoticeDismissed = false;
  */
 let lastRelayCueToastAt = 0;
 
+/**
+ * Timestamp of the last SPOKEN cue (ggui#447), on its own clock.
+ *
+ * Separate from the toast clock because the two cue shapes are
+ * mutually exclusive per gesture — a gesture either pulses a focused
+ * control or falls back to the toast — and each needs its own quiet
+ * period to be the one it advertises.
+ */
+let lastRelayCueAnnouncedAt = 0;
+
+/**
+ * Intent named by the standing spoken cue, or `null` when none is.
+ *
+ * The throttle is keyed on this as well as the clock. A quiet period
+ * that ignores WHICH action was attempted does not merely withhold the
+ * second cue — it leaves the region still naming the FIRST one, so a
+ * screen reader asked to re-read it reports the wrong action as the
+ * thing that just failed. Silence is a defensible answer to a repeat;
+ * it is never a defensible answer to a different gesture.
+ */
+let lastRelayCueAnnouncedIntent: string | null = null;
+
+/**
+ * Expiry timer for the standing spoken cue, held so a repeat can cancel
+ * its predecessor instead of racing it.
+ */
+let relayCueAnnounceTimer: number | undefined;
+
 /** Class carrying the pulse animation; also the `@keyframes` name. */
 const RELAY_CUE_CLASS = 'ggui-relay-cue-pulse';
 /** Stable id for the injected `<style>` — idempotent per document. */
 const RELAY_CUE_STYLE_ID = 'ggui-relay-cue-style';
 /** Pulse duration (ms). Brief enough to read as acknowledgement. */
 const RELAY_CUE_DURATION_MS = 400;
-/** At most one fallback cue toast per this window (ms). */
-const RELAY_CUE_TOAST_THROTTLE_MS = 5_000;
+/** At most one fallback cue toast, and one spoken cue, per window (ms). */
+const RELAY_CUE_THROTTLE_MS = 5_000;
+/**
+ * How long a spoken cue stands before it is retracted (ms).
+ *
+ * Matches the toast's own auto-dismiss cadence, and deliberately
+ * outlasts the 400ms pulse by a wide margin: content pulled out of a
+ * live region too soon after it lands can be dropped before the screen
+ * reader gets to it, so retracting at pulse-end would trade a stale
+ * announcement for a missing one.
+ */
+const RELAY_CUE_ANNOUNCE_TTL_MS = 2_500;
+
+/**
+ * Drop the retraction a standing spoken cue has pending, because
+ * something newer is about to own the region — another cue, a toast, or
+ * a latch edge that ends the dead zone entirely. Left armed, it comes
+ * due mid-message and clears whatever is in the region then.
+ */
+function cancelRelayCueRetraction(): void {
+  if (relayCueAnnounceTimer === undefined) return;
+  clearTimeout(relayCueAnnounceTimer);
+  relayCueAnnounceTimer = undefined;
+}
+
+/**
+ * Give the dead zone a fresh quiet period. Called on both latch edges
+ * and from the test reset — every throttle belongs to the notice that
+ * is standing NOW, so a new one never inherits an old one's silence.
+ */
+function resetRelayCueThrottles(): void {
+  lastRelayCueToastAt = 0;
+  lastRelayCueAnnouncedAt = 0;
+  lastRelayCueAnnouncedIntent = null;
+  cancelRelayCueRetraction();
+}
 
 /** @internal — exported for unit tests to reset module state. */
 export function __resetRelayNoticeForTest(): void {
   relayIncapabilityAnnounced = false;
   relayNoticeDismissed = false;
-  lastRelayCueToastAt = 0;
+  resetRelayCueThrottles();
 }
 
 /**
@@ -2250,13 +2525,83 @@ function resolveRelayCueTarget(): Element | null {
 }
 
 /**
+ * Speak the pulse (ggui#447).
+ *
+ * The pulse animates opacity on a control the runtime does not own, so
+ * it carries nothing to assistive technology and nothing may be added
+ * to that control — a role or label written onto generated markup would
+ * be a lie about someone else's element. The honest counterpart is a
+ * message in the announcer's own region, saying what the pulse means.
+ *
+ * NOT gated on `__GGUI_TOAST_DISABLED__`: that flag suppresses our
+ * toast chrome, and the pulse is not toast chrome — it fires either
+ * way. Announcing on the same condition as the visual keeps the two
+ * cues telling the same story.
+ *
+ * Throttled on its own clock, unlike the pulse — but only against
+ * IDENTICAL repeats. A flash repeating on every gesture costs a sighted
+ * user nothing to ignore, while the same sentence read aloud each time
+ * buries whatever else the screen reader was saying and carries no new
+ * information. A DIFFERENT action is new information: withholding it
+ * would leave the region naming the previous gesture, which reads as a
+ * confident answer about the wrong thing. The two cues share a meaning,
+ * not a rate.
+ *
+ * The cue also expires. A live region is a description of what is
+ * happening now, and a 400ms pulse that leaves a sentence standing for
+ * the rest of the session is the same stale-announcement defect the
+ * toast half avoids by clearing on hide.
+ */
+function announceRelayCue(intent: string): void {
+  const now = Date.now();
+  if (
+    intent === lastRelayCueAnnouncedIntent &&
+    now - lastRelayCueAnnouncedAt < RELAY_CUE_THROTTLE_MS
+  ) {
+    return;
+  }
+  lastRelayCueAnnouncedAt = now;
+  lastRelayCueAnnouncedIntent = intent;
+  // `announceToast` cancels any retraction still pending, so the timer
+  // armed here is always the only one in flight.
+  announceToast(`⚠ ${intent} — not delivered`, 'error');
+  relayCueAnnounceTimer = window.setTimeout(() => {
+    relayCueAnnounceTimer = undefined;
+    retractRelayCueAnnouncement();
+  }, RELAY_CUE_ANNOUNCE_TTL_MS);
+}
+
+/**
+ * Take a spoken cue back down once it has been heard.
+ *
+ * Unconditional, because by the time it runs the region can only hold
+ * this cue's own sentence or nothing at all: every other write to the
+ * region goes through {@link announceToast}, which cancels this
+ * retraction before it speaks.
+ *
+ * That cancellation is the whole mechanism — comparing text here could
+ * not substitute for it. The pulse cue and the fallback cue toast build
+ * their sentences from the SAME template, so for one intent the two are
+ * character-identical and no comparison can tell a dead cue from a live
+ * toast.
+ */
+function retractRelayCueAnnouncement(): void {
+  if (typeof document === 'undefined') return;
+  const regions = ensureToastAnnouncer(document);
+  if (regions === null) return;
+  regions.assertive.textContent = '';
+}
+
+/**
  * The dead-zone cue (ggui#442): the smallest honest "that did nothing"
  * signal, for a gesture on a host already known — and already
  * explained — to be relay-incapable.
  *
  * Component-agnostic by construction. It pulses whatever the user
  * focused without knowing what that is, and falls back to the toast
- * primitive when there is nothing to pulse.
+ * primitive when there is nothing to pulse. Either shape also SPEAKS
+ * (ggui#447) — the pulse via {@link announceRelayCue}, the fallback via
+ * the toast primitive's own announcement.
  */
 function showPostDismissalCue(intent: string): void {
   if (typeof document === 'undefined') return;
@@ -2269,6 +2614,7 @@ function showPostDismissalCue(intent: string): void {
     if (target.classList.contains(RELAY_CUE_CLASS)) return;
     ensureRelayCueStyle();
     target.classList.add(RELAY_CUE_CLASS);
+    announceRelayCue(intent);
     // Both cleanup routes cancel the other. Without the `clearTimeout`,
     // a pulse ended early by `animationend` leaves its timer armed, and
     // that timer later strips whatever class is on the element THEN —
@@ -2290,7 +2636,7 @@ function showPostDismissalCue(intent: string): void {
     return;
   }
   const now = Date.now();
-  if (now - lastRelayCueToastAt < RELAY_CUE_TOAST_THROTTLE_MS) return;
+  if (now - lastRelayCueToastAt < RELAY_CUE_THROTTLE_MS) return;
   lastRelayCueToastAt = now;
   // The toast primitive's auto-dismissing variant — this is a cue, not
   // a second explanation, so it must clear itself. Throttled because a
@@ -2430,7 +2776,7 @@ export function dispatchSubmitAction(args: {
       // gone, so the state that armed the cue goes with it. A later
       // re-latch starts from a clean slate.
       relayNoticeDismissed = false;
-      lastRelayCueToastAt = 0;
+      resetRelayCueThrottles();
       postObservabilityToParent({
         kind: 'relay-incapability',
         state: 'cleared',
@@ -2529,7 +2875,7 @@ export function dispatchSubmitAction(args: {
         // route — kept because the state belongs to THIS notice, and a
         // future second latch-set path shouldn't have to know that.
         relayNoticeDismissed = false;
-        lastRelayCueToastAt = 0;
+        resetRelayCueThrottles();
         showActionToast(
           'This host cannot relay actions to the agent — interactive controls will not work here.',
           'action_required',
