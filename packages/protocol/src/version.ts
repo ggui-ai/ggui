@@ -90,6 +90,11 @@
  * `ggui_emit` obligations stay kit-invisible and this entry closes
  * nothing for them.
  *
+ * This entry's earlier text made the package-version decision
+ * CONDITIONAL on that catalog landing. It has landed, so the condition
+ * is discharged — resolved in the package-version paragraph below
+ * rather than left standing as an open conditional.
+ *
  * Five things stay ungraded on purpose and MUST NOT be read as
  * obligations: the ORDER in which a substrate-less server answers
  * NOT_SUPPORTED; `detail` wording on any code; the NOT_FOUND message
@@ -101,18 +106,27 @@
  * non-conformant. On that last one the law is classification-only:
  * such a URI MUST NOT carry one of the four codes on `error.data.code`.
  *
- * Package version: this surface warrants a MINOR — a new closed enum,
- * a new canonical number, and a read contract the kit can now decide,
- * with no prior fixture invalidated. The bump is NOT taken in this
- * entry. Every `@ggui-ai/*` package carries one wave version, so this
- * package's number moves when the wave's does; the classification here
- * is the decision, and executing it belongs to the release owner at
- * the next wave cut. The kit's own delta rides the same wave and the
- * same reasoning, with one thing worth saying plainly rather than
- * calling it "purely additive": its `parseCase` rejects unknown keys,
- * so a case file with a typo'd key throws instead of being quietly
- * ignored. That strictness is free on a sub-module that has no prior
- * published version — nothing can be built against it yet — but
+ * Package version — the classification is MADE here, not deferred.
+ * The resource-read surface and the new canonical code are a MINOR for
+ * the `@ggui-ai/*` wave: additive under the version policy's minor rule
+ * (every fixture that passed against the current wave still passes; the
+ * delta is new surface), pre-1.0 and pre-launch. TWO packages carry
+ * minor-class changes into that wave — `@ggui-ai/protocol` (the closed
+ * enum, the canonical number, the projection) and
+ * `@ggui-ai/protocol-conformance` (the catalog that decides them).
+ *
+ * What is deferred is only the mechanical write. Every `@ggui-ai/*`
+ * package carries ONE wave version, and a wave cut moves all of them to
+ * it in a single commit — no package's number can move on its own — so
+ * the release owner takes both bumps together at the next cut. One
+ * deferral, one owner, two named packages. Nothing about what the
+ * change IS remains open.
+ *
+ * On the kit's half, one thing is worth saying plainly rather than
+ * calling its delta "purely additive": `parseCase` rejects unknown
+ * keys, so a case file with a typo'd key throws instead of being
+ * quietly ignored. That strictness is free on a sub-module with no
+ * prior published version — nothing can be built against it yet — but
  * extending it over the existing fixture catalog would be a MAJOR, not
  * a minor, and must be adjudicated as one.
  *
