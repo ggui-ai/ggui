@@ -1164,7 +1164,9 @@ export interface GguiRenderResourceTemplateOptions {
    * placeholder shell — there is no longer one to return. It removes
    * the third resolution, so a read that neither the row nor a re-mint
    * can serve fails typed: `NOT_FOUND`, or `NOT_SUPPORTED` on a
-   * deployment that also keeps no durable record. Deployments serving
+   * deployment that also keeps no durable record, or `NOT_MOUNTABLE`
+   * where the row is the caller's own and simply has no component yet.
+   * Deployments serving
    * more than one tenant from one registry scope are the reason the
    * option exists at all: the fallback discloses whether a blueprint
    * key exists under that scope, so leave it unset if that is not
@@ -1331,10 +1333,14 @@ function pickComponentFromGguiSession(render: GguiSession | null | undefined): R
  *
  * The obligation covers outcomes this server can DECIDE. A malfunction
  * still reaches the caller as an internal error (`-32603`) carrying
- * none of the four codes: a store that faults mid-read, or a template
- * wired with an empty `runtimeUrl`. That is deliberate — `-32603` says
- * "something is broken here", which is exactly what those are and what
- * the four codes must never be diluted into claiming.
+ * none of the four codes: a template wired with an empty `runtimeUrl`,
+ * or a delivery channel that faults **and leaves the read with no other
+ * channel to mount through**. A fault the read survives — the usual
+ * case on a deployment wiring both channels — is not an outcome at all;
+ * the render mounts through whatever is left. That split is deliberate:
+ * `-32603` says "something is broken here", which the four codes must
+ * never be diluted into claiming, and equally must not be raised over a
+ * blip the server routed around.
  *
  * Three resolutions are tried, in this order, and any of them can
  * produce the mount:
@@ -1751,31 +1757,48 @@ export function registerGguiRenderResourceTemplate(
     const view = deriveRenderMeta(picked.source);
     const isSystem = picked.kind !== undefined;
 
+    // A fault on EITHER delivery channel, held rather than acted on.
+    //
+    // Two things have to stay true at once. A channel that faulted must
+    // never be reported as a channel that was never wired — that is
+    // NOT_MOUNTABLE, which rides -32006 and tells the host the outcome
+    // is deterministic and a retry cannot succeed, when a store having
+    // a bad moment is the one thing that is not. But most deployments
+    // wire BOTH channels, and there a fault on one is survivable: the
+    // other still carries the mount, and failing the read would throw
+    // away a perfectly good delivery path.
+    //
+    // So the fault is remembered here and consulted at the mount-mode
+    // gate, which is the only place that knows whether anything
+    // survived. If a channel did, the render mounts through it and the
+    // fault costs the read nothing. If none did, the fault is thrown in
+    // place of NOT_MOUNTABLE and reaches the caller as an internal
+    // error — the honest answer for a blip, and the same policy the
+    // re-mint path applies to its own stores.
+    //
+    // Wrapped in an object so a thrown `undefined` is still recorded as
+    // a fault, and `??=` keeps the FIRST one when both channels break.
+    let channelFault: { readonly cause: unknown } | undefined;
+
     // Static-component delivery via codeUrl. The compiled-component
     // path mints a content-addressable URL the iframe-runtime fetches
     // at boot. When codeStore + codeBaseUrl aren't wired this channel
     // simply does not exist, and the live channel below has to carry
     // the mount.
-    //
-    // A FAULT here is not the same thing as the channel being absent,
-    // and is deliberately not caught. Swallowing it would leave
-    // `codeUrl` undefined, which the mount-mode gate reads as "no
-    // static channel is wired" and reports as NOT_MOUNTABLE — a code
-    // that rides -32006 and tells the host the outcome is deterministic
-    // and a retry cannot succeed. A store having a bad moment is the
-    // one thing that is NOT deterministic. Letting it propagate reaches
-    // the caller as an internal error, which is the honest answer for a
-    // blip and the same policy the re-mint path applies to its stores.
     let codeUrl: string | undefined;
     let codeHash: string | undefined;
     let contractHash: string | undefined;
     let validatorsUrl: string | undefined;
     if (!isSystem && opts.codeStore && opts.codeBaseUrl) {
-      const hash = opts.codeStore.hashOf(picked.componentCode);
-      await opts.codeStore.put(hash, picked.componentCode);
-      codeHash = hash;
-      const base = opts.codeBaseUrl.replace(/\/$/, "");
-      codeUrl = `${base}/code/${hash}.js`;
+      try {
+        const hash = opts.codeStore.hashOf(picked.componentCode);
+        await opts.codeStore.put(hash, picked.componentCode);
+        codeHash = hash;
+        const base = opts.codeBaseUrl.replace(/\/$/, "");
+        codeUrl = `${base}/code/${hash}.js`;
+      } catch (cause) {
+        channelFault ??= { cause };
+      }
       // Content-addressable contract-validator bundle (#109).
       try {
         const bundle = await deriveContractBundle(picked.source);
@@ -1828,22 +1851,25 @@ export function registerGguiRenderResourceTemplate(
     // `resources/read` after every update tool result to see new
     // state).
     //
-    // A mint FAULT propagates, for the same reason the code-store write
-    // above does: it would otherwise leave `wsToken` undefined, which
-    // the gate cannot tell from "no live channel is wired" and would
-    // report as a deterministic NOT_MOUNTABLE.
+    // A mint FAULT is held the same way the code-store write above is,
+    // for the same reason: `wsToken` left undefined is indistinguishable
+    // from "no live channel is wired" by the time the gate reads it.
     let wsUrl: string | undefined;
     let wsToken: string | undefined;
     let wsExpiresAt: string | undefined;
     if (opts.mintWsToken) {
-      const minted = opts.mintWsToken(sessionId, accessibleStored.appId);
-      wsUrl = minted.wsUrl;
-      wsToken = minted.token;
-      // Forward the token TTL so the iframe-runtime can degrade to
-      // static-only mode once it lapses (parity with the render-tool
-      // slice projection, render.ts). Dropping it left the live-mode
-      // resource shell unable to know when its WS token expired.
-      wsExpiresAt = minted.expiresAt;
+      try {
+        const minted = opts.mintWsToken(sessionId, accessibleStored.appId);
+        wsUrl = minted.wsUrl;
+        wsToken = minted.token;
+        // Forward the token TTL so the iframe-runtime can degrade to
+        // static-only mode once it lapses (parity with the render-tool
+        // slice projection, render.ts). Dropping it left the live-mode
+        // resource shell unable to know when its WS token expired.
+        wsExpiresAt = minted.expiresAt;
+      } catch (cause) {
+        channelFault ??= { cause };
+      }
     }
 
     // Mount-mode gate (below the live-channel mint): a compiled
@@ -1858,7 +1884,15 @@ export function registerGguiRenderResourceTemplate(
     // condition — that would reach the caller as an untyped internal
     // error announcing a malfunction where the server is behaving
     // exactly as configured.
+    //
+    // Reaching here having FAULTED is the one case that is not the
+    // server behaving as configured, and it is the only place with
+    // enough information to tell: a fault matters exactly when nothing
+    // else produced a channel. Anywhere above this line the same fault
+    // may have been survivable, and on a deployment wiring both
+    // channels it usually is.
     if (!isSystem && codeUrl === undefined && (wsUrl === undefined || wsToken === undefined)) {
+      if (channelFault !== undefined) throw channelFault.cause;
       throw new ResourceReadFailure(NO_DELIVERY_CHANNEL_FAILURE);
     }
 

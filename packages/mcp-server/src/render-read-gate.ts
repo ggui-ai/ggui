@@ -44,9 +44,15 @@ export interface RenderReadRowView {
  *     fetching on a user's behalf), builder/anonymous single-tenant
  *     flows, and rows with no subject.
  *
- * Deny is surfaced by the CALLER as the loading shell, byte-identical
- * to the missing-row response — reads must not oracle which sessionIds
- * exist.
+ * Deny is surfaced by the CALLER byte-identically to a missing row —
+ * reads must not oracle which sessionIds exist. This function only
+ * returns the boolean; making the two indistinguishable is the caller's
+ * obligation, and it is a real one, because "refused" and "never
+ * existed" travel completely different code paths to get there. The
+ * resource handler discharges it by collapsing a refusal to "absent"
+ * and letting every downstream branch run as it would for a locator
+ * that never existed, so both arrive at the same typed failure with the
+ * same bytes.
  */
 export function renderReadAllowed(
   row: RenderReadRowView,

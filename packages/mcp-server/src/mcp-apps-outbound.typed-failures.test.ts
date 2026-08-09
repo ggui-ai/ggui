@@ -65,6 +65,8 @@ const BLUEPRINT_ID = "bp_00000000-0000-4000-8000-000000000002";
 const CONTRACT_KEY = "fedcba9876543210";
 const DURABLE_CODE = "export default function Durable(){return null;}";
 const LIVE_ROW_CODE = "export default function LiveRow(){return null;}";
+/** Fixed id for the fault fixtures, which seed their own row at boot. */
+const SEEDED_SESSION_ID = "11111111-2222-4333-8444-555555555555";
 
 const silentLogger = {
   info: () => undefined,
@@ -812,83 +814,132 @@ describe("resource read — a faulting channel is a malfunction, not a verdict",
    */
   const INTERNAL_ERROR = -32603;
 
-  it("surfaces a faulting code-store write as an internal error", async () => {
+  /**
+   * Boot a server whose channels are wired but one of which is broken.
+   * `channels` says which are bound at all; `fault` says which of them
+   * throws when used. The pair is the whole point: "wired and faulted"
+   * and "never wired" have to stay distinguishable, and on a server
+   * wiring BOTH channels a fault on one must cost the read nothing.
+   */
+  async function bootWithFault(options: {
+    readonly channels: "both" | "staticOnly" | "liveOnly";
+    readonly fault: "codeStore" | "mintWsToken";
+  }): Promise<{ readonly client: Client; readonly close: () => Promise<void> }> {
     const renderStore = new InMemoryGguiSessionStore();
     const server = new McpServer({ name: "fault-test", version: "0.0.1" });
-    const faultingCodeStore = new InMemoryCodeStore();
-    // Wired, and broken — not the same as absent.
-    faultingCodeStore.put = async (): Promise<void> => {
-      throw new Error("code store unavailable");
-    };
+    const codeStore = new InMemoryCodeStore();
+    if (options.fault === "codeStore") {
+      codeStore.put = async (): Promise<void> => {
+        throw new Error("code store unavailable");
+      };
+    }
+    const wantsStatic = options.channels !== "liveOnly";
+    const wantsLive = options.channels !== "staticOnly";
     registerGguiRenderResourceTemplate(server, {
       renderStore,
       runtimeUrl: "https://runtime.example/bundle.js",
       getContext: () => ownerCtx,
       logger: silentLogger,
-      codeStore: faultingCodeStore,
-      codeBaseUrl: "https://code.example",
+      ...(wantsStatic ? { codeStore, codeBaseUrl: "https://code.example" } : {}),
+      ...(wantsLive
+        ? {
+            mintWsToken: (sessionId: string, appId: string) => {
+              if (options.fault === "mintWsToken") throw new Error("token signer unavailable");
+              return {
+                wsUrl: `wss://live.example/${appId}`,
+                token: `ws-token-for-${sessionId}`,
+                expiresAt: "2030-01-01T00:00:00.000Z",
+              };
+            },
+          }
+        : {}),
     });
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
     const client = new Client({ name: "fault-client", version: "0.0.1" });
     await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
-    try {
-      const sessionId = randomUUID();
-      const live: ComponentGguiSession = {
-        type: "component",
-        id: sessionId,
-        appId: OWNER_APP_ID,
-        componentCode: LIVE_ROW_CODE,
-        eventSequence: 0,
-        createdAt: 1_700_000_000_000,
-        lastActivityAt: 1_700_000_000_000,
-        expiresAt: 1_900_000_000_000,
-      };
-      await renderStore.commit({ render: live, appId: OWNER_APP_ID });
+    const sessionId = SEEDED_SESSION_ID;
+    const live: ComponentGguiSession = {
+      type: "component",
+      id: sessionId,
+      appId: OWNER_APP_ID,
+      componentCode: LIVE_ROW_CODE,
+      eventSequence: 0,
+      createdAt: 1_700_000_000_000,
+      lastActivityAt: 1_700_000_000_000,
+      expiresAt: 1_900_000_000_000,
+    };
+    await renderStore.commit({ render: live, appId: OWNER_APP_ID });
+    return {
+      client,
+      close: async () => {
+        await client.close();
+        await server.close();
+      },
+    };
+  }
 
-      const failure = await readFailure(client, `${RESOURCE_URI}/${sessionId}/${CONTRACT_KEY}`);
-      expect(failure.code).toBe(INTERNAL_ERROR);
-      expect(failure.data).toBeUndefined();
+  it("mounts through the live channel when the code store faults", async () => {
+    // Both channels wired. The static one broke; the live one did not,
+    // so the read has a delivery path and must use it. Failing here
+    // would throw away a working channel over a fault that cost the
+    // render nothing.
+    const f = await bootWithFault({ channels: "both", fault: "codeStore" });
+    try {
+      const read = await f.client.readResource({
+        uri: `${RESOURCE_URI}/${SEEDED_SESSION_ID}/${CONTRACT_KEY}`,
+      });
+      const meta = parseMeta(shellText(read.contents));
+      expect(meta.wsToken).toBe(`ws-token-for-${SEEDED_SESSION_ID}`);
+      // And it really did lose the static channel, so the degrade is
+      // the thing being asserted, not a happy path in disguise.
+      expect(meta.codeUrl).toBeUndefined();
     } finally {
-      await client.close();
-      await server.close();
+      await f.close();
     }
   });
 
-  it("surfaces a faulting live-channel mint as an internal error", async () => {
-    const renderStore = new InMemoryGguiSessionStore();
-    const server = new McpServer({ name: "fault-test-2", version: "0.0.1" });
-    registerGguiRenderResourceTemplate(server, {
-      renderStore,
-      runtimeUrl: "https://runtime.example/bundle.js",
-      getContext: () => ownerCtx,
-      logger: silentLogger,
-      mintWsToken: () => {
-        throw new Error("token signer unavailable");
-      },
-    });
-    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
-    const client = new Client({ name: "fault-client-2", version: "0.0.1" });
-    await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+  it("mounts through the static channel when the live-channel mint faults", async () => {
+    const f = await bootWithFault({ channels: "both", fault: "mintWsToken" });
     try {
-      const sessionId = randomUUID();
-      const live: ComponentGguiSession = {
-        type: "component",
-        id: sessionId,
-        appId: OWNER_APP_ID,
-        componentCode: LIVE_ROW_CODE,
-        eventSequence: 0,
-        createdAt: 1_700_000_000_000,
-        lastActivityAt: 1_700_000_000_000,
-        expiresAt: 1_900_000_000_000,
-      };
-      await renderStore.commit({ render: live, appId: OWNER_APP_ID });
+      const read = await f.client.readResource({
+        uri: `${RESOURCE_URI}/${SEEDED_SESSION_ID}/${CONTRACT_KEY}`,
+      });
+      const meta = parseMeta(shellText(read.contents));
+      expect(meta.codeUrl).toContain("/code/");
+      expect(meta.wsToken).toBeUndefined();
+    } finally {
+      await f.close();
+    }
+  });
 
-      const failure = await readFailure(client, `${RESOURCE_URI}/${sessionId}/${CONTRACT_KEY}`);
+  it("surfaces a code-store fault as an internal error when it is the only channel", async () => {
+    // The other half of the pair above. Nothing survived, so the fault
+    // IS the outcome — and it must not be dressed up as the
+    // deterministic "no channel is wired" verdict.
+    const f = await bootWithFault({ channels: "staticOnly", fault: "codeStore" });
+    try {
+      const failure = await readFailure(
+        f.client,
+        `${RESOURCE_URI}/${SEEDED_SESSION_ID}/${CONTRACT_KEY}`,
+      );
       expect(failure.code).toBe(INTERNAL_ERROR);
       expect(failure.data).toBeUndefined();
     } finally {
-      await client.close();
-      await server.close();
+      await f.close();
+    }
+  });
+
+  it("surfaces a live-mint fault as an internal error when it is the only channel", async () => {
+    const f = await bootWithFault({ channels: "liveOnly", fault: "mintWsToken" });
+    try {
+      const failure = await readFailure(
+        f.client,
+        `${RESOURCE_URI}/${SEEDED_SESSION_ID}/${CONTRACT_KEY}`,
+      );
+      expect(failure.code).toBe(INTERNAL_ERROR);
+      expect(failure.data).toBeUndefined();
+    } finally {
+      await f.close();
     }
   });
 });

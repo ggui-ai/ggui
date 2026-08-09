@@ -4410,14 +4410,21 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
               : {}),
             // Resume contract — registry-only fallback. Wired
             // when the blueprint vector store is available so the
-            // resource handler can render a render-evicted
-            // rehydrate from the registered blueprint instead of
-            // the dead loading shell. `defaultAppIdFallback`
-            // bounds the registry lookup to the OSS single-tenant
-            // identity; multi-tenant deployments leave this
-            // undefined to fail-safe back to the loading shell
-            // (no way to derive the right tenant from a missing
-            // render).
+            // resource handler can rehydrate a render-evicted
+            // locator from the registered blueprint instead of
+            // failing the read. `defaultAppIdFallback` bounds the
+            // registry lookup to the OSS single-tenant identity.
+            //
+            // Leaving it undefined does not soften the response —
+            // there is no placeholder shell to fall back to any more.
+            // It removes the fallback, and reads it would have served
+            // fail typed instead. The reason to leave it undefined is
+            // that the lookup answers "a blueprint with this key
+            // exists under this scope" to whoever asks, which a
+            // deployment serving several tenants from one scope may
+            // not want, and which it could not scope correctly anyway
+            // (a missing render carries no way to derive whose it
+            // was).
             ...(vectors
               ? {
                   vectorStore: vectors,
@@ -4430,9 +4437,15 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
                 }
               : {}),
             // T3-1 (2026-05-13) — content-addressable code delivery
-            // for the MCP-resource shell. Without these the handler
-            // emits the loading shell for compiled components; with
-            // them, it inlines a `codeUrl` the iframe-runtime fetches.
+            // for the MCP-resource shell. One of the handler's two
+            // delivery channels: with these it inlines a `codeUrl` the
+            // iframe-runtime fetches, and `mintWsToken` below is the
+            // other. A compiled component needs at least one, and a
+            // read that resolves a render this server can deliver by
+            // neither fails NOT_MOUNTABLE rather than returning a
+            // shell that would never paint. Wiring both (the shape
+            // this factory produces) also means a fault on one
+            // degrades to the other instead of failing the read.
             ...(opts.codeStore && opts.publicBaseUrl
               ? {
                   codeStore: opts.codeStore,
