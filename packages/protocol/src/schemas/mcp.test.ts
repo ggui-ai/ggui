@@ -20,6 +20,7 @@ import {
   handshakeInputSchema,
   handshakeOutputSchema,
   renderCacheMarkerSchema,
+  renderErrorCodeSchema,
   renderInputSchema,
   renderOutputSchema,
   resourceReadErrorCodeSchema,
@@ -602,6 +603,52 @@ describe('ggui_update', () => {
 
   it('rejects an update output missing resourceUri', () => {
     expect(() => updateOutputSchema.parse({ sessionId: 'render_1', updated: true })).toThrow();
+  });
+});
+
+describe('renderErrorCodeSchema', () => {
+  it('is the closed four-value set, in declaration order', () => {
+    expect(renderErrorCodeSchema.options).toEqual([
+      'PRODUCTION_FAILED',
+      'VALIDATION_ERROR',
+      'NO_PLATFORM_KEY',
+      'NO_CREDENTIALS',
+    ]);
+  });
+
+  it('accepts each member', () => {
+    for (const code of renderErrorCodeSchema.options) {
+      expect(renderErrorCodeSchema.parse(code)).toBe(code);
+    }
+  });
+
+  // The two failure surfaces are neighbours in this file and in the
+  // spec, which is exactly why they are pinned as disjoint: a
+  // `ggui_render` tool call that ran and failed classifies here, a
+  // `resources/read` that cannot return a mount classifies in
+  // `resourceReadErrorCodeSchema`, and a code that validated on both
+  // would make the classification meaningless to a host branching on
+  // it. Spelled as literals rather than read off the sibling schema's
+  // `.options` so the pin cannot be satisfied by both enums drifting
+  // together.
+  //
+  // `safeParse` rather than `expect(...).toThrow()` on purpose: a
+  // missing or renamed schema makes `.parse` throw a TypeError, which
+  // `toThrow()` happily accepts — the rejection pin would pass while
+  // proving nothing.
+  it('rejects every resource-read code — the two surfaces are disjoint', () => {
+    for (const code of [
+      'NOT_FOUND',
+      'BLUEPRINT_UNRESOLVABLE',
+      'NOT_SUPPORTED',
+      'NOT_MOUNTABLE',
+    ]) {
+      expect(renderErrorCodeSchema.safeParse(code).success).toBe(false);
+    }
+  });
+
+  it('rejects a lowercase spelling — the wire form is UPPER_SNAKE', () => {
+    expect(renderErrorCodeSchema.safeParse('production_failed').success).toBe(false);
   });
 });
 

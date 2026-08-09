@@ -1542,10 +1542,18 @@ export function registerGguiRenderResourceTemplate(
    *
    * A store may keep a row readable past its expiry — the reaper runs
    * on its own schedule, and some stamp the deletion deadline with a
-   * grace window on top. A read landing in that window mounts the row
-   * and mints a live-channel token against it, and the token then
-   * addresses a render the next reaper pass deletes. Extending here
-   * keeps the token's promise rather than weakening the token.
+   * grace window on top. A read landing in that window is a caller
+   * entitled to the row proving they are actively using it, which is
+   * the same signal every other touch-and-extend path acts on, so the
+   * row gets its lifetime back.
+   *
+   * The live-channel token is the SHARPEST case, not the only one: a
+   * read that mints one turns "the row dies soon" into "the thing I
+   * was just handed outlives what it points at". But a deployment with
+   * no minter wired reaches this too, and its row earns the same
+   * extension — the read was just as real. Widening this to any active
+   * use is why the call site sits ahead of the mint rather than inside
+   * it.
    *
    * CONDITIONAL, and that is the load-bearing half: a resource read is
    * the hottest path this handler has, so extending a row that is
