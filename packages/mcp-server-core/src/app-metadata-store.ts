@@ -173,6 +173,15 @@ export interface App {
 export interface ComposeAppInput {
   readonly id: string;
   readonly gadgets?: readonly GadgetDescriptor[];
+  /**
+   * Gadget rows added through the host's install surface (e.g. a web
+   * console). Input-only source: it folds into `App.gadgets` via
+   * `resolveAppGadgets(gadgets, installed)` with precedence
+   * floor < installed < declared — the app's own declared config wins
+   * on a `package` collision. Omitted ⇒ two-source resolution exactly
+   * as before.
+   */
+  readonly installed?: readonly GadgetDescriptor[];
   readonly defaultThemeId?: string;
   readonly availableThemeIds?: readonly string[];
   readonly blueprintSearchConfig?: AppBlueprintSearchConfig;
@@ -210,7 +219,7 @@ export interface ComposeAppInput {
 export function composeApp(input: ComposeAppInput): App {
   return {
     id: input.id,
-    gadgets: resolveAppGadgets(input.gadgets),
+    gadgets: resolveAppGadgets(input.gadgets, input.installed),
     ...(input.defaultThemeId !== undefined
       ? { defaultThemeId: input.defaultThemeId }
       : {}),

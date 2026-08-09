@@ -266,6 +266,44 @@ describe('InMemoryAppMetadataStore', () => {
     });
   });
 
+  // [D2] — installed-registration path (web-install parity for OSS).
+  describe('installed rows on register()', () => {
+    it('layers installed rows over the floor on get()', async () => {
+      const store = new InMemoryAppMetadataStore();
+      const inst = [makeGadget({ hook: 'useWeb', package: '@web/only' })];
+      store.register('app-1', { installed: inst });
+      const app = await store.get('app-1');
+      expect(app?.gadgets.map((g) => g.package)).toEqual(
+        expect.arrayContaining([STDLIB_PKG, '@web/only']),
+      );
+      expect(app?.gadgets).toHaveLength(STDLIB_GADGETS.length + 1);
+    });
+
+    it('declared (gadgets) beats installed on the same package', async () => {
+      const store = new InMemoryAppMetadataStore();
+      store.register('app-1', {
+        gadgets: [
+          makeGadget({ hook: 'useX', package: '@acme/maps', version: '2.0.0' }),
+        ],
+        installed: [
+          makeGadget({ hook: 'useX', package: '@acme/maps', version: '1.0.0' }),
+        ],
+      });
+      const app = await store.get('app-1');
+      const rows = app?.gadgets.filter((g) => g.package === '@acme/maps') ?? [];
+      expect(rows).toHaveLength(1);
+      expect(rows[0].version).toBe('2.0.0');
+    });
+
+    it('validates installed rows at the store boundary', () => {
+      const store = new InMemoryAppMetadataStore();
+      const bad = { package: '@acme/x', version: '0.0.1' } as GadgetDescriptor;
+      expect(() => store.register('app-1', { installed: [bad] })).toThrow(
+        /gadget\[0\] \(@acme\/x@0\.0\.1, source=register-installed\) failed schema validation/,
+      );
+    });
+  });
+
   // Schema-hardening (Bucket A, 2026-05-18): store-write boundary
   // re-validates every gadget against `strictGadgetDescriptorSchema`.
   // Programmatic callers that hand a malformed entry now fail loudly

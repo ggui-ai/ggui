@@ -103,6 +103,47 @@ describe('composeApp', () => {
     );
   });
 
+  // [D2] — installed source threads through to resolveAppGadgets.
+  describe('installed source (web write path)', () => {
+    const mk = (pkg: string, version = '1.0.0'): GadgetDescriptor => ({
+      package: pkg,
+      version,
+      exports: [{ hook: 'useX' }],
+    });
+
+    it('installed-only layers on top of the stdlib floor', () => {
+      const app = composeApp({ id: 'a', installed: [mk('@web/charts')] });
+      expect(app.gadgets.map((g) => g.package)).toEqual(
+        expect.arrayContaining([STDLIB_GADGETS[0].package, '@web/charts']),
+      );
+      expect(app.gadgets).toHaveLength(STDLIB_GADGETS.length + 1);
+    });
+
+    it('declared beats installed on the same package (declared wins)', () => {
+      const app = composeApp({
+        id: 'a',
+        gadgets: [mk('@acme/maps', '2.0.0')],
+        installed: [mk('@acme/maps', '1.0.0')],
+      });
+      const rows = app.gadgets.filter((g) => g.package === '@acme/maps');
+      expect(rows).toHaveLength(1);
+      expect(rows[0].version).toBe('2.0.0');
+    });
+
+    it('disjoint declared + installed both union over the floor', () => {
+      const app = composeApp({
+        id: 'a',
+        gadgets: [mk('@dec/only')],
+        installed: [mk('@inst/only')],
+      });
+      expect(app.gadgets).toHaveLength(STDLIB_GADGETS.length + 2);
+    });
+
+    it('omitting installed keeps the exact single-source behavior', () => {
+      expect(composeApp({ id: 'a' }).gadgets).toBe(STDLIB_GADGETS);
+    });
+  });
+
   // 2b M0.3 — generation read path
   it('passes generation through when supplied', () => {
     const generation: AppGeneration = {

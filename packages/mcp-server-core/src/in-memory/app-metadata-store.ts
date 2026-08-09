@@ -43,7 +43,11 @@ import {
  */
 function assertGadgetsValid(
   gadgets: readonly GadgetDescriptor[] | undefined,
-  source: 'register-input' | 'register-defaults' | 'get-defaults',
+  source:
+    | 'register-input'
+    | 'register-installed'
+    | 'register-defaults'
+    | 'get-defaults',
 ): readonly GadgetDescriptor[] | undefined {
   if (!gadgets) return gadgets;
   gadgets.forEach((entry, index) => {
@@ -96,6 +100,14 @@ function assertGadgetsValid(
  */
 export interface InMemoryAppRegisterInput {
   readonly gadgets?: readonly GadgetDescriptor[];
+  /**
+   * Gadget rows added through the host's install surface. Layered
+   * between the stdlib floor and the declared `gadgets` list by
+   * `resolveAppGadgets` (floor < installed < declared — declared wins
+   * on a `package` collision). OSS parity path for hosted web installs;
+   * validated at this boundary exactly like `gadgets`.
+   */
+  readonly installed?: readonly GadgetDescriptor[];
   readonly defaultThemeId?: string;
   readonly availableThemeIds?: readonly string[];
   /**
@@ -182,12 +194,14 @@ export class InMemoryAppMetadataStore implements AppMetadataStore {
     // free to do per-instance default-merging while every other call
     // site composes from a single source of truth.
     assertGadgetsValid(input.gadgets, 'register-input');
+    assertGadgetsValid(input.installed, 'register-installed');
     const resolvedDisplayMode =
       input.defaultDisplayMode ?? this.defaults.defaultDisplayMode;
     const composed = composeApp({
       id: appId,
       gadgets:
         input.gadgets ?? this.defaults.defaultGadgets,
+      ...(input.installed !== undefined ? { installed: input.installed } : {}),
       defaultThemeId:
         input.defaultThemeId ?? this.defaults.defaultThemeId,
       availableThemeIds:
