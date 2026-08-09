@@ -66,14 +66,24 @@
  *
  * **Failure mode:**
  * - On `put` failure (disk full, S3 5xx), the producer MAY proceed
- *   without `codeUrl` — the response falls back to inline base64
- *   `componentCode`.
- * - On `get` failure for an existing hash, the route returns 500;
- *   iframe runtime surfaces a `BUNDLE_FETCH_FAILED` boot failure.
+ *   without `codeUrl`. Nothing catches the response: a bootstrap
+ *   mounts on `codeUrl`, on a system-card `kind`, or on the live trio
+ *   (`wsUrl` + `wsToken`), and a compiled-component render can only
+ *   ever use the first or the third. So what survives is the live
+ *   trio when the deployment mints one, and otherwise a bootstrap
+ *   with no mount mode at all. Because that difference is invisible
+ *   on the wire, a producer that proceeds MUST make the failure
+ *   observable — the reference producer emits
+ *   `render_code_write_failed` rather than swallowing it.
+ * - On `get` failure for an existing hash, the route returns 500. The
+ *   iframe runtime's static seed-fetch throws, and the boot outcome
+ *   depends on the same trio: with it, the runtime warns and lets the
+ *   live channel deliver the render; without it, the failure is
+ *   terminal and surfaces as `UI_INITIALIZE_FAILED`.
  * - Missing hash on the read path (`get` returns `null`) is 404 — a
  *   normal outcome (server restart with in-memory store, expired
- *   filesystem cache, etc.); the iframe runtime falls back to
- *   inline `componentCode` if the bootstrap carries one.
+ *   filesystem cache, etc.). The runtime treats it exactly like the
+ *   500 above: live trio ⇒ degraded boot, no live trio ⇒ terminal.
  * - A removed hash reads exactly like one that was never stored: `get`
  *   returns `null`, the route 404s. `delete` therefore has no distinct
  *   read-side failure mode, and callers cannot tell removal from a
@@ -91,12 +101,23 @@
  *   malformed-hash rejection) stays in the impl's own suite.
  * - Route-level: `code-route.test.ts` (`@ggui-ai/mcp-server`) asserts
  *   404 on a hash that was never `put` and 400 on a malformed one.
+ * - Producer-side: the put-failure obligation above is pinned by the
+ *   code-delivery suite in `render.test.ts`
+ *   (`@ggui-ai/mcp-server-handlers`) — a rejecting store leaves the
+ *   render succeeding, emits the named event, and stamps the
+ *   live-channel posture on it. Scope worth stating plainly, since an
+ *   unflagged gap reads as coverage: `runCodeStoreConformance` grades
+ *   STORES, not producers, so that pin binds the reference producer
+ *   in this repo. A third-party producer that swallows the rejection
+ *   instead is caught by review, not by the kit.
  *
  * ## Reference implementations
  *
  * - {@link InMemoryCodeStore} (`mcp-server-core/in-memory/code-store`):
- *   process-local Map. Tests + ephemeral OSS (the codeUrl is invalid
- *   after restart, but the inline-componentCode fallback covers that).
+ *   process-local Map. Tests + ephemeral deployments — every codeUrl
+ *   minted before a restart 404s after it, so a host holding an old
+ *   bootstrap re-resolves the render (which re-mints against the fresh
+ *   store) or falls back to the live channel.
  * - `FileSystemCodeStore` (`@ggui-ai/mcp-server`): node:fs-backed,
  *   default root `~/.ggui/code-cache/`. Survives `ggui serve` restart
  *   so claude.ai's iframe cache still resolves the URL after a kick.

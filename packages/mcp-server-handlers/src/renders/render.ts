@@ -104,6 +104,7 @@ import type {
   GenerationCacheHit,
 } from './generation-cache.js';
 import { assertNoDuplicateGadgetHooks } from './assert-no-duplicate-gadget-hooks.js';
+import { reportRenderCodeWriteFailed } from './code-delivery-events.js';
 import {
   backfillRenderIdentityBlueprintId,
   writeRenderIdentity,
@@ -636,10 +637,16 @@ export interface GguiRenderHandlerDeps extends RenderSliceMetaDeps {
    *
    * Absent = the bootstrap emits no codeUrl. The iframe mounts via
    * live mode (wsUrl+token) and receives the render — including
-   * componentCode — over the live-channel WS subscribe. Deployments
-   * that disable both codeStore AND live-mode cannot deliver a
-   * static-component renderable surface; pure agent-driven flows
-   * still work via the live-channel path.
+   * componentCode — over the live-channel WS subscribe. A deployment
+   * that binds neither this store nor {@link mintWsToken} emits a
+   * bootstrap with no mount mode at all: the only surface left is a
+   * host that resolves the render's `resourceUri`, which mints its
+   * own delivery channel on the read path.
+   *
+   * Present-but-failing lands in the same wire shape as absent, which
+   * is why it does not stay quiet: a rejected write emits
+   * `render_code_write_failed` and the render still succeeds. See
+   * `code-delivery-events.ts`.
    */
   readonly codeStore?: import('@ggui-ai/mcp-server-core').CodeStore;
 
@@ -1951,10 +1958,30 @@ export function createGguiRenderHandler(
       // several branches above (cache-hit, fresh generation, MCP Apps
       // inbound) — re-reading is simpler than threading a reference
       // through every branch and matches resultMeta's own pattern.
-      // Failures are silent: on a put error or a missing render we
-      // fall through with no codeUrl. Without codeUrl, the iframe
-      // falls back to live-mode (wsUrl+token) — the render is
-      // delivered via the live-channel WS subscribe.
+      //
+      // A store failure does NOT fail the render: the code is already
+      // generated and the row already committed. But nothing catches
+      // the envelope either — the guard above narrowed this to a
+      // compiled-component render, and `codeUrl` is the only STATIC
+      // delivery surface such a render has (the other static mode,
+      // system-card `kind`, is excluded by that same guard). What
+      // survives is deployment-shaped, and no arm of it is visible on
+      // the wire:
+      //
+      //   - `mintWsToken` wired ⇒ the slice still carries the live
+      //     trio, the iframe subscribes, and the WS delivers the
+      //     render body. Cost: the zero-round-trip first paint.
+      //   - A host that resolves `resourceUri` re-mints `codeUrl`
+      //     against this same store at READ time, so a transient
+      //     fault costs it nothing.
+      //   - Neither ⇒ this envelope's slice keeps `runtimeUrl` and no
+      //     mode discriminator, which hosts read as "not a mountable
+      //     ggui render".
+      //
+      // Hence the named event rather than a swallow — see
+      // `code-delivery-events.ts`. A render with no `componentCode`
+      // (the placeholder / system arms) is not a failure and emits
+      // nothing: there was never a body to deliver.
       let codeUrl: string | undefined;
       let codeHash: string | undefined;
       if (deps.codeStore && deps.codeBaseUrl) {
@@ -1974,8 +2001,17 @@ export function createGguiRenderHandler(
             const base = deps.codeBaseUrl.replace(/\/$/, '');
             codeUrl = `${base}/code/${hash}.js`;
           }
-        } catch {
-          // Silent — codeStore failure falls back to inline-base64 path.
+        } catch (err) {
+          // Named for the OUTCOME, not the call: a throwing
+          // `renderStore.get` or `hashOf` reaches here too, and the
+          // consequence is identical — this envelope has no codeUrl.
+          // `error` carries which one it was.
+          reportRenderCodeWriteFailed({
+            sessionId,
+            appId: ctx.appId,
+            liveChannelWired: deps.mintWsToken !== undefined,
+            cause: err,
+          });
         }
       }
 

@@ -118,6 +118,16 @@ export {
   type BlueprintDurabilityDeps,
   type BlueprintDurabilityEvent,
 } from "./blueprint-durability.js";
+// Content-addressable code-delivery channel. The event registry is
+// exported so every emitter of a lost `codeUrl` — here or in a
+// transport that mints one on its own read path — spells the name
+// from one place.
+export {
+  CODE_DELIVERY_EVENTS,
+  reportRenderCodeWriteFailed,
+  type CodeDeliveryEvent,
+  type RenderCodeWriteFailure,
+} from "./code-delivery-events.js";
 export {
   createGguiGetSessionHandler,
   type GetSessionHeartbeatResult,
