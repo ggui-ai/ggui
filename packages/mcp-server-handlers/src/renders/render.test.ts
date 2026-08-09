@@ -1879,12 +1879,14 @@ describe('createGguiRenderHandler — durable render identity (#430 slice 1)', (
 /**
  * Content-addressable code delivery — what a lost `codeUrl` costs.
  *
- * `codeUrl` is the only STATIC delivery channel a render envelope has:
- * a bootstrap mounts on `codeUrl`, on a system-card `kind`, or on the
- * live trio, and nothing sits behind any of them. So a rejected store
- * write does not fall back onto some second static path — it changes
- * what the envelope can do, in a way that is invisible on the wire
- * (the render reports success either way).
+ * `codeUrl` is the only STATIC delivery channel a compiled-component
+ * envelope has: a bootstrap mounts on `codeUrl`, on a system-card
+ * `kind`, or on the live trio, and nothing sits behind any of them
+ * (`kind` is static too, but the handler excludes system renders from
+ * this channel). So a rejected store write does not fall back onto
+ * some second static path — it changes what the envelope can do, in a
+ * way that is invisible on the wire (the render reports success
+ * either way).
  *
  * Three things are pinned. The DEGRADE: the render still succeeds and,
  * when the deployment mints live-channel credentials, the envelope is

@@ -1,12 +1,14 @@
 /**
  * Named events for the content-addressable code-delivery channel.
  *
- * `codeUrl` is the only STATIC delivery surface a render envelope has.
- * Nothing sits behind it: a bootstrap mounts on `codeUrl`, on a
- * system-card `kind`, or on the live trio (`wsUrl` + `wsToken`) — and
- * an envelope carrying none of the three reads to a host as "not a
- * mountable ggui render". So a failed `codeUrl` mint is not absorbed
- * by a second static channel; what happens next is deployment-shaped:
+ * `codeUrl` is the only STATIC delivery surface a COMPILED-COMPONENT
+ * envelope has. Nothing sits behind it: a bootstrap mounts on
+ * `codeUrl`, on a system-card `kind`, or on the live trio (`wsUrl` +
+ * `wsToken`); `kind` is static too, but it belongs to system cards,
+ * which never reach this channel. An envelope carrying none of the
+ * three reads to a host as "not a mountable ggui render". So a failed
+ * `codeUrl` mint is not absorbed by a second static channel; what
+ * happens next is deployment-shaped:
  *
  *   - A deployment that mints live-channel credentials still mounts.
  *     The slice keeps `wsUrl` + `wsToken`, the iframe subscribes, and

@@ -66,12 +66,14 @@
  *
  * **Failure mode:**
  * - On `put` failure (disk full, S3 5xx), the producer MAY proceed
- *   without `codeUrl`. Nothing catches the response: `codeUrl` is the
- *   only static delivery channel a bootstrap has, so what survives is
- *   the live trio (`wsUrl` + `wsToken`) when the deployment mints one,
- *   and otherwise a bootstrap with no mount mode at all. Because that
- *   difference is invisible on the wire, a producer that proceeds MUST
- *   make the failure observable — the reference producer emits
+ *   without `codeUrl`. Nothing catches the response: a bootstrap
+ *   mounts on `codeUrl`, on a system-card `kind`, or on the live trio
+ *   (`wsUrl` + `wsToken`), and a compiled-component render can only
+ *   ever use the first or the third. So what survives is the live
+ *   trio when the deployment mints one, and otherwise a bootstrap
+ *   with no mount mode at all. Because that difference is invisible
+ *   on the wire, a producer that proceeds MUST make the failure
+ *   observable — the reference producer emits
  *   `render_code_write_failed` rather than swallowing it.
  * - On `get` failure for an existing hash, the route returns 500. The
  *   iframe runtime's static seed-fetch throws, and the boot outcome
@@ -99,6 +101,15 @@
  *   malformed-hash rejection) stays in the impl's own suite.
  * - Route-level: `code-route.test.ts` (`@ggui-ai/mcp-server`) asserts
  *   404 on a hash that was never `put` and 400 on a malformed one.
+ * - Producer-side: the put-failure obligation above is pinned by the
+ *   code-delivery suite in `render.test.ts`
+ *   (`@ggui-ai/mcp-server-handlers`) — a rejecting store leaves the
+ *   render succeeding, emits the named event, and stamps the
+ *   live-channel posture on it. Scope worth stating plainly, since an
+ *   unflagged gap reads as coverage: `runCodeStoreConformance` grades
+ *   STORES, not producers, so that pin binds the reference producer
+ *   in this repo. A third-party producer that swallows the rejection
+ *   instead is caught by review, not by the kit.
  *
  * ## Reference implementations
  *

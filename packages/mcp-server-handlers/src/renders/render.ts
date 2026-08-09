@@ -1961,9 +1961,12 @@ export function createGguiRenderHandler(
       //
       // A store failure does NOT fail the render: the code is already
       // generated and the row already committed. But nothing catches
-      // the envelope either — `codeUrl` is its only STATIC delivery
-      // surface, with no second channel behind it. What survives is
-      // deployment-shaped, and no arm of it is visible on the wire:
+      // the envelope either — the guard above narrowed this to a
+      // compiled-component render, and `codeUrl` is the only STATIC
+      // delivery surface such a render has (the other static mode,
+      // system-card `kind`, is excluded by that same guard). What
+      // survives is deployment-shaped, and no arm of it is visible on
+      // the wire:
       //
       //   - `mintWsToken` wired ⇒ the slice still carries the live
       //     trio, the iframe subscribes, and the WS delivers the
@@ -1999,6 +2002,10 @@ export function createGguiRenderHandler(
             codeUrl = `${base}/code/${hash}.js`;
           }
         } catch (err) {
+          // Named for the OUTCOME, not the call: a throwing
+          // `renderStore.get` or `hashOf` reaches here too, and the
+          // consequence is identical — this envelope has no codeUrl.
+          // `error` carries which one it was.
           reportRenderCodeWriteFailed({
             sessionId,
             appId: ctx.appId,

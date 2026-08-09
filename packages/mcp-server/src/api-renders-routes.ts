@@ -230,7 +230,15 @@ export function mountApiRendersRoutes(opts: MountOptions): void {
             : `${req.protocol}://${requestHost}`;
           renderCodeUrl = `${base}/code/${hash}.js`;
         } catch {
-          // Silent — caller falls back to live-mode delivery.
+          // Silent — the caller falls back to live-mode delivery, and
+          // here that fallback is structural rather than hoped for:
+          // `mintBootstrap` is optional on the options type, but these
+          // routes mount only under `mcpAppsEnabled` + a render store
+          // + a token secret, which are the same preconditions that
+          // assign the minter. So a reader of THIS file cannot see the
+          // guarantee — it lives at the mount site, and it is what
+          // keeps the silence honest. Lose that pairing and this catch
+          // becomes a swallow.
         }
         try {
           const bundle = await deriveContractBundle(render);
