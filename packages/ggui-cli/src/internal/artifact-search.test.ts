@@ -4,7 +4,7 @@
  * both the human-readable output AND the raw JSON shape — the two
  * paths share validation but diverge at the rendering step.
  */
-import { mkdir, rm, writeFile } from 'node:fs/promises';
+import { mkdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
@@ -12,10 +12,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   buildSearchQueryString,
   parseArtifactSearchFlags,
-  resolveRegistryUrl,
   runArtifactSearch,
   type SearchResponse,
 } from './artifact-search.js';
+import { DEFAULT_REGISTRY_URL } from './registry-url.js';
 
 /* -------------------------------------------------------------------------- */
 /* parseArtifactSearchFlags                                                    */
@@ -153,83 +153,10 @@ describe('buildSearchQueryString', () => {
   });
 });
 
-/* -------------------------------------------------------------------------- */
-/* resolveRegistryUrl — three-layer chain                                    */
-/* -------------------------------------------------------------------------- */
-
-describe('resolveRegistryUrl', () => {
-  let workDir: string;
-
-  beforeEach(async () => {
-    workDir = join(tmpdir(), `ggui-gadget-search-${randomUUID()}`);
-    await mkdir(workDir, { recursive: true });
-  });
-
-  afterEach(async () => {
-    await rm(workDir, { recursive: true, force: true });
-  });
-
-  it('layer 1: --registry flag beats env + config', async () => {
-    await writeFile(
-      join(workDir, 'ggui.json'),
-      JSON.stringify({ registry: 'https://from-config.example.com' }),
-      'utf-8',
-    );
-    const r = resolveRegistryUrl({
-      flag: 'https://from-flag.example.com',
-      cwd: workDir,
-      env: { GGUI_REGISTRY: 'https://from-env.example.com' },
-    });
-    expect(r).toEqual({ url: 'https://from-flag.example.com' });
-  });
-
-  it('layer 2: GGUI_REGISTRY env beats config', async () => {
-    await writeFile(
-      join(workDir, 'ggui.json'),
-      JSON.stringify({ registry: 'https://from-config.example.com' }),
-      'utf-8',
-    );
-    const r = resolveRegistryUrl({
-      cwd: workDir,
-      env: { GGUI_REGISTRY: 'https://from-env.example.com' },
-    });
-    expect(r).toEqual({ url: 'https://from-env.example.com' });
-  });
-
-  it('layer 3: ggui.json#registry', async () => {
-    await writeFile(
-      join(workDir, 'ggui.json'),
-      JSON.stringify({ registry: 'https://from-config.example.com' }),
-      'utf-8',
-    );
-    const r = resolveRegistryUrl({ cwd: workDir, env: {} });
-    expect(r).toEqual({ url: 'https://from-config.example.com' });
-  });
-
-  it('errors when nothing is set', () => {
-    const r = resolveRegistryUrl({ cwd: workDir, env: {} });
-    expect('error' in r).toBe(true);
-    if ('error' in r) expect(r.error).toMatch(/no registry/i);
-  });
-
-  it('normalizes trailing slashes', () => {
-    const r = resolveRegistryUrl({
-      flag: 'https://r.example.com/',
-      cwd: workDir,
-      env: {},
-    });
-    expect(r).toEqual({ url: 'https://r.example.com' });
-  });
-
-  it('rejects a malformed URL', () => {
-    const r = resolveRegistryUrl({
-      flag: 'not-a-url',
-      cwd: workDir,
-      env: {},
-    });
-    expect('error' in r).toBe(true);
-  });
-});
+// Registry-URL resolution unit tests live in `registry-url.test.ts`
+// (the chain is shared across publish/install/search/keys). The
+// `runArtifactSearch` suite below still covers the READ-verb
+// integration (zero config → public default registry).
 
 /* -------------------------------------------------------------------------- */
 /* runArtifactSearch — fetch-mocked integration                                */
@@ -525,16 +452,20 @@ describe('runArtifactSearch', () => {
     expect(out.code).toBe('bad-response');
   });
 
-  it('no registry configured anywhere → SearchFailure code=no-registry, no fetch', async () => {
-    const fetchMock = vi.fn<typeof fetch>();
+  it('no registry configured anywhere → falls back to the public default registry (READ verb)', async () => {
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(mockResponse({ results: [] }));
     const out = await runArtifactSearch(
       {},
       { cwd: workDir, env: {}, fetch: fetchMock },
     );
 
-    expect(out.ok).toBe(false);
-    if (out.ok) return;
-    expect(out.code).toBe('no-registry');
-    expect(fetchMock).not.toHaveBeenCalled();
+    expect(out.ok).toBe(true);
+    if (!out.ok) return;
+    expect(out.registryUrl).toBe(DEFAULT_REGISTRY_URL);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [url] = fetchMock.mock.calls[0]!;
+    expect(String(url)).toBe(`${DEFAULT_REGISTRY_URL}/search`);
   });
 });

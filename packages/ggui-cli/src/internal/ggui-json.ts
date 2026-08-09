@@ -24,10 +24,13 @@ import { dirname, join, resolve } from 'node:path';
  * place per package; updates ride along on a project-config bump. */
 export const GGUI_JSON_FILENAME = 'ggui.json';
 
-/** How many parent directories to walk before giving up. Mirrors the
- * convention used by `gadget-search.ts#findGguiJson` + the upstream
- * `@ggui-ai/project-config/node` helper. */
-export const FIND_MAX_DEPTH = 8;
+/** How many parent directories to walk before giving up. The single
+ * shared depth for every ggui.json walk in this package — manifest
+ * discovery (install/uninstall) AND registry-field resolution
+ * (`./registry-url.ts`). 16 levels covers deep monorepo layouts; the
+ * historical publish resolver walked 16 while search/install walked 8,
+ * and unifying DOWN would have broken 9-16-level-deep publishes. */
+export const FIND_MAX_DEPTH = 16;
 
 /**
  * Walk up from `startDir` looking for the first `ggui.json` ancestor.

@@ -18,7 +18,9 @@
  *
  *   GET <registry>/pkg/<scope>/<name>/<version>
  *     200: { manifest, bundleUrl?, bundleSri?, signatureUrl?, compiledBytes?, publishedAt, publishedBy }
- *     403: { error: 'forbidden', message }   — private artifact (JWT not yet threaded)
+ *     403: { error: 'forbidden', message }   — private artifact (install
+ *          sends no credentials, so private rows are uninstallable from
+ *          the CLI today; the error copy says exactly that)
  *     404: { error: 'not_found', message }   — artifactId/version unknown
  *     410: { manifest, …, publishedAt, publishedBy } — yanked (body shape = ReadPkgResponse)
  *     other 4xx/5xx: { error, message }
@@ -77,32 +79,19 @@ import {
 import type { GadgetDescriptor } from '@ggui-ai/protocol';
 import { READ_ERROR_CODES, type ArtifactKind, type ReadErrorBody } from '@ggui-ai/registry-core';
 import {
+  FIND_MAX_DEPTH,
   findGguiJson,
   readGguiJson,
   writeGguiJson,
   type GguiJsonObject,
 } from './ggui-json.js';
+import { DEFAULT_REGISTRY_URL, resolveRegistryUrl } from './registry-url.js';
 
 /** Artifact-kind discriminator (canonical type owned by
  * `@ggui-ai/registry-core`) — the verb the operator typed
  * (`gadget` vs `blueprint`). Enforced against the registry-served
  * manifest's `kind` discriminator. */
 export type { ArtifactKind };
-
-/* -------------------------------------------------------------------------- */
-/* Defaults                                                                   */
-/* -------------------------------------------------------------------------- */
-
-/**
- * Fallback registry URL when neither `--registry`, `GGUI_REGISTRY`,
- * nor a `ggui.json#registry` field is set.
- *
- * Defaults to the PRODUCTION marketplace registry — an install with no
- * explicit config must reach the real registry, not a sandbox/dev host. The
- * `--registry` flag and the `GGUI_REGISTRY` env var always take precedence
- * (point them at `<env>.registry.sandbox.ggui.ai` for non-prod testing).
- */
-const DEFAULT_REGISTRY_URL = 'https://registry.ggui.ai';
 
 /* -------------------------------------------------------------------------- */
 /* Flag parsing                                                               */
@@ -167,9 +156,9 @@ Arguments:
                             side SemVer rule (no \`latest\`, no ranges).
 
 Options:
-  --registry <url>          Override the registry URL. Three-layer
-                            resolution: flag > ggui.json#registry >
-                            GGUI_REGISTRY env > default
+  --registry <url>          Override the registry URL. Resolution:
+                            flag > GGUI_REGISTRY env >
+                            ggui.json#registry > default
                             (\`${DEFAULT_REGISTRY_URL}\`).
   --no-prompt               Skip interactive prompts for any
                             \`publicEnv\` keys the gadget's manifest
@@ -433,59 +422,6 @@ function decodeBase64(s: string): Uint8Array | undefined {
 
 
 /**
- * Resolve the registry URL the install should target.
- *
- * Precedence: `--registry` flag > `ggui.json#registry` > env var >
- * built-in {@link DEFAULT_REGISTRY_URL}. Mirrors publish + search's
- * three-layer chain, with the addition of a hardcoded fallback so an
- * install with no manifest still works against the sandbox registry
- * (consumers without a project yet shouldn't have to type
- * `--registry=…` every call).
- *
- * Returns the URL with any trailing `/` stripped so route concat below
- * (e.g. `${url}/pkg/…`) doesn't double-slash.
- */
-function resolveRegistry(args: {
-  flag?: string;
-  gguiJson?: GguiJsonObject;
-  env?: Readonly<Partial<Record<string, string | undefined>>>;
-}): { url: string } | { error: string } {
-  const candidates: Array<{ raw: string; source: string }> = [];
-  if (args.flag !== undefined && args.flag.length > 0) {
-    candidates.push({ raw: args.flag, source: '--registry' });
-  } else {
-    const registryField = args.gguiJson?.['registry'];
-    if (typeof registryField === 'string' && registryField.length > 0) {
-      candidates.push({ raw: registryField, source: 'ggui.json#registry' });
-    } else {
-      const envValue = args.env?.['GGUI_REGISTRY'];
-      if (typeof envValue === 'string' && envValue.length > 0) {
-        candidates.push({ raw: envValue, source: 'GGUI_REGISTRY' });
-      } else {
-        candidates.push({ raw: DEFAULT_REGISTRY_URL, source: '(default)' });
-      }
-    }
-  }
-  const picked = candidates[0]!;
-  let parsed: URL;
-  try {
-    parsed = new URL(picked.raw);
-  } catch {
-    return {
-      error: `registry URL is malformed (${picked.source}): ${picked.raw}`,
-    };
-  }
-  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
-    return {
-      error: `registry URL must be http(s) (${picked.source}): ${picked.raw}`,
-    };
-  }
-  let serialized = parsed.toString();
-  while (serialized.endsWith('/')) serialized = serialized.slice(0, -1);
-  return { url: serialized };
-}
-
-/**
  * Decompose `@scope/name` into its `scope` + `name` parts so the
  * read-handler URL `/pkg/{scope}/{name}/{version}` can be composed.
  *
@@ -623,7 +559,7 @@ export async function runArtifactInstall(
   const gguiPath = findGguiJson(cwd);
   if (gguiPath === null) {
     stderr(
-      `${verb}: no ggui.json found in ${cwd} or any ancestor (up to 8 levels).\n`,
+      `${verb}: no ggui.json found in ${cwd} or any ancestor (up to ${FIND_MAX_DEPTH} levels).\n`,
     );
     return 2;
   }
@@ -635,13 +571,16 @@ export async function runArtifactInstall(
   const gguiJson = loaded.value;
 
   // ---- step 3: resolve registry URL ----
-  const registryRes = resolveRegistry({
+  // Shared resolver (`./registry-url.ts`), READ-verb posture: flag →
+  // GGUI_REGISTRY env → nearest ggui.json#registry → public default.
+  const registryRes = resolveRegistryUrl({
     ...(flags.registry !== undefined ? { flag: flags.registry } : {}),
-    gguiJson,
-    env,
+    cwd,
+    env: { GGUI_REGISTRY: env['GGUI_REGISTRY'] },
+    defaultUrl: DEFAULT_REGISTRY_URL,
   });
-  if ('error' in registryRes) {
-    stderr(`${verb}: ${registryRes.error}\n`);
+  if (!registryRes.ok) {
+    stderr(`${verb}: ${registryRes.message}\n`);
     return 1;
   }
   const registryUrl = registryRes.url;
@@ -666,18 +605,10 @@ export async function runArtifactInstall(
     return 1;
   }
 
-  let pkgBody: unknown;
-  try {
-    pkgBody = await pkgRes.json();
-  } catch (err) {
-    stderr(
-      `${verb}: registry returned ${pkgRes.status} with non-JSON body: ${
-        err instanceof Error ? err.message : String(err)
-      }\n`,
-    );
-    return 1;
-  }
-
+  // Status checks BEFORE any body parse — a WAF/proxy in front of the
+  // registry may answer 403/404/410 with an HTML or empty body, and the
+  // status-specific diagnostics must still fire. Only the paths that
+  // actually consume the body parse it.
   if (pkgRes.status === 404) {
     stderr(
       `${verb}: package ${flags.artifactId}@${flags.version} not found\n`,
@@ -692,16 +623,38 @@ export async function runArtifactInstall(
   }
   if (pkgRes.status === 403) {
     stderr(
-      `${verb}: ${flags.artifactId}@${flags.version} is private — log in with \`ggui auth login\` (JWT auth for install is not yet supported)\n`,
+      `${verb}: ${flags.artifactId}@${flags.version} is private (HTTP 403). ` +
+        `Installing private artifacts is not supported yet — the CLI sends install requests without credentials, so logging in does not help. ` +
+        `Only artifacts published with public visibility are installable.\n`,
     );
     return 1;
   }
   if (!pkgRes.ok) {
-    const detail = isReadErrorBody(pkgBody)
-      ? ` (${pkgBody.error}: ${pkgBody.message})`
-      : '';
+    // Structured registry error bodies carry `(code: message)` detail;
+    // a non-JSON body (proxy error page) degrades to the bare status.
+    let detail = '';
+    try {
+      const errBody: unknown = await pkgRes.json();
+      if (isReadErrorBody(errBody)) {
+        detail = ` (${errBody.error}: ${errBody.message})`;
+      }
+    } catch {
+      // Non-JSON error body — the status line is all we can report.
+    }
     stderr(
       `${verb}: registry returned ${pkgRes.status}${detail}\n`,
+    );
+    return 1;
+  }
+
+  let pkgBody: unknown;
+  try {
+    pkgBody = await pkgRes.json();
+  } catch (err) {
+    stderr(
+      `${verb}: registry returned ${pkgRes.status} with non-JSON body: ${
+        err instanceof Error ? err.message : String(err)
+      }\n`,
     );
     return 1;
   }

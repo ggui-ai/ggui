@@ -1,17 +1,18 @@
 /**
- * `ggui gadget <create|publish|install|search>` — top-level router for
- * the marketplace author + consumer surface.
+ * `ggui gadget <create|publish|install|uninstall|search>` — top-level
+ * router for the marketplace author + consumer surface.
  *
  * A thin sibling of `blueprint-command.ts`. Both commands dispatch into
  * the shared `internal/artifact-*` modules with their own `kind`
  * discriminator; per-kind state (scaffolders, help text) lives in
  * sibling files.
  *
- * - `create`  — scaffold a new gadget repo (hook + bundle stub).
- * - `publish` — build, sign, and push to a registry.
- *               Manifest-kind mismatch surfaces a redirect.
- * - `install` — fetch, verify, append to ggui.json.
- * - `search`  — query the registry, hard-locked to `kind=gadget`.
+ * - `create`    — scaffold a new gadget repo (hook + bundle stub).
+ * - `publish`   — build, sign, and push to a registry.
+ *                 Manifest-kind mismatch surfaces a redirect.
+ * - `install`   — fetch, verify, append to ggui.json.
+ * - `uninstall` — remove the ggui.json#app.gadgets row (reverse of install).
+ * - `search`    — query the registry, hard-locked to `kind=gadget`.
  */
 import {
   GADGET_CREATE_HELP,
@@ -22,6 +23,7 @@ import {
 import {
   buildPublishHelp,
   parseArtifactPublishFlags,
+  publishOptionsFromFlags,
   runArtifactPublish,
 } from './internal/artifact-publish.js';
 import {
@@ -29,6 +31,11 @@ import {
   parseArtifactInstallFlags,
   runArtifactInstall,
 } from './internal/artifact-install.js';
+import {
+  buildUninstallHelp,
+  parseArtifactUninstallFlags,
+  runArtifactUninstall,
+} from './internal/artifact-uninstall.js';
 import {
   buildSearchHelp,
   parseArtifactSearchFlags,
@@ -47,6 +54,7 @@ Subcommands:
   create       Scaffold a new gadget repo.
   publish      Build, sign, and push the gadget in CWD to a marketplace registry.
   install      Fetch, verify, and register a gadget in ggui.json.
+  uninstall    Remove an installed gadget from ggui.json (reverse of install).
   search       Search the marketplace registry for gadgets.
 
 Run \`ggui gadget <subcommand> --help\` for subcommand-specific options.
@@ -67,6 +75,8 @@ export async function runGadgetCommand(
       return runPublish(rest);
     case 'install':
       return runInstall(rest);
+    case 'uninstall':
+      return runUninstall(rest);
     case 'search':
       return runSearch(rest);
     default:
@@ -137,12 +147,11 @@ async function runPublish(args: readonly string[]): Promise<number> {
     process.stderr.write(`ggui gadget publish: ${flags.error}\n`);
     return 2;
   }
+  // Forward the WHOLE parsed-flag bundle — no per-field spreads (a
+  // hand-written spread is how `--identity-token` got dropped once).
   const result = await runArtifactPublish({
     kind: KIND,
-    ...(flags.registry !== undefined ? { registry: flags.registry } : {}),
-    dryRun: flags.dryRun,
-    ...(flags.key !== undefined ? { key: flags.key } : {}),
-    ...(flags.auth !== undefined ? { auth: flags.auth } : {}),
+    ...publishOptionsFromFlags(flags),
   });
   return result.exitCode;
 }
@@ -167,6 +176,27 @@ async function runInstall(args: readonly string[]): Promise<number> {
     env: process.env,
     fetch: globalThis.fetch.bind(globalThis),
   });
+}
+
+/* -------------------------------------------------------------------------- */
+/* uninstall                                                                  */
+/* -------------------------------------------------------------------------- */
+
+async function runUninstall(args: readonly string[]): Promise<number> {
+  const parsed = parseArtifactUninstallFlags(KIND, args);
+  if ('error' in parsed) {
+    if (parsed.error === '__help__') {
+      process.stdout.write(buildUninstallHelp(KIND));
+      return 0;
+    }
+    process.stderr.write(`ggui gadget uninstall: ${parsed.error}\n\n`);
+    process.stderr.write(buildUninstallHelp(KIND));
+    return 2;
+  }
+  const result = await runArtifactUninstall(parsed, {
+    cwd: process.cwd(),
+  });
+  return result.exitCode;
 }
 
 /* -------------------------------------------------------------------------- */

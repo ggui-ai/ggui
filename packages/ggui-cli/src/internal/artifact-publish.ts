@@ -58,8 +58,7 @@
  */
 import { build as esbuild } from 'esbuild';
 import { existsSync, readFileSync } from 'node:fs';
-import { dirname, isAbsolute, join, resolve } from 'node:path';
-import { URL } from 'node:url';
+import { dirname, isAbsolute, join } from 'node:path';
 import {
   GGUI_BLUEPRINT_JSON_FILENAME,
   GGUI_GADGET_JSON_FILENAME,
@@ -101,6 +100,7 @@ import {
   AUTH_HELP_FRAGMENT,
   type AuthFlags,
 } from './auth-strategy.js';
+import { resolveRegistryUrl } from './registry-url.js';
 import type { ArtifactKind } from '@ggui-ai/registry-core';
 
 /** Artifact-kind discriminator (canonical type owned by
@@ -111,29 +111,18 @@ import type { ArtifactKind } from '@ggui-ai/registry-core';
 export type { ArtifactKind };
 
 /**
- * Shape of the resolved options the publish core consumes. Built from
- * argv by {@link parseArtifactPublishFlags} so the core function is
- * dependency-injectable for tests.
+ * Shape of the resolved options the publish core consumes. Extends the
+ * flag subset of {@link ParsedPublishFlags} (via
+ * {@link PublishFlagOptions}) so the parser and the core cannot drift:
+ * a flag added to the parser lands in this type automatically, and
+ * routers forward the whole parsed object via
+ * {@link publishOptionsFromFlags} instead of hand-copying fields —
+ * hand-copying is exactly how `--identity-token` was silently dropped
+ * once.
  */
-export interface ArtifactPublishOptions {
+export interface ArtifactPublishOptions extends PublishFlagOptions {
   /** CLI verb the operator typed — enforced against the manifest kind. */
   readonly kind: ArtifactKind;
-  /** Override the registry URL — highest precedence. */
-  readonly registry?: string;
-  /** Skip the actual POST; run everything else. */
-  readonly dryRun: boolean;
-  /** Override the private-key path. */
-  readonly key?: string;
-  /**
-   * OIDC identity token for sigstore signing (public gadgets only).
-   * Mirrors cosign's `--identity-token` flag. If absent the CLI falls
-   * back through `GGUI_OIDC_TOKEN` → GH-Actions ambient → interactive.
-   * Ignored for private-gadget publishes (which sign with Ed25519).
-   */
-  readonly identityToken?: string;
-  /** Auth strategy + bearer token. `auth === undefined` → the stored
-   * `ggui login` session. */
-  readonly auth?: AuthFlags;
   /** Starting directory; defaults to `process.cwd()`. */
   readonly cwd?: string;
   /**
@@ -172,6 +161,7 @@ export interface PublishSuccess {
 
 export type PublishError =
   | { readonly code: 'no_registry_resolved'; readonly message: string }
+  | { readonly code: 'invalid_registry'; readonly message: string }
   | { readonly code: 'manifest_missing'; readonly message: string }
   | { readonly code: 'manifest_invalid'; readonly message: string; readonly details?: string }
   | { readonly code: 'manifest_kind_mismatch'; readonly message: string }
@@ -200,14 +190,45 @@ export interface ConformanceIssue {
  * Returned by {@link parseArtifactPublishFlags}.
  */
 export interface ParsedPublishFlags {
+  /** Override the registry URL — highest precedence. */
   readonly registry?: string;
+  /** Skip the actual POST; run everything else. */
   readonly dryRun: boolean;
+  /** Override the private-key path. */
   readonly key?: string;
-  /** Parsed `--identity-token <jwt>` flag (sigstore / public gadgets). */
+  /**
+   * OIDC identity token for sigstore signing (public artifacts only).
+   * Mirrors cosign's `--identity-token` flag. If absent the CLI falls
+   * back through `GGUI_OIDC_TOKEN` → GH-Actions ambient → interactive.
+   * Ignored for private publishes (which sign with Ed25519).
+   */
   readonly identityToken?: string;
+  /** Auth strategy + bearer token. `auth === undefined` → the stored
+   * `ggui login` session. */
   readonly auth?: AuthFlags;
   readonly help: boolean;
   readonly error?: string;
+}
+
+/**
+ * The subset of {@link ParsedPublishFlags} the publish core consumes —
+ * everything except the parse-control fields (`help` / `error`).
+ * {@link ArtifactPublishOptions} extends this type, so parser and core
+ * stay structurally coupled by the compiler.
+ */
+export type PublishFlagOptions = Omit<ParsedPublishFlags, 'help' | 'error'>;
+
+/**
+ * Project a parsed flag bundle onto the options the publish core
+ * consumes. THE way routers hand flags to {@link runArtifactPublish} —
+ * forwarding the whole object means a future flag cannot be silently
+ * dropped in a router's hand-written spread.
+ */
+export function publishOptionsFromFlags(
+  flags: ParsedPublishFlags,
+): PublishFlagOptions {
+  const { help: _help, error: _error, ...options } = flags;
+  return options;
 }
 
 /**
@@ -308,7 +329,14 @@ export function parseArtifactPublishFlags(args: readonly string[]): ParsedPublis
         value = rest[i + 1];
         i += 1;
       }
-      if (typeof value !== 'string' || value.length === 0) {
+      // Leading `--` means the "value" is actually the next flag —
+      // `--identity-token --dry-run` must not swallow `--dry-run` as
+      // the token (JWTs never start with `--`).
+      if (
+        typeof value !== 'string' ||
+        value.length === 0 ||
+        value.startsWith('--')
+      ) {
         return { dryRun, help, error: '--identity-token requires a value' };
       }
       identityToken = value;
@@ -352,10 +380,24 @@ export async function runArtifactPublish(
   const fetchImpl = opts.fetch ?? globalThis.fetch.bind(globalThis);
 
   // ---- step 1: resolve registry URL ----
-  const registryRes = resolveRegistryUrl({ flag: opts.registry, env: process.env, cwd });
+  // Shared resolver (`./registry-url.ts`), WRITE-verb posture: flag →
+  // GGUI_REGISTRY env → nearest ggui.json#registry, and NO default —
+  // operators must opt into a publish target explicitly.
+  const registryRes = resolveRegistryUrl({
+    ...(opts.registry !== undefined ? { flag: opts.registry } : {}),
+    env: process.env,
+    cwd,
+  });
   if (!registryRes.ok) {
     stderr(`${verb}: ${registryRes.message}\n`);
-    return { ok: false, exitCode: 1, error: { code: 'no_registry_resolved', message: registryRes.message } };
+    // Preserve the resolver's code split (mirrors search + keys
+    // register): "nothing configured" and "configured but unusable"
+    // are different operator problems.
+    const error: PublishError =
+      registryRes.code === 'no-registry'
+        ? { code: 'no_registry_resolved', message: registryRes.message }
+        : { code: 'invalid_registry', message: registryRes.message };
+    return { ok: false, exitCode: 1, error };
   }
   const registryUrl = registryRes.url;
   stdout(`registry: ${registryUrl} (${registryRes.source})\n`);
@@ -602,130 +644,6 @@ export async function runArtifactPublish(
       dryRun: false,
     },
   };
-}
-
-// ---------------------------------------------------------------------------
-// step 1 — resolve registry URL
-// ---------------------------------------------------------------------------
-
-interface RegistryResolution {
-  readonly ok: true;
-  readonly url: string;
-  readonly source: 'flag' | 'env' | 'ggui.json';
-}
-
-interface RegistryUnresolved {
-  readonly ok: false;
-  readonly message: string;
-}
-
-export function resolveRegistryUrl(opts: {
-  readonly flag?: string;
-  readonly env: NodeJS.ProcessEnv;
-  readonly cwd: string;
-}): RegistryResolution | RegistryUnresolved {
-  if (opts.flag && opts.flag.length > 0) {
-    if (!isValidUrl(opts.flag)) {
-      return {
-        ok: false,
-        message: `--registry value is not a valid URL: ${opts.flag}`,
-      };
-    }
-    return { ok: true, url: stripTrailingSlash(opts.flag), source: 'flag' };
-  }
-  const envValue = opts.env['GGUI_REGISTRY'];
-  if (envValue && envValue.length > 0) {
-    if (!isValidUrl(envValue)) {
-      return {
-        ok: false,
-        message: `GGUI_REGISTRY is not a valid URL: ${envValue}`,
-      };
-    }
-    return { ok: true, url: stripTrailingSlash(envValue), source: 'env' };
-  }
-  const ggui = findAndReadGguiJsonRegistry(opts.cwd);
-  if (ggui.found) {
-    if (!isValidUrl(ggui.registry)) {
-      return {
-        ok: false,
-        message: `ggui.json#registry at ${ggui.path} is not a valid URL: ${ggui.registry}`,
-      };
-    }
-    return { ok: true, url: stripTrailingSlash(ggui.registry), source: 'ggui.json' };
-  }
-  return {
-    ok: false,
-    message:
-      'no registry resolved. Set one of:\n' +
-      '  --registry <url>\n' +
-      '  GGUI_REGISTRY env var\n' +
-      '  "registry": "<url>" in the nearest ggui.json',
-  };
-}
-
-interface GguiJsonRegistryFound {
-  readonly found: true;
-  readonly registry: string;
-  readonly path: string;
-}
-interface GguiJsonRegistryMissing {
-  readonly found: false;
-}
-
-/**
- * Walk up from `startDir` looking for the nearest `ggui.json` with a
- * top-level `registry` string field. Returns the first match.
- *
- * This is intentionally hand-rolled (not via `@ggui-ai/project-config`)
- * because the schema there has not grown a typed `registry` field yet;
- * until it does, the field is read opportunistically without forcing a
- * parallel schema migration.
- */
-function findAndReadGguiJsonRegistry(
-  startDir: string,
-): GguiJsonRegistryFound | GguiJsonRegistryMissing {
-  let dir = resolve(startDir);
-  for (let i = 0; i <= 16; i++) {
-    const candidate = join(dir, 'ggui.json');
-    if (existsSync(candidate)) {
-      const raw = readFileSync(candidate, 'utf8');
-      let parsed: unknown;
-      try {
-        parsed = JSON.parse(raw);
-      } catch {
-        // Malformed — fall through; the operator's `ggui serve` will
-        // raise a friendlier error than we can synthesize here.
-        return { found: false };
-      }
-      const registry = extractRegistryField(parsed);
-      if (typeof registry === 'string' && registry.length > 0) {
-        return { found: true, registry, path: candidate };
-      }
-      return { found: false };
-    }
-    const parent = dirname(dir);
-    if (parent === dir) break;
-    dir = parent;
-  }
-  return { found: false };
-}
-
-function extractRegistryField(x: unknown): unknown {
-  if (typeof x !== 'object' || x === null) return undefined;
-  return (x as { registry?: unknown }).registry;
-}
-
-function isValidUrl(s: string): boolean {
-  try {
-    const u = new URL(s);
-    return u.protocol === 'http:' || u.protocol === 'https:';
-  } catch {
-    return false;
-  }
-}
-
-function stripTrailingSlash(s: string): string {
-  return s.endsWith('/') ? s.slice(0, -1) : s;
 }
 
 // ---------------------------------------------------------------------------

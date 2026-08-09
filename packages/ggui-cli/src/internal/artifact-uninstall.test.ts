@@ -19,6 +19,7 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import type { GadgetDescriptor } from '@ggui-ai/protocol';
 import {
   parseArtifactUninstallFlags,
   runArtifactUninstall,
@@ -133,6 +134,17 @@ describe('parseArtifactUninstallFlags', () => {
   it('rejects a missing positional argument', () => {
     const parsed = parseArtifactUninstallFlags('blueprint', []);
     expect('error' in parsed).toBe(true);
+  });
+
+  it('stamps gadget kind onto flags when called with kind="gadget"', () => {
+    const parsed = parseArtifactUninstallFlags('gadget', [
+      '@vendor/map-hook@1.0.0',
+    ]);
+    expect('error' in parsed).toBe(false);
+    if ('error' in parsed) return;
+    expect(parsed.kind).toBe('gadget');
+    expect(parsed.artifactId).toBe('@vendor/map-hook');
+    expect(parsed.version).toBe('1.0.0');
   });
 });
 
@@ -265,6 +277,203 @@ describe('runArtifactUninstall', () => {
     // Operator-authored glob survives; only the install glob is stripped.
     const manifest = JSON.parse(readFileSync(join(ctx.cwd, 'ggui.json'), 'utf8'));
     expect(manifest.blueprints.include).toEqual(['src/uis/**/*.json']);
+  });
+
+  // ── gadget branch — reverse of install's `appendGadget` row write ──
+  describe('kind=gadget', () => {
+    /** Build a minimal valid GadgetDescriptor for test fixtures. */
+    function gadgetRow(pkg: string, version: string): GadgetDescriptor {
+      return {
+        package: pkg,
+        version,
+        bundleUrl: `https://cdn.example/${pkg.slice(1).replace('/', '-')}-${version}.js`,
+        exports: [
+          {
+            hook: 'useThing',
+            description: 'A thing',
+            usage: 'Use for things.',
+            example: {},
+          },
+        ],
+      };
+    }
+
+    it('removes the matching row and drops the emptied gadgets array', async () => {
+      const ctx = setupProject({
+        manifest: {
+          app: {
+            slug: 'demo',
+            name: 'Demo',
+            gadgets: [gadgetRow('@vendor/map-hook', '1.0.0')],
+          },
+        },
+      });
+      cleanup = ctx.cleanup;
+
+      const out: string[] = [];
+      const result = await runArtifactUninstall(
+        {
+          kind: 'gadget',
+          artifactId: '@vendor/map-hook',
+          version: '1.0.0',
+        },
+        { cwd: ctx.cwd, stdout: (s) => out.push(s), stderr: () => {} },
+      );
+      expect(result.exitCode).toBe(0);
+      expect(result.removed).toBe(true);
+      expect(result.globRemoved).toBe(false);
+      expect(out.join('')).toContain('removed: @vendor/map-hook@1.0.0');
+
+      const manifest = JSON.parse(readFileSync(join(ctx.cwd, 'ggui.json'), 'utf8'));
+      // Last row gone → the empty array is dropped; app identity survives.
+      expect(manifest.app.gadgets).toBeUndefined();
+      expect(manifest.app.slug).toBe('demo');
+    });
+
+    it('keeps other rows (and the array) when they remain', async () => {
+      const ctx = setupProject({
+        manifest: {
+          app: {
+            slug: 'demo',
+            name: 'Demo',
+            gadgets: [
+              gadgetRow('@vendor/map-hook', '1.0.0'),
+              gadgetRow('@vendor/chart-hook', '2.0.0'),
+            ],
+          },
+        },
+      });
+      cleanup = ctx.cleanup;
+
+      const result = await runArtifactUninstall(
+        {
+          kind: 'gadget',
+          artifactId: '@vendor/map-hook',
+          version: '1.0.0',
+        },
+        { cwd: ctx.cwd, stdout: () => {}, stderr: () => {} },
+      );
+      expect(result.exitCode).toBe(0);
+      expect(result.removed).toBe(true);
+
+      const manifest = JSON.parse(readFileSync(join(ctx.cwd, 'ggui.json'), 'utf8'));
+      expect(manifest.app.gadgets).toHaveLength(1);
+      expect(manifest.app.gadgets[0].package).toBe('@vendor/chart-hook');
+    });
+
+    it('matches on the FULL (package, version) tuple — other versions survive', async () => {
+      const ctx = setupProject({
+        manifest: {
+          app: {
+            slug: 'demo',
+            name: 'Demo',
+            gadgets: [
+              gadgetRow('@vendor/map-hook', '1.0.0'),
+              gadgetRow('@vendor/map-hook', '2.0.0'),
+            ],
+          },
+        },
+      });
+      cleanup = ctx.cleanup;
+
+      const result = await runArtifactUninstall(
+        {
+          kind: 'gadget',
+          artifactId: '@vendor/map-hook',
+          version: '1.0.0',
+        },
+        { cwd: ctx.cwd, stdout: () => {}, stderr: () => {} },
+      );
+      expect(result.exitCode).toBe(0);
+      expect(result.removed).toBe(true);
+
+      const manifest = JSON.parse(readFileSync(join(ctx.cwd, 'ggui.json'), 'utf8'));
+      expect(manifest.app.gadgets).toHaveLength(1);
+      expect(manifest.app.gadgets[0].version).toBe('2.0.0');
+    });
+
+    it('removes ALL duplicate (package, version) rows, not just the first', async () => {
+      // Install keeps the tuple unique, but hand-edited manifests can
+      // carry duplicates — a findIndex+splice would remove one row and
+      // still print "Uninstall complete" with the twin left behind.
+      const ctx = setupProject({
+        manifest: {
+          app: {
+            slug: 'demo',
+            name: 'Demo',
+            gadgets: [
+              gadgetRow('@vendor/map-hook', '1.0.0'),
+              gadgetRow('@vendor/chart-hook', '2.0.0'),
+              gadgetRow('@vendor/map-hook', '1.0.0'),
+            ],
+          },
+        },
+      });
+      cleanup = ctx.cleanup;
+
+      const result = await runArtifactUninstall(
+        {
+          kind: 'gadget',
+          artifactId: '@vendor/map-hook',
+          version: '1.0.0',
+        },
+        { cwd: ctx.cwd, stdout: () => {}, stderr: () => {} },
+      );
+      expect(result.exitCode).toBe(0);
+      expect(result.removed).toBe(true);
+
+      const manifest = JSON.parse(readFileSync(join(ctx.cwd, 'ggui.json'), 'utf8'));
+      expect(manifest.app.gadgets).toHaveLength(1);
+      expect(manifest.app.gadgets[0].package).toBe('@vendor/chart-hook');
+    });
+
+    it('is idempotent: uninstalling a never-installed gadget returns 0 with a stderr note', async () => {
+      const ctx = setupProject({
+        manifest: { app: { slug: 'demo', name: 'Demo' } },
+      });
+      cleanup = ctx.cleanup;
+
+      const err: string[] = [];
+      const result = await runArtifactUninstall(
+        {
+          kind: 'gadget',
+          artifactId: '@vendor/ghost',
+          version: '9.9.9',
+        },
+        { cwd: ctx.cwd, stdout: () => {}, stderr: (s) => err.push(s) },
+      );
+      expect(result.exitCode).toBe(0);
+      expect(result.removed).toBe(false);
+      expect(err.join('')).toContain('not installed');
+    });
+
+    it('never touches blueprints.include (globRemoved is blueprint-only)', async () => {
+      const ctx = setupProject({
+        manifest: {
+          app: {
+            slug: 'demo',
+            name: 'Demo',
+            gadgets: [gadgetRow('@vendor/map-hook', '1.0.0')],
+          },
+          blueprints: { include: [INSTALLED_BLUEPRINTS_GLOB] },
+        },
+      });
+      cleanup = ctx.cleanup;
+
+      const result = await runArtifactUninstall(
+        {
+          kind: 'gadget',
+          artifactId: '@vendor/map-hook',
+          version: '1.0.0',
+        },
+        { cwd: ctx.cwd, stdout: () => {}, stderr: () => {} },
+      );
+      expect(result.exitCode).toBe(0);
+      expect(result.globRemoved).toBe(false);
+
+      const manifest = JSON.parse(readFileSync(join(ctx.cwd, 'ggui.json'), 'utf8'));
+      expect(manifest.blueprints.include).toEqual([INSTALLED_BLUEPRINTS_GLOB]);
+    });
   });
 
   it('refuses to operate without a ggui.json in cwd or ancestors', async () => {

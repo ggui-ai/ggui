@@ -232,7 +232,7 @@ describe('runRegisterAuthorKey', () => {
     expect(outcome.ok).toBe(false);
     if (!outcome.ok) {
       expect(outcome.code).toBe('no-registry');
-      expect(outcome.message).toContain('no registry configured');
+      expect(outcome.message).toContain('no registry resolved');
     }
     expect(fetchStub.spy).not.toHaveBeenCalled();
   });

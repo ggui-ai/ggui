@@ -23,7 +23,7 @@ import {
   acquireLoginSessionToken,
   type AuthFailed,
 } from './artifact-publish.js';
-import { resolveRegistryUrl } from './artifact-search.js';
+import { resolveRegistryUrl } from './registry-url.js';
 import { acquireAuthToken, type AuthFlags } from './auth-strategy.js';
 import { getPublicKeyPath, hasKeypair } from './key-store.js';
 
@@ -106,7 +106,8 @@ export async function runRegisterAuthorKey(
   flags: RunRegisterKeyFlags,
   deps: RunRegisterKeyDeps,
 ): Promise<RegisterKeyOutcome> {
-  // 1. Registry URL — same resolver as publish/search.
+  // 1. Registry URL — shared resolver, WRITE-verb posture (no default:
+  // registering a key is a write, so the target must be explicit).
   const resolved = resolveRegistryUrl({
     ...(flags.registry !== undefined ? { flag: flags.registry } : {}),
     cwd: deps.cwd,
@@ -115,12 +116,11 @@ export async function runRegisterAuthorKey(
         typeof deps.env['GGUI_REGISTRY'] === 'string' ? deps.env['GGUI_REGISTRY'] : undefined,
     },
   });
-  if ('error' in resolved) {
-    const isNoRegistry = resolved.error.startsWith('no registry');
+  if (!resolved.ok) {
     return {
       ok: false,
-      code: isNoRegistry ? 'no-registry' : 'invalid-registry',
-      message: resolved.error,
+      code: resolved.code,
+      message: resolved.message,
     };
   }
 

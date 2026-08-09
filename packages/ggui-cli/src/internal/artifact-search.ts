@@ -6,13 +6,13 @@
  * and `gadget publish`. Public and unauthenticated; the registry's
  * `/search` route returns only `visibility: "public"` rows.
  *
- * Three-layer registry resolution (highest priority wins, mirrors
- * `gadget publish` + `ggui install`):
+ * Registry resolution rides the shared resolver (`./registry-url.ts`)
+ * with the READ-verb posture (highest priority wins):
  *
  *   1. `--registry <url>` flag.
  *   2. `GGUI_REGISTRY` environment variable.
  *   3. `ggui.json#registry` field (walks up from `cwd`).
- *   4. Error if unset — no hard-coded default.
+ *   4. The public default registry.
  *
  * Kept pure / testable — no `process.exit`, no direct stdout writes.
  * Returns a `SearchOutput` discriminated union; the CLI driver in
@@ -23,8 +23,6 @@
  * canonical owner of the registry HTTP response types — and
  * re-exported for this module's consumers.
  */
-import { existsSync, readFileSync } from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
 import {
   SEARCH_ERROR_CODES,
   type ArtifactKind,
@@ -32,17 +30,9 @@ import {
   type SearchResponse,
   type SearchResultEntry,
 } from '@ggui-ai/registry-core';
+import { DEFAULT_REGISTRY_URL, resolveRegistryUrl } from './registry-url.js';
 
 export type { ArtifactKind, SearchResponse, SearchResultEntry };
-
-/**
- * Filename constant for the project manifest. Duplicated from
- * `@ggui-ai/project-config` rather than imported to keep this
- * subcommand from pulling in the full project-config dependency tree.
- */
-const GGUI_JSON_FILENAME = 'ggui.json';
-/** How many parent directories the upward walk will inspect. */
-const FIND_MAX_DEPTH = 8;
 
 /* -------------------------------------------------------------------------- */
 /* Flag parsing                                                              */
@@ -234,126 +224,6 @@ export function parseArtifactSearchFlags(
 }
 
 /* -------------------------------------------------------------------------- */
-/* Registry URL resolution                                                   */
-/* -------------------------------------------------------------------------- */
-
-/**
- * Three-layer resolution: `--registry` flag > `GGUI_REGISTRY` env >
- * `ggui.json#registry` > error.
- *
- * `cwd` + `env` are injectable for tests. Returns either `{ url }` on
- * success or `{ error }` with a stderr-ready diagnostic. Trailing
- * slashes on the URL are normalized away so the URL builder can append
- * `/search?…` deterministically.
- */
-export function resolveRegistryUrl(args: {
-  flag?: string;
-  cwd: string;
-  env: { readonly GGUI_REGISTRY?: string | undefined };
-}): { url: string } | { error: string } {
-  const candidate =
-    args.flag ??
-    (typeof args.env.GGUI_REGISTRY === 'string' && args.env.GGUI_REGISTRY.length > 0
-      ? args.env.GGUI_REGISTRY
-      : undefined);
-
-  if (typeof candidate === 'string' && candidate.length > 0) {
-    return normalizeRegistryUrl(candidate);
-  }
-
-  const gguiJsonPath = findGguiJson(args.cwd);
-  if (gguiJsonPath !== null) {
-    const loaded = readGguiJsonRegistryField(gguiJsonPath);
-    if ('error' in loaded) {
-      return { error: loaded.error };
-    }
-    if (loaded.registry !== undefined) {
-      return normalizeRegistryUrl(loaded.registry);
-    }
-  }
-
-  return {
-    error:
-      'no registry configured. Pass --registry <url>, set GGUI_REGISTRY, or add `registry` to ggui.json.',
-  };
-}
-
-/**
- * Walk up from `startDir` looking for a `ggui.json`. Returns the
- * absolute path of the first match, or `null` if none found within
- * {@link FIND_MAX_DEPTH} levels. Mirrors the algorithm in
- * `@ggui-ai/project-config/node`'s `findGguiJson` — duplicated here
- * to keep this subcommand free of the project-config dependency.
- */
-function findGguiJson(startDir: string): string | null {
-  let dir = resolve(startDir);
-  for (let i = 0; i <= FIND_MAX_DEPTH; i++) {
-    const candidate = join(dir, GGUI_JSON_FILENAME);
-    if (existsSync(candidate)) return candidate;
-    const parent = dirname(dir);
-    if (parent === dir) return null;
-    dir = parent;
-  }
-  return null;
-}
-
-/**
- * Read just the `registry` field from a `ggui.json`. We don't run the
- * full schema parser here — that would couple this command to every
- * other field in the manifest, and a corrupt `gadgets` block
- * (unrelated to search) would prevent `gadget search` from running.
- * The field is validated structurally: must be a string. Schema-level
- * URL validation happens downstream in {@link normalizeRegistryUrl}.
- */
-function readGguiJsonRegistryField(
-  path: string,
-): { registry: string | undefined } | { error: string } {
-  let raw: string;
-  try {
-    raw = readFileSync(path, 'utf-8');
-  } catch (err) {
-    return {
-      error: `failed to read ${path}: ${
-        err instanceof Error ? err.message : String(err)
-      }`,
-    };
-  }
-  let decoded: unknown;
-  try {
-    decoded = JSON.parse(raw);
-  } catch (err) {
-    return {
-      error: `${path} is not valid JSON: ${
-        err instanceof Error ? err.message : String(err)
-      }`,
-    };
-  }
-  if (decoded === null || typeof decoded !== 'object' || Array.isArray(decoded)) {
-    return { error: `${path} is not a JSON object` };
-  }
-  const reg = (decoded as { registry?: unknown }).registry;
-  if (reg === undefined) return { registry: undefined };
-  if (typeof reg !== 'string') {
-    return { error: `${path}#registry must be a string` };
-  }
-  return { registry: reg };
-}
-
-function normalizeRegistryUrl(raw: string): { url: string } | { error: string } {
-  let parsed: URL;
-  try {
-    parsed = new URL(raw);
-  } catch {
-    return { error: `registry URL is malformed: ${raw}` };
-  }
-  // Strip trailing slashes so we can append `/search` deterministically.
-  // `URL` already normalized scheme + host casing.
-  let serialized = parsed.toString();
-  while (serialized.endsWith('/')) serialized = serialized.slice(0, -1);
-  return { url: serialized };
-}
-
-/* -------------------------------------------------------------------------- */
 /* Query string                                                              */
 /* -------------------------------------------------------------------------- */
 
@@ -431,7 +301,8 @@ export interface RunArtifactSearchDeps {
 /**
  * Run a search end-to-end:
  *
- *   1. Resolve the registry URL via the three-layer chain.
+ *   1. Resolve the registry URL via the shared chain (READ-verb
+ *      posture: flag > env > ggui.json > public default).
  *   2. Build the query string.
  *   3. GET `<registry>/search?<qs>` (no auth; public endpoint).
  *   4. Parse + validate the response shape.
@@ -447,13 +318,13 @@ export async function runArtifactSearch(
     ...(flags.registry !== undefined ? { flag: flags.registry } : {}),
     cwd: deps.cwd,
     env: deps.env,
+    defaultUrl: DEFAULT_REGISTRY_URL,
   });
-  if ('error' in resolved) {
-    const isNoRegistryError = resolved.error.startsWith('no registry');
+  if (!resolved.ok) {
     return {
       ok: false,
-      code: isNoRegistryError ? 'no-registry' : 'invalid-registry',
-      message: resolved.error,
+      code: resolved.code,
+      message: resolved.message,
     };
   }
 
@@ -662,9 +533,10 @@ ${hookLines}  --tag <tag>               Filter by tag (exact match).
   --limit <n>               Page size; 1..200, default 50.
   --cursor <opaque>         Opaque cursor from a previous response —
                             roundtrip verbatim for pagination.
-  --registry <url>          Override the registry URL. Three-layer
-                            resolution: flag > GGUI_REGISTRY env >
-                            ggui.json#registry > error if unset.
+  --registry <url>          Override the registry URL. Resolution:
+                            flag > GGUI_REGISTRY env >
+                            ggui.json#registry > default
+                            (\`${DEFAULT_REGISTRY_URL}\`).
   --json                    Emit the raw JSON response body instead of
                             the human-readable table.
   --help, -h                Show this help.

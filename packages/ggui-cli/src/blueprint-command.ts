@@ -1,13 +1,14 @@
 /**
- * `ggui blueprint <create|publish|install|search>` — kind-discriminated
- * sibling of `gadget-command.ts`.
+ * `ggui blueprint <create|publish|install|uninstall|search>` —
+ * kind-discriminated sibling of `gadget-command.ts`.
  *
- * - `create`  — scaffold a new blueprint repo (TSX + contract stub)
- * - `publish` — build, sign, and push to a registry; manifest-kind
- *               mismatch errors with a friendly redirect.
- * - `install` — fetch, verify, and materialize a blueprint into
- *               `.ggui/installed-blueprints/<id>/`.
- * - `search`  — query the registry, hard-locked to `kind=blueprint`.
+ * - `create`    — scaffold a new blueprint repo (TSX + contract stub)
+ * - `publish`   — build, sign, and push to a registry; manifest-kind
+ *                 mismatch errors with a friendly redirect.
+ * - `install`   — fetch, verify, and materialize a blueprint into
+ *                 `.ggui/installed-blueprints/<id>/`.
+ * - `uninstall` — remove the materialized directory (reverse of install).
+ * - `search`    — query the registry, hard-locked to `kind=blueprint`.
  *
  * A thin router that passes `kind: 'blueprint'` to the shared
  * `internal/artifact-*` implementations. Per-kind state (scaffolders,
@@ -22,6 +23,7 @@ import {
 import {
   buildPublishHelp,
   parseArtifactPublishFlags,
+  publishOptionsFromFlags,
   runArtifactPublish,
 } from './internal/artifact-publish.js';
 import {
@@ -144,12 +146,11 @@ async function runPublish(args: readonly string[]): Promise<number> {
     process.stderr.write(`ggui blueprint publish: ${flags.error}\n`);
     return 2;
   }
+  // Forward the WHOLE parsed-flag bundle — no per-field spreads (a
+  // hand-written spread is how `--identity-token` got dropped once).
   const result = await runArtifactPublish({
     kind: KIND,
-    ...(flags.registry !== undefined ? { registry: flags.registry } : {}),
-    dryRun: flags.dryRun,
-    ...(flags.key !== undefined ? { key: flags.key } : {}),
-    ...(flags.auth !== undefined ? { auth: flags.auth } : {}),
+    ...publishOptionsFromFlags(flags),
   });
   return result.exitCode;
 }

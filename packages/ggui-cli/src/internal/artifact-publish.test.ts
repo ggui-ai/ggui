@@ -5,7 +5,8 @@
  * session are never touched.
  *
  * Coverage matrix (Slice 3.4 brief, §Tests):
- *   - Three-layer registry resolution: flag > env > ggui.json > error
+ *   - WRITE-verb registry posture: flag > env > ggui.json > error
+ *     (chain unit tests live in `registry-url.test.ts`)
  *   - Missing manifest → clear error
  *   - Invalid manifest → zod issue message
  *   - Conformance preflight fails → exit 1, no upload
@@ -31,7 +32,6 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
   parseArtifactPublishFlags,
-  resolveRegistryUrl,
   runArtifactPublish,
   type ArtifactPublishOptions,
 } from './artifact-publish.js';
@@ -292,96 +292,19 @@ describe('parseArtifactPublishFlags', () => {
     const f = parseArtifactPublishFlags(['--identity-token']);
     expect(f.error).toBe('--identity-token requires a value');
   });
-});
 
-// ---------------------------------------------------------------------------
-// resolveRegistryUrl — three-layer
-// ---------------------------------------------------------------------------
-
-describe('resolveRegistryUrl', () => {
-  let env: TestEnv;
-  beforeEach(() => {
-    env = setupTestEnv();
-  });
-  afterEach(() => teardownTestEnv(env));
-
-  it('flag wins over env wins over ggui.json', () => {
-    process.env['GGUI_REGISTRY'] = 'https://from-env.example';
-    writeFileSync(
-      join(env.repoDir, 'ggui.json'),
-      JSON.stringify({ schema: '1', registry: 'https://from-json.example' }),
-    );
-    const flag = resolveRegistryUrl({
-      flag: 'https://from-flag.example',
-      env: process.env,
-      cwd: env.repoDir,
-    });
-    expect(flag.ok).toBe(true);
-    if (flag.ok) {
-      expect(flag.url).toBe('https://from-flag.example');
-      expect(flag.source).toBe('flag');
-    }
-  });
-
-  it('env wins over ggui.json when flag absent', () => {
-    process.env['GGUI_REGISTRY'] = 'https://from-env.example';
-    writeFileSync(
-      join(env.repoDir, 'ggui.json'),
-      JSON.stringify({ schema: '1', registry: 'https://from-json.example' }),
-    );
-    const r = resolveRegistryUrl({ env: process.env, cwd: env.repoDir });
-    expect(r.ok).toBe(true);
-    if (r.ok) {
-      expect(r.url).toBe('https://from-env.example');
-      expect(r.source).toBe('env');
-    }
-  });
-
-  it('falls back to ggui.json#registry when flag + env absent', () => {
-    writeFileSync(
-      join(env.repoDir, 'ggui.json'),
-      JSON.stringify({ schema: '1', registry: 'https://from-json.example/' }),
-    );
-    const r = resolveRegistryUrl({ env: process.env, cwd: env.repoDir });
-    expect(r.ok).toBe(true);
-    if (r.ok) {
-      expect(r.url).toBe('https://from-json.example');
-      expect(r.source).toBe('ggui.json');
-    }
-  });
-
-  it('walks UP from cwd to find ggui.json', () => {
-    const sub = join(env.repoDir, 'sub', 'nested');
-    mkdirSync(sub, { recursive: true });
-    writeFileSync(
-      join(env.repoDir, 'ggui.json'),
-      JSON.stringify({ schema: '1', registry: 'https://parent.example' }),
-    );
-    const r = resolveRegistryUrl({ env: process.env, cwd: sub });
-    expect(r.ok).toBe(true);
-    if (r.ok) expect(r.source).toBe('ggui.json');
-  });
-
-  it('errors when no registry can be resolved', () => {
-    const r = resolveRegistryUrl({ env: process.env, cwd: env.repoDir });
-    expect(r.ok).toBe(false);
-    if (!r.ok) {
-      expect(r.message).toContain('no registry resolved');
-      expect(r.message).toContain('--registry');
-      expect(r.message).toContain('GGUI_REGISTRY');
-      expect(r.message).toContain('ggui.json');
-    }
-  });
-
-  it('rejects an invalid registry URL on the flag', () => {
-    const r = resolveRegistryUrl({
-      flag: 'not-a-url',
-      env: process.env,
-      cwd: env.repoDir,
-    });
-    expect(r.ok).toBe(false);
+  it('rejects --identity-token followed by another flag (must not swallow it as the value)', () => {
+    const f = parseArtifactPublishFlags(['--identity-token', '--dry-run']);
+    expect(f.error).toBe('--identity-token requires a value');
+    expect(f.identityToken).toBeUndefined();
   });
 });
+
+// Registry-URL resolution unit tests live in `registry-url.test.ts`
+// (the chain is shared across publish/install/search/keys). The
+// `runArtifactPublish` suite below still covers the WRITE-verb
+// integration ("no_registry_resolved when none of flag/env/ggui.json
+// is set").
 
 // ---------------------------------------------------------------------------
 // runArtifactPublish — end-to-end with mocks
@@ -944,6 +867,27 @@ describe('runArtifactPublish', () => {
     });
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.error.code).toBe('no_registry_resolved');
+  });
+
+  it('returns invalid_registry (not no_registry_resolved) for a malformed --registry', async () => {
+    // "Nothing configured" and "configured but unusable" are different
+    // operator problems — the resolver's code split must survive into
+    // PublishError like it does for search + keys register.
+    seedGadgetRepo(env.repoDir);
+    const io = captureIO();
+    const result = await runArtifactPublish({
+      kind: 'gadget',
+      registry: 'not-a-url',
+      dryRun: false,
+      cwd: env.repoDir,
+      stdout: io.stdoutFn,
+      stderr: io.stderrFn,
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('invalid_registry');
+      expect(result.error.message).toContain('not a valid URL');
+    }
   });
 
   // De-Cognito (2026-06-11): the publish flow's default credential is

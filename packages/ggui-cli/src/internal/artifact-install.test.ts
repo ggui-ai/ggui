@@ -850,7 +850,7 @@ describe('runArtifactInstall', () => {
     expect(io.stderr.join('')).toMatch(/yanked/i);
   });
 
-  it('403 private → exit 1 with JWT-deferred hint', async () => {
+  it('403 private → exit 1 with a truthful "unsupported" hint (no login misdirection)', async () => {
     const fetchStub = makeFetchStub([
       {
         matches: (url) => url.endsWith('/pkg/my-org/private/1.0.0'),
@@ -872,7 +872,77 @@ describe('runArtifactInstall', () => {
       },
     );
     expect(code).toBe(1);
-    expect(io.stderr.join('')).toMatch(/private/i);
+    const err = io.stderr.join('');
+    expect(err).toMatch(/private/i);
+    // The hint must be honest: install sends no credentials, so it
+    // must NOT tell the operator to log in (a prior version pointed
+    // at a nonexistent `ggui auth login` verb AND implied logging in
+    // would unlock the install — neither was true). It also must not
+    // instruct the operator to lobby the publisher — visibility rules
+    // are registry policy; the CLI just states what is installable.
+    expect(err).toContain('not supported');
+    expect(err).toContain('without credentials');
+    expect(err).toContain('public visibility');
+    expect(err).not.toContain('ggui auth login');
+    expect(err).not.toMatch(/log in with/);
+    expect(err).not.toMatch(/[Aa]sk the publisher/);
+  });
+
+  it('403 with a non-JSON body (WAF/proxy) → same truthful hint, exit 1', async () => {
+    // A proxy in front of the registry may answer 403 with an HTML
+    // error page. The status check must fire BEFORE any body parse or
+    // the operator gets a generic "non-JSON body" error instead of
+    // the private-artifact diagnosis.
+    const fetchStub = makeFetchStub([
+      {
+        matches: (url) => url.endsWith('/pkg/my-org/private/1.0.0'),
+        response: new Response('<html>403 Forbidden</html>', {
+          status: 403,
+          headers: { 'content-type': 'text/html' },
+        }),
+      },
+    ]);
+    const io = captureIO();
+    const code = await runArtifactInstall(
+      io.flags({ artifactId: '@my-org/private', version: '1.0.0' }),
+      {
+        cwd: workDir,
+        env: {},
+        fetch: fetchStub,
+        stdout: (s) => io.stdout.push(s),
+        stderr: (s) => io.stderr.push(s),
+      },
+    );
+    expect(code).toBe(1);
+    const err = io.stderr.join('');
+    expect(err).toMatch(/private/i);
+    expect(err).toContain('not supported');
+    expect(err).not.toContain('non-JSON body');
+  });
+
+  it('5xx with a non-JSON body (proxy error page) → bare status line, exit 1', async () => {
+    const fetchStub = makeFetchStub([
+      {
+        matches: (url) => url.endsWith('/pkg/my-org/flaky/1.0.0'),
+        response: new Response('Bad Gateway', {
+          status: 502,
+          headers: { 'content-type': 'text/plain' },
+        }),
+      },
+    ]);
+    const io = captureIO();
+    const code = await runArtifactInstall(
+      io.flags({ artifactId: '@my-org/flaky', version: '1.0.0' }),
+      {
+        cwd: workDir,
+        env: {},
+        fetch: fetchStub,
+        stdout: (s) => io.stdout.push(s),
+        stderr: (s) => io.stderr.push(s),
+      },
+    );
+    expect(code).toBe(1);
+    expect(io.stderr.join('')).toContain('registry returned 502');
   });
 
   it('manifest invalid → exit 1, zod issues surface in message', async () => {
@@ -1169,7 +1239,11 @@ describe('runArtifactInstall', () => {
     expect(observedHost).toBe('from-flag.example.com');
   });
 
-  it('registry resolution: ggui.json#registry beats env', async () => {
+  it('registry resolution: GGUI_REGISTRY env beats ggui.json#registry (npm model)', async () => {
+    // Unified chain (2026-08): env over project config on EVERY verb —
+    // install previously inverted these two layers relative to
+    // publish/search, which silently sent installs to the wrong
+    // registry in CI setups that export GGUI_REGISTRY.
     writeFileSync(
       join(workDir, 'ggui.json'),
       JSON.stringify({
@@ -1205,7 +1279,78 @@ describe('runArtifactInstall', () => {
         stderr: (s) => io.stderr.push(s),
       },
     );
+    expect(observedHost).toBe('from-env.example.com');
+  });
+
+  it('registry resolution: ggui.json#registry used when env unset', async () => {
+    writeFileSync(
+      join(workDir, 'ggui.json'),
+      JSON.stringify({
+        schema: '1',
+        app: { slug: 'demo', name: 'Demo' },
+        registry: 'https://from-config.example.com',
+      }),
+    );
+    let observedHost: string | undefined;
+    const fetchStub = makeFetchStub([
+      {
+        matches: (url) => {
+          observedHost = new URL(url).host;
+          return true;
+        },
+        response: jsonResponse(404, { error: 'not_found', message: 'nope' }),
+      },
+    ]);
+    const io = captureIO();
+    await runArtifactInstall(
+      {
+        kind: 'gadget',
+        artifactId: '@my-org/foo',
+        version: '0.1.0',
+        noPrompt: true,
+        strict: false,
+      },
+      {
+        cwd: workDir,
+        env: {},
+        fetch: fetchStub,
+        stdout: (s) => io.stdout.push(s),
+        stderr: (s) => io.stderr.push(s),
+      },
+    );
     expect(observedHost).toBe('from-config.example.com');
+  });
+
+  it('registry resolution: zero config → public default registry', async () => {
+    // Seed ggui.json WITHOUT a registry field (setupTempWorkdir default).
+    let observedHost: string | undefined;
+    const fetchStub = makeFetchStub([
+      {
+        matches: (url) => {
+          observedHost = new URL(url).host;
+          return true;
+        },
+        response: jsonResponse(404, { error: 'not_found', message: 'nope' }),
+      },
+    ]);
+    const io = captureIO();
+    await runArtifactInstall(
+      {
+        kind: 'gadget',
+        artifactId: '@my-org/foo',
+        version: '0.1.0',
+        noPrompt: true,
+        strict: false,
+      },
+      {
+        cwd: workDir,
+        env: {},
+        fetch: fetchStub,
+        stdout: (s) => io.stdout.push(s),
+        stderr: (s) => io.stderr.push(s),
+      },
+    );
+    expect(observedHost).toBe('registry.ggui.ai');
   });
 
   it('registry resolution: env beats default when no flag/config', async () => {
