@@ -18,7 +18,15 @@
  */
 import { describe, expect, it } from 'vitest';
 import { InMemoryKeyValueStore } from '@ggui-ai/mcp-server-core/in-memory';
-import type { DataContract, HandshakeSuggestion, Blueprint } from '@ggui-ai/protocol';
+import type { AppMetadataStore } from '@ggui-ai/mcp-server-core';
+import {
+  resolveAppGadgets,
+  STDLIB_GADGETS,
+  type DataContract,
+  type GadgetDescriptor,
+  type HandshakeSuggestion,
+  type Blueprint,
+} from '@ggui-ai/protocol';
 import {
   createGguiHandshakeHandler,
   consumeHandshakeRecord,
@@ -486,6 +494,111 @@ describe('createGguiHandshakeHandler — MVB-5', () => {
         { appId: 'app-1', requestId: 'r' },
       );
       expect(out.target.sessionId).toBe('render-existing-123');
+    });
+  });
+
+  describe('per-app gadget catalog (resolveAppGadgets parity)', () => {
+    const DECLARED_ONLY: GadgetDescriptor[] = [
+      {
+        package: '@acme/x',
+        version: '0.0.1',
+        exports: [
+          {
+            hook: 'useCustom',
+            description: 'Custom hook for the test',
+            usage: 'Mounts the custom widget',
+            example: { hook: 'useCustom' },
+          },
+        ],
+      },
+    ];
+
+    /** Negotiator stub that captures the catalog the handler threads in. */
+    const capturingNegotiator = () => {
+      let captured: readonly GadgetDescriptor[] | undefined;
+      const negotiator: HandshakeNegotiator = {
+        decide: (input) => {
+          captured = input.gadgets;
+          return {
+            action: 'create',
+            reason: 'capture',
+            suggestion: {
+              origin: 'agent',
+              rationale: 'capture',
+              blueprintMeta: { contractHash: 'hash_cap', variance: {} },
+            },
+            effectiveContract: {} as DataContract,
+          };
+        },
+      };
+      return { negotiator, gadgets: () => captured };
+    };
+
+    it('applies the stdlib floor over a store returning DECLARED-ONLY gadgets — same resolution as render/list-gadgets', async () => {
+      // Regression (2026-08-09 audit): the handshake used to compute
+      // `app.gadgets ?? STDLIB_GADGETS` — declared gadgets REPLACED the
+      // stdlib floor, so a store returning raw declared rows made the
+      // negotiator see a DIFFERENT catalog than the render gate accepts
+      // (render.ts / list-gadgets.ts resolve via `resolveAppGadgets`).
+      // The bug was masked by stores that pre-floor on read (cloud DDB
+      // `getApp`, OSS `InMemoryAppMetadataStore` via `composeApp`); this
+      // stub returns the raw declared row a divergent store would.
+      const appMetadataStore: AppMetadataStore = {
+        get: async (appId) =>
+          appId === 'app-1' ? { id: 'app-1', gadgets: DECLARED_ONLY } : null,
+      };
+      const { negotiator, gadgets } = capturingNegotiator();
+      const handler = createGguiHandshakeHandler({
+        kvStore: new InMemoryKeyValueStore(),
+        negotiator,
+        appMetadataStore,
+      });
+      await handler.handler(minimalInput(), { appId: 'app-1', requestId: 'r' });
+      // Exactly what ggui_list_gadgets would serve for the same store row.
+      expect(gadgets()).toEqual(resolveAppGadgets(DECLARED_ONLY));
+      // Both the stdlib floor AND the declared package are present.
+      expect((gadgets() ?? []).map((g) => g.package)).toEqual(
+        expect.arrayContaining([STDLIB_GADGETS[0].package, '@acme/x']),
+      );
+    });
+
+    it('serves exactly STDLIB_GADGETS for an unregistered app (store returns null)', async () => {
+      const appMetadataStore: AppMetadataStore = { get: async () => null };
+      const { negotiator, gadgets } = capturingNegotiator();
+      const handler = createGguiHandshakeHandler({
+        kvStore: new InMemoryKeyValueStore(),
+        negotiator,
+        appMetadataStore,
+      });
+      await handler.handler(minimalInput(), { appId: 'app-x', requestId: 'r' });
+      // resolveAppGadgets(undefined) is the STDLIB_GADGETS reference —
+      // same identity list-gadgets serves for the unregistered case.
+      expect(gadgets()).toBe(STDLIB_GADGETS);
+    });
+
+    it('is idempotent over a pre-flooring store (cloud DDB read posture) — catalog unchanged by value', async () => {
+      const preFloored = resolveAppGadgets(DECLARED_ONLY);
+      const appMetadataStore: AppMetadataStore = {
+        get: async () => ({ id: 'app-1', gadgets: preFloored }),
+      };
+      const { negotiator, gadgets } = capturingNegotiator();
+      const handler = createGguiHandshakeHandler({
+        kvStore: new InMemoryKeyValueStore(),
+        negotiator,
+        appMetadataStore,
+      });
+      await handler.handler(minimalInput(), { appId: 'app-1', requestId: 'r' });
+      expect(gadgets()).toEqual(preFloored);
+    });
+
+    it('threads NO catalog when no appMetadataStore is bound', async () => {
+      const { negotiator, gadgets } = capturingNegotiator();
+      const handler = createGguiHandshakeHandler({
+        kvStore: new InMemoryKeyValueStore(),
+        negotiator,
+      });
+      await handler.handler(minimalInput(), { appId: 'app-1', requestId: 'r' });
+      expect(gadgets()).toBeUndefined();
     });
   });
 

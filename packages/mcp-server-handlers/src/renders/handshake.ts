@@ -40,7 +40,7 @@ import { z } from 'zod';
 import { isGeneratorRegistered } from './assert-generator.js';
 import { blueprintKey } from '@ggui-ai/protocol/blueprint-key';
 import {
-  STDLIB_GADGETS,
+  resolveAppGadgets,
   blueprintSourceToFlat,
   validateContract,
   lintContract,
@@ -278,9 +278,11 @@ export interface GguiHandshakeHandlerDeps {
   readonly kvStore: KeyValueStore;
   /**
    * Optional per-app metadata resolver. When bound, the handler reads
-   * `app.gadgets` for the resolved `ctx.appId` and threads it
-   * to the negotiator so synth can teach the LLM which gadget
-   * bindings the produced UI may use.
+   * `app.gadgets` for the resolved `ctx.appId`, resolves the effective
+   * catalog via `resolveAppGadgets` (stdlib floor + declared overlay —
+   * the same resolution the render gate and `ggui_list_gadgets` apply),
+   * and threads it to the negotiator so synth can teach the LLM which
+   * gadget bindings the produced UI may use.
    */
   readonly appMetadataStore?: AppMetadataStore;
   /**
@@ -554,11 +556,18 @@ export function createGguiHandshakeHandler(
       // deterministic gate. This is the forgiving-handshake posture: a
       // malformed draft is a TRIGGER into repair, not a thrown error.
 
-      // Per-app gadget catalog.
+      // Per-app gadget catalog — resolved via `resolveAppGadgets`
+      // (stdlib floor + declared overlay, declared wins per-package),
+      // the SAME resolution the render gate (render.ts) and
+      // `ggui_list_gadgets` apply. The negotiator MUST see the catalog
+      // the render gate will accept; a store that returns raw declared
+      // rows must not drop the floor here. Idempotent over stores that
+      // pre-floor on read (e.g. the cloud DDB adapter).
       const gadgets: readonly GadgetDescriptor[] | undefined =
         deps.appMetadataStore
-          ? ((await deps.appMetadataStore.get(ctx.appId))?.gadgets ??
-            STDLIB_GADGETS)
+          ? resolveAppGadgets(
+              (await deps.appMetadataStore.get(ctx.appId))?.gadgets,
+            )
           : undefined;
 
       // Delegate suggestion production to the negotiator. Absent
