@@ -71,11 +71,10 @@ import type { StreamBus } from './wire-config.js';
 
 /**
  * Default polling cadence for the iframe-polling transport (ms).
- * Mirrors the server-side default on
- * {@link DEFAULT_CHANNEL_POLL_DEFAULT_MS} in
- * `packages/mcp-server/src/render-channel.ts`. Conservative: 10s
- * matches a "data is fresh enough" bar without burning the parent
- * host's `tools/call` quota.
+ * Mirrors the server-side default (`DEFAULT_CHANNEL_POLL_DEFAULT_MS`
+ * in `mcp-server/src/ggui-session-channel/channel-subscriptions.ts`).
+ * Conservative: 10s matches a "data is fresh enough" bar without
+ * burning the parent host's `tools/call` quota.
  */
 export const DEFAULT_IFRAME_POLL_INTERVAL_MS = 10_000;
 
@@ -208,10 +207,22 @@ export interface ChannelTransportRouterOptions {
   /** StreamBus the router emits envelopes onto. */
   readonly streamBus: StreamBus;
   /**
-   * Default poll cadence (ms) for the iframe-polling transport.
-   * Overridden per-channel via `streamSpec[name].source.pollIntervalMs`
-   * when authored. Falls back to {@link DEFAULT_IFRAME_POLL_INTERVAL_MS}
-   * when neither the spec nor the option supplies one.
+   * Poll cadence (ms) shared by EVERY iframe-polled channel on this
+   * router. Uniform by construction: `StreamChannelEntry.source`
+   * declares `tool` + `args` only, so a contract author has no way to
+   * ask one channel to poll faster than another. Giving channels
+   * individual cadences would be a protocol change (a new contract
+   * field plus server-side clamping — placement, on the channel entry
+   * or on `source`, is still open), not a router option — the
+   * per-subscription `pollIntervalMs` that does exist belongs to the
+   * WS transport's `channel_subscribe` payload, which this polling
+   * fallback never sends.
+   *
+   * Falls back to {@link DEFAULT_IFRAME_POLL_INTERVAL_MS} when
+   * omitted. The only cadence that varies between channels at runtime
+   * is the degraded probe cadence ({@link
+   * ChannelTransportRouterOptions.probePollIntervalMs}), which follows
+   * observed poll health rather than authored config.
    */
   readonly defaultPollIntervalMs?: number;
   /**
