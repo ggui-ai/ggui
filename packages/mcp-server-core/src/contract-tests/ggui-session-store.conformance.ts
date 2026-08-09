@@ -41,7 +41,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import type { GguiSession } from '@ggui-ai/protocol';
+import type { ComponentGguiSession } from '@ggui-ai/protocol';
 import type { GguiSessionStore } from '../ggui-session-store.js';
 
 /**
@@ -84,7 +84,7 @@ export function runGguiSessionStoreConformance(
     id: string,
     appId: string,
     componentCode = '/* placeholder */',
-  ): GguiSession {
+  ): ComponentGguiSession {
     return {
       type: 'component',
       id,
@@ -210,6 +210,52 @@ export function runGguiSessionStoreConformance(
           expect(second?.createdAt).toBe(first?.createdAt);
           // eventSequence carried across upserts.
           expect(second?.eventSequence).toBe(first?.eventSequence);
+        });
+      });
+
+      it('mints the ledger at zero for an ordinary fresh render', async () => {
+        await withStore(async (store) => {
+          await store.commit({
+            appId: 'app-1',
+            render: makeComponentGguiSession('render-fresh', 'app-1'),
+          });
+          expect((await store.get('render-fresh'))?.eventSequence).toBe(0);
+        });
+      });
+
+      it('seeds the ledger from the payload when a re-created render resumes one', async () => {
+        // A render rebuilt under a sessionId that already had a life
+        // (a locator re-minted from a durable record after its row aged
+        // out) carries the sequence its earlier life reached. Restarting
+        // at zero would reissue sequence numbers the render already
+        // used, so a cursor persisted from that life filters the new
+        // life's events out as already-seen.
+        await withStore(async (store) => {
+          await store.commit({
+            appId: 'app-1',
+            render: {
+              ...makeComponentGguiSession('render-resumed', 'app-1'),
+              eventSequence: 12,
+            },
+          });
+          expect((await store.get('render-resumed'))?.eventSequence).toBe(12);
+        });
+      });
+
+      it('seeds the ledger only on the mint branch, never on a replace', async () => {
+        await withStore(async (store) => {
+          await store.commit({
+            appId: 'app-1',
+            render: makeComponentGguiSession('render-replaced', 'app-1'),
+          });
+          await store.commit({
+            appId: 'app-1',
+            render: {
+              ...makeComponentGguiSession('render-replaced', 'app-1', '/* v2 */'),
+              eventSequence: 99,
+            },
+          });
+          expect((await store.get('render-replaced'))?.eventSequence).toBe(0);
         });
       });
     });

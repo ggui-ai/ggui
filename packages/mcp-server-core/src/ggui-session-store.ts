@@ -219,7 +219,8 @@ export interface AppendEventInput {
  * Behavior:
  *
  *   - If no row with `render.id` exists, create one (with the standard
- *     lifecycle fields populated from `now`).
+ *     lifecycle fields populated from `now`, and the ledger seeded per
+ *     {@link firstWriteEventSequence}).
  *   - If a row with `render.id` exists, replace its visible-bits surface
  *     in place; lifecycle fields (`createdAt`, `eventSequence`,
  *     `hostSession`) are preserved across the upsert. `lastActivityAt`
@@ -245,6 +246,36 @@ export interface CommitGguiSessionInput {
     readonly hostName: string;
     readonly hostSessionId: string;
   };
+}
+
+/**
+ * The `eventSequence` a FIRST-WRITE {@link GguiSessionStore.commit}
+ * mints the row with. Implementations MUST route their create branch
+ * through this rather than hard-coding zero; the replace branch is
+ * unaffected and keeps preserving the existing row's sequence.
+ *
+ * Normally the answer is zero — a new render's ledger starts empty,
+ * and every producer of a fresh payload says so. The exception is a
+ * render RE-created under a sessionId that already had a life: a
+ * locator rebuilt from a durable record after its row aged out. Its
+ * ledger MUST continue above the sequence the earlier life reached,
+ * because a cursor persisted from that life (a WS `fromSeq`, a polling
+ * cursor) filters out everything at or below it — the new life's
+ * events would arrive numbered as already-seen and be dropped.
+ *
+ * Anything that is not a positive safe integer means zero rather than
+ * an error: the field only aligns cursors, and failing a commit over
+ * it would lose a working render to a caller-side bug.
+ */
+export function firstWriteEventSequence(
+  input: CommitGguiSessionInput,
+): number {
+  // The embedded-MCP-App variant carries no ledger field at all — it
+  // is not a variant a re-mint produces, so zero is the whole answer
+  // for it.
+  const seq =
+    'eventSequence' in input.render ? input.render.eventSequence : 0;
+  return Number.isSafeInteger(seq) && seq > 0 ? seq : 0;
 }
 
 export interface GguiSessionStore {
