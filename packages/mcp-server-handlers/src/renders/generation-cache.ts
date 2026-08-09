@@ -27,6 +27,7 @@ import type {
   EnumerableVectorStore,
   VectorStore,
 } from '@ggui-ai/mcp-server-core';
+import type { BlueprintDurabilityDeps } from './blueprint-durability.js';
 
 /**
  * Blueprint-cache storage bundle. Threaded into the
@@ -41,6 +42,14 @@ export interface GenerationCacheDeps {
    * {@link BlueprintIndex}.
    */
   readonly index: BlueprintIndex;
+  /**
+   * Durable write-through target for fresh registrations (#430 slice
+   * 2). Threaded alongside the cache seams because registration is
+   * where it fires; absent ⇒ the registry stays the only home for a
+   * blueprint, which is this deployment's existing behavior.
+   * See `blueprint-durability.ts`.
+   */
+  readonly durability?: BlueprintDurabilityDeps;
 }
 
 /** A cache hit the render handler can reconstruct a {@link ComponentGguiSession} from. */

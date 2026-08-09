@@ -1851,6 +1851,13 @@ export function createGguiRenderHandler(
                   embedding: deps.generation.cache.embedding,
                   vectorStore: deps.generation.cache.vectorStore,
                   index: deps.generation.cache.index,
+                  // Forwarded so a fresh mint is written through to
+                  // durable storage. Undefined on deployments that
+                  // bound none, which `registerBlueprint` treats as a
+                  // no-op rather than an error.
+                  ...(deps.generation.cache.durability !== undefined
+                    ? { durability: deps.generation.cache.durability }
+                    : {}),
                 },
                 ctx.appId,
                 {

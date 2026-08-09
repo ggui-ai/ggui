@@ -109,6 +109,15 @@ export {
   type GenerationCacheEntry,
   type GenerationCacheHit,
 } from "./generation-cache.js";
+// #430 slice 2 — durable blueprint write-through. The event registry is
+// exported so storage backends emit the same names from one place.
+export {
+  BLUEPRINT_DURABILITY_EVENTS,
+  projectDurableBlueprint,
+  writeBlueprintDurably,
+  type BlueprintDurabilityDeps,
+  type BlueprintDurabilityEvent,
+} from "./blueprint-durability.js";
 export {
   createGguiGetSessionHandler,
   type GetSessionHeartbeatResult,

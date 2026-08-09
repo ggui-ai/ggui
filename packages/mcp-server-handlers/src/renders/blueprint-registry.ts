@@ -69,6 +69,10 @@ import {
   type ContractValidationFinding,
   type ContractValidationResult,
 } from '@ggui-ai/negotiator';
+import {
+  writeBlueprintDurably,
+  type BlueprintDurabilityDeps,
+} from './blueprint-durability.js';
 
 /**
  * Atomic-design level. The runtime currently writes only
@@ -193,6 +197,17 @@ export interface BlueprintRegistryDeps {
    * indexed exact lookup that consume it land next wave.
    */
   readonly index: BlueprintIndex;
+  /**
+   * Durable write-through target (#430 slice 2). When bound, a fresh
+   * mint is also written to a {@link BlueprintStore} (+ optional
+   * {@link CodeStore} for the body) so it stays resolvable by id after
+   * the capped registry has evicted it or the process has restarted.
+   *
+   * Optional and best-effort: absent ⇒ no write, no event; present and
+   * failing ⇒ a named event and a registration that still succeeds.
+   * See `blueprint-durability.ts`.
+   */
+  readonly durability?: BlueprintDurabilityDeps;
 }
 
 /** Input for {@link registerBlueprint}. */
@@ -594,6 +609,14 @@ export async function registerBlueprint(
     metadata: blueprintToMetadata(blueprint),
   });
   await deps.index.putId(scope, exactKey, id);
+  // Durable write-through for the fresh mint only. The dedup return
+  // above skips it deliberately: that row was written through when it
+  // was first minted, and re-writing it would fail the durable store's
+  // already-exists guard on every cache hit.
+  //
+  // `scope` is the appId at every call site — the registry's tenancy
+  // unit and the durable record's are the same thing.
+  await writeBlueprintDurably(deps.durability, scope, blueprint);
   return blueprint;
 }
 

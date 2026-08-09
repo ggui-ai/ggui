@@ -120,6 +120,7 @@ import {
   createGguiOpsUpdateBlueprintHandler,
 } from "@ggui-ai/mcp-server-handlers/ops-blueprint";
 import { setCacheTraceSink, setPayloadTraceSink } from "@ggui-ai/mcp-server-handlers/renders";
+import type { BlueprintDurabilityDeps } from "@ggui-ai/mcp-server-handlers/renders";
 import type { OperatorConfig, ThemeConfig } from "@ggui-ai/project-config";
 import type { DiscoveredPrimitiveCatalog, LoadedTheme } from "@ggui-ai/project-config/node";
 import { loadTheme } from "@ggui-ai/project-config/node";
@@ -2718,6 +2719,25 @@ export interface CreateGguiServerOptions {
   readonly codeStore?: CodeStore;
 
   /**
+   * Durable write-through for freshly registered blueprints (#430
+   * slice 2). When wired, a registration that mints a new row also
+   * persists it — metadata to the `BlueprintStore`, the compiled body
+   * to the `CodeStore` — so the blueprint stays resolvable by id after
+   * the capped in-process registry has evicted it or the process has
+   * restarted.
+   *
+   * Separate from {@link codeStore} on purpose: that one backs the
+   * `GET /code/<hash>.js` delivery route and binding it changes what
+   * the render slice emits. This one is retention, and a deployment
+   * may reasonably want one without the other.
+   *
+   * Defaults: omitted ⇒ no write-through, no events, and the registry
+   * remains a blueprint's only home. Best-effort when present — a
+   * failing store logs a named event and registration still succeeds.
+   */
+  readonly durableBlueprints?: BlueprintDurabilityDeps;
+
+  /**
    * Provisional A2UI preview wiring for `ggui_render`. When the config
    * flag is on, every qualifying component render kicks off the
    * supplied emitter; frames land on the reserved `_ggui:preview`
@@ -3427,7 +3447,20 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
   const generationWithCache = opts.generation
     ? {
         ...opts.generation,
-        cache: opts.generation.cache ?? ({ embedding, vectorStore: vectors, index } as const),
+        cache:
+          opts.generation.cache ??
+          ({
+            embedding,
+            vectorStore: vectors,
+            index,
+            // Durable write-through rides the cache bundle because
+            // registration is where it fires. Omitted entirely when
+            // unwired so the bundle stays byte-identical to before on
+            // deployments that bound no durable store.
+            ...(opts.durableBlueprints !== undefined
+              ? { durability: opts.durableBlueprints }
+              : {}),
+          } as const),
         // Thread the shared/seed pools into the generation deps so the
         // render handler's §6 reuse point-read can fall back to them on a
         // per-app miss. Same `opts.seedPools` fed to the negotiator below;

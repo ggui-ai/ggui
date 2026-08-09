@@ -1,10 +1,15 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import {
   InMemoryBlueprintIndex,
   InMemoryVectorStore,
   MockEmbeddingProvider,
 } from '@ggui-ai/mcp-server-core/in-memory';
-import type { BlueprintSource, DataContract } from '@ggui-ai/protocol';
+import type { BlueprintStore } from '@ggui-ai/mcp-server-core';
+import type {
+  Blueprint as DurableBlueprint,
+  BlueprintSource,
+  DataContract,
+} from '@ggui-ai/protocol';
 import { blueprintKey, variantKey } from '@ggui-ai/protocol/blueprint-key';
 import type { ContractValidationResult } from '@ggui-ai/negotiator';
 import {
@@ -1061,5 +1066,91 @@ describe('registerBlueprint — contract structural validation', () => {
     expect(bp.validationWarnings).toBeUndefined();
     const all = await listBlueprints(deps, SCOPE);
     expect(all).toHaveLength(1);
+  });
+});
+
+/**
+ * #430 slice 2 — the durable write-through fires from registration
+ * itself, so the wiring is pinned where it actually runs rather than
+ * only at the unit level in `blueprint-durability.test.ts`.
+ */
+describe('registerBlueprint — durable write-through', () => {
+  function fakeDurableStore() {
+    const rows: DurableBlueprint[] = [];
+    const blueprintStore: BlueprintStore = {
+      put: async (bp) => {
+        rows.push(bp);
+      },
+      list: async () => [],
+      get: async () => null,
+      setOperatorDefault: async () => {},
+      delete: async () => {},
+    };
+    return { blueprintStore, rows };
+  }
+
+  const INPUT = {
+    kind: 'template' as const,
+    contract: NOTEPAD_CONTRACT,
+    intent: 'a notepad',
+    componentCode: 'export default () => null;',
+    source: { kind: 'user' } as BlueprintSource,
+  };
+
+  it('persists a fresh mint with the registry-minted id and domain keys', async () => {
+    const { blueprintStore, rows } = fakeDurableStore();
+    const deps = { ...makeDeps(), durability: { blueprintStore } };
+
+    const bp = await registerBlueprint(deps, SCOPE, INPUT);
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.blueprintId).toBe(bp.id);
+    expect(rows[0]!.appId).toBe(SCOPE);
+    expect(rows[0]!.contractHash).toBe(blueprintKey(NOTEPAD_CONTRACT));
+  });
+
+  it('does NOT re-persist on a dedup return', async () => {
+    const { blueprintStore, rows } = fakeDurableStore();
+    const deps = { ...makeDeps(), durability: { blueprintStore } };
+
+    const first = await registerBlueprint(deps, SCOPE, INPUT);
+    const second = await registerBlueprint(deps, SCOPE, INPUT);
+
+    // Same row returned, and exactly one durable write — a second one
+    // would hit the store's already-exists guard on every cache hit.
+    expect(second.id).toBe(first.id);
+    expect(rows).toHaveLength(1);
+  });
+
+  it('registers normally when no durable store is bound', async () => {
+    const deps = makeDeps();
+    const bp = await registerBlueprint(deps, SCOPE, INPUT);
+    expect(bp.id).toMatch(/^bp_/);
+    expect(await listBlueprints(deps, SCOPE)).toHaveLength(1);
+  });
+
+  it('still returns the blueprint when the durable store rejects', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const blueprintStore: BlueprintStore = {
+      put: async () => {
+        throw new Error('durable store down');
+      },
+      list: async () => [],
+      get: async () => null,
+      setOperatorDefault: async () => {},
+      delete: async () => {},
+    };
+    const deps = { ...makeDeps(), durability: { blueprintStore } };
+
+    const bp = await registerBlueprint(deps, SCOPE, INPUT);
+
+    // Registration succeeded and the registry row is queryable — only
+    // the future re-mint is degraded, and it said so by name.
+    expect(bp.id).toMatch(/^bp_/);
+    expect(await listBlueprints(deps, SCOPE)).toHaveLength(1);
+    expect(JSON.parse(warn.mock.calls[0]?.[0] as string).msg).toBe(
+      'blueprint_durable_write_failed',
+    );
+    warn.mockRestore();
   });
 });
