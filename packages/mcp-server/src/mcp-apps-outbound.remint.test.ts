@@ -47,6 +47,7 @@ import type {
   Blueprint,
   ComponentGguiSession,
   DataContract,
+  GadgetDescriptor,
 } from "@ggui-ai/protocol";
 import type { McpAppAiGguiRenderMeta } from "@ggui-ai/protocol/integrations/mcp-apps";
 import type { HandlerContext } from "@ggui-ai/mcp-server-handlers";
@@ -226,6 +227,7 @@ async function seedBlueprint(
     readonly appId?: string;
     readonly withCodeHash?: boolean;
     readonly withBody?: boolean;
+    readonly contract?: DataContract;
   } = {},
 ): Promise<void> {
   const blueprint: Blueprint = {
@@ -237,7 +239,7 @@ async function seedBlueprint(
     variance: {},
     createdAt: "2026-08-01T00:00:00.000Z",
     createdBy: "agent",
-    contract: CONTRACT,
+    contract: options.contract ?? CONTRACT,
   };
   await f.blueprintStore.put(blueprint);
   if (options.withBody !== false) {
@@ -305,11 +307,45 @@ const APP_THEME: AppTheme = {
   name: "operator-overlay",
 };
 
+const REFERENCED_GADGET_PACKAGE = "@example/maps";
+
+/**
+ * The operator's current gadget catalog. Two packages, only one of
+ * which the contract below references — so a test that asserts the
+ * re-mint carries exactly one descriptor is asserting the FILTER, not
+ * just that a list got copied.
+ *
+ * Neither is `@ggui-ai/gadgets` on purpose: STDLIB is pre-loaded by
+ * the runtime and deliberately never emitted as a gadget
+ * registration, so a fixture built on it would assert an empty
+ * projection and prove nothing.
+ */
+const APP_GADGETS: readonly GadgetDescriptor[] = [
+  {
+    package: REFERENCED_GADGET_PACKAGE,
+    version: "1.4.0",
+    exports: [{ hook: "useMapViewport", permission: "geolocation" }],
+  },
+  {
+    package: "@example/unreferenced",
+    version: "2.0.0",
+    exports: [{ hook: "useSomethingElse" }],
+  },
+];
+
+/** A contract that references exactly one of the two packages above. */
+const GADGET_CONTRACT: DataContract = {
+  ...CONTRACT,
+  clientCapabilities: {
+    gadgets: { [REFERENCED_GADGET_PACKAGE]: { useMapViewport: {} } },
+  },
+};
+
 /** App-metadata source that answers with a themed app record. */
 const themedAppMetadataStore: AppMetadataStore = {
   get: async (appId: string): Promise<App | null> => ({
     id: appId,
-    gadgets: [],
+    gadgets: APP_GADGETS,
     theme: APP_THEME,
   }),
 };
@@ -438,6 +474,36 @@ describe("resource read — re-mint from the durable record", () => {
       const committed = (await f.renderStore.get(sessionId))
         ?.render as ComponentGguiSession;
       expect(committed.theme).toEqual(APP_THEME);
+    } finally {
+      await f.close();
+    }
+  });
+
+  it("re-resolves gadget descriptors, filtered to what the contract references", async () => {
+    // The catalog holds two packages and the contract references one.
+    // Asserting exactly one descriptor survives is what makes this a
+    // test of the FILTER rather than of a list being copied across.
+    const f = await boot({ appMetadataStore: themedAppMetadataStore });
+    try {
+      const sessionId = randomUUID();
+      await seedRecord(f.identityStore, sessionId);
+      await seedBlueprint(f, { contract: GADGET_CONTRACT });
+
+      const read = await f.client.readResource({
+        uri: `${RESOURCE_URI}/${sessionId}/${CONTRACT_KEY}`,
+      });
+      const committed = (await f.renderStore.get(sessionId))
+        ?.render as ComponentGguiSession;
+      expect(committed.gadgetDescriptors).toEqual([APP_GADGETS[0]]);
+
+      // The descriptor reaches the shell as a gadget registration, and
+      // its declared permission reaches the permissions policy — the
+      // two projections a mounted wrapper actually depends on.
+      const meta = parseMeta(shellText(read.contents));
+      expect(meta.gadgets?.map((g) => g.package)).toEqual([
+        REFERENCED_GADGET_PACKAGE,
+      ]);
+      expect(meta.permissionsPolicy).toEqual(["geolocation"]);
     } finally {
       await f.close();
     }
