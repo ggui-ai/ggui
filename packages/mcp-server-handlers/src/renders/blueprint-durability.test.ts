@@ -108,6 +108,14 @@ describe('BLUEPRINT_DURABILITY_EVENTS — the registry', () => {
     );
   });
 
+  it('maps every key to a distinct value — one key per emitted name', () => {
+    // A copy-paste that leaves two keys pointing at one wire name makes
+    // one of them dead: emitters spell it, operators filter on it, and
+    // nothing ever matches the key that lost.
+    const values = Object.values(BLUEPRINT_DURABILITY_EVENTS);
+    expect(new Set(values).size).toBe(values.length);
+  });
+
   it('contains exactly these events and no others', () => {
     // Spelled as a literal array rather than derived from the registry:
     // rewriting this to `Object.values(...)` on both sides would make
@@ -154,6 +162,41 @@ describe('projectDurableBlueprint', () => {
       'abc123',
     );
     expect(record.codeHash).toBe('abc123');
+  });
+
+  it('assigns the registry key rather than re-deriving it from the contract', () => {
+    // Deliberately inconsistent: a row whose stored `contractKey`
+    // disagrees with `blueprintKey(contract)`. The registry always
+    // computes the two from the same contract, so a consistent fixture
+    // passes whether the projection ASSIGNS the field or RECOMPUTES it
+    // — this is the only shape that tells them apart.
+    const bp = makeRegistryBlueprint({ contractKey: 'ffffffffffffffff' });
+    const record = projectDurableBlueprint(bp, 'app-1', undefined);
+    expect(record.contractHash).toBe('ffffffffffffffff');
+    expect(record.contractHash).not.toBe(blueprintKey(CONTRACT));
+  });
+
+  it('defaults createdBy to agent', () => {
+    const record = projectDurableBlueprint(
+      makeRegistryBlueprint(),
+      'app-1',
+      undefined,
+    );
+    expect(record.createdBy).toBe('agent');
+  });
+
+  it('carries an operator-initiated mint through as operator', () => {
+    // WHO invoked is a different axis from WHAT produced the code: an
+    // operator-dispatched generation is `createdBy: 'operator'` AND
+    // `source.kind: 'llm'`, so this cannot be derived from `source`.
+    const record = projectDurableBlueprint(
+      makeRegistryBlueprint(),
+      'app-1',
+      undefined,
+      'operator',
+    );
+    expect(record.createdBy).toBe('operator');
+    expect(record.source.kind).toBe('llm');
   });
 
   it('never invents a codeS3Url — the location is the adapter’s to compose', () => {
@@ -217,6 +260,17 @@ describe('writeBlueprintDurably — wired', () => {
     expect(record.blueprintId).toBe(bp.id);
     expect(record.appId).toBe('app-7');
     expect(record.contractHash).toBe(blueprintKey(CONTRACT));
+  });
+
+  it('passes createdBy through to the persisted row', async () => {
+    const { store: bpStore, firstRow } = fakeBlueprintStore();
+    await writeBlueprintDurably(
+      { blueprintStore: bpStore },
+      'app-1',
+      makeRegistryBlueprint(),
+      'operator',
+    );
+    expect(firstRow().createdBy).toBe('operator');
   });
 
   it('persists metadata with no codeHash when no code store is bound', async () => {

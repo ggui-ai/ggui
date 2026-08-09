@@ -1109,6 +1109,28 @@ describe('registerBlueprint — durable write-through', () => {
     expect(rows[0]!.contractHash).toBe(blueprintKey(NOTEPAD_CONTRACT));
   });
 
+  it('stamps createdBy agent by default and operator when asked', async () => {
+    const first = fakeDurableStore();
+    await registerBlueprint(
+      { ...makeDeps(), durability: { blueprintStore: first.blueprintStore } },
+      SCOPE,
+      INPUT,
+    );
+    expect(first.rows[0]!.createdBy).toBe('agent');
+
+    // The ops tools reach registerBlueprint through the SAME cache
+    // bundle the render path uses, so without this the durable record
+    // would claim the standard agent flow minted a permanently-retained
+    // operator row.
+    const second = fakeDurableStore();
+    await registerBlueprint(
+      { ...makeDeps(), durability: { blueprintStore: second.blueprintStore } },
+      SCOPE,
+      { ...INPUT, createdBy: 'operator' as const },
+    );
+    expect(second.rows[0]!.createdBy).toBe('operator');
+  });
+
   it('does NOT re-persist on a dedup return', async () => {
     const { blueprintStore, rows } = fakeDurableStore();
     const deps = { ...makeDeps(), durability: { blueprintStore } };

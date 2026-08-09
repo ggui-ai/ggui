@@ -257,6 +257,10 @@ export function createGguiOpsRegisterBlueprintHandler(
             // Same user-arm provenance as the MVB row above — one
             // handler call, one provenance claim across both stores.
             source: USER_SOURCE,
+            // An operator invoked this tool. Without it the durable
+            // record would claim the standard agent flow minted a row
+            // that is retained permanently.
+            createdBy: "operator",
           });
         } catch (err) {
           try {

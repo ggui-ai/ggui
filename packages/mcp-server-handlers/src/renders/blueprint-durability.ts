@@ -107,6 +107,7 @@ export function projectDurableBlueprint(
   blueprint: RegistryBlueprint,
   appId: string,
   codeHash: string | undefined,
+  createdBy: DurableBlueprint['createdBy'] = 'agent',
 ): DurableBlueprint {
   return {
     blueprintId: blueprint.id,
@@ -117,9 +118,12 @@ export function projectDurableBlueprint(
     source: blueprint.source,
     variance: blueprint.variance,
     createdAt: blueprint.createdAt,
-    // Every registration reaching this path is agent-initiated; the
-    // operator tools persist through their own path.
-    createdBy: 'agent',
+    // WHO initiated the mint — a different axis from `source`, which
+    // records what produced the code. An operator-invoked registration
+    // is `createdBy: 'operator'` even when `source.kind` is `'llm'`.
+    // Defaulted rather than derived: the registry row does not carry
+    // this, and only the caller knows which tool it is serving.
+    createdBy,
     contract: blueprint.contract,
     ...(codeHash !== undefined ? { codeHash } : {}),
   };
@@ -137,6 +141,7 @@ export async function writeBlueprintDurably(
   deps: BlueprintDurabilityDeps | undefined,
   appId: string,
   blueprint: RegistryBlueprint,
+  createdBy: DurableBlueprint['createdBy'] = 'agent',
 ): Promise<void> {
   const blueprintStore = deps?.blueprintStore;
   if (!blueprintStore) return;
@@ -157,7 +162,7 @@ export async function writeBlueprintDurably(
 
   try {
     await blueprintStore.put(
-      projectDurableBlueprint(blueprint, appId, codeHash),
+      projectDurableBlueprint(blueprint, appId, codeHash, createdBy),
     );
   } catch (err) {
     logDurabilityFailure(DURABLE_WRITE_FAILED, blueprint, appId, err);

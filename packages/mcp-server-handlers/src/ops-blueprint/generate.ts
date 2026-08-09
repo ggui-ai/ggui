@@ -426,7 +426,10 @@ export function createGguiOpsGenerateBlueprintHandler(
             // Operator-DISPATCHED but engine-GENERATED: the code came
             // out of `generator.generate(...)`, so provenance is the
             // llm arm — the same `source` stamped on the MVB row above.
+            // The two axes disagree here on purpose, which is exactly
+            // why `createdBy` cannot be derived from `source`.
             source,
+            createdBy: "operator",
           });
         } catch (err) {
           try {

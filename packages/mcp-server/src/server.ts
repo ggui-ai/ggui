@@ -349,6 +349,13 @@ function buildOpsBlueprintDeps(input: {
     readonly embedding: EmbeddingProvider;
     readonly vectorStore: VectorStore;
     readonly index: BlueprintIndex;
+    /**
+     * Declared because the ops path receives the SAME bundle the render
+     * path does, durability included — omitting it here made
+     * operator-invoked registrations silently write durable rows
+     * through a field the type said was not there.
+     */
+    readonly durability?: BlueprintDurabilityDeps;
   };
 }): {
   readonly opsBlueprint: {

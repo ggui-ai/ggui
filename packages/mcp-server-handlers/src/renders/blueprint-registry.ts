@@ -237,6 +237,18 @@ export interface RegisterBlueprintInput {
    * empty variance as one stable sentinel.
    */
   readonly variance?: BlueprintVariance;
+  /**
+   * WHO initiated this mint, for the durable record. `'agent'` is the
+   * standard handshake → render flow; the operator tools
+   * (`ggui_ops_register_blueprint` / `ggui_ops_generate_blueprint`)
+   * pass `'operator'`.
+   *
+   * A different axis from {@link source}, which records what PRODUCED
+   * the code: an operator-invoked generation is `createdBy: 'operator'`
+   * AND `source.kind: 'llm'`. Defaults to `'agent'` — the registry row
+   * itself does not carry the field, so only the caller knows.
+   */
+  readonly createdBy?: 'agent' | 'operator';
 }
 
 /**
@@ -616,7 +628,12 @@ export async function registerBlueprint(
   //
   // `scope` is the appId at every call site — the registry's tenancy
   // unit and the durable record's are the same thing.
-  await writeBlueprintDurably(deps.durability, scope, blueprint);
+  await writeBlueprintDurably(
+    deps.durability,
+    scope,
+    blueprint,
+    input.createdBy ?? 'agent',
+  );
   return blueprint;
 }
 
