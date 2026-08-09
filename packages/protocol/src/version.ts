@@ -90,10 +90,9 @@
  * `ggui_emit` obligations stay kit-invisible and this entry closes
  * nothing for them.
  *
- * This entry's earlier text made the package-version decision
- * CONDITIONAL on that catalog landing. It has landed, so the condition
- * is discharged — resolved in the package-version paragraph below
- * rather than left standing as an open conditional.
+ * Because that catalog exists and ships, the package-version decision
+ * below is stated outright rather than made conditional on a driver
+ * that has yet to arrive.
  *
  * Five things stay ungraded on purpose and MUST NOT be read as
  * obligations: the ORDER in which a substrate-less server answers

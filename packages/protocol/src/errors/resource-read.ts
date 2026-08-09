@@ -50,16 +50,27 @@
  * perfectly.
  *
  * So the ordering is normative, scoped to the branches that can leak:
- * a server using this projection MUST route a refusal through
- * `NOT_FOUND`, and MUST NOT run a branch whose outcome VARIES WITH THE
- * LOCATOR before the access check — reaching one of those is itself the
- * disclosure. Resolution work is exactly such a branch, so it happens
- * only after the check has passed.
+ * a server using this projection MUST route a refusal through its
+ * TERMINAL failure — the single answer it gives for every locator it
+ * will not resolve — and MUST NOT run a branch whose outcome VARIES
+ * WITH THE LOCATOR before the access check. Reaching one of those is
+ * itself the disclosure. Resolution work is exactly such a branch, so
+ * it happens only after the check has passed.
  *
- * A deployment-global answer is not such a branch. `NOT_SUPPORTED`
- * describes the server and is identical for every locator on a server
- * that emits it, so answering it before any per-locator work — the
- * access check included — reveals nothing and is permitted.
+ * Naming the TERMINAL rather than a specific code is deliberate. Which
+ * code the terminal carries is a property of the deployment: a server
+ * keeping durable records answers `NOT_FOUND`, one keeping none answers
+ * `NOT_SUPPORTED`, and each answers it for a refused locator and a
+ * missing one alike. Pinning this rule to `NOT_FOUND` would declare the
+ * second server non-conformant for behaving correctly. What the rule
+ * protects is that refusal and absence are the SAME answer — never
+ * which answer it is.
+ *
+ * A deployment-global answer is not a locator-varying branch.
+ * `NOT_SUPPORTED` describes the server and is identical for every
+ * locator on a server that emits it, so answering it before any
+ * per-locator work — the access check included — reveals nothing and is
+ * permitted.
  */
 import {
   MCP_ERROR_CODES,

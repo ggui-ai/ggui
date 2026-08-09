@@ -487,11 +487,10 @@ export type DeclareToolCatalogOutput = z.infer<typeof declareToolCatalogOutputSc
  * JSON-RPC error. `PRODUCTION_FAILED` is now an in-result tool-error
  * code on the `ggui_render` failure envelope (SPEC §7.9 Plane 3 /
  * §7.1; see {@link RenderErrorCode}). The slot stays unassigned so a
- * future canonical code can't silently collide with stale consumers —
- * new canonical codes come at `-32006` onwards.
+ * future canonical code can't silently collide with stale consumers.
  *
- * `-32006` is now assigned to `MOUNT_UNAVAILABLE`; the next free
- * canonical slot is `-32007`.
+ * `-32006` is assigned to `MOUNT_UNAVAILABLE`; new canonical codes come
+ * at `-32007` onwards.
  */
 export const MCP_ERROR_CODES = {
   PARSE_ERROR: -32700,
