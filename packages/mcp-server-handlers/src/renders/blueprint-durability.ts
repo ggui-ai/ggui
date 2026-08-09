@@ -22,9 +22,16 @@
  * a match candidate: `id`, `kind`, `intent`, `componentCode` inline, a
  * `hitCount`. The protocol row is a persistence record: `blueprintId`,
  * `appId`, `contractHash`, a `codeHash` POINTER to the body. The
- * projection below is the only place the two meet, and it is where the
- * registry's `contractKey` becomes the protocol's `contractHash` —
- * one value, two spellings, same 16-char blueprintKey domain.
+ * projection below is where they meet on the DURABLE-WRITE path, and
+ * it is where the registry's `contractKey` becomes the protocol's
+ * `contractHash` — one value, two spellings, same 16-char blueprintKey
+ * domain.
+ *
+ * Not the only such hop in the codebase: `decide-handshake.ts` makes
+ * the same translation projecting a matched blueprint onto
+ * `blueprintMeta`, and predates this module. The claim is scoped on
+ * purpose — a docstring that overstates its reach is how a reader
+ * concludes a rename is contained when it is not.
  *
  * ## Best-effort, and what "best" means when it fails
  *
