@@ -1,0 +1,29 @@
+{
+  "name": "all-ephemeral-substrate-fuses-like-none",
+  "description": "A server binding the WHOLE substrate out of stores that declare ephemeral durability keeps no durable record — a restart erases everything — so it MUST fuse exactly like a substrate-less one (#457). Binding is not durability: deriving the NOT_SUPPORTED/NOT_FOUND split from mere binding lets an operator with three in-memory stores promise restorability the deployment cannot deliver, and the promise breaks silently, on the first restart, for every locator at once.",
+  "server": { "durableSubstrate": "all-ephemeral", "liveChannel": true },
+  "caller": "other",
+  "seeds": [{ "kind": "committed-render", "session": "6b2f8d13-4a5c-4e97-8f21-9d0c3b7a5e14" }],
+  "reads": [
+    {
+      "as": "refused",
+      "locator": { "kind": "render", "session": "6b2f8d13-4a5c-4e97-8f21-9d0c3b7a5e14" },
+      "expect": {
+        "kind": "typed-error",
+        "jsonRpcCode": -32006,
+        "dataCode": "NOT_SUPPORTED"
+      }
+    },
+    {
+      "as": "miss",
+      "locator": { "kind": "render", "session": "0c9e4f72-8b1d-4a63-95e8-2f6a7d3c1b58" },
+      "expect": {
+        "kind": "typed-error",
+        "jsonRpcCode": -32006,
+        "dataCode": "NOT_SUPPORTED"
+      }
+    }
+  ],
+  "indistinguishable": ["refused", "miss"],
+  "disclosesNothing": ["6b2f8d13-4a5c-4e97-8f21-9d0c3b7a5e14"]
+}

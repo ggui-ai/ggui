@@ -1543,6 +1543,17 @@ export function registerGguiRenderResourceTemplate(
     const blueprintStore = opts.durableBlueprints?.blueprintStore;
     const bodyStore = opts.durableBlueprints?.codeStore;
     if (!identityStore || !blueprintStore || !bodyStore) return null;
+    // #457 — bound is not enough: every member must DECLARE durability.
+    // An operator binding three in-memory stores must get NOT_SUPPORTED
+    // (an honest "keeps no durable record"), not a NOT_FOUND that
+    // promises restorability a restart erases.
+    if (
+      identityStore.durability !== "durable" ||
+      blueprintStore.durability !== "durable" ||
+      bodyStore.durability !== "durable"
+    ) {
+      return null;
+    }
     return { identityStore, blueprintStore, bodyStore };
   }
 

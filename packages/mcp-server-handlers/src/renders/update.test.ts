@@ -703,6 +703,7 @@ describe('createGguiUpdateHandler — render-identity refresh (#430 slice 1)', (
     const store = new InMemoryGguiSessionStore();
     const { sessionId } = await seedRender({ store });
     const rejecting: RenderIdentityStore = {
+      durability: 'ephemeral',
       get: async () => seededRecord(sessionId),
       put: async () => {
         throw new Error('identity store offline');
@@ -738,6 +739,7 @@ describe('createGguiUpdateHandler — render-identity refresh (#430 slice 1)', (
     // an uncaught throw here would escape a best-effort path and fail
     // a patch that already persisted.
     const throwingGet: RenderIdentityStore = {
+      durability: 'ephemeral',
       get: async () => {
         throw new Error('identity store unreachable');
       },

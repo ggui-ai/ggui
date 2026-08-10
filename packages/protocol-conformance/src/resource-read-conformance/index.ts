@@ -106,6 +106,7 @@ import noDeliveryChannel from './cases/read-without-a-delivery-channel-answers-n
 import substrateLessFusion from './cases/substrate-less-fusion-of-refusal-and-miss.json' with { type: 'json' };
 import halfWiredIdentityOnly from './cases/half-wired-identity-only-substrate-fuses-like-none.json' with { type: 'json' };
 import halfWiredBlueprintsOnly from './cases/half-wired-blueprints-only-substrate-fuses-like-none.json' with { type: 'json' };
+import allEphemeral from './cases/all-ephemeral-substrate-fuses-like-none.json' with { type: 'json' };
 import registryFusion from './cases/registry-match-fuses-on-not-mountable.json' with { type: 'json' };
 import malformedLocator from './cases/malformed-locator-stays-outside-the-typed-set.json' with { type: 'json' };
 import liveRowMount from './cases/live-row-read-returns-mount-material.json' with { type: 'json' };
@@ -142,8 +143,18 @@ export type ResourceReadErrorCodeDecl =
  * substrate-less as `none`; they exist as separate arms because they
  * are the shapes an operator actually reaches, by provisioning one
  * store and forgetting the other.
+ *
+ * `all-ephemeral` (#457): every store bound, every store DECLARING
+ * ephemeral durability — binding is not durability, and a server whose
+ * records die with the process MUST fuse like one holding nothing.
+ * The arm an operator reaches by wiring three in-memory stores.
  */
-export type DurableSubstrateWiring = 'all' | 'none' | 'identity-only' | 'blueprints-only';
+export type DurableSubstrateWiring =
+  | 'all'
+  | 'none'
+  | 'identity-only'
+  | 'blueprints-only'
+  | 'all-ephemeral';
 
 /** The deployment shape a case needs the server under test to have. */
 export interface ResourceReadServerShape {
@@ -432,6 +443,7 @@ export const resourceReadCases: readonly ResourceReadConformanceCase[] = [
   substrateLessFusion as ResourceReadConformanceCase,
   halfWiredIdentityOnly as ResourceReadConformanceCase,
   halfWiredBlueprintsOnly as ResourceReadConformanceCase,
+  allEphemeral as ResourceReadConformanceCase,
   registryFusion as ResourceReadConformanceCase,
   malformedLocator as ResourceReadConformanceCase,
   liveRowMount as ResourceReadConformanceCase,
@@ -881,6 +893,7 @@ const SUBSTRATE_WIRINGS: readonly string[] = [
   'none',
   'identity-only',
   'blueprints-only',
+  'all-ephemeral',
 ];
 
 const EXPECTATION_KINDS: readonly string[] = [
@@ -1071,6 +1084,7 @@ function parseSubstrate(bad: BadFn, value: unknown): DurableSubstrateWiring {
     case 'none':
     case 'identity-only':
     case 'blueprints-only':
+    case 'all-ephemeral':
       return value;
     default:
       throw bad(

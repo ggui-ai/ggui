@@ -41,6 +41,8 @@ function groupKey(appId: string, contractHash: string): string {
  * Zero-arg construction works too — embedding is opt-in.
  */
 export interface InMemoryBlueprintStoreOptions {
+  /** #457 — see the class field; defaults to `'ephemeral'`. */
+  readonly durability?: 'durable' | 'ephemeral';
   /**
    * Optional embedding provider. When wired, `put` computes
    * `blueprint.contractEmbedding` from the canonical-JSON contract
@@ -59,6 +61,16 @@ export interface InMemoryBlueprintStoreOptions {
  * without crossing the `(appId, contractHash)` index.
  */
 export class InMemoryBlueprintStore implements AppListableBlueprintStore {
+  /**
+   * #457 — declared by the BINDER, defaulting to the honest answer for
+   * process memory: `'ephemeral'`. A test double standing in for a
+   * durable store (or an exotic replicated-memory deployment) may
+   * declare `'durable'` — the declaration is the binder's promise that
+   * records survive a restart, and the substrate gate takes it at its
+   * word.
+   */
+  readonly durability: 'durable' | 'ephemeral';
+
   private readonly byId = new Map<string, Blueprint>();
   /** Secondary index: `(appId, contractHash)` → set of blueprint ids. */
   private readonly byGroup = new Map<string, Set<string>>();
@@ -70,6 +82,7 @@ export class InMemoryBlueprintStore implements AppListableBlueprintStore {
   private readonly embeddingProvider: EmbeddingProvider | undefined;
 
   constructor(options: InMemoryBlueprintStoreOptions = {}) {
+    this.durability = options.durability ?? 'ephemeral';
     this.embeddingProvider = options.embeddingProvider;
   }
 

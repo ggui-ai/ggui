@@ -1078,6 +1078,7 @@ describe('registerBlueprint — durable write-through', () => {
   function fakeDurableStore() {
     const rows: DurableBlueprint[] = [];
     const blueprintStore: BlueprintStore = {
+      durability: 'ephemeral',
       put: async (bp) => {
         rows.push(bp);
       },
@@ -1154,6 +1155,7 @@ describe('registerBlueprint — durable write-through', () => {
   it('still returns the blueprint when the durable store rejects', async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const blueprintStore: BlueprintStore = {
+      durability: 'ephemeral',
       put: async () => {
         throw new Error('durable store down');
       },

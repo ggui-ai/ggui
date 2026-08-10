@@ -14,6 +14,20 @@ import type {
 } from '../render-identity-store.js';
 
 export class InMemoryRenderIdentityStore implements RenderIdentityStore {
+  /**
+   * #457 — declared by the BINDER, defaulting to the honest answer for
+   * process memory: `'ephemeral'`. A test double standing in for a
+   * durable store (or an exotic replicated-memory deployment) may
+   * declare `'durable'` — the declaration is the binder's promise that
+   * records survive a restart, and the substrate gate takes it at its
+   * word.
+   */
+  readonly durability: 'durable' | 'ephemeral';
+
+  constructor(options: { readonly durability?: 'durable' | 'ephemeral' } = {}) {
+    this.durability = options.durability ?? 'ephemeral';
+  }
+
   private readonly records = new Map<string, RenderIdentityRecord>();
 
   async put(record: RenderIdentityRecord): Promise<void> {

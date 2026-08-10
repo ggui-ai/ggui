@@ -63,6 +63,12 @@ export type { PendingEventConsumerConformanceFactory } from './pending-event-con
 // content runs this; see the suite header for why there is no
 // "never removes" option yet.
 export { runCodeStoreConformance } from './code-store.conformance.js';
+// #457 — the RenderIdentityStore port's first conformance suite; the
+// durability declaration is graded here, not trusted.
+export {
+  runRenderIdentityStoreConformance,
+  type RenderIdentityStoreConformanceFactory,
+} from './render-identity-store.conformance.js';
 export type { CodeStoreConformanceFactory } from './code-store.conformance.js';
 
 // Blueprint conformance — store + search seams.

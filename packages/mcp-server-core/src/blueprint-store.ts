@@ -98,6 +98,15 @@ export class BlueprintAlreadyExistsError extends Error {
  */
 export interface BlueprintStore {
   /**
+   * Whether records written through this store survive a process
+   * restart. The substrate gate treats anything not `'durable'` as
+   * unbound: the wire must never promise restorability an
+   * implementation cannot keep (#457 — NOT_SUPPORTED derives from
+   * DECLARED durability, not from mere binding).
+   */
+  readonly durability: 'durable' | 'ephemeral';
+
+  /**
    * Enumerate every blueprint registered under
    * `(appId, contractHash)`. Returns an empty array — never null —
    * when no rows exist. Order is implementation-defined; the

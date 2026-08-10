@@ -60,6 +60,7 @@ function fakeBlueprintStore() {
     rows.push(bp);
   });
   const store: BlueprintStore = {
+    durability: 'ephemeral',
     put,
     list: async () => [],
     get: async () => null,
@@ -82,6 +83,7 @@ function fakeCodeStore() {
     objects.set(hash, code);
   });
   const store: CodeStore = {
+    durability: 'ephemeral',
     put,
     get: async (hash) => objects.get(hash) ?? null,
     delete: async (hash) => {
@@ -307,6 +309,7 @@ describe('writeBlueprintDurably — best-effort failure', () => {
   it('emits blueprint_durable_write_failed and resolves when the row write rejects', async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const bpStore: BlueprintStore = {
+      durability: 'ephemeral',
       put: async () => {
         throw new Error('blueprint store down');
       },
@@ -339,6 +342,7 @@ describe('writeBlueprintDurably — best-effort failure', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const { store: bpStore, put: bpPut, firstRow } = fakeBlueprintStore();
     const codeStore: CodeStore = {
+      durability: 'ephemeral',
       put: async () => {
         throw new Error('code store down');
       },
@@ -365,6 +369,7 @@ describe('writeBlueprintDurably — best-effort failure', () => {
   it('does not let a body failure suppress a subsequent row failure', async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const bpStore: BlueprintStore = {
+      durability: 'ephemeral',
       put: async () => {
         throw new Error('blueprint store down');
       },
@@ -374,6 +379,7 @@ describe('writeBlueprintDurably — best-effort failure', () => {
       delete: async () => {},
     };
     const codeStore: CodeStore = {
+      durability: 'ephemeral',
       put: async () => {
         throw new Error('code store down');
       },

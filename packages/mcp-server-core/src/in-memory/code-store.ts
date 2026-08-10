@@ -18,6 +18,20 @@ import {
 } from '../code-store.js';
 
 export class InMemoryCodeStore implements CodeStore {
+  /**
+   * #457 — declared by the BINDER, defaulting to the honest answer for
+   * process memory: `'ephemeral'`. A test double standing in for a
+   * durable store (or an exotic replicated-memory deployment) may
+   * declare `'durable'` — the declaration is the binder's promise that
+   * records survive a restart, and the substrate gate takes it at its
+   * word.
+   */
+  readonly durability: 'durable' | 'ephemeral';
+
+  constructor(options: { readonly durability?: 'durable' | 'ephemeral' } = {}) {
+    this.durability = options.durability ?? 'ephemeral';
+  }
+
   private readonly store = new Map<string, string>();
 
   async put(hash: string, code: string): Promise<void> {

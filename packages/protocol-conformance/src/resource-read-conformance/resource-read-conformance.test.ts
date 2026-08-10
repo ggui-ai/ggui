@@ -379,6 +379,7 @@ describe('resources/read catalog', () => {
       .map((c) => c.name)
       .sort();
     expect(fused).toEqual([
+      'all-ephemeral-substrate-fuses-like-none',
       'half-wired-blueprints-only-substrate-fuses-like-none',
       'half-wired-identity-only-substrate-fuses-like-none',
       'read-refusal-is-indistinguishable-from-a-miss',

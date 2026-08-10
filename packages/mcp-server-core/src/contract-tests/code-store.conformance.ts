@@ -42,6 +42,11 @@ import { CODE_HASH_REGEX, sha256Hex, type CodeStore } from '../code-store.js';
 
 /** Factory + optional cleanup. Mirrors `BlueprintStoreConformanceFactory`. */
 export interface CodeStoreConformanceFactory {
+  /**
+   * #457 — what the harness KNOWS this store to be; the suite grades
+   * the store's own `durability` declaration against it.
+   */
+  readonly expectedDurability: 'durable' | 'ephemeral';
   readonly create: () => Promise<CodeStore>;
   readonly cleanup?: (store: CodeStore) => Promise<void> | void;
 }
@@ -69,7 +74,13 @@ export function runCodeStoreConformance(
 
   describe(`${label} — conformance`, () => {
     describe('hashOf', () => {
-      it('is deterministic and agrees with sha256Hex', async () => {
+      it(`declares durability: the harness-known answer, graded not trusted (#457)`, async () => {
+      await withStore(async (store) => {
+        expect(store.durability).toBe(factory.expectedDurability);
+      });
+    });
+
+    it('is deterministic and agrees with sha256Hex', async () => {
         await withStore(async (store) => {
           expect(store.hashOf(SAMPLE)).toBe(sha256Hex(SAMPLE));
           expect(store.hashOf(SAMPLE)).toBe(store.hashOf(SAMPLE));

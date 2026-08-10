@@ -121,6 +121,17 @@
  * deferral, one owner, two named packages. Nothing about what the
  * change IS remains open.
  *
+ * #457 (2026-08-10, landed after the 0.7.0 bump — release owner: the
+ * wave after 0.7.0 must be ≥ 0.8.0): the substrate stores' `durability`
+ * declaration is a MINOR for the next cut. `@ggui-ai/mcp-server-core`
+ * adds a required member to three published ports (pre-launch
+ * no-compat: every in-tree impl moved in the same slice; out-of-tree
+ * implementors add one literal) and `@ggui-ai/protocol-conformance`
+ * adds the `all-ephemeral` wiring arm + its fusion case (additive —
+ * the catalog's public-API additive-only rule holds; the SPEC §7.10.4
+ * amendment defines "durable" as declared, which was previously
+ * undefined, not different).
+ *
  * On the kit's half, one thing is worth saying plainly rather than
  * calling its delta "purely additive": `parseCase` rejects unknown
  * keys, so a case file with a typo'd key throws instead of being

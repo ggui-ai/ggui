@@ -124,9 +124,9 @@ async function boot(
   onRead?: (uri: string) => void,
 ): Promise<BootedServer> {
   const renderStore = new InMemoryGguiSessionStore();
-  const identityStore = new InMemoryRenderIdentityStore();
-  const blueprintStore = new InMemoryBlueprintStore();
-  const durableCodeStore = new InMemoryCodeStore();
+  const identityStore = new InMemoryRenderIdentityStore({ durability: 'durable' });
+  const blueprintStore = new InMemoryBlueprintStore({ durability: 'durable' });
+  const durableCodeStore = new InMemoryCodeStore({ durability: 'durable' });
   const index = new InMemoryBlueprintIndex();
   const vectorStore = new InMemoryVectorStore();
   const server = new McpServer({ name: "resource-read-conformance", version: "0.0.1" });
@@ -147,7 +147,7 @@ async function boot(
       ? { vectorStore, index, defaultAppIdFallback: FALLBACK_APP_ID }
       : {}),
     ...(scenario.server.staticDelivery === true
-      ? { codeStore: new InMemoryCodeStore(), codeBaseUrl: "https://code.example" }
+      ? { codeStore: new InMemoryCodeStore({ durability: 'durable' }), codeBaseUrl: "https://code.example" }
       : {}),
     ...(scenario.server.liveChannel === true
       ? {

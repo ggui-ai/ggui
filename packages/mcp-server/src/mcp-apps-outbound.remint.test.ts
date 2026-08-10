@@ -138,9 +138,9 @@ async function boot(
   } = {},
 ): Promise<Fixture> {
   const renderStore = new InMemoryGguiSessionStore();
-  const identityStore = new InMemoryRenderIdentityStore();
-  const blueprintStore = new InMemoryBlueprintStore();
-  const durableCodeStore = new InMemoryCodeStore();
+  const identityStore = new InMemoryRenderIdentityStore({ durability: 'durable' });
+  const blueprintStore = new InMemoryBlueprintStore({ durability: 'durable' });
+  const durableCodeStore = new InMemoryCodeStore({ durability: 'durable' });
   const index = new InMemoryBlueprintIndex();
   const vectorStore = new InMemoryVectorStore();
   const warn = vi.fn();
@@ -171,7 +171,7 @@ async function boot(
           // `buildShellFromBlueprint` needs both to synthesize the
           // registry-only shell; without them the fallback fails typed
           // and the probe never exercises a real response body.
-          codeStore: new InMemoryCodeStore(),
+          codeStore: new InMemoryCodeStore({ durability: 'durable' }),
           codeBaseUrl: "https://code.example",
         }
       : {}),

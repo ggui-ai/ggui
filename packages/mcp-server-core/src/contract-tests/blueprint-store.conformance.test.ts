@@ -9,5 +9,6 @@ import { InMemoryBlueprintStore } from '../in-memory/blueprint-store.js';
 import { runBlueprintStoreConformance } from './blueprint-store.conformance.js';
 
 runBlueprintStoreConformance('InMemoryBlueprintStore', {
+  expectedDurability: 'ephemeral',
   create: async () => new InMemoryBlueprintStore(),
 });

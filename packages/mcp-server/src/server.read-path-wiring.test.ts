@@ -72,9 +72,9 @@ interface Fixture {
 
 async function boot(options: { readonly withSubstrate: boolean }): Promise<Fixture> {
   const renderStore = new InMemoryGguiSessionStore();
-  const identityStore = new InMemoryRenderIdentityStore();
-  const blueprintStore = new InMemoryBlueprintStore();
-  const durableCodeStore = new InMemoryCodeStore();
+  const identityStore = new InMemoryRenderIdentityStore({ durability: 'durable' });
+  const blueprintStore = new InMemoryBlueprintStore({ durability: 'durable' });
+  const durableCodeStore = new InMemoryCodeStore({ durability: 'durable' });
 
   if (options.withSubstrate) {
     await identityStore.put({

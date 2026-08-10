@@ -104,7 +104,7 @@ function sha256Hex(code: string): string {
  * provisioning one store and forgetting the other; a re-mint needs all
  * three, so both are as substrate-less as binding nothing.
  */
-type DurableWiring = true | "identityOnly" | "blueprintsOnly";
+type DurableWiring = true | "identityOnly" | "blueprintsOnly" | "allEphemeral";
 
 interface BootOptions {
   /** Bind the durable substrate a re-mint needs (record + blueprint + body stores). */
@@ -133,9 +133,9 @@ interface Fixture {
 
 async function boot(options: BootOptions = {}): Promise<Fixture> {
   const renderStore = new InMemoryGguiSessionStore();
-  const identityStore = new InMemoryRenderIdentityStore();
-  const blueprintStore = new InMemoryBlueprintStore();
-  const durableCodeStore = new InMemoryCodeStore();
+  const identityStore = new InMemoryRenderIdentityStore({ durability: 'durable' });
+  const blueprintStore = new InMemoryBlueprintStore({ durability: 'durable' });
+  const durableCodeStore = new InMemoryCodeStore({ durability: 'durable' });
   const index = new InMemoryBlueprintIndex();
   const vectorStore = new InMemoryVectorStore();
   const server = new McpServer({ name: "typed-failures-test", version: "0.0.1" });
@@ -151,11 +151,22 @@ async function boot(options: BootOptions = {}): Promise<Fixture> {
     ...(options.durable === true || options.durable === "blueprintsOnly"
       ? { durableBlueprints: { blueprintStore, codeStore: durableCodeStore } }
       : {}),
+    // #457 — every store BOUND, every store defaulting to its honest
+    // 'ephemeral' declaration: binding is not durability.
+    ...(options.durable === "allEphemeral"
+      ? {
+          renderIdentityStore: new InMemoryRenderIdentityStore(),
+          durableBlueprints: {
+            blueprintStore: new InMemoryBlueprintStore(),
+            codeStore: new InMemoryCodeStore(),
+          },
+        }
+      : {}),
     ...(options.registryFallback === true
       ? { vectorStore, index, defaultAppIdFallback: FALLBACK_APP_ID }
       : {}),
     ...(options.staticDelivery === true
-      ? { codeStore: new InMemoryCodeStore(), codeBaseUrl: "https://code.example" }
+      ? { codeStore: new InMemoryCodeStore({ durability: 'durable' }), codeBaseUrl: "https://code.example" }
       : {}),
     ...(options.liveChannel === true
       ? {
@@ -664,8 +675,11 @@ describe("resource read — a refused read is byte-identical to a miss", () => {
     }
   });
 
-  for (const wiring of ["identityOnly", "blueprintsOnly"] as const) {
-    it(`stays identical on a server whose substrate is only half wired (${wiring})`, async () => {
+  // #457 — "allEphemeral" joins the parametrization: every store BOUND
+  // but declaring ephemeral is as substrate-less as half-wired; a gate
+  // deriving the split from binding alone turns this arm red.
+  for (const wiring of ["identityOnly", "blueprintsOnly", "allEphemeral"] as const) {
+    it(`stays identical on a server whose substrate cannot restore (${wiring})`, async () => {
       // The half-wired shapes are where this is easiest to get wrong.
       // A re-mint needs all three stores, so a server holding one of
       // them can restore nothing — but the re-mint is only CONSULTED
@@ -827,7 +841,7 @@ describe("resource read — a faulting channel is a malfunction, not a verdict",
   }): Promise<{ readonly client: Client; readonly close: () => Promise<void> }> {
     const renderStore = new InMemoryGguiSessionStore();
     const server = new McpServer({ name: "fault-test", version: "0.0.1" });
-    const codeStore = new InMemoryCodeStore();
+    const codeStore = new InMemoryCodeStore({ durability: 'durable' });
     if (options.fault === "codeStore") {
       codeStore.put = async (): Promise<void> => {
         throw new Error("code store unavailable");

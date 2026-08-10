@@ -64,6 +64,15 @@ export interface RenderIdentityRecord {
  */
 export interface RenderIdentityStore {
   /**
+   * Whether records written through this store survive a process
+   * restart. The substrate gate treats anything not `'durable'` as
+   * unbound: the wire must never promise restorability an
+   * implementation cannot keep (#457 — NOT_SUPPORTED derives from
+   * DECLARED durability, not from mere binding).
+   */
+  readonly durability: 'durable' | 'ephemeral';
+
+  /**
    * Upsert by `record.sessionId`. Later writes win whole-record —
    * there is no field-level merge, so a caller refreshing part of a
    * record MUST read it, merge, and write the full result back.
@@ -87,7 +96,7 @@ export interface RenderIdentityStore {
    * rather than throw.
    *
    * Every field round-trips verbatim, including a `blueprintId` of
-   * `null` (the pre-backfill state, which is distinct from a miss).
+   * `null` (a terminal state since #460 — distinct from a miss).
    * The return value MUST be a defensive copy: callers may mutate it
    * without corrupting stored state.
    */

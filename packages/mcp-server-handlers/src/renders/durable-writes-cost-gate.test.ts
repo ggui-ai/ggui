@@ -40,6 +40,7 @@ const APP_ID = 'app-1';
 
 /** Any call is a test failure carrying the caller's stack. */
 const hostileIdentityStore: RenderIdentityStore = {
+  durability: 'ephemeral',
   put: async (_record: RenderIdentityRecord) => {
     throw new Error('identity store was touched with no store bound');
   },
@@ -151,6 +152,7 @@ describe('an unbound durable blueprint pair is free and silent', () => {
     // The row store is the gate: a body with no row to reference it is
     // pure orphan, so a codeStore-only pair must not upload one.
     const codeStore: CodeStore & { put: ReturnType<typeof vi.fn> } = {
+      durability: 'ephemeral',
       hashOf: vi.fn(() => 'deadbeef'),
       put: vi.fn(async () => undefined),
       get: vi.fn(async () => null),

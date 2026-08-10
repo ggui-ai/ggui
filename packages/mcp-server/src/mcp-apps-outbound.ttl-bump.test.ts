@@ -136,9 +136,9 @@ async function boot(
   const renderStore = new InMemoryGguiSessionStore(
     options.storeNow ? { now: options.storeNow } : {},
   );
-  const identityStore = new InMemoryRenderIdentityStore();
-  const blueprintStore = new InMemoryBlueprintStore();
-  const durableCodeStore = new InMemoryCodeStore();
+  const identityStore = new InMemoryRenderIdentityStore({ durability: 'durable' });
+  const blueprintStore = new InMemoryBlueprintStore({ durability: 'durable' });
+  const durableCodeStore = new InMemoryCodeStore({ durability: 'durable' });
   const warn = vi.fn();
   const mint = vi.fn((sessionId: string, appId: string) => ({
     wsUrl: `wss://live.example/${appId}`,

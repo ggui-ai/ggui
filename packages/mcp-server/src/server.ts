@@ -2359,6 +2359,13 @@ export interface CreateGguiServerOptions {
      * Embedded hosts that supply a custom `store` also supply the
      * right durability claim; the server doesn't inspect the store
      * instance to guess.
+     *
+     * Deliberately BINDING-SITE-level, unlike the substrate stores'
+     * port-level `durability` member (#457): this one is a
+     * health-report fact the operator asserts for display, while the
+     * substrate declaration backs a WIRE promise (NOT_FOUND ⇒
+     * restorable) — the higher bar lives on the implementation, where
+     * the knowledge is.
      */
     readonly durability?: "durable" | "ephemeral";
   };

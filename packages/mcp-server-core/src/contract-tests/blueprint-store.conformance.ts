@@ -40,6 +40,11 @@ import {
 
 /** Factory + optional cleanup. Mirrors `GguiSessionStoreConformanceFactory`. */
 export interface BlueprintStoreConformanceFactory {
+  /**
+   * #457 — what the harness KNOWS this store to be; the suite grades
+   * the store's own `durability` declaration against it.
+   */
+  readonly expectedDurability: 'durable' | 'ephemeral';
   readonly create: () => Promise<BlueprintStore>;
   readonly cleanup?: (store: BlueprintStore) => Promise<void> | void;
 }
@@ -110,7 +115,13 @@ export function runBlueprintStoreConformance(
 
   describe(`${label} — conformance`, () => {
     describe('put + get round-trip', () => {
-      it('preserves every Blueprint field on insert, except the derived codeS3Url', async () => {
+      it(`declares durability: the harness-known answer, graded not trusted (#457)`, async () => {
+      await withStore(async (store) => {
+        expect(store.durability).toBe(factory.expectedDurability);
+      });
+    });
+
+    it('preserves every Blueprint field on insert, except the derived codeS3Url', async () => {
         await withStore(async (store) => {
           const bp = makeBlueprint({
             blueprintId: 'bp-1',

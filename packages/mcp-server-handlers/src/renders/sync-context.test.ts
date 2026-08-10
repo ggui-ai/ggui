@@ -419,6 +419,7 @@ describe('createGguiSyncContextHandler — render-identity refresh (#430 slice 1
     const store = new InMemoryGguiSessionStore();
     const { sessionId } = await seedRender(store, { contextSpec: CONTEXT_SPEC });
     const rejecting: RenderIdentityStore = {
+      durability: 'ephemeral',
       get: async () => seededRecord(sessionId),
       put: async () => {
         throw new Error('identity store offline');
@@ -452,6 +453,7 @@ describe('createGguiSyncContextHandler — render-identity refresh (#430 slice 1
     const { sessionId } = await seedRender(store, { contextSpec: CONTEXT_SPEC });
     // The read half of get→merge→put, caught separately from `put`.
     const throwingGet: RenderIdentityStore = {
+      durability: 'ephemeral',
       get: async () => {
         throw new Error('identity store unreachable');
       },

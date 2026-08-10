@@ -68,6 +68,9 @@ export interface FileSystemCodeStoreOptions {
 }
 
 export class FileSystemCodeStore implements CodeStore {
+  /** Bodies live on disk under the cache root — restart-safe (#457). */
+  readonly durability = 'durable' as const;
+
   private readonly root: string;
 
   constructor(opts: FileSystemCodeStoreOptions = {}) {

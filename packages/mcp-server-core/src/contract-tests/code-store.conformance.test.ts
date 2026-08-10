@@ -8,5 +8,6 @@ import { InMemoryCodeStore } from '../in-memory/code-store.js';
 import { runCodeStoreConformance } from './code-store.conformance.js';
 
 runCodeStoreConformance('InMemoryCodeStore', {
+  expectedDurability: 'ephemeral',
   create: async () => new InMemoryCodeStore(),
 });

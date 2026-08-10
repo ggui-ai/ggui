@@ -1887,6 +1887,7 @@ describe('createGguiRenderHandler — durable render identity (#430 slice 1)', (
 
   it('a rejecting store cannot fail the render — logs render_identity_write_failed', async () => {
     const rejecting: RenderIdentityStore = {
+      durability: 'ephemeral',
       put: async () => {
         throw new Error('identity store offline');
       },
@@ -1950,6 +1951,7 @@ describe('createGguiRenderHandler — code-delivery channel', () => {
   /** A code store whose every `put` rejects. */
   function rejectingCodeStore(message: string): CodeStore {
     return {
+      durability: 'ephemeral',
       put: async () => {
         throw new Error(message);
       },

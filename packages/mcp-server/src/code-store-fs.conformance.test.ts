@@ -16,6 +16,7 @@ import { FileSystemCodeStore } from './code-store-fs.js';
 const roots: string[] = [];
 
 runCodeStoreConformance('FileSystemCodeStore', {
+  expectedDurability: 'durable',
   create: async () => {
     const root = await mkdtemp(join(tmpdir(), 'ggui-code-cache-conf-'));
     roots.push(root);
