@@ -438,8 +438,14 @@ test.describe.serial("OSS hero path — `ggui serve` (real CLI bin)", () => {
     expect(bootstrap).toBeDefined();
     // Task #382 contract: the CLI publishes an ABSOLUTE runtimeUrl so
     // `srcdoc` / WebView mounts (about:-scheme document URLs) can
-    // resolve the bundle without operator action.
-    expect(bootstrap!.runtimeUrl).toBe(`${baseUrl}/_ggui/iframe-runtime.js`);
+    // resolve the bundle without operator action. Filename is
+    // content-hashed since #472 (immutable long-cache route) — pin
+    // base + shape, not the moving hash.
+    expect(bootstrap!.runtimeUrl).toMatch(
+      new RegExp(
+        `^${baseUrl.replace(/[.*+?^${}()|[\\]\\\\]/g, "\\$&")}/_ggui/iframe-runtime\\.[0-9a-f]{12}\\.js$`,
+      ),
+    );
 
     // Preflight the bundle route separately so a missing build fails
     // with the server's 503 remediation hint instead of an opaque

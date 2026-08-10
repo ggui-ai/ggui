@@ -423,9 +423,12 @@ describe('buildMcpServerBackend', () => {
     const runtimeUrl = renderSlice?.runtimeUrl;
     expect(runtimeUrl).toBeDefined();
     // Absolute URL: starts with the server's own `baseUrl`, NOT the
-    // bare `/_ggui/iframe-runtime.js` relative path (which would fail in
-    // srcdoc iframes).
-    expect(runtimeUrl).toBe(`${url}/_ggui/iframe-runtime.js`);
+    // bare relative path (which would fail in srcdoc iframes). The
+    // filename is content-hashed since #472 (one cached download per
+    // content version); pin base + shape, not the moving hash.
+    expect(runtimeUrl).toMatch(
+      new RegExp(`^${url.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/_ggui/iframe-runtime\\.[0-9a-f]{12}\\.js$`),
+    );
     expect(runtimeUrl!.startsWith('http://')).toBe(true);
   });
 
