@@ -55,6 +55,8 @@ export {
   type RegisterAuthorKeyErrorCode,
   type RegisterAuthorKeyRequestBody,
   type RegisterAuthorKeyResponseBody,
+  SAN_ALLOWLIST_INVALID,
+  type SanAllowlistInvalid,
   SCOPE_VERIFICATIONS,
   type ScopeOwnerRow,
   type ScopeVerification,
@@ -94,6 +96,7 @@ export {
   type PublishArtifactDeps,
   type PublishArtifactInput,
   type PublishArtifactResult,
+  type VerifiedEmailResolver,
 } from './ops/publish.js';
 export {
   readArtifact,

@@ -74,6 +74,16 @@ export interface RegistryAppOptions {
    * the sigstore public-good trust root.
    */
   readonly sigstoreTuf?: PublishArtifactDeps['sigstoreTuf'];
+  /**
+   * Optional verified-email lookup for the publish gate's F4 identity
+   * binding — see {@link PublishArtifactDeps.verifiedEmailResolver}
+   * for the contract. Unset (the default here): publisher identity is
+   * enforced only on scopes whose ownership row carries a
+   * `sanAllowlist`; scopes without one accept any identity a valid
+   * sigstore bundle proves. Wire a resolver backed by your identity
+   * layer to bind default publishes to account emails.
+   */
+  readonly verifiedEmailResolver?: PublishArtifactDeps['verifiedEmailResolver'];
 }
 
 /**
@@ -87,6 +97,7 @@ export function createRegistryApp(options: RegistryAppOptions): Hono {
   const clock = options.clock ?? (() => new Date());
   const blueprintProbe = options.blueprintProbe;
   const sigstoreTuf = options.sigstoreTuf;
+  const verifiedEmailResolver = options.verifiedEmailResolver;
 
   const app = new Hono();
 
@@ -247,6 +258,7 @@ export function createRegistryApp(options: RegistryAppOptions): Hono {
         registryHostname,
         ...(blueprintProbe !== undefined ? { blueprintProbe } : {}),
         ...(sigstoreTuf !== undefined ? { sigstoreTuf } : {}),
+        ...(verifiedEmailResolver !== undefined ? { verifiedEmailResolver } : {}),
       },
     );
 

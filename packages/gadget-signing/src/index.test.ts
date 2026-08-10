@@ -3,6 +3,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
   derivePublicKeyId,
   extractSigstoreLeafCertPem,
+  extractSigstoreSANs,
   generateEd25519Keypair,
   signBundleEd25519,
   signBundleSigstore,
@@ -440,6 +441,53 @@ describe("sigstore keyless path — real sign + verify against mock infrastructu
     // The extracted value is the base64 DER — a decoded cert starts
     // with the ASN.1 SEQUENCE tag.
     expect(Buffer.from(leaf!, "base64")[0]).toBe(0x30);
+  });
+
+  it("extractSigstoreSANs projects EVERY signer identity from a REAL signed bundle (F4)", async () => {
+    const bundleBytes = new TextEncoder().encode("san-projection payload");
+    const signature = await signBundleSigstore({
+      bundleBytes,
+      identityToken: stack.identityToken(),
+      endpoints: stack.signEndpoints,
+    });
+
+    // The certificate's SANs carry the OIDC subject the token claimed
+    // — the identities a registry's publish gate authorizes against.
+    // The mock CA writes a single URI SAN; real Fulcio certs can carry
+    // BOTH a URI and an rfc822 SAN, and callers must check every one.
+    expect(extractSigstoreSANs(signature)).toEqual([stack.defaultSubject]);
+
+    // A custom subject flows through end-to-end.
+    const emailShaped = await signBundleSigstore({
+      bundleBytes,
+      identityToken: stack.identityToken({ sub: "release@gadgets.ggui.test" }),
+      endpoints: stack.signEndpoints,
+    });
+    expect(extractSigstoreSANs(emailShaped)).toEqual(["release@gadgets.ggui.test"]);
+  });
+
+  it("extractSigstoreSANs returns an EMPTY array for malformed or cert-less bundles (F4)", () => {
+    const sigWithBundle = (bundle: string): SigstoreSignature => ({
+      algorithm: "sigstore-cosign",
+      bundleSha384: "AAAA",
+      bundle,
+      signedAt: "2026-08-10T00:00:00.000Z",
+    });
+    expect(extractSigstoreSANs(sigWithBundle("{not json"))).toEqual([]);
+    expect(extractSigstoreSANs(sigWithBundle(JSON.stringify({})))).toEqual([]);
+    // A cert value that isn't parseable DER projects as empty —
+    // callers reject rather than authorize against garbage.
+    expect(
+      extractSigstoreSANs(
+        sigWithBundle(
+          JSON.stringify({
+            verificationMaterial: {
+              certificate: { rawBytes: "bm90LWEtY2VydA==" },
+            },
+          }),
+        ),
+      ),
+    ).toEqual([]);
   });
 });
 

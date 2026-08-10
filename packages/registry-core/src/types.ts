@@ -248,7 +248,56 @@ export interface ScopeOwnerRow {
   readonly verifiedDomain?: string;
   /** ISO timestamp of the verification, present when `verification: 'verified'`. */
   readonly verifiedAt?: string;
+  /**
+   * F4 identity binding — per-scope allowlist of sigstore certificate
+   * identities (the Fulcio cert's SubjectAlternativeName) permitted to
+   * publish under this scope. Entries are EXACT literal identity
+   * strings — an email (`release@acme.com`) or a CI workflow identity
+   * URI (`https://github.com/acme/app/.github/workflows/publish.yml@refs/heads/main`).
+   * Regex/glob patterns are deliberately NOT stored server-side: an
+   * allowlist is a finite set of named signers, and pattern semantics
+   * would make the authorization decision unauditable.
+   *
+   * Case rule: ONE rule for every identity comparison — the publish
+   * gate matches entries against certificate SANs CASE-INSENSITIVELY
+   * (mirroring the verified-email rule), and the operator tooling
+   * lowercase-normalizes entries at write time.
+   *
+   * Enforcement (publish gate, sigstore-signed publishes only): when
+   * present and non-empty, one of the bundle certificate's SANs MUST
+   * match one of these entries. When absent, the deployment's default
+   * identity rule applies — a SAN must equal the publishing account's
+   * verified email where the deployment provides a resolver;
+   * deployments without one enforce identity only through this
+   * allowlist.
+   *
+   * Fail-closed corruption handling: a storage adapter that finds a
+   * MALFORMED value in this column (anything but an array of strings)
+   * MUST project it as {@link SAN_ALLOWLIST_INVALID}, never as absent
+   * — projecting corrupt policy data as "no allowlist" would silently
+   * downgrade the scope to the weaker default rule. The publish gate
+   * rejects sigstore publishes into such a scope with a
+   * storage-inconsistency error until an operator rewrites the column
+   * (set or clear). Writers MUST only ever write string arrays.
+   *
+   * Managed by the registry operator (never by publish); a first-
+   * publish claim always lands without one, and an ownership transfer
+   * drops it (the previous owner's signer identities must not survive
+   * into the new owner's scope).
+   */
+  readonly sanAllowlist?: readonly string[] | SanAllowlistInvalid;
 }
+
+/**
+ * Fail-closed marker a storage adapter projects when the
+ * {@link ScopeOwnerRow.sanAllowlist} column holds malformed data (see
+ * that field's docstring). Chosen as a bare string precisely because a
+ * string is itself a malformed value for the column — the marker
+ * round-trips as invalid through every storage impl, so corruption can
+ * never launder itself back into a valid policy.
+ */
+export const SAN_ALLOWLIST_INVALID = 'invalid' as const;
+export type SanAllowlistInvalid = typeof SAN_ALLOWLIST_INVALID;
 
 // ─── Wire shapes (locked) ─────────────────────────────────────────────
 
@@ -411,6 +460,7 @@ export const PUBLISH_ERROR_CODES = [
   'bundle_hash_mismatch',
   'visibility_algorithm_mismatch',
   'scope_forbidden',
+  'identity_mismatch',
   'unknown_key',
   'signature_invalid',
   'version_exists',

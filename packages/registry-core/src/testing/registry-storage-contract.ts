@@ -27,7 +27,7 @@ import type {
   CompiledBlobRow,
   ScopeOwnerRow,
 } from '../types.js';
-import { ARTIFACTS_METADATA_SK } from '../types.js';
+import { ARTIFACTS_METADATA_SK, SAN_ALLOWLIST_INVALID } from '../types.js';
 import type {
   ArtifactManifest,
   BlueprintManifest,
@@ -694,6 +694,71 @@ export function registryStorageContract(makeStorage: () => RegistryStorage): voi
         const storage = makeStorage();
         await storage.claimScope(makeScopeOwner({ ownerSubject: 'winner' }));
         expect((await storage.getScopeOwner('@test'))?.ownerSubject).toBe('winner');
+      });
+
+      // F4 — `sanAllowlist` is the per-scope publisher-identity
+      // allowlist the publish gate enforces on sigstore-signed
+      // publishes. It's an OPTIONAL array column: a row without it
+      // falls back to the deployment's default identity rule, so a
+      // storage impl that silently drops (or fabricates) the field
+      // would flip a scope's identity policy without any write.
+      it('claimScope round-trips a sanAllowlist (F4 identity binding)', async () => {
+        const storage = makeStorage();
+        const row = makeScopeOwner({
+          sanAllowlist: [
+            'ci@test.example',
+            'https://ci.example.com/workflows/publish.yml@refs/heads/main',
+          ],
+        });
+        await storage.claimScope(row);
+        expect(await storage.getScopeOwner(row.scope)).toEqual(row);
+      });
+
+      it('updateScopeOwner sets a sanAllowlist on an existing row (operator path)', async () => {
+        const storage = makeStorage();
+        await storage.claimScope(makeScopeOwner());
+        const withAllowlist = makeScopeOwner({ sanAllowlist: ['ops@test.example'] });
+        const result = await storage.updateScopeOwner(withAllowlist, {
+          ownerSubject: 'user-1',
+          verification: 'unverified',
+        });
+        expect(result).toEqual({ ok: true });
+        expect(await storage.getScopeOwner('@test')).toEqual(withAllowlist);
+      });
+
+      it('the SAN_ALLOWLIST_INVALID marker round-trips as invalid — corruption never launders into a valid policy', async () => {
+        // Fail-closed obligation: an adapter that reads malformed
+        // allowlist data projects SAN_ALLOWLIST_INVALID (see
+        // ScopeOwnerRow.sanAllowlist). Writing the marker itself back
+        // (e.g. a verification flip preserving a corrupt column) MUST
+        // read back as invalid in every impl — the marker is a bare
+        // string, itself a malformed column value, so the round-trip
+        // cannot turn corruption into "no allowlist" or a real list.
+        const storage = makeStorage();
+        const row = makeScopeOwner({ sanAllowlist: SAN_ALLOWLIST_INVALID });
+        await storage.claimScope(row);
+        expect((await storage.getScopeOwner('@test'))?.sanAllowlist).toBe(
+          SAN_ALLOWLIST_INVALID,
+        );
+      });
+
+      it('updateScopeOwner clears a sanAllowlist — the field is ABSENT after, not empty', async () => {
+        // Absent vs empty is load-bearing: the publish gate treats a
+        // missing allowlist as "no per-scope rule" (default identity
+        // rule applies). A cleared row that came back `[]` instead of
+        // absent would be indistinguishable in JS truthiness tests but
+        // MUST round-trip as absent so every impl agrees on the shape.
+        const storage = makeStorage();
+        await storage.claimScope(makeScopeOwner({ sanAllowlist: ['ops@test.example'] }));
+        const cleared = makeScopeOwner();
+        const result = await storage.updateScopeOwner(cleared, {
+          ownerSubject: 'user-1',
+          verification: 'unverified',
+        });
+        expect(result).toEqual({ ok: true });
+        const fetched = await storage.getScopeOwner('@test');
+        expect(fetched).toEqual(cleared);
+        expect(fetched?.sanAllowlist).toBeUndefined();
       });
     });
 

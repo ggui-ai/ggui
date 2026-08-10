@@ -674,20 +674,23 @@ export async function verifyBundleSigstore(
 
   // 3. RegExp identity pre-check. Upstream `sigstore.verify` accepts
   // only literal-equality identity strings, so a RegExp expectation
-  // must be enforced here against the bundle's embedded SAN.
+  // must be enforced here against the bundle's embedded SANs — ANY
+  // matching SAN satisfies the pattern (a cert can carry both a URI
+  // and an email SAN).
   if (expectedIdentity && expectedIdentity.subject instanceof RegExp) {
-    const san = extractSANFromBundle(parsedBundle);
-    if (san === undefined) {
+    const sans = extractSANsFromBundle(parsedBundle);
+    if (sans.length === 0) {
       return {
         valid: false,
         reason:
           "expectedIdentity.subject is RegExp but bundle has no subjectAlternativeName to match against",
       };
     }
-    if (!expectedIdentity.subject.test(san)) {
+    const pattern = expectedIdentity.subject;
+    if (!sans.some((san) => pattern.test(san))) {
       return {
         valid: false,
-        reason: `identity mismatch: bundle SAN '${san}' does not match expected pattern ${expectedIdentity.subject}`,
+        reason: `identity mismatch: no bundle SAN (${sans.map((s) => `'${s}'`).join(', ')}) matches expected pattern ${pattern}`,
       };
     }
   }
@@ -796,24 +799,62 @@ export function extractSigstoreLeafCertPem(
 }
 
 /**
- * Reach into a serialized sigstore Bundle and pull the
- * `subjectAlternativeName` from the embedded X.509 cert (if any). Used
- * by the RegExp-identity pre-check; production verification still goes
+ * Extract EVERY signer identity — the embedded Fulcio cert's URI and
+ * rfc822 (email) `subjectAlternativeName` values — from a
+ * {@link SigstoreSignature}'s serialized cosign bundle. Returns an
+ * EMPTY array when the bundle is malformed, carries no certificate,
+ * or the cert has no URI/email SAN.
+ *
+ * ALL SANs, deliberately: a certificate can carry BOTH a URI and an
+ * email SAN, and a policy that inspected only the first would
+ * dead-end on such certs. Callers match their policy against every
+ * returned identity and accept on ANY hit.
+ *
+ * This is a PROJECTION, not a verification: callers that make an
+ * authorization decision on the returned identities (e.g. a
+ * registry's publish-time identity binding) MUST pair it with
+ * {@link verifyBundleSigstore} over the same signature — verification
+ * is what proves the SAN-bearing cert is genuinely CA-issued and tied
+ * to the signed bytes. Parsing delegates to the same X.509 parser the
+ * verifier uses (see {@link extractSANsFromBundle}), so the identities
+ * a policy check sees can never drift from what verification enforces.
+ *
+ * Lives here — next to {@link extractSigstoreLeafCertPem} — so cosign
+ * bundle-format knowledge has ONE home.
+ */
+export function extractSigstoreSANs(
+  signature: SigstoreSignature,
+): readonly string[] {
+  let parsed: SerializedBundle;
+  try {
+    parsed = JSON.parse(signature.bundle) as SerializedBundle;
+  } catch {
+    return [];
+  }
+  if (parsed === null || typeof parsed !== "object") return [];
+  return extractSANsFromBundle(parsed);
+}
+
+/**
+ * Reach into a serialized sigstore Bundle and pull every URI/email
+ * `subjectAlternativeName` from the embedded X.509 cert (if any).
+ * Used by the RegExp-identity pre-check and
+ * {@link extractSigstoreSANs}; production verification still goes
  * through the upstream verifier for the actual cryptographic check.
  *
  * Parsing delegates to `@sigstore/core`'s `X509Certificate` — the
- * SAME parser the upstream verifier uses — so the SAN this pre-check
- * sees can never drift from the SAN verification enforces. (A prior
+ * SAME parser the upstream verifier uses — so the SANs this pre-check
+ * sees can never drift from the SANs verification enforces. (A prior
  * hand-rolled DER scan over-captured on real certificates —
  * discovered on the first genuinely Fulcio-issued cert it ever saw,
  * 2026-08-10 — and was replaced wholesale rather than patched.)
  *
- * Returns `undefined` if the bundle has no cert (e.g. publicKey-only
+ * Returns `[]` if the bundle has no cert (e.g. publicKey-only
  * bundle), the cert fails to parse, or it carries no URI/email SAN.
  */
-function extractSANFromBundle(bundle: SerializedBundle): string | undefined {
+function extractSANsFromBundle(bundle: SerializedBundle): readonly string[] {
   const material = bundle.verificationMaterial;
-  if (!material) return undefined;
+  if (!material) return [];
 
   let certB64: string | undefined;
   if ("certificate" in material && material.certificate) {
@@ -825,15 +866,19 @@ function extractSANFromBundle(bundle: SerializedBundle): string | undefined {
   ) {
     certB64 = material.x509CertificateChain.certificates[0]?.rawBytes;
   }
-  if (!certB64) return undefined;
+  if (!certB64) return [];
 
   try {
     const cert = X509Certificate.parse(Buffer.from(certB64, "base64"));
-    // `subjectAltName` is the URI GeneralName when present, else the
-    // rfc822Name — the exact preference order the verifier's identity
-    // policy uses.
-    return cert.subjectAltName;
+    // Collect BOTH GeneralName kinds the identity policies use — URI
+    // first (matching upstream's preference order), then rfc822.
+    const ext = cert.extSubjectAltName;
+    if (ext === undefined) return [];
+    const sans: string[] = [];
+    if (ext.uri !== undefined) sans.push(ext.uri);
+    if (ext.rfc822Name !== undefined) sans.push(ext.rfc822Name);
+    return sans;
   } catch {
-    return undefined;
+    return [];
   }
 }

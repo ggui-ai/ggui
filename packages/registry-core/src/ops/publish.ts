@@ -18,11 +18,21 @@
  *       unclaimed scope is claimed for the caller via the atomic
  *       {@link RegistryStorage.claimScope} (first-writer-wins; a lost
  *       race re-reads and re-applies the owner check). NOTE — the
- *       claim is durable even when a LATER gate fails this publish:
- *       the caller demonstrated intent, a failed-publish claim stays
- *       re-usable by the same caller, and an unverified claim remains
- *       reclaimable by the registry operator. Deliberately the
- *       simplest correct behavior.
+ *       claim is durable when a LATER gate (bundle, conformance,
+ *       crypto verify) fails this publish: by then the caller passed
+ *       every policy gate, so the claim records legitimate intent, a
+ *       failed-publish claim stays re-usable by the same caller, and
+ *       an unverified claim remains reclaimable by the registry
+ *       operator. Deliberately the simplest correct behavior.
+ *   2d. Bind the publisher identity (F4, sigstore-signed publishes
+ *       only): the bundle certificate's SAN must be on the scope's
+ *       `sanAllowlist` when the ownership row carries one, else must
+ *       equal the account's verified email when the deployment wires
+ *       {@link PublishArtifactDeps.verifiedEmailResolver}. Neither
+ *       configured ⇒ no identity rule (allowlist-only posture).
+ *       Violations answer 403 `identity_mismatch`. On the UNCLAIMED
+ *       path this gate runs BEFORE the claim — a rejected signer
+ *       must not walk away owning the scope.
  *   3.  Decode + size-check the bundle (gadgets only).
  *   4.  Recompute SHA-384 of the bundle bytes; compare to client claim.
  *   5.  Re-run the conformance gate ({@link checkConformance}).
@@ -46,6 +56,7 @@ import {
 import {
   canonicalJson,
   extractSigstoreLeafCertPem,
+  extractSigstoreSANs,
   isGadgetSignature,
   verifyBundleEd25519,
   verifyBundleSigstore,
@@ -61,12 +72,13 @@ import type {
   PublishErrorBody,
   PublishErrorCode,
   PublishResponseBody,
+  ScopeOwnerRow,
 } from '../types.js';
 import type {
   BlueprintProbeRunner,
   ConformanceFailureCode,
 } from './conformance.js';
-import { ARTIFACTS_METADATA_SK } from '../types.js';
+import { ARTIFACTS_METADATA_SK, SAN_ALLOWLIST_INVALID } from '../types.js';
 import type { AuthnContext } from '../interfaces/authn.js';
 import type { BundleStorage } from '../interfaces/bundle-storage.js';
 import type { RegistryStorage } from '../interfaces/registry-storage.js';
@@ -184,7 +196,40 @@ export interface PublishArtifactDeps {
     VerifyBundleSigstoreInput,
     'tufCachePath' | 'tufForceCache' | 'tufMirrorURL' | 'tufRootPath'
   >;
+  /**
+   * F4 identity binding — resolve the VERIFIED email address of the
+   * publishing account identified by `subject` (the same value as
+   * {@link AuthnContext.subject}). Return `undefined` when the account
+   * has no verified email; the resolver MUST NOT return an address the
+   * deployment's identity layer has not verified, because the publish
+   * gate authorizes signer identities against it.
+   *
+   * Consumed only on sigstore-signed publishes into a scope whose
+   * ownership row carries NO `sanAllowlist`: the bundle's certificate
+   * SAN must then equal the resolved email (compared
+   * case-insensitively). Scopes WITH an allowlist never consult the
+   * resolver — the allowlist is the stricter, operator-managed rule.
+   *
+   * OPTIONAL, and honestly so: a deployment that does not wire a
+   * resolver enforces publisher identity ONLY through per-scope
+   * allowlists ({@link ScopeOwnerRow.sanAllowlist}); scopes without
+   * one accept any identity a valid sigstore bundle proves. Wire a
+   * resolver backed by your identity provider to bind default
+   * publishes to account emails.
+   */
+  readonly verifiedEmailResolver?: VerifiedEmailResolver;
 }
+
+/**
+ * Deployment-provided lookup from an authenticated caller subject to
+ * that account's VERIFIED email address. See
+ * {@link PublishArtifactDeps.verifiedEmailResolver} for the contract
+ * (parties, obligations, and the fail-closed posture the publish gate
+ * layers on top).
+ */
+export type VerifiedEmailResolver = (
+  subject: string,
+) => Promise<string | undefined>;
 
 export type PublishArtifactResult =
   | { readonly ok: true; readonly status: 201; readonly body: PublishResponseBody }
@@ -284,25 +329,144 @@ export async function publishArtifact(
   // somebody else's row is now durable and the re-read decides whose
   // scope this is.
   //
-  // The claim is DURABLE even when a later gate fails this publish
-  // (documented judgment call — see the flow docstring). The claim
-  // also deliberately lands BEFORE signature verification: moving it
-  // after would not stop a motivated squatter (any authenticated
-  // caller can produce a validly-signed private publish), so the real
-  // defenses against mass squatting are the operator reclaim flow, the
-  // audit trail, and (future) rate limiting — while the early claim
-  // keeps the gate order cheap-first.
+  // The claim is DURABLE when a LATER gate (bundle, conformance,
+  // crypto verify) fails this publish (documented judgment call — see
+  // the flow docstring): by then the caller has already passed every
+  // policy gate, so the claim records legitimate intent. The identity
+  // gate (2d) is different — it runs BEFORE the claim on the unclaimed
+  // path, because a signer the scope's identity rule rejects must not
+  // walk away owning the scope. That ordering costs nothing: a fresh
+  // claim can never carry a `sanAllowlist`, so only the deployment's
+  // default email rule can apply pre-claim. The claim still lands
+  // before cryptographic signature verification: moving it after would
+  // not stop a motivated squatter (any authenticated caller can
+  // produce a validly-signed private publish), so the real defenses
+  // against mass squatting are the operator reclaim flow, the audit
+  // trail, and (future) rate limiting.
   const scopeForbiddenByOwner = (): PublishArtifactResult =>
     error(
       403,
       'scope_forbidden',
       `scope \`${manifest.scope}\` is owned by another publisher. Choose a scope you own — your first publish into an unclaimed scope claims it. If you hold the rights to this name (for example the matching domain or brand), the registry operator can verify that ownership and reclaim an unverified scope.`,
     );
+
+  // 2d. Publisher-identity binding (F4) — sigstore-signed publishes
+  // only (returns `undefined` = pass for Ed25519). Binds the bundle's
+  // certificate identity (the Fulcio cert's SAN) to the ggui account
+  // that owns (or is claiming) the scope, so a valid-but-unrelated
+  // OIDC identity can no longer sign publishes into it. Two rules,
+  // strictly ordered:
+  //
+  //   1. ALLOWLIST — the ownership row carries a non-empty
+  //      `sanAllowlist`: the SAN must be one of its literal entries
+  //      (operator-managed; org/CI flexibility).
+  //   2. VERIFIED EMAIL (default) — no allowlist, and the deployment
+  //      wires {@link PublishArtifactDeps.verifiedEmailResolver}: the
+  //      SAN must equal the account's verified email
+  //      (case-insensitive). An account without a verified email
+  //      fails closed.
+  //
+  // No allowlist AND no resolver ⇒ no identity rule — the deployment
+  // enforces identity only through allowlists (see the resolver
+  // docstring for why that posture is documented rather than papered
+  // over).
+  //
+  // Invocation points (all before bundle decode or cryptographic
+  // verify — the SAN is a cheap local projection, so a forbidden
+  // identity never pays for, or leaks errors from, bundle work):
+  //   - claimed scope: with the stored ownership row;
+  //   - unclaimed scope: with `null` BEFORE the claim (fresh claims
+  //     never carry an allowlist — email rule only);
+  //   - lost claim race won by the same subject: re-run with the
+  //     winner row, which MAY be operator-seeded with an allowlist.
+  // The projection is trustworthy in the reject direction
+  // unconditionally; in the accept direction it is paired with the
+  // REAL `verifyBundleSigstore` at step 6, which proves the same
+  // SAN-bearing cert is genuinely CA-issued and bound to the signed
+  // bytes (same parser both places — the projection cannot drift from
+  // what verification enforces).
+  //
+  // Error hygiene: messages name the rule that failed and MAY echo the
+  // caller's OWN certificate identity (they supplied it), but NEVER
+  // other identities — not allowlist entries, not the account email.
+  const checkPublisherIdentity = async (
+    ownerRow: ScopeOwnerRow | null,
+  ): Promise<PublishArtifactResult | undefined> => {
+    if (input.signature.algorithm !== 'sigstore-cosign') return undefined;
+    // Fail closed on corrupt policy data: a storage adapter projects a
+    // malformed allowlist column as SAN_ALLOWLIST_INVALID (see the
+    // ScopeOwnerRow docstring). Falling through to the email rule (or
+    // no rule) would let corruption silently WIDEN who may publish.
+    const rawAllowlist = ownerRow?.sanAllowlist;
+    if (rawAllowlist === SAN_ALLOWLIST_INVALID) {
+      return error(
+        500,
+        'internal',
+        `scope \`${manifest.scope}\` has a malformed publisher-identity allowlist in storage — refusing to fall back to a weaker identity rule. A registry operator must rewrite the scope's allowlist (set or clear it) before sigstore publishes into this scope can proceed.`,
+      );
+    }
+    // An empty allowlist behaves like an absent one — the allowlist
+    // rule applies only when at least one entry names a signer.
+    const sanAllowlist = rawAllowlist ?? [];
+    const resolver = deps.verifiedEmailResolver;
+    if (sanAllowlist.length === 0 && resolver === undefined) return undefined;
+    // EVERY SAN on the certificate (a Fulcio cert can carry both a
+    // URI and an email SAN) — the rules below accept on ANY hit, so a
+    // both-SAN cert matches whichever identity the policy names.
+    const sans = extractSigstoreSANs(input.signature).map((san) =>
+      san.toLowerCase(),
+    );
+    if (sans.length === 0) {
+      return error(
+        403,
+        'identity_mismatch',
+        `scope \`${manifest.scope}\` requires a bound publisher identity, but the sigstore bundle's certificate carries no subject identity (SAN) to check`,
+      );
+    }
+    const echoedSans = sans.map((san) => `\`${san}\``).join(', ');
+    if (sanAllowlist.length > 0) {
+      // ONE case rule for every identity comparison (mirrors the email
+      // rule below): operator tooling lowercase-normalizes entries at
+      // write, and the comparison is case-insensitive regardless so
+      // rows seeded by other paths behave identically.
+      const allowlistLower = sanAllowlist.map((entry) => entry.toLowerCase());
+      if (!sans.some((san) => allowlistLower.includes(san))) {
+        return error(
+          403,
+          'identity_mismatch',
+          `no certificate identity (${echoedSans}) is on the publisher-identity allowlist for scope \`${manifest.scope}\`. Sign with an allowlisted identity, or ask the registry operator to update the scope's allowlist.`,
+        );
+      }
+      return undefined;
+    }
+    if (resolver !== undefined) {
+      const verifiedEmail = await resolver(deps.authn.subject);
+      if (verifiedEmail === undefined) {
+        return error(
+          403,
+          'identity_mismatch',
+          `scope \`${manifest.scope}\` binds publishes to the account's verified email, but the publishing account has none. Verify your account email, or ask the registry operator to set a publisher-identity allowlist for the scope. If you verified your email just now, it can take a minute to propagate — retry shortly.`,
+        );
+      }
+      if (!sans.includes(verifiedEmail.toLowerCase())) {
+        return error(
+          403,
+          'identity_mismatch',
+          `no certificate identity (${echoedSans}) matches the publishing account's verified email. Sign with the OIDC identity of your account email, or ask the registry operator to add this identity to the scope's publisher allowlist.`,
+        );
+      }
+    }
+    return undefined;
+  };
+
   const existingOwner = await deps.storage.getScopeOwner(manifest.scope);
   if (existingOwner !== null && existingOwner.ownerSubject !== deps.authn.subject) {
     return scopeForbiddenByOwner();
   }
-  if (existingOwner === null) {
+  if (existingOwner !== null) {
+    const identityFailure = await checkPublisherIdentity(existingOwner);
+    if (identityFailure !== undefined) return identityFailure;
+  } else {
     const reservedScopes = deps.reservedScopes ?? RESERVED_SCOPES;
     if (reservedScopes.includes(manifest.scope)) {
       return error(
@@ -311,6 +475,11 @@ export async function publishArtifact(
         `scope \`${manifest.scope}\` is reserved on this registry and cannot be claimed by publishing. Choose a scope you own — your first publish into an unclaimed scope claims it.`,
       );
     }
+    // Identity BEFORE the claim (review r1 finding 2): a rejected
+    // signer must not walk away owning the scope. Fresh claims carry
+    // no allowlist, so this pre-claim run applies the email rule only.
+    const identityFailure = await checkPublisherIdentity(null);
+    if (identityFailure !== undefined) return identityFailure;
     const claim = await deps.storage.claimScope({
       scope: manifest.scope,
       ownerSubject: deps.authn.subject,
@@ -332,6 +501,11 @@ export async function publishArtifact(
       if (winner.ownerSubject !== deps.authn.subject) {
         return scopeForbiddenByOwner();
       }
+      // The winner row may be operator-seeded WITH an allowlist the
+      // pre-claim run (against `null`) never saw — re-apply the gate
+      // against the durable row.
+      const raceIdentityFailure = await checkPublisherIdentity(winner);
+      if (raceIdentityFailure !== undefined) return raceIdentityFailure;
     }
   }
 
@@ -477,12 +651,15 @@ export async function publishArtifact(
     authorPublicKey = authorKeyRow.publicKeyBase64;
   } else {
     // Public gadgets — sigstore (Fulcio + Rekor) trust chain.
-    // Identity claim: trust ANY valid OIDC identity at publish-time —
-    // the publisher is already authenticated by the transport layer
-    // ahead of this op. Install-time consumers CAN tighten via
-    // `--verify-identity <pattern>` (CLI install flag); that's a
-    // separate trust decision controlled by the install operator, not
-    // the publisher.
+    // Identity claim: gate 2d already bound the certificate's SAN to
+    // the scope's allowlist / the account's verified email (where
+    // configured — see the gate for the honest no-rule posture). This
+    // verify is the cryptographic half of that pairing: it proves the
+    // SAN-bearing cert is genuinely CA-issued, transparency-logged,
+    // and bound to the signed bytes. Install-time consumers can layer
+    // their own policy via `--verify-identity <pattern>` (CLI install
+    // flag) — a separate trust decision controlled by the install
+    // operator, not the publisher.
     const verifyResult = await verifyBundleSigstore({
       bundleBytes: bytesForSignature,
       signature: input.signature,

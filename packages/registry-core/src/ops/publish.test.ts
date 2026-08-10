@@ -32,8 +32,13 @@ import { base64Encode, sha384Base64 } from '../utils/base64.js';
 // `vi.hoisted` lets the mock factory close over fresh `vi.fn()` refs that
 // each test re-stubs via `mockResolvedValue` without losing the
 // pass-through bindings the rest of the module needs.
+// `extractSigstoreSANsOverride` — when non-null, the SAN projection
+// answers this fixed list instead of parsing the fixture's (fake,
+// unparseable) cert. Lets gate-order tests exercise multi-SAN policy
+// paths that only real Fulcio certs could otherwise produce.
 const sigstoreMocks = vi.hoisted(() => ({
   verifyBundleSigstore: vi.fn(),
+  extractSigstoreSANsOverride: null as readonly string[] | null,
 }));
 
 vi.mock('@ggui-ai/gadget-signing', async () => {
@@ -43,6 +48,8 @@ vi.mock('@ggui-ai/gadget-signing', async () => {
   return {
     ...actual,
     verifyBundleSigstore: sigstoreMocks.verifyBundleSigstore,
+    extractSigstoreSANs: (signature: import('@ggui-ai/gadget-signing').SigstoreSignature) =>
+      sigstoreMocks.extractSigstoreSANsOverride ?? actual.extractSigstoreSANs(signature),
   };
 });
 
@@ -686,6 +693,7 @@ describe('publishArtifact', () => {
   describe('visibility ↔ algorithm pairing (F1)', () => {
     beforeEach(() => {
       sigstoreMocks.verifyBundleSigstore.mockReset();
+      sigstoreMocks.extractSigstoreSANsOverride = null;
     });
 
     it('rejects `visibility: public` + Ed25519 signature with 400 visibility_algorithm_mismatch', async () => {
@@ -1188,6 +1196,7 @@ describe('publishArtifact', () => {
 
     beforeEach(() => {
       sigstoreMocks.verifyBundleSigstore.mockReset();
+      sigstoreMocks.extractSigstoreSANsOverride = null;
     });
 
     it('valid sigstore signature → 201 + leaf-cert PEM pinned on authorPublicKey', async () => {
@@ -1345,6 +1354,85 @@ describe('publishArtifact', () => {
       expect(sigstoreMocks.verifyBundleSigstore.mock.calls[0]?.[0]).not.toHaveProperty(
         'tufForceCache',
       );
+    });
+
+    // F4 gate-order pin. Behavioral identity cases (allowlist hit/miss,
+    // email match/mismatch) run REAL crypto in
+    // `publish.sigstore.integration.test.ts`; this suite only pins
+    // that the identity gate (2d) fires BEFORE the cryptographic
+    // verify — a forbidden identity must not pay for (or leak errors
+    // from) verification work.
+    it('identity gate (F4) rejects before verifyBundleSigstore ever runs', async () => {
+      sigstoreMocks.verifyBundleSigstore.mockResolvedValue({ valid: true });
+      const f = await makeSigstoreFixture();
+      // The scope row carries an allowlist; the fixture's hand-built
+      // bundle has no parseable certificate, so no SAN can satisfy it.
+      await f.storage.claimScope({
+        scope: '@test',
+        ownerSubject: f.subject,
+        claimedAt: '2026-08-10T00:00:00.000Z',
+        verification: 'unverified',
+        sanAllowlist: ['release@acme.example'],
+      });
+      const result = await publishArtifact(
+        {
+          manifest: PUBLIC_GADGET_MANIFEST,
+          bundle: f.bundleB64,
+          bundleSha384: f.bundleSha384,
+          signature: f.signature,
+        },
+        {
+          storage: f.storage,
+          bundleStorage: f.bundleStorage,
+          authn: { subject: f.subject },
+          clock: () => new Date('2026-08-10T00:00:00.000Z'),
+          registryHostname: 'localhost:9001',
+        },
+      );
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.status).toBe(403);
+      expect(result.body.error).toBe('identity_mismatch');
+      // Cheap-first: the gate answered before any cryptographic work.
+      expect(sigstoreMocks.verifyBundleSigstore).not.toHaveBeenCalled();
+      expect(await f.storage.getArtifactVersion('@test/weather', '1.0.0')).toBe(null);
+    });
+
+    it('identity gate (F4 r4) accepts ANY SAN hit — a both-SAN cert matches on its second identity', async () => {
+      // Real Fulcio certs can carry BOTH a URI and an email SAN; the
+      // mock CA cannot mint one, so the projection is overridden to a
+      // two-SAN answer. The allowlist names only the SECOND — the gate
+      // must accept, not dead-end on the first.
+      sigstoreMocks.verifyBundleSigstore.mockResolvedValue({ valid: true });
+      sigstoreMocks.extractSigstoreSANsOverride = [
+        'https://ci.example.com/workflows/publish.yml@refs/heads/main',
+        'release@acme.example',
+      ];
+      const f = await makeSigstoreFixture();
+      await f.storage.claimScope({
+        scope: '@test',
+        ownerSubject: f.subject,
+        claimedAt: '2026-08-10T00:00:00.000Z',
+        verification: 'unverified',
+        sanAllowlist: ['release@acme.example'],
+      });
+      const result = await publishArtifact(
+        {
+          manifest: PUBLIC_GADGET_MANIFEST,
+          bundle: f.bundleB64,
+          bundleSha384: f.bundleSha384,
+          signature: f.signature,
+        },
+        {
+          storage: f.storage,
+          bundleStorage: f.bundleStorage,
+          authn: { subject: f.subject },
+          clock: () => new Date('2026-08-10T00:00:00.000Z'),
+          registryHostname: 'localhost:9001',
+        },
+      );
+      expect(result.ok, `publish failed: ${JSON.stringify(result)}`).toBe(true);
+      expect(sigstoreMocks.verifyBundleSigstore).toHaveBeenCalledTimes(1);
     });
   });
 });

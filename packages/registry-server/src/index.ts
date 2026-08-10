@@ -82,6 +82,13 @@ export interface CreateRegistryServerOptions {
    * {@link RegistryAppOptions.sigstoreTuf}).
    */
   readonly sigstoreTuf?: PublishArtifactDeps['sigstoreTuf'];
+  /**
+   * Optional verified-email lookup for the publish gate's identity
+   * binding. Forwarded to `createRegistryApp` (see
+   * {@link RegistryAppOptions.verifiedEmailResolver} for the default
+   * allowlist-only posture when unset).
+   */
+  readonly verifiedEmailResolver?: PublishArtifactDeps['verifiedEmailResolver'];
 }
 
 export interface RegistryServerHandle {
@@ -105,6 +112,9 @@ export function createRegistryServer(
       : {}),
     ...(options.sigstoreTuf !== undefined
       ? { sigstoreTuf: options.sigstoreTuf }
+      : {}),
+    ...(options.verifiedEmailResolver !== undefined
+      ? { verifiedEmailResolver: options.verifiedEmailResolver }
       : {}),
   });
 
