@@ -354,8 +354,8 @@ export interface SearchResponse {
 }
 
 /**
- * `GET /search` sort options. Supports a registry-web "Recent" view
- * that needs `publishedAt`-DESC ordering.
+ * `GET /search` sort options. Supports registry browse UIs that need
+ * a "Recent" view with `publishedAt`-DESC ordering.
  *
  *   - `recent` — order by {@link ArtifactsMetadataRow.publishedAt} DESC.
  *
