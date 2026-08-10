@@ -105,13 +105,15 @@ export interface AppsSource {
    * stores hold keyed by the same `appId` — saved blueprints, per-app
    * provider keys, marketplace installs, issued keys — is outside it.
    *
-   * An implementation MAY cascade those away inside its own `delete`.
-   * One that does NOT leaves them behind, and then MUST make that
-   * observable: a named, structured event naming the row classes it
-   * orphaned, emitted on the delete that orphaned them. Returning
-   * silently is the contract violation — not the orphaning itself.
-   * Orphaned rows an operator can enumerate are debt; orphaned rows
-   * nobody can find are loss.
+   * An implementation MAY cascade those away inside its own `delete`,
+   * and MAY complete that cascade asynchronously after resolving. One
+   * that leaves rows behind — permanently or until an asynchronous
+   * sweep lands — MUST make that observable: a named, structured event
+   * naming the row classes left in place, emitted on the delete that
+   * orphaned them, carrying an indication of whether asynchronous
+   * completion was arranged. Returning silently is the contract
+   * violation — not the orphaning itself. Orphaned rows an operator
+   * can enumerate are debt; orphaned rows nobody can find are loss.
    */
   delete(args: { appId: string; ownerSub: string }): Promise<void>;
   /**
