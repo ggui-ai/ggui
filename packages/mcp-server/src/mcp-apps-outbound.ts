@@ -568,49 +568,22 @@ function buildCspMeta(
 export function registerGguiRenderResource(
   server: McpServer,
   shellHtml: string = GGUI_RENDER_SHELL_HTML,
-  publicBaseUrl?: string
+  publicBaseUrl?: string,
+  /**
+   * Absolute runtime-bundle URL used as the CSP-declaration fallback
+   * when `publicBaseUrl` is absent — same posture as the per-render
+   * template registration ({@link buildCspMeta}'s second parameter).
+   * Deployments that publish an absolute `runtime.url` but
+   * deliberately do NOT set `publicBaseUrl` (it also feeds
+   * Origin/Host enforcement and OAuth) still get
+   * `_meta.ui.csp.{connectDomains,resourceDomains}` on the static
+   * resource read; before this fallback those reads carried no
+   * declaration at all and spec-compliant hosts applied the
+   * restrictive default (`connect-src 'none'`).
+   */
+  runtimeUrl?: string
 ): void {
-  let cspMeta:
-    | {
-        ui: {
-          csp: {
-            connectDomains: readonly string[];
-            resourceDomains: readonly string[];
-          };
-        };
-      }
-    | undefined;
-  if (publicBaseUrl) {
-    try {
-      const parsed = new URL(publicBaseUrl);
-      const origin = parsed.origin;
-      // CSP `connect-src` does NOT cross-translate between `https://`
-      // and `wss://` — they're independent URL schemes for the
-      // browser's URL-match algorithm. Declaring ONLY the HTTPS
-      // origin will leave WebSocket subscribes (`wss://<same-host>/ws`)
-      // blocked by hosts that compose strict CSPs from this
-      // `connectDomains` list (claude.ai's iframe is the live
-      // diagnosis case). Declare BOTH schemes so the same physical
-      // origin is reachable via HTTPS (`/api/bootstrap`, `/_ggui/
-      // iframe-runtime.js`) AND wss (live-channel subscribe).
-      const wsScheme = parsed.protocol === "https:" ? "wss:" : "ws:";
-      const wsOrigin = `${wsScheme}//${parsed.host}`;
-      cspMeta = {
-        ui: {
-          csp: {
-            connectDomains: [origin, wsOrigin],
-            resourceDomains: [origin],
-          },
-        },
-      };
-    } catch {
-      // Malformed `publicBaseUrl` — leave `_meta.ui.csp` off rather
-      // than emitting a broken declaration. The host falls back to its
-      // restrictive default and operators get the same observable
-      // failure they'd get from any other malformed URL setting.
-      cspMeta = undefined;
-    }
-  }
+  const cspMeta = buildCspMeta(publicBaseUrl, runtimeUrl);
 
   // `registerAppResource` (from `@modelcontextprotocol/ext-apps/server`)
   // defaults `mimeType` to `RESOURCE_MIME_TYPE` — the same
@@ -2477,7 +2450,16 @@ export function installMcpAppsOutbound(
   } = {}
 ): void {
   advertiseMcpAppsUiCapability(server);
-  registerGguiRenderResource(server, opts.shellHtml, opts.publicBaseUrl);
+  // The self-contained template's absolute runtimeUrl doubles as the
+  // static registration's CSP-declaration fallback — deployments that
+  // set no `publicBaseUrl` (it also feeds Origin/Host enforcement +
+  // OAuth) still declare their origin to spec-compliant hosts.
+  registerGguiRenderResource(
+    server,
+    opts.shellHtml,
+    opts.publicBaseUrl,
+    opts.selfContained?.runtimeUrl
+  );
   if (opts.selfContained) {
     registerGguiRenderResourceTemplate(server, opts.selfContained);
   }
