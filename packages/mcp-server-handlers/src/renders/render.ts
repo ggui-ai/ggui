@@ -104,7 +104,10 @@ import type {
   GenerationCacheHit,
 } from './generation-cache.js';
 import { assertNoDuplicateGadgetHooks } from './assert-no-duplicate-gadget-hooks.js';
-import { reportRenderCodeWriteFailed } from './code-delivery-events.js';
+import {
+  reportRenderCodeB64OverCap,
+  reportRenderCodeWriteFailed,
+} from './code-delivery-events.js';
 import { writeRenderIdentity } from './render-identity.js';
 import type { InstalledBlueprintsProvider } from './installed-blueprints-provider.js';
 import type { BlueprintPool } from './decide-handshake.js';
@@ -2258,6 +2261,22 @@ export function createGguiRenderHandler(
           view = deriveRenderMeta(
             await rewritePrivateBundleUrls(top, deps.presignPrivateBundleUrl),
           );
+          // Over-cap inline-channel omission is a named event, not a
+          // silent degrade: on a host whose iframe CSP blocks fetches
+          // AND WebSockets, a slice without `codeB64` cannot paint.
+          if (
+            top.type !== 'mcpApps' &&
+            top.type !== 'system' &&
+            typeof top.componentCode === 'string' &&
+            top.componentCode.length > 0 &&
+            view.codeB64 === undefined
+          ) {
+            reportRenderCodeB64OverCap({
+              sessionId: output.sessionId,
+              appId: ctx.appId,
+              sourceBytes: Buffer.byteLength(top.componentCode, 'utf8'),
+            });
+          }
           // Project the App's publicEnv down to the union of declared
           // wrappers' `requires`.
           if (deps.appMetadataStore) {

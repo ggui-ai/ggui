@@ -111,6 +111,7 @@ import registryFusion from './cases/registry-match-fuses-on-not-mountable.json' 
 import malformedLocator from './cases/malformed-locator-stays-outside-the-typed-set.json' with { type: 'json' };
 import liveRowMount from './cases/live-row-read-returns-mount-material.json' with { type: 'json' };
 import remintMount from './cases/evicted-row-remints-from-the-durable-record.json' with { type: 'json' };
+import inlineMount from './cases/channel-less-read-mounts-inline.json' with { type: 'json' };
 
 // =============================================================================
 // Authored vocabulary
@@ -210,6 +211,15 @@ export type ResourceReadSeed =
       /** A live render row that has committed a component. */
       readonly kind: 'committed-render';
       readonly session: string;
+      /**
+       * Size class of the committed component relative to the inline
+       * `codeB64` cap. `'under-inline-cap'` (the default) seeds a
+       * component the server can deliver inline even with no wired
+       * channels; `'over-inline-cap'` seeds one it cannot — the shape
+       * that still exercises the no-delivery-channel failure arm on a
+       * channel-less server.
+       */
+      readonly size: 'under-inline-cap' | 'over-inline-cap';
     }
   | {
       /** A live render row whose generation has not committed yet. */
@@ -370,8 +380,10 @@ export interface ResourceReadScenario {
  * markup that transports it is not.
  */
 export interface ResourceReadRenderMeta {
-  /** A fetchable component URL — the static delivery channel. */
+  /** A fetchable component URL — the fetched static delivery channel. */
   readonly codeUrl?: string;
+  /** Base64 component source — the inline static delivery channel. */
+  readonly codeB64?: string;
   /** The live channel's endpoint. Only a channel WITH a token. */
   readonly wsUrl?: string;
   /** The live channel's token. Only a channel WITH an endpoint. */
@@ -432,7 +444,7 @@ export type ResourceReadScenarioDriver = (
 /**
  * Every resource-read case the kit ships, in deterministic order: the
  * four typed classes, then the disclosure fusions, then the boundary of
- * the classification, then the two mount cases.
+ * the classification, then the three mount cases.
  */
 export const resourceReadCases: readonly ResourceReadConformanceCase[] = [
   notFoundOnAMiss as ResourceReadConformanceCase,
@@ -448,6 +460,7 @@ export const resourceReadCases: readonly ResourceReadConformanceCase[] = [
   malformedLocator as ResourceReadConformanceCase,
   liveRowMount as ResourceReadConformanceCase,
   remintMount as ResourceReadConformanceCase,
+  inlineMount as ResourceReadConformanceCase,
 ];
 
 // =============================================================================
@@ -480,8 +493,9 @@ export function renderLocatorUri(
 
 /**
  * Does this render meta carry enough to paint something? One of the
- * three delivery channels a runtime knows: a static component URL, a
- * live channel, or a server-emitted system card.
+ * four delivery channels a runtime knows: a fetchable static component
+ * URL, inline base64 component source, a live channel, or a
+ * server-emitted system card.
  *
  * The live channel needs BOTH halves — an endpoint with no token cannot
  * be opened, and a token with no endpoint has nowhere to go — so a
@@ -489,6 +503,7 @@ export function renderLocatorUri(
  */
 export function declaresDeliveryChannel(meta: ResourceReadRenderMeta): boolean {
   if (typeof meta.codeUrl === 'string' && meta.codeUrl.length > 0) return true;
+  if (typeof meta.codeB64 === 'string' && meta.codeB64.length > 0) return true;
   if (typeof meta.kind === 'string' && meta.kind.length > 0) return true;
   return (
     typeof meta.wsUrl === 'string' &&
@@ -1057,7 +1072,7 @@ const PROBE_KEYS: readonly string[] = ['as', 'locator', 'expect'];
 const SEED_KEYS: Readonly<Record<string, readonly string[]>> = {
   'identity-record': ['kind', 'session', 'key', 'blueprint'],
   'durable-blueprint': ['kind', 'componentRef', 'body'],
-  'committed-render': ['kind', 'session'],
+  'committed-render': ['kind', 'session', 'size'],
   'uncommitted-render': ['kind', 'session'],
   'registered-blueprint': ['kind', 'as'],
 };
@@ -1128,11 +1143,19 @@ function parseSeed(bad: BadFn, seed: unknown): ResourceReadSeed {
       }
       return { kind: 'durable-blueprint', componentRef, body };
     }
-    case 'committed-render':
+    case 'committed-render': {
+      const size = seed['size'] ?? 'under-inline-cap';
+      if (size !== 'under-inline-cap' && size !== 'over-inline-cap') {
+        throw bad(
+          "a committed-render seed's 'size' must be 'under-inline-cap' or 'over-inline-cap' (or omitted for the default)",
+        );
+      }
       return {
         kind: 'committed-render',
         session: requireText(bad, seed['session'], "a committed-render seed's 'session'"),
+        size,
       };
+    }
     case 'uncommitted-render':
       return {
         kind: 'uncommitted-render',

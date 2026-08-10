@@ -85,15 +85,17 @@ function namespaceProxy(resolve: () => Record<string, unknown>): Record<string, 
   );
 }
 
-/** Merged design-layer proxy — first namespace carrying the key wins. */
+/** Merged design-layer proxy — mirrors the data-URL merge shim. */
 function mergedLayersProxy(keys: readonly (readonly [string, string])[]): Record<string, unknown> {
   return namespaceProxy(() => {
     const merged: Record<string, unknown> = {};
-    // Later layers first so the PRIMARY (first entry) overwrites on
-    // collision — same precedence as `Object.assign({}, ...reversed)`
-    // in the data-URL merge shim.
-    for (let i = keys.length - 1; i >= 0; i--) {
-      const [gguiKey, legacy] = keys[i];
+    // In-order assign, EXACTLY like the data-URL merge shim's
+    // `Object.assign({}, primary, ...fallbacks)` — a later fallback
+    // overwrites on collision. Layer export names are disjoint by
+    // design, so precedence should never decide a lookup; mirroring
+    // the shim keeps the two projections behaviorally identical if
+    // one ever collides.
+    for (const [gguiKey, legacy] of keys) {
       Object.assign(merged, layered(gguiKey, legacy));
     }
     return merged;
@@ -315,14 +317,184 @@ export function resolveInlineSpecifier(
 // ---------------------------------------------------------------------------
 
 /**
- * Name of the window-scoped handoff object the transformed script reads
- * its `resolve` function from and writes `exports` / `error` / `ran`
- * onto. Installed and removed by `loadModuleInline` around the
- * synchronous script evaluation.
+ * Name of the handoff object the transformed script reads its
+ * `resolve` function from and writes `exports` / `error` / `ran` onto.
+ * `loadModuleInline` installs it in TWO places around the synchronous
+ * evaluation: as an expando on the script ELEMENT (read via
+ * `document.currentScript` — valid for synchronously-evaluated classic
+ * scripts, and element identity survives realm splits where a test
+ * runtime evaluates injected scripts in a different global than the
+ * caller's) and on the caller's global (the fallback for direct
+ * `new Function`-style evaluation of the transform's output).
  */
 export const INLINE_EXEC_HANDOFF_GLOBAL = '__GGUI_INLINE_EXEC__';
 
 const IDENT = '[A-Za-z_$][\\w$]*';
+
+/**
+ * Half-open `[start, end)` spans of string literals, template-literal
+ * text chunks, and comments — the positions where import/export-shaped
+ * TEXT is content, not syntax.
+ */
+type LiteralRange = readonly [number, number];
+
+/**
+ * Single-pass scan for literal/comment spans. Tracks single/double
+ * quotes (with escapes), template literals INCLUDING `${…}` expression
+ * nesting (expressions are code — their own nested literals are
+ * scanned recursively via the context stack), and line / block
+ * comments. Regex literals are NOT tracked (the `/`-versus-division
+ * ambiguity needs a full parser); an import/export-shaped sequence
+ * inside a regex literal body remains a known limitation — see the
+ * transform docstring.
+ */
+function scanLiteralRanges(code: string): LiteralRange[] {
+  const ranges: Array<[number, number]> = [];
+  type Ctx =
+    | { kind: 'code'; braceDepth: number }
+    | { kind: 'sq' | 'dq' | 'line' | 'block'; start: number }
+    | { kind: 'tpl'; chunkStart: number };
+  const stack: Ctx[] = [{ kind: 'code', braceDepth: 0 }];
+  let i = 0;
+  while (i < code.length) {
+    const top = stack[stack.length - 1];
+    const c = code[i];
+    const c2 = code.slice(i, i + 2);
+    switch (top.kind) {
+      case 'code': {
+        if (c2 === '//') {
+          stack.push({ kind: 'line', start: i });
+          i += 2;
+          continue;
+        }
+        if (c2 === '/*') {
+          stack.push({ kind: 'block', start: i });
+          i += 2;
+          continue;
+        }
+        if (c === "'") stack.push({ kind: 'sq', start: i });
+        else if (c === '"') stack.push({ kind: 'dq', start: i });
+        else if (c === '`') stack.push({ kind: 'tpl', chunkStart: i });
+        else if (c === '{') top.braceDepth++;
+        else if (c === '}') {
+          if (top.braceDepth === 0 && stack.length > 1) {
+            // Closing a `${…}` expression — resume the template chunk.
+            stack.pop();
+            const tpl = stack[stack.length - 1];
+            if (tpl.kind === 'tpl') tpl.chunkStart = i + 1;
+          } else {
+            top.braceDepth--;
+          }
+        }
+        i++;
+        continue;
+      }
+      case 'sq':
+      case 'dq': {
+        if (c === '\\') {
+          i += 2;
+          continue;
+        }
+        if ((top.kind === 'sq' && c === "'") || (top.kind === 'dq' && c === '"')) {
+          ranges.push([top.start, i + 1]);
+          stack.pop();
+        }
+        i++;
+        continue;
+      }
+      case 'line': {
+        if (c === '\n') {
+          ranges.push([top.start, i]);
+          stack.pop();
+        }
+        i++;
+        continue;
+      }
+      case 'block': {
+        if (c2 === '*/') {
+          ranges.push([top.start, i + 2]);
+          stack.pop();
+          i += 2;
+          continue;
+        }
+        i++;
+        continue;
+      }
+      case 'tpl': {
+        if (c === '\\') {
+          i += 2;
+          continue;
+        }
+        if (c === '`') {
+          ranges.push([top.chunkStart, i + 1]);
+          stack.pop();
+          i++;
+          continue;
+        }
+        if (c2 === '${') {
+          ranges.push([top.chunkStart, i]);
+          stack.push({ kind: 'code', braceDepth: 0 });
+          i += 2;
+          continue;
+        }
+        i++;
+        continue;
+      }
+    }
+  }
+  // Unterminated literal/comment at EOF — close it at the end so its
+  // content still counts as literal.
+  const top = stack[stack.length - 1];
+  if (top.kind === 'sq' || top.kind === 'dq' || top.kind === 'line' || top.kind === 'block') {
+    ranges.push([top.start, code.length]);
+  } else if (top.kind === 'tpl') {
+    ranges.push([top.chunkStart, code.length]);
+  }
+  return ranges;
+}
+
+function insideAny(ranges: readonly LiteralRange[], index: number): boolean {
+  for (const [start, end] of ranges) {
+    if (index >= start && index < end) return true;
+    if (start > index) break;
+  }
+  return false;
+}
+
+/**
+ * `String.replace(regex, fn)` that skips matches STARTING inside a
+ * literal/comment span. Ranges are rescanned per call — replacements
+ * from an earlier pass introduce their own string literals (specifier
+ * arguments, export-name keys), and rescanning makes them opaque to
+ * every later pass.
+ */
+function replaceOutsideLiterals(
+  code: string,
+  regex: RegExp,
+  replacer: (match: string, ...groups: Array<string | undefined>) => string,
+): string {
+  const ranges = scanLiteralRanges(code);
+  return code.replace(regex, (match: string, ...rest: unknown[]) => {
+    // `String.replace` callback contract: [...capture groups, offset,
+    // whole string] — groups are string|undefined, offset is a number.
+    const offset = rest[rest.length - 2];
+    if (typeof offset === 'number' && insideAny(ranges, offset)) return match;
+    const groups = rest.slice(0, -2) as Array<string | undefined>;
+    return replacer(match, ...groups);
+  });
+}
+
+/** Does `regex` match anywhere OUTSIDE literal/comment spans? */
+function testOutsideLiterals(code: string, regex: RegExp): boolean {
+  const ranges = scanLiteralRanges(code);
+  const re = new RegExp(regex.source, regex.flags.includes('g') ? regex.flags : `${regex.flags}g`);
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(code)) !== null) {
+    if (!insideAny(ranges, m.index)) return true;
+    if (m.index === re.lastIndex) re.lastIndex++;
+  }
+  return false;
+}
 
 /** `a, b as c` (import form) → `a, b: c` (destructuring form). */
 function importClauseToDestructuring(clause: string): string {
@@ -346,6 +518,17 @@ function importClauseToDestructuring(clause: string): string {
  * form survives the rewrite (re-export statements, unrecognized
  * clauses) — executing a half-transformed module would fail in a far
  * less diagnosable way.
+ *
+ * Literal safety: every pass (and both guards) skips matches inside
+ * string literals, template-literal text, and comments via
+ * {@link scanLiteralRanges} — generated UI copy legitimately contains
+ * import/export-shaped text ("export data as CSV", code-sample
+ * snippets) and must ride through byte-identical. Known limitation:
+ * regex-literal bodies are not tracked (the `/`-vs-division ambiguity
+ * needs a parser); an import/export-shaped sequence inside one could
+ * still be rewritten. Multi-declarator declaration exports
+ * (`export const a = 1, b = 2`) export only the first name — esbuild
+ * emits one declarator per exported declaration.
  */
 export function transformForInlineExec(code: string): string {
   const handoff = `globalThis.${INLINE_EXEC_HANDOFF_GLOBAL}`;
@@ -353,15 +536,16 @@ export function transformForInlineExec(code: string): string {
 
   // --- imports -----------------------------------------------------------
   // Named (with optional default): `import D, { a, b as c } from 'spec'`
-  out = out.replace(
+  out = replaceOutsideLiterals(
+    out,
     new RegExp(
       `import\\s*(?:(${IDENT})\\s*,\\s*)?\\{([^}]*)\\}\\s*from\\s*(['"])([^'"]+)\\3\\s*;?`,
       'g',
     ),
-    (_m, def: string | undefined, clause: string, _q: string, spec: string) => {
+    (_m, def, clause, _q, spec) => {
       const parts: string[] = [`var __ggui_m = __ggui_mod(${JSON.stringify(spec)});`];
       if (def !== undefined) parts.push(`var ${def} = __ggui_m["default"];`);
-      const destructuring = importClauseToDestructuring(clause);
+      const destructuring = importClauseToDestructuring(clause ?? '');
       if (destructuring.length > 0) parts.push(`var {${destructuring}} = __ggui_m;`);
       // Block-scope the temp so repeated import statements don't
       // collide on `__ggui_m`.
@@ -369,35 +553,43 @@ export function transformForInlineExec(code: string): string {
     },
   );
   // Namespace (with optional default): `import D, * as N from 'spec'`
-  out = out.replace(
+  out = replaceOutsideLiterals(
+    out,
     new RegExp(
       `import\\s*(?:(${IDENT})\\s*,\\s*)?\\*\\s*as\\s+(${IDENT})\\s+from\\s*(['"])([^'"]+)\\3\\s*;?`,
       'g',
     ),
-    (_m, def: string | undefined, ns: string, _q: string, spec: string) => {
+    (_m, def, ns, _q, spec) => {
       const parts = [`var ${ns} = __ggui_mod(${JSON.stringify(spec)});`];
       if (def !== undefined) parts.push(`var ${def} = ${ns}["default"];`);
       return parts.join(' ');
     },
   );
   // Default only: `import D from 'spec'`
-  out = out.replace(
+  out = replaceOutsideLiterals(
+    out,
     new RegExp(`import\\s+(${IDENT})\\s+from\\s*(['"])([^'"]+)\\2\\s*;?`, 'g'),
-    (_m, def: string, _q: string, spec: string) =>
-      `var ${def} = __ggui_mod(${JSON.stringify(spec)})["default"];`,
+    (_m, def, _q, spec) => `var ${def} = __ggui_mod(${JSON.stringify(spec)})["default"];`,
   );
   // Bare side-effect import: `import 'spec'` — registry-backed modules
   // have no side effects to run; drop.
-  out = out.replace(new RegExp(`import\\s*(['"])[^'"]+\\1\\s*;?`, 'g'), '');
+  out = replaceOutsideLiterals(
+    out,
+    new RegExp(`import\\s*(['"])[^'"]+\\1\\s*;?`, 'g'),
+    () => '',
+  );
 
   // --- exports -----------------------------------------------------------
   // Re-export statements are not transformable without module machinery.
-  if (/export\s*\{[^}]*\}\s*from\s*['"]/.test(out) || /export\s*\*\s*from\s*['"]/.test(out)) {
+  if (
+    testOutsideLiterals(out, /export\s*\{[^}]*\}\s*from\s*['"]/) ||
+    testOutsideLiterals(out, /export\s*\*\s*from\s*['"]/)
+  ) {
     throw new Error('inline-exec: re-export statements are not supported in inline execution');
   }
   // `export { a as default, b, c as d };` (esbuild's consolidated tail)
-  out = out.replace(/export\s*\{([^}]*)\}\s*;?/g, (_m, clause: string) => {
-    const assignments = clause
+  out = replaceOutsideLiterals(out, /export\s*\{([^}]*)\}\s*;?/g, (_m, clause) => {
+    const assignments = (clause ?? '')
       .split(',')
       .map((part) => {
         const trimmed = part.trim();
@@ -409,20 +601,31 @@ export function transformForInlineExec(code: string): string {
       .filter((p): p is string => p !== undefined);
     return assignments.join(' ');
   });
-  // `export default <function|class|expr>` — assignment covers all three.
-  out = out.replace(/export\s+default\s/g, '__ggui_exp["default"] = ');
+  // `export default function Name(…)` / `export default class Name` —
+  // preserve the NAME as a scope binding: the assignment form turns the
+  // declaration into a named expression whose name binds only inside
+  // itself, and later top-level references to it would throw.
+  out = replaceOutsideLiterals(
+    out,
+    new RegExp(`export\\s+default\\s+(async\\s+function|function|class)([\\s*]+)(${IDENT})`, 'g'),
+    (_m, kw, ws, name) => `var ${name} = __ggui_exp["default"] = ${kw}${ws}${name}`,
+  );
+  // `export default <anonymous function|class|expr>` — assignment
+  // covers the rest.
+  out = replaceOutsideLiterals(out, /export\s+default\s/g, () => '__ggui_exp["default"] = ');
   // Declaration exports: strip the keyword, assign at the end (function
   // declarations hoist; const/let/var declarations run in order, and
   // end-of-body assignment reads their settled values).
   const declaredExports: string[] = [];
-  out = out.replace(
-    new RegExp(`export\\s+(const|let|var|function|class)\\s+(${IDENT})`, 'g'),
-    (_m, kw: string, name: string) => {
-      declaredExports.push(name);
+  out = replaceOutsideLiterals(
+    out,
+    new RegExp(`export\\s+(async\\s+function|const|let|var|function|class)\\s+(${IDENT})`, 'g'),
+    (_m, kw, name) => {
+      if (name !== undefined) declaredExports.push(name);
       return `${kw} ${name}`;
     },
   );
-  if (/(^|[^.\w$'"`])export\s/.test(out)) {
+  if (testOutsideLiterals(out, /(^|[^.\w$])export\s/)) {
     throw new Error('inline-exec: unrecognized export form survived the rewrite');
   }
   const tail = declaredExports
@@ -431,7 +634,8 @@ export function transformForInlineExec(code: string): string {
 
   return `;(function(){
 "use strict";
-var __ggui_h = ${handoff};
+var __ggui_s = typeof document !== "undefined" ? document.currentScript : null;
+var __ggui_h = (__ggui_s && __ggui_s.__gguiInlineExec) || ${handoff};
 __ggui_h.ran = true;
 var __ggui_mod = __ggui_h.resolve;
 var __ggui_exp = __ggui_h.exports;

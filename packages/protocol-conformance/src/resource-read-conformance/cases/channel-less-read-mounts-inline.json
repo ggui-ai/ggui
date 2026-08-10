@@ -1,0 +1,24 @@
+{
+  "name": "channel-less-read-mounts-inline",
+  "description": "The inline static channel makes a channel-less server mountable: no static component URL is wired, no live channel is wired, but the committed component fits the inline codeB64 cap — so the read returns a shell whose projected render meta declares the inline channel, not a typed failure. This is the success half of the size split whose failure half is read-without-a-delivery-channel-answers-not-mountable: the SAME server wiring answers by component size class, which is what makes the inline channel a real delivery channel rather than a serving detail.",
+  "server": { "durableSubstrate": "all" },
+  "caller": "owner",
+  "seeds": [
+    {
+      "kind": "committed-render",
+      "session": "3f1a9c22-7b4e-4d18-9a05-6c2e8b1d4f70",
+      "size": "under-inline-cap"
+    }
+  ],
+  "reads": [
+    {
+      "as": "inline",
+      "locator": {
+        "kind": "render",
+        "session": "3f1a9c22-7b4e-4d18-9a05-6c2e8b1d4f70",
+        "key": { "kind": "literal", "value": "fedcba9876543210" }
+      },
+      "expect": { "kind": "live-mount" }
+    }
+  ]
+}

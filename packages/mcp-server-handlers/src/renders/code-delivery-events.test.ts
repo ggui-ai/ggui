@@ -55,6 +55,7 @@ describe('CODE_DELIVERY_EVENTS — the registry', () => {
     // rewriting this to `Object.values(...)` on both sides would make
     // the assertion vacuous, which is the whole failure mode it guards.
     expect(Object.values(CODE_DELIVERY_EVENTS).sort()).toEqual([
+      'render_code_b64_over_cap',
       'render_code_write_failed',
     ]);
   });

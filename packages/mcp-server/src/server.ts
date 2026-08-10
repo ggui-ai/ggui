@@ -632,12 +632,15 @@ export function defaultHandlers(deps: {
      * Optional content-addressable code store. When present together
      * with {@link codeBaseUrl}, `ggui_render` writes generated
      * componentCode to the store and surfaces `codeUrl` + `codeHash`
-     * on the response — the sole static-component delivery channel
-     * post-T3-1 (2026-05-13).
+     * on the response — the CACHE-ADDRESSABLE static-component
+     * delivery channel (repeat renders of the same bytes hit HTTP
+     * cache). The size-capped inline `codeB64` twin is stamped by the
+     * slice projection independently of this store.
      *
-     * Absent: `ggui_render.resultMeta` omits `codeUrl`. The iframe boots
-     * via live-mode (wsUrl+token) and receives the render via the
-     * live-channel WS subscribe. `/r/<shortCode>` (HTML default; JSON branch on `Accept: application/json`)
+     * Absent: `ggui_render.resultMeta` omits `codeUrl`; the slice
+     * still carries `codeB64` for under-cap renders, and the live
+     * trio (wsUrl+token) delivers over the WS subscribe where minted.
+     * `/r/<shortCode>` (HTML default; JSON branch on `Accept: application/json`)
      * routes ALSO mint `codeUrl` when `codeStore` is set — they derive
      * the base URL from `req.protocol + req.host` when `codeBaseUrl`
      * isn't explicit (works for local dev + tunnel deployments).
@@ -1285,10 +1288,11 @@ export function defaultHandlers(deps: {
           ? { checkRenderContracts: deps.render.checkRenderContracts }
           : {}),
         // Content-addressable code store. Both fields are forwarded
-        // together; the render handler
-        // requires both to emit `codeUrl`. Absent or partial = no
-        // static delivery channel, so the bootstrap mounts through the
-        // live trio instead (see render.ts handler body).
+        // together; the render handler requires both to emit
+        // `codeUrl`. Absent or partial = no cache-addressable static
+        // channel; the bootstrap still carries the inline `codeB64`
+        // twin for under-cap renders and mounts through the live trio
+        // where minted (see render.ts handler body).
         ...(deps.render.codeStore && deps.render.codeBaseUrl
           ? {
               codeStore: deps.render.codeStore,
@@ -2765,10 +2769,12 @@ export interface CreateGguiServerOptions {
    * slice.
    *
    * Defaults: when omitted the route is NOT mounted and the
-   * `ai.ggui/render` slice carries no `codeUrl` — there is no second
-   * static channel behind it. Such a deployment delivers renders
-   * through the live trio (`wsUrl` + `wsToken`); one that wires
-   * neither cannot mount a static component at all.
+   * `ai.ggui/render` slice carries no `codeUrl`. The slice still
+   * carries the size-capped inline `codeB64` twin for under-cap
+   * renders (stamped by the projection independently of this store),
+   * and the live trio (`wsUrl` + `wsToken`) delivers where minted; a
+   * deployment wiring neither store nor live channel loses only the
+   * OVER-CAP static mounts.
    *
    * OSS dev wires `FileSystemCodeStore` (rooted at `~/.ggui/code-cache/`)
    * via `ggui-cli/buildMcpServerBackend`. Tests wire

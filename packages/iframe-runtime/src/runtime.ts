@@ -1467,23 +1467,29 @@ export function extractMetaFromToolResult(
 /**
  * Drain `window.__GGUI_PENDING_TOOL_RESULTS__` — the buffer the
  * minimal shell populates while messages arrive between
- * shell-load and runtime-load. Returns the first valid slice meta
- * found; later params (if any) are dropped (each new tool-result
- * supersedes the previous).
+ * shell-load and runtime-load. Returns the NEWEST valid slice meta
+ * (each new tool-result supersedes the previous — every emission
+ * carries complete state, so last-wins loses nothing). Newest-first
+ * matters on the inline-runtime shell: its preflight completes the
+ * handshake BEFORE the large bundle parses, so a render AND a
+ * follow-up update can both land in the buffer during parse — booting
+ * the oldest would paint stale props and drop the update forever
+ * (buffered entries never reach the post-mount listener; it hears
+ * only post-App arrivals).
  *
- * The shell-side buffer contract: an array of
- * `{params: unknown}`-shaped JSON-RPC params from
- * `ui/notifications/tool-result` notifications, populated in
- * arrival order. The runtime drains it on first read.
+ * The shell-side buffer contract: an array whose ELEMENTS are the raw
+ * JSON-RPC `params` values of `ui/notifications/tool-result`
+ * notifications, in arrival order (shells cap it newest-biased). The
+ * runtime reads it once at autostart.
  */
-function readPendingToolResults(): McpAppAiGguiRenderMeta | null {
+export function readPendingToolResults(): McpAppAiGguiRenderMeta | null {
   if (typeof window === 'undefined') return null;
   const raw = (window as unknown as {
     __GGUI_PENDING_TOOL_RESULTS__?: unknown;
   }).__GGUI_PENDING_TOOL_RESULTS__;
   if (!Array.isArray(raw) || raw.length === 0) return null;
-  for (const params of raw) {
-    const meta = extractMetaFromToolResult(params);
+  for (let i = raw.length - 1; i >= 0; i--) {
+    const meta = extractMetaFromToolResult(raw[i]);
     if (meta !== null) return meta;
   }
   return null;

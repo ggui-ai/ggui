@@ -700,6 +700,16 @@ export interface SelfContainedShellInputs {
    */
   readonly codeHash?: string;
   /**
+   * Base64-encoded compiled component source inlined on the bootstrap
+   * — the fetch-free twin of {@link codeUrl}, decoded by the
+   * iframe-runtime instead of fetched. May coexist with codeUrl
+   * (consumers prefer the inline bytes); mutually exclusive with
+   * {@link systemKind}. For hosts whose iframe CSP blocks the codeUrl
+   * fetch, and for deployments whose code store is unwired or down —
+   * the inline bytes make the shell mountable independently of both.
+   */
+  readonly codeB64?: string;
+  /**
    * System-card kind identifier, mapped at runtime against the
    * built-in `SYSTEM_CARD_REGISTRY`. Mutually exclusive with
    * {@link codeUrl}.
@@ -876,14 +886,15 @@ export function buildSelfContainedShell(opts: SelfContainedShellInputs): string 
   // picks per its priority order.
   const isSystem = typeof opts.systemKind === "string" && opts.systemKind.length > 0;
   const hasCodeUrl = typeof opts.codeUrl === "string" && opts.codeUrl.length > 0;
+  const hasCodeB64 = typeof opts.codeB64 === "string" && opts.codeB64.length > 0;
   const hasLive =
     typeof opts.wsUrl === "string" &&
     opts.wsUrl.length > 0 &&
     typeof opts.token === "string" &&
     opts.token.length > 0;
-  if (!isSystem && !hasCodeUrl && !hasLive) {
+  if (!isSystem && !hasCodeUrl && !hasCodeB64 && !hasLive) {
     throw new Error(
-      "buildSelfContainedShell: at least one of `codeUrl`, `systemKind`, or live-mode (`wsUrl` + `token`) must be set"
+      "buildSelfContainedShell: at least one of `codeUrl`, `codeB64`, `systemKind`, or live-mode (`wsUrl` + `token`) must be set"
     );
   }
   // Build the single render slice (Phase B: ai.ggui/render collapsed
@@ -945,6 +956,7 @@ export function buildSelfContainedShell(opts: SelfContainedShellInputs): string 
           ...(opts.codeHash !== undefined ? { codeHash: opts.codeHash } : {}),
         }
       : {}),
+    ...(!isSystem && hasCodeB64 ? { codeB64: opts.codeB64! } : {}),
     ...(opts.propsJson !== undefined ? { propsJson: opts.propsJson } : {}),
     ...(opts.contextSlots !== undefined && opts.contextSlots.length > 0
       ? { contextSlots: opts.contextSlots }
@@ -2094,7 +2106,12 @@ export function registerGguiRenderResourceTemplate(
     // else produced a channel. Anywhere above this line the same fault
     // may have been survivable, and on a deployment wiring both
     // channels it usually is.
-    if (!isSystem && codeUrl === undefined && (wsUrl === undefined || wsToken === undefined)) {
+    if (
+      !isSystem &&
+      codeUrl === undefined &&
+      view.codeB64 === undefined &&
+      (wsUrl === undefined || wsToken === undefined)
+    ) {
       if (channelFault !== undefined) throw channelFault.cause;
       throw new ResourceReadFailure(NO_DELIVERY_CHANNEL_FAILURE);
     }
@@ -2104,15 +2121,20 @@ export function registerGguiRenderResourceTemplate(
       appId: accessibleStored.appId,
       ...(isSystem
         ? { systemKind: picked.kind }
-        : codeUrl !== undefined
-          ? {
-              codeUrl,
-              ...(codeHash !== undefined ? { codeHash } : {}),
-            }
-          : // No static codeUrl → live-mode (wsUrl + token spread below)
-            // carries the render; buildSelfContainedShell accepts
-            // live-mode without codeUrl.
-            {}),
+        : {
+            ...(codeUrl !== undefined
+              ? {
+                  codeUrl,
+                  ...(codeHash !== undefined ? { codeHash } : {}),
+                }
+              : {}),
+            // Inline fetch-free channel (size-capped, projected by
+            // `deriveRenderMeta`). Independent of the codeStore, so a
+            // dead/unwired store still yields a mountable shell — and
+            // hosts whose iframe CSP blocks the codeUrl fetch decode
+            // this instead.
+            ...(view.codeB64 !== undefined ? { codeB64: view.codeB64 } : {}),
+          }),
       runtimeUrl: opts.runtimeUrl,
       ...(wsUrl !== undefined && wsToken !== undefined
         ? {

@@ -65,6 +65,13 @@ const BLUEPRINT_ID = "bp_00000000-0000-4000-8000-000000000002";
 const CONTRACT_KEY = "fedcba9876543210";
 const DURABLE_CODE = "export default function Durable(){return null;}";
 const LIVE_ROW_CODE = "export default function LiveRow(){return null;}";
+/**
+ * A component too large for the inline `codeB64` channel. The
+ * no-delivery-channel scenarios seed THIS: since #471, an under-cap
+ * component mounts inline on any server, so only an over-cap one still
+ * has "no delivery channel" on a store-less, live-less deployment.
+ */
+const OVER_CAP_ROW_CODE = `${LIVE_ROW_CODE}/*${"x".repeat(300_000)}*/`;
 /** Fixed id for the fault fixtures, which seed their own row at boot. */
 const SEEDED_SESSION_ID = "11111111-2222-4333-8444-555555555555";
 
@@ -269,12 +276,14 @@ function parseMeta(html: string): McpAppAiGguiRenderMeta {
 }
 
 /**
- * Does this shell carry enough to paint something? One of the three
- * delivery channels the runtime knows: a static component URL, a live
- * channel, or a server-emitted system card.
+ * Does this shell carry enough to paint something? One of the four
+ * delivery channels the runtime knows: a static component URL, inline
+ * base64 component source, a live channel, or a server-emitted system
+ * card.
  */
 function declaresDeliveryChannel(meta: McpAppAiGguiRenderMeta): boolean {
   if (typeof meta.codeUrl === "string" && meta.codeUrl.length > 0) return true;
+  if (typeof meta.codeB64 === "string" && meta.codeB64.length > 0) return true;
   if (typeof meta.kind === "string" && meta.kind.length > 0) return true;
   return (
     typeof meta.wsUrl === "string" &&
@@ -324,12 +333,16 @@ async function seedBlueprint(
 }
 
 /** Commit a row that carries a renderable component. */
-async function seedLiveRow(f: Fixture, sessionId: string): Promise<void> {
+async function seedLiveRow(
+  f: Fixture,
+  sessionId: string,
+  componentCode: string = LIVE_ROW_CODE,
+): Promise<void> {
   const live: ComponentGguiSession = {
     type: "component",
     id: sessionId,
     appId: OWNER_APP_ID,
-    componentCode: LIVE_ROW_CODE,
+    componentCode,
     eventSequence: 0,
     createdAt: 1_700_000_000_000,
     lastActivityAt: 1_700_000_000_000,
@@ -408,11 +421,12 @@ describe("resource read — one typed failure per class", () => {
 
   it("answers a resolvable render with no delivery channel with NOT_MOUNTABLE on -32006", async () => {
     // Row present and renderable, but the server wires NEITHER static
-    // delivery NOR a live channel — the mount-mode gate.
+    // delivery NOR a live channel, and the component is over the
+    // inline cap — the mount-mode gate.
     const f = await boot({ durable: true });
     try {
       const sessionId = randomUUID();
-      await seedLiveRow(f, sessionId);
+      await seedLiveRow(f, sessionId, OVER_CAP_ROW_CODE);
 
       const failure = await readFailure(
         f.client,
@@ -456,7 +470,7 @@ describe("resource read — the whole error frame, not just its code", () => {
     const f = await boot({ durable: true });
     try {
       const sessionId = randomUUID();
-      await seedLiveRow(f, sessionId);
+      await seedLiveRow(f, sessionId, OVER_CAP_ROW_CODE);
 
       await readFailure(f.client, `${RESOURCE_URI}/${sessionId}/${CONTRACT_KEY}`);
       expect(wireErrors(f.frames)).toEqual([
@@ -805,7 +819,7 @@ describe("resource read — a row the caller owns but cannot mount", () => {
     const f = await boot({ durable: true });
     try {
       const sessionId = randomUUID();
-      await seedLiveRow(f, sessionId);
+      await seedLiveRow(f, sessionId, OVER_CAP_ROW_CODE);
 
       const failure = await readFailure(f.client, `${RESOURCE_URI}/${sessionId}`);
       expect(failure.code).toBe(MOUNT_UNAVAILABLE);
@@ -876,7 +890,10 @@ describe("resource read — a faulting channel is a malfunction, not a verdict",
       type: "component",
       id: sessionId,
       appId: OWNER_APP_ID,
-      componentCode: LIVE_ROW_CODE,
+      // Over-cap: the inline channel must not exist here, or a faulted
+      // store/mint would be absorbed by codeB64 and the fault-is-the-
+      // only-channel arms below would have nothing to test.
+      componentCode: OVER_CAP_ROW_CODE,
       eventSequence: 0,
       createdAt: 1_700_000_000_000,
       lastActivityAt: 1_700_000_000_000,
@@ -1001,7 +1018,7 @@ describe("resource read — NOT_SUPPORTED is exactly the substrate-less answer",
         name: "render with no delivery channel",
         options: { durable: true },
         setup: async (f, sessionId) => {
-          await seedLiveRow(f, sessionId);
+          await seedLiveRow(f, sessionId, OVER_CAP_ROW_CODE);
           return `${RESOURCE_URI}/${sessionId}/${CONTRACT_KEY}`;
         },
       },
@@ -1096,7 +1113,7 @@ describe("resource read — every result carries mount material", () => {
       name: "server with no delivery channel at all",
       options: { durable: true },
       setup: async (f, sessionId) => {
-        await seedLiveRow(f, sessionId);
+        await seedLiveRow(f, sessionId, OVER_CAP_ROW_CODE);
         return `${RESOURCE_URI}/${sessionId}/${CONTRACT_KEY}`;
       },
     },

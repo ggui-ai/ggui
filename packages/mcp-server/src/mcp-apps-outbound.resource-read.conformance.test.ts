@@ -95,6 +95,7 @@ function projectRenderMeta(html: string): ResourceReadRenderMeta {
   if (slice === undefined) throw new Error(`envelope carries no ${RENDER_META_KEY} slice`);
   return {
     ...(slice.codeUrl !== undefined ? { codeUrl: slice.codeUrl } : {}),
+    ...(slice.codeB64 !== undefined ? { codeB64: slice.codeB64 } : {}),
     ...(slice.wsUrl !== undefined ? { wsUrl: slice.wsUrl } : {}),
     ...(slice.wsToken !== undefined ? { wsToken: slice.wsToken } : {}),
     ...(slice.kind !== undefined ? { kind: slice.kind } : {}),
@@ -208,7 +209,14 @@ async function boot(
           type: "component",
           id: seed.session,
           appId: OWNER_APP_ID,
-          componentCode: COMPONENT_CODE,
+          // Size class drives whether the inline `codeB64` channel
+          // exists for this render: an over-cap body pads past the
+          // projection's inline ceiling, so a channel-less server has
+          // genuinely nothing to deliver.
+          componentCode:
+            seed.size === "over-inline-cap"
+              ? `${COMPONENT_CODE}/*${"x".repeat(300_000)}*/`
+              : COMPONENT_CODE,
           eventSequence: 0,
           createdAt: 1_700_000_000_000,
           lastActivityAt: 1_700_000_000_000,

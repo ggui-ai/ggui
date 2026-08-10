@@ -46,13 +46,22 @@ import {
   getThemeCss,
   getCssTokens,
 } from '@ggui-ai/design/rendering';
-import { hoistImports, loadModule, loadModuleInline } from '@ggui-ai/design/module-loader';
+import {
+  hoistImports,
+  loadModule,
+  loadModuleInline,
+  probeUrlModuleLoad,
+} from '@ggui-ai/design/module-loader';
 
 /**
  * Document-lifetime verdict: URL-scheme module loading (`blob:` main
- * module + `data:` import shims) is blocked by the host CSP. Set the
- * first time the inline classic-script path succeeds where the URL
- * path failed; later evaluations skip the doomed URL attempt.
+ * module + `data:` import shims) is blocked by the host CSP. Set only
+ * when the inline path succeeded where the URL path failed AND the
+ * known-good `probeUrlModuleLoad()` module ALSO fails — an arbitrary
+ * module's failure is not CSP evidence (an import-shim allowlist miss
+ * rejects blob-instantiation of that one module while URL loading is
+ * healthy, and latching on it would force every later evaluation in
+ * the document onto the inline path's narrower semantics).
  */
 let urlModuleLoadBlocked = false;
 
@@ -389,13 +398,18 @@ export async function mountReactRoot(
     } catch (urlError) {
       // A host CSP granting only 'unsafe-inline' rejects the blob:/
       // data: imports above. Attempt the inline classic-script path;
-      // its SUCCESS is the evidence that the failure above was a
-      // URL-scheme block rather than a component bug (a buggy
-      // component fails on both paths, and the original error is the
-      // honest one to surface).
+      // a buggy component fails on both paths, and the original error
+      // is the honest one to surface.
       try {
         const Comp = evaluateInline();
-        urlModuleLoadBlocked = true;
+        // Latch the inline path for the rest of the document ONLY on
+        // proven CSP evidence: the known-good probe module must also
+        // fail. A module-specific blob failure (import-shim allowlist
+        // drift) leaves the latch off so the next evaluation gets real
+        // module semantics again.
+        if (!(await probeUrlModuleLoad())) {
+          urlModuleLoadBlocked = true;
+        }
         return Comp;
       } catch {
         throw urlError;

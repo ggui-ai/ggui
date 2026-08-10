@@ -81,7 +81,7 @@ type Flaw =
 interface SeededState {
   readonly identityRecords: Map<string, { readonly key: string; readonly named: boolean }>;
   readonly durableBlueprint: { readonly componentRef: boolean; readonly body: boolean } | null;
-  readonly committedRenders: ReadonlySet<string>;
+  readonly committedRenders: ReadonlyMap<string, 'under-inline-cap' | 'over-inline-cap'>;
   readonly uncommittedRenders: ReadonlySet<string>;
   readonly registeredKeys: ReadonlyMap<string, string>;
 }
@@ -91,7 +91,7 @@ const REGISTRY_KEY = 'aaaabbbbccccdddd';
 
 function applySeeds(seeds: readonly ResourceReadSeed[]): SeededState {
   const identityRecords = new Map<string, { key: string; named: boolean }>();
-  const committedRenders = new Set<string>();
+  const committedRenders = new Map<string, 'under-inline-cap' | 'over-inline-cap'>();
   const uncommittedRenders = new Set<string>();
   const registeredKeys = new Map<string, string>();
   let durableBlueprint: { componentRef: boolean; body: boolean } | null = null;
@@ -111,7 +111,7 @@ function applySeeds(seeds: readonly ResourceReadSeed[]): SeededState {
         };
         break;
       case 'committed-render':
-        committedRenders.add(seed.session);
+        committedRenders.set(seed.session, seed.size);
         break;
       case 'uncommitted-render':
         uncommittedRenders.add(seed.session);
@@ -255,13 +255,18 @@ function makeDriver(flaw: Flaw = 'none'): ResourceReadScenarioDriver {
       const { session, key } = parsed;
 
       if (owns && state.committedRenders.has(session)) {
-        return hasChannel
-          ? mounted(flaw, scenario)
-          : mountUnavailable(
-              flaw,
-              'NOT_MOUNTABLE',
-              'no static component URL and no live channel is wired',
-            );
+        if (hasChannel) return mounted(flaw, scenario);
+        // No wired channel: an under-cap component still mounts through
+        // the inline codeB64 channel; only an over-cap one has nothing.
+        if (state.committedRenders.get(session) === 'under-inline-cap') {
+          if (flaw === 'dead-shell-on-success') return { kind: 'mount', renderMeta: {} };
+          return { kind: 'mount', renderMeta: { codeB64: 'ZXhwb3J0IGRlZmF1bHQgKCkgPT4gbnVsbA==' } };
+        }
+        return mountUnavailable(
+          flaw,
+          'NOT_MOUNTABLE',
+          'no static component URL and no live channel is wired',
+        );
       }
       if (owns && state.uncommittedRenders.has(session)) {
         return mountUnavailable(
@@ -352,6 +357,7 @@ describe('resources/read catalog', () => {
       c.reads.some((p) => p.expect.kind === 'live-mount'),
     );
     expect(mountCases.map((c) => c.name).sort()).toEqual([
+      'channel-less-read-mounts-inline',
       'evicted-row-remints-from-the-durable-record',
       'live-row-read-returns-mount-material',
     ]);

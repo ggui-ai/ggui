@@ -113,6 +113,81 @@ describe('transformForInlineExec — imports', () => {
   });
 });
 
+describe('transformForInlineExec — literal safety (adversarial-review repros)', () => {
+  const resolve = (spec: string) => {
+    if (spec === 'pkg-a') return { default: 'A-default', one: 1 };
+    throw new Error(`no module ${spec}`);
+  };
+
+  it('UI copy containing lowercase " export " survives (no false leftover-export throw)', () => {
+    const h = runTransformed(
+      `const label = "Click to export data as CSV";\nexport default label;`,
+      resolve,
+    );
+    expect(h.exports.default).toBe('Click to export data as CSV');
+  });
+
+  it('import-shaped text inside a string literal is NOT rewritten', () => {
+    const h = runTransformed(
+      `const sample = "import React from 'react'";\nexport default sample;`,
+      resolve,
+    );
+    expect(h.exports.default).toBe("import React from 'react'");
+  });
+
+  it('export-brace-shaped text inside a template literal is NOT rewritten', () => {
+    const h = runTransformed(
+      'const count = 3;\nconst msg = `You can export {count} rows`;\nexport default msg;',
+      resolve,
+    );
+    expect(h.exports.default).toBe('You can export {count} rows');
+  });
+
+  it('code-sample template literals ride through byte-identical, while real imports still rewrite', () => {
+    const h = runTransformed(
+      [
+        `import { one } from 'pkg-a';`,
+        'const snippet = `import Button from "@ggui-ai/design"`;',
+        `export default snippet + ':' + one;`,
+      ].join('\n'),
+      resolve,
+    );
+    expect(h.exports.default).toBe('import Button from "@ggui-ai/design":1');
+  });
+
+  it('template-literal ${} expressions are still CODE (a real import after one rewrites)', () => {
+    const h = runTransformed(
+      [
+        'const inner = `value: ${1 + 1}`;',
+        `import { one } from 'pkg-a';`,
+        'export default inner + one;',
+      ].join('\n'),
+      resolve,
+    );
+    expect(h.exports.default).toBe('value: 21');
+  });
+
+  it('commented-out import/export lines are inert', () => {
+    const h = runTransformed(
+      [
+        `// import { gone } from 'nowhere';`,
+        `/* export { alsoGone }; */`,
+        `export default 'ok';`,
+      ].join('\n'),
+      resolve,
+    );
+    expect(h.exports.default).toBe('ok');
+  });
+
+  it('bare-import-shaped text inside a string is NOT stripped', () => {
+    const h = runTransformed(
+      `const m = "cannot import 'leaflet' here";\nexport default m;`,
+      resolve,
+    );
+    expect(h.exports.default).toBe("cannot import 'leaflet' here");
+  });
+});
+
 describe('transformForInlineExec — exports', () => {
   const resolve = () => ({});
 
@@ -123,6 +198,25 @@ describe('transformForInlineExec — exports', () => {
     );
     expect(typeof h.exports.default).toBe('function');
     expect((h.exports.default as () => string)()).toBe('card');
+  });
+
+  it('`export default function Name()` keeps NAME referencable later in the body', () => {
+    // The naive assignment rewrite turns the declaration into a named
+    // function EXPRESSION whose name binds only inside itself — a later
+    // top-level reference then throws ReferenceError.
+    const h = runTransformed(
+      `export default function Card() { return 'c'; }\nconst also = Card;\nexport { also };`,
+      resolve,
+    );
+    expect(h.exports.also).toBe(h.exports.default);
+  });
+
+  it('handles `export async function`', () => {
+    const h = runTransformed(
+      `export async function load() { return 'async-ok'; }`,
+      resolve,
+    );
+    expect(typeof h.exports.load).toBe('function');
   });
 
   it('handles `export default <arrow expression>`', () => {

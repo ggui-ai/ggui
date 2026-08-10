@@ -1,16 +1,27 @@
 {
   "name": "read-without-a-delivery-channel-answers-not-mountable",
-  "description": "The locator resolves and the caller owns it, but the server wires no way to deliver a component — neither a static component URL nor a live channel. The read answers NOT_MOUNTABLE on -32006 rather than handing back a shell with nothing to mount. This is the branch that proves the invariant is about the RESULT, not the lookup: the lookup succeeded.",
-  "server": { "durableSubstrate": "all" },
+  "description": "The locator resolves and the caller owns it, but the server wires no way to deliver the component \u2014 neither a static component URL nor a live channel, and the committed component is too large for the inline codeB64 channel (an under-cap component would mount inline; that arm has its own case). The read answers NOT_MOUNTABLE on -32006 rather than handing back a shell with nothing to mount. This is the branch that proves the invariant is about the RESULT, not the lookup: the lookup succeeded.",
+  "server": {
+    "durableSubstrate": "all"
+  },
   "caller": "owner",
-  "seeds": [{ "kind": "committed-render", "session": "3f1a9c22-7b4e-4d18-9a05-6c2e8b1d4f70" }],
+  "seeds": [
+    {
+      "kind": "committed-render",
+      "session": "3f1a9c22-7b4e-4d18-9a05-6c2e8b1d4f70",
+      "size": "over-inline-cap"
+    }
+  ],
   "reads": [
     {
       "as": "resolvable",
       "locator": {
         "kind": "render",
         "session": "3f1a9c22-7b4e-4d18-9a05-6c2e8b1d4f70",
-        "key": { "kind": "literal", "value": "fedcba9876543210" }
+        "key": {
+          "kind": "literal",
+          "value": "fedcba9876543210"
+        }
       },
       "expect": {
         "kind": "typed-error",

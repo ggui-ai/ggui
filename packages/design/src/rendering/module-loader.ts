@@ -70,6 +70,33 @@ export async function loadModule(code: string): Promise<Record<string, unknown>>
 }
 
 /**
+ * Cached verdict of {@link probeUrlModuleLoad} — one probe per
+ * document lifetime; a page's CSP cannot change under it.
+ */
+let urlModuleLoadProbe: Promise<boolean> | undefined;
+
+/**
+ * Can THIS document import a `blob:` URL module at all?
+ *
+ * Imports a known-good one-liner module and reports whether it
+ * evaluates. Distinguishes "the host CSP blocks URL-scheme module
+ * loading" (probe fails) from "this particular module failed" (probe
+ * succeeds — e.g. an import-shim allowlist miss rejects the real
+ * module while blob loading itself is healthy). Callers deciding
+ * whether to permanently prefer inline execution MUST use this
+ * verdict, not the failure of an arbitrary module.
+ */
+export function probeUrlModuleLoad(): Promise<boolean> {
+  if (urlModuleLoadProbe === undefined) {
+    urlModuleLoadProbe = loadModule('export default true;').then(
+      () => true,
+      () => false,
+    );
+  }
+  return urlModuleLoadProbe;
+}
+
+/**
  * Execute compiled ESM code as an INLINE classic script and return its
  * exports — the CSP-resilient fallback to {@link loadModule} for host
  * pages whose `script-src` grants only `'unsafe-inline'` (no `blob:`,
@@ -105,6 +132,12 @@ export function loadModuleInline(
     resolve: (spec) => resolveInlineSpecifier(spec, opts),
     exports: {},
   };
+  // The handoff travels on the script ELEMENT (read via
+  // `document.currentScript`) with the caller's global as fallback.
+  // Element identity survives realm splits — a jsdom-backed test
+  // runtime evaluates injected scripts against a different global
+  // than the caller's, but the element object is shared; in a real
+  // browser both routes name the same objects.
   const scope = globalThis as Record<string, unknown>;
   const transformed = transformForInlineExec(code);
   scope[INLINE_EXEC_HANDOFF_GLOBAL] = handoff;
@@ -121,6 +154,7 @@ export function loadModuleInline(
   window.addEventListener('error', onWindowError);
   try {
     const script = document.createElement('script');
+    (script as unknown as Record<string, unknown>).__gguiInlineExec = handoff;
     script.textContent = transformed;
     document.head.appendChild(script);
     script.remove();

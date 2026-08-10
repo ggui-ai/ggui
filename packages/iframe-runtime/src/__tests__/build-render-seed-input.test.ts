@@ -13,7 +13,11 @@
  */
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import type { McpAppAiGguiRenderMeta } from '@ggui-ai/protocol/integrations/mcp-apps';
-import { buildGguiSessionSeedInput, hasStaticContentMeta } from '../runtime.js';
+import {
+  buildGguiSessionSeedInput,
+  hasStaticContentMeta,
+  readPendingToolResults,
+} from '../runtime.js';
 
 const BASE: McpAppAiGguiRenderMeta = {
   sessionId: 'render_seed_1',
@@ -150,5 +154,50 @@ describe('buildGguiSessionSeedInput', () => {
     await expect(
       buildGguiSessionSeedInput({ ...BASE, codeUrl: 'http://localhost:7000/code/missing.js' }),
     ).rejects.toThrow(/codeUrl fetch failed \(404\)/);
+  });
+});
+
+describe('readPendingToolResults — buffered-tool-result supersede order', () => {
+  const toolResult = (propsJson: string) => ({
+    content: [],
+    _meta: {
+      'ai.ggui/render': {
+        sessionId: 'render_buf',
+        appId: 'app_001',
+        runtimeUrl: '/_ggui/iframe-runtime.js',
+        codeB64: 'ZXhwb3J0',
+        propsJson,
+      },
+    },
+  });
+
+  afterEach(() => {
+    delete (window as unknown as { __GGUI_PENDING_TOOL_RESULTS__?: unknown })
+      .__GGUI_PENDING_TOOL_RESULTS__;
+  });
+
+  it('returns the NEWEST valid buffered meta — a render + follow-up update buffered during bundle parse boots on the update', () => {
+    (window as unknown as { __GGUI_PENDING_TOOL_RESULTS__: unknown[] })
+      .__GGUI_PENDING_TOOL_RESULTS__ = [
+      toolResult('{"n":1}'),
+      toolResult('{"n":2}'),
+    ];
+    expect(readPendingToolResults()?.propsJson).toBe('{"n":2}');
+  });
+
+  it('skips invalid newest entries and falls back to the newest VALID one', () => {
+    (window as unknown as { __GGUI_PENDING_TOOL_RESULTS__: unknown[] })
+      .__GGUI_PENDING_TOOL_RESULTS__ = [
+      toolResult('{"n":1}'),
+      { content: [], _meta: {} },
+    ];
+    expect(readPendingToolResults()?.propsJson).toBe('{"n":1}');
+  });
+
+  it('returns null for an absent or empty buffer', () => {
+    expect(readPendingToolResults()).toBeNull();
+    (window as unknown as { __GGUI_PENDING_TOOL_RESULTS__: unknown[] })
+      .__GGUI_PENDING_TOOL_RESULTS__ = [];
+    expect(readPendingToolResults()).toBeNull();
   });
 });
