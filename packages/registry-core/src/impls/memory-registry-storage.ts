@@ -6,8 +6,9 @@
  *
  * Filter semantics on {@link scanArtifacts} match every other storage
  * impl exactly — same AND-composition, same case-insensitive substring
- * match on q, same publisher-subject OR author-name match. Cursor is an
- * integer offset encoded as a base-10 string.
+ * match on q, same publisher-subject OR author-name match. Tool/server
+ * binding filters delegate to the shared `matchesMcpToolFilters`
+ * predicate. Cursor is an integer offset encoded as a base-10 string.
  */
 import type {
   AuthorKeyRow,
@@ -21,6 +22,7 @@ import {
   AuthorKeyAlreadyExistsError,
   type RegistryStorage,
 } from '../interfaces/registry-storage.js';
+import { matchesMcpToolFilters } from '../mcp-tool-filters.js';
 
 const DEFAULT_LIMIT = 50;
 const MAX_LIMIT = 200;
@@ -200,6 +202,7 @@ function parseCursor(cursor: string | undefined): number {
 function rowMatchesFilter(row: ArtifactsMetadataRow, q: ArtifactScanFilter): boolean {
   if (q.kind !== undefined && row.kind !== q.kind) return false;
   if (q.hook !== undefined && row.hook !== q.hook) return false;
+  if (!matchesMcpToolFilters(row.mcpTools, q)) return false;
 
   if (q.tag !== undefined) {
     if (row.tags === undefined || !row.tags.includes(q.tag)) return false;

@@ -772,6 +772,19 @@ export interface ArtifactScanFilter {
   readonly hook?: string;
   readonly tag?: string;
   readonly author?: string;
+  /**
+   * Exact MCP tool-name filter. Matches rows whose binding list has an
+   * entry with this tool name — with or without a server. Case-sensitive.
+   * Shared semantics: `matchesMcpToolFilters` in this package.
+   */
+  readonly tool?: string;
+  /**
+   * Exact MCP server-name filter. Matches rows whose binding list has an
+   * entry declaring this server; bare (server-less) entries never match.
+   * Combined with `tool`, requires a single entry carrying exactly that
+   * (server, tool) pair. Case-sensitive.
+   */
+  readonly server?: string;
   readonly limit?: number;
   readonly cursor?: string;
   /**

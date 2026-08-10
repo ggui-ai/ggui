@@ -309,4 +309,121 @@ describe('searchArtifacts', () => {
       expect([...scopeReads].sort()).toEqual(['@a', '@b']);
     });
   });
+
+  describe('tool/server search filters (MCP discovery §2)', () => {
+    async function seedBoundRows(storage: RegistryStorage): Promise<void> {
+      await storage.putArtifactMetadata(
+        makeMetadata({
+          artifactId: '@a/weather-card',
+          kind: 'gadget',
+          mcpTools: [{ server: 'weather-server', tool: 'get_weather' }],
+          mcpToolsSource: 'declared',
+        }),
+      );
+      await storage.putArtifactMetadata(
+        makeMetadata({
+          artifactId: '@b/forecast-panel',
+          kind: 'blueprint',
+          hook: undefined,
+          mcpTools: [{ tool: 'get_weather' }, { tool: 'get_forecast' }],
+          mcpToolsSource: 'derived',
+        }),
+      );
+      await storage.putArtifactMetadata(makeMetadata({ artifactId: '@c/unbound', kind: 'gadget' }));
+    }
+
+    it('tool= matches bindings with and without a server (cross-server)', async () => {
+      const storage = inMemoryRegistryStorage();
+      await seedBoundRows(storage);
+      const result = await searchArtifacts({ tool: 'get_weather' }, { storage });
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.body.results.map((r) => r.artifactId).sort()).toEqual([
+        '@a/weather-card',
+        '@b/forecast-panel',
+      ]);
+    });
+
+    it('server= matches only entries declaring that server — bare entries never match', async () => {
+      const storage = inMemoryRegistryStorage();
+      await seedBoundRows(storage);
+      const result = await searchArtifacts({ server: 'weather-server' }, { storage });
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.body.results.map((r) => r.artifactId)).toEqual(['@a/weather-card']);
+    });
+
+    it('tool+server matches only the exact pair', async () => {
+      const storage = inMemoryRegistryStorage();
+      await seedBoundRows(storage);
+      const result = await searchArtifacts(
+        { tool: 'get_forecast', server: 'weather-server' },
+        { storage },
+      );
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.body.results).toEqual([]);
+    });
+
+    it('AND-composes with existing filters (tool + kind)', async () => {
+      const storage = inMemoryRegistryStorage();
+      await seedBoundRows(storage);
+      const result = await searchArtifacts({ tool: 'get_weather', kind: 'blueprint' }, { storage });
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.body.results.map((r) => r.artifactId)).toEqual(['@b/forecast-panel']);
+    });
+
+    it('tool matching is case-sensitive', async () => {
+      const storage = inMemoryRegistryStorage();
+      await seedBoundRows(storage);
+      const result = await searchArtifacts({ tool: 'Get_Weather' }, { storage });
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.body.results).toEqual([]);
+    });
+
+    it('private rows never surface through a tool filter', async () => {
+      const storage = inMemoryRegistryStorage();
+      await storage.putArtifactMetadata(
+        makeMetadata({
+          artifactId: '@p/secret',
+          visibility: 'private',
+          mcpTools: [{ tool: 'get_weather' }],
+          mcpToolsSource: 'declared',
+        }),
+      );
+      const result = await searchArtifacts({ tool: 'get_weather' }, { storage });
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.body.results).toEqual([]);
+    });
+
+    it('rejects a malformed tool with 400 invalid_request', async () => {
+      const storage = inMemoryRegistryStorage();
+      const result = await searchArtifacts({ tool: 'not a tool!' }, { storage });
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.status).toBe(400);
+      expect(result.body.error).toBe('invalid_request');
+    });
+
+    it('rejects a malformed server with 400 invalid_request', async () => {
+      const storage = inMemoryRegistryStorage();
+      const result = await searchArtifacts({ server: 'bad/server' }, { storage });
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.status).toBe(400);
+      expect(result.body.error).toBe('invalid_request');
+    });
+
+    it('treats empty-string tool/server as absent (no filter)', async () => {
+      const storage = inMemoryRegistryStorage();
+      await seedBoundRows(storage);
+      const result = await searchArtifacts({ tool: '', server: '' }, { storage });
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.body.results).toHaveLength(3);
+    });
+  });
 });

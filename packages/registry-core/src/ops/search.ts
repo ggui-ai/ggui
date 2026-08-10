@@ -2,7 +2,7 @@
  * `searchArtifacts` — pure op for `GET /search?…`. Delegates the
  * post-fetch filter + cursor to {@link RegistryStorage.scanArtifacts} so
  * every storage impl shares the single semantic — AND-composition over
- * q/kind/hook/tag/author.
+ * q/kind/hook/tag/author/tool/server.
  *
  * Visibility: only `visibility: "public"` rows are exposed. Without that
  * filter the public `/search` route would leak private artifact IDs.
@@ -22,6 +22,7 @@ import type {
 import { SEARCH_SORT_OPTIONS } from '../types.js';
 import type { RegistryStorage } from '../interfaces/registry-storage.js';
 import { artifactScope } from './private-read-authz.js';
+import { MCP_TOOL_BINDING_NAME_RE } from '@ggui-ai/artifact-manifest';
 
 const DEFAULT_LIMIT = 50;
 const MAX_LIMIT = 200;
@@ -46,6 +47,18 @@ export interface SearchArtifactsInput {
    * globally-correct newest-first order across the full cursor chain.
    */
   readonly sort?: string;
+  /**
+   * Exact MCP tool-name filter — matches artifacts whose bindings
+   * include this tool (declared under any server, or none). Must match
+   * `^[A-Za-z0-9_.-]{1,128}$`; anything else is a 400.
+   */
+  readonly tool?: string;
+  /**
+   * Exact MCP server-name filter — matches artifacts whose bindings
+   * declare this server; bindings without a server never match. Same
+   * charset rule as `tool`.
+   */
+  readonly server?: string;
 }
 
 export interface SearchArtifactsDeps {
@@ -106,12 +119,38 @@ export async function searchArtifacts(
     sort = input.sort;
   }
 
+  const tool = nonEmpty(input.tool);
+  if (tool !== undefined && !MCP_TOOL_BINDING_NAME_RE.test(tool)) {
+    return {
+      ok: false,
+      status: 400,
+      body: {
+        error: 'invalid_request',
+        message: '`tool` must match ^[A-Za-z0-9_.-]{1,128}$',
+      },
+    };
+  }
+
+  const server = nonEmpty(input.server);
+  if (server !== undefined && !MCP_TOOL_BINDING_NAME_RE.test(server)) {
+    return {
+      ok: false,
+      status: 400,
+      body: {
+        error: 'invalid_request',
+        message: '`server` must match ^[A-Za-z0-9_.-]{1,128}$',
+      },
+    };
+  }
+
   const filter: ArtifactScanFilter = {
     q: nonEmpty(input.q),
     kind,
     hook: nonEmpty(input.hook),
     tag: nonEmpty(input.tag),
     author: nonEmpty(input.author),
+    tool,
+    server,
     limit,
     cursor: nonEmpty(input.cursor),
     order: sort,
