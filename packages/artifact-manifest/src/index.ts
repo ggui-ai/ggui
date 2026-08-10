@@ -59,6 +59,20 @@ export {
   ArtifactVersionSchema,
 } from './base.js';
 
+// MCP tool bindings — the `mcpTools` search-metadata field shared by
+// both manifest kinds, plus the declared-vs-derived resolver registry
+// publish flows use to compute the effective binding set. Registry
+// search input validation (`tool=` / `server=` filters) imports
+// `MCP_TOOL_BINDING_NAME_RE` from here so the wire filters and the
+// manifest field stay on a single charset rule.
+export {
+  MCP_TOOL_BINDING_NAME_RE,
+  mcpToolBindingSchema,
+  mcpToolsSchema,
+  resolveMcpToolBindings,
+} from './mcp-tool-bindings.js';
+export type { McpToolBinding, McpToolBindingSource } from './mcp-tool-bindings.js';
+
 // Manifest → registry-entry translator. The install CLI, programmatic
 // publish flows, and any future register-by-manifest tool all go
 // through this one function. Round-trip validated in the companion

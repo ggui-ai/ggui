@@ -72,6 +72,7 @@ import {
   BLUEPRINT_NAME_RE,
   sharedMetadataShape,
 } from './base.js';
+import { mcpToolsSchema } from './mcp-tool-bindings.js';
 
 /**
  * Blueprint name regex — the same kebab-case rule as gadgets. See
@@ -172,6 +173,13 @@ export const blueprintManifestSchema = z.strictObject({
     .optional()
     .describe(
       'SHA256(16) of the tool-identity catalog used to canonicalize `contract` at authoring time. Importers re-canonicalize against their own catalog and recompute the key; a divergence means the same intent would mis-key and silently cold-gen, so it is rejected. Optional — most marketplace blueprints are authored without a live tool catalog, which leaves the import gate’s re-key check inert.',
+    ),
+
+  // ---- Optional MCP tool bindings (search metadata only) ----
+  mcpTools: mcpToolsSchema
+    .optional()
+    .describe(
+      'MCP tool bindings this blueprint renders — surfaced in registry search results and matched by the `tool` / `server` search filters. When absent, registry publish derives bare tool-name bindings from the contract (`propsSpec.properties[*].sourceTool` plus `streamSpec[*].source.tool`); declaring this field disables derivation entirely (declared wins, no merge). Bindings are publisher claims, not an endorsement by the named server. Search metadata only — never part of `blueprintKey` or any cache identity. Max 16 entries, charset `[A-Za-z0-9_.-]`, case-sensitive; exact-duplicate `(server, tool)` pairs rejected.',
     ),
 
   // ---- Shared metadata ----

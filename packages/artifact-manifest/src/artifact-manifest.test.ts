@@ -145,3 +145,21 @@ describe('artifactManifest — type inference', () => {
     expectTypeOf<Inferred>().toEqualTypeOf<ArtifactManifest>();
   });
 });
+
+describe("artifactManifest — mcpTools rides both kinds through the union", () => {
+  it("parses a gadget carrying mcpTools", () => {
+    const parsed = parseArtifactManifest({
+      ...VALID_GADGET,
+      mcpTools: [{ server: "weather-server", tool: "get_weather" }],
+    });
+    expect(parsed.mcpTools).toEqual([{ server: "weather-server", tool: "get_weather" }]);
+  });
+
+  it("parses a blueprint carrying mcpTools", () => {
+    const parsed = parseArtifactManifest({
+      ...VALID_BLUEPRINT,
+      mcpTools: [{ tool: "get_weather" }],
+    });
+    expect(parsed.mcpTools).toEqual([{ tool: "get_weather" }]);
+  });
+});

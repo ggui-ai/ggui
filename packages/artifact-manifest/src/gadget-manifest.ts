@@ -65,6 +65,7 @@ import {
   GADGET_NAME_RE,
   sharedMetadataShape,
 } from './base.js';
+import { mcpToolsSchema } from './mcp-tool-bindings.js';
 
 /**
  * Gadget name — kebab-case identifier without scope prefix. The
@@ -297,6 +298,13 @@ export const gadgetManifestSchema = z.strictObject({
   connect: GadgetConnectSchema.optional().describe(
     "URLs the wrapper's runtime may speak to. Merged into the iframe CSP `connect-src` at boot. Shape mirrors `gadgetDescriptorSchema.connect` in `@ggui-ai/protocol` — a flat readonly string list.",
   ),
+
+  // ---- Optional MCP tool bindings (search metadata only) ----
+  mcpTools: mcpToolsSchema
+    .optional()
+    .describe(
+      'MCP tool bindings this gadget renders — surfaced in registry search results and matched by the `tool` / `server` search filters (`tool` matches any entry with that tool name; `server` matches entries declaring that server; both together match the exact pair). Bindings are publisher claims, not an endorsement by the named server. Search metadata only — never part of any cache identity. Max 16 entries, charset `[A-Za-z0-9_.-]`, case-sensitive; exact-duplicate `(server, tool)` pairs rejected.',
+    ),
 });
 
 /**

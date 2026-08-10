@@ -362,6 +362,35 @@ describe('ggui.blueprint.json — persistence-contract stamps', () => {
   });
 });
 
+describe("ggui.blueprint.json — mcpTools bindings", () => {
+  it("accepts a declared binding list", () => {
+    const result = safeParseBlueprintManifest({
+      ...MINIMAL,
+      mcpTools: [{ tool: "get_weather" }],
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("accepts the same tool under two different servers (not a duplicate)", () => {
+    const result = safeParseBlueprintManifest({
+      ...MINIMAL,
+      mcpTools: [
+        { server: "server-a", tool: "get_weather" },
+        { server: "server-b", tool: "get_weather" },
+      ],
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("rejects a duplicate bare pair", () => {
+    const result = safeParseBlueprintManifest({
+      ...MINIMAL,
+      mcpTools: [{ tool: "get_weather" }, { tool: "get_weather" }],
+    });
+    expect(result.success).toBe(false);
+  });
+});
+
 describe('ggui.blueprint.json — type inference', () => {
   it('z.infer<typeof blueprintManifestSchema> matches BlueprintManifest', () => {
     type Inferred = z.infer<typeof blueprintManifestSchema>;

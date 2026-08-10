@@ -514,3 +514,57 @@ describe('ggui.gadget.json — type inference', () => {
     expectTypeOf<Inferred>().toEqualTypeOf<GadgetManifest>();
   });
 });
+
+describe("ggui.gadget.json — mcpTools bindings", () => {
+  it("accepts a declared binding list", () => {
+    const result = safeParseGadgetManifest({
+      ...MINIMAL,
+      mcpTools: [{ server: "weather-server", tool: "get_weather" }, { tool: "get_forecast" }],
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.mcpTools).toEqual([
+        { server: "weather-server", tool: "get_weather" },
+        { tool: "get_forecast" },
+      ]);
+    }
+  });
+
+  it("rejects an empty mcpTools array with issue path `mcpTools`", () => {
+    const result = safeParseGadgetManifest({ ...MINIMAL, mcpTools: [] });
+    expect(result.success).toBe(false);
+    const paths = result.success ? [] : result.error.issues.map((i) => i.path.join("."));
+    expect(paths).toContain("mcpTools");
+  });
+
+  it("rejects more than 16 bindings", () => {
+    const mcpTools = Array.from({ length: 17 }, (_, i) => ({
+      tool: `tool-${i}`,
+    }));
+    const result = safeParseGadgetManifest({ ...MINIMAL, mcpTools });
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects a tool name outside the MCP charset with issue path `mcpTools.0.tool`", () => {
+    const result = safeParseGadgetManifest({
+      ...MINIMAL,
+      mcpTools: [{ tool: "has space" }],
+    });
+    expect(result.success).toBe(false);
+    const paths = result.success ? [] : result.error.issues.map((i) => i.path.join("."));
+    expect(paths).toContain("mcpTools.0.tool");
+  });
+
+  it("rejects exact duplicate (server, tool) pairs with issue path `mcpTools`", () => {
+    const result = safeParseGadgetManifest({
+      ...MINIMAL,
+      mcpTools: [
+        { server: "weather-server", tool: "get_weather" },
+        { server: "weather-server", tool: "get_weather" },
+      ],
+    });
+    expect(result.success).toBe(false);
+    const paths = result.success ? [] : result.error.issues.map((i) => i.path.join("."));
+    expect(paths).toContain("mcpTools");
+  });
+});
