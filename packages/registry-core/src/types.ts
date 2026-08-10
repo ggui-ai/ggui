@@ -354,6 +354,19 @@ export interface SearchResultEntry {
   readonly description?: string;
   readonly tags?: readonly string[];
   readonly publishedAt: string;
+  /** MCP tool bindings of the latest version, when the artifact declares or derives any. */
+  readonly mcpTools?: ReadonlyArray<McpToolBinding>;
+  /** How the bindings were produced: declared on the manifest, or derived from a blueprint contract. */
+  readonly mcpToolsSource?: McpToolBindingSource;
+  /**
+   * Verification state of the artifact's scope. Present only when the
+   * scope-ownership row was read; ABSENT when the scope state is
+   * unknown (unclaimed scope or a failed lookup) — absence is not
+   * `'unverified'`.
+   */
+  readonly scopeVerification?: ScopeVerification;
+  /** Domain whose control was proven — present only when `scopeVerification: 'verified'`. */
+  readonly verifiedDomain?: string;
 }
 
 /**

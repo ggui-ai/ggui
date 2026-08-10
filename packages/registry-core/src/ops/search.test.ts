@@ -211,4 +211,102 @@ describe('searchArtifacts', () => {
       ]);
     });
   });
+
+  describe('mcpTools + scope-verification surfacing (MCP discovery §2)', () => {
+    it('surfaces mcpTools and mcpToolsSource from the metadata row', async () => {
+      const storage = inMemoryRegistryStorage();
+      await storage.putArtifactMetadata(
+        makeMetadata({
+          artifactId: '@a/weather',
+          mcpTools: [{ server: 'weather-server', tool: 'get_weather' }],
+          mcpToolsSource: 'declared',
+        }),
+      );
+      const result = await searchArtifacts({}, { storage });
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.body.results[0]?.mcpTools).toEqual([
+        { server: 'weather-server', tool: 'get_weather' },
+      ]);
+      expect(result.body.results[0]?.mcpToolsSource).toBe('declared');
+    });
+
+    it('surfaces verified scope state with its domain', async () => {
+      const storage = inMemoryRegistryStorage();
+      await storage.putArtifactMetadata(makeMetadata({ artifactId: '@acme/x' }));
+      await storage.claimScope({
+        scope: '@acme',
+        ownerSubject: 'owner-1',
+        claimedAt: '2026-08-01T00:00:00.000Z',
+        verification: 'verified',
+        verifiedDomain: 'acme.example',
+        verifiedAt: '2026-08-02T00:00:00.000Z',
+      });
+      const result = await searchArtifacts({}, { storage });
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.body.results[0]?.scopeVerification).toBe('verified');
+      expect(result.body.results[0]?.verifiedDomain).toBe('acme.example');
+    });
+
+    it('surfaces unverified scope state without a domain', async () => {
+      const storage = inMemoryRegistryStorage();
+      await storage.putArtifactMetadata(makeMetadata({ artifactId: '@acme/x' }));
+      await storage.claimScope({
+        scope: '@acme',
+        ownerSubject: 'owner-1',
+        claimedAt: '2026-08-01T00:00:00.000Z',
+        verification: 'unverified',
+      });
+      const result = await searchArtifacts({}, { storage });
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.body.results[0]?.scopeVerification).toBe('unverified');
+      expect(result.body.results[0]?.verifiedDomain).toBeUndefined();
+    });
+
+    it('omits both verification fields when the scope is unclaimed', async () => {
+      const storage = inMemoryRegistryStorage();
+      await storage.putArtifactMetadata(makeMetadata({ artifactId: '@a/x' }));
+      const result = await searchArtifacts({}, { storage });
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.body.results[0]?.scopeVerification).toBeUndefined();
+      expect(result.body.results[0]?.verifiedDomain).toBeUndefined();
+    });
+
+    it('omits verification fields when the scope-owner read fails (still 200)', async () => {
+      const storage = inMemoryRegistryStorage();
+      await storage.putArtifactMetadata(makeMetadata({ artifactId: '@a/x' }));
+      const failing: RegistryStorage = {
+        ...storage,
+        getScopeOwner: async () => {
+          throw new Error('boom');
+        },
+      };
+      const result = await searchArtifacts({}, { storage: failing });
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.body.results[0]?.artifactId).toBe('@a/x');
+      expect(result.body.results[0]?.scopeVerification).toBeUndefined();
+    });
+
+    it('reads each unique scope once per page (batched)', async () => {
+      const storage = inMemoryRegistryStorage();
+      await storage.putArtifactMetadata(makeMetadata({ artifactId: '@a/one' }));
+      await storage.putArtifactMetadata(makeMetadata({ artifactId: '@a/two' }));
+      await storage.putArtifactMetadata(makeMetadata({ artifactId: '@b/three' }));
+      const scopeReads: string[] = [];
+      const counting: RegistryStorage = {
+        ...storage,
+        getScopeOwner: async (scope) => {
+          scopeReads.push(scope);
+          return storage.getScopeOwner(scope);
+        },
+      };
+      const result = await searchArtifacts({}, { storage: counting });
+      expect(result.ok).toBe(true);
+      expect([...scopeReads].sort()).toEqual(['@a', '@b']);
+    });
+  });
 });

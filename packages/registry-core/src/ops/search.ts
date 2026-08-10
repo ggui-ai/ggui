@@ -13,6 +13,7 @@ import type {
   ArtifactKind,
   ArtifactScanFilter,
   ArtifactsMetadataRow,
+  ScopeOwnerRow,
   SearchErrorBody,
   SearchResponse,
   SearchResultEntry,
@@ -20,6 +21,7 @@ import type {
 } from '../types.js';
 import { SEARCH_SORT_OPTIONS } from '../types.js';
 import type { RegistryStorage } from '../interfaces/registry-storage.js';
+import { artifactScope } from './private-read-authz.js';
 
 const DEFAULT_LIMIT = 50;
 const MAX_LIMIT = 200;
@@ -132,11 +134,19 @@ export async function searchArtifacts(
     visibleRows.push(row);
   }
 
+  // Scope-verification surfacing — ONE owner read per unique scope on
+  // the page, batched. A failed or empty read leaves the fields ABSENT
+  // (state unknown is not 'unverified'): the wire only carries a label
+  // the ownership row actually asserted.
+  const ownersByScope = await readScopeOwners(deps.storage, visibleRows);
+
   // `sort=recent` ordering is served by the storage layer (the filter
   // carries `order: 'recent'`); rows arrive newest-first and are
   // emitted verbatim — no re-sort here, so page order and cursor order
   // cannot diverge.
-  const results: SearchResultEntry[] = visibleRows.map(rowToEntry);
+  const results: SearchResultEntry[] = visibleRows.map((row) =>
+    rowToEntry(row, ownersByScope.get(artifactScope(row.artifactId)) ?? null),
+  );
 
   return {
     ok: true,
@@ -149,7 +159,32 @@ function isSearchSort(value: string): value is SearchSort {
   return (SEARCH_SORT_OPTIONS as readonly string[]).includes(value);
 }
 
-function rowToEntry(row: ArtifactsMetadataRow): SearchResultEntry {
+async function readScopeOwners(
+  storage: RegistryStorage,
+  rows: readonly ArtifactsMetadataRow[],
+): Promise<Map<string, ScopeOwnerRow | null>> {
+  const scopes = [...new Set(rows.map((row) => artifactScope(row.artifactId)))];
+  const entries = await Promise.all(
+    scopes.map(async (scope): Promise<readonly [string, ScopeOwnerRow | null]> => {
+      try {
+        return [scope, await storage.getScopeOwner(scope)] as const;
+      } catch (err) {
+        // eslint-disable-next-line no-console -- server-side operator signal; the wire simply omits the fields
+        console.error('registry search: scope-owner lookup failed; omitting verification fields', {
+          scope,
+          error: err instanceof Error ? err.message : String(err),
+        });
+        return [scope, null] as const;
+      }
+    }),
+  );
+  return new Map(entries);
+}
+
+function rowToEntry(
+  row: ArtifactsMetadataRow,
+  scopeOwner: ScopeOwnerRow | null,
+): SearchResultEntry {
   return {
     artifactId: row.artifactId,
     latestVersion: row.latestVersion,
@@ -157,6 +192,10 @@ function rowToEntry(row: ArtifactsMetadataRow): SearchResultEntry {
     description: row.description,
     tags: row.tags,
     publishedAt: row.publishedAt,
+    mcpTools: row.mcpTools,
+    mcpToolsSource: row.mcpToolsSource,
+    scopeVerification: scopeOwner?.verification,
+    verifiedDomain: scopeOwner?.verification === 'verified' ? scopeOwner.verifiedDomain : undefined,
   };
 }
 
