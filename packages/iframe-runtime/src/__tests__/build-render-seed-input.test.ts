@@ -68,6 +68,47 @@ describe('buildGguiSessionSeedInput', () => {
     expect((seed as { type?: string }).type).toBeUndefined();
   });
 
+  it('projects a compiled-component seed from `codeB64` with NO fetch', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    const source = 'export default function C(){return "café ☕"}';
+    const codeB64 = Buffer.from(source, 'utf8').toString('base64');
+
+    const seed = await buildGguiSessionSeedInput({
+      ...BASE,
+      codeB64,
+      propsJson: JSON.stringify({ n: 1 }),
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(seed).toMatchObject({
+      id: 'render_seed_1',
+      appId: 'app_001',
+      componentCode: source,
+      props: { n: 1 },
+    });
+    expect((seed as { type?: string }).type).toBeUndefined();
+  });
+
+  it('prefers the inline codeB64 bytes over codeUrl when both are present', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    const source = 'export default function Inline(){return null}';
+
+    const seed = await buildGguiSessionSeedInput({
+      ...BASE,
+      codeB64: Buffer.from(source, 'utf8').toString('base64'),
+      codeUrl: 'http://localhost:7000/code/abc.js',
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(seed).toMatchObject({ componentCode: source });
+  });
+
+  it('throws a field-labeled error on malformed codeB64', async () => {
+    await expect(
+      buildGguiSessionSeedInput({ ...BASE, codeB64: '!!not-base64!!' }),
+    ).rejects.toThrow(/codeB64 is not valid base64/);
+  });
+
   it('returns null for a live-only meta (no codeUrl, no kind)', async () => {
     const seed = await buildGguiSessionSeedInput({
       ...BASE,

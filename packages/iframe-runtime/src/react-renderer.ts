@@ -46,7 +46,15 @@ import {
   getThemeCss,
   getCssTokens,
 } from '@ggui-ai/design/rendering';
-import { hoistImports, loadModule } from '@ggui-ai/design/module-loader';
+import { hoistImports, loadModule, loadModuleInline } from '@ggui-ai/design/module-loader';
+
+/**
+ * Document-lifetime verdict: URL-scheme module loading (`blob:` main
+ * module + `data:` import shims) is blocked by the host CSP. Set the
+ * first time the inline classic-script path succeeds where the URL
+ * path failed; later evaluations skip the doomed URL attempt.
+ */
+let urlModuleLoadBlocked = false;
 
 // =============================================================================
 // Scope class helpers — port of RCR's `makeScopeClass` + counter.
@@ -331,27 +339,68 @@ export async function mountReactRoot(
 
     // 1. Strip metadata markers (__GGUI_META__ / __GGUI_STREAM_SPEC__).
     const cleaned = stripMarkers(resolved);
-    // 2. Hoist imports above var declarations.
+    // 2. Hoist imports above var declarations. Load-bearing for BOTH
+    //    execution paths: the inline transform places its bindings at
+    //    the import statement's position, so a pre-import statement
+    //    referencing an imported name needs the hoist exactly as the
+    //    real module semantics do.
     const hoisted = hoistImports(cleaned);
-    // 3. Rewrite bare specifiers to data-url shims reading from
-    //    `globalThis.__ggui__`. The __ggui__ registry is installed
-    //    by `runtime.ts::bootSequence` BEFORE any mountReactRoot call
-    //    — see globals.ts docstring on TOCTOU ordering.
-    const rewritten = rewriteImports(hoisted, {
-      mode: 'data-url',
-      gadgetPackages: currentOpts.gadgetPackages,
-    });
-    // 4. Dynamically import the module.
-    const mod = await loadModule(rewritten);
-    // 5. Extract default export (or first function export).
-    const Comp = (mod.default ??
-      Object.values(mod).find(
-        (v): v is ComponentType => typeof v === 'function',
-      )) as ComponentType<Record<string, unknown>> | undefined;
-    if (Comp === undefined) {
-      throw new Error('Module does not export a default component');
+
+    const pick = (mod: Record<string, unknown>): ComponentType<Record<string, unknown>> => {
+      const Comp = (mod.default ??
+        Object.values(mod).find(
+          (v): v is ComponentType => typeof v === 'function',
+        )) as ComponentType<Record<string, unknown>> | undefined;
+      if (Comp === undefined) {
+        throw new Error('Module does not export a default component');
+      }
+      return Comp;
+    };
+
+    const evaluateInline = (): ComponentType<Record<string, unknown>> =>
+      pick(
+        loadModuleInline(hoisted, {
+          ...(currentOpts.gadgetPackages !== undefined
+            ? { gadgetPackages: currentOpts.gadgetPackages }
+            : {}),
+        }),
+      );
+
+    // Once URL-scheme module loading has been proven blocked in this
+    // document, go straight to inline execution — the CSP verdict
+    // cannot change within the document's lifetime.
+    if (urlModuleLoadBlocked) {
+      return evaluateInline();
     }
-    return Comp;
+
+    try {
+      // 3. Rewrite bare specifiers to data-url shims reading from
+      //    `globalThis.__ggui__`. The __ggui__ registry is installed
+      //    by `runtime.ts::bootSequence` BEFORE any mountReactRoot call
+      //    — see globals.ts docstring on TOCTOU ordering.
+      const rewritten = rewriteImports(hoisted, {
+        mode: 'data-url',
+        gadgetPackages: currentOpts.gadgetPackages,
+      });
+      // 4. Dynamically import the module.
+      const mod = await loadModule(rewritten);
+      // 5. Extract default export (or first function export).
+      return pick(mod);
+    } catch (urlError) {
+      // A host CSP granting only 'unsafe-inline' rejects the blob:/
+      // data: imports above. Attempt the inline classic-script path;
+      // its SUCCESS is the evidence that the failure above was a
+      // URL-scheme block rather than a component bug (a buggy
+      // component fails on both paths, and the original error is the
+      // honest one to surface).
+      try {
+        const Comp = evaluateInline();
+        urlModuleLoadBlocked = true;
+        return Comp;
+      } catch {
+        throw urlError;
+      }
+    }
   }
 
   function renderTree(opts: ReactRootMountOptions): void {

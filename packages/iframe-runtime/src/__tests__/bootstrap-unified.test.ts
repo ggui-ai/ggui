@@ -170,6 +170,38 @@ describe('Slice 14 — per-mode validation', () => {
     }
   });
 
+  it('accepts inline static-component mode (codeB64 + runtimeUrl, no WS, no fetchable code)', () => {
+    const result = validateMeta({
+      sessionId: 'render_001',
+      appId: 'app_001',
+      runtimeUrl: RUNTIME_URL,
+      codeB64: 'ZXhwb3J0IGRlZmF1bHQgKCkgPT4gbnVsbA==',
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.meta.codeB64).toBe('ZXhwb3J0IGRlZmF1bHQgKCkgPT4gbnVsbA==');
+      expect(result.meta.codeUrl).toBeUndefined();
+    }
+  });
+
+  it('expired live creds DEGRADE to static when codeB64 carries the component', () => {
+    const result = validateMeta({
+      sessionId: 'render_001',
+      appId: 'app_001',
+      runtimeUrl: RUNTIME_URL,
+      wsUrl: 'wss://server.example/ws',
+      wsToken: 'tok_abc',
+      expiresAt: '2000-01-01T00:00:00.000Z',
+      codeB64: 'ZXhwb3J0IGRlZmF1bHQgKCkgPT4gbnVsbA==',
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.meta.wsUrl).toBeUndefined();
+      expect(result.meta.wsToken).toBeUndefined();
+      expect(result.meta.codeB64).toBe('ZXhwb3J0IGRlZmF1bHQgKCkgPT4gbnVsbA==');
+    }
+  });
+
   it('rejects no-discriminator (only sessionId/appId/runtimeUrl)', () => {
     expect(
       validateMeta({

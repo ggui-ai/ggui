@@ -1339,16 +1339,22 @@ function parseSeedProps(propsJson: string | undefined): JsonObject | undefined {
  * no WS at all for spec-compliant MCP-Apps hosts that expose no ggui
  * live channel (claude.ai / ChatGPT / Claude Desktop).
  *
- * Two static-content shapes (the autostart discriminator):
+ * Three static-content shapes (the autostart discriminator), in
+ * priority order:
  *   - `kind`    → a system-card seed (`type:'system'`); no fetch.
+ *   - `codeB64` → a compiled-component seed carried inline; DECODED,
+ *     never fetched. Preferred over `codeUrl` when both are present —
+ *     the inline bytes exist precisely for hosts whose iframe CSP
+ *     blocks the fetch.
  *   - `codeUrl` → a compiled-component seed; fetches the
  *     content-addressable component bytes.
  *
- * Returns `null` when the meta carries NEITHER (a live-only meta has
+ * Returns `null` when the meta carries NONE (a live-only meta has
  * nothing to seed — the first WS ack mounts it). Throws when a `codeUrl`
- * fetch fails so the caller can surface a typed boot failure. The four
- * server-assigned ledger fields are intentionally absent — the first
- * ack reconciles the seed to a full `GguiSession` (no fabrication).
+ * fetch fails or `codeB64` is not valid base64 so the caller can
+ * surface a typed boot failure. The four server-assigned ledger fields
+ * are intentionally absent — the first ack reconciles the seed to a
+ * full `GguiSession` (no fabrication).
  */
 export async function buildGguiSessionSeedInput(
   meta: McpAppAiGguiRenderMeta,
@@ -1362,6 +1368,16 @@ export async function buildGguiSessionSeedInput(
       appId: meta.appId,
       type: 'system',
       kind: meta.kind,
+      ...(props !== undefined ? { props } : {}),
+    };
+  }
+
+  // Inline compiled-component mode — decode, no network.
+  if (meta.codeB64 !== undefined) {
+    return {
+      id: meta.sessionId,
+      appId: meta.appId,
+      componentCode: decodeCodeB64(meta.codeB64),
       ...(props !== undefined ? { props } : {}),
     };
   }
@@ -1381,6 +1397,29 @@ export async function buildGguiSessionSeedInput(
     componentCode,
     ...(props !== undefined ? { props } : {}),
   };
+}
+
+/**
+ * Decode a `codeB64` slice field to UTF-8 component source. `atob`
+ * yields a byte string; routing through `TextDecoder` restores
+ * multi-byte characters (component source is UTF-8 — string literals
+ * carry emoji, quotes, non-Latin text). Throws a labeled error on
+ * malformed base64 so the boot-failure surface names the field.
+ */
+function decodeCodeB64(codeB64: string): string {
+  try {
+    const byteString = atob(codeB64);
+    const bytes = new Uint8Array(byteString.length);
+    for (let i = 0; i < byteString.length; i++) {
+      bytes[i] = byteString.charCodeAt(i);
+    }
+    return new TextDecoder().decode(bytes);
+  } catch (cause) {
+    throw new Error(
+      'buildGguiSessionSeedInput: codeB64 is not valid base64',
+      { cause },
+    );
+  }
 }
 
 /**
@@ -3325,6 +3364,10 @@ function installPostMountListener(): void {
       meta.sessionId,
       meta.kind ?? '-',
       meta.codeUrl ?? '-',
+      // Inline code participates like codeUrl: an update that ships new
+      // component bytes (re-generation) must re-mount even when
+      // sessionId + props are unchanged.
+      meta.codeB64 ?? '-',
       meta.propsJson ?? '-',
       liveTrio,
     ].join('|');

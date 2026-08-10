@@ -40,9 +40,10 @@
  *
  *   - **live** — slice has `wsUrl` + `wsToken`; runtime opens
  *     live-channel WS and renders agent-driven frames.
- *   - **static-component** — slice has `codeUrl`; runtime fetches
- *     the content-addressable URL, dynamic-imports the React
- *     component, mounts it, never opens WS.
+ *   - **static-component** — slice has `codeUrl` (runtime fetches the
+ *     content-addressable URL) and/or `codeB64` (runtime decodes the
+ *     inline bytes, no fetch); mounts the React component, never
+ *     opens WS.
  *   - **system-card** — slice has `kind`; runtime maps to a
  *     built-in component via the system-card registry.
  *
@@ -180,9 +181,9 @@ function projectPublicEnv(
  *
  * Invariants enforced here that the combiner doesn't:
  *   - `expiresAt` (when present) MUST parse to a valid timestamp. If
- *     in the past AND the slice carries static content (codeUrl / kind),
- *     DEGRADE to static-only (drop `wsUrl` / `wsToken` / `expiresAt`);
- *     otherwise return EXPIRED_BOOTSTRAP.
+ *     in the past AND the slice carries static content (codeUrl /
+ *     codeB64 / kind), DEGRADE to static-only (drop `wsUrl` /
+ *     `wsToken` / `expiresAt`); otherwise return EXPIRED_BOOTSTRAP.
  *   - `gadgets` / `publicEnv` / `permissionsPolicy` /
  *     `streamWebSocketLocalTools` / `contextSlots` get defensive
  *     entry-level validation; malformed → defaulted.
@@ -279,6 +280,7 @@ function projectMeta(
       : {}),
     ...(meta.codeUrl !== undefined ? { codeUrl: meta.codeUrl } : {}),
     ...(meta.codeHash !== undefined ? { codeHash: meta.codeHash } : {}),
+    ...(meta.codeB64 !== undefined ? { codeB64: meta.codeB64 } : {}),
     ...(meta.kind !== undefined ? { kind: meta.kind } : {}),
   };
   return { ok: true, meta: projected };
@@ -295,9 +297,9 @@ function projectMeta(
  *     direct-call callers like `parseMetaFromGlobal` / tests; the
  *     envelope-driven extractors already enforce this in the protocol-
  *     level parser).
- *   - At least one of `{live mode (wsUrl+wsToken), codeUrl, kind}` MUST
- *     be present. Without any mode discriminator the iframe has nothing
- *     to mount.
+ *   - At least one of `{live mode (wsUrl+wsToken), codeUrl, codeB64,
+ *     kind}` MUST be present. Without any mode discriminator the iframe
+ *     has nothing to mount.
  */
 export function validateMeta(
   meta: McpAppAiGguiRenderMeta,
@@ -316,8 +318,9 @@ export function validateMeta(
   const hasLive =
     isNonEmptyString(meta.wsUrl) && isNonEmptyString(meta.wsToken);
   const hasCodeUrl = isNonEmptyString(meta.codeUrl);
+  const hasCodeB64 = isNonEmptyString(meta.codeB64);
   const hasKind = isNonEmptyString(meta.kind);
-  const hasStaticContent = hasCodeUrl || hasKind;
+  const hasStaticContent = hasCodeUrl || hasCodeB64 || hasKind;
 
   if (!hasLive && !hasStaticContent) {
     return { ok: false, reason: 'MALFORMED_BOOTSTRAP' };

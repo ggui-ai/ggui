@@ -108,6 +108,17 @@ export function loadModuleInline(
   const scope = globalThis as Record<string, unknown>;
   const transformed = transformForInlineExec(code);
   scope[INLINE_EXEC_HANDOFF_GLOBAL] = handoff;
+  // A PARSE-time failure in the script (transformed source with a
+  // syntax error) never reaches the in-script try/catch — it surfaces
+  // only as a window `error` event. Capture it for the duration of the
+  // synchronous evaluation so it lands in this call's stack instead of
+  // escaping as an unhandled page error.
+  let parseError: unknown;
+  const onWindowError = (ev: ErrorEvent): void => {
+    parseError = ev.error ?? new Error(ev.message);
+    ev.preventDefault();
+  };
+  window.addEventListener('error', onWindowError);
   try {
     const script = document.createElement('script');
     script.textContent = transformed;
@@ -115,12 +126,18 @@ export function loadModuleInline(
     script.remove();
     if (handoff.error !== undefined) throw handoff.error;
     if (handoff.ran !== true) {
+      if (parseError !== undefined) {
+        throw parseError instanceof Error
+          ? parseError
+          : new Error(String(parseError));
+      }
       throw new Error(
         'loadModuleInline: the inline script did not execute — the host CSP blocks inline scripts as well as URL-based module loads.',
       );
     }
     return handoff.exports;
   } finally {
+    window.removeEventListener('error', onWindowError);
     delete scope[INLINE_EXEC_HANDOFF_GLOBAL];
   }
 }
