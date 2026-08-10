@@ -72,6 +72,7 @@
     }
   },
   "devDependencies": {
+    "@ggui-ai/protocol-conformance": "workspace:*",
     "@sigstore/mock": "~0.12.1",
     "@sigstore/protobuf-specs": "^0.5.1",
     "@tufjs/repo-mock": "4.0.1",

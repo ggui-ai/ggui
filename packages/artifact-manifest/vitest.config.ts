@@ -8,5 +8,6 @@ export default defineConfig({
     testTimeout: 30_000,
     hookTimeout: 30_000,
     include: ['src/**/*.test.{ts,tsx}', 'src/**/*.conformance.test.{ts,tsx}', 'src/**/*.spec.{ts,tsx}'],
+    exclude: ['src/excluded/**'],
   },
 });

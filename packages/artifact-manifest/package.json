@@ -37,6 +37,7 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
+    "@ggui-ai/protocol-conformance": "workspace:*",
     "typescript": "^5.0.0",
     "vitest": "^3.2.6"
   },
