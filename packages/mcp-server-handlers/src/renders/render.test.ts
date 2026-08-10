@@ -2045,7 +2045,7 @@ describe('createGguiRenderHandler — code-delivery channel', () => {
     }
   });
 
-  it('without a live channel the envelope stops being mountable — the event says so', async () => {
+  it('without a live channel the envelope STILL mounts — inline codeB64 carries the code past the dead store (#471)', async () => {
     const warn = spyOnWarn();
     try {
       const { harness, handshakeId } = await buildColdGenHarness({
@@ -2056,12 +2056,19 @@ describe('createGguiRenderHandler — code-delivery channel', () => {
       assertRenderSuccess(out);
 
       // The host-facing narrowing is the authority on "can this mount":
-      // runtimeUrl plus one mode discriminator. With no codeUrl and no
-      // live trio there is none, so a host reads this result as not a
-      // mountable ggui render.
+      // runtimeUrl plus one mode discriminator. codeUrl is gone with
+      // the store, but the size-capped inline `codeB64` channel is
+      // independent of the store — the render mounts through it. (Until
+      // #471 introduced codeB64, this exact scenario was unmountable.)
       const meta = await harness.handler.resultMeta?.(out, {}, CTX);
-      expect(asGguiRenderBootstrap(meta)).toBeUndefined();
+      const bootstrap = asGguiRenderBootstrap(meta);
+      expect(bootstrap).toBeDefined();
+      expect(bootstrap?.slice.codeUrl).toBeUndefined();
+      expect(bootstrap?.slice.codeB64).toBe(
+        Buffer.from(COLD_CODE, 'utf8').toString('base64'),
+      );
 
+      // The code-delivery event still reports the dead store honestly.
       const [event] = codeWriteEvents(warn);
       expect(event?.liveChannelWired).toBe(false);
     } finally {

@@ -234,6 +234,11 @@ describe('deriveRenderMeta', () => {
     );
     expect(view).toEqual({
       propsJson: '{"city":"Seoul"}',
+      // Inline fetch-free code channel (#471) — base64 of the item's
+      // componentCode, emitted whenever the source is under the cap.
+      codeB64: Buffer.from('export default () => null;', 'utf8').toString(
+        'base64',
+      ),
       contextSlots: [
         {
           name: 'count',
@@ -246,6 +251,15 @@ describe('deriveRenderMeta', () => {
       // calls deriveContractBundle directly + writes to the
       // content-addressable store. The view carries no contract bytes.
     });
+  });
+
+  it('omits codeB64 when the source exceeds the inline cap (channel falls back to codeUrl/live)', () => {
+    const big = 'x'.repeat(300_000);
+    expect(deriveRenderMeta(componentItem({ componentCode: big })).codeB64).toBeUndefined();
+  });
+
+  it('never emits codeB64 for system-card renders', () => {
+    expect(deriveRenderMeta(systemItem()).codeB64).toBeUndefined();
   });
 
   // St3 M2.1 — the per-app theme overlay is sidecar'd onto the render

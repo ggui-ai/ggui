@@ -645,6 +645,19 @@ export function derivePropsJson(item: GguiSession): string | undefined {
 export interface RenderMetaView {
   readonly kind?: string;
   readonly propsJson?: string;
+  /**
+   * Base64-encoded compiled component source — the fetch-free static
+   * delivery channel for hosts whose iframe CSP forbids cross-origin
+   * fetches (no `connect-src`/`script-src` to this server). Distinct
+   * from the 2026-05-13-retired raw-ESM `componentCode` field: this is
+   * base64 (inline-embedding-safe), consumed by the iframe-runtime's
+   * seed builder which PREFERS it over `codeUrl` and never fetches.
+   * Omitted when the source exceeds {@link CODE_B64_MAX_CHARS}
+   * (over-cap renders keep the codeUrl / live channels) and for
+   * system-card renders. Each transport spreads it explicitly, like
+   * every other view field.
+   */
+  readonly codeB64?: string;
   readonly contextSlots?: ReadonlyArray<{
     name: string;
     contextName: string;
@@ -897,13 +910,37 @@ export async function deriveContractBundle(
 }
 
 /**
+ * Ceiling on the base64 length {@link deriveRenderMeta} will inline as
+ * `codeB64` (256 KiB of base64 ≈ 192 KiB of source). Generated
+ * components run 5–50 KB; the cap exists so a pathological render
+ * cannot balloon every tool result and resource read it rides on.
+ * Over-cap renders keep their `codeUrl` / live-channel delivery.
+ */
+export const CODE_B64_MAX_CHARS = 262_144;
+
+/**
+ * Base64-encode a component render's compiled source for the inline
+ * `codeB64` channel. `undefined` for non-component variants, empty
+ * source, or over-cap source (see {@link CODE_B64_MAX_CHARS}).
+ */
+function deriveCodeB64(item: GguiSession): string | undefined {
+  if (item.type === 'mcpApps' || item.type === 'system') return undefined;
+  const code = item.componentCode;
+  if (typeof code !== 'string' || code.length === 0) return undefined;
+  const encoded = Buffer.from(code, 'utf8').toString('base64');
+  if (encoded.length > CODE_B64_MAX_CHARS) return undefined;
+  return encoded;
+}
+
+/**
  * Build the {@link RenderMetaView} for a render — the
  * single-entry-point projection function every bootstrap transport
  * SHOULD call. Composing transports take the view, spread it into
  * their own envelope alongside render/auth/runtime concerns. The
- * static-component code body itself is delivered via the render
- * handler's `codeUrl` channel (composed from `codeStore` + `codeBaseUrl`);
- * this projection only carries the wire-shape metadata.
+ * static-component code body is delivered via the render handler's
+ * `codeUrl` channel (composed from `codeStore` + `codeBaseUrl`) AND —
+ * for fetch-blocked hosts — inline via the size-capped `codeB64`
+ * field this projection carries.
  *
  * Pure. Same input → identical output, byte-for-byte.
  */
@@ -945,8 +982,10 @@ export function deriveRenderMeta(
   // system cards theme via the SystemCardHost→ThemeProvider path, not
   // this slice, so `SystemGguiSession` never carries a `theme` sidecar.
   const theme = deriveTheme(item);
+  const codeB64 = deriveCodeB64(item);
   return {
     ...(propsJson !== undefined ? { propsJson } : {}),
+    ...(codeB64 !== undefined ? { codeB64 } : {}),
     ...(slots !== undefined ? { contextSlots: [...slots] } : {}),
     ...(permissionsPolicy !== undefined
       ? { permissionsPolicy: [...permissionsPolicy] }

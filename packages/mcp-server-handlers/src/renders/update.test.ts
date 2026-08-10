@@ -552,6 +552,13 @@ describe('createGguiUpdateHandler', () => {
       expect(m?.streamWebSocketLocalTools).toBeUndefined();
       expect(m?.contractHash).toBeUndefined();
       expect(m?.validatorsUrl).toBeUndefined();
+      // `codeB64` is the deliberate EXCEPTION to the props-only trim
+      // (#471): on a fetch-blocked host the iframe repaints an update
+      // by re-seeding from this meta, and a seed needs a static-content
+      // channel — propsJson alone projects to nothing mountable.
+      expect(m?.codeB64).toBe(
+        Buffer.from('export default function X(){return null}', 'utf8').toString('base64'),
+      );
     });
 
     it('forwards themeId + themeMode from themeProvider over static deps', async () => {

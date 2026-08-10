@@ -2396,6 +2396,12 @@ export function createGguiRenderHandler(
         ...(outputWithCode.codeHash
           ? { codeHash: outputWithCode.codeHash }
           : {}),
+        // Inline compiled source (size-capped, projected by
+        // `deriveRenderMeta`). Coexists with codeUrl: fetch-capable
+        // hosts keep the cache-addressable URL, fetch-blocked hosts
+        // (iframe CSP without connect-src/script-src to this server)
+        // decode the inline bytes. Never emitted alongside `kind`.
+        ...(view.codeB64 !== undefined ? { codeB64: view.codeB64 } : {}),
       };
       const uiMeta: Record<string, unknown> = {
         resourceUri: perCallResourceUri,

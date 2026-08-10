@@ -487,12 +487,15 @@ export function createGguiUpdateHandler(
      * `_meta` (the structuredContent reply is the source of truth).
      */
     resultMeta: async (output, _input, ctx) => {
-      // Load the just-patched render only to derive the projected
-      // propsJson. The other view fields (componentCode / kind /
-      // contextSlots / permissionsPolicy / compiledValidators) are
+      // Load the just-patched render to derive the projected propsJson
+      // AND the inline `codeB64`. The remaining view fields
+      // (contextSlots / permissionsPolicy / compiledValidators) are
       // mount-time invariants — the initial render already shipped
       // them, and `ggui_update` patches `props` only, never the
-      // contract specs.
+      // contract specs. `codeB64` rides updates deliberately: on a
+      // fetch-blocked host the iframe repaints by re-seeding from the
+      // tool-result meta, and a seed needs a static-content channel —
+      // propsJson alone projects to nothing mountable.
       let view: RenderMetaView = {};
       let renderThemeId: string | undefined;
       // `lastSequence` — monotonic event-ledger cursor stamped on every
@@ -552,6 +555,7 @@ export function createGguiUpdateHandler(
           : {}),
         ...(lastSequence !== undefined ? { lastSequence } : {}),
         ...(view.propsJson !== undefined ? { propsJson: view.propsJson } : {}),
+        ...(view.codeB64 !== undefined ? { codeB64: view.codeB64 } : {}),
       };
       return toMcpAppEnvelope(render);
     },
