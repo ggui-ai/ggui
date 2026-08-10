@@ -121,9 +121,10 @@
  * deferral, one owner, two named packages. Nothing about what the
  * change IS remains open.
  *
- * #457 (2026-08-10, landed after the 0.7.0 bump — release owner: the
- * wave after 0.7.0 must be ≥ 0.8.0): the substrate stores' `durability`
- * declaration is a MINOR for the next cut. `@ggui-ai/mcp-server-core`
+ * #457 (2026-08-10): the substrate stores' `durability` declaration —
+ * a MINOR surface that SHIPPED IN 0.7.0 (the wave was published from
+ * main after it landed; an earlier revision of this note deferred it
+ * to the next cut, which the publish overtook). `@ggui-ai/mcp-server-core`
  * adds a required member to three published ports (pre-launch
  * no-compat: every in-tree impl moved in the same slice; out-of-tree
  * implementors add one literal) and `@ggui-ai/protocol-conformance`
