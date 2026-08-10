@@ -248,6 +248,18 @@ describe('buildInlineRenderShellHtml', () => {
     expect(GGUI_RENDER_SHELL_HTML).toContain('data-ggui-shell="thin"');
     expect(GGUI_RENDER_SHELL_HTML).not.toContain('data-ggui-runtime="inline"');
   });
+
+  it('adds bounded overhead over the raw bundle (size rides the iframe-runtime budget gate)', () => {
+    // The wire cost of the inline shell is the bundle's own size plus
+    // skeleton + buffer script + escaping. The bundle itself is gated
+    // by iframe-runtime's check-bundle-size (310 KB gz budget); this
+    // pin keeps the SHELL's addition on top of it from growing
+    // silently. Escaping is near-zero on real esbuild output (the
+    // hazard sequences only occur inside string literals).
+    const source = 'x'.repeat(100_000);
+    const overhead = buildInlineRenderShellHtml(source).length - source.length;
+    expect(overhead).toBeLessThan(4096);
+  });
 });
 
 describe('createGguiServer({ mcpApps: { inlineRuntimeShell: true } })', () => {
