@@ -429,16 +429,25 @@ describe('end-to-end outbound flow', () => {
     expect(parsed.ok).toBe(true);
     if (!parsed.ok || !parsed.meta) return;
     // Default same-origin path published by `createGguiServer` when
-    // `mcpApps: true` — operators override via `renderer.url`.
-    expect(parsed.meta.runtimeUrl).toBe('/_ggui/iframe-runtime.js');
+    // `mcpApps: true` — content-hashed since #472 (one cached
+    // download per content version). Operators override via
+    // `runtime.url` / opt out via `runtime.hashedUrl: false`.
+    expect(parsed.meta.runtimeUrl).toMatch(
+      /^\/_ggui\/iframe-runtime\.[0-9a-f]{12}\.js$/,
+    );
   });
 });
 
 describe('renderer-bundle static mount (C8 — plan §C8 Deliverable 2)', () => {
   let fx: Fixture;
+  let tmpDistC8: string | null = null;
 
   afterEach(async () => {
     await fx.server.close();
+    if (tmpDistC8) {
+      fs.rmSync(tmpDistC8, { recursive: true, force: true });
+      tmpDistC8 = null;
+    }
   });
 
   it('GET /_ggui/iframe-runtime.js serves the renderer bundle with application/javascript MIME', async () => {
@@ -485,6 +494,106 @@ describe('renderer-bundle static mount (C8 — plan §C8 Deliverable 2)', () => 
     const text = await resp.text();
     expect(text).toMatch(/renderer bundle not built/);
     expect(text).toMatch(/pnpm --filter @ggui-ai\/iframe-runtime build/);
+  });
+
+  it('serves the content-hashed twin route with an immutable cache posture (#472)', async () => {
+    tmpDistC8 = fs.mkdtempSync(path.join(os.tmpdir(), 'ggui-hashed-route-'));
+    const source = 'globalThis.__hashed_runtime = 1;';
+    fs.writeFileSync(path.join(tmpDistC8, 'iframe-runtime.js'), source, 'utf8');
+    const expectedHash = createHash('sha256').update(source).digest('hex').slice(0, 12);
+    fx = await bootOutboundServerWith({ runtime: { distDir: tmpDistC8 } });
+
+    const hashed = await fetch(`${fx.httpBase}/_ggui/iframe-runtime.${expectedHash}.js`);
+    expect(hashed.status).toBe(200);
+    expect(hashed.headers.get('cache-control')).toBe('public, max-age=31536000, immutable');
+    expect(hashed.headers.get('access-control-allow-origin')).toBe('*');
+    expect(await hashed.text()).toBe(source);
+
+    // The plain name's content changes in place across rebuilds, so it
+    // MUST stay revalidated — long caching lives on the hashed twin.
+    const plain = await fetch(`${fx.httpBase}/_ggui/iframe-runtime.js`);
+    expect(plain.headers.get('cache-control')).toBe('no-cache');
+  });
+
+  it('stamps the hashed URL as the slice runtimeUrl (consumers cache one download per content version)', async () => {
+    tmpDistC8 = fs.mkdtempSync(path.join(os.tmpdir(), 'ggui-hashed-stamp-'));
+    fs.writeFileSync(
+      path.join(tmpDistC8, 'iframe-runtime.js'),
+      'globalThis.__stamped = 1;',
+      'utf8',
+    );
+    fx = await bootOutboundServerWith({ runtime: { distDir: tmpDistC8 } });
+    const client = await connectClient(fx.httpBase);
+    try {
+      const result = await handshakeAndRender(client, 'hashed url stamp check');
+      const parsed = parseMcpAppAiGguiRenderMeta(result._meta);
+      expect(parsed.ok).toBe(true);
+      if (!parsed.ok) return;
+      expect(parsed.meta?.runtimeUrl).toMatch(/\/iframe-runtime\.[0-9a-f]{12}\.js$/);
+      // The stamped URL must actually resolve on this server.
+      const resp = await fetch(`${fx.httpBase}${parsed.meta?.runtimeUrl}`);
+      expect(resp.status).toBe(200);
+    } finally {
+      await client.close();
+    }
+  });
+
+  it('hashedUrl: false opts out — plain runtimeUrl, no hashed route', async () => {
+    tmpDistC8 = fs.mkdtempSync(path.join(os.tmpdir(), 'ggui-hashed-optout-'));
+    const source = 'globalThis.__optout = 1;';
+    fs.writeFileSync(path.join(tmpDistC8, 'iframe-runtime.js'), source, 'utf8');
+    const hash = createHash('sha256').update(source).digest('hex').slice(0, 12);
+    fx = await bootOutboundServerWith({
+      runtime: { distDir: tmpDistC8, hashedUrl: false },
+    });
+    expect((await fetch(`${fx.httpBase}/_ggui/iframe-runtime.${hash}.js`)).status).toBe(404);
+    const client = await connectClient(fx.httpBase);
+    try {
+      const result = await handshakeAndRender(client, 'hashed opt-out check');
+      const parsed = parseMcpAppAiGguiRenderMeta(result._meta);
+      expect(parsed.ok && parsed.meta?.runtimeUrl).toBe('/_ggui/iframe-runtime.js');
+    } finally {
+      await client.close();
+    }
+  });
+
+  it('rewrites a configured absolute runtime.url only when its filename matches the served route', async () => {
+    tmpDistC8 = fs.mkdtempSync(path.join(os.tmpdir(), 'ggui-hashed-cdn-'));
+    const source = 'globalThis.__cdn = 1;';
+    fs.writeFileSync(path.join(tmpDistC8, 'iframe-runtime.js'), source, 'utf8');
+    const hash = createHash('sha256').update(source).digest('hex').slice(0, 12);
+
+    // CDN fronting THIS server: filename matches → hashed rewrite.
+    fx = await bootOutboundServerWith({
+      runtime: { distDir: tmpDistC8, url: 'https://cdn.example.com/_ggui/iframe-runtime.js' },
+    });
+    const client = await connectClient(fx.httpBase);
+    try {
+      const result = await handshakeAndRender(client, 'cdn rewrite check');
+      const parsed = parseMcpAppAiGguiRenderMeta(result._meta);
+      expect(parsed.ok && parsed.meta?.runtimeUrl).toBe(
+        `https://cdn.example.com/_ggui/iframe-runtime.${hash}.js`,
+      );
+    } finally {
+      await client.close();
+      await fx.server.close();
+    }
+
+    // Foreign copy under a different name: left untouched — the
+    // foreign host serves only the name the operator configured.
+    fx = await bootOutboundServerWith({
+      runtime: { distDir: tmpDistC8, url: 'https://static.example.com/renderer-v7.js' },
+    });
+    const client2 = await connectClient(fx.httpBase);
+    try {
+      const result = await handshakeAndRender(client2, 'foreign url check');
+      const parsed = parseMcpAppAiGguiRenderMeta(result._meta);
+      expect(parsed.ok && parsed.meta?.runtimeUrl).toBe(
+        'https://static.example.com/renderer-v7.js',
+      );
+    } finally {
+      await client2.close();
+    }
   });
 
   it('does NOT mount the renderer route when `runtime: false` is passed (CDN-only posture)', async () => {

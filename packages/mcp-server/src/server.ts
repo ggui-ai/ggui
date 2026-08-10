@@ -131,7 +131,7 @@ import { setValidatorTraceSink } from "@ggui-ai/ui-gen/harness/validator-trace-s
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import express, { type Express, type Request } from "express";
 import { AsyncLocalStorage } from "node:async_hooks";
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import fs from "node:fs";
 import { Server as NodeHttpServer } from "node:http";
 import path from "node:path";
@@ -2259,6 +2259,22 @@ export interface CreateGguiServerOptions {
         readonly path?: string;
         readonly distDir?: string;
         readonly url?: string;
+        /**
+         * Stamp a CONTENT-HASHED runtime URL (and serve its immutable
+         * long-cache route). Default ON when this server serves the
+         * bundle: `runtimeUrl` becomes
+         * `…/iframe-runtime.<sha256[0..12)>.js`, served with
+         * `Cache-Control: public, max-age=31536000, immutable` — one
+         * download per client per content version, zero
+         * revalidations; deploys roll clients over by changing the
+         * stamped URL. The plain path keeps `no-cache` for operator
+         * iteration. A configured `url` is rewritten only when its
+         * filename matches the served route (a CDN fronting THIS
+         * server resolves the hashed name at its origin); set `false`
+         * when `url` points at a foreign copy that serves only the
+         * plain filename.
+         */
+        readonly hashedUrl?: boolean;
       };
 
   /**
@@ -3355,7 +3371,49 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
     runtimeConfig.distDir !== undefined
       ? path.join(runtimeConfig.distDir, "iframe-runtime.js")
       : RUNTIME_BUNDLE_FILE;
-  const runtimeBootstrapUrl = runtimeConfig.url ?? runtimePath;
+
+  // Bundle bytes, captured ONCE at composition. Feed three consumers:
+  // the content hash below, the immutable hashed route (which must
+  // serve exactly the bytes its name hashes — see runtime-bundle-
+  // route.ts), and the opt-in inline-runtime shell. Unreadable file ⇒
+  // undefined ⇒ every consumer falls back to its pre-#472 behavior.
+  let runtimeBundleBytes: Buffer | undefined;
+  if (runtimeEnabled) {
+    try {
+      runtimeBundleBytes = fs.readFileSync(runtimeBundleFile);
+    } catch {
+      // The plain route's own existsSync handles the missing-bundle
+      // warning; nothing extra to say here.
+    }
+  }
+
+  // Content-hashed runtime URL (#472). The stamped `runtimeUrl` (and
+  // the hashed route it points at) embeds sha256[0..12) of the bytes:
+  // clients cache one download per content version with zero
+  // revalidations, and a deploy rolls over by changing the URL. The
+  // rewrite applies to a configured absolute `runtime.url` ONLY when
+  // its filename matches the served bundle's route (a CDN fronting
+  // THIS server still resolves the hashed name at its origin); a URL
+  // pointing at a foreign copy is left untouched, and
+  // `runtime.hashedUrl: false` opts out entirely.
+  const runtimeBundleHash =
+    runtimeBundleBytes !== undefined && runtimeConfig.hashedUrl !== false
+      ? createHash("sha256").update(runtimeBundleBytes).digest("hex").slice(0, 12)
+      : undefined;
+  const insertHash = (urlOrPath: string): string => {
+    if (runtimeBundleHash === undefined) return urlOrPath;
+    const plainName = runtimePath.slice(runtimePath.lastIndexOf("/") + 1);
+    const dot = plainName.lastIndexOf(".");
+    const hashedName =
+      dot === -1
+        ? `${plainName}.${runtimeBundleHash}`
+        : `${plainName.slice(0, dot)}.${runtimeBundleHash}${plainName.slice(dot)}`;
+    if (!urlOrPath.endsWith(`/${plainName}`) && urlOrPath !== plainName) return urlOrPath;
+    return `${urlOrPath.slice(0, urlOrPath.length - plainName.length)}${hashedName}`;
+  };
+  const hashedRuntimePath =
+    runtimeBundleHash !== undefined ? insertHash(runtimePath) : undefined;
+  const runtimeBootstrapUrl = insertHash(runtimeConfig.url ?? runtimePath);
 
   // Lazy resolver: each render/update handler invocation looks up the
   // request-context-derived absolute base inside the request scope
@@ -4439,16 +4497,13 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
   // the thin shell worked).
   let inlineShellHtml: string | undefined;
   if (mcpAppsEnabled && mcpAppsConfig.inlineRuntimeShell === true) {
-    try {
-      inlineShellHtml = buildInlineRenderShellHtml(
-        fs.readFileSync(runtimeBundleFile, "utf8")
-      );
-    } catch (error) {
-      // inlineRuntimeShell is on but the runtime bundle file could not
-      // be read — serve the thin postMessage shell instead.
+    if (runtimeBundleBytes !== undefined) {
+      inlineShellHtml = buildInlineRenderShellHtml(runtimeBundleBytes.toString("utf8"));
+    } else {
+      // inlineRuntimeShell is on but the runtime bundle could not be
+      // read at composition — serve the thin postMessage shell instead.
       logger.warn("mcp_apps_inline_shell_bundle_unreadable", {
         runtimeBundleFile,
-        error: error instanceof Error ? error.message : String(error),
       });
     }
   }
@@ -4642,7 +4697,15 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
   // `runtime.url`. The bootstrap still carries a `runtimeUrl` so
   // the shell knows where to look — just not our HTTP listener.
   if (runtimeEnabled) {
-    mountRuntimeBundleRoute({ app, runtimePath, runtimeBundleFile, logger });
+    mountRuntimeBundleRoute({
+      app,
+      runtimePath,
+      runtimeBundleFile,
+      logger,
+      ...(hashedRuntimePath !== undefined && runtimeBundleBytes !== undefined
+        ? { hashed: { path: hashedRuntimePath, source: runtimeBundleBytes } }
+        : {}),
+    });
   }
 
   // R6 /state snapshot + R7 /events cursor-replay reads — see

@@ -252,12 +252,12 @@ describe('GET /ggui/console/sessions/:sessionId/meta', () => {
     // through unchanged. Pin both the absolutised default + the suffix
     // so a regression of either invariant fails loudly.
     expect(renderSlice?.['runtimeUrl']).toMatch(
-      /^https?:\/\/.+\/_ggui\/iframe-runtime\.js$/,
+      /^https?:\/\/.+\/_ggui\/iframe-runtime\.[0-9a-f]{12}\.js$/,
     );
     expect(
-      (renderSlice?.['runtimeUrl'] as string).endsWith(
-        '/_ggui/iframe-runtime.js',
-      ),
+      (renderSlice?.['runtimeUrl'] as string).match(
+        /\/_ggui\/iframe-runtime\.[0-9a-f]{12}\.js$/,
+      ) !== null,
     ).toBe(true);
   });
 

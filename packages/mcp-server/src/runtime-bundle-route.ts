@@ -35,6 +35,21 @@ interface MountOptions {
   readonly runtimeBundleFile: string;
   /** Structured logger for the missing-bundle boot warning. */
   readonly logger: Logger;
+  /**
+   * Content-hashed twin of the mount — the LONG-CACHE production
+   * route. When present, `GET <path>` serves `source` with
+   * `Cache-Control: public, max-age=31536000, immutable`: the path
+   * embeds a hash of these exact bytes, so the response can never go
+   * stale under its own name, and a rebuild rolls clients over by
+   * changing the STAMPED URL rather than the cached content. Serving
+   * the captured bytes (not the file) is load-bearing for that
+   * guarantee — an in-place rebuild must not change what the old
+   * hash-name returns.
+   */
+  readonly hashed?: {
+    readonly path: string;
+    readonly source: Buffer;
+  };
 }
 
 /**
@@ -44,13 +59,29 @@ interface MountOptions {
  */
 export function mountRuntimeBundleRoute(opts: MountOptions): void {
   const { app, runtimePath, runtimeBundleFile, logger } = opts;
+  // Content-hashed long-cache route (#472) — registered ahead of the
+  // plain path so the two never shadow each other regardless of how a
+  // custom `runtimePath` glob might overlap.
+  if (opts.hashed !== undefined) {
+    const { path: hashedPath, source } = opts.hashed;
+    app.get(hashedPath, (_req, res) => {
+      res.setHeader("Content-Type", "application/javascript; charset=utf-8");
+      // Immutable: the path names these exact bytes (see MountOptions
+      // .hashed). One download per client, zero revalidations; deploys
+      // roll over via a new stamped URL.
+      res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+      // Same CORS rationale as the plain route below.
+      res.setHeader("Access-Control-Allow-Origin", "*");
+      res.send(source);
+    });
+  }
   if (existsSync(runtimeBundleFile)) {
     app.get(runtimePath, (_req, res) => {
       res.setHeader("Content-Type", "application/javascript; charset=utf-8");
-      // Short cache — operators iterating on the renderer want
-      // fresh copies after rebuild. Production hardening (etag,
-      // long-term caching with hashed filenames) is a follow-on
-      // concern; same posture console takes.
+      // Short cache — operators iterating on the renderer want fresh
+      // copies after rebuild. Production long-term caching lives on
+      // the hashed twin above; this name's content changes in place,
+      // so it must stay revalidated.
       res.setHeader("Cache-Control", "no-cache");
       // CORS: the bundle MUST be loadable from `<script type="module"
       // src=...>` inside a sandboxed `srcdoc` iframe (the
