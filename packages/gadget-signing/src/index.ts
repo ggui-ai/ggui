@@ -156,6 +156,19 @@ function bytesToBase64(bytes: Uint8Array): string {
   return btoa(binary);
 }
 
+/**
+ * base64url (RFC 4648 §5, unpadded) — the URL- and filename-safe
+ * alphabet. Used for identifiers that travel as URL path segments or
+ * become row-key/filename components ({@link derivePublicKeyId});
+ * signatures and digests stay standard base64 (JSON-body-only).
+ */
+function bytesToBase64Url(bytes: Uint8Array): string {
+  return bytesToBase64(bytes)
+    .replaceAll("+", "-")
+    .replaceAll("/", "_")
+    .replace(/=+$/, "");
+}
+
 function base64ToBytes(b64: string): Uint8Array {
   const binary = atob(b64);
   const out = new Uint8Array(binary.length);
@@ -212,8 +225,11 @@ function canonicalSort(value: unknown): unknown {
 
 /**
  * Derive a stable public-key identifier from a 32-byte Ed25519 public key.
- * `base64(sha256(publicKey))[:16]`. Used as the registry's stable handle
- * for a stored author public key.
+ * `base64url(sha256(publicKey))[:16]` — RFC 4648 §5 URL-safe alphabet
+ * (`-`/`_`, no padding), because keyIds travel as URL path segments
+ * (`DELETE /author-keys/{keyId}`) and as storage row-key components;
+ * standard base64 would put `/` in ~22% of ids. Used as the registry's
+ * stable handle for a stored author public key.
  */
 export function derivePublicKeyId(publicKey: Uint8Array): string {
   if (publicKey.length !== 32) {
@@ -222,7 +238,7 @@ export function derivePublicKeyId(publicKey: Uint8Array): string {
     );
   }
   const digest = sha256(publicKey);
-  return bytesToBase64(digest).slice(0, 16);
+  return bytesToBase64Url(digest).slice(0, 16);
 }
 
 /**

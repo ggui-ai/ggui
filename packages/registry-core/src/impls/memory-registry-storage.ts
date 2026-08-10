@@ -34,8 +34,11 @@ export function inMemoryRegistryStorage(): RegistryStorage {
 
   const versionKey = (artifactId: string, version: string): string =>
     `${artifactId}@${version}`;
+  // JSON tuple — unambiguous for ANY subject/keyId contents. Subjects
+  // are operator-defined free text, so a `${subject}/${keyId}` composite
+  // would make ('team', …) and ('team/alice', …) collide or leak.
   const authorKey = (subject: string, keyId: string): string =>
-    `${subject}/${keyId}`;
+    JSON.stringify([subject, keyId]);
 
   return {
     async getArtifactMetadata(artifactId) {
@@ -163,12 +166,18 @@ export function inMemoryRegistryStorage(): RegistryStorage {
       authorKeys.set(key, row);
     },
     async listAuthorKeys(subject) {
-      const prefix = `${subject}/`;
+      // Row-field filter, not key-prefix matching — the row's own
+      // `subject` is the only unambiguous ownership signal.
       const matches: AuthorKeyRow[] = [];
-      for (const [key, row] of authorKeys) {
-        if (key.startsWith(prefix)) matches.push(row);
+      for (const row of authorKeys.values()) {
+        if (row.subject === subject) matches.push(row);
       }
       return matches;
+    },
+    async deleteAuthorKey(subject, keyId) {
+      // Map#delete returns whether an entry existed — exactly the
+      // contract's `deleted` signal.
+      return authorKeys.delete(authorKey(subject, keyId));
     },
   };
 }

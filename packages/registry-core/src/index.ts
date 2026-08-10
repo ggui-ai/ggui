@@ -25,9 +25,18 @@ export {
   type ArtifactScanFilter,
   type ArtifactVersionRow,
   type ArtifactsMetadataRow,
+  type AuthorKeyListEntry,
   type AuthorKeyRow,
   type CompiledBlobRow,
+  DELETE_AUTHOR_KEY_ERROR_CODES,
+  type DeleteAuthorKeyErrorBody,
+  type DeleteAuthorKeyErrorCode,
+  type DeleteAuthorKeyResponseBody,
   type ErrorBody,
+  LIST_AUTHOR_KEYS_ERROR_CODES,
+  type ListAuthorKeysErrorBody,
+  type ListAuthorKeysErrorCode,
+  type ListAuthorKeysResponseBody,
   LIST_VERSIONS_ERROR_CODES,
   type ListVersionsErrorBody,
   type ListVersionsErrorCode,
@@ -51,6 +60,7 @@ export {
   type ScopeVerification,
   SEARCH_ERROR_CODES,
   SEARCH_SORT_OPTIONS,
+  unauthorizedErrorBody,
   type SearchErrorBody,
   type SearchErrorCode,
   type SearchResponse,
@@ -109,6 +119,17 @@ export {
   type RegisterAuthorKeyInput,
   type RegisterAuthorKeyResult,
 } from './ops/register-author-key.js';
+export {
+  listAuthorKeys,
+  type ListAuthorKeysDeps,
+  type ListAuthorKeysResult,
+} from './ops/list-author-keys.js';
+export {
+  deleteAuthorKey,
+  type DeleteAuthorKeyDeps,
+  type DeleteAuthorKeyInput,
+  type DeleteAuthorKeyResult,
+} from './ops/delete-author-key.js';
 
 // In-memory impls
 export { inMemoryRegistryStorage } from './impls/memory-registry-storage.js';

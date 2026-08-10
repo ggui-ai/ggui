@@ -64,16 +64,17 @@
  *   {@link registryStorageContract} suite against a fresh tmpdir per
  *   test. Plus path-traversal rejection tests local to this file.
  */
-import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, readdir, unlink, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
-import type {
-  AuthorKeyRow,
-  ArtifactScanFilter,
-  ArtifactVersionRow,
-  ArtifactsMetadataRow,
-  CompiledBlobRow,
-  RegistryStorage,
-  ScopeOwnerRow,
+import {
+  AuthorKeyAlreadyExistsError,
+  type AuthorKeyRow,
+  type ArtifactScanFilter,
+  type ArtifactVersionRow,
+  type ArtifactsMetadataRow,
+  type CompiledBlobRow,
+  type RegistryStorage,
+  type ScopeOwnerRow,
 } from '@ggui-ai/registry-core';
 
 const DEFAULT_LIMIT = 50;
@@ -121,7 +122,13 @@ export function createFilesystemRegistryStorage(
   };
 
   const authorKeyPath = (subject: string, keyId: string): string => {
-    rejectTraversal(subject, 'subject');
+    // NO rejectTraversal on `subject`: subjects are operator-defined
+    // free text (a '/' is legal), and `encodeRowKey` neutralizes every
+    // traversal-capable character ('/' → %2F) before the value ever
+    // becomes a filename component — the appended `__<keyId>.json`
+    // suffix additionally guarantees the segment can never be a bare
+    // '..'. keyIds keep the guard as defense-in-depth (base64url by
+    // derivation — '.', '/', '\\' are unrepresentable).
     rejectTraversal(keyId, 'keyId');
     return join(
       authorKeysDir,
@@ -323,11 +330,33 @@ export function createFilesystemRegistryStorage(
     async getAuthorKey(subject, keyId) {
       return readJsonOrNull<AuthorKeyRow>(authorKeyPath(subject, keyId));
     },
-    async putAuthorKey(row) {
+    async putAuthorKey(row, options) {
       await ensureDir(authorKeysDir);
-      await writeJson(authorKeyPath(row.subject, row.keyId), row);
+      const path = authorKeyPath(row.subject, row.keyId);
+      if (options?.ifNotExists === true) {
+        // O_EXCL conditional create — same `wx` primitive as
+        // putArtifactVersionIfAbsent/claimScope. EEXIST maps to the
+        // typed conflict the register op's TOCTOU close dispatches on.
+        try {
+          await writeFile(path, JSON.stringify(row, null, 2), {
+            flag: 'wx',
+            encoding: 'utf8',
+          });
+          return;
+        } catch (err) {
+          if (isErrnoException(err) && err.code === 'EEXIST') {
+            throw new AuthorKeyAlreadyExistsError(row.subject, row.keyId);
+          }
+          throw err;
+        }
+      }
+      await writeJson(path, row);
     },
     async listAuthorKeys(subject) {
+      // Filename-prefix candidate scan, then a row-field filter — the
+      // row's own `subject` is the unambiguous ownership signal
+      // (encodeRowKey leaves '_' unescaped, so a prefix alone could
+      // cross-match subjects containing '__').
       const prefix = `${encodeRowKey(subject)}__`;
       let entries: string[];
       try {
@@ -340,9 +369,21 @@ export function createFilesystemRegistryStorage(
       for (const entry of entries) {
         if (!entry.startsWith(prefix) || !entry.endsWith('.json')) continue;
         const row = await readJsonOrNull<AuthorKeyRow>(join(authorKeysDir, entry));
-        if (row !== null) matches.push(row);
+        if (row !== null && row.subject === subject) matches.push(row);
       }
       return matches;
+    },
+    async deleteAuthorKey(subject, keyId) {
+      // ENOENT is the "row absent" signal (mirrors reads), mapped to
+      // the contract's `false`; anything else is a transport failure
+      // and throws.
+      try {
+        await unlink(authorKeyPath(subject, keyId));
+        return true;
+      } catch (err) {
+        if (isErrnoException(err) && err.code === 'ENOENT') return false;
+        throw err;
+      }
     },
   };
 }

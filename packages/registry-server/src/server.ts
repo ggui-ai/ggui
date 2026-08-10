@@ -6,6 +6,9 @@
  *   GET  /search                           → searchArtifacts
  *   GET  /pkg/:scope/:name/:version        → readArtifact
  *   POST /publish                          → publishArtifact (bearer-gated)
+ *   POST /author-keys                      → registerAuthorKey (bearer-gated)
+ *   GET  /author-keys                      → listAuthorKeys (bearer-gated)
+ *   DELETE /author-keys/:keyId             → deleteAuthorKey (bearer-gated)
  *   POST /conformance/check                → checkConformance (pre-flight gate)
  *   GET  /bundles/:scope/:name/:version/bundle.js
  *   GET  /bundles/:scope/:name/:version/bundle.js.sig
@@ -27,7 +30,10 @@ import { Hono } from 'hono';
 import type { Context } from 'hono';
 import {
   checkConformance,
+  deleteAuthorKey,
+  unauthorizedErrorBody,
   listArtifactVersions,
+  listAuthorKeys,
   publishArtifact,
   registerAuthorKey,
   type BlueprintProbeRunner,
@@ -73,18 +79,26 @@ export function createRegistryApp(options: RegistryAppOptions): Hono {
 
   const app = new Hono();
 
+  // Shared bearer gate for every authed route — ONE verification call
+  // shape, ONE 401 body (`unauthorizedErrorBody`, exported beside the
+  // registry-core error enums so every transport of this wire contract
+  // agrees).
+  const verifyBearer = (c: Context) => authn.verify(c.req.header('authorization'));
+
   // CORS — permissive read; strict for /publish. Adds ACAO headers
   // AFTER the route runs so they overlay on the route's response.
   app.use('*', async (c, next) => {
     const path = c.req.path;
     const isPublishRoute = path === '/publish';
     if (c.req.method === 'OPTIONS' && !isPublishRoute) {
-      // Preflight short-circuit for read routes.
+      // Preflight short-circuit for read routes. DELETE is listed for
+      // the author-key management route — a browser console revokes
+      // keys cross-origin ([E]).
       return new Response(null, {
         status: 204,
         headers: {
           'Access-Control-Allow-Origin': '*',
-          'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+          'Access-Control-Allow-Methods': 'GET, POST, DELETE, OPTIONS',
           'Access-Control-Allow-Headers': 'content-type, authorization',
         },
       });
@@ -92,7 +106,7 @@ export function createRegistryApp(options: RegistryAppOptions): Hono {
     await next();
     if (!isPublishRoute) {
       c.res.headers.set('Access-Control-Allow-Origin', '*');
-      c.res.headers.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+      c.res.headers.set('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
       c.res.headers.set('Access-Control-Allow-Headers', 'content-type, authorization');
     }
   });
@@ -192,16 +206,9 @@ export function createRegistryApp(options: RegistryAppOptions): Hono {
       // ACAO header, which is the protection we want.
     }
 
-    const authHeader = c.req.header('authorization');
-    const verified = authn.verify(authHeader);
+    const verified = verifyBearer(c);
     if (verified === null) {
-      return c.json(
-        {
-          error: 'unauthorized',
-          message: 'publish requires a valid bearer token in the Authorization header',
-        },
-        401,
-      );
+      return c.json(unauthorizedErrorBody(), 401);
     }
 
     let body: PublishRequestBody;
@@ -239,17 +246,9 @@ export function createRegistryApp(options: RegistryAppOptions): Hono {
   // bearer-authenticated subject's identity. Shares one wire contract
   // with the hosted registry's author-keys endpoint.
   app.post('/author-keys', async (c) => {
-    const authHeader = c.req.header('authorization');
-    const verified = authn.verify(authHeader);
+    const verified = verifyBearer(c);
     if (verified === null) {
-      return c.json(
-        {
-          error: 'unauthorized',
-          message:
-            'author-keys requires a valid bearer token in the Authorization header',
-        },
-        401,
-      );
+      return c.json(unauthorizedErrorBody(), 401);
     }
 
     let rawBody: unknown;
@@ -285,11 +284,42 @@ export function createRegistryApp(options: RegistryAppOptions): Hono {
         400,
       );
     }
-
     const result = await registerAuthorKey(
-      { publicKeyBase64: body.publicKeyBase64 },
-      { storage, authn: verified },
+      {
+        publicKeyBase64: body.publicKeyBase64,
+        ...(body.label !== undefined ? { label: body.label } : {}),
+      },
+      { storage, authn: verified, clock },
     );
+    return c.json(result.body, result.status);
+  });
+
+  // ── GET /author-keys ─────────────────────────────────────────────────
+  // Lists the bearer-authenticated subject's registered signing keys.
+  // Bearer REQUIRED: "my keys" has no anonymous projection, so a
+  // missing/invalid token is a 401 — never an empty anonymous list.
+  app.get('/author-keys', async (c) => {
+    const verified = verifyBearer(c);
+    if (verified === null) {
+      return c.json(unauthorizedErrorBody(), 401);
+    }
+    const result = await listAuthorKeys({ storage, authn: verified });
+    return c.json(result.body, result.status);
+  });
+
+  // ── DELETE /author-keys/:keyId ───────────────────────────────────────
+  // Hard-deletes the caller's `(subject, keyId)` row. Idempotent
+  // (absent → 200 `deleted: false`) and subject-scoped — see the op's
+  // docstring. Bearer REQUIRED, same as the list route. keyIds are
+  // base64url (`derivePublicKeyId`) — URL-safe by construction, the
+  // path param is the keyId verbatim.
+  app.delete('/author-keys/:keyId', async (c) => {
+    const verified = verifyBearer(c);
+    if (verified === null) {
+      return c.json(unauthorizedErrorBody(), 401);
+    }
+    const { keyId } = c.req.param();
+    const result = await deleteAuthorKey({ keyId }, { storage, authn: verified });
     return c.json(result.body, result.status);
   });
 

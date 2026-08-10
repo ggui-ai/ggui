@@ -91,6 +91,102 @@ describe('registerAuthorKey', () => {
     expect(row?.publicKeyBase64).toBe(publicKeyBase64);
   });
 
+  it('stamps createdAt from the injected clock + persists/echoes the label ([E] enrichment)', async () => {
+    const storage = inMemoryRegistryStorage();
+    const { publicKeyBase64 } = await makeKeyBase64();
+    const result = await registerAuthorKey(
+      { publicKeyBase64, label: 'ci laptop' },
+      {
+        storage,
+        authn: AUTHN,
+        clock: () => new Date('2026-08-10T12:00:00.000Z'),
+      },
+    );
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.status).toBe(201);
+    expect(result.body.createdAt).toBe('2026-08-10T12:00:00.000Z');
+    expect(result.body.label).toBe('ci laptop');
+
+    const row = await storage.getAuthorKey(AUTHN.subject, result.body.keyId);
+    expect(row?.createdAt).toBe('2026-08-10T12:00:00.000Z');
+    expect(row?.label).toBe('ci laptop');
+  });
+
+  it('omits label from the row when not supplied; createdAt is always stamped', async () => {
+    const storage = inMemoryRegistryStorage();
+    const { publicKeyBase64 } = await makeKeyBase64();
+    const result = await registerAuthorKey(
+      { publicKeyBase64 },
+      { storage, authn: AUTHN },
+    );
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const row = await storage.getAuthorKey(AUTHN.subject, result.body.keyId);
+    expect(typeof row?.createdAt).toBe('string');
+    expect(row?.label).toBeUndefined();
+    expect(result.body.label).toBeUndefined();
+  });
+
+  it('treats a whitespace-only label as absent', async () => {
+    const storage = inMemoryRegistryStorage();
+    const { publicKeyBase64 } = await makeKeyBase64();
+    const result = await registerAuthorKey(
+      { publicKeyBase64, label: '   ' },
+      { storage, authn: AUTHN },
+    );
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const row = await storage.getAuthorKey(AUTHN.subject, result.body.keyId);
+    expect(row?.label).toBeUndefined();
+  });
+
+  it('rejects an over-long label with 400 invalid_request', async () => {
+    const storage = inMemoryRegistryStorage();
+    const { publicKeyBase64 } = await makeKeyBase64();
+    const result = await registerAuthorKey(
+      { publicKeyBase64, label: 'x'.repeat(101) },
+      { storage, authn: AUTHN },
+    );
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.status).toBe(400);
+    expect(result.body.error).toBe('invalid_request');
+  });
+
+  it('idempotent re-register echoes the EXISTING row untouched (createdAt + label survive)', async () => {
+    const storage = inMemoryRegistryStorage();
+    const { publicKeyBase64 } = await makeKeyBase64();
+    const first = await registerAuthorKey(
+      { publicKeyBase64, label: 'original label' },
+      {
+        storage,
+        authn: AUTHN,
+        clock: () => new Date('2026-08-01T00:00:00.000Z'),
+      },
+    );
+    expect(first.ok).toBe(true);
+    if (!first.ok) return;
+
+    const second = await registerAuthorKey(
+      { publicKeyBase64, label: 'a different label' },
+      {
+        storage,
+        authn: AUTHN,
+        clock: () => new Date('2026-08-10T00:00:00.000Z'),
+      },
+    );
+    expect(second.ok).toBe(true);
+    if (!second.ok) return;
+    expect(second.status).toBe(200);
+    expect(second.body.createdAt).toBe('2026-08-01T00:00:00.000Z');
+    expect(second.body.label).toBe('original label');
+
+    const row = await storage.getAuthorKey(AUTHN.subject, first.body.keyId);
+    expect(row?.createdAt).toBe('2026-08-01T00:00:00.000Z');
+    expect(row?.label).toBe('original label');
+  });
+
   it('is idempotent on same-publicKey re-register → 200', async () => {
     const storage = inMemoryRegistryStorage();
     const { publicKeyBase64 } = await makeKeyBase64();

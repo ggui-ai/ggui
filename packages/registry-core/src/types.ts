@@ -190,11 +190,23 @@ export interface CompiledBlobRow {
  * Author signing-key row. One per `(subject, keyId)` pair. The key is
  * stored base64 — verification re-decodes + invokes
  * {@link verifyBundleEd25519}.
+ *
+ * `createdAt` + `label` ([E], 2026-08-10) are display enrichment for
+ * key-management surfaces (the list endpoint and whatever UI a
+ * deployment builds on it). Both are
+ * optional: rows written before the enrichment carry neither, and
+ * consumers MUST render the absence honestly (an em dash, not a
+ * fabricated date). `createdAt` is stamped by {@link registerAuthorKey}
+ * on first write; `label` is caller-supplied free text.
  */
 export interface AuthorKeyRow {
   readonly subject: string;
   readonly keyId: string;
   readonly publicKeyBase64: string;
+  /** ISO timestamp stamped by the register op on first write. */
+  readonly createdAt?: string;
+  /** Optional human-readable name (`ggui keys register --label …`). */
+  readonly label?: string;
 }
 
 /**
@@ -469,17 +481,24 @@ export type RegisterAuthorKeyErrorCode =
  */
 export interface RegisterAuthorKeyRequestBody {
   readonly publicKeyBase64: string;
+  /** Optional human-readable name for the key (`--label`). */
+  readonly label?: string;
 }
 
 /**
  * `POST /author-keys` 200/201 response. Echoes the stored row so the
  * CLI can confirm the (subject, keyId) tuple the registry now knows.
- * 201 on first-write; 200 on idempotent re-register of the same row.
+ * 201 on first-write; 200 on idempotent re-register of the same row —
+ * in which case `createdAt`/`label` are the EXISTING row's values (a
+ * retry never rewrites them), and both are absent for rows written
+ * before the display enrichment.
  */
 export interface RegisterAuthorKeyResponseBody {
   readonly subject: string;
   readonly keyId: string;
   readonly publicKeyBase64: string;
+  readonly createdAt?: string;
+  readonly label?: string;
 }
 
 /**
@@ -490,6 +509,112 @@ export interface RegisterAuthorKeyErrorBody {
   readonly error: RegisterAuthorKeyErrorCode;
   readonly message: string;
   readonly detail?: unknown;
+}
+
+/**
+ * Closed enum for `GET /author-keys` list responses.
+ *
+ *   - `unauthorized` — missing or invalid caller credentials (the
+ *                      route requires a verified bearer identity;
+ *                      there is no anonymous view of "my keys").
+ *   - `server_error` — unexpected adapter failure.
+ */
+export const LIST_AUTHOR_KEYS_ERROR_CODES = [
+  'unauthorized',
+  'server_error',
+] as const;
+export type ListAuthorKeysErrorCode =
+  (typeof LIST_AUTHOR_KEYS_ERROR_CODES)[number];
+
+/**
+ * One key in the `GET /author-keys` 200 response. The caller's subject
+ * is hoisted to the body root ({@link ListAuthorKeysResponseBody}) so
+ * entries carry only per-key fields. `createdAt` / `label` are absent
+ * on rows registered before the display enrichment — consumers render
+ * the absence honestly.
+ */
+export interface AuthorKeyListEntry {
+  readonly keyId: string;
+  readonly publicKeyBase64: string;
+  readonly createdAt?: string;
+  readonly label?: string;
+}
+
+/**
+ * `GET /author-keys` 200 response — every signing key registered under
+ * the verified caller identity, newest first (`createdAt` DESC, rows
+ * without `createdAt` last, `keyId` tie-break).
+ */
+export interface ListAuthorKeysResponseBody {
+  readonly subject: string;
+  readonly keys: readonly AuthorKeyListEntry[];
+}
+
+/**
+ * `GET /author-keys` error body. `error` narrowed to
+ * {@link ListAuthorKeysErrorCode}.
+ */
+export interface ListAuthorKeysErrorBody {
+  readonly error: ListAuthorKeysErrorCode;
+  readonly message: string;
+  readonly detail?: unknown;
+}
+
+/**
+ * Closed enum for `DELETE /author-keys/{keyId}` responses.
+ *
+ *   - `unauthorized`    — missing or invalid caller credentials.
+ *   - `invalid_request` — missing/empty `keyId` path segment.
+ *   - `server_error`    — unexpected adapter failure.
+ */
+export const DELETE_AUTHOR_KEY_ERROR_CODES = [
+  'unauthorized',
+  'invalid_request',
+  'server_error',
+] as const;
+export type DeleteAuthorKeyErrorCode =
+  (typeof DELETE_AUTHOR_KEY_ERROR_CODES)[number];
+
+/**
+ * `DELETE /author-keys/{keyId}` 200 response. The delete is idempotent:
+ * `deleted: true` when a row existed and was removed, `deleted: false`
+ * when nothing existed under the caller's identity — including when the
+ * keyId belongs to a DIFFERENT subject, so key existence never leaks
+ * across accounts. Removal blocks FUTURE publishes signed with the key;
+ * versions already published stay valid (their signing key is pinned
+ * per version at publish time).
+ */
+export interface DeleteAuthorKeyResponseBody {
+  readonly keyId: string;
+  readonly deleted: boolean;
+}
+
+/**
+ * `DELETE /author-keys/{keyId}` error body. `error` narrowed to
+ * {@link DeleteAuthorKeyErrorCode}.
+ */
+export interface DeleteAuthorKeyErrorBody {
+  readonly error: DeleteAuthorKeyErrorCode;
+  readonly message: string;
+  readonly detail?: unknown;
+}
+
+/**
+ * THE 401 body for bearer-required registry routes — one constructor,
+ * exported beside the error-code enums, so every transport of this
+ * wire contract emits an identical unauthorized shape. Deliberately
+ * reason-agnostic: missing vs invalid credentials are distinguished in
+ * code paths and logs, never on the wire (less oracle surface).
+ */
+export function unauthorizedErrorBody(): {
+  readonly error: 'unauthorized';
+  readonly message: string;
+} {
+  return {
+    error: 'unauthorized',
+    message:
+      'a valid bearer credential is required in the Authorization header — missing or invalid token',
+  };
 }
 
 /**

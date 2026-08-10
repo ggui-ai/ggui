@@ -51,6 +51,14 @@ export type RegisterKeyOutcome =
       readonly registryUrl: string;
       readonly subject: string;
       readonly keyId: string;
+      /**
+       * The STORED row's enrichment fields as echoed by the registry.
+       * On an idempotent 200 these are the existing row's values — a
+       * `label` differing from the flag means the registry kept the
+       * stored one (the output layer prints the kept-label notice).
+       */
+      readonly createdAt?: string;
+      readonly label?: string;
     }
   | {
       readonly ok: false;
@@ -72,6 +80,8 @@ export type RegisterKeyOutcome =
 export interface RunRegisterKeyFlags {
   readonly scope: string;
   readonly registry?: string;
+  /** Optional display name stored on the registered key ([E]). */
+  readonly label?: string;
   /** Auth strategy + bearer token. `undefined` → the stored `ggui
    *  login` session; `{ auth: 'bearer', token? }` → explicit bearer
    *  (self-hosted registries), token from the flag or
@@ -203,7 +213,10 @@ export async function runRegisterAuthorKey(
         'content-type': 'application/json',
         authorization: `Bearer ${accessToken}`,
       },
-      body: JSON.stringify({ publicKeyBase64 }),
+      body: JSON.stringify({
+        publicKeyBase64,
+        ...(flags.label !== undefined ? { label: flags.label } : {}),
+      }),
     });
   } catch (err) {
     return {
@@ -235,6 +248,8 @@ export async function runRegisterAuthorKey(
     const okBody = body as {
       subject?: unknown;
       keyId?: unknown;
+      createdAt?: unknown;
+      label?: unknown;
     };
     if (typeof okBody.subject !== 'string' || typeof okBody.keyId !== 'string') {
       return {
@@ -249,6 +264,10 @@ export async function runRegisterAuthorKey(
       registryUrl: resolved.url,
       subject: okBody.subject,
       keyId: okBody.keyId,
+      ...(typeof okBody.createdAt === 'string'
+        ? { createdAt: okBody.createdAt }
+        : {}),
+      ...(typeof okBody.label === 'string' ? { label: okBody.label } : {}),
     };
   }
 

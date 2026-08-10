@@ -66,6 +66,19 @@ describe("derivePublicKeyId", () => {
     expect(derivePublicKeyId(kp.publicKey)).toBe(derivePublicKeyId(kp.publicKey));
   });
 
+  it("emits base64url ids — URL-safe alphabet, never + / = ([E] structural ruling)", () => {
+    // keyIds travel as URL path segments (DELETE /author-keys/{keyId})
+    // and as filesystem row-key components. Standard base64 puts '/'
+    // in ~22% of ids, which breaks both. 64 deterministic inputs make
+    // an accidental all-clean pass under a standard-base64 impl
+    // vanishingly unlikely (~1e-14) while the base64url alphabet is
+    // guaranteed by construction.
+    for (let i = 0; i < 64; i++) {
+      const publicKey = new Uint8Array(32).fill(i);
+      expect(derivePublicKeyId(publicKey)).toMatch(/^[A-Za-z0-9_-]{16}$/);
+    }
+  });
+
   it("rejects non-32-byte input", () => {
     expect(() => derivePublicKeyId(bytes(1, 2, 3))).toThrow(/32-byte/);
   });

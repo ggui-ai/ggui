@@ -16,7 +16,10 @@
  * tests rely on isolation between cases.
  */
 import { describe, expect, it } from 'vitest';
-import type { RegistryStorage } from '../interfaces/registry-storage.js';
+import {
+  AuthorKeyAlreadyExistsError,
+  type RegistryStorage,
+} from '../interfaces/registry-storage.js';
 import type {
   AuthorKeyRow,
   ArtifactVersionRow,
@@ -119,6 +122,10 @@ function makeAuthorKey(overrides: Partial<AuthorKeyRow> = {}): AuthorKeyRow {
     subject: 'user-1',
     keyId: 'key-1',
     publicKeyBase64: 'BBBB',
+    // Row enrichment ([E], 2026-08-10) — the round-trip case carries
+    // BOTH optional fields so every impl proves it persists them.
+    createdAt: '2026-08-10T00:00:00.000Z',
+    label: 'ci laptop',
     ...overrides,
   };
 }
@@ -710,6 +717,112 @@ export function registryStorageContract(makeStorage: () => RegistryStorage): voi
         await storage.putAuthorKey(makeAuthorKey({ subject: 'bob', keyId: 'k1' }));
         const aliceKeys = await storage.listAuthorKeys('alice');
         expect(aliceKeys.map((k) => k.keyId).sort()).toEqual(['k1', 'k2']);
+      });
+
+      it('round-trips a legacy row without enrichment fields', async () => {
+        // Rows written before the [E] enrichment carry neither
+        // createdAt nor label — impls MUST NOT fabricate either.
+        const storage = makeStorage();
+        const row: AuthorKeyRow = {
+          subject: 'legacy-subject',
+          keyId: 'legacy-key',
+          publicKeyBase64: 'CCCC',
+        };
+        await storage.putAuthorKey(row);
+        const fetched = await storage.getAuthorKey('legacy-subject', 'legacy-key');
+        expect(fetched).toEqual(row);
+        expect(fetched?.createdAt).toBeUndefined();
+        expect(fetched?.label).toBeUndefined();
+      });
+
+      it('round-trips base64url-alphabet keyIds (- and _)', async () => {
+        // derivePublicKeyId emits RFC 4648 §5 base64url — the '-'/'_'
+        // characters are representative of the real id alphabet and
+        // MUST survive every impl's row-key encoding.
+        const storage = makeStorage();
+        const row = makeAuthorKey({ keyId: 'aB-cD_eF-gH_iJ-k' });
+        await storage.putAuthorKey(row);
+        expect(await storage.getAuthorKey(row.subject, row.keyId)).toEqual(row);
+        const listed = await storage.listAuthorKeys(row.subject);
+        expect(listed.map((k) => k.keyId)).toContain('aB-cD_eF-gH_iJ-k');
+        expect(await storage.deleteAuthorKey(row.subject, row.keyId)).toBe(true);
+        expect(await storage.getAuthorKey(row.subject, row.keyId)).toBe(null);
+      });
+
+      it("isolates subjects containing '/' — composite-key encodings must be unambiguous", async () => {
+        // Subjects are operator-defined free text; a naive
+        // `${subject}/${keyId}` composite (or a raw path component)
+        // makes 'team' and 'team/alice' collide or leak.
+        const storage = makeStorage();
+        await storage.putAuthorKey(
+          makeAuthorKey({ subject: 'team/alice', keyId: 'k1' }),
+        );
+        await storage.putAuthorKey(makeAuthorKey({ subject: 'team', keyId: 'k2' }));
+
+        const teamKeys = await storage.listAuthorKeys('team');
+        expect(teamKeys.map((k) => k.keyId)).toEqual(['k2']);
+        const nestedKeys = await storage.listAuthorKeys('team/alice');
+        expect(nestedKeys.map((k) => k.keyId)).toEqual(['k1']);
+
+        // Delete under 'team' must not touch team/alice's row.
+        expect(await storage.deleteAuthorKey('team', 'k1')).toBe(false);
+        expect(await storage.getAuthorKey('team/alice', 'k1')).not.toBe(null);
+      });
+
+      it('putAuthorKey with ifNotExists rejects an existing row with AuthorKeyAlreadyExistsError', async () => {
+        // The register op's TOCTOU close relies on this conditional
+        // rejecting — an impl that silently upserts turns idempotent
+        // re-registers into false 201s.
+        const storage = makeStorage();
+        const row = makeAuthorKey();
+        await storage.putAuthorKey(row, { ifNotExists: true });
+        await expect(
+          storage.putAuthorKey(
+            makeAuthorKey({ publicKeyBase64: 'ZZZZ' }),
+            { ifNotExists: true },
+          ),
+        ).rejects.toThrow(AuthorKeyAlreadyExistsError);
+        // The stored row is untouched by the rejected write.
+        expect(await storage.getAuthorKey(row.subject, row.keyId)).toEqual(row);
+      });
+
+      it('putAuthorKey without options is an unconditional upsert', async () => {
+        const storage = makeStorage();
+        await storage.putAuthorKey(makeAuthorKey({ label: 'first' }));
+        await storage.putAuthorKey(makeAuthorKey({ label: 'second' }));
+        const row = await storage.getAuthorKey('user-1', 'key-1');
+        expect(row?.label).toBe('second');
+      });
+
+      it('deletes an existing author key and reports deleted: true', async () => {
+        const storage = makeStorage();
+        const row = makeAuthorKey();
+        await storage.putAuthorKey(row);
+        expect(await storage.deleteAuthorKey(row.subject, row.keyId)).toBe(true);
+        expect(await storage.getAuthorKey(row.subject, row.keyId)).toBe(null);
+        expect(await storage.listAuthorKeys(row.subject)).toEqual([]);
+      });
+
+      it('delete of an absent key reports deleted: false (idempotent)', async () => {
+        const storage = makeStorage();
+        expect(await storage.deleteAuthorKey('nobody', 'nope')).toBe(false);
+        // Second delete of a just-deleted row is the same absent case.
+        const row = makeAuthorKey();
+        await storage.putAuthorKey(row);
+        await storage.deleteAuthorKey(row.subject, row.keyId);
+        expect(await storage.deleteAuthorKey(row.subject, row.keyId)).toBe(false);
+      });
+
+      it('delete is isolated per subject — another subject\'s same keyId survives', async () => {
+        const storage = makeStorage();
+        await storage.putAuthorKey(makeAuthorKey({ subject: 'alice', keyId: 'k1' }));
+        await storage.putAuthorKey(makeAuthorKey({ subject: 'bob', keyId: 'k1' }));
+        // Deleting under a subject that has no such key touches nothing.
+        expect(await storage.deleteAuthorKey('charlie', 'k1')).toBe(false);
+        // Alice's delete removes ONLY alice's row.
+        expect(await storage.deleteAuthorKey('alice', 'k1')).toBe(true);
+        expect(await storage.getAuthorKey('alice', 'k1')).toBe(null);
+        expect(await storage.getAuthorKey('bob', 'k1')).not.toBe(null);
       });
     });
   });

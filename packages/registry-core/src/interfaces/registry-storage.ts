@@ -65,6 +65,7 @@
  *   round-trip preservation, idempotent {@link putArtifactMetadata},
  *   `putArtifactVersionIfAbsent` rejects on collision, missing returns
  *   null, `listAuthorKeys` returns only keys for the queried subject,
+ *   `deleteAuthorKey` true/false idempotency + per-subject isolation,
  *   and `order: 'recent'` newest-first ordering (single page + across
  *   the cursor chain).
  */
@@ -318,4 +319,18 @@ export interface RegistryStorage {
     options?: PutAuthorKeyOptions,
   ): Promise<void>;
   listAuthorKeys(subject: string): Promise<readonly AuthorKeyRow[]>;
+  /**
+   * Hard-delete the row for `(subject, keyId)`. Returns `true` when a
+   * row existed and was removed, `false` when no row existed — the
+   * caller-visible idempotency signal for the delete op's
+   * `deleted: false` response. Implementations MUST NOT throw on the
+   * absent case; transport failures still throw.
+   *
+   * Hard delete is the registry's established author-key removal
+   * semantic: the durable audit trail is the public key pinned per
+   * published version (`ArtifactVersionRow.authorPublicKey` +
+   * `publishedBy`), which this delete never touches — removal only
+   * blocks FUTURE publishes signed with the key.
+   */
+  deleteAuthorKey(subject: string, keyId: string): Promise<boolean>;
 }

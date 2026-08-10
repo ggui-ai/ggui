@@ -28,7 +28,7 @@ Usage:
   ggui keys list                          [--keys-file <path>]
   ggui keys create  [--name <label>] [--expires-at <iso8601>] [--keys-file <path>]
   ggui keys revoke  <id>                  [--keys-file <path>]
-  ggui keys register --scope <@scope>    [--registry <url>] [--auth=bearer [--token <token>]]
+  ggui keys register --scope <@scope>    [--label <name>] [--registry <url>] [--auth=bearer [--token <token>]]
 
 list      Print the caller's keys (id, prefix, name, status, dates).
 create    Mint a new connector key. The full secret is printed ONCE — copy it.
@@ -39,6 +39,8 @@ register  Register a per-scope Ed25519 PUBLISHER key with the marketplace
           auto-generated on first publish under
           ~/.ggui/keys/<scope>/{private,public}.key — this verb ships
           the public half to the registry's POST /author-keys.
+          --label attaches a display name shown by the registry's key
+          management surfaces (e.g. "ci laptop").
 
 register-only ${AUTH_HELP_FRAGMENT}
 
@@ -327,6 +329,8 @@ function printApiError(label: string, err: unknown): number {
 export interface RegisterFlags {
   readonly scope?: string;
   readonly registry?: string;
+  /** Optional display name stored on the registered key ([E]). */
+  readonly label?: string;
   readonly help: boolean;
   readonly error?: string;
 }
@@ -334,6 +338,7 @@ export interface RegisterFlags {
 export function parseRegisterFlags(args: readonly string[]): RegisterFlags {
   let scope: string | undefined;
   let registry: string | undefined;
+  let label: string | undefined;
   let help = false;
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
@@ -367,12 +372,39 @@ export function parseRegisterFlags(args: readonly string[]): RegisterFlags {
       registry = arg.slice('--registry='.length);
       continue;
     }
+    if (arg === '--label') {
+      const value = args[i + 1];
+      if (typeof value !== 'string' || value.trim().length === 0) {
+        return {
+          help,
+          error: '--label requires a non-empty value (e.g. `ci laptop`)',
+        };
+      }
+      label = value;
+      i += 1;
+      continue;
+    }
+    if (arg && arg.startsWith('--label=')) {
+      // Same rule as the space form — an explicit empty (`--label=`)
+      // or whitespace-only value is a usage error, never a silent
+      // no-label register.
+      const value = arg.slice('--label='.length);
+      if (value.trim().length === 0) {
+        return {
+          help,
+          error: '--label requires a non-empty value (e.g. `ci laptop`)',
+        };
+      }
+      label = value;
+      continue;
+    }
     return { help, error: `unknown flag: ${arg}` };
   }
   return {
     help,
     ...(scope !== undefined ? { scope } : {}),
     ...(registry !== undefined ? { registry } : {}),
+    ...(label !== undefined ? { label } : {}),
   };
 }
 
@@ -412,6 +444,7 @@ async function runKeysRegister(args: readonly string[]): Promise<number> {
     {
       scope: flags.scope,
       ...(flags.registry !== undefined ? { registry: flags.registry } : {}),
+      ...(flags.label !== undefined ? { label: flags.label } : {}),
       ...(authFlags.auth !== undefined || authFlags.token !== undefined
         ? { auth: authFlags }
         : {}),
@@ -435,8 +468,19 @@ async function runKeysRegister(args: readonly string[]): Promise<number> {
       `${verb} publisher key for ${flags.scope}.\n` +
         `  registry: ${outcome.registryUrl}\n` +
         `  subject:  ${outcome.subject}\n` +
-        `  keyId:    ${outcome.keyId}\n`,
+        `  keyId:    ${outcome.keyId}\n` +
+        (outcome.label !== undefined ? `  label:    ${outcome.label}\n` : ''),
     );
+    // Idempotent re-register keeps the STORED label — say so when the
+    // caller asked for a different one, so a silent "why didn't my
+    // label change" mystery never happens.
+    if (flags.label !== undefined && outcome.label !== flags.label) {
+      process.stdout.write(
+        `  note: the registry kept the key's existing label` +
+          `${outcome.label !== undefined ? ` ("${outcome.label}")` : ''} — ` +
+          `re-registering never rewrites it.\n`,
+      );
+    }
     return 0;
   }
   process.stderr.write(`ggui keys register: ${outcome.code}: ${outcome.message}\n`);

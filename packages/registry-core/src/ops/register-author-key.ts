@@ -52,11 +52,22 @@ import type {
 
 export interface RegisterAuthorKeyInput {
   readonly publicKeyBase64: string;
+  /**
+   * Optional human-readable name for the key ([E] enrichment) —
+   * `ggui keys register --label …`. Trimmed; whitespace-only is
+   * treated as absent; longer than {@link MAX_LABEL_LENGTH} is a 400.
+   */
+  readonly label?: string;
 }
 
 export interface RegisterAuthorKeyDeps {
   readonly storage: RegistryStorage;
   readonly authn: AuthnContext;
+  /**
+   * Wall-clock provider for the row's `createdAt` stamp —
+   * overridable for deterministic tests. Defaults to `new Date()`.
+   */
+  readonly clock?: () => Date;
 }
 
 export type RegisterAuthorKeyResult =
@@ -72,6 +83,9 @@ export type RegisterAuthorKeyResult =
     };
 
 const ED25519_PUBLIC_KEY_BYTES = 32;
+
+/** Display-name budget — a label is a short human hint, not a document. */
+export const MAX_LABEL_LENGTH = 100;
 
 export async function registerAuthorKey(
   input: RegisterAuthorKeyInput,
@@ -113,12 +127,44 @@ export async function registerAuthorKey(
     };
   }
 
+  // Label ([E] enrichment) — defend with a typeof check even though the
+  // input type says string (transports hand over parsed JSON); trim;
+  // whitespace-only collapses to absent.
+  if (input.label !== undefined && typeof input.label !== 'string') {
+    return {
+      ok: false,
+      status: 400,
+      body: {
+        error: 'invalid_request',
+        message: '`label` must be a string',
+      },
+    };
+  }
+  const trimmedLabel = input.label?.trim();
+  const label =
+    trimmedLabel !== undefined && trimmedLabel.length > 0
+      ? trimmedLabel
+      : undefined;
+  if (label !== undefined && label.length > MAX_LABEL_LENGTH) {
+    return {
+      ok: false,
+      status: 400,
+      body: {
+        error: 'invalid_request',
+        message: `\`label\` must be at most ${MAX_LABEL_LENGTH} characters (got ${label.length})`,
+      },
+    };
+  }
+
   const keyId = derivePublicKeyId(decoded);
   const subject = deps.authn.subject;
+  const clock = deps.clock ?? (() => new Date());
   const row: AuthorKeyRow = {
     subject,
     keyId,
     publicKeyBase64: input.publicKeyBase64,
+    createdAt: clock().toISOString(),
+    ...(label !== undefined ? { label } : {}),
   };
 
   // Atomic first-write attempt. The `ifNotExists` flag tells the
@@ -144,6 +190,8 @@ export async function registerAuthorKey(
         subject,
         keyId,
         publicKeyBase64: input.publicKeyBase64,
+        ...(row.createdAt !== undefined ? { createdAt: row.createdAt } : {}),
+        ...(row.label !== undefined ? { label: row.label } : {}),
       },
     };
   } catch (err) {
@@ -193,6 +241,10 @@ export async function registerAuthorKey(
   }
 
   if (existing.publicKeyBase64 === input.publicKeyBase64) {
+    // Idempotent re-register echoes the EXISTING row untouched — a
+    // different label on a retry does NOT rewrite the stored one
+    // (relabeling is a deliberate future op, not a register side
+    // effect).
     return {
       ok: true,
       status: 200,
@@ -200,6 +252,10 @@ export async function registerAuthorKey(
         subject: existing.subject,
         keyId: existing.keyId,
         publicKeyBase64: existing.publicKeyBase64,
+        ...(existing.createdAt !== undefined
+          ? { createdAt: existing.createdAt }
+          : {}),
+        ...(existing.label !== undefined ? { label: existing.label } : {}),
       },
     };
   }

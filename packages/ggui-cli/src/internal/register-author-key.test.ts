@@ -72,6 +72,33 @@ describe('parseRegisterFlags', () => {
     expect(r.registry).toBe('https://r.example');
   });
 
+  it('parses --label <value> (space form, [E])', () => {
+    const r = parseRegisterFlags(['--scope', '@a', '--label', 'ci laptop']);
+    expect(r.error).toBeUndefined();
+    expect(r.label).toBe('ci laptop');
+  });
+
+  it('parses --label=<value> (=value form, [E])', () => {
+    const r = parseRegisterFlags(['--scope=@a', '--label=ci-laptop']);
+    expect(r.error).toBeUndefined();
+    expect(r.label).toBe('ci-laptop');
+  });
+
+  it('errors on --label with no value', () => {
+    const r = parseRegisterFlags(['--scope', '@a', '--label']);
+    expect(r.error).toBe('--label requires a non-empty value (e.g. `ci laptop`)');
+  });
+
+  it('errors on --label= (explicit empty) — both flag forms share one behavior', () => {
+    const r = parseRegisterFlags(['--scope', '@a', '--label=']);
+    expect(r.error).toBe('--label requires a non-empty value (e.g. `ci laptop`)');
+  });
+
+  it('errors on a whitespace-only --label value', () => {
+    const r = parseRegisterFlags(['--scope', '@a', '--label', '   ']);
+    expect(r.error).toBe('--label requires a non-empty value (e.g. `ci laptop`)');
+  });
+
   it('sets help on --help', () => {
     const r = parseRegisterFlags(['--help']);
     expect(r.help).toBe(true);
@@ -296,6 +323,95 @@ describe('runRegisterAuthorKey', () => {
     expect(JSON.parse(init.body as string)).toEqual({
       publicKeyBase64: Buffer.from(new Uint8Array(32).fill(0xbb)).toString('base64'),
     });
+  });
+
+  it('carries --label into the request body and echoes the stored label + createdAt on the outcome ([E] enrichment)', async () => {
+    seedFreshToken();
+    seedKeypair('@a');
+    const fetchStub = makeFetchStub(() =>
+      jsonResponse(201, {
+        subject: 'cog-sub-abc',
+        keyId: 'derivedKeyId',
+        publicKeyBase64: 'irrelevant',
+        createdAt: '2026-08-10T12:00:00.000Z',
+        label: 'ci laptop',
+      }),
+    );
+    const outcome = await runRegisterAuthorKey(
+      { scope: '@a', registry: REGISTRY_URL, label: 'ci laptop' },
+      {
+        cwd: env.repoDir,
+        env: {},
+        fetch: fetchStub.fetch,
+        now: () => 1_700_000_000,
+      },
+    );
+    expect(outcome.ok).toBe(true);
+    if (outcome.ok) {
+      expect(outcome.label).toBe('ci laptop');
+      expect(outcome.createdAt).toBe('2026-08-10T12:00:00.000Z');
+    }
+    const call = fetchStub.spy.mock.calls[0]!;
+    expect(JSON.parse(call[1].body as string)).toEqual({
+      publicKeyBase64: Buffer.from(new Uint8Array(32).fill(0xbb)).toString('base64'),
+      label: 'ci laptop',
+    });
+  });
+
+  it('idempotent 200 echoes the EXISTING stored label — a differing --label is visible on the outcome for the caller to notice', async () => {
+    seedFreshToken();
+    seedKeypair('@a');
+    const fetchStub = makeFetchStub(() =>
+      jsonResponse(200, {
+        subject: 'cog-sub-abc',
+        keyId: 'derivedKeyId',
+        publicKeyBase64: 'irrelevant',
+        createdAt: '2026-08-01T00:00:00.000Z',
+        label: 'original label',
+      }),
+    );
+    const outcome = await runRegisterAuthorKey(
+      { scope: '@a', registry: REGISTRY_URL, label: 'a different label' },
+      {
+        cwd: env.repoDir,
+        env: {},
+        fetch: fetchStub.fetch,
+        now: () => 1_700_000_000,
+      },
+    );
+    expect(outcome.ok).toBe(true);
+    if (outcome.ok) {
+      expect(outcome.status).toBe(200);
+      // The registry kept the stored label; the outcome carries it so
+      // the verb's output layer can print the kept-label notice.
+      expect(outcome.label).toBe('original label');
+    }
+  });
+
+  it('omits label from the request body when not supplied', async () => {
+    seedFreshToken();
+    seedKeypair('@a');
+    const fetchStub = makeFetchStub(() =>
+      jsonResponse(201, {
+        subject: 'cog-sub-abc',
+        keyId: 'derivedKeyId',
+        publicKeyBase64: 'irrelevant',
+      }),
+    );
+    const outcome = await runRegisterAuthorKey(
+      { scope: '@a', registry: REGISTRY_URL },
+      {
+        cwd: env.repoDir,
+        env: {},
+        fetch: fetchStub.fetch,
+        now: () => 1_700_000_000,
+      },
+    );
+    expect(outcome.ok).toBe(true);
+    const call = fetchStub.spy.mock.calls[0]!;
+    expect(
+      Object.keys(JSON.parse(call[1].body as string)),
+    ).toEqual(['publicKeyBase64']);
   });
 
   // --auth=bearer escape hatch (de-Cognito follow-up, 2026-06-11) —

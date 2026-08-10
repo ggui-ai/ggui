@@ -471,7 +471,7 @@ describe('runArtifactPublish', () => {
     expect(body.signature.algorithm).toBe('ed25519');
     // publicKeyId is a 16-char base64 hash (no algorithm prefix —
     // algorithm lives on signature.algorithm).
-    expect(body.signature.publicKeyId).toMatch(/^[A-Za-z0-9+/]{16}$/);
+    expect(body.signature.publicKeyId).toMatch(/^[A-Za-z0-9_-]{16}$/);
     expect(typeof body.signature.signature).toBe('string');
   });
 
@@ -643,7 +643,7 @@ describe('runArtifactPublish', () => {
     // `derivePublicKeyId` in @ggui-ai/gadget-signing); no `ed25519:`
     // algorithm prefix. The signature object carries `algorithm` on
     // a separate field.
-    expect(io.stdout.join('')).toMatch(/publicKeyId=[A-Za-z0-9+/]{16}/);
+    expect(io.stdout.join('')).toMatch(/publicKeyId=[A-Za-z0-9_-]{16}/);
   });
 
   it('--key path that does not exist → exit 1 with key_missing', async () => {

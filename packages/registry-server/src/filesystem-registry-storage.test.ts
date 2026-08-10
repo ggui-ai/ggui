@@ -77,16 +77,35 @@ describe('FilesystemRegistryStorage — impl-specific', () => {
     }
   });
 
-  it('rejects path-traversal in authorKey fields', async () => {
+  it('rejects path-traversal in authorKey keyIds; traversal-shaped subjects are neutralized by encoding', async () => {
     const root = await mkdtemp(join(tmpdir(), 'ggui-fs-reg-traversal2-'));
     try {
       const storage = createFilesystemRegistryStorage({ root });
-      await expect(
-        storage.getAuthorKey('../bad', 'k1'),
-      ).rejects.toThrow(/path-traversal/);
+      // keyId keeps the hard guard (base64url by derivation — '.', '/',
+      // '\\' are unrepresentable, so any occurrence is an attack).
       await expect(
         storage.getAuthorKey('alice', '..\\bad'),
       ).rejects.toThrow(/path-traversal/);
+      await expect(
+        storage.getAuthorKey('alice', '../bad'),
+      ).rejects.toThrow(/path-traversal/);
+      // Subjects are operator-defined free text — a traversal-shaped
+      // subject is LEGAL input, neutralized by encodeRowKey ('/' →
+      // %2F) before it becomes a filename component. Round-trip stays
+      // inside the author-keys dir.
+      await storage.putAuthorKey({
+        subject: '../escape',
+        keyId: 'k1',
+        publicKeyBase64: 'AAAA',
+      });
+      expect(await storage.getAuthorKey('../escape', 'k1')).toEqual({
+        subject: '../escape',
+        keyId: 'k1',
+        publicKeyBase64: 'AAAA',
+      });
+      // Nothing escaped the root: the parent of the storage root has
+      // gained no files (the row landed under state/author-keys).
+      expect(await storage.getAuthorKey('escape', 'k1')).toBe(null);
     } finally {
       await rm(root, { recursive: true, force: true });
     }
