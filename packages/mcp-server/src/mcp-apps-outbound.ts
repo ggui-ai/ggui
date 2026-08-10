@@ -1162,6 +1162,18 @@ export interface GguiRenderResourceTemplateOptions {
    */
   readonly renderTtlMs?: number;
   /**
+   * #457 — total-lifetime bound on RESURRECTION: an expired row's read
+   * (and a re-mint's fresh commit) may never advance `expiresAt` past
+   * `createdAt + maxRenderLifetimeMs`. Unset = unbounded, today's
+   * behavior — the knob exists because operator-set short TTLs are
+   * exactly where uncapped in-grace self-extension keeps a PII row
+   * alive forever on one poll per (TTL + grace). Live-row heartbeats
+   * are deliberately NOT capped (active-use lease renewal is intended);
+   * rows whose `createdAt` projects the legacy 0 sentinel are exempt
+   * (a cap keyed on 0 would mass-kill pre-column rows).
+   */
+  readonly maxRenderLifetimeMs?: number;
+  /**
    * Vector store backing the blueprint registry. When wired alongside
    * `defaultAppIdFallback`, the resource handler runs a registry-only
    * rehydrate fallback for the two-segment URI shape
@@ -1581,14 +1593,50 @@ export function registerGguiRenderResourceTemplate(
    * on a read, which is a much larger write for a field nothing gates
    * on.
    */
+  /**
+   * #457 — the row's total-lifetime ceiling, or undefined when the
+   * operator set none / the row predates the createdAt column (the
+   * legacy projection is 0, and a cap keyed on that sentinel would
+   * mass-kill pre-column rows).
+   */
+  function lifetimeCapFor(subject: { readonly createdAt: number }): number | undefined {
+    if (opts.maxRenderLifetimeMs === undefined) return undefined;
+    if (subject.createdAt === 0) return undefined;
+    return subject.createdAt + opts.maxRenderLifetimeMs;
+  }
+
   async function extendExpiredRow(
     sessionId: string,
     stored: StoredGguiSession,
   ): Promise<void> {
     const now = Date.now();
     if (stored.expiresAt > now) return;
+    // #457 — resurrection is bounded. Past the cap: serve the read
+    // (a mount is not retention) but extend nothing — the row reaps
+    // at its standing deadline. Under the cap: extend, clamped to it.
+    // Either clamp branch logs; successful UNCAPPED extension stays
+    // silent as before, so the one new line is the bounded-retention
+    // signal, not a metrics build-out.
+    const cap = lifetimeCapFor(stored);
+    if (cap !== undefined && now >= cap) {
+      opts.logger?.warn("render_resource_ttl_extend_capped", {
+        sessionId,
+        createdAt: stored.createdAt,
+        cap,
+      });
+      return;
+    }
+    const target =
+      cap !== undefined ? Math.min(now + renderTtlMs, cap) : now + renderTtlMs;
     try {
-      await opts.renderStore.update(sessionId, { expiresAt: now + renderTtlMs });
+      await opts.renderStore.update(sessionId, { expiresAt: target });
+      if (cap !== undefined && target < now + renderTtlMs) {
+        opts.logger?.warn("render_resource_ttl_extend_capped", {
+          sessionId,
+          createdAt: stored.createdAt,
+          cap,
+        });
+      }
     } catch (cause) {
       opts.logger?.warn("render_resource_ttl_extend_failed", {
         sessionId,
@@ -1779,7 +1827,15 @@ export function registerGguiRenderResourceTemplate(
       // itself as newly created.
       createdAt: record.createdAt,
       lastActivityAt: now,
-      expiresAt: now + renderTtlMs,
+      // #457 — the re-mint is the other resurrection surface: capped
+      // the same way the expired-read extension is, keyed on the
+      // ORIGINAL createdAt the record carries. Past the cap the mount
+      // still serves (a mount is not retention) but the row lands
+      // already in-grace and un-extendable.
+      expiresAt: Math.min(
+        now + renderTtlMs,
+        lifetimeCapFor(record) ?? Number.POSITIVE_INFINITY,
+      ),
       // States the same fact as the `seqFloor` below, which is what
       // the store actually seeds the row's ledger from.
       eventSequence: record.seqAtLastCommit,

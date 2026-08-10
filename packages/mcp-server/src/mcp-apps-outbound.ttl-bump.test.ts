@@ -123,9 +123,19 @@ async function boot(
     readonly getContext?: () => HandlerContext | undefined;
     /** Leave `renderTtlMs` unset so the handler's own fallback answers. */
     readonly withoutTtlOption?: boolean;
+    /** #457 — the resurrection cap under test. */
+    readonly maxRenderLifetimeMs?: number;
+    /**
+     * #457 — clock injected into the STORE so a test can commit a row
+     * "in the past" (store-owned `createdAt` is not patchable through
+     * the public API, by design). The handler keeps real time.
+     */
+    readonly storeNow?: () => number;
   } = {},
 ): Promise<Fixture> {
-  const renderStore = new InMemoryGguiSessionStore();
+  const renderStore = new InMemoryGguiSessionStore(
+    options.storeNow ? { now: options.storeNow } : {},
+  );
   const identityStore = new InMemoryRenderIdentityStore();
   const blueprintStore = new InMemoryBlueprintStore();
   const durableCodeStore = new InMemoryCodeStore();
@@ -147,6 +157,9 @@ async function boot(
     renderIdentityStore: identityStore,
     durableBlueprints: { blueprintStore, codeStore: durableCodeStore },
     ...(options.withoutTtlOption ? {} : { renderTtlMs: OPERATOR_TTL_MS }),
+    ...(options.maxRenderLifetimeMs !== undefined
+      ? { maxRenderLifetimeMs: options.maxRenderLifetimeMs }
+      : {}),
   });
 
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
@@ -182,6 +195,48 @@ async function seedExpiredRow(f: Fixture, sessionId: string): Promise<void> {
   await seedLiveRow(f, sessionId);
   await f.renderStore.update(sessionId, { expiresAt: Date.now() - 1_000 });
   f.update.mockClear();
+}
+
+/**
+ * #457 — an expired row whose STORE-level `createdAt` the test
+ * controls, via the fixture's injected clock: point the clock at
+ * `createdAt`, commit (the store stamps its own lifecycle fields from
+ * the clock), restore real time, then expire the row through the
+ * public patch surface.
+ */
+async function seedAgedExpiredRow(
+  f: Fixture & { clock: { value: number | null } },
+  sessionId: string,
+  createdAt: number,
+): Promise<void> {
+  f.clock.value = createdAt;
+  const render: ComponentGguiSession = {
+    type: "component",
+    id: sessionId,
+    appId: APP_ID,
+    componentCode: COMPONENT_CODE,
+    contentType: "application/javascript+react",
+    eventSequence: 0,
+    createdAt,
+    lastActivityAt: createdAt,
+    expiresAt: createdAt + 60_000,
+  };
+  await f.renderStore.commit({ render, appId: APP_ID });
+  f.clock.value = null; // back to real time
+  await f.renderStore.update(sessionId, { expiresAt: Date.now() - 1_000 });
+  f.update.mockClear();
+}
+
+/** Boot with a settable store clock for the aged-row seeds. */
+async function bootWithClock(
+  options: { readonly maxRenderLifetimeMs?: number } = {},
+): Promise<Fixture & { clock: { value: number | null } }> {
+  const clock: { value: number | null } = { value: null };
+  const f = await boot({
+    ...options,
+    storeNow: () => clock.value ?? Date.now(),
+  });
+  return { ...f, clock };
 }
 
 async function seedLiveRow(f: Fixture, sessionId: string): Promise<void> {
@@ -397,6 +452,97 @@ describe("expired-row reads extend the row (#430 slice 3, state b)", () => {
       const committed = stored?.render as ComponentGguiSession | undefined;
       expect(committed?.expiresAt).toBeGreaterThanOrEqual(before + OPERATOR_TTL_MS);
       expect(committed?.expiresAt).toBeLessThanOrEqual(after + OPERATOR_TTL_MS);
+    } finally {
+      await f.close();
+    }
+  });
+});
+
+
+describe("#457 — resurrection is bounded by maxRenderLifetimeMs", () => {
+  const CAP_MS = 5_000_000;
+
+  it("past the cap: serves the read, extends NOTHING, and says so", async () => {
+    const f = await bootWithClock({ maxRenderLifetimeMs: CAP_MS });
+    try {
+      const createdAt = Date.now() - CAP_MS - 60_000; // lifetime spent
+      await seedAgedExpiredRow(f, "render_capped_out", createdAt);
+      await read(f, "render_capped_out"); // the mount still serves
+      expect(f.update).not.toHaveBeenCalled();
+      expect(f.warn).toHaveBeenCalledWith(
+        "render_resource_ttl_extend_capped",
+        expect.objectContaining({ sessionId: "render_capped_out", createdAt }),
+      );
+    } finally {
+      await f.close();
+    }
+  });
+
+  it("under the cap: the extension CLAMPS to createdAt + cap, and says so", async () => {
+    const f = await bootWithClock({ maxRenderLifetimeMs: CAP_MS });
+    try {
+      const createdAt = Date.now() - CAP_MS + 120_000; // 2 min of lifetime left
+      await seedAgedExpiredRow(f, "render_clamped", createdAt);
+      await read(f, "render_clamped");
+      expect(f.update).toHaveBeenCalledTimes(1);
+      const stored = await f.renderStore.get("render_clamped");
+      expect(stored?.expiresAt).toBe(createdAt + CAP_MS);
+      expect(f.warn).toHaveBeenCalledWith(
+        "render_resource_ttl_extend_capped",
+        expect.objectContaining({ sessionId: "render_clamped" }),
+      );
+    } finally {
+      await f.close();
+    }
+  });
+
+  it("legacy rows (createdAt 0) are exempt — a cap keyed on the sentinel would mass-kill them", async () => {
+    const f = await bootWithClock({ maxRenderLifetimeMs: CAP_MS });
+    try {
+      await seedAgedExpiredRow(f, "render_legacy", 0);
+      const before = Date.now();
+      await read(f, "render_legacy");
+      const stored = await f.renderStore.get("render_legacy");
+      expect(stored?.expiresAt).toBeGreaterThanOrEqual(before + OPERATOR_TTL_MS);
+      expect(f.warn).not.toHaveBeenCalledWith(
+        "render_resource_ttl_extend_capped",
+        expect.anything(),
+      );
+    } finally {
+      await f.close();
+    }
+  });
+
+  it("the re-mint commit is the other resurrection surface: its stamp clamps to createdAt + cap", async () => {
+    // seedRemintable's record carries createdAt 1_700_000_000_000
+    // (deep past). With a cap, the reconstructed row's payload stamp
+    // must land at createdAt + cap — already in-grace, un-extendable —
+    // instead of granting a fresh full lifetime; the mount itself
+    // still serves (a mount is not retention).
+    const f = await boot({ maxRenderLifetimeMs: CAP_MS });
+    try {
+      await seedRemintable(f, "render_reminted_capped");
+      await read(f, "render_reminted_capped");
+      const stored = await f.renderStore.get("render_reminted_capped");
+      const committed = stored?.render as ComponentGguiSession | undefined;
+      expect(committed?.expiresAt).toBe(1_700_000_000_000 + CAP_MS);
+    } finally {
+      await f.close();
+    }
+  });
+
+  it("no knob ⇒ unbounded — an ancient row still gets a full lifetime (today's behavior)", async () => {
+    const f = await bootWithClock();
+    try {
+      await seedAgedExpiredRow(f, "render_uncapped", Date.now() - 10 * CAP_MS);
+      const before = Date.now();
+      await read(f, "render_uncapped");
+      const stored = await f.renderStore.get("render_uncapped");
+      expect(stored?.expiresAt).toBeGreaterThanOrEqual(before + OPERATOR_TTL_MS);
+      expect(f.warn).not.toHaveBeenCalledWith(
+        "render_resource_ttl_extend_capped",
+        expect.anything(),
+      );
     } finally {
       await f.close();
     }

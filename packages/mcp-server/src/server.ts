@@ -1946,6 +1946,16 @@ export interface CreateGguiServerOptions {
   readonly renderTtlMs?: number;
 
   /**
+   * #457 — total-lifetime bound on render-row RESURRECTION: the
+   * expired-read extension and the re-mint commit never advance
+   * `expiresAt` past `createdAt + maxRenderLifetimeMs`. Unset =
+   * unbounded (today's behavior). Live-row heartbeats are not capped —
+   * active use is legitimate lease renewal; this bounds how long an
+   * evicted-but-in-grace row can be kept warm by polling alone.
+   */
+  readonly maxRenderLifetimeMs?: number;
+
+  /**
    * Outbound stream replay buffer for the live-channel endpoint. Defaults
    * to a fresh `InMemoryGguiSessionStreamBuffer` — fine for OSS zero-config
    * / dev. Operators who need durability layer a different
@@ -4513,6 +4523,11 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
             // into service; unforwarded, both silently fall back to an
             // hour on a deployment whose renders live far longer.
             ...(opts.renderTtlMs !== undefined ? { renderTtlMs: opts.renderTtlMs } : {}),
+            // #457 — the resurrection cap rides with the retention
+            // knob; both surfaces it bounds live in the read path.
+            ...(opts.maxRenderLifetimeMs !== undefined
+              ? { maxRenderLifetimeMs: opts.maxRenderLifetimeMs }
+              : {}),
             // Live-channel wsToken minter — when wired, every
             // per-render resource shell embeds `{wsUrl, wsToken}`
             // so the iframe-runtime opens a WebSocket on mount and
