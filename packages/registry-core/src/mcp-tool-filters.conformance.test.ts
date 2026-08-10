@@ -1,11 +1,11 @@
 /**
  * Drift-catch: the shipping mcpTools search-filter predicate
  * conforms to the binding-conformance filter catalog in
- * `@ggui-ai/protocol-conformance`. The memory, filesystem, and
- * cloud storage impls all share this predicate's reference
- * semantics — pinning it here pins all consumers. If this file
- * goes red, fix the shipping predicate — the kit is the arbiter,
- * never the other way around.
+ * `@ggui-ai/protocol-conformance`. Every `scanArtifacts`
+ * implementation — in-repo and downstream adapters — shares this
+ * predicate's reference semantics; pinning it here pins all
+ * consumers. If this file goes red, fix the shipping predicate —
+ * the kit is the arbiter, never the other way around.
  */
 import {
   bindingFilterCases,
