@@ -478,6 +478,12 @@ function parseCursor(cursor: string | undefined): number {
  * `matchesMcpToolFilters` so the reference semantics cannot drift.
  */
 function rowMatchesFilter(row: ArtifactsMetadataRow, q: ArtifactScanFilter): boolean {
+  // #474 — visibility gating lives INSIDE every scanArtifacts impl
+  // (the ruled canonical location); the search op's post-filter stays
+  // as defense-in-depth. Without this, private rows would consume
+  // page slots on self-host impls even though the op filters them out
+  // before they ever reach the wire.
+  if (row.visibility !== 'public') return false;
   if (q.kind !== undefined && row.kind !== q.kind) return false;
   if (q.hook !== undefined && row.hook !== q.hook) return false;
   if (!matchesMcpToolFilters(row.mcpTools, q)) return false;

@@ -194,6 +194,48 @@ export function registryStorageContract(makeStorage: () => RegistryStorage): voi
         expect(ids).toEqual(['@a/1', '@b/2']);
       });
 
+      // #474 — visibility gating is ruled to live INSIDE every
+      // scanArtifacts impl (the search op's post-filter stays as
+      // defense-in-depth, but must never be the ONLY gate — otherwise
+      // private rows consume page slots on self-host impls, an
+      // observable underfill).
+      it('excludes private rows from scanArtifacts results (#474)', async () => {
+        const storage = makeStorage();
+        await storage.putArtifactMetadata(
+          makeMetadata({ artifactId: '@a/secret', visibility: 'private' }),
+        );
+        await storage.putArtifactMetadata(
+          makeMetadata({ artifactId: '@a/public', visibility: 'public' }),
+        );
+        const page = await storage.scanArtifacts({});
+        expect(page.rows.map((r) => r.artifactId)).toEqual(['@a/public']);
+      });
+
+      it('private rows never consume a page slot — a `limit` is satisfied entirely from public rows (#474)', async () => {
+        const storage = makeStorage();
+        // Private rows interleaved with public ones. If private rows
+        // consumed limit slots (visibility filtered only at the op
+        // layer, after pagination), a limit=2 request could return
+        // fewer than 2 public rows.
+        await storage.putArtifactMetadata(
+          makeMetadata({ artifactId: '@a/priv1', visibility: 'private' }),
+        );
+        await storage.putArtifactMetadata(
+          makeMetadata({ artifactId: '@a/pub1', visibility: 'public' }),
+        );
+        await storage.putArtifactMetadata(
+          makeMetadata({ artifactId: '@a/priv2', visibility: 'private' }),
+        );
+        await storage.putArtifactMetadata(
+          makeMetadata({ artifactId: '@a/pub2', visibility: 'public' }),
+        );
+        await storage.putArtifactMetadata(
+          makeMetadata({ artifactId: '@a/priv3', visibility: 'private' }),
+        );
+        const page = await storage.scanArtifacts({ limit: 2 });
+        expect(page.rows.map((r) => r.artifactId).sort()).toEqual(['@a/pub1', '@a/pub2']);
+      });
+
       it('filters by kind', async () => {
         const storage = makeStorage();
         await storage.putArtifactMetadata(makeMetadata({ artifactId: '@a/g', kind: 'gadget' }));
