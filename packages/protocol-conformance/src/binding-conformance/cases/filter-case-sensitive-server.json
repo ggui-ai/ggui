@@ -1,0 +1,7 @@
+{
+  "name": "filter-case-sensitive-server",
+  "description": "Server matching is case-sensitive exact — `acme-crm` does not match an entry declaring `Acme-CRM`, even with an exact tool match on the same entry.",
+  "bindings": [{ "server": "Acme-CRM", "tool": "list_invoices" }],
+  "filters": { "server": "acme-crm", "tool": "list_invoices" },
+  "expect": false
+}

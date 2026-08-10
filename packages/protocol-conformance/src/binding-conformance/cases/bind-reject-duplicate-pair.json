@@ -1,0 +1,12 @@
+{
+  "name": "bind-reject-duplicate-pair",
+  "description": "Two entries with the exact same `(server, tool)` pair. Exact duplicates are rejected at schema level with the manifest-validation code — deduplication is the publisher's job, not the registry's.",
+  "entry": {
+    "kind": "blueprint",
+    "mcpTools": [
+      { "server": "acme-crm", "tool": "list_invoices" },
+      { "server": "acme-crm", "tool": "list_invoices" }
+    ]
+  },
+  "expect": { "outcome": "reject", "code": "manifest_invalid" }
+}

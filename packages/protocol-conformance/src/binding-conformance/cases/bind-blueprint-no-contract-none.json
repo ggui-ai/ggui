@@ -1,0 +1,6 @@
+{
+  "name": "bind-blueprint-no-contract-none",
+  "description": "A blueprint manifest with no `mcpTools` and no contract. Nothing declares and nothing derives — the artifact has no bindings and is simply not findable by tool. Accept with no binding set.",
+  "entry": { "kind": "blueprint" },
+  "expect": { "outcome": "accept" }
+}

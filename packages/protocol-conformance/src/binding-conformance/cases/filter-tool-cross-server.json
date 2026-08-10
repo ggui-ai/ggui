@@ -1,0 +1,7 @@
+{
+  "name": "filter-tool-cross-server",
+  "description": "`tool=` alone matches any entry carrying that tool name regardless of which server qualifies it — a server-qualified entry satisfies a bare tool query.",
+  "bindings": [{ "server": "acme-crm", "tool": "list_invoices" }, { "tool": "export_csv" }],
+  "filters": { "tool": "list_invoices" },
+  "expect": true
+}

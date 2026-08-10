@@ -1,0 +1,7 @@
+{
+  "name": "filter-tool-no-match",
+  "description": "`tool=` alone with no entry carrying that tool name matches nothing.",
+  "bindings": [{ "server": "acme-crm", "tool": "create_invoice" }],
+  "filters": { "tool": "list_invoices" },
+  "expect": false
+}

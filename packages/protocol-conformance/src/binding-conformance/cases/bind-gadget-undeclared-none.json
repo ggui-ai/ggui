@@ -1,0 +1,6 @@
+{
+  "name": "bind-gadget-undeclared-none",
+  "description": "A gadget manifest without `mcpTools`. Gadgets have no contract to derive from — derivation is a blueprint-only fallback — so an undeclared gadget has no bindings.",
+  "entry": { "kind": "gadget" },
+  "expect": { "outcome": "accept" }
+}

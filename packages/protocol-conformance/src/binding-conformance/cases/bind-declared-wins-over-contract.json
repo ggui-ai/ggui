@@ -1,0 +1,23 @@
+{
+  "name": "bind-declared-wins-over-contract",
+  "description": "A blueprint manifest with BOTH a declared `mcpTools` list AND a contract whose prop lineage names a different tool. Declared wins entirely: derivation MUST NOT run and MUST NOT merge — the result carries only the declared entries, marked `declared`.",
+  "entry": {
+    "kind": "blueprint",
+    "mcpTools": [{ "server": "acme-crm", "tool": "list_invoices" }],
+    "contract": {
+      "propsSpec": {
+        "properties": {
+          "forecast": {
+            "schema": { "description": "hourly forecast rows" },
+            "sourceTool": "get_forecast"
+          }
+        }
+      }
+    }
+  },
+  "expect": {
+    "outcome": "accept",
+    "source": "declared",
+    "bindings": [{ "server": "acme-crm", "tool": "list_invoices" }]
+  }
+}

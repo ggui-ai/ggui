@@ -1,0 +1,36 @@
+{
+  "name": "bind-derived-props-and-stream",
+  "description": "A blueprint manifest with no `mcpTools` and a contract carrying tool lineage in both places derivation reads: `propsSpec.properties[*].sourceTool` and `streamSpec[*].source.tool`. The resolver MUST derive bare `{tool}` entries (contracts carry no server identity), marked `derived`, in first-appearance order: props entries in declaration order, then stream channels in declaration order.",
+  "entry": {
+    "kind": "blueprint",
+    "contract": {
+      "propsSpec": {
+        "properties": {
+          "invoices": {
+            "schema": { "description": "invoice rows" },
+            "sourceTool": "list_invoices"
+          },
+          "customer": {
+            "schema": { "description": "customer record" },
+            "sourceTool": "get_customer"
+          }
+        }
+      },
+      "streamSpec": {
+        "invoiceEvents": {
+          "schema": { "description": "invoice change events" },
+          "source": { "tool": "watch_invoices" }
+        }
+      }
+    }
+  },
+  "expect": {
+    "outcome": "accept",
+    "source": "derived",
+    "bindings": [
+      { "tool": "list_invoices" },
+      { "tool": "get_customer" },
+      { "tool": "watch_invoices" }
+    ]
+  }
+}

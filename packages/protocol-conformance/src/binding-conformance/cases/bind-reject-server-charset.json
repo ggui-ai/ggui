@@ -1,0 +1,9 @@
+{
+  "name": "bind-reject-server-charset",
+  "description": "A binding whose `server` violates the shared charset (here: a `/`). `server` and `tool` share one name rule. The manifest MUST be rejected with the manifest-validation code.",
+  "entry": {
+    "kind": "blueprint",
+    "mcpTools": [{ "server": "acme/crm", "tool": "list_invoices" }]
+  },
+  "expect": { "outcome": "reject", "code": "manifest_invalid" }
+}

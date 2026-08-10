@@ -1,0 +1,10 @@
+{
+  "name": "filter-pair-not-cross-entry",
+  "description": "The pair filter is per-entry, not per-list: one entry matching the server and a DIFFERENT entry matching the tool is NOT a match — both dimensions must land on the same entry.",
+  "bindings": [
+    { "server": "acme-crm", "tool": "create_invoice" },
+    { "server": "other-crm", "tool": "list_invoices" }
+  ],
+  "filters": { "server": "acme-crm", "tool": "list_invoices" },
+  "expect": false
+}

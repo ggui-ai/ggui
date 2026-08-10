@@ -1,0 +1,7 @@
+{
+  "name": "filter-server-excludes-bare",
+  "description": "`server=` alone NEVER matches a bare entry — a server-agnostic binding declares no server, so it cannot satisfy a server query.",
+  "bindings": [{ "tool": "list_invoices" }],
+  "filters": { "server": "acme-crm" },
+  "expect": false
+}

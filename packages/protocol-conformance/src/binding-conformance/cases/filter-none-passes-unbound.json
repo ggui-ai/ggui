@@ -1,0 +1,6 @@
+{
+  "name": "filter-none-passes-unbound",
+  "description": "No filters, and the artifact has no bindings at all: still passes — artifacts without bindings stay findable by every non-tool search dimension.",
+  "filters": {},
+  "expect": true
+}

@@ -1,0 +1,7 @@
+{
+  "name": "filter-server-match",
+  "description": "`server=` alone matches any entry that explicitly declares that server, whatever its tool.",
+  "bindings": [{ "server": "acme-crm", "tool": "list_invoices" }],
+  "filters": { "server": "acme-crm" },
+  "expect": true
+}

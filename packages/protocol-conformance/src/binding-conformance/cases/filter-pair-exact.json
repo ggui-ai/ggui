@@ -1,0 +1,10 @@
+{
+  "name": "filter-pair-exact",
+  "description": "`tool=` + `server=` together match only an entry carrying exactly that `(server, tool)` pair.",
+  "bindings": [
+    { "server": "acme-crm", "tool": "list_invoices" },
+    { "server": "other-crm", "tool": "export_csv" }
+  ],
+  "filters": { "server": "acme-crm", "tool": "list_invoices" },
+  "expect": true
+}

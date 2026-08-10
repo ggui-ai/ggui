@@ -50,6 +50,11 @@
       "types": "./dist/resource-read-conformance/index.d.ts",
       "import": "./dist/resource-read-conformance/index.js",
       "default": "./dist/resource-read-conformance/index.js"
+    },
+    "./binding-conformance": {
+      "types": "./dist/binding-conformance/index.d.ts",
+      "import": "./dist/binding-conformance/index.js",
+      "default": "./dist/binding-conformance/index.js"
     }
   },
   "scripts": {

@@ -1,0 +1,9 @@
+{
+  "name": "bind-reject-empty-list",
+  "description": "An empty `mcpTools` list. Present-but-empty is invalid — a publisher opting into tool bindings must name at least one; omitting the field entirely is the way to declare none.",
+  "entry": {
+    "kind": "gadget",
+    "mcpTools": []
+  },
+  "expect": { "outcome": "reject", "code": "manifest_invalid" }
+}

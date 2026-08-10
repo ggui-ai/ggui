@@ -1,0 +1,38 @@
+{
+  "name": "bind-derived-union-dedupes",
+  "description": "Derivation is a set union: the same tool name appearing on two props AND as a stream-channel source MUST collapse to one bare entry at its first appearance. Props without `sourceTool` and channels without `source` contribute nothing.",
+  "entry": {
+    "kind": "blueprint",
+    "contract": {
+      "propsSpec": {
+        "properties": {
+          "openInvoices": {
+            "schema": { "description": "open invoice rows" },
+            "sourceTool": "list_invoices"
+          },
+          "paidInvoices": {
+            "schema": { "description": "paid invoice rows" },
+            "sourceTool": "list_invoices"
+          },
+          "title": {
+            "schema": { "description": "screen title" }
+          }
+        }
+      },
+      "streamSpec": {
+        "refresh": {
+          "schema": { "description": "refreshed invoice rows" },
+          "source": { "tool": "list_invoices" }
+        },
+        "ticker": {
+          "schema": { "description": "sourceless local ticks" }
+        }
+      }
+    }
+  },
+  "expect": {
+    "outcome": "accept",
+    "source": "derived",
+    "bindings": [{ "tool": "list_invoices" }]
+  }
+}

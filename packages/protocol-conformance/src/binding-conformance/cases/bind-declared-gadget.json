@@ -1,0 +1,13 @@
+{
+  "name": "bind-declared-gadget",
+  "description": "A gadget manifest declaring `mcpTools` explicitly. The resolver MUST surface the declared list verbatim, marked `declared`. The list legally mixes a server-qualified entry with a bare (server-agnostic) entry for the same tool name — only exact-duplicate `(server, tool)` pairs are invalid, and a bare entry is a distinct pair from any server-qualified one.",
+  "entry": {
+    "kind": "gadget",
+    "mcpTools": [{ "server": "acme-crm", "tool": "list_invoices" }, { "tool": "list_invoices" }]
+  },
+  "expect": {
+    "outcome": "accept",
+    "source": "declared",
+    "bindings": [{ "server": "acme-crm", "tool": "list_invoices" }, { "tool": "list_invoices" }]
+  }
+}

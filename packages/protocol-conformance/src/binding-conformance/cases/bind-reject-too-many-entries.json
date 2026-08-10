@@ -1,0 +1,27 @@
+{
+  "name": "bind-reject-too-many-entries",
+  "description": "Seventeen binding entries — one past the 16-entry cap. The manifest MUST be rejected with the manifest-validation code.",
+  "entry": {
+    "kind": "blueprint",
+    "mcpTools": [
+      { "tool": "tool_01" },
+      { "tool": "tool_02" },
+      { "tool": "tool_03" },
+      { "tool": "tool_04" },
+      { "tool": "tool_05" },
+      { "tool": "tool_06" },
+      { "tool": "tool_07" },
+      { "tool": "tool_08" },
+      { "tool": "tool_09" },
+      { "tool": "tool_10" },
+      { "tool": "tool_11" },
+      { "tool": "tool_12" },
+      { "tool": "tool_13" },
+      { "tool": "tool_14" },
+      { "tool": "tool_15" },
+      { "tool": "tool_16" },
+      { "tool": "tool_17" }
+    ]
+  },
+  "expect": { "outcome": "reject", "code": "manifest_invalid" }
+}

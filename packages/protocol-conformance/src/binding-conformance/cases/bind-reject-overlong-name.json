@@ -1,0 +1,13 @@
+{
+  "name": "bind-reject-overlong-name",
+  "description": "A binding whose `tool` is 129 characters — one past the 128-character bound. The manifest MUST be rejected with the manifest-validation code.",
+  "entry": {
+    "kind": "gadget",
+    "mcpTools": [
+      {
+        "tool": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    ]
+  },
+  "expect": { "outcome": "reject", "code": "manifest_invalid" }
+}

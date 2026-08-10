@@ -1,0 +1,7 @@
+{
+  "name": "filter-none-passes-bound",
+  "description": "No tool/server filters at all: the predicate passes every artifact — the binding dimensions only constrain when asked, preserving AND-composition with unrelated search filters.",
+  "bindings": [{ "server": "acme-crm", "tool": "list_invoices" }],
+  "filters": {},
+  "expect": true
+}

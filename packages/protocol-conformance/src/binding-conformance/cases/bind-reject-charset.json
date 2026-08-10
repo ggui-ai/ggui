@@ -1,0 +1,9 @@
+{
+  "name": "bind-reject-charset",
+  "description": "A binding whose `tool` carries characters outside the allowed charset `[A-Za-z0-9_.-]` (here: a space and `!`). The manifest MUST be rejected with the manifest-validation code.",
+  "entry": {
+    "kind": "gadget",
+    "mcpTools": [{ "tool": "list invoices!" }]
+  },
+  "expect": { "outcome": "reject", "code": "manifest_invalid" }
+}

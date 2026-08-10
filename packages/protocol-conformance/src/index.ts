@@ -130,6 +130,30 @@ export type {
   ResolutionConformanceResult,
 } from './resolution-conformance/index.js';
 
+// Binding-conformance — MCP tool-binding resolution (declared wins,
+// contract-lineage derivation, schema-invalid rejects) + the search
+// filter semantics (`tool=` / `server=` case-sensitive exact,
+// AND-composed per entry).
+export {
+  bindingFilterCases,
+  bindingResolutionCases,
+  runBindingFilterCases,
+  runBindingResolutionCases,
+} from './binding-conformance/index.js';
+export type {
+  BindingFilterCase,
+  BindingFilterMismatch,
+  BindingFilterResult,
+  BindingManifestEntry,
+  BindingRejectCode,
+  BindingResolutionCase,
+  BindingResolutionMismatch,
+  BindingResolutionOutcome,
+  BindingResolutionResult,
+  McpToolBindingDecl,
+  McpToolFilterDecl,
+} from './binding-conformance/index.js';
+
 // Resource-read conformance — the kit's first MCP-binding driver, and
 // it binds `resources/read` ONLY (`tools/call` has none). A read of a
 // render locator has exactly two exits: a result whose contents

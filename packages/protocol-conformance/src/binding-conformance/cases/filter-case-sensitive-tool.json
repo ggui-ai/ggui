@@ -1,0 +1,7 @@
+{
+  "name": "filter-case-sensitive-tool",
+  "description": "Tool matching is case-sensitive exact — MCP tool names are case-sensitive, so `list_invoices` does not match an entry bound to `List_Invoices`.",
+  "bindings": [{ "tool": "List_Invoices" }],
+  "filters": { "tool": "list_invoices" },
+  "expect": false
+}

@@ -1,0 +1,7 @@
+{
+  "name": "filter-tool-matches-bare-entry",
+  "description": "`tool=` alone also matches a bare (server-agnostic) entry — the tool dimension ignores server identity entirely.",
+  "bindings": [{ "tool": "list_invoices" }],
+  "filters": { "tool": "list_invoices" },
+  "expect": true
+}

@@ -1,0 +1,6 @@
+{
+  "name": "filter-tool-excludes-unbound",
+  "description": "`tool=` with an artifact that has no bindings matches nothing — unbound artifacts are invisible to tool-dimension queries.",
+  "filters": { "tool": "list_invoices" },
+  "expect": false
+}
