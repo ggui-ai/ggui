@@ -1,25 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
-
-// `sigstore` is mocked at the import boundary — full sign+verify against
-// real Fulcio/Rekor would require either real network or building a
-// custom TUF trust root from `@sigstore/mock`, both of which add weight
-// well past the unit-test bar. The mock here verifies (a) inputs to
-// `sign` are correctly shaped and (b) the wire-shape projection
-// (bundleSha384 + signedAt + serialized bundle) is correct. The full
-// cryptographic flow is exercised by the upstream sigstore-js library's
-// own test suite and by the higher-tier e2e suite when it lands.
-vi.mock("sigstore", async () => {
-  const actual = await vi.importActual<typeof import("sigstore")>("sigstore");
-  return {
-    ...actual,
-    sign: vi.fn(),
-    verify: vi.fn(),
-  };
-});
-
-const sigstoreModule = await import("sigstore");
-const mockedSign = vi.mocked(sigstoreModule.sign);
-const mockedVerify = vi.mocked(sigstoreModule.verify);
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import {
   derivePublicKeyId,
@@ -33,6 +12,10 @@ import {
   type Ed25519Signature,
   type SigstoreSignature,
 } from "./index.js";
+import {
+  startSigstoreMockStack,
+  type SigstoreMockStack,
+} from "./testing/index.js";
 
 /**
  * Build a deterministic byte buffer so we can test deterministic-signature
@@ -257,137 +240,257 @@ describe("signBundleEd25519 + verifyBundleEd25519", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Sigstore path tests. The `sigstore` package is mocked at the top of
-// this file so we can exercise the gadget-signing seam in isolation.
+// Sigstore path — REAL crypto (F3, 2026-08-10).
+//
+// Nothing here mocks `sigstore`. `signBundleSigstore` and
+// `verifyBundleSigstore` run their full upstream code paths — real
+// ephemeral keys, real cert issuance, real transparency-log entries,
+// real TUF trust-root resolution, real cryptographic verification —
+// against the in-process mock Fulcio/Rekor/TUF stack from
+// `./testing`, whose trust material is injected purely through the
+// upstream option surface (`fulcioURL`/`rekorURL` on sign;
+// `tufMirrorURL`/`tufRootPath`/`tufCachePath` on verify). Assertions
+// that are pure option-threading live in
+// `sigstore-option-threading.test.ts` instead.
 // ---------------------------------------------------------------------------
 
-/**
- * Build a syntactically-valid Sigstore Bundle v0.2 JSON. The exact
- * contents don't need to verify cryptographically — `verifyBundleSigstore`
- * delegates the real check to the mocked `sigstore.verify`.
- *
- * Includes the bare minimum fields `assertBundleLatest` checks for
- * (mediaType + content + verificationMaterial + tlogEntries with
- * inclusionProof + checkpoint). Cert SAN is intentionally crafted so
- * the lightweight DER scanner can extract it.
- */
-function buildFakeBundleJSON(opts?: { san?: string }): string {
-  // Hand-rolled DER for: SEQUENCE { OID 2.5.29.17, OCTET-STRING containing
-  // SEQUENCE { GeneralName URI = opts.san } }. The SAN extractor scans
-  // for the OID prefix and then reads the printable run that follows.
-  const san = opts?.san ?? "https://gadgets.example.com/test-author";
-  const sanBytes = Array.from(san).map((c) => c.charCodeAt(0));
-  // 0x06 0x03 0x55 0x1d 0x11 (OID prefix) + small filler + ASCII SAN.
-  const certDer = new Uint8Array([
-    0x30, 0x82, 0x00, 0x10,
-    0x06, 0x03, 0x55, 0x1d, 0x11,
-    0x04, 0x0a,
-    0x30, 0x08, 0x86, 0x06,
-    ...sanBytes,
-    0x00,
-  ]);
-  const certB64 = Buffer.from(certDer).toString("base64");
+describe("sigstore keyless path — real sign + verify against mock infrastructure (F3)", () => {
+  let stack: SigstoreMockStack;
 
-  return JSON.stringify({
-    mediaType: "application/vnd.dev.sigstore.bundle+json;version=0.2",
-    verificationMaterial: {
-      certificate: { rawBytes: certB64 },
-      tlogEntries: [
-        {
-          logIndex: "1",
-          logId: { keyId: "AA==" },
-          kindVersion: { kind: "hashedrekord", version: "0.0.1" },
-          integratedTime: "1700000000",
-          inclusionProof: {
-            logIndex: "1",
-            rootHash: "AAAA",
-            treeSize: "2",
-            hashes: ["BBBB"],
-            checkpoint: { envelope: "checkpoint-body" },
-          },
-          canonicalizedBody: "AAAA",
-        },
-      ],
-    },
-    messageSignature: {
-      messageDigest: { algorithm: "SHA2_256", digest: "AAAA" },
-      signature: "BBBB",
-    },
-  });
-}
-
-describe("signBundleSigstore", () => {
-  beforeEach(() => {
-    mockedSign.mockReset();
-    mockedVerify.mockReset();
+  beforeAll(async () => {
+    stack = await startSigstoreMockStack();
   });
 
-  it("returns a SigstoreSignature with correct shape on happy path", async () => {
-    mockedSign.mockResolvedValueOnce(JSON.parse(buildFakeBundleJSON()));
-    const bundleBytes = new TextEncoder().encode("hello world");
+  afterAll(() => {
+    stack.teardown();
+  });
+
+  it("sign → verify roundtrip: Fulcio cert, Rekor entry, TUF-resolved trust root", async () => {
+    const bundleBytes = new TextEncoder().encode("export const wrapper = () => 'hi';");
 
     const signature = await signBundleSigstore({
       bundleBytes,
-      identityToken: "header.payload.sig",
+      identityToken: stack.identityToken(),
+      endpoints: stack.signEndpoints,
     });
 
     expect(signature.algorithm).toBe("sigstore-cosign");
     expect(signature.bundleSha384.length).toBeGreaterThan(0);
-    expect(() => JSON.parse(signature.bundle)).not.toThrow();
     expect(() => new Date(signature.signedAt).toISOString()).not.toThrow();
 
-    // Confirms the upstream sign was called with the right shape.
-    expect(mockedSign).toHaveBeenCalledOnce();
-    const [data, opts] = mockedSign.mock.calls[0]!;
-    expect(Buffer.isBuffer(data) ? data.toString("utf-8") : "").toBe("hello world");
-    expect(opts).toMatchObject({ identityToken: "header.payload.sig", tlogUpload: true });
+    // Pin the REAL bundle shape sigstore v4 emits — the old hand-built
+    // fixtures in this file assumed shapes real signing does not
+    // produce (see the extractSigstoreLeafCertPem suite below).
+    const parsed = JSON.parse(signature.bundle) as {
+      mediaType?: string;
+      verificationMaterial?: {
+        certificate?: { rawBytes?: string };
+        x509CertificateChain?: unknown;
+        tlogEntries?: unknown[];
+      };
+      messageSignature?: { messageDigest?: { algorithm?: string } };
+    };
+    expect(parsed.mediaType).toMatch(/application\/vnd\.dev\.sigstore\.bundle/);
+    expect(parsed.messageSignature?.messageDigest?.algorithm).toBe("SHA2_256");
+    expect(parsed.verificationMaterial?.tlogEntries).toHaveLength(1);
+
+    const result = await verifyBundleSigstore({
+      bundleBytes,
+      signature,
+      ...stack.tuf,
+    });
+    expect(result).toEqual({ valid: true });
   });
 
-  it("forwards endpoint overrides when supplied", async () => {
-    mockedSign.mockResolvedValueOnce(JSON.parse(buildFakeBundleJSON()));
-    await signBundleSigstore({
-      bundleBytes: new TextEncoder().encode("data"),
-      identityToken: "tok",
-      endpoints: {
-        fulcioURL: "https://fulcio.example.test",
-        rekorURL: "https://rekor.example.test",
+  it("verify rejects tampered bundle bytes at the fast SHA-384 gate", async () => {
+    const bundleBytes = new TextEncoder().encode("clean bundle");
+    const signature = await signBundleSigstore({
+      bundleBytes,
+      identityToken: stack.identityToken(),
+      endpoints: stack.signEndpoints,
+    });
+
+    const tampered = new Uint8Array(bundleBytes);
+    tampered[0] = (tampered[0]! ^ 0x01) & 0xff;
+
+    const result = await verifyBundleSigstore({
+      bundleBytes: tampered,
+      signature,
+      ...stack.tuf,
+    });
+    expect(result.valid).toBe(false);
+    if (!result.valid) expect(result.reason).toMatch(/bundle hash mismatch/);
+  });
+
+  it("verify cryptographically rejects a signature transplanted from other payload bytes", async () => {
+    // Defeat the fast SHA-384 gate on purpose (claim the digest of the
+    // bytes under verification) so the REAL upstream check — the
+    // signature + messageDigest inside the cosign bundle — is what
+    // rejects. This is the assertion the old wholesale `sigstore` mock
+    // could never make.
+    const signedBytes = new TextEncoder().encode("the bytes that were signed");
+    const presentedBytes = new TextEncoder().encode("different bytes presented");
+    const signature = await signBundleSigstore({
+      bundleBytes: signedBytes,
+      identityToken: stack.identityToken(),
+      endpoints: stack.signEndpoints,
+    });
+
+    const { sha384 } = await import("@noble/hashes/sha2");
+    const transplanted: SigstoreSignature = {
+      ...signature,
+      bundleSha384: Buffer.from(sha384(presentedBytes)).toString("base64"),
+    };
+
+    const result = await verifyBundleSigstore({
+      bundleBytes: presentedBytes,
+      signature: transplanted,
+      ...stack.tuf,
+    });
+    expect(result.valid).toBe(false);
+    if (!result.valid) {
+      expect(result.reason).toMatch(/sigstore verification failed/);
+      // Guard the assertion's meaning: the rejection must come from
+      // the cryptographic check, not from trust-material resolution
+      // failing before the check could run.
+      expect(result.reason).not.toMatch(/TUF/i);
+    }
+  });
+
+  it("string identity policy: the real leaf-cert SAN must match certificateIdentityURI", async () => {
+    // URI-shaped subject on purpose: the mock CA writes URI SANs
+    // regardless of subject shape (see ./testing module docstring), so
+    // email policies can never match here — email routing is pinned in
+    // the option-threading seam tests.
+    const bundleBytes = new TextEncoder().encode("identity-policy payload");
+    const signature = await signBundleSigstore({
+      bundleBytes,
+      identityToken: stack.identityToken(),
+      endpoints: stack.signEndpoints,
+    });
+
+    const matching = await verifyBundleSigstore({
+      bundleBytes,
+      signature,
+      expectedIdentity: {
+        subject: stack.defaultSubject,
+        issuer: stack.defaultIssuer,
       },
+      ...stack.tuf,
     });
-    const [, opts] = mockedSign.mock.calls[0]!;
-    expect(opts).toMatchObject({
-      fulcioURL: "https://fulcio.example.test",
-      rekorURL: "https://rekor.example.test",
+    expect(matching).toEqual({ valid: true });
+
+    const mismatched = await verifyBundleSigstore({
+      bundleBytes,
+      signature,
+      expectedIdentity: {
+        subject: "https://gadgets.ggui.test/somebody-else",
+        issuer: stack.defaultIssuer,
+      },
+      ...stack.tuf,
     });
+    expect(mismatched.valid).toBe(false);
+    if (!mismatched.valid) {
+      expect(mismatched.reason).toMatch(/sigstore verification failed/);
+    }
   });
 
-  it("wraps upstream OIDC errors as SigstoreSigningError(code='oidc_invalid')", async () => {
-    mockedSign.mockRejectedValueOnce(new Error("OIDC token expired"));
-    await expect(
-      signBundleSigstore({
-        bundleBytes: new TextEncoder().encode("data"),
-        identityToken: "expired",
-      }),
-    ).rejects.toMatchObject({
-      name: "SigstoreSigningError",
-      code: "oidc_invalid",
+  it("RegExp identity pre-check runs against the real leaf-cert SAN", async () => {
+    const bundleBytes = new TextEncoder().encode("regexp-identity payload");
+    const signature = await signBundleSigstore({
+      bundleBytes,
+      identityToken: stack.identityToken(),
+      endpoints: stack.signEndpoints,
     });
+
+    // The lightweight DER scanner in `extractSANFromBundle` reads a
+    // REAL Fulcio-mock certificate here — this suite is its only
+    // coverage against genuine DER (the old tests fed it hand-rolled
+    // pseudo-DER).
+    const matching = await verifyBundleSigstore({
+      bundleBytes,
+      signature,
+      expectedIdentity: { subject: /\/e2e-signer$/ },
+      ...stack.tuf,
+    });
+    expect(matching).toEqual({ valid: true });
+
+    const mismatched = await verifyBundleSigstore({
+      bundleBytes,
+      signature,
+      expectedIdentity: { subject: /\/somebody-else$/ },
+      ...stack.tuf,
+    });
+    expect(mismatched.valid).toBe(false);
+    // `identity mismatch` is emitted ONLY by the RegExp pre-check —
+    // proof the rejection happened before the upstream verifier ran.
+    if (!mismatched.valid) expect(mismatched.reason).toMatch(/identity mismatch/);
   });
 
-  it("wraps upstream tlog errors as SigstoreSigningError(code='rekor_error')", async () => {
-    const upstream = Object.assign(new Error("tlog write failed"), {
-      code: "TLOG_CREATE_ENTRY_ERROR",
+  it("extractSigstoreLeafCertPem returns the leaf cert from a REAL signed bundle", async () => {
+    const bundleBytes = new TextEncoder().encode("leaf-cert payload");
+    const signature = await signBundleSigstore({
+      bundleBytes,
+      identityToken: stack.identityToken(),
+      endpoints: stack.signEndpoints,
     });
-    mockedSign.mockRejectedValueOnce(upstream);
-    await expect(
-      signBundleSigstore({
-        bundleBytes: new TextEncoder().encode("data"),
-        identityToken: "tok",
-      }),
-    ).rejects.toMatchObject({
-      name: "SigstoreSigningError",
-      code: "rekor_error",
-    });
+
+    const leaf = extractSigstoreLeafCertPem(signature);
+    expect(leaf).toBeDefined();
+    // The extracted value is the base64 DER — a decoded cert starts
+    // with the ASN.1 SEQUENCE tag.
+    expect(Buffer.from(leaf!, "base64")[0]).toBe(0x30);
   });
+});
+
+describe("sigstore signing failure classification — real error paths (F3)", () => {
+  it("wraps a Fulcio 400 (garbage OIDC token) as SigstoreSigningError with a cause", async () => {
+    const stack = await startSigstoreMockStack();
+    try {
+      await expect(
+        signBundleSigstore({
+          bundleBytes: new TextEncoder().encode("data"),
+          identityToken: "not-a-jwt-at-all",
+          endpoints: stack.signEndpoints,
+        }),
+      ).rejects.toMatchObject({
+        name: "SigstoreSigningError",
+        // Observed on first real execution (F3): the upstream error
+        // message for an undecodable token mentions the token itself,
+        // so the classifier's message-level identity check fires
+        // BEFORE the `CA_*` code check — `oidc_invalid`, the more
+        // actionable code for this failure (re-acquire the token, not
+        // "Fulcio is down").
+        code: "oidc_invalid",
+      });
+    } finally {
+      stack.teardown();
+    }
+  });
+
+  it("wraps an unreachable Rekor as SigstoreSigningError(code='rekor_error')", async () => {
+    // Fulcio mounted, Rekor NOT — cert issuance succeeds, the
+    // transparency-log write fails. The stack is hermetic
+    // (disableNetConnect), so each attempt dies instantly on nock's
+    // disallowed-net-connect error — no live DNS involved; the ~3s
+    // wall time is upstream's default retry backoff (2 retries)
+    // around the deterministic refusal.
+    const stack = await startSigstoreMockStack({ rekor: false });
+    try {
+      await expect(
+        signBundleSigstore({
+          bundleBytes: new TextEncoder().encode("data"),
+          identityToken: stack.identityToken(),
+          endpoints: stack.signEndpoints,
+        }),
+      ).rejects.toMatchObject({
+        name: "SigstoreSigningError",
+        code: "rekor_error",
+      });
+    } finally {
+      stack.teardown();
+    }
+  }, 15_000);
 
   it("SigstoreSigningError exposes cause for upstream telemetry", () => {
     const cause = new Error("inner");
@@ -397,194 +500,37 @@ describe("signBundleSigstore", () => {
   });
 });
 
-describe("verifyBundleSigstore", () => {
-  beforeEach(() => {
-    mockedSign.mockReset();
-    mockedVerify.mockReset();
-  });
-
-  it("round-trips with sign on the happy path", async () => {
-    mockedSign.mockResolvedValueOnce(JSON.parse(buildFakeBundleJSON()));
-    mockedVerify.mockResolvedValueOnce({} as unknown as never);
-
-    const bundleBytes = new TextEncoder().encode("hello world");
-    const signature = await signBundleSigstore({
-      bundleBytes,
-      identityToken: "tok",
-    });
-
-    const result = await verifyBundleSigstore({
-      bundleBytes,
-      signature,
-    });
-    expect(result).toEqual({ valid: true });
-    expect(mockedVerify).toHaveBeenCalledOnce();
-  });
-
-  it("rejects bundle tampering with bundleSha384 mismatch", async () => {
-    mockedSign.mockResolvedValueOnce(JSON.parse(buildFakeBundleJSON()));
-    const bundleBytes = new TextEncoder().encode("clean bundle");
-    const signature = await signBundleSigstore({
-      bundleBytes,
-      identityToken: "tok",
-    });
-
-    const tampered = new Uint8Array(bundleBytes);
-    tampered[0] = (tampered[0]! ^ 0x01) & 0xff;
-
-    const result = await verifyBundleSigstore({
-      bundleBytes: tampered,
-      signature,
-    });
-    expect(result.valid).toBe(false);
-    if (!result.valid) expect(result.reason).toMatch(/bundle hash mismatch/);
-    expect(mockedVerify).not.toHaveBeenCalled();
-  });
-
-  it("rejects a malformed bundle JSON string", async () => {
+describe("verifyBundleSigstore — local structural gates (no network, no trust root)", () => {
+  it("rejects a malformed bundle JSON string before consulting any trust material", async () => {
+    const { sha384 } = await import("@noble/hashes/sha2");
+    const digest = sha384(new Uint8Array(0));
     const signature: SigstoreSignature = {
       algorithm: "sigstore-cosign",
-      bundleSha384: Buffer.from(
-        // Sha-384 of empty string — matches sha384(new Uint8Array(0)).
-        new Uint8Array(48),
-      ).toString("base64"),
+      bundleSha384: Buffer.from(digest).toString("base64"),
       bundle: "{not json",
       signedAt: new Date().toISOString(),
     };
-    // Force the fast-tamper check to pass: pre-compute the expected
-    // digest for the (empty) bundle bytes.
-    const { sha384 } = await import("@noble/hashes/sha2");
-    const digest = sha384(new Uint8Array(0));
-    signature.bundleSha384 satisfies string;
-    const fixed: SigstoreSignature = {
-      ...signature,
-      bundleSha384: Buffer.from(digest).toString("base64"),
-    };
     const result = await verifyBundleSigstore({
       bundleBytes: new Uint8Array(0),
-      signature: fixed,
+      signature,
     });
     expect(result.valid).toBe(false);
     if (!result.valid) expect(result.reason).toMatch(/malformed bundle JSON/);
   });
 
-  it("projects upstream verify failure to VerifyResult (does not throw)", async () => {
-    mockedSign.mockResolvedValueOnce(JSON.parse(buildFakeBundleJSON()));
-    mockedVerify.mockRejectedValueOnce(new Error("certificate identity does not match"));
+  it("rejects a structurally invalid sigstore bundle shape", async () => {
     const bundleBytes = new TextEncoder().encode("data");
-    const signature = await signBundleSigstore({ bundleBytes, identityToken: "tok" });
-
-    const result = await verifyBundleSigstore({
-      bundleBytes,
-      signature,
-      expectedIdentity: { subject: "https://different.example.test" },
-    });
+    const { sha384 } = await import("@noble/hashes/sha2");
+    const signature: SigstoreSignature = {
+      algorithm: "sigstore-cosign",
+      bundleSha384: Buffer.from(sha384(bundleBytes)).toString("base64"),
+      // Valid JSON, invalid Bundle: no verificationMaterial/content.
+      bundle: JSON.stringify({ mediaType: "application/vnd.dev.sigstore.bundle+json;version=0.3" }),
+      signedAt: new Date().toISOString(),
+    };
+    const result = await verifyBundleSigstore({ bundleBytes, signature });
     expect(result.valid).toBe(false);
-    if (!result.valid) {
-      expect(result.reason).toMatch(/sigstore verification failed/);
-      expect(result.reason).toMatch(/certificate identity does not match/);
-    }
-  });
-
-  it("forwards string identity policy to upstream verify", async () => {
-    mockedSign.mockResolvedValueOnce(JSON.parse(buildFakeBundleJSON()));
-    mockedVerify.mockResolvedValueOnce({} as unknown as never);
-    const bundleBytes = new TextEncoder().encode("data");
-    const signature = await signBundleSigstore({ bundleBytes, identityToken: "tok" });
-
-    await verifyBundleSigstore({
-      bundleBytes,
-      signature,
-      expectedIdentity: {
-        subject: "https://author.example.test/me",
-        issuer: "https://token.actions.githubusercontent.com",
-      },
-    });
-    const [, , opts] = mockedVerify.mock.calls[0]!;
-    expect(opts).toMatchObject({
-      certificateIdentityURI: "https://author.example.test/me",
-      certificateIssuer: "https://token.actions.githubusercontent.com",
-    });
-  });
-
-  it("routes email-shaped identity to certificateIdentityEmail", async () => {
-    mockedSign.mockResolvedValueOnce(JSON.parse(buildFakeBundleJSON()));
-    mockedVerify.mockResolvedValueOnce({} as unknown as never);
-    const bundleBytes = new TextEncoder().encode("data");
-    const signature = await signBundleSigstore({ bundleBytes, identityToken: "tok" });
-
-    await verifyBundleSigstore({
-      bundleBytes,
-      signature,
-      expectedIdentity: { subject: "author@example.test" },
-    });
-    const [, , opts] = mockedVerify.mock.calls[0]!;
-    expect(opts).toMatchObject({ certificateIdentityEmail: "author@example.test" });
-  });
-
-  it("RegExp identity that fails to match rejects WITHOUT calling upstream verify", async () => {
-    mockedSign.mockResolvedValueOnce(
-      JSON.parse(buildFakeBundleJSON({ san: "https://gadgets.example.com/alice" })),
-    );
-    const bundleBytes = new TextEncoder().encode("data");
-    const signature = await signBundleSigstore({ bundleBytes, identityToken: "tok" });
-
-    const result = await verifyBundleSigstore({
-      bundleBytes,
-      signature,
-      expectedIdentity: { subject: /\/bob$/ },
-    });
-    expect(result.valid).toBe(false);
-    if (!result.valid) expect(result.reason).toMatch(/identity mismatch/);
-    expect(mockedVerify).not.toHaveBeenCalled();
-  });
-
-  it("RegExp identity that matches allows upstream verify to proceed", async () => {
-    mockedSign.mockResolvedValueOnce(
-      JSON.parse(buildFakeBundleJSON({ san: "https://gadgets.example.com/alice" })),
-    );
-    mockedVerify.mockResolvedValueOnce({} as unknown as never);
-    const bundleBytes = new TextEncoder().encode("data");
-    const signature = await signBundleSigstore({ bundleBytes, identityToken: "tok" });
-
-    const result = await verifyBundleSigstore({
-      bundleBytes,
-      signature,
-      expectedIdentity: { subject: /\/alice$/ },
-    });
-    expect(result).toEqual({ valid: true });
-  });
-
-  it("threads tufCachePath + tufForceCache into upstream verify options", async () => {
-    mockedSign.mockResolvedValueOnce(JSON.parse(buildFakeBundleJSON()));
-    mockedVerify.mockResolvedValueOnce({} as unknown as never);
-    const bundleBytes = new TextEncoder().encode("data");
-    const signature = await signBundleSigstore({ bundleBytes, identityToken: "tok" });
-
-    const result = await verifyBundleSigstore({
-      bundleBytes,
-      signature,
-      tufCachePath: "/tmp/sigstore-js",
-      tufForceCache: true,
-    });
-    expect(result).toEqual({ valid: true });
-    const [, , opts] = mockedVerify.mock.calls[0]!;
-    expect(opts).toMatchObject({
-      tufCachePath: "/tmp/sigstore-js",
-      tufForceCache: true,
-    });
-  });
-
-  it("omits TUF options from upstream verify when unset", async () => {
-    mockedSign.mockResolvedValueOnce(JSON.parse(buildFakeBundleJSON()));
-    mockedVerify.mockResolvedValueOnce({} as unknown as never);
-    const bundleBytes = new TextEncoder().encode("data");
-    const signature = await signBundleSigstore({ bundleBytes, identityToken: "tok" });
-
-    await verifyBundleSigstore({ bundleBytes, signature });
-    const [, , opts] = mockedVerify.mock.calls[0]!;
-    expect(opts).not.toHaveProperty("tufCachePath");
-    expect(opts).not.toHaveProperty("tufForceCache");
+    if (!result.valid) expect(result.reason).toMatch(/invalid sigstore bundle shape/);
   });
 });
 
@@ -609,15 +555,19 @@ describe("extractSigstoreLeafCertPem", () => {
     expect(extractSigstoreLeafCertPem(sigWithBundle(bundle))).toBe("TEVBRi1DRVJU");
   });
 
-  it("returns undefined for malformed JSON", () => {
-    expect(extractSigstoreLeafCertPem(sigWithBundle("{not json"))).toBeUndefined();
-  });
-
-  it("returns undefined when the cert chain is absent (single-certificate shape)", () => {
+  it("returns the leaf cert rawBytes from a v0.3 single-certificate bundle", () => {
+    // sigstore v4's `sign()` emits bundle v0.3, which carries
+    // `verificationMaterial.certificate` (single leaf) instead of the
+    // v0.1/v0.2 `x509CertificateChain` shape — discovered when the
+    // first REAL signed bundle hit this extractor (F3).
     const bundle = JSON.stringify({
       verificationMaterial: { certificate: { rawBytes: "TEVBRi1DRVJU" } },
     });
-    expect(extractSigstoreLeafCertPem(sigWithBundle(bundle))).toBeUndefined();
+    expect(extractSigstoreLeafCertPem(sigWithBundle(bundle))).toBe("TEVBRi1DRVJU");
+  });
+
+  it("returns undefined for malformed JSON", () => {
+    expect(extractSigstoreLeafCertPem(sigWithBundle("{not json"))).toBeUndefined();
   });
 
   it("returns undefined for an empty certificates array", () => {
@@ -638,5 +588,9 @@ describe("extractSigstoreLeafCertPem", () => {
       verificationMaterial: { x509CertificateChain: { certificates: [{}] } },
     });
     expect(extractSigstoreLeafCertPem(sigWithBundle(missing))).toBeUndefined();
+    const emptySingle = JSON.stringify({
+      verificationMaterial: { certificate: { rawBytes: "" } },
+    });
+    expect(extractSigstoreLeafCertPem(sigWithBundle(emptySingle))).toBeUndefined();
   });
 });

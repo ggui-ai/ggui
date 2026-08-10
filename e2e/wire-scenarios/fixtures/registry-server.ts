@@ -14,6 +14,7 @@ import { createServer as createNetServer } from 'node:net';
 import {
   inMemoryRegistryStorage,
   inMemoryBundleStorage,
+  type PublishArtifactDeps,
   type RegistryStorage,
   type BundleStorage,
 } from '@ggui-ai/registry-core';
@@ -54,7 +55,20 @@ export async function findFreePort(): Promise<number> {
   });
 }
 
-export async function bootRegistryServer(): Promise<RegistryServerHandle> {
+export interface BootRegistryServerOptions {
+  /**
+   * TUF trust-root tuning forwarded to the server's sigstore-cosign
+   * publish verification — the public-lane scenarios (21/22) point it
+   * at the in-process mock stack from
+   * `@ggui-ai/gadget-signing/testing` so REAL sigstore signatures
+   * verify against the mock trust root.
+   */
+  readonly sigstoreTuf?: PublishArtifactDeps['sigstoreTuf'];
+}
+
+export async function bootRegistryServer(
+  options: BootRegistryServerOptions = {},
+): Promise<RegistryServerHandle> {
   const port = await findFreePort();
   const host = '127.0.0.1';
   const bundleHost = `http://${host}:${port}`;
@@ -75,6 +89,9 @@ export async function bootRegistryServer(): Promise<RegistryServerHandle> {
     port,
     bundleHost,
     registryHostname,
+    ...(options.sigstoreTuf !== undefined
+      ? { sigstoreTuf: options.sigstoreTuf }
+      : {}),
   });
   await handle.start();
 

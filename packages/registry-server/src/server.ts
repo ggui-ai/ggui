@@ -37,6 +37,7 @@ import {
   publishArtifact,
   registerAuthorKey,
   type BlueprintProbeRunner,
+  type PublishArtifactDeps,
   readArtifact,
   searchArtifacts,
   type BundleStorage,
@@ -64,6 +65,15 @@ export interface RegistryAppOptions {
    * only the static gates from `checkConformance`.
    */
   readonly blueprintProbe?: BlueprintProbeRunner;
+  /**
+   * Optional TUF trust-root tuning for sigstore-cosign publish
+   * verification, forwarded verbatim to the publish op. Point
+   * `tufMirrorURL` + `tufRootPath` at an alternative TUF repository
+   * (private sigstore deployments; hermetic tests); `tufCachePath` /
+   * `tufForceCache` control cache placement + warm reuse. Unset =
+   * the sigstore public-good trust root.
+   */
+  readonly sigstoreTuf?: PublishArtifactDeps['sigstoreTuf'];
 }
 
 /**
@@ -76,6 +86,7 @@ export function createRegistryApp(options: RegistryAppOptions): Hono {
   const { storage, bundleStorage, authn, registryHostname } = options;
   const clock = options.clock ?? (() => new Date());
   const blueprintProbe = options.blueprintProbe;
+  const sigstoreTuf = options.sigstoreTuf;
 
   const app = new Hono();
 
@@ -235,6 +246,7 @@ export function createRegistryApp(options: RegistryAppOptions): Hono {
         clock,
         registryHostname,
         ...(blueprintProbe !== undefined ? { blueprintProbe } : {}),
+        ...(sigstoreTuf !== undefined ? { sigstoreTuf } : {}),
       },
     );
 

@@ -26,10 +26,14 @@
  *   8. Fetch the bundle URL — assert the bytes round-trip + the
  *      Cache-Control header is the cache-immutable contract.
  *
+ * The public lane (F3, 2026-08-10) runs in its own describe below:
+ * the SAME fixture bundle published `visibility: 'public'` with a
+ * REAL sigstore keyless signature (mock Fulcio/Rekor + mock TUF trust
+ * root from `@ggui-ai/gadget-signing/testing`), then asserted to
+ * SURFACE in `/search` — the listing assertion the private lane
+ * structurally can never make.
+ *
  * What this scenario does NOT cover (deferred to a follow-up):
- *   - The public lane (sigstore keyless signing + public search
- *     listing) — requires Fulcio/Rekor (or `@sigstore/mock`), which
- *     lands with the real-sigstore coverage slice (F3).
  *   - CLI subprocess invocation of `ggui gadget publish` / `install`
  *     (the CLI surface has its own test suite at
  *     `packages/ggui-cli/src/internal/artifact-*.test.ts`).
@@ -46,8 +50,10 @@ import { createHash } from 'node:crypto';
 import {
   generateEd25519Keypair,
   signBundleEd25519,
+  signBundleSigstore,
   type Ed25519Signature,
 } from '@ggui-ai/gadget-signing';
+import { startSigstoreMockStack } from '@ggui-ai/gadget-signing/testing';
 import { parseGadgetManifest } from '@ggui-ai/artifact-manifest';
 import {
   bootRegistryServer,
@@ -132,8 +138,8 @@ describe('21 — marketplace gadget lifecycle', () => {
 
     // ── 5. GET /search ─────────────────────────────────────────────
     // The fixture is private — /search lists only public rows, so the
-    // publish MUST NOT surface here. (The public lane needs sigstore
-    // keyless signing; covered when F3 lands real-sigstore fixtures.)
+    // publish MUST NOT surface here. (The public lane — sigstore
+    // keyless + /search listing — is the F3 describe below.)
     const searchResp = await fetch(`${registry.url}/search?kind=gadget`);
     expect(searchResp.status).toBe(200);
     const searchBody = await searchResp.json();
@@ -222,5 +228,90 @@ describe('21 — marketplace gadget lifecycle', () => {
       body: JSON.stringify({}),
     });
     expect(resp.status).toBe(401);
+  });
+});
+
+describe('21 — marketplace gadget lifecycle: PUBLIC sigstore lane (F3)', () => {
+  test('public publish with REAL sigstore signature → 201 → SURFACES in /search → anonymous read + bundle fetch', async () => {
+    // One mock stack per test: nock interceptors are process-global,
+    // and the trust root must outlive the publish verify only.
+    const stack = await startSigstoreMockStack();
+    const registry = await bootRegistryServer({ sigstoreTuf: stack.tuf });
+    try {
+      // ── 1. Load fixture manifest (public variant) + bundle ───────
+      const manifestRaw = JSON.parse(
+        await readFile(resolve(FIXTURE_ROOT, 'ggui.gadget.json'), 'utf-8'),
+      );
+      const manifest = parseGadgetManifest({
+        ...manifestRaw,
+        visibility: 'public',
+      });
+      const bundleBytes = new Uint8Array(
+        await readFile(resolve(FIXTURE_ROOT, 'dist/index.js')),
+      );
+
+      // ── 2. REAL sigstore keyless signing ─────────────────────────
+      // Real ephemeral key → real cert from the mock CA → real
+      // transparency-log entry. No author-key registration: the
+      // sigstore lane's trust chain is Fulcio + Rekor, not AuthorKeys.
+      const signature = await signBundleSigstore({
+        bundleBytes,
+        identityToken: stack.identityToken(),
+        endpoints: stack.signEndpoints,
+      });
+
+      // ── 3. POST /publish ─────────────────────────────────────────
+      const publishResp = await fetch(`${registry.url}/publish`, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          authorization: `Bearer ${TEST_REGISTRY_TOKEN}`,
+        },
+        body: JSON.stringify({
+          manifest,
+          bundle: base64(bundleBytes),
+          bundleSha384: sha384(bundleBytes),
+          signature,
+        }),
+      });
+      const publishBody = await publishResp.json();
+      expect(
+        publishResp.status,
+        `publish answered: ${JSON.stringify(publishBody)}`,
+      ).toBe(201);
+      expect(publishBody.artifactId).toBe('@ggui-test/probe-gadget');
+
+      // ── 4. GET /search — the public row SURFACES ─────────────────
+      // The restored public-lane listing assertion (removed when F1
+      // flipped the fixtures honest-private).
+      const searchResp = await fetch(`${registry.url}/search?kind=gadget`);
+      expect(searchResp.status).toBe(200);
+      const searchBody = await searchResp.json();
+      const listed = searchBody.results.map(
+        (r: { artifactId: string }) => r.artifactId,
+      );
+      expect(listed).toContain('@ggui-test/probe-gadget');
+
+      // ── 5. Anonymous read — public rows need no bearer ───────────
+      const readResp = await fetch(
+        `${registry.url}/pkg/ggui-test/probe-gadget/0.0.1`,
+      );
+      expect(readResp.status).toBe(200);
+      const readBody = await readResp.json();
+      expect(readBody.manifest.visibility).toBe('public');
+      // Real Fulcio-mock leaf cert pinned on the row (v0.3
+      // single-certificate bundle shape).
+      expect(typeof readBody.authorPublicKey).toBe('string');
+      expect(Buffer.from(readBody.authorPublicKey, 'base64')[0]).toBe(0x30);
+
+      // ── 6. Bundle bytes round-trip ───────────────────────────────
+      const bundleResp = await fetch(readBody.bundleUrl);
+      expect(bundleResp.status).toBe(200);
+      const bundleText = await bundleResp.text();
+      expect(bundleText).toContain('useTestProbe');
+    } finally {
+      await registry.stop();
+      stack.teardown();
+    }
   });
 });

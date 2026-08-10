@@ -25,6 +25,11 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
       "default": "./dist/index.js"
+    },
+    "./testing": {
+      "types": "./dist/testing/index.d.ts",
+      "import": "./dist/testing/index.js",
+      "default": "./dist/testing/index.js"
     }
   },
   "scripts": {
@@ -40,10 +45,36 @@
     "@noble/ed25519": "^2.2.0",
     "@noble/hashes": "^1.6.0",
     "@sigstore/bundle": "^4.0.0",
+    "@sigstore/core": "^3.2.1",
     "sigstore": "^4.0.0"
   },
+  "peerDependencies": {
+    "@sigstore/mock": "~0.12.1",
+    "@sigstore/protobuf-specs": "^0.5.1",
+    "@tufjs/repo-mock": "4.0.1",
+    "nock": "^13.5.6"
+  },
+  "peerDependenciesMeta": {
+    "@sigstore/mock": {
+      "optional": true
+    },
+    "@sigstore/protobuf-specs": {
+      "optional": true
+    },
+    "@tufjs/repo-mock": {
+      "optional": true
+    },
+    "nock": {
+      "optional": true
+    }
+  },
   "devDependencies": {
+    "@sigstore/mock": "~0.12.1",
+    "@sigstore/protobuf-specs": "^0.5.1",
+    "@sigstore/verify": "^3.1.1",
+    "@tufjs/repo-mock": "4.0.1",
     "@types/node": "^24.0.0",
+    "nock": "^13.5.6",
     "typescript": "^5.0.0",
     "vitest": "^3.2.6"
   },

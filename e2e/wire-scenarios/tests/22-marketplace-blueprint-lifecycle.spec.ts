@@ -15,8 +15,10 @@
  *      `installCommand` says `ggui blueprint install`.
  *   6. GET /search?kind=blueprint — the fixture is private
  *      (visibility ↔ algorithm pairing: Ed25519 ⇒ private), so the
- *      entry MUST NOT surface; public-lane listing needs sigstore
- *      keyless signing (F3).
+ *      entry MUST NOT surface. The public lane — REAL sigstore
+ *      keyless signing over canonical manifest bytes + the /search
+ *      listing assertion — runs in its own describe below (F3,
+ *      2026-08-10).
  *   7. GET /pkg/.../{version} — 403 without auth; with the bearer,
  *      assert the read response's `manifest.source` carries the
  *      inline TSX and there is NO `bundleUrl`.
@@ -32,7 +34,13 @@ import { afterEach, beforeEach, describe, expect, test } from 'vitest';
 import { readFile } from 'node:fs/promises';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { generateEd25519Keypair, signBundleEd25519, canonicalJson } from '@ggui-ai/gadget-signing';
+import {
+  generateEd25519Keypair,
+  signBundleEd25519,
+  signBundleSigstore,
+  canonicalJson,
+} from '@ggui-ai/gadget-signing';
+import { startSigstoreMockStack } from '@ggui-ai/gadget-signing/testing';
 import { parseBlueprintManifest } from '@ggui-ai/artifact-manifest';
 import {
   bootRegistryServer,
@@ -162,5 +170,75 @@ describe('22 — marketplace blueprint lifecycle', () => {
     const ids: string[] = body.results.map((r: { artifactId: string }) => r.artifactId);
     expect(ids).toContain('@ggui-test/some-blueprint');
     expect(ids).not.toContain('@ggui-test/some-gadget');
+  });
+});
+
+describe('22 — marketplace blueprint lifecycle: PUBLIC sigstore lane (F3)', () => {
+  test('public publish signed over canonical manifest bytes with REAL sigstore → 201 → SURFACES in /search → anonymous read', async () => {
+    const stack = await startSigstoreMockStack();
+    const registry = await bootRegistryServer({ sigstoreTuf: stack.tuf });
+    try {
+      // ── 1. Load fixture manifest (public variant) ────────────────
+      const manifestRaw = JSON.parse(
+        await readFile(resolve(FIXTURE_ROOT, 'ggui.blueprint.json'), 'utf-8'),
+      );
+      const manifest = parseBlueprintManifest({
+        ...manifestRaw,
+        visibility: 'public',
+      });
+
+      // ── 2. REAL sigstore keyless signing over canonicalJson ──────
+      // Blueprints carry no bundle — the signature covers the
+      // canonical-JSON manifest bytes, which the registry
+      // re-canonicalizes and verifies with the REAL
+      // verifyBundleSigstore against the mock trust root.
+      const manifestBytes = new TextEncoder().encode(canonicalJson(manifest));
+      const signature = await signBundleSigstore({
+        bundleBytes: manifestBytes,
+        identityToken: stack.identityToken(),
+        endpoints: stack.signEndpoints,
+      });
+
+      // ── 3. POST /publish ─────────────────────────────────────────
+      const publishResp = await fetch(`${registry.url}/publish`, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          authorization: `Bearer ${TEST_REGISTRY_TOKEN}`,
+        },
+        body: JSON.stringify({ manifest, signature }),
+      });
+      const publishBody = await publishResp.json();
+      expect(
+        publishResp.status,
+        `publish answered: ${JSON.stringify(publishBody)}`,
+      ).toBe(201);
+      expect(publishBody.artifactId).toBe('@ggui-test/probe-blueprint');
+      expect(publishBody.installCommand).toContain('ggui blueprint install');
+
+      // ── 4. GET /search — the public blueprint SURFACES ───────────
+      const searchResp = await fetch(`${registry.url}/search?kind=blueprint`);
+      expect(searchResp.status).toBe(200);
+      const searchBody = await searchResp.json();
+      const ids = searchBody.results.map(
+        (r: { artifactId: string }) => r.artifactId,
+      );
+      expect(ids).toContain('@ggui-test/probe-blueprint');
+
+      // ── 5. Anonymous read of the public row ──────────────────────
+      const readResp = await fetch(
+        `${registry.url}/pkg/ggui-test/probe-blueprint/0.0.1`,
+      );
+      expect(readResp.status).toBe(200);
+      const readBody = await readResp.json();
+      expect(readBody.manifest.kind).toBe('blueprint');
+      expect(readBody.bundleUrl).toBeUndefined();
+      // Real leaf-cert pin from the v0.3 bundle.
+      expect(typeof readBody.authorPublicKey).toBe('string');
+      expect(Buffer.from(readBody.authorPublicKey, 'base64')[0]).toBe(0x30);
+    } finally {
+      await registry.stop();
+      stack.teardown();
+    }
   });
 });

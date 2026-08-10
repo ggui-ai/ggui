@@ -37,7 +37,7 @@
  *   emits 401 with `{ error: 'unauthorized', message: ... }`.
  *
  * **Observable violation:**
- * - The integration test in `server.test.ts` exercises three negative
+ * - The integration test in `server.integration.test.ts` exercises three negative
  *   paths (no header, wrong scheme, bad token) and asserts identical
  *   401 responses. Any divergence — a different status, a leaked
  *   token hint in the body — is a contract violation.

@@ -3,11 +3,13 @@
  * manifest validation, bundle size, hash mismatch, unknown key,
  * signature verify, version_exists, success path.
  *
- * Sigstore branch (Bucket B'' B''.5) is covered via `vi.mock` against
- * `@ggui-ai/gadget-signing` — the real upstream sigstore flow needs
- * Fulcio + Rekor network access (or a `@sigstore/mock` fixture) which
- * is out of scope for the unit-test layer. The dispatch wiring itself
- * is the load-bearing thing we pin here.
+ * Sigstore branch: `verifyBundleSigstore` is mocked HERE (via
+ * `vi.mock` against `@ggui-ai/gadget-signing`) for cheap gate-order +
+ * error-path + option-threading coverage only. The REAL cryptographic
+ * publish path — genuine sigstore-signed bundle through the full op,
+ * verified against mock Fulcio/Rekor/TUF infrastructure — lives in
+ * `publish.sigstore.integration.test.ts` (F3), which this file's
+ * mocked dispatch pins must never substitute for.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
@@ -1283,7 +1285,12 @@ describe('publishArtifact', () => {
       if (result.ok) return;
       expect(result.status).toBe(400);
       expect(result.body.error).toBe('signature_invalid');
-      expect(result.body.message).toContain('verificationMaterial.x509CertificateChain');
+      // The diagnostic names BOTH wire shapes the extractor accepts —
+      // v0.3 single-leaf (preferred) and the v0.1/v0.2 chain (legacy).
+      expect(result.body.message).toContain('verificationMaterial.certificate.rawBytes');
+      expect(result.body.message).toContain(
+        'verificationMaterial.x509CertificateChain.certificates[0].rawBytes',
+      );
     });
 
     it('threads deps.sigstoreTuf into the verifyBundleSigstore call (F2)', async () => {

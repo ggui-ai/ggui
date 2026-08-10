@@ -23,6 +23,7 @@ import type { AddressInfo } from 'node:net';
 import type {
   BlueprintProbeRunner,
   BundleStorage,
+  PublishArtifactDeps,
   RegistryStorage,
 } from '@ggui-ai/registry-core';
 import type { BearerAuthn } from './authn/bearer.js';
@@ -75,6 +76,12 @@ export interface CreateRegistryServerOptions {
    * e2e fixtures, not unauthenticated public publish endpoints.
    */
   readonly blueprintProbe?: BlueprintProbeRunner;
+  /**
+   * Optional TUF trust-root tuning for sigstore-cosign publish
+   * verification. Forwarded to `createRegistryApp` (see
+   * {@link RegistryAppOptions.sigstoreTuf}).
+   */
+  readonly sigstoreTuf?: PublishArtifactDeps['sigstoreTuf'];
 }
 
 export interface RegistryServerHandle {
@@ -95,6 +102,9 @@ export function createRegistryServer(
     clock: options.clock,
     ...(options.blueprintProbe !== undefined
       ? { blueprintProbe: options.blueprintProbe }
+      : {}),
+    ...(options.sigstoreTuf !== undefined
+      ? { sigstoreTuf: options.sigstoreTuf }
       : {}),
   });
 

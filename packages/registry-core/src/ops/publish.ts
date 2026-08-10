@@ -174,11 +174,15 @@ export interface PublishArtifactDeps {
    * verifier's trust-root cache at a writable directory — serverless
    * runtimes typically only allow writes under `/tmp`.
    * `tufForceCache` reuses valid cached TUF metadata without a remote
-   * refresh. Ed25519 verification never consults these.
+   * refresh. `tufMirrorURL` + `tufRootPath` select an alternative TUF
+   * repository (private sigstore deployments; hermetic tests) — the
+   * trust root is THE knob that decides which signing infrastructure
+   * this registry's verifier trusts. Ed25519 verification never
+   * consults any of these.
    */
   readonly sigstoreTuf?: Pick<
     VerifyBundleSigstoreInput,
-    'tufCachePath' | 'tufForceCache'
+    'tufCachePath' | 'tufForceCache' | 'tufMirrorURL' | 'tufRootPath'
   >;
 }
 
@@ -496,7 +500,7 @@ export async function publishArtifact(
       return error(
         400,
         'signature_invalid',
-        'sigstore verify succeeded but bundle is missing `verificationMaterial.x509CertificateChain.certificates[0].rawBytes` — cannot pin author identity on the version row',
+        'sigstore verify succeeded but bundle carries no leaf certificate — expected `verificationMaterial.certificate.rawBytes` (bundle v0.3) or `verificationMaterial.x509CertificateChain.certificates[0].rawBytes` (v0.1/v0.2) — cannot pin author identity on the version row',
       );
     }
     authorPublicKey = leafCertPem;

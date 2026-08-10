@@ -36,6 +36,7 @@ import {
   bundleToJSON,
   type SerializedBundle,
 } from "@sigstore/bundle";
+import { X509Certificate } from "@sigstore/core";
 import * as sigstoreClient from "sigstore";
 
 // ---------------------------------------------------------------------------
@@ -568,11 +569,23 @@ export interface VerifyBundleSigstoreInput {
     readonly issuer?: string;
   };
   /**
-   * Optional endpoint overrides — only meaningful when paired with a
-   * non-prod TUF mirror. Production gadgets verify against the prod
-   * Sigstore TUF root.
+   * TUF mirror serving the trust-root metadata + targets. When unset,
+   * the upstream verifier resolves against the Sigstore public-good
+   * mirror. Point this (together with {@link tufRootPath}) at an
+   * alternative TUF repository for private sigstore deployments and
+   * hermetic tests — verification never contacts Fulcio/Rekor
+   * directly, so the TUF trust root is THE knob that selects which
+   * signing infrastructure a verifier trusts.
    */
-  readonly endpoints?: { readonly fulcioURL?: string; readonly rekorURL?: string };
+  readonly tufMirrorURL?: string;
+  /**
+   * Path to the initial TUF `root.json` that anchors trust in
+   * {@link tufMirrorURL}. Required for any non-public-good mirror
+   * (the upstream client only ships seeds for the public-good
+   * repository); ignored once a cached root exists under
+   * {@link tufCachePath}.
+   */
+  readonly tufRootPath?: string;
   /**
    * Writable cache directory for the sigstore TUF trust root. The
    * upstream verifier refreshes TUF metadata into this directory
@@ -618,8 +631,15 @@ export interface VerifyBundleSigstoreInput {
 export async function verifyBundleSigstore(
   input: VerifyBundleSigstoreInput,
 ): Promise<VerifyResult> {
-  const { bundleBytes, signature, expectedIdentity, tufCachePath, tufForceCache } =
-    input;
+  const {
+    bundleBytes,
+    signature,
+    expectedIdentity,
+    tufMirrorURL,
+    tufRootPath,
+    tufCachePath,
+    tufForceCache,
+  } = input;
 
   // 1. Fast tamper check.
   const recomputed = sha384(bundleBytes);
@@ -675,6 +695,12 @@ export async function verifyBundleSigstore(
   // 4. Run the full upstream verify.
   try {
     const verifyOpts: sigstoreClient.VerifyOptions = {};
+    if (tufMirrorURL !== undefined) {
+      verifyOpts.tufMirrorURL = tufMirrorURL;
+    }
+    if (tufRootPath !== undefined) {
+      verifyOpts.tufRootPath = tufRootPath;
+    }
     if (tufCachePath !== undefined) {
       verifyOpts.tufCachePath = tufCachePath;
     }
@@ -710,10 +736,19 @@ export async function verifyBundleSigstore(
 
 /**
  * Extract the Fulcio leaf cert's base64 raw bytes from a
- * {@link SigstoreSignature}'s serialized cosign bundle (per
- * `@sigstore/bundle` v0.3, `verificationMaterial.x509CertificateChain
- * .certificates[0].rawBytes`). Returns `undefined` if the bundle is
- * malformed or missing the cert chain.
+ * {@link SigstoreSignature}'s serialized cosign bundle. Two
+ * `verificationMaterial` shapes exist on the wire:
+ *
+ *   - `certificate.rawBytes` — the single-leaf shape bundle v0.3
+ *     emits. What real `sigstore.sign()` produces today (surfaced by
+ *     this path's first real signing run, 2026-08-10 — the extractor
+ *     previously only knew the chain shape and returned `undefined`
+ *     for every genuinely-signed bundle).
+ *   - `x509CertificateChain.certificates[0].rawBytes` — the v0.1/v0.2
+ *     chain shape, still valid on the wire for externally-produced
+ *     bundles.
+ *
+ * Returns `undefined` if the bundle is malformed or carries neither.
  *
  * Lives here — next to {@link verifyBundleSigstore} — so cosign
  * bundle-format knowledge has ONE home. Registries persist the
@@ -741,6 +776,13 @@ export function extractSigstoreLeafCertPem(
   if (verificationMaterial === null || typeof verificationMaterial !== "object") {
     return undefined;
   }
+  // Bundle v0.3 single-leaf shape first — what real signing emits.
+  const certificate = (verificationMaterial as { certificate?: unknown }).certificate;
+  if (certificate !== null && typeof certificate === "object") {
+    const rawBytes = (certificate as { rawBytes?: unknown }).rawBytes;
+    if (typeof rawBytes === "string" && rawBytes.length > 0) return rawBytes;
+  }
+  // v0.1/v0.2 chain shape — leaf first.
   const chain = (verificationMaterial as { x509CertificateChain?: unknown })
     .x509CertificateChain;
   if (chain === null || typeof chain !== "object") return undefined;
@@ -759,9 +801,15 @@ export function extractSigstoreLeafCertPem(
  * by the RegExp-identity pre-check; production verification still goes
  * through the upstream verifier for the actual cryptographic check.
  *
+ * Parsing delegates to `@sigstore/core`'s `X509Certificate` — the
+ * SAME parser the upstream verifier uses — so the SAN this pre-check
+ * sees can never drift from the SAN verification enforces. (A prior
+ * hand-rolled DER scan over-captured on real certificates —
+ * discovered on the first genuinely Fulcio-issued cert it ever saw,
+ * 2026-08-10 — and was replaced wholesale rather than patched.)
+ *
  * Returns `undefined` if the bundle has no cert (e.g. publicKey-only
- * bundle) or no extractable SAN. Uses lightweight base64-DER scanning —
- * defers to the upstream verifier for the trust-chain semantics.
+ * bundle), the cert fails to parse, or it carries no URI/email SAN.
  */
 function extractSANFromBundle(bundle: SerializedBundle): string | undefined {
   const material = bundle.verificationMaterial;
@@ -779,55 +827,13 @@ function extractSANFromBundle(bundle: SerializedBundle): string | undefined {
   }
   if (!certB64) return undefined;
 
-  // Very lightweight SAN extraction: decode DER, locate the SAN
-  // extension OID (2.5.29.17), and pull the first URI/email-shaped
-  // ASCII run. This is intentionally tolerant — exact parsing happens
-  // in `@sigstore/verify` downstream.
-  let der: Uint8Array;
   try {
-    der = base64ToBytes(certB64);
+    const cert = X509Certificate.parse(Buffer.from(certB64, "base64"));
+    // `subjectAltName` is the URI GeneralName when present, else the
+    // rfc822Name — the exact preference order the verifier's identity
+    // policy uses.
+    return cert.subjectAltName;
   } catch {
     return undefined;
   }
-  // OID 2.5.29.17 (subjectAltName) DER prefix: 06 03 55 1d 11.
-  const sanOid = [0x06, 0x03, 0x55, 0x1d, 0x11];
-  let idx = -1;
-  for (let i = 0; i < der.length - sanOid.length; i++) {
-    let match = true;
-    for (let j = 0; j < sanOid.length; j++) {
-      if (der[i + j] !== sanOid[j]) {
-        match = false;
-        break;
-      }
-    }
-    if (match) {
-      idx = i;
-      break;
-    }
-  }
-  if (idx === -1) return undefined;
-
-  // After the OID DER there's a BOOLEAN (critical, optional) then an
-  // OCTET STRING wrapping a SEQUENCE of GeneralName. Scan forward for
-  // the first printable ASCII run containing a URI or email shape.
-  const tail = der.subarray(idx + sanOid.length);
-  let buf = "";
-  const uriPattern = /[a-zA-Z][a-zA-Z0-9+.-]*:[^\s]+|[\w.+-]+@[\w.-]+/;
-  for (let i = 0; i < tail.length; i++) {
-    const b = tail[i]!;
-    if (b >= 0x20 && b <= 0x7e) {
-      buf += String.fromCharCode(b);
-    } else {
-      if (buf.length >= 3) {
-        const m = buf.match(uriPattern);
-        if (m) return m[0];
-      }
-      buf = "";
-    }
-  }
-  if (buf.length >= 3) {
-    const m = buf.match(uriPattern);
-    if (m) return m[0];
-  }
-  return undefined;
 }
