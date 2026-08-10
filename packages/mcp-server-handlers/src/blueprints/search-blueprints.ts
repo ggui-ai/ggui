@@ -47,8 +47,8 @@
  * the split the server already knows how to make.
  *
  * Pure over `@ggui-ai/mcp-server-core`'s seams. No AWS imports. No
- * config loading. The hosted server's logger wrapper decorates this
- * when composing.
+ * config loading. A composing host may wrap this with its own
+ * logging when assembling the server.
  */
 import { z } from 'zod';
 import type {
@@ -124,10 +124,11 @@ export interface SearchBlueprintsDeps {
    * included in the search results alongside the semantic
    * `VectorStore` matches.
    *
-   * Omitted = semantic-only behavior (the pre-merge default). The
-   * hosted server historically ran without a manifest provider on
-   * this handler; OSS `createGguiServer` constructs a
-   * `ManifestBlueprintProvider` at boot and threads it through.
+   * Omitted = semantic-only behavior (the pre-merge default) — a
+   * composing host can run without a manifest provider bound to this
+   * handler. This package's own `createGguiServer` constructs a
+   * `ManifestBlueprintProvider` at boot and threads it through by
+   * default.
    */
   readonly blueprints?: BlueprintProvider;
   /**
@@ -171,8 +172,9 @@ type MergedHit = GguiSearchBlueprintsOutput['results'][number];
  * `vectors` implementations (required) + an optional manifest
  * `BlueprintProvider`. Tests inject in-memory fakes from
  * `@ggui-ai/mcp-server-core/in-memory`; production hosts bind to
- * AWS Bedrock + S3 Vectors for the semantic source and a
- * `ManifestBlueprintProvider` for the manifest source.
+ * their own operator-configured embedding + vector-store providers
+ * for the semantic source and a `ManifestBlueprintProvider` for the
+ * manifest source.
  */
 export function createSearchBlueprintsHandler(
   deps: SearchBlueprintsDeps,
