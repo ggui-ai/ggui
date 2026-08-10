@@ -18,12 +18,15 @@
  *
  *   GET <registry>/pkg/<scope>/<name>/<version>
  *     200: { manifest, bundleUrl?, bundleSri?, signatureUrl?, compiledBytes?, publishedAt, publishedBy }
- *     403: { error: 'forbidden', message }   — private artifact (install
- *          sends no credentials, so private rows are uninstallable from
- *          the CLI today; the error copy says exactly that)
  *     404: { error: 'not_found', message }   — artifactId/version unknown
+ *          OR a private artifact the caller may not read: the registry
+ *          answers both identically so existence never leaks. Install
+ *          sends no credentials, so every private row lands here — the
+ *          404 diagnosis carries that education.
  *     410: { manifest, …, publishedAt, publishedBy } — yanked (body shape = ReadPkgResponse)
- *     other 4xx/5xx: { error, message }
+ *     other 4xx/5xx: { error, message } — the registry itself never
+ *          answers a read with 403; one can only arrive from a WAF or
+ *          proxy in front of it and is reported as a bare status
  *
  *   GET <bundleUrl>  → raw esbuild output (presigned S3)
  *   GET <signatureUrl> → JSON-encoded {@link Ed25519Signature}
@@ -614,26 +617,23 @@ export async function runArtifactInstall(
   }
 
   // Status checks BEFORE any body parse — a WAF/proxy in front of the
-  // registry may answer 403/404/410 with an HTML or empty body, and the
+  // registry may answer 404/410 with an HTML or empty body, and the
   // status-specific diagnostics must still fire. Only the paths that
   // actually consume the body parse it.
   if (pkgRes.status === 404) {
+    // The registry answers an unauthorized private read with the
+    // SAME not-found shape as a true miss (no existence signal), so
+    // the CLI cannot tell "missing" from "private and not yours" —
+    // one message covers both honestly.
     stderr(
-      `${verb}: package ${flags.artifactId}@${flags.version} not found\n`,
+      `${verb}: package ${flags.artifactId}@${flags.version} not found ` +
+        `(or not visible: private artifacts answer as not-found, and the CLI sends install requests without credentials — only public artifacts are installable).\n`,
     );
     return 1;
   }
   if (pkgRes.status === 410) {
     stderr(
       `${verb}: ${flags.artifactId}@${flags.version} was yanked; choose a different version\n`,
-    );
-    return 1;
-  }
-  if (pkgRes.status === 403) {
-    stderr(
-      `${verb}: ${flags.artifactId}@${flags.version} is private (HTTP 403). ` +
-        `Installing private artifacts is not supported yet — the CLI sends install requests without credentials, so logging in does not help. ` +
-        `Only artifacts published with public visibility are installable.\n`,
     );
     return 1;
   }

@@ -19,7 +19,9 @@
  *      keyless signing over canonical manifest bytes + the /search
  *      listing assertion — runs in its own describe below (F3,
  *      2026-08-10).
- *   7. GET /pkg/.../{version} — 403 without auth; with the bearer,
+ *   7. GET /pkg/.../{version} — 404 `not_found` without auth (an
+ *      unauthorized private read answers exactly like a true miss —
+ *      no existence signal); with the publisher's bearer,
  *      assert the read response's `manifest.source` carries the
  *      inline TSX and there is NO `bundleUrl`.
  *
@@ -123,11 +125,13 @@ describe('22 — marketplace blueprint lifecycle', () => {
     expect(entry).toBeUndefined();
 
     // ── 6. GET /pkg/{scope}/{name}/{version} ───────────────────────
-    // Unauthed read of a private row is refused…
+    // Unauthed read of a private row answers with the SAME not-found
+    // shape as a true miss (ownership rule: publisher or scope owner
+    // only; no existence signal on the anonymous wire)…
     const unauthedReadResp = await fetch(
       `${registry.url}/pkg/ggui-test/probe-blueprint/0.0.1`,
     );
-    expect(unauthedReadResp.status).toBe(403);
+    expect(unauthedReadResp.status).toBe(404);
 
     // …and the bearer-authed read returns the full row.
     const readResp = await fetch(

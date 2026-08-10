@@ -102,6 +102,10 @@ export {
   type ReadArtifactResult,
 } from './ops/read.js';
 export {
+  artifactScope,
+  canReadPrivateArtifact,
+} from './ops/private-read-authz.js';
+export {
   listArtifactVersions,
   type ListArtifactVersionsDeps,
   type ListArtifactVersionsInput,

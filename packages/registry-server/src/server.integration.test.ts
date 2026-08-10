@@ -340,11 +340,14 @@ describe('OSS registry server', () => {
     expect(body.manifest.scope).toBe('@test');
   });
 
-  it('GET /pkg/:scope/:name/:version of a private row without auth returns 403', async () => {
+  it('GET /pkg/:scope/:name/:version of a private row without auth returns the not-found shape', async () => {
+    // Ownership rule: an unauthorized private read is byte-identical
+    // to a true miss — full parity coverage lives in
+    // `server.private-reads.integration.test.ts`.
     const res = await fetch(`${harness.baseUrl}/pkg/test/probe/0.1.0`);
-    expect(res.status).toBe(403);
+    expect(res.status).toBe(404);
     const body = (await res.json()) as { error: string };
-    expect(body.error).toBe('forbidden');
+    expect(body.error).toBe('not_found');
   });
 
   it('GET /pkg/:scope/:name/:version with leading @ also works', async () => {

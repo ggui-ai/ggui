@@ -43,6 +43,11 @@
       "types": "./dist/interfaces/registry-storage.d.ts",
       "import": "./dist/interfaces/registry-storage.js",
       "default": "./dist/interfaces/registry-storage.js"
+    },
+    "./ops/private-read-authz": {
+      "types": "./dist/ops/private-read-authz.d.ts",
+      "import": "./dist/ops/private-read-authz.js",
+      "default": "./dist/ops/private-read-authz.js"
     }
   },
   "scripts": {

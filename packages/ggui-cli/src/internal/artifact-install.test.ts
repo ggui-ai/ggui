@@ -850,13 +850,17 @@ describe('runArtifactInstall', () => {
     expect(io.stderr.join('')).toMatch(/yanked/i);
   });
 
-  it('403 private → exit 1 with a truthful "unsupported" hint (no login misdirection)', async () => {
+  it('the 404 diagnosis carries the honest private-visibility note (no login misdirection)', async () => {
+    // The registry answers an unauthorized private read
+    // with the SAME not-found shape as a true miss — the CLI can no
+    // longer distinguish "private" from "missing", so the 404 path
+    // carries the education the old 403 branch used to provide.
     const fetchStub = makeFetchStub([
       {
         matches: (url) => url.endsWith('/pkg/my-org/private/1.0.0'),
-        response: jsonResponse(403, {
-          error: 'forbidden',
-          message: 'private package requires authentication',
+        response: jsonResponse(404, {
+          error: 'not_found',
+          message: 'package @my-org/private@1.0.0 not found',
         }),
       },
     ]);
@@ -873,26 +877,25 @@ describe('runArtifactInstall', () => {
     );
     expect(code).toBe(1);
     const err = io.stderr.join('');
-    expect(err).toMatch(/private/i);
+    expect(err).toMatch(/not found/);
     // The hint must be honest: install sends no credentials, so it
     // must NOT tell the operator to log in (a prior version pointed
     // at a nonexistent `ggui auth login` verb AND implied logging in
     // would unlock the install — neither was true). It also must not
     // instruct the operator to lobby the publisher — visibility rules
     // are registry policy; the CLI just states what is installable.
-    expect(err).toContain('not supported');
+    expect(err).toMatch(/private/i);
     expect(err).toContain('without credentials');
-    expect(err).toContain('public visibility');
     expect(err).not.toContain('ggui auth login');
     expect(err).not.toMatch(/log in with/);
     expect(err).not.toMatch(/[Aa]sk the publisher/);
   });
 
-  it('403 with a non-JSON body (WAF/proxy) → same truthful hint, exit 1', async () => {
-    // A proxy in front of the registry may answer 403 with an HTML
-    // error page. The status check must fire BEFORE any body parse or
-    // the operator gets a generic "non-JSON body" error instead of
-    // the private-artifact diagnosis.
+  it('403 (WAF/proxy only) → generic status report, exit 1, no private-artifact diagnosis', async () => {
+    // The registry NEVER answers a read with 403 — private
+    // rows are not-found-shaped. A 403 can only come from a WAF or
+    // proxy in front of the registry, so the CLI reports it as a
+    // plain upstream status instead of diagnosing visibility.
     const fetchStub = makeFetchStub([
       {
         matches: (url) => url.endsWith('/pkg/my-org/private/1.0.0'),
@@ -915,8 +918,8 @@ describe('runArtifactInstall', () => {
     );
     expect(code).toBe(1);
     const err = io.stderr.join('');
-    expect(err).toMatch(/private/i);
-    expect(err).toContain('not supported');
+    expect(err).toContain('registry returned 403');
+    expect(err).not.toMatch(/private/i);
     expect(err).not.toContain('non-JSON body');
   });
 

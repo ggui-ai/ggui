@@ -42,7 +42,7 @@ ggui gadget publish --auth=bearer --token=$GGUI_REGISTRY_TOKEN \
 | GET    | `/bundles/:scope/:name/:version/bundle.js.sig` | none   | Serve the signature envelope (immutable cache)             |
 | GET    | `/bundles/:scope/:name/:version/manifest.json` | none   | Serve the manifest verbatim (immutable cache)              |
 
-\* Reads of `visibility: 'private'` rows require bearer; unauthenticated callers see only public rows.
+\* Reads of `visibility: 'private'` rows are ownership-gated: a private version is served only to the verified caller who published it or who owns the artifact's scope. Every other caller — unauthenticated included — receives the same `not_found` response as a genuinely missing artifact, and the version list filters unreadable versions (answering `not_found` when none are visible), so responses never reveal that a private artifact exists.
 
 ## Storage modes
 
@@ -60,7 +60,7 @@ This server is **MVP-scoped** for self-hosters who want the marketplace surface 
 - Rate limiting (use a reverse proxy)
 - TLS termination (use a reverse proxy)
 - Backup automation (the filesystem mode is single-machine)
-- Per-org private artifact scoping (treat `visibility: 'private'` as a label, not enforcement)
+- Per-org private artifact scoping (enforcement is per-subject — publisher or scope owner; org-membership admission is not implemented)
 - Sigstore transparency log integration
 
 If you need any of the above, build your own transport on top of [`@ggui-ai/registry-core`](https://github.com/ggui-ai/ggui/tree/main/packages/registry-core).

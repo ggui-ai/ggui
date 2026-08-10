@@ -424,10 +424,13 @@ export type PublishErrorCode = (typeof PUBLISH_ERROR_CODES)[number];
  * `yanked` is the 410-Gone path — the version exists in metadata but
  * the publisher revoked it. Clients SHOULD treat this as a hard
  * failure (don't fall back to a different version automatically).
+ *
+ * There is deliberately NO `forbidden` code: an unauthorized read of
+ * a private row answers with the SAME `not_found` shape as a true
+ * miss, so the wire never confirms a private artifact exists.
  */
 export const READ_ERROR_CODES = [
   'not_found',
-  'forbidden',
   'invalid_request',
   'yanked',
   'server_error',
@@ -435,13 +438,13 @@ export const READ_ERROR_CODES = [
 export type ReadErrorCode = (typeof READ_ERROR_CODES)[number];
 
 /**
- * Closed enum for `GET /search` responses. Same posture as
- * {@link ReadErrorCode} minus the `yanked` path (search filters
- * yanked rows out of the result set; it never surfaces as a top-level
- * error).
+ * Closed enum for `GET /search` responses. Search serves only public
+ * metadata rows and takes no caller identity, so the surface has no
+ * authorization failure at all — just request validation and adapter
+ * faults. (`yanked` likewise never surfaces: search filters yanked
+ * rows out of the result set.)
  */
 export const SEARCH_ERROR_CODES = [
-  'forbidden',
   'invalid_request',
   'server_error',
 ] as const;
@@ -702,12 +705,15 @@ export interface ArtifactScanFilter {
  * Closed enum for `GET /pkg/{scope}/{name}` list-versions responses.
  *
  *   - `invalid_request` — missing or malformed `artifactId`.
- *   - `not_found`       — no metadata row for `artifactId`. Distinct
- *                         from "metadata present but every version is
- *                         private + caller unauthed" (that path returns
- *                         200 with `versions: []` — exposing 404 vs
- *                         empty would leak private-row existence).
- *   - `server_error`    — unexpected adapter failure.
+ *   - `not_found`       — no metadata row for `artifactId`, OR no
+ *                         version of it is visible to the caller.
+ *                         The two are DELIBERATELY indistinguishable:
+ *                         any difference between "does not exist" and
+ *                         "exists but you may not see it" is an
+ *                         existence oracle for private artifacts.
+ *   - `server_error`    — unexpected adapter failure. The message is
+ *                         generic by contract — raw storage error text
+ *                         never reaches the wire.
  */
 export const LIST_VERSIONS_ERROR_CODES = [
   'invalid_request',

@@ -20,8 +20,10 @@
  *      include the registry hostname.
  *   6. GET /search?kind=gadget — assert the private row does NOT
  *      surface (search lists only public rows).
- *   7. GET /pkg/{scope}/{name}/{version} — 403 without auth; with the
- *      bearer, assert the full read response carries the manifest +
+ *   7. GET /pkg/{scope}/{name}/{version} — 404 `not_found` without
+ *      auth (an unauthorized private read answers exactly like a true
+ *      miss — no existence signal); with the publisher's bearer,
+ *      assert the full read response carries the manifest +
  *      bundleUrl + bundleSri + signatureUrl + authorPublicKey.
  *   8. Fetch the bundle URL — assert the bytes round-trip + the
  *      Cache-Control header is the cache-immutable contract.
@@ -151,11 +153,13 @@ describe('21 — marketplace gadget lifecycle', () => {
     // ── 6. GET /pkg/{scope}/{name}/{version} ───────────────────────
     // API GW route convention drops the leading @ — registry-server
     // accepts either, but use the dropped form to match the cloud.
-    // Private row: unauthenticated read is refused…
+    // Private row: an unauthenticated read answers with the SAME
+    // not-found shape as a true miss (ownership rule: publisher or
+    // scope owner only; no existence signal on the anonymous wire)…
     const unauthedReadResp = await fetch(
       `${registry.url}/pkg/ggui-test/probe-gadget/0.0.1`,
     );
-    expect(unauthedReadResp.status).toBe(403);
+    expect(unauthedReadResp.status).toBe(404);
 
     // …and the bearer-authed read returns the full row.
     const readResp = await fetch(

@@ -7,12 +7,20 @@
  *   1. Point-read the metadata row via {@link RegistryStorage.getArtifactMetadata}.
  *      Missing metadata → 404 (`not_found`).
  *   2. Fetch all version rows via {@link RegistryStorage.listArtifactVersions}.
- *   3. Filter out private rows for unauthenticated callers — same gate
- *      as the read op's `visibility === 'private' && authn === undefined`
- *      branch. We do NOT 403 on a fully-private artifact for an unauthed
- *      caller; we 200 with `versions: []` so the wire response doesn't
- *      leak the existence of a private artifact (cf. GitHub's 404-on-
- *      private-repo behaviour).
+ *   3. Filter out private rows the caller cannot read — the same
+ *      ownership rule as the read op ({@link canReadPrivateArtifact}:
+ *      publisher or scope owner). Unreadable rows are FILTERED, never
+ *      errored: an unauthorized caller (anonymous or authenticated)
+ *      gets the readable subset. When NOTHING is readable, the
+ *      response is the SAME 404 `not_found` as a true miss — a 200
+ *      `versions: []` would differ from the miss shape and that
+ *      difference is an existence oracle (cf. GitHub's
+ *      404-on-private-repo behaviour). The scope-owner lookup is lazy,
+ *      memoized, and fail-closed ({@link createScopeOwnerResolver}):
+ *      at most one {@link RegistryStorage.getScopeOwner} call per
+ *      request; none when every row is public, the caller published
+ *      every private row, or the caller is anonymous; a lookup fault
+ *      denies instead of erroring.
  *   4. Sort by semver DESC so the latest version is first. Yanked rows
  *      are NOT filtered — they stay in the list with `yanked: true`
  *      so the UI can show "this version was yanked".
@@ -34,6 +42,10 @@ import type {
 import type { AuthnContext } from '../interfaces/authn.js';
 import type { RegistryStorage } from '../interfaces/registry-storage.js';
 import { compareSemver } from '../utils/semver.js';
+import {
+  canReadPrivateArtifact,
+  createScopeOwnerResolver,
+} from './private-read-authz.js';
 
 export interface ListArtifactVersionsInput {
   /**
@@ -47,10 +59,11 @@ export interface ListArtifactVersionsInput {
 export interface ListArtifactVersionsDeps {
   readonly storage: RegistryStorage;
   /**
-   * Optional — when undefined, the op filters `private` versions OUT
-   * of the response. Authenticated callers see every version they own
-   * (the storage layer's row-level visibility filter is the source of
-   * truth; this op just honours it).
+   * Optional — the verified caller context, produced by the
+   * transport's own credential verification. Private versions appear
+   * in the response only for the caller who published them or the
+   * owner of the artifact's scope ({@link canReadPrivateArtifact});
+   * every other caller — anonymous included — gets the public subset.
    */
   readonly authn?: AuthnContext;
 }
@@ -83,18 +96,11 @@ export async function listArtifactVersions(
     const metadata = await deps.storage.getArtifactMetadata(input.artifactId);
     metadataExists = metadata !== null;
   } catch (err) {
-    return errorResult(
-      500,
-      'server_error',
-      `failed to read metadata: ${err instanceof Error ? err.message : String(err)}`,
-    );
+    logStorageFailure('read metadata', input.artifactId, err);
+    return errorResult(500, 'server_error', 'failed to list versions');
   }
   if (!metadataExists) {
-    return errorResult(
-      404,
-      'not_found',
-      `no such artifact: ${input.artifactId}`,
-    );
+    return notFoundResult(input);
   }
 
   // Step 2 — fetch all version rows.
@@ -102,21 +108,37 @@ export async function listArtifactVersions(
   try {
     rows = await deps.storage.listArtifactVersions(input.artifactId);
   } catch (err) {
-    return errorResult(
-      500,
-      'server_error',
-      `failed to list versions: ${err instanceof Error ? err.message : String(err)}`,
-    );
+    logStorageFailure('list version rows', input.artifactId, err);
+    return errorResult(500, 'server_error', 'failed to list versions');
   }
 
-  // Step 3 — visibility filter. Unauthed callers see only public rows;
-  // authed callers see everything (finer org-membership gating is a
-  // future concern — for now, "authed" === "can see your own private
-  // rows" is captured by the verified caller subject being non-null).
+  // Step 3 — ownership filter. A private row stays in the list only
+  // when the caller may read it under the shared rule (publisher or
+  // scope owner). All rows share one artifactId, hence one scope —
+  // the shared resolver memoizes the lazy owner lookup (one
+  // getScopeOwner call at most; none for public rows / anonymous
+  // callers / publisher-only matches) and fails CLOSED on a storage
+  // fault (deny + server-side log, never a distinctive error status).
+  const getScopeOwner = createScopeOwnerResolver(
+    deps.storage,
+    input.artifactId,
+  );
   const visibleRows: ArtifactVersionRow[] = [];
   for (const row of rows) {
-    if (row.visibility === 'private' && deps.authn === undefined) continue;
+    if (
+      row.visibility === 'private' &&
+      !(await canReadPrivateArtifact(deps.authn, row, getScopeOwner))
+    ) {
+      continue;
+    }
     visibleRows.push(row);
+  }
+
+  // No visible versions ⇒ answer exactly as a true miss. Emitting a
+  // 200 `versions: []` here would differ from the miss shape, and
+  // that difference is an existence oracle for private artifacts.
+  if (visibleRows.length === 0) {
+    return notFoundResult(input);
   }
 
   // Step 4 — semver DESC sort. `compareSemver(a, b)` returns -1/0/1
@@ -141,6 +163,34 @@ function rowToEntry(row: ArtifactVersionRow): VersionListEntry {
     kind: row.kind,
     visibility: row.visibility,
   };
+}
+
+/**
+ * The one not-found projection — used for a true miss AND an artifact
+ * with no versions visible to the caller, so the two responses cannot
+ * drift apart (drift would reintroduce the existence signal).
+ */
+function notFoundResult(
+  input: ListArtifactVersionsInput,
+): ListArtifactVersionsResult {
+  return errorResult(404, 'not_found', `no such artifact: ${input.artifactId}`);
+}
+
+/**
+ * Structured server-side failure log. Raw storage error text stays
+ * OUT of wire bodies (it can carry backend identifiers a caller has
+ * no business seeing); this log line is the operator's copy.
+ */
+function logStorageFailure(
+  operation: string,
+  artifactId: string,
+  err: unknown,
+): void {
+  // eslint-disable-next-line no-console -- server-side operator signal; the wire stays generic
+  console.error(`registry list-versions: failed to ${operation}`, {
+    artifactId,
+    error: err instanceof Error ? err.message : String(err),
+  });
 }
 
 function errorResult(
