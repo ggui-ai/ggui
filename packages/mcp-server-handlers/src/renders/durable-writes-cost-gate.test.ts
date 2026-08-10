@@ -30,7 +30,6 @@ import type { StoredGguiSession } from '@ggui-ai/mcp-server-core';
 import type { DataContract } from '@ggui-ai/protocol';
 import type { Blueprint as RegistryBlueprint } from './blueprint-registry.js';
 import {
-  backfillRenderIdentityBlueprintId,
   refreshRenderIdentity,
   writeRenderIdentity,
 } from './render-identity.js';
@@ -95,20 +94,6 @@ describe('an unbound render-identity store is free and silent', () => {
         contractKey: '0123456789abcdef',
         variantKey: 'default',
       });
-      expect(warn).not.toHaveBeenCalled();
-    } finally {
-      warn.mockRestore();
-    }
-  });
-
-  it('writes nothing on the cold-gen blueprintId backfill', async () => {
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
-    try {
-      await backfillRenderIdentityBlueprintId(
-        undefined,
-        { sessionId: SESSION_ID, appId: APP_ID },
-        'bp_00000000-0000-4000-8000-000000000001',
-      );
       expect(warn).not.toHaveBeenCalled();
     } finally {
       warn.mockRestore();

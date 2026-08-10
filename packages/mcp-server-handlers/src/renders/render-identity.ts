@@ -31,10 +31,12 @@ import type {
  */
 export interface RenderIdentityFields {
   /**
-   * Registered blueprint id, or `null` when none is resolved yet.
-   * Cold generation commits before registration mints the id, so that
-   * path writes `null` and backfills via
-   * {@link backfillRenderIdentityBlueprintId} once it resolves.
+   * Registered blueprint id, or `null` when registration did not
+   * resolve one for this commit (no cache bound, registration failed
+   * or was fail-closed rejected, or a probe/placeholder/error commit).
+   * #460: cold generation resolves the id BEFORE its success commit,
+   * so records are written complete once — `null` is a terminal state
+   * (#445: structurally non-remintable), never a pending one.
    */
   readonly blueprintId: string | null;
   /**
@@ -58,8 +60,8 @@ export interface RenderIdentityFields {
  * plausible-looking event that no alert ever matches, and nothing
  * downstream could tell it from the write simply never failing.
  *
- *   - `render_identity_write_failed` — a first write (or the cold-gen
- *     backfill) could not be persisted.
+ *   - `render_identity_write_failed` — a first write could not be
+ *     persisted.
  *   - `render_identity_refresh_failed` — a mutation path could not
  *     refresh an existing record.
  */
@@ -218,54 +220,6 @@ export async function writeRenderIdentity(
     await store.put(projectRenderIdentityRecord(session, identity));
   } catch (err) {
     logRenderIdentityFailure(failureEvent, session.id, session.appId, err);
-  }
-}
-
-/**
- * Set `blueprintId` on an existing record once cold-gen registration
- * resolves it. `put` replaces whole records, so this reads the current
- * one and writes the merged result back.
- *
- * A missing record is a normal outcome, not an error: the write-through
- * that would have created it may itself have failed, or no store was
- * bound when the render committed. There is nothing to backfill onto,
- * and inventing a record from the id alone would be a record with no
- * identity — so we skip.
- *
- * Concurrency: three writers touch a record. {@link writeRenderIdentity}
- * and {@link refreshRenderIdentity} write WHOLE records, as does this
- * one; a deployment may additionally advance the sequence from paths
- * that touch the render row for other reasons, and those are
- * field-targeted — they name the one or two fields they own in a
- * conditional update and structurally cannot carry a stale `props`.
- *
- * Between the whole-record writers it is last-write-wins, and that
- * includes an honest narrow window HERE: if a commit's `put` lands
- * between this function's `get` and its `put`, the merged record
- * carries the props read before that commit, so fresher props are
- * briefly overwritten. It is not silent and it is not durable — the id
- * being backfilled is correct, and the next refresh on any mutation
- * path reprojects `props` from the row and repairs it. Narrowing it
- * further would mean a conditional write on a path that runs once per
- * cold generation, which is not worth the machinery.
- */
-export async function backfillRenderIdentityBlueprintId(
-  store: RenderIdentityStore | undefined,
-  session: { readonly sessionId: string; readonly appId: string },
-  blueprintId: string,
-): Promise<void> {
-  if (!store) return;
-  try {
-    const existing = await store.get(session.sessionId);
-    if (!existing) return;
-    await store.put({ ...existing, blueprintId, updatedAt: Date.now() });
-  } catch (err) {
-    logRenderIdentityFailure(
-      WRITE_FAILED_EVENT,
-      session.sessionId,
-      session.appId,
-      err,
-    );
   }
 }
 

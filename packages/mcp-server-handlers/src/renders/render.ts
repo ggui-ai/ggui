@@ -105,10 +105,7 @@ import type {
 } from './generation-cache.js';
 import { assertNoDuplicateGadgetHooks } from './assert-no-duplicate-gadget-hooks.js';
 import { reportRenderCodeWriteFailed } from './code-delivery-events.js';
-import {
-  backfillRenderIdentityBlueprintId,
-  writeRenderIdentity,
-} from './render-identity.js';
+import { writeRenderIdentity } from './render-identity.js';
 import type { InstalledBlueprintsProvider } from './installed-blueprints-provider.js';
 import type { BlueprintPool } from './decide-handshake.js';
 import {
@@ -1120,8 +1117,8 @@ export function createGguiRenderHandler(
       const effectiveContractKey = blueprintKey(effectiveContract);
 
       // Bind the identity slice a commit will record. The blueprint id
-      // is per-path (a reuse knows it up front; a cold gen mints it
-      // only after registration, so it commits `null` and backfills),
+      // is per-path (a reuse knows it up front; a cold gen resolves it
+      // via registration immediately BEFORE its success commit — #460),
       // which is why it is a parameter and the contract/variant axes
       // are captured.
       const identityWriterFor = (
@@ -1795,6 +1792,7 @@ export function createGguiRenderHandler(
             resolvedAppLibraries !== undefined
               ? await fetchGadgetTypes(resolvedAppLibraries)
               : undefined;
+          const generationCache = deps.generation.cache;
           const outcome = await runGenerationIntoGguiSession(
             deps.generation,
             deps.renderStore,
@@ -1807,10 +1805,60 @@ export function createGguiRenderHandler(
               ctx,
               sessionId,
               story,
-              // Cold gen commits BEFORE registration mints an id, so
-              // every commit inside this call records `null` and the
-              // backfill below sets the resolved id.
-              writeIdentity: identityWriterFor(null),
+              // #460 — the callee binds each commit's id itself:
+              // failure commits bind null; the success commit binds
+              // whatever `resolveBlueprintId` returned, resolved
+              // BEFORE that commit (no backfill exists anymore).
+              writeIdentityFor: identityWriterFor,
+              // Registration is the resolve hook, passed only when a
+              // cache is bound (unbound deployments keep null ids —
+              // #445). Failures swallow to undefined inside
+              // `safelyRegisterBlueprint`, incl. fail-closed
+              // rejections. The cache handle is captured as a const so
+              // the async closure keeps the narrowing.
+              ...(generationCache
+                ? {
+                    resolveBlueprintId: async (produced: {
+                      readonly componentCode: string;
+                      readonly source: LlmBlueprintSource;
+                    }) =>
+                      safelyRegisterBlueprint(
+                        {
+                          embedding: generationCache.embedding,
+                          vectorStore: generationCache.vectorStore,
+                          index: generationCache.index,
+                          // Forwarded so a fresh mint is written
+                          // through to durable storage. Undefined on
+                          // deployments that bound none, which
+                          // `registerBlueprint` treats as a no-op.
+                          ...(generationCache.durability !== undefined
+                            ? { durability: generationCache.durability }
+                            : {}),
+                        },
+                        ctx.appId,
+                        {
+                          kind: 'template',
+                          contract: story.contract,
+                          intent,
+                          componentCode: produced.componentCode,
+                          // Engine provenance from the generator's own
+                          // metadata stamp — a fresh generation mints
+                          // an `llm`-sourced row.
+                          source: produced.source,
+                          // Register under the EFFECTIVE variance
+                          // (proposed on accept, re-aimed on
+                          // `override.variance`) so the row's
+                          // `variantKey` equals `effectiveVariantKey`
+                          // — the same `(contractKey, variantKey)`
+                          // identity the §6 re-resolution and the wire
+                          // output key on.
+                          ...(effectiveVariance !== undefined
+                            ? { variance: effectiveVariance }
+                            : {}),
+                        },
+                      ),
+                  }
+                : {}),
               ...(runtimeProps !== undefined
                 ? { runtimeProps: runtimeProps as JsonObject }
                 : {}),
@@ -1843,61 +1891,12 @@ export function createGguiRenderHandler(
                 ? 'cold: generated fresh — no stored component was reused for this render'
                 : 'cold: generation failed — no stored component was produced or reused',
             };
-            // Register the produced blueprint into the registry so
-            // future calls can hit Tier 1 (exact contract match) or
-            // Tier 2 (semantic neighbour). The minted UUID becomes this
-            // render's `blueprintId` (a fresh generation mints a new id).
-            // Register under the EFFECTIVE variance (proposed on accept,
-            // re-aimed on `override.variance`) so the row's `variantKey`
-            // equals `effectiveVariantKey` — the same
-            // `(contractKey, variantKey)` identity the §6 re-resolution
-            // and the wire output key on. Never the default sentinel when
-            // an override re-aimed the variant.
-            if (outcome.ok && outcome.componentCode && outcome.source) {
-              const registered = await safelyRegisterBlueprint(
-                {
-                  embedding: deps.generation.cache.embedding,
-                  vectorStore: deps.generation.cache.vectorStore,
-                  index: deps.generation.cache.index,
-                  // Forwarded so a fresh mint is written through to
-                  // durable storage. Undefined on deployments that
-                  // bound none, which `registerBlueprint` treats as a
-                  // no-op rather than an error.
-                  ...(deps.generation.cache.durability !== undefined
-                    ? { durability: deps.generation.cache.durability }
-                    : {}),
-                },
-                ctx.appId,
-                {
-                  kind: 'template',
-                  contract: story.contract,
-                  intent,
-                  componentCode: outcome.componentCode,
-                  // Engine provenance travels on the outcome — the
-                  // generator stamped its own slug + the resolved
-                  // model id into metadata, and a fresh generation
-                  // mints an `llm`-sourced row.
-                  source: outcome.source,
-                  ...(effectiveVariance !== undefined
-                    ? { variance: effectiveVariance }
-                    : {}),
-                },
-              );
-              resolvedBlueprintId = registered;
-              // Close the cold-gen gap: the record written at commit
-              // time carries `blueprintId: null` because the id did
-              // not exist yet. A plain read-modify-write is enough —
-              // not because nothing else writes this record, but
-              // because every other writer is field-targeted and
-              // cannot carry a stale `props`: see the concurrency note
-              // on `backfillRenderIdentityBlueprintId`.
-              if (registered !== undefined) {
-                await backfillRenderIdentityBlueprintId(
-                  deps.renderIdentityStore,
-                  { sessionId, appId: ctx.appId },
-                  registered,
-                );
-              }
+            // #460 — registration already ran INSIDE the generation
+            // call, before the success commit (the resolve hook
+            // above); the outcome carries the id the committed
+            // identity record was written with. No backfill exists.
+            if (outcome.ok) {
+              resolvedBlueprintId = outcome.blueprintId;
             }
           }
         }
@@ -2048,7 +2047,7 @@ export function createGguiRenderHandler(
             // Last commit of the render when a theme override is in
             // play, and every reuse / cold-gen path has settled by
             // here — so this write carries the final blueprint id
-            // rather than re-running the cold-gen backfill.
+            // (already resolved before the success commit, #460).
             await identityWriterFor(resolvedBlueprintId ?? null)(committed);
           }
         } catch (err) {
@@ -2474,6 +2473,13 @@ type GenerationRunOutcome =
        * register a blueprint.
        */
       readonly source?: LlmBlueprintSource;
+      /**
+       * #460 — the id registration minted (or dedup-returned) BEFORE
+       * the success commit. Present exactly when `resolveBlueprintId`
+       * was supplied and returned one; the committed identity record
+       * already carries it.
+       */
+      readonly blueprintId?: string;
     }
   | {
       readonly ok: false;
@@ -2518,9 +2524,28 @@ async function runGenerationIntoGguiSession(
       readonly contract?: DataContract;
       readonly variance?: BlueprintVariance;
     };
-    /** Identity write-through for every commit this call makes —
-     *  the success render and each of its failure renders. */
-    readonly writeIdentity: RenderIdentityWriter;
+    /**
+     * Identity write-through factory for every commit this call makes.
+     * Failure renders bind `null`; the success commit binds whatever
+     * {@link resolveBlueprintId} returned (#460 — the id is resolved
+     * BEFORE the commit, so the record is written complete once and no
+     * backfill exists).
+     */
+    readonly writeIdentityFor: (
+      blueprintId: string | null,
+    ) => RenderIdentityWriter;
+    /**
+     * #460 — resolve the blueprint id for a successful generation
+     * BEFORE its commit (registration, on deployments with a bound
+     * cache). Returning `undefined` commits the record with
+     * `blueprintId: null` (registration unavailable, failed, or
+     * fail-closed rejected — #445: null is structurally
+     * non-remintable, by design). Absent when no cache is bound.
+     */
+    readonly resolveBlueprintId?: (produced: {
+      readonly componentCode: string;
+      readonly source: LlmBlueprintSource;
+    }) => Promise<string | undefined>;
     /** Runtime prop values for THIS render. Validated against
      *  `story.contract.props` (propsSpec) by the upstream caller
      *  before this function runs. */
@@ -2589,7 +2614,7 @@ async function runGenerationIntoGguiSession(
         story,
         nowIso,
         nowEpochMs,
-        writeIdentity: args.writeIdentity,
+        writeIdentity: args.writeIdentityFor(null),
         message:
           err instanceof Error
             ? `generator threw: ${err.message}`
@@ -2612,7 +2637,7 @@ async function runGenerationIntoGguiSession(
         story,
         nowIso,
         nowEpochMs,
-        writeIdentity: args.writeIdentity,
+        writeIdentity: args.writeIdentityFor(null),
         message:
           err instanceof Error
             ? `credential resolution failed: ${err.message}`
@@ -2646,7 +2671,7 @@ async function runGenerationIntoGguiSession(
               userId: ctx.userId, // per-user isolation (undefined for non-federated single-user)
               nowIso,
               render: fallback,
-              writeIdentity: args.writeIdentity,
+              writeIdentity: args.writeIdentityFor(null),
             },
           );
         }
@@ -2658,7 +2683,7 @@ async function runGenerationIntoGguiSession(
         story,
         nowIso,
         nowEpochMs,
-        writeIdentity: args.writeIdentity,
+        writeIdentity: args.writeIdentityFor(null),
         message:
           'no credentials available for the configured generation provider (expected env var or ~/.ggui/credentials.json entry)',
         code: 'NO_CREDENTIALS',
@@ -2681,7 +2706,7 @@ async function runGenerationIntoGguiSession(
         story,
         nowIso,
         nowEpochMs,
-        writeIdentity: args.writeIdentity,
+        writeIdentity: args.writeIdentityFor(null),
         message:
           err instanceof Error
             ? `generator threw: ${err.message}`
@@ -2701,7 +2726,7 @@ async function runGenerationIntoGguiSession(
       story,
       nowIso,
       nowEpochMs,
-      writeIdentity: args.writeIdentity,
+      writeIdentity: args.writeIdentityFor(null),
       message: result.error.message,
       // Canonical projection — cloud seam codes (VALIDATION_ERROR /
       // NO_PLATFORM_KEY / PRODUCTION_FAILED) map through 1:1;
@@ -2767,13 +2792,30 @@ async function runGenerationIntoGguiSession(
       throw err;
     }
   }
+  // #460 — resolve the blueprint id BEFORE the commit. Registration
+  // was already awaited on this path (it just ran after the commit),
+  // so the reorder adds no latency and deletes the get+put backfill —
+  // and with it the backfill's stale-write race against the pod's
+  // field-targeted seq advance.
+  const producedSource: LlmBlueprintSource = {
+    kind: 'llm',
+    generator: result.metadata.generator,
+    model: result.metadata.model,
+  };
+  let resolvedBlueprintId: string | undefined;
+  if (args.resolveBlueprintId) {
+    resolvedBlueprintId = await args.resolveBlueprintId({
+      componentCode: result.response.componentCode,
+      source: producedSource,
+    });
+  }
   try {
     const committed = await renderStore.commit({
       render: componentRender,
       appId: ctx.appId,
       userId: ctx.userId, // per-user isolation (undefined for non-federated single-user)
     });
-    await args.writeIdentity(committed);
+    await args.writeIdentityFor(resolvedBlueprintId ?? null)(committed);
   } catch {
     await safelyFinalizePreview(previewDeps, sessionId, 'commit-failed');
     return {
@@ -2796,11 +2838,10 @@ async function runGenerationIntoGguiSession(
     ok: true,
     componentCode: result.response.componentCode,
     createdAt: nowIso,
-    source: {
-      kind: 'llm',
-      generator: result.metadata.generator,
-      model: result.metadata.model,
-    },
+    source: producedSource,
+    ...(resolvedBlueprintId !== undefined
+      ? { blueprintId: resolvedBlueprintId }
+      : {}),
   };
 }
 

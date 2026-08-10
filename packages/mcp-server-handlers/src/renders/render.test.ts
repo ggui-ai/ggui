@@ -488,6 +488,8 @@ async function buildColdGenHarness(extraOpts: {
   readonly postSuccessHook?: GguiRenderHandlerDeps['postSuccessHook'];
   readonly renderTtlMs?: number;
   readonly renderIdentityStore?: RenderIdentityStore;
+  /** #460 — injectable so a test can make registration fail. */
+  readonly index?: InMemoryBlueprintIndex;
   /** Agreed contract for the seeded handshake. Defaults to {@link CONTRACT}. */
   readonly contract?: DataContract;
   /** Content-addressable code-delivery pair — see {@link buildHandler}. */
@@ -502,7 +504,7 @@ async function buildColdGenHarness(extraOpts: {
   const handshakeStore = new InMemoryKeyValueStore();
   const renderStore = new InMemoryGguiSessionStore();
   const vectorStore = new InMemoryVectorStore();
-  const index = new InMemoryBlueprintIndex();
+  const index = extraOpts.index ?? new InMemoryBlueprintIndex();
 
   const handshakeId = 'hs-cold-1';
   await seedHandshake(
@@ -1769,8 +1771,14 @@ describe('createGguiRenderHandler — durable render identity (#430 slice 1)', (
     expect(record.updatedAt).toBeGreaterThanOrEqual(record.createdAt);
   });
 
-  it('cold gen backfills blueprintId once registration resolves it', async () => {
+  it('cold gen writes the blueprintId AT the success commit — no post-commit mutation (#460)', async () => {
     const renderIdentityStore = new InMemoryRenderIdentityStore();
+    const puts: Array<{ sessionId: string; blueprintId: string | null }> = [];
+    const originalPut = renderIdentityStore.put.bind(renderIdentityStore);
+    renderIdentityStore.put = async (record) => {
+      puts.push({ sessionId: record.sessionId, blueprintId: record.blueprintId });
+      await originalPut(record);
+    };
     const { harness, handshakeId } = await buildColdGenHarness({
       renderIdentityStore,
     });
@@ -1780,12 +1788,49 @@ describe('createGguiRenderHandler — durable render identity (#430 slice 1)', (
 
     const record = await readRecord(renderIdentityStore, out.sessionId);
     expect(record.blueprintId).not.toBeNull();
-    // The backfilled id is the SAME one the wire surfaces.
+    // The commit-time id is the SAME one the wire surfaces.
     expect(record.blueprintId).toBe(out.blueprintId);
     expect(record.blueprintId).toMatch(/^bp_/);
+
+    // Ordering pin: registration resolved BEFORE the success commit,
+    // so the id arrives ON a commit's own put — never as a later
+    // read-modify-write of an id-less record (the deleted backfill's
+    // shape). The placeholder put legitimately carries null; the
+    // SUCCESS put must already carry the id.
+    const sessionPuts = puts.filter((w) => w.sessionId === out.sessionId);
+    const idPuts = sessionPuts.filter((w) => w.blueprintId !== null);
+    expect(idPuts.length).toBeGreaterThanOrEqual(1);
+    expect(idPuts[0]!.blueprintId).toBe(out.blueprintId);
+    // No put may DOWNGRADE the id back to null after it was written.
+    const firstIdIdx = sessionPuts.findIndex((w) => w.blueprintId !== null);
+    for (const later of sessionPuts.slice(firstIdIdx)) {
+      expect(later.blueprintId).toBe(out.blueprintId);
+    }
   });
 
-  it('a themeId override re-commits LAST and its record keeps the backfilled blueprintId', async () => {
+  it('registration failure commits blueprintId: null and the render still succeeds (#460/#445)', async () => {
+    const renderIdentityStore = new InMemoryRenderIdentityStore();
+    const index = new InMemoryBlueprintIndex();
+    // First registry touch throws — `safelyRegisterBlueprint` swallows
+    // to undefined, the commit records null, the render is unharmed.
+    index.getId = async () => {
+      throw new Error('registry unavailable');
+    };
+    const { harness, handshakeId } = await buildColdGenHarness({
+      renderIdentityStore,
+      index,
+    });
+
+    const out = await harness.handler.handler({ handshakeId, props: {} }, CTX);
+    assertRenderSuccess(out);
+
+    const record = await readRecord(renderIdentityStore, out.sessionId);
+    expect(record.blueprintId).toBeNull();
+    // The wire mirrors the record: empty id on the failure path.
+    expect(out.blueprintId).toBe('');
+  });
+
+  it('a themeId override re-commits LAST and its record keeps the commit-time blueprintId', async () => {
     const renderIdentityStore = new InMemoryRenderIdentityStore();
     const { harness, handshakeId } = await buildColdGenHarness({
       renderIdentityStore,
@@ -1806,10 +1851,11 @@ describe('createGguiRenderHandler — durable render identity (#430 slice 1)', (
     }
     expect(render.themeId).toBe('dark');
 
-    // The overlay commit lands AFTER cold-gen registration backfilled
-    // the id, so its record must carry that id forward. Writing `null`
-    // here (or reading a `resolvedBlueprintId` that has not settled
-    // yet) would silently erase the backfill.
+    // The overlay commit lands AFTER the success commit wrote the
+    // resolved id (#460 — resolved before that commit), so its record
+    // must carry the id forward. Writing `null` here (or reading a
+    // `resolvedBlueprintId` that has not settled yet) would silently
+    // erase it.
     const record = await readRecord(renderIdentityStore, out.sessionId);
     expect(record.blueprintId).not.toBeNull();
     expect(record.blueprintId).toBe(out.blueprintId);

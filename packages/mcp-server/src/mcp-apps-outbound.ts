@@ -1688,9 +1688,10 @@ export function registerGguiRenderResourceTemplate(
     }
 
     // Everything below can only be reached by a caller entitled to
-    // this locator. A record whose `blueprintId` is still null never
-    // had its cold-generation registration backfilled, so it names
-    // nothing to resolve.
+    // this locator. A null `blueprintId` is terminal (#460): the id is
+    // resolved before the success commit, so null means registration
+    // failed or was unavailable at commit — the record names nothing
+    // to resolve, by design (#445).
     if (record.blueprintId === null) {
       return { ok: false, failure: blueprintUnresolvable("the record names no blueprint") };
     }
