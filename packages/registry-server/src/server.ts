@@ -182,6 +182,8 @@ export function createRegistryApp(options: RegistryAppOptions): Hono {
         limit: q.limit,
         cursor: q.cursor,
         sort: q.sort,
+        tool: q.tool,
+        server: q.server,
       },
       { storage },
     );
