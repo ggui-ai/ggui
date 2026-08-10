@@ -9,9 +9,7 @@
  *      {@link canReadPrivateArtifact} (publisher or scope owner).
  *      Anyone else receives a response byte-identical to a true
  *      not-found — no status, code, or message distinguishes "exists
- *      but you may not read it" from "does not exist". The scope-owner
- *      lookup is lazy: it runs only for a private row whose publisher
- *      doesn't match, so public reads cost zero extra storage reads.
+ *      but you may not read it" from "does not exist".
  *   3. Yanked → 410 with the manifest still in the body (audit-friendly).
  *      The private gate fires FIRST — an unauthorized caller never sees
  *      the 410 body.
@@ -20,7 +18,21 @@
  *      missing blob when the pointer is set is a critical storage
  *      inconsistency — the op returns 500 rather than silently
  *      omitting `compiledBytes`.
- *   5. Project the row + blob into the {@link ReadPkgResponse} wire shape.
+ *   5. Project the row + blob into the {@link ReadPkgResponse} wire shape,
+ *      including `scopeVerification`/`verifiedDomain`.
+ *
+ * Scope-owner reads (2026-08-10, MCP discovery §2): every read — public
+ * or private — now costs exactly ONE memoized {@link RegistryStorage.getScopeOwner}
+ * point-read via {@link createScopeOwnerResolver}, shared between the
+ * private-read gate (when applicable) and the `scopeVerification` /
+ * `verifiedDomain` wire projection. This deliberately SUPERSEDES the
+ * prior "public reads cost zero extra storage reads" guarantee from
+ * the private-read-ownership work ({@link ./private-read-authz.js}) —
+ * verification surfacing needs the scope row on every read, public
+ * included, so the old zero-reads pin was retired in favor of a
+ * one-read invariant instead. A failed or missing scope-owner read
+ * degrades to absent `scopeVerification`/`verifiedDomain` (never
+ * defaulted to `'unverified'`) and never fails the read itself.
  */
 import type {
   ArtifactVersionRow,
@@ -28,6 +40,7 @@ import type {
   ReadErrorBody,
   ReadErrorCode,
   ReadPkgResponse,
+  ScopeOwnerRow,
 } from '../types.js';
 import type { AuthnContext } from '../interfaces/authn.js';
 import type { RegistryStorage } from '../interfaces/registry-storage.js';
@@ -78,6 +91,12 @@ export async function readArtifact(
     return errorResult(400, 'invalid_request', 'missing version');
   }
 
+  // Scope-owner resolver — memoized, so the private-read gate and the
+  // verification surfacing share at most ONE storage read. Fail-closed:
+  // a storage fault resolves null, which denies on the private gate and
+  // omits the verification fields (state unknown is not 'unverified').
+  const resolveScopeOwner = createScopeOwnerResolver(deps.storage, input.artifactId);
+
   let row: ArtifactVersionRow | null;
   try {
     row = await deps.storage.getArtifactVersion(input.artifactId, input.version);
@@ -97,11 +116,7 @@ export async function readArtifact(
     // resolver is fail-closed: a storage fault during the owner
     // lookup denies (logged server-side) rather than erroring — a
     // 500 only private rows could trigger would leak existence.
-    const allowed = await canReadPrivateArtifact(
-      deps.authn,
-      row,
-      createScopeOwnerResolver(deps.storage, input.artifactId),
-    );
+    const allowed = await canReadPrivateArtifact(deps.authn, row, resolveScopeOwner);
     if (!allowed) {
       return notFoundResult(input);
     }
@@ -134,7 +149,8 @@ export async function readArtifact(
     }
   }
 
-  const body = rowToResponse(row, compiledBlob);
+  const scopeOwner = await resolveScopeOwner();
+  const body = rowToResponse(row, compiledBlob, scopeOwner);
 
   if (row.yanked === true) {
     return { ok: false, status: 410, body };
@@ -146,6 +162,7 @@ export async function readArtifact(
 function rowToResponse(
   row: ArtifactVersionRow,
   compiledBlob: CompiledBlobRow | null,
+  scopeOwner: ScopeOwnerRow | null,
 ): ReadPkgResponse {
   return {
     manifest: row.manifest,
@@ -157,6 +174,8 @@ function rowToResponse(
     authorPublicKey: row.authorPublicKey,
     publishedAt: row.publishedAt,
     publishedBy: row.publishedBy,
+    scopeVerification: scopeOwner?.verification,
+    verifiedDomain: scopeOwner?.verification === 'verified' ? scopeOwner.verifiedDomain : undefined,
   };
 }
 

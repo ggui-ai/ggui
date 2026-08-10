@@ -340,6 +340,14 @@ export interface ReadPkgResponse {
   readonly authorPublicKey?: string;
   readonly publishedAt: string;
   readonly publishedBy: string;
+  /**
+   * Verification state of the package's scope. Present only when the
+   * scope-ownership row was read; ABSENT when the scope state is
+   * unknown — absence is not `'unverified'`.
+   */
+  readonly scopeVerification?: ScopeVerification;
+  /** Domain whose control was proven — present only when `scopeVerification: 'verified'`. */
+  readonly verifiedDomain?: string;
 }
 
 /**

@@ -101,7 +101,7 @@ describe('readArtifact', () => {
     expect(result.status).toBe(200);
   });
 
-  it('returns 200 on private row when the caller owns the scope', async () => {
+  it('returns 200 on private row when the caller owns the scope, consulting the scope-owner store exactly once (memoized, shared between the gate and verification surfacing)', async () => {
     const storage = inMemoryRegistryStorage();
     await storage.putArtifactVersionIfAbsent(makeVersion({ visibility: 'private' }));
     await storage.claimScope({
@@ -110,6 +110,7 @@ describe('readArtifact', () => {
       claimedAt: '2026-08-01T00:00:00.000Z',
       verification: 'unverified',
     });
+    const getScopeOwnerSpy = vi.spyOn(storage, 'getScopeOwner');
     const result = await readArtifact(
       { artifactId: '@test/foo', version: '0.1.0' },
       { storage, authn: { subject: 'owner-9' } },
@@ -117,6 +118,7 @@ describe('readArtifact', () => {
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.status).toBe(200);
+    expect(getScopeOwnerSpy).toHaveBeenCalledTimes(1);
   });
 
   it('an authenticated stranger gets the not-found shape, not a forbidden signal', async () => {
@@ -156,7 +158,7 @@ describe('readArtifact', () => {
     expect(result.status).toBe(404);
   });
 
-  it('public reads never consult the scope-owner store (hot path zero extra reads)', async () => {
+  it('public reads consult the scope-owner store exactly once (memoized, for scopeVerification surfacing — supersedes the prior H2 zero-reads pin, MCP discovery §2)', async () => {
     const storage = inMemoryRegistryStorage();
     await storage.putArtifactVersionIfAbsent(makeVersion());
     const getScopeOwnerSpy = vi.spyOn(storage, 'getScopeOwner');
@@ -165,10 +167,10 @@ describe('readArtifact', () => {
       { storage, authn: { subject: 'anyone' } },
     );
     expect(result.ok).toBe(true);
-    expect(getScopeOwnerSpy).not.toHaveBeenCalled();
+    expect(getScopeOwnerSpy).toHaveBeenCalledTimes(1);
   });
 
-  it('the publisher fast path never consults the scope-owner store', async () => {
+  it('the publisher fast path consults the scope-owner store exactly once (memoized, shared between the gate short-circuit and verification surfacing)', async () => {
     const storage = inMemoryRegistryStorage();
     await storage.putArtifactVersionIfAbsent(makeVersion({ visibility: 'private' }));
     const getScopeOwnerSpy = vi.spyOn(storage, 'getScopeOwner');
@@ -177,7 +179,7 @@ describe('readArtifact', () => {
       { storage, authn: { subject: 'user-1' } },
     );
     expect(result.ok).toBe(true);
-    expect(getScopeOwnerSpy).not.toHaveBeenCalled();
+    expect(getScopeOwnerSpy).toHaveBeenCalledTimes(1);
   });
 
   it('returns 410 on yanked row with manifest still in body', async () => {
@@ -289,5 +291,49 @@ describe('readArtifact', () => {
     if (result.status === 410) return;
     expect(result.status).toBe(500);
     expect('error' in result.body && result.body.error).toBe('server_error');
+  });
+
+  it('surfaces scope verification on the read body when the scope row is verified', async () => {
+    const storage = inMemoryRegistryStorage();
+    await storage.putArtifactVersionIfAbsent(makeVersion());
+    await storage.claimScope({
+      scope: '@test',
+      ownerSubject: 'owner-1',
+      claimedAt: '2026-08-01T00:00:00.000Z',
+      verification: 'verified',
+      verifiedDomain: 'test.example',
+      verifiedAt: '2026-08-02T00:00:00.000Z',
+    });
+    const result = await readArtifact({ artifactId: '@test/foo', version: '0.1.0' }, { storage });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.body.scopeVerification).toBe('verified');
+    expect(result.body.verifiedDomain).toBe('test.example');
+  });
+
+  it('surfaces unverified scope state without a domain on read', async () => {
+    const storage = inMemoryRegistryStorage();
+    await storage.putArtifactVersionIfAbsent(makeVersion());
+    await storage.claimScope({
+      scope: '@test',
+      ownerSubject: 'owner-1',
+      claimedAt: '2026-08-01T00:00:00.000Z',
+      verification: 'unverified',
+    });
+    const result = await readArtifact({ artifactId: '@test/foo', version: '0.1.0' }, { storage });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.body.scopeVerification).toBe('unverified');
+    expect(result.body.verifiedDomain).toBeUndefined();
+  });
+
+  it('omits verification fields on read when the scope is unclaimed', async () => {
+    const storage = inMemoryRegistryStorage();
+    await storage.putArtifactVersionIfAbsent(makeVersion());
+    const result = await readArtifact({ artifactId: '@test/foo', version: '0.1.0' }, { storage });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.body.scopeVerification).toBeUndefined();
+    expect(result.body.verifiedDomain).toBeUndefined();
   });
 });
