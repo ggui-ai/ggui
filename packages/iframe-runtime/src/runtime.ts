@@ -959,13 +959,12 @@ export async function bootSequence(opts: BootSequenceOptions): Promise<BootSeque
   };
 
   // Mode discriminators. The mount surface is DECOUPLED from the live
-  // channel: static content (codeUrl/kind) paints immediately with no WS;
-  // the live trio (wsUrl+wsToken) is an OPTIONAL enhancement that
-  // delivers props_update / data / re-render frames. A bootstrap with
-  // NEITHER has nothing to show and nowhere to subscribe.
-  const hasStaticContent =
-    (typeof meta.codeUrl === 'string' && meta.codeUrl.length > 0) ||
-    (typeof meta.kind === 'string' && meta.kind.length > 0);
+  // channel: static content (codeUrl/codeB64/kind) paints immediately
+  // with no WS; the live trio (wsUrl+wsToken) is an OPTIONAL
+  // enhancement that delivers props_update / data / re-render frames.
+  // A bootstrap with NEITHER has nothing to show and nowhere to
+  // subscribe.
+  const hasStaticContent = hasStaticContentMeta(meta);
   const hasLiveTrio =
     typeof meta.wsUrl === 'string' &&
     meta.wsUrl.length > 0 &&
@@ -1021,7 +1020,7 @@ export async function bootSequence(opts: BootSequenceOptions): Promise<BootSeque
   if (!hasLiveTrio) {
     if (mountedRender === null) {
       const message =
-        'bootstrap carries neither static content (codeUrl/kind) nor a live trio (wsUrl/wsToken)';
+        'bootstrap carries neither static content (codeUrl/codeB64/kind) nor a live trio (wsUrl/wsToken)';
       setStatus(refs, message, 'error');
       emitBootFailure('MISSING_META_GGUI_BOOTSTRAP', message);
       return { ok: false, mountedRender };
@@ -1397,6 +1396,28 @@ export async function buildGguiSessionSeedInput(
     componentCode,
     ...(props !== undefined ? { props } : {}),
   };
+}
+
+/**
+ * Does this slice carry STATIC content the mount surface can paint
+ * without any network round-trip authorization — `codeUrl` (fetched),
+ * `codeB64` (decoded inline), or `kind` (built-in registry)?
+ *
+ * The ONE discriminator `bootSequence` consults when deciding whether
+ * the static seed-mount path runs. `codeB64` counting here is
+ * load-bearing for fetch-blocked hosts: their meta carries codeB64
+ * PLUS a live trio the iframe can never connect, and missing the
+ * inline arm would skip the only paint path and die on the dead WS.
+ * Mirrors `validateMeta`'s static-content arm (meta-parse.ts) and the
+ * protocol host-helper's `hasMountModeDiscriminator` — drift among
+ * the three IS the historical bug class, hence the named export.
+ */
+export function hasStaticContentMeta(meta: McpAppAiGguiRenderMeta): boolean {
+  return (
+    (typeof meta.codeUrl === 'string' && meta.codeUrl.length > 0) ||
+    (typeof meta.codeB64 === 'string' && meta.codeB64.length > 0) ||
+    (typeof meta.kind === 'string' && meta.kind.length > 0)
+  );
 }
 
 /**

@@ -13,7 +13,7 @@
  */
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import type { McpAppAiGguiRenderMeta } from '@ggui-ai/protocol/integrations/mcp-apps';
-import { buildGguiSessionSeedInput } from '../runtime.js';
+import { buildGguiSessionSeedInput, hasStaticContentMeta } from '../runtime.js';
 
 const BASE: McpAppAiGguiRenderMeta = {
   sessionId: 'render_seed_1',
@@ -126,6 +126,20 @@ describe('buildGguiSessionSeedInput', () => {
     });
     expect(seed).not.toBeNull();
     expect((seed as { props?: unknown }).props).toBeUndefined();
+  });
+
+  it('hasStaticContentMeta counts codeB64 as static content (the bootSequence mount gate)', () => {
+    // The claude.ai shape: codeB64 + a live trio the iframe can never
+    // connect. The static seed-mount path MUST run — a discriminator
+    // missing the inline arm skips the only paint path and dies on the
+    // dead WS. Pin all three arms + the live-only negative.
+    const live = { ...BASE, wsUrl: 'wss://x/ws', wsToken: 't' };
+    expect(hasStaticContentMeta({ ...live, codeB64: 'ZXhwb3J0' })).toBe(true);
+    expect(hasStaticContentMeta({ ...BASE, codeB64: 'ZXhwb3J0' })).toBe(true);
+    expect(hasStaticContentMeta({ ...BASE, codeUrl: 'https://x/c.js' })).toBe(true);
+    expect(hasStaticContentMeta({ ...BASE, kind: 'no-credentials' })).toBe(true);
+    expect(hasStaticContentMeta(live)).toBe(false);
+    expect(hasStaticContentMeta({ ...BASE, codeB64: '' })).toBe(false);
   });
 
   it('throws when the codeUrl fetch fails (caller surfaces a typed boot failure)', async () => {
