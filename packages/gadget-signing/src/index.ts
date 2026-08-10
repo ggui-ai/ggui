@@ -557,6 +557,24 @@ export interface VerifyBundleSigstoreInput {
    * Sigstore TUF root.
    */
   readonly endpoints?: { readonly fulcioURL?: string; readonly rekorURL?: string };
+  /**
+   * Writable cache directory for the sigstore TUF trust root. The
+   * upstream verifier refreshes TUF metadata into this directory
+   * before verifying; when unset it falls back to the platform
+   * app-data directory (derived from `$XDG_DATA_HOME` / `$HOME`),
+   * which read-only filesystems reject at `mkdir` time — serverless
+   * runtimes typically only allow writes under `/tmp`, so point this
+   * at e.g. `/tmp/sigstore-js` there.
+   */
+  readonly tufCachePath?: string;
+  /**
+   * Reuse cached TUF metadata without a remote refresh while the
+   * cached copy is still valid. Keeps the trust-root network
+   * round-trip off warm verification paths; a missing, expired, or
+   * corrupt cache falls back to a normal remote refresh, so this is
+   * a latency knob — never a correctness one.
+   */
+  readonly tufForceCache?: boolean;
 }
 
 /**
@@ -584,7 +602,8 @@ export interface VerifyBundleSigstoreInput {
 export async function verifyBundleSigstore(
   input: VerifyBundleSigstoreInput,
 ): Promise<VerifyResult> {
-  const { bundleBytes, signature, expectedIdentity } = input;
+  const { bundleBytes, signature, expectedIdentity, tufCachePath, tufForceCache } =
+    input;
 
   // 1. Fast tamper check.
   const recomputed = sha384(bundleBytes);
@@ -640,6 +659,12 @@ export async function verifyBundleSigstore(
   // 4. Run the full upstream verify.
   try {
     const verifyOpts: sigstoreClient.VerifyOptions = {};
+    if (tufCachePath !== undefined) {
+      verifyOpts.tufCachePath = tufCachePath;
+    }
+    if (tufForceCache !== undefined) {
+      verifyOpts.tufForceCache = tufForceCache;
+    }
     if (expectedIdentity) {
       if (typeof expectedIdentity.subject === "string") {
         // Use email-shaped vs URI-shaped routing per upstream's two

@@ -50,6 +50,7 @@ import {
   verifyBundleEd25519,
   verifyBundleSigstore,
   type GadgetSignature,
+  type VerifyBundleSigstoreInput,
 } from '@ggui-ai/gadget-signing';
 import { bundleHostScheme, strictGadgetDescriptorSchema } from '@ggui-ai/protocol';
 import { ZodError } from 'zod';
@@ -166,6 +167,19 @@ export interface PublishArtifactDeps {
    * HTTP endpoint that should not pay for react-dom.
    */
   readonly blueprintProbe?: BlueprintProbeRunner;
+  /**
+   * Optional TUF trust-root tuning forwarded verbatim to
+   * sigstore-cosign signature verification (see
+   * {@link VerifyBundleSigstoreInput}). `tufCachePath` points the
+   * verifier's trust-root cache at a writable directory — serverless
+   * runtimes typically only allow writes under `/tmp`.
+   * `tufForceCache` reuses valid cached TUF metadata without a remote
+   * refresh. Ed25519 verification never consults these.
+   */
+  readonly sigstoreTuf?: Pick<
+    VerifyBundleSigstoreInput,
+    'tufCachePath' | 'tufForceCache'
+  >;
 }
 
 export type PublishArtifactResult =
@@ -468,6 +482,7 @@ export async function publishArtifact(
     const verifyResult = await verifyBundleSigstore({
       bundleBytes: bytesForSignature,
       signature: input.signature,
+      ...(deps.sigstoreTuf ?? {}),
     });
     if (!verifyResult.valid) {
       return error(400, 'signature_invalid', verifyResult.reason);

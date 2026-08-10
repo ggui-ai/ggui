@@ -541,6 +541,38 @@ describe("verifyBundleSigstore", () => {
     });
     expect(result).toEqual({ valid: true });
   });
+
+  it("threads tufCachePath + tufForceCache into upstream verify options", async () => {
+    mockedSign.mockResolvedValueOnce(JSON.parse(buildFakeBundleJSON()));
+    mockedVerify.mockResolvedValueOnce({} as unknown as never);
+    const bundleBytes = new TextEncoder().encode("data");
+    const signature = await signBundleSigstore({ bundleBytes, identityToken: "tok" });
+
+    const result = await verifyBundleSigstore({
+      bundleBytes,
+      signature,
+      tufCachePath: "/tmp/sigstore-js",
+      tufForceCache: true,
+    });
+    expect(result).toEqual({ valid: true });
+    const [, , opts] = mockedVerify.mock.calls[0]!;
+    expect(opts).toMatchObject({
+      tufCachePath: "/tmp/sigstore-js",
+      tufForceCache: true,
+    });
+  });
+
+  it("omits TUF options from upstream verify when unset", async () => {
+    mockedSign.mockResolvedValueOnce(JSON.parse(buildFakeBundleJSON()));
+    mockedVerify.mockResolvedValueOnce({} as unknown as never);
+    const bundleBytes = new TextEncoder().encode("data");
+    const signature = await signBundleSigstore({ bundleBytes, identityToken: "tok" });
+
+    await verifyBundleSigstore({ bundleBytes, signature });
+    const [, , opts] = mockedVerify.mock.calls[0]!;
+    expect(opts).not.toHaveProperty("tufCachePath");
+    expect(opts).not.toHaveProperty("tufForceCache");
+  });
 });
 
 describe("extractSigstoreLeafCertPem", () => {

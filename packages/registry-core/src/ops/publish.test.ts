@@ -1285,5 +1285,59 @@ describe('publishArtifact', () => {
       expect(result.body.error).toBe('signature_invalid');
       expect(result.body.message).toContain('verificationMaterial.x509CertificateChain');
     });
+
+    it('threads deps.sigstoreTuf into the verifyBundleSigstore call (F2)', async () => {
+      sigstoreMocks.verifyBundleSigstore.mockResolvedValue({ valid: true });
+      const f = await makeSigstoreFixture();
+      const result = await publishArtifact(
+        {
+          manifest: PUBLIC_GADGET_MANIFEST,
+          bundle: f.bundleB64,
+          bundleSha384: f.bundleSha384,
+          signature: f.signature,
+        },
+        {
+          storage: f.storage,
+          bundleStorage: f.bundleStorage,
+          authn: { subject: f.subject },
+          clock: () => new Date('2026-05-18T00:00:00.000Z'),
+          registryHostname: 'localhost:9001',
+          sigstoreTuf: { tufCachePath: '/tmp/sigstore-js', tufForceCache: true },
+        },
+      );
+      expect(result.ok).toBe(true);
+      expect(sigstoreMocks.verifyBundleSigstore).toHaveBeenCalledTimes(1);
+      expect(sigstoreMocks.verifyBundleSigstore.mock.calls[0]?.[0]).toMatchObject({
+        tufCachePath: '/tmp/sigstore-js',
+        tufForceCache: true,
+      });
+    });
+
+    it('omits TUF options from the verify call when deps.sigstoreTuf is unset', async () => {
+      sigstoreMocks.verifyBundleSigstore.mockResolvedValue({ valid: true });
+      const f = await makeSigstoreFixture();
+      await publishArtifact(
+        {
+          manifest: PUBLIC_GADGET_MANIFEST,
+          bundle: f.bundleB64,
+          bundleSha384: f.bundleSha384,
+          signature: f.signature,
+        },
+        {
+          storage: f.storage,
+          bundleStorage: f.bundleStorage,
+          authn: { subject: f.subject },
+          clock: () => new Date('2026-05-18T00:00:00.000Z'),
+          registryHostname: 'localhost:9001',
+        },
+      );
+      expect(sigstoreMocks.verifyBundleSigstore).toHaveBeenCalledTimes(1);
+      expect(sigstoreMocks.verifyBundleSigstore.mock.calls[0]?.[0]).not.toHaveProperty(
+        'tufCachePath',
+      );
+      expect(sigstoreMocks.verifyBundleSigstore.mock.calls[0]?.[0]).not.toHaveProperty(
+        'tufForceCache',
+      );
+    });
   });
 });
