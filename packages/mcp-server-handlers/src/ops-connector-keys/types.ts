@@ -60,6 +60,13 @@ export interface IssueConnectorKeyResult {
  *   - `revoke` is idempotent — re-revoking a `revoked` row returns the
  *     same row with `alreadyRevoked: true`. Cross-user revoke is
  *     rejected with `ConnectorKeyAccessDeniedError`.
+ *   - When `issue` is asked to bind the key to an app (`appId` set),
+ *     the implementation MUST verify the subject owns that app before
+ *     minting, and MUST reject with `ConnectorKeyAccessDeniedError`
+ *     when it does not or when the deployment cannot verify. A key
+ *     bound to an app the subject does not own is a credential for
+ *     someone else's data — refusing the mint is the contract, not a
+ *     quality-of-implementation choice.
  */
 export interface ConnectorKeysSource {
   list(ownerSub: string): Promise<readonly ConnectorKeySummary[]>;
