@@ -16,7 +16,9 @@ import { describe, expect, it } from 'vitest';
 import {
   MCP_APP_AI_GGUI_RENDER_META_KEY,
   asGguiRenderBootstrap,
+  escapeInlineScript,
   gguiShellHtml,
+  parseMcpAppAiGguiRenderMeta,
   toolResultGguiRender,
 } from './mcp-apps.js';
 
@@ -112,6 +114,16 @@ describe('asGguiRenderBootstrap', () => {
       appId: 'APP00000',
       runtimeUrl: LIVE_SLICE.runtimeUrl,
       kind: 'no-credentials',
+    };
+    expect(asGguiRenderBootstrap(envelope(slice))?.slice).toEqual(slice);
+  });
+
+  it('accepts inline static-component mode (codeB64) as a mount discriminator', () => {
+    const slice = {
+      sessionId: 'render_0004',
+      appId: 'APP00000',
+      runtimeUrl: LIVE_SLICE.runtimeUrl,
+      codeB64: Buffer.from('export default () => null').toString('base64'),
     };
     expect(asGguiRenderBootstrap(envelope(slice))?.slice).toEqual(slice);
   });
@@ -226,5 +238,98 @@ describe('gguiShellHtml', () => {
     const html = gguiShellHtml(bootstrap);
     expect(html).toContain('name="viewport"');
     expect(html).toContain('name="color-scheme"');
+  });
+
+  it('runtimeInlineSource swaps the external tag for an inline module script', () => {
+    const html = gguiShellHtml(bootstrap, {
+      runtimeInlineSource: 'globalThis.__ran = 1;',
+    });
+    expect(html).toContain(
+      '<script type="module" data-ggui-runtime="inline">globalThis.__ran = 1;</script>',
+    );
+    expect(html).not.toContain(`src="${LIVE_SLICE.runtimeUrl}"`);
+    // Meta global still inlined first — parse-order guarantee holds in
+    // the inline variant too.
+    const metaAt = html.indexOf('__GGUI_META__');
+    const moduleAt = html.indexOf('<script type="module"');
+    expect(metaAt).toBeGreaterThan(-1);
+    expect(moduleAt).toBeGreaterThan(metaAt);
+    // The inlined meta still carries runtimeUrl (boot validator
+    // requires it across all modes).
+    const parsed = inlinedEnvelope(html) as Record<string, Record<string, unknown>>;
+    expect(parsed[MCP_APP_AI_GGUI_RENDER_META_KEY].runtimeUrl).toBe(
+      LIVE_SLICE.runtimeUrl,
+    );
+  });
+
+  it('runtimeInlineSource escapes script-terminating sequences in the bundle text', () => {
+    const html = gguiShellHtml(bootstrap, {
+      runtimeInlineSource: 'const a = "</script>"; const b = "<!--";',
+    });
+    expect(html).not.toContain('const a = "</script>"');
+    expect(html).toContain('const a = "<\\/script>"');
+    expect(html).toContain('const b = "<\\!--"');
+  });
+});
+
+describe('escapeInlineScript', () => {
+  it('neutralizes </script case-insensitively, preserving original casing', () => {
+    expect(escapeInlineScript('x="</script>"')).toBe('x="<\\/script>"');
+    expect(escapeInlineScript('x="</SCRIPT>"')).toBe('x="<\\/SCRIPT>"');
+    expect(escapeInlineScript('x="</ScRiPt>"')).toBe('x="<\\/ScRiPt>"');
+  });
+
+  it('neutralizes <!-- sequences', () => {
+    expect(escapeInlineScript('re=/<!--/')).toBe('re=/<\\!--/');
+  });
+
+  it('escaped output evaluates identically for string-literal occurrences', () => {
+    const src = 'globalThis.__esc = "</script>" + "<!--";';
+    const escaped = escapeInlineScript(src);
+    // `\/` and `\!` are identity escapes inside JS string literals.
+    // eslint-disable-next-line no-new-func
+    new Function(escaped)();
+    expect(
+      (globalThis as Record<string, unknown>).__esc,
+    ).toBe('</script><!--');
+    delete (globalThis as Record<string, unknown>).__esc;
+  });
+
+  it('leaves already-escaped sequences untouched', () => {
+    expect(escapeInlineScript('x="<\\/script>"')).toBe('x="<\\/script>"');
+  });
+});
+
+describe('parseMcpAppAiGguiRenderMeta — codeB64', () => {
+  const base = {
+    sessionId: 'render_0005',
+    appId: 'APP00000',
+    runtimeUrl: LIVE_SLICE.runtimeUrl,
+  };
+
+  it('carries codeB64 through, alone or alongside codeUrl', () => {
+    const alone = parseMcpAppAiGguiRenderMeta(
+      envelope({ ...base, codeB64: 'ZXhwb3J0' }),
+    );
+    expect(alone.ok && alone.meta?.codeB64).toBe('ZXhwb3J0');
+    const both = parseMcpAppAiGguiRenderMeta(
+      envelope({ ...base, codeB64: 'ZXhwb3J0', codeUrl: 'https://x/code/a.js' }),
+    );
+    expect(both.ok && both.meta?.codeB64).toBe('ZXhwb3J0');
+    expect(both.ok && both.meta?.codeUrl).toBe('https://x/code/a.js');
+  });
+
+  it('rejects codeB64 + kind (static-component vs system-card exclusivity)', () => {
+    const result = parseMcpAppAiGguiRenderMeta(
+      envelope({ ...base, codeB64: 'ZXhwb3J0', kind: 'no-credentials' }),
+    );
+    expect(result).toEqual({ ok: false, reason: 'MALFORMED_RENDER' });
+  });
+
+  it('rejects an empty codeB64', () => {
+    const result = parseMcpAppAiGguiRenderMeta(
+      envelope({ ...base, codeB64: '', wsUrl: 'w', wsToken: 't' }),
+    );
+    expect(result).toEqual({ ok: false, reason: 'MALFORMED_RENDER' });
   });
 });

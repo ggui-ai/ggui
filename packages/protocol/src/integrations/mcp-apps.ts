@@ -259,10 +259,11 @@ export interface McpAppContextSlot {
  * composes per-tick `&sinceSequence=<cursor>&limit=<N>` against this
  * base; companion to `lastSequence` which seeds the initial cursor.
  *
- * **Mode discriminator.** At least one of `{ codeUrl, kind, wsUrl-with-token }`
- * MUST be present for the iframe to mount. `kind` and `codeUrl` are
- * mutually exclusive (kind = system-card mode; codeUrl = static-component
- * mode; live-channel = absent both).
+ * **Mode discriminator.** At least one of `{ codeUrl, codeB64, kind,
+ * wsUrl-with-token }` MUST be present for the iframe to mount. `kind` is
+ * mutually exclusive with `codeUrl`/`codeB64` (kind = system-card mode;
+ * codeUrl/codeB64 = static-component mode, fetched vs inline;
+ * live-channel = absent all).
  *
  * @public
  */
@@ -324,11 +325,25 @@ export interface McpAppAiGguiRenderMeta {
   readonly validatorsUrl?: string;
 
   // Component mode discriminator
-  // - codeUrl + codeHash → static-component mode
-  // - kind → system-card mode (mutually exclusive with codeUrl)
+  // - codeUrl + codeHash → static-component mode (runtime fetches)
+  // - codeB64 → inline static-component mode (fetch-free)
+  // - kind → system-card mode (mutually exclusive with codeUrl/codeB64)
   // - absent (in live mode) → mount via live-channel
   readonly codeUrl?: string;
   readonly codeHash?: string;
+  /**
+   * Base64-encoded compiled ES-module source of the component — the
+   * fetch-free twin of {@link codeUrl}. Produced by servers whose
+   * renders must mount inside hosts that forbid cross-origin fetches
+   * at the iframe CSP layer (no `connect-src`, no external
+   * `script-src`); consumed by the iframe-runtime's seed builder,
+   * which decodes it instead of fetching. MAY coexist with `codeUrl`
+   * (a consumer prefers the inline bytes; the URL remains for
+   * cache-addressable consumers); mutually exclusive with `kind`.
+   * Malformed base64 fails at decode time as a boot failure — the
+   * parser here validates shape only (non-empty string).
+   */
+  readonly codeB64?: string;
   readonly kind?: string;
 }
 
@@ -406,10 +421,13 @@ export function parseMcpAppAiGguiRenderMeta(
     return { ok: false, reason: 'MALFORMED_RENDER' };
   }
 
-  // Component-mode discriminator: codeUrl + kind mutually exclusive.
+  // Component-mode discriminator: kind mutually exclusive with
+  // codeUrl/codeB64 (the two static-component carriers may coexist —
+  // consumers prefer the inline bytes).
   const cu = s.codeUrl;
   const ck = s.kind;
   const ch = s.codeHash;
+  const cb = s.codeB64;
   if (cu !== undefined && (typeof cu !== 'string' || cu.length === 0)) {
     return { ok: false, reason: 'MALFORMED_RENDER' };
   }
@@ -419,7 +437,13 @@ export function parseMcpAppAiGguiRenderMeta(
   if (ch !== undefined && (typeof ch !== 'string' || ch.length === 0)) {
     return { ok: false, reason: 'MALFORMED_RENDER' };
   }
-  if (typeof cu === 'string' && cu.length > 0 && typeof ck === 'string' && ck.length > 0) {
+  if (cb !== undefined && (typeof cb !== 'string' || cb.length === 0)) {
+    return { ok: false, reason: 'MALFORMED_RENDER' };
+  }
+  const hasStaticComponent =
+    (typeof cu === 'string' && cu.length > 0) ||
+    (typeof cb === 'string' && cb.length > 0);
+  if (hasStaticComponent && typeof ck === 'string' && ck.length > 0) {
     return { ok: false, reason: 'MALFORMED_RENDER' };
   }
 
@@ -490,6 +514,7 @@ export function parseMcpAppAiGguiRenderMeta(
       : {}),
     ...(typeof cu === 'string' && cu.length > 0 ? { codeUrl: cu } : {}),
     ...(typeof ch === 'string' && ch.length > 0 ? { codeHash: ch } : {}),
+    ...(typeof cb === 'string' && cb.length > 0 ? { codeB64: cb } : {}),
     ...(typeof ck === 'string' && ck.length > 0 ? { kind: ck } : {}),
   };
 
@@ -1432,14 +1457,15 @@ export interface GguiRenderBootstrap {
  * Does this slice carry at least one MOUNT MODE discriminator?
  * Mirrors the iframe-runtime's `validateMeta`: the runtime needs
  * `runtimeUrl` PLUS one of live mode (`wsUrl` + `wsToken` together),
- * `codeUrl`, or `kind` — without one of those three the iframe has
- * nothing to mount.
+ * `codeUrl`, `codeB64`, or `kind` — without one of those the iframe
+ * has nothing to mount.
  */
 function hasMountModeDiscriminator(slice: Record<string, unknown>): boolean {
   const nonEmpty = (v: unknown): v is string =>
     typeof v === 'string' && v.length > 0;
   if (nonEmpty(slice.wsUrl) && nonEmpty(slice.wsToken)) return true;
   if (nonEmpty(slice.codeUrl)) return true;
+  if (nonEmpty(slice.codeB64)) return true;
   if (nonEmpty(slice.kind)) return true;
   return false;
 }
@@ -1523,6 +1549,43 @@ export interface GguiShellHtmlOptions {
    *     iframe and accept the Safari canvas-color trade-off.
    */
   readonly background?: 'surface' | 'transparent';
+  /**
+   * Full source text of the iframe-runtime bundle to embed as an
+   * inline `<script type="module">` in place of the external
+   * `src={runtimeUrl}` tag. For hosts whose iframe CSP forbids
+   * external `script-src` while permitting inline scripts — the
+   * external tag can never load there, so the shell carries the
+   * runtime in its own bytes.
+   *
+   * The source is embedded via {@link escapeInlineScript}; see its
+   * contract for the (esbuild-bundle-safe) escaping guarantee. The
+   * bootstrap's `runtimeUrl` stays REQUIRED and stays on the inlined
+   * meta — the runtime's boot validator requires it across all modes;
+   * with this option set it is informational rather than fetched.
+   */
+  readonly runtimeInlineSource?: string;
+}
+
+/**
+ * Make raw JS source safe to embed as the text content of an HTML
+ * `<script>` element.
+ *
+ * The HTML parser terminates script data at the first
+ * case-insensitive `</script` and shifts parse state on `<!--`; both
+ * sequences are rewritten with a backslash (`<\/script`, `<\!--`).
+ * Inside JS string, template, and regex literals — the only positions
+ * these byte sequences occur in a well-formed bundled module (a bare
+ * `<!--` outside a literal is a SyntaxError in module code; a bare
+ * `</` cannot follow an expression) — `\/` and `\!` are identity
+ * escapes, so the escaped source evaluates identically to the
+ * original.
+ *
+ * @public
+ */
+export function escapeInlineScript(source: string): string {
+  return source
+    .replace(/<\/(script)/gi, '<\\/$1')
+    .replace(/<!--/g, '<\\!--');
 }
 
 /**
@@ -1587,10 +1650,18 @@ export function gguiShellHtml(
     options?.background === 'transparent'
       ? 'background:transparent'
       : `background-color:${GGUI_RENDER_SHELL_SURFACE}`;
+  // Inline vs external runtime: same document shape either way — the
+  // classic meta script always runs first (parse order + module
+  // deferral), so `__GGUI_META__` is populated before the runtime
+  // evaluates in both variants.
+  const runtimeTag =
+    options?.runtimeInlineSource !== undefined
+      ? `<script type="module" data-ggui-runtime="inline">${escapeInlineScript(options.runtimeInlineSource)}</script>`
+      : `<script type="module" crossorigin="anonymous" src="${safeRuntimeUrl}"></script>`;
   return `<!doctype html>
 <html lang="en" style="${background}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="color-scheme" content="light dark"><title>ggui render</title></head>
 <body style="margin:0;${background}">
 <script>globalThis.__GGUI_META__ = ${json};</script>
-<script type="module" crossorigin="anonymous" src="${safeRuntimeUrl}"></script>
+${runtimeTag}
 </body></html>`;
 }
