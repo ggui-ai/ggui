@@ -70,6 +70,7 @@ import {
   MCP_APP_BOOTSTRAP_FAILED_TYPE,
   asGguiRenderBootstrap,
   deriveContextName,
+  escapeInlineScript,
   gguiShellHtml,
   toMcpAppEnvelope,
   type McpAppAiGguiRenderMeta,
@@ -419,6 +420,72 @@ export const GGUI_RENDER_SHELL_HTML = `<!doctype html>
 export const GGUI_RENDER_SHELL_SCRIPT_HASH: string = `'sha256-${createHash("sha256")
   .update(GGUI_RENDER_SHELL_SCRIPT_BODY)
   .digest("base64")}'`;
+
+/**
+ * Bootstrap `<script>` body of the INLINE-RUNTIME shell (see
+ * {@link buildInlineRenderShellHtml}). Runs BEFORE the (large) inline
+ * runtime module parses and does exactly two things:
+ *
+ *  1. Installs the `window.__GGUI_PENDING_TOOL_RESULTS__` buffer the
+ *     iframe-runtime's autostart drains (`readPendingToolResults`
+ *     contract: an array whose elements are the RAW
+ *     `ui/notifications/tool-result` JSON-RPC `params` values, arrival
+ *     order, capped so a long-lived host session cannot grow it
+ *     unboundedly).
+ *  2. Sends the `ui/initialize` → `ui/notifications/initialized`
+ *     preflight. Load-bearing against a mutual 30s stall: spec hosts
+ *     gate tool-result delivery BEHIND the handshake, while the
+ *     runtime's autostart waits for a tool-result before its own
+ *     handshake runs. The runtime repeats `ui/initialize` when it
+ *     boots; MCP Apps hosts handle the repeat idempotently (same
+ *     preflight pattern as the thin shell above).
+ *
+ * No overlay, no meta inspection, no runtime loading — the runtime is
+ * inline in the same document and owns everything else.
+ */
+const GGUI_INLINE_SHELL_BUFFER_SCRIPT_BODY = `
+(function(){'use strict';
+var buf=window.__GGUI_PENDING_TOOL_RESULTS__=window.__GGUI_PENDING_TOOL_RESULTS__||[];
+window.addEventListener('message',function(ev){
+  var m=ev&&ev.data;
+  if(!m||m.jsonrpc!=='2.0'||m.method!=='ui/notifications/tool-result')return;
+  buf.push(m.params);
+  if(buf.length>8)buf.splice(0,buf.length-8);
+});
+try{
+  window.parent.postMessage({jsonrpc:'2.0',id:'ggui-inline-preflight',method:'ui/initialize',params:{appCapabilities:{},appInfo:{name:'ggui-render',version:'1.0.0'},protocolVersion:'2026-01-26'}},'*');
+  window.parent.postMessage({jsonrpc:'2.0',method:'ui/notifications/initialized',params:{}},'*');
+}catch(e){}
+})();
+`;
+
+/**
+ * Build the INLINE-RUNTIME static shell: a standalone document carrying
+ * the iframe-runtime bundle in its own bytes instead of an external
+ * `<script src>` tag. For MCP Apps hosts whose iframe CSP forbids
+ * external `script-src` while permitting inline scripts — the thin
+ * postMessage shell can never load its runtime there, so the shell IS
+ * the runtime.
+ *
+ * Per-render state does NOT live here (same posture as the thin
+ * shell): the host delivers it via `ui/notifications/tool-result`,
+ * caught either by the buffer script (pre-parse arrivals) or by the
+ * runtime's own autostart listener. Live-channel / codeUrl fetches are
+ * unavailable under the CSP this shell targets; delivered meta is
+ * expected to carry the fetch-free channels (inline `codeB64`, inline
+ * `propsJson`).
+ *
+ * Served per-mount via `installMcpAppsOutbound({ shellHtml })` — the
+ * module-level thin-shell constants (and their pinned CSP hash) are
+ * deliberately untouched.
+ */
+export function buildInlineRenderShellHtml(runtimeSource: string): string {
+  return `<!doctype html>
+<html lang="en" style="height:100%;background-color:${GGUI_RENDER_SHELL_SURFACE}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="color-scheme" content="light dark"><title>ggui render</title></head>
+<body style="margin:0;height:100%;min-height:480px;background-color:${GGUI_RENDER_SHELL_SURFACE}"><div id="ggui-root" data-ggui-shell="inline" style="height:100%;min-height:480px"></div>
+<script>${GGUI_INLINE_SHELL_BUFFER_SCRIPT_BODY}</script>
+<script type="module" data-ggui-runtime="inline">${escapeInlineScript(runtimeSource)}</script></body></html>`;
+}
 
 /**
  * Register `ui://ggui/render` as a readable resource on an `McpServer`.

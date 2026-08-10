@@ -132,6 +132,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import express, { type Express, type Request } from "express";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { randomBytes } from "node:crypto";
+import fs from "node:fs";
 import { Server as NodeHttpServer } from "node:http";
 import path from "node:path";
 import type { ZodRawShape } from "zod";
@@ -145,6 +146,7 @@ import {
   type ThemeWriter,
 } from "./console-theme-routes.js";
 import { mountConsoleTimelineRoutes } from "./console-timeline.js";
+import { buildInlineRenderShellHtml } from "./mcp-apps-outbound.js";
 import { BoundedValidatorTraceSink, mountConsoleValidatorRoutes } from "./console-validator.js";
 // Operator-class MCP handlers — twelve `ggui_ops_*` handlers across
 // four domains (apps / orgs / connector-keys / coupon). Every factory
@@ -2199,6 +2201,25 @@ export interface CreateGguiServerOptions {
          * their public URL (`wss://mcp.example.com/ws`).
          */
         readonly wsUrl?: string;
+        /**
+         * Serve the static `ui://ggui/render` resource as the
+         * INLINE-RUNTIME shell: the iframe-runtime bundle embedded in
+         * the document's own bytes instead of an external
+         * `<script src>` tag. For MCP Apps hosts whose iframe CSP
+         * forbids external `script-src` while permitting inline
+         * scripts — the thin postMessage shell can never load its
+         * runtime there.
+         *
+         * Trade-off: the resource body grows to the bundle size
+         * (~300 KB compressed on the wire), and hosts that prefetch
+         * the tool's declared resource pay it once per connection.
+         * Default OFF; hosted deployments fronting fetch-blocked
+         * hosts turn it on. An explicit `shellHtml` wins over this
+         * flag. If the runtime bundle file is unreadable at
+         * composition time the server logs a warning and falls back
+         * to the thin shell.
+         */
+        readonly inlineRuntimeShell?: boolean;
       };
 
   /**
@@ -4403,15 +4424,43 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
     corsOrigins: originHostPolicy.allowedOrigins,
   });
 
+  // Inline-runtime shell (opt-in): embed the runtime bundle's source
+  // into the static-resource shell so fetch-blocked hosts (iframe CSP
+  // without external script-src) can still boot. Resolved ONCE at
+  // composition time from the same bundle file the runtime mount
+  // serves. An explicit `shellHtml` wins; a read failure warns and
+  // falls back to the thin shell (the server still works everywhere
+  // the thin shell worked).
+  let inlineShellHtml: string | undefined;
+  if (mcpAppsEnabled && mcpAppsConfig.inlineRuntimeShell === true) {
+    try {
+      inlineShellHtml = buildInlineRenderShellHtml(
+        fs.readFileSync(runtimeBundleFile, "utf8")
+      );
+    } catch (error) {
+      // inlineRuntimeShell is on but the runtime bundle file could not
+      // be read — serve the thin postMessage shell instead.
+      logger.warn("mcp_apps_inline_shell_bundle_unreadable", {
+        runtimeBundleFile,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
   // Per-boot `buildMcpServer` options — every input below is fixed at
   // composition time, so the bundle is assembled once and the MCP
   // endpoint family spreads a fresh copy per request.
   const buildMcpOptions: BuildMcpServerOptions = {
     mcpAppsOutbound: mcpAppsEnabled,
-    // Caller-provided `shellHtml` overrides the default;
-    // `installMcpAppsOutbound` falls back to its baked
-    // `GGUI_RENDER_SHELL_HTML` constant when absent.
-    ...(mcpAppsConfig.shellHtml !== undefined ? { shellHtml: mcpAppsConfig.shellHtml } : {}),
+    // Caller-provided `shellHtml` overrides the default (and the
+    // inline-runtime shell); `installMcpAppsOutbound` falls back to
+    // its baked `GGUI_RENDER_SHELL_HTML` constant when both are
+    // absent.
+    ...(mcpAppsConfig.shellHtml !== undefined
+      ? { shellHtml: mcpAppsConfig.shellHtml }
+      : inlineShellHtml !== undefined
+        ? { shellHtml: inlineShellHtml }
+        : {}),
     // Forward the operator-supplied public origin so the static
     // `ui://ggui/render` resource declares `_meta.ui.csp` for
     // spec-compliant hosts (Claude Desktop / claude.ai Connector /

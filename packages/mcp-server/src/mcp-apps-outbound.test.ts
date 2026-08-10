@@ -20,10 +20,14 @@ import {
 } from '@ggui-ai/protocol/integrations/mcp-apps';
 import { isRecord } from '@ggui-ai/protocol';
 import { createHash } from 'node:crypto';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import {
   GGUI_RENDER_SHELL_HTML,
   GGUI_RENDER_SHELL_SCRIPT_HASH,
   advertiseMcpAppsUiCapability,
+  buildInlineRenderShellHtml,
   registerGguiRenderResource,
 } from './mcp-apps-outbound.js';
 import { createGguiServer, type GguiServer } from './server.js';
@@ -193,6 +197,146 @@ describe('GGUI_RENDER_SHELL_HTML', () => {
     );
   });
 
+});
+
+describe('buildInlineRenderShellHtml', () => {
+  const html = buildInlineRenderShellHtml('globalThis.__runtime_ran = true;');
+
+  it('embeds the runtime inline with the inline marker and NO external script tag', () => {
+    expect(html).toContain('data-ggui-shell="inline"');
+    expect(html).toContain(
+      '<script type="module" data-ggui-runtime="inline">globalThis.__runtime_ran = true;</script>',
+    );
+    expect(html).not.toMatch(/<script[^>]*\bsrc=/);
+  });
+
+  it('installs the __GGUI_PENDING_TOOL_RESULTS__ buffer pushing RAW tool-result params', () => {
+    // Contract pin against `readPendingToolResults` (iframe-runtime):
+    // the buffer's ELEMENTS are the JSON-RPC `params` values themselves
+    // — pushing the whole message (or a {params} wrapper) would make
+    // every buffered entry parse as invalid meta and silently fall
+    // through to the 30s postMessage tier.
+    expect(html).toContain('window.__GGUI_PENDING_TOOL_RESULTS__');
+    expect(html).toContain('buf.push(m.params)');
+    expect(html).toContain("m.method!=='ui/notifications/tool-result'");
+  });
+
+  it('sends the ui/initialize → initialized preflight before the runtime parses', () => {
+    // Spec hosts gate tool-result delivery behind the handshake while
+    // the runtime autostart waits for a tool-result before its own
+    // handshake — without the preflight both sides stall ~30s.
+    const bufferAt = html.indexOf('__GGUI_PENDING_TOOL_RESULTS__');
+    const initAt = html.indexOf("method:'ui/initialize'");
+    const initializedAt = html.indexOf("method:'ui/notifications/initialized'");
+    const runtimeAt = html.indexOf('data-ggui-runtime="inline"');
+    expect(bufferAt).toBeGreaterThan(-1);
+    expect(initAt).toBeGreaterThan(bufferAt);
+    expect(initializedAt).toBeGreaterThan(initAt);
+    expect(runtimeAt).toBeGreaterThan(initializedAt);
+  });
+
+  it('escapes script-terminating sequences in the runtime source', () => {
+    const hostile = buildInlineRenderShellHtml('var a = "</script>"; var b = "<!--";');
+    expect(hostile).not.toContain('var a = "</script>"');
+    expect(hostile).toContain('var a = "<\\/script>"');
+    expect(hostile).toContain('var b = "<\\!--"');
+  });
+
+  it('leaves the thin-shell constants untouched (per-mount override only)', () => {
+    // The pinned CSP hash + first-party consumers depend on the thin
+    // shell not changing when a mount opts into inlining.
+    expect(GGUI_RENDER_SHELL_HTML).toContain('data-ggui-shell="thin"');
+    expect(GGUI_RENDER_SHELL_HTML).not.toContain('data-ggui-runtime="inline"');
+  });
+});
+
+describe('createGguiServer({ mcpApps: { inlineRuntimeShell: true } })', () => {
+  let fx: Fixture | null = null;
+  let client: Client | null = null;
+  let tmpDist: string | null = null;
+
+  afterEach(async () => {
+    if (client) {
+      await client.close();
+      client = null;
+    }
+    if (fx) {
+      await fx.server.close();
+      fx = null;
+    }
+    if (tmpDist) {
+      fs.rmSync(tmpDist, { recursive: true, force: true });
+      tmpDist = null;
+    }
+  });
+
+  it('serves the inline-runtime shell at the static ui://ggui/render resource', async () => {
+    tmpDist = fs.mkdtempSync(path.join(os.tmpdir(), 'ggui-inline-shell-'));
+    fs.writeFileSync(
+      path.join(tmpDist, 'iframe-runtime.js'),
+      'globalThis.__fake_runtime = 1;',
+      'utf8',
+    );
+    const server = createGguiServer({
+      logger: silentLogger,
+      renderChannel: true,
+      mcpApps: { inlineRuntimeShell: true },
+      runtime: { distDir: tmpDist },
+      wsTokenSecret: 'test-secret-32bytes-for-hmac-1234',
+    });
+    const httpServer = await server.listen(0, '127.0.0.1');
+    const addr = httpServer.address();
+    if (!addr || typeof addr === 'string') throw new Error('no AddressInfo');
+    fx = {
+      server,
+      httpServer,
+      httpBase: `http://127.0.0.1:${addr.port}`,
+      wsUrl: `ws://127.0.0.1:${addr.port}/ws`,
+    };
+    client = await connectClient(fx.httpBase);
+
+    const read = await client.readResource({ uri: GGUI_RENDER_RESOURCE_URI });
+    const [content] = read.contents as Array<{ text?: string }>;
+    expect(typeof content?.text).toBe('string');
+    expect(content!.text).toContain('data-ggui-shell="inline"');
+    expect(content!.text).toContain('globalThis.__fake_runtime = 1;');
+    expect(content!.text).not.toMatch(/<script[^>]*\bsrc=/);
+  });
+
+  it('falls back to the thin shell (with a warning) when the bundle file is unreadable', async () => {
+    const warnings: string[] = [];
+    const collectingLogger = {
+      ...silentLogger,
+      warn: (event: string) => {
+        warnings.push(event);
+      },
+      child: () => collectingLogger,
+    };
+    tmpDist = fs.mkdtempSync(path.join(os.tmpdir(), 'ggui-inline-missing-'));
+    // No iframe-runtime.js written — the read fails.
+    const server = createGguiServer({
+      logger: collectingLogger,
+      renderChannel: true,
+      mcpApps: { inlineRuntimeShell: true },
+      runtime: { distDir: tmpDist },
+      wsTokenSecret: 'test-secret-32bytes-for-hmac-1234',
+    });
+    const httpServer = await server.listen(0, '127.0.0.1');
+    const addr = httpServer.address();
+    if (!addr || typeof addr === 'string') throw new Error('no AddressInfo');
+    fx = {
+      server,
+      httpServer,
+      httpBase: `http://127.0.0.1:${addr.port}`,
+      wsUrl: `ws://127.0.0.1:${addr.port}/ws`,
+    };
+    client = await connectClient(fx.httpBase);
+
+    expect(warnings).toContain('mcp_apps_inline_shell_bundle_unreadable');
+    const read = await client.readResource({ uri: GGUI_RENDER_RESOURCE_URI });
+    const [content] = read.contents as Array<{ text?: string }>;
+    expect(content!.text).toContain('data-ggui-shell="thin"');
+  });
 });
 
 describe('end-to-end outbound flow', () => {

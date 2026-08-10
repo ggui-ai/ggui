@@ -8,11 +8,16 @@
  *
  *   GET /ggui/console/session-resource?session=<sessionId>
  *     — production thin-shell HTML, wrapped as a ResourceContents
- *       blob (`text` IS `GGUI_RENDER_SHELL_HTML`, byte-identical to
- *       what Claude Desktop fetches via MCP `resources/read
- *       ui://ggui/render`). NO inlined bootstrap — console fetches
- *       the bootstrap separately (meta route below) and replies to
- *       the iframe's `ui/initialize` postMessage with it.
+ *       blob (`text` IS the `GGUI_RENDER_SHELL_HTML` constant). On a
+ *       default mount this matches what a host fetches via MCP
+ *       `resources/read ui://ggui/render`; a mount opted into
+ *       `mcpApps.inlineRuntimeShell` (or a custom `shellHtml`) serves
+ *       a different body on the MCP path while THIS route keeps the
+ *       thin shell — its first-party srcdoc/WebView consumers load
+ *       external scripts fine and rely on the pinned CSP hash. NO
+ *       inlined bootstrap — console fetches the bootstrap separately
+ *       (meta route below) and replies to the iframe's
+ *       `ui/initialize` postMessage with it.
  *
  *   GET /ggui/console/sessions/:sessionId/meta
  *     — slice-envelope JSON (`{ "ai.ggui/render": {...} }`, the same
