@@ -31,8 +31,12 @@
  * max of the two so a lexical OR semantic hit keeps the entry in
  * the top band.
  *
- * The merge stays under the `limit` request by taking the top-N
- * after sort. `total` reflects pre-trim matches.
+ * The local merge (manifest + semantic) is trimmed to the top-N
+ * after sort, so it stays within `limit`. Registry candidates are
+ * bounded by the same `limit` on their own request and append AFTER
+ * that trim rather than sharing its budget, so the final `results`
+ * count can reach up to 2×`limit`. `total` reflects the pre-trim
+ * local match count plus the appended registry count.
  *
  * ## Why merge vs. a dedicated tool
  *
