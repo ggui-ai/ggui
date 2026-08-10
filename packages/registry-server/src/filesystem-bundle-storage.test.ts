@@ -39,14 +39,17 @@ describe('FilesystemBundleStorage — impl-specific', () => {
         root,
         bundleHost: 'http://localhost:9001',
       });
-      expect(s.bundleUrl('@a', 'b', '0.1.0')).toBe(
-        'http://localhost:9001/bundles/@a/b/0.1.0/bundle.js',
+      expect(s.bundleUrl('@a', 'b', '0.1.0', 'public')).toBe(
+        'http://localhost:9001/bundles/public/@a/b/0.1.0/bundle.js',
       );
-      expect(s.signatureUrl('@a', 'b', '0.1.0')).toBe(
-        'http://localhost:9001/bundles/@a/b/0.1.0/bundle.js.sig',
+      expect(s.signatureUrl('@a', 'b', '0.1.0', 'public')).toBe(
+        'http://localhost:9001/bundles/public/@a/b/0.1.0/bundle.js.sig',
       );
-      expect(s.manifestUrl('@a', 'b', '0.1.0')).toBe(
-        'http://localhost:9001/bundles/@a/b/0.1.0/manifest.json',
+      expect(s.manifestUrl('@a', 'b', '0.1.0', 'public')).toBe(
+        'http://localhost:9001/bundles/public/@a/b/0.1.0/manifest.json',
+      );
+      expect(s.bundleUrl('@a', 'b', '0.1.0', 'private')).toBe(
+        'http://localhost:9001/bundles/private/@a/b/0.1.0/bundle.js',
       );
     } finally {
       await rm(root, { recursive: true, force: true });
@@ -60,8 +63,8 @@ describe('FilesystemBundleStorage — impl-specific', () => {
         root,
         bundleHost: 'http://localhost:9001/',
       });
-      expect(s.bundleUrl('@a', 'b', '0.1.0')).toBe(
-        'http://localhost:9001/bundles/@a/b/0.1.0/bundle.js',
+      expect(s.bundleUrl('@a', 'b', '0.1.0', 'public')).toBe(
+        'http://localhost:9001/bundles/public/@a/b/0.1.0/bundle.js',
       );
     } finally {
       await rm(root, { recursive: true, force: true });
@@ -72,7 +75,7 @@ describe('FilesystemBundleStorage — impl-specific', () => {
     const root = await mkdtemp(join(tmpdir(), 'ggui-bundle-trav1-'));
     try {
       const s = createFilesystemBundleStorage({ root, bundleHost: 'http://t' });
-      await expect(s.getBundle('../bad', 'name', '0.1.0')).rejects.toThrow(
+      await expect(s.getBundle('../bad', 'name', '0.1.0', 'public')).rejects.toThrow(
         /path-traversal/,
       );
     } finally {
@@ -84,7 +87,7 @@ describe('FilesystemBundleStorage — impl-specific', () => {
     const root = await mkdtemp(join(tmpdir(), 'ggui-bundle-trav2-'));
     try {
       const s = createFilesystemBundleStorage({ root, bundleHost: 'http://t' });
-      await expect(s.getBundle('@a', '../bad', '0.1.0')).rejects.toThrow(
+      await expect(s.getBundle('@a', '../bad', '0.1.0', 'public')).rejects.toThrow(
         /path-traversal/,
       );
     } finally {
@@ -96,10 +99,10 @@ describe('FilesystemBundleStorage — impl-specific', () => {
     const root = await mkdtemp(join(tmpdir(), 'ggui-bundle-trav3-'));
     try {
       const s = createFilesystemBundleStorage({ root, bundleHost: 'http://t' });
-      await expect(s.getBundle('@a', 'b', '../bad')).rejects.toThrow(
+      await expect(s.getBundle('@a', 'b', '../bad', 'private')).rejects.toThrow(
         /path-traversal/,
       );
-      expect(() => s.bundleUrl('@a', 'b', '..\\bad')).toThrow(/path-traversal/);
+      expect(() => s.bundleUrl('@a', 'b', '..\\bad', 'private')).toThrow(/path-traversal/);
     } finally {
       await rm(root, { recursive: true, force: true });
     }

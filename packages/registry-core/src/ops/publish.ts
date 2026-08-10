@@ -744,14 +744,29 @@ export async function publishArtifact(
   // `version_exists` immediately — the publisher's idempotent retry path.
   const nowIso = deps.clock().toISOString();
   const sriHash = bundleBytes === undefined ? undefined : `sha384-${sha384Base64(bundleBytes)}`;
+  // H1 prefix split — the manifest's visibility selects the blob
+  // placement (`bundles/public/…` vs `bundles/private/…`), and the
+  // persisted row URLs reflect that real location: public URLs stay
+  // CDN/static-servable, private URLs resolve only through the
+  // authenticated private-bundle route.
   const bundleUrl =
     bundleBytes === undefined
       ? undefined
-      : deps.bundleStorage.bundleUrl(manifest.scope, manifest.name, version);
+      : deps.bundleStorage.bundleUrl(
+          manifest.scope,
+          manifest.name,
+          version,
+          manifest.visibility,
+        );
   const signatureUrl =
     bundleBytes === undefined
       ? undefined
-      : deps.bundleStorage.signatureUrl(manifest.scope, manifest.name, version);
+      : deps.bundleStorage.signatureUrl(
+          manifest.scope,
+          manifest.name,
+          version,
+          manifest.visibility,
+        );
 
   const versionRow: ArtifactVersionRow = {
     artifactId,
@@ -803,11 +818,18 @@ export async function publishArtifact(
   let manifestUrl: string;
   try {
     if (bundleBytes !== undefined) {
-      await deps.bundleStorage.putBundle(manifest.scope, manifest.name, version, bundleBytes);
+      await deps.bundleStorage.putBundle(
+        manifest.scope,
+        manifest.name,
+        version,
+        manifest.visibility,
+        bundleBytes,
+      );
       await deps.bundleStorage.putSignature(
         manifest.scope,
         manifest.name,
         version,
+        manifest.visibility,
         input.signature,
       );
     }
@@ -815,6 +837,7 @@ export async function publishArtifact(
       manifest.scope,
       manifest.name,
       version,
+      manifest.visibility,
       manifest,
     );
   } catch (err) {

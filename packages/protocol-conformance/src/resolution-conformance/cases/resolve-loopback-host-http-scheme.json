@@ -7,7 +7,7 @@
     "bundleHost": "localhost:4873"
   },
   "expect": {
-    "bundleUrl": "http://localhost:4873/bundles/@acme/leaflet-wrapper/2.3.1/bundle.js",
-    "styleUrl": "http://localhost:4873/bundles/@acme/leaflet-wrapper/2.3.1/style.css"
+    "bundleUrl": "http://localhost:4873/bundles/public/@acme/leaflet-wrapper/2.3.1/bundle.js",
+    "styleUrl": "http://localhost:4873/bundles/public/@acme/leaflet-wrapper/2.3.1/style.css"
   }
 }

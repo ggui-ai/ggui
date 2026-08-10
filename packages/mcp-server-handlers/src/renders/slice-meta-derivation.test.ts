@@ -737,10 +737,10 @@ describe('resolveGadgetUrls — bundleHost / bundleUrl / styleUrl precedence', (
       bundleHost: 'sandbox.registry.ggui.ai',
     });
     expect(out.bundleUrl).toBe(
-      'https://sandbox.registry.ggui.ai/bundles/@ggui-samples/gadget-leaflet/0.0.1/bundle.js',
+      'https://sandbox.registry.ggui.ai/bundles/public/@ggui-samples/gadget-leaflet/0.0.1/bundle.js',
     );
     expect(out.styleUrl).toBe(
-      'https://sandbox.registry.ggui.ai/bundles/@ggui-samples/gadget-leaflet/0.0.1/style.css',
+      'https://sandbox.registry.ggui.ai/bundles/public/@ggui-samples/gadget-leaflet/0.0.1/style.css',
     );
   });
 
@@ -750,7 +750,7 @@ describe('resolveGadgetUrls — bundleHost / bundleUrl / styleUrl precedence', (
       version: '0.0.1',
     });
     expect(out.bundleUrl).toBe(
-      'https://registry.ggui.ai/bundles/@ggui-samples/gadget-leaflet/0.0.1/bundle.js',
+      'https://registry.ggui.ai/bundles/public/@ggui-samples/gadget-leaflet/0.0.1/bundle.js',
     );
   });
 
@@ -773,7 +773,7 @@ describe('resolveGadgetUrls — bundleHost / bundleUrl / styleUrl precedence', (
     });
     // bundle still computes from bundleHost; style takes the override.
     expect(out.bundleUrl).toBe(
-      'https://sandbox.registry.ggui.ai/bundles/@ggui-samples/gadget-leaflet/0.0.1/bundle.js',
+      'https://sandbox.registry.ggui.ai/bundles/public/@ggui-samples/gadget-leaflet/0.0.1/bundle.js',
     );
     expect(out.styleUrl).toBe('https://my-cdn.example/leaflet.css');
   });
@@ -801,10 +801,10 @@ describe('resolveGadgetUrls — bundleHost / bundleUrl / styleUrl precedence', (
       bundleHost: host,
     });
     expect(out.bundleUrl).toBe(
-      `http://${host}/bundles/@ggui-samples/gadget-leaflet/0.0.1/bundle.js`,
+      `http://${host}/bundles/public/@ggui-samples/gadget-leaflet/0.0.1/bundle.js`,
     );
     expect(out.styleUrl).toBe(
-      `http://${host}/bundles/@ggui-samples/gadget-leaflet/0.0.1/style.css`,
+      `http://${host}/bundles/public/@ggui-samples/gadget-leaflet/0.0.1/style.css`,
     );
   });
 
@@ -818,7 +818,7 @@ describe('resolveGadgetUrls — bundleHost / bundleUrl / styleUrl precedence', (
       bundleHost: 'localhost-evil.example.com',
     });
     expect(out.bundleUrl).toBe(
-      'https://localhost-evil.example.com/bundles/@ggui-samples/gadget-leaflet/0.0.1/bundle.js',
+      'https://localhost-evil.example.com/bundles/public/@ggui-samples/gadget-leaflet/0.0.1/bundle.js',
     );
   });
 });
@@ -943,7 +943,7 @@ describe('deriveGadgetRegistrations — Slice 3.9 bundleSri threading', () => {
     expect(regs).toEqual([
       {
         package: '@ggui-samples/gadget-mapbox',
-        bundleUrl: 'https://registry.ggui.ai/bundles/@ggui-samples/gadget-mapbox/0.0.1/bundle.js',
+        bundleUrl: 'https://registry.ggui.ai/bundles/public/@ggui-samples/gadget-mapbox/0.0.1/bundle.js',
         bundleSri: 'sha384-aHR0cDovL2V4YW1wbGUuY29tCg',
       },
     ]);

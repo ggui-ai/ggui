@@ -481,33 +481,51 @@ describe('OSS registry server', () => {
   });
 
   // ── /bundles/... cache headers ──
-  it('GET /bundles/:scope/:name/:version/bundle.js returns 200 + Cache-Control immutable', async () => {
+  // The publish journeys above are `visibility: 'private'` (Ed25519
+  // pairing), so their blobs live on the PRIVATE prefix (H1 split):
+  // fetches carry the publisher's bearer and the cache header is the
+  // non-shared-cacheable variant. The full split matrix (public prefix,
+  // 401/403 arms, scope-owner arm) is pinned in
+  // `bundles-visibility-routes.test.ts`.
+  it('GET /bundles/private/:scope/:name/:version/bundle.js returns 200 + private immutable Cache-Control for the publisher', async () => {
     // The publish above wrote the bundle to memory storage.
-    const res = await fetch(`${harness.baseUrl}/bundles/@test/probe/0.1.0/bundle.js`);
+    const res = await fetch(
+      `${harness.baseUrl}/bundles/private/@test/probe/0.1.0/bundle.js`,
+      { headers: { authorization: harness.authHeader } },
+    );
     expect(res.status).toBe(200);
-    expect(res.headers.get('cache-control')).toBe('public, max-age=31536000, immutable');
+    expect(res.headers.get('cache-control')).toBe('private, max-age=31536000, immutable');
     const text = await res.text();
     expect(text).toContain('useProbe');
   });
 
-  it('GET /bundles/.../bundle.js.sig returns 200 + Cache-Control immutable', async () => {
-    const res = await fetch(`${harness.baseUrl}/bundles/@test/probe/0.1.0/bundle.js.sig`);
+  it('GET /bundles/private/.../bundle.js.sig returns 200 + private immutable Cache-Control', async () => {
+    const res = await fetch(
+      `${harness.baseUrl}/bundles/private/@test/probe/0.1.0/bundle.js.sig`,
+      { headers: { authorization: harness.authHeader } },
+    );
     expect(res.status).toBe(200);
-    expect(res.headers.get('cache-control')).toBe('public, max-age=31536000, immutable');
+    expect(res.headers.get('cache-control')).toBe('private, max-age=31536000, immutable');
     const body = (await res.json()) as Ed25519Signature;
     expect(body.algorithm).toBe('ed25519');
   });
 
-  it('GET /bundles/.../manifest.json returns 200 + Cache-Control immutable', async () => {
-    const res = await fetch(`${harness.baseUrl}/bundles/@test/probe/0.1.0/manifest.json`);
+  it('GET /bundles/private/.../manifest.json returns 200 + private immutable Cache-Control', async () => {
+    const res = await fetch(
+      `${harness.baseUrl}/bundles/private/@test/probe/0.1.0/manifest.json`,
+      { headers: { authorization: harness.authHeader } },
+    );
     expect(res.status).toBe(200);
-    expect(res.headers.get('cache-control')).toBe('public, max-age=31536000, immutable');
+    expect(res.headers.get('cache-control')).toBe('private, max-age=31536000, immutable');
     const body = (await res.json()) as { kind: string };
     expect(body.kind).toBe('gadget');
   });
 
-  it('GET /bundles/.../bundle.js on miss returns 404', async () => {
-    const res = await fetch(`${harness.baseUrl}/bundles/@test/nope/9.9.9/bundle.js`);
+  it('GET /bundles/private/.../bundle.js on miss returns 404', async () => {
+    const res = await fetch(
+      `${harness.baseUrl}/bundles/private/@test/nope/9.9.9/bundle.js`,
+      { headers: { authorization: harness.authHeader } },
+    );
     expect(res.status).toBe(404);
   });
 

@@ -135,7 +135,8 @@ describe('21 — marketplace gadget lifecycle', () => {
     expect(publishBody.version).toBe('0.0.1');
     expect(publishBody.installCommand).toContain('ggui gadget install');
     expect(publishBody.installCommand).toContain('@ggui-test/probe-gadget@0.0.1');
-    expect(publishBody.bundleUrl).toContain('/bundles/');
+    // H1 split — the private fixture's blobs land on the private prefix.
+    expect(publishBody.bundleUrl).toContain('/bundles/private/');
     expect(publishBody.signatureUrl).toContain('.sig');
 
     // ── 5. GET /search ─────────────────────────────────────────────
@@ -175,12 +176,22 @@ describe('21 — marketplace gadget lifecycle', () => {
     expect(readBody.signatureUrl).toBe(publishBody.signatureUrl);
     expect(readBody.authorPublicKey).toBe(base64(keypair.publicKey));
 
-    // ── 7. Fetch the bundle ────────────────────────────────────────
-    const bundleResp = await fetch(publishBody.bundleUrl);
+    // ── 7. Fetch the bundle (H1 prefix split) ──────────────────────
+    // The fixture is PRIVATE: its bundleUrl resolves through the
+    // authenticated private route — anonymous fetches are refused…
+    const anonBundleResp = await fetch(publishBody.bundleUrl);
+    expect(anonBundleResp.status).toBe(401);
+
+    // …and the publisher's bearer unlocks it. Still immutable, but
+    // non-shared-cacheable (the authorization is per-caller).
+    const bundleResp = await fetch(publishBody.bundleUrl, {
+      headers: { authorization: `Bearer ${TEST_REGISTRY_TOKEN}` },
+    });
     expect(bundleResp.status).toBe(200);
     const cacheControl = bundleResp.headers.get('cache-control');
     expect(cacheControl).toMatch(/immutable/);
     expect(cacheControl).toMatch(/max-age=31536000/);
+    expect(cacheControl).toMatch(/^private/);
     const bundleText = await bundleResp.text();
     expect(bundleText).toContain('useTestProbe');
     expect(bundleText).toContain('GGUI_TEST_PROBE_FIRED');

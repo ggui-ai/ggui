@@ -744,8 +744,12 @@ export interface GadgetDescriptor {
    * Registry hostname (no scheme, no path) the server uses to resolve
    * `bundleUrl` + `styleUrl` at render time:
    *
-   *   `https://<bundleHost>/bundles/<scope>/<name>/<version>/bundle.js`
-   *   `https://<bundleHost>/bundles/<scope>/<name>/<version>/style.css`
+   *   `https://<bundleHost>/bundles/public/<scope>/<name>/<version>/bundle.js`
+   *   `https://<bundleHost>/bundles/public/<scope>/<name>/<version>/style.css`
+   *
+   * (the PUBLIC prefix of the registry's visibility-split bundle
+   * layout — host composition serves the anonymous render-time fetch;
+   * private artifacts always arrive as explicit `bundleUrl` values)
    *
    * Resolution order (operator wins over author wins over spec default):
    *

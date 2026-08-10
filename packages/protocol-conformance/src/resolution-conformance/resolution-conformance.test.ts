@@ -58,7 +58,10 @@ function referenceResolve(entry: GadgetUrlEntry): ResolvedGadgetUrls {
       typeof bundleHost === 'string' && bundleHost.length > 0
         ? bundleHost
         : DEFAULT_BUNDLE_HOST;
-    return `${bundleHostScheme(host)}://${host}/bundles/${pkg}/${version}/${file}`;
+    // H1 visibility split: bundleHost-tier composition is anonymous
+    // render-time fetching, which only the registry's PUBLIC prefix
+    // serves — the composed path carries the `public` segment.
+    return `${bundleHostScheme(host)}://${host}/bundles/public/${pkg}/${version}/${file}`;
   };
 
   const resolvedBundle = hasExplicitBundleUrl

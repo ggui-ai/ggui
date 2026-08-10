@@ -10,26 +10,47 @@
  *   GET  /author-keys                      → listAuthorKeys (bearer-gated)
  *   DELETE /author-keys/:keyId             → deleteAuthorKey (bearer-gated)
  *   POST /conformance/check                → checkConformance (pre-flight gate)
- *   GET  /bundles/:scope/:name/:version/bundle.js
- *   GET  /bundles/:scope/:name/:version/bundle.js.sig
- *   GET  /bundles/:scope/:name/:version/manifest.json
+ *   GET  /bundles/public/:scope/:name/:version/bundle.js        (anonymous)
+ *   GET  /bundles/public/:scope/:name/:version/bundle.js.sig    (anonymous)
+ *   GET  /bundles/public/:scope/:name/:version/manifest.json    (anonymous)
+ *   GET  /bundles/private/:scope/:name/:version/bundle.js       (bearer-gated)
+ *   GET  /bundles/private/:scope/:name/:version/bundle.js.sig   (bearer-gated)
+ *   GET  /bundles/private/:scope/:name/:version/manifest.json   (bearer-gated)
  *
  * Bundle / signature / manifest serves go through {@link BundleStorage}
  * directly so the operator can plug a different storage backend
  * (memory for tests; filesystem for self-hosting) without rewriting
- * the route table. The server always emits
- * `Cache-Control: public, max-age=31536000, immutable` on these
- * routes — bundles are SRI-pinned + immutable post-publish.
+ * the route table.
+ *
+ * H1 visibility split: blob placement mirrors the manifest's
+ * `visibility` (`bundles/public/…` vs `bundles/private/…`), and the
+ * ROUTE decides the auth posture — the public prefix serves
+ * anonymously; the private prefix requires a bearer AND authorizes the
+ * caller against the artifact's publisher or the scope owner (403
+ * otherwise; unknown triples answer 404). A blob is only findable
+ * through the prefix it was published under, so a private artifact can
+ * never be fetched via the anonymous route.
+ *
+ * Cache headers: public-prefix responses emit
+ * `Cache-Control: public, max-age=31536000, immutable` (bundles are
+ * SRI-pinned + immutable post-publish); private-prefix responses stay
+ * immutable but non-shared-cacheable
+ * (`Cache-Control: private, max-age=31536000, immutable`).
  *
  * CORS: permissive on public-read routes (`/search`, `/pkg/*`,
- * `/bundles/*`, `/conformance/check`); strict on `/publish` (same-origin
- * or no Origin header — the install CLI runs server-to-server, not
- * browser-side).
+ * `/bundles/public/*`, `/conformance/check`); strict on `/publish`
+ * (same-origin or no Origin header — the install CLI runs
+ * server-to-server, not browser-side) AND on `/bundles/private/*`
+ * (per-caller authorized content — no ACAO, no permissive preflight;
+ * browser consumers of private bundles go through presigned URLs
+ * rather than cross-origin credentialed fetches).
  */
 import { Hono } from 'hono';
 import type { Context } from 'hono';
 import {
+  canReadPrivateArtifact,
   checkConformance,
+  createScopeOwnerResolver,
   deleteAuthorKey,
   unauthorizedErrorBody,
   listArtifactVersions,
@@ -45,10 +66,16 @@ import {
   type PublishRequestBody,
   type RegisterAuthorKeyRequestBody,
   type RegistryStorage,
+  type Visibility,
 } from '@ggui-ai/registry-core';
 import type { BearerAuthn } from './authn/bearer.js';
 
 const IMMUTABLE_CACHE_HEADER = 'public, max-age=31536000, immutable';
+/**
+ * Private-prefix responses are immutable too, but MUST NOT land in
+ * shared caches — the authorization decision is per-caller.
+ */
+const PRIVATE_IMMUTABLE_CACHE_HEADER = 'private, max-age=31536000, immutable';
 
 export interface RegistryAppOptions {
   readonly storage: RegistryStorage;
@@ -107,12 +134,18 @@ export function createRegistryApp(options: RegistryAppOptions): Hono {
   // agrees).
   const verifyBearer = (c: Context) => authn.verify(c.req.header('authorization'));
 
-  // CORS — permissive read; strict for /publish. Adds ACAO headers
-  // AFTER the route runs so they overlay on the route's response.
+  // CORS — permissive read; strict for /publish AND the private
+  // bundle prefix (review finding 5). Private bundles are per-caller
+  // authorized content: no cross-origin page has any business reading
+  // them, and the browser consumers that need private bundle bytes go
+  // through presigned URLs, not cross-origin credentialed fetches.
+  // Adds ACAO headers AFTER the route runs so they overlay on the
+  // route's response.
   app.use('*', async (c, next) => {
     const path = c.req.path;
-    const isPublishRoute = path === '/publish';
-    if (c.req.method === 'OPTIONS' && !isPublishRoute) {
+    const isCorsExcluded =
+      path === '/publish' || path.startsWith('/bundles/private/');
+    if (c.req.method === 'OPTIONS' && !isCorsExcluded) {
       // Preflight short-circuit for read routes. DELETE is listed for
       // the author-key management route — a browser console revokes
       // keys cross-origin ([E]).
@@ -126,7 +159,7 @@ export function createRegistryApp(options: RegistryAppOptions): Hono {
       });
     }
     await next();
-    if (!isPublishRoute) {
+    if (!isCorsExcluded) {
       c.res.headers.set('Access-Control-Allow-Origin', '*');
       c.res.headers.set('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
       c.res.headers.set('Access-Control-Allow-Headers', 'content-type, authorization');
@@ -365,30 +398,114 @@ export function createRegistryApp(options: RegistryAppOptions): Hono {
     return c.json(result, 200);
   });
 
-  // ── /bundles/:scope/:name/:version/bundle.js ─────────────────────────
-  app.get('/bundles/:scope/:name/:version/bundle.js', async (c) => {
+  // ── /bundles/public/… — anonymous, CDN-parity serving ────────────────
+  app.get('/bundles/public/:scope/:name/:version/bundle.js', async (c) => {
     const { scope, name, version } = c.req.param();
-    return serveBundle(c, bundleStorage, scope, name, version);
+    return serveBundle(c, bundleStorage, scope, name, version, 'public');
+  });
+  app.get('/bundles/public/:scope/:name/:version/bundle.js.sig', async (c) => {
+    const { scope, name, version } = c.req.param();
+    return serveSignature(c, bundleStorage, scope, name, version, 'public');
+  });
+  app.get('/bundles/public/:scope/:name/:version/manifest.json', async (c) => {
+    const { scope, name, version } = c.req.param();
+    return serveManifest(c, bundleStorage, scope, name, version, 'public');
   });
 
-  // ── /bundles/:scope/:name/:version/bundle.js.sig ─────────────────────
-  app.get('/bundles/:scope/:name/:version/bundle.js.sig', async (c) => {
-    const { scope, name, version } = c.req.param();
-    return serveSignature(c, bundleStorage, scope, name, version);
-  });
+  // ── /bundles/private/… — authenticated + ownership-authorized ────────
+  // Auth rule (H1): a valid bearer is required (401 — uniform, fires
+  // before any storage read, so it can't distinguish triples); then
+  // authorization goes through H2's shared `canReadPrivateArtifact`
+  // predicate (publisher OR scope owner; owner lookup lazy + memoized
+  // + fail-closed via `createScopeOwnerResolver`). Unknown triples,
+  // rows that are not private (their blobs live on the public prefix),
+  // AND authorization denials all answer the SAME opaque 404 — a
+  // distinguishable denial is an existence oracle for private
+  // artifacts. Storage faults answer the documented `server_error`
+  // envelope with NO raw error text (fail closed, log server-side).
+  const privateBundleGate = async (
+    c: Context,
+    rawScope: string,
+    name: string,
+    version: string,
+  ): Promise<Response | null> => {
+    const verified = authn.verify(c.req.header('authorization'));
+    if (verified === null) {
+      return c.json(
+        {
+          error: 'unauthorized',
+          message:
+            'private bundles require a valid bearer token in the Authorization header',
+        },
+        401,
+      );
+    }
+    const scope = rawScope.startsWith('@') ? rawScope : `@${rawScope}`;
+    const artifactId = `${scope}/${name}`;
+    let row;
+    try {
+      row = await storage.getArtifactVersion(artifactId, version);
+    } catch (err) {
+      // Fail closed with the documented envelope — the raw fault text
+      // stays server-side (a wire-visible internals string is both a
+      // leak and a fingerprint).
+      // eslint-disable-next-line no-console -- server-side operator signal; the wire stays opaque
+      console.error('registry: private bundle gate storage read failed', {
+        artifactId,
+        version,
+        error: err instanceof Error ? err.message : String(err),
+      });
+      return c.json(errorBody('server_error', 'internal error'), 500);
+    }
+    if (row === null || row.visibility !== 'private') {
+      return c.json(errorBody('not_found', 'bundle not found'), 404);
+    }
+    // `createScopeOwnerResolver` already resolves owner-lookup faults
+    // to null (deny) with its own server-side log, so no try/catch is
+    // needed around the predicate.
+    const authorized = await canReadPrivateArtifact(
+      verified,
+      row,
+      createScopeOwnerResolver(storage, artifactId),
+    );
+    if (!authorized) {
+      return c.json(errorBody('not_found', 'bundle not found'), 404);
+    }
+    return null;
+  };
 
-  // ── /bundles/:scope/:name/:version/manifest.json ─────────────────────
-  app.get('/bundles/:scope/:name/:version/manifest.json', async (c) => {
+  app.get('/bundles/private/:scope/:name/:version/bundle.js', async (c) => {
     const { scope, name, version } = c.req.param();
-    return serveManifest(c, bundleStorage, scope, name, version);
+    const denied = await privateBundleGate(c, scope, name, version);
+    if (denied !== null) return denied;
+    return serveBundle(c, bundleStorage, scope, name, version, 'private');
+  });
+  app.get('/bundles/private/:scope/:name/:version/bundle.js.sig', async (c) => {
+    const { scope, name, version } = c.req.param();
+    const denied = await privateBundleGate(c, scope, name, version);
+    if (denied !== null) return denied;
+    return serveSignature(c, bundleStorage, scope, name, version, 'private');
+  });
+  app.get('/bundles/private/:scope/:name/:version/manifest.json', async (c) => {
+    const { scope, name, version } = c.req.param();
+    const denied = await privateBundleGate(c, scope, name, version);
+    if (denied !== null) return denied;
+    return serveManifest(c, bundleStorage, scope, name, version, 'private');
   });
 
   return app;
 }
 
+/** Cache header for the given prefix — see the module docstring. */
+function cacheHeaderFor(visibility: Visibility): string {
+  return visibility === 'public'
+    ? IMMUTABLE_CACHE_HEADER
+    : PRIVATE_IMMUTABLE_CACHE_HEADER;
+}
+
 /**
  * Serve the bundle bytes. `application/javascript` MIME with the
- * immutable cache header. 404 on miss.
+ * visibility-appropriate immutable cache header. 404 on miss.
  */
 async function serveBundle(
   c: Context,
@@ -396,11 +513,12 @@ async function serveBundle(
   rawScope: string,
   name: string,
   version: string,
+  visibility: Visibility,
 ): Promise<Response> {
   const scope = rawScope.startsWith('@') ? rawScope : `@${rawScope}`;
   let bytes: Uint8Array | null;
   try {
-    bytes = await bundleStorage.getBundle(scope, name, version);
+    bytes = await bundleStorage.getBundle(scope, name, version, visibility);
   } catch (err) {
     return c.json(errorBody('server_error', errorMessage(err)), 500);
   }
@@ -418,7 +536,7 @@ async function serveBundle(
     status: 200,
     headers: {
       'Content-Type': 'application/javascript; charset=utf-8',
-      'Cache-Control': IMMUTABLE_CACHE_HEADER,
+      'Cache-Control': cacheHeaderFor(visibility),
     },
   });
 }
@@ -429,18 +547,19 @@ async function serveSignature(
   rawScope: string,
   name: string,
   version: string,
+  visibility: Visibility,
 ): Promise<Response> {
   const scope = rawScope.startsWith('@') ? rawScope : `@${rawScope}`;
   let sig;
   try {
-    sig = await bundleStorage.getSignature(scope, name, version);
+    sig = await bundleStorage.getSignature(scope, name, version, visibility);
   } catch (err) {
     return c.json(errorBody('server_error', errorMessage(err)), 500);
   }
   if (sig === null) {
     return c.json(errorBody('not_found', 'signature not found'), 404);
   }
-  c.header('Cache-Control', IMMUTABLE_CACHE_HEADER);
+  c.header('Cache-Control', cacheHeaderFor(visibility));
   return c.json(sig, 200);
 }
 
@@ -450,18 +569,19 @@ async function serveManifest(
   rawScope: string,
   name: string,
   version: string,
+  visibility: Visibility,
 ): Promise<Response> {
   const scope = rawScope.startsWith('@') ? rawScope : `@${rawScope}`;
   let manifest;
   try {
-    manifest = await bundleStorage.getManifest(scope, name, version);
+    manifest = await bundleStorage.getManifest(scope, name, version, visibility);
   } catch (err) {
     return c.json(errorBody('server_error', errorMessage(err)), 500);
   }
   if (manifest === null) {
     return c.json(errorBody('not_found', 'manifest not found'), 404);
   }
-  c.header('Cache-Control', IMMUTABLE_CACHE_HEADER);
+  c.header('Cache-Control', cacheHeaderFor(visibility));
   return c.json(manifest, 200);
 }
 

@@ -146,6 +146,7 @@ import {
   deriveRenderMeta,
   derivePublicEnvProjection,
   deriveContractBundle,
+  rewritePrivateBundleUrls,
   type RenderMetaView,
   type RenderSliceMetaDeps,
 } from './slice-meta-derivation.js';
@@ -2250,7 +2251,13 @@ export function createGguiRenderHandler(
           lastSequence = stored.eventSequence;
         }
         if (top) {
-          view = deriveRenderMeta(top);
+          // H1 ruling 1b — presign-rewrite PRIVATE bundle URLs before
+          // projection so CSP origins + iframe registrations both see
+          // the fetchable (presigned) URL. Passthrough when the
+          // deployment wires no presigner (OSS same-origin story).
+          view = deriveRenderMeta(
+            await rewritePrivateBundleUrls(top, deps.presignPrivateBundleUrl),
+          );
           // Project the App's publicEnv down to the union of declared
           // wrappers' `requires`.
           if (deps.appMetadataStore) {

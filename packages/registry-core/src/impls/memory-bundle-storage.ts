@@ -12,6 +12,7 @@
 import type { ArtifactManifest } from '@ggui-ai/artifact-manifest';
 import type { GadgetSignature } from '@ggui-ai/gadget-signing';
 import type { BundleStorage } from '../interfaces/bundle-storage.js';
+import type { Visibility } from '../types.js';
 
 export interface InMemoryBundleStorageOptions {
   /**
@@ -32,40 +33,47 @@ export function inMemoryBundleStorage(
   const signatures = new Map<string, GadgetSignature>();
   const manifests = new Map<string, ArtifactManifest>();
 
-  const key = (scope: string, name: string, version: string): string =>
-    `${scope}/${name}/${version}`;
+  // Visibility segments the key (H1 prefix split) — a blob written
+  // `public` must be invisible to a `private` read of the same triple,
+  // exactly like the prefix-split object keys of the durable impls.
+  const key = (
+    scope: string,
+    name: string,
+    version: string,
+    visibility: Visibility,
+  ): string => `${visibility}/${scope}/${name}/${version}`;
 
   return {
-    async putBundle(scope, name, version, bytes) {
-      bundles.set(key(scope, name, version), new Uint8Array(bytes));
-      return this.bundleUrl(scope, name, version);
+    async putBundle(scope, name, version, visibility, bytes) {
+      bundles.set(key(scope, name, version, visibility), new Uint8Array(bytes));
+      return this.bundleUrl(scope, name, version, visibility);
     },
-    async getBundle(scope, name, version) {
-      const bytes = bundles.get(key(scope, name, version));
+    async getBundle(scope, name, version, visibility) {
+      const bytes = bundles.get(key(scope, name, version, visibility));
       return bytes === undefined ? null : new Uint8Array(bytes);
     },
-    async putSignature(scope, name, version, signature) {
-      signatures.set(key(scope, name, version), signature);
-      return this.signatureUrl(scope, name, version);
+    async putSignature(scope, name, version, visibility, signature) {
+      signatures.set(key(scope, name, version, visibility), signature);
+      return this.signatureUrl(scope, name, version, visibility);
     },
-    async getSignature(scope, name, version) {
-      return signatures.get(key(scope, name, version)) ?? null;
+    async getSignature(scope, name, version, visibility) {
+      return signatures.get(key(scope, name, version, visibility)) ?? null;
     },
-    async putManifest(scope, name, version, manifest) {
-      manifests.set(key(scope, name, version), manifest);
-      return this.manifestUrl(scope, name, version);
+    async putManifest(scope, name, version, visibility, manifest) {
+      manifests.set(key(scope, name, version, visibility), manifest);
+      return this.manifestUrl(scope, name, version, visibility);
     },
-    async getManifest(scope, name, version) {
-      return manifests.get(key(scope, name, version)) ?? null;
+    async getManifest(scope, name, version, visibility) {
+      return manifests.get(key(scope, name, version, visibility)) ?? null;
     },
-    bundleUrl(scope, name, version) {
-      return `${bundleHost}/bundles/${scope}/${name}/${version}/bundle.js`;
+    bundleUrl(scope, name, version, visibility) {
+      return `${bundleHost}/bundles/${visibility}/${scope}/${name}/${version}/bundle.js`;
     },
-    signatureUrl(scope, name, version) {
-      return `${bundleHost}/bundles/${scope}/${name}/${version}/bundle.js.sig`;
+    signatureUrl(scope, name, version, visibility) {
+      return `${bundleHost}/bundles/${visibility}/${scope}/${name}/${version}/bundle.js.sig`;
     },
-    manifestUrl(scope, name, version) {
-      return `${bundleHost}/bundles/${scope}/${name}/${version}/manifest.json`;
+    manifestUrl(scope, name, version, visibility) {
+      return `${bundleHost}/bundles/${visibility}/${scope}/${name}/${version}/manifest.json`;
     },
   };
 }

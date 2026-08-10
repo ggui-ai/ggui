@@ -76,39 +76,81 @@ export function bundleStorageContract(makeStorage: () => BundleStorage): void {
     describe('bundle', () => {
       it('returns null on miss', async () => {
         const s = makeStorage();
-        expect(await s.getBundle('@test', 'foo', '0.1.0')).toBe(null);
+        expect(await s.getBundle('@test', 'foo', '0.1.0', 'public')).toBe(null);
       });
 
       it('round-trips bundle bytes', async () => {
         const s = makeStorage();
         const bytes = new Uint8Array([0xff, 0x00, 0x10, 0x20]);
-        await s.putBundle('@test', 'foo', '0.1.0', bytes);
-        const fetched = await s.getBundle('@test', 'foo', '0.1.0');
+        await s.putBundle('@test', 'foo', '0.1.0', 'public', bytes);
+        const fetched = await s.getBundle('@test', 'foo', '0.1.0', 'public');
         expect(fetched).toEqual(bytes);
       });
 
       it('isolates bundles by (scope, name, version)', async () => {
         const s = makeStorage();
-        await s.putBundle('@a', 'pkg', '0.1.0', new Uint8Array([1]));
-        await s.putBundle('@a', 'pkg', '0.2.0', new Uint8Array([2]));
-        await s.putBundle('@b', 'pkg', '0.1.0', new Uint8Array([3]));
-        expect((await s.getBundle('@a', 'pkg', '0.1.0'))?.[0]).toBe(1);
-        expect((await s.getBundle('@a', 'pkg', '0.2.0'))?.[0]).toBe(2);
-        expect((await s.getBundle('@b', 'pkg', '0.1.0'))?.[0]).toBe(3);
+        await s.putBundle('@a', 'pkg', '0.1.0', 'public', new Uint8Array([1]));
+        await s.putBundle('@a', 'pkg', '0.2.0', 'public', new Uint8Array([2]));
+        await s.putBundle('@b', 'pkg', '0.1.0', 'public', new Uint8Array([3]));
+        expect((await s.getBundle('@a', 'pkg', '0.1.0', 'public'))?.[0]).toBe(1);
+        expect((await s.getBundle('@a', 'pkg', '0.2.0', 'public'))?.[0]).toBe(2);
+        expect((await s.getBundle('@b', 'pkg', '0.1.0', 'public'))?.[0]).toBe(3);
+      });
+    });
+
+    describe('visibility key split (H1)', () => {
+      it('a private-written bundle is invisible to a public read of the same triple', async () => {
+        const s = makeStorage();
+        await s.putBundle('@acme', 'secret', '1.0.0', 'private', new Uint8Array([7]));
+        expect(await s.getBundle('@acme', 'secret', '1.0.0', 'public')).toBe(null);
+        expect((await s.getBundle('@acme', 'secret', '1.0.0', 'private'))?.[0]).toBe(7);
+      });
+
+      it('a public-written bundle is invisible to a private read of the same triple', async () => {
+        const s = makeStorage();
+        await s.putBundle('@acme', 'open', '1.0.0', 'public', new Uint8Array([9]));
+        expect(await s.getBundle('@acme', 'open', '1.0.0', 'private')).toBe(null);
+        expect((await s.getBundle('@acme', 'open', '1.0.0', 'public'))?.[0]).toBe(9);
+      });
+
+      it('splits signatures and manifests by visibility too', async () => {
+        const s = makeStorage();
+        await s.putSignature('@acme', 'secret', '1.0.0', 'private', stubSignature());
+        await s.putManifest('@acme', 'secret', '1.0.0', 'private', stubManifest());
+        expect(await s.getSignature('@acme', 'secret', '1.0.0', 'public')).toBe(null);
+        expect(await s.getManifest('@acme', 'secret', '1.0.0', 'public')).toBe(null);
+        expect(await s.getSignature('@acme', 'secret', '1.0.0', 'private')).not.toBe(null);
+        expect(await s.getManifest('@acme', 'secret', '1.0.0', 'private')).not.toBe(null);
+      });
+
+      it('embeds the visibility segment in every composed URL', () => {
+        const s = makeStorage();
+        for (const compose of [
+          s.bundleUrl.bind(s),
+          s.signatureUrl.bind(s),
+          s.manifestUrl.bind(s),
+        ]) {
+          expect(compose('@test', 'foo', '0.1.0', 'public')).toContain(
+            '/bundles/public/',
+          );
+          expect(compose('@test', 'foo', '0.1.0', 'private')).toContain(
+            '/bundles/private/',
+          );
+        }
       });
     });
 
     describe('signature', () => {
       it('returns null on miss', async () => {
         const s = makeStorage();
-        expect(await s.getSignature('@test', 'foo', '0.1.0')).toBe(null);
+        expect(await s.getSignature('@test', 'foo', '0.1.0', 'public')).toBe(null);
       });
 
       it('round-trips an Ed25519 signature envelope', async () => {
         const s = makeStorage();
         const sig = stubSignature();
-        await s.putSignature('@test', 'foo', '0.1.0', sig);
-        const fetched = await s.getSignature('@test', 'foo', '0.1.0');
+        await s.putSignature('@test', 'foo', '0.1.0', 'private', sig);
+        const fetched = await s.getSignature('@test', 'foo', '0.1.0', 'private');
         expect(fetched).toEqual(sig);
       });
 
@@ -122,8 +164,8 @@ export function bundleStorageContract(makeStorage: () => BundleStorage): void {
       it('round-trips a sigstore signature envelope including the embedded cosign bundle', async () => {
         const s = makeStorage();
         const sig = stubSigstoreSignature();
-        await s.putSignature('@test', 'foo', '0.1.0', sig);
-        const fetched = await s.getSignature('@test', 'foo', '0.1.0');
+        await s.putSignature('@test', 'foo', '0.1.0', 'public', sig);
+        const fetched = await s.getSignature('@test', 'foo', '0.1.0', 'public');
         expect(fetched).toEqual(sig);
         // Specifically pin the `algorithm` discriminator + the
         // `bundle` field — these are sigstore-only fields the prior
@@ -152,6 +194,7 @@ export function bundleStorageContract(makeStorage: () => BundleStorage): void {
           '@no-such-scope',
           'no-such-name',
           '0.0.0',
+          'public',
         );
         expect(fetched).toBe(null);
       });
@@ -160,14 +203,14 @@ export function bundleStorageContract(makeStorage: () => BundleStorage): void {
     describe('manifest', () => {
       it('returns null on miss', async () => {
         const s = makeStorage();
-        expect(await s.getManifest('@test', 'foo', '0.1.0')).toBe(null);
+        expect(await s.getManifest('@test', 'foo', '0.1.0', 'public')).toBe(null);
       });
 
       it('round-trips the manifest', async () => {
         const s = makeStorage();
         const m = stubManifest();
-        await s.putManifest('@test', 'foo', '0.1.0', m);
-        const fetched = await s.getManifest('@test', 'foo', '0.1.0');
+        await s.putManifest('@test', 'foo', '0.1.0', 'public', m);
+        const fetched = await s.getManifest('@test', 'foo', '0.1.0', 'public');
         expect(fetched).toEqual(m);
       });
     });
@@ -175,9 +218,9 @@ export function bundleStorageContract(makeStorage: () => BundleStorage): void {
     describe('URL composition', () => {
       it('produces distinct URLs for bundle / sig / manifest', async () => {
         const s = makeStorage();
-        const b = s.bundleUrl('@test', 'foo', '0.1.0');
-        const sig = s.signatureUrl('@test', 'foo', '0.1.0');
-        const man = s.manifestUrl('@test', 'foo', '0.1.0');
+        const b = s.bundleUrl('@test', 'foo', '0.1.0', 'public');
+        const sig = s.signatureUrl('@test', 'foo', '0.1.0', 'public');
+        const man = s.manifestUrl('@test', 'foo', '0.1.0', 'public');
         expect(b).not.toBe(sig);
         expect(b).not.toBe(man);
         expect(sig).not.toBe(man);
@@ -185,14 +228,20 @@ export function bundleStorageContract(makeStorage: () => BundleStorage): void {
 
       it('matches the URL returned from put*', async () => {
         const s = makeStorage();
-        const putBundleUrl = await s.putBundle('@test', 'foo', '0.1.0', new Uint8Array([1]));
-        expect(putBundleUrl).toBe(s.bundleUrl('@test', 'foo', '0.1.0'));
+        const putBundleUrl = await s.putBundle(
+          '@test',
+          'foo',
+          '0.1.0',
+          'private',
+          new Uint8Array([1]),
+        );
+        expect(putBundleUrl).toBe(s.bundleUrl('@test', 'foo', '0.1.0', 'private'));
 
-        const putSigUrl = await s.putSignature('@test', 'foo', '0.1.0', stubSignature());
-        expect(putSigUrl).toBe(s.signatureUrl('@test', 'foo', '0.1.0'));
+        const putSigUrl = await s.putSignature('@test', 'foo', '0.1.0', 'private', stubSignature());
+        expect(putSigUrl).toBe(s.signatureUrl('@test', 'foo', '0.1.0', 'private'));
 
-        const putManUrl = await s.putManifest('@test', 'foo', '0.1.0', stubManifest());
-        expect(putManUrl).toBe(s.manifestUrl('@test', 'foo', '0.1.0'));
+        const putManUrl = await s.putManifest('@test', 'foo', '0.1.0', 'private', stubManifest());
+        expect(putManUrl).toBe(s.manifestUrl('@test', 'foo', '0.1.0', 'private'));
       });
     });
   });

@@ -155,6 +155,10 @@ describe('publishArtifact', () => {
     expect(result.body.artifactId).toBe('@test/weather');
     expect(result.body.version).toBe('1.0.0');
     expect(result.body.bundleUrl).toContain('@test/weather/1.0.0/bundle.js');
+    // H1 placement — a private publish lands under the private prefix
+    // and its persisted URLs point there.
+    expect(result.body.bundleUrl).toContain('/bundles/private/');
+    expect(result.body.signatureUrl).toContain('/bundles/private/');
     expect(result.body.installCommand).toBe(
       'ggui gadget install @test/weather@1.0.0 --registry=http://localhost:9001',
     );
@@ -167,8 +171,17 @@ describe('publishArtifact', () => {
     expect(versionRow?.publishedBy).toBe(f.subject);
     expect(versionRow?.bundleSri).toMatch(/^sha384-/);
 
-    const storedBundle = await f.bundleStorage.getBundle('@test', 'weather', '1.0.0');
+    const storedBundle = await f.bundleStorage.getBundle(
+      '@test',
+      'weather',
+      '1.0.0',
+      'private',
+    );
     expect(storedBundle).toEqual(f.bundleBytes);
+    // …and nothing leaked onto the public prefix.
+    expect(await f.bundleStorage.getBundle('@test', 'weather', '1.0.0', 'public')).toBe(
+      null,
+    );
   });
 
   it('rejects with `unauthorized` when authn.subject is empty', async () => {
@@ -803,12 +816,15 @@ describe('publishArtifact', () => {
       expect(result.status).toBe(201);
     });
 
-    it('accepts the public + sigstore pairing (201)', async () => {
+    it('accepts the public + sigstore pairing (201) and places blobs on the public prefix', async () => {
       sigstoreMocks.verifyBundleSigstore.mockResolvedValue({ valid: true });
       const publicManifest: ArtifactManifest = {
         ...GADGET_MANIFEST,
         visibility: 'public',
       } as ArtifactManifest;
+      const publicBundleStorage = inMemoryBundleStorage({
+        bundleHost: 'http://localhost:9001',
+      });
       const bundleBytes = new TextEncoder().encode(VALID_BUNDLE_TEXT);
       const sha = sha384Base64(bundleBytes);
       const sigstoreSignature: SigstoreSignature = {
@@ -837,7 +853,7 @@ describe('publishArtifact', () => {
         },
         {
           storage: inMemoryRegistryStorage(),
-          bundleStorage: inMemoryBundleStorage({ bundleHost: 'http://localhost:9001' }),
+          bundleStorage: publicBundleStorage,
           authn: { subject: 'user-1' },
           clock: () => new Date(),
           registryHostname: 'localhost:9001',
@@ -846,6 +862,16 @@ describe('publishArtifact', () => {
       expect(result.ok).toBe(true);
       if (!result.ok) return;
       expect(result.status).toBe(201);
+      // H1 placement — a public publish lands under the public prefix
+      // (CDN-servable) and its persisted URLs point there.
+      expect(result.body.bundleUrl).toContain('/bundles/public/');
+      expect(result.body.signatureUrl).toContain('/bundles/public/');
+      expect(
+        await publicBundleStorage.getBundle('@test', 'weather', '1.0.0', 'public'),
+      ).toEqual(bundleBytes);
+      expect(
+        await publicBundleStorage.getBundle('@test', 'weather', '1.0.0', 'private'),
+      ).toBe(null);
     });
   });
 

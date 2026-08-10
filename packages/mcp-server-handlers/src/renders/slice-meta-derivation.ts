@@ -63,9 +63,13 @@ import {
  *      ships via a non-registry CDN (esm.sh, jsdelivr, …).
  *   2. `entry.bundleHost` + `entry.package` + `entry.version` —
  *      hostname resolution: server assembles
- *      `https://<bundleHost>/bundles/<scope>/<name>/<version>/bundle.js`
- *      (matches `@ggui-ai/registry-core`'s `bundleStorage.bundleUrl(…)`
- *      path layout — see `packages/registry-core/src/impls/memory-bundle-storage.ts`).
+ *      `https://<bundleHost>/bundles/public/<scope>/<name>/<version>/bundle.js`
+ *      — the PUBLIC prefix of `@ggui-ai/registry-core`'s
+ *      visibility-split `BundleStorage` layout (H1). Host composition
+ *      serves the anonymous render-time fetch, which only the public
+ *      prefix answers; private artifacts always arrive as explicit
+ *      `bundleUrl` values and are presign-rewritten at render-meta
+ *      time ({@link rewritePrivateBundleUrls}).
  *   3. Spec default `registry.ggui.ai` — applied when `entry.bundleHost`
  *      is absent but `package` + `version` are present (first-party
  *      hosted-registry default).
@@ -166,7 +170,15 @@ function resolveGadgetUrlsImpl(
       typeof bundleHost === 'string' && bundleHost.length > 0
         ? bundleHost
         : DEFAULT_BUNDLE_HOST;
-    return `${bundleHostScheme(host)}://${host}/bundles/${pkg}/${version}/${file}`;
+    // H1 visibility split: bundleHost-tier composition serves the
+    // anonymous render-time fetch, which only the registry's PUBLIC
+    // prefix answers — the composed path carries the `public` segment
+    // (matches the visibility-split `BundleStorage` layout; pinned by
+    // the resolution-conformance catalog). Private artifacts reach
+    // the iframe via an explicit `bundleUrl` (presign-rewritten at
+    // render-meta time, see `rewritePrivateBundleUrls`), never via
+    // host composition.
+    return `${bundleHostScheme(host)}://${host}/bundles/public/${pkg}/${version}/${file}`;
   };
 
   const resolvedBundle = hasExplicitBundleUrl ? bundleUrl : computeFromHost('bundle.js');
@@ -187,6 +199,89 @@ function resolveGadgetUrlsImpl(
     ...(resolvedBundle !== undefined ? { bundleUrl: resolvedBundle } : {}),
     ...(resolvedStyle !== undefined ? { styleUrl: resolvedStyle } : {}),
   };
+}
+
+/**
+ * URL-path marker of the registry's PRIVATE bundle prefix (H1
+ * visibility split) — the substring {@link rewritePrivateBundleUrls}
+ * dispatches on.
+ */
+export const PRIVATE_BUNDLE_PREFIX = '/bundles/private/';
+
+/**
+ * H1 ruling 1b — rewrite a render item's PRIVATE gadget bundle URLs
+ * into fetchable equivalents at render-meta time.
+ *
+ * A private artifact's explicit `bundleUrl` / `styleUrl` / `typesUrl`
+ * point at the registry's `bundles/private/` prefix, which serves no
+ * anonymous request — the sandboxed iframe (which sends no
+ * credentials) could never load it. When a `presign` function is
+ * supplied, every descriptor URL containing
+ * {@link PRIVATE_BUNDLE_PREFIX} is replaced by `await presign(url)` —
+ * the hosted deployment presigns a short-lived object-storage URL via
+ * its pod task role. Everything else is untouched: public explicit
+ * URLs, bundleHost-composed URLs (which are public-prefix by
+ * construction, see {@link resolveGadgetUrls}), and descriptors with
+ * no URLs at all.
+ *
+ * **OSS default: passthrough.** Without `presign` the item is returned
+ * unchanged — the self-hosted story is same-origin: a self-hoster's
+ * iframe and registry share an origin, so its `/bundles/private/…`
+ * route can authenticate the fetch itself (cookie/session) or the
+ * operator simply publishes render-consumed gadgets public. No
+ * presigning infrastructure is required to run the OSS stack.
+ *
+ * MUST run BEFORE {@link deriveRenderMeta}: both the CSP origin
+ * allowlist (`deriveBundleOrigins`) and the iframe registrations
+ * (`deriveGadgetRegistrations`) read the descriptor URLs, so the
+ * rewritten (presigned) origin lands in `script-src`/`style-src`
+ * automatically and the iframe fetches exactly what the CSP allows.
+ * Zero iframe changes — the client sees an ordinary absolute URL.
+ *
+ * Purity note: `deriveRenderMeta` stays pure; this pre-pass is the
+ * ONLY projection stage that may perform I/O, and it returns a new
+ * item (never mutates) so the WeakMap-memoized URL resolution keys
+ * stay correct.
+ */
+export async function rewritePrivateBundleUrls(
+  item: GguiSession,
+  presign?: (url: string) => Promise<string>,
+): Promise<GguiSession> {
+  if (presign === undefined) return item;
+  if (item.type === 'mcpApps' || item.type === 'system') return item;
+  const descriptors = item.gadgetDescriptors;
+  if (descriptors === undefined || descriptors.length === 0) return item;
+
+  const maybePresign = async (
+    url: string | undefined,
+  ): Promise<string | undefined> =>
+    typeof url === 'string' && url.includes(PRIVATE_BUNDLE_PREFIX)
+      ? await presign(url)
+      : url;
+
+  let changed = false;
+  const rewritten = await Promise.all(
+    descriptors.map(async (descriptor) => {
+      const bundleUrl = await maybePresign(descriptor.bundleUrl);
+      const styleUrl = await maybePresign(descriptor.styleUrl);
+      const typesUrl = await maybePresign(descriptor.typesUrl);
+      if (
+        bundleUrl === descriptor.bundleUrl &&
+        styleUrl === descriptor.styleUrl &&
+        typesUrl === descriptor.typesUrl
+      ) {
+        return descriptor;
+      }
+      changed = true;
+      return {
+        ...descriptor,
+        ...(bundleUrl !== undefined ? { bundleUrl } : {}),
+        ...(styleUrl !== undefined ? { styleUrl } : {}),
+        ...(typesUrl !== undefined ? { typesUrl } : {}),
+      };
+    }),
+  );
+  return changed ? { ...item, gadgetDescriptors: rewritten } : item;
 }
 
 /**
@@ -941,6 +1036,21 @@ export interface RenderSliceMetaDeps {
         readonly mode?: 'light' | 'dark';
       }
     | undefined;
+  /**
+   * H1 ruling 1b — presigner for PRIVATE gadget bundle URLs, applied
+   * via {@link rewritePrivateBundleUrls} before the render projection
+   * so a private artifact's `bundles/private/…` URLs become
+   * short-lived fetchable equivalents (and their origin lands in the
+   * CSP allowlist). Injected at the deployment boundary: the hosted
+   * pod supplies an object-storage presigner running on its task
+   * role; leaving it unset (the OSS default) passes URLs through
+   * unchanged — the self-hosted same-origin story needs no presigning.
+   *
+   * Consumed by the full-envelope projection (`ggui_render`); the
+   * `ggui_update` slice subset carries no gadget URLs or CSP, so it
+   * never presigns.
+   */
+  readonly presignPrivateBundleUrl?: (url: string) => Promise<string>;
 }
 
 /**

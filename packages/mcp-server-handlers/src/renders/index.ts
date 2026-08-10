@@ -309,6 +309,8 @@ export {
   derivePropsJson,
   derivePublicEnvProjection,
   deriveRenderMeta,
+  rewritePrivateBundleUrls,
+  PRIVATE_BUNDLE_PREFIX,
   resolveGadgetUrls,
   type RenderMetaView,
   type RenderSliceBase,

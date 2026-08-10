@@ -107,6 +107,7 @@ export {
 export {
   artifactScope,
   canReadPrivateArtifact,
+  createScopeOwnerResolver,
 } from './ops/private-read-authz.js';
 export {
   listArtifactVersions,

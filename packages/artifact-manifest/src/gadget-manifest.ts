@@ -279,7 +279,7 @@ export const gadgetManifestSchema = z.strictObject({
     .regex(BUNDLE_HOST_RE)
     .optional()
     .describe(
-      "Optional author-default registry hostname (no scheme, no path). The server prepends `https://` and appends `/bundles/<scope>/<name>/<version>/{bundle.js,style.css}` at push time. Omit to inherit the spec default (`registry.ggui.ai`). Operators can override per-gadget via `ggui.json#app.gadgets[*].bundleHost`.",
+      "Optional author-default registry hostname (no scheme, no path). The server prepends `https://` and appends `/bundles/public/<scope>/<name>/<version>/{bundle.js,style.css}` at push time (the public prefix of the registry's visibility-split bundle layout). Omit to inherit the spec default (`registry.ggui.ai`). Operators can override per-gadget via `ggui.json#app.gadgets[*].bundleHost`.",
     ),
 
   // ---- Shared metadata ----

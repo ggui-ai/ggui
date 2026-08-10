@@ -1,17 +1,20 @@
 /**
  * Filesystem-backed {@link BundleStorage} for the OSS registry server.
  *
- * Blob layout:
+ * Blob layout (H1 visibility split — placement is the access-control
+ * boundary):
  *
- *   <root>/bundles/<scope>/<name>/<version>/bundle.js
- *   <root>/bundles/<scope>/<name>/<version>/bundle.js.sig
- *   <root>/bundles/<scope>/<name>/<version>/manifest.json
+ *   <root>/bundles/public/<scope>/<name>/<version>/bundle.js
+ *   <root>/bundles/public/<scope>/<name>/<version>/bundle.js.sig
+ *   <root>/bundles/public/<scope>/<name>/<version>/manifest.json
+ *   <root>/bundles/private/<scope>/<name>/<version>/{...}
  *
  * Scope is written verbatim (`@my-org/...`) because the leading `@`
  * is filename-safe on every supported OS. The URL composition mirrors
- * the same path so the public URL the install CLI follows resolves
- * directly against the file (the hono server's `/bundles/*` route
- * streams the file).
+ * the same path so the URL the install CLI follows resolves directly
+ * against the file: the hono server serves `/bundles/public/*`
+ * anonymously and `/bundles/private/*` through its authenticated
+ * bundle route.
  *
  * ## Path-traversal defense
  *
@@ -38,7 +41,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { ArtifactManifest } from '@ggui-ai/artifact-manifest';
 import { isGadgetSignature } from '@ggui-ai/gadget-signing';
-import type { BundleStorage } from '@ggui-ai/registry-core';
+import type { BundleStorage, Visibility } from '@ggui-ai/registry-core';
 
 export interface FilesystemBundleStorageOptions {
   /** Absolute path to the bundle storage root. */
@@ -56,36 +59,56 @@ export function createFilesystemBundleStorage(
   const bundlesRoot = join(options.root, 'bundles');
   const bundleHost = stripTrailingSlash(options.bundleHost);
 
-  const dirFor = (scope: string, name: string, version: string): string => {
+  const dirFor = (
+    scope: string,
+    name: string,
+    version: string,
+    visibility: Visibility,
+  ): string => {
+    // `visibility` is a closed union ('public' | 'private') — no
+    // traversal surface; the free-form triple still gets the check.
     rejectTraversal(scope, 'scope');
     rejectTraversal(name, 'name');
     rejectTraversal(version, 'version');
-    return join(bundlesRoot, scope, name, version);
+    return join(bundlesRoot, visibility, scope, name, version);
+  };
+
+  const urlFor = (
+    scope: string,
+    name: string,
+    version: string,
+    visibility: Visibility,
+    file: string,
+  ): string => {
+    rejectTraversal(scope, 'scope');
+    rejectTraversal(name, 'name');
+    rejectTraversal(version, 'version');
+    return `${bundleHost}/bundles/${visibility}/${scope}/${name}/${version}/${file}`;
   };
 
   return {
-    async putBundle(scope, name, version, bytes) {
-      const dir = dirFor(scope, name, version);
+    async putBundle(scope, name, version, visibility, bytes) {
+      const dir = dirFor(scope, name, version, visibility);
       await mkdir(dir, { recursive: true });
       await writeFile(join(dir, 'bundle.js'), bytes);
-      return this.bundleUrl(scope, name, version);
+      return this.bundleUrl(scope, name, version, visibility);
     },
-    async getBundle(scope, name, version) {
-      const path = join(dirFor(scope, name, version), 'bundle.js');
+    async getBundle(scope, name, version, visibility) {
+      const path = join(dirFor(scope, name, version, visibility), 'bundle.js');
       return readFileOrNull(path);
     },
-    async putSignature(scope, name, version, signature) {
-      const dir = dirFor(scope, name, version);
+    async putSignature(scope, name, version, visibility, signature) {
+      const dir = dirFor(scope, name, version, visibility);
       await mkdir(dir, { recursive: true });
       await writeFile(
         join(dir, 'bundle.js.sig'),
         JSON.stringify(signature, null, 2),
         'utf8',
       );
-      return this.signatureUrl(scope, name, version);
+      return this.signatureUrl(scope, name, version, visibility);
     },
-    async getSignature(scope, name, version) {
-      const path = join(dirFor(scope, name, version), 'bundle.js.sig');
+    async getSignature(scope, name, version, visibility) {
+      const path = join(dirFor(scope, name, version, visibility), 'bundle.js.sig');
       const text = await readTextOrNull(path);
       if (text === null) return null;
       // Runtime-validate the parsed shape against the `GadgetSignature`
@@ -97,38 +120,29 @@ export function createFilesystemBundleStorage(
       if (!isGadgetSignature(parsed)) return null;
       return parsed;
     },
-    async putManifest(scope, name, version, manifest) {
-      const dir = dirFor(scope, name, version);
+    async putManifest(scope, name, version, visibility, manifest) {
+      const dir = dirFor(scope, name, version, visibility);
       await mkdir(dir, { recursive: true });
       await writeFile(
         join(dir, 'manifest.json'),
         JSON.stringify(manifest, null, 2),
         'utf8',
       );
-      return this.manifestUrl(scope, name, version);
+      return this.manifestUrl(scope, name, version, visibility);
     },
-    async getManifest(scope, name, version) {
-      const path = join(dirFor(scope, name, version), 'manifest.json');
+    async getManifest(scope, name, version, visibility) {
+      const path = join(dirFor(scope, name, version, visibility), 'manifest.json');
       const text = await readTextOrNull(path);
       return text === null ? null : (JSON.parse(text) as ArtifactManifest);
     },
-    bundleUrl(scope, name, version) {
-      rejectTraversal(scope, 'scope');
-      rejectTraversal(name, 'name');
-      rejectTraversal(version, 'version');
-      return `${bundleHost}/bundles/${scope}/${name}/${version}/bundle.js`;
+    bundleUrl(scope, name, version, visibility) {
+      return urlFor(scope, name, version, visibility, 'bundle.js');
     },
-    signatureUrl(scope, name, version) {
-      rejectTraversal(scope, 'scope');
-      rejectTraversal(name, 'name');
-      rejectTraversal(version, 'version');
-      return `${bundleHost}/bundles/${scope}/${name}/${version}/bundle.js.sig`;
+    signatureUrl(scope, name, version, visibility) {
+      return urlFor(scope, name, version, visibility, 'bundle.js.sig');
     },
-    manifestUrl(scope, name, version) {
-      rejectTraversal(scope, 'scope');
-      rejectTraversal(name, 'name');
-      rejectTraversal(version, 'version');
-      return `${bundleHost}/bundles/${scope}/${name}/${version}/manifest.json`;
+    manifestUrl(scope, name, version, visibility) {
+      return urlFor(scope, name, version, visibility, 'manifest.json');
     },
   };
 }

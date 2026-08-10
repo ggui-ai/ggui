@@ -333,8 +333,10 @@ export const SEMVER_PIN_RE = /^\d+\.\d+\.\d+(-[\w.]+)?(\+[\w.]+)?$/;
 /**
  * Hostname-only regex for `bundleHost` — the registry hostname (no
  * scheme, no path) that the server prepends `https://` to and
- * appends the canonical `/bundles/<scope>/<name>/<version>/{bundle.js,style.css}`
- * suffix to when resolving a gadget's URLs at render time.
+ * appends the canonical
+ * `/bundles/public/<scope>/<name>/<version>/{bundle.js,style.css}`
+ * suffix to when resolving a gadget's URLs at render time (the PUBLIC
+ * prefix of the registry's visibility-split bundle layout).
  *
  * Examples that pass:
  *   - `registry.ggui.ai` (spec default)
