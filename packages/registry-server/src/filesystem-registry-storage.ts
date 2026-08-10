@@ -68,6 +68,7 @@ import { mkdir, readFile, readdir, unlink, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import {
   AuthorKeyAlreadyExistsError,
+  matchesMcpToolFilters,
   type AuthorKeyRow,
   type ArtifactScanFilter,
   type ArtifactVersionRow,
@@ -472,11 +473,14 @@ function parseCursor(cursor: string | undefined): number {
  * Mirrors {@link inMemoryRegistryStorage}'s filter — same
  * AND-composition, same case-insensitive substring match on q, same
  * publisher-sub OR author-name match. Kept inline so the filesystem
- * impl doesn't depend on a private helper from registry-core.
+ * impl doesn't depend on a private helper from registry-core; the
+ * tool/server dimensions delegate to the PUBLIC shared predicate
+ * `matchesMcpToolFilters` so the reference semantics cannot drift.
  */
 function rowMatchesFilter(row: ArtifactsMetadataRow, q: ArtifactScanFilter): boolean {
   if (q.kind !== undefined && row.kind !== q.kind) return false;
   if (q.hook !== undefined && row.hook !== q.hook) return false;
+  if (!matchesMcpToolFilters(row.mcpTools, q)) return false;
 
   if (q.tag !== undefined) {
     if (row.tags === undefined || !row.tags.includes(q.tag)) return false;

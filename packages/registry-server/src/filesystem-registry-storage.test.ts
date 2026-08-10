@@ -12,6 +12,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
 import { registryStorageContract } from '@ggui-ai/registry-core/testing';
+import { ARTIFACTS_METADATA_SK, type ArtifactsMetadataRow } from '@ggui-ai/registry-core';
 import { createFilesystemRegistryStorage } from './filesystem-registry-storage.js';
 
 // ─── Contract suite ──────────────────────────────────────────────────────
@@ -106,6 +107,66 @@ describe('FilesystemRegistryStorage — impl-specific', () => {
       // Nothing escaped the root: the parent of the storage root has
       // gained no files (the row landed under state/author-keys).
       expect(await storage.getAuthorKey('escape', 'k1')).toBe(null);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('FilesystemRegistryStorage — mcp tool filters', () => {
+  function makeRow(overrides: Partial<ArtifactsMetadataRow>): ArtifactsMetadataRow {
+    return {
+      artifactId: '@test/foo',
+      sk: ARTIFACTS_METADATA_SK,
+      kind: 'gadget',
+      latestVersion: '0.1.0',
+      visibility: 'public',
+      publishedAt: '2026-08-10T00:00:00.000Z',
+      publishedBy: 'user-1',
+      ...overrides,
+    };
+  }
+
+  it('scanArtifacts honors tool/server filters with the shared semantics', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'ggui-fs-reg-mcp-'));
+    try {
+      const storage = createFilesystemRegistryStorage({ root });
+      await storage.putArtifactMetadata(
+        makeRow({
+          artifactId: '@a/weather-card',
+          mcpTools: [{ server: 'weather-server', tool: 'get_weather' }],
+          mcpToolsSource: 'declared',
+        }),
+      );
+      await storage.putArtifactMetadata(
+        makeRow({
+          artifactId: '@b/forecast-panel',
+          mcpTools: [{ tool: 'get_weather' }],
+          mcpToolsSource: 'derived',
+        }),
+      );
+      await storage.putArtifactMetadata(makeRow({ artifactId: '@c/unbound' }));
+
+      const byTool = await storage.scanArtifacts({ tool: 'get_weather' });
+      expect(byTool.rows.map((r) => r.artifactId).sort()).toEqual([
+        '@a/weather-card',
+        '@b/forecast-panel',
+      ]);
+
+      const byServer = await storage.scanArtifacts({ server: 'weather-server' });
+      expect(byServer.rows.map((r) => r.artifactId)).toEqual(['@a/weather-card']);
+
+      const byPair = await storage.scanArtifacts({
+        tool: 'get_weather',
+        server: 'weather-server',
+      });
+      expect(byPair.rows.map((r) => r.artifactId)).toEqual(['@a/weather-card']);
+
+      const missPair = await storage.scanArtifacts({
+        tool: 'get_forecast',
+        server: 'weather-server',
+      });
+      expect(missPair.rows).toEqual([]);
     } finally {
       await rm(root, { recursive: true, force: true });
     }

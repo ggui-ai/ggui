@@ -53,6 +53,13 @@
  *   rows MUST come back ordered by `publishedAt` descending (newest
  *   first), globally correct across the full cursor chain. Without an
  *   `order`, consumers MUST treat ordering as non-deterministic.
+ * - {@link scanArtifacts} MUST apply the `tool` / `server` filter
+ *   dimensions with the shared semantics of `matchesMcpToolFilters`:
+ *   `tool` matches any binding entry with that tool name; `server`
+ *   matches entries declaring that server (bare entries never match);
+ *   together they require one entry with exactly that (server, tool)
+ *   pair. Case-sensitive exact, AND-composed with every other
+ *   dimension.
  *
  * **Failure mode:**
  * - Transport-level failures (store throttling, disk full) throw.
@@ -141,6 +148,10 @@ export interface RegistryStorage {
    * When `filter.order` is `'recent'`, rows MUST be returned newest
    * first by `publishedAt`, globally correct across the full cursor
    * chain — see the Obligations section above.
+   *
+   * `filter.tool` / `filter.server` follow the shared MCP-binding
+   * filter semantics (`matchesMcpToolFilters`) — see the Obligations
+   * section above.
    */
   scanArtifacts(filter: ArtifactScanFilter): Promise<{
     readonly rows: readonly ArtifactsMetadataRow[];
