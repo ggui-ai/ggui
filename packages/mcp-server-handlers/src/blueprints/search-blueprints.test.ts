@@ -7,7 +7,7 @@
  * Ports the coverage shape from the original hosted test suite so
  * behavior parity is mechanically provable.
  */
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   InMemoryVectorStore,
   ManifestBlueprintProvider,
@@ -507,6 +507,22 @@ describe('registry source', () => {
       registry: { fetch: notJson },
     }).handler({ query: 'weather' }, ctx);
     expect(r2.degradedSources).toEqual([{ source: 'registry', reason: 'invalid_response' }]);
+  });
+
+  it('cancels the unconsumed response body on the non-2xx branch (undici connection-pool leak guard)', async () => {
+    const { embedding, vectors } = makeDeps();
+    const res = new Response('boom', { status: 500 });
+    if (!res.body) throw new Error('expected the test Response to carry a body');
+    const cancelSpy = vi.spyOn(res.body, 'cancel');
+    const fetchImpl: typeof fetch = async () => res;
+    const handler = createSearchBlueprintsHandler({
+      embedding,
+      vectors,
+      registry: { fetch: fetchImpl },
+    });
+    const result = await handler.handler({ query: 'weather' }, ctx);
+    expect(result.degradedSources).toEqual([{ source: 'registry', reason: 'invalid_response' }]);
+    expect(cancelSpy).toHaveBeenCalled();
   });
 
   it('keeps the registry source inactive when no registry dep is configured', async () => {

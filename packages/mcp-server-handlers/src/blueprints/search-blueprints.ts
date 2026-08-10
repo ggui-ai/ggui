@@ -423,6 +423,15 @@ async function searchRegistry(
     return { hits: [], degraded: { source: 'registry', reason } };
   }
   if (!res.ok) {
+    // Undici doesn't return the socket to the pool until the body is
+    // consumed or canceled. We never read this body (non-2xx), so
+    // cancel it explicitly — a rejecting cancel() must still surface
+    // the already-typed degradation, not throw past this branch.
+    try {
+      await res.body?.cancel();
+    } catch {
+      // Deliberately swallowed — see comment above.
+    }
     return {
       hits: [],
       degraded: { source: 'registry', reason: 'invalid_response' },
