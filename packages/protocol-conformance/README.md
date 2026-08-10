@@ -51,11 +51,12 @@ One declared grading gap on the action loop: `action-ack` proves the append half
 
 The behavioral fixture catalog above asserts what an implementation _does_ over the wire. Some protocol obligations aren't transport-observable at all — they are deterministic _validation functions_: given an input, accept or reject it. SPEC §7.7.2's gadget obligations are exactly this. Modeling them as WebSocket fixtures would mean faking wire frames the protocol never emits; instead the kit ships **pure-function catalogs** — accept/reject cases graded against a caller-supplied function, with no host, render, or transport.
 
-Each catalog ships its cases as raw JSON so a non-TypeScript implementer can grade their own implementation, and each runner takes the implementation as a callback — the kit never hard-binds a concrete one. Three catalogs ship today:
+Each catalog ships its cases as raw JSON so a non-TypeScript implementer can grade their own implementation, and each runner takes the implementation as a callback — the kit never hard-binds a concrete one. Four catalogs ship today:
 
 - **`@ggui-ai/protocol-conformance/schema-conformance`** — which `DataContract.clientCapabilities` payloads a conformant parser MUST accept / reject (the gadget wire shape).
 - **`@ggui-ai/protocol-conformance/registration-conformance`** — which `(contract, appGadgets, appPublicEnv)` triples the push-time gadget gate stack MUST accept / reject, and with which precise SPEC §7.9 reject code (`gadget_not_registered` / `gadget_package_mismatch` / `gadget_public_env_missing` / `duplicate_gadget_hook`).
 - **`@ggui-ai/protocol-conformance/resolution-conformance`** — which bundle + style URLs the server MUST compute for a gadget descriptor's transport fields (`bundleHost` precedence, default host, loopback `http` scheme).
+- **`@ggui-ai/protocol-conformance/binding-conformance`** — which MCP tool-binding set a manifest resolves to (a declared `mcpTools` list wins entirely; blueprints without it derive bare tool-name entries from contract tool names) and which artifacts the registry `tool=` / `server=` search filters MUST match (SPEC §7.7.4.1).
 
 ```ts
 import { runSchemaConformance } from "@ggui-ai/protocol-conformance/schema-conformance";
@@ -75,7 +76,7 @@ if (schema.failed.length + gate.failed.length + urls.failed.length > 0) {
 }
 ```
 
-The `schema-conformance` meta-test binds its catalog to the live `@ggui-ai/protocol` `clientCapabilitiesSpecSchema` — a drift-catch if the wire schema diverges from the §7.7.2 obligations the catalog freezes. The `registration-conformance` and `resolution-conformance` meta-tests verify catalog coherence against faithful in-test implementations (the kit stays vendor-neutral — it does not depend on a server implementation); grading the _shipping_ gate / resolver is an implementation-side test that drives the corresponding runner.
+The `schema-conformance` meta-test binds its catalog to the live `@ggui-ai/protocol` `clientCapabilitiesSpecSchema` — a drift-catch if the wire schema diverges from the §7.7.2 obligations the catalog freezes. The `registration-conformance`, `resolution-conformance`, and `binding-conformance` meta-tests verify catalog coherence against faithful in-test implementations (the kit stays vendor-neutral — it does not depend on a server implementation); grading the _shipping_ gate / resolver is an implementation-side test that drives the corresponding runner.
 
 ## Resource-read conformance — the MCP binding
 
@@ -114,16 +115,18 @@ It deliberately does **not** grade: the order in which a substrate-less server a
 
 What is actually graded against shipping code today, and what is still awaiting a driver. This is an inventory, not a roadmap — a mechanism is listed as proven only if a test in the repo drives it against the real implementation on every push.
 
-Every test below is a plain `*.test.ts` inside a package's `src/`, so it runs in that package's ordinary vitest suite. The ggui repo's per-push CI runs `turbo run test` across all non-e2e packages, so **all six rows below are gated on every push** — the kit needs no dedicated workflow, and adopters wiring it into their own CI need nothing more than their existing unit-test task.
+Every test below is a plain `*.test.ts` inside a package's `src/`, so it runs in that package's ordinary vitest suite. The ggui repo's per-push CI runs `turbo run test` across all non-e2e packages, so **all eight rows below are gated on every push** — the kit needs no dedicated workflow, and adopters wiring it into their own CI need nothing more than their existing unit-test task.
 
-| Obligation                                        | Graded against                                                                             | Driver                                                                                               |
-| ------------------------------------------------- | ------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------- |
-| Gadget wire schema (§7.7.2)                       | the shipping `@ggui-ai/protocol` `clientCapabilitiesSpecSchema`                            | this kit's own `src/schema-conformance/schema-conformance.test.ts`                                   |
-| Registration gate (§7.7.3, §7.9)                  | the shipping gate trio in `@ggui-ai/mcp-server-handlers`                                   | `mcp-server-handlers/src/renders/assert-gadgets.conformance.test.ts`                                 |
-| Bundle-URL resolution (§7.7.2)                    | the shipping `resolveGadgetUrls` in `@ggui-ai/mcp-server-handlers`                         | `mcp-server-handlers/src/renders/resolve-gadget-urls.conformance.test.ts`                            |
-| Path-A WS fixtures — first-party                  | the real `@ggui-ai/mcp-server` GguiSession channel, booted in-process on an ephemeral port | `mcp-server/src/ggui-session-channel.conformance.test.ts` — **8 pass / 4 skip / 0 fail**             |
-| Path-A WS fixtures — vendor-neutral               | `@ggui-ai/protocol-reference-server`                                                       | `protocol-reference-server/src/conformance.test.ts` — **9 pass / 3 skip / 0 fail**                   |
-| `resources/read` typed failures + mount invariant | the shipping `registerGguiRenderResourceTemplate` in `@ggui-ai/mcp-server`                 | `mcp-server/src/mcp-apps-outbound.resource-read.conformance.test.ts` — **12 pass / 0 skip / 0 fail** |
+| Obligation                                                              | Graded against                                                                             | Driver                                                                                               |
+| ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------- |
+| Gadget wire schema (§7.7.2)                                             | the shipping `@ggui-ai/protocol` `clientCapabilitiesSpecSchema`                            | this kit's own `src/schema-conformance/schema-conformance.test.ts`                                   |
+| Registration gate (§7.7.3, §7.9)                                        | the shipping gate trio in `@ggui-ai/mcp-server-handlers`                                   | `mcp-server-handlers/src/renders/assert-gadgets.conformance.test.ts`                                 |
+| Bundle-URL resolution (§7.7.2)                                          | the shipping `resolveGadgetUrls` in `@ggui-ai/mcp-server-handlers`                         | `mcp-server-handlers/src/renders/resolve-gadget-urls.conformance.test.ts`                            |
+| Path-A WS fixtures — first-party                                        | the real `@ggui-ai/mcp-server` GguiSession channel, booted in-process on an ephemeral port | `mcp-server/src/ggui-session-channel.conformance.test.ts` — **8 pass / 4 skip / 0 fail**             |
+| Path-A WS fixtures — vendor-neutral                                     | `@ggui-ai/protocol-reference-server`                                                       | `protocol-reference-server/src/conformance.test.ts` — **9 pass / 3 skip / 0 fail**                   |
+| `resources/read` typed failures + mount invariant                       | the shipping `registerGguiRenderResourceTemplate` in `@ggui-ai/mcp-server`                 | `mcp-server/src/mcp-apps-outbound.resource-read.conformance.test.ts` — **12 pass / 0 skip / 0 fail** |
+| Tool-binding resolution — declared wins, contract derivation (§7.7.4.1) | the shipping `resolveMcpToolBindings` in `@ggui-ai/artifact-manifest`                      | `artifact-manifest/src/mcp-tool-bindings.conformance.test.ts`                                        |
+| Tool-binding search filters — `tool=` / `server=` semantics (§7.7.4.1)  | the shipping `matchesMcpToolFilters` in `@ggui-ai/registry-core`                           | `registry-core/src/mcp-tool-filters.conformance.test.ts`                                             |
 
 Both WS drivers pin their pass set _and_ their skip set as exact sets, and the resource-read driver pins its skip set as exactly empty. A fixture silently degrading to a skip fails the build, and so does a skipped fixture that quietly starts passing — a skip set that can grow unnoticed is a false gate, and re-pinning it is meant to be a deliberate act.
 

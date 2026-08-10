@@ -6,6 +6,69 @@
  * schema change; the most recent change anchors {@link PROTOCOL_VERSION}.
  *
  * --------------------------------------------------------------------
+ * MCP tool bindings & discovery (2026-08-10, additive, pre-launch,
+ * ggui#259). Artifacts gain an optional MCP tool-binding list and
+ * registry search gains a tool dimension, connecting the two
+ * namespaces the registry serves: signed UI artifacts and the MCP
+ * tools they render. SPEC §7.7.4.1 is the normative home.
+ *
+ *   tb1. **`mcpTools` on both manifest kinds**
+ *      (`@ggui-ai/artifact-manifest`): 1–16 `{server?, tool}`
+ *      entries, charset `/^[A-Za-z0-9_.-]{1,128}$/`,
+ *      exact-duplicate `(server, tool)` pairs rejected with the
+ *      existing `manifest_invalid` code. Declared wins entirely;
+ *      a blueprint without the field derives bare `{tool}` entries
+ *      from the union of its contract's per-prop `sourceTool` and
+ *      `streamSpec` `source.tool` names (`resolveMcpToolBindings`,
+ *      marked `derived`). Bindings are search metadata only — they
+ *      never enter contract canonicalization or `blueprintKey`.
+ *      NOTE: manifest schemas are strict-rooted, so an OLDER
+ *      manifest parser REJECTS a manifest file carrying the field —
+ *      the optionality guarantee below is wire-response-scoped
+ *      (search/read), not manifest-file-scoped.
+ *
+ *   tb2. **Registry wire additions** (`@ggui-ai/registry-core`),
+ *      all optional: `SearchResultEntry` += `mcpTools?`,
+ *      `mcpToolsSource?: 'declared' | 'derived'`,
+ *      `scopeVerification?: 'verified' | 'unverified'`,
+ *      `verifiedDomain?`; the single-version read response += the
+ *      same two verification fields; search input += `tool?` /
+ *      `server?` exact filters (AND-composed with the existing
+ *      filters, `matchesMcpToolFilters` semantics; an invalid
+ *      charset value is the existing `invalid_request` 400).
+ *      Pre-existing consumers see `undefined` and behave as before.
+ *
+ *   tb3. **Agent surface** (`@ggui-ai/mcp-server-handlers`):
+ *      `ggui_search_blueprints` gains an opt-in `registry` source
+ *      merged after the local sources; unreachable / timeout /
+ *      unparseable-body answers degrade typed —
+ *      `degradedSources: [{source: 'registry', reason:
+ *      'unreachable' | 'timeout' | 'invalid_response'}]` — never a
+ *      tool failure, never a thrown error.
+ *
+ * Conformance-kit verdict: additive, minor-intent while `draft-`,
+ * so PROTOCOL_VERSION is unchanged — no WS envelope moved; the
+ * change is confined to the manifest, registry HTTP, and MCP
+ * tool-result surfaces. The new `binding-conformance` catalog in
+ * `@ggui-ai/protocol-conformance` (`runBindingResolutionCases` /
+ * `runBindingFilterCases`) arbitrates resolution precedence and
+ * filter semantics; search/read response optionality is pinned by
+ * registry-core unit tests, because the strict-rooted manifest
+ * schema makes a manifest-file optionality fixture false (tb1).
+ *
+ * Package version — the classification is MADE here, not deferred:
+ * MINOR for the `@ggui-ai/*` wave, additive under the version
+ * policy's minor rule (every fixture that passed against the
+ * current wave still passes; the delta is new surface), pre-1.0
+ * and pre-launch. FOUR packages carry minor-class changes into
+ * that wave — `@ggui-ai/artifact-manifest` (the field + resolver),
+ * `@ggui-ai/registry-core` (wire + filters),
+ * `@ggui-ai/mcp-server-handlers` (the registry source), and
+ * `@ggui-ai/protocol-conformance` (the catalog that decides them).
+ * Only the mechanical write is deferred: every `@ggui-ai/*`
+ * package carries ONE wave version, so the release owner takes all
+ * four bumps together at the next wave cut.
+ * --------------------------------------------------------------------
  * Typed `resources/read` failures (2026-08-09, additive, pre-launch,
  * ggui#430). A read of a render locator
  * (`ui://ggui/render/{sessionId}/{blueprintKey}`) gains a closed failure
