@@ -15,6 +15,7 @@ import type {
   ArtifactVersionRow,
   ArtifactsMetadataRow,
   CompiledBlobRow,
+  ScopeOwnerRow,
 } from '../types.js';
 import {
   AuthorKeyAlreadyExistsError,
@@ -29,6 +30,7 @@ export function inMemoryRegistryStorage(): RegistryStorage {
   const versions = new Map<string, ArtifactVersionRow>();
   const authorKeys = new Map<string, AuthorKeyRow>();
   const compiledBlobs = new Map<string, CompiledBlobRow>();
+  const scopeOwners = new Map<string, ScopeOwnerRow>();
 
   const versionKey = (artifactId: string, version: string): string =>
     `${artifactId}@${version}`;
@@ -119,6 +121,36 @@ export function inMemoryRegistryStorage(): RegistryStorage {
         refCount: existingBlob.refCount + 1,
       });
       return { ok: true, mode: 'dedup' };
+    },
+    async getScopeOwner(scope) {
+      return scopeOwners.get(scope) ?? null;
+    },
+    async claimScope(row) {
+      // First-writer-wins. The check-and-set pair runs with no `await`
+      // between them, so the single-threaded event loop makes it
+      // atomic — two racing claims resolve strictly one-after-another.
+      if (scopeOwners.has(row.scope)) {
+        return { conflict: true };
+      }
+      scopeOwners.set(row.scope, row);
+      return { ok: true };
+    },
+    async updateScopeOwner(row, expect) {
+      // Compare-and-set against the caller's read snapshot. The
+      // check-and-set pair runs with no interleaving `await`, so the
+      // event loop makes it atomic (same discipline as claimScope).
+      const current = scopeOwners.get(row.scope);
+      if ('absent' in expect) {
+        if (current !== undefined) return { conflict: true };
+      } else if (
+        current === undefined ||
+        current.ownerSubject !== expect.ownerSubject ||
+        current.verification !== expect.verification
+      ) {
+        return { conflict: true };
+      }
+      scopeOwners.set(row.scope, row);
+      return { ok: true };
     },
     async getAuthorKey(subject, keyId) {
       return authorKeys.get(authorKey(subject, keyId)) ?? null;

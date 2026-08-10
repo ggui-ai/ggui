@@ -197,6 +197,47 @@ export interface AuthorKeyRow {
   readonly publicKeyBase64: string;
 }
 
+/**
+ * Verification state of a claimed scope.
+ *
+ *   - `unverified` — the default: the scope was claimed by first
+ *     publish and nobody has proven a matching domain/brand.
+ *   - `verified`   — a registry operator confirmed the owner controls
+ *     the matching domain or brand (out-of-band check today; a
+ *     self-serve DNS flow is a future enhancement).
+ */
+export const SCOPE_VERIFICATIONS = ['unverified', 'verified'] as const;
+export type ScopeVerification = (typeof SCOPE_VERIFICATIONS)[number];
+
+/**
+ * Scope-ownership row. One per claimed scope (`@acme`). Created by the
+ * FIRST authenticated publish into an unclaimed scope
+ * ({@link RegistryStorage.claimScope} — atomic first-writer-wins) and
+ * enforced on every subsequent publish: only `ownerSubject` may publish
+ * under `scope`.
+ *
+ * `ownerSubject` is the same subject namespace as
+ * {@link ArtifactVersionRow.publishedBy} — whatever the deployment's
+ * auth layer stamps into `AuthnContext.subject`.
+ *
+ * An `unverified` row is reclaimable by the registry operator in favor
+ * of a caller who proves ownership of the matching domain/brand; a
+ * `verified` row records that proof (`verifiedDomain`, `verifiedAt`).
+ */
+export interface ScopeOwnerRow {
+  /** PK. The npm-style scope, including the leading `@` (e.g. `@acme`). */
+  readonly scope: string;
+  /** Subject that owns publishes under this scope. */
+  readonly ownerSubject: string;
+  /** ISO timestamp of the claim (first publish or operator seed/transfer). */
+  readonly claimedAt: string;
+  readonly verification: ScopeVerification;
+  /** Domain whose control was proven, present when `verification: 'verified'`. */
+  readonly verifiedDomain?: string;
+  /** ISO timestamp of the verification, present when `verification: 'verified'`. */
+  readonly verifiedAt?: string;
+}
+
 // ─── Wire shapes (locked) ─────────────────────────────────────────────
 
 /**
@@ -357,6 +398,7 @@ export const PUBLISH_ERROR_CODES = [
   'conformance_failed',
   'bundle_hash_mismatch',
   'visibility_algorithm_mismatch',
+  'scope_forbidden',
   'unknown_key',
   'signature_invalid',
   'version_exists',

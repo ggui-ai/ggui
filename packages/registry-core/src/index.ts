@@ -15,6 +15,7 @@ export {
   AuthorKeyAlreadyExistsError,
   type PutAuthorKeyOptions,
   type RegistryStorage,
+  type ScopeOwnerExpectation,
 } from './interfaces/registry-storage.js';
 
 // Types — rows + wire shapes
@@ -45,6 +46,9 @@ export {
   type RegisterAuthorKeyErrorCode,
   type RegisterAuthorKeyRequestBody,
   type RegisterAuthorKeyResponseBody,
+  SCOPE_VERIFICATIONS,
+  type ScopeOwnerRow,
+  type ScopeVerification,
   SEARCH_ERROR_CODES,
   SEARCH_SORT_OPTIONS,
   type SearchErrorBody,
@@ -76,6 +80,7 @@ export {
 export {
   publishArtifact,
   MAX_BUNDLE_BYTES,
+  RESERVED_SCOPES,
   type PublishArtifactDeps,
   type PublishArtifactInput,
   type PublishArtifactResult,

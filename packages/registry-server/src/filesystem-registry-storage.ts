@@ -5,6 +5,7 @@
  *   <root>/state/plugins/<encoded artifactId>.json     → ArtifactsMetadataRow
  *   <root>/state/versions/<encoded artifactId>__<v>.json → ArtifactVersionRow
  *   <root>/state/author-keys/<subject>__<keyId>.json   → AuthorKeyRow
+ *   <root>/state/scope-owners/<encoded scope>.json     → ScopeOwnerRow
  *
  * The `__` separator is chosen because npm pkg names + semvers never
  * contain it (semver disallows underscores entirely; npm names disallow
@@ -19,6 +20,8 @@
  * Mirrors DDB's `ConditionExpression: attribute_not_exists(...)`. The
  * happy-path write is atomic at the inode level — partial writes on
  * crash leave the file absent rather than half-populated.
+ * {@link claimScope} uses the same `wx` primitive for its first-writer-
+ * wins scope claim (`EEXIST` → `{ conflict: true }`).
  *
  * ## Path-traversal defense
  *
@@ -70,6 +73,7 @@ import type {
   ArtifactsMetadataRow,
   CompiledBlobRow,
   RegistryStorage,
+  ScopeOwnerRow,
 } from '@ggui-ai/registry-core';
 
 const DEFAULT_LIMIT = 50;
@@ -91,6 +95,14 @@ export function createFilesystemRegistryStorage(
   // hex digest + `.json`. The digest itself is filename-safe (hex
   // chars only), so no URL-encoding is needed.
   const compiledBlobsDir = join(stateRoot, 'compiled-blobs');
+  // Scope-ownership rows — one file per claimed scope. The scope is
+  // URL-encoded like every other row key (`@` → `%40`).
+  const scopeOwnersDir = join(stateRoot, 'scope-owners');
+
+  const scopeOwnerPath = (scope: string): string => {
+    rejectTraversal(scope, 'scope');
+    return join(scopeOwnersDir, `${encodeRowKey(scope)}.json`);
+  };
 
   const compiledBlobPath = (compiledDigest: string): string => {
     rejectTraversal(compiledDigest, 'compiledDigest');
@@ -250,6 +262,63 @@ export function createFilesystemRegistryStorage(
         }
         throw err;
       }
+    },
+    async getScopeOwner(scope) {
+      return readJsonOrNull<ScopeOwnerRow>(scopeOwnerPath(scope));
+    },
+    async claimScope(row) {
+      // Atomic first-writer-wins via `wx` (open(2) O_EXCL) — mirrors
+      // the conditional-create semantics of a hosted database adapter.
+      // EEXIST maps to `{ conflict: true }` with the winner's file
+      // untouched.
+      await ensureDir(scopeOwnersDir);
+      try {
+        await writeFile(scopeOwnerPath(row.scope), JSON.stringify(row, null, 2), {
+          flag: 'wx',
+          encoding: 'utf8',
+        });
+        return { ok: true };
+      } catch (err) {
+        if (isErrnoException(err) && err.code === 'EEXIST') {
+          return { conflict: true };
+        }
+        throw err;
+      }
+    },
+    async updateScopeOwner(row, expect) {
+      // Compare-and-set against the caller's read snapshot. Atomicity
+      // note: the read-compare-write sequence relies on the OSS
+      // server's single-process, single-writer posture (the same
+      // documented caveat as commitVersionAndBlob's blob leg) — the
+      // `wx` seed path below is additionally inode-atomic.
+      await ensureDir(scopeOwnersDir);
+      const path = scopeOwnerPath(row.scope);
+      if ('absent' in expect) {
+        // Seed path — O_EXCL create, EEXIST means a claim (or another
+        // seed) landed first.
+        try {
+          await writeFile(path, JSON.stringify(row, null, 2), {
+            flag: 'wx',
+            encoding: 'utf8',
+          });
+          return { ok: true };
+        } catch (err) {
+          if (isErrnoException(err) && err.code === 'EEXIST') {
+            return { conflict: true };
+          }
+          throw err;
+        }
+      }
+      const current = await readJsonOrNull<ScopeOwnerRow>(path);
+      if (
+        current === null ||
+        current.ownerSubject !== expect.ownerSubject ||
+        current.verification !== expect.verification
+      ) {
+        return { conflict: true };
+      }
+      await writeJson(path, row);
+      return { ok: true };
     },
     async getAuthorKey(subject, keyId) {
       return readJsonOrNull<AuthorKeyRow>(authorKeyPath(subject, keyId));

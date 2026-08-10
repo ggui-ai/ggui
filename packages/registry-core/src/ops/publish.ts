@@ -9,6 +9,20 @@
  *   2b. Enforce the visibility ↔ signature-algorithm pairing
  *       (`public` ⇒ `sigstore-cosign`, `private` ⇒ `ed25519`) —
  *       cheap field comparison, before any decode or verify work.
+ *   2c. Enforce scope ownership: a scope owned by another subject
+ *       answers 403 `scope_forbidden`; an UNCLAIMED scope on the
+ *       reserved list ({@link RESERVED_SCOPES}, replaceable via
+ *       {@link PublishArtifactDeps.reservedScopes}) is never
+ *       claimable, while a reserved scope WITH an ownership row
+ *       (operator-seeded) follows the normal owner rule; any other
+ *       unclaimed scope is claimed for the caller via the atomic
+ *       {@link RegistryStorage.claimScope} (first-writer-wins; a lost
+ *       race re-reads and re-applies the owner check). NOTE — the
+ *       claim is durable even when a LATER gate fails this publish:
+ *       the caller demonstrated intent, a failed-publish claim stays
+ *       re-usable by the same caller, and an unverified claim remains
+ *       reclaimable by the registry operator. Deliberately the
+ *       simplest correct behavior.
  *   3.  Decode + size-check the bundle (gadgets only).
  *   4.  Recompute SHA-384 of the bundle bytes; compare to client claim.
  *   5.  Re-run the conformance gate ({@link checkConformance}).
@@ -69,6 +83,37 @@ import { checkConformance } from './conformance.js';
  */
 export const MAX_BUNDLE_BYTES = 5 * 1024 * 1024;
 
+/**
+ * Scopes no publish may CLAIM — well-known names whose squatting would
+ * mislead installers about who authored an artifact. The default
+ * covers first-party names plus obvious squat-bait; a deployment
+ * REPLACES the whole list via
+ * {@link PublishArtifactDeps.reservedScopes} (spread this constant to
+ * extend it instead).
+ *
+ * Reserved scopes block first-publish CLAIMS only — not owned
+ * publishes. A registry operator who wants artifacts under a reserved
+ * name seeds its ownership row out-of-band via
+ * {@link RegistryStorage.updateScopeOwner}; once the row exists, the
+ * normal owner rule applies (the seeded owner publishes, everyone else
+ * gets `scope_forbidden`) with no change to this list.
+ */
+export const RESERVED_SCOPES: readonly string[] = [
+  '@ggui-ai',
+  '@ggui',
+  '@guuey',
+  '@anthropic',
+  '@claude',
+  '@openai',
+  '@google',
+  '@gemini',
+  '@meta',
+  '@microsoft',
+  '@aws',
+  '@amazon',
+  '@apple',
+];
+
 export interface PublishArtifactInput {
   /** Unvalidated request body — the op parses + validates. */
   readonly manifest: unknown;
@@ -102,6 +147,13 @@ export interface PublishArtifactDeps {
    * `http://` for `localhost`/`127.0.0.1`.
    */
   readonly registryHostname: string;
+  /**
+   * Scopes no publish may claim — REPLACES {@link RESERVED_SCOPES}
+   * when set (spread the constant to extend instead:
+   * `[...RESERVED_SCOPES, '@my-brand']`). Exact-match against
+   * `manifest.scope`, leading `@` included.
+   */
+  readonly reservedScopes?: readonly string[];
   /**
    * Optional runtime probe for blueprint manifests. Static gates
    * always run; the probe additionally compiles + renders the
@@ -196,6 +248,73 @@ export async function publishArtifact(
       'visibility_algorithm_mismatch',
       "`visibility: 'private'` requires an Ed25519 author-key signature. Sigstore keyless signing (`algorithm: 'sigstore-cosign'`) records the publish in a public transparency log and pairs with `visibility: 'public'` — re-sign with your Ed25519 author key, or publish as public.",
     );
+  }
+
+  // 2c. Scope ownership. Runs after the pairing check (2b) and before
+  // any bundle decode — ownership is a cheap read and a forbidden
+  // publish must not pay for (or leak errors from) bundle work.
+  //
+  // Order within the gate: owner lookup first, then — only when the
+  // scope is UNCLAIMED — the reserved denylist, then the first-publish
+  // claim. Reserved scopes block CLAIMS, not owned publishes: a scope
+  // whose ownership row exists (seeded by the registry operator, or
+  // grandfathered) follows the normal owner rule, so the operator can
+  // publish first-party artifacts under a reserved name without
+  // touching the reserved list. A lost claim race re-reads and
+  // re-applies the owner check — the conditional create in
+  // `claimScope` is the only race-safe primitive, so `conflict` means
+  // somebody else's row is now durable and the re-read decides whose
+  // scope this is.
+  //
+  // The claim is DURABLE even when a later gate fails this publish
+  // (documented judgment call — see the flow docstring). The claim
+  // also deliberately lands BEFORE signature verification: moving it
+  // after would not stop a motivated squatter (any authenticated
+  // caller can produce a validly-signed private publish), so the real
+  // defenses against mass squatting are the operator reclaim flow, the
+  // audit trail, and (future) rate limiting — while the early claim
+  // keeps the gate order cheap-first.
+  const scopeForbiddenByOwner = (): PublishArtifactResult =>
+    error(
+      403,
+      'scope_forbidden',
+      `scope \`${manifest.scope}\` is owned by another publisher. Choose a scope you own — your first publish into an unclaimed scope claims it. If you hold the rights to this name (for example the matching domain or brand), the registry operator can verify that ownership and reclaim an unverified scope.`,
+    );
+  const existingOwner = await deps.storage.getScopeOwner(manifest.scope);
+  if (existingOwner !== null && existingOwner.ownerSubject !== deps.authn.subject) {
+    return scopeForbiddenByOwner();
+  }
+  if (existingOwner === null) {
+    const reservedScopes = deps.reservedScopes ?? RESERVED_SCOPES;
+    if (reservedScopes.includes(manifest.scope)) {
+      return error(
+        403,
+        'scope_forbidden',
+        `scope \`${manifest.scope}\` is reserved on this registry and cannot be claimed by publishing. Choose a scope you own — your first publish into an unclaimed scope claims it.`,
+      );
+    }
+    const claim = await deps.storage.claimScope({
+      scope: manifest.scope,
+      ownerSubject: deps.authn.subject,
+      claimedAt: deps.clock().toISOString(),
+      verification: 'unverified',
+    });
+    if ('conflict' in claim) {
+      // Lost the race — re-read and re-apply the owner check.
+      const winner = await deps.storage.getScopeOwner(manifest.scope);
+      if (winner === null) {
+        // claimScope reported an existing row but the re-read found
+        // none — storage-layer inconsistency, not a policy outcome.
+        return error(
+          500,
+          'internal',
+          `scope claim for \`${manifest.scope}\` conflicted but no ownership row exists — storage inconsistency`,
+        );
+      }
+      if (winner.ownerSubject !== deps.authn.subject) {
+        return scopeForbiddenByOwner();
+      }
+    }
   }
 
   // 3. Bundle decode + size (gadgets only)

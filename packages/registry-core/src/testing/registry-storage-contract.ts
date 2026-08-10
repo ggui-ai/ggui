@@ -22,6 +22,7 @@ import type {
   ArtifactVersionRow,
   ArtifactsMetadataRow,
   CompiledBlobRow,
+  ScopeOwnerRow,
 } from '../types.js';
 import { ARTIFACTS_METADATA_SK } from '../types.js';
 import type {
@@ -118,6 +119,16 @@ function makeAuthorKey(overrides: Partial<AuthorKeyRow> = {}): AuthorKeyRow {
     subject: 'user-1',
     keyId: 'key-1',
     publicKeyBase64: 'BBBB',
+    ...overrides,
+  };
+}
+
+function makeScopeOwner(overrides: Partial<ScopeOwnerRow> = {}): ScopeOwnerRow {
+  return {
+    scope: '@test',
+    ownerSubject: 'user-1',
+    claimedAt: '2026-08-10T00:00:00.000Z',
+    verification: 'unverified',
     ...overrides,
   };
 }
@@ -523,6 +534,159 @@ export function registryStorageContract(makeStorage: () => RegistryStorage): voi
         // Confirm: the existing blob's refCount was NOT bumped.
         const existingBlobFetched = await storage.getCompiledBlob(existingDigest);
         expect(existingBlobFetched?.refCount).toBe(1);
+      });
+    });
+
+    describe('scope owners', () => {
+      it('returns null for an unclaimed scope', async () => {
+        const storage = makeStorage();
+        expect(await storage.getScopeOwner('@nobody-claimed-this')).toBe(null);
+      });
+
+      it('claims an unclaimed scope and round-trips the full row', async () => {
+        const storage = makeStorage();
+        const row = makeScopeOwner();
+        const result = await storage.claimScope(row);
+        expect(result).toEqual({ ok: true });
+        expect(await storage.getScopeOwner(row.scope)).toEqual(row);
+      });
+
+      it('rejects a second claim on an already-claimed scope (first row untouched)', async () => {
+        const storage = makeStorage();
+        const first = makeScopeOwner({ ownerSubject: 'user-1' });
+        await storage.claimScope(first);
+        const second = await storage.claimScope(
+          makeScopeOwner({ ownerSubject: 'user-2', claimedAt: '2026-08-11T00:00:00.000Z' }),
+        );
+        expect(second).toEqual({ conflict: true });
+        // First-writer-wins: the persisted row is the FIRST claimant's.
+        expect(await storage.getScopeOwner('@test')).toEqual(first);
+      });
+
+      it('a simulated race between two claims yields exactly one winner', async () => {
+        // Both claims run concurrently against the same fresh storage.
+        // The atomicity obligation (conditional create — DDB
+        // `attribute_not_exists(scope)`, filesystem O_EXCL, memory
+        // check-and-set without an interleaving await) means EXACTLY
+        // one may win; the loser MUST see `{ conflict: true }` and the
+        // persisted row MUST be the winner's.
+        const storage = makeStorage();
+        const claimA = makeScopeOwner({ ownerSubject: 'racer-a' });
+        const claimB = makeScopeOwner({ ownerSubject: 'racer-b' });
+        const [a, b] = await Promise.all([
+          storage.claimScope(claimA),
+          storage.claimScope(claimB),
+        ]);
+        const results = [
+          { claim: claimA, result: a },
+          { claim: claimB, result: b },
+        ];
+        const winners = results.filter((r) => 'ok' in r.result);
+        const losers = results.filter((r) => 'conflict' in r.result);
+        expect(winners).toHaveLength(1);
+        expect(losers).toHaveLength(1);
+        expect(await storage.getScopeOwner('@test')).toEqual(winners[0]!.claim);
+      });
+
+      it('claims are scoped — sibling scopes claim independently', async () => {
+        const storage = makeStorage();
+        const a = await storage.claimScope(makeScopeOwner({ scope: '@alpha' }));
+        const b = await storage.claimScope(
+          makeScopeOwner({ scope: '@beta', ownerSubject: 'user-2' }),
+        );
+        expect(a).toEqual({ ok: true });
+        expect(b).toEqual({ ok: true });
+        expect((await storage.getScopeOwner('@alpha'))?.ownerSubject).toBe('user-1');
+        expect((await storage.getScopeOwner('@beta'))?.ownerSubject).toBe('user-2');
+      });
+
+      it('updateScopeOwner rewrites the full row when the expectation matches the stored snapshot', async () => {
+        const storage = makeStorage();
+        await storage.claimScope(makeScopeOwner());
+        const verified: ScopeOwnerRow = {
+          ...makeScopeOwner(),
+          verification: 'verified',
+          verifiedDomain: 'test.example',
+          verifiedAt: '2026-08-12T00:00:00.000Z',
+        };
+        const result = await storage.updateScopeOwner(verified, {
+          ownerSubject: 'user-1',
+          verification: 'unverified',
+        });
+        expect(result).toEqual({ ok: true });
+        expect(await storage.getScopeOwner('@test')).toEqual(verified);
+      });
+
+      it('updateScopeOwner seeds a row when the caller expects absence (operator seed path)', async () => {
+        const storage = makeStorage();
+        const seeded = makeScopeOwner({ scope: '@seeded', ownerSubject: 'operator-chosen' });
+        const result = await storage.updateScopeOwner(seeded, { absent: true });
+        expect(result).toEqual({ ok: true });
+        expect(await storage.getScopeOwner('@seeded')).toEqual(seeded);
+        // A first-publish claim against the seeded scope now conflicts.
+        expect(
+          await storage.claimScope(makeScopeOwner({ scope: '@seeded', ownerSubject: 'squatter' })),
+        ).toEqual({ conflict: true });
+      });
+
+      it('updateScopeOwner refuses a stale snapshot — RMW race loses, row untouched', async () => {
+        const storage = makeStorage();
+        const current = makeScopeOwner({ ownerSubject: 'current-owner' });
+        await storage.claimScope(current);
+        // Operator read an OLD snapshot (different owner) — e.g. a
+        // concurrent transfer landed between their read and this write.
+        const result = await storage.updateScopeOwner(
+          makeScopeOwner({ ownerSubject: 'operator-target' }),
+          { ownerSubject: 'stale-previous-owner', verification: 'unverified' },
+        );
+        expect(result).toEqual({ conflict: true });
+        expect(await storage.getScopeOwner('@test')).toEqual(current);
+      });
+
+      it('updateScopeOwner refuses a verification-stale snapshot', async () => {
+        const storage = makeStorage();
+        await storage.claimScope(makeScopeOwner());
+        // Verification flipped concurrently — the (owner, verification)
+        // pair is the snapshot identity, so a matching owner alone is
+        // not enough.
+        const result = await storage.updateScopeOwner(
+          makeScopeOwner({ ownerSubject: 'new-owner' }),
+          { ownerSubject: 'user-1', verification: 'verified' },
+        );
+        expect(result).toEqual({ conflict: true });
+        expect(await storage.getScopeOwner('@test')).toEqual(makeScopeOwner());
+      });
+
+      it('updateScopeOwner expect-absent refuses when a claim landed first', async () => {
+        const storage = makeStorage();
+        const claimed = makeScopeOwner({ ownerSubject: 'racing-claimant' });
+        await storage.claimScope(claimed);
+        const result = await storage.updateScopeOwner(
+          makeScopeOwner({ ownerSubject: 'operator-target' }),
+          { absent: true },
+        );
+        expect(result).toEqual({ conflict: true });
+        expect(await storage.getScopeOwner('@test')).toEqual(claimed);
+      });
+
+      it('updateScopeOwner expect-match refuses when the row is missing', async () => {
+        const storage = makeStorage();
+        const result = await storage.updateScopeOwner(makeScopeOwner(), {
+          ownerSubject: 'user-1',
+          verification: 'unverified',
+        });
+        expect(result).toEqual({ conflict: true });
+        expect(await storage.getScopeOwner('@test')).toBeNull();
+      });
+
+      it('getScopeOwner observes a completed claim immediately (conflict re-read obligation)', async () => {
+        // The publish gate's claim-conflict path re-reads to learn the
+        // winner. A read that can miss a completed claim would turn the
+        // losing racer's publish into a spurious storage-inconsistency
+        // failure — reads MUST be read-your-writes strong here.
+        const storage = makeStorage();
+        await storage.claimScope(makeScopeOwner({ ownerSubject: 'winner' }));
+        expect((await storage.getScopeOwner('@test'))?.ownerSubject).toBe('winner');
       });
     });
 

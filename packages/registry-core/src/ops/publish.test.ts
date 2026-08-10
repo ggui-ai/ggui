@@ -18,7 +18,7 @@ import {
   type SigstoreSignature,
 } from '@ggui-ai/gadget-signing';
 import type { ArtifactManifest } from '@ggui-ai/artifact-manifest';
-import { publishArtifact } from './publish.js';
+import { publishArtifact, type PublishArtifactDeps } from './publish.js';
 import { inMemoryRegistryStorage } from '../impls/memory-registry-storage.js';
 import { inMemoryBundleStorage } from '../impls/memory-bundle-storage.js';
 import type { RegistryStorage } from '../interfaces/registry-storage.js';
@@ -836,6 +836,290 @@ describe('publishArtifact', () => {
       expect(result.ok).toBe(true);
       if (!result.ok) return;
       expect(result.status).toBe(201);
+    });
+  });
+
+  // ── F0 — scope ownership at publish ───────────────────────────────
+  //
+  // Gate 2c: reserved-scope denylist, then owner check, then
+  // first-publish claim. Cheap-first order pin: the gate runs after the
+  // F1 pairing (2b) and BEFORE any bundle decode — an other-caller
+  // publish must answer `scope_forbidden` even when its bundle is
+  // garbage.
+  describe('scope ownership at publish (F0)', () => {
+    function deps(f: Fixture, subject: string, overrides: Partial<PublishArtifactDeps> = {}): PublishArtifactDeps {
+      return {
+        storage: f.storage,
+        bundleStorage: f.bundleStorage,
+        authn: { subject },
+        clock: () => new Date('2026-08-10T12:00:00.000Z'),
+        registryHostname: 'localhost:9001',
+        ...overrides,
+      };
+    }
+
+    function input(f: Fixture, manifest: ArtifactManifest = GADGET_MANIFEST) {
+      return {
+        manifest,
+        bundle: f.bundleB64,
+        bundleSha384: f.bundleSha384,
+        signature: f.signature,
+      };
+    }
+
+    it('first publish into an unclaimed scope claims it — row asserted', async () => {
+      const f = await makeFixture();
+      const result = await publishArtifact(input(f), deps(f, f.subject));
+      expect(result.ok).toBe(true);
+      const owner = await f.storage.getScopeOwner('@test');
+      expect(owner).toEqual({
+        scope: '@test',
+        ownerSubject: f.subject,
+        claimedAt: '2026-08-10T12:00:00.000Z',
+        verification: 'unverified',
+      });
+    });
+
+    it('same-caller republish into the claimed scope succeeds', async () => {
+      const f = await makeFixture();
+      const first = await publishArtifact(input(f), deps(f, f.subject));
+      expect(first.ok).toBe(true);
+      const secondManifest: ArtifactManifest = {
+        ...GADGET_MANIFEST,
+        version: '1.0.1',
+      } as ArtifactManifest;
+      const second = await publishArtifact(input(f, secondManifest), deps(f, f.subject));
+      expect(second.ok).toBe(true);
+      if (!second.ok) return;
+      expect(second.status).toBe(201);
+    });
+
+    it('other-caller publish into a claimed scope → 403 scope_forbidden, before any bundle work', async () => {
+      const f = await makeFixture();
+      const first = await publishArtifact(input(f), deps(f, f.subject));
+      expect(first.ok).toBe(true);
+      // The squatter's bundle is INVALID base64 — if the scope gate ran
+      // after bundle decode (step 3) this would answer
+      // `manifest_invalid: bundle field is not valid base64` instead.
+      const result = await publishArtifact(
+        {
+          manifest: { ...GADGET_MANIFEST, version: '2.0.0' },
+          bundle: '!!!not-base64!!!',
+          bundleSha384: f.bundleSha384,
+          signature: f.signature,
+        },
+        deps(f, 'user-2'),
+      );
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.status).toBe(403);
+      expect(result.body.error).toBe('scope_forbidden');
+      // Remedy message stays registry-neutral (OSS purity).
+      expect(result.body.message).toContain('scope');
+      expect(result.body.message).not.toMatch(/ggui\.ai|guuey|cloud/i);
+      // Ownership unchanged.
+      expect((await f.storage.getScopeOwner('@test'))?.ownerSubject).toBe(f.subject);
+    });
+
+    it('reserved scope → 403 scope_forbidden and NO claim row', async () => {
+      const reservedManifest: ArtifactManifest = {
+        ...GADGET_MANIFEST,
+        scope: '@anthropic',
+      } as ArtifactManifest;
+      const f = await makeFixture();
+      const result = await publishArtifact(
+        input(f, reservedManifest),
+        deps(f, f.subject),
+      );
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.status).toBe(403);
+      expect(result.body.error).toBe('scope_forbidden');
+      expect(await f.storage.getScopeOwner('@anthropic')).toBeNull();
+    });
+
+    it('operator-seeded owner publishes into a RESERVED scope (reserved blocks claims, not owned publishes)', async () => {
+      const reservedManifest: ArtifactManifest = {
+        ...GADGET_MANIFEST,
+        scope: '@anthropic',
+      } as ArtifactManifest;
+      const f = await makeFixture(reservedManifest);
+      // Ops seeded the ownership row for the reserved scope (the
+      // `ggui_ops_scope_transfer` path) — the seeded owner publishes
+      // like any other owner.
+      const seeded = await f.storage.updateScopeOwner(
+        {
+          scope: '@anthropic',
+          ownerSubject: f.subject,
+          claimedAt: '2026-08-09T00:00:00.000Z',
+          verification: 'unverified',
+        },
+        { absent: true },
+      );
+      expect(seeded).toEqual({ ok: true });
+      const result = await publishArtifact(
+        input(f, reservedManifest),
+        deps(f, f.subject),
+      );
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.status).toBe(201);
+    });
+
+    it('non-owner publish into a SEEDED reserved scope → 403 scope_forbidden (owner rule, not reserved rule)', async () => {
+      const reservedManifest: ArtifactManifest = {
+        ...GADGET_MANIFEST,
+        scope: '@anthropic',
+      } as ArtifactManifest;
+      const f = await makeFixture(reservedManifest);
+      await f.storage.updateScopeOwner(
+        {
+          scope: '@anthropic',
+          ownerSubject: 'first-party-subject',
+          claimedAt: '2026-08-09T00:00:00.000Z',
+          verification: 'verified',
+          verifiedDomain: 'anthropic.com',
+          verifiedAt: '2026-08-09T00:00:00.000Z',
+        },
+        { absent: true },
+      );
+      const result = await publishArtifact(
+        input(f, reservedManifest),
+        deps(f, f.subject),
+      );
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.status).toBe(403);
+      expect(result.body.error).toBe('scope_forbidden');
+      expect(result.body.message).toContain('owned by another publisher');
+    });
+
+    it('reservedScopes option REPLACES the built-in list', async () => {
+      const f = await makeFixture();
+      // '@test' becomes reserved under the custom list…
+      const forbidden = await publishArtifact(
+        input(f),
+        deps(f, f.subject, { reservedScopes: ['@test'] }),
+      );
+      expect(forbidden.ok).toBe(false);
+      if (forbidden.ok) return;
+      expect(forbidden.body.error).toBe('scope_forbidden');
+
+      // …and a built-in reserved scope becomes claimable when the
+      // custom list omits it (replacement, not extension).
+      const anthropicManifest: ArtifactManifest = {
+        ...GADGET_MANIFEST,
+        scope: '@anthropic',
+      } as ArtifactManifest;
+      const f2 = await makeFixture();
+      const allowed = await publishArtifact(
+        input(f2, anthropicManifest),
+        deps(f2, f2.subject, { reservedScopes: ['@only-this-one'] }),
+      );
+      expect(allowed.ok).toBe(true);
+    });
+
+    it('lost claim race, winner is another subject → 403 scope_forbidden (re-read path)', async () => {
+      const f = await makeFixture();
+      const winnerRow = {
+        scope: '@test',
+        ownerSubject: 'racer-winner',
+        claimedAt: '2026-08-10T11:59:59.000Z',
+        verification: 'unverified' as const,
+      };
+      let reads = 0;
+      const racingStorage: RegistryStorage = {
+        ...f.storage,
+        // First read (rule 2): unclaimed. The claim then loses the
+        // race; the re-read sees the winner's row.
+        async getScopeOwner(scope) {
+          reads += 1;
+          if (reads === 1) return null;
+          return scope === '@test' ? winnerRow : null;
+        },
+        async claimScope() {
+          return { conflict: true };
+        },
+      };
+      const result = await publishArtifact(
+        input(f),
+        deps(f, f.subject, { storage: racingStorage }),
+      );
+      expect(reads).toBe(2);
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.status).toBe(403);
+      expect(result.body.error).toBe('scope_forbidden');
+    });
+
+    it('lost claim race, winner is the SAME subject → publish proceeds (re-read path)', async () => {
+      const f = await makeFixture();
+      let reads = 0;
+      const racingStorage: RegistryStorage = {
+        ...f.storage,
+        async getScopeOwner(scope) {
+          reads += 1;
+          if (reads === 1) return null;
+          return scope === '@test'
+            ? {
+                scope: '@test',
+                ownerSubject: f.subject,
+                claimedAt: '2026-08-10T11:59:59.000Z',
+                verification: 'unverified' as const,
+              }
+            : null;
+        },
+        async claimScope() {
+          return { conflict: true };
+        },
+      };
+      const result = await publishArtifact(
+        input(f),
+        deps(f, f.subject, { storage: racingStorage }),
+      );
+      expect(reads).toBe(2);
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.status).toBe(201);
+    });
+
+    it('claim is durable when a downstream gate fails (documented judgment call)', async () => {
+      const f = await makeFixture();
+      const result = await publishArtifact(
+        {
+          manifest: GADGET_MANIFEST,
+          bundle: f.bundleB64,
+          // Wrong digest — fails step 4, AFTER the 2c claim.
+          bundleSha384: sha384Base64(new TextEncoder().encode('other-bytes')),
+          signature: f.signature,
+        },
+        deps(f, f.subject),
+      );
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.body.error).toBe('bundle_hash_mismatch');
+      // The failed publish still claimed the scope for its caller —
+      // re-usable by the same caller, reclaimable via ops like any
+      // unverified scope.
+      expect((await f.storage.getScopeOwner('@test'))?.ownerSubject).toBe(f.subject);
+    });
+
+    it('F1 pairing still fires first — public+Ed25519 into a FOREIGN claimed scope answers visibility_algorithm_mismatch', async () => {
+      const f = await makeFixture();
+      const first = await publishArtifact(input(f), deps(f, f.subject));
+      expect(first.ok).toBe(true);
+      const publicManifest: ArtifactManifest = {
+        ...GADGET_MANIFEST,
+        version: '3.0.0',
+        visibility: 'public',
+      } as ArtifactManifest;
+      const result = await publishArtifact(
+        input(f, publicManifest),
+        deps(f, 'user-2'),
+      );
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.body.error).toBe('visibility_algorithm_mismatch');
     });
   });
 

@@ -268,6 +268,55 @@ describe('OSS registry server', () => {
     expect(respBody.message).toContain('transparency log');
   });
 
+  // ── /publish scope-ownership gate (F0) ──
+  it('POST /publish into a scope owned by another subject returns 403 scope_forbidden', async () => {
+    // Wire-level pin of the ownership gate. The single-token OSS
+    // harness carries one subject, so the foreign owner is seeded
+    // directly through the operator-only storage write.
+    const seeded = await harness.storage.updateScopeOwner(
+      {
+        scope: '@squatted-elsewhere',
+        ownerSubject: 'somebody-else',
+        claimedAt: '2026-08-10T00:00:00.000Z',
+        verification: 'unverified',
+      },
+      { absent: true },
+    );
+    expect(seeded).toEqual({ ok: true });
+    const manifest = makeGadgetManifest({ scope: '@squatted-elsewhere' });
+    const body = await signedPublishBody(manifest, SIMPLE_BUNDLE, harness.keypair);
+
+    const res = await fetch(`${harness.baseUrl}/publish`, {
+      method: 'POST',
+      headers: {
+        authorization: harness.authHeader,
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify(body),
+    });
+    expect(res.status).toBe(403);
+    const respBody = (await res.json()) as { error: string; message: string };
+    expect(respBody.error).toBe('scope_forbidden');
+    expect(respBody.message).toContain('owned by another publisher');
+  });
+
+  it('POST /publish into a reserved scope returns 403 scope_forbidden', async () => {
+    const manifest = makeGadgetManifest({ scope: '@anthropic' });
+    const body = await signedPublishBody(manifest, SIMPLE_BUNDLE, harness.keypair);
+
+    const res = await fetch(`${harness.baseUrl}/publish`, {
+      method: 'POST',
+      headers: {
+        authorization: harness.authHeader,
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify(body),
+    });
+    expect(res.status).toBe(403);
+    const respBody = (await res.json()) as { error: string };
+    expect(respBody.error).toBe('scope_forbidden');
+  });
+
   // ── /pkg/:scope/:name/:version ──
   it('GET /pkg/:scope/:name/:version after publish returns 200 + manifest', async () => {
     // (Depends on the publish test above. The row is private, so the

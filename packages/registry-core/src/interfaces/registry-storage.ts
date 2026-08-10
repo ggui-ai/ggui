@@ -27,6 +27,23 @@
  *   at the storage layer. Implementations
  *   MUST NOT overwrite on conflict — per-version immutability is a
  *   load-bearing registry invariant.
+ * - {@link claimScope} MUST be an atomic first-writer-wins conditional
+ *   create: when two claims race on the same scope, EXACTLY one wins
+ *   and the loser observes `{ conflict: true }` with the winner's row
+ *   left untouched. Scope ownership is the publish-authorization
+ *   invariant — a lost race that overwrote the winner would silently
+ *   reassign every future publish under that scope.
+ * - {@link getScopeOwner} MUST observe a completed {@link claimScope}
+ *   immediately (read-your-writes strong). The publish gate's
+ *   claim-conflict path re-reads to learn the winner; a read that can
+ *   lag a durable claim would fail the losing racer's publish with a
+ *   spurious storage-inconsistency error.
+ * - {@link updateScopeOwner} MUST be conditional on the caller's read
+ *   snapshot (`expect`): the write lands only when the stored row still
+ *   matches (or is still absent, for `{ absent: true }`). On mismatch
+ *   it returns `{ conflict: true }` with the stored row untouched —
+ *   an operator rewrite MUST NOT clobber a concurrent transfer or a
+ *   racing first-publish claim.
  * - {@link getArtifactMetadata} / {@link getArtifactVersion} MUST return
  *   exactly what was last written. `null` on miss; throw on transport
  *   failure (caller decides retry).
@@ -57,6 +74,7 @@ import type {
   ArtifactsMetadataRow,
   AuthorKeyRow,
   CompiledBlobRow,
+  ScopeOwnerRow,
 } from '../types.js';
 
 /**
@@ -94,6 +112,19 @@ export class AuthorKeyAlreadyExistsError extends Error {
     this.keyId = keyId;
   }
 }
+
+/**
+ * The caller's read snapshot for {@link RegistryStorage.updateScopeOwner}
+ * — either the `(ownerSubject, verification)` pair the caller read, or
+ * an assertion that no row exists yet (`{ absent: true }`, the operator
+ * seed path).
+ */
+export type ScopeOwnerExpectation =
+  | {
+      readonly ownerSubject: string;
+      readonly verification: ScopeOwnerRow['verification'];
+    }
+  | { readonly absent: true };
 
 export interface RegistryStorage {
   // ─── Artifacts metadata (one row per scope/name) ───────────────────
@@ -225,6 +256,53 @@ export interface RegistryStorage {
     | { ok: true; mode: 'new-blob' | 'dedup' }
     | { ok: false; reason: 'version_exists' }
   >;
+
+  // ─── Scope owners (one row per scope) ──────────────────────────────
+  /**
+   * Fetch the ownership row for `scope` (leading `@` included, e.g.
+   * `@acme`). Returns `null` when the scope is unclaimed.
+   *
+   * MUST be read-your-writes strong with respect to {@link claimScope}
+   * and {@link updateScopeOwner} — see the Obligations section above.
+   */
+  getScopeOwner(scope: string): Promise<ScopeOwnerRow | null>;
+  /**
+   * Atomic first-writer-wins claim — creates the ownership row only
+   * when no row exists for `row.scope`. On conflict (a row already
+   * exists, including one that landed in a concurrent race) returns
+   * `{ conflict: true }` WITHOUT touching the existing row.
+   *
+   * The publish op claims on the caller's first publish into an
+   * unclaimed scope. Consumers MUST NOT pre-check with
+   * {@link getScopeOwner} + claim as a substitute for handling
+   * `conflict` — the conditional create is the only race-safe
+   * primitive (re-read on conflict instead).
+   */
+  claimScope(row: ScopeOwnerRow): Promise<{ ok: true } | { conflict: true }>;
+  /**
+   * Conditional full-row put of the ownership row — a compare-and-set
+   * against the caller's read snapshot.
+   *
+   * `expect` states what the caller believes is stored:
+   *   - `{ ownerSubject, verification }` — the row MUST still carry
+   *     exactly this pair (the snapshot identity of an ownership row).
+   *   - `{ absent: true }` — no row may exist yet (operator seeding).
+   *
+   * On mismatch the write is refused with `{ conflict: true }` and the
+   * stored row is untouched — the caller re-reads and retries. This is
+   * the structural defense against read-modify-write races between two
+   * operators, or between an operator write and a concurrent
+   * first-publish claim.
+   *
+   * Operator-only caller: verification flips and ownership transfers
+   * (including seeding rows for reserved scopes, which are never
+   * first-publish-claimable). The publish path MUST NOT call this —
+   * {@link claimScope} is its only write.
+   */
+  updateScopeOwner(
+    row: ScopeOwnerRow,
+    expect: ScopeOwnerExpectation,
+  ): Promise<{ ok: true } | { conflict: true }>;
 
   // ─── Author keys (one row per subject/keyId) ───────────────────────
   getAuthorKey(subject: string, keyId: string): Promise<AuthorKeyRow | null>;
