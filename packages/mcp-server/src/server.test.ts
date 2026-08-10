@@ -1884,3 +1884,44 @@ describe('createGguiServer — ggui_handshake (Slice 5 preflight seam)', () => {
   });
 
 });
+
+describe('registrySearch wiring', () => {
+  it('defaultHandlers threads registrySearch into ggui_search_blueprints', async () => {
+    const vectors = new InMemoryVectorStore();
+    const embedding = new MockEmbeddingProvider({ dimensions: 8 });
+    const calls: string[] = [];
+    const fakeFetch: typeof fetch = async (input) => {
+      calls.push(String(input));
+      return new Response(JSON.stringify({ results: [] }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    };
+    const { defaultHandlers } = await import('./server.js');
+    const handlers = defaultHandlers({
+      vectors,
+      embedding,
+      registrySearch: { host: 'registry.example.com', fetch: fakeFetch },
+    });
+    const search = handlers.find((h) => h.name === 'ggui_search_blueprints');
+    if (!search) throw new Error('ggui_search_blueprints not registered');
+    const ctx: HandlerContext = { appId: 'app-w', requestId: 'r-w' };
+    await search.handler({ query: 'weather' }, ctx);
+    expect(calls.length).toBe(1);
+    expect(calls[0]?.startsWith('https://registry.example.com/search?')).toBe(true);
+  });
+
+  it('defaultHandlers without registrySearch keeps the source inactive', async () => {
+    const vectors = new InMemoryVectorStore();
+    const embedding = new MockEmbeddingProvider({ dimensions: 8 });
+    const { defaultHandlers } = await import('./server.js');
+    const handlers = defaultHandlers({ vectors, embedding });
+    const search = handlers.find((h) => h.name === 'ggui_search_blueprints');
+    if (!search) throw new Error('ggui_search_blueprints not registered');
+    const ctx: HandlerContext = { appId: 'app-w', requestId: 'r-w' };
+    const result = (await search.handler({ query: 'weather' }, ctx)) as {
+      degradedSources?: unknown;
+    };
+    expect(result.degradedSources).toBeUndefined();
+  });
+});

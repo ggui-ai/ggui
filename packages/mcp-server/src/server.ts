@@ -111,6 +111,7 @@ import {
   createRenderBlueprintHandler,
   createSearchBlueprintsHandler,
   createValidateBlueprintHandler,
+  type SearchBlueprintsRegistrySource,
 } from "@ggui-ai/mcp-server-handlers/blueprints";
 import {
   createGguiOpsDeleteBlueprintHandler,
@@ -426,6 +427,15 @@ export function defaultHandlers(deps: {
    * tool.
    */
   readonly blueprints?: BlueprintProvider;
+  /**
+   * Registry-backed discovery source for `ggui_search_blueprints`.
+   * OPT-IN: absent = the search tool consults only local sources and
+   * never makes an outbound request. Present = the tool queries the
+   * configured registry's public `/search` (host defaults to the
+   * spec-default registry host) and appends advisory candidates
+   * after local results.
+   */
+  readonly registrySearch?: SearchBlueprintsRegistrySource;
   /**
    * UI registry consulted by `ggui_render_blueprint`. When bound,
    * the render handler is registered and resolves every call through
@@ -919,6 +929,7 @@ export function defaultHandlers(deps: {
       embedding: deps.embedding,
       vectors: deps.vectors,
       ...(deps.blueprints ? { blueprints: deps.blueprints } : {}),
+      ...(deps.registrySearch ? { registry: deps.registrySearch } : {}),
     }) as SharedHandler<ZodRawShape, ZodRawShape>,
     createListFeaturedBlueprintsHandler(
       deps.blueprints ? { blueprints: deps.blueprints } : {}
@@ -1541,6 +1552,15 @@ export interface CreateGguiServerOptions {
    * production.
    */
   readonly embedding?: EmbeddingProvider;
+
+  /**
+   * Registry-backed blueprint discovery for `ggui_search_blueprints`.
+   * OPT-IN: omitted = no outbound registry traffic, ever (the
+   * zero-config default). Pass `{}` to enable against the default
+   * registry host, or set `host` / `timeoutMs` to point at a
+   * self-hosted registry and adjust the fetch budget.
+   */
+  readonly registrySearch?: SearchBlueprintsRegistrySource;
 
   /**
    * Per-app metadata source. When bound, threaded into
@@ -3867,6 +3887,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
       // Registers `ggui_runtime_declare_tool_catalog`.
       toolIdentityCatalogStore,
       ...(opts.blueprintProvider ? { blueprints: opts.blueprintProvider } : {}),
+      ...(opts.registrySearch ? { registrySearch: opts.registrySearch } : {}),
       // UI registry for `ggui_render_blueprint`. Absent = render tool
       // is NOT registered on this server (defaultHandlers' own opt-in
       // rule). OSS CLI wires a `LocalUiRegistry` here so manifest
