@@ -146,6 +146,9 @@ export {
   type InMemoryBundleStorageOptions,
 } from './impls/memory-bundle-storage.js';
 
+// Shared scan-filter semantics
+export { matchesMcpToolFilters } from './mcp-tool-filters.js';
+
 // Utils
 export {
   installCommand,
