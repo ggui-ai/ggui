@@ -1,0 +1,40 @@
+{
+  "name": "bind-derived-skips-invalid-names",
+  "description": "Contract lineage tool names are agent/tool-authored data, not author declarations, so derivation stays inside the same charset envelope a declared `mcpTools` list is validated against by filtering invalid names silently rather than rejecting the manifest. An empty-string `sourceTool`, a charset-invalid `sourceTool` (embedded space), and a charset-invalid stream `source.tool` (embedded slash) MUST all be skipped; only names matching the binding charset survive derivation, in first-appearance order.",
+  "entry": {
+    "kind": "blueprint",
+    "contract": {
+      "propsSpec": {
+        "properties": {
+          "empty": {
+            "schema": { "description": "prop with empty lineage" },
+            "sourceTool": ""
+          },
+          "invalidChars": {
+            "schema": { "description": "prop with charset-invalid lineage" },
+            "sourceTool": "has space"
+          },
+          "customer": {
+            "schema": { "description": "customer record" },
+            "sourceTool": "get_customer"
+          }
+        }
+      },
+      "streamSpec": {
+        "badChannel": {
+          "schema": { "description": "channel with charset-invalid lineage" },
+          "source": { "tool": "bad/tool" }
+        },
+        "invoiceEvents": {
+          "schema": { "description": "invoice change events" },
+          "source": { "tool": "watch_invoices" }
+        }
+      }
+    }
+  },
+  "expect": {
+    "outcome": "accept",
+    "source": "derived",
+    "bindings": [{ "tool": "get_customer" }, { "tool": "watch_invoices" }]
+  }
+}

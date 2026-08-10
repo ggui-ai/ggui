@@ -1,0 +1,54 @@
+{
+  "name": "bind-derived-caps-at-sixteen",
+  "description": "Derivation caps at the same 16-entry bound a declared `mcpTools` list is schema-capped at, keeping the survivors in first-appearance order (props before stream, each in declaration order) and dropping anything past the 16th distinct tool name. This composes the existing envelope — it is not new policy.",
+  "entry": {
+    "kind": "blueprint",
+    "contract": {
+      "propsSpec": {
+        "properties": {
+          "p01": { "schema": { "description": "p01" }, "sourceTool": "tool_01" },
+          "p02": { "schema": { "description": "p02" }, "sourceTool": "tool_02" },
+          "p03": { "schema": { "description": "p03" }, "sourceTool": "tool_03" },
+          "p04": { "schema": { "description": "p04" }, "sourceTool": "tool_04" },
+          "p05": { "schema": { "description": "p05" }, "sourceTool": "tool_05" },
+          "p06": { "schema": { "description": "p06" }, "sourceTool": "tool_06" },
+          "p07": { "schema": { "description": "p07" }, "sourceTool": "tool_07" },
+          "p08": { "schema": { "description": "p08" }, "sourceTool": "tool_08" },
+          "p09": { "schema": { "description": "p09" }, "sourceTool": "tool_09" },
+          "p10": { "schema": { "description": "p10" }, "sourceTool": "tool_10" }
+        }
+      },
+      "streamSpec": {
+        "s11": { "schema": { "description": "s11" }, "source": { "tool": "tool_11" } },
+        "s12": { "schema": { "description": "s12" }, "source": { "tool": "tool_12" } },
+        "s13": { "schema": { "description": "s13" }, "source": { "tool": "tool_13" } },
+        "s14": { "schema": { "description": "s14" }, "source": { "tool": "tool_14" } },
+        "s15": { "schema": { "description": "s15" }, "source": { "tool": "tool_15" } },
+        "s16": { "schema": { "description": "s16" }, "source": { "tool": "tool_16" } },
+        "s17": { "schema": { "description": "s17" }, "source": { "tool": "tool_17" } }
+      }
+    }
+  },
+  "expect": {
+    "outcome": "accept",
+    "source": "derived",
+    "bindings": [
+      { "tool": "tool_01" },
+      { "tool": "tool_02" },
+      { "tool": "tool_03" },
+      { "tool": "tool_04" },
+      { "tool": "tool_05" },
+      { "tool": "tool_06" },
+      { "tool": "tool_07" },
+      { "tool": "tool_08" },
+      { "tool": "tool_09" },
+      { "tool": "tool_10" },
+      { "tool": "tool_11" },
+      { "tool": "tool_12" },
+      { "tool": "tool_13" },
+      { "tool": "tool_14" },
+      { "tool": "tool_15" },
+      { "tool": "tool_16" }
+    ]
+  }
+}

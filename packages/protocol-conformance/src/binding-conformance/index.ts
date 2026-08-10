@@ -43,7 +43,9 @@ import bindBlueprintNoContractNone from "./cases/bind-blueprint-no-contract-none
 import bindContractWithoutToolNamesNone from "./cases/bind-contract-without-tool-names-none.json" with { type: "json" };
 import bindDeclaredGadget from "./cases/bind-declared-gadget.json" with { type: "json" };
 import bindDeclaredWinsOverContract from "./cases/bind-declared-wins-over-contract.json" with { type: "json" };
+import bindDerivedCapsAtSixteen from "./cases/bind-derived-caps-at-sixteen.json" with { type: "json" };
 import bindDerivedPropsAndStream from "./cases/bind-derived-props-and-stream.json" with { type: "json" };
+import bindDerivedSkipsInvalidNames from "./cases/bind-derived-skips-invalid-names.json" with { type: "json" };
 import bindDerivedUnionDedupes from "./cases/bind-derived-union-dedupes.json" with { type: "json" };
 import bindGadgetUndeclaredNone from "./cases/bind-gadget-undeclared-none.json" with { type: "json" };
 import bindRejectCharset from "./cases/bind-reject-charset.json" with { type: "json" };
@@ -180,6 +182,8 @@ export const bindingResolutionCases: readonly BindingResolutionCase[] = [
   bindDeclaredWinsOverContract as BindingResolutionCase,
   bindDerivedPropsAndStream as BindingResolutionCase,
   bindDerivedUnionDedupes as BindingResolutionCase,
+  bindDerivedSkipsInvalidNames as BindingResolutionCase,
+  bindDerivedCapsAtSixteen as BindingResolutionCase,
   bindBlueprintNoContractNone as BindingResolutionCase,
   bindContractWithoutToolNamesNone as BindingResolutionCase,
   bindGadgetUndeclaredNone as BindingResolutionCase,

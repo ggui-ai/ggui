@@ -45,8 +45,14 @@ const MCP_TOOL_BINDING_NAME_RE = /^[A-Za-z0-9_.-]{1,128}$/;
  * validated (1–16 entries, shared charset on both names, no
  * exact-duplicate `(server, tool)` pairs) and wins entirely; absent
  * that, a blueprint contract derives bare tool names from its
- * lineage fields in first-appearance order; otherwise the artifact
- * has no bindings.
+ * lineage fields in first-appearance order, staying inside the same
+ * envelope a declared list is validated against — a lineage name
+ * failing the shared charset (including the empty string) is
+ * filtered out silently rather than rejected (contract lineage is
+ * agent/tool-authored data, not an author declaration), and the
+ * deduped survivors are capped at 16 entries in first-appearance
+ * order, the same bound `mcpTools` is schema-capped at; otherwise
+ * the artifact has no bindings.
  */
 function referenceResolve(entry: BindingManifestEntry): BindingResolutionOutcome {
   if (entry.mcpTools !== undefined) {
@@ -78,7 +84,11 @@ function referenceResolve(entry: BindingManifestEntry): BindingResolutionOutcome
     const orderedTools: string[] = [];
     const seenTools = new Set<string>();
     const addTool = (tool: string | undefined): void => {
-      if (tool !== undefined && !seenTools.has(tool)) {
+      if (
+        tool !== undefined &&
+        MCP_TOOL_BINDING_NAME_RE.test(tool) &&
+        !seenTools.has(tool)
+      ) {
         seenTools.add(tool);
         orderedTools.push(tool);
       }
@@ -93,7 +103,7 @@ function referenceResolve(entry: BindingManifestEntry): BindingResolutionOutcome
       return {
         outcome: "accept",
         source: "derived",
-        bindings: orderedTools.map((tool) => ({ tool })),
+        bindings: orderedTools.slice(0, 16).map((tool) => ({ tool })),
       };
     }
   }
@@ -122,8 +132,8 @@ function referenceMatches(
 }
 
 describe("binding-conformance catalogs", () => {
-  it("ships 13 resolution cases and 13 filter cases", () => {
-    expect(bindingResolutionCases.length).toBe(13);
+  it("ships 15 resolution cases and 13 filter cases", () => {
+    expect(bindingResolutionCases.length).toBe(15);
     expect(bindingFilterCases.length).toBe(13);
   });
 
