@@ -328,6 +328,83 @@ export function registryStorageContract(makeStorage: () => RegistryStorage): voi
         const byTag = await storage.scanArtifacts({ q: 'geo' });
         expect(byTag.rows.map((r) => r.artifactId)).toEqual(['@a/leaflet']);
       });
+
+      // #259 delta-2 — MCP tool-binding filters share `matchesMcpToolFilters`
+      // semantics with the search op; every impl must honor them identically
+      // (the byMcpTool GSI path in the DDB adapter is the load-bearing case).
+      it('filters by tool (matches any entry with that tool name, with or without a server)', async () => {
+        const storage = makeStorage();
+        await storage.putArtifactMetadata(
+          makeMetadata({
+            artifactId: '@a/stripe-ui',
+            mcpTools: [{ server: 'stripe-mcp', tool: 'create_payment' }],
+            mcpToolsSource: 'declared',
+          }),
+        );
+        await storage.putArtifactMetadata(
+          makeMetadata({
+            artifactId: '@a/bare-ui',
+            mcpTools: [{ tool: 'refund_payment' }],
+            mcpToolsSource: 'derived',
+          }),
+        );
+        await storage.putArtifactMetadata(
+          makeMetadata({ artifactId: '@a/unbound', mcpTools: undefined }),
+        );
+        const byServerBound = await storage.scanArtifacts({ tool: 'create_payment' });
+        expect(byServerBound.rows.map((r) => r.artifactId)).toEqual(['@a/stripe-ui']);
+        const byBare = await storage.scanArtifacts({ tool: 'refund_payment' });
+        expect(byBare.rows.map((r) => r.artifactId)).toEqual(['@a/bare-ui']);
+        const byMiss = await storage.scanArtifacts({ tool: 'unknown_tool' });
+        expect(byMiss.rows).toEqual([]);
+      });
+
+      it('filters by server; bare-tool entries never match', async () => {
+        const storage = makeStorage();
+        await storage.putArtifactMetadata(
+          makeMetadata({
+            artifactId: '@a/bound',
+            mcpTools: [{ server: 'stripe-mcp', tool: 'create_payment' }],
+            mcpToolsSource: 'declared',
+          }),
+        );
+        await storage.putArtifactMetadata(
+          makeMetadata({
+            artifactId: '@a/bare',
+            mcpTools: [{ tool: 'create_payment' }],
+            mcpToolsSource: 'derived',
+          }),
+        );
+        const page = await storage.scanArtifacts({ server: 'stripe-mcp' });
+        expect(page.rows.map((r) => r.artifactId)).toEqual(['@a/bound']);
+      });
+
+      it('tool + server composes into the exact-pair filter — cross-product is not enough', async () => {
+        const storage = makeStorage();
+        // A single artifact declaring TWO bindings — `stripe-mcp` and
+        // `refund_payment` each independently exist on this row, but
+        // never paired on the same binding entry.
+        await storage.putArtifactMetadata(
+          makeMetadata({
+            artifactId: '@a/multi-bound',
+            mcpTools: [
+              { server: 'stripe-mcp', tool: 'create_payment' },
+              { server: 'other-mcp', tool: 'refund_payment' },
+            ],
+            mcpToolsSource: 'declared',
+          }),
+        );
+        const exactPair = await storage.scanArtifacts({
+          server: 'stripe-mcp',
+          tool: 'create_payment',
+        });
+        expect(exactPair.rows.map((r) => r.artifactId)).toEqual(['@a/multi-bound']);
+        const crossProduct = await storage.scanArtifacts({
+          server: 'stripe-mcp',
+          tool: 'refund_payment',
+        });
+        expect(crossProduct.rows).toEqual([]);
+      });
     });
 
     describe('plugin versions', () => {
