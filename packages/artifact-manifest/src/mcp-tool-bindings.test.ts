@@ -217,6 +217,50 @@ describe("resolveMcpToolBindings", () => {
     });
   });
 
+  it("derivation filters charset-invalid lineage names silently rather than rejecting", () => {
+    const resolved = resolveMcpToolBindings({
+      ...BLUEPRINT_BASE,
+      contract: {
+        propsSpec: {
+          properties: {
+            empty: { schema: { type: "object" }, sourceTool: "" },
+            invalidChars: { schema: { type: "object" }, sourceTool: "has space" },
+            customer: { schema: { type: "object" }, sourceTool: "get_customer" },
+          },
+        },
+        streamSpec: {
+          badChannel: { schema: { type: "object" }, source: { tool: "bad/tool" } },
+          invoiceEvents: { schema: { type: "object" }, source: { tool: "watch_invoices" } },
+        },
+      },
+    });
+    expect(resolved).toEqual({
+      source: "derived",
+      bindings: [{ tool: "get_customer" }, { tool: "watch_invoices" }],
+    });
+  });
+
+  it("derivation caps at 16 entries in first-appearance order, same bound as a declared list", () => {
+    const properties: Record<string, { schema: { type: "object" }; sourceTool: string }> = {};
+    for (let i = 1; i <= 17; i++) {
+      properties[`p${i}`] = {
+        schema: { type: "object" },
+        sourceTool: `tool_${String(i).padStart(2, "0")}`,
+      };
+    }
+    const resolved = resolveMcpToolBindings({
+      ...BLUEPRINT_BASE,
+      contract: { propsSpec: { properties } },
+    });
+    expect(resolved?.source).toBe("derived");
+    expect(resolved?.bindings.length).toBe(16);
+    expect(resolved?.bindings).toEqual(
+      Array.from({ length: 16 }, (_, i) => ({
+        tool: `tool_${String(i + 1).padStart(2, "0")}`,
+      }))
+    );
+  });
+
   it("manifest mcpTools field infers ReadonlyArray<McpToolBinding> | undefined on both kinds", () => {
     expectTypeOf<GadgetManifest["mcpTools"]>().toEqualTypeOf<
       ReadonlyArray<McpToolBinding> | undefined

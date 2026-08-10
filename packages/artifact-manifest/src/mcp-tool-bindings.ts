@@ -35,6 +35,13 @@ import type { GadgetManifest } from "./gadget-manifest.js";
 export const MCP_TOOL_BINDING_NAME_RE = /^[A-Za-z0-9_.-]{1,128}$/;
 
 /**
+ * Shared entry-count bound for a binding list, declared OR derived —
+ * one envelope, referenced everywhere a cap applies rather than a
+ * second magic `16` drifting from this one.
+ */
+const MCP_TOOL_BINDING_MAX_ENTRIES = 16;
+
+/**
  * One MCP tool binding. `server` optional — omit for a
  * server-agnostic tool-name binding.
  */
@@ -72,7 +79,9 @@ export type McpToolBinding = z.infer<typeof mcpToolBindingSchema>;
 export const mcpToolsSchema = z
   .array(mcpToolBindingSchema)
   .min(1, { message: "mcpTools must declare at least one binding." })
-  .max(16, { message: "at most 16 MCP tool bindings per artifact." })
+  .max(MCP_TOOL_BINDING_MAX_ENTRIES, {
+    message: `at most ${MCP_TOOL_BINDING_MAX_ENTRIES} MCP tool bindings per artifact.`,
+  })
   .readonly()
   .refine(
     (bindings) => {
@@ -98,15 +107,29 @@ export type McpToolBindingSource = "declared" | "derived";
  *
  * Precedence: a declared `mcpTools` field wins entirely (result
  * marked `declared`; derivation never runs, no merge). Otherwise,
- * blueprint manifests with a contract derive the deduped union of
- * `contract.propsSpec.properties[*].sourceTool` and
- * `contract.streamSpec[*].source.tool` as bare `{tool}` entries
- * (contracts carry no server identity), marked `derived` — props
- * entries in declaration order, then stream channels, first
- * occurrence kept. Returns `undefined` when nothing declares or
- * derives (gadgets without `mcpTools`, contract-less blueprints,
- * contracts naming no tools) — such artifacts are simply not
- * findable by tool.
+ * blueprint manifests with a contract derive bare `{tool}` entries
+ * from the union of `contract.propsSpec.properties[*].sourceTool`
+ * and `contract.streamSpec[*].source.tool` (contracts carry no
+ * server identity), marked `derived`. Derivation stays INSIDE the
+ * same envelope a declared list is validated against — it composes
+ * the envelope, it does not relax it:
+ *
+ *   - Every candidate tool name is filtered through
+ *     {@link MCP_TOOL_BINDING_NAME_RE}; a name failing the charset
+ *     (including the empty string — just one case of the charset
+ *     filter) is dropped silently rather than rejected. Contract
+ *     lineage is agent/tool-authored data, not an author
+ *     declaration, so malformed lineage is noise to filter, not a
+ *     manifest error.
+ *   - Survivors are deduped first-seen — props entries in
+ *     declaration order, then stream channels in declaration order —
+ *     then capped at {@link MCP_TOOL_BINDING_MAX_ENTRIES} in that
+ *     same first-appearance order, matching the bound a declared
+ *     list is schema-capped at.
+ *
+ * Returns `undefined` when nothing declares or derives (gadgets
+ * without `mcpTools`, contract-less blueprints, contracts naming no
+ * valid tools) — such artifacts are simply not findable by tool.
  */
 export function resolveMcpToolBindings(
   manifest: GadgetManifest | BlueprintManifest
@@ -120,7 +143,7 @@ export function resolveMcpToolBindings(
   const seen = new Set<string>();
   const tools: string[] = [];
   const add = (tool: string | undefined): void => {
-    if (tool === undefined || tool.length === 0 || seen.has(tool)) return;
+    if (tool === undefined || !MCP_TOOL_BINDING_NAME_RE.test(tool) || seen.has(tool)) return;
     seen.add(tool);
     tools.push(tool);
   };
@@ -131,5 +154,6 @@ export function resolveMcpToolBindings(
     add(entry.source?.tool);
   }
   if (tools.length === 0) return undefined;
-  return { source: "derived", bindings: tools.map((tool) => ({ tool })) };
+  const capped = tools.slice(0, MCP_TOOL_BINDING_MAX_ENTRIES);
+  return { source: "derived", bindings: capped.map((tool) => ({ tool })) };
 }
