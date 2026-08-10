@@ -141,6 +141,38 @@
  * extending it over the existing fixture catalog would be a MAJOR, not
  * a minor, and must be adjudicated as one.
  *
+ * #471 (2026-08-10): the fetch-free delivery surface — a MINOR for the
+ * `@ggui-ai/protocol` wave, deferred to the next cut under the same
+ * one-wave-version rule as above. Three additive pieces, one shared
+ * motivation (hosts whose iframe CSP forbids every URL-scheme load
+ * while permitting inline scripts):
+ *
+ *   if1. **`McpAppAiGguiRenderMeta.codeB64`** — optional base64
+ *      compiled component source, the fetch-free twin of `codeUrl`
+ *      (coexists with it; exclusive with `kind`). Every envelope that
+ *      parsed before parses identically; the parser's new rejection
+ *      arm (`codeB64` + `kind` both set) rejects a shape no producer
+ *      ever emitted. `hasMountModeDiscriminator` widens PERMISSIVELY
+ *      (a codeB64-only slice becomes mountable — previously
+ *      undefined, not different).
+ *
+ *   if2. **`GguiShellHtmlOptions.runtimeInlineSource` +
+ *      `escapeInlineScript`** — host-helper additions; the default
+ *      (external `<script src>`) emission is byte-unchanged.
+ *
+ *   if3. Consumer-side: `@ggui-ai/design` gains the inline-exec
+ *      module (new exports only); `@ggui-ai/mcp-server` gains the
+ *      `mcpApps.inlineRuntimeShell` opt-in (default OFF — the served
+ *      static shell is byte-unchanged for every existing mount) and
+ *      `registerGguiRenderResource` gains a trailing optional
+ *      CSP-fallback parameter (existing positional calls unchanged).
+ *
+ * Conformance-kit verdict: no fixture pins the render slice's closed
+ * field set (the slice is verbatim-carry by design — the host-helper
+ * suite's "unknown future fields ride along" case is the governing
+ * posture), so the additive field breaks nothing. PROTOCOL_VERSION
+ * unchanged — no wire frame changed shape.
+ *
  * --------------------------------------------------------------------
  * Credential-broker surface retired (2026-08-08, BREAKING, pre-launch,
  * ggui#436). The `system` frame's auth vocabulary and the
