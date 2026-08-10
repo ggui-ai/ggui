@@ -264,11 +264,31 @@ export interface GguiSearchBlueprintsOutput {
     /** Cosine similarity score (0-1). Higher = better match. Agents can use this
      *  to decide whether to use a blueprint or generate from scratch. */
     score: number;
+    /** Present only on registry-sourced entries — advisory candidates
+     *  appended after local results, never auto-mounted. */
+    origin?: 'registry';
+    /** Registry artifact id (`@scope/name`) — registry entries only. */
+    artifactId?: string;
+    /** Registry artifact version — registry entries only. */
+    version?: string;
+    /** MCP tool bindings the artifact declares (publisher claims, not
+     *  endorsements by the named server) — registry entries only. */
+    mcpTools?: ReadonlyArray<{ server?: string; tool: string }>;
+    /** Publisher-scope verification label — registry entries only. */
+    scopeVerification?: 'verified' | 'unverified';
   }>;
   /** Total matches found */
   total: number;
   /** The query that was searched */
   query: string;
+  /**
+   * Sources consulted but skipped this call (e.g. registry timeout).
+   * Present only when a source degraded; the tool call still succeeds.
+   */
+  degradedSources?: ReadonlyArray<{
+    source: 'registry';
+    reason: 'unreachable' | 'timeout' | 'invalid_response';
+  }>;
 }
 
 /**

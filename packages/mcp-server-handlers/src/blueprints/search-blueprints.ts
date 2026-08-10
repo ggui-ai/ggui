@@ -2,8 +2,8 @@
  * ggui_search_blueprints — search across every discoverable blueprint
  * on this server.
  *
- * Two sources are consulted in parallel, then merged + de-duplicated
- * by id:
+ * Up to three sources are consulted in parallel, then merged +
+ * de-duplicated by id:
  *
  *   1. **Manifest source** (optional `BlueprintProvider`) — authored
  *      UIs declared in `ggui.json#blueprints.include`. Matched by
@@ -18,6 +18,11 @@
  *      pair. Covers prior `ggui_render` cache entries + any other
  *      producer that has written into the scope. Continues to honor
  *      `MIN_SIMILARITY_SCORE`.
+ *
+ *   3. **Registry source** (optional, opt-in via deps.registry) —
+ *      bounded public /search call for published blueprint
+ *      candidates; appended after local hits, degrades typed on
+ *      failure.
  *
  * When both sources return the same id (a manifest blueprint that
  * also has a cached generation), the manifest entry wins — its
@@ -49,6 +54,8 @@ import type {
   VectorStore,
 } from '@ggui-ai/mcp-server-core';
 import {
+  bundleHostScheme,
+  DEFAULT_BUNDLE_HOST,
   flatToBlueprintSource,
   searchBlueprintsInputShape,
   type GguiSearchBlueprintsOutput,
@@ -78,6 +85,32 @@ export const MANIFEST_EXACT_NAME_SCORE = 1.0;
  */
 export const MANIFEST_SUBSTRING_SCORE = 0.7;
 
+/**
+ * Default budget for the registry `/search` round-trip. The registry
+ * source is advisory — a slow registry must never stall the local
+ * sources past this bound. Operator-overridable per-deps.
+ */
+export const DEFAULT_REGISTRY_SEARCH_TIMEOUT_MS = 3000;
+
+/**
+ * Registry-backed discovery source configuration. Presence of this
+ * object on `SearchBlueprintsDeps` ACTIVATES the source (opt-in —
+ * a zero-config server never makes an outbound registry request).
+ */
+export interface SearchBlueprintsRegistrySource {
+  /**
+   * Registry host (`host[:port]`). Absent = `DEFAULT_BUNDLE_HOST`.
+   * Scheme derives via `bundleHostScheme` — http for loopback,
+   * https otherwise (the same resolution the gadget bundleHost
+   * uses).
+   */
+  readonly host?: string;
+  /** Fetch budget in ms. Default `DEFAULT_REGISTRY_SEARCH_TIMEOUT_MS`. */
+  readonly timeoutMs?: number;
+  /** Injectable fetch for tests. Defaults to the global fetch. */
+  readonly fetch?: typeof fetch;
+}
+
 export interface SearchBlueprintsDeps {
   readonly embedding: EmbeddingProvider;
   readonly vectors: VectorStore;
@@ -93,6 +126,13 @@ export interface SearchBlueprintsDeps {
    * `ManifestBlueprintProvider` at boot and threads it through.
    */
   readonly blueprints?: BlueprintProvider;
+  /**
+   * Optional registry discovery source. When bound, the handler
+   * queries the registry's public `/search` for published blueprint
+   * candidates and appends them after the local sources. Omitted =
+   * no outbound registry traffic (the zero-config default).
+   */
+  readonly registry?: SearchBlueprintsRegistrySource;
 }
 
 // Canonical SSoT shape — authored once in `@ggui-ai/protocol`
@@ -109,6 +149,14 @@ const outputSchema = {
   results: z.array(z.record(z.string(), z.unknown())),
   total: z.number().int().nonnegative(),
   query: z.string(),
+  degradedSources: z
+    .array(
+      z.object({
+        source: z.literal('registry'),
+        reason: z.enum(['unreachable', 'timeout', 'invalid_response']),
+      }),
+    )
+    .optional(),
 };
 
 /** One row on the merged result, before final serialization. */
@@ -130,22 +178,25 @@ export function createSearchBlueprintsHandler(
     title: 'Search blueprints',
     audience: ['agent'],
     description:
-      "Search this app's blueprints — both manifest-declared UIs (ggui.json#blueprints.include) and any previously cached generations. Matches by name/description against the manifest source and by cosine similarity against the semantic vector index. Returns entries ordered by score (descending). The agent can decide to reuse a match or generate from scratch.",
+      "Search this app's blueprints — manifest-declared UIs (ggui.json#blueprints.include), previously cached generations, and, when a registry is configured, published blueprint candidates from the artifact registry. Local sources match by name/description and cosine similarity; registry candidates are advisory matches appended after local results, labeled origin 'registry'. Optional tool/server filters narrow registry candidates to artifacts declaring those MCP tool bindings. The agent can decide to reuse a match or generate from scratch; installing a registry candidate remains a human/operator act.",
     inputSchema,
     outputSchema,
     async handler(
       rawInput: Record<string, unknown>,
       ctx: HandlerContext,
     ): Promise<GguiSearchBlueprintsOutput> {
-      const { query, limit = 10 } = z.object(inputSchema).parse(rawInput);
+      const { query, limit = 10, tool, server } = z
+        .object(inputSchema)
+        .parse(rawInput);
 
-      // Fan out both sources in parallel. The manifest source is a
+      // Fan out all sources in parallel. The manifest source is a
       // pure metadata read (cheap); the semantic source is one
-      // `embed` + one `query` round-trip. Running them concurrently
-      // keeps handler latency close to the slower of the two.
-      const [semantic, manifest] = await Promise.all([
+      // `embed` + one `query` round-trip; the registry source is a
+      // bounded HTTP call that degrades typed instead of throwing.
+      const [semantic, manifest, registry] = await Promise.all([
         searchSemantic(deps, ctx.appId, query, limit),
         searchManifest(deps.blueprints, query, limit),
+        searchRegistry(deps.registry, { query, tool, server, limit }, ctx.signal),
       ]);
 
       // Merge + dedupe by id. Manifest entries win on collision —
@@ -165,7 +216,17 @@ export function createSearchBlueprintsHandler(
 
       const merged = Array.from(byId.values()).sort((a, b) => b.score - a.score);
       const trimmed = merged.slice(0, limit);
-      return { results: trimmed, total: merged.length, query };
+
+      // Registry candidates append AFTER the local sources (advisory
+      // per the discovery design §3) and never displace a local id.
+      const registryHits = registry.hits.filter((hit) => !byId.has(hit.id));
+
+      return {
+        results: [...trimmed, ...registryHits],
+        total: merged.length + registryHits.length,
+        query,
+        ...(registry.degraded ? { degradedSources: [registry.degraded] } : {}),
+      };
     },
   };
 }
@@ -281,4 +342,130 @@ function asString(
   value: string | number | boolean | null | undefined,
 ): string {
   return typeof value === 'string' ? value : '';
+}
+
+type DegradedSource = NonNullable<GguiSearchBlueprintsOutput['degradedSources']>[number];
+
+interface RegistrySourceResult {
+  readonly hits: MergedHit[];
+  readonly degraded?: DegradedSource;
+}
+
+/**
+ * Wire subset of the registry `GET /search` response this handler
+ * consumes. Local on purpose: this package does not depend on the
+ * registry server implementation, and zod's default strip semantics
+ * keep the guard forward-compatible with response additions.
+ */
+const registrySearchEntrySchema = z.object({
+  artifactId: z.string().min(1),
+  latestVersion: z.string().min(1),
+  kind: z.string(),
+  description: z.string().optional(),
+  mcpTools: z.array(z.object({ server: z.string().optional(), tool: z.string() })).optional(),
+  scopeVerification: z.enum(['verified', 'unverified']).optional(),
+});
+
+const registrySearchResponseSchema = z.object({
+  results: z.array(registrySearchEntrySchema),
+});
+
+/**
+ * Registry-source branch: bounded public `/search` call. Inactive
+ * (empty hits, no degradation) when no registry source is
+ * configured. Never throws — every failure mode maps onto the typed
+ * `degraded` indication so the merged tool result always succeeds.
+ */
+async function searchRegistry(
+  registry: SearchBlueprintsRegistrySource | undefined,
+  filters: {
+    readonly query: string;
+    readonly tool: string | undefined;
+    readonly server: string | undefined;
+    readonly limit: number;
+  },
+  signal: AbortSignal | undefined,
+): Promise<RegistrySourceResult> {
+  if (!registry) return { hits: [] };
+
+  // Operator-override-then-default host resolution — the same
+  // precedence + scheme rule as gadget bundleHost (`DEFAULT_BUNDLE_HOST`
+  // + `bundleHostScheme` from `@ggui-ai/protocol`).
+  const host =
+    typeof registry.host === 'string' && registry.host.length > 0
+      ? registry.host
+      : DEFAULT_BUNDLE_HOST;
+  const params = new URLSearchParams();
+  params.set('q', filters.query);
+  // This tool's kind scope is blueprints; gadget discovery is served
+  // by the registry HTTP surface directly.
+  params.set('kind', 'blueprint');
+  if (filters.tool !== undefined) params.set('tool', filters.tool);
+  if (filters.server !== undefined) params.set('server', filters.server);
+  params.set('limit', String(filters.limit));
+  const url = `${bundleHostScheme(host)}://${host}/search?${params.toString()}`;
+
+  const timeoutMs = registry.timeoutMs ?? DEFAULT_REGISTRY_SEARCH_TIMEOUT_MS;
+  const signals = [AbortSignal.timeout(timeoutMs)];
+  if (signal) signals.push(signal);
+  const fetchImpl = registry.fetch ?? fetch;
+
+  let res: Response;
+  try {
+    res = await fetchImpl(url, {
+      method: 'GET',
+      headers: { accept: 'application/json' },
+      signal: AbortSignal.any(signals),
+    });
+  } catch (err) {
+    const reason: DegradedSource['reason'] =
+      err instanceof Error && err.name === 'TimeoutError' ? 'timeout' : 'unreachable';
+    return { hits: [], degraded: { source: 'registry', reason } };
+  }
+  if (!res.ok) {
+    return {
+      hits: [],
+      degraded: { source: 'registry', reason: 'invalid_response' },
+    };
+  }
+  let body: unknown;
+  try {
+    body = await res.json();
+  } catch {
+    return {
+      hits: [],
+      degraded: { source: 'registry', reason: 'invalid_response' },
+    };
+  }
+  const parsed = registrySearchResponseSchema.safeParse(body);
+  if (!parsed.success) {
+    return {
+      hits: [],
+      degraded: { source: 'registry', reason: 'invalid_response' },
+    };
+  }
+  return { hits: parsed.data.results.map(toRegistryHit) };
+}
+
+function toRegistryHit(entry: z.infer<typeof registrySearchEntrySchema>): MergedHit {
+  return {
+    id: `${entry.artifactId}@${entry.latestVersion}`,
+    name: entry.artifactId,
+    description: entry.description ?? '',
+    category: entry.kind,
+    // Registry search rows carry no contract details — honest empties.
+    props: [],
+    callbacks: [],
+    featured: false,
+    relevance: 'match' as const,
+    // The registry source computes no similarity. Entries always
+    // append AFTER the score-sorted local sources, so this value
+    // carries no ranking weight; 0 is the honest "not measured".
+    score: 0,
+    origin: 'registry' as const,
+    artifactId: entry.artifactId,
+    version: entry.latestVersion,
+    ...(entry.mcpTools ? { mcpTools: entry.mcpTools } : {}),
+    ...(entry.scopeVerification ? { scopeVerification: entry.scopeVerification } : {}),
+  };
 }

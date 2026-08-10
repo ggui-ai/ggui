@@ -360,3 +360,161 @@ describe('createSearchBlueprintsHandler — manifest + semantic merge', () => {
     expect(result.results.find((r) => r.id === 'c_secret-cached')).toBeUndefined();
   });
 });
+
+describe('registry source', () => {
+  function capturingFetch(
+    body: unknown,
+    opts: { status?: number } = {},
+  ): { fetch: typeof fetch; calls: string[] } {
+    const calls: string[] = [];
+    const impl: typeof fetch = async (input) => {
+      calls.push(String(input));
+      return new Response(JSON.stringify(body), {
+        status: opts.status ?? 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    };
+    return { fetch: impl, calls };
+  }
+
+  const registryBody = {
+    results: [
+      {
+        artifactId: '@acme/weather-card',
+        latestVersion: '1.2.0',
+        kind: 'blueprint',
+        description: 'Weather card UI',
+        publishedAt: '2026-08-01T00:00:00.000Z',
+        mcpTools: [{ server: 'weather', tool: 'get_weather' }],
+        mcpToolsSource: 'declared',
+        scopeVerification: 'verified',
+        verifiedDomain: 'acme.dev',
+      },
+    ],
+  };
+
+  it('merges registry hits after local sources, labeled origin registry', async () => {
+    const { embedding, vectors } = makeDeps();
+    await seed(embedding, vectors, 'app-a', 'bp_weather', 'weather card');
+    const { fetch: fetchImpl } = capturingFetch(registryBody);
+    const handler = createSearchBlueprintsHandler({
+      embedding,
+      vectors,
+      registry: { fetch: fetchImpl },
+    });
+    const result = await handler.handler({ query: 'weather card' }, ctx);
+    const registryHit = result.results.find((r) => r.origin === 'registry');
+    expect(registryHit).toBeDefined();
+    expect(registryHit?.id).toBe('@acme/weather-card@1.2.0');
+    expect(registryHit?.artifactId).toBe('@acme/weather-card');
+    expect(registryHit?.version).toBe('1.2.0');
+    expect(registryHit?.mcpTools).toEqual([{ server: 'weather', tool: 'get_weather' }]);
+    expect(registryHit?.scopeVerification).toBe('verified');
+    // Registry candidates append AFTER every local hit.
+    expect(result.results[result.results.length - 1]?.origin).toBe('registry');
+    expect(result.degradedSources).toBeUndefined();
+  });
+
+  it('resolves the host with bundleHost precedence — default registry.ggui.ai, loopback override goes http', async () => {
+    const { embedding, vectors } = makeDeps();
+    const a = capturingFetch({ results: [] });
+    await createSearchBlueprintsHandler({
+      embedding,
+      vectors,
+      registry: { fetch: a.fetch },
+    }).handler({ query: 'weather' }, ctx);
+    expect(a.calls[0]?.startsWith('https://registry.ggui.ai/search?')).toBe(true);
+
+    const b = capturingFetch({ results: [] });
+    await createSearchBlueprintsHandler({
+      embedding,
+      vectors,
+      registry: { host: 'localhost:4873', fetch: b.fetch },
+    }).handler({ query: 'weather' }, ctx);
+    expect(b.calls[0]?.startsWith('http://localhost:4873/search?')).toBe(true);
+  });
+
+  it('passes tool/server filters through to the registry query', async () => {
+    const { embedding, vectors } = makeDeps();
+    const { fetch: fetchImpl, calls } = capturingFetch({ results: [] });
+    const handler = createSearchBlueprintsHandler({
+      embedding,
+      vectors,
+      registry: { fetch: fetchImpl },
+    });
+    await handler.handler({ query: 'weather', tool: 'get_weather', server: 'weather' }, ctx);
+    const url = new URL(calls[0] ?? '');
+    expect(url.searchParams.get('q')).toBe('weather');
+    expect(url.searchParams.get('kind')).toBe('blueprint');
+    expect(url.searchParams.get('tool')).toBe('get_weather');
+    expect(url.searchParams.get('server')).toBe('weather');
+  });
+
+  it('rejects tool filter values outside the MCP tool-name charset', async () => {
+    const { embedding, vectors } = makeDeps();
+    const handler = createSearchBlueprintsHandler({ embedding, vectors });
+    await expect(handler.handler({ query: 'weather', tool: 'bad tool!' }, ctx)).rejects.toThrow();
+  });
+
+  it('degrades typed on registry timeout — never a tool failure', async () => {
+    const { embedding, vectors } = makeDeps();
+    await seed(embedding, vectors, 'app-a', 'bp_weather', 'weather card');
+    const hangingFetch: typeof fetch = (_input, init) =>
+      new Promise((_resolve, reject) => {
+        const signal = init?.signal;
+        if (!signal) return;
+        signal.addEventListener('abort', () => reject(signal.reason));
+      });
+    const handler = createSearchBlueprintsHandler({
+      embedding,
+      vectors,
+      registry: { timeoutMs: 25, fetch: hangingFetch },
+    });
+    const result = await handler.handler({ query: 'weather card' }, ctx);
+    expect(result.degradedSources).toEqual([{ source: 'registry', reason: 'timeout' }]);
+    // Local sources survive the degraded registry.
+    expect(result.total).toBeGreaterThan(0);
+  });
+
+  it('degrades typed when the registry is unreachable', async () => {
+    const { embedding, vectors } = makeDeps();
+    const failingFetch: typeof fetch = async () => {
+      throw new TypeError('fetch failed');
+    };
+    const handler = createSearchBlueprintsHandler({
+      embedding,
+      vectors,
+      registry: { fetch: failingFetch },
+    });
+    const result = await handler.handler({ query: 'weather' }, ctx);
+    expect(result.degradedSources).toEqual([{ source: 'registry', reason: 'unreachable' }]);
+  });
+
+  it('degrades typed on a non-OK or malformed registry response', async () => {
+    const { embedding, vectors } = makeDeps();
+    const { fetch: serverError } = capturingFetch({ error: 'boom' }, { status: 500 });
+    const r1 = await createSearchBlueprintsHandler({
+      embedding,
+      vectors,
+      registry: { fetch: serverError },
+    }).handler({ query: 'weather' }, ctx);
+    expect(r1.degradedSources).toEqual([{ source: 'registry', reason: 'invalid_response' }]);
+
+    const notJson: typeof fetch = async () => new Response('<html>', { status: 200 });
+    const r2 = await createSearchBlueprintsHandler({
+      embedding,
+      vectors,
+      registry: { fetch: notJson },
+    }).handler({ query: 'weather' }, ctx);
+    expect(r2.degradedSources).toEqual([{ source: 'registry', reason: 'invalid_response' }]);
+  });
+
+  it('keeps the registry source inactive when no registry dep is configured', async () => {
+    const { embedding, vectors } = makeDeps();
+    await seed(embedding, vectors, 'app-a', 'bp_weather', 'weather card');
+    const handler = createSearchBlueprintsHandler({ embedding, vectors });
+    const result = await handler.handler({ query: 'weather card' }, ctx);
+    expect(result.degradedSources).toBeUndefined();
+    expect(result.results.every((r) => r.origin === undefined)).toBe(true);
+  });
+});

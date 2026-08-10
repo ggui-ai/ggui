@@ -26,11 +26,15 @@
 
 export {
   createSearchBlueprintsHandler,
+  DEFAULT_REGISTRY_SEARCH_TIMEOUT_MS,
   MIN_SIMILARITY_SCORE,
   MANIFEST_EXACT_NAME_SCORE,
   MANIFEST_SUBSTRING_SCORE,
 } from './search-blueprints.js';
-export type { SearchBlueprintsDeps } from './search-blueprints.js';
+export type {
+  SearchBlueprintsDeps,
+  SearchBlueprintsRegistrySource,
+} from './search-blueprints.js';
 export { createListFeaturedBlueprintsHandler } from './list-featured-blueprints.js';
 export type {
   ListFeaturedBlueprintsDeps,

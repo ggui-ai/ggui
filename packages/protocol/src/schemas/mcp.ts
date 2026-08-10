@@ -127,6 +127,24 @@ export const searchBlueprintsInputShape = {
     .min(1)
     .describe("Natural-language description of the UI you're looking for"),
   limit: z.number().int().min(1).max(100).optional(),
+  // Charset mirrors `MCP_TOOL_BINDING_NAME_RE` in
+  // `@ggui-ai/artifact-manifest` (src/mcp-tool-bindings.ts). Inlined:
+  // protocol cannot import artifact-manifest — the dependency points
+  // the other way.
+  tool: z
+    .string()
+    .regex(/^[A-Za-z0-9_.-]{1,128}$/)
+    .optional()
+    .describe(
+      "Filter registry-sourced candidates to artifacts declaring a binding for this exact MCP tool name (case-sensitive). Local results are unaffected.",
+    ),
+  server: z
+    .string()
+    .regex(/^[A-Za-z0-9_.-]{1,128}$/)
+    .optional()
+    .describe(
+      "Filter registry-sourced candidates to artifacts declaring a binding for this exact MCP server name (case-sensitive). Combine with `tool` to require the exact (server, tool) pair.",
+    ),
 } as const;
 
 export const searchBlueprintsInputSchema = z.object(searchBlueprintsInputShape);
