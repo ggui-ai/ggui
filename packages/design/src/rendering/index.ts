@@ -12,6 +12,12 @@ export { stripMarkers } from './strip-markers';
 export { getCssTokens, getScopedCssTokens, getThemeCss, getScopedThemeCss } from './css-tokens';
 export { rewriteImports } from './rewrite-imports';
 export type { RewriteOptions, DataUrlOptions, ImportmapOptions } from './rewrite-imports';
-// loadModule is browser-only (uses dynamic import()) and is exported via
-// @ggui-ai/design/module-loader to avoid pulling it into React Native bundles
-// through this barrel. See module-loader.ts for the implementation.
+export {
+  resolveInlineSpecifier,
+  transformForInlineExec,
+  INLINE_EXEC_HANDOFF_GLOBAL,
+} from './inline-exec';
+export type { InlineExecOptions } from './inline-exec';
+// loadModule / loadModuleInline are browser-only and are exported via
+// @ggui-ai/design/module-loader to avoid pulling them into React Native
+// bundles through this barrel. See module-loader.ts for the implementation.

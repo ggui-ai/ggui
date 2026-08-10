@@ -5,6 +5,12 @@
  * via a temporary blob URL. Used by ReactComponentRenderer to instantiate
  * generated components inline (no iframe).
  */
+import {
+  INLINE_EXEC_HANDOFF_GLOBAL,
+  resolveInlineSpecifier,
+  transformForInlineExec,
+  type InlineExecOptions,
+} from './inline-exec';
 
 /**
  * Hoist static `import` declarations to the top of the module.
@@ -60,5 +66,61 @@ export async function loadModule(code: string): Promise<Record<string, unknown>>
     return await import(/* webpackIgnore: true */ /* @vite-ignore */ url);
   } finally {
     URL.revokeObjectURL(url);
+  }
+}
+
+/**
+ * Execute compiled ESM code as an INLINE classic script and return its
+ * exports — the CSP-resilient fallback to {@link loadModule} for host
+ * pages whose `script-src` grants only `'unsafe-inline'` (no `blob:`,
+ * no `data:`, no external origins), where every URL-based module load
+ * is blocked while inline `<script>` elements still execute.
+ *
+ * The code is rewritten by `transformForInlineExec` (imports → bindings
+ * resolved from the `globalThis.__ggui__` registry via
+ * `resolveInlineSpecifier`, exports → handoff assignments) and
+ * evaluated SYNCHRONOUSLY: dynamically-inserted classic scripts run on
+ * append, so the exports are available on return without a task hop.
+ *
+ * Pass the RAW compiled code (markers stripped, imports NOT rewritten
+ * to data-URLs) — the transform consumes the original bare specifiers.
+ *
+ * **Browser-only** — requires `document`.
+ *
+ * @param code - Compiled ESM code with bare import specifiers
+ * @param opts - Gadget-package allowlist forwarded to the resolver
+ * @returns Module exports as a key-value record
+ */
+export function loadModuleInline(
+  code: string,
+  opts?: InlineExecOptions,
+): Record<string, unknown> {
+  interface Handoff {
+    resolve: (spec: string) => Record<string, unknown>;
+    exports: Record<string, unknown>;
+    error?: unknown;
+    ran?: boolean;
+  }
+  const handoff: Handoff = {
+    resolve: (spec) => resolveInlineSpecifier(spec, opts),
+    exports: {},
+  };
+  const scope = globalThis as Record<string, unknown>;
+  const transformed = transformForInlineExec(code);
+  scope[INLINE_EXEC_HANDOFF_GLOBAL] = handoff;
+  try {
+    const script = document.createElement('script');
+    script.textContent = transformed;
+    document.head.appendChild(script);
+    script.remove();
+    if (handoff.error !== undefined) throw handoff.error;
+    if (handoff.ran !== true) {
+      throw new Error(
+        'loadModuleInline: the inline script did not execute — the host CSP blocks inline scripts as well as URL-based module loads.',
+      );
+    }
+    return handoff.exports;
+  } finally {
+    delete scope[INLINE_EXEC_HANDOFF_GLOBAL];
   }
 }
