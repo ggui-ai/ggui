@@ -14,7 +14,11 @@
  * 'blueprint'` as the discriminator. The field name `artifactId`
  * matches what the field actually contains.
  */
-import type { ArtifactManifest } from '@ggui-ai/artifact-manifest';
+import type {
+  ArtifactManifest,
+  McpToolBinding,
+  McpToolBindingSource,
+} from '@ggui-ai/artifact-manifest';
 import type { GadgetSignature } from '@ggui-ai/gadget-signing';
 import type { ConformanceFailureCode } from './ops/conformance.js';
 
@@ -58,6 +62,15 @@ export interface ArtifactsMetadataRow {
   readonly tags?: readonly string[];
   readonly visibility: Visibility;
   readonly hook?: string;
+  /**
+   * Denormalized MCP tool bindings of the latest version — stamped at
+   * publish from the manifest's declared `mcpTools`, or derived from a
+   * blueprint contract's tool names, so registry search can filter by
+   * tool without reading version rows.
+   */
+  readonly mcpTools?: ReadonlyArray<McpToolBinding>;
+  /** How the denormalized bindings were produced: declared on the manifest, or derived from the contract. */
+  readonly mcpToolsSource?: McpToolBindingSource;
   readonly authorName?: string;
   readonly publishedAt: string;
   readonly publishedBy: string;

@@ -51,6 +51,7 @@
 import {
   manifestToRegistryEntry,
   parseArtifactManifest,
+  resolveMcpToolBindings,
   type ArtifactManifest,
 } from '@ggui-ai/artifact-manifest';
 import {
@@ -860,6 +861,11 @@ export async function publishArtifact(
     // the manifest's `exports[]` is the source of truth.
     const primaryExport =
       manifest.kind === 'gadget' ? manifest.exports[0] : undefined;
+    // Denormalized search field — the effective MCP tool bindings
+    // (declared wins entirely; blueprints derive from their contract).
+    // Search metadata ONLY: never part of contract canonicalization,
+    // blueprintKey, or any cache identity.
+    const bindingResolution = resolveMcpToolBindings(manifest);
     const metadataRow: ArtifactsMetadataRow = {
       artifactId,
       sk: ARTIFACTS_METADATA_SK,
@@ -874,6 +880,8 @@ export async function publishArtifact(
           : 'hook' in primaryExport
             ? primaryExport.hook
             : primaryExport.component,
+      mcpTools: bindingResolution?.bindings,
+      mcpToolsSource: bindingResolution?.source,
       authorName: manifest.author?.name,
       publishedAt: nowIso,
       publishedBy: deps.authn.subject,

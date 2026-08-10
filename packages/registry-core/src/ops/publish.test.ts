@@ -548,6 +548,102 @@ describe('publishArtifact', () => {
     });
   });
 
+  describe('mcpTools metadata stamp (MCP discovery §2)', () => {
+    it('stamps declared bindings onto the metadata row as declared', async () => {
+      const manifest: ArtifactManifest = {
+        ...GADGET_MANIFEST,
+        mcpTools: [{ server: 'weather-server', tool: 'get_weather' }, { tool: 'get_forecast' }],
+      } as ArtifactManifest;
+      const f = await makeFixture(manifest);
+      const result = await publishArtifact(
+        {
+          manifest,
+          bundle: f.bundleB64,
+          bundleSha384: f.bundleSha384,
+          signature: f.signature,
+        },
+        {
+          storage: f.storage,
+          bundleStorage: f.bundleStorage,
+          authn: { subject: f.subject },
+          clock: () => new Date('2026-08-10T12:00:00.000Z'),
+          registryHostname: 'localhost:9001',
+        },
+      );
+      expect(result.ok).toBe(true);
+
+      const metadata = await f.storage.getArtifactMetadata('@test/weather');
+      expect(metadata?.mcpTools).toEqual([
+        { server: 'weather-server', tool: 'get_weather' },
+        { tool: 'get_forecast' },
+      ]);
+      expect(metadata?.mcpToolsSource).toBe('declared');
+    });
+
+    it('stamps contract-derived bindings for a blueprint without declared mcpTools', async () => {
+      const blueprintManifest: ArtifactManifest = {
+        kind: 'blueprint',
+        scope: '@test',
+        name: 'weather-panel',
+        version: '0.1.0',
+        visibility: 'private',
+        description: 'A weather panel blueprint',
+        source: 'export default function Panel(){ return <div>Panel</div>; }',
+        variance: { persona: 'casual-shopper', seedPrompt: 'A weather panel' },
+        contract: {
+          propsSpec: {
+            properties: {
+              temp: { schema: { type: 'number' }, sourceTool: 'get_weather' },
+            },
+          },
+          streamSpec: {
+            ticks: { schema: { type: 'object' }, source: { tool: 'stream_ticks' } },
+          },
+        },
+      } as ArtifactManifest;
+      const f = await makeFixture(blueprintManifest);
+      const result = await publishArtifact(
+        { manifest: blueprintManifest, signature: f.signature },
+        {
+          storage: f.storage,
+          bundleStorage: f.bundleStorage,
+          authn: { subject: f.subject },
+          clock: () => new Date('2026-08-10T12:00:00.000Z'),
+          registryHostname: 'localhost:9001',
+        },
+      );
+      expect(result.ok).toBe(true);
+
+      const metadata = await f.storage.getArtifactMetadata('@test/weather-panel');
+      expect(metadata?.mcpTools).toEqual([{ tool: 'get_weather' }, { tool: 'stream_ticks' }]);
+      expect(metadata?.mcpToolsSource).toBe('derived');
+    });
+
+    it('leaves the stamp absent when nothing declares or derives bindings', async () => {
+      const f = await makeFixture();
+      const result = await publishArtifact(
+        {
+          manifest: GADGET_MANIFEST,
+          bundle: f.bundleB64,
+          bundleSha384: f.bundleSha384,
+          signature: f.signature,
+        },
+        {
+          storage: f.storage,
+          bundleStorage: f.bundleStorage,
+          authn: { subject: f.subject },
+          clock: () => new Date('2026-08-10T12:00:00.000Z'),
+          registryHostname: 'localhost:9001',
+        },
+      );
+      expect(result.ok).toBe(true);
+
+      const metadata = await f.storage.getArtifactMetadata('@test/weather');
+      expect(metadata?.mcpTools).toBeUndefined();
+      expect(metadata?.mcpToolsSource).toBeUndefined();
+    });
+  });
+
   it('blueprint publish — no bundle, signature over canonical manifest bytes', async () => {
     const blueprintManifest: ArtifactManifest = {
       kind: 'blueprint',
