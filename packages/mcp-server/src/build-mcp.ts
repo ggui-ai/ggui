@@ -283,7 +283,12 @@ export function buildMcpServer(
               ? [
                   {
                     type: 'text' as const,
-                    text: `REQUIRED NEXT CALL: ${nextStepHint} — the UI has interactive actions; make this call before ending your turn, and on an empty result call it again.`,
+                    // Ordered, not absolute: an agent mid-way through a
+                    // user instruction (domain tool calls, ggui_update)
+                    // must finish THAT work first — a bare "call consume
+                    // NOW" hijacked live agents into polling instead of
+                    // acting. The imperative is scoped to turn-END.
+                    text: `NEXT: the UI has interactive actions. After completing whatever tool calls this user turn requires, call ${nextStepHint} to await the user's gesture — do not end your turn without it, and on an empty result call it again.`,
                   },
                 ]
               : []),
