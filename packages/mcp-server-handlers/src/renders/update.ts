@@ -248,6 +248,27 @@ const inputSchema = {
   patch: z.record(z.string(), z.unknown()).optional(),
 } as const;
 
+/**
+ * Canonical JSON stringify — object keys sorted recursively so two
+ * semantically-equal JsonObjects compare equal regardless of key
+ * insertion order. Arrays keep positional order (order is meaning
+ * there). Used by the no-op gate; props are validated JsonObjects, so
+ * no cycles by construction.
+ */
+function stableStringify(value: unknown): string {
+  if (Array.isArray(value)) {
+    return `[${value.map(stableStringify).join(',')}]`;
+  }
+  if (value !== null && typeof value === 'object') {
+    const entries = Object.entries(value as Record<string, unknown>)
+      .filter(([, v]) => v !== undefined)
+      .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+      .map(([k, v]) => `${JSON.stringify(k)}:${stableStringify(v)}`);
+    return `{${entries.join(',')}}`;
+  }
+  return JSON.stringify(value) ?? 'null';
+}
+
 const outputSchema = {
   sessionId: z.string(),
   updated: z.boolean(),
@@ -262,12 +283,21 @@ const outputSchema = {
    * `_meta.ui.resourceUri`.
    */
   resourceUri: z.string(),
+  /**
+   * Present ONLY on a no-op: the patch validated and conformed but
+   * left props identical to the current state, so nothing was written
+   * and nothing changes on screen. Model-visible by design — the
+   * common producer of a no-op is an LLM echoing existing props back,
+   * and this is its only feedback channel.
+   */
+  warning: z.string().optional(),
 } as const;
 
 interface UpdateOutput {
   sessionId: string;
   updated: boolean;
   resourceUri: string;
+  warning?: string;
 }
 
 /**
@@ -425,6 +455,31 @@ export function createGguiUpdateHandler(
         render: renderTarget,
         ...patchInput,
       });
+
+      // No-op gate (#471 round-3 live finding): a CONFORMING patch that
+      // leaves the final props semantically identical to the current
+      // state is almost always an agent error — the live failure mode
+      // was an LLM echoing the card's existing props back (believing it
+      // had "switched" the UI) and telling the user the card changed
+      // while nothing on screen could. The contract validated it, the
+      // commit would apply it, and no signal existed anywhere. Make the
+      // non-change OBSERVABLE instead of silently committing: skip the
+      // write + fan-out (there is nothing to deliver) and return an
+      // honest `updated: false` with a model-visible warning telling
+      // the agent what to do instead.
+      const priorProps =
+        'props' in renderTarget && renderTarget.props !== undefined
+          ? (renderTarget.props as JsonObject)
+          : {};
+      if (stableStringify(finalProps) === stableStringify(priorProps)) {
+        return {
+          sessionId,
+          updated: false,
+          resourceUri: `${GGUI_RENDER_UI_META.resourceUri}/${sessionId}`,
+          warning:
+            'NO-OP: this patch left the props identical to the current state — nothing changed on screen. If you meant to refresh the UI, send values that actually differ; if the user’s gesture asks for a DIFFERENT surface (menu selection, navigation), run ggui_handshake + ggui_render for the next UI instead of updating this one.',
+        };
+      }
 
       // Persist via the commit seam — first-write mints, re-write
       // replaces visible-bits in place. Lifecycle fields owned by the

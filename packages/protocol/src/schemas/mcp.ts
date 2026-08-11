@@ -720,6 +720,15 @@ export const updateOutputSchema = z.object({
    * this export and the handler's inline schema must not drift.
    */
   resourceUri: z.string(),
+  /**
+   * Present ONLY on a no-op (`updated: false`): the patch conformed to
+   * the contract but left the final props semantically identical to
+   * the current state, so nothing was written and nothing changes on
+   * screen. Model-visible by design — the common producer of a no-op
+   * is an agent echoing existing props back believing it changed the
+   * UI, and this field is its feedback channel.
+   */
+  warning: z.string().optional(),
 });
 
 /**

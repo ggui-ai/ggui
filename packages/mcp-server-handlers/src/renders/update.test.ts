@@ -85,8 +85,10 @@ describe('createGguiUpdateHandler', () => {
       // Phase-B (flatten-render-identity): stackItemId → sessionId.
       // `resourceUri` is the spec-canonical MCP-Apps entry-point — same
       // `ui://ggui/render/{id}` URI `ggui_render` stamped on the initial
-      // mount, surfaced to SDKs that strip `_meta`.
-      expect(outKeys).toEqual(['resourceUri', 'sessionId', 'updated']);
+      // mount, surfaced to SDKs that strip `_meta`. `warning` is the
+      // no-op signal (#471 round-3): present only when a conforming
+      // patch changed nothing.
+      expect(outKeys).toEqual(['resourceUri', 'sessionId', 'updated', 'warning']);
     });
 
     it('carries the MCP Apps UI binding — same template as ggui_render (#471 revised lock)', () => {
@@ -122,6 +124,57 @@ describe('createGguiUpdateHandler', () => {
       expect((after?.render as ComponentGguiSession | undefined)?.props).toEqual({
         count: 7,
       });
+    });
+
+    it('a conforming ECHO patch is a no-op: updated=false + model-visible warning, no write, no fan-out (#471)', async () => {
+      // The live claude.ai failure: the agent merged the card's
+      // existing props back verbatim, got {updated:true}, and told the
+      // user the UI changed. The no-op gate makes the non-change
+      // observable — and skips the pointless commit + notifier.
+      const store = new InMemoryGguiSessionStore();
+      const { sessionId } = await seedRender({
+        store,
+        initialProps: { count: 3, label: 'menu' },
+      });
+      const notifier: PropsUpdateNotifier = {
+        sendPropsUpdate: vi.fn(async () => undefined),
+      };
+      const handler = createGguiUpdateHandler({
+        renderStore: store,
+        propsUpdateNotifier: notifier,
+      });
+
+      // Key order deliberately DIFFERS from the seed — semantic
+      // equality, not byte equality, decides the no-op.
+      const out = await handler.handler(
+        { sessionId, kind: 'merge' as const, patch: { label: 'menu', count: 3 } },
+        ctx(),
+      );
+
+      expect(out.updated).toBe(false);
+      expect(out.warning).toMatch(/NO-OP/);
+      expect(out.warning).toMatch(/ggui_handshake \+ ggui_render/);
+      expect(notifier.sendPropsUpdate).not.toHaveBeenCalled();
+      const after = await store.get(sessionId);
+      expect((after?.render as ComponentGguiSession | undefined)?.props).toEqual({
+        count: 3,
+        label: 'menu',
+      });
+    });
+
+    it('a REAL change stays updated=true with no warning', async () => {
+      const store = new InMemoryGguiSessionStore();
+      const { sessionId } = await seedRender({
+        store,
+        initialProps: { count: 3 },
+      });
+      const handler = createGguiUpdateHandler({ renderStore: store });
+      const out = await handler.handler(
+        { sessionId, kind: 'merge' as const, patch: { count: 4 } },
+        ctx(),
+      );
+      expect(out.updated).toBe(true);
+      expect(out.warning).toBeUndefined();
     });
 
     it('falls back to HandlerContext.sessionId when wire input omits it', async () => {
