@@ -188,9 +188,17 @@ describe('routeDispatch — submit-action bridge', () => {
       expect(rawMethods).not.toContain('ui/message');
     });
 
-    it('on relay response {ok:true} with consumerPresent absent → no ui/message doorbell', async () => {
-      // Agnostic host stripped `consumerPresent`; an active consume loop
-      // is assumed, so no doorbell fires.
+    it('on relay response {ok:true} with consumerPresent absent → doorbell RINGS (no confirmed consumer)', async () => {
+      // A field-stripping relay host (claude.ai normalizes the tool
+      // result) must be treated as "no confirmed consumer": without a
+      // live channel a drain_ack can never arrive, so assuming an
+      // active consume loop swallowed the gesture forever (the first
+      // #471 live retest). The doorbell is pointer-only and the pipe
+      // pop is exactly-once, so a redundant ring on a host that DOES
+      // have a consumer costs one empty ggui_consume. Servers that can
+      // answer always send an explicit `true` (the factory wires the
+      // registry unconditionally), which is the only shape that stays
+      // quiet — pinned by the neighboring consumerPresent:true case.
       transport.queueResponse('tools/call', {
         result: { structuredContent: { ok: true } },
       });
@@ -208,14 +216,46 @@ describe('routeDispatch — submit-action bridge', () => {
       await tick();
       await tick();
 
-      const transportMethods = transport.sent
-        .map((msg) => (msg as { method?: unknown }).method)
-        .filter((m): m is string => typeof m === 'string');
-      expect(transportMethods).not.toContain('ui/message');
       const rawMethods = postMessageSpy.mock.calls.map(
         (call) => (call[0] as { method?: unknown }).method,
       );
-      expect(rawMethods).not.toContain('ui/message');
+      expect(rawMethods).toContain('ui/message');
+    });
+
+    it('a text-only normalized relay result still classifies success and rings the doorbell', async () => {
+      // claude.ai's live behavior: the relayed CallToolResult arrives
+      // with ONLY a content[0].text block carrying the JSON payload —
+      // no structuredContent. The payload unwrap must parse the text
+      // tier or a successful enqueue reads as a failure (toast, no
+      // doorbell, latch pressure).
+      transport.queueResponse('tools/call', {
+        result: {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify({ ok: true, consumerPresent: false }),
+            },
+          ],
+        },
+      });
+
+      routeDispatch({
+        actionName: 'archive',
+        data: { id: 'msg_2' },
+        meta: {
+          sessionId: 'sess_1',
+          appId: 'app_1',
+        },
+        dispatchToolName: 'ggui_runtime_submit_action',
+      });
+
+      await tick();
+      await tick();
+
+      const rawMethods = postMessageSpy.mock.calls.map(
+        (call) => (call[0] as { method?: unknown }).method,
+      );
+      expect(rawMethods).toContain('ui/message');
     });
 
     it('on relay response {ok:true, consumerPresent:false} → pure-doorbell ui/message fires via RAW postMessage (pointer only, no payload)', async () => {

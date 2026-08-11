@@ -260,9 +260,33 @@ export function buildMcpServer(
           outcome: 'success',
           elapsedMs: Date.now() - start,
         });
+        // When the handler's output carries a `nextStep`, lead the
+        // model-visible content with the imperative in PLAIN TEXT.
+        // Burying the chain cue inside the JSON block proved fragile
+        // on live hosts (the first claude.ai #471 test: the agent
+        // rendered, never noticed `nextStep`, ended its turn, and the
+        // user's click had no listener). The JSON stays second —
+        // structured consumers read `structuredContent` anyway.
+        const nextStepHint =
+          validated !== null &&
+          typeof validated === 'object' &&
+          'nextStep' in validated &&
+          (validated as { nextStep?: { example?: unknown } }).nextStep &&
+          typeof (validated as { nextStep: { example?: unknown } }).nextStep
+            .example === 'string'
+            ? (validated as { nextStep: { example: string } }).nextStep.example
+            : undefined;
         return {
           structuredContent: validated,
           content: [
+            ...(nextStepHint !== undefined
+              ? [
+                  {
+                    type: 'text' as const,
+                    text: `REQUIRED NEXT CALL: ${nextStepHint} — the UI has interactive actions; make this call before ending your turn, and on an empty result call it again.`,
+                  },
+                ]
+              : []),
             { type: 'text' as const, text: JSON.stringify(validated) },
           ],
           ...(meta !== undefined ? { _meta: meta } : {}),

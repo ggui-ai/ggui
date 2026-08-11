@@ -641,9 +641,14 @@ export const renderOutputSchema = z.object({
     example: z.string(),
     args: z.object({
       sessionId: z.string(),
+      // The per-call long-poll window in seconds. Carried on the hint
+      // because consume's own default is 0 (single non-blocking
+      // drain): an agent copying a timeout-less hint gets an instant
+      // empty result and stops looping.
+      timeout: z.number(),
     }),
   }).optional().describe(
-    'Recovery hint — when the rendered contract has actions, points the agent at ggui_consume({sessionId}) for the inbound action loop. Absent for pure-display renders.',
+    'Required-next-call hint — when the rendered contract has actions, points the agent at ggui_consume({sessionId, timeout}) for the inbound action loop. Absent for pure-display renders.',
   ),
 });
 

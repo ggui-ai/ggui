@@ -13,10 +13,13 @@
  *
  * Sink-reachability gate — never render a dead affordance:
  *
- *   - `window.parent !== window` → a parent window exists, the
- *     `ggui:observe` envelope has somewhere to go → mount. Parents
- *     that don't understand the envelope ignore it (best-effort emit;
- *     one postMessage of cost).
+ *   - `window.parent !== window` → a parent window exists → this
+ *     module's own precondition holds. The CALLER (bootSequence)
+ *     additionally gates on a live sink: an injected `onObserve`
+ *     emitter, or a first-party embed host (the only parent that
+ *     consumes `ggui:observe`). Third-party MCP-Apps hosts drop the
+ *     envelope, so the affordance is NOT mounted there — a feedback
+ *     control that can never deliver feedback is worse than none.
  *   - `window.parent === window` → top-level tab (the `/r/<shortCode>`
  *     share-link viewer) → NO mount. There is no parent to receive
  *     the envelope, so a rendered affordance would drop every click

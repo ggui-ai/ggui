@@ -878,16 +878,25 @@ export async function bootSequence(opts: BootSequenceOptions): Promise<BootSeque
   // In-iframe UI-feedback affordance (ggui#244) — mounted adjacent to
   // the session root, gated inside the helper on `window.parent !==
   // window` (top-level `/r/<shortCode>` tabs have no `ggui:observe`
-  // egress, so they get NO affordance). Interaction emits a
-  // `ui-feedback` ObservabilityEvent through the boot path's emitter;
-  // when no emitter was injected the postMessage-to-parent default
-  // still gives the mounted affordance a live sink (the gate already
-  // proved a parent exists). Fire-and-forget: chrome never blocks or
-  // fails the boot.
-  void mountUiFeedbackChrome(doc, {
-    emit: onObserve ?? postObservabilityToParent,
-    sessionId: meta.sessionId,
-  });
+  // egress, so they get NO affordance) AND here on a LIVE SINK: an
+  // injected `onObserve` emitter, or a first-party embed host — the
+  // only parent that consumes the `ggui:observe` envelope
+  // (mcp-app-iframe-host answers `ui/initialize` with exactly this
+  // hostInfo name). Third-party MCP-Apps hosts (claude.ai, ChatGPT,
+  // Claude Desktop) drop the envelope on the floor, so rendering the
+  // affordance there is a dead control — the first #471 claude.ai
+  // retest surfaced it as unstyled clutter that could never deliver
+  // feedback anywhere. Fire-and-forget: chrome never blocks or fails
+  // the boot.
+  const feedbackSinkLive =
+    onObserve !== undefined ||
+    app.getHostVersion()?.name === 'ggui-iframe-runtime-embed-host';
+  if (feedbackSinkLive) {
+    void mountUiFeedbackChrome(doc, {
+      emit: onObserve ?? postObservabilityToParent,
+      sessionId: meta.sessionId,
+    });
+  }
 
   setStatus(refs, `Connecting to ${meta.sessionId}…`, 'connecting');
 
@@ -1881,6 +1890,50 @@ export function emitAudit(args: {
  * iframe-runtime then falls through to `ui/message` so the gesture
  * still reaches the agent on its next turn.
  */
+/**
+ * Unwrap the payload record of a relayed submit-action tool result.
+ * Three tiers, in order of fidelity:
+ *   1. `result.structuredContent` — spec-canonical hosts.
+ *   2. Fields directly on `result` — looser hosts.
+ *   3. `result.content[0].text` parsed as JSON — relay hosts that
+ *      NORMALIZE the CallToolResult down to its text block
+ *      (claude.ai's live behavior on the #471 retest: the enqueue
+ *      succeeded server-side, but the response arrived text-only and
+ *      classified as a failure, so no doorbell rang).
+ * Returns `null` when no tier yields an object — the caller treats
+ * that as fallback/unknown.
+ */
+function submitActionPayload(
+  resp: JsonRpcResponse,
+): Record<string, unknown> | null {
+  if (resp === null || typeof resp !== 'object') return null;
+  const result = (resp as { result?: unknown }).result;
+  if (result === null || typeof result !== 'object') return null;
+  const r = result as Record<string, unknown>;
+  if (r.structuredContent && typeof r.structuredContent === 'object') {
+    return r.structuredContent as Record<string, unknown>;
+  }
+  // Text-block tier BEFORE the bare-result tier when content exists:
+  // a normalized result's own top level carries only `content`, so
+  // probing it for payload fields would always miss anyway — but a
+  // parseable text block is decisive evidence of the real payload.
+  const content = r.content;
+  if (Array.isArray(content) && content.length > 0) {
+    const first = content[0] as Record<string, unknown> | undefined;
+    if (first && first.type === 'text' && typeof first.text === 'string') {
+      try {
+        const parsed: unknown = JSON.parse(first.text);
+        if (parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed)) {
+          return parsed as Record<string, unknown>;
+        }
+      } catch {
+        // Not JSON — fall through to the bare-result tier.
+      }
+    }
+  }
+  return r;
+}
+
 function classifySubmitActionResponse(
   resp: JsonRpcResponse,
 ): 'success' | 'fallback' {
@@ -1892,15 +1945,8 @@ function classifySubmitActionResponse(
   ) {
     return 'fallback';
   }
-  const result = (resp as { result?: unknown }).result;
-  if (result === null || typeof result !== 'object') return 'fallback';
-  const r = result as Record<string, unknown>;
-  // Spec-canonical hosts wrap tool output under `structuredContent`;
-  // looser hosts may surface fields directly on `result`.
-  const inner =
-    r.structuredContent && typeof r.structuredContent === 'object'
-      ? (r.structuredContent as Record<string, unknown>)
-      : r;
+  const inner = submitActionPayload(resp);
+  if (inner === null) return 'fallback';
   return inner.ok === true ? 'success' : 'fallback';
 }
 
@@ -1934,23 +1980,17 @@ function isRelayShapedFailure(resp: JsonRpcResponse | null): boolean {
 /**
  * Extract `consumerPresent` from a successful submit_action response.
  * Returns the boolean if present + well-typed; `undefined` otherwise
- * (server didn't wire the registry, agnostic host stripped the field,
- * or any non-`ok:true` shape — callers fall back to the 10s timer
- * path on `undefined`). Mirrors the structuredContent → result
- * unwrap of {@link classifySubmitActionResponse} so both reads agree
- * on which envelope tier carries the success payload.
+ * (agnostic host stripped the field, or any non-`ok:true` shape).
+ * `undefined` is treated by the dispatch gate as "no confirmed
+ * consumer" — the doorbell rings. Shares {@link submitActionPayload}
+ * with {@link classifySubmitActionResponse} so both reads agree on
+ * which envelope tier carries the payload.
  */
 function extractConsumerPresent(
   resp: JsonRpcResponse,
 ): boolean | undefined {
-  if (resp === null || typeof resp !== 'object') return undefined;
-  const result = (resp as { result?: unknown }).result;
-  if (result === null || typeof result !== 'object') return undefined;
-  const r = result as Record<string, unknown>;
-  const inner =
-    r.structuredContent && typeof r.structuredContent === 'object'
-      ? (r.structuredContent as Record<string, unknown>)
-      : r;
+  const inner = submitActionPayload(resp);
+  if (inner === null) return undefined;
   const flag = inner.consumerPresent;
   return typeof flag === 'boolean' ? flag : undefined;
 }
@@ -2863,16 +2903,25 @@ export function dispatchSubmitAction(args: {
     }
     if (resp !== null && classifySubmitActionResponse(resp) === 'success') {
       const consumerPresent = extractConsumerPresent(resp);
-      if (consumerPresent === false) {
-        // No `ggui_consume` long-poll is draining this render's pipe,
-        // so the gesture needs a fresh agent turn. `ui/message` is the
-        // ONLY view→host method that can start one — a host that does
-        // not accept it cannot be woken by us at all, and the user has
-        // to send a message themselves (ggui#440).
+      if (consumerPresent !== true) {
+        // No `ggui_consume` long-poll is POSITIVELY confirmed to be
+        // draining this render's pipe, so the gesture needs a fresh
+        // agent turn. `ui/message` is the ONLY view→host method that
+        // can start one — a host that does not accept it cannot be
+        // woken by us at all, and the user has to send a message
+        // themselves (ggui#440).
         //
-        // The doorbell is posted either way: capability absence is an
-        // unconfirmed signal, not a proven "cannot", and a dropped
-        // postMessage costs nothing.
+        // `!== true` (not `=== false`) is load-bearing: a relay host
+        // that normalizes the tool result and strips the
+        // `consumerPresent` field (claude.ai's live behavior — the
+        // first #471 retest click died exactly here) must ring the
+        // doorbell, not wait forever for a drain_ack that cannot
+        // arrive without a live channel. The doorbell is pointer-only
+        // and the pipe pop is exactly-once, so a redundant ring on a
+        // field-stripping host with a live consumer costs one empty
+        // `ggui_consume`; servers that CAN answer always send an
+        // explicit `true` (the factory wires the registry
+        // unconditionally), so confirmed-consumer hosts stay quiet.
         showActionToast(
           hostCanReceiveMessages()
             ? `💬 ${intent}${dataPart} — agent not listening, sent to chat`
@@ -2887,9 +2936,9 @@ export function dispatchSubmitAction(args: {
         });
         return;
       }
-      // consumerPresent is true (or undefined — agnostic host stripped
-      // the field). Toast stays `pending`; drain_ack listener dismisses
-      // it when ggui_consume drains the event.
+      // consumerPresent === true — a live long-poll is confirmed
+      // draining the pipe. Toast stays `pending`; the drain_ack
+      // listener dismisses it when ggui_consume drains the event.
       return;
     }
 

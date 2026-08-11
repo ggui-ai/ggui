@@ -480,9 +480,16 @@ try{
  * deliberately untouched.
  */
 export function buildInlineRenderShellHtml(runtimeSource: string): string {
+  // No anchor div: the runtime appends its own mount target to
+  // `document.body` at boot, so a thin-shell-style `#ggui-root`
+  // placeholder here would just stack empty space ABOVE the rendered
+  // card (min-height'd blank div + content below it — the "long upper
+  // space" bug from the first claude.ai live test). Same
+  // no-container posture as `gguiShellHtml`; the shell marker rides
+  // on `<body>`.
   return `<!doctype html>
-<html lang="en" style="height:100%;background-color:${GGUI_RENDER_SHELL_SURFACE}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="color-scheme" content="light dark"><title>ggui render</title></head>
-<body style="margin:0;height:100%;min-height:480px;background-color:${GGUI_RENDER_SHELL_SURFACE}"><div id="ggui-root" data-ggui-shell="inline" style="height:100%;min-height:480px"></div>
+<html lang="en" style="background-color:${GGUI_RENDER_SHELL_SURFACE}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="color-scheme" content="light dark"><title>ggui render</title></head>
+<body style="margin:0;background-color:${GGUI_RENDER_SHELL_SURFACE}" data-ggui-shell="inline">
 <script>${GGUI_INLINE_SHELL_BUFFER_SCRIPT_BODY}</script>
 <script type="module" data-ggui-runtime="inline">${escapeInlineScript(runtimeSource)}</script></body></html>`;
 }

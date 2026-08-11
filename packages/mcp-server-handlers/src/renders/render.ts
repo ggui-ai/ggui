@@ -2131,10 +2131,16 @@ export function createGguiRenderHandler(
       const nextStep = hasActions
         ? {
             tool: 'ggui_consume' as const,
+            // Imperative + honest: `timeout` MUST ride the hint —
+            // consume's own default is 0 (single non-blocking drain),
+            // so an agent copying a timeout-less example gets an
+            // instant empty result and reasonably ends its turn (the
+            // first live claude.ai test died exactly this way). 25 is
+            // the server-enforced per-call cap (SPEC §7.3).
             description:
-              'Drain the action pipe for this render — long-polls until a user gesture arrives or 15s timeout.',
-            example: `ggui_consume({ sessionId: "${sessionId}" })`,
-            args: { sessionId },
+              "REQUIRED NEXT CALL — do not end your turn: the UI has interactive actions. Long-poll for the user's gesture now; each call waits up to 25s, and on an empty `events` array call it again until a gesture arrives.",
+            example: `ggui_consume({ sessionId: "${sessionId}", timeout: 25 })`,
+            args: { sessionId, timeout: 25 },
           }
         : undefined;
 
