@@ -157,6 +157,19 @@ export interface ConnectViaRegistryOptions {
    * absent).
    */
   readonly sse?: RegistrySseOptions;
+  /**
+   * Bridge-pull terminal-rung descriptor (WS → SSE → polling → bridge
+   * ladder). Same {@link RegistryPollingOptions} shape as `polling`
+   * because bridge-pull IS the polling algorithm on the `fetchBody`
+   * carrier — the event ledger pulled via `ggui_runtime_pull`
+   * `tools/call`s over the host's postMessage bridge instead of an
+   * HTTP URL. Composed at the runtime layer (`buildBridgePolling`
+   * bound to `app.callServerTool` + the shared ladder cursor)
+   * whenever the connected App handle exists; threaded verbatim to
+   * `bind()` like `sse`/`polling`. Absent → the ladder ends at
+   * whichever of the rungs above is armed.
+   */
+  readonly bridge?: RegistryPollingOptions;
 }
 
 /**
@@ -459,6 +472,7 @@ export function connectViaRegistry(
         onStatusChange: mappedStatusCallback,
         ...(opts.sse !== undefined ? { sse: opts.sse } : {}),
         ...(opts.polling !== undefined ? { polling: opts.polling } : {}),
+        ...(opts.bridge !== undefined ? { bridge: opts.bridge } : {}),
       })
       .then((bound) => {
         // bound is `AnyTransportHandle`. Composed URL + wsToken means

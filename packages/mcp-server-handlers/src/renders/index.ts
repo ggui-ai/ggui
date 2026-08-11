@@ -202,6 +202,10 @@ export {
 } from "./stream.js";
 export { createGguiSubmitActionHandler } from "./submit-action.js";
 export {
+  createGguiRuntimePullHandler,
+  type GguiRuntimePullHandlerDeps,
+} from "./runtime-pull.js";
+export {
   createGguiSyncContextHandler,
   type CreateGguiSyncContextHandlerDeps,
 } from "./sync-context.js";

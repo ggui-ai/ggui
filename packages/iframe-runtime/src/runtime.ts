@@ -88,7 +88,12 @@ import {
   type ConnectFn,
   type RegistrySubscribeHandle,
 } from './registry-subscribe.js';
-import { buildEventsPolling, createSequenceCursor } from './events-polling.js';
+import {
+  buildBridgePolling,
+  buildEventsPolling,
+  createSequenceCursor,
+} from './events-polling.js';
+import { unwrapCallToolResult } from './call-tool-unwrap.js';
 import {
   ensureStatusDom,
   setStatus,
@@ -1056,9 +1061,9 @@ export async function bootSequence(opts: BootSequenceOptions): Promise<BootSeque
   }
 
   // ── Live-channel subscribe (conditional enhancement). ──────────────
-  // Failover-ladder rung URLs (WS → SSE → polling), hoisted so the
-  // spreads below stay exact-optional-clean without non-null
-  // assertions. `sseUrl` is the server-stamped wsToken-gated
+  // Failover-ladder rung URLs (WS → SSE → polling → bridge-pull),
+  // hoisted so the spreads below stay exact-optional-clean without
+  // non-null assertions. `sseUrl` is the server-stamped wsToken-gated
   // `/api/sessions/<id>/stream` URL; SSE `id:` = ledger sequence = the
   // SAME cursor model as the WS `sinceSequence` replay and polling
   // ticks — switching rungs does not lose events.
@@ -1071,12 +1076,16 @@ export async function bootSequence(opts: BootSequenceOptions): Promise<BootSeque
       ? meta.pollingUrl
       : undefined;
   // One shared cursor for the whole ladder — SSE deliveries advance it
-  // (via onSequence), the polling descriptor reads it per tick, so an
-  // SSE→polling demotion resumes from the last streamed event instead
-  // of re-replaying from the boot snapshot. Created only when a
-  // fallback rung exists.
+  // (via onSequence), the polling + bridge descriptors read it per
+  // tick, so a demotion down the ladder resumes from the last
+  // delivered event instead of re-replaying from the boot snapshot.
+  // Created when ANY fallback rung exists — including the bridge-pull
+  // rung, whose only precondition is a connected App handle (the
+  // universal floor: a CSP-jailed host stamps no sseUrl/pollingUrl,
+  // yet its `tools/call` postMessage bridge still reaches the ledger).
+  const bridgeApp = getCurrentApp();
   const ladderCursor =
-    sseUrl !== undefined || pollingBaseUrl !== undefined
+    sseUrl !== undefined || pollingBaseUrl !== undefined || bridgeApp !== null
       ? createSequenceCursor(meta.lastSequence ?? 0)
       : undefined;
   let handle: RegistrySubscribeHandle;
@@ -1113,10 +1122,11 @@ export async function bootSequence(opts: BootSequenceOptions): Promise<BootSeque
       onResubscribeAck: (ack) => {
         void applyAck(ack);
       },
-      // Failover-ladder fallback rungs (WS → SSE → polling), composed
-      // once at bind time from the server-stamped wsToken-gated URLs +
-      // `meta.lastSequence` (shared cursor seed). FailoverHandle
-      // descends a rung on each 'failed'; both absent → WS-only mode.
+      // Failover-ladder fallback rungs (WS → SSE → polling →
+      // bridge-pull), composed once at bind time from the
+      // server-stamped wsToken-gated URLs + `meta.lastSequence`
+      // (shared cursor seed). FailoverHandle descends a rung on each
+      // 'failed'; the bridge rung is terminal (never emits 'failed').
       //
       // Same cursor model as the WS subscribe `sinceSequence` replay
       // path — switching transports does not lose events.
@@ -1135,6 +1145,25 @@ export async function bootSequence(opts: BootSequenceOptions): Promise<BootSeque
         ? {
             polling: buildEventsPolling({
               baseUrl: pollingBaseUrl,
+              cursor: ladderCursor,
+            }),
+          }
+        : {}),
+      // Bridge-pull terminal rung — composed whenever the App handle
+      // is bound (it always is by this point in the boot: connectApp
+      // succeeded and setCurrentApp ran above), INDEPENDENT of
+      // sseUrl/pollingUrl presence. This is the universal floor for
+      // CSP-jailed hosts (claude.ai) where the iframe has no network
+      // path at all: the ledger is pulled via `ggui_runtime_pull`
+      // `tools/call`s over the host's postMessage bridge. Shares the
+      // SAME ladder cursor — a demotion into the bridge resumes from
+      // whatever the rungs above already delivered.
+      ...(bridgeApp !== null && ladderCursor !== undefined
+        ? {
+            bridge: buildBridgePolling({
+              callTool: (name, args) =>
+                bridgeApp.callServerTool({ name, arguments: args }),
+              sessionId: meta.sessionId,
               cursor: ladderCursor,
             }),
           }
@@ -1923,14 +1952,13 @@ export function emitAudit(args: {
  */
 /**
  * Unwrap the payload record of a relayed submit-action tool result.
- * Three tiers, in order of fidelity:
- *   1. `result.structuredContent` — spec-canonical hosts.
- *   2. Fields directly on `result` — looser hosts.
- *   3. `result.content[0].text` parsed as JSON — relay hosts that
- *      NORMALIZE the CallToolResult down to its text block
- *      (claude.ai's live behavior on the #471 retest: the enqueue
- *      succeeded server-side, but the response arrived text-only and
- *      classified as a failure, so no doorbell rang).
+ * Envelope-level shim over the shared 3-tier unwrap
+ * ({@link unwrapCallToolResult}: `structuredContent` →
+ * `content[0].text` parsed as JSON → bare result) — this wrapper only
+ * peels the JSON-RPC `result` field first. The tiers themselves are
+ * shared with the bridge-pull rung's `fetchBody` carrier
+ * (`events-polling.ts`) so both reads agree on which envelope tier
+ * carries the payload for a given host shape.
  * Returns `null` when no tier yields an object — the caller treats
  * that as fallback/unknown.
  */
@@ -1938,31 +1966,7 @@ function submitActionPayload(
   resp: JsonRpcResponse,
 ): Record<string, unknown> | null {
   if (resp === null || typeof resp !== 'object') return null;
-  const result = (resp as { result?: unknown }).result;
-  if (result === null || typeof result !== 'object') return null;
-  const r = result as Record<string, unknown>;
-  if (r.structuredContent && typeof r.structuredContent === 'object') {
-    return r.structuredContent as Record<string, unknown>;
-  }
-  // Text-block tier BEFORE the bare-result tier when content exists:
-  // a normalized result's own top level carries only `content`, so
-  // probing it for payload fields would always miss anyway — but a
-  // parseable text block is decisive evidence of the real payload.
-  const content = r.content;
-  if (Array.isArray(content) && content.length > 0) {
-    const first = content[0] as Record<string, unknown> | undefined;
-    if (first && first.type === 'text' && typeof first.text === 'string') {
-      try {
-        const parsed: unknown = JSON.parse(first.text);
-        if (parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed)) {
-          return parsed as Record<string, unknown>;
-        }
-      } catch {
-        // Not JSON — fall through to the bare-result tier.
-      }
-    }
-  }
-  return r;
+  return unwrapCallToolResult((resp as { result?: unknown }).result);
 }
 
 function classifySubmitActionResponse(

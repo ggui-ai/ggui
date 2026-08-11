@@ -21,25 +21,41 @@
  * ```
  *
  * Transport selection — an ordered failover ladder (ws → sse →
- * polling); each rung is armed only when its inputs are present:
+ * polling → bridge); each rung is armed only when its inputs are
+ * present:
  *   - `bootstrap.wsUrl + bootstrap.wsToken` present (both non-empty) →
  *     WS rung is primary. The handle keeps `kind: 'ws'` across
  *     demotions (consumers narrow on it for `send()`).
  *   - WS not viable but `opts.sse` present → SSE rung is primary
  *     (handle `kind: 'sse'`).
+ *   - Neither, but `opts.bridge` present → polling-primary ladder
+ *     (handle `kind: 'polling'`): [HTTP polling (budgeted) →] bridge.
  *   - Otherwise → `PollingTransport` directly (no ladder).
  *
  * **Failover** — when the active rung transitions to `'failed'`
  * (WS: never-opened fail-fast / retry-ladder exhaustion; SSE:
- * construct throw / liveness watchdog / terminal-close 2-strike), the
- * ladder disposes it and spins up the next rung with the same handler
- * map. Callers observe the demotion only as a synthetic
+ * construct throw / liveness watchdog / terminal-close 2-strike;
+ * budgeted HTTP polling: consecutive-tick-failure budget exhaustion),
+ * the ladder disposes it and spins up the next rung with the same
+ * handler map. Callers observe the demotion only as a synthetic
  * `'connecting'` re-entry via `onStatusChange` — `'failed'` is never
- * forwarded while a lower rung remains. Polling is the terminal rung
- * and never emits `'failed'` (per-tick errors are absorbed).
+ * forwarded while a lower rung remains.
+ *
+ * **Terminal rung** — never emits `'failed'`: per-tick errors are
+ * absorbed forever. Without `opts.bridge` that is the HTTP polling
+ * rung (with or without a descriptor — descriptor-less it sits
+ * inert-open), exactly as pre-bridge. With `opts.bridge` the bridge
+ * rung is terminal: the SAME PollingTransport algorithm on the
+ * `fetchBody` carrier (event-ledger pull over the host's `tools/call`
+ * postMessage bridge), and the HTTP polling rung — only armed when it
+ * has a descriptor — gets a registry-injected failure budget of
+ * {@link BRIDGED_POLLING_FAILURE_BUDGET} so it can demote. The bridge
+ * rung NEVER gets a budget.
+ *
  * Empirically required for MCP-Apps hosts whose iframe sandbox
  * refuses `wss://` regardless of `_meta.ui.csp.connectDomains`
- * (Claude Desktop is the known case).
+ * (Claude Desktop is the known case), and — for the bridge rung —
+ * hosts whose CSP jail blocks every network API outright (claude.ai).
  */
 
 import { PollingTransport } from './polling-transport.js';
@@ -49,6 +65,8 @@ import type {
   BindOptions,
   ChannelHandler,
   ChannelLogger,
+  PollingTransportHandle,
+  RegistryPollingOptions,
   RegistrySseOptions,
   SseTransportHandle,
   TransportKind,
@@ -56,6 +74,17 @@ import type {
   WsTransportHandle,
 } from './types.js';
 import { WSTransport, type SubscribeFrameBuilder } from './ws-transport.js';
+
+/**
+ * Failure budget the registry injects into the HTTP polling rung IFF
+ * a bridge rung sits below it in the ladder. Three consecutive failed
+ * ticks (~3 intervals) is enough signal that the network path is
+ * structurally jailed (CSP-blocked fetch fails instantly, so the
+ * demotion lands in well under a second on claude.ai) without
+ * false-positiving on a single transient blip. Never injected into
+ * the bridge rung — the terminal rung absorbs errors forever.
+ */
+const BRIDGED_POLLING_FAILURE_BUDGET = 3;
 
 export interface ChannelRegistryOptions {
   /**
@@ -144,10 +173,18 @@ export class ChannelRegistry {
 
   /**
    * Construct a `PollingTransport` from the bind opts. Shared between
-   * the initial selection path (no WS, no SSE) and the ladder's
-   * terminal rung (built when the previous rung reaches `'failed'`).
+   * the initial selection path (no WS, no SSE, no bridge) and the
+   * ladder's polling-family rungs — the HTTP polling rung (descriptor
+   * `opts.polling`, optionally with the registry-injected
+   * `failureBudget`) and the bridge rung (descriptor `opts.bridge`,
+   * never a budget).
    */
-  private buildPollingTransport(opts: BindOptions): PollingTransport {
+  private buildPollingTransport(
+    opts: BindOptions,
+    polling: RegistryPollingOptions | undefined,
+    onStatusChange?: (status: TransportStatus) => void,
+    failureBudget?: number,
+  ): PollingTransport {
     const { logger } = opts;
     const pollOpts: ConstructorParameters<typeof PollingTransport>[0] = {
       handlers: this.handlers,
@@ -158,7 +195,9 @@ export class ChannelRegistry {
       ...(this.opts.fetchImpl !== undefined
         ? { fetchImpl: this.opts.fetchImpl }
         : {}),
-      ...(opts.polling !== undefined ? { polling: opts.polling } : {}),
+      ...(polling !== undefined ? { polling } : {}),
+      ...(onStatusChange !== undefined ? { onStatusChange } : {}),
+      ...(failureBudget !== undefined ? { failureBudget } : {}),
     };
     return new PollingTransport(pollOpts);
   }
@@ -198,18 +237,47 @@ export class ChannelRegistry {
   private selectTransport(opts: BindOptions): InternalTransport {
     const { bootstrap, logger } = opts;
     const sse = opts.sse;
+    const polling = opts.polling;
+    const bridge = opts.bridge;
 
     const sseRung = (sseOpts: RegistrySseOptions): LadderRung => ({
       kind: 'sse',
       build: (onStatus) => this.buildSseTransport(opts, sseOpts, onStatus),
     });
-    const pollingRung: LadderRung = {
+    const httpPollingRung = (
+      descriptor: RegistryPollingOptions | undefined,
+      failureBudget?: number,
+    ): LadderRung => ({
       kind: 'polling',
-      // PollingTransport has no status callback surface — it is the
-      // terminal rung and never emits 'failed' (per-tick errors are
-      // absorbed), so the ladder has nothing to intercept.
-      build: () => this.buildPollingTransport(opts),
-    };
+      build: (onStatus) =>
+        this.buildPollingTransport(opts, descriptor, onStatus, failureBudget),
+    });
+    const bridgeRung = (descriptor: RegistryPollingOptions): LadderRung => ({
+      kind: 'bridge',
+      // No injected budget, ever — the bridge is the terminal rung and
+      // absorbs per-tick errors forever.
+      build: (onStatus) =>
+        this.buildPollingTransport(opts, descriptor, onStatus),
+    });
+
+    // Terminal-rung geometry. With a `bridge` descriptor the ladder
+    // tail is [polling?, bridge]: the HTTP polling rung — armed only
+    // when it has a descriptor — gets the registry-injected failure
+    // budget so it can demote, and the bridge rung (the SAME
+    // PollingTransport algorithm on the `fetchBody` carrier) is
+    // terminal. A bind with `bridge` but no `polling` ladders straight
+    // past HTTP polling (ws → sse → bridge). Without a bridge the tail
+    // is the classic single polling rung: never-fail, inert-open when
+    // descriptor-less.
+    const tailRungs: readonly LadderRung[] =
+      bridge !== undefined
+        ? [
+            ...(polling !== undefined
+              ? [httpPollingRung(polling, BRIDGED_POLLING_FAILURE_BUDGET)]
+              : []),
+            bridgeRung(bridge),
+          ]
+        : [httpPollingRung(polling)];
 
     const wsUrl = bootstrap.wsUrl;
     const wsToken = bootstrap.wsToken;
@@ -220,7 +288,7 @@ export class ChannelRegistry {
       wsToken.length > 0
     ) {
       // WS is viable — ladder: ws → [sse if descriptor present] →
-      // polling. The handle keeps `kind: 'ws'` across demotions;
+      // tail. The handle keeps `kind: 'ws'` across demotions;
       // consumers see each demotion as a `'connecting'` re-entry via
       // `onStatusChange`.
       const rungs: readonly LadderRung[] = [
@@ -241,7 +309,7 @@ export class ChannelRegistry {
           },
         },
         ...(sse !== undefined ? [sseRung(sse)] : []),
-        pollingRung,
+        ...tailRungs,
       ];
       return new WsFailoverHandle(
         new TransportLadder(rungs, opts.onStatusChange, logger),
@@ -249,13 +317,23 @@ export class ChannelRegistry {
       );
     }
     if (sse !== undefined) {
-      // SSE-primary — ladder: sse → polling. Honest `kind: 'sse'`:
+      // SSE-primary — ladder: sse → tail. Honest `kind: 'sse'`:
       // SSE-primary sessions never had an outbound channel.
       return new SseFailoverHandle(
-        new TransportLadder([sseRung(sse), pollingRung], opts.onStatusChange, logger),
+        new TransportLadder([sseRung(sse), ...tailRungs], opts.onStatusChange, logger),
       );
     }
-    return this.buildPollingTransport(opts);
+    if (bridge !== undefined) {
+      // Polling-primary — the tail IS the ladder: [HTTP polling
+      // (budgeted) →] bridge. Both rungs are PollingTransports, so
+      // the handle's public `kind: 'polling'` discriminator stays
+      // honest across the demotion. A bridge-only bind is a one-rung
+      // ladder whose `'failed'` (carrier misconfig) forwards verbatim.
+      return new PollingFailoverHandle(
+        new TransportLadder(tailRungs, opts.onStatusChange, logger),
+      );
+    }
+    return this.buildPollingTransport(opts, polling, opts.onStatusChange);
   }
 }
 
@@ -270,18 +348,29 @@ type InternalTransport =
   | SSETransport
   | PollingTransport
   | WsFailoverHandle
-  | SseFailoverHandle;
+  | SseFailoverHandle
+  | PollingFailoverHandle;
 
 /** Any concrete transport a ladder rung can build. */
 type RungTransport = WSTransport | SSETransport | PollingTransport;
 
+/**
+ * Ladder-rung label. The bridge rung IS a `PollingTransport` (public
+ * handle kind `'polling'`) running the `fetchBody` carrier — ruled
+ * "not a new class of channel" — so `'bridge'` exists only at the
+ * ladder layer for failover telemetry + test seams, NOT as a new
+ * public {@link TransportKind}.
+ */
+type RungKind = TransportKind | 'bridge';
+
 interface LadderRung {
-  readonly kind: TransportKind;
+  readonly kind: RungKind;
   /**
    * Deferred constructor for the rung's transport, closure-bound to
    * the `bind()` opts. Receives the ladder's status-interception
-   * callback; the polling rung ignores it (PollingTransport has no
-   * status callback and never emits `'failed'`).
+   * callback — every rung wires it (a budgeted HTTP polling rung
+   * emits `'failed'` on budget exhaustion; the terminal rung's only
+   * `'failed'` is carrier misconfig, forwarded verbatim).
    */
   readonly build: (onStatus: (status: TransportStatus) => void) => RungTransport;
 }
@@ -298,7 +387,8 @@ interface LadderRung {
  *     `channel_failover_swap {from, to, reason}`, builds + starts the
  *     next rung.
  *   - On the LAST rung, `'failed'` is forwarded verbatim (unreachable
- *     in practice: polling never emits `'failed'`).
+ *     in practice: the terminal rung never carries a failure budget,
+ *     so its only `'failed'` is a carrier-misconfigured descriptor).
  *
  * Status callbacks from an already-demoted rung are stale-guarded so
  * a zombie rung can never trigger a second demotion. `dispose()`
@@ -324,11 +414,12 @@ class TransportLadder {
   }
 
   /**
-   * Test seam — the kind of the currently active rung. Production
-   * code shouldn't introspect this; ladder tests use it to assert
-   * which rung is live without timing-coupled status sniffing.
+   * Test seam — the kind of the currently active rung ('bridge' is a
+   * ladder-layer label; its transport's public kind is 'polling').
+   * Production code shouldn't introspect this; ladder tests use it to
+   * assert which rung is live without timing-coupled status sniffing.
    */
-  get activeKind(): TransportKind {
+  get activeKind(): RungKind {
     return this.rungs[this.rungIndex].kind;
   }
 
@@ -400,8 +491,9 @@ class TransportLadder {
  * WS-primary ladder facade. Keeps `kind: 'ws' as const` across
  * demotions — consumers (iframe-runtime's registry-subscribe) narrow
  * on it once at bind time; the demotion is internal. `send()` only
- * works while the WS rung is active: both lower rungs (SSE, polling)
- * are inbound-only, so post-demotion sends are logged + dropped.
+ * works while the WS rung is active: every lower rung (SSE, polling,
+ * bridge) is inbound-only, so post-demotion sends are logged +
+ * dropped.
  */
 class WsFailoverHandle implements WsTransportHandle {
   readonly kind = 'ws' as const;
@@ -421,7 +513,7 @@ class WsFailoverHandle implements WsTransportHandle {
   }
 
   /** Test seam — see {@link TransportLadder.activeKind}. */
-  get activeKind(): TransportKind {
+  get activeKind(): RungKind {
     return this.ladder.activeKind;
   }
 
@@ -467,7 +559,43 @@ class SseFailoverHandle implements SseTransportHandle {
   }
 
   /** Test seam — see {@link TransportLadder.activeKind}. */
-  get activeKind(): TransportKind {
+  get activeKind(): RungKind {
+    return this.ladder.activeKind;
+  }
+
+  start(): void {
+    this.ladder.start();
+  }
+
+  async dispose(): Promise<void> {
+    await this.ladder.dispose();
+  }
+}
+
+/**
+ * Polling-primary ladder facade (`kind: 'polling'`) — used when the
+ * bind has neither WS nor SSE but DOES have a bridge descriptor, so
+ * the ladder is [HTTP polling (budgeted) →] bridge. Both rungs are
+ * `PollingTransport`s, so the public discriminator stays honest
+ * across the demotion. No `send()` — polling never had an outbound
+ * channel.
+ */
+class PollingFailoverHandle implements PollingTransportHandle {
+  readonly kind = 'polling' as const;
+
+  constructor(private readonly ladder: TransportLadder) {}
+
+  get status(): TransportStatus {
+    return this.ladder.status;
+  }
+
+  /** Test seam — see {@link TransportLadder.hasSwapped}. */
+  get hasSwapped(): boolean {
+    return this.ladder.hasSwapped;
+  }
+
+  /** Test seam — see {@link TransportLadder.activeKind}. */
+  get activeKind(): RungKind {
     return this.ladder.activeKind;
   }
 

@@ -927,6 +927,71 @@ describe('createGguiUpdateHandler — render-identity refresh (#430 slice 1)', (
     );
   });
 
+  /**
+   * Ledger append (transport-ladder ruling 19): the pull rungs (HTTP
+   * /events polling + ggui_runtime_pull bridge) read ONLY the event
+   * ledger — an update that never appends is invisible to every
+   * cursor-based reader (live evidence: #471 round-3 eventSequence
+   * stuck at 0 across real updates).
+   */
+  it('appends a props_update ledger event on a real change — pull rungs can see it', async () => {
+    const store = new InMemoryGguiSessionStore();
+    const { sessionId } = await seedRender({ store });
+    const handler = createGguiUpdateHandler({ renderStore: store });
+    await handler.handler(
+      { sessionId, kind: 'replace' as const, props: { count: 7 } },
+      ctx(),
+    );
+    const page = await store.listEventsSince(sessionId, 0, 10);
+    expect(page).not.toBeNull();
+    expect(page!.lastSequence).toBe(1);
+    expect(page!.events).toHaveLength(1);
+    // Canonical ledger taxonomy name — the client parse core maps
+    // 'ui.updated' → the 'props_update' frame type.
+    expect(page!.events[0]?.type).toBe('ui.updated');
+    expect(page!.events[0]?.data).toEqual({
+      sessionId,
+      props: { count: 7 },
+    });
+  });
+
+  it('a NO-OP update appends nothing to the ledger', async () => {
+    const store = new InMemoryGguiSessionStore();
+    const { sessionId } = await seedRender({ store });
+    const handler = createGguiUpdateHandler({ renderStore: store });
+    const seeded = await store.get(sessionId);
+    const currentProps =
+      (seeded?.render as ComponentGguiSession | undefined)?.props ?? {};
+    const out = await handler.handler(
+      { sessionId, kind: 'merge' as const, patch: { ...currentProps } },
+      ctx(),
+    );
+    expect(out.updated).toBe(false);
+    const page = await store.listEventsSince(sessionId, 0, 10);
+    expect(page!.events).toHaveLength(0);
+    expect(page!.lastSequence).toBe(0);
+  });
+
+  it('a throwing appendEvent does not fail the update call', async () => {
+    class ThrowingLedgerStore extends InMemoryGguiSessionStore {
+      override appendEvent(): Promise<number> {
+        return Promise.reject(new Error('ledger unavailable'));
+      }
+    }
+    const store = new ThrowingLedgerStore();
+    const { sessionId } = await seedRender({ store });
+    const handler = createGguiUpdateHandler({ renderStore: store });
+    const out = await handler.handler(
+      { sessionId, kind: 'replace' as const, props: { count: 7 } },
+      ctx(),
+    );
+    expect(out.updated).toBe(true);
+    const after = await store.get(sessionId);
+    expect(
+      (after?.render as ComponentGguiSession | undefined)?.props,
+    ).toEqual({ count: 7 });
+  });
+
   it('identity get() throwing falls back to the bare session URI without failing the call', async () => {
     const store = new InMemoryGguiSessionStore();
     const { sessionId } = await seedRender({ store });

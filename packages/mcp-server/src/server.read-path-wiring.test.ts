@@ -209,3 +209,64 @@ describe("createGguiServer — durable substrate reaches the resource read path"
     expect(render?.expiresAt).toBeLessThanOrEqual(after + OPERATOR_TTL_MS);
   });
 });
+
+describe("createGguiServer — ggui_runtime_pull follows the render seam", () => {
+  // `ggui_runtime_pull` is the terminal bridge-pull rung of the
+  // live-channel failover ladder (WS → SSE → HTTP polling →
+  // bridge-pull): a CSP-jailed MCP Apps iframe pulls the
+  // GguiSessionEvent ledger over the host's tools/call postMessage
+  // relay — the same ledger read the `GET /api/sessions/:id/events`
+  // route serves. Its registration is gated on the SAME render seam
+  // the resource read path above rides (`mcpApps` + a bound
+  // renderStore), because without render there is no ledger to serve.
+  //
+  // The pin exists because a dropped registration is quiet by
+  // construction: the handler package exports the factory, server.ts
+  // compiles without calling it, and every other rung of the ladder
+  // keeps working — the ONLY surface that goes dark is the one host
+  // (claude.ai-style CSP jail) that has no network rung to fall back
+  // to. tools/list is the observable seam, so that is what's pinned —
+  // present when render is bound, absent when it is not.
+  let fx: Fixture | null = null;
+
+  afterEach(async () => {
+    if (fx) {
+      await fx.close();
+      fx = null;
+    }
+  });
+
+  it("registers ggui_runtime_pull when render is bound", async () => {
+    // Substrate stores are irrelevant to the pull tool — the gate is
+    // `deps.render` alone, so the substrate-less boot is the cheaper
+    // fixture that still binds render.
+    fx = await boot({ withSubstrate: false });
+    const { tools } = await fx.client.listTools();
+    expect(tools.map((t) => t.name)).toContain("ggui_runtime_pull");
+  });
+
+  it("does NOT register ggui_runtime_pull when render is off", async () => {
+    // Default boot: no `renderChannel`, no `mcpApps`, no renderStore ⇒
+    // `defaultHandlers` receives no `render` deps. Advertising a pull
+    // tool with no ledger behind it would be a tools/list lie.
+    const server = createGguiServer({ logger: silentLogger });
+    const httpServer = await server.listen(0, "127.0.0.1");
+    const addr = httpServer.address();
+    if (!addr || typeof addr === "string") {
+      throw new Error("server.address() did not return AddressInfo");
+    }
+    const transport = new StreamableHTTPClientTransport(
+      new URL(`http://127.0.0.1:${addr.port}/mcp`),
+      { requestInit: { headers: { Authorization: "Bearer dev" } } },
+    );
+    const client = new Client({ name: "read-path-wiring-client", version: "0.0.1" });
+    await client.connect(transport);
+    try {
+      const { tools } = await client.listTools();
+      expect(tools.map((t) => t.name)).not.toContain("ggui_runtime_pull");
+    } finally {
+      await client.close();
+      await server.close();
+    }
+  });
+});

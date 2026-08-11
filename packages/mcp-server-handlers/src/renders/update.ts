@@ -525,10 +525,43 @@ export function createGguiUpdateHandler(
           : {}),
       });
 
+      // Ledger append — the delivery substrate for the PULL rungs of
+      // the failover ladder (HTTP `/events` polling and the
+      // `ggui_runtime_pull` bridge rung read ONLY the event ledger).
+      // Without this append a props update is invisible to every
+      // cursor-based reader: live evidence (#471 round-3 forensics)
+      // showed eventSequence stuck at 0 across real updates — pull
+      // clients would poll politely forever and receive nothing.
+      // Best-effort: persistence already succeeded, and the push
+      // planes (WS/SSE fan-out, forwarded tool-result slice) deliver
+      // independently of the ledger.
+      let committedForIdentity = committed;
+      try {
+        // `'ui.updated'` is the canonical LEDGER taxonomy name; the
+        // live-channel FRAME namespace calls the same thing
+        // `props_update`. The translation lives at the client parse
+        // core (events-polling), never here — the ledger speaks only
+        // taxonomy types.
+        const seq = await deps.renderStore.appendEvent({
+          sessionId,
+          type: 'ui.updated',
+          data: { sessionId, props: finalProps },
+        });
+        // The append advanced the row's high-water mark past the
+        // commit-time snapshot — thread the returned seq so the
+        // identity refresh records the ledger state INCLUDING this
+        // update's own event (record.seqAtLastCommit tracks the row).
+        committedForIdentity = { ...committed, eventSequence: seq };
+      } catch {
+        // Silent — a ledger hiccup must not fail the tool call; the
+        // pull rungs degrade to the ack/mount snapshot on next
+        // (re)subscribe, same recovery every reader already has.
+      }
+
       // Keep the durable identity record's view of this row current.
-      // Reads the row the commit RETURNED so the record can't disagree
-      // with what was persisted.
-      await refreshRenderIdentity(deps.renderIdentityStore, committed);
+      // Reads the row the commit RETURNED (seq-adjusted above) so the
+      // record can't disagree with what was persisted.
+      await refreshRenderIdentity(deps.renderIdentityStore, committedForIdentity);
 
       // Best-effort live delivery. Persistence is the source of truth;
       // the live-channel fan-out is a latency optimization. Errors are

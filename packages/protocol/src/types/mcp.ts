@@ -14,11 +14,16 @@ import type {
   renderOutputSchema,
   resourceReadErrorCodeSchema,
   resourceReadErrorSchema,
+  runtimePullInputSchema,
   searchBlueprintsInputSchema,
   updateInputSchema,
   updateOutputSchema,
   declareToolCatalogOutputSchema,
 } from '../schemas/mcp';
+import type {
+  EventsResponse,
+  ReplayHorizonPassedError,
+} from './ggui-session-event';
 
 export type { GguiSessionStatus } from './render';
 // Zod schemas in ../schemas/mcp.ts are the runtime validation source of
@@ -494,6 +499,22 @@ export type GguiUpdateOutput = z.infer<typeof updateOutputSchema>;
  * directly; no separate Input type alias is published).
  */
 export type DeclareToolCatalogOutput = z.infer<typeof declareToolCatalogOutputSchema>;
+
+/**
+ * `ggui_runtime_pull` input. Derived from
+ * {@link runtimePullInputSchema} — the schema is the source of truth.
+ */
+export type GguiRuntimePullInput = z.infer<typeof runtimePullInputSchema>;
+
+/**
+ * `ggui_runtime_pull` output. Deliberately NOT `z.infer` of
+ * `runtimePullOutputSchema`: byte-parity with
+ * `GET /api/sessions/:sessionId/events` is the contract, so the output
+ * type IS the canonical ledger pair from `./ggui-session-event` — the
+ * same types the route's handlers produce. The zod union validates the
+ * same language; `schemas/mcp.test.ts` pins schema ↔ type parity.
+ */
+export type GguiRuntimePullOutput = EventsResponse | ReplayHorizonPassedError;
 
 // =============================================================================
 // MCP Error Codes

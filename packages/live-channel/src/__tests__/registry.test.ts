@@ -453,6 +453,285 @@ describe('ChannelRegistry — transport ladder (ws → sse → polling)', () => 
     await handle.dispose();
   });
 
+  it('bridge-pull: demotes down the full 4-rung ladder ws → sse → polling → bridge, never surfacing failed', async () => {
+    vi.useFakeTimers();
+    try {
+      // Always-503 fetch so the HTTP polling rung burns its
+      // registry-injected budget of 3.
+      const fakes: FakeSocket[] = [];
+      const sources: FakeEventSource[] = [];
+      const failingFetch = vi.fn(
+        async () => new Response('nope', { status: 503 }),
+      );
+      const bridgeRegistry = new ChannelRegistry({
+        subscribeFrameBuilder: noopBuilder,
+        webSocketFactory: () => {
+          const f = new FakeSocket();
+          fakes.push(f);
+          return f as unknown as WebSocket;
+        },
+        eventSourceFactory: (url) => {
+          const s = new FakeEventSource(url);
+          sources.push(s);
+          return s as unknown as EventSource;
+        },
+        fetchImpl: failingFetch as unknown as typeof fetch,
+      });
+      const propsHandler = vi.fn();
+      bridgeRegistry.register({ type: 'props_update', onMessage: propsHandler });
+      const statuses: string[] = [];
+      let pull = 0;
+      const fetchBody = vi.fn(async () => ({ seq: (pull += 1) }));
+      const handle = await bridgeRegistry.bind({
+        bootstrap: {
+          wsUrl: 'ws://csp-blocked',
+          wsToken: 'tok',
+          sessionId: 's',
+          appId: 'a',
+        },
+        onStatusChange: (s) => statuses.push(s),
+        sse: { url: SSE_URL },
+        polling: {
+          url: POLL_URL,
+          intervalMs: 1000,
+          parseSnapshot: () => null,
+        },
+        bridge: {
+          intervalMs: 1000,
+          fetchBody,
+          parseSnapshot: (body: unknown) => ({
+            props_update: { type: 'props_update', payload: body },
+          }),
+        },
+      });
+      expect(handle.kind).toBe('ws');
+      if (handle.kind !== 'ws') throw new Error('unreachable: wsViable bootstrap must yield a ws handle');
+      const seam = handle as unknown as {
+        hasSwapped: boolean;
+        activeKind: string;
+      };
+
+      // Rung 1 fails: WS never-opened fail-fast.
+      fakes[0]!.triggerClose(1006);
+      handle.start();
+      fakes[1]!.triggerClose(1006);
+      expect(seam.activeKind).toBe('sse');
+
+      // Rung 2 fails: SSE terminal-close 2-strike.
+      sources[0]!.triggerError(2);
+      handle.start();
+      sources[1]!.triggerError(2);
+      expect(seam.activeKind).toBe('polling');
+
+      // Rung 3: HTTP polling with the registry-injected budget of 3 —
+      // three consecutive non-ok ticks demote to the bridge.
+      await vi.advanceTimersByTimeAsync(0); // tick 1 (immediate)
+      expect(seam.activeKind).toBe('polling');
+      await vi.advanceTimersByTimeAsync(1000); // tick 2
+      expect(seam.activeKind).toBe('polling');
+      await vi.advanceTimersByTimeAsync(1000); // tick 3 → budget → demote
+      expect(seam.activeKind).toBe('bridge');
+      expect(failingFetch).toHaveBeenCalledTimes(3);
+      // Facade discriminator survives all three demotions.
+      expect(handle.kind).toBe('ws');
+
+      // Rung 4: bridge ticks over the fetchBody carrier and dispatches
+      // through the same handler map (immediate tick at demotion).
+      await vi.advanceTimersByTimeAsync(0);
+      expect(fetchBody).toHaveBeenCalledTimes(1);
+      expect(propsHandler).toHaveBeenCalledWith({ seq: 1 });
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(propsHandler).toHaveBeenCalledWith({ seq: 2 });
+      // The failed HTTP rung stays dead — its timer was stopped.
+      expect(failingFetch).toHaveBeenCalledTimes(3);
+
+      // The consumer never saw a terminal 'failed'.
+      expect(statuses).not.toContain('failed');
+      expect(statuses).toContain('connecting');
+      await handle.dispose();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('bridge-pull: ladders ws → sse → bridge when no polling descriptor is present', async () => {
+    vi.useFakeTimers();
+    try {
+      const { registry, fakes, sources, fetchImpl } = buildLadderRegistry();
+      const propsHandler = vi.fn();
+      registry.register({ type: 'props_update', onMessage: propsHandler });
+      const statuses: string[] = [];
+      const fetchBody = vi.fn(async () => ({ pulled: true }));
+      const handle = await registry.bind({
+        bootstrap: {
+          wsUrl: 'ws://csp-blocked',
+          wsToken: 'tok',
+          sessionId: 's',
+          appId: 'a',
+        },
+        onStatusChange: (s) => statuses.push(s),
+        sse: { url: SSE_URL },
+        // NO polling descriptor — the ladder must skip straight from
+        // sse to the bridge rung.
+        bridge: {
+          intervalMs: 1000,
+          fetchBody,
+          parseSnapshot: (body: unknown) => ({
+            props_update: { type: 'props_update', payload: body },
+          }),
+        },
+      });
+      if (handle.kind !== 'ws') throw new Error('unreachable: wsViable bootstrap must yield a ws handle');
+      const seam = handle as unknown as { activeKind: string };
+
+      fakes[0]!.triggerClose(1006);
+      handle.start();
+      fakes[1]!.triggerClose(1006);
+      expect(seam.activeKind).toBe('sse');
+
+      sources[0]!.triggerError(2);
+      handle.start();
+      sources[1]!.triggerError(2);
+      // Straight to the bridge — there is no HTTP polling rung.
+      expect(seam.activeKind).toBe('bridge');
+
+      await vi.advanceTimersByTimeAsync(0);
+      expect(fetchBody).toHaveBeenCalledTimes(1);
+      expect(propsHandler).toHaveBeenCalledWith({ pulled: true });
+      // No HTTP fetch ever fired on this bind.
+      expect(fetchImpl).not.toHaveBeenCalled();
+      expect(statuses).not.toContain('failed');
+      await handle.dispose();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('bridge-pull: polling-primary bind (kind polling) demotes to a bridge that absorbs errors forever', async () => {
+    vi.useFakeTimers();
+    try {
+      const failingFetch = vi.fn(
+        async () => new Response('nope', { status: 503 }),
+      );
+      const registry = new ChannelRegistry({
+        subscribeFrameBuilder: noopBuilder,
+        fetchImpl: failingFetch as unknown as typeof fetch,
+      });
+      registry.register({ type: 'props_update', onMessage: () => {} });
+      const statuses: string[] = [];
+      const fetchBody = vi.fn(async () => {
+        throw new Error('host bridge hiccup');
+      });
+      const handle = await registry.bind({
+        bootstrap: { sessionId: 's', appId: 'a' },
+        onStatusChange: (s) => statuses.push(s),
+        polling: {
+          url: POLL_URL,
+          intervalMs: 1000,
+          parseSnapshot: () => null,
+        },
+        bridge: {
+          intervalMs: 1000,
+          fetchBody,
+          parseSnapshot: () => null,
+        },
+      });
+      // No WS, no SSE, bridge present → polling-primary ladder facade.
+      expect(handle.kind).toBe('polling');
+      const seam = handle as unknown as {
+        hasSwapped: boolean;
+        activeKind: string;
+      };
+      expect(seam.activeKind).toBe('polling');
+
+      // Three failing HTTP ticks → demote to the bridge.
+      await vi.advanceTimersByTimeAsync(0);
+      await vi.advanceTimersByTimeAsync(1000);
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(seam.hasSwapped).toBe(true);
+      expect(seam.activeKind).toBe('bridge');
+      expect(failingFetch).toHaveBeenCalledTimes(3);
+
+      // The bridge rejects on EVERY tick — far past any budget — and
+      // never fails: the registry never injects a budget into the
+      // terminal rung.
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(seam.activeKind).toBe('bridge');
+      expect(handle.status).toBe('open');
+      expect(statuses).not.toContain('failed');
+      expect(fetchBody.mock.calls.length).toBeGreaterThanOrEqual(10);
+      // The demoted HTTP rung stays dead.
+      expect(failingFetch).toHaveBeenCalledTimes(3);
+      await handle.dispose();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('bridge-pull: without a bridge descriptor the polling rung keeps its never-fail posture', async () => {
+    vi.useFakeTimers();
+    try {
+      const failingFetch = vi.fn(async () => {
+        throw new Error('down');
+      });
+      const registry = new ChannelRegistry({
+        subscribeFrameBuilder: noopBuilder,
+        fetchImpl: failingFetch as unknown as typeof fetch,
+      });
+      const statuses: string[] = [];
+      const handle = await registry.bind({
+        bootstrap: { sessionId: 's', appId: 'a' },
+        onStatusChange: (s) => statuses.push(s),
+        polling: {
+          url: POLL_URL,
+          intervalMs: 1000,
+          parseSnapshot: () => null,
+        },
+      });
+      expect(handle.kind).toBe('polling');
+      // Way past 3 consecutive failures — no injected budget, never fails.
+      await vi.advanceTimersByTimeAsync(0);
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(handle.status).toBe('open');
+      expect(statuses).not.toContain('failed');
+      expect(failingFetch.mock.calls.length).toBeGreaterThanOrEqual(10);
+      await handle.dispose();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('bridge-pull: bridge-only bind is a one-rung ladder that ticks over fetchBody', async () => {
+    vi.useFakeTimers();
+    try {
+      const registry = new ChannelRegistry({
+        subscribeFrameBuilder: noopBuilder,
+      });
+      const propsHandler = vi.fn();
+      registry.register({ type: 'props_update', onMessage: propsHandler });
+      const fetchBody = vi.fn(async () => ({ only: 'bridge' }));
+      const handle = await registry.bind({
+        bootstrap: { sessionId: 's', appId: 'a' },
+        bridge: {
+          intervalMs: 1000,
+          fetchBody,
+          parseSnapshot: (body: unknown) => ({
+            props_update: { type: 'props_update', payload: body },
+          }),
+        },
+      });
+      expect(handle.kind).toBe('polling');
+      await vi.advanceTimersByTimeAsync(0);
+      expect(fetchBody).toHaveBeenCalledTimes(1);
+      expect(propsHandler).toHaveBeenCalledWith({ only: 'bridge' });
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(fetchBody).toHaveBeenCalledTimes(2);
+      await handle.dispose();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('dispose() mid-ladder cancels demotion (no polling fetch ever fires)', async () => {
     const { registry, fakes, sources, fetchImpl } = buildLadderRegistry();
     const handle = await registry.bind({

@@ -395,7 +395,7 @@ describe('connectViaRegistry — fallback-descriptor pass-through (branch 7)', (
     vi.useRealTimers();
   });
 
-  it('passes the sse + polling descriptors to bind() verbatim', async () => {
+  it('passes the sse + polling + bridge descriptors to bind() verbatim', async () => {
     const registry = makeRegistry();
     const bindSpy = vi.spyOn(registry, 'bind');
 
@@ -409,6 +409,11 @@ describe('connectViaRegistry — fallback-descriptor pass-through (branch 7)', (
       intervalMs: 2000,
       parseSnapshot: () => null,
     };
+    const bridge: RegistryPollingOptions = {
+      fetchBody: () => Promise.resolve(null),
+      intervalMs: 3000,
+      parseSnapshot: () => null,
+    };
 
     const handlePromise = connectViaRegistry({
       meta: META,
@@ -416,6 +421,7 @@ describe('connectViaRegistry — fallback-descriptor pass-through (branch 7)', (
       onStatusChange: () => {},
       sse,
       polling,
+      bridge,
     });
 
     await vi.advanceTimersByTimeAsync(1);
@@ -432,9 +438,10 @@ describe('connectViaRegistry — fallback-descriptor pass-through (branch 7)', (
     // connectViaRegistry is a plumbing layer; the runtime composed them.
     expect(bindArg?.sse).toBe(sse);
     expect(bindArg?.polling).toBe(polling);
+    expect(bindArg?.bridge).toBe(bridge);
   });
 
-  it('omits the sse + polling KEYS from BindOptions when both are absent (exact-optional pin)', async () => {
+  it('omits the sse + polling + bridge KEYS from BindOptions when all are absent (exact-optional pin)', async () => {
     const registry = makeRegistry();
     const bindSpy = vi.spyOn(registry, 'bind');
 
@@ -458,5 +465,6 @@ describe('connectViaRegistry — fallback-descriptor pass-through (branch 7)', (
     // `...(x !== undefined ? {x} : {})` spread convention).
     expect(bindArg !== undefined && 'sse' in bindArg).toBe(false);
     expect(bindArg !== undefined && 'polling' in bindArg).toBe(false);
+    expect(bindArg !== undefined && 'bridge' in bindArg).toBe(false);
   });
 });

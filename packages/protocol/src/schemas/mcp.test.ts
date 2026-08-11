@@ -16,7 +16,10 @@
  * threads `blueprintDraft` → `suggestion` → `decision`.
  */
 import { describe, it, expect } from 'vitest';
+import type { z } from 'zod';
 import {
+  RUNTIME_PULL_MAX_LIMIT,
+  gguiSessionEventSchema,
   handshakeInputSchema,
   handshakeOutputSchema,
   renderCacheMarkerSchema,
@@ -25,9 +28,18 @@ import {
   renderOutputSchema,
   resourceReadErrorCodeSchema,
   resourceReadErrorSchema,
+  runtimePullEventsPageSchema,
+  runtimePullHorizonSchema,
+  runtimePullInputSchema,
+  runtimePullOutputSchema,
   updateInputSchema,
   updateOutputSchema,
 } from './mcp';
+import type {
+  EventsResponse,
+  GguiSessionEvent,
+  ReplayHorizonPassedError,
+} from '../types/ggui-session-event';
 
 describe('renderCacheMarkerSchema', () => {
   it('round-trips a hit marker (full-template)', () => {
@@ -710,5 +722,143 @@ describe('resourceReadErrorSchema', () => {
       resourceReadErrorSchema.safeParse({ code: 'PRODUCTION_FAILED', message: 'wrong surface' })
         .success,
     ).toBe(false);
+  });
+});
+
+describe('ggui_runtime_pull — bridge-pull rung schemas', () => {
+  const EVENT = {
+    seq: 1,
+    type: 'ui.updated',
+    timestamp: '2026-08-11T00:00:00.000Z',
+    data: { props: { count: 1 } },
+  };
+
+  describe('runtimePullInputSchema', () => {
+    it('accepts a minimal input — sessionId only (cursor + limit optional)', () => {
+      const parsed = runtimePullInputSchema.parse({ sessionId: 'rnd_1' });
+      expect(parsed).toEqual({ sessionId: 'rnd_1' });
+      expect(parsed.sinceSequence).toBeUndefined();
+      expect(parsed.limit).toBeUndefined();
+    });
+
+    it('round-trips a fully-populated input', () => {
+      const input = { sessionId: 'rnd_1', sinceSequence: 12, limit: 50 };
+      expect(runtimePullInputSchema.parse(input)).toEqual(input);
+    });
+
+    it('rejects an empty sessionId', () => {
+      expect(runtimePullInputSchema.safeParse({ sessionId: '' }).success).toBe(false);
+    });
+
+    it('rejects a negative or fractional sinceSequence', () => {
+      expect(
+        runtimePullInputSchema.safeParse({ sessionId: 'rnd_1', sinceSequence: -1 }).success,
+      ).toBe(false);
+      expect(
+        runtimePullInputSchema.safeParse({ sessionId: 'rnd_1', sinceSequence: 1.5 }).success,
+      ).toBe(false);
+    });
+
+    it('rejects limit < 1 but accepts values above the clamp ceiling (clamped server-side, not rejected)', () => {
+      expect(
+        runtimePullInputSchema.safeParse({ sessionId: 'rnd_1', limit: 0 }).success,
+      ).toBe(false);
+      expect(
+        runtimePullInputSchema.safeParse({
+          sessionId: 'rnd_1',
+          limit: RUNTIME_PULL_MAX_LIMIT + 400,
+        }).success,
+      ).toBe(true);
+    });
+  });
+
+  describe('runtimePullOutputSchema — EventsResponse parity union', () => {
+    it('round-trips a normal page arm (byte-parity with GET /api/sessions/:id/events)', () => {
+      const page = { events: [EVENT], lastSequence: 1, hasMore: false };
+      expect(runtimePullOutputSchema.parse(page)).toEqual(page);
+    });
+
+    it('round-trips an empty page (cursor advances via lastSequence alone)', () => {
+      const page = { events: [], lastSequence: 7, hasMore: false };
+      expect(runtimePullOutputSchema.parse(page)).toEqual(page);
+    });
+
+    it('round-trips the horizon arm as a NORMAL result, not an error shape', () => {
+      const horizon = { reason: 'REPLAY_HORIZON_PASSED' as const, currentSequence: 9 };
+      expect(runtimePullOutputSchema.parse(horizon)).toEqual(horizon);
+    });
+
+    it('page arm requires all three keys', () => {
+      expect(
+        runtimePullOutputSchema.safeParse({ events: [EVENT], lastSequence: 1 }).success,
+      ).toBe(false);
+      expect(
+        runtimePullOutputSchema.safeParse({ events: [EVENT], hasMore: false }).success,
+      ).toBe(false);
+    });
+
+    it('horizon arm requires currentSequence and the exact reason literal', () => {
+      expect(
+        runtimePullOutputSchema.safeParse({ reason: 'REPLAY_HORIZON_PASSED' }).success,
+      ).toBe(false);
+      expect(
+        runtimePullOutputSchema.safeParse({
+          reason: 'replay_horizon_passed',
+          currentSequence: 9,
+        }).success,
+      ).toBe(false);
+    });
+
+    it('event rows enforce the ledger shape (seq >= 1, non-empty type)', () => {
+      expect(
+        runtimePullEventsPageSchema.safeParse({
+          events: [{ ...EVENT, seq: 0 }],
+          lastSequence: 1,
+          hasMore: false,
+        }).success,
+      ).toBe(false);
+      expect(
+        runtimePullEventsPageSchema.safeParse({
+          events: [{ ...EVENT, type: '' }],
+          lastSequence: 1,
+          hasMore: false,
+        }).success,
+      ).toBe(false);
+    });
+
+    it('accepts every valid EventsResponse / ReplayHorizonPassedError (parity with the canonical ledger types)', () => {
+      // Compile-time direction 1: everything the /events route emits
+      // (the canonical ledger types in types/ggui-session-event.ts)
+      // must satisfy the schema-inferred INPUT types — the schema may
+      // never reject a valid route body. Pinned at the event level
+      // (the array level differs only by ReadonlyArray, which zod
+      // accepts at runtime — covered by the parse below).
+      const routeEvent: GguiSessionEvent = {
+        seq: 3,
+        type: 'user.submitted',
+        timestamp: '2026-08-11T00:00:01.000Z',
+        data: null,
+      };
+      const eventInput: z.input<typeof gguiSessionEventSchema> = routeEvent;
+      const routeHorizon: ReplayHorizonPassedError = {
+        reason: 'REPLAY_HORIZON_PASSED',
+        currentSequence: 3,
+      };
+      const horizonInput: z.input<typeof runtimePullHorizonSchema> = routeHorizon;
+      const routePage: EventsResponse = {
+        events: [routeEvent],
+        lastSequence: 3,
+        hasMore: true,
+      };
+      expect(runtimePullOutputSchema.parse(routePage)).toEqual(routePage);
+      expect(runtimePullOutputSchema.parse(horizonInput)).toEqual(routeHorizon);
+      expect(gguiSessionEventSchema.parse(eventInput)).toEqual(routeEvent);
+      // Compile-time direction 2: the horizon arm infers back to the
+      // canonical error type (the page arm's `data: z.unknown()` infers
+      // an optional key, so its reverse direction is pinned at runtime
+      // by the round-trip cases above instead).
+      const inferredHorizon: ReplayHorizonPassedError = runtimePullHorizonSchema.parse(routeHorizon);
+      expect(inferredHorizon).toEqual(routeHorizon);
+    });
   });
 });

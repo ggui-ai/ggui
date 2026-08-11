@@ -774,3 +774,158 @@ export const declareToolCatalogOutputSchema = z
     appId: z.string(),
   })
   .strict();
+
+// ── `ggui_runtime_pull` — bridge-pull rung of the live-channel ladder ──
+
+/**
+ * Server-side page cap for `ggui_runtime_pull`. A `limit` above this is
+ * CLAMPED (not rejected) — the tool mirrors the cursor-walk posture of
+ * the `/events` HTTP route, where a too-eager page size is a tuning
+ * knob, not a caller bug. Shared so the pulling client and the serving
+ * handler agree on the effective page ceiling from one constant.
+ */
+export const RUNTIME_PULL_MAX_LIMIT = 100;
+
+/**
+ * Server-side ceiling on `ggui_runtime_pull`'s `wait` hold, in seconds.
+ * Chosen under `ggui_consume`'s proven 25-second host tolerance for
+ * held tool calls — the hold must resolve before any host-side
+ * `tools/call` timeout fires, or the transport counts a failure the
+ * server intended as a quiet success.
+ */
+export const RUNTIME_PULL_MAX_WAIT_SECONDS = 20;
+
+/**
+ * One `GguiSessionEvent` ledger row on the `ggui_runtime_pull` wire —
+ * the zod mirror of the canonical `GguiSessionEvent` interface in
+ * `types/ggui-session-event.ts` (which stays the type-level source of
+ * truth; `mcp.test.ts` pins the two together in both directions).
+ */
+export const gguiSessionEventSchema = z.object({
+  seq: z
+    .number()
+    .int()
+    .min(1)
+    .describe(
+      'Monotonic, gap-free per render; starts at 1 (0 is the "no events yet" cursor sentinel, never an event).',
+    ),
+  type: z
+    .string()
+    .min(1)
+    .describe(
+      'Wire-frame type — see the canonical GguiSessionEventType taxonomy; plain string so servers can mint new types without a protocol bump.',
+    ),
+  timestamp: z
+    .string()
+    .describe('ISO 8601 UTC timestamp the server stamped on emission.'),
+  data: z
+    .unknown()
+    .describe(
+      'Type-specific payload — structurally identical to the matching live-channel frame payload.',
+    ),
+});
+
+/**
+ * `ggui_runtime_pull` input — the terminal bridge-pull rung of the
+ * live-channel failover ladder (WS → SSE → HTTP polling → bridge-pull).
+ *
+ * Two named parties:
+ *
+ *   - **Puller** — the `@ggui-ai/iframe-runtime` bridge rung. In a
+ *     CSP-jailed MCP Apps host the iframe can reach no network origin
+ *     at all, so it pulls the event ledger by issuing `tools/call`
+ *     postMessages that the host's MCP client relays (the tool
+ *     registers `_meta.ui.visibility: ['app']` per MCP Apps spec §401
+ *     — hosts MUST route view-issued calls to it and MUST reject
+ *     view-issued calls to tools without it).
+ *   - **Server** — the MCP server hosting the render. It serves the
+ *     SAME `GguiSessionEvent` ledger `GET
+ *     /api/sessions/:sessionId/events` serves, through the same
+ *     `listEventsSince` read, and MUST answer with the same shapes
+ *     (see {@link runtimePullOutputSchema}) so one client parse core
+ *     handles both carriers.
+ *
+ * Divergences from the HTTP route, both deliberate: `sinceSequence` is
+ * OPTIONAL here (the bridge rung owns its cursor and seeds from 0; the
+ * route requires it because a bare browser GET has no cursor owner),
+ * and `limit` is clamped to {@link RUNTIME_PULL_MAX_LIMIT} instead of
+ * rejecting above it. Tenancy violations and unknown sessionIds
+ * surface uniformly as the `session_not_found` error — existence of
+ * other tenants' renders is never leaked.
+ */
+export const runtimePullInputShape = {
+  sessionId: z
+    .string()
+    .min(1)
+    .describe(
+      'Active render id — sourced from `_meta["ai.ggui/render"].sessionId` on the iframe boot envelope. Unknown and cross-tenant ids surface uniformly as session_not_found.',
+    ),
+  sinceSequence: z
+    .number()
+    .int()
+    .min(0)
+    .optional()
+    .describe(
+      'Replay cursor — only events with seq > sinceSequence return. Omit (= 0) on first pull; advance to the last event\'s seq (or lastSequence on an empty page) on every subsequent pull.',
+    ),
+  limit: z
+    .number()
+    .int()
+    .min(1)
+    .optional()
+    .describe(
+      `Max events per page. Values above ${RUNTIME_PULL_MAX_LIMIT} are clamped to ${RUNTIME_PULL_MAX_LIMIT}; omit for the default ${RUNTIME_PULL_MAX_LIMIT}. When hasMore is true, immediately re-pull with the advanced cursor.`,
+    ),
+  wait: z
+    .number()
+    .min(0)
+    .optional()
+    .describe(
+      `Subscription-mode hold, in seconds. When set and the cursor page is empty, the server holds this call until an event lands or the hold elapses (values above ${RUNTIME_PULL_MAX_WAIT_SECONDS} are clamped to ${RUNTIME_PULL_MAX_WAIT_SECONDS}). An empty page after a full hold is a NORMAL result — immediately re-pull to stay subscribed, or back off to sparse un-held pulls after a few consecutive empties. Omit (= 0) for an immediate return.`,
+    ),
+} as const;
+
+export const runtimePullInputSchema = z.object(runtimePullInputShape);
+
+/**
+ * Normal-page arm — EXACT `EventsResponse` parity with
+ * `GET /api/sessions/:sessionId/events` (same keys, same semantics):
+ * `events` strictly ascending by seq, `lastSequence` = the render's
+ * current high-water mark (NOT the page's last seq — advances the
+ * cursor on empty pages), `hasMore` = the page was truncated by
+ * `limit`.
+ */
+export const runtimePullEventsPageSchema = z.object({
+  events: z.array(gguiSessionEventSchema),
+  lastSequence: z.number().int().min(0),
+  hasMore: z.boolean(),
+});
+
+/**
+ * Replay-horizon arm — parity with the route's 410 body, but on this
+ * carrier it is a NORMAL result arm, not an error: the bridge rung is
+ * terminal and treats it as a re-sync instruction. Returned when the
+ * cursor fell out of the replayable window on EITHER side
+ * (`sinceSequence` above the server's `lastSequence` — a cursor from a
+ * different deployment/reset render — or below the retention horizon).
+ * Client recovery: re-mount state from a fresh snapshot and reset the
+ * cursor to `currentSequence`.
+ */
+export const runtimePullHorizonSchema = z.object({
+  reason: z.literal('REPLAY_HORIZON_PASSED'),
+  currentSequence: z.number().int().min(0),
+});
+
+/**
+ * `ggui_runtime_pull` output — the canonical strict wire contract, a
+ * two-arm union: {@link runtimePullEventsPageSchema} (normal page) |
+ * {@link runtimePullHorizonSchema} (cursor out of window). The handler
+ * registers a flat raw shape (MCP tool registration takes a
+ * `ZodRawShape`, which cannot express a top-level union) and its
+ * alignment test pins that shape to this union — same posture as
+ * `updateInputSchema`.
+ */
+export const runtimePullOutputSchema = z.union([
+  runtimePullEventsPageSchema,
+  runtimePullHorizonSchema,
+]);

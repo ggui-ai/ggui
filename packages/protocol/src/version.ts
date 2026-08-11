@@ -274,6 +274,36 @@
  * shape byte for byte.
  *
  * --------------------------------------------------------------------
+ * Bridge-pull terminal rung (2026-08-11): `ggui_runtime_pull` — a
+ * MINOR for the `@ggui-ai/protocol` wave, riding the same next cut
+ * (≥ 0.9.0) as the SSE entry above. One motivation: hosts whose CSP
+ * blocks EVERY network API from the iframe (claude.ai's srcdoc
+ * sandbox) can still pull the event ledger over the host's
+ * `tools/call` postMessage bridge — the fourth and terminal rung of
+ * the failover ladder (WS → SSE → HTTP polling → bridge-pull).
+ *
+ *   bp1. **`runtimePullInput/OutputSchema` + `GguiRuntimePullInput/
+ *      Output`** — new tool contract, output byte-parity with the
+ *      `/events` route (`EventsResponse` page arm |
+ *      `REPLAY_HORIZON_PASSED` arm as a NORMAL result) so ONE client
+ *      parse core serves both carriers. `_meta.ui.visibility: ['app']`
+ *      restricts callers to MCP Apps views per spec §401.
+ *
+ *   bp2. **`wait` + `RUNTIME_PULL_MAX_WAIT_SECONDS`** — the
+ *      subscription-mode hold: an empty cursor page holds the call
+ *      server-side (≤ 20s, under `ggui_consume`'s proven 25s host
+ *      tolerance) until an event lands. Back-to-back held single-shots
+ *      emulate push through a request/response-only bridge; clients
+ *      demote to sparse un-held pulls after consecutive empty holds.
+ *
+ * Conformance-kit verdict: additive tool, no existing fixture touches
+ * it; bridge-carrier conformance cases join the SSE follow-up ticket
+ * (No Silent Block). PROTOCOL_VERSION unchanged — no WS envelope
+ * moved; the ledger event vocabulary gained active use of the
+ * existing `'ui.updated'` taxonomy member (`ggui_update` now appends
+ * it), not a new member.
+ *
+ * --------------------------------------------------------------------
  * Credential-broker surface retired (2026-08-08, BREAKING, pre-launch,
  * ggui#436). The `system` frame's auth vocabulary and the
  * `ggui_request_credential` tool leave the protocol entirely.

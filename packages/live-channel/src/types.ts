@@ -57,14 +57,17 @@ export interface ChannelHandler<TPayload = unknown> {
 }
 
 /**
- * Registry-level polling descriptor (R6, 2026-05-26). One URL, one
+ * Registry-level polling descriptor (R6, 2026-05-26). One carrier, one
  * tick interval, one snapshot-parsing function for the WHOLE
  * registry — replaces the per-handler `polling?: ChannelPollingDescriptor`
  * shape that existed pre-R6.
  *
  * On each tick:
  *
- *   1. `PollingTransport` fetches `url` with `Accept: application/json`.
+ *   1. `PollingTransport` obtains a body via the descriptor's carrier —
+ *      either an HTTP fetch of `url` with `Accept: application/json`,
+ *      or an `await fetchBody()` call (bridge carrier; the resolved
+ *      value IS the body). Exactly one of the two must be set.
  *   2. `parseSnapshot(body)` returns either `null` (nothing changed
  *      since the last poll — short-circuit, no dispatch) OR a
  *      `Record<type, frame>` mapping handler-type strings to
@@ -77,11 +80,56 @@ export interface ChannelHandler<TPayload = unknown> {
  *
  * Diff detection lives inside `parseSnapshot` — the consumer composes
  * the snapshot hash / last-seen-value tracking in its closure. The
- * transport itself is stateless beyond the timer.
+ * transport itself is stateless beyond the timer + the
+ * consecutive-failure count (see {@link failureBudget}).
  */
 export interface RegistryPollingOptions {
-  readonly url: string;
+  /**
+   * Snapshot URL for the HTTP carrier — fetched with
+   * `Accept: application/json` on each tick. Exactly ONE of `url` /
+   * `fetchBody` must be set; a descriptor with neither or both is
+   * structurally unusable and fails the transport at `start()`
+   * (status `'failed'` + log, mirroring the WS constructor-throw
+   * route) instead of ticking into nonsense.
+   */
+  readonly url?: string;
   readonly intervalMs: number;
+  /**
+   * Bridge carrier — replaces the HTTP fetch when the client has no
+   * network path at all (a CSP-jailed MCP-Apps iframe pulls the event
+   * ledger over the host's `tools/call` postMessage bridge). The
+   * resolved value IS the body handed to `parseSnapshot` — there is
+   * no `res.ok` / `.json()` step because there is no HTTP response.
+   * A rejection counts as a tick failure (see {@link failureBudget});
+   * the next tick retries.
+   */
+  readonly fetchBody?: () => Promise<unknown>;
+  /**
+   * Consecutive-tick failure budget. A tick fails when the carrier
+   * throws/rejects or the HTTP response is `!res.ok`; ANY successful
+   * tick resets the count. Reaching the budget stops the timer and
+   * reports `'failed'` (the failover ladder demotes to the next
+   * rung). Unset → never-fail: per-tick errors are absorbed forever
+   * (the terminal-rung posture, unchanged from pre-bridge behavior).
+   * The registry injects a budget of 3 into the HTTP polling rung IFF
+   * a bridge rung sits below it, and never into the bridge rung.
+   */
+  readonly failureBudget?: number;
+  /**
+   * Subscription-mode pacing (long-poll chains). When set, the
+   * transport abandons the fixed `setInterval` cadence for a
+   * self-scheduling chain: exactly ONE tick in flight at a time, and
+   * after each completed tick this callback receives the raw body and
+   * returns the delay in ms before the NEXT tick (`0` = immediately —
+   * correct for long-poll carriers whose pacing lives in the held
+   * request itself). Failed ticks pace at `intervalMs` instead of
+   * consulting the callback. `minPollIntervalMs` does NOT clamp chain
+   * delays — a held call returning after 20s IS the interval, and the
+   * composer owning this callback is trusted code, not wire input.
+   * Absent → fixed-interval ticking (today's behavior, including its
+   * overlap tolerance).
+   */
+  readonly nextDelayMs?: (body: unknown) => number;
   /**
    * Parse the response body into a map of `type → frame` to dispatch.
    * Return `null` when nothing changed since the last poll — the
@@ -295,4 +343,17 @@ export interface BindOptions {
    * exactly as before.
    */
   readonly sse?: RegistrySseOptions;
+  /**
+   * Bridge-pull descriptor — the TERMINAL rung of the failover ladder
+   * (ws → sse → polling → bridge). Same shape as {@link polling}
+   * because bridge-pull IS the polling algorithm on a different
+   * carrier: `fetchBody` pulls the event ledger over the host's
+   * `tools/call` postMessage bridge instead of an HTTP URL, so it
+   * works even where the iframe's CSP jail blocks every network API.
+   * Present → the HTTP polling rung (when armed) gets a
+   * consecutive-failure budget so it can demote here; the bridge rung
+   * itself never gets a budget and never emits `'failed'`. Absent →
+   * polling stays the terminal rung exactly as before.
+   */
+  readonly bridge?: RegistryPollingOptions;
 }

@@ -424,16 +424,17 @@ describe('bootSequence — host capability capture (ggui#440)', () => {
   });
 });
 
-describe('bootSequence — failover-ladder composition (WS → SSE → polling)', () => {
+describe('bootSequence — failover-ladder composition (WS → SSE → polling → bridge)', () => {
   const SSE_URL =
     'https://server.example/api/sessions/render_001/stream?wsToken=tok_abc';
   const POLLING_URL =
     'https://server.example/api/sessions/render_001/events?wsToken=tok_abc';
 
-  /** Boot with `meta`, return the captured connectFn opts. */
-  async function bootAndCapture(
-    meta: McpAppAiGguiRenderMeta,
-  ): Promise<Parameters<ConnectFn>[0]> {
+  /** Boot with `meta`, return the captured connectFn opts + the App. */
+  async function bootAndCapture(meta: McpAppAiGguiRenderMeta): Promise<{
+    opts: Parameters<ConnectFn>[0];
+    app: import('@modelcontextprotocol/ext-apps').App;
+  }> {
     const dom = document.implementation.createHTMLDocument('renderer-test');
     const initial = makeRender('render_001', 'ladder composition');
     const { app, transport, pushToolResult } = buildBootHarness();
@@ -454,11 +455,11 @@ describe('bootSequence — failover-ladder composition (WS → SSE → polling)'
     const opts = captured.current;
     expect(opts).not.toBeNull();
     if (opts === null) throw new Error('connectFn never called');
-    return opts;
+    return { opts, app };
   }
 
   it('composes sse + polling from sseUrl/pollingUrl/lastSequence with a SHARED ladder cursor', async () => {
-    const opts = await bootAndCapture({
+    const { opts } = await bootAndCapture({
       ...VALID_META,
       sseUrl: SSE_URL,
       pollingUrl: POLLING_URL,
@@ -483,7 +484,7 @@ describe('bootSequence — failover-ladder composition (WS → SSE → polling)'
   });
 
   it('omits the sse KEY when meta has no sseUrl (two-rung WS→polling ladder)', async () => {
-    const opts = await bootAndCapture({
+    const { opts } = await bootAndCapture({
       ...VALID_META,
       pollingUrl: POLLING_URL,
       lastSequence: 3,
@@ -498,10 +499,84 @@ describe('bootSequence — failover-ladder composition (WS → SSE → polling)'
     expect(opts.polling?.url).toContain('sinceSequence=3');
   });
 
-  it('omits BOTH fallback keys when meta carries neither URL (WS-only mode)', async () => {
-    const opts = await bootAndCapture(VALID_META);
+  it('omits the sse + polling KEYS when meta carries neither URL — but the bridge rung still arms', async () => {
+    const { opts } = await bootAndCapture(VALID_META);
     expect('sse' in opts).toBe(false);
     expect('polling' in opts).toBe(false);
+    // The bridge is the universal floor: its only precondition is the
+    // connected App handle (always bound by the time bootSequence
+    // composes the ladder — setCurrentApp runs right after connectApp
+    // succeeds, which is also why the bridge-absent arm is
+    // structurally unreachable through bootSequence). No
+    // sseUrl/pollingUrl needed.
+    expect(opts.bridge).toBeDefined();
+  });
+
+  it('composes the bridge rung bound to app.callServerTool — fetchBody carrier, no url, ladder cursor created even without sseUrl/pollingUrl', async () => {
+    const { opts, app } = await bootAndCapture(VALID_META);
+
+    const bridge = opts.bridge;
+    expect(bridge).toBeDefined();
+    if (bridge === undefined) throw new Error('bridge rung not composed');
+    // Bridge-pull is the fetchBody carrier — never an HTTP url.
+    expect('url' in bridge).toBe(false);
+    expect(bridge.fetchBody).toBeTypeOf('function');
+    expect(bridge.intervalMs).toBe(3000);
+
+    const spy = vi.spyOn(app, 'callServerTool').mockResolvedValue({
+      content: [],
+      structuredContent: { events: [], lastSequence: 5, hasMore: false },
+    });
+
+    // First pull: cursor created + seeded 0 (VALID_META carries no
+    // lastSequence) even though NO sseUrl/pollingUrl exist — the
+    // universal-floor case.
+    const body = await bridge.fetchBody!();
+    expect(spy).toHaveBeenCalledWith({
+      name: 'ggui_runtime_pull',
+      arguments: { sessionId: 'render_001', sinceSequence: 0, wait: 20 },
+    });
+
+    // The parse core advances the ladder cursor; the next pull resumes
+    // from the server's high-water mark.
+    bridge.parseSnapshot(body);
+    await bridge.fetchBody!();
+    expect(spy).toHaveBeenLastCalledWith({
+      name: 'ggui_runtime_pull',
+      arguments: { sessionId: 'render_001', sinceSequence: 5, wait: 20 },
+    });
+  });
+
+  it('bridge shares the SAME ladder cursor as the sse + polling rungs', async () => {
+    const { opts, app } = await bootAndCapture({
+      ...VALID_META,
+      sseUrl: SSE_URL,
+      pollingUrl: POLLING_URL,
+      lastSequence: 7,
+    });
+
+    const spy = vi.spyOn(app, 'callServerTool').mockResolvedValue({
+      content: [],
+      structuredContent: { events: [], lastSequence: 7, hasMore: false },
+    });
+
+    // Bridge seeds from the boot snapshot's lastSequence like every
+    // other rung.
+    await opts.bridge?.fetchBody?.();
+    expect(spy).toHaveBeenLastCalledWith({
+      name: 'ggui_runtime_pull',
+      arguments: { sessionId: 'render_001', sinceSequence: 7, wait: 20 },
+    });
+
+    // An SSE delivery (surfaced via onSequence) advances the SHARED
+    // cursor — a demotion all the way down to the bridge resumes from
+    // the last streamed event instead of re-replaying.
+    opts.sse?.onSequence?.(42);
+    await opts.bridge?.fetchBody?.();
+    expect(spy).toHaveBeenLastCalledWith({
+      name: 'ggui_runtime_pull',
+      arguments: { sessionId: 'render_001', sinceSequence: 42, wait: 20 },
+    });
   });
 });
 

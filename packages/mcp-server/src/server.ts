@@ -194,6 +194,7 @@ import {
   createGguiListSessionsHandler,
   createGguiRefreshWsTokenHandler,
   createGguiRenderHandler,
+  createGguiRuntimePullHandler,
   createGguiSubmitActionHandler,
   createGguiSyncContextHandler,
   createGguiUpdateHandler,
@@ -1031,6 +1032,20 @@ export function defaultHandlers(deps: {
         ...(deps.render.renderIdentityStore
           ? { renderIdentityStore: deps.render.renderIdentityStore }
           : {}),
+      }) as SharedHandler<ZodRawShape, ZodRawShape>
+    );
+    // `ggui_runtime_pull` — terminal bridge-pull rung of the live-channel
+    // failover ladder (WS → SSE → HTTP polling → bridge-pull). A
+    // CSP-jailed MCP Apps iframe pulls the GguiSessionEvent ledger over
+    // the host's tools/call postMessage relay — same
+    // `_meta.ui.visibility: ['app']` channel as ggui_runtime_submit_action,
+    // same ledger + horizon semantics as `GET /api/sessions/:id/events`
+    // (both read `renderStore.listEventsSince`). Wired only when a
+    // renderStore is bound (render is on) — without render there is no
+    // ledger to serve.
+    handlers.push(
+      createGguiRuntimePullHandler({
+        renderStore: deps.render.renderStore,
       }) as SharedHandler<ZodRawShape, ZodRawShape>
     );
     // `ggui_runtime_refresh_ws_token` — G14 (2026-05-23) signed-
