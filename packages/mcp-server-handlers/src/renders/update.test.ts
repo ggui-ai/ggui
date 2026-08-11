@@ -874,4 +874,79 @@ describe('createGguiUpdateHandler — render-identity refresh (#430 slice 1)', (
     );
     expect(out.updated).toBe(true);
   });
+
+  /**
+   * Mount-URI identity (#471 round-4 live finding, claude.ai):
+   * `ggui_render` stamps `.../<sessionId>/<contractKey>` as the mounted
+   * iframe's resource URI. claude.ai routes forwarded tool results to
+   * iframes by URI equality, so an update stamping the bare
+   * `.../<sessionId>` shape — same handler on OUR server, different
+   * string to the host — missed the mount and the card never repainted.
+   * The update must reproduce the render's exact key-suffixed URI.
+   */
+  it('reproduces the render-stamped key-suffixed resourceUri from the identity record', async () => {
+    const store = new InMemoryGguiSessionStore();
+    const { sessionId } = await seedRender({ store });
+    const renderIdentityStore = new InMemoryRenderIdentityStore();
+    await renderIdentityStore.put(seededRecord(sessionId));
+
+    const handler = createGguiUpdateHandler({
+      renderStore: store,
+      renderIdentityStore,
+    });
+    const out = await handler.handler(
+      { sessionId, kind: 'replace' as const, props: { count: 7 } },
+      ctx(),
+    );
+    expect(out.updated).toBe(true);
+    expect(out.resourceUri).toBe(
+      `ui://ggui/render/${sessionId}/${CONTRACT_KEY}`,
+    );
+  });
+
+  it('stamps the key-suffixed URI on the NO-OP return too — same mount, same identity', async () => {
+    const store = new InMemoryGguiSessionStore();
+    const { sessionId } = await seedRender({ store });
+    const renderIdentityStore = new InMemoryRenderIdentityStore();
+    await renderIdentityStore.put(seededRecord(sessionId));
+
+    const handler = createGguiUpdateHandler({
+      renderStore: store,
+      renderIdentityStore,
+    });
+    const seeded = await store.get(sessionId);
+    const currentProps =
+      (seeded?.render as ComponentGguiSession | undefined)?.props ?? {};
+    const out = await handler.handler(
+      { sessionId, kind: 'merge' as const, patch: { ...currentProps } },
+      ctx(),
+    );
+    expect(out.updated).toBe(false);
+    expect(out.resourceUri).toBe(
+      `ui://ggui/render/${sessionId}/${CONTRACT_KEY}`,
+    );
+  });
+
+  it('identity get() throwing falls back to the bare session URI without failing the call', async () => {
+    const store = new InMemoryGguiSessionStore();
+    const { sessionId } = await seedRender({ store });
+    const renderIdentityStore = new InMemoryRenderIdentityStore();
+    await renderIdentityStore.put(seededRecord(sessionId));
+    const throwingGet: RenderIdentityStore = {
+      ...renderIdentityStore,
+      get: () => Promise.reject(new Error('identity store unreachable')),
+      put: (record) => renderIdentityStore.put(record),
+    };
+
+    const handler = createGguiUpdateHandler({
+      renderStore: store,
+      renderIdentityStore: throwingGet,
+    });
+    const out = await handler.handler(
+      { sessionId, kind: 'replace' as const, props: { count: 7 } },
+      ctx(),
+    );
+    expect(out.updated).toBe(true);
+    expect(out.resourceUri).toBe(`ui://ggui/render/${sessionId}`);
+  });
 });

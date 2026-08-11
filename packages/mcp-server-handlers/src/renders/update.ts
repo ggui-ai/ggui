@@ -430,6 +430,33 @@ export function createGguiUpdateHandler(
         throw new GguiSessionNotFoundError(sessionId);
       }
 
+      // Mount-URI identity (#471 round-4 live finding): `ggui_render`
+      // stamped `.../<sessionId>/<contractKey>` as the mounted iframe's
+      // resource URI. Hosts that key result→iframe routing on URI
+      // equality only deliver this update's result to the live card
+      // when the update reproduces that EXACT URI — a bare
+      // `.../<sessionId>` routes fine on OUR server but is a different
+      // string to the host, so the forwarded result misses the mount
+      // and the card never repaints. The contract key cannot be
+      // recomputed from the render row (it hashes the handshake-agreed
+      // contract — see render-identity.ts); read it from the durable
+      // identity record. Absent store/record ⇒ bare session URI
+      // (pre-identity renders keep the old shape).
+      let contractSegment = '';
+      if (deps.renderIdentityStore) {
+        try {
+          const identity = await deps.renderIdentityStore.get(sessionId);
+          if (identity?.contractKey) {
+            contractSegment = `/${identity.contractKey}`;
+          }
+        } catch {
+          // Best-effort, matching every identity-store touch in this
+          // handler: a failed read must not fail the tool call, and the
+          // bare URI below stays routable on our server.
+        }
+      }
+      const mountResourceUri = `${GGUI_RENDER_UI_META.resourceUri}/${sessionId}${contractSegment}`;
+
       // Devtools payload trace. No-op when no sink is registered.
       // Fires AFTER the tenancy gate so cross-tenant probes never leak
       // into the trace. Payload is the validated wire shape.
@@ -475,7 +502,7 @@ export function createGguiUpdateHandler(
         return {
           sessionId,
           updated: false,
-          resourceUri: `${GGUI_RENDER_UI_META.resourceUri}/${sessionId}`,
+          resourceUri: mountResourceUri,
           warning:
             'NO-OP: this patch left the props identical to the current state — nothing changed on screen. If you meant to refresh the UI, send values that actually differ; if the user’s gesture asks for a DIFFERENT surface (menu selection, navigation), run ggui_handshake + ggui_render for the next UI instead of updating this one.',
         };
@@ -519,16 +546,14 @@ export function createGguiUpdateHandler(
       }
 
       // resourceUri MUST be the SAME URI the initial ggui_render stamped
-      // — the iframe is mounted against that URI, and the host's
-      // `resources/read` re-fetch (spec-canonical refresh after every
-      // update tool_result) returns the fresh shell with new
-      // `__GGUI_META__` baked in. Single-segment is sufficient: both
-      // single + two-segment URI shapes route to the same handler.
-      const resourceUri = `${GGUI_RENDER_UI_META.resourceUri}/${sessionId}`;
+      // (key-suffixed via `mountResourceUri` above) — the iframe is
+      // mounted against that URI, and hosts route both the forwarded
+      // tool result AND the spec-canonical `resources/read` re-fetch by
+      // matching it.
       return {
         sessionId,
         updated: true,
-        resourceUri,
+        resourceUri: mountResourceUri,
       };
     },
     /**
