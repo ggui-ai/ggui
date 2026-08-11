@@ -2138,7 +2138,7 @@ export function createGguiRenderHandler(
             // first live claude.ai test died exactly this way). 25 is
             // the server-enforced per-call cap (SPEC §7.3).
             description:
-              "The UI has interactive actions. After completing whatever other tool calls this user turn requires, long-poll for the user's gesture — do not end your turn without it. Each call waits up to 25s; on an empty `events` array call it again until a gesture arrives.",
+              "The UI has interactive actions. After this turn's other tool calls, you may long-poll once (waits up to 25s) to catch an immediate gesture; if `events` comes back empty, end your turn — later gestures arrive as new user messages carrying their own consume directive.",
             example: `ggui_consume({ sessionId: "${sessionId}", timeout: 25 })`,
             args: { sessionId, timeout: 25 },
           }

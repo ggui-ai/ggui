@@ -283,12 +283,16 @@ export function buildMcpServer(
               ? [
                   {
                     type: 'text' as const,
-                    // Ordered, not absolute: an agent mid-way through a
-                    // user instruction (domain tool calls, ggui_update)
-                    // must finish THAT work first — a bare "call consume
-                    // NOW" hijacked live agents into polling instead of
-                    // acting. The imperative is scoped to turn-END.
-                    text: `NEXT: the UI has interactive actions. After completing whatever tool calls this user turn requires, call ${nextStepHint} to await the user's gesture — do not end your turn without it, and on an empty result call it again.`,
+                    // Gentle + bounded, deliberately: a forcing
+                    // imperative hijacked live agents into polling
+                    // instead of acting (matrix scenario 6), and an
+                    // unbounded "re-call on empty" looped them past
+                    // their turn budget. The poll is a latency
+                    // optimization, not the delivery guarantee — when
+                    // nobody is polling, a gesture rings the chat via
+                    // ui/message and arrives as a new user message
+                    // carrying its own consume directive.
+                    text: `The UI has interactive actions. After this turn's work, you may call ${nextStepHint} once to catch an immediate gesture (waits up to 25s); if events is empty, end your turn — later gestures arrive as new user messages.`,
                   },
                 ]
               : []),
