@@ -564,6 +564,9 @@ importers:
         specifier: ^4.4.3
         version: 4.4.3
     devDependencies:
+      '@ggui-ai/protocol-conformance':
+        specifier: workspace:*
+        version: link:../protocol-conformance
       typescript:
         specifier: ^5.0.0
         version: 5.9.3
@@ -1413,6 +1416,9 @@ importers:
         specifier: ^4.4.3
         version: 4.4.3
     devDependencies:
+      '@ggui-ai/protocol-conformance':
+        specifier: workspace:*
+        version: link:../protocol-conformance
       '@sigstore/mock':
         specifier: ~0.12.1
         version: 0.12.1
