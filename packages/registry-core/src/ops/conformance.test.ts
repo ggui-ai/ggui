@@ -49,22 +49,22 @@ const VALID_BLUEPRINT_MANIFEST = {
 };
 
 describe('checkConformance', () => {
-  it('accepts a valid gadget manifest + bundle with only allowlisted imports', () => {
-    expect(checkConformance({ manifest: VALID_GADGET_MANIFEST, bundle: VALID_BUNDLE })).toEqual({
+  it('accepts a valid gadget manifest + bundle with only allowlisted imports', async () => {
+    expect(await checkConformance({ manifest: VALID_GADGET_MANIFEST, bundle: VALID_BUNDLE })).toEqual({
       ok: true,
       errors: [],
     });
   });
 
-  it('accepts a valid blueprint manifest with a TSX source that compiles cleanly', () => {
-    expect(checkConformance({ manifest: VALID_BLUEPRINT_MANIFEST })).toEqual({
+  it('accepts a valid blueprint manifest with a TSX source that compiles cleanly', async () => {
+    expect(await checkConformance({ manifest: VALID_BLUEPRINT_MANIFEST })).toEqual({
       ok: true,
       errors: [],
     });
   });
 
-  it('rejects a manifest missing a required field with code=manifest_invalid', () => {
-    const result = checkConformance({
+  it('rejects a manifest missing a required field with code=manifest_invalid', async () => {
+    const result = await checkConformance({
       manifest: { ...VALID_GADGET_MANIFEST, name: undefined },
       bundle: VALID_BUNDLE,
     });
@@ -72,14 +72,14 @@ describe('checkConformance', () => {
     expect(result.errors[0]?.code).toBe('manifest_invalid');
   });
 
-  it('rejects a gadget submission missing the bundle field', () => {
-    const result = checkConformance({ manifest: VALID_GADGET_MANIFEST });
+  it('rejects a gadget submission missing the bundle field', async () => {
+    const result = await checkConformance({ manifest: VALID_GADGET_MANIFEST });
     expect(result.ok).toBe(false);
     expect(result.errors[0]?.code).toBe('bundle_parse_error');
   });
 
-  it('rejects a bundle with a disallowed import', () => {
-    const result = checkConformance({
+  it('rejects a bundle with a disallowed import', async () => {
+    const result = await checkConformance({
       manifest: VALID_GADGET_MANIFEST,
       bundle: `import { wow } from 'evil-pkg'; export function useWeatherCard(){ return wow; }`,
     });
@@ -87,8 +87,8 @@ describe('checkConformance', () => {
     expect(result.errors[0]?.code).toBe('disallowed_import');
   });
 
-  it('rejects a bundle that lacks the manifest-declared hook + default export', () => {
-    const result = checkConformance({
+  it('rejects a bundle that lacks the manifest-declared hook + default export', async () => {
+    const result = await checkConformance({
       manifest: VALID_GADGET_MANIFEST,
       bundle: `export function useDifferentName(){ return null; }`,
     });
@@ -96,8 +96,8 @@ describe('checkConformance', () => {
     expect(result.errors[0]?.code).toBe('missing_default_export');
   });
 
-  it('allows peerDeps imports', () => {
-    const result = checkConformance({
+  it('allows peerDeps imports', async () => {
+    const result = await checkConformance({
       manifest: { ...VALID_GADGET_MANIFEST, peerDeps: { 'mapbox-gl': '^3.0.0' } },
       bundle: `import mapboxgl from 'mapbox-gl'; export function useWeatherCard(){ return mapboxgl; }`,
     });
@@ -107,11 +107,11 @@ describe('checkConformance', () => {
   // ── Bucket B' (2026-05-18): blueprint gates ─────────────────────────
 
   describe('blueprint gates', () => {
-    it('rejects a blueprint whose source exceeds MAX_BLUEPRINT_SOURCE_BYTES', () => {
+    it('rejects a blueprint whose source exceeds MAX_BLUEPRINT_SOURCE_BYTES', async () => {
       // Build a string just over the cap. Use a repeating ASCII payload so
       // UTF-8 byte length matches the JS-string length.
       const padding = 'a'.repeat(MAX_BLUEPRINT_SOURCE_BYTES + 1);
-      const result = checkConformance({
+      const result = await checkConformance({
         manifest: { ...VALID_BLUEPRINT_MANIFEST, source: padding },
       });
       expect(result.ok).toBe(false);
@@ -121,8 +121,8 @@ describe('checkConformance', () => {
       });
     });
 
-    it('rejects TSX source with a syntax error via esbuild', () => {
-      const result = checkConformance({
+    it('rejects TSX source with a syntax error via esbuild', async () => {
+      const result = await checkConformance({
         manifest: {
           ...VALID_BLUEPRINT_MANIFEST,
           source: 'export default function Broken() { return <div', // unterminated JSX
@@ -132,8 +132,8 @@ describe('checkConformance', () => {
       expect(result.errors[0]?.code).toBe('blueprint_compile_error');
     });
 
-    it('rejects a blueprint that imports a package outside the always-allowlist', () => {
-      const result = checkConformance({
+    it('rejects a blueprint that imports a package outside the always-allowlist', async () => {
+      const result = await checkConformance({
         manifest: {
           ...VALID_BLUEPRINT_MANIFEST,
           source: `import evil from 'evil-pkg'; export default function X(){ return null; }`,
@@ -150,8 +150,8 @@ describe('checkConformance', () => {
     // import expressions are rejected outright because the gate
     // cannot statically resolve the target.
 
-    it('rejects a blueprint that dynamic-imports a disallowed package', () => {
-      const result = checkConformance({
+    it('rejects a blueprint that dynamic-imports a disallowed package', async () => {
+      const result = await checkConformance({
         manifest: {
           ...VALID_BLUEPRINT_MANIFEST,
           source: `
@@ -166,8 +166,8 @@ describe('checkConformance', () => {
       expect(result.errors.some((e) => e.code === 'blueprint_disallowed_import')).toBe(true);
     });
 
-    it('accepts a blueprint that dynamic-imports an allow-listed package', () => {
-      const result = checkConformance({
+    it('accepts a blueprint that dynamic-imports an allow-listed package', async () => {
+      const result = await checkConformance({
         manifest: {
           ...VALID_BLUEPRINT_MANIFEST,
           source: `
@@ -181,8 +181,8 @@ describe('checkConformance', () => {
       expect(result.ok).toBe(true);
     });
 
-    it('rejects a blueprint with a non-literal dynamic-import expression', () => {
-      const result = checkConformance({
+    it('rejects a blueprint with a non-literal dynamic-import expression', async () => {
+      const result = await checkConformance({
         manifest: {
           ...VALID_BLUEPRINT_MANIFEST,
           source: `
@@ -198,8 +198,8 @@ describe('checkConformance', () => {
       expect(result.errors.some((e) => e.code === 'blueprint_disallowed_import')).toBe(true);
     });
 
-    it('accepts a blueprint that imports from each always-allowlisted source', () => {
-      const result = checkConformance({
+    it('accepts a blueprint that imports from each always-allowlisted source', async () => {
+      const result = await checkConformance({
         manifest: {
           ...VALID_BLUEPRINT_MANIFEST,
           source: `
@@ -213,8 +213,8 @@ describe('checkConformance', () => {
       expect(result.ok).toBe(true);
     });
 
-    it('rejects a blueprint that has no default export', () => {
-      const result = checkConformance({
+    it('rejects a blueprint that has no default export', async () => {
+      const result = await checkConformance({
         manifest: {
           ...VALID_BLUEPRINT_MANIFEST,
           source: `export function NamedOnly(){ return null; }`,
@@ -224,8 +224,8 @@ describe('checkConformance', () => {
       expect(result.errors.some((e) => e.code === 'blueprint_missing_default_export')).toBe(true);
     });
 
-    it('passes fixture-shape gate when only fixtureProps is set (no propsSpec)', () => {
-      const result = checkConformance({
+    it('passes fixture-shape gate when only fixtureProps is set (no propsSpec)', async () => {
+      const result = await checkConformance({
         manifest: {
           ...VALID_BLUEPRINT_MANIFEST,
           fixtureProps: { anything: 'goes', no: 'spec' },
@@ -234,8 +234,8 @@ describe('checkConformance', () => {
       expect(result.ok).toBe(true);
     });
 
-    it('passes fixture-shape gate when only propsSpec is set (no fixtureProps)', () => {
-      const result = checkConformance({
+    it('passes fixture-shape gate when only propsSpec is set (no fixtureProps)', async () => {
+      const result = await checkConformance({
         manifest: {
           ...VALID_BLUEPRINT_MANIFEST,
           contract: {
@@ -250,8 +250,8 @@ describe('checkConformance', () => {
       expect(result.ok).toBe(true);
     });
 
-    it('rejects fixtureProps missing a required propsSpec key', () => {
-      const result = checkConformance({
+    it('rejects fixtureProps missing a required propsSpec key', async () => {
+      const result = await checkConformance({
         manifest: {
           ...VALID_BLUEPRINT_MANIFEST,
           fixtureProps: { unrelated: true },
@@ -272,8 +272,8 @@ describe('checkConformance', () => {
       });
     });
 
-    it('accepts fixtureProps that satisfies every required propsSpec key', () => {
-      const result = checkConformance({
+    it('accepts fixtureProps that satisfies every required propsSpec key', async () => {
+      const result = await checkConformance({
         manifest: {
           ...VALID_BLUEPRINT_MANIFEST,
           fixtureProps: { city: 'Tokyo', tempF: 68 },
@@ -290,8 +290,8 @@ describe('checkConformance', () => {
       expect(result.ok).toBe(true);
     });
 
-    it('rejects fixtureProps that is not a JSON object', () => {
-      const result = checkConformance({
+    it('rejects fixtureProps that is not a JSON object', async () => {
+      const result = await checkConformance({
         manifest: {
           ...VALID_BLUEPRINT_MANIFEST,
           fixtureProps: ['not', 'an', 'object'],
@@ -313,7 +313,7 @@ describe('checkConformance', () => {
     // multi-byte case where `.length` materially diverges from byte
     // length.
 
-    it('accepts a blueprint whose source is EXACTLY MAX_BLUEPRINT_SOURCE_BYTES bytes', () => {
+    it('accepts a blueprint whose source is EXACTLY MAX_BLUEPRINT_SOURCE_BYTES bytes', async () => {
       // Boilerplate that compiles + has a default export. Padding goes
       // inside a /* … */ block so esbuild + oxc-parser still accept the
       // source; the block is also pure ASCII so JS-string length and
@@ -329,14 +329,14 @@ describe('checkConformance', () => {
       // silently slip the byte count off the boundary.
       expect(encodedBytes).toBe(MAX_BLUEPRINT_SOURCE_BYTES);
 
-      const result = checkConformance({
+      const result = await checkConformance({
         manifest: { ...VALID_BLUEPRINT_MANIFEST, source },
       });
       expect(result.ok).toBe(true);
       expect(result.errors).toEqual([]);
     });
 
-    it('uses UTF-8 bytes not JS-string `.length` for the size gate (under-cap with multi-byte chars)', () => {
+    it('uses UTF-8 bytes not JS-string `.length` for the size gate (under-cap with multi-byte chars)', async () => {
       // Build a source whose JS-string `.length` is well under the cap
       // but whose UTF-8 byte length is still under the cap. Each `😀`
       // is 4 UTF-8 bytes vs 2 JS-string chars — so a string of N copies
@@ -357,13 +357,13 @@ describe('checkConformance', () => {
       expect(source.length).toBeLessThan(encodedBytes);
       expect(encodedBytes).toBeLessThanOrEqual(MAX_BLUEPRINT_SOURCE_BYTES);
 
-      const result = checkConformance({
+      const result = await checkConformance({
         manifest: { ...VALID_BLUEPRINT_MANIFEST, source },
       });
       expect(result.ok).toBe(true);
     });
 
-    it('uses UTF-8 bytes not JS-string `.length` for the size gate (over-cap with multi-byte chars)', () => {
+    it('uses UTF-8 bytes not JS-string `.length` for the size gate (over-cap with multi-byte chars)', async () => {
       // JS-string `.length` stays comfortably under the cap, but the
       // UTF-8 byte length spills over because each emoji counts for 4
       // bytes. Confirms the gate computes on bytes.
@@ -377,7 +377,7 @@ describe('checkConformance', () => {
       expect(source.length).toBeLessThan(MAX_BLUEPRINT_SOURCE_BYTES);
       expect(encodedBytes).toBeGreaterThan(MAX_BLUEPRINT_SOURCE_BYTES);
 
-      const result = checkConformance({
+      const result = await checkConformance({
         manifest: { ...VALID_BLUEPRINT_MANIFEST, source },
       });
       expect(result.ok).toBe(false);
@@ -390,8 +390,8 @@ describe('checkConformance', () => {
     // `name: 'default'` (not `kind: 'Default'`). `hasDefaultExport`
     // now handles both shapes (B'-A14 closeout, 2026-05-18).
 
-    it('accepts the `export { X as default }` alias-form as a valid default export', () => {
-      const result = checkConformance({
+    it('accepts the `export { X as default }` alias-form as a valid default export', async () => {
+      const result = await checkConformance({
         manifest: {
           ...VALID_BLUEPRINT_MANIFEST,
           source: `
@@ -406,10 +406,10 @@ describe('checkConformance', () => {
       ).toBe(false);
     });
 
-    it('rejects a named-only re-export (`export { X }`) as missing default', () => {
+    it('rejects a named-only re-export (`export { X }`) as missing default', async () => {
       // Negative control for the alias-form test above — a re-export
       // without `as default` must still trip the gate.
-      const result = checkConformance({
+      const result = await checkConformance({
         manifest: {
           ...VALID_BLUEPRINT_MANIFEST,
           source: `

@@ -592,7 +592,7 @@ export async function publishArtifact(
       : Buffer.from(bundleBytes.buffer, bundleBytes.byteOffset, bundleBytes.byteLength).toString(
           'utf8',
         );
-  const conformanceResult = checkConformance({
+  const conformanceResult = await checkConformance({
     manifest,
     bundle: conformanceBundleText,
   });

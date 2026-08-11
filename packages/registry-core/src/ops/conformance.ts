@@ -68,13 +68,35 @@ import {
   safeParseArtifactManifest,
   type ArtifactManifest,
 } from '@ggui-ai/artifact-manifest';
-import {
-  parseSync,
-  type DynamicImport,
-  type StaticExport,
-  type StaticImport,
+import type {
+  DynamicImport,
+  StaticExport,
+  StaticImport,
 } from 'oxc-parser';
 import type { ZodIssue } from 'zod';
+
+/**
+ * Lazy, memoized `oxc-parser` accessor. `oxc-parser` ships its own
+ * platform-specific native binding; loading it costs real init time
+ * and can fail outright on a host with no matching binding for the
+ * running platform. Callers that never reach the parse gates (most
+ * registry operations don't touch bundle/source conformance) shouldn't
+ * pay that cost just for importing this module — or the barrel that
+ * re-exports it.
+ *
+ * `oxc-parser` ships ESM-only (no CommonJS entry point), so a dynamic
+ * `import()` is the only way to defer the load — unlike `esbuild` in
+ * `compile.ts`, there's no synchronous `require()` path available.
+ * That's what pushes {@link checkConformance} (and everything that
+ * calls it) from a plain synchronous function to one returning a
+ * `Promise`. The promise itself is memoized at module scope, so
+ * concurrent first callers share one in-flight load and a long-lived
+ * process pays the import cost exactly once.
+ */
+let oxcParserModulePromise: Promise<typeof import('oxc-parser')> | undefined;
+function loadOxcParser(): Promise<typeof import('oxc-parser')> {
+  return (oxcParserModulePromise ??= import('oxc-parser'));
+}
 
 /**
  * Body shape of the conformance request. `bundle` is the UTF-8 text of
@@ -158,18 +180,21 @@ const ALWAYS_ALLOWED_IMPORTS: ReadonlySet<string> = new Set([
 export const MAX_BLUEPRINT_SOURCE_BYTES = 5 * 1024 * 1024;
 
 /**
- * Run the conformance check synchronously. Pure function: no
- * network, no env lookups. Returns the locked response body shape.
- * Every registry transport and the publish op call this.
+ * Run the conformance check. Pure beyond the (memoized, in-process)
+ * `oxc-parser` load: no network, no env lookups. Resolves to the
+ * locked response body shape. Every registry transport and the
+ * publish op call this — all are already async, so awaiting here adds
+ * no restructuring on the caller side; see `loadOxcParser`'s doc for
+ * why this can't stay synchronous.
  *
  * Static gates only — the optional runtime probe lives behind a
  * {@link BlueprintProbeRunner} seam so registry-core stays free of
  * DOM-emulation deps (happy-dom + react-dom/server land in the caller
  * that wants the probe).
  */
-export function checkConformance(
+export async function checkConformance(
   payload: ConformanceRequestPayload,
-): ConformanceResponseBody {
+): Promise<ConformanceResponseBody> {
   // ── Gate 1: manifest schema ────────────────────────────────────────
   const manifestResult = safeParseArtifactManifest(payload.manifest);
   if (!manifestResult.success) {
@@ -192,10 +217,10 @@ export function checkConformance(
  * Extracted from {@link checkConformance} so the blueprint branch can
  * stand on its own without nesting.
  */
-function checkGadgetConformance(
+async function checkGadgetConformance(
   manifest: Extract<ArtifactManifest, { kind: 'gadget' }>,
   bundle: string | undefined,
-): ConformanceResponseBody {
+): Promise<ConformanceResponseBody> {
   // ── Gate 2: bundle is parseable ESM ────────────────────────────────
   if (typeof bundle !== 'string' || bundle.length === 0) {
     return {
@@ -210,6 +235,7 @@ function checkGadgetConformance(
     };
   }
 
+  const { parseSync } = await loadOxcParser();
   const parsed = parseSync('bundle.js', bundle, {
     lang: 'js',
     sourceType: 'module',
@@ -294,9 +320,9 @@ function checkGadgetConformance(
  * shape. Static-only; the runtime probe lives behind the optional
  * {@link BlueprintProbeRunner} seam.
  */
-function checkBlueprintConformance(
+async function checkBlueprintConformance(
   manifest: Extract<ArtifactManifest, { kind: 'blueprint' }>,
-): ConformanceResponseBody {
+): Promise<ConformanceResponseBody> {
   // ── Gate 5: source size ──────────────────────────────────────────
   const sourceBytes = utf8ByteLength(manifest.source);
   if (sourceBytes > MAX_BLUEPRINT_SOURCE_BYTES) {
@@ -318,6 +344,7 @@ function checkBlueprintConformance(
   // (not a compiled output) is deliberate — author intent (including
   // unused imports that signal mis-configured deps) is what the
   // allow-list gates, not whatever a bundler would optimize away.
+  const { parseSync } = await loadOxcParser();
   const parsed = parseSync('blueprint.tsx', manifest.source, {
     lang: 'tsx',
     sourceType: 'module',

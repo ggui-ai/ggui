@@ -393,7 +393,7 @@ export function createRegistryApp(options: RegistryAppOptions): Hono {
         400,
       );
     }
-    const result = checkConformance(payload);
+    const result = await checkConformance(payload);
     // Domain-vs-transport split: a "non-conformant" submission is a
     // valid request that produced a `ok: false` body. Mirrors the cloud
     // conformance handler's wire shape.

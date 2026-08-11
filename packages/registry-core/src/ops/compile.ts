@@ -46,9 +46,29 @@
  * load-bearing one (its OUTPUT is what's stored), but the two are
  * deliberately separate so a `POST /conformance/check` dry-run
  * remains cheap (no bundle resolution).
+ *
+ * **Lazy dependency load.** `esbuild` ships its own platform-specific
+ * native binary; loading it costs real init time and can fail outright
+ * on a host with no matching binary for the running platform. Callers
+ * that never reach `compileBlueprint` (most registry operations don't
+ * touch blueprint compilation) shouldn't pay that cost just for
+ * importing this module. `esbuild` resolves as an ordinary CommonJS
+ * package, so a `require()` obtained via `createRequire` defers the
+ * load to the first actual call, memoized at module scope so a
+ * long-lived process only pays it once — with NO change to
+ * {@link compileBlueprint}'s synchronous signature.
  */
-import * as esbuild from 'esbuild';
+import { createRequire } from 'node:module';
 import { createHash } from 'node:crypto';
+
+const nodeRequire = createRequire(import.meta.url);
+
+let esbuildModule: typeof import('esbuild') | undefined;
+
+/** Lazy, memoized `esbuild` accessor — see the file-level doc above. */
+function loadEsbuild(): typeof import('esbuild') {
+  return (esbuildModule ??= nodeRequire('esbuild') as typeof import('esbuild'));
+}
 
 /** Compile output — base64-encoded bytes, hex digest, decoded size. */
 export interface CompileBlueprintOk {
@@ -83,6 +103,7 @@ export type CompileBlueprintResult = CompileBlueprintOk | CompileBlueprintErr;
  */
 export function compileBlueprint(source: string): CompileBlueprintResult {
   try {
+    const esbuild = loadEsbuild();
     // esbuild.buildSync would require a virtual-fs layer to handle
     // imports; we use transformSync which compiles a single text input
     // and emits a single text output. Tree-shaking is OFF and externals
