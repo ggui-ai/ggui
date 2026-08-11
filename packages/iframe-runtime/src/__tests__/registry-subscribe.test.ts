@@ -203,8 +203,8 @@ describe('connectViaRegistry — happy path', () => {
     });
 
     const handle = await handlePromise;
-    expect(handle.ack.sequence).toBe(1);
-    expect(handle.ack.serverVersion).toBe(PROTOCOL_SCHEMA_VERSION);
+    expect(handle.ack?.sequence).toBe(1);
+    expect(handle.ack?.serverVersion).toBe(PROTOCOL_SCHEMA_VERSION);
     expect(handle.handle.kind).toBe('ws');
   });
 
@@ -223,7 +223,8 @@ describe('connectViaRegistry — happy path', () => {
     });
 
     const handle = await handlePromise;
-    expect(handle.ack.serverVersion).toBeUndefined();
+    expect(handle.ack).toBeDefined();
+    expect(handle.ack?.serverVersion).toBeUndefined();
   });
 });
 
@@ -466,5 +467,51 @@ describe('connectViaRegistry — fallback-descriptor pass-through (branch 7)', (
     expect(bindArg !== undefined && 'sse' in bindArg).toBe(false);
     expect(bindArg !== undefined && 'polling' in bindArg).toBe(false);
     expect(bindArg !== undefined && 'bridge' in bindArg).toBe(false);
+  });
+});
+
+describe('connectViaRegistry — trio-less bridge-only bind (#471 round-6)', () => {
+  const TRIOLESS_META = {
+    sessionId: 'render_001',
+    appId: 'app_001',
+    runtimeUrl: 'https://x/runtime.js',
+  } as McpAppAiGguiRenderMeta;
+
+  const bridgeDescriptor = (): RegistryPollingOptions => ({
+    intervalMs: 3000,
+    fetchBody: async () => ({ events: [], lastSequence: 0, hasMore: false }),
+    parseSnapshot: () => null,
+  });
+
+  it('a trio-less meta WITH a bridge descriptor binds without wsUrl/wsToken and resolves ack-less', async () => {
+    const registry = makeRegistry();
+    const bindSpy = vi.spyOn(registry, 'bind');
+    const handle = await connectViaRegistry({
+      meta: TRIOLESS_META,
+      registry,
+      onStatusChange: () => {},
+      bridge: bridgeDescriptor(),
+    });
+    // No subscribe handshake — resolves with the handle alone (the
+    // static seed already painted; the bridge delivers deltas).
+    expect(handle.ack).toBeUndefined();
+    expect(handle.handle.kind).toBe('polling');
+    const bindArg = bindSpy.mock.calls[0]?.[0];
+    expect(bindArg !== undefined && 'bridge' in bindArg).toBe(true);
+    // The bootstrap carries NEITHER ws key (exact-optional) — the
+    // registry starts the ladder at its tail.
+    expect(bindArg !== undefined && 'wsUrl' in bindArg.bootstrap).toBe(false);
+    expect(bindArg !== undefined && 'wsToken' in bindArg.bootstrap).toBe(false);
+  });
+
+  it('a trio-less meta WITHOUT a bridge descriptor still rejects', async () => {
+    const registry = makeRegistry();
+    await expect(
+      connectViaRegistry({
+        meta: TRIOLESS_META,
+        registry,
+        onStatusChange: () => {},
+      }),
+    ).rejects.toThrow(/no bridge descriptor/);
   });
 });

@@ -75,6 +75,7 @@ import {
 } from './channel-transport.js';
 import { RelayIncapableError } from './relay-incapability.js';
 import { ChannelRegistry } from '@ggui-ai/live-channel';
+import type { WsTransportHandle } from '@ggui-ai/live-channel';
 import {
   createChannelErrorHandler,
   createChannelPayloadHandler,
@@ -1027,18 +1028,28 @@ export async function bootSequence(opts: BootSequenceOptions): Promise<BootSeque
     }
   }
 
-  // ── No live channel → static-only host. ────────────────────────────
+  // ── No live channel → static-only host (unless bridge-capable). ─────
   // The static seed already painted (or there was nothing to paint).
   // A bootstrap with neither static content nor a live trio is a
   // misconfiguration — surface a typed boot failure.
-  if (!hasLiveTrio) {
-    if (mountedRender === null) {
-      const message =
-        'bootstrap carries neither static content (codeUrl/codeB64/kind) nor a live trio (wsUrl/wsToken)';
-      setStatus(refs, message, 'error');
-      emitBootFailure('MISSING_META_GGUI_BOOTSTRAP', message);
-      return { ok: false, mountedRender };
-    }
+  //
+  // #471 round-6 live finding: when the host exposes an App bridge
+  // (tools/call postMessage — claude.ai, every MCP Apps host), a
+  // trio-less static mount must NOT stop here — the bridge-pull
+  // terminal rung is exactly its subscription. Fall through to the
+  // subscribe below, which binds trio-less (the registry starts the
+  // ladder at its tail). Gating the terminal rung behind the WS
+  // trio's presence disabled it on precisely the host class it was
+  // built for.
+  const staticOnlyNoBridge = !hasLiveTrio && getCurrentApp() === null;
+  if (!hasLiveTrio && mountedRender === null) {
+    const message =
+      'bootstrap carries neither static content (codeUrl/codeB64/kind) nor a live trio (wsUrl/wsToken)';
+    setStatus(refs, message, 'error');
+    emitBootFailure('MISSING_META_GGUI_BOOTSTRAP', message);
+    return { ok: false, mountedRender };
+  }
+  if (staticOnlyNoBridge) {
     // Host-context wiring for the no-WS static mount (claude.ai / ChatGPT
     // / Claude Desktop). The INITIAL host theme/style/fonts were already
     // applied at boot (applyHostContextStyling, above); attach the
@@ -1202,11 +1213,16 @@ export async function bootSequence(opts: BootSequenceOptions): Promise<BootSeque
   }
 
   // Attach the live transport handle to the renderer — flushes any
-  // buffered outbound `action` frames that were queued
-  // while the subscribe handshake completed. `handle.handle.send` is
-  // the canonical send surface for the bound WS transport.
+  // buffered outbound `action` frames that were queued while the
+  // subscribe handshake completed. `send` narrows to the ws surface:
+  // a trio-less bridge-only bind has NO outbound channel (gestures
+  // ride app.callServerTool, not the transport), so its sends drop —
+  // the same posture a post-swap FailoverHandle already has.
+  const transportSend = (msg: Parameters<WsTransportHandle['send']>[0]): void => {
+    if (handle.handle.kind === 'ws') handle.handle.send(msg);
+  };
   if (renderer !== null && rendererHooks?.attachManager !== undefined) {
-    rendererHooks.attachManager(renderer, { send: (msg) => handle.handle.send(msg) });
+    rendererHooks.attachManager(renderer, { send: transportSend });
   }
 
   // seed the host-context emitter with the projection captured from
@@ -1218,7 +1234,7 @@ export async function bootSequence(opts: BootSequenceOptions): Promise<BootSeque
   if (parsed.hostContext !== undefined) {
     seedHostContext({
       sessionId: meta.sessionId,
-      send: (msg) => handle.handle.send(msg),
+      send: transportSend,
       initial: parsed.hostContext,
     });
     // Bind via App's spec-canonical `hostcontextchanged` event surface.
@@ -1232,8 +1248,12 @@ export async function bootSequence(opts: BootSequenceOptions): Promise<BootSeque
   // `pinnedSessionId`) and mount it. Reuses the same `applyAck` helper
   // the reconnect-rebootstrap path uses — so a server-restart-driven
   // snapshot replay and the first-boot snapshot apply flow through
-  // one implementation.
-  await applyAck(handle.ack);
+  // one implementation. Trio-less bridge-only binds have no handshake
+  // and therefore no ack — the static seed already painted, and the
+  // bridge delivers deltas from the boot cursor.
+  if (handle.ack !== undefined) {
+    await applyAck(handle.ack);
+  }
   setConnectedStatus(refs);
   // Lifecycle `code-ready` — terminal happy state. Emitted ONCE per boot
   // (a static+live meta already fired it from the seed mount, so this is

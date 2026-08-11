@@ -47,6 +47,7 @@ import type { AckPayload } from '@ggui-ai/protocol';
 import type { ConnectionStatus } from '@ggui-ai/protocol/transport/websocket';
 import type { McpAppAiGguiRenderMeta } from '@ggui-ai/protocol/integrations/mcp-apps';
 import type {
+  AnyTransportHandle,
   ChannelRegistry,
   RegistryPollingOptions,
   RegistrySseOptions,
@@ -70,8 +71,19 @@ import type { ObservabilityEmitter } from './observability.js';
  * render slot.
  */
 export interface RegistrySubscribeHandle {
-  readonly handle: WsTransportHandle;
-  readonly ack: AckPayload;
+  /**
+   * The bound transport. `kind: 'ws'` on trio binds (the FailoverHandle
+   * facade keeps it across demotions); `kind: 'polling'` on trio-less
+   * bridge-only binds — narrow before using the ws-only `send` surface.
+   */
+  readonly handle: AnyTransportHandle;
+  /**
+   * First subscribe ack — present on trio binds only. A trio-less
+   * bridge-only bind has no subscribe handshake (the static seed
+   * already painted; the bridge delivers deltas), so the key is
+   * absent entirely (exact-optional).
+   */
+  readonly ack?: AckPayload;
 }
 
 /**
@@ -294,15 +306,24 @@ export function connectViaRegistry(
       opts.onProtocolError ?? (() => {});
     const emitObserve: ObservabilityEmitter = opts.onObserve ?? (() => {});
 
-    // Defense-in-depth — live mode requires both wsUrl + wsToken. The
-    // caller validates this before invoking; reject early with a
-    // typed transport failure if either is missing.
+    // Defense-in-depth — the WS rung requires both wsUrl + wsToken.
+    // A trio-less meta is still connectable when a BRIDGE descriptor
+    // is supplied (#471 round-6 live finding): CSP-jailed MCP-Apps
+    // hosts mount statically with NO trio at all, and the bridge-pull
+    // terminal rung — whose only precondition is the host's tools/call
+    // postMessage bridge — is precisely their subscription. The
+    // registry handles a trio-less bootstrap by starting the ladder at
+    // its tail. Trio-less AND bridge-less remains the typed failure.
     const wsUrl = opts.meta.wsUrl;
     const wsToken = opts.meta.wsToken;
-    if (typeof wsUrl !== 'string' || wsUrl.length === 0 ||
-        typeof wsToken !== 'string' || wsToken.length === 0) {
+    const hasTrio =
+      typeof wsUrl === 'string' &&
+      wsUrl.length > 0 &&
+      typeof wsToken === 'string' &&
+      wsToken.length > 0;
+    if (!hasTrio && opts.bridge === undefined) {
       const err = new Error(
-        'connectViaRegistry: render-meta missing wsUrl/wsToken — live-mode required',
+        'connectViaRegistry: render-meta missing wsUrl/wsToken and no bridge descriptor — nothing to subscribe',
       );
       emitProtocolError(fromTransportFailure('DISCONNECTED', false, err.message));
       reject(err);
@@ -453,19 +474,19 @@ export function connectViaRegistry(
       }
     };
 
-    const composedUrl = composeWsUrl(wsUrl, wsToken);
-
     // `bind()` selects the transport (WS for wsUrl+wsToken sessions;
     // the live-channel narrows on its `bootstrap` shape) and starts
     // it. We override `bootstrap.wsUrl` with the composed URL so the
     // registry's WS transport gets the wsToken-threaded variant. The
     // live-channel's `bootstrap` arg is its internal name; the field
-    // on the wire is `wsToken`.
+    // on the wire is `wsToken`. Trio-less (bridge-capable) binds carry
+    // NEITHER key — the registry then starts the ladder at its tail.
     void opts.registry
       .bind({
         bootstrap: {
-          wsUrl: composedUrl,
-          wsToken,
+          ...(hasTrio
+            ? { wsUrl: composeWsUrl(wsUrl, wsToken), wsToken }
+            : {}),
           sessionId: opts.meta.sessionId,
           appId: opts.meta.appId,
         },
@@ -475,6 +496,17 @@ export function connectViaRegistry(
         ...(opts.bridge !== undefined ? { bridge: opts.bridge } : {}),
       })
       .then((bound) => {
+        if (!hasTrio) {
+          // Bridge-only bind — no subscribe handshake, no ack. The
+          // polling facade reports 'open' immediately (mapped to
+          // 'connected' for the consumer); resolve with the handle
+          // alone and let the ladder deliver deltas.
+          if (!settled) {
+            settled = true;
+            resolve({ handle: bound });
+          }
+          return;
+        }
         // bound is `AnyTransportHandle`. Composed URL + wsToken means
         // the registry selected WSTransport — `kind === 'ws'` is the
         // structural invariant. Narrow defensively.
