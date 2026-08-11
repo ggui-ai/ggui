@@ -282,6 +282,18 @@ export function createGguiUpdateHandler(
   return {
     name: 'ggui_update',
     title: 'Update',
+    _meta: {
+      // MCP-Apps UI binding — REQUIRED for result delivery, not just
+      // entry-point visibility. Live claude.ai evidence (2026-08-11,
+      // #471 round-2 retest): hosts forward a tool's results to the
+      // mounted iframe only when the tool's DECLARATION carries the
+      // UI binding; without it, every ggui_update landed server-side
+      // and the iframe never repainted. Same template as ggui_render
+      // (one UI, two tools that feed it) — this revises the render.ts
+      // §2.4.1 "exactly one tool" entry-point lock, see the note
+      // there.
+      ui: GGUI_RENDER_UI_META,
+    },
     audience: ['agent'],
     description:
       deps.description ??
@@ -557,7 +569,15 @@ export function createGguiUpdateHandler(
         ...(view.propsJson !== undefined ? { propsJson: view.propsJson } : {}),
         ...(view.codeB64 !== undefined ? { codeB64: view.codeB64 } : {}),
       };
-      return toMcpAppEnvelope(render);
+      // `_meta.ui.resourceUri` mirrors ggui_render's result meta so
+      // hosts that key UI-instance routing on the per-result URI bind
+      // this update to the SAME mounted iframe (+ legacy flat key for
+      // hosts reading the unnested form).
+      return {
+        ...toMcpAppEnvelope(render),
+        ui: { resourceUri: output.resourceUri },
+        'ui/resourceUri': output.resourceUri,
+      };
     },
   };
 }

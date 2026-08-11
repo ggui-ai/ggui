@@ -16,7 +16,10 @@ import {
   type JsonObject,
   type PropsSpec,
 } from '@ggui-ai/protocol';
-import { parseMcpAppAiGguiRenderMeta } from '@ggui-ai/protocol/integrations/mcp-apps';
+import {
+  GGUI_RENDER_UI_META,
+  parseMcpAppAiGguiRenderMeta,
+} from '@ggui-ai/protocol/integrations/mcp-apps';
 import {
   InMemoryGguiSessionStore,
   InMemoryRenderIdentityStore,
@@ -86,10 +89,14 @@ describe('createGguiUpdateHandler', () => {
       expect(outKeys).toEqual(['resourceUri', 'sessionId', 'updated']);
     });
 
-    it('does NOT carry any MCP Apps _meta stamp — update is a pure mutation', () => {
+    it('carries the MCP Apps UI binding — same template as ggui_render (#471 revised lock)', () => {
+      // Hosts forward a tool's RESULTS to the mounted iframe only when
+      // the tool's DECLARATION carries the binding (live claude.ai
+      // evidence, #471 round-2 retest: without it, every ggui_update
+      // landed server-side and the iframe never repainted).
       const store = new InMemoryGguiSessionStore();
       const handler = createGguiUpdateHandler({ renderStore: store });
-      expect(handler._meta).toBeUndefined();
+      expect(handler._meta).toEqual({ ui: GGUI_RENDER_UI_META });
     });
   });
 

@@ -973,10 +973,15 @@ export function createGguiRenderHandler(
     inputSchema,
     outputSchema,
     _meta: {
-      // §2.4.1 entry-point lock: `_meta.ui.resourceUri` +
-      // `_meta.ui.visibility` per the MCP Apps spec. Exactly one ggui
-      // tool carries these; expanding this set without revisiting the
-      // design lock is a boundary violation.
+      // §2.4.1 entry-point lock, REVISED 2026-08-11: `_meta.ui.resourceUri`
+      // + `_meta.ui.visibility` per the MCP Apps spec. Exactly TWO ggui
+      // tools carry these — ggui_render (the entry point) and
+      // ggui_update (same template). The lock originally said one, but
+      // live claude.ai evidence (#471 round-2 retest) showed hosts
+      // forward a tool's RESULTS to the mounted iframe only when the
+      // tool's declaration carries the binding — without it every
+      // ggui_update landed server-side and the iframe never repainted.
+      // Expanding beyond these two still requires revisiting this note.
       //
       // Legacy flat-key (`_meta["ui/resourceUri"]`) is stamped
       // automatically by `registerAppTool` in `build-mcp.ts` — we
