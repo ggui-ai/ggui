@@ -37,11 +37,9 @@ export const MCP_TOOL_BINDING_NAME_RE = /^[A-Za-z0-9_.-]{1,128}$/;
 /**
  * Shared entry-count bound for a binding list, declared OR derived —
  * one envelope, referenced everywhere a cap applies rather than a
- * second magic `16` drifting from this one. Exported (#473 review
- * round 2) so callers that derive a DIFFERENT bound FROM this one
- * (e.g. the registry's per-binding index TransactWrite item count,
- * `1 + 2 * MCP_TOOL_BINDING_MAX_ENTRIES`) stay coupled by import
- * rather than by a second hand-copied `16` — if this cap ever
+ * second magic `16` drifting from this one. Exported so downstream
+ * callers that derive a bound from this cap stay coupled by import
+ * instead of a second hand-copied constant — if this cap ever
  * changes, every derived bound recomputes automatically instead of
  * silently drifting.
  */

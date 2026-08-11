@@ -65,9 +65,8 @@ export {
 // search input validation (`tool=` / `server=` filters) imports
 // `MCP_TOOL_BINDING_NAME_RE` from here so the wire filters and the
 // manifest field stay on a single charset rule. `MCP_TOOL_BINDING_MAX_ENTRIES`
-// (#473 review round 2) lets the registry's DDB adapter derive its
-// per-binding-index TransactWrite item bound FROM this cap instead of
-// a second hand-copied constant.
+// is exported so downstream callers that derive a bound from this cap
+// stay coupled by import instead of a second hand-copied constant.
 export {
   MCP_TOOL_BINDING_MAX_ENTRIES,
   MCP_TOOL_BINDING_NAME_RE,
