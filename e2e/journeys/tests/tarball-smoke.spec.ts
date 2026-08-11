@@ -133,7 +133,7 @@ test.describe.serial('Phase 5.5 — tarball-install smoke (cli + mcp-server)', (
     // routes (agent + runtime + protocol + ops); the `tools/list`
     // assertion below pins the agent/runtime surface the `/mcp` route
     // actually exposes. When the native surface changes, update both.
-    expect(health.tools).toBe(26);
+    expect(health.tools).toBe(27);
     expect(health.channel?.path).toBe('/ws');
 
     // tools/list with the pair-minted bearer. If publish-shape
@@ -160,6 +160,10 @@ test.describe.serial('Phase 5.5 — tarball-install smoke (cli + mcp-server)', (
       'ggui_list_themes',
       'ggui_render',
       'ggui_runtime_declare_tool_catalog',
+      // Bridge-pull terminal rung (transport ladder) — iframes in
+      // CSP-jailed hosts pull the event ledger over the host's
+      // tools/call bridge.
+      'ggui_runtime_pull',
       'ggui_runtime_refresh_ws_token',
       'ggui_runtime_submit_action',
       'ggui_runtime_sync_context',
