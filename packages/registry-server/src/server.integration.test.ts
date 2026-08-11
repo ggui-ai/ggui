@@ -467,6 +467,41 @@ describe('OSS registry server', () => {
     expect(body.error).toBe('invalid_request');
   });
 
+  // ── /search?tool=/server= (MCP discovery §2) ──
+  // Regression pin: the route handler must forward `tool`/`server`
+  // through to `searchArtifacts` — a prior version of this handler
+  // silently dropped both, so `?tool=` round-tripped as an unfiltered
+  // search instead of a 400 or a filtered result.
+  it('GET /search?tool= filters by MCP tool binding', async () => {
+    await harness.storage.putArtifactMetadata({
+      artifactId: '@test/weather-tool',
+      sk: ARTIFACTS_METADATA_SK,
+      kind: 'gadget',
+      latestVersion: '0.1.0',
+      visibility: 'public',
+      publishedAt: '2026-05-03T00:00:00.000Z',
+      publishedBy: TEST_SUBJECT,
+      mcpTools: [{ server: 'weather-server', tool: 'get_weather' }],
+      mcpToolsSource: 'declared',
+    });
+
+    const res = await fetch(`${harness.baseUrl}/search?tool=get_weather`);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      results: ReadonlyArray<{ artifactId: string }>;
+    };
+    const ids = body.results.map((r) => r.artifactId);
+    expect(ids).toContain('@test/weather-tool');
+    expect(ids).not.toContain('@test/earlier');
+  });
+
+  it('GET /search?tool=invalid%20name returns 400', async () => {
+    const res = await fetch(`${harness.baseUrl}/search?tool=${encodeURIComponent('invalid name')}`);
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as { error: string };
+    expect(body.error).toBe('invalid_request');
+  });
+
   // ── /conformance/check ──
   it('POST /conformance/check returns 200 with ok: false on invalid manifest', async () => {
     const res = await fetch(`${harness.baseUrl}/conformance/check`, {
