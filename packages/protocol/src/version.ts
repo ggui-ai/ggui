@@ -236,6 +236,43 @@
  * posture), so the additive field breaks nothing. PROTOCOL_VERSION
  * unchanged — no wire frame changed shape.
  *
+ * SSE middle rung (2026-08-11): the failover-ladder stream surface — a
+ * MINOR for the `@ggui-ai/protocol` wave, deferred to the next cut
+ * (≥ 0.9.0) under the same one-wave-version rule as above. Two
+ * additive pieces, one motivation (hosts whose CSP blocks WebSocket
+ * but permits `EventSource`, giving the ladder a live middle rung
+ * between WS and cursor polling):
+ *
+ *   sm1. **`McpAppAiGguiRenderMeta.sseUrl`** — optional server-stamped
+ *      `/api/sessions/<sessionId>/stream?wsToken=<token>` URL beside
+ *      `pollingUrl`. Every envelope that parsed before parses
+ *      identically (tolerant scalar posture, no pairing invariant —
+ *      the URL is self-authorizing via its embedded token). Absent ⇒
+ *      no SSE rung; the ladder is WS → polling. The stream contract
+ *      the URL points at (ChannelFrame-per-`data:`-line byte-same as
+ *      the WS push, `id:` = ledger seq on replay frames only,
+ *      `: hb` comment heartbeat ≤ ~25s, `retry: 3000` first write,
+ *      `Last-Event-ID` over `?sinceSequence=`, 401/404/410 mirroring
+ *      `/events`) is pinned on the interface docstring.
+ *
+ *   sm2. **`composeSessionApiUrls` + `SessionApiUrls`** — the ONE
+ *      pure composer every stamping surface (render/update resultMeta,
+ *      self-contained shell, `/state` bootstrap) routes both URLs
+ *      through — the `deriveRenderMeta` move applied to channel URLs.
+ *      New exports only. This REPAIRS a confirmed drift: `/state` used
+ *      to stamp an unconditional token-less `/state`-shaped
+ *      pollingUrl that could only 401 through the events composer;
+ *      both URLs now stamp ONLY when the live trio is minted, and
+ *      omission is the honest no-HTTP-fallback signal.
+ *
+ * Conformance-kit verdict: same posture as if1 — no fixture pins the
+ * render slice's closed field set (verbatim-carry by design), so the
+ * additive field breaks nothing. Full SSE endpoint conformance cases
+ * are a FLAGGED follow-up (unit tests ride this slice; conformance
+ * ticket after launch — No Silent Block). PROTOCOL_VERSION unchanged —
+ * no WS envelope moved; the SSE `data:` line reuses the ChannelFrame
+ * shape byte for byte.
+ *
  * --------------------------------------------------------------------
  * Credential-broker surface retired (2026-08-08, BREAKING, pre-launch,
  * ggui#436). The `system` frame's auth vocabulary and the

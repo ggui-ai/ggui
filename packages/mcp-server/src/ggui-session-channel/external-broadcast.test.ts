@@ -28,7 +28,7 @@ import {
 } from '@ggui-ai/mcp-server-core/in-memory';
 import type { WebSocketMessage } from '@ggui-ai/protocol/transport/websocket';
 import type { Logger } from '../logger.js';
-import { createOutbound, type Outbound } from './outbound.js';
+import { createOutbound, createWsSink, type Outbound } from './outbound.js';
 import type { Subscriber } from './internal-types.js';
 
 /** Silent logger — these tests don't assert on log output. */
@@ -99,7 +99,9 @@ async function buildFixture(): Promise<Fixture> {
   const connectedAt = Date.now();
 
   const subA: Subscriber = {
+    transport: 'ws',
     ws: wsA,
+    sink: createWsSink(wsA, logger),
     sessionId,
     appId: 'app-test',
     identity: IDENTITY,
@@ -109,7 +111,9 @@ async function buildFixture(): Promise<Fixture> {
     channelSubs: new Map(),
   };
   const subB: Subscriber = {
+    transport: 'ws',
     ws: wsB,
+    sink: createWsSink(wsB, logger),
     sessionId,
     appId: 'app-test',
     identity: IDENTITY,
@@ -119,7 +123,9 @@ async function buildFixture(): Promise<Fixture> {
     channelSubs: new Map(),
   };
   const subOther: Subscriber = {
+    transport: 'ws',
     ws: wsOther,
+    sink: createWsSink(wsOther, logger),
     sessionId: otherSessionId,
     appId: 'app-test',
     identity: IDENTITY,

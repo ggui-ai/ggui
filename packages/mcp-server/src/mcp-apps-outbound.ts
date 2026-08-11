@@ -45,6 +45,7 @@ import {
   deriveRenderMeta,
   filterDescriptorsToContract,
   findBlueprintExact,
+  wsOriginToHttpOrigin,
   type Blueprint,
   type BlueprintDurabilityDeps,
 } from "@ggui-ai/mcp-server-handlers/renders";
@@ -69,11 +70,13 @@ import {
   MCP_APPS_UI_CAPABILITY,
   MCP_APP_BOOTSTRAP_FAILED_TYPE,
   asGguiRenderBootstrap,
+  composeSessionApiUrls,
   deriveContextName,
   escapeInlineScript,
   gguiShellHtml,
   toMcpAppEnvelope,
   type McpAppAiGguiRenderMeta,
+  type SessionApiUrls,
 } from "@ggui-ai/protocol/integrations/mcp-apps";
 import { ResourceTemplate, type McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { registerAppResource } from "@modelcontextprotocol/ext-apps/server";
@@ -541,7 +544,17 @@ function buildCspMeta(
    * references `:6786/_ggui/iframe-runtime.js`) trips a `script-src`
    * violation that blanks the iframe — verified live 2026-05-27.
    */
-  runtimeUrl?: string
+  runtimeUrl?: string,
+  /**
+   * Origins of server-stamped fetch/stream URLs (`sseUrl`,
+   * `pollingUrl`) — each parseable entry's origin is unioned into
+   * `connectDomains` (deduplicated). Same-origin deployments add
+   * nothing new; split-origin session APIs (dedicated streaming host)
+   * would otherwise be silently blocked by `connect-src` on
+   * spec-compliant hosts — EventSource and fetch are both
+   * connect-src-governed.
+   */
+  extraConnectUrls?: readonly (string | undefined)[]
 ):
   | {
       readonly ui: {
@@ -559,10 +572,23 @@ function buildCspMeta(
     const origin = parsed.origin;
     const wsScheme = parsed.protocol === "https:" ? "wss:" : "ws:";
     const wsOrigin = `${wsScheme}//${parsed.host}`;
+    const connectDomains = [origin, wsOrigin];
+    for (const url of extraConnectUrls ?? []) {
+      if (url === undefined) continue;
+      let extraOrigin: string;
+      try {
+        extraOrigin = new URL(url).origin;
+      } catch {
+        // Unparseable stamped URL — nothing to declare for it; the
+        // base declaration stands.
+        continue;
+      }
+      if (!connectDomains.includes(extraOrigin)) connectDomains.push(extraOrigin);
+    }
     return {
       ui: {
         csp: {
-          connectDomains: [origin, wsOrigin],
+          connectDomains,
           resourceDomains: [origin],
         },
       },
@@ -858,6 +884,17 @@ export interface SelfContainedShellInputs {
    * shell builders do; callers composing their own shells SHOULD).
    */
   readonly pollingUrl?: McpAppAiGguiRenderMeta["pollingUrl"];
+  /**
+   * Wire-stamped SSE middle rung between WS and polling —
+   * `${base}/api/sessions/<id>/stream?wsToken=<...>`. Serves the same
+   * ChannelFrame stream the WS pushes (each SSE `data:` line is one
+   * `{type, payload}` JSON; `id:` = the event-ledger seq on
+   * ledger-backed replay frames). Composed alongside
+   * {@link pollingUrl} via the protocol's `composeSessionApiUrls` so
+   * the two rungs cannot drift. Absent ⇒ the failover ladder skips
+   * straight to polling (WS → polling).
+   */
+  readonly sseUrl?: McpAppAiGguiRenderMeta["sseUrl"];
 }
 
 /**
@@ -952,6 +989,9 @@ export function buildSelfContainedShell(opts: SelfContainedShellInputs): string 
     // WS-only mode (legacy behavior). See SelfContainedShellInputs
     // .pollingUrl for the URL shape.
     ...(opts.pollingUrl !== undefined ? { pollingUrl: opts.pollingUrl } : {}),
+    // SSE middle rung — same stamping posture as pollingUrl. See
+    // SelfContainedShellInputs.sseUrl for the stream contract.
+    ...(opts.sseUrl !== undefined ? { sseUrl: opts.sseUrl } : {}),
     ...(opts.lastSequence !== undefined ? { lastSequence: opts.lastSequence } : {}),
     // Visible-bits surface — what the iframe is mounting right now.
     // Static-content discriminators (codeUrl / kind) are mutually
@@ -1548,18 +1588,25 @@ export function registerGguiRenderResourceTemplate(
    * claude.ai's iframe CSP and the component fails to render. Returns
    * `undefined` when there's no base CSP at all (publicBaseUrl
    * absent — first-party same-origin host).
+   *
+   * `base` defaults to the registration-time `templateCspMeta`;
+   * `serveMount` passes a per-render base recomputed with the stamped
+   * session-API URLs (`sseUrl` / `pollingUrl`) so their origins ride
+   * `connectDomains` even when they differ from the publicBaseUrl
+   * origin (ws→http origin-flip fallback).
    */
   const augmentCspMeta = (
-    gadgetOrigins: ReturnType<typeof deriveBundleOrigins> | undefined
+    gadgetOrigins: ReturnType<typeof deriveBundleOrigins> | undefined,
+    base: CspMeta | undefined = templateCspMeta
   ): CspMeta | undefined => {
-    if (templateCspMeta === undefined) return undefined;
-    if (gadgetOrigins === undefined) return templateCspMeta;
+    if (base === undefined) return undefined;
+    if (gadgetOrigins === undefined) return base;
     return {
       ui: {
         csp: {
-          connectDomains: [...templateCspMeta.ui.csp.connectDomains, ...gadgetOrigins.connect],
+          connectDomains: [...base.ui.csp.connectDomains, ...gadgetOrigins.connect],
           resourceDomains: [
-            ...templateCspMeta.ui.csp.resourceDomains,
+            ...base.ui.csp.resourceDomains,
             ...gadgetOrigins.script,
             ...gadgetOrigins.style,
           ],
@@ -2094,6 +2141,22 @@ export function registerGguiRenderResourceTemplate(
       }
     }
 
+    // Token-bearing session-API URL pair (pollingUrl + sseUrl) —
+    // composed via the protocol's ONE composer so this surface cannot
+    // drift from the render/update resultMeta stamping. Stamped only
+    // when the mint above produced a token (both URLs embed it); base
+    // = publicBaseUrl when configured, else the ws→http origin flip
+    // of the minted wsUrl (session API served on the WS origin — OSS
+    // defaults + the cloud pod's single ingress).
+    let sessionApiUrls: SessionApiUrls | undefined;
+    if (wsToken !== undefined) {
+      const base =
+        opts.publicBaseUrl ?? (wsUrl !== undefined ? wsOriginToHttpOrigin(wsUrl) : undefined);
+      if (base !== undefined) {
+        sessionApiUrls = composeSessionApiUrls(base, sessionId, wsToken);
+      }
+    }
+
     // Mount-mode gate (below the live-channel mint): a compiled
     // component needs ONE of the two channels. A deployment that wires
     // no codeStore (codeUrl === undefined) but DOES wire mintWsToken
@@ -2170,6 +2233,12 @@ export function registerGguiRenderResourceTemplate(
       ...(resourcePublicEnv !== undefined && Object.keys(resourcePublicEnv).length > 0
         ? { publicEnv: resourcePublicEnv }
         : {}),
+      // Token-bearing HTTP fallback rungs — present exactly when the
+      // mint above produced a token and a base resolved (see the
+      // composition above the mount-mode gate).
+      ...(sessionApiUrls !== undefined
+        ? { pollingUrl: sessionApiUrls.pollingUrl, sseUrl: sessionApiUrls.sseUrl }
+        : {}),
       // R6 — ledger cursor stamp for polling-cursor alignment.
       lastSequence: accessibleStored.eventSequence,
     });
@@ -2183,7 +2252,20 @@ export function registerGguiRenderResourceTemplate(
     // derives these via deriveBundleOrigins; this is the per-call
     // resource mirror.
     const gadgetOrigins = deriveBundleOrigins(picked.source);
-    return shellContents(uri, html, augmentCspMeta(gadgetOrigins));
+    // Per-render CSP base: recompute with the stamped session-API
+    // URLs so their origins ride `connectDomains` (EventSource +
+    // fetch are connect-src-governed). Same-origin stamps dedupe to
+    // the registration-time declaration; a base derived from the
+    // wsUrl origin flip (publicBaseUrl absent) adds the flip origin
+    // that would otherwise be silently blocked.
+    const renderCspBase =
+      sessionApiUrls !== undefined
+        ? buildCspMeta(opts.publicBaseUrl, opts.runtimeUrl, [
+            sessionApiUrls.sseUrl,
+            sessionApiUrls.pollingUrl,
+          ])
+        : templateCspMeta;
+    return shellContents(uri, html, augmentCspMeta(gadgetOrigins, renderCspBase));
   }
 
   // Single shared handler powers both templates. `blueprintKey` is

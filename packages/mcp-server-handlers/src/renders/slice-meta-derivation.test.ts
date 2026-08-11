@@ -10,6 +10,7 @@ import type {
 import type { ComponentGguiSession, SystemGguiSession } from '@ggui-ai/protocol';
 import { isRecord } from '@ggui-ai/protocol';
 import {
+  assembleRenderSliceBase,
   composeContentSecurityPolicy,
   deriveBundleOrigins,
   deriveGadgetRegistrations,
@@ -20,6 +21,7 @@ import {
   derivePublicEnvProjection,
   deriveRenderMeta,
   deriveTheme,
+  wsOriginToHttpOrigin,
 } from './slice-meta-derivation';
 
 const NOW = '2026-05-09T00:00:00.000Z';
@@ -1164,5 +1166,127 @@ describe('derivePublicEnvProjection', () => {
         GGUI_PUBLIC_APP_MAPBOX_TOKEN: 123 as unknown as string,
       }),
     ).toBeUndefined();
+  });
+});
+
+describe('wsOriginToHttpOrigin — ws→http origin flip', () => {
+  it('flips wss:// to https:// and drops the path', () => {
+    expect(wsOriginToHttpOrigin('wss://mcp.example.com/ws')).toBe(
+      'https://mcp.example.com',
+    );
+  });
+
+  it('flips ws:// to http:// (OSS dev default)', () => {
+    expect(wsOriginToHttpOrigin('ws://localhost/ws')).toBe('http://localhost');
+  });
+
+  it('preserves an explicit port', () => {
+    expect(wsOriginToHttpOrigin('ws://127.0.0.1:6786/ws')).toBe(
+      'http://127.0.0.1:6786',
+    );
+  });
+
+  it('returns undefined for a malformed URL instead of throwing', () => {
+    expect(wsOriginToHttpOrigin('not a url')).toBeUndefined();
+  });
+});
+
+describe('assembleRenderSliceBase — channelUrls stamping matrix', () => {
+  const MINT = (sessionId: string, _appId: string) => ({
+    wsUrl: 'wss://live.example/ws',
+    token: `tok-${sessionId}`,
+    expiresAt: '2099-01-01T00:00:00.000Z',
+  });
+  const CALL = { sessionId: 'sess-1', appId: 'app-1' };
+
+  it('minted + static base → both URLs composed off the base with the token embedded', () => {
+    const base = assembleRenderSliceBase(
+      { mintWsToken: MINT, sessionApiBaseUrl: 'https://public.example' },
+      CALL,
+    );
+    expect(base.channelUrls).toEqual({
+      pollingUrl: 'https://public.example/api/sessions/sess-1/events?wsToken=tok-sess-1',
+      sseUrl: 'https://public.example/api/sessions/sess-1/stream?wsToken=tok-sess-1',
+    });
+  });
+
+  it('minted + function-form base → getter resolved lazily per call', () => {
+    const base = assembleRenderSliceBase(
+      { mintWsToken: MINT, sessionApiBaseUrl: () => 'https://proxy.example' },
+      CALL,
+    );
+    expect(base.channelUrls.pollingUrl).toBe(
+      'https://proxy.example/api/sessions/sess-1/events?wsToken=tok-sess-1',
+    );
+    expect(base.channelUrls.sseUrl).toBe(
+      'https://proxy.example/api/sessions/sess-1/stream?wsToken=tok-sess-1',
+    );
+  });
+
+  it('minted + base absent → falls back to the ws→http origin flip of the minted wsUrl', () => {
+    const base = assembleRenderSliceBase({ mintWsToken: MINT }, CALL);
+    expect(base.channelUrls).toEqual({
+      pollingUrl: 'https://live.example/api/sessions/sess-1/events?wsToken=tok-sess-1',
+      sseUrl: 'https://live.example/api/sessions/sess-1/stream?wsToken=tok-sess-1',
+    });
+  });
+
+  it('minted + getter returning undefined → same wsUrl-flip fallback', () => {
+    const base = assembleRenderSliceBase(
+      { mintWsToken: MINT, sessionApiBaseUrl: () => undefined },
+      CALL,
+    );
+    expect(base.channelUrls.sseUrl).toBe(
+      'https://live.example/api/sessions/sess-1/stream?wsToken=tok-sess-1',
+    );
+  });
+
+  it('unminted → empty channelUrls even when a base is configured (URLs embed the token)', () => {
+    const base = assembleRenderSliceBase(
+      { sessionApiBaseUrl: 'https://public.example' },
+      CALL,
+    );
+    expect(base.channelUrls).toEqual({});
+    // Exact-optional pin: neither KEY is present — spreading this into
+    // a slice literal must not create `pollingUrl: undefined` entries.
+    expect('pollingUrl' in base.channelUrls).toBe(false);
+    expect('sseUrl' in base.channelUrls).toBe(false);
+  });
+
+  it('minted + malformed wsUrl + no base → degrades to empty channelUrls, never throws', () => {
+    const base = assembleRenderSliceBase(
+      {
+        mintWsToken: () => ({
+          wsUrl: 'not a url',
+          token: 'tok',
+          expiresAt: '2099-01-01T00:00:00.000Z',
+        }),
+      },
+      CALL,
+    );
+    expect(base.channelUrls).toEqual({});
+    // The live trio itself still rides the slice — only the HTTP
+    // fallback rungs degrade.
+    expect(base.authFields.wsToken).toBe('tok');
+  });
+
+  it('URL-encodes sessionId and token into path and query', () => {
+    const base = assembleRenderSliceBase(
+      {
+        mintWsToken: () => ({
+          wsUrl: 'wss://live.example/ws',
+          token: 'tok/with?chars&',
+          expiresAt: '2099-01-01T00:00:00.000Z',
+        }),
+        sessionApiBaseUrl: 'https://public.example/',
+      },
+      { sessionId: 'sess/odd', appId: 'app-1' },
+    );
+    expect(base.channelUrls.pollingUrl).toBe(
+      'https://public.example/api/sessions/sess%2Fodd/events?wsToken=tok%2Fwith%3Fchars%26',
+    );
+    expect(base.channelUrls.sseUrl).toBe(
+      'https://public.example/api/sessions/sess%2Fodd/stream?wsToken=tok%2Fwith%3Fchars%26',
+    );
   });
 });

@@ -158,7 +158,7 @@ export function deriveContextName(slotKey: string): string {
 //   "ai.ggui/render": {
 //     sessionId, appId, runtimeUrl,
 //     wsUrl?, wsToken?, expiresAt?,
-//     pollingUrl?,
+//     pollingUrl?, sseUrl?,
 //     themeId?, themeMode?, theme?,
 //     gadgets?, publicEnv?, streamWebSocketLocalTools?,
 //     permissionsPolicy?,
@@ -253,11 +253,44 @@ export interface McpAppContextSlot {
  * WS auth credential the iframe threads on the WebSocket upgrade as
  * `?wsToken=<encoded>` and inside `SubscribePayload.wsToken`.
  *
- * **Polling-fallback URL.** When WS is blocked at the host CSP layer
- * the iframe polls `pollingUrl` (server-stamped post-Phase-B as
- * `/api/sessions/<sessionId>/events?wsToken=<token>`). The iframe-runtime
- * composes per-tick `&sinceSequence=<cursor>&limit=<N>` against this
- * base; companion to `lastSequence` which seeds the initial cursor.
+ * **Failover ladder (WS → SSE → polling).** `sseUrl` and `pollingUrl`
+ * are the two HTTP fallback rungs the iframe-runtime descends when the
+ * WS rung fails (host CSP block, proxy, network policy). Both are
+ * stamped by the SERVER via {@link composeSessionApiUrls} — one
+ * composer for every stamping surface — and consumed by the
+ * IFRAME-RUNTIME. Auth for both is the embedded `wsToken` query
+ * credential (`EventSource` cannot set request headers, so the query
+ * string is the only channel — same posture on both rungs), which is
+ * why each URL is stamped ONLY when the live trio was minted.
+ * Absence semantics: `sseUrl` absent ⇒ no SSE rung (ladder is
+ * WS → polling); `pollingUrl` absent ⇒ no polling rung.
+ *
+ * `pollingUrl` (server-stamped
+ * `/api/sessions/<sessionId>/events?wsToken=<token>`): the
+ * iframe-runtime composes per-tick `&sinceSequence=<cursor>&limit=<N>`
+ * against this base; companion to `lastSequence` which seeds the
+ * initial cursor.
+ *
+ * `sseUrl` (server-stamped
+ * `/api/sessions/<sessionId>/stream?wsToken=<token>`): consumed via
+ * `EventSource`. Server obligations — the endpoint serves
+ * `text/event-stream` where each SSE message's `data:` is EXACTLY one
+ * ChannelFrame JSON (`{type, payload}` — byte-same shape as the WS
+ * push); a message's `id:` is the decimal event-ledger `seq` (the SAME
+ * cursor space as `lastSequence`/`sinceSequence`), stamped ONLY on
+ * ledger-backed `render_event` replay frames — live frames are id-less
+ * (same ephemeral posture as WS) — so the browser's automatic
+ * `Last-Event-ID` reconnect header IS the existing cursor replay; the
+ * server emits a comment heartbeat (`: hb`, no `id:`) at least every
+ * ~25s (proxy/ALB idle-timeout floor) and `retry: 3000` as the first
+ * write after headers. Client obligations — append
+ * `&sinceSequence=<lastSequence>` on FIRST connect (before any
+ * `Last-Event-ID` exists); on reconnect the header WINS over the
+ * query. Failure modes mirror `/events`: 401 invalid token; 404
+ * evicted → stop; 410 expired / `REPLAY_HORIZON_PASSED` →
+ * re-bootstrap (the horizon violation is an in-band error frame
+ * carrying `resumeId: String(lastSequence)`, so the browser cursor
+ * advances and the ack snapshot re-mounts state).
  *
  * **Mode discriminator.** At least one of `{ codeUrl, codeB64, kind,
  * wsUrl-with-token }` MUST be present for the iframe to mount. `kind` is
@@ -282,6 +315,10 @@ export interface McpAppAiGguiRenderMeta {
   // Polling fallback (server-stamped URL post-rename:
   // `/api/sessions/<sessionId>/events`)
   readonly pollingUrl?: string;
+
+  // SSE middle-rung fallback (server-stamped:
+  // `/api/sessions/<sessionId>/stream?wsToken=<token>`)
+  readonly sseUrl?: string;
 
   // Theme
   readonly themeId?: string;
@@ -473,6 +510,11 @@ export function parseMcpAppAiGguiRenderMeta(
     ...(hasW && hasT ? { wsUrl: aw as string, wsToken: at as string } : {}),
     ...(ae !== undefined ? { expiresAt: ae as string } : {}),
     ...(s.pollingUrl !== undefined ? { pollingUrl: s.pollingUrl as string } : {}),
+    // Same tolerant scalar posture as pollingUrl; deliberately NO
+    // wsToken-pairing invariant — the URL is self-authorizing via its
+    // embedded token; field-level defense lives downstream in the
+    // iframe-runtime's `validateMeta`.
+    ...(s.sseUrl !== undefined ? { sseUrl: s.sseUrl as string } : {}),
     ...(s.themeId !== undefined ? { themeId: s.themeId as string } : {}),
     ...(s.themeMode !== undefined
       ? { themeMode: s.themeMode as 'light' | 'dark' }
@@ -532,6 +574,53 @@ export function toMcpAppEnvelope(
 ): Record<string, unknown> {
   return {
     [MCP_APP_AI_GGUI_RENDER_META_KEY]: render,
+  };
+}
+
+/**
+ * Token-bearing session-API URL pair — the return shape of
+ * {@link composeSessionApiUrls}. Field names deliberately match the
+ * {@link McpAppAiGguiRenderMeta} slice fields they stamp, so callers
+ * spread the pair straight into a slice literal.
+ *
+ * @public
+ */
+export interface SessionApiUrls {
+  /** `${base}/api/sessions/<sessionId>/events?wsToken=<token>` */
+  readonly pollingUrl: string;
+  /** `${base}/api/sessions/<sessionId>/stream?wsToken=<token>` */
+  readonly sseUrl: string;
+}
+
+/**
+ * Compose the token-bearing session-API URL pair — ONE composer for
+ * every stamping surface (render resultMeta, update resultMeta, the
+ * self-contained shell, the `/api/sessions/:id/state` bootstrap). Same
+ * move as `deriveRenderMeta`: because every surface routes through this
+ * function, cross-transport drift in the URL shapes is structurally
+ * impossible.
+ *
+ * Pure string composition, no I/O. `base` is the absolute public
+ * origin the session API is served on (a trailing `/` is tolerated and
+ * stripped); `sessionId` and `wsToken` are URL-encoded into path and
+ * query. Callers MUST invoke this only when the live trio was minted —
+ * both URLs embed the token, and a token-less URL can only 401 through
+ * the fallback composers; omission of both fields is the honest
+ * no-HTTP-fallback signal the slice contract defines.
+ *
+ * @public
+ */
+export function composeSessionApiUrls(
+  base: string,
+  sessionId: string,
+  wsToken: string,
+): SessionApiUrls {
+  const b = base.replace(/\/$/, '');
+  const sid = encodeURIComponent(sessionId);
+  const tok = encodeURIComponent(wsToken);
+  return {
+    pollingUrl: `${b}/api/sessions/${sid}/events?wsToken=${tok}`,
+    sseUrl: `${b}/api/sessions/${sid}/stream?wsToken=${tok}`,
   };
 }
 

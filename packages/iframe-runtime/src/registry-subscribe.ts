@@ -49,6 +49,7 @@ import type { McpAppAiGguiRenderMeta } from '@ggui-ai/protocol/integrations/mcp-
 import type {
   ChannelRegistry,
   RegistryPollingOptions,
+  RegistrySseOptions,
   TransportStatus,
   WsTransportHandle,
 } from '@ggui-ai/live-channel';
@@ -148,6 +149,14 @@ export interface ConnectViaRegistryOptions {
    * URL- and shape-agnostic.
    */
   readonly polling?: RegistryPollingOptions;
+  /**
+   * SSE middle-rung descriptor (WS → SSE → polling ladder). Composed
+   * at the runtime layer from `meta.sseUrl` + the shared ladder
+   * cursor — the live-channel is URL- and auth-agnostic. Absent →
+   * two-rung WS→polling ladder (or WS-only when `polling` is also
+   * absent).
+   */
+  readonly sse?: RegistrySseOptions;
 }
 
 /**
@@ -448,6 +457,7 @@ export function connectViaRegistry(
           appId: opts.meta.appId,
         },
         onStatusChange: mappedStatusCallback,
+        ...(opts.sse !== undefined ? { sse: opts.sse } : {}),
         ...(opts.polling !== undefined ? { polling: opts.polling } : {}),
       })
       .then((bound) => {

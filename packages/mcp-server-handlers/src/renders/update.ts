@@ -628,6 +628,7 @@ export function createGguiUpdateHandler(
       const {
         runtimeUrl,
         authFields,
+        channelUrls,
         themeId: resolvedThemeId,
         themeMode: resolvedThemeMode,
       } = assembleRenderSliceBase(deps, {
@@ -641,6 +642,10 @@ export function createGguiUpdateHandler(
         appId: ctx.appId,
         runtimeUrl,
         ...authFields,
+        // Token-bearing HTTP fallback rungs (pollingUrl + sseUrl) —
+        // same ONE-helper composition as `ggui_render`, so the two
+        // tools' stamping cannot drift.
+        ...channelUrls,
         ...(resolvedThemeId !== undefined ? { themeId: resolvedThemeId } : {}),
         ...(resolvedThemeMode !== undefined
           ? { themeMode: resolvedThemeMode }

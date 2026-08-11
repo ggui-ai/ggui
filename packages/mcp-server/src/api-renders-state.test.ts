@@ -21,6 +21,7 @@
  * Lane 3 of the 4-lane taxonomy (in-process fake, no browser).
  */
 import { afterEach, describe, expect, it } from 'vitest';
+import express from 'express';
 import type { Server as HttpServer } from 'node:http';
 import {
   InMemoryAuthAdapter,
@@ -37,6 +38,7 @@ import {
   MCP_APP_AI_GGUI_RENDER_META_KEY,
   type McpAppAiGguiRenderMeta,
 } from '@ggui-ai/protocol/integrations/mcp-apps';
+import { mountApiRendersRoutes } from './api-renders-routes.js';
 import { createGguiServer, type GguiServer } from './server.js';
 
 const silentLogger = {
@@ -151,6 +153,99 @@ describe('GET /api/sessions/:sessionId/state', () => {
     expect(renderMeta?.lastSequence).toBeGreaterThanOrEqual(0);
     // codeUrl wired via codeStore + publicBaseUrl.
     expect(renderMeta?.codeUrl).toMatch(/^https:\/\/test\.example\/code\//);
+  });
+
+  it('stamps token-bearing pollingUrl (/events) + sseUrl (/stream) alongside the fresh live trio', async () => {
+    fx = await bootWithRender({ withRender: true });
+    const res = await fetch(
+      `${fx.url}/api/sessions/${fx.sessionId}/state?wsToken=${encodeURIComponent(fx.validToken)}`,
+    );
+    expect(res.status).toBe(200);
+    const rawBody: unknown = await res.json();
+    if (!isRecord(rawBody)) {
+      throw new Error('expected a JSON object body');
+    }
+    const renderMeta = rawBody[MCP_APP_AI_GGUI_RENDER_META_KEY] as
+      | McpAppAiGguiRenderMeta
+      | undefined;
+    // The trio is minted fresh on every /state read; both URLs embed
+    // that fresh token and are composed via the protocol's ONE
+    // `composeSessionApiUrls` composer.
+    const freshToken = renderMeta?.wsToken;
+    expect(typeof freshToken).toBe('string');
+    const sid = encodeURIComponent(fx.sessionId);
+    expect(renderMeta?.pollingUrl).toBe(
+      `https://test.example/api/sessions/${sid}/events?wsToken=${encodeURIComponent(freshToken ?? '')}`,
+    );
+    expect(renderMeta?.sseUrl).toBe(
+      `https://test.example/api/sessions/${sid}/stream?wsToken=${encodeURIComponent(freshToken ?? '')}`,
+    );
+    // Regression pin — the pre-SSE-slice drift stamped a token-less
+    // `/api/sessions/<id>/state` pollingUrl, which could only 401
+    // through the iframe-runtime's /events composer.
+    expect(renderMeta?.pollingUrl).not.toMatch(/\/state/);
+  });
+
+  it('omits pollingUrl + sseUrl when no mintBootstrap is wired (URLs embed the token)', async () => {
+    const renderStore = new InMemoryGguiSessionStore();
+    const stored = await renderStore.create({ appId: 'app-state-test' });
+    const now = Date.now();
+    await renderStore.commit({
+      render: {
+        id: stored.id,
+        appId: stored.appId,
+        type: 'component',
+        componentCode: 'export default function X(){return null}',
+        props: {},
+        eventSequence: stored.eventSequence,
+        createdAt: now,
+        lastActivityAt: now,
+        expiresAt: now + 60_000,
+      },
+      appId: stored.appId,
+    });
+    const app = express();
+    mountApiRendersRoutes({
+      app,
+      renderStore,
+      secret: SECRET,
+      publicBaseUrl: 'https://test.example',
+      resolveRuntimeUrl: () => '/_ggui/iframe-runtime.js',
+      logger: silentLogger,
+    });
+    const httpServer = await new Promise<HttpServer>((resolve) => {
+      const s = app.listen(0, '127.0.0.1', () => resolve(s));
+    });
+    try {
+      const addr = httpServer.address();
+      if (!addr || typeof addr === 'string') {
+        throw new Error('server.address() did not return AddressInfo');
+      }
+      const { token } = mintWsToken(
+        { sessionId: stored.id, appId: stored.appId },
+        SECRET,
+      );
+      const res = await fetch(
+        `http://127.0.0.1:${addr.port}/api/sessions/${stored.id}/state?wsToken=${encodeURIComponent(token)}`,
+      );
+      expect(res.status).toBe(200);
+      const rawBody: unknown = await res.json();
+      if (!isRecord(rawBody)) {
+        throw new Error('expected a JSON object body');
+      }
+      const renderMeta = rawBody[MCP_APP_AI_GGUI_RENDER_META_KEY] as
+        | McpAppAiGguiRenderMeta
+        | undefined;
+      // No minter ⇒ no live trio AND no HTTP fallback URLs — omission
+      // is the honest no-fallback signal the slice contract defines.
+      expect(renderMeta?.wsUrl).toBeUndefined();
+      expect(renderMeta?.pollingUrl).toBeUndefined();
+      expect(renderMeta?.sseUrl).toBeUndefined();
+    } finally {
+      await new Promise<void>((resolve, reject) => {
+        httpServer.close((err) => (err ? reject(err) : resolve()));
+      });
+    }
   });
 
   it('returns 401 when wsToken query is absent', async () => {

@@ -76,7 +76,12 @@ import {
   createChannelSubscriptions,
   type GguiSessionChannelLocalToolsOptions,
 } from "./ggui-session-channel/channel-subscriptions.js";
-import type { Subscriber, UpgradeBindings } from "./ggui-session-channel/internal-types.js";
+import type {
+  Subscriber,
+  SubscriberSink,
+  UpgradeBindings,
+  WsSubscriber,
+} from "./ggui-session-channel/internal-types.js";
 import { createOutbound } from "./ggui-session-channel/outbound.js";
 import { attachSocketRouter } from "./ggui-session-channel/socket-router.js";
 import {
@@ -153,6 +158,26 @@ export type {
   GguiSessionChannelBootstrapVerifyResult,
   GguiSessionChannelCookieAuth,
 } from "./ggui-session-channel/subscribe.js";
+
+// Transport-neutral subscriber write surface — implemented by the WS
+// sink (`createWsSink`, internal) and the SSE route's `SseSink`
+// (`./api-renders-stream-route.ts`). Re-exported so external-transport
+// attach sites (`attachExternalSubscriber`) can type their sink.
+export type { SubscriberSink } from "./ggui-session-channel/internal-types.js";
+
+/**
+ * Thrown by {@link GguiSessionChannelServer.attachExternalSubscriber}
+ * when the target render does not exist OR is bound to a different
+ * app than the caller claims. Callers that pre-gated (the SSE route
+ * does) treat this as a lost race with eviction; callers that did not
+ * MUST map it to their 404 surface.
+ */
+export class ChannelSessionNotFoundError extends Error {
+  constructor(sessionId: string) {
+    super(`GguiSession '${sessionId}' not found (or bound to a different app)`);
+    this.name = "ChannelSessionNotFoundError";
+  }
+}
 
 export interface GguiSessionChannelOptions {
   /** Required — the render backing store (typically `InMemoryGguiSessionStore`). */
@@ -552,6 +577,35 @@ export interface GguiSessionChannelServer {
    * subscriber send failures are logged but never propagated.
    */
   externalBroadcast(sessionId: string, frame: WebSocketMessage): void;
+  /**
+   * Register an externally-transported (non-WS) subscriber into the
+   * SAME fan-out planes WS subscribers ride: the StreamFanout live
+   * tail, the direct walks (`props_update` / `render` / `drain_ack` /
+   * external broadcasts), and the subscribe tail's ack → ledger-replay
+   * → stream-replay ordering. The single consumer today is the SSE
+   * route (`GET /api/sessions/:sessionId/stream`).
+   *
+   * The caller owns transport-level auth (the SSE route clones the
+   * /state wsToken gate) — this method only re-checks render existence
+   * + appId binding as defense-in-depth, throwing
+   * {@link ChannelSessionNotFoundError} on mismatch.
+   *
+   * `sinceSequence` replays the GguiSessionEvent ledger as
+   * `render_event` frames (each written with `resumeId` = ledger seq —
+   * the SSE sink stamps it as the `id:` field); `fromSeq` replays the
+   * stream buffer as `data` frames. Returns `detach` — idempotent
+   * teardown that unregisters the subscriber, ends its pump, and fires
+   * the 1→0 subscriber hook when applicable. The caller MUST invoke it
+   * on transport close.
+   */
+  attachExternalSubscriber(args: {
+    readonly sessionId: string;
+    readonly appId: string;
+    readonly identity: AuthResult;
+    readonly sink: SubscriberSink;
+    readonly sinceSequence?: number;
+    readonly fromSeq?: number;
+  }): Promise<{ readonly detach: () => void }>;
   /** Number of live subscribers. Useful for health / debug introspection. */
   readonly subscriberCount: number;
   /** Number of distinct renders with at least one subscriber. */
@@ -615,14 +669,19 @@ export function createGguiSessionChannelServer(
       : new WebSocketServer({ noServer: true });
 
   /**
-   * Flat set of all live WS subscribers. Replaces the per-render
-   * `subscribersByRender` Map — routing is now StreamFanout's job;
-   * this set tracks WS-specific bookkeeping (stats, shutdown-broadcast)
-   * that the seam can't see (and shouldn't).
+   * Flat set of all live subscribers — WS-attached AND externally-
+   * attached (SSE). Replaces the per-render `subscribersByRender` Map —
+   * routing is now StreamFanout's job; this set tracks channel-level
+   * bookkeeping (stats, shutdown-broadcast) that the seam can't see
+   * (and shouldn't).
    */
   const wsSubscribers = new Set<Subscriber>();
-  /** ws → subscriber reverse index so socket-close can look up cheaply. */
-  const subscribersByWs = new WeakMap<WebSocket, Subscriber>();
+  /**
+   * ws → subscriber reverse index so socket-close / inbound dispatch
+   * can look up cheaply. WS-only: the lifecycle module populates it
+   * for `transport: 'ws'` subscribers only.
+   */
+  const subscribersByWs = new WeakMap<WebSocket, WsSubscriber>();
 
   // Send / fan-out family — wire-write primitives shared by every
   // handler module plus the public fan-out surfaces the returned
@@ -645,7 +704,6 @@ export function createGguiSessionChannelServer(
     logger: opts.logger,
     wsSubscribers,
     subscribersByWs,
-    send,
     onFirstSubscriber: opts.onFirstSubscriber,
     onLastSubscriberGone: opts.onLastSubscriberGone,
   });
@@ -676,20 +734,21 @@ export function createGguiSessionChannelServer(
   // Subscribe / credential-path family — upgrade-time identity
   // resolution (bearer / bootstrap / console cookie) + the
   // `subscribe` handler. See `ggui-session-channel/subscribe.ts`.
-  const { resolveIdentityFromUpgrade, handleSubscribe } = createSubscribeHandlers({
-    logger: opts.logger,
-    auth: opts.auth,
-    renderStore: opts.renderStore,
-    streamBuffer,
-    streamFanout,
-    bootstrap: opts.bootstrap,
-    cookieAuth: opts.cookieAuth,
-    appIdFromIdentity: opts.appIdFromIdentity,
-    versionPolicy: opts.versionPolicy,
-    send,
-    sendError,
-    register,
-  });
+  const { resolveIdentityFromUpgrade, handleSubscribe, completeSubscribe } =
+    createSubscribeHandlers({
+      logger: opts.logger,
+      auth: opts.auth,
+      renderStore: opts.renderStore,
+      streamBuffer,
+      streamFanout,
+      bootstrap: opts.bootstrap,
+      cookieAuth: opts.cookieAuth,
+      appIdFromIdentity: opts.appIdFromIdentity,
+      versionPolicy: opts.versionPolicy,
+      sendError,
+      register,
+      unregister,
+    });
 
   // WS lifecycle / message routing — the `connection` handler with
   // the per-socket inbound ordering chain, pre-subscribe identity +
@@ -754,6 +813,24 @@ export function createGguiSessionChannelServer(
     sendPropsUpdate: outbound.sendPropsUpdate,
     sendDrainAck: outbound.sendDrainAck,
     externalBroadcast: outbound.externalBroadcast,
+    async attachExternalSubscriber(args) {
+      // Defense-in-depth re-check — the transport route already gated
+      // on the wsToken's (sessionId, appId) claims, but this method is
+      // a public surface: never register a subscriber onto a render
+      // that no longer exists or belongs to a different app.
+      const stored = await opts.renderStore.get(args.sessionId);
+      if (!stored || stored.appId !== args.appId) {
+        throw new ChannelSessionNotFoundError(args.sessionId);
+      }
+      return completeSubscribe({
+        stored,
+        identity: args.identity,
+        sink: args.sink,
+        transport: "sse",
+        ...(args.sinceSequence !== undefined ? { sinceSequence: args.sinceSequence } : {}),
+        ...(args.fromSeq !== undefined ? { fromSeq: args.fromSeq } : {}),
+      });
+    },
     get subscriberCount() {
       return wsSubscribers.size;
     },
@@ -793,11 +870,11 @@ export function createGguiSessionChannelServer(
       const sessionIds = new Set<string>();
       for (const sub of wsSubscribers) {
         sessionIds.add(sub.sessionId);
-        try {
-          sub.ws.close(1012, "service_restart");
-        } catch {
-          /* best-effort */
-        }
+        // Transport-neutral shutdown: WS maps to close(1012), SSE ends
+        // the response so EventSource auto-reconnects to the new pod —
+        // exactly the 1012 semantics. `sink.end` is best-effort by
+        // contract (never throws on an already-closing transport).
+        sub.sink.end("service_restart");
         void sub.iter.return?.();
       }
       wsSubscribers.clear();

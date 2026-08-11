@@ -47,6 +47,7 @@ import {
   type GguiSession,
 } from '@ggui-ai/protocol';
 import {
+  composeSessionApiUrls,
   deriveContextName,
   type CompiledContractValidators,
   type McpAppAiGguiRenderMeta,
@@ -1090,6 +1091,42 @@ export interface RenderSliceMetaDeps {
    * never presigns.
    */
   readonly presignPrivateBundleUrl?: (url: string) => Promise<string>;
+  /**
+   * Absolute public origin the wsToken-gated session API
+   * (`/api/sessions/:sessionId/{events,stream}`) is served on. Feeds
+   * `composeSessionApiUrls` so the `ai.ggui/render` slice stamps
+   * `pollingUrl` + `sseUrl` alongside the minted live trio.
+   *
+   * Function form (request-aware): mirrors {@link runtimeUrl}'s
+   * rationale — behind a tunnel or reverse proxy a static value can't
+   * know the public host, so the server passes a getter resolved
+   * lazily inside the request scope (X-Forwarded-Host honored for
+   * loopback peers). When unset (or the getter returns `undefined`),
+   * the assembly falls back to the ws→http origin flip of the minted
+   * trio's `wsUrl` — correct whenever the session API is served on
+   * the WS origin (OSS defaults, the cloud pod's single ingress).
+   * Operators splitting WS and HTTP across hosts MUST set this (or
+   * `publicBaseUrl` upstream), or both URLs will point at the
+   * WS-only host.
+   */
+  readonly sessionApiBaseUrl?: string | (() => string | undefined);
+}
+
+/**
+ * Flip a WebSocket URL's origin to its HTTP twin —
+ * `wss://host/ws` → `https://host`, `ws://host/ws` → `http://host`.
+ * The fallback base for {@link composeSessionApiUrls} when no
+ * explicit `sessionApiBaseUrl` is configured (same derivation the
+ * cloud pod uses for its oauth issuerUrl). Total: a malformed
+ * `wsUrl` returns `undefined` so slice assembly degrades to
+ * no-channel-URLs instead of throwing mid-resultMeta.
+ */
+export function wsOriginToHttpOrigin(wsUrl: string): string | undefined {
+  try {
+    return new URL(wsUrl).origin.replace(/^ws/, 'http');
+  } catch {
+    return undefined;
+  }
 }
 
 /**
@@ -1105,6 +1142,16 @@ export interface RenderSliceBase {
    */
   readonly authFields: Partial<
     Pick<McpAppAiGguiRenderMeta, 'wsUrl' | 'wsToken' | 'expiresAt'>
+  >;
+  /**
+   * Token-bearing HTTP fallback URLs (`pollingUrl` + `sseUrl`),
+   * composed via `composeSessionApiUrls`. Stamped ONLY when the
+   * minter ran (both URLs embed the token) AND a session-API base
+   * resolved; empty object otherwise — the slice then honestly
+   * advertises no HTTP fallback.
+   */
+  readonly channelUrls: Partial<
+    Pick<McpAppAiGguiRenderMeta, 'pollingUrl' | 'sseUrl'>
   >;
   /** Resolved theme preset id, when any layer produced one. */
   readonly themeId?: string;
@@ -1159,6 +1206,24 @@ export function assembleRenderSliceBase(
       }
     : {};
 
+  // Token-bearing session-API URL pair. Base resolution:
+  // explicit `sessionApiBaseUrl` dep (static or request-aware getter)
+  // wins; otherwise flip the minted trio's wsUrl origin ws→http (the
+  // session API is served on the WS origin for OSS defaults and the
+  // cloud pod's single ingress). No minted trio ⇒ `{}` — the URLs
+  // embed the token, so there is nothing honest to stamp.
+  const sessionApiBaseRaw =
+    typeof deps.sessionApiBaseUrl === 'function'
+      ? deps.sessionApiBaseUrl()
+      : deps.sessionApiBaseUrl;
+  const sessionApiBase =
+    sessionApiBaseRaw ??
+    (mintedTrio !== undefined ? wsOriginToHttpOrigin(mintedTrio.wsUrl) : undefined);
+  const channelUrls: RenderSliceBase['channelUrls'] =
+    mintedTrio !== undefined && sessionApiBase !== undefined
+      ? composeSessionApiUrls(sessionApiBase, call.sessionId, mintedTrio.token)
+      : {};
+
   const liveTheme = deps.themeProvider?.();
   const themeId = liveTheme?.id ?? call.renderThemeId ?? deps.themeId;
   const themeMode = liveTheme?.mode ?? deps.themeMode;
@@ -1166,6 +1231,7 @@ export function assembleRenderSliceBase(
   return {
     runtimeUrl,
     authFields,
+    channelUrls,
     ...(themeId !== undefined ? { themeId } : {}),
     ...(themeMode !== undefined ? { themeMode } : {}),
   };

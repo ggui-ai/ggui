@@ -47,6 +47,51 @@ import type { EventsResponse, GguiSessionEvent } from '@ggui-ai/protocol';
 const DEFAULT_EVENTS_POLL_INTERVAL_MS = 2000;
 const DEFAULT_EVENTS_PAGE_LIMIT = 100;
 
+/**
+ * Shared, monotonic event-ledger cursor for the failover ladder.
+ *
+ * The SSE rung advances it via `RegistrySseOptions.onSequence` (the
+ * SSE `id:` field IS the ledger sequence); the polling descriptor
+ * reads it per tick — so an SSE→polling demotion resumes from the
+ * last streamed event instead of re-replaying from the boot snapshot.
+ */
+export interface SequenceCursor {
+  get(): number;
+  /**
+   * Monotonic max — no-op when `seq <= current`, guaranteeing a stale
+   * rung can never rewind progress another rung already made. Normal
+   * delivery path (SSE `id:`, polling `lastSequence`).
+   */
+  advance(seq: number): void;
+  /**
+   * Unconditional server-truth override — the REPLAY_HORIZON_PASSED
+   * escape hatch, and ONLY that. When the server declares the cursor
+   * outside the replayable window it reports its actual high-water
+   * mark, which can be BELOW the client cursor (a re-minted or reset
+   * session whose ledger restarted). A monotonic `advance` would no-op
+   * there and every subsequent tick would re-ask ahead of the horizon —
+   * a permanent error loop. `reset` adopts the server's number so the
+   * next tick lands inside the window and the ladder self-heals.
+   */
+  reset(seq: number): void;
+}
+
+/**
+ * Create a {@link SequenceCursor} seeded at `seed` (default `0`).
+ */
+export function createSequenceCursor(seed = 0): SequenceCursor {
+  let current = seed;
+  return {
+    get: () => current,
+    advance: (seq: number): void => {
+      if (seq > current) current = seq;
+    },
+    reset: (seq: number): void => {
+      current = seq;
+    },
+  };
+}
+
 export interface BuildEventsPollingOptions {
   /**
    * Base URL the polling tick reads from. The composer appends
@@ -61,7 +106,9 @@ export interface BuildEventsPollingOptions {
    * Optional cursor seed — initial value of `sinceSequence` on the
    * first tick. Typically threaded from `render.lastSequence` so the
    * cold-mount-after-WS-fail path picks up where the snapshot left
-   * off. Defaults to `0` (replay everything still retained).
+   * off. Defaults to `0` (replay everything still retained). Ignored
+   * when {@link cursor} is supplied — the shared cursor carries its
+   * own seed.
    */
   readonly initialSinceSequence?: number;
   /**
@@ -75,6 +122,14 @@ export interface BuildEventsPollingOptions {
    * single tick to keep latency bounded.
    */
   readonly limit?: number;
+  /**
+   * Shared ladder cursor (WS → SSE → polling). When supplied, the
+   * descriptor reads/advances it instead of a private closure cursor,
+   * so SSE deliveries observed via `RegistrySseOptions.onSequence`
+   * move the polling replay point forward. Absent → private internal
+   * cursor seeded from {@link initialSinceSequence} (today's behavior).
+   */
+  readonly cursor?: SequenceCursor;
 }
 
 /**
@@ -142,7 +197,10 @@ function isGguiSessionEvent(value: unknown): value is GguiSessionEvent {
 export function buildEventsPolling(
   opts: BuildEventsPollingOptions,
 ): RegistryPollingOptions {
-  let cursor = opts.initialSinceSequence ?? 0;
+  // Shared ladder cursor when supplied; else a private cursor seeded
+  // from `initialSinceSequence` — behaviorally identical to the old
+  // closure `let cursor`, modulo monotonicity (advance() never rewinds).
+  const cur = opts.cursor ?? createSequenceCursor(opts.initialSinceSequence ?? 0);
   const limit = opts.limit ?? DEFAULT_EVENTS_PAGE_LIMIT;
   const intervalMs = opts.intervalMs ?? DEFAULT_EVENTS_POLL_INTERVAL_MS;
   // Each `url` access recomputes from the current cursor. The
@@ -150,7 +208,7 @@ export function buildEventsPolling(
   const descriptor: RegistryPollingOptions = Object.create(null);
   Object.defineProperty(descriptor, 'url', {
     enumerable: true,
-    get: () => composeTickUrl(opts.baseUrl, cursor, limit),
+    get: () => composeTickUrl(opts.baseUrl, cur.get(), limit),
   });
   Object.defineProperty(descriptor, 'intervalMs', {
     enumerable: true,
@@ -170,10 +228,16 @@ export function buildEventsPolling(
       ) {
         const cs = (body as { currentSequence?: unknown }).currentSequence;
         const currentSequence = typeof cs === 'number' ? cs : 0;
-        // Reset cursor to the server's high-water mark; next tick
-        // starts fresh from there. Consumers handle the re-mount via
-        // the error channel.
-        cursor = currentSequence;
+        // Advance to the server's high-water mark; next tick starts
+        // fresh from there (monotonic — inside the replayable-range
+        // contract the high-water mark is >= the cursor, and a shared
+        // ladder cursor must never rewind another rung's progress).
+        // Consumers handle the re-mount via the error channel.
+        // Server-truth override, NOT advance(): the horizon error can
+        // report a high-water mark BELOW this cursor (re-minted/reset
+        // session ledger) — monotonic advance would no-op and every
+        // subsequent tick would re-ask ahead of the horizon forever.
+        cur.reset(currentSequence);
         const errorFrame: ChannelFrame = {
           type: 'error',
           payload: {
@@ -187,7 +251,7 @@ export function buildEventsPolling(
       if (!isEventsResponse(body)) return null;
       // Advance cursor even on empty pages — the server's high-water
       // mark moves with /state reads too.
-      cursor = body.lastSequence;
+      cur.advance(body.lastSequence);
       if (body.events.length === 0) {
         // Nothing to dispatch; the empty object signals "snapshot
         // parsed but no handlers matched today's keys" (distinct from

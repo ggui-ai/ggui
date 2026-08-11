@@ -258,6 +258,12 @@ function projectMeta(
     ...(meta.pollingUrl !== undefined
       ? { pollingUrl: meta.pollingUrl }
       : {}),
+    // sseUrl mirrors pollingUrl's posture: unconditional pass-through,
+    // OUTSIDE the dropLiveCreds guard. Both are server-stamped
+    // wsToken-gated URLs; on the expired-creds degrade path they're
+    // harmless dead data because runtime.ts early-returns static-only
+    // before any live bind.
+    ...(meta.sseUrl !== undefined ? { sseUrl: meta.sseUrl } : {}),
     ...(meta.themeId !== undefined ? { themeId: meta.themeId } : {}),
     ...(themeMode !== undefined ? { themeMode } : {}),
     // Per-app theme overlay carried through verbatim. Already validated

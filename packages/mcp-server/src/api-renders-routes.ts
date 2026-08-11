@@ -52,6 +52,7 @@ import {
   deriveRenderMeta,
 } from "@ggui-ai/mcp-server-handlers/renders";
 import {
+  composeSessionApiUrls,
   MCP_APP_AI_GGUI_RENDER_META_KEY,
   type McpAppAiGguiRenderMeta,
 } from "@ggui-ai/protocol/integrations/mcp-apps";
@@ -201,15 +202,21 @@ export function mountApiRendersRoutes(opts: MountOptions): void {
     // stamps this trio on its resultMeta; mirroring here closes the
     // drift.
     const liveTrio = mintBootstrap ? mintBootstrap(stored.id, stored.appId) : undefined;
-    // Polling URL — the iframe-runtime's R6 polling-fallback path
-    // composes its fetch URL from `render.pollingUrl`. The /state
-    // endpoint IS that URL, so we stamp it here; without it the
-    // iframe-runtime can't fall back when the WS upgrade fails.
-    const requestHostForPolling = req.get("host") ?? "";
-    const pollingBase = publicBaseUrl
+    // Token-bearing session-API URL pair (pollingUrl → /events,
+    // sseUrl → /stream), composed via the protocol's ONE composer so
+    // this surface cannot drift from the render/update resultMeta
+    // stamping. Stamped ONLY when the live trio above was minted —
+    // both URLs embed the fresh long-TTL token, so a minter-less
+    // deployment honestly omits them (the old unconditional
+    // token-less `/state`-shaped pollingUrl could only 401 through
+    // the iframe-runtime's /events composer).
+    const sessionApiBase = publicBaseUrl
       ? publicBaseUrl.replace(/\/$/, "")
-      : `${req.protocol}://${requestHostForPolling}`;
-    const pollingUrl = `${pollingBase}/api/sessions/${encodeURIComponent(stored.id)}/state`;
+      : `${req.protocol}://${req.get("host") ?? ""}`;
+    const sessionApiUrls =
+      liveTrio !== undefined
+        ? composeSessionApiUrls(sessionApiBase, stored.id, liveTrio.token)
+        : undefined;
     // Static-component delivery via codeUrl (the same content-addressable
     // channel the code routes serve). Polling clients are render-capable
     // and need the URL to mount/refresh the static-component variant.
@@ -269,7 +276,9 @@ export function mountApiRendersRoutes(opts: MountOptions): void {
             expiresAt: liveTrio.expiresAt,
           }
         : {}),
-      pollingUrl,
+      ...(sessionApiUrls !== undefined
+        ? { pollingUrl: sessionApiUrls.pollingUrl, sseUrl: sessionApiUrls.sseUrl }
+        : {}),
       ...(themeId !== undefined ? { themeId } : {}),
       ...(themeMode !== undefined ? { themeMode } : {}),
       // Per-app theme overlay projected by `deriveRenderMeta` from the

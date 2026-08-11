@@ -2319,6 +2319,7 @@ export function createGguiRenderHandler(
       const {
         runtimeUrl,
         authFields,
+        channelUrls,
         themeId: resolvedThemeId,
         themeMode: resolvedThemeMode,
       } = assembleRenderSliceBase(deps, {
@@ -2376,6 +2377,11 @@ export function createGguiRenderHandler(
         appId: ctx.appId,
         runtimeUrl,
         ...authFields,
+        // Token-bearing HTTP fallback rungs (pollingUrl + sseUrl),
+        // composed by the ONE shared helper — present exactly when
+        // the live trio above was minted and a session-API base
+        // resolved. See `assembleRenderSliceBase`.
+        ...channelUrls,
         ...(streamWebSocketLocalTools !== undefined
           ? { streamWebSocketLocalTools }
           : {}),

@@ -17,6 +17,10 @@
  *   6. Post-resolution frames go to registered handlers, NOT to a
  *      callback. The registry's transport routes frames directly to
  *      the handler whose `type` matches.
+ *   7. Fallback-descriptor pass-through: `sse` + `polling` reach
+ *      `ChannelRegistry.bind()` verbatim (reference equality); when
+ *      absent, neither KEY exists on the BindOptions object
+ *      (exactOptionalPropertyTypes spread discipline).
  *
  * Strategy:
  *   - Mock WebSocket globally with a class that records every send +
@@ -41,6 +45,10 @@ import type {
 } from '@ggui-ai/protocol/transport/websocket';
 import type { McpAppAiGguiRenderMeta } from '@ggui-ai/protocol/integrations/mcp-apps';
 import { ChannelRegistry } from '@ggui-ai/live-channel';
+import type {
+  RegistryPollingOptions,
+  RegistrySseOptions,
+} from '@ggui-ai/live-channel';
 import { connectViaRegistry } from '../registry-subscribe.js';
 import type { ProtocolError } from '../protocol-error.js';
 
@@ -369,5 +377,86 @@ describe('connectViaRegistry — version handshake', () => {
     expect((propsFrames[0] as { sessionId?: string }).sessionId).toBe(
       META.sessionId,
     );
+  });
+});
+
+describe('connectViaRegistry — fallback-descriptor pass-through (branch 7)', () => {
+  let originalWs: typeof WebSocket;
+
+  beforeEach(() => {
+    originalWs = global.WebSocket;
+    MockWebSocket.instances = [];
+    installMockWebSocket();
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    global.WebSocket = originalWs;
+    vi.useRealTimers();
+  });
+
+  it('passes the sse + polling descriptors to bind() verbatim', async () => {
+    const registry = makeRegistry();
+    const bindSpy = vi.spyOn(registry, 'bind');
+
+    const sse: RegistrySseOptions = {
+      url: 'https://server.example/api/sessions/render_001/stream?wsToken=tok_abc',
+      initialSinceSequence: 5,
+      onSequence: () => {},
+    };
+    const polling: RegistryPollingOptions = {
+      url: 'https://server.example/api/sessions/render_001/events?wsToken=tok_abc&sinceSequence=0&limit=100',
+      intervalMs: 2000,
+      parseSnapshot: () => null,
+    };
+
+    const handlePromise = connectViaRegistry({
+      meta: META,
+      registry,
+      onStatusChange: () => {},
+      sse,
+      polling,
+    });
+
+    await vi.advanceTimersByTimeAsync(1);
+    MockWebSocket.instances[0]?.emit({
+      type: 'ack',
+      payload: { sequence: 1, timestamp: Date.now() },
+    });
+    await handlePromise;
+
+    expect(bindSpy).toHaveBeenCalledTimes(1);
+    const bindArg = bindSpy.mock.calls[0]?.[0];
+    expect(bindArg).toBeDefined();
+    // Verbatim pass-through — the SAME descriptor objects, not clones.
+    // connectViaRegistry is a plumbing layer; the runtime composed them.
+    expect(bindArg?.sse).toBe(sse);
+    expect(bindArg?.polling).toBe(polling);
+  });
+
+  it('omits the sse + polling KEYS from BindOptions when both are absent (exact-optional pin)', async () => {
+    const registry = makeRegistry();
+    const bindSpy = vi.spyOn(registry, 'bind');
+
+    const handlePromise = connectViaRegistry({
+      meta: META,
+      registry,
+      onStatusChange: () => {},
+    });
+
+    await vi.advanceTimersByTimeAsync(1);
+    MockWebSocket.instances[0]?.emit({
+      type: 'ack',
+      payload: { sequence: 1, timestamp: Date.now() },
+    });
+    await handlePromise;
+
+    const bindArg = bindSpy.mock.calls[0]?.[0];
+    expect(bindArg).toBeDefined();
+    // exactOptionalPropertyTypes discipline: absent means NO key, not
+    // an explicit `undefined` value (matches the codebase's
+    // `...(x !== undefined ? {x} : {})` spread convention).
+    expect(bindArg !== undefined && 'sse' in bindArg).toBe(false);
+    expect(bindArg !== undefined && 'polling' in bindArg).toBe(false);
   });
 });

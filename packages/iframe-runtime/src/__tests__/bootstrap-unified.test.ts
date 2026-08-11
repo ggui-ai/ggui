@@ -269,3 +269,48 @@ describe('Slice 14 — optional-field round-trip', () => {
   });
 
 });
+
+describe('failover-ladder URL passthrough (sseUrl + pollingUrl)', () => {
+  const SSE_URL =
+    'https://server.example/api/sessions/render_001/stream?wsToken=tok_abc';
+  const POLLING_URL =
+    'https://server.example/api/sessions/render_001/events?wsToken=tok_abc';
+
+  it('sseUrl survives projection beside pollingUrl on a live bootstrap', () => {
+    const result = validateMeta({
+      ...liveBootstrap,
+      sseUrl: SSE_URL,
+      pollingUrl: POLLING_URL,
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.meta.sseUrl).toBe(SSE_URL);
+      expect(result.meta.pollingUrl).toBe(POLLING_URL);
+    }
+  });
+
+  it('retains sseUrl + pollingUrl on the dropLiveCreds degrade path (expired + static content)', () => {
+    // Pins the chosen UNCONDITIONAL passthrough posture: both URLs sit
+    // OUTSIDE the dropLiveCreds guard. On the degrade path they're
+    // harmless dead data — runtime.ts early-returns static-only before
+    // any live bind.
+    const result = validateMeta({
+      sessionId: 'render_001',
+      appId: 'app_001',
+      runtimeUrl: RUNTIME_URL,
+      wsUrl: 'wss://server.example/ws',
+      wsToken: 'tok_abc',
+      expiresAt: '2000-01-01T00:00:00.000Z',
+      codeB64: 'ZXhwb3J0IGRlZmF1bHQgKCkgPT4gbnVsbA==',
+      sseUrl: SSE_URL,
+      pollingUrl: POLLING_URL,
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.meta.wsUrl).toBeUndefined();
+      expect(result.meta.wsToken).toBeUndefined();
+      expect(result.meta.sseUrl).toBe(SSE_URL);
+      expect(result.meta.pollingUrl).toBe(POLLING_URL);
+    }
+  });
+});

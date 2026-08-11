@@ -118,12 +118,14 @@ export {
 export { createConsoleLogger } from './logger.js';
 export type { Logger } from './logger.js';
 export {
+  ChannelSessionNotFoundError,
   createGguiSessionChannelServer,
   DEFAULT_RENDER_CHANNEL_PATH,
 } from './ggui-session-channel.js';
 export type {
   GguiSessionChannelOptions,
   GguiSessionChannelServer,
+  SubscriberSink,
 } from './ggui-session-channel.js';
 export { resolveStorageFromConfig } from './storage.js';
 export type {

@@ -20,29 +20,38 @@
  * await handle.dispose();
  * ```
  *
- * Transport selection:
+ * Transport selection — an ordered failover ladder (ws → sse →
+ * polling); each rung is armed only when its inputs are present:
  *   - `bootstrap.wsUrl + bootstrap.wsToken` present (both non-empty) →
- *     `WSTransport` (wrapped in `FailoverHandle` so a hard failure
- *     swaps in `PollingTransport` transparently).
- *   - Either missing → `PollingTransport`.
+ *     WS rung is primary. The handle keeps `kind: 'ws'` across
+ *     demotions (consumers narrow on it for `send()`).
+ *   - WS not viable but `opts.sse` present → SSE rung is primary
+ *     (handle `kind: 'sse'`).
+ *   - Otherwise → `PollingTransport` directly (no ladder).
  *
- * **Failover** — when a `WSTransport` transitions to `'failed'`
- * (either via the never-opened fail-fast path or the exhausted-retry-
- * ladder path), `FailoverHandle` disposes it and spins up a
- * `PollingTransport` with the same handler map. Callers observe the
- * swap only via the transport `kind` discriminator on the handle; the
- * `onStatusChange` callback continues to fire with the polling
- * transport's status thereafter. Empirically required for MCP-Apps
- * hosts whose iframe sandbox refuses `wss://` regardless of
- * `_meta.ui.csp.connectDomains` (Claude Desktop is the known case).
+ * **Failover** — when the active rung transitions to `'failed'`
+ * (WS: never-opened fail-fast / retry-ladder exhaustion; SSE:
+ * construct throw / liveness watchdog / terminal-close 2-strike), the
+ * ladder disposes it and spins up the next rung with the same handler
+ * map. Callers observe the demotion only as a synthetic
+ * `'connecting'` re-entry via `onStatusChange` — `'failed'` is never
+ * forwarded while a lower rung remains. Polling is the terminal rung
+ * and never emits `'failed'` (per-tick errors are absorbed).
+ * Empirically required for MCP-Apps hosts whose iframe sandbox
+ * refuses `wss://` regardless of `_meta.ui.csp.connectDomains`
+ * (Claude Desktop is the known case).
  */
 
 import { PollingTransport } from './polling-transport.js';
+import { SSETransport } from './sse-transport.js';
 import type {
   AnyTransportHandle,
   BindOptions,
   ChannelHandler,
   ChannelLogger,
+  RegistrySseOptions,
+  SseTransportHandle,
+  TransportKind,
   TransportStatus,
   WsTransportHandle,
 } from './types.js';
@@ -58,7 +67,8 @@ export interface ChannelRegistryOptions {
    *
    * Called on every WSTransport `open` event (initial connect AND
    * each reconnect), so reconnect-resume semantics live in the
-   * caller's factory closure.
+   * caller's factory closure. WS-only concept — SSE subscribes via
+   * its URL; polling has no handshake.
    */
   readonly subscribeFrameBuilder: SubscribeFrameBuilder;
   /**
@@ -66,6 +76,11 @@ export interface ChannelRegistryOptions {
    * `globalThis.WebSocket`.
    */
   readonly webSocketFactory?: (url: string) => WebSocket;
+  /**
+   * Test hook — inject an EventSource constructor. Defaults to
+   * `globalThis.EventSource`.
+   */
+  readonly eventSourceFactory?: (url: string) => EventSource;
   /**
    * Test hook — inject a fetch impl. Defaults to `globalThis.fetch`.
    */
@@ -129,9 +144,8 @@ export class ChannelRegistry {
 
   /**
    * Construct a `PollingTransport` from the bind opts. Shared between
-   * the initial selection path (when the bootstrap omits wsUrl/token)
-   * and the `FailoverHandle` swap path (when a WSTransport reaches
-   * `'failed'`).
+   * the initial selection path (no WS, no SSE) and the ladder's
+   * terminal rung (built when the previous rung reaches `'failed'`).
    */
   private buildPollingTransport(opts: BindOptions): PollingTransport {
     const { logger } = opts;
@@ -150,6 +164,29 @@ export class ChannelRegistry {
   }
 
   /**
+   * Construct an `SSETransport` from the bind opts. Ladder-only path —
+   * the `onStatusChange` is the ladder's interception callback, not
+   * the consumer's.
+   */
+  private buildSseTransport(
+    opts: BindOptions,
+    sse: RegistrySseOptions,
+    onStatusChange: (status: TransportStatus) => void,
+  ): SSETransport {
+    const { logger } = opts;
+    const sseOpts: ConstructorParameters<typeof SSETransport>[0] = {
+      sse,
+      handlers: this.handlers,
+      onStatusChange,
+      ...(logger !== undefined ? { logger } : {}),
+      ...(this.opts.eventSourceFactory !== undefined
+        ? { eventSourceFactory: this.opts.eventSourceFactory }
+        : {}),
+    };
+    return new SSETransport(sseOpts);
+  }
+
+  /**
    * Test-only: return the registered handler map (snapshot). Useful
    * for tests that want to assert a particular handler is wired
    * through the registry.
@@ -160,162 +197,293 @@ export class ChannelRegistry {
 
   private selectTransport(opts: BindOptions): InternalTransport {
     const { bootstrap, logger } = opts;
-    const wsViable =
-      typeof bootstrap.wsUrl === 'string' &&
-      bootstrap.wsUrl.length > 0 &&
-      typeof bootstrap.wsToken === 'string' &&
-      bootstrap.wsToken.length > 0;
-    if (wsViable) {
-      // Wrap WSTransport in FailoverHandle so a hard failure
-      // (never-opened fail-fast OR retry-ladder exhaustion) transparently
-      // swaps in PollingTransport with the same handlers. Callers see a
-      // single handle whose `kind` flips from 'ws' → 'polling' across
-      // the swap; their `onStatusChange` keeps firing on the post-swap
-      // transport.
-      return new FailoverHandle({
-        wsUrl: bootstrap.wsUrl!,
-        subscribeFrame: this.opts.subscribeFrameBuilder,
-        handlers: this.handlers,
-        webSocketFactory: this.opts.webSocketFactory,
-        buildPolling: () => this.buildPollingTransport(opts),
-        ...(logger !== undefined ? { logger } : {}),
-        ...(opts.onStatusChange !== undefined
-          ? { onStatusChange: opts.onStatusChange }
-          : {}),
-      });
+    const sse = opts.sse;
+
+    const sseRung = (sseOpts: RegistrySseOptions): LadderRung => ({
+      kind: 'sse',
+      build: (onStatus) => this.buildSseTransport(opts, sseOpts, onStatus),
+    });
+    const pollingRung: LadderRung = {
+      kind: 'polling',
+      // PollingTransport has no status callback surface — it is the
+      // terminal rung and never emits 'failed' (per-tick errors are
+      // absorbed), so the ladder has nothing to intercept.
+      build: () => this.buildPollingTransport(opts),
+    };
+
+    const wsUrl = bootstrap.wsUrl;
+    const wsToken = bootstrap.wsToken;
+    if (
+      typeof wsUrl === 'string' &&
+      wsUrl.length > 0 &&
+      typeof wsToken === 'string' &&
+      wsToken.length > 0
+    ) {
+      // WS is viable — ladder: ws → [sse if descriptor present] →
+      // polling. The handle keeps `kind: 'ws'` across demotions;
+      // consumers see each demotion as a `'connecting'` re-entry via
+      // `onStatusChange`.
+      const rungs: readonly LadderRung[] = [
+        {
+          kind: 'ws',
+          build: (onStatus) => {
+            const wsOpts: ConstructorParameters<typeof WSTransport>[0] = {
+              url: wsUrl,
+              subscribeFrame: this.opts.subscribeFrameBuilder,
+              handlers: this.handlers,
+              onStatusChange: onStatus,
+              ...(logger !== undefined ? { logger } : {}),
+              ...(this.opts.webSocketFactory !== undefined
+                ? { webSocketFactory: this.opts.webSocketFactory }
+                : {}),
+            };
+            return new WSTransport(wsOpts);
+          },
+        },
+        ...(sse !== undefined ? [sseRung(sse)] : []),
+        pollingRung,
+      ];
+      return new WsFailoverHandle(
+        new TransportLadder(rungs, opts.onStatusChange, logger),
+        logger,
+      );
+    }
+    if (sse !== undefined) {
+      // SSE-primary — ladder: sse → polling. Honest `kind: 'sse'`:
+      // SSE-primary sessions never had an outbound channel.
+      return new SseFailoverHandle(
+        new TransportLadder([sseRung(sse), pollingRung], opts.onStatusChange, logger),
+      );
     }
     return this.buildPollingTransport(opts);
   }
 }
 
 /**
- * Tagged-union of the two concrete Transport classes — kept private
- * so consumers see the public `AnyTransportHandle` discriminated union
- * (narrowable via `.kind`) without reaching into class internals.
+ * Tagged-union of the concrete shapes `selectTransport` may return —
+ * kept private so consumers see the public `AnyTransportHandle`
+ * discriminated union (narrowable via `.kind`) without reaching into
+ * class internals.
  */
-type InternalTransport = WSTransport | PollingTransport | FailoverHandle;
+type InternalTransport =
+  | WSTransport
+  | SSETransport
+  | PollingTransport
+  | WsFailoverHandle
+  | SseFailoverHandle;
 
-interface FailoverHandleOptions {
-  readonly wsUrl: string;
-  readonly subscribeFrame: SubscribeFrameBuilder;
-  readonly handlers: ReadonlyMap<string, ChannelHandler>;
-  readonly webSocketFactory?: (url: string) => WebSocket;
-  readonly logger?: ChannelLogger;
-  readonly onStatusChange?: (status: TransportStatus) => void;
+/** Any concrete transport a ladder rung can build. */
+type RungTransport = WSTransport | SSETransport | PollingTransport;
+
+interface LadderRung {
+  readonly kind: TransportKind;
   /**
-   * Factory the wrapper invokes when the inner WSTransport reaches
-   * `'failed'`. Closure-bound to the bind() opts so the swapped-in
-   * PollingTransport shares the same handlers, logger, fetch impl,
-   * and minPollIntervalMs as the initial-selection path would have
-   * constructed.
+   * Deferred constructor for the rung's transport, closure-bound to
+   * the `bind()` opts. Receives the ladder's status-interception
+   * callback; the polling rung ignores it (PollingTransport has no
+   * status callback and never emits `'failed'`).
    */
-  readonly buildPolling: () => PollingTransport;
+  readonly build: (onStatus: (status: TransportStatus) => void) => RungTransport;
 }
 
 /**
- * Wraps a primary `WSTransport` with a deferred `PollingTransport`
- * fallback. On the primary's `'failed'` status, disposes it and spins
- * up the fallback so the iframe-runtime keeps receiving frames without
- * a manual re-bind. From the caller's perspective the handle continues
- * to satisfy `WsTransportHandle` (including the `send()` method, which
- * no-ops post-swap because polling has no outbound channel) — the swap
- * is internal. Callers that need to know whether they're still on WS
- * can subscribe to `onStatusChange`: a `'connecting'` transition
- * AFTER an earlier `'open'` or `'closed'` signals the swap has
- * happened.
+ * Ordered failover ladder core. Builds the first rung eagerly and
+ * demotes down the ladder on `'failed'`:
  *
- * Status forwarding rules:
- *   - Pre-swap: forwards the WSTransport's status verbatim EXCEPT for
- *     `'failed'` — which is intercepted to trigger the swap. The
- *     consumer sees the swap as a `'connecting'` re-entry instead of
- *     a terminal `'failed'`.
- *   - Post-swap: forwards the PollingTransport's status verbatim.
+ *   - Pre-demotion: forwards the active rung's status verbatim EXCEPT
+ *     `'failed'` — which is intercepted to trigger the demotion when a
+ *     lower rung exists. The consumer sees the demotion as a
+ *     `'connecting'` re-entry instead of a terminal `'failed'`.
+ *   - On demotion: disposes the failed rung, logs
+ *     `channel_failover_swap {from, to, reason}`, builds + starts the
+ *     next rung.
+ *   - On the LAST rung, `'failed'` is forwarded verbatim (unreachable
+ *     in practice: polling never emits `'failed'`).
+ *
+ * Status callbacks from an already-demoted rung are stale-guarded so
+ * a zombie rung can never trigger a second demotion. `dispose()`
+ * disposes only the active rung — earlier rungs were already disposed
+ * at their demotion.
  */
-class FailoverHandle implements WsTransportHandle {
-  readonly kind = 'ws' as const;
-  private active: WSTransport | PollingTransport;
-  private swapped = false;
+class TransportLadder {
+  private activeTransport: RungTransport;
+  private rungIndex = 0;
+  private demoted = false;
   private disposed = false;
 
-  constructor(private readonly opts: FailoverHandleOptions) {
-    const wsOpts: ConstructorParameters<typeof WSTransport>[0] = {
-      url: opts.wsUrl,
-      subscribeFrame: opts.subscribeFrame,
-      handlers: opts.handlers,
-      onStatusChange: (status) => this.onInnerStatus(status),
-      ...(opts.logger !== undefined ? { logger: opts.logger } : {}),
-      ...(opts.webSocketFactory !== undefined
-        ? { webSocketFactory: opts.webSocketFactory }
-        : {}),
-    };
-    this.active = new WSTransport(wsOpts);
+  constructor(
+    private readonly rungs: readonly LadderRung[],
+    private readonly onStatusChange?: (status: TransportStatus) => void,
+    private readonly logger?: ChannelLogger,
+  ) {
+    this.activeTransport = this.spawnRung(0);
+  }
+
+  get active(): RungTransport {
+    return this.activeTransport;
+  }
+
+  /**
+   * Test seam — the kind of the currently active rung. Production
+   * code shouldn't introspect this; ladder tests use it to assert
+   * which rung is live without timing-coupled status sniffing.
+   */
+  get activeKind(): TransportKind {
+    return this.rungs[this.rungIndex].kind;
+  }
+
+  /**
+   * Test seam — whether at least one demotion has fired. Kept with
+   * the pre-ladder `FailoverHandle.hasSwapped` semantics.
+   */
+  get hasSwapped(): boolean {
+    return this.demoted;
   }
 
   get status(): TransportStatus {
-    return this.active.status;
+    return this.activeTransport.status;
   }
 
   start(): void {
     if (this.disposed) return;
-    this.active.start();
+    this.activeTransport.start();
   }
 
   async dispose(): Promise<void> {
     if (this.disposed) return;
     this.disposed = true;
-    await this.active.dispose();
-  }
-
-  send(frame: unknown): void {
-    if (this.active instanceof WSTransport) {
-      this.active.send(frame);
-      return;
-    }
-    // Post-swap to polling: outbound channel is gone (PollingTransport
-    // has no `send`). Best-effort log + drop — consumer code may still
-    // call `send` from a stale closure during the swap window.
-    this.opts.logger?.debug?.('channel_failover_send_dropped_post_swap', {
-      reason: 'PollingTransport has no outbound channel',
-    });
+    await this.activeTransport.dispose();
   }
 
   /**
-   * Test seam — exposes whether the failover swap has fired. Production
-   * code shouldn't introspect this; tests in `registry.test.ts` use it
-   * to assert the swap happened without timing-coupled status sniffing.
+   * Build the rung at `index`, wiring its status callback through a
+   * stale guard: once the ladder has moved past this rung, its late
+   * callbacks are dropped (its own `dispose()` already fired the
+   * final `'closed'` during the demotion).
    */
-  get hasSwapped(): boolean {
-    return this.swapped;
+  private spawnRung(index: number): RungTransport {
+    let self: RungTransport | null = null;
+    const transport = this.rungs[index].build((status) => {
+      if (self !== null && self !== this.activeTransport) return;
+      this.onInnerStatus(status);
+    });
+    self = transport;
+    return transport;
   }
 
   private onInnerStatus(status: TransportStatus): void {
     if (this.disposed) return;
-    if (status !== 'failed' || this.swapped) {
-      this.opts.onStatusChange?.(status);
+    const next: LadderRung | undefined = this.rungs[this.rungIndex + 1];
+    if (status !== 'failed' || next === undefined) {
+      this.onStatusChange?.(status);
       return;
     }
-    // WS hit terminal failure — swap.
-    this.swapped = true;
-    this.opts.logger?.warn?.('channel_failover_swap', {
-      from: 'ws',
-      to: 'polling',
-      reason:
-        'WSTransport reached status=failed (never-opened or retry-ladder exhausted) — swapping to PollingTransport.',
+    // Active rung hit terminal failure — demote.
+    this.demoted = true;
+    const from = this.rungs[this.rungIndex].kind;
+    this.logger?.warn?.('channel_failover_swap', {
+      from,
+      to: next.kind,
+      reason: `${from} transport reached status=failed — swapping to ${next.kind}.`,
     });
-    void this.active.dispose();
-    const polling = this.opts.buildPolling();
-    this.active = polling;
-    // Surface `connecting` on the swap so consumers see a clean status
-    // re-entry. The polling transport itself will fire `'open'` on its
-    // first successful tick via its own `currentStatus` transition.
-    this.opts.onStatusChange?.('connecting');
-    polling.start();
+    void this.activeTransport.dispose();
+    this.rungIndex += 1;
+    this.activeTransport = this.spawnRung(this.rungIndex);
+    // Surface `connecting` on the demotion so consumers see a clean
+    // status re-entry instead of a terminal `failed`.
+    this.onStatusChange?.('connecting');
+    this.activeTransport.start();
+  }
+}
+
+/**
+ * WS-primary ladder facade. Keeps `kind: 'ws' as const` across
+ * demotions — consumers (iframe-runtime's registry-subscribe) narrow
+ * on it once at bind time; the demotion is internal. `send()` only
+ * works while the WS rung is active: both lower rungs (SSE, polling)
+ * are inbound-only, so post-demotion sends are logged + dropped.
+ */
+class WsFailoverHandle implements WsTransportHandle {
+  readonly kind = 'ws' as const;
+
+  constructor(
+    private readonly ladder: TransportLadder,
+    private readonly logger?: ChannelLogger,
+  ) {}
+
+  get status(): TransportStatus {
+    return this.ladder.status;
+  }
+
+  /** Test seam — see {@link TransportLadder.hasSwapped}. */
+  get hasSwapped(): boolean {
+    return this.ladder.hasSwapped;
+  }
+
+  /** Test seam — see {@link TransportLadder.activeKind}. */
+  get activeKind(): TransportKind {
+    return this.ladder.activeKind;
+  }
+
+  start(): void {
+    this.ladder.start();
+  }
+
+  async dispose(): Promise<void> {
+    await this.ladder.dispose();
+  }
+
+  send(frame: unknown): void {
+    const active = this.ladder.active;
+    if (active instanceof WSTransport) {
+      active.send(frame);
+      return;
+    }
+    // Post-demotion: the outbound channel is gone — neither SSE nor
+    // polling has one. Best-effort log + drop — consumer code may
+    // still call `send` from a stale closure.
+    this.logger?.debug?.('channel_failover_send_dropped_post_swap', {
+      reason: 'active transport has no outbound channel (SSE/polling rung)',
+    });
+  }
+}
+
+/**
+ * SSE-primary ladder facade (`kind: 'sse'`). No `send()` — honest
+ * type: SSE-primary sessions never had an outbound channel.
+ */
+class SseFailoverHandle implements SseTransportHandle {
+  readonly kind = 'sse' as const;
+
+  constructor(private readonly ladder: TransportLadder) {}
+
+  get status(): TransportStatus {
+    return this.ladder.status;
+  }
+
+  /** Test seam — see {@link TransportLadder.hasSwapped}. */
+  get hasSwapped(): boolean {
+    return this.ladder.hasSwapped;
+  }
+
+  /** Test seam — see {@link TransportLadder.activeKind}. */
+  get activeKind(): TransportKind {
+    return this.ladder.activeKind;
+  }
+
+  start(): void {
+    this.ladder.start();
+  }
+
+  async dispose(): Promise<void> {
+    await this.ladder.dispose();
   }
 }
 
 // Re-exports for consumers that want to instantiate transports
 // directly (rare — `ChannelRegistry.bind()` is the canonical entry).
 export { WSTransport } from './ws-transport.js';
+export { SSETransport } from './sse-transport.js';
 export { PollingTransport } from './polling-transport.js';
 
 // Re-export the logger type so consumers wiring telemetry get a

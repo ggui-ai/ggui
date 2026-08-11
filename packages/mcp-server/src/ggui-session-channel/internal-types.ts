@@ -6,15 +6,44 @@
 
 import type { AuthResult, BufferedStreamEnvelope } from "@ggui-ai/mcp-server-core";
 import type { JsonObject } from "@ggui-ai/protocol";
+import type { WebSocketMessage } from "@ggui-ai/protocol/transport/websocket";
 import type { WebSocket } from "ws";
 
 /**
- * A single connected subscriber (one client, one render). Held live in
- * the per-channel subscriber map; torn down on socket close or explicit
- * `close` message.
+ * Transport-neutral write surface for one subscriber's outbound plane.
+ * The fan-out walks (`props_update` / `render` / `drain_ack` / external
+ * broadcasts), the live-tail pump, and the subscribe tail all write
+ * through this seam so a subscriber can ride WS (`createWsSink`) or SSE
+ * (`SseSink` in `../api-renders-stream-route.ts`) without per-frame
+ * transport branching.
  */
-export interface Subscriber {
-  readonly ws: WebSocket;
+export interface SubscriberSink {
+  /** WS: `ws.readyState === OPEN`; SSE: `!res.writableEnded && !res.destroyed`. */
+  isOpen(): boolean;
+  /**
+   * Write one wire frame. `resumeId` is the durable-cursor stamp for
+   * ledger-backed replay frames: SSE emits it as the `id:` field ahead
+   * of `data:` (so the browser's `Last-Event-ID` lands on the
+   * GguiSessionEvent ledger cursor); WS ignores it — WS resume rides
+   * `SubscribePayload.sinceSequence` instead.
+   */
+  write(frame: WebSocketMessage, opts?: { readonly resumeId?: string }): void;
+  /**
+   * Terminate the transport. WS maps `service_restart` → close 1012
+   * (reconnect immediately — same server family is still up) and
+   * `session_expired` → close 1008 (policy violation — do not blind-
+   * reconnect); SSE ends the response, letting `EventSource`
+   * auto-reconnect hit the HTTP pre-gate for the authoritative verdict.
+   */
+  end(reason: "service_restart" | "session_expired"): void;
+}
+
+/**
+ * Fields shared by every subscriber regardless of transport (one
+ * client, one render). Held live in the channel's flat subscriber set;
+ * torn down on transport close or explicit `close` message.
+ */
+interface SubscriberBase {
   readonly sessionId: string;
   readonly appId: string;
   readonly identity: AuthResult;
@@ -34,7 +63,7 @@ export interface Subscriber {
    * Per-subscriber live-tail iterator from `streamFanout.subscribe`.
    * Owned by the subscriber for its full lifetime; ending it (via
    * `iter.return()`) terminates the pump loop AND unregisters from
-   * the StreamFanout. `unregister(ws)` is the single point that
+   * the StreamFanout. `unregister(sub)` is the single point that
    * does this teardown.
    */
   readonly iter: AsyncIterator<BufferedStreamEnvelope>;
@@ -43,15 +72,41 @@ export interface Subscriber {
    * Keyed by `${sessionId}:${channelName}` so a reconnect that
    * re-subscribes to the same (render, channel) pair replaces the
    * existing timer rather than minting a duplicate (idempotent
-   * semantics on the wire). Torn down en masse by `unregister(ws)` on
-   * WS close.
+   * semantics on the wire). Torn down en masse by `unregister(sub)`
+   * on transport close.
    *
    * Populated by the `channel_subscribe` handler when the composing
    * host wired a `streamWebSocketLocalTools` allowlist; empty
-   * otherwise.
+   * otherwise. SSE subscribers have no inbound channel, so theirs
+   * stays empty structurally.
    */
   readonly channelSubs: Map<string, ChannelSubscriptionState>;
+  /** Outbound write surface — the ONLY transport coupling on the fan-out path. */
+  readonly sink: SubscriberSink;
 }
+
+/**
+ * WebSocket-attached subscriber. The `ws` handle stays for the inbound
+ * / control planes (socket-router dispatch, action acks, subscribe
+ * rejects) which remain WS-only — SSE has no inbound channel.
+ */
+export interface WsSubscriber extends SubscriberBase {
+  readonly transport: "ws";
+  readonly ws: WebSocket;
+}
+
+/**
+ * SSE-attached subscriber (`GET /api/sessions/:sessionId/stream`),
+ * registered via `GguiSessionChannelServer.attachExternalSubscriber`.
+ * Outbound-only: it shares the fan-out planes with WS subscribers but
+ * never appears in the ws→subscriber reverse index.
+ */
+export interface SseSubscriber extends SubscriberBase {
+  readonly transport: "sse";
+}
+
+/** A single connected subscriber, discriminated on `transport`. */
+export type Subscriber = WsSubscriber | SseSubscriber;
 
 /**
  * Per-(subscriber, sessionId, channelName) polling-loop state.

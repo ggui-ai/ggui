@@ -14,7 +14,7 @@ import type { WebSocketMessage } from "@ggui-ai/protocol/transport/websocket";
 import { randomBytes } from "node:crypto";
 import type { WebSocket } from "ws";
 import type { Logger } from "../logger.js";
-import type { Subscriber } from "./internal-types.js";
+import type { WsSubscriber } from "./internal-types.js";
 import type { Outbound } from "./outbound.js";
 
 /**
@@ -164,7 +164,7 @@ export interface ActionIngress {
    */
   handleInboundAction(
     ws: WebSocket,
-    sub: Subscriber,
+    sub: WsSubscriber,
     message: WebSocketMessage & { type: "action" }
   ): Promise<void>;
 }
@@ -172,7 +172,7 @@ export interface ActionIngress {
 export function createActionIngress(deps: ActionIngressDeps): ActionIngress {
   async function handleInboundAction(
     ws: WebSocket,
-    sub: Subscriber,
+    sub: WsSubscriber,
     message: WebSocketMessage & { type: "action" }
   ): Promise<void> {
     const envelope: ActionEnvelope = message.payload;

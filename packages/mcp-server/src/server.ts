@@ -221,6 +221,7 @@ import { DEFAULT_BUILDER_APP_ID, defaultAppIdFromIdentity } from "./auth.js";
 import type { BuildMcpServerOptions, ServerInfo } from "./build-mcp.js";
 import { mountMcpEndpoints } from "./mcp-endpoint-routes.js";
 import { mountApiRendersRoutes } from "./api-renders-routes.js";
+import { mountApiRendersStreamRoute } from "./api-renders-stream-route.js";
 import { mountConsoleBlueprintRoutes } from "./console-blueprint-routes.js";
 import { mountConsoleChatRoutes } from "./console-chat-routes.js";
 import { mountConsoleConfigRoutes } from "./console-config-routes.js";
@@ -272,7 +273,11 @@ import {
   createGguiSessionChannelServer,
   type GguiSessionChannelServer,
 } from "./ggui-session-channel.js";
-import { buildRequestContextMiddleware, resolveRuntimeUrl } from "./request-context.js";
+import {
+  buildRequestContextMiddleware,
+  resolvePublicBaseUrl,
+  resolveRuntimeUrl,
+} from "./request-context.js";
 import { composePreviewReservedValidator, mergeReservedValidators } from "./reserved-validators.js";
 import {
   checkRenderSchemaCompat,
@@ -529,6 +534,16 @@ export function defaultHandlers(deps: {
      */
     readonly runtimeUrl?: string | (() => string | undefined);
     /**
+     * Absolute public origin the wsToken-gated session API
+     * (`/api/sessions/:sessionId/{events,stream}`) is served on —
+     * feeds the `pollingUrl` + `sseUrl` stamping on the
+     * `ai.ggui/render` slice. Function form mirrors `runtimeUrl`
+     * (request-aware behind tunnels/proxies). When unset (or the
+     * getter yields `undefined`), the handler falls back to the
+     * ws→http origin flip of the minted trio's `wsUrl`.
+     */
+    readonly sessionApiBaseUrl?: string | (() => string | undefined);
+    /**
      * Theme preset id resolved from `ggui.json#theme`. Forwarded onto
      * the `ai.ggui/render.themeId` slice field in the `ggui_render`
      * resultMeta so MCP Apps hosts (claude.ai, Claude Desktop)
@@ -745,6 +760,9 @@ export function defaultHandlers(deps: {
      *  `ai.ggui/render.runtimeUrl` slice field.
      *  Function form mirrors the `render` deps' `runtimeUrl`. */
     readonly runtimeUrl?: string | (() => string | undefined);
+    /** Session-API base for `pollingUrl` + `sseUrl` stamping —
+     *  mirrors the `render` deps' `sessionApiBaseUrl`. */
+    readonly sessionApiBaseUrl?: string | (() => string | undefined);
     /** Theme preset id forwarded onto the `ai.ggui/render.themeId` slice field. */
     readonly themeId?: string;
     /** Theme color mode forwarded onto the `ai.ggui/render.themeMode` slice field. */
@@ -1108,6 +1126,9 @@ export function defaultHandlers(deps: {
         // re-apply patched props on the live mount without a WS round-trip.
         ...(deps.update.mintBootstrap ? { mintWsToken: deps.update.mintBootstrap } : {}),
         ...(deps.update.runtimeUrl !== undefined ? { runtimeUrl: deps.update.runtimeUrl } : {}),
+        ...(deps.update.sessionApiBaseUrl !== undefined
+          ? { sessionApiBaseUrl: deps.update.sessionApiBaseUrl }
+          : {}),
         ...(deps.update.themeId !== undefined ? { themeId: deps.update.themeId } : {}),
         ...(deps.update.themeMode !== undefined ? { themeMode: deps.update.themeMode } : {}),
         ...(deps.update.themeProvider !== undefined
@@ -1270,6 +1291,9 @@ export function defaultHandlers(deps: {
           : {}),
         ...(deps.render.mintBootstrap ? { mintWsToken: deps.render.mintBootstrap } : {}),
         ...(deps.render.runtimeUrl !== undefined ? { runtimeUrl: deps.render.runtimeUrl } : {}),
+        ...(deps.render.sessionApiBaseUrl !== undefined
+          ? { sessionApiBaseUrl: deps.render.sessionApiBaseUrl }
+          : {}),
         ...(deps.render.themeId !== undefined ? { themeId: deps.render.themeId } : {}),
         ...(deps.render.themeMode !== undefined ? { themeMode: deps.render.themeMode } : {}),
         ...(deps.render.themeProvider !== undefined
@@ -3970,6 +3994,14 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
               // an absolute URL instead of the relative default that
               // breaks under srcdoc iframes (claude.ai).
               runtimeUrl: resolveRuntimeUrlForResultMeta,
+              // Session-API base for `pollingUrl` + `sseUrl` stamping.
+              // Same lazy request-scope resolution as runtimeUrl:
+              // static publicBaseUrl wins, X-Forwarded-Host honored
+              // for loopback peers, `undefined` outside any request —
+              // the handler then falls back to the minted trio's
+              // wsUrl origin flip (OSS dev: `ws://localhost/ws` →
+              // `http://localhost`).
+              sessionApiBaseUrl: () => resolvePublicBaseUrl(opts.publicBaseUrl),
               // Forward operator-picked theme onto every
               // `ai.ggui/render.themeId` slice field so MCP Apps hosts
               // (claude.ai, Claude Desktop) that mount via the
@@ -4173,6 +4205,9 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
               // same absolute URL when the server sits behind a tunnel
               // / reverse proxy.
               runtimeUrl: resolveRuntimeUrlForResultMeta,
+              // Session-API base — matches render so both tools stamp
+              // identical `pollingUrl` + `sseUrl` values.
+              sessionApiBaseUrl: () => resolvePublicBaseUrl(opts.publicBaseUrl),
               ...(opts.theme !== undefined && opts.theme.source === "preset"
                 ? { themeId: opts.theme.preset }
                 : {}),
@@ -4750,6 +4785,20 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
       ...(opts.publicBaseUrl !== undefined ? { publicBaseUrl: opts.publicBaseUrl } : {}),
       ...(mintBootstrap ? { mintBootstrap } : {}),
       resolveRuntimeUrl: resolveRuntimeUrlForResultMeta,
+      logger,
+    });
+    // SSE live stream (the ladder's middle rung) — same wsToken auth
+    // posture as /state and /events; see `./api-renders-stream-route.ts`
+    // for the framing contract. The channel is late-bound via the same
+    // `() => channelForHealth` pattern as `stream.channelProvider`:
+    // route mounting runs before `createGguiSessionChannelServer`, and
+    // the mcpApps ⇒ renderChannel throw above guarantees a channel
+    // exists by listen time.
+    mountApiRendersStreamRoute({
+      app,
+      renderStore,
+      secret: sharedTokenSecret,
+      channelProvider: () => channelForHealth,
       logger,
     });
   }

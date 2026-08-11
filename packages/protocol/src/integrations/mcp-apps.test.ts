@@ -18,6 +18,8 @@ import {
   parseMcpAppAiGguiRenderMeta,
   parseMcpAppAiGguiHostSessionMeta,
   toMcpAppEnvelope,
+  composeSessionApiUrls,
+  type SessionApiUrls,
   deriveContextName,
   isMcpAppsGguiSession,
   isMcpAppLifecycleMessage,
@@ -541,6 +543,51 @@ describe('parseMcpAppAiGguiRenderMeta', () => {
     }
   });
 
+  it('preserves sseUrl beside pollingUrl (SSE middle rung)', () => {
+    const result = parseMcpAppAiGguiRenderMeta({
+      [MCP_APP_AI_GGUI_RENDER_META_KEY]: {
+        ...minimalRender,
+        pollingUrl: 'https://x.example/api/sessions/r-1/events?wsToken=t',
+        sseUrl: 'https://x.example/api/sessions/r-1/stream?wsToken=t',
+      },
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.meta?.sseUrl).toBe(
+        'https://x.example/api/sessions/r-1/stream?wsToken=t',
+      );
+      expect(result.meta?.pollingUrl).toBe(
+        'https://x.example/api/sessions/r-1/events?wsToken=t',
+      );
+    }
+  });
+
+  it('leaves sseUrl absent when not stamped (no SSE rung — WS → polling ladder)', () => {
+    const result = parseMcpAppAiGguiRenderMeta({
+      [MCP_APP_AI_GGUI_RENDER_META_KEY]: minimalRender,
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.meta?.sseUrl).toBeUndefined();
+      expect(result.meta !== undefined && 'sseUrl' in result.meta).toBe(false);
+    }
+  });
+
+  it('accepts sseUrl without wsUrl/wsToken (self-authorizing URL, no pairing invariant)', () => {
+    const result = parseMcpAppAiGguiRenderMeta({
+      [MCP_APP_AI_GGUI_RENDER_META_KEY]: {
+        ...minimalRender,
+        sseUrl: 'https://x.example/api/sessions/r-1/stream?wsToken=t',
+      },
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.meta?.sseUrl).toBe(
+        'https://x.example/api/sessions/r-1/stream?wsToken=t',
+      );
+    }
+  });
+
   it('rejects half-live auth (wsUrl without wsToken)', () => {
     const result = parseMcpAppAiGguiRenderMeta({
       [MCP_APP_AI_GGUI_RENDER_META_KEY]: { ...minimalRender, wsUrl: 'ws://x' },
@@ -674,6 +721,7 @@ describe('emit ⇔ parse round-trip', () => {
       appId: 'app-1',
       runtimeUrl: '/_ggui/iframe-runtime.js',
       pollingUrl: '/api/sessions/r-1/events',
+      sseUrl: '/api/sessions/r-1/stream',
       themeId: 'indigo',
       themeMode: 'dark',
       wsUrl: 'ws://localhost:8080/ws',
@@ -690,6 +738,64 @@ describe('emit ⇔ parse round-trip', () => {
     expect(parsed.ok).toBe(true);
     if (!parsed.ok) return;
     expect(parsed.meta).toEqual(meta);
+  });
+});
+
+describe('composeSessionApiUrls', () => {
+  it('composes the pollingUrl/sseUrl pair on the pinned path shapes', () => {
+    const urls = composeSessionApiUrls('https://x.example', 'r-1', 'tok');
+    expect(urls).toEqual({
+      pollingUrl: 'https://x.example/api/sessions/r-1/events?wsToken=tok',
+      sseUrl: 'https://x.example/api/sessions/r-1/stream?wsToken=tok',
+    });
+  });
+
+  it('tolerates a trailing slash on the base', () => {
+    const urls = composeSessionApiUrls('https://x.example/', 'r-1', 'tok');
+    expect(urls.pollingUrl).toBe(
+      'https://x.example/api/sessions/r-1/events?wsToken=tok',
+    );
+    expect(urls.sseUrl).toBe(
+      'https://x.example/api/sessions/r-1/stream?wsToken=tok',
+    );
+  });
+
+  it('URL-encodes sessionId into the path segment', () => {
+    const urls = composeSessionApiUrls('https://x.example', 'r 1/x', 'tok');
+    expect(urls.pollingUrl).toBe(
+      'https://x.example/api/sessions/r%201%2Fx/events?wsToken=tok',
+    );
+    expect(urls.sseUrl).toBe(
+      'https://x.example/api/sessions/r%201%2Fx/stream?wsToken=tok',
+    );
+  });
+
+  it('URL-encodes wsToken into the query (query-reserved chars survive)', () => {
+    const urls = composeSessionApiUrls('https://x.example', 'r-1', 'a+b/c=&d');
+    expect(urls.pollingUrl).toBe(
+      'https://x.example/api/sessions/r-1/events?wsToken=a%2Bb%2Fc%3D%26d',
+    );
+    expect(urls.sseUrl).toBe(
+      'https://x.example/api/sessions/r-1/stream?wsToken=a%2Bb%2Fc%3D%26d',
+    );
+  });
+
+  it('field names spread straight into the render slice', () => {
+    // Compile-time lock: SessionApiUrls is assignable to the slice's
+    // channel-URL subset, so stamping surfaces spread it verbatim.
+    const urls: SessionApiUrls = composeSessionApiUrls(
+      'https://x.example',
+      'r-1',
+      'tok',
+    );
+    const slice: McpAppAiGguiRenderMeta = {
+      sessionId: 'r-1',
+      appId: 'a',
+      runtimeUrl: '/r',
+      ...urls,
+    };
+    expect(slice.pollingUrl).toBe(urls.pollingUrl);
+    expect(slice.sseUrl).toBe(urls.sseUrl);
   });
 });
 

@@ -93,6 +93,41 @@ export interface RegistryPollingOptions {
 }
 
 /**
+ * Registry-level SSE descriptor. Sits beside
+ * {@link RegistryPollingOptions} in `BindOptions` — SSE needs no
+ * `parseSnapshot` because every SSE `data:` line is one verbatim
+ * {@link ChannelFrame} JSON, byte-same shape as the WS push.
+ */
+export interface RegistrySseOptions {
+  /**
+   * Full EventSource URL, wsToken already embedded as a query param
+   * (EventSource cannot set headers). Composed by the consumer from
+   * the render slice's `sseUrl` + `wsToken` — mirrors how
+   * `RegistryPollingOptions.url` is composed from `pollingUrl`.
+   */
+  readonly url: string;
+  /**
+   * Replay cursor seed for the FIRST connect: the transport appends
+   * `&sinceSequence=<n>` to {@link url} so the server replays
+   * ledger-backed frames after sequence `n`. Reconnects after the
+   * first are cursored by the browser-stamped `Last-Event-ID` header
+   * (which the server prefers over the query param) or, for manual
+   * recreates, by the latest dispatched sequence the transport has
+   * observed. Absent → no query cursor (live frames only).
+   */
+  readonly initialSinceSequence?: number;
+  /**
+   * Cursor bridge. Fired once per dispatched frame that carries a
+   * parseable `id:` (the server stamps SSE `id:` = event-ledger
+   * sequence on ledger-backed replay frames). Consumers thread this
+   * into their polling cursor closure so an SSE→polling demotion
+   * resumes instead of replaying. Frames without a parseable id do
+   * not fire it.
+   */
+  readonly onSequence?: (sequence: number) => void;
+}
+
+/**
  * Transport status. `'connecting'` is the initial state; on success
  * `'open'`; closes graceful or otherwise → `'closed'`; unrecoverable
  * errors → `'failed'`.
@@ -101,9 +136,10 @@ export type TransportStatus = 'connecting' | 'open' | 'closed' | 'failed';
 
 /**
  * Transport-kind discriminator. Telemetry uses this to distinguish
- * WS-vs-polling delivery in observability events.
+ * WS / SSE / polling delivery in observability events. Also names the
+ * rungs of the failover ladder (ws → sse → polling).
  */
-export type TransportKind = 'ws' | 'polling';
+export type TransportKind = 'ws' | 'sse' | 'polling';
 
 /**
  * Bootstrap shape the registry reads to pick a transport. Mirrors the
@@ -113,8 +149,11 @@ export type TransportKind = 'ws' | 'polling';
  * slice). Field names line up 1:1 with the upstream slice so callers
  * can spread without an adapter.
  *
- * `wsUrl + wsToken` present (both non-empty) → WSTransport.
- * Either missing → PollingTransport.
+ * `wsUrl + wsToken` present (both non-empty) → WSTransport (head of
+ * the failover ladder). Either missing → SSETransport when
+ * `BindOptions.sse` is supplied, else PollingTransport. HTTP-rung
+ * URLs (polling + SSE) deliberately live on `BindOptions`
+ * descriptors, not here.
  */
 export interface ChannelClientBootstrap {
   readonly wsUrl?: string;
@@ -196,11 +235,30 @@ export interface PollingTransportHandle extends TransportHandle {
 }
 
 /**
+ * SSE-specific handle. No `send()` — SSE is inbound-only (the URL
+ * path + wsToken query IS the subscription; there is no outbound
+ * channel). Callers narrow on `handle.kind === 'ws'` when they need
+ * the outbound surface.
+ */
+export interface SseTransportHandle extends TransportHandle {
+  readonly kind: 'sse';
+  /**
+   * (Re)create the underlying EventSource. Same contract as
+   * `WsTransportHandle.start()` — auto-called by `bind()`; exposed
+   * for tests driving the recreate-after-terminal-close path.
+   */
+  start(): void;
+}
+
+/**
  * Discriminated-union of every concrete transport handle the registry
  * may return. `ChannelRegistry.bind()` resolves to one of these; the
  * `kind` field is the narrowing discriminator.
  */
-export type AnyTransportHandle = WsTransportHandle | PollingTransportHandle;
+export type AnyTransportHandle =
+  | WsTransportHandle
+  | SseTransportHandle
+  | PollingTransportHandle;
 
 /**
  * Opts for `ChannelRegistry.bind()`. The bootstrap shape decides
@@ -230,4 +288,11 @@ export interface BindOptions {
    * when WS is unavailable).
    */
   readonly polling?: RegistryPollingOptions;
+  /**
+   * SSE descriptor. Present → an SSE rung is armed in the failover
+   * ladder: primary when WS is not viable, middle rung between WS
+   * and polling when it is. Absent → the ladder is WS → polling
+   * exactly as before.
+   */
+  readonly sse?: RegistrySseOptions;
 }

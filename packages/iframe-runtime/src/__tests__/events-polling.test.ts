@@ -9,7 +9,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import type { EventsResponse } from '@ggui-ai/protocol';
-import { buildEventsPolling } from '../events-polling.js';
+import { buildEventsPolling, createSequenceCursor } from '../events-polling.js';
 
 describe('buildEventsPolling', () => {
   it('returns a descriptor with the cursor-aware URL and default interval', () => {
@@ -87,10 +87,12 @@ describe('buildEventsPolling', () => {
     expect(desc.url).toBe('http://x/events?sinceSequence=2&limit=100');
   });
 
-  it('emits a synthetic error frame + resets cursor on REPLAY_HORIZON_PASSED', () => {
+  it('emits a synthetic error frame + advances cursor on REPLAY_HORIZON_PASSED', () => {
+    // Realistic horizon violation: cursor (3) fell below the replay
+    // horizon; the server's high-water mark (7) is ahead of it.
     const desc = buildEventsPolling({
       baseUrl: 'http://x/events',
-      initialSinceSequence: 99,
+      initialSinceSequence: 3,
     });
     const body = {
       reason: 'REPLAY_HORIZON_PASSED',
@@ -105,8 +107,28 @@ describe('buildEventsPolling', () => {
     };
     expect(payload.code).toBe('REPLAY_HORIZON_PASSED');
     expect(payload.details.currentSequence).toBe(7);
-    // Cursor reset to the server's high-water mark; next tick fetches
-    // forward from there.
+    // Cursor advanced to the server's high-water mark; next tick
+    // fetches forward from there.
+    expect(desc.url).toBe('http://x/events?sinceSequence=7&limit=100');
+  });
+
+  it('REPLAY_HORIZON adopts a BACKWARD server high-water mark — the self-healing reset', () => {
+    // Cursor ahead of the server's high-water mark: a re-minted or
+    // reset session whose ledger restarted below the client's cursor.
+    // The horizon branch uses cursor.reset() (server-truth override),
+    // NOT the monotonic advance() — keeping 99 here would re-ask ahead
+    // of the horizon on every tick, a permanent error loop. Only the
+    // horizon branch may rewind; normal deliveries stay monotonic
+    // (pinned by the SequenceCursor tests below).
+    const desc = buildEventsPolling({
+      baseUrl: 'http://x/events',
+      initialSinceSequence: 99,
+    });
+    const frames = desc.parseSnapshot({
+      reason: 'REPLAY_HORIZON_PASSED',
+      currentSequence: 7,
+    });
+    expect(frames!['error']?.type).toBe('error');
     expect(desc.url).toBe('http://x/events?sinceSequence=7&limit=100');
   });
 
@@ -125,5 +147,83 @@ describe('buildEventsPolling', () => {
     expect(Object.keys(frames!)).toEqual(['props_update']);
     const payload = frames!['props_update']?.payload as { props: { x: number } };
     expect(payload.props.x).toBe(2);
+  });
+});
+
+describe('createSequenceCursor', () => {
+  it('seeds at 0 by default', () => {
+    expect(createSequenceCursor().get()).toBe(0);
+  });
+
+  it('seeds at the supplied value', () => {
+    expect(createSequenceCursor(12).get()).toBe(12);
+  });
+
+  it('advance is a monotonic max — no-op when seq <= current', () => {
+    const cursor = createSequenceCursor();
+    cursor.advance(5);
+    expect(cursor.get()).toBe(5);
+    cursor.advance(3);
+    expect(cursor.get()).toBe(5);
+    cursor.advance(5);
+    expect(cursor.get()).toBe(5);
+    cursor.advance(6);
+    expect(cursor.get()).toBe(6);
+  });
+});
+
+describe('buildEventsPolling — shared ladder cursor', () => {
+  it('reads the shared cursor per url access — an external advance (SSE delivery) moves the next tick forward', () => {
+    const cursor = createSequenceCursor(7);
+    const desc = buildEventsPolling({
+      baseUrl: 'http://x/events',
+      cursor,
+    });
+    expect(desc.url).toBe('http://x/events?sinceSequence=7&limit=100');
+    // Simulate SSE deliveries between polling ticks — the SSE rung
+    // advances the shared cursor via RegistrySseOptions.onSequence.
+    cursor.advance(42);
+    expect(desc.url).toBe('http://x/events?sinceSequence=42&limit=100');
+  });
+
+  it("exposes a tick's parseSnapshot advance on the shared cell", () => {
+    const cursor = createSequenceCursor(0);
+    const desc = buildEventsPolling({
+      baseUrl: 'http://x/events',
+      cursor,
+    });
+    const body: EventsResponse = {
+      events: [],
+      lastSequence: 9,
+      hasMore: false,
+    };
+    expect(desc.parseSnapshot(body)).toEqual({});
+    // The polling tick advanced the SHARED cursor, not a private copy.
+    expect(cursor.get()).toBe(9);
+    expect(desc.url).toBe('http://x/events?sinceSequence=9&limit=100');
+  });
+
+  it('ignores initialSinceSequence when a shared cursor is supplied', () => {
+    const cursor = createSequenceCursor(4);
+    const desc = buildEventsPolling({
+      baseUrl: 'http://x/events',
+      initialSinceSequence: 99,
+      cursor,
+    });
+    expect(desc.url).toBe('http://x/events?sinceSequence=4&limit=100');
+  });
+
+  it('REPLAY_HORIZON_PASSED advances the shared cell to the server high-water mark', () => {
+    const cursor = createSequenceCursor(3);
+    const desc = buildEventsPolling({
+      baseUrl: 'http://x/events',
+      cursor,
+    });
+    const frames = desc.parseSnapshot({
+      reason: 'REPLAY_HORIZON_PASSED',
+      currentSequence: 7,
+    });
+    expect(frames!['error']?.type).toBe('error');
+    expect(cursor.get()).toBe(7);
   });
 });

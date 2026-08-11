@@ -13,7 +13,7 @@ import type { JsonObject, StreamSpec } from "@ggui-ai/protocol";
 import type { WebSocketMessage } from "@ggui-ai/protocol/transport/websocket";
 import type { WebSocket } from "ws";
 import type { Logger } from "../logger.js";
-import type { ChannelSubscriptionState, Subscriber } from "./internal-types.js";
+import type { ChannelSubscriptionState, WsSubscriber } from "./internal-types.js";
 import type { Outbound } from "./outbound.js";
 
 /**
@@ -84,7 +84,7 @@ export interface ChannelSubscriptionsDeps {
    * callback fire-time to self-clean intervals that outlived their
    * subscriber.
    */
-  readonly subscribersByWs: WeakMap<WebSocket, Subscriber>;
+  readonly subscribersByWs: WeakMap<WebSocket, WsSubscriber>;
   readonly send: Outbound["send"];
   readonly sendChannelError: Outbound["sendChannelError"];
 }
@@ -99,7 +99,7 @@ export interface ChannelSubscriptions {
    */
   handleChannelSubscribe(
     ws: WebSocket,
-    sub: Subscriber,
+    sub: WsSubscriber,
     message: WebSocketMessage & { type: "channel_subscribe" }
   ): Promise<void>;
   /**
@@ -110,7 +110,7 @@ export interface ChannelSubscriptions {
    */
   handleChannelUnsubscribe(
     ws: WebSocket,
-    sub: Subscriber,
+    sub: WsSubscriber,
     message: WebSocketMessage & { type: "channel_unsubscribe" }
   ): void;
 }
@@ -153,7 +153,7 @@ export function createChannelSubscriptions(deps: ChannelSubscriptionsDeps): Chan
    * subscribes whose `source.tool` isn't in `localTools.allowlist`
    * never reach this function.
    */
-  async function pollChannelOnce(sub: Subscriber, state: ChannelSubscriptionState): Promise<void> {
+  async function pollChannelOnce(sub: WsSubscriber, state: ChannelSubscriptionState): Promise<void> {
     if (!localTools) return;
     if (sub.ws.readyState !== sub.ws.OPEN) return;
     try {
@@ -207,7 +207,7 @@ export function createChannelSubscriptions(deps: ChannelSubscriptionsDeps): Chan
 
   async function handleChannelSubscribe(
     ws: WebSocket,
-    sub: Subscriber,
+    sub: WsSubscriber,
     message: WebSocketMessage & { type: "channel_subscribe" }
   ): Promise<void> {
     const payload = message.payload;
@@ -349,7 +349,7 @@ export function createChannelSubscriptions(deps: ChannelSubscriptionsDeps): Chan
 
   function handleChannelUnsubscribe(
     _ws: WebSocket,
-    sub: Subscriber,
+    sub: WsSubscriber,
     message: WebSocketMessage & { type: "channel_unsubscribe" }
   ): void {
     const payload = message.payload;

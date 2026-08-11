@@ -12,6 +12,7 @@ import type {
   AuthResult,
   GguiSessionStore,
   GguiSessionStreamBuffer,
+  StoredGguiSession,
   StreamFanout,
 } from "@ggui-ai/mcp-server-core";
 import type { AckPayload, SubscribePayload } from "@ggui-ai/protocol";
@@ -25,8 +26,13 @@ import {
   UnauthenticatedError,
 } from "../auth.js";
 import type { Logger } from "../logger.js";
-import type { ChannelSubscriptionState, Subscriber, UpgradeBindings } from "./internal-types.js";
-import type { Outbound } from "./outbound.js";
+import type {
+  ChannelSubscriptionState,
+  Subscriber,
+  SubscriberSink,
+  UpgradeBindings,
+} from "./internal-types.js";
+import { createWsSink, type Outbound } from "./outbound.js";
 import type { SubscriberLifecycle } from "./subscriber-lifecycle.js";
 
 /**
@@ -156,10 +162,41 @@ export interface SubscribeDeps {
   readonly appIdFromIdentity?: (result: AuthResult) => string;
   /** Version-handshake policy — see `GguiSessionChannelOptions.versionPolicy`. */
   readonly versionPolicy?: "advisory" | "reject";
-  readonly send: Outbound["send"];
   readonly sendError: Outbound["sendError"];
   readonly register: SubscriberLifecycle["register"];
+  readonly unregister: SubscriberLifecycle["unregister"];
 }
+
+/**
+ * Arguments for {@link SubscribeHandlers.completeSubscribe} — the
+ * transport-neutral subscribe tail. The auth head (WS: version
+ * handshake + bootstrap verify; SSE: the HTTP wsToken pre-gate on
+ * `/api/sessions/:sessionId/stream`) runs BEFORE this; the tail trusts
+ * `stored` + `identity` as already-authorized.
+ */
+export type CompleteSubscribeArgs = {
+  /** Resolved render row the subscriber binds to. */
+  readonly stored: StoredGguiSession;
+  /** Already-verified identity for the subscriber row. */
+  readonly identity: AuthResult;
+  /** Transport write surface the tail (and the pump) emits through. */
+  readonly sink: SubscriberSink;
+  /** GguiSessionEvent-ledger cursor — replays `render_event` frames when set. */
+  readonly sinceSequence?: number;
+  /** Stream-buffer cursor — replays `data` frames per policy when set. */
+  readonly fromSeq?: number;
+  /** Correlates the ack / error frames to a WS request. SSE has none. */
+  readonly requestId?: string;
+  /** Bootstrap-minted reconnect credential to stamp on the ack. */
+  readonly sessionToken?: string;
+} & (
+  | {
+      readonly transport: "ws";
+      /** The socket — kept on the subscriber row for inbound dispatch. */
+      readonly ws: WebSocket;
+    }
+  | { readonly transport: "sse" }
+);
 
 export interface SubscribeHandlers {
   /**
@@ -176,6 +213,19 @@ export interface SubscribeHandlers {
     message: WebSocketMessage & { type: "subscribe" },
     cookieBound?: { readonly sessionId: string; readonly appId: string }
   ): Promise<void>;
+  /**
+   * The transport-neutral subscribe tail, order preserved exactly:
+   * stream-cursor snapshot → stream-buffer replay read → StreamFanout
+   * iterator → register (pump starts) → ack → GguiSessionEvent-ledger
+   * replay (`render_event` frames, `resumeId` = ledger seq) →
+   * stream-replay `data` frames. WS `handleSubscribe` calls this after
+   * its auth/provision head; SSE attaches call it via
+   * `GguiSessionChannelServer.attachExternalSubscriber`.
+   *
+   * Returns a `detach` that idempotently unregisters the subscriber
+   * (ends the pump, unhooks the StreamFanout, clears polling loops).
+   */
+  completeSubscribe(args: CompleteSubscribeArgs): Promise<{ readonly detach: () => void }>;
 }
 
 /**
@@ -515,6 +565,27 @@ export function createSubscribeHandlers(deps: SubscribeDeps): SubscribeHandlers 
       }
     }
 
+    // Transport-neutral tail — shared verbatim with the SSE attach
+    // path (`attachExternalSubscriber`). The WS head above resolved
+    // auth + render; the tail owns snapshot → replay → register →
+    // ack → ledger replay → stream replay.
+    await completeSubscribe({
+      stored,
+      identity: effectiveIdentity,
+      sink: createWsSink(ws, deps.logger),
+      transport: "ws",
+      ws,
+      ...(payload.sinceSequence !== undefined ? { sinceSequence: payload.sinceSequence } : {}),
+      ...(payload.fromSeq !== undefined ? { fromSeq: payload.fromSeq } : {}),
+      ...(message.requestId ? { requestId: message.requestId } : {}),
+      ...(mintedSessionToken !== undefined ? { sessionToken: mintedSessionToken } : {}),
+    });
+  }
+
+  async function completeSubscribe(
+    args: CompleteSubscribeArgs
+  ): Promise<{ readonly detach: () => void }> {
+    const { stored, sink } = args;
     // Snapshot the outbound-stream cursor BEFORE registering the
     // subscriber. Any concurrent producer that calls sendToGguiSession
     // between here and registration gets seq > snapshotSeq, so the
@@ -542,8 +613,8 @@ export function createSubscribeHandlers(deps: SubscribeDeps): SubscribeHandlers 
         ? activeItem.streamSpec
         : undefined;
     const replay =
-      payload.fromSeq !== undefined
-        ? await deps.streamBuffer.replay(stored.id, payload.fromSeq, activeStreamSpec)
+      args.fromSeq !== undefined
+        ? await deps.streamBuffer.replay(stored.id, args.fromSeq, activeStreamSpec)
         : await deps.streamBuffer.replay(stored.id, 0, undefined);
 
     // Subscribe to the StreamFanout BEFORE constructing the Subscriber:
@@ -553,29 +624,35 @@ export function createSubscribeHandlers(deps: SubscribeDeps): SubscribeHandlers 
     // point onward queues into our iterator — paired with the
     // replayCompletedSeq cursor below, that's race-free.
     const fanoutIter = deps.streamFanout.subscribe(stored.id)[Symbol.asyncIterator]();
-    const sub: Subscriber = {
-      ws,
+    const base = {
       sessionId: stored.id,
       appId: stored.appId,
-      identity: effectiveIdentity,
+      identity: args.identity,
       connectedAt: Date.now(),
       replayCompletedSeq: snapshotSeq,
       iter: fanoutIter,
       // Per-subscriber channel-subscribe tracker. Populated
       // lazily by the `channel_subscribe` handler when the operator
-      // wired `streamWebSocketLocalTools`; stays empty otherwise.
+      // wired `streamWebSocketLocalTools`; stays empty otherwise
+      // (structurally so for SSE — no inbound channel).
       channelSubs: new Map<string, ChannelSubscriptionState>(),
+      sink,
     };
+    const sub: Subscriber =
+      args.transport === "ws"
+        ? { ...base, transport: "ws", ws: args.ws }
+        : { ...base, transport: "sse" };
     deps.register(sub);
     deps.logger.info("render_channel_subscribed", {
       sessionId: stored.id,
       appId: stored.appId,
-      identityKind: effectiveIdentity.identity.kind,
-      fromSeq: payload.fromSeq,
+      identityKind: args.identity.identity.kind,
+      transport: args.transport,
+      fromSeq: args.fromSeq,
       snapshotSeq,
       replayCount: replay?.envelopes.length ?? 0,
       replayTruncated: replay?.truncated ?? false,
-      bootstrap: mintedSessionToken !== undefined,
+      bootstrap: args.sessionToken !== undefined,
     });
 
     const ackPayload: AckPayload = {
@@ -590,15 +667,15 @@ export function createSubscribeHandlers(deps: SubscribeDeps): SubscribeHandlers 
       // the handshake ignore the field (legacy-pass-through).
       serverVersion: PROTOCOL_SCHEMA_VERSION,
       ...(replay?.truncated ? { replayTruncated: true } : {}),
-      ...(mintedSessionToken !== undefined ? { sessionToken: mintedSessionToken } : {}),
+      ...(args.sessionToken !== undefined ? { sessionToken: args.sessionToken } : {}),
     };
-    deps.send(ws, {
+    sink.write({
       type: "ack",
       payload: ackPayload,
-      ...(message.requestId ? { requestId: message.requestId } : {}),
+      ...(args.requestId ? { requestId: args.requestId } : {}),
     });
 
-    // R7 — GguiSessionEvent ledger replay. When `payload.sinceSequence` is
+    // R7 — GguiSessionEvent ledger replay. When `args.sinceSequence` is
     // present, fetch events with `seq > sinceSequence` from the per-
     // render ledger and emit each as a `render_event` wire frame
     // BEFORE the per-channel stream-buffer replay. Consumers dispatch
@@ -606,49 +683,71 @@ export function createSubscribeHandlers(deps: SubscribeDeps): SubscribeHandlers 
     // (render/props_update/etc.) — same cursor model as the HTTP
     // `/api/sessions/:id/events?sinceSequence=N` endpoint.
     //
+    // Each replay frame carries `resumeId` = the ledger seq — the SSE
+    // sink stamps it as the `id:` field so the browser's Last-Event-ID
+    // lands on the exact same cursor space; the WS sink ignores it.
+    //
+    // Pagination: a hasMore-loop over 100-event pages (the HTTP
+    // route's default page size). Strict superset of the previous
+    // single-page-100 WS behavior.
+    //
     // Horizon gate: a cursor below the server's replay horizon OR
     // above `lastSequence` (stale from a different deployment) emits
     // an error frame with `code: 'REPLAY_HORIZON_PASSED'` and skips
-    // the replay. Client recovery: re-mount from a fresh /state read.
-    if (payload.sinceSequence !== undefined) {
-      const sinceSeq = payload.sinceSequence;
+    // the replay. The frame carries `resumeId` = lastSequence — a
+    // dispatched id-bearing frame advances the browser's Last-Event-ID
+    // to the fresh high-water mark, and the ack snapshot already
+    // re-mounted state. Client recovery: re-mount from a fresh /state
+    // read (WS) / the already-delivered ack (SSE).
+    if (args.sinceSequence !== undefined) {
+      const sinceSeq = args.sinceSequence;
       if (sinceSeq < 0 || !Number.isInteger(sinceSeq)) {
-        deps.sendError(
-          ws,
-          "INVALID_SINCE_SEQUENCE",
-          "sinceSequence must be a non-negative integer",
-          message.requestId
-        );
+        sink.write({
+          type: "error",
+          payload: {
+            code: "INVALID_SINCE_SEQUENCE",
+            message: "sinceSequence must be a non-negative integer",
+          },
+          ...(args.requestId ? { requestId: args.requestId } : {}),
+        });
       } else {
-        const ledger = await deps.renderStore.listEventsSince(
-          stored.id,
-          sinceSeq,
-          // Server-side cap matches the HTTP route's default (100).
-          // Stress + replay-from-zero workloads cap here.
-          100
-        );
-        if (ledger === null) {
-          // GguiSession disappeared between resolve and ledger read —
-          // already handled by the broader error envelope path; nothing
-          // to do here.
-        } else if (sinceSeq > ledger.lastSequence || sinceSeq < ledger.horizonSeq) {
-          deps.sendError(
-            ws,
-            "REPLAY_HORIZON_PASSED",
-            `cursor ${sinceSeq} is outside replayable range [${ledger.horizonSeq}, ${ledger.lastSequence}]`,
-            message.requestId,
-            { currentSequence: ledger.lastSequence }
-          );
-        } else {
+        let cursor = sinceSeq;
+        let firstPage = true;
+        for (;;) {
+          const ledger = await deps.renderStore.listEventsSince(stored.id, cursor, 100);
+          if (ledger === null) {
+            // GguiSession disappeared between resolve and ledger read —
+            // already handled by the broader error envelope path;
+            // nothing to do here.
+            break;
+          }
+          if (firstPage && (sinceSeq > ledger.lastSequence || sinceSeq < ledger.horizonSeq)) {
+            sink.write(
+              {
+                type: "error",
+                payload: {
+                  code: "REPLAY_HORIZON_PASSED",
+                  message: `cursor ${sinceSeq} is outside replayable range [${ledger.horizonSeq}, ${ledger.lastSequence}]`,
+                  details: { currentSequence: ledger.lastSequence },
+                },
+                ...(args.requestId ? { requestId: args.requestId } : {}),
+              },
+              { resumeId: String(ledger.lastSequence) }
+            );
+            break;
+          }
+          firstPage = false;
           for (const event of ledger.events) {
             // GguiSessionEvent is now the wire-shape ledger primitive
             // (Wave 7 of flatten-render-identity, 2026-05-28); no
             // projection — emit the store's row directly.
-            deps.send(ws, {
-              type: "render_event",
-              payload: event,
-            });
+            sink.write({ type: "render_event", payload: event }, { resumeId: String(event.seq) });
+            cursor = event.seq;
           }
+          // Defensive: an empty page with hasMore would loop forever;
+          // the store contract never produces it, but a broken adapter
+          // must not spin the server.
+          if (!ledger.hasMore || ledger.events.length === 0) break;
         }
       }
     }
@@ -660,10 +759,16 @@ export function createSubscribeHandlers(deps: SubscribeDeps): SubscribeHandlers 
     // the single source of truth for ordering.
     if (replay) {
       for (const env of replay.envelopes) {
-        deps.send(ws, { type: "data", payload: env });
+        sink.write({ type: "data", payload: env });
       }
     }
+
+    return {
+      detach: () => {
+        deps.unregister(sub);
+      },
+    };
   }
 
-  return { resolveIdentityFromUpgrade, handleSubscribe };
+  return { resolveIdentityFromUpgrade, handleSubscribe, completeSubscribe };
 }

@@ -70,14 +70,21 @@ function makeRender(id: string, description: string): GguiSession {
  * Build a `connectFn` that captures the registry it receives + exposes
  * an `emitFrame(type, payload)` helper for driving inbound frames
  * through the registered handlers post-bind. Returns the connectFn +
- * the emitter + a reference to the captured registry.
+ * the emitter + a reference to the captured registry, plus the FULL
+ * captured opts object so specs can pin what `bootSequence` composed
+ * (failover-ladder descriptors, callbacks, meta).
  */
 function buildMockConnect(render: GguiSession | undefined): {
   connectFn: ConnectFn;
   emitFrame: (type: string, payload: unknown) => void;
+  captured: { current: Parameters<ConnectFn>[0] | null };
 } {
   const registryRef: { current: import('@ggui-ai/live-channel').ChannelRegistry | null } = { current: null };
+  const captured: { current: Parameters<ConnectFn>[0] | null } = {
+    current: null,
+  };
   const connectFn: ConnectFn = async (opts) => {
+    captured.current = opts;
     registryRef.current = opts.registry;
     return {
       handle: {
@@ -102,7 +109,7 @@ function buildMockConnect(render: GguiSession | undefined): {
     if (handler === undefined) return;
     void handler.onMessage(payload);
   };
-  return { connectFn, emitFrame };
+  return { connectFn, emitFrame, captured };
 }
 
 describe('bootSequence — happy path', () => {
@@ -414,6 +421,87 @@ describe('bootSequence — host capability capture (ggui#440)', () => {
     expect(result.ok).toBe(true);
     expect(hostCanRelayToolCalls()).toBe(false);
     expect(hostCanReceiveMessages()).toBe(false);
+  });
+});
+
+describe('bootSequence — failover-ladder composition (WS → SSE → polling)', () => {
+  const SSE_URL =
+    'https://server.example/api/sessions/render_001/stream?wsToken=tok_abc';
+  const POLLING_URL =
+    'https://server.example/api/sessions/render_001/events?wsToken=tok_abc';
+
+  /** Boot with `meta`, return the captured connectFn opts. */
+  async function bootAndCapture(
+    meta: McpAppAiGguiRenderMeta,
+  ): Promise<Parameters<ConnectFn>[0]> {
+    const dom = document.implementation.createHTMLDocument('renderer-test');
+    const initial = makeRender('render_001', 'ladder composition');
+    const { app, transport, pushToolResult } = buildBootHarness();
+    const { connectFn, captured } = buildMockConnect(initial);
+
+    const bootPromise = bootSequence({
+      doc: dom,
+      app,
+      transport,
+      connectFn,
+      notifyParent: vi.fn(),
+      toolResultTimeoutMs: 500,
+    });
+    await tick();
+    pushToolResult(meta);
+    const result = await bootPromise;
+    expect(result.ok).toBe(true);
+    const opts = captured.current;
+    expect(opts).not.toBeNull();
+    if (opts === null) throw new Error('connectFn never called');
+    return opts;
+  }
+
+  it('composes sse + polling from sseUrl/pollingUrl/lastSequence with a SHARED ladder cursor', async () => {
+    const opts = await bootAndCapture({
+      ...VALID_META,
+      sseUrl: SSE_URL,
+      pollingUrl: POLLING_URL,
+      lastSequence: 7,
+    });
+
+    // SSE rung: verbatim server-stamped URL + cursor seeded from the
+    // boot snapshot's lastSequence.
+    expect(opts.sse?.url).toBe(SSE_URL);
+    expect(opts.sse?.initialSinceSequence).toBe(7);
+
+    // Polling rung: cursor-aware URL reads the SAME seed.
+    expect(opts.polling).toBeDefined();
+    expect(opts.polling?.url).toContain('sinceSequence=7');
+
+    // Shared ladder cursor: an SSE delivery (SSE `id:` = ledger seq,
+    // surfaced via onSequence) advances the polling replay point — an
+    // SSE→polling demotion resumes from the last streamed event
+    // instead of re-replaying from the boot snapshot.
+    opts.sse?.onSequence?.(42);
+    expect(opts.polling?.url).toContain('sinceSequence=42');
+  });
+
+  it('omits the sse KEY when meta has no sseUrl (two-rung WS→polling ladder)', async () => {
+    const opts = await bootAndCapture({
+      ...VALID_META,
+      pollingUrl: POLLING_URL,
+      lastSequence: 3,
+    });
+
+    // exactOptionalPropertyTypes discipline: no sseUrl → no `sse` key
+    // (not an explicit `undefined` value).
+    expect('sse' in opts).toBe(false);
+    // Retro-pin of the previously unpinned polling composition: base
+    // URL + lastSequence-seeded cursor.
+    expect(opts.polling?.url).toContain(POLLING_URL);
+    expect(opts.polling?.url).toContain('sinceSequence=3');
+  });
+
+  it('omits BOTH fallback keys when meta carries neither URL (WS-only mode)', async () => {
+    const opts = await bootAndCapture(VALID_META);
+    expect('sse' in opts).toBe(false);
+    expect('polling' in opts).toBe(false);
   });
 });
 

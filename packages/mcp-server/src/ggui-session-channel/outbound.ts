@@ -29,7 +29,7 @@ import type {
 import type { WebSocketMessage } from "@ggui-ai/protocol/transport/websocket";
 import type { WebSocket } from "ws";
 import type { Logger } from "../logger.js";
-import type { Subscriber } from "./internal-types.js";
+import type { Subscriber, SubscriberSink } from "./internal-types.js";
 
 /** Channel-scoped error codes carried on `channel_error` frames. */
 export type ChannelErrorCode =
@@ -48,10 +48,11 @@ export interface OutboundDeps {
   /** Live-tail pub/sub seam for stream-envelope fan-out. */
   readonly streamFanout: StreamFanout;
   /**
-   * Flat set of all live WS subscribers — shared with the
+   * Flat set of all live subscribers (WS + SSE) — shared with the
    * subscriber-lifecycle module (which owns membership); read-only
-   * here. Direct-to-WS frames (`props_update`, `render`, `drain_ack`,
-   * external broadcasts) iterate + filter by `sessionId`.
+   * here. Direct frames (`props_update`, `render`, `drain_ack`,
+   * external broadcasts) iterate + filter by `sessionId`, writing
+   * through each subscriber's transport-neutral `sink`.
    */
   readonly wsSubscribers: ReadonlySet<Subscriber>;
   /**
@@ -60,6 +61,44 @@ export interface OutboundDeps {
    * `assertStreamContract` ahead of the protocol built-ins.
    */
   readonly extraReservedValidators?: ReadonlyMap<string, ReservedChannelValidator>;
+}
+
+/**
+ * Low-level ws wire write shared by the closure-bound `send` helper and
+ * {@link createWsSink} — skips closed sockets, warn-logs send failures.
+ * One definition so the guard cannot drift between the two surfaces.
+ */
+function wsWrite(ws: WebSocket, logger: Logger, msg: WebSocketMessage): void {
+  if (ws.readyState !== ws.OPEN) return;
+  try {
+    ws.send(JSON.stringify(msg));
+  } catch (err) {
+    logger.warn("render_channel_send_failed", { error: String(err) });
+  }
+}
+
+/**
+ * WS-backed {@link SubscriberSink}. `write` wraps the existing send
+ * guard (readyState check + warn-log on failure); `resumeId` is ignored
+ * — WS resume rides `SubscribePayload.sinceSequence`, not a per-frame
+ * id. `end` maps `service_restart` → 1012 (RFC 6455 "Service Restart":
+ * reconnect immediately) and `session_expired` → 1008 (policy
+ * violation: do not blind-reconnect).
+ */
+export function createWsSink(ws: WebSocket, logger: Logger): SubscriberSink {
+  return {
+    isOpen: () => ws.readyState === ws.OPEN,
+    write: (frame) => {
+      wsWrite(ws, logger, frame);
+    },
+    end: (reason) => {
+      try {
+        ws.close(reason === "service_restart" ? 1012 : 1008, reason);
+      } catch {
+        /* best-effort — socket may already be closing */
+      }
+    },
+  };
 }
 
 /** The send/fan-out helpers, bound to one channel instance. */
@@ -113,12 +152,7 @@ export interface Outbound {
 
 export function createOutbound(deps: OutboundDeps): Outbound {
   function send(ws: WebSocket, msg: WebSocketMessage): void {
-    if (ws.readyState !== ws.OPEN) return;
-    try {
-      ws.send(JSON.stringify(msg));
-    } catch (err) {
-      deps.logger.warn("render_channel_send_failed", { error: String(err) });
-    }
+    wsWrite(ws, deps.logger, msg);
   }
 
   function sendError(
@@ -217,12 +251,14 @@ export function createOutbound(deps: OutboundDeps): Outbound {
     // `notifyGguiSessionCommit` JSDoc on the public interface for why
     // fresh subscribers rely on `ack.render` instead of a replay frame.
     // NOT routed through StreamFanout either — `type: 'render'` is a
-    // distinct WebSocket message type. Filter the flat WS-subscriber
+    // distinct WebSocket message type. Filter the flat subscriber
     // set by sessionId; N is typically 1-2 (multi-tab render sharing).
+    // `sink.write` is the transport-neutral seam — WS and SSE
+    // subscribers receive the identical frame.
     const payload = matchType !== undefined ? { session: render, matchType } : { session: render };
     for (const sub of deps.wsSubscribers) {
       if (sub.sessionId !== sessionId) continue;
-      send(sub.ws, { type: "render", payload });
+      sub.sink.write({ type: "render", payload });
     }
   }
 
@@ -247,13 +283,14 @@ export function createOutbound(deps: OutboundDeps): Outbound {
       });
       return;
     }
-    // Filter the flat WS-subscriber set by sessionId; same posture as
-    // `notifyGguiSessionCommit`. `send()` already silently skips closed sockets
-    // and logs (but doesn't throw on) per-subscriber send failures, so
-    // the calling handler can't be made to fail by a dead WebSocket.
+    // Filter the flat subscriber set by sessionId; same posture as
+    // `notifyGguiSessionCommit`. `sink.write` already silently skips
+    // closed transports and logs (but doesn't throw on) per-subscriber
+    // send failures, so the calling handler can't be made to fail by a
+    // dead transport.
     for (const sub of deps.wsSubscribers) {
       if (sub.sessionId !== sessionId) continue;
-      send(sub.ws, {
+      sub.sink.write({
         type: "props_update",
         payload: { sessionId, props },
       });
@@ -272,13 +309,13 @@ export function createOutbound(deps: OutboundDeps): Outbound {
     readonly drainedAt: string;
   }): void {
     // Server-side fan-out for the action-drain ack.
-    // Filter the flat WS-subscriber set by sessionId (same posture
+    // Filter the flat subscriber set by sessionId (same posture
     // as `sendPropsUpdate`). No persistence; subscribers that
     // missed the frame fall back to their 10s claim timer, which
     // the atomic pop resolves cleanly.
     for (const sub of deps.wsSubscribers) {
       if (sub.sessionId !== sessionId) continue;
-      send(sub.ws, {
+      sub.sink.write({
         type: "drain_ack",
         payload: { sessionId, appId, eventId, drainedAt },
       });
@@ -287,10 +324,10 @@ export function createOutbound(deps: OutboundDeps): Outbound {
 
   function externalBroadcast(sessionId: string, frame: WebSocketMessage): void {
     // Walk the flat subscriber set; filter to matching sessionId.
-    // `send()` already guards closed sockets and logs (but doesn't
-    // throw on) per-subscriber failures, so the caller (an external
-    // pubsub on-message handler) can't be made to fail by a dead
-    // WebSocket. No GguiSessionStore lookup — the publisher already
+    // `sink.write` already guards closed transports and logs (but
+    // doesn't throw on) per-subscriber failures, so the caller (an
+    // external pubsub on-message handler) can't be made to fail by a
+    // dead transport. No GguiSessionStore lookup — the publisher already
     // validated; this seam is the cross-process delivery path, not
     // the re-validation point.
     for (const sub of deps.wsSubscribers) {
@@ -309,7 +346,7 @@ export function createOutbound(deps: OutboundDeps): Outbound {
       ) {
         continue;
       }
-      send(sub.ws, frame);
+      sub.sink.write(frame);
     }
   }
 

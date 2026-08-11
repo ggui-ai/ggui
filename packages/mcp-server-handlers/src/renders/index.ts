@@ -310,6 +310,7 @@ export {
   derivePublicEnvProjection,
   deriveRenderMeta,
   rewritePrivateBundleUrls,
+  wsOriginToHttpOrigin,
   PRIVATE_BUNDLE_PREFIX,
   resolveGadgetUrls,
   type RenderMetaView,

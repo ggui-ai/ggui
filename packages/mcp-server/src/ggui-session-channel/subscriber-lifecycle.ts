@@ -1,28 +1,37 @@
 /**
- * WS subscriber lifecycle for the live channel — registration into the
+ * Subscriber lifecycle for the live channel — registration into the
  * shared subscriber set, the per-subscriber live-tail pump loop, and
  * the symmetric teardown path (`unregister`) that ends the pump,
  * unhooks the StreamFanout subscription, and clears every
  * `channel_subscribe` polling loop the subscriber owned.
  *
+ * Transport-neutral: subscribers write through their `SubscriberSink`,
+ * so WS-attached and SSE-attached subscribers share this module
+ * unchanged. Only the ws→subscriber reverse index is WS-specific —
+ * it is populated for `transport: 'ws'` rows only, because it exists
+ * for the inbound socket-router dispatch SSE does not have.
+ *
  * Owns the per-render subscriber counter that drives the
  * `onFirstSubscriber` / `onLastSubscriberGone` 0↔1 transition hooks —
- * no other module reads it.
+ * no other module reads it. The hooks fire for SSE attaches too:
+ * hosted cross-pod pubsub scoping keys on "does this pod hold any
+ * subscriber for this render", regardless of transport.
  */
 
-import type { WebSocketMessage } from "@ggui-ai/protocol/transport/websocket";
 import type { WebSocket } from "ws";
 import type { Logger } from "../logger.js";
-import type { Subscriber } from "./internal-types.js";
+import type { Subscriber, WsSubscriber } from "./internal-types.js";
 
 export interface SubscriberLifecycleDeps {
   readonly logger: Logger;
-  /** Flat set of all live WS subscribers — membership owned HERE. */
+  /** Flat set of all live subscribers (WS + SSE) — membership owned HERE. */
   readonly wsSubscribers: Set<Subscriber>;
-  /** ws → subscriber reverse index so socket-close can look up cheaply. */
-  readonly subscribersByWs: WeakMap<WebSocket, Subscriber>;
-  /** Low-level wire write from the outbound module. */
-  readonly send: (ws: WebSocket, msg: WebSocketMessage) => void;
+  /**
+   * ws → subscriber reverse index so socket-close / inbound dispatch
+   * can look up cheaply. WS-only by construction: populated for
+   * `transport: 'ws'` subscribers only.
+   */
+  readonly subscribersByWs: WeakMap<WebSocket, WsSubscriber>;
   /** 0→1 transition hook — see `GguiSessionChannelOptions.onFirstSubscriber`. */
   readonly onFirstSubscriber?: (sessionId: string) => void;
   /** 1→0 transition hook — see `GguiSessionChannelOptions.onLastSubscriberGone`. */
@@ -33,11 +42,12 @@ export interface SubscriberLifecycle {
   /** Add a subscriber to the live set and start its pump loop. */
   register(sub: Subscriber): void;
   /**
-   * Tear down the subscriber bound to `ws` (if any): remove from the
-   * live set, end the fanout iterator (terminates the pump), clear
-   * every channel-subscribe polling timer. Idempotent.
+   * Tear down `sub` (if still registered): remove from the live set,
+   * end the fanout iterator (terminates the pump), clear every
+   * channel-subscribe polling timer. Idempotent — a second call for
+   * the same subscriber is a no-op.
    */
-  unregister(ws: WebSocket): void;
+  unregister(sub: Subscriber): void;
 }
 
 export function createSubscriberLifecycle(deps: SubscriberLifecycleDeps): SubscriberLifecycle {
@@ -53,7 +63,7 @@ export function createSubscriberLifecycle(deps: SubscriberLifecycleDeps): Subscr
 
   /**
    * Pump live frames from the StreamFanout iterator out to this
-   * subscriber's WS. Started fire-and-forget by `register`; ends when
+   * subscriber's sink. Started fire-and-forget by `register`; ends when
    * the iterator yields done (close() on the seam) OR `unregister`
    * calls `iter.return()`. Per-subscriber seq filter applied here:
    * frames with `seq <= replayCompletedSeq` were (or will be)
@@ -72,11 +82,11 @@ export function createSubscriberLifecycle(deps: SubscriberLifecycleDeps): Subscr
         const { value, done } = await sub.iter.next();
         if (done) return;
         if (value.seq <= sub.replayCompletedSeq) continue;
-        if (sub.ws.readyState !== sub.ws.OPEN) {
+        if (!sub.sink.isOpen()) {
           await sub.iter.return?.();
           return;
         }
-        deps.send(sub.ws, { type: "data", payload: value });
+        sub.sink.write({ type: "data", payload: value });
       }
     } catch (err) {
       deps.logger.warn("render_channel_pump_failed", {
@@ -88,7 +98,9 @@ export function createSubscriberLifecycle(deps: SubscriberLifecycleDeps): Subscr
 
   function register(sub: Subscriber): void {
     deps.wsSubscribers.add(sub);
-    deps.subscribersByWs.set(sub.ws, sub);
+    if (sub.transport === "ws") {
+      deps.subscribersByWs.set(sub.ws, sub);
+    }
     // Per-render count bookkeeping + 0→1 hook for cloud pubsub
     // adapter scoping. Increment FIRST so the hook sees the up-to-date
     // state; hook fires only on the transition (prevCount === 0).
@@ -99,7 +111,7 @@ export function createSubscriberLifecycle(deps: SubscriberLifecycleDeps): Subscr
         deps.onFirstSubscriber(sub.sessionId);
       } catch (err) {
         // Best-effort: a thrown hook MUST NOT corrupt the
-        // wsSubscribers set vs the real socket lifecycle.
+        // wsSubscribers set vs the real transport lifecycle.
         deps.logger.warn("render_channel_on_first_subscriber_threw", {
           sessionId: sub.sessionId,
           error: String(err),
@@ -111,11 +123,14 @@ export function createSubscriberLifecycle(deps: SubscriberLifecycleDeps): Subscr
     void pumpSubscriber(sub);
   }
 
-  function unregister(ws: WebSocket): void {
-    const sub = deps.subscribersByWs.get(ws);
-    if (!sub) return;
-    deps.subscribersByWs.delete(ws);
+  function unregister(sub: Subscriber): void {
+    // Idempotency gate: membership in the live set is the single
+    // "still registered" signal, shared across transports.
+    if (!deps.wsSubscribers.has(sub)) return;
     deps.wsSubscribers.delete(sub);
+    if (sub.transport === "ws") {
+      deps.subscribersByWs.delete(sub.ws);
+    }
     // Per-render count bookkeeping + 1→0 hook (symmetric with register).
     const prevCount = renderCountById.get(sub.sessionId) ?? 0;
     if (prevCount <= 1) {

@@ -88,7 +88,7 @@ import {
   type ConnectFn,
   type RegistrySubscribeHandle,
 } from './registry-subscribe.js';
-import { buildEventsPolling } from './events-polling.js';
+import { buildEventsPolling, createSequenceCursor } from './events-polling.js';
 import {
   ensureStatusDom,
   setStatus,
@@ -1056,6 +1056,29 @@ export async function bootSequence(opts: BootSequenceOptions): Promise<BootSeque
   }
 
   // ── Live-channel subscribe (conditional enhancement). ──────────────
+  // Failover-ladder rung URLs (WS → SSE → polling), hoisted so the
+  // spreads below stay exact-optional-clean without non-null
+  // assertions. `sseUrl` is the server-stamped wsToken-gated
+  // `/api/sessions/<id>/stream` URL; SSE `id:` = ledger sequence = the
+  // SAME cursor model as the WS `sinceSequence` replay and polling
+  // ticks — switching rungs does not lose events.
+  const sseUrl =
+    typeof meta.sseUrl === 'string' && meta.sseUrl.length > 0
+      ? meta.sseUrl
+      : undefined;
+  const pollingBaseUrl =
+    typeof meta.pollingUrl === 'string' && meta.pollingUrl.length > 0
+      ? meta.pollingUrl
+      : undefined;
+  // One shared cursor for the whole ladder — SSE deliveries advance it
+  // (via onSequence), the polling descriptor reads it per tick, so an
+  // SSE→polling demotion resumes from the last streamed event instead
+  // of re-replaying from the boot snapshot. Created only when a
+  // fallback rung exists.
+  const ladderCursor =
+    sseUrl !== undefined || pollingBaseUrl !== undefined
+      ? createSequenceCursor(meta.lastSequence ?? 0)
+      : undefined;
   let handle: RegistrySubscribeHandle;
   try {
     handle = await connectFn({
@@ -1090,21 +1113,29 @@ export async function bootSequence(opts: BootSequenceOptions): Promise<BootSeque
       onResubscribeAck: (ack) => {
         void applyAck(ack);
       },
-      // R7 — registry-level events-polling fallback. Composed once at
-      // bind time from `meta.pollingUrl` (server-stamped wsToken-
-      // gated /api/sessions/<id>/events URL) + `meta.lastSequence`
-      // (cursor seed). FailoverHandle uses this when WS reaches
-      // 'failed'; absent → no polling fallback (WS-only mode).
+      // Failover-ladder fallback rungs (WS → SSE → polling), composed
+      // once at bind time from the server-stamped wsToken-gated URLs +
+      // `meta.lastSequence` (shared cursor seed). FailoverHandle
+      // descends a rung on each 'failed'; both absent → WS-only mode.
       //
       // Same cursor model as the WS subscribe `sinceSequence` replay
       // path — switching transports does not lose events.
-      ...(typeof meta.pollingUrl === 'string' && meta.pollingUrl.length > 0
+      ...(sseUrl !== undefined && ladderCursor !== undefined
+        ? {
+            sse: {
+              url: sseUrl,
+              initialSinceSequence: ladderCursor.get(),
+              onSequence: (seq: number) => {
+                ladderCursor.advance(seq);
+              },
+            },
+          }
+        : {}),
+      ...(pollingBaseUrl !== undefined && ladderCursor !== undefined
         ? {
             polling: buildEventsPolling({
-              baseUrl: meta.pollingUrl,
-              ...(meta.lastSequence !== undefined
-                ? { initialSinceSequence: meta.lastSequence }
-                : {}),
+              baseUrl: pollingBaseUrl,
+              cursor: ladderCursor,
             }),
           }
         : {}),

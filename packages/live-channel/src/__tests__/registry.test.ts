@@ -183,11 +183,16 @@ describe('ChannelRegistry — FailoverHandle (WS → polling swap)', () => {
     // the inner, we call it.
     handle.start();
     fakes[1]!.triggerClose(1006);
-    // Swap should have fired. Tag introspection on FailoverHandle.
-    // (The discriminator stays 'ws' — see FailoverHandle docstring.)
+    // Swap should have fired. Tag introspection on the failover handle.
+    // (The discriminator stays 'ws' — see WsFailoverHandle docstring.)
     expect((handle as unknown as { hasSwapped: boolean }).hasSwapped).toBe(
       true,
     );
+    // No SSE descriptor on this bind → the ladder is ws → polling
+    // exactly as pre-SSE (regression guard for the rung generalization).
+    expect(
+      (handle as unknown as { activeKind: string }).activeKind,
+    ).toBe('polling');
     // Status sequence MUST include 'failed' suppression + 'connecting'
     // re-entry on the swap. The PollingTransport then fires its own
     // 'open' on start().
@@ -233,5 +238,249 @@ describe('ChannelRegistry — FailoverHandle (WS → polling swap)', () => {
       false,
     );
     await handle.dispose();
+  });
+});
+
+describe('ChannelRegistry — transport ladder (ws → sse → polling)', () => {
+  /** Same FakeSocket shape as the failover describe above. */
+  class FakeSocket {
+    readyState = 0;
+    sent: string[] = [];
+    closeCalled = false;
+    onopen: (() => void) | null = null;
+    onmessage: ((e: MessageEvent) => void) | null = null;
+    onclose: ((e?: CloseEvent) => void) | null = null;
+    onerror: (() => void) | null = null;
+    send(data: string): void {
+      this.sent.push(data);
+    }
+    close(): void {
+      this.closeCalled = true;
+      this.readyState = 3;
+    }
+    triggerClose(code = 1006): void {
+      this.readyState = 3;
+      this.onclose?.({ code } as CloseEvent);
+    }
+  }
+
+  /**
+   * Fake EventSource mirroring the FakeSocket fixture —
+   * readyState 0=CONNECTING, 1=OPEN, 2=CLOSED. See
+   * sse-transport.test.ts for the transport-level cases; here the
+   * fakes only drive ladder demotions.
+   */
+  class FakeEventSource {
+    readyState = 0;
+    closeCalled = false;
+    onopen: ((e: Event) => void) | null = null;
+    onmessage: ((e: MessageEvent) => void) | null = null;
+    onerror: ((e: Event) => void) | null = null;
+    constructor(readonly url: string) {}
+    close(): void {
+      this.closeCalled = true;
+      this.readyState = 2;
+    }
+    triggerOpen(): void {
+      this.readyState = 1;
+      this.onopen?.(new Event('open'));
+    }
+    triggerMessage(frame: object, lastEventId = ''): void {
+      this.onmessage?.({
+        data: JSON.stringify(frame),
+        lastEventId,
+      } as MessageEvent);
+    }
+    triggerError(readyState: 0 | 2): void {
+      this.readyState = readyState;
+      this.onerror?.(new Event('error'));
+    }
+  }
+
+  function jsonOk(): Response {
+    return new Response(JSON.stringify({ ok: true }), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    });
+  }
+
+  const SSE_URL = 'http://test/api/sessions/s/stream?wsToken=tok';
+  const POLL_URL = 'http://test/r/abc';
+
+  function buildLadderRegistry() {
+    const fakes: FakeSocket[] = [];
+    const sources: FakeEventSource[] = [];
+    const fetchImpl = vi.fn(async () => jsonOk());
+    const registry = new ChannelRegistry({
+      subscribeFrameBuilder: noopBuilder,
+      webSocketFactory: () => {
+        const f = new FakeSocket();
+        fakes.push(f);
+        return f as unknown as WebSocket;
+      },
+      eventSourceFactory: (url) => {
+        const s = new FakeEventSource(url);
+        sources.push(s);
+        return s as unknown as EventSource;
+      },
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+    });
+    return { registry, fakes, sources, fetchImpl };
+  }
+
+  it('demotes ws → sse → polling down the full ladder, never surfacing failed', async () => {
+    const { registry, fakes, sources, fetchImpl } = buildLadderRegistry();
+    const propsHandler = vi.fn();
+    registry.register({ type: 'props_update', onMessage: propsHandler });
+    const statuses: string[] = [];
+    const debugLog = vi.fn();
+    const handle = await registry.bind({
+      bootstrap: {
+        wsUrl: 'ws://csp-blocked',
+        wsToken: 'tok',
+        sessionId: 's',
+        appId: 'a',
+      },
+      logger: { debug: debugLog },
+      onStatusChange: (s) => statuses.push(s),
+      sse: { url: SSE_URL },
+      polling: {
+        url: POLL_URL,
+        intervalMs: 60_000,
+        parseSnapshot: () => null,
+      },
+    });
+    // Facade: the handle keeps kind 'ws' throughout the ladder.
+    expect(handle.kind).toBe('ws');
+    if (handle.kind !== 'ws') throw new Error('unreachable: wsViable bootstrap must yield a ws handle');
+    const seam = handle as unknown as {
+      hasSwapped: boolean;
+      activeKind: string;
+    };
+    expect(seam.activeKind).toBe('ws');
+
+    // Rung 1 fails: two consecutive never-opened closes → WS fail-fast.
+    fakes[0]!.triggerClose(1006);
+    handle.start();
+    fakes[1]!.triggerClose(1006);
+
+    // Demotion 1: ws → sse. SSE rung built + started; polling untouched.
+    expect(seam.hasSwapped).toBe(true);
+    expect(seam.activeKind).toBe('sse');
+    expect(handle.kind).toBe('ws');
+    expect(sources).toHaveLength(1);
+    expect(sources[0]!.url).toBe(SSE_URL);
+    expect(fetchImpl).not.toHaveBeenCalled();
+
+    // SSE rung delivers frames through the same handler map.
+    sources[0]!.triggerOpen();
+    sources[0]!.triggerMessage({ type: 'props_update', payload: { n: 1 } });
+    expect(propsHandler).toHaveBeenCalledWith({ n: 1 });
+
+    // send() post-demotion: logged + dropped, never throws (neither
+    // SSE nor polling has an outbound channel).
+    expect(() => handle.send({ type: 'action', payload: {} })).not.toThrow();
+    expect(debugLog).toHaveBeenCalledWith(
+      'channel_failover_send_dropped_post_swap',
+      expect.any(Object),
+    );
+
+    // Rung 2 fails: terminal-close 2-strike (no intervening open on
+    // the recreated instance). start() bypasses the recreate timer —
+    // same pattern as the WS reconnect tests.
+    sources[0]!.triggerError(2);
+    handle.start();
+    expect(sources).toHaveLength(2);
+    sources[1]!.triggerError(2);
+
+    // Demotion 2: sse → polling. Terminal rung ticks immediately.
+    expect(seam.activeKind).toBe('polling');
+    expect(fetchImpl).toHaveBeenCalledWith(POLL_URL, {
+      headers: { accept: 'application/json' },
+    });
+
+    // The consumer never saw a terminal 'failed' — each demotion is a
+    // synthetic 'connecting' re-entry.
+    expect(statuses).not.toContain('failed');
+    expect(statuses).toContain('connecting');
+    await handle.dispose();
+  });
+
+  it('binds SSE-primary (kind sse) when WS is not viable and demotes to polling', async () => {
+    const { registry, sources, fetchImpl } = buildLadderRegistry();
+    const propsHandler = vi.fn();
+    const onSequence = vi.fn();
+    registry.register({ type: 'props_update', onMessage: propsHandler });
+    const statuses: string[] = [];
+    const handle = await registry.bind({
+      bootstrap: { sessionId: 's', appId: 'a' },
+      onStatusChange: (s) => statuses.push(s),
+      sse: { url: SSE_URL, initialSinceSequence: 12, onSequence },
+      polling: {
+        url: POLL_URL,
+        intervalMs: 60_000,
+        parseSnapshot: () => null,
+      },
+    });
+    expect(handle.kind).toBe('sse');
+    if (handle.kind !== 'sse') throw new Error('unreachable: sse descriptor without wsUrl must yield an sse handle');
+    // First connect seeds the replay cursor from initialSinceSequence.
+    expect(sources).toHaveLength(1);
+    expect(sources[0]!.url).toBe(`${SSE_URL}&sinceSequence=12`);
+
+    // Frames + sequence bridge flow through the registry wiring.
+    sources[0]!.triggerOpen();
+    expect(statuses).toContain('open');
+    sources[0]!.triggerMessage({ type: 'props_update', payload: { n: 2 } }, '13');
+    expect(propsHandler).toHaveBeenCalledWith({ n: 2 });
+    expect(onSequence).toHaveBeenCalledWith(13);
+
+    // Terminal-close 2-strike → demote to polling.
+    sources[0]!.triggerError(2);
+    handle.start();
+    sources[1]!.triggerError(2);
+    const seam = handle as unknown as {
+      hasSwapped: boolean;
+      activeKind: string;
+    };
+    expect(seam.hasSwapped).toBe(true);
+    expect(seam.activeKind).toBe('polling');
+    expect(handle.kind).toBe('sse');
+    expect(fetchImpl).toHaveBeenCalledWith(POLL_URL, {
+      headers: { accept: 'application/json' },
+    });
+    expect(statuses).not.toContain('failed');
+    await handle.dispose();
+  });
+
+  it('dispose() mid-ladder cancels demotion (no polling fetch ever fires)', async () => {
+    const { registry, fakes, sources, fetchImpl } = buildLadderRegistry();
+    const handle = await registry.bind({
+      bootstrap: {
+        wsUrl: 'ws://csp-blocked',
+        wsToken: 'tok',
+        sessionId: 's',
+        appId: 'a',
+      },
+      sse: { url: SSE_URL },
+      polling: {
+        url: POLL_URL,
+        intervalMs: 60_000,
+        parseSnapshot: () => null,
+      },
+    });
+    if (handle.kind !== 'ws') throw new Error('unreachable: wsViable bootstrap must yield a ws handle');
+    const seam = handle as unknown as { activeKind: string };
+    // Demote ws → sse, then tear the whole ladder down.
+    fakes[0]!.triggerClose(1006);
+    handle.start();
+    fakes[1]!.triggerClose(1006);
+    expect(seam.activeKind).toBe('sse');
+    await handle.dispose();
+    // A zombie SSE fake can no longer demote the disposed ladder.
+    sources[0]!.triggerError(2);
+    sources[0]!.triggerError(2);
+    expect(seam.activeKind).toBe('sse');
+    expect(fetchImpl).not.toHaveBeenCalled();
   });
 });

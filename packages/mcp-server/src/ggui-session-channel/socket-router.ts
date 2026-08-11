@@ -14,7 +14,7 @@ import type { WebSocket, WebSocketServer } from "ws";
 import type { Logger } from "../logger.js";
 import type { ActionIngress } from "./action-ingress.js";
 import type { ChannelSubscriptions } from "./channel-subscriptions.js";
-import type { Subscriber, UpgradeBindings } from "./internal-types.js";
+import type { UpgradeBindings, WsSubscriber } from "./internal-types.js";
 import type { Outbound } from "./outbound.js";
 import type { SubscribeHandlers } from "./subscribe.js";
 import type { SubscriberLifecycle } from "./subscriber-lifecycle.js";
@@ -54,8 +54,13 @@ export interface SocketRouterDeps {
   readonly logger: Logger;
   /** GguiSession backing store — observation-message patches persist here. */
   readonly renderStore: GguiSessionStore;
-  /** ws → subscriber reverse index — the dispatcher's per-frame lookup. */
-  readonly subscribersByWs: WeakMap<WebSocket, Subscriber>;
+  /**
+   * ws → subscriber reverse index — the dispatcher's per-frame lookup.
+   * WS-only by construction (the lifecycle module populates it for
+   * `transport: 'ws'` subscribers only); SSE subscribers have no
+   * inbound socket to route.
+   */
+  readonly subscribersByWs: WeakMap<WebSocket, WsSubscriber>;
   readonly send: Outbound["send"];
   readonly sendError: Outbound["sendError"];
   readonly unregister: SubscriberLifecycle["unregister"];
@@ -157,11 +162,11 @@ export function attachSocketRouter(wss: WebSocketServer, deps: SocketRouterDeps)
    */
   function checkSubscriberTenancy(
     ws: WebSocket,
-    sub: Subscriber | undefined,
+    sub: WsSubscriber | undefined,
     payload: { readonly sessionId?: string },
     messageType: string,
     requestId?: string
-  ): sub is Subscriber {
+  ): sub is WsSubscriber {
     if (!sub) {
       deps.sendError(
         ws,
@@ -481,7 +486,11 @@ export function attachSocketRouter(wss: WebSocketServer, deps: SocketRouterDeps)
     });
 
     ws.on("close", () => {
-      deps.unregister(ws);
+      // Resolve the subscriber bound to this socket (if any) before
+      // tearing it down — `unregister` is subscriber-keyed now that
+      // the lifecycle module is transport-neutral.
+      const closedSub = deps.subscribersByWs.get(ws);
+      if (closedSub) deps.unregister(closedSub);
       pendingIdentity.delete(ws);
       // A pending socket that closes before subscribing frees its idle
       // timer + ceiling slot. For a socket that already subscribed,
