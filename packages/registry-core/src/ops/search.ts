@@ -6,8 +6,11 @@
  *
  * Visibility: only `visibility: "public"` rows are exposed. Without that
  * filter the public `/search` route would leak private artifact IDs.
- * Impls SHOULD apply the visibility filter inside `scanArtifacts`; the
- * op verifies defensively after the page returns.
+ * Impls MUST apply the visibility filter inside `scanArtifacts` — the
+ * normative obligation on {@link RegistryStorage.scanArtifacts} (#474);
+ * this op's post-fetch check is defense-in-depth ONLY, never the sole
+ * gate (a private row that reaches the storage-layer page would
+ * consume a `limit` slot before this filter ever discards it).
  */
 import type {
   ArtifactKind,

@@ -60,6 +60,14 @@
  *   together they require one entry with exactly that (server, tool)
  *   pair. Case-sensitive exact, AND-composed with every other
  *   dimension.
+ * - {@link scanArtifacts} MUST exclude non-public rows
+ *   (`visibility !== 'public'`) — visibility gating lives INSIDE every
+ *   impl, not only at the caller layer (#259 delta-2 final-review
+ *   ruling, #474). {@link searchArtifacts}'s post-fetch visibility
+ *   filter is defense-in-depth ONLY; it must never be the sole gate,
+ *   because a private row that reaches the storage-layer page would
+ *   consume a `limit` slot before the op ever gets to discard it —
+ *   an observable underfill on self-host impls.
  *
  * **Failure mode:**
  * - Transport-level failures (store throttling, disk full) throw.
@@ -73,8 +81,11 @@
  *   `putArtifactVersionIfAbsent` rejects on collision, missing returns
  *   null, `listAuthorKeys` returns only keys for the queried subject,
  *   `deleteAuthorKey` true/false idempotency + per-subject isolation,
- *   and `order: 'recent'` newest-first ordering (single page + across
- *   the cursor chain).
+ *   `order: 'recent'` newest-first ordering (single page + across the
+ *   cursor chain), the `tool` / `server` filter dimensions (tool-only,
+ *   server-only with bare-entry exclusion, and the exact-pair
+ *   cross-product case), and non-public rows never appearing in
+ *   `scanArtifacts` results OR consuming a `limit` page slot.
  */
 import type {
   ArtifactScanFilter,

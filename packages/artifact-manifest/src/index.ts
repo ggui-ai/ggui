@@ -64,8 +64,11 @@ export {
 // publish flows use to compute the effective binding set. Registry
 // search input validation (`tool=` / `server=` filters) imports
 // `MCP_TOOL_BINDING_NAME_RE` from here so the wire filters and the
-// manifest field stay on a single charset rule.
+// manifest field stay on a single charset rule. `MCP_TOOL_BINDING_MAX_ENTRIES`
+// is exported so downstream callers that derive a bound from this cap
+// stay coupled by import instead of a second hand-copied constant.
 export {
+  MCP_TOOL_BINDING_MAX_ENTRIES,
   MCP_TOOL_BINDING_NAME_RE,
   mcpToolBindingSchema,
   mcpToolsSchema,

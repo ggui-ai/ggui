@@ -37,9 +37,13 @@ export const MCP_TOOL_BINDING_NAME_RE = /^[A-Za-z0-9_.-]{1,128}$/;
 /**
  * Shared entry-count bound for a binding list, declared OR derived —
  * one envelope, referenced everywhere a cap applies rather than a
- * second magic `16` drifting from this one.
+ * second magic `16` drifting from this one. Exported so downstream
+ * callers that derive a bound from this cap stay coupled by import
+ * instead of a second hand-copied constant — if this cap ever
+ * changes, every derived bound recomputes automatically instead of
+ * silently drifting.
  */
-const MCP_TOOL_BINDING_MAX_ENTRIES = 16;
+export const MCP_TOOL_BINDING_MAX_ENTRIES = 16;
 
 /**
  * One MCP tool binding. `server` optional — omit for a
