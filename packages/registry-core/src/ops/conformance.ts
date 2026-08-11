@@ -74,6 +74,7 @@ import type {
   StaticImport,
 } from 'oxc-parser';
 import type { ZodIssue } from 'zod';
+import { memoizedRetryingImport } from '../utils/lazy-import.js';
 
 /**
  * Lazy, memoized `oxc-parser` accessor. `oxc-parser` ships its own
@@ -89,14 +90,15 @@ import type { ZodIssue } from 'zod';
  * `compile.ts`, there's no synchronous `require()` path available.
  * That's what pushes {@link checkConformance} (and everything that
  * calls it) from a plain synchronous function to one returning a
- * `Promise`. The promise itself is memoized at module scope, so
- * concurrent first callers share one in-flight load and a long-lived
- * process pays the import cost exactly once.
+ * `Promise`. {@link memoizedRetryingImport} memoizes the promise at
+ * module scope — concurrent first callers share one in-flight load,
+ * and a long-lived process pays the import cost at most once per
+ * successful load — while clearing the cache on rejection, so a
+ * failed load doesn't poison every later call for the rest of the
+ * process (see that helper's doc for why a bare `??=` isn't safe
+ * here).
  */
-let oxcParserModulePromise: Promise<typeof import('oxc-parser')> | undefined;
-function loadOxcParser(): Promise<typeof import('oxc-parser')> {
-  return (oxcParserModulePromise ??= import('oxc-parser'));
-}
+const loadOxcParser = memoizedRetryingImport(() => import('oxc-parser'));
 
 /**
  * Body shape of the conformance request. `bundle` is the UTF-8 text of
