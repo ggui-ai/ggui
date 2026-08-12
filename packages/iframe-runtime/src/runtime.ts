@@ -2494,7 +2494,7 @@ function emitUserActionDoorbell(args: {
     `  <next_args>${nextArgs}</next_args>`,
     `</ggui_directive>`,
     '',
-    `The user interacted with render ${args.sessionId} while no ggui_consume long-poll was active. The gesture is queued on the consume pipe for that render — it is NOT in this message. After ggui_consume returns, react to the returned event with the appropriate domain tool, then call ggui_update on the SAME sessionId (${args.sessionId}). Omit renderAsNew — the card the user is looking at repaints in place.`,
+    `The user interacted with render ${args.sessionId} while no ggui_consume long-poll was active. The gesture is queued on the consume pipe for that render — it is NOT in this message. After ggui_consume returns, react to the returned event with the appropriate domain tool, then call ggui_amend on the SAME sessionId (${args.sessionId}) — the card the user is looking at repaints in place. Use ggui_update instead only if this moment deserves a NEW card in the conversation (it advances the history number).`,
   ].join('\n');
   // Structured mirror of the directive for ggui-aware programmatic
   // consumers. OPTIONAL — nothing in the loop depends on a server-side
