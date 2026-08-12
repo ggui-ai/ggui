@@ -87,9 +87,46 @@ export type GguiSessionEventType =
   | 'ui.created'
   | 'ui.updated'
   | 'ui.committed'
+  | 'ui.reminted'
   | 'tool.called'
   | 'tool.result'
   | 'user.submitted';
+
+/**
+ * Payload of a `'ui.reminted'` event — the epoch transition record
+ * (#483). Appended ONLY by `ggui_update` (never `ggui_amend`, never a
+ * no-op update): the session head advanced to a NEW epoch-numbered
+ * render record at this seq.
+ *
+ * `epoch` is the number the head advanced TO (the first update after
+ * render appends `{epoch: 1}`). Epochs are LEDGER-DERIVED — there is
+ * no counter field on the session row; the count of reminted events
+ * at a seq IS the epoch at that seq (see
+ * {@link deriveEpochFromEvents}). Frames freeze when they observe a
+ * reminted event whose `epoch` exceeds the epoch in their own
+ * resource URI (the #483 freeze latch).
+ */
+export interface UiRemintedEventData {
+  readonly epoch: number;
+}
+
+/**
+ * Head epoch implied by an event list: the count of `'ui.reminted'`
+ * events. `ggui_render` mints epoch 0 with NO event, so an empty (or
+ * remint-free) ledger is epoch 0 by construction. Callers slicing the
+ * ledger at a seq get the epoch AS OF that seq — which is exactly how
+ * pinned `#N` snapshots reconstruct (props replayed to the N-th
+ * remint boundary).
+ */
+export function deriveEpochFromEvents(
+  events: ReadonlyArray<Pick<GguiSessionEvent, 'type'>>,
+): number {
+  let epoch = 0;
+  for (const event of events) {
+    if (event.type === 'ui.reminted') epoch += 1;
+  }
+  return epoch;
+}
 
 /**
  * Response body for `GET /api/sessions/:sessionId/events?sinceSequence=N&limit=M`.
