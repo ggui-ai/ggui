@@ -854,6 +854,13 @@ export interface McpAppsGguiSession {
   // Shared base.
   readonly id: string;
   readonly createdAt: string;
+  /**
+   * History head epoch (#483) — same semantics as
+   * `GguiSessionBase.epoch` (absent ⇒ 0; advanced only by
+   * `ggui_update`). Declared here too because this variant does not
+   * extend the base.
+   */
+  readonly epoch?: number;
   readonly prompt?: string;
   readonly description?: string;
   readonly message?: string;

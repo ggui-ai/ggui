@@ -220,6 +220,15 @@ export {
   type GguiUpdateHandlerDeps,
   type PropsUpdateNotifier,
 } from "./update.js";
+export {
+  createGguiAmendHandler,
+  type GguiAmendHandlerDeps,
+} from "./amend.js";
+export {
+  mutationInputSchema,
+  runPropsMutation,
+  type PropsMutationResult,
+} from "./props-mutation-core.js";
 // The handshake handler owns suggestion orchestration directly, via
 // `HandshakeNegotiator.decide` returning a `HandshakeSuggestion`.
 // The LLM-backed negotiator in `@ggui-ai/mcp-server` is the

@@ -1,0 +1,90 @@
+/**
+ * `ggui_amend` — in-place props mutation on the ALREADY-MOUNTED card
+ * (#483 tool split). Same wire grammar as `ggui_update`
+ * (replace/merge via the shared {@link runPropsMutation} core), the
+ * opposite mount identity:
+ *
+ *   - NO history record: the head epoch is untouched by construction
+ *     (the core advances it only for `ggui_update`).
+ *   - NO `_meta.ui` on the tool DECLARATION and NO `resultMeta` — this
+ *     is a plain data tool. Hosts never reserve a per-result view for
+ *     it (hosts mint views from `_meta` on UI-bound success results —
+ *     live-proven 2026-08-12), so nothing new appears in the
+ *     conversation. The mounted card receives the new props over the
+ *     live-channel ladder (WS / SSE / polling / bridge-pull); the
+ *     spec tool-result forwarding path is deliberately not part of
+ *     this tool's contract.
+ *
+ * Git reading: `ggui_update` = commit (new history entry);
+ * `ggui_amend` = commit --amend (fix up the current one).
+ */
+import { z } from 'zod';
+import type { HandlerContext, SharedHandler } from '../types.js';
+import {
+  mutationInputSchema,
+  runPropsMutation,
+} from './props-mutation-core.js';
+import type { GguiUpdateHandlerDeps } from './update.js';
+
+/**
+ * Same seam set as `ggui_update` on purpose — the two tools share ONE
+ * mutation core, so composers wire ONE deps object for both. The
+ * slice-meta options (`mintWsToken` / `runtimeUrl` / theme plumbing)
+ * are simply never read on the amend path (no result meta exists to
+ * emit them into).
+ */
+export type GguiAmendHandlerDeps = GguiUpdateHandlerDeps;
+
+const outputSchema = {
+  sessionId: z.string(),
+  updated: z.boolean(),
+  /**
+   * The BARE live-head URI — amend targets the mounted card and never
+   * mints a record, so there is no pinned URI to return and no epoch
+   * field (the history number is untouched by construction).
+   */
+  resourceUri: z.string(),
+  /** No-op feedback channel — same semantics as ggui_update's. */
+  warning: z.string().optional(),
+} as const;
+
+interface AmendOutput {
+  sessionId: string;
+  updated: boolean;
+  resourceUri: string;
+  warning?: string;
+}
+
+/**
+ * Build the OSS `ggui_amend` handler. Additive, like `update:` — server
+ * composers opt in via the dedicated `amend:` slot.
+ */
+export function createGguiAmendHandler(
+  deps: GguiAmendHandlerDeps,
+): SharedHandler<typeof mutationInputSchema, typeof outputSchema, AmendOutput> {
+  return {
+    name: 'ggui_amend',
+    title: 'Amend',
+    // Deliberately NO `_meta` — see the module docstring. Declaring
+    // the UI binding here would make hosts treat amend results as
+    // renderable views, which is exactly what this tool exists to
+    // avoid.
+    audience: ['agent'],
+    description:
+      deps.description ??
+      "Amend the currently mounted card in place — no new card is added to the conversation and the history number does not advance. USE THIS AFTER ANY DOMAIN-TOOL CALL THAT CHANGED DATA THE UI SHOWS — e.g. you handled a `todo_toggle`/`cart_add`/`note_save` event from `ggui_consume`, mutated backend state, and the user is staring at stale props. Skipping this leaves the card frozen on the old state and is the #1 wire bug. Pattern: `consume → domain-tool → ggui_amend → loop`. The card repaints WITHOUT losing scroll position, focus, or uncommitted input.  Two mutation modes:  (1) `{sessionId, kind:'replace', props}` — full props replacement.  (2) `{sessionId, kind:'merge', patch}` — RFC 7396 JSON Merge Patch; send ONLY the delta (null deletes a key; arrays fully replace). Prefer `merge` after a single domain-tool mutation.  Both modes validate the FINAL props against the GguiSession's `propsSpec` (when declared) and reject on violation.  For a state MILESTONE that deserves its own new card in the conversation — or when the original card is no longer visible or usable — use ggui_update instead (it renders the state as a new card and advances the history number).",
+    inputSchema: mutationInputSchema,
+    outputSchema,
+    async handler(input, ctx: HandlerContext): Promise<AmendOutput> {
+      const r = await runPropsMutation(deps, 'ggui_amend', input, ctx);
+      return {
+        sessionId: r.sessionId,
+        updated: r.updated,
+        resourceUri: r.mountResourceUri,
+        ...(r.warning !== undefined ? { warning: r.warning } : {}),
+      };
+    },
+    // NO resultMeta — a `_meta`-carrying success result would make
+    // hosts mint a per-result view (live-proven), defeating the tool.
+  };
+}

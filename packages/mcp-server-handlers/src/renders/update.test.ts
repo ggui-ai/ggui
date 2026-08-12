@@ -80,17 +80,15 @@ describe('createGguiUpdateHandler', () => {
       expect(handler.name).toBe('ggui_update');
     });
 
-    it('declares the updateOutputSchema shape — {sessionId, resourceUri, updated}', () => {
+    it('declares the updateOutputSchema shape — {sessionId, resourceUri, epoch, updated}', () => {
       const store = new InMemoryGguiSessionStore();
       const handler = createGguiUpdateHandler({ renderStore: store });
       const outKeys = Object.keys(handler.outputSchema).sort();
-      // Phase-B (flatten-render-identity): stackItemId → sessionId.
-      // `resourceUri` is the spec-canonical MCP-Apps entry-point — same
-      // `ui://ggui/render/{id}` URI `ggui_render` stamped on the initial
-      // mount, surfaced to SDKs that strip `_meta`. `warning` is the
+      // `resourceUri` is the epoch-pinned URI of the NEW history record
+      // (#483); `epoch` is the head after the call. `warning` is the
       // no-op signal (#471 round-3): present only when a conforming
-      // patch changed nothing.
-      expect(outKeys).toEqual(['resourceUri', 'sessionId', 'updated', 'warning']);
+      // patch changed nothing (no record minted).
+      expect(outKeys).toEqual(['epoch', 'resourceUri', 'sessionId', 'updated', 'warning']);
     });
 
     it('carries the MCP Apps UI binding — same template as ggui_render (#471 revised lock)', () => {
@@ -118,7 +116,9 @@ describe('createGguiUpdateHandler', () => {
       expect(out).toEqual({
         sessionId,
         updated: true,
-        resourceUri: `ui://ggui/render/${sessionId}`,
+        // Epoch-pinned URI of the freshly minted history record (#483).
+        resourceUri: `ui://ggui/render/${sessionId}#1`,
+        epoch: 1,
       });
       const after = await store.get(sessionId);
       // The render's wire-shape payload narrows to ComponentGguiSession here
@@ -194,7 +194,9 @@ describe('createGguiUpdateHandler', () => {
       expect(out).toEqual({
         sessionId,
         updated: true,
-        resourceUri: `ui://ggui/render/${sessionId}`,
+        // Epoch-pinned URI of the freshly minted history record (#483).
+        resourceUri: `ui://ggui/render/${sessionId}#1`,
+        epoch: 1,
       });
     });
 
@@ -277,7 +279,9 @@ describe('createGguiUpdateHandler', () => {
       expect(out).toEqual({
         sessionId,
         updated: true,
-        resourceUri: `ui://ggui/render/${sessionId}`,
+        // Epoch-pinned URI of the freshly minted history record (#483).
+        resourceUri: `ui://ggui/render/${sessionId}#1`,
+        epoch: 1,
       });
       const after = await store.get(sessionId);
       // Only `temp` changes; `condition` and `city` carry through.
@@ -546,13 +550,12 @@ describe('createGguiUpdateHandler', () => {
   });
 
   describe('resultMeta — ai.ggui/render slice meta emission', () => {
-    it('renderAsNew: true emits slice meta with propsJson even when bootstrap-emitting deps are unwired (default runtimeUrl)', async () => {
-      // Once there's any patched props (always the case after a
-      // successful update — applyGguiSessionPatch sets `props: patch`),
-      // the true-branch envelope emits the full mount package (#481)
-      // with the propsJson + a default runtimeUrl. A host minting a
-      // view needs the runtimeUrl to mount on hosts that strip the
-      // live trio; the default is /_ggui/iframe-runtime.js.
+    it('emits slice meta with propsJson even when bootstrap-emitting deps are unwired (default runtimeUrl)', async () => {
+      // Every real update mints a history record (#483) — the envelope
+      // is ALWAYS the full mount package (#481) with the propsJson +
+      // a default runtimeUrl. A host minting a view needs the
+      // runtimeUrl to mount on hosts that strip the live trio; the
+      // default is /_ggui/iframe-runtime.js.
       const store = new InMemoryGguiSessionStore();
       const { sessionId } = await seedRender({
         store,
@@ -563,7 +566,6 @@ describe('createGguiUpdateHandler', () => {
         sessionId,
         kind: 'replace' as const,
         props: { x: 2 },
-        renderAsNew: true,
       };
       const out = await handler.handler(input, ctx());
       const meta = await handler.resultMeta?.(out, input, ctx());
@@ -575,12 +577,12 @@ describe('createGguiUpdateHandler', () => {
       expect(parsed.meta?.runtimeUrl).toBe('/_ggui/iframe-runtime.js');
     });
 
-    it('renderAsNew: true emits a BOOTABLE mount package: propsJson + contextSlots + mount pointer (#481/#482)', async () => {
+    it('emits a BOOTABLE mount package: propsJson + contextSlots + epoch-pinned mount pointer (#481/#483)', async () => {
       // Hosts mint a fresh view from any mountable result (claude.ai,
       // proven live 2026-08-12) — a frame booted from THIS envelope
       // must self-suffice. The 2026-05-13 props-only trim dropped
       // contextSlots and every update-minted view of a contextSpec
-      // contract crashed at boot; this pins the opt-in full package.
+      // contract crashed at boot; this pins the always-full package.
       const store = new InMemoryGguiSessionStore();
       const { sessionId } = await seedRender({
         store,
@@ -602,12 +604,15 @@ describe('createGguiUpdateHandler', () => {
         sessionId,
         kind: 'replace' as const,
         props: { count: 5 },
-        renderAsNew: true,
       };
       const out = await handler.handler(input, ctx());
       const meta = await handler.resultMeta?.(out, input, ctx());
       expect(meta).toBeDefined();
       expect(Object.keys(meta ?? {})).toContain('ui');
+      // Mount pointer is the epoch-PINNED URI of the new record (#483).
+      expect(
+        (meta as { ui?: { resourceUri?: string } } | undefined)?.ui?.resourceUri,
+      ).toBe(`ui://ggui/render/${sessionId}#1`);
       const parsed = parseMcpAppAiGguiRenderMeta(meta);
       expect(parsed.ok).toBe(true);
       if (!parsed.ok) return;
@@ -651,31 +656,30 @@ describe('createGguiUpdateHandler', () => {
       );
     });
 
-    it('default (renderAsNew omitted) emits NO _meta at all (#482)', async () => {
-      // The tool's essential semantic: update the ALREADY-MOUNTED UI.
-      // Live probing (2026-08-12) showed hosts mint a per-result view
-      // whenever a UI-bound tool's success result carries ANY `_meta`
-      // — the only proven mint-nothing shape is no `_meta`. The
-      // mounted frame repaints via its live rungs; the forwarding
-      // slice is deliberately sacrificed on the default branch.
+    it('a NO-OP update emits NO _meta at all — no record minted, no card (#483)', async () => {
+      // Hosts mint a per-result view whenever a UI-bound tool's
+      // success result carries ANY `_meta` (live-proven 2026-08-12).
+      // A no-op mints no history record, so a `_meta`-carrying result
+      // would spawn a card duplicating the head — the no-`_meta`
+      // shape is the only proven mint-nothing shape.
       const store = new InMemoryGguiSessionStore();
       const { sessionId } = await seedRender({
         store,
-        initialProps: { count: 0 },
-        contextSpec: {
-          draftText: { schema: { type: 'string' }, debounceMs: 300 },
-        },
+        initialProps: { count: 5 },
       });
       const handler = createGguiUpdateHandler({
         renderStore: store,
         runtimeUrl: '/_ggui/iframe-runtime.js',
       });
+      // Echo the existing props back — the canonical no-op.
       const input = { sessionId, kind: 'replace' as const, props: { count: 5 } };
       const out = await handler.handler(input, ctx());
+      expect(out.updated).toBe(false);
+      expect(out.epoch).toBe(0);
+      // No-op returns the BARE head URI — nothing was pinned.
+      expect(out.resourceUri).toBe(`ui://ggui/render/${sessionId}`);
       const meta = await handler.resultMeta?.(out, input, ctx());
       expect(meta).toBeUndefined();
-      // Agent-facing structuredContent keeps the mount URI either way.
-      expect(out.resourceUri).toContain(sessionId);
     });
 
     it('forwards themeId + themeMode from themeProvider over static deps', async () => {
@@ -692,7 +696,6 @@ describe('createGguiUpdateHandler', () => {
         sessionId,
         kind: 'replace' as const,
         props: { count: 1 },
-        renderAsNew: true,
       };
       const out = await handler.handler(input, ctx());
       const meta = await handler.resultMeta?.(out, input, ctx());
@@ -961,8 +964,9 @@ describe('createGguiUpdateHandler — render-identity refresh (#430 slice 1)', (
       ctx(),
     );
     expect(out.updated).toBe(true);
+    // Key-suffixed base + epoch pin (#483).
     expect(out.resourceUri).toBe(
-      `ui://ggui/render/${sessionId}/${CONTRACT_KEY}`,
+      `ui://ggui/render/${sessionId}/${CONTRACT_KEY}#1`,
     );
   });
 
@@ -1006,15 +1010,23 @@ describe('createGguiUpdateHandler — render-identity refresh (#430 slice 1)', (
     );
     const page = await store.listEventsSince(sessionId, 0, 10);
     expect(page).not.toBeNull();
-    expect(page!.lastSequence).toBe(1);
-    expect(page!.events).toHaveLength(1);
+    // #483: a real update appends TWO events — the props change, then
+    // the epoch boundary AFTER it (pinned reconstruction replays props
+    // up to and including the N-th remint boundary; the boundary is
+    // also the freeze signal older-epoch frames latch on).
+    expect(page!.lastSequence).toBe(2);
+    expect(page!.events).toHaveLength(2);
     // Canonical ledger taxonomy name — the client parse core maps
-    // 'ui.updated' → the 'props_update' frame type.
+    // 'ui.updated' → the 'props_update' frame type. The props event
+    // carries its epoch so frames never flash a newer epoch's state.
     expect(page!.events[0]?.type).toBe('ui.updated');
     expect(page!.events[0]?.data).toEqual({
       sessionId,
       props: { count: 7 },
+      epoch: 1,
     });
+    expect(page!.events[1]?.type).toBe('ui.reminted');
+    expect(page!.events[1]?.data).toEqual({ epoch: 1 });
   });
 
   it('a NO-OP update appends nothing to the ledger', async () => {
@@ -1074,6 +1086,7 @@ describe('createGguiUpdateHandler — render-identity refresh (#430 slice 1)', (
       ctx(),
     );
     expect(out.updated).toBe(true);
-    expect(out.resourceUri).toBe(`ui://ggui/render/${sessionId}`);
+    // Bare base (identity read failed) + epoch pin (#483).
+    expect(out.resourceUri).toBe(`ui://ggui/render/${sessionId}#1`);
   });
 });

@@ -49,11 +49,15 @@ export type ApplyGguiSessionPatchInput<T extends GguiSessionTarget> =
       readonly render: T;
       readonly mode: 'replace';
       readonly props: JsonObject;
+      /** Error attribution for propsSpec violations (#483). Default `'ggui_update'`. */
+      readonly tool?: 'ggui_update' | 'ggui_amend';
     }
   | {
       readonly render: T;
       readonly mode: 'merge';
       readonly patch: JsonObject;
+      /** Error attribution for propsSpec violations (#483). Default `'ggui_update'`. */
+      readonly tool?: 'ggui_amend' | 'ggui_update';
     };
 
 export interface ApplyGguiSessionPatchResult<T extends GguiSessionTarget> {
@@ -126,7 +130,7 @@ export function applyGguiSessionPatch<T extends GguiSessionTarget>(
   // unknown-key strictness. For merge mode, this catches the case
   // where the patch's null-delete would orphan a required field, or
   // a recursive merge would introduce an undeclared key.
-  assertPropsContract(existing.propsSpec, finalProps);
+  assertPropsContract(existing.propsSpec, finalProps, input.tool ?? 'ggui_update');
 
   // Spread preserves T's other fields; the `props` override lands on
   // top. The spread infers `T & { props: JsonObject }`, which is

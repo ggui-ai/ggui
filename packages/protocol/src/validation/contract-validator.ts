@@ -934,7 +934,7 @@ function validateSchemaStructure(
  * structured error response with violations + hint so the agent can
  * self-correct (fix data or propose a new contract via ggui_render).
  */
-function defaultHintFor(tool: 'ggui_render' | 'ggui_update' | 'ggui_emit' | 'ggui_event'): string {
+function defaultHintFor(tool: 'ggui_render' | 'ggui_update' | 'ggui_amend' | 'ggui_emit' | 'ggui_event'): string {
   if (tool === 'ggui_event') {
     return 'The user-action payload did not match the render\'s actionSpec. Re-check the client-side action wiring, or have the agent render a new UI whose actionSpec covers this payload shape.';
   }
@@ -943,11 +943,11 @@ function defaultHintFor(tool: 'ggui_render' | 'ggui_update' | 'ggui_emit' | 'ggu
 
 export class ContractViolationError extends Error {
   readonly violations: ContractViolation[];
-  readonly tool: 'ggui_render' | 'ggui_update' | 'ggui_emit' | 'ggui_event';
+  readonly tool: 'ggui_render' | 'ggui_update' | 'ggui_amend' | 'ggui_emit' | 'ggui_event';
   readonly hint: string;
 
   constructor(opts: {
-    tool: 'ggui_render' | 'ggui_update' | 'ggui_emit' | 'ggui_event';
+    tool: 'ggui_render' | 'ggui_update' | 'ggui_amend' | 'ggui_emit' | 'ggui_event';
     violations: ContractViolation[];
     hint?: string;
   }) {
