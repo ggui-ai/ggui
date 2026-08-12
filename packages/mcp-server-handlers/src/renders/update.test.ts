@@ -468,10 +468,10 @@ describe('createGguiUpdateHandler', () => {
       const store = new InMemoryGguiSessionStore();
       const { sessionId } = await seedRender({ store });
 
-      const calls: Array<{ sessionId: string; props: JsonObject }> = [];
+      const calls: Array<{ sessionId: string; props: JsonObject; epoch: number }> = [];
       const propsUpdateNotifier: PropsUpdateNotifier = {
-        async sendPropsUpdate(r, props) {
-          calls.push({ sessionId: r, props });
+        async sendPropsUpdate(r, props, epoch) {
+          calls.push({ sessionId: r, props, epoch });
         },
       };
 
@@ -485,9 +485,12 @@ describe('createGguiUpdateHandler', () => {
       );
 
       expect(calls).toHaveLength(1);
+      // The fan carries the freshly-advanced epoch — the freeze-latch
+      // signal that supersedes every lower-epoch mount (#483).
       expect(calls[0]).toEqual({
         sessionId,
         props: { count: 11 },
+        epoch: 1,
       });
     });
 

@@ -386,16 +386,18 @@ describe('GET /api/sessions/:sessionId/stream — live fan-out, heartbeat, teard
     );
     try {
       await stream.readUntil((b) => b.includes('"type":"ack"'));
-      await fx.channel.sendPropsUpdate(fx.sessionId, { headline: 'fresh' });
+      await fx.channel.sendPropsUpdate(fx.sessionId, { headline: 'fresh' }, 1);
       const buf = await stream.readUntil((b) => b.includes('"type":"props_update"'));
       const block = parseEventBlocks(buf).find((b) => b.frame.type === 'props_update');
       expect(block).toBeDefined();
       // Live frames are id-less — only ledger-backed replay frames
       // advance Last-Event-ID.
       expect(block?.id).toBeUndefined();
+      // `epoch` rides the SSE leg verbatim — same freeze-latch signal
+      // as the WS leg (one outbound impl behind both sinks).
       expect(block?.frame).toMatchObject({
         type: 'props_update',
-        payload: { sessionId: fx.sessionId, props: { headline: 'fresh' } },
+        payload: { sessionId: fx.sessionId, props: { headline: 'fresh' }, epoch: 1 },
       });
     } finally {
       await stream.close();

@@ -4240,9 +4240,9 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
                 ? { renderIdentityStore: opts.renderIdentityStore }
                 : {}),
               propsUpdateNotifier: {
-                sendPropsUpdate: async (sessionId, props) => {
+                sendPropsUpdate: async (sessionId, props, epoch) => {
                   if (!channelForHealth) return;
-                  await channelForHealth.sendPropsUpdate(sessionId, props);
+                  await channelForHealth.sendPropsUpdate(sessionId, props, epoch);
                 },
               },
               // Bootstrap-emission deps. Mirror render so MCP Apps hosts

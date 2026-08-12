@@ -371,7 +371,11 @@ export async function runPropsMutation(
       // (re)subscribe).
       if (deps.propsUpdateNotifier) {
         try {
-          await deps.propsUpdateNotifier.sendPropsUpdate(sessionId, finalProps);
+          await deps.propsUpdateNotifier.sendPropsUpdate(
+            sessionId,
+            finalProps,
+            nextEpoch,
+          );
         } catch {
           // Silent: stay aligned with `safelyNotifyGguiSessionCommit`'s
           // posture in render.ts. A throwing notifier is a host-side

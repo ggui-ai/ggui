@@ -108,6 +108,37 @@ describe('createGguiAmendHandler', () => {
     expect((updatedEvents[2]!.data as { epoch: number }).epoch).toBe(1);
   });
 
+  it('fans the UNCHANGED head epoch to the live notifier (freeze-latch asymmetry)', async () => {
+    const store = new InMemoryGguiSessionStore();
+    const { sessionId } = await seedRender({ store });
+    const fanned: number[] = [];
+    const propsUpdateNotifier = {
+      async sendPropsUpdate(_r: string, _p: JsonObject, epoch: number) {
+        fanned.push(epoch);
+      },
+    };
+    const amend = createGguiAmendHandler({ renderStore: store, propsUpdateNotifier });
+    const update = createGguiUpdateHandler({ renderStore: store, propsUpdateNotifier });
+
+    await amend.handler(
+      { sessionId, kind: 'replace' as const, props: { count: 1 } },
+      ctx(),
+    );
+    await update.handler(
+      { sessionId, kind: 'replace' as const, props: { count: 2 } },
+      ctx(),
+    );
+    await amend.handler(
+      { sessionId, kind: 'replace' as const, props: { count: 3 } },
+      ctx(),
+    );
+    // Amend fans the head's CURRENT epoch (head mount applies: frame
+    // epoch == its own); update fans the advanced one (older mounts
+    // freeze: frame epoch > theirs). This is the entire latch protocol
+    // seen from the server side.
+    expect(fanned).toEqual([0, 1, 1]);
+  });
+
   it('no-op amend returns updated:false + warning, appends nothing', async () => {
     const store = new InMemoryGguiSessionStore();
     const { sessionId } = await seedRender({ store, initialProps: { x: 1 } });

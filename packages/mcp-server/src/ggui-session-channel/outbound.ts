@@ -138,7 +138,7 @@ export interface Outbound {
   /** Impl behind {@link GguiSessionChannelServer.notifyGguiSessionCommit}. */
   notifyGguiSessionCommit(sessionId: string, render: GguiSession, matchType?: string): void;
   /** Impl behind {@link GguiSessionChannelServer.sendPropsUpdate}. */
-  sendPropsUpdate(sessionId: string, props: JsonObject): Promise<void>;
+  sendPropsUpdate(sessionId: string, props: JsonObject, epoch: number): Promise<void>;
   /** Impl behind {@link GguiSessionChannelServer.sendDrainAck}. */
   sendDrainAck(args: {
     readonly sessionId: string;
@@ -266,7 +266,11 @@ export function createOutbound(deps: OutboundDeps): Outbound {
    * Best-effort + orphan-tolerant per the docstring on the public
    * `sendPropsUpdate` method.
    */
-  async function sendPropsUpdate(sessionId: string, props: JsonObject): Promise<void> {
+  async function sendPropsUpdate(
+    sessionId: string,
+    props: JsonObject,
+    epoch: number,
+  ): Promise<void> {
     let stored;
     try {
       stored = await deps.renderStore.get(sessionId);
@@ -288,10 +292,11 @@ export function createOutbound(deps: OutboundDeps): Outbound {
     // closed transports and logs (but doesn't throw on) per-subscriber
     // send failures, so the calling handler can't be made to fail by a
     // dead transport.
-    // Freeze-latch epoch (#483): the just-committed row carries the
-    // head epoch — an update advanced it, an amend left it. A mount
-    // whose own epoch is lower freezes instead of applying.
-    const epoch = stored.render.epoch ?? 0;
+    // Freeze-latch epoch (#483): the caller passes the COMMIT-TIME
+    // epoch — an update fans its freshly-advanced value, an amend the
+    // unchanged head. Deliberately not re-read from the row here: a
+    // re-read races a concurrent update and could stamp an amend's
+    // frame with a newer epoch, freezing the live head it belongs to.
     for (const sub of deps.wsSubscribers) {
       if (sub.sessionId !== sessionId) continue;
       sub.sink.write({

@@ -104,9 +104,22 @@ import {
  * handler awaits to surface unexpected errors via the structured logger
  * (best-effort delivery; thrown errors in the seam don't fail the tool
  * call).
+ *
+ * `epoch` is the history epoch of the commit this frame carries —
+ * `ggui_update` fans its freshly-advanced epoch, `ggui_amend` fans the
+ * unchanged head. The notifier MUST put it on the `props_update`
+ * payload verbatim: it is the freeze-latch signal (#483) that tells a
+ * lower-epoch mount it has been superseded. The mutation core passes
+ * the commit-time value so implementations never re-read the row (a
+ * re-read races a concurrent update and can stamp an amend's frame
+ * with a newer epoch, freezing the live head it belongs to).
  */
 export interface PropsUpdateNotifier {
-  sendPropsUpdate(sessionId: string, props: JsonObject): Promise<void>;
+  sendPropsUpdate(
+    sessionId: string,
+    props: JsonObject,
+    epoch: number,
+  ): Promise<void>;
 }
 
 /** Re-exported for callers that prefer to import the error from this module.

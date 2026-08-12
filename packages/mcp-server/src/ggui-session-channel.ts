@@ -20,11 +20,13 @@
  *     mutation handlers (ggui_emit / connector `ctx.send`). Validated
  *     through `assertStreamContract` before delivery.
  *
- * `props_update`: the agent-driven `ggui_update` handler calls
- * `channel.sendPropsUpdate(sessionId, props)` (wired as its
- * `propsUpdateNotifier`) to fan a `{type:'props_update'}` frame to
- * live subscribers. Reaches the renderer's existing `props_update`
- * branch in `iframe-runtime` and applies new props in-place.
+ * `props_update`: the agent-driven `ggui_update` / `ggui_amend`
+ * handlers call `channel.sendPropsUpdate(sessionId, props, epoch)`
+ * (wired as their `propsUpdateNotifier`) to fan a
+ * `{type:'props_update'}` frame to live subscribers. Reaches the
+ * renderer's `props_update` branch in `iframe-runtime`, which applies
+ * new props in-place — or freezes the mount when the frame's `epoch`
+ * exceeds its own (#483 freeze latch).
  *
  * Not handled here:
  *
@@ -533,7 +535,7 @@ export interface GguiSessionChannelServer {
    * `render.propsSpec` before applying — defense-in-depth at the
    * receiving boundary.
    */
-  sendPropsUpdate(sessionId: string, props: JsonObject): Promise<void>;
+  sendPropsUpdate(sessionId: string, props: JsonObject, epoch: number): Promise<void>;
   /**
    * Fan a `{type:'drain_ack', payload:{sessionId, appId,
    * eventId, drainedAt}}` wire frame to every subscriber currently
