@@ -50,7 +50,7 @@ import {
   type ResourceReadScenario,
   type ResourceReadScenarioDriver,
 } from "@ggui-ai/protocol-conformance/resource-read-conformance";
-import type { Blueprint, ComponentGguiSession, DataContract } from "@ggui-ai/protocol";
+import type { Blueprint, ComponentGguiSession, DataContract, JsonObject } from "@ggui-ai/protocol";
 import type { McpAppAiGguiRenderMeta } from "@ggui-ai/protocol/integrations/mcp-apps";
 import { registerGguiRenderResourceTemplate } from "./mcp-apps-outbound.js";
 
@@ -240,7 +240,7 @@ async function boot(
           id: seed.session,
           appId: OWNER_APP_ID,
           componentCode: COMPONENT_CODE,
-          props: seed.records[0]!.props as Record<string, unknown>,
+          props: seed.records[0]!.props as JsonObject,
           eventSequence: 0,
           createdAt: 1_700_000_000_000,
           lastActivityAt: 1_700_000_000_000,
@@ -253,7 +253,7 @@ async function boot(
           data: { sessionId: seed.session, props: seed.records[0]!.props, epoch: 0 },
         });
         for (let epoch = 1; epoch < seed.records.length; epoch += 1) {
-          const props = seed.records[epoch]!.props as Record<string, unknown>;
+          const props = seed.records[epoch]!.props as JsonObject;
           await renderStore.appendEvent({
             sessionId: seed.session,
             type: "ui.updated",
