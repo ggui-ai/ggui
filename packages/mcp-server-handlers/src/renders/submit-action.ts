@@ -189,6 +189,16 @@ export interface GguiSubmitActionHandlerDeps {
    */
   readonly activeConsumerRegistry?: ActiveConsumerRegistry;
   /**
+   * Doorbell-race grace window, ms (default 800). When no consumer is
+   * parked at the click instant, the handler re-probes the registry at
+   * 100ms intervals for this long before answering
+   * `consumerPresent: false` — a consume parking inside the window
+   * drains the just-appended event, making `true` the honest answer
+   * and suppressing a duplicate ui/message doorbell. Test hook: pass a
+   * small value for deterministic no-consumer-case timing.
+   */
+  readonly consumerGraceMs?: number;
+  /**
    * Optional append-only event ledger. When wired, the handler
    * dual-writes every successful dispatch envelope to BOTH:
    *
@@ -357,12 +367,35 @@ export function createGguiSubmitActionHandler(
           // the pipe. When the seam isn't wired, the field is omitted
           // and the iframe assumes a consumer is present (drain_ack
           // will resolve the toast).
+          //
+          // GRACE WINDOW (doorbell race, observed live 2026-08-12):
+          // clicks routinely land a few hundred ms BEFORE the agent's
+          // next consume parks (live captures: 380ms and 371ms gaps).
+          // Answering `false` at the click instant makes the iframe
+          // ring the ui/message doorbell — and then the parked consume
+          // drains the SAME event, so the agent handles it twice (once
+          // from consume, once from the doorbell prompt). Instead of
+          // deciding at the instant, poll the registry briefly: a
+          // consumer parking inside the window drains this event and
+          // the honest answer is `true`. A full-window miss means no
+          // consume is coming this turn — `false`, ring away. The
+          // extra latency applies ONLY to the no-consumer case and is
+          // well under gesture-feedback tolerances.
           if (deps.activeConsumerRegistry !== undefined) {
+            const registry = deps.activeConsumerRegistry;
+            let present = registry.hasActive(env.sessionId);
+            const graceMs = deps.consumerGraceMs ?? 800;
+            const probeIntervalMs = 100;
+            const deadline = Date.now() + graceMs;
+            while (!present && Date.now() < deadline) {
+              await new Promise<void>((resolve) => {
+                setTimeout(resolve, probeIntervalMs);
+              });
+              present = registry.hasActive(env.sessionId);
+            }
             return {
               ok: true,
-              consumerPresent: deps.activeConsumerRegistry.hasActive(
-                env.sessionId,
-              ),
+              consumerPresent: present,
             };
           }
         } catch (err) {

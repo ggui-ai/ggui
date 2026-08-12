@@ -77,6 +77,10 @@ import { RelayIncapableError } from './relay-incapability.js';
 import { ChannelRegistry } from '@ggui-ai/live-channel';
 import type { WsTransportHandle } from '@ggui-ai/live-channel';
 import {
+  createTelemetrySink,
+  type TelemetrySink,
+} from './runtime-telemetry.js';
+import {
   createChannelErrorHandler,
   createChannelPayloadHandler,
   createDataHandler,
@@ -986,6 +990,29 @@ export async function bootSequence(opts: BootSequenceOptions): Promise<BootSeque
     typeof meta.wsToken === 'string' &&
     meta.wsToken.length > 0;
 
+  // Transport-telemetry sink — the iframe's self-report channel (see
+  // runtime-telemetry.ts). Created for EVERY boot with an App bridge;
+  // the first batch carries the boot-path decision so operators can
+  // see which ladder (if any) this mount composed, even on hosts
+  // whose console and network are unreachable.
+  const telemetryApp = getCurrentApp();
+  const telemetry: TelemetrySink | null =
+    telemetryApp !== null
+      ? createTelemetrySink({
+          sessionId: meta.sessionId,
+          callTool: (args) => telemetryApp.callServerTool(args),
+        })
+      : null;
+  currentTelemetrySink = telemetry;
+  telemetry?.record(
+    'boot.path',
+    JSON.stringify({
+      hasStaticContent,
+      hasLiveTrio,
+      bridgeCapable: telemetryApp !== null,
+    }),
+  );
+
   // ── Static seed mount — zero-round-trip paint, no WS required. ──────
   // The ONLY mount path for spec-compliant MCP-Apps hosts that expose no
   // ggui live channel (claude.ai / ChatGPT / Claude Desktop), AND the
@@ -1050,6 +1077,7 @@ export async function bootSequence(opts: BootSequenceOptions): Promise<BootSeque
     return { ok: false, mountedRender };
   }
   if (staticOnlyNoBridge) {
+    telemetry?.record('boot.static_only_no_bridge');
     // Host-context wiring for the no-WS static mount (claude.ai / ChatGPT
     // / Claude Desktop). The INITIAL host theme/style/fonts were already
     // applied at boot (applyHostContextStyling, above); attach the
@@ -1104,7 +1132,13 @@ export async function bootSequence(opts: BootSequenceOptions): Promise<BootSeque
     handle = await connectFn({
       meta,
       registry: activeRegistry,
+      // Live-channel diagnostics tap — every channel_* event the
+      // transports emit (failover swaps, polling budget exhaustion,
+      // SSE lifecycle) lands in the telemetry buffer. Without this the
+      // ladder's story on sandboxed hosts is unobservable.
+      ...(telemetry !== null ? { logger: telemetry.channelLogger } : {}),
       onStatusChange: (status) => {
+        telemetry?.record(`status.${status}`);
         setStatus(
           refs,
           status === 'connected' ? 'Connected.' : `Connection ${status}…`,
@@ -1212,6 +1246,10 @@ export async function bootSequence(opts: BootSequenceOptions): Promise<BootSeque
     return { ok: false, mountedRender };
   }
 
+  telemetry?.record(
+    'subscribe.resolved',
+    JSON.stringify({ kind: handle.handle.kind, hasAck: handle.ack !== undefined }),
+  );
   // Attach the live transport handle to the renderer — flushes any
   // buffered outbound `action` frames that were queued while the
   // subscribe handshake completed. `send` narrows to the ws surface:
@@ -2501,6 +2539,7 @@ function emitUserActionDoorbell(args: {
   // record — the proper extension point). Namespaced under
   // `ai.ggui/userAction` to match our other protocol extensions
   // (`ai.ggui/render`, `ai.ggui/bootstrap`, etc.).
+  currentTelemetrySink?.record('doorbell.ring', args.sessionId);
   postToParent({
     jsonrpc: '2.0',
     id: Math.floor(Math.random() * 1e9),
@@ -2533,6 +2572,15 @@ function emitUserActionDoorbell(args: {
  * nothing else about the latch is observable to the host.
  */
 let relayIncapabilityAnnounced = false;
+
+/**
+ * Module-level handle to the CURRENT boot's telemetry sink so
+ * module-scope paths (the doorbell emitter below) can report without
+ * threading the sink through every call chain. Per-iframe
+ * single-tenancy makes a single slot correct — same justification as
+ * `getCurrentApp()`.
+ */
+let currentTelemetrySink: TelemetrySink | null = null;
 
 /**
  * Whether the user has manually dismissed the CURRENTLY-STANDING relay

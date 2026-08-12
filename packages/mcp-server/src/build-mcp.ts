@@ -276,10 +276,22 @@ export function buildMcpServer(
             .example === 'string'
             ? (validated as { nextStep: { example: string } }).nextStep.example
             : undefined;
+        // The gesture-poll wrapper below describes ggui_consume's
+        // semantics ("catch an immediate gesture", "waits up to 25s")
+        // — it is ONLY true when the nextStep IS the consume hint.
+        // Ungated, it decorated ggui_handshake results too (whose
+        // nextStep is a ggui_render example), telling agents a
+        // not-yet-rendered UI "has interactive actions" — a live agent
+        // flagged the contradiction against an actions=∅ contract
+        // (2026-08-12).
+        const gestureHint =
+          nextStepHint !== undefined && nextStepHint.includes('ggui_consume')
+            ? nextStepHint
+            : undefined;
         return {
           structuredContent: validated,
           content: [
-            ...(nextStepHint !== undefined
+            ...(gestureHint !== undefined
               ? [
                   {
                     type: 'text' as const,
@@ -292,7 +304,7 @@ export function buildMcpServer(
                     // nobody is polling, a gesture rings the chat via
                     // ui/message and arrives as a new user message
                     // carrying its own consume directive.
-                    text: `The UI has interactive actions. After this turn's work, you may call ${nextStepHint} once to catch an immediate gesture (waits up to 25s); if events is empty, end your turn — later gestures arrive as new user messages.`,
+                    text: `The UI has interactive actions. After this turn's work, you may call ${gestureHint} once to catch an immediate gesture (waits up to 25s); if events is empty, end your turn — later gestures arrive as new user messages.`,
                   },
                 ]
               : []),

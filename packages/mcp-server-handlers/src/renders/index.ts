@@ -206,6 +206,11 @@ export {
   type GguiRuntimePullHandlerDeps,
 } from "./runtime-pull.js";
 export {
+  createGguiRuntimeTelemetryHandler,
+  type GguiRuntimeTelemetryHandlerDeps,
+  type RuntimeTelemetryLogger,
+} from "./runtime-telemetry.js";
+export {
   createGguiSyncContextHandler,
   type CreateGguiSyncContextHandlerDeps,
 } from "./sync-context.js";

@@ -929,3 +929,66 @@ export const runtimePullOutputSchema = z.union([
   runtimePullEventsPageSchema,
   runtimePullHorizonSchema,
 ]);
+
+/**
+ * Per-batch event cap on `ggui_runtime_telemetry` — a bounded
+ * fire-and-forget diagnostic channel, never a data plane.
+ */
+export const RUNTIME_TELEMETRY_MAX_EVENTS = 40;
+
+/**
+ * `ggui_runtime_telemetry` input — the iframe runtime's transport
+ * self-report (`_meta.ui.visibility: ['app']`, view-callable only).
+ *
+ * Contract (both parties named): the IFRAME RUNTIME batches short
+ * `{at, kind, detail?}` events describing its delivery-ladder journey
+ * (boot-path decision, per-rung status transitions and failures —
+ * `channel_failover_swap`, `channel_polling_budget_exhausted`, … —
+ * and outbound doorbell rings) and flushes them over the host's
+ * `tools/call` postMessage bridge; the SERVER logs one structured
+ * line per batch for operator forensics and stores NOTHING. Sandboxed
+ * hosts (claude.ai's `claudemcpcontent.com` frames) expose no
+ * readable console and no network — this tool is the ONLY way the
+ * ladder's behavior on such hosts reaches an operator. `sessionId` is
+ * client-claimed (log-tagged, never trusted for reads); events are
+ * bounded (≤ {@link RUNTIME_TELEMETRY_MAX_EVENTS} per batch, `kind` ≤
+ * 64 chars, `detail` ≤ 512) so a hostile view cannot use the channel
+ * for bulk exfiltration or log flooding.
+ */
+export const runtimeTelemetryInputShape = {
+  sessionId: z
+    .string()
+    .min(1)
+    .describe(
+      'Render id the report concerns — sourced from the boot envelope. Client-claimed: used as a log tag only.',
+    ),
+  events: z
+    .array(
+      z.object({
+        at: z
+          .number()
+          .min(0)
+          .describe('Milliseconds since iframe boot (monotonic, client clock).'),
+        kind: z
+          .string()
+          .min(1)
+          .max(64)
+          .describe(
+            "Event name — e.g. 'boot.path', 'status.connected', 'channel_failover_swap', 'doorbell.ring'.",
+          ),
+        detail: z
+          .string()
+          .max(512)
+          .optional()
+          .describe('Optional compact context (JSON fragment or message).'),
+      }),
+    )
+    .min(1)
+    .max(RUNTIME_TELEMETRY_MAX_EVENTS)
+    .describe('Batched ladder/doorbell events, oldest first.'),
+} as const;
+
+export const runtimeTelemetryInputSchema = z.object(runtimeTelemetryInputShape);
+
+/** `ggui_runtime_telemetry` output — bare acknowledgement. */
+export const runtimeTelemetryOutputSchema = z.object({ ok: z.literal(true) });

@@ -230,6 +230,9 @@ describe('createGguiSubmitActionHandler', () => {
       const h = createGguiSubmitActionHandler({
         pendingEventConsumer: consumer,
         activeConsumerRegistry: registry,
+        // Tiny grace so the no-consumer case resolves fast in tests —
+        // production default is 800ms (doorbell-race window).
+        consumerGraceMs: 50,
       });
       const out = await h.handler(
         {
@@ -241,6 +244,35 @@ describe('createGguiSubmitActionHandler', () => {
         ctx,
       );
       expect(out).toEqual({ ok: true, consumerPresent: false });
+    });
+
+    it('a consumer parking INSIDE the grace window flips the answer to true (doorbell race, live 2026-08-12)', async () => {
+      const consumer = new InMemoryPendingEventConsumer();
+      const sessionId = 'render-grace-race';
+      await consumer.markCreated(sessionId);
+      const registry = new InMemoryActiveConsumerRegistry();
+      const h = createGguiSubmitActionHandler({
+        pendingEventConsumer: consumer,
+        activeConsumerRegistry: registry,
+        consumerGraceMs: 800,
+      });
+      // The live race shape: the agent's consume parks ~380ms after
+      // the click. No consumer at submit time; one arrives mid-window.
+      const park = setTimeout(() => registry.enter(sessionId), 150);
+      try {
+        const out = await h.handler(
+          {
+            ...baseEnv,
+            sessionId,
+            kind: 'dispatch',
+            payload: { intent: 'submit', actionData: null, uiContext: {} },
+          },
+          ctx,
+        );
+        expect(out).toEqual({ ok: true, consumerPresent: true });
+      } finally {
+        clearTimeout(park);
+      }
     });
 
     it('reports consumerPresent:true when a consumer is currently registered for the render', async () => {
@@ -274,6 +306,7 @@ describe('createGguiSubmitActionHandler', () => {
       const h = createGguiSubmitActionHandler({
         pendingEventConsumer: consumer,
         activeConsumerRegistry: registry,
+        consumerGraceMs: 50,
       });
       const outA = await h.handler(
         {

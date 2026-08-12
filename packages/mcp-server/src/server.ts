@@ -195,6 +195,7 @@ import {
   createGguiRefreshWsTokenHandler,
   createGguiRenderHandler,
   createGguiRuntimePullHandler,
+  createGguiRuntimeTelemetryHandler,
   createGguiSubmitActionHandler,
   createGguiSyncContextHandler,
   createGguiUpdateHandler,
@@ -1046,6 +1047,20 @@ export function defaultHandlers(deps: {
     handlers.push(
       createGguiRuntimePullHandler({
         renderStore: deps.render.renderStore,
+      }) as SharedHandler<ZodRawShape, ZodRawShape>
+    );
+    // `ggui_runtime_telemetry` — the iframe runtime's transport
+    // self-report (visibility ['app'], same view-callable channel as
+    // submit_action/pull). Sandboxed hosts (claude.ai's
+    // claudemcpcontent frames) expose no readable console and no
+    // network, so the delivery ladder's behavior there is invisible
+    // WITHOUT this channel: the view batches its rung transitions +
+    // doorbell events and this handler logs them for operators.
+    // Fire-and-forget, store-less — gated on deps.render only because
+    // the ladder it reports on exists only when renders do.
+    handlers.push(
+      createGguiRuntimeTelemetryHandler({
+        ...(deps.logger ? { logger: deps.logger } : {}),
       }) as SharedHandler<ZodRawShape, ZodRawShape>
     );
     // `ggui_runtime_refresh_ws_token` — G14 (2026-05-23) signed-

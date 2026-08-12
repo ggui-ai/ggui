@@ -677,7 +677,7 @@ export function createGguiHandshakeHandler(
 
       const nextStep = buildNextStepHint({
         handshakeId,
-        suggestion: negotiated.suggestion,
+        contract: negotiated.effectiveContract,
       });
 
       const serverCapabilities = deps.serverCapabilities?.();
@@ -836,12 +836,17 @@ function isJsonObject(v: unknown): v is Record<string, unknown> {
  */
 function buildNextStepHint(input: {
   handshakeId: string;
-  suggestion: HandshakeSuggestion;
+  contract: DataContract;
 }): HandshakeOutput['nextStep'] | undefined {
-  const { handshakeId, suggestion } = input;
-  // `props` is REQUIRED on the new renderInputSchema; absent a contract-
-  // derived placeholder we emit `{}` so the example is copy-paste valid.
-  const propsExample = buildPropsExample(suggestion.blueprintMeta.contractHash) ?? '{}';
+  const { handshakeId, contract } = input;
+  // `props` is REQUIRED on the renderInputSchema, and the proposed
+  // contract's REQUIRED prop entries must appear in it — a bare `{}`
+  // example against such a contract fails validation when followed
+  // verbatim (a live agent flagged exactly that, 2026-08-12). Derive
+  // the example from the effective contract: required entries keyed
+  // with their declared `example`/`default` when present, else a
+  // type-shaped placeholder. No required props → `{}` stays honest.
+  const propsExample = buildPropsExample(contract) ?? '{}';
   // ACCEPT shape: omit `override` entirely — the agent reuses the
   // proposed contract. (Re-aim via `override:{variance}` / `override:
   // {contract}` is taught in the description, not the default hint.)
@@ -853,14 +858,52 @@ function buildNextStepHint(input: {
 }
 
 /**
- * Build a placeholder JSON example for `props` when the suggestion
- * carries a non-empty propsSpec. Without access to the full contract
- * here we return undefined; the caller falls back to `{}` (valid for
- * the REQUIRED `props` field), and the propsSpec hint surface is
- * delegated to the render.ts handler's recovery error messages.
+ * JSON example for the REQUIRED entries of the contract's propsSpec.
+ * Prefers each entry's declared `example`, then `default`, then a
+ * type-shaped placeholder from its JSON Schema (first enum member,
+ * else '' / 0 / false / [] / {}). Returns undefined when the contract
+ * has no required props — the caller's `{}` fallback is then valid
+ * verbatim.
  */
-function buildPropsExample(_contractHash: string): string | undefined {
-  return undefined;
+function buildPropsExample(contract: DataContract): string | undefined {
+  const properties = contract.propsSpec?.properties;
+  if (properties === undefined) return undefined;
+  const out: Record<string, JsonValue> = {};
+  for (const [name, entry] of Object.entries(properties)) {
+    if (entry.required !== true) continue;
+    out[name] =
+      entry.example ?? entry.default ?? placeholderForSchema(entry.schema);
+  }
+  if (Object.keys(out).length === 0) return undefined;
+  try {
+    return JSON.stringify(out);
+  } catch {
+    return undefined;
+  }
+}
+
+/** Minimal type-shaped placeholder for a JSON Schema. */
+function placeholderForSchema(schema: JsonValue | Record<string, unknown>): JsonValue {
+  if (schema === null || typeof schema !== 'object' || Array.isArray(schema)) {
+    return '';
+  }
+  const s = schema as { type?: unknown; enum?: unknown };
+  if (Array.isArray(s.enum) && s.enum.length > 0) {
+    return s.enum[0] as JsonValue;
+  }
+  switch (s.type) {
+    case 'number':
+    case 'integer':
+      return 0;
+    case 'boolean':
+      return false;
+    case 'array':
+      return [];
+    case 'object':
+      return {};
+    default:
+      return '';
+  }
 }
 
 /**

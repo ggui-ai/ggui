@@ -48,6 +48,7 @@ import type { ConnectionStatus } from '@ggui-ai/protocol/transport/websocket';
 import type { McpAppAiGguiRenderMeta } from '@ggui-ai/protocol/integrations/mcp-apps';
 import type {
   AnyTransportHandle,
+  ChannelLogger,
   ChannelRegistry,
   RegistryPollingOptions,
   RegistrySseOptions,
@@ -182,6 +183,13 @@ export interface ConnectViaRegistryOptions {
    * whichever of the rungs above is armed.
    */
   readonly bridge?: RegistryPollingOptions;
+  /**
+   * Diagnostics tap threaded into the live-channel bind — the
+   * transports' own `channel_*` events flow to it. The runtime passes
+   * its telemetry sink's `ChannelLogger` facade here so ladder
+   * behavior on console-less sandboxed hosts reaches the server.
+   */
+  readonly logger?: ChannelLogger;
 }
 
 /**
@@ -490,6 +498,7 @@ export function connectViaRegistry(
           sessionId: opts.meta.sessionId,
           appId: opts.meta.appId,
         },
+        ...(opts.logger !== undefined ? { logger: opts.logger } : {}),
         onStatusChange: mappedStatusCallback,
         ...(opts.sse !== undefined ? { sse: opts.sse } : {}),
         ...(opts.polling !== undefined ? { polling: opts.polling } : {}),

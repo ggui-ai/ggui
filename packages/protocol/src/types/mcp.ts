@@ -15,6 +15,8 @@ import type {
   resourceReadErrorCodeSchema,
   resourceReadErrorSchema,
   runtimePullInputSchema,
+  runtimeTelemetryInputSchema,
+  runtimeTelemetryOutputSchema,
   searchBlueprintsInputSchema,
   updateInputSchema,
   updateOutputSchema,
@@ -515,6 +517,18 @@ export type GguiRuntimePullInput = z.infer<typeof runtimePullInputSchema>;
  * same language; `schemas/mcp.test.ts` pins schema ↔ type parity.
  */
 export type GguiRuntimePullOutput = EventsResponse | ReplayHorizonPassedError;
+
+/**
+ * `ggui_runtime_telemetry` input. Derived from
+ * {@link runtimeTelemetryInputSchema} — the schema is the source of
+ * truth.
+ */
+export type GguiRuntimeTelemetryInput = z.infer<typeof runtimeTelemetryInputSchema>;
+
+/**
+ * `ggui_runtime_telemetry` output — bare `{ok: true}` acknowledgement.
+ */
+export type GguiRuntimeTelemetryOutput = z.infer<typeof runtimeTelemetryOutputSchema>;
 
 // =============================================================================
 // MCP Error Codes

@@ -223,6 +223,52 @@ describe('createGguiHandshakeHandler — MVB-5', () => {
       expect(out.contractHash).toBe(out.suggestion.blueprintMeta.contractHash);
     });
 
+    it('nextStep.example carries the REQUIRED props with example/default/type-shaped values (live agent finding, 2026-08-12)', async () => {
+      // A bare `props:{}` example against a contract with required
+      // props fails renderInputSchema when followed verbatim — the
+      // example must name the required entries.
+      const kvStore = new InMemoryKeyValueStore();
+      const handler = createGguiHandshakeHandler({ kvStore });
+      const out = await handler.handler(
+        minimalInput({
+          blueprintDraft: {
+            contract: {
+              propsSpec: {
+                properties: {
+                  title: {
+                    schema: { type: 'string' },
+                    required: true,
+                    example: 'Deploy Status',
+                  },
+                  count: { schema: { type: 'number' }, required: true },
+                  optionalNote: { schema: { type: 'string' } },
+                },
+              },
+            } as unknown as DataContract,
+          },
+        }),
+        { appId: 'app-1', requestId: 'r' },
+      );
+      const example = out.nextStep?.example ?? '';
+      // Declared example value wins; schema-typed placeholder fills in;
+      // optional entries stay OUT of the copy-paste example.
+      expect(example).toContain('"title":"Deploy Status"');
+      expect(example).toContain('"count":0');
+      expect(example).not.toContain('optionalNote');
+    });
+
+    it('nextStep.example stays a valid bare {} when the contract has no required props', async () => {
+      const kvStore = new InMemoryKeyValueStore();
+      const handler = createGguiHandshakeHandler({ kvStore });
+      const out = await handler.handler(
+        minimalInput({
+          blueprintDraft: { contract: {} as DataContract },
+        }),
+        { appId: 'app-1', requestId: 'r' },
+      );
+      expect(out.nextStep?.example).toContain('"props":{}');
+    });
+
     it('threads draft variance into the suggestion blueprintMeta', async () => {
       const kvStore = new InMemoryKeyValueStore();
       const handler = createGguiHandshakeHandler({ kvStore });
