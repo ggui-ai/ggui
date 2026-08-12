@@ -20,6 +20,8 @@ import type {
   searchBlueprintsInputSchema,
   updateInputSchema,
   updateOutputSchema,
+  amendInputSchema,
+  amendOutputSchema,
   declareToolCatalogOutputSchema,
 } from '../schemas/mcp';
 import type {
@@ -492,6 +494,9 @@ export type ResourceReadError = z.infer<typeof resourceReadErrorSchema>;
 
 export type GguiUpdateInput = z.infer<typeof updateInputSchema>;
 export type GguiUpdateOutput = z.infer<typeof updateOutputSchema>;
+
+export type GguiAmendInput = z.infer<typeof amendInputSchema>;
+export type GguiAmendOutput = z.infer<typeof amendOutputSchema>;
 
 /**
  * `ggui_runtime_declare_tool_catalog` output. Derived from

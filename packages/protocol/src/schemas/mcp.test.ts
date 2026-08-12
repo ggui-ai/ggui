@@ -34,6 +34,8 @@ import {
   runtimePullOutputSchema,
   updateInputSchema,
   updateOutputSchema,
+  amendInputSchema,
+  amendOutputSchema,
 } from './mcp';
 import type {
   EventsResponse,
@@ -601,16 +603,52 @@ describe('ggui_update', () => {
     ).toThrow();
   });
 
-  it('round-trips an update output', () => {
+  it('round-trips an update output (epoch-pinned URI + head epoch, #483)', () => {
     const out = {
       sessionId: 'render_1',
       updated: true,
-      // Same URI the initial render stamped — mirrored on the LLM-visible
-      // structuredContent (kept in sync with the update handler's wire
-      // shape, which always emits it).
-      resourceUri: 'ui://ggui/render/render_1',
+      // The NEW history record this update minted — epoch-pinned.
+      resourceUri: 'ui://ggui/render/render_1#1',
+      epoch: 1,
     };
     expect(updateOutputSchema.parse(out)).toEqual(out);
+  });
+
+  it('rejects an update output missing epoch (#483 — head epoch is mandatory)', () => {
+    expect(() =>
+      updateOutputSchema.parse({
+        sessionId: 'render_1',
+        updated: true,
+        resourceUri: 'ui://ggui/render/render_1#1',
+      }),
+    ).toThrow();
+  });
+
+  it('round-trips an amend output (bare head URI, no epoch field)', () => {
+    const out = {
+      sessionId: 'render_1',
+      updated: true,
+      resourceUri: 'ui://ggui/render/render_1',
+    };
+    expect(amendOutputSchema.parse(out)).toEqual(out);
+  });
+
+  it('amend input mirrors update mutation grammar but rejects unknown keys', () => {
+    expect(
+      amendInputSchema.parse({
+        sessionId: 'render_1',
+        kind: 'merge',
+        patch: { x: 1 },
+      }).kind,
+    ).toBe('merge');
+    expect(() =>
+      amendInputSchema.parse({
+        sessionId: 'render_1',
+        kind: 'replace',
+        props: {},
+        renderAsNew: true,
+      }),
+    ).toThrow();
   });
 
   it('rejects an update output missing resourceUri', () => {

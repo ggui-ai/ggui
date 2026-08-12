@@ -688,17 +688,35 @@ export const updateInputSchema = z.discriminatedUnion('kind', [
     sessionId: z.string().describe('GguiSession opaque id (UUID) — returned by ggui_render.'),
     kind: z.literal('replace'),
     props: z.record(z.string(), z.unknown())
-      .describe('Full replacement props map. New map IS the new state.'),
-    renderAsNew: z.boolean().optional()
-      .describe('Omit (default): update the already-mounted UI in place — no new card appears. true: emit the updated state as a NEW self-contained card at this point in the conversation — for milestones worth showing in the transcript, or when the original card is gone or far away.'),
+      .describe('Full replacement props map. New map IS the new state, rendered as a NEW card (a new history entry). For an in-place repaint of the mounted card use ggui_amend.'),
   }).strict(),
   z.object({
     sessionId: z.string().describe('GguiSession opaque id (UUID) — returned by ggui_render.'),
     kind: z.literal('merge'),
     patch: z.record(z.string(), z.unknown())
-      .describe('RFC 7396 JSON Merge Patch — null deletes a key; arrays fully replace.'),
-    renderAsNew: z.boolean().optional()
-      .describe('Omit (default): update the already-mounted UI in place — no new card appears. true: emit the updated state as a NEW self-contained card at this point in the conversation — for milestones worth showing in the transcript, or when the original card is gone or far away.'),
+      .describe('RFC 7396 JSON Merge Patch — null deletes a key; arrays fully replace. The merged state renders as a NEW card (a new history entry). For an in-place repaint of the mounted card use ggui_amend.'),
+  }).strict(),
+]);
+
+/**
+ * `ggui_amend` wire input (#483) — same replace/merge mutation
+ * grammar as `ggui_update`, different mount identity: amend targets
+ * the ALREADY-MOUNTED card. No new card, no history entry, the
+ * history number does not advance. Git reading: `ggui_update` =
+ * commit; `ggui_amend` = commit --amend.
+ */
+export const amendInputSchema = z.discriminatedUnion('kind', [
+  z.object({
+    sessionId: z.string().describe('GguiSession opaque id (UUID) — returned by ggui_render.'),
+    kind: z.literal('replace'),
+    props: z.record(z.string(), z.unknown())
+      .describe('Full replacement props map, applied to the currently mounted card in place.'),
+  }).strict(),
+  z.object({
+    sessionId: z.string().describe('GguiSession opaque id (UUID) — returned by ggui_render.'),
+    kind: z.literal('merge'),
+    patch: z.record(z.string(), z.unknown())
+      .describe('RFC 7396 JSON Merge Patch — null deletes a key; arrays fully replace. Applied to the currently mounted card in place.'),
   }).strict(),
 ]);
 
@@ -719,21 +737,45 @@ export const updateOutputSchema = z.object({
   sessionId: z.string(),
   updated: z.boolean(),
   /**
-   * Unchanged from the initial render — the same `ui://ggui/render/{id}`
-   * URI the mount stamped. Mirrored on the LLM-visible structuredContent
-   * so SDKs that strip `_meta` from tool_results can still reach the
+   * The epoch-pinned URI of the NEW history record this update minted
+   * (`ui://ggui/render/{id}[/{key}]#{epoch}` — see epoch-uri.ts). On a
+   * no-op (`updated: false`) no record is minted and this is the bare
+   * live-head URI. Mirrored on the LLM-visible structuredContent so
+   * SDKs that strip `_meta` from tool_results can still reach the
    * mount URI. Kept in sync with the update handler's wire shape —
    * this export and the handler's inline schema must not drift.
    */
   resourceUri: z.string(),
   /**
+   * The session's head epoch after this call: advanced by one on a
+   * real update (`updated: true`), unchanged on a no-op. `ggui_render`
+   * mints epoch 0; epochs are ledger-derived (`ui.reminted` events).
+   */
+  epoch: z.number().int().min(0),
+  /**
    * Present ONLY on a no-op (`updated: false`): the patch conformed to
    * the contract but left the final props semantically identical to
-   * the current state, so nothing was written and nothing changes on
-   * screen. Model-visible by design — the common producer of a no-op
-   * is an agent echoing existing props back believing it changed the
-   * UI, and this field is its feedback channel.
+   * the current state, so nothing was written, nothing changes on
+   * screen, and NO new history record was minted. Model-visible by
+   * design — the common producer of a no-op is an agent echoing
+   * existing props back believing it changed the UI, and this field is
+   * its feedback channel.
    */
+  warning: z.string().optional(),
+});
+
+/**
+ * `ggui_amend` wire output (#483) — acknowledgement only. `resourceUri`
+ * is the BARE live-head URI (amend targets the mounted card; it never
+ * mints a record, so there is no pinned URI to return and no epoch
+ * field — the history number is untouched by construction). The
+ * mounted card receives the new props over the live channels.
+ */
+export const amendOutputSchema = z.object({
+  sessionId: z.string(),
+  updated: z.boolean(),
+  resourceUri: z.string(),
+  /** Same no-op feedback channel as ggui_update's `warning`. */
   warning: z.string().optional(),
 });
 
