@@ -600,14 +600,7 @@ export function createGguiUpdateHandler(
       };
     },
     /**
-     * Emit the `ai.ggui/render` slice mirroring `ggui_render`'s shape
-     * but **props-only** (post-2026-05-13 trim). Spec-compliant MCP
-     * Apps hosts forward the full `CallToolResult` (including `_meta`)
-     * via `ui/notifications/tool-result` postMessage;
-     * iframe-runtime's `installPostMountListener` reads the envelope
-     * and re-applies the patched props to the live mount WITHOUT a WS
-     * round-trip. The WS `props_update` frame remains the first-party
-     * fast path; the slice meta is the cross-host fallback.
+     * Result-`_meta` emitter for `ggui_update`.
      *
      * **Two shapes, keyed on `renderAsNew` (#482):** by default
      * (omitted/false) the result carries NO `_meta` at all — the only

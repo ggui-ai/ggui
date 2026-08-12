@@ -321,17 +321,21 @@
  *
  *   mi2. **`ggui_update` result-`_meta` DEFAULT shape change**
  *      (handler-side, not a protocol type): the default emission
- *      drops the `_meta.ui` mount pointer and the mount-time view
- *      fields (props-only forwarding slice); `renderAsNew: true`
- *      emits the FULL `deriveRenderMeta` package + pointer. Stated
+ *      carries NO `_meta` at all — live probing falsified the
+ *      intermediate props-only-slice design the same day (hosts mint
+ *      a per-result view whenever a UI-bound tool's success result
+ *      carries ANY `_meta`; the no-`_meta` shape is the only one
+ *      proven to mint nothing). `renderAsNew: true` emits the FULL
+ *      `deriveRenderMeta` package + `_meta.ui` pointer. Stated
  *      plainly rather than called additive: a host that depended on
- *      update results carrying `_meta.ui.resourceUri` sees the
- *      default change. Pre-launch no-compat; the kit is the arbiter
- *      and no fixture pins update result-meta, so the wave
- *      classification stays MINOR — and that silence is itself the
- *      FLAGGED gap: update-surface conformance cases join the
- *      SSE/bridge follow-up ticket (No Silent Block, tracked on
- *      ggui#482).
+ *      update results carrying `_meta` (the forwarding-slice repaint
+ *      fallback included) sees the default change; default updates
+ *      now repaint exclusively over the live rungs. Pre-launch
+ *      no-compat; the kit is the arbiter and no fixture pins update
+ *      result-meta, so the wave classification stays MINOR — and
+ *      that silence is itself the FLAGGED gap: update-surface
+ *      conformance cases join the SSE/bridge follow-up ticket
+ *      (No Silent Block, tracked on ggui#482).
  *
  * PROTOCOL_VERSION unchanged — no wire frame changed shape; the
  * `ai.ggui/render` slice's field set was never closed (verbatim-carry

@@ -708,9 +708,11 @@ export const updateInputSchema = z.discriminatedUnion('kind', [
  * TS shape — zod strips them before structuredContent serialization.
  *
  * Post-update the iframe receives the new props via the live-channel
- * `props_update` WS frame; the cross-host fallback path receives them
- * via the `ai.ggui/render.propsJson` slice field (see
- * `update.resultMeta`). The wire response itself is just
+ * ladder (WS `props_update` / SSE / polling / bridge-pull). Default
+ * updates carry NO result `_meta` (#482 — hosts mint per-result views
+ * from any `_meta` on a UI-bound success result); only
+ * `renderAsNew: true` results carry the `ai.ggui/render` slice, as a
+ * full bootable mount package. The wire response itself is just
  * acknowledgement.
  */
 export const updateOutputSchema = z.object({
