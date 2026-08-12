@@ -2876,6 +2876,12 @@ export function dispatchSubmitAction(args: {
 }): void {
   if (typeof window === 'undefined') return;
   const { toolName, intent, data, sessionId, appId } = args;
+  // Gesture-path telemetry — the click's own autopsy trail. #471
+  // round 12 hit a frame whose channels + beacons were fully healthy
+  // while clicks produced NOTHING observable; without a record at the
+  // dispatch entry there is no way to tell "handler never fired" from
+  // "dispatch swallowed it" on a console-less host.
+  currentTelemetrySink?.record('gesture.dispatch', JSON.stringify({ intent, toolName }));
   const firedAt = new Date().toISOString();
   const actionId = fnv1aHex(
     `${intent}|${JSON.stringify(data ?? null)}|${firedAt}`,
@@ -2963,6 +2969,18 @@ export function dispatchSubmitAction(args: {
       showActionToast(`⚠ ${intent} — transport error`, 'error');
       resp = null;
     }
+    // Final hop of the gesture autopsy trail — what the relay
+    // answered (or that it didn't).
+    currentTelemetrySink?.record(
+      'gesture.result',
+      JSON.stringify({
+        intent,
+        ok: resp !== null && resp.error === undefined,
+        ...(resp?.error?.message !== undefined
+          ? { error: resp.error.message.slice(0, 120) }
+          : {}),
+      }),
+    );
     // Self-healing (ggui#440): a result envelope arriving at all is
     // proof this host CAN relay — `{ok:false, code:'PIPE_NOT_FOUND'}`
     // (an otherwise-healthy relay, expired pipe) proves it exactly as
@@ -3928,6 +3946,34 @@ async function bootProduction(opts: {
       // these lived only in the retired self-contained boot path; the
       // WS-driven path installed neither, so anchor clicks + fullscreen
       // requests in a live-rendered component silently no-op'd.
+      // Root of the gesture autopsy trail: a capture-phase listener
+      // proving pointer events reach this document AT ALL. #471
+      // round 12: a healthy frame (beacons + pulls flowing) whose
+      // clicks produced nothing observable — without this record,
+      // "host swallows pointer events" and "component handler never
+      // attached" are indistinguishable from outside a console-less
+      // host. Bounded: only the first few clicks record (the sink
+      // throttles + caps flushes regardless).
+      if (typeof document !== 'undefined') {
+        let recordedClicks = 0;
+        document.addEventListener(
+          'click',
+          (ev) => {
+            if (recordedClicks >= 5) return;
+            recordedClicks += 1;
+            const target = ev.target instanceof Element ? ev.target : null;
+            currentTelemetrySink?.record(
+              'gesture.dom_click',
+              JSON.stringify({
+                tag: target?.tagName ?? 'unknown',
+                role: target?.getAttribute('role') ?? undefined,
+                trusted: ev.isTrusted,
+              }),
+            );
+          },
+          { capture: true },
+        );
+      }
       installAnchorClickInterceptor({
         dispatchToolName,
         sessionId: meta.sessionId,
@@ -3946,6 +3992,13 @@ async function bootProduction(opts: {
         manager,
         streamBus,
         onDispatchEnvelope: (envelope) => {
+          // First hop of the gesture autopsy trail (see
+          // `dispatchSubmitAction`'s sibling record): proves the wire
+          // layer received the component's action envelope at all.
+          currentTelemetrySink?.record(
+            'gesture.envelope',
+            JSON.stringify({ type: envelope.type }),
+          );
           if (envelope.type !== 'data:submit') return;
           const payload = envelope.payload as
             | { action?: unknown; data?: unknown }
