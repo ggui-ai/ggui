@@ -943,10 +943,15 @@ async function runConformancePreflight(opts: {
   readonly fetchImpl: typeof fetch;
 }): Promise<ConformancePreflightOk | ConformancePreflightErr> {
   const url = `${opts.registryUrl}/conformance/check`;
+  // `bundle` is RAW ESM TEXT on this route — `checkConformance` feeds
+  // it straight to the parser. Unlike `/publish` (which uploads bytes
+  // and takes base64), the conformance gate checks text; base64 here
+  // parses as one exportless expression statement and every gadget
+  // preflight dies with `missing_default_export`.
   const body = JSON.stringify({
     manifest: opts.manifest,
     ...(opts.bundleBytes !== undefined
-      ? { bundle: Buffer.from(opts.bundleBytes).toString('base64') }
+      ? { bundle: Buffer.from(opts.bundleBytes).toString('utf8') }
       : {}),
   });
   let res: Response;

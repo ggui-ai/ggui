@@ -426,7 +426,9 @@ describe('runArtifactPublish', () => {
     seedLoginSession();
     const io = captureIO();
 
-    const conformance = vi.fn(async () => jsonResponse(200, { ok: true }));
+    const conformance = vi.fn(async (_url: string, _init?: RequestInit) =>
+      jsonResponse(200, { ok: true }),
+    );
     const publish = vi.fn(async (_url: string, _init?: RequestInit) =>
       jsonResponse(201, {
         artifactId: '@mapbox/map-gadget',
@@ -458,6 +460,16 @@ describe('runArtifactPublish', () => {
       expect(result.success.installCommand).toContain('--registry=https://r.example');
     }
     expect(io.stdout.join('')).toContain('Install:');
+
+    // Conformance preflight body: `bundle` is RAW ESM TEXT (the
+    // /conformance/check contract), NOT the base64 the /publish body
+    // carries — a base64 bundle parses as an exportless expression
+    // and fails the export gate server-side.
+    const conformanceBody = JSON.parse(
+      conformance.mock.calls[0]![1]?.body as string,
+    );
+    expect(conformanceBody.manifest.kind).toBe('gadget');
+    expect(conformanceBody.bundle).toContain('export');
 
     // Verify the POST body shape
     const publishCall = publish.mock.calls[0];
