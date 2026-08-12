@@ -304,42 +304,46 @@
  * it), not a new member.
  *
  * --------------------------------------------------------------------
- * Update mount-identity intent (2026-08-12, ggui#481 + ggui#482): a
- * MINOR for the `@ggui-ai/protocol` wave, riding the same next cut
- * (≥ 0.9.0). One motivation: hosts mint per-result views from result
- * shape (claude.ai, proven live), so `ggui_update`'s result must
- * either be a complete mount package or carry no mount pointer at
- * all — the props-only-with-pointer middle ground shipped views that
- * crashed at boot on every contextSpec contract.
+ * Mutation tool split + epoch history (2026-08-13, ggui#481→#483,
+ * SUPERSEDES the same-night renderAsNew param design, which never
+ * reached a cut): a MINOR for the `@ggui-ai/protocol` wave, riding
+ * the same next cut (≥ 0.9.0). One motivation arc: hosts mint
+ * per-result views from result shape, so mutation results must be
+ * either complete mount packages or carry nothing — and once every
+ * update result is a durable record, the records ARE a history.
  *
- *   mi1. **`updateInputSchema` arms gain `renderAsNew?: boolean`**
- *      (both `replace` and `merge`; optional, additive — every input
- *      that parsed before parses identically). Omitted/false: the
- *      tool's essential semantic, update the already-mounted UI.
- *      `true`: the result is a fresh self-sufficient render record.
- *      SPEC §7.1.2 "Mount-identity intent" is the normative text.
+ *   ts1. **`ggui_amend`** — new tool: in-place mutation of the
+ *      mounted card. Same replace/merge grammar as update
+ *      (`amendInputSchema`/`amendOutputSchema` + inferred types); NOT
+ *      UI-bound, results carry NO `_meta` under any outcome; the
+ *      history epoch is untouched by construction. Additive.
  *
- *   mi2. **`ggui_update` result-`_meta` DEFAULT shape change**
- *      (handler-side, not a protocol type): the default emission
- *      carries NO `_meta` at all — live probing falsified the
- *      intermediate props-only-slice design the same day (hosts mint
- *      a per-result view whenever a UI-bound tool's success result
- *      carries ANY `_meta`; the no-`_meta` shape is the only one
- *      proven to mint nothing). `renderAsNew: true` emits the FULL
- *      `deriveRenderMeta` package + `_meta.ui` pointer. Stated
- *      plainly rather than called additive: a host that depended on
- *      update results carrying `_meta` (the forwarding-slice repaint
- *      fallback included) sees the default change; default updates
- *      now repaint exclusively over the live rungs. Pre-launch
- *      no-compat; the kit is the arbiter and no fixture pins update
- *      result-meta, so the wave classification stays MINOR — and
- *      that silence is itself the FLAGGED gap: update-surface
- *      conformance cases join the SSE/bridge follow-up ticket
- *      (No Silent Block, tracked on ggui#482).
+ *   ts2. **`ggui_update` semantics change, stated plainly:** every
+ *      real update now mints a NEW history record — output gains
+ *      mandatory `epoch` and its `resourceUri` is the epoch-PINNED
+ *      URI (`…#N`); the result `_meta` is unconditionally the full
+ *      bootable mount package (#481). `renderAsNew` is deleted from
+ *      both arms. A consumer that treated update results as in-place
+ *      acknowledgements sees new cards; the in-place path moved to
+ *      ggui_amend. Pre-launch no-compat; the kit is the arbiter and
+ *      update-family conformance cases ship IN THIS SLICE (epoch
+ *      immutability, head aliasing, amend-mints-nothing), closing the
+ *      previously flagged gap.
  *
- * PROTOCOL_VERSION unchanged — no wire frame changed shape; the
- * `ai.ggui/render` slice's field set was never closed (verbatim-carry
- * posture, same as if1/sm1).
+ *   ts3. **Epoch surfaces:** `GguiSessionBase.epoch` +
+ *      `McpAppsGguiSession.epoch` (optional, absent ⇒ 0 — the row is
+ *      the authority; the ledger is horizon-bounded); `'ui.reminted'`
+ *      joins the ledger taxonomy with `UiRemintedEventData`;
+ *      `UiUpdatedEventData` types the props event (now epoch-stamped);
+ *      `composeEpochUri`/`parseEpochUri` (the ONE encoding seam —
+ *      fragment today, flippable post-host-probe);
+ *      `deriveEpochFromEvents` (in-horizon reconstruction only).
+ *      SPEC §7.1.2/§7.1.2.1/§7.1.2.2 are the normative text.
+ *
+ * PROTOCOL_VERSION unchanged — no WS frame changed shape; the
+ * `ai.ggui/render` slice's field set was never closed, and the
+ * `ui.updated` payload gained an optional field on an open payload
+ * surface.
  *
  * --------------------------------------------------------------------
  * Credential-broker surface retired (2026-08-08, BREAKING, pre-launch,
