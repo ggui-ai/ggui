@@ -407,9 +407,23 @@ export function seedPackages(seed, registry) {
         ),
       );
       const tarball = join(workDir, packed[0].filename);
+      // Explicit --tag: npm refuses to IMPLICITLY tag a publish as
+      // `latest` when the registry already carries a higher version —
+      // and seeding older upstream pins after new releases ship is
+      // this script's normal case. Consumers install exact versions,
+      // so the dist-tag itself is never resolved.
       execFileSync(
         'npm',
-        ['publish', tarball, '--registry', registry, '--access', 'public'],
+        [
+          'publish',
+          tarball,
+          '--registry',
+          registry,
+          '--access',
+          'public',
+          '--tag',
+          'seed-pin',
+        ],
         { encoding: 'utf8', stdio: ['ignore', 'ignore', 'inherit'] },
       );
       console.log(
