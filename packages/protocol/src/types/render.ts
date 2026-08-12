@@ -172,6 +172,18 @@ export interface GguiSessionBase {
   /** Monotonic event ledger sequence (per-render — each GguiSession has its
    *  own GguiSessionEvent ledger). */
   readonly eventSequence: number;
+  /**
+   * History head epoch (#483). `ggui_render` mints epoch 0 (field
+   * absent ⇒ 0); every real `ggui_update` advances it by one in the
+   * SAME commit as the props write; `ggui_amend` never touches it.
+   * The row is the AUTHORITY — the `'ui.reminted'` ledger event is
+   * the wire SIGNAL (what frames latch on), not the counter: the
+   * event ring is horizon-bounded, so counting events under-derives
+   * once old entries evict. `deriveEpochFromEvents` remains valid
+   * only for in-horizon ledger slices (pinned-snapshot
+   * reconstruction).
+   */
+  readonly epoch?: number;
   /** Creation timestamp (epoch ms). */
   readonly createdAt: number;
   /** Last activity timestamp (epoch ms). */
