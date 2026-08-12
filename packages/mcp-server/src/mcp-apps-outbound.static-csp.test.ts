@@ -75,6 +75,32 @@ describe('registerGguiRenderResource — extraConnectUrls in the static CSP decl
     ]);
   });
 
+  it('a meta-only change mints a NEW versioned URI (hosts cache the declaration with the bytes)', () => {
+    const a = registerGguiRenderResource(
+      new McpServer({ name: 'a', version: '0.0.0' }),
+      '<html>shell</html>',
+      undefined,
+      RUNTIME_URL,
+    );
+    const b = registerGguiRenderResource(
+      new McpServer({ name: 'b', version: '0.0.0' }),
+      '<html>shell</html>',
+      undefined,
+      RUNTIME_URL,
+      [WS_URL, 'https://live.example'],
+    );
+    const c = registerGguiRenderResource(
+      new McpServer({ name: 'c', version: '0.0.0' }),
+      '<html>shell</html>',
+      undefined,
+      RUNTIME_URL,
+      [WS_URL, 'https://live.example'],
+    );
+    expect(a).not.toBe(b);
+    // Determinism: identical bytes + identical declaration → same URI.
+    expect(b).toBe(c);
+  });
+
   it('without extras the declaration is unchanged (runtime origin + ws twin only)', async () => {
     const server = new McpServer({ name: 'test', version: '0.0.0' });
     const versionedUri = registerGguiRenderResource(

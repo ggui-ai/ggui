@@ -637,16 +637,22 @@ export function registerGguiRenderResource(
   // Hosts cache the prefetched shell keyed on the RESOURCE URI —
   // claude.ai's backend was observed serving days-old shell bytes
   // across our deploys, fresh pages, and connector re-connects,
-  // because `ui://ggui/render` never changes. Hash the FINAL shell
-  // bytes (wrapper + any inlined runtime) into the advertised URI so
-  // a deploy that changes the shell mints a NEW URI → every host
-  // cache misses exactly when the content changed, and never
-  // otherwise — the same content-address discipline the hashed
+  // because `ui://ggui/render` never changes. Hash the FULL SERVED
+  // REPRESENTATION — shell bytes (wrapper + any inlined runtime) AND
+  // the `_meta.ui.csp` declaration — into the advertised URI so any
+  // change a host may have cached mints a NEW URI, and an unchanged
+  // one never does; the same content-address discipline the hashed
   // `/_ggui/iframe-runtime.<sha12>.js` HTTP route applies one layer
-  // down. The bare URI stays registered for grandfathered sessions
-  // and hosts that read it directly.
+  // down. The meta MUST be in the hash input: hosts cache the
+  // declaration alongside the bytes (claude.ai derives the frame's
+  // connect-src from it), so a meta-only change — e.g. adding the
+  // live-channel origins to `connectDomains` — would otherwise ship a
+  // new policy under an old URI and never reach cached frames. The
+  // bare URI stays registered for grandfathered sessions and hosts
+  // that read it directly.
   const shellHash = createHash("sha256")
     .update(shellHtml)
+    .update(JSON.stringify(cspMeta ?? null))
     .digest("hex")
     .slice(0, 12);
   const versionedUri = `${GGUI_RENDER_RESOURCE_URI}/rt-${shellHash}`;
