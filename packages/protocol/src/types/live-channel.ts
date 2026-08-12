@@ -452,6 +452,14 @@ export interface PropsUpdatePayload {
   sessionId: string;
   /** New props — full replacement */
   props: JsonObject;
+  /**
+   * History epoch this update belongs to (#483, SPEC §7.1.2.2). An
+   * `ggui_update` stamps its new head epoch; a `ggui_amend` stamps the
+   * unchanged head. A mount whose OWN epoch is lower than this value
+   * has been superseded and freezes rather than applying (the freeze
+   * latch). Absent ⇒ 0 (pre-#483 producers / amend on an epoch-0 head).
+   */
+  epoch?: number;
 }
 
 /**

@@ -361,6 +361,16 @@ export interface McpAppAiGguiRenderMeta {
    */
   readonly lastSequence?: number;
 
+  /**
+   * History head epoch this mount belongs to (#483, SPEC §7.1.2.2).
+   * `ggui_render` mints epoch 0; each `ggui_update` result carries its
+   * new epoch; a pinned `#N` read carries N. The iframe reads it at
+   * boot as its OWN epoch: when a later `props_update` frame carries a
+   * HIGHER epoch, this mount has been superseded and freezes (the
+   * freeze latch). Absent ⇒ 0.
+   */
+  readonly epoch?: number;
+
   // GguiSession state — what the iframe re-renders on update
   readonly propsJson?: string;
   readonly contextSlots?: ReadonlyArray<McpAppContextSlot>;

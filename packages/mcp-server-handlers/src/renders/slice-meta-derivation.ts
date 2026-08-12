@@ -645,6 +645,8 @@ export function derivePropsJson(item: GguiSession): string | undefined {
  */
 export interface RenderMetaView {
   readonly kind?: string;
+  /** History head epoch (#483) — the mount's own epoch for the freeze latch. */
+  readonly epoch?: number;
   readonly propsJson?: string;
   /**
    * Base64-encoded compiled component source — the fetch-free static
@@ -985,6 +987,10 @@ export function deriveRenderMeta(
   const theme = deriveTheme(item);
   const codeB64 = deriveCodeB64(item);
   return {
+    // History head epoch (#483) — the mount reads this as its OWN
+    // epoch for the freeze latch. Always projected (0 default) so a
+    // frame can never mistake "absent" for "epoch 0 vs a live head".
+    epoch: item.epoch ?? 0,
     ...(propsJson !== undefined ? { propsJson } : {}),
     ...(codeB64 !== undefined ? { codeB64 } : {}),
     ...(slots !== undefined ? { contextSlots: [...slots] } : {}),

@@ -390,6 +390,8 @@ export function createGguiUpdateHandler(
           ? { themeMode: resolvedThemeMode }
           : {}),
         ...(lastSequence !== undefined ? { lastSequence } : {}),
+        // Freeze-latch self-epoch (#483) — the new card's own epoch.
+        ...(view.epoch !== undefined ? { epoch: view.epoch } : {}),
         ...(view.propsJson !== undefined ? { propsJson: view.propsJson } : {}),
         ...(view.codeB64 !== undefined ? { codeB64: view.codeB64 } : {}),
         // Mount-time view fields (#481) — this envelope only exists on

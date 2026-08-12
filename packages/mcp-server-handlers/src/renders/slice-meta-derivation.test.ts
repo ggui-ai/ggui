@@ -235,6 +235,9 @@ describe('deriveRenderMeta', () => {
       }),
     );
     expect(view).toEqual({
+      // History head epoch (#483) — always projected (0 default) so a
+      // mount reads its own epoch for the freeze latch.
+      epoch: 0,
       propsJson: '{"city":"Seoul"}',
       // Inline fetch-free code channel (#471) — base64 of the item's
       // componentCode, emitted whenever the source is under the cap.

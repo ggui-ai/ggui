@@ -120,3 +120,97 @@ describe('createPropsUpdateHandler (#290 boot-consolidation core)', () => {
     expect(applyRender).not.toHaveBeenCalled();
   });
 });
+
+describe('createPropsUpdateHandler — freeze latch (#483)', () => {
+  it('applies an amend to the live head (frame epoch == self epoch)', async () => {
+    const applyRender = makeApplyRender();
+    const onSuperseded = vi.fn();
+    const handler = createPropsUpdateHandler({
+      getCurrentGguiSession: () => componentRender({ count: 0 }),
+      applyRender,
+      getSelfEpoch: () => 0,
+      onSuperseded,
+      isSuperseded: () => false,
+    });
+    await handler.onMessage({
+      sessionId: 'sess_1',
+      props: { count: 5 },
+      epoch: 0,
+    } as PropsUpdatePayload);
+    expect(applyRender).toHaveBeenCalledTimes(1);
+    expect(onSuperseded).not.toHaveBeenCalled();
+  });
+
+  it('FREEZES on a higher-epoch update and does NOT apply', async () => {
+    const applyRender = makeApplyRender();
+    const onSuperseded = vi.fn();
+    const handler = createPropsUpdateHandler({
+      getCurrentGguiSession: () => componentRender({ count: 5 }),
+      applyRender,
+      getSelfEpoch: () => 0,
+      onSuperseded,
+      isSuperseded: () => false,
+    });
+    await handler.onMessage({
+      sessionId: 'sess_1',
+      props: { count: 9 },
+      epoch: 1,
+    } as PropsUpdatePayload);
+    expect(onSuperseded).toHaveBeenCalledTimes(1);
+    expect(applyRender).not.toHaveBeenCalled();
+  });
+
+  it('the head card (self epoch == frame epoch) applies its own update', async () => {
+    const applyRender = makeApplyRender();
+    const onSuperseded = vi.fn();
+    const handler = createPropsUpdateHandler({
+      getCurrentGguiSession: () => componentRender({ count: 0 }),
+      applyRender,
+      getSelfEpoch: () => 1,
+      onSuperseded,
+      isSuperseded: () => false,
+    });
+    await handler.onMessage({
+      sessionId: 'sess_1',
+      props: { count: 9 },
+      epoch: 1,
+    } as PropsUpdatePayload);
+    expect(applyRender).toHaveBeenCalledTimes(1);
+    expect(onSuperseded).not.toHaveBeenCalled();
+  });
+
+  it('drops every frame once superseded', async () => {
+    const applyRender = makeApplyRender();
+    const onSuperseded = vi.fn();
+    const handler = createPropsUpdateHandler({
+      getCurrentGguiSession: () => componentRender({ count: 5 }),
+      applyRender,
+      getSelfEpoch: () => 0,
+      onSuperseded,
+      isSuperseded: () => true,
+    });
+    await handler.onMessage({
+      sessionId: 'sess_1',
+      props: { count: 7 },
+      epoch: 0,
+    } as PropsUpdatePayload);
+    expect(applyRender).not.toHaveBeenCalled();
+    expect(onSuperseded).not.toHaveBeenCalled();
+  });
+
+  it('a frame with no epoch (pre-#483 producer) applies as before', async () => {
+    const applyRender = makeApplyRender();
+    const handler = createPropsUpdateHandler({
+      getCurrentGguiSession: () => componentRender({ count: 0 }),
+      applyRender,
+      getSelfEpoch: () => 0,
+      onSuperseded: vi.fn(),
+      isSuperseded: () => false,
+    });
+    await handler.onMessage({
+      sessionId: 'sess_1',
+      props: { count: 5 },
+    } as PropsUpdatePayload);
+    expect(applyRender).toHaveBeenCalledTimes(1);
+  });
+});

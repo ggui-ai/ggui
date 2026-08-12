@@ -52,6 +52,25 @@ export interface PropsUpdateHandlerDeps {
    * the render-frame handler so React updates flow through one path.
    */
   readonly applyRender: (render: GguiSession | GguiSessionSeedInput) => Promise<void>;
+  /**
+   * This mount's OWN history epoch (#483 freeze latch). A
+   * `props_update` frame carrying a HIGHER epoch means an
+   * `ggui_update` minted a newer card and this one is now history —
+   * the handler hands off to {@link onSuperseded} instead of applying.
+   * Absent ⇒ 0 (a fresh render).
+   */
+  readonly getSelfEpoch?: () => number;
+  /**
+   * Invoked (once) when a higher-epoch update supersedes this mount.
+   * The runtime freezes the frame: stop applying, tear down
+   * subscriptions, disable dispatch, show the superseded cue.
+   */
+  readonly onSuperseded?: () => void;
+  /**
+   * True after this mount has frozen. When true the handler drops
+   * every frame — a superseded mount never repaints again.
+   */
+  readonly isSuperseded?: () => boolean;
 }
 
 export function createPropsUpdateHandler(
@@ -60,8 +79,23 @@ export function createPropsUpdateHandler(
   return {
     type: 'props_update',
     onMessage: async (payload) => {
-      const { sessionId, props } = payload;
+      // Already frozen (#483): a superseded mount never repaints again.
+      if (deps.isSuperseded?.() === true) return;
+
+      const { sessionId, props, epoch } = payload;
       if (typeof sessionId !== 'string' || sessionId.length === 0) return;
+
+      // Freeze latch (#483): a frame stamped with a HIGHER epoch than
+      // this mount's own means a `ggui_update` minted a newer card —
+      // this one is history. Do NOT apply; hand off to the freeze
+      // routine. (`ggui_amend` carries the unchanged head epoch, so
+      // amends to the live head still apply.)
+      const selfEpoch = deps.getSelfEpoch?.() ?? 0;
+      if (typeof epoch === 'number' && epoch > selfEpoch) {
+        deps.onSuperseded?.();
+        return;
+      }
+
       if (props === null || typeof props !== 'object') return;
 
       const current = deps.getCurrentGguiSession();

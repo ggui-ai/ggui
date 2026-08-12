@@ -1004,6 +1004,9 @@ export async function bootSequence(opts: BootSequenceOptions): Promise<BootSeque
         })
       : null;
   currentTelemetrySink = telemetry;
+  // Fresh boot ⇒ not superseded (matters only for test re-runs that
+  // reuse the module; a real iframe boots once).
+  mountSuperseded = false;
   telemetry?.record(
     'boot.path',
     JSON.stringify({
@@ -2088,6 +2091,55 @@ function extractConsumerPresent(
   return typeof flag === 'boolean' ? flag : undefined;
 }
 
+/**
+ * Freeze-cue overlay (#483). A superseded (history) card gets a
+ * subtle, theme-aware "superseded" veil + a labelled pill, and its
+ * content is made non-interactive so a stale-view click can't even
+ * reach a control. Idempotent — the overlay id guards a second call.
+ * A polite live-region announcement (reusing the #447 announcer)
+ * tells a screen-reader user the card is now history.
+ */
+const FREEZE_CUE_ID = '__ggui-superseded-cue__';
+
+function applyFreezeCue(root: HTMLElement): void {
+  if (typeof document === 'undefined') return;
+  if (root.querySelector(`#${FREEZE_CUE_ID}`) !== null) return;
+
+  // Non-interactive + visually receded — inherits the mount's own
+  // colors, so it reads correctly in any theme.
+  root.style.pointerEvents = 'none';
+  root.style.opacity = '0.55';
+  root.style.filter = 'grayscale(0.4)';
+  root.style.transition = 'opacity 160ms ease, filter 160ms ease';
+  if (getComputedStyle(root).position === 'static') {
+    root.style.position = 'relative';
+  }
+
+  const pill = document.createElement('div');
+  pill.id = FREEZE_CUE_ID;
+  pill.setAttribute('role', 'note');
+  pill.textContent = 'Superseded — a newer version continues below';
+  Object.assign(pill.style, {
+    position: 'absolute',
+    top: '8px',
+    right: '8px',
+    padding: '4px 10px',
+    borderRadius: '9999px',
+    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+    fontSize: '11px',
+    fontWeight: '600',
+    color: 'var(--ggui-color-onSurface, inherit)',
+    background: 'rgba(128,128,128,0.16)',
+    border: '1px solid currentColor',
+    opacity: '0.85',
+    pointerEvents: 'none',
+    zIndex: '2',
+  } satisfies Partial<CSSStyleDeclaration>);
+  root.appendChild(pill);
+
+  announceToast('This card was superseded by a newer version below', 'fallback');
+}
+
 /** Container id for the announcer holding both live regions. */
 const TOAST_ANNOUNCER_ID = '__ggui-toast-announcer__';
 
@@ -2583,6 +2635,16 @@ let relayIncapabilityAnnounced = false;
 let currentTelemetrySink: TelemetrySink | null = null;
 
 /**
+ * Freeze latch (#483): set true once a higher-epoch `ggui_update`
+ * supersedes this mount. A frozen mount is HISTORY — its gestures no
+ * longer target the live session, so `dispatchSubmitAction` drops them
+ * (a stale-view submit against the live head is a prevented bug class).
+ * Module-level for the same single-mount-per-iframe reason as
+ * `currentTelemetrySink`.
+ */
+let mountSuperseded = false;
+
+/**
  * Whether the user has manually dismissed the CURRENTLY-STANDING relay
  * notice (ggui#442).
  *
@@ -2875,6 +2937,13 @@ export function dispatchSubmitAction(args: {
   readonly appId: string;
 }): void {
   if (typeof window === 'undefined') return;
+  // Freeze latch (#483): a superseded (history) mount does not drive
+  // the live session — drop the gesture rather than submit a stale
+  // view's action against the current head.
+  if (mountSuperseded) {
+    currentTelemetrySink?.record('gesture.dropped_superseded', args.intent);
+    return;
+  }
   const { toolName, intent, data, sessionId, appId } = args;
   // Gesture-path telemetry — the click's own autopsy trail. #471
   // round 12 hit a frame whose channels + beacons were fully healthy
@@ -4202,10 +4271,28 @@ async function bootProduction(opts: {
           validatorCtx,
         }),
       );
+      // Freeze latch (#483). This mount's own history epoch, read once
+      // from its boot meta: render → 0, an update-minted card → its N,
+      // a pinned `#N` read → N. When a `props_update` frame carries a
+      // higher epoch, a newer card superseded this one.
+      const selfEpoch = typeof meta.epoch === 'number' ? meta.epoch : 0;
+      let superseded = false;
+      const supersede = (): void => {
+        if (superseded) return;
+        superseded = true;
+        // Module-level dispatch guard: a history card's gestures no
+        // longer target the live session.
+        mountSuperseded = true;
+        currentTelemetrySink?.record('epoch.frozen', String(selfEpoch));
+        applyFreezeCue(renderInto);
+      };
       channelRegistry.register(
         createPropsUpdateHandler({
           getCurrentGguiSession: () => currentRender,
           applyRender,
+          getSelfEpoch: () => selfEpoch,
+          onSuperseded: supersede,
+          isSuperseded: () => superseded,
         }),
       );
       channelRegistry.register(

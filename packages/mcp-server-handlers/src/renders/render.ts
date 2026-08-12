@@ -2415,6 +2415,8 @@ export function createGguiRenderHandler(
           ? { permissionsPolicy: [...view.permissionsPolicy] }
           : {}),
         ...(lastSequence !== undefined ? { lastSequence } : {}),
+        // Freeze-latch self-epoch (#483) — a fresh render is epoch 0.
+        ...(view.epoch !== undefined ? { epoch: view.epoch } : {}),
         ...(view.propsJson !== undefined ? { propsJson: view.propsJson } : {}),
         ...(view.contextSlots !== undefined
           ? { contextSlots: [...view.contextSlots] }

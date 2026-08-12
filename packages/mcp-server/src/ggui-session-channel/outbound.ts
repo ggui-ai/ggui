@@ -288,11 +288,15 @@ export function createOutbound(deps: OutboundDeps): Outbound {
     // closed transports and logs (but doesn't throw on) per-subscriber
     // send failures, so the calling handler can't be made to fail by a
     // dead transport.
+    // Freeze-latch epoch (#483): the just-committed row carries the
+    // head epoch — an update advanced it, an amend left it. A mount
+    // whose own epoch is lower freezes instead of applying.
+    const epoch = stored.render.epoch ?? 0;
     for (const sub of deps.wsSubscribers) {
       if (sub.sessionId !== sessionId) continue;
       sub.sink.write({
         type: "props_update",
-        payload: { sessionId, props },
+        payload: { sessionId, props, epoch },
       });
     }
   }
