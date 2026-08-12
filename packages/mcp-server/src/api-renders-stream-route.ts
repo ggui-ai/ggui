@@ -147,6 +147,11 @@ export function mountApiRendersStreamRoute(opts: MountApiRendersStreamRouteOptio
   app.get("/api/sessions/:sessionId/stream", async (req, res) => {
     // ── Phase 1: plain-HTTP gates, BEFORE any event-stream byte ──
     // (EventSource fails permanently on non-200 — the demotion signal.)
+    // CORS pre-gates: a gate verdict without ACAO is an OPAQUE error
+    // to a cross-origin frame — the 410 refresh-your-token signal
+    // becomes indistinguishable from a CSP block, so the runtime
+    // demotes off a perfectly healthy rung instead of refreshing.
+    res.setHeader("Access-Control-Allow-Origin", "*");
     const sessionId = req.params["sessionId"];
     if (typeof sessionId !== "string" || sessionId.length === 0) {
       res.status(400).type("text/plain").send("sessionId required");
@@ -250,9 +255,6 @@ export function mountApiRendersStreamRoute(opts: MountApiRendersStreamRouteOptio
     res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
     res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
     res.setHeader("Connection", "keep-alive");
-    // Parity with /state — the iframe fetches cross-origin from the
-    // host page's origin.
-    res.setHeader("Access-Control-Allow-Origin", "*");
     // Tell nginx-family proxies not to buffer the stream. Self-hosters
     // behind proxies that ignore this must configure pass-through.
     res.setHeader("X-Accel-Buffering", "no");

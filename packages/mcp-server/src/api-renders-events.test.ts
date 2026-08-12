@@ -217,6 +217,10 @@ describe('GET /api/sessions/:sessionId/events', () => {
       `${fx.url}/api/sessions/${fx.sessionId}/events?wsToken=${encodeURIComponent(expiredToken)}&sinceSequence=0`,
     );
     expect(res.status).toBe(410);
+    // The 410 is the polling rung's refresh-your-token signal; without
+    // ACAO a cross-origin frame reads it as an opaque network error
+    // and demotes off a healthy rung instead of refreshing.
+    expect(res.headers.get('access-control-allow-origin')).toBe('*');
   });
 
   it('returns 401 when wsToken sessionId does not match URL sessionId', async () => {

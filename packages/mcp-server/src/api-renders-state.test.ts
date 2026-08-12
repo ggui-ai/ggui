@@ -278,6 +278,9 @@ describe('GET /api/sessions/:sessionId/state', () => {
       `${fx.url}/api/sessions/${fx.sessionId}/state?wsToken=${encodeURIComponent(expiredToken)}`,
     );
     expect(res.status).toBe(410);
+    // Refresh signal must be readable cross-origin (see events/stream
+    // twins) — gate rejections carry ACAO like the 200 path does.
+    expect(res.headers.get('access-control-allow-origin')).toBe('*');
   });
 
   it('returns 401 when wsToken sessionId does not match URL sessionId', async () => {

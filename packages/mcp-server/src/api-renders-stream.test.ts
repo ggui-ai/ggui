@@ -69,6 +69,10 @@ async function openStream(
     controller.abort();
     throw new Error(`expected 200 event-stream, got ${res.status}`);
   }
+  if (res.headers.get('access-control-allow-origin') !== '*') {
+    controller.abort();
+    throw new Error('stream 200 missing Access-Control-Allow-Origin');
+  }
   if (!res.body) throw new Error('response has no body stream');
   const reader = res.body.getReader();
   const decoder = new TextDecoder();
@@ -250,6 +254,9 @@ describe('GET /api/sessions/:sessionId/stream — auth gates (plain HTTP, pre-st
     const res = await fetch(streamUrl(fx, `wsToken=${encodeURIComponent(token)}`));
     expect(res.status).toBe(410);
     expect(await res.text()).toContain('wsToken expired');
+    // EventSource can only distinguish "refresh the token and retry"
+    // from "structurally unreachable" if the 410 is CORS-readable.
+    expect(res.headers.get('access-control-allow-origin')).toBe('*');
   });
 
   it('401 when the wsToken is scoped to a different render', async () => {

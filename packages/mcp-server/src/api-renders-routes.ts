@@ -108,6 +108,11 @@ export function mountApiRendersRoutes(opts: MountOptions): void {
   } = opts;
 
   app.get("/api/sessions/:sessionId/state", async (req, res) => {
+    // CORS on EVERY response, gates included: cross-origin frames can
+    // only read a status when the response carries ACAO. Without it a
+    // 410 (refresh the wsToken) is an opaque network error — the rung
+    // demotes as "structurally unreachable" instead of refreshing.
+    res.setHeader("Access-Control-Allow-Origin", "*");
     const sessionId = req.params["sessionId"];
     if (typeof sessionId !== "string" || sessionId.length === 0) {
       res.status(400).type("text/plain").send("sessionId required");
@@ -312,7 +317,6 @@ export function mountApiRendersRoutes(opts: MountOptions): void {
           }
         : {}),
     };
-    res.setHeader("Access-Control-Allow-Origin", "*");
     res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
     res.setHeader("Content-Type", "application/json; charset=utf-8");
     res.status(200).json({
@@ -321,6 +325,10 @@ export function mountApiRendersRoutes(opts: MountOptions): void {
   });
 
   app.get("/api/sessions/:sessionId/events", async (req, res) => {
+    // CORS pre-gates — same contract as /state: the 410/401 verdicts
+    // are part of the polling rung's protocol and must be readable
+    // from cross-origin frames.
+    res.setHeader("Access-Control-Allow-Origin", "*");
     const sessionId = req.params["sessionId"];
     if (typeof sessionId !== "string" || sessionId.length === 0) {
       res.status(400).type("text/plain").send("sessionId required");
@@ -427,7 +435,6 @@ export function mountApiRendersRoutes(opts: MountOptions): void {
     // (Wave 7 of flatten-render-identity, 2026-05-28). The store
     // returns events in protocol-canonical shape (seq + type +
     // timestamp[ISO] + data); no projection needed.
-    res.setHeader("Access-Control-Allow-Origin", "*");
     res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
     res.setHeader("Content-Type", "application/json; charset=utf-8");
     res.status(200).json({
