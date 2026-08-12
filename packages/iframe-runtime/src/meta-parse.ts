@@ -276,6 +276,13 @@ function projectMeta(
       : {}),
     ...(permissionsPolicy !== undefined ? { permissionsPolicy } : {}),
     ...(meta.lastSequence !== undefined ? { lastSequence: meta.lastSequence } : {}),
+    // Freeze-latch self-epoch (#483): this mount's own history number.
+    // Non-number collapses to undefined (⇒ boot treats itself as epoch
+    // 0). Dropping this field is catastrophic-but-quiet: every mount
+    // then boots believing epoch 0, and the first epoch-stamped live
+    // frame — including an amend's, addressed to the HEAD — freezes it
+    // (probe 18 round 2: the head card froze on its own amend).
+    ...(typeof meta.epoch === 'number' ? { epoch: meta.epoch } : {}),
     ...(meta.propsJson !== undefined ? { propsJson: meta.propsJson } : {}),
     ...(contextSlots !== undefined ? { contextSlots } : {}),
     ...(meta.contractHash !== undefined && meta.validatorsUrl !== undefined
