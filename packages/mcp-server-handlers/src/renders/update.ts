@@ -246,6 +246,16 @@ const inputSchema = {
    * `null` values in the patch DELETE the corresponding key.
    */
   patch: z.record(z.string(), z.unknown()).optional(),
+  /**
+   * Mount-identity intent (#482). Omitted/false (the tool's essential
+   * semantic): this update targets the ALREADY-MOUNTED UI — the result
+   * carries the props-only forwarding slice and no host mount pointer,
+   * so hosts that mint per-result views mint nothing. `true`: the
+   * result is a fresh, self-sufficient render at this point in the
+   * conversation — full bootable mount package (#481) + `_meta.ui`
+   * mount pointer.
+   */
+  renderAsNew: z.boolean().optional(),
 } as const;
 
 /**
@@ -599,23 +609,24 @@ export function createGguiUpdateHandler(
      * round-trip. The WS `props_update` frame remains the first-party
      * fast path; the slice meta is the cross-host fallback.
      *
-     * **Why a full mount package (2026-08-12, #481):** update mutates
-     * props, not the contract — but hosts mint a FRESH view from any
-     * mountable-looking result (claude.ai proven live: view minting
-     * keys on result shape). A frame booted from THIS envelope must
-     * therefore be self-sufficient: the 2026-05-13 props-only trim
-     * dropped `contextSlots`, so every update-minted view of a
-     * contract with contextSpec crashed at boot
-     * (`useGguiContext('draftText'): no Context registered`). The
-     * durable-record rule decides it: results are replayed by clients
-     * we cannot enumerate, so every mountable result carries the
-     * mount-time view fields, not just the patched props.
+     * **Two shapes, keyed on `renderAsNew` (#482):** update mutates
+     * props, not the contract — and by default (omitted/false) the
+     * result is a props-only forwarding slice with NO `_meta.ui`
+     * mount pointer: hosts mint no view, and the already-mounted
+     * frame repaints via its live rungs. `renderAsNew: true` declares
+     * the result a fresh render at this point in the conversation —
+     * it then carries the FULL bootable mount package (#481), because
+     * hosts mint views from result shape (claude.ai proven live) and
+     * a frame booted from this envelope must be self-sufficient: the
+     * 2026-05-13 props-only trim dropped `contextSlots` and every
+     * update-minted view of a contextSpec contract crashed at boot
+     * (`useGguiContext('draftText'): no Context registered`).
      *
      * Skipped entirely when no propsJson + no minter + no runtimeUrl —
      * keeps the response byte-identical for hosts that don't read
      * `_meta` (the structuredContent reply is the source of truth).
      */
-    resultMeta: async (output, _input, ctx) => {
+    resultMeta: async (output, input, ctx) => {
       // Load the just-patched render and derive the FULL projected
       // view — the same `deriveRenderMeta` projection `ggui_render`
       // emits, so an update-minted frame boots identically to a
@@ -685,30 +696,44 @@ export function createGguiUpdateHandler(
           : {}),
         ...(lastSequence !== undefined ? { lastSequence } : {}),
         ...(view.propsJson !== undefined ? { propsJson: view.propsJson } : {}),
-        // Mount-time view fields — required for hosts that mint a
-        // fresh view from this result (#481). Spread shapes mirror
-        // `ggui_render`'s emitter exactly.
-        ...(view.contextSlots !== undefined
-          ? { contextSlots: [...view.contextSlots] }
-          : {}),
-        ...(view.permissionsPolicy !== undefined
-          ? { permissionsPolicy: [...view.permissionsPolicy] }
-          : {}),
-        ...(view.theme !== undefined ? { theme: view.theme } : {}),
-        ...(view.gadgets !== undefined && view.gadgets.length > 0
-          ? { gadgets: view.gadgets }
-          : {}),
-        ...(view.kind ? { kind: view.kind } : {}),
         ...(view.codeB64 !== undefined ? { codeB64: view.codeB64 } : {}),
+        // Mount-time view fields — ONLY when the agent declared
+        // `renderAsNew: true` (#482): the result is then a fresh,
+        // self-sufficient render and hosts that mint per-result views
+        // need the full bootable package (#481). Spread shapes mirror
+        // `ggui_render`'s emitter exactly. Default (omitted/false):
+        // props-only forwarding slice — the update targets the
+        // already-mounted UI, which booted with these fields.
+        ...(input.renderAsNew === true
+          ? {
+              ...(view.contextSlots !== undefined
+                ? { contextSlots: [...view.contextSlots] }
+                : {}),
+              ...(view.permissionsPolicy !== undefined
+                ? { permissionsPolicy: [...view.permissionsPolicy] }
+                : {}),
+              ...(view.theme !== undefined ? { theme: view.theme } : {}),
+              ...(view.gadgets !== undefined && view.gadgets.length > 0
+                ? { gadgets: view.gadgets }
+                : {}),
+              ...(view.kind ? { kind: view.kind } : {}),
+            }
+          : {}),
       };
-      // `_meta.ui.resourceUri` mirrors ggui_render's result meta so
-      // hosts that key UI-instance routing on the per-result URI bind
-      // this update to the SAME mounted iframe (+ legacy flat key for
-      // hosts reading the unnested form).
+      // `_meta.ui.resourceUri` is the host-facing mount pointer — the
+      // spec key hosts read to mint a view for this result AND to
+      // route the forwarded result by URI equality. Emitted only for
+      // `renderAsNew: true`; the default deliberately carries NO mount
+      // pointer so hosts mint nothing — the mounted frame receives the
+      // new props via its live rungs (WS/SSE/polling/bridge-pull).
       return {
         ...toMcpAppEnvelope(render),
-        ui: { resourceUri: output.resourceUri },
-        'ui/resourceUri': output.resourceUri,
+        ...(input.renderAsNew === true
+          ? {
+              ui: { resourceUri: output.resourceUri },
+              'ui/resourceUri': output.resourceUri,
+            }
+          : {}),
       };
     },
   };

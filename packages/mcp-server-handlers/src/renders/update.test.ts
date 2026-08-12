@@ -570,12 +570,12 @@ describe('createGguiUpdateHandler', () => {
       expect(parsed.meta?.runtimeUrl).toBe('/_ggui/iframe-runtime.js');
     });
 
-    it('emits a BOOTABLE mount package: propsJson + contextSlots + auth/runtime (#481)', async () => {
+    it('renderAsNew: true emits a BOOTABLE mount package: propsJson + contextSlots + mount pointer (#481/#482)', async () => {
       // Hosts mint a fresh view from any mountable result (claude.ai,
       // proven live 2026-08-12) — a frame booted from THIS envelope
       // must self-suffice. The 2026-05-13 props-only trim dropped
       // contextSlots and every update-minted view of a contextSpec
-      // contract crashed at boot; this pins the revert.
+      // contract crashed at boot; this pins the opt-in full package.
       const store = new InMemoryGguiSessionStore();
       const { sessionId } = await seedRender({
         store,
@@ -593,10 +593,16 @@ describe('createGguiUpdateHandler', () => {
           expiresAt: '2099-01-01T00:00:00.000Z',
         }),
       });
-      const input = { sessionId, kind: 'replace' as const, props: { count: 5 } };
+      const input = {
+        sessionId,
+        kind: 'replace' as const,
+        props: { count: 5 },
+        renderAsNew: true,
+      };
       const out = await handler.handler(input, ctx());
       const meta = await handler.resultMeta?.(out, input, ctx());
       expect(meta).toBeDefined();
+      expect(Object.keys(meta ?? {})).toContain('ui');
       const parsed = parseMcpAppAiGguiRenderMeta(meta);
       expect(parsed.ok).toBe(true);
       if (!parsed.ok) return;
@@ -638,6 +644,43 @@ describe('createGguiUpdateHandler', () => {
       expect(m?.codeB64).toBe(
         Buffer.from('export default function X(){return null}', 'utf8').toString('base64'),
       );
+    });
+
+    it('default (renderAsNew omitted) emits the forwarding slice with NO mount pointer (#482)', async () => {
+      // The tool's essential semantic: update the ALREADY-MOUNTED UI.
+      // No `_meta.ui` mount pointer ⇒ hosts that mint per-result views
+      // mint nothing; the mounted frame repaints via its live rungs.
+      const store = new InMemoryGguiSessionStore();
+      const { sessionId } = await seedRender({
+        store,
+        initialProps: { count: 0 },
+        contextSpec: {
+          draftText: { schema: { type: 'string' }, debounceMs: 300 },
+        },
+      });
+      const handler = createGguiUpdateHandler({
+        renderStore: store,
+        runtimeUrl: '/_ggui/iframe-runtime.js',
+      });
+      const input = { sessionId, kind: 'replace' as const, props: { count: 5 } };
+      const out = await handler.handler(input, ctx());
+      const meta = await handler.resultMeta?.(out, input, ctx());
+      expect(meta).toBeDefined();
+      expect(Object.keys(meta ?? {})).not.toContain('ui');
+      expect(Object.keys(meta ?? {})).not.toContain('ui/resourceUri');
+      const parsed = parseMcpAppAiGguiRenderMeta(meta);
+      expect(parsed.ok).toBe(true);
+      if (!parsed.ok) return;
+      const { meta: m } = parsed;
+      // Forwarding slice: patched props + static code channel only —
+      // mount-time view fields stay off the default shape.
+      expect(m?.propsJson).toBe(JSON.stringify({ count: 5 }));
+      expect(m?.codeB64).toBeDefined();
+      expect(m?.contextSlots).toBeUndefined();
+      expect(m?.permissionsPolicy).toBeUndefined();
+      expect(m?.kind).toBeUndefined();
+      // Agent-facing structuredContent keeps the mount URI either way.
+      expect(out.resourceUri).toContain(sessionId);
     });
 
     it('forwards themeId + themeMode from themeProvider over static deps', async () => {

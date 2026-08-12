@@ -689,12 +689,16 @@ export const updateInputSchema = z.discriminatedUnion('kind', [
     kind: z.literal('replace'),
     props: z.record(z.string(), z.unknown())
       .describe('Full replacement props map. New map IS the new state.'),
+    renderAsNew: z.boolean().optional()
+      .describe('Omit (default): update the already-mounted UI in place — no new card appears. true: emit the updated state as a NEW self-contained card at this point in the conversation — for milestones worth showing in the transcript, or when the original card is gone or far away.'),
   }).strict(),
   z.object({
     sessionId: z.string().describe('GguiSession opaque id (UUID) — returned by ggui_render.'),
     kind: z.literal('merge'),
     patch: z.record(z.string(), z.unknown())
       .describe('RFC 7396 JSON Merge Patch — null deletes a key; arrays fully replace.'),
+    renderAsNew: z.boolean().optional()
+      .describe('Omit (default): update the already-mounted UI in place — no new card appears. true: emit the updated state as a NEW self-contained card at this point in the conversation — for milestones worth showing in the transcript, or when the original card is gone or far away.'),
   }).strict(),
 ]);
 
