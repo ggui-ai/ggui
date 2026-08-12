@@ -20,6 +20,7 @@ import {
   type SharedHandler,
 } from '@ggui-ai/mcp-server-handlers';
 import type { Logger } from './logger.js';
+import { GGUI_RENDER_RESOURCE_URI } from '@ggui-ai/protocol/integrations/mcp-apps';
 import {
   installMcpAppsOutbound,
   type GguiRenderResourceTemplateOptions,
@@ -154,8 +155,13 @@ export function buildMcpServer(
     ...(opts.instructions ? { instructions: opts.instructions } : {}),
   });
 
+  // Content-addressed shell URI (stale-shell bust) — when MCP Apps
+  // outbound wiring registers the shell, declarations advertising the
+  // BARE `ui://ggui/render` are rewritten to the versioned twin below
+  // so host prefetch caches key on content, not on a constant string.
+  let shellResourceUri: string | undefined;
   if (opts.mcpAppsOutbound) {
-    installMcpAppsOutbound(server, {
+    ({ shellResourceUri } = installMcpAppsOutbound(server, {
       ...(opts.shellHtml !== undefined ? { shellHtml: opts.shellHtml } : {}),
       // Thread the same per-request context accessor + logger the tool
       // path uses (`getContext`, param 3 of `buildMcpServer`) so the
@@ -167,7 +173,7 @@ export function buildMcpServer(
       ...(opts.publicBaseUrl !== undefined
         ? { publicBaseUrl: opts.publicBaseUrl }
         : {}),
-    });
+    }));
   }
 
   // Per-request resource registrars supplied by the host. Run BEFORE
@@ -343,13 +349,22 @@ export function buildMcpServer(
     // error on the handler author's side — fail loud rather than
     // silently registering the tool without its UI surface.
     if (handler._meta && 'ui' in handler._meta) {
-      const ui = handler._meta['ui'];
-      if (!isMcpUiToolMeta(ui)) {
+      const uiRaw = handler._meta['ui'];
+      if (!isMcpUiToolMeta(uiRaw)) {
         throw new Error(
           `Tool ${handler.name} declares _meta.ui with an invalid shape — ` +
             `expected { resourceUri?: string; visibility?: ('model' | 'app')[] }.`,
         );
       }
+      // Declarations author the STABLE `ui://ggui/render` constant;
+      // registration swaps in the content-addressed twin so hosts
+      // prefetch (and cache) the shell by its content hash. Handlers
+      // stay host-cache-agnostic; the swap lives in ONE place.
+      const ui =
+        shellResourceUri !== undefined &&
+        uiRaw.resourceUri === GGUI_RENDER_RESOURCE_URI
+          ? { ...uiRaw, resourceUri: shellResourceUri }
+          : uiRaw;
       registerAppTool(
         server,
         handler.name,

@@ -193,7 +193,7 @@ export interface GguiSubmitActionHandlerDeps {
    * policy entirely (see the handler body): the registry is waited on
    * for exactly this long before answering `consumerPresent: false`.
    * Unset → adaptive: 2s when a consume is plausibly imminent (recent
-   * exit, or first poll of a <20s-old render), 150ms otherwise. Test
+   * exit, or first poll of a <60s-old render), 150ms otherwise. Test
    * hook / operator escape hatch.
    */
   readonly consumerGraceMs?: number;
@@ -419,8 +419,13 @@ export function createGguiSubmitActionHandler(
                     // fast-answer arm on store hiccups.
                   }
                 }
+                // 60s (was 20s): a live probe clicked 20.4s
+                // post-render — 400ms past the old threshold — and
+                // rang a duplicate doorbell while the first poll
+                // parked 462ms later. Waiting 2s on a genuinely dead
+                // card is cheap; a false ring is not.
                 graceMs =
-                  renderAgeMs !== undefined && renderAgeMs < 20_000
+                  renderAgeMs !== undefined && renderAgeMs < 60_000
                     ? 2_000
                     : 150;
               } else {

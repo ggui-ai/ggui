@@ -423,7 +423,7 @@ describe('end-to-end outbound flow', () => {
     expect(parsed.meta.runtimeUrl).toBeDefined();
   });
 
-  it('ggui_render declaration exposes _meta.ui.resourceUri on tools/list', async () => {
+  it('ggui_render declaration advertises the CONTENT-ADDRESSED shell URI on tools/list (stale-shell bust, 2026-08-12)', async () => {
     const resp = await client.listTools();
     const renderTool = resp.tools.find((t) => t.name === 'ggui_render');
     expect(renderTool).toBeDefined();
@@ -431,8 +431,30 @@ describe('end-to-end outbound flow', () => {
     const meta = renderTool?._meta as {
       ui?: { resourceUri?: string; visibility?: string[] };
     };
-    expect(meta.ui?.resourceUri).toBe(GGUI_RENDER_RESOURCE_URI);
+    // Handlers author the stable constant; registration swaps in the
+    // versioned twin so host prefetch caches key on shell CONTENT.
+    // claude.ai's backend was observed serving days-old shells across
+    // deploys because the bare URI never changes.
+    expect(meta.ui?.resourceUri).toMatch(
+      new RegExp(`^${GGUI_RENDER_RESOURCE_URI}/rt-[0-9a-f]{12}$`),
+    );
     expect(meta.ui?.visibility).toEqual(['model']);
+  });
+
+  it('the advertised versioned URI reads back the SAME shell as the bare URI (grandfathered twin)', async () => {
+    const resp = await client.listTools();
+    const renderTool = resp.tools.find((t) => t.name === 'ggui_render');
+    const meta = renderTool?._meta as {
+      ui?: { resourceUri?: string };
+    };
+    const versionedUri = meta.ui?.resourceUri;
+    expect(versionedUri).toBeDefined();
+    const versioned = await client.readResource({ uri: versionedUri! });
+    const bare = await client.readResource({ uri: GGUI_RENDER_RESOURCE_URI });
+    const text = (r: typeof bare): string =>
+      (r.contents[0] as { text?: string }).text ?? '';
+    expect(text(versioned).length).toBeGreaterThan(0);
+    expect(text(versioned)).toBe(text(bare));
   });
 
   it('ggui_render bootstrap carries runtimeUrl — the URL the thin shell dynamic-script-loads (C8)', async () => {

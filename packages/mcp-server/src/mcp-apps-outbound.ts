@@ -615,8 +615,26 @@ export function registerGguiRenderResource(
    * restrictive default (`connect-src 'none'`).
    */
   runtimeUrl?: string
-): void {
+): string {
   const cspMeta = buildCspMeta(publicBaseUrl, runtimeUrl);
+
+  // Content-addressed shell URI (2026-08-12, the stale-shell bust).
+  // Hosts cache the prefetched shell keyed on the RESOURCE URI —
+  // claude.ai's backend was observed serving days-old shell bytes
+  // across our deploys, fresh pages, and connector re-connects,
+  // because `ui://ggui/render` never changes. Hash the FINAL shell
+  // bytes (wrapper + any inlined runtime) into the advertised URI so
+  // a deploy that changes the shell mints a NEW URI → every host
+  // cache misses exactly when the content changed, and never
+  // otherwise — the same content-address discipline the hashed
+  // `/_ggui/iframe-runtime.<sha12>.js` HTTP route applies one layer
+  // down. The bare URI stays registered for grandfathered sessions
+  // and hosts that read it directly.
+  const shellHash = createHash("sha256")
+    .update(shellHtml)
+    .digest("hex")
+    .slice(0, 12);
+  const versionedUri = `${GGUI_RENDER_RESOURCE_URI}/rt-${shellHash}`;
 
   // `registerAppResource` (from `@modelcontextprotocol/ext-apps/server`)
   // defaults `mimeType` to `RESOURCE_MIME_TYPE` — the same
@@ -624,6 +642,16 @@ export function registerGguiRenderResource(
   // carries. Letting the canonical helper own the default means the
   // mimeType string lives in ONE place across the ecosystem (the SDK)
   // rather than duplicated in our protocol package.
+  const serveShell = async (uri: URL) => ({
+    contents: [
+      {
+        uri: uri.href,
+        mimeType: GGUI_RENDER_RESOURCE_MIME,
+        text: shellHtml,
+        ...(cspMeta !== undefined ? { _meta: cspMeta } : {}),
+      },
+    ],
+  });
   registerAppResource(
     server,
     "ggui-render",
@@ -636,17 +664,21 @@ export function registerGguiRenderResource(
         "Thin-shell iframe bundle that bootstraps a ggui render. MCP Apps hosts fetch this when they see `_meta.ui.resourceUri` on a ggui_render result.",
       mimeType: GGUI_RENDER_RESOURCE_MIME,
     },
-    async (uri) => ({
-      contents: [
-        {
-          uri: uri.href,
-          mimeType: GGUI_RENDER_RESOURCE_MIME,
-          text: shellHtml,
-          ...(cspMeta !== undefined ? { _meta: cspMeta } : {}),
-        },
-      ],
-    })
+    serveShell
   );
+  registerAppResource(
+    server,
+    "ggui-render-versioned",
+    versionedUri,
+    {
+      title: "ggui render (content-addressed)",
+      description:
+        "Content-addressed twin of ui://ggui/render — the URI embeds the shell-bytes hash so host prefetch caches miss exactly when the shell changed. Tool declarations advertise THIS URI.",
+      mimeType: GGUI_RENDER_RESOURCE_MIME,
+    },
+    serveShell
+  );
+  return versionedUri;
 }
 
 /**
@@ -2559,13 +2591,13 @@ export function installMcpAppsOutbound(
      */
     readonly publicBaseUrl?: string;
   } = {}
-): void {
+): { readonly shellResourceUri: string } {
   advertiseMcpAppsUiCapability(server);
   // The self-contained template's absolute runtimeUrl doubles as the
   // static registration's CSP-declaration fallback — deployments that
   // set no `publicBaseUrl` (it also feeds Origin/Host enforcement +
   // OAuth) still declare their origin to spec-compliant hosts.
-  registerGguiRenderResource(
+  const shellResourceUri = registerGguiRenderResource(
     server,
     opts.shellHtml,
     opts.publicBaseUrl,
@@ -2574,4 +2606,5 @@ export function installMcpAppsOutbound(
   if (opts.selfContained) {
     registerGguiRenderResourceTemplate(server, opts.selfContained);
   }
+  return { shellResourceUri };
 }
