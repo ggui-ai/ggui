@@ -51,13 +51,18 @@ describe('host-simulator: happy path against OSS createGguiServer', () => {
     const tools = await host.listTools();
     const render = tools.find((t) => t.name === 'ggui_render');
     expect(render, 'ggui_render must be in tools/list').toBeDefined();
+    // Content-addressed since the stale-shell bust (2026-08-12): the
+    // declared URI embeds the shell-bytes hash; a spec-faithful host
+    // prefetches whatever the declaration names — never a hardcoded
+    // constant (that assumption is exactly what let real hosts serve
+    // stale cached shells across deploys).
     expect(
       render?.resourceUri,
-      'ggui_render must declare _meta.ui.resourceUri = ui://ggui/render',
-    ).toBe('ui://ggui/render');
+      'ggui_render must declare a content-addressed _meta.ui.resourceUri',
+    ).toMatch(/^ui:\/\/ggui\/render\/rt-[0-9a-f]{12}$/);
 
     // 2. Pre-fetched resource is non-empty (the iframe shell HTML).
-    const shell = host.getPrefetchedResource('ui://ggui/render');
+    const shell = host.getPrefetchedResource(render!.resourceUri!);
     expect(shell, 'shell HTML body must be non-empty').toBeTruthy();
     expect(shell?.length ?? 0).toBeGreaterThan(100);
 

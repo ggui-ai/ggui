@@ -366,7 +366,10 @@ describe('buildMcpServerBackend', () => {
     expect(render).toBeTruthy();
     // `_meta.ui.*` is the MCP Apps §2.4.1 "sole entry-point tool"
     // stamp — lost if the CLI ever reverts to the old bundle.
-    expect(render?._meta?.ui?.resourceUri).toBe('ui://ggui/render');
+    // Content-addressed since the stale-shell bust (2026-08-12).
+    expect(render?._meta?.ui?.resourceUri).toMatch(
+      /^ui:\/\/ggui\/render\/rt-[0-9a-f]{12}$/,
+    );
     expect(render?._meta?.ui?.visibility).toEqual(expect.arrayContaining(['model']));
   });
 

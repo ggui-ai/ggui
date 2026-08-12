@@ -321,7 +321,12 @@ test.describe.serial("OSS hero path — `ggui serve` (real CLI bin)", () => {
       ])
     );
     const renderTool = tools.find((t) => t.name === "ggui_render");
-    expect(renderTool?._meta?.ui?.resourceUri).toBe("ui://ggui/render");
+    // Content-addressed since the stale-shell bust (2026-08-12): the
+    // declaration advertises `ui://ggui/render/rt-<shellHash>` so host
+    // prefetch caches key on shell CONTENT, not a constant string.
+    expect(renderTool?._meta?.ui?.resourceUri).toMatch(
+      /^ui:\/\/ggui\/render\/rt-[0-9a-f]{12}$/,
+    );
     expect(renderTool?._meta?.ui?.visibility).toEqual(expect.arrayContaining(["model"]));
 
     // ── 3. tools/call ggui_handshake → ggui_render ────────────────
