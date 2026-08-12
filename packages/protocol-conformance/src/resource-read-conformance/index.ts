@@ -112,6 +112,8 @@ import malformedLocator from './cases/malformed-locator-stays-outside-the-typed-
 import liveRowMount from './cases/live-row-read-returns-mount-material.json' with { type: 'json' };
 import remintMount from './cases/evicted-row-remints-from-the-durable-record.json' with { type: 'json' };
 import inlineMount from './cases/channel-less-read-mounts-inline.json' with { type: 'json' };
+import pinnedImmutable from './cases/pinned-superseded-record-serves-its-reign-immutably.json' with { type: 'json' };
+import pinPastHead from './cases/pin-past-the-head-answers-not-found.json' with { type: 'json' };
 
 // =============================================================================
 // Authored vocabulary
@@ -235,6 +237,20 @@ export type ResourceReadSeed =
        */
       readonly kind: 'registered-blueprint';
       readonly as: string;
+    }
+  | {
+      /**
+       * A session with epoch HISTORY (#483): `records[0]` is the mint
+       * (epoch 0), each later entry one `ggui_update` (epoch N). The
+       * driver seeds the ledger so every superseded record is
+       * reconstructable (an in-reign props event per record) and the
+       * row carries the head epoch.
+       */
+      readonly kind: 'epoch-history';
+      readonly session: string;
+      readonly records: ReadonlyArray<{
+        readonly props: Readonly<Record<string, unknown>>;
+      }>;
     };
 
 /**
@@ -263,6 +279,14 @@ export type ResourceReadLocator =
       readonly kind: 'render';
       readonly session: string;
       readonly key?: ResourceReadKey;
+      /**
+       * Epoch pin (#483, SPEC §7.1.2.2): present ⇒ the kit reads the
+       * PINNED history record (`…#N`); absent ⇒ the live head. The
+       * fragment encoding is pinned HERE deliberately — the kit is
+       * the arbiter of the wire grammar, so an encoding change is a
+       * conscious, visible kit change.
+       */
+      readonly epoch?: number;
     }
   | { readonly kind: 'raw'; readonly uri: string };
 
@@ -307,6 +331,16 @@ export type ResourceReadExpectation =
   | {
       /** A result whose contents declare a delivery channel. */
       readonly kind: 'live-mount';
+    }
+  | {
+      /**
+       * A mount serving a HISTORY record (#483): still a real mount
+       * (delivery channel required), graded additionally on its
+       * props — every `propsInclude` entry must appear in the parsed
+       * `propsJson` with the authored value.
+       */
+      readonly kind: 'pinned-mount';
+      readonly propsInclude?: Readonly<Record<string, unknown>>;
     };
 
 /** One read within a case. */
@@ -350,6 +384,14 @@ export interface ResourceReadConformanceCase {
    */
   readonly indistinguishable?: readonly string[];
   /**
+   * Probe names whose MOUNT outcomes must carry byte-identical
+   * `propsJson` (#483 — pinned-record immutability). Deliberately
+   * compares ONLY the props: live-channel tokens and expiries on the
+   * same meta legitimately differ per read; the RECORD is what may
+   * not.
+   */
+  readonly identicalMounts?: readonly string[];
+  /**
    * Literal substrings that MUST NOT appear anywhere in any error frame
    * this case produces. The values a refusal would leak if a diagnostic
    * escaped into `message` or `detail`.
@@ -390,6 +432,12 @@ export interface ResourceReadRenderMeta {
   readonly wsToken?: string;
   /** A server-emitted system card, which carries its own content. */
   readonly kind?: string;
+  /**
+   * The mount's props as a JSON string (#483). Graded by the
+   * `pinned-mount` expectation and the `identicalMounts` group;
+   * ungraded elsewhere.
+   */
+  readonly propsJson?: string;
 }
 
 /** The raw JSON-RPC error body a server put on the wire. */
@@ -461,6 +509,8 @@ export const resourceReadCases: readonly ResourceReadConformanceCase[] = [
   liveRowMount as ResourceReadConformanceCase,
   remintMount as ResourceReadConformanceCase,
   inlineMount as ResourceReadConformanceCase,
+  pinnedImmutable as ResourceReadConformanceCase,
+  pinPastHead as ResourceReadConformanceCase,
 ];
 
 // =============================================================================
@@ -480,15 +530,16 @@ export function renderLocatorUri(
   registeredKeys: Readonly<Record<string, string>> = {},
 ): string {
   if (locator.kind === 'raw') return locator.uri;
+  const pin = locator.epoch === undefined ? '' : `#${locator.epoch}`;
   const base = `${GGUI_RENDER_RESOURCE_URI}/${locator.session}`;
   const keyRef = locator.key;
-  if (keyRef === undefined) return base;
-  if (keyRef.kind === 'literal') return `${base}/${keyRef.value}`;
+  if (keyRef === undefined) return `${base}${pin}`;
+  if (keyRef.kind === 'literal') return `${base}/${keyRef.value}${pin}`;
   const key = registeredKeys[keyRef.seed];
   if (key === undefined) {
     throw new Error(`no key was reported for registry seed '${keyRef.seed}'`);
   }
-  return `${base}/${key}`;
+  return `${base}/${key}${pin}`;
 }
 
 /**
@@ -671,6 +722,9 @@ async function gradeCase(
   const fusion = gradeIndistinguishable(testCase, outcomes);
   if (fusion !== null) return { kind: 'fail', failure: fusion };
 
+  const pinned = gradeIdenticalMounts(testCase, outcomes);
+  if (pinned !== null) return { kind: 'fail', failure: pinned };
+
   return { kind: 'pass' };
 }
 
@@ -707,6 +761,53 @@ function gradeProbe(
         'render meta declaring a component URL, a live channel (endpoint AND token), or a system card',
         `reading '${uri}' succeeded with contents that declare no delivery channel — a shell that can never paint anything. A read with nothing to mount answers with a typed error instead.`,
       );
+    }
+    return null;
+  }
+
+  if (probe.expect.kind === 'pinned-mount') {
+    if (outcome.kind !== 'mount') {
+      return fail(
+        'a pinned history record within the servable window mounts (SPEC §7.1.2.2)',
+        'a result whose contents declare a delivery channel and carry the record props',
+        `reading '${uri}' failed, but this pinned record resolves on this server.`,
+      );
+    }
+    if (!declaresDeliveryChannel(outcome.renderMeta)) {
+      return fail(
+        'a pinned mount is still a mount',
+        'render meta declaring a delivery channel',
+        `reading '${uri}' succeeded with contents that declare no delivery channel.`,
+      );
+    }
+    const include = probe.expect.propsInclude;
+    if (include !== undefined) {
+      const raw = outcome.renderMeta.propsJson;
+      let parsed: Record<string, unknown> | null = null;
+      if (typeof raw === 'string') {
+        try {
+          const candidate: unknown = JSON.parse(raw);
+          if (isRecord(candidate)) parsed = candidate as Record<string, unknown>;
+        } catch {
+          parsed = null;
+        }
+      }
+      if (parsed === null) {
+        return fail(
+          'a pinned mount carries its record props (SPEC §7.1.2.2)',
+          'parseable propsJson on the render meta',
+          `reading '${uri}' mounted, but its render meta carries no parseable propsJson to grade the record against.`,
+        );
+      }
+      for (const [key, expected] of Object.entries(include)) {
+        if (JSON.stringify(parsed[key]) !== JSON.stringify(expected)) {
+          return fail(
+            'a pinned record serves the props of ITS epoch, never a neighbor\'s',
+            `propsJson entry '${key}' = ${JSON.stringify(expected)}`,
+            `reading '${uri}' served '${key}' = ${JSON.stringify(parsed[key])}.`,
+          );
+        }
+      }
     }
     return null;
   }
@@ -803,6 +904,43 @@ function gradeDisclosure(
           message: `the error frame for probe '${probeName}' contains ${JSON.stringify(secret)}. A caller with no claim to this render learned it exists.`,
         };
       }
+    }
+  }
+  return null;
+}
+
+function gradeIdenticalMounts(
+  testCase: ResourceReadConformanceCase,
+  outcomes: ReadonlyMap<string, ResourceReadOutcome>,
+): ResourceReadConformanceFailure | null {
+  const group = testCase.identicalMounts ?? [];
+  if (group.length < 2) return null;
+  let reference: { readonly probe: string; readonly propsJson: string } | null = null;
+  for (const probeName of group) {
+    const outcome = outcomes.get(probeName);
+    if (outcome === undefined || outcome.kind !== 'mount' || outcome.renderMeta.propsJson === undefined) {
+      return {
+        name: testCase.name,
+        probe: probeName,
+        obligation: 'a pinned history record serves identical props on every read (SPEC §7.1.2.2)',
+        expected: 'a mount outcome carrying propsJson to compare',
+        actual: outcome ?? '(no outcome recorded)',
+        message: `probe '${probeName}' is named in this case's identicalMounts group but did not produce a props-carrying mount, so immutability cannot even be compared.`,
+      };
+    }
+    if (reference === null) {
+      reference = { probe: probeName, propsJson: outcome.renderMeta.propsJson };
+      continue;
+    }
+    if (outcome.renderMeta.propsJson !== reference.propsJson) {
+      return {
+        name: testCase.name,
+        probe: probeName,
+        obligation: 'a pinned history record serves identical props on every read (SPEC §7.1.2.2)',
+        expected: reference.propsJson,
+        actual: outcome.renderMeta.propsJson,
+        message: `probes '${reference.probe}' and '${probeName}' read the same pinned record and got different props — the record mutated between reads.`,
+      };
     }
   }
   return null;
@@ -980,6 +1118,15 @@ export function parseCase(input: unknown): ResourceReadConformanceCase {
     return parsed;
   });
 
+  const mountGroup = input['identicalMounts'];
+  if (mountGroup !== undefined) {
+    if (!Array.isArray(mountGroup)) throw bad("'identicalMounts' must be an array of probe names");
+    if (mountGroup.length < 2) {
+      throw bad(
+        "'identicalMounts' names a single probe — a group of one asserts nothing, which reads as an obligation being graded when it is not",
+      );
+    }
+  }
   const group = input['indistinguishable'];
   if (group !== undefined) {
     if (!Array.isArray(group)) throw bad("'indistinguishable' must be an array of probe names");
@@ -1018,6 +1165,7 @@ export function parseCase(input: unknown): ResourceReadConformanceCase {
     seeds,
     reads,
     ...(group !== undefined ? { indistinguishable: group.map(String) } : {}),
+    ...(mountGroup !== undefined ? { identicalMounts: mountGroup.map(String) } : {}),
     ...(secrets !== undefined ? { disclosesNothing: secrets.map(String) } : {}),
   };
 }
@@ -1057,6 +1205,7 @@ const CASE_KEYS: readonly string[] = [
   'seeds',
   'reads',
   'indistinguishable',
+  'identicalMounts',
   'disclosesNothing',
 ];
 
@@ -1073,12 +1222,13 @@ const SEED_KEYS: Readonly<Record<string, readonly string[]>> = {
   'identity-record': ['kind', 'session', 'key', 'blueprint'],
   'durable-blueprint': ['kind', 'componentRef', 'body'],
   'committed-render': ['kind', 'session', 'size'],
+  'epoch-history': ['kind', 'session', 'records'],
   'uncommitted-render': ['kind', 'session'],
   'registered-blueprint': ['kind', 'as'],
 };
 
 const LOCATOR_KEYS: Readonly<Record<string, readonly string[]>> = {
-  render: ['kind', 'session', 'key'],
+  render: ['kind', 'session', 'key', 'epoch'],
   raw: ['kind', 'uri'],
 };
 
@@ -1091,6 +1241,7 @@ const EXPECTATION_KEYS: Readonly<Record<string, readonly string[]>> = {
   'typed-error': ['kind', 'jsonRpcCode', 'dataCode', 'detailAbsent'],
   'outside-typed-set': ['kind'],
   'live-mount': ['kind'],
+  'pinned-mount': ['kind', 'propsInclude'],
 };
 
 function parseSubstrate(bad: BadFn, value: unknown): DurableSubstrateWiring {
@@ -1161,6 +1312,23 @@ function parseSeed(bad: BadFn, seed: unknown): ResourceReadSeed {
         kind: 'uncommitted-render',
         session: requireText(bad, seed['session'], "an uncommitted-render seed's 'session'"),
       };
+    case 'epoch-history': {
+      const session = requireText(bad, seed['session'], "epoch-history seed 'session'");
+      const rawRecords = seed['records'];
+      if (!Array.isArray(rawRecords) || rawRecords.length < 2) {
+        throw bad(
+          "epoch-history seed 'records' must be an array of at least TWO entries — one mint plus one update; a single-record history has nothing superseded to pin",
+        );
+      }
+      const records = rawRecords.map((entry, i) => {
+        if (!isRecord(entry) || !isRecord(entry['props'])) {
+          throw bad(`epoch-history seed record ${i} authors no 'props' object`);
+        }
+        rejectUnknownKeys(bad, entry, ['props'], `epoch-history seed record ${i}`);
+        return { props: entry['props'] as Record<string, unknown> };
+      });
+      return { kind: 'epoch-history', session, records };
+    }
     case 'registered-blueprint':
       return {
         kind: 'registered-blueprint',
@@ -1193,9 +1361,18 @@ function parseLocator(bad: BadFn, as: string, locator: unknown): ResourceReadLoc
   switch (locator['kind']) {
     case 'render': {
       const session = requireText(bad, locator['session'], `probe '${as}' locator 'session'`);
+      const rawEpoch = locator['epoch'];
+      let epoch: number | undefined;
+      if (rawEpoch !== undefined) {
+        if (typeof rawEpoch !== 'number' || !Number.isInteger(rawEpoch) || rawEpoch < 0) {
+          throw bad(`probe '${as}' locator 'epoch' must be a non-negative integer`);
+        }
+        epoch = rawEpoch;
+      }
       const key = locator['key'];
-      if (key === undefined) return { kind: 'render', session };
-      return { kind: 'render', session, key: parseKey(bad, as, key) };
+      const base = { kind: 'render' as const, session, ...(epoch !== undefined ? { epoch } : {}) };
+      if (key === undefined) return base;
+      return { ...base, key: parseKey(bad, as, key) };
     }
     case 'raw':
       return { kind: 'raw', uri: requireText(bad, locator['uri'], `probe '${as}' locator 'uri'`) };
@@ -1234,6 +1411,18 @@ function parseExpectation(bad: BadFn, as: string, expect: unknown): ResourceRead
   switch (expect['kind']) {
     case 'outside-typed-set':
       return { kind: 'outside-typed-set' };
+    case 'pinned-mount': {
+      const rawInclude = expect['propsInclude'];
+      if (rawInclude !== undefined && !isRecord(rawInclude)) {
+        throw bad(`probe '${as}' 'propsInclude' must be an object of expected prop entries`);
+      }
+      return {
+        kind: 'pinned-mount',
+        ...(rawInclude !== undefined
+          ? { propsInclude: rawInclude as Record<string, unknown> }
+          : {}),
+      };
+    }
     case 'live-mount':
       return { kind: 'live-mount' };
     case 'typed-error': {

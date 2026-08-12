@@ -1,0 +1,29 @@
+{
+  "name": "pin-past-the-head-answers-not-found",
+  "description": "Epoch history (#483, SPEC §7.1.2.2): a pinned locator whose epoch exceeds the session's head names a record that does not exist — the same NOT_FOUND on -32002, detail-free, that a missing session answers. Nothing about the head's value may leak through the error shape: a caller must not be able to binary-search the history depth off error variance.",
+  "server": { "durableSubstrate": "all", "liveChannel": true },
+  "caller": "owner",
+  "seeds": [
+    {
+      "kind": "epoch-history",
+      "session": "7a4d9c15-8e2f-4b06-a3c9-5d1f8e0b2c47",
+      "records": [{ "props": { "count": 1 } }, { "props": { "count": 5 } }]
+    }
+  ],
+  "reads": [
+    {
+      "as": "past-head",
+      "locator": {
+        "kind": "render",
+        "session": "7a4d9c15-8e2f-4b06-a3c9-5d1f8e0b2c47",
+        "epoch": 7
+      },
+      "expect": {
+        "kind": "typed-error",
+        "jsonRpcCode": -32002,
+        "dataCode": "NOT_FOUND",
+        "detailAbsent": true
+      }
+    }
+  ]
+}

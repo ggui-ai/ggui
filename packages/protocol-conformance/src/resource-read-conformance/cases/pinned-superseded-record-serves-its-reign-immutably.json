@@ -1,0 +1,42 @@
+{
+  "name": "pinned-superseded-record-serves-its-reign-immutably",
+  "description": "Epoch history (#483, SPEC §7.1.2.2): a session whose head advanced to epoch 1 still serves its superseded epoch-0 record on the pinned locator — with the props of ITS reign (the amended mint state), never the successor's — and serves them byte-identically on a second read. The bare locator meanwhile tracks the live head. Immutability is graded on propsJson only: live-channel tokens on the same meta legitimately differ per read; the RECORD is what may not.",
+  "server": { "durableSubstrate": "all", "liveChannel": true },
+  "caller": "owner",
+  "seeds": [
+    {
+      "kind": "epoch-history",
+      "session": "5e2c7a90-4f1b-4c3d-8a67-9b0e2d4f6a81",
+      "records": [{ "props": { "count": 1 } }, { "props": { "count": 5 } }]
+    }
+  ],
+  "reads": [
+    {
+      "as": "pin0-first",
+      "locator": {
+        "kind": "render",
+        "session": "5e2c7a90-4f1b-4c3d-8a67-9b0e2d4f6a81",
+        "epoch": 0
+      },
+      "expect": { "kind": "pinned-mount", "propsInclude": { "count": 1 } }
+    },
+    {
+      "as": "pin0-second",
+      "locator": {
+        "kind": "render",
+        "session": "5e2c7a90-4f1b-4c3d-8a67-9b0e2d4f6a81",
+        "epoch": 0
+      },
+      "expect": { "kind": "pinned-mount", "propsInclude": { "count": 1 } }
+    },
+    {
+      "as": "head",
+      "locator": {
+        "kind": "render",
+        "session": "5e2c7a90-4f1b-4c3d-8a67-9b0e2d4f6a81"
+      },
+      "expect": { "kind": "pinned-mount", "propsInclude": { "count": 5 } }
+    }
+  ],
+  "identicalMounts": ["pin0-first", "pin0-second"]
+}

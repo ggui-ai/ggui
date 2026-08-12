@@ -83,6 +83,8 @@ interface SeededState {
   readonly durableBlueprint: { readonly componentRef: boolean; readonly body: boolean } | null;
   readonly committedRenders: ReadonlyMap<string, 'under-inline-cap' | 'over-inline-cap'>;
   readonly uncommittedRenders: ReadonlySet<string>;
+  /** #483 — session → per-epoch props (index = epoch; last = head). */
+  readonly epochHistories: ReadonlyMap<string, ReadonlyArray<Record<string, unknown>>>;
   readonly registeredKeys: ReadonlyMap<string, string>;
 }
 
@@ -93,6 +95,7 @@ function applySeeds(seeds: readonly ResourceReadSeed[]): SeededState {
   const identityRecords = new Map<string, { key: string; named: boolean }>();
   const committedRenders = new Map<string, 'under-inline-cap' | 'over-inline-cap'>();
   const uncommittedRenders = new Set<string>();
+  const epochHistories = new Map<string, ReadonlyArray<Record<string, unknown>>>();
   const registeredKeys = new Map<string, string>();
   let durableBlueprint: { componentRef: boolean; body: boolean } | null = null;
 
@@ -119,6 +122,12 @@ function applySeeds(seeds: readonly ResourceReadSeed[]): SeededState {
       case 'registered-blueprint':
         registeredKeys.set(seed.as, REGISTRY_KEY);
         break;
+      case 'epoch-history':
+        epochHistories.set(
+          seed.session,
+          seed.records.map((r) => r.props as Record<string, unknown>),
+        );
+        break;
     }
   }
   return {
@@ -126,6 +135,7 @@ function applySeeds(seeds: readonly ResourceReadSeed[]): SeededState {
     durableBlueprint,
     committedRenders,
     uncommittedRenders,
+    epochHistories,
     registeredKeys,
   };
 }
@@ -182,16 +192,32 @@ function mounted(flaw: Flaw, scenario: ResourceReadScenario): ResourceReadOutcom
 }
 
 /** Split `ui://ggui/render/{sessionId}[/{blueprintKey}]`; null names no locator. */
-function parseLocator(uri: string): { readonly session: string; readonly key?: string } | null {
+function parseEpochPin(segment: string): { readonly base: string; readonly epoch?: number } {
+  const idx = segment.lastIndexOf('#');
+  if (idx < 0) return { base: segment };
+  const suffix = segment.slice(idx + 1);
+  if (!/^(0|[1-9][0-9]*)$/.test(suffix)) return { base: segment };
+  return { base: segment.slice(0, idx), epoch: Number(suffix) };
+}
+
+function parseLocator(
+  uri: string,
+): { readonly session: string; readonly key?: string; readonly epoch?: number } | null {
   const prefix = 'ui://ggui/render/';
   if (!uri.startsWith(prefix)) return null;
   const segments = uri.slice(prefix.length).split('/');
-  const session = segments[0];
-  if (session === undefined || session.length === 0) return null;
-  if (segments.length === 1) return { session };
-  const key = segments[1];
-  if (segments.length > 2 || key === undefined || key.length === 0) return null;
-  return { session, key };
+  const first = segments[0];
+  if (first === undefined || first.length === 0) return null;
+  if (segments.length === 1) {
+    const { base, epoch } = parseEpochPin(first);
+    if (base.length === 0) return null;
+    return { session: base, ...(epoch !== undefined ? { epoch } : {}) };
+  }
+  const rawKey = segments[1];
+  if (segments.length > 2 || rawKey === undefined || rawKey.length === 0) return null;
+  const { base: key, epoch } = parseEpochPin(rawKey);
+  if (key.length === 0) return null;
+  return { session: first, key, ...(epoch !== undefined ? { epoch } : {}) };
 }
 
 /**
@@ -252,7 +278,23 @@ function makeDriver(flaw: Flaw = 'none'): ResourceReadScenarioDriver {
         if (flaw === 'malformed-uri-answers-not-found') return notFound(flaw, uri);
         return errorOutcome(INVALID_PARAMS_CODE, `Invalid resource URI: ${uri}`);
       }
-      const { session, key } = parsed;
+      const { session, key, epoch } = parsed;
+
+      // Epoch history (#483): bare = live head; #N = pinned record;
+      // past-head = the same detail-free NOT_FOUND a miss answers.
+      const history = owns ? state.epochHistories.get(session) : undefined;
+      if (history !== undefined) {
+        const head = history.length - 1;
+        if (epoch !== undefined && epoch > head) return notFound(flaw, session);
+        const record = history[epoch ?? head]!;
+        return {
+          kind: 'mount',
+          renderMeta: {
+            codeB64: 'ZXhwb3J0IGRlZmF1bHQgKCkgPT4gbnVsbA==',
+            propsJson: JSON.stringify(record),
+          },
+        };
+      }
 
       if (owns && state.committedRenders.has(session)) {
         if (hasChannel) return mounted(flaw, scenario);

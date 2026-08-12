@@ -99,6 +99,8 @@ function projectRenderMeta(html: string): ResourceReadRenderMeta {
     ...(slice.wsUrl !== undefined ? { wsUrl: slice.wsUrl } : {}),
     ...(slice.wsToken !== undefined ? { wsToken: slice.wsToken } : {}),
     ...(slice.kind !== undefined ? { kind: slice.kind } : {}),
+    // #483 — the epoch cases grade the record props.
+    ...(slice.propsJson !== undefined ? { propsJson: slice.propsJson } : {}),
   };
 }
 
@@ -228,6 +230,47 @@ async function boot(
       case "uncommitted-render":
         await renderStore.create({ id: seed.session, appId: OWNER_APP_ID });
         break;
+      case "epoch-history": {
+        // records[0] = mint (epoch 0); each later record = one
+        // ggui_update. Seed the same event shapes the real handlers
+        // append (epoch-stamped props event per reign so every
+        // superseded record reconstructs; boundary AFTER its props).
+        const base: ComponentGguiSession = {
+          type: "component",
+          id: seed.session,
+          appId: OWNER_APP_ID,
+          componentCode: COMPONENT_CODE,
+          props: seed.records[0]!.props as Record<string, unknown>,
+          eventSequence: 0,
+          createdAt: 1_700_000_000_000,
+          lastActivityAt: 1_700_000_000_000,
+          expiresAt: 1_900_000_000_000,
+        };
+        await renderStore.commit({ render: base, appId: OWNER_APP_ID });
+        await renderStore.appendEvent({
+          sessionId: seed.session,
+          type: "ui.updated",
+          data: { sessionId: seed.session, props: seed.records[0]!.props, epoch: 0 },
+        });
+        for (let epoch = 1; epoch < seed.records.length; epoch += 1) {
+          const props = seed.records[epoch]!.props as Record<string, unknown>;
+          await renderStore.appendEvent({
+            sessionId: seed.session,
+            type: "ui.updated",
+            data: { sessionId: seed.session, props, epoch },
+          });
+          await renderStore.appendEvent({
+            sessionId: seed.session,
+            type: "ui.reminted",
+            data: { epoch },
+          });
+          await renderStore.commit({
+            render: { ...base, props, epoch },
+            appId: OWNER_APP_ID,
+          });
+        }
+        break;
+      }
       case "registered-blueprint": {
         const registered = await registerBlueprint(
           { embedding: new MockEmbeddingProvider(), vectorStore, index },
