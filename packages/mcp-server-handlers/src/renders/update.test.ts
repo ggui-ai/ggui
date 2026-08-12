@@ -546,20 +546,25 @@ describe('createGguiUpdateHandler', () => {
   });
 
   describe('resultMeta — ai.ggui/render slice meta emission', () => {
-    it('emits slice meta with propsJson even when bootstrap-emitting deps are unwired (default runtimeUrl)', async () => {
+    it('renderAsNew: true emits slice meta with propsJson even when bootstrap-emitting deps are unwired (default runtimeUrl)', async () => {
       // Once there's any patched props (always the case after a
       // successful update — applyGguiSessionPatch sets `props: patch`),
-      // the envelope emits the full mount package (#481) with the
-      // propsJson + a default runtimeUrl. The cross-host postMessage
-      // fallback path needs the runtimeUrl to re-mount on hosts that
-      // strip the live trio; the default is /_ggui/iframe-runtime.js.
+      // the true-branch envelope emits the full mount package (#481)
+      // with the propsJson + a default runtimeUrl. A host minting a
+      // view needs the runtimeUrl to mount on hosts that strip the
+      // live trio; the default is /_ggui/iframe-runtime.js.
       const store = new InMemoryGguiSessionStore();
       const { sessionId } = await seedRender({
         store,
         initialProps: { x: 1 },
       });
       const handler = createGguiUpdateHandler({ renderStore: store });
-      const input = { sessionId, kind: 'replace' as const, props: { x: 2 } };
+      const input = {
+        sessionId,
+        kind: 'replace' as const,
+        props: { x: 2 },
+        renderAsNew: true,
+      };
       const out = await handler.handler(input, ctx());
       const meta = await handler.resultMeta?.(out, input, ctx());
       expect(meta).toBeDefined();
@@ -646,10 +651,13 @@ describe('createGguiUpdateHandler', () => {
       );
     });
 
-    it('default (renderAsNew omitted) emits the forwarding slice with NO mount pointer (#482)', async () => {
+    it('default (renderAsNew omitted) emits NO _meta at all (#482)', async () => {
       // The tool's essential semantic: update the ALREADY-MOUNTED UI.
-      // No `_meta.ui` mount pointer ⇒ hosts that mint per-result views
-      // mint nothing; the mounted frame repaints via its live rungs.
+      // Live probing (2026-08-12) showed hosts mint a per-result view
+      // whenever a UI-bound tool's success result carries ANY `_meta`
+      // — the only proven mint-nothing shape is no `_meta`. The
+      // mounted frame repaints via its live rungs; the forwarding
+      // slice is deliberately sacrificed on the default branch.
       const store = new InMemoryGguiSessionStore();
       const { sessionId } = await seedRender({
         store,
@@ -665,20 +673,7 @@ describe('createGguiUpdateHandler', () => {
       const input = { sessionId, kind: 'replace' as const, props: { count: 5 } };
       const out = await handler.handler(input, ctx());
       const meta = await handler.resultMeta?.(out, input, ctx());
-      expect(meta).toBeDefined();
-      expect(Object.keys(meta ?? {})).not.toContain('ui');
-      expect(Object.keys(meta ?? {})).not.toContain('ui/resourceUri');
-      const parsed = parseMcpAppAiGguiRenderMeta(meta);
-      expect(parsed.ok).toBe(true);
-      if (!parsed.ok) return;
-      const { meta: m } = parsed;
-      // Forwarding slice: patched props + static code channel only —
-      // mount-time view fields stay off the default shape.
-      expect(m?.propsJson).toBe(JSON.stringify({ count: 5 }));
-      expect(m?.codeB64).toBeDefined();
-      expect(m?.contextSlots).toBeUndefined();
-      expect(m?.permissionsPolicy).toBeUndefined();
-      expect(m?.kind).toBeUndefined();
+      expect(meta).toBeUndefined();
       // Agent-facing structuredContent keeps the mount URI either way.
       expect(out.resourceUri).toContain(sessionId);
     });
@@ -693,7 +688,12 @@ describe('createGguiUpdateHandler', () => {
         themeMode: 'light',
         themeProvider: () => ({ id: 'indigo', mode: 'dark' }),
       });
-      const input = { sessionId, kind: 'replace' as const, props: { count: 1 } };
+      const input = {
+        sessionId,
+        kind: 'replace' as const,
+        props: { count: 1 },
+        renderAsNew: true,
+      };
       const out = await handler.handler(input, ctx());
       const meta = await handler.resultMeta?.(out, input, ctx());
       const parsed = parseMcpAppAiGguiRenderMeta(meta);
