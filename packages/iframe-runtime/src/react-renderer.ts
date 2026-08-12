@@ -137,12 +137,17 @@ class RcrErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState>
   }
 
   render(): ReactNode {
-    const { error, autoRetrying, catchCount } = this.state;
+    const { error, autoRetrying } = this.state;
     if (error === null) return this.props.children;
 
     // The two fallback UIs match the host-SDK error boundary
     // verbatim (same inline styles so operator-visible DOM is
     // identical between the host-SDK and iframe-renderer paths).
+    // Colors inherit the themed body (`--ggui-color-onSurface`) with
+    // opacity for hierarchy — hardcoded white-alpha text was
+    // illegible on light shells (#481); the boundary must stay
+    // readable on WHATEVER background the theme painted, including
+    // when theme CSS itself failed to inject (browser-default white).
     const FONT = '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
 
     if (autoRetrying) {
@@ -158,15 +163,16 @@ class RcrErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState>
             gap: 8,
             fontFamily: FONT,
             fontSize: 13,
-            color: 'rgba(255,255,255,0.4)',
+            color: 'var(--ggui-color-onSurface, inherit)',
+            opacity: 0.6,
           },
         },
         createElement('div', {
           style: {
             width: 16,
             height: 16,
-            border: '2px solid rgba(255,255,255,0.15)',
-            borderTopColor: 'rgba(255,255,255,0.5)',
+            border: '2px solid rgba(128,128,128,0.25)',
+            borderTopColor: 'currentColor',
             borderRadius: '50%',
             animation: 'ggui-err-spin 0.6s linear infinite',
           },
@@ -189,6 +195,7 @@ class RcrErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState>
           gap: 12,
           textAlign: 'center',
           fontFamily: FONT,
+          color: 'var(--ggui-color-onSurface, inherit)',
         },
       },
       createElement(
@@ -199,6 +206,7 @@ class RcrErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState>
             height: 48,
             borderRadius: 14,
             background: 'rgba(239, 68, 68, 0.1)',
+            color: '#ef4444',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -209,12 +217,12 @@ class RcrErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState>
       ),
       createElement(
         'div',
-        { style: { fontSize: 14, fontWeight: 600, color: 'rgba(255,255,255,0.8)' } },
+        { style: { fontSize: 14, fontWeight: 600, opacity: 0.9 } },
         'Something went wrong',
       ),
       createElement(
         'div',
-        { style: { fontSize: 12, color: 'rgba(255,255,255,0.4)', maxWidth: 280, lineHeight: 1.4 } },
+        { style: { fontSize: 12, opacity: 0.6, maxWidth: 280, lineHeight: 1.4 } },
         'This component encountered an error. Try asking for a different view.',
       ),
       createElement(
@@ -225,9 +233,10 @@ class RcrErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState>
             marginTop: 4,
             padding: '8px 20px',
             borderRadius: 8,
-            border: '1px solid rgba(255,255,255,0.15)',
-            background: 'rgba(255,255,255,0.08)',
-            color: 'rgba(255,255,255,0.7)',
+            border: '1px solid currentColor',
+            background: 'transparent',
+            color: 'inherit',
+            opacity: 0.75,
             fontSize: 13,
             fontWeight: 500,
             cursor: 'pointer',
@@ -235,13 +244,40 @@ class RcrErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState>
         },
         'Retry',
       ),
-      catchCount > 1
-        ? createElement(
-            'div',
-            { style: { fontSize: 11, color: 'rgba(255,255,255,0.2)' } },
-            error.message,
-          )
-        : null,
+      // Diagnostic is ALWAYS reachable (#481 ruling: errors must be
+      // visible) — collapsed by default, legible when opened.
+      createElement(
+        'details',
+        {
+          style: {
+            marginTop: 8,
+            maxWidth: 320,
+            width: '100%',
+            textAlign: 'left',
+            opacity: 0.65,
+          },
+        },
+        createElement(
+          'summary',
+          { style: { fontSize: 11, cursor: 'pointer' } },
+          'Error details',
+        ),
+        createElement(
+          'pre',
+          {
+            style: {
+              fontSize: 11,
+              fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+              whiteSpace: 'pre-wrap',
+              overflowWrap: 'anywhere',
+              margin: '6px 0 0',
+              maxHeight: 140,
+              overflow: 'auto',
+            },
+          },
+          error.message,
+        ),
+      ),
     );
   }
 }

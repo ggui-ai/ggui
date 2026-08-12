@@ -51,6 +51,7 @@ async function seedRender(opts: {
   sessionId?: string;
   propsSpec?: PropsSpec;
   initialProps?: JsonObject;
+  contextSpec?: ComponentGguiSession['contextSpec'];
 }): Promise<{ sessionId: string }> {
   const sessionId = opts.sessionId ?? 'render-1';
   const appId = opts.appId ?? APP_A;
@@ -61,6 +62,7 @@ async function seedRender(opts: {
     componentCode: 'export default function X(){return null}',
     props: opts.initialProps ?? { count: 0 },
     ...(opts.propsSpec ? { propsSpec: opts.propsSpec } : {}),
+    ...(opts.contextSpec ? { contextSpec: opts.contextSpec } : {}),
     eventSequence: 0,
     createdAt: NOW_MS,
     lastActivityAt: NOW_MS,
@@ -545,9 +547,9 @@ describe('createGguiUpdateHandler', () => {
 
   describe('resultMeta — ai.ggui/render slice meta emission', () => {
     it('emits slice meta with propsJson even when bootstrap-emitting deps are unwired (default runtimeUrl)', async () => {
-      // Post-Phase-B: update.resultMeta is props-only. Once there's
-      // any patched props (always the case after a successful update —
-      // applyGguiSessionPatch sets `props: patch`), the envelope emits the
+      // Once there's any patched props (always the case after a
+      // successful update — applyGguiSessionPatch sets `props: patch`),
+      // the envelope emits the full mount package (#481) with the
       // propsJson + a default runtimeUrl. The cross-host postMessage
       // fallback path needs the runtimeUrl to re-mount on hosts that
       // strip the live trio; the default is /_ggui/iframe-runtime.js.
@@ -568,11 +570,19 @@ describe('createGguiUpdateHandler', () => {
       expect(parsed.meta?.runtimeUrl).toBe('/_ggui/iframe-runtime.js');
     });
 
-    it('emits slice meta with propsJson + sessionId/auth/runtime on the patched view (props-only post-trim)', async () => {
+    it('emits a BOOTABLE mount package: propsJson + contextSlots + auth/runtime (#481)', async () => {
+      // Hosts mint a fresh view from any mountable result (claude.ai,
+      // proven live 2026-08-12) — a frame booted from THIS envelope
+      // must self-suffice. The 2026-05-13 props-only trim dropped
+      // contextSlots and every update-minted view of a contextSpec
+      // contract crashed at boot; this pins the revert.
       const store = new InMemoryGguiSessionStore();
       const { sessionId } = await seedRender({
         store,
         initialProps: { count: 0 },
+        contextSpec: {
+          draftText: { schema: { type: 'string' }, debounceMs: 300 },
+        },
       });
       const handler = createGguiUpdateHandler({
         renderStore: store,
@@ -600,22 +610,31 @@ describe('createGguiUpdateHandler', () => {
       // propsJson carries the POST-patch props (the source of truth
       // for the spec-compliant postMessage re-apply path).
       expect(m?.propsJson).toBe(JSON.stringify({ count: 5 }));
-      // Post-Phase-B props-only trim: mount-time fields (codeUrl /
-      // kind / contextSlots /
-      // streamWebSocketLocalTools / contractHash / validatorsUrl /
-      // permissionsPolicy) are NOT re-emitted on update — the iframe
-      // already has them from its initial render bootstrap.
-      expect(m?.codeUrl).toBeUndefined();
-      expect(m?.kind).toBeUndefined();
-      expect(m?.contextSlots).toBeUndefined();
+      // Mount-time view fields ride every update (#481) — an
+      // update-minted frame boots identically to a render-minted one.
+      expect(m?.contextSlots).toEqual([
+        {
+          name: 'draftText',
+          contextName: 'DraftTextContext',
+          schema: { type: 'string' },
+          default: '',
+          debounceMs: 300,
+        },
+      ]);
+      // Not declared by this fixture ⇒ legitimately absent.
       expect(m?.permissionsPolicy).toBeUndefined();
+      expect(m?.kind).toBeUndefined();
+      // Bootstrap-channel fields update does not compose (no codeStore
+      // / validator hashing in its deps): still absent. A frame booted
+      // from an update envelope gets its code via `codeB64` (below) or
+      // falls back to the live channels.
+      expect(m?.codeUrl).toBeUndefined();
       expect(m?.streamWebSocketLocalTools).toBeUndefined();
       expect(m?.contractHash).toBeUndefined();
       expect(m?.validatorsUrl).toBeUndefined();
-      // `codeB64` is the deliberate EXCEPTION to the props-only trim
-      // (#471): on a fetch-blocked host the iframe repaints an update
-      // by re-seeding from this meta, and a seed needs a static-content
-      // channel — propsJson alone projects to nothing mountable.
+      // `codeB64` static-content channel (#471): on a fetch-blocked
+      // host a seed needs code — propsJson alone projects to nothing
+      // mountable.
       expect(m?.codeB64).toBe(
         Buffer.from('export default function X(){return null}', 'utf8').toString('base64'),
       );

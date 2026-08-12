@@ -599,28 +599,28 @@ export function createGguiUpdateHandler(
      * round-trip. The WS `props_update` frame remains the first-party
      * fast path; the slice meta is the cross-host fallback.
      *
-     * **Why props-only:** update mutates props, not the contract. The
-     * iframe is already mounted with code + actionSpec + contextSpec +
-     * permissions from its initial render slice meta; those are
-     * mount-time invariants. Re-emitting them on every update wasted
-     * 5-50KB per call. Today's update slice meta carries only what
-     * actually changed (propsJson) plus the auth/identity/runtime
-     * fields the cross-host fallback needs to re-bind.
+     * **Why a full mount package (2026-08-12, #481):** update mutates
+     * props, not the contract — but hosts mint a FRESH view from any
+     * mountable-looking result (claude.ai proven live: view minting
+     * keys on result shape). A frame booted from THIS envelope must
+     * therefore be self-sufficient: the 2026-05-13 props-only trim
+     * dropped `contextSlots`, so every update-minted view of a
+     * contract with contextSpec crashed at boot
+     * (`useGguiContext('draftText'): no Context registered`). The
+     * durable-record rule decides it: results are replayed by clients
+     * we cannot enumerate, so every mountable result carries the
+     * mount-time view fields, not just the patched props.
      *
      * Skipped entirely when no propsJson + no minter + no runtimeUrl —
      * keeps the response byte-identical for hosts that don't read
      * `_meta` (the structuredContent reply is the source of truth).
      */
     resultMeta: async (output, _input, ctx) => {
-      // Load the just-patched render to derive the projected propsJson
-      // AND the inline `codeB64`. The remaining view fields
-      // (contextSlots / permissionsPolicy / compiledValidators) are
-      // mount-time invariants — the initial render already shipped
-      // them, and `ggui_update` patches `props` only, never the
-      // contract specs. `codeB64` rides updates deliberately: on a
-      // fetch-blocked host the iframe repaints by re-seeding from the
-      // tool-result meta, and a seed needs a static-content channel —
-      // propsJson alone projects to nothing mountable.
+      // Load the just-patched render and derive the FULL projected
+      // view — the same `deriveRenderMeta` projection `ggui_render`
+      // emits, so an update-minted frame boots identically to a
+      // render-minted one (contextSlots, permissions, theme, gadgets,
+      // kind, codeB64 all ride along; see the emitter docstring).
       let view: RenderMetaView = {};
       let renderThemeId: string | undefined;
       // `lastSequence` — monotonic event-ledger cursor stamped on every
@@ -685,6 +685,20 @@ export function createGguiUpdateHandler(
           : {}),
         ...(lastSequence !== undefined ? { lastSequence } : {}),
         ...(view.propsJson !== undefined ? { propsJson: view.propsJson } : {}),
+        // Mount-time view fields — required for hosts that mint a
+        // fresh view from this result (#481). Spread shapes mirror
+        // `ggui_render`'s emitter exactly.
+        ...(view.contextSlots !== undefined
+          ? { contextSlots: [...view.contextSlots] }
+          : {}),
+        ...(view.permissionsPolicy !== undefined
+          ? { permissionsPolicy: [...view.permissionsPolicy] }
+          : {}),
+        ...(view.theme !== undefined ? { theme: view.theme } : {}),
+        ...(view.gadgets !== undefined && view.gadgets.length > 0
+          ? { gadgets: view.gadgets }
+          : {}),
+        ...(view.kind ? { kind: view.kind } : {}),
         ...(view.codeB64 !== undefined ? { codeB64: view.codeB64 } : {}),
       };
       // `_meta.ui.resourceUri` mirrors ggui_render's result meta so

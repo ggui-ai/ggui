@@ -105,9 +105,14 @@ class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundarySta
   }
 
   render(): ReactNode {
-    const { error, autoRetrying, catchCount } = this.state;
+    const { error, autoRetrying } = this.state;
 
     if (!error) return this.props.children;
+
+    // Colors inherit the themed body (`--ggui-color-onSurface`) with
+    // opacity for hierarchy — hardcoded white-alpha text was illegible
+    // on light surfaces (#481). Twin of the iframe-runtime boundary
+    // (react-renderer.ts); keep the two verbatim-matched.
 
     // Auto-retrying — show subtle loading state
     if (autoRetrying) {
@@ -116,11 +121,11 @@ class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundarySta
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           padding: 24, minHeight: 80, gap: 8,
           fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-          fontSize: 13, color: 'rgba(255,255,255,0.4)',
+          fontSize: 13, color: 'var(--ggui-color-onSurface, inherit)', opacity: 0.6,
         }}>
           <div style={{
-            width: 16, height: 16, border: '2px solid rgba(255,255,255,0.15)',
-            borderTopColor: 'rgba(255,255,255,0.5)', borderRadius: '50%',
+            width: 16, height: 16, border: '2px solid rgba(128,128,128,0.25)',
+            borderTopColor: 'currentColor', borderRadius: '50%',
             animation: 'ggui-err-spin 0.6s linear infinite',
           }} />
           Retrying...
@@ -135,36 +140,44 @@ class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundarySta
         display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
         padding: '32px 24px', minHeight: 120, gap: 12, textAlign: 'center',
         fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+        color: 'var(--ggui-color-onSurface, inherit)',
       }}>
         <div style={{
           width: 48, height: 48, borderRadius: 14,
-          background: 'rgba(239, 68, 68, 0.1)', display: 'flex',
+          background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', display: 'flex',
           alignItems: 'center', justifyContent: 'center', fontSize: 22,
         }}>
           !
         </div>
-        <div style={{ fontSize: 14, fontWeight: 600, color: 'rgba(255,255,255,0.8)' }}>
+        <div style={{ fontSize: 14, fontWeight: 600, opacity: 0.9 }}>
           Something went wrong
         </div>
-        <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.4)', maxWidth: 280, lineHeight: 1.4 }}>
+        <div style={{ fontSize: 12, opacity: 0.6, maxWidth: 280, lineHeight: 1.4 }}>
           This component encountered an error. Try asking for a different view.
         </div>
         <button
           onClick={() => this.setState({ error: null, catchCount: 0 })}
           style={{
             marginTop: 4, padding: '8px 20px', borderRadius: 8,
-            border: '1px solid rgba(255,255,255,0.15)', background: 'rgba(255,255,255,0.08)',
-            color: 'rgba(255,255,255,0.7)', fontSize: 13, fontWeight: 500,
+            border: '1px solid currentColor', background: 'transparent',
+            color: 'inherit', opacity: 0.75, fontSize: 13, fontWeight: 500,
             cursor: 'pointer',
           }}
         >
           Retry
         </button>
-        {catchCount > 1 && (
-          <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.2)' }}>
+        {/* Diagnostic is ALWAYS reachable (#481 ruling) — collapsed by
+            default, legible when opened. */}
+        <details style={{ marginTop: 8, maxWidth: 320, width: '100%', textAlign: 'left', opacity: 0.65 }}>
+          <summary style={{ fontSize: 11, cursor: 'pointer' }}>Error details</summary>
+          <pre style={{
+            fontSize: 11, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+            whiteSpace: 'pre-wrap', overflowWrap: 'anywhere',
+            margin: '6px 0 0', maxHeight: 140, overflow: 'auto',
+          }}>
             {error.message}
-          </div>
-        )}
+          </pre>
+        </details>
       </div>
     );
   }
