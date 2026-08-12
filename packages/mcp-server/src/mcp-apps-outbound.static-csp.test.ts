@@ -75,6 +75,32 @@ describe('registerGguiRenderResource — extraConnectUrls in the static CSP decl
     ]);
   });
 
+  it('a STALE rt-<hash> URI (previous deploy) still reads back the CURRENT shell + declaration', async () => {
+    const server = new McpServer({ name: 'test', version: '0.0.0' });
+    registerGguiRenderResource(
+      server,
+      '<html>current shell</html>',
+      undefined,
+      RUNTIME_URL,
+      [WS_URL, 'https://live.example'],
+    );
+    const client = new Client({ name: 'stale-host', version: '0.0.0' });
+    const [ct, st] = InMemoryTransport.createLinkedPair();
+    await Promise.all([server.connect(st), client.connect(ct)]);
+    // A hash no current registration produced — what a host with a
+    // stale tool-declaration snapshot asks for after our deploy.
+    const stale = await client.readResource({
+      uri: `${GGUI_RENDER_RESOURCE_URI}/rt-000000000000`,
+    });
+    const content = stale.contents[0] as {
+      text?: string;
+      _meta?: { ui?: { csp?: { connectDomains?: string[] } } };
+    };
+    expect(content.text).toBe('<html>current shell</html>');
+    expect(content._meta?.ui?.csp?.connectDomains).toContain('wss://live.example');
+    await client.close();
+  });
+
   it('a meta-only change mints a NEW versioned URI (hosts cache the declaration with the bytes)', () => {
     const a = registerGguiRenderResource(
       new McpServer({ name: 'a', version: '0.0.0' }),

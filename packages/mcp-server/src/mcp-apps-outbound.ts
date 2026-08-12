@@ -699,6 +699,36 @@ export function registerGguiRenderResource(
     },
     serveShell
   );
+  // STALE-HASH grandfather template — `rt-{shellHash}` for ANY hash.
+  // Hosts snapshot tool declarations (claude.ai stores the connector's
+  // tool list server-side), so after a shell-changing deploy they keep
+  // asking for the PREVIOUS deploy's versioned URI. Without this
+  // template that read falls through to the per-session
+  // `ui://ggui/render/{sessionId}` template (a bare `rt-abc…` segment
+  // parses as a sessionId), resolves no render, and the host shows
+  // "unable to reach" — observed live on claude.ai the first deploy
+  // after the URI scheme changed (#471 round 12). Serving the CURRENT
+  // shell under the stale URI restores the pre-content-addressing
+  // behavior for stale hosts (at worst they cache today's shell under
+  // yesterday's key) while fresh declarations keep the cache-bust
+  // property. MUST register before the session templates
+  // (`installMcpAppsOutbound` orders this call first; the SDK matches
+  // templates in registration order).
+  server.registerResource(
+    "ggui-render-versioned-grandfather",
+    new ResourceTemplate(`${GGUI_RENDER_RESOURCE_URI}/rt-{shellHash}`, {
+      // No list-callback — same posture as the session templates; the
+      // canonical URI is the one advertised on tool declarations.
+      list: undefined,
+    }),
+    {
+      title: "ggui render (content-addressed, any revision)",
+      description:
+        "Grandfather route for content-addressed shell URIs from earlier deploys — hosts holding a stale tool-declaration snapshot read their old rt-<hash> URI and receive the CURRENT shell.",
+      mimeType: GGUI_RENDER_RESOURCE_MIME,
+    },
+    serveShell
+  );
   return versionedUri;
 }
 
