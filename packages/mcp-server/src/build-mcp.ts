@@ -75,6 +75,16 @@ export interface BuildMcpServerOptions {
    */
   readonly publicBaseUrl?: string;
   /**
+   * Live-channel origins for the static shell's CSP declaration —
+   * forwarded to `installMcpAppsOutbound`. Deployments that set no
+   * `publicBaseUrl` (the cloud pod) pass their `wsUrl` + its ws→http
+   * origin flip here so the mounted iframe's `connect-src` covers the
+   * SSE / HTTP-polling session API and the WebSocket; otherwise
+   * cross-origin hosts CSP-block every network rung of the failover
+   * ladder (#471 round 11).
+   */
+  readonly extraConnectUrls?: readonly (string | undefined)[];
+  /**
    * Identity-kind allowlist for tool registration. When set, handlers
    * whose `allowedFor` field is non-empty AND does NOT intersect this
    * list are skipped at registration time (NOT registered with the MCP
@@ -172,6 +182,9 @@ export function buildMcpServer(
         : {}),
       ...(opts.publicBaseUrl !== undefined
         ? { publicBaseUrl: opts.publicBaseUrl }
+        : {}),
+      ...(opts.extraConnectUrls !== undefined
+        ? { extraConnectUrls: opts.extraConnectUrls }
         : {}),
     }));
   }

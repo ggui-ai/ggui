@@ -614,9 +614,24 @@ export function registerGguiRenderResource(
    * declaration at all and spec-compliant hosts applied the
    * restrictive default (`connect-src 'none'`).
    */
-  runtimeUrl?: string
+  runtimeUrl?: string,
+  /**
+   * Additional URLs whose origins the mounted iframe must be able to
+   * `connect-src` — unioned into `connectDomains` by
+   * {@link buildCspMeta}. The load-bearing entries are the live-channel
+   * origins (`wsUrl` + its ws→http origin flip): the STATIC shell is
+   * the resource cross-origin hosts (claude.ai) mount and derive the
+   * frame CSP from, so origins declared only on per-render resources
+   * never reach the frame. Without these, deployments that set no
+   * `publicBaseUrl` (the cloud pod — it feeds Origin/Host enforcement)
+   * declare only the runtime-CDN origin and every SSE / HTTP-polling /
+   * WS rung of the failover ladder is CSP-blocked in the mounted
+   * iframe — observed live on claude.ai (#471 round 11: frame booted
+   * with `connect-src assets.mcp.ggui.ai` only).
+   */
+  extraConnectUrls?: readonly (string | undefined)[]
 ): string {
-  const cspMeta = buildCspMeta(publicBaseUrl, runtimeUrl);
+  const cspMeta = buildCspMeta(publicBaseUrl, runtimeUrl, extraConnectUrls);
 
   // Content-addressed shell URI (2026-08-12, the stale-shell bust).
   // Hosts cache the prefetched shell keyed on the RESOURCE URI —
@@ -2590,6 +2605,14 @@ export function installMcpAppsOutbound(
      * there via `<McpAppIframe>`.
      */
     readonly publicBaseUrl?: string;
+    /**
+     * Live-channel origins for the static shell's CSP declaration —
+     * forwarded to `registerGguiRenderResource` (see its
+     * `extraConnectUrls` docstring). Callers pass the deployment's
+     * `wsUrl` and its http-origin flip so the mounted iframe's
+     * `connect-src` covers the SSE/polling session API and the WS.
+     */
+    readonly extraConnectUrls?: readonly (string | undefined)[];
   } = {}
 ): { readonly shellResourceUri: string } {
   advertiseMcpAppsUiCapability(server);
@@ -2601,7 +2624,8 @@ export function installMcpAppsOutbound(
     server,
     opts.shellHtml,
     opts.publicBaseUrl,
-    opts.selfContained?.runtimeUrl
+    opts.selfContained?.runtimeUrl,
+    opts.extraConnectUrls
   );
   if (opts.selfContained) {
     registerGguiRenderResourceTemplate(server, opts.selfContained);

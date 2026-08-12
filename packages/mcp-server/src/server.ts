@@ -120,7 +120,11 @@ import {
   createGguiOpsRegisterBlueprintHandler,
   createGguiOpsUpdateBlueprintHandler,
 } from "@ggui-ai/mcp-server-handlers/ops-blueprint";
-import { setCacheTraceSink, setPayloadTraceSink } from "@ggui-ai/mcp-server-handlers/renders";
+import {
+  setCacheTraceSink,
+  setPayloadTraceSink,
+  wsOriginToHttpOrigin,
+} from "@ggui-ai/mcp-server-handlers/renders";
 import type { BlueprintDurabilityDeps } from "@ggui-ai/mcp-server-handlers/renders";
 import type { OperatorConfig, ThemeConfig } from "@ggui-ai/project-config";
 import type { DiscoveredPrimitiveCatalog, LoadedTheme } from "@ggui-ai/project-config/node";
@@ -4615,6 +4619,18 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
     // (`connect-src 'none'`) blocks the iframe from fetching the
     // runtime bundle and opening the WebSocket.
     ...(opts.publicBaseUrl !== undefined ? { publicBaseUrl: opts.publicBaseUrl } : {}),
+    // Live-channel origins for the static shell's CSP declaration:
+    // the WS endpoint + its http-origin flip (the session-API base the
+    // sseUrl/pollingUrl stamps derive from when `publicBaseUrl` is
+    // unset — the cloud pod's posture, see compose.ts's Origin/Host
+    // ruling). Cross-origin hosts (claude.ai) build the frame CSP from
+    // the STATIC shell resource they mount; per-render declarations
+    // never reach it, so without these entries every network rung of
+    // the failover ladder (WS, SSE, HTTP polling) is `connect-src`-
+    // blocked in the frame — observed live in #471 round 11.
+    ...(mcpAppsEnabled
+      ? { extraConnectUrls: [wsUrl, wsOriginToHttpOrigin(wsUrl)] }
+      : {}),
     // Per-render self-contained shell registration. Only wired
     // when MCP Apps is on AND the render store is resolved —
     // both preconditions for `ggui_render.resultMeta` stamping a
