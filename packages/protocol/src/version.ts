@@ -304,6 +304,40 @@
  * it), not a new member.
  *
  * --------------------------------------------------------------------
+ * Update mount-identity intent (2026-08-12, ggui#481 + ggui#482): a
+ * MINOR for the `@ggui-ai/protocol` wave, riding the same next cut
+ * (≥ 0.9.0). One motivation: hosts mint per-result views from result
+ * shape (claude.ai, proven live), so `ggui_update`'s result must
+ * either be a complete mount package or carry no mount pointer at
+ * all — the props-only-with-pointer middle ground shipped views that
+ * crashed at boot on every contextSpec contract.
+ *
+ *   mi1. **`updateInputSchema` arms gain `renderAsNew?: boolean`**
+ *      (both `replace` and `merge`; optional, additive — every input
+ *      that parsed before parses identically). Omitted/false: the
+ *      tool's essential semantic, update the already-mounted UI.
+ *      `true`: the result is a fresh self-sufficient render record.
+ *      SPEC §7.1.2 "Mount-identity intent" is the normative text.
+ *
+ *   mi2. **`ggui_update` result-`_meta` DEFAULT shape change**
+ *      (handler-side, not a protocol type): the default emission
+ *      drops the `_meta.ui` mount pointer and the mount-time view
+ *      fields (props-only forwarding slice); `renderAsNew: true`
+ *      emits the FULL `deriveRenderMeta` package + pointer. Stated
+ *      plainly rather than called additive: a host that depended on
+ *      update results carrying `_meta.ui.resourceUri` sees the
+ *      default change. Pre-launch no-compat; the kit is the arbiter
+ *      and no fixture pins update result-meta, so the wave
+ *      classification stays MINOR — and that silence is itself the
+ *      FLAGGED gap: update-surface conformance cases join the
+ *      SSE/bridge follow-up ticket (No Silent Block, tracked on
+ *      ggui#482).
+ *
+ * PROTOCOL_VERSION unchanged — no wire frame changed shape; the
+ * `ai.ggui/render` slice's field set was never closed (verbatim-carry
+ * posture, same as if1/sm1).
+ *
+ * --------------------------------------------------------------------
  * Credential-broker surface retired (2026-08-08, BREAKING, pre-launch,
  * ggui#436). The `system` frame's auth vocabulary and the
  * `ggui_request_credential` tool leave the protocol entirely.
