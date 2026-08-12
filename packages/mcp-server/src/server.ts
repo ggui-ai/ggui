@@ -203,6 +203,7 @@ import {
   createGguiSubmitActionHandler,
   createGguiSyncContextHandler,
   createGguiUpdateHandler,
+  createGguiAmendHandler,
   InMemoryToolIdentityCatalogStore,
   createInMemoryProvisionalPreviewRegistry,
   type ChannelNotifier,
@@ -1167,6 +1168,22 @@ export function defaultHandlers(deps: {
         ...(deps.update.themeMode !== undefined ? { themeMode: deps.update.themeMode } : {}),
         ...(deps.update.themeProvider !== undefined
           ? { themeProvider: deps.update.themeProvider }
+          : {}),
+      }) as SharedHandler<ZodRawShape, ZodRawShape>
+    );
+    // ggui_amend rides the SAME deps slot (#483 tool split): one
+    // mutation core, one wiring. It reads only the mutation-flow deps
+    // (renderStore / identity / notifier) — the bootstrap-emission
+    // options above are meaningless to a tool that emits no result
+    // meta by design.
+    handlers.push(
+      createGguiAmendHandler({
+        renderStore: deps.update.renderStore,
+        ...(deps.update.renderIdentityStore
+          ? { renderIdentityStore: deps.update.renderIdentityStore }
+          : {}),
+        ...(deps.update.propsUpdateNotifier
+          ? { propsUpdateNotifier: deps.update.propsUpdateNotifier }
           : {}),
       }) as SharedHandler<ZodRawShape, ZodRawShape>
     );
