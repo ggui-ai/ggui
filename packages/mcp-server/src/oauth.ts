@@ -337,7 +337,14 @@ export function buildWwwAuthenticate(
   resourcePath: string = '',
 ): string {
   const normalized = resourcePath.replace(/\/$/, '');
-  const resourceMetadataUrl = `${issuerUrl}${normalized}/.well-known/oauth-protected-resource`;
+  // RFC 9728 §3.1 path-INSERTED form — the well-known component goes
+  // BETWEEN origin and resource path (`/.well-known/oauth-protected-
+  // resource/apps/<id>`), NOT appended after it. The pre-RFC suffix
+  // form this header used to advertise is still SERVED (grandfathered
+  // clients), but the advert must be the spec shape: claude.ai's
+  // connect flow follows this header verbatim and 404'd on the suffix
+  // URL, dead-ending Dynamic Client Registration for new connects.
+  const resourceMetadataUrl = `${issuerUrl}/.well-known/oauth-protected-resource${normalized}`;
   return `Bearer realm="mcp", resource_metadata="${resourceMetadataUrl}"`;
 }
 

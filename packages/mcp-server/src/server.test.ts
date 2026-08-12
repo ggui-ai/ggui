@@ -500,6 +500,51 @@ describe('createGguiServer — OAuth per-app discovery (S4.1, 2026-05-06)', () =
     expect(universalBody.resource).toBe('https://mcp.example.test/mcp');
   });
 
+  it('serves the RFC 9728 path-INSERTED well-known twins (claude.ai connect flow, 2026-08-12)', async () => {
+    fx = await boot({
+      oauth: { issuerUrl: 'https://mcp.example.test' },
+      perAppRouting: {
+        paramName: 'appId',
+        paramPattern: '[A-Za-z0-9]{8}',
+        pathPrefix: '/apps',
+      },
+    });
+
+    // Inserted-form per-app protected-resource — the ONLY form
+    // claude.ai's connector connect fetches; its absence 404'd DCR
+    // ("Couldn't register with GGUI's sign-in service") for every new
+    // connect. Identical document to the grandfathered suffix form.
+    const perApp = await fetch(
+      `${fx.url}/.well-known/oauth-protected-resource/apps/aB3kP9xY`,
+    );
+    expect(perApp.status).toBe(200);
+    const perAppBody = (await perApp.json()) as { resource: string };
+    expect(perAppBody.resource).toBe('https://mcp.example.test/apps/aB3kP9xY');
+
+    // Inserted-form universal-path protected-resource.
+    const universal = await fetch(
+      `${fx.url}/.well-known/oauth-protected-resource/mcp`,
+    );
+    expect(universal.status).toBe(200);
+    const universalBody = (await universal.json()) as { resource: string };
+    expect(universalBody.resource).toBe('https://mcp.example.test/mcp');
+
+    // Inserted-form AS-metadata twin — fallback chain for clients that
+    // insert the RESOURCE path into the AS well-known.
+    const as = await fetch(
+      `${fx.url}/.well-known/oauth-authorization-server/apps/aB3kP9xY`,
+    );
+    expect(as.status).toBe(200);
+    const asBody = (await as.json()) as { issuer: string };
+    expect(asBody.issuer).toBe('https://mcp.example.test');
+
+    // The param validator guards the inserted form too.
+    const bad = await fetch(
+      `${fx.url}/.well-known/oauth-protected-resource/apps/short`,
+    );
+    expect(bad.status).toBe(404);
+  });
+
   it('rejects per-app well-known with appId that fails the regex (404 from Express route mismatch)', async () => {
     fx = await boot({
       oauth: { issuerUrl: 'https://mcp.example.test' },
@@ -544,8 +589,11 @@ describe('createGguiServer — OAuth per-app discovery (S4.1, 2026-05-06)', () =
     expect(res.status).toBe(401);
     const wwwAuth = res.headers.get('www-authenticate');
     expect(wwwAuth).not.toBeNull();
+    // RFC 9728 §3.1 path-INSERTED form — well-known BETWEEN origin and
+    // resource path. claude.ai follows this header verbatim; the old
+    // suffix-form advert 404'd its Dynamic Client Registration.
     expect(wwwAuth).toContain(
-      'resource_metadata="https://mcp.example.test/apps/aB3kP9xY/.well-known/oauth-protected-resource"',
+      'resource_metadata="https://mcp.example.test/.well-known/oauth-protected-resource/apps/aB3kP9xY"',
     );
   });
 

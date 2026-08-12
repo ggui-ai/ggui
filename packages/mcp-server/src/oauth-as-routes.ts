@@ -125,6 +125,55 @@ export function mountOAuthAuthorizationServerRoutes(opts: MountOptions): void {
       }
     );
   }
+  // ── RFC 9728 §3.1 path-INSERTED discovery ──────────────────────────
+  // The RFC forms the metadata URL by inserting the well-known
+  // component BETWEEN origin and resource path:
+  //   resource https://host/apps/<id>
+  //   → https://host/.well-known/oauth-protected-resource/apps/<id>
+  // The suffix-form routes above (`<path>/.well-known/...`) predate the
+  // final RFC and STAY for grandfathered clients. claude.ai's connector
+  // connect flow (observed 2026-08-12) fetches ONLY the inserted form —
+  // its absence 404'd the discovery chain, which surfaced as "Couldn't
+  // register with GGUI's sign-in service" on every NEW connect: a
+  // launch-day onboarding blocker. Both forms serve the identical
+  // document.
+  if (universalMcpPath !== "/") {
+    app.get(
+      `/.well-known/oauth-protected-resource${universalMcpPath}`,
+      (req, res) =>
+        handleProtectedResourceMetadata(req, res, oauthConfig, universalMcpPath)
+    );
+  }
+  if (perAppRouting !== undefined) {
+    const { paramName, pathPrefix = "" } = perAppRouting;
+    app.get<ParamsDictionary>(
+      `/.well-known/oauth-protected-resource${pathPrefix}/:${paramName}`,
+      (req, res) => {
+        const appId = req.params[paramName];
+        if (typeof appId !== "string" || appId.length === 0) {
+          res.status(404).json({ error: "not_found" });
+          return;
+        }
+        handleProtectedResourceMetadata(req, res, oauthConfig, `${pathPrefix}/${appId}`);
+      }
+    );
+    // Path-inserted AS-metadata twin (RFC 8414 §3.1). Our issuer is
+    // origin-only, so the ROOT document is the normative one — but
+    // several MCP clients derive an AS-metadata URL by inserting into
+    // the RESOURCE path when the protected-resource fetch fails or
+    // races. Serving the identical document here is spec-tolerant and
+    // keeps their fallback chain alive instead of dead-ending DCR.
+    app.get<ParamsDictionary>(
+      `/.well-known/oauth-authorization-server${pathPrefix}/:${paramName}`,
+      (req, res) => handleAuthorizationServerMetadata(req, res, oauthConfig)
+    );
+  }
+  if (universalMcpPath !== "/") {
+    app.get(
+      `/.well-known/oauth-authorization-server${universalMcpPath}`,
+      (req, res) => handleAuthorizationServerMetadata(req, res, oauthConfig)
+    );
+  }
   app.get("/.well-known/oauth-authorization-server", (req, res) =>
     handleAuthorizationServerMetadata(req, res, oauthConfig)
   );
