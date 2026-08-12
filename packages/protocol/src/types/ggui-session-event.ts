@@ -111,6 +111,22 @@ export interface UiRemintedEventData {
 }
 
 /**
+ * Payload of a `'ui.updated'` event — the ledger's record of a props
+ * change (the taxonomy twin of the live-channel `props_update`
+ * frame). `epoch` (#483) names the history record the props belong
+ * to: an update stamps the epoch it MINTED, an amend stamps the
+ * current head — so pinned `#N` reconstruction replays exactly the
+ * events with `epoch ≤ N` up to the N+1 boundary, and frames never
+ * apply props from a newer epoch than their own.
+ */
+export interface UiUpdatedEventData {
+  readonly sessionId: string;
+  readonly props: Record<string, unknown>;
+  /** Absent on pre-#483 ledgers — read as "the then-current epoch". */
+  readonly epoch?: number;
+}
+
+/**
  * Head epoch implied by an event list: the count of `'ui.reminted'`
  * events. `ggui_render` mints epoch 0 with NO event, so an empty (or
  * remint-free) ledger is epoch 0 by construction. Callers slicing the

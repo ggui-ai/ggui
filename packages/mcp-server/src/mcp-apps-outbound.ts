@@ -52,8 +52,11 @@ import {
 import type {
   ComponentGguiSession,
   GguiSession,
+  JsonObject,
   ResourceReadError,
   ResourceReadJsonRpcError,
+  UiRemintedEventData,
+  UiUpdatedEventData,
 } from "@ggui-ai/protocol";
 import {
   RESOURCE_NOT_FOUND_MESSAGE,
@@ -74,6 +77,7 @@ import {
   deriveContextName,
   escapeInlineScript,
   gguiShellHtml,
+  parseEpochUri,
   toMcpAppEnvelope,
   type McpAppAiGguiRenderMeta,
   type SessionApiUrls,
@@ -2351,6 +2355,47 @@ export function registerGguiRenderResourceTemplate(
     return shellContents(uri, html, augmentCspMeta(gadgetOrigins, renderCspBase));
   }
 
+  /**
+   * Reconstruct the props of history record `#epoch` from the event
+   * ledger (#483): walk ascending, apply every `ui.updated`, and stop
+   * at the `ui.reminted` boundary that LEAVES the pinned epoch
+   * (`data.epoch === epoch + 1`) — so the record includes the amends
+   * made during its reign, matching the live freeze semantics
+   * (state-at-supersession). Returns `null` when the walk cannot reach
+   * the boundary (ledger horizon evicted the record's reign) — the
+   * caller surfaces the standard not-found posture; the record aged
+   * out of what this server can serve.
+   */
+  async function reconstructPropsAtEpoch(
+    sessionId: string,
+    epoch: number
+  ): Promise<JsonObject | null> {
+    let since = 0;
+    let currentProps: JsonObject | null = null;
+    for (;;) {
+      const page = await opts.renderStore.listEventsSince(sessionId, since, 200);
+      if (page === null || page.events.length === 0) return null;
+      for (const event of page.events) {
+        if (event.type === "ui.updated") {
+          const data = event.data as UiUpdatedEventData;
+          // Epoch-stamped filtering: the update that MINTS epoch N+1
+          // appends its props event (stamped N+1) BEFORE the N+1
+          // boundary — those props belong to the NEXT record, never
+          // to #N. Pre-#483 events carry no stamp and read as
+          // belonging to the then-current (≤ pinned) epoch.
+          if ((data.epoch ?? 0) <= epoch) {
+            currentProps = data.props as JsonObject;
+          }
+        } else if (event.type === "ui.reminted") {
+          const data = event.data as UiRemintedEventData;
+          if (data.epoch === epoch + 1) return currentProps;
+        }
+        since = event.seq;
+      }
+      if (!page.hasMore && page.lastSequence <= since) return null;
+    }
+  }
+
   // Single shared handler powers both templates. `blueprintKey` is
   // optional in the variables map — present for the resume URI shape,
   // absent for the legacy single-segment shape.
@@ -2359,14 +2404,62 @@ export function registerGguiRenderResourceTemplate(
     variables: Record<string, string | string[]>
   ): Promise<{ contents: ShellContent[] }> {
     const sessionIdRaw = variables["sessionId"];
-    const sessionId = Array.isArray(sessionIdRaw) ? sessionIdRaw[0] : sessionIdRaw;
+    let sessionId = Array.isArray(sessionIdRaw) ? sessionIdRaw[0] : sessionIdRaw;
+    const blueprintKeyRaw = variables["blueprintKey"];
+    let blueprintKey = Array.isArray(blueprintKeyRaw) ? blueprintKeyRaw[0] : blueprintKeyRaw;
+
+    // Epoch pin (#483): `…#N` names the immutable history record N;
+    // bare names the live head. Depending on the transport's URL
+    // handling the pin may arrive as `uri.hash`, glued RAW onto the
+    // last matched variable, or PERCENT-ENCODED inside it (`%23N`) —
+    // resolve all three tolerantly via the one seam, cleaning the
+    // variable either way.
+    const parsePin = (segment: string): { base: string; epoch?: number } => {
+      const direct = parseEpochUri(segment);
+      if (direct.epoch !== undefined) {
+        return { base: direct.baseUri, epoch: direct.epoch };
+      }
+      try {
+        const decoded = decodeURIComponent(segment);
+        if (decoded !== segment) {
+          const parsed = parseEpochUri(decoded);
+          if (parsed.epoch !== undefined) {
+            return { base: parsed.baseUri, epoch: parsed.epoch };
+          }
+        }
+      } catch {
+        // Malformed percent-encoding — not a pin; segment passes
+        // through whole (same tolerant posture as parseEpochUri).
+      }
+      return { base: segment };
+    };
+    // ALWAYS clean the variables (transports have been observed to
+    // deliver the pin BOTH as uri.hash and glued raw onto the matched
+    // variable); the pin resolves from whichever source carried it.
+    let pinnedEpoch: number | undefined;
+    if (uri.hash.length > 1) {
+      pinnedEpoch = parseEpochUri(`x${uri.hash}`).epoch;
+    }
+    if (typeof blueprintKey === "string") {
+      const parsed = parsePin(blueprintKey);
+      if (parsed.epoch !== undefined) {
+        pinnedEpoch = pinnedEpoch ?? parsed.epoch;
+        blueprintKey = parsed.base;
+      }
+    }
+    if (typeof sessionId === "string") {
+      const parsed = parsePin(sessionId);
+      if (parsed.epoch !== undefined) {
+        pinnedEpoch = pinnedEpoch ?? parsed.epoch;
+        sessionId = parsed.base;
+      }
+    }
+
     if (typeof sessionId !== "string" || sessionId.length === 0) {
       // A URI with no session segment names no locator, which is the
       // same thing as naming one that does not exist.
       throw new ResourceReadFailure(NOT_FOUND_FAILURE);
     }
-    const blueprintKeyRaw = variables["blueprintKey"];
-    const blueprintKey = Array.isArray(blueprintKeyRaw) ? blueprintKeyRaw[0] : blueprintKeyRaw;
     const hasResumeKey = typeof blueprintKey === "string" && blueprintKey.length > 0;
 
     // The failure this read ends in if nothing mounts. Seeded from a
@@ -2404,6 +2497,38 @@ export function registerGguiRenderResourceTemplate(
       })
         ? stored
         : null;
+
+    // Pinned history read (#483): `#N` where N is a SUPERSEDED epoch
+    // reconstructs that record's props from the ledger and serves a
+    // shell frozen at them. N === head falls through to the live
+    // mount (the pinned URI of the current head IS the head); N >
+    // head names a record that does not exist.
+    if (accessibleStored && pinnedEpoch !== undefined) {
+      const headEpoch = accessibleStored.render.epoch ?? 0;
+      if (pinnedEpoch > headEpoch) {
+        throw new ResourceReadFailure(NOT_FOUND_FAILURE);
+      }
+      if (pinnedEpoch < headEpoch && accessibleStored.render.type !== "mcpApps") {
+        const historicalProps = await reconstructPropsAtEpoch(sessionId, pinnedEpoch);
+        if (historicalProps === null) {
+          // The record's reign aged out of the ledger horizon — this
+          // server can no longer serve it. Same terminal posture as a
+          // locator that never existed (see #483 SPEC note).
+          throw new ResourceReadFailure(failure);
+        }
+        const pinnedRow = {
+          ...accessibleStored,
+          render: {
+            ...accessibleStored.render,
+            props: historicalProps,
+            epoch: pinnedEpoch,
+          },
+        };
+        const served = await serveMount(uri, sessionId, pinnedRow);
+        if (served !== null) return served;
+        throw new ResourceReadFailure(failure);
+      }
+    }
 
     // Live state first: render present and renderable mounts with the
     // current props + current contextSpec values.
