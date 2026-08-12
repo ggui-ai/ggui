@@ -80,7 +80,7 @@ export function createGguiDeclareToolCatalogHandler(
 ): SharedHandler<typeof declareInputSchema, typeof declareOutputSchema, DeclareToolCatalogOutput> {
   return {
     name: "ggui_runtime_declare_tool_catalog",
-    title: "Declare tool catalog",
+    title: "[runtime] Declare Tool Catalog",
     audience: ["runtime"],
     // `_meta.ui.visibility: ['app']` keeps this tool off the LLM's
     // `tools/list` (spec-compliant hosts filter `app`-visible tools out
