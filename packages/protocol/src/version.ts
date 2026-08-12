@@ -340,10 +340,27 @@
  *      `deriveEpochFromEvents` (in-horizon reconstruction only).
  *      SPEC §7.1.2/§7.1.2.1/§7.1.2.2 are the normative text.
  *
+ *   ts4. **Live-fan epoch obligation (2026-08-13 follow-up, same
+ *      wave):** `PropsUpdatePayload.epoch` (`@ggui-ai/protocol`
+ *      live-channel, optional on the wire) is the freeze-latch signal,
+ *      and servers MUST stamp live `props_update` frames with the
+ *      COMMIT-TIME epoch (SPEC §7.1.2.2). TS API surfaces moved with
+ *      it: `PropsUpdateNotifier.sendPropsUpdate` gains a required
+ *      `epoch` third param (`@ggui-ai/mcp-server-handlers`), as does
+ *      `GguiSessionChannelServer.sendPropsUpdate`
+ *      (`@ggui-ai/mcp-server`) — 2-arg callers break at compile time
+ *      (pre-launch no-compat; 0.x MINOR carries it). Motivating
+ *      incident: a second notifier impl (cloud pod) omitted the then-
+ *      optional field and shipped epoch-less frames — the latch
+ *      degraded to legacy-apply exactly as designed for skew, which
+ *      is also the compat story: old runtime × new server ignores the
+ *      extra field; new runtime × old server sees no epoch and
+ *      applies as before. Graceful both directions.
+ *
  * PROTOCOL_VERSION unchanged — no WS frame changed shape; the
  * `ai.ggui/render` slice's field set was never closed, and the
- * `ui.updated` payload gained an optional field on an open payload
- * surface.
+ * `ui.updated` / `props_update` payloads gained an optional field on
+ * open payload surfaces.
  *
  * --------------------------------------------------------------------
  * Credential-broker surface retired (2026-08-08, BREAKING, pre-launch,
