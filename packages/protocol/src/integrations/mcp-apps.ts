@@ -59,6 +59,17 @@ export const GGUI_RENDER_RESOURCE_URI = 'ui://ggui/render' as const;
  */
 export const GGUI_RENDER_RESOURCE_MIME = 'text/html;profile=mcp-app' as const;
 
+// Epoch-pinned resource URIs (#483) — bare URI = live head, `#N` =
+// immutable history record. Re-exported here because this module is
+// the package's MCP-Apps export surface; the seam itself lives in
+// epoch-uri.ts (ONE place to flip the encoding).
+export {
+  composeEpochUri,
+  parseEpochUri,
+  EPOCH_URI_SEPARATOR,
+  type ParsedEpochUri,
+} from './epoch-uri.js';
+
 /**
  * The single `_meta.ui.resourceUri` value ggui uses across every MCP Apps
  * host surface. Exposed as a named constant so tool-declaration code,
