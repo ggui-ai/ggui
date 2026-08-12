@@ -246,6 +246,60 @@ describe('createGguiSubmitActionHandler', () => {
       expect(out).toEqual({ ok: true, consumerPresent: false });
     });
 
+    it('ADAPTIVE: a recent consumer exit arms the long window — a re-poll parking inside flips true', async () => {
+      const consumer = new InMemoryPendingEventConsumer();
+      const sessionId = 'render-adaptive-midloop';
+      await consumer.markCreated(sessionId);
+      const registry = new InMemoryActiveConsumerRegistry();
+      // Simulate the mid-loop shape: a consume just completed.
+      registry.enter(sessionId);
+      registry.exit(sessionId);
+      const h = createGguiSubmitActionHandler({
+        pendingEventConsumer: consumer,
+        activeConsumerRegistry: registry,
+        // NO consumerGraceMs — the adaptive policy decides.
+      });
+      const park = setTimeout(() => registry.enter(sessionId), 300);
+      try {
+        const out = await h.handler(
+          {
+            ...baseEnv,
+            sessionId,
+            kind: 'dispatch',
+            payload: { intent: 'submit', actionData: null, uiContext: {} },
+          },
+          ctx,
+        );
+        expect(out).toEqual({ ok: true, consumerPresent: true });
+      } finally {
+        clearTimeout(park);
+      }
+    });
+
+    it('ADAPTIVE: no consumer ever seen + no render row → fast false (idle-card arm, well under the long window)', async () => {
+      const consumer = new InMemoryPendingEventConsumer();
+      const sessionId = 'render-adaptive-idle';
+      await consumer.markCreated(sessionId);
+      const registry = new InMemoryActiveConsumerRegistry();
+      const h = createGguiSubmitActionHandler({
+        pendingEventConsumer: consumer,
+        activeConsumerRegistry: registry,
+        // No renderStore → age unknown → fast-answer arm (150ms).
+      });
+      const started = Date.now();
+      const out = await h.handler(
+        {
+          ...baseEnv,
+          sessionId,
+          kind: 'dispatch',
+          payload: { intent: 'submit', actionData: null, uiContext: {} },
+        },
+        ctx,
+      );
+      expect(out).toEqual({ ok: true, consumerPresent: false });
+      expect(Date.now() - started).toBeLessThan(1_000);
+    });
+
     it('a consumer parking INSIDE the grace window flips the answer to true (doorbell race, live 2026-08-12)', async () => {
       const consumer = new InMemoryPendingEventConsumer();
       const sessionId = 'render-grace-race';

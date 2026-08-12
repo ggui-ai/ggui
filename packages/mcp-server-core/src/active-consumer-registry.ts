@@ -67,5 +67,31 @@ export interface ActiveConsumerRegistry {
    * `consumerPresent`.
    */
   hasActive(sessionId: string): boolean;
+
+  /**
+   * Resolve `true` the INSTANT a consumer is (or becomes) registered
+   * for `sessionId`, or `false` when `timeoutMs` elapses first.
+   *
+   * The doorbell-grace primitive (2026-08-12): `submit-action.ts` uses
+   * this instead of probe-polling `hasActive` so a consume parking
+   * mid-window flips the answer with zero quantization delay. An
+   * already-active consumer resolves synchronously-fast (microtask);
+   * the wait NEVER rejects.
+   */
+  waitForConsumer(sessionId: string, timeoutMs: number): Promise<boolean>;
+
+  /**
+   * Milliseconds since the LAST consumer for `sessionId` exited, or
+   * `undefined` when none has ever exited (no consume has completed
+   * for this render since process start).
+   *
+   * Powers the ADAPTIVE grace window: a recent exit means the agent is
+   * mid-loop (consume → act → consume) and a re-poll is likely — worth
+   * waiting for; a stale (or absent) exit on an old render means no
+   * consume is coming this turn and the doorbell should ring promptly.
+   * In-process timestamps — same single-instance scope as the counts
+   * (see the InMemory impl's multi-pod note).
+   */
+  msSinceLastExit(sessionId: string): number | undefined;
 }
 

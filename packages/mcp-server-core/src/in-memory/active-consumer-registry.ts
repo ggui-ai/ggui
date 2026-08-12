@@ -18,9 +18,17 @@ import type { ActiveConsumerRegistry } from '../active-consumer-registry.js';
 
 export class InMemoryActiveConsumerRegistry implements ActiveConsumerRegistry {
   private readonly counts = new Map<string, number>();
+  private readonly lastExitAt = new Map<string, number>();
+  private readonly waiters = new Map<string, Set<() => void>>();
 
   enter(sessionId: string): void {
     this.counts.set(sessionId, (this.counts.get(sessionId) ?? 0) + 1);
+    // Wake every parked waitForConsumer — the answer just became true.
+    const set = this.waiters.get(sessionId);
+    if (set !== undefined) {
+      this.waiters.delete(sessionId);
+      for (const wake of set) wake();
+    }
   }
 
   exit(sessionId: string): void {
@@ -30,9 +38,38 @@ export class InMemoryActiveConsumerRegistry implements ActiveConsumerRegistry {
     } else {
       this.counts.set(sessionId, next);
     }
+    this.lastExitAt.set(sessionId, Date.now());
   }
 
   hasActive(sessionId: string): boolean {
     return (this.counts.get(sessionId) ?? 0) > 0;
+  }
+
+  waitForConsumer(sessionId: string, timeoutMs: number): Promise<boolean> {
+    if (this.hasActive(sessionId)) return Promise.resolve(true);
+    if (timeoutMs <= 0) return Promise.resolve(false);
+    return new Promise<boolean>((resolve) => {
+      let settled = false;
+      const timer = setTimeout(() => {
+        if (settled) return;
+        settled = true;
+        this.waiters.get(sessionId)?.delete(wake);
+        resolve(false);
+      }, timeoutMs);
+      const wake = (): void => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        resolve(true);
+      };
+      const set = this.waiters.get(sessionId) ?? new Set<() => void>();
+      set.add(wake);
+      this.waiters.set(sessionId, set);
+    });
+  }
+
+  msSinceLastExit(sessionId: string): number | undefined {
+    const at = this.lastExitAt.get(sessionId);
+    return at === undefined ? undefined : Math.max(0, Date.now() - at);
   }
 }

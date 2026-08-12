@@ -189,13 +189,12 @@ export interface GguiSubmitActionHandlerDeps {
    */
   readonly activeConsumerRegistry?: ActiveConsumerRegistry;
   /**
-   * Doorbell-race grace window, ms (default 800). When no consumer is
-   * parked at the click instant, the handler re-probes the registry at
-   * 100ms intervals for this long before answering
-   * `consumerPresent: false` — a consume parking inside the window
-   * drains the just-appended event, making `true` the honest answer
-   * and suppressing a duplicate ui/message doorbell. Test hook: pass a
-   * small value for deterministic no-consumer-case timing.
+   * Doorbell-race grace OVERRIDE, ms. When set, replaces the adaptive
+   * policy entirely (see the handler body): the registry is waited on
+   * for exactly this long before answering `consumerPresent: false`.
+   * Unset → adaptive: 2s when a consume is plausibly imminent (recent
+   * exit, or first poll of a <20s-old render), 150ms otherwise. Test
+   * hook / operator escape hatch.
    */
   readonly consumerGraceMs?: number;
   /**
@@ -383,16 +382,55 @@ export function createGguiSubmitActionHandler(
           // well under gesture-feedback tolerances.
           if (deps.activeConsumerRegistry !== undefined) {
             const registry = deps.activeConsumerRegistry;
-            let present = registry.hasActive(env.sessionId);
-            const graceMs = deps.consumerGraceMs ?? 800;
-            const probeIntervalMs = 100;
-            const deadline = Date.now() + graceMs;
-            while (!present && Date.now() < deadline) {
-              await new Promise<void>((resolve) => {
-                setTimeout(resolve, probeIntervalMs);
-              });
-              present = registry.hasActive(env.sessionId);
+            // ADAPTIVE grace (2026-08-12 follow-up to the fixed
+            // window): wait only when a consume is plausibly imminent,
+            // judged from server-side facts — no environment guesses.
+            //   - recent consumer exit (<10s): the agent is mid-loop
+            //     (consume → act → consume); a re-poll is very likely
+            //     → wait up to 2s.
+            //   - no consumer EVER seen + render younger than 20s: the
+            //     post-render FIRST poll is the classic 380ms race →
+            //     wait up to 2s.
+            //   - otherwise (idle card, agent long gone): 150ms —
+            //     enough to absorb scheduling jitter, snappy enough
+            //     that the doorbell (the only wake-up left) rings
+            //     promptly.
+            // `waitForConsumer` is event-driven: a consumer parking
+            // mid-window flips the answer instantly, so the window is
+            // a CEILING, not a fixed cost. `consumerGraceMs` overrides
+            // the whole policy (test hook / operator escape).
+            let graceMs = deps.consumerGraceMs;
+            if (graceMs === undefined) {
+              const sinceExit = registry.msSinceLastExit(env.sessionId);
+              if (sinceExit !== undefined && sinceExit < 10_000) {
+                graceMs = 2_000;
+              } else if (sinceExit === undefined) {
+                let renderAgeMs: number | undefined;
+                if (deps.renderStore !== undefined) {
+                  try {
+                    const row = await deps.renderStore.get(env.sessionId);
+                    const createdAt = row?.render.createdAt;
+                    renderAgeMs =
+                      typeof createdAt === 'number'
+                        ? Math.max(0, Date.now() - createdAt)
+                        : undefined;
+                  } catch {
+                    // Best-effort age read — fall through to the
+                    // fast-answer arm on store hiccups.
+                  }
+                }
+                graceMs =
+                  renderAgeMs !== undefined && renderAgeMs < 20_000
+                    ? 2_000
+                    : 150;
+              } else {
+                graceMs = 150;
+              }
             }
+            const present = await registry.waitForConsumer(
+              env.sessionId,
+              graceMs,
+            );
             return {
               ok: true,
               consumerPresent: present,

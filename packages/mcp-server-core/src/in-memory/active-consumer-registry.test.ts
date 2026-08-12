@@ -78,4 +78,45 @@ describe('InMemoryActiveConsumerRegistry', () => {
     r.exit('render-1');
     expect(r.hasActive('render-1')).toBe(false);
   });
+
+  it('waitForConsumer resolves immediately-true when a consumer is already parked', async () => {
+    const r = new InMemoryActiveConsumerRegistry();
+    r.enter('render-1');
+    await expect(r.waitForConsumer('render-1', 1)).resolves.toBe(true);
+  });
+
+  it('waitForConsumer resolves the INSTANT a consumer parks mid-window (event-driven, no probe quantization)', async () => {
+    const r = new InMemoryActiveConsumerRegistry();
+    const started = Date.now();
+    const wait = r.waitForConsumer('render-1', 5_000);
+    setTimeout(() => r.enter('render-1'), 20);
+    await expect(wait).resolves.toBe(true);
+    expect(Date.now() - started).toBeLessThan(1_000);
+  });
+
+  it('waitForConsumer resolves false at the deadline and cleans its waiter up', async () => {
+    const r = new InMemoryActiveConsumerRegistry();
+    await expect(r.waitForConsumer('render-1', 30)).resolves.toBe(false);
+    // A later enter() must not throw / double-settle anything.
+    r.enter('render-1');
+    expect(r.hasActive('render-1')).toBe(true);
+  });
+
+  it('waitForConsumer isolates by sessionId', async () => {
+    const r = new InMemoryActiveConsumerRegistry();
+    const wait = r.waitForConsumer('render-A', 60);
+    r.enter('render-B');
+    await expect(wait).resolves.toBe(false);
+  });
+
+  it('msSinceLastExit: undefined before any exit, then tracks the most recent exit', async () => {
+    const r = new InMemoryActiveConsumerRegistry();
+    expect(r.msSinceLastExit('render-1')).toBeUndefined();
+    r.enter('render-1');
+    expect(r.msSinceLastExit('render-1')).toBeUndefined();
+    r.exit('render-1');
+    const since = r.msSinceLastExit('render-1');
+    expect(since).toBeDefined();
+    expect(since!).toBeLessThan(1_000);
+  });
 });
