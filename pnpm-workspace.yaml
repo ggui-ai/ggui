@@ -176,7 +176,7 @@ overrides:
   # BEGIN oss-lock-sync generated pins — do not hand-edit (scripts/oss-lock-sync.mjs, #420)
   "@a2a-js/sdk": 0.3.14
   "@adobe/css-tools": 4.5.0
-  "@anthropic-ai/bedrock-sdk": 0.29.2
+  "@anthropic-ai/bedrock-sdk": 0.32.1
   "@aws-sdk/checksums": 3.1000.25
   "@aws-sdk/client-bedrock-runtime": 3.1102.0
   "@aws-sdk/client-s3": 3.1102.0
