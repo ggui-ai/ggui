@@ -63,6 +63,18 @@ export interface GguiSessionStoreConformanceFactory {
    * class; a loud refusal is a documented boundary.
    */
   readonly deletion?: 'implemented' | 'declared-out-of-scope';
+  /**
+   * Whether the impl implements `list`. Default `'implemented'`.
+   *
+   * Same graded contract as {@link deletion}: an impl that routes
+   * listing through a different surface (the pod's delegation adapter
+   * serves reads via the runtime store and stubs `list`) declares it
+   * out of scope, and the suite pins that `list` refuses LOUDLY —
+   * a list that resolves `[]` while rows exist is the silent-loss
+   * bug class; a thrown `NotImplemented` is a documented boundary.
+   * The #495 erroredOnly facet vectors run only on implemented lists.
+   */
+  readonly listing?: 'implemented' | 'declared-out-of-scope';
 }
 
 /**
@@ -116,6 +128,17 @@ export function runGguiSessionStoreConformance(
     // `erroredOnly` filter must match it, including for rows written
     // before `errorCode` existed.
     describe('erroredOnly outcome facet', () => {
+      if (factory.listing === 'declared-out-of-scope') {
+        it('declares listing out of scope and refuses loudly', async () => {
+          await withStore(async (store) => {
+            await store.create({ id: 'render-1', appId: 'app-1' });
+            // Graded boundary: a `list` that resolves `[]` while rows
+            // exist is silent loss; out-of-scope MUST throw.
+            await expect(store.list({ appId: 'app-1' })).rejects.toThrow();
+          });
+        });
+        return;
+      }
       it('list({erroredOnly:true}) returns exactly the rows with a recorded failure', async () => {
         await withStore(async (store) => {
           await store.commit({
