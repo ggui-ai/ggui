@@ -62,6 +62,7 @@ import type { HandlerContext } from '../types.js';
 import {
   matchBlueprint,
   type BlueprintMatchHit,
+  type BlueprintMatchResult,
   type MatchBlueprintDeps,
 } from './blueprint-matcher.js';
 import type { CoverageGap } from './blueprint-coverage.js';
@@ -153,6 +154,19 @@ export interface HandshakeDecisionAdapter {
    * passes its structured logger. Absent ⇒ silent.
    */
   warn?(message: string): void;
+  /**
+   * Optional observer for every blueprint-match OUTCOME (hit or miss),
+   * called once per pool probed in the Tier-1 find-similar loop.
+   * Non-error, non-blocking — purely for cache-hit-ratio observability.
+   * Absent ⇒ no-op. OSS ships no default observer; cloud wires this to
+   * its structured logger (see cloud/ggui-protocol-pod's
+   * HandshakeDecisionAdapter composition).
+   */
+  onBlueprintMatch?(input: {
+    readonly pool: string;
+    readonly scope: string;
+    readonly result: BlueprintMatchResult;
+  }): void;
   /** Optional per-app tool-identity catalog (bare tool → canonical serverInfo).
    *  Present ⇒ run the canonicalization step before keying (Tier 1); absent ⇒
    *  no-op (Tier 2). Resolved by ctx.appId. */
@@ -529,6 +543,11 @@ export async function decideHandshake(
           intent,
           contract: parsedDraft.data,
           ...(variance !== undefined ? { variance } : {}),
+        });
+        adapter.onBlueprintMatch?.({
+          pool: pool.label ?? scope,
+          scope,
+          result: matchResult,
         });
         // exact-key is a perfect canonical match — it wins immediately over
         // any semantic hit from any pool, but ONLY when the requesting agent
