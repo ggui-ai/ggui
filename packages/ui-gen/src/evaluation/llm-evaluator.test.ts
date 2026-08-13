@@ -9,8 +9,16 @@ import type { LLMEvalContext, LLMEvalConfig, EvalContext, PreWarmedEvalContext }
 const mockCallTools = vi.fn();
 const mockAgent = { callTools: mockCallTools };
 
+// `vi.fn((arg) => mockAgent)` (not a bare arrow) so tests can assert
+// on the arg `createAgent` was called with (#484 routeOverride
+// threading) without changing its return value for any existing test.
+// `createAgent`'s real callers always pass exactly one argument (a
+// bare provider string or a full config object), so a single-param
+// signature here matches every real call shape.
+const mockCreateAgent = vi.fn((_arg?: unknown) => mockAgent);
+
 vi.mock('../harness/llm-router', () => ({
-  createAgent: () => mockAgent,
+  createAgent: (arg: unknown) => mockCreateAgent(arg),
 }));
 
 // =============================================================================
@@ -375,6 +383,7 @@ export default function MyComponent({ title }: Props) {
 
   beforeEach(() => {
     mockCallTools.mockReset();
+    mockCreateAgent.mockClear();
   });
 
   it('makes 7 parallel calls when pre-warmed with no dynamic criteria', async () => {
@@ -749,6 +758,36 @@ export default function MyComponent({ title }: Props) {
     expect(funcIssues).toHaveLength(1);
     expect(funcIssues[0].result).toBe('fail');
     expect(funcIssues[0].description).toContain('functionality');
+  });
+
+  // #484 — the concurrency-race fix. `routeOverride` must reach the
+  // agent `runLLMEvaluation` constructs; a caller that supplies it and
+  // still sees `createAgent` called without it would silently fall
+  // back to `process.env`, reopening the race for the eval phase.
+  it('threads config.routeOverride through to createAgent (#484)', async () => {
+    mockCallTools.mockResolvedValue({
+      toolCalls: [{
+        name: 'evaluate_criterion',
+        input: { pass: true, result: 'pass' },
+      }],
+      inputTokens: 500,
+      outputTokens: 50,
+    });
+
+    const configWithOverride: LLMEvalConfig = {
+      provider: 'openai',
+      model: 'gpt-5.6',
+      routeOverride: { apiKey: 'eval-test-key' },
+    };
+
+    await runLLMEvaluation(context, configWithOverride, NO_DYNAMIC);
+
+    expect(mockCreateAgent).toHaveBeenCalledTimes(1);
+    expect(mockCreateAgent).toHaveBeenCalledWith({
+      provider: 'openai',
+      model: 'gpt-5.6',
+      routeOverride: { apiKey: 'eval-test-key' },
+    });
   });
 });
 
