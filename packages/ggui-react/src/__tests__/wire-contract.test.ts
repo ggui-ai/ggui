@@ -11,7 +11,8 @@
  *     inbound stream (`validateInboundStreamPayload`)
  *   - (new) client inbound props — no server contract-suite case
  *     today, but the validator's semantics match the server's
- *     `assertPropsContract` used in `ggui_update`.
+ *     `assertPropsContract` used on the shared `ggui_update` /
+ *     `ggui_amend` ingress.
  *
  * There is no event-allowlist gate on either side — inbound actions
  * are gated by the action contract alone (the pre-Phase-B

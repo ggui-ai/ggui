@@ -72,12 +72,12 @@ const JOURNEY_PROMPT =
 
 // Turn 2 — drives the drain. Steers the agent to update the EXISTING render:
 // this turn's tool results never reach the page (the page's hook is not in
-// this invoke), so only an in-place ggui_update on the live channel can move
+// this invoke), so only an in-place ggui_amend on the live channel can move
 // the mounted card. A fresh ggui_render would be invisible to the page.
 const SYNC_PROMPT =
   'I just toggled a todo item in the rendered UI. Consume my pending UI ' +
   'actions from the ggui server, apply the toggle to the todo list via the ' +
-  'todo MCP server, and update the existing rendered UI in place so it ' +
+  'todo MCP server, and amend the existing rendered UI in place so it ' +
   'shows the new checked state. Do not create a new UI render.';
 
 const EXPECTED_TODOS = ['buy milk', 'walk', 'write code'];

@@ -2,7 +2,7 @@
 
 Reference backend for an MCP-host agent built with [Google ADK for TypeScript](https://adk.dev/get-started/typescript/) (`@google/adk`), pointed at a ggui MCP server.
 
-**The agent core is a small, readable amount of TypeScript.** No ggui agent-side wrapper, no scaffold. The only ggui-specific configuration is the MCP server URL — every ggui tool (`ggui_handshake`, `ggui_render`, `ggui_update`, `ggui_emit`, `ggui_consume`) is discovered by Gemini via the standard MCP `tools/list` handshake.
+**The agent core is a small, readable amount of TypeScript.** No ggui agent-side wrapper, no scaffold. The only ggui-specific configuration is the MCP server URL — every ggui tool (`ggui_handshake`, `ggui_render`, `ggui_update`, `ggui_amend`, `ggui_emit`, `ggui_consume`) is discovered by Gemini via the standard MCP `tools/list` handshake.
 
 This is "Zero Agent Code" with Gemini as the driver.
 

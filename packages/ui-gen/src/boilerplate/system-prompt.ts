@@ -347,7 +347,7 @@ A \`DataContract\` declares everything a GguiSession exchanges with the outside 
 
 ## Defensive coding for absent / late-arriving data
 
-Props arrive via \`ggui_update\` and may be partial on first render. Stream channels start empty and fill over time. Context slots start at their declared default (often \`null\`). **Never assume a field exists before you read it.**
+Props arrive at mount and may be partial on first render; later prop changes reach the SAME mounted component via \`ggui_amend\` (in-place repaint) on the live channel. Stream channels start empty and fill over time. Context slots start at their declared default (often \`null\`). **Never assume a field exists before you read it.**
 
 - **Array iteration**: always default to \`[]\` before \`.map\`/\`.filter\`/\`.length\`. Use \`(props.items ?? []).map(...)\` not \`props.items.map(...)\`. Same for stream.all, stream.latest, etc.
 - **Object access**: optional-chain through nested fields. \`props.user?.name ?? 'Anonymous'\` not \`props.user.name\`.
@@ -481,7 +481,7 @@ Every value change is mirrored to the host LLM's context automatically (debounce
 
 **When NOT to use it.** Local UI state the contract did NOT declare — \`isDropdownOpen\`, hover flags, animation phase, ephemeral toggles. For those, use a plain \`useState\` directly. The runtime ignores undeclared state.
 
-**\`contextSpec\` direction is one-way: client → agent.** The agent uses \`propsSpec\` (via \`ggui_update\`) and \`streamSpec\` (via the live channel) to push state TO the client. Don't try to write to the agent via \`contextSpec\` — there is no return path.
+**\`contextSpec\` direction is one-way: client → agent.** The agent uses \`propsSpec\` (via \`ggui_amend\` for in-place repaints of this mount, or \`ggui_update\` when it mints a new history card) and \`streamSpec\` (via the live channel) to push state TO the client. Don't try to write to the agent via \`contextSpec\` — there is no return path.
 
 **Schema mismatches drop silently.** If you set a value that doesn't match the slot's schema (e.g. a string into a \`{type: 'number'}\` slot), the runtime logs a dev \`console.warn\` and skips the post. Make sure your setter calls produce values that match the declared shape.
 

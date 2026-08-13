@@ -143,6 +143,7 @@ const DEFAULT_ALLOWED_TOOLS: Record<string, ReadonlyArray<string>> = {
     'mcp__ggui__ggui_handshake',
     'mcp__ggui__ggui_render',
     'mcp__ggui__ggui_update',
+    'mcp__ggui__ggui_amend',
     'mcp__ggui__ggui_emit',
     'mcp__ggui__ggui_consume',
     'mcp__ggui__ggui_get_session',

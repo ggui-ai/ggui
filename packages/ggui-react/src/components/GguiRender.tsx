@@ -426,13 +426,20 @@ export function GguiRender({
         }
       }
       if (message.type === 'props_update') {
-        // ggui_update: replace props on the active render (no re-generation)
+        // props_update: replace props on the active render (no
+        // re-generation). Produced by BOTH ggui_update (mints a new
+        // history card/epoch) and ggui_amend (in-place repaint of the
+        // currently mounted card) — the frame carries the commit-time
+        // epoch. NOTE: the freeze-latch that should drop frames whose
+        // epoch is behind the active render's is not yet implemented
+        // here (tracked follow-up).
         const { sessionId: targetSessionId, props } = message.payload;
         if (targetSessionId && props) {
           // Defense-in-depth: server already validates props via
-          // assertPropsContract on the ggui_update path; the client
-          // re-checks against the active render's cached propsSpec to
-          // catch spec-versioning drift before applying to React state.
+          // assertPropsContract on the shared ggui_update/ggui_amend
+          // ingress; the client re-checks against the active render's
+          // cached propsSpec to catch spec-versioning drift before
+          // applying to React state.
           const target = renderRef.current;
           // Ignore frames targeting a different render — the server
           // routes by subscription, but a sloppy implementation could

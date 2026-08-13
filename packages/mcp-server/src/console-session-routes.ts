@@ -330,9 +330,19 @@ export function mountConsoleSessionRoutes(opts: MountOptions): GguiSessionChanne
     // remains authoritative.
     let renderContractHash: string | undefined;
     let renderValidatorsUrl: string | undefined;
+    // Freeze-latch self-epoch (#483): the console inspector views the
+    // LIVE HEAD, so its boot meta carries the row's current epoch —
+    // without it the viewer boots believing epoch 0 and the first
+    // update on the session would freeze the inspection surface.
+    // (Follow-up: on a `ui.reminted` boundary the viewer should
+    // re-mount to the new head rather than stay frozen.)
+    let renderEpoch: number | undefined;
     if (renderStore && codeStore) {
       try {
         const stored = await renderStore.get(verified.sessionId);
+        if (stored !== null) {
+          renderEpoch = stored.render.epoch;
+        }
         if (
           stored !== null &&
           stored.render.type !== "mcpApps" &&
@@ -368,6 +378,7 @@ export function mountConsoleSessionRoutes(opts: MountOptions): GguiSessionChanne
       wsUrl: resolvedWsUrl,
       wsToken: minted.token,
       expiresAt: minted.expiresAt,
+      ...(renderEpoch !== undefined ? { epoch: renderEpoch } : {}),
       ...(renderContractHash !== undefined && renderValidatorsUrl !== undefined
         ? {
             contractHash: renderContractHash,

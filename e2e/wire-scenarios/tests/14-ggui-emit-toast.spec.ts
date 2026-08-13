@@ -2,7 +2,7 @@
  * Scenario 14 — `ggui_emit` toast notification driven by the agent.
  *
  * Companion to scenarios 7 (ggui_update for re-render) and 12
- * (server-driven ggui_update propagation). Where ggui_update refreshes
+ * (server-driven ggui_update propagation). Where ggui_amend refreshes
  * PROPS in place, ggui_emit pushes a STREAM frame on a declared
  * `streamSpec.<channel>`. The iframe's generated component subscribes
  * to the channel and renders frames as they land.

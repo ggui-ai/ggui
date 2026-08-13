@@ -60,7 +60,7 @@ describe('extractMcpAppAiGguiMeta', () => {
   });
 
   it('returns null on non-meta tool_results (legitimate)', () => {
-    // ggui_update / ggui_consume etc. have no ai.ggui/* meta slices.
+    // ggui_amend / ggui_consume etc. have no ai.ggui/* meta slices.
     expect(extractMcpAppAiGguiMeta({ ok: true })).toBeNull();
     expect(extractMcpAppAiGguiMeta({ _meta: { ggui: {} } })).toBeNull();
     expect(extractMcpAppAiGguiMeta({ _meta: { other: {} } })).toBeNull();

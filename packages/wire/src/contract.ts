@@ -199,9 +199,10 @@ export function validateOutboundActionEnvelope(
  * Validate a `props_update` payload against the target GguiSession's
  * `propsSpec` before applying.
  *
- * Server-side `assertPropsContract` runs on the ingress path into
- * `ggui_update`, so a well-behaved mutation handler never produces a
- * violating `props_update`. This client-side check catches
+ * Server-side `assertPropsContract` runs on the shared ingress path
+ * into `ggui_update` and `ggui_amend`, so a well-behaved mutation
+ * handler never produces a violating `props_update`. This client-side
+ * check catches
  * spec-versioning drift and acts as a defense-in-depth for GguiSessions
  * whose spec the client cached from a prior `ggui_render` call.
  */

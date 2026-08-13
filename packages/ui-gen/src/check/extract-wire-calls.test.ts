@@ -272,8 +272,9 @@ describe("checkWirePreservation", () => {
   // emits a component that mirrors the live count to the agent via
   // `useGguiContext('count')` — a slot the contract never declared. At
   // runtime the iframe throws on mount (`no Context registered for
-  // 'count'`) and the agent's later `ggui_update({props: {count: N}})`
-  // is rejected by the propsSpec validator.
+  // 'count'`) and the agent's later in-place repaint
+  // (`ggui_amend({kind: 'replace', props: {count: N}})`) is rejected
+  // by the propsSpec validator.
   //
   // The unconditional `wire_undeclared` tier-0 check (shipped in
   // 42e3328a5 "feat(ui-gen): unconditional wire_undeclared check +

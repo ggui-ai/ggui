@@ -35,7 +35,7 @@ import {
  *
  * Returns `null` when the content is missing / malformed / carries no
  * `ai.ggui/render` key. Consumers MUST handle the `null` path — a
- * tool_result of the non-bootstrap class (`ggui_update`,
+ * tool_result of the non-bootstrap class (`ggui_amend`,
  * `ggui_consume`, raw text, etc.) legitimately carries no
  * `ai.ggui/render` slice, and the shell should ignore it without
  * throwing.
@@ -68,7 +68,8 @@ export function extractMcpAppAiGguiMeta(
  * `<AppRenderer toolResult={...}>` so it forwards the envelope to the
  * inner iframe via the spec-canonical `ui/notifications/tool-result`
  * postMessage. iframe-runtime re-applies state from this envelope on
- * every `ggui_update` after first mount.
+ * every `ggui_amend` (the in-place repaint of the currently mounted
+ * card) after first mount.
  *
  * The lone `as CallToolResult` cast in this helper bridges Zod's
  * `$loose` mode on the MCP SDK's `CallToolResultSchema._meta`: the
