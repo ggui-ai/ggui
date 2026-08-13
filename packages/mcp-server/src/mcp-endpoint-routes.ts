@@ -58,6 +58,23 @@ interface PerAppRouting {
   readonly authorize?: (urlAppId: string, identity: AuthResult) => Promise<void>;
 }
 
+/**
+ * Return shape for an `errorMapper` hook — a domain error mapped onto
+ * an HTTP/JSON-RPC response triple, with optional response headers.
+ *
+ * `headers` is deliberately generic HTTP plumbing (e.g. `Retry-After`
+ * on a `503`), not a deployment-specific concept — any operator
+ * mapping a domain error to a status code that conventionally carries
+ * a header can use it.
+ */
+export interface ErrorMapperResult {
+  readonly status: number;
+  readonly code: number;
+  readonly message: string;
+  /** Response headers to set before the JSON body is written. */
+  readonly headers?: Readonly<Record<string, string>>;
+}
+
 interface MountOptions {
   /** Express app to mount onto. */
   readonly app: Express;
@@ -91,9 +108,7 @@ interface MountOptions {
   /** Operator-configured issuer URL override (OAuth). */
   readonly oauthIssuerUrl?: string;
   /** Operator-supplied error → HTTP/JSON-RPC mapping hook. */
-  readonly errorMapper?: (
-    err: unknown
-  ) => { readonly status: number; readonly code: number; readonly message: string } | undefined;
+  readonly errorMapper?: (err: unknown) => ErrorMapperResult | undefined;
   /**
    * Per-boot `buildMcpServer` options. Assembled once by the composer
    * (every input is fixed at composition time); the handler spreads a
@@ -320,9 +335,7 @@ export function mountMcpEndpoints(opts: MountOptions): void {
       } catch (err) {
         reqLogger.error("mcp_handle_failed", { error: String(err) });
         if (!res.headersSent) {
-          let mapped:
-            | { readonly status: number; readonly code: number; readonly message: string }
-            | undefined;
+          let mapped: ErrorMapperResult | undefined;
           if (errorMapper) {
             try {
               mapped = errorMapper(err);
@@ -335,6 +348,7 @@ export function mountMcpEndpoints(opts: MountOptions): void {
             }
           }
           if (mapped) {
+            if (mapped.headers) res.set(mapped.headers);
             res.status(mapped.status).json({
               jsonrpc: "2.0",
               error: { code: mapped.code, message: mapped.message },
