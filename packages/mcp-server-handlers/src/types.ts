@@ -16,7 +16,7 @@
  * await handler.handler({ query: 'weather' }, { appId: 'a', requestId: 'r' });
  * ```
  */
-import type { AuthResult } from '@ggui-ai/mcp-server-core';
+import type { AuthResult, CredentialScope } from '@ggui-ai/mcp-server-core';
 import type { ZodRawShape } from 'zod';
 
 /**
@@ -74,6 +74,25 @@ export interface HandlerContext {
    * never neither when auth resolved.
    */
   readonly userId?: string;
+  /**
+   * What the CREDENTIAL on this request may act on, forwarded verbatim
+   * from the resolved `AuthResult.credentialScope` upstream of the
+   * handler. See `CredentialScope` in `@ggui-ai/mcp-server-core`.
+   *
+   * Orthogonal to {@link userId}, which says who the caller is. One
+   * account can hold several credentials — one bound to a single app,
+   * another carrying full account authority — and {@link userId} is the
+   * same string for both. A handler that grants account-wide authority
+   * (enumerating an account's apps, minting new ones) therefore CANNOT
+   * decide from {@link userId}; it reads this.
+   *
+   * `undefined` when the deployment's adapter doesn't distinguish
+   * credential scopes, and for in-process invocations. Absence is NOT
+   * account scope: handlers MUST require an explicit `'account'` scope
+   * (or another positive proof of full authority, such as a first-party
+   * session) rather than treating a missing scope as permission.
+   */
+  readonly credentialScope?: CredentialScope;
   /**
    * How the caller's identity was proved, forwarded verbatim from the
    * resolved `AuthResult.source` upstream of the handler.

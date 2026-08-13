@@ -55,10 +55,14 @@ export class InMemoryAuthAdapter implements AuthAdapter {
     if (!token) return null;
     const hit = this.tokens.get(token);
     if (hit) {
-      // Clone so caller mutations don't alias the stored record.
+      // Clone so caller mutations don't alias the stored record. Spread
+      // the whole record rather than re-listing fields: an enumerated
+      // rebuild silently DROPS any field added to `AuthResult` later,
+      // and a reference adapter that quietly loses part of the contract
+      // is worse than no reference adapter. `metadata` is re-copied
+      // because it is the one nested mutable object.
       return {
-        identity: hit.identity,
-        source: hit.source,
+        ...hit,
         ...(hit.metadata ? { metadata: { ...hit.metadata } } : {}),
       };
     }

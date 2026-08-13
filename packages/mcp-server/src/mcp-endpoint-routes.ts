@@ -314,6 +314,15 @@ export function mountMcpEndpoints(opts: MountOptions): void {
         // context shape; OSS handlers continue to ignore both fields.
         ...(identity.identity.kind === "app" ? { apiKeyHash: identity.identity.apiKeyHash } : {}),
         ...(identity.identity.kind === "user" ? { userId: identity.identity.userId } : {}),
+        // What the credential itself may act on, when the adapter
+        // distinguishes credential scopes. Identity-independent by
+        // design: one account can present a key bound to a single app
+        // on one request and an account-wide key on the next, and the
+        // resolved userId is the same string both times — so the scope
+        // has to ride the request, not be re-derived from the identity.
+        ...(identity.credentialScope !== undefined
+          ? { credentialScope: identity.credentialScope }
+          : {}),
       };
       reqLogger.debug?.("mcp_request", { appId: ctx.appId });
 

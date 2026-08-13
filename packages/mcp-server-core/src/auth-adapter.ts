@@ -74,6 +74,38 @@ export type Identity =
     };
 
 /**
+ * How broadly the credential that proved an identity is scoped.
+ *
+ * {@link Identity} answers WHO the caller is; this answers WHAT the
+ * particular credential on this request may act on. The two are
+ * independent: one account can hold several credentials, one bound to a
+ * single app and another carrying the account's full authority. A
+ * resolved `userId` alone therefore cannot tell a handler which of the
+ * account's credentials authenticated this request — only the adapter
+ * that verified it knows, so the adapter states it here.
+ *
+ * Modeled as a discriminated union rather than a boolean plus an
+ * optional appId so that "full account authority AND bound to one app"
+ * is unrepresentable — an adapter cannot silently widen a bound
+ * credential by forgetting to clear a flag.
+ *
+ *   - `'account'` — acts for the whole account: every resource the
+ *     identity owns, including ones created after the credential was
+ *     issued.
+ *   - `'app'` — bound to exactly `appId`, with no authority over the
+ *     account's other apps.
+ *
+ * Adapters that don't distinguish credential scopes leave
+ * {@link AuthResult.credentialScope} absent. Absence is NOT `'account'`:
+ * a handler granting account-wide authority MUST require an explicit
+ * `'account'` scope (or some other positive proof, e.g. a first-party
+ * session), never read absence as permission.
+ */
+export type CredentialScope =
+  | { readonly kind: 'account' }
+  | { readonly kind: 'app'; readonly appId: string };
+
+/**
  * Result of a successful authentication.
  */
 export interface AuthResult {
@@ -98,6 +130,18 @@ export interface AuthResult {
     | 'oauth'
     | 'email'
     | 'anonymous';
+  /**
+   * Scope of the credential that proved {@link identity}, when this
+   * adapter distinguishes credential scopes. See {@link CredentialScope}
+   * — in particular, absence means "this adapter doesn't say", never
+   * "account-wide".
+   *
+   * Distinct from {@link metadata}: metadata is opaque adapter-specific
+   * strings for audit and debugging, while this is a typed
+   * authorization input that the binding layer threads onto the handler
+   * context for handlers to act on.
+   */
+  credentialScope?: CredentialScope;
   /** Opaque metadata — adapter-specific (sub, iss, deviceName, etc.). */
   metadata?: Record<string, string>;
 }
