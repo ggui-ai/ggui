@@ -54,6 +54,13 @@ export interface AgentSpec {
    * it. Absent for every pre-existing caller.
    */
   routeOverride?: AgentConfig["routeOverride"];
+  /**
+   * Retry observer (#489) — see `AgentConfig.onRetry`. Threaded
+   * through unchanged so `createAgent()` can notify the caller when
+   * `apiCall()` retries a rate-limited request. Absent for every
+   * pre-existing caller (no-op).
+   */
+  onRetry?: AgentConfig["onRetry"];
 }
 
 export interface SingleComponentParams {
