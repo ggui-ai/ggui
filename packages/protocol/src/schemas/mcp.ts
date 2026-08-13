@@ -452,7 +452,7 @@ export const renderCacheMarkerSchema = z.object({
 /**
  * Canonical failure codes for the in-result `ggui_render` failure
  * envelope (SPEC §7.9 Plane 3). Closed enum — a failed render's
- * `error.code` is always one of these four; finer-grained diagnostics
+ * `error.code` is always one of these five; finer-grained diagnostics
  * ride on `error.message`.
  *
  *   - `PRODUCTION_FAILED` — generation ran but did not produce a
@@ -464,12 +464,21 @@ export const renderCacheMarkerSchema = z.object({
  *     configuration has no key for the resolved route.
  *   - `NO_CREDENTIALS` — no generation credentials are configured on
  *     the server at all.
+ *   - `GENERATION_QUEUE_OVERLOADED` — the deployment's generation
+ *     admission gate rejected this request before any generation
+ *     attempt started (concurrent-request queue full, or wait for a
+ *     free slot exceeded the configured timeout). Distinct from
+ *     `PRODUCTION_FAILED` by design: generation never ran, so callers
+ *     MUST NOT bill or count it as a failed attempt. See
+ *     {@link GenerationError} in `types/ui-generator.ts` for the full
+ *     contract.
  */
 export const renderErrorCodeSchema = z.enum([
   'PRODUCTION_FAILED',
   'VALIDATION_ERROR',
   'NO_PLATFORM_KEY',
   'NO_CREDENTIALS',
+  'GENERATION_QUEUE_OVERLOADED',
 ]);
 
 /**
@@ -480,7 +489,7 @@ export const renderErrorCodeSchema = z.enum([
  */
 export const renderErrorSchema = z.object({
   code: renderErrorCodeSchema.describe(
-    'Canonical failure class. PRODUCTION_FAILED: generation did not produce a component. VALIDATION_ERROR: a server-side precondition rejected the render before generation. NO_PLATFORM_KEY: the server\'s managed provider-key configuration has no key for the resolved route. NO_CREDENTIALS: no generation credentials are configured on the server.',
+    'Canonical failure class. PRODUCTION_FAILED: generation did not produce a component. VALIDATION_ERROR: a server-side precondition rejected the render before generation. NO_PLATFORM_KEY: the server\'s managed provider-key configuration has no key for the resolved route. NO_CREDENTIALS: no generation credentials are configured on the server. GENERATION_QUEUE_OVERLOADED: the deployment\'s admission gate rejected the request before generation started (queue full or wait timed out) — not a failed attempt; safe to retry immediately.',
   ),
   message: z
     .string()

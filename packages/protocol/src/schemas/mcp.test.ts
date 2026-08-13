@@ -657,12 +657,13 @@ describe('ggui_update', () => {
 });
 
 describe('renderErrorCodeSchema', () => {
-  it('is the closed four-value set, in declaration order', () => {
+  it('is the closed five-value set, in declaration order', () => {
     expect(renderErrorCodeSchema.options).toEqual([
       'PRODUCTION_FAILED',
       'VALIDATION_ERROR',
       'NO_PLATFORM_KEY',
       'NO_CREDENTIALS',
+      'GENERATION_QUEUE_OVERLOADED',
     ]);
   });
 

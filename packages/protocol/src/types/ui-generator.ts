@@ -71,9 +71,24 @@ export interface UIGenerationResponse {
  *     configuration has no key for the resolved route.
  *   - `NO_CREDENTIALS` — no generation credentials are configured on
  *     the server.
+ *   - `GENERATION_QUEUE_OVERLOADED` — the deployment's generation
+ *     admission gate rejected this request before any generation
+ *     attempt started (its concurrent-request queue was full, or the
+ *     wait for a free slot exceeded the configured timeout). Contract
+ *     (protocol-and-contract-bar): the deployment (party A) promises
+ *     the caller (party B) that this code is emitted ONLY when
+ *     generation never began — never as a relabeling of a genuine
+ *     production failure. Callers MUST NOT bill or count this as a
+ *     failed generation attempt; a caller that retries MAY do so
+ *     immediately (no state was consumed). Violation is observable:
+ *     a deployment that folds an admission shed into
+ *     `PRODUCTION_FAILED` (or vice versa) breaks this promise and a
+ *     caller relying on the distinction will mis-bill or mis-count.
  *
- * The last four map 1:1 onto the render failure envelope's canonical
- * codes (`renderErrorCodeSchema` in `schemas/mcp.ts`).
+ * The other five map 1:1 onto the render failure envelope's canonical
+ * codes (`renderErrorCodeSchema` in `schemas/mcp.ts`); `COMPILATION_ERROR`
+ * is the sole exception (folds into `PRODUCTION_FAILED` on the wire, per
+ * above).
  */
 export interface GenerationError {
   code:
@@ -81,7 +96,8 @@ export interface GenerationError {
     | 'COMPILATION_ERROR'
     | 'VALIDATION_ERROR'
     | 'NO_PLATFORM_KEY'
-    | 'NO_CREDENTIALS';
+    | 'NO_CREDENTIALS'
+    | 'GENERATION_QUEUE_OVERLOADED';
   message: string;
   /** Additional diagnostic information. Typed as {@link JsonValue} (any JSON-safe value). */
   details?: JsonValue;
