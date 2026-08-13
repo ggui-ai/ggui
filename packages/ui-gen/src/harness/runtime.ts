@@ -31,6 +31,7 @@ import { WIRE_DOCUMENTATION } from "../tools/get-wire.js";
 import { renderPitfallsBlock } from "./pitfalls.js";
 import type { GadgetDescriptor, DataContract, JsonObject } from "@ggui-ai/protocol";
 import { buildSystemPrompt as buildSystemPromptSkeleton } from "../boilerplate.js";
+import type { AgentConfig } from "./llm-router.js";
 
 // Re-export the boilerplate generator so existing internal importers
 // (create-harness.ts, benchmarks/preview-boilerplate.ts) keep working.
@@ -46,6 +47,13 @@ type Provider = "anthropic" | "openai" | "google" | "openrouter";
 export interface AgentSpec {
   provider: Provider;
   model: string;
+  /**
+   * Explicit per-call credentials/routing (#484) — see
+   * `AgentConfig.routeOverride`. Threaded through unchanged so
+   * `createAgent()` can bypass `process.env` when the caller supplies
+   * it. Absent for every pre-existing caller.
+   */
+  routeOverride?: AgentConfig["routeOverride"];
 }
 
 export interface SingleComponentParams {

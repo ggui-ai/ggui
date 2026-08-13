@@ -144,7 +144,10 @@ export async function initSession(input: {
   const systemPrompt = input.systemPromptOverride ?? harness.how.systemPrompt;
 
   // ── Create + warm-cache the coding agent ──
-  const codingAgent = createAgent(agents.coding.provider);
+  // Pass the full spec (not just `.provider`) so a caller-supplied
+  // `routeOverride` (#484) reaches the constructed `LLMAgent` instance
+  // and it never falls back to reading `process.env`.
+  const codingAgent = createAgent(agents.coding);
   await codingAgent.warmCache(
     agents.coding.model,
     systemPrompt,

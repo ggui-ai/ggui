@@ -53,6 +53,7 @@ import type {
 } from "../harness/result-types.js";
 import type { AdapterResult, ProviderName, ToolDefinition } from "./types.js";
 import type { QualityConfig } from "../evaluation/types-public.js";
+import type { AgentConfig } from "../harness/llm-router.js";
 import {
   type GadgetDescriptor,
   type JsonObject,
@@ -147,6 +148,14 @@ export interface GenerationDispatchParams {
    * STDLIB-only / bench / direct callers.
    */
   gadgetTypes?: Readonly<Record<string, string>>;
+  /**
+   * Explicit per-call credentials/routing (#484) — see
+   * `AgentConfig.routeOverride`. Threaded onto the coding + evaluation
+   * agent specs so `resolveSessionAgents` → `createAgent` never falls
+   * back to reading `process.env`. Absent (default) preserves
+   * existing behavior for callers that don't set it.
+   */
+  routeOverride?: AgentConfig["routeOverride"];
 }
 
 /**
@@ -186,9 +195,17 @@ export async function dispatchGeneration(
 
   const routerProvider = mapProviderForLLMRouter(params.provider);
   const resolvedModel = params.models?.coding ?? params.models?.default ?? params.model;
-  const codingAgent = { provider: routerProvider, model: resolvedModel };
+  const codingAgent = {
+    provider: routerProvider,
+    model: resolvedModel,
+    routeOverride: params.routeOverride,
+  };
   const evaluationAgent = params.models?.evaluation
-    ? { provider: routerProvider, model: params.models.evaluation }
+    ? {
+        provider: routerProvider,
+        model: params.models.evaluation,
+        routeOverride: params.routeOverride,
+      }
     : undefined;
   // ModelRoles doesn't currently expose a visualEval slot — falls through
   // to the documented evaluation → coding chain inside resolveSessionAgents.
