@@ -1617,56 +1617,79 @@ export function createGguiRenderHandler(
         // fallthrough (self-heal, unchanged). With `seedPools` undefined
         // both helpers collapse to exactly the old single per-app read.
         const seedPools = deps.generation.seedPools ?? [];
+        // Both helpers below are wrapped so a lookup FAULT (a backend
+        // reject — throttle, network blip, transient IAM error) degrades
+        // exactly like a genuine miss, keeping the "Never throws"
+        // self-heal contract above true for real remote-backed stores,
+        // not just an in-memory index that could structurally never
+        // reject. Mirrors the sibling guards on every other index
+        // consumer (blueprint-matcher.ts's exact-key probe,
+        // decideHandshake's per-pool probe) — this was the one §6
+        // point-read that had none.
         const readByIdAcrossPools = async (id: string) => {
-          const perApp = deps.generation?.cache
-            ? await readBlueprintById(
-                { vectorStore: deps.generation.cache.vectorStore },
-                ctx.appId,
+          try {
+            const perApp = deps.generation?.cache
+              ? await readBlueprintById(
+                  { vectorStore: deps.generation.cache.vectorStore },
+                  ctx.appId,
+                  id,
+                )
+              : null;
+            if (perApp) return perApp;
+            for (const pool of seedPools) {
+              const hit = await readBlueprintById(
+                { vectorStore: pool.registry.vectorStore },
+                pool.scope ?? ctx.appId,
                 id,
-              )
-            : null;
-          if (perApp) return perApp;
-          for (const pool of seedPools) {
-            const hit = await readBlueprintById(
-              { vectorStore: pool.registry.vectorStore },
-              pool.scope ?? ctx.appId,
-              id,
-            );
-            if (hit) return hit;
+              );
+              if (hit) return hit;
+            }
+            return null;
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            // eslint-disable-next-line no-console -- operator-visible signal; reuse lookup faults must never crash the render
+            console.warn(`[ggui_render] blueprint reuse read-by-id failed, falling through to cold-gen: ${msg}`);
+            return null;
           }
-          return null;
         };
         const findExactAcrossPools = async (
           contractKey: string,
           variantKey_: string,
         ) => {
-          const perApp = deps.generation?.cache?.index
-            ? await findBlueprintExact(
+          try {
+            const perApp = deps.generation?.cache?.index
+              ? await findBlueprintExact(
+                  {
+                    vectorStore: deps.generation.cache.vectorStore,
+                    index: deps.generation.cache.index,
+                  },
+                  ctx.appId,
+                  'template',
+                  contractKey,
+                  variantKey_,
+                )
+              : null;
+            if (perApp) return perApp;
+            for (const pool of seedPools) {
+              const hit = await findBlueprintExact(
                 {
-                  vectorStore: deps.generation.cache.vectorStore,
-                  index: deps.generation.cache.index,
+                  vectorStore: pool.registry.vectorStore,
+                  index: pool.registry.index,
                 },
-                ctx.appId,
+                pool.scope ?? ctx.appId,
                 'template',
                 contractKey,
                 variantKey_,
-              )
-            : null;
-          if (perApp) return perApp;
-          for (const pool of seedPools) {
-            const hit = await findBlueprintExact(
-              {
-                vectorStore: pool.registry.vectorStore,
-                index: pool.registry.index,
-              },
-              pool.scope ?? ctx.appId,
-              'template',
-              contractKey,
-              variantKey_,
-            );
-            if (hit) return hit;
+              );
+              if (hit) return hit;
+            }
+            return null;
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            // eslint-disable-next-line no-console -- operator-visible signal; reuse lookup faults must never crash the render
+            console.warn(`[ggui_render] blueprint reuse exact-key lookup failed, falling through to cold-gen: ${msg}`);
+            return null;
           }
-          return null;
         };
 
         const matched = handshakeRecord.matchedBlueprint;
