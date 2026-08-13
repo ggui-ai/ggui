@@ -1290,6 +1290,95 @@ describe('createGguiRenderHandler — variance-aware input reshape (Tasks 6+7)',
     const render = stored?.render as ComponentGguiSession | undefined;
     expect(render?.componentCode).toBe(COLD_CODE);
   });
+
+  // §6 self-heal is documented as "Never throws" (render.ts: a dangling
+  // binding or stale index resolves to null → cold-gen fallthrough). A
+  // BlueprintIndex backed by a remote store (e.g. DynamoDB) can REJECT
+  // rather than miss — a throttle, a network blip, a transient IAM
+  // fault. Mirrors the existing "registration failure commits
+  // blueprintId: null" test's monkeypatch-after-seed idiom (durable
+  // render identity suite, below): register normally first, THEN
+  // install the fault so setup is unaffected.
+  it('(h) a rejecting index.getId cannot fail the render — falls through to cold-gen, no throw', async () => {
+    const handshakeStore = new InMemoryKeyValueStore();
+    const renderStore = new InMemoryGguiSessionStore();
+    const vectorStore = new InMemoryVectorStore();
+    const index = new InMemoryBlueprintIndex();
+
+    // Seed the default-variant row BEFORE the fault is installed — this
+    // registration must succeed normally.
+    const storedUuid = 'bp_33333333-3333-4333-8333-333333333333';
+    await registerBlueprint(
+      { embedding: fakeEmbedding, vectorStore, index },
+      APP_ID,
+      {
+        kind: 'template',
+        contract: CONTRACT,
+        intent: 'a test card',
+        componentCode: STORED_CODE,
+        source: { kind: 'llm', generator: 'fake-generator', model: 'fake' },
+      },
+      { mintId: () => storedUuid },
+    );
+
+    // Install the fault AFTER setup — every getId from here on rejects,
+    // both the §6 point-read (findExactAcrossPools) AND cold-gen's own
+    // registerBlueprint dedup-check getId.
+    index.getId = async () => {
+      throw new Error('index unavailable (simulated fault)');
+    };
+
+    const handshakeId = 'hs-cache-rejecting-index';
+    await seedHandshake(
+      handshakeStore,
+      handshakeId,
+      buildRecord({
+        handshakeId,
+        origin: 'cache',
+        matchedBlueprint: {
+          id: storedUuid,
+          contractKey: blueprintKey(CONTRACT),
+          variantKey: variantKey(undefined),
+        },
+      }),
+    );
+
+    const handler = buildHandler({
+      handshakeStore,
+      renderStore,
+      vectorStore,
+      index,
+      coldCode: COLD_CODE,
+    });
+
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      // override.variance re-resolves via findExactAcrossPools →
+      // findBlueprintExact → index.getId, which now REJECTS.
+      const out = await handler.handler(
+        { handshakeId, override: { variance: PERSONA_VARIANCE }, props: {} },
+        CTX,
+      );
+
+      // Never throws — degrades exactly like a genuine miss. The §6
+      // point-read AND cold-gen's own dedup-check getId both hit the
+      // same fault, so the cold-gen write is ALSO swallowed
+      // (safelyRegisterBlueprint's existing guard) — same
+      // wire-shape as the "registration failure" test below.
+      assertRenderSuccess(out);
+      expect(out.cache.hit).toBe(false);
+      expect(out.blueprintId).toBe('');
+
+      const warned = warn.mock.calls.some(
+        ([first]) =>
+          typeof first === 'string' &&
+          first.includes('index unavailable (simulated fault)'),
+      );
+      expect(warned).toBe(true);
+    } finally {
+      warn.mockRestore();
+    }
+  });
 });
 
 // P2-25: the CALL SHAPE block of the ggui_render description was
