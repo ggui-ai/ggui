@@ -3,7 +3,7 @@
  *
  * These are wire-contract tests, not behavioural tests: they pin the exact
  * shape of every event variant so that any breaking change to the schema
- * surfaces in CI before @ggui-ai/server or @ggui-ai/react silently
+ * surfaces in CI before @ggui-ai/server or @ggui-ai/mcp-apps-react silently
  * drift apart.
  *
  * Spec: docs/superpowers/specs/2026-04-13-streamable-invoke-protocol.md

@@ -141,7 +141,7 @@ export function validateInboundStreamPayload(
  * (matches the protocol's "absent field = default" convention).
  *
  * This is the canonical construction helper used by the repo-local
- * render emitters (`@ggui-ai/react` and `@ggui-ai/react-native`).
+ * render emitters (`@ggui-ai/mcp-apps-react` and `@ggui-ai/mcp-apps-react-native`).
  * Both `GguiRender` implementations route every outbound action
  * through `buildActionEnvelope` + {@link validateOutboundActionEnvelope}
  * + `sendAction`. Third-party live-channel clients should use the same

@@ -1,7 +1,7 @@
 /**
  * Provisional (A2UI preview) renderer for the iframe runtime.
  *
- * Port of `@ggui-ai/react::components/ProvisionalRenderer.tsx` with
+ * Port of `@ggui-ai/mcp-apps-react::components/ProvisionalRenderer.tsx` with
  * the React-hook consumer stripped. The A2UI reduce + adjacency-list
  * render is preserved verbatim; the inputs + mount lifecycle differ:
  *

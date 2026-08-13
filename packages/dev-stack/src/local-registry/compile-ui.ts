@@ -25,8 +25,8 @@
  *   - esbuild `build` mode with bundle: true, so multi-file UIs
  *     work (import sibling helpers, theme tokens, wire hooks).
  *   - Sandbox externals match the runtime renderer
- *     (`DynamicComponent` in `@ggui-ai/react`). React, the design
- *     system, `@ggui-ai/wire`, and `@ggui-ai/react` stay external
+ *     (`DynamicComponent` in `@ggui-ai/mcp-apps-react`). React, the design
+ *     system, `@ggui-ai/wire`, and `@ggui-ai/mcp-apps-react` stay external
  *     and resolve against the import map the rendering host
  *     provides at render time.
  *   - No caching. Every request recompiles. esbuild TSX transform
@@ -54,8 +54,8 @@ export const SANDBOX_EXTERNALS = [
   '@ggui-ai/design/*',
   '@ggui-ai/wire',
   '@ggui-ai/wire/*',
-  '@ggui-ai/react',
-  '@ggui-ai/react/*',
+  '@ggui-ai/mcp-apps-react',
+  '@ggui-ai/mcp-apps-react/*',
 ];
 
 /**

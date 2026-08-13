@@ -64,8 +64,8 @@ const SANDBOX_EXTERNALS = [
   '@ggui-ai/design/*',
   '@ggui-ai/wire',
   '@ggui-ai/wire/*',
-  '@ggui-ai/react',
-  '@ggui-ai/react/*',
+  '@ggui-ai/mcp-apps-react',
+  '@ggui-ai/mcp-apps-react/*',
 ];
 
 /** Max compiled bundle size (2MB). Prevents accidentally bundling huge deps. */

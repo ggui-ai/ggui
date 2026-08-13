@@ -42,7 +42,7 @@
   },
   "devDependencies": {
     "@ggui-ai/design": "workspace:*",
-    "@ggui-ai/react": "workspace:*",
+    "@ggui-ai/mcp-apps-react": "workspace:*",
     "@ggui-ai/wire": "workspace:*",
     "@types/node": "^24.0.0",
     "@types/react": "^19.0.0",

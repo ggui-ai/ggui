@@ -246,14 +246,14 @@ For non-React frameworks, embed the viewer directly:
 
 Consumer-facing surface — what you `npm install`:
 
-| Package                                                 | Purpose                                                            | npm                                                                                                           |
-| ------------------------------------------------------- | ------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------- |
-| [`@ggui-ai/cli`](./packages/ggui-cli)                   | The `ggui` binary — `serve`, `dev`, `blueprint`, `gadget`, `theme` | [![npm](https://img.shields.io/npm/v/@ggui-ai/cli)](https://npmjs.com/package/@ggui-ai/cli)                   |
-| [`@ggui-ai/mcp-server`](./packages/mcp-server)          | Reference OSS server (programmatic embedding)                      | [![npm](https://img.shields.io/npm/v/@ggui-ai/mcp-server)](https://npmjs.com/package/@ggui-ai/mcp-server)     |
-| [`@ggui-ai/react`](./packages/ggui-react)               | React embedding — chat shells + MCP-Apps chat hook                 | [![npm](https://img.shields.io/npm/v/@ggui-ai/react)](https://npmjs.com/package/@ggui-ai/react)               |
-| [`@ggui-ai/react-native`](./packages/ggui-react-native) | React Native embedding — `<McpAppIframe>` MCP-Apps host + shells   | [![npm](https://img.shields.io/npm/v/@ggui-ai/react-native)](https://npmjs.com/package/@ggui-ai/react-native) |
-| [`@ggui-ai/protocol`](./packages/protocol)              | Wire types (events, sessions, WebSocket, MCP envelopes)            | [![npm](https://img.shields.io/npm/v/@ggui-ai/protocol)](https://npmjs.com/package/@ggui-ai/protocol)         |
-| [`@ggui-ai/gadgets`](./packages/gadgets)                | Author wrappers for 3rd-party libs (Leaflet, Mapbox, …)            | [![npm](https://img.shields.io/npm/v/@ggui-ai/gadgets)](https://npmjs.com/package/@ggui-ai/gadgets)           |
+| Package                                                     | Purpose                                                            | npm                                                                                                           |
+| ----------------------------------------------------------- | ------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------- |
+| [`@ggui-ai/cli`](./packages/ggui-cli)                       | The `ggui` binary — `serve`, `dev`, `blueprint`, `gadget`, `theme` | [![npm](https://img.shields.io/npm/v/@ggui-ai/cli)](https://npmjs.com/package/@ggui-ai/cli)                   |
+| [`@ggui-ai/mcp-server`](./packages/mcp-server)              | Reference OSS server (programmatic embedding)                      | [![npm](https://img.shields.io/npm/v/@ggui-ai/mcp-server)](https://npmjs.com/package/@ggui-ai/mcp-server)     |
+| [`@ggui-ai/react`](./packages/mcp-apps-react)               | React embedding — chat shells + MCP-Apps chat hook                 | [![npm](https://img.shields.io/npm/v/@ggui-ai/react)](https://npmjs.com/package/@ggui-ai/react)               |
+| [`@ggui-ai/react-native`](./packages/mcp-apps-react-native) | React Native embedding — `<McpAppIframe>` MCP-Apps host + shells   | [![npm](https://img.shields.io/npm/v/@ggui-ai/react-native)](https://npmjs.com/package/@ggui-ai/react-native) |
+| [`@ggui-ai/protocol`](./packages/protocol)                  | Wire types (events, sessions, WebSocket, MCP envelopes)            | [![npm](https://img.shields.io/npm/v/@ggui-ai/protocol)](https://npmjs.com/package/@ggui-ai/protocol)         |
+| [`@ggui-ai/gadgets`](./packages/gadgets)                    | Author wrappers for 3rd-party libs (Leaflet, Mapbox, …)            | [![npm](https://img.shields.io/npm/v/@ggui-ai/gadgets)](https://npmjs.com/package/@ggui-ai/gadgets)           |
 
 Plus 27 supporting packages under [`packages/`](./packages) spanning the runtime (`@ggui-ai/mcp-server-core`, `@ggui-ai/mcp-server-handlers`, `@ggui-ai/ui-gen`, `@ggui-ai/negotiator`), authoring (`@ggui-ai/project-config`, `@ggui-ai/ui-registry`), registry (`@ggui-ai/registry-core`, `@ggui-ai/registry-server`), and dev tooling (`@ggui-ai/dev-stack`, `@ggui-ai/agent-runtime`, `@ggui-ai/console`). See each subdirectory for details.
 

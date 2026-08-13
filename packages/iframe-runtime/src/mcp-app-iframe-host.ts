@@ -1,5 +1,5 @@
 /**
- * Vanilla-TS port of `@ggui-ai/react::components/GguiRender.tsx`'s
+ * Vanilla-TS port of `@ggui-ai/mcp-apps-react::components/GguiRender.tsx`'s
  * MCP-Apps branch. Used when a ggui render's `type === 'mcpApps'`
  * — the renderer mounts a nested iframe that embeds a foreign
  * MCP App.

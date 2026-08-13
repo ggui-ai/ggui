@@ -3,7 +3,7 @@
  * ("did this generated UI work for you?").
  *
  * The in-iframe twin of the host-chrome `UiFeedback` component in
- * `@ggui-ai/react`: same three verdicts — Love / Dislike / Other
+ * `@ggui-ai/mcp-apps-react`: same three verdicts — Love / Dislike / Other
  * (free-text comment) — same acknowledgement after submit, same
  * dismiss control, same payload semantics (trimmed comment only on
  * `verdict: 'other'`, context stamps present exactly when known).

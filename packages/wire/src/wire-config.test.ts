@@ -6,7 +6,7 @@
  *
  * The renderer-side adapters keep their own suites
  * (`@ggui-ai/iframe-runtime`'s wire-config tests pin the tools/call-vs-WS
- * transport seam; `@ggui-ai/react`'s GguiRender tests pin the
+ * transport seam; `@ggui-ai/mcp-apps-react`'s GguiRender tests pin the
  * live-channel wiring) — this file pins the shared core's contract:
  *
  *   1. Action envelopes carry a single `sessionId` plus `clientSeq` +

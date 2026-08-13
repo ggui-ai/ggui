@@ -13,7 +13,7 @@
  *      `{type:'ggui:observe', event:{kind:'ui-feedback',…}}` to
  *      `window.parent`.
  *   3. Payload semantics — mirrors the host-chrome `UiFeedback` twin
- *      (`@ggui-ai/react`): trimmed comment only on `verdict:'other'`,
+ *      (`@ggui-ai/mcp-apps-react`): trimmed comment only on `verdict:'other'`,
  *      whitespace-only comments omitted, context stamps present
  *      exactly when supplied, dismissal emits nothing.
  *
@@ -173,7 +173,7 @@ describe('mountUiFeedbackChrome — ggui:observe envelope', () => {
 });
 
 // =============================================================================
-// 3. Payload semantics — mirrors UiFeedback.test.tsx (@ggui-ai/react)
+// 3. Payload semantics — mirrors UiFeedback.test.tsx (@ggui-ai/mcp-apps-react)
 // =============================================================================
 
 describe('UiFeedbackCard — payload semantics', () => {

@@ -37,7 +37,7 @@
   "dependencies": {
     "@ggui-ai/design": "workspace:*",
     "@ggui-ai/project-config": "workspace:*",
-    "@ggui-ai/react": "workspace:*",
+    "@ggui-ai/mcp-apps-react": "workspace:*",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
   },

@@ -10,7 +10,7 @@
  * `StackRenderer` / `StackRenderContext` orchestrator (a stack-of-N
  * map keyed by item id) was retired along with `StackModel`.
  *
- * The dispatch tree mirrors `@ggui-ai/react::DynamicComponent` +
+ * The dispatch tree mirrors `@ggui-ai/mcp-apps-react::DynamicComponent` +
  * `GguiRender`'s MCP-Apps branch:
  *
  *   - `type === 'mcpApps'` → `mountMcpAppIframe` (vanilla iframe

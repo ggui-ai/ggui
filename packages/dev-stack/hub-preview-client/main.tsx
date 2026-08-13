@@ -1,7 +1,7 @@
 /**
  * Hub preview client — the React app that mounts inside the hub's
  * preview iframe and renders a local UI via
- * `<DynamicComponent code={...} />` from `@ggui-ai/react`.
+ * `<DynamicComponent code={...} />` from `@ggui-ai/mcp-apps-react`.
  *
  * Why a bundled React app (not the vanilla hub JS):
  *
@@ -41,7 +41,7 @@
  */
 import { StrictMode, useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { DynamicComponent } from '@ggui-ai/react';
+import { DynamicComponent } from '@ggui-ai/mcp-apps-react';
 
 /**
  * Registry event payload emitted by the dev-stack SSE endpoint.

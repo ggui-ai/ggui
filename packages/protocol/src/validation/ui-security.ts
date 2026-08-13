@@ -21,7 +21,7 @@
  *
  * - `sandboxed` — pure React + `@ggui-ai/design` primitives. Portable,
  *   publishable, runs in any ggui rendering context.
- * - `fullstack` — uses adapters (`@ggui-ai/react` hooks, server
+ * - `fullstack` — uses adapters (`@ggui-ai/mcp-apps-react` hooks, server
  *   connectors). Requires a client bundle, app-scoped.
  *
  * Colocated with the classifier (`classifyUi`) because that's the
@@ -139,7 +139,7 @@ export const DANGEROUS_PATTERNS: DangerousPattern[] = [
  */
 const FULLSTACK_IMPORT_PREFIXES = [
   '@ggui-ai/wire',
-  '@ggui-ai/react',
+  '@ggui-ai/mcp-apps-react',
   '@app/components',
 ] as const;
 
@@ -147,7 +147,7 @@ const FULLSTACK_IMPORT_PREFIXES = [
  * Classify a component as sandboxed or fullstack based on its imports.
  *
  * - **sandboxed**: Pure React + @ggui-ai/design primitives. Portable, publishable.
- * - **fullstack**: Uses @ggui-ai/wire, @ggui-ai/react, or @app/components. Private.
+ * - **fullstack**: Uses @ggui-ai/wire, @ggui-ai/mcp-apps-react, or @app/components. Private.
  *
  * Works on both source (.tsx) and compiled (.js) code.
  */

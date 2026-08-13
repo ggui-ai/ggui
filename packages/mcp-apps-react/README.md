@@ -1,0 +1,67 @@
+# @ggui-ai/mcp-apps-react
+
+React SDK for [ggui](https://ggui.ai) — the interface layer between AI
+agents and humans. Agents describe UIs in natural language over MCP;
+ggui generates ephemeral interfaces. This package lets you embed those
+interfaces in a React web app.
+
+## Install
+
+```bash
+npm install @ggui-ai/mcp-apps-react react react-dom
+```
+
+`react` and `react-dom` are peer dependencies (React 18 or 19).
+`@modelcontextprotocol/sdk` is also a peer dependency.
+
+To host a render's sandboxed iframe you also need `@mcp-ui/client`
+(install it directly; ggui does not re-export it):
+
+```bash
+npm install @mcp-ui/client
+```
+
+## Quick start
+
+An agent emits UI as MCP Apps-conformant renders. In a React app you
+drive the conversation with the `useMcpAppsChat` hook and host each
+render's sandboxed iframe with `<AppRenderer>`:
+
+```tsx
+import { AppRenderer } from "@mcp-ui/client";
+import { useMcpAppsChat } from "@ggui-ai/mcp-apps-react/chat-helpers";
+
+function Chat({ agentUrl }: { agentUrl: string }) {
+  const { entries, sessions, send, handleAppMessage } = useMcpAppsChat({
+    chatEndpoint: `${agentUrl}/agent`,
+    snapshotEndpoint: `${agentUrl}/agent`,
+  });
+
+  // - render `entries` as chat bubbles; call `send(prompt)` to talk to the agent
+  // - mount the latest `sessions` entry with <AppRenderer> — it needs the
+  //   sandbox-proxy origin + onReadResource / onCallTool relay + onMessage={handleAppMessage}
+}
+```
+
+`<AppRenderer>`'s sandbox + resource-read + tool-call relay wiring is
+non-trivial (it implements the MCP Apps host contract). The complete,
+runnable reference — including auth — is the
+[`ggui-basic-web`](../../samples/apps/ggui-basic-web) sample. **Start there.**
+
+The package also exports the `useInvoke` hook for driving the invoke
+conversation loop directly. It pairs with `<AppRenderer>` from
+`@mcp-ui/client` for hosting an MCP Apps render in a sandboxed iframe
+— install that package directly; ggui does not re-export it. (React
+Native's equivalent host is `<McpAppIframe>` from
+`@ggui-ai/mcp-apps-react-native`.)
+
+## Entry points
+
+| Import path                            | Contents                            |
+| -------------------------------------- | ----------------------------------- |
+| `@ggui-ai/mcp-apps-react`              | Components and hooks                |
+| `@ggui-ai/mcp-apps-react/chat-helpers` | Message-grouping and render helpers |
+
+## License
+
+Apache-2.0

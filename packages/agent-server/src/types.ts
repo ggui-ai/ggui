@@ -47,7 +47,7 @@ export interface McpCallToolResult {
 /**
  * Normalized SDK-message envelope. Mirrors the relevant subset of
  * Anthropic's `SDKMessage` so the shared frontend hook
- * (`useMcpAppsChat` in `@ggui-ai/react/chat-helpers`) parses one shape
+ * (`useMcpAppsChat` in `@ggui-ai/mcp-apps-react/chat-helpers`) parses one shape
  * regardless of which SDK is upstream.
  *
  * Each per-SDK adapter is responsible for translating its native event

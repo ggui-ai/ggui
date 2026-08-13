@@ -167,7 +167,7 @@ export interface ChannelPollRecoveredEvent {
 /**
  * Fired when the end user submits the runtime's in-iframe UI-feedback
  * affordance ("did this generated UI work for you?"). Field semantics
- * mirror `UiFeedbackPayload` in `@ggui-ai/react` / `@ggui-ai/react-native`
+ * mirror `UiFeedbackPayload` in `@ggui-ai/mcp-apps-react` / `@ggui-ai/mcp-apps-react-native`
  * (the host-chrome twin of this affordance):
  *
  *   - `verdict` — `'love'` / `'dislike'`, or `'other'` for the

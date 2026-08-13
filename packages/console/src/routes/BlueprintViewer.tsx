@@ -30,7 +30,7 @@ import {
   type ReactElement,
   type ReactNode,
 } from 'react';
-import { GguiSessionRenderer } from '@ggui-ai/react';
+import { GguiSessionRenderer } from '@ggui-ai/mcp-apps-react';
 import { SectionHead } from '../brand/SectionHead.js';
 import { StatusBadge } from '../brand/StatusBadge.js';
 import { navigateTo } from '../router.js';

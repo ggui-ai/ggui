@@ -5,7 +5,7 @@
  * Reads the compiled design package output (dist/tokens/, dist/primitives/)
  * and bundles each into a single ESM file with React imports rewritten to
  * esm.sh URLs. The output is consumed by:
- *   - packages/ggui-react (DynamicComponent.tsx blob URLs)
+ *   - packages/mcp-apps-react (DynamicComponent.tsx blob URLs)
  *   - cloud/amplify/functions/render (importmap endpoints)
  *
  * Run: node packages/design/scripts/generate-inline-modules.mjs

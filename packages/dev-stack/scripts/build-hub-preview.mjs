@@ -6,12 +6,12 @@
  * Source:  packages/dev-stack/hub-preview-client/main.tsx
  * Output:  packages/dev-stack/dist/hub-preview/client.js
  *
- * Everything (React, ReactDOM, @ggui-ai/react, @ggui-ai/design,
+ * Everything (React, ReactDOM, @ggui-ai/mcp-apps-react, @ggui-ai/design,
  * @ggui-ai/wire) is bundled in — the iframe is a standalone page
  * with no import map, and the user's compiled UI expects these
  * modules to be resolvable through the renderer's data-URL shim
  * (which DynamicComponent sets up against `globalThis.__ggui__`,
- * populated by @ggui-ai/react at render time).
+ * populated by @ggui-ai/mcp-apps-react at render time).
  *
  * Run via `pnpm build` (added to the package.json build script).
  * Runs in ~200-500ms locally.
@@ -39,7 +39,7 @@ const result = await build({
   minify: false,
   sourcemap: false,
   // The preview iframe is a standalone page — nothing is external.
-  // `@ggui-ai/react` pulls in react, react-dom, and (transitively)
+  // `@ggui-ai/mcp-apps-react` pulls in react, react-dom, and (transitively)
   // the design system; bundling everything keeps the delivery shape
   // a single GET, no import map, no surprises.
   jsx: 'automatic',
