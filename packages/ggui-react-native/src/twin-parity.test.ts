@@ -51,13 +51,18 @@ const RN_SRC = path.join(packagesRoot, 'ggui-react-native', 'src');
  * byte-identical across the two SDKs.
  */
 const BYTE_IDENTICAL_TWINS: readonly string[] = [
+  // The chat-thread/* entries were pruned when the RN chat-thread stack
+  // (ChatThreadProvider/useChatThread/outbox/shells) was deleted as an
+  // owner-ruled zero-consumer surface (ggui#425 residual slice) — the
+  // ggui-react copy survives as a deliberately web-only surface, so it
+  // is no longer a twin.
   'chat-helpers/message-groups.ts',
   'chat-helpers/render.ts',
   'chat-helpers/useRafThrottled.ts',
-  // The chat-thread/* twin entries were pruned when the ggui-react
-  // copy of the chat-thread family was deleted (owner-ruled
-  // SDK-for-others surface with zero internal consumers). The
-  // ggui-react-native copy survives one-sided; it is no longer a twin.
+  // No chat-thread entries on either side: the chat-thread family was
+  // deleted from BOTH packages (owner-ruled SDK-for-others surface,
+  // zero internal consumers — web slice + #425-residual RN slice,
+  // 2026-08-13). Nothing to diff.
   'twin-parity.test.ts',
 ];
 

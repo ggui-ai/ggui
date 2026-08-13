@@ -5,7 +5,7 @@
  * agent interfaces in mobile applications. The host primitive is
  * `<McpAppIframe>` — the WebView-backed MCP Apps host (RN analog of the
  * web's `<AppRenderer>` from `@mcp-ui/client`) — surrounded by the
- * thread-backed chat stack (`chat-thread` subpath), the Streamable
+ * message-grouping helpers (`chat-helpers` subpath), the Streamable
  * Invoke hook (`useInvoke`), and a React Native theme system that
  * mirrors the web design tokens.
  *
@@ -128,10 +128,6 @@ export type {
 export { ErrorBoundary } from './components/ErrorBoundary';
 export type { ErrorBoundaryProps } from './components/ErrorBoundary';
 
-// Self-Repair Error Boundary
-export { SelfRepairBoundary } from './components/SelfRepairBoundary';
-export type { SelfRepairBoundaryProps } from './components/SelfRepairBoundary';
-
 // UI Feedback affordance — host-side render-shell chrome. Hidden
 // entirely unless the host wires `onUiFeedback`; the payload leaves
 // through that callback only (never the agent ↔ UI wire). An
@@ -144,13 +140,6 @@ export type {
   UiFeedbackPayload,
   UiFeedbackVerdict,
 } from './components/UiFeedback';
-
-// Re-export self-repair types from internal
-export type {
-  ComponentErrorReport,
-  ComponentRepairResult,
-  SelfRepairConfig,
-} from '@ggui-ai/shared';
 
 // Streamable Invoke Protocol (v1.1) hook
 export { useInvoke, parseSseStream } from './invoke/index';

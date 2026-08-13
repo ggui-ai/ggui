@@ -48,18 +48,6 @@
     "./chat-helpers": {
       "types": "./src/chat-helpers/index.ts",
       "default": "./src/chat-helpers/index.ts"
-    },
-    "./chat-thread": {
-      "types": "./src/chat-thread/index.ts",
-      "default": "./src/chat-thread/index.ts"
-    },
-    "./chat-thread/shells/chat": {
-      "types": "./src/chat-thread/shells/chat/index.ts",
-      "default": "./src/chat-thread/shells/chat/index.ts"
-    },
-    "./chat-thread/shells/agent": {
-      "types": "./src/chat-thread/shells/agent/index.ts",
-      "default": "./src/chat-thread/shells/agent/index.ts"
     }
   },
   "scripts": {
@@ -72,7 +60,6 @@
   },
   "peerDependencies": {
     "@modelcontextprotocol/sdk": "^1.27.0",
-    "@react-native-async-storage/async-storage": "^2.0.0",
     "react": "^18.0.0 || ^19.0.0",
     "react-native": ">=0.70.0 <1.0.0",
     "react-native-webview": "^13.0.0"
@@ -80,15 +67,11 @@
   "dependencies": {
     "@ggui-ai/design": "workspace:*",
     "@ggui-ai/iframe-runtime": "workspace:*",
-    "@ggui-ai/preview-a2ui": "workspace:*",
     "@ggui-ai/protocol": "workspace:*",
-    "@ggui-ai/shared": "workspace:*",
-    "@ggui-ai/wire": "workspace:*",
     "@modelcontextprotocol/ext-apps": "^1.7.2"
   },
   "devDependencies": {
     "@modelcontextprotocol/sdk": "^1.27.0",
-    "@react-native-async-storage/async-storage": "^2.2.0",
     "@types/react": "^19.0.0",
     "react": "19.0.0",
     "react-native": "0.81.5",

@@ -1,7 +1,6 @@
 /**
  * Error Boundary for React Native
  *
- * React Native equivalent of SelfRepairBoundary.
  * Catches runtime errors in generated components and displays
  * a native error UI with retry capability.
  */

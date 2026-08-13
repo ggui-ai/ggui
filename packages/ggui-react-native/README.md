@@ -15,13 +15,7 @@ Peer dependencies (install the ones your app uses):
 
 - `react` (18 or 19) and `react-native` (>= 0.70)
 - `react-native-webview` (>= 13) — used by `<McpAppIframe>`
-- `@react-native-async-storage/async-storage` (2.x) — offline thread storage
 - `@modelcontextprotocol/sdk`
-
-Network-state awareness is injected, not bundled: the package never
-imports `@react-native-community/netinfo`. If your app wants real
-online/offline signals, wire netinfo yourself and pass them in via
-`useChatThread({ isOnline })`.
 
 ## Quick start — mount an MCP-Apps card
 
@@ -47,21 +41,19 @@ export function AgentCard({ toolResult }) {
 The component works for any MCP Apps-conformant UI, not only ggui
 renders — it has zero ggui-specific coupling.
 
-For a full chat experience around those cards, use the thread-backed
-chat stack (`@ggui-ai/react-native/chat-thread`): `<ChatThreadProvider>`
-with `useChatThread` and the chat shell, plus `useInvoke` driving the
-Streamable Invoke Protocol.
+To build a chat experience around those cards, drive the Streamable
+Invoke Protocol with `useInvoke` and group the resulting turns with the
+`chat-helpers` subpath.
 
 The package also exports a React Native theme system (`ThemeProvider`,
 `useTheme`, mirroring the web design tokens) and app-state hooks.
 
 ## Entry points
 
-| Import path                          | Contents                             |
-| ------------------------------------ | ------------------------------------ |
-| `@ggui-ai/react-native`              | Components, hooks, theme             |
-| `@ggui-ai/react-native/chat-helpers` | Message-grouping helpers             |
-| `@ggui-ai/react-native/chat-thread`  | Thread-backed chat (`useChatThread`) |
+| Import path                          | Contents                 |
+| ------------------------------------ | ------------------------ |
+| `@ggui-ai/react-native`              | Components, hooks, theme |
+| `@ggui-ai/react-native/chat-helpers` | Message-grouping helpers |
 
 ## License
 

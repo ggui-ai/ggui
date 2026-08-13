@@ -1,9 +1,9 @@
-/* eslint-disable @typescript-eslint/no-explicit-any -- global native-module mocks (react-native / AsyncStorage / NetInfo / WebView) for plain-Node test runs; test-only, never ships */
+/* eslint-disable @typescript-eslint/no-explicit-any -- global native-module mocks (react-native / WebView) for plain-Node test runs; test-only, never ships */
 /**
  * Global test setup for @ggui-ai/react-native
  *
- * Mocks react-native, AsyncStorage, NetInfo, and WebView
- * so tests can run in a plain Node environment.
+ * Mocks react-native and WebView so tests can run in a plain Node
+ * environment.
  */
 import { vi } from 'vitest';
 import React from 'react';
@@ -64,24 +64,6 @@ vi.mock('react-native', async () => {
   };
 });
 
-// --- AsyncStorage mock (in-memory) ---
-
-const asyncStore = new Map<string, string>();
-
-vi.mock('@react-native-async-storage/async-storage', () => ({
-  default: {
-    getItem: vi.fn(async (key: string) => asyncStore.get(key) ?? null),
-    setItem: vi.fn(async (key: string, value: string) => { asyncStore.set(key, value); }),
-    removeItem: vi.fn(async (key: string) => { asyncStore.delete(key); }),
-    clear: vi.fn(async () => { asyncStore.clear(); }),
-  },
-}));
-
-// NOTE: no NetInfo mock — the package never imports
-// `@react-native-community/netinfo`. Network state is injected by the
-// app (`useChatThread({ isOnline })`); tests inject their own
-// subscribers.
-
 // --- react-native-webview mock ---
 
 vi.mock('react-native-webview', async () => {
@@ -100,8 +82,4 @@ export function simulateAppStateChange(state: string): void {
   for (const listener of appStateListeners) {
     listener(state);
   }
-}
-
-export function clearAsyncStore(): void {
-  asyncStore.clear();
 }
