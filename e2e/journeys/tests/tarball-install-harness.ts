@@ -84,7 +84,7 @@ const TRANSITIVE_PACKAGES: ReadonlyArray<{ dir: string; pkgName: string }> = [
   { dir: 'preview-a2ui', pkgName: '@ggui-ai/preview-a2ui' },
   { dir: 'mcp-server-core', pkgName: '@ggui-ai/mcp-server-core' },
   { dir: 'mcp-server-handlers', pkgName: '@ggui-ai/mcp-server-handlers' },
-  { dir: 'ggui-react', pkgName: '@ggui-ai/mcp-apps-react' },
+  { dir: 'mcp-apps-react', pkgName: '@ggui-ai/mcp-apps-react' },
   { dir: 'console', pkgName: '@ggui-ai/console' },
   { dir: 'project-config', pkgName: '@ggui-ai/project-config' },
   { dir: 'ui-registry', pkgName: '@ggui-ai/ui-registry' },
