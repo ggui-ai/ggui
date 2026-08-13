@@ -5,9 +5,10 @@
  *                          loop can run a handler, regardless of
  *                          readiness).
  *   GET /ggui/health     — readiness probe; runs the operator-supplied
- *                          readiness checks and reports per-check
- *                          results, live-channel counts, and the
- *                          thread-transport durability claim.
+ *                          readiness checks, advisory checks, and
+ *                          reports per-check results, live-channel
+ *                          counts, and the thread-transport durability
+ *                          claim.
  *   GET /ggui/auth-check — authenticated liveness. 204 when the bearer
  *                          resolves via the configured AuthAdapter,
  *                          401 otherwise (with `WWW-Authenticate` when
@@ -38,8 +39,9 @@ import { buildWwwAuthenticate, resolveIssuerUrl } from "./oauth.js";
 
 /**
  * 1s per-check timeout — a hung dependency must not block the K8s
- * liveness probe, which itself runs on a short period. A timeout is
- * treated as a failed check; the dependency is degraded either way.
+ * readiness probe (/ggui/health), which itself runs on a short period.
+ * A timeout is treated as a failed check; the dependency is degraded
+ * either way.
  */
 const READINESS_CHECK_TIMEOUT_MS = 1_000;
 
@@ -155,8 +157,13 @@ export function mountHealthRoutes(opts: MountOptions): void {
 
   app.get("/ggui/health", (_req, res) => {
     void (async () => {
-      const { allOk: allReady, results } = await runChecks(readinessChecks);
-      const { results: advisoryResults } = await runChecks(advisoryChecks ?? []);
+      const [
+        { allOk: allReady, results },
+        { results: advisoryResults },
+      ] = await Promise.all([
+        runChecks(readinessChecks),
+        runChecks(advisoryChecks ?? []),
+      ]);
       const body: Record<string, unknown> = {
         status: allReady ? "ok" : "degraded",
         server: info.name,
