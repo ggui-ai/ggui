@@ -49,7 +49,7 @@ export class OpenRouterClient {
     if (!response.ok) {
       const errorBody = await response.json().catch(() => ({ error: { message: response.statusText } }));
       const message = (errorBody as { error?: { message?: string } }).error?.message ?? response.statusText;
-      throw new OpenRouterError(message, response.status);
+      throw new OpenRouterError(message, response.status, undefined, response.headers);
     }
 
     return response.json() as Promise<OpenRouterChatResponse>;
@@ -72,7 +72,7 @@ export class OpenRouterClient {
     if (!response.ok) {
       const errorBody = await response.json().catch(() => ({ error: { message: response.statusText } }));
       const message = (errorBody as { error?: { message?: string } }).error?.message ?? response.statusText;
-      throw new OpenRouterError(message, response.status);
+      throw new OpenRouterError(message, response.status, undefined, response.headers);
     }
 
     if (!response.body) {
