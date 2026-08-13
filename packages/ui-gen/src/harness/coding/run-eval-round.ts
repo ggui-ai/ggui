@@ -424,6 +424,12 @@ export async function runEvalRound(
               // inside the same concurrent generation, so the race is
               // real here too, not just on the coding turn).
               routeOverride: evaluationAgent.routeOverride,
+              // #489 — thread the same provider-429-retry observer.
+              // Without this, a rate-limited retry inside the
+              // evaluation agent's apiCall() happens (the base-class
+              // retry loop is unconditional) but never reaches the
+              // caller, silently missing the pod's structured log.
+              onRetry: evaluationAgent.onRetry,
             },
             preWarmedContext,
           )

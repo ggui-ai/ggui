@@ -1,17 +1,25 @@
 /**
- * Unit tests for `runEvalRound` — #484 routeOverride threading.
+ * Unit tests for `runEvalRound` — #484 routeOverride + #489 onRetry
+ * threading.
  *
- * Scope: this file exists to close one specific regression a prior
- * review caught — the tier-1/2 LLM-eval config object literal built
- * inside `runEvalRound` dropped `evaluationAgent.routeOverride` on
- * the floor, silently reopening the `process.env` concurrency race
+ * Scope: this file exists to close a specific regression class a
+ * prior review caught — the tier-1/2 LLM-eval config object literal
+ * built inside `runEvalRound` dropped `evaluationAgent.routeOverride`
+ * on the floor, silently reopening the `process.env` concurrency race
  * for the evaluation phase even when `disableEnvMutation` was set.
- * It is not a general-purpose `runEvalRound` test suite — the
- * fixture below is deliberately minimal (low-risk-bypass avoided via
- * an explicit `riskTier` override, `runCheck` mocked, visual eval
- * disabled) so the real seam under test — the object literal passed
- * to `llmEvalMod.runLLMEvaluation` — is exercised without needing a
- * full harness/coding-agent integration setup.
+ * The identical class recurred with `evaluationAgent.onRetry` (#489
+ * final-review finding): the field is threaded onto `AgentSpec` but
+ * silently dropped at this same object literal, making eval-leg 429
+ * retries invisible to the pod's `provider_429_retrying` structured
+ * log even though they still happen. Both fields are pinned in the
+ * same test now, at the same seam, so a future field addition that
+ * repeats this drop pattern has one obvious place to extend rather
+ * than a new file. It is not a general-purpose `runEvalRound` test
+ * suite — the fixture below is deliberately minimal (low-risk-bypass
+ * avoided via an explicit `riskTier` override, `runCheck` mocked,
+ * visual eval disabled) so the real seam under test — the object
+ * literal passed to `llmEvalMod.runLLMEvaluation` — is exercised
+ * without needing a full harness/coding-agent integration setup.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { AgentWorkspace } from '../../coding-agent/workspace.js';
@@ -31,13 +39,13 @@ vi.mock('../index.js', () => ({
 // Import AFTER the mock is registered so the module binds the stub.
 const { runEvalRound } = await import('./run-eval-round.js');
 
-describe('runEvalRound — routeOverride threading (#484)', () => {
+describe('runEvalRound — routeOverride + onRetry threading (#484, #489)', () => {
   beforeEach(() => {
     mockRunCheck.mockReset();
     mockRunCheck.mockResolvedValue({ issues: [] });
   });
 
-  it("threads evaluationAgent.routeOverride into runLLMEvaluation's config (fails if the object literal drops it)", async () => {
+  it("threads evaluationAgent.routeOverride and onRetry into runLLMEvaluation's config (fails if the object literal drops either)", async () => {
     // Real Classification, forced off the low-risk-bypass path so
     // execution reaches the tier-1/2 LLM-eval block.
     const classification = {
@@ -67,10 +75,12 @@ describe('runEvalRound — routeOverride threading (#484)', () => {
       },
     };
 
+    const onRetrySpy = vi.fn();
     const evaluationAgent: AgentSpec = {
       provider: 'anthropic',
       model: 'claude-haiku-4-5',
       routeOverride: { apiKey: 'eval-route-key' },
+      onRetry: onRetrySpy,
     };
 
     const ctx: EvalRoundContext = {
@@ -102,8 +112,10 @@ describe('runEvalRound — routeOverride threading (#484)', () => {
     await runEvalRound(ctx, input);
 
     expect(capturedConfigs).toHaveLength(1);
-    // The load-bearing assertion — this is exactly the field the
-    // reviewed regression dropped.
+    // The load-bearing assertions — routeOverride is the field the
+    // #484 regression dropped; onRetry is the field the #489
+    // final-review found dropped at this exact same object literal.
     expect(capturedConfigs[0]?.routeOverride).toEqual({ apiKey: 'eval-route-key' });
+    expect(capturedConfigs[0]?.onRetry).toBe(onRetrySpy);
   });
 });
