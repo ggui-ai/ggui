@@ -138,6 +138,19 @@ export interface CreateUiGeneratorOptions {
    * `appGadgets` themselves; the legacy handler path stays unchanged.
    */
   readonly gadgetCatalog?: GadgetCatalogAdapter;
+  /**
+   * When `true`, `generate()` never mutates `process.env` — the
+   * resolved provider route is threaded structurally into the
+   * dispatch call instead of being written to and restored from the
+   * process environment. Use this when running concurrent
+   * generations in one process (the default backup/mutate/restore
+   * dance is NOT concurrency-safe: two simultaneous calls race on
+   * the shared `process.env`).
+   *
+   * Default `false` — preserves the original env-mutation behavior
+   * for callers that don't need concurrent generations in-process.
+   */
+  readonly disableEnvMutation?: boolean;
 }
 
 export function createUiGenerator(
@@ -149,6 +162,7 @@ export function createUiGenerator(
     maxEvalRounds,
     qualityConfig,
     gadgetCatalog,
+    disableEnvMutation = false,
   } = options;
 
   const identity = resolveIdentity(options);
@@ -193,18 +207,36 @@ export function createUiGenerator(
       }
 
       const envBackup: Record<string, string | undefined> = {};
-      for (const k of Object.keys(route.env)) envBackup[k] = process.env[k];
-      const baseEnvForApply: Record<string, string> = {};
-      for (const [k, v] of Object.entries(process.env)) {
-        if (v !== undefined) baseEnvForApply[k] = v;
+      if (!disableEnvMutation) {
+        for (const k of Object.keys(route.env)) envBackup[k] = process.env[k];
+        const baseEnvForApply: Record<string, string> = {};
+        for (const [k, v] of Object.entries(process.env)) {
+          if (v !== undefined) baseEnvForApply[k] = v;
+        }
+        const routedEnv = applyRouteToEnv(baseEnvForApply, route);
+        for (const [k, v] of Object.entries(routedEnv)) process.env[k] = v;
+        // Also delete any keys the route asked to clear (route.env values
+        // marked undefined).
+        for (const [k, v] of Object.entries(route.env)) {
+          if (v === undefined) delete process.env[k];
+        }
       }
-      const routedEnv = applyRouteToEnv(baseEnvForApply, route);
-      for (const [k, v] of Object.entries(routedEnv)) process.env[k] = v;
-      // Also delete any keys the route asked to clear (route.env values
-      // marked undefined).
-      for (const [k, v] of Object.entries(route.env)) {
-        if (v === undefined) delete process.env[k];
-      }
+
+      // #484 — when `disableEnvMutation` is set, skip the process-env
+      // mutation above entirely and thread the resolved route
+      // structurally into the dispatch call instead. `route.env`
+      // already carries exactly the key(s) that would have gone into
+      // `process.env`, so no extra resolution work is needed here.
+      const routeOverride = disableEnvMutation
+        ? {
+            apiKey:
+              route.env['ANTHROPIC_API_KEY'] ??
+              route.env['OPENAI_API_KEY'] ??
+              route.env['GEMINI_API_KEY'] ??
+              route.env['OPENROUTER_API_KEY'],
+            useBedrock: route.env['CLAUDE_CODE_USE_BEDROCK'] === '1',
+          }
+        : undefined;
 
       try {
         const tools = createGeneratorTools({
@@ -269,6 +301,7 @@ export function createUiGenerator(
             ? { gadgetTypes: input.gadgetTypes }
             : {}),
           enableRuntimeRender,
+          ...(routeOverride !== undefined ? { routeOverride } : {}),
         });
 
         const metadata: GenerationMetadata = {

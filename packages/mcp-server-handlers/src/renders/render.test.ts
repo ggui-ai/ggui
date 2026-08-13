@@ -1607,11 +1607,12 @@ describe('createGguiRenderHandler — isError failure envelope (ruling B)', () =
     ).rejects.toMatchObject({ code: 'handshake_not_found' });
   });
 
-  it('cloud seam codes map through: VALIDATION_ERROR and NO_PLATFORM_KEY verbatim, COMPILATION_ERROR folds to PRODUCTION_FAILED', async () => {
+  it('cloud seam codes map through: VALIDATION_ERROR, NO_PLATFORM_KEY, and GENERATION_QUEUE_OVERLOADED verbatim, COMPILATION_ERROR folds to PRODUCTION_FAILED', async () => {
     const cases = [
       { in: 'VALIDATION_ERROR', outCode: 'VALIDATION_ERROR' },
       { in: 'NO_PLATFORM_KEY', outCode: 'NO_PLATFORM_KEY' },
       { in: 'COMPILATION_ERROR', outCode: 'PRODUCTION_FAILED' },
+      { in: 'GENERATION_QUEUE_OVERLOADED', outCode: 'GENERATION_QUEUE_OVERLOADED' },
     ] as const;
     for (const kase of cases) {
       const { handler, handshakeId } = await buildFailingHarness({
