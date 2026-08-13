@@ -578,6 +578,36 @@ describe('decideHandshake — onBlueprintMatch observer (#490 Wave 1)', () => {
     });
     expect(r.action).toBe('reuse');
   });
+
+  it('a throwing observer does not break decideHandshake — the exact-key match still resolves, and warn sees the observer failure', async () => {
+    mockMatch.mockResolvedValueOnce(hit('exact-key', { id: 'bp-ek' }));
+    const onBlueprintMatch = vi.fn(() => {
+      throw new Error('observer boom');
+    });
+    const warn = vi.fn();
+    const r = await decideHandshake(
+      adapter({ pools: [pool({ label: '@e2e/pool' })], onBlueprintMatch, warn }),
+      { intent: 'i', blueprintDraft: DRAFT, ctx: CTX },
+    );
+    expect(r.action).toBe('reuse');
+    expect(onBlueprintMatch).toHaveBeenCalledTimes(1);
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn.mock.calls[0]?.[0]).toContain('onBlueprintMatch observer threw');
+    expect(warn.mock.calls[0]?.[0]).toContain('observer boom');
+  });
+
+  it('a throwing observer with no warn channel still does not break decideHandshake', async () => {
+    mockMatch.mockResolvedValueOnce(hit('exact-key', { id: 'bp-ek' }));
+    const onBlueprintMatch = vi.fn(() => {
+      throw new Error('observer boom');
+    });
+    const r = await decideHandshake(adapter({ pools: [pool()], onBlueprintMatch }), {
+      intent: 'i',
+      blueprintDraft: DRAFT,
+      ctx: CTX,
+    });
+    expect(r.action).toBe('reuse');
+  });
 });
 
 describe('decideHandshake — quirky draft reaches the reuse-match gate (fallback-normalize)', () => {

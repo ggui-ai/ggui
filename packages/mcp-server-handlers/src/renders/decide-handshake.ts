@@ -158,9 +158,10 @@ export interface HandshakeDecisionAdapter {
    * Optional observer for every blueprint-match OUTCOME (hit or miss),
    * called once per pool probed in the Tier-1 find-similar loop.
    * Non-error, non-blocking — purely for cache-hit-ratio observability.
-   * Absent ⇒ no-op. OSS ships no default observer; cloud wires this to
-   * its structured logger (see cloud/ggui-protocol-pod's
-   * HandshakeDecisionAdapter composition).
+   * Absent ⇒ no-op. OSS ships no default observer; a host MAY wire
+   * this to its own structured logger. Enforced non-blocking: a
+   * throwing observer is caught, reported via `warn` if present, and
+   * never breaks the handshake.
    */
   onBlueprintMatch?(input: {
     readonly pool: string;
@@ -544,11 +545,25 @@ export async function decideHandshake(
           contract: parsedDraft.data,
           ...(variance !== undefined ? { variance } : {}),
         });
-        adapter.onBlueprintMatch?.({
-          pool: pool.label ?? scope,
-          scope,
-          result: matchResult,
-        });
+        // Isolated in its OWN try/catch, separate from the outer
+        // pool-probe catch below: onBlueprintMatch's contract promises
+        // non-blocking observation, so a throwing observer must never
+        // lose an otherwise-successful matchResult (falling into the
+        // outer catch would either rethrow a non-operational error or
+        // misreport "matchBlueprint probe failed" for a probe that
+        // actually succeeded). Observer failures are surfaced via warn
+        // and the request proceeds — never rethrown.
+        try {
+          adapter.onBlueprintMatch?.({
+            pool: pool.label ?? scope,
+            scope,
+            result: matchResult,
+          });
+        } catch (err) {
+          adapter.warn?.(
+            `[decideHandshake] onBlueprintMatch observer threw for pool ${pool.label ?? scope}; ignoring: ${errMessage(err)}`,
+          );
+        }
         // exact-key is a perfect canonical match — it wins immediately over
         // any semantic hit from any pool, but ONLY when the requesting agent
         // can fulfill it: its declared tools must superset the blueprint's
