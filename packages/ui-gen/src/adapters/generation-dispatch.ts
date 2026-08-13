@@ -156,6 +156,13 @@ export interface GenerationDispatchParams {
    * existing behavior for callers that don't set it.
    */
   routeOverride?: AgentConfig["routeOverride"];
+  /**
+   * Retry observer (#489) — see `AgentConfig.onRetry`. Threaded onto
+   * the coding + evaluation agent specs so a rate-limited retry inside
+   * either agent's `apiCall()` reaches the caller. Absent (default) is
+   * a no-op.
+   */
+  onRetry?: AgentConfig["onRetry"];
 }
 
 /**
@@ -199,12 +206,14 @@ export async function dispatchGeneration(
     provider: routerProvider,
     model: resolvedModel,
     routeOverride: params.routeOverride,
+    onRetry: params.onRetry,
   };
   const evaluationAgent = params.models?.evaluation
     ? {
         provider: routerProvider,
         model: params.models.evaluation,
         routeOverride: params.routeOverride,
+        onRetry: params.onRetry,
       }
     : undefined;
   // ModelRoles doesn't currently expose a visualEval slot — falls through
