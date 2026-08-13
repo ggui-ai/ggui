@@ -80,7 +80,6 @@ const TRANSITIVE_PACKAGES: ReadonlyArray<{ dir: string; pkgName: string }> = [
   { dir: 'agent-runtime', pkgName: '@ggui-ai/agent-runtime' },
   { dir: 'design', pkgName: '@ggui-ai/design' },
   { dir: 'wire', pkgName: '@ggui-ai/wire' },
-  { dir: 'shared', pkgName: '@ggui-ai/shared' },
   { dir: 'preview-a2ui', pkgName: '@ggui-ai/preview-a2ui' },
   { dir: 'mcp-server-core', pkgName: '@ggui-ai/mcp-server-core' },
   { dir: 'mcp-server-handlers', pkgName: '@ggui-ai/mcp-server-handlers' },
