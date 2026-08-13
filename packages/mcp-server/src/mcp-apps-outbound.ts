@@ -202,9 +202,39 @@ var rpcId=1,pending={};
 var rootEl=document.getElementById('ggui-root');
 rootEl.style.cssText='display:flex;flex-direction:column;height:100%;min-height:300px;margin:0';
 var mounted=false;
+var lastEnvelope=null;
+// Text color pairs with the shell surface: themed var when the runtime
+// injected theme CSS, else the light-on-dark fallback matching the
+// shell's static #1e293b pre-theme surface. The old hardcoded #666 was
+// illegible on that dark fallback (#481).
+var SHELL_FG='var(--ggui-color-onSurface,#e2e8f0)';
 function setOverlay(text){
   if(mounted)return;
-  rootEl.innerHTML='<div style="font:14px system-ui,sans-serif;padding:24px;color:#666">'+text+'</div>';
+  rootEl.innerHTML='<div style="font:13px system-ui,sans-serif;padding:24px;color:'+SHELL_FG+';opacity:.55">'+text+'</div>';
+}
+function escText(s){
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+// Terminal failure card (#481): plain-language summary, diagnostic
+// reachable but collapsed, Retry only when a retry can actually work.
+// Same visual vocabulary as the runtime's React error boundary so the
+// two error surfaces read as one system.
+function showFailure(summary,detail,retry){
+  if(mounted)return;
+  rootEl.innerHTML=''+
+    '<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:32px 24px;min-height:160px;font-family:system-ui,sans-serif;color:'+SHELL_FG+';text-align:center">'+
+      '<div style="font-size:14px;font-weight:600">'+escText(summary)+'</div>'+
+      '<div style="font-size:12px;opacity:.65;max-width:320px;line-height:1.45">The interface could not start. The conversation is unaffected — you can also just ask for the view again.</div>'+
+      (retry?'<button id="ggui-shell-retry" style="margin-top:2px;padding:7px 18px;border-radius:8px;border:1px solid currentColor;background:transparent;color:inherit;opacity:.75;font:500 13px system-ui,sans-serif;cursor:pointer">Retry</button>':'')+
+      '<details style="margin-top:6px;max-width:340px;width:100%;text-align:left;opacity:.75">'+
+        '<summary style="cursor:pointer;font-size:12px">Details</summary>'+
+        '<pre style="margin:6px 0 0;font:11px/1.5 ui-monospace,Menlo,monospace;white-space:pre-wrap;word-break:break-word">'+escText(detail)+'</pre>'+
+      '</details>'+
+    '</div>';
+  if(retry){
+    var b=document.getElementById('ggui-shell-retry');
+    if(b)b.onclick=retry;
+  }
 }
 function postNotification(method,params){
   try{window.parent.postMessage({jsonrpc:'2.0',method:method,params:params||{}},'*');}catch(e){}
@@ -235,10 +265,12 @@ async function mountFromMeta(envelope){
   var renderSlice=envelope&&envelope['ai.ggui/render'];
   var runtimeUrl=renderSlice&&renderSlice.runtimeUrl;
   if(!envelope||typeof runtimeUrl!=='string'){
-    setOverlay('Bootstrap payload malformed.');
+    // No retry: without a valid envelope there is nothing to re-run.
+    showFailure('This view could not start','MALFORMED_BOOTSTRAP: bootstrap payload malformed (no ai.ggui/render slice with a runtimeUrl).',null);
     postBootstrapFailed('MALFORMED_BOOTSTRAP','Bootstrap payload malformed.');
     return;
   }
+  lastEnvelope=envelope;
   setOverlay('Loading UI…');
   window.__GGUI_META__=envelope;
   // Load the runtime bundle via a direct cross-origin script tag
@@ -264,14 +296,14 @@ async function mountFromMeta(envelope){
     s.onload=function(){mounted=true;};
     s.onerror=function(e){
       var msg='Runtime bundle failed to load: '+(e&&e.message||'script error');
-      setOverlay(msg);
+      showFailure('This view could not load','BUNDLE_FETCH_FAILED: '+msg,function(){mountFromMeta(lastEnvelope);});
       postBootstrapFailed('BUNDLE_FETCH_FAILED',msg);
     };
     rootEl.innerHTML='';
     document.body.appendChild(s);
   }catch(e){
     var msg='Runtime bundle failed to load: '+(e&&e.message||e);
-    setOverlay(msg);
+    showFailure('This view could not load','BUNDLE_FETCH_FAILED: '+msg,function(){mountFromMeta(lastEnvelope);});
     postBootstrapFailed('BUNDLE_FETCH_FAILED',msg);
   }
 }
@@ -314,26 +346,32 @@ window.addEventListener('message',function(ev){
     // above.
   }
 });
-setOverlay('Initializing…');
-var initTimer=setTimeout(function(){
-  setOverlay('Host did not respond to ui/initialize within 3s.');
-},3000);
-postRpc('ui/initialize',{
-  appCapabilities:{},
-  appInfo:{name:'ggui-render',version:'1.0.0'},
-  protocolVersion:'2026-01-26'
-}).then(function(){
-  clearTimeout(initTimer);
-  postNotification('ui/notifications/initialized',{});
-  // Wait for the host to send ui/notifications/tool-result carrying
-  // the slice envelope in _meta — the spec-canonical delivery channel.
-  // The ui/initialize result itself carries no slice meta (the
-  // McpUiInitializeResult schema defines no such field).
-  setOverlay('Waiting for tool result…');
-}).catch(function(e){
-  clearTimeout(initTimer);
-  setOverlay('ui/initialize failed: '+(e&&e.message||JSON.stringify(e)));
-});
+// Named so the failure card's Retry can re-run the whole handshake —
+// a host that missed or rejected the first ui/initialize may answer a
+// second (observed with hosts that attach their listener late).
+function startInit(){
+  setOverlay('Initializing…');
+  var initTimer=setTimeout(function(){
+    showFailure('This view did not hear back from its host','INIT_TIMEOUT: no response to ui/initialize within 3s.',startInit);
+  },3000);
+  postRpc('ui/initialize',{
+    appCapabilities:{},
+    appInfo:{name:'ggui-render',version:'1.0.0'},
+    protocolVersion:'2026-01-26'
+  }).then(function(){
+    clearTimeout(initTimer);
+    postNotification('ui/notifications/initialized',{});
+    // Wait for the host to send ui/notifications/tool-result carrying
+    // the slice envelope in _meta — the spec-canonical delivery channel.
+    // The ui/initialize result itself carries no slice meta (the
+    // McpUiInitializeResult schema defines no such field).
+    setOverlay('Waiting for tool result…');
+  }).catch(function(e){
+    clearTimeout(initTimer);
+    showFailure('This view could not connect to its host','ui/initialize failed: '+(e&&e.message||JSON.stringify(e)),startInit);
+  });
+}
+startInit();
 })();
 `;
 

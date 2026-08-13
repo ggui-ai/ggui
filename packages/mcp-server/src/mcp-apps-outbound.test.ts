@@ -170,6 +170,36 @@ describe('GGUI_RENDER_SHELL_HTML', () => {
     expect(GGUI_RENDER_SHELL_HTML).toContain('window.parent.postMessage');
   });
 
+  it('ships the themed failure card (#481): summary + expandable diagnostic + Retry', () => {
+    // Terminal failures render a presentable card, not the old bare
+    // #666 overlay (illegible on the shell's dark pre-theme surface).
+    expect(GGUI_RENDER_SHELL_HTML).toContain('function showFailure(');
+    // Text color pairs with the surface: themed var, light-on-dark
+    // fallback matching the static #1e293b pre-theme surface.
+    expect(GGUI_RENDER_SHELL_HTML).toContain(
+      'var(--ggui-color-onSurface,#e2e8f0)',
+    );
+    expect(GGUI_RENDER_SHELL_HTML).not.toContain('color:#666');
+    // Diagnostic reachable but collapsed; Retry wired by element id.
+    expect(GGUI_RENDER_SHELL_HTML).toContain('<details');
+    expect(GGUI_RENDER_SHELL_HTML).toContain('ggui-shell-retry');
+    // Diagnostic text is HTML-escaped before innerHTML injection.
+    expect(GGUI_RENDER_SHELL_HTML).toContain('function escText(');
+  });
+
+  it('failure paths pick retryability correctly (#481)', () => {
+    // Malformed bootstrap: nothing to re-run — card without Retry.
+    expect(GGUI_RENDER_SHELL_HTML).toContain(
+      "with a runtimeUrl).',null)",
+    );
+    // Bundle-load failure: retry re-mounts from the retained envelope.
+    expect(GGUI_RENDER_SHELL_HTML).toContain(
+      'function(){mountFromMeta(lastEnvelope);}',
+    );
+    // Handshake timeout/rejection: retry re-runs the whole init.
+    expect(GGUI_RENDER_SHELL_HTML).toMatch(/showFailure\([^)]*,startInit\)/);
+  });
+
   it("loads the renderer bundle as <script type='module'> per `@ggui-ai/iframe-runtime`'s ESM contract", () => {
     // `@ggui-ai/iframe-runtime` bundles to ESM with top-level `export`
     // statements (see `packages/iframe-runtime/src/runtime.ts:5` — "the
