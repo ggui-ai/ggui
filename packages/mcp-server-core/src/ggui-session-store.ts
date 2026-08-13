@@ -160,6 +160,19 @@ export interface GguiSessionFilter {
   appId?: string;
   userId?: string;
   status?: 'active' | 'expired';
+  /**
+   * When true, return only rows with a recorded generation failure —
+   * the outcome facet (#495), orthogonal to {@link status} (an errored
+   * row still TTL-expires). A row is errored iff `errorCode` OR
+   * `error` is present (pre-`errorCode` rows carry the message alone).
+   *
+   * Implementations MUST NOT satisfy this with a single-page
+   * post-filter that silently under-returns (the banned list+filter
+   * class): either match natively or page the underlying query until
+   * `limit` errored rows are found or a documented examined-rows bound
+   * is hit.
+   */
+  erroredOnly?: boolean;
   createdAfter?: number;
   createdBefore?: number;
   limit?: number;

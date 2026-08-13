@@ -56,7 +56,7 @@ import Database, {
   type Database as SqliteDatabase,
   type Statement as SqliteStatement,
 } from 'better-sqlite3';
-import { isRecord } from '@ggui-ai/protocol';
+import { isErroredGguiSession, isRecord } from '@ggui-ai/protocol';
 import type {
   EndUserIdentity,
   GguiSession,
@@ -325,7 +325,10 @@ export class SqliteGguiSessionStore implements GguiSessionStore {
       }
       if (filter.hostName !== undefined && row.host_name !== filter.hostName) continue;
       if (filter.hostSessionId !== undefined && row.host_session_id !== filter.hostSessionId) continue;
-      filtered.push(rowToStored(row));
+      const stored = rowToStored(row);
+      // Outcome facet (#495) — single definition lives in the protocol.
+      if (filter.erroredOnly === true && !isErroredGguiSession(stored.render)) continue;
+      filtered.push(stored);
     }
     const offset = parseCursor(filter.cursor);
     const limit = filter.limit ?? filtered.length;

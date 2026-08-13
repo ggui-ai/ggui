@@ -12,6 +12,7 @@ import type {
 import type { EndUserIdentity } from './auth';
 import type { HostContextProjection } from './host-context';
 import type { AppTheme } from '../schemas/app-theme';
+import type { RenderErrorCode } from '../schemas/mcp';
 // MCP Apps inbound variant lives behind a boundary subpath to keep core
 // render typing opt-in. The import IS legitimate — the design lock
 // explicitly treats the `GguiSession` union as core's one concession to MCP
@@ -226,6 +227,34 @@ export type GguiSession<TProps = JsonObject> =
   | McpAppsGguiSession;
 
 /**
+ * Outcome-facet predicate (#495): true iff a generation failure was
+ * recorded on this render. The failure writer commits component
+ * renders only, so non-component variants are never errored. Rows
+ * written before {@link ComponentGguiSession.errorCode} existed carry
+ * {@link ComponentGguiSession.error} alone — either field's presence
+ * means errored. This is the single definition of "errored": store
+ * filters (`GguiSessionFilter.erroredOnly`) MUST match it.
+ */
+export function isErroredGguiSession(render: GguiSession): boolean {
+  // `type` absent ⇒ component (back-compat default, see the variant's
+  // discriminator docstring below).
+  if (render.type !== undefined && render.type !== 'component') return false;
+  return render.errorCode !== undefined || render.error !== undefined;
+}
+
+/**
+ * Companion accessor to {@link isErroredGguiSession}: the recorded
+ * failure classification, or `undefined` when the render is not
+ * errored or predates the `errorCode` field (message-only rows).
+ */
+export function erroredGguiSessionCode(
+  render: GguiSession,
+): RenderErrorCode | undefined {
+  if (render.type !== undefined && render.type !== 'component') return undefined;
+  return render.errorCode;
+}
+
+/**
  * GguiSession variant: LLM-generated / native React component.
  *
  * Discriminator: `type === 'component'` OR `type` absent (back-compat
@@ -253,6 +282,22 @@ export interface ComponentGguiSession<TProps = JsonObject> extends GguiSessionBa
   readonly schema?: JsonSchema;
   /** Generation error message (populated on failure). */
   readonly error?: string;
+  /**
+   * Canonical failure classification for the recorded failure —
+   * `renderErrorCodeSchema`'s closed enum, the same code the failed
+   * `ggui_render` result carried on the wire (#495).
+   *
+   * **Outcome facet, orthogonal to lifecycle.** {@link status} stays
+   * `'active' | 'expired'` — an errored row still TTL-expires like any
+   * other; "errored" means a generation failure was recorded here, not
+   * a third lifecycle state. Written by exactly one site (the error
+   * commit in `@ggui-ai/mcp-server-handlers`' render handler) in the
+   * same commit as {@link error}; invariant: `errorCode` present ⇒
+   * `error` present. Rows written before this field exists carry
+   * `error` alone — readers filtering "errored" MUST treat either
+   * field's presence as errored.
+   */
+  readonly errorCode?: RenderErrorCode;
   /** Stream contract — describes what data the component accepts in
    *  real-time via `ggui_emit`. */
   readonly streamSpec?: StreamSpec;

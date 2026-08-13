@@ -109,6 +109,56 @@ export function runGguiSessionStoreConformance(
   }
 
   describe(`${label} — conformance`, () => {
+    // #495 — the outcome facet is orthogonal to lifecycle status: a
+    // row is errored iff a generation failure was recorded on it
+    // (`errorCode`, or legacy message-only `error`). The definition
+    // lives in the protocol (`isErroredGguiSession`); every store's
+    // `erroredOnly` filter must match it, including for rows written
+    // before `errorCode` existed.
+    describe('erroredOnly outcome facet', () => {
+      it('list({erroredOnly:true}) returns exactly the rows with a recorded failure', async () => {
+        await withStore(async (store) => {
+          await store.commit({
+            appId: 'app-1',
+            userId: 'u-1',
+            render: makeComponentGguiSession('healthy', 'app-1'),
+          });
+          await store.commit({
+            appId: 'app-1',
+            userId: 'u-1',
+            render: {
+              ...makeComponentGguiSession('errored-coded', 'app-1', ''),
+              error: 'generation failed',
+              errorCode: 'PRODUCTION_FAILED',
+            },
+          });
+          await store.commit({
+            appId: 'app-1',
+            userId: 'u-1',
+            render: {
+              ...makeComponentGguiSession('errored-legacy', 'app-1', ''),
+              error: 'pre-errorCode failure',
+            },
+          });
+          const errored = await store.list({ appId: 'app-1', erroredOnly: true });
+          expect(errored.map((s) => s.id).sort()).toEqual([
+            'errored-coded',
+            'errored-legacy',
+          ]);
+          // The facet narrows; it must not leak into the unfiltered list.
+          const all = await store.list({ appId: 'app-1' });
+          expect(all).toHaveLength(3);
+          // Round-trip: the classification survives storage.
+          const coded = errored.find((s) => s.id === 'errored-coded');
+          expect(
+            coded !== undefined && coded.render.type === 'component'
+              ? coded.render.errorCode
+              : undefined,
+          ).toBe('PRODUCTION_FAILED');
+        });
+      });
+    });
+
     describe('create + get round-trip', () => {
       it('preserves id + appId on minimal create', async () => {
         await withStore(async (store) => {

@@ -1688,6 +1688,10 @@ describe('createGguiRenderHandler — isError failure envelope (ruling B)', () =
     }
     expect(render.componentCode).toBe('');
     expect(render.error).toBe('provider 500');
+    // #495 — the outcome facet rides the same commit: the canonical
+    // classification the wire envelope carried is persisted on the row
+    // (never the message alone), so "errored renders" is queryable.
+    expect(render.errorCode).toBe('PRODUCTION_FAILED');
     // The commit notify fan-out fired for the error render.
     expect(
       notified.some(

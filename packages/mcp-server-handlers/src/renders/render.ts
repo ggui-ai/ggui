@@ -3004,6 +3004,11 @@ async function commitErrorGguiSession(
     componentCode: '',
     prompt: args.story.intent,
     error: args.message,
+    // Outcome facet (#495): the same canonical classification the wire
+    // failure envelope carries, persisted so "errored renders" is
+    // queryable. Same commit as `error` — the row never has one
+    // without the other from this writer.
+    errorCode: args.code,
     contentType: 'application/javascript+react',
     createdAt: args.nowEpochMs,
     lastActivityAt: args.nowEpochMs,

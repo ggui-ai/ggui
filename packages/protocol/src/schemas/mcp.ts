@@ -482,6 +482,14 @@ export const renderErrorCodeSchema = z.enum([
 ]);
 
 /**
+ * Canonical inferred type for {@link renderErrorCodeSchema}. Lives
+ * beside the schema (rather than in `types/mcp.ts`, which re-exports
+ * it) so `types/render.ts` can reference it without a type-only
+ * import cycle through `types/mcp.ts`.
+ */
+export type RenderErrorCode = z.infer<typeof renderErrorCodeSchema>;
+
+/**
  * In-result failure marker for `ggui_render`. Present on the wire
  * output iff the tool result is `isError: true` — the structuredContent
  * stays schema-conformant on failures, and this field carries the

@@ -12,7 +12,7 @@
  * `runGguiSessionStoreConformance`) from `./contract-tests` — this
  * store and the sqlite one both do, in their `.test.ts` files.
  */
-import type { GguiSession } from '@ggui-ai/protocol';
+import { isErroredGguiSession, type GguiSession } from '@ggui-ai/protocol';
 import { firstWriteEventSequence } from '../ggui-session-store.js';
 import type {
   AppendEventInput,
@@ -143,6 +143,8 @@ export class InMemoryGguiSessionStore implements GguiSessionStore {
       if (filter.status !== undefined) {
         if (computeStatus(s, now) !== filter.status) continue;
       }
+      // Outcome facet (#495) — single definition lives in the protocol.
+      if (filter.erroredOnly === true && !isErroredGguiSession(s.render)) continue;
       if (
         filter.hostName !== undefined
         && s.hostSession?.hostName !== filter.hostName

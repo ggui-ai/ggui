@@ -8,7 +8,6 @@ import type {
   handshakeOutputSchema,
   renderBlueprintInputSchema,
   renderCacheMarkerSchema,
-  renderErrorCodeSchema,
   renderErrorSchema,
   renderInputSchema,
   renderOutputSchema,
@@ -468,8 +467,10 @@ export type RenderCacheMarker = z.infer<typeof renderCacheMarkerSchema>;
  * Canonical failure code for the in-result `ggui_render` failure
  * envelope (SPEC §7.9 Plane 3). Derived from
  * {@link renderErrorCodeSchema} — the schema is the source of truth.
+ * Canonical declaration lives beside the schema in `schemas/mcp.ts`;
+ * re-exported here so existing importers keep their path.
  */
-export type RenderErrorCode = z.infer<typeof renderErrorCodeSchema>;
+export type { RenderErrorCode } from '../schemas/mcp';
 
 /**
  * In-result failure marker on `GguiRenderOutput.error` — present iff the

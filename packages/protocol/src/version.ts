@@ -304,6 +304,23 @@
  * it), not a new member.
  *
  * --------------------------------------------------------------------
+ * Render outcome facet (2026-08-13, ggui#495; rides the next cut
+ * after 0.9.0 — additive MINOR): `ComponentGguiSession` gains
+ * `errorCode?: RenderErrorCode` — the SAME closed enum the §7.1
+ * failure envelope carries, persisted on the committed error render
+ * beside the existing `error` message (invariant: `errorCode` ⇒
+ * `error`; one writer, the failure commit). Deliberately NOT a new
+ * `GguiSessionStatus` member: outcome ⊥ lifecycle — errored rows
+ * still TTL-expire. New exported predicate `isErroredGguiSession` +
+ * accessor `erroredGguiSessionCode` are the single normative
+ * definition of "errored" (message-only legacy rows count); store
+ * `erroredOnly` filters (GguiSessionFilter, all three stores) and
+ * `ggui_ops_list_recent_renders`' new `erroredOnly` arg + per-row
+ * `errorCode` derive from them. The canonical `RenderErrorCode` type
+ * declaration moved from `types/mcp.ts` beside its schema in
+ * `schemas/mcp.ts` (types/mcp re-exports — import paths unchanged).
+ *
+ * --------------------------------------------------------------------
  * React/RN SDK-surface retirement (2026-08-13, owner ruling; rides
  * the same next cut ≥ 0.9.0): `@ggui-ai/react` + `@ggui-ai/react-
  * native` are MCP Apps HOST-HELPER libraries, not SDKs — embeds mount
