@@ -403,10 +403,10 @@ export abstract class LLMAgent {
    * each one can independently add up to `MAX_TOTAL_RETRY_DELAY_MS`, so
    * a generation with k rate-limited calls can add up to roughly `k *
    * MAX_TOTAL_RETRY_DELAY_MS` to how long it holds its caller's
-   * resources (e.g. the pod's admission slot) — not a flat 20s
+   * resources (e.g. the caller's concurrency slot) — not a flat 20s
    * ceiling. No shared per-generation budget is threaded here by
-   * design (accepted ruling, not an oversight): the pod's own
-   * admission queue-wait timeout is the backstop for how long other
+   * design (accepted ruling, not an oversight): the caller's own
+   * queue/admission backstop is what bounds how long other
    * queued work waits, independent of any one generation's retry
    * total.
    */

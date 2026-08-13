@@ -10,11 +10,11 @@
  * The identical class recurred with `evaluationAgent.onRetry` (#489
  * final-review finding): the field is threaded onto `AgentSpec` but
  * silently dropped at this same object literal, making eval-leg 429
- * retries invisible to the pod's `provider_429_retrying` structured
- * log even though they still happen. Both fields are pinned in the
- * same test now, at the same seam, so a future field addition that
- * repeats this drop pattern has one obvious place to extend rather
- * than a new file. It is not a general-purpose `runEvalRound` test
+ * retries invisible to a host application's `provider_429_retrying`
+ * structured log even though they still happen. Both fields are
+ * pinned in the same test now, at the same seam, so a future field
+ * addition that repeats this drop pattern has one obvious place to
+ * extend rather than a new file. It is not a general-purpose `runEvalRound` test
  * suite — the fixture below is deliberately minimal (low-risk-bypass
  * avoided via an explicit `riskTier` override, `runCheck` mocked,
  * visual eval disabled) so the real seam under test — the object

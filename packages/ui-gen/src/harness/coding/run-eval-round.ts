@@ -428,7 +428,8 @@ export async function runEvalRound(
               // Without this, a rate-limited retry inside the
               // evaluation agent's apiCall() happens (the base-class
               // retry loop is unconditional) but never reaches the
-              // caller, silently missing the pod's structured log.
+              // caller, silently missing the host application's
+              // structured log.
               onRetry: evaluationAgent.onRetry,
             },
             preWarmedContext,
