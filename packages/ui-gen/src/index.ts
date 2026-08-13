@@ -2,14 +2,13 @@
  * `@ggui-ai/ui-gen` — open-source UI generation harness.
  *
  * Implements the `UiGenerator` contract from `@ggui-ai/mcp-server-core`.
- * `createUiGenerator()` returns a callable provider-backed generator:
+ * `createUiGenerator()` returns a callable provider-backed generator.
+ * Provider routing, compilation, and the system prompt are all
+ * internal to the harness — the factory takes no `adapter` option:
  *
  *   import { createUiGenerator } from '@ggui-ai/ui-gen';
- *   import { createAnthropicAdapter } from '@ggui-ai/ui-gen/providers';
  *
- *   const generator = createUiGenerator({
- *     adapter: createAnthropicAdapter(),
- *   });
+ *   const generator = createUiGenerator();
  *   const result = await generator.generate({ request, llm, providerKey, blueprints });
  *
  * The `./harness` / `./workflows` / `./classifier` / `./fragments`
@@ -21,6 +20,7 @@ export {
   extractComponentCode,
 } from './create-ui-generator.js';
 export type { CreateUiGeneratorOptions } from './create-ui-generator.js';
+export type { ProviderRetryInfo } from './harness/llm-router.js';
 
 // Generator registry seam re-export. The interface + slug helpers live
 // in `@ggui-ai/mcp-server-core`; the in-memory factory lives in

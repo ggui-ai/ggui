@@ -127,6 +127,16 @@ export class OpenRouterError extends Error {
     message: string,
     public readonly status: number,
     public readonly code?: string,
+    /**
+     * Response headers, when the caller had access to them at throw
+     * time (#489). Only `client.ts`'s two HTTP-response-driven throw
+     * sites populate this — the "no response body" throw has no
+     * response to read headers from. Duck-typed against the same
+     * `{ get(name): string | null }` shape `llm-router.ts`'s
+     * `extractRetryAfterSec` already reads from Anthropic/OpenAI SDK
+     * errors, so OpenRouter gets retry-after support for free.
+     */
+    public readonly headers?: { get(name: string): string | null },
   ) {
     super(message);
     this.name = 'OpenRouterError';

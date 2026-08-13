@@ -68,6 +68,36 @@ export interface AgentConfig {
     /** Anthropic-only: force the Bedrock-IAM client instead of the direct API client. */
     readonly useBedrock?: boolean;
   };
+  /**
+   * Observer invoked once per retried attempt when `apiCall()` (#489)
+   * retries a rate-limited (HTTP 429) provider call. Fires AFTER the
+   * retry decision is made and BEFORE the delay is awaited — never on
+   * the terminal failure/success of the whole call. Purely an
+   * observability hook: it never influences whether or how long
+   * `apiCall()` retries. If the observer itself throws, `apiCall()`
+   * catches it, logs a `console.warn`, and proceeds to the retry
+   * delay unaffected — a broken observer cannot turn a recoverable
+   * 429 into an unrelated hard failure. Absent (default) is a no-op;
+   * `apiCall()` still logs every retry via `console.warn` regardless.
+   */
+  onRetry?: (info: ProviderRetryInfo) => void;
+}
+
+/** One retried attempt's context — passed to `AgentConfig.onRetry`. */
+export interface ProviderRetryInfo {
+  readonly provider: AgentConfig['provider'];
+  /** 1-based index of this retry (1 = first retry, 2 = second, …). */
+  readonly attempt: number;
+  /** Total retries `apiCall()` will attempt before giving up. */
+  readonly maxAttempts: number;
+  /** HTTP status of the failed call, when the caught error carries one. */
+  readonly status: number | undefined;
+  /** Provider-supplied `Retry-After` value in seconds, when present and within the cap. */
+  readonly retryAfterSec: number | undefined;
+  /** Delay actually awaited before the next attempt. */
+  readonly delayMs: number;
+  /** One-line error summary (same shape as the existing `console.error` line). */
+  readonly message: string;
 }
 
 export interface LLMResponse {
@@ -182,6 +212,59 @@ function errorSummary(e: unknown): string {
   return `${e.constructor.name}${status}${code}: ${e.message.slice(0, 120)}${body}`;
 }
 
+/** True when the caught value looks like an HTTP 429 from any provider SDK. */
+function isRateLimited(e: unknown): boolean {
+  if (!(e instanceof Error) || !('status' in e)) return false;
+  return (e as { status: unknown }).status === 429;
+}
+
+/** HTTP status of the caught error, when the SDK attached one. Duck-typed — matches `errorSummary`'s existing precedent. */
+function extractStatus(e: unknown): number | undefined {
+  if (!(e instanceof Error) || !('status' in e)) return undefined;
+  const status = (e as { status: unknown }).status;
+  return typeof status === 'number' ? status : undefined;
+}
+
+/**
+ * Duck-typed `Retry-After` extraction. Both `@anthropic-ai/sdk`'s and
+ * `openai`'s `APIError` attach a `Headers`-like `.headers` (with
+ * `.get()`) to the thrown error at construction time — this is the
+ * ONLY point in the call chain where that header is still reachable
+ * (confirmed by reading both SDKs' error constructors). Handles the
+ * delta-seconds form only (a plain integer/float string) — the rarer
+ * HTTP-date form parses to `NaN` and correctly falls through to
+ * `undefined` rather than fabricating a value. Google's `ApiError` has
+ * no `.headers` at all, so this always returns `undefined` for Google
+ * — expected, not a gap.
+ */
+function extractRetryAfterSec(e: unknown): number | undefined {
+  if (!(e instanceof Error) || !('headers' in e)) return undefined;
+  const headers = (e as { headers?: unknown }).headers;
+  if (
+    headers === null ||
+    typeof headers !== 'object' ||
+    !('get' in headers) ||
+    typeof (headers as { get?: unknown }).get !== 'function'
+  ) {
+    return undefined;
+  }
+  const raw = (headers as { get(name: string): string | null }).get('retry-after');
+  if (raw === null) return undefined;
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) && parsed >= 0 ? Math.floor(parsed) : undefined;
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/** Retry budget for `apiCall()` — see the docstring on `apiCall()` itself for the full policy. */
+const MAX_RETRY_ATTEMPTS = 2;
+const RETRY_AFTER_CAP_SEC = 15;
+const DEFAULT_BACKOFF_BASE_MS = 1000;
+const DEFAULT_BACKOFF_MAX_MS = 8000;
+const MAX_TOTAL_RETRY_DELAY_MS = 20000;
+
 // =============================================================================
 // LLMAgent — abstract base
 // =============================================================================
@@ -204,8 +287,12 @@ export abstract class LLMAgent {
    */
   protected readonly routeOverride: AgentConfig['routeOverride'];
 
-  constructor(routeOverride?: AgentConfig['routeOverride']) {
+  /** See `AgentConfig.onRetry` (#489). Absent is a no-op. */
+  protected readonly onRetry: AgentConfig['onRetry'];
+
+  constructor(routeOverride?: AgentConfig['routeOverride'], onRetry?: AgentConfig['onRetry']) {
     this.routeOverride = routeOverride;
+    this.onRetry = onRetry;
   }
 
   protected abstract resolveModel(model: string): string;
@@ -294,17 +381,92 @@ export abstract class LLMAgent {
   }
 
   /**
-   * Execute an API call. No retry — if it fails, it fails.
-   * Logs the error with provider context and re-throws.
+   * Execute an API call, retrying once or twice on HTTP 429
+   * (rate-limited) before giving up (#489).
+   *
+   * Policy: on a 429, honor the provider's `Retry-After` header when
+   * present (capped at `RETRY_AFTER_CAP_SEC` — a provider asking for a
+   * longer wait is treated as "don't retry", not "wait longer": making
+   * the caller sit through 15+ more seconds on a single failed call is
+   * a bad experience regardless of what's driving the request);
+   * otherwise fall back to exponential backoff with jitter, capped at
+   * `DEFAULT_BACKOFF_MAX_MS` per attempt. Stops after
+   * `MAX_RETRY_ATTEMPTS` retries OR once the cumulative delay would
+   * exceed `MAX_TOTAL_RETRY_DELAY_MS`, whichever comes first. Any
+   * non-429 error, or a 429 with no attempts left, is logged and
+   * re-thrown immediately — unchanged from the pre-#489 behavior.
+   *
+   * **Budget scope (final-review correction):** `MAX_TOTAL_RETRY_DELAY_MS`
+   * bounds a single `apiCall()` invocation, not a whole generation. A
+   * generation issues many sequential `apiCall()` calls (coding turns,
+   * tool-result round-trips, eval rounds); under sustained throttling
+   * each one can independently add up to `MAX_TOTAL_RETRY_DELAY_MS`, so
+   * a generation with k rate-limited calls can add up to roughly `k *
+   * MAX_TOTAL_RETRY_DELAY_MS` to how long it holds its caller's
+   * resources (e.g. the caller's concurrency slot) — not a flat 20s
+   * ceiling. No shared per-generation budget is threaded here by
+   * design (accepted ruling, not an oversight): the caller's own
+   * queue/admission backstop is what bounds how long other
+   * queued work waits, independent of any one generation's retry
+   * total.
    */
   protected async apiCall<T>(fn: () => Promise<T>): Promise<T> {
     const start = Date.now();
-    try {
-      return await fn();
-    } catch (e: unknown) {
-      const ms = Date.now() - start;
-      console.error(`[${this.provider}] API error after ${ms}ms: ${errorSummary(e)}`);
-      throw e;
+    let totalDelayMs = 0;
+    for (let attempt = 0; ; attempt++) {
+      try {
+        return await fn();
+      } catch (e: unknown) {
+        const ms = Date.now() - start;
+        if (attempt >= MAX_RETRY_ATTEMPTS || !isRateLimited(e)) {
+          console.error(`[${this.provider}] API error after ${ms}ms: ${errorSummary(e)}`);
+          throw e;
+        }
+        const retryAfterSec = extractRetryAfterSec(e);
+        if (retryAfterSec !== undefined && retryAfterSec > RETRY_AFTER_CAP_SEC) {
+          console.error(
+            `[${this.provider}] API error after ${ms}ms (retry-after ${retryAfterSec}s exceeds ${RETRY_AFTER_CAP_SEC}s cap, not retrying): ${errorSummary(e)}`,
+          );
+          throw e;
+        }
+        const delayMs =
+          retryAfterSec !== undefined
+            ? retryAfterSec * 1000
+            : Math.min(DEFAULT_BACKOFF_BASE_MS * 2 ** attempt, DEFAULT_BACKOFF_MAX_MS) +
+              Math.floor(Math.random() * 250);
+        if (totalDelayMs + delayMs > MAX_TOTAL_RETRY_DELAY_MS) {
+          console.error(
+            `[${this.provider}] API error after ${ms}ms (retry budget exhausted, not retrying): ${errorSummary(e)}`,
+          );
+          throw e;
+        }
+        totalDelayMs += delayMs;
+        const info: ProviderRetryInfo = {
+          provider: this.provider,
+          attempt: attempt + 1,
+          maxAttempts: MAX_RETRY_ATTEMPTS,
+          status: extractStatus(e),
+          retryAfterSec,
+          delayMs,
+          message: errorSummary(e),
+        };
+        console.warn(
+          `[${this.provider}] rate-limited (attempt ${info.attempt}/${info.maxAttempts}), retrying in ${delayMs}ms`,
+        );
+        try {
+          this.onRetry?.(info);
+        } catch (observerError) {
+          // Guard, not propagate — the docstring on AgentConfig.onRetry
+          // promises this is "purely an observability hook: it never
+          // influences whether or how long apiCall() retries". A
+          // caller-supplied observer that throws must not turn a
+          // recoverable 429 into an unrelated hard failure.
+          console.warn(
+            `[${this.provider}] onRetry observer threw (ignored, retry proceeds): ${errorSummary(observerError)}`,
+          );
+        }
+        await sleep(delayMs);
+      }
     }
   }
 
@@ -1479,15 +1641,16 @@ export function createAgent(providerOrConfig: AgentConfig['provider'] | AgentCon
     typeof providerOrConfig === 'string' ? providerOrConfig : providerOrConfig.provider;
   const routeOverride =
     typeof providerOrConfig === 'string' ? undefined : providerOrConfig.routeOverride;
+  const onRetry = typeof providerOrConfig === 'string' ? undefined : providerOrConfig.onRetry;
   switch (provider) {
     case 'anthropic':
-      return new AnthropicAgent(routeOverride);
+      return new AnthropicAgent(routeOverride, onRetry);
     case 'openai':
-      return new OpenAIAgent(routeOverride);
+      return new OpenAIAgent(routeOverride, onRetry);
     case 'google':
-      return new GoogleAgent(routeOverride);
+      return new GoogleAgent(routeOverride, onRetry);
     case 'openrouter':
-      return new OpenRouterAgent(routeOverride);
+      return new OpenRouterAgent(routeOverride, onRetry);
   }
 }
 

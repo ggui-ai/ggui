@@ -7,8 +7,8 @@
  *
  * ## Why this adapter exists
  *
- * Anyone running the generator on an AWS-credentialed host (EC2, ECS,
- * Lambda, EKS) can target Bedrock without managing API keys: IAM is
+ * Anyone running a one-shot LLM caller on an AWS-credentialed host
+ * (EC2, ECS, Lambda, EKS) can target Bedrock without managing API keys: IAM is
  * the auth boundary, AWS rotates host credentials automatically, and
  * a misconfigured IAM role surfaces as a clear `AccessDeniedException`
  * the SDK funnels through `mapError`. The alternative — parking a
@@ -198,8 +198,9 @@ export interface BedrockAdapterOptions {
  *
  * No API key — IAM is the auth boundary. The returned `ProviderAdapter`
  * satisfies the same contract as `createAnthropicAdapter`, so it
- * slots into `createUiGenerator({ adapter })` interchangeably (modulo
- * the per-provider model-id namespace differences).
+ * slots into any one-shot `ProviderAdapter` caller (e.g. `selectAdapter`)
+ * interchangeably (modulo the per-provider model-id namespace
+ * differences).
  */
 export function createBedrockAdapter(
   options: BedrockAdapterOptions = {},

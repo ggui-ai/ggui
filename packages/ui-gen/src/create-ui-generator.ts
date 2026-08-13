@@ -61,6 +61,7 @@ import {
 import type { RenderingContext } from './contract-context.js';
 import { resolveRoute, applyRouteToEnv } from './adapters/provider-router.js';
 import type { QualityConfig } from './evaluation/types-public.js';
+import type { AgentConfig } from './harness/llm-router.js';
 
 /** The slug for the OSS default seed generator. */
 const DEFAULT_TIER: GeneratorTier = 'default';
@@ -151,6 +152,17 @@ export interface CreateUiGeneratorOptions {
    * for callers that don't need concurrent generations in-process.
    */
   readonly disableEnvMutation?: boolean;
+  /**
+   * Retry observer (#489) — see `AgentConfig.onRetry`. Bound ONCE at
+   * factory construction time (mirrors `disableEnvMutation`), not
+   * per-call: `generate()` is invoked once per request, but the
+   * generator instance itself is typically long-lived and cached by
+   * the caller, so a single observer covers every generation it runs.
+   * Fires whenever any agent's `apiCall()` retries a rate-limited
+   * request. Absent (default) is a no-op — retries still happen and
+   * still log via `console.warn`, just without a caller-side hook.
+   */
+  readonly onRetry?: AgentConfig['onRetry'];
 }
 
 export function createUiGenerator(
@@ -163,6 +175,7 @@ export function createUiGenerator(
     qualityConfig,
     gadgetCatalog,
     disableEnvMutation = false,
+    onRetry,
   } = options;
 
   const identity = resolveIdentity(options);
@@ -302,6 +315,7 @@ export function createUiGenerator(
             : {}),
           enableRuntimeRender,
           ...(routeOverride !== undefined ? { routeOverride } : {}),
+          ...(onRetry !== undefined ? { onRetry } : {}),
         });
 
         const metadata: GenerationMetadata = {
