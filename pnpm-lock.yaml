@@ -620,12 +620,12 @@ importers:
       '@ggui-ai/design':
         specifier: workspace:*
         version: link:../design
+      '@ggui-ai/mcp-apps-react':
+        specifier: workspace:*
+        version: link:../mcp-apps-react
       '@ggui-ai/project-config':
         specifier: workspace:*
         version: link:../project-config
-      '@ggui-ai/react':
-        specifier: workspace:*
-        version: link:../ggui-react
       react:
         specifier: ^19.2.8
         version: 19.2.8
@@ -752,9 +752,9 @@ importers:
       '@ggui-ai/design':
         specifier: workspace:*
         version: link:../design
-      '@ggui-ai/react':
+      '@ggui-ai/mcp-apps-react':
         specifier: workspace:*
-        version: link:../ggui-react
+        version: link:../mcp-apps-react
       '@ggui-ai/wire':
         specifier: workspace:*
         version: link:../wire
@@ -946,98 +946,6 @@ importers:
         specifier: ^3.2.6
         version: 3.2.7(@types/node@24.12.2)(happy-dom@20.11.1)(jsdom@25.0.1)(terser@5.49.0)(tsx@4.23.5)(yaml@2.8.3)
 
-  packages/ggui-react:
-    dependencies:
-      '@ggui-ai/iframe-runtime':
-        specifier: workspace:*
-        version: link:../iframe-runtime
-      '@ggui-ai/protocol':
-        specifier: workspace:*
-        version: link:../protocol
-      '@ggui-ai/wire':
-        specifier: workspace:*
-        version: link:../wire
-    devDependencies:
-      '@ggui-ai/design':
-        specifier: workspace:*
-        version: link:../design
-      '@modelcontextprotocol/sdk':
-        specifier: 1.30.0
-        version: 1.30.0(zod@4.4.3)
-      '@silverprotocol/core':
-        specifier: 0.4.1
-        version: 0.4.1
-      '@testing-library/react':
-        specifier: ^16.0.0
-        version: 16.3.2(@testing-library/dom@10.4.0)(@types/react-dom@19.2.4(@types/react@19.2.18))(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
-      '@types/node':
-        specifier: ^22.0.0
-        version: 22.19.15
-      '@types/react':
-        specifier: ^19.2.18
-        version: 19.2.18
-      '@types/react-dom':
-        specifier: ^19.2.4
-        version: 19.2.4(@types/react@19.2.18)
-      jsdom:
-        specifier: ^24.0.0
-        version: 24.1.3
-      react:
-        specifier: ^19.2.8
-        version: 19.2.8
-      react-dom:
-        specifier: ^19.2.8
-        version: 19.2.8(react@19.2.8)
-      tsup:
-        specifier: ^8.0.0
-        version: 8.5.1(postcss@8.5.25)(tsx@4.23.5)(typescript@5.9.3)(yaml@2.8.3)
-      typescript:
-        specifier: ^5.0.0
-        version: 5.9.3
-      vitest:
-        specifier: ^3.2.6
-        version: 3.2.7(@types/node@22.19.15)(happy-dom@20.11.1)(jsdom@24.1.3)(terser@5.49.0)(tsx@4.23.5)(yaml@2.8.3)
-
-  packages/ggui-react-native:
-    dependencies:
-      '@ggui-ai/design':
-        specifier: workspace:*
-        version: link:../design
-      '@ggui-ai/iframe-runtime':
-        specifier: workspace:*
-        version: link:../iframe-runtime
-      '@ggui-ai/protocol':
-        specifier: workspace:*
-        version: link:../protocol
-      '@modelcontextprotocol/ext-apps':
-        specifier: 1.7.5
-        version: 1.7.5(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(zod@4.4.3)
-    devDependencies:
-      '@modelcontextprotocol/sdk':
-        specifier: 1.30.0
-        version: 1.30.0(zod@4.4.3)
-      '@types/react':
-        specifier: ^19.2.18
-        version: 19.2.18
-      react:
-        specifier: ^19.2.8
-        version: 19.2.8
-      react-native:
-        specifier: 0.81.5
-        version: 0.81.5(@babel/core@7.29.7)(@types/react@19.2.18)(react@19.2.8)
-      react-native-webview:
-        specifier: 13.16.1
-        version: 13.16.1(react-native@0.81.5(@babel/core@7.29.7)(@types/react@19.2.18)(react@19.2.8))(react@19.2.8)
-      react-test-renderer:
-        specifier: 19.0.0
-        version: 19.0.0(react@19.2.8)
-      typescript:
-        specifier: ^5.0.0
-        version: 5.9.3
-      vitest:
-        specifier: ^3.2.6
-        version: 3.2.7(@types/node@24.13.3)(happy-dom@20.11.1)(jsdom@25.0.1)(terser@5.49.0)(tsx@4.23.5)(yaml@2.8.3)
-
   packages/iframe-runtime:
     dependencies:
       '@ggui-ai/design':
@@ -1116,6 +1024,98 @@ importers:
       vitest:
         specifier: ^3.2.6
         version: 3.2.7(@types/node@22.19.15)(happy-dom@20.11.1)(jsdom@25.0.1)(terser@5.49.0)(tsx@4.23.5)(yaml@2.8.3)
+
+  packages/mcp-apps-react:
+    dependencies:
+      '@ggui-ai/iframe-runtime':
+        specifier: workspace:*
+        version: link:../iframe-runtime
+      '@ggui-ai/protocol':
+        specifier: workspace:*
+        version: link:../protocol
+      '@ggui-ai/wire':
+        specifier: workspace:*
+        version: link:../wire
+    devDependencies:
+      '@ggui-ai/design':
+        specifier: workspace:*
+        version: link:../design
+      '@modelcontextprotocol/sdk':
+        specifier: 1.30.0
+        version: 1.30.0(zod@4.4.3)
+      '@silverprotocol/core':
+        specifier: 0.4.1
+        version: 0.4.1
+      '@testing-library/react':
+        specifier: ^16.0.0
+        version: 16.3.2(@testing-library/dom@10.4.0)(@types/react-dom@19.2.4(@types/react@19.2.18))(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+      '@types/node':
+        specifier: ^22.0.0
+        version: 22.19.15
+      '@types/react':
+        specifier: ^19.2.18
+        version: 19.2.18
+      '@types/react-dom':
+        specifier: ^19.2.4
+        version: 19.2.4(@types/react@19.2.18)
+      jsdom:
+        specifier: ^24.0.0
+        version: 24.1.3
+      react:
+        specifier: ^19.2.8
+        version: 19.2.8
+      react-dom:
+        specifier: ^19.2.8
+        version: 19.2.8(react@19.2.8)
+      tsup:
+        specifier: ^8.0.0
+        version: 8.5.1(postcss@8.5.25)(tsx@4.23.5)(typescript@5.9.3)(yaml@2.8.3)
+      typescript:
+        specifier: ^5.0.0
+        version: 5.9.3
+      vitest:
+        specifier: ^3.2.6
+        version: 3.2.7(@types/node@22.19.15)(happy-dom@20.11.1)(jsdom@24.1.3)(terser@5.49.0)(tsx@4.23.5)(yaml@2.8.3)
+
+  packages/mcp-apps-react-native:
+    dependencies:
+      '@ggui-ai/design':
+        specifier: workspace:*
+        version: link:../design
+      '@ggui-ai/iframe-runtime':
+        specifier: workspace:*
+        version: link:../iframe-runtime
+      '@ggui-ai/protocol':
+        specifier: workspace:*
+        version: link:../protocol
+      '@modelcontextprotocol/ext-apps':
+        specifier: 1.7.5
+        version: 1.7.5(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(zod@4.4.3)
+    devDependencies:
+      '@modelcontextprotocol/sdk':
+        specifier: 1.30.0
+        version: 1.30.0(zod@4.4.3)
+      '@types/react':
+        specifier: ^19.2.18
+        version: 19.2.18
+      react:
+        specifier: ^19.2.8
+        version: 19.2.8
+      react-native:
+        specifier: 0.81.5
+        version: 0.81.5(@babel/core@7.29.7)(@types/react@19.2.18)(react@19.2.8)
+      react-native-webview:
+        specifier: 13.16.1
+        version: 13.16.1(react-native@0.81.5(@babel/core@7.29.7)(@types/react@19.2.18)(react@19.2.8))(react@19.2.8)
+      react-test-renderer:
+        specifier: 19.0.0
+        version: 19.0.0(react@19.2.8)
+      typescript:
+        specifier: ^5.0.0
+        version: 5.9.3
+      vitest:
+        specifier: ^3.2.6
+        version: 3.2.7(@types/node@24.13.3)(happy-dom@20.11.1)(jsdom@25.0.1)(terser@5.49.0)(tsx@4.23.5)(yaml@2.8.3)
 
   packages/mcp-server:
     dependencies:
@@ -1497,11 +1497,11 @@ importers:
         specifier: 0.32.1
         version: 0.32.1(zod@4.4.3)
       '@anthropic-ai/claude-agent-sdk':
-        specifier: 0.2.76
-        version: 0.2.76(zod@4.4.3)
+        specifier: 0.3.229
+        version: 0.3.229(@anthropic-ai/sdk@0.116.0(zod@4.4.3))(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(zod@4.4.3)
       '@anthropic-ai/sdk':
-        specifier: ^0.91.1
-        version: 0.91.1(zod@4.4.3)
+        specifier: ^0.116.0
+        version: 0.116.0(zod@4.4.3)
       '@ggui-ai/design':
         specifier: workspace:*
         version: link:../design
@@ -1943,10 +1943,62 @@ packages:
   '@anthropic-ai/bedrock-sdk@0.32.1':
     resolution: {integrity: sha512-nURBd2U7GpF38Ul4Qbw/IVSsN4YR/O9+VXMmgQubvNQqmB7m1Sys7FuHSydtuPtanoOA9t4Q+a+jcylMfJuQZg==}
 
+  '@anthropic-ai/claude-agent-sdk-darwin-arm64@0.3.229':
+    resolution: {integrity: sha512-yVrJwSG9ur001ggDHKPUHlRuHKwbi2ETfby+4wlktRcQ5sAXqcSeS6B4T+IsXk8NDDHKXbCxpAPnCB5dz1Ac9g==}
+    cpu: [arm64]
+    os: [darwin]
+
+  '@anthropic-ai/claude-agent-sdk-darwin-x64@0.3.229':
+    resolution: {integrity: sha512-MOhOwgh9fqnX/rqeVJzy+NNFx+xXX2Kej/jx33xTV+4J5aJ2H1SwjZ+r3f/k1MMQmPvkrE0GHnMYrpu4hfvZ5Q==}
+    cpu: [x64]
+    os: [darwin]
+
+  '@anthropic-ai/claude-agent-sdk-linux-arm64-musl@0.3.229':
+    resolution: {integrity: sha512-S0XcKhUXLFdEv1Pq+aYiV7fDlTa/n+bajBNkKv12eUzjCUFsM/TfSyU5shnkQg9y7NtoB4owK/rezm5hHD1ybg==}
+    cpu: [arm64]
+    os: [linux]
+    libc: [musl]
+
+  '@anthropic-ai/claude-agent-sdk-linux-arm64@0.3.229':
+    resolution: {integrity: sha512-xSPUmKNik7HEYsbdUFywbjvGzUth0P2KohetJixSOrBha63ZRun449ssEHU55VX3qH+YO5ENn129l5TGFzMNGQ==}
+    cpu: [arm64]
+    os: [linux]
+    libc: [glibc]
+
+  '@anthropic-ai/claude-agent-sdk-linux-x64-musl@0.3.229':
+    resolution: {integrity: sha512-9gJsr0elKyV21ln+Mza5kYiSAsqSAWFiHuaT+MiXAycBK73UbzRVLBg87dajkGagg6H1u5ZtPSkqNXzA2xArmA==}
+    cpu: [x64]
+    os: [linux]
+    libc: [musl]
+
+  '@anthropic-ai/claude-agent-sdk-linux-x64@0.3.229':
+    resolution: {integrity: sha512-Cs0NxWVL/Up8kEh//P2cE+3VHrDxoSmWUP3EvI/GU+1RRGZPDD80UN1Rvl3TMC5QPMq+IYPjh1yncnxZ6j8aNw==}
+    cpu: [x64]
+    os: [linux]
+    libc: [glibc]
+
+  '@anthropic-ai/claude-agent-sdk-win32-arm64@0.3.229':
+    resolution: {integrity: sha512-2fkljxQweZUa41RrlhLh+VdZrJ4kYzEBHGD8sc+Xy2bjkF8T4GTmsE8eKSWN3NfSCQOLHgK7Bxfm6+2n88WJMg==}
+    cpu: [arm64]
+    os: [win32]
+
+  '@anthropic-ai/claude-agent-sdk-win32-x64@0.3.229':
+    resolution: {integrity: sha512-2M2/KHJTGqzduA8eRZDu1vWSFkMqKl9JZMqJmaJ2THIR2g7jBUAzK0B57UzkO9uQXoXWFH7P91OSKKGA4rwfwQ==}
+    cpu: [x64]
+    os: [win32]
+
   '@anthropic-ai/claude-agent-sdk@0.2.76':
     resolution: {integrity: sha512-HZxvnT8ZWkzCnQygaYCA0dl8RSUzuVbxE1YG4ecy6vh4nQbTT36CxUxBy+QVdR12pPQluncC0mCOLhI2918Eaw==}
     engines: {node: '>=18.0.0'}
     peerDependencies:
+      zod: ^4.4.3
+
+  '@anthropic-ai/claude-agent-sdk@0.3.229':
+    resolution: {integrity: sha512-ZxSFO7cNSz7jqsOmoGkBtvMT4JGWb2a8PUe6doAydZXH6mm6FsoUf+duSUm2rDrbv7OMoD8HDGwNZv5P3woE3w==}
+    engines: {node: '>=18.0.0'}
+    peerDependencies:
+      '@anthropic-ai/sdk': '>=0.93.0'
+      '@modelcontextprotocol/sdk': 1.30.0
       zod: ^4.4.3
 
   '@anthropic-ai/sdk@0.116.0':
@@ -9040,6 +9092,30 @@ snapshots:
     transitivePeerDependencies:
       - zod
 
+  '@anthropic-ai/claude-agent-sdk-darwin-arm64@0.3.229':
+    optional: true
+
+  '@anthropic-ai/claude-agent-sdk-darwin-x64@0.3.229':
+    optional: true
+
+  '@anthropic-ai/claude-agent-sdk-linux-arm64-musl@0.3.229':
+    optional: true
+
+  '@anthropic-ai/claude-agent-sdk-linux-arm64@0.3.229':
+    optional: true
+
+  '@anthropic-ai/claude-agent-sdk-linux-x64-musl@0.3.229':
+    optional: true
+
+  '@anthropic-ai/claude-agent-sdk-linux-x64@0.3.229':
+    optional: true
+
+  '@anthropic-ai/claude-agent-sdk-win32-arm64@0.3.229':
+    optional: true
+
+  '@anthropic-ai/claude-agent-sdk-win32-x64@0.3.229':
+    optional: true
+
   '@anthropic-ai/claude-agent-sdk@0.2.76(zod@4.4.3)':
     dependencies:
       zod: 4.4.3
@@ -9053,6 +9129,21 @@ snapshots:
       '@img/sharp-linuxmusl-x64': 0.34.5
       '@img/sharp-win32-arm64': 0.34.5
       '@img/sharp-win32-x64': 0.34.5
+
+  '@anthropic-ai/claude-agent-sdk@0.3.229(@anthropic-ai/sdk@0.116.0(zod@4.4.3))(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(zod@4.4.3)':
+    dependencies:
+      '@anthropic-ai/sdk': 0.116.0(zod@4.4.3)
+      '@modelcontextprotocol/sdk': 1.30.0(zod@4.4.3)
+      zod: 4.4.3
+    optionalDependencies:
+      '@anthropic-ai/claude-agent-sdk-darwin-arm64': 0.3.229
+      '@anthropic-ai/claude-agent-sdk-darwin-x64': 0.3.229
+      '@anthropic-ai/claude-agent-sdk-linux-arm64': 0.3.229
+      '@anthropic-ai/claude-agent-sdk-linux-arm64-musl': 0.3.229
+      '@anthropic-ai/claude-agent-sdk-linux-x64': 0.3.229
+      '@anthropic-ai/claude-agent-sdk-linux-x64-musl': 0.3.229
+      '@anthropic-ai/claude-agent-sdk-win32-arm64': 0.3.229
+      '@anthropic-ai/claude-agent-sdk-win32-x64': 0.3.229
 
   '@anthropic-ai/sdk@0.116.0(zod@4.4.3)':
     dependencies:
@@ -11580,7 +11671,7 @@ snapshots:
   '@react-native/codegen@0.81.5(@babel/core@7.29.7)':
     dependencies:
       '@babel/core': 7.29.7
-      '@babel/parser': 7.29.2
+      '@babel/parser': 7.29.8
       glob: 7.2.3
       hermes-parser: 0.29.1
       invariant: 2.2.4
@@ -11595,7 +11686,7 @@ snapshots:
       metro: 0.83.7
       metro-config: 0.83.7
       metro-core: 0.83.7
-      semver: 7.7.4
+      semver: 7.8.5
     transitivePeerDependencies:
       - bufferutil
       - supports-color
@@ -12910,8 +13001,8 @@ snapshots:
 
   babel-plugin-jest-hoist@29.6.3:
     dependencies:
-      '@babel/template': 7.28.6
-      '@babel/types': 7.29.0
+      '@babel/template': 7.29.7
+      '@babel/types': 7.29.8
       '@types/babel__core': 7.20.5
       '@types/babel__traverse': 7.28.0
 
@@ -14743,7 +14834,7 @@ snapshots:
   istanbul-lib-instrument@5.2.1:
     dependencies:
       '@babel/core': 7.29.7
-      '@babel/parser': 7.29.2
+      '@babel/parser': 7.29.8
       '@istanbuljs/schema': 0.1.6
       istanbul-lib-coverage: 3.2.2
       semver: 6.3.1
@@ -14794,7 +14885,7 @@ snapshots:
 
   jest-message-util@29.7.0:
     dependencies:
-      '@babel/code-frame': 7.29.0
+      '@babel/code-frame': 7.29.7
       '@jest/types': 29.6.3
       '@types/stack-utils': 2.0.3
       chalk: 4.1.2
@@ -15340,8 +15431,8 @@ snapshots:
 
   metro-source-map@0.83.7:
     dependencies:
-      '@babel/traverse': 7.29.0
-      '@babel/types': 7.29.0
+      '@babel/traverse': 7.29.8
+      '@babel/types': 7.29.8
       flow-enums-runtime: 0.0.6
       invariant: 2.2.4
       metro-symbolicate: 0.83.7
@@ -15366,9 +15457,9 @@ snapshots:
   metro-transform-plugins@0.83.7:
     dependencies:
       '@babel/core': 7.29.7
-      '@babel/generator': 7.29.1
-      '@babel/template': 7.28.6
-      '@babel/traverse': 7.29.0
+      '@babel/generator': 7.29.8
+      '@babel/template': 7.29.7
+      '@babel/traverse': 7.29.8
       flow-enums-runtime: 0.0.6
       nullthrows: 1.1.1
     transitivePeerDependencies:
@@ -15377,9 +15468,9 @@ snapshots:
   metro-transform-worker@0.83.7:
     dependencies:
       '@babel/core': 7.29.7
-      '@babel/generator': 7.29.1
-      '@babel/parser': 7.29.2
-      '@babel/types': 7.29.0
+      '@babel/generator': 7.29.8
+      '@babel/parser': 7.29.8
+      '@babel/types': 7.29.8
       flow-enums-runtime: 0.0.6
       metro: 0.83.7
       metro-babel-transformer: 0.83.7
@@ -15396,13 +15487,13 @@ snapshots:
 
   metro@0.83.7:
     dependencies:
-      '@babel/code-frame': 7.29.0
+      '@babel/code-frame': 7.29.7
       '@babel/core': 7.29.7
-      '@babel/generator': 7.29.1
-      '@babel/parser': 7.29.2
-      '@babel/template': 7.28.6
-      '@babel/traverse': 7.29.0
-      '@babel/types': 7.29.0
+      '@babel/generator': 7.29.8
+      '@babel/parser': 7.29.8
+      '@babel/template': 7.29.7
+      '@babel/traverse': 7.29.8
+      '@babel/types': 7.29.8
       accepts: 2.0.0
       ci-info: 2.0.0
       connect: 3.7.0
@@ -16251,7 +16342,7 @@ snapshots:
       react-refresh: 0.14.2
       regenerator-runtime: 0.13.11
       scheduler: 0.26.0
-      semver: 7.7.4
+      semver: 7.8.5
       stacktrace-parser: 0.1.11
       whatwg-fetch: 3.6.20
       ws: 6.2.6
