@@ -960,6 +960,15 @@ export interface SelfContainedShellInputs {
    */
   readonly lastSequence?: McpAppAiGguiRenderMeta["lastSequence"];
   /**
+   * Freeze-latch self-epoch (#483), mirrored from
+   * {@link McpAppAiGguiRenderMeta.epoch}: the history epoch of the
+   * record this shell mounts (pinned `#N` read ⇒ N; bare/head read ⇒
+   * the row's epoch). Absent ⇒ the runtime treats the mount as epoch
+   * 0 — correct only for a fresh render, so emitters serving epoch-
+   * bearing sessions MUST thread it.
+   */
+  readonly epoch?: McpAppAiGguiRenderMeta["epoch"];
+  /**
    * Wire-stamped polling fallback URL — `${base}/api/sessions/<id>/events?wsToken=<...>`.
    * When the iframe-runtime's WS transport reaches `'failed'` (CSP
    * blocks `ws://`, corporate firewall, etc.), `@ggui-ai/live-channel`
@@ -1080,6 +1089,7 @@ export function buildSelfContainedShell(opts: SelfContainedShellInputs): string 
     // SelfContainedShellInputs.sseUrl for the stream contract.
     ...(opts.sseUrl !== undefined ? { sseUrl: opts.sseUrl } : {}),
     ...(opts.lastSequence !== undefined ? { lastSequence: opts.lastSequence } : {}),
+    ...(opts.epoch !== undefined ? { epoch: opts.epoch } : {}),
     // Visible-bits surface — what the iframe is mounting right now.
     // Static-content discriminators (codeUrl / kind) are mutually
     // exclusive; the iframe-runtime rejects the both-set mix.
@@ -2328,6 +2338,10 @@ export function registerGguiRenderResourceTemplate(
         : {}),
       // R6 — ledger cursor stamp for polling-cursor alignment.
       lastSequence: accessibleStored.eventSequence,
+      // Freeze-latch self-epoch (#483): a pinned `#N` read carries N
+      // (the reconstruction stamps it on the session before
+      // `deriveRenderMeta`), a bare/head read the row's epoch.
+      ...(view.epoch !== undefined ? { epoch: view.epoch } : {}),
     });
     // Augment per-call CSP with gadget-declared bundle / style /
     // API origins. Without this, claude.ai's iframe CSP only allows

@@ -479,6 +479,20 @@ export function parseMcpAppAiGguiRenderMeta(
     return { ok: false, reason: 'MALFORMED_RENDER' };
   }
 
+  // `epoch` (#483) mirrors lastSequence's invariant: the freeze-latch
+  // self-epoch is a non-negative integer when present. This parser
+  // REBUILDS the slice field-by-field, so a field missing from the
+  // constructor below is silently deleted from every downstream
+  // consumer — epoch was exactly such a drop (probe 18 round 3: the
+  // head card booted believing epoch 0 and froze on its own amend).
+  const ep = s.epoch;
+  if (
+    ep !== undefined &&
+    (typeof ep !== 'number' || !Number.isInteger(ep) || ep < 0)
+  ) {
+    return { ok: false, reason: 'MALFORMED_RENDER' };
+  }
+
   // Component-mode discriminator: kind mutually exclusive with
   // codeUrl/codeB64 (the two static-component carriers may coexist —
   // consumers prefer the inline bytes).
@@ -562,6 +576,7 @@ export function parseMcpAppAiGguiRenderMeta(
       ? { permissionsPolicy: s.permissionsPolicy as readonly string[] }
       : {}),
     ...(ls !== undefined ? { lastSequence: ls as number } : {}),
+    ...(ep !== undefined ? { epoch: ep as number } : {}),
     ...(s.propsJson !== undefined ? { propsJson: s.propsJson as string } : {}),
     ...(s.contextSlots !== undefined
       ? {

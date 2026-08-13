@@ -630,6 +630,38 @@ describe('parseMcpAppAiGguiRenderMeta', () => {
     });
     expect(b.ok ? null : b.reason).toBe('MALFORMED_RENDER');
   });
+
+  it('carries epoch through the rebuild (#483 freeze-latch self-epoch)', () => {
+    // The parser reconstructs the slice field-by-field, so a field
+    // missing from its constructor is silently deleted for every
+    // downstream consumer. `epoch` was exactly such a drop (probe 18
+    // round 3: mounts booted believing epoch 0 and the head froze on
+    // its own amend). Both a positive epoch and the falsy 0 must ride.
+    const one = parseMcpAppAiGguiRenderMeta({
+      [MCP_APP_AI_GGUI_RENDER_META_KEY]: { ...minimalRender, epoch: 1 },
+    });
+    expect(one.ok).toBe(true);
+    if (one.ok) expect(one.meta?.epoch).toBe(1);
+    const zero = parseMcpAppAiGguiRenderMeta({
+      [MCP_APP_AI_GGUI_RENDER_META_KEY]: { ...minimalRender, epoch: 0 },
+    });
+    expect(zero.ok).toBe(true);
+    if (zero.ok) expect(zero.meta?.epoch).toBe(0);
+    const absent = parseMcpAppAiGguiRenderMeta({
+      [MCP_APP_AI_GGUI_RENDER_META_KEY]: { ...minimalRender },
+    });
+    expect(absent.ok).toBe(true);
+    if (absent.ok) expect(absent.meta?.epoch).toBeUndefined();
+  });
+
+  it('rejects epoch that is non-integer / negative / non-number', () => {
+    for (const bad of [-1, 1.5, '2']) {
+      const r = parseMcpAppAiGguiRenderMeta({
+        [MCP_APP_AI_GGUI_RENDER_META_KEY]: { ...minimalRender, epoch: bad },
+      });
+      expect(r.ok ? null : r.reason).toBe('MALFORMED_RENDER');
+    }
+  });
 });
 
 describe('parseMcpAppAiGguiHostSessionMeta', () => {

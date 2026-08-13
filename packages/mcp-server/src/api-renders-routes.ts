@@ -300,6 +300,9 @@ export function mountApiRendersRoutes(opts: MountOptions): void {
       // R6 — load-bearing ledger cursor. Always stamped on /state
       // reads so polling clients can position the R7 /events cursor.
       lastSequence: stored.eventSequence,
+      // Freeze-latch self-epoch (#483) — /state serves the live head,
+      // so this is the row's current epoch.
+      ...(view?.epoch !== undefined ? { epoch: view.epoch } : {}),
       // Visible-bits surface merged onto the single render slice.
       ...(renderKind !== undefined ? { kind: renderKind } : {}),
       ...(renderCodeUrl !== undefined
