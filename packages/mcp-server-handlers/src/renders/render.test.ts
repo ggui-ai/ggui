@@ -256,6 +256,13 @@ function buildHandler(opts: {
    * code-delivery suite drives both postures through this seam.
    */
   readonly mintWsToken?: GguiRenderHandlerDeps['mintWsToken'];
+  /**
+   * Optional admission-control seam (#488). Presence is what decides
+   * whether the handler's rate-limiter check runs at all; the
+   * fairness-key suite drives it with a capturing fake to assert the
+   * exact `limiterKey` string the handler composes.
+   */
+  readonly rateLimiter?: GguiRenderHandlerDeps['rateLimiter'];
 }): ReturnType<typeof createGguiRenderHandler> {
   return createGguiRenderHandler({
     handshakeStore: opts.handshakeStore,
@@ -273,6 +280,7 @@ function buildHandler(opts: {
       ? { codeBaseUrl: opts.codeBaseUrl }
       : {}),
     ...(opts.mintWsToken ? { mintWsToken: opts.mintWsToken } : {}),
+    ...(opts.rateLimiter ? { rateLimiter: opts.rateLimiter } : {}),
     generation: {
       // `uiGenerator` is never reached — `generator` escape hatch wins.
       uiGenerator: {
@@ -497,6 +505,8 @@ async function buildColdGenHarness(extraOpts: {
   readonly codeBaseUrl?: string;
   /** Live-channel credential minter — see {@link buildHandler}. */
   readonly mintWsToken?: GguiRenderHandlerDeps['mintWsToken'];
+  /** Admission-control seam (#488) — see {@link buildHandler}. */
+  readonly rateLimiter?: GguiRenderHandlerDeps['rateLimiter'];
 } = {}): Promise<{
   readonly harness: Harness;
   readonly handshakeId: string;
@@ -537,6 +547,7 @@ async function buildColdGenHarness(extraOpts: {
       ? { codeBaseUrl: extraOpts.codeBaseUrl }
       : {}),
     ...(extraOpts.mintWsToken ? { mintWsToken: extraOpts.mintWsToken } : {}),
+    ...(extraOpts.rateLimiter ? { rateLimiter: extraOpts.rateLimiter } : {}),
   });
   return {
     harness: { handshakeStore, renderStore, vectorStore, index, handler },
@@ -2103,5 +2114,74 @@ describe('createGguiRenderHandler — code-delivery channel', () => {
     } finally {
       warn.mockRestore();
     }
+  });
+});
+
+describe('createGguiRenderHandler — admission-control key composition (#488)', () => {
+  /** A rate limiter that always allows, capturing every `key` it was
+   *  called with so tests can assert the exact bucket the handler
+   *  composed. */
+  function capturingRateLimiter(): {
+    readonly rateLimiter: NonNullable<GguiRenderHandlerDeps['rateLimiter']>;
+    readonly checkedKeys: string[];
+  } {
+    const checkedKeys: string[] = [];
+    return {
+      rateLimiter: {
+        async check(input) {
+          checkedKeys.push(input.key);
+          return { allowed: true, remaining: 999, resetAt: Date.now() + 60_000 };
+        },
+      },
+      checkedKeys,
+    };
+  }
+
+  it('buckets a federated end-user (ctx.userId set, no apiKeyHash) by userId, not "anon"', async () => {
+    const { rateLimiter, checkedKeys } = capturingRateLimiter();
+    const { harness, handshakeId } = await buildColdGenHarness({ rateLimiter });
+    const userCtx: HandlerContext = { ...CTX, userId: 'sub_abc123' };
+
+    const out = await harness.handler.handler({ handshakeId, props: {} }, userCtx);
+    assertRenderSuccess(out);
+
+    expect(checkedKeys).toContain(`ggui_render:${APP_ID}:sub_abc123`);
+  });
+
+  it('still buckets an app-kind caller (apiKeyHash set) by apiKeyHash, unchanged', async () => {
+    const { rateLimiter, checkedKeys } = capturingRateLimiter();
+    const { harness, handshakeId } = await buildColdGenHarness({ rateLimiter });
+    const appCtx: HandlerContext = { ...CTX, apiKeyHash: 'hash_xyz' };
+
+    const out = await harness.handler.handler({ handshakeId, props: {} }, appCtx);
+    assertRenderSuccess(out);
+
+    expect(checkedKeys).toContain(`ggui_render:${APP_ID}:hash_xyz`);
+  });
+
+  it('still buckets a keyless/anonymous caller as "anon", unchanged', async () => {
+    const { rateLimiter, checkedKeys } = capturingRateLimiter();
+    const { harness, handshakeId } = await buildColdGenHarness({ rateLimiter });
+
+    const out = await harness.handler.handler({ handshakeId, props: {} }, CTX);
+    assertRenderSuccess(out);
+
+    expect(checkedKeys).toContain(`ggui_render:${APP_ID}:anon`);
+  });
+
+  it('prefers apiKeyHash over userId when both are somehow set (apiKeyHash stays first in the composition)', async () => {
+    const { rateLimiter, checkedKeys } = capturingRateLimiter();
+    const { harness, handshakeId } = await buildColdGenHarness({ rateLimiter });
+    const bothCtx: HandlerContext = {
+      ...CTX,
+      apiKeyHash: 'hash_xyz',
+      userId: 'sub_abc123',
+    };
+
+    const out = await harness.handler.handler({ handshakeId, props: {} }, bothCtx);
+    assertRenderSuccess(out);
+
+    expect(checkedKeys).toContain(`ggui_render:${APP_ID}:hash_xyz`);
+    expect(checkedKeys.some((k) => k.includes('sub_abc123'))).toBe(false);
   });
 });

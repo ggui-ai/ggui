@@ -457,15 +457,19 @@ export interface GguiRenderHandlerDeps extends RenderSliceMetaDeps {
    * {@link import('@ggui-ai/mcp-server-core').RateLimitDecision} to
    * HTTP 429 + `Retry-After` / `X-RateLimit-*` headers.
    *
-   * Key composition: `ggui_render:<appId>:<apiKeyHash|anon>`. The
-   * key carries BOTH isolation units the seam knows about — the app
-   * and the calling credential — because the `RateLimitCheckInput`
-   * carries no other identity channel: a binding that only ever sees
-   * `key` can enforce per-app policy (aggregate on the middle
-   * segment) or per-API-key policy (bucket the full key) without
-   * this handler changing shape. Keyless callers collapse to the
-   * literal `anon` segment, so an OSS demo deployment still gets one
-   * shared bucket per app (the pre-widening behavior).
+   * Key composition: `ggui_render:<appId>:<apiKeyHash|userId|anon>`.
+   * The key carries the isolation units the seam knows about — the
+   * app and the calling credential (API key hash for app-kind
+   * callers, the verified sub claim for federated end-users via
+   * `ctx.userId`) — because the `RateLimitCheckInput` carries no
+   * other identity channel: a binding that only ever sees `key` can
+   * enforce per-app policy (aggregate on the middle segment),
+   * per-API-key policy, or per-end-user policy (bucket the full key)
+   * without this handler changing shape. Federated end-users without
+   * a `userId` OR an `apiKeyHash` (shouldn't happen post-auth, but
+   * the fallback is defensive) and fully keyless/anonymous callers
+   * collapse to the literal `anon` segment, so an OSS demo deployment
+   * still gets one shared bucket per app (the pre-widening behavior).
    *
    * Absence of this dep is the "unlimited / handler is not
    * broken when limiter is absent" invariant — the `NoopRateLimiter`
@@ -1167,7 +1171,7 @@ export function createGguiRenderHandler(
       // Admission check. Fires BEFORE state changes — a rate-limited
       // caller should get 429 without the server doing any real work.
       if (deps.rateLimiter) {
-        const limiterKey = `ggui_render:${ctx.appId}:${ctx.apiKeyHash ?? "anon"}`;
+        const limiterKey = `ggui_render:${ctx.appId}:${ctx.apiKeyHash ?? ctx.userId ?? "anon"}`;
         const decision = await deps.rateLimiter.check({
           key: limiterKey,
           cost: 1,
