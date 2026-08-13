@@ -153,7 +153,7 @@ export async function compileComponentCode(source: string): Promise<string> {
  * `response.sourceCode` so downstream consumers that want human-readable
  * source (benchmarks, blueprint cache seeding) still have it.
  *
- *   const raw = createUiGenerator({ adapter });
+ *   const raw = createUiGenerator();
  *   const oss = withBrowserCompile(raw);
  *   const out = await oss.generate({ ... });
  *   // out.response.componentCode → ESM (browser-ready)

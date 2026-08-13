@@ -3012,8 +3012,8 @@ export interface CreateGguiServerOptions {
    * doesn't silently drop the generator binding.
    *
    * The `@ggui-ai/ui-gen` package ships the OSS default
-   * implementation (`createUiGenerator({adapter})`); a hosted closed
-   * runtime supplies its own generator binding through the same seam.
+   * implementation (`createUiGenerator()`); other deployments can
+   * supply their own generator binding through the same seam.
    * BYOK resolution (env → credentials file) is the CLI layer's
    * concern — at this boundary the caller hands in a closure that
    * returns resolved credentials per render.
