@@ -1,7 +1,18 @@
 /**
  * Provider adapter contract — the narrow surface every concrete LLM
- * provider client (Anthropic, Google, OpenAI, OpenRouter) implements
- * before the generator wires them in.
+ * provider client (Anthropic, Google, OpenAI, OpenRouter, Bedrock)
+ * implements.
+ *
+ * **Real role:** a provider-agnostic one-shot LLM caller for
+ * lightweight callers that need a single `complete()` round-trip — NOT
+ * a generation harness. The primary consumer is the negotiator's LLM
+ * seam (`@ggui-ai/mcp-server`'s `llm-backed-negotiator.ts`, via
+ * {@link selectAdapter} from `./providers/index.js`); other lightweight
+ * one-shot callers use it the same way. It is explicitly NOT part of
+ * the generation dispatch path: `createUiGenerator()` accepts no
+ * adapter option, and generation-call 429 retry/backoff lives entirely
+ * in `harness/llm-router.ts`'s `apiCall()` — a separate retry story for
+ * a separate call shape (an agentic SDK loop, not a single completion).
  *
  * The contract is deliberately defined independently of concrete
  * adapters so:
@@ -9,10 +20,9 @@
  *   - Adapter implementations can be written against a stable surface —
  *     every concrete adapter MUST pass
  *     {@link providerAdapterContract} or it isn't a `ProviderAdapter`.
- *   - Downstream callers (`createUiGenerator`, render handlers, retry /
- *     backoff plumbing) build against ONE structured failure shape
- *     ({@link ProviderError}) instead of inventing per-provider error
- *     UX.
+ *   - Downstream one-shot callers build against ONE structured failure
+ *     shape ({@link ProviderError}) instead of inventing per-provider
+ *     error UX.
  *   - The negotiator + cache layers can branch on
  *     `error.kind === 'rate-limited'` etc. without parsing strings.
  *

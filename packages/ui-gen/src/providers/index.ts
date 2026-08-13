@@ -5,6 +5,15 @@
  * providers ggui supports today: Anthropic (direct API), Google,
  * OpenAI, OpenRouter, and AWS Bedrock (Anthropic models via IAM).
  *
+ * **Real role:** a provider-agnostic one-shot LLM caller for
+ * lightweight callers that need a single `complete()` round-trip — NOT
+ * the generation dispatch path. `createUiGenerator()` accepts no
+ * adapter option; generation-call retry/backoff lives entirely in
+ * `harness/llm-router.ts`'s `apiCall()`. The primary consumer is the
+ * negotiator's LLM seam (`@ggui-ai/mcp-server`'s
+ * `llm-backed-negotiator.ts`, via {@link selectAdapter}); other
+ * lightweight one-shot callers use it the same way.
+ *
  * Every adapter satisfies the structural
  * {@link import('../provider-adapter.js').ProviderAdapter} contract.
  * The four direct-API adapters compose
@@ -15,15 +24,18 @@
  * because rolling our own AWS SigV4 signer for one provider isn't a
  * reasonable trade.
  *
- * Typical usage from the CLI:
+ * Typical usage — a one-shot completion:
  *
  *   ```ts
  *   import { createAnthropicAdapter } from '@ggui-ai/ui-gen/providers';
- *   import { createUiGenerator } from '@ggui-ai/ui-gen';
  *
  *   const adapter = createAnthropicAdapter();
- *   const generator = createUiGenerator({ adapter });
- *   const result = await generator.generate({ request, llm, providerKey, blueprints });
+ *   const result = await adapter.complete({
+ *     apiKey,
+ *     route: { provider: 'anthropic', model: 'claude-haiku-4-5-20251001' },
+ *     systemPrompt,
+ *     userPrompt,
+ *   });
  *   ```
  *
  * Bedrock pool path (no API key — IAM at process boot):
