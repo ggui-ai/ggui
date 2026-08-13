@@ -5,9 +5,10 @@
  *                          loop can run a handler, regardless of
  *                          readiness).
  *   GET /ggui/health     — readiness probe; runs the operator-supplied
- *                          readiness checks and reports per-check
- *                          results, live-channel counts, and the
- *                          thread-transport durability claim.
+ *                          readiness checks, advisory checks, and
+ *                          reports per-check results, live-channel
+ *                          counts, and the thread-transport durability
+ *                          claim.
  *   GET /ggui/auth-check — authenticated liveness. 204 when the bearer
  *                          resolves via the configured AuthAdapter,
  *                          401 otherwise (with `WWW-Authenticate` when
@@ -38,8 +39,9 @@ import { buildWwwAuthenticate, resolveIssuerUrl } from "./oauth.js";
 
 /**
  * 1s per-check timeout — a hung dependency must not block the K8s
- * liveness probe, which itself runs on a short period. A timeout is
- * treated as a failed check; the dependency is degraded either way.
+ * readiness probe (/ggui/health), which itself runs on a short period.
+ * A timeout is treated as a failed check; the dependency is degraded
+ * either way.
  */
 const READINESS_CHECK_TIMEOUT_MS = 1_000;
 
@@ -52,6 +54,21 @@ interface MountOptions {
   readonly toolCount: number;
   /** Operator-supplied readiness checks (empty = always ready). */
   readonly readinessChecks: ReadonlyArray<{
+    readonly name: string;
+    readonly check: () => boolean | Promise<boolean>;
+  }>;
+  /**
+   * Reported but non-gating checks — surfaced under `body.advisoryChecks`
+   * in the `/ggui/health` response with the SAME per-check boolean
+   * shape as `readinessChecks`, but a failing advisory check never
+   * flips `status` or the HTTP status code. Use this for a dependency
+   * whose health is worth reporting for diagnostics but that MUST NOT
+   * affect readiness on its own — e.g. a best-effort side channel
+   * every consumer already degrades gracefully around when the
+   * dependency is unavailable. Same 1s per-check timeout as
+   * `readinessChecks`; a timeout or thrown check reports `false`.
+   */
+  readonly advisoryChecks?: ReadonlyArray<{
     readonly name: string;
     readonly check: () => boolean | Promise<boolean>;
   }>;
@@ -90,6 +107,7 @@ export function mountHealthRoutes(opts: MountOptions): void {
     info,
     toolCount,
     readinessChecks,
+    advisoryChecks,
     getChannel,
     threads,
     auth,
@@ -98,33 +116,35 @@ export function mountHealthRoutes(opts: MountOptions): void {
     corsOrigins,
   } = opts;
 
-  async function runReadinessChecks(): Promise<{
-    readonly allReady: boolean;
-    readonly results: Record<string, boolean>;
-  }> {
-    if (readinessChecks.length === 0) {
-      return { allReady: true, results: {} };
+  async function runChecks(
+    checks: ReadonlyArray<{
+      readonly name: string;
+      readonly check: () => boolean | Promise<boolean>;
+    }>
+  ): Promise<{ readonly allOk: boolean; readonly results: Record<string, boolean> }> {
+    if (checks.length === 0) {
+      return { allOk: true, results: {} };
     }
     const results: Record<string, boolean> = {};
-    let allReady = true;
+    let allOk = true;
     await Promise.all(
-      readinessChecks.map(async ({ name, check }) => {
+      checks.map(async ({ name, check }) => {
         try {
-          const ready = await Promise.race<boolean>([
+          const ok = await Promise.race<boolean>([
             Promise.resolve().then(() => check()),
             new Promise<boolean>((resolve) =>
               setTimeout(() => resolve(false), READINESS_CHECK_TIMEOUT_MS)
             ),
           ]);
-          results[name] = ready;
-          if (!ready) allReady = false;
+          results[name] = ok;
+          if (!ok) allOk = false;
         } catch {
           results[name] = false;
-          allReady = false;
+          allOk = false;
         }
       })
     );
-    return { allReady, results };
+    return { allOk, results };
   }
 
   // No body needed for the kubelet's HTTP check (status code is the
@@ -137,7 +157,13 @@ export function mountHealthRoutes(opts: MountOptions): void {
 
   app.get("/ggui/health", (_req, res) => {
     void (async () => {
-      const { allReady, results } = await runReadinessChecks();
+      const [
+        { allOk: allReady, results },
+        { results: advisoryResults },
+      ] = await Promise.all([
+        runChecks(readinessChecks),
+        runChecks(advisoryChecks ?? []),
+      ]);
       const body: Record<string, unknown> = {
         status: allReady ? "ok" : "degraded",
         server: info.name,
@@ -174,6 +200,9 @@ export function mountHealthRoutes(opts: MountOptions): void {
       }
       if (Object.keys(results).length > 0) {
         body.checks = results;
+      }
+      if (Object.keys(advisoryResults).length > 0) {
+        body.advisoryChecks = advisoryResults;
       }
       res.status(allReady ? 200 : 503).json(body);
     })();

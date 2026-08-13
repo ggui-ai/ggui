@@ -300,6 +300,91 @@ describe('createGguiServer — HTTP surface', () => {
     });
   });
 
+  describe('advisoryChecks (reported, non-gating /ggui/health signals)', () => {
+    it('omits `advisoryChecks` and stays 200/ok when none are wired', async () => {
+      fx = await boot();
+      const res = await fetch(`${fx.url}/ggui/health`);
+      expect(res.status).toBe(200);
+      const rawBody: unknown = await res.json();
+      if (!isRecord(rawBody)) {
+        throw new Error('expected a JSON object body');
+      }
+      expect(rawBody.status).toBe('ok');
+      expect(rawBody.advisoryChecks).toBeUndefined();
+    });
+
+    it('reports a failing advisory check WITHOUT flipping status/HTTP code', async () => {
+      fx = await boot({
+        advisoryChecks: [{ name: 'broadcast_subscriber', check: () => false }],
+      });
+      const res = await fetch(`${fx.url}/ggui/health`);
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as {
+        status: string;
+        advisoryChecks: Record<string, boolean>;
+      };
+      expect(body.status).toBe('ok');
+      expect(body.advisoryChecks).toEqual({ broadcast_subscriber: false });
+    });
+
+    it('readinessChecks and advisoryChecks stay independent — a failing advisory check does not appear in `checks`, and a passing readiness check does not appear in `advisoryChecks`', async () => {
+      fx = await boot({
+        readinessChecks: [{ name: 'db', check: () => true }],
+        advisoryChecks: [{ name: 'broadcast_subscriber', check: () => false }],
+      });
+      const res = await fetch(`${fx.url}/ggui/health`);
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as {
+        status: string;
+        checks: Record<string, boolean>;
+        advisoryChecks: Record<string, boolean>;
+      };
+      expect(body.status).toBe('ok');
+      expect(body.checks).toEqual({ db: true });
+      expect(body.advisoryChecks).toEqual({ broadcast_subscriber: false });
+    });
+
+    it('a thrown advisory check reports false, never propagates, never affects status', async () => {
+      fx = await boot({
+        advisoryChecks: [
+          {
+            name: 'broadcast_subscriber',
+            check: () => {
+              throw new Error('boom');
+            },
+          },
+        ],
+      });
+      const res = await fetch(`${fx.url}/ggui/health`);
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as {
+        status: string;
+        advisoryChecks: Record<string, boolean>;
+      };
+      expect(body.status).toBe('ok');
+      expect(body.advisoryChecks.broadcast_subscriber).toBe(false);
+    });
+
+    it('a timed-out advisory check (beyond 1s) reports false, never affects status', async () => {
+      fx = await boot({
+        advisoryChecks: [
+          {
+            name: 'broadcast_subscriber',
+            check: () => new Promise<boolean>(() => undefined), // never resolves
+          },
+        ],
+      });
+      const res = await fetch(`${fx.url}/ggui/health`);
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as {
+        status: string;
+        advisoryChecks: Record<string, boolean>;
+      };
+      expect(body.status).toBe('ok');
+      expect(body.advisoryChecks.broadcast_subscriber).toBe(false);
+    }, 5_000);
+  });
+
   it('returns 405 on GET /mcp (stateless server)', async () => {
     fx = await boot();
     const res = await fetch(`${fx.url}/mcp`);
