@@ -155,6 +155,7 @@ describe("LLMAgent.apiCall() — provider-429 retry (#489)", () => {
       retryAfterSec: 3,
       delayMs: 3000,
     });
+    expect(calls[0]?.message).toContain("429");
   });
 
   it("does not invoke onRetry when retry is skipped (cap exceeded)", async () => {
@@ -163,5 +164,50 @@ describe("LLMAgent.apiCall() — provider-429 retry (#489)", () => {
     const err = makeSdkError(429, "30");
     await expect(agent.run(() => Promise.reject(err))).rejects.toBe(err);
     expect(calls).toHaveLength(0);
+  });
+
+  it("a throwing onRetry observer does not abort the retry — it is caught, logged, and the retry still completes", async () => {
+    const agent = new TestAgent(undefined, () => {
+      throw new Error("observer boom");
+    });
+    const fn = vi.fn().mockRejectedValueOnce(makeSdkError(429)).mockResolvedValueOnce("ok");
+    const promise = agent.run(fn);
+    await vi.advanceTimersByTimeAsync(2000);
+    await expect(promise).resolves.toBe("ok");
+    expect(fn).toHaveBeenCalledTimes(2);
+  });
+
+  it("accepts a retry-after exactly at the 15s cap", async () => {
+    const agent = new TestAgent();
+    const fn = vi.fn().mockRejectedValueOnce(makeSdkError(429, "15")).mockResolvedValueOnce("ok");
+    const promise = agent.run(fn);
+    await vi.advanceTimersByTimeAsync(15000);
+    await expect(promise).resolves.toBe("ok");
+    expect(fn).toHaveBeenCalledTimes(2);
+  });
+
+  it("rejects a retry-after one second past the 15s cap — throws immediately", async () => {
+    const agent = new TestAgent();
+    const err = makeSdkError(429, "16");
+    const fn = vi.fn().mockRejectedValue(err);
+    await expect(agent.run(fn)).rejects.toBe(err);
+    expect(fn).toHaveBeenCalledTimes(1);
+  });
+
+  it("gives up when the 20s total retry budget would be exceeded — throws after 2 calls (not 3), onRetry invoked exactly once", async () => {
+    const calls: ProviderRetryInfo[] = [];
+    const err = makeSdkError(429, "12");
+    const agent = new TestAgent(undefined, (info) => calls.push(info));
+    const fn = vi.fn().mockRejectedValue(err);
+    const promise = agent.run(fn);
+    promise.catch(() => {});
+    // Attempt 1 fails: totalDelayMs 0 + 12000 <= 20000 (MAX_TOTAL_RETRY_DELAY_MS)
+    // → allowed, onRetry fires once, sleeps 12s. Attempt 2 fails again:
+    // totalDelayMs 12000 + 12000 = 24000 > 20000 → budget exhausted, throws
+    // the original error immediately — no second onRetry call, no 3rd fn() call.
+    await vi.advanceTimersByTimeAsync(13000);
+    await expect(promise).rejects.toBe(err);
+    expect(fn).toHaveBeenCalledTimes(2);
+    expect(calls).toHaveLength(1);
   });
 });

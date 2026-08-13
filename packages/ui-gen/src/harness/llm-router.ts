@@ -74,8 +74,11 @@ export interface AgentConfig {
    * retry decision is made and BEFORE the delay is awaited — never on
    * the terminal failure/success of the whole call. Purely an
    * observability hook: it never influences whether or how long
-   * `apiCall()` retries. Absent (default) is a no-op; `apiCall()`
-   * still logs every retry via `console.warn` regardless.
+   * `apiCall()` retries. If the observer itself throws, `apiCall()`
+   * catches it, logs a `console.warn`, and proceeds to the retry
+   * delay unaffected — a broken observer cannot turn a recoverable
+   * 429 into an unrelated hard failure. Absent (default) is a no-op;
+   * `apiCall()` still logs every retry via `console.warn` regardless.
    */
   onRetry?: (info: ProviderRetryInfo) => void;
 }
@@ -392,6 +395,20 @@ export abstract class LLMAgent {
    * exceed `MAX_TOTAL_RETRY_DELAY_MS`, whichever comes first. Any
    * non-429 error, or a 429 with no attempts left, is logged and
    * re-thrown immediately — unchanged from the pre-#489 behavior.
+   *
+   * **Budget scope (final-review correction):** `MAX_TOTAL_RETRY_DELAY_MS`
+   * bounds a single `apiCall()` invocation, not a whole generation. A
+   * generation issues many sequential `apiCall()` calls (coding turns,
+   * tool-result round-trips, eval rounds); under sustained throttling
+   * each one can independently add up to `MAX_TOTAL_RETRY_DELAY_MS`, so
+   * a generation with k rate-limited calls can add up to roughly `k *
+   * MAX_TOTAL_RETRY_DELAY_MS` to how long it holds its caller's
+   * resources (e.g. the pod's admission slot) — not a flat 20s
+   * ceiling. No shared per-generation budget is threaded here by
+   * design (accepted ruling, not an oversight): the pod's own
+   * admission queue-wait timeout is the backstop for how long other
+   * queued work waits, independent of any one generation's retry
+   * total.
    */
   protected async apiCall<T>(fn: () => Promise<T>): Promise<T> {
     const start = Date.now();
@@ -436,7 +453,18 @@ export abstract class LLMAgent {
         console.warn(
           `[${this.provider}] rate-limited (attempt ${info.attempt}/${info.maxAttempts}), retrying in ${delayMs}ms`,
         );
-        this.onRetry?.(info);
+        try {
+          this.onRetry?.(info);
+        } catch (observerError) {
+          // Guard, not propagate — the docstring on AgentConfig.onRetry
+          // promises this is "purely an observability hook: it never
+          // influences whether or how long apiCall() retries". A
+          // caller-supplied observer that throws must not turn a
+          // recoverable 429 into an unrelated hard failure.
+          console.warn(
+            `[${this.provider}] onRetry observer threw (ignored, retry proceeds): ${errorSummary(observerError)}`,
+          );
+        }
         await sleep(delayMs);
       }
     }
