@@ -1502,7 +1502,7 @@ export async function callLLM(
   maxTokens?: number,
 ): Promise<LLMResponse> {
   const start = Date.now();
-  const agent = createAgent(config.provider);
+  const agent = createAgent(config);
   const result = await agent.callText(
     config.model,
     systemPrompt,
@@ -1524,7 +1524,7 @@ export async function callLLMWithTools(
   maxTurns: number = 10,
 ): Promise<LLMWithToolsResponse> {
   const start = Date.now();
-  const agent = createAgent(config.provider);
+  const agent = createAgent(config);
   const result = await agent.callWithTools(
     config.model,
     systemPrompt,
