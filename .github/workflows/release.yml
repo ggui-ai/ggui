@@ -257,8 +257,8 @@ jobs:
             design
             iframe-runtime
             shared
-            ggui-react
-            ggui-react-native
+            mcp-apps-react
+            mcp-apps-react-native
             project-config
             ui-registry
             dev-stack
@@ -791,7 +791,7 @@ jobs:
           set -uo pipefail
           # Every published @ggui-ai/* name. Keep in sync with the
           # preflight ORDER (modulo directory→name renames like
-          # ggui-react → @ggui-ai/react).
+          # mcp-apps-react → @ggui-ai/mcp-apps-react).
           PACKAGES=(
             protocol artifact-manifest gadget-signing wire live-channel
             design gadgets ui-gen blueprint-probe preview-a2ui
