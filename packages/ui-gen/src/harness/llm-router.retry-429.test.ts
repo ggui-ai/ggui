@@ -55,6 +55,19 @@ function makeSdkError(
   return err;
 }
 
+/**
+ * Shapes a fake SDK error like Google's `@google/genai` `ApiError`:
+ * `.status` present, `.headers` ABSENT entirely (confirmed by reading
+ * the SDK's error class — Google's `ApiError` has no `.headers`
+ * property at all, unlike Anthropic's/OpenAI's `APIError`). Exercises
+ * `extractRetryAfterSec`'s `!('headers' in e)` guard directly.
+ */
+function makeSdkErrorNoHeaders(status: number): Error & { status: number } {
+  const err = new Error(`${status} rate limited`) as Error & { status: number };
+  err.status = status;
+  return err;
+}
+
 describe("LLMAgent.apiCall() — provider-429 retry (#489)", () => {
   beforeEach(() => {
     vi.useFakeTimers();
@@ -73,6 +86,18 @@ describe("LLMAgent.apiCall() — provider-429 retry (#489)", () => {
   it("retries a 429 with no retry-after header using exponential backoff, then succeeds", async () => {
     const agent = new TestAgent();
     const fn = vi.fn().mockRejectedValueOnce(makeSdkError(429)).mockResolvedValueOnce("ok");
+    const promise = agent.run(fn);
+    await vi.advanceTimersByTimeAsync(2000);
+    await expect(promise).resolves.toBe("ok");
+    expect(fn).toHaveBeenCalledTimes(2);
+  });
+
+  it("retries a 429 whose error has no .headers property at all (the Google shape) using exponential backoff — never crashes", async () => {
+    const agent = new TestAgent();
+    const fn = vi
+      .fn()
+      .mockRejectedValueOnce(makeSdkErrorNoHeaders(429))
+      .mockResolvedValueOnce("ok");
     const promise = agent.run(fn);
     await vi.advanceTimersByTimeAsync(2000);
     await expect(promise).resolves.toBe("ok");

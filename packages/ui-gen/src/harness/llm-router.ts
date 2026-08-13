@@ -383,8 +383,9 @@ export abstract class LLMAgent {
    *
    * Policy: on a 429, honor the provider's `Retry-After` header when
    * present (capped at `RETRY_AFTER_CAP_SEC` — a provider asking for a
-   * longer wait is treated as "don't retry", not "wait longer", since
-   * this call runs inside a bounded generation-admission slot);
+   * longer wait is treated as "don't retry", not "wait longer": making
+   * the caller sit through 15+ more seconds on a single failed call is
+   * a bad experience regardless of what's driving the request);
    * otherwise fall back to exponential backoff with jitter, capped at
    * `DEFAULT_BACKOFF_MAX_MS` per attempt. Stops after
    * `MAX_RETRY_ATTEMPTS` retries OR once the cumulative delay would
