@@ -451,7 +451,7 @@ export const BENCH_CORPUS: readonly BenchEntry[] = [
         'remove',
       ],
       notes:
-        'agent-backed/persisted = the agent OWNS the items → todos seed on propsSpec (refreshed via ggui_update); add/delete/toggle are discrete events on actionSpec. contextSpec has no agent-push channel, so an agent-owned persisted list there cannot round-trip — this is the round-trip-correct shape, aligned with list-message-thread / list-file-browser (both props-bearing agent-supplied collections).',
+        'agent-backed/persisted = the agent OWNS the items → todos seed on propsSpec (refreshed via ggui_amend); add/delete/toggle are discrete events on actionSpec. contextSpec has no agent-push channel, so an agent-owned persisted list there cannot round-trip — this is the round-trip-correct shape, aligned with list-message-thread / list-file-browser (both props-bearing agent-supplied collections).',
     },
   },
   {

@@ -503,11 +503,13 @@ export interface GguiSessionChannelServer {
    */
   notifyGguiSessionCommit(sessionId: string, render: GguiSession, matchType?: string): void;
   /**
-   * Fan a `{type:'props_update', payload:{sessionId, props}}` wire frame
-   * to every subscriber currently bound to `sessionId`. The agent-driven
-   * `ggui_update` handler calls this (wired as its `propsUpdateNotifier`)
-   * so a props patch replaces renderer props in-place on live
-   * subscribers without waiting for a resubscribe.
+   * Fan a `{type:'props_update', payload:{sessionId, props, epoch}}`
+   * wire frame to every subscriber currently bound to `sessionId`.
+   * Both mutation handlers call this (wired as their
+   * `propsUpdateNotifier`): `ggui_amend` fans the unchanged head
+   * epoch so the live mount repaints in place, `ggui_update` fans its
+   * freshly-advanced epoch so superseded mounts freeze (#483 latch)
+   * — no waiting for a resubscribe either way.
    *
    * Validation posture (mirrors `notifyGguiSessionCommit`'s "best-effort orphan
    * no-op"):

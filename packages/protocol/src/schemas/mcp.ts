@@ -725,13 +725,14 @@ export const amendInputSchema = z.discriminatedUnion('kind', [
  * `decision`, `contract`, `contractHash` on its internal `UpdateOutput`
  * TS shape — zod strips them before structuredContent serialization.
  *
- * Post-update the iframe receives the new props via the live-channel
- * ladder (WS `props_update` / SSE / polling / bridge-pull). Default
- * updates carry NO result `_meta` (#482 — hosts mint per-result views
- * from any `_meta` on a UI-bound success result); only
- * `renderAsNew: true` results carry the `ai.ggui/render` slice, as a
- * full bootable mount package. The wire response itself is just
- * acknowledgement.
+ * Every REAL update (`updated: true`) mints a new history record and
+ * its result carries the `ai.ggui/render` slice as a FULL bootable
+ * mount package (#483 — hosts mint a per-result view for the new
+ * card); a no-op (`updated: false`) carries NO result `_meta`.
+ * Already-mounted frames are not repainted by update — they freeze as
+ * history when its higher-epoch `props_update` frame lands; the
+ * in-place repaint over the live-channel ladder (WS / SSE / polling /
+ * bridge-pull) is `ggui_amend`'s job.
  */
 export const updateOutputSchema = z.object({
   sessionId: z.string(),
@@ -749,7 +750,10 @@ export const updateOutputSchema = z.object({
   /**
    * The session's head epoch after this call: advanced by one on a
    * real update (`updated: true`), unchanged on a no-op. `ggui_render`
-   * mints epoch 0; epochs are ledger-derived (`ui.reminted` events).
+   * mints epoch 0. The session ROW is the authority
+   * (`GguiSessionBase.epoch`, absent ⇒ 0); the ledger's `ui.reminted`
+   * events are the wire signal only — the ledger is horizon-bounded
+   * and must never be counted as the source of truth.
    */
   epoch: z.number().int().min(0),
   /**

@@ -38,7 +38,7 @@
  *                 dev-router session (see the SAME-SESSION note below):
  *                 the agent consumes the pending toggle (ggui_consume),
  *                 applies it via the todo MCP (todo_toggle), and
- *                 ggui_update-s the EXISTING render — the still-mounted
+ *                 ggui_amend-s the EXISTING render — the still-mounted
  *                 card flips to checked over the live channel, with no
  *                 page-side invoke in flight.
  *   rehydrate   — reload the page. The transcript starts empty (the
@@ -285,7 +285,7 @@ test.describe('samples-render: with-guuey full journey against the composed publ
       dumpBootTail('toggle-never-round-tripped');
       throw err;
     }
-    // In-page: the still-mounted card received the turn's ggui_update over
+    // In-page: the still-mounted card received the turn's ggui_amend over
     // the live channel — checked state appears with NO page-side invoke in
     // flight. `.last()` mirrors render.spec's remount-tolerant read (this
     // page has a single card slot, so last === first unless it re-keyed).

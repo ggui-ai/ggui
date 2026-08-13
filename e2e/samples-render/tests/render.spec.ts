@@ -7,7 +7,7 @@
  *
  *   render   — agent generates a todo UI; the 3 items mount in the iframe.
  *   interact — click "buy milk" → the agent drains the action (ggui_consume),
- *              toggles via the todo MCP, and ggui_update-s the checked state.
+ *              toggles via the todo MCP, and ggui_amend-s the checked state.
  *   rehydrate— reload the page → the on-mount snapshot restores the POST-CLICK
  *              checked state (not just the initial render).
  *
@@ -23,7 +23,7 @@ import { spawnComposedApp, type ComposedAppHandle, type SdkId } from './composed
 import { findTodoToggleable, waitForTodoCheckedIndicator } from './todo-locators';
 
 // The proven agent-loop prompt — the trailing "keep in sync" sentence is what
-// drives the click-loop (toggle → todo MCP update → ggui_update).
+// drives the click-loop (toggle → todo MCP update → ggui_amend).
 const JOURNEY_PROMPT =
   'Please use the todo MCP server to add these items to my todo list: ' +
   'buy milk, walk the dog, write code. Then show me my todo list as an ' +
@@ -109,7 +109,7 @@ for (const c of SDK_CASES) {
 
       // ── STEP 2 — interaction (toggle "buy milk" → checked) ───────────
       // Clicking dispatches an action the agent drains (ggui_consume), toggles
-      // via the todo MCP, then ggui_update-s the render with the checked state.
+      // via the todo MCP, then ggui_amend-s the render with the checked state.
       await findTodoToggleable(initialFrame, /buy milk/i).click({ timeout: 30_000 });
       // The agent may re-mount mid-update — read the LATEST iframe pair.
       const afterClickFrame = page.frameLocator('iframe').last().frameLocator('iframe').first();

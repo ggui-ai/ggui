@@ -123,7 +123,7 @@ A contract has FOUR specs that describe distinct directions on the wire between 
 THE FOUR-SPEC MODEL
 
   propsSpec    (agent → UI, render-time + agent-pushed refreshes)
-    Data the AGENT owns and supplies — the initial values at mount, AND every later refresh via ggui_update. NOT "static / never changes": propsSpec is the ONLY channel for agent-owned data, mutable or not. A weather card's city+temp (fixed) AND the items of the todo list the agent fetched and keeps in sync (mutable) BOTH live here — the agent seeds them at render and pushes each change with ggui_update. Use whenever the agent is the SOURCE of what the UI shows: the intent names data the agent provides / fetches / owns ("my todos", "the cart", "this user's profile", "the directory contents") OR data the component cannot render without (city, temp). Omit only when the UI originates its own state with no agent-supplied contents (a counter starting at zero, a blank notepad, a list the USER builds locally).
+    Data the AGENT owns and supplies — the initial values at mount, AND every later refresh via ggui_amend (in-place repaint of the mounted card; ggui_update instead mints a NEW history card for milestones). NOT "static / never changes": propsSpec is the ONLY channel for agent-owned data, mutable or not. A weather card's city+temp (fixed) AND the items of the todo list the agent fetched and keeps in sync (mutable) BOTH live here — the agent seeds them at render and pushes each change with ggui_amend. Use whenever the agent is the SOURCE of what the UI shows: the intent names data the agent provides / fetches / owns ("my todos", "the cart", "this user's profile", "the directory contents") OR data the component cannot render without (city, temp). Omit only when the UI originates its own state with no agent-supplied contents (a counter starting at zero, a blank notepad, a list the USER builds locally).
 
   streamSpec   (agent → UI, live, append-only)
     Channels where the agent pushes live data the UI displays as it arrives. Use ONLY when the intent describes ongoing agent-originated updates (a chat with messages, a live dashboard, a clock, a stock ticker, a notifications feed). Wrong instinct: do NOT use streamSpec for user-driven state, nor for a multi-step wizard / tutorial — its steps are a local stepper plus component-authored copy, not an agent-pushed feed.
@@ -198,7 +198,7 @@ CONCRETE PATTERNS
   Todo list / collection — split on OWNERSHIP, not on mutability. Both kinds mutate; what differs is WHO supplies the items.
 
     (a) Agent-owned — "show my todos", "an agent-backed todo list that persists across sessions", "render my cart", "the messages in this thread", "the directory contents"
-        The AGENT owns the items: it fetched / persists / keeps them in sync. The collection is the agent's data → it goes on PROPSSPEC, seeded at render and refreshed via ggui_update after each change. This is the ONLY shape that round-trips — contextSpec has no agent-push channel, so an agent-owned list placed there can never be seeded or updated (the UI renders empty). add / delete / toggle are discrete events the agent must witness to persist → declare them on actionSpec (with a matching agentCapabilities tool for each nextStep). Mutability is fine: ggui_update is exactly how the agent pushes the change.
+        The AGENT owns the items: it fetched / persists / keeps them in sync. The collection is the agent's data → it goes on PROPSSPEC, seeded at render and refreshed via ggui_amend after each change. This is the ONLY shape that round-trips — contextSpec has no agent-push channel, so an agent-owned list placed there can never be seeded or updated (the UI renders empty). add / delete / toggle are discrete events the agent must witness to persist → declare them on actionSpec (with a matching agentCapabilities tool for each nextStep). Mutability is fine: ggui_amend is exactly how the agent pushes the change.
         propsSpec:   { properties: { todos: {schema: {type: "array", items: {type: "object", properties: {id: {type: "string"}, text: {type: "string"}, done: {type: "boolean"}}, required: ["id", "text", "done"]}}, required: true} } }
         actionSpec:  { toggleTodo: {label: "Toggle todo", schema: {type: "object", properties: {id: {type: "string"}}, required: ["id"]}, nextStep: "todo_toggle"}, addTodo: {label: "Add todo", schema: {type: "object", properties: {text: {type: "string"}}, required: ["text"]}, nextStep: "todo_add"} }
 
@@ -472,7 +472,7 @@ export const SYNTHESIZE_TOOL: ToolSchema = {
           },
         },
         description:
-          'Agent-OWNED data the UI displays — the initial values seeded at render, refreshed any time after via ggui_update. NOT static-only: mutable collections the agent owns / fetched / keeps in sync (my todos, the cart, this thread\'s messages, a directory listing) go here too — propsSpec is the ONLY agent→client data channel. Use whenever the agent is the SOURCE of the displayed data (weather card → city/temp; profile → name/avatar; "my todos" → todos). Omit only when the UI originates its own state with no agent-supplied contents (a counter, a blank notepad, a list the user builds locally).',
+          'Agent-OWNED data the UI displays — the initial values seeded at render, refreshed any time after via ggui_amend. NOT static-only: mutable collections the agent owns / fetched / keeps in sync (my todos, the cart, this thread\'s messages, a directory listing) go here too — propsSpec is the ONLY agent→client data channel. Use whenever the agent is the SOURCE of the displayed data (weather card → city/temp; profile → name/avatar; "my todos" → todos). Omit only when the UI originates its own state with no agent-supplied contents (a counter, a blank notepad, a list the user builds locally).',
       },
       reason: {
         type: 'string',
@@ -586,7 +586,7 @@ function buildPreservationRepairNote(
     '',
     `The agent's draft declared these on propsSpec (agent-owned seed data the UI renders): ${dropped.join(', ')}. Your contract no longer carries them as propsSpec properties — so the agent can no longer seed them at render. contextSpec has NO agent seed channel, so moving them there leaves the UI empty.`,
     '',
-    `Re-emit the contract with ${dropped.join(', ')} restored as propsSpec properties (agent-owned, seeded at render and refreshed via ggui_update). Keep every other spec unchanged.`,
+    `Re-emit the contract with ${dropped.join(', ')} restored as propsSpec properties (agent-owned, seeded at render and refreshed via ggui_amend). Keep every other spec unchanged.`,
   ].join('\n');
 }
 

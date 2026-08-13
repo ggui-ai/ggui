@@ -1,10 +1,15 @@
 /**
- * Scenario 12 — `ggui_update` props propagate to a live iframe.
+ * Scenario 12 — `ggui_amend` props propagate to a live iframe.
+ *
+ * (#483 tool split: the in-place live-repaint contract this scenario
+ * pins moved from `ggui_update` — which now always mints a NEW history
+ * card and would FREEZE this mounted iframe via the epoch latch — to
+ * `ggui_amend`. Filename kept for history continuity.)
  *
  * Locks in the live-channel propagation contract: when a renderer
  * iframe is mounted from the per-render MCP-App resource (whose
  * self-contained shell embeds the live trio wsUrl + wsToken +
- * sessionId), a server-side `ggui_update` MUST propagate to the
+ * sessionId), a server-side `ggui_amend` MUST propagate to the
  * iframe over WS so React re-renders with new props.
  *
  * Setup: render a contract with a `propsSpec.count` numeric prop +
@@ -13,12 +18,12 @@
  * render's `resourceUri` via MCP `resources/read` and mount it in a
  * real browser behind the minimal MCP-Apps host stand-in
  * (fixtures/mcp-app-host.ts). Wait for initial `Count: 0`. Call
- * `ggui_update` with `props: {count: 42}`. Assert `Count: 42` becomes
+ * `ggui_amend` with `props: {count: 42}`. Assert `Count: 42` becomes
  * visible inside the iframe.
  *
  * ## Obligation remapping (2026-06-11 retired-surfaces port)
  *
- * The propagation assertions (initial `0` paints; after `ggui_update`
+ * The propagation assertions (initial `0` paints; after `ggui_amend`
  * the DOM shows `42` and drops `0`) are UNCHANGED. What moved is the
  * mount surface: the spec used to open the render's `/r/<shortCode>`
  * URL — retired by R5, and `ggui_render`'s wire output carries no
@@ -59,7 +64,7 @@ const PROPS_CONTRACT = {
 for (const provider of PROVIDERS) {
   const hasKey = !!process.env[provider.apiKey];
   describe.skipIf(providerSkip(provider))(
-    `Scenario 12 [${provider.name}] — ggui_update props propagate to iframe`,
+    `Scenario 12 [${provider.name}] — ggui_amend props propagate to iframe`,
     () => {
       if (!hasKey) {
         test(`${provider.apiKey} missing (REQUIRE_ALL_PROVIDERS=${REQUIRE_ALL ? '1' : '0'})`, () => {
@@ -83,7 +88,7 @@ for (const provider of PROVIDERS) {
       });
 
       test(
-        'initial props render; ggui_update with new props triggers re-render',
+        'initial props render; ggui_amend with new props triggers re-render',
         async () => {
           // 1. Render a contract with propsSpec.count + initial count=0.
           //    `ggui_render` blocks until cold-gen completes (codeReady).
@@ -118,13 +123,13 @@ for (const provider of PROVIDERS) {
             .toMatch(/\b0\b/);
 
           // Brief pause so the post-mount fire-and-forget WS subscribe
-          // can settle before we fire ggui_update — without this, the
+          // can settle before we fire ggui_amend — without this, the
           // server-side fan-out can race ahead of the iframe's subscribe-
           // ack and drop the frame (live-only, no replay buffer).
           await new Promise((r) => setTimeout(r, 500));
 
-          // 4. Call ggui_update with new props.
-          await callTool(MCP_URL, 'ggui_update', {
+          // 4. Call ggui_amend with new props.
+          await callTool(MCP_URL, 'ggui_amend', {
             sessionId: ref.sessionId,
             kind: 'replace',
             props: { count: 42 },

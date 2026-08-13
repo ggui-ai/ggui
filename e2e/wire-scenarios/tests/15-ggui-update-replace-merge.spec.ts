@@ -1,7 +1,11 @@
 /**
- * Scenario 15 — `ggui_update` replace + merge both propagate to iframe DOM.
+ * Scenario 15 — `ggui_amend` replace + merge both propagate to iframe DOM.
  *
- * Closes the gap scenario 7 left open. Drives `ggui_update` directly
+ * (#483 tool split: in-place repaint of the SAME mounted iframe is
+ * `ggui_amend`'s contract now — `ggui_update` mints a new history card
+ * and its higher-epoch frame would freeze this mount. Filename kept.)
+ *
+ * Closes the gap scenario 7 left open. Drives `ggui_amend` directly
  * via the wire (no LLM authorship) and asserts the iframe re-renders
  * for BOTH wire modes:
  *
@@ -101,7 +105,7 @@ const INITIAL_PROPS = {
 for (const provider of PROVIDERS) {
   const hasKey = !!process.env[provider.apiKey];
   describe.skipIf(providerSkip(provider))(
-    `Scenario 15 [${provider.name}] — ggui_update replace + merge both propagate to iframe`,
+    `Scenario 15 [${provider.name}] — ggui_amend replace + merge both propagate to iframe`,
     () => {
       if (!hasKey) {
         test(`${provider.apiKey} missing (REQUIRE_ALL_PROVIDERS=${REQUIRE_ALL ? '1' : '0'})`, () => {
@@ -164,7 +168,7 @@ for (const provider of PROVIDERS) {
           await new Promise((r) => setTimeout(r, 500));
 
           // ── PHASE 1 — kind: 'replace' ───────────────────────────────
-          await callTool(MCP_URL, 'ggui_update', {
+          await callTool(MCP_URL, 'ggui_amend', {
             sessionId: ref.sessionId,
             kind: 'replace',
             props: {
@@ -184,7 +188,7 @@ for (const provider of PROVIDERS) {
             .toMatch(/walk the dog/i);
 
           // ── PHASE 2 — kind: 'merge' shallow ─────────────────────────
-          await callTool(MCP_URL, 'ggui_update', {
+          await callTool(MCP_URL, 'ggui_amend', {
             sessionId: ref.sessionId,
             kind: 'merge',
             patch: { title: 'Updated Todos' },
@@ -197,7 +201,7 @@ for (const provider of PROVIDERS) {
             .toMatch(/1 of 2 done/i);
 
           // ── PHASE 3 — kind: 'merge' nested-deep ─────────────────────
-          await callTool(MCP_URL, 'ggui_update', {
+          await callTool(MCP_URL, 'ggui_amend', {
             sessionId: ref.sessionId,
             kind: 'merge',
             patch: { summary: { completed: 2 } },
@@ -210,7 +214,7 @@ for (const provider of PROVIDERS) {
             .toMatch(/updated todos/i);
 
           // ── PHASE 4 — kind: 'merge' contract violation ─────────────
-          const violationResp = await callTool(MCP_URL, 'ggui_update', {
+          const violationResp = await callTool(MCP_URL, 'ggui_amend', {
             sessionId: ref.sessionId,
             kind: 'merge',
             patch: { todos: null },
@@ -229,7 +233,7 @@ for (const provider of PROVIDERS) {
           );
           expect(
             wasRejected,
-            'expected ggui_update with patch {todos: null} on a required field to reject',
+            'expected ggui_amend with patch {todos: null} on a required field to reject',
           ).toBe(true);
 
           // DOM remains on phase-3 state.

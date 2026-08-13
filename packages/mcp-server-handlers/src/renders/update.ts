@@ -312,18 +312,18 @@ export function createGguiUpdateHandler(
     /**
      * Result-`_meta` emitter for `ggui_update`.
      *
-     * **Two shapes, keyed on `renderAsNew` (#482):** by default
-     * (omitted/false) the result carries NO `_meta` at all — the only
-     * shape live-proven (2026-08-12) to make claude.ai mint no
-     * per-result view; the already-mounted frame repaints via its
-     * live rungs. `renderAsNew: true` declares the result a fresh
-     * render at this point in the conversation — it then carries the
-     * FULL bootable mount package (#481) + the `_meta.ui` mount
-     * pointer, because a frame booted from this envelope must be
-     * self-sufficient: the 2026-05-13 props-only trim dropped
-     * `contextSlots` and every update-minted view of a contextSpec
-     * contract crashed at boot (`useGguiContext('draftText'): no
-     * Context registered`).
+     * **Two shapes, keyed on `updated` (#483):** every REAL update
+     * (`updated: true`) mints a new history record, so its result
+     * carries the FULL bootable mount package (#481) + the
+     * `_meta.ui` mount pointer with the epoch-PINNED resourceUri —
+     * a frame booted from this envelope must be self-sufficient:
+     * the 2026-05-13 props-only trim dropped `contextSlots` and
+     * every update-minted view of a contextSpec contract crashed at
+     * boot (`useGguiContext('draftText'): no Context registered`).
+     * A NO-OP (`updated: false`) mints nothing and carries NO
+     * `_meta` at all — the only shape live-proven (2026-08-12) to
+     * make claude.ai mint no per-result view. The in-place repaint
+     * path (never any `_meta`) is `ggui_amend`'s.
      *
      * Skipped entirely when no propsJson + no minter + no runtimeUrl —
      * keeps the response byte-identical for hosts that don't read
