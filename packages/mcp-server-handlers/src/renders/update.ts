@@ -80,6 +80,7 @@ import type { HandlerContext, SharedHandler } from '../types.js';
 import {
   assembleRenderSliceBase,
   deriveRenderMeta,
+  spreadRenderMetaViewOntoSlice,
   type RenderMetaView,
   type RenderSliceMetaDeps,
 } from './slice-meta-derivation.js';
@@ -403,24 +404,13 @@ export function createGguiUpdateHandler(
           ? { themeMode: resolvedThemeMode }
           : {}),
         ...(lastSequence !== undefined ? { lastSequence } : {}),
-        // Freeze-latch self-epoch (#483) — the new card's own epoch.
-        ...(view.epoch !== undefined ? { epoch: view.epoch } : {}),
-        ...(view.propsJson !== undefined ? { propsJson: view.propsJson } : {}),
+        // State + policy view fields (incl. the #483 freeze-latch
+        // self-epoch) — ONE shared spread so this emitter cannot drift
+        // from ggui_render / the shell / the /state route.
+        ...spreadRenderMetaViewOntoSlice(view),
+        // Mode discriminators stay site-local (mutual-exclusion logic
+        // differs per transport).
         ...(view.codeB64 !== undefined ? { codeB64: view.codeB64 } : {}),
-        // Mount-time view fields (#481) — this envelope only exists on
-        // the `renderAsNew: true` branch (see the guard above), so the
-        // full bootable package is unconditional here. Spread shapes
-        // mirror `ggui_render`'s emitter exactly.
-        ...(view.contextSlots !== undefined
-          ? { contextSlots: [...view.contextSlots] }
-          : {}),
-        ...(view.permissionsPolicy !== undefined
-          ? { permissionsPolicy: [...view.permissionsPolicy] }
-          : {}),
-        ...(view.theme !== undefined ? { theme: view.theme } : {}),
-        ...(view.gadgets !== undefined && view.gadgets.length > 0
-          ? { gadgets: view.gadgets }
-          : {}),
         ...(view.kind ? { kind: view.kind } : {}),
       };
       // `_meta.ui.resourceUri` is the host-facing mount pointer — the

@@ -150,6 +150,7 @@ import {
   derivePublicEnvProjection,
   deriveContractBundle,
   rewritePrivateBundleUrls,
+  spreadRenderMetaViewOntoSlice,
   type RenderMetaView,
   type RenderSliceMetaDeps,
 } from './slice-meta-derivation.js';
@@ -2385,14 +2386,6 @@ export function createGguiRenderHandler(
         ...(streamWebSocketLocalTools !== undefined
           ? { streamWebSocketLocalTools }
           : {}),
-        // Operator-registered wrappers ride the render slice so the
-        // runtime can dynamic-import each before mounting. Projected
-        // by `deriveRenderMeta` from the (enriched) render contract;
-        // only emitted when wrappers are actually declared so
-        // pure-STDLIB apps stay byte-identical.
-        ...(view.gadgets !== undefined && view.gadgets.length > 0
-          ? { gadgets: view.gadgets }
-          : {}),
         // Minimum-disclosure subset of App.publicEnv (union of
         // declared wrappers' `requires`). Filtered above by
         // `derivePublicEnvProjection`.
@@ -2406,21 +2399,13 @@ export function createGguiRenderHandler(
         ...(resolvedThemeMode !== undefined
           ? { themeMode: resolvedThemeMode }
           : {}),
-        // Resolved per-app theme overlay (mode + `--ggui-*` variable map)
-        // projected by `deriveRenderMeta` from the render's `theme`
-        // sidecar. Only emitted when the App declared a theme so
-        // theme-less apps stay byte-identical.
-        ...(view.theme !== undefined ? { theme: view.theme } : {}),
-        ...(view.permissionsPolicy !== undefined
-          ? { permissionsPolicy: [...view.permissionsPolicy] }
-          : {}),
         ...(lastSequence !== undefined ? { lastSequence } : {}),
-        // Freeze-latch self-epoch (#483) — a fresh render is epoch 0.
-        ...(view.epoch !== undefined ? { epoch: view.epoch } : {}),
-        ...(view.propsJson !== undefined ? { propsJson: view.propsJson } : {}),
-        ...(view.contextSlots !== undefined
-          ? { contextSlots: [...view.contextSlots] }
-          : {}),
+        // State + policy view fields (gadgets, theme overlay,
+        // permissionsPolicy, propsJson, contextSlots, and the #483
+        // freeze-latch self-epoch — a fresh render is epoch 0) — ONE
+        // shared spread so this emitter cannot drift from ggui_update /
+        // the shell / the /state route.
+        ...spreadRenderMetaViewOntoSlice(view),
         // Content-addressable contract validators. Both fields present
         // together or absent together — iframe-runtime treats absence
         // as "no validators".

@@ -45,6 +45,7 @@ import {
   deriveRenderMeta,
   filterDescriptorsToContract,
   findBlueprintExact,
+  spreadRenderMetaViewOntoSlice,
   wsOriginToHttpOrigin,
   type Blueprint,
   type BlueprintDurabilityDeps,
@@ -2312,18 +2313,11 @@ export function registerGguiRenderResourceTemplate(
         : {}),
       ...(opts.themeId !== undefined ? { themeId: opts.themeId } : {}),
       ...(opts.themeMode !== undefined ? { themeMode: opts.themeMode } : {}),
-      // Per-app theme overlay projected by `deriveRenderMeta` from
-      // the render's `theme` sidecar — forwarded so the
-      // resource-served iframe matches the postMessage path.
-      ...(view.theme !== undefined ? { theme: view.theme } : {}),
-      ...(view.propsJson !== undefined ? { propsJson: view.propsJson } : {}),
-      ...(view.contextSlots !== undefined ? { contextSlots: view.contextSlots } : {}),
-      ...(view.permissionsPolicy !== undefined
-        ? { permissionsPolicy: view.permissionsPolicy }
-        : {}),
-      ...(view.gadgets !== undefined && view.gadgets.length > 0
-        ? { gadgets: view.gadgets }
-        : {}),
+      // State + policy view fields (theme overlay, propsJson,
+      // contextSlots, permissionsPolicy, gadgets, #483 epoch) — ONE
+      // shared spread so the resource-served shell cannot drift from
+      // the postMessage-path emitters.
+      ...spreadRenderMetaViewOntoSlice(view),
       ...(contractHash !== undefined && validatorsUrl !== undefined
         ? { contractHash, validatorsUrl }
         : {}),
@@ -2338,10 +2332,6 @@ export function registerGguiRenderResourceTemplate(
         : {}),
       // R6 — ledger cursor stamp for polling-cursor alignment.
       lastSequence: accessibleStored.eventSequence,
-      // Freeze-latch self-epoch (#483): a pinned `#N` read carries N
-      // (the reconstruction stamps it on the session before
-      // `deriveRenderMeta`), a bare/head read the row's epoch.
-      ...(view.epoch !== undefined ? { epoch: view.epoch } : {}),
     });
     // Augment per-call CSP with gadget-declared bundle / style /
     // API origins. Without this, claude.ai's iframe CSP only allows

@@ -50,6 +50,7 @@ import {
   deriveContractBundle,
   derivePublicEnvProjection,
   deriveRenderMeta,
+  spreadRenderMetaViewOntoSlice,
 } from "@ggui-ai/mcp-server-handlers/renders";
 import {
   composeSessionApiUrls,
@@ -286,23 +287,17 @@ export function mountApiRendersRoutes(opts: MountOptions): void {
         : {}),
       ...(themeId !== undefined ? { themeId } : {}),
       ...(themeMode !== undefined ? { themeMode } : {}),
-      // Per-app theme overlay projected by `deriveRenderMeta` from the
-      // render's `theme` sidecar — same field the render result-meta
-      // carries, so a /state read returns the identical overlay.
-      ...(view?.theme !== undefined ? { theme: view.theme } : {}),
-      ...(view?.gadgets !== undefined && view.gadgets.length > 0 ? { gadgets: view.gadgets } : {}),
       ...(statePublicEnv !== undefined && Object.keys(statePublicEnv).length > 0
         ? { publicEnv: statePublicEnv }
         : {}),
-      ...(view?.permissionsPolicy !== undefined && view.permissionsPolicy.length > 0
-        ? { permissionsPolicy: view.permissionsPolicy }
-        : {}),
+      // State + policy view fields (theme overlay, gadgets,
+      // permissionsPolicy, propsJson, contextSlots, #483 epoch) — ONE
+      // shared spread so /state cannot drift from the result-meta
+      // emitters (a hand-copied list once silently dropped `epoch`).
+      ...spreadRenderMetaViewOntoSlice(view),
       // R6 — load-bearing ledger cursor. Always stamped on /state
       // reads so polling clients can position the R7 /events cursor.
       lastSequence: stored.eventSequence,
-      // Freeze-latch self-epoch (#483) — /state serves the live head,
-      // so this is the row's current epoch.
-      ...(view?.epoch !== undefined ? { epoch: view.epoch } : {}),
       // Visible-bits surface merged onto the single render slice.
       ...(renderKind !== undefined ? { kind: renderKind } : {}),
       ...(renderCodeUrl !== undefined
@@ -311,8 +306,6 @@ export function mountApiRendersRoutes(opts: MountOptions): void {
             ...(renderCodeHash !== undefined ? { codeHash: renderCodeHash } : {}),
           }
         : {}),
-      ...(view?.propsJson !== undefined ? { propsJson: view.propsJson } : {}),
-      ...(view?.contextSlots !== undefined ? { contextSlots: view.contextSlots } : {}),
       ...(renderContractHash !== undefined && renderValidatorsUrl !== undefined
         ? {
             contractHash: renderContractHash,

@@ -947,6 +947,46 @@ function deriveCodeB64(item: GguiSession): string | undefined {
  *
  * Pure. Same input → identical output, byte-for-byte.
  */
+/**
+ * Spread a {@link RenderMetaView}'s state + policy fields onto an
+ * `ai.ggui/render` slice literal — the ONE place the view→slice field
+ * list lives (#483 follow-up). Every slice emitter (ggui_render /
+ * ggui_update resultMeta, the resources/read shell, the /state route)
+ * MUST compose its envelope as `{ ...siteFields, ...spreadRenderMetaViewOntoSlice(view) }`
+ * instead of re-listing view fields: four emitters once re-spread the
+ * list by hand, and a field missing from one hand-copy is silently
+ * deleted for that transport (the `epoch` freeze-latch signal shipped
+ * exactly that way — probe 18). Mode discriminators (`kind`,
+ * `codeB64`/`codeUrl`) stay site-local on purpose: their mutual-
+ * exclusion logic differs per transport.
+ *
+ * Array fields are emitted only when non-empty (absent and `[]` are
+ * indistinguishable to every consumer's projection) and re-spread into
+ * fresh arrays so no emitter aliases the view's internals.
+ */
+export function spreadRenderMetaViewOntoSlice(
+  view: RenderMetaView | undefined,
+): Pick<
+  McpAppAiGguiRenderMeta,
+  'epoch' | 'propsJson' | 'contextSlots' | 'permissionsPolicy' | 'theme' | 'gadgets'
+> {
+  if (view === undefined) return {};
+  return {
+    ...(view.epoch !== undefined ? { epoch: view.epoch } : {}),
+    ...(view.propsJson !== undefined ? { propsJson: view.propsJson } : {}),
+    ...(view.contextSlots !== undefined && view.contextSlots.length > 0
+      ? { contextSlots: [...view.contextSlots] }
+      : {}),
+    ...(view.permissionsPolicy !== undefined && view.permissionsPolicy.length > 0
+      ? { permissionsPolicy: [...view.permissionsPolicy] }
+      : {}),
+    ...(view.theme !== undefined ? { theme: view.theme } : {}),
+    ...(view.gadgets !== undefined && view.gadgets.length > 0
+      ? { gadgets: [...view.gadgets] }
+      : {}),
+  };
+}
+
 export function deriveRenderMeta(
   item: GguiSession,
 ): RenderMetaView {

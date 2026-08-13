@@ -327,6 +327,7 @@ export {
   derivePropsJson,
   derivePublicEnvProjection,
   deriveRenderMeta,
+  spreadRenderMetaViewOntoSlice,
   rewritePrivateBundleUrls,
   wsOriginToHttpOrigin,
   PRIVATE_BUNDLE_PREFIX,
