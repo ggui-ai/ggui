@@ -80,7 +80,9 @@ export interface UIGenerationResponse {
  *     generation never began — never as a relabeling of a genuine
  *     production failure. Callers MUST NOT bill or count this as a
  *     failed generation attempt; a caller that retries MAY do so
- *     immediately (no state was consumed). Violation is observable:
+ *     immediately (no generation attempt was made — re-handshake first,
+ *     since the handshake that led here was already consumed like
+ *     every other Plane-3 failure). Violation is observable:
  *     a deployment that folds an admission shed into
  *     `PRODUCTION_FAILED` (or vice versa) breaks this promise and a
  *     caller relying on the distinction will mis-bill or mis-count.
