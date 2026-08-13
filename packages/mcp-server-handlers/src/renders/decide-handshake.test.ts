@@ -99,6 +99,9 @@ function adapter(over: Partial<HandshakeDecisionAdapter> = {}): HandshakeDecisio
     ...(over.toolIdentityCatalog !== undefined
       ? { toolIdentityCatalog: over.toolIdentityCatalog }
       : {}),
+    ...(over.onBlueprintMatch !== undefined
+      ? { onBlueprintMatch: over.onBlueprintMatch }
+      : {}),
   };
 }
 
@@ -497,6 +500,113 @@ describe('decideHandshake — find-similar across pools', () => {
     });
     expect(r.action).toBe('reuse');
     expect(r.suggestion.blueprintMeta.variance).toEqual(matchedVariance);
+  });
+});
+
+describe('decideHandshake — onBlueprintMatch observer (#490 Wave 1)', () => {
+  it('calls adapter.onBlueprintMatch for every pool probed, with the match outcome', async () => {
+    mockMatch.mockResolvedValueOnce(hit('exact-key', { id: 'bp-ek' }));
+    const calls: Array<{ pool: string; scope: string; result: BlueprintMatchResult }> = [];
+    const onBlueprintMatch = vi.fn(
+      (input: { pool: string; scope: string; result: BlueprintMatchResult }) => {
+        calls.push(input);
+      },
+    );
+    const r = await decideHandshake(
+      adapter({ pools: [pool({ label: '@e2e/pool' })], onBlueprintMatch }),
+      { intent: 'i', blueprintDraft: DRAFT, ctx: CTX },
+    );
+    expect(r.action).toBe('reuse');
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.pool).toBe('@e2e/pool');
+    expect(calls[0]?.result.strategy).toBe('exact-key');
+  });
+
+  it('calls the observer once per pool probed — a later pool is still probed and observed after an earlier miss', async () => {
+    mockMatch
+      .mockResolvedValueOnce(miss)
+      .mockResolvedValueOnce(hit('exact-key', { id: 'bp-ek' }));
+    const calls: Array<{ pool: string; scope: string; result: BlueprintMatchResult }> = [];
+    const onBlueprintMatch = vi.fn(
+      (input: { pool: string; scope: string; result: BlueprintMatchResult }) => {
+        calls.push(input);
+      },
+    );
+    const r = await decideHandshake(
+      adapter({
+        pools: [pool({ label: 'first' }), pool({ label: 'second' })],
+        onBlueprintMatch,
+      }),
+      { intent: 'i', blueprintDraft: DRAFT, ctx: CTX },
+    );
+    expect(r.action).toBe('reuse');
+    expect(calls).toHaveLength(2);
+    expect(calls[0]).toMatchObject({ pool: 'first', result: { strategy: 'no-match' } });
+    expect(calls[1]).toMatchObject({ pool: 'second', result: { strategy: 'exact-key' } });
+  });
+
+  it('observes a no-match outcome with strategy "no-match" when no pool hits', async () => {
+    mockMatch.mockResolvedValue(miss);
+    mockEnsure.mockResolvedValue({
+      contract: {},
+      origin: 'agent',
+      method: 'verbatim',
+      findings: [],
+      reasoning: 'clean',
+    } satisfies EnsureConformingResult);
+    const calls: Array<{ pool: string; scope: string; result: BlueprintMatchResult }> = [];
+    const onBlueprintMatch = vi.fn(
+      (input: { pool: string; scope: string; result: BlueprintMatchResult }) => {
+        calls.push(input);
+      },
+    );
+    const r = await decideHandshake(
+      adapter({ pools: [pool({ label: '@e2e/pool' })], onBlueprintMatch }),
+      { intent: 'i', blueprintDraft: DRAFT, ctx: CTX },
+    );
+    expect(r.action).toBe('create');
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.result.strategy).toBe('no-match');
+  });
+
+  it('absent onBlueprintMatch is a no-op — decideHandshake still works', async () => {
+    mockMatch.mockResolvedValueOnce(hit('exact-key', { id: 'bp-ek' }));
+    const r = await decideHandshake(adapter({ pools: [pool()] }), {
+      intent: 'i',
+      blueprintDraft: DRAFT,
+      ctx: CTX,
+    });
+    expect(r.action).toBe('reuse');
+  });
+
+  it('a throwing observer does not break decideHandshake — the exact-key match still resolves, and warn sees the observer failure', async () => {
+    mockMatch.mockResolvedValueOnce(hit('exact-key', { id: 'bp-ek' }));
+    const onBlueprintMatch = vi.fn(() => {
+      throw new Error('observer boom');
+    });
+    const warn = vi.fn();
+    const r = await decideHandshake(
+      adapter({ pools: [pool({ label: '@e2e/pool' })], onBlueprintMatch, warn }),
+      { intent: 'i', blueprintDraft: DRAFT, ctx: CTX },
+    );
+    expect(r.action).toBe('reuse');
+    expect(onBlueprintMatch).toHaveBeenCalledTimes(1);
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn.mock.calls[0]?.[0]).toContain('onBlueprintMatch observer threw');
+    expect(warn.mock.calls[0]?.[0]).toContain('observer boom');
+  });
+
+  it('a throwing observer with no warn channel still does not break decideHandshake', async () => {
+    mockMatch.mockResolvedValueOnce(hit('exact-key', { id: 'bp-ek' }));
+    const onBlueprintMatch = vi.fn(() => {
+      throw new Error('observer boom');
+    });
+    const r = await decideHandshake(adapter({ pools: [pool()], onBlueprintMatch }), {
+      intent: 'i',
+      blueprintDraft: DRAFT,
+      ctx: CTX,
+    });
+    expect(r.action).toBe('reuse');
   });
 });
 
