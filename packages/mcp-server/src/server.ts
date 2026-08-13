@@ -3217,6 +3217,20 @@ export interface CreateGguiServerOptions {
     readonly name: string;
     readonly check: () => boolean | Promise<boolean>;
   }>;
+  /**
+   * Reported but non-gating checks — same shape as
+   * {@link CreateGguiServerOptions.readinessChecks}, surfaced at
+   * `/ggui/health` under `advisoryChecks` for diagnostics, but a
+   * failing entry never flips `/ggui/health`'s status or HTTP code.
+   * Use this when a dependency's health is worth reporting but every
+   * consumer of that dependency already degrades gracefully on its
+   * own — gating readiness on it would be strictly worse than
+   * reporting it and moving on.
+   */
+  readonly advisoryChecks?: ReadonlyArray<{
+    readonly name: string;
+    readonly check: () => boolean | Promise<boolean>;
+  }>;
 }
 
 export interface GguiServer {
@@ -4579,6 +4593,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
     info,
     toolCount: handlers.length,
     readinessChecks: opts.readinessChecks ?? [],
+    advisoryChecks: opts.advisoryChecks ?? [],
     getChannel: () => channelForHealth,
     ...(opts.threads !== undefined
       ? {
