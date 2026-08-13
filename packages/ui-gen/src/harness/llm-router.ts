@@ -53,6 +53,21 @@ export interface AgentConfig {
    * behavior for all existing callers).
    */
   temperature?: number;
+  /**
+   * Explicit per-call credentials/routing, bypassing `process.env`
+   * entirely when supplied. Absent (default) preserves today's
+   * behavior — each agent falls back to reading its provider's env
+   * var(s) directly, so existing callers (including self-hosters who
+   * set env vars once at process start) are unaffected. Use this to
+   * run concurrent generations safely in one process: two simultaneous
+   * calls with different `routeOverride`s never race on shared
+   * `process.env` state.
+   */
+  routeOverride?: {
+    readonly apiKey?: string;
+    /** Anthropic-only: force the Bedrock-IAM client instead of the direct API client. */
+    readonly useBedrock?: boolean;
+  };
 }
 
 export interface LLMResponse {
@@ -181,6 +196,17 @@ export abstract class LLMAgent {
   // Call resetSession() between independent generation runs.
   protected lastSessionId: string | undefined;
 
+  /**
+   * Explicit per-call routing override — see `AgentConfig.routeOverride`.
+   * Absent when constructed via the bare `new XAgent()` form (every
+   * existing call site), so `createClient()`/`resolveModel()` fall
+   * back to `process.env` exactly as before.
+   */
+  protected readonly routeOverride: AgentConfig['routeOverride'];
+
+  constructor(routeOverride?: AgentConfig['routeOverride']) {
+    this.routeOverride = routeOverride;
+  }
 
   protected abstract resolveModel(model: string): string;
   protected abstract createClient(): Promise<unknown>;
@@ -294,7 +320,9 @@ export class AnthropicAgent extends LLMAgent {
   protected resolveModel(model: string): string {
     // Bedrock IAM path — the upstream model id must be the cross-region
     // inference-profile form (`us.anthropic.*`), not the bare API id.
-    if (process.env.CLAUDE_CODE_USE_BEDROCK === '1') {
+    const useBedrock =
+      this.routeOverride?.useBedrock ?? process.env.CLAUDE_CODE_USE_BEDROCK === '1';
+    if (useBedrock) {
       return getBedrockModelId(model);
     }
     return model.startsWith('anthropic/')
@@ -308,7 +336,9 @@ export class AnthropicAgent extends LLMAgent {
     // pool-funded cloud pod. Auth is the pod's IRSA role — no API key.
     // `AnthropicBedrock` is wire-compatible with `Anthropic` for the
     // `.messages` API this agent uses.
-    if (process.env.CLAUDE_CODE_USE_BEDROCK === '1') {
+    const useBedrock =
+      this.routeOverride?.useBedrock ?? process.env.CLAUDE_CODE_USE_BEDROCK === '1';
+    if (useBedrock) {
       const { AnthropicBedrock } = await import('@anthropic-ai/bedrock-sdk');
       return new AnthropicBedrock({
         awsRegion:
@@ -319,8 +349,10 @@ export class AnthropicAgent extends LLMAgent {
     }
     // SDK construction lives in `adapters/claude/client.ts`. The BYOK
     // resolver writes the raw key into `process.env.ANTHROPIC_API_KEY`
-    // before this runs (see `applyRouteToEnv` in provider-router).
-    return createAnthropicClient(process.env.ANTHROPIC_API_KEY);
+    // before this runs (see `applyRouteToEnv` in provider-router) —
+    // `routeOverride.apiKey`, when supplied, skips that env round-trip
+    // entirely.
+    return createAnthropicClient(this.routeOverride?.apiKey ?? process.env.ANTHROPIC_API_KEY);
   }
 
   async callText(
@@ -670,7 +702,7 @@ export class OpenAIAgent extends LLMAgent {
 
   protected async createClient(): Promise<OpenAI> {
     const { default: OpenAISDK } = await import('openai');
-    return new OpenAISDK({ apiKey: process.env.OPENAI_API_KEY });
+    return new OpenAISDK({ apiKey: this.routeOverride?.apiKey ?? process.env.OPENAI_API_KEY });
   }
 
   async callText(
@@ -928,7 +960,8 @@ export class GoogleAgent extends LLMAgent {
   protected async createClient(): Promise<GoogleGenAI> {
     const { GoogleGenAI: GoogleGenAISDK } = await import('@google/genai');
     return new GoogleGenAISDK({
-      apiKey: process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY,
+      apiKey:
+        this.routeOverride?.apiKey ?? (process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY),
       httpOptions: { timeout: 300_000 }, // 5 min — Pro models can be slow
     });
   }
@@ -1248,7 +1281,7 @@ export class OpenRouterAgent extends LLMAgent {
   protected async createClient(): Promise<unknown> {
     const { OpenRouterClient } = await import('../adapters/openrouter/client');
     return new OpenRouterClient({
-      apiKey: process.env.OPENROUTER_API_KEY!,
+      apiKey: this.routeOverride?.apiKey ?? process.env.OPENROUTER_API_KEY!,
     });
   }
 
@@ -1432,17 +1465,29 @@ export class OpenRouterAgent extends LLMAgent {
 /**
  * Create a fresh agent instance for the given provider.
  * Each call returns a new instance — no shared state between callers.
+ *
+ * Accepts either a bare provider string (every pre-existing call
+ * site — the agent falls back to reading its provider's env var(s)
+ * directly) or a full {@link AgentConfig}, whose `routeOverride`
+ * (when present) is threaded into the constructed agent so it never
+ * touches `process.env`.
  */
-export function createAgent(provider: AgentConfig['provider']): LLMAgent {
+export function createAgent(provider: AgentConfig['provider']): LLMAgent;
+export function createAgent(config: AgentConfig): LLMAgent;
+export function createAgent(providerOrConfig: AgentConfig['provider'] | AgentConfig): LLMAgent {
+  const provider =
+    typeof providerOrConfig === 'string' ? providerOrConfig : providerOrConfig.provider;
+  const routeOverride =
+    typeof providerOrConfig === 'string' ? undefined : providerOrConfig.routeOverride;
   switch (provider) {
     case 'anthropic':
-      return new AnthropicAgent();
+      return new AnthropicAgent(routeOverride);
     case 'openai':
-      return new OpenAIAgent();
+      return new OpenAIAgent(routeOverride);
     case 'google':
-      return new GoogleAgent();
+      return new GoogleAgent(routeOverride);
     case 'openrouter':
-      return new OpenRouterAgent();
+      return new OpenRouterAgent(routeOverride);
   }
 }
 
