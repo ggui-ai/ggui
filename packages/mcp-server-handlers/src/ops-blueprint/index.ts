@@ -15,6 +15,14 @@
  *     (`isOperatorDefault`, `variance`).
  *   - `createGguiOpsDeleteBlueprintHandler` —
  *     `ggui_ops_delete_blueprint`. Idempotent removal.
+ *
+ * **Deployment boundary (2026-08-13 ruling, ggui#496):** this family
+ * mounts on the OSS default server only — self-hosted `ggui serve`
+ * and the local dev console's variant routes are its wire consumers.
+ * The hosted cloud pod does NOT mount it; the tools are absent from
+ * mcp.ggui.ai until the pod grows the store/registry deps the port
+ * needs (tracked separately). Docs describing these tools must not
+ * imply hosted callability.
  */
 
 export {
