@@ -24,11 +24,11 @@ export const stateFragments: Record<string, HarnessFragment> = {
     value: "merge",
     cacheTier: "axisDelta",
     promptText:
-      "## State: merge (live entity reconciliation)\n1. Seed `const [items, setItems] = useState(props.items ?? [])`.\n2. On stream updates: `setItems(prev => prev.map(it => it.id === event.id ? { ...it, ...event } : it))` — merge by id, do NOT append.\n3. Memoize derived views (grouping/sorting/filtering) with useMemo.\n4. Per-item actions pass `{ id, ... }` in the payload.\n5. Never push the stream payload into an append-only list unless realtime=append.",
+      "## State: merge (live entity reconciliation)\n1. Seed `const [items, setItems] = useState(props.items ?? [])` AND re-seed on prop change: `useEffect(() => setItems(props.items ?? []), [props.items])` — a `ggui_amend` repaint must move the list.\n2. On stream updates: `setItems(prev => prev.map(it => it.id === event.id ? { ...it, ...event } : it))` — merge by id, do NOT append.\n3. Memoize derived views (grouping/sorting/filtering) with useMemo.\n4. Per-item actions pass `{ id, ... }` in the payload.\n5. Never push the stream payload into an append-only list unless realtime=append.",
     boilerplateMarker: [
       "",
       "  // ── Live entity state (merge-by-id) ──",
-      "  // useState(props.items ?? []); merge stream events by item.id; never append.",
+      "  // useState(props.items ?? []); re-seed via useEffect on [props.items]; merge stream events by item.id; never append.",
       "",
     ].join("\n"),
   },
