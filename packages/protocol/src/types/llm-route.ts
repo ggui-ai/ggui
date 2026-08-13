@@ -60,12 +60,13 @@ export const MODELS = {
     // Wire-canonical IDs accepted by api.anthropic.com/v1/messages.
     // Per Anthropic's official models doc (claude.com/docs/about-claude/models/overview):
     // the Claude 5 family (2026-07: Opus 5, Sonnet 5, and the
-    // Mythos-class Fable 5) and the 4.6/4.7 generation carry undated
+    // Mythos-class Fable 5) and the 4.6–4.8 generation carry undated
     // wire IDs; Haiku 4.5 still uses the dated form.
     'claude-fable-5',
     'claude-opus-5',
     'claude-sonnet-5',
     'claude-haiku-4-5-20251001',
+    'claude-opus-4-8',
     'claude-sonnet-4-6',
     'claude-opus-4-7',
     'claude-opus-4-6',
@@ -116,6 +117,16 @@ export const MODELS = {
     // model — verify on individual model card pages under
     // docs.aws.amazon.com/bedrock/latest/userguide/model-cards.html
     // before locking expanded coverage.
+    //
+    // The Claude 5 family (and Opus 4.8) is deliberately ABSENT: on
+    // Bedrock those models are served only by the Messages-API Bedrock
+    // endpoint (region-less `anthropic.claude-opus-5`-shaped IDs,
+    // `AnthropicBedrockMantle` client), not by the bedrock-runtime
+    // path this slot's adapter drives today. Adding them here without
+    // the adapter migration would register routes the shipped adapter
+    // cannot invoke — and would break this list's cross-region-profile
+    // shape invariant (asserted in llm-route.test.ts). Do both halves
+    // together when the Mantle migration lands.
 
     // Haiku 4.5 — has full us/eu/apac/global coverage per Anthropic docs
     'us.anthropic.claude-haiku-4-5-20251001-v1:0',
