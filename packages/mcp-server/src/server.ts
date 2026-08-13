@@ -136,7 +136,7 @@ import { setValidatorTraceSink } from "@ggui-ai/ui-gen/harness/validator-trace-s
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import express, { type Express, type Request } from "express";
 import { AsyncLocalStorage } from "node:async_hooks";
-import { createHash, randomBytes } from "node:crypto";
+import { randomBytes } from "node:crypto";
 import fs from "node:fs";
 import { Server as NodeHttpServer } from "node:http";
 import path from "node:path";
@@ -245,6 +245,10 @@ import { mountHealthRoutes } from "./health-routes.js";
 import { mountOAuthAuthorizationServerRoutes } from "./oauth-as-routes.js";
 import { mountOAuthClientsRoutes } from "./oauth-clients-routes.js";
 import { mountRuntimeBundleRoute } from "./runtime-bundle-route.js";
+import {
+  computeRuntimeBundleHash,
+  insertRuntimeBundleHash,
+} from "./runtime-bundle-hash.js";
 import { createCsrfMiddleware, mountCsrfTokenRoute } from "./csrf-middleware.js";
 import { mountEmailLoginRoutes, type EmailSender, type MagicLinkStore } from "./email-login.js";
 import { resolveMcpInstructions, type McpInstructionsValue } from "./instructions-presets.js";
@@ -3493,19 +3497,16 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
   // `runtime.hashedUrl: false` opts out entirely.
   const runtimeBundleHash =
     runtimeBundleBytes !== undefined && runtimeConfig.hashedUrl !== false
-      ? createHash("sha256").update(runtimeBundleBytes).digest("hex").slice(0, 12)
+      ? computeRuntimeBundleHash(runtimeBundleBytes)
       : undefined;
-  const insertHash = (urlOrPath: string): string => {
-    if (runtimeBundleHash === undefined) return urlOrPath;
-    const plainName = runtimePath.slice(runtimePath.lastIndexOf("/") + 1);
-    const dot = plainName.lastIndexOf(".");
-    const hashedName =
-      dot === -1
-        ? `${plainName}.${runtimeBundleHash}`
-        : `${plainName.slice(0, dot)}.${runtimeBundleHash}${plainName.slice(dot)}`;
-    if (!urlOrPath.endsWith(`/${plainName}`) && urlOrPath !== plainName) return urlOrPath;
-    return `${urlOrPath.slice(0, urlOrPath.length - plainName.length)}${hashedName}`;
-  };
+  const insertHash = (urlOrPath: string): string =>
+    runtimeBundleHash === undefined
+      ? urlOrPath
+      : insertRuntimeBundleHash(
+          urlOrPath,
+          runtimeBundleHash,
+          runtimePath.slice(runtimePath.lastIndexOf("/") + 1)
+        );
   const hashedRuntimePath =
     runtimeBundleHash !== undefined ? insertHash(runtimePath) : undefined;
   const runtimeBootstrapUrl = insertHash(runtimeConfig.url ?? runtimePath);

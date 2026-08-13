@@ -61,6 +61,16 @@ export {
   SINGLE_CALL_OPS,
 } from './control-service.js';
 export type { AudienceTag, BuildControlServiceArgs } from './control-service.js';
+// Content-hashed runtime-bundle URL naming (#472). `createGguiServer`
+// stamps the hashed name itself; these are exported for deployments
+// that compose their own render handler (replacing the factory's
+// default set) and therefore mint an absolute `runtimeUrl` directly —
+// one derivation, no drift against the route the factory mounts.
+export {
+  computeRuntimeBundleHash,
+  insertRuntimeBundleHash,
+  resolveHashedRuntimeBundleUrl,
+} from './runtime-bundle-hash.js';
 // Content-addressable code delivery (2026-05-03). FileSystemCodeStore
 // is the OSS dev default; in-memory variant ships in
 // `@ggui-ai/mcp-server-core/in-memory` for tests + ephemeral runs.
