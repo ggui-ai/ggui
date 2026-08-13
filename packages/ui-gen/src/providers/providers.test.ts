@@ -23,7 +23,7 @@ import {
   classifyFetchError,
 } from './http.js';
 import { createAnthropicAdapter } from './anthropic.js';
-import { createBedrockAdapter } from './bedrock.js';
+import { bedrockEndpointFor, createBedrockAdapter } from './bedrock.js';
 import { createGoogleAdapter } from './google.js';
 import { createOpenAiAdapter, selectMaxTokensField } from './openai.js';
 import { createOpenRouterAdapter } from './openrouter.js';
@@ -646,6 +646,83 @@ describe('BedrockAdapter — mapError', () => {
     const adapter = createBedrockAdapter();
     const raw = Object.assign(new Error('canceled'), { name: 'AbortError' });
     expect(adapter.mapError(raw).kind).toBe('aborted');
+  });
+});
+
+describe('BedrockAdapter — endpoint routing', () => {
+  // The two Bedrock endpoints have disjoint model-id namespaces
+  // (live-probed 2026-08-13): region-prefixed inference profiles are
+  // runtime-only, region-less `anthropic.*` ids are Mantle-only. The
+  // adapter must pick the client per request from the id shape alone.
+  const OK_ENVELOPE = {
+    content: [{ type: 'text' as const, text: 'OK' }],
+    stop_reason: 'end_turn',
+    usage: { input_tokens: 1, output_tokens: 1 },
+  };
+
+  function trackingAdapter() {
+    const created: string[] = [];
+    const invoked: Array<{ endpoint: string; model: string }> = [];
+    const adapter = createBedrockAdapter({
+      region: 'us-east-1',
+      clientFactory: (_region, endpoint) => {
+        created.push(endpoint);
+        return {
+          messages: {
+            create: async (body) => {
+              invoked.push({ endpoint, model: body.model });
+              return OK_ENVELOPE;
+            },
+          },
+        };
+      },
+    });
+    return { adapter, created, invoked };
+  }
+
+  it('classifies ids: region prefix → runtime, anthropic.* → mantle', () => {
+    expect(bedrockEndpointFor('us.anthropic.claude-haiku-4-5-20251001-v1:0')).toBe('runtime');
+    expect(bedrockEndpointFor('global.anthropic.claude-opus-4-7')).toBe('runtime');
+    expect(bedrockEndpointFor('anthropic.claude-opus-5')).toBe('mantle');
+    expect(bedrockEndpointFor('anthropic.claude-fable-5')).toBe('mantle');
+  });
+
+  it('routes an inference-profile id to the runtime client', async () => {
+    const { adapter, invoked } = trackingAdapter();
+    const result = await adapter.complete({
+      apiKey: 'bedrock-iam',
+      route: BR_ROUTE,
+      systemPrompt: 'sys',
+      userPrompt: 'u',
+    });
+    expect(result.ok).toBe(true);
+    expect(invoked).toEqual([
+      { endpoint: 'runtime', model: 'us.anthropic.claude-haiku-4-5-20251001-v1:0' },
+    ]);
+  });
+
+  it('routes a region-less anthropic.* id to the Mantle client', async () => {
+    const { adapter, invoked } = trackingAdapter();
+    const result = await adapter.complete({
+      apiKey: 'bedrock-iam',
+      route: { provider: 'bedrock', model: 'anthropic.claude-opus-5' },
+      systemPrompt: 'sys',
+      userPrompt: 'u',
+    });
+    expect(result.ok).toBe(true);
+    expect(invoked).toEqual([{ endpoint: 'mantle', model: 'anthropic.claude-opus-5' }]);
+  });
+
+  it('lazily constructs one client per endpoint and reuses it', async () => {
+    const { adapter, created } = trackingAdapter();
+    const req = { apiKey: 'bedrock-iam', systemPrompt: 'sys', userPrompt: 'u' };
+    await adapter.complete({ ...req, route: BR_ROUTE });
+    await adapter.complete({ ...req, route: BR_ROUTE });
+    await adapter.complete({
+      ...req,
+      route: { provider: 'bedrock', model: 'anthropic.claude-sonnet-5' },
+    });
+    expect(created).toEqual(['runtime', 'mantle']);
   });
 });
 

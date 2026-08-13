@@ -304,6 +304,30 @@
  * it), not a new member.
  *
  * --------------------------------------------------------------------
+ * React/RN SDK-surface retirement (2026-08-13, owner ruling; rides
+ * the same next cut ≥ 0.9.0): `@ggui-ai/react` + `@ggui-ai/react-
+ * native` are MCP Apps HOST-HELPER libraries, not SDKs — embeds mount
+ * views via the spec path (`AppRenderer` / RN `McpAppIframe`) and get
+ * runtime semantics (freeze latch, crash card, epochs) from the
+ * mounted iframe itself. Deleted from `@ggui-ai/react`: `GguiRender`
+ * + its WS stack (`useWebSocket`, `WebSocketManager`, `EventBuffer`,
+ * reserved-validators), local `ThemeProvider`, `SelfRepairBoundary`
+ * family, `AgentBrowsePanel`, the dead wire-type re-exports, the
+ * public `useGguiContext`/`useAdapter`/`AdapterRegistry` barrel
+ * entries (impls stay internal), and `chat-thread/**` (both
+ * packages — third-party chat framework, zero consumers; guuey built
+ * `@guuey/threads` instead). RN's direct-render family was already
+ * deleted pre-ruling (#425, 7d5c6955b). Zero-consumer adversarially
+ * traced per export before deletion; guuey pins both packages at
+ * 0.6.3 (npm-immutable — installs unaffected; handoff note per the
+ * deletion discipline). Breaking TS-API shrink, 0.x MINOR carries it.
+ * SAME-DAY RENAME RULING: the packages republish at this cut as
+ * `@ggui-ai/mcp-apps-react` / `@ggui-ai/mcp-apps-react-native` —
+ * the names must say "MCP Apps bindings," not "SDK." Old names get
+ * `npm deprecate` + pointer at cut time (owner click, OTP; new names
+ * need Trusted Publishing setup — see release:cut).
+ *
+ * --------------------------------------------------------------------
  * Mutation tool split + epoch history (2026-08-13, ggui#481→#483,
  * SUPERSEDES the same-night renderAsNew param design, which never
  * reached a cut): a MINOR for the `@ggui-ai/protocol` wave, riding

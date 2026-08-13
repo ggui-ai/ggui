@@ -1,6 +1,6 @@
 {
   "name": "@ggui-ai/ui-gen",
-  "version": "0.8.0",
+  "version": "0.9.0",
   "description": "UI generation harness for ggui — the LLM system prompt, multi-turn coding loop, and evaluation engine that turn a DataContract into a React component. Implements the UiGenerator contract from @ggui-ai/mcp-server-core; consumed by @ggui-ai/mcp-server.",
   "license": "Apache-2.0",
   "keywords": [
@@ -195,7 +195,7 @@
     "@ggui-ai/protocol": "workspace:*",
     "@google/adk": "^0.5.0",
     "@openai/agents": "^0.7.1",
-    "puppeteer-core": "^24.40.0",
+    "puppeteer-core": "^24.40.0 || ^25.0.0",
     "react": "^18.0.0 || ^19.0.0",
     "react-dom": "^18.0.0 || ^19.0.0"
   },
@@ -217,9 +217,9 @@
     }
   },
   "dependencies": {
-    "@anthropic-ai/bedrock-sdk": "^0.29.0",
-    "@anthropic-ai/claude-agent-sdk": "0.2.76",
-    "@anthropic-ai/sdk": "^0.91.1",
+    "@anthropic-ai/bedrock-sdk": "^0.32.1",
+    "@anthropic-ai/claude-agent-sdk": "0.3.229",
+    "@anthropic-ai/sdk": "^0.116.0",
     "@ggui-ai/design": "workspace:*",
     "@ggui-ai/gadgets": "workspace:*",
     "@ggui-ai/sandbox": "workspace:*",
@@ -248,12 +248,12 @@
     "@ggui-ai/protocol": "workspace:*",
     "@google/adk": "^0.5.0",
     "@openai/agents": "^0.7.1",
-    "@sparticuz/chromium": "^143.0.4",
+    "@sparticuz/chromium": "^149.0.0",
     "@types/eslint": "^9.6.1",
     "@types/node": "^22.0.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
-    "puppeteer-core": "^24.40.0",
+    "puppeteer-core": "^25.6.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "tsup": "^8.5.0",

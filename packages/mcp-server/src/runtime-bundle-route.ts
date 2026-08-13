@@ -85,7 +85,7 @@ export function mountRuntimeBundleRoute(opts: MountOptions): void {
       res.setHeader("Cache-Control", "no-cache");
       // CORS: the bundle MUST be loadable from `<script type="module"
       // src=...>` inside a sandboxed `srcdoc` iframe (the
-      // `<McpAppIframe>` mount path — see `packages/ggui-react/src/
+      // `<McpAppIframe>` mount path — see `packages/mcp-apps-react/src/
       // McpAppIframe/dispatch.ts::deriveResourceMountSource`). Such an
       // iframe has the `null` origin and module-script fetches always
       // run in CORS mode; without a permissive header browsers reject

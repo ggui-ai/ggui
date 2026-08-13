@@ -187,7 +187,7 @@ export interface PropsSpec {
 //
 //   - `schema` (required) is the payload contract — the SAME field every
 //     live-channel enforcement point validates against (hosted fan-out, OSS
-//     `/ws` fan-out, `@ggui-ai/react` data receipt, `@ggui-ai/
+//     `/ws` fan-out, `@ggui-ai/mcp-apps-react` data receipt, `@ggui-ai/
 //     react-native` data receipt). `validateStreamData` enforces this.
 //
 //   - `mode` / `replay` / `complete` (optional) declare runtime semantics
@@ -275,8 +275,8 @@ export interface StreamChannelEntry {
   /**
    * JSON Schema for the channel payload. This is the authoritative
    * shape guard for every delivery on this channel — live-channel
-   * enforcement points (hosted fan-out, OSS `/ws`, `@ggui-ai/react`
-   * data receipt, `@ggui-ai/react-native` data receipt) all validate
+   * enforcement points (hosted fan-out, OSS `/ws`, `@ggui-ai/mcp-apps-react`
+   * data receipt, `@ggui-ai/mcp-apps-react-native` data receipt) all validate
    * deliveries against it.
    *
    * When the channel declares a `source.tool` feed, the protocol-level

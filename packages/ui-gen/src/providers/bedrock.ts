@@ -50,19 +50,29 @@
  * discriminator if a third auth mode (e.g. cross-account assume-role)
  * lands.
  *
- * ## Model IDs — pass-through
+ * ## Model IDs — pass-through, endpoint chosen by ID shape
  *
- * Bedrock and the direct Anthropic API use OVERLAPPING but DISTINCT
- * model id namespaces:
+ * Bedrock serves Anthropic models through TWO endpoints with DISJOINT
+ * model-id namespaces (live-probed against us-east-1, 2026-08-13):
  *
- *   - Direct API: `claude-haiku-4-5`, `claude-opus-4-7`, etc.
- *   - Bedrock foundation models: `anthropic.claude-sonnet-4-6`
- *   - Bedrock cross-region inference profiles: `us.anthropic.claude-haiku-4-5-20251001-v1:0`
+ *   - **bedrock-runtime** (`AnthropicBedrock`): serves ONLY
+ *     cross-region inference-profile ids —
+ *     `us.anthropic.claude-haiku-4-5-20251001-v1:0` etc. Bare
+ *     `anthropic.*` foundation ids are rejected with 400
+ *     "on-demand throughput isn't supported".
+ *   - **Messages-API endpoint / Mantle** (`AnthropicBedrockMantle`):
+ *     serves ONLY region-less `anthropic.*` ids —
+ *     `anthropic.claude-opus-5`, `anthropic.claude-haiku-4-5`. The
+ *     Claude 5 family and Opus 4.8 exist ONLY here. Profile ids are
+ *     rejected with 404. Requires the account to have enabled Claude
+ *     in Amazon Bedrock (otherwise every id 403s "not available for
+ *     this account").
  *
- * The adapter passes whatever `request.model` contains straight to
- * Bedrock — translation lives in the caller (model picker / deployment
- * config). Supply a Bedrock foundation-model or inference-profile id,
- * not a direct-API model name.
+ * Because the namespaces never overlap, the adapter routes each
+ * request by shape: ids starting `anthropic.` go to Mantle, region-
+ * prefixed ids (`us.` / `eu.` / `apac.` / `global.`) go to
+ * bedrock-runtime. The id itself passes through untranslated —
+ * supply a Bedrock id, not a direct-API model name.
  *
  * ## Failure mapping
  *
@@ -87,7 +97,7 @@
  * subclasses in the SDK, distinguished by `.status` (403 / 429 / 400
  * respectively).
  */
-import { AnthropicBedrock } from '@anthropic-ai/bedrock-sdk';
+import { AnthropicBedrock, AnthropicBedrockMantle } from '@anthropic-ai/bedrock-sdk';
 import type { LlmProvider } from '@ggui-ai/mcp-server-core';
 import {
   makeProviderError,
@@ -111,6 +121,47 @@ const PROVIDER: LlmProvider = 'bedrock';
 const DEFAULT_MAX_TOKENS = 4096;
 
 /**
+ * Which Bedrock endpoint a model id resolves to. The namespaces are
+ * disjoint (see the docstring above), so the shape of the id fully
+ * determines the endpoint — no configuration knob needed.
+ */
+export type BedrockEndpoint = 'runtime' | 'mantle';
+
+/**
+ * Structural slice of the two SDK clients the adapter actually drives —
+ * the seam that lets tests inject a stub without standing up a real
+ * AWS client. Both `AnthropicBedrock` and `AnthropicBedrockMantle`
+ * satisfy it (the adapter's single-completion contract only ever calls
+ * non-streaming `messages.create`; the response is parsed from
+ * `unknown` by `parseAnthropicMessagesResponse`, so the SDK's
+ * version-volatile `Message` type is deliberately not part of the
+ * seam).
+ */
+export interface BedrockMessagesClient {
+  readonly messages: {
+    create(
+      body: {
+        model: string;
+        max_tokens: number;
+        system?: string;
+        messages: Array<{ role: 'user'; content: string }>;
+      },
+      options?: { signal?: AbortSignal },
+    ): Promise<unknown>;
+  };
+}
+
+/**
+ * Route a Bedrock model id to its serving endpoint. Region-less
+ * `anthropic.*` ids exist only on the Messages-API (Mantle) endpoint;
+ * everything else (region-prefixed inference profiles, ARNs) belongs
+ * to bedrock-runtime.
+ */
+export function bedrockEndpointFor(model: string): BedrockEndpoint {
+  return model.startsWith('anthropic.') ? 'mantle' : 'runtime';
+}
+
+/**
  * Constructor options for the Bedrock adapter.
  *
  * `region` is the only required option in the common case — IAM
@@ -130,11 +181,16 @@ export interface BedrockAdapterOptions {
   readonly region?: string;
   /**
    * Optional client factory override — used by tests to inject a
-   * mock or stub `AnthropicBedrock` client without actually hitting
-   * AWS. Production callers leave this unset; the adapter constructs
-   * the real client lazily on first `complete(...)` call.
+   * mock or stub client without actually hitting AWS. Called with the
+   * endpoint the request's model id routed to (`'runtime'` →
+   * `AnthropicBedrock`, `'mantle'` → `AnthropicBedrockMantle`).
+   * Production callers leave this unset; the adapter constructs the
+   * real client lazily on first `complete(...)` call per endpoint.
    */
-  readonly clientFactory?: (region: string) => AnthropicBedrock;
+  readonly clientFactory?: (
+    region: string,
+    endpoint: BedrockEndpoint,
+  ) => BedrockMessagesClient;
 }
 
 /**
@@ -150,13 +206,19 @@ export function createBedrockAdapter(
 ): ProviderAdapter {
   const region = options.region ?? process.env['AWS_REGION'] ?? 'us-east-1';
   const clientFactory =
-    options.clientFactory ?? ((r: string) => new AnthropicBedrock({ awsRegion: r }));
+    options.clientFactory ??
+    ((r: string, endpoint: BedrockEndpoint): BedrockMessagesClient =>
+      endpoint === 'mantle'
+        ? new AnthropicBedrockMantle({ awsRegion: r })
+        : new AnthropicBedrock({ awsRegion: r }));
 
-  let cachedClient: AnthropicBedrock | null = null;
-  function getClient(): AnthropicBedrock {
-    if (cachedClient) return cachedClient;
-    cachedClient = clientFactory(region);
-    return cachedClient;
+  const cachedClients: Partial<Record<BedrockEndpoint, BedrockMessagesClient>> = {};
+  function getClient(endpoint: BedrockEndpoint): BedrockMessagesClient {
+    const cached = cachedClients[endpoint];
+    if (cached) return cached;
+    const created = clientFactory(region, endpoint);
+    cachedClients[endpoint] = created;
+    return created;
   }
 
   function mapError(raw: unknown): ProviderError {
@@ -218,7 +280,7 @@ export function createBedrockAdapter(
         };
       }
 
-      const client = getClient();
+      const client = getClient(bedrockEndpointFor(request.route.model));
       // The SDK's `Message` return type drifts between
       // `@anthropic-ai/sdk` versions (pnpm hoists multiple copies in
       // this workspace today). We type the captured value as

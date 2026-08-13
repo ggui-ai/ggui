@@ -10,14 +10,14 @@ import {
   type KeyboardEvent,
 } from 'react';
 import { AppRenderer, type RequestHandlerExtra } from '@mcp-ui/client';
-import { UiFeedback, type UiFeedbackPayload } from '@ggui-ai/react';
+import { UiFeedback, type UiFeedbackPayload } from '@ggui-ai/mcp-apps-react';
 import {
   useMcpAppsChat,
   type ChatEntry,
   type GguiSessionRef,
   type ToolCallEntry,
   type UseMcpAppsChatResult,
-} from '@ggui-ai/react/chat-helpers';
+} from '@ggui-ai/mcp-apps-react/chat-helpers';
 import type {
   CallToolRequest,
   CallToolResult,

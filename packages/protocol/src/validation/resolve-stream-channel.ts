@@ -3,8 +3,8 @@
  * per-channel defaults to a {@link StreamSpec} entry.
  *
  * Four runtime roles reason about stream channels today (hosted
- * Lambda fan-out, OSS `/ws` fan-out, `@ggui-ai/react` data receipt,
- * `@ggui-ai/react-native` data receipt). Each of them needs the same
+ * Lambda fan-out, OSS `/ws` fan-out, `@ggui-ai/mcp-apps-react` data receipt,
+ * `@ggui-ai/mcp-apps-react-native` data receipt). Each of them needs the same
  * question answered: "what are the effective semantics of channel X
  * on this spec?" Without a shared helper, each role applies the
  * `DEFAULT_STREAM_*` constants inline and those defaults drift.

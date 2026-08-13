@@ -27,7 +27,7 @@
  *   The thin shell is static content; it depends on nothing except the
  *   MIME constant and the HTML. Keeping it next to the registration
  *   means a future refactor of the shell edits one file. The
- *   `@ggui-ai/react` package does NOT ship the shell as a separate
+ *   `@ggui-ai/mcp-apps-react` package does NOT ship the shell as a separate
  *   build target — per the design lock, the shell is served by the
  *   same `@ggui-ai/mcp-server` instance that mints the bootstrap.
  */

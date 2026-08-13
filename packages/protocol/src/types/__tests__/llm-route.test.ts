@@ -43,12 +43,16 @@ describe('MODELS registry', () => {
     }
   });
 
-  it('bedrock entries follow the cross-region inference profile shape', () => {
-    // `<region>.anthropic.<rest>` — region is one of us/eu/apac/global,
-    // payload is anthropic-author and a recognizable claude family.
+  it('bedrock entries follow one of the two endpoint id shapes', () => {
+    // Two disjoint families, one per Bedrock endpoint (see MODELS
+    // docstring): region-prefixed cross-region inference profiles
+    // (`<region>.anthropic.<rest>`, region ∈ us/eu/apac/global —
+    // bedrock-runtime) and region-less `anthropic.claude-*` ids
+    // (Messages-API / Mantle endpoint). The adapter routes by this
+    // exact shape split, so an entry matching neither is unroutable.
     for (const id of MODELS.bedrock) {
       expect(id, `bedrock id "${id}"`).toMatch(
-        /^(us|eu|apac|global)\.anthropic\.claude-/,
+        /^((us|eu|apac|global)\.)?anthropic\.claude-/,
       );
     }
   });

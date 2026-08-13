@@ -418,6 +418,12 @@ export async function runEvalRound(
             {
               provider: mapProviderForEvaluator(evaluationAgent.provider),
               model: evaluationAgent.model,
+              // #484 — thread the coding-agent's routing override
+              // through to the evaluator so its LLM call never falls
+              // back to `process.env` either (the eval calls run
+              // inside the same concurrent generation, so the race is
+              // real here too, not just on the coding turn).
+              routeOverride: evaluationAgent.routeOverride,
             },
             preWarmedContext,
           )

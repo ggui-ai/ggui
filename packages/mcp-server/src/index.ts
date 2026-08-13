@@ -46,6 +46,7 @@ export { buildNoCredentialsGguiSession } from '@ggui-ai/mcp-server-handlers';
 export { buildOpsBundleHandlers, createGguiServer, defaultHandlers } from './server.js';
 export type {
   CreateGguiServerOptions,
+  ErrorMapperResult,
   GguiServer,
   OpsBundleDeps,
 } from './server.js';

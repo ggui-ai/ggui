@@ -1,7 +1,7 @@
 /**
  * @ggui-ai/shared — Shared types used across public ggui SDK packages.
  *
- * Contains types that are shared between @ggui-ai/react, @ggui-ai/react-native,
+ * Contains types that are shared between @ggui-ai/mcp-apps-react, @ggui-ai/mcp-apps-react-native,
  * and other public packages but aren't wire protocol types.
  */
 

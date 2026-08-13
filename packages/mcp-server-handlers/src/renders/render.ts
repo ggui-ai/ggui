@@ -872,6 +872,8 @@ const RENDER_FAILURE_GUIDANCE: Record<RenderErrorCode, string> = {
     'Have the operator set a provider key for this app, or switch the app to a model whose key is configured',
   NO_CREDENTIALS:
     'Have the operator configure provider credentials on the server (environment variable or credentials file)',
+  GENERATION_QUEUE_OVERLOADED:
+    'No attempt was made — this is safe to retry immediately, or after a short backoff if it recurs',
 };
 
 /**
@@ -892,7 +894,7 @@ function buildRenderFailureText(failure: RenderError): string {
  * Project a generator-result {@link GenerationError} code onto the
  * canonical render-failure enum. `COMPILATION_ERROR` is a
  * finer-grained production failure, not a distinct wire class — it
- * folds into `PRODUCTION_FAILED`; the other four members map 1:1.
+ * folds into `PRODUCTION_FAILED`; the other five members map 1:1.
  */
 function toCanonicalRenderErrorCode(
   code: GenerationError['code'],
@@ -904,6 +906,8 @@ function toCanonicalRenderErrorCode(
       return 'NO_PLATFORM_KEY';
     case 'NO_CREDENTIALS':
       return 'NO_CREDENTIALS';
+    case 'GENERATION_QUEUE_OVERLOADED':
+      return 'GENERATION_QUEUE_OVERLOADED';
     case 'PRODUCTION_FAILED':
     case 'COMPILATION_ERROR':
       return 'PRODUCTION_FAILED';

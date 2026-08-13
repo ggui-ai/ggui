@@ -111,8 +111,8 @@ export const OUTERMOST_ROOT: string =
  * Absolute path to a publishable package's directory, e.g.
  * `packageDir('ggui-cli')` → `<PACKAGES_ROOT>/packages/ggui-cli`.
  * The `dir` argument is the on-disk directory name, which is NOT
- * always the npm package's unscoped name (`@ggui-ai/react` lives in
- * `packages/ggui-react`, `@ggui-ai/cli` in `packages/ggui-cli`).
+ * always the npm package's unscoped name (`@ggui-ai/mcp-apps-react` lives in
+ * `packages/mcp-apps-react`, `@ggui-ai/cli` in `packages/ggui-cli`).
  */
 export function packageDir(dir: string): string {
   return resolve(PACKAGES_ROOT, 'packages', dir);

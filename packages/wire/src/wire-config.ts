@@ -6,7 +6,7 @@
  *   - `@ggui-ai/iframe-runtime`'s `buildRootWireConfig` (the MCP-Apps
  *     iframe boot) injects its CSP-precompiled outbound validator and
  *     routes `emitEnvelope` through the host `tools/call` relay.
- *   - `@ggui-ai/react`'s `<GguiRender>` uses the default validator and
+ *   - `@ggui-ai/mcp-apps-react`'s `<GguiRender>` uses the default validator and
  *     routes `emitEnvelope` over its live-channel WebSocket.
  *
  * Per the MCP Apps Compliance principle, drift across transports is

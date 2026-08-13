@@ -8,7 +8,7 @@ This is "Zero Agent Code" with GPT-5.5 as the driver.
 
 ## Architecture
 
-This package is the **backend** only. There is no bundled frontend — the reference frontend lives at `oss/samples/apps/ggui-basic-web/` (a Vite SPA that mounts `<AppRenderer>` from `@mcp-ui/client`, the spec-canonical MCP Apps host, with ggui chat plumbing from `@ggui-ai/react/chat-helpers` — ggui deliberately does not wrap or re-export the host) and binds to this backend via `VITE_AGENT_ENDPOINT_URL`.
+This package is the **backend** only. There is no bundled frontend — the reference frontend lives at `oss/samples/apps/ggui-basic-web/` (a Vite SPA that mounts `<AppRenderer>` from `@mcp-ui/client`, the spec-canonical MCP Apps host, with ggui chat plumbing from `@ggui-ai/mcp-apps-react/chat-helpers` — ggui deliberately does not wrap or re-export the host) and binds to this backend via `VITE_AGENT_ENDPOINT_URL`.
 
 ```
 src/
@@ -35,7 +35,7 @@ Identical layering, wire surface, and chat-snapshot semantics as the sibling Cla
 ┌─────────────────────────────────────┐
 │ Browser — ggui-basic-web (Vite)     │
 │ <AppRenderer> from @mcp-ui/client   │
-│ + useMcpAppsChat (@ggui-ai/react)   │
+│ + useMcpAppsChat (@ggui-ai/mcp-apps-react)   │
 └─────────┬───────────────────┬───────┘
           │                   │
           │ POST /agent       │ iframe-internal
@@ -144,7 +144,7 @@ The frontend needs to:
 2. POST `{kind:'chat', prompt, chatId?}` to `/agent` and read the SSE stream (the first event is `chat-allocated` with the server-assigned chat id; rehydrate later via `GET /agent?chatId=`)
 3. Forward iframe `tools/call` requests as `POST /agent {kind:'tool-call', name, arguments}`
 
-The `useMcpAppsChat` hook in `@ggui-ai/react/chat-helpers` does all three.
+The `useMcpAppsChat` hook in `@ggui-ai/mcp-apps-react/chat-helpers` does all three.
 
 ## Not used for
 

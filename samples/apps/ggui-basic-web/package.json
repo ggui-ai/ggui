@@ -1,7 +1,7 @@
 {
   "name": "@ggui-samples/app-ggui-basic-web",
   "version": "0.0.1",
-  "description": "Reference Vite-SPA frontend for any MCP-Apps-spec agent backend that mounts ggui sessions. Consumes @mcp-ui/client's <AppRenderer> (the spec-canonical MCP Apps host) + @ggui-ai/react's useMcpAppsChat hook. Talks to a brand-agnostic agent server (claude-agent-sdk / openai-agents-sdk / google-adk) via VITE_AGENT_ENDPOINT_URL. Not published.",
+  "description": "Reference Vite-SPA frontend for any MCP-Apps-spec agent backend that mounts ggui sessions. Consumes @mcp-ui/client's <AppRenderer> (the spec-canonical MCP Apps host) + @ggui-ai/mcp-apps-react's useMcpAppsChat hook. Talks to a brand-agnostic agent server (claude-agent-sdk / openai-agents-sdk / google-adk) via VITE_AGENT_ENDPOINT_URL. Not published.",
   "private": true,
   "type": "module",
   "scripts": {
@@ -13,7 +13,7 @@
   },
   "dependencies": {
     "@ggui-ai/design": "workspace:*",
-    "@ggui-ai/react": "workspace:*",
+    "@ggui-ai/mcp-apps-react": "workspace:*",
     "@mcp-ui/client": "^7.1.1",
     "@modelcontextprotocol/sdk": "^1.27.0",
     "react": "^19.0.0",

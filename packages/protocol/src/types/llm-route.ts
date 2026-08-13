@@ -60,12 +60,13 @@ export const MODELS = {
     // Wire-canonical IDs accepted by api.anthropic.com/v1/messages.
     // Per Anthropic's official models doc (claude.com/docs/about-claude/models/overview):
     // the Claude 5 family (2026-07: Opus 5, Sonnet 5, and the
-    // Mythos-class Fable 5) and the 4.6/4.7 generation carry undated
+    // Mythos-class Fable 5) and the 4.6–4.8 generation carry undated
     // wire IDs; Haiku 4.5 still uses the dated form.
     'claude-fable-5',
     'claude-opus-5',
     'claude-sonnet-5',
     'claude-haiku-4-5-20251001',
+    'claude-opus-4-8',
     'claude-sonnet-4-6',
     'claude-opus-4-7',
     'claude-opus-4-6',
@@ -109,13 +110,31 @@ export const MODELS = {
     'gemini-3-flash-preview',
   ],
   bedrock: [
-    // AWS cross-region inference profile IDs. Each region is its own
-    // wire-canonical entry — no `{region}` field on the route.
-    // Per AWS docs the 4.6/4.7 generation dropped `-vN:0`; Haiku 4.5
-    // keeps it. Coverage per region (us/eu/apac/global) varies per
-    // model — verify on individual model card pages under
-    // docs.aws.amazon.com/bedrock/latest/userguide/model-cards.html
-    // before locking expanded coverage.
+    // TWO wire-id families, one per Bedrock endpoint — the namespaces
+    // are disjoint (live-probed 2026-08-13), and ui-gen's bedrock
+    // adapter routes each request by shape:
+    //
+    //   - Region-prefixed cross-region inference-profile IDs
+    //     (`us.` / `eu.` / `apac.` / `global.`) — served by the
+    //     bedrock-runtime endpoint. Each region is its own
+    //     wire-canonical entry; no `{region}` field on the route.
+    //     Per AWS docs the 4.6/4.7 generation dropped `-vN:0`;
+    //     Haiku 4.5 keeps it. Coverage per region varies per model —
+    //     verify on model card pages under
+    //     docs.aws.amazon.com/bedrock/latest/userguide/model-cards.html
+    //     before locking expanded coverage.
+    //   - Region-less `anthropic.*` IDs — served ONLY by the
+    //     Messages-API Bedrock endpoint (`AnthropicBedrockMantle`).
+    //     The Claude 5 family and Opus 4.8 exist ONLY in this family
+    //     (per the Anthropic models doc). Requires the AWS account to
+    //     have enabled Claude in Amazon Bedrock; otherwise every id
+    //     403s "not available for this account".
+
+    // Messages-API endpoint (Mantle) — Claude 5 family + Opus 4.8
+    'anthropic.claude-fable-5',
+    'anthropic.claude-opus-5',
+    'anthropic.claude-sonnet-5',
+    'anthropic.claude-opus-4-8',
 
     // Haiku 4.5 — has full us/eu/apac/global coverage per Anthropic docs
     'us.anthropic.claude-haiku-4-5-20251001-v1:0',

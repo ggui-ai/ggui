@@ -7,7 +7,7 @@
 
 This package owns everything an MCP-Apps host needs to expose an agent over HTTP — the wire shape, MCP discovery, tool-result resource inlining, server-allocated chat ids, guest + bearer auth with chat ownership — so each per-SDK integration only has to implement a thin `AgentAdapter` (prompt + chatId in → normalized message stream out). The prompt path has no ggui-protocol knowledge: the prompt is forwarded to the adapter verbatim, and guest-gesture directives are authored in the iframe's `ui/message` text and pass straight through. The library itself implements a ggui runtime surface — it inlines ggui render resources into tool results and (with `crossFramework`) declares the agent's tool-identity catalog to ggui via `ggui_runtime_declare_tool_catalog`.
 
-Pairs with [`@ggui-ai/react/chat-helpers`](https://www.npmjs.com/package/@ggui-ai/react) on the frontend.
+Pairs with [`@ggui-ai/mcp-apps-react/chat-helpers`](https://www.npmjs.com/package/@ggui-ai/mcp-apps-react) on the frontend.
 
 ## Install
 

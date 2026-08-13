@@ -1,7 +1,7 @@
 /**
  * React component renderer for the iframe runtime.
  *
- * Port of `@ggui-ai/react::components/ReactComponentRenderer.tsx` (L10-384)
+ * Port of `@ggui-ai/mcp-apps-react::components/ReactComponentRenderer.tsx` (L10-384)
  * with the enclosing React component stripped — the iframe runtime
  * does not have an outer React tree; it owns the root `createRoot`
  * mount itself. The inner eval + data-URL-shim + error-boundary

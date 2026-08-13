@@ -227,6 +227,8 @@ import { mountAdminOAuthProvidersTransport } from "./admin-oauth-providers-trans
 import { DEFAULT_BUILDER_APP_ID, defaultAppIdFromIdentity } from "./auth.js";
 import type { BuildMcpServerOptions, ServerInfo } from "./build-mcp.js";
 import { mountMcpEndpoints } from "./mcp-endpoint-routes.js";
+import type { ErrorMapperResult } from "./mcp-endpoint-routes.js";
+export type { ErrorMapperResult } from "./mcp-endpoint-routes.js";
 import { mountApiRendersRoutes } from "./api-renders-routes.js";
 import { mountApiRendersStreamRoute } from "./api-renders-stream-route.js";
 import { mountConsoleBlueprintRoutes } from "./console-blueprint-routes.js";
@@ -1948,9 +1950,7 @@ export interface CreateGguiServerOptions {
    * `catch (err)` block; any throw from the mapper itself is treated
    * as if it returned `undefined` (default 500).
    */
-  readonly errorMapper?: (
-    err: unknown
-  ) => { readonly status: number; readonly code: number; readonly message: string } | undefined;
+  readonly errorMapper?: (err: unknown) => ErrorMapperResult | undefined;
 
   /**
    * BYOK provider-key store consumed by the operator-facing

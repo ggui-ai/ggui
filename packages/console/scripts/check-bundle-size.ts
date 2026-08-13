@@ -22,7 +22,7 @@
  *     moving both this threshold and the hard cap together.
  *   - {@link HARD_CAP_BYTES} (500 KB) — MVP §6.3 absolute ceiling.
  *     Failing here is a kill-switch trigger per the design note: the
- *     `@ggui-ai/react` export shape no longer fits the OSS operator
+ *     `@ggui-ai/mcp-apps-react` export shape no longer fits the OSS operator
  *     view in its current form.
  *
  * If either cap ever needs to move, update the MVP design note

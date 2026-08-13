@@ -1,6 +1,6 @@
 {
   "name": "@ggui-ai/console",
-  "version": "0.8.0",
+  "version": "0.9.0",
   "description": "Operator console for a self-hosted @ggui-ai/mcp-server instance — a single-origin admin and devtools surface served by the server itself.",
   "keywords": [
     "ggui",
@@ -37,7 +37,7 @@
   "dependencies": {
     "@ggui-ai/design": "workspace:*",
     "@ggui-ai/project-config": "workspace:*",
-    "@ggui-ai/react": "workspace:*",
+    "@ggui-ai/mcp-apps-react": "workspace:*",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
   },

@@ -185,7 +185,11 @@ async function captureScreenshot(
     const browser = await puppeteer.default.launch(launchOptions);
     try {
       const page = await browser.newPage();
-      await page.setContent(html, { waitUntil: 'networkidle0', timeout: 15000 });
+      // puppeteer ≥24.43 narrowed setContent's waitUntil to
+      // 'load' | 'domcontentloaded'; waitForNetworkIdle (0 connections
+      // for 500ms) reproduces the old 'networkidle0' semantics.
+      await page.setContent(html, { waitUntil: 'load', timeout: 15000 });
+      await page.waitForNetworkIdle({ idleTime: 500, timeout: 15000 }).catch(() => {});
       await page.waitForSelector('#root > *', { timeout: 10000 }).catch(() => {});
       // Wait a bit for CSS/fonts to settle
       await new Promise(r => setTimeout(r, 1000));

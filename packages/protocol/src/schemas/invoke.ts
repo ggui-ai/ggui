@@ -8,7 +8,7 @@
  * client tools — no ggui-specific block type.
  *
  * TS types in types/invoke.ts are derived from these via z.infer. Consumers
- * (@ggui-ai/server, @ggui-ai/react) import schemas for runtime validation
+ * (@ggui-ai/server, @ggui-ai/mcp-apps-react) import schemas for runtime validation
  * and types for authoring.
  */
 
