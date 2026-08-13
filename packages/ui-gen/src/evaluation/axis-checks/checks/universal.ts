@@ -86,6 +86,39 @@ function runNoPhantomUseState(input: AxisCheckInput): EvalIssue[] {
   return issues;
 }
 
+function runPropSeedNoResync(input: AxisCheckInput): EvalIssue[] {
+  if (input.compiledCode === null) return [];
+  const src = input.sourceCode;
+  const issues: EvalIssue[] = [];
+  const re =
+    /const\s*\[\s*(\w+)\s*,\s*(\w+)\s*\]\s*=\s*useState(?:<[^>]*>)?\s*\(\s*props\??\.(\w+)/g;
+  for (const m of src.matchAll(re)) {
+    const [full, stateVar, setter, propName] = m;
+    const idx = m.index ?? 0;
+    const after = src.slice(idx + full.length);
+    // Never-called setter is `no_prop_mirror`'s case — this check is
+    // its #480 complement: the setter IS used (real optimistic state)
+    // but nothing re-seeds when the agent repaints the prop.
+    if (!new RegExp(`\\b${setter}\\s*\\(`).test(after)) continue;
+    // A re-seed effect names the prop in a dependency array. Bracket
+    // shape is the pragmatic signal (same looseness as the sibling
+    // checks): any `[... props.X ...]` array in the source counts.
+    const resync = new RegExp(
+      `\\[[^\\[\\]]*props\\??\\.${propName}\\b[^\\[\\]]*\\]`,
+    );
+    if (resync.test(src)) continue;
+    issues.push(
+      mkIssue(
+        "universal.prop_seed_no_resync",
+        `useState(props.${propName}) seeds "${stateVar}" and mutates it, but no effect depends on [props.${propName}] — a ggui_amend repaint pushes new props that never reach this display (#480).`,
+        `Add \`useEffect(() => ${setter}(props.${propName}), [props.${propName}]);\` so agent repaints re-seed the state, or derive the display directly from props.${propName}.`,
+        "warn",
+      ),
+    );
+  }
+  return issues;
+}
+
 export const UNIVERSAL_CHECKS: readonly AxisCheck[] = [
   {
     id: "universal.prop_coverage",
@@ -104,5 +137,11 @@ export const UNIVERSAL_CHECKS: readonly AxisCheck[] = [
     axis: "render",
     values: ALL_RENDER_VALUES,
     run: runNoPhantomUseState,
+  },
+  {
+    id: "universal.prop_seed_no_resync",
+    axis: "render",
+    values: ALL_RENDER_VALUES,
+    run: runPropSeedNoResync,
   },
 ];

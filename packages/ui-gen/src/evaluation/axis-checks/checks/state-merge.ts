@@ -29,7 +29,7 @@ function runStateSeededFromProps(input: AxisCheckInput): EvalIssue[] {
       mkIssue(
         "state.merge.seeded_from_props",
         `Entity collection "${e.name}" is not seeded from props — no useState initializer reads props.${e.name}.`,
-        `Add \`const [${e.name}, set${cap(e.name)}] = useState(props.${e.name});\` so stream/action updates can merge into live state.`,
+        `Add \`const [${e.name}, set${cap(e.name)}] = useState(props.${e.name});\` paired with \`useEffect(() => set${cap(e.name)}(props.${e.name}), [props.${e.name}]);\` so stream/action updates merge into live state AND agent repaints (ggui_amend) re-seed it (#480).`,
       ),
     );
   }
