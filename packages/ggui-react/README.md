@@ -48,21 +48,19 @@ non-trivial (it implements the MCP Apps host contract). The complete,
 runnable reference — including auth — is the
 [`ggui-basic-web`](../../samples/apps/ggui-basic-web) sample. **Start there.**
 
-The package also exports hooks (`useWebSocket`, `useInvoke`). It pairs
-with `<AppRenderer>` from `@mcp-ui/client` for hosting an MCP Apps
-render in a sandboxed iframe — install that package directly; ggui
-does not re-export it. (React Native's equivalent host is
-`<McpAppIframe>` from `@ggui-ai/react-native`.)
+The package also exports the `useInvoke` hook for driving the invoke
+conversation loop directly. It pairs with `<AppRenderer>` from
+`@mcp-ui/client` for hosting an MCP Apps render in a sandboxed iframe
+— install that package directly; ggui does not re-export it. (React
+Native's equivalent host is `<McpAppIframe>` from
+`@ggui-ai/react-native`.)
 
 ## Entry points
 
-| Import path                               | Contents                                      |
-| ----------------------------------------- | --------------------------------------------- |
-| `@ggui-ai/react`                          | Components and hooks                          |
-| `@ggui-ai/react/chat-helpers`             | Message-grouping and render helpers           |
-| `@ggui-ai/react/chat-thread`              | Thread-backed chat (`useChatThread`)          |
-| `@ggui-ai/react/chat-thread/shells/chat`  | Thread-backed reference chat UI (`ChatShell`) |
-| `@ggui-ai/react/chat-thread/shells/agent` | AgentShell types (component not yet shipped)  |
+| Import path                   | Contents                            |
+| ----------------------------- | ----------------------------------- |
+| `@ggui-ai/react`              | Components and hooks                |
+| `@ggui-ai/react/chat-helpers` | Message-grouping and render helpers |
 
 ## License
 

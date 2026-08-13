@@ -2,46 +2,29 @@
  * @ggui-ai/react - React SDK for ggui
  *
  * Provides React components, hooks, and utilities for embedding ggui agent
- * interfaces in web applications. Includes WebSocket session management and
- * dynamic component rendering in the React tree with wire hook support.
+ * interfaces in web applications: the invoke conversation loop, MCP Apps
+ * tool-result helpers, and dynamic component rendering in the React tree
+ * with wire hook support.
  *
  * @packageDocumentation
  */
 
-// Re-export transport types from the transport subpath
-export type {
-  ConnectionStatus,
-  WebSocketMessage,
-  WebSocketMessageType,
-} from '@ggui-ai/protocol/transport/websocket';
-
 // Re-export types from protocol
 export type {
-  ActionEnvelope,
-  EventType,
   // Post-Phase-B render shape — replaces the deleted Session/StackItem
   // pair with a single GguiSession union (ComponentGguiSession, SystemGguiSession,
   // McpAppsGguiSession) keyed by the flat `sessionId`.
   GguiSession,
   ComponentGguiSession,
   SystemGguiSession,
-  GguiSessionStatus,
   AdapterPermissions,
   PermissionStatus,
-  SubscribePayload,
-  AckPayload,
   StreamEnvelope,
-  ErrorPayload,
-  RenderPayload,
-  PropsUpdatePayload,
-  GenerationStrategy,
-  ShellType,
   AppDisplayConfig,
   InterfaceContext,
-  DeviceCategory,
   EndUserIdentity,
 } from '@ggui-ai/protocol';
-export { BRIDGE_EVENTS, detectInterfaceContext, getDeviceCategory } from '@ggui-ai/protocol';
+export { detectInterfaceContext } from '@ggui-ai/protocol';
 
 // Invoke protocol message block types — re-exported at root so facade
 // consumers can pull them from the same import path as useInvoke.
@@ -85,30 +68,9 @@ export type {
   UnknownObservabilityEvent,
 } from '@ggui-ai/iframe-runtime';
 
-// Re-export types from internal
-export type {
-  // Self-repair types (error boundary, component repair)
-  ComponentErrorReport,
-  ComponentRepairResult,
-  SelfRepairConfig,
-  // Agent listing types
-  AgentListingItem,
-  AgentListingVisibility,
-  AgentListingStatus,
-} from '@ggui-ai/shared';
-
 // Provider
-export { GguiProvider, useGguiContext, useAdapter } from './components/GguiProvider';
+export { GguiProvider } from './components/GguiProvider';
 export type { GguiProviderProps } from './components/GguiProvider';
-export type { AdapterRegistry } from './context/GguiContext';
-
-// Theme Provider — root-surface parity with RN SDK
-export { ThemeProvider } from './components/ThemeProvider';
-export type { ThemeProviderProps } from './components/ThemeProvider';
-
-// GguiSession
-export { GguiRender } from './components/GguiRender';
-export type { GguiRenderProps, GguiSessionApi, GguiSessionInfo } from './components/GguiRender';
 
 // Dynamic Component Rendering
 export {
@@ -150,17 +112,10 @@ export type {
 // ggui's own helper for the AppRenderer toolResult envelope is
 // `buildAppRendererToolResult` (exported below).
 
-// Provisional A2UI preview renderer (consumes `_ggui:preview` channel)
+// Provisional preview placeholder shown while a render's componentCode
+// is still being generated.
 export { ProvisionalRenderer } from './components/ProvisionalRenderer';
 export type { ProvisionalRendererProps } from './components/ProvisionalRenderer';
-
-// Self-Repair
-export { SelfRepairBoundary } from './components/SelfRepairBoundary';
-export type { SelfRepairBoundaryProps } from './components/SelfRepairBoundary';
-
-// Agent Browse Panel
-export { AgentBrowsePanel } from './components/AgentBrowsePanel';
-export type { AgentBrowsePanelProps } from './components/AgentBrowsePanel';
 
 // UI Feedback affordance — host-side render-shell chrome. Hidden
 // entirely unless the host wires `onUiFeedback`; the payload leaves
@@ -176,8 +131,6 @@ export type {
 } from './components/UiFeedback';
 
 // Hooks
-export { useWebSocket } from './hooks/useWebSocket';
-export type { UseWebSocketOptions, UseWebSocketReturn } from './hooks/useWebSocket';
 export { useInvoke, parseSseStream } from './invoke/index';
 export type { UseInvokeOptions, UseInvokeReturn, ConversationMessage, InvokeError } from './invoke/index';
 export {
@@ -186,10 +139,3 @@ export {
   extractUiMoments,
 } from './invoke/index';
 export type { UiMoment, ExtractUiMomentsOptions } from './invoke/index';
-
-// WebSocket
-export { WebSocketManager } from './websocket/WebSocketManager';
-export type { WebSocketManagerOptions } from './websocket/WebSocketManager';
-export { EventBuffer } from './websocket/EventBuffer';
-export type { EventBufferOptions } from './websocket/EventBuffer';
-

@@ -7,11 +7,10 @@
  *
  * Post-Phase-B: the old `StackItemRenderer` (which scoped a wire
  * provider per stack item via `LegacyScopableWireConfig.scope()`) is
- * retired. Renders mount one-at-a-time inside `<GguiRender>`; the
- * scoping factory it composed against is gone. The replacement
- * `<GguiSessionRenderer>` is a leaf — it consumes the ambient wire context
- * established by `<GguiRender>` directly. The provisional path (empty
- * `componentCode`, A2UI preview channel) is preserved unchanged.
+ * retired. The replacement `<GguiSessionRenderer>` is a leaf — it
+ * consumes the ambient wire context when a host provides one, or falls
+ * back to a standalone no-op WireConfig. The provisional path (empty
+ * `componentCode` → static placeholder) is preserved.
  */
 
 import React, { type ReactNode } from 'react';
@@ -109,12 +108,9 @@ export function GguiSessionRenderer({
   feedbackToolName,
 }: GguiSessionRendererProps): React.JSX.Element {
   // Empty componentCode → the render is still being generated.
-  // Route through `<ProvisionalRenderer>` so the reserved
-  // `_ggui:preview` channel's A2UI envelopes (when the server preamble
-  // emits them) paint the assembling surface in place of the raw
-  // loading fallback. Without an active preamble, the renderer itself
-  // falls back to the caller's `fallback` prop — so current consumers
-  // keep today's "Spinner while empty" UX with no behavioural change.
+  // Route through `<ProvisionalRenderer>`, which paints the caller's
+  // `fallback` prop (or a centred Spinner) until the authoritative
+  // component code lands.
   if (!render.componentCode || render.componentCode.length === 0) {
     return (
       <EnsureWireContext>
@@ -151,18 +147,14 @@ export function GguiSessionRenderer({
 /**
  * Ensure a WireConfig is present in context.
  *
- * If a parent `<GguiRender>` already provided one (the production
- * path), pass through. Otherwise — preview / standalone mounts e.g.
- * BlueprintViewer at `/preview/<id>` — inject a no-op WireConfig so
- * generated components calling `useAction` / `useStream` don't throw.
+ * If a parent host already provided one, pass through. Otherwise —
+ * preview / standalone mounts e.g. BlueprintViewer at `/preview/<id>`
+ * — inject a no-op WireConfig so generated components calling
+ * `useAction` / `useStream` don't throw.
  *
  * Standalone semantics: dispatch is a no-op, subscribe never fires.
  * Matches the documented "static preview renders without a live
  * channel" contract authored components depend on.
- *
- * Post-Phase-B: there is no per-render scoping factory. `<GguiRender>`
- * provides one WireConfig keyed by the single mounted sessionId; this
- * leaf either consumes that or provides the standalone fallback.
  */
 function EnsureWireContext({
   children,

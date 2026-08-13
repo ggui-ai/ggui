@@ -4,9 +4,6 @@ export default defineConfig({
   entry: [
     'src/index.ts',
     'src/chat-helpers/index.ts',
-    'src/chat-thread/index.ts',
-    'src/chat-thread/shells/chat/index.ts',
-    'src/chat-thread/shells/agent/index.ts',
   ],
   format: ['cjs', 'esm'],
   dts: true,

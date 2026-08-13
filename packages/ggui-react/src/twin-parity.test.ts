@@ -2,8 +2,8 @@
  * react ↔ react-native twin parity gate.
  *
  * `@ggui-ai/react` and `@ggui-ai/react-native` deliberately carry
- * byte-identical copies of the platform-neutral chat-thread /
- * chat-helpers core (and of this very test). Duplicated
+ * byte-identical copies of the platform-neutral chat-helpers core
+ * (and of this very test). Duplicated
  * platform-neutral React code is the leading indicator of silent
  * behavioral drift between the two published SDKs — this gate makes
  * any one-sided edit fail fast in BOTH packages' suites.
@@ -30,15 +30,7 @@
  *     so undocumented drift in the public shape still fails fast.
  *   - header-only twins NOT listed in any manifest (e.g.
  *     `invoke/sse-parse.ts`) — they document their delta in a
- *     file-top header per the original convention. (The former
- *     example, `components/GguiRender.tsx`, is web-only since the RN
- *     legacy render family was deleted — ggui#425.)
- *
- * `CODE_IDENTICAL_MIRRORS` extends the same gate beyond the SDK pair:
- * documented structural copies (e.g. the reserved-validators A2UI
- * adapter, mirrored into `@ggui-ai/mcp-server`) whose docstrings
- * legitimately differ per package but whose EXECUTABLE CODE must stay
- * identical — compared comment-stripped.
+ *     file-top header per the original convention.
  */
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
@@ -62,14 +54,10 @@ const BYTE_IDENTICAL_TWINS: readonly string[] = [
   'chat-helpers/message-groups.ts',
   'chat-helpers/render.ts',
   'chat-helpers/useRafThrottled.ts',
-  'chat-thread/ChatThreadProvider.tsx',
-  'chat-thread/adapters/types.ts',
-  'chat-thread/index.ts',
-  'chat-thread/outbox.ts',
-  'chat-thread/shells/agent/index.ts',
-  'chat-thread/shells/chat/index.ts',
-  'chat-thread/useChatThread.ts',
-  'chat-thread/useNetworkState.ts',
+  // The chat-thread/* twin entries were pruned when the ggui-react
+  // copy of the chat-thread family was deleted (owner-ruled
+  // SDK-for-others surface with zero internal consumers). The
+  // ggui-react-native copy survives one-sided; it is no longer a twin.
   'twin-parity.test.ts',
 ];
 
@@ -109,26 +97,13 @@ const DELTA_HEADER_RE = /platform delta/i;
 /** How much of the file head is searched for the delta header. */
 const DELTA_HEADER_WINDOW = 2000;
 
-/**
- * Documented structural copies whose executable code must stay
- * identical while package-perspective docstrings may differ.
- * Compared after stripping comments + blank lines. Paths are relative
- * to the shared `oss/packages/` root.
- */
-const CODE_IDENTICAL_MIRRORS: ReadonlyArray<{
-  readonly label: string;
-  readonly files: readonly string[];
-}> = [
-  {
-    // The ggui-react-native copy was deleted with the RN legacy render
-    // family (ggui#425) — only the legacy WS path consumed it there.
-    label: 'reserved-validators A2UI adapter (react / mcp-server)',
-    files: [
-      'ggui-react/src/internal/reserved-validators.ts',
-      'mcp-server/src/reserved-validators.ts',
-    ],
-  },
-];
+// The former CODE_IDENTICAL_MIRRORS gate (comment-stripped code parity
+// beyond the SDK pair) was retired when its last entry — the
+// reserved-validators A2UI adapter — collapsed to a single copy:
+// the ggui-react copy was deleted with the legacy `GguiRender` WS
+// render family, leaving `mcp-server/src/reserved-validators.ts` as
+// the sole owner. Reinstate the mechanism if a new structural mirror
+// family appears.
 
 /**
  * Extract the set of exported binding names from a TS/TSX source.
@@ -154,78 +129,6 @@ function extractExportedNames(source: string): ReadonlySet<string> {
   }
   if (/^export\s+default\b/m.test(source)) names.add('default');
   return names;
-}
-
-/**
- * Strip line and block comments (string-literal aware) plus blank
- * lines and trailing whitespace, so mirror comparison sees executable
- * code only. NOT a general TS lexer (no regex-literal handling) —
- * sufficient for the mirror files, which contain none.
- */
-function stripCommentsAndBlankLines(source: string): string {
-  let out = '';
-  let i = 0;
-  let mode: 'code' | 'line' | 'block' | 'single' | 'double' | 'template' =
-    'code';
-  while (i < source.length) {
-    const ch = source[i] as string;
-    const next = source[i + 1];
-    if (mode === 'code') {
-      if (ch === '/' && next === '/') {
-        mode = 'line';
-        i += 2;
-        continue;
-      }
-      if (ch === '/' && next === '*') {
-        mode = 'block';
-        i += 2;
-        continue;
-      }
-      if (ch === "'") mode = 'single';
-      else if (ch === '"') mode = 'double';
-      else if (ch === '`') mode = 'template';
-      out += ch;
-      i += 1;
-      continue;
-    }
-    if (mode === 'line') {
-      if (ch === '\n') {
-        mode = 'code';
-        out += ch;
-      }
-      i += 1;
-      continue;
-    }
-    if (mode === 'block') {
-      if (ch === '*' && next === '/') {
-        mode = 'code';
-        i += 2;
-      } else {
-        i += 1;
-      }
-      continue;
-    }
-    // String modes.
-    if (ch === '\\') {
-      out += ch + (next ?? '');
-      i += 2;
-      continue;
-    }
-    if (
-      (mode === 'single' && ch === "'") ||
-      (mode === 'double' && ch === '"') ||
-      (mode === 'template' && ch === '`')
-    ) {
-      mode = 'code';
-    }
-    out += ch;
-    i += 1;
-  }
-  return out
-    .split('\n')
-    .map((line) => line.trimEnd())
-    .filter((line) => line.trim().length > 0)
-    .join('\n');
 }
 
 describe('react ↔ react-native twin parity (byte-identical modules)', () => {
@@ -338,42 +241,6 @@ describe('react ↔ react-native twin parity (documented platform-delta twins)',
           '(both copies of twin-parity.test.ts, same slice) and record ' +
           'it in the RN file-top header.',
       ).toEqual(webCore);
-    },
-  );
-});
-
-describe('documented structural mirrors (comment-stripped code parity)', () => {
-  it.each(CODE_IDENTICAL_MIRRORS.map((m) => [m.label, m] as const))(
-    '%s — executable code is identical across all copies',
-    (label, mirror) => {
-      const present = mirror.files.filter((rel) =>
-        existsSync(path.join(packagesRoot, rel)),
-      );
-      if (present.length === 0) {
-        // Whole mirror family deleted in tandem — prune the entry.
-        return;
-      }
-      expect(
-        present.length === mirror.files.length,
-        `mirror drift (${label}): only ${present.length}/${mirror.files.length} ` +
-          `copies exist (${present.join(', ')}). Delete or add all copies ` +
-          'in the same slice.',
-      ).toBe(true);
-
-      const stripped = mirror.files.map((rel) =>
-        stripCommentsAndBlankLines(
-          readFileSync(path.join(packagesRoot, rel), 'utf8'),
-        ),
-      );
-      for (let i = 1; i < stripped.length; i += 1) {
-        expect(
-          stripped[i] === stripped[0],
-          `mirror drift (${label}): comment-stripped code of ` +
-            `${mirror.files[i]} differs from ${mirror.files[0]}. ` +
-            'These are documented structural copies — apply code changes ' +
-            'to every copy in the same slice (docstrings may differ).',
-        ).toBe(true);
-      }
     },
   );
 });

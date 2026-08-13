@@ -8,7 +8,6 @@
     "mcp",
     "ai-agent",
     "generative-ui",
-    "websocket",
     "sdk"
   ],
   "license": "Apache-2.0",
@@ -38,21 +37,6 @@
       "types": "./dist/chat-helpers/index.d.ts",
       "import": "./dist/chat-helpers/index.mjs",
       "require": "./dist/chat-helpers/index.js"
-    },
-    "./chat-thread": {
-      "types": "./dist/chat-thread/index.d.ts",
-      "import": "./dist/chat-thread/index.mjs",
-      "require": "./dist/chat-thread/index.js"
-    },
-    "./chat-thread/shells/chat": {
-      "types": "./dist/chat-thread/shells/chat/index.d.ts",
-      "import": "./dist/chat-thread/shells/chat/index.mjs",
-      "require": "./dist/chat-thread/shells/chat/index.js"
-    },
-    "./chat-thread/shells/agent": {
-      "types": "./dist/chat-thread/shells/agent/index.d.ts",
-      "import": "./dist/chat-thread/shells/agent/index.mjs",
-      "require": "./dist/chat-thread/shells/agent/index.js"
     }
   },
   "scripts": {
@@ -68,10 +52,8 @@
     "react-dom": "^18.0.0 || ^19.0.0"
   },
   "dependencies": {
-    "@ggui-ai/preview-a2ui": "workspace:*",
     "@ggui-ai/protocol": "workspace:*",
     "@ggui-ai/iframe-runtime": "workspace:*",
-    "@ggui-ai/shared": "workspace:*",
     "@ggui-ai/wire": "workspace:*"
   },
   "devDependencies": {
