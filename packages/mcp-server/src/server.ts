@@ -193,6 +193,7 @@ import {
   createGguiConsumeHandler,
   createGguiDeclareToolCatalogHandler,
   createGguiEmitHandler,
+  createGguiGetRenderSourceHandler,
   createGguiGetSessionHandler,
   createGguiHandshakeHandler,
   createGguiListSessionsHandler,
@@ -1262,6 +1263,14 @@ export function defaultHandlers(deps: {
     // decay implicitly via TTL, so there is no terminal write to make.)
     handlers.push(
       createGguiGetSessionHandler({
+        renderStore: deps.render.renderStore,
+      }) as SharedHandler<ZodRawShape, ZodRawShape>
+    );
+    // ggui_get_render_source (#282 data-plane rider) — the calling
+    // app reads its OWN render's generated source. No heartbeat: a
+    // one-shot source read is not an activity signal.
+    handlers.push(
+      createGguiGetRenderSourceHandler({
         renderStore: deps.render.renderStore,
       }) as SharedHandler<ZodRawShape, ZodRawShape>
     );

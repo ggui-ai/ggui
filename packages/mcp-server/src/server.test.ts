@@ -2023,6 +2023,7 @@ describe('createGguiServer — ggui_handshake (Slice 5 preflight seam)', () => {
       const { tools } = await client.listTools();
       const names = new Set(tools.map((t) => t.name));
       expect(names).toContain('ggui_get_session');
+      expect(names).toContain('ggui_get_render_source');
       expect(names).toContain('ggui_list_sessions');
       expect(names).toContain('ggui_emit');
       // `ggui_close` was retired alongside the terminal `session.closed`
