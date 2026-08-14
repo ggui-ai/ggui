@@ -143,7 +143,7 @@ export function createGguiOpsUpdateBlueprintHandler(
     title: 'Update blueprint',
     audience: ['ops'],
     description:
-      'Patch the mutable surface of an existing blueprint: pin/unpin operator-default + merge variance tags. Immutable fields (contractHash, appId, codeS3Url, codeHash, source, createdAt, createdBy) are absent from the schema — to "replace" a row, delete + re-generate. Partial-merge semantics: supplied variance keys overwrite, omitted keys preserve. Empty-string persona is removal.',
+      'Patch the mutable surface of an existing blueprint: pin/unpin operator-default + merge variance tags. Immutable fields (contractHash, appId, codeS3Url, codeHash, source, createdAt, createdBy) are absent from the schema — to "replace" a row, delete + re-generate. Partial-merge semantics: supplied variance keys overwrite, omitted keys preserve. Empty-string persona is removal. App-scoped variant curation for an app you operate — distinct from the personal saved-blueprint library (the _my_ tools).',
     inputSchema: opsInputSchema,
     outputSchema: opsOutputSchema,
     async handler(

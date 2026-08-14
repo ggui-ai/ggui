@@ -119,6 +119,7 @@ import {
   createGguiOpsListBlueprintsHandler,
   createGguiOpsRegisterBlueprintHandler,
   createGguiOpsUpdateBlueprintHandler,
+  type OpsBlueprintAppAuthorizer,
 } from "@ggui-ai/mcp-server-handlers/ops-blueprint";
 import {
   setCacheTraceSink,
@@ -379,6 +380,14 @@ function buildOpsBlueprintDeps(input: {
      */
     readonly durability?: BlueprintDurabilityDeps;
   };
+  /**
+   * Authorization seam for cross-app curation. When omitted, the
+   * default server binds an allow-all authorizer — the
+   * single-operator trust model: whoever runs the server operates
+   * every app on it. Multi-user deployments MUST supply a real
+   * authorizer.
+   */
+  readonly authorizeAppAccess?: OpsBlueprintAppAuthorizer;
 }): {
   readonly opsBlueprint: {
     readonly registry: GeneratorRegistry;
@@ -395,6 +404,7 @@ function buildOpsBlueprintDeps(input: {
       readonly vectorStore: VectorStore;
       readonly index: BlueprintIndex;
     };
+    readonly authorizeAppAccess: OpsBlueprintAppAuthorizer;
   };
 } {
   const { blueprintStore } = input;
@@ -416,6 +426,7 @@ function buildOpsBlueprintDeps(input: {
       ...(input.resolveLlm ? { resolveLlm: input.resolveLlm } : {}),
       ...(input.blueprints ? { blueprints: input.blueprints } : {}),
       ...(input.cacheRegistry ? { cacheRegistry: input.cacheRegistry } : {}),
+      authorizeAppAccess: input.authorizeAppAccess ?? (async () => ({ allowed: true as const })),
     },
   };
 }
@@ -869,21 +880,23 @@ export function defaultHandlers(deps: {
   /**
    * Operator-class blueprint tool wiring. When
    * `generators` + `blueprintStore` + `blueprintSearch` are all
-   * bound, `defaultHandlers` registers the four `ggui_ops_*`
+   * bound, `defaultHandlers` registers the five `ggui_ops_*`
    * blueprint tools on the `/control` plane:
    *
    *   - `ggui_ops_generate_blueprint` (requires `resolveLlm` +
    *     `blueprints` too — same deps the render generation path
    *     reads).
+   *   - `ggui_ops_register_blueprint`
    *   - `ggui_ops_list_blueprints`
    *   - `ggui_ops_update_blueprint`
    *   - `ggui_ops_delete_blueprint`
    *
    * Absent = the ops tools are not registered (operator UX falls
    * back to whatever surface the cloud pod exposes, or the deployment
-   * runs without operator authorship). The list/update/delete trio
-   * registers even when `generate` deps are absent — read-only
-   * operations on an existing store can be useful for inspection.
+   * runs without operator authorship). The register/list/update/delete
+   * quartet registers even when `generate` deps are absent — read-only
+   * and non-LLM operations on an existing store can be useful for
+   * inspection and fixture seeding.
    */
   readonly opsBlueprint?: {
     readonly registry: GeneratorRegistry;
@@ -932,6 +945,14 @@ export function defaultHandlers(deps: {
       readonly vectorStore: VectorStore;
       readonly index: BlueprintIndex;
     };
+    /**
+     * Authorization seam for cross-app curation. When omitted, the
+     * default server binds an allow-all authorizer — the
+     * single-operator trust model: whoever runs the server operates
+     * every app on it. Multi-user deployments MUST supply a real
+     * authorizer.
+     */
+    readonly authorizeAppAccess?: OpsBlueprintAppAuthorizer;
   };
 }): ReadonlyArray<SharedHandler<ZodRawShape, ZodRawShape>> {
   // Single shared pending-events pipe (Model C, sessionId-keyed).
@@ -1411,12 +1432,12 @@ export function defaultHandlers(deps: {
       }) as SharedHandler<ZodRawShape, ZodRawShape>
     );
   }
-  // Operator-class blueprint tools. Registered
-  // on /ops via `audience: ['ops']`. Three read-mutating tools land
-  // whenever the blueprint store + search seam is bound; the
-  // `generate` tool additionally requires `resolveLlm` +
-  // `blueprints` (same deps the render generation path reads). Cloud
-  // pods wire all four through their own composition layer.
+  // Operator-class blueprint tools. Registered on the control plane
+  // via `audience: ['ops']`. Four of the five land whenever the
+  // blueprint store + search seam is bound; the `generate` tool
+  // additionally requires `resolveLlm` + `blueprints` (same deps the
+  // render generation path reads). Cloud pods wire all five through
+  // their own composition layer.
   if (deps.opsBlueprint) {
     if (deps.opsBlueprint.resolveLlm && deps.opsBlueprint.blueprints) {
       handlers.push(
@@ -1433,6 +1454,7 @@ export function defaultHandlers(deps: {
             ? { cacheRegistry: deps.opsBlueprint.cacheRegistry }
             : {}),
           ...(deps.telemetry ? { telemetry: deps.telemetry } : {}),
+          authorizeAppAccess: deps.opsBlueprint.authorizeAppAccess,
         }) as SharedHandler<ZodRawShape, ZodRawShape>
       );
     }
@@ -1452,22 +1474,26 @@ export function defaultHandlers(deps: {
           ? { cacheRegistry: deps.opsBlueprint.cacheRegistry }
           : {}),
         ...(deps.telemetry ? { telemetry: deps.telemetry } : {}),
+        authorizeAppAccess: deps.opsBlueprint.authorizeAppAccess,
       }) as SharedHandler<ZodRawShape, ZodRawShape>
     );
     handlers.push(
       createGguiOpsListBlueprintsHandler({
         blueprintStore: deps.opsBlueprint.blueprintStore,
         blueprintSearch: deps.opsBlueprint.blueprintSearch,
+        authorizeAppAccess: deps.opsBlueprint.authorizeAppAccess,
       }) as SharedHandler<ZodRawShape, ZodRawShape>
     );
     handlers.push(
       createGguiOpsUpdateBlueprintHandler({
         blueprintStore: deps.opsBlueprint.blueprintStore,
+        authorizeAppAccess: deps.opsBlueprint.authorizeAppAccess,
       }) as SharedHandler<ZodRawShape, ZodRawShape>
     );
     handlers.push(
       createGguiOpsDeleteBlueprintHandler({
         blueprintStore: deps.opsBlueprint.blueprintStore,
+        authorizeAppAccess: deps.opsBlueprint.authorizeAppAccess,
       }) as SharedHandler<ZodRawShape, ZodRawShape>
     );
   }
@@ -4314,19 +4340,20 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
       ...(opts.themes ? { themes: opts.themes } : {}),
       // Operator-class blueprint tool wiring. Threads the
       // resolved blueprint store + search + generator registry into
-      // defaultHandlers; the four `ggui_ops_*` tools land on /ops
-      // via their `audience: ['ops']` tag. The `resolveLlm` +
-      // `blueprints` deps come from the same source render reads, so
-      // generate dispatches through the same credential + catalog
-      // path as live agent traffic. listAllForApp wires only when
-      // the resolved store is the in-memory adapter (which exposes
-      // it); cloud adapters bind their own listAllForApp via the
-      // search seam.
+      // defaultHandlers; the five `ggui_ops_*` tools land on the
+      // control plane via their `audience: ['ops']` tag. The
+      // `resolveLlm` + `blueprints` deps come from the same source
+      // render reads, so generate dispatches through the same
+      // credential + catalog path as live agent traffic.
+      // listAllForApp wires only when the resolved store is the
+      // in-memory adapter (which exposes it); cloud adapters bind
+      // their own listAllForApp via the search seam.
       // Wire only when we have a resolved generator
       // registry. Without `generators`, the ops `generate` path has
-      // no dispatch target; the list/update/delete trio could
-      // technically run without it but the operator UX expects all
-      // four together, so we gate the whole block on the registry.
+      // no dispatch target; the register/list/update/delete quartet
+      // could technically run without it but the operator UX expects
+      // all five together, so we gate the whole block on the
+      // registry.
       ...(generators
         ? buildOpsBlueprintDeps({
             registry: generators,

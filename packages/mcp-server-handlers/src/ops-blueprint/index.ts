@@ -1,11 +1,15 @@
 /**
  * Operator-class blueprint handler family.
  *
- * Four MCP tools, all `audience: ['ops']`, all served on `/control`:
+ * Five MCP tools, all `audience: ['ops']`, all served on `/control`:
  *
  *   - `createGguiOpsGenerateBlueprintHandler` —
  *     `ggui_ops_generate_blueprint`. Author a new blueprint variant
  *     by dispatching through the registry's selected generator.
+ *   - `createGguiOpsRegisterBlueprintHandler` —
+ *     `ggui_ops_register_blueprint`. Register a pre-built blueprint
+ *     variant (operator-supplied componentCode bytes, no LLM
+ *     dispatch).
  *   - `createGguiOpsListBlueprintsHandler` —
  *     `ggui_ops_list_blueprints`. Enumerate metadata under filters
  *     (indexed list when only `contractHash` is set; semantic search
@@ -16,13 +20,11 @@
  *   - `createGguiOpsDeleteBlueprintHandler` —
  *     `ggui_ops_delete_blueprint`. Idempotent removal.
  *
- * **Deployment boundary (2026-08-13 ruling, ggui#496):** this family
- * mounts on the OSS default server only — self-hosted `ggui serve`
- * and the local dev console's variant routes are its wire consumers.
- * The hosted cloud pod does NOT mount it; the tools are absent from
- * mcp.ggui.ai until the pod grows the store/registry deps the port
- * needs (tracked separately). Docs describing these tools must not
- * imply hosted callability.
+ * **Deployment boundary (revised 2026-08-14, ggui#501):** this family
+ * mounts on any control plane whose deployment supplies the
+ * store/search/authorizer deps. Single-operator deployments bind an
+ * allow-all authorizer; multi-user deployments supply one that
+ * enforces their ownership model.
  */
 
 export {

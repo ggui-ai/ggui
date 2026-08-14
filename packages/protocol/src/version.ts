@@ -6,6 +6,46 @@
  * schema change; the most recent change anchors {@link PROTOCOL_VERSION}.
  *
  * --------------------------------------------------------------------
+ * ops-blueprint appId input + app-access seam (2026-08-14, additive,
+ * pre-launch, ggui#501). Cross-app curation seam for the operator-
+ * class blueprint family — the prerequisite for the family mounting
+ * beyond the OSS default server.
+ *
+ *   ob1. **Optional `appId` input** on all five `ggui_ops_*_blueprint`
+ *      tools (`generate`, `register`, `list`, `update`, `delete`).
+ *      Omitted ⇒ resolves to the caller's bound `ctx.appId` (unchanged
+ *      default behavior). Present ⇒ the tool curates the NAMED app
+ *      instead, subject to the authorizer below.
+ *
+ *   ob2. **`authorizeAppAccess` dep seam**
+ *      (`OpsBlueprintAppAuthorizer`, exported from
+ *      `@ggui-ai/mcp-server-handlers`'s ops-blueprint barrel):
+ *      consulted via `resolveEffectiveAppId` on every resolution,
+ *      bound or unbound `appId` input alike. Seam unbound ⇒ legacy
+ *      bound-only posture — a cross-app `appId` input (different from
+ *      `ctx.appId`) rejects with the new `cross_app_curation_unavailable`
+ *      named code, mirroring the `app_scoped_keys_unavailable` idiom
+ *      from the 2026-07-29 ops slice. Seam bound and denying ⇒
+ *      `app_curation_denied` with a `not_found` / `not_owner` reason.
+ *      `@ggui-ai/mcp-server`'s default server binds an allow-all
+ *      authorizer when the operator supplies none — the
+ *      single-operator trust model: whoever runs the server operates
+ *      every app on it.
+ *
+ *   ob3. **Hosted mount.** The deployment-boundary restriction that
+ *      pinned this family to the OSS default server only (2026-08-13
+ *      ruling, ggui#496) is retired: the family now mounts on any
+ *      control plane whose deployment supplies the
+ *      store/search/authorizer deps, cloud pods included.
+ *
+ * Conformance-kit verdict: ops tools are not conformance-kit surface —
+ * NO protocol stamp roll.
+ *
+ * Package version — classification MADE here: MINOR for
+ * `@ggui-ai/protocol`, `@ggui-ai/mcp-server-handlers`,
+ * `@ggui-ai/mcp-server` (additive), pre-1.0 and pre-launch.
+ * PROTOCOL_VERSION unchanged.
+ * --------------------------------------------------------------------
  * `ggui_get_render_source` data-plane tool (2026-08-14, additive,
  * pre-launch, ggui#282). New bare-wire-name MCP tool, `agent`
  * audience — the calling app reads the generated source of its OWN

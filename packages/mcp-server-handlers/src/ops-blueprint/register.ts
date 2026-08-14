@@ -154,7 +154,7 @@ export function createGguiOpsRegisterBlueprintHandler(
     title: "Register blueprint",
     audience: ["ops"],
     description:
-      "Register a pre-built blueprint variant (operator-supplied componentCode bytes, no LLM dispatch). Sibling of `ggui_ops_generate_blueprint` — same persistence + dual-write semantics, same variance + default-pin behavior. Use for fixture seeding, export/reimport round-trips, and manual recovery. Returns `{blueprintId, codeHash, source}` where `source` is always `{kind: 'user'}` — hand-supplied bytes carry no engine claim, so none is recorded.",
+      "Register a pre-built blueprint variant (operator-supplied componentCode bytes, no LLM dispatch). Sibling of `ggui_ops_generate_blueprint` — same persistence + dual-write semantics, same variance + default-pin behavior. Use for fixture seeding, export/reimport round-trips, and manual recovery. Returns `{blueprintId, codeHash, source}` where `source` is always `{kind: 'user'}` — hand-supplied bytes carry no engine claim, so none is recorded. App-scoped variant curation for an app you operate — distinct from the personal saved-blueprint library (the _my_ tools).",
     inputSchema: opsInputSchema,
     outputSchema: opsOutputSchema,
     async handler(

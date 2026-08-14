@@ -72,7 +72,7 @@ export function createGguiOpsDeleteBlueprintHandler(
     title: 'Delete blueprint',
     audience: ['ops'],
     description:
-      "Remove a blueprint row by id. Idempotent — a second delete for the same id returns `{deleted: true}` without throwing. Cross-tenant probes return the same shape (no existence leak across apps). Mirrors `BlueprintStore.delete`'s no-throw contract.",
+      "Remove a blueprint row by id. Idempotent — a second delete for the same id returns `{deleted: true}` without throwing. Cross-tenant probes return the same shape (no existence leak across apps). Mirrors `BlueprintStore.delete`'s no-throw contract. App-scoped variant curation for an app you operate — distinct from the personal saved-blueprint library (the _my_ tools).",
     inputSchema: opsInputSchema,
     outputSchema: opsOutputSchema,
     async handler(
