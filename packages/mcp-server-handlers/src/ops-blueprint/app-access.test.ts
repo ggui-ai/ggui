@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { HandlerContext } from "../types.js";
 import {
-  AppAccessDeniedError,
+  AppCurationDeniedError,
   CrossAppCurationUnavailableError,
   resolveEffectiveAppId,
   type OpsBlueprintAppAuthorizer,
@@ -68,8 +68,8 @@ describe("resolveEffectiveAppId", () => {
       ctx: ctx(""),
       authorize: notOwner,
     }).catch((e: unknown) => e);
-    expect(err1).toBeInstanceOf(AppAccessDeniedError);
-    expect(err2).toBeInstanceOf(AppAccessDeniedError);
+    expect(err1).toBeInstanceOf(AppCurationDeniedError);
+    expect(err2).toBeInstanceOf(AppCurationDeniedError);
     expect((err1 as Error).message).not.toBe((err2 as Error).message);
   });
 

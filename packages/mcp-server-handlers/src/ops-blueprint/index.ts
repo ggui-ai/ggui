@@ -61,7 +61,7 @@ export {
 export {
   resolveEffectiveAppId,
   CrossAppCurationUnavailableError,
-  AppAccessDeniedError,
+  AppCurationDeniedError,
   type OpsBlueprintAppAccess,
   type OpsBlueprintAppAuthorizer,
 } from './app-access.js';

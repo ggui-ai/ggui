@@ -18,8 +18,8 @@ export class CrossAppCurationUnavailableError extends Error {
   }
 }
 
-export class AppAccessDeniedError extends Error {
-  readonly code = "app_access_denied" as const;
+export class AppCurationDeniedError extends Error {
+  readonly code = "app_curation_denied" as const;
   constructor(
     toolName: string,
     appId: string,
@@ -30,7 +30,7 @@ export class AppAccessDeniedError extends Error {
         ? `${toolName}: app ${JSON.stringify(appId)} not found.`
         : `${toolName}: app ${JSON.stringify(appId)} is not curatable by this caller — variant curation is limited to the app's operator.`
     );
-    this.name = "AppAccessDeniedError";
+    this.name = "AppCurationDeniedError";
   }
 }
 
@@ -61,7 +61,7 @@ export async function resolveEffectiveAppId(args: ResolveEffectiveAppIdArgs): Pr
   }
   if (authorize !== undefined) {
     const access = await authorize(ctx, effective);
-    if (!access.allowed) throw new AppAccessDeniedError(toolName, effective, access.reason);
+    if (!access.allowed) throw new AppCurationDeniedError(toolName, effective, access.reason);
     return effective;
   }
   if (inputAppId !== undefined && inputAppId !== ctx.appId) {

@@ -45,15 +45,6 @@ export * from "./app-discovery/index.js";
 // served on the `/control` plane. Available under
 // `@ggui-ai/mcp-server-handlers/ops-blueprint` subpath too.
 export * from "./ops-blueprint/index.js";
-// `AppAccessDeniedError` is declared independently by both app-discovery
-// and ops-blueprint (distinct shapes — ops-blueprint's carries
-// `.reason: 'not_found' | 'not_owner'`), which the two wildcards above
-// alone leave ambiguous at this root barrel. This explicit re-export
-// shadows the ambiguity in app-discovery's favor (the incumbent
-// root-level export, predating ops-blueprint's); ops-blueprint's
-// version stays reachable via its own subpath
-// (`@ggui-ai/mcp-server-handlers/ops-blueprint`) or `./app-access.js`.
-export { AppAccessDeniedError } from "./app-discovery/index.js";
 // Operator-class apps, orgs, connector-keys, and coupon handler
 // families — `ggui_ops_*` tools backing the console's management
 // surfaces, each pure over a deps seam. Subpaths:
