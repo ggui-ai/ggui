@@ -17,7 +17,8 @@
  *      early-detection signal, not a gate.
  *   3. Compute `contractHash` via the canonical RFC 8785 (JCS)
  *      helper `blueprintKey(contract)`.
- *   4. Resolve LLM credentials via `deps.resolveLlm(ctx)`. Throw
+ *   4. Resolve LLM credentials via `deps.resolveLlm({...ctx, appId})`
+ *      — `ctx` widened with the resolved effective appId. Throw
  *      {@link MissingCredentialsError} when `null`.
  *   5. Dispatch through `generator.generate({...})`.
  *   6. On `result.ok === true`, persist via `BlueprintStore.put({...})`
@@ -75,6 +76,7 @@ import {
   type GenerationCredentials,
 } from "../renders/index.js";
 import type { HandlerContext, SharedHandler } from "../types.js";
+import { resolveEffectiveAppId, type OpsBlueprintAppAuthorizer } from "./app-access.js";
 import {
   GenerationFailedError,
   GeneratorNotFoundError,
@@ -124,10 +126,10 @@ export interface GguiOpsGenerateBlueprintDeps {
   readonly blueprintStore: BlueprintStore;
   /**
    * Per-app blueprint enumerator — used for the persona near-dup
-   * check. Reads every blueprint under `ctx.appId` to gather the
-   * existing persona tag set. Optional — when omitted, the
-   * near-dup check is skipped (cloud adapters that bind their own
-   * AppListableBlueprintStore via the search seam supply this
+   * check. Reads every blueprint under the resolved `appId` to
+   * gather the existing persona tag set. Optional — when omitted,
+   * the near-dup check is skipped (cloud adapters that bind their
+   * own AppListableBlueprintStore via the search seam supply this
    * explicitly).
    */
   readonly listAllForApp?: (appId: string) => Promise<readonly Blueprint[]>;
@@ -201,6 +203,15 @@ export interface GguiOpsGenerateBlueprintDeps {
    * Tests override to produce stable blueprint ids.
    */
   readonly mintBlueprintId?: () => string;
+  /**
+   * Optional app-access authorizer — when bound, consulted on EVERY
+   * resolution (see {@link resolveEffectiveAppId}) to decide whether
+   * the caller may curate the effective `appId`, including cross-app
+   * calls that supply an explicit `appId` input different from
+   * `ctx.appId`. Unbound: legacy bound-only posture, cross-app input
+   * fails closed with `CrossAppCurationUnavailableError`.
+   */
+  readonly authorizeAppAccess?: OpsBlueprintAppAuthorizer;
 }
 
 /**
@@ -254,10 +265,14 @@ export function createGguiOpsGenerateBlueprintHandler(
       rawInput: Record<string, unknown>,
       ctx: HandlerContext
     ): Promise<OpsGenerateBlueprintOutput> {
-      if (!ctx.appId) {
-        throw new Error("ggui_ops_generate_blueprint: missing caller identity (appId empty)");
-      }
       const parsed: OpsGenerateBlueprintInput = opsGenerateBlueprintInputSchema.parse(rawInput);
+
+      const appId = await resolveEffectiveAppId({
+        toolName: "ggui_ops_generate_blueprint",
+        inputAppId: parsed.appId,
+        ctx,
+        ...(deps.authorizeAppAccess ? { authorize: deps.authorizeAppAccess } : {}),
+      });
 
       // Reject retired top-level contract fields BEFORE any
       // persistence so an operator-supplied row can't smuggle
@@ -281,7 +296,7 @@ export function createGguiOpsGenerateBlueprintHandler(
       // instead of just the STDLIB seed.
       let resolvedAppLibraries: readonly GadgetDescriptor[] | undefined;
       if (deps.appMetadataStore) {
-        const appRecord = await deps.appMetadataStore.get(ctx.appId);
+        const appRecord = await deps.appMetadataStore.get(appId);
         assertGadgetsRegistered(parsed.contract, appRecord?.gadgets);
         resolvedAppLibraries = appRecord?.gadgets;
       }
@@ -293,7 +308,7 @@ export function createGguiOpsGenerateBlueprintHandler(
       const normalizedPersona = normalizePersona(parsed.persona);
       if (normalizedPersona !== undefined && deps.listAllForApp) {
         try {
-          const allForApp = await deps.listAllForApp(ctx.appId);
+          const allForApp = await deps.listAllForApp(appId);
           const existingPersonas = new Set<string>();
           for (const row of allForApp) {
             if (row.variance.persona) existingPersonas.add(row.variance.persona);
@@ -307,7 +322,7 @@ export function createGguiOpsGenerateBlueprintHandler(
                 name: "blueprint.near_duplicate_persona",
                 at: Date.now(),
                 attributes: {
-                  appId: ctx.appId,
+                  appId,
                   requestId: ctx.requestId,
                   newPersona: check.newPersona,
                   nearestExisting: check.nearestExisting ?? "",
@@ -330,7 +345,7 @@ export function createGguiOpsGenerateBlueprintHandler(
       const contractHash = blueprintKey(contract);
 
       // 4. Resolve LLM credentials.
-      const creds = await deps.resolveLlm(ctx);
+      const creds = await deps.resolveLlm({ ...ctx, appId });
       if (creds === null) {
         throw new MissingCredentialsError();
       }
@@ -387,7 +402,7 @@ export function createGguiOpsGenerateBlueprintHandler(
       const blueprint: Blueprint = {
         blueprintId,
         contractHash,
-        appId: ctx.appId,
+        appId,
         codeHash,
         source,
         variance: {
@@ -419,7 +434,7 @@ export function createGguiOpsGenerateBlueprintHandler(
             parsed.seedPrompt ??
             normalizedPersona ??
             `operator-authored blueprint (${blueprintId})`;
-          await registerBlueprint(deps.cacheRegistry, ctx.appId, {
+          await registerBlueprint(deps.cacheRegistry, appId, {
             kind: "template",
             contract,
             intent: intentForCache,
@@ -438,7 +453,7 @@ export function createGguiOpsGenerateBlueprintHandler(
               name: "blueprint.cache_mirror_failed",
               at: Date.now(),
               attributes: {
-                appId: ctx.appId,
+                appId,
                 requestId: ctx.requestId,
                 blueprintId,
                 contractHash,
@@ -462,7 +477,7 @@ export function createGguiOpsGenerateBlueprintHandler(
           name: "blueprint.generated",
           at: Date.now(),
           attributes: {
-            appId: ctx.appId,
+            appId,
             requestId: ctx.requestId,
             blueprintId,
             contractHash,

@@ -7,7 +7,7 @@ import {
 import type { DataContract } from "@ggui-ai/protocol";
 import { blueprintKey } from "@ggui-ai/protocol/blueprint-key";
 import { createHash } from "node:crypto";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { findBlueprintExact } from "../renders/blueprint-registry.js";
 import type { HandlerContext } from "../types.js";
 import { createGguiOpsRegisterBlueprintHandler } from "./register.js";
@@ -236,5 +236,70 @@ describe("createGguiOpsRegisterBlueprintHandler", () => {
     expect(String(mirrorFailed!.attributes?.errorMessage ?? "")).toContain(
       "synthetic cache-mirror failure"
     );
+  });
+});
+
+describe("createGguiOpsRegisterBlueprintHandler — appId input + authorizer", () => {
+  it("explicit appId equal to ctx.appId resolves (seam unbound)", async () => {
+    const blueprintStore = new InMemoryBlueprintStore();
+    const handler = createGguiOpsRegisterBlueprintHandler({ blueprintStore });
+    const result = await handler.handler(
+      { contract: SAMPLE_CONTRACT, componentCode: SAMPLE_CODE, appId: "app-1" },
+      makeCtx("app-1")
+    );
+    expect(typeof result.blueprintId).toBe("string");
+  });
+
+  it("explicit differing appId with NO authorizer fails closed with cross_app_curation_unavailable", async () => {
+    const blueprintStore = new InMemoryBlueprintStore();
+    const handler = createGguiOpsRegisterBlueprintHandler({ blueprintStore });
+    await expect(
+      handler.handler(
+        { contract: SAMPLE_CONTRACT, componentCode: SAMPLE_CODE, appId: "other-app" },
+        makeCtx("app-1")
+      )
+    ).rejects.toThrow(/cross_app_curation_unavailable/);
+  });
+
+  it("bound authorizer is consulted even when the input is omitted", async () => {
+    const blueprintStore = new InMemoryBlueprintStore();
+    const authorizeAppAccess = vi.fn(async () => ({ allowed: true as const }));
+    const handler = createGguiOpsRegisterBlueprintHandler({
+      blueprintStore,
+      authorizeAppAccess,
+    });
+    await handler.handler(
+      { contract: SAMPLE_CONTRACT, componentCode: SAMPLE_CODE },
+      makeCtx("app-1")
+    );
+    expect(authorizeAppAccess).toHaveBeenCalledTimes(1);
+  });
+
+  it("authorizer-approved cross-app call persists the row's appId as the EXPLICIT one", async () => {
+    const blueprintStore = new InMemoryBlueprintStore();
+    const handler = createGguiOpsRegisterBlueprintHandler({
+      blueprintStore,
+      authorizeAppAccess: async () => ({ allowed: true as const }),
+    });
+    const result = await handler.handler(
+      { contract: SAMPLE_CONTRACT, componentCode: SAMPLE_CODE, appId: "other-app" },
+      makeCtx("app-1")
+    );
+    const persisted = await blueprintStore.get(result.blueprintId);
+    expect(persisted?.appId).toBe("other-app");
+  });
+
+  it("authorizer not_owner denial surfaces the denial error", async () => {
+    const blueprintStore = new InMemoryBlueprintStore();
+    const handler = createGguiOpsRegisterBlueprintHandler({
+      blueprintStore,
+      authorizeAppAccess: async () => ({ allowed: false as const, reason: "not_owner" as const }),
+    });
+    await expect(
+      handler.handler(
+        { contract: SAMPLE_CONTRACT, componentCode: SAMPLE_CODE, appId: "other-app" },
+        makeCtx("app-1")
+      )
+    ).rejects.toThrow(/not curatable/);
   });
 });

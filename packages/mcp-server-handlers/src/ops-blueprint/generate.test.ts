@@ -11,7 +11,7 @@ import {
 } from "@ggui-ai/mcp-server-core/in-memory";
 import type { Blueprint, DataContract, UIGenerationResponse } from "@ggui-ai/protocol";
 import { blueprintKey } from "@ggui-ai/protocol/blueprint-key";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { GenerationCredentials } from "../renders/index.js";
 import type { HandlerContext } from "../types.js";
 import {
@@ -430,5 +430,74 @@ describe("createGguiOpsGenerateBlueprintHandler — persona near-dup", () => {
     );
     const nearDup = emissions.find((e) => e.name === "blueprint.near_duplicate_persona");
     expect(nearDup).toBeUndefined();
+  });
+});
+
+describe("createGguiOpsGenerateBlueprintHandler — appId input + authorizer", () => {
+  it("explicit appId equal to ctx.appId resolves (seam unbound)", async () => {
+    const deps = defaultDeps();
+    const handler = createGguiOpsGenerateBlueprintHandler(deps);
+    const result = await handler.handler(
+      { contract: emptyContract(), appId: "app-1" },
+      makeCtx("app-1")
+    );
+    expect(result.blueprintId).toBe("bp_test_1");
+  });
+
+  it("explicit differing appId with NO authorizer fails closed with cross_app_curation_unavailable", async () => {
+    const deps = defaultDeps();
+    const handler = createGguiOpsGenerateBlueprintHandler(deps);
+    await expect(
+      handler.handler({ contract: emptyContract(), appId: "other-app" }, makeCtx("app-1"))
+    ).rejects.toThrow(/cross_app_curation_unavailable/);
+  });
+
+  it("bound authorizer is consulted even when the input is omitted", async () => {
+    const authorizeAppAccess = vi.fn(async () => ({ allowed: true as const }));
+    const handler = createGguiOpsGenerateBlueprintHandler({
+      ...defaultDeps(),
+      authorizeAppAccess,
+    });
+    await handler.handler({ contract: emptyContract() }, makeCtx("app-1"));
+    expect(authorizeAppAccess).toHaveBeenCalledTimes(1);
+  });
+
+  it("authorizer-approved cross-app call persists the row under the EXPLICIT appId", async () => {
+    const deps = defaultDeps();
+    const handler = createGguiOpsGenerateBlueprintHandler({
+      ...deps,
+      authorizeAppAccess: async () => ({ allowed: true as const }),
+    });
+    const result = await handler.handler(
+      { contract: emptyContract(), appId: "other-app" },
+      makeCtx("app-1")
+    );
+    const persisted = await deps.blueprintStore.get(result.blueprintId);
+    expect(persisted?.appId).toBe("other-app");
+  });
+
+  it("authorizer not_owner denial surfaces the denial error", async () => {
+    const handler = createGguiOpsGenerateBlueprintHandler({
+      ...defaultDeps(),
+      authorizeAppAccess: async () => ({ allowed: false as const, reason: "not_owner" as const }),
+    });
+    await expect(
+      handler.handler({ contract: emptyContract(), appId: "other-app" }, makeCtx("app-1"))
+    ).rejects.toThrow(/not curatable/);
+  });
+
+  it("resolveLlm receives the effective appId, not ctx.appId", async () => {
+    let seen: string | undefined;
+    const resolveLlm = vi.fn((c: HandlerContext) => {
+      seen = c.appId;
+      return fakeCredentials;
+    });
+    const deps = defaultDeps({ resolveLlm });
+    const handler = createGguiOpsGenerateBlueprintHandler({
+      ...deps,
+      authorizeAppAccess: async () => ({ allowed: true as const }),
+    });
+    await handler.handler({ contract: emptyContract(), appId: "other-app" }, makeCtx("app-1"));
+    expect(seen).toBe("other-app");
   });
 });

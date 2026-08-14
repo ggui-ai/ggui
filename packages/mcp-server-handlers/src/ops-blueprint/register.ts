@@ -56,6 +56,7 @@ import { assertContractNoRetiredFields } from "../renders/assert-contract-no-ret
 import { assertGadgetsRegistered } from "../renders/assert-gadgets.js";
 import { registerBlueprint, type BlueprintRegistryDeps } from "../renders/index.js";
 import type { HandlerContext, SharedHandler } from "../types.js";
+import { resolveEffectiveAppId, type OpsBlueprintAppAuthorizer } from "./app-access.js";
 import type { PutCodeHook } from "./generate.js";
 import { findNearDuplicatePersona, normalizePersona } from "./persona-normalization.js";
 
@@ -131,6 +132,15 @@ export interface GguiOpsRegisterBlueprintDeps {
    * Optional id minter — defaults to `() => 'bp_' + randomUUID()`.
    */
   readonly mintBlueprintId?: () => string;
+  /**
+   * Optional app-access authorizer — when bound, consulted on EVERY
+   * resolution (see {@link resolveEffectiveAppId}) to decide whether
+   * the caller may curate the effective `appId`, including cross-app
+   * calls that supply an explicit `appId` input different from
+   * `ctx.appId`. Unbound: legacy bound-only posture, cross-app input
+   * fails closed with `CrossAppCurationUnavailableError`.
+   */
+  readonly authorizeAppAccess?: OpsBlueprintAppAuthorizer;
 }
 
 export function createGguiOpsRegisterBlueprintHandler(
@@ -151,10 +161,14 @@ export function createGguiOpsRegisterBlueprintHandler(
       rawInput: Record<string, unknown>,
       ctx: HandlerContext
     ): Promise<OpsRegisterBlueprintOutput> {
-      if (!ctx.appId) {
-        throw new Error("ggui_ops_register_blueprint: missing caller identity (appId empty)");
-      }
       const parsed: OpsRegisterBlueprintInput = opsRegisterBlueprintInputSchema.parse(rawInput);
+
+      const appId = await resolveEffectiveAppId({
+        toolName: "ggui_ops_register_blueprint",
+        inputAppId: parsed.appId,
+        ctx,
+        ...(deps.authorizeAppAccess ? { authorize: deps.authorizeAppAccess } : {}),
+      });
 
       // Reject retired top-level contract fields BEFORE any
       // persistence so an operator-supplied row can't smuggle
@@ -170,7 +184,7 @@ export function createGguiOpsRegisterBlueprintHandler(
       // pin. Fails fast with a precise reject before any state
       // mutation. No-op when no `appMetadataStore` is bound.
       if (deps.appMetadataStore) {
-        const appRecord = await deps.appMetadataStore.get(ctx.appId);
+        const appRecord = await deps.appMetadataStore.get(appId);
         assertGadgetsRegistered(parsed.contract, appRecord?.gadgets);
       }
 
@@ -179,7 +193,7 @@ export function createGguiOpsRegisterBlueprintHandler(
       const normalizedPersona = normalizePersona(parsed.persona);
       if (normalizedPersona !== undefined && deps.listAllForApp) {
         try {
-          const allForApp = await deps.listAllForApp(ctx.appId);
+          const allForApp = await deps.listAllForApp(appId);
           const existingPersonas: ReadonlyArray<string> = allForApp
             .map((bp) => bp.variance.persona)
             .filter((p): p is string => typeof p === "string");
@@ -190,7 +204,7 @@ export function createGguiOpsRegisterBlueprintHandler(
                 name: "near-duplicate-persona",
                 at: Date.now(),
                 attributes: {
-                  appId: ctx.appId,
+                  appId,
                   requestId: ctx.requestId,
                   candidate: normalizedPersona,
                   existing: dup.nearestExisting,
@@ -217,7 +231,7 @@ export function createGguiOpsRegisterBlueprintHandler(
       const blueprint: Blueprint = {
         blueprintId,
         contractHash,
-        appId: ctx.appId,
+        appId,
         codeHash,
         // Operator-supplied bytes, no LLM dispatch — provenance is the
         // user arm on BOTH stores this handler writes (MVB row here,
@@ -250,7 +264,7 @@ export function createGguiOpsRegisterBlueprintHandler(
             parsed.seedPrompt ??
             normalizedPersona ??
             `operator-registered blueprint (${blueprintId})`;
-          await registerBlueprint(deps.cacheRegistry, ctx.appId, {
+          await registerBlueprint(deps.cacheRegistry, appId, {
             kind: "template",
             contract,
             intent: intentForCache,
@@ -269,7 +283,7 @@ export function createGguiOpsRegisterBlueprintHandler(
               name: "blueprint.cache_mirror_failed",
               at: Date.now(),
               attributes: {
-                appId: ctx.appId,
+                appId,
                 requestId: ctx.requestId,
                 blueprintId,
                 contractHash,
@@ -293,7 +307,7 @@ export function createGguiOpsRegisterBlueprintHandler(
           name: "blueprint.registered",
           at: Date.now(),
           attributes: {
-            appId: ctx.appId,
+            appId,
             requestId: ctx.requestId,
             blueprintId,
             contractHash,

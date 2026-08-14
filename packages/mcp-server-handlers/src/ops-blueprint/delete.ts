@@ -8,11 +8,15 @@
  * ## Tenancy
  *
  * The blueprint id is globally unique, but the delete path scopes
- * by `ctx.appId`: if the row exists AND its `appId` doesn't match
- * the caller's, the handler treats it as "not found from the
- * caller's perspective" and returns `{deleted: true}` — a uniform
- * shape that doesn't leak whether the id exists in another tenant.
- * The store's underlying delete is NOT invoked in that case.
+ * by the resolved effective appId (see {@link resolveEffectiveAppId}):
+ * if the row exists AND its `appId` doesn't match, the handler
+ * treats it as "not found from the caller's perspective" and
+ * returns `{deleted: true}` — a uniform shape that doesn't leak
+ * whether the id exists in another tenant. The store's underlying
+ * delete is NOT invoked in that case. This row-level uniformity is
+ * separate from (and downstream of) the app-level authorizer check:
+ * a foreign `appId` input the authorizer denies surfaces the denial
+ * error before the row lookup ever runs.
  *
  * ## Audience
  *
@@ -27,6 +31,7 @@ import {
 } from '@ggui-ai/protocol';
 import type { BlueprintStore } from '@ggui-ai/mcp-server-core';
 import type { HandlerContext, SharedHandler } from '../types.js';
+import { resolveEffectiveAppId, type OpsBlueprintAppAuthorizer } from './app-access.js';
 
 const opsInputSchema = opsDeleteBlueprintInputSchema.shape;
 const opsOutputSchema = {
@@ -38,6 +43,21 @@ const opsOutputSchema = {
  */
 export interface GguiOpsDeleteBlueprintDeps {
   readonly blueprintStore: BlueprintStore;
+  /**
+   * Optional app-access authorizer — when bound, consulted on EVERY
+   * resolution (see {@link resolveEffectiveAppId}) to decide whether
+   * the caller may curate the effective `appId`, including cross-app
+   * calls that supply an explicit `appId` input different from
+   * `ctx.appId`. Unbound: legacy bound-only posture, cross-app input
+   * fails closed with `CrossAppCurationUnavailableError`.
+   *
+   * This app-level check runs BEFORE the row-level tenancy lookup
+   * below: a foreign `appId` INPUT denied by the authorizer surfaces
+   * the denial error, while an authorizer-approved effective appId
+   * still hits the row-level uniform `{deleted: true}` posture when
+   * the target row belongs to a different app (no existence leak).
+   */
+  readonly authorizeAppAccess?: OpsBlueprintAppAuthorizer;
 }
 
 export function createGguiOpsDeleteBlueprintHandler(
@@ -59,20 +79,22 @@ export function createGguiOpsDeleteBlueprintHandler(
       rawInput: Record<string, unknown>,
       ctx: HandlerContext,
     ): Promise<OpsDeleteBlueprintOutput> {
-      if (!ctx.appId) {
-        throw new Error(
-          'ggui_ops_delete_blueprint: missing caller identity (appId empty)',
-        );
-      }
       const parsed: OpsDeleteBlueprintInput =
         opsDeleteBlueprintInputSchema.parse(rawInput);
+
+      const appId = await resolveEffectiveAppId({
+        toolName: 'ggui_ops_delete_blueprint',
+        inputAppId: parsed.appId,
+        ctx,
+        ...(deps.authorizeAppAccess ? { authorize: deps.authorizeAppAccess } : {}),
+      });
 
       const existing = await deps.blueprintStore.get(parsed.blueprintId);
       if (existing === null) {
         // Unknown id — idempotent. Return the success shape.
         return { deleted: true };
       }
-      if (existing.appId !== ctx.appId) {
+      if (existing.appId !== appId) {
         // Cross-tenant probe — return the success shape WITHOUT
         // actually deleting. Uniform shape across "doesn't exist"
         // and "exists in another tenant" prevents id-existence

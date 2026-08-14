@@ -45,6 +45,7 @@ import type {
   BlueprintStore,
 } from '@ggui-ai/mcp-server-core';
 import type { HandlerContext, SharedHandler } from '../types.js';
+import { resolveEffectiveAppId, type OpsBlueprintAppAuthorizer } from './app-access.js';
 import { normalizePersona } from './persona-normalization.js';
 
 const opsInputSchema = opsListBlueprintsInputSchema.shape;
@@ -69,6 +70,15 @@ export interface GguiOpsListBlueprintsDeps {
    * only supports `(appId, contractHash)` lookup.
    */
   readonly blueprintSearch: BlueprintSearch;
+  /**
+   * Optional app-access authorizer — when bound, consulted on EVERY
+   * resolution (see {@link resolveEffectiveAppId}) to decide whether
+   * the caller may curate the effective `appId`, including cross-app
+   * calls that supply an explicit `appId` input different from
+   * `ctx.appId`. Unbound: legacy bound-only posture, cross-app input
+   * fails closed with `CrossAppCurationUnavailableError`.
+   */
+  readonly authorizeAppAccess?: OpsBlueprintAppAuthorizer;
 }
 
 /**
@@ -107,13 +117,15 @@ export function createGguiOpsListBlueprintsHandler(
       rawInput: Record<string, unknown>,
       ctx: HandlerContext,
     ): Promise<OpsListBlueprintsOutput> {
-      if (!ctx.appId) {
-        throw new Error(
-          'ggui_ops_list_blueprints: missing caller identity (appId empty)',
-        );
-      }
       const parsed: OpsListBlueprintsInput =
         opsListBlueprintsInputSchema.parse(rawInput);
+
+      const appId = await resolveEffectiveAppId({
+        toolName: 'ggui_ops_list_blueprints',
+        inputAppId: parsed.appId,
+        ctx,
+        ...(deps.authorizeAppAccess ? { authorize: deps.authorizeAppAccess } : {}),
+      });
 
       const normalizedPersona = normalizePersona(parsed.persona);
       const hasSemanticFilter =
@@ -127,7 +139,7 @@ export function createGguiOpsListBlueprintsHandler(
         // Indexed fast path — only `contractHash` (+ optional
         // `generator` post-filter) was supplied.
         candidates = await deps.blueprintStore.list(
-          ctx.appId,
+          appId,
           parsed.contractHash,
         );
       } else {
@@ -136,7 +148,7 @@ export function createGguiOpsListBlueprintsHandler(
         // set, it short-circuits to score 1.0 in the search impl
         // (see `BlueprintSearch` docstring).
         const searchResults = await deps.blueprintSearch.search({
-          appId: ctx.appId,
+          appId,
           ...(parsed.contractHash !== undefined
             ? { contractHash: parsed.contractHash }
             : {}),

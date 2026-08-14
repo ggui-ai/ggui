@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { Blueprint, DataContract } from '@ggui-ai/protocol';
 import { blueprintKey } from '@ggui-ai/protocol/blueprint-key';
 import {
@@ -252,5 +252,59 @@ describe('createGguiOpsListBlueprintsHandler — tenancy', () => {
     await expect(
       handler.handler({}, { appId: '', requestId: 'req-1' }),
     ).rejects.toThrow();
+  });
+});
+
+describe('createGguiOpsListBlueprintsHandler — appId input + authorizer', () => {
+  it('explicit appId equal to ctx.appId resolves (seam unbound)', async () => {
+    const deps = defaultDeps();
+    const handler = createGguiOpsListBlueprintsHandler(deps);
+    const result = await handler.handler({ appId: 'app-1' }, makeCtx('app-1'));
+    expect(result.blueprints).toEqual([]);
+  });
+
+  it('explicit differing appId with NO authorizer fails closed with cross_app_curation_unavailable', async () => {
+    const deps = defaultDeps();
+    const handler = createGguiOpsListBlueprintsHandler(deps);
+    await expect(
+      handler.handler({ appId: 'other-app' }, makeCtx('app-1')),
+    ).rejects.toThrow(/cross_app_curation_unavailable/);
+  });
+
+  it('bound authorizer is consulted even when the input is omitted', async () => {
+    const authorizeAppAccess = vi.fn(async () => ({ allowed: true as const }));
+    const handler = createGguiOpsListBlueprintsHandler({
+      ...defaultDeps(),
+      authorizeAppAccess,
+    });
+    await handler.handler({}, makeCtx('app-1'));
+    expect(authorizeAppAccess).toHaveBeenCalledTimes(1);
+  });
+
+  it('authorizer-approved cross-app call scopes rows by the EXPLICIT appId', async () => {
+    const deps = defaultDeps();
+    const c1 = emptyContract();
+    await deps.blueprintStore.put(
+      makeBlueprint({ blueprintId: 'bp-other', appId: 'other-app', contract: c1 }),
+    );
+    const handler = createGguiOpsListBlueprintsHandler({
+      ...deps,
+      authorizeAppAccess: async () => ({ allowed: true as const }),
+    });
+    const result = await handler.handler(
+      { appId: 'other-app', contractHash: blueprintKey(c1) },
+      makeCtx('app-1'),
+    );
+    expect(result.blueprints.map((b) => b.blueprintId)).toEqual(['bp-other']);
+  });
+
+  it('authorizer not_owner denial surfaces the denial error', async () => {
+    const handler = createGguiOpsListBlueprintsHandler({
+      ...defaultDeps(),
+      authorizeAppAccess: async () => ({ allowed: false as const, reason: 'not_owner' as const }),
+    });
+    await expect(
+      handler.handler({ appId: 'other-app' }, makeCtx('app-1')),
+    ).rejects.toThrow(/not curatable/);
   });
 });

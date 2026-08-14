@@ -35,6 +35,7 @@ import type {
 } from '@ggui-ai/mcp-server-core';
 import { BlueprintNotFoundError } from '@ggui-ai/mcp-server-core';
 import type { HandlerContext, SharedHandler } from '../types.js';
+import { resolveEffectiveAppId, type OpsBlueprintAppAuthorizer } from './app-access.js';
 import { normalizePersona } from './persona-normalization.js';
 
 const opsInputSchema = opsUpdateBlueprintInputSchema.shape;
@@ -45,10 +46,13 @@ const opsOutputSchema = {
 
 /**
  * Cross-tenant probe — thrown when an operator tries to update a
- * blueprint whose `appId` doesn't match `ctx.appId` resolved by the
- * upstream auth adapter. The blueprintId itself is technically
- * lookupable across tenants because the store's primary key is
- * global, but the update path scopes by caller identity.
+ * blueprint whose `appId` doesn't match the effective `appId`
+ * resolved by {@link resolveEffectiveAppId} (caller identity, or an
+ * authorizer-approved explicit input). The blueprintId itself is
+ * technically lookupable across tenants because the store's primary
+ * key is global, but the update path scopes by resolved identity —
+ * row-level tenancy holds even when the authorizer approved the
+ * caller's effective appId (see {@link GguiOpsUpdateBlueprintDeps.authorizeAppAccess}).
  */
 export class BlueprintAppMismatchError extends Error {
   readonly code = 'blueprint_app_mismatch' as const;
@@ -70,6 +74,22 @@ export interface GguiOpsUpdateBlueprintDeps {
    * `() => new Date().toISOString()`. Tests override.
    */
   readonly now?: () => string;
+  /**
+   * Optional app-access authorizer — when bound, consulted on EVERY
+   * resolution (see {@link resolveEffectiveAppId}) to decide whether
+   * the caller may curate the effective `appId`, including cross-app
+   * calls that supply an explicit `appId` input different from
+   * `ctx.appId`. Unbound: legacy bound-only posture, cross-app input
+   * fails closed with `CrossAppCurationUnavailableError`.
+   *
+   * Authorizer approval only resolves the EFFECTIVE appId used for
+   * the identity check — it does NOT bypass the row-level tenancy
+   * comparison below (`existing.appId !== appId`). A blueprint that
+   * belongs to a THIRD app still throws
+   * {@link BlueprintAppMismatchError} even when the authorizer
+   * approved the caller's effective appId.
+   */
+  readonly authorizeAppAccess?: OpsBlueprintAppAuthorizer;
 }
 
 /**
@@ -130,19 +150,21 @@ export function createGguiOpsUpdateBlueprintHandler(
       rawInput: Record<string, unknown>,
       ctx: HandlerContext,
     ): Promise<OpsUpdateBlueprintOutput> {
-      if (!ctx.appId) {
-        throw new Error(
-          'ggui_ops_update_blueprint: missing caller identity (appId empty)',
-        );
-      }
       const parsed: OpsUpdateBlueprintInput =
         opsUpdateBlueprintInputSchema.parse(rawInput);
+
+      const appId = await resolveEffectiveAppId({
+        toolName: 'ggui_ops_update_blueprint',
+        inputAppId: parsed.appId,
+        ctx,
+        ...(deps.authorizeAppAccess ? { authorize: deps.authorizeAppAccess } : {}),
+      });
 
       const existing = await deps.blueprintStore.get(parsed.blueprintId);
       if (existing === null) {
         throw new BlueprintNotFoundError(parsed.blueprintId);
       }
-      if (existing.appId !== ctx.appId) {
+      if (existing.appId !== appId) {
         // Tenancy boundary — cross-app updates are a security
         // violation. The blueprint id is global but the mutation
         // scope is per-app.
