@@ -493,11 +493,11 @@ export class AnthropicAgent extends LLMAgent {
   }
 
   protected async createClient(): Promise<Anthropic | AnthropicBedrock> {
-    // Bedrock IAM path: `resolveRoute` (provider-router) sets
-    // CLAUDE_CODE_USE_BEDROCK=1 and clears ANTHROPIC_API_KEY for the
-    // pool-funded cloud pod. Auth is the pod's IRSA role — no API key.
-    // `AnthropicBedrock` is wire-compatible with `Anthropic` for the
-    // `.messages` API this agent uses.
+    // Bedrock IAM path: when CLAUDE_CODE_USE_BEDROCK=1 (set by the
+    // deployment's provider routing), auth comes from the ambient AWS
+    // credential chain (instance role, env credentials, etc.) — no API
+    // key. `AnthropicBedrock` is wire-compatible with `Anthropic` for
+    // the `.messages` API this agent uses.
     const useBedrock =
       this.routeOverride?.useBedrock ?? process.env.CLAUDE_CODE_USE_BEDROCK === '1';
     if (useBedrock) {
