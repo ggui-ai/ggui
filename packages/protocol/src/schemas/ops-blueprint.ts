@@ -289,10 +289,12 @@ export const opsListBlueprintsOutputSchema = z
 
 /**
  * `ggui_ops_update_blueprint` input. Only mutable fields are present
- * here — `contractHash`, `appId`, `codeS3Url`, `codeHash`,
- * `source`, `createdAt`, `createdBy` are immutable invariants
- * and the schema does NOT accept them. Operators who want to
- * "replace" a row delete + re-generate.
+ * here — `contractHash`, `codeS3Url`, `codeHash`, `source`,
+ * `createdAt`, `createdBy` are immutable invariants and the schema
+ * does NOT accept them. Operators who want to "replace" a row
+ * delete + re-generate. The `appId` input below scopes the TARGET
+ * app for authorization/routing purposes only — the blueprint's own
+ * immutable `appId` field is never mutated by this call.
  */
 export const opsUpdateBlueprintInputSchema = z
   .object({
