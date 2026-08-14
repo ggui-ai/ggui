@@ -386,6 +386,20 @@ export type OpsBlueprintBundle = {
    */
   readonly blueprints?: BlueprintProvider;
   /**
+   * Per-app metadata resolver — when bound, `ggui_ops_generate_blueprint`
+   * and `ggui_ops_register_blueprint` run `assertGadgetsRegistered`
+   * against the operator-authored contract before persisting/dispatching,
+   * same gate `ggui_render` applies (see `assert-gadgets.ts`). Unbound:
+   * the gadget-registration check is skipped for both tools — an
+   * unregistered `(package, exportName)` reference is not caught until
+   * the generated component actually fails to import at render time.
+   * When omitted here, falls back to the server-level
+   * {@link CreateGguiServerOptions.appMetadataStore} — same precedence
+   * `deps.handshake.appMetadataStore` uses against its own server-level
+   * fallback.
+   */
+  readonly appMetadataStore?: AppMetadataStore;
+  /**
    * Cache-registry mirror for `ggui_ops_generate_blueprint`. When
    * bound, operator-authored blueprints are dual-written to the
    * cache vectorStore via `registerBlueprint` so the agent-facing
@@ -1449,6 +1463,13 @@ export function defaultHandlers(deps: {
   // render generation path reads). Cloud pods wire all five through
   // their own composition layer.
   if (deps.opsBlueprint) {
+    // Bundle-explicit `appMetadataStore` wins; falls back to the
+    // server-level `deps.appMetadataStore` — same precedence
+    // `deps.handshake.appMetadataStore ?? deps.appMetadataStore` uses
+    // just above. Gates `assertGadgetsRegistered` inside both
+    // generate + register (see each handler's own no-op-when-unbound
+    // posture); render already gets the server-level store at :1398.
+    const opsBlueprintAppMetadataStore = deps.opsBlueprint.appMetadataStore ?? deps.appMetadataStore;
     if (deps.opsBlueprint.resolveLlm && deps.opsBlueprint.blueprints) {
       handlers.push(
         createGguiOpsGenerateBlueprintHandler({
@@ -1459,6 +1480,9 @@ export function defaultHandlers(deps: {
           ...(deps.opsBlueprint.putCode ? { putCode: deps.opsBlueprint.putCode } : {}),
           ...(deps.opsBlueprint.listAllForApp
             ? { listAllForApp: deps.opsBlueprint.listAllForApp }
+            : {}),
+          ...(opsBlueprintAppMetadataStore
+            ? { appMetadataStore: opsBlueprintAppMetadataStore }
             : {}),
           ...(deps.opsBlueprint.cacheRegistry
             ? { cacheRegistry: deps.opsBlueprint.cacheRegistry }
@@ -1479,6 +1503,9 @@ export function defaultHandlers(deps: {
         ...(deps.opsBlueprint.putCode ? { putCode: deps.opsBlueprint.putCode } : {}),
         ...(deps.opsBlueprint.listAllForApp
           ? { listAllForApp: deps.opsBlueprint.listAllForApp }
+          : {}),
+        ...(opsBlueprintAppMetadataStore
+          ? { appMetadataStore: opsBlueprintAppMetadataStore }
           : {}),
         ...(deps.opsBlueprint.cacheRegistry
           ? { cacheRegistry: deps.opsBlueprint.cacheRegistry }

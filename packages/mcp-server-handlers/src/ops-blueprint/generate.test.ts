@@ -1,4 +1,5 @@
 import type {
+  AppMetadataStore,
   BlueprintProvider,
   GeneratorRegistry,
   UiGenerateInput,
@@ -6,12 +7,14 @@ import type {
   UiGenerator,
 } from "@ggui-ai/mcp-server-core";
 import {
+  InMemoryAppMetadataStore,
   InMemoryBlueprintStore,
   createInMemoryGeneratorRegistry,
 } from "@ggui-ai/mcp-server-core/in-memory";
 import type { Blueprint, DataContract, UIGenerationResponse } from "@ggui-ai/protocol";
 import { blueprintKey } from "@ggui-ai/protocol/blueprint-key";
 import { describe, expect, it, vi } from "vitest";
+import { GadgetNotRegisteredError } from "../renders/assert-gadgets.js";
 import type { GenerationCredentials } from "../renders/index.js";
 import type { HandlerContext } from "../types.js";
 import {
@@ -109,6 +112,7 @@ function defaultDeps(
     ) => Promise<GenerationCredentials | null> | GenerationCredentials | null;
     listAllForApp?: (appId: string) => Promise<readonly Blueprint[]>;
     generator?: UiGenerator;
+    appMetadataStore?: AppMetadataStore;
   } = {}
 ) {
   const generator = opts.generator ?? makeMockGenerator();
@@ -123,6 +127,7 @@ function defaultDeps(
       blueprintStore.putCode(codeHash, body);
     },
     ...(opts.listAllForApp ? { listAllForApp: opts.listAllForApp } : {}),
+    ...(opts.appMetadataStore ? { appMetadataStore: opts.appMetadataStore } : {}),
     now: () => "2026-05-12T00:00:00.000Z",
     mintBlueprintId: (() => {
       let n = 0;
@@ -526,5 +531,51 @@ describe("createGguiOpsGenerateBlueprintHandler — appId input + authorizer", (
     expect(seen[0]?.appId).toBe("other-app");
     // The generation id the hosted charge path records on the ledger row.
     expect(seen[0]?.request.sessionId).toMatch(/^ops_gen_/);
+  });
+});
+
+describe("createGguiOpsGenerateBlueprintHandler — appMetadataStore gadget gate", () => {
+  it("throws GadgetNotRegisteredError before dispatching the LLM when the contract references a gadget the app hasn't registered", async () => {
+    // `InMemoryAppMetadataStore.register("app-1")` with no `gadgets`
+    // input resolves to the STDLIB floor only (`resolveAppGadgets` —
+    // "app declares no [custom] gadgets"), never truly empty. A
+    // contract referencing a non-stdlib export must still reject —
+    // same fixture shape as assert-gadgets.test.ts's own
+    // `gadget_not_registered` case.
+    const appMetadataStore = new InMemoryAppMetadataStore();
+    appMetadataStore.register("app-1");
+    const generator = vi.fn();
+    const registry = createInMemoryGeneratorRegistry({
+      default: {
+        slug: "ui-gen-default-haiku-4-5",
+        tier: "default",
+        model: "haiku-4-5",
+        generate: generator,
+      },
+    });
+    const deps = defaultDeps({ registry, appMetadataStore });
+    const handler = createGguiOpsGenerateBlueprintHandler(deps);
+    const contract: DataContract = {
+      clientCapabilities: {
+        gadgets: { "@acme/doordash": { useDoorDashCheckout: {} } },
+      },
+    };
+    await expect(handler.handler({ contract }, makeCtx("app-1"))).rejects.toBeInstanceOf(
+      GadgetNotRegisteredError,
+    );
+    // The gate runs BEFORE generator dispatch — no LLM spend on a
+    // reject that never reaches the provider.
+    expect(generator).not.toHaveBeenCalled();
+  });
+
+  it("does not gate on gadgets when no appMetadataStore is bound (unchanged default posture)", async () => {
+    const deps = defaultDeps();
+    const handler = createGguiOpsGenerateBlueprintHandler(deps);
+    const contract: DataContract = {
+      clientCapabilities: {
+        gadgets: { "@acme/doordash": { useDoorDashCheckout: {} } },
+      },
+    };
+    await expect(handler.handler({ contract }, makeCtx("app-1"))).resolves.toBeDefined();
   });
 });
