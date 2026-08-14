@@ -5,9 +5,9 @@
  * the scoring helpers from `../blueprint-search.ts`.
  *
  * Suitable for tests, dev, and the OSS zero-config path up to ~10k
- * blueprints per app. Production multi-tenant deployments swap in
- * `DynamoBlueprintSearch` (cloud subtree); the handshake wires
- * whichever implementation the host bound.
+ * blueprints per app. Larger deployments swap in a database-backed
+ * implementation of the same port; the handshake wires whichever
+ * implementation the host bound.
  *
  * The scan iterates {@link BlueprintStore.list} per `(appId,
  * contractHash)` group. When `criteria.contractHash` is provided we
@@ -15,7 +15,7 @@
  * group the store has seen via a parallel `listAllForApp` helper that
  * implementations may expose (see {@link AppListableBlueprintStore}
  * below). Reference impls extend the base store with `listAllForApp`;
- * cloud impls use a GSI Query.
+ * database-backed impls typically use an index-scoped query.
  */
 import type {
   AppBlueprintSearchConfig,

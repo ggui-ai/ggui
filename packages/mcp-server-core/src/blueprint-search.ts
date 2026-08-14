@@ -56,11 +56,10 @@
  *   - `InMemoryBlueprintSearch` (this package's `/in-memory` entry) —
  *     OSS single-tenant default + test fixtures. Brute-force linear
  *     scan + cosine. Acceptable up to ~10k blueprints per app.
- *   - `DynamoBlueprintSearch` (cloud subtree
- *     `cloud/ggui-protocol-pod/src/adapters/dynamo-blueprint-search.ts`)
- *     — DDB Query by `appId` partition → cosine in-process. ANN /
- *     pgvector escape hatch reserved for v2 once the row count
- *     justifies it.
+ *   - Database-backed implementations plug in through this same
+ *     port (partition-scoped query → cosine in-process is the
+ *     expected shape; ANN / pgvector escape hatch reserved for v2
+ *     once row counts justify it).
  */
 import type {
   Blueprint,

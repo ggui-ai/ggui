@@ -22,9 +22,9 @@
  *   - Determinism — identical inputs ⇒ identical output.
  *   - Tie-breaking by createdAt desc, then blueprintId asc.
  *
- * Implementations layer their own adapter-specific tests on top (e.g.
- * the cloud `DynamoBlueprintSearch` additionally asserts the GSI
- * Query shape against a mock DDB client).
+ * Implementations layer their own adapter-specific tests on top
+ * (e.g. asserting a database adapter's query shape against a mock
+ * client).
  */
 
 import type { Blueprint, DataContract } from '@ggui-ai/protocol';
@@ -35,7 +35,7 @@ import type { BlueprintStore } from '../blueprint-store.js';
 /**
  * Factory inputs for the conformance suite. Implementations supply
  * a fresh `(store, search)` pair plus an optional cleanup hook —
- * cloud impls clean up DDB tables between runs.
+ * database-backed impls clean their tables between runs.
  */
 export interface BlueprintSearchConformanceFactory {
   readonly create: () => Promise<{
