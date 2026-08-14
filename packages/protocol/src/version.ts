@@ -6,6 +6,39 @@
  * schema change; the most recent change anchors {@link PROTOCOL_VERSION}.
  *
  * --------------------------------------------------------------------
+ * `ggui_get_render_source` data-plane tool (2026-08-14, additive,
+ * pre-launch, ggui#282). New bare-wire-name MCP tool, `agent`
+ * audience — the calling app reads the generated source of its OWN
+ * render as `{sessionId, blueprint: {source, contract?,
+ * fixtureProps?}}`. New input shape `getRenderSourceInputShape`
+ * (mirrors `getSessionInputShape`) and output type
+ * `GguiGetRenderSourceOutput` added to `@ggui-ai/protocol`; new
+ * factory `createGguiGetRenderSourceHandler` (modeled on
+ * `createGguiGetSessionHandler` — same tenancy posture via
+ * `ctx.appId`, no heartbeat) plus the shared
+ * `buildRenderSourceEnvelope` helper added to
+ * `@ggui-ai/mcp-server-handlers`. The pre-existing control-plane
+ * `ggui_ops_get_render_source` (cloud-only, connector-key tenancy —
+ * a different caller, unchanged contract) now imports the SAME
+ * shared helper so the two tools' envelope shape cannot drift apart;
+ * a behavior-neutral refactor pinned by an envelope-equivalence test.
+ * No existing wire shape changed.
+ *
+ * Conformance-kit verdict: no kit entry required. The kit's WS
+ * live-channel conformance surface (`@ggui-ai/protocol-conformance`)
+ * has zero enumeration of MCP tool names anywhere in its source —
+ * verified by grepping the package for `ggui_` tool-name references
+ * outside its fixtures/tests, which returns nothing; it grades
+ * `GguiSessionChannelServer` wire-frame behavior (ack/error/data,
+ * echoed requestId, session-state read-back), a surface this
+ * addition never touches.
+ *
+ * Package version — the classification is MADE here, not deferred:
+ * MINOR for `@ggui-ai/protocol` (new exports, additive) and
+ * `@ggui-ai/mcp-server-handlers` (new factory + shared helper,
+ * additive), pre-1.0 and pre-launch. PROTOCOL_VERSION is unchanged —
+ * no WS envelope moved.
+ * --------------------------------------------------------------------
  * MCP tool bindings & discovery (2026-08-10, additive, pre-launch,
  * ggui#259). Artifacts gain an optional MCP tool-binding list and
  * registry search gains a tool dimension, connecting the two
