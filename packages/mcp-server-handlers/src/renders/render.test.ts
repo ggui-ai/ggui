@@ -217,7 +217,7 @@ function buildHandler(opts: {
   readonly coldCode: string;
   /**
    * Optional authored source the fake generator's response carries
-   * alongside `coldCode` (guuey#179 finding #4) — threads through to
+   * alongside `coldCode` — threads through to
    * `resolveBlueprintId`'s `produced.sourceCode` on a fresh
    * registration. Omitted = today's default (generator never
    * distinguishes an authored form).
@@ -274,8 +274,8 @@ function buildHandler(opts: {
    */
   readonly rateLimiter?: GguiRenderHandlerDeps['rateLimiter'];
   /**
-   * Optional blueprint-cache durability seam (guuey#179 finding #4) —
-   * threaded onto `generation.cache.durability`. Omitted = today's
+   * Optional blueprint-cache durability seam — threaded onto
+   * `generation.cache.durability`. Omitted = today's
    * default (no durability bound, reuse never resolves an authored-
    * source body).
    */
@@ -860,7 +860,7 @@ describe('createGguiRenderHandler — cache-reuse point-read (Phase 2)', () => {
   });
 });
 
-// ── Authored source rides cache-reuse (guuey#179 finding #4) ──────────
+// ── Authored source rides cache-reuse ──────────────────────────────────
 //
 // A repeated prompt semantic-matches a cached blueprint → the §6
 // point-read above → `commitCachedGguiSession` used to commit the render
@@ -870,7 +870,7 @@ describe('createGguiRenderHandler — cache-reuse point-read (Phase 2)', () => {
 // bound CodeStore) carries `sourceCodeHash` on the row; the reuse
 // branch resolves the body from CodeStore and sidecars it onto the
 // committed render exactly like the cold-gen path already does.
-describe('createGguiRenderHandler — authored source rides cache-reuse (guuey#179 #4)', () => {
+describe('createGguiRenderHandler — authored source rides cache-reuse', () => {
   const STORED_SOURCE =
     'export default function Cached(props){ return <div>{props.title}</div>; }';
 

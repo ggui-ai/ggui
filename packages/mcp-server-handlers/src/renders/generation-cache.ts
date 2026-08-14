@@ -62,11 +62,11 @@ export interface GenerationCacheHit {
   readonly componentCode: string;
   /**
    * Authored (pre-compile) source, resolved from the `CodeStore` by the
-   * reuse branch when the matched blueprint carries a `sourceCodeHash`
-   * (guuey#179 finding #4). `commitCachedGguiSession` sidecars this onto
-   * the reuse render exactly like the cold-gen commit path already
-   * does, so `ggui_get_render_source` serves reuse renders identically
-   * to cold-gen ones. Absent when the blueprint has no authored form,
+   * reuse branch when the matched blueprint carries a `sourceCodeHash`.
+   * `commitCachedGguiSession` sidecars this onto the reuse render
+   * exactly like the cold-gen commit path already does, so
+   * `ggui_get_render_source` serves reuse renders identically to
+   * cold-gen ones. Absent when the blueprint has no authored form,
    * the body read misses (`CodeStore.get` returns `null`), or the read
    * itself failed — all non-fatal; the render still commits.
    */

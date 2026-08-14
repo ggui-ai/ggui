@@ -7,23 +7,22 @@
  *
  * --------------------------------------------------------------------
  * Authored source rides blueprint reuse (2026-08-14, additive,
- * pre-launch, guuey#179 finding #4). Cache-reuse renders (a repeated
- * prompt semantic-matches a cached blueprint) previously committed
- * without authored `sourceCode` — structurally, not incidentally: the
- * reuse-commit path never carried it, and blueprint registry rows
- * never persisted it, so `ggui_get_render_source` always returned
- * `render_source_unavailable` for every reuse render.
+ * pre-launch). Cache-reuse renders (a repeated prompt semantic-matches
+ * a cached blueprint) previously committed without authored
+ * `sourceCode` — structurally, not incidentally: the reuse-commit path
+ * never carried it, and blueprint registry rows never persisted it, so
+ * `ggui_get_render_source` always returned `render_source_unavailable`
+ * for every reuse render.
  *
  *   sc1. **`Blueprint.sourceCodeHash?: string`** added to
  *      `@ggui-ai/protocol` — content hash (`CodeStore.hashOf`) of the
  *      AUTHORED, pre-compile source body, distinct from the existing
  *      `codeHash` (compiled `componentCode`). The body itself is never
  *      stored on the row — persistent adapters keep vector/metadata
- *      rows small (S3 Vectors caps filterable metadata at ~2KB) and
- *      content-address the body through the same `CodeStore` seam
- *      `codeHash` already implies. Absent on legacy rows and on
- *      blueprints with no authored form distinct from their compiled
- *      output.
+ *      rows small and content-address the body through the same
+ *      `CodeStore` seam `codeHash` already implies. Absent on legacy
+ *      rows and on blueprints with no authored form distinct from
+ *      their compiled output.
  *
  *   sc2. **Registration threads it through.** `registerBlueprint`
  *      (`@ggui-ai/mcp-server-handlers`) gains an optional

@@ -217,7 +217,7 @@ describe('projectDurableBlueprint', () => {
     expect(record.codeS3Url).toBeUndefined();
   });
 
-  it('carries sourceCodeHash onto the durable row when the registry blueprint has one (guuey#179 #4)', () => {
+  it('carries sourceCodeHash onto the durable row when the registry blueprint has one', () => {
     const bp = makeRegistryBlueprint({
       sourceCode: 'export default function Card(props){return <div/>;}',
       sourceCodeHash: 'source-hash-abc',
@@ -441,7 +441,7 @@ describe('writeBlueprintDurably — best-effort failure', () => {
   });
 });
 
-describe('writeBlueprintDurably — authored source body (guuey#179 #4)', () => {
+describe('writeBlueprintDurably — authored source body', () => {
   const SOURCE = 'export default function Card(props){return <div>{props.title}</div>;}';
 
   it('writes the source body under sourceCodeHash when the registry blueprint carries both', async () => {

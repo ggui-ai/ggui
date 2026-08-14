@@ -637,7 +637,7 @@ export async function registerBlueprint(
   const variance = input.variance ?? {};
   const createdAt = new Date().toISOString();
 
-  // Authored source (guuey#179 finding #4) — only worth carrying when
+  // Authored source — only worth carrying when
   // distinct from componentCode (fallback-collapse symmetry: a
   // byte-identical pair is never worth persisting) AND a CodeStore is
   // bound (no store → no hash → honest absence, never a guess).

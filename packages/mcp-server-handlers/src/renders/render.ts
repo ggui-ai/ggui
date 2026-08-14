@@ -1605,11 +1605,11 @@ export function createGguiRenderHandler(
           readonly cosine: number;
           readonly contract: DataContract;
           /**
-           * Content hash of the matched blueprint's authored source
-           * (guuey#179 finding #4), when the registry row carries one.
-           * The body is resolved from `CodeStore` just before the
-           * commit below — never inlined here (the point-read only
-           * fetches the row, not the body).
+           * Content hash of the matched blueprint's authored source,
+           * when the registry row carries one. The body is resolved
+           * from `CodeStore` just before the commit below — never
+           * inlined here (the point-read only fetches the row, not
+           * the body).
            */
           readonly sourceCodeHash?: string;
         } | null = null;
@@ -1760,7 +1760,7 @@ export function createGguiRenderHandler(
           // on this path).
           resolvedBlueprintId = blueprintHit.id;
 
-          // Authored source (guuey#179 finding #4) — resolve the body
+          // Authored source — resolve the body
           // from CodeStore by the row's stored hash, if any. Best-
           // effort: a miss or a read failure commits the reuse render
           // without `sourceCode`, exactly like a blueprint that never
@@ -1924,9 +1924,9 @@ export function createGguiRenderHandler(
                           // metadata stamp — a fresh generation mints
                           // an `llm`-sourced row.
                           source: produced.source,
-                          // Authored source (guuey#179 finding #4) —
-                          // threaded to the registry so cache-reuse
-                          // renders of this blueprint can serve it too.
+                          // Authored source — threaded to the registry
+                          // so cache-reuse renders of this blueprint
+                          // can serve it too.
                           ...(produced.sourceCode !== undefined
                             ? { sourceCode: produced.sourceCode }
                             : {}),
@@ -2659,9 +2659,9 @@ async function runGenerationIntoGguiSession(
       /**
        * Authored (pre-compile) source, when the generator distinguishes
        * one from `componentCode` — see
-       * `RegisterBlueprintInput.sourceCode`'s docstring (guuey#179
-       * finding #4). Threaded to `registerBlueprint` so cache-reuse
-       * renders of this blueprint can serve authored source too.
+       * `RegisterBlueprintInput.sourceCode`'s docstring. Threaded to
+       * `registerBlueprint` so cache-reuse renders of this blueprint
+       * can serve authored source too.
        */
       readonly sourceCode?: string;
     }) => Promise<string | undefined>;
@@ -3297,7 +3297,7 @@ async function commitCachedGguiSession(
       render: componentRender,
       appId: args.appId,
       userId: args.userId,
-      // Authored source (guuey#179 finding #4) — sidecar exactly like
+      // Authored source — sidecar exactly like
       // the cold-gen commit does (see `CommitGguiSessionInput.sourceCode`'s
       // docstring). Absent when the matched blueprint has no authored
       // form or the body read missed/failed (see the caller's resolve

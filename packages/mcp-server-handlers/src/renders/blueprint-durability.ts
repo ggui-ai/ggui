@@ -85,7 +85,7 @@ export const BLUEPRINT_DURABILITY_EVENTS = {
   /** Body rejected. The row still lands, without a `codeHash`. */
   codeWriteFailed: 'blueprint_code_write_failed',
   /**
-   * Authored-source body rejected (guuey#179 #4). Sibling of
+   * Authored-source body rejected. Sibling of
    * `codeWriteFailed`, not an overload of it — distinct body, distinct
    * failure. Unlike `codeHash`, the row still lands WITH
    * `sourceCodeHash` even on this failure (see `writeBlueprintDurably`'s
@@ -189,7 +189,7 @@ export async function writeBlueprintDurably(
     }
   }
 
-  // Authored source body (guuey#179 #4), own try/catch — a distinct
+  // Authored source body, own try/catch — a distinct
   // failure mode from the compiled-code write above. `sourceCodeHash`
   // is already decided (computed at registration, already on the
   // vector-store row); this write just persists the body it points at.

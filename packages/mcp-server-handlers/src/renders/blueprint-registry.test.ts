@@ -1179,7 +1179,7 @@ describe('registerBlueprint — durable write-through', () => {
   });
 });
 
-describe('registerBlueprint — authored source (guuey#179 finding #4)', () => {
+describe('registerBlueprint — authored source', () => {
   function fakeCodeStore() {
     const objects = new Map<string, string>();
     const store = {
