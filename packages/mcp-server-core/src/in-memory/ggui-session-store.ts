@@ -31,6 +31,16 @@ interface RenderBucket {
   events: GguiSessionEvent[];
   /** Tail subscribers waiting for the next event or for `delete`. */
   waiters: Array<(e: GguiSessionEvent | null) => void>;
+  /**
+   * Authored source from the most recent `commit`'s
+   * `CommitGguiSessionInput.sourceCode`, when supplied. Deliberately
+   * NOT part of `stored`/`render` — see `GguiSessionStore.
+   * getAuthoredSource`'s split-read note. `undefined` when the commit
+   * didn't supply one (e.g. an operator-authored or non-generator
+   * render) — distinct from "not yet committed", which has no bucket
+   * at all.
+   */
+  authoredSource?: string;
 }
 
 export interface InMemoryGguiSessionStoreOptions {
@@ -213,6 +223,7 @@ export class InMemoryGguiSessionStore implements GguiSessionStore {
         render: incoming,
       };
       existing.stored = merged;
+      existing.authoredSource = input.sourceCode;
       return cloneStored(merged);
     }
     // First-write — mint a fresh bucket using the supplied lifecycle slice.
@@ -233,8 +244,13 @@ export class InMemoryGguiSessionStore implements GguiSessionStore {
       stored,
       events: [],
       waiters: [],
+      authoredSource: input.sourceCode,
     });
     return cloneStored(stored);
+  }
+
+  async getAuthoredSource(id: string): Promise<string | undefined> {
+    return this.buckets.get(id)?.authoredSource;
   }
 
   async appendEvent(input: AppendEventInput): Promise<number> {

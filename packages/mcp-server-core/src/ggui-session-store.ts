@@ -290,6 +290,24 @@ export interface CommitGguiSessionInput {
    * working render to a caller-side bug.
    */
   seqFloor?: number;
+  /**
+   * Authored source for this commit, when the generator that produced
+   * `render` distinguishes authored (human/LLM-readable) source from
+   * the compiled `componentCode` it also carries. Orthogonal to the
+   * wire-typed `render` payload — a self-hosted deployment reading
+   * `render.componentCode` back via {@link GguiSessionStore.get} sees
+   * exactly the same value whether or not this field is supplied.
+   *
+   * Implementations MAY persist this out-of-band (never as part of the
+   * `GguiSession` shape a hot-path `get()` returns — see
+   * {@link GguiSessionStore.getAuthoredSource}'s split-read note) for
+   * later non-hot-path retrieval, e.g. a source-export tool that needs
+   * to hand the original authored text to a caller. Absent, or
+   * byte-identical to `render`'s compiled code, means "no distinct
+   * authored source for this commit" — implementations MUST NOT
+   * synthesize one.
+   */
+  sourceCode?: string;
 }
 
 /**
@@ -395,4 +413,27 @@ export interface GguiSessionStore {
    *   receiving new entries (the historical replay is still served).
    */
   observe(id: string, opts?: ObserveOptions): AsyncIterable<GguiSessionEvent>;
+
+  /**
+   * Read back the authored source a prior {@link commit} persisted via
+   * {@link CommitGguiSessionInput.sourceCode}, when the implementation
+   * stores one. Optional — an implementation that never persisted one
+   * (including every implementation that predates this method) simply
+   * omits it; callers MUST treat that identically to "no distinct
+   * authored source for this render" (never as an error on its own).
+   *
+   * **Split-read discipline**: this is a deliberately SEPARATE read
+   * path from {@link get}. `get()` backs hot, frequent reads
+   * (`ggui_get_session`, tenancy gates, the render/update/consume
+   * cycle) and MUST NEVER eagerly load or return authored source —
+   * only a caller that specifically needs the original authored text
+   * (e.g. a source-export tool) calls this method, and only then does
+   * an implementation pay the cost of fetching it.
+   *
+   * Returns `undefined` for a missing render — this method makes no
+   * tenancy claim of its own; callers MUST resolve + tenancy-check the
+   * render via {@link get} first and only call this for a render they
+   * have already confirmed is visible to the caller.
+   */
+  getAuthoredSource?(id: string): Promise<string | undefined>;
 }
