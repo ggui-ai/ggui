@@ -2,6 +2,12 @@
  * Tests for `createGguiGetRenderSourceHandler` (#282 data-plane source
  * read). Mirrors get-session.test.ts's structure — same
  * InMemoryGguiSessionStore harness, same seedRender shape.
+ *
+ * `source` must always be the AUTHORED text, never the compiled
+ * bundle — fixtures below deliberately use DISTINCT `componentCode`
+ * (looks compiled) vs `sourceCode` (real authored TSX, `export
+ * default`) so a regression that silently falls back to
+ * `componentCode` fails loudly here.
  */
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { ComponentGguiSession, SystemGguiSession } from '@ggui-ai/protocol';
@@ -12,23 +18,33 @@ import { GguiSessionNotFoundError } from './errors.js';
 
 const NOW_MS = Date.parse('2026-05-09T00:00:00.000Z');
 
+/** Looks compiled — never contains `export default`. */
+const COMPILED = '"use strict";var Widget=()=>null;export{Widget as default};';
+/** Real authored TSX — the D16-bar shape a save-as-blueprint selfCheck demands. */
+const AUTHORED = 'export default function Widget() { return null; }';
+
 async function seedComponentRender(
   store: InMemoryGguiSessionStore,
   opts: {
     sessionId?: string;
     appId?: string;
     componentCode?: string;
+    /** Explicit `undefined` (as opposed to omitted) suppresses the
+     *  default — used to simulate a commit that never recorded one. */
+    sourceCode?: string | undefined;
+    omitSourceCode?: boolean;
     propsSpec?: ComponentGguiSession['propsSpec'];
     props?: ComponentGguiSession['props'];
   } = {},
 ): Promise<{ sessionId: string }> {
   const sessionId = opts.sessionId ?? 'render-1';
   const appId = opts.appId ?? 'app-1';
+  const componentCode = opts.componentCode ?? COMPILED;
   const render: ComponentGguiSession = {
     id: sessionId,
     appId,
     type: 'component',
-    componentCode: opts.componentCode ?? 'export default () => null;',
+    componentCode,
     eventSequence: 0,
     createdAt: NOW_MS,
     lastActivityAt: NOW_MS,
@@ -36,7 +52,8 @@ async function seedComponentRender(
     ...(opts.propsSpec !== undefined ? { propsSpec: opts.propsSpec } : {}),
     ...(opts.props !== undefined ? { props: opts.props } : {}),
   };
-  await store.commit({ render, appId });
+  const sourceCode = opts.omitSourceCode ? undefined : (opts.sourceCode ?? AUTHORED);
+  await store.commit({ render, appId, ...(sourceCode !== undefined ? { sourceCode } : {}) });
   return { sessionId };
 }
 
@@ -56,10 +73,8 @@ describe('createGguiGetRenderSourceHandler', () => {
   });
 
   describe('happy path', () => {
-    it('returns the envelope for the calling app\'s own component-variant render', async () => {
-      const { sessionId } = await seedComponentRender(renderStore, {
-        componentCode: 'export default function Widget() { return null; }',
-      });
+    it('returns the AUTHORED source, never the compiled componentCode', async () => {
+      const { sessionId } = await seedComponentRender(renderStore);
       const handler = createGguiGetRenderSourceHandler({ renderStore });
       const out = await handler.handler(
         { sessionId },
@@ -67,8 +82,19 @@ describe('createGguiGetRenderSourceHandler', () => {
       );
       expect(out).toEqual({
         sessionId,
-        blueprint: { source: 'export default function Widget() { return null; }' },
+        blueprint: { source: AUTHORED },
       });
+      expect(out.blueprint.source).not.toBe(COMPILED);
+    });
+
+    it('D16-bar proxy: the returned source is authorable TSX with a default export', async () => {
+      const { sessionId } = await seedComponentRender(renderStore);
+      const handler = createGguiGetRenderSourceHandler({ renderStore });
+      const out = await handler.handler(
+        { sessionId },
+        { appId: 'app-1', requestId: 'r1' },
+      );
+      expect(out.blueprint.source).toContain('export default');
     });
 
     it('reassembles contract from propsSpec when present', async () => {
@@ -173,6 +199,25 @@ describe('createGguiGetRenderSourceHandler', () => {
 
     it('a component render that never committed (empty componentCode) throws the same typed error, not a hollow envelope', async () => {
       const { sessionId } = await seedComponentRender(renderStore, { componentCode: '' });
+      const handler = createGguiGetRenderSourceHandler({ renderStore });
+      await expect(
+        handler.handler({ sessionId }, { appId: 'app-1', requestId: 'r1' }),
+      ).rejects.toThrow(/render_source_unavailable/);
+    });
+
+    it('a render whose commit never recorded authored source throws the same typed error, never falls back to componentCode', async () => {
+      const { sessionId } = await seedComponentRender(renderStore, { omitSourceCode: true });
+      const handler = createGguiGetRenderSourceHandler({ renderStore });
+      await expect(
+        handler.handler({ sessionId }, { appId: 'app-1', requestId: 'r1' }),
+      ).rejects.toThrow(/render_source_unavailable/);
+    });
+
+    it('a render whose authored source collapsed to the same text as componentCode (generator never distinguished) throws the same typed error', async () => {
+      const { sessionId } = await seedComponentRender(renderStore, {
+        componentCode: COMPILED,
+        sourceCode: COMPILED,
+      });
       const handler = createGguiGetRenderSourceHandler({ renderStore });
       await expect(
         handler.handler({ sessionId }, { appId: 'app-1', requestId: 'r1' }),

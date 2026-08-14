@@ -84,7 +84,12 @@ export function createGguiGetRenderSourceHandler(
         throw new GguiSessionNotFoundError(sessionId);
       }
 
-      const blueprint = buildRenderSourceEnvelope(stored.render, sessionId);
+      // Split-read: only fetched here, on the envelope path — never on
+      // the `ggui_get_session` hot path. Absent when the store never
+      // implemented `getAuthoredSource` (an honest "nothing reachable"
+      // signal, not an error) or never persisted one for this commit.
+      const authoredSource = await deps.renderStore.getAuthoredSource?.(sessionId);
+      const blueprint = buildRenderSourceEnvelope(stored.render, sessionId, authoredSource);
       return { sessionId: stored.id, blueprint };
     },
   };

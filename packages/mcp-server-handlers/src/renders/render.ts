@@ -2881,6 +2881,13 @@ async function runGenerationIntoGguiSession(
       render: componentRender,
       appId: ctx.appId,
       userId: ctx.userId, // per-user isolation (undefined for non-federated single-user)
+      // Authored source, when the generator distinguishes it from the
+      // compiled `componentCode` above — see
+      // `CommitGguiSessionInput.sourceCode`'s docstring. Absent on
+      // generators that never produce a separate authored form.
+      ...(result.response.sourceCode !== undefined
+        ? { sourceCode: result.response.sourceCode }
+        : {}),
     });
     await args.writeIdentityFor(resolvedBlueprintId ?? null)(committed);
   } catch {
