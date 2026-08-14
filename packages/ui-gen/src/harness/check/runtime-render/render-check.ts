@@ -24,6 +24,7 @@ import { HOOK_NAME_RE, listContractGadgets } from "@ggui-ai/protocol";
 import { createProbe, createProbeWireConfig, type Probe } from "./probe.js";
 import { loadComponent } from "./load-component.js";
 import { findWiring, type WiringDetection } from "./find-wiring.js";
+import { installProductionActShim } from "./production-act-shim.js";
 // All happy-dom / RTL / user-event narrowing flows through the typed
 // host boundary (one set of structural interfaces + validating guards;
 // DOM-lib-free — some downstream packages, e.g. cloud/amplify, exclude
@@ -237,6 +238,9 @@ export async function runRenderCheck(
     // internals.
     uninstallSpy = probe.installPostMessageSpy();
 
+    // Must run before RTL's first import in this process — see
+    // production-act-shim.ts's docstring for why.
+    installProductionActShim();
     const { render, cleanup } = await import("@testing-library/react");
     // user-event v14 default export — see https://testing-library.com/docs/user-event/intro/
     const userEventModule = await import("@testing-library/user-event");

@@ -9,6 +9,8 @@
 //   - declared props appear in the DOM                      (warn)
 //   - declared stream events update the DOM when emitted    (warn)
 
+import { installProductionActShim } from "./production-act-shim.js";
+
 export { runRenderCheck, type RenderCheckResult, type RenderCheckIssue } from "./render-check.js";
 export { createProbe, createProbeWireConfig, type Probe } from "./probe.js";
 export { prepareMockupProps, type MockupPropsResult } from "./prepare-mockup.js";
@@ -51,6 +53,11 @@ export async function warmupRuntimeRenderProbe(): Promise<{ ms: number; loaded: 
       missing += 1;
     }
   };
+  // Must run before RTL's first import in this process — the pod
+  // calls this warmup at boot, so RTL lands in the module cache (with
+  // its act snapshot taken) here, long before the first real probe
+  // call. See production-act-shim.ts's docstring for why.
+  installProductionActShim();
   await Promise.all([
     tryLoad("happy-dom"),
     tryLoad("@testing-library/react"),
