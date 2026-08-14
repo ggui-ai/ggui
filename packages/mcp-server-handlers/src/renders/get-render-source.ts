@@ -7,7 +7,7 @@
  * plane (bare `ggui_*` wire name, `agent` audience) — the calling app
  * reads its OWN render's source, no user-identity logic anywhere.
  * Deliberately separate from the control-plane
- * `ggui_ops_get_render_source` (which a signed-in console user calls
+ * `ggui_ops_get_render_source` (which a signed-in end user calls
  * to read one of their own renders by user identity, not app
  * identity) — two different callers, two different tenancy models,
  * two tools.

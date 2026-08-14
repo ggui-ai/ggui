@@ -3,8 +3,8 @@
  * into the `{source, contract?, fixtureProps?}` blueprint envelope.
  *
  * Shared by every caller that exposes a render's source for saving as
- * a blueprint — the control-plane `ggui_ops_get_render_source`
- * (`cloud/ggui-protocol-pod`) and the data-plane
+ * a blueprint — the control-plane per-user variant
+ * (`ggui_ops_get_render_source`) and the data-plane
  * `ggui_get_render_source` (`createGguiGetRenderSourceHandler`, this
  * package) both import this one function so their envelope shape can
  * never drift apart. Extracted verbatim from the control-plane tool's
