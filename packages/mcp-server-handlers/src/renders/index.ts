@@ -134,6 +134,14 @@ export {
   type GguiGetSessionHandlerDeps,
 } from "./get-session.js";
 export {
+  createGguiGetRenderSourceHandler,
+  type GguiGetRenderSourceHandlerDeps,
+} from "./get-render-source.js";
+export {
+  buildRenderSourceEnvelope,
+  type RenderSourceEnvelope,
+} from "./render-source-envelope.js";
+export {
   handleStream,
   type HandleStreamDeps,
   type HandleStreamEnvelope,
