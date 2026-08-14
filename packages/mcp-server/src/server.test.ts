@@ -1069,6 +1069,125 @@ describe('createGguiServer — MCP wire roundtrip', () => {
     }
   });
 
+  // ── Anonymous-ops OAuth challenge (ggui#505) ────────────────────────
+  // The control transport 401s anonymous tools/call requests naming an
+  // ops tool BEFORE dispatch — the standards trigger for OAuth
+  // auto-negotiation — while every other message on the route keeps
+  // the anonymous-capable design-time posture.
+  describe('control plane anonymous-ops challenge', () => {
+    /**
+     * The bare fixture mounts no ops-audience tools (the ops families
+     * are deployment-registered), so the challenge tests register one:
+     * an ops-tagged probe that lands on /control via the audience
+     * route and therefore in the challenge set.
+     */
+    async function bootWithOpsProbe(
+      opts: { strictAuth?: boolean } = {},
+    ): Promise<BootedFixture> {
+      const vectors = new InMemoryVectorStore();
+      const embedding = new MockEmbeddingProvider();
+      const { defaultHandlers } = await import('./server.js');
+      const opsProbe = {
+        name: 'ggui_ops_test_probe',
+        description: 'ops-tagged probe for the anonymous-challenge tests.',
+        audience: ['ops' as const],
+        inputSchema: {},
+        outputSchema: { ok: z.boolean() },
+        handler: async () => ({ ok: true }),
+      };
+      return boot({
+        vectors,
+        embedding,
+        handlers: [...defaultHandlers({ vectors, embedding }), opsProbe],
+        oauth: { issuerUrl: 'https://mcp.example.test' },
+        // The default fixture adapter is devAllowAll — it authenticates
+        // even bearer-LESS requests as source:'dev', so the anonymous
+        // branch (and therefore the challenge) can never fire under it.
+        // Anonymous-caller tests boot the strict adapter instead, which
+        // rejects missing bearers → the transport synthesizes
+        // source:'anonymous' — the production shape.
+        ...(opts.strictAuth
+          ? { auth: new InMemoryAuthAdapter({ devAllowAll: false }) }
+          : {}),
+      });
+    }
+
+    async function controlToolsCall(
+      url: string,
+      toolName: string,
+      headers: Record<string, string> = {},
+    ): Promise<globalThis.Response> {
+      return fetch(`${url}/control`, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          accept: 'application/json, text/event-stream',
+          ...headers,
+        },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: 1,
+          method: 'tools/call',
+          params: { name: toolName, arguments: {} },
+        }),
+      });
+    }
+
+    it('401s an anonymous ops call with WWW-Authenticate pointing at the control PRM', async () => {
+      fx = await bootWithOpsProbe({ strictAuth: true });
+      const res = await controlToolsCall(fx.url, 'ggui_ops_test_probe');
+      expect(res.status).toBe(401);
+      const challenge = res.headers.get('www-authenticate');
+      expect(challenge).not.toBeNull();
+      expect(challenge).toContain(
+        '/.well-known/oauth-protected-resource/control',
+      );
+      // The body stays actionable for agent-class callers.
+      const body = (await res.json()) as {
+        error: { message: string };
+      };
+      expect(body.error.message).toContain('operator tool');
+      expect(body.error.message).toContain('ggui_ops_test_probe');
+    });
+
+    it('does NOT challenge an anonymous protocol tool call on the same route', async () => {
+      fx = await bootWithOpsProbe({ strictAuth: true });
+      const res = await controlToolsCall(
+        fx.url,
+        'ggui_protocol_list_available_primitives',
+      );
+      expect(res.status).toBe(200);
+    });
+
+    it('does NOT challenge a bearer-carrying ops call (reaches dispatch)', async () => {
+      fx = await bootWithOpsProbe();
+      const res = await controlToolsCall(fx.url, 'ggui_ops_test_probe', {
+        authorization: 'Bearer devAllowAllKey',
+      });
+      // Dispatch outcome (success, confirm preview, or in-band tool
+      // error) is the handler's business — the transport must not 401.
+      expect(res.status).not.toBe(401);
+    });
+
+    it('anonymous tools/list on the control plane still succeeds', async () => {
+      fx = await bootWithOpsProbe({ strictAuth: true });
+      const transport = new StreamableHTTPClientTransport(
+        new URL(`${fx.url}/control`),
+      );
+      const client = new Client(
+        { name: 'test-client', version: '0' },
+        { capabilities: {} },
+      );
+      await client.connect(transport);
+      try {
+        const tools = await client.listTools();
+        expect(tools.tools.length).toBeGreaterThan(0);
+      } finally {
+        await client.close();
+      }
+    });
+  });
+
   it('tools/call ggui_list_featured_blueprints returns the contract-shaped output', async () => {
     fx = await boot();
     const client = await connectClient(fx.url);

@@ -4813,6 +4813,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
     info,
     handlers,
     controlHandlers: controlService.handlers,
+    controlOpsToolNames: controlService.opsToolNames,
     mcpServices,
     als,
     appIdFromIdentity,

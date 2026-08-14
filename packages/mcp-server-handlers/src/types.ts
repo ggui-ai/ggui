@@ -410,10 +410,16 @@ export interface SharedHandler<
  * authorization — auth resolved fine, but the resolved identity
  * doesn't have what this particular handler needs.
  *
- * Transport layers SHOULD map this to a 401 (or 403, depending on
- * whether the client could re-auth into a richer identity). The pod's
- * `podErrorMapper` maps it to 401 with the handler's message so
- * MCP clients can prompt for sign-in.
+ * How this reaches the wire is two-layered (ggui#505): the control
+ * transport challenges anonymous OPS calls with an HTTP 401 +
+ * `WWW-Authenticate` BEFORE dispatch (so standards hosts
+ * auto-negotiate OAuth), and a throw from INSIDE a handler surfaces
+ * as an in-band `isError` tool result — the MCP framework converts
+ * handler throws at dispatch, so transport error mappers (the pod's
+ * `podErrorMapper` 401 arm included) never see this error from tool
+ * dispatch. The in-band form is the contract for authenticated-but-
+ * insufficient callers; the transport 401 is the contract for
+ * anonymous ones.
  */
 export class AuthRequiredError extends Error {
   constructor(message: string) {

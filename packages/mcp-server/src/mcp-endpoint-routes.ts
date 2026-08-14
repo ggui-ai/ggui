@@ -32,6 +32,7 @@
  * rules.
  */
 
+import { isRecord } from "@ggui-ai/protocol";
 import type { AuthAdapter, AuthResult } from "@ggui-ai/mcp-server-core";
 import type { HandlerContext, SharedHandler } from "@ggui-ai/mcp-server-handlers";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
@@ -93,6 +94,12 @@ interface MountOptions {
    * transport.
    */
   readonly controlHandlers: ReadonlyArray<SharedHandler<ZodRawShape, ZodRawShape>>;
+  /**
+   * The control plane's ops-tool name set (captured by
+   * `buildControlService` before audience-stripping). Drives the
+   * transport-level anonymous-ops OAuth challenge (ggui#505).
+   */
+  readonly controlOpsToolNames: ReadonlySet<string>;
   /** Validated isolated-service list (`validateMcpServices` output). */
   readonly mcpServices: ReadonlyArray<McpService>;
   /** Request-scoped HandlerContext storage shared with the handlers. */
@@ -154,6 +161,7 @@ export function mountMcpEndpoints(opts: MountOptions): void {
     info,
     handlers,
     controlHandlers,
+    controlOpsToolNames,
     mcpServices,
     als,
     appIdFromIdentity,
@@ -165,10 +173,44 @@ export function mountMcpEndpoints(opts: MountOptions): void {
     buildMcpOptions,
   } = opts;
 
+  /**
+   * OAuth auto-negotiation for the control plane (ggui#505): the first
+   * tool name in the request body that is an ops tool, or `null` when
+   * the request contains none. JSON-RPC bodies may be a single message
+   * or a batch; a batch containing ANY ops call challenges as a whole
+   * (mixed anonymous batches are not a supported shape).
+   *
+   * External-boundary narrowing via `isRecord` — the body is unvalidated
+   * wire input here; the MCP transport re-validates after dispatch.
+   */
+  const findOpsToolCall = (body: unknown, opsToolNames: ReadonlySet<string>): string | null => {
+    const messages = Array.isArray(body) ? body : [body];
+    for (const m of messages) {
+      if (!isRecord(m) || m.method !== "tools/call" || !isRecord(m.params)) continue;
+      const name = m.params.name;
+      if (typeof name === "string" && opsToolNames.has(name)) return name;
+    }
+    return null;
+  };
+
   const makeMcpHandler =
     (
       routeHandlers: ReadonlyArray<SharedHandler<ZodRawShape, ZodRawShape>>,
-      handlerOpts?: { readonly anonymous?: boolean; readonly rejectFederated?: boolean }
+      handlerOpts?: {
+        readonly anonymous?: boolean;
+        readonly rejectFederated?: boolean;
+        /**
+         * Ops-tool names that CHALLENGE anonymous callers at the
+         * transport (ggui#505): an anonymous `tools/call` naming one
+         * of these gets HTTP 401 + `WWW-Authenticate` pointing at the
+         * control plane's RFC 9728 metadata, so standards hosts
+         * auto-negotiate OAuth. Everything else on the route
+         * (initialize, tools/list, protocol tools) stays
+         * anonymous-capable — the mixed-audience posture survives.
+         * The per-tool `withAuthGate` remains as defense-in-depth.
+         */
+        readonly anonymousOpsChallenge?: ReadonlySet<string>;
+      }
     ) =>
     async (req: Request, res: Response): Promise<void> => {
       const requestId =
@@ -262,6 +304,42 @@ export function mountMcpEndpoints(opts: MountOptions): void {
           id: null,
         });
         return;
+      }
+
+      // OAuth auto-negotiation (ggui#505) — anonymous ops calls get a
+      // transport 401 BEFORE dispatch, with the standards trigger in
+      // the header AND the actionable guidance agents read in the
+      // body. Runs only when the route opted in (the control plane)
+      // and only for resolved-anonymous callers naming an ops tool —
+      // every other message on the route keeps the anonymous-capable
+      // design-time posture. This makes the documented
+      // AuthRequiredError→401 mapping observable at the transport; the
+      // per-tool auth gate stays as defense-in-depth for any path that
+      // reaches dispatch.
+      if (handlerOpts?.anonymousOpsChallenge !== undefined && identity.source === "anonymous") {
+        const opsToolName = findOpsToolCall(req.body, handlerOpts.anonymousOpsChallenge);
+        if (opsToolName !== null) {
+          reqLogger.info("anonymous_ops_call_challenged", { tool: opsToolName });
+          if (oauthEnabled) {
+            res.setHeader(
+              "WWW-Authenticate",
+              buildWwwAuthenticate(resolveIssuerUrl(req, oauthIssuerUrl), CONTROL_PATH)
+            );
+          }
+          res.status(401).json({
+            jsonrpc: "2.0",
+            error: {
+              code: -32000,
+              message:
+                `${opsToolName} is an operator tool and needs an authenticated caller. ` +
+                `Present a bearer token this deployment accepts, or complete the OAuth flow ` +
+                `advertised in WWW-Authenticate (universal connector keys come from the ` +
+                `console: Connector keys → New key, leave the app unset).`,
+            },
+            id: null,
+          });
+          return;
+        }
       }
 
       // Per-tenant URL routing. When `perAppRouting`
@@ -396,6 +474,10 @@ export function mountMcpEndpoints(opts: MountOptions): void {
   const controlMcpHandler = makeMcpHandler(controlHandlers, {
     anonymous: true,
     rejectFederated: true,
+    // The control service captures this set BEFORE stripAudience
+    // erases the tags — filtering `controlHandlers` here would yield
+    // an empty set and silently disable the challenge (ggui#505).
+    anonymousOpsChallenge: controlOpsToolNames,
   });
 
   // Universal endpoint — `appId` resolved from the auth identity via

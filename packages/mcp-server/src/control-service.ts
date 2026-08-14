@@ -151,8 +151,12 @@ export function stripAudience<I extends ZodRawShape, O extends ZodRawShape, D>(
  * populated: every deployment tier proves identity differently
  * (single-user builder, per-app key, per-user key, OIDC), and only the
  * source distinguishes "the adapter authenticated this request" from
- * "the transport let it through". Transports map
- * {@link AuthRequiredError} to 401 so clients can prompt for sign-in.
+ * "the transport let it through". This gate is defense-in-depth
+ * behind the transport's anonymous-ops 401 challenge (ggui#505, see
+ * `mcp-endpoint-routes.ts`): anonymous callers normally never reach
+ * dispatch on an ops tool; a throw HERE surfaces as an in-band
+ * `isError` tool result, which is the contract for callers that
+ * authenticated but lack what the handler needs.
  */
 export function withAuthGate<I extends ZodRawShape, O extends ZodRawShape, D>(
   h: SharedHandler<I, O, D>
@@ -253,7 +257,7 @@ export interface BuildControlServiceArgs {
  * design-time tools, and the per-handler auth gate is what keeps the
  * ops half closed.
  */
-export function buildControlService(args: BuildControlServiceArgs): McpService {
+export function buildControlService(args: BuildControlServiceArgs): ControlService {
   const singleCall = new Set<string>([...SINGLE_CALL_OPS, ...(args.singleCallOps ?? [])]);
   const protocolTools = filterHandlersByAudience(args.handlers, ["protocol"]);
   const opsTools = filterHandlersByAudience(args.handlers, ["ops"]);
@@ -271,5 +275,21 @@ export function buildControlService(args: BuildControlServiceArgs): McpService {
     path: CONTROL_PATH,
     handlers,
     anonymous: true,
+    // Captured BEFORE stripAudience erases the tags — the transport's
+    // anonymous-ops 401 challenge (ggui#505) needs the ops-name set,
+    // and the stripped handlers can no longer answer "which of you are
+    // ops". This service is the single authority on that membership.
+    opsToolNames: new Set(opsTools.map((h) => h.name)),
   };
+}
+
+/**
+ * {@link McpService} plus the control plane's ops-tool name set — the
+ * membership the transport-level OAuth challenge reads. A separate
+ * field (rather than audience tags on the handlers) because service
+ * handlers deliberately carry no audience tag (see
+ * {@link stripAudience}).
+ */
+export interface ControlService extends McpService {
+  readonly opsToolNames: ReadonlySet<string>;
 }
