@@ -510,6 +510,99 @@ function buildOpsBlueprintDeps(input: {
   };
 }
 
+/**
+ * Materialize the operator-class blueprint family from a bound
+ * {@link OpsBlueprintBundle}. Registered on the control plane via
+ * `audience: ['ops']`.
+ *
+ * Four of the five land whenever the bundle is present; the `generate`
+ * tool additionally requires `resolveLlm` + `blueprints` (the same deps
+ * the render generation path reads) because without them it has no
+ * dispatch target.
+ *
+ * Lives here — not inline in {@link defaultHandlers} — so BOTH
+ * composition paths build the family from ONE body:
+ * `defaultHandlers` for the default handler set, and
+ * {@link buildOpsBundleHandlers} for deployments that supply their own
+ * `CreateGguiServerOptions.handlers` array. The construction used to sit
+ * only inside `defaultHandlers`, so an explicit handler list silently
+ * dropped all five tools even with the bundle bound.
+ */
+export function buildOpsBlueprintHandlers(input: {
+  readonly bundle: OpsBlueprintBundle;
+  /**
+   * Server-level fallback for the bundle's own `appMetadataStore` — the
+   * bundle's field wins, this fills in when the bundle omits it. Only
+   * the `defaultHandlers` path has a server-level store to offer; the
+   * ops-bundle path passes nothing and lets the bundle govern.
+   */
+  readonly appMetadataStore?: AppMetadataStore;
+  readonly telemetry?: TelemetrySink;
+}): ReadonlyArray<SharedHandler<ZodRawShape, ZodRawShape>> {
+  const { bundle } = input;
+  const handlers: Array<SharedHandler<ZodRawShape, ZodRawShape>> = [];
+  // Bundle-explicit `appMetadataStore` wins; falls back to the
+  // server-level one — same precedence
+  // `deps.handshake.appMetadataStore ?? deps.appMetadataStore` uses.
+  // Gates `assertGadgetsRegistered` inside both generate + register
+  // (see each handler's own no-op-when-unbound posture).
+  const opsBlueprintAppMetadataStore = bundle.appMetadataStore ?? input.appMetadataStore;
+  if (bundle.resolveLlm && bundle.blueprints) {
+    handlers.push(
+      createGguiOpsGenerateBlueprintHandler({
+        registry: bundle.registry,
+        blueprintStore: bundle.blueprintStore,
+        resolveLlm: bundle.resolveLlm,
+        blueprints: bundle.blueprints,
+        ...(bundle.putCode ? { putCode: bundle.putCode } : {}),
+        ...(bundle.listAllForApp ? { listAllForApp: bundle.listAllForApp } : {}),
+        ...(opsBlueprintAppMetadataStore
+          ? { appMetadataStore: opsBlueprintAppMetadataStore }
+          : {}),
+        ...(bundle.cacheRegistry ? { cacheRegistry: bundle.cacheRegistry } : {}),
+        ...(input.telemetry ? { telemetry: input.telemetry } : {}),
+        authorizeAppAccess: bundle.authorizeAppAccess,
+      }) as SharedHandler<ZodRawShape, ZodRawShape>
+    );
+  }
+  // `ggui_ops_register_blueprint` — sibling of `_generate_*` that
+  // accepts pre-built componentCode bytes. No LLM dispatch, so it
+  // registers whenever the ops dep bundle is bound (no resolveLlm
+  // / blueprints gate). Operator UX entry point for fixture
+  // seeding + export/reimport round-trips.
+  handlers.push(
+    createGguiOpsRegisterBlueprintHandler({
+      blueprintStore: bundle.blueprintStore,
+      ...(bundle.putCode ? { putCode: bundle.putCode } : {}),
+      ...(bundle.listAllForApp ? { listAllForApp: bundle.listAllForApp } : {}),
+      ...(opsBlueprintAppMetadataStore ? { appMetadataStore: opsBlueprintAppMetadataStore } : {}),
+      ...(bundle.cacheRegistry ? { cacheRegistry: bundle.cacheRegistry } : {}),
+      ...(input.telemetry ? { telemetry: input.telemetry } : {}),
+      authorizeAppAccess: bundle.authorizeAppAccess,
+    }) as SharedHandler<ZodRawShape, ZodRawShape>
+  );
+  handlers.push(
+    createGguiOpsListBlueprintsHandler({
+      blueprintStore: bundle.blueprintStore,
+      blueprintSearch: bundle.blueprintSearch,
+      authorizeAppAccess: bundle.authorizeAppAccess,
+    }) as SharedHandler<ZodRawShape, ZodRawShape>
+  );
+  handlers.push(
+    createGguiOpsUpdateBlueprintHandler({
+      blueprintStore: bundle.blueprintStore,
+      authorizeAppAccess: bundle.authorizeAppAccess,
+    }) as SharedHandler<ZodRawShape, ZodRawShape>
+  );
+  handlers.push(
+    createGguiOpsDeleteBlueprintHandler({
+      blueprintStore: bundle.blueprintStore,
+      authorizeAppAccess: bundle.authorizeAppAccess,
+    }) as SharedHandler<ZodRawShape, ZodRawShape>
+  );
+  return handlers;
+}
+
 export function defaultHandlers(deps: {
   readonly embedding: EmbeddingProvider;
   readonly vectors: VectorStore;
@@ -1456,82 +1549,19 @@ export function defaultHandlers(deps: {
       }) as SharedHandler<ZodRawShape, ZodRawShape>
     );
   }
-  // Operator-class blueprint tools. Registered on the control plane
-  // via `audience: ['ops']`. Four of the five land whenever the
-  // blueprint store + search seam is bound; the `generate` tool
-  // additionally requires `resolveLlm` + `blueprints` (same deps the
-  // render generation path reads). Cloud pods wire all five through
-  // their own composition layer.
+  // Operator-class blueprint tools — see `buildOpsBlueprintHandlers`
+  // for the family's registration rules. The server-level
+  // `deps.appMetadataStore` + `deps.telemetry` are offered as the
+  // bundle's fallbacks; render already gets the server-level store at
+  // :1398. Cloud pods that pass their own handler list pick the same
+  // family up through `buildOpsBundleHandlers`.
   if (deps.opsBlueprint) {
-    // Bundle-explicit `appMetadataStore` wins; falls back to the
-    // server-level `deps.appMetadataStore` — same precedence
-    // `deps.handshake.appMetadataStore ?? deps.appMetadataStore` uses
-    // just above. Gates `assertGadgetsRegistered` inside both
-    // generate + register (see each handler's own no-op-when-unbound
-    // posture); render already gets the server-level store at :1398.
-    const opsBlueprintAppMetadataStore = deps.opsBlueprint.appMetadataStore ?? deps.appMetadataStore;
-    if (deps.opsBlueprint.resolveLlm && deps.opsBlueprint.blueprints) {
-      handlers.push(
-        createGguiOpsGenerateBlueprintHandler({
-          registry: deps.opsBlueprint.registry,
-          blueprintStore: deps.opsBlueprint.blueprintStore,
-          resolveLlm: deps.opsBlueprint.resolveLlm,
-          blueprints: deps.opsBlueprint.blueprints,
-          ...(deps.opsBlueprint.putCode ? { putCode: deps.opsBlueprint.putCode } : {}),
-          ...(deps.opsBlueprint.listAllForApp
-            ? { listAllForApp: deps.opsBlueprint.listAllForApp }
-            : {}),
-          ...(opsBlueprintAppMetadataStore
-            ? { appMetadataStore: opsBlueprintAppMetadataStore }
-            : {}),
-          ...(deps.opsBlueprint.cacheRegistry
-            ? { cacheRegistry: deps.opsBlueprint.cacheRegistry }
-            : {}),
-          ...(deps.telemetry ? { telemetry: deps.telemetry } : {}),
-          authorizeAppAccess: deps.opsBlueprint.authorizeAppAccess,
-        }) as SharedHandler<ZodRawShape, ZodRawShape>
-      );
-    }
-    // `ggui_ops_register_blueprint` — sibling of `_generate_*` that
-    // accepts pre-built componentCode bytes. No LLM dispatch, so it
-    // registers whenever the ops dep bundle is bound (no resolveLlm
-    // / blueprints gate). Operator UX entry point for fixture
-    // seeding + export/reimport round-trips.
     handlers.push(
-      createGguiOpsRegisterBlueprintHandler({
-        blueprintStore: deps.opsBlueprint.blueprintStore,
-        ...(deps.opsBlueprint.putCode ? { putCode: deps.opsBlueprint.putCode } : {}),
-        ...(deps.opsBlueprint.listAllForApp
-          ? { listAllForApp: deps.opsBlueprint.listAllForApp }
-          : {}),
-        ...(opsBlueprintAppMetadataStore
-          ? { appMetadataStore: opsBlueprintAppMetadataStore }
-          : {}),
-        ...(deps.opsBlueprint.cacheRegistry
-          ? { cacheRegistry: deps.opsBlueprint.cacheRegistry }
-          : {}),
+      ...buildOpsBlueprintHandlers({
+        bundle: deps.opsBlueprint,
+        ...(deps.appMetadataStore ? { appMetadataStore: deps.appMetadataStore } : {}),
         ...(deps.telemetry ? { telemetry: deps.telemetry } : {}),
-        authorizeAppAccess: deps.opsBlueprint.authorizeAppAccess,
-      }) as SharedHandler<ZodRawShape, ZodRawShape>
-    );
-    handlers.push(
-      createGguiOpsListBlueprintsHandler({
-        blueprintStore: deps.opsBlueprint.blueprintStore,
-        blueprintSearch: deps.opsBlueprint.blueprintSearch,
-        authorizeAppAccess: deps.opsBlueprint.authorizeAppAccess,
-      }) as SharedHandler<ZodRawShape, ZodRawShape>
-    );
-    handlers.push(
-      createGguiOpsUpdateBlueprintHandler({
-        blueprintStore: deps.opsBlueprint.blueprintStore,
-        authorizeAppAccess: deps.opsBlueprint.authorizeAppAccess,
-      }) as SharedHandler<ZodRawShape, ZodRawShape>
-    );
-    handlers.push(
-      createGguiOpsDeleteBlueprintHandler({
-        blueprintStore: deps.opsBlueprint.blueprintStore,
-        authorizeAppAccess: deps.opsBlueprint.authorizeAppAccess,
-      }) as SharedHandler<ZodRawShape, ZodRawShape>
+      })
     );
   }
   return handlers;
@@ -1539,7 +1569,7 @@ export function defaultHandlers(deps: {
 
 /**
  * Per-domain dep seams for the operator-class `ggui_ops_*` handlers
- * covering apps + orgs + connector-keys + coupons.
+ * covering apps + orgs + connector-keys + coupons + blueprints.
  */
 export interface OpsBundleDeps {
   readonly opsApps?: {
@@ -1556,11 +1586,24 @@ export interface OpsBundleDeps {
   readonly opsCoupon?: {
     readonly coupons: CouponRedeemSource;
   };
+  /**
+   * Operator-class blueprint bundle. Same option
+   * {@link CreateGguiServerOptions.opsBlueprint} carries — read here so
+   * the family materializes on EVERY path, including a deployment that
+   * supplies its own base handler list.
+   */
+  readonly opsBlueprint?: OpsBlueprintBundle;
+  /**
+   * Telemetry sink threaded into the ops-blueprint generate + register
+   * handlers. Same instance {@link CreateGguiServerOptions.telemetry}
+   * carries.
+   */
+  readonly telemetry?: TelemetrySink;
 }
 
 /**
  * Build the operator-class handlers for the apps / orgs /
- * connector-keys / coupon domains. Each domain materializes
+ * connector-keys / coupon / blueprint domains. Each domain materializes
  * independently when its deps seam is bound; deployments that wired
  * none get an empty list.
  *
@@ -1618,6 +1661,17 @@ export function buildOpsBundleHandlers(
       createRedeemCouponHandler({
         coupons: deps.opsCoupon.coupons,
       }) as SharedHandler<ZodRawShape, ZodRawShape>
+    );
+  }
+  if (deps.opsBlueprint) {
+    // No server-level `appMetadataStore` fallback on this path — the
+    // bundle's own field governs, since a deployment that binds its own
+    // bundle here binds the store with it.
+    handlers.push(
+      ...buildOpsBlueprintHandlers({
+        bundle: deps.opsBlueprint,
+        ...(deps.telemetry ? { telemetry: deps.telemetry } : {}),
+      })
     );
   }
   return handlers;
@@ -3244,6 +3298,11 @@ export interface CreateGguiServerOptions {
    * deployment's own `authorizeAppAccess` governs). Omit to get the
    * default assembly: in-memory store/search/registry with the
    * single-operator allow-all authorizer.
+   *
+   * Honored even when {@link handlers} is set — like the other ops
+   * domains, this is an explicit per-domain binding rather than part of
+   * the default handler set a custom list replaces. A tool the custom
+   * list already registers under the same name wins.
    */
   readonly opsBlueprint?: OpsBlueprintBundle;
 
@@ -4443,11 +4502,13 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
     });
 
   // Operator-class domain handlers (apps / orgs / connector-keys /
-  // coupon). Built on EVERY path — they hang off their own explicit
-  // options, so a deployment that supplies a custom base handler list
-  // still gets the domains it wired. A name already claimed by the base
-  // list wins: that's how the cloud pod ships its own
-  // `ggui_ops_create_app` while still picking up the rest of the family.
+  // coupon / blueprints). Built on EVERY path — they hang off their own
+  // explicit options, so a deployment that supplies a custom base
+  // handler list still gets the domains it wired. A name already claimed
+  // by the base list wins: that's how the cloud pod ships its own
+  // `ggui_ops_create_app` while still picking up the rest of the family,
+  // and it is what keeps the blueprint family single-registered when the
+  // default handler set already built it from the same bundle.
   const baseHandlerNames = new Set(baseHandlers.map((h) => h.name));
   const opsBundleHandlers = buildOpsBundleHandlers(opts).filter(
     (h) => !baseHandlerNames.has(h.name)

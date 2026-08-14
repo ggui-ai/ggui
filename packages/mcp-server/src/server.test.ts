@@ -2322,4 +2322,131 @@ describe('createGguiServer — opsBlueprint bundle (explicit-wins factory option
       await client.close();
     }
   });
+
+  // The case above passes `opsBlueprint` WITHOUT `handlers`, so the
+  // family is built by `defaultHandlers`. The deployed cloud pod does
+  // the opposite: it supplies its own explicit handler array alongside
+  // the bundle — and for that shape the five tools used to vanish from
+  // /control entirely, because their construction lived only inside
+  // `defaultHandlers`'s `if (deps.opsBlueprint)` branch. A live probe
+  // of the pod caught it; this test is the lock. `handlers: []` is the
+  // minimal expression of that shape (and a valid "expose no tools"
+  // state), so anything on /control here came from the bundle alone.
+  it('explicit handlers array + opsBlueprint bundle — the family still materializes on /control (live-probe regression lock)', async () => {
+    const generator: UiGenerator = {
+      slug: 'ui-gen-default-haiku-4-5',
+      tier: 'default',
+      model: 'haiku-4-5',
+      async generate() {
+        throw new Error('not exercised by this test');
+      },
+    };
+    const registry = createInMemoryGeneratorRegistry({ default: generator });
+    const blueprintStore = new InMemoryBlueprintStore();
+    const blueprintSearch = createInMemoryBlueprintSearch({ blueprintStore });
+    const blueprints: BlueprintProvider = {
+      async list() {
+        return [];
+      },
+      async get() {
+        return null;
+      },
+    };
+    const resolveLlm = (): GenerationCredentials => ({
+      selection: { provider: 'anthropic', model: 'claude-haiku-4-5-20251001' },
+      providerKey: { provider: 'anthropic', key: 'sk-test' },
+    });
+    const authorizeAppAccess = vi.fn(async () => ({
+      allowed: false as const,
+      reason: 'not_owner' as const,
+    }));
+
+    fx = await boot({
+      // The pod's shape: an explicit base handler list AND the bundle.
+      handlers: [],
+      // Strict adapter (no devAllowAll) so a bearer-less request really
+      // arrives anonymous — the production shape the 401 challenge is
+      // written for. Bearer-carrying calls still authenticate via the
+      // seeded token.
+      auth: new InMemoryAuthAdapter({
+        seedTokens: [
+          {
+            token: 'ops-key',
+            result: { identity: { kind: 'builder' }, source: 'apikey' },
+          },
+        ],
+      }),
+      opsBlueprint: {
+        registry,
+        blueprintStore,
+        blueprintSearch,
+        resolveLlm,
+        blueprints,
+        authorizeAppAccess,
+      },
+    });
+
+    // (c) the anonymous-ops challenge sees the family too — the control
+    // service captures `opsToolNames` from the SAME composed handler
+    // array, so a bearer-less call to one of the five 401s rather than
+    // falling through as an unknown tool.
+    const anonymous = await fetch(`${fx.url}/control`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        accept: 'application/json, text/event-stream',
+      },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 1,
+        method: 'tools/call',
+        params: { name: 'ggui_ops_list_blueprints', arguments: {} },
+      }),
+    });
+    expect(anonymous.status).toBe(401);
+
+    const transport = new StreamableHTTPClientTransport(
+      new URL(`${fx.url}/control`),
+      { requestInit: { headers: { Authorization: 'Bearer ops-key' } } },
+    );
+    const client = new Client(
+      { name: 'test-client', version: '0' },
+      { capabilities: {} },
+    );
+    await client.connect(transport);
+    try {
+      // (a) all five reach /control even though `defaultHandlers` never
+      // ran on this boot.
+      const { tools } = await client.listTools();
+      const names = tools.map((t) => t.name);
+      const family = [
+        'ggui_ops_generate_blueprint',
+        'ggui_ops_register_blueprint',
+        'ggui_ops_list_blueprints',
+        'ggui_ops_update_blueprint',
+        'ggui_ops_delete_blueprint',
+      ];
+      expect(names).toEqual(expect.arrayContaining(family));
+      // Each lands exactly once — the ops-bundle path and the
+      // default-handler path must never both register the family.
+      for (const toolName of family) {
+        expect(names.filter((n) => n === toolName)).toHaveLength(1);
+      }
+
+      // (b) the deployment's own `authorizeAppAccess` — threaded through
+      // the bundle on THIS path, not the factory's allow-all default —
+      // still denies a cross-app curation call.
+      const result = await client.callTool({
+        name: 'ggui_ops_list_blueprints',
+        arguments: { appId: 'some-other-app' },
+      });
+      expect(authorizeAppAccess).toHaveBeenCalled();
+      expect(result.isError).toBe(true);
+      const content = result.content as Array<{ type: string; text: string }>;
+      const message = content.map((c) => c.text).join(' ');
+      expect(message).toMatch(/not curatable/);
+    } finally {
+      await client.close();
+    }
+  });
 });
