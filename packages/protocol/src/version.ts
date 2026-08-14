@@ -32,11 +32,13 @@
  *      single-operator trust model: whoever runs the server operates
  *      every app on it.
  *
- *   ob3. **Hosted mount.** The deployment-boundary restriction that
- *      pinned this family to the OSS default server only (2026-08-13
- *      ruling, ggui#496) is retired: the family now mounts on any
- *      control plane whose deployment supplies the
- *      store/search/authorizer deps, cloud pods included.
+ *   ob3. **Deployment boundary retired.** The restriction that pinned
+ *      this family to the OSS default server only (2026-08-13 ruling,
+ *      ggui#496) is retired: the family now mounts on any control
+ *      plane whose deployment supplies the store/search/authorizer
+ *      deps. Single-operator deployments bind an allow-all
+ *      authorizer; multi-user deployments supply one that enforces
+ *      their ownership model.
  *
  * Conformance-kit verdict: ops tools are not conformance-kit surface —
  * NO protocol stamp roll.

@@ -342,6 +342,71 @@ const DEFAULT_INFO: ServerInfo = {
  * and pairs a real GguiSessionStore. Callers get the choice explicitly.
  */
 /**
+ * Operator-class blueprint dep bundle — the `opsBlueprint` option shape
+ * shared verbatim by {@link defaultHandlers} and
+ * {@link CreateGguiServerOptions.opsBlueprint}. Extracted to a named type
+ * so the two option surfaces cannot drift apart. `buildOpsBlueprintDeps`
+ * below produces one of these (in-memory store/search/registry,
+ * allow-all authorizer) as the OSS default assembly when a deployment
+ * doesn't supply its own bundle.
+ */
+export type OpsBlueprintBundle = {
+  readonly registry: GeneratorRegistry;
+  readonly blueprintStore: BlueprintStore;
+  readonly blueprintSearch: BlueprintSearch;
+  /**
+   * Hook into the store's code-body path. When the bound
+   * `blueprintStore` is an `InMemoryBlueprintStore`, pass
+   * `(codeHash, body) => store.putCode(codeHash, body)` so the
+   * generated body is reachable via `getCode(codeHash)`. Cloud
+   * adapters that persist code inside `BlueprintStore.put` omit
+   * this.
+   */
+  readonly putCode?: (codeHash: string, body: string) => void | Promise<void>;
+  /**
+   * Per-app blueprint enumerator — used for the persona near-dup
+   * warning on the generate path. Optional; when omitted the
+   * check is skipped.
+   */
+  readonly listAllForApp?: (appId: string) => Promise<readonly Blueprint[]>;
+  /**
+   * Resolver for LLM credentials on the generate path. Same shape
+   * as `render.generation.resolveLlm` — typically wired to the same
+   * closure. When absent, the generate handler is NOT registered
+   * (list/update/delete still register).
+   */
+  readonly resolveLlm?: (
+    ctx: HandlerContext
+  ) => Promise<GenerationCredentials | null> | GenerationCredentials | null;
+  /**
+   * BlueprintProvider passed to the generator (same instance
+   * `defaultHandlers`'s blueprint search reads). Required when
+   * `resolveLlm` is set — generate needs this on its
+   * UiGenerateInput.
+   */
+  readonly blueprints?: BlueprintProvider;
+  /**
+   * Cache-registry mirror for `ggui_ops_generate_blueprint`. When
+   * bound, operator-authored blueprints are dual-written to the
+   * cache vectorStore via `registerBlueprint` so the agent-facing
+   * matchBlueprint exact-key probe (handshake + render) finds them.
+   * Same bundle the render handler reads/writes.
+   */
+  readonly cacheRegistry?: {
+    readonly embedding: EmbeddingProvider;
+    readonly vectorStore: VectorStore;
+    readonly index: BlueprintIndex;
+  };
+  /**
+   * Authorization seam for cross-app curation. When omitted, the
+   * default server binds an allow-all authorizer — the
+   * single-operator trust model: whoever runs the server operates
+   * every app on it. Multi-user deployments MUST supply a real
+   * authorizer.
+   */
+  readonly authorizeAppAccess?: OpsBlueprintAppAuthorizer;
+};
+/**
  * Assemble the `opsBlueprint` dep bundle for `defaultHandlers`.
  *
  * Encapsulates the in-memory-store-narrowing logic at one site so the
@@ -898,62 +963,7 @@ export function defaultHandlers(deps: {
    * and non-LLM operations on an existing store can be useful for
    * inspection and fixture seeding.
    */
-  readonly opsBlueprint?: {
-    readonly registry: GeneratorRegistry;
-    readonly blueprintStore: BlueprintStore;
-    readonly blueprintSearch: BlueprintSearch;
-    /**
-     * Hook into the store's code-body path. When the bound
-     * `blueprintStore` is an `InMemoryBlueprintStore`, pass
-     * `(codeHash, body) => store.putCode(codeHash, body)` so the
-     * generated body is reachable via `getCode(codeHash)`. Cloud
-     * adapters that persist code inside `BlueprintStore.put` omit
-     * this.
-     */
-    readonly putCode?: (codeHash: string, body: string) => void | Promise<void>;
-    /**
-     * Per-app blueprint enumerator — used for the persona near-dup
-     * warning on the generate path. Optional; when omitted the
-     * check is skipped.
-     */
-    readonly listAllForApp?: (appId: string) => Promise<readonly Blueprint[]>;
-    /**
-     * Resolver for LLM credentials on the generate path. Same shape
-     * as `render.generation.resolveLlm` — typically wired to the same
-     * closure. When absent, the generate handler is NOT registered
-     * (list/update/delete still register).
-     */
-    readonly resolveLlm?: (
-      ctx: import("@ggui-ai/mcp-server-handlers").HandlerContext
-    ) => Promise<GenerationCredentials | null> | GenerationCredentials | null;
-    /**
-     * BlueprintProvider passed to the generator (same instance
-     * `defaultHandlers`'s blueprint search reads). Required when
-     * `resolveLlm` is set — generate needs this on its
-     * UiGenerateInput.
-     */
-    readonly blueprints?: BlueprintProvider;
-    /**
-     * Cache-registry mirror for `ggui_ops_generate_blueprint`. When
-     * bound, operator-authored blueprints are dual-written to the
-     * cache vectorStore via `registerBlueprint` so the agent-facing
-     * matchBlueprint exact-key probe (handshake + render) finds them.
-     * Same bundle the render handler reads/writes.
-     */
-    readonly cacheRegistry?: {
-      readonly embedding: EmbeddingProvider;
-      readonly vectorStore: VectorStore;
-      readonly index: BlueprintIndex;
-    };
-    /**
-     * Authorization seam for cross-app curation. When omitted, the
-     * default server binds an allow-all authorizer — the
-     * single-operator trust model: whoever runs the server operates
-     * every app on it. Multi-user deployments MUST supply a real
-     * authorizer.
-     */
-    readonly authorizeAppAccess?: OpsBlueprintAppAuthorizer;
-  };
+  readonly opsBlueprint?: OpsBlueprintBundle;
 }): ReadonlyArray<SharedHandler<ZodRawShape, ZodRawShape>> {
   // Single shared pending-events pipe (Model C, sessionId-keyed).
   // render opens (`markCreated`), submit_action appends, consume drains,
@@ -3201,6 +3211,16 @@ export interface CreateGguiServerOptions {
   readonly opsCoupon?: OpsBundleDeps["opsCoupon"];
 
   /**
+   * Explicit ops-blueprint dep bundle. When supplied, it is passed to
+   * the handler set AS-IS — the factory does not assemble its default
+   * in-memory bundle (and does not bind the allow-all authorizer; the
+   * deployment's own `authorizeAppAccess` governs). Omit to get the
+   * default assembly: in-memory store/search/registry with the
+   * single-operator allow-all authorizer.
+   */
+  readonly opsBlueprint?: OpsBlueprintBundle;
+
+  /**
    * Control-plane tuning. The `/control` route itself is not optional —
    * it is one of the server's two MCP surfaces (see
    * `./control-service.ts`) — but a deployment that registers its own
@@ -4338,43 +4358,48 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
       // `appMetadataStore` to register `ggui_list_themes`; absent ⇒
       // tool omitted from `tools/list`.
       ...(opts.themes ? { themes: opts.themes } : {}),
-      // Operator-class blueprint tool wiring. Threads the
-      // resolved blueprint store + search + generator registry into
-      // defaultHandlers; the five `ggui_ops_*` tools land on the
-      // control plane via their `audience: ['ops']` tag. The
-      // `resolveLlm` + `blueprints` deps come from the same source
-      // render reads, so generate dispatches through the same
+      // Operator-class blueprint tool wiring. Explicit-wins: a
+      // deployment that supplies `opts.opsBlueprint` gets that bundle
+      // threaded through AS-IS (its own store/search/registry/
+      // authorizer — the factory does not assemble or override it).
+      // Otherwise falls back to the OSS default assembly below, which
+      // threads the resolved blueprint store + search + generator
+      // registry into defaultHandlers; the five `ggui_ops_*` tools
+      // land on the control plane via their `audience: ['ops']` tag.
+      // The `resolveLlm` + `blueprints` deps come from the same
+      // source render reads, so generate dispatches through the same
       // credential + catalog path as live agent traffic.
       // listAllForApp wires only when the resolved store is the
       // in-memory adapter (which exposes it); cloud adapters bind
       // their own listAllForApp via the search seam.
-      // Wire only when we have a resolved generator
-      // registry. Without `generators`, the ops `generate` path has
-      // no dispatch target; the register/list/update/delete quartet
-      // could technically run without it but the operator UX expects
-      // all five together, so we gate the whole block on the
-      // registry.
-      ...(generators
-        ? buildOpsBlueprintDeps({
-            registry: generators,
-            blueprintStore,
-            blueprintSearch,
-            ...(generationWithCache?.resolveLlm
-              ? { resolveLlm: generationWithCache.resolveLlm }
-              : {}),
-            ...(generationWithCache?.blueprints
-              ? { blueprints: generationWithCache.blueprints }
-              : opts.blueprintProvider
-                ? { blueprints: opts.blueprintProvider }
+      // The fallback is gated on `generators`: without it, the ops
+      // `generate` path has no dispatch target; the
+      // register/list/update/delete quartet could technically run
+      // without it but the operator UX expects all five together, so
+      // we gate the whole block on the registry.
+      ...(opts.opsBlueprint
+        ? { opsBlueprint: opts.opsBlueprint }
+        : generators
+          ? buildOpsBlueprintDeps({
+              registry: generators,
+              blueprintStore,
+              blueprintSearch,
+              ...(generationWithCache?.resolveLlm
+                ? { resolveLlm: generationWithCache.resolveLlm }
                 : {}),
-            // Mirror operator-authored blueprints into the cache
-            // vectorStore so the agent-facing matchBlueprint exact-
-            // key probe (handshake + render) finds them. Same bundle
-            // the render handler + handshake negotiator already
-            // consume.
-            ...(generationWithCache?.cache ? { cacheRegistry: generationWithCache.cache } : {}),
-          })
-        : {}),
+              ...(generationWithCache?.blueprints
+                ? { blueprints: generationWithCache.blueprints }
+                : opts.blueprintProvider
+                  ? { blueprints: opts.blueprintProvider }
+                  : {}),
+              // Mirror operator-authored blueprints into the cache
+              // vectorStore so the agent-facing matchBlueprint exact-
+              // key probe (handshake + render) finds them. Same bundle
+              // the render handler + handshake negotiator already
+              // consume.
+              ...(generationWithCache?.cache ? { cacheRegistry: generationWithCache.cache } : {}),
+            })
+          : {}),
       // ggui_emit resolves the channel via
       // a lazy getter so the handler captures whatever
       // `channelForHealth` ends up pointing at after

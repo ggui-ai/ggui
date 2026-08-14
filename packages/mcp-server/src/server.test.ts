@@ -12,20 +12,25 @@
  * MCP SDK so the test proves actual wire compatibility — not a hand-
  * rolled JSON-RPC impl that could drift from the spec.
  */
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import type { Server as HttpServer } from 'node:http';
 import {
   InMemoryAuthAdapter,
+  InMemoryBlueprintStore,
   InMemoryKeyValueStore,
   InMemoryVectorStore,
   MockEmbeddingProvider,
+  createInMemoryBlueprintSearch,
+  createInMemoryGeneratorRegistry,
 } from '@ggui-ai/mcp-server-core/in-memory';
+import type { BlueprintProvider, UiGenerator } from '@ggui-ai/mcp-server-core';
 import { createGguiServer, type GguiServer } from './server.js';
 import { isRecord } from '@ggui-ai/protocol';
 import type { HandlerContext } from '@ggui-ai/mcp-server-handlers';
+import type { GenerationCredentials } from '@ggui-ai/mcp-server-handlers/renders';
 
 interface BootedFixture {
   server: GguiServer;
@@ -2217,5 +2222,104 @@ describe('registrySearch wiring', () => {
       degradedSources?: unknown;
     };
     expect(result.degradedSources).toBeUndefined();
+  });
+});
+
+// ── opsBlueprint factory-level threading (ggui#501 Task 3 review fix) ──
+// `CreateGguiServerOptions.opsBlueprint` lets a deployment supply its OWN
+// store/search/registry/authorizer bundle instead of the factory's
+// in-memory default. This proves the whole seam end to end: the bundle
+// reaches `defaultHandlers` verbatim (all five tools register, including
+// `generate` which needs `resolveLlm` + `blueprints`), and the
+// deployment's own `authorizeAppAccess` — not the allow-all default — is
+// what governs a cross-app curation call. Task 7 (cloud pod port) depends
+// on exactly this seam.
+describe('createGguiServer — opsBlueprint bundle (explicit-wins factory option)', () => {
+  let fx: BootedFixture;
+
+  afterEach(async () => {
+    await fx.server.close();
+  });
+
+  it('threads a deployment-supplied opsBlueprint bundle end to end: registers all five tools and lets the deployment authorizer deny a cross-app call', async () => {
+    const generator: UiGenerator = {
+      slug: 'ui-gen-default-haiku-4-5',
+      tier: 'default',
+      model: 'haiku-4-5',
+      async generate() {
+        throw new Error('not exercised by this test');
+      },
+    };
+    const registry = createInMemoryGeneratorRegistry({ default: generator });
+    const blueprintStore = new InMemoryBlueprintStore();
+    const blueprintSearch = createInMemoryBlueprintSearch({ blueprintStore });
+    const blueprints: BlueprintProvider = {
+      async list() {
+        return [];
+      },
+      async get() {
+        return null;
+      },
+    };
+    const resolveLlm = (): GenerationCredentials => ({
+      selection: { provider: 'anthropic', model: 'claude-haiku-4-5-20251001' },
+      providerKey: { provider: 'anthropic', key: 'sk-test' },
+    });
+    const authorizeAppAccess = vi.fn(async () => ({
+      allowed: false as const,
+      reason: 'not_owner' as const,
+    }));
+
+    fx = await boot({
+      opsBlueprint: {
+        registry,
+        blueprintStore,
+        blueprintSearch,
+        resolveLlm,
+        blueprints,
+        authorizeAppAccess,
+      },
+    });
+    const transport = new StreamableHTTPClientTransport(
+      new URL(`${fx.url}/control`),
+      { requestInit: { headers: { Authorization: 'Bearer dev' } } },
+    );
+    const client = new Client(
+      { name: 'test-client', version: '0' },
+      { capabilities: {} },
+    );
+    await client.connect(transport);
+    try {
+      // (a) the deployment's bundle reached `defaultHandlers` — all five
+      // ops-blueprint tools registered (generate included, since this
+      // bundle supplies both `resolveLlm` and `blueprints`).
+      const { tools } = await client.listTools();
+      const names = tools.map((t) => t.name);
+      expect(names).toEqual(
+        expect.arrayContaining([
+          'ggui_ops_generate_blueprint',
+          'ggui_ops_register_blueprint',
+          'ggui_ops_list_blueprints',
+          'ggui_ops_update_blueprint',
+          'ggui_ops_delete_blueprint',
+        ]),
+      );
+
+      // (b) + (c) an authenticated caller asking for a DIFFERENT app's
+      // blueprints reaches the deployment's own `authorizeAppAccess` —
+      // not the factory's allow-all default — and its denial surfaces
+      // as an in-band tool error.
+      const result = await client.callTool({
+        name: 'ggui_ops_list_blueprints',
+        arguments: { appId: 'some-other-app' },
+      });
+      expect(authorizeAppAccess).toHaveBeenCalled();
+      expect(result.isError).toBe(true);
+      const content = result.content as Array<{ type: string; text: string }>;
+      const message = content.map((c) => c.text).join(' ');
+      expect(message).toMatch(/not curatable/);
+    } finally {
+      await client.close();
+    }
   });
 });
