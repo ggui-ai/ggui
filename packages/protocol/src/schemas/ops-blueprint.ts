@@ -46,12 +46,19 @@ import {
  * the `variance.persona` slot after normalization (lowercase + trim
  * + Levenshtein near-dup warning).
  *
- * `appId` is NOT on the input shape — the handler reads it off
- * `ctx.appId` resolved by the upstream auth adapter. Cross-tenant
- * authorship would be a security-boundary violation.
+ * `appId` is optional on the input shape and defaults to the
+ * caller's bound app identity; cross-app calls are subject to the
+ * deployment's authorization policy.
  */
 export const opsGenerateBlueprintInputSchema = z
   .object({
+    appId: z
+      .string()
+      .min(1)
+      .optional()
+      .describe(
+        'Target app for this curation call. Defaults to the caller\'s bound app identity; callers not bound to an app must provide it. The deployment\'s authorization policy decides whether the caller may curate the named app.'
+      ),
     contract: dataContractSchema,
     generator: z
       .string()
@@ -149,6 +156,13 @@ export const opsGenerateBlueprintOutputSchema = z
  */
 export const opsRegisterBlueprintInputSchema = z
   .object({
+    appId: z
+      .string()
+      .min(1)
+      .optional()
+      .describe(
+        'Target app for this curation call. Defaults to the caller\'s bound app identity; callers not bound to an app must provide it. The deployment\'s authorization policy decides whether the caller may curate the named app.'
+      ),
     contract: dataContractSchema,
     componentCode: z
       .string()
@@ -210,9 +224,11 @@ export const opsRegisterBlueprintOutputSchema = z
   .strict();
 
 /**
- * `ggui_ops_list_blueprints` input. `appId` is NOT carried on the
- * wire — handlers scope from `ctx.appId`. The filters below are AND-
- * composed against the matching `(appId, *)` view of the store.
+ * `ggui_ops_list_blueprints` input. `appId` is optional on the wire
+ * and defaults to the caller's bound app identity; cross-app calls
+ * are subject to the deployment's authorization policy. The filters
+ * below are AND-composed against the matching `(appId, *)` view of
+ * the store.
  *
  * Behavior split:
  *   - When `contractHash` is the ONLY filter (no semantic keywords
@@ -229,6 +245,13 @@ export const opsRegisterBlueprintOutputSchema = z
  */
 export const opsListBlueprintsInputSchema = z
   .object({
+    appId: z
+      .string()
+      .min(1)
+      .optional()
+      .describe(
+        'Target app for this curation call. Defaults to the caller\'s bound app identity; callers not bound to an app must provide it. The deployment\'s authorization policy decides whether the caller may curate the named app.'
+      ),
     contractHash: z
       .string()
       .min(1)
@@ -273,6 +296,13 @@ export const opsListBlueprintsOutputSchema = z
  */
 export const opsUpdateBlueprintInputSchema = z
   .object({
+    appId: z
+      .string()
+      .min(1)
+      .optional()
+      .describe(
+        'Target app for this curation call. Defaults to the caller\'s bound app identity; callers not bound to an app must provide it. The deployment\'s authorization policy decides whether the caller may curate the named app. Must match the app the addressed blueprint belongs to.'
+      ),
     blueprintId: z.string().min(1),
     isOperatorDefault: z
       .literal(true)
@@ -302,6 +332,13 @@ export const opsUpdateBlueprintOutputSchema = z
  */
 export const opsDeleteBlueprintInputSchema = z
   .object({
+    appId: z
+      .string()
+      .min(1)
+      .optional()
+      .describe(
+        'Target app for this curation call. Defaults to the caller\'s bound app identity; callers not bound to an app must provide it. The deployment\'s authorization policy decides whether the caller may curate the named app. Must match the app the addressed blueprint belongs to.'
+      ),
     blueprintId: z.string().min(1),
   })
   .strict();

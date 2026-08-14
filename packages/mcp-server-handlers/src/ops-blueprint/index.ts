@@ -58,3 +58,10 @@ export {
   findNearDuplicatePersona,
   type NearDuplicatePersonaCheck,
 } from './persona-normalization.js';
+export {
+  resolveEffectiveAppId,
+  CrossAppCurationUnavailableError,
+  AppAccessDeniedError,
+  type OpsBlueprintAppAccess,
+  type OpsBlueprintAppAuthorizer,
+} from './app-access.js';
