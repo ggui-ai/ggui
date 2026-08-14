@@ -157,8 +157,13 @@ export interface UiGenerateInput {
    * generator calls `gadgetCatalog.list(appId)` to resolve the
    * descriptor list per call.
    *
-   * Optional. Callers that pre-fetch `appGadgets` themselves
-   * can ignore this field.
+   * ALSO the app this generation is attributed to: a deployment whose
+   * generator meters or bills per app reads this field to know which
+   * app's usage the call belongs to. Callers that pre-fetch
+   * `appGadgets` SHOULD still supply it for that reason — a generator
+   * that does neither simply ignores it.
+   *
+   * Optional.
    */
   appId?: string;
   /**

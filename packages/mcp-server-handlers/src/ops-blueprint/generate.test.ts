@@ -500,4 +500,31 @@ describe("createGguiOpsGenerateBlueprintHandler — appId input + authorizer", (
     await handler.handler({ contract: emptyContract(), appId: "other-app" }, makeCtx("app-1"));
     expect(seen).toBe("other-app");
   });
+
+  it("the generator receives the effective appId on UiGenerateInput", async () => {
+    // Deployments whose generator meters or bills per app read
+    // `UiGenerateInput.appId` to attribute the generation. It must name
+    // the app being CURATED — billing the caller's bound app for a
+    // cross-app curation would charge the wrong owner.
+    const seen: UiGenerateInput[] = [];
+    const inner = makeMockGenerator();
+    const capturing: UiGenerator = {
+      slug: inner.slug,
+      tier: inner.tier,
+      model: inner.model,
+      generate(generateInput: UiGenerateInput): Promise<UiGenerateResult> {
+        seen.push(generateInput);
+        return inner.generate(generateInput);
+      },
+    };
+    const handler = createGguiOpsGenerateBlueprintHandler({
+      ...defaultDeps({ registry: createInMemoryGeneratorRegistry({ default: capturing }) }),
+      authorizeAppAccess: async () => ({ allowed: true as const }),
+    });
+    await handler.handler({ contract: emptyContract(), appId: "other-app" }, makeCtx("app-1"));
+    expect(seen).toHaveLength(1);
+    expect(seen[0]?.appId).toBe("other-app");
+    // The generation id the hosted charge path records on the ledger row.
+    expect(seen[0]?.request.sessionId).toMatch(/^ops_gen_/);
+  });
 });

@@ -360,6 +360,12 @@ export function createGguiOpsGenerateBlueprintHandler(
         contract,
         llm: creds.selection,
         providerKey: creds.providerKey,
+        // The EFFECTIVE app — the one being curated, which may differ
+        // from `ctx.appId`. Generators resolve their gadget catalog from
+        // it when `appGadgets` wasn't pre-fetched, and deployments that
+        // meter generation per app attribute the call by it. Always
+        // threaded: a generator that never reads it is unaffected.
+        appId,
         ...(resolvedAppLibraries !== undefined ? { appGadgets: resolvedAppLibraries } : {}),
       };
 
