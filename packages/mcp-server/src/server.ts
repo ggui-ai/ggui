@@ -4552,6 +4552,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
       buildResourceValidator({
         universalMcpPath: opts.universalMcpPath ?? "/mcp",
         perAppRouting: opts.perAppRouting,
+        controlPath: CONTROL_PATH,
       }),
   };
   const oauthStorage: OAuthStorage = oauthConfig.storage ?? new InMemoryOAuthStorage();
@@ -4565,6 +4566,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
       oauthConfig,
       oauthStorage,
       universalMcpPath: opts.universalMcpPath ?? "/mcp",
+      controlPath: CONTROL_PATH,
       ...(opts.perAppRouting !== undefined
         ? {
             perAppRouting: {
@@ -5853,7 +5855,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
  * Build the {@link OAuthConfig.validateResource} callback from the
  * deployment shape (RFC 8707).
  *
- * Two valid resource shapes are recognized:
+ * Three valid resource shapes are recognized:
  *   - **Universal** — exactly `${issuer}` when `universalMcpPath` is
  *     `/`, otherwise `${issuer}${universalMcpPath}`. Cloud
  *     `mcp.ggui.ai` collapses the bare-root case (the domain already
@@ -5861,6 +5863,11 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
  *   - **Per-app** — `${issuer}${perAppRouting.pathPrefix}/<appId>`
  *     where `<appId>` matches `perAppRouting.paramPattern`. Cloud
  *     uses `/apps` prefix + `[A-Za-z0-9]{8}`.
+ *   - **Control plane** — `${issuer}${controlPath}` (ggui#505). A
+ *     host naming `/control` consents through the same ceremony and
+ *     receives a UNIVERSAL key: the consent page extracts an appId
+ *     only from the per-app shape, and control-plane ops are
+ *     account-level by design.
  *
  * Anything else returns `false` → /authorize emits `invalid_target`
  * per RFC 8707 §2 before showing consent. Defense-in-depth — the
@@ -5874,8 +5881,9 @@ function buildResourceValidator(opts: {
     paramPattern: string;
     pathPrefix?: string;
   };
+  controlPath?: string;
 }): (issuer: string, resource: string) => boolean {
-  const { universalMcpPath, perAppRouting } = opts;
+  const { universalMcpPath, perAppRouting, controlPath } = opts;
   // Normalize a single trailing slash on the path-only-root form. RFC
   // 3986 §6.2.3 says `https://host` and `https://host/` are equivalent
   // when no other path segments follow. Some clients (claude.ai 2026-05)
@@ -5887,6 +5895,12 @@ function buildResourceValidator(opts: {
   return (issuer: string, resource: string): boolean => {
     const universalResource = universalMcpPath === "/" ? issuer : `${issuer}${universalMcpPath}`;
     if (stripTrailingSlash(resource) === stripTrailingSlash(universalResource)) return true;
+    if (
+      controlPath !== undefined &&
+      stripTrailingSlash(resource) === stripTrailingSlash(`${issuer}${controlPath}`)
+    ) {
+      return true;
+    }
     if (!perAppRouting) return false;
     const { paramPattern, pathPrefix = "" } = perAppRouting;
     // Anchor both ends so partial matches like

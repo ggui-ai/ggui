@@ -49,6 +49,17 @@ interface MountOptions {
     readonly paramName: string;
     readonly pathPrefix?: string;
   };
+  /**
+   * Control-plane mount path (`/control`). When set, the control
+   * plane becomes an RFC 9728/8707-nameable resource: both PRM
+   * discovery forms mount for it, and hosts can complete the OAuth
+   * ceremony naming it directly instead of consenting against the
+   * data plane and reusing the bearer (ggui#505). The minted key is
+   * universal — the consent page extracts an appId only from the
+   * per-app resource shape, and control-plane ops are account-level
+   * by design.
+   */
+  readonly controlPath?: string;
   /** Auth adapter the consent-submit handler resolves bearers against. */
   readonly auth: AuthAdapter;
   /**
@@ -75,6 +86,7 @@ export function mountOAuthAuthorizationServerRoutes(opts: MountOptions): void {
     oauthStorage,
     universalMcpPath,
     perAppRouting,
+    controlPath,
     auth,
     getPairingService,
   } = opts;
@@ -86,6 +98,18 @@ export function mountOAuthAuthorizationServerRoutes(opts: MountOptions): void {
   app.get("/.well-known/oauth-protected-resource", (req, res) =>
     handleProtectedResourceMetadata(req, res, oauthConfig, universalMcpPath)
   );
+  // Control-plane PRM (ggui#505) — both discovery forms, mirroring the
+  // universal endpoint's pair below: the suffix form for grandfathered
+  // clients and the RFC 9728 §3.1 path-inserted form claude.ai's
+  // connect flow actually fetches. Same document either way.
+  if (controlPath !== undefined) {
+    app.get(`${controlPath}/.well-known/oauth-protected-resource`, (req, res) =>
+      handleProtectedResourceMetadata(req, res, oauthConfig, controlPath)
+    );
+    app.get(`/.well-known/oauth-protected-resource${controlPath}`, (req, res) =>
+      handleProtectedResourceMetadata(req, res, oauthConfig, controlPath)
+    );
+  }
   // Per-app protected-resource metadata (RFC 9728 per-resource
   // discovery). When `perAppRouting` is configured,
   // mount a second well-known endpoint under the same path prefix

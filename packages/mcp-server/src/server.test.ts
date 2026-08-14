@@ -893,6 +893,47 @@ describe('createGguiServer — RFC 8707 resource indicator (S4.2, 2026-05-06)', 
     expect(result.status).toBe(200);
     expect(result.body['access_token']).toBe('devAllowAllKey');
   });
+
+  // ── Control plane as an RFC 8707 target (ggui#505) ──────────────────
+  it('accepts the control-plane resource indicator round-trip /authorize → /token', async () => {
+    fx = await boot({
+      oauth: { issuerUrl: 'https://mcp.example.test' },
+    });
+    const result = await runOAuthFlow(fx, {
+      authorizeResource: 'https://mcp.example.test/control',
+      tokenResource: 'https://mcp.example.test/control',
+    });
+    expect(result.status).toBe(200);
+    expect(result.body['access_token']).toBe('devAllowAllKey');
+  });
+
+  it('serves the control-plane PRM on both discovery forms with the same document', async () => {
+    fx = await boot({
+      oauth: { issuerUrl: 'https://mcp.example.test' },
+    });
+    const suffix = await fetch(
+      `${fx.url}/control/.well-known/oauth-protected-resource`,
+    );
+    const inserted = await fetch(
+      `${fx.url}/.well-known/oauth-protected-resource/control`,
+    );
+    expect(suffix.status).toBe(200);
+    expect(inserted.status).toBe(200);
+    const suffixBody = (await suffix.json()) as { resource: string };
+    const insertedBody = (await inserted.json()) as { resource: string };
+    expect(suffixBody.resource.endsWith('/control')).toBe(true);
+    expect(insertedBody).toEqual(suffixBody);
+  });
+
+  it('rejects a resource with extra segments under /control with invalid_target', async () => {
+    fx = await boot({
+      oauth: { issuerUrl: 'https://mcp.example.test' },
+    });
+    const result = await runOAuthFlow(fx, {
+      authorizeResource: 'https://mcp.example.test/control/apps/aB3kP9xY',
+    });
+    expect(result.status).toBe(400);
+  });
 });
 
 describe('createGguiServer — MCP wire roundtrip', () => {
