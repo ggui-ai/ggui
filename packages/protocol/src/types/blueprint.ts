@@ -147,6 +147,18 @@ export interface Blueprint {
    */
   readonly codeHash?: string;
   /**
+   * `CodeStore` content hash (`hashOf`) of the AUTHORED, pre-compile
+   * source body — distinct from {@link codeHash}, which hashes the
+   * compiled `componentCode`. Absent when the blueprint has no
+   * authored form distinct from its compiled output (the engine never
+   * produced one, or produced a byte-identical duplicate that the
+   * read-side envelope guard would reject as a fallback collapse
+   * anyway). The body itself is NOT stored on this row — persistent
+   * adapters keep vector/metadata rows small and content-address the
+   * body through the same `CodeStore` seam `codeHash` already implies.
+   */
+  readonly sourceCodeHash?: string;
+  /**
    * Provenance of the component code — the single
    * {@link BlueprintSource} vocabulary. Generation paths mint the
    * `llm` arm (`{kind: 'llm', generator, model}`) from the engine's

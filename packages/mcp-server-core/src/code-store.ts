@@ -141,7 +141,11 @@ import { createHash } from "node:crypto";
 
 /**
  * Content-addressable code blob storage. Key = `sha256(code)` hex, value
- * = the compiled JavaScript module text the iframe runtime mounts.
+ * = a content-addressable code blob — compiled JavaScript module text
+ * the iframe runtime mounts, or an authored (pre-compile) source body
+ * kept for blueprint provenance (`Blueprint.sourceCodeHash`, guuey#179
+ * finding #4). Both share the same content-hash-keyed, immutable-body
+ * shape; this store doesn't distinguish them by kind.
  */
 export interface CodeStore {
   /**

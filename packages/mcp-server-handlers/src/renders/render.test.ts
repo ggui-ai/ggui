@@ -38,6 +38,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { z } from 'zod';
 import {
   InMemoryBlueprintIndex,
+  InMemoryBlueprintStore,
   InMemoryCodeStore,
   InMemoryKeyValueStore,
   InMemoryRenderIdentityStore,
@@ -154,7 +155,7 @@ const fakeEmbedding: EmbeddingProvider = {
 
 /** Pre-resolved generator escape hatch — returns fixed componentCode,
  *  no LLM. */
-function fakeGenerator(componentCode: string) {
+function fakeGenerator(componentCode: string, sourceCode?: string) {
   return async (
     input: { request: { sessionId: string } },
   ): Promise<UiGenerateResult> => ({
@@ -162,6 +163,7 @@ function fakeGenerator(componentCode: string) {
     response: {
       sessionId: input.request.sessionId,
       componentCode,
+      ...(sourceCode !== undefined ? { sourceCode } : {}),
     },
     metadata: {
       provider: 'anthropic',
@@ -214,6 +216,14 @@ function buildHandler(opts: {
   readonly index: InMemoryBlueprintIndex;
   readonly coldCode: string;
   /**
+   * Optional authored source the fake generator's response carries
+   * alongside `coldCode` (guuey#179 finding #4) — threads through to
+   * `resolveBlueprintId`'s `produced.sourceCode` on a fresh
+   * registration. Omitted = today's default (generator never
+   * distinguishes an authored form).
+   */
+  readonly coldSourceCode?: string;
+  /**
    * Optional schema-compat seam. When present it's threaded onto the
    * handler deps' `checkRenderContracts`, so cache-hit AND cold-gen
    * commits run it against the projected `ComponentGguiSession`. Default
@@ -263,6 +273,15 @@ function buildHandler(opts: {
    * exact `limiterKey` string the handler composes.
    */
   readonly rateLimiter?: GguiRenderHandlerDeps['rateLimiter'];
+  /**
+   * Optional blueprint-cache durability seam (guuey#179 finding #4) —
+   * threaded onto `generation.cache.durability`. Omitted = today's
+   * default (no durability bound, reuse never resolves an authored-
+   * source body).
+   */
+  readonly cacheDurability?: NonNullable<
+    NonNullable<GguiRenderHandlerDeps['generation']>['cache']
+  >['durability'];
 }): ReturnType<typeof createGguiRenderHandler> {
   return createGguiRenderHandler({
     handshakeStore: opts.handshakeStore,
@@ -287,7 +306,7 @@ function buildHandler(opts: {
         slug: 'ui-gen-default-fake',
         tier: 'default',
         model: 'fake',
-        generate: fakeGenerator(opts.coldCode),
+        generate: fakeGenerator(opts.coldCode, opts.coldSourceCode),
       },
       resolveLlm: () => null,
       blueprints: { get: async () => null, list: async () => [] },
@@ -295,9 +314,10 @@ function buildHandler(opts: {
         embedding: fakeEmbedding,
         vectorStore: opts.vectorStore,
         index: opts.index,
+        ...(opts.cacheDurability ? { durability: opts.cacheDurability } : {}),
       },
     },
-    generator: fakeGenerator(opts.coldCode),
+    generator: fakeGenerator(opts.coldCode, opts.coldSourceCode),
   });
 }
 
@@ -507,6 +527,14 @@ async function buildColdGenHarness(extraOpts: {
   readonly mintWsToken?: GguiRenderHandlerDeps['mintWsToken'];
   /** Admission-control seam (#488) — see {@link buildHandler}. */
   readonly rateLimiter?: GguiRenderHandlerDeps['rateLimiter'];
+  /** Authored source the fake generator's response carries — see
+   *  {@link buildHandler}'s `coldSourceCode`. */
+  readonly coldSourceCode?: string;
+  /** Blueprint-cache durability seam — see {@link buildHandler}'s
+   *  `cacheDurability`. */
+  readonly cacheDurability?: NonNullable<
+    NonNullable<GguiRenderHandlerDeps['generation']>['cache']
+  >['durability'];
 } = {}): Promise<{
   readonly harness: Harness;
   readonly handshakeId: string;
@@ -548,6 +576,12 @@ async function buildColdGenHarness(extraOpts: {
       : {}),
     ...(extraOpts.mintWsToken ? { mintWsToken: extraOpts.mintWsToken } : {}),
     ...(extraOpts.rateLimiter ? { rateLimiter: extraOpts.rateLimiter } : {}),
+    ...(extraOpts.coldSourceCode !== undefined
+      ? { coldSourceCode: extraOpts.coldSourceCode }
+      : {}),
+    ...(extraOpts.cacheDurability
+      ? { cacheDurability: extraOpts.cacheDurability }
+      : {}),
   });
   return {
     harness: { handshakeStore, renderStore, vectorStore, index, handler },
@@ -823,6 +857,258 @@ describe('createGguiRenderHandler — cache-reuse point-read (Phase 2)', () => {
         agentCapabilities: AGENT_TOOL_CONTRACT.agentCapabilities,
       }),
     ).not.toThrow();
+  });
+});
+
+// ── Authored source rides cache-reuse (guuey#179 finding #4) ──────────
+//
+// A repeated prompt semantic-matches a cached blueprint → the §6
+// point-read above → `commitCachedGguiSession` used to commit the render
+// WITHOUT authored `sourceCode`, structurally — the registry never
+// persisted it and the reuse commit never threaded it. These tests
+// exercise the fix: a blueprint registered WITH `sourceCode` (and a
+// bound CodeStore) carries `sourceCodeHash` on the row; the reuse
+// branch resolves the body from CodeStore and sidecars it onto the
+// committed render exactly like the cold-gen path already does.
+describe('createGguiRenderHandler — authored source rides cache-reuse (guuey#179 #4)', () => {
+  const STORED_SOURCE =
+    'export default function Cached(props){ return <div>{props.title}</div>; }';
+
+  /** Cache harness — registers a blueprint WITH sourceCode (so the row
+   *  carries sourceCodeHash) under a bound CodeStore, and seeds a
+   *  matching origin:'cache' handshake — the same shape as
+   *  `buildAcceptCacheHarness`, plus the source-carrying registration
+   *  and the durability seam threaded onto the handler. */
+  async function buildAcceptCacheHarnessWithSource(
+    codeStore: CodeStore,
+  ): Promise<{
+    readonly harness: Harness;
+    readonly storedUuid: string;
+    readonly handshakeId: string;
+    readonly sourceCodeHash: string;
+  }> {
+    const handshakeStore = new InMemoryKeyValueStore();
+    const renderStore = new InMemoryGguiSessionStore();
+    const vectorStore = new InMemoryVectorStore();
+    const index = new InMemoryBlueprintIndex();
+
+    const storedUuid = 'bp_22222222-2222-4222-8222-222222222222';
+    const registered = await registerBlueprint(
+      {
+        embedding: fakeEmbedding,
+        vectorStore,
+        index,
+        // writeBlueprintDurably no-ops entirely without a blueprintStore
+        // bound (it's the "row" half of the body-then-row write) — the
+        // source BODY write (this test's whole point) never happens
+        // without one, even though codeStore alone is bound.
+        durability: { blueprintStore: new InMemoryBlueprintStore(), codeStore },
+      },
+      APP_ID,
+      {
+        kind: 'template',
+        contract: CONTRACT,
+        intent: 'a test card',
+        componentCode: STORED_CODE,
+        sourceCode: STORED_SOURCE,
+        source: { kind: 'llm', generator: 'fake-generator', model: 'fake' },
+      },
+      { mintId: () => storedUuid },
+    );
+    if (!registered.sourceCodeHash) {
+      throw new Error('test setup bug: expected registration to compute sourceCodeHash');
+    }
+
+    const handshakeId = 'hs-cache-source-1';
+    await seedHandshake(
+      handshakeStore,
+      handshakeId,
+      buildRecord({
+        handshakeId,
+        origin: 'cache',
+        matchedBlueprint: {
+          id: storedUuid,
+          contractKey: blueprintKey(CONTRACT),
+          variantKey: variantKey(undefined),
+        },
+      }),
+    );
+
+    const handler = buildHandler({
+      handshakeStore,
+      renderStore,
+      vectorStore,
+      index,
+      coldCode: COLD_CODE,
+      cacheDurability: { codeStore },
+    });
+    return {
+      harness: { handshakeStore, renderStore, vectorStore, index, handler },
+      storedUuid,
+      handshakeId,
+      sourceCodeHash: registered.sourceCodeHash,
+    };
+  }
+
+  it('a reuse hit resolves the authored source from CodeStore and commits it onto the render', async () => {
+    const codeStore = new InMemoryCodeStore();
+    const { harness, handshakeId } =
+      await buildAcceptCacheHarnessWithSource(codeStore);
+
+    const out = await harness.handler.handler(
+      { handshakeId, props: {} },
+      CTX,
+    );
+    assertRenderSuccess(out);
+    expect(out.cache.hit).toBe(true);
+
+    const stored = await harness.renderStore.get(out.sessionId);
+    const render = stored?.render as ComponentGguiSession | undefined;
+    expect(render?.componentCode).toBe(STORED_CODE);
+    // sourceCode is a split-read — never on the ComponentGguiSession
+    // itself (get()'s hot path never eagerly loads it), only via
+    // getAuthoredSource().
+    expect(await harness.renderStore.getAuthoredSource?.(out.sessionId)).toBe(
+      STORED_SOURCE,
+    );
+  });
+
+  it('a CodeStore miss (get → null) commits the reuse render WITHOUT sourceCode — no crash', async () => {
+    // A real CodeStore, but we register through a DIFFERENT store than
+    // we read through — the write went somewhere the read can never
+    // see, so `get(hash)` genuinely misses (not a stub pretending to).
+    const writeStore = new InMemoryCodeStore();
+    const readStore = new InMemoryCodeStore();
+    const { harness, handshakeId, storedUuid } =
+      await buildAcceptCacheHarnessWithSource(writeStore);
+
+    // Rebuild the handler bound to the EMPTY readStore for the render
+    // call itself, keeping the same registry/handshake state — mirrors
+    // how a real deployment's CodeStore could miss (restarted process,
+    // expired filesystem cache) independent of the vector-row surviving.
+    const handlerWithMissingBody = buildHandler({
+      handshakeStore: harness.handshakeStore,
+      renderStore: harness.renderStore,
+      vectorStore: harness.vectorStore,
+      index: harness.index,
+      coldCode: COLD_CODE,
+      cacheDurability: { codeStore: readStore },
+    });
+
+    const out = await handlerWithMissingBody.handler(
+      { handshakeId, props: {} },
+      CTX,
+    );
+    assertRenderSuccess(out);
+    expect(out.cache.hit).toBe(true);
+    expect(out.blueprintId).toBe(storedUuid);
+
+    const stored = await harness.renderStore.get(out.sessionId);
+    const render = stored?.render as ComponentGguiSession | undefined;
+    expect(render?.componentCode).toBe(STORED_CODE);
+    expect(await harness.renderStore.getAuthoredSource?.(out.sessionId)).toBeUndefined();
+  });
+
+  it('a CodeStore.get failure warns and commits the reuse render WITHOUT sourceCode — no crash', async () => {
+    const writeStore = new InMemoryCodeStore();
+    const { harness, handshakeId, storedUuid } =
+      await buildAcceptCacheHarnessWithSource(writeStore);
+
+    const rejectingStore: CodeStore = {
+      durability: 'ephemeral',
+      put: async () => {},
+      get: async () => {
+        throw new Error('code store offline');
+      },
+      delete: async () => {},
+      hashOf: writeStore.hashOf.bind(writeStore),
+    };
+    const handlerWithFailingRead = buildHandler({
+      handshakeStore: harness.handshakeStore,
+      renderStore: harness.renderStore,
+      vectorStore: harness.vectorStore,
+      index: harness.index,
+      coldCode: COLD_CODE,
+      cacheDurability: { codeStore: rejectingStore },
+    });
+
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const out = await handlerWithFailingRead.handler(
+      { handshakeId, props: {} },
+      CTX,
+    );
+    assertRenderSuccess(out);
+    expect(out.cache.hit).toBe(true);
+    expect(out.blueprintId).toBe(storedUuid);
+
+    const stored = await harness.renderStore.get(out.sessionId);
+    const render = stored?.render as ComponentGguiSession | undefined;
+    expect(render?.componentCode).toBe(STORED_CODE);
+    expect(await harness.renderStore.getAuthoredSource?.(out.sessionId)).toBeUndefined();
+    expect(
+      warn.mock.calls.some(([msg]) =>
+        typeof msg === 'string' &&
+        msg.includes('authored-source body read failed on reuse'),
+      ),
+    ).toBe(true);
+    warn.mockRestore();
+  });
+
+  it('a blueprint registered without sourceCode commits the reuse render WITHOUT sourceCode (unchanged behavior)', async () => {
+    const { harness, handshakeId } = await buildAcceptCacheHarness();
+    const out = await harness.handler.handler(
+      { handshakeId, props: {} },
+      CTX,
+    );
+    assertRenderSuccess(out);
+    expect(await harness.renderStore.getAuthoredSource?.(out.sessionId)).toBeUndefined();
+  });
+
+  it('cold-gen registration carries sourceCode through resolveBlueprintId when the generation result has one', async () => {
+    const codeStore = new InMemoryCodeStore();
+    const { harness, handshakeId } = await buildColdGenHarness({
+      coldSourceCode: STORED_SOURCE,
+      cacheDurability: {
+        blueprintStore: new InMemoryBlueprintStore(),
+        codeStore,
+      },
+    });
+
+    const out = await harness.handler.handler(
+      { handshakeId, props: {} },
+      CTX,
+    );
+    assertRenderSuccess(out);
+    expect(out.cache.hit).toBe(false);
+    expect(out.blueprintId).toMatch(/^bp_[0-9a-f-]{36}$/);
+
+    // The fresh registry row carries a sourceCodeHash — proves
+    // resolveBlueprintId's `produced.sourceCode` reached
+    // registerBlueprint, and the body is retrievable from the bound
+    // CodeStore under that same hash.
+    const entries = await harness.vectorStore.listByScope(APP_ID);
+    expect(entries).toHaveLength(1);
+    const hash = entries[0].metadata['sourceCodeHash'];
+    expect(typeof hash).toBe('string');
+    expect(await codeStore.get(hash as string)).toBe(STORED_SOURCE);
+  });
+
+  it('cold-gen registration carries no sourceCodeHash when the generation result has none (unchanged behavior)', async () => {
+    const { harness, handshakeId } = await buildColdGenHarness({
+      cacheDurability: {
+        blueprintStore: new InMemoryBlueprintStore(),
+        codeStore: new InMemoryCodeStore(),
+      },
+    });
+
+    const out = await harness.handler.handler(
+      { handshakeId, props: {} },
+      CTX,
+    );
+    assertRenderSuccess(out);
+    const entries = await harness.vectorStore.listByScope(APP_ID);
+    expect(entries).toHaveLength(1);
+    expect(entries[0].metadata['sourceCodeHash']).toBeUndefined();
   });
 });
 

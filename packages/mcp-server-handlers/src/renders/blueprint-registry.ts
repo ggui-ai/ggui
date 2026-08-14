@@ -112,6 +112,26 @@ export interface Blueprint {
   readonly intent: string;
   /** Generated component source. Empty string when generation hasn't happened yet. */
   readonly componentCode: string;
+  /**
+   * Authored (pre-compile) source body, when the generator distinguishes
+   * one from the compiled {@link componentCode}. Carried in-memory only
+   * — from `registerBlueprint`'s construction through to the durable
+   * write in `writeBlueprintDurably` — and NEVER persisted in
+   * vector-store metadata: a multi-KB source blob would blow the
+   * filterable-metadata size cap on production vector-store backends
+   * (vector-store metadata stays small; code bodies go through the
+   * `CodeStore` seam). A row read back via {@link rowToBlueprint} always
+   * has this `undefined`; only {@link sourceCodeHash} round-trips.
+   */
+  readonly sourceCode?: string;
+  /**
+   * Content hash (`CodeStore.hashOf`) of {@link sourceCode}, computed at
+   * registration when a `CodeStore` is bound. Unlike `sourceCode`
+   * itself, THIS field rides the vector-store row (see
+   * `METADATA_KEYS.sourceCodeHash`) — the small scalar pointer the
+   * `codeHash` pattern already established for compiled bodies.
+   */
+  readonly sourceCodeHash?: string;
   /** ISO timestamp of registration. */
   readonly createdAt: string;
   /** Times this entry was returned as a registry hit. Bumps on Tier 1 + Tier 2 hits. */
@@ -217,6 +237,19 @@ export interface RegisterBlueprintInput {
   readonly intent: string;
   readonly componentCode: string;
   /**
+   * Authored (pre-compile) source body, when the generator distinguishes
+   * one from `componentCode`. Optional — the registry persists only its
+   * content hash in row metadata (vector-store metadata stays small;
+   * code bodies go through the `CodeStore` seam). Skipped entirely (no
+   * hash computed, no body written) when byte-identical to
+   * `componentCode` — fallback-collapse symmetry: engines that
+   * duplicate compiled output into `sourceCode` produce a pair the
+   * read-side envelope guard would reject anyway, so persisting it is
+   * pure waste — or when no `CodeStore` is bound (no store → no hash →
+   * honest absence, never a guess).
+   */
+  readonly sourceCode?: string;
+  /**
    * Provenance of `componentCode` — required, no default. Every mint
    * site knows where its code came from: generation paths stamp
    * `{kind: 'llm', generator, model}`, registration/import paths
@@ -307,6 +340,7 @@ const METADATA_KEYS = {
   hitCount: 'hitCount',
   lastHitAt: 'lastHitAt',
   installed: 'installed',
+  sourceCodeHash: 'sourceCodeHash',
 } as const;
 
 function blueprintToMetadata(
@@ -327,6 +361,11 @@ function blueprintToMetadata(
     ...(bp.installed === true ? { [METADATA_KEYS.installed]: true } : {}),
     ...(bp.lastHitAt !== undefined
       ? { [METADATA_KEYS.lastHitAt]: bp.lastHitAt }
+      : {}),
+    // `sourceCode` itself (the raw body) is deliberately NEVER written
+    // here — only its hash. See `Blueprint.sourceCode`'s docstring.
+    ...(bp.sourceCodeHash !== undefined
+      ? { [METADATA_KEYS.sourceCodeHash]: bp.sourceCodeHash }
       : {}),
   };
 }
@@ -447,6 +486,10 @@ function rowToBlueprint(
     warnDroppedRow(key, 'missing variantKey');
     return null;
   }
+  // Missing on legacy rows (written before this field existed) — never
+  // an error, just absence. `sourceCode` itself never round-trips (it
+  // was never persisted); only the hash does.
+  const sourceCodeHash = readScalarString(metadata[METADATA_KEYS.sourceCodeHash]);
   return {
     id: key,
     kind: kindStr,
@@ -461,6 +504,7 @@ function rowToBlueprint(
     source,
     ...(installed ? { installed: true } : {}),
     ...(lastHitAt !== undefined ? { lastHitAt } : {}),
+    ...(sourceCodeHash !== undefined ? { sourceCodeHash } : {}),
   };
 }
 
@@ -592,6 +636,19 @@ export async function registerBlueprint(
   const id = options.mintId?.() ?? `bp_${randomUUID()}`;
   const variance = input.variance ?? {};
   const createdAt = new Date().toISOString();
+
+  // Authored source (guuey#179 finding #4) — only worth carrying when
+  // distinct from componentCode (fallback-collapse symmetry: a
+  // byte-identical pair is never worth persisting) AND a CodeStore is
+  // bound (no store → no hash → honest absence, never a guess).
+  const codeStore = deps.durability?.codeStore;
+  const sourceCodeHash =
+    input.sourceCode !== undefined &&
+    input.sourceCode !== input.componentCode &&
+    codeStore !== undefined
+      ? codeStore.hashOf(input.sourceCode)
+      : undefined;
+
   const blueprint: Blueprint = {
     id,
     kind: input.kind,
@@ -607,6 +664,9 @@ export async function registerBlueprint(
     ...(input.installed === true ? { installed: true } : {}),
     ...(warnFindings.length > 0
       ? { validationWarnings: warnFindings }
+      : {}),
+    ...(sourceCodeHash !== undefined
+      ? { sourceCode: input.sourceCode, sourceCodeHash }
       : {}),
   };
 

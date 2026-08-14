@@ -72,7 +72,8 @@ import type { Blueprint as RegistryBlueprint } from './blueprint-registry.js';
  */
 export type BlueprintDurabilityEvent =
   | 'blueprint_durable_write_failed'
-  | 'blueprint_code_write_failed';
+  | 'blueprint_code_write_failed'
+  | 'blueprint_source_write_failed';
 
 /**
  * The event names as values, so every emitter — in this package or a
@@ -83,6 +84,15 @@ export const BLUEPRINT_DURABILITY_EVENTS = {
   durableWriteFailed: 'blueprint_durable_write_failed',
   /** Body rejected. The row still lands, without a `codeHash`. */
   codeWriteFailed: 'blueprint_code_write_failed',
+  /**
+   * Authored-source body rejected (guuey#179 #4). Sibling of
+   * `codeWriteFailed`, not an overload of it — distinct body, distinct
+   * failure. Unlike `codeHash`, the row still lands WITH
+   * `sourceCodeHash` even on this failure (see `writeBlueprintDurably`'s
+   * comment) — a reuse read against the missing body degrades
+   * gracefully, never an error.
+   */
+  sourceWriteFailed: 'blueprint_source_write_failed',
 } as const satisfies Record<string, BlueprintDurabilityEvent>;
 
 const DURABLE_WRITE_FAILED: BlueprintDurabilityEvent =
@@ -90,6 +100,9 @@ const DURABLE_WRITE_FAILED: BlueprintDurabilityEvent =
 
 const CODE_WRITE_FAILED: BlueprintDurabilityEvent =
   BLUEPRINT_DURABILITY_EVENTS.codeWriteFailed;
+
+const SOURCE_WRITE_FAILED: BlueprintDurabilityEvent =
+  BLUEPRINT_DURABILITY_EVENTS.sourceWriteFailed;
 
 /**
  * The durable pair. Both optional at the binding site — a deployment
@@ -133,6 +146,15 @@ export function projectDurableBlueprint(
     createdBy,
     contract: blueprint.contract,
     ...(codeHash !== undefined ? { codeHash } : {}),
+    // Unlike `codeHash` above, `sourceCodeHash` was already decided at
+    // registration time (`registerBlueprint`) and already lives on the
+    // vector-store row via `blueprintToMetadata` — it doesn't depend on
+    // THIS write succeeding, so it's spread unconditionally rather than
+    // gated on the body write below. See `writeBlueprintDurably`'s
+    // comment for the degradation this implies.
+    ...(blueprint.sourceCodeHash !== undefined
+      ? { sourceCodeHash: blueprint.sourceCodeHash }
+      : {}),
   };
 }
 
@@ -164,6 +186,28 @@ export async function writeBlueprintDurably(
       codeHash = hash;
     } catch (err) {
       logDurabilityFailure(CODE_WRITE_FAILED, blueprint, appId, err);
+    }
+  }
+
+  // Authored source body (guuey#179 #4), own try/catch — a distinct
+  // failure mode from the compiled-code write above. `sourceCodeHash`
+  // is already decided (computed at registration, already on the
+  // vector-store row); this write just persists the body it points at.
+  // A failure here does NOT withhold `sourceCodeHash` from the durable
+  // row below (contrast `codeHash`, which IS withheld on failure) — see
+  // `projectDurableBlueprint`'s comment. The degradation is honest and
+  // non-fatal: a reuse read that resolves the hash but finds
+  // `codeStore.get(hash) === null` gracefully skips, surfacing as the
+  // typed `render_source_unavailable` at the tool layer, never an error.
+  if (
+    codeStore &&
+    blueprint.sourceCode !== undefined &&
+    blueprint.sourceCodeHash !== undefined
+  ) {
+    try {
+      await codeStore.put(blueprint.sourceCodeHash, blueprint.sourceCode);
+    } catch (err) {
+      logDurabilityFailure(SOURCE_WRITE_FAILED, blueprint, appId, err);
     }
   }
 

@@ -6,6 +6,57 @@
  * schema change; the most recent change anchors {@link PROTOCOL_VERSION}.
  *
  * --------------------------------------------------------------------
+ * Authored source rides blueprint reuse (2026-08-14, additive,
+ * pre-launch, guuey#179 finding #4). Cache-reuse renders (a repeated
+ * prompt semantic-matches a cached blueprint) previously committed
+ * without authored `sourceCode` — structurally, not incidentally: the
+ * reuse-commit path never carried it, and blueprint registry rows
+ * never persisted it, so `ggui_get_render_source` always returned
+ * `render_source_unavailable` for every reuse render.
+ *
+ *   sc1. **`Blueprint.sourceCodeHash?: string`** added to
+ *      `@ggui-ai/protocol` — content hash (`CodeStore.hashOf`) of the
+ *      AUTHORED, pre-compile source body, distinct from the existing
+ *      `codeHash` (compiled `componentCode`). The body itself is never
+ *      stored on the row — persistent adapters keep vector/metadata
+ *      rows small (S3 Vectors caps filterable metadata at ~2KB) and
+ *      content-address the body through the same `CodeStore` seam
+ *      `codeHash` already implies. Absent on legacy rows and on
+ *      blueprints with no authored form distinct from their compiled
+ *      output.
+ *
+ *   sc2. **Registration threads it through.** `registerBlueprint`
+ *      (`@ggui-ai/mcp-server-handlers`) gains an optional
+ *      `sourceCode` input; when present, distinct from the compiled
+ *      `componentCode` (fallback-collapse symmetry — a byte-identical
+ *      pair is never worth persisting, since the read-side envelope
+ *      guard would reject it anyway), and a `CodeStore` is bound, the
+ *      registry computes + persists `sourceCodeHash` on the row and
+ *      writes the body through the durability `CodeStore` (body-
+ *      before-row ordering, same orphan-body-beats-dangling-pointer
+ *      posture as the existing compiled-code write). New durability
+ *      event `blueprint_source_write_failed` (additive, sibling to
+ *      `blueprint_code_write_failed`) on a failed body write — the row
+ *      still commits with the hash; a reuse read against a missing
+ *      body degrades gracefully to `render_source_unavailable`, never
+ *      an error.
+ *
+ *   sc3. **Reuse commit threads it back.** The cache-hit reuse branch
+ *      resolves the body from `CodeStore` by the stored hash and
+ *      stamps it onto `GenerationCacheHit.sourceCode`, which
+ *      `commitCachedGguiSession` sidecars onto the render exactly like
+ *      the cold-gen commit path already does — reuse renders now serve
+ *      `ggui_get_render_source` identically to cold-gen renders.
+ *
+ * Conformance-kit verdict: no kit entry required — additive optional
+ * fields + a new durability event, no existing wire shape changed, no
+ * MCP tool name/shape touched.
+ *
+ * Package version — classification MADE here: PATCH for
+ * `@ggui-ai/protocol` (additive optional field, no new export),
+ * MINOR for `@ggui-ai/mcp-server-handlers` (new optional input field +
+ * new event), pre-1.0 and pre-launch. PROTOCOL_VERSION unchanged.
+ * --------------------------------------------------------------------
  * ops-blueprint appId input + app-access seam (2026-08-14, additive,
  * pre-launch, ggui#501). Cross-app curation seam for the operator-
  * class blueprint family — the prerequisite for the family mounting

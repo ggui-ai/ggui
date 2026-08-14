@@ -1604,6 +1604,14 @@ export function createGguiRenderHandler(
           readonly componentCode: string;
           readonly cosine: number;
           readonly contract: DataContract;
+          /**
+           * Content hash of the matched blueprint's authored source
+           * (guuey#179 finding #4), when the registry row carries one.
+           * The body is resolved from `CodeStore` just before the
+           * commit below — never inlined here (the point-read only
+           * fetches the row, not the body).
+           */
+          readonly sourceCodeHash?: string;
         } | null = null;
 
         // Cross-deployment reuse fan-out. The handshake matcher fans out
@@ -1710,6 +1718,9 @@ export function createGguiRenderHandler(
               componentCode: bp.componentCode,
               cosine: 1,
               contract: bp.contract,
+              ...(bp.sourceCodeHash !== undefined
+                ? { sourceCodeHash: bp.sourceCodeHash }
+                : {}),
             };
           }
         } else if (
@@ -1734,6 +1745,9 @@ export function createGguiRenderHandler(
               componentCode: bp.componentCode,
               cosine: 1,
               contract: bp.contract,
+              ...(bp.sourceCodeHash !== undefined
+                ? { sourceCodeHash: bp.sourceCodeHash }
+                : {}),
             };
           }
         }
@@ -1745,6 +1759,26 @@ export function createGguiRenderHandler(
           // at that commit already carries the id (no backfill needed
           // on this path).
           resolvedBlueprintId = blueprintHit.id;
+
+          // Authored source (guuey#179 finding #4) — resolve the body
+          // from CodeStore by the row's stored hash, if any. Best-
+          // effort: a miss or a read failure commits the reuse render
+          // without `sourceCode`, exactly like a blueprint that never
+          // had one — never blocks the render.
+          const codeStore = deps.generation.cache?.durability?.codeStore;
+          let reuseSourceCode: string | undefined;
+          if (blueprintHit.sourceCodeHash !== undefined && codeStore) {
+            try {
+              reuseSourceCode =
+                (await codeStore.get(blueprintHit.sourceCodeHash)) ?? undefined;
+            } catch (err) {
+              // eslint-disable-next-line no-console -- operator-visible, non-fatal
+              console.warn(
+                `[ggui_render] authored-source body read failed on reuse — committing without sourceCode: ${err instanceof Error ? err.message : String(err)}`,
+              );
+            }
+          }
+
           generatedCodeReady = await commitCachedGguiSession(
             deps.renderStore,
             deps.provisionalPreview,
@@ -1763,6 +1797,9 @@ export function createGguiRenderHandler(
                 componentCode: blueprintHit.componentCode,
                 cachedIntent: intent,
                 cachedAt: new Date().toISOString(),
+                ...(reuseSourceCode !== undefined
+                  ? { sourceCode: reuseSourceCode }
+                  : {}),
                 // Project the matched blueprint's contract onto the
                 // cache hit so commitCachedGguiSession lands the wire-surface
                 // specs and capability catalog on the new render.
@@ -1862,6 +1899,7 @@ export function createGguiRenderHandler(
                     resolveBlueprintId: async (produced: {
                       readonly componentCode: string;
                       readonly source: LlmBlueprintSource;
+                      readonly sourceCode?: string;
                     }) =>
                       safelyRegisterBlueprint(
                         {
@@ -1886,6 +1924,12 @@ export function createGguiRenderHandler(
                           // metadata stamp — a fresh generation mints
                           // an `llm`-sourced row.
                           source: produced.source,
+                          // Authored source (guuey#179 finding #4) —
+                          // threaded to the registry so cache-reuse
+                          // renders of this blueprint can serve it too.
+                          ...(produced.sourceCode !== undefined
+                            ? { sourceCode: produced.sourceCode }
+                            : {}),
                           // Register under the EFFECTIVE variance
                           // (proposed on accept, re-aimed on
                           // `override.variance`) so the row's
@@ -2612,6 +2656,14 @@ async function runGenerationIntoGguiSession(
     readonly resolveBlueprintId?: (produced: {
       readonly componentCode: string;
       readonly source: LlmBlueprintSource;
+      /**
+       * Authored (pre-compile) source, when the generator distinguishes
+       * one from `componentCode` — see
+       * `RegisterBlueprintInput.sourceCode`'s docstring (guuey#179
+       * finding #4). Threaded to `registerBlueprint` so cache-reuse
+       * renders of this blueprint can serve authored source too.
+       */
+      readonly sourceCode?: string;
     }) => Promise<string | undefined>;
     /** Runtime prop values for THIS render. Validated against
      *  `story.contract.props` (propsSpec) by the upstream caller
@@ -2874,6 +2926,9 @@ async function runGenerationIntoGguiSession(
     resolvedBlueprintId = await args.resolveBlueprintId({
       componentCode: result.response.componentCode,
       source: producedSource,
+      ...(result.response.sourceCode !== undefined
+        ? { sourceCode: result.response.sourceCode }
+        : {}),
     });
   }
   try {
@@ -3242,6 +3297,14 @@ async function commitCachedGguiSession(
       render: componentRender,
       appId: args.appId,
       userId: args.userId,
+      // Authored source (guuey#179 finding #4) — sidecar exactly like
+      // the cold-gen commit does (see `CommitGguiSessionInput.sourceCode`'s
+      // docstring). Absent when the matched blueprint has no authored
+      // form or the body read missed/failed (see the caller's resolve
+      // step above `commitCachedGguiSession`).
+      ...(args.cacheHit.sourceCode !== undefined
+        ? { sourceCode: args.cacheHit.sourceCode }
+        : {}),
     });
     await args.writeIdentity(committed);
   } catch {

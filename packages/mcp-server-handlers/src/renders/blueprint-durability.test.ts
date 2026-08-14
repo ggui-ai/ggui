@@ -108,6 +108,9 @@ describe('BLUEPRINT_DURABILITY_EVENTS — the registry', () => {
     expect(BLUEPRINT_DURABILITY_EVENTS.codeWriteFailed).toBe(
       'blueprint_code_write_failed',
     );
+    expect(BLUEPRINT_DURABILITY_EVENTS.sourceWriteFailed).toBe(
+      'blueprint_source_write_failed',
+    );
   });
 
   it('maps every key to a distinct value — one key per emitted name', () => {
@@ -123,7 +126,11 @@ describe('BLUEPRINT_DURABILITY_EVENTS — the registry', () => {
     // rewriting this to `Object.values(...)` on both sides would make
     // the assertion vacuous, which is the whole failure mode it guards.
     expect(Object.values(BLUEPRINT_DURABILITY_EVENTS).sort()).toEqual(
-      ['blueprint_code_write_failed', 'blueprint_durable_write_failed'].sort(),
+      [
+        'blueprint_code_write_failed',
+        'blueprint_durable_write_failed',
+        'blueprint_source_write_failed',
+      ].sort(),
     );
   });
 });
@@ -208,6 +215,34 @@ describe('projectDurableBlueprint', () => {
       'abc123',
     );
     expect(record.codeS3Url).toBeUndefined();
+  });
+
+  it('carries sourceCodeHash onto the durable row when the registry blueprint has one (guuey#179 #4)', () => {
+    const bp = makeRegistryBlueprint({
+      sourceCode: 'export default function Card(props){return <div/>;}',
+      sourceCodeHash: 'source-hash-abc',
+    });
+    const record = projectDurableBlueprint(bp, 'app-1', undefined);
+    expect(record.sourceCodeHash).toBe('source-hash-abc');
+  });
+
+  it('omits sourceCodeHash when the registry blueprint has none', () => {
+    const record = projectDurableBlueprint(
+      makeRegistryBlueprint(),
+      'app-1',
+      undefined,
+    );
+    expect(record).not.toHaveProperty('sourceCodeHash');
+  });
+
+  it('carries sourceCodeHash independently of codeHash — unlike codeHash, it is not gated on the 3rd argument', () => {
+    // sourceCodeHash was already decided at registration time (it also
+    // lives on the vector-store row); it doesn't depend on whatever
+    // codeHash this particular durable write resolved.
+    const bp = makeRegistryBlueprint({ sourceCodeHash: 'source-hash-xyz' });
+    const record = projectDurableBlueprint(bp, 'app-1', undefined);
+    expect(record.sourceCodeHash).toBe('source-hash-xyz');
+    expect(record).not.toHaveProperty('codeHash');
   });
 });
 
@@ -403,5 +438,124 @@ describe('writeBlueprintDurably — best-effort failure', () => {
       'blueprint_code_write_failed',
       'blueprint_durable_write_failed',
     ]);
+  });
+});
+
+describe('writeBlueprintDurably — authored source body (guuey#179 #4)', () => {
+  const SOURCE = 'export default function Card(props){return <div>{props.title}</div>;}';
+
+  it('writes the source body under sourceCodeHash when the registry blueprint carries both', async () => {
+    const { store: bpStore, firstRow } = fakeBlueprintStore();
+    const { store: codeStore, put: codePut, objects } = fakeCodeStore();
+    const bp = makeRegistryBlueprint({
+      sourceCode: SOURCE,
+      sourceCodeHash: 'source-hash-1',
+    });
+
+    await writeBlueprintDurably(
+      { blueprintStore: bpStore, codeStore },
+      'app-1',
+      bp,
+    );
+
+    // Two put()s on the code store — the compiled componentCode body
+    // (existing behavior) AND the authored source body (this change) —
+    // each under its own hash.
+    expect(codePut).toHaveBeenCalledWith('source-hash-1', SOURCE);
+    expect(objects.get('source-hash-1')).toBe(SOURCE);
+    expect(firstRow().sourceCodeHash).toBe('source-hash-1');
+  });
+
+  it('does not write a source body when the registry blueprint carries no sourceCode', async () => {
+    const { store: bpStore } = fakeBlueprintStore();
+    const { store: codeStore, put: codePut } = fakeCodeStore();
+
+    await writeBlueprintDurably(
+      { blueprintStore: bpStore, codeStore },
+      'app-1',
+      makeRegistryBlueprint(), // no sourceCode/sourceCodeHash
+    );
+
+    // Only the componentCode put() — never a 2nd call for a source body
+    // that was never provided.
+    expect(codePut).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not write a source body without a bound code store', async () => {
+    const { store: bpStore, firstRow } = fakeBlueprintStore();
+    const bp = makeRegistryBlueprint({
+      sourceCode: SOURCE,
+      sourceCodeHash: 'source-hash-2',
+    });
+
+    await writeBlueprintDurably({ blueprintStore: bpStore }, 'app-1', bp);
+
+    // The row still carries the hash (decided at registration,
+    // independent of this write) even though no body was ever
+    // attempted — see the "unlike codeHash" test above.
+    expect(firstRow().sourceCodeHash).toBe('source-hash-2');
+  });
+
+  it('a source-body write failure emits blueprint_source_write_failed and STILL writes sourceCodeHash on the row (documented degradation)', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const { store: bpStore, put: bpPut, firstRow } = fakeBlueprintStore();
+    const codeStore: CodeStore = {
+      durability: 'ephemeral',
+      put: vi.fn(async (hash: string) => {
+        if (hash === 'source-hash-3') throw new Error('source store down');
+      }),
+      get: async () => null,
+      delete: async () => {},
+      hashOf: () => 'unused',
+    };
+    const bp = makeRegistryBlueprint({
+      sourceCode: SOURCE,
+      sourceCodeHash: 'source-hash-3',
+    });
+
+    await expect(
+      writeBlueprintDurably({ blueprintStore: bpStore, codeStore }, 'app-1', bp),
+    ).resolves.toBeUndefined();
+
+    const event = JSON.parse(warn.mock.calls[0]?.[0] as string);
+    expect(event.msg).toBe('blueprint_source_write_failed');
+
+    // Documented degradation: unlike a failed componentCode body write
+    // (which withholds codeHash from the row), a failed source body
+    // write does NOT withhold sourceCodeHash — a later reuse read
+    // resolves the hash, finds `codeStore.get(hash) === null`, and
+    // gracefully skips (typed `render_source_unavailable` at the tool
+    // layer), never an error.
+    expect(bpPut).toHaveBeenCalledTimes(1);
+    expect(firstRow().sourceCodeHash).toBe('source-hash-3');
+  });
+
+  it('a source-body write failure does not suppress the componentCode body write or the row write', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const { store: bpStore, put: bpPut, firstRow } = fakeBlueprintStore();
+    const { objects } = fakeCodeStore();
+    const codeStore: CodeStore = {
+      durability: 'ephemeral',
+      put: vi.fn(async (hash: string, code: string) => {
+        if (hash === 'source-hash-4') throw new Error('source store down');
+        objects.set(hash, code);
+      }),
+      get: async (hash) => objects.get(hash) ?? null,
+      delete: async () => {},
+      hashOf: (code) => `hash-of-${code.length}`,
+    };
+    const bp = makeRegistryBlueprint({
+      sourceCode: SOURCE,
+      sourceCodeHash: 'source-hash-4',
+    });
+
+    await writeBlueprintDurably({ blueprintStore: bpStore, codeStore }, 'app-1', bp);
+
+    expect(bpPut).toHaveBeenCalledTimes(1);
+    expect(firstRow().codeHash).toBe(codeStore.hashOf(CODE));
+    const names = warn.mock.calls.map(
+      (call) => JSON.parse(call[0] as string).msg,
+    );
+    expect(names).toEqual(['blueprint_source_write_failed']);
   });
 });

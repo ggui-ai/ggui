@@ -1178,3 +1178,159 @@ describe('registerBlueprint — durable write-through', () => {
     warn.mockRestore();
   });
 });
+
+describe('registerBlueprint — authored source (guuey#179 finding #4)', () => {
+  function fakeCodeStore() {
+    const objects = new Map<string, string>();
+    const store = {
+      durability: 'ephemeral' as const,
+      put: vi.fn(async (hash: string, code: string) => {
+        objects.set(hash, code);
+      }),
+      get: async (hash: string) => objects.get(hash) ?? null,
+      delete: async (hash: string) => {
+        objects.delete(hash);
+      },
+      hashOf: (code: string) => `hash-of-${code.length}-${code.slice(0, 8)}`,
+    };
+    return { store, objects };
+  }
+
+  const SOURCE = 'export default function Notepad(props){return <div>{props.noteText}</div>;}';
+
+  const INPUT = {
+    kind: 'template' as const,
+    contract: NOTEPAD_CONTRACT,
+    intent: 'a notepad',
+    componentCode: 'export default () => null;',
+    source: { kind: 'user' } as BlueprintSource,
+  };
+
+  it('computes + persists sourceCodeHash and writes the body when sourceCode is distinct and a codeStore is bound', async () => {
+    const { store: codeStore, objects } = fakeCodeStore();
+    const blueprintStore: BlueprintStore = {
+      durability: 'ephemeral',
+      put: async () => {},
+      list: async () => [],
+      get: async () => null,
+      setOperatorDefault: async () => {},
+      delete: async () => {},
+    };
+    const deps = { ...makeDeps(), durability: { blueprintStore, codeStore } };
+
+    const bp = await registerBlueprint(deps, SCOPE, {
+      ...INPUT,
+      sourceCode: SOURCE,
+    });
+
+    const expectedHash = codeStore.hashOf(SOURCE);
+    expect(bp.sourceCodeHash).toBe(expectedHash);
+    expect(objects.get(expectedHash)).toBe(SOURCE);
+
+    // The hash also round-trips through the vector-store row itself —
+    // not just the returned in-memory object.
+    const fetched = await findBlueprintExact(deps, SCOPE, 'template', bp.contractKey);
+    expect(fetched?.sourceCodeHash).toBe(expectedHash);
+  });
+
+  it('skips the hash and the body write when sourceCode is byte-identical to componentCode (fallback-collapse symmetry)', async () => {
+    const { store: codeStore } = fakeCodeStore();
+    const blueprintStore: BlueprintStore = {
+      durability: 'ephemeral',
+      put: async () => {},
+      list: async () => [],
+      get: async () => null,
+      setOperatorDefault: async () => {},
+      delete: async () => {},
+    };
+    const deps = { ...makeDeps(), durability: { blueprintStore, codeStore } };
+
+    const bp = await registerBlueprint(deps, SCOPE, {
+      ...INPUT,
+      sourceCode: INPUT.componentCode, // byte-identical
+    });
+
+    expect(bp.sourceCodeHash).toBeUndefined();
+    // Exactly ONE put() — the pre-existing componentCode body write
+    // (unrelated to this feature, happens regardless). A second call
+    // for the byte-identical "source" body would be pure waste, since
+    // it's the exact same (hash, code) pair already written.
+    expect(codeStore.put).toHaveBeenCalledTimes(1);
+    expect(codeStore.put).toHaveBeenCalledWith(
+      codeStore.hashOf(INPUT.componentCode),
+      INPUT.componentCode,
+    );
+  });
+
+  it('skips the hash entirely when no durability/codeStore is bound — honest absence, never a guess', async () => {
+    const deps = makeDeps(); // no durability at all
+    const bp = await registerBlueprint(deps, SCOPE, {
+      ...INPUT,
+      sourceCode: SOURCE,
+    });
+    expect(bp.sourceCodeHash).toBeUndefined();
+  });
+
+  it('skips the hash when durability is bound but codeStore is not', async () => {
+    const blueprintStore: BlueprintStore = {
+      durability: 'ephemeral',
+      put: async () => {},
+      list: async () => [],
+      get: async () => null,
+      setOperatorDefault: async () => {},
+      delete: async () => {},
+    };
+    const deps = { ...makeDeps(), durability: { blueprintStore } }; // no codeStore
+    const bp = await registerBlueprint(deps, SCOPE, {
+      ...INPUT,
+      sourceCode: SOURCE,
+    });
+    expect(bp.sourceCodeHash).toBeUndefined();
+  });
+
+  it('round-trips sourceCodeHash through findBlueprintExact and listBlueprints', async () => {
+    const { store: codeStore } = fakeCodeStore();
+    const blueprintStore: BlueprintStore = {
+      durability: 'ephemeral',
+      put: async () => {},
+      list: async () => [],
+      get: async () => null,
+      setOperatorDefault: async () => {},
+      delete: async () => {},
+    };
+    const deps = { ...makeDeps(), durability: { blueprintStore, codeStore } };
+
+    const bp = await registerBlueprint(deps, SCOPE, {
+      ...INPUT,
+      sourceCode: SOURCE,
+    });
+
+    const all = await listBlueprints(deps, SCOPE);
+    expect(all[0]?.sourceCodeHash).toBe(bp.sourceCodeHash);
+  });
+
+  it('tolerates a legacy row with no sourceCodeHash key at all — absence, never an error', async () => {
+    const deps = makeDeps();
+    // Simulate a pre-field row: blueprint-shaped metadata with no
+    // sourceCodeHash key whatsoever (written before this field existed).
+    await deps.vectorStore.putVector(SCOPE, {
+      key: 'bp_legacy_no_source',
+      vector: [0],
+      metadata: {
+        intent: 'legacy row',
+        componentCode: 'export default () => null;',
+        contract: JSON.stringify(NOTEPAD_CONTRACT),
+        contractKey: blueprintKey(NOTEPAD_CONTRACT),
+        variantKey: variantKey(undefined),
+        variance: JSON.stringify({}),
+        kind: 'template',
+        createdAt: '2026-01-01T00:00:00.000Z',
+        hitCount: 0,
+        sourceKind: 'user',
+      },
+    });
+    const all = await listBlueprints(deps, SCOPE);
+    expect(all).toHaveLength(1);
+    expect(all[0]?.sourceCodeHash).toBeUndefined();
+  });
+});
