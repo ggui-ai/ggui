@@ -1,8 +1,9 @@
 import type { z } from 'zod';
-import type { JsonObject, JsonSchema, JsonValue } from './data-contract';
+import type { DataContract, JsonObject, JsonSchema, JsonValue } from './data-contract';
 import type { GguiSession, GguiSessionStatus } from './render';
 import type {
   consumeInputSchema,
+  getRenderSourceInputSchema,
   getSessionInputSchema,
   handshakeInputSchema,
   handshakeOutputSchema,
@@ -170,6 +171,29 @@ export type GguiGetSessionInput = z.infer<typeof getSessionInputSchema>;
  * Output from ggui_get_session tool — full render snapshot.
  */
 export type GguiGetSessionOutput = GguiSession;
+
+/**
+ * Input for ggui_get_render_source tool — read the generated source of
+ * the calling app's own render. Derived from `getRenderSourceInputSchema`.
+ */
+export type GguiGetRenderSourceInput = z.infer<typeof getRenderSourceInputSchema>;
+
+/**
+ * Output from ggui_get_render_source tool — the render's generated
+ * source, ready to feed into a blueprint-save call unreshaped.
+ * `contract` is reassembled from the render's own propsSpec/actionSpec/
+ * streamSpec/contextSpec (this IS `DataContract`'s field set); absent
+ * when the render declares none. `fixtureProps` is the render's live
+ * prop values, when present.
+ */
+export interface GguiGetRenderSourceOutput {
+  readonly sessionId: string;
+  readonly blueprint: {
+    readonly source: string;
+    readonly contract?: DataContract;
+    readonly fixtureProps?: unknown;
+  };
+}
 
 // =============================================================================
 // MCP Tool Output Types

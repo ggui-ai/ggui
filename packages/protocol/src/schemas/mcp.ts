@@ -110,6 +110,22 @@ export const getSessionInputShape = {
 export const getSessionInputSchema = z.object(getSessionInputShape);
 
 /**
+ * `ggui_get_render_source` input — read the generated source of the
+ * calling app's own render. Same shape as {@link getSessionInputShape}
+ * (both take only a sessionId); kept as its own named export rather
+ * than reused directly so each tool's wire contract is independently
+ * pinned, per this file's one-shape-per-tool convention.
+ */
+export const getRenderSourceInputShape = {
+  sessionId: z
+    .string()
+    .min(1)
+    .describe('GguiSession opaque id (UUID) — returned by ggui_render.'),
+} as const;
+
+export const getRenderSourceInputSchema = z.object(getRenderSourceInputShape);
+
+/**
  * `ggui_list_featured_blueprints` input — intentionally EMPTY. The
  * pre-launch No-Backcompat scrub deleted the level/category/tags/limit
  * filters (delete-until-wired); filters re-enter here when a real
