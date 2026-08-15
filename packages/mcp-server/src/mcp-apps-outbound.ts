@@ -404,10 +404,15 @@ startInit();
 // diverged. Painting the served document's own surface here removes the
 // dependency on a browser honoring iframe transparency.
 //
-// Value-resolution only — no `--ggui-*` token added or renamed. The
-// constant itself lives with the protocol host-helper (the shared
-// self-contained-shell assembler paints the same surface); imported
-// above and reused here for the thin postMessage shell.
+// The paint is inline, so no stylesheet `background` rule can undo
+// it — which is why the constant's `var()` chain opens with the
+// `--ggui-shell-background` override point: content that KNOWS its
+// host composites behind the document (the runtime's system-card
+// layer inside Claude) sets that property from its stylesheet and
+// the inline value re-resolves to transparent in place. See
+// `GGUI_RENDER_SHELL_SURFACE` in the protocol host-helper (the
+// shared self-contained-shell assembler paints the same surface);
+// imported above and reused here for the thin postMessage shell.
 
 // `#ggui-root` here is LOAD-BEARING for the shell script (NOT a React
 // mount target): the inline script grabs it as `rootEl` for the
@@ -1173,7 +1178,12 @@ export function buildSelfContainedShell(opts: SelfContainedShellInputs): string 
   // standalone served iframe (claude.ai per-render resource shells,
   // `/r/<shortCode>`), never inlined into a host page — so it paints
   // its own theme-surface backdrop. See `GguiShellHtmlOptions` for the
-  // Safari white-canvas rationale.
+  // Safari white-canvas rationale. System-kind renders keep this
+  // posture too: the surface paint resolves through the
+  // `--ggui-shell-background` override point, so the card layer —
+  // the only layer that can detect a compositing host at runtime —
+  // drops the backdrop to transparent itself where that is right,
+  // and every other context keeps the per-browser-consistent paint.
   return gguiShellHtml(bootstrap, { background: "surface" });
 }
 

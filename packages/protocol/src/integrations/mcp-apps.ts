@@ -1657,9 +1657,21 @@ export function toolResultGguiRender(
  * theme variables at boot; the static dark fallback covers the
  * pre-resolve first paint.
  *
+ * The chain opens with `--ggui-shell-background` — unset in the
+ * served bytes — as the runtime's override point. The shell stamps
+ * its backdrop as an INLINE style, which no stylesheet `background`
+ * rule can out-cascade; but because the inline value is a `var()`,
+ * a stylesheet that sets the custom property re-resolves it in
+ * place. The layer that knows whether the embedding host composites
+ * its own chrome behind the document (the design system's
+ * `ThemeProvider` in its transparent posture) sets
+ * `--ggui-shell-background: transparent`; every other context keeps
+ * the surface paint and its per-browser consistency.
+ *
  * @public
  */
-export const GGUI_RENDER_SHELL_SURFACE = 'var(--ggui-color-surface, #1e293b)';
+export const GGUI_RENDER_SHELL_SURFACE =
+  'var(--ggui-shell-background, var(--ggui-color-surface, #1e293b))';
 
 /**
  * Options for {@link gguiShellHtml}.

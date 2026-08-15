@@ -42,6 +42,12 @@ interface ThemeProviderProps {
    * Token-level `--ggui-color-surface` stays opaque so individual
    * surfaces (Card primitives, modal panels) still render with
    * proper contrast.
+   *
+   * Also sets `--ggui-shell-background: transparent` — the override
+   * point served render shells resolve their INLINE `html`/`body`
+   * backdrop through — so shell documents go transparent along with
+   * the body even though a stylesheet rule can never out-cascade an
+   * inline style directly.
    */
   transparent?: boolean;
   children: React.ReactNode;
@@ -111,13 +117,24 @@ export function ThemeProvider({
     // through. We DON'T null-out `--ggui-color-surface` so cards/
     // panels inside still draw their own opaque surfaces — that's
     // the visual layering we want: transparent canvas, opaque cards.
+    //
+    // Served render shells stamp their backdrop as an INLINE
+    // `html`/`body` style, which this stylesheet's `background` rule
+    // can never out-cascade. The inline value resolves through the
+    // `--ggui-shell-background` custom property precisely so this
+    // rule can reach it: setting the property re-resolves the inline
+    // `var()` in place, dropping the shell's own backdrop along with
+    // ours.
     const bodyBackground = transparent
       ? 'transparent'
       : 'var(--ggui-color-surface, #ffffff)';
+    const shellBackdropOverride = transparent
+      ? '\n  --ggui-shell-background: transparent;'
+      : '';
     const baseRules = `
 html, body {
   margin: 0;
-  font-family: var(--ggui-font-family-sans, system-ui, -apple-system, sans-serif);
+  font-family: var(--ggui-font-family-sans, system-ui, -apple-system, sans-serif);${shellBackdropOverride}
   background: ${bodyBackground};
   color: var(--ggui-color-onSurface, #111827);
   -webkit-font-smoothing: antialiased;

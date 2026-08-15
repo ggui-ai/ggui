@@ -228,6 +228,19 @@ describe('gguiShellHtml', () => {
     expect(html).not.toContain('background:transparent');
   });
 
+  it('surface backdrop opens with the runtime override point (ggui#514)', () => {
+    // The backdrop is an INLINE style, so no stylesheet `background`
+    // rule can out-cascade it — the `--ggui-shell-background` head of
+    // the var() chain is the only seam through which the card layer
+    // (ThemeProvider's transparent posture) can drop it. Removing the
+    // head silently re-breaks system-card transparency in compositing
+    // hosts.
+    const html = gguiShellHtml(bootstrap);
+    expect(html).toContain(
+      'var(--ggui-shell-background, var(--ggui-color-surface',
+    );
+  });
+
   it('supports the transparent backdrop for host-embedded cards', () => {
     const html = gguiShellHtml(bootstrap, { background: 'transparent' });
     expect(html).toContain('background:transparent');
