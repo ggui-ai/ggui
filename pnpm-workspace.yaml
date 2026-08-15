@@ -168,11 +168,13 @@ overrides:
   # exactly the breakage this file exists to avoid.
   "adm-zip@<0.6.0": ^0.6.0
   "immutable@<3.8.3": ^3.8.3
-  # Exact-pinned SAME as root (ggui#430): @guuey/threads 0.3.0
-  # exact-pins @guuey/mcp-apps-host 0.3.0 while the guuey-interop suite
-  # pins 0.3.1 (additive release) — force ONE dispatcher copy per tree,
-  # and the same one in both trees.
-  "@guuey/mcp-apps-host": 0.3.1
+  # Exact-pinned SAME as root (ggui#430) — force ONE dispatcher copy per
+  # tree, and the same one in both trees. Moved 0.3.1 → 0.4.0 with the
+  # withguuey 0.4.0 wave (#506); see the root pnpm-workspace.yaml entry
+  # for why the family moves together (agent-client/threads 0.4.0 both
+  # exact-pin host 0.4.0, and agent-client value-imports an export 0.3.1
+  # does not have).
+  "@guuey/mcp-apps-host": 0.4.0
   # BEGIN oss-lock-sync generated pins — do not hand-edit (scripts/oss-lock-sync.mjs, #420)
   "@a2a-js/sdk": 0.3.14
   "@adobe/css-tools": 4.5.0
@@ -180,38 +182,40 @@ overrides:
   "@aws-sdk/checksums": 3.1000.25
   "@aws-sdk/client-bedrock-runtime": 3.1102.0
   "@aws-sdk/client-s3": 3.1102.0
-  "@aws-sdk/core": 3.977.6
+  "@aws-sdk/core": 3.977.7
   "@aws-sdk/credential-provider-cognito-identity": 3.972.65
-  "@aws-sdk/credential-provider-env": 3.972.67
-  "@aws-sdk/credential-provider-http": 3.972.69
-  "@aws-sdk/credential-provider-ini": 3.973.12
-  "@aws-sdk/credential-provider-login": 3.972.74
-  "@aws-sdk/credential-provider-node": 3.972.78
-  "@aws-sdk/credential-provider-process": 3.972.67
-  "@aws-sdk/credential-provider-sso": 3.973.11
-  "@aws-sdk/credential-provider-web-identity": 3.972.73
+  "@aws-sdk/credential-provider-env": 3.972.68
+  "@aws-sdk/credential-provider-http": 3.972.70
+  "@aws-sdk/credential-provider-ini": 3.973.13
+  "@aws-sdk/credential-provider-login": 3.972.75
+  "@aws-sdk/credential-provider-node": 3.972.79
+  "@aws-sdk/credential-provider-process": 3.972.68
+  "@aws-sdk/credential-provider-sso": 3.973.12
+  "@aws-sdk/credential-provider-web-identity": 3.972.74
   "@aws-sdk/credential-providers": 3.1102.0
   "@aws-sdk/eventstream-handler-node": 3.972.31
   "@aws-sdk/middleware-eventstream": 3.972.26
   "@aws-sdk/middleware-sdk-s3": 3.972.71
   "@aws-sdk/middleware-websocket": 3.972.48
-  "@aws-sdk/nested-clients": 3.997.41
-  "@aws-sdk/signature-v4-multi-region": 3.996.43
-  "@aws-sdk/token-providers": 3.1103.0
-  "@aws-sdk/types": 3.974.2
-  "@aws-sdk/xml-builder": 3.972.37
+  "@aws-sdk/nested-clients": 3.997.42
+  "@aws-sdk/signature-v4-multi-region": 3.996.44
+  "@aws-sdk/token-providers": 3.1108.0
+  "@aws-sdk/types": 3.974.3
+  "@aws-sdk/xml-builder": 3.972.38
   "@aws/lambda-invoke-store": 0.3.0
-  "@azure/msal-browser": 5.17.3
-  "@azure/msal-common": 16.11.3
-  "@azure/msal-node": 5.4.3
+  "@azure/msal-browser": 5.18.0
+  "@azure/msal-common": 16.12.0
+  "@azure/msal-node": 5.5.0
   "@babel/helper-plugin-utils": 7.29.7
   "@babel/plugin-syntax-import-attributes": 7.29.7
   "@babel/plugin-transform-react-jsx-self": 7.29.7
   "@babel/plugin-transform-react-jsx-source": 7.29.7
   "@babel/runtime@^7": 7.29.7
   "@babel/runtime@^8": 8.0.0
+  "@ggui-ai/protocol": 0.9.0
   "@google-cloud/storage": 7.21.0
-  "@guuey/threads": 0.3.1
+  "@guuey/mcp-apps-host@0.4.x": 0.4.0
+  "@guuey/threads": 0.4.0
   "@hono/node-server": 2.1.0
   "@huggingface/jinja": 0.5.9
   "@jsonjoy.com/fs-core": 4.66.1
@@ -267,7 +271,7 @@ overrides:
   "@rollup/rollup-win32-x64-msvc": 4.62.4
   "@silverprotocol/core": 0.4.1
   "@sinclair/typebox": 0.27.12
-  "@smithy/core": 3.31.1
+  "@smithy/core": 3.32.0
   "@smithy/credential-provider-imds": 4.4.16
   "@smithy/types@^4": 4.16.1
   "@sparticuz/chromium": 149.0.0

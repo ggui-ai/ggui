@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-13T04:40:27.459Z",
+  "generatedAt": "2026-08-15T01:29:40.063Z",
   "pinnedNames": [
     "@a2a-js/sdk",
     "@adobe/css-tools",
@@ -36,7 +36,9 @@
     "@babel/plugin-transform-react-jsx-self",
     "@babel/plugin-transform-react-jsx-source",
     "@babel/runtime",
+    "@ggui-ai/protocol",
     "@google-cloud/storage",
+    "@guuey/mcp-apps-host",
     "@guuey/threads",
     "@hono/node-server",
     "@huggingface/jinja",
@@ -216,7 +218,9 @@
     "@babel/plugin-transform-react-jsx-source",
     "@babel/runtime@^7",
     "@babel/runtime@^8",
+    "@ggui-ai/protocol",
     "@google-cloud/storage",
+    "@guuey/mcp-apps-host@0.4.x",
     "@guuey/threads",
     "@hono/node-server",
     "@huggingface/jinja",

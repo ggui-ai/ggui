@@ -55,45 +55,47 @@ overrides:
   '@opentelemetry/core@<2.8.0': ^2.8.0
   adm-zip@<0.6.0: ^0.6.0
   immutable@<3.8.3: ^3.8.3
-  '@guuey/mcp-apps-host': 0.3.1
+  '@guuey/mcp-apps-host': 0.4.0
   '@a2a-js/sdk': 0.3.14
   '@adobe/css-tools': 4.5.0
   '@anthropic-ai/bedrock-sdk': 0.32.1
   '@aws-sdk/checksums': 3.1000.25
   '@aws-sdk/client-bedrock-runtime': 3.1102.0
   '@aws-sdk/client-s3': 3.1102.0
-  '@aws-sdk/core': 3.977.6
+  '@aws-sdk/core': 3.977.7
   '@aws-sdk/credential-provider-cognito-identity': 3.972.65
-  '@aws-sdk/credential-provider-env': 3.972.67
-  '@aws-sdk/credential-provider-http': 3.972.69
-  '@aws-sdk/credential-provider-ini': 3.973.12
-  '@aws-sdk/credential-provider-login': 3.972.74
-  '@aws-sdk/credential-provider-node': 3.972.78
-  '@aws-sdk/credential-provider-process': 3.972.67
-  '@aws-sdk/credential-provider-sso': 3.973.11
-  '@aws-sdk/credential-provider-web-identity': 3.972.73
+  '@aws-sdk/credential-provider-env': 3.972.68
+  '@aws-sdk/credential-provider-http': 3.972.70
+  '@aws-sdk/credential-provider-ini': 3.973.13
+  '@aws-sdk/credential-provider-login': 3.972.75
+  '@aws-sdk/credential-provider-node': 3.972.79
+  '@aws-sdk/credential-provider-process': 3.972.68
+  '@aws-sdk/credential-provider-sso': 3.973.12
+  '@aws-sdk/credential-provider-web-identity': 3.972.74
   '@aws-sdk/credential-providers': 3.1102.0
   '@aws-sdk/eventstream-handler-node': 3.972.31
   '@aws-sdk/middleware-eventstream': 3.972.26
   '@aws-sdk/middleware-sdk-s3': 3.972.71
   '@aws-sdk/middleware-websocket': 3.972.48
-  '@aws-sdk/nested-clients': 3.997.41
-  '@aws-sdk/signature-v4-multi-region': 3.996.43
-  '@aws-sdk/token-providers': 3.1103.0
-  '@aws-sdk/types': 3.974.2
-  '@aws-sdk/xml-builder': 3.972.37
+  '@aws-sdk/nested-clients': 3.997.42
+  '@aws-sdk/signature-v4-multi-region': 3.996.44
+  '@aws-sdk/token-providers': 3.1108.0
+  '@aws-sdk/types': 3.974.3
+  '@aws-sdk/xml-builder': 3.972.38
   '@aws/lambda-invoke-store': 0.3.0
-  '@azure/msal-browser': 5.17.3
-  '@azure/msal-common': 16.11.3
-  '@azure/msal-node': 5.4.3
+  '@azure/msal-browser': 5.18.0
+  '@azure/msal-common': 16.12.0
+  '@azure/msal-node': 5.5.0
   '@babel/helper-plugin-utils': 7.29.7
   '@babel/plugin-syntax-import-attributes': 7.29.7
   '@babel/plugin-transform-react-jsx-self': 7.29.7
   '@babel/plugin-transform-react-jsx-source': 7.29.7
   '@babel/runtime@^7': 7.29.7
   '@babel/runtime@^8': 8.0.0
+  '@ggui-ai/protocol': 0.9.0
   '@google-cloud/storage': 7.21.0
-  '@guuey/threads': 0.3.1
+  '@guuey/mcp-apps-host@0.4.x': 0.4.0
+  '@guuey/threads': 0.4.0
   '@hono/node-server': 2.1.0
   '@huggingface/jinja': 0.5.9
   '@jsonjoy.com/fs-core': 4.66.1
@@ -149,7 +151,7 @@ overrides:
   '@rollup/rollup-win32-x64-msvc': 4.62.4
   '@silverprotocol/core': 0.4.1
   '@sinclair/typebox': 0.27.12
-  '@smithy/core': 3.31.1
+  '@smithy/core': 3.32.0
   '@smithy/credential-provider-imds': 4.4.16
   '@smithy/types@^4': 4.16.1
   '@sparticuz/chromium': 149.0.0
@@ -270,14 +272,14 @@ importers:
         specifier: workspace:*
         version: link:../../packages/mcp-server-core
       '@ggui-ai/protocol':
-        specifier: workspace:*
-        version: link:../../packages/protocol
+        specifier: 0.9.0
+        version: 0.9.0(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       '@guuey/mcp-apps-host':
-        specifier: 0.3.1
-        version: 0.3.1(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+        specifier: 0.4.0
+        version: 0.4.0(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       '@guuey/threads':
-        specifier: 0.3.1
-        version: 0.3.1(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(vitest@3.2.7(@types/node@24.13.3)(happy-dom@20.11.1)(jsdom@25.0.1)(terser@5.49.0)(tsx@4.23.5)(yaml@2.8.3))
+        specifier: 0.4.0
+        version: 0.4.0(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(vitest@3.2.7(@types/node@24.13.3)(happy-dom@20.11.1)(jsdom@25.0.1)(terser@5.49.0)(tsx@4.23.5)(yaml@2.8.3))
       '@modelcontextprotocol/sdk':
         specifier: 1.30.0
         version: 1.30.0(zod@4.4.3)
@@ -309,8 +311,8 @@ importers:
         specifier: workspace:*
         version: link:../../packages/preview-a2ui
       '@ggui-ai/protocol':
-        specifier: workspace:*
-        version: link:../../packages/protocol
+        specifier: 0.9.0
+        version: 0.9.0(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       '@ggui-ai/protocol-conformance':
         specifier: workspace:*
         version: link:../../packages/protocol-conformance
@@ -363,8 +365,8 @@ importers:
         specifier: workspace:*
         version: link:../../packages/mcp-server-handlers
       '@ggui-ai/protocol':
-        specifier: workspace:*
-        version: link:../../packages/protocol
+        specifier: 0.9.0
+        version: 0.9.0(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       '@modelcontextprotocol/sdk':
         specifier: 1.30.0
         version: 1.30.0(zod@4.4.3)
@@ -418,8 +420,8 @@ importers:
         version: 3.2.7(@types/node@22.19.15)(happy-dom@20.11.1)(jsdom@25.0.1)(terser@5.49.0)(tsx@4.23.5)(yaml@2.8.3)
     devDependencies:
       '@ggui-ai/protocol':
-        specifier: workspace:*
-        version: link:../../packages/protocol
+        specifier: 0.9.0
+        version: 0.9.0(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       '@sigstore/mock':
         specifier: ~0.12.1
         version: 0.12.1
@@ -469,8 +471,8 @@ importers:
         specifier: workspace:*
         version: link:../../packages/project-config
       '@ggui-ai/protocol':
-        specifier: workspace:*
-        version: link:../../packages/protocol
+        specifier: 0.9.0
+        version: 0.9.0(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       '@ggui-ai/shared':
         specifier: workspace:*
         version: link:../../packages/shared
@@ -540,8 +542,8 @@ importers:
   packages/agent-server:
     dependencies:
       '@ggui-ai/protocol':
-        specifier: workspace:*
-        version: link:../protocol
+        specifier: 0.9.0
+        version: 0.9.0(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       '@hono/node-server':
         specifier: 2.1.0
         version: 2.1.0(hono@4.13.0)
@@ -565,8 +567,8 @@ importers:
   packages/artifact-manifest:
     dependencies:
       '@ggui-ai/protocol':
-        specifier: workspace:*
-        version: link:../protocol
+        specifier: 0.9.0
+        version: 0.9.0(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       zod:
         specifier: ^4.4.3
         version: 4.4.3
@@ -634,8 +636,8 @@ importers:
         version: 19.2.8(react@19.2.8)
     devDependencies:
       '@ggui-ai/protocol':
-        specifier: workspace:*
-        version: link:../protocol
+        specifier: 0.9.0
+        version: 0.9.0(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       '@testing-library/react':
         specifier: ^16.0.0
         version: 16.3.2(@testing-library/dom@10.4.0)(@types/react-dom@19.2.4(@types/react@19.2.18))(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
@@ -842,8 +844,8 @@ importers:
   packages/gadgets:
     dependencies:
       '@ggui-ai/protocol':
-        specifier: workspace:*
-        version: link:../protocol
+        specifier: 0.9.0
+        version: 0.9.0(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
     devDependencies:
       '@testing-library/react':
         specifier: ^16.0.0
@@ -912,8 +914,8 @@ importers:
         specifier: workspace:*
         version: link:../project-config
       '@ggui-ai/protocol':
-        specifier: workspace:*
-        version: link:../protocol
+        specifier: 0.9.0
+        version: 0.9.0(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       '@ggui-ai/registry-core':
         specifier: workspace:*
         version: link:../registry-core
@@ -961,8 +963,8 @@ importers:
         specifier: workspace:*
         version: link:../preview-a2ui
       '@ggui-ai/protocol':
-        specifier: workspace:*
-        version: link:../protocol
+        specifier: 0.9.0
+        version: 0.9.0(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       '@ggui-ai/wire':
         specifier: workspace:*
         version: link:../wire
@@ -1031,8 +1033,8 @@ importers:
         specifier: workspace:*
         version: link:../iframe-runtime
       '@ggui-ai/protocol':
-        specifier: workspace:*
-        version: link:../protocol
+        specifier: 0.9.0
+        version: 0.9.0(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       '@ggui-ai/wire':
         specifier: workspace:*
         version: link:../wire
@@ -1086,8 +1088,8 @@ importers:
         specifier: workspace:*
         version: link:../iframe-runtime
       '@ggui-ai/protocol':
-        specifier: workspace:*
-        version: link:../protocol
+        specifier: 0.9.0
+        version: 0.9.0(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       '@modelcontextprotocol/ext-apps':
         specifier: 1.7.5
         version: 1.7.5(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(zod@4.4.3)
@@ -1141,8 +1143,8 @@ importers:
         specifier: workspace:*
         version: link:../project-config
       '@ggui-ai/protocol':
-        specifier: workspace:*
-        version: link:../protocol
+        specifier: 0.9.0
+        version: 0.9.0(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       '@ggui-ai/ui-gen':
         specifier: workspace:*
         version: link:../ui-gen
@@ -1196,8 +1198,8 @@ importers:
   packages/mcp-server-core:
     dependencies:
       '@ggui-ai/protocol':
-        specifier: workspace:*
-        version: link:../protocol
+        specifier: 0.9.0
+        version: 0.9.0(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
     devDependencies:
       '@ggui-ai/gadgets':
         specifier: workspace:*
@@ -1227,8 +1229,8 @@ importers:
         specifier: workspace:*
         version: link:../negotiator
       '@ggui-ai/protocol':
-        specifier: workspace:*
-        version: link:../protocol
+        specifier: 0.9.0
+        version: 0.9.0(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       '@ggui-ai/ui-gen':
         specifier: workspace:*
         version: link:../ui-gen
@@ -1258,8 +1260,8 @@ importers:
         specifier: workspace:*
         version: link:../mcp-server-core
       '@ggui-ai/protocol':
-        specifier: workspace:*
-        version: link:../protocol
+        specifier: 0.9.0
+        version: 0.9.0(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
     devDependencies:
       '@types/node':
         specifier: ^24.0.0
@@ -1290,8 +1292,8 @@ importers:
         specifier: workspace:*
         version: link:../design
       '@ggui-ai/protocol':
-        specifier: workspace:*
-        version: link:../protocol
+        specifier: 0.9.0
+        version: 0.9.0(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       tinyglobby:
         specifier: 0.2.17
         version: 0.2.17
@@ -1340,8 +1342,8 @@ importers:
   packages/protocol-conformance:
     dependencies:
       '@ggui-ai/protocol':
-        specifier: workspace:*
-        version: link:../protocol
+        specifier: 0.9.0
+        version: 0.9.0(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       ws:
         specifier: 8.21.2
         version: 8.21.2
@@ -1362,8 +1364,8 @@ importers:
   packages/protocol-reference-server:
     dependencies:
       '@ggui-ai/protocol':
-        specifier: workspace:*
-        version: link:../protocol
+        specifier: 0.9.0
+        version: 0.9.0(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       ws:
         specifier: 8.21.2
         version: 8.21.2
@@ -1393,8 +1395,8 @@ importers:
         specifier: workspace:*
         version: link:../gadget-signing
       '@ggui-ai/protocol':
-        specifier: workspace:*
-        version: link:../protocol
+        specifier: 0.9.0
+        version: 0.9.0(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       esbuild:
         specifier: 0.25.12
         version: 0.25.12
@@ -1573,8 +1575,8 @@ importers:
         specifier: workspace:*
         version: link:../project-config
       '@ggui-ai/protocol':
-        specifier: workspace:*
-        version: link:../protocol
+        specifier: 0.9.0
+        version: 0.9.0(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       '@google/adk':
         specifier: ^0.5.0
         version: 0.5.0(3b1f9409196c7e3a44ca97133c17cb59)
@@ -1634,8 +1636,8 @@ importers:
         specifier: workspace:*
         version: link:../design
       '@ggui-ai/protocol':
-        specifier: workspace:*
-        version: link:../protocol
+        specifier: 0.9.0
+        version: 0.9.0(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       '@ggui-ai/wire':
         specifier: workspace:*
         version: link:../wire
@@ -1674,8 +1676,8 @@ importers:
   packages/wire:
     dependencies:
       '@ggui-ai/protocol':
-        specifier: workspace:*
-        version: link:../protocol
+        specifier: 0.9.0
+        version: 0.9.0(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       react:
         specifier: ^19.2.8
         version: 19.2.8
@@ -1699,8 +1701,8 @@ importers:
         specifier: workspace:*
         version: link:../../../packages/agent-server
       '@ggui-ai/protocol':
-        specifier: workspace:*
-        version: link:../../../packages/protocol
+        specifier: 0.9.0
+        version: 0.9.0(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       dotenv:
         specifier: ^16.4.5
         version: 16.6.1
@@ -1721,14 +1723,14 @@ importers:
         specifier: workspace:*
         version: link:../../../packages/agent-server
       '@ggui-ai/protocol':
-        specifier: workspace:*
-        version: link:../../../packages/protocol
+        specifier: 0.9.0
+        version: 0.9.0(@modelcontextprotocol/sdk@1.30.0(zod@3.25.76))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       '@google/adk':
         specifier: ^1.1.0
         version: 1.1.0(@grpc/grpc-js@1.14.4)(@mikro-orm/mariadb@6.6.9(@mikro-orm/core@6.6.16)(better-sqlite3@12.11.1))(@mikro-orm/mssql@6.6.9(@mikro-orm/core@6.6.16)(better-sqlite3@12.11.1)(mariadb@3.4.5))(@mikro-orm/mysql@6.6.9(@mikro-orm/core@6.6.16)(@types/node@22.19.15)(better-sqlite3@12.11.1)(mariadb@3.4.5))(@mikro-orm/postgresql@6.6.9(@mikro-orm/core@6.6.16)(better-sqlite3@12.11.1)(mariadb@3.4.5))(@mikro-orm/sqlite@6.6.9(@mikro-orm/core@6.6.16)(better-sqlite3@12.11.1)(mariadb@3.4.5))(@opentelemetry/core@2.10.0(@opentelemetry/api@1.9.0))(encoding@0.1.13)
       '@google/genai':
         specifier: ^1.37.0
-        version: 1.50.1(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))
+        version: 1.50.1(@modelcontextprotocol/sdk@1.30.0(zod@3.25.76))
       dotenv:
         specifier: ^16.4.5
         version: 16.6.1
@@ -1752,8 +1754,8 @@ importers:
         specifier: workspace:*
         version: link:../../../packages/agent-server
       '@ggui-ai/protocol':
-        specifier: workspace:*
-        version: link:../../../packages/protocol
+        specifier: 0.9.0
+        version: 0.9.0(@modelcontextprotocol/sdk@1.30.0(zod@3.25.76))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       '@openai/agents':
         specifier: ^0.0.13
         version: 0.0.13(ws@8.21.2)(zod@3.25.76)
@@ -1780,8 +1782,8 @@ importers:
         specifier: workspace:*
         version: link:../../../packages/gadgets
       '@ggui-ai/protocol':
-        specifier: workspace:*
-        version: link:../../../packages/protocol
+        specifier: 0.9.0
+        version: 0.9.0(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
     devDependencies:
       '@types/react':
         specifier: ^19.2.18
@@ -1799,8 +1801,8 @@ importers:
         specifier: workspace:*
         version: link:../../../packages/gadgets
       '@ggui-ai/protocol':
-        specifier: workspace:*
-        version: link:../../../packages/protocol
+        specifier: 0.9.0
+        version: 0.9.0(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       leaflet:
         specifier: ^1.9.4
         version: 1.9.4
@@ -1824,8 +1826,8 @@ importers:
         specifier: workspace:*
         version: link:../../../packages/gadgets
       '@ggui-ai/protocol':
-        specifier: workspace:*
-        version: link:../../../packages/protocol
+        specifier: 0.9.0
+        version: 0.9.0(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
     devDependencies:
       '@types/react':
         specifier: ^19.2.18
@@ -2046,44 +2048,44 @@ packages:
     resolution: {integrity: sha512-VQL/oWlt0+Rj2QZcAnp3+hMHW/T01EmkPQXf9ise2gz6d95U82eVE1dPBpMlnv4aDiz99TrMR0DHmceCjCkCmA==}
     engines: {node: '>=20.0.0'}
 
-  '@aws-sdk/core@3.977.6':
-    resolution: {integrity: sha512-QiaJV4/zDrB4ZY2mfeSXSzSTc36W16sZXcGz+SPFk0CJ26gziO0cS+4LjJUMAbdeeBOvS0k0Aq1cZpfGdUXxSw==}
+  '@aws-sdk/core@3.977.7':
+    resolution: {integrity: sha512-I88Iov89NVmjSmJLKSv7Cn9M2J+a2942OkA8nZCbz+sl4ZeY4zEOcoLOrbt1GRfQ8zEQKnjAJdXixA3J/p1fDQ==}
     engines: {node: '>=20.0.0'}
 
   '@aws-sdk/credential-provider-cognito-identity@3.972.65':
     resolution: {integrity: sha512-1DfK/WvYHlalaejpsmG+oQESu5QC06ylhIgSH8YUt+ZHJdh7/bJsQDVUpbN+tE9GkJG7id+m3+nop+oEw2m9Rw==}
     engines: {node: '>=20.0.0'}
 
-  '@aws-sdk/credential-provider-env@3.972.67':
-    resolution: {integrity: sha512-rcIpk5kxUqDaaNa6Xk23pQ6ViY7jlqzmfFWCahQcBT97ddXaXYYwzCen9Tz1Jvo6aJft6wDl5bN44/Jw5B4oLA==}
+  '@aws-sdk/credential-provider-env@3.972.68':
+    resolution: {integrity: sha512-2a20A/IdNOwUvaDq91iqqS7BA0XlNMfW3iLGZGZLJv0EbUqhSxB0PIx4rQQqssvWj1uXImb3/UCCdHz/+1dOiA==}
     engines: {node: '>=20.0.0'}
 
-  '@aws-sdk/credential-provider-http@3.972.69':
-    resolution: {integrity: sha512-nggwJtZ4eeNsUw5IeWBMXsi1ryct5idi0K+/SCRF3kybLubOMaNTb3XCihXpWMiVpyzyPeIrl0zTkzhBH9porA==}
+  '@aws-sdk/credential-provider-http@3.972.70':
+    resolution: {integrity: sha512-0yRem2Fs52r/Nn6UAqIlpjexfaYj8ziEozOe9tamtAVT/5bzFLKx8O2r7MaRqgS3hGKHIa1Jij9nKHSsNnb04A==}
     engines: {node: '>=20.0.0'}
 
-  '@aws-sdk/credential-provider-ini@3.973.12':
-    resolution: {integrity: sha512-pNEf/OeyN5X3VmLKlgSO6TqaWmW10CvI3TfwL1XhsuhYjSLT2VDaxFnCPHnOeQXSaFisMX4jNhpETriqN8DOmg==}
+  '@aws-sdk/credential-provider-ini@3.973.13':
+    resolution: {integrity: sha512-2M39DE02XpYYaSWYk/4AsImXYUU/1L2xmTMLUpMMWq7DfLv191/vCRy3baKtdr45AkJQyVgSjmuVOLm15SwrRQ==}
     engines: {node: '>=20.0.0'}
 
-  '@aws-sdk/credential-provider-login@3.972.74':
-    resolution: {integrity: sha512-0AQfDcf99TNmqVKv0owHrw/TQs6i4ZE5t9qmz6NvO53bE/sA/tpXhXL9AAcEP1qHc6Zzjd1UMb69+/9zdhvY3g==}
+  '@aws-sdk/credential-provider-login@3.972.75':
+    resolution: {integrity: sha512-jaTESuJlQsoUZ44f/i2puyPt8VlF/dMMJ9HM3cStYtk7eKX4N9UWi83OLixUkoOJH3BwWlPLCq9YIK9nfWhVBg==}
     engines: {node: '>=20.0.0'}
 
-  '@aws-sdk/credential-provider-node@3.972.78':
-    resolution: {integrity: sha512-OgPAnfvbGAMWac6yvxJ1ihslrvDpPVwR68D2csospdNCCyPvHk9JLzYKwz48SNiS1T2znDwHauywRKRFfpyYng==}
+  '@aws-sdk/credential-provider-node@3.972.79':
+    resolution: {integrity: sha512-RIw5dof1EHkWubrZzPC941CDtnFG1iAXsxbFgLkhdYZXHc4icU13c/uxSMI0J5eUx9bxa7LjfpdjfClBB1QsDA==}
     engines: {node: '>=20.0.0'}
 
-  '@aws-sdk/credential-provider-process@3.972.67':
-    resolution: {integrity: sha512-IlUEejorGTWKb4/Dm7K5Yw4QxUmXLThLhrvBmzVBqZFTbW72cv9LTcITmo1dsnYriALE4h68mOq4LB99x6sQ7Q==}
+  '@aws-sdk/credential-provider-process@3.972.68':
+    resolution: {integrity: sha512-nLP3Pda2MQTFJ25hKBMmUuB9Uv+bTZQNlufbeCwklP549Vwnkd8bRLJoCKp5k6xjmdyptrPrOfGOhN0mKuca8A==}
     engines: {node: '>=20.0.0'}
 
-  '@aws-sdk/credential-provider-sso@3.973.11':
-    resolution: {integrity: sha512-gAQBkBZxUB84d71+pPcI9L+jh2ujhuAVxc/4FgGiWFDjkPBlMKxzd5XDtkSXTFX8Ro7ansnT88+XadasxMeCRw==}
+  '@aws-sdk/credential-provider-sso@3.973.12':
+    resolution: {integrity: sha512-EmgyyHn+f9WCcelp3L/vci+LGbX8GigWaVphRArjVo5Pktkr9YnLy/mQ6VDkDyBD72dtfRNTgHmD2ts4rTDXKQ==}
     engines: {node: '>=20.0.0'}
 
-  '@aws-sdk/credential-provider-web-identity@3.972.73':
-    resolution: {integrity: sha512-SnlEmQa6SjOgs6iOPLUQl1Eyq4AKiAdPQlkOhFhqNfDtDCwibMGvL6QlkSmf3o6vAUSImzdPCxowT5dfQUZP1A==}
+  '@aws-sdk/credential-provider-web-identity@3.972.74':
+    resolution: {integrity: sha512-0YfczxGXF3RjGj8z7QG/Ho2HnLGKDHfPSHiTs47UU1U/+mmwISDN+rvGKt2zh+3FX8NdT4xd95LGBGyhQw2dgQ==}
     engines: {node: '>=20.0.0'}
 
   '@aws-sdk/credential-providers@3.1102.0':
@@ -2106,27 +2108,27 @@ packages:
     resolution: {integrity: sha512-1BYTN+c0J/n5HfoDl3IR2Cjhfp2coByofX+gOh8HhyXda1HP7oGAUI/uyKSn4Xc+rrvVcsSROTVF1ZRBs07ARQ==}
     engines: {node: '>= 14.0.0'}
 
-  '@aws-sdk/nested-clients@3.997.41':
-    resolution: {integrity: sha512-RDHqPGQWlF6tatA/Tp3rg6oIwtgN9IVderxE+9av2Y93Dfyu+mO1hZ5Bu2jpfZg2rwdNbsssnwM+sLafIczMlQ==}
+  '@aws-sdk/nested-clients@3.997.42':
+    resolution: {integrity: sha512-XWRyon2MTHXD/zMoo0Mbge6Vwf+iE0qQaM/RyGO6NfZ9WukCFiQL27nQVZjYy2JwSIg+iXZxKOX95OBXqlSM4w==}
     engines: {node: '>=20.0.0'}
 
-  '@aws-sdk/signature-v4-multi-region@3.996.43':
-    resolution: {integrity: sha512-lKekx8bLBXSv4O+cslk9Zfnw2XKSkWBs3uWL5QGhH2ZAQfNS7FE0vcSSN2vD/AhxX54ZTywWxR4STThoeOXlBA==}
+  '@aws-sdk/signature-v4-multi-region@3.996.44':
+    resolution: {integrity: sha512-ZSfQ35Qn4MhSY+A0Whyr+KBx+wJKZUyBsOrjB2pSHOafRzbFe47T8XcXM8hZqUAC69qnqIy0C9ArxTuud0CC2w==}
     engines: {node: '>=20.0.0'}
 
-  '@aws-sdk/token-providers@3.1103.0':
-    resolution: {integrity: sha512-N4wy26MNn31ItGVHYHPrEuCIFY4MBBjC+C5v1lJKqIUSA7OZBdhleCY53zCCrXn27hsk7YNOaTuhQu807S4AfQ==}
+  '@aws-sdk/token-providers@3.1108.0':
+    resolution: {integrity: sha512-rI80zxDxGJ6904eC/YbjkdjY6JdaZvQ01kOmrMvw7cFQGIHo27fhnIVbMSVDS4T6foQImjxYSRoOu/uSJscXDw==}
     engines: {node: '>=20.0.0'}
 
-  '@aws-sdk/types@3.974.2':
-    resolution: {integrity: sha512-3W6IUtSxFbH6X7Wb7DzGCV5QiFQsd0g8bOfntpmDxQlzBoKWUMBu/JPQR0DwkE+Hpnxd6db1tXbOwdeHddG6cA==}
+  '@aws-sdk/types@3.974.3':
+    resolution: {integrity: sha512-ECAqfpNsef+7MO8qtR0h9KcFIBAygaE7Cm6UOiQl+ft+uVap+1G7bNEjs4mdJE2OnA4m6k7i8peH8uGIAsOMGw==}
     engines: {node: '>=20.0.0'}
 
   '@aws-sdk/util-utf8-browser@3.259.0':
     resolution: {integrity: sha512-UvFa/vR+e19XookZF8RzFZBrw2EUkQWxiBW0yYQAhvk3C+QVGl0H3ouca8LDBlBfQKXwmW3huo/59H8rwb1wJw==}
 
-  '@aws-sdk/xml-builder@3.972.37':
-    resolution: {integrity: sha512-zKq4HQum8JwDyEuyfuI4bbiAcU0KxP6qy+9PR/IsR92IyE/DaBAikzAS50tjxip4bqIIANpCcG+Yyj6CVhXupg==}
+  '@aws-sdk/xml-builder@3.972.38':
+    resolution: {integrity: sha512-grf7mzfVxBS5AlsuTvBN7uDpzqohFww9fRPCO+EBSUdvtsYMcPSKdz54h/7XiscqNcUM1Ae1MF7JLHmiYYuzbQ==}
     engines: {node: '>=20.0.0'}
 
   '@aws/lambda-invoke-store@0.3.0':
@@ -2185,16 +2187,16 @@ packages:
     resolution: {integrity: sha512-rbAE25KUfjU/s3XHUdJgceoCP5dEOpMx85J04kF+QMdta73XkuG9JGHHinch+XIoKpBdqljin+KqURpJriSzLA==}
     engines: {node: '>=22.0.0'}
 
-  '@azure/msal-browser@5.17.3':
-    resolution: {integrity: sha512-qMabD7Xrm/UgRhs+/IVyCTZRjUl8Qb+uGsRrCkaKNWsiTwRaeyStJbChE7/ySNTNYtiWo7khfF7vUDd0wGMnLw==}
+  '@azure/msal-browser@5.18.0':
+    resolution: {integrity: sha512-SPTeHYZghdEdRddJzNjhH+CI5MSQtquNYwGJnYXfOHIBRXCmrWimBS85OhwXpXFIlrCtNTbBPm5mPAWRNEoktA==}
     engines: {node: '>=0.8.0'}
 
-  '@azure/msal-common@16.11.3':
-    resolution: {integrity: sha512-VeXOW+t3Rdd9XGX6lVyIg3DhtjMR1JD8ARKcsnGbJFUWwAmF3sHL7GwZc/ZjEUfHESResAonETRYCuG06OBT7A==}
+  '@azure/msal-common@16.12.0':
+    resolution: {integrity: sha512-hgLgfRdbG2AmhXPygebf1KYJEvse86+ZZLWufdiTKaGRYEUqOzHdlf6AS1IiuUCHWbynkgbHc451jSNkbfhWlg==}
     engines: {node: '>=0.8.0'}
 
-  '@azure/msal-node@5.4.3':
-    resolution: {integrity: sha512-tumCMmzrRhKmTbYQg/7OlfbrIKcKaf8Ed0Fw3suUpRT3owFYljznVgxcfHe8RycQXY9uyROGiLD1GjhpF45AwA==}
+  '@azure/msal-node@5.5.0':
+    resolution: {integrity: sha512-A/2WIsuH0vsC6JVkkafjS4kHpi2LDR4AzDT0kJ+oIRtXYeYtvGQ2pwN2X88thQPhSek+82ela3MprsKXWQRrhQ==}
     engines: {node: '>=20'}
 
   '@babel/code-frame@7.29.0':
@@ -2851,8 +2853,8 @@ packages:
   '@gar/promisify@1.1.3':
     resolution: {integrity: sha512-k2Ty1JcVojjJFwrg/ThKi2ujJ7XNLYaFGNB/bWT9wGR+oSMJHMa5w+CUq6p/pVrKeNNgA7pCqEcjSnHVoqJQFw==}
 
-  '@ggui-ai/protocol@0.6.3':
-    resolution: {integrity: sha512-vMxyKaoUsBZvl5GewZVSa/WdalLtq1Gm8SdWj7szT2xeu86nqJ3eNTa1kOk1pccs4CcjwEu6kBeDgy63oWkzfg==}
+  '@ggui-ai/protocol@0.9.0':
+    resolution: {integrity: sha512-rV1b/zcbeS1C0tnLCm0Y4KemtD9slphhB252DEHXSixB6mQPJbGifgs25FTs8G1d+J7zC0PL0nQVbcc3X94EZw==}
     engines: {node: '>=20.0.0'}
 
   '@google-cloud/opentelemetry-cloud-monitoring-exporter@0.21.0':
@@ -2959,11 +2961,11 @@ packages:
     engines: {node: '>=6'}
     hasBin: true
 
-  '@guuey/mcp-apps-host@0.3.1':
-    resolution: {integrity: sha512-v6gpDLFkCHXzueXHDBHPHzlXT4oOpn04hLpZzUA20I2/+dU1qBbZ9zCKDs9LyJIqxkdZm8ZM9Oi3ug6Rx9PHSw==}
+  '@guuey/mcp-apps-host@0.4.0':
+    resolution: {integrity: sha512-z/ZubarBUHF+MVeodILHPfhcN0aLW1watR6JrH/CzDmdHVK80rs6BUdFucnZoa08jZLYrUAGbd9QUu8+EL+UnQ==}
 
-  '@guuey/threads@0.3.1':
-    resolution: {integrity: sha512-2oXI/SwlGgfkdyp6qCVaTxBgb+XRRt16/nKxVk8G8C8SFlYrk4RAClz/woncpJsQuo+i3jnC9JSkyBmLJ+o2Aw==}
+  '@guuey/threads@0.4.0':
+    resolution: {integrity: sha512-Y6bGbsduiYWXw8OpRd5QDXny7yHTF8wttRZYW6R3e6Tjy3tdpzKFvrpLouFs6HFe1fsxasd0FGavwECvVejXIQ==}
     peerDependencies:
       vitest: ^3.0.0
     peerDependenciesMeta:
@@ -4264,8 +4266,8 @@ packages:
     resolution: {integrity: sha512-wRlta7GuLWpTqtFfGo+nZyOO1vEvewdNR1R4rTxpC8XU6vG/NDyrFBhwLZsqg1NUoR1noVaXJPC/7ZK47QCySw==}
     engines: {node: '>=14.0.0'}
 
-  '@smithy/core@3.31.1':
-    resolution: {integrity: sha512-CyogUINxvi7C7LDsh8Syo6hVJOT9ckz4rG8dRZfTJ8r91HkMY59PnNooaj7WcHyxEkxPfBAmbgztZU+xTo76lg==}
+  '@smithy/core@3.32.0':
+    resolution: {integrity: sha512-NAiCSC78fzbNIEWoheoF74Ob5ZorLijCHpMY26Fqvqg/+9LuyIqMfHDg2p8Yk1rqOyowtiL3y7WX0AW+teL6zw==}
     engines: {node: '>=18.0.0'}
 
   '@smithy/credential-provider-imds@4.4.16':
@@ -4751,9 +4753,6 @@ packages:
 
   '@types/node@22.19.15':
     resolution: {integrity: sha512-F0R/h2+dsy5wJAUe3tAU6oqa2qbWY5TpNfL/RGmo1y38hiyO1w3x2jPtt76wmuaJI4DQnOBu21cNXQ2STIUUWg==}
-
-  '@types/node@22.20.1':
-    resolution: {integrity: sha512-EANqOCF9QFyra+4pfxUcX9STKJpCLjMbObVzljIJomAWSnuSIEAvyzEU53GaajbXJEgdh0iEcPL+DGvpUd4k1Q==}
 
   '@types/node@24.12.2':
     resolution: {integrity: sha512-A1sre26ke7HDIuY/M23nd9gfB+nrmhtYyMINbjI1zHJxYteKR6qSMX56FsmjMcDb3SMcjJg5BiRRgOCC/yBD0g==}
@@ -9176,45 +9175,45 @@ snapshots:
   '@aws-crypto/crc32@3.0.0':
     dependencies:
       '@aws-crypto/util': 3.0.0
-      '@aws-sdk/types': 3.974.2
+      '@aws-sdk/types': 3.974.3
       tslib: 1.14.1
 
   '@aws-crypto/sha256-js@4.0.0':
     dependencies:
       '@aws-crypto/util': 4.0.0
-      '@aws-sdk/types': 3.974.2
+      '@aws-sdk/types': 3.974.3
       tslib: 1.14.1
 
   '@aws-crypto/util@3.0.0':
     dependencies:
-      '@aws-sdk/types': 3.974.2
+      '@aws-sdk/types': 3.974.3
       '@aws-sdk/util-utf8-browser': 3.259.0
       tslib: 1.14.1
 
   '@aws-crypto/util@4.0.0':
     dependencies:
-      '@aws-sdk/types': 3.974.2
+      '@aws-sdk/types': 3.974.3
       '@aws-sdk/util-utf8-browser': 3.259.0
       tslib: 1.14.1
 
   '@aws-sdk/checksums@3.1000.25':
     dependencies:
-      '@aws-sdk/core': 3.977.6
-      '@aws-sdk/types': 3.974.2
-      '@smithy/core': 3.31.1
+      '@aws-sdk/core': 3.977.7
+      '@aws-sdk/types': 3.974.3
+      '@smithy/core': 3.32.0
       '@smithy/types': 4.16.1
       tslib: 2.8.1
 
   '@aws-sdk/client-bedrock-runtime@3.1102.0':
     dependencies:
-      '@aws-sdk/core': 3.977.6
-      '@aws-sdk/credential-provider-node': 3.972.78
+      '@aws-sdk/core': 3.977.7
+      '@aws-sdk/credential-provider-node': 3.972.79
       '@aws-sdk/eventstream-handler-node': 3.972.31
       '@aws-sdk/middleware-eventstream': 3.972.26
       '@aws-sdk/middleware-websocket': 3.972.48
-      '@aws-sdk/token-providers': 3.1103.0
-      '@aws-sdk/types': 3.974.2
-      '@smithy/core': 3.31.1
+      '@aws-sdk/token-providers': 3.1108.0
+      '@aws-sdk/types': 3.974.3
+      '@smithy/core': 3.32.0
       '@smithy/fetch-http-handler': 5.6.13
       '@smithy/node-http-handler': 4.9.13
       '@smithy/types': 4.16.1
@@ -9223,23 +9222,23 @@ snapshots:
   '@aws-sdk/client-s3@3.1102.0':
     dependencies:
       '@aws-sdk/checksums': 3.1000.25
-      '@aws-sdk/core': 3.977.6
-      '@aws-sdk/credential-provider-node': 3.972.78
+      '@aws-sdk/core': 3.977.7
+      '@aws-sdk/credential-provider-node': 3.972.79
       '@aws-sdk/middleware-sdk-s3': 3.972.71
-      '@aws-sdk/signature-v4-multi-region': 3.996.43
-      '@aws-sdk/types': 3.974.2
-      '@smithy/core': 3.31.1
+      '@aws-sdk/signature-v4-multi-region': 3.996.44
+      '@aws-sdk/types': 3.974.3
+      '@smithy/core': 3.32.0
       '@smithy/fetch-http-handler': 5.6.13
       '@smithy/node-http-handler': 4.9.13
       '@smithy/types': 4.16.1
       tslib: 2.8.1
 
-  '@aws-sdk/core@3.977.6':
+  '@aws-sdk/core@3.977.7':
     dependencies:
-      '@aws-sdk/types': 3.974.2
-      '@aws-sdk/xml-builder': 3.972.37
+      '@aws-sdk/types': 3.974.3
+      '@aws-sdk/xml-builder': 3.972.38
       '@aws/lambda-invoke-store': 0.3.0
-      '@smithy/core': 3.31.1
+      '@smithy/core': 3.32.0
       '@smithy/signature-v4': 5.6.12
       '@smithy/types': 4.16.1
       bowser: 2.14.1
@@ -9247,176 +9246,176 @@ snapshots:
 
   '@aws-sdk/credential-provider-cognito-identity@3.972.65':
     dependencies:
-      '@aws-sdk/nested-clients': 3.997.41
-      '@aws-sdk/types': 3.974.2
-      '@smithy/core': 3.31.1
+      '@aws-sdk/nested-clients': 3.997.42
+      '@aws-sdk/types': 3.974.3
+      '@smithy/core': 3.32.0
       '@smithy/types': 4.16.1
       tslib: 2.8.1
 
-  '@aws-sdk/credential-provider-env@3.972.67':
+  '@aws-sdk/credential-provider-env@3.972.68':
     dependencies:
-      '@aws-sdk/core': 3.977.6
-      '@aws-sdk/types': 3.974.2
-      '@smithy/core': 3.31.1
+      '@aws-sdk/core': 3.977.7
+      '@aws-sdk/types': 3.974.3
+      '@smithy/core': 3.32.0
       '@smithy/types': 4.16.1
       tslib: 2.8.1
 
-  '@aws-sdk/credential-provider-http@3.972.69':
+  '@aws-sdk/credential-provider-http@3.972.70':
     dependencies:
-      '@aws-sdk/core': 3.977.6
-      '@aws-sdk/types': 3.974.2
-      '@smithy/core': 3.31.1
+      '@aws-sdk/core': 3.977.7
+      '@aws-sdk/types': 3.974.3
+      '@smithy/core': 3.32.0
       '@smithy/fetch-http-handler': 5.6.13
       '@smithy/node-http-handler': 4.9.13
       '@smithy/types': 4.16.1
       tslib: 2.8.1
 
-  '@aws-sdk/credential-provider-ini@3.973.12':
+  '@aws-sdk/credential-provider-ini@3.973.13':
     dependencies:
-      '@aws-sdk/core': 3.977.6
-      '@aws-sdk/credential-provider-env': 3.972.67
-      '@aws-sdk/credential-provider-http': 3.972.69
-      '@aws-sdk/credential-provider-login': 3.972.74
-      '@aws-sdk/credential-provider-process': 3.972.67
-      '@aws-sdk/credential-provider-sso': 3.973.11
-      '@aws-sdk/credential-provider-web-identity': 3.972.73
-      '@aws-sdk/nested-clients': 3.997.41
-      '@aws-sdk/types': 3.974.2
-      '@smithy/core': 3.31.1
+      '@aws-sdk/core': 3.977.7
+      '@aws-sdk/credential-provider-env': 3.972.68
+      '@aws-sdk/credential-provider-http': 3.972.70
+      '@aws-sdk/credential-provider-login': 3.972.75
+      '@aws-sdk/credential-provider-process': 3.972.68
+      '@aws-sdk/credential-provider-sso': 3.973.12
+      '@aws-sdk/credential-provider-web-identity': 3.972.74
+      '@aws-sdk/nested-clients': 3.997.42
+      '@aws-sdk/types': 3.974.3
+      '@smithy/core': 3.32.0
       '@smithy/credential-provider-imds': 4.4.16
       '@smithy/types': 4.16.1
       tslib: 2.8.1
 
-  '@aws-sdk/credential-provider-login@3.972.74':
+  '@aws-sdk/credential-provider-login@3.972.75':
     dependencies:
-      '@aws-sdk/core': 3.977.6
-      '@aws-sdk/nested-clients': 3.997.41
-      '@aws-sdk/types': 3.974.2
-      '@smithy/core': 3.31.1
+      '@aws-sdk/core': 3.977.7
+      '@aws-sdk/nested-clients': 3.997.42
+      '@aws-sdk/types': 3.974.3
+      '@smithy/core': 3.32.0
       '@smithy/types': 4.16.1
       tslib: 2.8.1
 
-  '@aws-sdk/credential-provider-node@3.972.78':
+  '@aws-sdk/credential-provider-node@3.972.79':
     dependencies:
-      '@aws-sdk/credential-provider-env': 3.972.67
-      '@aws-sdk/credential-provider-http': 3.972.69
-      '@aws-sdk/credential-provider-ini': 3.973.12
-      '@aws-sdk/credential-provider-process': 3.972.67
-      '@aws-sdk/credential-provider-sso': 3.973.11
-      '@aws-sdk/credential-provider-web-identity': 3.972.73
-      '@aws-sdk/types': 3.974.2
-      '@smithy/core': 3.31.1
+      '@aws-sdk/credential-provider-env': 3.972.68
+      '@aws-sdk/credential-provider-http': 3.972.70
+      '@aws-sdk/credential-provider-ini': 3.973.13
+      '@aws-sdk/credential-provider-process': 3.972.68
+      '@aws-sdk/credential-provider-sso': 3.973.12
+      '@aws-sdk/credential-provider-web-identity': 3.972.74
+      '@aws-sdk/types': 3.974.3
+      '@smithy/core': 3.32.0
       '@smithy/credential-provider-imds': 4.4.16
       '@smithy/types': 4.16.1
       tslib: 2.8.1
 
-  '@aws-sdk/credential-provider-process@3.972.67':
+  '@aws-sdk/credential-provider-process@3.972.68':
     dependencies:
-      '@aws-sdk/core': 3.977.6
-      '@aws-sdk/types': 3.974.2
-      '@smithy/core': 3.31.1
+      '@aws-sdk/core': 3.977.7
+      '@aws-sdk/types': 3.974.3
+      '@smithy/core': 3.32.0
       '@smithy/types': 4.16.1
       tslib: 2.8.1
 
-  '@aws-sdk/credential-provider-sso@3.973.11':
+  '@aws-sdk/credential-provider-sso@3.973.12':
     dependencies:
-      '@aws-sdk/core': 3.977.6
-      '@aws-sdk/nested-clients': 3.997.41
-      '@aws-sdk/token-providers': 3.1103.0
-      '@aws-sdk/types': 3.974.2
-      '@smithy/core': 3.31.1
+      '@aws-sdk/core': 3.977.7
+      '@aws-sdk/nested-clients': 3.997.42
+      '@aws-sdk/token-providers': 3.1108.0
+      '@aws-sdk/types': 3.974.3
+      '@smithy/core': 3.32.0
       '@smithy/types': 4.16.1
       tslib: 2.8.1
 
-  '@aws-sdk/credential-provider-web-identity@3.972.73':
+  '@aws-sdk/credential-provider-web-identity@3.972.74':
     dependencies:
-      '@aws-sdk/core': 3.977.6
-      '@aws-sdk/nested-clients': 3.997.41
-      '@aws-sdk/types': 3.974.2
-      '@smithy/core': 3.31.1
+      '@aws-sdk/core': 3.977.7
+      '@aws-sdk/nested-clients': 3.997.42
+      '@aws-sdk/types': 3.974.3
+      '@smithy/core': 3.32.0
       '@smithy/types': 4.16.1
       tslib: 2.8.1
 
   '@aws-sdk/credential-providers@3.1102.0':
     dependencies:
-      '@aws-sdk/core': 3.977.6
+      '@aws-sdk/core': 3.977.7
       '@aws-sdk/credential-provider-cognito-identity': 3.972.65
-      '@aws-sdk/credential-provider-env': 3.972.67
-      '@aws-sdk/credential-provider-http': 3.972.69
-      '@aws-sdk/credential-provider-ini': 3.973.12
-      '@aws-sdk/credential-provider-login': 3.972.74
-      '@aws-sdk/credential-provider-node': 3.972.78
-      '@aws-sdk/credential-provider-process': 3.972.67
-      '@aws-sdk/credential-provider-sso': 3.973.11
-      '@aws-sdk/credential-provider-web-identity': 3.972.73
-      '@aws-sdk/nested-clients': 3.997.41
-      '@aws-sdk/types': 3.974.2
-      '@smithy/core': 3.31.1
+      '@aws-sdk/credential-provider-env': 3.972.68
+      '@aws-sdk/credential-provider-http': 3.972.70
+      '@aws-sdk/credential-provider-ini': 3.973.13
+      '@aws-sdk/credential-provider-login': 3.972.75
+      '@aws-sdk/credential-provider-node': 3.972.79
+      '@aws-sdk/credential-provider-process': 3.972.68
+      '@aws-sdk/credential-provider-sso': 3.973.12
+      '@aws-sdk/credential-provider-web-identity': 3.972.74
+      '@aws-sdk/nested-clients': 3.997.42
+      '@aws-sdk/types': 3.974.3
+      '@smithy/core': 3.32.0
       '@smithy/credential-provider-imds': 4.4.16
       '@smithy/types': 4.16.1
       tslib: 2.8.1
 
   '@aws-sdk/eventstream-handler-node@3.972.31':
     dependencies:
-      '@aws-sdk/types': 3.974.2
-      '@smithy/core': 3.31.1
+      '@aws-sdk/types': 3.974.3
+      '@smithy/core': 3.32.0
       '@smithy/types': 4.16.1
       tslib: 2.8.1
 
   '@aws-sdk/middleware-eventstream@3.972.26':
     dependencies:
-      '@aws-sdk/types': 3.974.2
-      '@smithy/core': 3.31.1
+      '@aws-sdk/types': 3.974.3
+      '@smithy/core': 3.32.0
       '@smithy/types': 4.16.1
       tslib: 2.8.1
 
   '@aws-sdk/middleware-sdk-s3@3.972.71':
     dependencies:
-      '@aws-sdk/core': 3.977.6
-      '@aws-sdk/signature-v4-multi-region': 3.996.43
-      '@aws-sdk/types': 3.974.2
-      '@smithy/core': 3.31.1
+      '@aws-sdk/core': 3.977.7
+      '@aws-sdk/signature-v4-multi-region': 3.996.44
+      '@aws-sdk/types': 3.974.3
+      '@smithy/core': 3.32.0
       '@smithy/types': 4.16.1
       tslib: 2.8.1
 
   '@aws-sdk/middleware-websocket@3.972.48':
     dependencies:
-      '@aws-sdk/core': 3.977.6
-      '@aws-sdk/types': 3.974.2
-      '@smithy/core': 3.31.1
+      '@aws-sdk/core': 3.977.7
+      '@aws-sdk/types': 3.974.3
+      '@smithy/core': 3.32.0
       '@smithy/fetch-http-handler': 5.6.13
       '@smithy/signature-v4': 5.6.12
       '@smithy/types': 4.16.1
       tslib: 2.8.1
 
-  '@aws-sdk/nested-clients@3.997.41':
+  '@aws-sdk/nested-clients@3.997.42':
     dependencies:
-      '@aws-sdk/core': 3.977.6
-      '@aws-sdk/signature-v4-multi-region': 3.996.43
-      '@aws-sdk/types': 3.974.2
-      '@smithy/core': 3.31.1
+      '@aws-sdk/core': 3.977.7
+      '@aws-sdk/signature-v4-multi-region': 3.996.44
+      '@aws-sdk/types': 3.974.3
+      '@smithy/core': 3.32.0
       '@smithy/fetch-http-handler': 5.6.13
       '@smithy/node-http-handler': 4.9.13
       '@smithy/types': 4.16.1
       tslib: 2.8.1
 
-  '@aws-sdk/signature-v4-multi-region@3.996.43':
+  '@aws-sdk/signature-v4-multi-region@3.996.44':
     dependencies:
-      '@aws-sdk/types': 3.974.2
+      '@aws-sdk/types': 3.974.3
       '@smithy/signature-v4': 5.6.12
       '@smithy/types': 4.16.1
       tslib: 2.8.1
 
-  '@aws-sdk/token-providers@3.1103.0':
+  '@aws-sdk/token-providers@3.1108.0':
     dependencies:
-      '@aws-sdk/core': 3.977.6
-      '@aws-sdk/nested-clients': 3.997.41
-      '@aws-sdk/types': 3.974.2
-      '@smithy/core': 3.31.1
+      '@aws-sdk/core': 3.977.7
+      '@aws-sdk/nested-clients': 3.997.42
+      '@aws-sdk/types': 3.974.3
+      '@smithy/core': 3.32.0
       '@smithy/types': 4.16.1
       tslib: 2.8.1
 
-  '@aws-sdk/types@3.974.2':
+  '@aws-sdk/types@3.974.3':
     dependencies:
       '@smithy/types': 4.16.1
       tslib: 2.8.1
@@ -9425,7 +9424,7 @@ snapshots:
     dependencies:
       tslib: 2.8.1
 
-  '@aws-sdk/xml-builder@3.972.37':
+  '@aws-sdk/xml-builder@3.972.38':
     dependencies:
       '@smithy/types': 4.16.1
       tslib: 2.8.1
@@ -9513,8 +9512,8 @@ snapshots:
       '@azure/core-tracing': 1.4.0
       '@azure/core-util': 1.14.0
       '@azure/logger': 1.4.0
-      '@azure/msal-browser': 5.17.3
-      '@azure/msal-node': 5.4.3
+      '@azure/msal-browser': 5.18.0
+      '@azure/msal-node': 5.5.0
       open: 10.2.0
       tslib: 2.8.1
     transitivePeerDependencies:
@@ -9556,15 +9555,15 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@azure/msal-browser@5.17.3':
+  '@azure/msal-browser@5.18.0':
     dependencies:
-      '@azure/msal-common': 16.11.3
+      '@azure/msal-common': 16.12.0
 
-  '@azure/msal-common@16.11.3': {}
+  '@azure/msal-common@16.12.0': {}
 
-  '@azure/msal-node@5.4.3':
+  '@azure/msal-node@5.5.0':
     dependencies:
-      '@azure/msal-common': 16.11.3
+      '@azure/msal-common': 16.12.0
       jsonwebtoken: 9.0.3
 
   '@babel/code-frame@7.29.0':
@@ -10207,7 +10206,19 @@ snapshots:
   '@gar/promisify@1.1.3':
     optional: true
 
-  '@ggui-ai/protocol@0.6.3(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)':
+  '@ggui-ai/protocol@0.9.0(@modelcontextprotocol/sdk@1.30.0(zod@3.25.76))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)':
+    dependencies:
+      '@modelcontextprotocol/ext-apps': 1.7.5(@modelcontextprotocol/sdk@1.30.0(zod@3.25.76))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(zod@4.4.3)
+      ajv: 8.20.0
+      ajv-formats: 3.0.1(ajv@8.20.0)
+      canonicalize: 2.1.0
+      zod: 4.4.3
+    transitivePeerDependencies:
+      - '@modelcontextprotocol/sdk'
+      - react
+      - react-dom
+
+  '@ggui-ai/protocol@0.9.0(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)':
     dependencies:
       '@modelcontextprotocol/ext-apps': 1.7.5(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(zod@4.4.3)
       ajv: 8.20.0
@@ -10372,7 +10383,7 @@ snapshots:
       '@google-cloud/opentelemetry-cloud-monitoring-exporter': 0.21.0(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.10.0(@opentelemetry/api@1.9.0))(@opentelemetry/resources@2.7.0(@opentelemetry/api@1.9.0))(@opentelemetry/sdk-metrics@2.7.0(@opentelemetry/api@1.9.0))(encoding@0.1.13)
       '@google-cloud/opentelemetry-cloud-trace-exporter': 3.0.0(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.10.0(@opentelemetry/api@1.9.0))(@opentelemetry/resources@2.7.0(@opentelemetry/api@1.9.0))(@opentelemetry/sdk-trace-base@2.7.0(@opentelemetry/api@1.9.0))(encoding@0.1.13)
       '@google-cloud/storage': 7.21.0(encoding@0.1.13)
-      '@google/genai': 1.50.1(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))
+      '@google/genai': 1.50.1(@modelcontextprotocol/sdk@1.30.0(zod@3.25.76))
       '@mikro-orm/core': 6.6.16
       '@mikro-orm/mariadb': 6.6.9(@mikro-orm/core@6.6.16)(better-sqlite3@12.11.1)(pg@8.19.0)
       '@mikro-orm/mssql': 6.6.9(@mikro-orm/core@6.6.16)(better-sqlite3@12.11.1)(mariadb@3.4.5)(pg@8.19.0)
@@ -10407,6 +10418,19 @@ snapshots:
       - '@opentelemetry/core'
       - bufferutil
       - encoding
+      - supports-color
+      - utf-8-validate
+
+  '@google/genai@1.50.1(@modelcontextprotocol/sdk@1.30.0(zod@3.25.76))':
+    dependencies:
+      google-auth-library: 10.6.2
+      p-retry: 4.6.2
+      protobufjs: 7.6.5
+      ws: 8.21.2
+    optionalDependencies:
+      '@modelcontextprotocol/sdk': 1.30.0(zod@3.25.76)
+    transitivePeerDependencies:
+      - bufferutil
       - supports-color
       - utf-8-validate
 
@@ -10448,18 +10472,18 @@ snapshots:
       protobufjs: 7.6.5
       yargs: 17.7.3
 
-  '@guuey/mcp-apps-host@0.3.1(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)':
+  '@guuey/mcp-apps-host@0.4.0(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)':
     dependencies:
-      '@ggui-ai/protocol': 0.6.3(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+      '@ggui-ai/protocol': 0.9.0(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       '@silverprotocol/core': 0.4.1
     transitivePeerDependencies:
       - '@modelcontextprotocol/sdk'
       - react
       - react-dom
 
-  '@guuey/threads@0.3.1(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(vitest@3.2.7(@types/node@24.13.3)(happy-dom@20.11.1)(jsdom@25.0.1)(terser@5.49.0)(tsx@4.23.5)(yaml@2.8.3))':
+  '@guuey/threads@0.4.0(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(vitest@3.2.7(@types/node@24.13.3)(happy-dom@20.11.1)(jsdom@25.0.1)(terser@5.49.0)(tsx@4.23.5)(yaml@2.8.3))':
     dependencies:
-      '@guuey/mcp-apps-host': 0.3.1(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+      '@guuey/mcp-apps-host': 0.4.0(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       '@silverprotocol/core': 0.4.1
     optionalDependencies:
       vitest: 3.2.7(@types/node@24.13.3)(happy-dom@20.11.1)(jsdom@25.0.1)(terser@5.49.0)(tsx@4.23.5)(yaml@2.8.3)
@@ -11109,6 +11133,15 @@ snapshots:
       - supports-color
       - tedious
 
+  '@modelcontextprotocol/ext-apps@1.7.5(@modelcontextprotocol/sdk@1.30.0(zod@3.25.76))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(zod@4.4.3)':
+    dependencies:
+      '@modelcontextprotocol/sdk': 1.30.0(zod@3.25.76)
+      '@standard-schema/spec': 1.1.0
+      zod: 4.4.3
+    optionalDependencies:
+      react: 19.2.8
+      react-dom: 19.2.8(react@19.2.8)
+
   '@modelcontextprotocol/ext-apps@1.7.5(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(zod@4.4.3)':
     dependencies:
       '@modelcontextprotocol/sdk': 1.30.0(zod@4.4.3)
@@ -11139,7 +11172,6 @@ snapshots:
       zod-to-json-schema: 3.25.2(zod@3.25.76)
     transitivePeerDependencies:
       - supports-color
-    optional: true
 
   '@modelcontextprotocol/sdk@1.30.0(zod@4.4.3)':
     dependencies:
@@ -11886,14 +11918,14 @@ snapshots:
       '@smithy/types': 4.16.1
       tslib: 2.8.1
 
-  '@smithy/core@3.31.1':
+  '@smithy/core@3.32.0':
     dependencies:
       '@smithy/types': 4.16.1
       tslib: 2.8.1
 
   '@smithy/credential-provider-imds@4.4.16':
     dependencies:
-      '@smithy/core': 3.31.1
+      '@smithy/core': 3.32.0
       '@smithy/types': 4.16.1
       tslib: 2.8.1
 
@@ -11926,7 +11958,7 @@ snapshots:
 
   '@smithy/fetch-http-handler@5.6.13':
     dependencies:
-      '@smithy/core': 3.31.1
+      '@smithy/core': 3.32.0
       '@smithy/types': 4.16.1
       tslib: 2.8.1
 
@@ -11975,7 +12007,7 @@ snapshots:
 
   '@smithy/node-http-handler@4.9.13':
     dependencies:
-      '@smithy/core': 3.31.1
+      '@smithy/core': 3.32.0
       '@smithy/types': 4.16.1
       tslib: 2.8.1
 
@@ -12017,7 +12049,7 @@ snapshots:
 
   '@smithy/signature-v4@5.6.12':
     dependencies:
-      '@smithy/core': 3.31.1
+      '@smithy/core': 3.32.0
       '@smithy/types': 4.16.1
       tslib: 2.8.1
 
@@ -12534,10 +12566,6 @@ snapshots:
     dependencies:
       undici-types: 6.21.0
 
-  '@types/node@22.20.1':
-    dependencies:
-      undici-types: 6.21.0
-
   '@types/node@24.12.2':
     dependencies:
       undici-types: 7.16.0
@@ -12568,7 +12596,7 @@ snapshots:
 
   '@types/readable-stream@4.0.24':
     dependencies:
-      '@types/node': 22.20.1
+      '@types/node': 24.13.3
 
   '@types/request@2.48.13':
     dependencies:
@@ -17113,7 +17141,7 @@ snapshots:
       '@azure/identity': 4.13.1
       '@azure/keyvault-keys': 4.10.2
       '@js-joda/core': 5.7.0
-      '@types/node': 22.20.1
+      '@types/node': 24.13.3
       bl: 6.1.6
       iconv-lite: 0.7.3
       js-md4: 0.3.2
@@ -18073,7 +18101,6 @@ snapshots:
   zod-to-json-schema@3.25.2(zod@3.25.76):
     dependencies:
       zod: 3.25.76
-    optional: true
 
   zod-to-json-schema@3.25.2(zod@4.4.3):
     dependencies:
