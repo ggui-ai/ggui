@@ -142,6 +142,39 @@ describe('mountReactRoot — per-app theme overlay', () => {
 
     mount!.unmount();
   });
+
+  it('merges the overlay INTO the scoped in-tree block — the :root append alone is cascade-dead for components', async () => {
+    // rnd/gen-ui/beauty/experiments/001: the scoped token block mounts
+    // INSIDE the scope div (body), later in document order than any
+    // head-level style — so a `:root`-only overlay can never recolor
+    // tree content. The overlay must ALSO ride the scoped style, after
+    // the base scoped block.
+    const container = makeContainer();
+    let mount: Awaited<ReturnType<typeof mountReactRoot>> | null = null;
+    await flush(async () => {
+      mount = await mountReactRoot(container, {
+        render: { id: 'x', componentCode: '' },
+        appTheme: {
+          mode: 'light',
+          cssVariables: { '--ggui-color-primary-600': '#abcdef' },
+        },
+      });
+    });
+
+    const scopeDiv = container.firstElementChild as HTMLElement;
+    const scopeClass = scopeDiv.className;
+    const inScopeStyle = scopeDiv.querySelector('style')?.textContent ?? '';
+    const overlayRule = `.${scopeClass}{--ggui-color-primary-600: #abcdef;}`;
+    const overlayIdx = inScopeStyle.lastIndexOf(overlayRule);
+    expect(overlayIdx, 'scoped overlay rule missing from the in-tree style').toBeGreaterThan(-1);
+    // After the base scoped block: the base defines the same var via
+    // the scoped token block earlier in the SAME style element.
+    const baseIdx = inScopeStyle.indexOf(`.${scopeClass} {`);
+    expect(baseIdx).toBeGreaterThanOrEqual(0);
+    expect(overlayIdx).toBeGreaterThan(baseIdx);
+
+    mount!.unmount();
+  });
 });
 
 describe('mountReactRoot — update with new props (no re-eval)', () => {

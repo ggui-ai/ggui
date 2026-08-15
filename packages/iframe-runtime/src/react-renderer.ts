@@ -454,9 +454,25 @@ export async function mountReactRoot(
   }
 
   function renderTree(opts: ReactRootMountOptions): void {
-    const themeCss = opts.themeId
+    let themeCss = opts.themeId
       ? getScopedThemeCss(opts.themeId, scopeClass, opts.themeMode)
       : getScopedCssTokens(scopeClass, opts.themeMode);
+    if (opts.appTheme) {
+      const decls = Object.entries(opts.appTheme.cssVariables)
+        .map(([k, v]) => `${k}: ${v};`)
+        .join('');
+      // The overlay must be merged HERE, into the scoped style that
+      // mounts INSIDE the scope div — the `:root` append below is
+      // cascade-dead for tree content: the in-scope block sits later
+      // in document order than anything in `<head>`, so at equal
+      // specificity the base scoped tokens always win over a head-level
+      // override (browser-verified in rnd/gen-ui/beauty/experiments/001,
+      // the probe sequence that found this). Appended AFTER the base
+      // block and BEFORE `cssOverrides`, so: base < operator overlay <
+      // explicit overrides. Values validated injection-safe upstream
+      // (same guarantee the `:root` append cites).
+      themeCss += `.${scopeClass}{${decls}}`;
+    }
 
     // Also inject theme CSS at `:root` on `document.head`. The scoped
     // injection above isolates token resolution to the React tree, but
@@ -475,10 +491,12 @@ export async function mountReactRoot(
         const decls = Object.entries(opts.appTheme.cssVariables)
           .map(([k, v]) => `${k}: ${v};`)
           .join('');
-        // Appended AFTER the base block → the per-app overlay wins; it is a
-        // partial set (unset vars keep their token defaults). CSS custom
-        // properties at :root inherit into the scoped React tree, so this
-        // alone is sufficient for the component to resolve `var(--ggui-*)`.
+        // BODY-CHROME ONLY. This `:root` append themes the embedding
+        // shell's body styles (font/color/background outside the scope
+        // div). It does NOT reach tree content — the scoped in-body
+        // token block wins by document order (see the scoped merge in
+        // `renderTree`, and rnd/gen-ui/beauty/experiments/001 for the
+        // probe that falsified the old "inherits into the tree" claim).
         // Values were validated injection-safe upstream (write-side
         // `appThemeSchema` + the wire parser re-validates), so the
         // string-join here is safe — do NOT re-sanitize.
