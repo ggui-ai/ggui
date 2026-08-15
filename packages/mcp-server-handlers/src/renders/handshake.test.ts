@@ -139,7 +139,13 @@ describe('createGguiHandshakeHandler — MVB-5', () => {
       const d = description();
       // variance = design-shaping signals; per-user data → props/contextSpec.
       expect(d).toMatch(/VARIANCE is design-shaping signals only/);
-      expect(d).toMatch(/persona \/ aesthetic \/ mood/);
+      // The variance teaching must name EXACTLY the schema's four keys —
+      // the old prose taught `mood`, which the strict schema rejects, and
+      // an agent following it got an unhinted -32602 (the 2026-08-16
+      // landing activation's handshake failures).
+      expect(d).toMatch(/persona \/ aesthetic \/ context \/ seedPrompt/);
+      expect(d).not.toMatch(/persona \/ aesthetic \/ mood/);
+      expect(d).toMatch(/toolInfo/);
       expect(d).toMatch(/per-user runtime data belongs in `props` \/ contextSpec/);
     });
 

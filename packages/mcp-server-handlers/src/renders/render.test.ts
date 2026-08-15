@@ -1714,7 +1714,8 @@ describe('createGguiRenderHandler — description (P2-25 CALL SHAPE)', () => {
     // variance carries design-shaping signals; per-user runtime data
     // belongs in props/contextSpec, never variance.
     expect(d).toMatch(/VARIANCE is design-shaping signals only/);
-    expect(d).toMatch(/persona\/aesthetic\/mood/);
+    expect(d).toMatch(/persona\/aesthetic\/context\/seedPrompt/);
+    expect(d).not.toMatch(/mood/);
     expect(d).toMatch(/per-user runtime data goes in props\/contextSpec, NOT variance/);
   });
 
