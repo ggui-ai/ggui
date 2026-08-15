@@ -92,7 +92,6 @@ overrides:
   '@babel/plugin-transform-react-jsx-source': 7.29.7
   '@babel/runtime@^7': 7.29.7
   '@babel/runtime@^8': 8.0.0
-  '@ggui-ai/protocol': 0.9.0
   '@google-cloud/storage': 7.21.0
   '@guuey/mcp-apps-host@0.4.x': 0.4.0
   '@guuey/threads': 0.4.0
@@ -272,8 +271,8 @@ importers:
         specifier: workspace:*
         version: link:../../packages/mcp-server-core
       '@ggui-ai/protocol':
-        specifier: 0.9.0
-        version: 0.9.0(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+        specifier: workspace:*
+        version: link:../../packages/protocol
       '@guuey/mcp-apps-host':
         specifier: 0.4.0
         version: 0.4.0(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
@@ -311,8 +310,8 @@ importers:
         specifier: workspace:*
         version: link:../../packages/preview-a2ui
       '@ggui-ai/protocol':
-        specifier: 0.9.0
-        version: 0.9.0(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+        specifier: workspace:*
+        version: link:../../packages/protocol
       '@ggui-ai/protocol-conformance':
         specifier: workspace:*
         version: link:../../packages/protocol-conformance
@@ -365,8 +364,8 @@ importers:
         specifier: workspace:*
         version: link:../../packages/mcp-server-handlers
       '@ggui-ai/protocol':
-        specifier: 0.9.0
-        version: 0.9.0(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+        specifier: workspace:*
+        version: link:../../packages/protocol
       '@modelcontextprotocol/sdk':
         specifier: 1.30.0
         version: 1.30.0(zod@4.4.3)
@@ -420,8 +419,8 @@ importers:
         version: 3.2.7(@types/node@22.19.15)(happy-dom@20.11.1)(jsdom@25.0.1)(terser@5.49.0)(tsx@4.23.5)(yaml@2.8.3)
     devDependencies:
       '@ggui-ai/protocol':
-        specifier: 0.9.0
-        version: 0.9.0(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+        specifier: workspace:*
+        version: link:../../packages/protocol
       '@sigstore/mock':
         specifier: ~0.12.1
         version: 0.12.1
@@ -471,8 +470,8 @@ importers:
         specifier: workspace:*
         version: link:../../packages/project-config
       '@ggui-ai/protocol':
-        specifier: 0.9.0
-        version: 0.9.0(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+        specifier: workspace:*
+        version: link:../../packages/protocol
       '@ggui-ai/shared':
         specifier: workspace:*
         version: link:../../packages/shared
@@ -542,8 +541,8 @@ importers:
   packages/agent-server:
     dependencies:
       '@ggui-ai/protocol':
-        specifier: 0.9.0
-        version: 0.9.0(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+        specifier: workspace:*
+        version: link:../protocol
       '@hono/node-server':
         specifier: 2.1.0
         version: 2.1.0(hono@4.13.0)
@@ -567,8 +566,8 @@ importers:
   packages/artifact-manifest:
     dependencies:
       '@ggui-ai/protocol':
-        specifier: 0.9.0
-        version: 0.9.0(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+        specifier: workspace:*
+        version: link:../protocol
       zod:
         specifier: ^4.4.3
         version: 4.4.3
@@ -636,8 +635,8 @@ importers:
         version: 19.2.8(react@19.2.8)
     devDependencies:
       '@ggui-ai/protocol':
-        specifier: 0.9.0
-        version: 0.9.0(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+        specifier: workspace:*
+        version: link:../protocol
       '@testing-library/react':
         specifier: ^16.0.0
         version: 16.3.2(@testing-library/dom@10.4.0)(@types/react-dom@19.2.4(@types/react@19.2.18))(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
@@ -844,8 +843,8 @@ importers:
   packages/gadgets:
     dependencies:
       '@ggui-ai/protocol':
-        specifier: 0.9.0
-        version: 0.9.0(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+        specifier: workspace:*
+        version: link:../protocol
     devDependencies:
       '@testing-library/react':
         specifier: ^16.0.0
@@ -914,8 +913,8 @@ importers:
         specifier: workspace:*
         version: link:../project-config
       '@ggui-ai/protocol':
-        specifier: 0.9.0
-        version: 0.9.0(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+        specifier: workspace:*
+        version: link:../protocol
       '@ggui-ai/registry-core':
         specifier: workspace:*
         version: link:../registry-core
@@ -963,8 +962,8 @@ importers:
         specifier: workspace:*
         version: link:../preview-a2ui
       '@ggui-ai/protocol':
-        specifier: 0.9.0
-        version: 0.9.0(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+        specifier: workspace:*
+        version: link:../protocol
       '@ggui-ai/wire':
         specifier: workspace:*
         version: link:../wire
@@ -1033,8 +1032,8 @@ importers:
         specifier: workspace:*
         version: link:../iframe-runtime
       '@ggui-ai/protocol':
-        specifier: 0.9.0
-        version: 0.9.0(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+        specifier: workspace:*
+        version: link:../protocol
       '@ggui-ai/wire':
         specifier: workspace:*
         version: link:../wire
@@ -1088,8 +1087,8 @@ importers:
         specifier: workspace:*
         version: link:../iframe-runtime
       '@ggui-ai/protocol':
-        specifier: 0.9.0
-        version: 0.9.0(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+        specifier: workspace:*
+        version: link:../protocol
       '@modelcontextprotocol/ext-apps':
         specifier: 1.7.5
         version: 1.7.5(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(zod@4.4.3)
@@ -1143,8 +1142,8 @@ importers:
         specifier: workspace:*
         version: link:../project-config
       '@ggui-ai/protocol':
-        specifier: 0.9.0
-        version: 0.9.0(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+        specifier: workspace:*
+        version: link:../protocol
       '@ggui-ai/ui-gen':
         specifier: workspace:*
         version: link:../ui-gen
@@ -1198,8 +1197,8 @@ importers:
   packages/mcp-server-core:
     dependencies:
       '@ggui-ai/protocol':
-        specifier: 0.9.0
-        version: 0.9.0(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+        specifier: workspace:*
+        version: link:../protocol
     devDependencies:
       '@ggui-ai/gadgets':
         specifier: workspace:*
@@ -1229,8 +1228,8 @@ importers:
         specifier: workspace:*
         version: link:../negotiator
       '@ggui-ai/protocol':
-        specifier: 0.9.0
-        version: 0.9.0(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+        specifier: workspace:*
+        version: link:../protocol
       '@ggui-ai/ui-gen':
         specifier: workspace:*
         version: link:../ui-gen
@@ -1260,8 +1259,8 @@ importers:
         specifier: workspace:*
         version: link:../mcp-server-core
       '@ggui-ai/protocol':
-        specifier: 0.9.0
-        version: 0.9.0(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+        specifier: workspace:*
+        version: link:../protocol
     devDependencies:
       '@types/node':
         specifier: ^24.0.0
@@ -1292,8 +1291,8 @@ importers:
         specifier: workspace:*
         version: link:../design
       '@ggui-ai/protocol':
-        specifier: 0.9.0
-        version: 0.9.0(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+        specifier: workspace:*
+        version: link:../protocol
       tinyglobby:
         specifier: 0.2.17
         version: 0.2.17
@@ -1342,8 +1341,8 @@ importers:
   packages/protocol-conformance:
     dependencies:
       '@ggui-ai/protocol':
-        specifier: 0.9.0
-        version: 0.9.0(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+        specifier: workspace:*
+        version: link:../protocol
       ws:
         specifier: 8.21.2
         version: 8.21.2
@@ -1364,8 +1363,8 @@ importers:
   packages/protocol-reference-server:
     dependencies:
       '@ggui-ai/protocol':
-        specifier: 0.9.0
-        version: 0.9.0(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+        specifier: workspace:*
+        version: link:../protocol
       ws:
         specifier: 8.21.2
         version: 8.21.2
@@ -1395,8 +1394,8 @@ importers:
         specifier: workspace:*
         version: link:../gadget-signing
       '@ggui-ai/protocol':
-        specifier: 0.9.0
-        version: 0.9.0(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+        specifier: workspace:*
+        version: link:../protocol
       esbuild:
         specifier: 0.25.12
         version: 0.25.12
@@ -1575,8 +1574,8 @@ importers:
         specifier: workspace:*
         version: link:../project-config
       '@ggui-ai/protocol':
-        specifier: 0.9.0
-        version: 0.9.0(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+        specifier: workspace:*
+        version: link:../protocol
       '@google/adk':
         specifier: ^0.5.0
         version: 0.5.0(3b1f9409196c7e3a44ca97133c17cb59)
@@ -1636,8 +1635,8 @@ importers:
         specifier: workspace:*
         version: link:../design
       '@ggui-ai/protocol':
-        specifier: 0.9.0
-        version: 0.9.0(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+        specifier: workspace:*
+        version: link:../protocol
       '@ggui-ai/wire':
         specifier: workspace:*
         version: link:../wire
@@ -1676,8 +1675,8 @@ importers:
   packages/wire:
     dependencies:
       '@ggui-ai/protocol':
-        specifier: 0.9.0
-        version: 0.9.0(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+        specifier: workspace:*
+        version: link:../protocol
       react:
         specifier: ^19.2.8
         version: 19.2.8
@@ -1701,8 +1700,8 @@ importers:
         specifier: workspace:*
         version: link:../../../packages/agent-server
       '@ggui-ai/protocol':
-        specifier: 0.9.0
-        version: 0.9.0(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+        specifier: workspace:*
+        version: link:../../../packages/protocol
       dotenv:
         specifier: ^16.4.5
         version: 16.6.1
@@ -1723,14 +1722,14 @@ importers:
         specifier: workspace:*
         version: link:../../../packages/agent-server
       '@ggui-ai/protocol':
-        specifier: 0.9.0
-        version: 0.9.0(@modelcontextprotocol/sdk@1.30.0(zod@3.25.76))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+        specifier: workspace:*
+        version: link:../../../packages/protocol
       '@google/adk':
         specifier: ^1.1.0
         version: 1.1.0(@grpc/grpc-js@1.14.4)(@mikro-orm/mariadb@6.6.9(@mikro-orm/core@6.6.16)(better-sqlite3@12.11.1))(@mikro-orm/mssql@6.6.9(@mikro-orm/core@6.6.16)(better-sqlite3@12.11.1)(mariadb@3.4.5))(@mikro-orm/mysql@6.6.9(@mikro-orm/core@6.6.16)(@types/node@22.19.15)(better-sqlite3@12.11.1)(mariadb@3.4.5))(@mikro-orm/postgresql@6.6.9(@mikro-orm/core@6.6.16)(better-sqlite3@12.11.1)(mariadb@3.4.5))(@mikro-orm/sqlite@6.6.9(@mikro-orm/core@6.6.16)(better-sqlite3@12.11.1)(mariadb@3.4.5))(@opentelemetry/core@2.10.0(@opentelemetry/api@1.9.0))(encoding@0.1.13)
       '@google/genai':
         specifier: ^1.37.0
-        version: 1.50.1(@modelcontextprotocol/sdk@1.30.0(zod@3.25.76))
+        version: 1.50.1(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))
       dotenv:
         specifier: ^16.4.5
         version: 16.6.1
@@ -1754,8 +1753,8 @@ importers:
         specifier: workspace:*
         version: link:../../../packages/agent-server
       '@ggui-ai/protocol':
-        specifier: 0.9.0
-        version: 0.9.0(@modelcontextprotocol/sdk@1.30.0(zod@3.25.76))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+        specifier: workspace:*
+        version: link:../../../packages/protocol
       '@openai/agents':
         specifier: ^0.0.13
         version: 0.0.13(ws@8.21.2)(zod@3.25.76)
@@ -1782,8 +1781,8 @@ importers:
         specifier: workspace:*
         version: link:../../../packages/gadgets
       '@ggui-ai/protocol':
-        specifier: 0.9.0
-        version: 0.9.0(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+        specifier: workspace:*
+        version: link:../../../packages/protocol
     devDependencies:
       '@types/react':
         specifier: ^19.2.18
@@ -1801,8 +1800,8 @@ importers:
         specifier: workspace:*
         version: link:../../../packages/gadgets
       '@ggui-ai/protocol':
-        specifier: 0.9.0
-        version: 0.9.0(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+        specifier: workspace:*
+        version: link:../../../packages/protocol
       leaflet:
         specifier: ^1.9.4
         version: 1.9.4
@@ -1826,8 +1825,8 @@ importers:
         specifier: workspace:*
         version: link:../../../packages/gadgets
       '@ggui-ai/protocol':
-        specifier: 0.9.0
-        version: 0.9.0(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+        specifier: workspace:*
+        version: link:../../../packages/protocol
     devDependencies:
       '@types/react':
         specifier: ^19.2.18
@@ -10206,18 +10205,6 @@ snapshots:
   '@gar/promisify@1.1.3':
     optional: true
 
-  '@ggui-ai/protocol@0.9.0(@modelcontextprotocol/sdk@1.30.0(zod@3.25.76))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)':
-    dependencies:
-      '@modelcontextprotocol/ext-apps': 1.7.5(@modelcontextprotocol/sdk@1.30.0(zod@3.25.76))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(zod@4.4.3)
-      ajv: 8.20.0
-      ajv-formats: 3.0.1(ajv@8.20.0)
-      canonicalize: 2.1.0
-      zod: 4.4.3
-    transitivePeerDependencies:
-      - '@modelcontextprotocol/sdk'
-      - react
-      - react-dom
-
   '@ggui-ai/protocol@0.9.0(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)':
     dependencies:
       '@modelcontextprotocol/ext-apps': 1.7.5(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(zod@4.4.3)
@@ -10383,7 +10370,7 @@ snapshots:
       '@google-cloud/opentelemetry-cloud-monitoring-exporter': 0.21.0(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.10.0(@opentelemetry/api@1.9.0))(@opentelemetry/resources@2.7.0(@opentelemetry/api@1.9.0))(@opentelemetry/sdk-metrics@2.7.0(@opentelemetry/api@1.9.0))(encoding@0.1.13)
       '@google-cloud/opentelemetry-cloud-trace-exporter': 3.0.0(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.10.0(@opentelemetry/api@1.9.0))(@opentelemetry/resources@2.7.0(@opentelemetry/api@1.9.0))(@opentelemetry/sdk-trace-base@2.7.0(@opentelemetry/api@1.9.0))(encoding@0.1.13)
       '@google-cloud/storage': 7.21.0(encoding@0.1.13)
-      '@google/genai': 1.50.1(@modelcontextprotocol/sdk@1.30.0(zod@3.25.76))
+      '@google/genai': 1.50.1(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))
       '@mikro-orm/core': 6.6.16
       '@mikro-orm/mariadb': 6.6.9(@mikro-orm/core@6.6.16)(better-sqlite3@12.11.1)(pg@8.19.0)
       '@mikro-orm/mssql': 6.6.9(@mikro-orm/core@6.6.16)(better-sqlite3@12.11.1)(mariadb@3.4.5)(pg@8.19.0)
@@ -10418,19 +10405,6 @@ snapshots:
       - '@opentelemetry/core'
       - bufferutil
       - encoding
-      - supports-color
-      - utf-8-validate
-
-  '@google/genai@1.50.1(@modelcontextprotocol/sdk@1.30.0(zod@3.25.76))':
-    dependencies:
-      google-auth-library: 10.6.2
-      p-retry: 4.6.2
-      protobufjs: 7.6.5
-      ws: 8.21.2
-    optionalDependencies:
-      '@modelcontextprotocol/sdk': 1.30.0(zod@3.25.76)
-    transitivePeerDependencies:
-      - bufferutil
       - supports-color
       - utf-8-validate
 
@@ -11133,15 +11107,6 @@ snapshots:
       - supports-color
       - tedious
 
-  '@modelcontextprotocol/ext-apps@1.7.5(@modelcontextprotocol/sdk@1.30.0(zod@3.25.76))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(zod@4.4.3)':
-    dependencies:
-      '@modelcontextprotocol/sdk': 1.30.0(zod@3.25.76)
-      '@standard-schema/spec': 1.1.0
-      zod: 4.4.3
-    optionalDependencies:
-      react: 19.2.8
-      react-dom: 19.2.8(react@19.2.8)
-
   '@modelcontextprotocol/ext-apps@1.7.5(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(zod@4.4.3)':
     dependencies:
       '@modelcontextprotocol/sdk': 1.30.0(zod@4.4.3)
@@ -11172,6 +11137,7 @@ snapshots:
       zod-to-json-schema: 3.25.2(zod@3.25.76)
     transitivePeerDependencies:
       - supports-color
+    optional: true
 
   '@modelcontextprotocol/sdk@1.30.0(zod@4.4.3)':
     dependencies:
@@ -18101,6 +18067,7 @@ snapshots:
   zod-to-json-schema@3.25.2(zod@3.25.76):
     dependencies:
       zod: 3.25.76
+    optional: true
 
   zod-to-json-schema@3.25.2(zod@4.4.3):
     dependencies:
