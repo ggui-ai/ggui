@@ -107,9 +107,22 @@ function runStateAriaPresent(input: AxisCheckInput): EvalIssue[] {
   const issues: EvalIssue[] = [];
   const flaggedLines = new Set<number>();
 
+  // Locally-defined components: their CALL SITES can never satisfy the
+  // check (the ARIA lives inside the definition, which this check
+  // already covers via the callback-prop clause) — flagging the call
+  // site is a permanently-unresolvable finding that stalls the
+  // eval-fix loop in the recurrence guard (Experiment 54: exactly the
+  // 2/27 stuck cells). Skip call sites of components defined in this
+  // file; the definition's own inner element carries the check.
+  const localComponents = new Set<string>();
+  for (const m of src.matchAll(/(?:function\s+([A-Z]\w*)\s*\(|const\s+([A-Z]\w*)\s*=)/g)) {
+    localComponents.add(m[1] ?? m[2]);
+  }
+
   for (const m of src.matchAll(/<([A-Za-z][A-Za-z0-9]*)\b/g)) {
     const tag = m[1];
     if (m.index === undefined) continue;
+    if (localComponents.has(tag)) continue;
     const { block, end } = attrBlock(src, m.index + m[0].length);
     const clickValue = onClickValue(block);
     if (clickValue === null) continue;

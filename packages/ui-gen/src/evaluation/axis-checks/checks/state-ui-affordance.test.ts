@@ -147,4 +147,41 @@ return <Box as={Clickable} onClick={() => console.log("noop")}>row</Box>;`;
     const input = { ...makeInput("<Box onClick={() => setX(1)} />"), compiledCode: null };
     expect(CHECK.run(input)).toHaveLength(0);
   });
+
+  it("never flags the CALL SITE of a locally-defined component whose definition carries the ARIA (the Experiment-54 stuck shape)", () => {
+    // The model fixes the definition; the call site can never satisfy
+    // the check — flagging it stalls the eval-fix loop permanently.
+    const src = `
+const [selectedElement, setSelectedElement] = useState(null);
+function ElementCell({ element, isSelected, onClick }) {
+  return (
+    <Box as={Clickable} aria-pressed={isSelected} onClick={() => onClick()}>
+      <Text>{element.symbol}</Text>
+    </Box>
+  );
+}
+return elements.map((element) => (
+  <ElementCell element={element} isSelected={selectedElement === element}
+    onClick={() => setSelectedElement(element)} />
+));`;
+    expect(CHECK.run(makeInput(src))).toHaveLength(0);
+  });
+
+  it("flags a DEFECTIVE locally-defined component exactly once — at its definition, not its call site", () => {
+    const src = `
+const [selectedElement, setSelectedElement] = useState(null);
+function ElementCell({ element, onClick }) {
+  return (
+    <Box as={Clickable} onClick={() => onClick()}>
+      <Text>{element.symbol}</Text>
+    </Box>
+  );
+}
+return elements.map((element) => (
+  <ElementCell element={element} onClick={() => setSelectedElement(element)} />
+));`;
+    const issues = CHECK.run(makeInput(src));
+    expect(issues).toHaveLength(1);
+    expect(issues[0].description).toContain("<Box>");
+  });
 });
