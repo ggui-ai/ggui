@@ -10,8 +10,10 @@
  * `(userId, transactionId)` key, newest-first sort); tests inject an
  * in-memory fake.
  *
- * Identity scope mirrors get-credit-balance: `ctx.appId` IS the
- * userId for end-user callers.
+ * Identity scope mirrors get-credit-balance: `ctx.userId` when the
+ * host resolves a distinct per-user identity, else `ctx.appId` (the
+ * single-tenant fold) — see that module's docstring for why reading
+ * `ctx.appId` alone loses every multi-tenant caller.
  */
 import { z } from 'zod';
 import type { SharedHandler } from '../types.js';
@@ -92,10 +94,13 @@ export function createListCreditTransactionsHandler(
     // No `allowedFor` — same toolset on every pod kind. Callers
     // without a credit account see an empty ledger.
     async handler(rawInput, ctx) {
-      const userId = ctx.appId;
+      // USER identity first — `ctx.appId` is the active app on
+      // multi-tenant hosts and never keys a ledger row (see
+      // get-credit-balance's module docstring).
+      const userId = ctx.userId ?? ctx.appId;
       if (!userId) {
         throw new Error(
-          'ggui_list_credit_transactions: missing caller identity (ctx.appId unset)',
+          'ggui_list_credit_transactions: missing caller identity (ctx.userId and ctx.appId both unset)',
         );
       }
       const parsed = z.object(inputSchema).parse(rawInput);

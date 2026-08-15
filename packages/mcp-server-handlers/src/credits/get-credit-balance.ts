@@ -9,12 +9,17 @@
  * deployment backs it with a real credit-balance datastore; tests
  * inject an in-memory fake.
  *
- * Identity scope: the handler reads the caller's userId from
- * `ctx.appId`. The auth adapter resolves `appId = workspaceId ?? userId`,
- * which IS the userId for the end-user single-tenant default. See
- * `packages/mcp-server/src/auth.ts#defaultAppIdFromIdentity`. The tool
- * is registered on every deployment kind; callers without a credit
- * account (e.g. agent-builder identities) get the zero-row
+ * Identity scope: credit rows are keyed by USER identity, so the
+ * handler reads `ctx.userId` when the host's auth layer resolves a
+ * distinct per-user identity (multi-tenant hosts where `ctx.appId`
+ * names the caller's active app, not the caller), and falls back to
+ * `ctx.appId` for single-tenant hosts whose auth adapter folds the
+ * user into the app slot (`appId = workspaceId ?? userId` — see
+ * `packages/mcp-server/src/auth.ts#defaultAppIdFromIdentity`).
+ * Reading `ctx.appId` alone silently returns the zero-row fallback
+ * for every multi-tenant caller — an app id never keys a credit row.
+ * The tool is registered on every deployment kind; callers without a
+ * credit account (e.g. agent-builder identities) get the zero-row
  * fallback.
  */
 import { z } from 'zod';
@@ -87,10 +92,14 @@ export function createGetCreditBalanceHandler(
     // without a credit account get the zero-row fallback below; no
     // separate "tool not registered" UX needed.
     async handler(_input, ctx) {
-      const userId = ctx.appId;
+      // USER identity first — on multi-tenant hosts `ctx.appId` is the
+      // caller's active app, which never keys a credit row (see the
+      // module docstring). Single-tenant hosts leave `ctx.userId`
+      // unset and fold the user into the app slot.
+      const userId = ctx.userId ?? ctx.appId;
       if (!userId) {
         throw new Error(
-          'ggui_get_credit_balance: missing caller identity (ctx.appId unset)',
+          'ggui_get_credit_balance: missing caller identity (ctx.userId and ctx.appId both unset)',
         );
       }
       const balance = await deps.creditBalance.getBalance(userId);
