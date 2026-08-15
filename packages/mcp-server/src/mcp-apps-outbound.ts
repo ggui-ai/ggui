@@ -594,13 +594,15 @@ function buildCspMeta(
    */
   runtimeUrl?: string,
   /**
-   * Origins of server-stamped fetch/stream URLs (`sseUrl`,
+   * Origins of server-stamped connect URLs (`wsUrl`, `sseUrl`,
    * `pollingUrl`) — each parseable entry's origin is unioned into
-   * `connectDomains` (deduplicated). Same-origin deployments add
-   * nothing new; split-origin session APIs (dedicated streaming host)
-   * would otherwise be silently blocked by `connect-src` on
-   * spec-compliant hosts — EventSource and fetch are both
-   * connect-src-governed.
+   * `connectDomains` (deduplicated), scheme preserved (`ws`/`wss` are
+   * WHATWG special schemes, so a `wss://` entry contributes its
+   * `wss://` origin). Same-origin deployments add nothing new;
+   * split-origin live channels or session APIs would otherwise be
+   * silently blocked by `connect-src` on spec-compliant hosts —
+   * WebSocket, EventSource, and fetch are all connect-src-governed,
+   * and the base's ws-twin flip only covers the base's own host.
    */
   extraConnectUrls?: readonly (string | undefined)[]
 ):
@@ -2391,17 +2393,24 @@ export function registerGguiRenderResourceTemplate(
     // derives these via deriveBundleOrigins; this is the per-call
     // resource mirror.
     const gadgetOrigins = deriveBundleOrigins(picked.source);
-    // Per-render CSP base: recompute with the stamped session-API
-    // URLs so their origins ride `connectDomains` (EventSource +
-    // fetch are connect-src-governed). Same-origin stamps dedupe to
-    // the registration-time declaration; a base derived from the
-    // wsUrl origin flip (publicBaseUrl absent) adds the flip origin
-    // that would otherwise be silently blocked.
+    // Per-render CSP base: recompute with the stamped live-channel +
+    // session-API URLs so their origins ride `connectDomains`
+    // (WebSocket, EventSource, and fetch are all connect-src-governed).
+    // The stamped `wsUrl` MUST be its own entry: CSP never
+    // cross-translates `https://` ↔ `wss://`, and the base's ws-twin
+    // flip only covers deployments whose base origin IS the ws host —
+    // when `publicBaseUrl` is absent and the runtime bundle lives on
+    // an assets CDN origin, the flip declares the CDN's wss twin while
+    // the actual socket host goes undeclared and the live channel dies
+    // in the mounted iframe (#479, observed as the cloud-render
+    // capstone's CSP block). Same-origin stamps dedupe to the
+    // registration-time declaration.
     const renderCspBase =
-      sessionApiUrls !== undefined
+      sessionApiUrls !== undefined || wsUrl !== undefined
         ? buildCspMeta(opts.publicBaseUrl, opts.runtimeUrl, [
-            sessionApiUrls.sseUrl,
-            sessionApiUrls.pollingUrl,
+            wsUrl,
+            sessionApiUrls?.sseUrl,
+            sessionApiUrls?.pollingUrl,
           ])
         : templateCspMeta;
     return shellContents(uri, html, augmentCspMeta(gadgetOrigins, renderCspBase));

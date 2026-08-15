@@ -199,6 +199,14 @@ describe("serveMount — pollingUrl + sseUrl stamping on the self-contained shel
       // unioned into connectDomains or spec-compliant hosts block the
       // EventSource/fetch to it.
       expect(connectDomainsOf(meta)).toContain("https://live.example");
+      // #479 — the stamped wsUrl's OWN origin must be declared too:
+      // CSP never cross-translates https:// ↔ wss://, and the base's
+      // ws-twin flip covers only the base host (runtime.example here,
+      // an assets-CDN origin in the deployments that hit this live).
+      // Without this entry the mounted iframe's WebSocket dies with a
+      // connect-src violation while SSE/polling still work — exactly
+      // the cloud-render capstone's failure face.
+      expect(connectDomainsOf(meta)).toContain("wss://live.example");
     } finally {
       await f.close();
     }
