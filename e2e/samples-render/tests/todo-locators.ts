@@ -110,13 +110,15 @@ export async function waitForTodoCheckedIndicator(
   timeout: number,
 ): Promise<void> {
   const deadline = Date.now() + timeout;
-  const locatorLeg = findTodoCheckedIndicator(frame, name).waitFor({
-    state: 'visible',
-    timeout,
-  });
-  const styleLeg = (async (): Promise<void> => {
+  const locatorLeg = findTodoCheckedIndicator(frame, name)
+    .waitFor({
+      state: 'visible',
+      timeout,
+    })
+    .then(() => 'aria' as const);
+  const styleLeg = (async (): Promise<'line-through'> => {
     for (;;) {
-      if (await todoTextStruckThrough(frame, name)) return;
+      if (await todoTextStruckThrough(frame, name)) return 'line-through';
       if (Date.now() >= deadline) {
         throw new Error(`no line-through on "${name.source}" within ${timeout}ms`);
       }
@@ -124,7 +126,18 @@ export async function waitForTodoCheckedIndicator(
     }
   })();
   try {
-    await Promise.any([locatorLeg, styleLeg]);
+    const winner = await Promise.any([locatorLeg, styleLeg]);
+    // Which leg carried the assertion is the ggui#408 close-condition
+    // signal: 'aria' means the generated control expressed its state
+    // accessibly (role/:checked/completion text) and the line-through
+    // fallback below is dead weight ready for deletion; 'line-through'
+    // means production generation still ships style-only state.
+    console.log(
+      `[todo-locators] checked indicator for "${name.source}": ` +
+        (winner === 'aria'
+          ? 'ARIA/native leg'
+          : 'line-through FALLBACK (style-only state)'),
+    );
   } catch (err) {
     const errors = err instanceof AggregateError ? err.errors : [err];
     throw new Error(
