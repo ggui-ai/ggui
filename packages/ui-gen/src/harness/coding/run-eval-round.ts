@@ -122,6 +122,29 @@ export interface EvalRoundResult {
 const MAX_FEEDBACK_ISSUES = 3;
 
 /**
+ * Pick the ≤{@link MAX_FEEDBACK_ISSUES} issues an eval-fix turn feeds
+ * back. Provenance-aware (Exp 54 P1 addendum): ONE slot is reserved
+ * for the first deterministic tier-0 fail (axis/mode checks —
+ * machine-verified findings) when one exists; the rest fill
+ * fails-first then warns. Without the reservation, the merge order
+ * put deterministic findings last and any round with ≥3 LLM-judge
+ * fails silently starved them — the model never saw a precision-1.00
+ * structural finding while the stuck detector blamed it for not
+ * fixing it. Exactly one slot, so crash-class LLM fails keep the
+ * other two. Exported for the pins.
+ */
+export function selectActionableFeedback(issues: readonly EvalIssue[]): EvalIssue[] {
+  const pool = issues.filter((i) => i.result === "fail" || i.result === "warn");
+  const reserved = pool.find((i) => i.tier === 0 && i.result === "fail");
+  return [
+    ...(reserved ? [reserved] : []),
+    ...pool
+      .filter((i) => i !== reserved)
+      .sort((a, b) => (a.result === "fail" ? 0 : 1) - (b.result === "fail" ? 0 : 1)),
+  ].slice(0, MAX_FEEDBACK_ISSUES);
+}
+
+/**
  * Fingerprint a fail issue for cross-round stuck detection. Identifies the
  * "same fail" without being thrown by minor description-text variation.
  * Format: `category|subcategory|first 40 chars of description, lowercased,
@@ -773,10 +796,19 @@ export async function runEvalRound(
     // Feeding too many issues at once causes the LLM to make many simultaneous
     // changes, breaking JSX nesting in complex components. Prioritize fails
     // first, then warns, capped to keep fixes surgical.
-    const allActionable = evalResult.issues
-      .filter((i) => i.result === "fail" || i.result === "warn")
-      .sort((a, b) => (a.result === "fail" ? 0 : 1) - (b.result === "fail" ? 0 : 1))
-      .slice(0, MAX_FEEDBACK_ISSUES);
+    //
+    // Provenance-aware selection (Exp 54 P1 addendum): deterministic
+    // tier-0 fails (axis/mode checks — machine-verified, precision-1.00
+    // findings) get ONE reserved slot, first. Before this, the merge
+    // order (`allIssues = [...llm, ...visual, ...mode]`) + stable sort
+    // + slice meant any round where the LLM leg emitted ≥3 fails
+    // silently starved every deterministic finding — the model never
+    // saw it, the fingerprint set still recorded it, and the stuck
+    // detector exited on an issue that was never delivered (2/9 cells
+    // shipped a P0 structural defect this way, one displaced by
+    // design-token nits). Exactly one slot is reserved so crash-class
+    // LLM fails keep the other two.
+    const allActionable = selectActionableFeedback(evalResult.issues);
     const issueLines = allActionable.map((issue) => {
       const tag = issue.result === "fail" ? "FAIL" : "WARN";
       return `[${tag}] ${issue.category}${issue.subcategory ? "/" + issue.subcategory : ""}: ${issue.description}\n  Fix: ${issue.fix}`;
@@ -792,7 +824,16 @@ export async function runEvalRound(
       evalResult,
       evalRoundsUsed,
       prevModeSubcats: updatedPrevModeSubcats,
-      prevFailFingerprints: currFailFingerprints,
+      // DELIVERED fails only (Exp 54 P1 addendum, proposal 2): the
+      // stuck detector's premise is "the LLM saw these and did not
+      // resolve them" — recording fails that the MAX_FEEDBACK_ISSUES
+      // cap cut from the feedback turns truncation into a premature
+      // stuck-exit (the model never saw the issue it is blamed for
+      // not fixing). An undelivered fail recurring next round now
+      // reads as NEW, gets delivered, and earns its fix round.
+      prevFailFingerprints: new Set(
+        allActionable.filter((i) => i.result === "fail").map(fingerprintFail),
+      ),
       preWarmedContext,
       evalTokens,
       evalLlmMs,
