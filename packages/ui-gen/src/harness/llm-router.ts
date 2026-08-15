@@ -10,6 +10,7 @@
 
 import type Anthropic from '@anthropic-ai/sdk';
 import type {
+  ImageBlockParam,
   TextBlock,
   TextBlockParam,
   ToolUseBlock,
@@ -104,6 +105,35 @@ export interface LLMResponse {
   text: string;
   inputTokens: number;
   outputTokens: number;
+}
+
+/**
+ * Image payload for {@link VisionAgent.callVision}. Base64-encoded
+ * bytes plus their media type — the two fields every vision-capable
+ * provider SDK needs to reconstruct the image part.
+ */
+export interface VisionImageInput {
+  mediaType: 'image/png' | 'image/jpeg' | 'image/webp';
+  base64: string;
+}
+
+/**
+ * The multimodal (image + text) call surface. Implemented by the
+ * providers whose SDK path supports vision input (Anthropic, Google);
+ * construct one via {@link createVisionAgent} so the call runs inside
+ * the same `apiCall()` retry/observability choke point as every text
+ * call — provider 429s retry with `Retry-After` honoring, `onRetry`
+ * reaches the caller's structured log, and `routeOverride` governs
+ * credentials and model routing instead of `process.env`.
+ */
+export interface VisionAgent {
+  callVision(
+    model: string,
+    systemPrompt: string,
+    userPrompt: string,
+    image: VisionImageInput,
+    maxTokens?: number,
+  ): Promise<LLMResponse>;
 }
 
 export interface LLMTool {
@@ -599,6 +629,90 @@ export class AnthropicAgent extends LLMAgent {
         provider: 'anthropic',
         model: resolvedModel,
         kind: 'callText',
+        systemPrompt,
+        userPrompt,
+        error: { message: e instanceof Error ? e.message : String(e) },
+      });
+      throw e;
+    }
+  }
+
+  async callVision(
+    model: string,
+    systemPrompt: string,
+    userPrompt: string,
+    image: VisionImageInput,
+    maxTokens?: number,
+  ): Promise<LLMResponse> {
+    const client = await this.getClient<Anthropic>();
+    const traceId = newLlmTraceId();
+    const startedAt = Date.now();
+    const resolvedModel = this.resolveModel(model);
+
+    const imageBlock: ImageBlockParam = {
+      type: 'image',
+      source: {
+        type: 'base64',
+        media_type: image.mediaType,
+        data: image.base64,
+      },
+    };
+
+    try {
+      const response = await this.apiCall(() =>
+        client.messages.create({
+          model: resolvedModel,
+          max_tokens: maxTokens ?? 1500,
+          system: systemPrompt,
+          messages: [
+            {
+              role: 'user',
+              content: [imageBlock, { type: 'text', text: userPrompt }],
+            },
+          ],
+        }),
+      );
+
+      const text = response.content
+        .filter((block): block is TextBlock => block.type === 'text')
+        .map((block) => block.text)
+        .join('');
+
+      const endedAt = Date.now();
+      // The image bytes stay OUT of the trace — a base64 screenshot
+      // would balloon every event; the prompts identify the call.
+      emitLlmTraceEvent({
+        id: traceId,
+        at: startedAt,
+        endedAt,
+        durationMs: endedAt - startedAt,
+        provider: 'anthropic',
+        model: resolvedModel,
+        kind: 'callVision',
+        systemPrompt,
+        userPrompt,
+        result: {
+          inputTokens: response.usage.input_tokens,
+          outputTokens: response.usage.output_tokens,
+          text,
+        },
+      });
+
+      return {
+        text,
+        inputTokens: response.usage.input_tokens,
+        outputTokens: response.usage.output_tokens,
+      };
+    } catch (e) {
+      const endedAt = Date.now();
+      emitLlmTraceEvent({
+        id: traceId,
+        at: startedAt,
+        endedAt,
+        durationMs: endedAt - startedAt,
+        provider: 'anthropic',
+        model: resolvedModel,
+        kind: 'callVision',
         systemPrompt,
         userPrompt,
         error: { message: e instanceof Error ? e.message : String(e) },
@@ -1159,6 +1273,86 @@ export class GoogleAgent extends LLMAgent {
     };
   }
 
+  async callVision(
+    model: string,
+    systemPrompt: string,
+    userPrompt: string,
+    image: VisionImageInput,
+    maxTokens?: number,
+  ): Promise<LLMResponse> {
+    const client = await this.getClient<GoogleGenAI>();
+    const traceId = newLlmTraceId();
+    const startedAt = Date.now();
+    const resolvedModel = this.resolveModel(model);
+
+    try {
+      const response = await this.apiCall(() =>
+        client.models.generateContent({
+          model: resolvedModel,
+          contents: [
+            {
+              role: 'user',
+              parts: [
+                { inlineData: { mimeType: image.mediaType, data: image.base64 } },
+                { text: userPrompt },
+              ],
+            },
+          ],
+          config: {
+            systemInstruction: systemPrompt,
+            ...(maxTokens ? { maxOutputTokens: maxTokens } : {}),
+          },
+        }),
+      );
+
+      const text =
+        response.candidates?.[0]?.content?.parts?.map((p) => p.text || '').join('') || '';
+      const usage = response.usageMetadata;
+      const result: LLMResponse = {
+        text,
+        inputTokens: usage?.promptTokenCount ?? 0,
+        outputTokens: usage?.candidatesTokenCount ?? 0,
+      };
+
+      const endedAt = Date.now();
+      // The image bytes stay OUT of the trace — a base64 screenshot
+      // would balloon every event; the prompts identify the call.
+      emitLlmTraceEvent({
+        id: traceId,
+        at: startedAt,
+        endedAt,
+        durationMs: endedAt - startedAt,
+        provider: 'google',
+        model: resolvedModel,
+        kind: 'callVision',
+        systemPrompt,
+        userPrompt,
+        result: {
+          inputTokens: result.inputTokens,
+          outputTokens: result.outputTokens,
+          text,
+        },
+      });
+
+      return result;
+    } catch (e) {
+      const endedAt = Date.now();
+      emitLlmTraceEvent({
+        id: traceId,
+        at: startedAt,
+        endedAt,
+        durationMs: endedAt - startedAt,
+        provider: 'google',
+        model: resolvedModel,
+        kind: 'callVision',
+        systemPrompt,
+        userPrompt,
+        error: { message: e instanceof Error ? e.message : String(e) },
+      });
+      throw e;
+    }
+  }
+
   async callTools(
     model: string,
     systemPrompt: string,
@@ -1651,6 +1845,28 @@ export function createAgent(providerOrConfig: AgentConfig['provider'] | AgentCon
       return new GoogleAgent(routeOverride, onRetry);
     case 'openrouter':
       return new OpenRouterAgent(routeOverride, onRetry);
+  }
+}
+
+/** Providers whose agent implements {@link VisionAgent}. */
+export type VisionProvider = 'anthropic' | 'google';
+
+/**
+ * Construct an agent for a multimodal (image + text) call. Same
+ * threading contract as {@link createAgent} — `routeOverride` and
+ * `onRetry` from the config reach the constructed agent — with the
+ * provider narrowed to the ones whose SDK path supports vision input,
+ * so the returned type carries `callVision` statically instead of
+ * every caller re-proving it.
+ */
+export function createVisionAgent(
+  config: AgentConfig & { provider: VisionProvider },
+): LLMAgent & VisionAgent {
+  switch (config.provider) {
+    case 'anthropic':
+      return new AnthropicAgent(config.routeOverride, config.onRetry);
+    case 'google':
+      return new GoogleAgent(config.routeOverride, config.onRetry);
   }
 }
 

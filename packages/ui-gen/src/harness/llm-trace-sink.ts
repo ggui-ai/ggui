@@ -39,7 +39,8 @@ export type LlmTraceKind =
   | 'callText'
   | 'callTools'
   | 'callWithTools'
-  | 'callStructured';
+  | 'callStructured'
+  | 'callVision';
 
 /**
  * One LLM call. Emitted **after** the call completes (success or error)

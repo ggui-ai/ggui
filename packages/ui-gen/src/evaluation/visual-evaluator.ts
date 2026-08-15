@@ -16,6 +16,7 @@ import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { writeFileSync, mkdirSync, unlinkSync } from 'fs';
 import { tmpdir } from 'os';
+import { createVisionAgent, type AgentConfig } from '../harness/llm-router';
 import type { EvaluationResult, EvaluationIssue, DimensionScores } from './types';
 import type { EvalIssue } from './types-public.js';
 
@@ -34,6 +35,20 @@ export interface VisualEvalConfig {
   sampleProps?: Record<string, unknown>;
   /** Viewport dimensions for screenshot */
   viewport?: { width: number; height: number };
+  /**
+   * Optional provider-routing override — see
+   * `AgentConfig.routeOverride`. Threaded onto the agent this
+   * evaluator constructs so its multimodal call never falls back to
+   * `process.env` for credentials or model routing.
+   */
+  routeOverride?: AgentConfig['routeOverride'];
+  /**
+   * Provider-429-retry observer — see `AgentConfig.onRetry`.
+   * Without it, a rate-limited retry inside the evaluation call
+   * happens (the agent's retry loop is unconditional) but never
+   * reaches the caller's structured log.
+   */
+  onRetry?: AgentConfig['onRetry'];
 }
 
 export interface VisualEvalContext {
@@ -247,75 +262,37 @@ Respond with ONLY a JSON object (no markdown, no explanation):
   "critique": "<2-3 sentences: what's good, what needs improvement, does it achieve the user's goal?>"
 }`;
 
-interface VisualProviderResponse {
-  text: string;
-  inputTokens: number;
-  outputTokens: number;
-}
-
+/**
+ * Send the screenshot to the configured multimodal provider through
+ * the shared `LLMAgent` machinery. Routing through `createVisionAgent`
+ * (rather than constructing provider SDK clients inline) is what puts
+ * this call inside the same `apiCall()` choke point as every other
+ * completion: provider 429s retry with `Retry-After` honoring, the
+ * caller's `onRetry` observer sees each retry, and `routeOverride`
+ * governs credentials and model routing (including the Anthropic
+ * Bedrock path) instead of `process.env`.
+ */
 async function callMultimodalLLM(
-  provider: 'claude' | 'google',
+  config: VisualEvalConfig,
   model: string,
   prompt: string,
   screenshot: Buffer,
   originalPrompt: string,
-): Promise<VisualProviderResponse> {
+) {
   const userPrompt = `## Original Request\n${originalPrompt}\n\nEvaluate the screenshot of the generated component.`;
-
-  if (provider === 'claude') {
-    const { default: Anthropic } = await import('@anthropic-ai/sdk');
-    const client = new Anthropic({
-      apiKey: process.env.ANTHROPIC_API_KEY,
-      baseURL: 'https://api.anthropic.com',
-    });
-    const response = await client.messages.create({
-      model: model.startsWith('anthropic/') ? model.slice(10) : model,
-      max_tokens: 1500,
-      system: prompt,
-      messages: [{
-        role: 'user',
-        content: [
-          {
-            type: 'image',
-            source: {
-              type: 'base64',
-              media_type: 'image/png',
-              data: screenshot.toString('base64'),
-            },
-          },
-          { type: 'text', text: userPrompt },
-        ],
-      }],
-    });
-    return {
-      text: response.content.filter(b => b.type === 'text').map(b => b.text).join(''),
-      inputTokens: response.usage.input_tokens,
-      outputTokens: response.usage.output_tokens,
-    };
-  }
-
-  // Google Gemini
-  const { GoogleGenAI } = await import('@google/genai');
-  const client = new GoogleGenAI({
-    apiKey: process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY,
+  const agent = createVisionAgent({
+    provider: config.provider === 'claude' ? 'anthropic' : config.provider,
+    model,
+    routeOverride: config.routeOverride,
+    onRetry: config.onRetry,
   });
-  const response = await client.models.generateContent({
-    model: model.startsWith('google/') ? model.slice(7) : model,
-    contents: [{
-      role: 'user',
-      parts: [
-        { inlineData: { mimeType: 'image/png', data: screenshot.toString('base64') } },
-        { text: userPrompt },
-      ],
-    }],
-    config: { systemInstruction: prompt },
-  });
-  const usage = response.usageMetadata;
-  return {
-    text: response.candidates?.[0]?.content?.parts?.map(p => p.text || '').join('') || '',
-    inputTokens: usage?.promptTokenCount ?? 0,
-    outputTokens: usage?.candidatesTokenCount ?? 0,
-  };
+  return agent.callVision(
+    model,
+    prompt,
+    userPrompt,
+    { mediaType: 'image/png', base64: screenshot.toString('base64') },
+    1500,
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -358,7 +335,7 @@ export async function runVisualEvaluation(
   // Send to multimodal LLM
   const model = config.model ?? getDefaultVisualModel(config.provider);
   const response = await callMultimodalLLM(
-    config.provider,
+    config,
     model,
     VISUAL_EVAL_PROMPT,
     screenshot,
@@ -377,9 +354,11 @@ export async function runVisualEvaluation(
 }
 
 /**
- * Exported for testing — bundles and builds the HTML for rendering.
+ * Exported for testing — bundles and builds the HTML for rendering;
+ * `callMultimodalLLM` so the #504 routing contract (config →
+ * `createVisionAgent`) is assertable without a screenshot pipeline.
  */
-export { bundleForRendering, buildRenderHTML };
+export { bundleForRendering, buildRenderHTML, callMultimodalLLM };
 
 // ---------------------------------------------------------------------------
 // Response parsing

@@ -444,6 +444,14 @@ export async function runEvalRound(
               passThreshold: visualThreshold,
               sampleProps: visualEvaluation?.sampleProps,
               viewport: visualEvaluation?.viewport,
+              // #484/#489 — same threading as the LLM-eval leg above:
+              // the visual eval's multimodal call runs inside the same
+              // concurrent generation, so it needs the same routing
+              // override (never fall back to `process.env`) and the
+              // same provider-429-retry observer (retries reach the
+              // host application's structured log).
+              routeOverride: visualEvalAgent.routeOverride,
+              onRetry: visualEvalAgent.onRetry,
             },
           )
         : null,
