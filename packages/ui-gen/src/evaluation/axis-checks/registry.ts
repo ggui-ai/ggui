@@ -6,6 +6,7 @@
 import type { AxisCheck } from "./types.js";
 import { UNIVERSAL_CHECKS } from "./checks/universal.js";
 import { STATE_MERGE_CHECKS } from "./checks/state-merge.js";
+import { STATE_UI_AFFORDANCE_CHECKS } from "./checks/state-ui-affordance.js";
 import { REALTIME_CHECKS } from "./checks/realtime.js";
 import { WRITES_CHECKS } from "./checks/writes.js";
 import { STATE_PAYLOAD_CHECKS } from "./checks/state-payload.js";
@@ -15,6 +16,7 @@ import { EXTRA_CHECKS } from "./extras.js";
 export const REGISTRY: readonly AxisCheck[] = [
   ...UNIVERSAL_CHECKS,
   ...STATE_MERGE_CHECKS,
+  ...STATE_UI_AFFORDANCE_CHECKS,
   ...REALTIME_CHECKS,
   ...WRITES_CHECKS,
   ...STATE_PAYLOAD_CHECKS,

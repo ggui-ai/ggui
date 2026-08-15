@@ -1134,6 +1134,85 @@ All data must come from props — never hardcode releases. Use design-system com
       ],
     },
   },
+
+  // ── 12. SIMPLE: Hand-Rolled Toggleable Rows (ggui#408 probe) ──────
+  // The exact production-defect shape from ggui#408: a per-item boolean
+  // whose only UI affordance is a row the user activates. No roster
+  // member exercises `checked` state on a HAND-ROLLED control —
+  // survey-form reaches the `Checkbox` primitive through a form
+  // contract, kanban's per-item action is a move, periodic-table is
+  // `selected`, release-notes is `expanded`. The prompt deliberately
+  // does NOT name a primitive and does NOT name a visual treatment, so
+  // the choice between a state-carrying primitive and a styled
+  // `as={Clickable}` row is the model's alone.
+  {
+    id: 'todo-toggle',
+    name: 'Todo List (toggle-complete)',
+    description: 'Todo list whose rows toggle complete — the #408 hand-rolled stateful-control probe',
+    complexity: 'simple',
+    expectedMinScore: 65,
+    shellType: 'chat',
+    screen: 'universal',
+    prompt: `Build a todo list where each item can be toggled complete.
+
+- Show the list title at the top and a count of how many items are still open
+- Render every todo as a row in a vertical list: the item's text plus the affordance that toggles it between complete and not complete
+- A completed item must be distinguishable from an open one
+- Activating a row's toggle calls the toggleItem action with { id }
+
+All todos come from props — never hardcode them. Use design system components and CSS variables.`,
+    contract: {
+      propsSpec: {
+        properties: {
+          listTitle: {
+            schema: { type: 'string' },
+            required: true,
+            description: 'Title of the todo list',
+            example: 'Today',
+          },
+          todos: {
+            schema: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  id: { type: 'string' },
+                  text: { type: 'string' },
+                  done: { type: 'boolean' },
+                },
+              },
+            },
+            required: true,
+            description: 'Todo items. `done` is the completion state of the item.',
+            example: [
+              { id: 't1', text: 'Buy oat milk', done: false },
+              { id: 't2', text: 'Renew passport', done: true },
+            ],
+          },
+        },
+      },
+      actionSpec: {
+        toggleItem: {
+          label: 'Toggle Item',
+          description: 'Called when the user toggles a todo between complete and not complete. Payload: { id }',
+          nextStep: 'todoist_toggle_item',
+          schema: { type: 'object', properties: { id: { type: 'string' } } },
+          example: { id: 't1' },
+        },
+      },
+    },
+    props: {
+      listTitle: 'Today',
+      todos: [
+        { id: 't1', text: 'Buy oat milk', done: false },
+        { id: 't2', text: 'Renew passport', done: true },
+        { id: 't3', text: 'Book dentist appointment', done: false },
+        { id: 't4', text: 'Reply to Mira about the offsite', done: false },
+        { id: 't5', text: 'Cancel the unused storage plan', done: true },
+        { id: 't6', text: 'Water the fiddle-leaf fig', done: false },
+      ],
+    },
+  },
 ];
 
 /**
