@@ -142,6 +142,29 @@ export interface BuildMcpServerOptions {
    * `resources/read` later.
    */
   readonly extraResources?: ReadonlyArray<(server: McpServer) => void>;
+
+  /**
+   * Withhold every handler's per-result `_meta` from tool results.
+   *
+   * By default a successful tool result carries the handler's
+   * `resultMeta` slice — for `ggui_render` / `ggui_update` that is the
+   * `ai.ggui/render` bootstrap a host may mount DIRECTLY without any
+   * further round-trip. Setting this makes the server publish only the
+   * durable identity (`structuredContent.resourceUri`, the `ui://`
+   * locator), so a host MUST resolve every view by an authenticated
+   * `resources/read` — the persisted-locator path — before it can
+   * mount anything.
+   *
+   * That is a deployment posture, not a debug switch: a hosted
+   * deployment that wants "views mount only through the read plane"
+   * (thread-scoped ownership checks, fresh per-read credentials, no
+   * inlined bootstrap material crossing a chat transcript) states it
+   * here by construction, and any host that still expects the inlined
+   * bootstrap fails loudly (a locator it cannot resolve) instead of
+   * silently mounting stale material. `structuredContent` and `content`
+   * are untouched; only `_meta` is withheld.
+   */
+  readonly withholdResultMeta?: boolean;
 }
 
 /**
@@ -272,7 +295,10 @@ export function buildMcpServer(
         // Per-result `_meta` — NOT merged into structuredContent, so
         // agents that typecheck against the tool signature never see
         // it. This is where view-only bootstrap material lives.
-        const meta = await handler.resultMeta?.(data, input, ctx);
+        const meta =
+          opts.withholdResultMeta === true
+            ? undefined
+            : await handler.resultMeta?.(data, input, ctx);
         logger.info('tool_invoked', {
           tool: handler.name,
           appId: ctx.appId,

@@ -212,8 +212,9 @@ describe('buildMcpServer — in-result isError failure channel (ruling B)', () =
    */
   async function bootLinked(
     handlers: ReadonlyArray<SharedHandler<ZodRawShape, ZodRawShape>>,
+    opts: { withholdResultMeta?: boolean } = {},
   ): Promise<{ client: Client; close: () => Promise<void> }> {
-    const server = buildMcpServer(info, handlers, () => baseCtx, silentLogger);
+    const server = buildMcpServer(info, handlers, () => baseCtx, silentLogger, opts);
     const [clientTransport, serverTransport] =
       InMemoryTransport.createLinkedPair();
     const client = new Client({ name: 'ruling-b-test', version: '0' });
@@ -317,6 +318,37 @@ describe('buildMcpServer — in-result isError failure channel (ruling B)', () =
       expect(result.isError).toBeUndefined();
       expect(result.structuredContent).toEqual({ ok: true });
       expect(result._meta).toEqual({ ui: { resourceUri: 'ui://x' } });
+    } finally {
+      await close();
+    }
+  });
+
+  it('withholdResultMeta publishes the durable identity only — structuredContent intact, no _meta, resultMeta never consulted', async () => {
+    // Read-plane-only mounting: a host receiving this result holds a
+    // `ui://` locator and nothing to mount directly, so it MUST resolve
+    // via authenticated resources/read. This is the posture guuey's
+    // vendor-arm retirement lands in for every consumer, and what a
+    // deployment states to guarantee it by construction.
+    const resultMetaSpy = vi.fn(() => ({ 'ai.ggui/render': { runtimeUrl: 'https://x/rt.js' } }));
+    const rendering: SharedHandler<ZodRawShape, ZodRawShape> = {
+      name: 'synth_render',
+      description: 'synthetic render-shaped handler',
+      inputSchema: {},
+      outputSchema: { sessionId: z.string(), resourceUri: z.string() },
+      async handler() {
+        return { sessionId: 's1', resourceUri: 'ui://ggui/render/s1' };
+      },
+      resultMeta: resultMetaSpy,
+    };
+    const { client, close } = await bootLinked([rendering], { withholdResultMeta: true });
+    try {
+      const result = await client.callTool({ name: 'synth_render', arguments: {} });
+      expect(result.isError).toBeUndefined();
+      expect(result.structuredContent).toEqual({ sessionId: 's1', resourceUri: 'ui://ggui/render/s1' });
+      expect(result._meta).toBeUndefined();
+      // Not merely stripped after the fact — never assembled, so no
+      // bootstrap token is minted for a slice nobody will receive.
+      expect(resultMetaSpy).not.toHaveBeenCalled();
     } finally {
       await close();
     }

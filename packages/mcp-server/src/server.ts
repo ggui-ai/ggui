@@ -3269,6 +3269,15 @@ export interface CreateGguiServerOptions {
   readonly extraResources?: ReadonlyArray<(server: McpServer) => void>;
 
   /**
+   * Publish tool results WITHOUT their per-result `_meta` bootstrap:
+   * hosts then resolve every view through the authenticated
+   * `resources/read` path off the `ui://` locator, never from inlined
+   * material. A deployment posture (read-plane-only mounting); see
+   * `BuildMcpServerOptions.withholdResultMeta` for the full rationale.
+   */
+  readonly withholdResultMeta?: boolean;
+
+  /**
    * Per-domain dep seams for the operator-class `ggui_ops_*` handlers
    * covering the console's apps + orgs + connector-keys + coupon
    * surfaces. Each domain is independently optional —
@@ -4947,6 +4956,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
     ...(opts.allowedKinds !== undefined ? { allowedKinds: opts.allowedKinds } : {}),
     ...(resolvedInstructions !== undefined ? { instructions: resolvedInstructions } : {}),
     ...(opts.extraResources !== undefined ? { extraResources: opts.extraResources } : {}),
+    ...(opts.withholdResultMeta === true ? { withholdResultMeta: true } : {}),
   };
 
   // MCP wire endpoints (data plane: universal / per-app; control
