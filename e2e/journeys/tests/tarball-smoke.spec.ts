@@ -133,7 +133,7 @@ test.describe.serial('Phase 5.5 — tarball-install smoke (cli + mcp-server)', (
     // routes (agent + runtime + protocol + ops); the `tools/list`
     // assertion below pins the agent/runtime surface the `/mcp` route
     // actually exposes. When the native surface changes, update both.
-    expect(health.tools).toBe(29);
+    expect(health.tools).toBe(30);
     expect(health.channel?.path).toBe('/ws');
 
     // tools/list with the pair-minted bearer. If publish-shape
@@ -155,6 +155,9 @@ test.describe.serial('Phase 5.5 — tarball-install smoke (cli + mcp-server)', (
       'ggui_amend',
       'ggui_consume',
       'ggui_emit',
+      // Data-plane source read (#282 dataplane rider) — the calling
+      // app reads the authored component source for its own render.
+      'ggui_get_render_source',
       'ggui_get_session',
       'ggui_handshake',
       'ggui_list_featured_blueprints',
