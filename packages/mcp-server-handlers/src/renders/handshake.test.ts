@@ -367,7 +367,10 @@ describe('createGguiHandshakeHandler — MVB-5', () => {
       // optional entries stay OUT of the copy-paste example.
       expect(example).toContain('"title":"Deploy Status"');
       expect(example).toContain('"count":0');
-      expect(example).not.toContain('optionalNote');
+      // Every declared prop is shown — the closed key set IS the
+      // teaching (ggui#523) — required ones first, optional after.
+      expect(example).toContain('"optionalNote":""');
+      expect(example.indexOf('"count"')).toBeLessThan(example.indexOf('"optionalNote"'));
     });
 
     it('nextStep.example stays a valid bare {} when the contract has no required props', async () => {

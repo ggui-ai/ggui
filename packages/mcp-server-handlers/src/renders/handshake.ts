@@ -948,19 +948,32 @@ function buildNextStepHint(input: {
 }
 
 /**
- * JSON example for the REQUIRED entries of the contract's propsSpec.
- * Prefers each entry's declared `example`, then `default`, then a
- * type-shaped placeholder from its JSON Schema (first enum member,
- * else '' / 0 / false / [] / {}). Returns undefined when the contract
- * has no required props — the caller's `{}` fallback is then valid
- * verbatim.
+ * JSON example for the contract's propsSpec — EVERY declared prop,
+ * required ones first, each with its declared `example`, then
+ * `default`, then a type-shaped placeholder from its JSON Schema
+ * (first enum member, else '' / 0 / false, arrays with one item in the
+ * item's shape, objects with every declared key). Returns undefined
+ * when the contract declares no props — the caller's `{}` fallback is
+ * then valid verbatim.
+ *
+ * Why every prop and not only the required ones (ggui#523, live bench
+ * 2026-08-16): the render gate validates props against a CLOSED key
+ * set at every level, and an agent that cannot see the whole set
+ * invents keys (`members[0].id`) and blank enum values (`status: ""`
+ * where the contract says idle|success). The example IS the closed
+ * set, values included — the agent copies the shape and replaces the
+ * values.
  */
 function buildPropsExample(contract: DataContract): string | undefined {
   const properties = contract.propsSpec?.properties;
   if (properties === undefined) return undefined;
   const out: Record<string, JsonValue> = {};
-  for (const [name, entry] of Object.entries(properties)) {
-    if (entry.required !== true) continue;
+  const entries = Object.entries(properties);
+  const ordered = [
+    ...entries.filter(([, entry]) => entry.required === true),
+    ...entries.filter(([, entry]) => entry.required !== true),
+  ];
+  for (const [name, entry] of ordered) {
     out[name] =
       entry.example ?? entry.default ?? placeholderForSchema(entry.schema);
   }
