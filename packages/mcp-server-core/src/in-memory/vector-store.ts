@@ -11,11 +11,12 @@
  */
 import type {
   EnumerableVectorStore,
+  KeyedVectorStore,
   VectorEntry,
   VectorSearchResult,
 } from '../vector-store.js';
 
-export class InMemoryVectorStore implements EnumerableVectorStore {
+export class InMemoryVectorStore implements EnumerableVectorStore, KeyedVectorStore {
   /** scope → key → entry */
   private readonly index = new Map<string, Map<string, VectorEntry>>();
 
@@ -68,6 +69,12 @@ export class InMemoryVectorStore implements EnumerableVectorStore {
       vector: entry.vector.slice(),
       metadata: { ...entry.metadata },
     }));
+  }
+
+  async getByKey(scope: string, key: string): Promise<VectorEntry | null> {
+    const entry = this.index.get(scope)?.get(key);
+    if (!entry) return null;
+    return { key: entry.key, vector: entry.vector.slice(), metadata: { ...entry.metadata } };
   }
 }
 

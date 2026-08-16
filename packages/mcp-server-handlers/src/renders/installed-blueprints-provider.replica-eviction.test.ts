@@ -48,17 +48,19 @@ const ENTRY: InstalledBlueprintEntry = {
 };
 
 /**
- * Enumerable store whose LISTINGS keep serving deleted rows until
- * `settle()` — deletes land in point-state immediately, but
- * `listByScope` returns ghosts, modeling an eventually-consistent
- * enumeration backend.
+ * Store whose READS keep serving deleted rows until `settle()` — the
+ * delete lands, but both `listByScope` AND `getByKey` return ghosts,
+ * modeling an eventually-consistent backend. Both read paths lag on
+ * purpose: since ggui#527 the registry's point-read goes through
+ * `getByKey` (never the enumeration) on a keyed store, so a lag model
+ * that covered only the listing would no longer exercise the stale-hit
+ * class this test guards — the read would already be clean.
  */
 class LaggingListVectorStore extends InMemoryVectorStore {
   private readonly ghosts = new Map<string, VectorEntry[]>();
 
   override async deleteVector(scope: string, key: string): Promise<void> {
-    const rows = await super.listByScope(scope);
-    const victim = rows.find((r) => r.key === key);
+    const victim = await super.getByKey(scope, key);
     await super.deleteVector(scope, key);
     if (victim) {
       const bucket = this.ghosts.get(scope) ?? [];
@@ -73,6 +75,12 @@ class LaggingListVectorStore extends InMemoryVectorStore {
       (g) => !live.some((l) => l.key === g.key),
     );
     return [...live, ...ghosts];
+  }
+
+  override async getByKey(scope: string, key: string): Promise<VectorEntry | null> {
+    const live = await super.getByKey(scope, key);
+    if (live) return live;
+    return (this.ghosts.get(scope) ?? []).find((g) => g.key === key) ?? null;
   }
 
   settle(): void {

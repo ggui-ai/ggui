@@ -43,6 +43,7 @@ import type {
   BlueprintIndex,
   EmbeddingProvider,
   EnumerableVectorStore,
+  KeyedVectorStore,
   VectorEntry,
   VectorSearchResult,
   VectorStore,
@@ -823,39 +824,58 @@ export async function findBlueprintExact(
 }
 
 /**
+ * Read the vector-store row at `(scope, id)` — the ONE keyed-read
+ * ladder every registry point-read shares (ggui#527):
+ *
+ *   1. `getByKey` on a {@link KeyedVectorStore} — O(1), the backend's
+ *      own point-read (S3 Vectors `GetVectors`, sqlite PK, in-memory
+ *      map). ALWAYS preferred.
+ *   2. `listByScope` + find on an {@link EnumerableVectorStore} — the
+ *      pre-#527 default. On the S3 Vectors adapter this is a whole-
+ *      INDEX walk with `returnData` (every app's float32 vectors,
+ *      deserialized on the main thread): 500–970 ms event-loop stall
+ *      bursts on every cache-hit render, long enough for nginx to see
+ *      the upstream reset and answer 502. Reached now only by a
+ *      backend that enumerates but cannot point-read.
+ *   3. zero-vector `query` + scan on a backend with neither.
+ *
+ * Returns the raw entry (a `VectorSearchResult` on rung 3 — no
+ * `vector`); callers that need the vector fall back to re-embedding.
+ */
+async function readRegistryRow(
+  store: VectorStore,
+  scope: string,
+  id: string,
+): Promise<VectorEntry | VectorSearchResult | null> {
+  if ('getByKey' in store && typeof store.getByKey === 'function') {
+    return (store as KeyedVectorStore).getByKey(scope, id);
+  }
+  if ('listByScope' in store && typeof store.listByScope === 'function') {
+    const entries = await (store as EnumerableVectorStore).listByScope(scope);
+    return entries.find((e) => e.key === id) ?? null;
+  }
+  const dummy = new Array<number>(1).fill(0);
+  const results = await store.query(scope, dummy, 1000);
+  return results.find((r) => r.key === id) ?? null;
+}
+
+/**
  * Point-read a blueprint by its vector-store key (id) within `scope`,
- * or `null` when absent. Two branches mirror {@link findBlueprintExact}:
- * `listByScope`+find on an {@link EnumerableVectorStore} (no embed
- * round-trip), else a zero-vector `query`+scan on a non-enumerable
- * backend.
+ * or `null` when absent — {@link readRegistryRow} projected onto the
+ * blueprint shape.
  *
  * Distinct from `findBlueprintExact`, which resolves a `(kind,
  * contractKey)` lookup to the synthetic key first. This reads straight
- * by id — the shape the render-time point-read (next wave) needs once
- * the index resolves `(scope, exactKey) → id`.
+ * by id — the shape the render-time point-read needs once the index
+ * resolves `(scope, exactKey) → id`.
  */
 async function findBlueprintByUuid(
   store: VectorStore,
   scope: string,
   id: string,
 ): Promise<Blueprint | null> {
-  if ('listByScope' in store && typeof store.listByScope === 'function') {
-    const entries = await (store as EnumerableVectorStore).listByScope(scope);
-    for (const entry of entries) {
-      if (entry.key === id) {
-        return rowToBlueprint(entry.key, entry.metadata);
-      }
-    }
-    return null;
-  }
-  const dummy = new Array<number>(1).fill(0);
-  const results = await store.query(scope, dummy, 1000);
-  for (const result of results) {
-    if (result.key === id) {
-      return rowToBlueprint(result.key, result.metadata);
-    }
-  }
-  return null;
+  const row = await readRegistryRow(store, scope, id);
+  return row ? rowToBlueprint(row.key, row.metadata) : null;
 }
 
 /**
@@ -941,19 +961,13 @@ export async function recordBlueprintHit(
   scope: string,
   id: string,
 ): Promise<void> {
-  // We need the existing entry to update it. Lookup via listByScope
-  // when enumerable; otherwise via cosine query. Same shape as
-  // findBlueprintExact's two branches.
+  // We need the existing entry to update it — the shared keyed-read
+  // ladder (`getByKey` → `listByScope` → zero-vector query). This
+  // runs on EVERY cache hit, so it MUST take the point-read rung on a
+  // keyed backend (ggui#527: the enumerate rung on S3 Vectors was a
+  // whole-index walk per hit).
   const store = deps.vectorStore;
-  let existing: VectorEntry | VectorSearchResult | undefined;
-  if ('listByScope' in store && typeof store.listByScope === 'function') {
-    const entries = await (store as EnumerableVectorStore).listByScope(scope);
-    existing = entries.find((e) => e.key === id);
-  } else {
-    const dummy = new Array<number>(1).fill(0);
-    const results = await store.query(scope, dummy, 1000);
-    existing = results.find((r) => r.key === id);
-  }
+  const existing = await readRegistryRow(store, scope, id);
   if (!existing) return;
   // Re-write the entry with bumped counters. Reuse the existing
   // vector — it's already correct for the canonical embedding input,

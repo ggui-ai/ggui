@@ -4,7 +4,7 @@ import {
   InMemoryVectorStore,
   MockEmbeddingProvider,
 } from '@ggui-ai/mcp-server-core/in-memory';
-import type { BlueprintStore } from '@ggui-ai/mcp-server-core';
+import type { BlueprintStore, EnumerableVectorStore } from '@ggui-ai/mcp-server-core';
 import type {
   Blueprint as DurableBlueprint,
   BlueprintSource,
@@ -1332,5 +1332,77 @@ describe('registerBlueprint — authored source', () => {
     const all = await listBlueprints(deps, SCOPE);
     expect(all).toHaveLength(1);
     expect(all[0]?.sourceCodeHash).toBeUndefined();
+  });
+});
+
+describe('keyed point-reads never enumerate the scope (ggui#527)', () => {
+  // The dev 502s: on the S3 Vectors backend `listByScope` walks the
+  // WHOLE index with the full float32 vectors and deserializes them on
+  // the main thread — a 500–970 ms stall burst per cache-hit render.
+  // Both render-hot reads MUST take `getByKey` when the store offers it
+  // and never fall through to enumeration.
+  it('findBlueprintExact reads through getByKey, not listByScope', async () => {
+    const deps = makeDeps();
+    const bp = await registerBlueprint(deps, SCOPE, {
+      kind: 'template',
+      contract: NOTEPAD_CONTRACT,
+      intent: 'notepad',
+      componentCode: 'a',
+      source: { kind: 'user' },
+    });
+    const list = vi.spyOn(deps.vectorStore, 'listByScope');
+    const get = vi.spyOn(deps.vectorStore, 'getByKey');
+    const found = await findBlueprintExact(deps, SCOPE, 'template', blueprintKey(NOTEPAD_CONTRACT));
+    expect(found?.id).toBe(bp.id);
+    expect(get).toHaveBeenCalledWith(SCOPE, bp.id);
+    expect(list).not.toHaveBeenCalled();
+  });
+
+  it('recordBlueprintHit reads through getByKey, not listByScope', async () => {
+    const deps = makeDeps();
+    const bp = await registerBlueprint(deps, SCOPE, {
+      kind: 'template',
+      contract: NOTEPAD_CONTRACT,
+      intent: 'notepad',
+      componentCode: 'a',
+      source: { kind: 'user' },
+    });
+    const list = vi.spyOn(deps.vectorStore, 'listByScope');
+    const get = vi.spyOn(deps.vectorStore, 'getByKey');
+    await recordBlueprintHit(deps, SCOPE, bp.id);
+    expect(get).toHaveBeenCalledWith(SCOPE, bp.id);
+    expect(list).not.toHaveBeenCalled();
+    // And the bump still landed (the reused stored vector path).
+    const after = await findBlueprintExact(deps, SCOPE, 'template', blueprintKey(NOTEPAD_CONTRACT));
+    expect(after?.hitCount).toBe(1);
+  });
+
+  it('falls back to listByScope on an enumerable-but-not-keyed backend', async () => {
+    const deps = makeDeps();
+    const bp = await registerBlueprint(deps, SCOPE, {
+      kind: 'template',
+      contract: NOTEPAD_CONTRACT,
+      intent: 'notepad',
+      componentCode: 'a',
+      source: { kind: 'user' },
+    });
+    // Strip the keyed capability — the shape of a backend that only
+    // implements EnumerableVectorStore. Delegating wrapper (not a
+    // prototype trick) so the type says exactly what the object is.
+    const enumerableOnly: EnumerableVectorStore = {
+      putVector: (s, e) => deps.vectorStore.putVector(s, e),
+      deleteVector: (s, k) => deps.vectorStore.deleteVector(s, k),
+      query: (s, q, k) => deps.vectorStore.query(s, q, k),
+      listByScope: (s) => deps.vectorStore.listByScope(s),
+    };
+    const list = vi.spyOn(deps.vectorStore, 'listByScope');
+    const found = await findBlueprintExact(
+      { ...deps, vectorStore: enumerableOnly },
+      SCOPE,
+      'template',
+      blueprintKey(NOTEPAD_CONTRACT),
+    );
+    expect(found?.id).toBe(bp.id);
+    expect(list).toHaveBeenCalled();
   });
 });

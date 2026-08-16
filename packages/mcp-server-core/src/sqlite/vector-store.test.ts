@@ -15,6 +15,7 @@ import { join } from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
 import {
   enumerableVectorStoreContract,
+  keyedVectorStoreContract,
   vectorStoreContract,
 } from '../contract-tests/vector-store.js';
 import { SqliteVectorStore } from './vector-store.js';
@@ -26,6 +27,10 @@ vectorStoreContract(
   () => new SqliteVectorStore({ filename: ':memory:' }),
 );
 enumerableVectorStoreContract(
+  'SqliteVectorStore (in-memory db)',
+  () => new SqliteVectorStore({ filename: ':memory:' }),
+);
+keyedVectorStoreContract(
   'SqliteVectorStore (in-memory db)',
   () => new SqliteVectorStore({ filename: ':memory:' }),
 );

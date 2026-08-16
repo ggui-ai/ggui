@@ -58,6 +58,7 @@ import Database, {
 } from 'better-sqlite3';
 import type {
   EnumerableVectorStore,
+  KeyedVectorStore,
   VectorEntry,
   VectorSearchResult,
 } from '../vector-store.js';
@@ -85,7 +86,7 @@ interface VectorRow {
   metadata: string;
 }
 
-export class SqliteVectorStore implements EnumerableVectorStore {
+export class SqliteVectorStore implements EnumerableVectorStore, KeyedVectorStore {
   private readonly db: SqliteDatabase;
   private readonly ownsDatabase: boolean;
 
@@ -94,6 +95,7 @@ export class SqliteVectorStore implements EnumerableVectorStore {
     upsert: SqliteStatement<unknown[]>;
     del: SqliteStatement<unknown[]>;
     selectScope: SqliteStatement<unknown[], VectorRow>;
+    selectOne: SqliteStatement<unknown[], VectorRow>;
   };
 
   constructor(opts: SqliteVectorStoreOptions = {}) {
@@ -118,6 +120,10 @@ export class SqliteVectorStore implements EnumerableVectorStore {
       // `scope = ?` predicate without a table scan.
       selectScope: this.db.prepare<unknown[], VectorRow>(
         `SELECT scope, key, vector, metadata FROM vectors WHERE scope = ?`,
+      ),
+      // Composite-PK point read for `getByKey` (ggui#527).
+      selectOne: this.db.prepare<unknown[], VectorRow>(
+        `SELECT scope, key, vector, metadata FROM vectors WHERE scope = ? AND key = ?`,
       ),
     };
   }
@@ -189,6 +195,14 @@ export class SqliteVectorStore implements EnumerableVectorStore {
       });
     }
     return entries;
+  }
+
+  async getByKey(scope: string, key: string): Promise<VectorEntry | null> {
+    const row = this.stmts.selectOne.get(scope, key);
+    if (!row) return null;
+    const vector = parseVector(row.vector);
+    if (!vector) return null;
+    return { key: row.key, vector, metadata: parseMetadata(row.metadata) };
   }
 }
 

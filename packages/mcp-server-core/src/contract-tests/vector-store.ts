@@ -27,9 +27,10 @@
 import { describe, expect, it } from 'vitest';
 import type {
   EnumerableVectorStore,
+  KeyedVectorStore,
   VectorStore,
 } from '../vector-store.js';
-import { isEnumerableVectorStore } from '../vector-store.js';
+import { isEnumerableVectorStore, isKeyedVectorStore } from '../vector-store.js';
 
 export function vectorStoreContract(
   label: string,
@@ -210,6 +211,62 @@ export function enumerableVectorStoreContract(
       const entries = await s.listByScope('app-a');
       expect(entries).toHaveLength(1);
       expect(entries[0]!.metadata).toEqual({ rev: 2 });
+    });
+  });
+}
+
+/**
+ * Contract for the optional {@link KeyedVectorStore} capability
+ * (ggui#527) — the O(1) point-read the blueprint registry's render-
+ * time read + hit-bump MUST take when a backend offers it.
+ */
+export function keyedVectorStoreContract(
+  label: string,
+  makeStore: () => Promise<KeyedVectorStore> | KeyedVectorStore,
+): void {
+  describe(`KeyedVectorStore contract — ${label}`, () => {
+    const v1 = [1, 0, 0, 0];
+    const v2 = [0, 1, 0, 0];
+
+    it('isKeyedVectorStore returns true for the concrete', async () => {
+      const s = await makeStore();
+      expect(isKeyedVectorStore(s)).toBe(true);
+    });
+
+    it('getByKey on an unknown scope or key returns null — never throws', async () => {
+      const s = await makeStore();
+      expect(await s.getByKey('nope', 'k1')).toBeNull();
+      await s.putVector('app-a', { key: 'k1', vector: v1, metadata: {} });
+      expect(await s.getByKey('app-a', 'k-missing')).toBeNull();
+    });
+
+    it('getByKey roundtrips vector + metadata faithfully', async () => {
+      const s = await makeStore();
+      const vector = [0.1, 0.2, 0.3, 0.4];
+      const metadata = { str: 'ok', num: 7, bool: false, nul: null };
+      await s.putVector('app-a', { key: 'k1', vector, metadata });
+      const entry = await s.getByKey('app-a', 'k1');
+      expect(entry).not.toBeNull();
+      expect(entry!.key).toBe('k1');
+      expect(entry!.vector).toEqual(vector);
+      expect(entry!.metadata).toEqual(metadata);
+    });
+
+    it('getByKey does not leak across scopes', async () => {
+      const s = await makeStore();
+      await s.putVector('app-a', { key: 'shared', vector: v1, metadata: { src: 'a' } });
+      await s.putVector('app-b', { key: 'shared', vector: v2, metadata: { src: 'b' } });
+      expect((await s.getByKey('app-a', 'shared'))!.metadata.src).toBe('a');
+      expect((await s.getByKey('app-b', 'shared'))!.metadata.src).toBe('b');
+    });
+
+    it('getByKey reflects deletes and upsert overwrites', async () => {
+      const s = await makeStore();
+      await s.putVector('app-a', { key: 'k1', vector: v1, metadata: { rev: 1 } });
+      await s.putVector('app-a', { key: 'k1', vector: v1, metadata: { rev: 2 } });
+      expect((await s.getByKey('app-a', 'k1'))!.metadata).toEqual({ rev: 2 });
+      await s.deleteVector('app-a', 'k1');
+      expect(await s.getByKey('app-a', 'k1')).toBeNull();
     });
   });
 }

@@ -118,3 +118,36 @@ export function isEnumerableVectorStore(
     typeof (store as { listByScope?: unknown }).listByScope === 'function'
   );
 }
+
+/**
+ * Optional capability: point-read one entry by `(scope, key)` — the
+ * O(1) read every backend with a keyed API can offer (S3 Vectors
+ * `GetVectors`, sqlite primary key, an in-memory map).
+ *
+ * Why it exists (ggui#527): the blueprint registry's render-time
+ * point-read and hit-bump used to fall through to `listByScope` on any
+ * enumerable backend, and the S3 Vectors `listByScope` is a whole-
+ * INDEX walk with `returnData: true` — every app's full float32
+ * vectors, deserialized number-by-number on the main thread. On the
+ * dev pod that produced 500–970 ms event-loop stalls in a burst on
+ * every cache-hit render (twice per turn), long enough for nginx to
+ * see the upstream reset (`recv() failed (104)`) and answer 502.
+ * Consumers doing a keyed read MUST prefer this capability when
+ * present ({@link isKeyedVectorStore}) and enumerate only as the last
+ * resort.
+ */
+export interface KeyedVectorStore extends VectorStore {
+  /**
+   * Return the entry at `(scope, key)`, or `null` when absent. Never
+   * throws for a missing key. `vector` is the stored embedding — the
+   * hit-bump re-write reuses it without an embed round-trip.
+   */
+  getByKey(scope: string, key: string): Promise<VectorEntry | null>;
+}
+
+/** Type guard: does this store support keyed point-reads? */
+export function isKeyedVectorStore(
+  store: VectorStore,
+): store is KeyedVectorStore {
+  return typeof (store as { getByKey?: unknown }).getByKey === 'function';
+}

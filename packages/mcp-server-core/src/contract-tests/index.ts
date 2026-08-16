@@ -21,6 +21,7 @@
 
 export {
   enumerableVectorStoreContract,
+  keyedVectorStoreContract,
   vectorStoreContract,
 } from './vector-store.js';
 // (scope, exactKey) → blueprint UUID seam. The first-write-wins dedup
