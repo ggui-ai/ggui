@@ -108,6 +108,18 @@ export function filterHandlersByAudience(
  * mutations. Confirm-gating it would break the card's inline render on
  * the first call, because the confirmation preview does not carry the
  * card's discriminant.
+ *
+ * `ggui_ops_save_library_blueprint` is the one MUTATING entry, by owner
+ * ruling (ggui#525, 2026-08-16). The argument that it is safe on the
+ * first call: the save is idempotent under the name-collapse rule (same
+ * slug ⇒ one row, a repeat is a no-op), it writes only to the CALLER's
+ * own library (no cross-tenant or account-wide effect), and its caller
+ * is the console helper agent auto-saving after a render — the
+ * "confirm" it performed was an agent self-confirm with no human in
+ * the loop, which bought no safety and cost one extra tool round trip
+ * on every helper render. A future entry that lacks any of those three
+ * properties (idempotent, own-scope, no human to protect) does NOT
+ * inherit this ruling — it argues its own.
  */
 export const SINGLE_CALL_OPS: ReadonlySet<string> = new Set<string>([
   "ggui_ops_get_credit_balance",
@@ -123,6 +135,7 @@ export const SINGLE_CALL_OPS: ReadonlySet<string> = new Set<string>([
   "ggui_ops_list_orgs",
   "ggui_ops_list_provider_keys",
   "ggui_ops_list_recent_renders",
+  "ggui_ops_save_library_blueprint",
   "ggui_ops_setup_byok",
 ]);
 

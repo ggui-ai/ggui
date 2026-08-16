@@ -250,6 +250,10 @@ describe('SINGLE_CALL_OPS', () => {
       // separate tools. Confirm-gating it would break the card's inline
       // render — the preview shape lacks the card's discriminant.
       'ggui_ops_setup_byok',
+      // The one MUTATING entry, by owner ruling (ggui#525): idempotent
+      // (same slug ⇒ one row), own-library only, and its caller is the
+      // helper agent auto-saving — a self-confirm bought no safety.
+      'ggui_ops_save_library_blueprint',
     ]) {
       expect(SINGLE_CALL_OPS.has(n), `${n} must be single-call`).toBe(true);
     }
