@@ -49,9 +49,9 @@ import {
 import {
   composeSessionApiUrls,
   deriveContextName,
-  type CompiledContractValidators,
   type McpAppAiGguiRenderMeta,
 } from '@ggui-ai/protocol/integrations/mcp-apps';
+import type { ContractValidatorExprs } from '@ggui-ai/protocol';
 
 /**
  * Resolve the canonical bundle URL + style URL for a gadget entry.
@@ -872,11 +872,12 @@ export function deriveGadgetRegistrations(
 }
 
 /**
- * Content-addressable bundle of precompiled, eval-free validator
- * modules for a render's runtime-validated contract specs —
- * `propsSpec` / `actionSpec` / `streamSpec` / `contextSpec`. The bundle
- * is an ES module text whose `default` export is a
- * {@link CompiledContractValidators}; the hash is `sha256` over the
+ * Content-addressable bundle of precompiled, eval-free validators for
+ * a render's runtime-validated contract specs — `propsSpec` /
+ * `actionSpec` / `streamSpec` / `contextSpec`. The bundle is ONE plain
+ * ES module whose `default` export carries the validate FUNCTIONS
+ * (v2 executable format, ggui#522 slice 2 — no per-validator `blob:`
+ * loads remain); the hash is `sha256` over the version-salted
  * canonical-JSON serialization of the input specs (stable across
  * server processes and Ajv version bumps).
  *
@@ -899,7 +900,7 @@ export async function deriveContractBundle(
   | {
       readonly contractHash: string;
       readonly bundleSource: string;
-      readonly validators: CompiledContractValidators;
+      readonly validators: ContractValidatorExprs;
     }
   | undefined
 > {

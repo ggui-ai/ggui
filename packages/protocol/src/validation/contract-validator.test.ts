@@ -4,7 +4,7 @@ import {
   validatePropsData,
   buildPropsWrapperSchema,
   compileContractValidators,
-  bundleCompiledValidatorsAsModule,
+  bundleValidatorExprsAsExecutableModule,
   computeContractBundle,
   ContractViolationError,
 } from './contract-validator.js';
@@ -584,16 +584,45 @@ describe('compileContractValidators', () => {
   });
 });
 
-describe('bundleCompiledValidatorsAsModule', () => {
-  it('wraps a CompiledContractValidators as an ES module whose default is the same object', () => {
-    const compiled = {
-      props: 'export default function v(d){return true};',
-      actions: { increment: 'export default function v(d){return true};' },
+describe('bundleValidatorExprsAsExecutableModule (ggui#522 slice 2 — v2 executable format)', () => {
+  it('emits one plain module whose default export carries the expressions verbatim', () => {
+    const module = bundleValidatorExprsAsExecutableModule({
+      props: '(function(){return function(){return true}})()',
+      actions: { increment: '(function(){return function(){return true}})()' },
+    });
+    expect(module).toContain('"use strict";');
+    expect(module).toContain('v.props = (function(){');
+    expect(module).toContain('v.actions["increment"] = (function(){');
+    expect(module).toContain('export default v;');
+    // Nothing in the executable format is a string-carried source — no
+    // blob loads left for the consumer to perform.
+    expect(module).not.toContain('export default {');
+  });
+
+  it('a REAL compiled bundle imports as functions and validates closed-shape (no eval, no blob)', async () => {
+    const result = await computeContractBundle({
+      actionSpec: {
+        increment: {
+          label: 'inc',
+          schema: { type: 'object', properties: { by: { type: 'integer' } } },
+        },
+      },
+    });
+    expect(result).toBeDefined();
+    if (!result) return;
+    // Node imports data: ESM natively — this executes the bundle the
+    // exact way the iframe's `import(validatorsUrl)` does.
+    const mod = (await import(
+      /* @vite-ignore */ `data:text/javascript,${encodeURIComponent(result.bundleSource)}`
+    )) as {
+      default: { actions?: Record<string, (d: unknown) => boolean> };
     };
-    const module = bundleCompiledValidatorsAsModule(compiled);
-    expect(module).toBe(
-      `export default ${JSON.stringify(compiled)};\n`,
-    );
+    const validate = mod.default.actions?.increment;
+    expect(validate).toBeTypeOf('function');
+    expect(validate!({ by: 3 })).toBe(true);
+    expect(validate!({ by: 'three' })).toBe(false);
+    // Closed shape injected — extras rejected, same as the server gate.
+    expect(validate!({ by: 3, extra: true })).toBe(false);
   });
 });
 

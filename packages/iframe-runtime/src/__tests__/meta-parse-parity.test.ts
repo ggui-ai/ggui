@@ -47,6 +47,9 @@ const FULL: Omit<Required<McpAppAiGguiRenderMeta>, 'kind'> = {
   validatorsUrl: 'https://example.test/validators/sha256:abc.js',
   codeUrl: 'https://example.test/code/sha256:def.js',
   codeHash: 'sha256:def',
+  // Strict-CSP module variant (ggui#522 slice 2) — projected only
+  // alongside a raw static carrier, as here.
+  codeModuleUrl: 'https://example.test/code/sha256:def.m0123abcd4567.js',
   codeB64: 'ZXhwb3J0IGRlZmF1bHQgKCkgPT4gbnVsbA==',
 };
 

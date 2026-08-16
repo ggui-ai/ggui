@@ -123,17 +123,26 @@ export async function loadCompiledValidators(
 }
 
 /**
- * #109 content-addressable variant: fetch the validator-bundle URL,
- * dynamic-import the response, then delegate to
- * {@link loadCompiledValidators}. Returns {@link EMPTY_COMPILED_VALIDATOR_SET}
+ * #109 content-addressable variant: fetch the validator-bundle URL via
+ * ONE dynamic import. Returns {@link EMPTY_COMPILED_VALIDATOR_SET}
  * when `url` is undefined OR the fetch/import fails — sidecar
  * semantics, the server-side `assertActionContract` gate remains
  * authoritative on validator absence.
  *
- * Response shape: an ES module whose `default` export is a
- * {@link CompiledContractValidators} object (produced server-side by
- * `bundleCompiledValidatorsAsModule`). `Cache-Control: immutable` so
- * repeat renders with the same contract hit browser cache with no
+ * Response shape (v2 executable format, ggui#522 slice 2): an ES
+ * module whose `default` export carries the validate FUNCTIONS
+ * themselves (produced server-side by
+ * `bundleValidatorExprsAsExecutableModule`) — the single https import
+ * is the whole load, governed by `script-src` origins alone. No
+ * per-validator `blob:` import remains on this path, which is what
+ * lets a strict-CSP embedder (no `blob:`, no `data:`, no
+ * `'unsafe-eval'`) run client-side outbound validation at all.
+ *
+ * A default export whose leaves are not functions (the retired v1
+ * format carried module SOURCES as strings — reachable only through a
+ * stale CDN copy under a pre-salt URL, which no current slice mints)
+ * degrades to the empty set with a warning. `Cache-Control: immutable`
+ * so repeat renders with the same contract hit browser cache with no
  * round-trip.
  */
 export async function loadCompiledValidatorsFromUrl(
@@ -153,10 +162,43 @@ export async function loadCompiledValidatorsFromUrl(
       );
       return EMPTY_COMPILED_VALIDATOR_SET;
     }
-    return loadCompiledValidators(
-      compiled as CompiledContractValidators,
-      warn,
-    );
+    const groups = compiled as {
+      readonly props?: unknown;
+      readonly actions?: Readonly<Record<string, unknown>>;
+      readonly streams?: Readonly<Record<string, unknown>>;
+      readonly context?: Readonly<Record<string, unknown>>;
+    };
+    const pickGroup = (
+      group: Readonly<Record<string, unknown>> | undefined,
+      kind: string,
+    ): ReadonlyMap<string, ValidateFunction> => {
+      const map = new Map<string, ValidateFunction>();
+      if (group === undefined) return map;
+      for (const [name, fn] of Object.entries(group)) {
+        if (isValidateFunction(fn)) {
+          map.set(name, fn);
+        } else {
+          warn?.(
+            `[ggui:validators] ${kind}.${name}: bundle entry is not a function (stale v1-format bundle?)`,
+            typeof fn,
+          );
+        }
+      }
+      return map;
+    };
+    const props = isValidateFunction(groups.props) ? groups.props : undefined;
+    if (groups.props !== undefined && props === undefined) {
+      warn?.(
+        '[ggui:validators] props: bundle entry is not a function (stale v1-format bundle?)',
+        typeof groups.props,
+      );
+    }
+    return {
+      ...(props !== undefined ? { props } : {}),
+      actions: pickGroup(groups.actions, 'action'),
+      streams: pickGroup(groups.streams, 'stream'),
+      context: pickGroup(groups.context, 'context'),
+    };
   } catch (err) {
     warn?.(
       `[ggui:validators] contract bundle: failed to load ${url}`,

@@ -297,6 +297,18 @@ export interface ReactRootMountOptions {
     readonly id?: string;
     readonly componentCode: string;
     readonly props?: Record<string, unknown>;
+    /**
+     * Strict-CSP module variant of `componentCode` (ggui#522 slice 2):
+     * a server-side import-rewritten twin of the SAME bytes, directly
+     * `import()`able (its imports resolve to static shim assets on an
+     * allowed origin — no `data:`, no `blob:`, no eval). Tried FIRST;
+     * any failure falls through to the blob/inline ladder on the raw
+     * bytes. Callers MUST pass it only when it names exactly these
+     * `componentCode` bytes — a stale variant would paint the WRONG
+     * component, not fail (the runtime's dispatcher guards this by
+     * attaching it to the inline seed only).
+     */
+    readonly codeModuleUrl?: string;
   };
   readonly themeId?: string;
   /**
@@ -410,6 +422,31 @@ export async function mountReactRoot(
             : {}),
         }),
       );
+
+    // Asset-module path (ggui#522 slice 2) — FIRST when the mount
+    // carries the strict-CSP variant URL: a plain https module import,
+    // legal under `script-src` origins alone, no scheme sources, no
+    // eval. Under a strict host CSP it is the ONLY path that works;
+    // under a permissive one it costs a CDN round-trip on cold cache
+    // and nothing on warm (the URL is immutable). Any failure — CSP
+    // block, network fault, a 404 from a redeployed variant family —
+    // falls through to the raw-bytes ladder below. No document latch
+    // on failure: unlike the per-evaluation blob probe, this branch
+    // runs only when componentCode changes (rare — usually once per
+    // mount), so the retry cost is one fetch, and the failure classes
+    // (transient network vs permanent CSP) are indistinguishable in
+    // the import error anyway.
+    const moduleUrl = currentOpts.render.codeModuleUrl;
+    if (moduleUrl !== undefined) {
+      try {
+        const mod = (await import(
+          /* webpackIgnore: true */ /* @vite-ignore */ moduleUrl
+        )) as Record<string, unknown>;
+        return pick(mod);
+      } catch {
+        // Fall through — the raw bytes are the authoritative carrier.
+      }
+    }
 
     // Once URL-scheme module loading has been proven blocked in this
     // document, go straight to inline execution — the CSP verdict

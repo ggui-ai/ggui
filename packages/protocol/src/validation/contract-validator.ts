@@ -4,6 +4,7 @@ import type { ActionEnvelope } from '../types/events';
 import type { CompiledContractValidators } from '../integrations/mcp-apps';
 import {
   compileForValidation,
+  compileValidatorFunctionExpr,
   compileValidatorModule,
   mapAjvErrorsToViolations,
   prefixViolations,
@@ -450,32 +451,113 @@ export function compileContractValidators(specs: {
 }
 
 /**
- * Wrap a {@link CompiledContractValidators} object as the source text of
- * an ES module whose `default` export is the same object. This is the
- * wire format served from the content-addressable contract route
- * (`GET /contract/<hash>.js`) in #109's decomposition slice — one URL,
- * one fetch, one dynamic-import per unique contract.
- *
- * Why a wrapping module rather than emitting the validator-modules
- * raw: each inner validator-module is independently `export default ...`,
- * so they can't share a single file without name collisions. The
- * iframe-runtime's existing `loadCompiledValidators` already knows how
- * to take a `CompiledContractValidators` and load each inner module via
- * `blob:` import; this wrapper just hands it the same shape it expects,
- * sourced from one HTTP round-trip instead of inline.
- *
- * `JSON.stringify` is deterministic on objects with string keys in V8
- * + Node — the producer's iteration order is preserved, so a given
- * contract always serializes to identical bytes. {@link computeContractBundle}
- * leans on that determinism so the resulting hash is stable across
- * renders of the same contract.
+ * A contract's runtime-validator compilation in **expression form** —
+ * same grouping as {@link CompiledContractValidators}, but each string
+ * is a JS EXPRESSION evaluating to the validate function (see
+ * `compileValidatorFunctionExpr`), not an ESM module source. The
+ * expression form exists so the executable bundle below can be one
+ * plain module; the ESM-module form remains the inline
+ * `_meta.compiledValidators` channel's shape.
  *
  * @public
  */
-export function bundleCompiledValidatorsAsModule(
-  compiled: CompiledContractValidators,
+export interface ContractValidatorExprs {
+  readonly props?: string;
+  readonly actions?: Readonly<Record<string, string>>;
+  readonly streams?: Readonly<Record<string, string>>;
+  readonly context?: Readonly<Record<string, string>>;
+}
+
+/**
+ * Compile a contract's runtime-validated sub-schemas into
+ * expression-form validators ({@link ContractValidatorExprs}) — the
+ * same four surfaces, guards, and closed-shape semantics as
+ * {@link compileContractValidators}, differing only in emission form.
+ * Returns `undefined` when the contract declares no runtime-validated
+ * schema at all.
+ */
+export function compileContractValidatorExprs(specs: {
+  readonly propsSpec?: PropsSpec;
+  readonly actionSpec?: ActionSpec;
+  readonly streamSpec?: StreamSpec;
+  readonly contextSpec?: ContextSpec;
+}): ContractValidatorExprs | undefined {
+  const compilePerEntry = (
+    spec: Record<string, { schema?: JsonSchema }> | undefined,
+  ): Record<string, string> | undefined => {
+    if (!spec) return undefined;
+    const collected: Record<string, string> = {};
+    for (const [name, entry] of Object.entries(spec)) {
+      if (entry && entry.schema) {
+        collected[name] = compileValidatorFunctionExpr(entry.schema);
+      }
+    }
+    return Object.keys(collected).length > 0 ? collected : undefined;
+  };
+
+  const out: {
+    props?: string;
+    actions?: Record<string, string>;
+    streams?: Record<string, string>;
+    context?: Record<string, string>;
+  } = {};
+  if (
+    specs.propsSpec &&
+    specs.propsSpec.properties &&
+    Object.keys(specs.propsSpec.properties).length > 0
+  ) {
+    out.props = compileValidatorFunctionExpr(
+      buildPropsWrapperSchema(specs.propsSpec),
+    );
+  }
+  const actions = compilePerEntry(specs.actionSpec);
+  if (actions) out.actions = actions;
+  const streams = compilePerEntry(specs.streamSpec);
+  if (streams) out.streams = streams;
+  const context = compilePerEntry(specs.contextSpec);
+  if (context) out.context = context;
+  return Object.keys(out).length > 0 ? out : undefined;
+}
+
+/**
+ * Wrap {@link ContractValidatorExprs} as the source text of ONE plain
+ * ES module whose `default` export carries the validate FUNCTIONS
+ * themselves — the v2 wire format of the content-addressable contract
+ * route (`GET /contract/<hash>.js`), ggui#522 slice 2.
+ *
+ * The v1 format exported the validator-module SOURCES as strings, so
+ * the iframe still needed one `blob:` dynamic import per validator —
+ * exactly the scheme-source grant a strict host CSP refuses, which
+ * made client-side validation silently fail open on such hosts. Here
+ * the expressions concatenate at BUILD time into ordinary code: the
+ * frame does one `import(validatorsUrl)` (a plain https module load,
+ * governed by `script-src` origins alone) and receives functions. No
+ * `blob:`, no `data:`, no eval anywhere.
+ *
+ * Key emission order follows the producer's iteration order, which is
+ * deterministic in V8/Node for string keys — {@link computeContractBundle}
+ * hashes the INPUT specs anyway, so byte-level determinism of this
+ * source is a courtesy, not a correctness requirement.
+ *
+ * @public
+ */
+export function bundleValidatorExprsAsExecutableModule(
+  exprs: ContractValidatorExprs,
 ): string {
-  return `export default ${JSON.stringify(compiled)};\n`;
+  const lines: string[] = ['"use strict";', 'const v = {};'];
+  if (exprs.props !== undefined) {
+    lines.push(`v.props = ${exprs.props};`);
+  }
+  for (const group of ['actions', 'streams', 'context'] as const) {
+    const entries = exprs[group];
+    if (entries === undefined) continue;
+    lines.push(`v.${group} = {};`);
+    for (const [name, expr] of Object.entries(entries)) {
+      lines.push(`v.${group}[${JSON.stringify(name)}] = ${expr};`);
+    }
+  }
+  lines.push('export default v;');
+  return `${lines.join('\n')}\n`;
 }
 
 /**
@@ -510,21 +592,36 @@ function canonicalJsonStringify(value: unknown): string {
 }
 
 /**
- * Convenience over {@link compileContractValidators} +
- * {@link bundleCompiledValidatorsAsModule} + sha256 — produces the
- * `{contractHash, bundleSource, validators}` triple the emitter (render.ts
- * / update.ts in #109 C4) writes to the content-addressable store and
- * emits as `_meta["ai.ggui/contract"] = {contractHash, validatorsUrl}`.
+ * Version salt for {@link computeContractBundle}'s hash. The bundle's
+ * URL + store key are `Cache-Control: immutable` and the CodeStore is
+ * first-write-wins, so a FORMAT change under an unchanged key would be
+ * invisible to every cache in the chain — the salt moves the whole
+ * family to fresh keys instead. `v2` = the executable-module format
+ * ({@link bundleValidatorExprsAsExecutableModule}); v1 (unsalted) was
+ * the string-carrying format whose per-validator `blob:` loads a
+ * strict CSP refuses.
+ */
+const CONTRACT_BUNDLE_HASH_SALT = 'ggui-validators-v2\n';
+
+/**
+ * Convenience over {@link compileContractValidatorExprs} +
+ * {@link bundleValidatorExprsAsExecutableModule} + sha256 — produces
+ * the `{contractHash, bundleSource, validators}` triple the emitter
+ * (render.ts / the resource read / the /state route) writes to the
+ * content-addressable store and emits as
+ * `{contractHash, validatorsUrl}` on the render slice.
  *
- * `contractHash` is `sha256(canonicalJsonStringify(specs))` (hex). Hashing
- * the INPUT specs — not the compiled output — guarantees a stable hash
- * across server processes and Ajv version bumps: the same contract
- * definition always lands at the same URL. Compiled output bytes may
- * differ across calls (Ajv's standalone emitter uses incrementing
- * counter names like `validate10`/`validate11`), but the CodeStore is
- * idempotent (first write wins) and the URL response carries
- * `Cache-Control: immutable`, so browsers + CDNs lock in the
- * first-served bytes and never observe a counter-name reshuffle.
+ * `contractHash` is `sha256(salt + canonicalJsonStringify(specs))`
+ * (hex). Hashing the INPUT specs — not the compiled output —
+ * guarantees a stable hash across server processes and Ajv version
+ * bumps: the same contract definition always lands at the same URL.
+ * Compiled output bytes may differ across calls (Ajv's standalone
+ * emitter uses incrementing counter names like `validate10`/
+ * `validate11`), but the CodeStore is idempotent (first write wins)
+ * and the URL response carries `Cache-Control: immutable`, so browsers
+ * + CDNs lock in the first-served bytes and never observe a
+ * counter-name reshuffle. The salt exists precisely because of that
+ * immutability — see {@link CONTRACT_BUNDLE_HASH_SALT}.
  *
  * Returns `undefined` when the contract declares no runtime-validated
  * schema at all (matches {@link compileContractValidators}'s posture).
@@ -540,19 +637,21 @@ export async function computeContractBundle(specs: {
   | {
       readonly contractHash: string;
       readonly bundleSource: string;
-      readonly validators: CompiledContractValidators;
+      readonly validators: ContractValidatorExprs;
     }
   | undefined
 > {
-  const validators = compileContractValidators(specs);
+  const validators = compileContractValidatorExprs(specs);
   if (validators === undefined) return undefined;
-  const bundleSource = bundleCompiledValidatorsAsModule(validators);
+  const bundleSource = bundleValidatorExprsAsExecutableModule(validators);
   // Web Crypto's subtle.digest is universal (Node 19+, all modern
   // browsers, Workers). The protocol package ships into iframe-runtime
   // bundles too — `node:crypto` would force esbuild to mark a Node
   // builtin unresolved at browser bundle time even though this
   // function is server-only at call time.
-  const bytes = new TextEncoder().encode(canonicalJsonStringify(specs));
+  const bytes = new TextEncoder().encode(
+    `${CONTRACT_BUNDLE_HASH_SALT}${canonicalJsonStringify(specs)}`,
+  );
   const digest = await globalThis.crypto.subtle.digest('SHA-256', bytes);
   const contractHash = Array.from(new Uint8Array(digest))
     .map((b) => b.toString(16).padStart(2, '0'))

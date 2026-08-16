@@ -84,6 +84,15 @@ export interface RenderItemOptions {
    * this. STDLIB `@ggui-ai/gadgets` is always rewritten regardless.
    */
   readonly gadgetPackages?: readonly string[];
+  /**
+   * Strict-CSP module variant of the render's `componentCode`
+   * (ggui#522 slice 2), forwarded to
+   * {@link ReactRootMountOptions.render.codeModuleUrl}. The CALLER
+   * owns the bytes↔URL association: pass it only when it names
+   * exactly `render.componentCode`'s bytes (the runtime attaches it
+   * to the inline seed mount only — a WS-delivered render drops it).
+   */
+  readonly codeModuleUrl?: string;
   /** Theme id passed to ReactComponentRenderer for scoped CSS. */
   readonly themeId?: string;
   /**
@@ -279,6 +288,9 @@ export async function mountRender(
         ...(render.props !== undefined
           ? { props: render.props }
           : {}),
+        ...(currentOpts.codeModuleUrl !== undefined
+          ? { codeModuleUrl: currentOpts.codeModuleUrl }
+          : {}),
       },
       ...(gadgetPackages !== undefined ? { gadgetPackages } : {}),
       ...(currentOpts.themeId !== undefined ? { themeId: currentOpts.themeId } : {}),
@@ -351,6 +363,9 @@ export async function mountRender(
             componentCode: render.componentCode ?? '',
             ...(render.props !== undefined
               ? { props: render.props }
+              : {}),
+            ...(next.codeModuleUrl !== undefined
+              ? { codeModuleUrl: next.codeModuleUrl }
               : {}),
           },
           ...(next.themeId !== undefined ? { themeId: next.themeId } : {}),

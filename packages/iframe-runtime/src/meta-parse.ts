@@ -293,6 +293,11 @@ function projectMeta(
       : {}),
     ...(meta.codeUrl !== undefined ? { codeUrl: meta.codeUrl } : {}),
     ...(meta.codeHash !== undefined ? { codeHash: meta.codeHash } : {}),
+    // Strict-CSP module-variant twin (ggui#522 slice 2). The protocol
+    // parser already enforces the with-a-raw-carrier pairing.
+    ...(meta.codeModuleUrl !== undefined
+      ? { codeModuleUrl: meta.codeModuleUrl }
+      : {}),
     ...(meta.codeB64 !== undefined ? { codeB64: meta.codeB64 } : {}),
     ...(meta.kind !== undefined ? { kind: meta.kind } : {}),
   };

@@ -137,6 +137,27 @@ if (!standaloneAjv.getKeyword('nullable')) {
 }
 
 /**
+ * A third instance for {@link compileValidatorFunctionExpr} — CJS
+ * standalone emission (`code.esm` off). CJS sources can be wrapped in
+ * a function scope and CONCATENATED into one executable bundle module
+ * (ggui#522 slice 2); ESM sources cannot — `export` is illegal inside
+ * a function body, which is why the v1 bundle carried them as strings
+ * the iframe had to `blob:`-import one by one.
+ */
+const standaloneCjsAjv = new Ajv({
+  ...AJV_OPTIONS,
+  code: { source: true },
+});
+addFormats(standaloneCjsAjv);
+
+if (!standaloneCjsAjv.getKeyword('example')) {
+  standaloneCjsAjv.addKeyword({ keyword: 'example' });
+}
+if (!standaloneCjsAjv.getKeyword('nullable')) {
+  standaloneCjsAjv.addKeyword({ keyword: 'nullable' });
+}
+
+/**
  * Recursively walk a JSON Schema and inject
  * `additionalProperties: false` at every object node. Authors who
  * explicitly set `additionalProperties` keep that intent (boolean
@@ -240,6 +261,32 @@ export function compileValidatorModule(schema: JsonSchema): string {
 }
 
 /**
+ * Compile a JSON Schema into a standalone validator as a JS
+ * **EXPRESSION** — an IIFE over the CJS standalone emission, runtime
+ * helpers inlined, evaluating to the validate function.
+ *
+ * The expression form is what makes the eval-free EXECUTABLE contract
+ * bundle possible (ggui#522 slice 2): N validators concatenate into
+ * ONE plain ES module (`v.actions["submit"] = <expr>;`) that a
+ * strict-CSP iframe imports directly — no per-validator `blob:`
+ * import, no `new Function`, the browser just parses code. Closed
+ * shape + strict-mode meta-validation semantics are identical to
+ * {@link compileValidatorModule} (same options, same injection).
+ */
+export function compileValidatorFunctionExpr(schema: JsonSchema): string {
+  const injected = injectClosedShape(schema);
+  const validate = standaloneCjsAjv.compile(injected);
+  const source = inlineRuntimeHelpersCjs(
+    standaloneCode(standaloneCjsAjv, validate),
+  );
+  return (
+    `(function(){var module={exports:{}};var exports=module.exports;\n` +
+    `${source}\n` +
+    `return module.exports.default||module.exports;})()`
+  );
+}
+
+/**
  * Inlinable Ajv runtime helpers, keyed by bare specifier. Ajv standalone
  * references these by `import`; the CSP-sandboxed iframe has no bundler
  * to resolve a bare specifier, so {@link inlineRuntimeHelpers} replaces
@@ -292,6 +339,31 @@ function inlineRuntimeHelpers(source: string): string {
   if (leftover) {
     throw new Error(
       `compileValidatorModule: emitted module has an un-inlined import of "${leftover[1]}". Add it to RUNTIME_HELPER_SOURCES.`,
+    );
+  }
+  return out;
+}
+
+/**
+ * CJS twin of {@link inlineRuntimeHelpers} for
+ * {@link compileValidatorFunctionExpr}: inline each supported runtime
+ * helper's source in place of its `require(...)`, keeping the emission
+ * CJS throughout (no `import` may appear — the result is embedded
+ * inside a function body). Same survivor check, on the `require` form.
+ */
+function inlineRuntimeHelpersCjs(source: string): string {
+  const out = source.replace(
+    /const (\w+) = require\("([^"]+)"\)(\.default)?;/g,
+    (match, binding: string, specifier: string) => {
+      const helperSource = RUNTIME_HELPER_SOURCES[specifier];
+      if (helperSource === undefined) return match;
+      return `const ${binding} = ${helperSource};`;
+    },
+  );
+  const leftover = /require\("(ajv\/dist\/runtime\/[^"]+)"\)/.exec(out);
+  if (leftover) {
+    throw new Error(
+      `compileValidatorFunctionExpr: emitted validator has an un-inlined require of "${leftover[1]}". Add it to RUNTIME_HELPER_SOURCES.`,
     );
   }
   return out;

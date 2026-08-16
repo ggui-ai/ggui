@@ -209,3 +209,54 @@ describe('mountReactRoot — update with new props (no re-eval)', () => {
     mount!.unmount();
   });
 });
+
+describe('mountReactRoot — codeModuleUrl asset path (ggui#522 slice 2)', () => {
+  it('imports the module variant FIRST — raw bytes untouched when the variant loads', async () => {
+    const container = makeContainer();
+    // componentCode is deliberately un-evaluatable: a clean mount can
+    // only mean the asset path (the data: module below, standing in
+    // for the https variant URL) evaluated. Dependency-free module —
+    // a data: module cannot resolve bare specifiers, so it renders
+    // null rather than importing react.
+    const moduleUrl = `data:text/javascript,${encodeURIComponent(
+      'export default function C(){return null}',
+    )}`;
+    const onError = vi.fn();
+    let mount: Awaited<ReturnType<typeof mountReactRoot>> | null = null;
+    await flush(async () => {
+      mount = await mountReactRoot(container, {
+        render: {
+          id: 'v1',
+          componentCode: 'this is not javascript {{{',
+          codeModuleUrl: moduleUrl,
+        },
+        onError,
+      });
+    });
+    expect(onError).not.toHaveBeenCalled();
+    expect(mount!.currentCode).toBe('this is not javascript {{{');
+    mount!.unmount();
+  });
+
+  it('falls back to the raw-bytes ladder when the variant import fails', async () => {
+    const container = makeContainer();
+    const onError = vi.fn();
+    let mount: Awaited<ReturnType<typeof mountReactRoot>> | null = null;
+    await flush(async () => {
+      mount = await mountReactRoot(container, {
+        render: {
+          id: 'v2',
+          // Un-evaluatable raw bytes AND a dead variant URL: both
+          // rungs fail, the eval error surfaces through onError —
+          // proving the variant failure fell THROUGH rather than
+          // masking the ladder.
+          componentCode: 'also not javascript {{{',
+          codeModuleUrl: 'data:text/javascript,syntax error {{{',
+        },
+        onError,
+      });
+    });
+    expect(onError).toHaveBeenCalled();
+    mount!.unmount();
+  });
+});

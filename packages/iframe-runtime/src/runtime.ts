@@ -4142,6 +4142,21 @@ async function bootProduction(opts: {
           ...(meta.gadgets !== undefined
             ? { gadgetPackages: meta.gadgets.map((g) => g.package) }
             : {}),
+          // Strict-CSP module variant (ggui#522 slice 2) — attached to
+          // the INLINE SEED mount only, detected by the absence of the
+          // server-assigned ledger fields (`buildGguiSessionSeedInput`
+          // omits them; every wire-delivered GguiSession carries them).
+          // The variant URL names the SEEDED bytes: a WS-delivered
+          // body may differ, and importing a stale variant would paint
+          // the WRONG component rather than fail. A WS redelivery of
+          // the SAME bytes loses nothing — same code ⇒ the renderer
+          // skips re-evaluation entirely.
+          ...(meta.codeModuleUrl !== undefined &&
+          render.type !== 'mcpApps' &&
+          render.type !== 'system' &&
+          !('createdAt' in render)
+            ? { codeModuleUrl: meta.codeModuleUrl }
+            : {}),
           ...(meta.themeId !== undefined ? { themeId: meta.themeId } : {}),
           ...(meta.themeMode !== undefined
             ? { themeMode: meta.themeMode }
