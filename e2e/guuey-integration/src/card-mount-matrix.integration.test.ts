@@ -43,7 +43,6 @@ import { createGguiServer, type GguiServer } from '@ggui-ai/mcp-server';
 import { InMemoryAuthAdapter, InMemoryGguiSessionStore } from '@ggui-ai/mcp-server-core/in-memory';
 import type { GguiSessionStore } from '@ggui-ai/mcp-server-core';
 import {
-  MCP_APP_AI_GGUI_RENDER_META_KEY,
   toolResultGguiRender,
   asGguiRenderBootstrap,
 } from '@ggui-ai/protocol/integrations/mcp-apps';
@@ -239,47 +238,55 @@ async function renderOnce(): Promise<Record<string, unknown>> {
 }
 
 // ───────────────────────────────────────────────────────────────────────
-// Matrix 1 — live ggui-channel mount
+// Matrix 1 — live ggui render mounts as a LOCATOR (0.7.0: the vendor
+// arm is retired; a ggui render is just another locator producer, and
+// `"ggui"` is a resolution-time tag only). The mount material lives
+// behind `resourceUri` via `resources/read` — matrix 5's territory.
 // ───────────────────────────────────────────────────────────────────────
 
 describe('matrix 1 — live ggui render mounts through guuey narrowing', () => {
-  it('real ggui_render result → Reducer fold → toolResultViewMount, slice verbatim', async () => {
+  it('real ggui_render result → Reducer fold → toolResultViewMount = the locator our own helper names', async () => {
     const result = await renderOnce();
 
-    // The pod's Claude facet routes structuredContent → uiData and
-    // carries _meta on the tool.done event.
-    const { block } = foldToolDone({
-      uiData: result.structuredContent,
-      meta: result._meta,
-    });
+    // The pod's Claude facet routes structuredContent → uiData; under
+    // read-plane-only mounting the tool result carries NO _meta slice,
+    // so fold exactly what a withheld-_meta wire carries. (0.6.x's
+    // vendor arm read the slice off `_meta`; 0.7.0 removed it, so a
+    // fold that STILL carried `_meta` must mount identically — pinned
+    // by the second fold below.)
+    const { block } = foldToolDone({ uiData: result.structuredContent });
 
     const mount = toolResultViewMount(block);
     expect(mount).toBeDefined();
-    expect(mount?.channel).toBe('ggui');
-    if (mount === undefined || mount.channel === 'locator') {
-      // Unreachable past the two expects above — narrows the 0.3.0
-      // ViewMount union to its resource-bearing arm.
-      throw new Error('expected a resource-bearing ggui mount');
+    expect(mount?.channel).toBe('locator');
+    if (mount === undefined || mount.channel !== 'locator') {
+      throw new Error('expected a locator mount for a ggui render');
     }
 
-    // The mounted shell inlines the slice envelope — parse it back out
-    // and compare VERBATIM against ggui's own host-helper narrowing of
-    // the SAME wire result (ggui#427). Since 0.3.x guuey ships NO copy
-    // of the helpers — @guuey/mcp-apps-host re-exports them from the
-    // PUBLISHED @ggui-ai/protocol@0.6.3 pinned beneath it, while the
-    // `toolResultGguiRender` imported here resolves workspace HEAD. So
-    // byte-equality now detects ggui-HEAD-vs-published-pin drift: if
-    // HEAD's slice projection moves ahead of what guuey actually pins,
-    // it fails HERE, before it fails in guuey's host.
-    const bootstrap = toolResultGguiRender(result);
-    expect(bootstrap).toBeDefined();
-    const envelope = shellEnvelope(mount.resource.text ?? '');
-    expect(envelope[MCP_APP_AI_GGUI_RENDER_META_KEY]).toEqual(bootstrap!.slice);
+    // Drift gate (ggui#427 lineage): the locator guuey's host narrows out
+    // of the wire result must be BYTE-EQUAL to the identity ggui's own
+    // host-helper reads from the same result. `toolResultGguiRender`
+    // resolves workspace HEAD; guuey pins the published protocol beneath
+    // it — so if HEAD's identity projection moves ahead of what guuey
+    // narrows, it fails HERE, before it fails in guuey's host.
+    const ours = toolResultGguiRender(result);
+    expect(ours).toBeDefined();
+    const resourceUri = (result.structuredContent as { resourceUri?: string }).resourceUri;
+    expect(typeof resourceUri).toBe('string');
+    expect(mount.resourceUri).toBe(resourceUri);
+    expect(mount.resourceUri).toBe(`ui://ggui/render/${ours!.slice.sessionId}/${String(mount.resourceUri).split('/').pop()}`);
+    expect(mount.resourceUri.startsWith('ui://ggui/render/')).toBe(true);
 
-    // Live-mode slice sanity: the render channel minted real creds.
-    const slice = bootstrap!.slice;
-    expect(typeof slice.wsToken).toBe('string');
-    expect(String(slice.wsUrl)).toContain('/ws');
+    // The retirement's load-bearing property: a result that ALSO carries
+    // the legacy `_meta` slice mounts to the SAME locator — the arm that
+    // used to inline it is gone, so `_meta` is inert, not a second path.
+    const { block: withMeta } = foldToolDone({
+      uiData: result.structuredContent,
+      meta: result._meta,
+    });
+    const legacyMount = toolResultViewMount(withMeta);
+    expect(legacyMount?.channel).toBe('locator');
+    expect(legacyMount && legacyMount.channel === 'locator' ? legacyMount.resourceUri : undefined).toBe(mount.resourceUri);
   });
 });
 
