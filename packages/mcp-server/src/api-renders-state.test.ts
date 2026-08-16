@@ -65,6 +65,8 @@ async function bootWithRender(opts?: {
   readonly withRender?: boolean;
   readonly componentCode?: string;
   readonly props?: JsonObject;
+  /** Asset host for the content-addressable URLs (ggui#522 slice 1). */
+  readonly codeBaseUrl?: string;
 }): Promise<Fixture> {
   const renderStore = new InMemoryGguiSessionStore();
   const stored = await renderStore.create({ appId: 'app-state-test' });
@@ -97,6 +99,7 @@ async function bootWithRender(opts?: {
     wsTokenSecret: SECRET,
     codeStore: new InMemoryCodeStore(),
     publicBaseUrl: 'https://test.example',
+    ...(opts?.codeBaseUrl !== undefined ? { codeBaseUrl: opts.codeBaseUrl } : {}),
   });
   const httpServer = await server.listen(0, '127.0.0.1');
   const addr = httpServer.address();
@@ -153,6 +156,25 @@ describe('GET /api/sessions/:sessionId/state', () => {
     expect(renderMeta?.lastSequence).toBeGreaterThanOrEqual(0);
     // codeUrl wired via codeStore + publicBaseUrl.
     expect(renderMeta?.codeUrl).toMatch(/^https:\/\/test\.example\/code\//);
+  });
+
+  it('composes codeUrl / validatorsUrl on codeBaseUrl (an asset host) while session-API URLs stay on the public origin (ggui#522 slice 1)', async () => {
+    fx = await bootWithRender({ withRender: true, codeBaseUrl: 'https://assets.test.example' });
+    const res = await fetch(
+      `${fx.url}/api/sessions/${fx.sessionId}/state?wsToken=${encodeURIComponent(fx.validToken)}`,
+    );
+    expect(res.status).toBe(200);
+    const rawBody: unknown = await res.json();
+    if (!isRecord(rawBody)) {
+      throw new Error('expected a JSON object body');
+    }
+    const renderMeta = rawBody[MCP_APP_AI_GGUI_RENDER_META_KEY] as
+      | McpAppAiGguiRenderMeta
+      | undefined;
+    // Static, content-addressable → the asset host.
+    expect(renderMeta?.codeUrl).toMatch(/^https:\/\/assets\.test\.example\/code\//);
+    // Dynamic, credentialed → the public origin, untouched.
+    expect(renderMeta?.pollingUrl).toMatch(/^https:\/\/test\.example\/api\/sessions\//);
   });
 
   it('stamps token-bearing pollingUrl (/events) + sseUrl (/stream) alongside the fresh live trio', async () => {

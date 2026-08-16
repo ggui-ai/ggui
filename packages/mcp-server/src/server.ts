@@ -3027,6 +3027,24 @@ export interface CreateGguiServerOptions {
   readonly codeStore?: CodeStore;
 
   /**
+   * Base URL the content-addressable routes (`/code/<hash>.js`,
+   * `/contract/<hash>.js`) are REACHED at from the iframe — the origin
+   * the render slice's `codeUrl` / `validatorsUrl` are composed on.
+   *
+   * Defaults to {@link publicBaseUrl}. Set it explicitly when the
+   * static routes are fronted by a different host than the server's
+   * public origin — an edge cache in front of the asset paths only,
+   * with the data plane and live channel staying on the origin. A
+   * deployment that leaves `publicBaseUrl` unset for its own reasons
+   * (Origin/Host policy) can still turn on content-addressable
+   * delivery through this option alone.
+   *
+   * No effect without {@link codeStore}: the routes are mounted and
+   * the URLs emitted only when the store is wired.
+   */
+  readonly codeBaseUrl?: string;
+
+  /**
    * Durable write-through for freshly registered blueprints (#430
    * slice 2). When wired, a registration that mints a new row also
    * persists it — metadata to the `BlueprintStore`, the compiled body
@@ -3506,6 +3524,9 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
   const info: ServerInfo = { ...DEFAULT_INFO, ...opts.info };
   const logger = opts.logger ?? createConsoleLogger({ server: info.name });
   const bodyLimit = opts.bodyLimit ?? "4mb";
+  // Where the content-addressable routes are reached from the iframe:
+  // an explicit asset host, else the public origin (see `codeBaseUrl`).
+  const codeBaseUrl = opts.codeBaseUrl ?? opts.publicBaseUrl;
 
   // Operator mode: gates the `/devtools/*` namespace. Explicit option
   // wins; otherwise read GGUI_MODE env (`'dev'` opts in, anything else
@@ -4318,18 +4339,19 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
               //
               // Content-addressable code delivery. When the operator
               // wired `opts.codeStore`, forward it to the render
-              // handler along with the base
-              // URL the code-blob route resolves to. We prefer the
-              // explicit `--public-base-url` (so the URL is reachable
-              // from a remote host's iframe sandbox); when absent we
-              // fall back to "no codeUrl emission" — the iframe then
+              // handler along with the base URL the code-blob route
+              // resolves to: the explicit `codeBaseUrl` (an edge-cached
+              // asset host, ggui#522) or, absent that, the
+              // `--public-base-url` (so the URL is reachable from a
+              // remote host's iframe sandbox); with neither we fall
+              // back to "no codeUrl emission" — the iframe then
               // mounts through the live trio and the WS subscribe
               // carries the render body, which is the delivery path a
               // render-channel deployment already has.
-              ...(opts.codeStore && opts.publicBaseUrl
+              ...(opts.codeStore && codeBaseUrl !== undefined
                 ? {
                     codeStore: opts.codeStore,
-                    codeBaseUrl: opts.publicBaseUrl,
+                    codeBaseUrl,
                   }
                 : {}),
               // Bootstrap-side mirror of the handshake's
@@ -4886,10 +4908,10 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
             // shell that would never paint. Wiring both (the shape
             // this factory produces) also means a fault on one
             // degrades to the other instead of failing the read.
-            ...(opts.codeStore && opts.publicBaseUrl
+            ...(opts.codeStore && codeBaseUrl !== undefined
               ? {
                   codeStore: opts.codeStore,
-                  codeBaseUrl: opts.publicBaseUrl,
+                  codeBaseUrl,
                 }
               : {}),
             // Bind the app-metadata store so the resource
@@ -5024,6 +5046,9 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
         : {}),
       ...(opts.codeStore ? { codeStore: opts.codeStore } : {}),
       ...(opts.publicBaseUrl !== undefined ? { publicBaseUrl: opts.publicBaseUrl } : {}),
+      // Asset host for the content-addressable URLs the /state read
+      // composes (ggui#522) — session-API URLs keep the public origin.
+      ...(opts.codeBaseUrl !== undefined ? { codeBaseUrl: opts.codeBaseUrl } : {}),
       ...(mintBootstrap ? { mintBootstrap } : {}),
       resolveRuntimeUrl: resolveRuntimeUrlForResultMeta,
       logger,

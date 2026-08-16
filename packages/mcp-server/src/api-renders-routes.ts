@@ -77,6 +77,15 @@ interface MountOptions {
   readonly codeStore?: CodeStore;
   /** Operator-configured public origin for absolute URL composition. */
   readonly publicBaseUrl?: string;
+  /**
+   * Origin the content-addressable routes (`/code/*`, `/contract/*`)
+   * are reached at — an edge-cached asset host when the deployment
+   * fronts static paths separately (ggui#522). Defaults to
+   * {@link publicBaseUrl}, then the request host. Session-API URLs
+   * (`/events`, `/stream`) never use it: those are dynamic and stay on
+   * the public origin.
+   */
+  readonly codeBaseUrl?: string;
   /** Live-mode credential minter — fresh trio on every /state read. */
   readonly mintBootstrap?: (
     sessionId: string,
@@ -103,10 +112,15 @@ export function mountApiRendersRoutes(opts: MountOptions): void {
     themeMode,
     codeStore,
     publicBaseUrl,
+    codeBaseUrl,
     mintBootstrap,
     resolveRuntimeUrl,
     logger,
   } = opts;
+  // The origin the content-addressable routes are reached at (asset
+  // host if fronted separately, else the public origin); the request
+  // host is the last resort for local/tunnel deployments.
+  const staticBase = codeBaseUrl ?? publicBaseUrl;
 
   app.get("/api/sessions/:sessionId/state", async (req, res) => {
     // CORS on EVERY response, gates included: cross-origin frames can
@@ -238,9 +252,10 @@ export function mountApiRendersRoutes(opts: MountOptions): void {
           await codeStore.put(hash, code);
           renderCodeHash = hash;
           const requestHost = req.get("host") ?? "";
-          const base = publicBaseUrl
-            ? publicBaseUrl.replace(/\/$/, "")
-            : `${req.protocol}://${requestHost}`;
+          const base =
+            staticBase !== undefined
+              ? staticBase.replace(/\/$/, "")
+              : `${req.protocol}://${requestHost}`;
           renderCodeUrl = `${base}/code/${hash}.js`;
         } catch {
           // Silent — the caller falls back to live-mode delivery, and
@@ -259,9 +274,10 @@ export function mountApiRendersRoutes(opts: MountOptions): void {
             await codeStore.put(bundle.contractHash, bundle.bundleSource);
             renderContractHash = bundle.contractHash;
             const requestHost = req.get("host") ?? "";
-            const base = publicBaseUrl
-              ? publicBaseUrl.replace(/\/$/, "")
-              : `${req.protocol}://${requestHost}`;
+            const base =
+              staticBase !== undefined
+                ? staticBase.replace(/\/$/, "")
+                : `${req.protocol}://${requestHost}`;
             renderValidatorsUrl = `${base}/contract/${bundle.contractHash}.js`;
           }
         } catch {
