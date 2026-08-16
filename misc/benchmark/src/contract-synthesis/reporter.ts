@@ -36,7 +36,10 @@ export interface ModelSummary {
     readonly verbatim: number;
     readonly normalized: number;
     readonly llmRepair: number;
-    readonly fallbackEmpty: number;
+    /** The last-resort tier: the conforming subset of the draft (ggui#523 item 3 replaced the empty fallback). */
+    readonly salvagedSubset: number;
+    /** Nothing salvageable — the handshake declines (no contract). */
+    readonly declined: number;
   };
   readonly capHits: number;
   readonly errors: number;
@@ -103,7 +106,8 @@ function summarizeModel(
       verbatim: rows.filter((r) => r.method === 'verbatim').length,
       normalized: rows.filter((r) => r.method === 'normalized').length,
       llmRepair: rows.filter((r) => r.method === 'llm-repair').length,
-      fallbackEmpty: rows.filter((r) => r.method === 'fallback-empty').length,
+      salvagedSubset: rows.filter((r) => r.method === 'salvaged-subset').length,
+      declined: rows.filter((r) => r.method === 'declined').length,
     },
     capHits: rows.filter((r) => r.capHit).length,
     errors: rows.filter((r) => r.error !== undefined).length,
@@ -147,7 +151,7 @@ export function renderReport(report: ContractSynthReport): string {
   );
   if (isEnsure) {
     lines.push(
-      '  model                          runs  conv   zero-LLM  verb/norm/repair/fallback  avgLat',
+      '  model                          runs  conv   zero-LLM  verb/norm/repair/salv/decl  avgLat',
     );
     for (const m of report.models) {
       const name = `${m.provider}/${m.model}`.slice(0, 28).padEnd(30);
@@ -155,7 +159,7 @@ export function renderReport(report: ContractSynthReport): string {
       lines.push(
         `  ${name} ${String(m.runs).padStart(4)}  ${pct(m.convergeRate).padStart(4)}  ` +
           `${pct(m.fastRate).padStart(8)}  ` +
-          `${`${md.verbatim}/${md.normalized}/${md.llmRepair}/${md.fallbackEmpty}`.padStart(25)}  ` +
+          `${`${md.verbatim}/${md.normalized}/${md.llmRepair}/${md.salvagedSubset}/${md.declined}`.padStart(26)}  ` +
           `${ms(m.avgLatencyMs).padStart(6)}`,
       );
     }

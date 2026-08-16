@@ -53,7 +53,7 @@ export interface ContractSynthRunResult {
   readonly llmUsed: boolean;
   /**
    * ensure-path method tier: 'verbatim' | 'normalized' (both zero-LLM) |
-   * 'llm-repair' | 'fallback-empty'. Undefined on the synth path.
+   * 'llm-repair' | 'salvaged-subset' | 'declined'. Undefined on the synth path.
    */
   readonly method?: EnsureConformingResult['method'];
   /**
@@ -180,10 +180,16 @@ async function runViaEnsure(
     };
   }
   const latencyMs = Date.now() - started;
-  const residualErrors = lintContract(result.contract).errors.length;
-  // `fallback-empty` returns a trivially-valid `{}` — it passes lint but
-  // represents "gave up", so it is NOT counted as converged.
-  const realConverge = residualErrors === 0 && result.method !== 'fallback-empty';
+  // A decline carries no contract; count it as maximally non-converged
+  // (every gate error still stands). The salvaged subset passes lint but
+  // represents "gave up on part of the draft" — like the retired empty
+  // fallback, it is NOT counted as converged (ggui#523 item 3).
+  const residualErrors =
+    result.contract === null
+      ? lintContract(draft).errors.length
+      : lintContract(result.contract).errors.length;
+  const gaveUp = result.method === 'salvaged-subset' || result.method === 'declined';
+  const realConverge = residualErrors === 0 && !gaveUp;
   const zeroLlm = result.method === 'verbatim' || result.method === 'normalized';
   return {
     ...base,
@@ -191,7 +197,7 @@ async function runViaEnsure(
     llmUsed: !zeroLlm,
     method: result.method,
     oneShot: zeroLlm, // zero-LLM resolution is the ensure-path "fast" win
-    capHit: result.method === 'fallback-empty',
+    capHit: gaveUp,
     latencyMs,
     residualErrors,
     metTarget: realConverge,
