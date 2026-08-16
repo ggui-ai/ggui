@@ -13,10 +13,14 @@
  *                              seeded with the draft + the deterministic
  *                              findings, looping until the gate is green
  *                              (origin: 'synth')
- *   - repair impossible      → minimal conforming contract (`{}`) + loud
- *     (LLM down / provider      error findings; STILL origin 'synth';
- *      can't synth / budget     NEVER throws.
- *      exhausted)
+ *   - repair impossible      → the conforming SUBSET of the draft (every
+ *     (LLM down / provider      refused entry dropped and reported;
+ *      can't synth / budget     origin 'synth', method 'salvaged-subset')
+ *      exhausted)              — or, when nothing usable survives, a
+ *                              DECLINE (`contract: null`, method
+ *                              'declined') with the findings. NEVER
+ *                              throws; NEVER an empty contract on the
+ *                              agent's behalf (ggui#523 item 3).
  *
  * Determinism lives in the GATE (`lintContract`), never in the repair.
  * The repair LLM is non-deterministic, but the loop only exits when the
@@ -39,38 +43,65 @@ import {
 import type { LLMCaller } from './llm-caller.js';
 import { synthesizeContract } from './synthesize-contract.js';
 import { normalizeDraft } from './normalize-draft.js';
+import { salvageConformingSubset } from './salvage-draft.js';
 
-export interface EnsureConformingResult {
+/**
+ * How a conforming contract was produced — finer-grained than `origin`,
+ * for telemetry (the efficiency tiers):
+ *   - `verbatim`        — draft was clean; returned as-is (origin agent).
+ *   - `normalized`      — deterministic fix only, NO LLM (origin synth).
+ *   - `llm-repair`      — the bounded LLM repair loop ran (origin synth).
+ *   - `salvaged-subset` — unrepairable within budget; the conforming
+ *                         SUBSET of the draft, refused entries dropped
+ *                         and reported (origin synth).
+ */
+export type EnsureConformingMethod =
+  | 'verbatim'
+  | 'normalized'
+  | 'llm-repair'
+  | 'salvaged-subset';
+
+/** A conforming contract was produced (the common case). */
+export interface EnsureConformingAccepted {
   /** A contract guaranteed to pass `lintContract` with zero errors. */
   readonly contract: DataContract;
   /**
    * - `'agent'` — the draft was already conforming; returned verbatim.
    * - `'synth'` — the draft had errors; this is the repaired result
-   *   (or the minimal-conforming fallback when repair was impossible).
+   *   (or the salvaged subset when repair was impossible).
    */
   readonly origin: 'agent' | 'synth';
-  /**
-   * How the conforming contract was produced — finer-grained than
-   * `origin`, for telemetry (the efficiency tiers):
-   *   - `verbatim`      — draft was clean; returned as-is (origin agent).
-   *   - `normalized`    — deterministic fix only, NO LLM (origin synth).
-   *   - `llm-repair`    — the bounded LLM repair loop ran (origin synth).
-   *   - `fallback-empty`— unrepairable; minimal `{}` contract (origin synth).
-   */
-  readonly method: 'verbatim' | 'normalized' | 'llm-repair' | 'fallback-empty';
+  readonly method: EnsureConformingMethod;
   /**
    * Findings surfaced to the agent. On `origin: 'agent'`, any hygiene
    * warnings on the (valid) draft. On `origin: 'synth'`, the ERROR
    * findings that rejected the agent's draft — so the agent-side model
-   * learns what it got wrong, even though we repaired it.
+   * learns what it got wrong, even though we repaired it. On
+   * `salvaged-subset` they include one finding per dropped entry.
    */
   readonly findings: readonly SuggestionFinding[];
   /** Operator- + LLM-readable explanation. */
   readonly reasoning: string;
 }
 
-/** Trivially-valid last-resort contract — all four specs omitted. */
-const EMPTY_CONTRACT: DataContract = {};
+/**
+ * Nothing in the draft could be kept: repair failed AND no entry
+ * survives the gate. There is no contract to propose — the caller
+ * answers `action: 'declined'` with the findings and the agent fixes
+ * and re-handshakes. This is what replaced the empty-contract fallback:
+ * a hollow "success" was indistinguishable from a rejection and the
+ * observed recovery was a field-by-field bisect (ggui#523 item 3).
+ */
+export interface EnsureConformingDeclined {
+  readonly contract: null;
+  readonly origin: 'agent';
+  readonly method: 'declined';
+  /** The ERROR findings that rejected the draft — every one of them. */
+  readonly findings: readonly SuggestionFinding[];
+  readonly reasoning: string;
+}
+
+export type EnsureConformingResult = EnsureConformingAccepted | EnsureConformingDeclined;
 
 export async function ensureConformingContract(
   deps: { readonly llm: LLMCaller },
@@ -161,15 +192,37 @@ export async function ensureConformingContract(
   }
 
   // Repair impossible (LLM down, provider can't synthesize, or the
-  // repair budget exhausted). We still MUST return a conforming
-  // contract — the handshake never hard-fails. Minimal conforming
-  // contract + loud findings so the agent can re-issue a corrected
-  // contract via ggui_render override if it needs the declared specs.
+  // repair budget exhausted). Keep what conforms: drop exactly the
+  // entries the gate refuses, report each drop, and propose the rest —
+  // the agent's own draft minus the parts the protocol rejected. Never
+  // an empty contract dressed as a proposal.
+  const salvaged = salvageConformingSubset(normalized);
+  if (salvaged !== null) {
+    const droppedPaths = salvaged.dropped.map((d) => d.path);
+    return {
+      contract: salvaged.contract,
+      origin: 'synth',
+      method: 'salvaged-subset',
+      findings: [...errorFindings, ...salvaged.dropped],
+      reasoning:
+        `could not repair the agent draft within budget (${synth.reason}); ` +
+        `proposing the conforming SUBSET of your draft — dropped ${droppedPaths.length} ` +
+        `entr${droppedPaths.length === 1 ? 'y' : 'ies'} the protocol refused (${droppedPaths.join(', ')}). ` +
+        `Each drop is a finding: fix those entries and re-handshake, or render this subset ` +
+        `and re-declare them via ggui_render override.`,
+    };
+  }
+
+  // Nothing usable survives. Decline: there is no contract to propose,
+  // and the findings say exactly why.
   return {
-    contract: EMPTY_CONTRACT,
-    origin: 'synth',
-    method: 'fallback-empty',
+    contract: null,
+    origin: 'agent',
+    method: 'declined',
     findings: errorFindings,
-    reasoning: `could not repair the agent draft within budget (${synth.reason}); returning a minimal conforming contract — re-issue a corrected contract via ggui_render override if you need the declared specs`,
+    reasoning:
+      `declined: could not repair the agent draft within budget (${synth.reason}) and no entry of it ` +
+      `passes the contract gate — nothing to propose. Fix the findings (every one names its path) ` +
+      `and re-handshake; do not render against this handshake.`,
   };
 }

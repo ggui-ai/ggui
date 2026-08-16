@@ -51,6 +51,7 @@ import {
   type BlueprintDraft,
   type BlueprintMeta,
   type BlueprintSourceKind,
+  type BlueprintVariance,
   type GadgetDescriptor,
   type DataContract,
   type HandshakeSuggestion,
@@ -66,6 +67,7 @@ import type {
   VariantSelectionDecision,
 } from '@ggui-ai/mcp-server-core';
 import type { HandlerContext, SharedHandler } from '../types.js';
+import { buildSalvagedOrDeclined } from './handshake-fallbacks.js';
 import type { GguiLifecycleEmitter } from './lifecycle.js';
 
 /**
@@ -239,13 +241,40 @@ export interface HandshakeNegotiator {
   }): Promise<VariantSelectionDecision>;
 }
 
-export interface HandshakeNegotiatorResult {
-  readonly action: 'create' | 'reuse' | 'update' | 'replace' | 'declined';
+/**
+ * A handshake the server DECLINED (ggui#523 item 3): the draft could
+ * not be repaired AND no entry of it survives the contract gate, so
+ * there is no contract to propose. No handshake record is written and
+ * no `nextStep` is offered — the agent reads `suggestion.validationFindings`
+ * (every one names its path), fixes the draft, and re-handshakes.
+ * This replaced the empty-contract fallback: a hollow `{}` "success"
+ * was indistinguishable from a rejection, and the observed recovery was
+ * a field-by-field bisect.
+ */
+export interface HandshakeNegotiatorDeclined {
+  readonly action: 'declined';
+  readonly reason: string;
+  /** `origin: 'agent'` (the draft is the agent's, unchanged), findings loud, summary teaches. */
+  readonly suggestion: HandshakeSuggestion;
+  /** Nothing to render against — declined handshakes never reach `ggui_render`. */
+  readonly effectiveContract: null;
+}
+
+/**
+ * A handshake decision that carries a conforming contract to render
+ * against — every action but `'declined'`.
+ */
+export interface HandshakeNegotiatorDecision {
+  readonly action: 'create' | 'reuse' | 'update' | 'replace';
   readonly reason: string;
   readonly suggestion: HandshakeSuggestion;
   /**
    * Effective contract the accept-path gen / cache-delivery runs
-   * against. See {@link HandshakeRecord.effectiveContract}.
+   * against. See {@link HandshakeRecord.effectiveContract}. Never
+   * empty on the server's initiative: a dirty draft is repaired,
+   * salvaged to its conforming subset, or DECLINED (see
+   * {@link HandshakeNegotiatorDeclined}) — `{}` is proposed only when
+   * the agent itself drafted a clean `{}`.
    */
   readonly effectiveContract: DataContract;
   /** Routing hint. */
@@ -267,6 +296,9 @@ export interface HandshakeNegotiatorResult {
     readonly variantKey: string;
   };
 }
+
+/** What a negotiator answers: a decision to render against, or a decline. */
+export type HandshakeNegotiatorResult = HandshakeNegotiatorDecision | HandshakeNegotiatorDeclined;
 
 export interface GguiHandshakeHandlerDeps {
   /**
@@ -517,7 +549,7 @@ export function createGguiHandshakeHandler(
     audience: ['agent'],
     description:
       deps.description ??
-      "Negotiate a contract for a UI you want to deliver. Call BEFORE ggui_render. Input: {intent, blueprintDraft: {contract, variance?, generator?}}. CONTRACT SHAPE (DataContract) — every entry under propsSpec.properties / actionSpec / streamSpec / contextSpec is a WRAPPER that contains a JSON Schema in its `schema:` field; the JSON Schema does NOT sit flat at the entry level. ActionEntry uses OPTIONAL `nextStep: '<toolName>'` to hint the agent's intended next tool call — when present, the tool MUST also be declared in `agentCapabilities.tools`; OMIT it entirely when the agent should decide freely. AGENT TOOLS: key `agentCapabilities.tools` by the BARE MCP tool name (the part after any `mcp__<server>__` prefix a host adds), NOT the host's connection label; each entry is `{toolInfo: {inputSchema, …}, serverInfo?, usage?, example?}` — `toolInfo` with its `inputSchema` is REQUIRED (copy the tool's declared JSON Schema); set the tool's `serverInfo.name` to the server handle from that SAME prefix (e.g. `mcp__todo__todo_add` → `serverInfo.name: 'todo'`) — it lets the server reuse a UI built against the same (server, tool) for a later turn or a different agent. If a tool has NO `mcp__<server>__` prefix, OMIT `serverInfo` — never invent a name. `version` is optional metadata (include it only if your host surfaces it from `initialize`); a version difference alone never blocks reuse. NEGOTIATION: the server PRIORITIZES reusing a similar contract it already built for an earlier UI — so it returns a PROPOSED contract rather than echoing your draft back. The `suggestion` carries that proposed contract plus a short `proposedContractSummary` and origin = cache (the server proposes a similar contract it built before) | agent (your draft was already clean and is proposed as-is) | synth (the server repaired your draft into the proposal; what changed is listed in suggestion.validationFindings). FORGIVING: the proposal is ALWAYS protocol-conforming — accept it; do NOT re-call ggui_handshake in a loop hoping for a different origin. When origin = cache the proposal may not cover every field of your draft; suggestion.validationFindings flags any COVERAGE_GAP, one per uncovered surface. DEFAULT TO ACCEPT (reuse-and-refine is the priority) — override only if the user must directly see or act on a flagged surface, since the cached UI cannot show it; a COVERAGE_GAP on a prop notes whether that prop was required or optional in your draft to inform that call. Also when origin = cache the proposed UI may have been built for a DIFFERENT variance than you requested; suggestion.validationFindings flags a VARIANCE_GAP (built for X, you asked Y). DEFAULT TO ACCEPT here too (reuse-and-refine) — re-aim the variance only if the persona/aesthetic difference is user-observable and matters for this interaction. Then you act on the paired ggui_render (where `props` is REQUIRED): OMIT `override` to ACCEPT the proposed contract (the normal path), OR set `override: {variance}` to re-aim the variant — keeps the agreed contract; a different variance resolves a distinct cached component, OR set `override: {contract}` to commit a NEW contract of your own (STRICT — it must already conform, the server will not repair an override, and render fails if it does not). VARIANCE is design-shaping signals only, and a STRICT four-key object: persona / aesthetic / context / seedPrompt — no other keys exist (`mood` is not one; put tonal intent in `aesthetic`); per-user runtime data belongs in `props` / contextSpec, NOT in variance. STRICTNESS: variance, blueprintDraft, and every wrapper entry (propsSpec.properties / actionSpec / streamSpec / contextSpec / agentCapabilities.tools) reject unrecognized keys — misplaced fields fail the call or surface as validationFindings rather than being ignored. Then ggui_consume → react → repeat. PLACEMENT RULE: actionSpec = events that drive the agent's next turn; contextSpec = observable state. Test: needs next-turn reasoning? actionSpec. No? contextSpec.",
+      "Negotiate a contract for a UI you want to deliver. Call BEFORE ggui_render. Input: {intent, blueprintDraft: {contract, variance?, generator?}}. CONTRACT SHAPE (DataContract) — every entry under propsSpec.properties / actionSpec / streamSpec / contextSpec is a WRAPPER that contains a JSON Schema in its `schema:` field; the JSON Schema does NOT sit flat at the entry level. ActionEntry uses OPTIONAL `nextStep: '<toolName>'` to hint the agent's intended next tool call — when present, the tool MUST also be declared in `agentCapabilities.tools`; OMIT it entirely when the agent should decide freely. AGENT TOOLS: key `agentCapabilities.tools` by the BARE MCP tool name (the part after any `mcp__<server>__` prefix a host adds), NOT the host's connection label; each entry is `{toolInfo: {inputSchema, …}, serverInfo?, usage?, example?}` — `toolInfo` with its `inputSchema` is REQUIRED (copy the tool's declared JSON Schema); set the tool's `serverInfo.name` to the server handle from that SAME prefix (e.g. `mcp__todo__todo_add` → `serverInfo.name: 'todo'`) — it lets the server reuse a UI built against the same (server, tool) for a later turn or a different agent. If a tool has NO `mcp__<server>__` prefix, OMIT `serverInfo` — never invent a name. `version` is optional metadata (include it only if your host surfaces it from `initialize`); a version difference alone never blocks reuse. NEGOTIATION: the server PRIORITIZES reusing a similar contract it already built for an earlier UI — so it returns a PROPOSED contract rather than echoing your draft back. The `suggestion` carries that proposed contract plus a short `proposedContractSummary` and origin = cache (the server proposes a similar contract it built before) | agent (your draft was already clean and is proposed as-is) | synth (the server repaired your draft into the proposal; what changed is listed in suggestion.validationFindings). FORGIVING: the proposal is ALWAYS protocol-conforming — accept it; do NOT re-call ggui_handshake in a loop hoping for a different origin. Two honest exceptions: (a) `action: 'declined'` — nothing in your draft passed the contract gate, so there is NO proposal and NO ggui_render for that handshakeId; read suggestion.validationFindings (each names its path and what the protocol wants there), fix the draft, and call ggui_handshake once more; (b) a `proposedContractSummary` starting with `PARTIAL` — the proposal is your draft MINUS the entries the protocol refused (each listed in validationFindings): render it to get the rest working, and re-declare the dropped entries via `override: {contract}` on the render or a corrected re-handshake. The server never substitutes an empty contract for yours. When origin = cache the proposal may not cover every field of your draft; suggestion.validationFindings flags any COVERAGE_GAP, one per uncovered surface. DEFAULT TO ACCEPT (reuse-and-refine is the priority) — override only if the user must directly see or act on a flagged surface, since the cached UI cannot show it; a COVERAGE_GAP on a prop notes whether that prop was required or optional in your draft to inform that call. Also when origin = cache the proposed UI may have been built for a DIFFERENT variance than you requested; suggestion.validationFindings flags a VARIANCE_GAP (built for X, you asked Y). DEFAULT TO ACCEPT here too (reuse-and-refine) — re-aim the variance only if the persona/aesthetic difference is user-observable and matters for this interaction. Then you act on the paired ggui_render (where `props` is REQUIRED): OMIT `override` to ACCEPT the proposed contract (the normal path), OR set `override: {variance}` to re-aim the variant — keeps the agreed contract; a different variance resolves a distinct cached component, OR set `override: {contract}` to commit a NEW contract of your own (STRICT — it must already conform, the server will not repair an override, and render fails if it does not). VARIANCE is design-shaping signals only, and a STRICT four-key object: persona / aesthetic / context / seedPrompt — no other keys exist (`mood` is not one; put tonal intent in `aesthetic`); per-user runtime data belongs in `props` / contextSpec, NOT in variance. STRICTNESS: variance, blueprintDraft, and every wrapper entry (propsSpec.properties / actionSpec / streamSpec / contextSpec / agentCapabilities.tools) reject unrecognized keys — misplaced fields fail the call or surface as validationFindings rather than being ignored. Then ggui_consume → react → repeat. PLACEMENT RULE: actionSpec = events that drive the agent's next turn; contextSpec = observable state. Test: needs next-turn reasoning? actionSpec. No? contextSpec.",
     inputSchema,
     outputSchema,
     async handler(input, ctx: HandlerContext): Promise<HandshakeOutput> {
@@ -584,6 +616,49 @@ export function createGguiHandshakeHandler(
             ctx,
           })
         : buildDefaultAgentSuggestion(normalizedInput.blueprintDraft);
+
+      // DECLINED (ggui#523 item 3): the draft could not be repaired and
+      // nothing in it conforms. No record (nothing to render against),
+      // no `nextStep`; the findings say what to fix. The lifecycle sees
+      // a completed handshake with outcome 'declined'.
+      if (negotiated.action === 'declined') {
+        const handshakeId = mintHandshakeId();
+        deps.lifecycleEmitter?.emit(handshakeId, {
+          kind: 'handshake_started',
+          handshakeId,
+          intent: normalizedInput.intent,
+        });
+        deps.lifecycleEmitter?.emit(handshakeId, {
+          kind: 'handshake_completed',
+          handshakeId,
+          outcome: 'declined',
+          genExpected: false,
+        });
+        const declinedSuggestion: HandshakeSuggestion =
+          generatorFindings.length > 0
+            ? {
+                ...negotiated.suggestion,
+                validationFindings: [
+                  ...(negotiated.suggestion.validationFindings ?? []),
+                  ...generatorFindings,
+                ],
+              }
+            : negotiated.suggestion;
+        const truncatedDeclineReason =
+          negotiated.reason.length > 280
+            ? `${negotiated.reason.slice(0, 277)}...`
+            : negotiated.reason;
+        return {
+          handshakeId,
+          action: 'declined',
+          reason: truncatedDeclineReason,
+          target: {},
+          suggestion: declinedSuggestion,
+          contractHash: blueprintKey(
+            dataContractSchema.safeParse(normalizedInput.blueprintDraft.contract).data,
+          ),
+        };
+      }
 
       // Backstop: the negotiator's effectiveContract MUST pass the
       // single deterministic gate. For a bound negotiator this is
@@ -708,57 +783,58 @@ export function createGguiHandshakeHandler(
  * zero-config). No negotiator ⇒ no LLM ⇒ nothing can REPAIR a malformed
  * draft. The handshake backstop (validateContract) would throw on one,
  * so this still honors "handshake never hard-fails": a clean draft is
- * used verbatim; a malformed draft is deterministically replaced by the
- * trivially-conforming empty contract + loud findings (bind a
- * HandshakeNegotiator to get the forgiving repair path instead).
+ * used verbatim; a malformed draft is deterministically reduced to its
+ * conforming subset (one finding per dropped entry) or DECLINED when
+ * nothing survives — never the empty contract (ggui#523 item 3); bind a
+ * HandshakeNegotiator to get the forgiving repair path instead.
  */
 function buildDefaultAgentSuggestion(
   blueprintDraft: DraftInput,
 ): HandshakeNegotiatorResult {
+  const variance: BlueprintVariance = {
+    ...(blueprintDraft.variance?.persona !== undefined
+      ? { persona: blueprintDraft.variance.persona }
+      : {}),
+    ...(blueprintDraft.variance?.aesthetic !== undefined
+      ? { aesthetic: blueprintDraft.variance.aesthetic }
+      : {}),
+    ...(blueprintDraft.variance?.context !== undefined
+      ? { context: blueprintDraft.variance.context }
+      : {}),
+    ...(blueprintDraft.variance?.seedPrompt !== undefined
+      ? { seedPrompt: blueprintDraft.variance.seedPrompt }
+      : {}),
+  };
   const lint = lintContract(blueprintDraft.contract);
-  const clean = lint.errors.length === 0;
+  if (lint.errors.length > 0) {
+    // Dirty draft and nothing bound to repair it: keep the conforming
+    // subset, or decline. Never the empty contract (ggui#523 item 3).
+    return buildSalvagedOrDeclined({
+      draftContract: blueprintDraft.contract,
+      reason:
+        'no-negotiator-bound: draft failed validation and no negotiator (LLM) is bound to repair it. Bind a HandshakeNegotiator to enable repair.',
+      variance,
+    });
+  }
   // `clean` ⇒ shape phase passed ⇒ strict parse cannot throw.
-  const contract: DataContract = clean
-    ? dataContractSchema.parse(blueprintDraft.contract)
-    : {};
-  const findings: SuggestionFinding[] = lint.errors.map((e) => ({
-    code: e.code,
-    severity: 'error',
-    path: e.path,
-    message: e.message,
-  }));
+  const contract: DataContract = dataContractSchema.parse(blueprintDraft.contract);
   // No blueprintId, no source — origin:'agent' (D4): the durable UUID
   // and the real provenance are both minted at render-time
   // registration, never at handshake.
   const blueprintMeta: BlueprintMeta = {
     contractHash: blueprintKey(contract),
-    variance: {
-      ...(blueprintDraft.variance?.persona !== undefined
-        ? { persona: blueprintDraft.variance.persona }
-        : {}),
-      ...(blueprintDraft.variance?.aesthetic !== undefined
-        ? { aesthetic: blueprintDraft.variance.aesthetic }
-        : {}),
-      ...(blueprintDraft.variance?.context !== undefined
-        ? { context: blueprintDraft.variance.context }
-        : {}),
-      ...(blueprintDraft.variance?.seedPrompt !== undefined
-        ? { seedPrompt: blueprintDraft.variance.seedPrompt }
-        : {}),
-    },
+    variance,
   };
   const suggestion: HandshakeSuggestion = {
     origin: 'agent',
-    rationale: clean
-      ? 'no-negotiator-bound: OSS default routes the draft as origin=agent (no search, no repair). Bind a HandshakeNegotiator to enable cache/synth routing.'
-      : 'no-negotiator-bound: draft failed validation and no negotiator (LLM) is bound to repair it — returning a minimal conforming contract. Bind a HandshakeNegotiator to enable repair.',
+    rationale:
+      'no-negotiator-bound: OSS default routes the draft as origin=agent (no search, no repair). Bind a HandshakeNegotiator to enable cache/synth routing.',
     blueprintMeta,
     proposedContractSummary: summarizeContract(contract),
-    ...(findings.length > 0 ? { validationFindings: findings } : {}),
   };
   return {
     action: 'create',
-    reason: 'no-negotiator-bound: agent draft accepted verbatim',
+    reason: suggestion.rationale,
     suggestion,
     effectiveContract: contract,
   };

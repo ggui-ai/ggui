@@ -72,6 +72,7 @@ import type {
   HandshakeNegotiator,
   HandshakeNegotiatorResult,
 } from './handshake.js';
+import { buildDeclined, buildSalvagedOrDeclined } from './handshake-fallbacks.js';
 import type { InstalledBlueprintsProvider } from './installed-blueprints-provider.js';
 import { emitAgentCaps } from './agentcaps-measurement.js';
 import {
@@ -367,10 +368,11 @@ export function buildCacheReuseResult(
  * Deterministic no-LLM create fallback (no LLM resolved, or an
  * operational error during synth). The handshake backstop
  * (`validateContract`) THROWS on a malformed draft and there is no LLM
- * here to repair it — so deterministically substitute the trivially-
- * conforming empty contract (+ loud findings) when the draft fails the
- * gate. NEVER return a raw malformed draft into the throwing backstop. A
- * clean draft is kept verbatim (`origin: 'agent'`).
+ * here to repair it — so deterministically keep the conforming SUBSET
+ * of the draft (+ one finding per dropped entry), or DECLINE when
+ * nothing survives; never the empty contract (ggui#523 item 3). NEVER
+ * return a raw malformed draft into the throwing backstop. A clean
+ * draft is kept verbatim (`origin: 'agent'`).
  */
 export function buildCreateFallback(
   draftContract: unknown,
@@ -378,37 +380,38 @@ export function buildCreateFallback(
   requestVariance?: BlueprintVariance,
 ): HandshakeNegotiatorResult {
   const lint = lintContract(draftContract);
-  const contract: DataContract =
-    lint.errors.length === 0 ? dataContractSchema.parse(draftContract) : {};
-  const findings: SuggestionFinding[] = lint.errors.map((e) => ({
-    code: e.code,
-    severity: 'error',
-    path: e.path,
-    message: e.message,
-  }));
-  const contractHash = blueprintKey(contract);
-  const suggestion: HandshakeSuggestion = {
-    origin: 'agent',
-    rationale: reason,
-    // No blueprintId, no source — the durable UUID and the real
-    // provenance are both minted at render-time registration, never at
-    // handshake. Absent on agent/synth (D4).
-    blueprintMeta: {
-      contractHash,
-      // The REQUEST variance — this contract was built for the request, so
-      // the proposed variance is the request's. `?? {}` keeps the
-      // no-variance default (D5).
-      variance: requestVariance ?? {},
-    },
-    proposedContractSummary: summarizeContract(contract),
-    ...(findings.length > 0 ? { validationFindings: findings } : {}),
-  };
-  return {
-    action: 'create',
+  if (lint.errors.length === 0) {
+    // Clean draft: kept verbatim (origin agent), exactly as before.
+    const contract: DataContract = dataContractSchema.parse(draftContract);
+    const suggestion: HandshakeSuggestion = {
+      origin: 'agent',
+      rationale: reason,
+      // No blueprintId, no source — the durable UUID and the real
+      // provenance are both minted at render-time registration, never at
+      // handshake. Absent on agent/synth (D4).
+      blueprintMeta: {
+        contractHash: blueprintKey(contract),
+        // The REQUEST variance — this contract was built for the request, so
+        // the proposed variance is the request's. `?? {}` keeps the
+        // no-variance default (D5).
+        variance: requestVariance ?? {},
+      },
+      proposedContractSummary: summarizeContract(contract),
+    };
+    return {
+      action: 'create',
+      reason,
+      suggestion,
+      effectiveContract: contract,
+    };
+  }
+  // Dirty draft, no LLM to repair it: keep the conforming subset, or
+  // decline. Never the empty contract (ggui#523 item 3).
+  return buildSalvagedOrDeclined({
+    draftContract,
     reason,
-    suggestion,
-    effectiveContract: contract,
-  };
+    ...(requestVariance !== undefined ? { variance: requestVariance } : {}),
+  });
 }
 
 /**
@@ -656,6 +659,15 @@ export async function decideHandshake(
         ...(gadgets !== undefined ? { appGadgets: gadgets } : {}),
       },
     );
+    if (conforming.contract === null) {
+      // Repair exhausted AND nothing salvageable — decline, loudly.
+      return buildDeclined({
+        draftContract,
+        findings: conforming.findings,
+        reason: conforming.reasoning,
+        ...(variance !== undefined ? { variance } : {}),
+      });
+    }
     const suggestion: HandshakeSuggestion = {
       origin: conforming.origin,
       rationale: conforming.reasoning,

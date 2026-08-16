@@ -159,6 +159,7 @@ describe('buildCacheReuseResult', () => {
       summarizeContract(cachedContract),
     );
     // Matched-ref threaded for the paired render's §6 point-read.
+    if (result.action === 'declined') throw new Error('expected a decision, got declined');
     expect(result.matchedBlueprint).toEqual({
       id: BP_UUID,
       contractKey: 'abc',
@@ -230,19 +231,51 @@ describe('buildCreateFallback', () => {
     // proposedContractSummary projects the clean draft.
     expect(r.suggestion.proposedContractSummary).toBe(summarizeContract(clean));
     // No matched-ref on a create decision.
+    if (r.action === 'declined') throw new Error('expected a decision, got declined');
     expect(r.matchedBlueprint).toBeUndefined();
   });
 
-  it('substitutes the empty contract + loud findings for a MALFORMED draft', () => {
+  // ggui#523 item 3 — the empty contract is no longer a thing the server
+  // proposes. A dirty draft is reduced to its conforming SUBSET (origin
+  // synth, one finding per dropped entry, summary marked PARTIAL), or
+  // DECLINED when nothing survives.
+  it('proposes the conforming SUBSET of a partly-malformed draft — never `{}`', () => {
+    const partly = {
+      propsSpec: { properties: { title: { required: true, schema: { type: 'string' } } } },
+      actionSpec: {
+        ok: { label: 'Ok', schema: { type: 'object' } },
+        bad: { type: 'object' }, // flat schema, no wrapper — refused
+      },
+    };
+    const r = buildCreateFallback(partly, 'no-creds: ...');
+    if (r.action === 'declined') throw new Error('expected a salvaged create, got declined');
+    expect(r.action).toBe('create');
+    expect(r.suggestion.origin).toBe('synth');
+    expect(r.effectiveContract).not.toEqual({});
+    expect(Object.keys(r.effectiveContract.actionSpec ?? {})).toEqual(['ok']);
+    expect(Object.keys(r.effectiveContract.propsSpec?.properties ?? {})).toEqual(['title']);
+    const findings = r.suggestion.validationFindings ?? [];
+    expect(findings.length).toBeGreaterThan(0);
+    expect(findings.every((f) => f.severity === 'error')).toBe(true);
+    expect(findings.some((f) => f.path.startsWith('actionSpec.bad'))).toBe(true);
+    expect(r.suggestion.proposedContractSummary).toMatch(/^PARTIAL/);
+    expect(r.suggestion.proposedContractSummary).toContain('actionSpec.bad');
+    expect(r.suggestion.blueprintMeta.blueprintId).toBeUndefined();
+  });
+
+  it('DECLINES a draft with nothing salvageable — no contract, no `{}`, findings loud', () => {
     const malformed = { propsSpec: 'not-an-object' };
     const r = buildCreateFallback(malformed, 'no-creds: ...');
-    expect(r.action).toBe('create');
-    expect(r.effectiveContract).toEqual({});
+    expect(r.action).toBe('declined');
+    expect(r.effectiveContract).toBeNull();
+    expect(r.suggestion.origin).toBe('agent');
     expect(r.suggestion.validationFindings?.length ?? 0).toBeGreaterThan(0);
     expect(r.suggestion.validationFindings?.[0]?.severity).toBe('error');
+    expect(r.suggestion.proposedContractSummary).toMatch(/^DECLINED/);
+    expect(r.suggestion.proposedContractSummary).toContain('propsSpec');
     expect(r.suggestion.blueprintMeta.blueprintId).toBeUndefined();
-    // Summary of the substituted empty contract.
-    expect(r.suggestion.proposedContractSummary).toBe(summarizeContract({}));
+    // The one thing this posture forbids:
+    expect(r.suggestion.proposedContractSummary).not.toBe(summarizeContract({}));
   });
 
   it('defaults blueprintMeta.variance to {} when no requestVariance is threaded', () => {
@@ -1310,6 +1343,7 @@ describe('decideHandshake — create / fallback', () => {
     // No throwaway provisional id on the synth-create path (D4) and no
     // matched-ref; proposedContractSummary projects the conforming contract.
     expect(r.suggestion.blueprintMeta.blueprintId).toBeUndefined();
+    if (r.action === 'declined') throw new Error('expected a decision, got declined');
     expect(r.matchedBlueprint).toBeUndefined();
     expect(r.suggestion.proposedContractSummary).toBe(
       summarizeContract({ propsSpec: { properties: {} } }),

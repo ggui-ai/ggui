@@ -36,8 +36,21 @@ export type {
 export { synthesizeContract } from './synthesize-contract.js';
 export type { SynthesizeContractResult } from './synthesize-contract.js';
 export { ensureConformingContract } from './ensure-conforming-contract.js';
-export type { EnsureConformingResult } from './ensure-conforming-contract.js';
+export type {
+  EnsureConformingAccepted,
+  EnsureConformingDeclined,
+  EnsureConformingMethod,
+  EnsureConformingResult,
+} from './ensure-conforming-contract.js';
 export { normalizeDraft } from './normalize-draft.js';
+// The last-resort tier that replaced the empty-contract fallback (ggui#523
+// item 3): keep the conforming subset of a draft, or decline. Shared with
+// the handlers' no-LLM paths so every producer answers the same way.
+export {
+  salvageConformingSubset,
+  declaresAnySurface,
+  type SalvageResult,
+} from './salvage-draft.js';
 export {
   validateContractRedundancy,
   validateContractNovelty,

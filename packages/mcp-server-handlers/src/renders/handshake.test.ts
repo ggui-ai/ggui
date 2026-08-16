@@ -18,6 +18,8 @@
  */
 import { describe, expect, it } from 'vitest';
 import { InMemoryKeyValueStore } from '@ggui-ai/mcp-server-core/in-memory';
+import type { GguiLifecyclePayload } from '@ggui-ai/protocol';
+import type { GguiLifecycleEmitter } from './lifecycle';
 import type { AppMetadataStore } from '@ggui-ai/mcp-server-core';
 import {
   resolveAppGadgets,
@@ -349,6 +351,79 @@ describe('createGguiHandshakeHandler — MVB-5', () => {
       expect(finding?.severity).toBe('warn');
       expect(finding?.message).toMatch(/unregistered-slug/);
       expect(finding?.message).toMatch(new RegExp(DEFAULT_GENERATOR_SLUG));
+    });
+  });
+
+  // ggui#523 item 3 — the server never proposes `{}` on the agent's
+  // behalf. With no negotiator bound, a dirty draft is reduced to its
+  // conforming subset (origin synth, findings per drop) or DECLINED; a
+  // declined handshake writes no record and offers no nextStep.
+  describe('never `{}` — salvage or decline (no negotiator bound)', () => {
+    it('proposes the conforming SUBSET of a partly-malformed draft, origin synth, PARTIAL summary', async () => {
+      const kvStore = new InMemoryKeyValueStore();
+      const handler = createGguiHandshakeHandler({ kvStore });
+      const out = await handler.handler(
+        minimalInput({
+          blueprintDraft: {
+            contract: {
+              propsSpec: { properties: { title: { required: true, schema: { type: 'string' } } } },
+              actionSpec: {
+                ok: { label: 'Ok', schema: { type: 'object' } },
+                bad: { type: 'object' }, // flat schema — refused, dropped
+              },
+            },
+          },
+        }),
+        { appId: 'app-1', requestId: 'r' },
+      );
+      expect(out.action).toBe('create');
+      expect(out.suggestion.origin).toBe('synth');
+      expect(out.suggestion.proposedContractSummary).toMatch(/^PARTIAL/);
+      expect(out.suggestion.validationFindings?.some((f) => f.path.startsWith('actionSpec.bad'))).toBe(true);
+      // The record carries the salvaged, NON-empty contract.
+      const record = await consumeHandshakeRecord(kvStore, 'app-1', out.handshakeId);
+      expect(record).not.toBeNull();
+      expect(Object.keys(record!.effectiveContract.actionSpec ?? {})).toEqual(['ok']);
+      expect(record!.effectiveContract).not.toEqual({});
+      // And a render is still on offer for the subset.
+      expect(out.nextStep?.tool).toBe('ggui_render');
+    });
+
+    it('DECLINES a draft with nothing salvageable — no record, no nextStep, findings loud, lifecycle outcome declined', async () => {
+      const kvStore = new InMemoryKeyValueStore();
+      const events: GguiLifecyclePayload[] = [];
+      const lifecycleEmitter: GguiLifecycleEmitter = {
+        emit: (_id, payload) => {
+          events.push(payload);
+        },
+      };
+      const handler = createGguiHandshakeHandler({ kvStore, lifecycleEmitter });
+      const out = await handler.handler(
+        minimalInput({ blueprintDraft: { contract: { propsSpec: 'not-an-object' } } }),
+        { appId: 'app-1', requestId: 'r' },
+      );
+      expect(out.action).toBe('declined');
+      expect(out.nextStep).toBeUndefined();
+      expect(out.suggestion.origin).toBe('agent');
+      expect(out.suggestion.proposedContractSummary).toMatch(/^DECLINED/);
+      expect(out.suggestion.validationFindings?.length ?? 0).toBeGreaterThan(0);
+      expect(out.suggestion.validationFindings?.[0]?.severity).toBe('error');
+      // Nothing to render against — no record was written.
+      expect(await kvStore.get(handshakeRecordKey('app-1', out.handshakeId))).toBeNull();
+      // Lifecycle: started, then completed with outcome 'declined', genExpected false.
+      expect(events.map((e) => e.kind)).toEqual(['handshake_started', 'handshake_completed']);
+      const completed = events[1];
+      expect(completed?.kind === 'handshake_completed' ? completed.outcome : undefined).toBe('declined');
+    });
+
+    it("keeps an agent's own clean `{}` verbatim — the empty contract is the AGENT's choice, not the server's", async () => {
+      const kvStore = new InMemoryKeyValueStore();
+      const handler = createGguiHandshakeHandler({ kvStore });
+      const out = await handler.handler(minimalInput(), { appId: 'app-1', requestId: 'r' });
+      expect(out.action).toBe('create');
+      expect(out.suggestion.origin).toBe('agent');
+      const record = await consumeHandshakeRecord(kvStore, 'app-1', out.handshakeId);
+      expect(record!.effectiveContract).toEqual({});
     });
   });
 

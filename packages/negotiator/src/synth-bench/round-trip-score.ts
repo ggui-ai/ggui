@@ -86,9 +86,9 @@ export interface RoundTripScore {
 
 /**
  * True when a contract declares none of the six spec surfaces — the
- * `EMPTY_CONTRACT` (`{}`) that `ensureConformingContract` returns when a
- * draft is unrepairable. Such a contract is structurally valid but
- * carries no wire at all.
+ * empty contract the bench substitutes for a DECLINE (and the `{}` the
+ * retired fallback used to return for an unrepairable draft). Such a
+ * contract is structurally valid but carries no wire at all.
  */
 function isEmptyContract(contract: DataContract): boolean {
   return (

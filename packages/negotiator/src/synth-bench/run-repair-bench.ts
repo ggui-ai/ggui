@@ -26,7 +26,10 @@
  */
 
 import type { DataContract, SuggestionFinding } from '@ggui-ai/protocol';
-import { ensureConformingContract } from '../ensure-conforming-contract.js';
+import {
+  ensureConformingContract,
+  type EnsureConformingMethod,
+} from '../ensure-conforming-contract.js';
 import type { LLMCaller } from '../llm-caller.js';
 import { scoreSynthesizedContract, type ScoreResult } from './run-bench.js';
 import {
@@ -37,13 +40,19 @@ import { REPAIR_CORPUS, type BenchEntry } from './corpus.js';
 
 export interface RepairBenchOutcome {
   readonly entry: BenchEntry;
-  /** ensureConformingContract always returns a contract (possibly `{}`). */
-  readonly contract: DataContract;
+  /**
+   * The conforming contract ensureConformingContract produced — or
+   * `null` when it DECLINED (nothing in the draft could be kept; ggui#523
+   * item 3 retired the empty-contract fallback). Scored as the empty
+   * contract so the tiers stay comparable across that change.
+   */
+  readonly contract: DataContract | null;
   /** `agent` = clean draft returned verbatim; `synth` = repaired in-place. */
   readonly origin: 'agent' | 'synth';
   /** How the contract was produced (the efficiency tier): verbatim /
-   *  normalized (deterministic, no LLM) / llm-repair / fallback-empty. */
-  readonly method: 'verbatim' | 'normalized' | 'llm-repair' | 'fallback-empty';
+   *  normalized (deterministic, no LLM) / llm-repair / salvaged-subset /
+   *  declined. */
+  readonly method: EnsureConformingMethod | 'declined';
   /** Structural shape score (ride-along secondary signal). */
   readonly shape: ScoreResult;
   /** Round-trip usability — null when the entry declares no round-trip
@@ -114,7 +123,8 @@ export async function evaluateRepairCorpus(
     const startedAt = Date.now();
     // The real production create-path: lint the draft → verbatim if clean
     // (origin agent), repair-in-place otherwise (origin synth). NEVER
-    // throws; an unrepairable draft yields the empty `{}` contract.
+    // throws; an unrepairable draft yields its conforming subset, or a
+    // decline (`contract: null`) when nothing survives.
     const result = await ensureConformingContract(
       { llm: deps.llm },
       {
@@ -126,10 +136,14 @@ export async function evaluateRepairCorpus(
       },
     );
     const latencyMs = Date.now() - startedAt;
-    const shape = scoreSynthesizedContract(result.contract, entry.expected);
+    // A decline carries no contract; score it as the empty contract —
+    // exactly what the retired fallback returned — so pass rates before
+    // and after the posture change measure the same thing.
+    const scored: DataContract = result.contract ?? {};
+    const shape = scoreSynthesizedContract(scored, entry.expected);
     const roundTrip =
       entry.roundTrip !== undefined
-        ? scoreContractRoundTrip(result.contract, entry.roundTrip)
+        ? scoreContractRoundTrip(scored, entry.roundTrip)
         : null;
     const outcome: RepairBenchOutcome = {
       entry,
@@ -215,7 +229,7 @@ export function formatRepairBenchReport(report: RepairBenchReport): string {
   for (const o of report.outcomes) {
     byMethod.set(o.method, (byMethod.get(o.method) ?? 0) + 1);
   }
-  const methodStr = ['verbatim', 'normalized', 'llm-repair', 'fallback-empty']
+  const methodStr = ['verbatim', 'normalized', 'llm-repair', 'salvaged-subset', 'declined']
     .filter((m) => byMethod.has(m))
     .map((m) => `${m}×${byMethod.get(m)}`)
     .join(' ');
