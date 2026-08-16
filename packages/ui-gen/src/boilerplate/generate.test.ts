@@ -470,3 +470,36 @@ describe('generateBoilerplate — clientCapabilities.gadgets emits direct gadget
     expect(boilerplate).not.toContain('= LeafletMap(');
   });
 });
+
+describe('generateBoilerplate — Props optionality follows the wire gate (ggui#528)', () => {
+  const boilerplate = generateBoilerplate('test prompt', {
+    propsSpec: {
+      properties: {
+        title: { schema: { type: 'string' }, required: true, description: 'heading' },
+        items: { schema: { type: 'array', items: { type: 'string' } } },
+        note: { schema: { type: 'string' }, required: false },
+      },
+    },
+  });
+
+  it('types `required: true` props as present', () => {
+    expect(boilerplate).toMatch(/^\s*title: string;/m);
+  });
+
+  it('types omitted-`required` props as OPTIONAL — the gate only requires `=== true`', () => {
+    // Pre-fix this read `items: string[]` (required unless `=== false`),
+    // so a render the gate accepts without `items` crashed on
+    // `props.items.map(...)` — the latent-undefined class.
+    expect(boilerplate).toMatch(/^\s*items\?: string\[\];/m);
+    expect(boilerplate).not.toMatch(/^\s*items: string\[\];/m);
+  });
+
+  it('types `required: false` props as optional too', () => {
+    expect(boilerplate).toMatch(/^\s*note\?: string;/m);
+  });
+
+  it('teaches the optionality contract in the field comment', () => {
+    const line = boilerplate.split('\n').find((l) => /^\s*items\?: /.test(l)) ?? '';
+    expect(line).toContain('optional — the agent may omit it');
+  });
+});

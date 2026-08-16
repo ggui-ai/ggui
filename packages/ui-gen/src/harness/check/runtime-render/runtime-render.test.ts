@@ -591,3 +591,93 @@ describe("installGadgetStubRegistry", () => {
     }
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Check 7 — optional-props omission (ggui#528)
+// ─────────────────────────────────────────────────────────────────────────────
+
+const OPTIONAL_ASSUMED_PRESENT = `
+interface Props {
+  title: string;
+  items?: string[];
+}
+
+export default function Component(props: Props) {
+  // BUG CLASS: optional prop dereferenced unguarded. Passes the main
+  // pass (mockup fills items) — crashes when the agent omits it.
+  return (
+    <div>
+      <h1>{props.title}</h1>
+      <ul>{props.items!.map((i) => <li key={i}>{i}</li>)}</ul>
+    </div>
+  );
+}
+`;
+
+const OPTIONAL_GUARDED = `
+interface Props {
+  title: string;
+  items?: string[];
+}
+
+export default function Component(props: Props) {
+  const items = props.items ?? [];
+  return (
+    <div>
+      <h1>{props.title}</h1>
+      <ul>{items.map((i) => <li key={i}>{i}</li>)}</ul>
+    </div>
+  );
+}
+`;
+
+describe("runRenderCheck — optional-props omission (ggui#528)", () => {
+  // `items` has NO \`required\` — the wire gate treats it as optional,
+  // so a legitimate render may omit it.
+  const contract: DataContract = {
+    propsSpec: {
+      properties: {
+        title: { schema: { type: "string" }, required: true },
+        items: { schema: { type: "array", items: { type: "string" } } },
+      },
+    },
+  };
+
+  it("BLOCKS a component that crashes when an optional prop is omitted (main pass alone would pass it)", async () => {
+    const result = await runRenderCheck({
+      sourceCode: OPTIONAL_ASSUMED_PRESENT,
+      mockupProps: { title: "Hello", items: ["a", "b"] },
+      contract,
+    });
+    // The main pass renders fine — every prop filled.
+    expect(result.issues.find((i) => i.check === "render-no-throw")).toBeUndefined();
+    // The omission pass catches the latent class.
+    const omit = result.issues.find((i) => i.check === "optional-props-omitted");
+    expect(omit).toBeDefined();
+    expect(omit!.outcome).toBe("failed");
+    expect(omit!.subject).toBe("items");
+    expect(result.ok).toBe(false);
+  }, 30000);
+
+  it("passes a component that guards its optional props", async () => {
+    const result = await runRenderCheck({
+      sourceCode: OPTIONAL_GUARDED,
+      mockupProps: { title: "Hello", items: ["a", "b"] },
+      contract,
+    });
+    expect(result.issues.find((i) => i.check === "optional-props-omitted")).toBeUndefined();
+    expect(result.ok).toBe(true);
+  }, 30000);
+
+  it("skips the omission pass entirely when every declared prop is required", async () => {
+    const allRequired: DataContract = {
+      propsSpec: { properties: { title: { schema: { type: "string" }, required: true } } },
+    };
+    const result = await runRenderCheck({
+      sourceCode: SIMPLE_COMPONENT.replace("const save = useAction('save');", "const save = useAction('save'); void save;"),
+      mockupProps: { title: "Hello" },
+      contract: allRequired,
+    });
+    expect(result.issues.find((i) => i.check === "optional-props-omitted")).toBeUndefined();
+  }, 30000);
+});

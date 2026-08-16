@@ -217,6 +217,24 @@ function toEvalIssue(issue: RenderCheckIssue): EvalIssue | null {
         fix: classifyRenderCrashFix(issue.reason),
       };
 
+    case "optional-props-omitted":
+      // Same crash class as render-no-throw, surfaced by the second
+      // render pass with optional props stripped (ggui#528): the wire
+      // gate only requires `required: true` props, so a legitimate
+      // render may omit these and the component must survive it.
+      return {
+        tier: 0,
+        result,
+        category: "crash",
+        subcategory,
+        severity: "critical",
+        description: `Component crashed when optional props were omitted: ${issue.reason}`,
+        fix:
+          `Guard every optional prop before member access (props.${subject.split(",")[0]?.trim() ?? "x"}?.map(...), ` +
+          `a default via destructuring, or an early empty-state return). Optional props (no \`required: true\` in the contract) ` +
+          `may be absent at runtime even though the harness fills them.`,
+      };
+
     case "action-wiring": {
       const fix = issue.outcome === "unverified"
         ? `Source shows the action callback flowing into a non-native or custom-component prop. If wiring is intentional (e.g., Dropdown.onChange, drag-drop), this warn is informational — manual/browser verification is required to confirm. Otherwise wire to a native onClick={() => ${subject}(payload)} on <button> or design-system <Button>.`

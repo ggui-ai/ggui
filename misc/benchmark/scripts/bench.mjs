@@ -74,11 +74,30 @@ const NODE_MODULES_UI_GEN = resolve(
   'node_modules/@ggui-ai/ui-gen',
 );
 const UI_GEN_DIR = existsSync(SIBLING_UI_GEN) ? SIBLING_UI_GEN : NODE_MODULES_UI_GEN;
-// WORKSPACE_ROOT only matters for .env loading; pick whichever layout
-// resolves to a real directory containing `.env`.
-const WORKSPACE_ROOT = existsSync(SIBLING_UI_GEN)
-  ? resolve(BENCHMARKS_DIR, '../..')
-  : BENCHMARKS_DIR;
+// ENV_ROOTS only matter for .env loading. Every ancestor holding a
+// `pnpm-workspace.yaml` is a candidate root, nearest first: in the
+// monorepo that is `oss/` (the OSS subtree is itself a workspace so it
+// can be mirrored standalone) THEN the repo root — and the keys live at
+// the repo root; in the standalone OSS checkout the subtree root IS the
+// only workspace root. The previous single-root derivation keyed on the
+// retired `../ui-gen` sibling probe and silently fell back to
+// BENCHMARKS_DIR, so no `.env` was ever loaded and every cell died with
+// "API key not set" unless the shell already exported the keys
+// (2026-08-16, the #528 bench). Container deploys (no workspace file
+// above /app) keep BENCHMARKS_DIR alone, exactly as before. Nearest
+// root wins on a key clash (loader is first-write-wins).
+function findWorkspaceRoots(start) {
+  const roots = [];
+  let dir = start;
+  for (let i = 0; i < 6; i += 1) {
+    if (existsSync(resolve(dir, 'pnpm-workspace.yaml'))) roots.push(dir);
+    const parent = resolve(dir, '..');
+    if (parent === dir) break;
+    dir = parent;
+  }
+  return roots.length > 0 ? roots : [start];
+}
+const ENV_ROOTS = findWorkspaceRoots(BENCHMARKS_DIR);
 
 // ---------------------------------------------------------------------------
 // Parse CLI args
@@ -264,8 +283,10 @@ function loadEnvFile(filepath) {
   } catch { /* file not found — ok */ }
 }
 
-loadEnvFile(resolve(WORKSPACE_ROOT, '.env'));
-loadEnvFile(resolve(WORKSPACE_ROOT, '.env.local'));
+for (const root of ENV_ROOTS) {
+  loadEnvFile(resolve(root, '.env'));
+  loadEnvFile(resolve(root, '.env.local'));
+}
 
 // ---------------------------------------------------------------------------
 // Run directly via dynamic import (tsx loader)

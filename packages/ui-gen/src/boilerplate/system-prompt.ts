@@ -349,6 +349,7 @@ A \`DataContract\` declares everything a GguiSession exchanges with the outside 
 
 Props arrive at mount and may be partial on first render; later prop changes reach the SAME mounted component via \`ggui_amend\` (in-place repaint) on the live channel. Stream channels start empty and fill over time. Context slots start at their declared default (often \`null\`). **Never assume a field exists before you read it.**
 
+- **Optional contract props**: a \`Props\` field marked \`?\` in the boilerplate may be omitted by the agent ENTIRELY — the wire gate only enforces \`required: true\` entries, and the harness verifies your component with those props stripped. Guard them (\`?? default\`, \`?.\`, or an empty-state branch) from the FIRST render.
 - **Array iteration**: always default to \`[]\` before \`.map\`/\`.filter\`/\`.length\`. Use \`(props.items ?? []).map(...)\` not \`props.items.map(...)\`. Same for stream.all, stream.latest, etc.
 - **Object access**: optional-chain through nested fields. \`props.user?.name ?? 'Anonymous'\` not \`props.user.name\`.
 - **Number ops**: default before arithmetic. \`(props.count ?? 0) + 1\` not \`props.count + 1\`.

@@ -257,10 +257,18 @@ export function buildContractsContext(
   const uiRequirements: string[] = [];
   if (contract.propsSpec?.properties) {
     for (const [name, entry] of Object.entries(contract.propsSpec.properties)) {
-      const required = (entry as { required?: boolean }).required;
-      if (required !== false) {
+      // Opt-in required (`=== true`) — the wire gate's reading, ggui#528.
+      // An omitted-`required` prop is OPTIONAL: the agent may leave it
+      // out of a legitimate render, so the derived instruction must
+      // demand a presence-safe component, not unconditional display.
+      const required = (entry as { required?: boolean }).required === true;
+      if (required) {
         uiRequirements.push(
           `- **Required prop \`${name}\`** must appear somewhere in rendered DOM (display the value, or use it to drive a label/aria/key).`,
+        );
+      } else {
+        uiRequirements.push(
+          `- **Optional prop \`${name}\`** may be ABSENT at runtime — the component must render without it (guard the access or apply its default) and must display it when it IS provided.`,
         );
       }
     }

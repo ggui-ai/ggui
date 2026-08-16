@@ -191,14 +191,22 @@ export function generateBoilerplate(
   const propsFields: string[] = [];
   const propsProperties = contract?.propsSpec?.properties ?? {};
   for (const [key, entry] of Object.entries(propsProperties)) {
-    const required = entry.required !== false;
+    // Required is OPT-IN (`required === true`) — the same reading the
+    // wire gate applies (`contract-validator.ts` builds the JSON-Schema
+    // `required` list from `=== true`), the contract summary's `!`
+    // marker uses, and coverage annotates with. The old `!== false`
+    // reading typed omitted-`required` props as always-present, so a
+    // render the gate legitimately accepts (agent omits an optional
+    // prop) crashed on `props.x.map(...)` — ggui#528.
+    const required = entry.required === true;
     const nullable = entry.schema.nullable === true;
     const tsType = jsonSchemaTypeToTs(entry.schema);
     const fullType = nullable ? `${tsType} | null` : tsType;
-    // Build comment: description + default value hint
+    // Build comment: description + default hint + optionality contract
     const parts: string[] = [];
     if (entry.description) parts.push(entry.description);
     if (entry.default !== undefined) parts.push(`(default: ${JSON.stringify(entry.default)})`);
+    if (!required) parts.push("(optional — the agent may omit it; guard or fall back)");
     const desc = parts.length > 0 ? ` // ${parts.join(' ')}` : "";
     propsFields.push(`  ${key}${required ? "" : "?"}: ${fullType};${desc}`);
   }

@@ -71,7 +71,8 @@ export interface RenderCheckIssue {
     | "render-no-throw"
     | "action-wiring"
     | "prop-coverage"
-    | "stream-rerender";
+    | "stream-rerender"
+    | "optional-props-omitted";
   readonly outcome: CheckOutcome;
   readonly subject?: string;
   readonly reason: string;
@@ -516,6 +517,72 @@ export async function runRenderCheck(
             React,
           });
           if (issue) issues.push(issue);
+        }
+      }
+
+      // ── Check 7: Optional-props omission (BLOCK on crash, ggui#528) ──
+      // The main pass renders with EVERY declared prop filled, so a
+      // component that assumes an optional prop is present always
+      // passes here and crashes only live, when an agent legitimately
+      // omits it (the wire gate requires only `required === true`
+      // props). Render a second instance with the optional props
+      // STRIPPED — a throw is exactly the latent-undefined class this
+      // check exists to surface. Runs only when the contract declares
+      // at least one optional prop that the mockup filled; zero cost
+      // otherwise.
+      const declaredProps = input.contract?.propsSpec?.properties;
+      if (declaredProps) {
+        const optionalFilled = Object.entries(declaredProps)
+          .filter(([name, entry]) =>
+            (entry as { required?: boolean }).required !== true &&
+            input.mockupProps[name] !== undefined,
+          )
+          .map(([name]) => name);
+        if (optionalFilled.length > 0) {
+          const requiredOnlyProps: JsonObject = { ...input.mockupProps };
+          for (const name of optionalFilled) delete requiredOnlyProps[name];
+          const omitBoundaryRef: { error?: Error } = {};
+          class OmitErrorBoundary extends React.Component<
+            { children?: React.ReactNode },
+            { caught: boolean }
+          > {
+            state = { caught: false };
+            static getDerivedStateFromError(): { caught: boolean } {
+              return { caught: true };
+            }
+            componentDidCatch(error: Error): void {
+              omitBoundaryRef.error ??= error;
+            }
+            render(): React.ReactNode {
+              if (this.state.caught) return null;
+              return this.props.children;
+            }
+          }
+          try {
+            render(
+              React.createElement(GguiWireProvider, {
+                config: wireConfig,
+                children: React.createElement(OmitErrorBoundary, {
+                  children: React.createElement(Component, requiredOnlyProps),
+                }),
+              }),
+            );
+          } catch (e) {
+            omitBoundaryRef.error ??=
+              e instanceof Error ? e : new Error(String(e));
+          }
+          if (omitBoundaryRef.error) {
+            issues.push({
+              check: "optional-props-omitted",
+              outcome: "failed",
+              subject: optionalFilled.join(", "),
+              reason:
+                `Render crashed when the optional prop(s) ${optionalFilled
+                  .map((n) => `'${n}'`)
+                  .join(", ")} were omitted: ${omitBoundaryRef.error.message}. ` +
+                `The contract marks them optional (no \`required: true\`), so a legitimate render may leave them out.`,
+            });
+          }
         }
       }
     } finally {
