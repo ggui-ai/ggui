@@ -291,6 +291,51 @@ describe('createGguiHandshakeHandler — MVB-5', () => {
       expect(out.contractHash).toBe(out.suggestion.blueprintMeta.contractHash);
     });
 
+    it('nextStep.example shows nested ARRAY ITEM + object shapes — the closed key set the render gate holds the agent to (ggui#523, live bench 2026-08-16)', async () => {
+      // 5/8 first-attempt renders on dev failed with "Undeclared field
+      // 'name' … Declared keys: [id, title, cards]" — the example used
+      // to say `columns: []`, so the agent guessed the item shape.
+      const kvStore = new InMemoryKeyValueStore();
+      const handler = createGguiHandshakeHandler({ kvStore });
+      const out = await handler.handler(
+        minimalInput({
+          blueprintDraft: {
+            contract: {
+              propsSpec: {
+                properties: {
+                  columns: {
+                    required: true,
+                    schema: {
+                      type: 'array',
+                      items: {
+                        type: 'object',
+                        properties: {
+                          id: { type: 'string' },
+                          title: { type: 'string' },
+                          cards: {
+                            type: 'array',
+                            items: { type: 'object', properties: { id: { type: 'string' }, text: { type: 'string' } } },
+                          },
+                        },
+                        required: ['id', 'title'],
+                      },
+                    },
+                  },
+                  status: { required: true, schema: { type: 'string', enum: ['idle', 'success'] } },
+                },
+              },
+            },
+          },
+        }),
+        { appId: 'app-1', requestId: 'r' },
+      );
+      const example = out.nextStep?.example ?? '';
+      // One item, in the item's shape, all declared keys — nested arrays too.
+      expect(example).toContain('"columns":[{"id":"","title":"","cards":[{"id":"","text":""}]}]');
+      // Enum: the first legal value, never "".
+      expect(example).toContain('"status":"idle"');
+    });
+
     it('nextStep.example carries the REQUIRED props with example/default/type-shaped values (live agent finding, 2026-08-12)', async () => {
       // A bare `props:{}` example against a contract with required
       // props fails renderInputSchema when followed verbatim — the

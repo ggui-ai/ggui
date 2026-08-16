@@ -972,25 +972,68 @@ function buildPropsExample(contract: DataContract): string | undefined {
   }
 }
 
-/** Minimal type-shaped placeholder for a JSON Schema. */
-function placeholderForSchema(schema: JsonValue | Record<string, unknown>): JsonValue {
+/**
+ * Type-shaped placeholder for a JSON Schema — the props example the
+ * agent copies from `nextStep.example`, so it must show the SHAPE the
+ * render gate will hold the agent to, all the way down (ggui#523).
+ *
+ * The first landing bench (8 guest turns on dev, 2026-08-16) failed
+ * 5/8 renders on the first attempt with "Undeclared field 'name' …
+ * Declared keys: [id, title, cards]" / "Required field 'title'
+ * missing" — every one a nested ARRAY ITEM shape the agent guessed,
+ * because this used to answer `[]` for any array and `{}` for any
+ * object. Now: an array shows one item in the item's shape; an object
+ * shows every declared key (the gate rejects undeclared ones, so the
+ * closed set IS the teaching); an enum shows its first value; a
+ * declared `example`/`default` on a nested schema wins. Bounded depth.
+ */
+function placeholderForSchema(
+  schema: JsonValue | Record<string, unknown>,
+  depth = 0,
+): JsonValue {
   if (schema === null || typeof schema !== 'object' || Array.isArray(schema)) {
     return '';
   }
-  const s = schema as { type?: unknown; enum?: unknown };
+  const s = schema as {
+    type?: unknown;
+    enum?: unknown;
+    example?: unknown;
+    default?: unknown;
+    items?: unknown;
+    properties?: unknown;
+    const?: unknown;
+  };
+  if (s.const !== undefined) return s.const as JsonValue;
+  if (s.example !== undefined) return s.example as JsonValue;
+  if (s.default !== undefined) return s.default as JsonValue;
   if (Array.isArray(s.enum) && s.enum.length > 0) {
     return s.enum[0] as JsonValue;
   }
-  switch (s.type) {
+  const type = Array.isArray(s.type) ? s.type[0] : s.type;
+  switch (type) {
     case 'number':
     case 'integer':
       return 0;
     case 'boolean':
       return false;
-    case 'array':
-      return [];
-    case 'object':
-      return {};
+    case 'array': {
+      // One item in the item's shape — `[]` teaches nothing about what
+      // goes inside, and "inside" is where the first-attempt failures were.
+      if (depth >= 4 || s.items === undefined || typeof s.items !== 'object' || Array.isArray(s.items)) {
+        return [];
+      }
+      return [placeholderForSchema(s.items as Record<string, unknown>, depth + 1)];
+    }
+    case 'object': {
+      if (depth >= 4 || s.properties === null || typeof s.properties !== 'object' || Array.isArray(s.properties)) {
+        return {};
+      }
+      const out: Record<string, JsonValue> = {};
+      for (const [key, sub] of Object.entries(s.properties as Record<string, unknown>)) {
+        out[key] = placeholderForSchema(sub as Record<string, unknown>, depth + 1);
+      }
+      return out;
+    }
     default:
       return '';
   }
