@@ -18,7 +18,13 @@
  */
 import { describe, expect, it } from 'vitest';
 import { InMemoryKeyValueStore } from '@ggui-ai/mcp-server-core/in-memory';
-import type { GguiLifecyclePayload } from '@ggui-ai/protocol';
+import { z } from 'zod';
+import {
+  DATA_CONTRACT_MINIMAL_EXAMPLE,
+  DATA_CONTRACT_SHAPE_RULE,
+  handshakeInputSchema,
+  type GguiLifecyclePayload,
+} from '@ggui-ai/protocol';
 import type { GguiLifecycleEmitter } from './lifecycle';
 import type { AppMetadataStore } from '@ggui-ai/mcp-server-core';
 import {
@@ -55,6 +61,57 @@ describe('createGguiHandshakeHandler — MVB-5', () => {
       const kvStore = new InMemoryKeyValueStore();
       const handler = createGguiHandshakeHandler({ kvStore });
       expect(handler.name).toBe('ggui_handshake');
+    });
+
+    // ggui#523 items 1+2 — the teaching surface an agent sees FIRST is the
+    // published input schema. Pin what `tools/list` projects (the same
+    // zod → JSON-Schema engine the MCP SDK uses) and what a strict-key
+    // rejection says.
+    it('publishes the DataContract shape rule + a valid example on the loose `contract` field (item 1)', () => {
+      const kvStore = new InMemoryKeyValueStore();
+      const handler = createGguiHandshakeHandler({ kvStore });
+      const json = z.toJSONSchema(z.object(handler.inputSchema), { io: 'input' });
+      const draft = (json.properties as Record<string, { properties?: Record<string, unknown>; description?: string }>)['blueprintDraft']!;
+      const contract = draft.properties!['contract'] as { type?: string; description?: string; examples?: unknown[] };
+      // Loose at validation (any object) …
+      expect(contract.type).toBe('object');
+      // … but it TEACHES: the shared shape rule and a minimal example.
+      expect(contract.description).toContain(DATA_CONTRACT_SHAPE_RULE);
+      expect(contract.examples).toEqual([DATA_CONTRACT_MINIMAL_EXAMPLE]);
+      // The draft field carries the protocol's own description (derived, not retyped).
+      expect(draft.description).toBe(handshakeInputSchema.shape.blueprintDraft.description);
+      // The variance keys carry the protocol's `.describe()` teaching (blueprintVarianceSchema, not a mirror).
+      const variance = draft.properties!['variance'] as { properties?: Record<string, { description?: string }> };
+      expect(variance.properties?.['persona']?.description).toMatch(/Design persona/);
+      expect(variance.properties?.['context']?.description).toMatch(/NOT for per-user runtime data/);
+    });
+
+    it('a rejected `mood` names the legal variance set instead of a bare "Unrecognized key" (item 2)', () => {
+      const kvStore = new InMemoryKeyValueStore();
+      const handler = createGguiHandshakeHandler({ kvStore });
+      // The SDK validates args against this zod BEFORE the handler runs;
+      // its -32602 text is zod's issue message — so the message is the UX.
+      const parsed = z.object(handler.inputSchema).safeParse({
+        intent: 'x',
+        blueprintDraft: { contract: {}, variance: { persona: 'p', mood: 'sad' } },
+      });
+      expect(parsed.success).toBe(false);
+      const messages = parsed.success ? [] : parsed.error.issues.map((i) => i.message);
+      expect(messages.join(' | ')).toMatch(/variance: unknown key\(s\) "mood" — variance is EXACTLY \{persona, aesthetic, context, seedPrompt\}/);
+      expect(messages.join(' | ')).toMatch(/tonal intent in `aesthetic`/);
+    });
+
+    it('a stray draft key names the legal draft set and where `intent` lives (item 2)', () => {
+      const kvStore = new InMemoryKeyValueStore();
+      const handler = createGguiHandshakeHandler({ kvStore });
+      const parsed = z.object(handler.inputSchema).safeParse({
+        intent: 'x',
+        blueprintDraft: { contract: {}, intent: 'misplaced' },
+      });
+      expect(parsed.success).toBe(false);
+      const text = parsed.success ? '' : parsed.error.issues.map((i) => i.message).join(' | ');
+      expect(text).toMatch(/blueprintDraft: unknown key\(s\) "intent" — a draft is EXACTLY \{contract, variance, generator\}/);
+      expect(text).toMatch(/`intent` is a top-level ggui_handshake field/);
     });
 
     it('declares the lean handshakeOutputSchema shape — {handshakeId, action, suggestion, nextStep?}', () => {
@@ -151,10 +208,13 @@ describe('createGguiHandshakeHandler — MVB-5', () => {
       expect(d).toMatch(/per-user runtime data belongs in `props` \/ contextSpec/);
     });
 
-    it('keeps the CONTRACT SHAPE + PLACEMENT RULE blocks verbatim', () => {
+    it('keeps the CONTRACT SHAPE + PLACEMENT RULE blocks verbatim — the shape block IS the protocol\'s shared rule (ggui#523 item 1)', () => {
       const d = description();
-      expect(d).toContain(
-        'CONTRACT SHAPE (DataContract) — every entry under propsSpec.properties / actionSpec / streamSpec / contextSpec is a WRAPPER that contains a JSON Schema in its `schema:` field',
+      // One constant, quoted here and published as the loose `contract`
+      // field's JSON-Schema description — the words cannot drift apart.
+      expect(d).toContain(`CONTRACT SHAPE — ${DATA_CONTRACT_SHAPE_RULE}`);
+      expect(DATA_CONTRACT_SHAPE_RULE).toContain(
+        'EVERY entry under propsSpec.properties / actionSpec / streamSpec / contextSpec is a WRAPPER object whose JSON Schema sits in its `schema:` field',
       );
       expect(d).toContain(
         'PLACEMENT RULE: actionSpec = events that drive the agent\'s next turn; contextSpec = observable state. Test: needs next-turn reasoning? actionSpec. No? contextSpec.',

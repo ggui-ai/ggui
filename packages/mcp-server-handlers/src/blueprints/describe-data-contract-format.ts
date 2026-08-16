@@ -8,6 +8,7 @@
  * what Claude composes and what `ggui_protocol_validate_blueprint` expects.
  */
 import { z } from 'zod';
+import { RETIRED_CONTRACT_FIELDS } from '@ggui-ai/protocol';
 import type { SharedHandler } from '../types.js';
 
 const inputSchema = {};
@@ -30,6 +31,13 @@ interface DescribeDataContractFormatOutput {
     readonly title: string;
     readonly contract: Record<string, unknown>;
   }>;
+}
+
+/** The retired-field table, derived from the protocol's own list. */
+function retiredFieldsBlock(): string {
+  return Object.entries(RETIRED_CONTRACT_FIELDS)
+    .map(([field, replacement]) => `- \`${field}\` → \`${replacement}\``)
+    .join('\n');
 }
 
 const DOCUMENTATION = `# DataContract format
@@ -77,7 +85,7 @@ interface PropsSpec {
   description?: string;
   properties: Record<string, {
     schema: JsonSchema;       // draft-07 subset: type, enum, items, properties
-    required?: boolean;       // default true
+    required?: boolean;       // required at the wire gate ONLY when \`true\`; omitted ⇒ optional
     description?: string;
     default?: JsonValue;
     example?: JsonValue;
@@ -85,16 +93,19 @@ interface PropsSpec {
 }
 \`\`\`
 
-The boilerplate generator turns each \`properties\` entry into a typed
-TypeScript field on \`Props\`. \`required: false\` becomes \`field?:\`.
-\`schema.nullable: true\` becomes \`| null\`.
+\`required\` is opt-in: the render gate (\`validateContract\` → props
+validation) treats a prop as required only when the entry says
+\`required: true\`; an omitted \`required\` means the render MAY leave
+that prop out. Declare \`required: true\` on every prop the component
+cannot paint without. (The boilerplate generator types the TypeScript
+field from the same flag; \`schema.nullable: true\` becomes \`| null\`.)
 
 ## ActionSpec entry
 
 \`\`\`ts
 interface ActionEntry {
-  /** Human label — drives button copy / accessibility name. */
-  label?: string;
+  /** Human label — drives button copy / accessibility name. REQUIRED. */
+  label: string;
   description?: string;
   /** Optional payload schema. Action with a payload becomes useAction<T>. */
   schema?: JsonSchema;
@@ -223,6 +234,38 @@ Pure declaration — items are React hooks the UI imports + calls. Pure
 UI-side lifecycle; the agent never invokes them. Values reach the
 agent only when threaded into a contextSpec slot or actionSpec
 payload.
+
+## Retired top-level fields (hard errors)
+
+These names were retired by the flatten and are REJECTED by the
+contract gate at handshake and render — not ignored, not migrated.
+Each maps to where the same intent lives now:
+
+${retiredFieldsBlock()}
+
+## What the contract gate checks (handshake AND render, same gate)
+
+The one deterministic gate (\`validateContract\`) runs at the handshake
+(the forgiving path repairs what it can and reports the rest as
+\`validationFindings\`; on the render's STRICT \`override.contract\` it
+fails the call). Every rule below is enforced there:
+
+- **Wrapper shape** — every entry under \`propsSpec.properties\` /
+  \`actionSpec\` / \`streamSpec\` / \`contextSpec\` is a WRAPPER with the
+  JSON Schema in its \`schema:\` field; wrappers reject unrecognized keys.
+- **Inner schemas compile** — each \`schema:\` must be a valid draft-07
+  JSON Schema under strict meta-validation (\`type\` present, no unknown
+  keywords).
+- **References resolve** — \`actionSpec[*].nextStep\` and
+  \`streamSpec[*].source.tool\` MUST name a key of
+  \`agentCapabilities.tools\` on the same contract.
+- **Schema compat** — an \`actionSpec[*].schema\` must be a SUBSET of the
+  referenced tool's \`inputSchema\` (payloads travel UI → tool), and a
+  \`streamSpec[*].schema\` a SUPERSET of the referenced tool's
+  \`outputSchema\` (payloads travel tool → channel).
+- **Reserved channels** — \`streamSpec\` names may not use the
+  \`_ggui:\` prefix (server-owned channels).
+- **Retired fields** — the list above.
 
 ## defineContract helper (TypeScript only)
 

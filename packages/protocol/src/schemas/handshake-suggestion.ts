@@ -55,20 +55,27 @@ export const jsonPatchSchema: z.ZodType<JsonPatch> = z.array(jsonPatchOpSchema) 
  * normal consumers should prefer {@link blueprintDraftSchema} (typed
  * `z.ZodType<BlueprintDraft>`).
  */
+/** The three — and only — draft keys; the strict object names them on rejection. */
+export const BLUEPRINT_DRAFT_KEYS = ['contract', 'variance', 'generator'] as const;
+
 export const blueprintDraftObjectSchema = z
-  .object({
-    contract: dataContractSchema,
-    variance: z
-      .object({
-        persona: z.string().optional(),
-        aesthetic: z.string().optional(),
-        context: z.record(z.string(), jsonValueSchema).optional(),
-        seedPrompt: z.string().optional(),
-      })
-      .strict()
-      .optional(),
-    generator: z.string().optional(),
-  })
+  .object(
+    {
+      contract: dataContractSchema,
+      // ONE declaration of the variance shape, protocol-wide: the same
+      // schema (with its `.describe()` teaching and its legal-set
+      // rejection message) that `blueprintMeta.variance` projects on the
+      // way back out (ggui#523 item 1 — the mirror-of-a-mirror is gone).
+      variance: blueprintVarianceSchema.optional(),
+      generator: z.string().optional(),
+    },
+    {
+      error: (issue) =>
+        issue.code === 'unrecognized_keys'
+          ? `blueprintDraft: unknown key(s) ${issue.keys.map((k) => JSON.stringify(k)).join(', ')} — a draft is EXACTLY {${BLUEPRINT_DRAFT_KEYS.join(', ')}}; \`intent\` is a top-level ggui_handshake field, not a draft field, and the four specs live INSIDE \`contract\``
+          : undefined,
+    },
+  )
   .strict();
 
 /** `BlueprintDraft` — input shape on the handshake. */

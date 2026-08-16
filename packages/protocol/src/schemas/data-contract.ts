@@ -723,13 +723,78 @@ export const appPublicEnvSchema = z
  * posture (`handshakeInputSchema`, `renderInputSchema`, etc. all
  * `passthrough` for the same reason).
  */
+/**
+ * The one-paragraph shape rule every teaching surface quotes (ggui#523
+ * item 1): the handshake's tool description, the loose `contract`
+ * field the handshake publishes on `tools/list`, and the format doc.
+ * One constant, so the wording cannot drift between them. Mechanism-
+ * only and vendor-neutral — it ships as JSON-Schema metadata to every
+ * agent that lists the tools.
+ */
+export const DATA_CONTRACT_SHAPE_RULE =
+  'DataContract = up to six top-level specs: propsSpec (initial render data), ' +
+  'actionSpec (user gestures that drive the agent\'s next turn), contextSpec (observable client state), ' +
+  'streamSpec (live update channels), agentCapabilities (MCP tools the AGENT may call — the catalog ' +
+  'actionSpec[*].nextStep and streamSpec[*].source.tool must resolve into), clientCapabilities (browser ' +
+  'gadget hooks the COMPONENT imports). EVERY entry under propsSpec.properties / actionSpec / streamSpec / ' +
+  'contextSpec is a WRAPPER object whose JSON Schema sits in its `schema:` field — never a flat JSON Schema ' +
+  'at the entry level. Wrappers reject unrecognized keys. Placement test: needs next-turn reasoning ⇒ ' +
+  'actionSpec; observed state only ⇒ contextSpec.';
+
+/**
+ * A minimal, complete, valid example — published beside the rule so a
+ * first-time caller can copy a shape that parses (JSON-Schema
+ * `examples`). Deliberately tiny: one prop, one action with a payload,
+ * one context slot.
+ */
+export const DATA_CONTRACT_MINIMAL_EXAMPLE = {
+  propsSpec: {
+    properties: {
+      items: {
+        schema: { type: 'array', items: { type: 'object', properties: { id: { type: 'string' }, title: { type: 'string' } }, required: ['id', 'title'] } },
+        required: true,
+      },
+    },
+  },
+  actionSpec: {
+    toggle: { label: 'Toggle', schema: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'] } },
+  },
+  contextSpec: {
+    filter: { schema: { type: 'string' }, default: 'all' },
+  },
+} as const;
+
 export const dataContractSchema: z.ZodType<DataContract> = z
   .object({
-    propsSpec: propsSpecSchema.optional(),
-    actionSpec: actionSpecSchema.optional(),
-    streamSpec: streamSpecSchema.optional(),
-    contextSpec: contextSpecSchema.optional(),
-    agentCapabilities: agentCapabilitiesSpecSchema.optional(),
-    clientCapabilities: clientCapabilitiesSpecSchema.optional(),
+    propsSpec: propsSpecSchema
+      .optional()
+      .describe(
+        'Initial render data: {description?, properties: {<name>: {schema: <JSON Schema>, required?: boolean, description?, default?, example?}}}. A prop is required at the wire gate ONLY when `required: true`; omitted ⇒ optional (declare `required: true` for props the render must always pass).',
+      ),
+    actionSpec: actionSpecSchema
+      .optional()
+      .describe(
+        "User gestures the agent reacts to on its next turn: {<action>: {label: string (REQUIRED — button copy / accessible name), schema?: <payload JSON Schema>, description?, example?, icon?, confirm?, nextStep?: '<agentCapabilities.tools key>'}}. Every action is agent-routed; `nextStep` is a hint, not a dispatch.",
+      ),
+    streamSpec: streamSpecSchema
+      .optional()
+      .describe(
+        'Live update channels the agent emits into: {<channel>: {schema: <JSON Schema>, description?, example?, mode?: append|replace, replay?: latest|all|none, complete?, source?: {tool, args?}}}. `source.tool` must be declared in agentCapabilities.tools.',
+      ),
+    contextSpec: contextSpecSchema
+      .optional()
+      .describe(
+        'Observable client state the agent reads alongside each action: {<slot>: {schema: <JSON Schema>, description?, default?, debounceMs?, example?}}. State that needs no next-turn reasoning belongs here, not in actionSpec.',
+      ),
+    agentCapabilities: agentCapabilitiesSpecSchema
+      .optional()
+      .describe(
+        "MCP tools the AGENT may call: {tools: {<bareToolName>: {toolInfo: {inputSchema (REQUIRED), description?, outputSchema?}, serverInfo?: {name, version?}, usage?, example?: {input, output}}}}. Key by the BARE tool name (after any `mcp__<server>__` prefix); the component never calls these.",
+      ),
+    clientCapabilities: clientCapabilitiesSpecSchema
+      .optional()
+      .describe(
+        'Browser-capability gadgets the COMPONENT imports: {gadgets: {<npm package>: {<exportName>: {description?, usage?}}}} — `use`-prefixed export keys are hooks, PascalCase keys are components; version and transport resolve from the app\'s registered catalog, never on the wire.',
+      ),
   })
   .passthrough() as z.ZodType<DataContract>;

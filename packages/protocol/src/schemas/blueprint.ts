@@ -64,8 +64,12 @@ export const blueprintSourceSchema: z.ZodType<BlueprintSource> = z.union([
  * metadata via `tools/list`, so they stay mechanism-only and
  * vendor-neutral.
  */
+/** The four — and only — variance keys; the strict object names them on rejection. */
+export const BLUEPRINT_VARIANCE_KEYS = ['persona', 'aesthetic', 'context', 'seedPrompt'] as const;
+
 export const blueprintVarianceSchema: z.ZodType<BlueprintVariance> = z
-  .object({
+  .object(
+    {
     persona: z
       .string()
       .optional()
@@ -84,7 +88,17 @@ export const blueprintVarianceSchema: z.ZodType<BlueprintVariance> = z
       .string()
       .optional()
       .describe('Generation seed directive. Part of cache identity.'),
-  })
+    },
+    {
+      // A rejection that teaches (ggui#523 item 2): the first live guest
+      // turn sent `mood` and got a bare "Unrecognized key" — name the
+      // legal set and where the misplaced intent belongs.
+      error: (issue) =>
+        issue.code === 'unrecognized_keys'
+          ? `variance: unknown key(s) ${issue.keys.map((k) => JSON.stringify(k)).join(', ')} — variance is EXACTLY {${BLUEPRINT_VARIANCE_KEYS.join(', ')}}; put tonal intent in \`aesthetic\`, and per-user runtime data in props / contextSpec, never in variance`
+          : undefined,
+    },
+  )
   .strict() as z.ZodType<BlueprintVariance>;
 
 /**
