@@ -39,7 +39,12 @@
  */
 
 import { CONSOLE_DIST_DIR } from "@ggui-ai/console/server";
-import { RUNTIME_BUNDLE_FILE, RUNTIME_BUNDLE_URL_PATH } from "@ggui-ai/iframe-runtime/server";
+import {
+  RUNTIME_BUNDLE_FILE,
+  RUNTIME_BUNDLE_URL_PATH,
+  RUNTIME_SHIMS_DIR,
+  RUNTIME_SHIMS_URL_PREFIX,
+} from "@ggui-ai/iframe-runtime/server";
 import type {
   AppMetadataStore,
   AuditSink,
@@ -245,6 +250,11 @@ import { mountConsoleSessionRoutes } from "./console-session-routes.js";
 import { mountConsoleStaticRoutes } from "./console-static-routes.js";
 import { mountConsoleSessionsRoutes } from "./console-sessions-routes.js";
 import { mountCodeRoutes } from "./code-routes.js";
+import {
+  captureShimSources,
+  createCodeModuleUrlMinter,
+  mountShimRoutes,
+} from "./code-module-variant.js";
 import { mountHealthRoutes } from "./health-routes.js";
 import { mountOAuthAuthorizationServerRoutes } from "./oauth-as-routes.js";
 import { mountOAuthClientsRoutes } from "./oauth-clients-routes.js";
@@ -877,6 +887,19 @@ export function defaultHandlers(deps: {
      * `createGguiRenderHandler`.
      */
     readonly codeBaseUrl?: string;
+    /**
+     * Strict-CSP module-variant minter (ggui#522 slice 2). Composes
+     * `codeModuleUrl` — the server-side import-rewritten twin of
+     * `codeUrl` — or declines with `undefined`. Build one with
+     * `createCodeModuleUrlMinter({runtimeHash})`; `createGguiServer`
+     * wires its own from the served runtime bundle's content hash.
+     * Forwarded as-is to `createGguiRenderHandler`.
+     */
+    readonly mintCodeModuleUrl?: (args: {
+      readonly code: string;
+      readonly hash: string;
+      readonly base: string;
+    }) => string | undefined;
     /**
      * Resolver for the bootstrap field
      * `streamWebSocketLocalTools`. Mirrors the handshake's
@@ -1536,6 +1559,9 @@ export function defaultHandlers(deps: {
           ? {
               codeStore: deps.render.codeStore,
               codeBaseUrl: deps.render.codeBaseUrl,
+              ...(deps.render.mintCodeModuleUrl
+                ? { mintCodeModuleUrl: deps.render.mintCodeModuleUrl }
+                : {}),
             }
           : {}),
         // Share the handshake KV store between the two handlers so
@@ -3696,6 +3722,39 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
     runtimeBundleHash !== undefined ? insertHash(runtimePath) : undefined;
   const runtimeBootstrapUrl = insertHash(runtimeConfig.url ?? runtimePath);
 
+  // Strict-CSP module-variant family (ggui#522 slice 2). Every
+  // ingredient must exist for any of it to mount: the shim files the
+  // runtime build emitted next to the bundle (the fetchable twins of
+  // the data-url shims), the bundle content hash (the variant KEY —
+  // shims ship in the bundle's dist, so one hash versions both), the
+  // code store (the variant is a `/code` twin), and an absolute code
+  // base URL (the rewrite embeds absolute shim URLs — a srcdoc frame
+  // has no base to resolve relative ones). Missing any ⇒ no variant
+  // URLs are minted and no variant routes mount; renders keep the raw
+  // codeUrl/codeB64 carriers and the renderer's blob ladder.
+  const shimSources =
+    runtimeEnabled && runtimeBundleHash !== undefined
+      ? captureShimSources(
+          runtimeConfig.distDir !== undefined
+            ? path.join(runtimeConfig.distDir, "shims")
+            : RUNTIME_SHIMS_DIR
+        )
+      : undefined;
+  const codeModuleVariant =
+    shimSources !== undefined &&
+    runtimeBundleHash !== undefined &&
+    opts.codeStore !== undefined &&
+    codeBaseUrl !== undefined
+      ? {
+          runtimeHash: runtimeBundleHash,
+          shimBaseUrl: `${codeBaseUrl.replace(/\/$/, "")}${RUNTIME_SHIMS_URL_PREFIX}/${runtimeBundleHash}`,
+        }
+      : undefined;
+  const mintCodeModuleUrl =
+    codeModuleVariant !== undefined
+      ? createCodeModuleUrlMinter({ runtimeHash: codeModuleVariant.runtimeHash })
+      : undefined;
+
   // Lazy resolver: each render/update handler invocation looks up the
   // request-context-derived absolute base inside the request scope
   // (via AsyncLocalStorage). Static `publicBaseUrl` wins when set;
@@ -4352,6 +4411,9 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
                 ? {
                     codeStore: opts.codeStore,
                     codeBaseUrl,
+                    ...(mintCodeModuleUrl !== undefined
+                      ? { mintCodeModuleUrl }
+                      : {}),
                   }
                 : {}),
               // Bootstrap-side mirror of the handshake's
@@ -4912,6 +4974,9 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
               ? {
                   codeStore: opts.codeStore,
                   codeBaseUrl,
+                  ...(mintCodeModuleUrl !== undefined
+                    ? { mintCodeModuleUrl }
+                    : {}),
                 }
               : {}),
             // Bind the app-metadata store so the resource
@@ -5025,6 +5090,20 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
         ? { hashed: { path: hashedRuntimePath, source: runtimeBundleBytes } }
         : {}),
     });
+    // Static shim assets (ggui#522 slice 2) — the fetchable twins of
+    // the data-url import shims, served immutable under the runtime
+    // bundle's content hash. Mounted whenever the build shipped them
+    // (independent of the code store: the `/code` variant route is the
+    // usual consumer, but a foreign composition may rewrite against
+    // these shims itself).
+    if (shimSources !== undefined && runtimeBundleHash !== undefined) {
+      mountShimRoutes({
+        app,
+        urlPrefix: RUNTIME_SHIMS_URL_PREFIX,
+        runtimeHash: runtimeBundleHash,
+        shims: shimSources,
+      });
+    }
   }
 
   // R6 /state snapshot + R7 /events cursor-replay reads — see
@@ -5049,6 +5128,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
       // Asset host for the content-addressable URLs the /state read
       // composes (ggui#522) — session-API URLs keep the public origin.
       ...(opts.codeBaseUrl !== undefined ? { codeBaseUrl: opts.codeBaseUrl } : {}),
+      ...(mintCodeModuleUrl !== undefined ? { mintCodeModuleUrl } : {}),
       ...(mintBootstrap ? { mintBootstrap } : {}),
       resolveRuntimeUrl: resolveRuntimeUrlForResultMeta,
       logger,
@@ -5073,7 +5153,14 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
   // `./code-routes.ts` for the route contract (cache posture, CORS,
   // hash validation).
   if (opts.codeStore) {
-    mountCodeRoutes({ app, codeStore: opts.codeStore, logger });
+    mountCodeRoutes({
+      app,
+      codeStore: opts.codeStore,
+      logger,
+      ...(codeModuleVariant !== undefined
+        ? { moduleVariant: codeModuleVariant }
+        : {}),
+    });
   }
 
   // Pairing transport + auth bridge. Opt-in via `opts.pairing`. When

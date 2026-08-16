@@ -86,6 +86,18 @@ interface MountOptions {
    * the public origin.
    */
   readonly codeBaseUrl?: string;
+  /**
+   * Strict-CSP module-variant minter (ggui#522 slice 2) — the /state
+   * read re-mints the `codeModuleUrl` twin alongside `codeUrl`. Only
+   * consulted when an explicit {@link codeBaseUrl}/{@link publicBaseUrl}
+   * base resolved: the variant embeds absolute shim URLs on the SAME
+   * origin, and a request-derived base has no shim family behind it.
+   */
+  readonly mintCodeModuleUrl?: (args: {
+    readonly code: string;
+    readonly hash: string;
+    readonly base: string;
+  }) => string | undefined;
   /** Live-mode credential minter — fresh trio on every /state read. */
   readonly mintBootstrap?: (
     sessionId: string,
@@ -242,6 +254,7 @@ export function mountApiRendersRoutes(opts: MountOptions): void {
     // and need the URL to mount/refresh the static-component variant.
     let renderCodeUrl: string | undefined;
     let renderCodeHash: string | undefined;
+    let renderCodeModuleUrl: string | undefined;
     let renderContractHash: string | undefined;
     let renderValidatorsUrl: string | undefined;
     if (!isSystem && !isMcpApps && codeStore) {
@@ -257,6 +270,15 @@ export function mountApiRendersRoutes(opts: MountOptions): void {
               ? staticBase.replace(/\/$/, "")
               : `${req.protocol}://${requestHost}`;
           renderCodeUrl = `${base}/code/${hash}.js`;
+          // Strict-CSP module-variant twin — only on an explicit base
+          // (see MountOptions.mintCodeModuleUrl for why).
+          if (staticBase !== undefined) {
+            renderCodeModuleUrl = opts.mintCodeModuleUrl?.({
+              code,
+              hash,
+              base,
+            });
+          }
         } catch {
           // Silent — the caller falls back to live-mode delivery, and
           // here that fallback is structural rather than hoped for:
@@ -320,6 +342,9 @@ export function mountApiRendersRoutes(opts: MountOptions): void {
         ? {
             codeUrl: renderCodeUrl,
             ...(renderCodeHash !== undefined ? { codeHash: renderCodeHash } : {}),
+            ...(renderCodeModuleUrl !== undefined
+              ? { codeModuleUrl: renderCodeModuleUrl }
+              : {}),
           }
         : {}),
       ...(renderContractHash !== undefined && renderValidatorsUrl !== undefined

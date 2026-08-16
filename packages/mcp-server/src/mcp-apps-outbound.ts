@@ -866,6 +866,14 @@ export interface SelfContainedShellInputs {
    */
   readonly codeHash?: string;
   /**
+   * Strict-CSP module-variant twin of {@link codeUrl} (ggui#522 slice
+   * 2): the same bytes, server-side import-rewritten to static shim
+   * assets, directly `import()`able with no `blob:`/`data:` grants.
+   * Rides only alongside `codeUrl`/`codeB64` — a load path, never a
+   * mode discriminator.
+   */
+  readonly codeModuleUrl?: string;
+  /**
    * Base64-encoded compiled component source inlined on the bootstrap
    * — the fetch-free twin of {@link codeUrl}, decoded by the
    * iframe-runtime instead of fetched. May coexist with codeUrl
@@ -1146,6 +1154,11 @@ export function buildSelfContainedShell(opts: SelfContainedShellInputs): string 
           ...(opts.codeHash !== undefined ? { codeHash: opts.codeHash } : {}),
         }
       : {}),
+    // Strict-CSP module-variant twin — only WITH a raw static carrier
+    // (the protocol parser drops it otherwise).
+    ...(!isSystem && (hasCodeUrl || hasCodeB64) && opts.codeModuleUrl !== undefined
+      ? { codeModuleUrl: opts.codeModuleUrl }
+      : {}),
     ...(!isSystem && hasCodeB64 ? { codeB64: opts.codeB64! } : {}),
     ...(opts.propsJson !== undefined ? { propsJson: opts.propsJson } : {}),
     ...(opts.contextSlots !== undefined && opts.contextSlots.length > 0
@@ -1339,6 +1352,16 @@ export interface GguiRenderResourceTemplateOptions {
    * Base URL the code-blob route resolves to. Paired with {@link codeStore}.
    */
   readonly codeBaseUrl?: string;
+  /**
+   * Strict-CSP module-variant minter (ggui#522 slice 2) — same
+   * function dep the render handler takes; the read path re-mints the
+   * `codeModuleUrl` twin alongside its re-minted `codeUrl`.
+   */
+  readonly mintCodeModuleUrl?: (args: {
+    readonly code: string;
+    readonly hash: string;
+    readonly base: string;
+  }) => string | undefined;
   /**
    * Theme preset id resolved from `ggui.json#theme`. Without this,
    * MCP-Apps hosts (claude.ai, Claude Desktop) that fetch the resource
@@ -2204,6 +2227,7 @@ export function registerGguiRenderResourceTemplate(
     // the mount.
     let codeUrl: string | undefined;
     let codeHash: string | undefined;
+    let codeModuleUrl: string | undefined;
     let contractHash: string | undefined;
     let validatorsUrl: string | undefined;
     if (!isSystem && opts.codeStore && opts.codeBaseUrl) {
@@ -2213,6 +2237,13 @@ export function registerGguiRenderResourceTemplate(
         codeHash = hash;
         const base = opts.codeBaseUrl.replace(/\/$/, "");
         codeUrl = `${base}/code/${hash}.js`;
+        // Strict-CSP module-variant twin (ggui#522 slice 2) — a
+        // decline (`undefined`) just means the blob ladder carries it.
+        codeModuleUrl = opts.mintCodeModuleUrl?.({
+          code: picked.componentCode,
+          hash,
+          base,
+        });
       } catch (cause) {
         channelFault ??= { cause };
       }
@@ -2344,6 +2375,7 @@ export function registerGguiRenderResourceTemplate(
               ? {
                   codeUrl,
                   ...(codeHash !== undefined ? { codeHash } : {}),
+                  ...(codeModuleUrl !== undefined ? { codeModuleUrl } : {}),
                 }
               : {}),
             // Inline fetch-free channel (size-capped, projected by

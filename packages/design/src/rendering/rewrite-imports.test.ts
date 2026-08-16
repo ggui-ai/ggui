@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { rewriteImports } from './rewrite-imports';
+import {
+  rewriteImports,
+  buildStaticShimModules,
+  findBareImportSpecifiers,
+  ASSET_SHIM_FOR_SPECIFIER,
+} from './rewrite-imports';
 import { hoistImports } from './module-loader';
 
 describe('rewriteImports — data-url mode', () => {
@@ -433,5 +438,96 @@ describe('rewriteImports — gadget direct-import (GG.8.2)', () => {
     const code = `import { useLeafletMap } from "@ggui-samples/gadget-leaflet";`;
     const rewritten = rewriteImports(code, opts);
     expect(rewritten).toContain(`from "@ggui-samples/gadget-leaflet"`);
+  });
+});
+
+describe('rewriteImports — asset-url mode + static shims (ggui#522 slice 2)', () => {
+  const opts = {
+    mode: 'asset-url' as const,
+    shimBaseUrl: 'https://assets.test.example/_ggui/shims/abc123def456',
+  };
+
+  it('rewrites every mapped bare specifier to an absolute shim URL', () => {
+    const code = [
+      `import { jsx } from "react/jsx-runtime";`,
+      `import React from "react";`,
+      `import { Button } from "@ggui-ai/design/primitives";`,
+      `import { useAction } from "@ggui-ai/wire";`,
+      `import { useGeolocation } from "@ggui-ai/gadgets";`,
+    ].join('\n');
+    const result = rewriteImports(code, opts);
+    expect(result).toContain('from "https://assets.test.example/_ggui/shims/abc123def456/jsx-runtime.js"');
+    expect(result).toContain('from "https://assets.test.example/_ggui/shims/abc123def456/react.js"');
+    expect(result).toContain('from "https://assets.test.example/_ggui/shims/abc123def456/primitives.js"');
+    expect(result).toContain('from "https://assets.test.example/_ggui/shims/abc123def456/wire.js"');
+    expect(result).toContain('from "https://assets.test.example/_ggui/shims/abc123def456/gadgets.js"');
+    expect(findBareImportSpecifiers(result)).toEqual([]);
+  });
+
+  it('tolerates a trailing slash on shimBaseUrl', () => {
+    const result = rewriteImports(`import React from "react";`, {
+      ...opts,
+      shimBaseUrl: `${opts.shimBaseUrl}/`,
+    });
+    expect(result).toContain('/abc123def456/react.js"');
+    expect(result).not.toContain('//react.js');
+  });
+
+  it('leaves 3rd-party gadget packages BARE — the variant-decline signal', () => {
+    const code = `import { useLeafletMap } from "@ggui-samples/gadget-leaflet";`;
+    const result = rewriteImports(code, opts);
+    expect(result).toContain('from "@ggui-samples/gadget-leaflet"');
+    expect(findBareImportSpecifiers(result)).toEqual(['@ggui-samples/gadget-leaflet']);
+  });
+
+  it('findBareImportSpecifiers ignores URL-scheme and relative specifiers', () => {
+    const code = [
+      `import a from "https://assets.test.example/x.js";`,
+      `import b from "./local.js";`,
+      `import "../side-effect.js";`,
+      `import c from "data:text/javascript,export default 1";`,
+    ].join('\n');
+    expect(findBareImportSpecifiers(code)).toEqual([]);
+  });
+
+  it('every specifier in ASSET_SHIM_FOR_SPECIFIER has a static shim module', () => {
+    const shims = buildStaticShimModules({ gadgetExports: ['useGeolocation'] });
+    for (const name of Object.values(ASSET_SHIM_FOR_SPECIFIER)) {
+      expect(shims[name], `missing shim body for "${name}"`).toBeTypeOf('string');
+      expect(shims[name].length).toBeGreaterThan(0);
+    }
+  });
+
+  it('static shim bodies are byte-identical to the decoded data-url bodies', () => {
+    // The two delivery modes MUST stay semantically identical — the
+    // asset files are the data-url shims, just fetchable. Compare the
+    // react shim (allowlist-driven) and the wire shim (registry-driven).
+    const shims = buildStaticShimModules({ gadgetExports: [] });
+    const dataUrlRewrite = rewriteImports(
+      `import React from "react";\nimport { useAction } from "@ggui-ai/wire";`,
+      { mode: 'data-url' },
+    );
+    const decoded = (marker: string): string => {
+      const m = new RegExp(`from "data:text/javascript,([^"]+)"`, 'g');
+      const bodies: string[] = [];
+      let match: RegExpExecArray | null;
+      while ((match = m.exec(dataUrlRewrite)) !== null) {
+        bodies.push(decodeURIComponent(match[1]!));
+      }
+      const hit = bodies.find((b) => b.includes(marker));
+      if (hit === undefined) throw new Error(`no data-url body containing ${marker}`);
+      return hit;
+    };
+    expect(shims.react).toBe(decoded('const R = '));
+    expect(shims.wire).toBe(decoded('globalThis.__ggui__.wire'));
+  });
+
+  it('the gadgets static shim exports each provided dist name lazily', () => {
+    const shims = buildStaticShimModules({
+      gadgetExports: ['useGeolocation', 'getPublicEnv'],
+    });
+    expect(shims.gadgets).toContain('export const useGeolocation=');
+    expect(shims.gadgets).toContain('export const getPublicEnv=');
+    expect(shims.gadgets).toContain('"@ggui-ai/gadgets"');
   });
 });

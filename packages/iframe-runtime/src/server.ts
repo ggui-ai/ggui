@@ -77,3 +77,24 @@ export const RUNTIME_DIST_DIR: string = path.dirname(RUNTIME_BUNDLE_FILE);
  * `bootstrap.runtimeUrl`, never hardcodes it.
  */
 export const RUNTIME_BUNDLE_URL_PATH = '/_ggui/iframe-runtime.js' as const;
+
+/**
+ * Directory of the static shim modules (`dist/shims/<name>.js`) the
+ * build emits alongside the bundle (ggui#522 slice 2 — `asset-url`
+ * delivery). The mcp-server captures these files at composition and
+ * serves them under `/_ggui/shims/<runtime-hash>/<name>.js` with the
+ * same immutable posture as the hashed bundle route: the shims ship in
+ * the same dist as the bundle, so the bundle's content hash versions
+ * both — a shim-affecting change in the design package also changes
+ * the bundle bytes.
+ */
+export const RUNTIME_SHIMS_DIR: string = path.resolve(here, 'shims');
+
+/**
+ * The URL prefix under which the mcp-server publishes the shim
+ * directory family. The full shim directory for a given build is
+ * `<origin>${RUNTIME_SHIMS_URL_PREFIX}/<runtime-hash>` — the server-
+ * side `asset-url` rewrite composes shim URLs on it, and the shim
+ * route parses it back.
+ */
+export const RUNTIME_SHIMS_URL_PREFIX = '/_ggui/shims' as const;

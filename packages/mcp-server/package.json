@@ -33,6 +33,7 @@
   },
   "dependencies": {
     "@ggui-ai/console": "workspace:*",
+    "@ggui-ai/design": "workspace:*",
     "@ggui-ai/iframe-runtime": "workspace:*",
     "@ggui-ai/mcp-server-core": "workspace:*",
     "@ggui-ai/mcp-server-handlers": "workspace:*",

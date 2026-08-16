@@ -119,3 +119,41 @@ if (result.errors.length > 0) {
 await writeFile(metafile, JSON.stringify(result.metafile), 'utf-8');
 
 console.log(`[iframe-runtime:esbuild] wrote ${outfile}`);
+
+// ---------------------------------------------------------------------------
+// Static shim modules (ggui#522 slice 2) — dist/shims/<name>.js
+//
+// The `asset-url` delivery mode serves the import-rewrite shims as
+// fetchable files instead of `data:` URLs, so strict-CSP host pages
+// (script-src limited to the asset origin) can load generated modules.
+// The bodies come from the SAME builders the `data-url` mode uses
+// (`@ggui-ai/design/rendering::buildStaticShimModules`), emitted here so
+// the files ship in the same dist as the runtime bundle: the mcp-server
+// keys the shim URL directory on the runtime bundle's content hash, and
+// any shim-affecting change (an export-allowlist edit in the design
+// package) also changes the bundle bytes — one hash versions both.
+//
+// The gadgets shim's export surface is enumerated from the REAL
+// `@ggui-ai/gadgets` dist at build time — drift-immune by construction,
+// same spirit as verify-shim-allowlists.test.ts. A failure here fails
+// the build loudly; a missing name in the shim would otherwise surface
+// as a SyntaxError blanking the iframe at runtime.
+// ---------------------------------------------------------------------------
+{
+  const { buildStaticShimModules } = await import('@ggui-ai/design/rendering');
+  const gadgets = await import('@ggui-ai/gadgets');
+  const gadgetExports = Object.keys(gadgets).filter((k) => k !== 'default');
+  if (gadgetExports.length === 0) {
+    console.error('[iframe-runtime:shims] @ggui-ai/gadgets enumerated ZERO exports — refusing to emit an empty gadgets shim');
+    process.exit(1);
+  }
+  const shims = buildStaticShimModules({ gadgetExports });
+  const shimsDir = join(pkgRoot, 'dist/shims');
+  await mkdir(shimsDir, { recursive: true });
+  for (const [name, source] of Object.entries(shims)) {
+    await writeFile(join(shimsDir, `${name}.js`), source, 'utf-8');
+  }
+  console.log(
+    `[iframe-runtime:shims] wrote ${Object.keys(shims).length} shim modules to dist/shims (gadgets surface: ${gadgetExports.length} exports)`,
+  );
+}

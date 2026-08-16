@@ -669,6 +669,25 @@ export interface GguiRenderHandlerDeps extends RenderSliceMetaDeps {
   readonly codeBaseUrl?: string;
 
   /**
+   * Strict-CSP module-variant minter (ggui#522 slice 2). When present
+   * AND {@link codeStore} + {@link codeBaseUrl} minted a `codeUrl`,
+   * the handler asks it for the `codeModuleUrl` twin — the URL of the
+   * server-side import-rewritten variant a strict-CSP frame can
+   * `import()` directly. Returns `undefined` to decline (the code
+   * imports a package with no static shim); the slice then carries
+   * only the raw carriers and the renderer uses its blob ladder.
+   *
+   * A FUNCTION dep on purpose: the composition layer (the factory /
+   * the pod) owns the runtime-bundle hash and the shim coverability
+   * table; this handler owns neither.
+   */
+  readonly mintCodeModuleUrl?: (args: {
+    readonly code: string;
+    readonly hash: string;
+    readonly base: string;
+  }) => string | undefined;
+
+  /**
    * Pre-validation gate. Fires at the very TOP of the handler, BEFORE
    * any input parsing or state-changing work. Throws to reject the
    * render — the thrown error class propagates unchanged through
@@ -845,6 +864,7 @@ type RenderOutput = GguiRenderOutput & {
   handshakeId?: string;
   codeUrl?: string;
   codeHash?: string;
+  codeModuleUrl?: string;
 };
 
 /**
@@ -2068,6 +2088,7 @@ export function createGguiRenderHandler(
       // nothing: there was never a body to deliver.
       let codeUrl: string | undefined;
       let codeHash: string | undefined;
+      let codeModuleUrl: string | undefined;
       if (deps.codeStore && deps.codeBaseUrl) {
         try {
           const stored = await deps.renderStore.get(sessionId);
@@ -2084,6 +2105,14 @@ export function createGguiRenderHandler(
             codeHash = hash;
             const base = deps.codeBaseUrl.replace(/\/$/, '');
             codeUrl = `${base}/code/${hash}.js`;
+            // Strict-CSP module-variant twin (ggui#522 slice 2) —
+            // minted only alongside a raw codeUrl; the minter declines
+            // for code that imports shim-less packages.
+            codeModuleUrl = deps.mintCodeModuleUrl?.({
+              code: rendered.componentCode,
+              hash,
+              base,
+            });
           }
         } catch (err) {
           // Named for the OUTCOME, not the call: a throwing
@@ -2266,6 +2295,7 @@ export function createGguiRenderHandler(
           reason: 'cold: no cache marker was set for this render',
         },
         ...(codeUrl ? { codeUrl, codeHash } : {}),
+        ...(codeModuleUrl !== undefined ? { codeModuleUrl } : {}),
         ...(nextStep ? { nextStep } : {}),
       };
 
@@ -2411,6 +2441,7 @@ export function createGguiRenderHandler(
       const outputWithCode = output as typeof output & {
         codeUrl?: string;
         codeHash?: string;
+        codeModuleUrl?: string;
       };
       // Mirror `serverCapabilities.streamWebSocketLocalTools` onto
       // the bootstrap.
@@ -2493,6 +2524,11 @@ export function createGguiRenderHandler(
           : {}),
         ...(outputWithCode.codeHash
           ? { codeHash: outputWithCode.codeHash }
+          : {}),
+        // Strict-CSP module-variant twin — rides only alongside the
+        // raw carriers (the protocol parser enforces the pairing).
+        ...(outputWithCode.codeModuleUrl
+          ? { codeModuleUrl: outputWithCode.codeModuleUrl }
           : {}),
         // Inline compiled source (size-capped, projected by
         // `deriveRenderMeta`). Coexists with codeUrl: fetch-capable

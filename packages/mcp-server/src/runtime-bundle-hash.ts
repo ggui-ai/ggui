@@ -76,3 +76,24 @@ export function resolveHashedRuntimeBundleUrl(
   );
   return insertRuntimeBundleHash(plainUrl, computeRuntimeBundleHash(bytes), plainName);
 }
+
+/**
+ * The 12-hex runtime-bundle content hash for the bundle at
+ * `bundleFile` (default: the workspace's built bundle — the same file
+ * `createGguiServer` hashes, so both derive the same value), or
+ * `undefined` when the bundle is unreadable. Deployments that compose
+ * their own render handler (the cloud pod's `handlers: tools` shape)
+ * use this to build a `createCodeModuleUrlMinter` that stamps the SAME
+ * `<rt>` the co-resident factory's variant route serves (ggui#522
+ * slice 2) — re-deriving the scheme by hand is how the codeUrl binding
+ * drifted in slice 1.
+ */
+export function resolveRuntimeBundleHash(
+  bundleFile: string = RUNTIME_BUNDLE_FILE
+): string | undefined {
+  try {
+    return computeRuntimeBundleHash(fs.readFileSync(bundleFile));
+  } catch {
+    return undefined;
+  }
+}

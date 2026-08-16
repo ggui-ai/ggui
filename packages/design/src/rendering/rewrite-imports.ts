@@ -2,12 +2,22 @@
  * Import Rewriter
  *
  * Rewrites bare import specifiers in compiled ESM code to resolve in
- * different rendering contexts. Two modes handle the renderer types:
+ * different rendering contexts. Three modes handle the renderer types:
  *
  * - `data-url` — ReactComponentRenderer (direct React tree, window globals)
  * - `importmap` — Dev-server / serverless (import map handles design packages)
+ * - `asset-url` — strict-CSP delivery (ggui#522 slice 2): every bare
+ *   specifier resolves to a versioned static shim FILE under the
+ *   server's shim directory (`/_ggui/shims/<runtime-hash>/<name>.js`).
+ *   The shim bodies are byte-identical to the `data-url` bodies — same
+ *   `globalThis.__ggui__` resolution — just delivered as fetchable
+ *   assets so a host page whose `script-src` grants only the asset
+ *   origin (no `data:`, no `blob:`) can still load generated modules.
+ *   The rewrite runs SERVER-side (the `/code/<hash>.m<rt>.js` variant
+ *   route); {@link buildStaticShimModules} is the build-time emitter
+ *   the `@ggui-ai/iframe-runtime` build uses to write the files.
  *
- * A third `blob-url` mode historically targeted an IframeComponentRenderer
+ * A `blob-url` mode historically targeted an IframeComponentRenderer
  * that rendered generated components inside iframe srcdoc documents. That
  * renderer was retired — all SDK consumers render inline — so the mode was
  * removed along with the iframe path.
@@ -17,7 +27,7 @@
 // Types
 // ---------------------------------------------------------------------------
 
-export type RewriteMode = 'data-url' | 'importmap';
+export type RewriteMode = 'data-url' | 'importmap' | 'asset-url';
 
 /** Options for `data-url` mode (ReactComponentRenderer). */
 export interface DataUrlOptions {
@@ -52,7 +62,20 @@ export interface ImportmapOptions {
   reactBaseUrl?: string;
 }
 
-export type RewriteOptions = DataUrlOptions | ImportmapOptions;
+/** Options for `asset-url` mode (strict-CSP static-shim delivery). */
+export interface AssetUrlOptions {
+  mode: 'asset-url';
+  /**
+   * Absolute base of the versioned shim directory, WITHOUT a trailing
+   * slash — e.g. `https://assets.example.com/_ggui/shims/0123abcd4567`.
+   * Must be absolute: the rewritten module executes inside a `srcdoc`
+   * iframe whose document has no usable base URL for relative
+   * resolution.
+   */
+  shimBaseUrl: string;
+}
+
+export type RewriteOptions = DataUrlOptions | ImportmapOptions | AssetUrlOptions;
 
 // ---------------------------------------------------------------------------
 // Shared helpers
@@ -278,25 +301,36 @@ function globalExpr(gguiKey: string, legacyName: string): string {
   return `(globalThis.__ggui__&&globalThis.__ggui__["${gguiKey}"]||window["${legacyName}"])`;
 }
 
-function buildDataUrlReactShim(globalName: string): string {
+/** Wrap a raw shim JS body as a `data:` module URL. */
+function toDataUrl(js: string): string {
+  return `data:text/javascript,${encodeURIComponent(js)}`;
+}
+
+function jsReactShim(globalName: string): string {
   const namedExports = REACT_EXPORTS.map(
     (e) => `export const ${e} = R.${e};`,
   ).join(' ');
   const resolve = globalExpr('react', globalName);
-  const js = `const R = ${resolve}; export default R; ${namedExports}`;
-  return `data:text/javascript,${encodeURIComponent(js)}`;
+  return `const R = ${resolve}; export default R; ${namedExports}`;
 }
 
-function buildDataUrlReactDomShim(): string {
+function buildDataUrlReactShim(globalName: string): string {
+  return toDataUrl(jsReactShim(globalName));
+}
+
+function jsReactDomShim(): string {
   const REACT_DOM_EXPORTS = ['createPortal', 'flushSync', 'unstable_batchedUpdates'];
   const namedExports = REACT_DOM_EXPORTS.map(
     (e) => `export const ${e} = D.${e};`,
   ).join(' ');
-  const js = `const D = globalThis.__ggui__["reactDom"]; export default D; ${namedExports}`;
-  return `data:text/javascript,${encodeURIComponent(js)}`;
+  return `const D = globalThis.__ggui__["reactDom"]; export default D; ${namedExports}`;
 }
 
-function buildDataUrlJsxShim(globalName: string): string {
+function buildDataUrlReactDomShim(): string {
+  return toDataUrl(jsReactDomShim());
+}
+
+function jsJsxShim(globalName: string): string {
   // The automatic JSX transform calls jsx(type, props, key) where:
   //   - props.children contains the children
   //   - key is the 3rd argument (optional)
@@ -315,7 +349,11 @@ function buildDataUrlJsxShim(globalName: string): string {
     `export{jsx,jsx as jsxs,jsx as jsxDEV};`,
     `export const Fragment=R.Fragment;`,
   ].join('');
-  return `data:text/javascript,${encodeURIComponent(js)}`;
+  return js;
+}
+
+function buildDataUrlJsxShim(globalName: string): string {
+  return toDataUrl(jsJsxShim(globalName));
 }
 
 /**
@@ -330,7 +368,7 @@ function buildDataUrlJsxShim(globalName: string): string {
  * @param fallbackGlobals - Additional legacy globals to merge (for cross-layer imports)
  * @param fallbackGguiKeys - Additional `__ggui__` keys to merge
  */
-function buildDataUrlGlobalShim(
+function jsGlobalShim(
   globalName: string,
   gguiKey: string,
   exportNames?: readonly string[],
@@ -349,27 +387,40 @@ function buildDataUrlGlobalShim(
     );
     const mergeExpr = resolveExprs.join(',');
     const named = exportNames.map(n => `export const ${n} = M["${n}"];`).join(' ');
-    const js = resolveExprs.length > 1
+    return resolveExprs.length > 1
       ? `const M = Object.assign({}, ${mergeExpr}); ${named} export default M;`
       : `const M = ${resolveExprs[0]}; ${named} export default M;`;
-    return `data:text/javascript,${encodeURIComponent(js)}`;
   }
   // Fallback: Proxy-based default export for unknown export sets
   const resolve = globalExpr(gguiKey, globalName);
-  const js = `const M = ${resolve} || {}; const handler = { get(_, key) { return M[key]; } }; export default new Proxy({}, handler);`;
-  return `data:text/javascript,${encodeURIComponent(js)}`;
+  return `const M = ${resolve} || {}; const handler = { get(_, key) { return M[key]; } }; export default new Proxy({}, handler);`;
+}
+
+function buildDataUrlGlobalShim(
+  globalName: string,
+  gguiKey: string,
+  exportNames?: readonly string[],
+  fallbackGlobals?: readonly string[],
+  fallbackGguiKeys?: readonly string[],
+): string {
+  return toDataUrl(
+    jsGlobalShim(globalName, gguiKey, exportNames, fallbackGlobals, fallbackGguiKeys),
+  );
 }
 
 /**
  * Build a data-url shim for `@ggui-ai/wire` that re-exports hook functions
  * from `globalThis.__ggui__.wire`.
  */
-function buildDataUrlWireShim(): string {
+function jsWireShim(): string {
   const named = WIRE_EXPORTS.map(
     (e) => `export const ${e} = w.${e};`,
   ).join(' ');
-  const js = `const w = globalThis.__ggui__.wire; ${named} export default w;`;
-  return `data:text/javascript,${encodeURIComponent(js)}`;
+  return `const w = globalThis.__ggui__.wire; ${named} export default w;`;
+}
+
+function buildDataUrlWireShim(): string {
+  return toDataUrl(jsWireShim());
 }
 
 /**
@@ -428,7 +479,7 @@ function extractNamedImports(code: string, specifier: string): string[] {
  * `loadGadgets()` is retired — there is no accessor export; generated
  * component code direct-imports each gadget export.
  */
-function buildGadgetPackageShim(
+function jsGadgetPackageShim(
   packageName: string,
   exportNames: readonly string[],
 ): string {
@@ -484,7 +535,14 @@ function buildGadgetPackageShim(
   parts.push(
     `export default new Proxy({},{get:function(_,k){return NS()[k];}});`,
   );
-  return `data:text/javascript,${encodeURIComponent(parts.join(''))}`;
+  return parts.join('');
+}
+
+function buildGadgetPackageShim(
+  packageName: string,
+  exportNames: readonly string[],
+): string {
+  return toDataUrl(jsGadgetPackageShim(packageName, exportNames));
 }
 
 function rewriteDataUrl(code: string, opts: DataUrlOptions): string {
@@ -587,6 +645,138 @@ function rewriteDataUrl(code: string, opts: DataUrlOptions): string {
 }
 
 // ---------------------------------------------------------------------------
+// asset-url mode + static shim modules (ggui#522 slice 2)
+// ---------------------------------------------------------------------------
+
+/**
+ * File names (without `.js`) of the static shim modules — one per
+ * distinct shim BODY. `react/jsx-runtime` and `react/jsx-dev-runtime`
+ * share `jsx-runtime`; every other specifier maps 1:1.
+ */
+export type StaticShimName =
+  | 'react'
+  | 'jsx-runtime'
+  | 'react-dom'
+  | 'primitives'
+  | 'components'
+  | 'compositions'
+  | 'interact'
+  | 'templates'
+  | 'app-components'
+  | 'tokens'
+  | 'design'
+  | 'wire'
+  | 'gadgets';
+
+/**
+ * Bare specifier → static shim file name. The `asset-url` rewrite maps
+ * each specifier to `<shimBaseUrl>/<name>.js`; the iframe-runtime build
+ * emits exactly these files ({@link buildStaticShimModules}). Exact
+ * quoted-specifier matching in {@link replaceSpecifier} makes entry
+ * order irrelevant (`from"@ggui-ai/design"` never matches the longer
+ * subpath forms), so this reads as a plain lookup table.
+ *
+ * 3rd-party gadget packages (GG.8.2) are deliberately ABSENT: their
+ * shims are derived per-render from the generated code's own imports,
+ * so no static file can exist for them. A render importing one keeps
+ * its bare specifier under this mode — callers detect that with
+ * {@link findBareImportSpecifiers} and decline the asset variant, and
+ * the renderer falls back to the `data-url` ladder.
+ */
+export const ASSET_SHIM_FOR_SPECIFIER: Readonly<Record<string, StaticShimName>> = {
+  'react/jsx-runtime': 'jsx-runtime',
+  'react/jsx-dev-runtime': 'jsx-runtime',
+  'react-dom': 'react-dom',
+  react: 'react',
+  '@ggui-ai/design/primitives': 'primitives',
+  '@ggui-ai/design/components': 'components',
+  '@ggui-ai/design/compositions': 'compositions',
+  '@ggui-ai/design/interact': 'interact',
+  '@ggui-ai/design/templates': 'templates',
+  '@ggui-ai/design/app-components': 'app-components',
+  '@ggui-ai/design/tokens': 'tokens',
+  '@ggui-ai/design': 'design',
+  '@ggui-ai/wire': 'wire',
+  '@ggui-ai/gadgets': 'gadgets',
+};
+
+/**
+ * Build the static shim module SOURCES, keyed by {@link StaticShimName}.
+ * Bodies are byte-identical to the decoded `data-url` shim bodies (same
+ * builders, default global names) so the two delivery modes can never
+ * drift semantically — pinned by rewrite-imports.test.ts.
+ *
+ * `gadgetExports` is the full named-export surface of
+ * `@ggui-ai/gadgets`' dist, enumerated by the caller (the
+ * iframe-runtime build script does `Object.keys(await import(...))`).
+ * Unlike the per-render `data-url` gadget shim — whose exports are
+ * derived from the generated code's own imports — the static file must
+ * export a SUPERSET of anything any generated module may import; the
+ * full dist surface is exactly that superset, and resolution stays
+ * lazy so unused names cost nothing.
+ */
+export function buildStaticShimModules(opts: {
+  readonly gadgetExports: readonly string[];
+}): Readonly<Record<StaticShimName, string>> {
+  const ALL_EXPORTS = [
+    ...PRIMITIVES_EXPORTS,
+    ...COMPONENTS_EXPORTS,
+    ...COMPOSITIONS_EXPORTS,
+    ...INTERACT_EXPORTS,
+  ] as const;
+  // Default binding names mirror rewriteDataUrl's defaults — the
+  // runtime installs `globalThis.__ggui__` under exactly these keys.
+  return {
+    react: jsReactShim('__REACT'),
+    'jsx-runtime': jsJsxShim('__REACT'),
+    'react-dom': jsReactDomShim(),
+    primitives: jsGlobalShim('__GGUI_PRIMITIVES', 'primitives', ALL_EXPORTS, ['__GGUI_COMPONENTS', '__GGUI_COMPOSITIONS', '__GGUI_INTERACT'], ['components', 'compositions', 'interact']),
+    components: jsGlobalShim('__GGUI_COMPONENTS', 'components', ALL_EXPORTS, ['__GGUI_PRIMITIVES', '__GGUI_COMPOSITIONS', '__GGUI_INTERACT'], ['primitives', 'compositions', 'interact']),
+    compositions: jsGlobalShim('__GGUI_COMPOSITIONS', 'compositions', ALL_EXPORTS, ['__GGUI_PRIMITIVES', '__GGUI_COMPONENTS', '__GGUI_INTERACT'], ['primitives', 'components', 'interact']),
+    interact: jsGlobalShim('__GGUI_INTERACT', 'interact', [...INTERACT_EXPORTS]),
+    templates: jsGlobalShim('__GGUI_COMPOSITIONS', 'compositions', ALL_EXPORTS, ['__GGUI_PRIMITIVES', '__GGUI_COMPONENTS'], ['primitives', 'components']),
+    'app-components': jsGlobalShim('__GGUI_APP_COMPONENTS', 'appComponents'),
+    tokens: jsGlobalShim('__GGUI_TOKENS', 'tokens', [...TOKENS_EXPORTS]),
+    design: jsGlobalShim('__GGUI_PRIMITIVES', 'primitives', ALL_EXPORTS, ['__GGUI_COMPONENTS', '__GGUI_COMPOSITIONS', '__GGUI_INTERACT'], ['components', 'compositions', 'interact']),
+    wire: jsWireShim(),
+    gadgets: jsGadgetPackageShim('@ggui-ai/gadgets', opts.gadgetExports),
+  };
+}
+
+/**
+ * Static-import specifiers in `code` that are still BARE — neither a
+ * URL scheme (`https:`, `data:`, `blob:`) nor a relative path. After an
+ * `asset-url` rewrite, a non-empty result means the module cannot load
+ * standalone (a browser rejects bare specifiers without an import map)
+ * — in practice a 3rd-party gadget package this mode has no static
+ * shim for. The `/code` variant route uses this to DECLINE the asset
+ * variant instead of serving a module that fails at eval.
+ *
+ * Static forms only (`import … from '<spec>'`, bare `import '<spec>'`)
+ * — the boilerplate's compiled output contains no dynamic `import()`.
+ */
+export function findBareImportSpecifiers(code: string): string[] {
+  const out = new Set<string>();
+  const re = /(?:^|[^.\w$])(?:import|from)\s*['"]([^'"]+)['"]/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(code)) !== null) {
+    const spec = m[1];
+    if (spec === undefined) continue;
+    if (/^(?:[a-z][a-z0-9+.-]*:|\.{0,2}\/)/i.test(spec)) continue;
+    out.add(spec);
+  }
+  return [...out];
+}
+
+function rewriteAssetUrl(code: string, opts: AssetUrlOptions): string {
+  const base = opts.shimBaseUrl.replace(/\/$/, '');
+  for (const [specifier, shimName] of Object.entries(ASSET_SHIM_FOR_SPECIFIER)) {
+    code = replaceSpecifier(code, specifier, `${base}/${shimName}.js`);
+  }
+  return code;
+}
+
+// ---------------------------------------------------------------------------
 // importmap mode
 // ---------------------------------------------------------------------------
 
@@ -618,5 +808,7 @@ export function rewriteImports(code: string, options: RewriteOptions): string {
       return rewriteDataUrl(code, options);
     case 'importmap':
       return rewriteImportmap(code, options);
+    case 'asset-url':
+      return rewriteAssetUrl(code, options);
   }
 }

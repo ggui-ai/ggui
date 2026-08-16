@@ -32,6 +32,10 @@ import type { CodeStore } from "@ggui-ai/mcp-server-core";
 import { CODE_HASH_REGEX } from "@ggui-ai/mcp-server-core";
 import type { Express, Request, Response } from "express";
 import type { Logger } from "./logger.js";
+import {
+  mountCodeModuleVariantRoute,
+  type CodeModuleVariantOptions,
+} from "./code-module-variant.js";
 
 interface MountOptions {
   /** Express app to mount onto. */
@@ -40,14 +44,31 @@ interface MountOptions {
   readonly codeStore: CodeStore;
   /** Structured logger for fetch-failure warnings. */
   readonly logger: Logger;
+  /**
+   * Strict-CSP module-variant family (`/code/<hash>.m<rt>.js`,
+   * ggui#522 slice 2). Present ⇒ the variant route mounts BEFORE the
+   * plain routes — ordering is load-bearing: `/code/:hash.js`'s param
+   * would otherwise swallow the variant path (`:hash` = `<hash>.m<rt>`)
+   * and 400 it at the hash gate.
+   */
+  readonly moduleVariant?: CodeModuleVariantOptions;
 }
 
 /**
- * Mount `GET /code/:hash.js` + `GET /contract/:hash.js` onto the
- * express app. Returns nothing — the routes self-register.
+ * Mount `GET /code/:hash.js` + `GET /contract/:hash.js` (+ the
+ * module-variant route when configured) onto the express app. Returns
+ * nothing — the routes self-register.
  */
 export function mountCodeRoutes(opts: MountOptions): void {
   const { app, codeStore, logger } = opts;
+  if (opts.moduleVariant !== undefined) {
+    mountCodeModuleVariantRoute({
+      app,
+      codeStore,
+      variant: opts.moduleVariant,
+      logger,
+    });
+  }
   const mountContentAddressableRoute = (mountPath: string, label: "code" | "contract"): void => {
     app.get(mountPath, async (req: Request, res: Response) => {
       res.setHeader("Access-Control-Allow-Origin", "*");

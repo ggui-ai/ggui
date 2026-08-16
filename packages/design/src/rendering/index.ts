@@ -10,8 +10,19 @@
 
 export { stripMarkers } from './strip-markers';
 export { getCssTokens, getScopedCssTokens, getThemeCss, getScopedThemeCss } from './css-tokens';
-export { rewriteImports } from './rewrite-imports';
-export type { RewriteOptions, DataUrlOptions, ImportmapOptions } from './rewrite-imports';
+export {
+  rewriteImports,
+  buildStaticShimModules,
+  findBareImportSpecifiers,
+  ASSET_SHIM_FOR_SPECIFIER,
+} from './rewrite-imports';
+export type {
+  RewriteOptions,
+  DataUrlOptions,
+  ImportmapOptions,
+  AssetUrlOptions,
+  StaticShimName,
+} from './rewrite-imports';
 export {
   resolveInlineSpecifier,
   transformForInlineExec,

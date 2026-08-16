@@ -71,7 +71,18 @@ export {
   computeRuntimeBundleHash,
   insertRuntimeBundleHash,
   resolveHashedRuntimeBundleUrl,
+  resolveRuntimeBundleHash,
 } from './runtime-bundle-hash.js';
+// Strict-CSP module-variant delivery (ggui#522 slice 2). The minter is
+// exported for the same composed-handler deployments: a pod that binds
+// `codeStore`/`codeBaseUrl` on its own render tool builds the minter
+// from `resolveRuntimeBundleHash()` so its `codeModuleUrl`s name the
+// exact variant family the co-resident factory routes serve.
+export {
+  createCodeModuleUrlMinter,
+  composeCodeModuleUrl,
+} from './code-module-variant.js';
+export type { MintCodeModuleUrl } from './code-module-variant.js';
 // Content-addressable code delivery (2026-05-03). FileSystemCodeStore
 // is the OSS dev default; in-memory variant ships in
 // `@ggui-ai/mcp-server-core/in-memory` for tests + ephemeral runs.

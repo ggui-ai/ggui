@@ -390,6 +390,19 @@ export interface McpAppAiGguiRenderMeta {
   readonly codeUrl?: string;
   readonly codeHash?: string;
   /**
+   * Strict-CSP module variant of {@link codeUrl} (ggui#522 slice 2):
+   * the SAME component bytes, server-side import-rewritten so every
+   * bare specifier resolves to a static shim asset on the code origin
+   * — directly `import()`able under a `script-src` that allows only
+   * that origin (no `blob:`, no `data:`, no `'unsafe-eval'`). The
+   * renderer tries this FIRST when present and falls back to the
+   * codeB64/codeUrl blob ladder on any failure. Never a mode
+   * discriminator on its own — always accompanies `codeUrl`/`codeB64`
+   * (the raw bytes remain the fallback), so its presence adds a load
+   * path without changing mountability.
+   */
+  readonly codeModuleUrl?: string;
+  /**
    * Base64-encoded compiled ES-module source of the component — the
    * fetch-free twin of {@link codeUrl}. Produced by servers whose
    * renders must mount inside hosts that forbid cross-origin fetches
@@ -500,7 +513,17 @@ export function parseMcpAppAiGguiRenderMeta(
   const ck = s.kind;
   const ch = s.codeHash;
   const cb = s.codeB64;
+  const cm = s.codeModuleUrl;
   if (cu !== undefined && (typeof cu !== 'string' || cu.length === 0)) {
+    return { ok: false, reason: 'MALFORMED_RENDER' };
+  }
+  // `codeModuleUrl` rides ALONGSIDE a static-component carrier, never
+  // alone — it is a load-path optimization, not a mode. A slice
+  // carrying only the variant would leave fallback-less consumers
+  // stranded; parse it out unless a raw carrier is present (tolerant
+  // drop, matching the optional-field posture — the raw carrier gate
+  // below still decides mountability).
+  if (cm !== undefined && (typeof cm !== 'string' || cm.length === 0)) {
     return { ok: false, reason: 'MALFORMED_RENDER' };
   }
   if (ck !== undefined && (typeof ck !== 'string' || ck.length === 0)) {
@@ -593,6 +616,10 @@ export function parseMcpAppAiGguiRenderMeta(
     ...(typeof cu === 'string' && cu.length > 0 ? { codeUrl: cu } : {}),
     ...(typeof ch === 'string' && ch.length > 0 ? { codeHash: ch } : {}),
     ...(typeof cb === 'string' && cb.length > 0 ? { codeB64: cb } : {}),
+    // Variant only WITH a raw static carrier — see the parse gate above.
+    ...(typeof cm === 'string' && cm.length > 0 && hasStaticComponent
+      ? { codeModuleUrl: cm }
+      : {}),
     ...(typeof ck === 'string' && ck.length > 0 ? { kind: ck } : {}),
   };
 
