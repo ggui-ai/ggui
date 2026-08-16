@@ -234,7 +234,7 @@ export const handshakeInputSchema = z.object({
    */
   blueprintDraft: blueprintDraftSchema
     .describe(
-      'Agent\'s draft: contract (required) + optional variance + optional generator slug hint. The server combines this with cached blueprints + validator outcomes to produce a three-mode suggestion (cache / agent / synth).',
+      'Agent\'s draft — a JSON OBJECT, never a JSON-encoded string (pass {contract: {...}}, not "{\\"contract\\":...}"; a string fails input validation with -32602). Fields: contract (required) + optional variance + optional generator slug hint. The server combines this with cached blueprints + validator outcomes to produce a three-mode suggestion (cache / agent / synth).',
     ),
   /**
    * Skip blueprint-search on step-2 and route straight to validation
