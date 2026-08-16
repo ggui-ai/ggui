@@ -11,7 +11,7 @@ Canonical end-to-end scenario suite for the ggui protocol. Vitest-driven full-st
 ## Axis — numeric ordinal + descriptive slug
 
 Every spec is named `<NN>-<slug>.spec.ts` where `NN` is a stable
-two-digit ordinal (01-26 today; 13/23/24 retired). New scenarios append
+two-digit ordinal (01-27 today; 13/23/24 retired). New scenarios append
 to the next free ordinal. The ordinal is the load-bearing identifier —
 referenced from PR descriptions, CI logs, and the
 [provider matrix](#provider-matrix) below. Per
@@ -19,7 +19,7 @@ referenced from PR descriptions, CI logs, and the
 single stable axis; no per-feature subdirs.
 
 **Where does a new test go?** Append the next free ordinal:
-`tests/27-<slug>.spec.ts`. Add a row to the flagship table below AND
+`tests/28-<slug>.spec.ts`. Add a row to the flagship table below AND
 the [CI Tier Classification](#ci-tier-classification-478) table — if
 the test needs an LLM, audit whether it should join the provider
 matrix; if not, it belongs in the keyless sweep
@@ -44,6 +44,7 @@ The suite has 25+ scenarios pinning the wire's behavioral contract. The flagship
 | 4   | CONTEXT_TOO_LARGE rejection                  | ❌        | sync_context with oversize snapshot → asserts CONTEXT_TOO_LARGE                                                    |
 | 5   | pure-display render (no actionSpec)          | ✅        | render w/o actionSpec → asserts no nextStep                                                                        |
 | 6   | sample-agent + todo MCP real-data round trip | ✅        | full-stack: prompt → todo_add → state mutates → re-render                                                          |
+| 27  | strict-CSP host mount via the asset path     | ❌        | ggui#522 net: no-blob/no-data/no-eval host CSP → paints via `codeModuleUrl` + static shims, zero CSP violations    |
 
 ### Provider matrix
 
@@ -101,6 +102,7 @@ glance whether a file's absence from CI is deliberate or a gap.
 | 22  | marketplace blueprint lifecycle      | **keyless sweep**                                         | Same as 21, blueprint lane.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
 | 25  | component-gadget registry round-trip | **keyless sweep**                                         | No LLM — component-gadget wire path against the running `ggui-leaflet-demo` MCP server.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
 | 26  | by-tool discovery journey (#477)     | **keyless sweep**                                         | `bootRegistryServer()` in-process, sigstore-mock public lane — the template this sweep job followed.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| 27  | strict-CSP static mount (ggui#522)   | **keyless sweep**                                         | Zero-LLM (scenario-18 priming recipe) + browser: mounts the render under a no-`blob:`/no-`data:`/no-`'unsafe-eval'` host CSP and pins that the paint rode the asset path (`/code/<hash>.m<rt>.js` + `/_ggui/shims/*` fetched, zero `securitypolicyviolation` events). The sweep's ONE browser spec — its job installs playwright chromium for it.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
 
 **Bold = wired into a CI tier as of #478.** `key-gated, not wired` files
 (01/05/07/08/10/16/17) already carry correct in-file skip gating with a

@@ -23,10 +23,16 @@ import {
   type JsonRpcResponse,
 } from './mcp-client.js';
 
-/** Code identity pair read off the render's `ai.ggui/render` slice. */
+/** Code identity read off the render's `ai.ggui/render` slice. */
 export interface RenderCodeRef {
   readonly codeUrl?: string;
   readonly codeHash?: string;
+  /**
+   * Strict-CSP module variant of `codeUrl` (ggui#522 slice 2) — the
+   * server-side import-rewritten twin a strict host imports directly.
+   * Scenario 27 pins its presence + servability.
+   */
+  readonly codeModuleUrl?: string;
 }
 
 /**
@@ -58,6 +64,9 @@ export function readRenderCodeRef(resp: JsonRpcResponse): RenderCodeRef {
   return {
     ...(parsed.meta.codeUrl !== undefined ? { codeUrl: parsed.meta.codeUrl } : {}),
     ...(parsed.meta.codeHash !== undefined ? { codeHash: parsed.meta.codeHash } : {}),
+    ...(parsed.meta.codeModuleUrl !== undefined
+      ? { codeModuleUrl: parsed.meta.codeModuleUrl }
+      : {}),
   };
 }
 

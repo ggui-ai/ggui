@@ -24,6 +24,10 @@
  * The post-message envelope is consumed by the `<McpAppIframe>` host
  * wrapper, which routes it to the host's `onError` callback.
  */
+// FIRST import on purpose — declares zod jitless before any
+// schema-defining dependency initializes (see zod-jitless.ts).
+import './zod-jitless.js';
+
 import type { ReactNode } from 'react';
 import type {
   DrainAckPayload,

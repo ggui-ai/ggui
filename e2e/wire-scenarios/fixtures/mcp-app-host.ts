@@ -59,6 +59,15 @@ export interface McpAppHostOptions {
    * same identity as the agent that created the render.
    */
   readonly bearer?: string;
+  /**
+   * `Content-Security-Policy` header value stamped on BOTH the
+   * wrapper page and the resource document (ggui#522 slice 3). Lets a
+   * scenario mount the render under a strict-CSP host posture — no
+   * `blob:`, no `data:`, no `'unsafe-eval'` — the way the ggui.ai
+   * landing (and any hardened embedder) serves its pages. Absent ⇒ no
+   * header, the permissive default every other scenario runs under.
+   */
+  readonly csp?: string;
 }
 
 export interface McpAppHostHandle {
@@ -145,14 +154,22 @@ export async function startMcpAppHost(
   const bearer = opts.bearer ?? process.env.GGUI_MCP_BEARER ?? 'dev';
   const wrapperHtml = buildWrapperHtml();
 
+  const cspHeader =
+    opts.csp !== undefined ? { 'Content-Security-Policy': opts.csp } : {};
   const server: Server = createServer((req, res) => {
     if (req.method === 'GET' && req.url === '/') {
-      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+      res.writeHead(200, {
+        'Content-Type': 'text/html; charset=utf-8',
+        ...cspHeader,
+      });
       res.end(wrapperHtml);
       return;
     }
     if (req.method === 'GET' && req.url === '/resource') {
-      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+      res.writeHead(200, {
+        'Content-Type': 'text/html; charset=utf-8',
+        ...cspHeader,
+      });
       res.end(opts.resourceHtml);
       return;
     }
@@ -223,6 +240,8 @@ export interface MountRenderResourceOptions {
   readonly resourceUri: string;
   /** Optional bearer override — see {@link McpAppHostOptions.bearer}. */
   readonly bearer?: string;
+  /** Optional strict-CSP header — see {@link McpAppHostOptions.csp}. */
+  readonly csp?: string;
 }
 
 /**
@@ -247,5 +266,6 @@ export async function mountRenderResource(
     mcpUrl: opts.mcpUrl,
     resourceHtml,
     ...(opts.bearer !== undefined ? { bearer: opts.bearer } : {}),
+    ...(opts.csp !== undefined ? { csp: opts.csp } : {}),
   });
 }
