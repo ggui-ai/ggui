@@ -383,6 +383,31 @@ export function parseMetaFromGlobal(): McpAppAiGguiMetaParseResult {
 }
 
 /**
+ * The `ui://ggui/render/…` LOCATOR a tool result publishes when a server
+ * runs the read-plane-only posture (`withholdResultMeta`, guuey#209 C3 /
+ * ggui#537): the bootstrap material is absent, but the view's durable
+ * identity rides `structuredContent.resourceUri` (ggui-aware hosts) and
+ * the spec-canonical `_meta.ui.resourceUri` (MCP Apps hosts) — same
+ * value, either slot. The runtime resolves such a result through the
+ * read-plane door (`app.readServerResource` → the per-render
+ * self-contained shell → its inlined envelope). `null` for anything else
+ * — a result that carries the slice inline never needs this, and a
+ * result with neither is not a view.
+ */
+export function extractLocatorFromToolResult(params: unknown): string | null {
+  if (!isPlainObject(params)) return null;
+  const sc = params['structuredContent'];
+  const fromStructured =
+    isPlainObject(sc) && typeof sc['resourceUri'] === 'string' ? sc['resourceUri'] : null;
+  const meta = params['_meta'];
+  const ui = isPlainObject(meta) ? meta['ui'] : undefined;
+  const fromUi =
+    isPlainObject(ui) && typeof ui['resourceUri'] === 'string' ? ui['resourceUri'] : null;
+  const uri = fromStructured ?? fromUi;
+  return uri !== null && uri.startsWith('ui://ggui/render/') ? uri : null;
+}
+
+/**
  * Parse the render slice from a `ui/notifications/tool-result`
  * postMessage params payload. `params` is a `CallToolResult` per the
  * MCP-Apps spec, so the slice envelope lives at the spec-canonical

@@ -36,6 +36,7 @@
 import {
   MCP_APPS_UI_CAPABILITY,
   parseMcpAppAiGguiRenderMeta,
+  readGguiShellEnvelope,
   type McpAppAiGguiRenderMeta,
 } from "@ggui-ai/protocol/integrations/mcp-apps";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
@@ -500,11 +501,10 @@ export class HostSimulator {
   /**
    * Read a per-render `ui://` resource through `resources/read` and
    * recover its `ai.ggui/render` slice — the read-plane path a host
-   * takes when a tool result withholds `_meta`. The pod's shell HTML
-   * inlines the slice envelope on ONE line,
-   * `<script>globalThis.__GGUI_META__ = {...};</script>` (protocol
-   * `gguiShellHtml`, the same assembler every host-built shell uses);
-   * the JSON is validated by the protocol's own
+   * takes when a tool result withholds the bootstrap material. The pod's
+   * shell HTML inlines the slice envelope on ONE line (protocol
+   * `gguiShellHtml`); `readGguiShellEnvelope` is its inverse, and the
+   * envelope is validated by the protocol's own
    * `parseMcpAppAiGguiRenderMeta`, so a malformed slice fails exactly
    * the way an inline one would. `meta` is absent when the resource
    * has no envelope (a static shell, a miss the server rendered as a
@@ -517,14 +517,11 @@ export class HostSimulator {
     const res = await this.client.readResource({ uri });
     const first = res.contents[0];
     const html = first && "text" in first && typeof first.text === "string" ? first.text : "";
-    const match = /<script>globalThis\.__GGUI_META__ = (.*?);<\/script>/s.exec(html);
-    if (!match) return { html };
-    let envelope: unknown;
-    try {
-      envelope = JSON.parse(match[1]!);
-    } catch {
-      return { html };
-    }
+    // The protocol's own inverse of `gguiShellHtml` — the same reader the
+    // iframe-runtime's door uses, so writer, runtime and reference host
+    // cannot drift on the shell's inline envelope.
+    const envelope = readGguiShellEnvelope(html);
+    if (envelope === undefined) return { html };
     const parsed = parseMcpAppAiGguiRenderMeta(envelope);
     return {
       html,

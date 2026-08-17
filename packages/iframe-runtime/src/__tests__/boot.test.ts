@@ -1,6 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { GguiSession } from '@ggui-ai/protocol';
-import type { McpAppAiGguiRenderMeta } from '@ggui-ai/protocol/integrations/mcp-apps';
+import {
+  asGguiRenderBootstrap,
+  gguiShellHtml,
+  toMcpAppEnvelope,
+  type McpAppAiGguiRenderMeta,
+} from '@ggui-ai/protocol/integrations/mcp-apps';
 import { bootSequence, type RendererBootFailedMessage } from '../runtime.js';
 import type { ConnectFn } from '../registry-subscribe.js';
 import {
@@ -583,3 +588,101 @@ describe('bootSequence — failover-ladder composition (WS → SSE → polling �
 // Re-export for downstream module consumers that imported via boot.test
 // before the rewrite. Not used directly here.
 export { buildHappyInitResult };
+
+describe('bootSequence — the read-plane door (ggui#537, read-plane-only posture)', () => {
+  const LOCATOR = 'ui://ggui/render/render_001/abcdef0123456789';
+
+  /** A per-render self-contained shell document as the server serves it. */
+  function shellDocFor(meta: McpAppAiGguiRenderMeta): string {
+    const bootstrap = asGguiRenderBootstrap(toMcpAppEnvelope(meta));
+    if (bootstrap === undefined) throw new Error('fixture meta is not mountable');
+    return gguiShellHtml(bootstrap);
+  }
+
+  /** The identity-only tool result a withholding server publishes. */
+  function identityOnlyParams(): Record<string, unknown> {
+    return {
+      content: [{ type: 'text', text: 'rendered' }],
+      structuredContent: { sessionId: 'render_001', resourceUri: LOCATOR },
+      _meta: { ui: { resourceUri: LOCATOR }, 'ui/resourceUri': LOCATOR },
+    };
+  }
+
+  it('boots from a tool result that carries only the locator — resolves the envelope through resources/read (Tier 2 door)', async () => {
+    const dom = document.implementation.createHTMLDocument('renderer-test');
+    const initial = makeRender('render_001', 'first render');
+    const { app, transport } = buildBootHarness();
+    transport.queueResponse('resources/read', {
+      result: { contents: [{ uri: LOCATOR, mimeType: 'text/html;profile=mcp-app', text: shellDocFor(VALID_META) }] },
+    });
+    const { connectFn } = buildMockConnect(initial);
+    const notifyParent = vi.fn();
+
+    const bootPromise = bootSequence({
+      doc: dom,
+      app,
+      transport,
+      connectFn,
+      notifyParent,
+      toolResultTimeoutMs: 1_000,
+    });
+    await tick();
+    transport.pushNotification({ method: 'ui/notifications/tool-result', params: identityOnlyParams() });
+
+    const result = await bootPromise;
+    expect(result.ok).toBe(true);
+    expect(transport.methodsSeen).toContain('resources/read');
+    expect(result.mountedRender?.id).toBe('render_001');
+    expect(notifyParent).toHaveBeenCalledWith(expect.objectContaining({ type: 'ggui:renderer-ready' }));
+  });
+
+  it('boots from a pre-resolved locator (autostart caught the identity-only result before boot) — Tier 1.5, no tool-result wait', async () => {
+    const dom = document.implementation.createHTMLDocument('renderer-test');
+    const initial = makeRender('render_001', 'first render');
+    const { app, transport } = buildBootHarness();
+    transport.queueResponse('resources/read', {
+      result: { contents: [{ uri: LOCATOR, mimeType: 'text/html;profile=mcp-app', text: shellDocFor(VALID_META) }] },
+    });
+    const { connectFn } = buildMockConnect(initial);
+
+    const result = await bootSequence({
+      doc: dom,
+      app,
+      transport,
+      connectFn,
+      notifyParent: vi.fn(),
+      // Would time out long before the door if the door did not run.
+      toolResultTimeoutMs: 200,
+      preResolvedLocator: LOCATOR,
+    });
+    expect(result.ok).toBe(true);
+    expect(transport.methodsSeen).toContain('resources/read');
+    expect(result.mountedRender?.id).toBe('render_001');
+  });
+
+  it('a door miss (resource without an envelope) falls through — a later inline slice still boots, and only the timeout is terminal', async () => {
+    const dom = document.implementation.createHTMLDocument('renderer-test');
+    const initial = makeRender('render_001', 'first render');
+    const { app, transport, pushToolResult } = buildBootHarness();
+    transport.queueResponse('resources/read', {
+      result: { contents: [{ uri: LOCATOR, mimeType: 'text/html', text: '<!doctype html><html><body>Waiting for tool result…</body></html>' }] },
+    });
+    const { connectFn } = buildMockConnect(initial);
+
+    const bootPromise = bootSequence({
+      doc: dom,
+      app,
+      transport,
+      connectFn,
+      notifyParent: vi.fn(),
+      toolResultTimeoutMs: 1_000,
+      preResolvedLocator: LOCATOR,
+    });
+    await tick();
+    // The door missed; the spec-canonical tier is still armed.
+    pushToolResult(VALID_META);
+    const result = await bootPromise;
+    expect(result.ok).toBe(true);
+    expect(transport.methodsSeen).toContain('resources/read');
+  });
+});

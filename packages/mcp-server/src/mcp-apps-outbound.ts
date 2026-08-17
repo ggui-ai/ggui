@@ -339,13 +339,66 @@ window.addEventListener('message',function(ev){
     // at the top level.
     var specMeta=readMetaFromCallToolResult(m.params);
     if(specMeta){mountFromMeta(specMeta);return;}
-    // R5 (2026-05-26) -- the /r/<shortCode> HTTP fallback was removed
-    // along with the bearer-by-obscurity model. Hosts that strip
-    // _meta on the tool-result wire have no fallback path here;
-    // spec-canonical hosts deliver meta inline and land in the branch
-    // above.
+    // Read-plane door (ggui#537). A server running the read-plane-only
+    // posture publishes only the view's IDENTITY on the result -- the
+    // ui:// locator on structuredContent.resourceUri and the spec
+    // pointer _meta.ui.resourceUri -- and no bootstrap material. The
+    // per-render resource that locator names is the self-contained
+    // shell, whose document inlines the very envelope this shell needs;
+    // ask the HOST to read it (resources/read, proxied by the host's
+    // own MCP client -- no fetch from this sandbox, so a host CSP with
+    // no connect-src to the server is not in the way). R5 (2026-05-26)
+    // removed the /r/<shortCode> HTTP fallback with the bearer-by-
+    // obscurity model; this door is the spec-canonical replacement.
+    var locator=readLocatorFromCallToolResult(m.params);
+    if(locator){mountFromLocator(locator);return;}
   }
 });
+function readLocatorFromCallToolResult(params){
+  if(!params||typeof params!=='object')return null;
+  var sc=params.structuredContent, meta=params._meta, uri=null;
+  if(sc&&typeof sc==='object'&&typeof sc.resourceUri==='string')uri=sc.resourceUri;
+  else if(meta&&typeof meta==='object'&&meta.ui&&typeof meta.ui==='object'&&typeof meta.ui.resourceUri==='string')uri=meta.ui.resourceUri;
+  if(!uri||uri.indexOf('ui://ggui/render/')!==0)return null;
+  return uri;
+}
+function envelopeFromResourceDoc(text){
+  // The per-render self-contained shell inlines its envelope on ONE
+  // line inside its meta script tag: globalThis.__GGUI_META__ = {...};
+  // (protocol gguiShellHtml). The JSON is angle-bracket-escaped by the
+  // assembler, so the first ';' followed by the closing script tag
+  // after the marker is the terminator.
+  if(typeof text!=='string')return null;
+  var marker='globalThis.__GGUI_META__ = ';
+  var start=text.indexOf(marker);
+  if(start<0)return null;
+  start+=marker.length;
+  var end=text.indexOf(';<'+'/script>',start);
+  if(end<0)return null;
+  try{var env=JSON.parse(text.slice(start,end));}catch(e){return null;}
+  return (env&&typeof env==='object'&&env['ai.ggui/render']&&typeof env['ai.ggui/render'].runtimeUrl==='string')?env:null;
+}
+async function mountFromLocator(uri){
+  if(mounted)return;
+  setOverlay('Resolving view…');
+  var res;
+  try{res=await postRpc('resources/read',{uri:uri});}
+  catch(e){
+    var rmsg='READ_DOOR_FAILED: the host could not read '+uri+' -- '+(e&&e.message||JSON.stringify(e));
+    showFailure('This view could not be resolved',rmsg,function(){mountFromLocator(uri);});
+    postBootstrapFailed('MALFORMED_BOOTSTRAP',rmsg);
+    return;
+  }
+  var c=res&&res.contents&&res.contents[0];
+  var env=envelopeFromResourceDoc(c&&c.text);
+  if(!env){
+    var emsg='MALFORMED_BOOTSTRAP: resource '+uri+' carried no ai.ggui/render envelope with a runtimeUrl.';
+    showFailure('This view could not start',emsg,function(){mountFromLocator(uri);});
+    postBootstrapFailed('MALFORMED_BOOTSTRAP',emsg);
+    return;
+  }
+  mountFromMeta(env);
+}
 // Named so the failure card's Retry can re-run the whole handshake —
 // a host that missed or rejected the first ui/initialize may answer a
 // second (observed with hosts that attach their listener late).

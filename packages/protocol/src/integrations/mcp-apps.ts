@@ -1836,3 +1836,43 @@ export function gguiShellHtml(
 ${runtimeTag}
 </body></html>`;
 }
+
+/**
+ * The exact prefix {@link gguiShellHtml} writes before the envelope
+ * JSON — shared with {@link readGguiShellEnvelope} so the writer and the
+ * reader cannot drift. ONE line, one marker; the JSON that follows is
+ * angle-bracket-escaped, so the closing script tag can only be the
+ * terminator.
+ */
+export const GGUI_SHELL_META_MARKER = 'globalThis.__GGUI_META__ = ';
+
+/**
+ * Inverse of {@link gguiShellHtml}: recover the slice envelope
+ * (`{ "ai.ggui/render": {…} }`) a shell document inlines. This is the
+ * host-side half of the read-plane door (ggui#537): a tool result that
+ * carries only the view's identity (`structuredContent.resourceUri` /
+ * `_meta.ui.resourceUri`, no bootstrap material) names a per-render
+ * resource whose document IS a self-contained shell — read it through
+ * `resources/read`, hand the text here, then validate the returned
+ * envelope with {@link parseMcpAppAiGguiRenderMeta}. Returns
+ * `undefined` when the text carries no marker or the JSON does not
+ * parse (a static thin shell, a failure page, a truncated body) —
+ * never throws, so a caller can fall through to its next tier.
+ *
+ * Reads the FIRST marker only. `gguiShellHtml` writes exactly one; a
+ * document with two is not one it produced.
+ */
+export function readGguiShellEnvelope(html: string): unknown {
+  const start = html.indexOf(GGUI_SHELL_META_MARKER);
+  if (start < 0) return undefined;
+  const jsonStart = start + GGUI_SHELL_META_MARKER.length;
+  // The assembler escapes `<`/`>` inside the JSON, so this sequence
+  // cannot occur before the real terminator.
+  const end = html.indexOf(';</' + 'script>', jsonStart);
+  if (end < 0) return undefined;
+  try {
+    return JSON.parse(html.slice(jsonStart, end)) as unknown;
+  } catch {
+    return undefined;
+  }
+}

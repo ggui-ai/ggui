@@ -18,6 +18,7 @@ import {
   asGguiRenderBootstrap,
   escapeInlineScript,
   gguiShellHtml,
+  readGguiShellEnvelope,
   parseMcpAppAiGguiRenderMeta,
   toolResultGguiRender,
 } from './mcp-apps.js';
@@ -38,13 +39,15 @@ function envelope(
   return { [MCP_APP_AI_GGUI_RENDER_META_KEY]: slice };
 }
 
-/** Extract + parse the inlined `__GGUI_META__` JSON back out of a shell. */
+/**
+ * Extract + parse the inlined `__GGUI_META__` JSON back out of a shell —
+ * through the protocol's own inverse, so these tests pin writer/reader
+ * PARITY (the read-plane door, ggui#537, reads shells exactly this way).
+ */
 function inlinedEnvelope(html: string): unknown {
-  const match = html.match(
-    /globalThis\.__GGUI_META__ = (.*);<\/script>/,
-  );
-  expect(match).not.toBeNull();
-  return JSON.parse(match![1]);
+  const parsed = readGguiShellEnvelope(html);
+  expect(parsed).toBeDefined();
+  return parsed;
 }
 
 describe('asGguiRenderBootstrap', () => {
@@ -344,5 +347,27 @@ describe('parseMcpAppAiGguiRenderMeta — codeB64', () => {
       envelope({ ...base, codeB64: '', wsUrl: 'w', wsToken: 't' }),
     );
     expect(result).toEqual({ ok: false, reason: 'MALFORMED_RENDER' });
+  });
+});
+
+describe('readGguiShellEnvelope (the read-plane door reader)', () => {
+  it('round-trips gguiShellHtml, including a slice string that carries a script terminator', () => {
+    const slice = { ...LIVE_SLICE, propsJson: '{"t":"</script><script>alert(1)</script>"}' };
+    const bootstrap = asGguiRenderBootstrap(envelope(slice));
+    expect(bootstrap).toBeDefined();
+    expect(readGguiShellEnvelope(gguiShellHtml(bootstrap!))).toEqual(envelope(slice));
+  });
+
+  it('returns undefined for a document without the marker (a thin static shell, a failure page)', () => {
+    expect(readGguiShellEnvelope('<!doctype html><html><body>Waiting for tool result…</body></html>')).toBeUndefined();
+    expect(readGguiShellEnvelope('')).toBeUndefined();
+  });
+
+  it('returns undefined when the JSON does not parse (truncated body) — never throws', () => {
+    const bootstrap = asGguiRenderBootstrap(envelope(LIVE_SLICE));
+    expect(bootstrap).toBeDefined();
+    const html = gguiShellHtml(bootstrap!);
+    const cut = html.slice(0, html.indexOf('"wsUrl"') + 5);
+    expect(readGguiShellEnvelope(cut)).toBeUndefined();
   });
 });

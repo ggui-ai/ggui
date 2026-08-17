@@ -39,6 +39,8 @@ import type { WebSocketMessage } from '@ggui-ai/protocol/transport/websocket';
 import {
   MCP_APP_BOOTSTRAP_FAILED_TYPE,
   MCP_APP_RENDERER_READY_TYPE,
+  parseMcpAppAiGguiRenderMeta,
+  readGguiShellEnvelope,
   type McpAppAiGguiRenderMeta,
   type McpAppBootstrapFailedMessage,
   type McpAppRendererReadyMessage,
@@ -46,8 +48,10 @@ import {
 } from '@ggui-ai/protocol/integrations/mcp-apps';
 import type { GguiSessionSeedInput } from './types.js';
 import {
+  extractLocatorFromToolResult,
   parseMetaFromGlobal,
   parseMetaFromToolResult,
+  validateMeta,
 } from './meta-parse.js';
 import type {
   McpAppAiGguiMetaParseFailureReason,
@@ -544,6 +548,17 @@ export interface BootSequenceOptions {
    */
   readonly preResolvedMeta?: McpAppAiGguiRenderMeta;
   /**
+   * Autostart-layer pre-resolution of the read-plane door (ggui#537):
+   * a tool result that arrived before `bootSequence` ran carried the
+   * view's LOCATOR (`ui://ggui/render/…`) but no bootstrap material —
+   * the read-plane-only posture. The runtime cannot read the resource
+   * before the App is connected, so the locator is threaded here and
+   * resolved via {@link resolveMetaViaReadDoor} right after the
+   * handshake, ahead of the Tier 2 tool-result wait. Ignored when
+   * `preResolvedMeta` is set.
+   */
+  readonly preResolvedLocator?: string;
+  /**
    * How long to wait for the spec-canonical `ui/notifications/tool-result`
    * notification (Tier 2 of the resolver chain) before failing with
    * the synchronous tier's parse reason. Defaults to
@@ -809,7 +824,17 @@ export async function bootSequence(opts: BootSequenceOptions): Promise<BootSeque
     if (inline.ok) {
       parsed = inline;
     } else {
-      const fromToolResult = await toolResultPromise;
+      // Tier 1.5 — the read-plane door (ggui#537). A pre-boot tool
+      // result named the view but carried no material; now that the
+      // App is connected, resolve the locator through the host's
+      // `resources/read` proxy. One round trip, ahead of the Tier 2
+      // wait; a miss falls through to Tier 2 unchanged (its listener
+      // is already armed and resolves locator-only arrivals too).
+      const viaDoor =
+        opts.preResolvedLocator !== undefined
+          ? await resolveMetaViaReadDoor(app, opts.preResolvedLocator)
+          : null;
+      const fromToolResult = viaDoor ?? (await toolResultPromise);
       if (fromToolResult !== null) {
         parsed = { ok: true, meta: fromToolResult };
       } else {
@@ -1630,6 +1655,26 @@ export function readPendingToolResults(): McpAppAiGguiRenderMeta | null {
 }
 
 /**
+ * Sibling of {@link readPendingToolResults} for the read-plane-only
+ * posture (ggui#537): the NEWEST buffered tool result that carries a
+ * `ui://ggui/render/…` locator but no bootstrap material. Consulted only
+ * when the buffer yielded no inline slice; the autostart threads it to
+ * `bootSequence` as `preResolvedLocator`, resolved after the handshake.
+ */
+export function readPendingToolResultLocator(): string | null {
+  if (typeof window === 'undefined') return null;
+  const raw = (window as unknown as {
+    __GGUI_PENDING_TOOL_RESULTS__?: unknown;
+  }).__GGUI_PENDING_TOOL_RESULTS__;
+  if (!Array.isArray(raw) || raw.length === 0) return null;
+  for (let i = raw.length - 1; i >= 0; i--) {
+    const locator = extractLocatorFromToolResult(raw[i]);
+    if (locator !== null) return locator;
+  }
+  return null;
+}
+
+/**
  * Listen for a `ui/notifications/tool-result` notification via the
  * App's spec-canonical event surface and resolve to the extracted
  * slice meta. Times out after `timeoutMs`; resolves `null` on timeout
@@ -1647,23 +1692,72 @@ function awaitToolResultMetaFromApp(
 ): Promise<McpAppAiGguiRenderMeta | null> {
   return new Promise((resolve) => {
     let settled = false;
-    const handler = (params: CallToolResult): void => {
+    const settle = (value: McpAppAiGguiRenderMeta | null): void => {
       if (settled) return;
-      const meta = extractMetaFromToolResult(params);
-      if (meta === null) return;
       settled = true;
       app.removeEventListener('toolresult', handler);
       clearTimeout(timer);
-      resolve(meta);
+      resolve(value);
+    };
+    const handler = (params: CallToolResult): void => {
+      if (settled) return;
+      const meta = extractMetaFromToolResult(params);
+      if (meta !== null) {
+        settle(meta);
+        return;
+      }
+      // Read-plane door (ggui#537): identity-only result → resolve the
+      // locator through the host's `resources/read` proxy. Async, and
+      // it never settles `null` — a later result carrying the slice
+      // inline (or the timeout) still decides.
+      const locator = extractLocatorFromToolResult(params);
+      if (locator === null) return;
+      void resolveMetaViaReadDoor(app, locator).then((resolved) => {
+        if (resolved !== null) settle(resolved);
+      });
     };
     app.addEventListener('toolresult', handler);
-    const timer = setTimeout(() => {
-      if (settled) return;
-      settled = true;
-      app.removeEventListener('toolresult', handler);
-      resolve(null);
-    }, timeoutMs);
+    const timer = setTimeout(() => settle(null), timeoutMs);
   });
+}
+
+/**
+ * The read-plane door (ggui#537). A server running the read-plane-only
+ * posture publishes only the view's identity on the tool result — the
+ * `ui://ggui/render/…` locator — and no bootstrap material; the
+ * per-render resource that locator names is the self-contained shell,
+ * whose document inlines the very envelope this runtime boots from.
+ * Ask the HOST to read it (`app.readServerResource` → `resources/read`,
+ * proxied by the host's own MCP client — no fetch from this sandbox, so
+ * a host CSP without `connect-src` to the server is not in the way),
+ * recover the envelope with the protocol's writer/reader pair
+ * ({@link readGguiShellEnvelope}), and validate it exactly as an inline
+ * slice would be. `null` on any miss (host cannot proxy reads, resource
+ * gone, no envelope) — the caller's other tiers still decide.
+ */
+export async function resolveMetaViaReadDoor(
+  app: App,
+  locator: string,
+): Promise<McpAppAiGguiRenderMeta | null> {
+  let text: string | undefined;
+  try {
+    const res = await app.readServerResource({ uri: locator });
+    const first = res.contents[0];
+    text = first !== undefined && 'text' in first && typeof first.text === 'string' ? first.text : undefined;
+  } catch (err) {
+    // eslint-disable-next-line no-console -- operator-visible: the door is a boot tier, its miss must be legible
+    console.warn(
+      `[ggui-runtime] read-plane door: host could not read ${locator} — ${err instanceof Error ? err.message : String(err)}`,
+    );
+    return null;
+  }
+  if (text === undefined) return null;
+  const envelope = readGguiShellEnvelope(text);
+  if (envelope === undefined) return null;
+  const parsed = parseMcpAppAiGguiRenderMeta(envelope);
+  if (!parsed.ok || parsed.meta === undefined) return null;
+  const validated = validateMeta(parsed.meta);
+  return validated.ok ? validated.meta : null;
 }
 
 /**
@@ -1675,13 +1769,23 @@ function awaitToolResultMetaFromApp(
  * listener catches the ones that arrive AFTER the bundle parses but
  * BEFORE bootSequence runs.
  */
+/**
+ * What the pre-handshake wait resolves to: an inline slice (boot from
+ * it directly), or — read-plane-only posture — the view's locator, to
+ * be resolved through the door once the App is connected. `null` on
+ * timeout.
+ */
+type PreBootToolResult =
+  | { readonly kind: 'meta'; readonly meta: McpAppAiGguiRenderMeta }
+  | { readonly kind: 'locator'; readonly locator: string };
+
 function awaitToolResultMeta(
   timeoutMs: number,
-): Promise<McpAppAiGguiRenderMeta | null> {
+): Promise<PreBootToolResult | null> {
   if (typeof window === 'undefined') return Promise.resolve(null);
   return new Promise((resolve) => {
     let settled = false;
-    const settle = (value: McpAppAiGguiRenderMeta | null) => {
+    const settle = (value: PreBootToolResult | null) => {
       if (settled) return;
       settled = true;
       window.removeEventListener('message', onMessage);
@@ -1702,7 +1806,16 @@ function awaitToolResultMeta(
         return;
       }
       const meta = extractMetaFromToolResult(m.params);
-      if (meta !== null) settle(meta);
+      if (meta !== null) {
+        settle({ kind: 'meta', meta });
+        return;
+      }
+      // Identity-only result (ggui#537): settle NOW with the locator so
+      // boot starts immediately and the door runs after the handshake —
+      // waiting the full timeout for a slice this posture never sends
+      // would cost every spec-host view 30 s for nothing.
+      const locator = extractLocatorFromToolResult(m.params);
+      if (locator !== null) settle({ kind: 'locator', locator });
     };
     window.addEventListener('message', onMessage);
     const timer = setTimeout(() => settle(null), timeoutMs);
@@ -3731,7 +3844,10 @@ function readLiveBootstrapShape(): boolean {
  * re-await the same postMessage or re-parse the same global), saving
  * up to the 30s postMessage timeout for spec-strict hosts.
  */
-function runBootProduction(preResolvedMeta?: McpAppAiGguiRenderMeta): void {
+function runBootProduction(
+  preResolvedMeta?: McpAppAiGguiRenderMeta,
+  preResolvedLocator?: string,
+): void {
   const { app, transport } = createDefaultApp();
   void bootProduction({
     doc: document,
@@ -3747,6 +3863,7 @@ function runBootProduction(preResolvedMeta?: McpAppAiGguiRenderMeta): void {
     onObserve: postObservabilityToParent,
     onLifecycle: postLifecycleToParent,
     ...(preResolvedMeta !== undefined ? { preResolvedMeta } : {}),
+    ...(preResolvedLocator !== undefined ? { preResolvedLocator } : {}),
   });
 }
 
@@ -3777,16 +3894,21 @@ if (shouldAutostart() && typeof window !== 'undefined') {
     runBootProduction(inline);
   } else {
     const buffered = readPendingToolResults();
+    const bufferedLocator = buffered === null ? readPendingToolResultLocator() : null;
     if (buffered !== null) {
       runBootProduction(buffered);
+    } else if (bufferedLocator !== null) {
+      // Read-plane-only posture (ggui#537): the buffered result named
+      // the view; the door resolves it right after the handshake.
+      runBootProduction(undefined, bufferedLocator);
     } else if (readLiveBootstrapShape()) {
       runBootProduction();
     } else {
-      void awaitToolResultMeta(POSTMESSAGE_BOOT_TIMEOUT_MS).then(
-        (postMessageMeta) => {
-          runBootProduction(postMessageMeta ?? undefined);
-        },
-      );
+      void awaitToolResultMeta(POSTMESSAGE_BOOT_TIMEOUT_MS).then((pre) => {
+        if (pre === null) runBootProduction();
+        else if (pre.kind === 'meta') runBootProduction(pre.meta);
+        else runBootProduction(undefined, pre.locator);
+      });
     }
   }
 }
@@ -3841,6 +3963,8 @@ async function bootProduction(opts: {
    * + spec-canonical toolresult tiers.
    */
   readonly preResolvedMeta?: McpAppAiGguiRenderMeta;
+  /** Pre-resolved LOCATOR from the autostart layer (read-plane door, ggui#537). */
+  readonly preResolvedLocator?: string;
 }): Promise<void> {
   // Dynamic-import the heavy module graph. Done here rather than at
   // top-level so spec files importing runtime.ts for `bootSequence`
@@ -4370,6 +4494,9 @@ async function bootProduction(opts: {
     ...(opts.onLifecycle !== undefined ? { onLifecycle: opts.onLifecycle } : {}),
     ...(opts.preResolvedMeta !== undefined
       ? { preResolvedMeta: opts.preResolvedMeta }
+      : {}),
+    ...(opts.preResolvedLocator !== undefined
+      ? { preResolvedLocator: opts.preResolvedLocator }
       : {}),
   });
 }
