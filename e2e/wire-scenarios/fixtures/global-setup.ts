@@ -175,6 +175,20 @@ const SERVICES: readonly ServiceSpec[] = [
   // card instead of a real render. `GGUI_GENERATION_MODEL` overrides
   // the manifest (env > manifest precedence) so each instance generates
   // with its own provider's flagship-but-cheap model.
+  // ggui#537 — the read-plane-only posture. Same sample, second port,
+  // `GGUI_WITHHOLD_RESULT_META=1`: tool results publish only the view's
+  // identity (structuredContent.resourceUri + _meta.ui.resourceUri), no
+  // bootstrap material. Scenario 28 mounts the DECLARATION-level static
+  // shell against it and proves the shell's read-plane door (a
+  // host-proxied `resources/read` of the locator) paints the view.
+  // Keyless: priming is `/control` register (scenario-18 recipe).
+  {
+    name: 'ggui-default-withhold',
+    pkg: '@ggui-samples/ggui-default',
+    port: Number.parseInt(process.env.GGUI_WITHHOLD_PORT ?? '6789', 10),
+    healthPath: '/healthz',
+    envOverride: { GGUI_WITHHOLD_RESULT_META: '1' },
+  },
   {
     name: 'ggui-default-openai',
     pkg: '@ggui-samples/ggui-default',

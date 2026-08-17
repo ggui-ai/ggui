@@ -49,6 +49,7 @@ describe('parseServeFlags', () => {
       host: DEFAULT_SERVE_HOST,
       mcpOnly: false,
       devAllowAll: false,
+      withholdResultMeta: false,
       publicDemo: false,
       multiTenant: false,
       oauth: false,
@@ -60,6 +61,11 @@ describe('parseServeFlags', () => {
   it('parses --oauth', () => {
     expect(parseServeFlags(['--oauth']).oauth).toBe(true);
     expect(parseServeFlags([]).oauth).toBe(false);
+  });
+
+  it('parses --withhold-result-meta (read-plane-only posture, ggui#537) and defaults it off', () => {
+    expect(parseServeFlags([]).withholdResultMeta).toBe(false);
+    expect(parseServeFlags(['--withhold-result-meta']).withholdResultMeta).toBe(true);
   });
 
   it('parses --dev-allow-all', () => {
@@ -481,6 +487,7 @@ describe('runServe', () => {
     host: '127.0.0.1',
     mcpOnly: true,
     devAllowAll: false,
+    withholdResultMeta: false,
     oauth: false,
     publicDemo: false,
     multiTenant: false,
@@ -637,6 +644,7 @@ describe('runServe — agent supervision', () => {
     host: '127.0.0.1',
     mcpOnly: false,
     devAllowAll: false,
+    withholdResultMeta: false,
     oauth: false,
     publicDemo: false,
     multiTenant: false,

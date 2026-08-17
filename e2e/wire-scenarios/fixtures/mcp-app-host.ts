@@ -68,6 +68,17 @@ export interface McpAppHostOptions {
    * header, the permissive default every other scenario runs under.
    */
   readonly csp?: string;
+  /**
+   * A `CallToolResult` the host forwards to the app as
+   * `ui/notifications/tool-result` right after answering
+   * `ui/initialize` — the spec-canonical delivery a real host performs
+   * (claude.ai, Claude Desktop). Optional: the per-render self-contained
+   * shell needs no tool result (its envelope is inlined); the
+   * DECLARATION-level static shell does, and under the read-plane-only
+   * posture that result carries only the view's locator, which the
+   * shell resolves through the `resources/read` proxy below (ggui#537).
+   */
+  readonly toolResult?: Record<string, unknown>;
 }
 
 export interface McpAppHostHandle {
@@ -83,10 +94,15 @@ export interface McpAppHostHandle {
  */
 const MCP_APPS_PROTOCOL_VERSION = '2026-01-26';
 
-function buildWrapperHtml(): string {
+function buildWrapperHtml(toolResult: Record<string, unknown> | undefined): string {
+  // Script-safe JSON: `<` escaped so a tool result carrying "</script>"
+  // in a text block cannot terminate the wrapper's inline script.
+  const toolResultJson =
+    toolResult === undefined ? 'null' : JSON.stringify(toolResult).replace(/</g, '\\u003c');
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>wire-scenarios MCP-Apps host</title></head><body style="margin:0">
 <iframe id="app" data-ggui-mcp-app-iframe src="/resource" style="width:100%;height:600px;border:0"></iframe>
 <script>
+var TOOL_RESULT = ${toolResultJson};
 (function () {
   var iframe = document.getElementById('app');
   window.addEventListener('message', async function (ev) {
@@ -101,6 +117,41 @@ function buildWrapperHtml(): string {
         hostCapabilities: {},
         hostContext: { availableDisplayModes: ['inline'] },
       } }, '*');
+      // Spec-canonical delivery: the tool result rides
+      // ui/notifications/tool-result once the app is initialized.
+      if (TOOL_RESULT !== null) {
+        iframe.contentWindow.postMessage({ jsonrpc: '2.0', method: 'ui/notifications/tool-result', params: TOOL_RESULT }, '*');
+      }
+      return;
+    }
+    if (req.method === 'resources/read') {
+      // Host-proxied resource read (the App SDK's readServerResource /
+      // the shell's read-plane door, ggui#537): the HOST's MCP client
+      // performs the read; the sandbox never fetches the server.
+      try {
+        var rparams = req.params || {};
+        var rresp = await fetch('/mcp', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Accept: 'application/json, text/event-stream' },
+          body: JSON.stringify({ jsonrpc: '2.0', id: Math.floor(Math.random() * 1e9), method: 'resources/read', params: { uri: rparams.uri || '' } }),
+        });
+        var rtext = (await rresp.text()).trim();
+        var rline = rtext;
+        if (rtext.indexOf('event:') === 0 || rtext.indexOf('data:') === 0) {
+          var rdata = rtext.split('\\n').find(function (l) { return l.indexOf('data:') === 0; });
+          rline = rdata ? rdata.slice('data:'.length).trim() : '{}';
+        }
+        var rrpc = JSON.parse(rline);
+        iframe.contentWindow.postMessage(
+          Object.assign({ jsonrpc: '2.0', id: req.id }, rrpc.error !== undefined ? { error: rrpc.error } : { result: rrpc.result }),
+          '*',
+        );
+      } catch (rerr) {
+        iframe.contentWindow.postMessage(
+          { jsonrpc: '2.0', id: req.id, error: { code: -32603, message: String(rerr) } },
+          '*',
+        );
+      }
       return;
     }
     if (req.method === 'tools/call') {
@@ -152,7 +203,7 @@ export async function startMcpAppHost(
   opts: McpAppHostOptions,
 ): Promise<McpAppHostHandle> {
   const bearer = opts.bearer ?? process.env.GGUI_MCP_BEARER ?? 'dev';
-  const wrapperHtml = buildWrapperHtml();
+  const wrapperHtml = buildWrapperHtml(opts.toolResult);
 
   const cspHeader =
     opts.csp !== undefined ? { 'Content-Security-Policy': opts.csp } : {};

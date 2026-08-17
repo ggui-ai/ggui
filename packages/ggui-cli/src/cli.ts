@@ -754,6 +754,7 @@ async function runServeCommand(args: string[]): Promise<number> {
         host: parsed.host,
         mcpOnly: parsed.mcpOnly,
         devAllowAll: parsed.devAllowAll,
+        withholdResultMeta: parsed.withholdResultMeta,
         publicDemo: parsed.publicDemo,
         multiTenant: parsed.multiTenant,
         oauth: parsed.oauth,
@@ -782,6 +783,7 @@ async function runServeCommand(args: string[]): Promise<number> {
           ...(parsed.mcpInstructions !== undefined
             ? { mcpInstructions: parsed.mcpInstructions }
             : {}),
+          ...(parsed.withholdResultMeta ? { withholdResultMeta: true } : {}),
           ...(parsed.keysFile !== undefined ? { keysFile: parsed.keysFile } : {}),
           ...(parsed.adminToken !== undefined
             ? { adminToken: parsed.adminToken }

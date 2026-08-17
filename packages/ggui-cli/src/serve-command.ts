@@ -164,6 +164,18 @@ export interface ParsedServeFlags {
    */
   mcpInstructions?: 'default' | 'aggressive' | 'always' | 'minimal' | 'off';
   /**
+   * Read-plane-only mounting posture (`--withhold-result-meta`): tool
+   * results publish only the view's identity — `structuredContent.
+   * resourceUri` and the spec pointer `_meta.ui.resourceUri` — and no
+   * bootstrap material; every host resolves the view by an authenticated
+   * `resources/read`. Threaded to `createGguiServer({withholdResultMeta})`;
+   * the `GGUI_WITHHOLD_RESULT_META=1` env var is the equivalent (flag
+   * wins). Default off = the inlined bootstrap. See
+   * `BuildMcpServerOptions.withholdResultMeta` for the full rationale
+   * (guuey#209 C3, ggui#537).
+   */
+  withholdResultMeta: boolean;
+  /**
    * Skip auto-opening the operator's browser at the base URL after
    * boot. Without this flag, `ggui serve` opens the local HTTP URL
    * after the banner — server-side redirect routes first-run
@@ -251,6 +263,7 @@ export function parseServeFlags(args: readonly string[]): ParsedServeFlags {
     host: DEFAULT_SERVE_HOST,
     mcpOnly: false,
     devAllowAll: false,
+    withholdResultMeta: false,
     publicDemo: false,
     multiTenant: false,
     oauth: false,
@@ -284,6 +297,10 @@ export function parseServeFlags(args: readonly string[]): ParsedServeFlags {
     }
     if (arg === '--mcp-only') {
       out.mcpOnly = true;
+      continue;
+    }
+    if (arg === '--withhold-result-meta') {
+      out.withholdResultMeta = true;
       continue;
     }
     if (arg === '--dev-allow-all') {

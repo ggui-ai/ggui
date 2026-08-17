@@ -348,6 +348,15 @@ export interface BuildMcpServerBackendOptions {
    * `GGUI_MCP_INSTRUCTIONS` env var (CLI flag wins).
    */
   readonly mcpInstructions?: "default" | "aggressive" | "always" | "minimal" | "off";
+  /**
+   * Read-plane-only mounting posture — threaded to
+   * `createGguiServer({withholdResultMeta})`. Falls back to the
+   * `GGUI_WITHHOLD_RESULT_META` env var (`1`/`true`) when absent; the
+   * flag wins. See `BuildMcpServerOptions.withholdResultMeta`.
+   *
+   * Surface = `--withhold-result-meta` CLI flag or the env var.
+   */
+  readonly withholdResultMeta?: boolean;
 
   /**
    * Directory backing the cross-restart persistence bundle. When set,
@@ -624,6 +633,10 @@ export function buildMcpServerBackend(opts: BuildMcpServerBackendOptions): Serve
       join(opts.persistentDir, "render-signer-secret.hex")
     );
   }
+  // Resolve withholdResultMeta: CLI flag wins over env var.
+  const envWithhold = process.env.GGUI_WITHHOLD_RESULT_META?.trim();
+  const resolvedWithhold =
+    opts.withholdResultMeta === true || (opts.withholdResultMeta === undefined && (envWithhold === "1" || envWithhold === "true"));
   // Resolve mcpInstructions: CLI flag wins over env var. Validated
   // env-var values pass through to createGguiServer; invalid values
   // fall through to the no-preset default with a one-line warning.
@@ -813,6 +826,7 @@ export function buildMcpServerBackend(opts: BuildMcpServerBackendOptions): Serve
       ? { renderSigning: { secret: persistedRenderSignerSecret } }
       : {}),
     ...(resolvedMcpInstructions !== undefined ? { mcpInstructions: resolvedMcpInstructions } : {}),
+    ...(resolvedWithhold ? { withholdResultMeta: true } : {}),
     // `--multi-tenant` flips the `/ggui/console/llm-keys` gate from
     // admin-token to auth-adapter. Default scope derivation in the
     // server picks up `userId` / `appId` from the resolved identity;

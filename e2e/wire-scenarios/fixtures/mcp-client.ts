@@ -75,6 +75,27 @@ export async function callTool(
 }
 
 /**
+ * `tools/list` against an MCP endpoint — the host-side discovery a spec
+ * MCP-Apps host performs, where the DECLARATION-level `_meta.ui.
+ * resourceUri` (the static shell) is announced.
+ */
+export async function listTools(mcpUrl: string): Promise<JsonRpcResponse> {
+  const id = nextRpcId++;
+  const resp = await fetch(mcpUrl, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json, text/event-stream',
+    },
+    body: JSON.stringify({ jsonrpc: '2.0', id, method: 'tools/list', params: {} }),
+  });
+  if (!resp.ok) {
+    throw new Error(`listTools: HTTP ${resp.status} ${resp.statusText}`);
+  }
+  return parseMcpResponse(await resp.text());
+}
+
+/**
  * Parse the MCP server's response body. Handles two shapes:
  *
  *   - `application/json` → JSON-RPC envelope as a flat object.

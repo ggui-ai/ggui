@@ -77,6 +77,7 @@ describe('runServe + createGguiServer (end-to-end)', () => {
         host: DEFAULT_SERVE_HOST,
         mcpOnly: true,
         devAllowAll: false,
+        withholdResultMeta: false,
         oauth: false,
         publicDemo: false,
         multiTenant: false,
