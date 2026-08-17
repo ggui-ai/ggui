@@ -323,12 +323,17 @@ describe('buildMcpServer — in-result isError failure channel (ruling B)', () =
     }
   });
 
-  it('withholdResultMeta publishes the durable identity only — structuredContent intact, no _meta, resultMeta never consulted', async () => {
+  it('withholdResultMeta publishes the durable identity only — structuredContent intact, _meta = the spec pointer alone, resultMeta never consulted', async () => {
     // Read-plane-only mounting: a host receiving this result holds a
     // `ui://` locator and nothing to mount directly, so it MUST resolve
-    // via authenticated resources/read. This is the posture guuey's
-    // vendor-arm retirement lands in for every consumer, and what a
-    // deployment states to guarantee it by construction.
+    // via authenticated resources/read. The locator is published on
+    // BOTH wire slots hosts read — `structuredContent.resourceUri`
+    // (ggui-aware hosts) and `_meta.ui.resourceUri` (spec-canonical
+    // MCP Apps hosts: claude.ai, Claude Desktop, mcp-apps-react's
+    // chat-helpers) — and the bootstrap MATERIAL (`ai.ggui/render`) is
+    // what stays withheld. The first arm stripped `_meta` wholesale and
+    // blinded every spec host (ggui#537). Same value on both slots:
+    // the identity, never material.
     const resultMetaSpy = vi.fn(() => ({ 'ai.ggui/render': { runtimeUrl: 'https://x/rt.js' } }));
     const rendering: SharedHandler<ZodRawShape, ZodRawShape> = {
       name: 'synth_render',
@@ -345,9 +350,36 @@ describe('buildMcpServer — in-result isError failure channel (ruling B)', () =
       const result = await client.callTool({ name: 'synth_render', arguments: {} });
       expect(result.isError).toBeUndefined();
       expect(result.structuredContent).toEqual({ sessionId: 's1', resourceUri: 'ui://ggui/render/s1' });
-      expect(result._meta).toBeUndefined();
+      expect(result._meta).toEqual({
+        ui: { resourceUri: 'ui://ggui/render/s1' },
+        'ui/resourceUri': 'ui://ggui/render/s1',
+      });
       // Not merely stripped after the fact — never assembled, so no
-      // bootstrap token is minted for a slice nobody will receive.
+      // bootstrap token is minted for a slice nobody will receive; the
+      // pointer above is derived from the OUTPUT, not from resultMeta.
+      expect(resultMetaSpy).not.toHaveBeenCalled();
+    } finally {
+      await close();
+    }
+  });
+
+  it('withholdResultMeta publishes NO _meta for outputs without a ui:// locator — no pointer to mirror, nothing invented', async () => {
+    const resultMetaSpy = vi.fn(() => ({ 'ai.ggui/render': { runtimeUrl: 'https://x/rt.js' } }));
+    const plain: SharedHandler<ZodRawShape, ZodRawShape> = {
+      name: 'synth_plain',
+      description: 'synthetic non-render handler',
+      inputSchema: {},
+      outputSchema: { ok: z.boolean() },
+      async handler() {
+        return { ok: true };
+      },
+      resultMeta: resultMetaSpy,
+    };
+    const { client, close } = await bootLinked([plain], { withholdResultMeta: true });
+    try {
+      const result = await client.callTool({ name: 'synth_plain', arguments: {} });
+      expect(result.structuredContent).toEqual({ ok: true });
+      expect(result._meta).toBeUndefined();
       expect(resultMetaSpy).not.toHaveBeenCalled();
     } finally {
       await close();

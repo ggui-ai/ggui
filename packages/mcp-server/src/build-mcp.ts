@@ -144,16 +144,32 @@ export interface BuildMcpServerOptions {
   readonly extraResources?: ReadonlyArray<(server: McpServer) => void>;
 
   /**
-   * Withhold every handler's per-result `_meta` from tool results.
+   * Withhold every handler's per-result bootstrap MATERIAL from tool
+   * results — the read-plane-only posture.
    *
    * By default a successful tool result carries the handler's
-   * `resultMeta` slice — for `ggui_render` / `ggui_update` that is the
+   * `resultMeta` — for `ggui_render` / `ggui_update` that is the
    * `ai.ggui/render` bootstrap a host may mount DIRECTLY without any
-   * further round-trip. Setting this makes the server publish only the
-   * durable identity (`structuredContent.resourceUri`, the `ui://`
-   * locator), so a host MUST resolve every view by an authenticated
-   * `resources/read` — the persisted-locator path — before it can
-   * mount anything.
+   * further round-trip, plus the spec-canonical pointer `_meta.ui.
+   * resourceUri`. Setting this makes the server publish only the
+   * durable IDENTITY: `structuredContent.resourceUri` (the `ui://`
+   * locator) and — the same value, on the wire slot MCP Apps hosts
+   * read — `_meta.ui.resourceUri` (+ the legacy flat `ui/resourceUri`).
+   * `resultMeta` is never invoked (no bootstrap token is minted for a
+   * slice nobody receives); the pointer is derived from the validated
+   * OUTPUT itself, the single source of truth `resultMeta` reuses.
+   * A host MUST resolve every view by an authenticated `resources/read`
+   * — the persisted-locator path — before it can mount anything.
+   *
+   * Why the pointer stays (ggui#537): the identity IS the pointer.
+   * Spec-canonical hosts (claude.ai, Claude Desktop, `@ggui-ai/
+   * mcp-apps-react`'s chat-helpers, the OSS samples) mount the
+   * per-render self-contained shell that `_meta.ui.resourceUri` names —
+   * a `resources/read` the HOST performs, exactly the read-plane path
+   * this posture wants. The first arm (f8c93405d) stripped `_meta`
+   * wholesale, which took the pointer with it and left every such host
+   * with the declaration-level static shell and a result it could not
+   * mount from ("Waiting for tool result…", prod 2026-08-16→17).
    *
    * That is a deployment posture, not a debug switch: a hosted
    * deployment that wants "views mount only through the read plane"
@@ -174,6 +190,22 @@ export interface BuildMcpServerOptions {
  * per-request context (via AsyncLocalStorage or a closure) without
  * leaking the shape into this module.
  */
+/**
+ * The identity-only `_meta` a withholding server publishes (ggui#537):
+ * when the validated output carries a `ui://` `resourceUri` (the durable
+ * locator `ggui_render` / `ggui_update` surface on structuredContent),
+ * mirror it onto the spec-canonical `_meta.ui.resourceUri` slot MCP
+ * Apps hosts read (+ the legacy flat key), and nothing else. Same value
+ * `resultMeta` would have stamped, without invoking it — no bootstrap
+ * material, no minted token. `undefined` for outputs without a locator.
+ */
+function identityPointerMeta(validated: unknown): Record<string, unknown> | undefined {
+  if (!isRecord(validated)) return undefined;
+  const uri = validated['resourceUri'];
+  if (typeof uri !== 'string' || !uri.startsWith('ui://')) return undefined;
+  return { ui: { resourceUri: uri }, 'ui/resourceUri': uri };
+}
+
 export function buildMcpServer(
   info: ServerInfo,
   handlers: ReadonlyArray<SharedHandler<ZodRawShape, ZodRawShape>>,
@@ -294,10 +326,12 @@ export function buildMcpServer(
         const validated = z.object(handler.outputSchema).parse(data);
         // Per-result `_meta` — NOT merged into structuredContent, so
         // agents that typecheck against the tool signature never see
-        // it. This is where view-only bootstrap material lives.
+        // it. This is where view-only bootstrap material lives. Under
+        // the withhold posture only the identity pointer is published,
+        // derived from the output (see `withholdResultMeta`).
         const meta =
           opts.withholdResultMeta === true
-            ? undefined
+            ? identityPointerMeta(validated)
             : await handler.resultMeta?.(data, input, ctx);
         logger.info('tool_invoked', {
           tool: handler.name,
