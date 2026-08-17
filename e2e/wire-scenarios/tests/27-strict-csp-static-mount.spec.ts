@@ -57,15 +57,33 @@ const STRICT_CSP = [
   "img-src 'self' data:",
 ].join('; ');
 
-/** Unique-per-scenario contract — same posture as scenarios 8/16/17/18. */
+/**
+ * Unique-per-scenario contract — unique in SHAPE, not just in prose.
+ *
+ * `blueprintKey` canonicalization STRIPS `description`/`usage` by domain
+ * rule (`@ggui-ai/protocol` canonicalize-contract: prose never alters
+ * the wire surface), so two contracts that differ only in description
+ * share the Tier-1 exact-match key and the registry treats them as ONE
+ * shape — same shape + no variance ⇒ reuse whichever registration came
+ * first. The keyless sweep runs this scenario and scenario 18 against
+ * the same in-process server, and 27 primes first, so a description-only
+ * "signature" here would hand 18's handshake THIS component (live: the
+ * 2026-08-16 sweep red — 18 saw sha256(STRICT_CSP_COMPONENT_CODE) instead
+ * of its own). Distinct prop NAMES + arity are what make the key unique.
+ */
 const STRICT_CSP_CONTRACT = {
   propsSpec: {
-    description: 'strict-csp scenario 27 — unique signature',
+    description: 'strict-csp scenario 27 — a badge with a tone',
     properties: {
-      label: {
+      badgeText: {
         schema: { type: 'string' },
+        required: true,
+        description: 'the badge caption',
+      },
+      tone: {
+        schema: { type: 'string', enum: ['neutral', 'positive', 'warning'] },
         required: false,
-        description: 'optional label',
+        description: 'visual tone',
       },
     },
   },
@@ -129,7 +147,7 @@ describe('Scenario 27 — strict-CSP host: asset-path mount, no scheme sources',
 
       const renderResp = await callTool(MCP_URL, 'ggui_render', {
         handshakeId: handshake.handshakeId,
-        props: {},
+        props: { badgeText: 'strict-csp-ok' },
       });
       const render = unwrapStructured<{
         sessionId: string;

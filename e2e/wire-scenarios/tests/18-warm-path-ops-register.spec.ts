@@ -80,9 +80,15 @@ interface OpsRegisterOut {
 }
 
 /**
- * Unique-per-test contract — same posture as scenarios 8/16/17. The
- * description string is the only varying field so blueprintKey is
- * unique to this scenario's registry slot.
+ * Unique-per-test contract. NOTE (2026-08-16): the description string
+ * does NOT make `blueprintKey` unique — canonicalization strips
+ * `description`/`usage` by domain rule, so only the SHAPE (prop names,
+ * arity, schemas, variance) keys the registry slot. Every scenario that
+ * shares a server with this one (the keyless sweep: 27 primes before 18)
+ * must therefore differ in shape, or its registration shadows this
+ * one's on the exact-key fast path and the handshake below returns the
+ * wrong codeHash. This shape — one optional string `label` — is
+ * scenario 18's alone.
  */
 const REGISTER_TEST_CONTRACT = {
   propsSpec: {
