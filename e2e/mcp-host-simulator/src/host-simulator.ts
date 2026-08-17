@@ -91,6 +91,17 @@ export interface HostSimulatorOptions {
  * the resourceUri the host should have pre-fetched (declaration-
  * level meta from `tools/list`, surfaced here for assertions).
  */
+/**
+ * The `ui://ggui/render/...` locator a render-shaped result publishes
+ * on `structuredContent.resourceUri`, or `undefined` for anything else
+ * (non-render tools, failure envelopes — which carry no resourceUri).
+ */
+function renderLocatorOf(structuredContent: unknown): string | undefined {
+  if (typeof structuredContent !== "object" || structuredContent === null) return undefined;
+  const uri = (structuredContent as { resourceUri?: unknown }).resourceUri;
+  return typeof uri === "string" && uri.startsWith("ui://ggui/render/") ? uri : undefined;
+}
+
 export interface CallToolResult {
   readonly structuredContent?: unknown;
   readonly content: ReadonlyArray<unknown>;
@@ -119,6 +130,18 @@ export interface CallToolResult {
    * resource result that omits it).
    */
   readonly meta?: McpAppAiGguiRenderMeta;
+  /**
+   * Which door {@link meta} came through. `'result'` = the tool
+   * result carried the `ai.ggui/render` slice inline (the default
+   * posture); `'resource'` = the result withheld `_meta` and the host
+   * resolved the locator in `structuredContent.resourceUri` through
+   * `resources/read` — the read-plane-only posture
+   * (`withholdResultMeta`, live on every ggui env since 2026-08-16).
+   * A spec asserting the POSTURE reads this; a spec asserting the
+   * BOOTSTRAP reads {@link meta} and is door-agnostic, like a real
+   * host. Absent when there is no meta at all.
+   */
+  readonly metaSource?: "result" | "resource";
   /**
    * The `_meta.ui.resourceUri` declared on the TOOL (from
    * tools/list), if any. Distinct from per-call `_meta.ui.resourceUri`
@@ -442,14 +465,70 @@ export class HostSimulator {
     // retired.
     const isError = (result as { isError?: unknown }).isError === true;
 
+    // Read-plane door. A server running the `withholdResultMeta`
+    // posture publishes only the durable identity — the `ui://`
+    // locator in `structuredContent.resourceUri` — and a host MUST
+    // resolve it through `resources/read` before it can mount. Mirror
+    // that here so every spec reading `meta` sees the bootstrap under
+    // either posture, exactly as a compliant host would; `metaSource`
+    // keeps the door observable for specs that assert the posture.
+    let resolvedMeta = meta;
+    let metaSource: CallToolResult["metaSource"] = meta !== undefined ? "result" : undefined;
+    if (resolvedMeta === undefined && !isError) {
+      const locator = renderLocatorOf(result.structuredContent);
+      if (locator !== undefined) {
+        const read = await this.readRenderResource(locator);
+        if (read.meta !== undefined) {
+          resolvedMeta = read.meta;
+          metaSource = "resource";
+        }
+      }
+    }
+
     return {
       content: (result.content ?? []) as ReadonlyArray<unknown>,
       ...(result.structuredContent !== undefined
         ? { structuredContent: result.structuredContent }
         : {}),
       ...(isError ? { isError: true } : {}),
-      ...(meta !== undefined ? { meta } : {}),
+      ...(resolvedMeta !== undefined ? { meta: resolvedMeta } : {}),
+      ...(metaSource !== undefined ? { metaSource } : {}),
       ...(toolEntry?.resourceUri !== undefined ? { toolResourceUri: toolEntry.resourceUri } : {}),
+    };
+  }
+
+  /**
+   * Read a per-render `ui://` resource through `resources/read` and
+   * recover its `ai.ggui/render` slice — the read-plane path a host
+   * takes when a tool result withholds `_meta`. The pod's shell HTML
+   * inlines the slice envelope on ONE line,
+   * `<script>globalThis.__GGUI_META__ = {...};</script>` (protocol
+   * `gguiShellHtml`, the same assembler every host-built shell uses);
+   * the JSON is validated by the protocol's own
+   * `parseMcpAppAiGguiRenderMeta`, so a malformed slice fails exactly
+   * the way an inline one would. `meta` is absent when the resource
+   * has no envelope (a static shell, a miss the server rendered as a
+   * failure page, an evicted render).
+   */
+  async readRenderResource(
+    uri: string
+  ): Promise<{ readonly html: string; readonly meta?: McpAppAiGguiRenderMeta }> {
+    if (!this.client) throw new Error("connect() first");
+    const res = await this.client.readResource({ uri });
+    const first = res.contents[0];
+    const html = first && "text" in first && typeof first.text === "string" ? first.text : "";
+    const match = /<script>globalThis\.__GGUI_META__ = (.*?);<\/script>/s.exec(html);
+    if (!match) return { html };
+    let envelope: unknown;
+    try {
+      envelope = JSON.parse(match[1]!);
+    } catch {
+      return { html };
+    }
+    const parsed = parseMcpAppAiGguiRenderMeta(envelope);
+    return {
+      html,
+      ...(parsed.ok && parsed.meta !== undefined ? { meta: parsed.meta } : {}),
     };
   }
 
