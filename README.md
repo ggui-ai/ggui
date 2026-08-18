@@ -123,11 +123,9 @@ Then in **claude.ai → Settings → Connectors → Add custom connector**, past
 
 Install cloudflared via your package manager: `brew install cloudflared` (macOS), `apt install cloudflared` (Debian), or grab a binary from [cloudflare.com/products/tunnel](https://www.cloudflare.com/products/tunnel/).
 
-### 4. Use the hosted ggui.ai cloud — `mcp.ggui.ai` _(deploying soon)_
+### 4. Use the hosted ggui cloud — `mcp.ggui.ai`
 
-For **production**, sign up at [ggui.ai](https://ggui.ai) → create an app → get a managed MCP URL (form: `https://mcp.ggui.ai/<app-id>/mcp`). Paste into your chat host's connector settings — no self-hosting, no tunnel, no key management.
-
-🚧 _The hosted endpoint is deploying — coming in a follow-up rc. Use paths 1–3 in the meantime._
+For **production**, sign in at [the ggui console](https://console.ggui.ai) → create an app → mint a connector key. Paste the bare `https://mcp.ggui.ai` endpoint into your chat host's connector settings — no self-hosting, no tunnel, no key management.
 
 ---
 
@@ -178,7 +176,7 @@ Full CLI reference: [`@ggui-ai/cli` README](./packages/ggui-cli/README.md).
 └─────────┘                    └──────────┘                   └──────────┘
 ```
 
-Your agent uses MCP tools to push UIs and receive user events. The protocol is defined by `@ggui-ai/protocol`; the reference server lives in `@ggui-ai/mcp-server`; embedding primitives ship in `@ggui-ai/react`.
+Your agent uses MCP tools to push UIs and receive user events. The protocol is defined by `@ggui-ai/protocol`; the reference server lives in `@ggui-ai/mcp-server`; embedding host-helpers ship in `@ggui-ai/mcp-apps-react` (web) and `@ggui-ai/mcp-apps-react-native` (React Native).
 
 ### MCP tools (primary surface)
 
@@ -210,31 +208,42 @@ The runtime's native tool-calling loop discovers `ggui_render`, `ggui_update`, `
 
 ## Embedding UIs
 
-`<McpAppIframe>` is the canonical consumer primitive. It takes an MCP Apps resource and mounts the ggui render inside a same-origin iframe. The iframe owns the WebSocket lifecycle, renderer bundle, and render mount — host code does not touch `Render` / WebSocket / renderer internals.
+On web, `<AppRenderer>` — imported directly from `@mcp-ui/client`, the spec-canonical MCP Apps host — is the canonical consumer primitive, driven by ggui's `useMcpAppsChat` hook from `@ggui-ai/mcp-apps-react`. `<AppRenderer>` mounts each ggui render inside a sandboxed iframe; the iframe owns the WebSocket lifecycle and renderer bundle, so host code never touches render internals or WebSocket machinery directly.
+
+```bash
+npm install @ggui-ai/mcp-apps-react @mcp-ui/client
+```
 
 ```tsx
-import { McpAppIframe, type ProtocolError } from "@ggui-ai/react";
-import { useEffect, useState } from "react";
+import { AppRenderer } from "@mcp-ui/client";
+import { useMcpAppsChat } from "@ggui-ai/mcp-apps-react/chat-helpers";
 
-function App({ renderId }: { renderId: string }) {
-  const [resource, setResource] = useState<{ uri: string; mimeType: string; text: string } | null>(
-    null
-  );
+function Chat({ agentUrl, sandboxUrl }: { agentUrl: string; sandboxUrl: string }) {
+  const { sessions, send, handleAppMessage } = useMcpAppsChat({
+    chatEndpoint: `${agentUrl}/agent`,
+  });
 
-  useEffect(() => {
-    // Fetch the render-resource envelope from your MCP host. On the
-    // OSS path the renderer route at /r/<shortCode> embeds the
-    // bootstrap inline, so a resource with just `{ uri }` is enough.
-    fetchRenderResource(renderId).then((r) => setResource(r.contents[0]));
-  }, [renderId]);
-
-  if (!resource) return <p>Loading…</p>;
-
-  return <McpAppIframe resource={resource} onError={(err: ProtocolError) => console.error(err)} />;
+  // render `entries` as chat bubbles; call send(prompt) to talk to the agent.
+  // onReadResource / onCallTool relay through your agent backend — see the
+  // full runnable reference below for the wiring.
+  const latest = sessions[sessions.length - 1];
+  return latest ? (
+    <AppRenderer
+      toolName="ggui_render"
+      sandbox={{ url: new URL(sandboxUrl) }}
+      html={latest.inlinedResource?.text}
+      onMessage={handleAppMessage}
+      onError={(err) => console.warn("render error", err)}
+    />
+  ) : null;
 }
 ```
 
-Implementer references for the full protocol: [Architecture overview](https://docs.ggui.ai/architecture/overview/), [MCP Apps support](https://docs.ggui.ai/api/mcp-apps/), [WebSocket protocol](https://docs.ggui.ai/api/websocket-protocol/).
+The complete runnable reference — including auth, sandbox relay, and tool-call wiring — is the [`ggui-basic-web`](https://github.com/ggui-ai/ggui/tree/main/samples/apps/ggui-basic-web) sample. **Start there.**
+
+React Native's equivalent host is `<McpAppIframe>` from `@ggui-ai/mcp-apps-react-native` — RN-only; there is no `<McpAppIframe>` on web.
+
+Implementer references for the full protocol: [React host helpers](https://docs.ggui.ai/sdk/react/), [Architecture overview](https://docs.ggui.ai/architecture/overview/), [MCP Apps support](https://docs.ggui.ai/api/mcp-apps/), [WebSocket protocol](https://docs.ggui.ai/api/websocket-protocol/).
 
 For non-React frameworks, embed the viewer directly:
 
@@ -246,20 +255,20 @@ For non-React frameworks, embed the viewer directly:
 
 Consumer-facing surface — what you `npm install`:
 
-| Package                                                     | Purpose                                                            | npm                                                                                                           |
-| ----------------------------------------------------------- | ------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------- |
-| [`@ggui-ai/cli`](./packages/ggui-cli)                       | The `ggui` binary — `serve`, `dev`, `blueprint`, `gadget`, `theme` | [![npm](https://img.shields.io/npm/v/@ggui-ai/cli)](https://npmjs.com/package/@ggui-ai/cli)                   |
-| [`@ggui-ai/mcp-server`](./packages/mcp-server)              | Reference OSS server (programmatic embedding)                      | [![npm](https://img.shields.io/npm/v/@ggui-ai/mcp-server)](https://npmjs.com/package/@ggui-ai/mcp-server)     |
-| [`@ggui-ai/react`](./packages/mcp-apps-react)               | React embedding — chat shells + MCP-Apps chat hook                 | [![npm](https://img.shields.io/npm/v/@ggui-ai/react)](https://npmjs.com/package/@ggui-ai/react)               |
-| [`@ggui-ai/react-native`](./packages/mcp-apps-react-native) | React Native embedding — `<McpAppIframe>` MCP-Apps host + shells   | [![npm](https://img.shields.io/npm/v/@ggui-ai/react-native)](https://npmjs.com/package/@ggui-ai/react-native) |
-| [`@ggui-ai/protocol`](./packages/protocol)                  | Wire types (events, sessions, WebSocket, MCP envelopes)            | [![npm](https://img.shields.io/npm/v/@ggui-ai/protocol)](https://npmjs.com/package/@ggui-ai/protocol)         |
-| [`@ggui-ai/gadgets`](./packages/gadgets)                    | Author wrappers for 3rd-party libs (Leaflet, Mapbox, …)            | [![npm](https://img.shields.io/npm/v/@ggui-ai/gadgets)](https://npmjs.com/package/@ggui-ai/gadgets)           |
+| Package                                                              | Purpose                                                             | npm                                                                                                                             |
+| -------------------------------------------------------------------- | ------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| [`@ggui-ai/cli`](./packages/ggui-cli)                                | The `ggui` binary — `serve`, `dev`, `blueprint`, `gadget`, `theme`  | [![npm](https://img.shields.io/npm/v/@ggui-ai/cli)](https://npmjs.com/package/@ggui-ai/cli)                                     |
+| [`@ggui-ai/mcp-server`](./packages/mcp-server)                       | Reference OSS server (programmatic embedding)                       | [![npm](https://img.shields.io/npm/v/@ggui-ai/mcp-server)](https://npmjs.com/package/@ggui-ai/mcp-server)                       |
+| [`@ggui-ai/mcp-apps-react`](./packages/mcp-apps-react)               | React web host helpers — `useMcpAppsChat` + MCP-Apps chat hook      | [![npm](https://img.shields.io/npm/v/@ggui-ai/mcp-apps-react)](https://npmjs.com/package/@ggui-ai/mcp-apps-react)               |
+| [`@ggui-ai/mcp-apps-react-native`](./packages/mcp-apps-react-native) | React Native host helpers — `<McpAppIframe>` MCP-Apps host + shells | [![npm](https://img.shields.io/npm/v/@ggui-ai/mcp-apps-react-native)](https://npmjs.com/package/@ggui-ai/mcp-apps-react-native) |
+| [`@ggui-ai/protocol`](./packages/protocol)                           | Wire types (events, sessions, WebSocket, MCP envelopes)             | [![npm](https://img.shields.io/npm/v/@ggui-ai/protocol)](https://npmjs.com/package/@ggui-ai/protocol)                           |
+| [`@ggui-ai/gadgets`](./packages/gadgets)                             | Author wrappers for 3rd-party libs (Leaflet, Mapbox, …)             | [![npm](https://img.shields.io/npm/v/@ggui-ai/gadgets)](https://npmjs.com/package/@ggui-ai/gadgets)                             |
 
 Plus 27 supporting packages under [`packages/`](./packages) spanning the runtime (`@ggui-ai/mcp-server-core`, `@ggui-ai/mcp-server-handlers`, `@ggui-ai/ui-gen`, `@ggui-ai/negotiator`), authoring (`@ggui-ai/project-config`, `@ggui-ai/ui-registry`), registry (`@ggui-ai/registry-core`, `@ggui-ai/registry-server`), and dev tooling (`@ggui-ai/dev-stack`, `@ggui-ai/agent-runtime`, `@ggui-ai/console`). See each subdirectory for details.
 
 ## Hosted providers
 
-Self-hosting is the primary path. For managed infrastructure (no server to run, no LLM key to wire, hosted dashboards), the first-party hosted endpoint at **`mcp.ggui.ai`** is deploying — see [path 4](#4-use-the-hosted-gguiai-cloud--mcpgguiai-deploying-soon) above. [Guuey](https://guuey.com) hosts an upgraded experience built on top of the protocol. The protocol is identical on all paths — you can move between self-hosted and hosted without rewriting anything against this SDK.
+Self-hosting is the primary path. For managed infrastructure (no server to run, no LLM key to wire, hosted dashboards), the first-party hosted endpoint at **`mcp.ggui.ai`** is live — see [path 4](#4-use-the-hosted-ggui-cloud--mcpgguiai) above. [Guuey](https://guuey.com) hosts an upgraded experience built on top of the protocol. The protocol is identical on all paths — you can move between self-hosted and hosted without rewriting anything against this SDK.
 
 ## Contributing
 
