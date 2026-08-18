@@ -180,7 +180,7 @@ Global options:
   --version    Show installed version.
 
 \`ggui\` runs the protocol locally — no account required. The hosted
-Guuey platform is a separate product with its own \`guuey\` binary for
+guuey platform is a separate product with its own \`guuey\` binary for
 hosted control-plane commands (login/deploy/logs/secrets).
 `;
 

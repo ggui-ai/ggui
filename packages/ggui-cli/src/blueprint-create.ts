@@ -306,7 +306,7 @@ Edit \`src/blueprint.tsx\` (component body) and \`src/contract.ts\`
 ggui blueprint publish
 \`\`\`
 
-See [ggui blueprint docs](https://ggui.ai/docs/blueprints) for the full
+See [ggui blueprint docs](https://docs.ggui.ai/hosted/marketplace/) for the full
 marketplace flow.
 `;
 }

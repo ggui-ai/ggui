@@ -436,7 +436,7 @@ pnpm typecheck
 ggui gadget publish
 \`\`\`
 
-See [ggui gadget docs](https://ggui.ai/docs/gadgets) for the full
+See [ggui gadget docs](https://docs.ggui.ai/hosted/marketplace/) for the full
 marketplace flow.
 
 ## Use
