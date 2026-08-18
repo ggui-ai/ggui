@@ -21,7 +21,7 @@
     "react-dom": "^19.0.0"
   },
   "devDependencies": {
-    "@ggui-ai/agent-server": "^0.6.1",
+    "@ggui-ai/agent-server": "^0.9.0",
     "@types/node": "^26.1.2",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
