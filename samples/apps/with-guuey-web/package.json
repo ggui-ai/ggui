@@ -12,7 +12,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@ggui-ai/design": "^0.6.1",
+    "@ggui-ai/design": "^0.9.0",
     "@guuey/agent-client": "0.3.1",
     "@guuey/mcp-apps-host": "0.3.1",
     "@mcp-ui/client": "^7.1.1",
