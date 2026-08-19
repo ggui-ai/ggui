@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-19T04:37:54.568Z",
+  "generatedAt": "2026-08-19T13:25:44.004Z",
   "pinnedNames": [
     "@a2a-js/sdk",
     "@adobe/css-tools",
@@ -218,7 +218,7 @@
     "@babel/runtime@^7",
     "@babel/runtime@^8",
     "@google-cloud/storage",
-    "@guuey/mcp-apps-host@0.9.x",
+    "@guuey/mcp-apps-host@0.10.x",
     "@guuey/threads",
     "@hono/node-server",
     "@huggingface/jinja",
