@@ -95,5 +95,48 @@ export function runBlueprintIndexConformance(
       await ix.putId('app-a', 'k1', 'uuid-second');
       await expect(ix.getId('app-a', 'k1')).resolves.toBe('uuid-second');
     });
+
+    // Optional counting capability (ggui#540) — powers the blueprint
+    // registry's eviction count-gate. These cases self-skip on an
+    // implementation that doesn't declare `countIds`; an implementation
+    // that DOES declare it is held to the full semantics.
+    it('countIds (when declared) counts only bindings whose exactKey starts with the prefix', async () => {
+      const ix = await makeIndex();
+      if (typeof ix.countIds !== 'function') return;
+      await ix.putId('app-a', 'template:c1:v1', 'u1');
+      await ix.putId('app-a', 'template:c2:v1', 'u2');
+      await ix.putId('app-a', 'component:c3:v1', 'u3');
+      await expect(ix.countIds('app-a', 'template:')).resolves.toBe(2);
+      await expect(ix.countIds('app-a', 'component:')).resolves.toBe(1);
+      await expect(ix.countIds('app-a', 'composite:')).resolves.toBe(0);
+    });
+
+    it('countIds (when declared) is scope-isolated and starts at zero', async () => {
+      const ix = await makeIndex();
+      if (typeof ix.countIds !== 'function') return;
+      await expect(ix.countIds('app-a', 'template:')).resolves.toBe(0);
+      await ix.putId('app-b', 'template:c1:v1', 'u1');
+      await expect(ix.countIds('app-a', 'template:')).resolves.toBe(0);
+      await expect(ix.countIds('app-b', 'template:')).resolves.toBe(1);
+    });
+
+    it('countIds (when declared) reflects deleteId', async () => {
+      const ix = await makeIndex();
+      if (typeof ix.countIds !== 'function') return;
+      await ix.putId('app-a', 'template:c1:v1', 'u1');
+      await ix.putId('app-a', 'template:c2:v1', 'u2');
+      await ix.deleteId('app-a', 'template:c1:v1');
+      await expect(ix.countIds('app-a', 'template:')).resolves.toBe(1);
+    });
+
+    it('countIds (when declared) treats the prefix literally, not as a pattern', async () => {
+      const ix = await makeIndex();
+      if (typeof ix.countIds !== 'function') return;
+      // `%`/`_` are SQL-LIKE metacharacters; a literal-prefix contract
+      // must not let them widen the match.
+      await ix.putId('app-a', 'template:c1:v1', 'u1');
+      await expect(ix.countIds('app-a', '%')).resolves.toBe(0);
+      await expect(ix.countIds('app-a', 't_mplate:')).resolves.toBe(0);
+    });
   });
 }
