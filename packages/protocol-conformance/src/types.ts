@@ -328,6 +328,27 @@ export interface ErrorFrameBehavior {
    *  to the fixture's own dispatched frame rather than any error the
    *  observation window happens to catch. */
   readonly requestId?: string;
+  /**
+   * Optional shape assertions on the matched frame's
+   * `payload.details` recovery payload — the SPEC §7.9
+   * `contract_violation` shape (`{error, tool, violations[], hint,
+   * propsSchemaHash?}`), load-bearing since draft-2026-08-19
+   * (`ContractViolation.keyword` segments failure classes; the §2.3.2
+   * breach classifier joins on the payload). Additive-tolerant per
+   * VERSION-POLICY §1.2: only the pinned fields assert; extra fields
+   * on the payload or its entries never fail. Omit entirely for the
+   * plain code/requestId match (every pre-existing fixture).
+   */
+  readonly contractViolationPayload?: {
+    /** Minimum `details.violations` entries (default 1). Every entry
+     *  MUST carry string `field` + `message`. */
+    readonly minViolations?: number;
+    /** When true, every violation entry MUST carry a string `keyword`
+     *  (the JSON Schema keyword that produced it). Set on fixtures
+     *  whose violations are validator-produced; leave unset where a
+     *  synthetic violation (no schema keyword) is legal. */
+    readonly requireKeyword?: boolean;
+  };
 }
 
 /**

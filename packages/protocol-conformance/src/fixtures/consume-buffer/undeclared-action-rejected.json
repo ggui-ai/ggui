@@ -24,6 +24,7 @@
   "expectedBehavior": {
     "kind": "error-frame",
     "code": "CONTRACT_VIOLATION",
-    "requestId": "ck-undeclared-action-1-req"
+    "requestId": "ck-undeclared-action-1-req",
+    "contractViolationPayload": {}
   }
 }
