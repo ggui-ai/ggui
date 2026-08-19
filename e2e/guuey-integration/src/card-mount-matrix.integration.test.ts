@@ -30,7 +30,8 @@
  *      bootstrap-free locator placeholder rows (guuey#122): the durable
  *      `ui://` identity survives, credentials never do (ggui#430).
  *
- * The `@guuey/*` pins are EXACT (0.3.x): the point is testing ggui
+ * The `@guuey/*` pins are EXACT (see package.json for the current
+ * family version): the point is testing ggui
  * HEAD against the versions guuey actually shipped. The pins are
  * dev-side test harness only — no published `@ggui-ai/*` package
  * depends on anything above MCP.
