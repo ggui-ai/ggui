@@ -71,3 +71,14 @@ export type {
 } from './types.js';
 export { runAxisChecks } from './axis-checks/index.js';
 export type { RunAxisChecksInput } from './axis-checks/index.js';
+
+// The visual judge's raw multimodal call — arbitrary prompt + screenshot
+// Buffer, routed through the same `createVisionAgent`/`apiCall()` choke
+// point as every in-loop evaluation call (the #504 contract). Exposed so
+// standalone visual-judging instruments (host-fit probes, external
+// benches) can reuse the judging machinery WITHOUT entering the in-loop
+// rubric — scoring generation on criteria the generator was never taught
+// is a constraint-alignment violation, so out-of-loop judges get this
+// seam instead of a rubric extension.
+export { callMultimodalLLM } from './visual-evaluator.js';
+export type { VisualEvalConfig } from './visual-evaluator.js';
