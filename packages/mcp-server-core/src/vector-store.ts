@@ -83,6 +83,25 @@ export interface VectorStore {
 }
 
 /**
+ * A row as ENUMERATION sees it: identity + metadata, no embedding.
+ *
+ * Enumeration is metadata-only by contract (ggui#540): every real
+ * consumer — eviction ranking, the orphan scan, cache/export listings —
+ * reads identity and metadata, never the floats, and on AWS S3 Vectors
+ * returning the data meant deserializing every scope's full float32
+ * vectors on the main thread per walk (the #527/#410 stall class,
+ * resurfaced on the gha nightly as the index grew). A caller that needs
+ * an embedding takes a point read ({@link KeyedVectorStore.getByKey})
+ * or re-embeds from the metadata it already holds.
+ */
+export interface VectorRowSummary {
+  /** Stable primary key within scope — same key {@link VectorEntry} wrote. */
+  key: string;
+  /** The row's metadata, verbatim as stored. */
+  metadata: Record<string, string | number | boolean | null>;
+}
+
+/**
  * Optional capability: enumerate all entries in a scope without
  * scoring against a query vector. Kept separate from {@link VectorStore}
  * because not every backend has a cheap "list all" API — notably AWS
@@ -95,8 +114,9 @@ export interface VectorStore {
  * support enumeration" error otherwise — never a runtime throw from
  * inside a stubbed method.
  *
- * Implementation note: `listByScope` returns {@link VectorEntry}, not
- * {@link VectorSearchResult} — there's no query vector, so no score.
+ * Implementation note: `listByScope` returns {@link VectorRowSummary} —
+ * metadata-only, no score (there's no query vector) and no embedding
+ * (see the summary type's rationale).
  * Results are returned in insertion order when the backend naturally
  * preserves it; implementations MAY reorder freely.
  */
@@ -107,7 +127,7 @@ export interface EnumerableVectorStore extends VectorStore {
    * semantics. Backends facing real enumeration cost should NOT
    * implement this interface.
    */
-  listByScope(scope: string): Promise<readonly VectorEntry[]>;
+  listByScope(scope: string): Promise<readonly VectorRowSummary[]>;
 }
 
 /** Type guard: does this store support `listByScope`? */

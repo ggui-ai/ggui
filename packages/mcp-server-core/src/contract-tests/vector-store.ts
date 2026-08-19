@@ -184,15 +184,19 @@ export function enumerableVectorStoreContract(
       expect(b[0]!.metadata.src).toBe('b');
     });
 
-    it('listByScope roundtrips vector + metadata faithfully', async () => {
+    it('listByScope roundtrips key + metadata faithfully — and carries NO embedding (metadata-only enumeration, ggui#540)', async () => {
       const s = await makeStore();
       const vector = [0.1, 0.2, 0.3, 0.4];
       const metadata = { str: 'ok', num: 7, bool: false, nul: null };
       await s.putVector('app-a', { key: 'k1', vector, metadata });
       const [entry] = await s.listByScope('app-a');
       expect(entry!.key).toBe('k1');
-      expect(entry!.vector).toEqual(vector);
       expect(entry!.metadata).toEqual(metadata);
+      // The embedding never rides enumeration — on AWS S3 Vectors,
+      // returning it meant deserializing every scope's float32 data on
+      // the main thread per walk (the #527/#410 stall class). Point
+      // reads (`getByKey`) are where the vector comes back.
+      expect('vector' in entry!).toBe(false);
     });
 
     it('listByScope reflects deletes', async () => {

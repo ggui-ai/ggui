@@ -45,6 +45,7 @@ import type {
   EnumerableVectorStore,
   KeyedVectorStore,
   VectorEntry,
+  VectorRowSummary,
   VectorSearchResult,
   VectorStore,
 } from '@ggui-ai/mcp-server-core';
@@ -729,8 +730,10 @@ async function maybeEvictLowestHitBlueprint(
     return;
   }
   const enumerable = store as EnumerableVectorStore;
-  let bucket: VectorEntry[];
+  let bucket: VectorRowSummary[];
   try {
+    // Metadata-only walk (ggui#540) — ranking below reads kind /
+    // hitCount / createdAt off metadata, never the embedding.
     const all = await enumerable.listByScope(scope);
     bucket = all.filter((entry) => {
       const k = readScalarString(entry.metadata[METADATA_KEYS.kind]);
@@ -746,7 +749,7 @@ async function maybeEvictLowestHitBlueprint(
   // createdAt. This lines up with LRU-by-importance: rarely-used
   // blueprints go first, and when nothing has been hit yet, the
   // oldest cold entry leaves.
-  let victim: VectorEntry | null = null;
+  let victim: VectorRowSummary | null = null;
   let victimHits = Number.POSITIVE_INFINITY;
   let victimCreated = '￿'; // Sorts after every realistic ISO string
   for (const entry of bucket) {
@@ -839,14 +842,17 @@ export async function findBlueprintExact(
  *      backend that enumerates but cannot point-read.
  *   3. zero-vector `query` + scan on a backend with neither.
  *
- * Returns the raw entry (a `VectorSearchResult` on rung 3 — no
- * `vector`); callers that need the vector fall back to re-embedding.
+ * Returns the raw entry. Only rung 1 carries the embedding
+ * (`VectorEntry`); rungs 2 and 3 are vectorless (`VectorRowSummary` /
+ * `VectorSearchResult` — enumeration is metadata-only per ggui#540, and
+ * a query result never carried one). Callers that need the vector on a
+ * vectorless rung fall back to re-embedding.
  */
 async function readRegistryRow(
   store: VectorStore,
   scope: string,
   id: string,
-): Promise<VectorEntry | VectorSearchResult | null> {
+): Promise<VectorEntry | VectorRowSummary | VectorSearchResult | null> {
   if ('getByKey' in store && typeof store.getByKey === 'function') {
     return (store as KeyedVectorStore).getByKey(scope, id);
   }
@@ -970,13 +976,13 @@ export async function recordBlueprintHit(
   const existing = await readRegistryRow(store, scope, id);
   if (!existing) return;
   // Re-write the entry with bumped counters. Reuse the existing
-  // vector — it's already correct for the canonical embedding input,
-  // and re-embedding here would burn an unnecessary round-trip.
-  // VectorSearchResult doesn't carry `vector`, only metadata + key,
-  // so when we landed via the non-enumerable branch we can't reuse
-  // the vector — re-embedding is the only path. Document this branch
-  // as the hosted-only slow case; OSS always lands on the enumerable
-  // branch above.
+  // vector when rung 1 (`getByKey`) supplied it — it's already correct
+  // for the canonical embedding input, and re-embedding would burn an
+  // unnecessary round-trip. Rungs 2 and 3 are vectorless (enumeration
+  // is metadata-only per ggui#540; a query result never carried one),
+  // so re-embedding is the only path there. Every in-repo backend is
+  // keyed (#527), so the vectorless rungs are the exotic-backend slow
+  // case, not a path OSS or the pod takes.
   const vector = 'vector' in existing ? existing.vector : await reembed(deps, existing.metadata);
   if (!vector) return; // re-embed failed silently — drop the hit-count update
   const nextHitCount =

@@ -194,18 +194,22 @@ describe('SqliteVectorStore — persistence', () => {
       const entries = await b.listByScope('app-a');
       const byKey = new Map(entries.map((e) => [e.key, e]));
       expect(byKey.size).toBe(2);
-      expect(byKey.get('k1')?.vector).toEqual([0.1, 0.2, 0.3]);
       expect(byKey.get('k1')?.metadata).toEqual({ tag: 'one' });
-      expect(byKey.get('k2')?.vector).toEqual([0.4, 0.5, 0.6]);
       expect(byKey.get('k2')?.metadata).toEqual({ tag: 'two' });
+      // Enumeration is metadata-only (ggui#540); the persisted vector
+      // survives the reopen and comes back on the point read.
+      expect((await b.getByKey('app-a', 'k1'))?.vector).toEqual([0.1, 0.2, 0.3]);
+      expect((await b.getByKey('app-a', 'k2'))?.vector).toEqual([0.4, 0.5, 0.6]);
     } finally {
       b.close();
     }
   });
 
-  it('listByScope skips corrupt rows (parity with query)', async () => {
-    // Same corruption pattern the `query` degradation test uses, proved
-    // against `listByScope` to keep both read paths in lockstep.
+  it('a corrupt-vector row still LISTS (identity + metadata are what enumeration promises) while query skips it', async () => {
+    // Deliberately NOT parity with `query` since metadata-only
+    // enumeration (ggui#540): the vector column never parses on the
+    // list path, so a corrupt embedding cannot hide the row from
+    // eviction ranking or scope listings — only scoring paths skip it.
     const path = join(tmpRoot, 'list-corrupt.sqlite');
     const store = new SqliteVectorStore({ filename: path });
     try {
@@ -229,7 +233,10 @@ describe('SqliteVectorStore — persistence', () => {
     const store2 = new SqliteVectorStore({ filename: path });
     try {
       const entries = await store2.listByScope('app-a');
-      expect(entries.map((e) => e.key)).toEqual(['good']);
+      expect(entries.map((e) => e.key).sort()).toEqual(['bad', 'good']);
+      // The scoring path still skips the corrupt row.
+      const scored = await store2.query('app-a', [1, 0, 0], 10);
+      expect(scored.map((r) => r.key)).toEqual(['good']);
     } finally {
       store2.close();
     }

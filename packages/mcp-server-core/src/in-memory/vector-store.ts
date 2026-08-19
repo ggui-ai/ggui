@@ -14,6 +14,7 @@ import type {
   KeyedVectorStore,
   VectorEntry,
   VectorSearchResult,
+  VectorRowSummary,
 } from '../vector-store.js';
 
 export class InMemoryVectorStore implements EnumerableVectorStore, KeyedVectorStore {
@@ -59,14 +60,15 @@ export class InMemoryVectorStore implements EnumerableVectorStore, KeyedVectorSt
     return results.slice(0, topK);
   }
 
-  async listByScope(scope: string): Promise<readonly VectorEntry[]> {
+  async listByScope(scope: string): Promise<readonly VectorRowSummary[]> {
     const bucket = this.index.get(scope);
     if (!bucket || bucket.size === 0) return [];
     // Clone on the way out — same invariant as `query` / `putVector`:
-    // the store never hands out its internal references.
+    // the store never hands out its internal references. Metadata-only
+    // by the enumeration contract (ggui#540); embeddings come from
+    // `getByKey`.
     return Array.from(bucket.values(), (entry) => ({
       key: entry.key,
-      vector: entry.vector.slice(),
       metadata: { ...entry.metadata },
     }));
   }

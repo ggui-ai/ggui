@@ -22,7 +22,8 @@ import {
   InMemoryVectorStore,
   MockEmbeddingProvider,
 } from '@ggui-ai/mcp-server-core/in-memory';
-import type { VectorEntry } from '@ggui-ai/mcp-server-core';
+import type { VectorEntry,
+  VectorRowSummary } from '@ggui-ai/mcp-server-core';
 import type { DataContract } from '@ggui-ai/protocol';
 import { blueprintKey } from '@ggui-ai/protocol/blueprint-key';
 import {
@@ -69,11 +70,13 @@ class LaggingListVectorStore extends InMemoryVectorStore {
     }
   }
 
-  override async listByScope(scope: string): Promise<readonly VectorEntry[]> {
+  override async listByScope(scope: string): Promise<readonly VectorRowSummary[]> {
     const live = await super.listByScope(scope);
-    const ghosts = (this.ghosts.get(scope) ?? []).filter(
-      (g) => !live.some((l) => l.key === g.key),
-    );
+    // Enumeration is metadata-only (ggui#540) — project the ghosts the
+    // same way the real store projects its rows.
+    const ghosts = (this.ghosts.get(scope) ?? [])
+      .filter((g) => !live.some((l) => l.key === g.key))
+      .map(({ key, metadata }) => ({ key, metadata }));
     return [...live, ...ghosts];
   }
 

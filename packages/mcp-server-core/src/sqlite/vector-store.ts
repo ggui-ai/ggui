@@ -61,6 +61,7 @@ import type {
   KeyedVectorStore,
   VectorEntry,
   VectorSearchResult,
+  VectorRowSummary,
 } from '../vector-store.js';
 
 export interface SqliteVectorStoreOptions {
@@ -177,20 +178,18 @@ export class SqliteVectorStore implements EnumerableVectorStore, KeyedVectorStor
     return results.slice(0, topK);
   }
 
-  async listByScope(scope: string): Promise<readonly VectorEntry[]> {
-    // Same PK-scoped scan as `query`, minus the cosine step.
-    // Corrupt rows are skipped (matching `query`'s behavior) rather
-    // than surfaced — operators debugging via `cat` + `jq` still see
-    // them at the SQL level.
+  async listByScope(scope: string): Promise<readonly VectorRowSummary[]> {
+    // Same PK-scoped scan as `query`, minus the cosine step and minus
+    // the vector column parse — enumeration is metadata-only by
+    // contract (ggui#540). A row with a corrupt vector still lists:
+    // its identity + metadata are intact and that's all enumeration
+    // promises (point reads still skip it).
     const rows = this.stmts.selectScope.all(scope);
     if (rows.length === 0) return [];
-    const entries: VectorEntry[] = [];
+    const entries: VectorRowSummary[] = [];
     for (const row of rows) {
-      const vector = parseVector(row.vector);
-      if (!vector) continue;
       entries.push({
         key: row.key,
-        vector,
         metadata: parseMetadata(row.metadata),
       });
     }
