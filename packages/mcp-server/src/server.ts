@@ -4948,6 +4948,13 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
             ...(opts.theme !== undefined && opts.theme.source !== "default"
               ? { themeMode: opts.theme.mode }
               : {}),
+            // The live pick reaches the read door too (ggui#539) — same
+            // getter the render handler's deps carry, so the FIRST
+            // resolution layer is identical across the tool-result
+            // slice and the served shell.
+            ...(opts.themeProvider !== undefined
+              ? { themeProvider: opts.themeProvider }
+              : {}),
             // Resume contract — registry-only fallback. Wired
             // when the blueprint vector store is available so the
             // resource handler can rehydrate a render-evicted

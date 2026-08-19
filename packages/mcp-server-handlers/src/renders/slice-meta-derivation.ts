@@ -1207,6 +1207,61 @@ export interface RenderSliceBase {
 }
 
 /**
+ * The deps slice that theme resolution reads — the three theme layers,
+ * nothing else. Narrow on purpose so a caller that has no minter, no
+ * runtime URL, and no session API (the `resources/read` door) can still
+ * satisfy it with its own options object.
+ */
+export type SliceThemeDeps = Pick<
+  RenderSliceMetaDeps,
+  'themeId' | 'themeMode' | 'themeProvider'
+>;
+
+/** What theme resolution stamps: each key present ONLY when a layer resolved it. */
+export type SliceTheme = Pick<RenderSliceBase, 'themeId' | 'themeMode'>;
+
+/**
+ * Layered theme resolution — THE one implementation every transport
+ * stamps `themeId` / `themeMode` from, so the tool-result slice, the
+ * `resources/read` shell, and `/r/<shortCode>` cannot drift (MCP Apps
+ * Compliance: one projection per fact). Order is operator-debug-wins:
+ *
+ *   `themeId`   = themeProvider().id  ??  renderThemeId  ??  deps.themeId
+ *   `themeMode` = themeProvider().mode ?? deps.themeMode
+ *
+ * The live console pick beats the agent's per-render override
+ * (`ggui_render({ themeId })`, stored on the GguiSession) beats the
+ * static `ggui.json#theme` deps. `themeMode` is 2-layer — no agent
+ * surface sets a mode per render today. Precedence is per FIELD via
+ * `??`: a live `{ mode }`-only pick does not block a per-render or
+ * static `themeId`.
+ *
+ * A key is OMITTED (never null, never defaulted to 'light') when no
+ * layer resolves it. That absence is load-bearing downstream: the
+ * iframe runtime falls back to the host's `hostContext.theme` only when
+ * the slice stamps no mode (ggui#551) — a defaulted mode would silence
+ * that fallback and pin dark hosts to a light card. Absent means "no
+ * operator opinion", which is exactly the case the host should fill.
+ *
+ * ggui#539: before this existed, the `resources/read` door stamped only
+ * the static deps — the per-render override and the live pick reached
+ * hosts mounting from the tool result but not hosts mounting by read,
+ * which under read-plane-only mounting is every host.
+ */
+export function resolveSliceTheme(
+  deps: SliceThemeDeps,
+  renderThemeId: string | undefined,
+): SliceTheme {
+  const liveTheme = deps.themeProvider?.();
+  const themeId = liveTheme?.id ?? renderThemeId ?? deps.themeId;
+  const themeMode = liveTheme?.mode ?? deps.themeMode;
+  return {
+    ...(themeId !== undefined ? { themeId } : {}),
+    ...(themeMode !== undefined ? { themeMode } : {}),
+  };
+}
+
+/**
  * Assemble the shared `ai.ggui/render` envelope base from the shared
  * deps. ONE implementation of the three formerly hand-mirrored
  * sub-blocks (`ggui_render` / `ggui_update`):
@@ -1215,11 +1270,9 @@ export interface RenderSliceBase {
  *      the request scope; `/_ggui/iframe-runtime.js` fallback.
  *   2. Minted-trio remap — the minter's return names the credential
  *      `token` (legacy); the render slice uses `wsToken`.
- *   3. Layered theme resolution — order is operator-debug-wins:
- *      `themeProvider()` (live console pick) beats the per-render
- *      `renderThemeId` (agent-set, rare) beats the static deps.
- *      `themeMode` stays 2-layer (no agent surface sets it
- *      per-render today).
+ *   3. Layered theme resolution — {@link resolveSliceTheme}, the ONE
+ *      resolver the read door and `/r/<shortCode>` also stamp from
+ *      (order + the omit-when-unresolved rule are documented there).
  *
  * Each handler composes the full `McpAppAiGguiRenderMeta` itself —
  * `ggui_update`'s post-update slice is intentionally a SUBSET (no
@@ -1271,15 +1324,10 @@ export function assembleRenderSliceBase(
       ? composeSessionApiUrls(sessionApiBase, call.sessionId, mintedTrio.token)
       : {};
 
-  const liveTheme = deps.themeProvider?.();
-  const themeId = liveTheme?.id ?? call.renderThemeId ?? deps.themeId;
-  const themeMode = liveTheme?.mode ?? deps.themeMode;
-
   return {
     runtimeUrl,
     authFields,
     channelUrls,
-    ...(themeId !== undefined ? { themeId } : {}),
-    ...(themeMode !== undefined ? { themeMode } : {}),
+    ...resolveSliceTheme(deps, call.renderThemeId),
   };
 }

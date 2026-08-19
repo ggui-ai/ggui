@@ -45,10 +45,12 @@ import {
   deriveRenderMeta,
   filterDescriptorsToContract,
   findBlueprintExact,
+  resolveSliceTheme,
   spreadRenderMetaViewOntoSlice,
   wsOriginToHttpOrigin,
   type Blueprint,
   type BlueprintDurabilityDeps,
+  type SliceThemeDeps,
 } from "@ggui-ai/mcp-server-handlers/renders";
 import type {
   ComponentGguiSession,
@@ -1416,15 +1418,29 @@ export interface GguiRenderResourceTemplateOptions {
     readonly base: string;
   }) => string | undefined;
   /**
-   * Theme preset id resolved from `ggui.json#theme`. Without this,
-   * MCP-Apps hosts (claude.ai, Claude Desktop) that fetch the resource
-   * via `resources/read` always render the runtime's baked default
-   * theme — `ggui.json#theme: 'indigo'` would only take effect on
-   * the direct-browser `/r/<shortCode>` path, not in claude.ai.
+   * Static theme preset id resolved from `ggui.json#theme` — the LAST
+   * layer of the resolution the served shell stamps. The shell resolves
+   * `themeId` / `themeMode` through {@link resolveSliceTheme}, the same
+   * function the tool-result slice uses: live `themeProvider()` beats
+   * the per-render override the agent set on the GguiSession
+   * (`ggui_render({ themeId })`) beats this static value (ggui#539 —
+   * before that, `resources/read` stamped only this static layer, so a
+   * per-render override never reached a host that mounts by read).
+   * Without any layer, MCP-Apps hosts (claude.ai, Claude Desktop) that
+   * fetch the resource via `resources/read` render the runtime's baked
+   * default theme.
    */
   readonly themeId?: string;
-  /** Theme color mode resolved from `ggui.json#theme.mode`. */
+  /** Static theme color mode resolved from `ggui.json#theme.mode` (last layer; see `themeId`). */
   readonly themeMode?: "light" | "dark";
+  /**
+   * Live theme getter — the operator's current pick (the console's
+   * "Save to ggui.json" cell), evaluated per read. FIRST layer of the
+   * resolution; identical in shape and precedence to the render
+   * handler's `themeProvider` dep, so a pick that changes the next
+   * tool-result slice changes the next `resources/read` shell too.
+   */
+  readonly themeProvider?: SliceThemeDeps["themeProvider"];
   /**
    * Per-app metadata store the resource handler reads to resolve
    * `App.publicEnv` for the bootstrap projection.
@@ -2446,8 +2462,20 @@ export function registerGguiRenderResourceTemplate(
             ...(wsExpiresAt !== undefined ? { expiresAt: wsExpiresAt } : {}),
           }
         : {}),
-      ...(opts.themeId !== undefined ? { themeId: opts.themeId } : {}),
-      ...(opts.themeMode !== undefined ? { themeMode: opts.themeMode } : {}),
+      // Layered theme — the SAME resolver the tool-result slice uses
+      // (live pick > per-render override on this render > static
+      // ggui.json), so a `ggui_render({ themeId })` override survives a
+      // mount-by-read (ggui#539). The picked source IS the committed
+      // render, so its `themeId` is the override the emitter read at
+      // commit time — component variant only, exactly the emitter's
+      // own narrowing (render.ts resultMeta): mcpApps / system renders
+      // carry no user-facing theme. Keys stay absent when unresolved.
+      ...resolveSliceTheme(
+        opts,
+        picked.source.type !== "mcpApps" && picked.source.type !== "system"
+          ? picked.source.themeId
+          : undefined
+      ),
       // State + policy view fields (theme overlay, propsJson,
       // contextSlots, permissionsPolicy, gadgets, #483 epoch) — ONE
       // shared spread so the resource-served shell cannot drift from
@@ -2739,8 +2767,10 @@ export function registerGguiRenderResourceTemplate(
         appId: opts.defaultAppIdFallback,
         blueprint,
         runtimeUrl: opts.runtimeUrl,
-        ...(opts.themeId !== undefined ? { themeId: opts.themeId } : {}),
-        ...(opts.themeMode !== undefined ? { themeMode: opts.themeMode } : {}),
+        // No render row exists on this branch, so there is no
+        // per-render override to honor — but the live pick still beats
+        // the static preset, same resolver as every other shell.
+        ...resolveSliceTheme(opts, undefined),
         ...(opts.codeStore !== undefined ? { codeStore: opts.codeStore } : {}),
         ...(opts.codeBaseUrl !== undefined ? { codeBaseUrl: opts.codeBaseUrl } : {}),
       });

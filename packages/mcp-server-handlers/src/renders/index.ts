@@ -340,9 +340,12 @@ export {
   wsOriginToHttpOrigin,
   PRIVATE_BUNDLE_PREFIX,
   resolveGadgetUrls,
+  resolveSliceTheme,
   type RenderMetaView,
   type RenderSliceBase,
   type RenderSliceMetaDeps,
+  type SliceTheme,
+  type SliceThemeDeps,
 } from "./slice-meta-derivation.js";
 export type { SeedPoolSource } from "./seed-pool-source.js";
 export { buildSeedPool, type BuildSeedPoolOptions } from "./build-seed-pool.js";

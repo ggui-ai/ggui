@@ -21,6 +21,7 @@ import {
   derivePublicEnvProjection,
   deriveRenderMeta,
   deriveTheme,
+  resolveSliceTheme,
   wsOriginToHttpOrigin,
 } from './slice-meta-derivation';
 
@@ -1291,5 +1292,51 @@ describe('assembleRenderSliceBase — channelUrls stamping matrix', () => {
     expect(base.channelUrls.sseUrl).toBe(
       'https://public.example/api/sessions/sess%2Fodd/stream?wsToken=tok%2Fwith%3Fchars%26',
     );
+  });
+});
+
+describe('resolveSliceTheme — THE layered theme resolution every transport stamps from (ggui#539)', () => {
+  it('full ladder: live pick beats per-render override beats static deps, per field', () => {
+    expect(
+      resolveSliceTheme(
+        {
+          themeId: 'static',
+          themeMode: 'light',
+          themeProvider: () => ({ id: 'live', mode: 'dark' }),
+        },
+        'per-render',
+      ),
+    ).toEqual({ themeId: 'live', themeMode: 'dark' });
+  });
+
+  it('no live pick → the per-render override wins themeId; themeMode falls to static (2-layer)', () => {
+    expect(
+      resolveSliceTheme({ themeId: 'static', themeMode: 'light' }, 'per-render'),
+    ).toEqual({ themeId: 'per-render', themeMode: 'light' });
+  });
+
+  it('per-FIELD precedence: a mode-only live pick does not block the per-render themeId', () => {
+    expect(
+      resolveSliceTheme(
+        { themeId: 'static', themeProvider: () => ({ mode: 'dark' }) },
+        'per-render',
+      ),
+    ).toEqual({ themeId: 'per-render', themeMode: 'dark' });
+  });
+
+  it('no layer resolves → BOTH keys absent (never null, never defaulted to light) — the ggui#551 host fallback fires only on absence', () => {
+    const resolved = resolveSliceTheme({}, undefined);
+    expect(resolved).toEqual({});
+    expect('themeId' in resolved).toBe(false);
+    expect('themeMode' in resolved).toBe(false);
+  });
+
+  it('assembleRenderSliceBase delegates: the base stamps exactly what the resolver resolves', () => {
+    const base = assembleRenderSliceBase(
+      { themeId: 'static', themeProvider: () => ({ id: 'live' }) },
+      { sessionId: 's', appId: 'a', renderThemeId: 'per-render' },
+    );
+    expect(base.themeId).toBe('live');
+    expect('themeMode' in base).toBe(false);
   });
 });
