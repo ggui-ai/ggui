@@ -12,6 +12,7 @@
 import { generateKeyPairSync } from "node:crypto";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Signer } from "@sigstore/verify";
+import { bundleFromJSON } from "@sigstore/bundle";
 
 vi.mock("sigstore", async () => {
   const actual = await vi.importActual<typeof import("sigstore")>("sigstore");
@@ -22,9 +23,48 @@ vi.mock("sigstore", async () => {
   };
 });
 
+// The SIGN seam assembles `@sigstore/sign` primitives directly (ggui#555
+// — the facade hardcodes `fetchOnConflict: false`), so its threading
+// pins mock the primitive constructors + the builder, capturing exactly
+// what our seam hands upstream. Behavioral coverage (the reassembled
+// pipeline actually signing) stays REAL in `index.test.ts`.
+vi.mock("@sigstore/sign", async () => {
+  const actual = await vi.importActual<typeof import("@sigstore/sign")>("@sigstore/sign");
+  return {
+    ...actual,
+    FulcioSigner: vi.fn(),
+    RekorWitness: vi.fn(),
+    MessageSignatureBundleBuilder: vi.fn(),
+  };
+});
+
 const sigstoreModule = await import("sigstore");
+const signModule = await import("@sigstore/sign");
 const mockedSign = vi.mocked(sigstoreModule.sign);
 const mockedVerify = vi.mocked(sigstoreModule.verify);
+const MockedFulcioSigner = vi.mocked(signModule.FulcioSigner);
+const MockedRekorWitness = vi.mocked(signModule.RekorWitness);
+const MockedBundleBuilder = vi.mocked(signModule.MessageSignatureBundleBuilder);
+
+/**
+ * Arm the mocked builder so `create` resolves; returns the create spy.
+ * `create` resolves a DESERIALIZED Bundle (through the real
+ * `@sigstore/bundle` codec) because the seam re-serializes it with
+ * `bundleToJSON` — resolving pre-serialized JSON would round-trip into
+ * garbage and poison the verify-side fixtures downstream.
+ */
+function armBuilder(): ReturnType<typeof vi.fn> {
+  const create = vi
+    .fn()
+    .mockResolvedValue(bundleFromJSON(JSON.parse(buildFakeBundleJSON())));
+  MockedBundleBuilder.mockImplementation(
+    () =>
+      ({ create }) as unknown as InstanceType<
+        typeof signModule.MessageSignatureBundleBuilder
+      >,
+  );
+  return create;
+}
 
 /**
  * Genuine `Signer` resolution value for the mocked `sigstore.verify`.
@@ -83,7 +123,9 @@ async function signedFixture(): Promise<{
   bundleBytes: Uint8Array;
   signature: SigstoreSignature;
 }> {
-  mockedSign.mockResolvedValueOnce(JSON.parse(buildFakeBundleJSON()));
+  // The sign seam runs through the mocked primitive builder now
+  // (ggui#555) — arm it so the fixture resolves the fake bundle.
+  armBuilder();
   const bundleBytes = new TextEncoder().encode("data");
   const signature = await signBundleSigstore({ bundleBytes, identityToken: "tok" });
   return { bundleBytes, signature };
@@ -93,22 +135,46 @@ describe("signBundleSigstore — option threading", () => {
   beforeEach(() => {
     mockedSign.mockReset();
     mockedVerify.mockReset();
+    MockedFulcioSigner.mockReset();
+    MockedRekorWitness.mockReset();
+    MockedBundleBuilder.mockReset();
   });
 
-  it("threads identityToken + tlogUpload and the payload bytes", async () => {
-    mockedSign.mockResolvedValueOnce(JSON.parse(buildFakeBundleJSON()));
+  it("threads the identity token through a resolving provider and hands the payload bytes to the builder", async () => {
+    const create = armBuilder();
     await signBundleSigstore({
       bundleBytes: new TextEncoder().encode("hello world"),
       identityToken: "header.payload.sig",
     });
-    expect(mockedSign).toHaveBeenCalledOnce();
-    const [data, opts] = mockedSign.mock.calls[0]!;
+    expect(create).toHaveBeenCalledOnce();
+    const [artifact] = create.mock.calls[0]!;
+    const data = (artifact as { data: Buffer }).data;
     expect(Buffer.isBuffer(data) ? data.toString("utf-8") : "").toBe("hello world");
-    expect(opts).toMatchObject({ identityToken: "header.payload.sig", tlogUpload: true });
+    const signerOpts = MockedFulcioSigner.mock.calls[0]![0]!;
+    await expect(signerOpts.identityProvider!.getToken()).resolves.toBe(
+      "header.payload.sig",
+    );
+  });
+
+  it("arms Rekor's fetch-on-conflict recovery — a 409 'equivalent entry' is our own retry's success, never fatal (ggui#555)", async () => {
+    armBuilder();
+    await signBundleSigstore({
+      bundleBytes: new TextEncoder().encode("data"),
+      identityToken: "tok",
+    });
+    expect(MockedRekorWitness).toHaveBeenCalledOnce();
+    expect(MockedRekorWitness.mock.calls[0]![0]).toMatchObject({
+      fetchOnConflict: true,
+    });
+    // Exactly one witness, and it is the armed one — a second,
+    // facade-built witness would reintroduce the fatal path.
+    const builderOpts = MockedBundleBuilder.mock.calls[0]![0]!;
+    expect(builderOpts.witnesses).toHaveLength(1);
+    expect(builderOpts.witnesses[0]).toBe(MockedRekorWitness.mock.instances[0]);
   });
 
   it("forwards endpoint overrides when supplied", async () => {
-    mockedSign.mockResolvedValueOnce(JSON.parse(buildFakeBundleJSON()));
+    armBuilder();
     await signBundleSigstore({
       bundleBytes: new TextEncoder().encode("data"),
       identityToken: "tok",
@@ -117,22 +183,26 @@ describe("signBundleSigstore — option threading", () => {
         rekorURL: "https://rekor.example.test",
       },
     });
-    const [, opts] = mockedSign.mock.calls[0]!;
-    expect(opts).toMatchObject({
-      fulcioURL: "https://fulcio.example.test",
-      rekorURL: "https://rekor.example.test",
+    expect(MockedFulcioSigner.mock.calls[0]![0]).toMatchObject({
+      fulcioBaseURL: "https://fulcio.example.test",
+    });
+    expect(MockedRekorWitness.mock.calls[0]![0]).toMatchObject({
+      rekorBaseURL: "https://rekor.example.test",
     });
   });
 
-  it("omits endpoint fields from upstream options when unset", async () => {
-    mockedSign.mockResolvedValueOnce(JSON.parse(buildFakeBundleJSON()));
+  it("falls back to sigstore's public defaults when endpoints are unset (the facade's own composition)", async () => {
+    armBuilder();
     await signBundleSigstore({
       bundleBytes: new TextEncoder().encode("data"),
       identityToken: "tok",
     });
-    const [, opts] = mockedSign.mock.calls[0]!;
-    expect(opts).not.toHaveProperty("fulcioURL");
-    expect(opts).not.toHaveProperty("rekorURL");
+    expect(MockedFulcioSigner.mock.calls[0]![0]).toMatchObject({
+      fulcioBaseURL: "https://fulcio.sigstore.dev",
+    });
+    expect(MockedRekorWitness.mock.calls[0]![0]).toMatchObject({
+      rekorBaseURL: "https://rekor.sigstore.dev",
+    });
   });
 });
 

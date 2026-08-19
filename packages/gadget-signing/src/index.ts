@@ -37,6 +37,13 @@ import {
   type SerializedBundle,
 } from "@sigstore/bundle";
 import { X509Certificate } from "@sigstore/core";
+import {
+  DEFAULT_FULCIO_URL,
+  DEFAULT_REKOR_URL,
+  FulcioSigner,
+  MessageSignatureBundleBuilder,
+  RekorWitness,
+} from "@sigstore/sign";
 import * as sigstoreClient from "sigstore";
 
 // ---------------------------------------------------------------------------
@@ -476,14 +483,43 @@ export async function signBundleSigstore(
   const digest = sha384(bundleBytes);
   const bundleSha384 = bytesToBase64(digest);
 
+  // Assembled from `@sigstore/sign` primitives rather than the
+  // high-level `sigstore.sign()` facade, for exactly one flag the
+  // facade hardcodes off: `fetchOnConflict` (ggui#555). Rekor answers
+  // 409 "an equivalent entry already exists" when the SAME signed
+  // entry is re-submitted — and under keyless signing (a fresh
+  // ephemeral key per sign) that can only be this client's own retry
+  // re-POSTing a create whose first attempt landed but whose response
+  // was lost. The facade surfaces that as a fatal
+  // TLOG_CREATE_ENTRY_ERROR; with `fetchOnConflict: true` the witness
+  // follows the 409's Location header to the entry the first attempt
+  // created — the designed recovery, and the publish is (correctly)
+  // idempotent. Everything else mirrors the facade's own composition
+  // (its initSigner/initWitnesses: same URL defaults, same
+  // retry/timeout). The verify path stays on the facade.
+  const retry = { retries: 2 }; // sigstore's DEFAULT_RETRY
+  const timeout = 5_000; // sigstore's DEFAULT_TIMEOUT
+  const bundler = new MessageSignatureBundleBuilder({
+    signer: new FulcioSigner({
+      fulcioBaseURL: endpoints?.fulcioURL ?? DEFAULT_FULCIO_URL,
+      identityProvider: { getToken: () => Promise.resolve(identityToken) },
+      retry,
+      timeout,
+    }),
+    witnesses: [
+      new RekorWitness({
+        rekorBaseURL: endpoints?.rekorURL ?? DEFAULT_REKOR_URL,
+        fetchOnConflict: true,
+        retry,
+        timeout,
+      }),
+    ],
+  });
+
   let serialized: SerializedBundle;
   try {
-    serialized = await sigstoreClient.sign(Buffer.from(bundleBytes), {
-      identityToken,
-      ...(endpoints?.fulcioURL ? { fulcioURL: endpoints.fulcioURL } : {}),
-      ...(endpoints?.rekorURL ? { rekorURL: endpoints.rekorURL } : {}),
-      tlogUpload: true,
-    });
+    const bundle = await bundler.create({ data: Buffer.from(bundleBytes) });
+    serialized = bundleToJSON(bundle);
   } catch (err) {
     throw classifySigstoreSigningError(err);
   }
