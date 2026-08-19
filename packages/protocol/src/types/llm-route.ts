@@ -100,6 +100,7 @@ export const MODELS = {
     // Stable + the commonly-used previews. The `-preview` suffix is
     // load-bearing on the wire for preview models — Gemini's API
     // rejects the bare name for those.
+    'gemini-3.7-flash',
     'gemini-3.6-flash',
     'gemini-3.5-flash',
     'gemini-3.5-flash-lite',

@@ -11,7 +11,6 @@
     "!src/multi-sdk/reports",
     "!src/a2ui/reports",
     "scripts",
-    "litellm_config.yaml",
     "README.md"
   ],
   "repository": {

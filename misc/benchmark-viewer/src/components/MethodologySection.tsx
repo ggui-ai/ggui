@@ -55,6 +55,33 @@ const DIMENSIONS: ReadonlyArray<{ label: string; definition: string }> = [
 ];
 
 /**
+ * Methodology changes, newest first. House rule: methodology never changes
+ * silently — cadence, matrix, panel, prompt, and scoring changes are all
+ * announced here, dated, because run-to-run comparability is the product.
+ */
+const CHANGELOG: ReadonlyArray<{ date: string; text: string }> = [
+  {
+    date: '2026-08-19',
+    text:
+      'Cadence: daily → weekly (Mondays 03:00 UTC). Model matrix refreshed to ' +
+      'the current standard lineups — Claude balanced/premium → Sonnet 5 / Opus 5, ' +
+      'OpenAI balanced/premium → GPT-5.6 Terra / Sol, Google balanced → ' +
+      'Gemini 3.7 Flash (premium stays 3.1 Pro Preview; no higher tier exists). ' +
+      'Judge panel: the Google judge moved from a retired preview id to ' +
+      'Gemini 3.5 Flash (panel version v2 → v3). Scores on or after this date ' +
+      'are not comparable with earlier dates.',
+  },
+  {
+    date: '2026-08-19',
+    text:
+      'Runs dated 2026-06-15 through 2026-08-19 show 0% success across every ' +
+      'cell. That was a pipeline credential outage (the runner fired with ' +
+      'unpopulated API-key secrets), not a model failure — no generation was ' +
+      'ever attempted. Those runs are kept, honestly, as pipeline history.',
+  },
+];
+
+/**
  * Standing methodology disclosure for the benchmark dashboard.
  *
  * Renders the static parts (what we measure / how we score / noise band)
@@ -137,6 +164,20 @@ export function MethodologySection({ meta, commits, rawDataUrl }: Props) {
             </ul>
           </div>
         )}
+
+        <div>
+          <h3 className="text-ink font-semibold mb-2">Methodology changes</h3>
+          <ul className="space-y-2">
+            {CHANGELOG.map((entry, i) => (
+              <li key={`${entry.date}-${i}`}>
+                <span className="font-mono text-xs text-ink-4 mr-2">
+                  {entry.date}
+                </span>
+                {entry.text}
+              </li>
+            ))}
+          </ul>
+        </div>
 
         {rawDataUrl && (
           <div>

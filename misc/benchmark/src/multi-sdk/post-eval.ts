@@ -134,7 +134,12 @@ function weightedScore(scores: AestheticScores): number {
 // Panel evaluation (3-provider, avg + spread, temp 0)
 // =============================================================================
 
-export const AESTHETIC_PROMPT_VERSION_PANEL = 'aesthetic-eval.v2-panel';
+// v3-panel (2026-08-19): google judge gemini-3-flash-preview → gemini-3.5-flash
+// (the preview id is gone from the current Gemini model docs; 3.5-flash is the
+// GA replacement). Prompt text unchanged. Bumped per the PANEL docstring —
+// no prior comparable data exists (every earlier run failed on auth, #557),
+// so this is the zero-cost moment to move the panel to GA ids.
+export const AESTHETIC_PROMPT_VERSION_PANEL = 'aesthetic-eval.v3-panel';
 
 /** One judge's contribution to a panel. */
 export interface SingleJudgeResult {
@@ -168,7 +173,7 @@ export interface PanelEvalResult {
 const PANEL = [
   { provider: 'anthropic', model: 'claude-haiku-4-5-20251001' },
   { provider: 'openai', model: 'gpt-5.4-mini' },
-  { provider: 'google', model: 'gemini-3-flash-preview' },
+  { provider: 'google', model: 'gemini-3.5-flash' },
 ] as const;
 
 /**

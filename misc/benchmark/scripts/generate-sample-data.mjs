@@ -65,7 +65,7 @@ const VARIANTS = getDefaultVariants();
 const PANEL_MODELS = [
   'claude-haiku-4-5-20251001',
   'gpt-5.4-mini',
-  'gemini-3-flash-preview',
+  'gemini-3.5-flash',
 ];
 
 const COMMITS = [

@@ -226,12 +226,16 @@ describe('BenchmarkRunner generator dispatch', () => {
     expect(report.results[0]!.generator).toBe('ui-gen-future-experimental-llm');
   });
 
-  it('advanced generator with Playwright stub → passes the gate, then routes to dispatch (errors downstream is OK)', async () => {
+  it('advanced generator with Playwright stub → passes the gate, then routes to dispatch (errors downstream is OK)', { timeout: 60_000 }, async () => {
     // With playwright stubbed, the advanced-not-available SKIP is
     // bypassed. The run will go on to invoke dispatchGeneration which
     // fails because MockAdapter throws — that's fine; the dispatch
     // failure shows up as `error` on the result, the `generator` field
     // still records the slug, and we've proved the gate is configurable.
+    //
+    // 60s timeout: the dispatch-failure path retries with jittered
+    // backoff — measured 18-27s wall on an idle machine (2026-08-19,
+    // n=4), which tips over the default 30s under full-suite load.
     const runner = makeRunnerWithMockAdapter({
       // Field is read off the config object via narrow shape check
       // (`{ playwright?: { chromium?: unknown } }`) in the runner.

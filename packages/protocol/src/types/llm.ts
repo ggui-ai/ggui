@@ -61,6 +61,7 @@ export type ModelId =
   | "anthropic/claude-sonnet-4-6"
   | "anthropic/claude-opus-4-6"
   // Google Gemini models (preview suffix required by API for *-preview ids)
+  | "gemini/gemini-3.7-flash"
   | "gemini/gemini-3.6-flash"
   | "gemini/gemini-3.5-flash"
   | "gemini/gemini-3.5-flash-lite"
@@ -139,10 +140,10 @@ export const MODEL_REGISTRY: Record<ModelId, ModelConfig> = {
     maxTokens: 1000000,
     supportsTools: true,
   },
-  // NOTE(pricing): $2/$10 is Anthropic's INTRODUCTORY rate, in effect
-  // through 2026-08-31; it reverts to $3/$15 on 2026-09-01. Re-check
-  // this entry then — the vendored LiteLLM snapshot carries the intro
-  // rate too, so the drift guard will not flag the reversion for us.
+  // NOTE(pricing): $2/$10 launched as an introductory rate but is now
+  // the PERMANENT standard price — Anthropic's pricing docs state the
+  // scheduled 2026-09-01 increase to $3/$15 will not occur (verified
+  // platform.claude.com/docs/en/about-claude/pricing, 2026-08-19).
   "anthropic/claude-sonnet-5": {
     id: "anthropic/claude-sonnet-5",
     provider: "anthropic",
@@ -221,12 +222,29 @@ export const MODEL_REGISTRY: Record<ModelId, ModelConfig> = {
   // (https://github.com/BerriAI/litellm/blob/main/model_prices_and_context_window.json);
   // host-side consumers may apply a more authoritative price table
   // if they ship one.
+  // NOTE(pricing): 3.7-flash and 3.6-flash are on Google's INTRODUCTORY
+  // rate ($0.75/$3.75) through 2026-12-31; both double to $1.50/$7.50 on
+  // 2027-01-01 (ai.google.dev/gemini-api/docs/pricing, 2026-08-19). The
+  // vendored snapshot carries the intro rate too, so the drift guard
+  // will not flag the increase for us — re-check these entries then.
+  "gemini/gemini-3.7-flash": {
+    id: "gemini/gemini-3.7-flash",
+    provider: "google",
+    displayName: "Gemini 3.7 Flash",
+    tier: "balanced",
+    costs: { inputPer1M: 0.75, outputPer1M: 3.75, cacheReadPer1M: 0.075 },
+    maxTokens: 1048576,
+    supportsTools: true,
+    supportsCaching: true,
+  },
   "gemini/gemini-3.6-flash": {
     id: "gemini/gemini-3.6-flash",
     provider: "google",
     displayName: "Gemini 3.6 Flash",
     tier: "fast",
-    costs: { inputPer1M: 1.5, outputPer1M: 7.5, cacheReadPer1M: 0.15 },
+    // 2026-08-19 re-vendor: cut from $1.5/$7.5 to the 3.7-launch intro
+    // rate (see NOTE above 3.7-flash).
+    costs: { inputPer1M: 0.75, outputPer1M: 3.75, cacheReadPer1M: 0.075 },
     maxTokens: 1048576,
     supportsTools: true,
     supportsCaching: true,

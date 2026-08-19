@@ -156,7 +156,7 @@ const PRESETS = {
   'coding-agent': {
     providers: ['google'],
     commits: ['weather-card'],
-    model: 'gemini/gemini-3-flash-preview',
+    model: 'gemini/gemini-3.5-flash',
     maxAttempts: 10,
     maxEvalRounds: 0,
     timeout: 300000,

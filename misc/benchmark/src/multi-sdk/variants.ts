@@ -11,45 +11,54 @@ import type { AdapterMode, ProviderName } from '@ggui-ai/ui-gen/adapters/types';
 export function getDefaultVariants(): BenchmarkVariant[] {
   return [
     // --- Claude (Anthropic) ---
+    // Matrix refresh 2026-08-19 (#557 follow-up): balanced/premium moved to
+    // the current standard lineup per platform.claude.com model overview —
+    // sonnet-4-6/opus-4-6 are now filed under "Legacy models". Fable 5 is
+    // deliberately NOT the premium slot: premium = the provider's flagship
+    // STANDARD tier ($5/$25 Opus 5), not the above-standard capability SKU.
     {
       id: 'claude-fast',
       sdkName: 'claude',
       tier: 'fast',
-      modelId: 'anthropic/claude-haiku-4-5',
+      modelId: 'anthropic/claude-haiku-4-5', // still the current Haiku (no 5)
     },
     {
       id: 'claude-balanced',
       sdkName: 'claude',
       tier: 'balanced',
-      modelId: 'anthropic/claude-sonnet-4-6',
+      modelId: 'anthropic/claude-sonnet-5',
     },
     {
       id: 'claude-premium',
       sdkName: 'claude',
       tier: 'premium',
-      modelId: 'anthropic/claude-opus-4-6',
+      modelId: 'anthropic/claude-opus-5',
     },
 
     // --- OpenAI ---
+    // Matrix refresh 2026-08-19: balanced/premium moved to the GPT-5.6
+    // frontier family (developers.openai.com/api/docs/models) — terra/sol
+    // supersede 5.4-mini/5.4, which remain GA but off the frontier page.
     {
       id: 'openai-fast',
       sdkName: 'openai',
       tier: 'fast',
       // Fast-tier refresh (Exp 52a follow-up, 2026-08-08): luna replaces
-      // the retired-from-rotation 5.4-nano as the openai fast SKU.
+      // the retired-from-rotation 5.4-nano as the openai fast SKU. Still
+      // current 2026-08-19 (cheapest 5.6-family SKU after the Jul 30 cut).
       modelId: 'openai/gpt-5.6-luna',
     },
     {
       id: 'openai-balanced',
       sdkName: 'openai',
       tier: 'balanced',
-      modelId: 'openai/gpt-5.4-mini',
+      modelId: 'openai/gpt-5.6-terra',
     },
     {
       id: 'openai-premium',
       sdkName: 'openai',
       tier: 'premium',
-      modelId: 'openai/gpt-5.4',
+      modelId: 'openai/gpt-5.6-sol',
     },
 
     // --- Google (Gemini) ---
@@ -58,21 +67,27 @@ export function getDefaultVariants(): BenchmarkVariant[] {
       sdkName: 'google',
       tier: 'fast',
       // Canonical google fast floor — priced in MODEL_REGISTRY, cheaper
-      // than gemini-3-flash-preview. Fast-tier refresh (2026-08-08):
-      // 3.5-flash-lite replaces 3.1.
+      // than gemini-3.5-flash. Fast-tier refresh (2026-08-08):
+      // 3.5-flash-lite replaces 3.1. Still current 2026-08-19.
       modelId: 'gemini/gemini-3.5-flash-lite',
     },
     {
       id: 'google-balanced',
       sdkName: 'google',
       tier: 'balanced',
-      modelId: 'gemini/gemini-3.1-pro-preview',
+      // Matrix refresh 2026-08-19: 3.7-flash (GA 2026-08-13, Google's
+      // "workhorse model for coding and agents") replaces 3.1-pro-preview
+      // in the balanced slot — newer and ~60% cheaper.
+      modelId: 'gemini/gemini-3.7-flash',
     },
     {
       id: 'google-premium',
       sdkName: 'google',
       tier: 'premium',
-      modelId: 'gemini/gemini-3.1-pro-preview', // No ultra available yet — use pro
+      // Still no Ultra/above-Pro tier and no newer Pro as of 2026-08-19
+      // (3.1-pro-preview remains Google's designated top reasoning tier;
+      // the only GA Pro is the older 2.5). Keep pro-preview.
+      modelId: 'gemini/gemini-3.1-pro-preview',
     },
   ];
 }
@@ -94,17 +109,21 @@ export function getSpeedVariants(): BenchmarkVariant[] {
       tier: 'fast',
       modelId: 'openai/gpt-5.4-mini',
     },
+    // 2026-08-19: gemini-3-flash-preview + gemini-3.1-flash-lite-preview
+    // dropped — both preview ids are absent from the current Gemini model
+    // docs (3.1-flash-lite-preview is confirmed shut down; its GA id
+    // lives on). Replaced with the GA generation.
     {
-      id: 'gemini-3-flash-preview',
+      id: 'gemini-3.5-flash',
       sdkName: 'google',
       tier: 'fast',
-      modelId: 'gemini/gemini-3-flash-preview',
+      modelId: 'gemini/gemini-3.5-flash',
     },
     {
-      id: 'gemini-3.1-flash-lite-preview',
+      id: 'gemini-3.1-flash-lite',
       sdkName: 'google',
       tier: 'fast',
-      modelId: 'gemini/gemini-3.1-flash-lite-preview',
+      modelId: 'gemini/gemini-3.1-flash-lite',
     },
     {
       id: 'claude-haiku',
@@ -126,7 +145,7 @@ export function getHybridVariants(): BenchmarkVariant[] {
       tier: 'balanced',
       hybrid: {
         draftModel: 'anthropic/claude-haiku-4-5',
-        reviewModel: 'anthropic/claude-sonnet-4-6',
+        reviewModel: 'anthropic/claude-sonnet-5', // 2026-08-19: 4-6 → 5
       },
     },
     {
@@ -143,7 +162,7 @@ export function getHybridVariants(): BenchmarkVariant[] {
       sdkName: 'google',
       tier: 'balanced',
       hybrid: {
-        draftModel: 'gemini/gemini-3-flash-preview',
+        draftModel: 'gemini/gemini-3.5-flash', // 2026-08-19: 3-preview gone
         reviewModel: 'gemini/gemini-3.1-pro-preview',
       },
     },
@@ -160,10 +179,13 @@ export function getRawVsSdkVariants(): BenchmarkVariant[] {
     sdkName: ProviderName;
     modelId: string;
   }> = [
-    { sdkName: 'claude', modelId: 'anthropic/claude-sonnet-4-6' },
+    // 2026-08-19: claude legs moved sonnet-4-6 → sonnet-5 (current balanced).
+    // gpt-5.3-codex stays — still OpenAI's latest codex model (no 5.4/5.6
+    // codex exists as of 2026-08-19).
+    { sdkName: 'claude', modelId: 'anthropic/claude-sonnet-5' },
     { sdkName: 'openai', modelId: 'openai/gpt-5.3-codex' },
     { sdkName: 'google', modelId: 'gemini/gemini-3.1-pro-preview' },
-    { sdkName: 'openrouter', modelId: 'openrouter/anthropic/claude-sonnet-4-6' },
+    { sdkName: 'openrouter', modelId: 'openrouter/anthropic/claude-sonnet-5' },
   ];
 
   return providers.flatMap(({ sdkName, modelId }) =>
