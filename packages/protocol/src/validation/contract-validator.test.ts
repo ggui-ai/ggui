@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   validateActionData,
   validatePropsData,
+  validatePropsDataWithSchema,
   buildPropsWrapperSchema,
   compileContractValidators,
   bundleValidatorExprsAsExecutableModule,
@@ -10,6 +11,7 @@ import {
 } from './contract-validator.js';
 import { compileForValidation } from './ajv-runtime.js';
 import type {
+  JsonSchema,
   ActionSpec,
   ContextSpec,
   PropsSpec,
@@ -462,6 +464,57 @@ describe('ContractViolationError with ggui_event tool', () => {
       violations: [{ field: 'action', message: 'bad' }],
     });
     expect(typeof data.hint).toBe('string');
+  });
+
+  it('validatePropsDataWithSchema enforces an explicit enforced schema with keyword retention', () => {
+    // The persisted-schema render path (schema-precise render P1):
+    // ggui_render validates against the handshake-persisted enforced
+    // schema, not a recomputation from the propsSpec — this helper is
+    // that seam. Compilation injects closed shape idempotently, so a
+    // pre-injected enforced schema round-trips unchanged.
+    const schema: JsonSchema = {
+      type: 'object',
+      properties: {
+        status: { type: 'string', enum: ['open', 'busy'] },
+      },
+      required: ['status'],
+      additionalProperties: false,
+    };
+    const ok = validatePropsDataWithSchema({ status: 'open' }, schema);
+    expect(ok.valid).toBe(true);
+    const bad = validatePropsDataWithSchema({ status: 'booked' }, schema);
+    expect(bad.valid).toBe(false);
+    expect(bad.violations[0]!.keyword).toBe('enum');
+    const extra = validatePropsDataWithSchema(
+      { status: 'open', x: 1 },
+      schema,
+    );
+    expect(extra.valid).toBe(false);
+    expect(extra.violations[0]!.keyword).toBe('additionalProperties');
+  });
+
+  it('toErrorData carries propsSchemaHash when constructed with one, omits it otherwise', () => {
+    // The breach classifier (P3 pin, schema-precise render plan): a
+    // runtime holding the handshake's propsSchemaHash compares it to
+    // the hash on the violation payload — mismatch = server breach,
+    // match = own-fault props.
+    const hash = 'a'.repeat(64);
+    const withHash = new ContractViolationError({
+      tool: 'ggui_render',
+      violations: [{ field: 'status', message: 'bad', keyword: 'enum' }],
+      propsSchemaHash: hash,
+    });
+    expect(withHash.propsSchemaHash).toBe(hash);
+    expect(withHash.toErrorData()).toMatchObject({
+      error: 'contract_violation',
+      propsSchemaHash: hash,
+    });
+
+    const without = new ContractViolationError({
+      tool: 'ggui_render',
+      violations: [{ field: 'status', message: 'bad' }],
+    });
+    expect(without.toErrorData()).not.toHaveProperty('propsSchemaHash');
   });
 
   it('honors custom hint override', () => {

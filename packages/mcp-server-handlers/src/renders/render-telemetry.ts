@@ -107,6 +107,10 @@ export function emitRenderContractViolation(
     readonly overridePresent?: boolean;
     /** Mutation mode — the props-mutation family only. */
     readonly kind?: 'replace' | 'merge';
+    /** sha256 of the ENFORCED schema's RFC 8785 canonical bytes —
+     *  the breach-classifier join key (matches the hash on the
+     *  handshake output and on `ContractViolationError.toErrorData`). */
+    readonly propsSchemaHash?: string;
     readonly violations?: readonly ContractViolation[];
   },
 ): void {
@@ -129,6 +133,9 @@ export function emitRenderContractViolation(
         ? { overridePresent: args.overridePresent }
         : {}),
       ...(args.kind !== undefined ? { kind: args.kind } : {}),
+      ...(args.propsSchemaHash !== undefined
+        ? { propsSchemaHash: args.propsSchemaHash }
+        : {}),
       ...(violationKeywords !== undefined ? { violationKeywords } : {}),
     },
   });

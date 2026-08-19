@@ -114,7 +114,7 @@ describe('createGguiHandshakeHandler — MVB-5', () => {
       expect(text).toMatch(/`intent` is a top-level ggui_handshake field/);
     });
 
-    it('declares the lean handshakeOutputSchema shape — {handshakeId, action, suggestion, nextStep?}', () => {
+    it('declares the lean handshakeOutputSchema shape — {handshakeId, action, suggestion, propsSchema*, nextStep?}', () => {
       const kvStore = new InMemoryKeyValueStore();
       const handler = createGguiHandshakeHandler({ kvStore });
       const outKeys = Object.keys(handler.outputSchema).sort();
@@ -123,10 +123,18 @@ describe('createGguiHandshakeHandler — MVB-5', () => {
       // handshake follows). These survive on the internal TS shape /
       // HandshakeRecord for telemetry + post-classify tracing — zod
       // strips them before structuredContent serialization.
+      //
+      // 2026-08-19 (schema-precise render, frozen shape guuey#271):
+      // the three propsSchema* fields joined the lean set — P3 pin 1
+      // requires them declared HERE (body placement; this zod schema
+      // is the strip gate) so they are wire-visible by construction.
       expect(outKeys).toEqual([
         'action',
         'handshakeId',
         'nextStep',
+        'propsSchema',
+        'propsSchemaHash',
+        'propsSchemaProfile',
         'suggestion',
       ]);
     });

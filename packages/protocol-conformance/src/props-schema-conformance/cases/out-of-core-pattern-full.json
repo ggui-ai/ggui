@@ -1,0 +1,21 @@
+{
+  "id": "out-of-core-pattern-full",
+  "description": "An out-of-core keyword (pattern) classifies 'full' — the server still enforces it (AUTHORITY covers the whole schema); 'full' only means a grammar-compiling runtime falls back to schema-as-context.",
+  "propsSpec": {
+    "properties": {
+      "code": { "schema": { "type": "string", "pattern": "^[A-Z]+$" } }
+    }
+  },
+  "propsSchema": {
+    "additionalProperties": false,
+    "properties": { "code": { "pattern": "^[A-Z]+$", "type": "string" } },
+    "required": [],
+    "type": "object"
+  },
+  "propsSchemaHash": "9e9fe92d5aa4dbbda98ef26874acbd732318344126776dc159c3fe9d8fd25b8d",
+  "propsSchemaProfile": "full",
+  "samples": [
+    { "props": { "code": "ABC" }, "valid": true },
+    { "props": { "code": "abc" }, "valid": false }
+  ]
+}

@@ -79,6 +79,31 @@ export function buildPropsWrapperSchema(spec: PropsSpec): JsonSchema {
 }
 
 /**
+ * Validate runtime props against an EXPLICIT enforced schema — the
+ * persisted-schema render path of the schema-precise render contract
+ * (docs/plans/2026-08-19-schema-precise-render.md P1). The paired
+ * `ggui_handshake` persists the exact `buildEnforcedPropsSchema`
+ * artifact it returned on the wire; `ggui_render` validates against
+ * that PERSISTED schema rather than recomputing from the propsSpec,
+ * so the returned and enforced schemas cannot diverge under
+ * rolling-deploy version skew (the AUTHORITY obligation is structural,
+ * not best-effort). Closed-shape injection at compile is idempotent —
+ * a pre-injected enforced schema round-trips unchanged.
+ */
+export function validatePropsDataWithSchema(
+  props: Record<string, unknown>,
+  schema: JsonSchema,
+): ValidationResult {
+  const validate = compileForValidation(schema);
+  const ok = validate(props);
+  if (ok) return { valid: true, violations: [] };
+  return {
+    valid: false,
+    violations: mapAjvErrorsToViolations(validate.errors, props),
+  };
+}
+
+/**
  * Validate runtime props data against a PropsSpec contract.
  *
  * Synthesizes the propsSpec into a single JSON Schema object node
@@ -1054,11 +1079,25 @@ export class ContractViolationError extends Error {
   readonly violations: ContractViolation[];
   readonly tool: 'ggui_render' | 'ggui_update' | 'ggui_amend' | 'ggui_emit' | 'ggui_event';
   readonly hint: string;
+  /**
+   * sha256 (lowercase hex) of the RFC 8785 canonical bytes of the
+   * ENFORCED props schema this violation was validated against —
+   * present when the enforcing site holds one (the handshake-persisted
+   * schema on the render path). The breach classifier of the
+   * schema-precise render contract: a caller holding the handshake's
+   * `propsSchemaHash` compares it to this value — mismatch means the
+   * server enforced a different schema than it returned (server
+   * breach); match means the props themselves were at fault. Absent on
+   * violations produced without an enforced-schema identity (synthetic
+   * violations, stream/context/action validation).
+   */
+  readonly propsSchemaHash?: string;
 
   constructor(opts: {
     tool: 'ggui_render' | 'ggui_update' | 'ggui_amend' | 'ggui_emit' | 'ggui_event';
     violations: ContractViolation[];
     hint?: string;
+    propsSchemaHash?: string;
   }) {
     const formattedViolations = formatViolations(opts.violations);
     super(`Contract violation in ${opts.tool}:\n${formattedViolations}`);
@@ -1066,6 +1105,9 @@ export class ContractViolationError extends Error {
     this.violations = opts.violations;
     this.tool = opts.tool;
     this.hint = opts.hint ?? defaultHintFor(opts.tool);
+    if (opts.propsSchemaHash !== undefined) {
+      this.propsSchemaHash = opts.propsSchemaHash;
+    }
   }
 
   /** Structured payload for MCP error response `data` field. */
@@ -1074,12 +1116,16 @@ export class ContractViolationError extends Error {
     tool: string;
     violations: ContractViolation[];
     hint: string;
+    propsSchemaHash?: string;
   } {
     return {
       error: 'contract_violation',
       tool: this.tool,
       violations: this.violations,
       hint: this.hint,
+      ...(this.propsSchemaHash !== undefined
+        ? { propsSchemaHash: this.propsSchemaHash }
+        : {}),
     };
   }
 }

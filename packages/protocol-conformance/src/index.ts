@@ -100,6 +100,23 @@ export type {
   SchemaConformanceResult,
 } from './schema-conformance/index.js';
 
+// Props-schema conformance — the schema-precise render arbiter
+// (frozen shape 2026-08-19): the enforced-schema builder, its RFC 8785
+// hash, the grammar-safe profile, and returned-schema AUTHORITY, each
+// graded against caller-supplied callbacks over a polyglot JSON
+// catalog. Includes the live-incident enum sample.
+export {
+  propsSchemaConformanceCases,
+  runPropsSchemaConformance,
+} from './props-schema-conformance/index.js';
+export type {
+  PropsSchemaConformanceCase,
+  PropsSchemaConformanceFailure,
+  PropsSchemaConformanceReport,
+  PropsSchemaConformanceSample,
+  PropsSchemaImplementation,
+} from './props-schema-conformance/index.js';
+
 // Registration-conformance — which `(contract, appGadgets, appPublicEnv)`
 // triples the push-time gadget gate stack MUST accept / reject, with
 // which precise SPEC §7.9 reject code.

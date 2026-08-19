@@ -130,8 +130,10 @@ import { fetchGadgetTypes } from './fetch-gadget-types.js';
 import { assertPublicEnvSatisfied } from './assert-public-env.js';
 import type { LLMCaller } from '@ggui-ai/negotiator';
 import { blueprintKey, variantKey } from '@ggui-ai/protocol/blueprint-key';
+import { computePropsSchemaHash } from '@ggui-ai/protocol/props-schema-hash';
 import {
-  validatePropsData,
+  buildEnforcedPropsSchema,
+  validatePropsDataWithSchema,
   ContractViolationError,
   validateContract,
   renderInputShape,
@@ -1330,16 +1332,37 @@ export function createGguiRenderHandler(
         }
       }
 
-      // Props validation against the agreed contract's propsSpec. The
-      // wire `props` is required (value may be `{}`), but the
-      // accept-path drop below resets it to `undefined` (= "no runtime
-      // props"), so the local stays `Record<string, unknown> | undefined`.
+      // Props validation against the agreed contract. Schema-precise
+      // render (frozen shape, guuey#271): absent an `override.contract`
+      // patch, the validator is the schema PERSISTED on the handshake
+      // record — the byte-identical artifact the handshake returned on
+      // the wire — so the returned and enforced schemas cannot diverge
+      // under rolling-deploy version skew (the AUTHORITY obligation is
+      // structural). An `override.contract` re-draft (outside the
+      // AUTHORITY proviso) and the TTL-bounded mixed-version window
+      // (records written by the previous build carry no persisted
+      // schema) recompute via the same builder the handshake uses —
+      // one synthesis either way. The wire `props` is required (value
+      // may be `{}`), but the accept-path drop below resets it to
+      // `undefined` (= "no runtime props"), so the local stays
+      // `Record<string, unknown> | undefined`.
       let runtimeProps: Record<string, unknown> | undefined = parsed.props;
       if (effectiveContract.propsSpec) {
         const propsToValidate: Record<string, unknown> = runtimeProps ?? {};
-        const propsValidation = validatePropsData(
+        const persistedSchema =
+          override?.contract === undefined
+            ? handshakeRecord.propsSchema
+            : undefined;
+        const enforcedSchema =
+          persistedSchema ??
+          buildEnforcedPropsSchema(effectiveContract.propsSpec);
+        const enforcedSchemaHash =
+          (override?.contract === undefined
+            ? handshakeRecord.propsSchemaHash
+            : undefined) ?? computePropsSchemaHash(enforcedSchema);
+        const propsValidation = validatePropsDataWithSchema(
           propsToValidate,
-          effectiveContract.propsSpec,
+          enforcedSchema,
         );
         if (!propsValidation.valid) {
           emitRenderContractViolation(deps.telemetrySink, {
@@ -1351,11 +1374,13 @@ export function createGguiRenderHandler(
             origin: handshakeRecord.suggestion.origin,
             overridePresent: override !== undefined,
             violations: propsValidation.violations,
+            propsSchemaHash: enforcedSchemaHash,
           });
           throw new ContractViolationError({
             tool: 'ggui_render',
             violations: propsValidation.violations,
             hint: 'Fix the props to satisfy the agreed propsSpec, or send `override: {contract}` to re-draft the agreed shape. The handshake record is preserved across this validation error — retry on the SAME handshakeId after fixing the input; no need to re-handshake.',
+            propsSchemaHash: enforcedSchemaHash,
           });
         }
       } else if (
@@ -1380,6 +1405,12 @@ export function createGguiRenderHandler(
           );
           runtimeProps = undefined;
         } else {
+          // The enforced schema for a propsSpec-less contract IS the
+          // empty closed wrapper — its hash identifies what rejected
+          // these props (frozen no-propsSpec rule).
+          const emptyWrapperHash = computePropsSchemaHash(
+            buildEnforcedPropsSchema({ properties: {} }),
+          );
           emitRenderContractViolation(deps.telemetrySink, {
             appId: ctx.appId,
             tool: 'ggui_render',
@@ -1388,9 +1419,11 @@ export function createGguiRenderHandler(
             handshakeId: parsed.handshakeId,
             origin: handshakeRecord.suggestion.origin,
             overridePresent: true,
+            propsSchemaHash: emptyWrapperHash,
           });
           throw new ContractViolationError({
             tool: 'ggui_render',
+            propsSchemaHash: emptyWrapperHash,
             violations: [
               {
                 field: 'props',
@@ -3002,8 +3035,17 @@ async function runGenerationIntoGguiSession(
     ...(responseContracts?.streamSpec
       ? { streamSpec: responseContracts.streamSpec }
       : {}),
-    ...(responseContracts?.propsSpec
-      ? { propsSpec: responseContracts.propsSpec }
+    // SESSION CONTINUITY (schema-precise render, frozen obligation 3):
+    // the committed session's propsSpec MUST canonically equal the
+    // agreed effective contract's — it is what ggui_update/ggui_amend
+    // validate against, and what makes a handshake-compiled grammar
+    // legitimately reusable on those legs. The generator response wins
+    // when it carries a propsSpec (the OSS generator echoes the input
+    // contract verbatim); a response with NONE falls back to the
+    // agreed contract instead of silently committing a spec-less
+    // session (which would disarm update-time enforcement entirely).
+    ...((responseContracts?.propsSpec ?? story.contract?.propsSpec)
+      ? { propsSpec: responseContracts?.propsSpec ?? story.contract?.propsSpec }
       : {}),
     ...(responseContracts?.contextSpec
       ? { contextSpec: responseContracts.contextSpec }

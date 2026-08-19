@@ -29,12 +29,18 @@
  *
  * Tolerated metadata keywords:
  *   - `example` (singular, OpenAPI-ish; JSON Schema standard is
- *     `examples` array). Treated as informational.
- *   - `nullable` (OpenAPI 3.0 shorthand). Tolerated; the canonical
- *     way to express nullability is `type: [<original>, 'null']`.
- *
- * Both are registered as no-op keywords so Ajv strict mode doesn't
- * reject schemas that carry them.
+ *     `examples` array). Registered by us as a genuine no-op keyword
+ *     (informational only) so strict mode doesn't reject it.
+ *   - `nullable` (OpenAPI 3.0 shorthand). NOT a no-op: Ajv 8
+ *     pre-registers `nullable` itself with WIDENING semantics —
+ *     `{type:'string', nullable:true}` accepts `null` (empirically
+ *     verified 2026-08-19; the `getKeyword` guard below never fires
+ *     for it). Behaviorally equivalent to the canonical
+ *     `type: [<original>, 'null']` union, which is what the enforced
+ *     props schema emission (`buildEnforcedPropsSchema`) rewrites it
+ *     to — the wire artifact carries the widening explicitly so a
+ *     strict reader of the emitted schema sees the same acceptance
+ *     the validator enforces.
  */
 
 import Ajv from 'ajv';

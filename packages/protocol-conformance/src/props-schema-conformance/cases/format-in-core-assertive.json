@@ -1,0 +1,28 @@
+{
+  "id": "format-in-core-assertive",
+  "description": "The dialect pin: format is ASSERTIVE (not annotation-only), and the ten-format list is in the grammar-safe core. A malformed date-time MUST reject.",
+  "propsSpec": {
+    "properties": {
+      "when": {
+        "schema": { "type": "string", "format": "date-time" },
+        "required": true
+      }
+    }
+  },
+  "propsSchema": {
+    "additionalProperties": false,
+    "properties": { "when": { "format": "date-time", "type": "string" } },
+    "required": ["when"],
+    "type": "object"
+  },
+  "propsSchemaHash": "4a9fa57c154a96bdb5b4ac2f3efc878eb07a41cb64e10ac5701a87bee75ad885",
+  "propsSchemaProfile": "grammar-safe",
+  "samples": [
+    { "props": { "when": "2026-08-19T12:00:00Z" }, "valid": true },
+    {
+      "props": { "when": "yesterday" },
+      "valid": false,
+      "note": "format-assertive semantics — annotation-only readers would wrongly accept this"
+    }
+  ]
+}

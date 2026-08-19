@@ -1,0 +1,36 @@
+{
+  "id": "scheduler-enum-authority",
+  "description": "The incident shape: a closed enum vocabulary. The returned schema IS the enforced schema — props valid under it MUST validate; the out-of-vocabulary value ('booked') MUST reject with the enum keyword.",
+  "propsSpec": {
+    "properties": {
+      "status": {
+        "schema": { "type": "string", "enum": ["open", "busy", "tentative"] },
+        "required": true
+      }
+    }
+  },
+  "propsSchema": {
+    "additionalProperties": false,
+    "properties": {
+      "status": { "enum": ["open", "busy", "tentative"], "type": "string" }
+    },
+    "required": ["status"],
+    "type": "object"
+  },
+  "propsSchemaHash": "1479a6193c963a0d501f0ef80fbba1d2d12087f2da9fcf86b2bd65b54c7e16ee",
+  "propsSchemaProfile": "grammar-safe",
+  "samples": [
+    { "props": { "status": "open" }, "valid": true },
+    {
+      "props": { "status": "booked" },
+      "valid": false,
+      "note": "the live-incident value — out-of-vocabulary enum member"
+    },
+    { "props": {}, "valid": false, "note": "required member missing" },
+    {
+      "props": { "status": "open", "extra": 1 },
+      "valid": false,
+      "note": "closed shape — undeclared key"
+    }
+  ]
+}

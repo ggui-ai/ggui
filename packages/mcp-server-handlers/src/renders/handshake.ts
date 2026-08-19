@@ -51,6 +51,10 @@ import {
   blueprintDraftObjectSchema,
   DATA_CONTRACT_SHAPE_RULE,
   DATA_CONTRACT_MINIMAL_EXAMPLE,
+  buildEnforcedPropsSchema,
+  canonicalPropsSchemaBytes,
+  classifyPropsSchemaProfile,
+  jsonSchemaSchema,
   type Blueprint,
   type BlueprintDraft,
   type BlueprintMeta,
@@ -59,10 +63,13 @@ import {
   type GadgetDescriptor,
   type DataContract,
   type HandshakeSuggestion,
+  type JsonSchema,
   type JsonValue,
+  type PropsSchemaProfile,
   type ServerCapabilities,
   type SuggestionFinding,
 } from '@ggui-ai/protocol';
+import { computePropsSchemaHash } from '@ggui-ai/protocol/props-schema-hash';
 import type {
   AppMetadataStore,
   KeyValueStore,
@@ -171,6 +178,28 @@ export interface HandshakeRecord {
     readonly contractKey: string;
     readonly variantKey: string;
   };
+  /**
+   * The ENFORCED props schema, persisted at handshake time — the
+   * `buildEnforcedPropsSchema` artifact over `effectiveContract.propsSpec`
+   * (empty closed wrapper for a propsSpec-less contract). The paired
+   * `ggui_render` validates against THIS persisted value (not a
+   * recomputation), which is what makes the returned-schema AUTHORITY
+   * obligation structural under rolling-deploy version skew
+   * (docs/plans/2026-08-19-schema-precise-render.md, frozen shape).
+   * Always persisted on non-declined records; wire emission is
+   * conditional (see the handler body). Optional on the type only for
+   * the TTL-bounded mixed-version window at a deploy boundary —
+   * records written by the previous build lack it and fall back to
+   * the propsSpec recomputation path.
+   */
+  readonly propsSchema?: JsonSchema;
+  /** sha256 (lowercase hex) over the RFC 8785 canonical bytes of
+   *  {@link propsSchema}. Persisted with it; stamped onto props
+   *  contract-violation errors as the breach classifier. */
+  readonly propsSchemaHash?: string;
+  /** Grammar-safe-core classification of {@link propsSchema} —
+   *  `classifyPropsSchemaProfile`'s verdict at handshake time. */
+  readonly propsSchemaProfile?: PropsSchemaProfile;
   readonly appId: string;
   readonly createdAt: string;
 }
@@ -504,11 +533,37 @@ const inputSchema = {
   forceCreate: handshakeInputSchema.shape.forceCreate,
 } as const;
 
-/** Output zod-shape mirror. Same shape as `handshakeOutputSchema`. */
+/** Output zod-shape mirror. Same shape as `handshakeOutputSchema`.
+ *
+ * The three `propsSchema*` fields are the schema-precise render wire
+ * surface (frozen 2026-08-19; docs/plans/2026-08-19-schema-precise-render.md
+ * §2). P3 pin 1: they are declared HERE, on the zod output schema, and
+ * ride the RESULT BODY (`structuredContent`) — never `_meta` — so the
+ * vocabulary stays in the model's context and transcript-reading
+ * runtimes can consume it. This zod schema is an active strip gate;
+ * an emitted-but-undeclared field silently disappears from the wire.
+ */
 const outputSchema = {
   handshakeId: z.string(),
   action: z.enum(['create', 'reuse', 'update', 'replace', 'declined']),
   suggestion: handshakeSuggestionSchema,
+  propsSchema: jsonSchemaSchema
+    .optional()
+    .describe(
+      'The exact JSON Schema the paired ggui_render enforces for this handshakeId — generate props that satisfy it (enum fields list their full legal vocabulary). Present when the agreed contract differs from your draft; when absent, your draft propsSpec is agreed verbatim. Advisory: no agent obligation attaches to reading it; runtimes MAY compile it for constrained argument generation.',
+    ),
+  propsSchemaHash: z
+    .string()
+    .optional()
+    .describe(
+      'sha256 (lowercase hex) over the RFC 8785 canonical form of the enforced props schema. Present on every non-declined handshake. A later contract_violation carries the hash of the schema it enforced — equal hashes mean the props were at fault.',
+    ),
+  propsSchemaProfile: z
+    .string()
+    .optional()
+    .describe(
+      "Grammar profile of the enforced props schema: 'grammar-safe' (every keyword is in the enumerated core — a runtime can compile the schema into a decoding grammar) or 'full' (read the schema as context instead). Treat unrecognized values as 'full'; the set may grow in minor versions.",
+    ),
   nextStep: z
     .object({
       tool: z.literal('ggui_render'),
@@ -533,6 +588,14 @@ interface HandshakeOutput {
   alternatives?: readonly Blueprint[];
   /** Canonical hash — internal-only telemetry. */
   contractHash: string;
+  /** Enforced props schema — wire-emitted when the effective contract
+   *  differs from the agent's parsed draft (and under the byte
+   *  ceiling); always persisted on the record. */
+  propsSchema?: JsonSchema;
+  /** Present on every non-declined handshake (P3 pin 2). */
+  propsSchemaHash?: string;
+  /** Present whenever {@link propsSchemaHash} is. */
+  propsSchemaProfile?: PropsSchemaProfile;
   nextStep?: {
     readonly tool: 'ggui_render';
     readonly example: string;
@@ -724,6 +787,47 @@ export function createGguiHandshakeHandler(
         negotiated.suggestion.origin === 'cache'
           ? negotiated.matchedBlueprint
           : undefined;
+
+      // Schema-precise render (frozen shape, guuey#271): materialize
+      // the ENFORCED props schema once, at handshake time. The record
+      // persists it (the paired ggui_render validates against the
+      // PERSISTED value — the AUTHORITY obligation is structural, not
+      // a recompute-and-hope); the wire carries hash + profile on
+      // every non-declined handshake (pin 2), and the schema VALUE
+      // whenever the effective contract's props shape differs from
+      // the agent's parsed draft — the exact asymmetry this surface
+      // closes (cache/synth/salvaged paths; a verbatim-accepted draft
+      // already sits in the agent's context, and a compiling runtime
+      // derives the identical artifact locally via the OSS builder,
+      // verifying against the hash).
+      const enforcedPropsSchema = buildEnforcedPropsSchema(
+        negotiated.effectiveContract.propsSpec ?? { properties: {} },
+      );
+      const propsSchemaHash = computePropsSchemaHash(enforcedPropsSchema);
+      const propsSchemaProfile =
+        classifyPropsSchemaProfile(enforcedPropsSchema);
+      const parsedDraft = dataContractSchema.safeParse(
+        normalizedInput.blueprintDraft.contract,
+      );
+      const draftMatchesEffective =
+        parsedDraft.success &&
+        computePropsSchemaHash(
+          buildEnforcedPropsSchema(
+            parsedDraft.data.propsSpec ?? { properties: {} },
+          ),
+        ) === propsSchemaHash;
+      // Pathological-size escape hatch (frozen behavior): past the
+      // provisional ceiling the schema VALUE is omitted — hash +
+      // profile still ride; a named retrieval affordance is
+      // deliberately deferred (no field name without its mechanism).
+      const PROPS_SCHEMA_BYTE_CEILING = 256 * 1024;
+      const underCeiling =
+        Buffer.byteLength(
+          canonicalPropsSchemaBytes(enforcedPropsSchema),
+          'utf8',
+        ) <= PROPS_SCHEMA_BYTE_CEILING;
+      const emitPropsSchema = !draftMatchesEffective && underCeiling;
+
       const record: HandshakeRecord = {
         handshakeId,
         action: negotiated.action,
@@ -733,6 +837,9 @@ export function createGguiHandshakeHandler(
         suggestion: finalSuggestion,
         effectiveContract: negotiated.effectiveContract,
         ...(matchedBlueprint !== undefined ? { matchedBlueprint } : {}),
+        propsSchema: enforcedPropsSchema,
+        propsSchemaHash,
+        propsSchemaProfile,
         appId: ctx.appId,
         createdAt: nowIso(),
       };
@@ -785,6 +892,9 @@ export function createGguiHandshakeHandler(
           ? { alternatives: negotiated.alternatives }
           : {}),
         contractHash: draftHash,
+        ...(emitPropsSchema ? { propsSchema: enforcedPropsSchema } : {}),
+        propsSchemaHash,
+        propsSchemaProfile,
         ...(nextStep ? { nextStep } : {}),
         ...(serverCapabilities ? { serverCapabilities } : {}),
       };

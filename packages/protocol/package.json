@@ -50,6 +50,12 @@
       "require": "./dist/registry/blueprint-key.js",
       "default": "./dist/registry/blueprint-key.js"
     },
+    "./props-schema-hash": {
+      "types": "./dist/registry/props-schema-hash.d.ts",
+      "import": "./dist/registry/props-schema-hash.js",
+      "require": "./dist/registry/props-schema-hash.js",
+      "default": "./dist/registry/props-schema-hash.js"
+    },
     "./transport/websocket": {
       "types": "./dist/transport/websocket.d.ts",
       "import": "./dist/transport/websocket.js",

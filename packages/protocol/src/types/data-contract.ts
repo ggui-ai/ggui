@@ -83,9 +83,27 @@ export type JsonValue =
  * Fields like `default`, `example`, and `const` are typed as {@link JsonValue}
  * to accept any JSON-safe value.
  */
+/** The JSON Schema primitive type vocabulary (draft-07). */
+export type JsonSchemaTypeName =
+  | 'string'
+  | 'number'
+  | 'integer'
+  | 'boolean'
+  | 'array'
+  | 'object'
+  | 'null';
+
 export interface JsonSchema extends JsonObject {
-  /** JSON Schema type. Optional when using `oneOf`/`anyOf` unions. */
-  type?: 'string' | 'number' | 'integer' | 'boolean' | 'array' | 'object' | 'null';
+  /**
+   * JSON Schema type. Optional when using `oneOf`/`anyOf` unions.
+   * Draft-07 also admits a type ARRAY (`['string','null']`) — the
+   * canonical nullability form the enforced-props-schema emission
+   * (`buildEnforcedPropsSchema`) rewrites OpenAPI `nullable: true`
+   * into, and what the validating engine's `nullable` widening
+   * enforces. Additive widening of the authoring grammar (a type a
+   * validator always accepted, now expressible in the TS type).
+   */
+  type?: JsonSchemaTypeName | JsonSchemaTypeName[];
   description?: string;
   /** Allowed values (enum constraint) */
   enum?: JsonValue[];
