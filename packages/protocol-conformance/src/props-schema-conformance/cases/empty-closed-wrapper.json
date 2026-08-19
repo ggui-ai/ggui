@@ -1,0 +1,17 @@
+{
+  "id": "empty-closed-wrapper",
+  "description": "A propsSpec-less / empty contract emits the empty closed wrapper — never omitted for a non-declined handshake. Non-empty props are invalid under it, making the props-without-propsSpec rejection schema-derivable.",
+  "propsSpec": { "properties": {} },
+  "propsSchema": {
+    "additionalProperties": false,
+    "properties": {},
+    "required": [],
+    "type": "object"
+  },
+  "propsSchemaHash": "d746974fa9afd5e951f76f9af38954b0ad7f436f2120dc974da65e5ee39f856f",
+  "propsSchemaProfile": "grammar-safe",
+  "samples": [
+    { "props": {}, "valid": true },
+    { "props": { "x": 1 }, "valid": false }
+  ]
+}

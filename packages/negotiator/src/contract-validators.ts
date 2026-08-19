@@ -249,7 +249,13 @@ function nameImpliesMutation(args: {
  */
 function isEmptyPayloadSchema(schema: JsonSchema | undefined): boolean {
   if (schema === undefined) return true;
-  if (schema.type !== 'object') return false;
+  // `type` may be a draft-07 type ARRAY (`['object','null']`) since
+  // draft-2026-08-19 — treat a type set containing 'object' like the
+  // single-string form.
+  const declaresObject = Array.isArray(schema.type)
+    ? schema.type.includes('object')
+    : schema.type === 'object';
+  if (!declaresObject) return false;
   if (schema.properties === undefined) return true;
   return Object.keys(schema.properties).length === 0;
 }

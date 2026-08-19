@@ -3047,8 +3047,33 @@
  *      and the WS frame discriminators `'render'` / `'render_event'`.
  *      OSS-first; the cloud pod follows at its next image build. See
  *      `docs/protocol/migrations/2026-06-05-gguisession-reintroduction.md`.
+ *
+ * draft-2026-08-19 — SCHEMA-PRECISE RENDER (additive minor; frozen
+ *      shape per the 2026-08-19 consumer review, design record
+ *      `docs/plans/2026-08-19-schema-precise-render.md`):
+ *
+ *   c1. **Enforced props schema on the handshake output** (SPEC
+ *      §2.3.2 + §7.1.1). `GguiHandshakeOutput` gains `propsSchema?`
+ *      (the exact schema the paired render enforces, emission form,
+ *      RFC 8785-canonical construction), `propsSchemaHash?` (sha256
+ *      over the canonical bytes; on EVERY non-declined handshake) and
+ *      `propsSchemaProfile?` ('grammar-safe' | 'full'; unknown values
+ *      degrade to 'full'). The record persists the artifact and
+ *      `ggui_render` validates against the PERSISTED value — the
+ *      AUTHORITY obligation is structural under version skew.
+ *   c2. **`ContractViolation.keyword`** (additive) + **`propsSchemaHash`
+ *      on `contract_violation` error data** — the failure-class
+ *      segmentation and breach-classifier surfaces (SPEC §7.9).
+ *   c3. **`JsonSchema.type` admits draft-07 type arrays**
+ *      (`['string','null']` — the canonical nullability form the
+ *      emission rewrites OpenAPI `nullable: true` into). Acceptance
+ *      widening only; the schema-subset checker compares type SETS.
+ *   c4. **Conformance:** the `props-schema-conformance` catalog
+ *      (drift / hash / profile / authority obligations; pins the
+ *      2026-08-19 out-of-vocabulary enum incident as a permanent
+ *      sample).
  */
-export const PROTOCOL_VERSION = "draft-2026-06-12";
+export const PROTOCOL_VERSION = "draft-2026-08-19";
 
 /**
  * Schema version stamped onto wire envelopes that opt into the

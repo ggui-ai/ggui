@@ -1,0 +1,21 @@
+{
+  "id": "format-out-of-list-full",
+  "description": "A validator-known format OUTSIDE the enumerated ten (url) classifies 'full'. Server enforcement is unchanged; only grammar compilation is off the table.",
+  "propsSpec": {
+    "properties": {
+      "link": { "schema": { "type": "string", "format": "url" } }
+    }
+  },
+  "propsSchema": {
+    "additionalProperties": false,
+    "properties": { "link": { "format": "url", "type": "string" } },
+    "required": [],
+    "type": "object"
+  },
+  "propsSchemaHash": "fa2b9ed841ac15c8a5ef525c61dc007532b7a6e6eea37ce7c6177ea5abe15213",
+  "propsSchemaProfile": "full",
+  "samples": [
+    { "props": { "link": "https://example.com/a" }, "valid": true },
+    { "props": { "link": "not a url" }, "valid": false }
+  ]
+}

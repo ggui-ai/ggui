@@ -55,6 +55,11 @@
       "types": "./dist/binding-conformance/index.d.ts",
       "import": "./dist/binding-conformance/index.js",
       "default": "./dist/binding-conformance/index.js"
+    },
+    "./props-schema-conformance": {
+      "types": "./dist/props-schema-conformance/index.d.ts",
+      "import": "./dist/props-schema-conformance/index.js",
+      "default": "./dist/props-schema-conformance/index.js"
     }
   },
   "scripts": {

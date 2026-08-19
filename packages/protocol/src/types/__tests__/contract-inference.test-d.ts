@@ -37,6 +37,31 @@ type _S4 = Expect<Equal<SchemaToType<{ readonly type: 'boolean' }>, boolean>>;
 type _S5 = Expect<Equal<SchemaToType<{ readonly type: 'null' }>, null>>;
 
 // =============================================================================
+// 1b. SchemaToType — draft-07 type arrays (schema-precise render,
+//     draft-2026-08-19): `['string','null']` is the canonical nullable
+//     form the enforced-props-schema emission produces. Members map to
+//     a UNION — the pre-fix behavior silently degraded these to
+//     `unknown` (the classic Infer* fail-open).
+// =============================================================================
+
+type _SU1 = Expect<Equal<
+  SchemaToType<{ readonly type: readonly ['string', 'null'] }>,
+  string | null
+>>;
+type _SU2 = Expect<Equal<
+  SchemaToType<{ readonly type: ['number', 'null'] }>,
+  number | null
+>>;
+type _SU3 = Expect<Equal<
+  SchemaToType<{
+    readonly type: readonly ['object', 'null'];
+    readonly properties: { readonly id: { readonly type: 'string' } };
+    readonly required: readonly ['id'];
+  }>,
+  { id: string } | null
+>>;
+
+// =============================================================================
 // 2. SchemaToType — array
 // =============================================================================
 

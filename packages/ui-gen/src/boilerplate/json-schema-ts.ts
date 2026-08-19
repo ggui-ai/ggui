@@ -35,6 +35,21 @@ export function jsonSchemaTypeToTs(schema: JsonSchema): string {
       .join(' | ');
   }
 
+  // ── Draft-07 type array (`['string','null']` — the canonical
+  // nullable form since draft-2026-08-19): members' TS union. Each
+  // member re-enters with the single type so object/array members
+  // keep their properties/items; `nullable` is folded in here (not in
+  // the recursion) so it can't double-append. ──
+  if (Array.isArray(schema.type)) {
+    const { nullable: _nullable, ...rest } = schema;
+    const members = [...new Set(schema.type)].map((member) =>
+      jsonSchemaTypeToTs({ ...rest, type: member }),
+    );
+    const unique = [...new Set(members)];
+    if (schema.nullable && !unique.includes('null')) unique.push('null');
+    return unique.join(' | ');
+  }
+
   let result: string;
 
   switch (schema.type) {
@@ -54,8 +69,13 @@ export function jsonSchemaTypeToTs(schema: JsonSchema): string {
     case 'array': {
       if (schema.items) {
         const itemType = jsonSchemaTypeToTs(schema.items);
-        // Use Array<T> for complex object types, T[] for simple
-        result = (schema.items.type === 'object' && schema.items.properties)
+        // Use Array<T> for complex object types, T[] for simple.
+        // `items.type` may be a type SET — treat any set containing
+        // 'object' like the single-string form.
+        const itemsDeclareObject = Array.isArray(schema.items.type)
+          ? schema.items.type.includes('object')
+          : schema.items.type === 'object';
+        result = (itemsDeclareObject && schema.items.properties)
           ? `Array<${itemType}>`
           : (itemType.includes('|') ? `(${itemType})[]` : `${itemType}[]`);
       } else {

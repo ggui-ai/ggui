@@ -34,6 +34,31 @@ const EMPTY_PAYLOAD_SCHEMA = {
 } as const;
 
 describe('validateContractRedundancy — load-bearing counter case', () => {
+  it('recognizes an empty payload declared with a draft-07 type array', () => {
+    // Since draft-2026-08-19 JsonSchema.type admits arrays
+    // (`['object','null']`); the empty-payload heuristic must treat a
+    // type SET containing 'object' like the single-string form, or
+    // redundancy detection silently skips such actions.
+    const contract: DataContract = {
+      actionSpec: {
+        increment: {
+          label: 'Increment',
+          schema: {
+            type: ['object', 'null'],
+            properties: {},
+            additionalProperties: false,
+          },
+        },
+      },
+      contextSpec: {
+        count: { schema: { type: 'number' }, default: 0 },
+      },
+    };
+    const { findings } = validateContractRedundancy(contract);
+    expect(findings).toHaveLength(1);
+    expect(findings[0]!.kind).toBe('redundant-action');
+  });
+
   it('flags increment + count (single slot, empty remainder)', () => {
     const contract: DataContract = {
       actionSpec: {

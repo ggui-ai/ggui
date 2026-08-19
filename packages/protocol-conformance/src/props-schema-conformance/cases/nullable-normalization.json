@@ -1,0 +1,23 @@
+{
+  "id": "nullable-normalization",
+  "description": "OpenAPI nullable:true normalizes to the canonical type union in the emitted bytes; null acceptance is preserved (the validator's nullable widening, made explicit).",
+  "propsSpec": {
+    "properties": {
+      "note": { "schema": { "type": "string", "nullable": true } }
+    }
+  },
+  "propsSchema": {
+    "additionalProperties": false,
+    "properties": { "note": { "type": ["string", "null"] } },
+    "required": [],
+    "type": "object"
+  },
+  "propsSchemaHash": "e45869c6cabb21553f1ff784c8dfdbbb1cd9992aa516ae98d995b1385a23bee8",
+  "propsSchemaProfile": "grammar-safe",
+  "samples": [
+    { "props": { "note": null }, "valid": true },
+    { "props": { "note": "x" }, "valid": true },
+    { "props": { "note": 1 }, "valid": false },
+    { "props": {}, "valid": true, "note": "note is not required" }
+  ]
+}

@@ -51,12 +51,13 @@ One declared grading gap on the action loop: `action-ack` proves the append half
 
 The behavioral fixture catalog above asserts what an implementation _does_ over the wire. Some protocol obligations aren't transport-observable at all — they are deterministic _validation functions_: given an input, accept or reject it. SPEC §7.7.2's gadget obligations are exactly this. Modeling them as WebSocket fixtures would mean faking wire frames the protocol never emits; instead the kit ships **pure-function catalogs** — accept/reject cases graded against a caller-supplied function, with no host, render, or transport.
 
-Each catalog ships its cases as raw JSON so a non-TypeScript implementer can grade their own implementation, and each runner takes the implementation as a callback — the kit never hard-binds a concrete one. Four catalogs ship today:
+Each catalog ships its cases as raw JSON so a non-TypeScript implementer can grade their own implementation, and each runner takes the implementation as a callback — the kit never hard-binds a concrete one. Five catalogs ship today:
 
 - **`@ggui-ai/protocol-conformance/schema-conformance`** — which `DataContract.clientCapabilities` payloads a conformant parser MUST accept / reject (the gadget wire shape).
 - **`@ggui-ai/protocol-conformance/registration-conformance`** — which `(contract, appGadgets, appPublicEnv)` triples the push-time gadget gate stack MUST accept / reject, and with which precise SPEC §7.9 reject code (`gadget_not_registered` / `gadget_package_mismatch` / `gadget_public_env_missing` / `duplicate_gadget_hook`).
 - **`@ggui-ai/protocol-conformance/resolution-conformance`** — which bundle + style URLs the server MUST compute for a gadget descriptor's transport fields (`bundleHost` precedence, default host, loopback `http` scheme).
 - **`@ggui-ai/protocol-conformance/binding-conformance`** — which MCP tool-binding set a manifest resolves to (a declared `mcpTools` list wins entirely; blueprints without it derive bare tool-name entries from contract tool names) and which artifacts the registry `tool=` / `server=` search filters MUST match (SPEC §7.7.4.1).
+- **`@ggui-ai/protocol-conformance/props-schema-conformance`** — the schema-precise render arbiter (SPEC §2.3.2): the enforced-props-schema builder (drift), its RFC 8785 sha256 hash, the grammar-safe profile verdict, and returned-schema AUTHORITY (sample validity under the case's own `propsSchema`, including the 2026-08-19 out-of-vocabulary enum incident pinned as a permanent sample).
 
 ```ts
 import { runSchemaConformance } from "@ggui-ai/protocol-conformance/schema-conformance";

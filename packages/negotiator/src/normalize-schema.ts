@@ -102,7 +102,7 @@ function inferEnumBaseType(enumSibling: unknown): string {
 function normalizeTypeValue(
   value: unknown,
   enumSibling: unknown,
-): string | undefined {
+): string | string[] | undefined {
   if (typeof value === 'string') {
     const lower = value.toLowerCase();
     if (VALID_TYPES.has(lower)) return lower;
@@ -113,31 +113,49 @@ function normalizeTypeValue(
     if (lower.includes('|')) {
       // Pipe-union string (`"STRING|null"`). Some models emit the union
       // as one pipe-delimited string rather than the JSON Schema array
-      // form; recover the first valid non-null member, mirroring the
-      // array branch below (drops the nullable arm).
-      for (const member of lower.split('|')) {
-        const norm = normalizeTypeValue(member, enumSibling);
-        if (norm !== undefined && norm !== 'null') return norm;
-      }
-      return undefined;
+      // form; recover it AS the draft-07 array form — since
+      // draft-2026-08-19 the protocol's JsonSchema.type admits type
+      // arrays, and the nullable arm is load-bearing (schema-precise
+      // render: dropping it narrows the contract and turns the agent's
+      // legal `null` into a contract_violation).
+      return normalizeTypeMembers(lower.split('|'), enumSibling);
     }
     // Unrecognized garbage — drop the constraint rather than guess.
     return undefined;
   }
   if (Array.isArray(value)) {
-    // Union type (`["string", "null"]`). The protocol contract schema
-    // accepts only a single string; recover the first valid non-null
-    // member, dropping the nullable arm.
-    for (const member of value) {
-      if (typeof member === 'string') {
-        const norm = normalizeTypeValue(member, enumSibling);
-        if (norm !== undefined && norm !== 'null') return norm;
-      }
-    }
-    return 'string';
+    // Draft-07 union type (`["string", "null"]`) — PRESERVED, with
+    // each member normalized individually (invalid members drop). The
+    // pre-draft-2026-08-19 behavior collapsed to the first non-null
+    // member; see the pipe-union note above for why that narrowing is
+    // now a contract-violation factory.
+    return normalizeTypeMembers(value, enumSibling) ?? 'string';
   }
   // `type` was a number / object / boolean — meaningless; drop it.
   return undefined;
+}
+
+/**
+ * Normalize a list of candidate type members: each member runs through
+ * {@link normalizeTypeValue} (case folding, aliases, drop-words),
+ * survivors dedupe in order. Two-plus survivors → the draft-07 array
+ * form; exactly one → the plain string form; none → `undefined`.
+ */
+function normalizeTypeMembers(
+  members: readonly unknown[],
+  enumSibling: unknown,
+): string | string[] | undefined {
+  const survivors: string[] = [];
+  for (const member of members) {
+    if (typeof member !== 'string') continue;
+    const norm = normalizeTypeValue(member, enumSibling);
+    if (typeof norm === 'string' && !survivors.includes(norm)) {
+      survivors.push(norm);
+    }
+  }
+  if (survivors.length === 0) return undefined;
+  if (survivors.length === 1) return survivors[0];
+  return survivors;
 }
 
 /** Normalize a map of name → schema (e.g. `properties`). */

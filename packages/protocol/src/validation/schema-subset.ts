@@ -80,7 +80,11 @@
  * @see ./schema-compat-invariants.ts — the protocol-level invariants
  *      that call this algorithm at render-time.
  */
-import type { JsonSchema, JsonValue } from '../types/data-contract.js';
+import type {
+  JsonSchema,
+  JsonSchemaTypeName,
+  JsonValue,
+} from '../types/data-contract.js';
 
 /**
  * Category of subset violation. Narrow enough that a downstream
@@ -257,18 +261,24 @@ function compare(
   // Type match. Superset `undefined` is a wildcard (accepts any
   // type). Subset `undefined` against a specific superset type is a
   // violation — "no declared type" is wider than any specific type.
-  const sup = normalizeType(superset);
-  const sub = normalizeType(subset);
+  const sup = normalizeTypeSet(superset);
+  const sub = normalizeTypeSet(subset);
   if (sup !== undefined) {
-    if (sub === undefined || sub !== sup) {
+    // Draft-07 type ARRAYS (e.g. `['string','null']`, the canonical
+    // nullability form the enforced-props-schema emission produces)
+    // compare as SETS: every type the subset can emit must be accepted
+    // by the superset.
+    const subsetOk =
+      sub !== undefined && [...sub].every((t) => sup.has(t));
+    if (!subsetOk) {
       out.push({
         path,
         reason: 'type-mismatch',
-        superset: sup,
-        subset: sub ?? '(unspecified)',
+        superset: formatTypeSet(sup),
+        subset: sub === undefined ? '(unspecified)' : formatTypeSet(sub),
         message:
           `${pathLabel(path)}: type mismatch — superset accepts ` +
-          `'${sup}' but subset ${sub === undefined ? 'does not declare a type' : `declares '${sub}'`}.`,
+          `'${formatTypeSet(sup)}' but subset ${sub === undefined ? 'does not declare a type' : `declares '${formatTypeSet(sub)}'`}.`,
       });
       // Type mismatch invalidates downstream object/array structural
       // checks — if the types don't match, deeper comparison is noise.
@@ -277,14 +287,14 @@ function compare(
   }
 
   // Object structure.
-  if (sup === 'object' || sub === 'object') {
+  if (sup?.has('object') || sub?.has('object')) {
     compareObject(superset, subset, path, out);
   }
   // Array items. We descend through items only when both sides have
   // `type: 'array'` (or superset omitted type and subset declares
   // array — but that case is caught by the type block above as a
   // mismatch). Omission on either side is permissive.
-  if (sup === 'array' || sub === 'array') {
+  if (sup?.has('array') || sub?.has('array')) {
     compareArray(superset, subset, path, out);
   }
 }
@@ -422,17 +432,21 @@ function compareArray(
 
 // ── Helpers ───────────────────────────────────────────────────────
 
-type NormalizedType =
-  | 'string'
-  | 'number'
-  | 'integer'
-  | 'boolean'
-  | 'array'
-  | 'object'
-  | 'null';
+/**
+ * The declared type(s) as a SET — single declarations and draft-07
+ * type arrays normalize to the same shape so subset comparison is
+ * uniform. `undefined` = no type declared (permissive).
+ */
+function normalizeTypeSet(
+  schema: JsonSchema,
+): ReadonlySet<JsonSchemaTypeName> | undefined {
+  const t = schema.type;
+  if (t === undefined) return undefined;
+  return new Set(Array.isArray(t) ? t : [t]);
+}
 
-function normalizeType(schema: JsonSchema): NormalizedType | undefined {
-  return schema.type;
+function formatTypeSet(set: ReadonlySet<JsonSchemaTypeName>): string {
+  return [...set].join('|');
 }
 
 type AdditionalResolution =

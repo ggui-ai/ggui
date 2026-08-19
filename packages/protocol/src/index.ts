@@ -32,6 +32,20 @@ export { canonicalizeContracts, canonicalizeValue } from "./registry/canonicaliz
 // as `./content-hash`. Server consumers import from the subpath:
 //   import { blueprintKey } from '@ggui-ai/protocol/blueprint-key';
 export { summarizeContract } from "./registry/summarize-contract";
+// Enforced props schema — the schema-precise render wire artifact
+// (P1): the exact schema ggui_render enforces for a handshake, in
+// emission form, plus the grammar-safe profile classifier and the
+// RFC 8785 canonical serializer. Browser-safe (pure). The sha256
+// hash helper is server-only at `@ggui-ai/protocol/props-schema-hash`
+// (node:crypto — same convention as `./blueprint-key`).
+export {
+  buildEnforcedPropsSchema,
+  canonicalPropsSchemaBytes,
+  classifyPropsSchemaProfile,
+  GRAMMAR_SAFE_FORMATS,
+  GRAMMAR_SAFE_KEYWORDS,
+  type PropsSchemaProfile,
+} from "./validation/enforced-props-schema";
 // Explicit type re-exports — `export *` from a types-only file does not always
 // surface re-exported types in the generated .d.ts root index when the source
 // uses `export type` (TS's emit elides them in some configurations). Listing

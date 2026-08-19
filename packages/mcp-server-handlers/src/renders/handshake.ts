@@ -51,6 +51,10 @@ import {
   blueprintDraftObjectSchema,
   DATA_CONTRACT_SHAPE_RULE,
   DATA_CONTRACT_MINIMAL_EXAMPLE,
+  buildEnforcedPropsSchema,
+  canonicalPropsSchemaBytes,
+  classifyPropsSchemaProfile,
+  jsonSchemaSchema,
   type Blueprint,
   type BlueprintDraft,
   type BlueprintMeta,
@@ -59,10 +63,13 @@ import {
   type GadgetDescriptor,
   type DataContract,
   type HandshakeSuggestion,
+  type JsonSchema,
   type JsonValue,
+  type PropsSchemaProfile,
   type ServerCapabilities,
   type SuggestionFinding,
 } from '@ggui-ai/protocol';
+import { computePropsSchemaHash } from '@ggui-ai/protocol/props-schema-hash';
 import type {
   AppMetadataStore,
   KeyValueStore,
@@ -171,6 +178,28 @@ export interface HandshakeRecord {
     readonly contractKey: string;
     readonly variantKey: string;
   };
+  /**
+   * The ENFORCED props schema, persisted at handshake time — the
+   * `buildEnforcedPropsSchema` artifact over `effectiveContract.propsSpec`
+   * (empty closed wrapper for a propsSpec-less contract). The paired
+   * `ggui_render` validates against THIS persisted value (not a
+   * recomputation), which is what makes the returned-schema AUTHORITY
+   * obligation structural under rolling-deploy version skew
+   * (docs/plans/2026-08-19-schema-precise-render.md, frozen shape).
+   * Always persisted on non-declined records; wire emission is
+   * conditional (see the handler body). Optional on the type only for
+   * the TTL-bounded mixed-version window at a deploy boundary —
+   * records written by the previous build lack it and fall back to
+   * the propsSpec recomputation path.
+   */
+  readonly propsSchema?: JsonSchema;
+  /** sha256 (lowercase hex) over the RFC 8785 canonical bytes of
+   *  {@link propsSchema}. Persisted with it; stamped onto props
+   *  contract-violation errors as the breach classifier. */
+  readonly propsSchemaHash?: string;
+  /** Grammar-safe-core classification of {@link propsSchema} —
+   *  `classifyPropsSchemaProfile`'s verdict at handshake time. */
+  readonly propsSchemaProfile?: PropsSchemaProfile;
   readonly appId: string;
   readonly createdAt: string;
 }
@@ -504,11 +533,37 @@ const inputSchema = {
   forceCreate: handshakeInputSchema.shape.forceCreate,
 } as const;
 
-/** Output zod-shape mirror. Same shape as `handshakeOutputSchema`. */
+/** Output zod-shape mirror. Same shape as `handshakeOutputSchema`.
+ *
+ * The three `propsSchema*` fields are the schema-precise render wire
+ * surface (frozen 2026-08-19; docs/plans/2026-08-19-schema-precise-render.md
+ * §2). P3 pin 1: they are declared HERE, on the zod output schema, and
+ * ride the RESULT BODY (`structuredContent`) — never `_meta` — so the
+ * vocabulary stays in the model's context and transcript-reading
+ * runtimes can consume it. This zod schema is an active strip gate;
+ * an emitted-but-undeclared field silently disappears from the wire.
+ */
 const outputSchema = {
   handshakeId: z.string(),
   action: z.enum(['create', 'reuse', 'update', 'replace', 'declined']),
   suggestion: handshakeSuggestionSchema,
+  propsSchema: jsonSchemaSchema
+    .optional()
+    .describe(
+      'The exact JSON Schema the paired ggui_render enforces for this handshakeId — generate props that satisfy it (enum fields list their full legal vocabulary). Present when the agreed contract differs from your draft; when absent, your draft propsSpec is agreed verbatim. Advisory: no agent obligation attaches to reading it; runtimes MAY compile it for constrained argument generation.',
+    ),
+  propsSchemaHash: z
+    .string()
+    .optional()
+    .describe(
+      'sha256 (lowercase hex) over the RFC 8785 canonical form of the enforced props schema. Present on every non-declined handshake. A later contract_violation carries the hash of the schema it enforced — equal hashes mean the props were at fault.',
+    ),
+  propsSchemaProfile: z
+    .string()
+    .optional()
+    .describe(
+      "Grammar profile of the enforced props schema: 'grammar-safe' (every keyword is in the enumerated core — a runtime can compile the schema into a decoding grammar) or 'full' (read the schema as context instead). Treat unrecognized values as 'full'; the set may grow in minor versions.",
+    ),
   nextStep: z
     .object({
       tool: z.literal('ggui_render'),
@@ -533,6 +588,14 @@ interface HandshakeOutput {
   alternatives?: readonly Blueprint[];
   /** Canonical hash — internal-only telemetry. */
   contractHash: string;
+  /** Enforced props schema — wire-emitted when the effective contract
+   *  differs from the agent's parsed draft (and under the byte
+   *  ceiling); always persisted on the record. */
+  propsSchema?: JsonSchema;
+  /** Present on every non-declined handshake (P3 pin 2). */
+  propsSchemaHash?: string;
+  /** Present whenever {@link propsSchemaHash} is. */
+  propsSchemaProfile?: PropsSchemaProfile;
   nextStep?: {
     readonly tool: 'ggui_render';
     readonly example: string;
@@ -563,7 +626,7 @@ export function createGguiHandshakeHandler(
     // handshake.test.ts holds it byte-equal to the constant.
     description:
       deps.description ??
-      "Negotiate a contract for a UI you want to deliver. Call BEFORE ggui_render. Input: {intent, blueprintDraft: {contract, variance?, generator?}}. CONTRACT SHAPE — DataContract = up to six top-level specs: propsSpec (initial render data), actionSpec (user gestures that drive the agent's next turn), contextSpec (observable client state), streamSpec (live update channels), agentCapabilities (MCP tools the AGENT may call — the catalog actionSpec[*].nextStep and streamSpec[*].source.tool must resolve into), clientCapabilities (browser gadget hooks the COMPONENT imports). EVERY entry under propsSpec.properties / actionSpec / streamSpec / contextSpec is a WRAPPER object whose JSON Schema sits in its `schema:` field — never a flat JSON Schema at the entry level. Wrappers reject unrecognized keys. Placement test: needs next-turn reasoning ⇒ actionSpec; observed state only ⇒ contextSpec. ActionEntry uses OPTIONAL `nextStep: '<toolName>'` to hint the agent's intended next tool call — when present, the tool MUST also be declared in `agentCapabilities.tools`; OMIT it entirely when the agent should decide freely. AGENT TOOLS: key `agentCapabilities.tools` by the BARE MCP tool name (the part after any `mcp__<server>__` prefix a host adds), NOT the host's connection label; each entry is `{toolInfo: {inputSchema, …}, serverInfo?, usage?, example?}` — `toolInfo` with its `inputSchema` is REQUIRED (copy the tool's declared JSON Schema); set the tool's `serverInfo.name` to the server handle from that SAME prefix (e.g. `mcp__todo__todo_add` → `serverInfo.name: 'todo'`) — it lets the server reuse a UI built against the same (server, tool) for a later turn or a different agent. If a tool has NO `mcp__<server>__` prefix, OMIT `serverInfo` — never invent a name. `version` is optional metadata (include it only if your host surfaces it from `initialize`); a version difference alone never blocks reuse. NEGOTIATION: the server PRIORITIZES reusing a similar contract it already built for an earlier UI — so it returns a PROPOSED contract rather than echoing your draft back. The `suggestion` carries that proposed contract plus a short `proposedContractSummary` and origin = cache (the server proposes a similar contract it built before) | agent (your draft was already clean and is proposed as-is) | synth (the server repaired your draft into the proposal; what changed is listed in suggestion.validationFindings). FORGIVING: the proposal is ALWAYS protocol-conforming — accept it; do NOT re-call ggui_handshake in a loop hoping for a different origin. Two honest exceptions: (a) `action: 'declined'` — nothing in your draft passed the contract gate, so there is NO proposal and NO ggui_render for that handshakeId; read suggestion.validationFindings (each names its path and what the protocol wants there), fix the draft, and call ggui_handshake once more; (b) a `proposedContractSummary` starting with `PARTIAL` — the proposal is your draft MINUS the entries the protocol refused (each listed in validationFindings): render it to get the rest working, and re-declare the dropped entries via `override: {contract}` on the render or a corrected re-handshake. The server never substitutes an empty contract for yours. When origin = cache the proposal may not cover every field of your draft; suggestion.validationFindings flags any COVERAGE_GAP, one per uncovered surface. DEFAULT TO ACCEPT (reuse-and-refine is the priority) — override only if the user must directly see or act on a flagged surface, since the cached UI cannot show it; a COVERAGE_GAP on a prop notes whether that prop was required or optional in your draft to inform that call. Also when origin = cache the proposed UI may have been built for a DIFFERENT variance than you requested; suggestion.validationFindings flags a VARIANCE_GAP (built for X, you asked Y). DEFAULT TO ACCEPT here too (reuse-and-refine) — re-aim the variance only if the persona/aesthetic difference is user-observable and matters for this interaction. Then you act on the paired ggui_render (where `props` is REQUIRED): OMIT `override` to ACCEPT the proposed contract (the normal path), OR set `override: {variance}` to re-aim the variant — keeps the agreed contract; a different variance resolves a distinct cached component, OR set `override: {contract}` to commit a NEW contract of your own (STRICT — it must already conform, the server will not repair an override, and render fails if it does not). VARIANCE is design-shaping signals only, and a STRICT four-key object: persona / aesthetic / context / seedPrompt — no other keys exist (`mood` is not one; put tonal intent in `aesthetic`); per-user runtime data belongs in `props` / contextSpec, NOT in variance. STRICTNESS: variance, blueprintDraft, and every wrapper entry (propsSpec.properties / actionSpec / streamSpec / contextSpec / agentCapabilities.tools) reject unrecognized keys — misplaced fields fail the call or surface as validationFindings rather than being ignored. Then ggui_consume → react → repeat. PLACEMENT RULE: actionSpec = events that drive the agent's next turn; contextSpec = observable state. Test: needs next-turn reasoning? actionSpec. No? contextSpec.",
+      "Negotiate a contract for a UI you want to deliver. Call BEFORE ggui_render. Input: {intent, blueprintDraft: {contract, variance?, generator?}}. CONTRACT SHAPE — DataContract = up to six top-level specs: propsSpec (initial render data), actionSpec (user gestures that drive the agent's next turn), contextSpec (observable client state), streamSpec (live update channels), agentCapabilities (MCP tools the AGENT may call — the catalog actionSpec[*].nextStep and streamSpec[*].source.tool must resolve into), clientCapabilities (browser gadget hooks the COMPONENT imports). EVERY entry under propsSpec.properties / actionSpec / streamSpec / contextSpec is a WRAPPER object whose JSON Schema sits in its `schema:` field — never a flat JSON Schema at the entry level. Wrappers reject unrecognized keys. Placement test: needs next-turn reasoning ⇒ actionSpec; observed state only ⇒ contextSpec. ActionEntry uses OPTIONAL `nextStep: '<toolName>'` to hint the agent's intended next tool call — when present, the tool MUST also be declared in `agentCapabilities.tools`; OMIT it entirely when the agent should decide freely. AGENT TOOLS: key `agentCapabilities.tools` by the BARE MCP tool name (the part after any `mcp__<server>__` prefix a host adds), NOT the host's connection label; each entry is `{toolInfo: {inputSchema, …}, serverInfo?, usage?, example?}` — `toolInfo` with its `inputSchema` is REQUIRED (copy the tool's declared JSON Schema); set the tool's `serverInfo.name` to the server handle from that SAME prefix (e.g. `mcp__todo__todo_add` → `serverInfo.name: 'todo'`) — it lets the server reuse a UI built against the same (server, tool) for a later turn or a different agent. If a tool has NO `mcp__<server>__` prefix, OMIT `serverInfo` — never invent a name. `version` is optional metadata (include it only if your host surfaces it from `initialize`); a version difference alone never blocks reuse. NEGOTIATION: the server PRIORITIZES reusing a similar contract it already built for an earlier UI — so it returns a PROPOSED contract rather than echoing your draft back. The `suggestion` carries that proposed contract plus a short `proposedContractSummary` and origin = cache (the server proposes a similar contract it built before) | agent (your draft was already clean and is proposed as-is) | synth (the server repaired your draft into the proposal; what changed is listed in suggestion.validationFindings). SCHEMA ON THE WIRE: the response also carries `propsSchema` — the EXACT JSON Schema the paired ggui_render will enforce (enum fields list their full legal vocabulary; present whenever the proposal's props shape differs from your draft) — plus `propsSchemaHash` and `propsSchemaProfile`; when `propsSchema` is present, generate `props` that satisfy it instead of guessing values from your draft. FORGIVING: the proposal is ALWAYS protocol-conforming — accept it; do NOT re-call ggui_handshake in a loop hoping for a different origin. Two honest exceptions: (a) `action: 'declined'` — nothing in your draft passed the contract gate, so there is NO proposal and NO ggui_render for that handshakeId; read suggestion.validationFindings (each names its path and what the protocol wants there), fix the draft, and call ggui_handshake once more; (b) a `proposedContractSummary` starting with `PARTIAL` — the proposal is your draft MINUS the entries the protocol refused (each listed in validationFindings): render it to get the rest working, and re-declare the dropped entries via `override: {contract}` on the render or a corrected re-handshake. The server never substitutes an empty contract for yours. When origin = cache the proposal may not cover every field of your draft; suggestion.validationFindings flags any COVERAGE_GAP, one per uncovered surface. DEFAULT TO ACCEPT (reuse-and-refine is the priority) — override only if the user must directly see or act on a flagged surface, since the cached UI cannot show it; a COVERAGE_GAP on a prop notes whether that prop was required or optional in your draft to inform that call. Also when origin = cache the proposed UI may have been built for a DIFFERENT variance than you requested; suggestion.validationFindings flags a VARIANCE_GAP (built for X, you asked Y). DEFAULT TO ACCEPT here too (reuse-and-refine) — re-aim the variance only if the persona/aesthetic difference is user-observable and matters for this interaction. Then you act on the paired ggui_render (where `props` is REQUIRED): OMIT `override` to ACCEPT the proposed contract (the normal path), OR set `override: {variance}` to re-aim the variant — keeps the agreed contract; a different variance resolves a distinct cached component, OR set `override: {contract}` to commit a NEW contract of your own (STRICT — it must already conform, the server will not repair an override, and render fails if it does not). VARIANCE is design-shaping signals only, and a STRICT four-key object: persona / aesthetic / context / seedPrompt — no other keys exist (`mood` is not one; put tonal intent in `aesthetic`); per-user runtime data belongs in `props` / contextSpec, NOT in variance. STRICTNESS: variance, blueprintDraft, and every wrapper entry (propsSpec.properties / actionSpec / streamSpec / contextSpec / agentCapabilities.tools) reject unrecognized keys — misplaced fields fail the call or surface as validationFindings rather than being ignored. Then ggui_consume → react → repeat. PLACEMENT RULE: actionSpec = events that drive the agent's next turn; contextSpec = observable state. Test: needs next-turn reasoning? actionSpec. No? contextSpec.",
     inputSchema,
     outputSchema,
     async handler(input, ctx: HandlerContext): Promise<HandshakeOutput> {
@@ -724,6 +787,47 @@ export function createGguiHandshakeHandler(
         negotiated.suggestion.origin === 'cache'
           ? negotiated.matchedBlueprint
           : undefined;
+
+      // Schema-precise render (frozen shape, guuey#271): materialize
+      // the ENFORCED props schema once, at handshake time. The record
+      // persists it (the paired ggui_render validates against the
+      // PERSISTED value — the AUTHORITY obligation is structural, not
+      // a recompute-and-hope); the wire carries hash + profile on
+      // every non-declined handshake (pin 2), and the schema VALUE
+      // whenever the effective contract's props shape differs from
+      // the agent's parsed draft — the exact asymmetry this surface
+      // closes (cache/synth/salvaged paths; a verbatim-accepted draft
+      // already sits in the agent's context, and a compiling runtime
+      // derives the identical artifact locally via the OSS builder,
+      // verifying against the hash).
+      const enforcedPropsSchema = buildEnforcedPropsSchema(
+        negotiated.effectiveContract.propsSpec ?? { properties: {} },
+      );
+      const propsSchemaHash = computePropsSchemaHash(enforcedPropsSchema);
+      const propsSchemaProfile =
+        classifyPropsSchemaProfile(enforcedPropsSchema);
+      const parsedDraft = dataContractSchema.safeParse(
+        normalizedInput.blueprintDraft.contract,
+      );
+      const draftMatchesEffective =
+        parsedDraft.success &&
+        computePropsSchemaHash(
+          buildEnforcedPropsSchema(
+            parsedDraft.data.propsSpec ?? { properties: {} },
+          ),
+        ) === propsSchemaHash;
+      // Pathological-size escape hatch (frozen behavior): past the
+      // provisional ceiling the schema VALUE is omitted — hash +
+      // profile still ride; a named retrieval affordance is
+      // deliberately deferred (no field name without its mechanism).
+      const PROPS_SCHEMA_BYTE_CEILING = 256 * 1024;
+      const underCeiling =
+        Buffer.byteLength(
+          canonicalPropsSchemaBytes(enforcedPropsSchema),
+          'utf8',
+        ) <= PROPS_SCHEMA_BYTE_CEILING;
+      const emitPropsSchema = !draftMatchesEffective && underCeiling;
+
       const record: HandshakeRecord = {
         handshakeId,
         action: negotiated.action,
@@ -733,6 +837,9 @@ export function createGguiHandshakeHandler(
         suggestion: finalSuggestion,
         effectiveContract: negotiated.effectiveContract,
         ...(matchedBlueprint !== undefined ? { matchedBlueprint } : {}),
+        propsSchema: enforcedPropsSchema,
+        propsSchemaHash,
+        propsSchemaProfile,
         appId: ctx.appId,
         createdAt: nowIso(),
       };
@@ -785,6 +892,9 @@ export function createGguiHandshakeHandler(
           ? { alternatives: negotiated.alternatives }
           : {}),
         contractHash: draftHash,
+        ...(emitPropsSchema ? { propsSchema: enforcedPropsSchema } : {}),
+        propsSchemaHash,
+        propsSchemaProfile,
         ...(nextStep ? { nextStep } : {}),
         ...(serverCapabilities ? { serverCapabilities } : {}),
       };

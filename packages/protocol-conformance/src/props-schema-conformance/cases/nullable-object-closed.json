@@ -1,0 +1,50 @@
+{
+  "id": "nullable-object-closed",
+  "description": "Closed shape survives nullability: a nullable free-form object node closes (additionalProperties:false), and the items of a nullable array are descended. Pins the round-2 injectClosedShape residual (2026-08-19) — single-string type comparisons silently left these subtrees open.",
+  "propsSpec": {
+    "properties": {
+      "meta": { "schema": { "type": ["object", "null"] } },
+      "rows": {
+        "schema": {
+          "type": ["array", "null"],
+          "items": { "type": "object", "properties": { "id": { "type": "string" } } }
+        }
+      }
+    }
+  },
+  "propsSchema": {
+    "additionalProperties": false,
+    "properties": {
+      "meta": {
+        "additionalProperties": false,
+        "type": ["object", "null"]
+      },
+      "rows": {
+        "items": {
+          "additionalProperties": false,
+          "properties": { "id": { "type": "string" } },
+          "type": "object"
+        },
+        "type": ["array", "null"]
+      }
+    },
+    "required": [],
+    "type": "object"
+  },
+  "propsSchemaHash": "8fcc242455134dd13ef9a6dbea78ff2b8f623798383e0fa27eacc107856dbc5c",
+  "propsSchemaProfile": "grammar-safe",
+  "samples": [
+    { "props": { "meta": null, "rows": null }, "valid": true },
+    { "props": { "meta": {}, "rows": [{ "id": "a" }] }, "valid": true },
+    {
+      "props": { "meta": { "x": 1 } },
+      "valid": false,
+      "note": "the nullable free-form object is CLOSED — undeclared keys reject"
+    },
+    {
+      "props": { "rows": [{ "id": "a", "extra": 1 }] },
+      "valid": false,
+      "note": "items of a nullable array are closed too"
+    }
+  ]
+}

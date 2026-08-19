@@ -28,7 +28,12 @@ import { existsSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { pathToFileURL, fileURLToPath } from 'node:url';
 import { runSandboxed } from '@ggui-ai/sandbox';
-import type { PropsSpec, JsonObject, JsonValue } from '@ggui-ai/protocol';
+import type {
+  JsonObject,
+  JsonSchema,
+  JsonValue,
+  PropsSpec,
+} from '@ggui-ai/protocol';
 
 /**
  * Generate sample props from a PropsSpec contract.
@@ -58,21 +63,28 @@ export function generateSampleProps(spec: PropsSpec): JsonObject {
   return props;
 }
 
-function synthesizeFromSchema(schema: { type?: string; items?: unknown; properties?: JsonObject; required?: string[] }): JsonValue | undefined {
-  switch (schema.type) {
+function synthesizeFromSchema(schema: JsonSchema): JsonValue | undefined {
+  // Draft-07 type arrays (`['string','null']`) synthesize from the
+  // first non-null member — the canonical nullability form the
+  // enforced-props-schema emission produces.
+  const declared = Array.isArray(schema.type)
+    ? schema.type.find((t) => t !== 'null')
+    : schema.type;
+  switch (declared) {
     case 'string': return 'sample';
-    case 'number': return 0;
+    case 'number':
+    case 'integer': return 0;
     case 'boolean': return false;
+    case 'null': return null;
     case 'array': {
-      const itemSchema = schema.items as { type?: string } | undefined;
-      if (itemSchema) return [synthesizeFromSchema(itemSchema) ?? null];
+      if (schema.items) return [synthesizeFromSchema(schema.items) ?? null];
       return [];
     }
     case 'object': {
       const obj: JsonObject = {};
       if (schema.properties) {
         for (const [k, v] of Object.entries(schema.properties)) {
-          obj[k] = synthesizeFromSchema(v as { type?: string });
+          obj[k] = synthesizeFromSchema(v);
         }
       }
       return obj;

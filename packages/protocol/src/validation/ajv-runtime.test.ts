@@ -69,6 +69,24 @@ describe('compileValidatorModule', () => {
 });
 
 describe('injectClosedShape', () => {
+  it('treats a draft-07 type array containing object as an object node (nullable free-form object closes)', () => {
+    // `['object','null']` with no properties is still an object node —
+    // pre-fix the single-string comparison let it through UNCLOSED,
+    // silently weakening closed-shape enforcement for nullable
+    // free-form objects (schema-precise render residual, round-2
+    // audit 2026-08-19).
+    const out = injectClosedShape({ type: ['object', 'null'] });
+    expect(out.additionalProperties).toBe(false);
+  });
+
+  it('recurses into items of a nullable array (type array containing array)', () => {
+    const out = injectClosedShape({
+      type: ['array', 'null'],
+      items: { type: 'object', properties: { id: { type: 'string' } } },
+    });
+    expect(out.items?.additionalProperties).toBe(false);
+  });
+
   it('injects additionalProperties: false at top-level object', () => {
     const schema: JsonSchema = {
       type: 'object',

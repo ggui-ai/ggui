@@ -87,18 +87,28 @@ export const jsonValueSchema: z.ZodType<JsonValue> = z.lazy(() =>
  * deep `z.lazy` chains; the F4 schema-subset checker validates
  * full structural correctness at render time.
  */
+const jsonSchemaTypeNameSchema = z.enum([
+  'string',
+  'number',
+  'integer',
+  'boolean',
+  'array',
+  'object',
+  'null',
+]);
+
 export const jsonSchemaSchema: z.ZodType<JsonSchema> = z.lazy(() =>
   z
     .object({
+      // Single type OR a draft-07 type array (`['string','null']` —
+      // the canonical nullability form the enforced-props-schema
+      // emission produces). Mirrors `JsonSchemaTypeName | JsonSchemaTypeName[]`
+      // on the TS type — the zod and TS sides are an SSoT pair; widen
+      // both or neither.
       type: z
-        .enum([
-          'string',
-          'number',
-          'integer',
-          'boolean',
-          'array',
-          'object',
-          'null',
+        .union([
+          jsonSchemaTypeNameSchema,
+          z.array(jsonSchemaTypeNameSchema),
         ])
         .optional(),
       description: z.string().optional(),

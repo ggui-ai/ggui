@@ -152,6 +152,20 @@ function synthesizeFromSchema(
     return synthesizeFromSchema(schema.anyOf[0], hint, warnings, depth + 1);
   }
 
+  // Draft-07 type array (`['string','null']` — the canonical nullable
+  // form since draft-2026-08-19): synthesize from the first non-null
+  // member ('null' only when it is the sole member). The depth guard
+  // above bounds the recursion.
+  if (Array.isArray(schema.type)) {
+    const primary = schema.type.find((t) => t !== "null") ?? "null";
+    return synthesizeFromSchema(
+      { ...schema, type: primary },
+      hint,
+      warnings,
+      depth + 1,
+    );
+  }
+
   switch (schema.type) {
     case "string": {
       // Format-aware placeholder
