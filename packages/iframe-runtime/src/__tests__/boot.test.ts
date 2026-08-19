@@ -176,6 +176,42 @@ describe('bootSequence — happy path', () => {
       });
     expect(failures).toHaveLength(0);
   });
+
+  // Boot-time DOM-apply of the host's raw hostContext — the
+  // `applyHostContextStyling(rawHostContext)` call right after connect
+  // in `bootSequence`. The helper's own behavior is unit-covered in
+  // host-context-emitter.test.ts; THIS pin covers the call site, which
+  // was ledger-only until now (beauty/002 unpinned-lever list): a host
+  // announcing theme:'dark' at ui/initialize gets data-theme stamped on
+  // the (global) documentElement during boot, before any render lands.
+  it("applies the host's initialize hostContext to the DOM at boot (theme:'dark' → data-theme)", async () => {
+    const dom = document.implementation.createHTMLDocument('renderer-test');
+    const initial = makeRender('render_001', 'first render');
+    const { app, transport, pushToolResult } = buildBootHarness({
+      initResponse: buildHappyInitResult({
+        hostContext: { theme: 'dark', availableDisplayModes: ['inline'] },
+      }),
+    });
+    const { connectFn } = buildMockConnect(initial);
+    try {
+      const bootPromise = bootSequence({
+        doc: dom,
+        app,
+        transport,
+        connectFn,
+        notifyParent: vi.fn(),
+        toolResultTimeoutMs: 500,
+      });
+      await tick();
+      pushToolResult(VALID_META);
+      const result = await bootPromise;
+      expect(result.ok).toBe(true);
+      expect(document.documentElement.getAttribute('data-theme')).toBe('dark');
+    } finally {
+      document.documentElement.removeAttribute('data-theme');
+      document.documentElement.style.removeProperty('color-scheme');
+    }
+  });
 });
 
 describe('bootSequence — preResolvedMeta short-circuit', () => {

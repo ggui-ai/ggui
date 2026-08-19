@@ -339,4 +339,34 @@ describe('applyHostContextStyling', () => {
       ),
     ).toBe('#000000');
   });
+
+  // The fonts channel is THE proven host-theming conduit (beauty/001 F4:
+  // cascade-immune, consumed by --ggui-font-family-sans naming Inter
+  // first; console + landing feed it in production) — yet its
+  // consumption side was ledger-only until now (beauty/002 unpinned-
+  // lever list). One test, one sequence: ext-apps' applyHostFonts is
+  // once-per-MODULE (state, not DOM — removing the node does NOT
+  // re-arm it), so injection + the no-op contract must be pinned in
+  // the same it(). Also why the afterEach's style cleanup can't reset
+  // it: mid-session font changes never take (beauty charter limit).
+  it('injects styles.css.fonts into document.head ONCE; later payloads no-op (beauty/001 F4 conduit)', () => {
+    const fonts =
+      "@import url('https://fonts.googleapis.com/css2?family=Inter&display=swap');";
+    applyHostContextStyling({ styles: { css: { fonts } } });
+    const styleEls = Array.from(document.head.querySelectorAll('style'));
+    const injected = styleEls.find((el) => el.textContent?.includes('Inter'));
+    expect(injected, 'host fonts CSS never reached document.head').toBeDefined();
+    expect(injected?.textContent).toContain('fonts.googleapis.com');
+
+    // Second payload: documented ext-apps behavior is inject-once,
+    // no-op-after. If this assertion ever flips, the runtime gained
+    // live font swaps — update the beauty charter's known-limits note.
+    applyHostContextStyling({
+      styles: { css: { fonts: '@font-face { font-family: SecondPayload; }' } },
+    });
+    const all = Array.from(document.head.querySelectorAll('style'))
+      .map((el) => el.textContent ?? '')
+      .join('\n');
+    expect(all).not.toContain('SecondPayload');
+  });
 });
