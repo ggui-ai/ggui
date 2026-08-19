@@ -87,7 +87,7 @@ ADK's `StreamableHTTPConnectionParams` carries the `Accept: application/json, te
 
 ```bash
 # 1. Boot a ggui MCP server in another terminal
-ggui serve --port 6781 --mcp-only
+ggui serve --port 6781 --mcp-only --dev-allow-all  # agent-server's default bearer is 'dev'; --dev-allow-all is what accepts it
 
 # 2. Set your Gemini API key
 export GEMINI_API_KEY=...

@@ -80,7 +80,7 @@ The runtime bridge that turns those postMessage calls into App-class methods is 
 
 ```bash
 # 1. Boot a ggui MCP server in another terminal
-ggui serve --port 6781 --mcp-only
+ggui serve --port 6781 --mcp-only --dev-allow-all  # agent-server's default bearer is 'dev'; --dev-allow-all is what accepts it
 
 # 2. Set your Anthropic API key
 export ANTHROPIC_API_KEY=sk-ant-...
