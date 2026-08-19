@@ -340,6 +340,59 @@ function matchErrorFrame(
       message: `expected an \`error\` frame with \`payload.code === ${behavior.code}\`${behavior.requestId !== undefined ? ` echoing requestId '${behavior.requestId}'` : ''}; received none.`,
     };
   }
+  if (behavior.contractViolationPayload !== undefined && match.kind === 'frame') {
+    return matchContractViolationPayload(
+      behavior.contractViolationPayload,
+      match.parsed,
+      frames,
+    );
+  }
+  return { kind: 'pass' };
+}
+
+/**
+ * Grade the SPEC §7.9 `contract_violation` recovery payload on a
+ * matched error frame — the transport-observable half of the payload
+ * pin (draft-2026-08-19). Only the declared assertions fire; extra
+ * fields anywhere in the payload are ignored (additive tolerance,
+ * VERSION-POLICY §1.2).
+ */
+function matchContractViolationPayload(
+  assertions: NonNullable<ErrorFrameBehavior['contractViolationPayload']>,
+  parsed: Record<string, unknown>,
+  frames: readonly ObservedFrame[],
+): MatchResult {
+  const received = frames.map((f) => (f.kind === 'frame' ? f.parsed : f));
+  const payload = parsed['payload'];
+  const details = isRecord(payload) ? payload['details'] : undefined;
+  const violations = isRecord(details) ? details['violations'] : undefined;
+  const minViolations = assertions.minViolations ?? 1;
+  if (!Array.isArray(violations) || violations.length < minViolations) {
+    return {
+      kind: 'fail',
+      expected: { payload: { details: { violations: `array with >= ${minViolations} entries` } } },
+      received,
+      message: `expected the error frame's \`payload.details.violations\` to be an array with at least ${minViolations} entr${minViolations === 1 ? 'y' : 'ies'} (SPEC §7.9 contract_violation payload); received ${Array.isArray(violations) ? `${violations.length}` : 'none'}.`,
+    };
+  }
+  for (const [index, entry] of violations.entries()) {
+    if (!isRecord(entry) || typeof entry['field'] !== 'string' || typeof entry['message'] !== 'string') {
+      return {
+        kind: 'fail',
+        expected: { violations: [{ field: '<string>', message: '<string>' }] },
+        received,
+        message: `violations[${index}] must carry string \`field\` + \`message\` (SPEC §7.9 ContractViolation shape).`,
+      };
+    }
+    if (assertions.requireKeyword === true && typeof entry['keyword'] !== 'string') {
+      return {
+        kind: 'fail',
+        expected: { violations: [{ keyword: '<string>' }] },
+        received,
+        message: `violations[${index}] lacks the \`keyword\` field — validator-produced violations MUST retain the JSON Schema keyword that fired (SPEC §7.9, draft-2026-08-19).`,
+      };
+    }
+  }
   return { kind: 'pass' };
 }
 

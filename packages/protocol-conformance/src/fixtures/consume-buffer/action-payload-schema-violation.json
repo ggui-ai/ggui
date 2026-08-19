@@ -1,6 +1,6 @@
 {
   "name": "action-payload-schema-violation",
-  "description": "A `data:submit` action naming a DECLARED action whose `data` violates the entry's declared payload schema is rejected at receipt: the server replies an `error` frame with code CONTRACT_VIOLATION (echoing the action's requestId) and the envelope is NOT appended to the consume buffer. Proves the payload-schema half of the declared-action contract (SPEC Section 4.6 receipt validation) — name-membership alone does not admit an action whose payload breaks the contract.",
+  "description": "A `data:submit` action naming a DECLARED action whose `data` violates the entry's declared payload schema is rejected at receipt: the server replies an `error` frame with code CONTRACT_VIOLATION (echoing the action's requestId) and the envelope is NOT appended to the consume buffer. Proves the payload-schema half of the declared-action contract (SPEC Section 4.6 receipt validation) — name-membership alone does not admit an action whose payload breaks the contract. The rejection's recovery payload is the SPEC Section 7.9 contract_violation shape: `payload.details.violations` entries carry field + message + the producing JSON Schema `keyword` (draft-2026-08-19 — the failure-class segmentation surface).",
   "skipReason": null,
   "setup": [
     {
@@ -32,6 +32,7 @@
   "expectedBehavior": {
     "kind": "error-frame",
     "code": "CONTRACT_VIOLATION",
-    "requestId": "ck-schema-violation-1-req"
+    "requestId": "ck-schema-violation-1-req",
+    "contractViolationPayload": { "requireKeyword": true }
   }
 }

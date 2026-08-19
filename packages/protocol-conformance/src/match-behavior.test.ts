@@ -155,6 +155,113 @@ describe('matchBehavior — error-frame', () => {
   });
 });
 
+describe('matchBehavior — error-frame contractViolationPayload assertions (SPEC §7.9 recovery payload)', () => {
+  // draft-2026-08-19: the contract_violation recovery payload is
+  // load-bearing (ContractViolation.keyword segments failure classes;
+  // propsSchemaHash is the §2.3.2 breach classifier on the tool-call
+  // surface). These assertions grade the TRANSPORT-observable half on
+  // WS error frames: `payload.details.violations` shape. Additive-
+  // tolerant per VERSION-POLICY §1.2 — only pinned fields assert;
+  // extra fields never fail.
+  const withPayload: ErrorFrameBehavior = {
+    kind: 'error-frame',
+    code: 'CONTRACT_VIOLATION',
+    requestId: 'action-req-3',
+    contractViolationPayload: { requireKeyword: true },
+  };
+
+  const conformingFrame = frame({
+    type: 'error',
+    payload: {
+      code: 'CONTRACT_VIOLATION',
+      message: 'Contract violation in ggui_event',
+      details: {
+        error: 'contract_violation',
+        tool: 'ggui_event',
+        violations: [
+          {
+            field: 'data.id',
+            message: 'must be string',
+            expected: 'string',
+            received: 'number',
+            keyword: 'type',
+            extraFutureField: true,
+          },
+        ],
+        hint: 'fix the payload',
+      },
+    },
+    requestId: 'action-req-3',
+  });
+
+  it('passes when details.violations entries carry field + message + keyword', () => {
+    expect(matchBehavior(withPayload, [SUBSCRIBE_ACK, conformingFrame]).kind).toBe('pass');
+  });
+
+  it('fails when the frame carries no details.violations at all', () => {
+    const bare = frame({
+      type: 'error',
+      payload: { code: 'CONTRACT_VIOLATION', message: 'rejected' },
+      requestId: 'action-req-3',
+    });
+    const result = matchBehavior(withPayload, [bare]);
+    expect(result.kind).toBe('fail');
+    if (result.kind !== 'fail') return;
+    expect(result.message).toContain('violations');
+  });
+
+  it('fails when a violation entry lacks the required keyword', () => {
+    const noKeyword = frame({
+      type: 'error',
+      payload: {
+        code: 'CONTRACT_VIOLATION',
+        message: 'rejected',
+        details: {
+          error: 'contract_violation',
+          tool: 'ggui_event',
+          violations: [{ field: 'data.id', message: 'must be string' }],
+          hint: 'fix it',
+        },
+      },
+      requestId: 'action-req-3',
+    });
+    expect(matchBehavior(withPayload, [noKeyword]).kind).toBe('fail');
+  });
+
+  it('passes keyword-less synthetic violations when requireKeyword is not set', () => {
+    const structural: ErrorFrameBehavior = {
+      kind: 'error-frame',
+      code: 'CONTRACT_VIOLATION',
+      requestId: 'action-req-3',
+      contractViolationPayload: {},
+    };
+    const synthetic = frame({
+      type: 'error',
+      payload: {
+        code: 'CONTRACT_VIOLATION',
+        message: 'rejected',
+        details: {
+          error: 'contract_violation',
+          tool: 'ggui_event',
+          violations: [{ field: 'action', message: "Unknown action 'nope'" }],
+          hint: 'declare it',
+        },
+      },
+      requestId: 'action-req-3',
+    });
+    expect(matchBehavior(structural, [synthetic]).kind).toBe('pass');
+  });
+
+  it('honors minViolations', () => {
+    const two: ErrorFrameBehavior = {
+      kind: 'error-frame',
+      code: 'CONTRACT_VIOLATION',
+      contractViolationPayload: { minViolations: 2 },
+    };
+    expect(matchBehavior(two, [conformingFrame]).kind).toBe('fail');
+  });
+});
+
 describe('matchBehavior — version-mismatch rides the error-frame read', () => {
   it('passes on an UPGRADE_REQUIRED error frame', () => {
     const frames: readonly ObservedFrame[] = [
