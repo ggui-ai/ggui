@@ -33,6 +33,7 @@ describe('props-schema conformance catalog', () => {
       'format-in-core-assertive',
       'format-out-of-list-full',
       'nullable-normalization',
+      'nullable-object-closed',
       'out-of-core-pattern-full',
       'scheduler-enum-authority',
     ]);
@@ -61,6 +62,6 @@ describe('props-schema conformance catalog', () => {
         validatePropsDataWithSchema(props, jsonSchemaSchema.parse(schema)).valid,
     });
     expect(report.failures).toEqual([]);
-    expect(report.total).toBe(6);
+    expect(report.total).toBe(7);
   });
 });

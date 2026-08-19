@@ -178,7 +178,14 @@ if (!standaloneCjsAjv.getKeyword('nullable')) {
  * Returns a new schema tree; never mutates the input.
  */
 export function injectClosedShape(schema: JsonSchema): JsonSchema {
-  const isObjectNode = schema.type === 'object' || schema.properties !== undefined;
+  // `type` may be a draft-07 type ARRAY (`['object','null']` — the
+  // canonical nullable form since draft-2026-08-19); read it as a SET
+  // so nullable object/array nodes get the same closed-shape treatment
+  // as their single-type forms.
+  const typeSet = new Set(
+    Array.isArray(schema.type) ? schema.type : schema.type ? [schema.type] : [],
+  );
+  const isObjectNode = typeSet.has('object') || schema.properties !== undefined;
 
   if (isObjectNode) {
     const out: JsonSchema = { ...schema };
@@ -202,7 +209,7 @@ export function injectClosedShape(schema: JsonSchema): JsonSchema {
     return out;
   }
 
-  if (schema.type === 'array' && schema.items) {
+  if (typeSet.has('array') && schema.items) {
     return { ...schema, items: injectClosedShape(schema.items) };
   }
 

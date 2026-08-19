@@ -35,6 +35,7 @@ import emptyClosedWrapper from './cases/empty-closed-wrapper.json' with { type: 
 import formatInCoreAssertive from './cases/format-in-core-assertive.json' with { type: 'json' };
 import formatOutOfListFull from './cases/format-out-of-list-full.json' with { type: 'json' };
 import nullableNormalization from './cases/nullable-normalization.json' with { type: 'json' };
+import nullableObjectClosed from './cases/nullable-object-closed.json' with { type: 'json' };
 import outOfCorePatternFull from './cases/out-of-core-pattern-full.json' with { type: 'json' };
 import schedulerEnumAuthority from './cases/scheduler-enum-authority.json' with { type: 'json' };
 
@@ -70,6 +71,7 @@ export const propsSchemaConformanceCases: readonly PropsSchemaConformanceCase[] 
     formatInCoreAssertive,
     formatOutOfListFull,
     nullableNormalization,
+    nullableObjectClosed,
     outOfCorePatternFull,
     schedulerEnumAuthority,
   ] as PropsSchemaConformanceCase[];
