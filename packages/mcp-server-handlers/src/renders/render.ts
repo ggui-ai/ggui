@@ -76,6 +76,7 @@ import type {
   GguiSessionStore,
   ShortCodeIndex,
   StoredGguiSession,
+  TelemetrySink,
   UiGenerateInput,
   UiGenerator,
 } from '@ggui-ai/mcp-server-core';
@@ -104,6 +105,11 @@ import type {
   GenerationCacheHit,
 } from './generation-cache.js';
 import { assertNoDuplicateGadgetHooks } from './assert-no-duplicate-gadget-hooks.js';
+import {
+  emitRenderAttempted,
+  emitRenderCommitted,
+  emitRenderContractViolation,
+} from './render-telemetry.js';
 import {
   reportRenderCodeB64OverCap,
   reportRenderCodeWriteFailed,
@@ -477,6 +483,17 @@ export interface GguiRenderHandlerDeps extends RenderSliceMetaDeps {
    * a requirement.
    */
   readonly rateLimiter?: RateLimiter;
+
+  /**
+   * Operational-signal sink for the render measurement events
+   * (`render.attempted` / `render.contract_violation` /
+   * `render.committed` — see `render-telemetry.ts`). Mirrors the
+   * handshake handler's same-named dep: lossy + non-throwing per the
+   * {@link TelemetrySink} contract; absent dep is a
+   * NoopTelemetrySink semantic equivalent (every emission becomes a
+   * noop, nothing else changes).
+   */
+  readonly telemetrySink?: TelemetrySink;
 
   /**
    * ShortCode → render lookup. When present, every successful render
@@ -1098,6 +1115,19 @@ export function createGguiRenderHandler(
       const acceptanceClassification: 'accept' | 'override' =
         override === undefined ? 'accept' : 'override';
 
+      // Measurement denominator (`render.attempted`) — emitted the
+      // moment the handshake record resolves, BEFORE any gate, so
+      // every attempt that reached contract-relevant processing
+      // counts. Recoverable violations below peek-don't-consume the
+      // handshake, so retries share this handshakeId and first-vs-
+      // retry ordering is derivable from event order.
+      emitRenderAttempted(deps.telemetrySink, {
+        appId: ctx.appId,
+        handshakeId: parsed.handshakeId,
+        origin: handshakeRecord.suggestion.origin,
+        overridePresent: override !== undefined,
+      });
+
       // Telemetry: classification observable on every render so the
       // cache trace shows accept-vs-override patterns.
       emitCacheTraceEvent({
@@ -1215,6 +1245,18 @@ export function createGguiRenderHandler(
       try {
         validateContract(story.contract);
       } catch (err) {
+        emitRenderContractViolation(deps.telemetrySink, {
+          appId: ctx.appId,
+          tool: 'ggui_render',
+          site: 'contract_gate',
+          violationClass:
+            acceptanceClassification === 'override'
+              ? 'override_contract_invalid'
+              : 'contract_schema_invalid',
+          handshakeId: parsed.handshakeId,
+          origin: handshakeRecord.suggestion.origin,
+          overridePresent: override !== undefined,
+        });
         if (acceptanceClassification === 'override') {
           const detail = err instanceof Error ? err.message : String(err);
           throw new Error(
@@ -1262,17 +1304,30 @@ export function createGguiRenderHandler(
       // `commitCachedGguiSession`) cover contracts that differ from
       // `story.contract` (synth-emit, matched-blueprint reuse).
       if (deps.checkRenderContracts && story.contract) {
-        deps.checkRenderContracts({
-          ...(story.contract.actionSpec
-            ? { actionSpec: story.contract.actionSpec }
-            : {}),
-          ...(story.contract.streamSpec
-            ? { streamSpec: story.contract.streamSpec }
-            : {}),
-          ...(story.contract.agentCapabilities
-            ? { agentCapabilities: story.contract.agentCapabilities }
-            : {}),
-        });
+        try {
+          deps.checkRenderContracts({
+            ...(story.contract.actionSpec
+              ? { actionSpec: story.contract.actionSpec }
+              : {}),
+            ...(story.contract.streamSpec
+              ? { streamSpec: story.contract.streamSpec }
+              : {}),
+            ...(story.contract.agentCapabilities
+              ? { agentCapabilities: story.contract.agentCapabilities }
+              : {}),
+          });
+        } catch (err) {
+          emitRenderContractViolation(deps.telemetrySink, {
+            appId: ctx.appId,
+            tool: 'ggui_render',
+            site: 'schema_compat',
+            violationClass: 'schema_mismatch',
+            handshakeId: parsed.handshakeId,
+            origin: handshakeRecord.suggestion.origin,
+            overridePresent: override !== undefined,
+          });
+          throw err;
+        }
       }
 
       // Props validation against the agreed contract's propsSpec. The
@@ -1287,6 +1342,16 @@ export function createGguiRenderHandler(
           effectiveContract.propsSpec,
         );
         if (!propsValidation.valid) {
+          emitRenderContractViolation(deps.telemetrySink, {
+            appId: ctx.appId,
+            tool: 'ggui_render',
+            site: 'props_validation',
+            violationClass: 'props',
+            handshakeId: parsed.handshakeId,
+            origin: handshakeRecord.suggestion.origin,
+            overridePresent: override !== undefined,
+            violations: propsValidation.violations,
+          });
           throw new ContractViolationError({
             tool: 'ggui_render',
             violations: propsValidation.violations,
@@ -1315,6 +1380,15 @@ export function createGguiRenderHandler(
           );
           runtimeProps = undefined;
         } else {
+          emitRenderContractViolation(deps.telemetrySink, {
+            appId: ctx.appId,
+            tool: 'ggui_render',
+            site: 'override_no_propsspec',
+            violationClass: 'props',
+            handshakeId: parsed.handshakeId,
+            origin: handshakeRecord.suggestion.origin,
+            overridePresent: true,
+          });
           throw new ContractViolationError({
             tool: 'ggui_render',
             violations: [
@@ -2298,6 +2372,17 @@ export function createGguiRenderHandler(
         ...(codeModuleUrl !== undefined ? { codeModuleUrl } : {}),
         ...(nextStep ? { nextStep } : {}),
       };
+
+      // Success terminal (`render.committed`). Every success path —
+      // cold-gen, cache reuse, probe, generation-off — converges on
+      // this assembly; the generation-failure arm returned above and
+      // deliberately does NOT count as committed.
+      emitRenderCommitted(deps.telemetrySink, {
+        appId: ctx.appId,
+        handshakeId: handshakeRecord.handshakeId,
+        codeReady: generatedCodeReady,
+        cacheHit: cacheMarker?.hit ?? false,
+      });
 
       // Post-success hook for fire-and-forget side-effects.
       if (deps.postSuccessHook) {

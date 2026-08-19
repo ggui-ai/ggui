@@ -395,7 +395,14 @@ export function mapAjvErrorsToViolations(
   data: unknown,
 ): ContractViolation[] {
   if (!errors) return [];
-  return errors.map(err => mapOne(err, data));
+  // `keyword` is stamped uniformly at this single assembly seam (not
+  // per-case inside `mapOne`) so every mapped violation — including
+  // the default-case fallthrough — retains the producing JSON Schema
+  // keyword for downstream failure-class segmentation.
+  return errors.map(err => ({
+    ...mapOne(err, data),
+    ...(err.keyword ? { keyword: err.keyword } : {}),
+  }));
 }
 
 /**

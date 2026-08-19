@@ -1311,6 +1311,11 @@ export function defaultHandlers(deps: {
           ? { serverCapabilities: deps.handshake.serverCapabilities }
           : {}),
         ...(lifecycleEmitter ? { lifecycleEmitter } : {}),
+        // Server-level TelemetrySink → the handler's `handshake.decided`
+        // emission. Without this thread the composed emission never
+        // fired (the handler dep predates the wiring — P2 of
+        // docs/plans/2026-08-19-schema-precise-render.md pinned it).
+        ...(deps.telemetry ? { telemetrySink: deps.telemetry } : {}),
       }) as SharedHandler<ZodRawShape, ZodRawShape>
     );
   }
@@ -1337,6 +1342,10 @@ export function defaultHandlers(deps: {
         ...(deps.update.themeProvider !== undefined
           ? { themeProvider: deps.update.themeProvider }
           : {}),
+        // Mutation-time `render.contract_violation` events (P2
+        // measurement — update-time violations are baselined with
+        // render-time ones, not hidden).
+        ...(deps.telemetry ? { telemetrySink: deps.telemetry } : {}),
       }) as SharedHandler<ZodRawShape, ZodRawShape>
     );
     // ggui_amend rides the SAME deps slot (#483 tool split): one
@@ -1353,6 +1362,8 @@ export function defaultHandlers(deps: {
         ...(deps.update.propsUpdateNotifier
           ? { propsUpdateNotifier: deps.update.propsUpdateNotifier }
           : {}),
+        // Same mutation core as ggui_update — same violation events.
+        ...(deps.telemetry ? { telemetrySink: deps.telemetry } : {}),
       }) as SharedHandler<ZodRawShape, ZodRawShape>
     );
   }
@@ -1527,6 +1538,11 @@ export function defaultHandlers(deps: {
           ? { themeProvider: deps.render.themeProvider }
           : {}),
         ...(deps.render.rateLimiter ? { rateLimiter: deps.render.rateLimiter } : {}),
+        // Render measurement events (`render.attempted` /
+        // `render.contract_violation` / `render.committed`) — P2 of
+        // docs/plans/2026-08-19-schema-precise-render.md. One
+        // server-level sink, every consumer.
+        ...(deps.telemetry ? { telemetrySink: deps.telemetry } : {}),
         ...(deps.render.shortCodeIndex ? { shortCodeIndex: deps.render.shortCodeIndex } : {}),
         ...(deps.render.renderIdentityStore
           ? { renderIdentityStore: deps.render.renderIdentityStore }

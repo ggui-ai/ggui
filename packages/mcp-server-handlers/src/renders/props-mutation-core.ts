@@ -21,6 +21,7 @@ import {
 } from './apply-ggui-session-patch.js';
 import { GguiSessionNotFoundError } from './errors.js';
 import { emitPayloadTraceEvent } from './payload-trace-sink.js';
+import { emitRenderContractViolation } from './render-telemetry.js';
 // Type-only — erased at runtime, so no import cycle with update.ts
 // (which imports this module's runtime exports).
 import type { GguiUpdateHandlerDeps } from './update.js';
@@ -246,11 +247,37 @@ export async function runPropsMutation(
       // assertPropsContract no-ops on absent spec, so MCP Apps renders
       // accept any patch shape (the iframe owns its own validation).
       const renderTarget: GguiSessionTarget & GguiSession = stored.render;
-      const { updatedSession, finalProps } = applyGguiSessionPatch({
-        render: renderTarget,
-        tool,
-        ...patchInput,
-      });
+      // Closure keeps `applyGguiSessionPatch`'s generic inference on the
+      // concrete render type — `ReturnType<typeof applyGguiSessionPatch>`
+      // directly would collapse the type parameter to its constraint.
+      const applyPatch = () =>
+        applyGguiSessionPatch({
+          render: renderTarget,
+          tool,
+          ...patchInput,
+        });
+      let patched: ReturnType<typeof applyPatch>;
+      try {
+        patched = applyPatch();
+      } catch (err) {
+        // Measurement: mutation-time propsSpec violations are the same
+        // failure class the render-time `render.contract_violation`
+        // events count — emit, then propagate verbatim (the transport
+        // layer still maps the error; the sink is fire-and-forget).
+        if (err instanceof ContractViolationError) {
+          emitRenderContractViolation(deps.telemetrySink, {
+            appId: ctx.appId,
+            tool,
+            site: 'mutation_props',
+            violationClass: 'props',
+            sessionId,
+            kind: parsed.kind,
+            violations: err.violations,
+          });
+        }
+        throw err;
+      }
+      const { updatedSession, finalProps } = patched;
 
       // No-op gate (#471 round-3 live finding): a CONFORMING patch that
       // leaves the final props semantically identical to the current

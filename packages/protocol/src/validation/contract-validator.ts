@@ -31,6 +31,16 @@ export interface ContractViolation extends JsonObject {
   message: string;
   expected?: string;
   received?: string;
+  /**
+   * The JSON Schema keyword whose assertion failed (`'enum'`,
+   * `'required'`, `'type'`, `'additionalProperties'`, …) — retained
+   * verbatim from the underlying validator error. Absent on synthetic
+   * violations that no schema keyword produced (e.g. the
+   * props-without-propsSpec rejection). Consumers segment failure
+   * classes on it (telemetry `violationKeywords`); it is additive
+   * metadata, never part of the violation's identity.
+   */
+  keyword?: string;
 }
 
 export interface ValidationResult {

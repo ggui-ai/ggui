@@ -75,6 +75,7 @@ import {
 import type {
   GguiSessionStore,
   RenderIdentityStore,
+  TelemetrySink,
 } from '@ggui-ai/mcp-server-core';
 import type { HandlerContext, SharedHandler } from '../types.js';
 import {
@@ -200,6 +201,16 @@ export interface GguiUpdateHandlerDeps extends RenderSliceMetaDeps {
    * the tool call still returns `updated: true`.
    */
   readonly propsUpdateNotifier?: PropsUpdateNotifier;
+  /**
+   * Operational-signal sink for mutation-time contract-violation
+   * events (`render.contract_violation` with `tool: 'ggui_update' |
+   * 'ggui_amend'` — see `render-telemetry.ts`). Update-time
+   * violations are the same failure class the render-time events
+   * measure; baselining one without the other hides half the
+   * surface. Lossy + non-throwing per the {@link TelemetrySink}
+   * contract; absent dep = noop.
+   */
+  readonly telemetrySink?: TelemetrySink;
   /**
    * Optional pre-mutation gate. See {@link BillingGate}. Hosted
    * deployments bind a real gate (cloud's traffic-class /
