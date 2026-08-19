@@ -73,7 +73,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "cache-reuse-probe": "tsx src/renders/cache-reuse-probe.ts"
+    "cache-reuse-probe": "tsx src/renders/cache-reuse-probe.ts",
+    "match-precision-probe": "tsx src/renders/match-precision/run-probe.ts"
   },
   "dependencies": {
     "@ggui-ai/mcp-server-core": "workspace:*",
@@ -84,6 +85,7 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
+    "@ggui-ai/embedding-local": "workspace:*",
     "@ggui-ai/protocol-conformance": "workspace:*",
     "@types/node": "^22.0.0",
     "typescript": "^5.0.0",
