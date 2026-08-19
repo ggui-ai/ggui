@@ -1015,7 +1015,15 @@ function validateSchemaStructure(
     return;
   }
 
-  if (schema.type === 'array' && !schema.items) {
+  // `type` may be a draft-07 type ARRAY (`['array','null']`) since
+  // draft-2026-08-19 — read it as a SET so the structural rules below
+  // apply to nullable array/object schemas too (a single-string
+  // comparison silently skipped them).
+  const typeSet = new Set(
+    Array.isArray(schema.type) ? schema.type : schema.type ? [schema.type] : [],
+  );
+
+  if (typeSet.has('array') && !schema.items) {
     violations.push({
       field: path,
       message: `Array schema at '${path}' has no items — cannot validate array elements`,
@@ -1024,7 +1032,7 @@ function validateSchemaStructure(
     });
   }
 
-  if (schema.type === 'object' && schema.required?.length) {
+  if (typeSet.has('object') && schema.required?.length) {
     const definedProps = Object.keys(schema.properties ?? {});
     for (const req of schema.required) {
       if (!definedProps.includes(req)) {

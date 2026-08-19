@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   validateActionData,
+  validateContractStructure,
   validatePropsData,
   validatePropsDataWithSchema,
   buildPropsWrapperSchema,
@@ -464,6 +465,45 @@ describe('ContractViolationError with ggui_event tool', () => {
       violations: [{ field: 'action', message: 'bad' }],
     });
     expect(typeof data.hint).toBe('string');
+  });
+
+  it('validateContractStructure applies array/object structural rules to draft-07 type arrays', () => {
+    // Since draft-2026-08-19 `JsonSchema.type` admits arrays
+    // (`['array','null']`). The structural checks must read the type
+    // as a SET — a single-string comparison silently skips the
+    // "array has no items" and "required not in properties" rules for
+    // nullable array/object schemas.
+    const missingItems = validateContractStructure({
+      propsSpec: {
+        properties: {
+          rows: { schema: { type: ['array', 'null'] } },
+        },
+      },
+    });
+    expect(missingItems.valid).toBe(false);
+    expect(
+      missingItems.violations.some((v) => /no items/.test(v.message)),
+    ).toBe(true);
+
+    const requiredNotDeclared = validateContractStructure({
+      propsSpec: {
+        properties: {
+          slot: {
+            schema: {
+              type: ['object', 'null'],
+              properties: {},
+              required: ['id'],
+            },
+          },
+        },
+      },
+    });
+    expect(requiredNotDeclared.valid).toBe(false);
+    expect(
+      requiredNotDeclared.violations.some((v) =>
+        /Required field 'id' is not defined/.test(v.message),
+      ),
+    ).toBe(true);
   });
 
   it('validatePropsDataWithSchema enforces an explicit enforced schema with keyword retention', () => {

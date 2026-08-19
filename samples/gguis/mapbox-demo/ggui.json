@@ -1,6 +1,6 @@
 {
   "schema": "1",
-  "protocol": "draft-2026-06-12",
+  "protocol": "draft-2026-08-19",
   "generation": {
     "model": "anthropic:claude-haiku-4-5-20251001"
   },

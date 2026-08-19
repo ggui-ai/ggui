@@ -65,28 +65,49 @@ describe('normalizeSchema — invalid type spellings', () => {
     expect(normalizeSchema({ type: 'OBJECT' })).toEqual({ type: 'object' });
   });
 
-  it('collapses a union type array to its first valid non-null member', () => {
+  it('PRESERVES a draft-07 type array, normalizing each member (schema-precise render: nullability is load-bearing)', () => {
+    // Pre-draft-2026-08-19 this collapsed to the first non-null member,
+    // silently dropping the nullable arm — the exact narrowing that
+    // turns an agent's legal `null` into a contract_violation. The
+    // protocol's JsonSchema.type now admits arrays; the normalizer
+    // keeps them.
     expect(normalizeSchema({ type: ['string', 'null'] })).toEqual({
-      type: 'string',
+      type: ['string', 'null'],
     });
     expect(normalizeSchema({ type: ['null', 'number'] })).toEqual({
-      type: 'number',
+      type: ['null', 'number'],
+    });
+    // Members still normalize individually; invalid members drop.
+    expect(normalizeSchema({ type: ['String', 'NULL'] })).toEqual({
+      type: ['string', 'null'],
+    });
+    expect(normalizeSchema({ type: ['string', 'bogus'] })).toEqual({
+      type: 'string',
+    });
+    // A single surviving member collapses to the plain string form.
+    expect(normalizeSchema({ type: ['string'] })).toEqual({
+      type: 'string',
     });
   });
 
-  it('collapses a pipe-union type STRING to its first valid non-null member', () => {
+  it('normalizes a pipe-union type STRING to the draft-07 array form, preserving the nullable arm', () => {
     // Gemini emits the union as a single pipe-string, e.g. "STRING|null",
-    // rather than the JSON Schema array form. Recover the first valid
-    // non-null member (case-insensitive), dropping the nullable arm.
+    // rather than the JSON Schema array form. Since draft-2026-08-19
+    // the canonical recovery IS the array form — nullability is
+    // load-bearing (schema-precise render) and MUST survive.
     expect(normalizeSchema({ type: 'STRING|null' })).toEqual({
-      type: 'string',
+      type: ['string', 'null'],
     });
     expect(normalizeSchema({ type: 'null|number' })).toEqual({
-      type: 'number',
+      type: ['null', 'number'],
     });
     // Aliases inside the pipe-union normalize too.
     expect(normalizeSchema({ type: 'int|null' })).toEqual({
-      type: 'integer',
+      type: ['integer', 'null'],
+    });
+    // A pipe-union with one surviving member collapses to the string form.
+    expect(normalizeSchema({ type: 'string|bogus' })).toEqual({
+      type: 'string',
     });
   });
 
@@ -98,7 +119,7 @@ describe('normalizeSchema — invalid type spellings', () => {
       }),
     ).toEqual({
       type: 'object',
-      properties: { text: { type: 'string' } },
+      properties: { text: { type: ['string', 'null'] } },
     });
   });
 

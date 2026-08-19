@@ -7,7 +7,12 @@
 // and tool signatures automatically from the JSON Schema literal — no
 // parallel type definitions needed.
 
-import type { DataContract, JsonObject, JsonValue } from './data-contract';
+import type {
+  DataContract,
+  JsonObject,
+  JsonSchemaTypeName,
+  JsonValue,
+} from './data-contract';
 
 // =============================================================================
 // SchemaToType — recursive JSON Schema → TypeScript type mapper
@@ -76,6 +81,16 @@ export type SchemaToType<S> =
   S extends { readonly const: infer V } ? V :
   // Enum values
   S extends { readonly enum: readonly (infer E)[] } ? E :
+  // Draft-07 type ARRAY (`['string','null']` — the canonical nullable
+  // form the enforced-props-schema emission produces; draft-2026-08-19).
+  // Distributes each member back through SchemaToType with the member
+  // as the single type, so object/array members keep their
+  // properties/items and the result is the members' UNION.
+  S extends { readonly type: readonly (infer M extends JsonSchemaTypeName)[] }
+    ? M extends JsonSchemaTypeName
+      ? SchemaToType<Omit<S, 'type'> & { readonly type: M }>
+      : never
+    :
   // Primitives
   S extends { readonly type: 'string' } ? string :
   S extends { readonly type: 'number' } ? number :
