@@ -54,10 +54,12 @@ These tokens adapt automatically to any theme (light, dark, branded). **ALWAYS u
 - Borders/dividers → \`var(--ggui-color-outline)\` or \`var(--ggui-color-outlineVariant)\`
 
 ### State Colors
-- var(--ggui-color-success) — success states
-- var(--ggui-color-warning) — warning states
-- var(--ggui-color-error) — error states, destructive actions
-- var(--ggui-color-info) — informational
+Semantic families ship as SCALES; the \`500\` stop is the role color (per-mode brightness), \`50\` the tint, \`800\` the on-tint text:
+- var(--ggui-color-success-500) — success states (tint bg: success-50, text on tint: success-800)
+- var(--ggui-color-warning-500) — warning states (warning-50 / warning-800)
+- var(--ggui-color-error-500) — error states, destructive actions (error-50 / error-800)
+- var(--ggui-color-info-500) — informational (info-50 / info-800)
+Prefer the primitives' \`tone="success|warning|error|info"\` prop over hand-written vars — it resolves to the same stops.
 
 ### IMPORTANT: Color Rules
 - **NEVER** use hardcoded hex colors. ONLY use var(--ggui-color-*) tokens.

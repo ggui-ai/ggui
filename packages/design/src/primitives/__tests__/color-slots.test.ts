@@ -15,6 +15,7 @@ import {
   type ToneSlot,
   type SurfaceSlot,
 } from '../color-slots';
+import { getTheme, getThemeIds } from '../../themes/registry';
 
 describe('resolveToneCss', () => {
   it.each([
@@ -23,16 +24,38 @@ describe('resolveToneCss', () => {
     ['subtle', 'var(--ggui-color-neutral-500, #71717a)'],
     ['emphasized', 'var(--ggui-color-primary-700, #0369a1)'],
     ['loud', 'var(--ggui-color-primary-500, #0ea5e9)'],
-    ['success', 'var(--ggui-color-success, #15803d)'],
-    ['warning', 'var(--ggui-color-warning, #b45309)'],
-    ['error', 'var(--ggui-color-error, #b91c1c)'],
-    ['info', 'var(--ggui-color-info, #0e7490)'],
+    ['success', 'var(--ggui-color-success-500, #15803d)'],
+    ['warning', 'var(--ggui-color-warning-500, #b45309)'],
+    ['error', 'var(--ggui-color-error-500, #b91c1c)'],
+    ['info', 'var(--ggui-color-info-500, #0e7490)'],
     ['inverse', 'var(--ggui-color-surface, #ffffff)'],
     ['inherit', 'inherit'],
   ] as readonly [ToneSlot, string][])(
     'tone "%s" → "%s"',
     (slot, expected) => {
       expect(resolveToneCss(slot)).toBe(expected);
+    },
+  );
+
+  // The resolver is only honest if the token it names is one every
+  // theme actually EMITS — the prior flat `--ggui-color-<tone>` lookup
+  // was never emitted by any theme (DtcgTheme types the semantic
+  // families as scales), so every semantic tone silently painted the
+  // light-mode fallback hex on every theme, including dark ones.
+  it.each(['success', 'warning', 'error', 'info'] as const)(
+    'every registry theme emits the "%s-500" stop the resolver reads, in both modes',
+    (tone) => {
+      const token = `--ggui-color-${tone}-500:`;
+      for (const id of getThemeIds()) {
+        for (const mode of ['light', 'dark'] as const) {
+          const theme = getTheme(id, mode);
+          expect(theme, `theme "${id}" (${mode}) missing from registry`).toBeDefined();
+          expect(
+            theme!.cssVariables.includes(token),
+            `theme "${id}" (${mode}) does not emit ${token} — resolveToneCss("${tone}") would fall back to a hardcoded hex`,
+          ).toBe(true);
+        }
+      }
     },
   );
 

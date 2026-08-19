@@ -87,15 +87,17 @@ export function resolveToneCss(tone: ToneSlot): string {
     case 'warning':
     case 'error':
     case 'info':
-      // Semantic tones resolve to FLAT semantic tokens
-      // (`var(--ggui-color-success)` etc.) rather than ladder lookups
-      // (`success-700`). Themes ship semantic tokens as flat values
-      // per palette mode (e.g., indigo-light success = #0e9d6e,
-      // indigo-dark success = #34d399); ladder lookups never resolved
-      // because parsers emit the flat token only, and the hardcoded
-      // fallback (#15803d) was invisible on dark surfaces. Flat
-      // resolution honors per-mode brightness.
-      return `var(--ggui-color-${tone}, ${SEMANTIC_TONE_FALLBACK[tone]})`;
+      // Semantic tones resolve to the ladder's `500` stop — the "live"
+      // stop every theme annotates as the semantic role color and ships
+      // per palette mode (ggui light success-500 #1b7a37, ggui dark
+      // #3da85b "brighter live"), the same stop Alert reads for its
+      // icon. NOT the flat `--ggui-color-<tone>`: `DtcgTheme.color`
+      // types the four semantic families as SCALES ONLY and the parser
+      // walks scales, so no theme has ever emitted a flat token — the
+      // prior flat lookup fell through to SEMANTIC_TONE_FALLBACK's
+      // light-mode hexes on every theme, invisible on dark surfaces
+      // (found by the beauty/002 understand pass, 2026-08-19).
+      return `var(--ggui-color-${tone}-500, ${SEMANTIC_TONE_FALLBACK[tone]})`;
     case 'inverse':
       return 'var(--ggui-color-surface, #ffffff)';
     case 'inherit':
@@ -105,10 +107,11 @@ export function resolveToneCss(tone: ToneSlot): string {
 
 /**
  * Per-tone hardcoded fallback for the semantic slots. Used only when
- * the theme hasn't emitted a `--ggui-color-<tone>` token. Each picks
- * a value with adequate contrast on a light surface (the historical
- * default); dark-mode users without a theme bound see a less-readable
- * but still-distinguishable shade. Prefer binding a real theme.
+ * no theme is bound (every registry theme emits `<tone>-500` in both
+ * modes). Each picks a value with adequate contrast on a light surface
+ * (the historical default); dark-mode users without a theme bound see
+ * a less-readable but still-distinguishable shade. Prefer binding a
+ * real theme.
  */
 const SEMANTIC_TONE_FALLBACK: Readonly<Record<'success' | 'warning' | 'error' | 'info', string>> = {
   success: '#15803d',

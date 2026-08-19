@@ -516,7 +516,7 @@ function ProbeButtonRow({
             fontSize: 'var(--ggui-font-size-xs, 11px)',
             color:
               outcome.state === 'error'
-                ? 'var(--ggui-color-warning, #b45309)'
+                ? 'var(--ggui-color-warning-500, #b45309)'
                 : 'var(--ggui-color-onSurfaceVariant, #52525b)',
             background: 'var(--ggui-color-neutral-100, #f4f4f5)',
             padding: 'var(--ggui-spacing-2, 8px)',

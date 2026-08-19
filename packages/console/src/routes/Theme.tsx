@@ -1624,10 +1624,10 @@ function PreviewSemantic(): ReactElement {
   );
   return (
     <section style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
-      {dot('var(--ggui-color-success)', 'success')}
-      {dot('var(--ggui-color-warning)', 'warning')}
-      {dot('var(--ggui-color-error)', 'error')}
-      {dot('var(--ggui-color-info)', 'info')}
+      {dot('var(--ggui-color-success-500)', 'success')}
+      {dot('var(--ggui-color-warning-500)', 'warning')}
+      {dot('var(--ggui-color-error-500)', 'error')}
+      {dot('var(--ggui-color-info-500)', 'info')}
     </section>
   );
 }
