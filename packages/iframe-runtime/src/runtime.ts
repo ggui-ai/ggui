@@ -323,6 +323,33 @@ function getCurrentApp(): App | null {
 }
 
 /**
+ * The host's announced color mode, read from the connected App's
+ * pre-merged hostContext (`ui/initialize` result, kept current by the
+ * App across `host-context-changed`). `undefined` when no App is
+ * connected, the host sent no `theme`, or it sent something outside
+ * the spec's `'light' | 'dark'` literals (dropped, never guessed —
+ * the same tolerant posture as `projectHostContext`).
+ *
+ * This is the INPUT leg of host-theme adaptation
+ * (rnd/gen-ui/beauty/experiments/002-host-theme-adaptation.md, ggui#551):
+ * `hostContext.theme` alone reaches only `data-theme` +
+ * `color-scheme` via `applyDocumentTheme` — nothing in the token
+ * pipeline keys off it, so a dark host painted the light ladder
+ * (host-fit 46.0 vs 87.7 with the dark ladder, probe `cc728a8eb`).
+ * `buildOpts` consumes this ONLY when the slice stamps no `themeMode`:
+ * every operator layer (live provider > per-render override > app
+ * default > server default) still wins by being stamped; the host
+ * fills the gap where no operator had an opinion.
+ *
+ * @internal — exported for unit tests (`setCurrentApp` injects the
+ *   App); production caller is `buildOpts` inside `bootSequence`.
+ */
+export function hostAnnouncedThemeMode(): 'light' | 'dark' | undefined {
+  const theme = currentApp?.getHostContext()?.theme;
+  return theme === 'light' || theme === 'dark' ? theme : undefined;
+}
+
+/**
  * @internal — exported for unit tests to reset module state between
  * scenarios.
  */
@@ -4286,9 +4313,14 @@ async function bootProduction(opts: {
             ? { codeModuleUrl: meta.codeModuleUrl }
             : {}),
           ...(meta.themeId !== undefined ? { themeId: meta.themeId } : {}),
-          ...(meta.themeMode !== undefined
-            ? { themeMode: meta.themeMode }
-            : {}),
+          // Mode: the slice's stamped `themeMode` (every operator layer
+          // resolves into it) wins; when absent, the HOST's announced
+          // theme fills the gap (ggui#551 — see `hostAnnouncedThemeMode`).
+          // Absent-in-slice means "no operator opinion", not "light".
+          ...(() => {
+            const themeMode = meta.themeMode ?? hostAnnouncedThemeMode();
+            return themeMode !== undefined ? { themeMode } : {};
+          })(),
           // Per-app theme overlay (St3 M2.2). Threaded straight from the
           // bootstrap's `_meta["ai.ggui/render"].theme` (typed `AppTheme`,
           // already injection-validated by the wire parser) onto the mount
