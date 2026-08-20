@@ -211,6 +211,26 @@ export interface McpAppIframeProps {
    * neither mirrors nor blocks).
    */
   readonly onLifecycle?: (event: McpAppLifecycleEvent) => void;
+
+  /**
+   * Fired when the view announces a content-size change via the
+   * spec-canonical `ui/notifications/size-changed` notification
+   * (ext-apps `App.sendSizeChanged` / its autoResize observer).
+   * Both dimensions are optional per the spec — the common autoResize
+   * case announces `height` only. Values are validated finite
+   * non-negative numbers before they reach this callback; malformed
+   * announcements are dropped silently (the same tolerant posture as
+   * every other envelope).
+   *
+   * The host does NOT resize itself: `containerDimensions` stays the
+   * embedder's declaration. Bind this to drive your own container
+   * sizing (autoResize) — without it, content taller than the
+   * container clips.
+   */
+  readonly onSizeChanged?: (size: {
+    readonly width?: number;
+    readonly height?: number;
+  }) => void;
 }
 
 /**

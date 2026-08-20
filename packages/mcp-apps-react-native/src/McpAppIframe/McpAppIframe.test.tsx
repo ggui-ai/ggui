@@ -879,3 +879,75 @@ describe('<McpAppIframe> — imperative ref (RN)', () => {
     act(() => tree.unmount());
   });
 });
+
+// =============================================================================
+// <McpAppIframe> — `ui/notifications/size-changed` (ggui#589 rider 5).
+//
+// The view (ext-apps `App.sendSizeChanged` / autoResize observer) sends
+// this NOTIFICATION when its rendered content changes size. Before the
+// fix, the jsonrpc branch dropped every id-less message on the floor
+// (`dispatchHostBridgeRequest` returns null for notifications) — portal
+// cards clipped at their initial fixed height. The host now surfaces it
+// through `onSizeChanged` so embedders can autoResize their container.
+// =============================================================================
+describe('<McpAppIframe> — size-changed notification (ggui#589 rider 5)', () => {
+  it('fires onSizeChanged with the spec params when the view announces a new size', async () => {
+    const onSizeChanged = vi.fn();
+    let tree!: ReactTestRenderer;
+    act(() => {
+      tree = create(
+        <McpAppIframe resource={makeResource()} onSizeChanged={onSizeChanged} />,
+      );
+    });
+    await simulateFromWebView(tree, {
+      jsonrpc: '2.0',
+      method: 'ui/notifications/size-changed',
+      params: { width: 390, height: 742 },
+    });
+    expect(onSizeChanged).toHaveBeenCalledTimes(1);
+    expect(onSizeChanged).toHaveBeenCalledWith({ width: 390, height: 742 });
+    act(() => tree.unmount());
+  });
+
+  it('height-only announce (the autoResize common case) passes through without inventing a width', async () => {
+    const onSizeChanged = vi.fn();
+    let tree!: ReactTestRenderer;
+    act(() => {
+      tree = create(
+        <McpAppIframe resource={makeResource()} onSizeChanged={onSizeChanged} />,
+      );
+    });
+    await simulateFromWebView(tree, {
+      jsonrpc: '2.0',
+      method: 'ui/notifications/size-changed',
+      params: { height: 512 },
+    });
+    expect(onSizeChanged).toHaveBeenCalledWith({ height: 512 });
+    act(() => tree.unmount());
+  });
+
+  it('malformed params (non-numeric / negative / non-finite) are dropped, not surfaced', async () => {
+    const onSizeChanged = vi.fn();
+    let tree!: ReactTestRenderer;
+    act(() => {
+      tree = create(
+        <McpAppIframe resource={makeResource()} onSizeChanged={onSizeChanged} />,
+      );
+    });
+    for (const params of [
+      { width: 'wide' },
+      { height: -1 },
+      { width: Number.POSITIVE_INFINITY },
+      {},
+      undefined,
+    ]) {
+      await simulateFromWebView(tree, {
+        jsonrpc: '2.0',
+        method: 'ui/notifications/size-changed',
+        ...(params !== undefined ? { params } : {}),
+      });
+    }
+    expect(onSizeChanged).not.toHaveBeenCalled();
+    act(() => tree.unmount());
+  });
+});

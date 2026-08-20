@@ -307,6 +307,43 @@ export function classifyRendererEnvelope(data: unknown): RendererEnvelopeTag {
   return 'unknown';
 }
 
+/**
+ * Read a spec-canonical `ui/notifications/size-changed` NOTIFICATION
+ * (ggui#589 rider 5). The view sends it when its rendered content
+ * changes size (ext-apps `App.sendSizeChanged` / its autoResize
+ * observer); before this reader existed, the jsonrpc branch dropped
+ * every id-less message (`dispatchHostBridgeRequest` returns null for
+ * notifications) and content taller than the container clipped.
+ *
+ * Returns the validated `{width?, height?}` params, or `null` when the
+ * payload is not this notification OR carries nothing usable — each
+ * dimension must be a finite non-negative number to pass; a payload
+ * where NEITHER dimension survives is `null` (nothing to resize on).
+ * Pure function — testable without a WebView present.
+ */
+export function readSizeChangedNotification(
+  data: unknown,
+): { width?: number; height?: number } | null {
+  if (data === null || typeof data !== 'object') return null;
+  const d = data as { jsonrpc?: unknown; method?: unknown; params?: unknown };
+  if (d.jsonrpc !== '2.0' || d.method !== 'ui/notifications/size-changed') {
+    return null;
+  }
+  if (d.params === null || typeof d.params !== 'object' || Array.isArray(d.params)) {
+    return null;
+  }
+  const params = d.params as { width?: unknown; height?: unknown };
+  const dim = (v: unknown): number | undefined =>
+    typeof v === 'number' && Number.isFinite(v) && v >= 0 ? v : undefined;
+  const width = dim(params.width);
+  const height = dim(params.height);
+  if (width === undefined && height === undefined) return null;
+  return {
+    ...(width !== undefined ? { width } : {}),
+    ...(height !== undefined ? { height } : {}),
+  };
+}
+
 export function buildDispatchActionNotification(
   name: string,
   data: unknown,

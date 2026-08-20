@@ -68,6 +68,7 @@ import {
   classifyRendererEnvelope,
   deriveResourceMountSource,
   dispatchHostBridgeRequest,
+  readSizeChangedNotification,
   type HostBridgeContext,
   type HostBridgeRequest,
   type HostBridgeResponse,
@@ -107,6 +108,7 @@ export const McpAppIframe = forwardRef<McpAppIframeRef, McpAppIframeProps>(
       onError,
       onObserve,
       onLifecycle,
+      onSizeChanged,
     },
     ref,
   ) {
@@ -226,6 +228,16 @@ export const McpAppIframe = forwardRef<McpAppIframeRef, McpAppIframeProps>(
             return;
           }
           case 'jsonrpc': {
+            // `ui/notifications/size-changed` (ggui#589 rider 5) — an
+            // id-less NOTIFICATION, so it never reaches the request
+            // dispatcher below (which returns null for notifications;
+            // before this branch the announce was dropped and content
+            // taller than the container clipped). Surface it and stop.
+            const sizeChange = readSizeChangedNotification(payload);
+            if (sizeChange !== null) {
+              onSizeChanged?.(sizeChange);
+              return;
+            }
             const req = payload as HostBridgeRequest;
             const response = await dispatchHostBridgeRequest(req, ctxRef.current);
             if (response) deliverToWebView(response);
@@ -256,7 +268,7 @@ export const McpAppIframe = forwardRef<McpAppIframeRef, McpAppIframeProps>(
             return;
         }
       },
-      [deliverToWebView, onError, onObserve, onLifecycle],
+      [deliverToWebView, onError, onObserve, onLifecycle, onSizeChanged],
     );
 
     // Mount-source null → caller gave an unmountable resource. Emit
