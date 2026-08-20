@@ -31,3 +31,24 @@ export function formatPercent(rate: number): string {
 export function formatDate(date: string): string {
   return date;
 }
+
+/**
+ * Judge-coverage disclosure line (#565): how many generated cells actually
+ * carry a panel score, and whether the runner flagged the run degraded
+ * (coverage under its floor — aggregate scores not representative).
+ * Returns null for reports published before the field existed (2026-08-20);
+ * those runs' coverage is unknown, not 100%, so we say nothing rather than
+ * guess.
+ */
+export function judgeCoverageLine(meta: {
+  evaluatedCount?: number;
+  judgeCoverage?: number;
+  judgeCoverageDegraded?: true;
+  successCount: number;
+}): { text: string; degraded: boolean } | null {
+  if (meta.evaluatedCount === undefined || meta.judgeCoverage === undefined) return null;
+  return {
+    text: `scores from ${meta.evaluatedCount}/${meta.successCount} generated cells (${formatPercent(meta.judgeCoverage)})`,
+    degraded: meta.judgeCoverageDegraded === true,
+  };
+}

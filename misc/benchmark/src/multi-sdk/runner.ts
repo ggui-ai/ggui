@@ -223,7 +223,9 @@ export class BenchmarkRunner {
       }
     }
 
-    return generateReport(results, totalDurationMs);
+    return generateReport(results, totalDurationMs, {
+      evaluationSkipped: this.config.skipEvaluation,
+    });
   }
 
   /**

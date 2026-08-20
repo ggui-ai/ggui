@@ -131,6 +131,74 @@ function weightedScore(scores: AestheticScores): number {
 }
 
 // =============================================================================
+// Resilience primitives (retry + concurrency cap) — #565 item 1
+// =============================================================================
+
+export interface RetryOptions {
+  /** Total attempts, including the first (>= 1). */
+  attempts: number;
+  /** Delay before the first retry; doubles per subsequent retry. */
+  baseDelayMs: number;
+  /** Injectable sleep for tests. Defaults to a real setTimeout wait. */
+  sleep?: (ms: number) => Promise<void>;
+}
+
+const realSleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+
+/**
+ * Retry an operation whose failure modes are BOTH `null` returns (the
+ * judge contract — see {@link runSingleJudge}) and thrown errors. Waits
+ * `baseDelayMs * 2^n` between attempts. Never throws: after the final
+ * attempt fails, returns null so the caller's swallow-and-aggregate
+ * contract is preserved — the point is that failures stop being FIRST-try
+ * failures, not that they become fatal.
+ */
+export async function retryWithBackoff<T>(
+  fn: () => Promise<T | null>,
+  opts: RetryOptions,
+): Promise<T | null> {
+  const sleep = opts.sleep ?? realSleep;
+  for (let attempt = 0; attempt < opts.attempts; attempt++) {
+    if (attempt > 0) await sleep(opts.baseDelayMs * 2 ** (attempt - 1));
+    try {
+      const result = await fn();
+      if (result !== null) return result;
+    } catch {
+      // fall through to the next attempt; the final failure returns null
+    }
+  }
+  return null;
+}
+
+/**
+ * Minimal promise-concurrency limiter: at most `max` wrapped calls run at
+ * once; excess callers queue FIFO. A rejection releases its slot like any
+ * completion — the queue keeps draining. Woken waiters RE-CHECK the cap
+ * (`while`, not `if`): a fresh caller can land in the microtask window
+ * between a slot release and the waiter's resumption and legitimately take
+ * the slot — without the re-check both would admit and overshoot `max`.
+ * A re-queued waiter is always woken again: whoever holds the contested
+ * slot calls `next()` on completion.
+ */
+export function createLimiter(max: number): <T>(fn: () => Promise<T>) => Promise<T> {
+  let active = 0;
+  const queue: Array<() => void> = [];
+  const next = () => {
+    active--;
+    queue.shift()?.();
+  };
+  return async <T>(fn: () => Promise<T>): Promise<T> => {
+    while (active >= max) await new Promise<void>((resolve) => queue.push(resolve));
+    active++;
+    try {
+      return await fn();
+    } finally {
+      next();
+    }
+  };
+}
+
+// =============================================================================
 // Panel evaluation (3-provider, avg + spread, temp 0)
 // =============================================================================
 
@@ -175,6 +243,25 @@ const PANEL = [
   { provider: 'openai', model: 'gpt-5.4-mini' },
   { provider: 'google', model: 'gemini-3.5-flash' },
 ] as const;
+
+/**
+ * Judge-call resilience knobs (#565 item 1). The first real run (2026-08-19)
+ * fired ~237 judge calls in 6 minutes with NO cap and NO retry: coverage
+ * decayed front-to-back (claude-balanced 9/9 evaluated → google-balanced
+ * 0/10 — the rate-limit signature), landing at 24/79 = 30% overall.
+ *
+ * - Cap: 9 concurrent judge calls ACROSS all panels. Each panel fires one
+ *   call per provider, so ~3 in-flight per provider at the cap — far under
+ *   provider rate limits while barely stretching wall time (judges are
+ *   seconds-cheap next to 30-300s generations).
+ * - Retry: 3 attempts, 5s → 10s backoff — enough to ride out a short 429
+ *   window; a provider outage still degrades to null after ~15s.
+ */
+const JUDGE_CONCURRENCY = 9;
+const JUDGE_RETRY: RetryOptions = { attempts: 3, baseDelayMs: 5000 };
+
+/** Module-wide limiter: one gate for every panel this process runs. */
+const judgeLimit = createLimiter(JUDGE_CONCURRENCY);
 
 /**
  * Run a single panel judge. Builds the shared judge user message and calls
@@ -252,9 +339,11 @@ export function aggregatePanel(
 }
 
 /**
- * Run the 3-provider aesthetic judge panel. Fires all judges concurrently,
- * drops any that fail, then aggregates the survivors. Returns null when fewer
- * than 2 judges respond (no defensible panel score).
+ * Run the 3-provider aesthetic judge panel. Fires all judges concurrently
+ * (globally capped at {@link JUDGE_CONCURRENCY} in-flight calls across every
+ * panel in the process, retried per {@link JUDGE_RETRY}), drops any that
+ * still fail, then aggregates the survivors. Returns null when fewer than 2
+ * judges respond (no defensible panel score).
  *
  * `contract` (optional): the commit's data contract — see
  * {@link buildJudgeUserMessage}.
@@ -266,8 +355,16 @@ export async function evaluateAestheticsPanel(
 ): Promise<PanelEvalResult | null> {
   const startTime = Date.now();
 
+  // Each judge: globally concurrency-capped per ATTEMPT, retried with
+  // backoff on null/throw. The backoff sleep happens OUTSIDE the limiter
+  // slot so a rate-limited judge doesn't block other judges while waiting.
   const settled = await Promise.all(
-    PANEL.map((p) => runSingleJudge(p.provider, p.model, sourceCode, prompt, contract)),
+    PANEL.map((p) =>
+      retryWithBackoff(
+        () => judgeLimit(() => runSingleJudge(p.provider, p.model, sourceCode, prompt, contract)),
+        JUDGE_RETRY,
+      ),
+    ),
   );
   const survivors = settled.filter((r): r is SingleJudgeResult => r !== null);
 

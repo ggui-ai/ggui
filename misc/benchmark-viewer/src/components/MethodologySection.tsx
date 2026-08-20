@@ -61,6 +61,17 @@ const DIMENSIONS: ReadonlyArray<{ label: string; definition: string }> = [
  */
 const CHANGELOG: ReadonlyArray<{ date: string; text: string }> = [
   {
+    date: '2026-08-20',
+    text:
+      'Judge-panel resilience: judge calls now retry with backoff and are ' +
+      'concurrency-capped, and every report discloses its judge coverage ' +
+      '(scored cells / generated cells) with a low-coverage flag under 80%. ' +
+      'The 2026-08-19 run predates the disclosure fields: only 24 of its 79 ' +
+      'generated cells (30%) carry a panel score — its aggregate scores are ' +
+      'not representative. Scoring itself is unchanged (panel v3, same ' +
+      'prompt); coverage disclosure is additive, not a comparability break.',
+  },
+  {
     date: '2026-08-19',
     text:
       'Cadence: daily → weekly (Mondays 03:00 UTC). Model matrix refreshed to ' +
