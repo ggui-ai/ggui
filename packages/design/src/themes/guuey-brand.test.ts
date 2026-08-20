@@ -65,4 +65,29 @@ describe('guuey-brand-v1 — registration', () => {
     expect(vars).toContain('--ggui-accessibility-focusRing-color: #B8FF3A');
     expect(vars).toContain('--ggui-shape-radius-lg: 0.75rem');
   });
+
+  it('round 4 — dark borders sit at the portal hairline stops: outline .14, variant softer', () => {
+    // The round-3 residual: outline at .18 blended to a slate-grey
+    // hairline over the blue-slate surface (exec zoom crop). The
+    // portal's map: .14 = the base hairline; .18 is the STRONG stop
+    // (no DtcgTheme slot — strong strokes ride primary/focusRing,
+    // which the Select button proved take brand).
+    const vars = darkVars();
+    expect(vars).toContain('--ggui-color-outline: rgba(246, 245, 238, 0.14)');
+    expect(vars).toContain('--ggui-color-outlineVariant: rgba(246, 245, 238, 0.1)');
+  });
+
+  it('round 4 — dark shadows are near-none ink, never a heavy blob; light keeps soft grey', () => {
+    const vars = darkVars();
+    // The old mode-agnostic set (0.35–0.5 alpha black) painted a
+    // visible dark blob under slot cards on the dark surface.
+    expect(vars).not.toContain('rgba(0, 0, 0, 0.35)');
+    expect(vars).not.toContain('rgba(0, 0, 0, 0.4)');
+    expect(vars).toContain('--ggui-shape-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.2)');
+    const light = getTheme('guuey-brand-v1', 'light');
+    if (!light) throw new Error('light missing');
+    expect(light.cssVariables).toContain(
+      '--ggui-shape-shadow-sm: 0 1px 2px rgba(26, 29, 36, 0.06)',
+    );
+  });
 });

@@ -77,25 +77,11 @@ const shared = {
     '12': { $value: '3rem', $type: 'dimension' },
   },
 
-  shape: {
-    // 12px cards = the portal's stated radius rule → `lg` (0.75rem).
-    radius: {
-      sm: { $value: '0.375rem', $type: 'dimension' },
-      md: { $value: '0.5rem', $type: 'dimension' },
-      lg: { $value: '0.75rem', $type: 'dimension' },
-      xl: { $value: '1rem', $type: 'dimension' },
-      full: { $value: '9999px', $type: 'dimension' },
-    },
-    shadow: {
-      sm: { $value: '0 1px 2px rgba(0, 0, 0, 0.35)', $type: 'shadow' },
-      md: { $value: '0 4px 10px rgba(0, 0, 0, 0.4)', $type: 'shadow' },
-      lg: { $value: '0 10px 24px rgba(0, 0, 0, 0.45)', $type: 'shadow' },
-      xl: {
-        $value: '0 18px 40px rgba(0, 0, 0, 0.5), 0 2px 6px rgba(0, 0, 0, 0.35)',
-        $type: 'shadow',
-      },
-    },
-  },
+  // NOTE: `shape` is per-mode (round 4) — radius is shared via
+  // `sharedRadius` below, but shadows split: dark wants near-none ink
+  // (a visible black blob under a card on a dark surface was the
+  // round-3 "borders looking ugly" residual's shadow half), light
+  // wants classic soft grey.
 
   motion: {
     duration: {
@@ -158,6 +144,36 @@ const shared = {
   },
 
   zIndex: standardZIndex,
+} as const;
+
+/** 12px cards = the portal's stated radius rule → `lg` (0.75rem). */
+const sharedRadius = {
+  sm: { $value: '0.375rem', $type: 'dimension' },
+  md: { $value: '0.5rem', $type: 'dimension' },
+  lg: { $value: '0.75rem', $type: 'dimension' },
+  xl: { $value: '1rem', $type: 'dimension' },
+  full: { $value: '9999px', $type: 'dimension' },
+} as const;
+
+/**
+ * Dark elevation = near-none ink (round 4). Elevation on the slate
+ * surfaces reads through the surface-step ladder (sunken → surface →
+ * elevated), not through drop shadows — a black blob under a card on
+ * #1A1D24 was exactly the rejected look.
+ */
+const darkShadows = {
+  sm: { $value: '0 1px 2px rgba(0, 0, 0, 0.2)', $type: 'shadow' },
+  md: { $value: '0 2px 8px rgba(0, 0, 0, 0.25)', $type: 'shadow' },
+  lg: { $value: '0 6px 16px rgba(0, 0, 0, 0.28)', $type: 'shadow' },
+  xl: { $value: '0 10px 24px rgba(0, 0, 0, 0.3)', $type: 'shadow' },
+} as const;
+
+/** Light elevation = classic soft ink-tinted grey. */
+const lightShadows = {
+  sm: { $value: '0 1px 2px rgba(26, 29, 36, 0.06)', $type: 'shadow' },
+  md: { $value: '0 2px 8px rgba(26, 29, 36, 0.08)', $type: 'shadow' },
+  lg: { $value: '0 6px 16px rgba(26, 29, 36, 0.1)', $type: 'shadow' },
+  xl: { $value: '0 12px 28px rgba(26, 29, 36, 0.12)', $type: 'shadow' },
 } as const;
 
 // ── guuey brand — Dark (the gating variant) ────────────────────────
@@ -247,8 +263,12 @@ const guueyBrandDark: DtcgTheme = {
     onSurfaceVariant: { $value: '#B7BAC4', $type: 'color' },
     container: { $value: '#232630', $type: 'color' }, // elevated
     onContainer: { $value: '#F6F5EE', $type: 'color' },
-    outline: { $value: 'rgba(246, 245, 238, 0.18)', $type: 'color' },
-    outlineVariant: { $value: 'rgba(246, 245, 238, 0.14)', $type: 'color' },
+    // Round 4 (portal stops): .14 IS the base hairline; .18 is the
+    // STRONG stop (no DtcgTheme slot — strong/interactive strokes
+    // ride primary borders + the slime focusRing, receipted by the
+    // Select button). Dividers sit softer still.
+    outline: { $value: 'rgba(246, 245, 238, 0.14)', $type: 'color' },
+    outlineVariant: { $value: 'rgba(246, 245, 238, 0.1)', $type: 'color' },
     onPrimary: { $value: '#0E1014', $type: 'color' }, // ink on slime
     primaryContainer: { $value: '#242938', $type: 'color' }, // portal
     onPrimaryContainer: { $value: '#CCFF66', $type: 'color' }, // portal
@@ -264,6 +284,7 @@ const guueyBrandDark: DtcgTheme = {
   },
 
   ...shared,
+  shape: { radius: sharedRadius, shadow: darkShadows },
 };
 
 // ── guuey brand — Light (provisional derivation) ───────────────────
@@ -357,6 +378,7 @@ const guueyBrandLight: DtcgTheme = {
   },
 
   ...shared,
+  shape: { radius: sharedRadius, shadow: lightShadows },
 };
 
 export const theme = {
