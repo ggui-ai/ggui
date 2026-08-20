@@ -351,6 +351,41 @@ export function hostAnnouncedThemeMode(): 'light' | 'dark' | undefined {
 }
 
 /**
+ * Resolve the mount's base-stylesheet color mode from the slice, with
+ * the host as the final fallback (ggui#589, completing the ggui#551
+ * precedence ruling — "slice wins, host is the fallback, absent ≠
+ * light"):
+ *
+ *   stamped `themeMode`  >  `theme.mode` (the slice theme OBJECT)  >
+ *   host-announced theme  >  undefined
+ *
+ * The middle leg is the ggui#589 fix: a render envelope carrying a
+ * per-app theme (`theme: {mode, cssVariables}`) but no top-level
+ * `themeMode` is still a slice-stamped mode opinion — before this,
+ * the base token ladder ignored it and painted the LIGHT token set
+ * under a dark overlay whenever the host (correctly, per the
+ * adapter-boundary doctrine in the native host helpers) announced no
+ * `hostContext.theme`: a light skeleton in a dark skin. The theme
+ * object's own `mode` already drove `color-scheme`; now it also
+ * selects the ladder.
+ *
+ * `undefined` still means "no opinion anywhere" — the renderer's
+ * default applies; never coerced to `'light'`.
+ *
+ * @internal — exported for unit tests; production caller is
+ *   `buildOpts` inside `bootSequence`.
+ */
+export function resolveMountThemeMode(meta: {
+  readonly themeMode?: 'light' | 'dark';
+  readonly theme?: {
+    readonly mode: 'light' | 'dark';
+    readonly cssVariables?: Record<string, string>;
+  };
+}): 'light' | 'dark' | undefined {
+  return meta.themeMode ?? meta.theme?.mode ?? hostAnnouncedThemeMode();
+}
+
+/**
  * The host's announced palette, read from the connected App's
  * pre-merged hostContext and translated onto `--ggui-*` tokens by the
  * host-palette bridge. `undefined` when no App is connected, the host
@@ -4339,12 +4374,12 @@ async function bootProduction(opts: {
             ? { codeModuleUrl: meta.codeModuleUrl }
             : {}),
           ...(meta.themeId !== undefined ? { themeId: meta.themeId } : {}),
-          // Mode: the slice's stamped `themeMode` (every operator layer
-          // resolves into it) wins; when absent, the HOST's announced
-          // theme fills the gap (ggui#551 — see `hostAnnouncedThemeMode`).
-          // Absent-in-slice means "no operator opinion", not "light".
+          // Mode ladder (ggui#551 + #589 — see `resolveMountThemeMode`):
+          // stamped `themeMode` > the slice theme OBJECT's `mode` >
+          // host-announced theme. Absent everywhere means "no opinion",
+          // not "light".
           ...(() => {
-            const themeMode = meta.themeMode ?? hostAnnouncedThemeMode();
+            const themeMode = resolveMountThemeMode(meta);
             return themeMode !== undefined ? { themeMode } : {};
           })(),
           // Per-app theme overlay (St3 M2.2). Threaded straight from the

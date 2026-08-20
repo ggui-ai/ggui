@@ -1227,14 +1227,19 @@ export type SliceTheme = Pick<RenderSliceBase, 'themeId' | 'themeMode'>;
  * Compliance: one projection per fact). Order is operator-debug-wins:
  *
  *   `themeId`   = themeProvider().id  ??  renderThemeId  ??  deps.themeId
- *   `themeMode` = themeProvider().mode ?? deps.themeMode
+ *   `themeMode` = themeProvider().mode ?? deps.themeMode ?? sessionThemeMode
  *
  * The live console pick beats the agent's per-render override
  * (`ggui_render({ themeId })`, stored on the GguiSession) beats the
- * static `ggui.json#theme` deps. `themeMode` is 2-layer — no agent
- * surface sets a mode per render today. Precedence is per FIELD via
- * `??`: a live `{ mode }`-only pick does not block a per-render or
- * static `themeId`.
+ * static `ggui.json#theme` deps. `themeMode` gained a third, lowest
+ * layer (ggui#589): the SESSION THEME's own mode — the per-app
+ * `App.theme` sidecar snapshotted at render-commit. An envelope whose
+ * only mode opinion lives inside `theme.mode` must still stamp a
+ * top-level `themeMode`, or hosts reading only the top-level field
+ * select the wrong base token set (the light-skeleton-under-dark-skin
+ * store-frame class). Precedence is per FIELD via `??`: a live
+ * `{ mode }`-only pick does not block a per-render or static
+ * `themeId`.
  *
  * A key is OMITTED (never null, never defaulted to 'light') when no
  * layer resolves it. That absence is load-bearing downstream: the
@@ -1251,10 +1256,11 @@ export type SliceTheme = Pick<RenderSliceBase, 'themeId' | 'themeMode'>;
 export function resolveSliceTheme(
   deps: SliceThemeDeps,
   renderThemeId: string | undefined,
+  sessionThemeMode: 'light' | 'dark' | undefined,
 ): SliceTheme {
   const liveTheme = deps.themeProvider?.();
   const themeId = liveTheme?.id ?? renderThemeId ?? deps.themeId;
-  const themeMode = liveTheme?.mode ?? deps.themeMode;
+  const themeMode = liveTheme?.mode ?? deps.themeMode ?? sessionThemeMode;
   return {
     ...(themeId !== undefined ? { themeId } : {}),
     ...(themeMode !== undefined ? { themeMode } : {}),
@@ -1285,6 +1291,14 @@ export function assembleRenderSliceBase(
     readonly appId: string;
     /** Per-render theme override the agent set on the GguiSession. */
     readonly renderThemeId?: string | undefined;
+    /**
+     * The session theme's own mode (`deriveTheme(item)?.mode`) — the
+     * lowest `themeMode` layer (ggui#589). REQUIRED (not optional) so
+     * every transport states its session-theme input explicitly; pass
+     * `undefined` where no render row exists (the blueprint re-mint
+     * branch) or the item variant carries no theme sidecar.
+     */
+    readonly sessionThemeMode: 'light' | 'dark' | undefined;
   },
 ): RenderSliceBase {
   const runtimeUrlRaw =
@@ -1328,6 +1342,6 @@ export function assembleRenderSliceBase(
     runtimeUrl,
     authFields,
     channelUrls,
-    ...resolveSliceTheme(deps, call.renderThemeId),
+    ...resolveSliceTheme(deps, call.renderThemeId, call.sessionThemeMode),
   };
 }

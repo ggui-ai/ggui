@@ -1201,7 +1201,7 @@ describe('assembleRenderSliceBase — channelUrls stamping matrix', () => {
     token: `tok-${sessionId}`,
     expiresAt: '2099-01-01T00:00:00.000Z',
   });
-  const CALL = { sessionId: 'sess-1', appId: 'app-1' };
+  const CALL = { sessionId: 'sess-1', appId: 'app-1', sessionThemeMode: undefined };
 
   it('minted + static base → both URLs composed off the base with the token embedded', () => {
     const base = assembleRenderSliceBase(
@@ -1284,7 +1284,7 @@ describe('assembleRenderSliceBase — channelUrls stamping matrix', () => {
         }),
         sessionApiBaseUrl: 'https://public.example/',
       },
-      { sessionId: 'sess/odd', appId: 'app-1' },
+      { sessionId: 'sess/odd', appId: 'app-1', sessionThemeMode: undefined },
     );
     expect(base.channelUrls.pollingUrl).toBe(
       'https://public.example/api/sessions/sess%2Fodd/events?wsToken=tok%2Fwith%3Fchars%26',
@@ -1298,43 +1298,65 @@ describe('assembleRenderSliceBase — channelUrls stamping matrix', () => {
 describe('resolveSliceTheme — THE layered theme resolution every transport stamps from (ggui#539)', () => {
   it('full ladder: live pick beats per-render override beats static deps, per field', () => {
     expect(
-      resolveSliceTheme(
-        {
+      resolveSliceTheme({
           themeId: 'static',
           themeMode: 'light',
           themeProvider: () => ({ id: 'live', mode: 'dark' }),
-        },
-        'per-render',
-      ),
+        }, 'per-render', undefined),
     ).toEqual({ themeId: 'live', themeMode: 'dark' });
   });
 
   it('no live pick → the per-render override wins themeId; themeMode falls to static (2-layer)', () => {
     expect(
-      resolveSliceTheme({ themeId: 'static', themeMode: 'light' }, 'per-render'),
+      resolveSliceTheme({ themeId: 'static', themeMode: 'light' }, 'per-render', undefined),
     ).toEqual({ themeId: 'per-render', themeMode: 'light' });
   });
 
   it('per-FIELD precedence: a mode-only live pick does not block the per-render themeId', () => {
     expect(
-      resolveSliceTheme(
-        { themeId: 'static', themeProvider: () => ({ mode: 'dark' }) },
-        'per-render',
-      ),
+      resolveSliceTheme({ themeId: 'static', themeProvider: () => ({ mode: 'dark' }) }, 'per-render', undefined),
     ).toEqual({ themeId: 'per-render', themeMode: 'dark' });
   });
 
   it('no layer resolves → BOTH keys absent (never null, never defaulted to light) — the ggui#551 host fallback fires only on absence', () => {
-    const resolved = resolveSliceTheme({}, undefined);
+    const resolved = resolveSliceTheme({}, undefined, undefined);
     expect(resolved).toEqual({});
     expect('themeId' in resolved).toBe(false);
+    expect('themeMode' in resolved).toBe(false);
+  });
+
+  it('ggui#589: the session theme mode is the lowest server layer — emitted as top-level themeMode when no operator layer resolved one', () => {
+    // The store-frame rejection class: an envelope whose only mode
+    // opinion lives inside `theme.mode`. The top-level `themeMode`
+    // must reflect it so hosts that read only the top-level field
+    // (and the runtime's stamped-first ladder) select the right base
+    // token set.
+    expect(resolveSliceTheme({}, undefined, 'dark')).toEqual({ themeMode: 'dark' });
+  });
+
+  it('ggui#589 ordering: live pick > static deps > session-theme mode', () => {
+    expect(resolveSliceTheme({ themeMode: 'light' }, undefined, 'dark')).toEqual({
+      themeMode: 'light',
+    });
+    expect(
+      resolveSliceTheme(
+        { themeMode: 'light', themeProvider: () => ({ mode: 'dark' }) },
+        undefined,
+        'light',
+      ),
+    ).toEqual({ themeMode: 'dark' });
+  });
+
+  it('ggui#589: an absent session theme changes nothing — keys stay absent on absence', () => {
+    const resolved = resolveSliceTheme({}, undefined, undefined);
+    expect(resolved).toEqual({});
     expect('themeMode' in resolved).toBe(false);
   });
 
   it('assembleRenderSliceBase delegates: the base stamps exactly what the resolver resolves', () => {
     const base = assembleRenderSliceBase(
       { themeId: 'static', themeProvider: () => ({ id: 'live' }) },
-      { sessionId: 's', appId: 'a', renderThemeId: 'per-render' },
+      { sessionId: 's', appId: 'a', renderThemeId: 'per-render', sessionThemeMode: undefined },
     );
     expect(base.themeId).toBe('live');
     expect('themeMode' in base).toBe(false);

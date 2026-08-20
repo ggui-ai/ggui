@@ -15,7 +15,12 @@
  */
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { App } from '@modelcontextprotocol/ext-apps';
-import { __resetAppForTest, hostAnnouncedThemeMode, setCurrentApp } from '../runtime.js';
+import {
+  __resetAppForTest,
+  hostAnnouncedThemeMode,
+  resolveMountThemeMode,
+  setCurrentApp,
+} from '../runtime.js';
 import { buildBootHarness, buildHappyInitResult, DEFAULT_HOST_CONTEXT } from './boot-helpers.js';
 import type { MockTransport } from './mock-transport.js';
 
@@ -84,6 +89,44 @@ describe('hostAnnouncedThemeMode — the #551 input leg', () => {
     });
     await new Promise<void>((resolve) => setTimeout(resolve, 0));
     expect(hostAnnouncedThemeMode()).toBe('dark');
+  });
+
+  it('#589: the slice theme OBJECT is part of the slice — its mode sits between the stamped mode and the host announce', async () => {
+    // The store-frame rejection (ggui#589 / guuey#318): an envelope
+    // carrying `theme: {mode:'dark', cssVariables:{…}}` but NO
+    // top-level `themeMode`, mounted under a host that (correctly,
+    // per the adapter-boundary doctrine) announces no hostContext
+    // theme. The old ladder (`themeMode ?? hostAnnounced()`) resolved
+    // undefined → the base stylesheet painted the FULL LIGHT token
+    // set under the 12 dark brand vars — a light skeleton in a dark
+    // skin. The theme object's mode is slice-stamped material and
+    // MUST be consulted before falling through to the host.
+    await connectWithHostContext({ ...DEFAULT_HOST_CONTEXT }); // host silent
+    expect(
+      resolveMountThemeMode({
+        theme: { mode: 'dark', cssVariables: { '--ggui-color-surface': '#111' } },
+      }),
+    ).toBe('dark');
+  });
+
+  it('#589 full ladder: stamped top-level > theme-object mode > host announce > undefined', async () => {
+    await connectWithHostContext({ ...DEFAULT_HOST_CONTEXT, theme: 'dark' }); // host says dark
+    // Stamped top-level wins over everything.
+    expect(
+      resolveMountThemeMode({
+        themeMode: 'light',
+        theme: { mode: 'dark', cssVariables: {} },
+      }),
+    ).toBe('light');
+    // Theme-object mode beats the host announce.
+    expect(
+      resolveMountThemeMode({ theme: { mode: 'light', cssVariables: {} } }),
+    ).toBe('light');
+    // No slice opinion at all → host fills (the #551 leg, unchanged).
+    expect(resolveMountThemeMode({})).toBe('dark');
+    // Nothing anywhere → undefined (absent ≠ light).
+    __resetAppForTest();
+    expect(resolveMountThemeMode({})).toBeUndefined();
   });
 
   it('precedence contract: the slice-stamped mode wins; the host fills only an ABSENT mode', async () => {

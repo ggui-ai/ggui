@@ -2474,7 +2474,11 @@ export function registerGguiRenderResourceTemplate(
         opts,
         picked.source.type !== "mcpApps" && picked.source.type !== "system"
           ? picked.source.themeId
-          : undefined
+          : undefined,
+        // ggui#589 — the session theme's own mode, from the SAME
+        // projection (`view`, derived above) that emits the `theme`
+        // object on this shell's envelope.
+        view.theme?.mode
       ),
       // State + policy view fields (theme overlay, propsJson,
       // contextSlots, permissionsPolicy, gadgets, #483 epoch) — ONE
@@ -2768,9 +2772,10 @@ export function registerGguiRenderResourceTemplate(
         blueprint,
         runtimeUrl: opts.runtimeUrl,
         // No render row exists on this branch, so there is no
-        // per-render override to honor — but the live pick still beats
-        // the static preset, same resolver as every other shell.
-        ...resolveSliceTheme(opts, undefined),
+        // per-render override to honor (and no session theme — the
+        // ggui#589 layer is honestly absent) — but the live pick still
+        // beats the static preset, same resolver as every other shell.
+        ...resolveSliceTheme(opts, undefined, undefined),
         ...(opts.codeStore !== undefined ? { codeStore: opts.codeStore } : {}),
         ...(opts.codeBaseUrl !== undefined ? { codeBaseUrl: opts.codeBaseUrl } : {}),
       });

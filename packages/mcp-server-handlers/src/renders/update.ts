@@ -399,6 +399,9 @@ export function createGguiUpdateHandler(
         sessionId: output.sessionId,
         appId: ctx.appId,
         renderThemeId,
+        // ggui#589 — the session theme's own mode, from the SAME
+        // projection that emits the `theme` object on this envelope.
+        sessionThemeMode: view.theme?.mode,
       });
 
       const render: McpAppAiGguiRenderMeta = {
