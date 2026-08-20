@@ -2151,9 +2151,11 @@ export function emitAudit(args: {
  * Returns `'success'` when the handler said `ok:true`. Returns
  * `'fallback'` for any other outcome — pipe missing
  * (`PIPE_NOT_FOUND`), envelope rejected (`INVALID_ACTION_KIND`),
- * relay error, no host relay wired, or any unexpected shape. The
- * iframe-runtime then falls through to `ui/message` so the gesture
- * still reaches the agent on its next turn.
+ * relay error, no host relay wired, or any unexpected shape. On
+ * `'fallback'` the gesture was NOT enqueued and is dropped with local
+ * feedback only (toast / #440 latch) — no `ui/message` fires (the
+ * doorbell is success-path-only: there is nothing to point it at), and
+ * no alternate transport is attempted today (ggui#599's open leg).
  */
 /**
  * Unwrap the payload record of a relayed submit-action tool result.
@@ -4138,20 +4140,24 @@ async function bootProduction(opts: {
         },
       };
 
-      // Spec-canonical outbound dispatch. The WS pipe is for streamSpec
-      // subscriptions ONLY (inbound `ggui_emit` fanout + `props_update` +
-      // `render` + `data` + `drain_ack` + `channel_payload`).
-      // Outbound user actions go through the MCP-Apps host relay per
-      // spec §401: postMessage `tools/call:ggui_runtime_submit_action`
-      // to the parent → `AppRenderer.onCallTool` → sample agent's
-      // `/relay/tools-call` → ggui MCP server →
-      // `createGguiSubmitActionHandler.append` → `pendingEventConsumer`
-      // → `ggui_consume` wakes the agent. The server's WS
-      // `handleInboundAction` writes to the render ledger only — no
-      // downstream consumer — so the WS action path silently drops
-      // clicks. `routeDispatch` is the shared named-export helper
-      // (production + tests exercise the same code path); threading it
-      // here keeps LIVE-mode on the canonical dispatch pipeline.
+      // Spec-canonical outbound dispatch: user actions go through the
+      // MCP-Apps host relay (SPEC §4.7): postMessage
+      // `tools/call:ggui_runtime_submit_action` to the parent →
+      // `AppRenderer.onCallTool` → host's MCP client → ggui MCP server
+      // → `createGguiSubmitActionHandler.append` → `pendingEventConsumer`
+      // → `ggui_consume` wakes the agent. NOTE (truth, ggui#596): the
+      // server's WS ingress DUAL-WRITES accepted `data:submit` frames
+      // onto the same consume pipe (SPEC §2.4; action-ingress dual-write)
+      // — a WS-delivered gesture WOULD reach the agent. The runtime
+      // still routes gestures relay-only; falling back to the WS frame
+      // when the relay is refused is ggui#599's open design leg, not a
+      // capability gap on the server. The WS pipe otherwise carries
+      // streamSpec subscriptions (inbound `ggui_emit` fanout +
+      // `props_update` + `render` + `data` + `drain_ack` +
+      // `channel_payload`). `routeDispatch` is the shared named-export
+      // helper (production + tests exercise the same code path);
+      // threading it here keeps LIVE-mode on the canonical dispatch
+      // pipeline.
       // Single mounted render — populated by `applyRender` on the first
       // render frame. The wire config + data channel handler read it
       // through `currentRender`-returning thunks so they always see the
