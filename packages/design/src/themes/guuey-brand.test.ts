@@ -7,6 +7,7 @@
  * (#573 order unchanged).
  */
 import { describe, expect, it } from 'vitest';
+import { getScopedThemeCss } from '../rendering/css-tokens';
 import { getTheme, getThemeIds } from './registry';
 
 const RAMP_STOPS = ['50', '100', '200', '300', '400', '500', '600', '700', '800', '900'];
@@ -75,6 +76,24 @@ describe('guuey-brand-v1 — registration', () => {
     const vars = darkVars();
     expect(vars).toContain('--ggui-color-outline: rgba(246, 245, 238, 0.14)');
     expect(vars).toContain('--ggui-color-outlineVariant: rgba(246, 245, 238, 0.1)');
+  });
+
+  it('round 5 — frameless: the scoped CSS suppresses borders on the ROOT layer only (host rim owns the card silhouette)', () => {
+    // Founder-ruled: the guuey host clips the WebView with its own
+    // rounded rim; a square stroke on the document's outermost element
+    // gets its corners amputated by the mask. The theme paints NO
+    // border on the root layer — inner-container fog hairlines STAY.
+    const scoped = getScopedThemeCss('guuey-brand-v1', 'gg-test', 'dark');
+    expect(scoped).toContain('.gg-test > :where(:not(style)) { border: none !important; }');
+    // Inner hairline stops are untouched — outline still resolves.
+    expect(scoped).toContain('--ggui-color-outline: rgba(246, 245, 238, 0.14)');
+    // Both modes carry the flag (the host rim exists in either scheme).
+    expect(getScopedThemeCss('guuey-brand-v1', 'gg-test', 'light')).toContain(
+      '.gg-test > :where(:not(style)) { border: none !important; }',
+    );
+    // Themes that do NOT declare frameless keep their root strokes —
+    // console / claude.ai cards rely on them.
+    expect(getScopedThemeCss('ggui', 'gg-test', 'dark')).not.toContain('border: none !important');
   });
 
   it('round 4 — dark shadows are near-none ink, never a heavy blob; light keeps soft grey', () => {

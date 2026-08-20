@@ -186,6 +186,10 @@ const guueyBrandDark: DtcgTheme = {
     fontUrl:
       'https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap',
     philosophy: 'Agent-native. Slime on slate.',
+    // Round 5 (founder-ruled): the guuey host clips the view with its
+    // own rounded rim — the HOST owns the card silhouette; the theme
+    // paints no border on the root layer. Inner hairlines stay.
+    frameless: true,
   },
 
   color: {
