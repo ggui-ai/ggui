@@ -1198,6 +1198,15 @@ export interface HandshakeDecidedAttributes {
   readonly selectedBlueprintId: string;
   readonly selectionReason: string;
   readonly selectionConfidence?: number;
+  /**
+   * The armed props-schema hash the record persists — same attribute
+   * name as `render.contract_violation` rows stamp, so a telemetry
+   * consumer can join violation hashes against the arm without any
+   * out-of-band reference (telemetry-attribute only; the wire already
+   * carries the hash on the handshake output). Present whenever the
+   * record carries one.
+   */
+  readonly propsSchemaHash?: string;
   readonly sourceKind?: BlueprintSourceKind;
   readonly sourceGenerator?: string;
   readonly sourceModel?: string;
@@ -1249,6 +1258,13 @@ function emitHandshakeDecided(
   }
   if (confidence !== undefined) {
     attributes['selectionConfidence'] = confidence;
+  }
+  // Arm hash for the self-contained breach join (violation rows stamp
+  // the enforced hash under the same key) — conditional like
+  // blueprintId: records predating the propsSchema persistence carry
+  // none.
+  if (record.propsSchemaHash !== undefined) {
+    attributes['propsSchemaHash'] = record.propsSchemaHash;
   }
   sink.emit({
     name: HANDSHAKE_DECIDED_EVENT,
