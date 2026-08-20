@@ -881,6 +881,51 @@ describe('<McpAppIframe> — imperative ref (RN)', () => {
 });
 
 // =============================================================================
+// <McpAppIframe> — no hardcoded card chrome (ggui#589 round 6).
+//
+// The HOST owns card chrome entirely — the same doctrine as the
+// founder's round-5 frameless ruling, one layer down. The hardcoded
+// `borderWidth: 1, borderColor: '#e5e5e5', borderRadius: 8` on both
+// Views was the audit-localized culprit behind the store-frame
+// rejection: a white square line running at its own radius-8 INSIDE
+// the embedder's radius-20 rim (pixel-measured #E5E5E5).
+// =============================================================================
+describe('<McpAppIframe> — host owns card chrome (ggui#589 round 6)', () => {
+  const CHROME_KEYS = ['borderWidth', 'borderColor', 'borderRadius'] as const;
+
+  it('the mounted host View paints no border chrome of its own', () => {
+    let tree!: ReactTestRenderer;
+    act(() => {
+      tree = create(<McpAppIframe resource={makeResource()} />);
+    });
+    const host = tree.root.findByProps({ testID: 'mcp-app-iframe-host' });
+    const style = host.props.style as Record<string, unknown>;
+    for (const key of CHROME_KEYS) {
+      expect(style[key], `${key} must not be hardcoded on the host View`).toBeUndefined();
+    }
+    act(() => tree.unmount());
+  });
+
+  it('the empty-slot fallback View paints no border chrome either', () => {
+    let tree!: ReactTestRenderer;
+    act(() => {
+      tree = create(
+        <McpAppIframe
+          resource={{ uri: 'ui://not-mountable', mimeType: 'text/html' }}
+          onError={vi.fn()}
+        />,
+      );
+    });
+    const empty = tree.root.findByProps({ testID: 'mcp-app-iframe-empty' });
+    const style = empty.props.style as Record<string, unknown>;
+    for (const key of CHROME_KEYS) {
+      expect(style[key], `${key} must not be hardcoded on the empty View`).toBeUndefined();
+    }
+    act(() => tree.unmount());
+  });
+});
+
+// =============================================================================
 // <McpAppIframe> — `ui/notifications/size-changed` (ggui#589 rider 5).
 //
 // The view (ext-apps `App.sendSizeChanged` / autoResize observer) sends
