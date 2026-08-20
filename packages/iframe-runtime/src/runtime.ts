@@ -222,7 +222,7 @@ function dispatchDrainAck(payload: DrainAckPayload): void {
 // App-class plumbing (Phase 1.19b.3). The renderer used to roll its own
 // JSON-RPC pump (a closure-scoped `makeJsonRpcCaller` for the single
 // `ui/initialize` request + a module-level `ensurePostRpcToParentListener`
-// for `tools/call` and a `installPostMountListener` for inbound
+// for `tools/call` and a `installPersistentToolResultListener` for inbound
 // `ui/notifications/tool-result`). Every one of those was a hand-rolled
 // reimplementation of a primitive `@modelcontextprotocol/ext-apps`'s
 // `App` class already ships — drift across them produced the Reading-B
@@ -885,6 +885,15 @@ export async function bootSequence(opts: BootSequenceOptions): Promise<BootSeque
     opts.preResolvedMeta !== undefined
       ? Promise.resolve(null)
       : awaitToolResultMetaFromApp(app, toolResultTimeoutMs);
+
+  // Persistent re-mount listener — ALSO pre-connect (ggui#586). On a
+  // Tier-1/preResolved boot the one-shot listener above is skipped,
+  // which made the post-mount installation the FIRST toolresult
+  // registration — after the handshake, tripping the ext-apps timing
+  // notice and leaning on SDK replay for correctness. Registering here
+  // covers every boot path; arrivals before a renderer publishes
+  // `applyRender` no-op inside the listener.
+  installPersistentToolResultListener(app);
 
   const initResult = await connectApp(app, transport);
   if (!initResult.ok) {
@@ -1941,18 +1950,20 @@ function awaitToolResultMeta(
 }
 
 /**
- * Module-level guard for the App-mediated post-mount toolresult
- * re-listener. Ensures exactly one persistent
- * `app.addEventListener('toolresult', …)` registration even across
- * re-mounts (e.g. an agent fires a second `ggui_render` and the
- * listener re-applies through the published `applyRender`).
+ * Per-App guard for the persistent toolresult re-listener. Ensures
+ * exactly one `app.addEventListener('toolresult', …)` registration per
+ * App instance even across re-mounts (e.g. an agent fires a second
+ * `ggui_render` and the listener re-applies through the published
+ * `applyRender`). Keyed by App — not a module boolean — so a fresh App
+ * (a re-booted document in tests; production is single-tenant per
+ * iframe) always gets its own registration, never a stale latch.
  */
-let postMountListenerInstalled = false;
+const persistentToolResultListenerApps = new WeakSet<App>();
 
 /**
  * Module-level handle to the active renderer's `applyRender`, published
  * by `bootProduction`'s `setup()` once the renderer is built. The
- * module-level {@link installPostMountListener} resolves this to re-mount
+ * module-level {@link installPersistentToolResultListener} resolves this to re-mount
  * on a host-re-emitted tool-result WITHOUT a fresh boot — no second mount,
  * no second WS. This is the no-WS live-re-render channel for
  * spec-compliant MCP-Apps hosts (claude.ai / ChatGPT / Claude Desktop)
@@ -1967,8 +1978,8 @@ let activeApplyRender:
 
 /**
  * Module-level guard for {@link installAnchorClickInterceptor}. Same
- * rationale as {@link postMountListenerInstalled}: re-mounts are
- * triggered by `installPostMountListener`, and stacking capture-phase
+ * rationale as {@link persistentToolResultListenerApps}: re-mounts are
+ * triggered by `installPersistentToolResultListener`, and stacking capture-phase
  * click listeners across re-mounts would multiply the audit envelopes
  * that fire on a single click.
  */
@@ -3653,7 +3664,7 @@ export function requestDisplayModeInParent(args: {
  * or honor an upstream `defaultPrevented` from a higher-priority
  * handler.
  *
- * Idempotent: re-mounts (via `installPostMountListener`) call this
+ * Idempotent: re-mounts (via `installPersistentToolResultListener`) call this
  * helper again; the {@link anchorClickInterceptInstalled} guard makes
  * subsequent calls a no-op.
  */
@@ -3810,15 +3821,26 @@ export function __resetInterceptorsForTest(): void {
 }
 
 /**
- * Install a persistent `app.addEventListener('toolresult', …)` listener
- * that catches `ui/notifications/tool-result` notifications arriving
- * AFTER the initial mount. Each new tool-result that carries a
- * different bootstrap (different sessionId / codeUrl / kind) triggers
- * a re-mount through the published `applyRender`. This closes the boot-only-
+ * Install the persistent `app.addEventListener('toolresult', …)`
+ * listener that catches `ui/notifications/tool-result` notifications
+ * arriving at ANY point in the document's life. Each tool-result that
+ * carries a different bootstrap (different sessionId / codeUrl / kind)
+ * triggers a re-mount through the published `applyRender`; arrivals
+ * before a renderer publishes `applyRender` no-op safely (and do NOT
+ * latch the dedupe key — see below). This closes the boot-only-
  * listener gap that prevented live re-render when an agent issued
  * a second `ggui_render` to the same render-resource.
  *
- * Idempotent: subsequent calls no-op via {@link postMountListenerInstalled}.
+ * REGISTRATION TIMING (ggui#586): called by `bootSequence` BEFORE
+ * `app.connect(transport)` — on a Tier-1/preResolved boot the one-shot
+ * Tier-2 listener never registers, so this used to be the FIRST
+ * `toolresult` registration and landed post-handshake (the ext-apps
+ * `_assertHandlerTiming` notice a guuey production render surfaced).
+ * The SDK's replay made that harmless; pre-registering removes the
+ * dependence on replay entirely.
+ *
+ * Idempotent per App: repeat calls with the same App no-op via
+ * {@link persistentToolResultListenerApps}.
  *
  * Why module-level vs scoped to a single mount: re-mounts re-apply
  * through `applyRender` while the listener stays live, and the
@@ -3828,15 +3850,12 @@ export function __resetInterceptorsForTest(): void {
  * Spec-canonical (post-Phase-1.19b.3): the previous hand-rolled
  * `window.addEventListener('message', …)` is gone; App handles every
  * inbound `ui/notifications/tool-result` envelope and dispatches via
- * its event system. Per-iframe single-tenancy means the App handle
- * comes from `getCurrentApp()` — set by `bootSequence`'s connect
- * path before this helper runs.
+ * its event system. The App handle is passed by the boot path
+ * directly (pre-connect, so `getCurrentApp()` is not yet set).
  */
-function installPostMountListener(): void {
-  if (postMountListenerInstalled) return;
-  const app = getCurrentApp();
-  if (app === null) return; // pre-connect; caller bug, swallow safely
-  postMountListenerInstalled = true;
+function installPersistentToolResultListener(app: App): void {
+  if (persistentToolResultListenerApps.has(app)) return;
+  persistentToolResultListenerApps.add(app);
   let lastMetaKey: string | null = null;
   app.addEventListener('toolresult', (params) => {
     const meta = extractMetaFromToolResult(params);
@@ -3873,14 +3892,20 @@ function installPostMountListener(): void {
       liveTrio,
     ].join('|');
     if (key === lastMetaKey) return;
-    lastMetaKey = key;
     // Re-mount through the EXISTING renderer's `applyRender` (published
     // module-level by bootProduction's setup) — NOT a fresh boot. One
     // mount surface, one WS; the prior stale-closure / second-WS race
     // (the #290 root cause) is structurally impossible. Project the new
     // tool-result meta into a seed and re-apply it.
+    //
+    // The apply-null check runs BEFORE the dedupe key latches (ggui#586
+    // ordering): now that this listener registers pre-connect, the
+    // BOOT-path tool-result also flows through here while no renderer
+    // is published yet — latching its key then would silently dedupe a
+    // legitimate post-mount re-broadcast of the same envelope.
     const apply = activeApplyRender;
     if (apply === null) return; // no renderer published yet — no-op safely
+    lastMetaKey = key;
     void buildGguiSessionSeedInput(meta).then((seed) => {
       if (seed === null) return;
       void apply(seed).then(() => {
@@ -4461,17 +4486,17 @@ async function bootProduction(opts: {
         await renderHandle.update(buildOpts(render));
       };
 
-      // Publish `applyRender` module-level + install the persistent
-      // post-mount tool-result listener. On a host-re-emitted tool-result
-      // (claude.ai re-broadcast; the Anthropic-SDK-strips-_meta refetch),
-      // the listener re-mounts through THIS `applyRender` — no fresh boot,
-      // no second WS. The no-WS live-re-render channel; for WS hosts the
-      // render-frame handler already covers re-render, so it's a
-      // redundant-safe fallback (guarded by the sessionId pin + liveTrio
-      // dedupe). Runs only on the production renderer path (tests that
-      // drive bootSequence without a renderer never reach setup()).
+      // Publish `applyRender` module-level. The persistent tool-result
+      // listener is ALREADY registered — `bootSequence` installs it
+      // pre-connect (ggui#586) — and reads this slot dynamically, so
+      // publishing here is what arms it. On a host-re-emitted
+      // tool-result (claude.ai re-broadcast; the
+      // Anthropic-SDK-strips-_meta refetch), the listener re-mounts
+      // through THIS `applyRender` — no fresh boot, no second WS. The
+      // no-WS live-re-render channel; for WS hosts the render-frame
+      // handler already covers re-render, so it's a redundant-safe
+      // fallback (guarded by the sessionId pin + liveTrio dedupe).
       activeApplyRender = applyRender;
-      installPostMountListener();
 
       // Validator context — A2UI default for `_ggui:preview`; no
       // bootstrap-supplied overrides today (the
