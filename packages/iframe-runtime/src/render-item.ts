@@ -111,6 +111,14 @@ export interface RenderItemOptions {
     readonly mode: 'light' | 'dark';
     readonly cssVariables: Record<string, string>;
   };
+  /**
+   * Host-announced palette, pre-mapped onto `--ggui-*` tokens by the
+   * host-palette bridge. Forwarded to
+   * {@link ReactRootMountOptions.hostPalette}: the fallback layer
+   * beneath `appTheme` in the scoped token block (ggui#572, merge
+   * order per the ggui#573 ruling — slice wins, host fallback).
+   */
+  readonly hostPalette?: Readonly<Record<string, string>>;
   readonly cssOverrides?: string;
   readonly onError?: (err: Error) => void;
   /**
@@ -296,6 +304,9 @@ export async function mountRender(
       ...(currentOpts.themeId !== undefined ? { themeId: currentOpts.themeId } : {}),
       ...(currentOpts.themeMode !== undefined ? { themeMode: currentOpts.themeMode } : {}),
       ...(currentOpts.appTheme !== undefined ? { appTheme: currentOpts.appTheme } : {}),
+      ...(currentOpts.hostPalette !== undefined
+        ? { hostPalette: currentOpts.hostPalette }
+        : {}),
       ...(currentOpts.cssOverrides !== undefined
         ? { cssOverrides: currentOpts.cssOverrides }
         : {}),
@@ -371,6 +382,7 @@ export async function mountRender(
           ...(next.themeId !== undefined ? { themeId: next.themeId } : {}),
           ...(next.themeMode !== undefined ? { themeMode: next.themeMode } : {}),
           ...(next.appTheme !== undefined ? { appTheme: next.appTheme } : {}),
+          ...(next.hostPalette !== undefined ? { hostPalette: next.hostPalette } : {}),
           ...(next.cssOverrides !== undefined ? { cssOverrides: next.cssOverrides } : {}),
           ...(next.onError !== undefined ? { onError: next.onError } : {}),
           renderWrapper: wrapInScopedProvider,

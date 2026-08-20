@@ -83,6 +83,19 @@ function makeScopeClass(): string {
   return `ggui-rcr-${scopeCounter}`;
 }
 
+/**
+ * Join a custom-property record into CSS declarations. Values were
+ * validated injection-safe upstream (appTheme: write-side
+ * `appThemeSchema` + the wire parser; hostPalette: the host-palette
+ * bridge's sanitizer), so the string-join is safe — do NOT
+ * re-sanitize here.
+ */
+function toCssDecls(vars: Readonly<Record<string, string>>): string {
+  return Object.entries(vars)
+    .map(([k, v]) => `${k}: ${v};`)
+    .join('');
+}
+
 // =============================================================================
 // Error boundary — port of RCR's internal ErrorBoundary (L68–203).
 // =============================================================================
@@ -318,17 +331,37 @@ export interface ReactRootMountOptions {
    */
   readonly themeMode?: 'light' | 'dark';
   /**
-   * Per-app theme overlay applied at the iframe's `:root` AFTER the base
-   * token block, so the operator-supplied `--ggui-*` values win the
-   * cascade (a partial set — unset vars keep their token defaults). A
-   * structural subset of protocol's `AppTheme` (`name` is display-only,
-   * not needed at render). `mode` drives `color-scheme` so native
-   * controls / scrollbars / canvas pick up dark vs light.
+   * Per-app theme overlay — a partial set of `--ggui-*` values; unset
+   * vars keep their token defaults. Merged INTO the scoped in-body
+   * token block after the base block (and after `hostPalette`), which
+   * is the only placement that can recolor tree content: a `:root`-only
+   * append is cascade-dead for components — the scoped block sits later
+   * in document order and re-specifies every token (browser-verified,
+   * see the scoped-merge comment in `renderTree`). The `:root` append
+   * still happens, but for body chrome only. A structural subset of
+   * protocol's `AppTheme` (`name` is display-only, not needed at
+   * render). `mode` drives `color-scheme` so native controls /
+   * scrollbars / canvas pick up dark vs light.
+   *
+   * Precedence (ggui#573 ruling): base tokens < `hostPalette` <
+   * `appTheme` < `cssOverrides` — the slice's stamped theme always
+   * wins; the host palette is the fallback layer beneath it.
    */
   readonly appTheme?: {
     readonly mode: 'light' | 'dark';
     readonly cssVariables: Record<string, string>;
   };
+  /**
+   * Host-announced palette, already translated onto `--ggui-*` tokens
+   * (see `host-palette-bridge.ts` — the spec `--color-*` vocabulary
+   * never reaches this layer). Merged into the scoped token block
+   * after the base block and BEFORE `appTheme`, so it repaints only
+   * the slots no operator theme re-specifies (ggui#572; precedence
+   * per the ggui#573 ruling above). Values are sanitized by the
+   * bridge before they get here — host input never reaches this
+   * string-join raw.
+   */
+  readonly hostPalette?: Readonly<Record<string, string>>;
   readonly cssOverrides?: string;
   readonly onError?: (error: Error) => void;
   /**
@@ -494,10 +527,16 @@ export async function mountReactRoot(
     let themeCss = opts.themeId
       ? getScopedThemeCss(opts.themeId, scopeClass, opts.themeMode)
       : getScopedCssTokens(scopeClass, opts.themeMode);
+    if (opts.hostPalette) {
+      // Host palette = the fallback layer (ggui#572, #573 ruling):
+      // after the base scoped block so it can repaint at all (the base
+      // re-specifies every token), BEFORE the appTheme overlay so the
+      // slice's stamped theme wins by document order. Keys + values
+      // arrive pre-sanitized from the host-palette bridge.
+      themeCss += `.${scopeClass}{${toCssDecls(opts.hostPalette)}}`;
+    }
     if (opts.appTheme) {
-      const decls = Object.entries(opts.appTheme.cssVariables)
-        .map(([k, v]) => `${k}: ${v};`)
-        .join('');
+      const decls = toCssDecls(opts.appTheme.cssVariables);
       // The overlay must be merged HERE, into the scoped style that
       // mounts INSIDE the scope div — the `:root` append below is
       // cascade-dead for tree content: the in-scope block sits later
@@ -505,9 +544,11 @@ export async function mountReactRoot(
       // specificity the base scoped tokens always win over a head-level
       // override (browser-verified in rnd/gen-ui/beauty/experiments/001,
       // the probe sequence that found this). Appended AFTER the base
-      // block and BEFORE `cssOverrides`, so: base < operator overlay <
-      // explicit overrides. Values validated injection-safe upstream
-      // (same guarantee the `:root` append cites).
+      // block + host palette and BEFORE `cssOverrides`, so: base <
+      // host palette < operator overlay < explicit overrides
+      // (ggui#573: slice wins, host fallback). Values validated
+      // injection-safe upstream (same guarantee the `:root` append
+      // cites).
       themeCss += `.${scopeClass}{${decls}}`;
     }
 
@@ -524,10 +565,15 @@ export async function mountReactRoot(
       let rootCss = opts.themeId
         ? getThemeCss(opts.themeId, opts.themeMode)
         : getCssTokens(opts.themeMode);
+      if (opts.hostPalette) {
+        // BODY-CHROME ONLY, same as the appTheme `:root` append below —
+        // and beneath it, mirroring the scoped-block order (#573:
+        // slice wins, host fallback). Keeps the embedding shell's
+        // body font/color/background coherent with the tree.
+        rootCss += `:root{${toCssDecls(opts.hostPalette)}}`;
+      }
       if (opts.appTheme) {
-        const decls = Object.entries(opts.appTheme.cssVariables)
-          .map(([k, v]) => `${k}: ${v};`)
-          .join('');
+        const decls = toCssDecls(opts.appTheme.cssVariables);
         // BODY-CHROME ONLY. This `:root` append themes the embedding
         // shell's body styles (font/color/background outside the scope
         // div). It does NOT reach tree content — the scoped in-body

@@ -73,6 +73,7 @@ import {
   attachListener as attachHostContextListener,
   seed as seedHostContext,
 } from './host-context-emitter.js';
+import { mapHostPaletteToGguiVars } from './host-palette-bridge.js';
 import {
   buildRootWireConfig,
   StreamBus,
@@ -347,6 +348,31 @@ function getCurrentApp(): App | null {
 export function hostAnnouncedThemeMode(): 'light' | 'dark' | undefined {
   const theme = currentApp?.getHostContext()?.theme;
   return theme === 'light' || theme === 'dark' ? theme : undefined;
+}
+
+/**
+ * The host's announced palette, read from the connected App's
+ * pre-merged hostContext and translated onto `--ggui-*` tokens by the
+ * host-palette bridge. `undefined` when no App is connected, the host
+ * sent no `styles.variables`, or nothing in it maps/survives
+ * sanitization — callers spread-skip the option, exactly like
+ * {@link hostAnnouncedThemeMode}.
+ *
+ * This is the palette input leg of host-theme adaptation (ggui#572,
+ * the color analog of #551's mode leg above): the spec `--color-*`
+ * variables land as inline custom properties on `<html>` via the
+ * canonical ext-apps helper, but nothing ggui renders consumes that
+ * vocabulary, and the scoped token block shadows root inheritance
+ * anyway — so without this mapping a host palette repaints nothing.
+ * `buildOpts` threads it onto the mount options; the renderer merges
+ * it as the fallback layer BENEATH the slice's own theme (ggui#573
+ * ruling: slice wins, host fallback).
+ *
+ * @internal — exported for unit tests (`setCurrentApp` injects the
+ *   App); production caller is `buildOpts` inside `bootSequence`.
+ */
+export function hostAnnouncedPalette(): Readonly<Record<string, string>> | undefined {
+  return mapHostPaletteToGguiVars(currentApp?.getHostContext()?.styles?.variables);
 }
 
 /**
@@ -4328,6 +4354,15 @@ async function bootProduction(opts: {
           // `color-scheme` at `:root`. THEME IS COMPONENT-ONLY — system
           // cards theme via the SystemCardHost/ThemeProvider path.
           ...(meta.theme !== undefined ? { appTheme: meta.theme } : {}),
+          // Host palette: always threaded when the host announced one —
+          // unlike mode there is no either/or gate here, because the
+          // precedence is CSS document order inside the scoped block
+          // (base < hostPalette < appTheme, ggui#572/#573: slice wins,
+          // host fallback), not a value-level ?? fallback.
+          ...(() => {
+            const hostPalette = hostAnnouncedPalette();
+            return hostPalette !== undefined ? { hostPalette } : {};
+          })(),
           ...(wrapOuter !== undefined ? { wrapOuter } : {}),
         };
       };
