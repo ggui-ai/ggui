@@ -1,0 +1,40 @@
+{
+  "id": "required-order-canonical",
+  "description": "Representation-insensitivity pin (2026-08-20 incident): the wrapper's `required` array is DERIVED from properties iteration order — an order-unstable source (a document-store Map round-trip legally reorders object keys). `required` is set-semantics in JSON Schema, so the canonical form sorts every `required` array (derived and authored, at every depth); two representations of one contract MUST build byte-identical canonical schemas and one propsSchemaHash. This case lists properties in NON-sorted insertion order; a builder that reproduces iteration order emits required:[\"tickets\",\"asOf\"] and fails both the schema and hash compare.",
+  "propsSpec": {
+    "properties": {
+      "tickets": {
+        "schema": { "type": "array", "items": { "type": "string" } },
+        "required": true
+      },
+      "asOf": {
+        "schema": { "type": "string" },
+        "required": true
+      }
+    }
+  },
+  "propsSchema": {
+    "additionalProperties": false,
+    "properties": {
+      "asOf": { "type": "string" },
+      "tickets": { "items": { "type": "string" }, "type": "array" }
+    },
+    "required": ["asOf", "tickets"],
+    "type": "object"
+  },
+  "propsSchemaHash": "b9d16dbdc03fa678ffe6af44a8d6a2f96c59d0913bff35e866516bfcecb67316",
+  "propsSchemaProfile": "grammar-safe",
+  "samples": [
+    { "props": { "asOf": "2026-08-20", "tickets": ["t-1"] }, "valid": true },
+    {
+      "props": { "tickets": ["t-1"] },
+      "valid": false,
+      "note": "asOf required regardless of declaration order"
+    },
+    {
+      "props": { "asOf": "2026-08-20" },
+      "valid": false,
+      "note": "tickets required regardless of declaration order"
+    }
+  ]
+}

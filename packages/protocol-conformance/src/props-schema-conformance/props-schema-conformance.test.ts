@@ -35,6 +35,7 @@ describe('props-schema conformance catalog', () => {
       'nullable-normalization',
       'nullable-object-closed',
       'out-of-core-pattern-full',
+      'required-order-canonical',
       'scheduler-enum-authority',
     ]);
     // The live incident is pinned as a sample forever.
@@ -62,6 +63,6 @@ describe('props-schema conformance catalog', () => {
         validatePropsDataWithSchema(props, jsonSchemaSchema.parse(schema)).valid,
     });
     expect(report.failures).toEqual([]);
-    expect(report.total).toBe(7);
+    expect(report.total).toBe(8);
   });
 });
