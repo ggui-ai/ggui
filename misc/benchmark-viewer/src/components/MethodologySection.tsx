@@ -63,6 +63,15 @@ const CHANGELOG: ReadonlyArray<{ date: string; text: string }> = [
   {
     date: '2026-08-20',
     text:
+      'Per-cell generation timeout for the published weekly run: 300s → 600s. ' +
+      'On 2026-08-19, 7 heavy-prompt cells hit the 300s limit and produced no ' +
+      'data; success rates on or after this change are measured under the ' +
+      'longer budget. Generation wall time is still recorded per cell, so ' +
+      'slowness remains visible.',
+  },
+  {
+    date: '2026-08-20',
+    text:
       'Judge-panel resilience: judge calls now retry with backoff and are ' +
       'concurrency-capped, and every report discloses its judge coverage ' +
       '(scored cells / generated cells) with a low-coverage flag under 80%. ' +

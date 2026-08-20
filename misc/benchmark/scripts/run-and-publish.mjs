@@ -219,6 +219,13 @@ function runBench() {
         COMMITS,
         '--threshold',
         THRESHOLD,
+        // 600s per-cell generation timeout for the PUBLISHED weekly run
+        // (bench.mjs defaults to 300s, which cost 7 heavy-commit cells on
+        // 2026-08-19 — paid tokens, no data; #565 item 2). Local/dev
+        // benches keep the fast-fail default; slowness stays visible via
+        // per-cell generationTimeMs either way.
+        '--timeout',
+        '600000',
       ],
       {
         cwd: BENCH_ROOT,
