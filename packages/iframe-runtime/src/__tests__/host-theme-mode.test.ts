@@ -18,6 +18,7 @@ import type { App } from '@modelcontextprotocol/ext-apps';
 import {
   __resetAppForTest,
   hostAnnouncedThemeMode,
+  resolveMountThemeId,
   resolveMountThemeMode,
   setCurrentApp,
 } from '../runtime.js';
@@ -127,6 +128,30 @@ describe('hostAnnouncedThemeMode — the #551 input leg', () => {
     // Nothing anywhere → undefined (absent ≠ light).
     __resetAppForTest();
     expect(resolveMountThemeMode({})).toBeUndefined();
+  });
+
+  it('#589 ask 3: the slice theme NAME binds the base ladder when no themeId is stamped', () => {
+    // guuey's widget stamps theme:{name:'guuey-brand-v1',…} on every
+    // envelope; the name IS a registered theme id, so the base itself
+    // becomes brand (only the 12 overlay vars carried brand before —
+    // the "light skeleton"/"stock green pills" rejection class).
+    expect(
+      resolveMountThemeId({
+        theme: { name: 'guuey-brand-v1', mode: 'dark', cssVariables: {} },
+      }),
+    ).toBe('guuey-brand-v1');
+    // A stamped themeId (operator layer) still wins over the name.
+    expect(
+      resolveMountThemeId({
+        themeId: 'indigo',
+        theme: { name: 'guuey-brand-v1', mode: 'dark', cssVariables: {} },
+      }),
+    ).toBe('indigo');
+    // No theme / no name → undefined (renderer default path unchanged).
+    expect(resolveMountThemeId({})).toBeUndefined();
+    expect(
+      resolveMountThemeId({ theme: { mode: 'dark', cssVariables: {} } }),
+    ).toBeUndefined();
   });
 
   it('precedence contract: the slice-stamped mode wins; the host fills only an ABSENT mode', async () => {

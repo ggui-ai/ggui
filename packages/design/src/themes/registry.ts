@@ -29,6 +29,7 @@ import { theme as neonNoirTheme } from './definitions/premium-neon-noir';
 import { theme as botanicalTheme } from './definitions/premium-botanical';
 import { theme as claudicTheme } from './definitions/claudic';
 import { theme as indigoTheme } from './definitions/indigo';
+import { theme as guueyBrandTheme } from './definitions/guuey-brand';
 
 /** All registered themes keyed by ID */
 const themes = new Map<string, ThemeRegistration>([
@@ -39,6 +40,10 @@ const themes = new Map<string, ThemeRegistration>([
   ['premium-zen', zenTheme],
   ['premium-neon-noir', neonNoirTheme],
   ['premium-botanical', botanicalTheme],
+  // Registered under the EXACT AppTheme.name the guuey widget stamps,
+  // so the runtime's theme-name→registry binding (ggui#589 ask 3)
+  // selects it as the base ladder with no sender-side change.
+  ['guuey-brand-v1', guueyBrandTheme],
 ]);
 
 /**

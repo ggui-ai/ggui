@@ -386,6 +386,36 @@ export function resolveMountThemeMode(meta: {
 }
 
 /**
+ * Resolve the mount's base-theme id from the slice (ggui#589 ask 3):
+ *
+ *   stamped `themeId`  >  `theme.name` (the slice theme OBJECT's name)
+ *   >  undefined (renderer default ladder)
+ *
+ * The name leg makes a slice theme whose `name` matches a REGISTERED
+ * theme id select that theme as the BASE token ladder — the overlay's
+ * cssVariables still apply above it, so the base carries the full
+ * brand ramp coverage a sparse overlay cannot (the "only the mapped
+ * vars carry brand" store-frame class). An unregistered name is
+ * harmless by construction: `getScopedThemeCss` falls back to the
+ * default theme, which is byte-identical to the no-themeId path
+ * (`getScopedCssTokens` ≡ `getScopedThemeCss(default)`), so a slice
+ * naming its theme "My Custom" renders exactly as before.
+ *
+ * @internal — exported for unit tests; production caller is
+ *   `buildOpts` inside `bootSequence`.
+ */
+export function resolveMountThemeId(meta: {
+  readonly themeId?: string;
+  readonly theme?: {
+    readonly name?: string;
+    readonly mode?: 'light' | 'dark';
+    readonly cssVariables?: Record<string, string>;
+  };
+}): string | undefined {
+  return meta.themeId ?? meta.theme?.name;
+}
+
+/**
  * The host's announced palette, read from the connected App's
  * pre-merged hostContext and translated onto `--ggui-*` tokens by the
  * host-palette bridge. `undefined` when no App is connected, the host
@@ -4373,7 +4403,15 @@ async function bootProduction(opts: {
           !('createdAt' in render)
             ? { codeModuleUrl: meta.codeModuleUrl }
             : {}),
-          ...(meta.themeId !== undefined ? { themeId: meta.themeId } : {}),
+          // Base-theme ladder (ggui#589 ask 3 — see `resolveMountThemeId`):
+          // stamped themeId > the slice theme object's NAME (a
+          // registered name binds the full brand base; unregistered
+          // names fall back to the default ladder, byte-identical to
+          // the no-themeId path).
+          ...(() => {
+            const themeId = resolveMountThemeId(meta);
+            return themeId !== undefined ? { themeId } : {};
+          })(),
           // Mode ladder (ggui#551 + #589 — see `resolveMountThemeMode`):
           // stamped `themeMode` > the slice theme OBJECT's `mode` >
           // host-announced theme. Absent everywhere means "no opinion",
