@@ -21,8 +21,8 @@ A Vite SPA that:
   `<AppRenderer>` — the ggui card arrives as the package's self-contained
   shell (`gguiShellHtml` inlining the `_meta["ai.ggui/render"]` bootstrap)
   and boots ggui's iframe runtime with no host-side ggui code;
-- rehydrates a persisted card after a page reload: the host keeps the
-  render's durable `ui://` locator (plus its sandbox-CSP origins) in
+- rehydrates a persisted card after a page reload: the host keeps ONLY the
+  render's durable `ui://` locator in
   `localStorage` and resolves it with the package's generic reader
   (`createMcpUiResourceReader` over the same MCP client the guest
   `tools/call` relay holds) — one fresh `resources/read`, fresh mount
@@ -77,9 +77,12 @@ DIFFERENT origin). The framework-native backends boot one for their web
 app; guuey's dev router doesn't, so `vite.config.ts` boots the same
 spec-canonical proxy itself (`@ggui-ai/agent-server`'s
 `startSandboxProxyServer`, loopback-only). For ggui cards the sandbox
-page's CSP is derived per-card from the render bootstrap — the runtime
-bundle origin and the live-channel (WebSocket) origin the wire announced,
-nothing hardcoded.
+page's CSP comes straight off the wire, per card: the server declares
+`_meta.ui.csp.{connectDomains,resourceDomains}` (MCP Apps spec) on every
+per-render `resources/read` result, the package's reader surfaces the
+schema-validated declaration as `mount.csp`, and this host applies those
+lists verbatim — nothing derived, nothing hardcoded, and it works
+against ANY MCP-Apps server that declares CSP.
 
 ## Known limitation: fresh transcripts, rehydrated cards
 

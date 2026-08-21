@@ -20,9 +20,8 @@ import {
 import {
   createMcpUiResourceReader,
   resourceHtml,
-  toolResultGguiRender,
   toolResultViewMount,
-  type GguiRenderBootstrap,
+  type McpUiResourceCsp,
   type ResolvedViewMount,
   type ViewMount,
 } from '@guuey/mcp-apps-host';
@@ -178,49 +177,33 @@ interface MountedCard {
   key: string;
   toolName: string;
   mount: ViewMount;
-  /**
-   * CSP domains for the sandbox page — present only on the ggui channel,
-   * whose shell must load ggui's runtime bundle and open its WebSocket
-   * (an inline card is self-contained HTML and needs no exceptions).
-   * Derived from the live render bootstrap, or carried by the persisted
-   * card memento for a restored locator (see `CardMemento`).
-   */
-  csp?: SandboxCsp;
 }
 
 /**
- * Derive the sandbox CSP a ggui shell needs from its own bootstrap slice:
- * the runtime-bundle origin (script/resource load) and the live-channel
- * origins (`connect-src`). Nothing is hardcoded — whatever origins the
- * runtime MCP put on the wire are the origins the sandbox page allows.
+ * Sandbox CSP for a ggui-channel mount, read from the WIRE: the server
+ * declares `_meta.ui.csp.{connectDomains,resourceDomains}` (MCP Apps
+ * spec) on every per-render `resources/read` result, and the reader
+ * surfaces the schema-validated declaration as `mount.csp`. Nothing is
+ * derived or hardcoded client-side — whatever origins the runtime MCP
+ * declared are the origins the sandbox page allows. Vendor-neutral:
+ * this works against ANY MCP-Apps server that declares CSP.
  */
-function gguiCsp(bootstrap: GguiRenderBootstrap): {
-  resourceDomains: string[];
-  connectDomains: string[];
-} {
-  const resource = new Set<string>();
-  const connect = new Set<string>();
-  const add = (value: unknown, sets: Set<string>[]): void => {
-    // Structural gate on wire data (the runtime's projector is the slice
-    // authority; unparseable entries simply contribute no CSP exception).
-    if (typeof value !== 'string' || value.length === 0 || !URL.canParse(value)) return;
-    const origin = new URL(value).origin;
-    for (const s of sets) s.add(origin);
+function sandboxCspFromWire(csp: McpUiResourceCsp | undefined): SandboxCsp | undefined {
+  if (csp === undefined) return undefined;
+  return {
+    resourceDomains: [...(csp.resourceDomains ?? [])],
+    connectDomains: [...(csp.connectDomains ?? [])],
   };
-  add(bootstrap.runtimeUrl, [resource, connect]);
-  add(bootstrap.slice.codeUrl, [resource, connect]);
-  add(bootstrap.slice.wsUrl, [connect]);
-  return { resourceDomains: [...resource], connectDomains: [...connect] };
 }
 
 /**
  * Walk the fold for generative-UI cards through the host package's
- * view-mount dispatcher (`toolResultViewMount` — inline mcp-ui resources
- * first, ggui renders second, and a bare `ui://` LOCATOR when a block
- * carries the durable identity but no mount material). For ggui mounts,
- * re-narrow the descriptor to reach the bootstrap the CSP needs; a locator
- * has neither material nor bootstrap — its key IS the uri, and the panel
- * resolves it through `readUiResource` before anything can mount.
+ * view-mount dispatcher (`toolResultViewMount` — an inline mcp-ui
+ * resource, else a bare `ui://` LOCATOR when a block carries the
+ * durable identity but no mount material). Cards carry NO trust
+ * material: the sandbox CSP arrives on the RESOLVED mount
+ * (`mount.csp`, the server's wire declaration) once the panel resolves
+ * a locator through `readUiResource` — see `sandboxCspFromWire`.
  */
 function foldCards(foldMessages: AgMessage[]): MountedCard[] {
   const cards: MountedCard[] = [];
@@ -229,13 +212,10 @@ function foldCards(foldMessages: AgMessage[]): MountedCard[] {
       if (block.type !== 'tool-result') continue;
       const mount = toolResultViewMount(block);
       if (!mount) continue;
-      const bootstrap =
-        mount.channel === 'ggui' ? toolResultGguiRender(block)?.bootstrap : undefined;
       cards.push({
         key: mount.channel === 'locator' ? mount.resourceUri : mount.resource.uri,
         toolName: toolNameFor(m, block.toolCallId),
         mount,
-        ...(bootstrap ? { csp: gguiCsp(bootstrap) } : {}),
       });
     }
   }
@@ -251,38 +231,28 @@ function foldCards(foldMessages: AgMessage[]): MountedCard[] {
  * replay of stored mount material (whose live-channel credentials expire
  * with the page). The dev router's history rows are text-only, so the
  * locator has to survive somewhere the HOST owns; this sample keeps it in
- * `localStorage`. The CSP origin lists ride along because they are host
- * TRUST policy, not mount material: which origins the sandbox page may let
- * a ggui shell load from — learned from the live bootstrap at first mount
- * and stable per deployment. They are GGUI-CHANNEL trust specifically:
- * mementos are scoped to `ui://ggui/` locators (`parseCardMemento`), and
- * the sandbox applies the lists only while the resolved material is the
- * ggui channel — never over a mount the reader classified `inline`. (A
- * hosted platform persists the locator in its thread store instead and
- * configures the trusted origins statically; the mechanics here are the
- * same reader.)
+ * `localStorage`.
+ *
+ * The memento stores NO trust material: sandbox-CSP origins arrive on the
+ * WIRE with every `resources/read` (`_meta.ui.csp`, surfaced as
+ * `mount.csp` by the reader), so a rehydrated locator re-learns its trust
+ * from the fresh read — per card, spec-declared, never persisted state
+ * that could go stale against a redeployed runtime.
  */
 interface CardMemento {
   /** The persisted `ui://` locator — the render's durable identity. */
   resourceUri: string;
   /** The tool that produced the render (panel chrome only). */
   toolName: string;
-  /** Sandbox-CSP origins for the ggui channel (see the docblock). */
-  csp: SandboxCsp;
 }
 
 const CARD_MEMENTO_KEY = `with-guuey-web:card:${APP_ID}`;
 
-function isStringArray(value: unknown): value is string[] {
-  return Array.isArray(value) && value.every((x) => typeof x === 'string');
-}
-
 /** Structural gate for a stored memento — a corrupt or foreign entry reads
  *  as "no memento" (the same posture as a reader miss: placeholder, never
  *  an error surface). The locator must be `ui://ggui/` specifically, not
- *  just `ui://`: the memento's CSP is GGUI-CHANNEL trust, and the reader
- *  classifies any other uri as the `inline` channel — arbitrary tenant
- *  HTML that must never mount in a page whose CSP names these origins. */
+ *  just `ui://` — the restore path is for ggui renders; any other uri
+ *  resolves through the reader as the `inline` channel anyway. */
 function parseCardMemento(raw: string): CardMemento | undefined {
   let parsed: unknown;
   try {
@@ -294,21 +264,15 @@ function parseCardMemento(raw: string): CardMemento | undefined {
   if (!('resourceUri' in parsed) || typeof parsed.resourceUri !== 'string') return undefined;
   if (!parsed.resourceUri.startsWith('ui://ggui/')) return undefined;
   if (!('toolName' in parsed) || typeof parsed.toolName !== 'string') return undefined;
-  if (!('csp' in parsed) || typeof parsed.csp !== 'object' || parsed.csp === null) {
-    return undefined;
-  }
-  const csp = parsed.csp;
-  if (!('resourceDomains' in csp) || !isStringArray(csp.resourceDomains)) return undefined;
-  if (!('connectDomains' in csp) || !isStringArray(csp.connectDomains)) return undefined;
   return {
     resourceUri: parsed.resourceUri,
     toolName: parsed.toolName,
-    csp: { resourceDomains: csp.resourceDomains, connectDomains: csp.connectDomains },
   };
 }
 
 /** The restored card for a persisted memento: a `locator` mount the reader
- *  resolves on demand — deliberately NOT stored mount material. */
+ *  resolves on demand — deliberately NOT stored mount material; its
+ *  sandbox trust arrives on the fresh read (`mount.csp`). */
 function restoredCardFromStorage(): MountedCard | undefined {
   let raw: string | null;
   try {
@@ -323,7 +287,6 @@ function restoredCardFromStorage(): MountedCard | undefined {
     key: memento.resourceUri,
     toolName: memento.toolName,
     mount: { channel: 'locator', resourceUri: memento.resourceUri },
-    csp: memento.csp,
   };
 }
 
@@ -398,21 +361,22 @@ export function App(): JSX.Element {
         ? top.mount
         : (resolved[top.key] ?? undefined);
 
-  // Persist the newest LIVE ggui card's locator + sandbox-CSP origins as the
-  // rehydration memento (see CardMemento). Serialized in the memo so the
-  // write effect keys on VALUE — the fold rebuilds card objects every frame,
-  // but the JSON only changes when the card (or its CSP) does.
+  // Persist the newest ggui card's locator as the rehydration memento
+  // (see CardMemento) — written once the material RESOLVES to the ggui
+  // channel (the reader's uri-derived classification), which is also
+  // the moment its wire-declared CSP proved the locator mounts.
+  // Serialized in the memo so the write effect keys on VALUE — the fold
+  // rebuilds card objects every frame, but the JSON only changes when
+  // the card does.
   const mementoJson = useMemo(() => {
-    if (cards.length === 0) return undefined;
-    const live = cards[cards.length - 1];
-    if (live.mount.channel !== 'ggui' || live.csp === undefined) return undefined;
+    if (top === undefined || material === undefined) return undefined;
+    if (material.channel !== 'ggui') return undefined;
     const memento: CardMemento = {
-      resourceUri: live.mount.resource.uri,
-      toolName: live.toolName,
-      csp: live.csp,
+      resourceUri: material.resource.uri,
+      toolName: top.toolName,
     };
     return JSON.stringify(memento);
-  }, [cards]);
+  }, [top, material]);
   useEffect(() => {
     if (mementoJson === undefined) return;
     try {
@@ -424,47 +388,42 @@ export function App(): JSX.Element {
   }, [mementoJson]);
 
   // `foldCards` re-runs on every AgJSON frame (each `reduceResult` update),
-  // so `top` — and its `csp` arrays — get a FRESH object identity per frame
-  // even when the card is unchanged. AppRenderer's send-html effect depends
-  // on `sandbox.csp` by identity and re-sends
-  // `ui/notifications/sandbox-resource-ready` when it changes, which the
-  // sandbox page answers with doc.open()/write()/close() — a full reboot of
-  // the mounted ggui shell (flicker, in-card state loss, a fresh WS
-  // bootstrap). So the sandbox prop must be VALUE-keyed, not derived from
-  // `top`'s identity: fingerprint the CSP origin lists into primitives (URL
-  // origins cannot contain spaces) and rebuild the object only when the
-  // card or its CSP values actually change.
+  // so mount objects get a FRESH identity per frame even when the card is
+  // unchanged. AppRenderer's send-html effect depends on `sandbox.csp` by
+  // identity and re-sends `ui/notifications/sandbox-resource-ready` when
+  // it changes, which the sandbox page answers with
+  // doc.open()/write()/close() — a full reboot of the mounted ggui shell
+  // (flicker, in-card state loss, a fresh WS bootstrap). So the sandbox
+  // prop must be VALUE-keyed: fingerprint the CSP origin lists into
+  // primitives (URL origins cannot contain spaces) and rebuild the object
+  // only when the card or its declared CSP values actually change.
   //
-  // Applied trust follows the RESOLVED channel: the CSP exceptions mount
-  // ONLY when the material actually on screen is the ggui channel. The
-  // package derives a mount's channel from the uri it resolved (never from
-  // the response), and this host must not override that decision — carried
-  // csp on any non-ggui material is dropped, not applied.
+  // Applied trust = the RESOLVED material's own wire declaration
+  // (`material.csp`, the server's `_meta.ui.csp` surfaced by the reader),
+  // applied ONLY when the material on screen is the ggui channel — the
+  // package derives a mount's channel from the uri it resolved, and this
+  // host does not override that decision.
   const topKey = top?.key;
-  const topResourceOrigins = top?.csp?.resourceDomains.join(' ');
-  const topConnectOrigins = top?.csp?.connectDomains.join(' ');
-  const materialChannel = material?.channel;
+  const wireCsp = material?.channel === 'ggui' ? sandboxCspFromWire(material.csp) : undefined;
+  const wireResourceOrigins = wireCsp?.resourceDomains.join(' ');
+  const wireConnectOrigins = wireCsp?.connectDomains.join(' ');
   const sandbox = useMemo(() => {
     if (topKey === undefined) return undefined;
     const url = new URL(SANDBOX_URL);
-    // Both origin lists are set together (ggui channel) or not at all
-    // (inline card) — see MountedCard.csp. And they apply only when the
-    // resolved material IS the ggui channel (see the note above).
-    if (
-      materialChannel !== 'ggui' ||
-      topResourceOrigins === undefined ||
-      topConnectOrigins === undefined
-    ) {
+    // Origin lists apply only when the resolved material IS the ggui
+    // channel AND the server declared them on the read (see the note
+    // above) — an inline card is self-contained HTML, no exceptions.
+    if (wireResourceOrigins === undefined || wireConnectOrigins === undefined) {
       return { url };
     }
     return {
       url,
       csp: {
-        resourceDomains: topResourceOrigins.length > 0 ? topResourceOrigins.split(' ') : [],
-        connectDomains: topConnectOrigins.length > 0 ? topConnectOrigins.split(' ') : [],
+        resourceDomains: wireResourceOrigins.length > 0 ? wireResourceOrigins.split(' ') : [],
+        connectDomains: wireConnectOrigins.length > 0 ? wireConnectOrigins.split(' ') : [],
       },
     };
-  }, [topKey, topResourceOrigins, topConnectOrigins, materialChannel]);
+  }, [topKey, wireResourceOrigins, wireConnectOrigins]);
 
   const statusLabel =
     status === 'using-tool' && activeTool !== null ? `using tool: ${activeTool}` : status;
