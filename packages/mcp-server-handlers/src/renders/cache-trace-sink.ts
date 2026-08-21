@@ -358,7 +358,29 @@ function envStderrSink(): CacheTraceSink {
   return envStderrSinkSingleton;
 }
 
+let envStdoutSinkSingleton: CacheTraceSink | null = null;
+function envStdoutSink(): CacheTraceSink {
+  if (!envStdoutSinkSingleton) {
+    envStdoutSinkSingleton = createStdoutJsonCacheTraceSink();
+  }
+  return envStdoutSinkSingleton;
+}
+
 export function emitCacheTraceEvent(event: CacheTraceEvent): void {
+  // Env-gated stdout JSON diagnostic (`GGUI_CACHE_TRACE=logger`) — like
+  // the stderr gate below, it lives INSIDE this function rather than
+  // relying on a caller's setCacheTraceSink, so it fires from whichever
+  // module instance the matcher actually calls. A caller-registered
+  // sink proved fragile across module-instance boundaries in exactly
+  // the way the registry docstring above warns (2026-08-21: an armed
+  // deployment produced zero lines); the in-module gate cannot miss.
+  if (process.env['GGUI_CACHE_TRACE'] === 'logger') {
+    try {
+      envStdoutSink().emit(event);
+    } catch {
+      // Diagnostic must never break generation.
+    }
+  }
   // Env-gated stderr diagnostic — independent of any registered sink, so the
   // matcher's decision is visible in captured stderr regardless of whether a
   // devtools sink is wired (and regardless of module-singleton boundaries).
@@ -376,6 +398,67 @@ export function emitCacheTraceEvent(event: CacheTraceEvent): void {
   } catch {
     // Devtools sink is allowed to be buggy — generation must not die.
   }
+}
+
+/**
+ * Version stamp on every stdout-JSON trace line. Consumers MAY pin it;
+ * bump it on ANY change to the emitted shape so a pinned consumer
+ * fails loudly instead of silently diverging.
+ */
+export const CACHE_TRACE_STDOUT_SCHEMA_VERSION = 1;
+
+/** Top cap on the stringified candidates payload per stdout line. */
+const CACHE_TRACE_STDOUT_CANDIDATES_CAP = 5;
+
+/**
+ * A sink that writes each {@link CacheTraceEvent} as ONE
+ * newline-delimited JSON record to stdout — the machine-readable
+ * counterpart of the stderr diagnostic above, for deployments whose
+ * stdout is collected by a structured log pipeline. Enable with
+ * `GGUI_CACHE_TRACE=logger` (see {@link emitCacheTraceEvent}) and the
+ * matcher's full decision trail becomes queryable wherever your logs
+ * land — one env var, no code.
+ *
+ * Line shape: `level`/`time`/`msg: "cache_trace"` envelope; every
+ * event property lands under its own name (identity mapping — renames
+ * are breakage for consumers that diff events field-by-field), EXCEPT
+ * `candidates`, which ships stringified as `candidatesJson` (capped at
+ * the top five; nested arrays query poorly in most log stores) with
+ * flat conveniences alongside: `appId` (= `scope`),
+ * `matchedBlueprintId` (= `winningBlueprintId` when present),
+ * `topCosine`, and `candidateCount` (the REAL pre-cap length). Every
+ * line stamps {@link CACHE_TRACE_STDOUT_SCHEMA_VERSION}.
+ *
+ * Sync + non-throwing per the {@link CacheTraceSink} contract.
+ */
+export function createStdoutJsonCacheTraceSink(): CacheTraceSink {
+  return {
+    emit(event: CacheTraceEvent): void {
+      try {
+        const { candidates, ...verbatim } = event;
+        const record: Record<string, unknown> = {
+          level: 'info',
+          time: new Date(event.at).toISOString(),
+          msg: 'cache_trace',
+          traceSchemaVersion: CACHE_TRACE_STDOUT_SCHEMA_VERSION,
+          ...verbatim,
+          appId: event.scope,
+          candidateCount: candidates.length,
+          candidatesJson: JSON.stringify(
+            candidates.slice(0, CACHE_TRACE_STDOUT_CANDIDATES_CAP),
+          ),
+        };
+        const top = candidates[0];
+        if (top !== undefined) record['topCosine'] = top.score;
+        if (event.winningBlueprintId !== undefined) {
+          record['matchedBlueprintId'] = event.winningBlueprintId;
+        }
+        process.stdout.write(`${JSON.stringify(record)}\n`);
+      } catch {
+        // A diagnostic sink must never break generation — swallow.
+      }
+    },
+  };
 }
 
 /**

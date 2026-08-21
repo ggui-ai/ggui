@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import {
   createStderrCacheTraceSink,
+  createStdoutJsonCacheTraceSink,
   emitCacheTraceEvent,
   setCacheTraceSink,
   newCacheTraceId,
@@ -121,5 +122,130 @@ describe('emitCacheTraceEvent env-gated stderr diagnostic', () => {
     emitCacheTraceEvent(makeEvent());
 
     expect(spy).not.toHaveBeenCalled();
+  });
+});
+
+describe('createStdoutJsonCacheTraceSink', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('emits ONE parseable JSON stdout line: msg cache_trace, identity-mapped event fields, flat query fields, schema version', () => {
+    const writes: string[] = [];
+    vi.spyOn(process.stdout, 'write').mockImplementation((chunk) => {
+      writes.push(String(chunk));
+      return true;
+    });
+    const sink = createStdoutJsonCacheTraceSink();
+    sink.emit(
+      makeEvent({
+        scope: 'app-42',
+        intent: 'a team standup timer',
+        decision: 'match-semantic',
+        strategy: 'semantic',
+        judgeConfidence: 0.95,
+        winningBlueprintId: 'bp_win',
+        candidates: [
+          { key: 'bp_win', score: 0.91, cachedIntent: 'a standup timer' },
+          { key: 'bp_other', score: 0.4 },
+        ],
+        reason: 'judge matched bp_win',
+      }),
+    );
+    expect(writes).toHaveLength(1);
+    const line = writes[0]!;
+    expect(line.endsWith('\n')).toBe(true);
+    const f = JSON.parse(line) as Record<string, unknown>;
+    // Log-shipper envelope.
+    expect(f.msg).toBe('cache_trace');
+    expect(f.level).toBe('info');
+    // Identity mapping — event property names verbatim.
+    expect(f.scope).toBe('app-42');
+    expect(f.intent).toBe('a team standup timer');
+    expect(f.decision).toBe('match-semantic');
+    expect(f.strategy).toBe('semantic');
+    expect(f.judgeConfidence).toBe(0.95);
+    expect(f.winningBlueprintId).toBe('bp_win');
+    expect(f.reason).toBe('judge matched bp_win');
+    // Flat query fields; candidates ride stringified, never nested.
+    expect(f.appId).toBe('app-42');
+    expect(f.matchedBlueprintId).toBe('bp_win');
+    expect(f.topCosine).toBe(0.91);
+    expect(f.candidateCount).toBe(2);
+    expect(f.candidates).toBeUndefined();
+    expect(JSON.parse(f.candidatesJson as string)).toHaveLength(2);
+    // Version pin.
+    expect(f.traceSchemaVersion).toBe(1);
+  });
+
+  it('omits absent optional fields and caps candidatesJson at five while candidateCount reports the real length', () => {
+    const writes: string[] = [];
+    vi.spyOn(process.stdout, 'write').mockImplementation((chunk) => {
+      writes.push(String(chunk));
+      return true;
+    });
+    const sink = createStdoutJsonCacheTraceSink();
+    sink.emit(
+      makeEvent({
+        candidates: Array.from({ length: 8 }, (_, i) => ({
+          key: `bp_${i}`,
+          score: 1 - i / 10,
+        })),
+      }),
+    );
+    const f = JSON.parse(writes[0]!) as Record<string, unknown>;
+    expect('strategy' in f).toBe(false);
+    expect('judgeConfidence' in f).toBe(false);
+    expect('winningBlueprintId' in f).toBe(false);
+    expect('matchedBlueprintId' in f).toBe(false);
+    expect(f.candidateCount).toBe(8);
+    expect(JSON.parse(f.candidatesJson as string)).toHaveLength(5);
+  });
+
+  it('never throws, even when stdout write explodes', () => {
+    vi.spyOn(process.stdout, 'write').mockImplementation(() => {
+      throw new Error('boom');
+    });
+    const sink = createStdoutJsonCacheTraceSink();
+    expect(() => sink.emit(makeEvent())).not.toThrow();
+  });
+});
+
+describe('emitCacheTraceEvent env-gated stdout JSON diagnostic (GGUI_CACHE_TRACE=logger)', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    delete process.env['GGUI_CACHE_TRACE'];
+    setCacheTraceSink(null);
+  });
+
+  it('self-emits the stdout JSON line with NO registered sink — the in-module gate survives module-instance boundaries', () => {
+    // The caller-registered path (setCacheTraceSink) is documented as
+    // fragile across module-instance boundaries; a deployment armed a
+    // caller-registered sink and got ZERO lines from the live process
+    // (2026-08-21). The env gate lives INSIDE emitCacheTraceEvent, so
+    // it fires from whichever module instance the matcher actually
+    // calls — by construction.
+    process.env['GGUI_CACHE_TRACE'] = 'logger';
+    const writes: string[] = [];
+    vi.spyOn(process.stdout, 'write').mockImplementation((chunk) => {
+      writes.push(String(chunk));
+      return true;
+    });
+    emitCacheTraceEvent(makeEvent({ decision: 'match-exact' }));
+    const traceLines = writes.filter((w) => w.includes('"cache_trace"'));
+    expect(traceLines).toHaveLength(1);
+    expect(JSON.parse(traceLines[0]!).decision).toBe('match-exact');
+  });
+
+  it('emits nothing when the env is unset or off', () => {
+    const writes: string[] = [];
+    vi.spyOn(process.stdout, 'write').mockImplementation((chunk) => {
+      writes.push(String(chunk));
+      return true;
+    });
+    emitCacheTraceEvent(makeEvent());
+    process.env['GGUI_CACHE_TRACE'] = 'off';
+    emitCacheTraceEvent(makeEvent());
+    expect(writes.filter((w) => w.includes('"cache_trace"'))).toHaveLength(0);
   });
 });
