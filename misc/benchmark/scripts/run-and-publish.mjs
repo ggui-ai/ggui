@@ -42,6 +42,13 @@ const COMMITS =
   'weather-card,survey-form,kanban-board,periodic-table,product-page,chat-interface,stock-ticker,onboarding-wizard,leaflet-map,revenue-chart';
 const THRESHOLD = process.env.BENCH_THRESHOLD ?? '70';
 const BENCH_DATE = process.env.BENCH_DATE ?? new Date().toISOString().slice(0, 10);
+// Cell concurrency. 12 fits the 2GB Fargate task (36 OOM-killed it,
+// 2026-08-21); the VerifyBenchmarkRule overrides to 36 for original-
+// concurrency batteries (needs the 4096MiB task def).
+const CONCURRENCY = process.env.BENCH_CONCURRENCY ?? '12';
+// Set by the manual + verify EventBridge rules' container overrides:
+// forced dispatches never gate (standing P0-dispatch rule).
+const FORCE = process.env.BENCH_FORCE === '1';
 
 if (!S3_PREFIX.endsWith('/')) {
   fail(`S3_PREFIX must end with a slash, got "${S3_PREFIX}"`);
@@ -54,6 +61,34 @@ console.log(`  date=${BENCH_DATE}`);
 console.log(`  providers=${PROVIDERS}`);
 console.log(`  commits=${COMMITS}`);
 console.log(`  threshold=${THRESHOLD}`);
+console.log(`  concurrency=${CONCURRENCY}`);
+console.log(`  force=${FORCE}`);
+
+// ---------------------------------------------------------------------------
+// Change gate — run only when a bench-relevant update exists (or long-stop /
+// forced). See run-gate.mjs for the full rationale. Runs BEFORE the key
+// preflight: a gated skip needs no provider keys.
+// ---------------------------------------------------------------------------
+
+const s3 = new S3Client({});
+
+{
+  const { decideBenchRun } = await import('./run-gate.mjs');
+  const { index } = await tryFetchIndex(`${S3_PREFIX}index.json`);
+  const latest = index?.runs?.find((r) => r.multiSdk);
+  const decision = decideBenchRun({
+    imageVersion: process.env.GIT_SHA,
+    latestVersion: latest?.multiSdk?.version,
+    latestDate: latest?.date,
+    today: BENCH_DATE,
+    force: FORCE,
+  });
+  console.log(`[run-and-publish] gate: ${decision.reason}`);
+  if (!decision.run) {
+    // Clean exit 0 — a gated skip is the cadence working, not a failure.
+    process.exit(0);
+  }
+}
 
 // Preflight: refuse to publish if a requested provider has no key — a
 // keyless provider yields all-failed cells that look like a real
@@ -67,8 +102,6 @@ if (missing.length > 0) {
       `Set the provider's API key in the environment (e.g. ANTHROPIC_API_KEY) or drop the provider from BENCH_PROVIDERS.`,
   );
 }
-
-const s3 = new S3Client({});
 
 // ---------------------------------------------------------------------------
 // 1. Run the bench
@@ -147,6 +180,9 @@ function newRunEntry() {
       reportPath: `${BENCH_DATE}/multi-sdk.json`,
       successRate: report?.meta?.successRate ?? 0,
       totalRuns: report?.meta?.totalRuns ?? 0,
+      // Runner-image build commit — the change gate compares the current
+      // image against this to decide whether an update exists.
+      version: report?.meta?.version,
       headline: buildHeadline(report),
     },
   };
@@ -226,15 +262,17 @@ function runBench() {
         // per-cell generationTimeMs either way.
         '--timeout',
         '600000',
-        // 12 concurrent cells on the 2GB Fargate task. The 2026-08-21
-        // manual run OOM-killed at bench.mjs's 36-cell default ~4min in
-        // (happy-dom render checks + esbuild + 7-way parallel evals per
-        // cell outgrew 2GB as the harness got heavier). Cells are LLM-
-        // latency-bound, so 12 lanes ≈ 3× wall time at ~1/3 the peak
-        // memory. Belt to the memoryLimitMiB=4096 suspender in
-        // apps/benchmarks/amplify/backend.ts.
+        // Default 12 concurrent cells fits the 2GB Fargate task (the
+        // 2026-08-21 manual run OOM-killed at bench.mjs's 36-cell
+        // default ~4min in: happy-dom render checks + esbuild + 7-way
+        // parallel evals per cell outgrew 2GB as the harness got
+        // heavier). Cells are LLM-latency-bound, so 12 lanes ≈ 3× wall
+        // time at ~1/3 the peak memory. Belt = memoryLimitMiB 4096 in
+        // apps/benchmarks/amplify/backend.ts; the VerifyBenchmarkRule
+        // overrides BENCH_CONCURRENCY=36 for original-concurrency
+        // batteries once that task def is live.
         '--concurrency',
-        '12',
+        CONCURRENCY,
       ],
       {
         cwd: BENCH_ROOT,

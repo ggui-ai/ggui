@@ -61,6 +61,16 @@ const DIMENSIONS: ReadonlyArray<{ label: string; definition: string }> = [
  */
 const CHANGELOG: ReadonlyArray<{ date: string; text: string }> = [
   {
+    date: '2026-08-21',
+    text:
+      'Cadence: weekly → change-triggered. The full matrix now fires only ' +
+      'when the generation harness, model matrix, or runner changes (a daily ' +
+      '03:00 UTC probe checks and exits otherwise), with a 28-day long-stop ' +
+      'so provider-side model drift still gets caught. Run dates are ' +
+      'therefore irregular by design — every published run corresponds to ' +
+      'an actual update. Scoring and corpus are unchanged.',
+  },
+  {
     date: '2026-08-20',
     text:
       'Per-cell generation timeout for the published weekly run: 300s → 600s. ' +

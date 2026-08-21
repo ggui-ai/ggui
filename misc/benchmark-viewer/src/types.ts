@@ -68,6 +68,13 @@ export interface BenchSummaryRef {
   successRate: number;
   /** Total per-cell runs in this report. */
   totalRuns: number;
+  /**
+   * Runner-image build commit (short sha) that produced this run. The
+   * pipeline's change gate compares the current image against the newest
+   * row's version to decide whether an update exists. Absent on rows
+   * published before 2026-08-21.
+   */
+  version?: string;
   /** Optional headline string the runner emits — short summary line. */
   headline?: string;
 }
