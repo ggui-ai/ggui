@@ -66,7 +66,8 @@ async function boot(themeOpts: ThemeOpts): Promise<{
 
 async function seedRender(
   store: InMemoryGguiSessionStore,
-  themeId?: string
+  themeId?: string,
+  theme?: ComponentGguiSession["theme"]
 ): Promise<void> {
   const render: ComponentGguiSession = {
     type: "component",
@@ -80,6 +81,9 @@ async function seedRender(
     // The agent's per-render override, exactly as ggui_render({themeId})
     // stores it (render.ts overlay re-commit).
     ...(themeId !== undefined ? { themeId } : {}),
+    // The per-app App.theme sidecar snapshotted at render-commit —
+    // the `sessionSidecar` layer of the theme-binding total order.
+    ...(theme !== undefined ? { theme } : {}),
   };
   await store.commit({ render, appId: APP });
 }
@@ -137,6 +141,41 @@ describe("resources/read stamps the layered theme — parity with the tool-resul
     const slice = await readEnvelope(client);
     expect(slice.themeId).toBe("static-preset");
     expect(slice.themeMode).toBe("dark");
+    await close();
+  });
+
+  it("the theme sidecar's mode stamps themeMode when no higher layer resolves — and the stamp is IDENTICAL to the emitted theme object's own mode (the composition law's server-side identity precondition; adversarial-cycle pin, ggui#598 leg 4)", async () => {
+    // The 81-combination law in @ggui-ai/protocol/integrations/
+    // theme-binding is a pure-function law; THIS pin binds it to the
+    // envelope: the `sessionSidecar` input the server projection
+    // consumed is the mode of the very theme object the same envelope
+    // emits. Without this identity, a transport could thread one mode
+    // and emit another, and the law would hold vacuously.
+    const { client, store, close } = await boot({});
+    await seedRender(store, undefined, {
+      name: "guuey-brand-v1",
+      mode: "dark",
+      cssVariables: {},
+    });
+    const slice = await readEnvelope(client);
+    expect(slice.themeMode).toBe("dark");
+    expect((slice.theme as { mode?: string }).mode).toBe("dark");
+    await close();
+  });
+
+  it("static config outranks the sidecar in the stamp (total order) while the emitted theme object keeps its own mode", async () => {
+    const { client, store, close } = await boot({ themeMode: "light" });
+    await seedRender(store, undefined, {
+      name: "guuey-brand-v1",
+      mode: "dark",
+      cssVariables: {},
+    });
+    const slice = await readEnvelope(client);
+    // staticConfig > sessionSidecar per the normative order; the theme
+    // OBJECT still carries its own mode — the client's composed result
+    // obeys the stamp (stamped > sidecar), so no side ever re-ranks.
+    expect(slice.themeMode).toBe("light");
+    expect((slice.theme as { mode?: string }).mode).toBe("dark");
     await close();
   });
 

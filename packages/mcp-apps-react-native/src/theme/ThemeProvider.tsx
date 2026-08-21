@@ -93,9 +93,33 @@ export interface ThemeProviderProps {
   children: ReactNode;
 }
 
+/**
+ * TERMINAL CONSUMER of the theme-mode ladder (adversarial-cycle
+ * ruling, ggui#598 leg 4): the RN provider paints the NATIVE chrome
+ * around the WebView — there is no downstream layer left to fill an
+ * absent opinion, and React Native must render with SOME concrete
+ * scheme. The `?? 'light'` here is therefore the documented
+ * terminal-consumer default (the same posture as the design package's
+ * css-tokens terminal default), NOT a mid-ladder defaulting: it fires
+ * only after the embedder's explicit prop AND the OS scheme are both
+ * absent (`useColorScheme()` → null, rare). Mid-ladder code — anything
+ * with a layer below it — must never default; it delegates to
+ * `@ggui-ai/protocol/integrations/theme-binding` and lets absence
+ * propagate (the composition law).
+ *
+ * @internal — exported for the precedence pin; production caller is
+ *   `ThemeProvider`.
+ */
+export function resolveNativeScheme(
+  prop: 'light' | 'dark' | undefined,
+  system: 'light' | 'dark' | null | undefined,
+): 'light' | 'dark' {
+  return prop ?? system ?? 'light';
+}
+
 export function ThemeProvider({ colorScheme: colorSchemeProp, children }: ThemeProviderProps) {
   const systemScheme = useColorScheme();
-  const effectiveScheme = colorSchemeProp ?? systemScheme ?? 'light';
+  const effectiveScheme = resolveNativeScheme(colorSchemeProp, systemScheme);
   const [reduceMotionEnabled, setReduceMotionEnabled] = useState(false);
 
   useEffect(() => {
