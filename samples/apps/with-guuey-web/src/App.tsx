@@ -21,6 +21,7 @@ import {
   createMcpUiResourceReader,
   resourceHtml,
   toolResultViewMount,
+  uiResourceChannel,
   type McpUiResourceCsp,
   type ResolvedViewMount,
   type ViewMount,
@@ -327,16 +328,27 @@ export function App(): JSX.Element {
   // falling back to the restored locator card while the fold is empty.
   const top = cards.length > 0 ? cards[cards.length - 1] : restored;
 
-  // Locator resolution: when the top card is a bare `ui://` locator (a
-  // restored card, or a live fold whose `_meta` never reached us), resolve
-  // it through the reader exactly once per uri. `null` records a miss —
-  // deny == miss == placeholder, never an error surface, and no retry loop
-  // (a fresh mount or reload asks again).
+  // Read-door resolution — TWO cases go through the reader, once per uri:
+  //   1. A bare `ui://` locator (a restored card, or a live fold whose
+  //      `_meta` never reached us) — it has no mount material at all.
+  //   2. An INLINE-embedded resource whose uri classifies as the ggui
+  //      channel (`uiResourceChannel`): servers like `ggui serve` embed
+  //      the render in the tool result, but the dispatcher deliberately
+  //      never labels an embed 'ggui' — the channel AND the sandbox
+  //      trust both come from the read door (`mount.csp`, the wire's
+  //      `_meta.ui.csp` declaration). A fresh read of the same uri
+  //      yields the same material PLUS the declared CSP, so ggui cards
+  //      always mount read-door-resolved, spec-consistently.
+  // `null` records a miss — deny == miss == placeholder, never an error
+  // surface, and no retry loop (a fresh mount or reload asks again).
   const [resolved, setResolved] = useState<Record<string, ResolvedViewMount | null>>({});
+  const topNeedsRead =
+    top !== undefined &&
+    (top.mount.channel === 'locator' ||
+      (top.mount.channel === 'inline' &&
+        uiResourceChannel(top.mount.resource.uri) === 'ggui'));
   const pendingLocator =
-    top !== undefined && top.mount.channel === 'locator' && resolved[top.key] === undefined
-      ? top.key
-      : undefined;
+    top !== undefined && topNeedsRead && resolved[top.key] === undefined ? top.key : undefined;
   useEffect(() => {
     if (pendingLocator === undefined) return undefined;
     let cancelled = false;
@@ -351,13 +363,13 @@ export function App(): JSX.Element {
     };
   }, [pendingLocator]);
 
-  // The material actually mounted: resolved arms mount as-is; a locator
-  // mounts its reader result once resolved (placeholder until then, and on
-  // a miss).
+  // The material actually mounted: non-ggui inline arms mount as-is; a
+  // locator OR a ggui-uri embed mounts its reader result once resolved
+  // (placeholder until then, and on a miss).
   const material: ResolvedViewMount | undefined =
     top === undefined
       ? undefined
-      : top.mount.channel !== 'locator'
+      : !topNeedsRead && top.mount.channel === 'inline'
         ? top.mount
         : (resolved[top.key] ?? undefined);
 
