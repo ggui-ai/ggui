@@ -307,7 +307,18 @@ export function getScopedThemeCss(
   // bake `color-mix()`, so they ship a static fallback + an `@supports`
   // modern tier (see `buildGradientTokens`).
   const gradientTokens = buildGradientTokens(scopeClass, primary500);
-  return `${scoped}\n${baseInherits}\n${gradientTokens}\n${theme.cssKeyframes}\n.${scopeClass} *, .${scopeClass} *::before, .${scopeClass} *::after { box-sizing: border-box; }\n.${scopeClass} h1, .${scopeClass} h2, .${scopeClass} h3, .${scopeClass} h4, .${scopeClass} h5, .${scopeClass} h6, .${scopeClass} button, .${scopeClass} input, .${scopeClass} textarea, .${scopeClass} select { font-family: inherit; }`;
+  // Frameless themes (`$metadata.frameless`): the embedding host draws
+  // the card silhouette (rim / rounded clip mask), so a stroke on the
+  // document's ROOT layer gets its corners amputated by the mask. The
+  // suppression targets only the scope's direct children (the mounted
+  // component's outermost element(s)); inner-container strokes are
+  // untouched. `:where()` keeps specificity at zero; `!important` is
+  // required because generated components carry inline styles.
+  const framelessRule =
+    theme.metadata?.frameless === true
+      ? `\n.${scopeClass} > :where(:not(style)) { border: none !important; }`
+      : '';
+  return `${scoped}\n${baseInherits}\n${gradientTokens}\n${theme.cssKeyframes}\n.${scopeClass} *, .${scopeClass} *::before, .${scopeClass} *::after { box-sizing: border-box; }\n.${scopeClass} h1, .${scopeClass} h2, .${scopeClass} h3, .${scopeClass} h4, .${scopeClass} h5, .${scopeClass} h6, .${scopeClass} button, .${scopeClass} input, .${scopeClass} textarea, .${scopeClass} select { font-family: inherit; }${framelessRule}`;
 }
 
 /**

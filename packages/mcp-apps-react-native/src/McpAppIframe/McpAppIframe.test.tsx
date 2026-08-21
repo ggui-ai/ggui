@@ -879,3 +879,120 @@ describe('<McpAppIframe> — imperative ref (RN)', () => {
     act(() => tree.unmount());
   });
 });
+
+// =============================================================================
+// <McpAppIframe> — no hardcoded card chrome (ggui#589 round 6).
+//
+// The HOST owns card chrome entirely — the same doctrine as the
+// founder's round-5 frameless ruling, one layer down. The hardcoded
+// `borderWidth: 1, borderColor: '#e5e5e5', borderRadius: 8` on both
+// Views was the audit-localized culprit behind the store-frame
+// rejection: a white square line running at its own radius-8 INSIDE
+// the embedder's radius-20 rim (pixel-measured #E5E5E5).
+// =============================================================================
+describe('<McpAppIframe> — host owns card chrome (ggui#589 round 6)', () => {
+  const CHROME_KEYS = ['borderWidth', 'borderColor', 'borderRadius'] as const;
+
+  it('the mounted host View paints no border chrome of its own', () => {
+    let tree!: ReactTestRenderer;
+    act(() => {
+      tree = create(<McpAppIframe resource={makeResource()} />);
+    });
+    const host = tree.root.findByProps({ testID: 'mcp-app-iframe-host' });
+    const style = host.props.style as Record<string, unknown>;
+    for (const key of CHROME_KEYS) {
+      expect(style[key], `${key} must not be hardcoded on the host View`).toBeUndefined();
+    }
+    act(() => tree.unmount());
+  });
+
+  it('the empty-slot fallback View paints no border chrome either', () => {
+    let tree!: ReactTestRenderer;
+    act(() => {
+      tree = create(
+        <McpAppIframe
+          resource={{ uri: 'ui://not-mountable', mimeType: 'text/html' }}
+          onError={vi.fn()}
+        />,
+      );
+    });
+    const empty = tree.root.findByProps({ testID: 'mcp-app-iframe-empty' });
+    const style = empty.props.style as Record<string, unknown>;
+    for (const key of CHROME_KEYS) {
+      expect(style[key], `${key} must not be hardcoded on the empty View`).toBeUndefined();
+    }
+    act(() => tree.unmount());
+  });
+});
+
+// =============================================================================
+// <McpAppIframe> — `ui/notifications/size-changed` (ggui#589 rider 5).
+//
+// The view (ext-apps `App.sendSizeChanged` / autoResize observer) sends
+// this NOTIFICATION when its rendered content changes size. Before the
+// fix, the jsonrpc branch dropped every id-less message on the floor
+// (`dispatchHostBridgeRequest` returns null for notifications) — portal
+// cards clipped at their initial fixed height. The host now surfaces it
+// through `onSizeChanged` so embedders can autoResize their container.
+// =============================================================================
+describe('<McpAppIframe> — size-changed notification (ggui#589 rider 5)', () => {
+  it('fires onSizeChanged with the spec params when the view announces a new size', async () => {
+    const onSizeChanged = vi.fn();
+    let tree!: ReactTestRenderer;
+    act(() => {
+      tree = create(
+        <McpAppIframe resource={makeResource()} onSizeChanged={onSizeChanged} />,
+      );
+    });
+    await simulateFromWebView(tree, {
+      jsonrpc: '2.0',
+      method: 'ui/notifications/size-changed',
+      params: { width: 390, height: 742 },
+    });
+    expect(onSizeChanged).toHaveBeenCalledTimes(1);
+    expect(onSizeChanged).toHaveBeenCalledWith({ width: 390, height: 742 });
+    act(() => tree.unmount());
+  });
+
+  it('height-only announce (the autoResize common case) passes through without inventing a width', async () => {
+    const onSizeChanged = vi.fn();
+    let tree!: ReactTestRenderer;
+    act(() => {
+      tree = create(
+        <McpAppIframe resource={makeResource()} onSizeChanged={onSizeChanged} />,
+      );
+    });
+    await simulateFromWebView(tree, {
+      jsonrpc: '2.0',
+      method: 'ui/notifications/size-changed',
+      params: { height: 512 },
+    });
+    expect(onSizeChanged).toHaveBeenCalledWith({ height: 512 });
+    act(() => tree.unmount());
+  });
+
+  it('malformed params (non-numeric / negative / non-finite) are dropped, not surfaced', async () => {
+    const onSizeChanged = vi.fn();
+    let tree!: ReactTestRenderer;
+    act(() => {
+      tree = create(
+        <McpAppIframe resource={makeResource()} onSizeChanged={onSizeChanged} />,
+      );
+    });
+    for (const params of [
+      { width: 'wide' },
+      { height: -1 },
+      { width: Number.POSITIVE_INFINITY },
+      {},
+      undefined,
+    ]) {
+      await simulateFromWebView(tree, {
+        jsonrpc: '2.0',
+        method: 'ui/notifications/size-changed',
+        ...(params !== undefined ? { params } : {}),
+      });
+    }
+    expect(onSizeChanged).not.toHaveBeenCalled();
+    act(() => tree.unmount());
+  });
+});

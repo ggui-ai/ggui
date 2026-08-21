@@ -1029,6 +1029,39 @@ describe('createGguiHandshakeHandler — MVB-5', () => {
       expect(attrs['selectionConfidence']).toBeUndefined();
     });
 
+    it('stamps propsSchemaHash equal to the persisted record arm (self-contained breach join)', async () => {
+      // Before this stamp, only render.contract_violation carried
+      // propsSchemaHash, so a telemetry consumer had no INDEPENDENT
+      // armed reference to join violation hashes against.
+      // handshake.decided is the arm event — it must carry the same
+      // hash the record persists, under the same attribute name the
+      // violation rows use (join-key symmetry).
+      const events: Array<{ attributes: Record<string, unknown> }> = [];
+      const telemetrySink = {
+        emit(event: {
+          name: string;
+          at: number;
+          attributes?: Readonly<Record<string, string | number | boolean>>;
+        }) {
+          events.push({ attributes: { ...(event.attributes ?? {}) } });
+        },
+      };
+      const kvStore = new InMemoryKeyValueStore();
+      const handler = createGguiHandshakeHandler({ kvStore, telemetrySink });
+      const out = await handler.handler(
+        minimalInput(),
+        { appId: 'app-1', requestId: 'r' },
+      );
+      const raw = await kvStore.get(handshakeRecordKey('app-1', out.handshakeId));
+      expect(raw).not.toBeNull();
+      const record = JSON.parse(raw!) as { propsSchemaHash?: string };
+      expect(record.propsSchemaHash).toMatch(/^[0-9a-f]{64}$/);
+      expect(events).toHaveLength(1);
+      expect(events[0]!.attributes['propsSchemaHash']).toBe(
+        record.propsSchemaHash,
+      );
+    });
+
     it('threads selectionConfidence when selectedReason carries a conf= suffix', async () => {
       const events: Array<{ attributes: Record<string, unknown> }> = [];
       const telemetrySink = {

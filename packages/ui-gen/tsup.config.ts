@@ -14,9 +14,11 @@ import { defineConfig } from 'tsup';
  * docs) are registered in the `entry` array below.
  *
  * Entry ⇆ exports-map invariant: every entry here corresponds to a
- * `package.json#exports` subpath, with ONE exception — `src/tools/
- * render-check-worker.ts` is reached by file path (subprocess spawn),
- * not by import specifier. Entries without an exports target ship
+ * `package.json#exports` subpath, with TWO exceptions reached by file
+ * path (subprocess spawn), not by import specifier — `src/tools/
+ * render-check-worker.ts` (the render SMOKE worker) and `src/harness/
+ * check/runtime-render/render-check-worker.ts` (the isolated in-loop
+ * render-check worker, #592). Entries without an exports target ship
  * unroutable dist bytes (Node blocks deep `dist/` imports once an
  * exports map exists); modules consumed only internally are inlined
  * into their importing entries by tsup and need no entry of their own.
@@ -73,6 +75,12 @@ export default defineConfig({
     // so tsup can't statically pick it up via import-graph traversal —
     // it needs to be listed as an explicit entry to land in dist/.
     'src/tools/render-check-worker.ts',
+    // Isolated in-loop render-check worker (#592) — same spawn-by-path
+    // model as the smoke worker above: `render-check-host.ts` resolves
+    // `dist/harness/check/runtime-render/render-check-worker.js`
+    // relative to whichever chunk inlined it, so it must be an
+    // explicit entry to land in dist/.
+    'src/harness/check/runtime-render/render-check-worker.ts',
   ],
   format: ['esm'],
   dts: true,

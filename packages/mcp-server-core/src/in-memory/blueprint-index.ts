@@ -39,4 +39,12 @@ export class InMemoryBlueprintIndex implements BlueprintIndex {
   async deleteId(scope: string, exactKey: string): Promise<void> {
     this.index.get(scope)?.delete(exactKey);
   }
+
+  async countIds(scope: string, exactKeyPrefix: string): Promise<number> {
+    let n = 0;
+    for (const exactKey of this.index.get(scope)?.keys() ?? []) {
+      if (exactKey.startsWith(exactKeyPrefix)) n++;
+    }
+    return n;
+  }
 }

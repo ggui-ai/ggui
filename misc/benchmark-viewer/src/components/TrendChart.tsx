@@ -131,6 +131,19 @@ export function TrendChart({ dataSource, runs, maxRuns = 14 }: Props) {
     );
   }, [reports, visibleRuns]);
 
+  // Dates whose report flagged itself judge-coverage-degraded: their
+  // plotted scores come from a minority of judged cells. Disclosed as a
+  // footnote — plotting them unannotated would present the means as
+  // full-coverage (#565). Pre-2026-08-20 reports lack the flag; their
+  // coverage is unknown and stays undisclosed rather than guessed.
+  const degradedDates = useMemo(
+    () =>
+      visibleRuns
+        .filter((r) => reports.get(r.date)?.meta.judgeCoverageDegraded)
+        .map((r) => r.date),
+    [reports, visibleRuns],
+  );
+
   if (visibleRuns.length === 0) {
     return null;
   }
@@ -267,6 +280,12 @@ export function TrendChart({ dataSource, runs, maxRuns = 14 }: Props) {
           );
         })}
       </ul>
+      {degradedDates.length > 0 && (
+        <p className="font-mono text-xs text-draft mt-2">
+          low judge coverage on {degradedDates.join(', ')} — those dates&apos; scores come
+          from a minority of judged cells
+        </p>
+      )}
     </section>
   );
 }

@@ -177,6 +177,84 @@ describe('mountReactRoot — per-app theme overlay', () => {
   });
 });
 
+describe('mountReactRoot — host palette fallback layer (ggui#572 / #573 ruling)', () => {
+  it('merges the host palette INTO the scoped in-tree block, after the base token block', async () => {
+    // Same F3 constraint as the appTheme overlay: only the scoped
+    // in-body block can recolor tree content — a :root-only (or
+    // documentElement-inline) mapping is cascade-dead.
+    const container = makeContainer();
+    let mount: Awaited<ReturnType<typeof mountReactRoot>> | null = null;
+    await flush(async () => {
+      mount = await mountReactRoot(container, {
+        render: { id: 'x', componentCode: '' },
+        hostPalette: { '--ggui-color-surface': '#101014' },
+      });
+    });
+
+    const scopeDiv = container.firstElementChild as HTMLElement;
+    const scopeClass = scopeDiv.className;
+    const inScopeStyle = scopeDiv.querySelector('style')?.textContent ?? '';
+    const hostRule = `.${scopeClass}{--ggui-color-surface: #101014;}`;
+    const hostIdx = inScopeStyle.indexOf(hostRule);
+    expect(hostIdx, 'host palette rule missing from the in-tree style').toBeGreaterThan(-1);
+    const baseIdx = inScopeStyle.indexOf(`.${scopeClass} {`);
+    expect(baseIdx).toBeGreaterThanOrEqual(0);
+    expect(hostIdx).toBeGreaterThan(baseIdx);
+
+    mount!.unmount();
+  });
+
+  it('slice wins, host is the fallback: the appTheme rule lands AFTER the host palette rule (#573)', async () => {
+    const container = makeContainer();
+    let mount: Awaited<ReturnType<typeof mountReactRoot>> | null = null;
+    await flush(async () => {
+      mount = await mountReactRoot(container, {
+        render: { id: 'x', componentCode: '' },
+        hostPalette: { '--ggui-color-surface': '#101014' },
+        appTheme: {
+          mode: 'dark',
+          cssVariables: { '--ggui-color-surface': '#22222a' },
+        },
+      });
+    });
+
+    const scopeDiv = container.firstElementChild as HTMLElement;
+    const scopeClass = scopeDiv.className;
+    const inScopeStyle = scopeDiv.querySelector('style')?.textContent ?? '';
+    const hostIdx = inScopeStyle.indexOf(`.${scopeClass}{--ggui-color-surface: #101014;}`);
+    const appIdx = inScopeStyle.indexOf(`.${scopeClass}{--ggui-color-surface: #22222a;}`);
+    expect(hostIdx).toBeGreaterThan(-1);
+    expect(appIdx, 'appTheme rule must appear (and win by document order)').toBeGreaterThan(
+      hostIdx,
+    );
+
+    mount!.unmount();
+  });
+
+  it('also rides the :root head block beneath the appTheme append (body chrome coherence)', async () => {
+    const container = makeContainer();
+    let mount: Awaited<ReturnType<typeof mountReactRoot>> | null = null;
+    await flush(async () => {
+      mount = await mountReactRoot(container, {
+        render: { id: 'x', componentCode: '' },
+        hostPalette: { '--ggui-color-surface': '#101014' },
+        appTheme: {
+          mode: 'dark',
+          cssVariables: { '--ggui-color-surface': '#22222a' },
+        },
+      });
+    });
+
+    const text = document.getElementById('ggui-theme-vars')?.textContent ?? '';
+    const hostIdx = text.indexOf('--ggui-color-surface: #101014');
+    const appIdx = text.indexOf('--ggui-color-surface: #22222a');
+    expect(hostIdx).toBeGreaterThan(-1);
+    expect(appIdx).toBeGreaterThan(hostIdx);
+
+    mount!.unmount();
+  });
+});
+
 describe('mountReactRoot — update with new props (no re-eval)', () => {
   it('skips evaluation when componentCode is unchanged across update()', async () => {
     // We can't easily observe "skipped evaluation" without mocking

@@ -5,7 +5,29 @@ import {
   formatDurationMs,
   formatPercent,
   formatDate,
+  judgeCoverageLine,
 } from './format';
+
+describe('judgeCoverageLine', () => {
+  it('renders evaluated/generated with the coverage percent', () => {
+    const line = judgeCoverageLine({ evaluatedCount: 24, judgeCoverage: 24 / 79, successCount: 79 });
+    expect(line).toEqual({ text: 'scores from 24/79 generated cells (30%)', degraded: false });
+  });
+
+  it('marks degraded runs', () => {
+    const line = judgeCoverageLine({
+      evaluatedCount: 24,
+      judgeCoverage: 24 / 79,
+      judgeCoverageDegraded: true,
+      successCount: 79,
+    });
+    expect(line?.degraded).toBe(true);
+  });
+
+  it('returns null for pre-field reports (no evaluatedCount)', () => {
+    expect(judgeCoverageLine({ successCount: 79 })).toBeNull();
+  });
+});
 
 describe('formatScore', () => {
   it('rounds to 1 decimal place', () => {

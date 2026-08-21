@@ -73,6 +73,7 @@ import {
   attachListener as attachHostContextListener,
   seed as seedHostContext,
 } from './host-context-emitter.js';
+import { mapHostPaletteToGguiVars } from './host-palette-bridge.js';
 import {
   buildRootWireConfig,
   StreamBus,
@@ -221,7 +222,7 @@ function dispatchDrainAck(payload: DrainAckPayload): void {
 // App-class plumbing (Phase 1.19b.3). The renderer used to roll its own
 // JSON-RPC pump (a closure-scoped `makeJsonRpcCaller` for the single
 // `ui/initialize` request + a module-level `ensurePostRpcToParentListener`
-// for `tools/call` and a `installPostMountListener` for inbound
+// for `tools/call` and a `installPersistentToolResultListener` for inbound
 // `ui/notifications/tool-result`). Every one of those was a hand-rolled
 // reimplementation of a primitive `@modelcontextprotocol/ext-apps`'s
 // `App` class already ships — drift across them produced the Reading-B
@@ -347,6 +348,96 @@ function getCurrentApp(): App | null {
 export function hostAnnouncedThemeMode(): 'light' | 'dark' | undefined {
   const theme = currentApp?.getHostContext()?.theme;
   return theme === 'light' || theme === 'dark' ? theme : undefined;
+}
+
+/**
+ * Resolve the mount's base-stylesheet color mode from the slice, with
+ * the host as the final fallback (ggui#589, completing the ggui#551
+ * precedence ruling — "slice wins, host is the fallback, absent ≠
+ * light"):
+ *
+ *   stamped `themeMode`  >  `theme.mode` (the slice theme OBJECT)  >
+ *   host-announced theme  >  undefined
+ *
+ * The middle leg is the ggui#589 fix: a render envelope carrying a
+ * per-app theme (`theme: {mode, cssVariables}`) but no top-level
+ * `themeMode` is still a slice-stamped mode opinion — before this,
+ * the base token ladder ignored it and painted the LIGHT token set
+ * under a dark overlay whenever the host (correctly, per the
+ * adapter-boundary doctrine in the native host helpers) announced no
+ * `hostContext.theme`: a light skeleton in a dark skin. The theme
+ * object's own `mode` already drove `color-scheme`; now it also
+ * selects the ladder.
+ *
+ * `undefined` still means "no opinion anywhere" — the renderer's
+ * default applies; never coerced to `'light'`.
+ *
+ * @internal — exported for unit tests; production caller is
+ *   `buildOpts` inside `bootSequence`.
+ */
+export function resolveMountThemeMode(meta: {
+  readonly themeMode?: 'light' | 'dark';
+  readonly theme?: {
+    readonly mode: 'light' | 'dark';
+    readonly cssVariables?: Record<string, string>;
+  };
+}): 'light' | 'dark' | undefined {
+  return meta.themeMode ?? meta.theme?.mode ?? hostAnnouncedThemeMode();
+}
+
+/**
+ * Resolve the mount's base-theme id from the slice (ggui#589 ask 3):
+ *
+ *   stamped `themeId`  >  `theme.name` (the slice theme OBJECT's name)
+ *   >  undefined (renderer default ladder)
+ *
+ * The name leg makes a slice theme whose `name` matches a REGISTERED
+ * theme id select that theme as the BASE token ladder — the overlay's
+ * cssVariables still apply above it, so the base carries the full
+ * brand ramp coverage a sparse overlay cannot (the "only the mapped
+ * vars carry brand" store-frame class). An unregistered name is
+ * harmless by construction: `getScopedThemeCss` falls back to the
+ * default theme, which is byte-identical to the no-themeId path
+ * (`getScopedCssTokens` ≡ `getScopedThemeCss(default)`), so a slice
+ * naming its theme "My Custom" renders exactly as before.
+ *
+ * @internal — exported for unit tests; production caller is
+ *   `buildOpts` inside `bootSequence`.
+ */
+export function resolveMountThemeId(meta: {
+  readonly themeId?: string;
+  readonly theme?: {
+    readonly name?: string;
+    readonly mode?: 'light' | 'dark';
+    readonly cssVariables?: Record<string, string>;
+  };
+}): string | undefined {
+  return meta.themeId ?? meta.theme?.name;
+}
+
+/**
+ * The host's announced palette, read from the connected App's
+ * pre-merged hostContext and translated onto `--ggui-*` tokens by the
+ * host-palette bridge. `undefined` when no App is connected, the host
+ * sent no `styles.variables`, or nothing in it maps/survives
+ * sanitization — callers spread-skip the option, exactly like
+ * {@link hostAnnouncedThemeMode}.
+ *
+ * This is the palette input leg of host-theme adaptation (ggui#572,
+ * the color analog of #551's mode leg above): the spec `--color-*`
+ * variables land as inline custom properties on `<html>` via the
+ * canonical ext-apps helper, but nothing ggui renders consumes that
+ * vocabulary, and the scoped token block shadows root inheritance
+ * anyway — so without this mapping a host palette repaints nothing.
+ * `buildOpts` threads it onto the mount options; the renderer merges
+ * it as the fallback layer BENEATH the slice's own theme (ggui#573
+ * ruling: slice wins, host fallback).
+ *
+ * @internal — exported for unit tests (`setCurrentApp` injects the
+ *   App); production caller is `buildOpts` inside `bootSequence`.
+ */
+export function hostAnnouncedPalette(): Readonly<Record<string, string>> | undefined {
+  return mapHostPaletteToGguiVars(currentApp?.getHostContext()?.styles?.variables);
 }
 
 /**
@@ -794,6 +885,15 @@ export async function bootSequence(opts: BootSequenceOptions): Promise<BootSeque
     opts.preResolvedMeta !== undefined
       ? Promise.resolve(null)
       : awaitToolResultMetaFromApp(app, toolResultTimeoutMs);
+
+  // Persistent re-mount listener — ALSO pre-connect (ggui#586). On a
+  // Tier-1/preResolved boot the one-shot listener above is skipped,
+  // which made the post-mount installation the FIRST toolresult
+  // registration — after the handshake, tripping the ext-apps timing
+  // notice and leaning on SDK replay for correctness. Registering here
+  // covers every boot path; arrivals before a renderer publishes
+  // `applyRender` no-op inside the listener.
+  installPersistentToolResultListener(app);
 
   const initResult = await connectApp(app, transport);
   if (!initResult.ok) {
@@ -1850,18 +1950,20 @@ function awaitToolResultMeta(
 }
 
 /**
- * Module-level guard for the App-mediated post-mount toolresult
- * re-listener. Ensures exactly one persistent
- * `app.addEventListener('toolresult', …)` registration even across
- * re-mounts (e.g. an agent fires a second `ggui_render` and the
- * listener re-applies through the published `applyRender`).
+ * Per-App guard for the persistent toolresult re-listener. Ensures
+ * exactly one `app.addEventListener('toolresult', …)` registration per
+ * App instance even across re-mounts (e.g. an agent fires a second
+ * `ggui_render` and the listener re-applies through the published
+ * `applyRender`). Keyed by App — not a module boolean — so a fresh App
+ * (a re-booted document in tests; production is single-tenant per
+ * iframe) always gets its own registration, never a stale latch.
  */
-let postMountListenerInstalled = false;
+const persistentToolResultListenerApps = new WeakSet<App>();
 
 /**
  * Module-level handle to the active renderer's `applyRender`, published
  * by `bootProduction`'s `setup()` once the renderer is built. The
- * module-level {@link installPostMountListener} resolves this to re-mount
+ * module-level {@link installPersistentToolResultListener} resolves this to re-mount
  * on a host-re-emitted tool-result WITHOUT a fresh boot — no second mount,
  * no second WS. This is the no-WS live-re-render channel for
  * spec-compliant MCP-Apps hosts (claude.ai / ChatGPT / Claude Desktop)
@@ -1876,8 +1978,8 @@ let activeApplyRender:
 
 /**
  * Module-level guard for {@link installAnchorClickInterceptor}. Same
- * rationale as {@link postMountListenerInstalled}: re-mounts are
- * triggered by `installPostMountListener`, and stacking capture-phase
+ * rationale as {@link persistentToolResultListenerApps}: re-mounts are
+ * triggered by `installPersistentToolResultListener`, and stacking capture-phase
  * click listeners across re-mounts would multiply the audit envelopes
  * that fire on a single click.
  */
@@ -3564,7 +3666,7 @@ export function requestDisplayModeInParent(args: {
  * or honor an upstream `defaultPrevented` from a higher-priority
  * handler.
  *
- * Idempotent: re-mounts (via `installPostMountListener`) call this
+ * Idempotent: re-mounts (via `installPersistentToolResultListener`) call this
  * helper again; the {@link anchorClickInterceptInstalled} guard makes
  * subsequent calls a no-op.
  */
@@ -3721,15 +3823,26 @@ export function __resetInterceptorsForTest(): void {
 }
 
 /**
- * Install a persistent `app.addEventListener('toolresult', …)` listener
- * that catches `ui/notifications/tool-result` notifications arriving
- * AFTER the initial mount. Each new tool-result that carries a
- * different bootstrap (different sessionId / codeUrl / kind) triggers
- * a re-mount through the published `applyRender`. This closes the boot-only-
+ * Install the persistent `app.addEventListener('toolresult', …)`
+ * listener that catches `ui/notifications/tool-result` notifications
+ * arriving at ANY point in the document's life. Each tool-result that
+ * carries a different bootstrap (different sessionId / codeUrl / kind)
+ * triggers a re-mount through the published `applyRender`; arrivals
+ * before a renderer publishes `applyRender` no-op safely (and do NOT
+ * latch the dedupe key — see below). This closes the boot-only-
  * listener gap that prevented live re-render when an agent issued
  * a second `ggui_render` to the same render-resource.
  *
- * Idempotent: subsequent calls no-op via {@link postMountListenerInstalled}.
+ * REGISTRATION TIMING (ggui#586): called by `bootSequence` BEFORE
+ * `app.connect(transport)` — on a Tier-1/preResolved boot the one-shot
+ * Tier-2 listener never registers, so this used to be the FIRST
+ * `toolresult` registration and landed post-handshake (the ext-apps
+ * `_assertHandlerTiming` notice a guuey production render surfaced).
+ * The SDK's replay made that harmless; pre-registering removes the
+ * dependence on replay entirely.
+ *
+ * Idempotent per App: repeat calls with the same App no-op via
+ * {@link persistentToolResultListenerApps}.
  *
  * Why module-level vs scoped to a single mount: re-mounts re-apply
  * through `applyRender` while the listener stays live, and the
@@ -3739,15 +3852,12 @@ export function __resetInterceptorsForTest(): void {
  * Spec-canonical (post-Phase-1.19b.3): the previous hand-rolled
  * `window.addEventListener('message', …)` is gone; App handles every
  * inbound `ui/notifications/tool-result` envelope and dispatches via
- * its event system. Per-iframe single-tenancy means the App handle
- * comes from `getCurrentApp()` — set by `bootSequence`'s connect
- * path before this helper runs.
+ * its event system. The App handle is passed by the boot path
+ * directly (pre-connect, so `getCurrentApp()` is not yet set).
  */
-function installPostMountListener(): void {
-  if (postMountListenerInstalled) return;
-  const app = getCurrentApp();
-  if (app === null) return; // pre-connect; caller bug, swallow safely
-  postMountListenerInstalled = true;
+function installPersistentToolResultListener(app: App): void {
+  if (persistentToolResultListenerApps.has(app)) return;
+  persistentToolResultListenerApps.add(app);
   let lastMetaKey: string | null = null;
   app.addEventListener('toolresult', (params) => {
     const meta = extractMetaFromToolResult(params);
@@ -3784,14 +3894,20 @@ function installPostMountListener(): void {
       liveTrio,
     ].join('|');
     if (key === lastMetaKey) return;
-    lastMetaKey = key;
     // Re-mount through the EXISTING renderer's `applyRender` (published
     // module-level by bootProduction's setup) — NOT a fresh boot. One
     // mount surface, one WS; the prior stale-closure / second-WS race
     // (the #290 root cause) is structurally impossible. Project the new
     // tool-result meta into a seed and re-apply it.
+    //
+    // The apply-null check runs BEFORE the dedupe key latches (ggui#586
+    // ordering): now that this listener registers pre-connect, the
+    // BOOT-path tool-result also flows through here while no renderer
+    // is published yet — latching its key then would silently dedupe a
+    // legitimate post-mount re-broadcast of the same envelope.
     const apply = activeApplyRender;
     if (apply === null) return; // no renderer published yet — no-op safely
+    lastMetaKey = key;
     void buildGguiSessionSeedInput(meta).then((seed) => {
       if (seed === null) return;
       void apply(seed).then(() => {
@@ -4318,13 +4434,21 @@ async function bootProduction(opts: {
           !('createdAt' in render)
             ? { codeModuleUrl: meta.codeModuleUrl }
             : {}),
-          ...(meta.themeId !== undefined ? { themeId: meta.themeId } : {}),
-          // Mode: the slice's stamped `themeMode` (every operator layer
-          // resolves into it) wins; when absent, the HOST's announced
-          // theme fills the gap (ggui#551 — see `hostAnnouncedThemeMode`).
-          // Absent-in-slice means "no operator opinion", not "light".
+          // Base-theme ladder (ggui#589 ask 3 — see `resolveMountThemeId`):
+          // stamped themeId > the slice theme object's NAME (a
+          // registered name binds the full brand base; unregistered
+          // names fall back to the default ladder, byte-identical to
+          // the no-themeId path).
           ...(() => {
-            const themeMode = meta.themeMode ?? hostAnnouncedThemeMode();
+            const themeId = resolveMountThemeId(meta);
+            return themeId !== undefined ? { themeId } : {};
+          })(),
+          // Mode ladder (ggui#551 + #589 — see `resolveMountThemeMode`):
+          // stamped `themeMode` > the slice theme OBJECT's `mode` >
+          // host-announced theme. Absent everywhere means "no opinion",
+          // not "light".
+          ...(() => {
+            const themeMode = resolveMountThemeMode(meta);
             return themeMode !== undefined ? { themeMode } : {};
           })(),
           // Per-app theme overlay (St3 M2.2). Threaded straight from the
@@ -4334,6 +4458,15 @@ async function bootProduction(opts: {
           // `color-scheme` at `:root`. THEME IS COMPONENT-ONLY — system
           // cards theme via the SystemCardHost/ThemeProvider path.
           ...(meta.theme !== undefined ? { appTheme: meta.theme } : {}),
+          // Host palette: always threaded when the host announced one —
+          // unlike mode there is no either/or gate here, because the
+          // precedence is CSS document order inside the scoped block
+          // (base < hostPalette < appTheme, ggui#572/#573: slice wins,
+          // host fallback), not a value-level ?? fallback.
+          ...(() => {
+            const hostPalette = hostAnnouncedPalette();
+            return hostPalette !== undefined ? { hostPalette } : {};
+          })(),
           ...(wrapOuter !== undefined ? { wrapOuter } : {}),
         };
       };
@@ -4359,17 +4492,17 @@ async function bootProduction(opts: {
         await renderHandle.update(buildOpts(render));
       };
 
-      // Publish `applyRender` module-level + install the persistent
-      // post-mount tool-result listener. On a host-re-emitted tool-result
-      // (claude.ai re-broadcast; the Anthropic-SDK-strips-_meta refetch),
-      // the listener re-mounts through THIS `applyRender` — no fresh boot,
-      // no second WS. The no-WS live-re-render channel; for WS hosts the
-      // render-frame handler already covers re-render, so it's a
-      // redundant-safe fallback (guarded by the sessionId pin + liveTrio
-      // dedupe). Runs only on the production renderer path (tests that
-      // drive bootSequence without a renderer never reach setup()).
+      // Publish `applyRender` module-level. The persistent tool-result
+      // listener is ALREADY registered — `bootSequence` installs it
+      // pre-connect (ggui#586) — and reads this slot dynamically, so
+      // publishing here is what arms it. On a host-re-emitted
+      // tool-result (claude.ai re-broadcast; the
+      // Anthropic-SDK-strips-_meta refetch), the listener re-mounts
+      // through THIS `applyRender` — no fresh boot, no second WS. The
+      // no-WS live-re-render channel; for WS hosts the render-frame
+      // handler already covers re-render, so it's a redundant-safe
+      // fallback (guarded by the sessionId pin + liveTrio dedupe).
       activeApplyRender = applyRender;
-      installPostMountListener();
 
       // Validator context — A2UI default for `_ggui:preview`; no
       // bootstrap-supplied overrides today (the

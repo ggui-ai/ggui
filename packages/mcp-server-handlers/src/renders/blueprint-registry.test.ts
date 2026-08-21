@@ -1406,3 +1406,119 @@ describe('keyed point-reads never enumerate the scope (ggui#527)', () => {
     expect(list).toHaveBeenCalled();
   });
 });
+
+describe('registerBlueprint — eviction count-gate (ggui#540)', () => {
+  function gateContract(seed: number): DataContract {
+    return {
+      contextSpec: {
+        [`gate_field_${seed}`]: { schema: { type: 'string' }, default: '' },
+      },
+    };
+  }
+
+  it('skips the scope enumeration entirely while the index proves the bucket under cap', async () => {
+    const deps = makeDeps();
+    const list = vi.spyOn(deps.vectorStore, 'listByScope');
+    await registerBlueprint(
+      deps,
+      SCOPE,
+      {
+        kind: 'template',
+        contract: gateContract(1),
+        intent: 'one',
+        componentCode: 'a',
+        source: { kind: 'user' },
+      },
+      { maxPerKind: 3 },
+    );
+    // Bucket is provably under cap (index count 0 < 3) — the O(index)
+    // walk must not run at all on the fresh-mint path.
+    expect(list).not.toHaveBeenCalled();
+  });
+
+  it('at cap the gate lets the ranking walk run — eviction still fires', async () => {
+    const deps = makeDeps();
+    const cap = 2;
+    for (let i = 1; i <= cap; i++) {
+      await registerBlueprint(
+        deps,
+        SCOPE,
+        {
+          kind: 'template',
+          contract: gateContract(10 + i),
+          intent: `seed ${i}`,
+          componentCode: 'x',
+          source: { kind: 'user' },
+        },
+        { maxPerKind: cap },
+      );
+    }
+    const list = vi.spyOn(deps.vectorStore, 'listByScope');
+    await registerBlueprint(
+      deps,
+      SCOPE,
+      {
+        kind: 'template',
+        contract: gateContract(99),
+        intent: 'overflow',
+        componentCode: 'y',
+        source: { kind: 'user' },
+      },
+      { maxPerKind: cap },
+    );
+    expect(list).toHaveBeenCalled();
+    const all = await listBlueprints(deps, SCOPE);
+    expect(all).toHaveLength(cap);
+  });
+
+  it('an index without countIds preserves the pre-gate walk behavior', async () => {
+    const deps = makeDeps();
+    // Delegating wrapper without the optional counting capability —
+    // the shape of a third-party BlueprintIndex written before #540.
+    const bare = {
+      getId: (s: string, k: string) => deps.index.getId(s, k),
+      putId: (s: string, k: string, id: string) => deps.index.putId(s, k, id),
+      deleteId: (s: string, k: string) => deps.index.deleteId(s, k),
+    };
+    const list = vi.spyOn(deps.vectorStore, 'listByScope');
+    await registerBlueprint(
+      { ...deps, index: bare },
+      SCOPE,
+      {
+        kind: 'template',
+        contract: gateContract(2),
+        intent: 'bare',
+        componentCode: 'b',
+        source: { kind: 'user' },
+      },
+      { maxPerKind: 3 },
+    );
+    expect(list).toHaveBeenCalled();
+  });
+
+  it('a throwing countIds falls back to the walk — counting is an optimization only', async () => {
+    const deps = makeDeps();
+    const throwing = {
+      getId: (s: string, k: string) => deps.index.getId(s, k),
+      putId: (s: string, k: string, id: string) => deps.index.putId(s, k, id),
+      deleteId: (s: string, k: string) => deps.index.deleteId(s, k),
+      countIds: async (): Promise<number> => {
+        throw new Error('count backend down');
+      },
+    };
+    const list = vi.spyOn(deps.vectorStore, 'listByScope');
+    await registerBlueprint(
+      { ...deps, index: throwing },
+      SCOPE,
+      {
+        kind: 'template',
+        contract: gateContract(3),
+        intent: 'throwing',
+        componentCode: 'c',
+        source: { kind: 'user' },
+      },
+      { maxPerKind: 3 },
+    );
+    expect(list).toHaveBeenCalled();
+  });
+});

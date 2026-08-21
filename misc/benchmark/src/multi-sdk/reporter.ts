@@ -46,13 +46,33 @@ function dedupeJudges(judges: JudgeDisclosure[]): JudgeDisclosure[] {
 }
 
 /**
+ * Judge-coverage floor: below this share of generation-succeeded cells
+ * carrying a panel score, the report flags itself `judgeCoverageDegraded`
+ * (#565 — the first real run silently published aggregates over 30%
+ * coverage). 0.8 = at most 1 in 5 judgeable cells may lose its panel
+ * before the run stops presenting its means as representative.
+ */
+export const JUDGE_COVERAGE_FLOOR = 0.8;
+
+/**
  * Generate a full benchmark report from individual run results.
+ *
+ * `opts.evaluationSkipped` — pass true for `skipEvaluation` runs so the
+ * (expected) zero coverage isn't flagged as degradation.
  */
 export function generateReport(
   results: BenchmarkRunResult[],
-  totalDurationMs: number
+  totalDurationMs: number,
+  opts?: { evaluationSkipped?: boolean }
 ): BenchmarkReport {
   const successResults = results.filter((r) => r.generation !== null);
+  const evaluatedCount = results.filter((r) => r.evaluation !== null).length;
+  const judgeCoverage =
+    successResults.length > 0 ? evaluatedCount / successResults.length : 0;
+  const judgeCoverageDegraded =
+    !opts?.evaluationSkipped &&
+    successResults.length > 0 &&
+    judgeCoverage < JUDGE_COVERAGE_FLOOR;
 
   // Judge disclosure: every PanelEvalResult carries its panel of
   // judges. Surface the distinct panel models once at meta level (taken
@@ -73,6 +93,9 @@ export function generateReport(
       failureCount: results.length - successResults.length,
       successRate: results.length > 0 ? successResults.length / results.length : 0,
       ...(judges !== undefined ? { judges } : {}),
+      evaluatedCount,
+      judgeCoverage,
+      ...(judgeCoverageDegraded ? { judgeCoverageDegraded: true as const } : {}),
     },
     results,
     variantSummaries: buildVariantSummaries(results),
@@ -582,6 +605,9 @@ export function toDisplayReport(
       durationMs: report.meta.totalDurationMs,
       dataLicense: 'CC-BY-4.0',
       ...(report.meta.judges !== undefined ? { judges: report.meta.judges } : {}),
+      evaluatedCount: report.meta.evaluatedCount,
+      judgeCoverage: report.meta.judgeCoverage,
+      ...(report.meta.judgeCoverageDegraded ? { judgeCoverageDegraded: true as const } : {}),
     },
     results: report.results.map(mapRunResult),
     variantSummaries: report.variantSummaries.map((v) =>

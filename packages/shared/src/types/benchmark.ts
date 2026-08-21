@@ -77,6 +77,24 @@ export interface BenchmarkMeta {
    * result was evaluated (skip-evaluation runs).
    */
   judges?: JudgeDisclosureDisplay[];
+  /**
+   * Cells whose judge panel produced a score. Optional: reports
+   * published before 2026-08-20 predate the field.
+   */
+  evaluatedCount?: number;
+  /**
+   * `evaluatedCount` over the generation-succeeded cells (the judgeable
+   * subset); 0 when nothing generated. Raw ratio, like `successRate`.
+   * Optional for the same pre-2026-08-20 reason.
+   */
+  judgeCoverage?: number;
+  /**
+   * Present (true) when evaluation ran but judge coverage fell under the
+   * runner's floor — this run's aggregate scores rest on too few judged
+   * cells to be representative. Viewers must annotate scores from a
+   * degraded run rather than presenting them as full-coverage means.
+   */
+  judgeCoverageDegraded?: true;
   /** SPDX id of the published dataset license. */
   dataLicense?: string;
 }

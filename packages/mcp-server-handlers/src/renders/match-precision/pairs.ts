@@ -155,6 +155,51 @@ const CALENDAR: DataContract = {
 const STUB_CODE = 'export default () => null;';
 
 /** Convenience: a seed with the shared stub component body. */
+/**
+ * Day-slot booking card — mirrors the live bp_25d3a859/bp_52e08f19
+ * contract family (#556 incident rows): a day's slots and a book action.
+ */
+const BOOKING_CARD: DataContract = {
+  propsSpec: {
+    properties: {
+      day: { required: true, schema: { type: 'string' } },
+      slots: { required: true, schema: { type: 'array' } },
+    },
+  },
+  actionSpec: {
+    bookSlot: {
+      label: 'Book this slot',
+      schema: {
+        type: 'object',
+        properties: { slotId: { type: 'string' } },
+        required: ['slotId'],
+      },
+    },
+  },
+};
+
+/**
+ * Per-person standup timer — mirrors the live bp_252c5ec7/bp_3bb57449
+ * family: members, per-turn seconds, advance/reset actions.
+ */
+const STANDUP_TIMER: DataContract = {
+  propsSpec: {
+    properties: {
+      members: { required: true, schema: { type: 'array' } },
+      secondsPerPerson: { required: true, schema: { type: 'number' } },
+    },
+  },
+  contextSpec: {
+    activeIndex: { schema: { type: 'number' }, default: 0 },
+    running: { schema: { type: 'boolean' }, default: false },
+  },
+  actionSpec: {
+    startTimer: { label: 'Start' },
+    nextPerson: { label: 'Next person' },
+    resetTimer: { label: 'Reset' },
+  },
+};
+
 function seed(intent: string, contract: DataContract, variance?: BlueprintVariance): PairSeed {
   return variance === undefined ? { intent, contract } : { intent, contract, variance };
 }
@@ -763,5 +808,144 @@ export const PAIRS: readonly MatchPair[] = [
     reuseWouldBeWrong: false,
     rationale:
       'Step COUNT lives in intent prose; the wizard chrome is identical. Fixed-value conflict or cosmetic delta? Unresolved — stability only.',
+  },
+
+  // -------------------------------------------------------------------------
+  // Cross-family time-vocabulary class — added 2026-08-20 from a LIVE
+  // incident (ggui#556/#563: the dev-plane Tier-2 judge matched BOOKING
+  // CARDS for timer-family asks at confidence 0.82–0.95; handshakes
+  // 8af5e62f/a2f32727/edee3d63/4f0d2c0c, stored rows bp_25d3a859 and
+  // bp_52e08f19). Stored intents below mirror the live rows; probe
+  // intents mirror the live ask family. Hand-labeled: a day-slot
+  // booking surface handed to a countdown/timer ask is wrong, whatever
+  // the judge's confidence says.
+  // -------------------------------------------------------------------------
+  {
+    id: 'm-crossfam-timer-vs-booking',
+    klass: 'semantic-must-miss',
+    tier: 'gated',
+    seeds: [
+      seed(
+        'Compact booking card showing Monday availability with time slots',
+        BOOKING_CARD,
+      ),
+    ],
+    probe: {
+      intent: 'a team standup timer that cycles through members',
+      contract: STANDUP_TIMER,
+    },
+    expect: { verdict: 'miss' },
+    reuseWouldBeWrong: true,
+    rationale:
+      'The live #556 shape: booking (pick a slot, submit) vs timer (countdown, advance turns) share time-of-day vocabulary but are different user tasks AND different UI shapes. Live judge said "Exact task match" at 0.95 — hand label says wrong.',
+  },
+  {
+    id: 'm-crossfam-slots-vocab-hard',
+    klass: 'semantic-must-miss',
+    tier: 'gated',
+    seeds: [
+      seed(
+        'Compact booking card showing Monday availability with time slots',
+        BOOKING_CARD,
+      ),
+    ],
+    probe: {
+      // Deliberately poisoned with "time slot" vocabulary — the hard
+      // variant: if the live agent authored its intent with slot words,
+      // this is the trap the judge fell into.
+      intent:
+        'a standup timer giving each person a time slot — countdown per member with a next-up queue',
+      contract: STANDUP_TIMER,
+    },
+    expect: { verdict: 'miss' },
+    reuseWouldBeWrong: true,
+    rationale:
+      'Same task split as m-crossfam-timer-vs-booking but the probe intent itself says "time slot". Vocabulary overlap must not read as task identity: booking allocates calendar availability; a standup timer allocates speaking turns.',
+  },
+  {
+    id: 'm-crossfam-booking-vs-timer',
+    klass: 'semantic-must-miss',
+    tier: 'gated',
+    seeds: [seed('a team standup timer for daily check-ins', STANDUP_TIMER)],
+    probe: {
+      intent: 'Small booking card showing Monday with one time slot free',
+      contract: BOOKING_CARD,
+    },
+    expect: { verdict: 'miss' },
+    reuseWouldBeWrong: true,
+    rationale:
+      'Reverse direction of the live incident: a countdown surface for a booking ask is equally wrong — the class must fail symmetrically.',
+  },
+
+  // -------------------------------------------------------------------------
+  // Distractor-pool over-selection probes — added 2026-08-20 after the
+  // live diagnosis (#556 c.5353568001) landed on candidate-set
+  // over-selection: the live judge picked wrong-family candidates at
+  // 0.82–0.95 when the app scope's pool held ONLY wrong-family rows,
+  // while this instrument's 1-candidate replicas refuse at 0.05. These
+  // pairs hand the judge a POOL of plausible wrong-family candidates
+  // and nothing right-family — the offline reproduction attempt for
+  // best-of-bad selection. Verbatim intents from the incident.
+  // -------------------------------------------------------------------------
+  {
+    id: 'm-pool-booking-heavy',
+    klass: 'semantic-must-miss',
+    tier: 'gated',
+    seeds: [
+      seed(
+        'Compact booking card showing Monday availability with time slots',
+        BOOKING_CARD,
+      ),
+      seed(
+        'Small booking card showing Monday with one time slot marked busy',
+        BOOKING_CARD,
+      ),
+      seed('appointment picker for a barber shop, morning slots', BOOKING_CARD),
+      seed(
+        'weekly availability card with bookable afternoon windows',
+        BOOKING_CARD,
+      ),
+      seed('reservation card for Tuesday with two open tables', BOOKING_CARD),
+    ],
+    probe: {
+      intent: 'a standup timer',
+      contract: STANDUP_TIMER,
+    },
+    expect: { verdict: 'miss' },
+    reuseWouldBeWrong: true,
+    rationale:
+      'The live 05:57Z shape: verbatim incident intent against a pool of five booking variants and zero timer rows. A judge that returns any of these instead of null is over-selecting best-of-bad.',
+  },
+  {
+    id: 'm-pool-mixed-wrongfam',
+    klass: 'semantic-must-miss',
+    tier: 'gated',
+    seeds: [
+      seed(
+        'Compact booking card showing Monday availability with time slots',
+        BOOKING_CARD,
+      ),
+      seed('my todo items', TODO),
+      seed(
+        'account management dashboard combining credit balance and usage',
+        {
+          propsSpec: {
+            properties: {
+              balanceUsd: { required: true, schema: { type: 'number' } },
+              usageRows: { required: true, schema: { type: 'array' } },
+            },
+          },
+        },
+      ),
+      seed('reservation card for Tuesday with two open tables', BOOKING_CARD),
+    ],
+    probe: {
+      intent: 'a meeting countdown clock',
+      contract: STANDUP_TIMER,
+    },
+    expect: { verdict: 'miss' },
+    reuseWouldBeWrong: true,
+    rationale:
+      'The live 06:02Z verbatim intent against a mixed wrong-family pool (bookings, todo, dashboard). Nothing here is a countdown; null is the only correct answer at any pool size.',
   },
 ] as const;

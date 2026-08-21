@@ -38,6 +38,17 @@ export interface DtcgTheme {
     font?: string;
     fontUrl?: string;
     philosophy?: string;
+    /**
+     * The embedding host draws the card silhouette (a rim / rounded
+     * clip mask around the view), so the theme must paint NO border on
+     * the document's ROOT layer — a square stroke on the outermost
+     * element gets its corners amputated by the host's rounded mask.
+     * When true, `getScopedThemeCss` appends a root-children border
+     * suppression rule (`.scope > :where(:not(style)) { border: none
+     * !important }`). Inner-container strokes are untouched — only the
+     * outermost layer is the host's.
+     */
+    frameless?: boolean;
   };
 
   color: {

@@ -282,6 +282,21 @@ export interface BenchmarkReport {
      * runs) — a report without scores has no judges.
      */
     judges?: JudgeDisclosure[];
+    /** Cells whose judge panel produced a score (`evaluation !== null`). */
+    evaluatedCount: number;
+    /**
+     * `evaluatedCount` over the generation-succeeded cells (the judgeable
+     * subset); 0 when nothing generated. Raw ratio, like `successRate`.
+     */
+    judgeCoverage: number;
+    /**
+     * Present (true) when evaluation RAN (not `skipEvaluation`) over a
+     * non-empty judgeable subset but coverage fell under
+     * `JUDGE_COVERAGE_FLOOR` — the run's aggregate scores rest on too few
+     * judged cells to be representative (#565: 30% coverage published as
+     * if it were full). Viewers must annotate scores from a degraded run.
+     */
+    judgeCoverageDegraded?: true;
   };
   results: BenchmarkRunResult[];
   variantSummaries: VariantSummary[];

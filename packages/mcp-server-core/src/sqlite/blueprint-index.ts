@@ -75,6 +75,7 @@ export class SqliteBlueprintIndex implements BlueprintIndex {
     insert: SqliteStatement<unknown[]>;
     select: SqliteStatement<unknown[], BlueprintIndexRow>;
     del: SqliteStatement<unknown[]>;
+    count: SqliteStatement<unknown[], { n: number }>;
   };
 
   constructor(opts: SqliteBlueprintIndexOptions = {}) {
@@ -104,6 +105,14 @@ export class SqliteBlueprintIndex implements BlueprintIndex {
       ),
       del: this.db.prepare<unknown[]>(
         `DELETE FROM blueprint_index WHERE scope = ? AND exact_key = ?`,
+      ),
+      // Literal-prefix count via substr, deliberately NOT LIKE — `%`/`_`
+      // in a prefix must never widen the match (contract-pinned). The
+      // (scope, exact_key) PK satisfies the scope equality; the substr
+      // filter walks only that scope's rows.
+      count: this.db.prepare<unknown[], { n: number }>(
+        `SELECT COUNT(*) AS n FROM blueprint_index
+         WHERE scope = ? AND substr(exact_key, 1, ?) = ?`,
       ),
     };
   }
@@ -135,6 +144,11 @@ export class SqliteBlueprintIndex implements BlueprintIndex {
     // `DELETE WHERE` is naturally idempotent — zero-row deletes are not
     // errors in SQLite, matching the BlueprintIndex contract.
     this.stmts.del.run(scope, exactKey);
+  }
+
+  async countIds(scope: string, exactKeyPrefix: string): Promise<number> {
+    const row = this.stmts.count.get(scope, exactKeyPrefix.length, exactKeyPrefix);
+    return row?.n ?? 0;
   }
 }
 

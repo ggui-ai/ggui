@@ -68,6 +68,7 @@ import {
   classifyRendererEnvelope,
   deriveResourceMountSource,
   dispatchHostBridgeRequest,
+  readSizeChangedNotification,
   type HostBridgeContext,
   type HostBridgeRequest,
   type HostBridgeResponse,
@@ -107,6 +108,7 @@ export const McpAppIframe = forwardRef<McpAppIframeRef, McpAppIframeProps>(
       onError,
       onObserve,
       onLifecycle,
+      onSizeChanged,
     },
     ref,
   ) {
@@ -226,6 +228,16 @@ export const McpAppIframe = forwardRef<McpAppIframeRef, McpAppIframeProps>(
             return;
           }
           case 'jsonrpc': {
+            // `ui/notifications/size-changed` (ggui#589 rider 5) — an
+            // id-less NOTIFICATION, so it never reaches the request
+            // dispatcher below (which returns null for notifications;
+            // before this branch the announce was dropped and content
+            // taller than the container clipped). Surface it and stop.
+            const sizeChange = readSizeChangedNotification(payload);
+            if (sizeChange !== null) {
+              onSizeChanged?.(sizeChange);
+              return;
+            }
             const req = payload as HostBridgeRequest;
             const response = await dispatchHostBridgeRequest(req, ctxRef.current);
             if (response) deliverToWebView(response);
@@ -256,7 +268,7 @@ export const McpAppIframe = forwardRef<McpAppIframeRef, McpAppIframeProps>(
             return;
         }
       },
-      [deliverToWebView, onError, onObserve, onLifecycle],
+      [deliverToWebView, onError, onObserve, onLifecycle, onSizeChanged],
     );
 
     // Mount-source null → caller gave an unmountable resource. Emit
@@ -306,7 +318,11 @@ export const McpAppIframe = forwardRef<McpAppIframeRef, McpAppIframeProps>(
 
     if (mountSource === null) {
       // Render an empty View so the caller still sees a slot; onError
-      // already fired the bootstrap-failed error.
+      // already fired the bootstrap-failed error. NO card chrome —
+      // the HOST owns borders/radius entirely (ggui#589 round 6: the
+      // hardcoded #e5e5e5 border ran at its own radius inside the
+      // embedder's rounded rim — the two-radii mismatch was the
+      // store-frame rejection).
       return (
         <View
           testID="mcp-app-iframe-empty"
@@ -315,9 +331,6 @@ export const McpAppIframe = forwardRef<McpAppIframeRef, McpAppIframeProps>(
             height: dims.height ?? 480,
             ...(dims.maxWidth !== undefined ? { maxWidth: dims.maxWidth } : {}),
             ...(dims.maxHeight !== undefined ? { maxHeight: dims.maxHeight } : {}),
-            borderWidth: 1,
-            borderColor: '#e5e5e5',
-            borderRadius: 8,
           }}
         />
       );
@@ -337,14 +350,15 @@ export const McpAppIframe = forwardRef<McpAppIframeRef, McpAppIframeProps>(
         {...(lifecycleState !== null
           ? { accessibilityValue: { text: lifecycleState } }
           : {})}
+        // NO card chrome (ggui#589 round 6) — the HOST owns borders/
+        // radius/silhouette entirely, the same doctrine as the round-5
+        // frameless ruling one layer down. `overflow: 'hidden'` stays:
+        // it is containment (clip the WebView to the slot), not chrome.
         style={{
           width: dims.width ?? '100%',
           height: dims.height ?? 480,
           ...(dims.maxWidth !== undefined ? { maxWidth: dims.maxWidth } : {}),
           ...(dims.maxHeight !== undefined ? { maxHeight: dims.maxHeight } : {}),
-          borderWidth: 1,
-          borderColor: '#e5e5e5',
-          borderRadius: 8,
           overflow: 'hidden',
         }}
       >

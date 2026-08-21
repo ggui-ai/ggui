@@ -114,7 +114,47 @@ export interface RunRenderCheckInput {
 // Public entry
 // ─────────────────────────────────────────────────────────────────────────────
 
+/**
+ * Run the in-loop runtime render check.
+ *
+ * Isolation dispatcher (#592): when the CALLING environment already
+ * owns a DOM (`window` + `document` on `globalThis` — e.g. a vitest
+ * `happy-dom` environment, where the environment owner installed the
+ * globals deliberately), the check runs in-process exactly as before.
+ * In a plain Node process it runs in an ISOLATED SUBPROCESS
+ * (`render-check-host.ts` → `render-check-worker.ts`), because the
+ * in-process path installs happy-dom globals on `globalThis`
+ * process-wide — a TOCTOU hazard for anything that sniffs `window`
+ * concurrently (provider SDKs throw "browser-like environment" at
+ * client construction; two overlapping checks corrupt each other's
+ * teardown). See #592 for the measured incident (4 bench cells hard-
+ * failed on the 2026-08-19 run).
+ *
+ * The host is loaded lazily so the worker bundle (which imports this
+ * module for `runRenderCheckInProcess`) never drags in the sandbox
+ * spawn machinery.
+ */
 export async function runRenderCheck(
+  input: RunRenderCheckInput,
+): Promise<RenderCheckResult> {
+  const g = hostGlobals();
+  if ("window" in g && "document" in g) {
+    return runRenderCheckInProcess(input);
+  }
+  const { runRenderCheckViaWorker } = await import("./render-check-host.js");
+  return runRenderCheckViaWorker(input);
+}
+
+/**
+ * The actual check, executed IN THE CURRENT PROCESS — installs
+ * happy-dom globals on `globalThis` for the duration when the
+ * environment doesn't already provide a DOM. Call sites outside this
+ * module should use {@link runRenderCheck}; this export exists for the
+ * isolation worker (which IS the private process the globals may own)
+ * and for DOM-owning test environments that want to bypass the
+ * dispatcher explicitly.
+ */
+export async function runRenderCheckInProcess(
   input: RunRenderCheckInput,
 ): Promise<RenderCheckResult> {
   const t0 = Date.now();

@@ -247,6 +247,55 @@ describe('bootSequence — preResolvedMeta short-circuit', () => {
   });
 });
 
+describe('bootSequence — persistent toolresult listener timing (ggui#586)', () => {
+  /**
+   * Field-reported by a guuey production render (Trimly, 2026-08-20):
+   * on a Tier-1/preResolved boot the one-shot Tier-2 listener never
+   * registers, so the FIRST `toolresult` registration was the
+   * post-mount re-mount listener — after `connect()` — and the
+   * ext-apps SDK logged its `_assertHandlerTiming` notice. The SDK's
+   * replay made it harmless TODAY; if replay ever goes away, a host
+   * re-emitting a tool-result between handshake and mount is silently
+   * dropped on the most common boot path. The persistent listener must
+   * register BEFORE `connect()` on EVERY boot path.
+   */
+  it('registers a toolresult listener BEFORE connect() even when preResolvedMeta skips Tier 2', async () => {
+    const dom = document.implementation.createHTMLDocument('renderer-test');
+    const { app, transport } = buildBootHarness();
+    const { connectFn } = buildMockConnect(makeRender('render_001', 'pre-resolved'));
+
+    const events: string[] = [];
+    const origAdd = app.addEventListener.bind(app);
+    vi.spyOn(app, 'addEventListener').mockImplementation((event, listener) => {
+      if (event === 'toolresult') events.push('register');
+      origAdd(event, listener);
+    });
+    const origConnect = app.connect.bind(app);
+    vi.spyOn(app, 'connect').mockImplementation(async (t) => {
+      events.push('connect');
+      return origConnect(t);
+    });
+
+    const result = await bootSequence({
+      doc: dom,
+      app,
+      transport,
+      connectFn,
+      notifyParent: vi.fn(),
+      preResolvedMeta: VALID_META,
+      toolResultTimeoutMs: 50,
+    });
+    expect(result.ok).toBe(true);
+    const firstRegister = events.indexOf('register');
+    const connectAt = events.indexOf('connect');
+    expect(firstRegister, 'no toolresult listener registered at all').toBeGreaterThanOrEqual(0);
+    expect(
+      firstRegister,
+      `first toolresult registration must precede connect() — got order [${events.join(',')}]`,
+    ).toBeLessThan(connectAt);
+  });
+});
+
 describe('bootSequence — single-render mode (post-render-identity-collapse)', () => {
   it('leaves mountedRender null when the ack render id does not match the pin', async () => {
     const dom = document.implementation.createHTMLDocument('renderer-test');

@@ -1,5 +1,5 @@
 import type { BenchmarkReport } from '../types';
-import { formatDurationMs, formatPercent } from '../format';
+import { formatDurationMs, formatPercent, judgeCoverageLine } from '../format';
 
 interface Props {
   report: BenchmarkReport;
@@ -12,6 +12,7 @@ interface Props {
  */
 export function SummaryHeader({ report, date }: Props) {
   const { meta } = report;
+  const coverage = judgeCoverageLine(meta);
   return (
     <header className="border-b border-line-2 pb-6 mb-8">
       <p className="eyebrow mb-2">run · {date}</p>
@@ -47,6 +48,16 @@ export function SummaryHeader({ report, date }: Props) {
       {meta.judges && meta.judges.length > 0 && (
         <p className="font-mono text-xs text-ink-4 mt-3">
           scores judged by panel: {meta.judges.map((j) => j.model).join(', ')}
+        </p>
+      )}
+      {coverage && (
+        <p className="font-mono text-xs mt-1">
+          <span className="text-ink-4">{coverage.text}</span>
+          {coverage.degraded && (
+            <span className="ml-2 px-1.5 py-0.5 rounded bg-draft/10 text-draft font-semibold">
+              low judge coverage — aggregate scores not representative
+            </span>
+          )}
         </p>
       )}
     </header>

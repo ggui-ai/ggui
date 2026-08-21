@@ -730,6 +730,24 @@ async function maybeEvictLowestHitBlueprint(
     return;
   }
   const enumerable = store as EnumerableVectorStore;
+
+  // Count-gate (ggui#540): when the index can answer the bucket size
+  // cheaply, skip the O(scope) enumeration entirely while under cap.
+  // exactKey is `${kind}:${contractKey}:${variantKey}`, so the kind
+  // prefix counts exactly this bucket. The index may under-count
+  // (bindings that skipped unbind on legacy evictions are the OVER-
+  // count direction; an under-count comes from a lost binding) — one
+  // put past the soft ceiling is the accepted cost, per the cap's
+  // documented semantics above. Any failure falls through to the walk:
+  // counting is an optimization, never a correctness gate.
+  if (typeof deps.index.countIds === 'function') {
+    try {
+      const count = await deps.index.countIds(scope, `${kind}:`);
+      if (count < cap) return;
+    } catch {
+      // Fall through to the enumeration below.
+    }
+  }
   let bucket: VectorRowSummary[];
   try {
     // Metadata-only walk (ggui#540) — ranking below reads kind /
