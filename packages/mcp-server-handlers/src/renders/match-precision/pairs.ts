@@ -650,14 +650,19 @@ export const PAIRS: readonly MatchPair[] = [
         },
       },
     },
-    // Run-1 lesson: real bge-small geometry puts even this cross-domain
-    // far miss at cosine 0.726 — the 0.2 gate NEVER fires in practice
-    // (dead code; every candidate reaches the judge; ledgered as F2).
-    // The judge caught it at 0.00. Expectation corrected to the judge
-    // bucket; the pair now guards "far misses still die SOMEWHERE".
-    expect: { verdict: 'miss', decision: 'no-match' },
+    // GEOMETRY-RELATIVE decision bucket (2026-08-21 wire-fidelity leg):
+    // under local bge-small this far miss sits at cosine 0.726 and dies
+    // at the judge (decision 'no-match'; run-1's "gate dead" reading was
+    // TRUE ONLY IN THAT GEOMETRY); under the production embedder
+    // (Bedrock Titan v2, the pod's `generation-deps` composition) the
+    // same pair lands at cosine 0.143 and the 0.2 gate SKIPS it before
+    // any judge call ('match-skip-low-cosine') — the gate is
+    // load-bearing live. The MATCHER verdict is a miss either way, so
+    // the gated expectation is verdict-only; which layer killed it is
+    // reported by the run output per embedder, not pinned here.
+    expect: { verdict: 'miss' },
     reuseWouldBeWrong: true,
-    rationale: 'Unrelated domain and shape — must miss; in real geometry that means the judge, the cosine gate being dead (F2).',
+    rationale: 'Unrelated domain and shape — must miss; the killing layer is geometry-relative (judge under bge-small, cosine gate under Titan).',
   },
   {
     id: 'm-live-vs-click-search',

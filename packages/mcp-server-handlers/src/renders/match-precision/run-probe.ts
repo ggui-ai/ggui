@@ -149,7 +149,7 @@ interface PairResult {
 async function runPair(
   pair: MatchPair,
   llm: LLMCaller,
-  embedding: ReturnType<typeof createLocalEmbeddingProvider>,
+  embedding: BlueprintRegistryDeps['embedding'],
 ): Promise<PairResult> {
   const registry: BlueprintRegistryDeps = {
     embedding,
@@ -252,11 +252,48 @@ function pct(n: number, d: number): string {
   return d === 0 ? 'n/a' : `${((100 * n) / d).toFixed(1)}% (${n}/${d})`;
 }
 
+/**
+ * Resolve the embedding provider for this run.
+ *
+ * Default: the local provider (fast, free, deterministic geometry).
+ *
+ * Wire-fidelity arm: set `RND_EMBEDDER_MODULE` to the absolute path of
+ * a module exporting `createEmbedding(): EmbeddingProvider` and the
+ * probe runs the SAME pairs under that provider's geometry instead —
+ * cosine scales are model-relative, so comparing instrument numbers
+ * against a deployment that embeds with a different model requires
+ * re-running the probe under that model's provider. The module is
+ * loaded by path (never a package name) so this script stays free of
+ * any dependency on where such a provider lives.
+ */
+async function resolveEmbedding(): Promise<BlueprintRegistryDeps['embedding']> {
+  const modulePath = process.env['RND_EMBEDDER_MODULE'];
+  if (modulePath === undefined || modulePath.length === 0) {
+    return createLocalEmbeddingProvider({
+      cacheDir: join(homedir(), '.ggui', 'models'),
+    });
+  }
+  const mod = (await import(pathResolve(modulePath))) as {
+    createEmbedding?: () => BlueprintRegistryDeps['embedding'];
+  };
+  if (typeof mod.createEmbedding !== 'function') {
+    throw new Error(
+      `RND_EMBEDDER_MODULE (${modulePath}) must export createEmbedding(): EmbeddingProvider`,
+    );
+  }
+  const provider = mod.createEmbedding();
+  if (typeof provider.embed !== 'function' || typeof provider.id !== 'string') {
+    throw new Error(
+      `RND_EMBEDDER_MODULE (${modulePath}) createEmbedding() returned a non-EmbeddingProvider`,
+    );
+  }
+  return provider;
+}
+
 async function main(): Promise<void> {
   const llm = anthropicJudge(resolveKey());
-  const embedding = createLocalEmbeddingProvider({
-    cacheDir: join(homedir(), '.ggui', 'models'),
-  });
+  const embedding = await resolveEmbedding();
+  process.stdout.write(`embedding provider: ${embedding.id}\n`);
   mkdirSync(OUT_DIR, { recursive: true });
 
   const results: PairResult[] = [];
@@ -324,12 +361,20 @@ async function main(): Promise<void> {
     debatedStability: pct(stable.length, debated.length),
   };
 
+  // The default (local) geometry keeps the historical `results.json`
+  // name; alternate-embedder runs write alongside it so geometries can
+  // be diffed without clobbering the series.
+  const outName =
+    process.env['RND_EMBEDDER_MODULE'] === undefined ||
+    process.env['RND_EMBEDDER_MODULE'].length === 0
+      ? 'results.json'
+      : `results-${embedding.id}.json`;
   writeFileSync(
-    pathResolve(OUT_DIR, 'results.json'),
+    pathResolve(OUT_DIR, outName),
     JSON.stringify({ summary, results }, null, 2),
   );
   process.stdout.write(`\n${JSON.stringify(summary, null, 2)}\n`);
-  process.stdout.write(`full detail → ${pathResolve(OUT_DIR, 'results.json')}\n`);
+  process.stdout.write(`full detail → ${pathResolve(OUT_DIR, outName)}\n`);
 }
 
 main().catch((err) => {
