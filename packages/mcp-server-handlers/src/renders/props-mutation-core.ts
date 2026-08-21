@@ -246,7 +246,7 @@ export async function runPropsMutation(
       // Devtools payload trace. No-op when no sink is registered.
       // Fires AFTER the tenancy gate so cross-tenant probes never leak
       // into the trace. Payload is the validated wire shape.
-      emitPayloadTraceEvent({
+      emitPayloadTraceEvent(deps.payloadTraceSink, {
         direction: 'outbound-update',
         sessionId,
         appId: ctx.appId,

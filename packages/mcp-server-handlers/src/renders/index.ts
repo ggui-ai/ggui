@@ -160,9 +160,7 @@ export {
 } from "./no-credentials-card.js";
 export {
   emitPayloadTraceEvent,
-  getPayloadTraceSink,
   newPayloadTraceId,
-  setPayloadTraceSink,
   type PayloadTraceDirection,
   type PayloadTraceEvent,
   type PayloadTraceSink,

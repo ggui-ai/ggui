@@ -150,7 +150,7 @@ import {
   newCacheTraceId,
   truncateCacheTraceIntent,
 } from './cache-trace-sink.js';
-import { emitPayloadTraceEvent } from './payload-trace-sink.js';
+import { emitPayloadTraceEvent, type PayloadTraceSink } from './payload-trace-sink.js';
 import { isVisibleToCaller } from './tenancy.js';
 import {
   assembleRenderSliceBase,
@@ -386,6 +386,14 @@ export interface GguiSessionPostSuccessArgs {
  * slice deps.
  */
 export interface GguiRenderHandlerDeps extends RenderSliceMetaDeps {
+  /**
+   * Devtools payload-trace sink (ggui#605): rides the DEPS so the
+   * registrar (mcp-server console wiring) and this package's emitters
+   * meet on a call path — never cross-package module-global state
+   * (the split-module-instance dark-sink class, #604). Absent = the
+   * zero-cost unwired hot path.
+   */
+  readonly payloadTraceSink?: PayloadTraceSink;
   /** GguiSession-backing store. Used to mint / replace renders on render. */
   readonly renderStore: GguiSessionStore;
   /**
@@ -1478,7 +1486,7 @@ export function createGguiRenderHandler(
       // Devtools payload trace. No-op when no sink is registered.
       // Post-Phase-B the sink shape addresses by `sessionId` directly
       // (every render IS the addressable row).
-      emitPayloadTraceEvent({
+      emitPayloadTraceEvent(deps.payloadTraceSink, {
         direction: 'outbound-update',
         sessionId,
         appId: ctx.appId,

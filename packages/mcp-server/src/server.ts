@@ -128,9 +128,9 @@ import {
 } from "@ggui-ai/mcp-server-handlers/ops-blueprint";
 import {
   setCacheTraceSink,
-  setPayloadTraceSink,
   wsOriginToHttpOrigin,
 } from "@ggui-ai/mcp-server-handlers/renders";
+import type { PayloadTraceSink } from "@ggui-ai/mcp-server-handlers/renders";
 import type { BlueprintDurabilityDeps } from "@ggui-ai/mcp-server-handlers/renders";
 import type { OperatorConfig, ThemeConfig } from "@ggui-ai/project-config";
 import type { DiscoveredPrimitiveCatalog, LoadedTheme } from "@ggui-ai/project-config/node";
@@ -627,6 +627,14 @@ export function defaultHandlers(deps: {
    * stays clean).
    */
   readonly toolIdentityCatalogStore?: ToolIdentityCatalogStore;
+  /**
+   * Devtools payload-trace sink threaded into the render + update
+   * handler deps (ggui#605): registrar and emitter meet on this call
+   * path — never cross-package module-global state (the
+   * split-module-instance dark-sink class, #604). Absent = unwired,
+   * zero hot-path cost.
+   */
+  readonly payloadTraceSink?: PayloadTraceSink;
   /**
    * Optional blueprint catalog source. When bound,
    * `ggui_list_featured_blueprints` enumerates the provider's
@@ -1323,6 +1331,7 @@ export function defaultHandlers(deps: {
     handlers.push(
       createGguiUpdateHandler({
         renderStore: deps.update.renderStore,
+        ...(deps.payloadTraceSink ? { payloadTraceSink: deps.payloadTraceSink } : {}),
         ...(deps.update.renderIdentityStore
           ? { renderIdentityStore: deps.update.renderIdentityStore }
           : {}),
@@ -1514,6 +1523,7 @@ export function defaultHandlers(deps: {
     handlers.push(
       createGguiRenderHandler({
         renderStore: deps.render.renderStore,
+        ...(deps.payloadTraceSink ? { payloadTraceSink: deps.payloadTraceSink } : {}),
         ...(deps.render.renderTtlMs !== undefined
           ? { renderTtlMs: deps.render.renderTtlMs }
           : {}),
@@ -3644,18 +3654,6 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
   const cacheTraceSink = new BoundedCacheTraceSink();
   setCacheTraceSink(cacheTraceSink);
 
-  // Payload trace sink — captures every `ggui_render` / `ggui_update`
-  // payload that lands on the handlers and exposes it to the console
-  // SPA at `/devtools/payloads`. Bounded ring buffer (default 100
-  // events; tighter than llm-trace because each `ggui_render` may carry
-  // full componentCode + base64 blobs). Module-level registration via
-  // setPayloadTraceSink because the render + update factories are
-  // constructed once per server boot and threading a sink for a
-  // devtools-only surface isn't worth the churn (see payload-trace-
-  // sink.ts). A hosted closed runtime may swap in a durable adapter;
-  // OSS gets in-memory.
-  const payloadTraceSink = new BoundedPayloadTraceSink();
-  setPayloadTraceSink(payloadTraceSink);
 
   // MCP Apps outbound wiring gate.
   //
@@ -4212,11 +4210,20 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
   // (default or caller-supplied). Composition throws on tool-name
   // collision — surfacing at construction time rather than as a
   // `tools/call` dispatch surprise. See `./mcp-mounts.ts`.
+  // Devtools payload-trace sink (ggui#605) — captures every
+  // `ggui_render` / `ggui_update` payload for the console SPA at
+  // `/devtools/payloads` (bounded ring, default 100 events).
+  // Constructed BEFORE the handler factories so it rides their deps:
+  // call-path injection, never a cross-package module-global (the
+  // #604 dark-sink class). Consumed below by
+  // mountConsolePayloadsRoutes.
+  const payloadTraceSink = new BoundedPayloadTraceSink();
   const baseHandlers: ReadonlyArray<SharedHandler<ZodRawShape, ZodRawShape>> =
     opts.handlers ??
     defaultHandlers({
       embedding,
       vectors,
+      payloadTraceSink,
       consume: { pendingEventConsumer },
       // WRITE side of tool-identity canonicalization — the SAME store
       // the handshake negotiator's `toolIdentityCatalog` resolver reads.
