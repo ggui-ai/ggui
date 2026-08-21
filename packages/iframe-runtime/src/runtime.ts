@@ -46,6 +46,10 @@ import {
   type McpAppRendererReadyMessage,
   type GguiUserActionMeta,
 } from '@ggui-ai/protocol/integrations/mcp-apps';
+import {
+  effectiveThemeId,
+  effectiveThemeMode,
+} from '@ggui-ai/protocol/integrations/theme-binding';
 import type { GguiSessionSeedInput } from './types.js';
 import {
   extractLocatorFromToolResult,
@@ -382,7 +386,16 @@ export function resolveMountThemeMode(meta: {
     readonly cssVariables?: Record<string, string>;
   };
 }): 'light' | 'dark' | undefined {
-  return meta.themeMode ?? meta.theme?.mode ?? hostAnnouncedThemeMode();
+  // The CLIENT projection of the protocol's normative theme-binding
+  // total order (@ggui-ai/protocol/integrations/theme-binding,
+  // ggui#598 leg 4) — the server stamps via the sibling projection and
+  // the protocol's composition-law test pins that the two compose
+  // without rank drift.
+  return effectiveThemeMode({
+    stamped: meta.themeMode,
+    sessionSidecar: meta.theme?.mode,
+    hostAnnounced: hostAnnouncedThemeMode(),
+  });
 }
 
 /**
@@ -412,7 +425,12 @@ export function resolveMountThemeId(meta: {
     readonly cssVariables?: Record<string, string>;
   };
 }): string | undefined {
-  return meta.themeId ?? meta.theme?.name;
+  // Client projection of the normative theme-binding order — see
+  // resolveMountThemeMode above.
+  return effectiveThemeId({
+    stamped: meta.themeId,
+    sidecarName: meta.theme?.name,
+  });
 }
 
 /**
