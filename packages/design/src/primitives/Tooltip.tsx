@@ -108,7 +108,9 @@ export function Tooltip({
             left: coords.left,
             transform: getTransform(),
             backgroundColor: 'var(--ggui-color-onSurface, #18181b)',
-            color: '#ffffff',
+            // Inverse pair: text on the inverted (onSurface) ground is
+            // the surface color — white was only right for light themes.
+            color: 'var(--ggui-color-surface, #ffffff)',
             padding: '6px 10px',
             borderRadius: 'var(--ggui-shape-radius-md, 8px)',
             fontSize: 'var(--ggui-font-size-xs, 12px)',

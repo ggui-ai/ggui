@@ -110,7 +110,9 @@ export function Tabs({
     if (variant === 'pills') {
       return {
         ...base,
-        color: isActive ? '#ffffff' : 'var(--ggui-color-onSurfaceVariant, #52525b)',
+        color: isActive
+          ? 'var(--ggui-color-onPrimary, #ffffff)'
+          : 'var(--ggui-color-onSurfaceVariant, #52525b)',
         backgroundColor: isActive
           ? 'var(--ggui-color-primary-600, #0284c7)'
           : 'transparent',

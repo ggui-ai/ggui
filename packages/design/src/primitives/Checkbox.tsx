@@ -74,7 +74,7 @@ export function Checkbox({
               height="12"
               viewBox="0 0 12 12"
               fill="none"
-              style={{ color: '#ffffff' }}
+              style={{ color: 'var(--ggui-color-onPrimary, #ffffff)' }}
             >
               {indeterminate ? (
                 <path d="M2.5 6H9.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />

@@ -29,7 +29,10 @@ const sizeStyles: Record<string, CSSProperties> = {
 const variantStyles: Record<string, CSSProperties> = {
   primary: {
     backgroundColor: 'var(--ggui-color-primary-600, #0284c7)',
-    color: '#ffffff',
+    // The on-accent PAIR, never a literal (ggui#589 round 7): a theme
+    // whose primary is bright (slime) pairs dark ink via onPrimary —
+    // hardcoded white was unreadable on it.
+    color: 'var(--ggui-color-onPrimary, #ffffff)',
     border: 'none',
   },
   secondary: {
@@ -49,7 +52,7 @@ const variantStyles: Record<string, CSSProperties> = {
   },
   danger: {
     backgroundColor: 'var(--ggui-color-error-600, #dc2626)',
-    color: '#ffffff',
+    color: 'var(--ggui-color-onError, #ffffff)',
     border: 'none',
   },
 };

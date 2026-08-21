@@ -19,6 +19,115 @@ function darkVars(): string {
   return theme.cssVariables;
 }
 
+// ── WCAG contrast sweep (ggui#589 round 7 / #594's pair class) ─────────
+// Relative-luminance math per WCAG 2.x. rgba() values are composited
+// over their ground first (the outline stops are alpha).
+
+function channelLin(c: number): number {
+  const s = c / 255;
+  return s <= 0.04045 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4);
+}
+function parseColor(value: string): { r: number; g: number; b: number; a: number } {
+  const hex = value.match(/^#([0-9a-fA-F]{6})$/);
+  if (hex) {
+    const n = parseInt(hex[1], 16);
+    return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255, a: 1 };
+  }
+  const rgba = value.match(/^rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*(?:,\s*([\d.]+)\s*)?\)$/);
+  if (rgba) {
+    return { r: +rgba[1], g: +rgba[2], b: +rgba[3], a: rgba[4] === undefined ? 1 : +rgba[4] };
+  }
+  throw new Error(`unparseable color: ${value}`);
+}
+function compositeOver(fg: string, bg: string): { r: number; g: number; b: number } {
+  const f = parseColor(fg);
+  const b = parseColor(bg);
+  return {
+    r: f.r * f.a + b.r * (1 - f.a),
+    g: f.g * f.a + b.g * (1 - f.a),
+    b: f.b * f.a + b.b * (1 - f.a),
+  };
+}
+function luminance(c: { r: number; g: number; b: number }): number {
+  return 0.2126 * channelLin(c.r) + 0.7152 * channelLin(c.g) + 0.0722 * channelLin(c.b);
+}
+function contrastRatio(fg: string, bg: string): number {
+  const bgc = compositeOver(bg, '#000000');
+  const fgc = compositeOver(fg, `rgb(${bgc.r}, ${bgc.g}, ${bgc.b})`.replace('rgb', 'rgba').replace(')', ', 1)'));
+  const l1 = luminance(fgc);
+  const l2 = luminance(bgc);
+  const [hi, lo] = l1 >= l2 ? [l1, l2] : [l2, l1];
+  return (hi + 0.05) / (lo + 0.05);
+}
+function varsOf(mode: 'light' | 'dark'): Record<string, string> {
+  const theme = getTheme('guuey-brand-v1', mode);
+  if (!theme) throw new Error('guuey-brand-v1 not registered');
+  const out: Record<string, string> = {};
+  for (const line of theme.cssVariables.split('\n')) {
+    const m = line.match(/^\s*(--ggui-[A-Za-z0-9-]+):\s*(.+);\s*$/);
+    if (m) out[m[1]] = m[2].trim();
+  }
+  return out;
+}
+
+/**
+ * Every fg/bg pairing the registration can produce through the design
+ * system's own consumption paths (tone slots, surface slots, Button/
+ * Tabs/Checkbox variant styles, container roles). AA-at-normal-text
+ * (≥ 4.5) is the bar — the founder-set gate for round 7.
+ *
+ * Deliberately EXCLUDED: `primary-500`-as-text (the 'loud' tone) —
+ * sub-AA across every registered theme including stock; that is
+ * #594's class-wide item, not this theme's defect.
+ */
+const AA_PAIRS: ReadonlyArray<readonly [string, string]> = [
+  // Plain text on the three grounds.
+  ['onSurface', 'surface'],
+  ['onSurfaceVariant', 'surfaceVariant'],
+  ['onSurfaceVariant', 'surface'],
+  ['onContainer', 'container'],
+  ['neutral-500', 'surface'], // hint text ('subtle' tone)
+  // Solid-accent components (Button primary/danger, Tabs pills,
+  // Checkbox mark) — bg is the -600 stop in the variant styles.
+  ['onPrimary', 'primary-500'],
+  ['onPrimary', 'primary-600'],
+  ['onError', 'error-500'],
+  ['onError', 'error-600'],
+  // Container role pairs.
+  ['onPrimaryContainer', 'primaryContainer'],
+  ['onErrorContainer', 'errorContainer'],
+  ['onTertiary', 'tertiary'],
+  ['onTertiaryContainer', 'tertiaryContainer'],
+  // Text tones on the plain surface (resolveToneCss consumers).
+  ['primary-700', 'surface'], // 'emphasized'
+  ['success-500', 'surface'],
+  ['warning-500', 'surface'],
+  ['error-500', 'surface'],
+  ['info-500', 'surface'],
+];
+
+describe('guuey-brand-v1 — WCAG AA contrast sweep (round 7)', () => {
+  for (const mode of ['dark', 'light'] as const) {
+    it(`${mode}: every producible fg/bg pair clears AA normal text (4.5)`, () => {
+      const vars = varsOf(mode);
+      const failures: string[] = [];
+      for (const [fgKey, bgKey] of AA_PAIRS) {
+        const fg = vars[`--ggui-color-${fgKey}`];
+        const bg = vars[`--ggui-color-${bgKey}`];
+        if (fg === undefined || bg === undefined) {
+          failures.push(`${fgKey}/${bgKey}: token missing (fg=${fg}, bg=${bg})`);
+          continue;
+        }
+        const ratio = contrastRatio(fg, bg);
+        if (ratio < 4.5) {
+          failures.push(`${fgKey} (${fg}) on ${bgKey} (${bg}) = ${ratio.toFixed(2)}`);
+        }
+      }
+      expect(failures, failures.join('\n')).toEqual([]);
+    });
+  }
+});
+
 describe('guuey-brand-v1 — registration', () => {
   it('is registered and resolves BOTH modes without fallback aliasing', () => {
     expect(getThemeIds()).toContain('guuey-brand-v1');
