@@ -799,6 +799,17 @@ export const updateOutputSchema = z.object({
    * its feedback channel.
    */
   warning: z.string().optional(),
+  /**
+   * Schema attestation (ggui#560): identity hash of the enforced props
+   * schema this mutation was validated against — the same schema the
+   * paired handshake disclosed. Present when the session declares a
+   * `propsSpec`; equal to the handshake's `propsSchemaHash` under the
+   * session-continuity guarantee, so a mismatch is the observable form
+   * of a contract changing mid-session.
+   */
+  propsSchemaHash: z.string().optional(),
+  /** Present with `propsSchemaHash`; same profile classifier as the handshake's. */
+  propsSchemaProfile: z.string().optional(),
 });
 
 /**
@@ -814,6 +825,10 @@ export const amendOutputSchema = z.object({
   resourceUri: z.string(),
   /** Same no-op feedback channel as ggui_update's `warning`. */
   warning: z.string().optional(),
+  /** Schema attestation (ggui#560) — same semantics as ggui_update's. */
+  propsSchemaHash: z.string().optional(),
+  /** Present with `propsSchemaHash`. */
+  propsSchemaProfile: z.string().optional(),
 });
 
 /**

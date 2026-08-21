@@ -46,6 +46,19 @@ const outputSchema = {
   resourceUri: z.string(),
   /** No-op feedback channel — same semantics as ggui_update's. */
   warning: z.string().optional(),
+  /** ggui#560 — schema attestation, same semantics as ggui_update's. */
+  propsSchemaHash: z
+    .string()
+    .optional()
+    .describe(
+      'sha256 (lowercase hex) over the RFC 8785 canonical form of the enforced props schema this mutation was validated against — the same schema the paired handshake disclosed. Present when the session declares a propsSpec. Equal to the handshake propsSchemaHash by the session-continuity guarantee; a mismatch means the contract changed under you.',
+    ),
+  propsSchemaProfile: z
+    .string()
+    .optional()
+    .describe(
+      "Grammar profile of the enforced props schema: 'grammar-safe' or 'full'. Present with propsSchemaHash; treat unrecognized values as 'full'.",
+    ),
 } as const;
 
 interface AmendOutput {
@@ -53,6 +66,8 @@ interface AmendOutput {
   updated: boolean;
   resourceUri: string;
   warning?: string;
+  propsSchemaHash?: string;
+  propsSchemaProfile?: string;
 }
 
 /**
@@ -82,6 +97,12 @@ export function createGguiAmendHandler(
         updated: r.updated,
         resourceUri: r.mountResourceUri,
         ...(r.warning !== undefined ? { warning: r.warning } : {}),
+        ...(r.propsSchemaHash !== undefined
+          ? { propsSchemaHash: r.propsSchemaHash }
+          : {}),
+        ...(r.propsSchemaProfile !== undefined
+          ? { propsSchemaProfile: r.propsSchemaProfile }
+          : {}),
       };
     },
     // NO resultMeta — a `_meta`-carrying success result would make

@@ -87,8 +87,18 @@ describe('createGguiUpdateHandler', () => {
       // `resourceUri` is the epoch-pinned URI of the NEW history record
       // (#483); `epoch` is the head after the call. `warning` is the
       // no-op signal (#471 round-3): present only when a conforming
-      // patch changed nothing (no record minted).
-      expect(outKeys).toEqual(['epoch', 'resourceUri', 'sessionId', 'updated', 'warning']);
+      // patch changed nothing (no record minted). `propsSchemaHash` +
+      // `propsSchemaProfile` are the ggui#560 schema attestation —
+      // present when the session declares a propsSpec.
+      expect(outKeys).toEqual([
+        'epoch',
+        'propsSchemaHash',
+        'propsSchemaProfile',
+        'resourceUri',
+        'sessionId',
+        'updated',
+        'warning',
+      ]);
     });
 
     it('carries the MCP Apps UI binding — same template as ggui_render (#471 revised lock)', () => {

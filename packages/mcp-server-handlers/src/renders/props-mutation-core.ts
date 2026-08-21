@@ -9,9 +9,13 @@
 import { z } from 'zod';
 import {
   ContractViolationError,
+  buildEnforcedPropsSchema,
+  classifyPropsSchemaProfile,
   type JsonObject,
   type GguiSession,
+  type PropsSchemaProfile,
 } from '@ggui-ai/protocol';
+import { computePropsSchemaHash } from '@ggui-ai/protocol/props-schema-hash';
 import { GGUI_RENDER_UI_META } from '@ggui-ai/protocol/integrations/mcp-apps';
 import type { HandlerContext } from '../types.js';
 import { refreshRenderIdentity } from './render-identity.js';
@@ -92,6 +96,19 @@ export interface PropsMutationResult {
   /** Head epoch AFTER the call (row-authoritative; 0 when absent). */
   readonly epoch: number;
   readonly warning?: string;
+  /**
+   * ggui#560 — schema attestation: identity hash of the enforced
+   * props schema derived from the COMMITTED session's `propsSpec`
+   * (the schema this leg validated against and the next mutation will
+   * be validated against). Present iff the session carries a spec —
+   * the mutation legs' validation no-ops on an absent spec, and
+   * attesting a schema this leg does not enforce would be false.
+   * Joins the handshake disclosure by hash equality: a mismatch =
+   * the SESSION CONTINUITY obligation broken, observable per-turn.
+   */
+  readonly propsSchemaHash?: string;
+  /** Present with {@link propsSchemaHash}. Same classifier as the handshake's. */
+  readonly propsSchemaProfile?: PropsSchemaProfile;
 }
 
 export async function runPropsMutation(
@@ -247,6 +264,26 @@ export async function runPropsMutation(
       // assertPropsContract no-ops on absent spec, so MCP Apps renders
       // accept any patch shape (the iframe owns its own validation).
       const renderTarget: GguiSessionTarget & GguiSession = stored.render;
+      // ggui#560 — schema attestation for the mutation outputs: the
+      // enforced-schema identity this leg validates against, derived
+      // from the committed spec. Computed once, spread into every
+      // successful return. Absent spec → absent attestation (this
+      // leg's validation no-ops there; see PropsMutationResult).
+      const attestation: {
+        readonly propsSchemaHash?: string;
+        readonly propsSchemaProfile?: PropsSchemaProfile;
+      } =
+        'propsSpec' in renderTarget && renderTarget.propsSpec !== undefined
+          ? (() => {
+              const enforced = buildEnforcedPropsSchema(
+                renderTarget.propsSpec,
+              );
+              return {
+                propsSchemaHash: computePropsSchemaHash(enforced),
+                propsSchemaProfile: classifyPropsSchemaProfile(enforced),
+              };
+            })()
+          : {};
       // Closure keeps `applyGguiSessionPatch`'s generic inference on the
       // concrete render type — `ReturnType<typeof applyGguiSessionPatch>`
       // directly would collapse the type parameter to its constraint.
@@ -273,7 +310,26 @@ export async function runPropsMutation(
             sessionId,
             kind: parsed.kind,
             violations: err.violations,
+            ...(attestation.propsSchemaHash !== undefined
+              ? { propsSchemaHash: attestation.propsSchemaHash }
+              : {}),
           });
+          // §2.3.2 Obligation 4: every props contract_violation carries
+          // the ENFORCED schema's hash. The patch helper throws without
+          // one (it has no schema identity in scope); the enforcing
+          // SITE does — rewrap with it so the breach classifier works
+          // on the mutation legs exactly as on the render leg.
+          if (
+            attestation.propsSchemaHash !== undefined &&
+            err.propsSchemaHash === undefined
+          ) {
+            throw new ContractViolationError({
+              tool: err.tool,
+              violations: err.violations,
+              hint: err.hint,
+              propsSchemaHash: attestation.propsSchemaHash,
+            });
+          }
         }
         throw err;
       }
@@ -299,6 +355,7 @@ export async function runPropsMutation(
           sessionId,
           updated: false,
           mountResourceUri,
+          ...attestation,
           // No record minted on a no-op — the head epoch is untouched.
           epoch: stored.render.epoch ?? 0,
           warning:
@@ -418,5 +475,6 @@ export async function runPropsMutation(
         updated: true,
         mountResourceUri,
         epoch: nextEpoch,
+        ...attestation,
       };
 }

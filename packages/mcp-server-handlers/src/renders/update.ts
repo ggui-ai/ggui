@@ -264,6 +264,23 @@ const outputSchema = {
    * echoing existing props back, and this is its only feedback channel.
    */
   warning: z.string().optional(),
+  /**
+   * ggui#560 — schema attestation (same three-field family as the
+   * handshake disclosure; no value field, the spec cannot change on
+   * this leg).
+   */
+  propsSchemaHash: z
+    .string()
+    .optional()
+    .describe(
+      'sha256 (lowercase hex) over the RFC 8785 canonical form of the enforced props schema this mutation was validated against — the same schema the paired handshake disclosed. Present when the session declares a propsSpec. Equal to the handshake propsSchemaHash by the session-continuity guarantee; a mismatch means the contract changed under you.',
+    ),
+  propsSchemaProfile: z
+    .string()
+    .optional()
+    .describe(
+      "Grammar profile of the enforced props schema: 'grammar-safe' or 'full'. Present with propsSchemaHash; treat unrecognized values as 'full'.",
+    ),
 } as const;
 
 interface UpdateOutput {
@@ -272,6 +289,8 @@ interface UpdateOutput {
   resourceUri: string;
   epoch: number;
   warning?: string;
+  propsSchemaHash?: string;
+  propsSchemaProfile?: string;
 }
 
 /**
@@ -318,6 +337,12 @@ export function createGguiUpdateHandler(
           : r.mountResourceUri,
         epoch: r.epoch,
         ...(r.warning !== undefined ? { warning: r.warning } : {}),
+        ...(r.propsSchemaHash !== undefined
+          ? { propsSchemaHash: r.propsSchemaHash }
+          : {}),
+        ...(r.propsSchemaProfile !== undefined
+          ? { propsSchemaProfile: r.propsSchemaProfile }
+          : {}),
       };
     },
     /**
