@@ -638,6 +638,13 @@ const readUiResource = createMcpUiResourceReader({
       ...(typeof first.mimeType === 'string' ? { mimeType: first.mimeType } : {}),
       ...('text' in first && typeof first.text === 'string' ? { text: first.text } : {}),
       ...('blob' in first && typeof first.blob === 'string' ? { blob: first.blob } : {}),
+      // The contents entry's `_meta` MUST ride along: the server's
+      // per-resource CSP declaration (`_meta.ui.csp`, MCP Apps spec)
+      // lives here, and the reader's schema-validated door
+      // (`declaredResourceCsp`) surfaces it as `mount.csp` — the
+      // sandbox trust this host applies. Dropping it silently strips
+      // the card's CSP and the shell mounts blind.
+      ...('_meta' in first ? { _meta: first._meta } : {}),
     };
   },
 });
