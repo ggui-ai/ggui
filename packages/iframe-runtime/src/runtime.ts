@@ -139,7 +139,7 @@ import {
   postObservabilityToParent,
   type ObservabilityEmitter,
 } from './observability.js';
-import { mountUiFeedbackChrome } from './ui-feedback-chrome.js';
+import { ACTION_TOAST_Z_INDEX, mountUiFeedbackChrome } from './ui-feedback-chrome.js';
 import {
   hostCanReceiveMessages,
   hostCanRelayToolCalls,
@@ -2347,6 +2347,16 @@ function isRelayShapedFailure(resp: JsonRpcResponse | null): boolean {
  * consumer" — the doorbell rings. Shares {@link submitActionPayload}
  * with {@link classifySubmitActionResponse} so both reads agree on
  * which envelope tier carries the payload.
+ *
+ * RELAY CONTRACT (ggui#603): this read only works when the host's
+ * `tools/call` relay threads the server's tool result VERBATIM — the
+ * `consumerPresent` marker rides `structuredContent` on the real
+ * result. A relay that wraps or synthesizes the response silently
+ * strips the marker, and every healthy gesture then misclassifies as
+ * "agent not listening" (a persistent `action_required` toast per
+ * gesture). Verbatim threading is the same obligation that keeps
+ * `_meta` alive on `resources/read` relays; a conformance vector for
+ * it is tracked on ggui#603.
  */
 function extractConsumerPresent(
   resp: JsonRpcResponse,
@@ -2627,7 +2637,7 @@ function showActionToast(
       'bottom:16px',
       'left:50%',
       'transform:translateX(-50%)',
-      'z-index:2147483647',
+      `z-index:${ACTION_TOAST_Z_INDEX}`,
       'pointer-events:auto',
       'max-width:90%',
       'padding:8px 14px',

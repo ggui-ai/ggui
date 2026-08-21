@@ -26,6 +26,8 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import { act } from 'react';
 import { fireEvent } from '@testing-library/react';
 import {
+  ACTION_TOAST_Z_INDEX,
+  UI_FEEDBACK_CHROME_Z_INDEX,
   mountUiFeedbackChrome,
   type UiFeedbackChromeHandle,
 } from '../ui-feedback-chrome.js';
@@ -253,5 +255,25 @@ describe('UiFeedbackCard — payload semantics', () => {
     fireEvent.click(q('[data-ggui-ui-feedback-dismiss]'));
     expect(document.querySelector('[data-ggui-ui-feedback]')).toBeNull();
     expect(emit).not.toHaveBeenCalled();
+  });
+});
+
+describe('feedback chrome vs action toast — stacking (ggui#603)', () => {
+  // The persistent `action_required` toast parks pointer-events:auto at
+  // fixed bottom-center — the same region this chrome occupies. The
+  // chrome must WIN the stacking race so an armed toast can never eat
+  // taps aimed at the feedback controls; the toast stays dismissable on
+  // its own uncovered area (it is clickable anywhere on itself).
+  it('the chrome container stacks strictly above the toast layer', async () => {
+    const emit = eventSink();
+    await mount({ emit });
+    const container = q('[data-ggui-ui-feedback-chrome]');
+    if (!(container instanceof HTMLElement)) throw new Error('chrome container is not an HTMLElement');
+    expect(container.style.position).toBe('relative');
+    expect(Number(container.style.zIndex)).toBeGreaterThan(ACTION_TOAST_Z_INDEX);
+  });
+
+  it('the constants encode the relationship (single source both layers read)', () => {
+    expect(UI_FEEDBACK_CHROME_Z_INDEX).toBeGreaterThan(ACTION_TOAST_Z_INDEX);
   });
 });

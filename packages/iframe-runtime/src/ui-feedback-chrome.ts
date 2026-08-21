@@ -38,6 +38,23 @@
 import { createElement } from 'react';
 import type { ObservabilityEmitter } from './observability.js';
 
+/**
+ * Stacking contract between the two body-appended runtime layers
+ * (ggui#603): the feedback chrome must sit strictly ABOVE the action
+ * toast. The persistent `action_required` toast parks
+ * `pointer-events:auto` at fixed bottom-center — the same region this
+ * chrome occupies — and is re-armed per gesture; without this order an
+ * armed toast eats every tap aimed at the feedback controls. The toast
+ * remains dismissable on its own uncovered area (it accepts the click
+ * anywhere on itself), so partial occlusion costs it nothing.
+ *
+ * Single source: `runtime.ts`'s toast reads {@link ACTION_TOAST_Z_INDEX};
+ * this module applies {@link UI_FEEDBACK_CHROME_Z_INDEX} to the chrome
+ * container. The test suite pins the relationship, not the numbers.
+ */
+export const UI_FEEDBACK_CHROME_Z_INDEX = 2147483647;
+export const ACTION_TOAST_Z_INDEX = 2147483646;
+
 export interface UiFeedbackChromeOptions {
   /**
    * Observability sink the card emits `ui-feedback` events into.
@@ -102,6 +119,10 @@ export async function mountUiFeedbackChrome(
   doc.querySelector('[data-ggui-ui-feedback-chrome]')?.remove();
   const container = doc.createElement('div');
   container.setAttribute('data-ggui-ui-feedback-chrome', '');
+  // Win the stacking race against the action toast (ggui#603 — see
+  // the constants' docblock above).
+  container.style.position = 'relative';
+  container.style.zIndex = String(UI_FEEDBACK_CHROME_Z_INDEX);
   doc.body.appendChild(container);
 
   const root = reactDomClient.createRoot(container);
