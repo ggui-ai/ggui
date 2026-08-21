@@ -9,10 +9,12 @@
  *
  * FAIL-SAFE BY CONTRACT: absence of a capability MUST NOT stop the
  * runtime from attempting the operation. Hosts under-advertise in
- * practice — ggui's own embed host (`./mcp-app-iframe-host.ts`) proxies
- * `tools/call` while advertising nothing — so treating silence as
- * "cannot" would break working paths. These accessors exist to explain
- * a failure that already happened, never to pre-empt an attempt.
+ * practice — ggui's own embed host (`./mcp-app-iframe-host.ts`)
+ * historically proxied `tools/call` while advertising nothing (it now
+ * advertises `serverTools: {}`, but version-skewed embeds still
+ * under-advertise) — so treating silence as "cannot" would break
+ * working paths. These accessors exist to explain a failure that
+ * already happened, never to pre-empt an attempt.
  *
  * PRESENCE, NOT VALUE: on `McpUiHostCapabilities` both fields are
  * optional OBJECTS (`serverTools?: { listChanged?: boolean }`,

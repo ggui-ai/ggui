@@ -4279,13 +4279,19 @@ async function bootProduction(opts: {
       // `tools/call:ggui_runtime_submit_action` to the parent →
       // `AppRenderer.onCallTool` → host's MCP client → ggui MCP server
       // → `createGguiSubmitActionHandler.append` → `pendingEventConsumer`
-      // → `ggui_consume` wakes the agent. NOTE (truth, ggui#596): the
-      // server's WS ingress DUAL-WRITES accepted `data:submit` frames
-      // onto the same consume pipe (SPEC §2.4; action-ingress dual-write)
-      // — a WS-delivered gesture WOULD reach the agent. The runtime
-      // still routes gestures relay-only; falling back to the WS frame
-      // when the relay is refused is ggui#599's open design leg, not a
-      // capability gap on the server. The WS pipe otherwise carries
+      // → `ggui_consume` wakes the agent. NOTE (truth, ggui#596 +
+      // adversarial-cycle correction): the server's WS ingress
+      // dual-writes accepted `data:submit` frames onto the consume pipe
+      // ONLY when the live channel is composed with a
+      // `pendingEventConsumer` — which `createGguiServer` threads for
+      // DEFAULT-handlers compositions only (a custom `handlers` list
+      // drains its own pipe; bridging the channel onto an instance
+      // nobody drains would buffer gestures into the void — see the
+      // hoist note in server.ts). The hosted pod IS a custom-handlers
+      // caller: on it, a WS gesture lands on the retained ledger only
+      // and never reaches the agent. Any WS action fallback (ggui#599's
+      // open design leg) therefore requires the server/pod bridge
+      // FIRST — it is a capability gap on that composition today. The WS pipe otherwise carries
       // streamSpec subscriptions (inbound `ggui_emit` fanout +
       // `props_update` + `render` + `data` + `drain_ack` +
       // `channel_payload`). `routeDispatch` is the shared named-export

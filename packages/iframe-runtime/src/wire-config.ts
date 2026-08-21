@@ -115,9 +115,13 @@ export interface BuildRootWireConfigOptions {
    *
    * The default WS-frame send reaches the agent only on servers whose
    * live channel bridges WS `data:submit` actions onto the same
-   * pending-events pipe (first-party `createGguiServer` does — see
-   * `GguiSessionChannelOptions.pendingEventConsumer`); it remains the
-   * seam tests and direct-WS callers exercise.
+   * pending-events pipe. First-party `createGguiServer` bridges it
+   * ONLY when composed with DEFAULT handlers (`opts.handlers`
+   * undefined); a custom `handlers` list drains its own pipe, so the
+   * channel deliberately does not bridge — the hosted pod is such a
+   * caller, and on it a WS gesture lands on the retained ledger only.
+   * See `GguiSessionChannelOptions.pendingEventConsumer`. The default
+   * send remains the seam tests and direct-WS callers exercise.
    *
    * Called AFTER outbound validation passes. Receives the validated
    * {@link ActionEnvelope}; caller extracts payload.action +
