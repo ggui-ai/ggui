@@ -37,6 +37,8 @@
  *   --max-eval       Max evaluation rounds (default: 3)
  *   --timeout        Timeout in ms (default: 300000)
  *   --threshold      Pass threshold 0-100 (default: 70)
+ *   --concurrency    Max concurrent cells (default: 36). Memory-bound
+ *                    environments (the 2GB Fargate runner) pass a lower cap.
  *   --no-eval        Skip ALL evaluation: zeroes in-loop eval rounds AND skips
  *                    the post-gen aesthetic judge (no Anthropic call, no score)
  *   --visual         Enable in-loop visual evaluation (screenshot + multimodal
@@ -218,6 +220,7 @@ const skipEvaluation = hasFlag(['--no-eval']);
 const maxEvalRounds = skipEvaluation ? 0 : parseInt(getArg(['--max-eval'], String(preset?.maxEvalRounds ?? 3)), 10);
 const timeoutMs = parseInt(getArg(['--timeout'], String(preset?.timeout ?? 300000)), 10);
 const passThreshold = parseInt(getArg(['--threshold'], '70'), 10);
+const concurrency = parseInt(getArg(['--concurrency'], '36'), 10);
 const visualEnabled = hasFlag(['--visual']);
 const qualityMode = getArg(['--quality'], 'fast');
 
@@ -363,7 +366,7 @@ const run = async () => {
   // Build runner
   const runner = new BenchmarkRunner({
     storage,
-    concurrency: 36,
+    concurrency,
     timeoutMs,
     passThreshold,
     maxAttempts,

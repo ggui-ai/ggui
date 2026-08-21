@@ -226,6 +226,15 @@ function runBench() {
         // per-cell generationTimeMs either way.
         '--timeout',
         '600000',
+        // 12 concurrent cells on the 2GB Fargate task. The 2026-08-21
+        // manual run OOM-killed at bench.mjs's 36-cell default ~4min in
+        // (happy-dom render checks + esbuild + 7-way parallel evals per
+        // cell outgrew 2GB as the harness got heavier). Cells are LLM-
+        // latency-bound, so 12 lanes ≈ 3× wall time at ~1/3 the peak
+        // memory. Belt to the memoryLimitMiB=4096 suspender in
+        // apps/benchmarks/amplify/backend.ts.
+        '--concurrency',
+        '12',
       ],
       {
         cwd: BENCH_ROOT,
