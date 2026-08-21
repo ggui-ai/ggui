@@ -52,6 +52,10 @@ import {
   type McpAppAiGguiRenderMeta,
 } from '@ggui-ai/protocol/integrations/mcp-apps';
 import type { ContractValidatorExprs } from '@ggui-ai/protocol';
+import {
+  stampThemeId,
+  stampThemeMode,
+} from '@ggui-ai/protocol/integrations/theme-binding';
 
 /**
  * Resolve the canonical bundle URL + style URL for a gadget entry.
@@ -1258,9 +1262,22 @@ export function resolveSliceTheme(
   renderThemeId: string | undefined,
   sessionThemeMode: 'light' | 'dark' | undefined,
 ): SliceTheme {
+  // Delegates to the protocol's normative theme-binding total order
+  // (@ggui-ai/protocol/integrations/theme-binding, ggui#598 leg 4) —
+  // this function IS the server projection; the iframe runtime runs
+  // the client projection of the SAME order, and the protocol's
+  // composition-law test pins that the two compose without rank drift.
   const liveTheme = deps.themeProvider?.();
-  const themeId = liveTheme?.id ?? renderThemeId ?? deps.themeId;
-  const themeMode = liveTheme?.mode ?? deps.themeMode ?? sessionThemeMode;
+  const themeId = stampThemeId({
+    consolePick: liveTheme?.id,
+    renderOverride: renderThemeId,
+    staticConfig: deps.themeId,
+  });
+  const themeMode = stampThemeMode({
+    consolePick: liveTheme?.mode,
+    staticConfig: deps.themeMode,
+    sessionSidecar: sessionThemeMode,
+  });
   return {
     ...(themeId !== undefined ? { themeId } : {}),
     ...(themeMode !== undefined ? { themeMode } : {}),

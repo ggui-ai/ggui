@@ -68,6 +68,12 @@
       "require": "./dist/integrations/mcp-apps.js",
       "default": "./dist/integrations/mcp-apps.js"
     },
+    "./integrations/theme-binding": {
+      "types": "./dist/integrations/theme-binding.d.ts",
+      "import": "./dist/integrations/theme-binding.js",
+      "require": "./dist/integrations/theme-binding.js",
+      "default": "./dist/integrations/theme-binding.js"
+    },
     "./version": {
       "types": "./dist/version.d.ts",
       "import": "./dist/version.js",

@@ -46,6 +46,10 @@ import {
   type McpAppRendererReadyMessage,
   type GguiUserActionMeta,
 } from '@ggui-ai/protocol/integrations/mcp-apps';
+import {
+  effectiveThemeId,
+  effectiveThemeMode,
+} from '@ggui-ai/protocol/integrations/theme-binding';
 import type { GguiSessionSeedInput } from './types.js';
 import {
   extractLocatorFromToolResult,
@@ -382,7 +386,16 @@ export function resolveMountThemeMode(meta: {
     readonly cssVariables?: Record<string, string>;
   };
 }): 'light' | 'dark' | undefined {
-  return meta.themeMode ?? meta.theme?.mode ?? hostAnnouncedThemeMode();
+  // The CLIENT projection of the protocol's normative theme-binding
+  // total order (@ggui-ai/protocol/integrations/theme-binding,
+  // ggui#598 leg 4) — the server stamps via the sibling projection and
+  // the protocol's composition-law test pins that the two compose
+  // without rank drift.
+  return effectiveThemeMode({
+    stamped: meta.themeMode,
+    sessionSidecar: meta.theme?.mode,
+    hostAnnounced: hostAnnouncedThemeMode(),
+  });
 }
 
 /**
@@ -412,7 +425,12 @@ export function resolveMountThemeId(meta: {
     readonly cssVariables?: Record<string, string>;
   };
 }): string | undefined {
-  return meta.themeId ?? meta.theme?.name;
+  // Client projection of the normative theme-binding order — see
+  // resolveMountThemeMode above.
+  return effectiveThemeId({
+    stamped: meta.themeId,
+    sidecarName: meta.theme?.name,
+  });
 }
 
 /**
@@ -2253,9 +2271,11 @@ export function emitAudit(args: {
  * Returns `'success'` when the handler said `ok:true`. Returns
  * `'fallback'` for any other outcome — pipe missing
  * (`PIPE_NOT_FOUND`), envelope rejected (`INVALID_ACTION_KIND`),
- * relay error, no host relay wired, or any unexpected shape. The
- * iframe-runtime then falls through to `ui/message` so the gesture
- * still reaches the agent on its next turn.
+ * relay error, no host relay wired, or any unexpected shape. On
+ * `'fallback'` the gesture was NOT enqueued and is dropped with local
+ * feedback only (toast / #440 latch) — no `ui/message` fires (the
+ * doorbell is success-path-only: there is nothing to point it at), and
+ * no alternate transport is attempted today (ggui#599's open leg).
  */
 /**
  * Unwrap the payload record of a relayed submit-action tool result.
@@ -4254,20 +4274,30 @@ async function bootProduction(opts: {
         },
       };
 
-      // Spec-canonical outbound dispatch. The WS pipe is for streamSpec
-      // subscriptions ONLY (inbound `ggui_emit` fanout + `props_update` +
-      // `render` + `data` + `drain_ack` + `channel_payload`).
-      // Outbound user actions go through the MCP-Apps host relay per
-      // spec §401: postMessage `tools/call:ggui_runtime_submit_action`
-      // to the parent → `AppRenderer.onCallTool` → sample agent's
-      // `/relay/tools-call` → ggui MCP server →
-      // `createGguiSubmitActionHandler.append` → `pendingEventConsumer`
-      // → `ggui_consume` wakes the agent. The server's WS
-      // `handleInboundAction` writes to the render ledger only — no
-      // downstream consumer — so the WS action path silently drops
-      // clicks. `routeDispatch` is the shared named-export helper
-      // (production + tests exercise the same code path); threading it
-      // here keeps LIVE-mode on the canonical dispatch pipeline.
+      // Spec-canonical outbound dispatch: user actions go through the
+      // MCP-Apps host relay (SPEC §4.7): postMessage
+      // `tools/call:ggui_runtime_submit_action` to the parent →
+      // `AppRenderer.onCallTool` → host's MCP client → ggui MCP server
+      // → `createGguiSubmitActionHandler.append` → `pendingEventConsumer`
+      // → `ggui_consume` wakes the agent. NOTE (truth, ggui#596 +
+      // adversarial-cycle correction): the server's WS ingress
+      // dual-writes accepted `data:submit` frames onto the consume pipe
+      // ONLY when the live channel is composed with a
+      // `pendingEventConsumer` — which `createGguiServer` threads for
+      // DEFAULT-handlers compositions only (a custom `handlers` list
+      // drains its own pipe; bridging the channel onto an instance
+      // nobody drains would buffer gestures into the void — see the
+      // hoist note in server.ts). The hosted pod IS a custom-handlers
+      // caller: on it, a WS gesture lands on the retained ledger only
+      // and never reaches the agent. Any WS action fallback (ggui#599's
+      // open design leg) therefore requires the server/pod bridge
+      // FIRST — it is a capability gap on that composition today. The WS pipe otherwise carries
+      // streamSpec subscriptions (inbound `ggui_emit` fanout +
+      // `props_update` + `render` + `data` + `drain_ack` +
+      // `channel_payload`). `routeDispatch` is the shared named-export
+      // helper (production + tests exercise the same code path);
+      // threading it here keeps LIVE-mode on the canonical dispatch
+      // pipeline.
       // Single mounted render — populated by `applyRender` on the first
       // render frame. The wire config + data channel handler read it
       // through `currentRender`-returning thunks so they always see the

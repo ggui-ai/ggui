@@ -148,6 +148,59 @@ describe('buildEnforcedPropsSchema — authority equivalence', () => {
       canonicalPropsSchemaBytes(buildEnforcedPropsSchema(b)),
     );
   });
+
+  it('is byte-stable across author key insertion order when entries are REQUIRED (2026-08-20 ca204076 incident pin)', () => {
+    // Production incident: one contract, two persisted representations
+    // (byte-preserving JSON string vs a DDB Map round-trip that legally
+    // reorders object keys) rebuilt to TWO different propsSchemaHashes
+    // (ca204076… vs d130e5b9…), because the wrapper's `required` array
+    // is derived from properties ITERATION order — an order-sensitive
+    // artifact from an order-unstable source. JCS sorts object keys but
+    // rightly preserves array order, so the hash flipped with the
+    // representation. `required` is set-semantics in JSON Schema: the
+    // canonical form must sort it.
+    const a: PropsSpec = {
+      properties: {
+        asOf: { schema: { type: 'string' }, required: true },
+        tickets: { schema: { type: 'array', items: { type: 'string' } }, required: true },
+      },
+    };
+    const b: PropsSpec = {
+      properties: {
+        tickets: { schema: { type: 'array', items: { type: 'string' } }, required: true },
+        asOf: { schema: { type: 'string' }, required: true },
+      },
+    };
+    const bytesA = canonicalPropsSchemaBytes(buildEnforcedPropsSchema(a));
+    const bytesB = canonicalPropsSchemaBytes(buildEnforcedPropsSchema(b));
+    expect(bytesA).toBe(bytesB);
+    expect(bytesA).toContain('"required":["asOf","tickets"]');
+  });
+
+  it('sorts authored `required` arrays in nested schemas (set-semantics canonical form)', () => {
+    // One rule, no special cases: EVERY `required` array — derived at
+    // the wrapper or authored inside a nested object schema — emits in
+    // sorted order. Two semantically identical schemas differing only
+    // in required member order must hash identically.
+    const spec: PropsSpec = {
+      properties: {
+        slot: {
+          schema: {
+            type: 'object',
+            properties: {
+              end: { type: 'string' },
+              start: { type: 'string' },
+            },
+            required: ['start', 'end'],
+          },
+          required: true,
+        },
+      },
+    };
+    const bytes = canonicalPropsSchemaBytes(buildEnforcedPropsSchema(spec));
+    expect(bytes).toContain('"required":["end","start"]');
+    expect(bytes).not.toContain('"required":["start","end"]');
+  });
 });
 
 describe('canonicalPropsSchemaBytes', () => {

@@ -157,6 +157,22 @@ function canonicalizeSchemaNode(node: JsonSchema): JsonSchema {
         continue;
       }
     }
+    if (key === 'required' && Array.isArray(node.required)) {
+      // `required` is SET-semantics in JSON Schema — member order never
+      // affects validation — but it is an ARRAY on the wire, and JCS
+      // rightly preserves array order while sorting only object keys.
+      // The wrapper's `required` is derived from properties ITERATION
+      // order, an order-unstable source (a DynamoDB Map round-trip
+      // legally reorders object keys), so without this sort one
+      // contract stored under two representations rebuilt to two
+      // different propsSchemaHashes (production incident 2026-08-20:
+      // ca204076… vs d130e5b9… for the same Deskly contract). Sorting
+      // here — for derived AND authored arrays at every depth — makes
+      // the canonical bytes (and therefore the hash) canonical over the
+      // keyword's actual semantics.
+      out.required = [...node.required].sort();
+      continue;
+    }
     out[key] = value;
   }
   return out;

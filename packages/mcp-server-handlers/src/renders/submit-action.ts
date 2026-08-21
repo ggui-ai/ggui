@@ -3,10 +3,12 @@
  * iframe-runtime's user-action envelopes.
  *
  * Registered with `_meta.ui.visibility: ['app']` per MCP Apps spec
- * §401: hosts MUST relay `tools/call` from views (iframes) for tools
- * carrying `'app'` visibility, AND MUST reject calls from views for
- * tools that don't. The iframe holds no auth credential; the host's
- * MCP client is the relay party.
+ * §401: hosts MUST reject view-issued `tools/call` for tools that do
+ * NOT carry `'app'` visibility. Relaying calls for tools that DO is an
+ * OPTIONAL host capability (spec `serverTools`) — the external spec
+ * obliges no host to relay, so this bridge is live only on hosts that
+ * choose to. The iframe holds no auth credential; on a relaying host,
+ * the host's MCP client is the relay party.
  *
  * **Wire shape** (what iframe-runtime postMessages via `tools/call`
  * and the host relays to the MCP server):

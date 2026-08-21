@@ -37,6 +37,7 @@ import formatOutOfListFull from './cases/format-out-of-list-full.json' with { ty
 import nullableNormalization from './cases/nullable-normalization.json' with { type: 'json' };
 import nullableObjectClosed from './cases/nullable-object-closed.json' with { type: 'json' };
 import outOfCorePatternFull from './cases/out-of-core-pattern-full.json' with { type: 'json' };
+import requiredOrderCanonical from './cases/required-order-canonical.json' with { type: 'json' };
 import schedulerEnumAuthority from './cases/scheduler-enum-authority.json' with { type: 'json' };
 
 /**
@@ -73,6 +74,7 @@ export const propsSchemaConformanceCases: readonly PropsSchemaConformanceCase[] 
     nullableNormalization,
     nullableObjectClosed,
     outOfCorePatternFull,
+    requiredOrderCanonical,
     schedulerEnumAuthority,
   ] as PropsSchemaConformanceCase[];
 
