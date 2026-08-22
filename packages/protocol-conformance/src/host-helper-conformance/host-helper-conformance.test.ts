@@ -22,6 +22,7 @@ import {
   type HostHelperPort,
   type JsonRpcRequest,
   type JsonRpcResponse,
+  type ThemeCoverageValidationResult,
 } from './index.js';
 
 const METHOD_NOT_SUPPORTED = -32601;
@@ -220,6 +221,107 @@ describe('C-grades — zero ungoverned chrome (round-6 doctrine @6e15724a1)', ()
     const report = await runHostHelperConformance(initializeOnlyPort());
     const c1 = report.cases.find((c) => c.id === 'C1-containment-only');
     expect(c1?.outcome).toBe('skip');
+    expect(report.tier).toBe('read-only');
+  });
+});
+
+describe('T-grades — token coverage (ggui#600 grade class 4, #598 manifest)', () => {
+  // The kit never imports the validator — the option carries it as a
+  // callback (implementation-as-callbacks; the reference validate is
+  // `@ggui-ai/design`'s `validateThemeCoverage` bound to the shipped
+  // `consumed-tokens.manifest.json`). Fakes pin the grading semantics.
+  const coveredResult: ThemeCoverageValidationResult = {
+    covered: true,
+    uncovered: { light: [], dark: [] },
+    inheritMatched: ['--ggui-spacing-md', '--ggui-spacing-sm'],
+    excluded: ['--ggui-flash-color'],
+  };
+
+  it('a covered registration passes T1 with inherit + exclusion counts in the detail', async () => {
+    const report = await runHostHelperConformance(relayingPort(), {
+      themeCoverage: {
+        registration: { light: {}, dark: {} },
+        validate: () => coveredResult,
+      },
+    });
+    const t1 = report.cases.find((c) => c.id === 'T1-theme-coverage');
+    expect(t1?.outcome).toBe('pass');
+    expect(t1?.detail).toContain('2 inherit-matched');
+    expect(t1?.detail).toContain('1 excluded');
+    expect(report.tier).toBe('relaying');
+    expect(report.failures).toEqual([]);
+  });
+
+  it('the kit hands the SUPPLIED registration to the callback, untouched', async () => {
+    const registration = { light: { color: {} }, dark: { color: {} } };
+    let seen: unknown;
+    await runHostHelperConformance(relayingPort(), {
+      themeCoverage: {
+        registration,
+        validate: (r) => {
+          seen = r;
+          return coveredResult;
+        },
+      },
+    });
+    expect(seen).toBe(registration);
+  });
+
+  it('an uncovered registration FAILS T1 naming the uncovered tokens per mode', async () => {
+    const report = await runHostHelperConformance(relayingPort(), {
+      themeCoverage: {
+        registration: { light: {}, dark: {} },
+        validate: () => ({
+          covered: false,
+          uncovered: {
+            light: ['--ggui-color-surface'],
+            dark: ['--ggui-color-onSurface', '--ggui-color-surface'],
+          },
+          inheritMatched: [],
+          excluded: [],
+        }),
+      },
+    });
+    const t1 = report.cases.find((c) => c.id === 'T1-theme-coverage');
+    expect(t1?.outcome).toBe('fail');
+    expect(t1?.detail).toContain('light');
+    expect(t1?.detail).toContain('dark');
+    expect(t1?.detail).toContain('--ggui-color-surface');
+    expect(t1?.detail).toContain('--ggui-color-onSurface');
+    expect(report.tier).toBe('nonconforming');
+    expect(report.failures).toContain('T1-theme-coverage');
+  });
+
+  it('T1 names at most the first 10 uncovered tokens per mode, then counts the rest', async () => {
+    const light = Array.from(
+      { length: 12 },
+      (_, i) => `--ggui-probe-${String(i + 1).padStart(2, '0')}`,
+    );
+    const report = await runHostHelperConformance(relayingPort(), {
+      themeCoverage: {
+        registration: { light: {}, dark: {} },
+        validate: () => ({
+          covered: false,
+          uncovered: { light, dark: [] },
+          inheritMatched: [],
+          excluded: [],
+        }),
+      },
+    });
+    const t1 = report.cases.find((c) => c.id === 'T1-theme-coverage');
+    expect(t1?.outcome).toBe('fail');
+    expect(t1?.detail).toContain('--ggui-probe-01');
+    expect(t1?.detail).toContain('--ggui-probe-10');
+    expect(t1?.detail).toContain('…2 more');
+    expect(t1?.detail).not.toContain('--ggui-probe-11');
+    expect(t1?.detail).not.toContain('--ggui-probe-12');
+  });
+
+  it('no theme registration supplied → T1 skips, tier unaffected', async () => {
+    const report = await runHostHelperConformance(initializeOnlyPort());
+    const t1 = report.cases.find((c) => c.id === 'T1-theme-coverage');
+    expect(t1?.outcome).toBe('skip');
+    expect(t1?.detail).toContain('no theme registration supplied');
     expect(report.tier).toBe('read-only');
   });
 });
