@@ -96,6 +96,29 @@ function toCssDecls(vars: Readonly<Record<string, string>>): string {
     .join('');
 }
 
+/**
+ * Serialize a DELIVERED base ladder (one mode's resolved variable set,
+ * `theme.base.light`/`.dark` — ggui#598-C) into the scoped block that
+ * replaces the compiled ladder at the base position. Mirrors the
+ * `.scope {` block shape `getScopedThemeCss` emits (space-brace opener,
+ * two-space-indented `--k: v;` lines) so everything downstream that
+ * anchors on the base block's shape holds on both paths. Keys are
+ * sorted — the wire object's insertion order is not part of the
+ * contract, and byte-stable output keeps repeated renders comparable.
+ * Values are injection-safe by the wire schema (`appThemeSchema` — the
+ * same guarantee `toCssDecls` cites); do NOT re-sanitize here.
+ */
+function toScopedBaseCss(
+  scopeClass: string,
+  vars: Readonly<Record<string, string>>,
+): string {
+  const decls = Object.keys(vars)
+    .sort()
+    .map((k) => `  ${k}: ${vars[k]};`)
+    .join('\n');
+  return `.${scopeClass} {\n${decls}\n}`;
+}
+
 // =============================================================================
 // Error boundary — port of RCR's internal ErrorBoundary (L68–203).
 // =============================================================================
@@ -350,6 +373,28 @@ export interface ReactRootMountOptions {
   readonly appTheme?: {
     readonly mode: 'light' | 'dark';
     readonly cssVariables: Record<string, string>;
+    /**
+     * The REGISTERED base ladder, delivered over the wire (ggui#598-C
+     * runtime theme registration — see protocol's `appThemeSchema`).
+     * BOTH modes' resolved variable sets ride the envelope; when
+     * present, the mode-selected set REPLACES the compiled ladder
+     * block (`getScopedThemeCss`/`getScopedCssTokens`) at the base
+     * position of the #573 precedence above — delivery changes WHERE
+     * the ladder's bytes come from, never WHICH layer wins. Mode
+     * selection reuses the mount's already-resolved `themeMode` (one
+     * projection — no second mode resolution here), and a mode switch
+     * re-paints from the retained other set with no network activity.
+     * Values are injection-safe by the wire schema — never
+     * re-validated here; serialization is key-sorted for byte-stable
+     * output. `documentHash` is the registration's identity (joins a
+     * painted ladder to its registration record); the renderer
+     * carries it but exposes no observability surface for it today.
+     */
+    readonly base?: {
+      readonly documentHash: string;
+      readonly light: Readonly<Record<string, string>>;
+      readonly dark: Readonly<Record<string, string>>;
+    };
   };
   /**
    * Host-announced palette, already translated onto `--ggui-*` tokens
@@ -524,9 +569,24 @@ export async function mountReactRoot(
   }
 
   function renderTree(opts: ReactRootMountOptions): void {
-    let themeCss = opts.themeId
-      ? getScopedThemeCss(opts.themeId, scopeClass, opts.themeMode)
-      : getScopedCssTokens(scopeClass, opts.themeMode);
+    // Delivered base ladder (ggui#598-C): when the slice theme carries
+    // `base`, the mode-selected set REPLACES the compiled ladder block
+    // at the base position — same precedence slot, different byte
+    // source. Mode selection reuses the already-resolved `themeMode`
+    // (one projection; absent means light — the same default
+    // `getScopedThemeCss` applies). Both sets stay retained on the
+    // options, so a mode-switch re-render picks the other ladder from
+    // memory — never the network.
+    const deliveredBase = opts.appTheme?.base;
+    let themeCss =
+      deliveredBase !== undefined
+        ? toScopedBaseCss(
+            scopeClass,
+            opts.themeMode === 'dark' ? deliveredBase.dark : deliveredBase.light,
+          )
+        : opts.themeId
+          ? getScopedThemeCss(opts.themeId, scopeClass, opts.themeMode)
+          : getScopedCssTokens(scopeClass, opts.themeMode);
     if (opts.hostPalette) {
       // Host palette = the fallback layer (ggui#572, #573 ruling):
       // after the base scoped block so it can repaint at all (the base
