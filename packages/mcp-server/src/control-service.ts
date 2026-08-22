@@ -134,6 +134,7 @@ export const SINGLE_CALL_OPS: ReadonlySet<string> = new Set<string>([
   "ggui_ops_list_my_blueprints",
   "ggui_ops_list_orgs",
   "ggui_ops_list_provider_keys",
+  "ggui_ops_list_themes",
   "ggui_ops_list_recent_renders",
   "ggui_ops_save_library_blueprint",
   "ggui_ops_setup_byok",

@@ -39,7 +39,9 @@ export {
 export type {
   ThemeCoverageResult,
   ThemeRegistrationDocs,
+  ThemeRegistrationDocsInput,
 } from './validate-coverage';
+export { consumedTokenManifest } from './consumed-tokens';
 export { resolveRegistrationVariables } from './resolve-registration';
 export type { ResolvedRegistrationVariables } from './resolve-registration';
 

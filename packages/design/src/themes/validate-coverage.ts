@@ -65,6 +65,20 @@ export interface ThemeRegistrationDocs {
   readonly dark: DtcgTheme;
 }
 
+/**
+ * The validator's INPUT shape — deliberately wider than
+ * {@link ThemeRegistrationDocs}: registration documents arrive
+ * UNVALIDATED (a wire payload), and this function's documented
+ * contract is may-throw-on-bad-shape — `parseTheme` is the validating
+ * narrower. Callers holding loose `Record<string, unknown>` docs pass
+ * them directly; a non-DtcgTheme document throws here, and the
+ * registration seam maps that to its document-shape refusal.
+ */
+export interface ThemeRegistrationDocsInput {
+  readonly light: DtcgTheme | Record<string, unknown>;
+  readonly dark: DtcgTheme | Record<string, unknown>;
+}
+
 export interface ThemeCoverageResult {
   /** True iff both modes cover (emit or explicitly inherit) every obligated token. */
   readonly covered: boolean;
@@ -79,8 +93,10 @@ export interface ThemeCoverageResult {
 const EMITTED_VAR_RE = /(--ggui-[a-zA-Z0-9-]+)\s*:/g;
 
 /** The variable names the parser ACTUALLY emits for a document. */
-function emittedNames(doc: DtcgTheme): ReadonlySet<string> {
-  const parsed = parseTheme('coverage-probe', doc);
+function emittedNames(doc: DtcgTheme | Record<string, unknown>): ReadonlySet<string> {
+  // Union → member narrowing at the validating boundary: parseTheme
+  // rejects anything that is not a DtcgTheme (the may-throw contract).
+  const parsed = parseTheme('coverage-probe', doc as DtcgTheme);
   const names = new Set<string>();
   for (const match of parsed.cssVariables.matchAll(EMITTED_VAR_RE)) {
     names.add(match[1]!);
@@ -88,11 +104,14 @@ function emittedNames(doc: DtcgTheme): ReadonlySet<string> {
   return names;
 }
 
-function inheritPatterns(docs: ThemeRegistrationDocs): readonly string[] {
+function inheritPatterns(docs: ThemeRegistrationDocsInput): readonly string[] {
   // `$extensions` values are unknown by DTCG design (vendor
   // namespaces); narrow our own namespace structurally.
-  const collect = (doc: DtcgTheme): readonly string[] => {
-    const ext = doc.$extensions?.['ai.ggui.coverage'];
+  const collect = (doc: DtcgTheme | Record<string, unknown>): readonly string[] => {
+    // Union → member narrowing (same validating-boundary rule as
+    // emittedNames): `$extensions` is read structurally either way and
+    // every downstream access is typeof-guarded.
+    const ext = (doc as DtcgTheme).$extensions?.['ai.ggui.coverage'];
     if (typeof ext !== 'object' || ext === null) return [];
     const inherit = (ext as { inherit?: unknown }).inherit;
     return Array.isArray(inherit)
@@ -115,7 +134,7 @@ function matchesPattern(name: string, pattern: string): boolean {
  * (`consumed-tokens.manifest.json`'s `tokens`).
  */
 export function validateThemeCoverage(
-  docs: ThemeRegistrationDocs,
+  docs: ThemeRegistrationDocsInput,
   manifestTokens: readonly string[],
 ): ThemeCoverageResult {
   const excluded = manifestTokens

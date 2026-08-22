@@ -46,6 +46,7 @@ import {
   RUNTIME_SHIMS_URL_PREFIX,
 } from "@ggui-ai/iframe-runtime/server";
 import type {
+  ThemeStore,
   AppMetadataStore,
   AuditSink,
   AuthAdapter,
@@ -174,6 +175,12 @@ import {
   type AppsSource,
   type UserDefaultAppSource,
 } from "@ggui-ai/mcp-server-handlers/ops-apps";
+import {
+  createDeleteThemeHandler,
+  createListThemesHandler,
+  createRegisterThemeHandler,
+  type ThemeCoverageValidator,
+} from "@ggui-ai/mcp-server-handlers/ops-themes";
 import {
   createIssueConnectorKeyHandler,
   createListConnectorKeysHandler,
@@ -1628,6 +1635,19 @@ export interface OpsBundleDeps {
     readonly apps: AppsSource;
     readonly userDefaultApp: UserDefaultAppSource;
   };
+  /**
+   * Runtime theme registration tools (ggui#598-C). Sources for the
+   * three `ggui_ops_*_theme*` handlers: the app tenancy source, the
+   * `ThemeStore`, the coverage validator + consumed-token manifest,
+   * and the built-in theme-id list (registration refuses collisions).
+   */
+  readonly opsThemes?: {
+    readonly apps: AppsSource;
+    readonly themeStore: ThemeStore;
+    readonly coverageValidator: ThemeCoverageValidator;
+    readonly manifestTokens: readonly string[];
+    readonly staticThemeIds: readonly string[];
+  };
   readonly opsOrgs?: {
     readonly orgs: OrgsSource;
     readonly invites: OrgInvitesSource;
@@ -1683,6 +1703,27 @@ export function buildOpsBundleHandlers(
         ZodRawShape
       >,
       createSetDefaultAppHandler({ apps, userDefaultApp }) as SharedHandler<
+        ZodRawShape,
+        ZodRawShape
+      >
+    );
+  }
+  if (deps.opsThemes) {
+    const { apps, themeStore, coverageValidator, manifestTokens, staticThemeIds } =
+      deps.opsThemes;
+    handlers.push(
+      createRegisterThemeHandler({
+        apps,
+        themeStore,
+        coverageValidator,
+        manifestTokens,
+        staticThemeIds,
+      }) as SharedHandler<ZodRawShape, ZodRawShape>,
+      createListThemesHandler({ apps, themeStore }) as SharedHandler<
+        ZodRawShape,
+        ZodRawShape
+      >,
+      createDeleteThemeHandler({ apps, themeStore }) as SharedHandler<
         ZodRawShape,
         ZodRawShape
       >
@@ -3381,6 +3422,7 @@ export interface CreateGguiServerOptions {
    * under the same name wins.
    */
   readonly opsApps?: OpsBundleDeps["opsApps"];
+  readonly opsThemes?: OpsBundleDeps["opsThemes"];
   readonly opsOrgs?: OpsBundleDeps["opsOrgs"];
   readonly opsConnectorKeys?: OpsBundleDeps["opsConnectorKeys"];
   readonly opsCoupon?: OpsBundleDeps["opsCoupon"];
