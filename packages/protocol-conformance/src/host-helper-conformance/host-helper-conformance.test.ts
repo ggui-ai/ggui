@@ -166,3 +166,60 @@ describe('host-helper conformance — grading semantics (ggui#600)', () => {
     expect(new Set(ids).size).toBe(ids.length);
   });
 });
+
+describe('C-grades — zero ungoverned chrome (round-6 doctrine @6e15724a1)', () => {
+  it('a containment-only chrome audit passes C1', async () => {
+    const report = await runHostHelperConformance(relayingPort(), {
+      chromeAudit: {
+        slotStyles: { overflow: 'hidden', width: '100%', height: '100%' },
+        emptySlotStyles: { overflow: 'hidden', minHeight: '120px' },
+      },
+    });
+    const c1 = report.cases.find((c) => c.id === 'C1-containment-only');
+    expect(c1?.outcome).toBe('pass');
+    expect(report.tier).toBe('relaying');
+  });
+
+  it('the exact round-6 hardcoded chrome FAILS C1 naming every offending property', async () => {
+    // The McpAppIframe regression, pinned at kit level: borderWidth 1,
+    // borderColor #e5e5e5, borderRadius 8 on the mounted slot — chrome
+    // no theme registration could reach, present in every #589 round.
+    const report = await runHostHelperConformance(relayingPort(), {
+      chromeAudit: {
+        slotStyles: {
+          overflow: 'hidden',
+          borderWidth: '1',
+          borderColor: '#e5e5e5',
+          borderRadius: '8',
+        },
+        emptySlotStyles: { overflow: 'hidden' },
+      },
+    });
+    const c1 = report.cases.find((c) => c.id === 'C1-containment-only');
+    expect(c1?.outcome).toBe('fail');
+    expect(c1?.detail).toContain('borderWidth');
+    expect(c1?.detail).toContain('borderColor');
+    expect(c1?.detail).toContain('borderRadius');
+    expect(report.tier).toBe('nonconforming');
+  });
+
+  it('empty-slot chrome fails the same rule — the fallback slot is a mount surface too', async () => {
+    const report = await runHostHelperConformance(relayingPort(), {
+      chromeAudit: {
+        slotStyles: { overflow: 'hidden' },
+        emptySlotStyles: { overflow: 'hidden', backgroundColor: '#fafafa' },
+      },
+    });
+    const c1 = report.cases.find((c) => c.id === 'C1-containment-only');
+    expect(c1?.outcome).toBe('fail');
+    expect(c1?.detail).toContain('emptySlot');
+    expect(c1?.detail).toContain('backgroundColor');
+  });
+
+  it('no audit supplied → C cases skip as self-certification-pending, tier unaffected', async () => {
+    const report = await runHostHelperConformance(initializeOnlyPort());
+    const c1 = report.cases.find((c) => c.id === 'C1-containment-only');
+    expect(c1?.outcome).toBe('skip');
+    expect(report.tier).toBe('read-only');
+  });
+});

@@ -73,6 +73,24 @@ export interface HostHelperPort {
   send(request: JsonRpcRequest): Promise<JsonRpcResponse | null>;
 }
 
+/**
+ * Style inventory of the helper's mount surfaces, collected by the
+ * vendor (computed styles on web, style objects on RN) and graded by
+ * the kit — the pure-node split that keeps DOM out of the catalog.
+ * The helper OWNS containment only; every visual property beyond it is
+ * chrome the theme contract cannot reach (the round-6 class:
+ * `McpAppIframe` hardcoded borderWidth/#e5e5e5/radius on both slots,
+ * present in every #589 rejection round). Silhouette (rim, clip,
+ * radius) belongs to the EMBEDDING host outside the helper; tokens
+ * belong to the theme; the helper paints nothing.
+ */
+export interface ChromeAudit {
+  /** Styles the helper applies to the mounted view's slot element. */
+  readonly slotStyles: Record<string, string>;
+  /** Styles the helper applies to its empty/fallback slot. */
+  readonly emptySlotStyles: Record<string, string>;
+}
+
 export interface HostHelperConformanceOptions {
   /**
    * How long a refusal may take before it counts as a hang (H4 /
@@ -80,6 +98,11 @@ export interface HostHelperConformanceOptions {
    * default absorbs slow transports, not slow decisions.
    */
   readonly refusalTimeoutMs?: number;
+  /**
+   * Chrome audit for the C-grades. Absent ⇒ C cases report `skip`
+   * (self-certification pending) — the tier is decided by H/R alone.
+   */
+  readonly chromeAudit?: ChromeAudit;
 }
 
 export type HostHelperCaseOutcome = 'pass' | 'fail' | 'skip' | 'warn';
@@ -105,6 +128,45 @@ const DEFAULT_REFUSAL_TIMEOUT_MS = 2_000;
 
 /** A method no ggui helper answers — the honest-refusal probe. */
 const UNSUPPORTED_PROBE_METHOD = 'ggui-conformance/unsupported-probe';
+
+/**
+ * Containment styles a helper may legitimately apply to its mount
+ * surfaces: sizing, layout participation, overflow clipping, and
+ * stacking — never color, border, radius, shadow, or typography.
+ * Vendor-prefixed and camelCase/kebab-case spellings both normalize.
+ */
+const CONTAINMENT_STYLE_ALLOWLIST = new Set([
+  'overflow',
+  'overflowx',
+  'overflowy',
+  'width',
+  'height',
+  'minwidth',
+  'minheight',
+  'maxwidth',
+  'maxheight',
+  'flex',
+  'flexgrow',
+  'flexshrink',
+  'flexbasis',
+  'alignself',
+  'display',
+  'position',
+  'top',
+  'right',
+  'bottom',
+  'left',
+  'inset',
+  'zindex',
+  'contain',
+  'aspectratio',
+]);
+
+function isContainmentStyle(property: string): boolean {
+  return CONTAINMENT_STYLE_ALLOWLIST.has(
+    property.toLowerCase().replace(/-/g, ''),
+  );
+}
 
 let nextId = 1;
 
@@ -330,6 +392,41 @@ export async function runHostHelperConformance(
       outcome: 'skip',
       detail: 'not gradable over a dropped relay',
     });
+  }
+
+  // ── C1: zero ungoverned chrome ────────────────────────────────────
+  if (options.chromeAudit === undefined) {
+    cases.push({
+      id: 'C1-containment-only',
+      outcome: 'skip',
+      detail:
+        'no chrome audit supplied — self-certification pending (collect the slot style inventories and re-run)',
+    });
+  } else {
+    const offending: string[] = [];
+    for (const [surface, styles] of [
+      ['slot', options.chromeAudit.slotStyles],
+      ['emptySlot', options.chromeAudit.emptySlotStyles],
+    ] as const) {
+      for (const prop of Object.keys(styles)) {
+        if (!isContainmentStyle(prop)) {
+          offending.push(`${surface}.${prop}`);
+        }
+      }
+    }
+    cases.push(
+      offending.length === 0
+        ? {
+            id: 'C1-containment-only',
+            outcome: 'pass',
+            detail: 'both mount surfaces carry containment styles only',
+          }
+        : {
+            id: 'C1-containment-only',
+            outcome: 'fail',
+            detail: `ungoverned chrome the theme contract cannot reach: ${offending.join(', ')} — the helper owns containment only (silhouette = embedding host, tokens = theme; round-6 doctrine)`,
+          },
+    );
   }
 
   const failures = cases
