@@ -41,7 +41,7 @@ const silentLogger = {
 
 type ThemeOpts = Pick<
   GguiRenderResourceTemplateOptions,
-  "themeId" | "themeMode" | "themeProvider"
+  "themeId" | "themeMode" | "themeProvider" | "themeBaseProvider"
 >;
 
 async function boot(themeOpts: ThemeOpts): Promise<{
@@ -176,6 +176,46 @@ describe("resources/read stamps the layered theme — parity with the tool-resul
     // obeys the stamp (stamped > sidecar), so no side ever re-ranks.
     expect(slice.themeMode).toBe("light");
     expect((slice.theme as { mode?: string }).mode).toBe("dark");
+    await close();
+  });
+
+  it("a runtime-registered theme's ladder is DELIVERED on the read door — theme.base with documentHash + both modes (ggui#598-C)", async () => {
+    const BASE = {
+      documentHash: "d".repeat(64),
+      light: { "--ggui-color-surface": "#ffffff" },
+      dark: { "--ggui-color-surface": "#101216" },
+    };
+    const calls: Array<[string, string]> = [];
+    const { client, store, close } = await boot({
+      themeBaseProvider: async (appId, name) => {
+        calls.push([appId, name]);
+        return name === "acme-brand-v1" ? BASE : null;
+      },
+    });
+    await seedRender(store, undefined, {
+      name: "acme-brand-v1",
+      mode: "dark",
+      cssVariables: {},
+    });
+    const slice = await readEnvelope(client);
+    const theme = slice.theme as { base?: typeof BASE; mode?: string };
+    expect(calls).toEqual([[APP, "acme-brand-v1"]]);
+    expect(theme.base).toEqual(BASE);
+    expect(theme.mode).toBe("dark");
+    await close();
+  });
+
+  it("an unregistered name leaves the served theme base-less — today's path byte-preserved", async () => {
+    const { client, store, close } = await boot({
+      themeBaseProvider: async () => null,
+    });
+    await seedRender(store, undefined, {
+      name: "My Decorative",
+      mode: "light",
+      cssVariables: {},
+    });
+    const slice = await readEnvelope(client);
+    expect((slice.theme as { base?: unknown }).base).toBeUndefined();
     await close();
   });
 

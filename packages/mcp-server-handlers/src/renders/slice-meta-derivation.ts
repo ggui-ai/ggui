@@ -437,6 +437,40 @@ export function derivePermissionsPolicy(
  * mcpApps items return `undefined` (the `'theme' in item` guard is
  * false for them). Absent ⇒ the renderer applies its default theme.
  */
+/** The registered ladder's delivery payload — `AppTheme.base`, required form. */
+export type AppThemeBase = NonNullable<AppTheme['base']>;
+
+/**
+ * Async view-enrichment for the ggui#598-C delivery: when the view's
+ * theme names a RUNTIME-REGISTERED theme, attach the registered
+ * ladder (`theme.base` — both modes + documentHash) so the runtime
+ * paints the delivered base at the compiled-ladder slot. Every
+ * emitting door awaits this BEFORE the ONE sync spread
+ * ({@link spreadRenderMetaViewOntoSlice}) — one enrichment, every
+ * transport, no drift.
+ *
+ * Identity in every non-resolving case (no provider / no theme name /
+ * base already present / name resolves nowhere) — today's behavior is
+ * byte-preserved for every existing surface.
+ */
+export async function withResolvedThemeBase(
+  view: RenderMetaView,
+  deps: Pick<RenderSliceMetaDeps, 'themeBaseProvider'>,
+  appId: string,
+): Promise<RenderMetaView> {
+  const name = view.theme?.name;
+  if (
+    deps.themeBaseProvider === undefined ||
+    name === undefined ||
+    view.theme?.base !== undefined
+  ) {
+    return view;
+  }
+  const base = await deps.themeBaseProvider(appId, name);
+  if (base === null) return view;
+  return { ...view, theme: { ...view.theme!, base } };
+}
+
 export function deriveTheme(item: GguiSession): AppTheme | undefined {
   return 'theme' in item ? item.theme : undefined;
 }
@@ -1127,6 +1161,22 @@ export interface RenderSliceMetaDeps {
         readonly mode?: 'light' | 'dark';
       }
     | undefined;
+  /**
+   * Runtime theme-registration resolver (ggui#598-C delivery): given
+   * `(appId, themeName)`, return the registered ladder's delivery
+   * payload — `{documentHash, light, dark}` — or `null` when the name
+   * resolves to no registration (static presets and decorative names
+   * stay on today's path). Bound by the composer to the ThemeStore +
+   * `resolveRegistrationVariables` (typically behind a documentHash-
+   * keyed memo). Absent = no runtime registration surface (the OSS
+   * default without a store). A throwing provider FAILS the emission —
+   * loud beats silently-wrong-brand; a deployment preferring fail-open
+   * wraps its provider.
+   */
+  readonly themeBaseProvider?: (
+    appId: string,
+    themeName: string,
+  ) => Promise<AppThemeBase | null> | AppThemeBase | null;
   /**
    * H1 ruling 1b — presigner for PRIVATE gadget bundle URLs, applied
    * via {@link rewritePrivateBundleUrls} before the render projection

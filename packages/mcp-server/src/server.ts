@@ -100,7 +100,7 @@ import {
   NoopRateLimiter,
   NoopTelemetrySink,
 } from "@ggui-ai/mcp-server-core/in-memory";
-import type { HandlerContext, SharedHandler } from "@ggui-ai/mcp-server-handlers";
+import type { AppThemeBase, HandlerContext, SharedHandler } from "@ggui-ai/mcp-server-handlers";
 import {
   createGguiListGadgetsHandler,
   createGguiListThemesHandler,
@@ -2018,6 +2018,21 @@ export interface CreateGguiServerOptions {
         readonly mode?: "light" | "dark";
       }
     | undefined;
+
+  /**
+   * Runtime theme-registration resolver (ggui#598-C): `(appId,
+   * themeName)` → the registered ladder's delivery payload
+   * (`{documentHash, light, dark}`) or `null` for names with no
+   * registration. Threaded to every emitting door (render/update
+   * result-meta, the read-served shell, `/state`) so delivery cannot
+   * drift across transports. Bind it to a ThemeStore +
+   * `resolveRegistrationVariables` (typically memoized on
+   * documentHash). Absent = no runtime registration surface.
+   */
+  readonly themeBaseProvider?: (
+    appId: string,
+    themeName: string,
+  ) => Promise<AppThemeBase | null> | AppThemeBase | null;
 
   /**
    * Optional change notifier — fires when the operator's theme
@@ -4339,6 +4354,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
               // without restarting the server. CLI owns the shared
               // state cell; this getter just reads it.
               ...(opts.themeProvider !== undefined ? { themeProvider: opts.themeProvider } : {}),
+              ...(opts.themeBaseProvider !== undefined ? { themeBaseProvider: opts.themeBaseProvider } : {}),
               // Only thread the limiter through when the operator
               // bound a real one — passing the NoopRateLimiter is a
               // wasted allocation and makes the wire-through noisy
@@ -4538,6 +4554,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
                 ? { themeMode: opts.theme.mode }
                 : {}),
               ...(opts.themeProvider !== undefined ? { themeProvider: opts.themeProvider } : {}),
+              ...(opts.themeBaseProvider !== undefined ? { themeBaseProvider: opts.themeBaseProvider } : {}),
             },
           }
         : {}),
@@ -4555,6 +4572,9 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
       // ephemeral InMemoryAppMetadataStore instances (the pre-Phase-3
       // shape). The CLI seeds this from `ggui.json#theme.preset`.
       ...(opts.appMetadataStore ? { appMetadataStore: opts.appMetadataStore } : {}),
+      ...(opts.themeBaseProvider !== undefined
+        ? { themeBaseProvider: opts.themeBaseProvider }
+        : {}),
       // Theme catalog resolver. Read per-call so additions to the
       // registry surface without a restart. Wired alongside
       // `appMetadataStore` to register `ggui_list_themes`; absent ⇒
@@ -4961,6 +4981,9 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
             // slice and the served shell.
             ...(opts.themeProvider !== undefined
               ? { themeProvider: opts.themeProvider }
+              : {}),
+            ...(opts.themeBaseProvider !== undefined
+              ? { themeBaseProvider: opts.themeBaseProvider }
               : {}),
             // Resume contract — registry-only fallback. Wired
             // when the blueprint vector store is available so the

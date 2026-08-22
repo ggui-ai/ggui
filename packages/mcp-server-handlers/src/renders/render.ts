@@ -155,6 +155,7 @@ import { isVisibleToCaller } from './tenancy.js';
 import {
   assembleRenderSliceBase,
   deriveRenderMeta,
+  withResolvedThemeBase,
   derivePublicEnvProjection,
   deriveContractBundle,
   rewritePrivateBundleUrls,
@@ -2511,8 +2512,12 @@ export function createGguiRenderHandler(
           // projection so CSP origins + iframe registrations both see
           // the fetchable (presigned) URL. Passthrough when the
           // deployment wires no presigner (OSS same-origin story).
-          view = deriveRenderMeta(
-            await rewritePrivateBundleUrls(top, deps.presignPrivateBundleUrl),
+          view = await withResolvedThemeBase(
+            deriveRenderMeta(
+              await rewritePrivateBundleUrls(top, deps.presignPrivateBundleUrl),
+            ),
+            deps,
+            ctx.appId,
           );
           // Over-cap inline-channel omission is a named event, not a
           // silent degrade: on a host whose iframe CSP blocks fetches

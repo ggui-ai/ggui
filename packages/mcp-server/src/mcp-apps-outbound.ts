@@ -43,6 +43,8 @@ import {
   deriveContractBundle,
   derivePublicEnvProjection,
   deriveRenderMeta,
+  withResolvedThemeBase,
+  type AppThemeBase,
   filterDescriptorsToContract,
   findBlueprintExact,
   resolveSliceTheme,
@@ -1388,6 +1390,15 @@ export interface GguiRenderResourceTemplateOptions {
   /** GguiSessionStore the template handler reads to find the render's
    *  componentCode. */
   readonly renderStore: GguiSessionStore;
+  /**
+   * Runtime theme-registration resolver (ggui#598-C) — the same
+   * contract as `RenderSliceMetaDeps.themeBaseProvider`, bound here so
+   * the read-served shell cannot drift from the result-meta emitters.
+   */
+  readonly themeBaseProvider?: (
+    appId: string,
+    themeName: string,
+  ) => Promise<AppThemeBase | null> | AppThemeBase | null;
   /** Absolute URL of the iframe-runtime bundle inlined in the shell. */
   readonly runtimeUrl: string;
   /**
@@ -2263,7 +2274,14 @@ export function registerGguiRenderResourceTemplate(
     // (the browser-enforced gate ultimately comes from the host's
     // `allow=""` attribute when the host translates
     // `_meta.ui.permissions` — set by McpAppIframe consumers).
-    const view = deriveRenderMeta(picked.source);
+    // Theme-base enrichment needs the owning app; mcpApps sources carry
+    // no appId AND project an empty view (no theme), so the enrichment
+    // is definitionally a no-op there — skip rather than fake an id.
+    const baseView = deriveRenderMeta(picked.source);
+    const view =
+      picked.source.type !== "mcpApps"
+        ? await withResolvedThemeBase(baseView, opts, picked.source.appId)
+        : baseView;
     const isSystem = picked.kind !== undefined;
 
     // A fault on EITHER delivery channel, held rather than acted on.

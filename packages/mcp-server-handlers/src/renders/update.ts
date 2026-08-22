@@ -81,6 +81,7 @@ import type { HandlerContext, SharedHandler } from '../types.js';
 import {
   assembleRenderSliceBase,
   deriveRenderMeta,
+  withResolvedThemeBase,
   spreadRenderMetaViewOntoSlice,
   type RenderMetaView,
   type RenderSliceMetaDeps,
@@ -397,7 +398,11 @@ export function createGguiUpdateHandler(
         if (stored) {
           lastSequence = stored.eventSequence;
           renderThemeId = stored.themeId;
-          view = deriveRenderMeta(stored.render);
+          view = await withResolvedThemeBase(
+            deriveRenderMeta(stored.render),
+            deps,
+            ctx.appId,
+          );
           if (
             stored.render.type !== 'mcpApps' &&
             stored.render.type !== 'system'
