@@ -375,6 +375,20 @@ export interface GguiSessionPostSuccessArgs {
    * cloud deployments use it for per-render metering.
    */
   readonly cacheHit: boolean;
+  /**
+   * Identity of the stored component that served this render — the
+   * same value the wire output's `blueprintId` carries (empty string
+   * on the genuinely-no-component branches, §9.1
+   * present-on-materialisation). Neutral observability field, same
+   * posture as {@link cacheHit}.
+   */
+  readonly blueprintId: string;
+  /**
+   * Variant axis of the reuse key for this render — the same
+   * `variantKey` the wire output carries. Neutral observability
+   * field, same posture as {@link cacheHit}.
+   */
+  readonly variantKey: string;
 }
 
 /**
@@ -2398,6 +2412,11 @@ export function createGguiRenderHandler(
             action,
             codeReady: false,
             cacheHit: false,
+            // Mirrors the failure envelope above: no component
+            // materialised ⇒ empty-sentinel id; the variant axis is
+            // still the one the attempt keyed on.
+            blueprintId: '',
+            variantKey: effectiveVariantKey,
           });
         }
         return handlerFailure(
@@ -2499,6 +2518,10 @@ export function createGguiRenderHandler(
           // `cacheMarker ?? { hit: false, … }`, set on BOTH the
           // blueprint-reuse and cold-gen branches above.
           cacheHit: result.cache.hit,
+          // Same values the wire result carries — see the `result`
+          // assembly above for the per-branch semantics.
+          blueprintId: result.blueprintId,
+          variantKey: result.variantKey,
         });
       }
 
