@@ -150,7 +150,7 @@ import {
   newCacheTraceId,
   truncateCacheTraceIntent,
 } from './cache-trace-sink.js';
-import { emitPayloadTraceEvent } from './payload-trace-sink.js';
+import { emitPayloadTraceEvent, type PayloadTraceSink } from './payload-trace-sink.js';
 import { isVisibleToCaller } from './tenancy.js';
 import {
   assembleRenderSliceBase,
@@ -386,6 +386,14 @@ export interface GguiSessionPostSuccessArgs {
  * slice deps.
  */
 export interface GguiRenderHandlerDeps extends RenderSliceMetaDeps {
+  /**
+   * Devtools payload-trace sink (ggui#605): rides the DEPS so the
+   * registrar (mcp-server console wiring) and this package's emitters
+   * meet on a call path — never cross-package module-global state
+   * (the split-module-instance dark-sink class, #604). Absent = the
+   * zero-cost unwired hot path.
+   */
+  readonly payloadTraceSink?: PayloadTraceSink;
   /** GguiSession-backing store. Used to mint / replace renders on render. */
   readonly renderStore: GguiSessionStore;
   /**
@@ -1478,7 +1486,7 @@ export function createGguiRenderHandler(
       // Devtools payload trace. No-op when no sink is registered.
       // Post-Phase-B the sink shape addresses by `sessionId` directly
       // (every render IS the addressable row).
-      emitPayloadTraceEvent({
+      emitPayloadTraceEvent(deps.payloadTraceSink, {
         direction: 'outbound-update',
         sessionId,
         appId: ctx.appId,
@@ -1843,7 +1851,14 @@ export function createGguiRenderHandler(
               id: bp.id,
               contractKey: bp.contractKey,
               componentCode: bp.componentCode,
-              cosine: 1,
+              // The matcher's measured cosine, persisted on the handshake
+              // record (#564 — this was hardcoded 1, misreporting the
+              // wire's documented semantic similarity). `?? 1` covers
+              // ONLY records persisted by a pre-#564 pod inside the
+              // rolling-deploy skew window (the record store's TTL
+              // bounds it); those were all reported as 1 before, so the
+              // fallback preserves their prior behavior, never invents.
+              cosine: matched.cosine ?? 1,
               contract: bp.contract,
               ...(bp.sourceCodeHash !== undefined
                 ? { sourceCodeHash: bp.sourceCodeHash }
@@ -1870,6 +1885,9 @@ export function createGguiRenderHandler(
               id: bp.id,
               contractKey: bp.contractKey,
               componentCode: bp.componentCode,
+              // Exact `(contractKey, variantKey)` re-resolution — cosine 1
+              // by definition (canonical identity, no retrieval; NOT a
+              // #564 hardcode).
               cosine: 1,
               contract: bp.contract,
               ...(bp.sourceCodeHash !== undefined

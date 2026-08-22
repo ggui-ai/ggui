@@ -138,6 +138,7 @@ describe('buildCacheReuseResult', () => {
         source,
       },
       'match-semantic: judge matched (confidence=0.90)',
+      0.87,
     );
     expect(result.action).toBe('reuse');
     // Atomic: served contract is the CACHED blueprint's own contract.
@@ -164,6 +165,9 @@ describe('buildCacheReuseResult', () => {
       id: BP_UUID,
       contractKey: 'abc',
       variantKey: 'v-abc',
+      // #564: the matcher's measured cosine rides the ref so the paired
+      // render reports the real similarity on the wire.
+      cosine: 0.87,
     });
   });
 
@@ -179,6 +183,7 @@ describe('buildCacheReuseResult', () => {
         source: { kind: 'user' },
       },
       'r',
+      1,
     );
     expect(r.suggestion.blueprintMeta.source).toEqual({ kind: 'user' });
   });
@@ -196,6 +201,7 @@ describe('buildCacheReuseResult', () => {
         source: { kind: 'user' },
       },
       'match-semantic',
+      0.9,
     );
     expect(r.suggestion.blueprintMeta.variance).toEqual(variance);
   });
@@ -210,7 +216,7 @@ describe('buildCacheReuseResult', () => {
       variance: {},
       source: { kind: 'user' } as const,
     };
-    expect(buildCacheReuseResult(bp, 'r')).toEqual(buildCacheReuseResult(bp, 'r'));
+    expect(buildCacheReuseResult(bp, 'r', 0.5)).toEqual(buildCacheReuseResult(bp, 'r', 0.5));
   });
 });
 
@@ -339,6 +345,7 @@ describe('decideHandshake — pre-match', () => {
         source: { kind: 'curated' },
       },
       'curated',
+      1,
     );
     const preMatch = vi.fn(async () => preResult);
     const r = await decideHandshake(

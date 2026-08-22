@@ -177,6 +177,18 @@ export interface HandshakeRecord {
     readonly id: string;
     readonly contractKey: string;
     readonly variantKey: string;
+    /**
+     * The retrieval cosine the matcher measured for this reuse —
+     * `1` on the exact-key tier (canonical-contract identity), the
+     * real embedding-space similarity on the semantic tier. The
+     * paired render threads it onto the wire's `cacheHit.similarity`
+     * (ggui#564 — that field was hardcoded `1`, misreporting the
+     * documented semantic cosine). Optional on the TYPE only for the
+     * rolling-deploy skew window: a record persisted by a pre-#564
+     * pod lacks it (Redis TTL bounds the window); the render reads
+     * `?? 1`, preserving prior behavior for exactly those records.
+     */
+    readonly cosine?: number;
   };
   /**
    * The ENFORCED props schema, persisted at handshake time — the
@@ -327,6 +339,8 @@ export interface HandshakeNegotiatorDecision {
     readonly id: string;
     readonly contractKey: string;
     readonly variantKey: string;
+    /** See the result-type twin — matcher cosine for `cacheHit.similarity` (#564). */
+    readonly cosine?: number;
   };
 }
 

@@ -86,6 +86,7 @@ import {
   type RenderSliceMetaDeps,
 } from './slice-meta-derivation.js';
 import { GguiSessionNotFoundError } from './errors.js';
+import { type PayloadTraceSink } from './payload-trace-sink.js';
 import {
   mutationInputSchema,
   runPropsMutation,
@@ -173,6 +174,14 @@ export interface BillingGate {
  * live-channel `props_update` fan-out still fire.
  */
 export interface GguiUpdateHandlerDeps extends RenderSliceMetaDeps {
+  /**
+   * Devtools payload-trace sink (ggui#605): rides the DEPS so the
+   * registrar (mcp-server console wiring) and this package's emitters
+   * meet on a call path — never cross-package module-global state
+   * (the split-module-instance dark-sink class, #604). Absent = the
+   * zero-cost unwired hot path.
+   */
+  readonly payloadTraceSink?: PayloadTraceSink;
   /** GguiSession-backing store. Used to load + persist the patched render. */
   readonly renderStore: GguiSessionStore;
   /**

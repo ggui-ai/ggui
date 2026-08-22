@@ -15,19 +15,21 @@
  *     on the handler. Answers "what JSON did the agent actually send
  *     me?" — invaluable when debugging contract drift.
  *
- * **Why module-level registry instead of constructor injection.** The
- * render + update handlers are constructed once per server boot via
- * `createGguiRenderHandler` / `createGguiUpdateHandler` factories.
- * Threading a sink through every handler dep struct + every test that
- * builds them would touch ~30 callsites for a devtools-only surface.
- * The OSS ggui server is a single process per CLI invocation — global
- * state has no confusion-cost there. The hosted runtime isolates per
- * request via process-pool, so a global per-pool is also safe. If we ever
- * multi-tenant inside one process we'll thread it then.
+ * **Why constructor injection, not a module-level registry (ggui#605).**
+ * An earlier revision kept a module-global `activeSink` with an exported
+ * setter — registered from `@ggui-ai/mcp-server` (the console wiring)
+ * while emission happened here. That cross-package module-global
+ * topology is exactly the class that went dark in production elsewhere
+ * (#604's audit): any loader topology that splits module instances —
+ * ESM instrumentation hooks, dual-resolution bundling — lands the
+ * registration on one instance while the emitters read another, and
+ * traces vanish silently. The sink now rides the handler DEPS
+ * (`payloadTraceSink` on the render/update factory deps), so registrar
+ * and emitter meet on a call path that no loader topology can split.
  *
- * **Default = no sink.** When unset, the handler emit calls return
- * immediately without copying or stringifying the payload — zero hot-
- * path cost. Passing `null` removes a previously registered sink.
+ * **Default = no sink.** Handlers whose deps carry no sink pay zero
+ * hot-path cost — the emit helper returns before copying or
+ * stringifying the payload.
  *
  * **Direction labelling.** `inbound-render` for `ggui_render` invocations,
  * `outbound-update` for `ggui_update` invocations. From the agent's
@@ -86,32 +88,22 @@ export interface PayloadTraceSink {
   emit(event: PayloadTraceEvent): void;
 }
 
-let activeSink: PayloadTraceSink | null = null;
-
 /**
- * Register the active sink. Pass `null` to remove. Subsequent
- * {@link emitPayloadTraceEvent} calls dispatch to this sink.
- */
-export function setPayloadTraceSink(sink: PayloadTraceSink | null): void {
-  activeSink = sink;
-}
-
-/** Read the active sink. Mostly for tests. */
-export function getPayloadTraceSink(): PayloadTraceSink | null {
-  return activeSink;
-}
-
-/**
- * Internal — called from `ggui_render` + `ggui_update` handlers. No-op
- * when no sink is registered, so the byte-size compute + JSON.stringify
- * are skipped on the no-sink hot path. Swallows sink-thrown errors (a
- * broken devtools sink must not break tool dispatch).
+ * Called from the `ggui_render` + `ggui_update` handlers with the sink
+ * their DEPS carry (ggui#605 — #604's structural rule: the registrar
+ * lives in `@ggui-ai/mcp-server`, the emitters live here; a
+ * module-global registry across that package boundary goes dark under
+ * any loader topology that splits module instances, so registrar and
+ * emitter meet on a call path instead). No-op when the deps carry no
+ * sink, so the byte-size compute + JSON.stringify are skipped on the
+ * unwired hot path. Swallows sink-thrown errors (a broken devtools
+ * sink must not break tool dispatch).
  */
 export function emitPayloadTraceEvent(
+  sink: PayloadTraceSink | null | undefined,
   input: Omit<PayloadTraceEvent, 'id' | 'at' | 'byteSize'> &
     Partial<Pick<PayloadTraceEvent, 'id' | 'at' | 'byteSize'>>,
 ): void {
-  const sink = activeSink;
   if (!sink) return;
   let byteSize = input.byteSize;
   if (byteSize === undefined) {

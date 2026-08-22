@@ -2,10 +2,11 @@
  * Console-facing payload trace sink + REST/SSE endpoints powering
  * `/devtools/payloads` in the @ggui-ai/console SPA.
  *
- * This is the OSS-default sink the `ggui serve` process registers via
- * {@link setPayloadTraceSink}. A hosted closed runtime may swap in a
- * durable sink (e.g. Redis-backed) — the handlers only know about the
- * {@link PayloadTraceSink} contract.
+ * This is the OSS-default sink `createGguiServer` threads into the
+ * render + update handler DEPS (ggui#605 — call-path injection; the
+ * old cross-package setPayloadTraceSink global is gone). A hosted
+ * closed runtime may swap in a durable sink (e.g. Redis-backed) — the
+ * handlers only know about the {@link PayloadTraceSink} contract.
  *
  * **Two surfaces, both admin-gated:**
  *   - `GET /ggui/console/payloads/recent?limit=<n>` — JSON snapshot
@@ -29,8 +30,8 @@ type SseListener = (event: PayloadTraceEvent) => void;
 
 /**
  * In-memory ring buffer + listener fanout. Implements
- * {@link PayloadTraceSink} so it can be passed to
- * {@link setPayloadTraceSink}.
+ * {@link PayloadTraceSink} so it can ride the handler deps
+ * (`payloadTraceSink` on the factory deps, ggui#605).
  *
  * **Why a class, not a closure.** Tests + operators read state
  * (`recent()`, listener count) — instance methods on a class beat a

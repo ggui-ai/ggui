@@ -439,6 +439,9 @@ async function buildAcceptCacheHarnessFor(
   contract: DataContract,
   extraOpts: {
     readonly checkRenderContracts?: GguiRenderHandlerDeps['checkRenderContracts'];
+    /** #564 — matcher cosine persisted on the record; absent = a
+     *  skew-era record from a pre-#564 pod. */
+    readonly matchCosine?: number;
   } = {},
 ): Promise<{
   readonly harness: Harness;
@@ -487,6 +490,9 @@ async function buildAcceptCacheHarnessFor(
       id: storedUuid,
       contractKey: blueprintKey(contract),
       variantKey: variantKey(undefined),
+      ...(extraOpts.matchCosine !== undefined
+        ? { cosine: extraOpts.matchCosine }
+        : {}),
     },
     appId: APP_ID,
     createdAt: new Date().toISOString(),
@@ -818,6 +824,27 @@ describe('createGguiRenderHandler — cache-reuse point-read (Phase 2)', () => {
     );
     expect(typeof seen.at(-1)).toBe('boolean');
     expect(seen.at(-1)).toBe(false);
+  });
+
+  it('threads the matcher cosine onto the committed cacheHit.similarity — and falls back to 1 only for skew-era records (#564)', async () => {
+    // Record persisted WITH the matcher cosine (post-#564 pod).
+    const withCosine = await buildAcceptCacheHarnessFor(CONTRACT, {
+      matchCosine: 0.73,
+    });
+    const out1 = (await withCosine.harness.handler.handler(
+      { handshakeId: withCosine.handshakeId, props: {} },
+      CTX,
+    )) as { cache?: { hit: boolean; similarity?: number } };
+    expect(out1.cache).toMatchObject({ hit: true, similarity: 0.73 });
+
+    // Skew-era record (no cosine field — persisted by a pre-#564 pod):
+    // reported as 1 before the fix, so 1 is preserved, never invented.
+    const skew = await buildAcceptCacheHarnessFor(CONTRACT);
+    const out2 = (await skew.harness.handler.handler(
+      { handshakeId: skew.handshakeId, props: {} },
+      CTX,
+    )) as { cache?: { hit: boolean; similarity?: number } };
+    expect(out2.cache).toMatchObject({ hit: true, similarity: 1 });
   });
 
   // ── reuse × action-bearing contract (the SCHEMA_MISMATCH seam) ──────
