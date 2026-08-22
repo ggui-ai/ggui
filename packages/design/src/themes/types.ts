@@ -34,6 +34,14 @@ export interface DtcgToken<T = string> {
 export interface DtcgTheme {
   $name: string;
   $description: string;
+  /**
+   * DTCG-standard extensions bag: vendor-namespaced, arbitrary values
+   * by SPEC (foreign namespaces are unknowable, so the open record is
+   * the honest type — narrow per-namespace at the consumer). ggui's
+   * own namespace: `'ai.ggui.coverage'` — the registration-gate
+   * inherit declarations (see `validate-coverage.ts`).
+   */
+  $extensions?: Record<string, unknown>;
   $metadata?: {
     font?: string;
     fontUrl?: string;

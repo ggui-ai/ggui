@@ -31,8 +31,15 @@ export {
 } from './parser';
 
 // Theme validator
-export { validateTheme } from './validate';
-export type { ValidationResult, ValidationIssue } from './validate';
+export { validateConsumerContrast } from './validate';
+export {
+  NON_THEME_DEFINABLE_TOKENS,
+  validateThemeCoverage,
+} from './validate-coverage';
+export type {
+  ThemeCoverageResult,
+  ThemeRegistrationDocs,
+} from './validate-coverage';
 
 // Theme registry
 export {

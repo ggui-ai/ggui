@@ -134,6 +134,19 @@ export const darkTheme: DtcgTheme = {
   },
 
   spacing: {
+    // Numeric 4px-grid scale (ggui#598-s2 gate catch: consumed by
+    // generated code — the prompt teaches var(--ggui-spacing-4) — and
+    // theme-emittable, but the default pair never emitted it; values =
+    // the platform grid, matching guuey-brand's canonical block).
+    '1': { $type: 'dimension', $value: '0.25rem' },
+    '2': { $type: 'dimension', $value: '0.5rem' },
+    '3': { $type: 'dimension', $value: '0.75rem' },
+    '4': { $type: 'dimension', $value: '1rem' },
+    '5': { $type: 'dimension', $value: '1.25rem' },
+    '6': { $type: 'dimension', $value: '1.5rem' },
+    '8': { $type: 'dimension', $value: '2rem' },
+    '10': { $type: 'dimension', $value: '2.5rem' },
+    '12': { $type: 'dimension', $value: '3rem' },
     xs: { $type: 'dimension', $value: '4px' },
     sm: { $type: 'dimension', $value: '8px' },
     md: { $type: 'dimension', $value: '16px' },

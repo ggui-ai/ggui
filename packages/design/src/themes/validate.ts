@@ -1,40 +1,15 @@
 /**
- * DTCG Theme Validator
+ * Consumer contrast validation for DTCG themes.
  *
- * Validates that a DtcgTheme has all required semantic color roles
- * and that paired tokens meet WCAG AA contrast requirements.
+ * The 8-role `validateTheme` predecessor was deleted 2026-08-22
+ * (ggui#598 slice 2): it had zero callers since birth and its
+ * successor is `validate-coverage.ts` — the manifest-grounded
+ * registration gate. What remains here is the CONSUMER contrast
+ * surface (`validateConsumerContrast` + its ratchet pairs), which has
+ * live test consumers.
  */
 
-import type { DtcgTheme, DtcgToken } from './types';
-
-export interface ValidationIssue {
-  severity: 'error' | 'warning';
-  token: string;
-  message: string;
-}
-
-export interface ValidationResult {
-  valid: boolean;
-  issues: ValidationIssue[];
-}
-
-/** Required semantic color tokens and their paired foreground/background. */
-const SEMANTIC_PAIRS: Array<{ bg: string; fg: string }> = [
-  { bg: 'surface', fg: 'onSurface' },
-  { bg: 'surfaceVariant', fg: 'onSurfaceVariant' },
-  { bg: 'container', fg: 'onContainer' },
-];
-
-const SEMANTIC_TOKENS = [
-  'surface',
-  'onSurface',
-  'surfaceVariant',
-  'onSurfaceVariant',
-  'container',
-  'onContainer',
-  'outline',
-  'outlineVariant',
-] as const;
+import type { DtcgTheme } from './types';
 
 /**
  * Parse a CSS color value to [r, g, b]. Accepts #rgb/#rrggbb hex and
@@ -78,92 +53,6 @@ function relativeLuminance(r: number, g: number, b: number): number {
   });
   return 0.2126 * rs + 0.7152 * gs + 0.0722 * bs;
 }
-
-/**
- * Compute contrast ratio between two colors (WCAG 2.1).
- * Returns a value >= 1.0.
- */
-function contrastRatio(hex1: string, hex2: string): number | null {
-  const rgb1 = hexToRgb(hex1);
-  const rgb2 = hexToRgb(hex2);
-  if (!rgb1 || !rgb2) return null;
-
-  const l1 = relativeLuminance(...rgb1);
-  const l2 = relativeLuminance(...rgb2);
-  const lighter = Math.max(l1, l2);
-  const darker = Math.min(l1, l2);
-  return (lighter + 0.05) / (darker + 0.05);
-}
-
-/** WCAG AA minimum contrast for normal text. */
-const WCAG_AA_CONTRAST = 4.5;
-
-/**
- * Validate a DtcgTheme for semantic color role completeness and contrast.
- */
-export function validateTheme(theme: DtcgTheme): ValidationResult {
-  const issues: ValidationIssue[] = [];
-
-  const colorRecord = theme.color as Record<string, DtcgToken | Record<string, DtcgToken>>;
-
-  // Check all 8 semantic tokens are present
-  for (const name of SEMANTIC_TOKENS) {
-    const token = colorRecord[name] as DtcgToken | undefined;
-    if (!token) {
-      issues.push({
-        severity: 'error',
-        token: `color.${name}`,
-        message: `Missing required semantic token "color.${name}"`,
-      });
-    } else if (!token.$value || typeof token.$value !== 'string') {
-      issues.push({
-        severity: 'error',
-        token: `color.${name}`,
-        message: `Token "color.${name}" must have a string $value`,
-      });
-    } else if (token.$type !== 'color') {
-      issues.push({
-        severity: 'warning',
-        token: `color.${name}`,
-        message: `Token "color.${name}" should have $type "color", got "${token.$type}"`,
-      });
-    }
-  }
-
-  // Check contrast ratios for semantic pairs
-  for (const { bg, fg } of SEMANTIC_PAIRS) {
-    const bgToken = colorRecord[bg] as DtcgToken | undefined;
-    const fgToken = colorRecord[fg] as DtcgToken | undefined;
-    if (!bgToken?.$value || !fgToken?.$value) continue;
-
-    const ratio = contrastRatio(
-      bgToken.$value as string,
-      fgToken.$value as string,
-    );
-    if (ratio === null) {
-      issues.push({
-        severity: 'warning',
-        token: `color.${bg} / color.${fg}`,
-        message: `Could not compute contrast ratio (non-hex values)`,
-      });
-    } else if (ratio < WCAG_AA_CONTRAST) {
-      issues.push({
-        severity: 'error',
-        token: `color.${bg} / color.${fg}`,
-        message: `Contrast ratio ${ratio.toFixed(2)}:1 is below WCAG AA minimum (${WCAG_AA_CONTRAST}:1)`,
-      });
-    }
-  }
-
-  return {
-    valid: issues.filter((i) => i.severity === 'error').length === 0,
-    issues,
-  };
-}
-
-// ─────────────────────────────────────────────────────────────────────
-// Consumer contrast contract (#594)
-// ─────────────────────────────────────────────────────────────────────
 
 /**
  * One foreground/background pairing that first-party consumers
