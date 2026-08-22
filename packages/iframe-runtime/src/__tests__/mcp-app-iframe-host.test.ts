@@ -103,3 +103,28 @@ describe('ui/initialize advertises implemented capabilities (ggui#440)', () => {
     expect(result.hostCapabilities.message).toBeUndefined();
   });
 });
+
+describe('mountMcpAppIframe — no ungoverned chrome (ggui#597, round-6 doctrine)', () => {
+  // The former hardcoded 1px #e5e5e5 / radius-8 was the web twin of the
+  // #589 round-6 RN defect (ungoverned inline chrome fighting the
+  // embedder's silhouette), stripped in the #600 first-party catalog
+  // pass. The helper paints CONTAINMENT ONLY — width/height/display —
+  // and no border or radius of its own; silhouette belongs to the
+  // embedding host's chrome, tokens to the theme (#598 doctrine).
+  it('the mounted iframe carries no border or radius chrome', () => {
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const mount = mountMcpAppIframe(container, {
+      render: SAMPLE_RENDER,
+      sessionId: SAMPLE_RENDER.id,
+    });
+    const style = mount.element.style;
+    // jsdom normalizes the border shorthand — assert via cssText + the
+    // absence of any radius/border-color chrome.
+    expect(style.cssText).not.toContain('border');
+    expect(style.cssText).not.toContain('e5e5e5');
+    expect(style.display).toBe('block');
+    mount.unmount();
+    container.remove();
+  });
+});
