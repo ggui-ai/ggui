@@ -164,15 +164,31 @@ const botanicalLight: DtcgTheme = {
       '200': { $value: '#f8f0df', $type: 'color' },
       '300': { $value: '#f0e4c9', $type: 'color' },
       '400': { $value: '#dccba5', $type: 'color' },
-      '500': { $value: '#bfaa80', $type: 'color' },
+      '500': { $value: '#aa8e56', $type: 'color' },
       '600': { $value: '#9a8660', $type: 'color' },
       '700': { $value: '#746448', $type: 'color' },
       '800': { $value: '#504530', $type: 'color' },
       '900': { $value: '#352e20', $type: 'color' },
     },
-    success: standardSemanticScales.light.success,
-    warning: standardSemanticScales.light.warning,
-    error: standardSemanticScales.light.error,
+    // #594 founder-approved light override (2026-08-22): shared success-500
+    // is sub-AA as TEXT on botanical's warm paper — override the 500 stop
+    // only, light only (same pattern as warning/error below).
+    success: {
+      ...standardSemanticScales.light.success,
+      '500': { $type: 'color', $value: '#17843f' },
+    },
+    // #594 founder-approved light overrides (2026-08-22): the shared
+    // standardSemantic 500s are sub-AA as TEXT on botanical's warm paper
+    // (#fefcf8) — override ONLY the 500 stop, only in light; the shared
+    // scales stay untouched for every other theme and for dark.
+    warning: {
+      ...standardSemanticScales.light.warning,
+      '500': { $type: 'color', $value: '#a06707' },
+    },
+    error: {
+      ...standardSemanticScales.light.error,
+      '500': { $type: 'color', $value: '#e51414' },
+    },
     info: standardSemanticScales.light.info,
     // Semantic roles
     surface: { $value: '#fefcf8', $type: 'color' },
@@ -184,7 +200,7 @@ const botanicalLight: DtcgTheme = {
     outline: { $value: '#f0e4c9', $type: 'color' },
     outlineVariant: { $value: '#f8f0df', $type: 'color' },
     // Primary role pair — onPrimary is cream for the leaf-green brand hex.
-    onPrimary: { $value: '#fefcf8', $type: 'color' },
+    onPrimary: { $value: '#332407', $type: 'color' },
     primaryContainer: { $value: '#dcfce7', $type: 'color' }, // primary-100
     onPrimaryContainer: { $value: '#14532d', $type: 'color' }, // primary-900
     // Error role pair — uses the shared standardSemantic error ladder.

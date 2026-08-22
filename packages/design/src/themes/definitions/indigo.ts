@@ -217,7 +217,7 @@ const indigoLight: DtcgTheme = {
       '50': { $value: '#ecfdf5', $type: 'color' },
       '100': { $value: '#d1fae5', $type: 'color' },
       '200': { $value: '#a7f3d0', $type: 'color' },
-      '500': { $value: '#0e9d6e', $type: 'color' }, // brand emerald
+      '500': { $value: '#0b815a', $type: 'color' }, // brand emerald
       '600': { $value: '#0b8259', $type: 'color' },
       '700': { $value: '#086847', $type: 'color' },
       '800': { $value: '#064e36', $type: 'color' },
@@ -226,7 +226,7 @@ const indigoLight: DtcgTheme = {
       '50': { $value: '#fff8eb', $type: 'color' },
       '100': { $value: '#fdecc8', $type: 'color' },
       '200': { $value: '#fbd897', $type: 'color' },
-      '500': { $value: '#e08515', $type: 'color' }, // brand amber
+      '500': { $value: '#a66210', $type: 'color' }, // brand amber
       '600': { $value: '#b86b0e', $type: 'color' },
       '700': { $value: '#90530a', $type: 'color' },
       '800': { $value: '#6b3d07', $type: 'color' },
@@ -327,7 +327,7 @@ const indigoDark: DtcgTheme = {
       '200': { $value: '#1d1b29', $type: 'color' }, // surface variant
       '300': { $value: '#2a2839', $type: 'color' }, // outline
       '400': { $value: '#3e3c50', $type: 'color' },
-      '500': { $value: '#5e5c70', $type: 'color' }, // muted
+      '500': { $value: '#636176', $type: 'color' }, // muted
       '600': { $value: '#8b8898', $type: 'color' },
       '700': { $value: '#b8b6c2', $type: 'color' },
       '800': { $value: '#dcdbe2', $type: 'color' },

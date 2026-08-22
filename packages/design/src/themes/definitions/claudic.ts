@@ -235,7 +235,7 @@ const claudicLight: DtcgTheme = {
       '50': { $value: '#f4f7ec', $type: 'color' },
       '100': { $value: '#e3ecd0', $type: 'color' },
       '200': { $value: '#c8d8a5', $type: 'color' },
-      '500': { $value: '#6b8e3d', $type: 'color' }, // brand: olive
+      '500': { $value: '#5c7a35', $type: 'color' }, // brand: olive
       '600': { $value: '#587634', $type: 'color' },
       '700': { $value: '#465c29', $type: 'color' },
       '800': { $value: '#33431e', $type: 'color' },
@@ -244,7 +244,7 @@ const claudicLight: DtcgTheme = {
       '50': { $value: '#fbf3e3', $type: 'color' },
       '100': { $value: '#f6e2bb', $type: 'color' },
       '200': { $value: '#eac786', $type: 'color' },
-      '500': { $value: '#c98e2e', $type: 'color' }, // brand: amber-orange
+      '500': { $value: '#956922', $type: 'color' }, // brand: amber-orange
       '600': { $value: '#a87725', $type: 'color' },
       '700': { $value: '#825c1d', $type: 'color' },
       '800': { $value: '#5d4214', $type: 'color' },
@@ -277,7 +277,7 @@ const claudicLight: DtcgTheme = {
     outline: { $value: '#dad8cc', $type: 'color' },
     outlineVariant: { $value: '#ebe9df', $type: 'color' },
     // Primary role pair — text on Crail CTAs is ivory, container is Crail-50.
-    onPrimary: { $value: '#faf9f5', $type: 'color' }, // Ivory
+    onPrimary: { $value: '#15130a', $type: 'color' }, // Ivory
     primaryContainer: { $value: '#fbf2ee', $type: 'color' }, // primary-50
     onPrimaryContainer: { $value: '#4d2920', $type: 'color' }, // primary-900
     // Error role pair — onError reads ivory on the brick brand hex.
@@ -385,7 +385,7 @@ const claudicDark: DtcgTheme = {
       '50': { $value: '#2a1410', $type: 'color' },
       '100': { $value: '#52271f', $type: 'color' },
       '200': { $value: '#7a3a2e', $type: 'color' },
-      '500': { $value: '#d56b59', $type: 'color' }, // brand: brick (lifted for dark)
+      '500': { $value: '#d7705f', $type: 'color' }, // brand: brick (lifted for dark)
       '600': { $value: '#df8576', $type: 'color' },
       '700': { $value: '#e3a294', $type: 'color' },
       '800': { $value: '#f1cec5', $type: 'color' },

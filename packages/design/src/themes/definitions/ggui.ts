@@ -227,7 +227,7 @@ const gguiLight: DtcgTheme = {
       '50': { $value: '#fbf3e0', $type: 'color' },
       '100': { $value: '#f3e1b0', $type: 'color' },
       '200': { $value: '#e6c46e', $type: 'color' },
-      '500': { $value: '#a87b0e', $type: 'color' }, // draft
+      '500': { $value: '#8e680c', $type: 'color' }, // draft
       '600': { $value: '#86620b', $type: 'color' },
       '700': { $value: '#654a08', $type: 'color' },
       '800': { $value: '#433105', $type: 'color' },
@@ -236,7 +236,7 @@ const gguiLight: DtcgTheme = {
       '50': { $value: '#fbe7e3', $type: 'color' },
       '100': { $value: '#f4bbb1', $type: 'color' },
       '200': { $value: '#ea8a7a', $type: 'color' },
-      '500': { $value: '#d93822', $type: 'color' }, // signal
+      '500': { $value: '#cc3520', $type: 'color' }, // signal
       '600': { $value: '#ae2d1b', $type: 'color' },
       '700': { $value: '#822214', $type: 'color' },
       '800': { $value: '#57160d', $type: 'color' },

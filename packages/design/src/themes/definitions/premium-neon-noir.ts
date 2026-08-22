@@ -171,7 +171,7 @@ const neonNoirLight: DtcgTheme = {
       '400': { $value: '#f472b6', $type: 'color' },
       '500': { $value: '#ec4899', $type: 'color' },
       '600': { $value: '#db2777', $type: 'color' },
-      '700': { $value: '#be185d', $type: 'color' },
+      '700': { $value: '#e42574', $type: 'color' },
       '800': { $value: '#9d174d', $type: 'color' },
       '900': { $value: '#831843', $type: 'color' },
     },
@@ -181,7 +181,7 @@ const neonNoirLight: DtcgTheme = {
       '200': { $value: '#19191e', $type: 'color' },
       '300': { $value: '#232329', $type: 'color' },
       '400': { $value: '#3b3b44', $type: 'color' },
-      '500': { $value: '#5a5a68', $type: 'color' },
+      '500': { $value: '#5e5e6c', $type: 'color' },
       '600': { $value: '#8a8a9a', $type: 'color' },
       '700': { $value: '#b0b0be', $type: 'color' },
       '800': { $value: '#d4d4de', $type: 'color' },
@@ -213,7 +213,7 @@ const neonNoirLight: DtcgTheme = {
     outline: { $value: '#3b3b44', $type: 'color' },
     outlineVariant: { $value: '#232329', $type: 'color' },
     // Primary role pair — onPrimary is deep noir so hot pink CTAs pop.
-    onPrimary: { $value: '#09090b', $type: 'color' },
+    onPrimary: { $value: '#ffffff', $type: 'color' },
     primaryContainer: { $value: '#9d174d', $type: 'color' }, // primary-800
     onPrimaryContainer: { $value: '#fce7f3', $type: 'color' }, // primary-100
     // Error role pair — onError on lifted rose.
