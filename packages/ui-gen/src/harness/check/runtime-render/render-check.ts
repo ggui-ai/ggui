@@ -77,6 +77,7 @@ export interface RenderCheckIssue {
     | "action-wiring"
     | "selection-identity"
     | "prop-coverage"
+    | "prop-sensitivity"
     | "stream-rerender"
     | "optional-props-omitted";
   readonly outcome: CheckOutcome;
@@ -577,6 +578,72 @@ export async function runRenderCheckInProcess(
           mockupProps: input.mockupProps,
         })) {
           issues.push(issue);
+        }
+      }
+
+      // ── Check 5c: Prop sensitivity (#563) ─────────────────────────────
+      // The measured class (economy/001 run 6): generated code renders a
+      // value the contract delivers via props but BAKES the request's
+      // literal — `props.month ?? 'January'` date math, hardcoded display
+      // text — so a cached blueprint reused under a different value serves
+      // the wrong surface. Deterministic detection for the DISPLAYED-value
+      // half: re-render with a distinct value for each required scalar
+      // prop whose original value visibly appears in the DOM; if the
+      // rendered text is IDENTICAL under the change, the prop's value is
+      // dead — baked. Scope honesty: value-ANCHORED logic that still
+      // reacts (differently-wrong branches) is not deterministically
+      // decidable here; the matcher-side pair armor and the judge track
+      // that half. Conservative nulls: non-displayed props (ids are
+      // legitimately non-visual), varied-value crashes (the code READ the
+      // prop — not dead), and non-scalar props are all skipped.
+      if (input.contract?.propsSpec) {
+        const propsSpec5c = input.contract.propsSpec as PropsSpec;
+        const normalize = (s: string | null): string =>
+          (s ?? "").replace(/\s+/g, " ").trim();
+        const baseText = normalize(container.textContent);
+        for (const [propName, entry] of Object.entries(propsSpec5c.properties)) {
+          if (!entry.required) continue;
+          const orig = input.mockupProps[propName];
+          if (typeof orig !== "string" && typeof orig !== "number") continue;
+          const marker = pickScalarMarker(orig);
+          if (marker === null || !baseText.includes(marker)) continue;
+          // Distinct same-type value. A token that never substring-matches
+          // the original, so value-anchored branches (`includes(orig)`)
+          // genuinely flip.
+          const varied: string | number =
+            typeof orig === "string" ? "Zzyzx Qw" : (orig as number) + 137731;
+          // Isolated probe/wire per varied mount — events must not leak
+          // into the primary probe's fire log.
+          const variedProbe = createProbe();
+          const variedConfig = createProbeWireConfig(variedProbe);
+          let variedResult: ReturnType<typeof render> | undefined;
+          try {
+            variedResult = render(
+              React.createElement(GguiWireProvider, {
+                config: variedConfig,
+                children: React.createElement(ProbeErrorBoundary, {
+                  children: React.createElement(Component, {
+                    ...input.mockupProps,
+                    [propName]: varied,
+                  }),
+                }),
+              }),
+            );
+          } catch {
+            continue; // crash on varied value ⇒ the prop is read, not dead
+          }
+          await flushPromises();
+          const variedText = normalize(variedResult.container.textContent);
+          variedResult.unmount();
+          if (variedText === baseText) {
+            issues.push({
+              check: "prop-sensitivity",
+              outcome: "failed",
+              subject: propName,
+              reason:
+                `props.${propName} is displayed ('${marker}' appears in the DOM) but changing its value to '${String(varied)}' left the rendered output BYTE-IDENTICAL — the value is baked into the component instead of derived from the prop. A cached reuse of this blueprint under a different ${propName} would show the original value.`,
+            });
+          }
         }
       }
 

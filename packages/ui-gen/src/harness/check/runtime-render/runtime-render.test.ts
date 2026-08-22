@@ -807,3 +807,107 @@ describe("selection-identity (#601)", () => {
     expect(result.issues.find(i => i.check === "selection-identity")).toBeUndefined();
   }, 30000);
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// prop-sensitivity (#563) — displayed required scalars must track their value
+// ─────────────────────────────────────────────────────────────────────────────
+
+const MONTH_CONTRACT: DataContract = {
+  propsSpec: {
+    properties: {
+      month: { required: true, schema: { type: "string" } },
+      bookingId: { required: true, schema: { type: "string" } },
+    },
+  },
+};
+
+const MONTH_PROPS = { month: "January", bookingId: "bk-7731" };
+
+// The economy/001 run-6 class, distilled: the contract delivers `month`
+// but the component displays the request's literal.
+const BAKED_MONTH = `
+interface Props { month: string; bookingId: string }
+
+export default function Calendar(props: Props) {
+  return (
+    <div>
+      <h1>January Booking Calendar</h1>
+      <p>ref: {props.bookingId}</p>
+    </div>
+  );
+}
+`;
+
+const PROP_DRIVEN_MONTH = `
+interface Props { month: string; bookingId: string }
+
+export default function Calendar(props: Props) {
+  return (
+    <div>
+      <h1>{props.month} Booking Calendar</h1>
+      <p>ref: {props.bookingId}</p>
+    </div>
+  );
+}
+`;
+
+// gen-2 shape from the probe: display fallback — still tracks the prop.
+const FALLBACK_MONTH = `
+interface Props { month: string; bookingId: string }
+
+export default function Calendar(props: Props) {
+  return <h1>{props.month || 'January'} Booking Calendar</h1>;
+}
+`;
+
+describe("prop-sensitivity (#563)", () => {
+  it("FAILS a component that displays the request literal instead of the prop", async () => {
+    const result = await runRenderCheck({
+      sourceCode: BAKED_MONTH,
+      mockupProps: MONTH_PROPS,
+      contract: MONTH_CONTRACT,
+    });
+    const issue = result.issues.find(i => i.check === "prop-sensitivity");
+    expect(issue).toBeDefined();
+    expect(issue?.outcome).toBe("failed");
+    expect(issue?.subject).toBe("month");
+    expect(issue?.reason).toContain("baked");
+    expect(result.ok).toBe(false);
+  }, 30000);
+
+  it("passes a component that derives the display from the prop", async () => {
+    const result = await runRenderCheck({
+      sourceCode: PROP_DRIVEN_MONTH,
+      mockupProps: MONTH_PROPS,
+      contract: MONTH_CONTRACT,
+    });
+    expect(result.issues.find(i => i.check === "prop-sensitivity")).toBeUndefined();
+  }, 30000);
+
+  it("passes a display fallback that still tracks the prop (gen-2 shape)", async () => {
+    const result = await runRenderCheck({
+      sourceCode: FALLBACK_MONTH,
+      mockupProps: MONTH_PROPS,
+      contract: MONTH_CONTRACT,
+    });
+    expect(result.issues.find(i => i.check === "prop-sensitivity")).toBeUndefined();
+  }, 30000);
+
+  it("does not speculate about non-displayed props (ids are legitimately non-visual)", async () => {
+    const NO_ID_SHOWN = `
+interface Props { month: string; bookingId: string }
+export default function Calendar(props: Props) {
+  return <h1>{props.month} Booking Calendar</h1>;
+}
+`;
+    const result = await runRenderCheck({
+      sourceCode: NO_ID_SHOWN,
+      mockupProps: MONTH_PROPS,
+      contract: MONTH_CONTRACT,
+    });
+    // bookingId never appears in the DOM — the check must stay silent
+    // about it (prop-coverage owns "should it be displayed").
+    const flagged = result.issues.filter(i => i.check === "prop-sensitivity");
+    expect(flagged.map(i => i.subject)).toEqual([]);
+  }, 30000);
+});
