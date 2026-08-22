@@ -1851,7 +1851,14 @@ export function createGguiRenderHandler(
               id: bp.id,
               contractKey: bp.contractKey,
               componentCode: bp.componentCode,
-              cosine: 1,
+              // The matcher's measured cosine, persisted on the handshake
+              // record (#564 — this was hardcoded 1, misreporting the
+              // wire's documented semantic similarity). `?? 1` covers
+              // ONLY records persisted by a pre-#564 pod inside the
+              // rolling-deploy skew window (the record store's TTL
+              // bounds it); those were all reported as 1 before, so the
+              // fallback preserves their prior behavior, never invents.
+              cosine: matched.cosine ?? 1,
               contract: bp.contract,
               ...(bp.sourceCodeHash !== undefined
                 ? { sourceCodeHash: bp.sourceCodeHash }
@@ -1878,6 +1885,9 @@ export function createGguiRenderHandler(
               id: bp.id,
               contractKey: bp.contractKey,
               componentCode: bp.componentCode,
+              // Exact `(contractKey, variantKey)` re-resolution — cosine 1
+              // by definition (canonical identity, no retrieval; NOT a
+              // #564 hardcode).
               cosine: 1,
               contract: bp.contract,
               ...(bp.sourceCodeHash !== undefined

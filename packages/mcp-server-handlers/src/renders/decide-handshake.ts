@@ -322,6 +322,13 @@ export function buildCacheReuseResult(
     readonly source: BlueprintSource;
   },
   reason: string,
+  /**
+   * The matcher's measured retrieval cosine — `1` from the exact-key
+   * tier, the real embedding similarity from the semantic tier. Rides
+   * `matchedBlueprint.cosine` so the paired render reports it on the
+   * wire's `cacheHit.similarity` (ggui#564).
+   */
+  matchCosine: number,
 ): HandshakeNegotiatorResult {
   const codeHash = createHash('sha256')
     .update(blueprint.componentCode)
@@ -360,6 +367,7 @@ export function buildCacheReuseResult(
       id: blueprint.id,
       contractKey: blueprint.contractKey,
       variantKey: blueprint.variantKey,
+      cosine: matchCosine,
     },
   };
 }
@@ -581,6 +589,9 @@ export async function decideHandshake(
           return buildCacheReuseResult(
             matchResult.blueprint,
             matchResult.reason,
+            // Exact-key = canonical-contract identity — cosine 1 by
+            // definition (the matcher hard-sets it; no retrieval ran).
+            1,
           );
         }
         if (
@@ -609,7 +620,7 @@ export async function decideHandshake(
         if (aGap !== bGap) return aGap ? b : a; // empty-gap wins
         return (b.judgeConfidence ?? 0) > (a.judgeConfidence ?? 0) ? b : a;
       });
-      const reuse = buildCacheReuseResult(best.blueprint, best.reason);
+      const reuse = buildCacheReuseResult(best.blueprint, best.reason, best.cosine);
       // A gapped reuse carries COVERAGE_GAP warn findings so the agent sees
       // what the cached UI lacks before accepting; a variance-divergent
       // reuse additionally carries a VARIANCE_GAP warn finding so the agent
