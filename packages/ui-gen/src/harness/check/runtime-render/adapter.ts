@@ -264,6 +264,20 @@ function toEvalIssue(issue: RenderCheckIssue): EvalIssue | null {
           `and store selection as the id (setSelected(item.id)), not the label.`,
       };
 
+    case "prop-sensitivity":
+      return {
+        tier: 0,
+        result,
+        category: "contract",
+        subcategory,
+        severity: "critical",
+        description: `${issue.reason}${diagSuffix}`,
+        fix:
+          `Derive the display AND any logic from props.${subject} — render {props.${subject}} and branch on the prop's value, ` +
+          `never on the literal value the request happened to mention (e.g. props.${subject} ?? 'January' followed by ` +
+          `January-special-cased logic bakes the request into the component). The contract delivers the value; trust it.`,
+      };
+
     case "prop-coverage":
       return {
         tier: 0,
