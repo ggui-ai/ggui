@@ -789,6 +789,13 @@ export function defaultHandlers(deps: {
           readonly mode?: "light" | "dark";
         }
       | undefined;
+    /** Runtime theme-registration resolver — forwarded to the handler (ggui#598-C). */
+    readonly themeBaseProvider?: (
+      appId: string,
+      themeName: string,
+    ) => Promise<AppThemeBase | null> | AppThemeBase | null;
+    /** Built-in preset ids for the themeId door (ggui#598 slice 3). */
+    readonly staticThemeIds?: readonly string[];
     /**
      * Optional admission-control limiter. When present, `ggui_render`
      * gates every call through `rateLimiter.check({key:
@@ -1009,6 +1016,13 @@ export function defaultHandlers(deps: {
           readonly mode?: "light" | "dark";
         }
       | undefined;
+    /** Runtime theme-registration resolver — forwarded to the handler (ggui#598-C). */
+    readonly themeBaseProvider?: (
+      appId: string,
+      themeName: string,
+    ) => Promise<AppThemeBase | null> | AppThemeBase | null;
+    /** Built-in preset ids for the themeId door (ggui#598 slice 3). */
+    readonly staticThemeIds?: readonly string[];
   };
   /**
    * Pending-events consumer wiring for `ggui_consume`. When `render`
@@ -1358,6 +1372,9 @@ export function defaultHandlers(deps: {
         ...(deps.update.themeProvider !== undefined
           ? { themeProvider: deps.update.themeProvider }
           : {}),
+        ...(deps.update.themeBaseProvider !== undefined
+          ? { themeBaseProvider: deps.update.themeBaseProvider }
+          : {}),
         // Mutation-time `render.contract_violation` events (P2
         // measurement — update-time violations are baselined with
         // render-time ones, not hidden).
@@ -1554,6 +1571,12 @@ export function defaultHandlers(deps: {
         ...(deps.render.themeProvider !== undefined
           ? { themeProvider: deps.render.themeProvider }
           : {}),
+        ...(deps.render.themeBaseProvider !== undefined
+          ? { themeBaseProvider: deps.render.themeBaseProvider }
+          : {}),
+        ...(deps.render.staticThemeIds !== undefined
+          ? { staticThemeIds: deps.render.staticThemeIds }
+          : {}),
         ...(deps.render.rateLimiter ? { rateLimiter: deps.render.rateLimiter } : {}),
         // Render measurement events (`render.attempted` /
         // `render.contract_violation` / `render.committed`) — P2 of
@@ -1636,6 +1659,12 @@ export interface OpsBundleDeps {
     readonly userDefaultApp: UserDefaultAppSource;
   };
   /**
+   * Known theme ids for the brand-shaped-overlay WARN's name
+   * resolution (`ggui_ops_set_app_theme`, ggui#598 slice 3). On the
+   * server path this is `CreateGguiServerOptions.knownThemeIds`.
+   */
+  readonly knownThemeIds?: readonly string[];
+  /**
    * Runtime theme registration tools (ggui#598-C). Sources for the
    * three `ggui_ops_*_theme*` handlers: the app tenancy source, the
    * `ThemeStore`, the coverage validator + consumed-token manifest,
@@ -1697,7 +1726,7 @@ export function buildOpsBundleHandlers(
       createListAppsHandler({ apps }) as SharedHandler<ZodRawShape, ZodRawShape>,
       createCreateAppHandler({ apps }) as SharedHandler<ZodRawShape, ZodRawShape>,
       createUpdateAppHandler({ apps }) as SharedHandler<ZodRawShape, ZodRawShape>,
-      createSetAppThemeHandler({ apps }) as SharedHandler<ZodRawShape, ZodRawShape>,
+      createSetAppThemeHandler({ apps, ...(deps.knownThemeIds !== undefined ? { knownThemeIds: deps.knownThemeIds } : {}) }) as SharedHandler<ZodRawShape, ZodRawShape>,
       createDeleteAppHandler({ apps, userDefaultApp }) as SharedHandler<
         ZodRawShape,
         ZodRawShape
@@ -2074,6 +2103,15 @@ export interface CreateGguiServerOptions {
     appId: string,
     themeName: string,
   ) => Promise<AppThemeBase | null> | AppThemeBase | null;
+
+  /**
+   * Built-in theme preset ids for the themeId DOOR (ggui#598 slice 3)
+   * and the brand-shaped-overlay WARN's name resolution. Threaded to
+   * the render handler (`staticThemeIds`) and `ggui_ops_set_app_theme`
+   * (`knownThemeIds`). Absent = no door check beyond registered-theme
+   * resolution, and overlay names cannot be resolved.
+   */
+  readonly knownThemeIds?: readonly string[];
 
   /**
    * Optional change notifier — fires when the operator's theme
@@ -4397,6 +4435,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
               // state cell; this getter just reads it.
               ...(opts.themeProvider !== undefined ? { themeProvider: opts.themeProvider } : {}),
               ...(opts.themeBaseProvider !== undefined ? { themeBaseProvider: opts.themeBaseProvider } : {}),
+              ...(opts.knownThemeIds !== undefined ? { staticThemeIds: opts.knownThemeIds } : {}),
               // Only thread the limiter through when the operator
               // bound a real one — passing the NoopRateLimiter is a
               // wasted allocation and makes the wire-through noisy
@@ -4597,6 +4636,7 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
                 : {}),
               ...(opts.themeProvider !== undefined ? { themeProvider: opts.themeProvider } : {}),
               ...(opts.themeBaseProvider !== undefined ? { themeBaseProvider: opts.themeBaseProvider } : {}),
+              ...(opts.knownThemeIds !== undefined ? { staticThemeIds: opts.knownThemeIds } : {}),
             },
           }
         : {}),

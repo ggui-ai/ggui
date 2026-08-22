@@ -37,16 +37,63 @@ const outputSchema = {
   appId: z.string(),
   theme: appThemeSchema,
   updatedAt: z.string(),
+  /**
+   * Migration nudge (ggui#598 slice 3): present when the overlay is
+   * BRAND-SHAPED — ≥3 color families over a name that resolves to no
+   * registered theme. The write still succeeds (overlays stay legal);
+   * the tier just stops being silent about brands living in it.
+   */
+  warning: z.string().optional(),
 } as const;
 
 export interface SetAppThemeOutput {
   readonly appId: string;
   readonly theme: z.infer<typeof appThemeSchema>;
   readonly updatedAt: string;
+  readonly warning?: string;
 }
 
 export interface SetAppThemeDeps {
   readonly apps: AppsSource;
+  /**
+   * Known theme ids (built-in presets + registered) for the
+   * brand-shaped-overlay WARN's name resolution. Absent = names cannot
+   * be resolved, so brand-scale coverage always draws the nudge.
+   */
+  readonly knownThemeIds?: readonly string[];
+}
+
+/**
+ * Detect a BRAND-SHAPED overlay (ggui#598 slice 3): ≥3 distinct color
+ * families in the variable map while the overlay's `name` resolves to
+ * no known theme. A brand living in the accent tier is the round-3
+ * mechanism — the overlay inherits every unmapped token from someone
+ * else's ladder. The WARN names the registration path; it never
+ * blocks. Exported for its unit pins.
+ *
+ * @internal
+ */
+export function detectBrandShapedOverlay(
+  theme: z.infer<typeof appThemeSchema>,
+  deps: Pick<SetAppThemeDeps, 'knownThemeIds'>,
+): string | undefined {
+  const families = new Set<string>();
+  for (const key of Object.keys(theme.cssVariables)) {
+    const m = key.match(/^--ggui-color-([a-zA-Z]+)/);
+    if (m) families.add(m[1]!.toLowerCase());
+  }
+  if (families.size < 3) return undefined;
+  if (
+    theme.name !== undefined &&
+    deps.knownThemeIds !== undefined &&
+    deps.knownThemeIds.includes(theme.name)
+  ) {
+    // Brand-scale accents over a COVERED registered base — legitimate.
+    return undefined;
+  }
+  return `This overlay carries ${families.size} color families over ${
+    theme.name !== undefined ? `an unregistered name ("${theme.name}")` : 'no named base'
+  } — brand-scale theming belongs in a REGISTERED theme (runtime theme registration), where coverage is validated and every token is yours; overlays are accents over a covered base. The write succeeded; unmapped tokens will paint the default ladder.`;
 }
 
 export function createSetAppThemeHandler(
@@ -78,9 +125,11 @@ export function createSetAppThemeHandler(
         ownerSub,
         theme: parsed.theme,
       });
+      const warning = detectBrandShapedOverlay(parsed.theme, deps);
       return {
         appId: written.appId,
         theme: parsed.theme,
+        ...(warning !== undefined ? { warning } : {}),
         updatedAt: written.updatedAt,
       };
     },

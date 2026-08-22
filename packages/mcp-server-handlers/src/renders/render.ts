@@ -388,6 +388,16 @@ export interface GguiSessionPostSuccessArgs {
  */
 export interface GguiRenderHandlerDeps extends RenderSliceMetaDeps {
   /**
+   * Built-in theme preset ids for the themeId DOOR (ggui#598 slice 3):
+   * an explicit `ggui_render({themeId})` naming an id that matches
+   * neither this list nor the app's registered themes (via
+   * `themeBaseProvider`) refuses at the door — a typo is caught where
+   * it was typed instead of silently painting the default ladder.
+   * Absent AND no `themeBaseProvider` = no check (compositions without
+   * theme surfaces keep the historical accept-anything behavior).
+   */
+  readonly staticThemeIds?: readonly string[];
+  /**
    * Devtools payload-trace sink (ggui#605): rides the DEPS so the
    * registrar (mcp-server console wiring) and this package's emitters
    * meet on a call path — never cross-package module-global state
@@ -996,6 +1006,40 @@ function generateShortCode(): string {
  * structuredContent and NO `_meta`. In-process callers narrow with
  * `isHandlerFailure`.
  */
+/**
+ * The themeId door (ggui#598 slice 3). Refuses an explicit per-render
+ * `themeId` that matches neither a built-in preset
+ * ({@link GguiRenderHandlerDeps.staticThemeIds}) nor a runtime
+ * registration (resolved through `themeBaseProvider`). No theme
+ * surfaces composed = no check. Exported for its unit pins.
+ *
+ * @internal
+ */
+export async function assertKnownThemeId(
+  themeId: string,
+  appId: string,
+  deps: Pick<GguiRenderHandlerDeps, 'staticThemeIds' | 'themeBaseProvider'>,
+): Promise<void> {
+  const hasStatic = deps.staticThemeIds !== undefined;
+  const hasProvider = deps.themeBaseProvider !== undefined;
+  if (!hasStatic && !hasProvider) return;
+  if (hasStatic && deps.staticThemeIds!.includes(themeId)) return;
+  if (hasProvider) {
+    const registered = await deps.themeBaseProvider!(appId, themeId);
+    if (registered !== null) return;
+  }
+  throw new ContractViolationError({
+    tool: 'ggui_render',
+    violations: [
+      {
+        code: 'CTR_RENDER_UNKNOWN_THEME_ID',
+        field: 'themeId',
+        message: `themeId "${themeId}" matches no built-in preset and no registered theme for this app. Omit themeId to use the app default, pick a built-in id, or register the theme first.`,
+      },
+    ],
+  });
+}
+
 export function createGguiRenderHandler(
   deps: GguiRenderHandlerDeps,
 ): SharedHandler<
@@ -1068,6 +1112,11 @@ export function createGguiRenderHandler(
       }
 
       const parsed = z.object(inputSchema).parse(input);
+      // themeId DOOR (ggui#598 slice 3) — before any store or
+      // generation work: a typo'd id refuses here, where it was typed.
+      if (parsed.themeId !== undefined) {
+        await assertKnownThemeId(parsed.themeId, ctx.appId, deps);
+      }
 
       if (!deps.handshakeStore) {
         throw new Error(
