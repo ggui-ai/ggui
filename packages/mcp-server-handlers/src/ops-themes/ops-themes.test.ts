@@ -10,7 +10,11 @@ import { describe, expect, it } from 'vitest';
 import { InMemoryThemeStore } from '@ggui-ai/mcp-server-core/in-memory';
 import type { ThemeStore } from '@ggui-ai/mcp-server-core';
 import type { HandlerContext } from '../types.js';
-import { AppNotFoundError, type AppsSource } from '../ops-apps/types.js';
+import {
+  AppNotFoundError,
+  type AppRecord,
+  type AppsSource,
+} from '../ops-apps/types.js';
 import {
   createDeleteThemeHandler,
   createListThemesHandler,
@@ -27,7 +31,7 @@ const CTX: HandlerContext = {
   appId: 'ctx-app',
   requestId: 'r',
   userId: OWNER, // resolveOwnerSub reads ctx.userId ?? ctx.appId
-} as unknown as HandlerContext;
+} as HandlerContext;
 
 const LIGHT = { color: { brand: { $value: '#123456' } } };
 const DARK = { color: { brand: { $value: '#654321' } } };
@@ -45,13 +49,26 @@ const COVERED: ReturnType<ThemeCoverageValidator> = {
   excluded: ['--ggui-motion-duration'],
 };
 
+/**
+ * Honest AppsSource stub — the ONE exercised method behaves; every
+ * other throws loudly (no cast laundering; the compiler checks the
+ * full surface, the runtime catches accidental use).
+ */
+const notExercised = (method: string) => async (): Promise<never> => {
+  throw new Error(`AppsSource.${method} is not exercised by this suite`);
+};
 function stubApps(ownedAppIds: readonly string[]): AppsSource {
   return {
-    get: async ({ appId, ownerSub }: { appId: string; ownerSub: string }) =>
+    get: async ({ appId, ownerSub }) =>
       ownerSub === OWNER && ownedAppIds.includes(appId)
-        ? ({ appId } as never)
+        ? ({ appId } as AppRecord)
         : null,
-  } as unknown as AppsSource;
+    list: notExercised('list'),
+    create: notExercised('create'),
+    update: notExercised('update'),
+    delete: notExercised('delete'),
+    setTheme: notExercised('setTheme'),
+  };
 }
 
 function deps(over: {
