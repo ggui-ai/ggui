@@ -135,6 +135,9 @@ export * from './code-store.js';
 // `ApiKeyProvider`) and shares the same `appId` namespace handlers
 // thread through `ctx.appId`.
 export * from './app-metadata-store.js';
+// ThemeStore — the #598-C runtime theme-registration persistence port
+// (FROZEN 2026-08-22 with the delivery design).
+export * from './theme-store.js';
 
 // `GadgetCatalogAdapter` impl backed by an `AppMetadataStore`.
 // Validates + lints `App.gadgets` on every read so

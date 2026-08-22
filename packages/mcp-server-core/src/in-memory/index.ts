@@ -70,6 +70,7 @@ export { InMemoryCodeStore } from './code-store.js';
 // with `STDLIB_GADGETS`. See `app-metadata-store.ts` for the parent
 // interface.
 export { InMemoryAppMetadataStore } from './app-metadata-store.js';
+export { InMemoryThemeStore } from './theme-store.js';
 export type { InMemoryAppRegisterInput } from './app-metadata-store.js';
 
 // Slug-addressable generator registry. The blueprint matcher,
