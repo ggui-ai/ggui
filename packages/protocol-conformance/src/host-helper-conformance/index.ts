@@ -217,9 +217,22 @@ const CONTAINMENT_STYLE_ALLOWLIST = new Set([
   'aspectratio',
 ]);
 
-function isContainmentStyle(property: string): boolean {
-  return CONTAINMENT_STYLE_ALLOWLIST.has(
-    property.toLowerCase().replace(/-/g, ''),
+/**
+ * Border-family properties whose value can be judged: an EXPLICIT
+ * non-painting value (`none` / `0`) is containment — it neutralizes
+ * user-agent defaults and paints nothing — while any painting value
+ * is chrome. Only the border family gets value-aware treatment; every
+ * other visual property is chrome regardless of value.
+ */
+const BORDER_FAMILY_RE = /^border/;
+const NON_PAINTING_VALUES = new Set(['none', '0', '0px']);
+
+function isContainmentStyle(property: string, value: string): boolean {
+  const normalized = property.toLowerCase().replace(/-/g, '');
+  if (CONTAINMENT_STYLE_ALLOWLIST.has(normalized)) return true;
+  return (
+    BORDER_FAMILY_RE.test(normalized) &&
+    NON_PAINTING_VALUES.has(value.trim().toLowerCase())
   );
 }
 
@@ -463,8 +476,8 @@ export async function runHostHelperConformance(
       ['slot', options.chromeAudit.slotStyles],
       ['emptySlot', options.chromeAudit.emptySlotStyles],
     ] as const) {
-      for (const prop of Object.keys(styles)) {
-        if (!isContainmentStyle(prop)) {
+      for (const [prop, value] of Object.entries(styles)) {
+        if (!isContainmentStyle(prop, value)) {
           offending.push(`${surface}.${prop}`);
         }
       }

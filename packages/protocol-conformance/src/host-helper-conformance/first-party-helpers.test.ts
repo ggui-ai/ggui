@@ -144,8 +144,9 @@ const IFRAME_RUNTIME_SLOT_STYLES: Record<string, string> = {
   width: '100%',
   height: '480px',
   maxWidth: '100%',
-  border: '1px solid #e5e5e5',
-  borderRadius: '8px',
+  // Post-fix transcription: the round-6 chrome (1px #e5e5e5 + radius
+  // 8) was removed at source — the helper paints containment only.
+  border: 'none',
   display: 'block',
 };
 
@@ -174,7 +175,9 @@ function rnMcpAppIframeModel(): HostHelperPort {
           return response(req.id, {
             protocolVersion: '2026-01-26',
             hostInfo: { name: 'ggui-react-native', version: 'unstamped' },
-            hostCapabilities: {},
+            // Post-fix transcription: a wired relay advertises
+            // serverTools (dispatch.ts, ggui#600 finding closed).
+            hostCapabilities: { serverTools: {} },
             hostContext: { locale: 'en-US', containerDimensions: {} },
           });
         case 'tools/call': {
@@ -248,7 +251,13 @@ describe('first-party helpers — iframe-runtime embed host (reference model)', 
     expect(h3?.detail).toContain('does not name the method');
   });
 
-  it('OPEN FINDING (pinned): the transcribed hardcoded chrome fails C1 — border + borderRadius', async () => {
+  it('FINDING CLOSED (was: hardcoded chrome): the fixed transcription passes C1 — containment + explicit border:none only', async () => {
+    // The round-6 chrome (1px #e5e5e5 + radius 8) was removed at
+    // source (mcp-app-iframe-host.ts) after this catalog's first
+    // first-party run surfaced it; the transcription tracks the fixed
+    // source and the grade flips to pass. `border: none` is legal by
+    // the value-aware rule — it neutralizes UA defaults, paints
+    // nothing.
     const report = await runHostHelperConformance(iframeRuntimeEmbedHostModel(), {
       chromeAudit: {
         slotStyles: IFRAME_RUNTIME_SLOT_STYLES,
@@ -256,34 +265,27 @@ describe('first-party helpers — iframe-runtime embed host (reference model)', 
       },
     });
     const c1 = report.cases.find((c) => c.id === 'C1-containment-only');
-    expect(c1?.outcome).toBe('fail');
-    expect(c1?.detail).toContain('slot.border');
-    expect(c1?.detail).toContain('slot.borderRadius');
-    // Containment styles are NOT named as offenders.
-    expect(c1?.detail).not.toContain('slot.width');
-    expect(c1?.detail).not.toContain('slot.display');
-    expect(report.tier).toBe('nonconforming');
+    expect(c1?.outcome).toBe('pass');
+    expect(report.tier).toBe('relaying');
   });
 });
 
 describe('first-party helpers — RN McpAppIframe dispatcher (reference model)', () => {
-  it('OPEN FINDING (pinned): relays but under-advertises — R2 fails, tier nonconforming', async () => {
+  it('FINDING CLOSED (was: under-advertising): a wired relay now advertises serverTools — full relaying tier', async () => {
+    // dispatch.ts advertises serverTools when onToolCall is wired
+    // (fixed after this catalog's first-party run surfaced the
+    // hardcoded empty advertisement); the transcription tracks the
+    // fixed source and the helper grades clean.
     const report = await runHostHelperConformance(rnMcpAppIframeModel());
     const byId = Object.fromEntries(report.cases.map((c) => [c.id, c.outcome]));
-    // The relay itself is healthy…
     expect(byId['H1-initialize-well-formed']).toBe('pass');
+    expect(byId['H2-advertisement-truthful']).toBe('pass');
     expect(byId['H3-refusal-honest']).toBe('pass');
     expect(byId['H4-refusal-bounded']).toBe('pass');
     expect(byId['R1-relay-round-trip']).toBe('pass');
-    // …and H2 passes VACUOUSLY (nothing advertised means nothing to
-    // contradict) — which is exactly why R2 exists: the empty
-    // advertisement over a live relay is the under-advertising shape.
-    expect(byId['H2-advertisement-truthful']).toBe('pass');
-    expect(byId['R2-relay-advertised']).toBe('fail');
-    const r2 = report.cases.find((c) => c.id === 'R2-relay-advertised');
-    expect(r2?.detail).toContain('under-advertising');
-    expect(report.failures).toEqual(['R2-relay-advertised']);
-    expect(report.tier).toBe('nonconforming');
+    expect(byId['R2-relay-advertised']).toBe('pass');
+    expect(report.failures).toEqual([]);
+    expect(report.tier).toBe('relaying');
   });
 });
 

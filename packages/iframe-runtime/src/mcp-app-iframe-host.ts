@@ -179,8 +179,13 @@ export function mountMcpAppIframe(
   iframe.style.height = dims.height !== undefined ? `${dims.height}px` : '480px';
   iframe.style.maxWidth = dims.maxWidth !== undefined ? `${dims.maxWidth}px` : '100%';
   if (dims.maxHeight !== undefined) iframe.style.maxHeight = `${dims.maxHeight}px`;
-  iframe.style.border = '1px solid #e5e5e5';
-  iframe.style.borderRadius = '8px';
+  // Round-6 doctrine (ggui#589 @6e15724a1, kit C1 grade): the helper
+  // paints CONTAINMENT ONLY — silhouette (border/radius) belongs to
+  // the embedding host's own chrome, tokens to the theme. The former
+  // 1px #e5e5e5 / radius-8 here was the same ungoverned-chrome class
+  // the RN helper shipped, surfaced by the host-helper catalog's
+  // first-party run (ggui#600 OPEN FINDING, closed here).
+  iframe.style.border = 'none';
   iframe.style.display = 'block';
 
   container.appendChild(iframe);

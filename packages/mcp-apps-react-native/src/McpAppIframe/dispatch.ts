@@ -164,7 +164,12 @@ export async function dispatchHostBridgeRequest(
         // `define`), and a hand-maintained literal would silently drift
         // from the published version at every release.
         hostInfo: { name: 'ggui-react-native', version: 'unstamped' },
-        hostCapabilities: {},
+        // Truthful positive advertisement (kit R2 grade, ggui#600 OPEN
+        // FINDING closed): a wired tools/call relay advertises
+        // `serverTools` so the runtime never spends a failed user
+        // gesture probing a capability the host actually has.
+        hostCapabilities:
+          ctx.onToolCall !== undefined ? { serverTools: {} } : {},
         hostContext: {
           locale: ctx.locale,
           containerDimensions: ctx.containerDimensions,

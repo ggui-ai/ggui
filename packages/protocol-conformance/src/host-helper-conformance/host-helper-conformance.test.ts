@@ -217,6 +217,17 @@ describe('C-grades — zero ungoverned chrome (round-6 doctrine @6e15724a1)', ()
     expect(c1?.detail).toContain('backgroundColor');
   });
 
+  it('an explicit NON-PAINTING border (none / 0) passes C1 — neutralizing UA defaults is containment, painting is chrome', async () => {
+    const report = await runHostHelperConformance(relayingPort(), {
+      chromeAudit: {
+        slotStyles: { overflow: 'hidden', border: 'none' },
+        emptySlotStyles: { border: '0' },
+      },
+    });
+    const c1 = report.cases.find((c) => c.id === 'C1-containment-only');
+    expect(c1?.outcome).toBe('pass');
+  });
+
   it('no audit supplied → C cases skip as self-certification-pending, tier unaffected', async () => {
     const report = await runHostHelperConformance(initializeOnlyPort());
     const c1 = report.cases.find((c) => c.id === 'C1-containment-only');
