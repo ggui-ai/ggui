@@ -681,3 +681,129 @@ describe("runRenderCheck — optional-props omission (ggui#528)", () => {
     expect(result.issues.find((i) => i.check === "optional-props-omitted")).toBeUndefined();
   }, 30000);
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// selection-identity (#601) — duplicate-label cells must carry their own id
+// ─────────────────────────────────────────────────────────────────────────────
+
+const SLOT_CONTRACT: DataContract = {
+  propsSpec: {
+    properties: {
+      slots: { required: true, schema: { type: "array" } },
+    },
+  },
+  actionSpec: {
+    bookSlot: {
+      label: "Book this slot",
+      schema: {
+        type: "object",
+        properties: { slotId: { type: "string" } },
+        required: ["slotId"],
+      },
+    },
+  },
+};
+
+const SLOT_PROPS = {
+  slots: [
+    { id: "a1", time: "09:00" },
+    { id: "b2", time: "09:00" },
+    { id: "c3", time: "10:00" },
+  ],
+};
+
+// The ggui#601 live bug, distilled: payload keyed on the DISPLAY VALUE —
+// clicking either "09:00" cell fires the same slotId.
+const VALUE_KEYED_SLOTS = `
+import { useAction } from '@ggui-ai/wire';
+
+interface Slot { id: string; time: string }
+interface Props { slots: Slot[] }
+
+export default function SlotGrid(props: Props) {
+  const bookSlot = useAction('bookSlot');
+  return (
+    <div>
+      {props.slots.map(slot => (
+        <button key={slot.id} onClick={() => bookSlot({ slotId: slot.time })}>
+          {slot.time}
+        </button>
+      ))}
+    </div>
+  );
+}
+`;
+
+// The correct shape: payload keyed on the cell's identity.
+const IDENTITY_KEYED_SLOTS = `
+import { useAction } from '@ggui-ai/wire';
+
+interface Slot { id: string; time: string }
+interface Props { slots: Slot[] }
+
+export default function SlotGrid(props: Props) {
+  const bookSlot = useAction('bookSlot');
+  return (
+    <div>
+      {props.slots.map(slot => (
+        <button key={slot.id} onClick={() => bookSlot({ slotId: slot.id })}>
+          {slot.time}
+        </button>
+      ))}
+    </div>
+  );
+}
+`;
+
+describe("selection-identity (#601)", () => {
+  it("FAILS a grid whose duplicate-label cells fire the same id (value-keyed)", async () => {
+    const result = await runRenderCheck({
+      sourceCode: VALUE_KEYED_SLOTS,
+      mockupProps: SLOT_PROPS,
+      contract: SLOT_CONTRACT,
+    });
+    const issue = result.issues.find(i => i.check === "selection-identity");
+    expect(issue).toBeDefined();
+    expect(issue?.outcome).toBe("failed");
+    expect(issue?.subject).toBe("bookSlot");
+    expect(issue?.reason).toContain("slotId");
+    expect(issue?.reason).toContain("09:00");
+    expect(result.ok).toBe(false);
+  }, 30000);
+
+  it("passes a grid whose duplicate-label cells fire their own ids (identity-keyed)", async () => {
+    const result = await runRenderCheck({
+      sourceCode: IDENTITY_KEYED_SLOTS,
+      mockupProps: SLOT_PROPS,
+      contract: SLOT_CONTRACT,
+    });
+    expect(result.issues.find(i => i.check === "selection-identity")).toBeUndefined();
+  }, 30000);
+
+  it("emits nothing when no labels are duplicated (check does not speculate)", async () => {
+    const result = await runRenderCheck({
+      sourceCode: IDENTITY_KEYED_SLOTS,
+      mockupProps: {
+        slots: [
+          { id: "a1", time: "09:00" },
+          { id: "c3", time: "10:00" },
+        ],
+      },
+      contract: SLOT_CONTRACT,
+    });
+    expect(result.issues.find(i => i.check === "selection-identity")).toBeUndefined();
+  }, 30000);
+
+  it("emits nothing for actions without an id-like required string field", async () => {
+    const contract: DataContract = {
+      propsSpec: SLOT_CONTRACT.propsSpec,
+      actionSpec: { bookSlot: { label: "Book this slot" } },
+    };
+    const result = await runRenderCheck({
+      sourceCode: VALUE_KEYED_SLOTS,
+      mockupProps: SLOT_PROPS,
+      contract,
+    });
+    expect(result.issues.find(i => i.check === "selection-identity")).toBeUndefined();
+  }, 30000);
+});

@@ -250,6 +250,20 @@ function toEvalIssue(issue: RenderCheckIssue): EvalIssue | null {
       };
     }
 
+    case "selection-identity":
+      return {
+        tier: 0,
+        result,
+        category: "contract",
+        subcategory,
+        severity: "critical",
+        description: `${issue.reason}${elementHint}${diagSuffix}`,
+        fix:
+          `Key the action payload (and any selection state) on the item's ID from the data, never on its display text. ` +
+          `Common fix: map over items and pass the item's id into the handler — onClick={() => ${subject}({ ...payload, id: item.id })} — ` +
+          `and store selection as the id (setSelected(item.id)), not the label.`,
+      };
+
     case "prop-coverage":
       return {
         tier: 0,

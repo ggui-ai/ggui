@@ -21,7 +21,12 @@ import type {
   PropsSpec,
 } from "@ggui-ai/protocol";
 import { HOOK_NAME_RE, listContractGadgets } from "@ggui-ai/protocol";
-import { createProbe, createProbeWireConfig, type Probe } from "./probe.js";
+import {
+  createProbe,
+  createProbeWireConfig,
+  type ActionFiredEvent,
+  type Probe,
+} from "./probe.js";
 import { loadComponent } from "./load-component.js";
 import { findWiring, type WiringDetection } from "./find-wiring.js";
 import { installProductionActShim } from "./production-act-shim.js";
@@ -70,6 +75,7 @@ export interface RenderCheckIssue {
   readonly check:
     | "render-no-throw"
     | "action-wiring"
+    | "selection-identity"
     | "prop-coverage"
     | "stream-rerender"
     | "optional-props-omitted";
@@ -514,6 +520,35 @@ export async function runRenderCheckInProcess(
             wiring,
             probe,
             user,
+          });
+          if (issue) issues.push(issue);
+        }
+      }
+
+      // ── Check 2b: Selection identity — duplicate-label cells (#601) ───
+      // The live bug: a slot grid rendered several cells with the same
+      // visible label ("09:00" across stylist rows); clicking one
+      // selected ALL of them because the generated code keyed
+      // selection/payload on the DISPLAY VALUE instead of the cell's
+      // identity — even though the action schema carried an id field.
+      // Wire-behavior check, DOM-shape independent: click two
+      // same-label clickables and require their fired payloads to
+      // differ on the id-like field. Conservative: any ambiguity
+      // (no duplicate labels, clicks that fire nothing, payloads
+      // missing the field) yields NO issue — those belong to other
+      // checks.
+      if (input.contract?.actionSpec) {
+        for (const [name, entry] of Object.entries(input.contract.actionSpec)) {
+          const idField = idLikeRequiredStringField(
+            entry.schema as Record<string, unknown> | undefined,
+          );
+          if (idField === null) continue;
+          const issue = await checkSelectionIdentity({
+            container,
+            probe,
+            user,
+            actionName: name,
+            idField,
           });
           if (issue) issues.push(issue);
         }
@@ -1080,6 +1115,127 @@ async function checkActionWiring(input: CheckActionInput): Promise<RenderCheckIs
 // (no component hook to verify). Cross-refs from `actionSpec[*].nextStep` and
 // `streamSpec[*].source.tool` ride through the action / stream check
 // arms in `runRenderCheck` instead.
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Selection identity (#601) — duplicate-label cells must carry their own id
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Find the id-like required string property in an action's payload
+ * schema, or null. "id-like" = a required property whose name ends in
+ * `id`/`Id`/`ID` and whose declared type is string — the shape the
+ * matcher's booking/selection contracts carry (`bookSlot { slotId }`).
+ */
+function idLikeRequiredStringField(
+  schema: Record<string, unknown> | undefined,
+): string | null {
+  if (schema === undefined) return null;
+  const properties = schema['properties'];
+  const required = schema['required'];
+  if (properties === null || typeof properties !== 'object') return null;
+  if (!Array.isArray(required)) return null;
+  for (const [propName, propSchema] of Object.entries(
+    properties as Record<string, unknown>,
+  )) {
+    if (!/id$/i.test(propName)) continue;
+    if (!required.includes(propName)) continue;
+    const t =
+      propSchema !== null && typeof propSchema === 'object'
+        ? (propSchema as Record<string, unknown>)['type']
+        : undefined;
+    if (t === 'string') return propName;
+  }
+  return null;
+}
+
+interface CheckSelectionIdentityInput {
+  container: MinimalElement;
+  probe: Probe;
+  user: { click: (el: MinimalElement) => Promise<void> };
+  actionName: string;
+  idField: string;
+}
+
+/**
+ * Click two clickables that share a visible label and require the two
+ * fired payloads to DIFFER on the id-like field. Identical values mean
+ * the component keys the action on the display value, not the element's
+ * identity — the ggui#601 class (every "09:00" cell selecting together).
+ *
+ * Emits at most one `failed` issue; every ambiguous situation returns
+ * null (covered by other checks or genuinely unjudgeable here).
+ */
+async function checkSelectionIdentity(
+  input: CheckSelectionIdentityInput,
+): Promise<RenderCheckIssue | null> {
+  const { container, probe, user, actionName, idField } = input;
+
+  const clickables = Array.from(
+    container.querySelectorAll<MinimalElement>('button, [role="button"]'),
+  );
+  const byLabel = new Map<string, MinimalElement[]>();
+  for (const el of clickables) {
+    const label = (el.textContent ?? '').replace(/\s+/g, ' ').trim();
+    if (label.length === 0) continue;
+    const group = byLabel.get(label);
+    if (group) group.push(el);
+    else byLabel.set(label, [el]);
+  }
+
+  for (const [label, group] of byLabel) {
+    if (group.length < 2) continue;
+
+    const payloadFor = async (
+      el: MinimalElement,
+    ): Promise<unknown | undefined> => {
+      const before = probe.getFireLog().length;
+      try {
+        await user.click(el);
+      } catch {
+        return undefined;
+      }
+      await flushPromises();
+      const events = probe
+        .getFireLog()
+        .slice(before)
+        .filter(
+          (e): e is ActionFiredEvent =>
+            e.kind === 'action.fired' && e.name === actionName,
+        );
+      return events.length > 0 ? events[events.length - 1]!.payload : undefined;
+    };
+
+    const first = await payloadFor(group[0]!);
+    const second = await payloadFor(group[1]!);
+    // Either click firing nothing for this action = not this check's
+    // question (wiring check owns "does it fire").
+    if (first === undefined || second === undefined) continue;
+
+    const idOf = (payload: unknown): string | undefined => {
+      if (payload === null || typeof payload !== 'object') return undefined;
+      const v = (payload as Record<string, unknown>)[idField];
+      return typeof v === 'string' ? v : undefined;
+    };
+    const firstId = idOf(first);
+    const secondId = idOf(second);
+    // Payloads missing the required field = schema territory, not ours.
+    if (firstId === undefined || secondId === undefined) continue;
+
+    if (firstId === secondId) {
+      return {
+        check: 'selection-identity',
+        outcome: 'failed',
+        subject: actionName,
+        reason:
+          `Two clickable elements share the visible label '${label}', and clicking EACH fired '${actionName}' with the same ${idField} ('${firstId}') — the action payload is keyed on the display value, not the element's identity. Distinct cells must send their own ${idField} (the contract requires it), or selecting one "${label}" acts on every "${label}".`,
+        elementHint: describeElement(group[0]!),
+      };
+    }
+    // Distinct ids on the first duplicate group — identity keying holds.
+    return null;
+  }
+  return null;
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Trigger simulators — narrow set, deterministic only
