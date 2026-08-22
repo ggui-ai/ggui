@@ -765,7 +765,7 @@ Hero sections should feel airy. Use \`padding="xl"\` (32px) on the main card, no
 
 - [ ] Imports ONLY from: react, @ggui-ai/design, @ggui-ai/wire
 - [ ] No raw HTML elements (\`<button>\`, \`<input>\`, \`<div>\` for layout) — uses primitives
-- [ ] ZERO hardcoded hex colors — every color is \`var(--ggui-color-*, fallback)\`
+- [ ] ZERO hardcoded hex colors — every color is a bare \`var(--ggui-color-*)\`, no literal fallback
 - [ ] No raw pixel values for spacing — all via \`var(--ggui-spacing-*)\` tokens
 - [ ] Primary palette used throughout (headers, borders, icons) — not just buttons
 - [ ] Typed Props interface exported; request-specific data is a prop with default
