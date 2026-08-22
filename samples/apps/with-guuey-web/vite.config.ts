@@ -9,10 +9,10 @@ import {
  * Vite config for the with-guuey-web composed-golden-path SPA.
  *
  * Mirrors `../ggui-basic-web/vite.config.ts` (same pure-SPA posture, same
- * port-resolution contract — but NOT the same tooling majors: this cell is
- * dependabot-tracked and rides vite 8 / plugin-react 6 / TS 7, while the
- * mirror stays on the workspace's vite 6 line) with ONE addition: this
- * app's agent backend is
+ * port-resolution contract, same tooling majors since the 2026-08-22
+ * workspace slice — vite 8 / plugin-react 6 / TS 7 on both; this cell is
+ * dependabot-tracked, the mirror rides the workspace) with ONE addition:
+ * this app's agent backend is
  * guuey's published dev router (`guuey dev --serve`), which serves ONLY
  * `POST /agent/invoke` + `GET /healthz` — unlike the framework-native
  * sample backends it exposes no manifest and boots no MCP-Apps sandbox
