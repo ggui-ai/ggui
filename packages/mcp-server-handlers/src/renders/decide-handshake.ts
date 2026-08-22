@@ -135,6 +135,20 @@ export interface HandshakeDecisionAdapter {
    * are cheap (no RAG candidates ⇒ judge skipped).
    */
   readonly pools?: readonly BlueprintPool[];
+
+  /**
+   * Per-request reuse policy (ggui#607). `'exact-only'` disables the
+   * semantic (RAG + judge) strategy for this request — exact-key
+   * canonical matches still reuse; everything else regenerates. For
+   * callers whose surfaces must be presentation-stable (byte-identical
+   * requests → the identical cached surface; paraphrases → fresh
+   * generation): a SIMILAR cached surface is exactly what a
+   * stability-sensitive deployment cannot afford. Absent ⇒ `'full'`.
+   * Resolved once per decision, before the pool loop.
+   */
+  readonly reuseMode?: (
+    ctx: HandlerContext,
+  ) => Promise<'full' | 'exact-only'> | 'full' | 'exact-only';
   /**
    * Optional deployment-specific pre-match, run BEFORE the find-similar
    * probe so a curated / byte-exact hit wins over everything. Cloud uses
@@ -530,6 +544,10 @@ export async function decideHandshake(
   // the synth/repair create path reuses it.
   const llm = await adapter.resolveLlm(ctx);
 
+  // ggui#607 — resolve the reuse policy once; 'exact-only' threads
+  // disableSemantic into every pool probe below.
+  const reuseMode = adapter.reuseMode ? await adapter.reuseMode(ctx) : 'full';
+
   // Tier 1 — find-similar across pools (exact-key free + semantic
   // find+judge). Reuse the cached blueprint ATOMICALLY; a coverage gap is
   // informational (surfaced as COVERAGE_GAP warn findings, not a drop).
@@ -551,11 +569,18 @@ export async function decideHandshake(
             ? { installedBlueprints: pool.installedBlueprints }
             : {}),
         };
-        const matchResult = await matchBlueprint(matchDeps, scope, {
-          intent,
-          contract: parsedDraft.data,
-          ...(variance !== undefined ? { variance } : {}),
-        });
+        const matchResult = await matchBlueprint(
+          matchDeps,
+          scope,
+          {
+            intent,
+            contract: parsedDraft.data,
+            ...(variance !== undefined ? { variance } : {}),
+          },
+          ...(reuseMode === 'exact-only'
+            ? [{ disableSemantic: true } as const]
+            : []),
+        );
         // Isolated in its OWN try/catch, separate from the outer
         // pool-probe catch below: onBlueprintMatch's contract promises
         // non-blocking observation, so a throwing observer must never

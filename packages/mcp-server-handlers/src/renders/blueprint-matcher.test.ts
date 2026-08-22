@@ -189,6 +189,64 @@ describe('matchBlueprint — variance-aware exact-key strategy', () => {
   });
 });
 
+describe('matchBlueprint — disableSemantic (per-app exact-only reuse, ggui#607)', () => {
+  // The #601 RCA class: semantic reuse served a template with the
+  // warm-up ask's service/day baked into its code for a MISMATCHED
+  // ask. Presentation-stable apps (demos, regulated tenants) need to
+  // opt out of the semantic tier entirely: byte-identical contracts
+  // still reuse via exact-key; everything else cold-gens.
+  it('exact-key still wins when semantic is disabled', async () => {
+    const registry = makeRegistry();
+    const registered = await registerBlueprint(registry, SCOPE, {
+      kind: 'template',
+      contract: NOTEPAD_CONTRACT,
+      intent: 'notepad',
+      componentCode: 'a',
+      source: { kind: 'user' },
+    });
+    const result = await matchBlueprint(
+      { registry },
+      SCOPE,
+      { intent: 'notepad again', contract: NOTEPAD_CONTRACT },
+      { disableSemantic: true },
+    );
+    expect(result.strategy).toBe('exact-key');
+    if (result.strategy === 'exact-key') {
+      expect(result.blueprint.id).toBe(registered.id);
+    }
+  });
+
+  it('a would-be semantic match returns no-match and NEVER invokes the judge', async () => {
+    const registry = makeRegistry();
+    await registerBlueprint(registry, SCOPE, {
+      kind: 'template',
+      contract: NOTEPAD_CONTRACT,
+      intent: 'notepad',
+      componentCode: 'a',
+      source: { kind: 'user' },
+    });
+    let judgeCalls = 0;
+    const result = await matchBlueprint(
+      {
+        registry,
+        llm: stubLlm(() => {
+          judgeCalls++;
+          return { matchId: null, confidence: 1, reason: 'must not run' };
+        }),
+      },
+      SCOPE,
+      { intent: 'a different prose form of notepad request' },
+      { disableSemantic: true, minCosineForRerank: -1 },
+    );
+    expect(result.strategy).toBe('no-match');
+    if (result.strategy === 'no-match') {
+      expect(result.reason).toMatch(/exact-only|semantic.*disabled/i);
+      expect(result.candidates).toEqual([]);
+    }
+    expect(judgeCalls).toBe(0);
+  });
+});
+
 describe('matchBlueprint — semantic strategy (RAG + judge)', () => {
   // The mock embedder produces sine/cosine basis vectors that often
   // land below 0.3 cosine across distinct text — fine for production

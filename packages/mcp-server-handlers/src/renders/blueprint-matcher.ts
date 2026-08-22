@@ -156,6 +156,16 @@ export interface MatchBlueprintOptions {
   /** LLM judge confidence threshold for treating a semantic-strategy decision as a hit. */
   /** Default 0.5 — loosened for Path-A; see the DEFAULT_JUDGE_THRESHOLD note. */
   readonly judgeThreshold?: number;
+  /**
+   * Disable the semantic (RAG + judge) strategy entirely — exact-key
+   * canonical matches still hit; everything else returns `no-match`
+   * without a retrieval or judge call. For deployments whose surfaces
+   * must be presentation-stable (byte-identical requests reuse
+   * deterministically; paraphrases regenerate): fuzzy matching serves
+   * a SIMILAR cached surface, and "similar" is exactly what a
+   * stability-sensitive caller cannot afford (ggui#607).
+   */
+  readonly disableSemantic?: boolean;
 }
 
 const DEFAULT_TOP_K = 20;
@@ -340,6 +350,16 @@ export async function matchBlueprint(
     // Exact-key MISS → fall through to the semantic strategy below. A
     // non-covering candidate is no longer dropped — the matcher proposes
     // it and reports the coverage gap on the hit for the decision layer.
+  }
+
+  if (options.disableSemantic === true) {
+    // Exact-only reuse policy (ggui#607): the semantic tier is
+    // switched off for this request — report the miss without
+    // spending the retrieval or the judge call.
+    const reason =
+      'exact-only policy: semantic strategy disabled — no canonical match, regenerate';
+    emit({ decision: 'no-match', strategy: 'semantic', reason, candidates: [] });
+    return { strategy: 'no-match', reason, candidates: [] };
   }
 
   // ─── Strategy: semantic (find-similar + judge) ────────────────────

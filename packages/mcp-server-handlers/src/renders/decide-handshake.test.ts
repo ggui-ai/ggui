@@ -102,6 +102,7 @@ function adapter(over: Partial<HandshakeDecisionAdapter> = {}): HandshakeDecisio
     ...(over.onBlueprintMatch !== undefined
       ? { onBlueprintMatch: over.onBlueprintMatch }
       : {}),
+    ...(over.reuseMode !== undefined ? { reuseMode: over.reuseMode } : {}),
   };
 }
 
@@ -440,6 +441,38 @@ describe('decideHandshake — find-similar across pools', () => {
     );
     expect(mockMatch.mock.calls[0]?.[1]).toBe('app-1'); // default → ctx.appId
     expect(mockMatch.mock.calls[1]?.[1]).toBe('shared');
+  });
+
+  it("adapter.reuseMode 'exact-only' threads disableSemantic into EVERY pool probe (ggui#607)", async () => {
+    mockMatch.mockResolvedValue(miss);
+    mockEnsure.mockResolvedValue({
+      contract: {}, origin: 'agent', method: 'verbatim', findings: [], reasoning: 'clean',
+    });
+    await decideHandshake(
+      adapter({
+        pools: [pool({ label: 'app' }), pool({ scope: 'shared' })],
+        reuseMode: async () => 'exact-only' as const,
+      }),
+      { intent: 'i', blueprintDraft: DRAFT, ctx: CTX },
+    );
+    expect(mockMatch.mock.calls[0]?.[3]).toEqual(
+      expect.objectContaining({ disableSemantic: true }),
+    );
+    expect(mockMatch.mock.calls[1]?.[3]).toEqual(
+      expect.objectContaining({ disableSemantic: true }),
+    );
+  });
+
+  it('absent reuseMode threads NO disableSemantic (full reuse is the default)', async () => {
+    mockMatch.mockResolvedValue(miss);
+    mockEnsure.mockResolvedValue({
+      contract: {}, origin: 'agent', method: 'verbatim', findings: [], reasoning: 'clean',
+    });
+    await decideHandshake(adapter({ pools: [pool()] }), {
+      intent: 'i', blueprintDraft: DRAFT, ctx: CTX,
+    });
+    const opts = mockMatch.mock.calls[0]?.[3];
+    expect(opts === undefined || opts.disableSemantic === undefined).toBe(true);
   });
 
   it('threads the request variance from blueprintDraft.variance into the match query', async () => {
