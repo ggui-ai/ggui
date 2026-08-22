@@ -43,6 +43,15 @@
  * - `R2-relay-advertised` — a relaying helper advertises
  *   `serverTools` (truthful positive advertisement).
  *
+ * - `T1-theme-coverage` — OPTIONAL (like the C-class chrome audit):
+ *   when a theme registration is supplied, it covers the consumed-
+ *   token manifest or declares explicit inherit (ggui#598's
+ *   registration gate, graded at the helper's door). The kit carries
+ *   no theme machinery — the option takes the VALIDATOR AS A CALLBACK
+ *   (implementation-as-callbacks, the kit's own pattern); the
+ *   reference validate is `@ggui-ai/design`'s `validateThemeCoverage`
+ *   bound to the shipped `consumed-tokens.manifest.json` tokens.
+ *
  * A helper that refuses the relay honestly is graded **tier
  * `read-only`** — a LEGAL grade, with the R cases skipped, never
  * failed. `nonconforming` means a dishonesty case failed.
@@ -91,6 +100,46 @@ export interface ChromeAudit {
   readonly emptySlotStyles: Record<string, string>;
 }
 
+/**
+ * What the theme-coverage callback returns — structurally identical
+ * to `@ggui-ai/design`'s `ThemeCoverageResult`, declared here so the
+ * kit's dependency surface stays `@ggui-ai/protocol` + `ws` (the
+ * validator is injected, never imported).
+ */
+export interface ThemeCoverageValidationResult {
+  /** True iff every obligated manifest token is covered in both modes. */
+  readonly covered: boolean;
+  /** Obligated tokens not covered, per mode. */
+  readonly uncovered: {
+    readonly light: readonly string[];
+    readonly dark: readonly string[];
+  };
+  /** Tokens satisfied via explicit inherit declarations. */
+  readonly inheritMatched: readonly string[];
+  /** Manifest tokens excluded from the obligation (non-definable). */
+  readonly excluded: readonly string[];
+}
+
+/**
+ * Theme-coverage grading input (T1). `registration` is the helper's
+ * theme registration document pair, OPAQUE to the kit — only the
+ * supplied `validate` callback reads it. The reference callback is
+ * `@ggui-ai/design`'s `validateThemeCoverage` bound to the shipped
+ * `consumed-tokens.manifest.json` `tokens` array:
+ *
+ * ```ts
+ * const docs: ThemeRegistrationDocs = { light, dark };
+ * themeCoverage: {
+ *   registration: docs,
+ *   validate: () => validateThemeCoverage(docs, manifest.tokens),
+ * }
+ * ```
+ */
+export interface ThemeCoverageOptions {
+  readonly registration: unknown;
+  readonly validate: (registration: unknown) => ThemeCoverageValidationResult;
+}
+
 export interface HostHelperConformanceOptions {
   /**
    * How long a refusal may take before it counts as a hang (H4 /
@@ -103,6 +152,12 @@ export interface HostHelperConformanceOptions {
    * (self-certification pending) — the tier is decided by H/R alone.
    */
   readonly chromeAudit?: ChromeAudit;
+  /**
+   * Theme registration + coverage validator for the T-grades. Absent
+   * ⇒ T cases report `skip` (no theme registration supplied) — an
+   * unthemed helper surface has no coverage obligation.
+   */
+  readonly themeCoverage?: ThemeCoverageOptions;
 }
 
 export type HostHelperCaseOutcome = 'pass' | 'fail' | 'skip' | 'warn';
@@ -427,6 +482,46 @@ export async function runHostHelperConformance(
             detail: `ungoverned chrome the theme contract cannot reach: ${offending.join(', ')} — the helper owns containment only (silhouette = embedding host, tokens = theme; round-6 doctrine)`,
           },
     );
+  }
+
+  // ── T1: token coverage ────────────────────────────────────────────
+  if (options.themeCoverage === undefined) {
+    cases.push({
+      id: 'T1-theme-coverage',
+      outcome: 'skip',
+      detail:
+        'no theme registration supplied — an unthemed helper surface has no coverage obligation (supply themeCoverage to grade)',
+    });
+  } else {
+    const coverage = options.themeCoverage.validate(
+      options.themeCoverage.registration,
+    );
+    if (coverage.covered) {
+      cases.push({
+        id: 'T1-theme-coverage',
+        outcome: 'pass',
+        detail: `manifest covered — ${coverage.inheritMatched.length} inherit-matched, ${coverage.excluded.length} excluded (non-definable)`,
+      });
+    } else {
+      const nameUncovered = (
+        mode: 'light' | 'dark',
+        tokens: readonly string[],
+      ): string | undefined => {
+        if (tokens.length === 0) return undefined;
+        const named = tokens.slice(0, 10).join(', ');
+        const rest = tokens.length - 10;
+        return `${mode} uncovered (${tokens.length}): ${named}${rest > 0 ? ` …${rest} more` : ''}`;
+      };
+      const perMode = [
+        nameUncovered('light', coverage.uncovered.light),
+        nameUncovered('dark', coverage.uncovered.dark),
+      ].filter((part): part is string => part !== undefined);
+      cases.push({
+        id: 'T1-theme-coverage',
+        outcome: 'fail',
+        detail: `consumed-token manifest not covered — ${perMode.join('; ')} (cover the tokens or declare explicit inherit; silence is not a legal way to inherit)`,
+      });
+    }
   }
 
   const failures = cases
