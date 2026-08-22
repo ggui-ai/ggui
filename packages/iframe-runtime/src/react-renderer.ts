@@ -43,6 +43,7 @@ import {
   rewriteImports,
   getScopedThemeCss,
   getScopedCssTokens,
+  assembleDeliveredThemeCss,
   getThemeCss,
   getCssTokens,
 } from '@ggui-ai/design/rendering';
@@ -96,28 +97,6 @@ function toCssDecls(vars: Readonly<Record<string, string>>): string {
     .join('');
 }
 
-/**
- * Serialize a DELIVERED base ladder (one mode's resolved variable set,
- * `theme.base.light`/`.dark` — ggui#598-C) into the scoped block that
- * replaces the compiled ladder at the base position. Mirrors the
- * `.scope {` block shape `getScopedThemeCss` emits (space-brace opener,
- * two-space-indented `--k: v;` lines) so everything downstream that
- * anchors on the base block's shape holds on both paths. Keys are
- * sorted — the wire object's insertion order is not part of the
- * contract, and byte-stable output keeps repeated renders comparable.
- * Values are injection-safe by the wire schema (`appThemeSchema` — the
- * same guarantee `toCssDecls` cites); do NOT re-sanitize here.
- */
-function toScopedBaseCss(
-  scopeClass: string,
-  vars: Readonly<Record<string, string>>,
-): string {
-  const decls = Object.keys(vars)
-    .sort()
-    .map((k) => `  ${k}: ${vars[k]};`)
-    .join('\n');
-  return `.${scopeClass} {\n${decls}\n}`;
-}
 
 // =============================================================================
 // Error boundary — port of RCR's internal ErrorBoundary (L68–203).
@@ -580,7 +559,12 @@ export async function mountReactRoot(
     const deliveredBase = opts.appTheme?.base;
     let themeCss =
       deliveredBase !== undefined
-        ? toScopedBaseCss(
+        ? // Design-package assembler (ggui#598-C, injection-review flag 1):
+          // the delivered ladder gets the SAME scaffolding the compiled
+          // ladder gets — base inherits, derived gradient/effect tokens
+          // (color-mix fallback split), box-sizing, font-inherit — from
+          // ONE shared builder, so the two paths cannot drift.
+          assembleDeliveredThemeCss(
             scopeClass,
             opts.themeMode === 'dark' ? deliveredBase.dark : deliveredBase.light,
           )

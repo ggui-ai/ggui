@@ -88,11 +88,16 @@ describe('mountReactRoot — delivered base ladder (theme.base, ggui#598-C)', ()
     // Mode-selected: light values in, dark values NOT painted here.
     expect(css).toContain('--ggui-color-surface: #fefefe;');
     expect(css).not.toContain('#0a0a0f');
-    // Replacement, not double-injection: the compiled ladder block's
-    // structural markers must be gone (scoped box-sizing rule +
-    // scoped-helper gradient token are compiled-path-only emissions).
-    expect(css).not.toContain('box-sizing: border-box');
-    expect(css).not.toContain('--ggui-color-primary-gradient');
+    // Replacement, not double-injection — but WITH the shared
+    // scaffolding (flag-1 fix, ggui#598-C): the delivered path now
+    // rides the design package's assembleDeliveredThemeCss, so the
+    // structural rules and derived tokens the compiled ladder gets
+    // appear here too — from ONE builder, so the paths cannot drift.
+    // Replacement is proven by the COMPILED ladder's own variable
+    // values being absent (the delivered values painted above), not
+    // by scaffolding absence.
+    expect(css).toContain('box-sizing: border-box');
+    expect(css).toContain('--ggui-color-primary-gradient');
 
     mount!.unmount();
   });

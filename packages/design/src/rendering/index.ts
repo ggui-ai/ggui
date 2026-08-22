@@ -9,7 +9,13 @@
  */
 
 export { stripMarkers } from './strip-markers';
-export { getCssTokens, getScopedCssTokens, getThemeCss, getScopedThemeCss } from './css-tokens';
+export {
+  getCssTokens,
+  getScopedCssTokens,
+  getThemeCss,
+  getScopedThemeCss,
+  assembleDeliveredThemeCss,
+} from './css-tokens';
 export {
   rewriteImports,
   buildStaticShimModules,

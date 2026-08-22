@@ -318,7 +318,57 @@ export function getScopedThemeCss(
     theme.metadata?.frameless === true
       ? `\n.${scopeClass} > :where(:not(style)) { border: none !important; }`
       : '';
-  return `${scoped}\n${baseInherits}\n${gradientTokens}\n${theme.cssKeyframes}\n.${scopeClass} *, .${scopeClass} *::before, .${scopeClass} *::after { box-sizing: border-box; }\n.${scopeClass} h1, .${scopeClass} h2, .${scopeClass} h3, .${scopeClass} h4, .${scopeClass} h5, .${scopeClass} h6, .${scopeClass} button, .${scopeClass} input, .${scopeClass} textarea, .${scopeClass} select { font-family: inherit; }${framelessRule}`;
+  return `${scoped}\n${baseInherits}\n${gradientTokens}\n${theme.cssKeyframes}\n${structuralScaffolding(scopeClass)}${framelessRule}`;
+}
+
+/**
+ * The structural scaffolding EVERY scoped ladder needs regardless of
+ * where its variables came from: border-box sizing and the
+ * font-family inherit for elements user-agent stylesheets would
+ * otherwise style (h1-h6, form controls). Shared verbatim between the
+ * compiled path ({@link getScopedThemeCss}) and the delivered path
+ * ({@link assembleDeliveredThemeCss}) — one string builder, no drift.
+ */
+function structuralScaffolding(scopeClass: string): string {
+  return `.${scopeClass} *, .${scopeClass} *::before, .${scopeClass} *::after { box-sizing: border-box; }\n.${scopeClass} h1, .${scopeClass} h2, .${scopeClass} h3, .${scopeClass} h4, .${scopeClass} h5, .${scopeClass} h6, .${scopeClass} button, .${scopeClass} input, .${scopeClass} textarea, .${scopeClass} select { font-family: inherit; }`;
+}
+
+/** The base-inherits rule shared by both ladder paths. */
+function baseInheritsRule(scopeClass: string): string {
+  return `.${scopeClass} {
+  font-family: var(--ggui-font-family-sans);
+  color: var(--ggui-color-onSurface);
+  background-color: transparent;
+}`;
+}
+
+/**
+ * Assemble the scoped CSS block for a DELIVERED ladder (ggui#598-C
+ * runtime theme registration): the wire's `theme.base` variable map,
+ * given the SAME scaffolding the compiled ladder gets — base
+ * inherits, derived gradient/effect tokens (color-mix fallback split
+ * included), box-sizing, and font-inherit. Without this the delivered
+ * path silently dropped every non-ladder rule (the injection review's
+ * finding).
+ *
+ * Known v1 deltas vs the compiled path, deliberate and documented:
+ * theme-document keyframes and the `$metadata.frameless` suppression
+ * do not ride the delivered wire yet — both are follow-ups on the
+ * registration arc, neither affects variable resolution.
+ */
+export function assembleDeliveredThemeCss(
+  scopeClass: string,
+  variables: Readonly<Record<string, string>>,
+): string {
+  const body = Object.keys(variables)
+    .sort()
+    .map((k) => `  ${k}: ${variables[k]};`)
+    .join('\n');
+  const block = `.${scopeClass} {\n${body}\n}`;
+  const primary500 = resolvePrimary500Hex(block);
+  const scoped = withColorMixFallback(block, `.${scopeClass}`, primary500);
+  const gradientTokens = buildGradientTokens(scopeClass, primary500);
+  return `${scoped}\n${baseInheritsRule(scopeClass)}\n${gradientTokens}\n${structuralScaffolding(scopeClass)}`;
 }
 
 /**
