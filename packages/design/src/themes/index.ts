@@ -40,6 +40,8 @@ export type {
   ThemeCoverageResult,
   ThemeRegistrationDocs,
 } from './validate-coverage';
+export { resolveRegistrationVariables } from './resolve-registration';
+export type { ResolvedRegistrationVariables } from './resolve-registration';
 
 // Theme registry
 export {

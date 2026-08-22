@@ -36,13 +36,36 @@ const cssValue = z
   .regex(CSS_VALUE_SAFE_RE, 'css value contains a disallowed character')
   .refine((v) => !v.includes('/*'), 'css value may not contain a comment');
 
+const cssVariableMap = z
+  .record(z.string().regex(GGUI_CSS_VAR_KEY_RE, 'css var key must be --ggui-*'), cssValue)
+  .refine((m) => Object.keys(m).length <= 200, 'too many css variables (max 200)');
+
 export const appThemeSchema = z
   .object({
     mode: z.enum(['light', 'dark']),
-    cssVariables: z
-      .record(z.string().regex(GGUI_CSS_VAR_KEY_RE, 'css var key must be --ggui-*'), cssValue)
-      .refine((m) => Object.keys(m).length <= 200, 'too many css variables (max 200)'),
+    cssVariables: cssVariableMap,
     name: z.string().min(1).max(64).optional(),
+    /**
+     * The REGISTERED base ladder, delivered (runtime theme
+     * registration): both modes' resolved variable sets ride the
+     * envelope so a mid-session mode switch is a local operation and
+     * delivery never depends on the iframe being able to fetch. The
+     * renderer injects the mode-selected set BELOW `cssVariables` (the
+     * per-app overlay) in the documented precedence. `documentHash` is
+     * the registration's identity: it joins painted ladders to
+     * registration records, and a receiver holding the hash may be
+     * served a future envelope without the variable sets.
+     */
+    base: z
+      .object({
+        documentHash: z
+          .string()
+          .regex(/^[0-9a-f]{64}$/, 'documentHash must be sha256 lowercase hex'),
+        light: cssVariableMap,
+        dark: cssVariableMap,
+      })
+      .strict()
+      .optional(),
   })
   .strict();
 
