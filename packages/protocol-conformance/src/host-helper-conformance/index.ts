@@ -314,6 +314,14 @@ export async function runHostHelperConformance(
     capabilities !== undefined && capabilities['serverTools'] !== undefined;
 
   // ── relay probe (feeds H2 and R1) ─────────────────────────────────
+  // The probe's `payload: {}` is non-primitive DELIBERATELY: helpers
+  // that stage primitive action payloads into a host affordance before
+  // relaying (e.g. a chat composer's staging gate) fall THROUGH to the
+  // relay on a non-primitive payload — so this probe grades the relay
+  // itself, never the staging path. An all-primitive payload against
+  // such a helper would legally answer the staged acceptance instead
+  // of round-tripping the relay; do not "simplify" this shape.
+  // (First observed live on the guuey kit baseline, ggui#600.)
   const relayProbe = await sendWithTimeout(
     port,
     request('tools/call', {

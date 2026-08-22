@@ -117,8 +117,13 @@ export interface PendingEventConsumer {
    * what makes transport-level retries of `ggui_runtime_submit_action`
    * safe: a relay that lost the RESPONSE (but whose request was
    * delivered) can replay without double-firing the user's gesture.
-   * Events WITHOUT an `id` are appended unconditionally (the WS
-   * ingress may produce id-less entries; those carry no retry path).
+   * Events WITHOUT an `id` are appended unconditionally. NOTE: the WS
+   * ingress DOES pass an id today — but mints it server-side per call
+   * (`randomBytes(4)`, action-ingress.ts), so for WS-ingressed entries
+   * this idempotency is structurally satisfied and semantically inert:
+   * a re-fired gesture gets a fresh id and a fresh row. Gesture-stable
+   * WS dedup requires the client-minted `actionId` on the wire
+   * envelope (ggui#599 leg 2).
    *
    * @throws when the pipe row doesn't exist.
    */
