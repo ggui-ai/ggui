@@ -25,7 +25,7 @@ interface Props {
 export default function MyComponent({ title, count = 0 }: Props) {
   return (
     <div style={{ padding: 'var(--ggui-spacing-md, 16px)' }}>
-      <h1 style={{ color: 'var(--ggui-color-onSurface, #1a1a2e)' }}>{title}</h1>
+      <h1 style={{ color: 'var(--ggui-color-onSurface)' }}>{title}</h1>
       <Button>{count}</Button>
     </div>
   );
@@ -138,15 +138,52 @@ export default function C(props: Props) {
     expect(hexIssues[0].description).toContain('breaks theme switching');
   });
 
-  it('allows hex in CSS variable fallbacks', async () => {
+  it('FAILS hex inside a var() fallback — the origin-kill (ggui#598 slice 4): a literal fallback paints the wrong brand exactly when the theme matters', async () => {
+    // Pre-#598 this was the ALLOWED pattern (and the remediation text
+    // actively taught the model to launder invented hex INTO var()
+    // fallbacks — the adversarial cycle's sharpest find). The runtime
+    // injects every token; the fallback can only ever paint default-
+    // brand pixels under a failed injection, which must be VISIBLE,
+    // not silently sky-blue.
     const code = `
 interface Props { x: string }
 export default function C(props: Props) {
   return <div style={{ color: 'var(--ggui-color-primary, #0284c7)' }}>blue</div>;
 }`;
     const issues = await runTier0Checks(code);
+    const fallbackIssues = issues.filter(
+      i => i.category === 'tokens' && i.subcategory === 'token-fallback',
+    );
+    expect(fallbackIssues).toHaveLength(1);
+    expect(fallbackIssues[0].result).toBe('fail');
+    expect(fallbackIssues[0].description).toContain('#0284c7');
+    // The remediation must NOT launder the hex back into a fallback.
+    expect(fallbackIssues[0].fix).not.toContain('#0284c7');
+    expect(fallbackIssues[0].fix).toContain('var(--ggui-color-primary)');
+  });
+
+  it('bare token references stay clean — var() without a fallback is the taught pattern', async () => {
+    const code = `
+interface Props { x: string }
+export default function C(props: Props) {
+  return <div style={{ color: 'var(--ggui-color-primary-600)' }}>blue</div>;
+}`;
+    const issues = await runTier0Checks(code);
+    const tokenIssues = issues.filter(i => i.category === 'tokens');
+    expect(tokenIssues).toHaveLength(0);
+  });
+
+  it('the bare-hex remediation no longer suggests a var() fallback (de-laundered)', async () => {
+    const code = `
+interface Props { x: string }
+export default function C(props: Props) {
+  return <div style={{ color: '#ff0000' }}>red</div>;
+}`;
+    const issues = await runTier0Checks(code);
     const hexIssues = issues.filter(i => i.category === 'tokens' && i.subcategory === 'hex-color');
-    expect(hexIssues).toHaveLength(0);
+    expect(hexIssues).toHaveLength(1);
+    expect(hexIssues[0].fix).not.toContain('#ff0000');
+    expect(hexIssues[0].fix).not.toContain(', ${');
   });
 
   it('FAILS self-check on a raw CSS length in a spacing prop (D4)', async () => {

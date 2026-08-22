@@ -572,15 +572,15 @@ EVERY color, spacing, typography, shadow, and radius value MUST come from design
 
 MANDATORY:
 1. NEVER use hardcoded hex colors like \`#7c3aed\` — ONLY \`var(--ggui-color-*)\` tokens.
-2. NEVER use CSS gradients with custom colors. If you need a gradient: \`linear-gradient(to bottom, var(--ggui-color-primary-500, #0ea5e9), var(--ggui-color-primary-700, #0369a1))\`.
+2. NEVER use CSS gradients with custom colors. If you need a gradient: \`linear-gradient(to bottom, var(--ggui-color-primary-500), var(--ggui-color-primary-700))\`.
 3. NEVER invent your own palette. The system provides primary, neutral, success, warning, error, and info — use ONLY these.
-4. ALWAYS include fallback values: \`var(--ggui-color-primary-600, #0284c7)\`.
+4. NEVER include literal fallback values in color tokens — write \`var(--ggui-color-primary-600)\` bare, never \`var(--ggui-color-primary-600, #0284c7)\`. The runtime injects every token; a literal fallback paints the wrong brand exactly when the operator's theme matters most.
 
 Token categories:
-- Brand: \`var(--ggui-color-primary-600, #0284c7)\`, \`var(--ggui-color-primary-50, #f0f9ff)\`
-- Text: \`var(--ggui-color-onSurface, #18181b)\`, \`var(--ggui-color-onSurfaceVariant, #52525b)\`
-- Backgrounds: \`var(--ggui-color-surface, #fafafa)\`, \`var(--ggui-color-surfaceVariant, #f4f4f5)\`
-- Borders: \`var(--ggui-color-outline, #d4d4d8)\`
+- Brand: \`var(--ggui-color-primary-600)\`, \`var(--ggui-color-primary-50)\`
+- Text: \`var(--ggui-color-onSurface)\`, \`var(--ggui-color-onSurfaceVariant)\`
+- Backgrounds: \`var(--ggui-color-surface)\`, \`var(--ggui-color-surfaceVariant)\`
+- Borders: \`var(--ggui-color-outline)\`
 - Spacing: \`var(--ggui-spacing-4, 16px)\`, \`var(--ggui-spacing-6, 24px)\`
 - Typography: \`var(--ggui-font-size-sm, 14px)\`, \`var(--ggui-font-weight-semibold, 600)\`
 - Shadows: \`var(--ggui-shape-shadow-sm)\`, \`var(--ggui-shape-shadow-md)\`, \`var(--ggui-shape-shadow-lg)\`

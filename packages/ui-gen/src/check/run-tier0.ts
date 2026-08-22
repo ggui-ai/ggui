@@ -508,22 +508,41 @@ export async function runTier0Checks(
     // typed escape on Box (`assetColor` + `assetSemantic`) — see
     // T-4 follow-up.
     const hexMatch = line.match(/#[0-9a-fA-F]{3,8}\b/);
-    if (
-      hexMatch &&
-      !line.includes('var(--ggui-') &&
-      !line.includes('// fallback') &&
-      !assetEscapedLines.has(lineNum)
-    ) {
-      issues.push({
-        tier: 0,
-        result: 'fail',
-        category: 'tokens',
-        subcategory: 'hex-color',
-        severity: 'critical',
-        description: `Hardcoded color "${hexMatch[0]}" breaks theme switching — use design tokens.`,
-        fix: `Replace with a primitive variant (Button variant="primary"|Badge variant="success"|...) OR a token reference like var(--ggui-color-primary-500, ${hexMatch[0]}). Hardcoded colors mean the operator's theme has no effect on this surface.`,
-        line: lineNum,
-      });
+    if (hexMatch && !assetEscapedLines.has(lineNum)) {
+      // ggui#598 slice 4 (origin-kill): hex inside a `var(--ggui-*, #hex)`
+      // fallback is ALSO a violation now — the runtime injects every
+      // token, so a literal fallback can only ever paint default-brand
+      // pixels under a failed injection, which must be visible (unset)
+      // rather than silently sky-blue under someone's brand. The old
+      // exemption plus a remediation text that suggested
+      // `var(--x, ${hex})` actively taught the model to launder its
+      // invented hex INTO fallbacks (adversarial-cycle find).
+      const fallbackVarMatch = line.match(
+        /var\((--ggui-[a-zA-Z0-9-]+)\s*,[^)]*#[0-9a-fA-F]{3,8}/,
+      );
+      if (fallbackVarMatch) {
+        issues.push({
+          tier: 0,
+          result: 'fail',
+          category: 'tokens',
+          subcategory: 'token-fallback',
+          severity: 'critical',
+          description: `Literal fallback "${hexMatch[0]}" inside a token reference — the runtime injects every token, and the fallback paints the wrong brand exactly when the theme matters most.`,
+          fix: `Drop the fallback: write var(${fallbackVarMatch[1]}) bare. If the token might not exist, that is a vocabulary problem to fix by choosing a token from the design-system docs, never by a literal.`,
+          line: lineNum,
+        });
+      } else if (!line.includes('// fallback')) {
+        issues.push({
+          tier: 0,
+          result: 'fail',
+          category: 'tokens',
+          subcategory: 'hex-color',
+          severity: 'critical',
+          description: `Hardcoded color "${hexMatch[0]}" breaks theme switching — use design tokens.`,
+          fix: `Replace with a primitive variant (Button variant="primary"|Badge variant="success"|...) OR a bare token reference like var(--ggui-color-primary-500) — never a literal fallback. Hardcoded colors mean the operator's theme has no effect on this surface.`,
+          line: lineNum,
+        });
+      }
     }
 
     // Hardcoded rgba()/hsl() color functions — same reasoning as above.
