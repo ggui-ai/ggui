@@ -14,6 +14,7 @@
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
+import { GGUI_WAVE_VERSION } from '@ggui-ai/protocol';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import type { Server as HttpServer } from 'node:http';
@@ -92,7 +93,9 @@ describe('createGguiServer — HTTP surface', () => {
     expect(body).toEqual({
       status: 'ok',
       server: 'ggui-mcp-server',
-      version: '0.0.1',
+      // The shipped wave (ggui#622) — /ggui/health reports the same
+      // identity serverInfo does; the old pin enshrined the 0.0.1 lie.
+      version: GGUI_WAVE_VERSION,
       tools: 11,
       cors: { loopback: true, origins: [] },
     });

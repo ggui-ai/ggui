@@ -64,6 +64,7 @@ import type {
   UiUpdatedEventData,
 } from "@ggui-ai/protocol";
 import {
+  GGUI_WAVE_VERSION,
   RESOURCE_NOT_FOUND_MESSAGE,
   deriveContextDefault,
   isRecord,
@@ -413,7 +414,7 @@ function startInit(){
   },3000);
   postRpc('ui/initialize',{
     appCapabilities:{},
-    appInfo:{name:'ggui-render',version:'1.0.0'},
+    appInfo:{name:'ggui-render',version:'${GGUI_WAVE_VERSION}'},
     protocolVersion:'2026-01-26'
   }).then(function(){
     clearTimeout(initTimer);
@@ -561,7 +562,7 @@ window.addEventListener('message',function(ev){
   if(buf.length>8)buf.splice(0,buf.length-8);
 });
 try{
-  window.parent.postMessage({jsonrpc:'2.0',id:'ggui-inline-preflight',method:'ui/initialize',params:{appCapabilities:{},appInfo:{name:'ggui-render',version:'1.0.0'},protocolVersion:'2026-01-26'}},'*');
+  window.parent.postMessage({jsonrpc:'2.0',id:'ggui-inline-preflight',method:'ui/initialize',params:{appCapabilities:{},appInfo:{name:'ggui-render',version:'${GGUI_WAVE_VERSION}'},protocolVersion:'2026-01-26'}},'*');
   window.parent.postMessage({jsonrpc:'2.0',method:'ui/notifications/initialized',params:{}},'*');
 }catch(e){}
 })();

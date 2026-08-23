@@ -137,7 +137,7 @@ import type { OperatorConfig, ThemeConfig } from "@ggui-ai/project-config";
 import type { DiscoveredPrimitiveCatalog, LoadedTheme } from "@ggui-ai/project-config/node";
 import { loadTheme } from "@ggui-ai/project-config/node";
 import type { Blueprint, GguiLifecyclePayload } from "@ggui-ai/protocol";
-import { LIFECYCLE_CHANNEL } from "@ggui-ai/protocol";
+import { GGUI_WAVE_VERSION, LIFECYCLE_CHANNEL } from "@ggui-ai/protocol";
 import { setLlmTraceSink } from "@ggui-ai/ui-gen/harness/llm-trace-sink";
 import { setValidatorTraceSink } from "@ggui-ai/ui-gen/harness/validator-trace-sink";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -326,10 +326,15 @@ import { cookieAuthMiddleware } from "./user-session-auth.js";
 
 /**
  * Default server identity. Callers override via `info:` when embedding.
+ *
+ * `version` is the shipped @ggui-ai/* wave (ggui#622/#623) — what every
+ * connected agent sees in `serverInfo`; never a hand-typed literal (a
+ * hard-coded `0.0.1` lied to every agent for four waves). Exported so
+ * the identity is pinnable.
  */
-const DEFAULT_INFO: ServerInfo = {
+export const DEFAULT_INFO: ServerInfo = {
   name: "ggui-mcp-server",
-  version: "0.0.1",
+  version: GGUI_WAVE_VERSION,
   description:
     "Open self-hosted MCP server for the ggui protocol. Powered by @ggui-ai/mcp-server-handlers.",
 };
