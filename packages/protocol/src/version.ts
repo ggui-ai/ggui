@@ -3076,6 +3076,24 @@
 export const PROTOCOL_VERSION = "draft-2026-08-19";
 
 /**
+ * The shipped `@ggui-ai/*` WAVE version — bare semver, identical to
+ * `package.json#version` on every published package (the lockstep
+ * cohort; `@ggui-ai/protocol` is its anchor). Distinct from
+ * {@link PROTOCOL_VERSION}: that names the WIRE draft (what the
+ * messages mean), this names the SHIPPED BUILD (which release an agent
+ * is actually talking to). Runtime surfaces that identify themselves
+ * — MCP `serverInfo.version`, the MCP Apps `appInfo.version` — report
+ * this, never a hand-typed literal (ggui#622: a hard-coded `0.0.1`
+ * told every connected agent the wrong thing for four waves).
+ *
+ * Moves with every wave: `version.test.ts` pins it to this package's
+ * `package.json#version` (the same parity pattern as
+ * `STDLIB_GADGETS_VERSION` and `agent-server`'s `CLIENT_INFO`), and the
+ * `/release:cut` straggler list names it so the bump is mechanical.
+ */
+export const GGUI_WAVE_VERSION = "0.11.0";
+
+/**
  * Schema version stamped onto wire envelopes that opt into the
  * `schemaVersion` forward-compat field (see {@link ActionEnvelope},
  * {@link StreamEnvelope}).
