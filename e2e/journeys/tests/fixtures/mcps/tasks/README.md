@@ -75,7 +75,7 @@ try {
 From the repo root:
 
 ```sh
-pnpm --filter @ggui-private/e2e-oss test:mcp-fixtures
+pnpm --filter @ggui-ai/e2e-journeys test:mcp-fixtures
 ```
 
 Pure vitest (Lane 3 per strategy §4.3). No browser, no CLI spawn,

@@ -75,5 +75,5 @@ store boundary — set equality, not array equality.
 Run with:
 
 ```sh
-pnpm --filter @ggui-private/e2e-oss test:mcp-fixtures
+pnpm --filter @ggui-ai/e2e-journeys test:mcp-fixtures
 ```

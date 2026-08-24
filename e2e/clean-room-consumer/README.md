@@ -65,20 +65,22 @@ after 72h). The gate runs _before_ that point of no return.
 
 ## Which e2e do I run? — the landscape
 
-The repo has three e2e surfaces. They are **not interchangeable**:
+The e2e surfaces here are **not interchangeable**:
 
-| Surface                        | Package                 | Tests                                                             | When to run                                                                                                                                                                         |
-| ------------------------------ | ----------------------- | ----------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **`e2e/`**                     | `@ggui-private/e2e`     | ggui.ai hosted journeys, MCP/render/oauth contracts, ops, quality | You changed the **hosted product** (console, api.ggui.ai, render endpoint). Needs a deployed Amplify sandbox.                                                                       |
-| **`e2e/oss/`**                 | `@ggui-private/e2e-oss` | Solo-builder OSS flows — `ggui serve`, generation, pairing        | You changed **OSS CLI / server / SDK behavior**. Runs against **workspace** packages.                                                                                               |
-| **`e2e/clean-room-consumer/`** | _(this)_                | Every `@ggui-ai/*` package installs + runs from a registry        | You changed **anything that affects packaging** — `package.json` `files`/`exports`/`main`/`deps`, or you're about to **npm publish**. Runs against **registry-installed** packages. |
+| Surface                        | Package                 | Tests                                                      | When to run                                                                                                                                                                         |
+| ------------------------------ | ----------------------- | ---------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **`e2e/journeys/`**            | `@ggui-ai/e2e-journeys` | Solo-builder OSS flows — `ggui serve`, generation, pairing | You changed **OSS CLI / server / SDK behavior**. Runs against **workspace** packages.                                                                                               |
+| **`e2e/clean-room-consumer/`** | _(this)_                | Every `@ggui-ai/*` package installs + runs from a registry | You changed **anything that affects packaging** — `package.json` `files`/`exports`/`main`/`deps`, or you're about to **npm publish**. Runs against **registry-installed** packages. |
+
+(Journeys for ggui.ai's own hosted deployment — console, api.ggui.ai —
+are maintained privately, outside this repo.)
 
 Rule of thumb:
 
-- **`e2e/oss/` answers** "does the code behave correctly?"
+- **`e2e/journeys/` answers** "does the code behave correctly?"
 - **`e2e/clean-room-consumer/` answers** "do the _published artifacts_ even load?"
 
-They are complementary. `e2e/oss/` can be 100% green while the gate
+They are complementary. `e2e/journeys/` can be 100% green while the gate
 fails — that is precisely the bug class the gate exists for.
 
 ---

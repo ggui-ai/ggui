@@ -97,5 +97,5 @@ a silent casing bucket mismatch.
 Run with:
 
 ```sh
-pnpm --filter @ggui-private/e2e-oss test:mcp-fixtures
+pnpm --filter @ggui-ai/e2e-journeys test:mcp-fixtures
 ```

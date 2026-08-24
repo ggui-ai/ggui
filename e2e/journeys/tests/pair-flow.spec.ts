@@ -78,10 +78,10 @@ const TEST_TIMEOUT_MS = 60_000;
 /**
  * Minimal structural shapes for the pairing wire. Source of truth
  * lives in `@ggui-ai/mcp-server-core` (`PairingInit` /
- * `PairingCompletion`), but `@ggui-private/e2e`'s dep graph
- * deliberately does not pull the server-side package in — spec
- * assertions use these local shapes so the e2e package doesn't gain
- * a new workspace dep for one slice.
+ * `PairingCompletion`), but this journeys package deliberately does
+ * not pull the server-side package in — spec assertions use these
+ * local shapes so the package doesn't gain a new workspace dep for
+ * one slice.
  */
 interface PairingInit {
   readonly code: string;

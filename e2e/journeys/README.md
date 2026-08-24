@@ -15,13 +15,13 @@ tests that surface.
 This dir's organizing axis is **the OSS product boundary as journeys**:
 one spec per end-to-end flow a self-hoster (or `npx`-driven trier) would
 take. The OSS claim is enforced by the dep graph — no `aws-amplify`,
-no `@aws-sdk/*`, no `@ggui-cloud/*`, no `@ggui-private/*` in the
+no `@aws-sdk/*`, no cloud-coupled or closed-source packages in the
 `dependencies` or `devDependencies` of `package.json`. That negative
-space is the contract; see
-[OSS Purity](../../../docs/principles/oss-purity.md).
+space is the contract: every journey here must run for a self-hoster
+with nothing but this repo and npm.
 
-The hosted-product Playwright journeys live next door under
-`cloud/e2e/tests/journeys/ggui/` (owned by `@ggui-private/e2e`).
+Journeys for ggui.ai's own hosted deployment are maintained privately,
+outside this repo.
 
 ## Hybrid runner — known axis violation
 
@@ -51,8 +51,8 @@ up the vitest residue.
    `<slug>.spec.ts` under `tests/`.
 2. **Stateful MCP fixture (Lane 3 contract test)?** → under
    `tests/fixtures/mcps/<name>/<name>.test.ts` (the vitest residue).
-3. **Hosted product journey (UI tied to api.ggui.ai)?** → not here. Use
-   `cloud/e2e/tests/journeys/ggui/` with `@ggui-private/e2e`.
+3. **Hosted product journey (UI tied to api.ggui.ai)?** → not here;
+   those are maintained privately, outside this repo.
 4. **Cross-host MCP wire scenario (numeric ordinal)?** → not here. Use
    [`oss/e2e/wire-scenarios/`](../wire-scenarios/README.md).
 
@@ -95,7 +95,8 @@ oss/e2e/journeys/
 ## What's NOT here (and why)
 
 - Hosted sandbox fixtures (`amplify.ts`, `auth.ts`, `mcp.ts`) — those
-  pull in `aws-amplify`; they live in `@ggui-private/e2e` (closed).
+  pull in `aws-amplify`; they belong to the hosted deployment's private
+  suites, not this repo.
 - The Tier-2 MCP host simulator — lives in
   [`oss/e2e/mcp-host-simulator/`](../mcp-host-simulator/README.md)
   as `@ggui-ai/e2e-mcp-host-simulator`.
