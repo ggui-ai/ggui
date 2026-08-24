@@ -1,6 +1,6 @@
 {
   "name": "@ggui-ai/negotiator",
-  "version": "0.11.0",
+  "version": "0.12.0",
   "description": "Contract-synthesis + match-judge engine for ggui's handshake. Synthesizes or repairs a conforming DataContract from an agent's draft, judges blueprint-match candidates for reuse, and validates contract structure + novelty — the primitives composed by decideHandshake in @ggui-ai/mcp-server-handlers. Deployment-agnostic: concrete embedding and vector-store bindings plug in via the storage interfaces from @ggui-ai/mcp-server-core.",
   "license": "Apache-2.0",
   "keywords": [
