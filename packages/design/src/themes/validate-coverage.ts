@@ -42,7 +42,17 @@ import { parseTheme } from './parser.js';
  *   never registered.
  * - `--ggui-color-surface-subtle` / `--ggui-color-surface-sunken`:
  *   consumption-site fallback-only names (Markdown / preview surfaces);
- *   no emission slot exists.
+ *   no emission slot exists. For `surface-sunken` this is a DESIGN
+ *   COMMITMENT, not a gap (guuey#401 disposition, 2026-08-25): the
+ *   registration parser deliberately does NOT consume a direct
+ *   `surface-sunken` declaration even though registration compilers
+ *   may emit one — the per-app OVERLAY tier (`AppTheme.cssVariables`)
+ *   is the one door for this token (live-attested carrying it), and a
+ *   second door on the registration ladder would create cross-tier
+ *   precedence ambiguity for zero functional need. The two-layer rule:
+ *   the registered base ladder stays ramp-coherent; canvas-family
+ *   surface mappings ride the overlay. Seven excluded tokens is the
+ *   documented floor in BOTH fleets' coverage vocabulary.
  * - `--ggui-flash-color`: an element-level opt-in variable set by
  *   component code at runtime (`tokens/motion.ts`), not a ladder token.
  * - `--ggui-radius-sm` / `--ggui-radius-md`: wrong-prefix legacy names
