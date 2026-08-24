@@ -1,4 +1,4 @@
-# `@ggui-private/e2e-oss-mcp-host-simulator`
+# `@ggui-ai/e2e-mcp-host-simulator`
 
 Headless MCP Apps host simulator (OSS-local path) — Tier 2 of the testing pyramid (see `docs/testing.md`).
 
@@ -15,11 +15,11 @@ A reusable test fixture that mimics what an MCP-Apps-aware host (claude.ai, Clau
 
 Everything runs in vitest with no browser, no jsdom, no Playwright.
 
-This package also **owns the shared `HostSimulator` core** + `bootOssServer` fixture. The sibling `@ggui-private/e2e-cloud-mcp-host-simulator` package depends on it (`workspace:*`) and re-exports `HostSimulator` to drive the same lifecycle against live `mcp.ggui.ai` endpoints.
+This package **owns the `HostSimulator` core** + the `bootOssServer` fixture. The core is deliberately transport-generic: point `HostSimulator` at any deployed ggui server's URL to drive the same lifecycle against a remote endpoint instead of the local fixture.
 
 ## What this is NOT
 
-- **Not the remote/cloud suite** — tests that hit live `mcp.ggui.ai` / `status.ggui.ai` live in `@ggui-private/e2e-cloud-mcp-host-simulator`.
+- **Not a hosted-deployment monitor** — this package tests the server you boot locally; probing a live remote deployment is a different job with different auth and uptime concerns, out of scope here.
 - **Not a faithful claude.ai recreation** — claude.ai has CSP rules, message validators, anti-bot signals, OAuth UI. The simulator covers the wire shape, not the chrome.
 - **Not a substitute for the protocol probe card** — `packages/iframe-runtime/src/system-cards/ProtocolProbeCard.tsx` is the regression fixture for real-host quirks. Run it manually pre-launch + on host-shape changes.
 - **Not a mock LLM** — the simulator drives the wire, not the model. The OSS dev path uses the real ui-generator.
@@ -32,11 +32,22 @@ This package also **owns the shared `HostSimulator` core** + `bootOssServer` fix
 | **2** | **oss-mcp-host-simulator**    | this package    | every commit                    |
 | 3     | real claude.ai via probe card | manual operator | pre-launch + host-version flips |
 
+**Tier-3 invocation quirk** (caught by the ritual itself, 2026-08-24, 5/5
+pass): a bare `[ggui:probe] …` chat message gets **paraphrased** by the
+host model — you get a "READY" chat reply instead of tool pass-through,
+and the probe never fires. Force verbatim pass-through in the invocation:
+
+> Use the ggui render tool now with the intent set to exactly this
+> string, unchanged: "[ggui:probe] …" — do not rephrase.
+
+The model-paraphrase hole is exactly the real-host quirk class Tier 3
+exists to catch; treat any new "probe never fired" symptom as this first.
+
 ## Usage
 
 ```ts
 import { describe, expect, it } from "vitest";
-import { HostSimulator, bootOssServer } from "@ggui-private/e2e-oss-mcp-host-simulator";
+import { HostSimulator, bootOssServer } from "@ggui-ai/e2e-mcp-host-simulator";
 
 it("happy path: tools/list → handshake → render → bootstrap → ws ack", async () => {
   const fixture = await bootOssServer();
@@ -60,7 +71,7 @@ it("happy path: tools/list → handshake → render → bootstrap → ws ack", a
 ### Submit-action usage
 
 ```ts
-import { HostSimulator, bootOssServer } from "@ggui-private/e2e-oss-mcp-host-simulator";
+import { HostSimulator, bootOssServer } from "@ggui-ai/e2e-mcp-host-simulator";
 
 const fixture = await bootOssServer();
 const host = new HostSimulator({ url: fixture.url, bearer: "host-simulator-test" });
@@ -90,7 +101,7 @@ The 3 envelopes are byte-identical to what `packages/iframe-runtime/src/runtime.
 ### OAuth flow usage
 
 ```ts
-import { OAuthFlowSimulator, bootOssServer } from "@ggui-private/e2e-oss-mcp-host-simulator";
+import { OAuthFlowSimulator, bootOssServer } from "@ggui-ai/e2e-mcp-host-simulator";
 
 const fixture = await bootOssServer({ oauth: {} });
 const flow = new OAuthFlowSimulator({ url: fixture.url });

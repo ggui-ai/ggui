@@ -5,15 +5,12 @@
  * Public API:
  *   - {@link HostSimulator} — driver class for the App-spec lifecycle
  *     (initialize → tools/list with resourceUri pre-fetch → tools/call
- *     → ws subscribe). Shared core, also re-exported by
- *     `@ggui-private/e2e-host-simulator-remote` for remote tests.
+ *     → ws subscribe). Transport-generic: pass any deployed ggui
+ *     server's URL to drive the same lifecycle remotely.
  *   - {@link bootOssServer} — vitest helper that spins up an OSS
  *     `createGguiServer` factory on an ephemeral port for in-process
- *     testing. Tests targeting `mcp.ggui.ai` live in the cloud
- *     package and pass the remote URL into `HostSimulator` directly.
- *
- * Cloud/remote-only helpers (`loadAmplifyOutputs`) live in the
- * `@ggui-private/e2e-host-simulator-remote` package.
+ *     testing. To test a remote deployment, skip the fixture and pass
+ *     the server's URL into `HostSimulator` directly.
  *
  * See `README.md` for tier mapping + roadmap.
  */
