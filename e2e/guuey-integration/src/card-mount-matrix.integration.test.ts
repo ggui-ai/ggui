@@ -54,6 +54,7 @@ import {
   type JsonValue,
 } from '@silverprotocol/core';
 import {
+  createMcpUiActionRelay,
   isJsonObject,
   snapshotViewMount,
   toolResultViewMount,
@@ -547,4 +548,132 @@ describe("matrix 5 — rehydrate-by-refetch mints fresh credentials with current
     expect(typeof refetched!.slice.wsToken).toBe("string");
     expect(refetched!.slice.wsToken).not.toBe(live!.slice.wsToken);
   });
+});
+
+// ───────────────────────────────────────────────────────────────────────
+// Matrix 6 — action relay: `consumerPresent` threads VERBATIM through
+// guuey's headless relay (0.15.1's `createMcpUiActionRelay`) against a
+// real ggui upstream. This is the conformance receipt for the relay
+// contract named at ggui#603 (`extractConsumerPresent` reads the
+// submit-action result verbatim — a host that wraps or strips the
+// field breaks the action-toast honesty loop) and discharges
+// guuey#422's close-condition (2): one OBSERVED `consumerPresent` on a
+// ≥0.15.1 surface.
+//
+// Two arms, deliberately: the false arm proves the observable MOVES
+// (the assertion tracks the wire, not a constant); the true arm is the
+// receipt. Each arm gets its OWN render — a `ggui_consume` long-poll
+// drains its session's pipe immediately when a prior arm left an event
+// on it, which would unregister the consumer before the second
+// dispatch fired.
+// ───────────────────────────────────────────────────────────────────────
+
+describe('matrix 6 — action relay: consumerPresent threads verbatim through createMcpUiActionRelay', () => {
+  /** The relay a guuey host assembles: one tools/call over its channel. */
+  const relay = createMcpUiActionRelay({
+    callTool: async (_uri, name, args) =>
+      await client.callTool({ name, arguments: args ?? {} }),
+  });
+
+  interface RenderIdentity {
+    readonly sessionId: string;
+    readonly appId: string;
+    readonly locator: string;
+  }
+
+  async function renderIdentity(): Promise<RenderIdentity> {
+    const result = await renderOnce();
+    const boot = toolResultGguiRender(result);
+    expect(boot).toBeDefined();
+    const sessionId: unknown = boot!.slice.sessionId;
+    const appId: unknown = (boot!.slice as { appId?: unknown }).appId;
+    const locator: unknown = (
+      result.structuredContent as { resourceUri?: unknown }
+    ).resourceUri;
+    if (
+      typeof sessionId !== 'string' ||
+      typeof appId !== 'string' ||
+      typeof locator !== 'string'
+    ) {
+      throw new Error('render identity fields missing from the wire result');
+    }
+    return { sessionId, appId, locator };
+  }
+
+  function dispatchEnvelope(
+    id: RenderIdentity,
+    actionId: string,
+  ): Record<string, unknown> {
+    return {
+      kind: 'dispatch',
+      payload: {
+        intent: 'submit',
+        actionData: { arm: actionId },
+        uiContext: {},
+      },
+      sessionId: id.sessionId,
+      appId: id.appId,
+      actionId,
+      firedAt: new Date().toISOString(),
+    };
+  }
+
+  it(
+    'no consumer → consumerPresent:false; active ggui_consume → consumerPresent:true — boolean verbatim, never stripped by arm narrowing',
+    async () => {
+      // Arm A — no consumer registered. The server waits its doorbell
+      // grace, then answers `false`. Non-vacuity arm: if the field were
+      // hardcoded or stripped, THIS assertion catches it.
+      const armA = await renderIdentity();
+      const a = await relay({
+        resourceUri: armA.locator,
+        name: 'ggui_runtime_submit_action',
+        arguments: dispatchEnvelope(armA, 'a11ce000'),
+      });
+      expect(a.isError).not.toBe(true);
+      const sa = a.structuredContent as {
+        ok: boolean;
+        consumerPresent?: boolean;
+      };
+      expect(sa.ok).toBe(true);
+      expect(sa.consumerPresent).toBe(false);
+
+      // Arm B — the receipt. Fresh render (fresh, EMPTY pipe), a real
+      // `ggui_consume` long-poll parks on it, then the relay dispatches.
+      const armB = await renderIdentity();
+      const consume = client.callTool({
+        name: 'ggui_consume',
+        arguments: { sessionId: armB.sessionId, timeout: 15 },
+      });
+      // One beat for the long-poll to register on the active-consumer
+      // registry before the dispatch races it.
+      await new Promise((resolve) => setTimeout(resolve, 500));
+      const b = await relay({
+        resourceUri: armB.locator,
+        name: 'ggui_runtime_submit_action',
+        arguments: dispatchEnvelope(armB, 'b0b0feed'),
+      });
+      expect(b.isError).not.toBe(true);
+      const sb = b.structuredContent as {
+        ok: boolean;
+        consumerPresent?: boolean;
+      };
+      expect(sb.ok).toBe(true);
+      // THE RECEIPT (guuey#422 condition 2): observed consumerPresent
+      // === true on a ≥0.15.1 surface with a real ggui upstream, the
+      // boolean threaded verbatim through the relay's narrowing.
+      expect(sb.consumerPresent).toBe(true);
+
+      // Loop closure: the consumer actually drained the dispatched
+      // action — consumerPresent was true about something real.
+      const drained = await consume;
+      const events = (
+        drained.structuredContent as {
+          events: Array<Record<string, unknown>>;
+        }
+      ).events;
+      expect(events.some((e) => e.actionId === 'b0b0feed')).toBe(true);
+    },
+    45_000,
+  );
 });
