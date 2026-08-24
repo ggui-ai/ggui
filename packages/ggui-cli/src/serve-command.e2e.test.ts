@@ -10,6 +10,7 @@
  * port, and verify the HTTP surface is live.
  */
 import { afterEach, describe, expect, it } from 'vitest';
+import { GGUI_WAVE_VERSION } from '@ggui-ai/protocol';
 import { createGguiServer } from '@ggui-ai/mcp-server';
 import {
   DEFAULT_SERVE_HOST,
@@ -39,7 +40,10 @@ describe('runServe + createGguiServer (end-to-end)', () => {
     return {
       toolCount,
       serverName: 'ggui-mcp-server',
-      serverVersion: '0.0.1',
+      // Mirrors production: `mcp-backend.ts` feeds the CLI's own
+      // package version, which the publish wave keeps in lockstep
+      // with `GGUI_WAVE_VERSION` (never a placeholder — see #622).
+      serverVersion: GGUI_WAVE_VERSION,
       primitiveCatalogCount: inner.primitiveCatalogs.length,
       themeSource: inner.theme.source,
       pairingService: inner.pairingService,
@@ -115,7 +119,10 @@ describe('runServe + createGguiServer (end-to-end)', () => {
     expect(body).toMatchObject({
       status: 'ok',
       server: 'ggui-mcp-server',
-      version: '0.0.1',
+      // The health endpoint reports the server's real shipped wave
+      // (`DEFAULT_INFO.version` = `GGUI_WAVE_VERSION`), not a
+      // hand-typed placeholder — the 0.12.0 cut's truth-class fix.
+      version: GGUI_WAVE_VERSION,
     });
     // Bare `ggui serve` (no `ggui.json` in cwd) registers the
     // always-on subset: 2 blueprint-read handlers + the render-
