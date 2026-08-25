@@ -18,7 +18,10 @@
  *
  * Flow (setup.sh step 4, after the cohort publish):
  *   1. Scan oss/samples/**\/package.json for @guuey/* pins (exact by design —
- *      the samples deliberately never share a hoist with workspace HEAD).
+ *      the samples deliberately never share a hoist with workspace HEAD)
+ *      AND for the samples' OWN @ggui-ai/* specs (ggui#618: the with-guuey
+ *      cells' published-posture caret ranges, e.g. agent-server@^0.11.0 —
+ *      workspace:* specs are compose-rewritten and skipped).
  *   2. BFS the @guuey/* dependency closure against real npm (`npm view`),
  *      collecting every @ggui-ai/* dep spec it requires.
  *   3. Read the locally-published cohort (same derivation as the publisher:
@@ -54,6 +57,38 @@ const REAL_NPM = 'https://registry.npmjs.org';
 
 /** Exact semver (optionally prerelease) — the only spec shape npm 404s on. */
 const EXACT_VERSION = /^\d+\.\d+\.\d+(-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$/;
+const CARET_RANGE = /^\^(\d+)\.(\d+)\.(\d+)$/;
+
+/**
+ * PURE npm-caret satisfaction check — does `version` satisfy `spec`?
+ * (ggui#618 RCA: the samples' own @ggui-ai/* deps are legitimate RANGES —
+ * published posture, unlike the exact-pin @guuey regime — and the moment the
+ * local cohort bumps past a cell's caret, the range 404s inside the
+ * local-only Verdaccio. Deciding "does the cohort satisfy this caret?" purely
+ * is the first half of the fix; seeding real npm's max-satisfying version
+ * when it does not is the second.)
+ *
+ * Caret semantics (npm): changes must not modify the left-most non-zero
+ * digit — ^1.2.3 → [1.2.3, 2.0.0); ^0.11.0 → [0.11.0, 0.12.0);
+ * ^0.0.3 → [0.0.3, 0.0.4).
+ *
+ * @returns {boolean | null} true/false when decidable; null when the spec is
+ *   not a plain caret range or either side carries a prerelease — callers
+ *   route null to the loud `indeterminate` path, never guess.
+ */
+export function caretSatisfies(spec, version) {
+  const m = CARET_RANGE.exec(spec);
+  if (!m) return null;
+  if (!EXACT_VERSION.test(version) || version.includes('-')) return null;
+  const [lo0, lo1, lo2] = [Number(m[1]), Number(m[2]), Number(m[3])];
+  const [v0, v1, v2] = version.split('.').map(Number);
+  // Below the floor → never satisfies.
+  if (compareSemver(version, `${lo0}.${lo1}.${lo2}`) < 0) return false;
+  // At/above the floor: bound by the left-most non-zero digit.
+  if (lo0 > 0) return v0 === lo0;
+  if (lo1 > 0) return v0 === 0 && v1 === lo1;
+  return v0 === 0 && v1 === 0 && v2 === lo2;
+}
 
 /**
  * PURE decision function (no network, no fs) — which @ggui-ai/* pins must be
@@ -67,16 +102,24 @@ const EXACT_VERSION = /^\d+\.\d+\.\d+(-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$/;
  * @returns {{
  *   seed: Array<{name: string, version: string, requiredBy: string[], cohortVersion: string | null}>,
  *   satisfied: Array<{name: string, spec: string, requiredBy: string}>,
+ *   resolveOnNpm: Array<{name: string, spec: string, requiredBy: string}>,
  *   indeterminate: Array<{name: string, spec: string, requiredBy: string}>,
  * }}
  *   `seed` — exact pins the cohort does not carry (dedup by name@version);
- *   `satisfied` — exact pins the cohort covers verbatim;
- *   `indeterminate` — non-exact specs (ranges resolve against whatever the
- *   local-only registry holds; flagged for a loud warning, never seeded).
+ *   `satisfied` — specs the cohort covers (exact verbatim, or a caret range
+ *   the cohort version satisfies — the compose then installs the cohort);
+ *   `resolveOnNpm` — caret ranges the cohort does NOT satisfy (ggui#618:
+ *   the samples' own @ggui-ai deps — the caller resolves each to real npm's
+ *   max-satisfying version and seeds that, mirroring what a real-world
+ *   install would get);
+ *   `indeterminate` — every other non-exact spec (flagged for a loud
+ *   warning, never seeded — the tripwire that says this logic needs
+ *   widening).
  */
 export function computeSeedList(pins, cohort) {
   const seedByKey = new Map();
   const satisfied = [];
+  const resolveOnNpm = [];
   const indeterminate = [];
 
   for (const pin of pins) {
@@ -87,7 +130,15 @@ export function computeSeedList(pins, cohort) {
       );
     }
     if (!EXACT_VERSION.test(pin.spec)) {
-      indeterminate.push(pin);
+      const cohortVersion = Object.hasOwn(cohort, pin.name) ? cohort[pin.name] : null;
+      const verdict = cohortVersion === null ? false : caretSatisfies(pin.spec, cohortVersion);
+      if (verdict === true) {
+        satisfied.push(pin);
+      } else if (verdict === false && CARET_RANGE.test(pin.spec)) {
+        resolveOnNpm.push(pin);
+      } else {
+        indeterminate.push(pin);
+      }
       continue;
     }
     const cohortVersion = Object.hasOwn(cohort, pin.name) ? cohort[pin.name] : null;
@@ -109,10 +160,47 @@ export function computeSeedList(pins, cohort) {
     }
   }
 
-  return { seed: [...seedByKey.values()], satisfied, indeterminate };
+  return { seed: [...seedByKey.values()], satisfied, resolveOnNpm, indeterminate };
 }
 
 /* ────────────────────────── gather (fs + network) ────────────────────────── */
+
+/**
+ * Walk oss/samples for package.json files; collect the samples' OWN
+ * @ggui-ai/* dep specs (ggui#618 RCA). Two spec regimes live in the samples:
+ *   - `workspace:*` (workspace-member samples, e.g. ggui-basic-web) —
+ *     compose-app.mjs rewrites these to the cohort at compose time, so they
+ *     NEVER reach npm install as ranges. Skipped here.
+ *   - published ranges (the workspace-EXCLUDED with-guuey cells, e.g.
+ *     `@ggui-ai/agent-server: ^0.11.0`) — compose leaves these untouched by
+ *     design (published posture), so they hit the local-only Verdaccio raw.
+ *     The moment the cohort bumps past the range (0.12.0 vs ^0.11.0), npm
+ *     ETARGETs inside the cell — the exact break behind the Aug 10–25
+ *     nightly streak. These are what this collector feeds the seeder.
+ */
+function collectGguiSampleSpecs(root) {
+  const specs = [];
+  const visit = (dir) => {
+    for (const entry of readdirSync(dir)) {
+      const p = join(dir, entry);
+      if (statSync(p).isDirectory()) {
+        if (entry === 'node_modules') continue;
+        visit(p);
+      } else if (entry === 'package.json') {
+        const pkg = JSON.parse(readFileSync(p, 'utf8'));
+        for (const field of ['dependencies', 'devDependencies']) {
+          for (const [name, spec] of Object.entries(pkg[field] ?? {})) {
+            if (name.startsWith('@ggui-ai/') && !spec.startsWith('workspace:')) {
+              specs.push({ name, spec, requiredBy: pkg.name ?? p });
+            }
+          }
+        }
+      }
+    }
+  };
+  visit(root);
+  return specs;
+}
 
 /** Walk oss/samples for package.json files; collect @guuey/* dep pins. */
 function collectGuueyPins(root) {
@@ -455,8 +543,18 @@ function main() {
     `[seed] resolving @ggui-ai/* deps of ${guueyPins.length} @guuey/* sample pins against real npm`,
   );
   const gguiPins = resolveGguiPinsFromGuueyClosure(guueyPins);
+  // ggui#618: the samples' OWN @ggui-ai/* ranges (the with-guuey cells'
+  // published-posture deps) join the closure pins — same seeding decision,
+  // different spec regime (caret ranges instead of exact pins).
+  const sampleSpecs = collectGguiSampleSpecs(SAMPLES_ROOT);
+  console.log(
+    `[seed] ${sampleSpecs.length} sample-declared @ggui-ai/* spec(s) join the seed decision`,
+  );
   const cohort = readCohort();
-  const { seed, satisfied, indeterminate } = computeSeedList(gguiPins, cohort);
+  const { seed, satisfied, resolveOnNpm, indeterminate } = computeSeedList(
+    [...gguiPins, ...sampleSpecs],
+    cohort,
+  );
 
   for (const pin of indeterminate) {
     console.log(
@@ -466,7 +564,29 @@ function main() {
     );
   }
   for (const pin of satisfied) {
-    console.log(`[seed] ${pin.name}@${pin.spec} (from ${pin.requiredBy}) == local cohort — ok`);
+    console.log(`[seed] ${pin.name}@${pin.spec} (from ${pin.requiredBy}) — local cohort satisfies, ok`);
+  }
+  // Resolve each cohort-unsatisfied caret against real npm — the version a
+  // real-world install would get — and seed exactly that (dedup name@version).
+  for (const pin of resolveOnNpm) {
+    const version = resolveVersionOnNpm(pin.name, pin.spec);
+    const cohortVersion = Object.hasOwn(cohort, pin.name) ? cohort[pin.name] : null;
+    const existing = seed.find((s) => s.name === pin.name && s.version === version);
+    if (existing) {
+      existing.requiredBy.push(`${pin.requiredBy} (range ${pin.spec})`);
+    } else {
+      seed.push({
+        name: pin.name,
+        version,
+        requiredBy: [`${pin.requiredBy} (range ${pin.spec})`],
+        cohortVersion,
+      });
+    }
+    console.log(
+      `[seed] sample range ${pin.name}@${pin.spec} (from ${pin.requiredBy}) is NOT ` +
+        `satisfied by local cohort ${cohortVersion ?? '<not in cohort>'} — seeding ` +
+        `real-npm max-satisfying ${version}`,
+    );
   }
   if (seed.length === 0) {
     console.log('[seed] no upstream-pin seeding needed (cohort == all pins)');
@@ -522,14 +642,56 @@ function selfTest() {
     fail('a pin on a package absent from the cohort must seed (cohortVersion null)');
   }
 
-  // Non-exact spec → indeterminate (warned), NEVER seeded.
+  // Caret range the cohort does NOT satisfy → resolveOnNpm (ggui#618: the
+  // caller then seeds real npm's max-satisfying version). 0.x carets bound
+  // at the minor: ^0.6.0 excludes 0.7.0.
   const range = computeSeedList(
-    [{ name: '@ggui-ai/protocol', spec: '^0.6.0', requiredBy: '@guuey/y@1.0.0' }],
+    [{ name: '@ggui-ai/protocol', spec: '^0.6.0', requiredBy: 'with-guuey-web-sample' }],
     { '@ggui-ai/protocol': '0.7.0' },
   );
-  if (range.seed.length !== 0 || range.indeterminate.length !== 1) {
-    fail('a range spec must land in indeterminate, never in seed');
+  if (range.seed.length !== 0 || range.resolveOnNpm.length !== 1 || range.indeterminate.length !== 0) {
+    fail('a cohort-unsatisfied caret must land in resolveOnNpm (the ggui#618 class)');
   }
+
+  // Caret range the cohort DOES satisfy → satisfied (compose installs the
+  // cohort; nothing seeds — the harness's most-valuable posture).
+  const caretOk = computeSeedList(
+    [{ name: '@ggui-ai/protocol', spec: '^0.7.0', requiredBy: 'with-guuey-web-sample' }],
+    { '@ggui-ai/protocol': '0.7.3' },
+  );
+  if (caretOk.satisfied.length !== 1 || caretOk.resolveOnNpm.length !== 0 || caretOk.seed.length !== 0) {
+    fail('a cohort-satisfied caret must be satisfied, never seeded');
+  }
+
+  // Caret on a package the cohort does not publish → resolveOnNpm.
+  const caretGone = computeSeedList(
+    [{ name: '@ggui-ai/retired', spec: '^0.5.0', requiredBy: 'with-guuey-web-sample' }],
+    { '@ggui-ai/protocol': '0.7.0' },
+  );
+  if (caretGone.resolveOnNpm.length !== 1) {
+    fail('a caret on a cohort-absent package must land in resolveOnNpm');
+  }
+
+  // Any OTHER range form stays indeterminate (warned, never seeded) — the
+  // loud tripwire that says the range logic needs widening.
+  const tilde = computeSeedList(
+    [{ name: '@ggui-ai/protocol', spec: '~0.6.0', requiredBy: '@guuey/y@1.0.0' }],
+    { '@ggui-ai/protocol': '0.7.0' },
+  );
+  if (tilde.seed.length !== 0 || tilde.resolveOnNpm.length !== 0 || tilde.indeterminate.length !== 1) {
+    fail('a non-caret range must land in indeterminate, never in seed/resolveOnNpm');
+  }
+
+  // caretSatisfies — the pure half of the ggui#618 fix.
+  if (caretSatisfies('^0.11.0', '0.11.5') !== true) fail('^0.11.0 must accept 0.11.5');
+  if (caretSatisfies('^0.11.0', '0.12.0') !== false) fail('^0.11.0 must reject 0.12.0 (0.x bounds at the minor)');
+  if (caretSatisfies('^0.11.2', '0.11.1') !== false) fail('^0.11.2 must reject 0.11.1 (below floor)');
+  if (caretSatisfies('^1.2.3', '1.9.0') !== true) fail('^1.2.3 must accept 1.9.0');
+  if (caretSatisfies('^1.2.3', '2.0.0') !== false) fail('^1.2.3 must reject 2.0.0');
+  if (caretSatisfies('^0.0.3', '0.0.4') !== false) fail('^0.0.3 must reject 0.0.4 (0.0.x bounds at the patch)');
+  if (caretSatisfies('^0.0.3', '0.0.3') !== true) fail('^0.0.3 must accept 0.0.3');
+  if (caretSatisfies('~1.2.3', '1.2.4') !== null) fail('a non-caret spec must return null (indeterminate)');
+  if (caretSatisfies('^1.2.3', '1.3.0-rc.1') !== null) fail('a prerelease version must return null (indeterminate)');
 
   // Two requirers of the same exact pin → ONE seed entry, both attributed.
   const dedup = computeSeedList(
@@ -596,9 +758,9 @@ function selfTest() {
   }
 
   console.log(
-    '✓ seed-upstream-pins self-test: decision logic (5 cases + the ' +
-      'non-@ggui-ai defensive invariant) + version comparator (7 cases incl. ' +
-      'reachable empty-range negative)',
+    '✓ seed-upstream-pins self-test: decision logic (8 cases + the ' +
+      'non-@ggui-ai defensive invariant) + caretSatisfies (9 cases, ggui#618) ' +
+      '+ version comparator (7 cases incl. reachable empty-range negative)',
   );
 }
 
