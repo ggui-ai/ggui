@@ -166,6 +166,79 @@ export function computeSeedList(pins, cohort) {
 /* ────────────────────────── gather (fs + network) ────────────────────────── */
 
 /**
+ * PURE classification of one @ggui-ai/* dep OF A SEEDED PACKAGE against the
+ * versions the local-only registry will hold (`available` = cohort version +
+ * every already-planned seed of that name). ggui#618 round 2: seeds must be
+ * TRANSITIVELY closed — a seeded @ggui-ai/agent-server@0.11.0 itself pins
+ * @ggui-ai/protocol@0.11.0, which routes to the local-only registry too and
+ * ETARGETs unless seeded alongside.
+ *
+ * @returns {'satisfied' | 'seed-exact' | 'resolve' | 'indeterminate'}
+ */
+export function classifySeedDep(spec, available) {
+  if (EXACT_VERSION.test(spec)) {
+    return available.includes(spec) ? 'satisfied' : 'seed-exact';
+  }
+  if (CARET_RANGE.test(spec)) {
+    return available.some((v) => caretSatisfies(spec, v) === true) ? 'satisfied' : 'resolve';
+  }
+  return 'indeterminate';
+}
+
+/**
+ * Transitively close the seed list over the @ggui-ai/* deps of every seeded
+ * package (network: npm view per seed; decision: classifySeedDep, pure).
+ * Mutates `seed` in place; returns the entries it added. Non-@ggui-ai deps
+ * are out of scope — only @ggui-ai/* routes to the local-only registry.
+ */
+function expandSeedClosure(seed, cohort) {
+  const added = [];
+  const visited = new Set(seed.map((s) => `${s.name}@${s.version}`));
+  const queue = [...seed];
+  const availableFor = (name) => {
+    const versions = seed.filter((s) => s.name === name).map((s) => s.version);
+    if (Object.hasOwn(cohort, name)) versions.push(cohort[name]);
+    return versions;
+  };
+  while (queue.length > 0) {
+    const entry = queue.shift();
+    const depFields = npmViewDepFields(entry.name, entry.version);
+    for (const [depName, depSpec] of Object.entries(depFields)) {
+      if (!depName.startsWith('@ggui-ai/')) continue;
+      const verdict = classifySeedDep(depSpec, availableFor(depName));
+      if (verdict === 'satisfied') continue;
+      if (verdict === 'indeterminate') {
+        console.log(
+          `[seed] WARNING: seeded ${entry.name}@${entry.version} dep ` +
+            `"${depName}@${depSpec}" is neither exact nor caret — cannot ` +
+            'statically verify it is satisfiable in the local-only registry',
+        );
+        continue;
+      }
+      const version =
+        verdict === 'seed-exact' ? depSpec : resolveVersionOnNpm(depName, depSpec);
+      const key = `${depName}@${version}`;
+      if (visited.has(key)) continue;
+      visited.add(key);
+      const next = {
+        name: depName,
+        version,
+        requiredBy: [`${entry.name}@${entry.version} (transitive ${depSpec})`],
+        cohortVersion: Object.hasOwn(cohort, depName) ? cohort[depName] : null,
+      };
+      seed.push(next);
+      added.push(next);
+      queue.push(next);
+      console.log(
+        `[seed] transitive: ${key} required by seeded ${entry.name}@${entry.version} ` +
+          `(spec ${depSpec}) — joining the seed list`,
+      );
+    }
+  }
+  return added;
+}
+
+/**
  * Walk oss/samples for package.json files; collect the samples' OWN
  * @ggui-ai/* dep specs (ggui#618 RCA). Two spec regimes live in the samples:
  *   - `workspace:*` (workspace-member samples, e.g. ggui-basic-web) —
@@ -592,6 +665,13 @@ function main() {
     console.log('[seed] no upstream-pin seeding needed (cohort == all pins)');
     return;
   }
+  // ggui#618 round 2: close the seed set over the seeded packages' OWN
+  // @ggui-ai deps (a seeded agent-server@0.11.0 pins protocol@0.11.0 —
+  // also local-only-routed, also absent from the cohort registry).
+  const transitive = expandSeedClosure(seed, cohort);
+  if (transitive.length > 0) {
+    console.log(`[seed] +${transitive.length} transitive seed(s) from the closure expansion`);
+  }
   seedPackages(seed, registry);
 }
 
@@ -693,6 +773,25 @@ function selfTest() {
   if (caretSatisfies('~1.2.3', '1.2.4') !== null) fail('a non-caret spec must return null (indeterminate)');
   if (caretSatisfies('^1.2.3', '1.3.0-rc.1') !== null) fail('a prerelease version must return null (indeterminate)');
 
+  // classifySeedDep — the transitive-closure half of the ggui#618 fix
+  // (seeded agent-server@0.11.0 pins protocol@0.11.0; registry holds
+  // cohort 0.12.0 + planned seeds only).
+  if (classifySeedDep('0.11.0', ['0.12.0']) !== 'seed-exact') {
+    fail('an exact transitive dep absent from available versions must seed');
+  }
+  if (classifySeedDep('0.11.0', ['0.12.0', '0.11.0']) !== 'satisfied') {
+    fail('an exact transitive dep already available must be satisfied');
+  }
+  if (classifySeedDep('^0.11.0', ['0.12.0']) !== 'resolve') {
+    fail('a caret transitive dep unsatisfied by available versions must resolve on npm');
+  }
+  if (classifySeedDep('^0.11.0', ['0.12.0', '0.11.2']) !== 'satisfied') {
+    fail('a caret transitive dep satisfied by a planned seed must be satisfied');
+  }
+  if (classifySeedDep('~0.11.0', ['0.11.0']) !== 'indeterminate') {
+    fail('a non-caret transitive range must be indeterminate (loud tripwire)');
+  }
+
   // Two requirers of the same exact pin → ONE seed entry, both attributed.
   const dedup = computeSeedList(
     [
@@ -759,7 +858,7 @@ function selfTest() {
 
   console.log(
     '✓ seed-upstream-pins self-test: decision logic (8 cases + the ' +
-      'non-@ggui-ai defensive invariant) + caretSatisfies (9 cases, ggui#618) ' +
+      'non-@ggui-ai defensive invariant) + caretSatisfies (9 cases, ggui#618) + classifySeedDep (5 transitive-closure cases) ' +
       '+ version comparator (7 cases incl. reachable empty-range negative)',
   );
 }
