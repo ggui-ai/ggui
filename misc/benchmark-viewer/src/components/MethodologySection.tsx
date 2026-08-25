@@ -61,6 +61,18 @@ const DIMENSIONS: ReadonlyArray<{ label: string; definition: string }> = [
  */
 const CHANGELOG: ReadonlyArray<{ date: string; text: string }> = [
   {
+    date: '2026-08-25',
+    text:
+      'Post-hoc finding on the 2026-08-19 judge-coverage collapse: a second ' +
+      'candidate cause surfaced — a billing suspension on the account behind ' +
+      'the Gemini judge key overlapped that window (all 30 google-variant ' +
+      'cells generated but zero were judged; generation preceded judging in ' +
+      'each cell). Retroactively indistinguishable from judge rate limiting ' +
+      'because failures were silently swallowed at the time — the defect the ' +
+      '2026-08-20 resilience change fixed. No scores changed; billing alerts ' +
+      'now exist on that account, so a repeat fails loudly.',
+  },
+  {
     date: '2026-08-21',
     text:
       'Cadence: weekly → change-triggered. The full matrix now fires only ' +
