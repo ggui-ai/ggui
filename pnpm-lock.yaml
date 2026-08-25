@@ -54,7 +54,7 @@ overrides:
   '@opentelemetry/core@<2.8.0': ^2.8.0
   adm-zip@<0.6.0: ^0.6.0
   immutable@<3.8.3: ^3.8.3
-  '@guuey/mcp-apps-host': 0.16.0
+  '@guuey/mcp-apps-host': 0.16.1
   '@a2a-js/sdk': 0.3.14
   '@adobe/css-tools': 4.5.0
   '@anthropic-ai/bedrock-sdk': 0.32.1
@@ -90,8 +90,8 @@ overrides:
   '@babel/runtime@^7': 7.29.7
   '@babel/runtime@^8': 8.0.0
   '@google-cloud/storage': 7.21.0
-  '@guuey/mcp-apps-host@0.16.x': 0.16.0
-  '@guuey/threads': 0.16.0
+  '@guuey/mcp-apps-host@0.16.x': 0.16.1
+  '@guuey/threads': 0.16.1
   '@hono/node-server': 2.1.0
   '@huggingface/jinja': 0.5.9
   '@jsonjoy.com/fs-core': 4.66.1
@@ -288,11 +288,11 @@ importers:
         specifier: workspace:*
         version: link:../../packages/protocol
       '@guuey/mcp-apps-host':
-        specifier: 0.16.0
-        version: 0.16.0(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(zod@4.4.3)
+        specifier: 0.16.1
+        version: 0.16.1(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(zod@4.4.3)
       '@guuey/threads':
-        specifier: 0.16.0
-        version: 0.16.0(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(vitest@3.2.7(@types/node@24.13.3)(happy-dom@20.11.1)(jsdom@25.0.1)(lightningcss@1.33.0)(terser@5.49.0)(tsx@4.23.5)(yaml@2.8.3))(zod@4.4.3)
+        specifier: 0.16.1
+        version: 0.16.1(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(vitest@3.2.7(@types/node@24.13.3)(happy-dom@20.11.1)(jsdom@25.0.1)(lightningcss@1.33.0)(terser@5.49.0)(tsx@4.23.5)(yaml@2.8.3))(zod@4.4.3)
       '@modelcontextprotocol/sdk':
         specifier: 1.30.0
         version: 1.30.0(zod@4.4.3)
@@ -2977,16 +2977,16 @@ packages:
     engines: {node: '>=6'}
     hasBin: true
 
-  '@guuey/mcp-apps-host@0.16.0':
-    resolution: {integrity: sha512-W8OpUrJYf9O9Hv1LVjTsWtznVDpFqBDkqLneDAPv25Nle2aNr1zxxbBcCztHsJWB6F13olxlDdF4uB+7/rdN6Q==}
+  '@guuey/mcp-apps-host@0.16.1':
+    resolution: {integrity: sha512-+Tk3khR17SRJsW4jaO1/n/mJiMwciYAYgKTCSp0w/NTnfljuuYtjyRY//q+4hvW/tC30H6jAB2PKgXO40xBvvg==}
     peerDependencies:
       react: ^19.2.8
     peerDependenciesMeta:
       react:
         optional: true
 
-  '@guuey/threads@0.16.0':
-    resolution: {integrity: sha512-Ju6H27RE+Qb8PMj+pgzXCCFxiYhV7ErQT1tQlw35D/G+Uf6ThUsw9Qcpl6gE3ekzhFMQD3fsLwELsuMqTcBuVw==}
+  '@guuey/threads@0.16.1':
+    resolution: {integrity: sha512-u7/hgxSHMmTeJMjffk2Ae1aMLL46R9IegsciGE5wML721DR9N84m8SHia7JS13NyRWJR3KADK1UejV4g1GjlfA==}
     peerDependencies:
       vitest: ^3.2.7
     peerDependenciesMeta:
@@ -10908,7 +10908,7 @@ snapshots:
       protobufjs: 7.6.5
       yargs: 17.7.3
 
-  '@guuey/mcp-apps-host@0.16.0(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(zod@4.4.3)':
+  '@guuey/mcp-apps-host@0.16.1(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(zod@4.4.3)':
     dependencies:
       '@ggui-ai/protocol': 0.12.0(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       '@modelcontextprotocol/ext-apps': 1.7.5(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(zod@4.4.3)
@@ -10920,9 +10920,9 @@ snapshots:
       - react-dom
       - zod
 
-  '@guuey/threads@0.16.0(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(vitest@3.2.7(@types/node@24.13.3)(happy-dom@20.11.1)(jsdom@25.0.1)(lightningcss@1.33.0)(terser@5.49.0)(tsx@4.23.5)(yaml@2.8.3))(zod@4.4.3)':
+  '@guuey/threads@0.16.1(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(vitest@3.2.7(@types/node@24.13.3)(happy-dom@20.11.1)(jsdom@25.0.1)(lightningcss@1.33.0)(terser@5.49.0)(tsx@4.23.5)(yaml@2.8.3))(zod@4.4.3)':
     dependencies:
-      '@guuey/mcp-apps-host': 0.16.0(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(zod@4.4.3)
+      '@guuey/mcp-apps-host': 0.16.1(@modelcontextprotocol/sdk@1.30.0(zod@4.4.3))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(zod@4.4.3)
       '@silverprotocol/core': 0.5.1
     optionalDependencies:
       vitest: 3.2.7(@types/node@24.13.3)(happy-dom@20.11.1)(jsdom@25.0.1)(lightningcss@1.33.0)(terser@5.49.0)(tsx@4.23.5)(yaml@2.8.3)
