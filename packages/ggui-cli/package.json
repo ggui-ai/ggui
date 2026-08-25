@@ -1,7 +1,7 @@
 {
   "name": "@ggui-ai/cli",
   "version": "0.12.0",
-  "description": "The `ggui` CLI — run the ggui protocol locally: dev server, self-hosted MCP server, and gadget / blueprint authoring. End-to-end OSS and self-hosted workflows; no account required.",
+  "description": "The `ggui` CLI \u2014 run the ggui protocol locally: dev server, self-hosted MCP server, and gadget / blueprint authoring. End-to-end OSS and self-hosted workflows; no account required.",
   "keywords": [
     "ggui",
     "cli",
@@ -33,7 +33,7 @@
     "README.md"
   ],
   "scripts": {
-    "build": "rm -rf dist && tsc -p tsconfig.build.json && chmod +x dist/cli.js",
+    "build": "rm -rf dist.staging && tsc -p tsconfig.build.json --outDir dist.staging && chmod +x dist.staging/cli.js && node ../scripts/atomic-swap.mjs dist.staging dist",
     "dev": "tsc --watch",
     "typecheck": "tsc --noEmit",
     "test": "vitest run --passWithNoTests",

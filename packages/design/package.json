@@ -1,7 +1,7 @@
 {
   "name": "@ggui-ai/design",
   "version": "0.12.0",
-  "description": "ggui design system — themeable React primitives, components, compositions, and design tokens. Bare-barrel import for component code, renderer-facing subpaths for integrators; runtime theming via DTCG token injection.",
+  "description": "ggui design system \u2014 themeable React primitives, components, compositions, and design tokens. Bare-barrel import for component code, renderer-facing subpaths for integrators; runtime theming via DTCG token injection.",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -81,7 +81,7 @@
     "!**/*.stories.d.ts.map"
   ],
   "scripts": {
-    "build": "rm -rf dist && tsc -p tsconfig.build.json && node ../scripts/fix-esm-imports.mjs dist && node scripts/generate-inline-modules.mjs && pnpm run generate:docs && pnpm run generate:docs-ts",
+    "build": "rm -rf dist.staging && tsc -p tsconfig.build.json --outDir dist.staging && node ../scripts/fix-esm-imports.mjs dist.staging && node ../scripts/atomic-swap.mjs dist.staging dist && node scripts/generate-inline-modules.mjs && pnpm run generate:docs && pnpm run generate:docs-ts",
     "build:inline": "node scripts/generate-inline-modules.mjs",
     "dev": "tsc --watch",
     "typecheck": "tsc --noEmit",

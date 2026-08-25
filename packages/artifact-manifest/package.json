@@ -1,7 +1,7 @@
 {
   "name": "@ggui-ai/artifact-manifest",
   "version": "0.12.0",
-  "description": "Strict zod schemas + parsers for ggui marketplace artifact manifests — ggui.gadget.json (gadget bundles) and ggui.blueprint.json (cached UI blueprints).",
+  "description": "Strict zod schemas + parsers for ggui marketplace artifact manifests \u2014 ggui.gadget.json (gadget bundles) and ggui.blueprint.json (cached UI blueprints).",
   "license": "Apache-2.0",
   "keywords": [
     "ggui",
@@ -26,7 +26,7 @@
     }
   },
   "scripts": {
-    "build": "rm -rf dist && tsc -p tsconfig.build.json",
+    "build": "rm -rf dist.staging && tsc -p tsconfig.build.json --outDir dist.staging && node ../scripts/atomic-swap.mjs dist.staging dist",
     "dev": "tsc --watch",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",

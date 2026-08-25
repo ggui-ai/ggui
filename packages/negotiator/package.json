@@ -1,7 +1,7 @@
 {
   "name": "@ggui-ai/negotiator",
   "version": "0.12.0",
-  "description": "Contract-synthesis + match-judge engine for ggui's handshake. Synthesizes or repairs a conforming DataContract from an agent's draft, judges blueprint-match candidates for reuse, and validates contract structure + novelty — the primitives composed by decideHandshake in @ggui-ai/mcp-server-handlers. Deployment-agnostic: concrete embedding and vector-store bindings plug in via the storage interfaces from @ggui-ai/mcp-server-core.",
+  "description": "Contract-synthesis + match-judge engine for ggui's handshake. Synthesizes or repairs a conforming DataContract from an agent's draft, judges blueprint-match candidates for reuse, and validates contract structure + novelty \u2014 the primitives composed by decideHandshake in @ggui-ai/mcp-server-handlers. Deployment-agnostic: concrete embedding and vector-store bindings plug in via the storage interfaces from @ggui-ai/mcp-server-core.",
   "license": "Apache-2.0",
   "keywords": [
     "ggui",
@@ -47,7 +47,7 @@
     }
   },
   "scripts": {
-    "build": "rm -rf dist && tsc -p tsconfig.build.json",
+    "build": "rm -rf dist.staging && tsc -p tsconfig.build.json --outDir dist.staging && node ../scripts/atomic-swap.mjs dist.staging dist",
     "dev": "tsc --watch",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
