@@ -8,7 +8,7 @@
   },
   "dependencies": {
     "@guuey/worker": "0.12.0",
-    "@anthropic-ai/claude-agent-sdk": "^0.3.233"
+    "@anthropic-ai/claude-agent-sdk": "^0.3.238"
   },
   "devDependencies": {
     "@guuey/cli": "0.12.0"
