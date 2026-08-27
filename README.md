@@ -12,7 +12,7 @@
   <a href="https://github.com/ggui-ai/ggui/releases">Releases</a>
 </p>
 
-> 🚧 **Active development — iterating on `v0.1.0` release candidates.** APIs are converging; pin exact versions (see badges below) and watch [Releases](https://github.com/ggui-ai/ggui/releases) for the next RC and the v0.1.0 final.
+> 🚧 **Active development — pre-1.0.** All 32 `@ggui-ai/*` packages ship in lockstep minor waves (currently `0.12.x`); the protocol is a draft and may still change between waves. Pin exact versions (see badges below) and watch [Releases](https://github.com/ggui-ai/ggui/releases) for each wave's notes; `v1.0` marks the protocol freeze.
 
 ---
 
