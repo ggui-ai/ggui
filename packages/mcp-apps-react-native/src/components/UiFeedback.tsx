@@ -3,28 +3,32 @@
  * shell chrome ("did this generated UI work for you?").
  *
  * Platform delta (vs `ggui-react/src/components/UiFeedback.tsx`):
- *   - DOM elements (`div` / `button` / `form` / `input`) become RN
- *     primitives (`View` / `Pressable` / `Text` / `TextInput`).
+ *   - DOM elements (`div` / `button`) become RN primitives
+ *     (`View` / `Pressable` / `Text`).
  *   - Inline styles with `--ggui-*` CSS-variable hooks become
  *     `StyleSheet.create` constants carrying the same neutral palette
  *     the web copy uses as its variable fallbacks (RN has no CSS
  *     variable layer).
  *   - `data-ggui-ui-feedback*` styling/test hooks become `testID`s
  *     (`ggui-ui-feedback`, `ggui-ui-feedback-verdict-<verdict>`, …).
- *   - The comment `<form>` submit becomes a Send `Pressable` plus the
- *     `TextInput`'s `onSubmitEditing` (keyboard return key).
  *   - `role` / `aria-label` become `accessibilityLabel` /
  *     `accessibilityRole` props.
+ *   - The web copy's monochrome stroked SVG thumbs become 👍 / 👎
+ *     emoji glyphs in `Text` (#653 lean call: `react-native-svg` is
+ *     not a dependency of this package and one chrome row does not
+ *     justify adding it to the lockstep wave; the glyph renders in the
+ *     platform's emoji face rather than the theme ink — revisit if a
+ *     ggui icon dependency ever lands for other reasons).
  * The exported surface is identical to the web copy — pinned by the
  * twin-parity gate (`DOCUMENTED_DELTA_TWINS`).
  *
- * Three verdicts — Love / Dislike / Other (free-text comment) — plus a
- * dismiss control. Entirely host-driven: the component renders NOTHING
- * unless the host passes `onUiFeedback`, so deployments that don't
- * collect feedback never show a dead affordance. Where the payload
- * goes is the host's choice — a logger, an analytics client, a support
- * inbox; this component only builds the typed {@link UiFeedbackPayload}
- * and hands it over.
+ * Two verdicts — thumbs up / thumbs down (#653) — plus a dismiss
+ * control. Entirely host-driven: the component renders NOTHING unless
+ * the host passes `onUiFeedback`, so deployments that don't collect
+ * feedback never show a dead affordance. Where the payload goes is
+ * the host's choice — a logger, an analytics client, a support inbox;
+ * this component only builds the typed {@link UiFeedbackPayload} and
+ * hands it over.
  *
  * Zero wire surface: feedback never crosses the agent ↔ UI contract.
  * It is host-app chrome (Data vs Behavior — the agent cannot observe
@@ -50,20 +54,17 @@
  * choice safe: omitting `onUiFeedback` fully disables this surface.
  */
 import { useCallback, useState } from 'react';
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-/** The three feedback verdicts the affordance can emit. */
-export type UiFeedbackVerdict = 'love' | 'dislike' | 'other';
+/** The two feedback verdicts the affordance can emit. */
+export type UiFeedbackVerdict = 'up' | 'down';
 
 /**
  * Payload handed to {@link UiFeedbackProps.onUiFeedback}. Context
- * fields are present exactly when the host supplied them as props;
- * `comment` is present only for `verdict: 'other'` with a non-empty
- * trimmed comment.
+ * fields are present exactly when the host supplied them as props.
  */
 export interface UiFeedbackPayload {
   verdict: UiFeedbackVerdict;
-  comment?: string;
   /** GguiSession id of the render the feedback is about. */
   sessionId?: string;
   /** Tool that produced the render (e.g. `ggui_render`). */
@@ -82,19 +83,26 @@ export interface UiFeedbackProps {
   toolName?: string;
 }
 
-type Phase = 'idle' | 'comment' | 'sent' | 'dismissed';
+type Phase = 'idle' | 'sent' | 'dismissed';
+
+const VERDICT_GLYPHS: Record<UiFeedbackVerdict, string> = {
+  up: '👍',
+  down: '👎',
+};
+
+const VERDICT_LABELS: Record<UiFeedbackVerdict, string> = {
+  up: 'Thumbs up',
+  down: 'Thumbs down',
+};
 
 export function UiFeedback({ onUiFeedback, sessionId, toolName }: UiFeedbackProps) {
   const [phase, setPhase] = useState<Phase>('idle');
-  const [comment, setComment] = useState('');
 
   const emit = useCallback(
-    (verdict: UiFeedbackVerdict, commentText?: string) => {
+    (verdict: UiFeedbackVerdict) => {
       if (!onUiFeedback) return;
-      const trimmed = commentText?.trim();
       onUiFeedback({
         verdict,
-        ...(trimmed !== undefined && trimmed.length > 0 ? { comment: trimmed } : {}),
         ...(sessionId !== undefined ? { sessionId } : {}),
         ...(toolName !== undefined ? { toolName } : {}),
       });
@@ -102,10 +110,6 @@ export function UiFeedback({ onUiFeedback, sessionId, toolName }: UiFeedbackProp
     },
     [onUiFeedback, sessionId, toolName],
   );
-
-  const onCommentSubmit = useCallback(() => {
-    emit('other', comment);
-  }, [emit, comment]);
 
   // Hidden entirely: no sink wired, or the user dismissed it.
   if (!onUiFeedback || phase === 'dismissed') return null;
@@ -120,54 +124,19 @@ export function UiFeedback({ onUiFeedback, sessionId, toolName }: UiFeedbackProp
         <Text testID="ggui-ui-feedback-thanks" style={styles.thanksText}>
           Thanks for the feedback
         </Text>
-      ) : phase === 'comment' ? (
-        <View style={styles.commentForm} testID="ggui-ui-feedback-comment-form">
-          <TextInput
-            value={comment}
-            onChangeText={setComment}
-            onSubmitEditing={onCommentSubmit}
-            placeholder="What happened?"
-            accessibilityLabel="Feedback comment"
-            testID="ggui-ui-feedback-comment"
-            style={styles.commentInput}
-            autoFocus
-          />
-          <Pressable
-            accessibilityRole="button"
-            style={styles.verdictButton}
-            testID="ggui-ui-feedback-send"
-            onPress={onCommentSubmit}
-          >
-            <Text style={styles.verdictText}>Send</Text>
-          </Pressable>
-        </View>
       ) : (
-        <>
+        (['up', 'down'] as const).map((verdict) => (
           <Pressable
+            key={verdict}
             accessibilityRole="button"
+            accessibilityLabel={VERDICT_LABELS[verdict]}
             style={styles.verdictButton}
-            testID="ggui-ui-feedback-verdict-love"
-            onPress={() => emit('love')}
+            testID={`ggui-ui-feedback-verdict-${verdict}`}
+            onPress={() => emit(verdict)}
           >
-            <Text style={styles.verdictText}>Love</Text>
+            <Text style={styles.verdictText}>{VERDICT_GLYPHS[verdict]}</Text>
           </Pressable>
-          <Pressable
-            accessibilityRole="button"
-            style={styles.verdictButton}
-            testID="ggui-ui-feedback-verdict-dislike"
-            onPress={() => emit('dislike')}
-          >
-            <Text style={styles.verdictText}>Dislike</Text>
-          </Pressable>
-          <Pressable
-            accessibilityRole="button"
-            style={styles.verdictButton}
-            testID="ggui-ui-feedback-verdict-other"
-            onPress={() => setPhase('comment')}
-          >
-            <Text style={styles.verdictText}>Other…</Text>
-          </Pressable>
-        </>
+        ))
       )}
       <Pressable
         accessibilityRole="button"
@@ -199,12 +168,12 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#e5e7eb',
     borderRadius: 4,
-    paddingVertical: 2,
-    paddingHorizontal: 8,
+    paddingVertical: 3,
+    paddingHorizontal: 7,
   },
   verdictText: {
     fontSize: 12,
-    color: '#4b5563',
+    lineHeight: 14,
   },
   dismissButton: {
     paddingVertical: 2,
@@ -213,21 +182,5 @@ const styles = StyleSheet.create({
   dismissText: {
     fontSize: 12,
     color: '#9ca3af',
-  },
-  commentForm: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  commentInput: {
-    fontSize: 12,
-    paddingVertical: 2,
-    paddingHorizontal: 6,
-    minWidth: 140,
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
-    borderRadius: 4,
-    backgroundColor: '#ffffff',
-    color: '#1f2937',
   },
 });

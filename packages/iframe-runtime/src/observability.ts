@@ -170,10 +170,7 @@ export interface ChannelPollRecoveredEvent {
  * mirror `UiFeedbackPayload` in `@ggui-ai/mcp-apps-react` / `@ggui-ai/mcp-apps-react-native`
  * (the host-chrome twin of this affordance):
  *
- *   - `verdict` — `'love'` / `'dislike'`, or `'other'` for the
- *     free-text flow.
- *   - `comment` — present only for `verdict: 'other'` with a non-empty
- *     trimmed comment.
+ *   - `verdict` — `'up'` / `'down'` (the two thumb verdicts, #653).
  *   - `sessionId` / `toolName` — present exactly when the runtime knew
  *     them at mount time.
  *
@@ -194,9 +191,7 @@ export interface ChannelPollRecoveredEvent {
  */
 export interface UiFeedbackEvent {
   readonly kind: 'ui-feedback';
-  readonly verdict: 'love' | 'dislike' | 'other';
-  /** Trimmed free-text comment; only on `verdict: 'other'`, never empty. */
-  readonly comment?: string;
+  readonly verdict: 'up' | 'down';
   /** GguiSession id of the render the feedback is about. */
   readonly sessionId?: string;
   /** Tool that produced the render (e.g. `ggui_render`). */

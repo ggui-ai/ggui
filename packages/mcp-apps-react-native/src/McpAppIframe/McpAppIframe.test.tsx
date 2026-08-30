@@ -628,7 +628,7 @@ describe('<McpAppIframe> — observe envelope integration', () => {
     });
     const event = {
       kind: 'ui-feedback',
-      verdict: 'love',
+      verdict: 'up',
       sessionId: 'session-test',
     };
     await simulateFromWebView(tree, { type: 'ggui:observe', event });

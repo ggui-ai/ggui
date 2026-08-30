@@ -1,8 +1,8 @@
 /**
  * UiFeedback — behaviour tests for the render-shell feedback
- * affordance: hidden-without-callback gating, verdict payload shapes
- * (context stamping + omission of absent fields), the Other free-text
- * flow, the post-submit acknowledgement, and dismissal.
+ * affordance: hidden-without-callback gating, the two thumb verdicts
+ * (context stamping + omission of absent fields), glyph-only a11y
+ * labelling, the post-submit acknowledgement, and dismissal.
  *
  * Mirrors `ggui-react/src/components/UiFeedback.test.tsx` on the RN
  * test idiom: react-test-renderer trees, `testID` lookups in place of
@@ -55,7 +55,7 @@ describe('UiFeedback', () => {
     expect(renderer.toJSON()).toBeNull();
   });
 
-  it('emits a love verdict stamped with session context', () => {
+  it('emits an up verdict stamped with session context', () => {
     const onUiFeedback = feedbackSink();
     const renderer = mount(
       <UiFeedback
@@ -64,82 +64,47 @@ describe('UiFeedback', () => {
         toolName="ggui_render"
       />,
     );
-    press(renderer, 'ggui-ui-feedback-verdict-love');
+    press(renderer, 'ggui-ui-feedback-verdict-up');
     expect(onUiFeedback).toHaveBeenCalledTimes(1);
     expect(onUiFeedback.mock.calls[0]?.[0]).toEqual({
-      verdict: 'love',
+      verdict: 'up',
       sessionId: 'sess-1',
       toolName: 'ggui_render',
     });
   });
 
+  it('renders exactly two glyph verdict buttons with accessible names', () => {
+    const renderer = mount(<UiFeedback onUiFeedback={feedbackSink()} />);
+    const up = byTestId(renderer, 'ggui-ui-feedback-verdict-up');
+    const down = byTestId(renderer, 'ggui-ui-feedback-verdict-down');
+    // #653: the words left the row — the name lives in accessibilityLabel.
+    expect((up.props as { accessibilityLabel?: string }).accessibilityLabel).toBe(
+      'Thumbs up',
+    );
+    expect(
+      (down.props as { accessibilityLabel?: string }).accessibilityLabel,
+    ).toBe('Thumbs down');
+    // No third verdict, no free-text affordance (founder-scoped to two).
+    expect(hasTestId(renderer, 'ggui-ui-feedback-verdict-other')).toBe(false);
+    expect(hasTestId(renderer, 'ggui-ui-feedback-comment')).toBe(false);
+  });
+
   it('omits context fields the host did not supply', () => {
     const onUiFeedback = feedbackSink();
     const renderer = mount(<UiFeedback onUiFeedback={onUiFeedback} />);
-    press(renderer, 'ggui-ui-feedback-verdict-dislike');
+    press(renderer, 'ggui-ui-feedback-verdict-down');
     expect(onUiFeedback).toHaveBeenCalledTimes(1);
-    expect(onUiFeedback.mock.calls[0]?.[0]).toEqual({ verdict: 'dislike' });
+    expect(onUiFeedback.mock.calls[0]?.[0]).toEqual({ verdict: 'down' });
   });
 
-  it('opens the free-text flow on Other and sends the trimmed comment', () => {
-    const onUiFeedback = feedbackSink();
-    const renderer = mount(
-      <UiFeedback onUiFeedback={onUiFeedback} sessionId="sess-2" />,
-    );
-    press(renderer, 'ggui-ui-feedback-verdict-other');
-    // Verdict buttons collapse into the comment form; nothing emitted yet.
-    expect(onUiFeedback).not.toHaveBeenCalled();
-    const input = byTestId(renderer, 'ggui-ui-feedback-comment');
-    act(() => {
-      (input.props as { onChangeText: (text: string) => void }).onChangeText(
-        '  the chart ignored my data  ',
-      );
-    });
-    press(renderer, 'ggui-ui-feedback-send');
-    expect(onUiFeedback).toHaveBeenCalledTimes(1);
-    expect(onUiFeedback.mock.calls[0]?.[0]).toEqual({
-      verdict: 'other',
-      comment: 'the chart ignored my data',
-      sessionId: 'sess-2',
-    });
-  });
 
-  it('submits the comment from the keyboard return key too', () => {
-    const onUiFeedback = feedbackSink();
-    const renderer = mount(<UiFeedback onUiFeedback={onUiFeedback} />);
-    press(renderer, 'ggui-ui-feedback-verdict-other');
-    const input = byTestId(renderer, 'ggui-ui-feedback-comment');
-    act(() => {
-      (input.props as { onChangeText: (text: string) => void }).onChangeText('great');
-    });
-    act(() => {
-      (input.props as { onSubmitEditing: () => void }).onSubmitEditing();
-    });
-    expect(onUiFeedback).toHaveBeenCalledTimes(1);
-    expect(onUiFeedback.mock.calls[0]?.[0]).toEqual({
-      verdict: 'other',
-      comment: 'great',
-    });
-  });
 
-  it('omits a whitespace-only comment from the payload', () => {
-    const onUiFeedback = feedbackSink();
-    const renderer = mount(<UiFeedback onUiFeedback={onUiFeedback} />);
-    press(renderer, 'ggui-ui-feedback-verdict-other');
-    const input = byTestId(renderer, 'ggui-ui-feedback-comment');
-    act(() => {
-      (input.props as { onChangeText: (text: string) => void }).onChangeText('   ');
-    });
-    press(renderer, 'ggui-ui-feedback-send');
-    expect(onUiFeedback).toHaveBeenCalledTimes(1);
-    expect(onUiFeedback.mock.calls[0]?.[0]).toEqual({ verdict: 'other' });
-  });
 
   it('collapses into an acknowledgement after a verdict', () => {
     const onUiFeedback = feedbackSink();
     const renderer = mount(<UiFeedback onUiFeedback={onUiFeedback} />);
-    press(renderer, 'ggui-ui-feedback-verdict-love');
-    expect(hasTestId(renderer, 'ggui-ui-feedback-verdict-love')).toBe(false);
+    press(renderer, 'ggui-ui-feedback-verdict-up');
+    expect(hasTestId(renderer, 'ggui-ui-feedback-verdict-up')).toBe(false);
     expect(hasTestId(renderer, 'ggui-ui-feedback-thanks')).toBe(true);
   });
 
@@ -154,7 +119,7 @@ describe('UiFeedback', () => {
   it('stays dismissable from the acknowledgement state', () => {
     const onUiFeedback = feedbackSink();
     const renderer = mount(<UiFeedback onUiFeedback={onUiFeedback} />);
-    press(renderer, 'ggui-ui-feedback-verdict-dislike');
+    press(renderer, 'ggui-ui-feedback-verdict-down');
     expect(hasTestId(renderer, 'ggui-ui-feedback-thanks')).toBe(true);
     press(renderer, 'ggui-ui-feedback-dismiss');
     expect(renderer.toJSON()).toBeNull();

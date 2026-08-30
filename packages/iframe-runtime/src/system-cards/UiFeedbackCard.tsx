@@ -3,14 +3,19 @@
  * ("did this generated UI work for you?").
  *
  * The in-iframe twin of the host-chrome `UiFeedback` component in
- * `@ggui-ai/mcp-apps-react`: same three verdicts — Love / Dislike / Other
- * (free-text comment) — same acknowledgement after submit, same
- * dismiss control, same payload semantics (trimmed comment only on
- * `verdict: 'other'`, context stamps present exactly when known).
- * Where the host-chrome twin hands a payload to an `onUiFeedback`
- * callback, this card builds a {@link UiFeedbackEvent} and hands it to
- * the injected {@link ObservabilityEmitter} — production binds the
- * `ggui:observe` postMessage-to-parent default, tests record.
+ * `@ggui-ai/mcp-apps-react`: same two verdicts — thumbs up / thumbs
+ * down (#653) — same acknowledgement after submit, same dismiss
+ * control, same payload semantics (context stamps present exactly when
+ * known). Where the host-chrome twin hands a payload to an
+ * `onUiFeedback` callback, this card builds a {@link UiFeedbackEvent}
+ * and hands it to the injected {@link ObservabilityEmitter} —
+ * production binds the `ggui:observe` postMessage-to-parent default,
+ * tests record.
+ *
+ * The verdict buttons are icon-only: monochrome stroked SVGs drawn in
+ * `currentColor`, so the icon ink follows the button's `--ggui-*`
+ * color token in both modes (the #653 theme-applicability
+ * requirement). The verdict's name lives in the `aria-label`.
  *
  * This is CHROME the runtime mounts adjacent to the session root
  * (see `ui-feedback-chrome.ts`), NOT a system card: it has no
@@ -46,7 +51,7 @@ export interface UiFeedbackCardProps {
   readonly toolName?: string;
 }
 
-type Phase = 'idle' | 'comment' | 'sent' | 'dismissed';
+type Phase = 'idle' | 'sent' | 'dismissed';
 
 const FONT_FAMILY =
   "var(--ggui-font-family-sans, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif)";
@@ -62,8 +67,6 @@ function buildStyles(scheme: 'light' | 'dark'): {
   root: React.CSSProperties;
   verdictButton: React.CSSProperties;
   dismissButton: React.CSSProperties;
-  commentForm: React.CSSProperties;
-  commentInput: React.CSSProperties;
 } {
   const dark = scheme === 'dark';
   return {
@@ -80,6 +83,8 @@ function buildStyles(scheme: 'light' | 'dark'): {
     },
     verdictButton: {
       appearance: 'none',
+      display: 'inline-flex',
+      alignItems: 'center',
       background: dark
         ? 'var(--ggui-color-neutral-50, #1f2937)'
         : 'var(--ggui-color-neutral-50, #f9fafb)',
@@ -87,9 +92,10 @@ function buildStyles(scheme: 'light' | 'dark'): {
         ? '1px solid var(--ggui-color-neutral-200, #374151)'
         : '1px solid var(--ggui-color-neutral-200, #e5e7eb)',
       borderRadius: 'var(--ggui-shape-radius-sm, 4px)',
-      padding: '2px 8px',
+      padding: '3px 7px',
       fontFamily: 'inherit',
       fontSize: 'inherit',
+      // The icons stroke in currentColor — this token IS the icon ink.
       color: dark
         ? 'var(--ggui-color-neutral-600, #d1d5db)'
         : 'var(--ggui-color-neutral-600, #4b5563)',
@@ -107,30 +113,50 @@ function buildStyles(scheme: 'light' | 'dark'): {
         : 'var(--ggui-color-neutral-400, #9ca3af)',
       cursor: 'pointer',
     },
-    commentForm: {
-      display: 'inline-flex',
-      alignItems: 'center',
-      gap: 4,
-      margin: 0,
-    },
-    commentInput: {
-      fontFamily: 'inherit',
-      fontSize: 'inherit',
-      padding: '2px 6px',
-      minWidth: 140,
-      border: dark
-        ? '1px solid var(--ggui-color-neutral-200, #374151)'
-        : '1px solid var(--ggui-color-neutral-200, #e5e7eb)',
-      borderRadius: 'var(--ggui-shape-radius-sm, 4px)',
-      background: dark
-        ? 'var(--ggui-color-neutral-50, #111827)'
-        : 'var(--ggui-color-neutral-50, #ffffff)',
-      color: dark
-        ? 'var(--ggui-color-neutral-800, #e5e7eb)'
-        : 'var(--ggui-color-neutral-800, #1f2937)',
-    },
   };
 }
+
+/**
+ * Monochrome stroked thumb icons. `stroke="currentColor"` is the
+ * theme-applicability contract: the glyph takes whatever ink the
+ * button's `color` token resolves to, in either mode.
+ */
+function ThumbIcon({
+  direction,
+}: {
+  readonly direction: UiFeedbackEvent['verdict'];
+}): React.JSX.Element {
+  return (
+    <svg
+      width={13}
+      height={13}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      {direction === 'up' ? (
+        <>
+          <path d="M7 10v12" />
+          <path d="M15 5.88 14 10h5.83a2 2 0 0 1 1.92 2.56l-2.33 8A2 2 0 0 1 17.5 22H4a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2h2.76a2 2 0 0 0 1.79-1.11L12 2a3.13 3.13 0 0 1 3 3.88Z" />
+        </>
+      ) : (
+        <>
+          <path d="M17 14V2" />
+          <path d="M9 18.12 10 14H4.17a2 2 0 0 1-1.92-2.56l2.33-8A2 2 0 0 1 6.5 2H20a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-2.76a2 2 0 0 0-1.79 1.11L12 22a3.13 3.13 0 0 1-3-3.88Z" />
+        </>
+      )}
+    </svg>
+  );
+}
+
+const VERDICT_LABELS: Record<UiFeedbackEvent['verdict'], string> = {
+  up: 'Thumbs up',
+  down: 'Thumbs down',
+};
 
 export function UiFeedbackCard({
   emit,
@@ -138,31 +164,20 @@ export function UiFeedbackCard({
   toolName,
 }: UiFeedbackCardProps): React.JSX.Element | null {
   const [phase, setPhase] = React.useState<Phase>('idle');
-  const [comment, setComment] = React.useState('');
   const scheme = useColorScheme();
   const styles = buildStyles(scheme);
 
   const send = React.useCallback(
-    (verdict: UiFeedbackEvent['verdict'], commentText?: string) => {
-      const trimmed = commentText?.trim();
+    (verdict: UiFeedbackEvent['verdict']) => {
       emit({
         kind: 'ui-feedback',
         verdict,
-        ...(trimmed !== undefined && trimmed.length > 0 ? { comment: trimmed } : {}),
         ...(sessionId !== undefined ? { sessionId } : {}),
         ...(toolName !== undefined ? { toolName } : {}),
       });
       setPhase('sent');
     },
     [emit, sessionId, toolName],
-  );
-
-  const onCommentSubmit = React.useCallback(
-    (e: React.FormEvent<HTMLFormElement>) => {
-      e.preventDefault();
-      send('other', comment);
-    },
-    [send, comment],
   );
 
   if (phase === 'dismissed') return null;
@@ -176,53 +191,20 @@ export function UiFeedbackCard({
     >
       {phase === 'sent' ? (
         <span data-ggui-ui-feedback-thanks>Thanks for the feedback</span>
-      ) : phase === 'comment' ? (
-        <form
-          onSubmit={onCommentSubmit}
-          style={styles.commentForm}
-          data-ggui-ui-feedback-comment-form
-        >
-          <input
-            type="text"
-            value={comment}
-            onChange={(e) => setComment(e.target.value)}
-            placeholder="What happened?"
-            aria-label="Feedback comment"
-            data-ggui-ui-feedback-comment
-            style={styles.commentInput}
-            autoFocus
-          />
-          <button type="submit" style={styles.verdictButton} data-ggui-ui-feedback-send>
-            Send
-          </button>
-        </form>
       ) : (
-        <>
+        (['up', 'down'] as const).map((verdict) => (
           <button
+            key={verdict}
             type="button"
             style={styles.verdictButton}
-            data-ggui-ui-feedback-verdict="love"
-            onClick={() => send('love')}
+            data-ggui-ui-feedback-verdict={verdict}
+            aria-label={VERDICT_LABELS[verdict]}
+            title={VERDICT_LABELS[verdict]}
+            onClick={() => send(verdict)}
           >
-            Love
+            <ThumbIcon direction={verdict} />
           </button>
-          <button
-            type="button"
-            style={styles.verdictButton}
-            data-ggui-ui-feedback-verdict="dislike"
-            onClick={() => send('dislike')}
-          >
-            Dislike
-          </button>
-          <button
-            type="button"
-            style={styles.verdictButton}
-            data-ggui-ui-feedback-verdict="other"
-            onClick={() => setPhase('comment')}
-          >
-            Other…
-          </button>
-        </>
+        ))
       )}
       <button
         type="button"

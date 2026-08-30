@@ -1,8 +1,9 @@
 /**
  * UiFeedback — behaviour tests for the render-shell feedback
- * affordance: hidden-without-callback gating, verdict payload shapes
- * (context stamping + omission of absent fields), the Other free-text
- * flow, the post-submit acknowledgement, and dismissal.
+ * affordance: hidden-without-callback gating, the two thumb verdicts
+ * (context stamping + omission of absent fields), icon-only a11y
+ * labelling, theme-ink icon rendering, the post-submit
+ * acknowledgement, and dismissal.
  */
 import { describe, it, expect, vi } from 'vitest';
 import { fireEvent, render } from '@testing-library/react';
@@ -29,7 +30,7 @@ describe('UiFeedback', () => {
     expect(container.innerHTML).toBe('');
   });
 
-  it('emits a love verdict stamped with session context', () => {
+  it('emits an up verdict stamped with session context', () => {
     const onUiFeedback = feedbackSink();
     const { container } = render(
       <UiFeedback
@@ -38,58 +39,58 @@ describe('UiFeedback', () => {
         toolName="ggui_render"
       />,
     );
-    fireEvent.click(q(container, '[data-ggui-ui-feedback-verdict="love"]'));
+    fireEvent.click(q(container, '[data-ggui-ui-feedback-verdict="up"]'));
     expect(onUiFeedback).toHaveBeenCalledTimes(1);
     expect(onUiFeedback.mock.calls[0]?.[0]).toEqual({
-      verdict: 'love',
+      verdict: 'up',
       sessionId: 'sess-1',
       toolName: 'ggui_render',
     });
   });
 
+  it('renders exactly two icon-only verdict buttons with accessible names', () => {
+    const { container } = render(<UiFeedback onUiFeedback={feedbackSink()} />);
+    const up = q(container, '[data-ggui-ui-feedback-verdict="up"]');
+    const down = q(container, '[data-ggui-ui-feedback-verdict="down"]');
+    // #653: the words left the row — the name lives in the aria-label.
+    expect(up.getAttribute('aria-label')).toBe('Thumbs up');
+    expect(down.getAttribute('aria-label')).toBe('Thumbs down');
+    expect(up.textContent).toBe('');
+    expect(down.textContent).toBe('');
+    // No third verdict, no free-text affordance (founder-scoped to two).
+    expect(
+      container.querySelectorAll('[data-ggui-ui-feedback-verdict]'),
+    ).toHaveLength(2);
+    expect(container.querySelector('[data-ggui-ui-feedback-comment]')).toBeNull();
+  });
+
+  it('draws the icons in theme ink (stroke=currentColor SVGs)', () => {
+    const { container } = render(<UiFeedback onUiFeedback={feedbackSink()} />);
+    for (const v of ['up', 'down'] as const) {
+      const svg = q(container, `[data-ggui-ui-feedback-verdict="${v}"] svg`);
+      // currentColor is the theme-applicability contract (#653): the
+      // icon ink follows the button's --ggui-* color token in both modes.
+      expect(svg.getAttribute('stroke')).toBe('currentColor');
+      expect(svg.getAttribute('fill')).toBe('none');
+      expect(svg.getAttribute('aria-hidden')).toBe('true');
+    }
+  });
+
   it('omits context fields the host did not supply', () => {
     const onUiFeedback = feedbackSink();
     const { container } = render(<UiFeedback onUiFeedback={onUiFeedback} />);
-    fireEvent.click(q(container, '[data-ggui-ui-feedback-verdict="dislike"]'));
+    fireEvent.click(q(container, '[data-ggui-ui-feedback-verdict="down"]'));
     expect(onUiFeedback).toHaveBeenCalledTimes(1);
-    expect(onUiFeedback.mock.calls[0]?.[0]).toEqual({ verdict: 'dislike' });
+    expect(onUiFeedback.mock.calls[0]?.[0]).toEqual({ verdict: 'down' });
   });
 
-  it('opens the free-text flow on Other and sends the trimmed comment', () => {
-    const onUiFeedback = feedbackSink();
-    const { container } = render(
-      <UiFeedback onUiFeedback={onUiFeedback} sessionId="sess-2" />,
-    );
-    fireEvent.click(q(container, '[data-ggui-ui-feedback-verdict="other"]'));
-    // Verdict buttons collapse into the comment form; nothing emitted yet.
-    expect(onUiFeedback).not.toHaveBeenCalled();
-    fireEvent.change(q(container, '[data-ggui-ui-feedback-comment]'), {
-      target: { value: '  the chart ignored my data  ' },
-    });
-    fireEvent.submit(q(container, '[data-ggui-ui-feedback-comment-form]'));
-    expect(onUiFeedback).toHaveBeenCalledTimes(1);
-    expect(onUiFeedback.mock.calls[0]?.[0]).toEqual({
-      verdict: 'other',
-      comment: 'the chart ignored my data',
-      sessionId: 'sess-2',
-    });
-  });
 
-  it('omits a whitespace-only comment from the payload', () => {
-    const onUiFeedback = feedbackSink();
-    const { container } = render(<UiFeedback onUiFeedback={onUiFeedback} />);
-    fireEvent.click(q(container, '[data-ggui-ui-feedback-verdict="other"]'));
-    fireEvent.change(q(container, '[data-ggui-ui-feedback-comment]'), { target: { value: '   ' } });
-    fireEvent.submit(q(container, '[data-ggui-ui-feedback-comment-form]'));
-    expect(onUiFeedback).toHaveBeenCalledTimes(1);
-    expect(onUiFeedback.mock.calls[0]?.[0]).toEqual({ verdict: 'other' });
-  });
 
   it('collapses into an acknowledgement after a verdict', () => {
     const onUiFeedback = feedbackSink();
     const { container } = render(<UiFeedback onUiFeedback={onUiFeedback} />);
-    fireEvent.click(q(container, '[data-ggui-ui-feedback-verdict="love"]'));
-    expect(container.querySelector('[data-ggui-ui-feedback-verdict="love"]')).toBeNull();
+    fireEvent.click(q(container, '[data-ggui-ui-feedback-verdict="up"]'));
+    expect(container.querySelector('[data-ggui-ui-feedback-verdict="up"]')).toBeNull();
     expect(container.querySelector('[data-ggui-ui-feedback-thanks]')).not.toBeNull();
   });
 
@@ -104,7 +105,7 @@ describe('UiFeedback', () => {
   it('stays dismissable from the acknowledgement state', () => {
     const onUiFeedback = feedbackSink();
     const { container } = render(<UiFeedback onUiFeedback={onUiFeedback} />);
-    fireEvent.click(q(container, '[data-ggui-ui-feedback-verdict="dislike"]'));
+    fireEvent.click(q(container, '[data-ggui-ui-feedback-verdict="down"]'));
     expect(container.querySelector('[data-ggui-ui-feedback-thanks]')).not.toBeNull();
     fireEvent.click(q(container, '[data-ggui-ui-feedback-dismiss]'));
     expect(container.querySelector('[data-ggui-ui-feedback]')).toBeNull();

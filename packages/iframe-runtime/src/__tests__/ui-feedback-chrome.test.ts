@@ -13,8 +13,7 @@
  *      `{type:'ggui:observe', event:{kind:'ui-feedback',…}}` to
  *      `window.parent`.
  *   3. Payload semantics — mirrors the host-chrome `UiFeedback` twin
- *      (`@ggui-ai/mcp-apps-react`): trimmed comment only on `verdict:'other'`,
- *      whitespace-only comments omitted, context stamps present
+ *      (`@ggui-ai/mcp-apps-react`): two thumb verdicts, context stamps present
  *      exactly when supplied, dismissal emits nothing.
  *
  * The gate is driven through the injectable `win` seam (fake windows)
@@ -110,7 +109,7 @@ describe('mountUiFeedbackChrome — parent-window gate', () => {
     expect(container.parentElement).toBe(document.body);
     expect(container.querySelector('[data-ggui-ui-feedback]')).not.toBeNull();
     expect(
-      container.querySelector('[data-ggui-ui-feedback-verdict="love"]'),
+      container.querySelector('[data-ggui-ui-feedback-verdict="up"]'),
     ).not.toBeNull();
     expect(emit).not.toHaveBeenCalled();
   });
@@ -159,13 +158,13 @@ describe('mountUiFeedbackChrome — ggui:observe envelope', () => {
         emit: postObservabilityToParent,
         sessionId: 'sess-envelope',
       });
-      fireEvent.click(q('[data-ggui-ui-feedback-verdict="love"]'));
+      fireEvent.click(q('[data-ggui-ui-feedback-verdict="up"]'));
       expect(posted).toHaveLength(1);
       const msg = posted[0] as ObservabilityMessage;
       expect(msg.type).toBe('ggui:observe');
       expect(msg.event).toEqual({
         kind: 'ui-feedback',
-        verdict: 'love',
+        verdict: 'up',
         sessionId: 'sess-envelope',
       });
     } finally {
@@ -179,14 +178,14 @@ describe('mountUiFeedbackChrome — ggui:observe envelope', () => {
 // =============================================================================
 
 describe('UiFeedbackCard — payload semantics', () => {
-  it('emits a love verdict stamped with the supplied context', async () => {
+  it('emits an up verdict stamped with the supplied context', async () => {
     const emit = eventSink();
     await mount({ emit, sessionId: 'sess-1', toolName: 'ggui_render' });
-    fireEvent.click(q('[data-ggui-ui-feedback-verdict="love"]'));
+    fireEvent.click(q('[data-ggui-ui-feedback-verdict="up"]'));
     expect(emit).toHaveBeenCalledTimes(1);
     expect(emit.mock.calls[0]?.[0]).toEqual({
       kind: 'ui-feedback',
-      verdict: 'love',
+      verdict: 'up',
       sessionId: 'sess-1',
       toolName: 'ggui_render',
     });
@@ -195,54 +194,22 @@ describe('UiFeedbackCard — payload semantics', () => {
   it('omits context fields the runtime did not supply', async () => {
     const emit = eventSink();
     await mount({ emit });
-    fireEvent.click(q('[data-ggui-ui-feedback-verdict="dislike"]'));
+    fireEvent.click(q('[data-ggui-ui-feedback-verdict="down"]'));
     expect(emit).toHaveBeenCalledTimes(1);
     expect(emit.mock.calls[0]?.[0]).toEqual({
       kind: 'ui-feedback',
-      verdict: 'dislike',
+      verdict: 'down',
     });
   });
 
-  it('opens the free-text flow on Other and sends the trimmed comment', async () => {
-    const emit = eventSink();
-    await mount({ emit, sessionId: 'sess-2' });
-    fireEvent.click(q('[data-ggui-ui-feedback-verdict="other"]'));
-    // Verdict buttons collapse into the comment form; nothing emitted yet.
-    expect(emit).not.toHaveBeenCalled();
-    fireEvent.change(q('[data-ggui-ui-feedback-comment]'), {
-      target: { value: '  the chart ignored my data  ' },
-    });
-    fireEvent.submit(q('[data-ggui-ui-feedback-comment-form]'));
-    expect(emit).toHaveBeenCalledTimes(1);
-    expect(emit.mock.calls[0]?.[0]).toEqual({
-      kind: 'ui-feedback',
-      verdict: 'other',
-      comment: 'the chart ignored my data',
-      sessionId: 'sess-2',
-    });
-  });
 
-  it('omits a whitespace-only comment from the event', async () => {
-    const emit = eventSink();
-    await mount({ emit });
-    fireEvent.click(q('[data-ggui-ui-feedback-verdict="other"]'));
-    fireEvent.change(q('[data-ggui-ui-feedback-comment]'), {
-      target: { value: '   ' },
-    });
-    fireEvent.submit(q('[data-ggui-ui-feedback-comment-form]'));
-    expect(emit).toHaveBeenCalledTimes(1);
-    expect(emit.mock.calls[0]?.[0]).toEqual({
-      kind: 'ui-feedback',
-      verdict: 'other',
-    });
-  });
 
   it('collapses into an acknowledgement after a verdict', async () => {
     const emit = eventSink();
     await mount({ emit });
-    fireEvent.click(q('[data-ggui-ui-feedback-verdict="dislike"]'));
+    fireEvent.click(q('[data-ggui-ui-feedback-verdict="down"]'));
     expect(
-      document.querySelector('[data-ggui-ui-feedback-verdict="dislike"]'),
+      document.querySelector('[data-ggui-ui-feedback-verdict="down"]'),
     ).toBeNull();
     expect(
       document.querySelector('[data-ggui-ui-feedback-thanks]'),
