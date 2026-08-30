@@ -29,6 +29,7 @@ import {
   UI_FEEDBACK_CHROME_Z_INDEX,
   mountUiFeedbackChrome,
   type UiFeedbackChromeHandle,
+  shouldMountUiFeedbackChrome,
 } from '../ui-feedback-chrome.js';
 import {
   postObservabilityToParent,
@@ -242,5 +243,75 @@ describe('feedback chrome vs action toast — stacking (ggui#603)', () => {
 
   it('the constants encode the relationship (single source both layers read)', () => {
     expect(UI_FEEDBACK_CHROME_Z_INDEX).toBeGreaterThan(ACTION_TOAST_Z_INDEX);
+  });
+});
+
+// =============================================================================
+// 4. Mount decision — #653 founder ruling: DEFAULT OFF, opt-in
+// =============================================================================
+//
+// The boot path consults this pure predicate before touching the DOM.
+// Two independent gates compose:
+//   1. the #653 opt-in knob — absent/false ⇒ NEVER mount, regardless
+//      of sink state (the announcement-day default);
+//   2. the #471 live-sink gate — even opted in, a host that drops the
+//      `ggui:observe` envelope gets no dead affordance.
+
+describe('shouldMountUiFeedbackChrome — default-off opt-in (#653)', () => {
+  it('refuses when the knob is absent (the default)', () => {
+    expect(
+      shouldMountUiFeedbackChrome({
+        uiFeedback: undefined,
+        onObserveBound: true,
+        hostName: 'ggui-iframe-runtime-embed-host',
+      }),
+    ).toBe(false);
+  });
+
+  it('refuses when the knob is explicitly false', () => {
+    expect(
+      shouldMountUiFeedbackChrome({
+        uiFeedback: false,
+        onObserveBound: true,
+        hostName: 'ggui-iframe-runtime-embed-host',
+      }),
+    ).toBe(false);
+  });
+
+  it('opted in + bound onObserve emitter mounts', () => {
+    expect(
+      shouldMountUiFeedbackChrome({
+        uiFeedback: true,
+        onObserveBound: true,
+        hostName: undefined,
+      }),
+    ).toBe(true);
+  });
+
+  it('opted in + first-party embed host mounts', () => {
+    expect(
+      shouldMountUiFeedbackChrome({
+        uiFeedback: true,
+        onObserveBound: false,
+        hostName: 'ggui-iframe-runtime-embed-host',
+      }),
+    ).toBe(true);
+  });
+
+  it('opted in but no live sink still refuses (#471 dead-control gate)', () => {
+    expect(
+      shouldMountUiFeedbackChrome({
+        uiFeedback: true,
+        onObserveBound: false,
+        hostName: 'claude-ai',
+      }),
+    ).toBe(false);
+    expect(
+      shouldMountUiFeedbackChrome({
+        uiFeedback: true,
+        onObserveBound: false,
+        hostName: undefined,
+      }),
+    ).toBe(false);
   });
 });

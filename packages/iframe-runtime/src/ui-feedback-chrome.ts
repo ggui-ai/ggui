@@ -55,6 +55,46 @@ import type { ObservabilityEmitter } from './observability.js';
 export const UI_FEEDBACK_CHROME_Z_INDEX = 2147483647;
 export const ACTION_TOAST_Z_INDEX = 2147483646;
 
+/** Inputs to the boot path's mount decision — see
+ * {@link shouldMountUiFeedbackChrome}. */
+export interface UiFeedbackMountDecisionInput {
+  /**
+   * The opt-in knob from the boot options (#653). Feedback chrome is
+   * DEFAULT OFF: only an explicit `true` can mount it.
+   */
+  readonly uiFeedback: boolean | undefined;
+  /** Whether the boot bound an `onObserve` emitter. */
+  readonly onObserveBound: boolean;
+  /** The MCP-Apps host's announced name, when known. */
+  readonly hostName: string | undefined;
+}
+
+/**
+ * Pure mount decision the boot path consults before touching the DOM.
+ * Two independent gates compose:
+ *
+ *   1. **The #653 opt-in knob** — the founder's default-off ruling:
+ *      generated-component cards carry NO feedback chrome unless the
+ *      embedding deployment explicitly opts in (`uiFeedback: true` on
+ *      the boot options). Absent or `false` ⇒ never mount, regardless
+ *      of sink state.
+ *   2. **The #471 live-sink gate** — even opted in, only a parent that
+ *      actually consumes the `ggui:observe` envelope gets the
+ *      affordance: a bound `onObserve` emitter, or the first-party
+ *      embed host. Third-party MCP-Apps hosts drop the envelope, and a
+ *      feedback control that can never deliver feedback is worse than
+ *      none.
+ */
+export function shouldMountUiFeedbackChrome(
+  input: UiFeedbackMountDecisionInput,
+): boolean {
+  if (input.uiFeedback !== true) return false;
+  return (
+    input.onObserveBound ||
+    input.hostName === 'ggui-iframe-runtime-embed-host'
+  );
+}
+
 export interface UiFeedbackChromeOptions {
   /**
    * Observability sink the card emits `ui-feedback` events into.

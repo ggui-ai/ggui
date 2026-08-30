@@ -139,7 +139,11 @@ import {
   postObservabilityToParent,
   type ObservabilityEmitter,
 } from './observability.js';
-import { ACTION_TOAST_Z_INDEX, mountUiFeedbackChrome } from './ui-feedback-chrome.js';
+import {
+  ACTION_TOAST_Z_INDEX,
+  mountUiFeedbackChrome,
+  shouldMountUiFeedbackChrome,
+} from './ui-feedback-chrome.js';
 import {
   hostCanReceiveMessages,
   hostCanRelayToolCalls,
@@ -636,6 +640,18 @@ export interface BootSequenceOptions {
    */
   readonly onObserve?: ObservabilityEmitter;
   /**
+   * Opt-in knob for the in-iframe UI-feedback chrome (#653). DEFAULT
+   * OFF by founder ruling — a generated component card carries no
+   * feedback affordance unless the embedding deployment passes `true`
+   * here. Even when opted in, the #471 live-sink gate still applies
+   * (see `shouldMountUiFeedbackChrome`): hosts that drop the
+   * `ggui:observe` envelope never get the affordance. Chrome
+   * configuration, not wire data — the agent cannot observe this knob
+   * (data-vs-behavior), so it is a boot option, never a contract
+   * field.
+   */
+  readonly uiFeedback?: boolean;
+  /**
    * Optional {@link LifecycleEmitter} sink. Fires on every renderer
    * mount-state transition (`mounting` → `code-ready` | `error`,
    * later `disconnected`). Production binds the postMessage-to-parent
@@ -827,7 +843,7 @@ export interface BootSequenceResult {
 }
 
 export async function bootSequence(opts: BootSequenceOptions): Promise<BootSequenceResult> {
-  const { doc, app, transport, notifyParent, renderer: rendererHooks, onProtocolError, onObserve, onLifecycle } = opts;
+  const { doc, app, transport, notifyParent, renderer: rendererHooks, onProtocolError, onObserve, onLifecycle, uiFeedback } = opts;
   const connectFn: ConnectFn = opts.connectFn ?? connectViaRegistry;
   const toolResultTimeoutMs = opts.toolResultTimeoutMs ?? POSTMESSAGE_BOOT_TIMEOUT_MS;
 
@@ -1059,10 +1075,12 @@ export async function bootSequence(opts: BootSequenceOptions): Promise<BootSeque
         })
       : null;
 
-  // In-iframe UI-feedback affordance (ggui#244) — mounted adjacent to
-  // the session root, gated inside the helper on `window.parent !==
-  // window` (top-level `/r/<shortCode>` tabs have no `ggui:observe`
-  // egress, so they get NO affordance) AND here on a LIVE SINK: an
+  // In-iframe UI-feedback affordance (ggui#244) — DEFAULT OFF since
+  // #653 (founder ruling): mounts only when the boot options opt in
+  // via `uiFeedback: true`. When opted in it is additionally gated
+  // inside the helper on `window.parent !== window` (top-level
+  // `/r/<shortCode>` tabs have no `ggui:observe` egress, so they get
+  // NO affordance) AND here on a LIVE SINK: an
   // injected `onObserve` emitter, or a first-party embed host — the
   // only parent that consumes the `ggui:observe` envelope
   // (mcp-app-iframe-host answers `ui/initialize` with exactly this
@@ -1072,10 +1090,12 @@ export async function bootSequence(opts: BootSequenceOptions): Promise<BootSeque
   // retest surfaced it as unstyled clutter that could never deliver
   // feedback anywhere. Fire-and-forget: chrome never blocks or fails
   // the boot.
-  const feedbackSinkLive =
-    onObserve !== undefined ||
-    app.getHostVersion()?.name === 'ggui-iframe-runtime-embed-host';
-  if (feedbackSinkLive) {
+  const mountFeedback = shouldMountUiFeedbackChrome({
+    uiFeedback,
+    onObserveBound: onObserve !== undefined,
+    hostName: app.getHostVersion()?.name,
+  });
+  if (mountFeedback) {
     void mountUiFeedbackChrome(doc, {
       emit: onObserve ?? postObservabilityToParent,
       sessionId: meta.sessionId,
