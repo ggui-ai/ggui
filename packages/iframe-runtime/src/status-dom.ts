@@ -116,3 +116,15 @@ export function setStatus(
 export function setConnectedStatus(refs: StatusRefs): void {
   setStatus(refs, 'Connected.', 'connected');
 }
+
+/**
+ * Retire the served shell's pre-render working-state mark (#667 —
+ * `[data-ggui-shell-loading]`, the ggui glyph treatment or an
+ * operator's court block). Called at `code-ready` (the first real
+ * paint makes a loading mark a lie) and on terminal boot failure (the
+ * failure card must not sit under an "everything is fine" animation).
+ * Idempotent; a shell without the mark is a no-op.
+ */
+export function retireShellLoadingIndicator(doc: Document): void {
+  doc.querySelector('[data-ggui-shell-loading]')?.remove();
+}

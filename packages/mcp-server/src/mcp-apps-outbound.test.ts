@@ -172,6 +172,18 @@ describe('GGUI_RENDER_SHELL_HTML', () => {
 
 
   // ── #662: scheme-aware pre-render placeholder in the served shells ──
+  it('both served shells carry the ggui working-state mark for the pre-render window (#667)', () => {
+    const inlineShell = buildInlineRenderShellHtml('globalThis.__x=1;');
+    for (const html of [GGUI_RENDER_SHELL_HTML, inlineShell]) {
+      expect(html).toContain('data-ggui-shell-loading');
+      // The four brand-glyph units on the I\u2032 4.4s cycle, reduced-motion
+      // honored — the #640 treatment, serve-time default for ggui's court.
+      expect(html).toContain('gs-u4');
+      expect(html).toContain('4.4s');
+      expect(html).toContain('prefers-reduced-motion');
+    }
+  });
+
   it('both served shells carry the scheme style so the placeholder ground is neutral per scheme (#662)', () => {
     const inlineShell = buildInlineRenderShellHtml('globalThis.__x=1;');
     for (const html of [GGUI_RENDER_SHELL_HTML, inlineShell]) {

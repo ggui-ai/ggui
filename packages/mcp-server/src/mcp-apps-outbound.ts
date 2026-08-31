@@ -77,6 +77,7 @@ import {
   GGUI_RENDER_RESOURCE_URI,
   GGUI_RENDER_SHELL_SCHEME_STYLE,
   GGUI_RENDER_SHELL_SURFACE,
+  GGUI_SHELL_LOADING_INDICATOR_HTML,
   MCP_APPS_UI_CAPABILITY,
   MCP_APP_BOOTSTRAP_FAILED_TYPE,
   asGguiRenderBootstrap,
@@ -486,7 +487,7 @@ startInit();
 // script and therefore no anchor div at all.
 export const GGUI_RENDER_SHELL_HTML = `<!doctype html>
 <html lang="en" style="height:100%;background-color:${GGUI_RENDER_SHELL_SURFACE}"><head><meta charset="utf-8"><meta name="color-scheme" content="light dark">${GGUI_RENDER_SHELL_SCHEME_STYLE}<title>ggui render</title></head>
-<body style="margin:0;height:100%;min-height:480px;background-color:${GGUI_RENDER_SHELL_SURFACE}"><div id="ggui-root" data-ggui-shell="thin" style="height:100%;min-height:480px"></div>
+<body style="margin:0;height:100%;min-height:480px;background-color:${GGUI_RENDER_SHELL_SURFACE}">${GGUI_SHELL_LOADING_INDICATOR_HTML}<div id="ggui-root" data-ggui-shell="thin" style="height:100%;min-height:480px"></div>
 <script>${GGUI_RENDER_SHELL_SCRIPT_BODY}</script></body></html>`;
 
 /**
@@ -600,7 +601,7 @@ export function buildInlineRenderShellHtml(runtimeSource: string): string {
   // on `<body>`.
   return `<!doctype html>
 <html lang="en" style="background-color:${GGUI_RENDER_SHELL_SURFACE}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="color-scheme" content="light dark">${GGUI_RENDER_SHELL_SCHEME_STYLE}<title>ggui render</title></head>
-<body style="margin:0;background-color:${GGUI_RENDER_SHELL_SURFACE}" data-ggui-shell="inline">
+<body style="margin:0;background-color:${GGUI_RENDER_SHELL_SURFACE}" data-ggui-shell="inline">${GGUI_SHELL_LOADING_INDICATOR_HTML}
 <script>${GGUI_INLINE_SHELL_BUFFER_SCRIPT_BODY}</script>
 <script type="module" data-ggui-runtime="inline">${escapeInlineScript(runtimeSource)}</script></body></html>`;
 }

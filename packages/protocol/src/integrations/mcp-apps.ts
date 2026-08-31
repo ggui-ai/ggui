@@ -1721,6 +1721,53 @@ export const GGUI_RENDER_SHELL_SURFACE =
  *
  * @public
  */
+/**
+ * The ggui-court working-state mark for the pre-render window (#667;
+ * cross-repo pair guuey#559): the founder-picked #640 I\u2032 treatment,
+ * "assemble \u00b7 swap \u00b7 clear" \u2014 the four brand glyphs land one at a
+ * time on a 4.4s cycle, the ink/chrome fills make one swap-and-return
+ * mid-hold, the mark clears, repeat. Inks are scheme-scoped (the
+ * console light values; the #640-spec dark mapping) through the
+ * `--ggui-standby-*` vars, so a stylesheet can also re-ink it. All
+ * motion collapses to the shared static frame (full composition, 65%
+ * presence, zero travel) under `prefers-reduced-motion` \u2014 the
+ * non-negotiable MUST.
+ *
+ * A fixed, pointer-inert, centered overlay: it never intercepts input
+ * and never shifts layout. The iframe-runtime retires the element at
+ * `code-ready` (first real paint) and on terminal boot failure \u2014 see
+ * `retireShellLoadingIndicator`.
+ *
+ * @public
+ */
+export const GGUI_SHELL_LOADING_INDICATOR_HTML =
+  '<div data-ggui-shell-loading aria-hidden="true">' +
+  '<style>' +
+  '[data-ggui-shell-loading]{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none;' +
+  '--ggui-standby-ink:#292929;--ggui-standby-chrome:#d9d9d9}' +
+  '@media (prefers-color-scheme: dark){[data-ggui-shell-loading]{--ggui-standby-ink:#E3E3E5;--ggui-standby-chrome:#5B5B60}}' +
+  '[data-ggui-shell-loading] svg{width:112px;display:block}' +
+  '[data-ggui-shell-loading] .gs-ink{fill:var(--ggui-standby-ink);animation:ggui-standby-swap-ink 4.4s ease-in-out infinite}' +
+  '[data-ggui-shell-loading] .gs-chrome{fill:var(--ggui-standby-chrome);animation:ggui-standby-swap-chrome 4.4s ease-in-out infinite}' +
+  '[data-ggui-shell-loading] .gs-unit{opacity:0;animation:ggui-standby-assemble 4.4s steps(1, end) infinite}' +
+  '[data-ggui-shell-loading] .gs-u2{animation-delay:0.15s}' +
+  '[data-ggui-shell-loading] .gs-u3{animation-delay:0.3s}' +
+  '[data-ggui-shell-loading] .gs-u4{animation-delay:0.45s}' +
+  '@keyframes ggui-standby-assemble{0%{opacity:0}8%,84%{opacity:1}92%,100%{opacity:0}}' +
+  '@keyframes ggui-standby-swap-ink{0%,38%{fill:var(--ggui-standby-ink)}45%,70%{fill:var(--ggui-standby-chrome)}78%,100%{fill:var(--ggui-standby-ink)}}' +
+  '@keyframes ggui-standby-swap-chrome{0%,38%{fill:var(--ggui-standby-chrome)}45%,70%{fill:var(--ggui-standby-ink)}78%,100%{fill:var(--ggui-standby-chrome)}}' +
+  '@media (prefers-reduced-motion: reduce){' +
+  '[data-ggui-shell-loading] .gs-unit{animation:none;opacity:0.65}' +
+  '[data-ggui-shell-loading] .gs-ink,[data-ggui-shell-loading] .gs-chrome{animation:none}}' +
+  '</style>' +
+  '<svg viewBox="0 0 224 50" focusable="false">' +
+  '<g class="gs-unit gs-u1"><path d="M 0 0 H 50 V 25 H 25 V 50 H 0 Z" class="gs-chrome"/><rect x="33" y="33" width="17" height="17" class="gs-ink"/></g>' +
+  '<g class="gs-unit gs-u2"><path d="M 58 0 H 108 V 25 H 83 V 50 H 58 Z" class="gs-ink"/><rect x="91" y="33" width="17" height="17" class="gs-chrome"/></g>' +
+  '<g class="gs-unit gs-u3"><path d="M 141 50 C 154.807 50 166 38.8071 166 25 V 0 H 116 V 25 C 116 38.8071 127.193 50 141 50 Z" class="gs-ink"/></g>' +
+  '<g class="gs-unit gs-u4"><rect x="174" y="0" width="50" height="50" class="gs-chrome"/></g>' +
+  '</svg>' +
+  '</div>';
+
 export const GGUI_RENDER_SHELL_SCHEME_STYLE =
   '<style data-ggui-shell-scheme>:root{--ggui-shell-scheme-surface:#f9fafb;--ggui-shell-scheme-on-surface:#374151}@media (prefers-color-scheme: dark){:root{--ggui-shell-scheme-surface:#111827;--ggui-shell-scheme-on-surface:#e2e8f0}}</style>';
 
@@ -1759,6 +1806,22 @@ export interface GguiShellHtmlOptions {
    * with this option set it is informational rather than fetched.
    */
   readonly runtimeInlineSource?: string;
+  /**
+   * Serve-time working-state mark for the pre-render window (#667).
+   * Court-keyed at ASSEMBLY: the serving deployment knows its court
+   * and passes its brand block here (guuey#559's blob is the first
+   * consumer); ggui's court leaves it absent and gets the #640 glyph
+   * treatment ({@link GGUI_SHELL_LOADING_INDICATOR_HTML}); `null`
+   * disables the mark entirely.
+   *
+   * OPERATOR-TRUSTED serve-time input: the assembling operator already
+   * authors the whole document, so the markup is embedded verbatim \u2014
+   * it must never be populated from wire data. The runtime retires
+   * whatever element carries `data-ggui-shell-loading` at code-ready /
+   * terminal failure; custom blocks keep that attribute to be retired
+   * (the default carries it).
+   */
+  readonly loadingIndicator?: string | null;
 }
 
 /**
@@ -1849,13 +1912,17 @@ export function gguiShellHtml(
   // classic meta script always runs first (parse order + module
   // deferral), so `__GGUI_META__` is populated before the runtime
   // evaluates in both variants.
+  const loadingBlock =
+    options?.loadingIndicator === null
+      ? ''
+      : (options?.loadingIndicator ?? GGUI_SHELL_LOADING_INDICATOR_HTML);
   const runtimeTag =
     options?.runtimeInlineSource !== undefined
       ? `<script type="module" data-ggui-runtime="inline">${escapeInlineScript(options.runtimeInlineSource)}</script>`
       : `<script type="module" crossorigin="anonymous" src="${safeRuntimeUrl}"></script>`;
   return `<!doctype html>
 <html lang="en" style="${background}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="color-scheme" content="light dark">${GGUI_RENDER_SHELL_SCHEME_STYLE}<title>ggui render</title></head>
-<body style="margin:0;${background}">
+<body style="margin:0;${background}">${loadingBlock}
 <script>globalThis.__GGUI_META__ = ${json};</script>
 ${runtimeTag}
 </body></html>`;

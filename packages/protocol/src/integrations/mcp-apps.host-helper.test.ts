@@ -267,6 +267,43 @@ describe('gguiShellHtml', () => {
   // prefers-color-scheme: neutral light ground on light, neutral dark
   // ground on dark. Theme still wins post-inject (--ggui-color-surface
   // outranks it) and --ggui-shell-background stays the top override.
+  // ── #667: the serve-time loading-indicator slot (pair: guuey#559) ──
+  //
+  // The pre-render window gets a working-state mark: operator-supplied
+  // markup via `loadingIndicator` (court-keyed at SERVE time — the
+  // assembling deployment knows its court), the ggui glyph treatment
+  // (#640 I′, assemble·swap·clear) when the option is absent, nothing
+  // when `null`. The block must ride ahead of the runtime scripts so
+  // it paints before any fetch, and the runtime retires it at
+  // code-ready / terminal failure.
+  it('embeds the ggui glyph working-state mark by default (#667)', () => {
+    const html = gguiShellHtml(bootstrap);
+    expect(html).toContain('data-ggui-shell-loading');
+    // The four brand-glyph units + the I′ cycle timing.
+    expect(html).toContain('gs-u4');
+    expect(html).toContain('4.4s');
+    // Scheme-aware inks (light + the #640-spec dark mapping).
+    expect(html).toContain('--ggui-standby-ink:#292929');
+    expect(html).toContain('--ggui-standby-ink:#E3E3E5');
+    // The lib MUST: reduced motion collapses to the static frame.
+    expect(html).toContain('prefers-reduced-motion');
+    // Paints before the runtime scripts.
+    expect(html.indexOf('data-ggui-shell-loading')).toBeLessThan(
+      html.indexOf('__GGUI_META__'),
+    );
+  });
+
+  it('loadingIndicator: custom markup replaces the default; null disables (#667)', () => {
+    const custom = gguiShellHtml(bootstrap, {
+      loadingIndicator: '<div data-court-brand>blob</div>',
+    });
+    expect(custom).toContain('data-court-brand');
+    expect(custom).not.toContain('gs-u1');
+    const none = gguiShellHtml(bootstrap, { loadingIndicator: null });
+    expect(none).not.toContain('data-ggui-shell-loading');
+    expect(none).not.toContain('gs-u1');
+  });
+
   it('paints a scheme-aware neutral placeholder ground (#662)', () => {
     const html = gguiShellHtml(bootstrap);
     // The scheme style block ships in <head>, before first paint.

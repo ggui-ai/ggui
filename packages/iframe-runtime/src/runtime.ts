@@ -117,6 +117,7 @@ import {
   setStatus,
   setConnectedStatus,
   type StatusRefs,
+  retireShellLoadingIndicator,
 } from './status-dom.js';
 import {
   mergeReservedValidators,
@@ -932,6 +933,7 @@ export async function bootSequence(opts: BootSequenceOptions): Promise<BootSeque
   const initResult = await connectApp(app, transport);
   if (!initResult.ok) {
     setStatus(refs, `ui/initialize failed: ${initResult.message}`, 'error');
+    retireShellLoadingIndicator(doc);
     emitBootFailure('UI_INITIALIZE_FAILED', initResult.message);
     return { ok: false, mountedRender };
   }
@@ -1031,6 +1033,7 @@ export async function bootSequence(opts: BootSequenceOptions): Promise<BootSeque
   if (!parsed.ok) {
     const message = `slice-meta parse failed: ${parsed.reason}`;
     setStatus(refs, message, 'error');
+    retireShellLoadingIndicator(doc);
     emitBootFailure(parsed.reason, message);
     return { ok: false, mountedRender };
   }
@@ -1168,6 +1171,9 @@ export async function bootSequence(opts: BootSequenceOptions): Promise<BootSeque
   const emitCodeReadyOnce = (): void => {
     if (codeReadyEmitted) return;
     codeReadyEmitted = true;
+    // First real paint — the served shell's working-state mark (#667)
+    // becomes a lie the moment content lands.
+    retireShellLoadingIndicator(doc);
     onLifecycle?.(makeLifecycleEvent('code-ready', { sessionId: meta.sessionId }));
   };
 
@@ -1270,6 +1276,7 @@ export async function bootSequence(opts: BootSequenceOptions): Promise<BootSeque
     const message =
       'bootstrap carries neither static content (codeUrl/codeB64/kind) nor a live trio (wsUrl/wsToken)';
     setStatus(refs, message, 'error');
+    retireShellLoadingIndicator(doc);
     emitBootFailure('MISSING_META_GGUI_BOOTSTRAP', message);
     return { ok: false, mountedRender };
   }
