@@ -48,9 +48,12 @@ import {
   type ProtocolErrorEmitter,
 } from './protocol-error.js';
 
-// `StreamBus` (and its bounded reserved-channel replay ring) was
-// hoisted into `@ggui-ai/wire` so `<GguiRender>` and this runtime share
-// one implementation. Re-exported for the runtime's internal modules.
+// `StreamBus` (and its bounded reserved-channel replay ring) lives in
+// `@ggui-ai/wire` (one implementation for every first-party renderer).
+// It was originally hoisted to share with `<GguiRender>` — that
+// component and its WS action path are DELETED (react host-helper
+// ruling; ggui#599 cycle-2 caught the stale reference here) — and the
+// hoist stands on its own merits. Re-exported for internal modules.
 export { StreamBus };
 
 // =============================================================================

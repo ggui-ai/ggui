@@ -135,9 +135,23 @@ export interface PendingEventConsumer {
   /**
    * Open a pipe for `sessionId` so subsequent `append` /
    * `consumeAndClear` calls work. Optional on the interface because
-   * the cloud Dynamo adapter implicitly opens via UpdateItem upsert
-   * semantics and doesn't expose a separate creation path; OSS
-   * impls (InMemory / Sqlite) MUST implement it.
+   * an adapter may open the pipe through another write entirely: the
+   * cloud Dynamo adapter's pipe row IS the session row, opened by the
+   * render-row write — its `append` is guarded by
+   * `attribute_exists(id)` and THROWS on an absent row (it does NOT
+   * upsert; ggui#599 cycle-2 corrected the earlier "upsert semantics"
+   * claim here). OSS impls (InMemory / Sqlite) MUST implement it.
+   *
+   * FUTURE-BRIDGE PINS (ggui#599 cycle-2 — obligations any slice that
+   * threads a caller-supplied consumer into the WS action ingress must
+   * discharge first): (1) SIZE — this contract names no entry-size
+   * bound; the WS channel accepts frames far larger than some backing
+   * rows can absorb, and an oversized append that fails after the
+   * ledger write produced a full ack to the client (the lying-ack
+   * class). Define the cap + failure mode before bridging. (2)
+   * ATOMICITY — ledger and pipe are separate writes with no cross-
+   * write transaction; enumerate the partial-failure states in the
+   * bridging slice.
    *
    * Idempotent — calling on an existing pipe is a no-op.
    *
