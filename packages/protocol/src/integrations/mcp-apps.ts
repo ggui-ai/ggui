@@ -1698,7 +1698,31 @@ export function toolResultGguiRender(
  * @public
  */
 export const GGUI_RENDER_SHELL_SURFACE =
-  'var(--ggui-shell-background, var(--ggui-color-surface, #1e293b))';
+  'var(--ggui-shell-background, var(--ggui-color-surface, var(--ggui-shell-scheme-surface, #f9fafb)))';
+
+/**
+ * Inline `<style>` block that gives the shell's pre-render placeholder
+ * a SCHEME-AWARE neutral ground (#662). Before the runtime injects
+ * theme variables, {@link GGUI_RENDER_SHELL_SURFACE}'s chain bottoms
+ * out at `--ggui-shell-scheme-surface` — which this block sets per
+ * `prefers-color-scheme`: a neutral light ground on light, a neutral
+ * dark ground on dark (the chrome family's gray-50 / gray-900, so the
+ * loading document reads as calm paper instead of a colored slab).
+ * `--ggui-shell-scheme-on-surface` is the paired overlay-text ink the
+ * shell's "Initializing…" / failure overlays fall back to, keeping the
+ * pre-theme text legible on whichever ground the scheme picked.
+ *
+ * Placement contract: serve this in `<head>` BEFORE any painted
+ * element so the first paint is already scheme-correct. Once the
+ * runtime injects theme variables, `--ggui-color-surface` outranks the
+ * scheme fallback (theme-aware), and `--ggui-shell-background` remains
+ * the top override for hosts that know better (configurable) — the
+ * #662 preference order, in that order.
+ *
+ * @public
+ */
+export const GGUI_RENDER_SHELL_SCHEME_STYLE =
+  '<style data-ggui-shell-scheme>:root{--ggui-shell-scheme-surface:#f9fafb;--ggui-shell-scheme-on-surface:#374151}@media (prefers-color-scheme: dark){:root{--ggui-shell-scheme-surface:#111827;--ggui-shell-scheme-on-surface:#e2e8f0}}</style>';
 
 /**
  * Options for {@link gguiShellHtml}.
@@ -1830,7 +1854,7 @@ export function gguiShellHtml(
       ? `<script type="module" data-ggui-runtime="inline">${escapeInlineScript(options.runtimeInlineSource)}</script>`
       : `<script type="module" crossorigin="anonymous" src="${safeRuntimeUrl}"></script>`;
   return `<!doctype html>
-<html lang="en" style="${background}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="color-scheme" content="light dark"><title>ggui render</title></head>
+<html lang="en" style="${background}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="color-scheme" content="light dark">${GGUI_RENDER_SHELL_SCHEME_STYLE}<title>ggui render</title></head>
 <body style="margin:0;${background}">
 <script>globalThis.__GGUI_META__ = ${json};</script>
 ${runtimeTag}

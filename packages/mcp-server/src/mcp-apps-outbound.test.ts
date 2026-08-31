@@ -24,10 +24,10 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import {
+  buildInlineRenderShellHtml,
   GGUI_RENDER_SHELL_HTML,
   GGUI_RENDER_SHELL_SCRIPT_HASH,
   advertiseMcpAppsUiCapability,
-  buildInlineRenderShellHtml,
   registerGguiRenderResource,
 } from './mcp-apps-outbound.js';
 import { createGguiServer, type GguiServer } from './server.js';
@@ -170,14 +170,30 @@ describe('GGUI_RENDER_SHELL_HTML', () => {
     expect(GGUI_RENDER_SHELL_HTML).toContain('window.parent.postMessage');
   });
 
+
+  // ── #662: scheme-aware pre-render placeholder in the served shells ──
+  it('both served shells carry the scheme style so the placeholder ground is neutral per scheme (#662)', () => {
+    const inlineShell = buildInlineRenderShellHtml('globalThis.__x=1;');
+    for (const html of [GGUI_RENDER_SHELL_HTML, inlineShell]) {
+      expect(html).toContain('data-ggui-shell-scheme');
+      expect(html).toContain('--ggui-shell-scheme-surface:#f9fafb');
+      expect(html).toContain('prefers-color-scheme: dark');
+      expect(html).not.toContain('#1e293b');
+    }
+    // The thin shell now declares color-scheme so UA form controls and
+    // the canvas follow the scheme too.
+    expect(GGUI_RENDER_SHELL_HTML).toContain('name="color-scheme"');
+  });
+
   it('ships the themed failure card (#481): summary + expandable diagnostic + Retry', () => {
     // Terminal failures render a presentable card, not the old bare
     // #666 overlay (illegible on the shell's dark pre-theme surface).
     expect(GGUI_RENDER_SHELL_HTML).toContain('function showFailure(');
-    // Text color pairs with the surface: themed var, light-on-dark
-    // fallback matching the static #1e293b pre-theme surface.
+    // Text color pairs with the surface: themed var first, then the
+    // scheme-scoped pre-theme ink (#662) so overlay text stays legible
+    // on whichever neutral ground prefers-color-scheme picked.
     expect(GGUI_RENDER_SHELL_HTML).toContain(
-      'var(--ggui-color-onSurface,#e2e8f0)',
+      'var(--ggui-color-onSurface,var(--ggui-shell-scheme-on-surface,#374151))',
     );
     expect(GGUI_RENDER_SHELL_HTML).not.toContain('color:#666');
     // Diagnostic reachable but collapsed; Retry wired by element id.

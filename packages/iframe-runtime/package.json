@@ -31,7 +31,7 @@
     }
   },
   "scripts": {
-    "build": "rm -rf dist.staging && tsc -p tsconfig.types.json --outDir dist.staging && node ../scripts/atomic-swap.mjs dist.staging dist && node esbuild.config.mjs && pnpm run check:bundle-size",
+    "build": "rm -rf dist.staging && tsc -p tsconfig.types.json --outDir dist.staging && GGUI_ESBUILD_OUT_DIR=dist.staging node esbuild.config.mjs && node ../scripts/atomic-swap.mjs dist.staging dist && pnpm run check:bundle-size",
     "check:bundle-size": "tsx scripts/check-bundle-size.ts",
     "check:bundle-size:self-test": "tsx scripts/check-bundle-size.ts --self-test",
     "typecheck": "tsc --noEmit",

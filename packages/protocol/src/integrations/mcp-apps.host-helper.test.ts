@@ -21,6 +21,7 @@ import {
   readGguiShellEnvelope,
   parseMcpAppAiGguiRenderMeta,
   toolResultGguiRender,
+  GGUI_RENDER_SHELL_SURFACE,
 } from './mcp-apps.js';
 
 const LIVE_SLICE = {
@@ -254,6 +255,31 @@ describe('gguiShellHtml', () => {
     const html = gguiShellHtml(bootstrap);
     expect(html).toContain('name="viewport"');
     expect(html).toContain('name="color-scheme"');
+  });
+
+  // ── #662: scheme-aware pre-render placeholder ─────────────────────────
+  //
+  // Before the runtime injects theme vars, the shell's surface chain
+  // bottoms out at its terminal fallback — which used to be a single
+  // dark constant that painted an indigo-dark slab on light hosts
+  // while components loaded. The terminal fallback is now a
+  // scheme-scoped variable the shell's own <style> sets per
+  // prefers-color-scheme: neutral light ground on light, neutral dark
+  // ground on dark. Theme still wins post-inject (--ggui-color-surface
+  // outranks it) and --ggui-shell-background stays the top override.
+  it('paints a scheme-aware neutral placeholder ground (#662)', () => {
+    const html = gguiShellHtml(bootstrap);
+    // The scheme style block ships in <head>, before first paint.
+    expect(html).toContain('data-ggui-shell-scheme');
+    expect(html).toContain('--ggui-shell-scheme-surface:#f9fafb');
+    expect(html).toContain('prefers-color-scheme: dark');
+    expect(html).toContain('--ggui-shell-scheme-surface:#111827');
+    // The surface chain terminates in the scheme var, not a bare dark
+    // constant — precedence: override > theme > scheme fallback.
+    expect(GGUI_RENDER_SHELL_SURFACE).toBe(
+      'var(--ggui-shell-background, var(--ggui-color-surface, var(--ggui-shell-scheme-surface, #f9fafb)))',
+    );
+    expect(html).not.toContain('#1e293b');
   });
 
   it('runtimeInlineSource swaps the external tag for an inline module script', () => {

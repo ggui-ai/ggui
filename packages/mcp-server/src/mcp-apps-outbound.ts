@@ -75,6 +75,7 @@ import {
 import {
   GGUI_RENDER_RESOURCE_MIME,
   GGUI_RENDER_RESOURCE_URI,
+  GGUI_RENDER_SHELL_SCHEME_STYLE,
   GGUI_RENDER_SHELL_SURFACE,
   MCP_APPS_UI_CAPABILITY,
   MCP_APP_BOOTSTRAP_FAILED_TYPE,
@@ -209,10 +210,11 @@ rootEl.style.cssText='display:flex;flex-direction:column;height:100%;min-height:
 var mounted=false;
 var lastEnvelope=null;
 // Text color pairs with the shell surface: themed var when the runtime
-// injected theme CSS, else the light-on-dark fallback matching the
-// shell's static #1e293b pre-theme surface. The old hardcoded #666 was
-// illegible on that dark fallback (#481).
-var SHELL_FG='var(--ggui-color-onSurface,#e2e8f0)';
+// injected theme CSS, else the scheme-scoped pre-theme ink the shell's
+// own scheme <style> defines (#662) — legible on whichever neutral
+// ground prefers-color-scheme picked. (#481 killed the illegible
+// hardcoded #666; #662 killed the dark-only fallback.)
+var SHELL_FG='var(--ggui-color-onSurface,var(--ggui-shell-scheme-on-surface,#374151))';
 function setOverlay(text){
   if(mounted)return;
   rootEl.innerHTML='<div style="font:13px system-ui,sans-serif;padding:24px;color:'+SHELL_FG+';opacity:.55">'+text+'</div>';
@@ -437,7 +439,7 @@ startInit();
 // `<head>` by the iframe-runtime at boot (react-renderer.ts ->
 // `<style id="ggui-theme-vars">`), so the `var()` resolves to the
 // active theme's exact per-mode surface color at runtime. The static
-// `#1e293b` fallback (the dark-mode surface) covers the pre-resolve
+// scheme-scoped fallback (#662: neutral per prefers-color-scheme) covers the pre-resolve
 // first paint + browsers that drop unresolved custom properties.
 //
 // # Why paint the document background here (Safari white-canvas fix)
@@ -483,7 +485,7 @@ startInit();
 // The self-contained shell (`buildSelfContainedShell`) has no overlay
 // script and therefore no anchor div at all.
 export const GGUI_RENDER_SHELL_HTML = `<!doctype html>
-<html lang="en" style="height:100%;background-color:${GGUI_RENDER_SHELL_SURFACE}"><head><meta charset="utf-8"><title>ggui render</title></head>
+<html lang="en" style="height:100%;background-color:${GGUI_RENDER_SHELL_SURFACE}"><head><meta charset="utf-8"><meta name="color-scheme" content="light dark">${GGUI_RENDER_SHELL_SCHEME_STYLE}<title>ggui render</title></head>
 <body style="margin:0;height:100%;min-height:480px;background-color:${GGUI_RENDER_SHELL_SURFACE}"><div id="ggui-root" data-ggui-shell="thin" style="height:100%;min-height:480px"></div>
 <script>${GGUI_RENDER_SHELL_SCRIPT_BODY}</script></body></html>`;
 
@@ -597,7 +599,7 @@ export function buildInlineRenderShellHtml(runtimeSource: string): string {
   // no-container posture as `gguiShellHtml`; the shell marker rides
   // on `<body>`.
   return `<!doctype html>
-<html lang="en" style="background-color:${GGUI_RENDER_SHELL_SURFACE}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="color-scheme" content="light dark"><title>ggui render</title></head>
+<html lang="en" style="background-color:${GGUI_RENDER_SHELL_SURFACE}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="color-scheme" content="light dark">${GGUI_RENDER_SHELL_SCHEME_STYLE}<title>ggui render</title></head>
 <body style="margin:0;background-color:${GGUI_RENDER_SHELL_SURFACE}" data-ggui-shell="inline">
 <script>${GGUI_INLINE_SHELL_BUFFER_SCRIPT_BODY}</script>
 <script type="module" data-ggui-runtime="inline">${escapeInlineScript(runtimeSource)}</script></body></html>`;

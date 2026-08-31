@@ -31,14 +31,20 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const pkgRoot = resolve(__dirname);
 
 const entry = join(pkgRoot, 'src/runtime.ts');
-const outfile = join(pkgRoot, 'dist/iframe-runtime.js');
+// ggui#610/#662: the build script stages every artifact into
+// `dist.staging` and atomically swaps it live (atomic-swap.mjs) — the
+// env var routes this config's outputs into the same staging tree so
+// the bundle is never absent from a live `dist/` mid-build. Direct
+// `node esbuild.config.mjs` runs (no env) still write to `dist/`.
+const OUT_DIR = process.env.GGUI_ESBUILD_OUT_DIR ?? 'dist';
+const outfile = join(pkgRoot, OUT_DIR, 'iframe-runtime.js');
 // Build metadata consumed by `scripts/check-bundle-size.ts`. It needs the
 // per-input module list to detect the same npm package bundled twice from
 // two different `node_modules/` paths — the failure mode that silently
 // added 85 KB gz (two copies of zod v4) and could only be seen as an
 // unexplained budget overrun. Not published: `dist/` is gitignored and
 // package.json#files ships only the bundle + types.
-const metafile = join(pkgRoot, 'dist/iframe-runtime.meta.json');
+const metafile = join(pkgRoot, OUT_DIR, 'iframe-runtime.meta.json');
 
 await mkdir(dirname(outfile), { recursive: true });
 
@@ -148,7 +154,7 @@ console.log(`[iframe-runtime:esbuild] wrote ${outfile}`);
     process.exit(1);
   }
   const shims = buildStaticShimModules({ gadgetExports });
-  const shimsDir = join(pkgRoot, 'dist/shims');
+  const shimsDir = join(pkgRoot, OUT_DIR, 'shims');
   await mkdir(shimsDir, { recursive: true });
   for (const [name, source] of Object.entries(shims)) {
     await writeFile(join(shimsDir, `${name}.js`), source, 'utf-8');
