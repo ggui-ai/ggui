@@ -1,7 +1,7 @@
 node_modules/
 dist/
 dist.staging/
-dist.trash/
+dist.trash*/
 .turbo/
 *.tsbuildinfo
 

@@ -1,7 +1,7 @@
 {
   "name": "@ggui-ai/gadgets",
-  "version": "0.12.0",
-  "description": "Browser-capability gadget hooks for ggui \u2014 declared via DataContract.clientCapabilities.gadgets, mounted by the UI generator's component code.",
+  "version": "0.13.0",
+  "description": "Browser-capability gadget hooks for ggui — declared via DataContract.clientCapabilities.gadgets, mounted by the UI generator's component code.",
   "license": "Apache-2.0",
   "keywords": [
     "ggui",

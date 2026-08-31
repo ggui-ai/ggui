@@ -1,7 +1,7 @@
 {
   "name": "@ggui-ai/cli",
-  "version": "0.12.0",
-  "description": "The `ggui` CLI \u2014 run the ggui protocol locally: dev server, self-hosted MCP server, and gadget / blueprint authoring. End-to-end OSS and self-hosted workflows; no account required.",
+  "version": "0.13.0",
+  "description": "The `ggui` CLI — run the ggui protocol locally: dev server, self-hosted MCP server, and gadget / blueprint authoring. End-to-end OSS and self-hosted workflows; no account required.",
   "keywords": [
     "ggui",
     "cli",

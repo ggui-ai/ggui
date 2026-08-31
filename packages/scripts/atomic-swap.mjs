@@ -44,16 +44,41 @@ if (staging === live) {
   process.exit(1);
 }
 
-// A crashed prior swap can leave a trash dir behind; clear it first so
-// the rename below cannot collide.
-const trash = `${live}.trash`;
+// Trash is PID-suffixed: two concurrent builds of the same package
+// (this session's turbo run + a peer session's async typecheck hook —
+// routine in this shared worktree) must never contend on one trash
+// name. The original shared `dist.trash` made concurrent swaps
+// catastrophic: rm/rename interleavings threw ENOTEMPTY mid-swap and
+// left `dist/` ABSENT, and turbo then CACHED the broken tree — the
+// resurrecting-corrupt-dist class (#610 postscript). A crashed prior
+// swap's stray trash dirs match `dist.trash-*` and are gitignored;
+// each process removes only its own on the way out.
+const trash = `${live}.trash-${process.pid}`;
 rmSync(trash, { recursive: true, force: true });
 
 // The swap: at most one rename separates "old dist" from "new dist".
-if (existsSync(live)) {
-  renameSync(live, trash);
+// Every step tolerates a concurrent sibling winning the same race —
+// the invariant is that SOME complete fresh build ends up live, never
+// that it is ours.
+try {
+  if (existsSync(live)) {
+    renameSync(live, trash);
+  }
+} catch {
+  // A concurrent swap took `live` between the check and the rename.
 }
-renameSync(staging, live);
+try {
+  renameSync(staging, live);
+} catch (err) {
+  if (existsSync(live)) {
+    // A concurrent build installed its (equally fresh) dist first.
+    // Ours is redundant — discard staging and succeed.
+    rmSync(staging, { recursive: true, force: true });
+  } else {
+    rmSync(trash, { recursive: true, force: true });
+    throw err;
+  }
+}
 
 // Cleanup happens AFTER the live dir is whole again — a slow rm of the
 // old tree never widens the visibility window.
