@@ -72,7 +72,11 @@ import {
 import { applyDevtoolSecurityHeaders } from "./console-headers.js";
 import type { GguiSessionChannelCookieAuth } from "./ggui-session-channel.js";
 import type { Logger } from "./logger.js";
-import { GGUI_RENDER_SHELL_HTML } from "./mcp-apps-outbound.js";
+import {
+  GGUI_RENDER_SHELL_HTML,
+  resolveLoadingIndicatorBody,
+  type LoadingIndicatorOption,
+} from "./mcp-apps-outbound.js";
 import { singleParam } from "./route-param.js";
 
 interface MountOptions {
@@ -102,12 +106,11 @@ interface MountOptions {
   /** Parent logger; the mount derives its `console-cookie` child. */
   readonly logger: Logger;
   /**
-   * Shell document this route serves. Defaults to the thin-shell
-   * constant; `createGguiServer` passes the loadingIndicator-swapped
-   * variant when the deployment set the #667 court knob (markup-only
-   * — the pinned inline-script CSP hash is unaffected).
+   * #667 working-state knob — static mark or per-app provider,
+   * resolved per request against the gate's verified appId (markup-
+   * only: the pinned inline-script CSP hash is unaffected).
    */
-  readonly shellHtml?: string;
+  readonly loadingIndicator?: LoadingIndicatorOption;
 }
 
 /**
@@ -266,7 +269,11 @@ export function mountConsoleSessionRoutes(opts: MountOptions): GguiSessionChanne
         {
           uri: GGUI_RENDER_RESOURCE_URI,
           mimeType: GGUI_RENDER_RESOURCE_MIME,
-          text: opts.shellHtml ?? GGUI_RENDER_SHELL_HTML,
+          text: resolveLoadingIndicatorBody(
+            GGUI_RENDER_SHELL_HTML,
+            opts.loadingIndicator,
+            verified.appId,
+          ),
         },
       ],
     });

@@ -26,6 +26,7 @@ import path from 'node:path';
 import {
   buildInlineRenderShellHtml,
   withLoadingIndicator,
+  resolveLoadingIndicatorBody,
   GGUI_RENDER_SHELL_HTML,
   GGUI_RENDER_SHELL_SCRIPT_HASH,
   advertiseMcpAppsUiCapability,
@@ -105,6 +106,40 @@ async function handshakeAndRender(
     arguments: { handshakeId, props: {} },
   });
 }
+
+describe('resolveLoadingIndicatorBody — the per-app provider arm (#667)', () => {
+  const BASE = GGUI_RENDER_SHELL_HTML;
+
+  it('static string and null behave as the deployment knob', () => {
+    expect(
+      resolveLoadingIndicatorBody(BASE, '<div data-ggui-shell-loading data-b>x</div>', undefined),
+    ).toContain('data-b');
+    expect(
+      resolveLoadingIndicatorBody(BASE, null, undefined),
+    ).not.toContain('data-ggui-shell-loading');
+    expect(resolveLoadingIndicatorBody(BASE, undefined, undefined)).toBe(BASE);
+  });
+
+  it('provider resolves per app: string swaps, null strips, undefined keeps the default', () => {
+    const provider = (ctx: { readonly appId?: string }) =>
+      ctx.appId === 'APP_GUUEY'
+        ? '<div data-ggui-shell-loading data-guuey-blob>g</div>'
+        : ctx.appId === 'APP_BARE'
+          ? null
+          : undefined;
+    expect(resolveLoadingIndicatorBody(BASE, provider, 'APP_GUUEY')).toContain('data-guuey-blob');
+    expect(resolveLoadingIndicatorBody(BASE, provider, 'APP_BARE')).not.toContain('data-ggui-shell-loading');
+    // undefined return = the ggui default treatment stays.
+    expect(resolveLoadingIndicatorBody(BASE, provider, 'APP_NATIVE')).toContain('gs-u1');
+  });
+
+  it('a throwing provider falls back to the default mark — serving never breaks on chrome', () => {
+    const bomb = () => {
+      throw new Error('court db down');
+    };
+    expect(resolveLoadingIndicatorBody(BASE, bomb, 'APP_X')).toBe(BASE);
+  });
+});
 
 describe('mcpApps.loadingIndicator — the per-deployment court knob (#667)', () => {
   it('threads a court blob into the served shell; null strips the mark', async () => {

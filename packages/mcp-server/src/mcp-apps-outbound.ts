@@ -730,6 +730,53 @@ export function withLoadingIndicator(
   );
 }
 
+/** Caller context handed to a per-app loading-indicator provider. */
+export interface LoadingIndicatorContext {
+  /** The reading connection's app identity, when the deployment knows it. */
+  readonly appId?: string;
+}
+
+/**
+ * The #667 working-state knob, both arms:
+ *   - `string` / `null` — one mark (or none) for the whole deployment.
+ *   - provider — deployments that vary the pre-render mark per app
+ *     resolve it at shell-serve time; return a markup block to swap it
+ *     in, `null` to strip the mark, `undefined` for the default
+ *     treatment. The provider MUST be total in spirit — a throw is
+ *     caught and serves the default (a broken chrome hook must never
+ *     break shell serving).
+ */
+export type LoadingIndicatorOption =
+  | string
+  | null
+  | ((ctx: LoadingIndicatorContext) => string | null | undefined);
+
+/**
+ * Resolve the shell body for one read: apply the loading-indicator
+ * option (static or provider) to the base shell. The base shell keeps
+ * the deployment's identity — the versioned resource URI hashes the
+ * BASE bytes; the mark swap is per-read cosmetic chrome the runtime
+ * retires at first paint, deliberately outside the hash.
+ */
+export function resolveLoadingIndicatorBody(
+  baseShellHtml: string,
+  option: LoadingIndicatorOption | undefined,
+  appId: string | undefined,
+): string {
+  if (option === undefined) return baseShellHtml;
+  if (typeof option !== "function") {
+    return withLoadingIndicator(baseShellHtml, option);
+  }
+  let resolved: string | null | undefined;
+  try {
+    resolved = option({ ...(appId !== undefined ? { appId } : {}) });
+  } catch {
+    return baseShellHtml;
+  }
+  if (resolved === undefined) return baseShellHtml;
+  return withLoadingIndicator(baseShellHtml, resolved);
+}
+
 export function registerGguiRenderResource(
   server: McpServer,
   shellHtml: string = GGUI_RENDER_SHELL_HTML,
@@ -761,7 +808,18 @@ export function registerGguiRenderResource(
    * iframe — observed live on claude.ai (#471 round 11: frame booted
    * with `connect-src assets.mcp.ggui.ai` only).
    */
-  extraConnectUrls?: readonly (string | undefined)[]
+  extraConnectUrls?: readonly (string | undefined)[],
+  /**
+   * #667 working-state knob (static or per-app provider) + the app
+   * identity accessor the provider resolves against. The BASE shell
+   * (before any mark swap) is what the content-addressed URI hashes —
+   * the mark is per-read cosmetic chrome the runtime retires at first
+   * paint, deliberately outside the cache identity.
+   */
+  loading?: {
+    readonly indicator?: LoadingIndicatorOption;
+    readonly getAppId?: () => string | undefined;
+  },
 ): string {
   const cspMeta = buildCspMeta(publicBaseUrl, runtimeUrl, extraConnectUrls);
 
@@ -800,7 +858,14 @@ export function registerGguiRenderResource(
       {
         uri: uri.href,
         mimeType: GGUI_RENDER_RESOURCE_MIME,
-        text: shellHtml,
+        // #667: the working-state mark resolves per read (a per-app
+        // provider sees the reading connection's app identity); the
+        // versioned URI above hashes the BASE bytes on purpose.
+        text: resolveLoadingIndicatorBody(
+          shellHtml,
+          loading?.indicator,
+          loading?.getAppId?.(),
+        ),
         ...(cspMeta !== undefined ? { _meta: cspMeta } : {}),
       },
     ],
@@ -2973,6 +3038,12 @@ export function installMcpAppsOutbound(
   server: McpServer,
   opts: {
     readonly shellHtml?: string;
+  /**
+   * #667 working-state knob — static mark, `null`, or a per-app
+   * provider resolved at shell-serve time against the reading
+   * connection's app identity. See {@link LoadingIndicatorOption}.
+   */
+  readonly loadingIndicator?: LoadingIndicatorOption;
     /**
      * Per-render self-contained shell registration. When supplied,
      * `ui://ggui/render/{sessionId}` becomes a readable resource
@@ -2998,6 +3069,12 @@ export function installMcpAppsOutbound(
      * `connect-src` covers the SSE/polling session API and the WS.
      */
     readonly extraConnectUrls?: readonly (string | undefined)[];
+    /**
+     * Late-binding caller-context accessor (same seam the render read
+     * path uses) — a per-app `loadingIndicator` provider resolves
+     * against the reading connection's `appId` from here.
+     */
+    readonly getContext?: () => HandlerContext | undefined;
   } = {}
 ): { readonly shellResourceUri: string } {
   advertiseMcpAppsUiCapability(server);
@@ -3010,7 +3087,15 @@ export function installMcpAppsOutbound(
     opts.shellHtml,
     opts.publicBaseUrl,
     opts.selfContained?.runtimeUrl,
-    opts.extraConnectUrls
+    opts.extraConnectUrls,
+    // #667: per-app providers resolve against the reading connection's
+    // identity — the same context accessor the render read-gate uses.
+    {
+      ...(opts.loadingIndicator !== undefined
+        ? { indicator: opts.loadingIndicator }
+        : {}),
+      getAppId: () => opts.getContext?.()?.appId,
+    },
   );
   if (opts.selfContained) {
     registerGguiRenderResourceTemplate(server, opts.selfContained);

@@ -159,8 +159,7 @@ import {
 } from "./console-theme-routes.js";
 import { mountConsoleTimelineRoutes } from "./console-timeline.js";
 import { buildInlineRenderShellHtml,
-  withLoadingIndicator,
-  GGUI_RENDER_SHELL_HTML,
+  type LoadingIndicatorOption,
 } from "./mcp-apps-outbound.js";
 import { BoundedValidatorTraceSink, mountConsoleValidatorRoutes } from "./console-validator.js";
 // Operator-class MCP handlers — twelve `ggui_ops_*` handlers across
@@ -2590,7 +2589,7 @@ export interface CreateGguiServerOptions {
          * route; an explicit `shellHtml` is the operator's whole
          * document and is served untouched.
          */
-        readonly loadingIndicator?: string | null;
+        readonly loadingIndicator?: LoadingIndicatorOption;
         /**
          * External WebSocket URL the iframe should open, visible to
          * MCP Apps hosts. Defaults to `"ws://localhost:<port>/ws"`
@@ -5034,23 +5033,14 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
     ...(mcpAppsConfig.shellHtml !== undefined
       ? { shellHtml: mcpAppsConfig.shellHtml }
       : inlineShellHtml !== undefined
-        ? {
-            shellHtml:
-              mcpAppsConfig.loadingIndicator !== undefined
-                ? withLoadingIndicator(
-                    inlineShellHtml,
-                    mcpAppsConfig.loadingIndicator,
-                  )
-                : inlineShellHtml,
-          }
-        : mcpAppsConfig.loadingIndicator !== undefined
-          ? {
-              shellHtml: withLoadingIndicator(
-                GGUI_RENDER_SHELL_HTML,
-                mcpAppsConfig.loadingIndicator,
-              ),
-            }
-          : {}),
+        ? { shellHtml: inlineShellHtml }
+        : {}),
+    // #667 working-state knob — static or per-app provider; resolved
+    // at shell-serve time inside the outbound registration (the base
+    // shell keeps the content-address identity).
+    ...(mcpAppsConfig.loadingIndicator !== undefined
+      ? { loadingIndicator: mcpAppsConfig.loadingIndicator }
+      : {}),
     // Forward the operator-supplied public origin so the static
     // `ui://ggui/render` resource declares `_meta.ui.csp` for
     // spec-compliant hosts (Claude Desktop / claude.ai Connector /
@@ -5918,15 +5908,10 @@ export function createGguiServer(opts: CreateGguiServerOptions = {}): GguiServer
         runtimeBootstrapUrl,
         ...(opts.codeStore ? { codeStore: opts.codeStore } : {}),
         ...(opts.publicBaseUrl !== undefined ? { publicBaseUrl: opts.publicBaseUrl } : {}),
-        // #667 court knob: the console /shell route serves the same
-        // loadingIndicator-swapped thin shell as the MCP read path.
+        // #667 knob: the console /shell route resolves the same
+        // working-state option per request (its gate knows the appId).
         ...(mcpAppsConfig.loadingIndicator !== undefined
-          ? {
-              shellHtml: withLoadingIndicator(
-                GGUI_RENDER_SHELL_HTML,
-                mcpAppsConfig.loadingIndicator,
-              ),
-            }
+          ? { loadingIndicator: mcpAppsConfig.loadingIndicator }
           : {}),
         logger,
       });

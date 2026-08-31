@@ -22,6 +22,7 @@ import {
 import type { Logger } from './logger.js';
 import { GGUI_RENDER_RESOURCE_URI } from '@ggui-ai/protocol/integrations/mcp-apps';
 import {
+  type LoadingIndicatorOption,
   installMcpAppsOutbound,
   type GguiRenderResourceTemplateOptions,
 } from './mcp-apps-outbound.js';
@@ -51,6 +52,8 @@ export interface BuildMcpServerOptions {
    * or the real thin-shell HTML.
    */
   readonly shellHtml?: string;
+  /** #667 working-state knob — see `LoadingIndicatorOption`. */
+  readonly loadingIndicator?: LoadingIndicatorOption;
   /**
    * Per-render self-contained shell options. When supplied,
    * `installMcpAppsOutbound` ALSO registers
@@ -228,6 +231,10 @@ export function buildMcpServer(
   if (opts.mcpAppsOutbound) {
     ({ shellResourceUri } = installMcpAppsOutbound(server, {
       ...(opts.shellHtml !== undefined ? { shellHtml: opts.shellHtml } : {}),
+      ...(opts.loadingIndicator !== undefined
+        ? { loadingIndicator: opts.loadingIndicator }
+        : {}),
+      getContext,
       // Thread the same per-request context accessor + logger the tool
       // path uses (`getContext`, param 3 of `buildMcpServer`) so the
       // per-session resource handler's render-read gate sees the
