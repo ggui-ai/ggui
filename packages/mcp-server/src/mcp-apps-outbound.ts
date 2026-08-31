@@ -709,6 +709,27 @@ function buildCspMeta(
   }
 }
 
+/**
+ * Swap the served shell's working-state mark for a court's own block
+ * (#667's per-deployment knob; guuey#559's blob is the first
+ * consumer). String surgery on the EXACT default block — the constant
+ * is interpolated verbatim into every default shell, so the swap
+ * touches nothing else (the inline-script CSP hash survives: the mark
+ * is markup, not script). `null` strips the mark entirely. A shell
+ * that never carried the default block (an operator's custom
+ * `shellHtml`) passes through untouched — that operator owns their
+ * whole document.
+ */
+export function withLoadingIndicator(
+  shellHtml: string,
+  indicator: string | null,
+): string {
+  return shellHtml.replace(
+    GGUI_SHELL_LOADING_INDICATOR_HTML,
+    indicator ?? "",
+  );
+}
+
 export function registerGguiRenderResource(
   server: McpServer,
   shellHtml: string = GGUI_RENDER_SHELL_HTML,

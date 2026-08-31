@@ -101,6 +101,13 @@ interface MountOptions {
   readonly publicBaseUrl?: string;
   /** Parent logger; the mount derives its `console-cookie` child. */
   readonly logger: Logger;
+  /**
+   * Shell document this route serves. Defaults to the thin-shell
+   * constant; `createGguiServer` passes the loadingIndicator-swapped
+   * variant when the deployment set the #667 court knob (markup-only
+   * — the pinned inline-script CSP hash is unaffected).
+   */
+  readonly shellHtml?: string;
 }
 
 /**
@@ -259,7 +266,7 @@ export function mountConsoleSessionRoutes(opts: MountOptions): GguiSessionChanne
         {
           uri: GGUI_RENDER_RESOURCE_URI,
           mimeType: GGUI_RENDER_RESOURCE_MIME,
-          text: GGUI_RENDER_SHELL_HTML,
+          text: opts.shellHtml ?? GGUI_RENDER_SHELL_HTML,
         },
       ],
     });

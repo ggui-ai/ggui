@@ -25,6 +25,7 @@ import os from 'node:os';
 import path from 'node:path';
 import {
   buildInlineRenderShellHtml,
+  withLoadingIndicator,
   GGUI_RENDER_SHELL_HTML,
   GGUI_RENDER_SHELL_SCRIPT_HASH,
   advertiseMcpAppsUiCapability,
@@ -105,6 +106,32 @@ async function handshakeAndRender(
   });
 }
 
+describe('mcpApps.loadingIndicator — the per-deployment court knob (#667)', () => {
+  it('threads a court blob into the served shell; null strips the mark', async () => {
+    for (const [indicator, expectContain, expectAbsent] of [
+      ['<div data-ggui-shell-loading data-court-blob>b</div>', 'data-court-blob', 'gs-u1'],
+      [null, null, 'data-ggui-shell-loading'],
+    ] as const) {
+      const server = createGguiServer({
+        logger: silentLogger,
+        renderChannel: true,
+        mcpApps: { loadingIndicator: indicator },
+        wsTokenSecret: 'test-secret-32bytes-for-hmac-1234',
+      });
+      const httpServer = await server.listen(0, '127.0.0.1');
+      const addr = httpServer.address();
+      if (!addr || typeof addr === 'string') throw new Error('no AddressInfo');
+      const client = await connectClient(`http://127.0.0.1:${addr.port}`);
+      const read = await client.readResource({ uri: GGUI_RENDER_RESOURCE_URI });
+      const [content] = read.contents as Array<{ text?: string }>;
+      if (expectContain !== null) expect(content!.text).toContain(expectContain);
+      expect(content!.text).not.toContain(expectAbsent);
+      await client.close();
+      await server.close();
+    }
+  });
+});
+
 describe('createGguiServer({ mcpApps: true }) — construction', () => {
   it('throws when renderChannel is not also enabled', () => {
     expect(() =>
@@ -172,6 +199,26 @@ describe('GGUI_RENDER_SHELL_HTML', () => {
 
 
   // ── #662: scheme-aware pre-render placeholder in the served shells ──
+  // ── #667 follow-through: the per-deployment court knob (guuey#559) ──
+  it('withLoadingIndicator swaps the default mark for a court block, null strips it, block-less shells pass through (#667)', () => {
+    const swapped = withLoadingIndicator(
+      GGUI_RENDER_SHELL_HTML,
+      '<div data-ggui-shell-loading data-court-blob>x</div>',
+    );
+    expect(swapped).toContain('data-court-blob');
+    expect(swapped).not.toContain('gs-u1');
+    // Everything else is byte-identical — script hash included.
+    expect(swapped).toContain('data-ggui-shell="thin"');
+
+    const stripped = withLoadingIndicator(GGUI_RENDER_SHELL_HTML, null);
+    expect(stripped).not.toContain('data-ggui-shell-loading');
+
+    // A custom shell that never carried the default block passes
+    // through untouched (the operator owns its whole document).
+    const custom = '<!doctype html><html><body>mine</body></html>';
+    expect(withLoadingIndicator(custom, '<div data-ggui-shell-loading>y</div>')).toBe(custom);
+  });
+
   it('both served shells carry the ggui working-state mark for the pre-render window (#667)', () => {
     const inlineShell = buildInlineRenderShellHtml('globalThis.__x=1;');
     for (const html of [GGUI_RENDER_SHELL_HTML, inlineShell]) {
