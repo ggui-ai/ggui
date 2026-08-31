@@ -202,10 +202,19 @@ export async function dispatchHostBridgeRequest(
     }
     case 'tools/call': {
       if (ctx.onToolCall === undefined) {
+        // In-band method refusal, spec shape (-32601 naming the
+        // method — the #600 catalog's H3 grade). Was -32000
+        // 'no-tool-handler'; retired (ggui#599 cycle-2) because
+        // -32000 collides with the MCP SDK's ErrorCode.ConnectionClosed
+        // and could never be classified as a confirmed refusal by the
+        // runtime's latch.
         return {
           jsonrpc: '2.0',
           id,
-          error: { code: -32000, message: 'no-tool-handler' },
+          error: {
+            code: -32601,
+            message: 'tools/call not supported: no tool handler wired',
+          },
         };
       }
       const tool = paramString(req.params, 'name');

@@ -61,7 +61,7 @@ export interface McpAppIframePermissions {
  *   - `ui/initialize` replies carry ONLY `{theme, containerDimensions,
  *     locale}` — adapter-boundary rule.
  *   - `tools/call` forwards to `onToolCall`; absent handler → reject
- *     `no-tool-handler`.
+ *     an in-band `-32601` naming `tools/call` (was `no-tool-handler`; ggui#599 cycle-2).
  *   - `ui/open-link` with `https?://` → delegates to `Linking.openURL`;
  *     other schemes → reject `unsupported-scheme`.
  *   - Unknown method → `method_not_supported`.
@@ -166,7 +166,7 @@ export interface McpAppIframeProps {
    * iframe. The host forwards `(toolName, args)` and awaits; the
    * resolved value becomes the JSON-RPC `result`, rejections become
    * `-32000` errors. Absent handler = every `tools/call` is rejected
-   * with `no-tool-handler`.
+   * with an in-band `-32601` naming `tools/call` (was `no-tool-handler`; ggui#599 cycle-2).
    */
   readonly onToolCall?: (
     toolName: string,

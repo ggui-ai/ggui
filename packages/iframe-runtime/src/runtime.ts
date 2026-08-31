@@ -2238,12 +2238,68 @@ async function callServerToolSpec(
     });
     return { jsonrpc: '2.0', result: result as unknown };
   } catch (err) {
+    // Preserve the JSON-RPC error code when the SDK throw carries one
+    // (McpError does) — ggui#599 cycle-2: without it a genuine helper
+    // refusal (-32601 / -32000) is indistinguishable from a socket
+    // drop at both latch call sites, and the confirmed-refusal
+    // classification below this file cannot exist. Code-less throws
+    // stay code-less: transport-shaped, never a confirmed refusal.
+    const code = (err as { code?: unknown }).code;
     return {
       error: {
+        ...(typeof code === 'number' ? { code } : {}),
         message: err instanceof Error ? err.message : String(err),
       },
     };
   }
+}
+
+/**
+ * Declared relay-refusal registry (ggui#599 cycle-2, finding 34): the
+ * JSON-RPC error codes a HELPER mints to refuse the relay leg itself —
+ * proof the envelope never round-tripped to the server. Server-side
+ * tool failures come back as well-formed `CallToolResult`s (often
+ * `{ok:false}`), never as JSON-RPC errors on this leg, so a registry
+ * code here is helper-minted by construction:
+ *
+ *   - `-32601` — method not supported (the spec's in-band refusal; the
+ *     host-helper conformance catalog's H3 shape). The ONLY registry
+ *     entry, deliberately.
+ *
+ * `-32000` is EXCLUDED by ruling (ggui#599 cycle-2): it collides with
+ * the MCP SDK's `ErrorCode.ConnectionClosed`, so through the App-SDK
+ * catch a helper-minted -32000 refusal and an SDK-local transport loss
+ * are indistinguishable — and a transport loss must NEVER classify
+ * (misbranding a dropped connection as incapability is the
+ * misclassification asymmetry the cycle killed the mount probe over).
+ * The one live -32000 minter (the RN dispatcher's `no-tool-handler`)
+ * was fixed at source to -32601 in the same slice.
+ *
+ * Unknown codes NEVER confirm — they may be proxy- or server-minted
+ * (e.g. `-32603` internal error), and classifying them would misbrand
+ * capable mounts. They stay on the per-gesture transient path.
+ */
+const CONFIRMED_RELAY_REFUSAL_CODES = new Set([-32601]);
+
+/**
+ * A CONFIRMED relay refusal: the response is an error envelope whose
+ * code is in the declared registry. Strictly stronger evidence than
+ * {@link isRelayShapedFailure} (every confirmed refusal is
+ * relay-shaped; a null/timeout or code-less error never confirms).
+ * Confirmed refusal outranks a positive `serverTools` advertisement at
+ * the latch — classification keys on confirmed attempt outcomes, never
+ * advertisement (#440's doctrine applied symmetrically; the
+ * advertises-but-refuses host is H2's worst dead-tap shape and was
+ * unlatchable before this predicate existed).
+ */
+function isConfirmedRelayRefusal(resp: JsonRpcResponse | null): boolean {
+  return (
+    resp !== null &&
+    resp.error !== undefined &&
+    resp.error !== null &&
+    typeof resp.error.code === 'number' &&
+    CONFIRMED_RELAY_REFUSAL_CODES.has(resp.error.code)
+  );
 }
 
 /**
@@ -3460,10 +3516,21 @@ export function dispatchSubmitAction(args: {
     //     standing latch at the response-arrival guard above, and
     //     keeps routing to the ordinary per-gesture transient toast
     //     below instead.
+    // Two evidence classes latch (ggui#599 cycle-2): the original
+    // advert-silent leg (nothing advertised AND the attempt failed
+    // relay-shaped), and the CONFIRMED-REFUSAL leg — a declared
+    // helper-minted refusal code, which outranks any positive
+    // advertisement (the advertises-but-refuses host previously got a
+    // fresh transient toast per tap, forever). Timeouts and unknown
+    // codes never reach the second leg; the un-classify edge for BOTH
+    // is the same response-arrival clear guard above (attempt-always
+    // preserved — nothing here suppresses dispatch, per the #443
+    // doctrine: the attempt is the self-heal sensor).
+    const confirmedRefusal = isConfirmedRelayRefusal(resp);
     if (
       hostCapabilitiesCaptured() &&
-      !hostCanRelayToolCalls() &&
-      isRelayShapedFailure(resp)
+      ((!hostCanRelayToolCalls() && isRelayShapedFailure(resp)) ||
+        confirmedRefusal)
     ) {
       if (!relayIncapabilityAnnounced) {
         relayIncapabilityAnnounced = true;
@@ -3474,6 +3541,7 @@ export function dispatchSubmitAction(args: {
         postObservabilityToParent({
           kind: 'relay-incapability',
           state: 'latched',
+          trigger: confirmedRefusal ? 'confirmed-refusal' : 'advert-silent',
         });
         // Establish the flag's invariant where the notice it describes
         // is created: a freshly-shown notice is undismissed, and its

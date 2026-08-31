@@ -228,6 +228,16 @@ export interface UiFeedbackEvent {
 export interface RelayIncapabilityEvent {
   readonly kind: 'relay-incapability';
   readonly state: 'latched' | 'cleared';
+  /**
+   * What evidence latched the notice (present on `state: 'latched'`
+   * only; ggui#599 cycle-2): `'confirmed-refusal'` — the relay
+   * answered a declared refusal code (helper-minted; outranks any
+   * positive advertisement), vs `'advert-silent'` — the host never
+   * advertised `serverTools` and the attempt failed relay-shaped.
+   * Additive optional: consumers keying on `kind`/`state` are
+   * unaffected.
+   */
+  readonly trigger?: 'confirmed-refusal' | 'advert-silent';
 }
 
 /**

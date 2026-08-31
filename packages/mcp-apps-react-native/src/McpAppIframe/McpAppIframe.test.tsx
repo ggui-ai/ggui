@@ -239,7 +239,16 @@ describe('dispatchHostBridgeRequest (RN shared switch)', () => {
     expect(res?.result).toEqual({ opened: true });
   });
 
-  it('tools/call without onToolCall → no-tool-handler', async () => {
+  it('tools/call without onToolCall → in-band -32601 NAMING the method (H3-conformant refusal, ggui#599 cycle-2)', async () => {
+    // Was `-32000 'no-tool-handler'` — retired because -32000 collides
+    // with the MCP SDK's ErrorCode.ConnectionClosed: through the
+    // App-SDK catch, a helper-minted -32000 refusal and an SDK-local
+    // transport loss are indistinguishable, so -32000 can never join
+    // the runtime's confirmed-refusal registry. A helper with no tool
+    // handler genuinely does not support tools/call: the spec's
+    // in-band method refusal (-32601, naming the method — the #600
+    // catalog's H3 shape) is the correct code, and it is what the
+    // runtime's confirmed-refusal latch classifies on.
     const res = await dispatchHostBridgeRequest(
       {
         jsonrpc: '2.0',
@@ -249,7 +258,8 @@ describe('dispatchHostBridgeRequest (RN shared switch)', () => {
       },
       makeCtx({ onToolCall: undefined }),
     );
-    expect(res?.error?.message).toBe('no-tool-handler');
+    expect(res?.error?.code).toBe(-32601);
+    expect(res?.error?.message).toContain('tools/call');
   });
 
   it('tools/call forwards to onToolCall and returns its result', async () => {

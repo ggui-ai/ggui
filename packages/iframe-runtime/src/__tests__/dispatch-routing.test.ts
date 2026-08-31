@@ -949,7 +949,7 @@ describe('latch transitions — unlatch on ANY result envelope + edge observabil
   it('emits exactly one relay-incapability observability event per transition edge — repeated failing gestures add no duplicate latched events', async () => {
     await latchViaFailedGesture();
     expect(relayIncapabilityEvents()).toEqual([
-      { kind: 'relay-incapability', state: 'latched' },
+      { kind: 'relay-incapability', state: 'latched', trigger: 'confirmed-refusal' },
     ]);
 
     // A SECOND failing gesture while already latched is not a
@@ -966,7 +966,7 @@ describe('latch transitions — unlatch on ANY result envelope + edge observabil
     await tick();
     await tick();
     expect(relayIncapabilityEvents()).toEqual([
-      { kind: 'relay-incapability', state: 'latched' },
+      { kind: 'relay-incapability', state: 'latched', trigger: 'confirmed-refusal' },
     ]);
 
     // The clearing response is the other edge — exactly one 'cleared'.
@@ -982,7 +982,7 @@ describe('latch transitions — unlatch on ANY result envelope + edge observabil
     await tick();
     await tick();
     expect(relayIncapabilityEvents()).toEqual([
-      { kind: 'relay-incapability', state: 'latched' },
+      { kind: 'relay-incapability', state: 'latched', trigger: 'confirmed-refusal' },
       { kind: 'relay-incapability', state: 'cleared' },
     ]);
   });
@@ -1264,5 +1264,132 @@ describe('post-dismissal cue in the relay dead zone (ggui#442)', () => {
     expect(btn.classList.contains(CUE_CLASS)).toBe(false);
     expect(toastEl()?.textContent).toMatch(/cannot relay/i);
     expect(toastEl()?.style.opacity).toBe('1');
+  });
+});
+
+describe('confirmed-refusal latch precision — attempt outcome outranks advertisement (ggui#599 cycle-2)', () => {
+  beforeEach(() => {
+    __resetHostCapabilitiesForTest();
+    __resetRelayNoticeForTest();
+    document.getElementById('__ggui-action-toast__')?.remove();
+  });
+
+  function relayEvents(): RelayIncapabilityEvent[] {
+    return postMessageSpy.mock.calls
+      .map(([msg]) => msg as { type?: unknown })
+      .filter(
+        (msg): msg is ObservabilityMessage => msg.type === MCP_APP_OBSERVE_TYPE,
+      )
+      .map((msg) => msg.event)
+      .filter(
+        (event): event is RelayIncapabilityEvent =>
+          event.kind === 'relay-incapability',
+      );
+  }
+
+  async function dispatchOnce(): Promise<void> {
+    routeDispatch({
+      actionName: 'archive',
+      data: {},
+      meta: { sessionId: 'sess_1', appId: 'app_1' },
+      dispatchToolName: 'ggui_runtime_submit_action',
+    });
+    await tick();
+    await tick();
+  }
+
+  it('an advertises-but-refuses host (-32601 under serverTools) LATCHES — the H2 worst dead-tap shape', async () => {
+    // Pre-#599-cycle-2 this shape could never latch: the advertisement
+    // gate read the host as capable, so every tap got a fresh transient
+    // toast forever. A declared refusal code is helper-minted proof of
+    // incapability that outranks what the handshake advertised —
+    // classification keys on confirmed attempt outcomes, never
+    // advertisement (#440's own doctrine, applied symmetrically).
+    setHostCapabilities({ serverTools: {} });
+    transport.queueResponse('tools/call', {
+      error: { code: -32601, message: 'method not supported' },
+    });
+    await dispatchOnce();
+
+    const toast = document.getElementById('__ggui-action-toast__');
+    expect(toast?.textContent).toMatch(/cannot relay|can't relay/i);
+  });
+
+  it('-32000 under advertisement stays TRANSIENT — the ConnectionClosed collision keeps it out of the registry', async () => {
+    // -32000 is the MCP SDK's ErrorCode.ConnectionClosed: at this
+    // catch a helper-minted -32000 and an SDK-local transport loss are
+    // the same object, and a transport loss must never classify. The
+    // one live -32000 refusal minter (RN no-tool-handler) was fixed at
+    // source to -32601 in this same slice; a third-party helper still
+    // minting -32000 degrades to per-gesture transient toasts — honest,
+    // never falsely inert. (This is also the MockTransport default for
+    // code-less errors, so this case doubles as the code-less pin.)
+    setHostCapabilities({ serverTools: {} });
+    transport.queueResponse('tools/call', {
+      error: { code: -32000, message: 'no-tool-handler' },
+    });
+    await dispatchOnce();
+
+    const toast = document.getElementById('__ggui-action-toast__');
+    expect(toast?.textContent).not.toMatch(/cannot relay|can't relay/i);
+    expect(toast?.textContent).toMatch(/could not reach/i);
+  });
+
+  it('an unknown error code under advertisement stays transient — unknown codes never classify', async () => {
+    // -32050 is nobody's declared refusal: it could be server-side,
+    // proxy-minted, anything. Classifying it would misbrand capable
+    // mounts; it stays on the per-gesture transient path.
+    setHostCapabilities({ serverTools: {} });
+    transport.queueResponse('tools/call', {
+      error: { code: -32050, message: 'mystery' },
+    });
+    await dispatchOnce();
+
+    const toast = document.getElementById('__ggui-action-toast__');
+    expect(toast?.textContent).not.toMatch(/cannot relay|can't relay/i);
+    expect(toast?.textContent).toMatch(/could not reach/i);
+  });
+
+  it("the latched observability event names its trigger: 'confirmed-refusal'", async () => {
+    setHostCapabilities({ serverTools: {} });
+    transport.queueResponse('tools/call', {
+      error: { code: -32601, message: 'method not supported' },
+    });
+    await dispatchOnce();
+
+    const latched = relayEvents().find((e) => e.state === 'latched');
+    expect(latched).toBeDefined();
+    expect(latched?.trigger).toBe('confirmed-refusal');
+  });
+
+  it("the advert-silent path reports trigger: 'advert-silent' (non-registry failure, nothing advertised)", async () => {
+    setHostCapabilities({});
+    transport.queueResponse('tools/call', {
+      // Mock coerces code-less to -32000 — outside the registry, so
+      // only the advert-silent leg can latch this.
+      error: { message: 'socket dropped' },
+    });
+    await dispatchOnce();
+
+    const latched = relayEvents().find((e) => e.state === 'latched');
+    expect(latched).toBeDefined();
+    expect(latched?.trigger).toBe('advert-silent');
+  });
+
+  it('a confirmed-refusal latch self-heals on the next well-formed result — the response-arrival clear covers the new path', async () => {
+    setHostCapabilities({ serverTools: {} });
+    transport.queueResponse('tools/call', {
+      error: { code: -32601, message: 'method not supported' },
+    });
+    await dispatchOnce();
+    expect(relayEvents().some((e) => e.state === 'latched')).toBe(true);
+
+    transport.queueResponse('tools/call', {
+      result: { structuredContent: { ok: true, consumerPresent: true } },
+    });
+    await dispatchOnce();
+
+    const events = relayEvents();
+    expect(events[events.length - 1]?.state).toBe('cleared');
   });
 });
