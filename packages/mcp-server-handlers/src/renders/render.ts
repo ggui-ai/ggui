@@ -2064,7 +2064,7 @@ export function createGguiRenderHandler(
             cachedBlueprintId: blueprintHit.id,
             llmCallsAvoided: 1,
             kind: 'full-template',
-            reason: `full-template: reused stored blueprint ${blueprintHit.id}; 1 generation call avoided`,
+            reason: 'full-template: reused a stored interface for this contract',
           };
         } else {
           // The `.d.ts` fetch is deferred to HERE — the cold-gen
@@ -2182,8 +2182,8 @@ export function createGguiRenderHandler(
               llmCallsAvoided: 0,
               kind: 'cold',
               reason: outcome.ok
-                ? 'cold: generated fresh — no stored component was reused for this render'
-                : 'cold: generation failed — no stored component was produced or reused',
+                ? 'cold: generated fresh — no saved interface fit this render'
+                : 'cold: generation failed — no interface was produced',
             };
             // #460 — registration already ran INSIDE the generation
             // call, before the success commit (the resolve hook
@@ -2394,7 +2394,7 @@ export function createGguiRenderHandler(
             llmCallsAvoided: 0,
             kind: 'cold',
             reason:
-              'cold: generation failed — no stored component was produced or reused',
+              'cold: generation failed — no interface was produced',
           },
           error: generationFailure,
         };
@@ -2486,7 +2486,7 @@ export function createGguiRenderHandler(
           hit: false,
           llmCallsAvoided: 0,
           kind: 'cold',
-          reason: 'cold: no cache marker was set for this render',
+          reason: 'cold: no reuse occurred for this render',
         },
         ...(codeUrl ? { codeUrl, codeHash } : {}),
         ...(codeModuleUrl !== undefined ? { codeModuleUrl } : {}),

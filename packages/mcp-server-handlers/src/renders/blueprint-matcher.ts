@@ -324,7 +324,7 @@ export async function matchBlueprint(
       );
       if (exact) {
         bumpHitBestEffort(deps.registry, scope, exact.id);
-        const reason = `match-exact: contract-key equality (${exact.contractKey}). Same canonical contract — guaranteed reuse.`;
+        const reason = 'match-exact: this contract already has a saved interface — reusing it';
         emit({
           decision: 'match-exact',
           strategy: 'exact-key',
@@ -357,7 +357,7 @@ export async function matchBlueprint(
     // switched off for this request — report the miss without
     // spending the retrieval or the judge call.
     const reason =
-      'exact-only policy: semantic strategy disabled — no canonical match, regenerate';
+      'exact-only policy: no canonical match — a new interface will be generated';
     emit({ decision: 'no-match', strategy: 'semantic', reason, candidates: [] });
     return { strategy: 'no-match', reason, candidates: [] };
   }
@@ -380,11 +380,12 @@ export async function matchBlueprint(
     );
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    const reason = `no-match: RAG retrieval failed — ${msg}`;
+    const reason =
+      'no-match: retrieval unavailable — a new interface will be generated';
     emit({
       decision: 'no-match',
       strategy: 'semantic',
-      reason,
+      reason: `no-match: RAG retrieval failed — ${msg}`,
       candidates: [],
     });
     return { strategy: 'no-match', reason, candidates: [] };
@@ -404,22 +405,26 @@ export async function matchBlueprint(
 
   const top = candidates[0]!;
   if (top.cosine < minCosine) {
-    const reason = `match-skip-low-cosine: top cosine=${top.cosine.toFixed(2)} < minCosine=${minCosine}; judge skipped`;
+    const reason =
+      'match-skip-low-cosine: no saved interface is close enough — a new one will be generated';
+    const traceReason = `match-skip-low-cosine: top cosine=${top.cosine.toFixed(2)} < minCosine=${minCosine}; judge skipped`;
     emit({
       decision: 'match-skip-low-cosine',
       strategy: 'semantic',
-      reason,
+      reason: traceReason,
       candidates,
     });
     return { strategy: 'no-match', reason, candidates };
   }
 
   if (!deps.llm) {
-    const reason = `match-skip-no-llm: ${candidates.length} candidates available but no LLMCaller wired — falling through to cold generation`;
+    const reason =
+      'match-skip-no-llm: semantic matching unavailable — a new interface will be generated';
+    const traceReason = `match-skip-no-llm: ${candidates.length} candidates available but no LLMCaller wired — falling through to cold generation`;
     emit({
       decision: 'match-skip-no-llm',
       strategy: 'semantic',
-      reason,
+      reason: traceReason,
       candidates,
     });
     return { strategy: 'no-match', reason, candidates };
@@ -443,13 +448,17 @@ export async function matchBlueprint(
   if (decision.matchId === null || decision.confidence < judgeThreshold) {
     const reason =
       decision.matchId === null
+        ? 'no-match: judge declined all candidates — a new interface will be generated'
+        : 'no-match-low-confidence: the closest saved interface is not a confident match — a new one will be generated';
+    const traceReason =
+      decision.matchId === null
         ? `no-match: judge declined all ${candidates.length} candidates (confidence=${decision.confidence.toFixed(2)})`
         : `no-match-low-confidence: judge picked ${decision.matchId} but confidence=${decision.confidence.toFixed(2)} < threshold=${judgeThreshold}`;
     emit({
       decision:
         decision.matchId === null ? 'no-match' : 'no-match-low-confidence',
       strategy: 'semantic',
-      reason,
+      reason: traceReason,
       candidates,
       judgeConfidence: decision.confidence,
       judgeReason: decision.reason,
@@ -467,11 +476,13 @@ export async function matchBlueprint(
     // Defensive — rerankCandidates already guards against unknown ids
     // by collapsing to null, but a future change could re-introduce
     // the gap. Fail-loud.
-    const reason = `no-match-judge-defense: judge picked id=${decision.matchId} but it's not in the candidate set — falling through`;
+    const reason =
+      'no-match-judge-defense: the match could not be verified — a new interface will be generated';
+    const traceReason = `no-match-judge-defense: judge picked id=${decision.matchId} but it's not in the candidate set — falling through`;
     emit({
       decision: 'no-match-judge-defense',
       strategy: 'semantic',
-      reason,
+      reason: traceReason,
       candidates,
       judgeConfidence: decision.confidence,
       judgeReason: decision.reason,
@@ -494,11 +505,12 @@ export async function matchBlueprint(
       ? coverageGap(matched.blueprint.contract, query.contract)
       : EMPTY_GAP;
   const gapNote = coverageGapNote(coverage);
-  const reason = `match-semantic: judge matched ${matched.blueprint.id} (cosine=${matched.cosine.toFixed(2)}, confidence=${decision.confidence.toFixed(2)}) — ${decision.reason}${gapNote}`;
+  const reason = `match-semantic: a saved interface matches this intent — reusing it${gapNote}`;
+  const traceReason = `match-semantic: judge matched ${matched.blueprint.id} (cosine=${matched.cosine.toFixed(2)}, confidence=${decision.confidence.toFixed(2)}) — ${decision.reason}${gapNote}`;
   emit({
     decision: 'match-semantic',
     strategy: 'semantic',
-    reason,
+    reason: traceReason,
     candidates,
     winningBlueprintId: matched.blueprint.id,
     judgeConfidence: decision.confidence,

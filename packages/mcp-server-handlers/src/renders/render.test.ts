@@ -649,10 +649,12 @@ describe('createGguiRenderHandler — cache-reuse point-read (Phase 2)', () => {
     expect(out.variantKey).toBe(variantKey({}));
 
     // B1: the cache marker is self-describing by default — a HIT names
-    // the reused blueprint without GGUI_CACHE_TRACE_STDERR.
+    // the reused blueprint on the STRUCTURED field (the reason prose is
+    // outcome-first and carries no ids, per the #556-parallel wording
+    // lever: mechanics live in structured siblings, never narration).
     expect(out.cache.reason).toBeTruthy();
     expect(out.cache.reason).toContain('full-template');
-    expect(out.cache.reason).toContain(storedUuid);
+    expect(out.cache.cachedBlueprintId).toBe(storedUuid);
 
     const stored = await harness.renderStore.get(out.sessionId);
     const render = stored?.render as ComponentGguiSession | undefined;
@@ -1984,7 +1986,7 @@ describe('createGguiRenderHandler — isError failure envelope (ruling B)', () =
       llmCallsAvoided: 0,
       kind: 'cold',
       reason:
-        'cold: generation failed — no stored component was produced or reused',
+        'cold: generation failed — no interface was produced',
     });
     // nextStep never lands on the failure envelope — the content text
     // carries the recovery guidance instead.
@@ -2061,7 +2063,7 @@ describe('createGguiRenderHandler — isError failure envelope (ruling B)', () =
     expect(out.data.error.code).toBe('NO_CREDENTIALS');
     // No cache deps on this harness — the ?? fallback pins the same reason.
     expect(out.data.cache.reason).toBe(
-      'cold: generation failed — no stored component was produced or reused',
+      'cold: generation failed — no interface was produced',
     );
   });
 

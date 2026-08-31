@@ -67,7 +67,7 @@ describe('renderCacheMarkerSchema', () => {
       cachedBlueprintId: 'bp_abc',
       llmCallsAvoided: 1,
       kind: 'full-template' as const,
-      reason: 'full-template: reused stored blueprint bp_abc; 1 generation call avoided',
+      reason: 'full-template: reused a stored interface for this contract',
     };
     expect(renderCacheMarkerSchema.parse(marker)).toEqual(marker);
   });
@@ -454,7 +454,7 @@ describe('ggui_render — variance-aware override reshape', () => {
         llmCallsAvoided: 0,
         kind: 'cold' as const,
         reason:
-          'cold: generation failed — no stored component was produced or reused',
+          'cold: generation failed — no interface was produced',
       },
       error: {
         code: 'PRODUCTION_FAILED' as const,

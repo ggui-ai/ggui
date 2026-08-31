@@ -246,7 +246,7 @@ describe('useMcpAppsChat handleEvent — _meta.ui.displayMode extraction', () =>
         llmCallsAvoided: 0,
         kind: 'cold',
         reason:
-          'cold: generation failed — no stored component was produced or reused',
+          'cold: generation failed — no interface was produced',
       },
       error: { code: 'PRODUCTION_FAILED', message: 'generation failed' },
     };
