@@ -461,6 +461,14 @@ export default function MyComponent({ title }: Props) {
     expect(result.pass).toContain('layout');
     expect(result.pass).toContain('loading');
     expect(result.pass).toContain('visual');
+
+    // Coverage instrument: every criterion gets a row, all `ran`, no
+    // skip reasons on a clean run.
+    expect(result.criteriaCoverage).toHaveLength(7);
+    expect(result.criteriaCoverage!.every(c => c.status === 'ran')).toBe(true);
+    expect(result.criteriaCoverage!.every(c => c.reason === undefined)).toBe(true);
+    const tier1 = result.criteriaCoverage!.filter(c => c.tier === 1).map(c => c.criterion);
+    expect(tier1).toEqual(['functionality', 'crash']);
   });
 
   it('aggregates token counts from all criterion calls', async () => {
@@ -554,6 +562,15 @@ export default function MyComponent({ title }: Props) {
     // Should not throw — error criterion treated as pass
     expect(result.issues).toHaveLength(0);
     expect(result.pass).toHaveLength(7); // including the errored criterion
+
+    // …but the fail-open is DISCLOSED: the errored criterion is
+    // `skipped` with the error message, never conflated with ran-clean.
+    const skipped = result.criteriaCoverage!.filter(c => c.status === 'skipped');
+    expect(skipped).toHaveLength(1);
+    expect(skipped[0].criterion).toBe('functionality'); // first call errored
+    expect(skipped[0].tier).toBe(1);
+    expect(skipped[0].reason).toBe('API rate limit exceeded');
+    expect(result.criteriaCoverage!.filter(c => c.status === 'ran')).toHaveLength(6);
   });
 
   it('handles missing tool call gracefully', async () => {
@@ -580,8 +597,14 @@ export default function MyComponent({ title }: Props) {
 
     const result = await runLLMEvaluation(context, config, NO_DYNAMIC);
 
-    // Should handle gracefully — missing tool call = pass
+    // Should handle gracefully — missing tool call = pass…
     expect(result.pass).toHaveLength(7);
+
+    // …disclosed as `skipped`, with the no-tool-call reason.
+    const skipped = result.criteriaCoverage!.filter(c => c.status === 'skipped');
+    expect(skipped).toHaveLength(1);
+    expect(skipped[0].criterion).toBe('crash'); // second call returned no tool call
+    expect(skipped[0].reason).toBe('no tool call returned');
   });
 
   it('passes contract to mother prompt when provided', async () => {

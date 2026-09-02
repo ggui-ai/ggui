@@ -14,7 +14,13 @@
 // Caching: Anthropic ephemeral cache, OpenAI auto-cache, Google explicit cache.
 // Same system prompt across all 7 calls → first call caches, 6 remaining hit cache.
 
-import type { EvalIssue, EvalResult, EvalCategory } from './types-public.js';
+import type {
+  EvalIssue,
+  EvalResult,
+  EvalCategory,
+  CriterionCoverage,
+  CriterionRunStatus,
+} from './types-public.js';
 import { createAgent } from '../harness/llm-router';
 import type { AgentConfig, LLMToolDef, LLMAgent } from '../harness/llm-router';
 import type { JsonObject } from '@ggui-ai/protocol';
@@ -518,6 +524,15 @@ interface CriterionResult {
   tier: 1 | 2;
   issues: EvalIssue[];
   pass: boolean;
+  /**
+   * Did this criterion actually produce a verdict? The evaluator
+   * fail-opens (`pass: true`) on LLM errors and missing tool calls so a
+   * flaky call never blocks generation — this field is what keeps that
+   * fail-open honest: `skipped` means `pass` carries zero evidence.
+   */
+  coverage: CriterionRunStatus;
+  /** Populated for `skipped` — why the criterion produced no verdict. */
+  skipReason?: string;
   tokens: { in: number; out: number };
   durationMs: number;
 }
@@ -557,6 +572,8 @@ async function evalCriterion(
         tier,
         issues: [],
         pass: true,
+        coverage: 'skipped',
+        skipReason: 'no tool call returned',
         tokens: { in: response.inputTokens, out: response.outputTokens },
         durationMs,
       };
@@ -614,18 +631,25 @@ async function evalCriterion(
       tier,
       issues,
       pass,
+      coverage: 'ran',
       tokens: { in: response.inputTokens, out: response.outputTokens },
       durationMs,
     };
   } catch (e) {
     const durationMs = Date.now() - start;
-    console.error(`[eval] ${criterion}: error — ${e instanceof Error ? e.message : e}`);
-    // On error, treat as pass to avoid blocking on flaky LLM calls
+    const message = e instanceof Error ? e.message : String(e);
+    console.error(`[eval] ${criterion}: error — ${message}`);
+    // On error, treat as pass to avoid blocking on flaky LLM calls.
+    // `coverage: 'skipped'` discloses the fail-open: this criterion
+    // produced NO verdict, and consumers must not read its `pass`
+    // membership as evidence.
     return {
       criterion,
       tier,
       issues: [],
       pass: true,
+      coverage: 'skipped',
+      skipReason: message,
       tokens: { in: 0, out: 0 },
       durationMs,
     };
@@ -809,22 +833,37 @@ export async function runLLMEvaluation(
 
   const wallMs = Date.now() - evalStart;
 
+  // Per-criterion coverage — one row per criterion, ALWAYS all of them,
+  // so a consumer can tell "ran clean" from "silently didn't run"
+  // (the fail-open paths above return pass:true with zero evidence).
+  const criteriaCoverage: CriterionCoverage[] = results.map((r) => ({
+    criterion: r.criterion,
+    tier: r.tier,
+    status: r.coverage,
+    ...(r.skipReason !== undefined ? { reason: r.skipReason } : {}),
+  }));
+  const skippedCount = criteriaCoverage.filter((c) => c.status === 'skipped').length;
+
   // Log per-criterion results
   for (const r of results) {
     const issueCount = r.issues.length;
-    const status = r.pass ? 'PASS' : r.tier === 1 ? 'FAIL' : (r.issues.some(i => i.result === 'fail') ? 'FAIL' : 'WARN');
+    const status = r.coverage === 'skipped'
+      ? 'SKIPPED'
+      : r.pass ? 'PASS' : r.tier === 1 ? 'FAIL' : (r.issues.some(i => i.result === 'fail') ? 'FAIL' : 'WARN');
     const issueLabel = issueCount > 0 ? ` (${issueCount} issue${issueCount > 1 ? 's' : ''})` : '';
     console.log(`[eval] ${r.criterion}: ${status}${issueLabel} ${(r.durationMs / 1000).toFixed(1)}s`);
   }
   console.log(
     `[eval] total: ${(wallMs / 1000).toFixed(1)}s wall (${totalCriteriaCount} parallel) | ` +
     `in=${totalIn} out=${totalOut} cached~=${cachedTokensEstimate} | ` +
-    `issues=${allIssues.length} pass=${passCategories.length}`,
+    `issues=${allIssues.length} pass=${passCategories.length}` +
+    (skippedCount > 0 ? ` skipped=${skippedCount}` : ''),
   );
 
   return {
     issues: allIssues,
     pass: passCategories,
+    criteriaCoverage,
     inputTokens: totalIn,
     outputTokens: totalOut,
   };

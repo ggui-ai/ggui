@@ -87,9 +87,41 @@ export interface RuntimeProbeMeta {
   readonly reason?: string;
 }
 
+/**
+ * Per-criterion execution status — two-valued so "the criterion
+ * silently produced no verdict" is never conflated with "the criterion
+ * ran clean". Same doctrine as `RuntimeProbeStatus` above.
+ *
+ *   - `ran`     — the LLM call completed and returned a verdict for this
+ *                 criterion; its findings (possibly none) are in `issues`.
+ *   - `skipped` — the call errored or returned no tool call. The
+ *                 criterion carries ZERO evidence; the evaluator
+ *                 fail-opens it into `pass` to avoid blocking generation
+ *                 on flaky LLM calls, so consumers MUST consult this
+ *                 field before treating `pass` membership as a verdict.
+ */
+export type CriterionRunStatus = "ran" | "skipped";
+
+/** Coverage row for one evaluation criterion of one eval run. */
+export interface CriterionCoverage {
+  readonly criterion: string;
+  readonly tier: 1 | 2;
+  readonly status: CriterionRunStatus;
+  /** Populated for `skipped` — why the criterion produced no verdict. */
+  readonly reason?: string;
+}
+
 export interface EvalResult {
   issues: EvalIssue[];
   pass: string[];
+  /**
+   * Per-criterion coverage for this eval run. Stamped by
+   * `runLLMEvaluation` (one row per static criterion, always all of
+   * them); absent on eval paths that predate the instrument or never
+   * run per-criterion calls (e.g. `parseEvalResponse` replays). Absence
+   * means coverage is UNKNOWN — never assume `ran`.
+   */
+  criteriaCoverage?: CriterionCoverage[];
   /**
    * Runtime-render probe execution meta. Stamped by the exit-decision
    * probe runner; absent on eval paths that never invoke the probe.

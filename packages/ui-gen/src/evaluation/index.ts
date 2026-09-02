@@ -23,6 +23,8 @@ export type {
   EvalCategory,
   EvalResult,
   EvalCriterion,
+  CriterionCoverage,
+  CriterionRunStatus,
   QualityMode,
   QualityConfig,
   AxisCheck,
