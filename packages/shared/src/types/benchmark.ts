@@ -95,8 +95,45 @@ export interface BenchmarkMeta {
    * degraded run rather than presenting them as full-coverage means.
    */
   judgeCoverageDegraded?: true;
+  /**
+   * Per-criterion coverage of the in-loop evaluator over the run's
+   * tier-evaluated cells. A criterion that never ran fail-opens into
+   * `pass` inside the evaluator, so a pass with skipped coverage is zero
+   * evidence — this is the disclosure. `unknown` = cells whose eval
+   * predates the instrument (or lacks that criterion's row). Cells whose
+   * evaluator was bypassed by design (all rows `not-applicable`) are
+   * excluded from the counts. Absent when no cell carries the instrument.
+   */
+  criteriaCoverage?: CriterionCoverageSummaryDisplay[];
+  /**
+   * Present (true) when some criterion ran on fewer than the runner's
+   * floor of tier-evaluated cells — its pass/warn/fail counts are not
+   * representative. Viewers must annotate.
+   */
+  criteriaCoverageDegraded?: true;
   /** SPDX id of the published dataset license. */
   dataLicense?: string;
+}
+
+/** Run-level roll-up of one eval criterion's coverage. */
+export interface CriterionCoverageSummaryDisplay {
+  criterion: string;
+  tier: 1 | 2;
+  ran: number;
+  skipped: number;
+  unknown: number;
+}
+
+/**
+ * One cell's coverage row for one eval criterion (mirrors ui-gen's
+ * `CriterionCoverage`). `not-applicable` = the evaluator was bypassed by
+ * design for this cell (same-image low-risk); `reason` says why.
+ */
+export interface CriterionCoverageDisplay {
+  criterion: string;
+  tier: 1 | 2;
+  status: 'ran' | 'skipped' | 'not-applicable';
+  reason?: string;
 }
 
 /** Which model + prompt version produced the quality scores. */
@@ -176,6 +213,12 @@ export interface TierEvaluationDisplay {
     description: string;
   }>;
   pass: string[];
+  /**
+   * Per-criterion ran/skipped rows for this cell's eval. Absent when the
+   * eval predates the instrument — coverage unknown, never assumed ran.
+   * A criterion in `pass` with status `skipped` carried no verdict.
+   */
+  criteriaCoverage?: CriterionCoverageDisplay[];
 }
 
 export interface PostGenerationDisplay {

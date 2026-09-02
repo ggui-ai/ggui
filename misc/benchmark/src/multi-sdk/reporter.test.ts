@@ -1,7 +1,13 @@
 import { describe, it, expect } from 'vitest';
-import { generateReport, toDisplayReport, JUDGE_COVERAGE_FLOOR } from './reporter';
+import {
+  generateReport,
+  toDisplayReport,
+  JUDGE_COVERAGE_FLOOR,
+  CRITERIA_COVERAGE_FLOOR,
+} from './reporter';
 import type { BenchmarkRunResult } from './types';
 import type { PanelEvalResult } from './post-eval.js';
+import type { CriterionCoverage } from '@ggui-ai/ui-gen/evaluation';
 
 /**
  * A run where a variant's single cell failed to generate (outage shape):
@@ -62,6 +68,103 @@ function panelResult(score: number): PanelEvalResult {
     evalTimeMs: 10,
   };
 }
+
+/** A generated run that went through in-loop eval; `coverage` = the instrument's rows (undefined = predates it). */
+function tierEvaluatedRun(id: string, coverage: CriterionCoverage[] | undefined): BenchmarkRunResult {
+  const run = generatedRun(id, panelResult(80));
+  return {
+    ...run,
+    tierEvaluation: {
+      issues: [],
+      pass: ['functionality', 'crash', 'interactivity', 'accessibility', 'layout', 'loading', 'visual'],
+      ...(coverage ? { criteriaCoverage: coverage } : {}),
+    },
+  };
+}
+
+const ALL_RAN: CriterionCoverage[] = [
+  { criterion: 'functionality', tier: 1, status: 'ran' },
+  { criterion: 'crash', tier: 1, status: 'ran' },
+  { criterion: 'visual', tier: 2, status: 'ran' },
+];
+const VISUAL_SKIPPED: CriterionCoverage[] = [
+  { criterion: 'functionality', tier: 1, status: 'ran' },
+  { criterion: 'crash', tier: 1, status: 'ran' },
+  { criterion: 'visual', tier: 2, status: 'skipped', reason: 'no tool call returned' },
+];
+
+describe('criteria coverage meta (#591 class)', () => {
+  it('counts ran/skipped per criterion over tier-evaluated cells', () => {
+    const report = generateReport(
+      [tierEvaluatedRun('a', ALL_RAN), tierEvaluatedRun('b', VISUAL_SKIPPED)],
+      0,
+    );
+    const visual = report.meta.criteriaCoverage?.find((c) => c.criterion === 'visual');
+    expect(visual).toEqual({ criterion: 'visual', tier: 2, ran: 1, skipped: 1, unknown: 0 });
+    const crash = report.meta.criteriaCoverage?.find((c) => c.criterion === 'crash');
+    expect(crash).toEqual({ criterion: 'crash', tier: 1, ran: 2, skipped: 0, unknown: 0 });
+  });
+
+  it('counts a tier-evaluated cell without the field as unknown — never as ran', () => {
+    const report = generateReport(
+      [tierEvaluatedRun('a', ALL_RAN), tierEvaluatedRun('b', undefined)],
+      0,
+    );
+    const visual = report.meta.criteriaCoverage?.find((c) => c.criterion === 'visual');
+    expect(visual).toEqual({ criterion: 'visual', tier: 2, ran: 1, skipped: 0, unknown: 1 });
+  });
+
+  it('omits criteriaCoverage entirely when no cell carries the instrument', () => {
+    const report = generateReport([tierEvaluatedRun('a', undefined), generatedRun('b', null)], 0);
+    expect(report.meta.criteriaCoverage).toBeUndefined();
+    expect(report.meta.criteriaCoverageDegraded).toBeUndefined();
+  });
+
+  it('flags criteriaCoverageDegraded when any criterion ran under the floor', () => {
+    // visual ran 1 of 3 tier-evaluated cells (33%) — under the 0.8 floor.
+    const report = generateReport(
+      [tierEvaluatedRun('a', ALL_RAN), tierEvaluatedRun('b', VISUAL_SKIPPED), tierEvaluatedRun('c', undefined)],
+      0,
+    );
+    expect(1 / 3).toBeLessThan(CRITERIA_COVERAGE_FLOOR);
+    expect(report.meta.criteriaCoverageDegraded).toBe(true);
+  });
+
+  it('does not flag degraded when every criterion ran at or above the floor', () => {
+    const report = generateReport([tierEvaluatedRun('a', ALL_RAN), tierEvaluatedRun('b', ALL_RAN)], 0);
+    expect(report.meta.criteriaCoverage).toHaveLength(3);
+    expect(report.meta.criteriaCoverageDegraded).toBeUndefined();
+  });
+
+  it('excludes not-applicable rows (evaluator bypassed by design) from the denominator', () => {
+    // Contract (ui-gen): a same-image low-risk bypass cell stamps one
+    // `not-applicable` row per criterion — no criterion was applicable, so
+    // the cell is evidence neither for nor against any criterion.
+    const bypass: CriterionCoverage[] = ALL_RAN.map((c) => ({
+      ...c,
+      status: 'not-applicable',
+      reason: 'same-image low-risk bypass',
+    }));
+    const report = generateReport([tierEvaluatedRun('a', ALL_RAN), tierEvaluatedRun('b', bypass)], 0);
+    const visual = report.meta.criteriaCoverage?.find((c) => c.criterion === 'visual');
+    expect(visual).toEqual({ criterion: 'visual', tier: 2, ran: 1, skipped: 0, unknown: 0 });
+    expect(report.meta.criteriaCoverageDegraded).toBeUndefined();
+  });
+
+  it('treats an empty criteriaCoverage array as unknown — ui-gen never emits it', () => {
+    const report = generateReport([tierEvaluatedRun('a', ALL_RAN), tierEvaluatedRun('b', [])], 0);
+    const visual = report.meta.criteriaCoverage?.find((c) => c.criterion === 'visual');
+    expect(visual).toEqual({ criterion: 'visual', tier: 2, ran: 1, skipped: 0, unknown: 1 });
+  });
+
+  it('propagates meta summary and per-cell rows to the display report', () => {
+    const report = generateReport([tierEvaluatedRun('a', VISUAL_SKIPPED)], 0);
+    const d = toDisplayReport(report, 'rep-1', 'test');
+    expect(d.meta.criteriaCoverage?.find((c) => c.criterion === 'visual')?.skipped).toBe(1);
+    expect(d.meta.criteriaCoverageDegraded).toBe(true);
+    expect(d.results[0]?.tierEvaluation?.criteriaCoverage).toEqual(VISUAL_SKIPPED);
+  });
+});
 
 describe('judge coverage meta (#565)', () => {
   it('reports evaluatedCount and judgeCoverage over the generated subset', () => {

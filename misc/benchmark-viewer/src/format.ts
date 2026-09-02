@@ -27,6 +27,15 @@ export function formatPercent(rate: number): string {
   return `${Math.round(rate * 100)}%`;
 }
 
+/**
+ * Coverage percents FLOOR instead of round: the runner's degraded flags
+ * use a strict `< 0.8`, so 0.798 must never print as "80%" next to a badge
+ * that says "under 80%".
+ */
+function formatCoveragePercent(rate: number): string {
+  return `${Math.floor(rate * 100)}%`;
+}
+
 /** Normalize a date string for display (YYYY-MM-DD passes through). */
 export function formatDate(date: string): string {
   return date;
@@ -48,7 +57,50 @@ export function judgeCoverageLine(meta: {
 }): { text: string; degraded: boolean } | null {
   if (meta.evaluatedCount === undefined || meta.judgeCoverage === undefined) return null;
   return {
-    text: `scores from ${meta.evaluatedCount}/${meta.successCount} generated cells (${formatPercent(meta.judgeCoverage)})`,
+    text: `scores from ${meta.evaluatedCount}/${meta.successCount} generated cells (${formatCoveragePercent(meta.judgeCoverage)})`,
     degraded: meta.judgeCoverageDegraded === true,
+  };
+}
+
+/**
+ * Mirror of the runner's `CRITERIA_COVERAGE_FLOOR` (reporter.ts) — the
+ * viewer cannot import the runner, and the floor is also stated as "80%"
+ * in the methodology text. Change all three together.
+ */
+const CRITERIA_COVERAGE_FLOOR = 0.8;
+
+/**
+ * In-loop evaluator criterion-coverage disclosure (#591 class): how many
+ * criteria produced a verdict on every tier-evaluated cell, and — on a
+ * degraded run — which criteria fell under the floor, as
+ * "name ran/total (pct)". A criterion that never ran fail-opens into
+ * `pass` inside the evaluator, so an undisclosed shortfall would publish
+ * non-evidence as evidence. Returns null for reports without the
+ * instrument (no cell carried it) — unknown coverage, never 100%.
+ */
+export function criteriaCoverageLine(meta: {
+  criteriaCoverage?: Array<{
+    criterion: string;
+    tier: 1 | 2;
+    ran: number;
+    skipped: number;
+    unknown: number;
+  }>;
+  criteriaCoverageDegraded?: true;
+}): { text: string; degraded: boolean; short: string[] } | null {
+  const rows = meta.criteriaCoverage;
+  if (rows === undefined || rows.length === 0) return null;
+  const [first] = rows;
+  // Every row's counts are over the same cell set, so any row yields the total.
+  const cells = first.ran + first.skipped + first.unknown;
+  const share = (ran: number) => (cells > 0 ? ran / cells : 0);
+  const full = rows.filter((r) => r.ran === cells).length;
+  const short = rows
+    .filter((r) => share(r.ran) < CRITERIA_COVERAGE_FLOOR)
+    .map((r) => `${r.criterion} ${r.ran}/${cells} (${formatCoveragePercent(share(r.ran))})`);
+  return {
+    text: `eval criteria: ${full}/${rows.length} ran on all ${cells} evaluated cells`,
+    degraded: meta.criteriaCoverageDegraded === true,
+    short,
   };
 }

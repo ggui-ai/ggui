@@ -11,11 +11,13 @@ import type {
   VariantSummaryDisplay,
   SdkComparisonEntry,
 } from '@ggui-ai/shared';
+import type { CriterionRunStatus } from '@ggui-ai/ui-gen/evaluation';
 import type {
   AestheticScores,
   BenchmarkReport,
   BenchmarkRunResult,
   CommitSummary,
+  CriterionCoverageSummary,
   GeneratorComparisonCell,
   GeneratorComparisonMatrix,
   GeneratorSummary,
@@ -55,6 +57,71 @@ function dedupeJudges(judges: JudgeDisclosure[]): JudgeDisclosure[] {
 export const JUDGE_COVERAGE_FLOOR = 0.8;
 
 /**
+ * In-loop criterion coverage floor: a criterion that produced a verdict
+ * on fewer than this share of tier-evaluated cells flags the run
+ * `criteriaCoverageDegraded` (#591 class — the evaluator fail-opens a
+ * skipped criterion into `pass`, so unflagged partial coverage would
+ * publish non-evidence as evidence). Same bar as the judge panel.
+ */
+export const CRITERIA_COVERAGE_FLOOR = 0.8;
+
+/**
+ * Roll up the in-loop evaluator's per-criterion coverage over the run's
+ * tier-evaluated cells. Returns undefined when no cell carries the
+ * instrument (pre-instrument image) — "unknown everywhere" is not a
+ * summary, it's the absence of one. When present, cells without the
+ * field count as `unknown` for every criterion (never `ran`).
+ */
+function buildCriteriaCoverage(
+  results: BenchmarkRunResult[],
+): { rows: CriterionCoverageSummary[]; degraded: boolean } | undefined {
+  // Contract (ui-gen `CriterionCoverage`): field ABSENT = unknown (never
+  // ran / predates the instrument); `not-applicable` rows = the evaluator
+  // was bypassed by design (same-image low-risk cell) — no criterion was
+  // applicable, so the cell is excluded from the denominator; `skipped` =
+  // silent absence, counts against; `ran` = covered. `[]` never arrives
+  // from ui-gen — treated as unknown, never as presence or bypass.
+  const isBypassed = (r: BenchmarkRunResult): boolean => {
+    const cc = r.tierEvaluation?.criteriaCoverage;
+    return cc !== undefined && cc.length > 0 && cc.every((c) => c.status === 'not-applicable');
+  };
+  const evaluated = results.filter((r) => r.tierEvaluation !== undefined && !isBypassed(r));
+  // Instrument presence = at least one evaluated cell the evaluator
+  // actually stamped (non-empty rows). Bypass cells alone don't count.
+  const instrumented = evaluated.filter(
+    (r) => (r.tierEvaluation?.criteriaCoverage?.length ?? 0) > 0,
+  );
+  if (instrumented.length === 0) return undefined;
+
+  // Criterion set + tier: first-seen order across instrumented cells.
+  const tiers = new Map<string, 1 | 2>();
+  for (const r of instrumented) {
+    for (const c of r.tierEvaluation?.criteriaCoverage ?? []) {
+      if (!tiers.has(c.criterion)) tiers.set(c.criterion, c.tier);
+    }
+  }
+
+  const rows: CriterionCoverageSummary[] = [];
+  let degraded = false;
+  for (const [criterion, tier] of tiers) {
+    let ran = 0;
+    let skipped = 0;
+    let unknown = 0;
+    for (const r of evaluated) {
+      const row = r.tierEvaluation?.criteriaCoverage?.find((c) => c.criterion === criterion);
+      if (!row) unknown++;
+      else if (row.status === 'ran') ran++;
+      else if (row.status === 'skipped') skipped++;
+      // 'not-applicable' on a non-bypass cell: not in this criterion's denominator.
+    }
+    rows.push({ criterion, tier, ran, skipped, unknown });
+    const denominator = ran + skipped + unknown;
+    if (denominator > 0 && ran / denominator < CRITERIA_COVERAGE_FLOOR) degraded = true;
+  }
+  return { rows, degraded };
+}
+
+/**
  * Generate a full benchmark report from individual run results.
  *
  * `opts.evaluationSkipped` — pass true for `skipEvaluation` runs so the
@@ -73,6 +140,7 @@ export function generateReport(
     !opts?.evaluationSkipped &&
     successResults.length > 0 &&
     judgeCoverage < JUDGE_COVERAGE_FLOOR;
+  const criteria = buildCriteriaCoverage(results);
 
   // Judge disclosure: every PanelEvalResult carries its panel of
   // judges. Surface the distinct panel models once at meta level (taken
@@ -96,6 +164,8 @@ export function generateReport(
       evaluatedCount,
       judgeCoverage,
       ...(judgeCoverageDegraded ? { judgeCoverageDegraded: true as const } : {}),
+      ...(criteria !== undefined ? { criteriaCoverage: criteria.rows } : {}),
+      ...(criteria?.degraded ? { criteriaCoverageDegraded: true as const } : {}),
     },
     results,
     variantSummaries: buildVariantSummaries(results),
@@ -608,6 +678,10 @@ export function toDisplayReport(
       evaluatedCount: report.meta.evaluatedCount,
       judgeCoverage: report.meta.judgeCoverage,
       ...(report.meta.judgeCoverageDegraded ? { judgeCoverageDegraded: true as const } : {}),
+      ...(report.meta.criteriaCoverage !== undefined
+        ? { criteriaCoverage: report.meta.criteriaCoverage.map((c) => ({ ...c })) }
+        : {}),
+      ...(report.meta.criteriaCoverageDegraded ? { criteriaCoverageDegraded: true as const } : {}),
     },
     results: report.results.map(mapRunResult),
     variantSummaries: report.variantSummaries.map((v) =>
@@ -684,6 +758,20 @@ function mapEvaluation(r: BenchmarkRunResult): EvaluationResultDisplay | null {
   };
 }
 
+/**
+ * Compile-time pin: the display row's `status` vocabulary (owned by
+ * `@ggui-ai/shared`, which cannot depend on ui-gen) must accept every
+ * value ui-gen's `CriterionRunStatus` can produce. If ui-gen adds a
+ * status, this line fails typecheck instead of the mapper below silently
+ * narrowing or erroring at a distance.
+ */
+const _criterionStatusVocabularyPinned: CriterionRunStatus extends TierEvaluationCriterionStatus
+  ? true
+  : never = true;
+type TierEvaluationCriterionStatus = NonNullable<
+  TierEvaluationDisplay['criteriaCoverage']
+>[number]['status'];
+
 function mapTierEvaluation(r: BenchmarkRunResult): TierEvaluationDisplay | undefined {
   if (!r.tierEvaluation) return undefined;
   return {
@@ -694,6 +782,16 @@ function mapTierEvaluation(r: BenchmarkRunResult): TierEvaluationDisplay | undef
       description: i.description,
     })),
     pass: [...r.tierEvaluation.pass],
+    ...(r.tierEvaluation.criteriaCoverage !== undefined
+      ? {
+          criteriaCoverage: r.tierEvaluation.criteriaCoverage.map((c) => ({
+            criterion: c.criterion,
+            tier: c.tier,
+            status: c.status,
+            ...(c.reason !== undefined ? { reason: c.reason } : {}),
+          })),
+        }
+      : {}),
   };
 }
 

@@ -6,7 +6,62 @@ import {
   formatPercent,
   formatDate,
   judgeCoverageLine,
+  criteriaCoverageLine,
 } from './format';
+
+describe('criteriaCoverageLine', () => {
+  const full = [
+    { criterion: 'functionality', tier: 1 as const, ran: 90, skipped: 0, unknown: 0 },
+    { criterion: 'visual', tier: 2 as const, ran: 90, skipped: 0, unknown: 0 },
+  ];
+
+  it('summarizes full coverage as all criteria ran on every evaluated cell', () => {
+    const line = criteriaCoverageLine({ criteriaCoverage: full });
+    expect(line).toEqual({
+      text: 'eval criteria: 2/2 ran on all 90 evaluated cells',
+      degraded: false,
+      short: [],
+    });
+  });
+
+  it('names the criteria under the floor on a degraded run', () => {
+    const line = criteriaCoverageLine({
+      criteriaCoverage: [
+        full[0]!,
+        { criterion: 'visual', tier: 2, ran: 54, skipped: 30, unknown: 6 },
+      ],
+      criteriaCoverageDegraded: true,
+    });
+    expect(line?.degraded).toBe(true);
+    expect(line?.short).toEqual(['visual 54/90 (60%)']);
+    expect(line?.text).toBe('eval criteria: 1/2 ran on all 90 evaluated cells');
+  });
+
+  it('lists only criteria under the floor — a 94% criterion is not "low coverage"', () => {
+    const line = criteriaCoverageLine({
+      criteriaCoverage: [
+        full[0]!,
+        { criterion: 'loading', tier: 2, ran: 85, skipped: 5, unknown: 0 },
+        { criterion: 'visual', tier: 2, ran: 54, skipped: 36, unknown: 0 },
+      ],
+      criteriaCoverageDegraded: true,
+    });
+    expect(line?.short).toEqual(['visual 54/90 (60%)']);
+  });
+
+  it('floors the percent so a sub-floor ratio never renders as the floor itself', () => {
+    // 79/99 = 0.798 — flagged by the reporter's strict < 0.8, must not print "80%".
+    const line = criteriaCoverageLine({
+      criteriaCoverage: [{ criterion: 'visual', tier: 2, ran: 79, skipped: 20, unknown: 0 }],
+      criteriaCoverageDegraded: true,
+    });
+    expect(line?.short).toEqual(['visual 79/99 (79%)']);
+  });
+
+  it('returns null for pre-instrument reports', () => {
+    expect(criteriaCoverageLine({})).toBeNull();
+  });
+});
 
 describe('judgeCoverageLine', () => {
   it('renders evaluated/generated with the coverage percent', () => {

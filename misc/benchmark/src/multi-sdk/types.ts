@@ -297,6 +297,22 @@ export interface BenchmarkReport {
      * if it were full). Viewers must annotate scores from a degraded run.
      */
     judgeCoverageDegraded?: true;
+    /**
+     * Per-criterion coverage of the IN-LOOP evaluator over tier-evaluated
+     * cells (the #591 silent-absence class: a criterion that never ran
+     * fail-opens into `pass` in the evaluator, so a pass with `skipped`
+     * coverage is zero evidence). One row per criterion seen; `unknown`
+     * counts cells whose eval predates the instrument (field absent —
+     * never assumed `ran`). Absent when NO cell carries the instrument.
+     */
+    criteriaCoverage?: CriterionCoverageSummary[];
+    /**
+     * Present (true) when the instrument is present but some criterion
+     * ran on fewer than `CRITERIA_COVERAGE_FLOOR` of the tier-evaluated
+     * cells — that criterion's pass/warn/fail counts are not
+     * representative.
+     */
+    criteriaCoverageDegraded?: true;
   };
   results: BenchmarkRunResult[];
   variantSummaries: VariantSummary[];
@@ -321,6 +337,29 @@ export interface BenchmarkReport {
    * without diving into the full matrix.
    */
   generatorSummaries: GeneratorSummary[];
+}
+
+/**
+ * Run-level roll-up of one in-loop eval criterion's coverage (see
+ * {@link BenchmarkReport.meta.criteriaCoverage}). Counts are over the
+ * tier-evaluated cells of the run; `ran + skipped + unknown` = that count.
+ */
+export interface CriterionCoverageSummary {
+  readonly criterion: string;
+  readonly tier: 1 | 2;
+  /** Cells where the criterion produced a verdict. */
+  readonly ran: number;
+  /** Cells where the instrument reported the criterion produced NO verdict. */
+  readonly skipped: number;
+  /**
+   * Cells whose eval carries no coverage field (predates the instrument),
+   * or carries the field without a row for this criterion (the
+   * evaluator's static criterion set changed within one report). Never
+   * counted as `ran`. Cells whose rows are all `not-applicable` (evaluator
+   * bypassed by design — same-image low-risk cells) are excluded from all
+   * three counts: no criteria applicable is not evidence either way.
+   */
+  readonly unknown: number;
 }
 
 /**

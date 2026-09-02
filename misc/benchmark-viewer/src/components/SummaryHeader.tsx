@@ -1,5 +1,10 @@
 import type { BenchmarkReport } from '../types';
-import { formatDurationMs, formatPercent, judgeCoverageLine } from '../format';
+import {
+  formatDurationMs,
+  formatPercent,
+  judgeCoverageLine,
+  criteriaCoverageLine,
+} from '../format';
 
 interface Props {
   report: BenchmarkReport;
@@ -13,6 +18,7 @@ interface Props {
 export function SummaryHeader({ report, date }: Props) {
   const { meta } = report;
   const coverage = judgeCoverageLine(meta);
+  const criteria = criteriaCoverageLine(meta);
   return (
     <header className="border-b border-line-2 pb-6 mb-8">
       <p className="eyebrow mb-2">run · {date}</p>
@@ -56,6 +62,17 @@ export function SummaryHeader({ report, date }: Props) {
           {coverage.degraded && (
             <span className="ml-2 px-1.5 py-0.5 rounded bg-draft/10 text-draft font-semibold">
               low judge coverage — aggregate scores not representative
+            </span>
+          )}
+        </p>
+      )}
+      {criteria && (
+        <p className="font-mono text-xs mt-1">
+          <span className="text-ink-4">{criteria.text}</span>
+          {criteria.degraded && (
+            <span className="ml-2 px-1.5 py-0.5 rounded bg-draft/10 text-draft font-semibold">
+              low criterion coverage — {criteria.short.join(', ')} — skipped criteria
+              fail-open to pass
             </span>
           )}
         </p>
