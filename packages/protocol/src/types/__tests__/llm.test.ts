@@ -36,7 +36,9 @@ describe('MODEL_REGISTRY — Fable 5.1 row (ggui#707)', () => {
       inputPer1M: 10.0,
       outputPer1M: 50.0,
       cacheWritePer1M: 12.5,
-      cacheReadPer1M: 1.0,
+      // 0.025× the input price on Fable 5.1 (pricing docs footnote; every
+      // other model keeps the 0.1× multiplier) — $0.25 / MTok.
+      cacheReadPer1M: 0.25,
     });
   });
 

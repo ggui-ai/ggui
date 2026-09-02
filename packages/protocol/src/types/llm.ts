@@ -137,8 +137,13 @@ const MODEL_ROWS = defineModelRegistry({
     costs: {
       inputPer1M: 10.0,
       outputPer1M: 50.0,
+      // 5-minute cache write (1.25×); the 1h write ($20) is not modeled.
       cacheWritePer1M: 12.5,
-      cacheReadPer1M: 1.0,
+      // NOT the usual 0.1× — the pricing docs footnote: "Cache hits and
+      // refreshes on Claude Fable 5.1 and Claude Mythos 5.1 are priced at
+      // 0.025x the base input price." $0.25 / MTok; the vendored LiteLLM
+      // snapshot agrees (2.5e-7 per token). Verified 2026-09-02 (#707).
+      cacheReadPer1M: 0.25,
     },
     maxTokens: 1000000,
     supportsTools: true,
