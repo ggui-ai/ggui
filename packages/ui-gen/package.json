@@ -1,7 +1,7 @@
 {
   "name": "@ggui-ai/ui-gen",
   "version": "0.13.0",
-  "description": "UI generation harness for ggui \u2014 the LLM system prompt, multi-turn coding loop, and evaluation engine that turn a DataContract into a React component. Implements the UiGenerator contract from @ggui-ai/mcp-server-core; consumed by @ggui-ai/mcp-server.",
+  "description": "UI generation harness for ggui — the LLM system prompt, multi-turn coding loop, and evaluation engine that turn a DataContract into a React component. Implements the UiGenerator contract from @ggui-ai/mcp-server-core; consumed by @ggui-ai/mcp-server.",
   "license": "Apache-2.0",
   "keywords": [
     "ggui",
@@ -183,7 +183,7 @@
     }
   },
   "scripts": {
-    "build": "NODE_OPTIONS=--max-old-space-size=8192 TSUP_OUT_DIR=dist.staging-$$ tsup && node ../scripts/atomic-swap.mjs dist.staging-$$ dist",
+    "build": "NODE_OPTIONS=--max-old-space-size=8192 TSUP_OUT_DIR=dist.staging tsup && node ../scripts/atomic-swap.mjs dist.staging dist",
     "dev": "tsup --watch",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
@@ -217,9 +217,9 @@
     }
   },
   "dependencies": {
-    "@anthropic-ai/bedrock-sdk": "^0.32.1",
-    "@anthropic-ai/claude-agent-sdk": "0.3.258",
-    "@anthropic-ai/sdk": "^0.116.0",
+    "@anthropic-ai/bedrock-sdk": "^0.33.3",
+    "@anthropic-ai/claude-agent-sdk": "0.3.229",
+    "@anthropic-ai/sdk": "^0.123.0",
     "@ggui-ai/design": "workspace:*",
     "@ggui-ai/gadgets": "workspace:*",
     "@ggui-ai/sandbox": "workspace:*",

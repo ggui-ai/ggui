@@ -39,7 +39,7 @@
     "sample-data": "node --import tsx scripts/generate-sample-data.mjs"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.32.0",
+    "@anthropic-ai/sdk": "^0.123.0",
     "@aws-sdk/client-s3": "^3.500.0",
     "@ggui-ai/design": "workspace:*",
     "@ggui-ai/mcp-server-core": "workspace:*",
