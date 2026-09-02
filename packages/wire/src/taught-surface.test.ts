@@ -37,3 +37,22 @@ describe('taught wire surface is frozen for ggui#670 Phase 1', () => {
     expect(iface.split('\n').filter((l) => l.includes(':')).length).toBe(2);
   });
 });
+
+describe('the rendered prompt surface (WIRE_DOCUMENTATION) is frozen — the wire build regenerates it', () => {
+  // `pnpm --filter @ggui-ai/wire build` ends with `generate:docs`, which
+  // rewrites ui-gen's get-wire.ts from THIS package's source. The
+  // generator prints EVERY WireConfig member and provider prop, so any
+  // new documented member is prompt motion even when no hook changes.
+  // (ggui#670 Phase 1 caught its own leak this way: an optional
+  // `render.connection` field surfaced ~400 chars into the prompt.)
+  it('WireConfig.render prints exactly {sessionId, isConnected} and the provider has exactly config + children', async () => {
+    const doc = readFileSync(resolve(here, '..', '..', 'ui-gen', 'src', 'tools', 'get-wire.ts'), 'utf8');
+    expect(doc).toContain('| render | `{     readonly sessionId: string;     readonly isConnected: boolean;   }` | render |');
+    // Pin the absence of the FIELD, not the word: "render context with
+    // connection status" is the taught useRender docstring.
+    expect(doc).not.toContain('ConnectionStore');
+    expect(doc).not.toContain('connection?:');
+    const provider = doc.slice(doc.indexOf('### GguiWireProvider'), doc.indexOf('## Internal: WireConfig'));
+    expect((provider.match(/^\| [a-zA-Z]+ \| `/gm) ?? []).length).toBe(2);
+  });
+});

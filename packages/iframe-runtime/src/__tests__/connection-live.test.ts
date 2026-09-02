@@ -91,7 +91,7 @@ describe('useRender().isConnected is live (ggui#670)', () => {
     document.body.appendChild(container);
     const config = {
       app: { appId: 'app_1', appName: 'app_1' },
-      render: { sessionId: 'sess_1', isConnected: true, connection: connectionStore },
+      render: { sessionId: 'sess_1', isConnected: true },
       auth: { isAuthenticated: false },
       dispatch: () => {},
       subscribe: () => () => {},

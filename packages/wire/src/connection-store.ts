@@ -49,3 +49,9 @@ export function createConnectionStore(initial = true): ConnectionStore {
     },
   };
 }
+
+/**
+ * The document's connection store — the runtime is its only writer
+ * (the relay latch's two edges); `useRender()` is its reader.
+ */
+export const connectionStore: ConnectionStore = createConnectionStore(true);

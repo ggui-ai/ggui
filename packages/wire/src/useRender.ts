@@ -1,22 +1,23 @@
 import { useSyncExternalStore } from 'react';
 import { useWireContext } from './context';
+import { connectionStore } from './connection-store';
 
 export interface GguiSessionInfo {
   sessionId: string;
   isConnected: boolean;
 }
 
-const noopSubscribe = (): (() => void) => () => {};
-
 /** Read-only render context with connection status. */
 export function useRender(): GguiSessionInfo {
   const { render } = useWireContext();
-  // Live when the renderer supplies the connection store (ggui#670);
-  // the static field is the value for hand-built configs.
+  // `isConnected` is LIVE (ggui#670): the document's connection store
+  // is written by the runtime at the relay latch's edges; the static
+  // config field is not consulted. Presentational truth only —
+  // readers MUST NOT suppress dispatch on `false`.
   const isConnected = useSyncExternalStore(
-    render.connection?.subscribe ?? noopSubscribe,
-    () => (render.connection ? render.connection.getSnapshot() : render.isConnected),
-    () => (render.connection ? render.connection.getSnapshot() : render.isConnected),
+    connectionStore.subscribe,
+    connectionStore.getSnapshot,
+    connectionStore.getSnapshot,
   );
   return { sessionId: render.sessionId, isConnected };
 }

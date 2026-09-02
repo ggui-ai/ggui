@@ -14,7 +14,7 @@ export { useContract, type InferredContractHooks, type ManualContractHooks } fro
 export { useAuth, type AuthInfo } from './useAuth';
 export { useApp, type AppInfo } from './useApp';
 export { useRender, type GguiSessionInfo } from './useRender';
-export { createConnectionStore, type ConnectionStore } from './connection-store';
+export { createConnectionStore, connectionStore, type ConnectionStore } from './connection-store';
 export {
   ClientContractViolationError,
   buildActionEnvelope,

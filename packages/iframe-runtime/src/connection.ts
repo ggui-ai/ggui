@@ -7,15 +7,14 @@
  * host (there is exactly one boot per document; re-mounts inherit it).
  * The runtime is the only writer, through `transitionRelayLatch` in
  * `runtime.ts` — the latch's two edges are the only transitions. Lives
- * in its own module so `wire-config.ts` (which threads it into the
- * root config) and `runtime.ts` (which writes it) share it without a
- * circular import.
+ * re-exported here so the runtime's writer sites name one local
+ * module; the store itself is wire's package singleton (the wire docs
+ * generator prints every WireConfig member into the prompt, so the
+ * store is deliberately NOT a config member).
  *
  * Not a reserved stream channel: nothing on the wire can reach it
  * (SPEC §4.4 forbids renderer-authored `_ggui:*` deliveries, and a
  * registered-but-ungated channel would have been a forgery path — the
  * adversarial pass on ggui#670).
  */
-import { createConnectionStore, type ConnectionStore } from '@ggui-ai/wire';
-
-export const connectionStore: ConnectionStore = createConnectionStore(true);
+export { connectionStore } from '@ggui-ai/wire';
