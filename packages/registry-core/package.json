@@ -62,7 +62,7 @@
     "@ggui-ai/artifact-manifest": "workspace:*",
     "@ggui-ai/gadget-signing": "workspace:*",
     "@ggui-ai/protocol": "workspace:*",
-    "esbuild": "0.25.12",
+    "esbuild": "0.28.2",
     "oxc-parser": "^0.131.0",
     "zod": "^4.3.6"
   },

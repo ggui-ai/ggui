@@ -113,8 +113,9 @@ overrides:
   # a ^6-range lands ≥6.4.3 (verified in both lockfiles at retirement).
   # If a transitive context ever entrenches <6.4.3 again, prefer
   # peerDependencyRules or an exact-version selector over a range floor.
-  "esbuild@<0.25.0": ^0.25.0
-  "esbuild@>=0.27.3 <0.28.1": ^0.28.1
+  # esbuild: no workspace-wide pin (#758) — mirrors the root yaml; the two
+  # prior floors (<0.25.0 → ^0.25.0; >=0.27.3 <0.28.1 → ^0.28.1) were dormant
+  # (one 0.25.12 arm existed) and are retired.
   "uuid@<14.0.0": ^14.0.0
   # Exact-pinned SAME as root: the two workspaces install over
   # overlapping hoisted trees, and tsc only unifies duplicate packages
@@ -228,6 +229,84 @@ overrides:
   "@babel/runtime@^7": 7.29.7
   "@babel/runtime@^8": 8.0.0
   "@chromatic-com/storybook": 5.3.0
+  "@esbuild/aix-ppc64@0.25.x": 0.25.12
+  "@esbuild/aix-ppc64@0.27.x": 0.27.7
+  "@esbuild/aix-ppc64@0.28.x": 0.28.2
+  "@esbuild/android-arm64@0.25.x": 0.25.12
+  "@esbuild/android-arm64@0.27.x": 0.27.7
+  "@esbuild/android-arm64@0.28.x": 0.28.2
+  "@esbuild/android-arm@0.25.x": 0.25.12
+  "@esbuild/android-arm@0.27.x": 0.27.7
+  "@esbuild/android-arm@0.28.x": 0.28.2
+  "@esbuild/android-x64@0.25.x": 0.25.12
+  "@esbuild/android-x64@0.27.x": 0.27.7
+  "@esbuild/android-x64@0.28.x": 0.28.2
+  "@esbuild/darwin-arm64@0.25.x": 0.25.12
+  "@esbuild/darwin-arm64@0.27.x": 0.27.7
+  "@esbuild/darwin-arm64@0.28.x": 0.28.2
+  "@esbuild/darwin-x64@0.25.x": 0.25.12
+  "@esbuild/darwin-x64@0.27.x": 0.27.7
+  "@esbuild/darwin-x64@0.28.x": 0.28.2
+  "@esbuild/freebsd-arm64@0.25.x": 0.25.12
+  "@esbuild/freebsd-arm64@0.27.x": 0.27.7
+  "@esbuild/freebsd-arm64@0.28.x": 0.28.2
+  "@esbuild/freebsd-x64@0.25.x": 0.25.12
+  "@esbuild/freebsd-x64@0.27.x": 0.27.7
+  "@esbuild/freebsd-x64@0.28.x": 0.28.2
+  "@esbuild/linux-arm64@0.25.x": 0.25.12
+  "@esbuild/linux-arm64@0.27.x": 0.27.7
+  "@esbuild/linux-arm64@0.28.x": 0.28.2
+  "@esbuild/linux-arm@0.25.x": 0.25.12
+  "@esbuild/linux-arm@0.27.x": 0.27.7
+  "@esbuild/linux-arm@0.28.x": 0.28.2
+  "@esbuild/linux-ia32@0.25.x": 0.25.12
+  "@esbuild/linux-ia32@0.27.x": 0.27.7
+  "@esbuild/linux-ia32@0.28.x": 0.28.2
+  "@esbuild/linux-loong64@0.25.x": 0.25.12
+  "@esbuild/linux-loong64@0.27.x": 0.27.7
+  "@esbuild/linux-loong64@0.28.x": 0.28.2
+  "@esbuild/linux-mips64el@0.25.x": 0.25.12
+  "@esbuild/linux-mips64el@0.27.x": 0.27.7
+  "@esbuild/linux-mips64el@0.28.x": 0.28.2
+  "@esbuild/linux-ppc64@0.25.x": 0.25.12
+  "@esbuild/linux-ppc64@0.27.x": 0.27.7
+  "@esbuild/linux-ppc64@0.28.x": 0.28.2
+  "@esbuild/linux-riscv64@0.25.x": 0.25.12
+  "@esbuild/linux-riscv64@0.27.x": 0.27.7
+  "@esbuild/linux-riscv64@0.28.x": 0.28.2
+  "@esbuild/linux-s390x@0.25.x": 0.25.12
+  "@esbuild/linux-s390x@0.27.x": 0.27.7
+  "@esbuild/linux-s390x@0.28.x": 0.28.2
+  "@esbuild/linux-x64@0.25.x": 0.25.12
+  "@esbuild/linux-x64@0.27.x": 0.27.7
+  "@esbuild/linux-x64@0.28.x": 0.28.2
+  "@esbuild/netbsd-arm64@0.25.x": 0.25.12
+  "@esbuild/netbsd-arm64@0.27.x": 0.27.7
+  "@esbuild/netbsd-arm64@0.28.x": 0.28.2
+  "@esbuild/netbsd-x64@0.25.x": 0.25.12
+  "@esbuild/netbsd-x64@0.27.x": 0.27.7
+  "@esbuild/netbsd-x64@0.28.x": 0.28.2
+  "@esbuild/openbsd-arm64@0.25.x": 0.25.12
+  "@esbuild/openbsd-arm64@0.27.x": 0.27.7
+  "@esbuild/openbsd-arm64@0.28.x": 0.28.2
+  "@esbuild/openbsd-x64@0.25.x": 0.25.12
+  "@esbuild/openbsd-x64@0.27.x": 0.27.7
+  "@esbuild/openbsd-x64@0.28.x": 0.28.2
+  "@esbuild/openharmony-arm64@0.25.x": 0.25.12
+  "@esbuild/openharmony-arm64@0.27.x": 0.27.7
+  "@esbuild/openharmony-arm64@0.28.x": 0.28.2
+  "@esbuild/sunos-x64@0.25.x": 0.25.12
+  "@esbuild/sunos-x64@0.27.x": 0.27.7
+  "@esbuild/sunos-x64@0.28.x": 0.28.2
+  "@esbuild/win32-arm64@0.25.x": 0.25.12
+  "@esbuild/win32-arm64@0.27.x": 0.27.7
+  "@esbuild/win32-arm64@0.28.x": 0.28.2
+  "@esbuild/win32-ia32@0.25.x": 0.25.12
+  "@esbuild/win32-ia32@0.27.x": 0.27.7
+  "@esbuild/win32-ia32@0.28.x": 0.28.2
+  "@esbuild/win32-x64@0.25.x": 0.25.12
+  "@esbuild/win32-x64@0.27.x": 0.27.7
+  "@esbuild/win32-x64@0.28.x": 0.28.2
   "@google-cloud/storage": 7.21.0
   "@guuey/mcp-apps-host@0.16.x": 0.16.14
   "@guuey/threads": 0.16.14
@@ -350,6 +429,9 @@ overrides:
   es-iterator-helpers: 1.4.0
   es-object-atoms: 1.1.2
   es-to-primitive: 1.3.4
+  "esbuild@0.25.x": 0.25.12
+  "esbuild@0.27.x": 0.27.7
+  "esbuild@0.28.x": 0.28.2
   eventsource-parser: 3.1.0
   expect-type: 1.4.0
   express-rate-limit: 8.6.1

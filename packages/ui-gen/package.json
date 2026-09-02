@@ -231,7 +231,7 @@
     "@testing-library/user-event": "^14.6.1",
     "@typescript-eslint/parser": "^8.0.0",
     "diff": "^8.0.3",
-    "esbuild": "^0.25.0",
+    "esbuild": "^0.28.2",
     "eslint": "^8.56.0",
     "eslint-plugin-react": "^7.37.0",
     "eslint-plugin-react-hooks": "^5.0.0",
