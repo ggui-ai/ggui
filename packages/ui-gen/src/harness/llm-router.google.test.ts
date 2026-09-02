@@ -78,7 +78,14 @@ describe('GoogleAgent (steps schema)', () => {
     const agent = new GoogleAgent();
     const res = await agent.callText('gemini/gemini-3.1-flash-lite', 'SYSTEM', 'USER');
 
-    expect(res).toEqual({ text: 'Hello world', inputTokens: 11, outputTokens: 7 });
+    // `sampling` discloses the effective temperature (ggui#710): none was
+    // requested here, so the provider default applied.
+    expect(res).toEqual({
+      text: 'Hello world',
+      inputTokens: 11,
+      outputTokens: 7,
+      sampling: { temperature: 'provider-default' },
+    });
     // `gemini/` transport prefix stripped before the wire.
     expect(createMock.mock.calls[0][0].model).toBe('gemini-3.1-flash-lite');
     expect(createMock.mock.calls[0][0].system_instruction).toBe('SYSTEM');

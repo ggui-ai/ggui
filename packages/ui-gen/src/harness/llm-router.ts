@@ -52,6 +52,14 @@ export interface AgentConfig {
    * Sampling temperature. When defined it is threaded into the provider
    * request; when undefined the provider default is used (unchanged
    * behavior for all existing callers).
+   *
+   * Capability is the ROUTER's: Anthropic Opus 4.7+ and the 5-family
+   * (`claude-opus-4-7*`, `claude-fable-5*`, `claude-opus-5*`,
+   * `claude-sonnet-5*`, incl. Bedrock ids) return HTTP 400 on a
+   * non-default `temperature`/`top_p`/`top_k`, so the Anthropic adapter
+   * STRIPS the value for those ids (one log line naming model + param)
+   * and reports the effective sampling on `LLMResponse.sampling`. Callers
+   * keep expressing intent; disclosure reads the applied value.
    */
   temperature?: number;
   /**
@@ -101,10 +109,32 @@ export interface ProviderRetryInfo {
   readonly message: string;
 }
 
+/**
+ * What sampling the provider ACTUALLY received for a text call — so a
+ * caller that asked for `temperature: 0` (a disclosed reproducibility
+ * property, e.g. the benchmark judge panel) can record the effective
+ * value instead of the requested one. `'provider-default'` means no
+ * temperature reached the provider: either the caller passed none, or
+ * the adapter stripped it because the model rejects sampling params
+ * (Anthropic Opus 4.7+ / 5-family → HTTP 400 on non-default
+ * `temperature`/`top_p`/`top_k`); `strippedReason` names the second case.
+ */
+export interface AppliedSampling {
+  readonly temperature: number | 'provider-default';
+  readonly strippedReason?: string;
+}
+
 export interface LLMResponse {
   text: string;
   inputTokens: number;
   outputTokens: number;
+  /**
+   * Effective sampling for this call (see {@link AppliedSampling}).
+   * Every provider's `callText` sets it; absent only on paths that
+   * predate the field — treat absence as unknown, never as "as
+   * requested".
+   */
+  sampling?: AppliedSampling;
 }
 
 /**
@@ -163,6 +193,16 @@ export interface LLMToolCallResponse {
   toolCalls: LLMToolCall[];
   inputTokens: number;
   outputTokens: number;
+  /**
+   * The tool-choice mode the provider ACTUALLY received. Callers ask
+   * for `'required'` (Anthropic `tool_choice: any`); Claude Fable 5.1
+   * rejects forced tool choice with HTTP 400, so the Anthropic adapter
+   * downgrades to `'auto'` for that family and reports it here. A
+   * downgraded call may legitimately return zero tool calls — the
+   * evaluator's `criteriaCoverage` records that as `skipped`, never as
+   * a pass. Absent = predates the field (treat as unknown).
+   */
+  appliedToolChoice?: 'required' | 'auto';
   /**
    * Tokens read from / written to the prompt cache, when the provider
    * reports them. Optional because not every provider exposes
@@ -506,6 +546,65 @@ export abstract class LLMAgent {
 // AnthropicAgent
 // =============================================================================
 
+/**
+ * Strip every routing spelling down to the bare Claude API id so the
+ * family predicates below see one form: `anthropic/claude-x`,
+ * `anthropic.claude-x`, `us.anthropic.claude-x[-vN:M]` and the bare
+ * `claude-x` all normalize to `claude-x…`. ARNs are left as-is (they
+ * name a profile, not a family) and match no predicate.
+ */
+export function normalizeAnthropicModelId(model: string): string {
+  return model
+    .replace(/^anthropic\//, '')
+    .replace(/^(?:[a-z]{2}\.)?anthropic\./, '');
+}
+
+/**
+ * Models that reject non-default sampling parameters with HTTP 400:
+ * Opus 4.7 and everything after it (Fable 5, Fable 5.1, Opus 5,
+ * Sonnet 5). Haiku 4.5 (`claude-haiku-4-5*`) still accepts them.
+ * Strings per ggui#706 (platform.claude.com, verified 2026-09-02).
+ */
+export function anthropicRejectsSamplingParams(model: string): boolean {
+  return /^claude-(?:opus-4-7|opus-5|sonnet-5|fable-5)(?:-|$)/.test(
+    normalizeAnthropicModelId(model),
+  );
+}
+
+/**
+ * Models that reject a FORCED tool choice (`tool_choice: any` / a named
+ * tool) with HTTP 400: Claude Fable 5.1 (ggui#706). `auto` is accepted.
+ */
+export function anthropicRejectsForcedToolChoice(model: string): boolean {
+  return /^claude-fable-5-1(?:-|$)/.test(normalizeAnthropicModelId(model));
+}
+
+/**
+ * Decide what sampling reaches Anthropic for `model` given the caller's
+ * `temperature`: pass it through on models that accept it, strip it on
+ * the 4.7+/5-family and say so. Pure — the caller logs and spreads.
+ */
+export function resolveAnthropicSampling(
+  model: string,
+  temperature: number | undefined,
+): { readonly request: { temperature?: number }; readonly applied: AppliedSampling } {
+  if (temperature === undefined) {
+    return { request: {}, applied: { temperature: 'provider-default' } };
+  }
+  if (anthropicRejectsSamplingParams(model)) {
+    return {
+      request: {},
+      applied: {
+        temperature: 'provider-default',
+        strippedReason:
+          `${normalizeAnthropicModelId(model)} rejects non-default sampling params (HTTP 400 on Opus 4.7+/5-family); ` +
+          `caller's temperature=${temperature} was not sent`,
+      },
+    };
+  }
+  return { request: { temperature }, applied: { temperature } };
+}
+
 export class AnthropicAgent extends LLMAgent {
   readonly provider = 'anthropic' as const;
 
@@ -568,6 +667,14 @@ export class AnthropicAgent extends LLMAgent {
       },
     ];
 
+    // Capability is the router's: the 4.7+/5-family rejects sampling
+    // params with 400, so strip (and disclose) rather than fail the call
+    // or make callers stop expressing intent (ggui#710 / #706).
+    const sampling = resolveAnthropicSampling(resolvedModel, temperature);
+    if (sampling.applied.strippedReason !== undefined) {
+      console.warn(`[anthropic] callText: ${sampling.applied.strippedReason}`);
+    }
+
     try {
       const response = await this.apiCall(() =>
         client.messages.create({
@@ -575,7 +682,7 @@ export class AnthropicAgent extends LLMAgent {
           max_tokens: maxTokens ?? 4096,
           system,
           messages: [{ role: 'user', content: userPrompt }],
-          ...(temperature !== undefined && { temperature }),
+          ...sampling.request,
         }),
       );
 
@@ -618,6 +725,7 @@ export class AnthropicAgent extends LLMAgent {
         text,
         inputTokens: response.usage.input_tokens,
         outputTokens: response.usage.output_tokens,
+        sampling: sampling.applied,
       };
     } catch (e) {
       const endedAt = Date.now();
@@ -761,6 +869,20 @@ export class AnthropicAgent extends LLMAgent {
       // want the final-message shape downstream, so use the stream
       // helper's `finalMessage()` which folds the events back to the
       // same `Message` Type the non-streaming path returned.
+      // Fable 5.1 rejects a forced tool choice (400); downgrade to
+      // `auto` for that family and disclose it on the response so a
+      // resulting zero-tool-call reply is never mistaken for a verdict
+      // (ggui#710 / #706).
+      const appliedToolChoice: 'required' | 'auto' =
+        toolChoice === 'required' && anthropicRejectsForcedToolChoice(resolvedModel)
+          ? 'auto'
+          : toolChoice;
+      if (appliedToolChoice !== toolChoice) {
+        console.warn(
+          `[anthropic] callTools: ${normalizeAnthropicModelId(resolvedModel)} rejects forced tool_choice (HTTP 400); ` +
+            `caller's 'required' downgraded to 'auto'`,
+        );
+      }
       const response = await this.apiCall(() =>
         client.messages
           .stream({
@@ -769,7 +891,7 @@ export class AnthropicAgent extends LLMAgent {
             system,
             messages: [{ role: 'user', content: userPrompt }],
             tools: cachedTools,
-            tool_choice: { type: toolChoice === 'required' ? 'any' : 'auto' },
+            tool_choice: { type: appliedToolChoice === 'required' ? 'any' : 'auto' },
           })
           .finalMessage(),
       );
@@ -821,6 +943,7 @@ export class AnthropicAgent extends LLMAgent {
         outputTokens: response.usage.output_tokens,
         cacheReadTokens: cacheRead,
         cacheCreationTokens: cacheCreated,
+        appliedToolChoice,
       };
     } catch (e) {
       const endedAt = Date.now();
@@ -1012,6 +1135,7 @@ export class OpenAIAgent extends LLMAgent {
       text,
       inputTokens: response.usage?.input_tokens ?? 0,
       outputTokens: response.usage?.output_tokens ?? 0,
+      sampling: { temperature: temperature ?? 'provider-default' },
     };
   }
 
@@ -1270,6 +1394,7 @@ export class GoogleAgent extends LLMAgent {
       text: interactionText(interaction),
       inputTokens: interaction.usage?.total_input_tokens ?? 0,
       outputTokens: interaction.usage?.total_output_tokens ?? 0,
+      sampling: { temperature: temperature ?? 'provider-default' },
     };
   }
 
@@ -1669,6 +1794,7 @@ export class OpenRouterAgent extends LLMAgent {
       text,
       inputTokens: response.usage.prompt_tokens,
       outputTokens: response.usage.completion_tokens,
+      sampling: { temperature: temperature ?? 'provider-default' },
     };
   }
 

@@ -30,6 +30,15 @@ export function getBedrockModelId(model: string): string {
     'anthropic/claude-haiku-4-5': 'us.anthropic.claude-haiku-4-5-20251001-v1:0',
     'anthropic/claude-sonnet-4-6': 'us.anthropic.claude-sonnet-4-6',
     'anthropic/claude-opus-4-6': 'us.anthropic.claude-opus-4-6-v1:0',
+    // Claude 5-family (ggui#706, strings verified 2026-09-02 against
+    // platform.claude.com; Bedrock base form `anthropic.<id>`, upcast to
+    // the cross-region profile). Explicit so the ids are pinned by test,
+    // not merely reachable through the generic fallback below.
+    'anthropic/claude-fable-5-1': 'us.anthropic.claude-fable-5-1',
+    'anthropic/claude-opus-5': 'us.anthropic.claude-opus-5',
+    'anthropic/claude-sonnet-5': 'us.anthropic.claude-sonnet-5',
+    // Legacy (still available; registry state `legacy`, not deprecated).
+    'anthropic/claude-fable-5': 'us.anthropic.claude-fable-5',
   };
   // Normalize the Bedrock dot-form opt-in (e.g. `anthropic.claude-haiku-4-5`,
   // produced when cloud-pod's `resolvePoolRoute` strips a `bedrock/` opt-in

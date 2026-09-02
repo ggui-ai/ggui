@@ -261,6 +261,29 @@ describe('resolveRoute — OpenRouter', () => {
   });
 });
 
+describe('getBedrockModelId — Claude 5-family ids are explicit, pinned entries (ggui#706/#710)', () => {
+  // Strings per ggui#706's verified table (platform.claude.com,
+  // 2026-09-02): Bedrock base form `anthropic.<api id>`, upcast to the
+  // cross-region profile. Pinned so the generic fallback cannot drift
+  // them silently.
+  it.each([
+    ['anthropic/claude-fable-5-1', 'us.anthropic.claude-fable-5-1'],
+    ['anthropic/claude-opus-5', 'us.anthropic.claude-opus-5'],
+    ['anthropic/claude-sonnet-5', 'us.anthropic.claude-sonnet-5'],
+    ['anthropic/claude-fable-5', 'us.anthropic.claude-fable-5'],
+  ])('%s → %s', (wire, bedrock) => {
+    expect(getBedrockModelId(wire)).toBe(bedrock);
+    // Dot-form opt-in resolves to the same profile.
+    expect(getBedrockModelId(wire.replace('anthropic/', 'anthropic.'))).toBe(bedrock);
+  });
+
+  it('keeps Haiku 4.5 on its versioned profile (the pool default, ggui#706 decision 1 pending)', () => {
+    expect(getBedrockModelId('anthropic/claude-haiku-4-5')).toBe(
+      'us.anthropic.claude-haiku-4-5-20251001-v1:0',
+    );
+  });
+});
+
 describe('getBedrockModelId — Bedrock opt-in dot form', () => {
   it('upcasts the dot-form short id (anthropic.claude-haiku-4-5) to the cross-region profile', () => {
     // Live-bug regression (cloud e2e 2026-05-25, bedrock-iam.spec): the
