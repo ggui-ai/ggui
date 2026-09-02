@@ -19,7 +19,14 @@ import { fileURLToPath } from 'url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const DESIGN_ROOT = resolve(__dirname, '..');
-const DIST_DIR = resolve(DESIGN_ROOT, 'dist');
+// `DESIGN_DIST_DIR` lets the build run this generator against the
+// STAGING dir (`dist.staging`) BEFORE `atomic-swap` publishes it: the
+// package declares `./inline` → `dist/inline/*`, and atomic-swap's
+// completeness gate (ggui#681) refuses to publish a staging dir that is
+// missing a declared entry point — so the inline modules must exist in
+// staging, not be appended to `dist` afterwards. Default stays `dist`
+// for the standalone `build:inline` script.
+const DIST_DIR = resolve(DESIGN_ROOT, process.env.DESIGN_DIST_DIR ?? 'dist');
 const INLINE_DIR = resolve(DIST_DIR, 'inline');
 
 const REACT_ESM_URL = 'https://esm.sh/react@18.2.0';
@@ -161,7 +168,7 @@ async function main() {
 
   // Check dist exists
   if (!existsSync(resolve(DIST_DIR, 'tokens', 'index.js'))) {
-    console.error('[inline-modules] ERROR: dist/tokens/index.js not found. Run `pnpm --filter @ggui-ai/design build` first.');
+    console.error(`[inline-modules] ERROR: ${resolve(DIST_DIR, 'tokens', 'index.js')} not found. Run \`pnpm --filter @ggui-ai/design build\` first.`);
     process.exit(1);
   }
 

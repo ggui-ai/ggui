@@ -81,7 +81,7 @@
     "!**/*.stories.d.ts.map"
   ],
   "scripts": {
-    "build": "rm -rf dist.staging && tsc -p tsconfig.build.json --outDir dist.staging && node ../scripts/fix-esm-imports.mjs dist.staging && node ../scripts/atomic-swap.mjs dist.staging dist && node scripts/generate-inline-modules.mjs && pnpm run generate:docs && pnpm run generate:docs-ts",
+    "build": "rm -rf dist.staging && tsc -p tsconfig.build.json --outDir dist.staging && node ../scripts/fix-esm-imports.mjs dist.staging && DESIGN_DIST_DIR=dist.staging node scripts/generate-inline-modules.mjs && node ../scripts/atomic-swap.mjs dist.staging dist && pnpm run generate:docs && pnpm run generate:docs-ts",
     "build:inline": "node scripts/generate-inline-modules.mjs",
     "dev": "tsc --watch",
     "typecheck": "tsc --noEmit",
