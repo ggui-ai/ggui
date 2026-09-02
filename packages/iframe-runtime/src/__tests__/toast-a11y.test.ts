@@ -285,18 +285,17 @@ describe('toast primitive — spoken and visual halves', () => {
     expect(region('polite')?.textContent).toBe('');
   });
 
-  it('suppresses both halves under the operator override', async () => {
+  it('the retired __GGUI_TOAST_DISABLED__ override is inert — chrome + announcement render regardless (ggui#692)', async () => {
+    // A reader with no writer: no host ever set the flag and nothing
+    // documented it, so the pre-launch rule deleted it. Re-introducing
+    // it would silently re-open the class (a suppressed notice, an
+    // unreachable cue) — pin that the global does nothing.
     Reflect.set(window, '__GGUI_TOAST_DISABLED__', true);
     try {
       ensureToastAnnouncer(document);
       fireGesture();
-
-      // A host rendering its own toast chrome opted out of ours. It
-      // must not get an invisible spoken copy of the surface it
-      // replaced.
-      expect(toastEl()).toBeNull();
-      expect(region('polite')?.textContent).toBe('');
-      expect(region('assertive')?.textContent).toBe('');
+      expect(toastEl()).not.toBeNull();
+      expect(toastEl()?.style.opacity).toBe('1');
       await tick();
     } finally {
       Reflect.deleteProperty(window, '__GGUI_TOAST_DISABLED__');

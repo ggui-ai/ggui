@@ -2704,13 +2704,6 @@ const ACTION_TOAST_ID = '__ggui-action-toast__';
  * the tree as a named button with a tab stop, because a dismissal that
  * needs a mouse is a dismissal some users cannot perform.
  *
- * Operator override: set `window.__GGUI_TOAST_DISABLED__ = true`
- * before the runtime boots to suppress (e.g., for first-party hosts
- * that want their own toast UI). Suppression covers both halves —
- * announcements mirror the visual feedback that actually happened, so
- * a host rendering its own toast chrome does not get a second, spoken
- * copy of ours.
- *
  * @internal — runtime-layer concern.
  */
 type ToastKind =
@@ -2725,7 +2718,6 @@ function showActionToast(
   onDismiss?: () => void,
 ): void {
   if (typeof document === 'undefined') return;
-  if (isToastChromeDisabled()) return;
   const id = ACTION_TOAST_ID;
   let el = document.getElementById(id);
   if (!el) {
@@ -3100,8 +3092,7 @@ function emitRelayDeadTap(intent: string, scope: RelayLatchScope): void {
 /**
  * Marks the toast element as the STANDING relay notice. The dead-zone
  * cue arms on this element's absence or invisibility — however it went
- * away (the user's click, a late `drain_ack` retiring it, or the host
- * disabling our chrome so it was never created). `showActionToast`
+ * away (the user's click or a late `drain_ack` retiring it). `showActionToast`
  * drops the mark whenever it renders any other message, so a fallback
  * cue or a later pending toast never passes for the explanation.
  */
@@ -3117,7 +3108,7 @@ const RELAY_NOTICE_ATTR = 'data-ggui-relay-notice';
 function markRelayNotice(): void {
   if (typeof document === 'undefined') return;
   const el = document.getElementById(ACTION_TOAST_ID);
-  if (el === null) return; // chrome disabled: no notice exists — the cue covers every attempt
+  if (el === null) return; // no document surface to mark (pre-boot); the cue covers every attempt
   el.setAttribute(RELAY_NOTICE_ATTR, '');
   const root = document.querySelector('[data-ggui-session-root]');
   if (
@@ -3139,15 +3130,6 @@ function isRelayNoticeVisible(): boolean {
     el.style.opacity !== '0' &&
     el.getAttribute('aria-hidden') !== 'true'
   );
-}
-
-/**
- * The operator override that suppresses our toast chrome (a host that
- * renders its own). Visual halves honor it; the dead-zone cue's spoken
- * half does not (ggui#447 — "fires either way" must be true as wired).
- */
-function isToastChromeDisabled(): boolean {
-  return typeof window !== 'undefined' && Reflect.get(window, '__GGUI_TOAST_DISABLED__') === true;
 }
 
 /**
@@ -3337,10 +3319,8 @@ function resolveRelayCueTarget(): Element | null {
  * be a lie about someone else's element. The honest counterpart is a
  * message in the announcer's own region, saying what the pulse means.
  *
- * NOT gated on `__GGUI_TOAST_DISABLED__`: that flag suppresses our
- * toast chrome, and the pulse is not toast chrome — it fires either
- * way. Announcing on the same condition as the visual keeps the two
- * cues telling the same story.
+ * Announcing on the same condition as the visual keeps the two cues
+ * telling the same story.
  *
  * Throttled on its own clock, unlike the pulse — but only against
  * IDENTICAL repeats. A flash repeating on every gesture costs a sighted
@@ -3400,9 +3380,8 @@ function retractRelayCueAnnouncement(): void {
  * The dead-zone cue (ggui#442): the smallest honest "that did nothing"
  * signal, for a gesture on a host already known to be relay-incapable
  * while the standing explanation is NOT on screen — dismissed by the
- * user, retired by a late `drain_ack`, or never created because the
- * host disabled our toast chrome (ggui#670 Phase 3: the cue arms on the
- * notice's absence, never on how it went away).
+ * user or retired by a late `drain_ack` (ggui#670 Phase 3: the cue arms
+ * on the notice's absence, never on how it went away).
  *
  * Component-agnostic by construction. It pulses whatever the user
  * focused without knowing what that is, and falls back to the toast
@@ -3449,13 +3428,6 @@ function showDeadZoneCue(intent: string): void {
   // a second explanation, so it must clear itself. Throttled because a
   // per-click toast on a host that fails every click is the #426
   // failure mode the latch exists to prevent.
-  if (isToastChromeDisabled()) {
-    // The host replaced our visual chrome; the spoken half of the cue
-    // is still ours to deliver (ggui#447) — `showActionToast` would
-    // return before announcing.
-    announceRelayCue(intent);
-    return;
-  }
   showActionToast(`⚠ ${intent} — not delivered`, 'error');
 }
 
@@ -3537,9 +3509,8 @@ export function dispatchSubmitAction(args: {
   // #443 — the attempt is the self-heal sensor); its outcome is counted
   // for the host where it lands (ggui#670 Phase 3, the terminal branch
   // below). When the standing explanation is not on screen — dismissed,
-  // retired by a late `drain_ack`, or never created because the host
-  // disabled our chrome — skipping would leave the gesture with no
-  // feedback at all: the dead zone ggui#442 names. The cue fills it
+  // or retired by a late `drain_ack` — skipping would leave the gesture
+  // with no feedback at all: the dead zone ggui#442 names. The cue fills it
   // here, at dispatch time, because the element it pulses is the one
   // the user has focused NOW; by the time the relay response settles,
   // focus may have moved on.

@@ -49,7 +49,6 @@ import {
   __resetRelayNoticeForTest,
   channelToolsCall,
   dispatchDrainAck,
-  ensureToastAnnouncer,
   resetRelayLatchForBoot,
   routeDispatch,
   setCurrentApp,
@@ -1456,7 +1455,6 @@ describe('relay dead zone — truth surface + instrument (ggui#670 Phase 3)', ()
     expect(relay().at(-1)?.state).toBe('latched');
   }
   const toast = (): HTMLElement | null => document.getElementById(TOAST_ID);
-  const assertive = (): string => document.querySelector('[aria-live="assertive"]')?.textContent ?? '';
 
   it('a drain_ack that retires the standing notice does not silence the dead zone — the next attempt still cues (truth-2)', async () => {
     await latch();
@@ -1475,21 +1473,6 @@ describe('relay dead zone — truth surface + instrument (ggui#670 Phase 3)', ()
     // No focused control in this document → the fallback cue toast.
     expect(toast()?.textContent).toMatch(/not delivered/);
     expect(toast()?.style.opacity).not.toBe('0');
-  });
-
-  it('a host that disables toast chrome still gets the spoken cue on every attempt in the dead zone (a11y-1)', async () => {
-    Reflect.set(window, '__GGUI_TOAST_DISABLED__', true);
-    try {
-      ensureToastAnnouncer(document);
-      setHostCapabilities({ serverTools: {} });
-      await attempt(); // latches; the notice is suppressed with the chrome
-      expect(relay().at(-1)?.state).toBe('latched');
-      expect(toast()).toBeNull();
-      await attempt('save');
-      expect(assertive()).toMatch(/save — not delivered/);
-    } finally {
-      Reflect.deleteProperty(window, '__GGUI_TOAST_DISABLED__');
-    }
   });
 
   it('boot while latched routes through the latch writer: emits cleared with the summary and removes the prior notice (truth-5)', async () => {
