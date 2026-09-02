@@ -88,38 +88,85 @@ export interface RuntimeProbeMeta {
 }
 
 /**
- * Per-criterion execution status — two-valued so "the criterion
+ * Per-criterion execution status — three-valued so "the criterion
  * silently produced no verdict" is never conflated with "the criterion
- * ran clean". Same doctrine as `RuntimeProbeStatus` above.
+ * ran clean", and neither is conflated with "not evaluated by design".
+ * Same doctrine and vocabulary family as `RuntimeProbeStatus` above.
  *
- *   - `ran`     — the LLM call completed and returned a verdict for this
- *                 criterion; its findings (possibly none) are in `issues`.
- *   - `skipped` — the call errored or returned no tool call. The
- *                 criterion carries ZERO evidence; the evaluator
- *                 fail-opens it into `pass` to avoid blocking generation
- *                 on flaky LLM calls, so consumers MUST consult this
- *                 field before treating `pass` membership as a verdict.
+ *   - `ran`            — the LLM call completed and returned a verdict
+ *                        for this criterion; its findings (possibly
+ *                        none) are in `issues`.
+ *   - `skipped`        — the call errored or returned no tool call. The
+ *                        criterion carries ZERO evidence; the evaluator
+ *                        fail-opens it into `pass` to avoid blocking
+ *                        generation on flaky LLM calls, so consumers
+ *                        MUST consult this field before treating `pass`
+ *                        membership as a verdict. Counts AGAINST
+ *                        coverage.
+ *   - `not-applicable` — the evaluator was bypassed by design for this
+ *                        cell (e.g. the same-image low-risk bypass:
+ *                        axis checks clean, tier-1/2 never invoked).
+ *                        `reason` names the bypass. Excluded from
+ *                        coverage denominators — it is neither evidence
+ *                        nor a silent absence.
  */
-export type CriterionRunStatus = "ran" | "skipped";
+export type CriterionRunStatus = "ran" | "skipped" | "not-applicable";
 
 /** Coverage row for one evaluation criterion of one eval run. */
 export interface CriterionCoverage {
   readonly criterion: string;
   readonly tier: 1 | 2;
   readonly status: CriterionRunStatus;
-  /** Populated for `skipped` — why the criterion produced no verdict. */
+  /** Populated for `skipped` / `not-applicable` — why no verdict. */
   readonly reason?: string;
+}
+
+/**
+ * The static criteria `runLLMEvaluation` runs, in stamp order — the
+ * ONE list both the evaluator's coverage stamp and the harness's
+ * bypass stamp derive from, so the two can never disagree on the set.
+ * Tier 1 = binary pass/fail gates; tier 2 = fail/warn/pass quality.
+ */
+export const LLM_EVAL_STATIC_CRITERIA: ReadonlyArray<{ readonly criterion: string; readonly tier: 1 | 2 }> = [
+  { criterion: "functionality", tier: 1 },
+  { criterion: "crash", tier: 1 },
+  { criterion: "interactivity", tier: 2 },
+  { criterion: "accessibility", tier: 2 },
+  { criterion: "layout", tier: 2 },
+  { criterion: "loading", tier: 2 },
+  { criterion: "visual", tier: 2 },
+];
+
+/**
+ * Coverage rows for a cell where the evaluator was BYPASSED BY DESIGN
+ * (never invoked) — one `not-applicable` row per static criterion, all
+ * carrying `reason`. Harness exits that skip tier-1/2 evaluation stamp
+ * this so the cell is neither a silent absence (field missing) nor
+ * evidence. Same shape contract as `runLLMEvaluation`'s stamp: always
+ * every criterion. Lives here (not in llm-evaluator) because the bypass
+ * exit runs before the evaluator module is lazily loaded.
+ */
+export function notApplicableCoverage(reason: string): CriterionCoverage[] {
+  return LLM_EVAL_STATIC_CRITERIA.map(({ criterion, tier }) => ({
+    criterion,
+    tier,
+    status: "not-applicable",
+    reason,
+  }));
 }
 
 export interface EvalResult {
   issues: EvalIssue[];
   pass: string[];
   /**
-   * Per-criterion coverage for this eval run. Stamped by
-   * `runLLMEvaluation` (one row per static criterion, always all of
-   * them); absent on eval paths that predate the instrument or never
-   * run per-criterion calls (e.g. `parseEvalResponse` replays). Absence
-   * means coverage is UNKNOWN — never assume `ran`.
+   * Per-criterion coverage for this eval run — one row per static
+   * criterion, ALWAYS all of them when present. Stamped by
+   * `runLLMEvaluation` (`ran` / `skipped`) and by the harness on
+   * evaluator-bypass exits (`not-applicable` + reason). The harness
+   * carries it unchanged through every later re-stamp of this result.
+   * Absent = coverage UNKNOWN (paths that predate the instrument, e.g.
+   * `parseEvalResponse` replays) — never assume `ran`, never assume
+   * bypass.
    */
   criteriaCoverage?: CriterionCoverage[];
   /**

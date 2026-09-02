@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { parseEvalResponse, buildMotherPrompt, runLLMEvaluation } from './llm-evaluator';
+import { notApplicableCoverage } from './types-public';
 import type { LLMEvalContext, LLMEvalConfig, EvalContext, PreWarmedEvalContext } from './llm-evaluator';
 
 // =============================================================================
@@ -469,6 +470,13 @@ export default function MyComponent({ title }: Props) {
     expect(result.criteriaCoverage!.every(c => c.reason === undefined)).toBe(true);
     const tier1 = result.criteriaCoverage!.filter(c => c.tier === 1).map(c => c.criterion);
     expect(tier1).toEqual(['functionality', 'crash']);
+
+    // The harness's bypass stamp (`notApplicableCoverage`) must name the
+    // SAME criteria in the SAME order as the evaluator's stamp — both
+    // derive from LLM_EVAL_STATIC_CRITERIA; this pins that they can't drift.
+    const bypass = notApplicableCoverage('same-image low-risk bypass');
+    expect(bypass.map(c => [c.criterion, c.tier])).toEqual(result.criteriaCoverage!.map(c => [c.criterion, c.tier]));
+    expect(bypass.every(c => c.status === 'not-applicable' && c.reason === 'same-image low-risk bypass')).toBe(true);
   });
 
   it('aggregates token counts from all criterion calls', async () => {

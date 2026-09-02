@@ -21,6 +21,7 @@ import type {
   CriterionCoverage,
   CriterionRunStatus,
 } from './types-public.js';
+import { LLM_EVAL_STATIC_CRITERIA } from './types-public.js';
 import { createAgent } from '../harness/llm-router';
 import type { AgentConfig, LLMToolDef, LLMAgent } from '../harness/llm-router';
 import type { JsonObject } from '@ggui-ai/protocol';
@@ -537,9 +538,13 @@ interface CriterionResult {
   durationMs: number;
 }
 
-/** All valid categories for LLM evaluation */
-const TIER_1_CRITERIA = ['functionality', 'crash'] as const;
-const TIER_2_CRITERIA = ['interactivity', 'accessibility', 'layout', 'loading', 'visual'] as const;
+/**
+ * All valid categories for LLM evaluation — derived from the ONE static
+ * list in types-public so the coverage stamp here and the harness's
+ * bypass stamp (`notApplicableCoverage`) can never disagree on the set.
+ */
+const TIER_1_CRITERIA = LLM_EVAL_STATIC_CRITERIA.filter((c) => c.tier === 1).map((c) => c.criterion);
+const TIER_2_CRITERIA = LLM_EVAL_STATIC_CRITERIA.filter((c) => c.tier === 2).map((c) => c.criterion);
 
 async function evalCriterion(
   criterion: string,

@@ -28,6 +28,8 @@ import { classifyAxes } from '../../classifier/classifier.js';
 import { createHarness } from '../../create-harness.js';
 import * as realLlmEvaluator from '../../evaluation/llm-evaluator.js';
 import type { LLMEvalConfig, LLMEvalContext, PreWarmedEvalContext } from '../../evaluation/llm-evaluator.js';
+import { LLM_EVAL_STATIC_CRITERIA } from '../../evaluation/types-public.js';
+import type { CriterionCoverage } from '../../evaluation/types-public.js';
 import type { AgentSpec } from '../runtime.js';
 import type { EvalRoundContext, EvalRoundInput } from './run-eval-round.js';
 
@@ -117,5 +119,91 @@ describe('runEvalRound — routeOverride + onRetry threading (#484, #489)', () =
     // final-review found dropped at this exact same object literal.
     expect(capturedConfigs[0]?.routeOverride).toEqual({ apiKey: 'eval-route-key' });
     expect(capturedConfigs[0]?.onRetry).toBe(onRetrySpy);
+  });
+});
+
+/**
+ * Same drop-at-the-literal class, third field: `criteriaCoverage`.
+ * `runLLMEvaluation` stamps it; `runEvalRound` rebuilds `evalResult`
+ * by object literal at every exit and (before this pin) dropped it —
+ * the bench reporter then saw the exact silent-absence class the field
+ * exists to close (benchmark's adversarial verify, 2026-09-02).
+ */
+describe('runEvalRound — criteriaCoverage carry-through + bypass stamp', () => {
+  beforeEach(() => {
+    mockRunCheck.mockReset();
+    mockRunCheck.mockResolvedValue({ issues: [] });
+  });
+
+  async function buildCtx(riskTier: 'low' | 'medium', llmEvalMod: typeof realLlmEvaluator | null) {
+    const classification = {
+      ...classifyAxes({ contract: {}, prompt: 'test prompt' }),
+      riskTier,
+    };
+    const harness = createHarness({ classification, contract: {}, prompt: 'test prompt' });
+    const workspace = new AgentWorkspace();
+    await workspace.init();
+    const compiledCode = 'export default function C() { return null; }';
+    workspace.write(compiledCode);
+    const evaluationAgent: AgentSpec = { provider: 'anthropic', model: 'claude-haiku-4-5' };
+    const ctx: EvalRoundContext = {
+      workspace,
+      harness,
+      contract: undefined,
+      userPrompt: 'test prompt',
+      fixtureProps: undefined,
+      classification,
+      evaluationAgent,
+      visualEvalAgent: evaluationAgent,
+      visualEvaluation: undefined,
+      visualThreshold: 0.7,
+      qualityMode: 'fast',
+      maxEvalRounds: 3,
+      costTracker: new CostTracker(null),
+      llmEvalMod,
+      visualMod: null,
+      preWarmPromise: undefined,
+    };
+    const input: EvalRoundInput = {
+      compiledCode,
+      evalRoundsUsed: 0,
+      preWarmedContext: undefined,
+      prevModeSubcats: new Set(),
+      prevFailFingerprints: new Set(),
+    };
+    return { ctx, input };
+  }
+
+  it("carries runLLMEvaluation's criteriaCoverage onto the round's evalResult (fails if any exit literal drops it)", async () => {
+    const stamped: CriterionCoverage[] = LLM_EVAL_STATIC_CRITERIA.map(({ criterion, tier }, i) =>
+      i === 1
+        ? { criterion, tier, status: 'skipped', reason: 'API rate limit exceeded' }
+        : { criterion, tier, status: 'ran' },
+    );
+    const fakeLlmEvalMod: typeof realLlmEvaluator = {
+      ...realLlmEvaluator,
+      runLLMEvaluation: () =>
+        Promise.resolve({ issues: [], pass: [], criteriaCoverage: stamped, inputTokens: 0, outputTokens: 0 }),
+    };
+    const { ctx, input } = await buildCtx('medium', fakeLlmEvalMod);
+
+    const round = await runEvalRound(ctx, input);
+
+    expect(round.evalResult?.criteriaCoverage).toEqual(stamped);
+    // The probe meta is stamped on this exit too — proves the spread
+    // kept coverage while the literal re-stamped runtimeProbe.
+    expect(round.evalResult?.runtimeProbe).toBeDefined();
+  });
+
+  it('stamps every criterion not-applicable (with the bypass reason) on the same-image low-risk bypass exit', async () => {
+    const { ctx, input } = await buildCtx('low', null);
+
+    const round = await runEvalRound(ctx, input);
+
+    expect(round.evalResult?.pass).toContain('axis.low-risk');
+    const cov = round.evalResult?.criteriaCoverage ?? [];
+    expect(cov.map((c) => c.criterion)).toEqual(LLM_EVAL_STATIC_CRITERIA.map((c) => c.criterion));
+    expect(cov.every((c) => c.status === 'not-applicable')).toBe(true);
+    expect(cov.every((c) => typeof c.reason === 'string' && c.reason.includes('low-risk bypass'))).toBe(true);
   });
 });

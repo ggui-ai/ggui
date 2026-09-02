@@ -32,6 +32,8 @@ export type {
 } from './types-public.js';
 export {
   CRITERIA,
+  LLM_EVAL_STATIC_CRITERIA,
+  notApplicableCoverage,
   DEFAULT_QUALITY_CONFIG,
   matches,
   priorityForIssue,

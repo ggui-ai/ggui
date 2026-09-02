@@ -129,6 +129,26 @@ describe("assembleGenerationResult — cache-token passthrough", () => {
     expect(result.cacheCreationTokens).toBe(200);
   });
 
+  it("forwards evalResult.criteriaCoverage to the assembled result untouched (bench reporter reads it per run)", async () => {
+    const session = fakeSession();
+    const telemetry = createTelemetry();
+    telemetry.codingStartedAtMs = session.startedAtMs + 50;
+    telemetry.codingMs = 1_000;
+    telemetry.totalIn = 1_000;
+    telemetry.evalResult = {
+      issues: [],
+      pass: ["functionality"],
+      criteriaCoverage: [
+        { criterion: "functionality", tier: 1, status: "ran" },
+        { criterion: "crash", tier: 1, status: "skipped", reason: "no tool call returned" },
+      ],
+    };
+
+    const result = await assembleGenerationResult({ session, telemetry, source: "" });
+
+    expect(result.evalResult?.criteriaCoverage).toEqual(telemetry.evalResult.criteriaCoverage);
+  });
+
   it("leaves cache-token fields undefined when telemetry omits them (truthful absence)", async () => {
     const session = fakeSession();
     const telemetry = createTelemetry();

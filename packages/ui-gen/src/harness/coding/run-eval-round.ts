@@ -23,6 +23,7 @@ import type { Classification } from "../../classifier/index.js";
 import type { AgentWorkspace } from "../../coding-agent/workspace.js";
 import type { CostTracker } from "../../evaluation/cost-tracker.js";
 import type { EvalIssue, EvalResult, RuntimeProbeMeta } from "../../evaluation/types-public.js";
+import { notApplicableCoverage } from "../../evaluation/types-public.js";
 import { mapProviderForEvaluator } from "../enforced-coding.js";
 import { runCheck } from "../index.js";
 import { isRecoverableRenderCrash } from "../check/runtime-render/index.js";
@@ -120,6 +121,15 @@ export interface EvalRoundResult {
 
 /** Cap feedback to N issues per eval-fix turn so the LLM stays surgical. */
 const MAX_FEEDBACK_ISSUES = 3;
+
+/**
+ * `criteriaCoverage` reason stamped on the same-image low-risk bypass
+ * exits: tier-1/2 evaluation is never invoked there BY DESIGN, so every
+ * criterion is `not-applicable` (excluded from coverage denominators),
+ * not `skipped` (which would count as silent absence).
+ */
+const LOW_RISK_BYPASS_REASON =
+  "same-image low-risk bypass: axis checks clean, tier-1/2 evaluation not invoked";
 
 /**
  * Pick the ≤{@link MAX_FEEDBACK_ISSUES} issues an eval-fix turn feeds
@@ -375,7 +385,12 @@ export async function runEvalRound(
         );
         const lines = runtimeFails.slice(0, MAX_FEEDBACK_ISSUES).map(formatRuntimeProbeFeedback);
         const allIssues = [...modeIssues, ...exitProbe.probeIssues];
-        evalResult = { issues: allIssues, pass: ["axis.low-risk"], runtimeProbe: exitProbe.meta };
+        evalResult = {
+          issues: allIssues,
+          pass: ["axis.low-risk"],
+          criteriaCoverage: notApplicableCoverage(LOW_RISK_BYPASS_REASON),
+          runtimeProbe: exitProbe.meta,
+        };
         console.log(
           `[simple] eval round ${evalRoundsUsed}: low-risk bypass clean BUT ` +
             `runtime probe fail (recoverable) — granting +1 turn`,
@@ -398,6 +413,7 @@ export async function runEvalRound(
       evalResult = {
         issues: [...modeIssues, ...exitProbe.probeIssues],
         pass: ["axis.low-risk"],
+        criteriaCoverage: notApplicableCoverage(LOW_RISK_BYPASS_REASON),
         runtimeProbe: exitProbe.meta,
       };
       console.log(
@@ -499,7 +515,16 @@ export async function runEvalRound(
       ...modeIssues,
     ];
     const allPass: string[] = [...(llmResult?.pass ?? [])];
-    evalResult = { issues: allIssues, pass: allPass };
+    // Carry the per-criterion coverage stamp from the evaluator; every
+    // later re-stamp of evalResult below spreads this base so the field
+    // survives to the assembled result (benchmark reads it per run).
+    evalResult = {
+      issues: allIssues,
+      pass: allPass,
+      ...(llmResult?.criteriaCoverage !== undefined
+        ? { criteriaCoverage: llmResult.criteriaCoverage }
+        : {}),
+    };
 
     // ── Log merged results, with mode-check subcategory breakdown ──
     const fails = allIssues.filter((i) => i.result === "fail");
@@ -570,7 +595,7 @@ export async function runEvalRound(
         );
         const lines = runtimeFails.slice(0, MAX_FEEDBACK_ISSUES).map(formatRuntimeProbeFeedback);
         const enrichedIssues = [...allIssues, ...exitProbe.probeIssues];
-        evalResult = { issues: enrichedIssues, pass: allPass, runtimeProbe: exitProbe.meta };
+        evalResult = { ...evalResult, issues: enrichedIssues, pass: allPass, runtimeProbe: exitProbe.meta };
         const enrichedFingerprints = new Set([
           ...currFailFingerprints,
           ...runtimeFails.map(fingerprintFail),
@@ -598,6 +623,7 @@ export async function runEvalRound(
       // into the merged result and ALWAYS stamp its execution meta, so a
       // did-not-run probe is visible downstream even on this clean exit.
       evalResult = {
+        ...evalResult,
         issues: [...allIssues, ...exitProbe.probeIssues],
         pass: allPass,
         runtimeProbe: exitProbe.meta,
@@ -659,8 +685,8 @@ export async function runEvalRound(
         fixtureProps,
       });
       evalResult = {
+        ...evalResult,
         issues: [...evalResult.issues, ...stuckExitProbe.probeIssues],
-        pass: evalResult.pass,
         runtimeProbe: stuckExitProbe.meta,
       };
       return {
@@ -718,8 +744,8 @@ export async function runEvalRound(
         // ALWAYS stamp the probe's execution meta, even though we're not
         // granting an extension — a did-not-run probe must stay visible.
         evalResult = {
+          ...evalResult,
           issues: [...evalResult.issues, ...exitProbe.probeIssues],
-          pass: evalResult.pass,
           runtimeProbe: exitProbe.meta,
         };
         console.log(`[simple] eval round ${evalRoundsUsed}: max eval rounds reached — stopping`);
@@ -748,7 +774,7 @@ export async function runEvalRound(
         .slice(0, MAX_FEEDBACK_ISSUES)
         .map(formatRuntimeProbeFeedback);
       const enrichedIssues = [...evalResult.issues, ...exitProbe.probeIssues];
-      evalResult = { issues: enrichedIssues, pass: evalResult.pass, runtimeProbe: exitProbe.meta };
+      evalResult = { ...evalResult, issues: enrichedIssues, runtimeProbe: exitProbe.meta };
       console.log(
         `[simple] eval round ${evalRoundsUsed}: runtime-probe fail active at cap — granting +1 retry (${maxEvalRounds + RUNTIME_EXTENSION_BONUS - evalRoundsUsed} of ${RUNTIME_EXTENSION_BONUS} bonus rounds remain)`,
       );
