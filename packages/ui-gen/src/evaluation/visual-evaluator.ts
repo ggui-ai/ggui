@@ -12,6 +12,7 @@
 // poor visual hierarchy, missing whitespace.
 
 import { build } from 'esbuild';
+import { getCssTokens } from '@ggui-ai/design/rendering';
 import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { writeFileSync, mkdirSync, unlinkSync } from 'fs';
@@ -69,6 +70,22 @@ export interface VisualEvalContext {
  * Produces a self-contained IIFE that only needs React + ReactDOM from CDN.
  * Resolves @ggui-ai/design/* imports from the local monorepo packages.
  */
+/**
+ * The on-disk root of `@ggui-ai/design`, for the esbuild aliases that
+ * let JUDGED components resolve the same design source production
+ * ships. Exported for the ggui#613 regression pin: the previous inline
+ * `'..','..','..','packages','design'` resolved a pre-`oss/`-migration
+ * path (`oss/packages/packages/design`) that exists from NEITHER the
+ * src nor the dist layout — the visual leg's bundle broke silently at
+ * the migration. Three ups from `<pkg>/src/evaluation` (or
+ * `<pkg>/dist/evaluation`) is `oss/packages/`; the design package is
+ * its direct child.
+ */
+export function resolveDesignPackageDir(): string {
+  const selfDir = dirname(fileURLToPath(import.meta.url));
+  return resolve(selfDir, '..', '..', '..', 'design');
+}
+
 async function bundleForRendering(
   compiledCode: string,
   sampleProps: Record<string, unknown>,
@@ -79,10 +96,7 @@ async function bundleForRendering(
   const componentFile = resolve(tmpDir, 'component.tsx');
   const entryFile = resolve(tmpDir, 'entry.tsx');
 
-  // Find the design package root — navigate from this file to packages/design/
-  const __filename = fileURLToPath(import.meta.url);
-  const __dirname = dirname(__filename);
-  const designPkgDir = resolve(__dirname, '..', '..', '..', 'packages', 'design');
+  const designPkgDir = resolveDesignPackageDir();
 
   // Write the compiled component as a separate module
   writeFileSync(componentFile, compiledCode);
@@ -138,13 +152,21 @@ function buildRenderHTML(
   bundledCode: string,
   cssTokens?: string,
 ): string {
+  // Default to the design tokens production's no-theme branch injects
+  // (getCssTokens → default theme, light) — ggui#613: under the s4
+  // fallback ban the generated component's `var(--ggui-*)` references
+  // carry no literal fallbacks, so an un-injected judged render shows
+  // unset colors and the multimodal judge grades broken output. An
+  // explicit caller value still wins (theme-aware callers pass their
+  // own).
+  const tokens = cssTokens ?? getCssTokens();
   return `<!DOCTYPE html>
 <html>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <style>
-    ${cssTokens ?? ''}
+    ${tokens}
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     body {
       font-family: var(--ggui-font-family-sans, system-ui, -apple-system, sans-serif);
