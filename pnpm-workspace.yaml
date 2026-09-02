@@ -182,7 +182,7 @@ overrides:
   # for why the family moves together (agent-client/threads 0.4.0 both
   # exact-pin host 0.4.0, and agent-client value-imports an export 0.3.1
   # does not have).
-  "@guuey/mcp-apps-host": 0.16.2
+  "@guuey/mcp-apps-host": 0.16.14
   # BEGIN oss-lock-sync generated pins — do not hand-edit (scripts/oss-lock-sync.mjs, #420)
   "@a2a-js/sdk": 0.3.14
   "@adobe/css-tools": 4.5.0
@@ -221,8 +221,8 @@ overrides:
   "@babel/runtime@^8": 8.0.0
   "@chromatic-com/storybook": 5.3.0
   "@google-cloud/storage": 7.21.0
-  "@guuey/mcp-apps-host@0.16.x": 0.16.2
-  "@guuey/threads": 0.16.2
+  "@guuey/mcp-apps-host@0.16.x": 0.16.14
+  "@guuey/threads": 0.16.14
   "@hono/node-server": 2.1.0
   "@huggingface/jinja": 0.5.9
   "@joshwooding/vite-plugin-react-docgen-typescript": 0.7.0
@@ -292,7 +292,7 @@ overrides:
   "@rollup/rollup-win32-ia32-msvc": 4.62.4
   "@rollup/rollup-win32-x64-gnu": 4.62.4
   "@rollup/rollup-win32-x64-msvc": 4.62.4
-  "@silverprotocol/core": 0.5.1
+  "@silverprotocol/core": 0.5.4
   "@sinclair/typebox": 0.27.12
   "@smithy/core": 3.33.3
   "@smithy/credential-provider-imds": 4.4.16

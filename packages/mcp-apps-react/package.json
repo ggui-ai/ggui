@@ -59,7 +59,7 @@
   "devDependencies": {
     "@ggui-ai/design": "workspace:*",
     "@modelcontextprotocol/sdk": "^1.27.0",
-    "@silverprotocol/core": "0.5.1",
+    "@silverprotocol/core": "0.5.4",
     "@testing-library/react": "^16.0.0",
     "@types/node": "^22.0.0",
     "@types/react": "^19.0.0",
