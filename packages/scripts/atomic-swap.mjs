@@ -19,12 +19,20 @@
  * compile to the microseconds between two `rename(2)` calls — the
  * closest a portable filesystem swap gets to atomic.
  *
- * Not addressed (pre-existing, unchanged): two simultaneous builds of
- * the SAME package still race each other on the staging dir, exactly
- * as they always raced on `dist/` itself.
+ * Still a race (pre-existing): two simultaneous builds of the SAME
+ * package share one staging dir, and tsup's `clean: true` in the second
+ * wipes the first's JS mid-flight. What changed (ggui#681): the swap now
+ * REFUSES to publish a staging dir that is missing any entry point the
+ * package.json declares (`main`/`module`/`types`/`exports`). The losing
+ * build exits non-zero — so turbo never caches its partial `dist/` — and
+ * the winning build's complete tree is what goes live. Before this gate,
+ * a declarations-only `dist/` was swapped live with exit 0, cached under
+ * the task hash, and replayed into every fresh pre-push verify worktree
+ * fleet-wide (the #681 incident). Removing the race itself (per-process
+ * staging dirs) is the follow-up; this gate makes it loud, not silent.
  */
-import { existsSync, renameSync, rmSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { existsSync, readFileSync, renameSync, rmSync } from 'node:fs';
+import { join, relative, resolve } from 'node:path';
 
 const [stagingArg, liveArg] = process.argv.slice(2);
 if (!stagingArg || !liveArg) {
@@ -41,6 +49,30 @@ if (!existsSync(staging)) {
 }
 if (staging === live) {
   console.error('atomic-swap: staging and live paths are identical');
+  process.exit(1);
+}
+
+// ggui#681 completeness gate: every declared entry point that lives under
+// the live dir must already exist in staging, or this build is incomplete
+// and must fail (never be cached, never go live).
+const pkg = JSON.parse(readFileSync(resolve(process.cwd(), 'package.json'), 'utf8'));
+const liveRel = relative(process.cwd(), live).split('\\').join('/');
+const declared = new Set();
+const add = (p) => declared.add(p.replace(/^\.\//, ''));
+for (const k of ['main', 'module', 'types']) if (typeof pkg[k] === 'string') add(pkg[k]);
+const walk = (v) => {
+  if (typeof v === 'string') add(v);
+  else if (Array.isArray(v)) v.forEach(walk);
+  else if (v && typeof v === 'object') Object.values(v).forEach(walk);
+};
+if (pkg.exports !== undefined) walk(pkg.exports);
+const missing = [...declared]
+  .filter((p) => p === liveRel || p.startsWith(`${liveRel}/`))
+  .filter((p) => !existsSync(join(staging, relative(liveRel, p))));
+if (missing.length) {
+  console.error(`atomic-swap: refusing to publish ${stagingArg} → ${liveArg}: incomplete build, ${missing.length} declared entry point(s) missing from staging:`);
+  for (const m of missing) console.error(`    - ${m}`);
+  console.error('atomic-swap: (a concurrent build of this package probably wiped the staging dir mid-flight — re-run the build; ggui#681)');
   process.exit(1);
 }
 
