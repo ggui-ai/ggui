@@ -1,7 +1,7 @@
 {
   "name": "@ggui-ai/design",
   "version": "0.13.0",
-  "description": "ggui design system — themeable React primitives, components, compositions, and design tokens. Bare-barrel import for component code, renderer-facing subpaths for integrators; runtime theming via DTCG token injection.",
+  "description": "ggui design system \u2014 themeable React primitives, components, compositions, and design tokens. Bare-barrel import for component code, renderer-facing subpaths for integrators; runtime theming via DTCG token injection.",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -26,10 +26,6 @@
     "./tokens": {
       "types": "./dist/tokens/index.d.ts",
       "import": "./dist/tokens/index.js"
-    },
-    "./inline": {
-      "types": "./dist/inline/index.d.ts",
-      "import": "./dist/inline/index.js"
     },
     "./themes": {
       "types": "./dist/themes/index.d.ts",
@@ -81,8 +77,7 @@
     "!**/*.stories.d.ts.map"
   ],
   "scripts": {
-    "build": "rm -rf dist.staging && tsc -p tsconfig.build.json --outDir dist.staging && node ../scripts/fix-esm-imports.mjs dist.staging && DESIGN_DIST_DIR=dist.staging node scripts/generate-inline-modules.mjs && node ../scripts/atomic-swap.mjs dist.staging dist && pnpm run generate:docs && pnpm run generate:docs-ts",
-    "build:inline": "node scripts/generate-inline-modules.mjs",
+    "build": "rm -rf dist.staging && tsc -p tsconfig.build.json --outDir dist.staging && node ../scripts/fix-esm-imports.mjs dist.staging && node ../scripts/atomic-swap.mjs dist.staging dist && pnpm run generate:docs && pnpm run generate:docs-ts",
     "dev": "tsc --watch",
     "typecheck": "tsc --noEmit",
     "clean": "rm -rf dist",

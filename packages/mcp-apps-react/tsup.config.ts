@@ -19,8 +19,9 @@ export default defineConfig({
   // clean, a retired entry's stale dist output would keep shipping
   // (the `./shells` zombie-export bug, audit F2).
   clean: true,
-  // Bundle @ggui-ai/design/inline into the output so consumers
-  // don't need to install it separately. The inline module contains
-  // auto-generated string constants (~90KB) for iframe sandboxes.
+  // Bundle @ggui-ai/design into the host-helper output so consumers
+  // install ONE package for the chat surface — the design system is an
+  // implementation detail of these components, not a peer contract.
+  // (Formerly justified by the retired `./inline` subpath; see #717.)
   noExternal: ['@ggui-ai/design'],
 });

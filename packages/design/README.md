@@ -26,8 +26,8 @@ import { Card, Stack, Text, Button, Grid, colors, spacing } from "@ggui-ai/desig
 
 Renderer integrators (packages that mount generated components) use the
 subpaths that are deliberately kept **out** of the barrel:
-`@ggui-ai/design/preview`, `@ggui-ai/design/rendering`,
-`@ggui-ai/design/module-loader`, and `@ggui-ai/design/inline`. Per-layer
+`@ggui-ai/design/preview`, `@ggui-ai/design/rendering`, and
+`@ggui-ai/design/module-loader`. Per-layer
 subpaths (`/primitives`, `/components`, `/compositions`, `/tokens`,
 `/themes`, `/interact`) also exist for callers that want a narrower
 entry point; they re-export the same symbols the barrel carries.
