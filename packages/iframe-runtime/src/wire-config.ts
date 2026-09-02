@@ -16,6 +16,7 @@
  * ProtocolError dual-emission policy, and the tools/call-vs-WS
  * dispatch transport.
  */
+import { connectionStore } from './connection.js';
 import type { ActionEnvelope, GguiSession } from '@ggui-ai/protocol';
 import type { GguiSessionSeedInput } from './types.js';
 import {
@@ -177,7 +178,11 @@ export function buildRootWireConfig(
 
   return buildWireConfig({
     app: { appId: opts.appId, appName: opts.appId },
-    render: { sessionId: opts.sessionId, isConnected: true },
+    // `isConnected` is LIVE through the document's connection store
+    // (ggui#670): the runtime writes the relay latch's two edges into
+    // it and `useRender` reads it via useSyncExternalStore. The static
+    // `true` is the hand-built-config fallback value, never read here.
+    render: { sessionId: opts.sessionId, isConnected: true, connection: connectionStore },
     auth: { isAuthenticated: false },
     // Resolve the active render's actionSpec on every dispatch.
     // Per-render lifecycle: props_update patches replace the render

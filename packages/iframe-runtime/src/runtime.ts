@@ -27,6 +27,7 @@
 // FIRST import on purpose — declares zod jitless before any
 // schema-defining dependency initializes (see zod-jitless.ts).
 import './zod-jitless.js';
+import { connectionStore } from './connection.js';
 
 import type { ReactNode } from 'react';
 import type {
@@ -1207,6 +1208,11 @@ export async function bootSequence(opts: BootSequenceOptions): Promise<BootSeque
   // Fresh boot ⇒ not superseded (matters only for test re-runs that
   // reuse the module; a real iframe boots once).
   mountSuperseded = false;
+  // Fresh boot ⇒ the relay latch and the connection store start
+  // aligned (ggui#670): a standing latch from a prior mount in a
+  // re-booted document must not outlive the store it was written to.
+  relayIncapabilityAnnounced = false;
+  connectionStore.set(true);
   telemetry?.record(
     'boot.path',
     JSON.stringify({
@@ -2985,6 +2991,27 @@ function emitUserActionDoorbell(args: {
 let relayIncapabilityAnnounced = false;
 
 /**
+ * The ONE writer of the relay latch (ggui#670, adversarial-pass fold):
+ * flips the flag, posts the transition-edge observability event, and
+ * writes the document's connection store — so "exactly one transition
+ * per edge" is structural, not a convention spread over inline sites.
+ * `next === true` latches (host cannot relay); `false` clears. Never
+ * call off-edge; callers guard on the current flag.
+ */
+function transitionRelayLatch(
+  next: boolean,
+  trigger?: 'confirmed-refusal' | 'advert-silent',
+): void {
+  relayIncapabilityAnnounced = next;
+  connectionStore.set(!next);
+  postObservabilityToParent(
+    next
+      ? { kind: 'relay-incapability', state: 'latched', ...(trigger !== undefined ? { trigger } : {}) }
+      : { kind: 'relay-incapability', state: 'cleared' },
+  );
+}
+
+/**
  * Module-level handle to the CURRENT boot's telemetry sink so
  * module-scope paths (the doorbell emitter below) can report without
  * threading the sink through every call chain. Per-iframe
@@ -3103,6 +3130,7 @@ function resetRelayCueThrottles(): void {
 /** @internal — exported for unit tests to reset module state. */
 export function __resetRelayNoticeForTest(): void {
   relayIncapabilityAnnounced = false;
+  connectionStore.set(true);
   relayNoticeDismissed = false;
   resetRelayCueThrottles();
 }
@@ -3426,16 +3454,12 @@ export function dispatchSubmitAction(args: {
       resp !== null &&
       !isRelayShapedFailure(resp)
     ) {
-      relayIncapabilityAnnounced = false;
       // Self-heal leaves NO cue residue (ggui#442): the dead zone is
       // gone, so the state that armed the cue goes with it. A later
       // re-latch starts from a clean slate.
       relayNoticeDismissed = false;
       resetRelayCueThrottles();
-      postObservabilityToParent({
-        kind: 'relay-incapability',
-        state: 'cleared',
-      });
+      transitionRelayLatch(false);
       // The (1.5) pending toast above was SKIPPED for this gesture —
       // the latch was still standing at dispatch time — so a bare
       // clear leaves the now-false "cannot relay" notice standing with
@@ -3533,16 +3557,11 @@ export function dispatchSubmitAction(args: {
         confirmedRefusal)
     ) {
       if (!relayIncapabilityAnnounced) {
-        relayIncapabilityAnnounced = true;
         // Transition edge — the paired 'cleared' edge lives at the
         // response-arrival guard above. NEVER emit off-edge (e.g. per
         // channel poll tick): the router ticks on an interval and
         // would spam; the two edges carry the full information.
-        postObservabilityToParent({
-          kind: 'relay-incapability',
-          state: 'latched',
-          trigger: confirmedRefusal ? 'confirmed-refusal' : 'advert-silent',
-        });
+        transitionRelayLatch(true, confirmedRefusal ? 'confirmed-refusal' : 'advert-silent');
         // Establish the flag's invariant where the notice it describes
         // is created: a freshly-shown notice is undismissed, and its
         // dead zone starts with an unspent throttle. Today every

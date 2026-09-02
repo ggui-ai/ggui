@@ -1,3 +1,4 @@
+import type { ConnectionStore } from './connection-store';
 import { createContext, useContext } from 'react';
 import type {
   DataContract,
@@ -100,6 +101,14 @@ export interface WireConfig<T extends DataContract = DataContract> {
   readonly render: {
     readonly sessionId: string;
     readonly isConnected: boolean;
+    /**
+     * Live connection truth (ggui#670). When present, `useRender()`
+     * reads `isConnected` from this store (the runtime writes the
+     * relay-latch edges into it); when absent — a hand-built config —
+     * the static `isConnected` above is the value. Presentational
+     * truth only: readers MUST NOT suppress dispatch on `false`.
+     */
+    readonly connection?: ConnectionStore;
   };
   readonly auth: {
     readonly userId?: string;

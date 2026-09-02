@@ -1,0 +1,39 @@
+/**
+ * ggui#670 Phase 1 admissibility pin (adversarial-pass fold 3/14): the
+ * wire docs generator's `hookFiles` allowlist is the TAUGHT surface —
+ * `WIRE_DOCUMENTATION` is interpolated verbatim into the generation
+ * system prompt ("## Reference: Wire Hooks"). Phase 1 ships the live
+ * `isConnected` mechanism SILENT: no new hook enters the allowlist and
+ * the `useRender` teaching text is byte-identical, so the prompt does
+ * not move without a bench. Any change here is prompt motion and must
+ * ride a pre-registered bench (Phase 2).
+ */
+import { describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { resolve, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const here = dirname(fileURLToPath(import.meta.url));
+
+describe('taught wire surface is frozen for ggui#670 Phase 1', () => {
+  it('the docs generator allowlist is exactly the five taught hooks', () => {
+    const src = readFileSync(resolve(here, '..', 'scripts', 'generate-wire-docs.ts'), 'utf8');
+    const start = src.indexOf('const hookFiles');
+    const end = src.indexOf('];', start);
+    expect(start).toBeGreaterThan(-1);
+    const block = src.slice(start, end);
+    const names = [...block.matchAll(/hookName:\s*'([A-Za-z]+)'/g)].map((m) => m[1]);
+    expect(names).toEqual(['useAction', 'useStream', 'useAuth', 'useApp', 'useRender']);
+  });
+
+  it('useRender keeps its exact taught docstring and return shape (prompt byte-identical)', () => {
+    const src = readFileSync(resolve(here, 'useRender.ts'), 'utf8');
+    expect(src).toContain('/** Read-only render context with connection status. */');
+    expect(src).toContain('export interface GguiSessionInfo {');
+    expect(src).toContain('  sessionId: string;');
+    expect(src).toContain('  isConnected: boolean;');
+    // No new documented fields on the taught interface.
+    const iface = src.slice(src.indexOf('export interface GguiSessionInfo'), src.indexOf('}', src.indexOf('export interface GguiSessionInfo')));
+    expect(iface.split('\n').filter((l) => l.includes(':')).length).toBe(2);
+  });
+});
