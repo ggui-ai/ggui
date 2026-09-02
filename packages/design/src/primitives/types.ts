@@ -107,10 +107,10 @@ export interface CardProps extends BaseProps {
   /**
    * Shadow elevation level. Maps to design tokens:
    * - `'none'` -- no shadow
-   * - `'sm'` -- var(--ggui-shape-shadow-sm) -- subtle, default
-   * - `'md'` -- var(--ggui-shape-shadow-md) -- dialogs, emphasized sections
-   * - `'lg'` -- var(--ggui-shape-shadow-lg) -- floating panels
-   * - `'xl'` -- var(--ggui-shape-shadow-xl) -- popovers, modals
+   * - `'sm'` -- var(--ggui-shape-shadow-sm, 0 1px 2px 0 rgba(0,0,0,0.05)) -- subtle, default
+   * - `'md'` -- var(--ggui-shape-shadow-md, 0 4px 6px -1px rgba(0,0,0,0.1)) -- dialogs, emphasized sections
+   * - `'lg'` -- var(--ggui-shape-shadow-lg, 0 10px 15px -3px rgba(0,0,0,0.1)) -- floating panels
+   * - `'xl'` -- var(--ggui-shape-shadow-xl, 0 20px 25px -5px rgba(0,0,0,0.1)) -- popovers, modals
    * @default 'sm'
    */
   shadow?: 'none' | 'sm' | 'md' | 'lg' | 'xl';
@@ -715,7 +715,7 @@ export interface HeadingProps extends BaseProps {
  * Base styles applied to every variant:
  * - `border-radius: var(--ggui-shape-radius-md)`
  * - `font-weight: var(--ggui-font-weight-medium)`
- * - `box-shadow: var(--ggui-shape-shadow-sm)`
+ * - `box-shadow: var(--ggui-shape-shadow-sm, 0 1px 2px rgba(0,0,0,0.05))`
  * - `gap: var(--ggui-spacing-2)` between icon and text
  * - Transitions: background-color, box-shadow, opacity at 200ms ease-in-out
  *
@@ -2125,7 +2125,7 @@ export interface TabsProps extends BaseProps {
  * The timer resets if `visible`, `duration`, or `onClose` changes.
  *
  * Dimensions: `min-width: 280px`, `max-width: 420px`.
- * Shadow: `var(--ggui-shape-shadow-lg)`.
+ * Shadow: `var(--ggui-shape-shadow-lg, 0 10px 15px -3px rgba(0,0,0,0.1))`.
  * Border radius: `var(--ggui-shape-radius-lg)`.
  *
  * When `visible` is false, renders nothing (returns `null`).
@@ -2195,7 +2195,7 @@ export interface AccordionItem {
   /**
    * Panel content rendered below the header when expanded. Styled with
    * `var(--ggui-font-size-sm)`, `var(--ggui-color-onSurfaceVariant)`,
-   * `line-height: var(--ggui-font-lineHeight-normal)`.
+   * `line-height: var(--ggui-font-lineHeight-normal, 1.5)`.
    * Padding: `0 var(--ggui-spacing-4) var(--ggui-spacing-4)`.
    */
   content: ReactNode;
