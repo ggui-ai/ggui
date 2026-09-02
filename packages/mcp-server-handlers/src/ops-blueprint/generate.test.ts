@@ -12,7 +12,13 @@ import {
   createInMemoryGeneratorRegistry,
 } from "@ggui-ai/mcp-server-core/in-memory";
 import type { Blueprint, DataContract, UIGenerationResponse } from "@ggui-ai/protocol";
-import { blueprintKey } from "@ggui-ai/protocol/blueprint-key";
+import { blueprintKey, variantKey } from '@ggui-ai/protocol/blueprint-key';
+import {
+  InMemoryBlueprintIndex,
+  InMemoryVectorStore,
+  MockEmbeddingProvider,
+} from '@ggui-ai/mcp-server-core/in-memory';
+import { findBlueprintExact } from '../renders/blueprint-registry.js';
 import { describe, expect, it, vi } from "vitest";
 import { GadgetNotRegisteredError } from "../renders/assert-gadgets.js";
 import type { GenerationCredentials } from "../renders/index.js";
@@ -238,6 +244,38 @@ describe("createGguiOpsGenerateBlueprintHandler — happy path", () => {
     const persisted = await deps.blueprintStore.get(result.blueprintId);
     expect(persisted?.variance.seedPrompt).toBe("make it red");
     expect(persisted?.variance.context).toEqual({ palette: "warm" });
+  });
+
+  it("mirrors the cache row under the REQUESTED variance, never the default sentinel (#697)", async () => {
+    const cacheRegistry = {
+      embedding: new MockEmbeddingProvider(),
+      vectorStore: new InMemoryVectorStore(),
+      index: new InMemoryBlueprintIndex(),
+    };
+    const deps = { ...defaultDeps(), cacheRegistry };
+    const handler = createGguiOpsGenerateBlueprintHandler(deps);
+    const variance = { persona: "data-dense", aesthetic: "editorial" };
+    const result = await handler.handler(
+      { contract: emptyContract(), ...variance },
+      makeCtx("app-1")
+    );
+    // MVB row carries the full variance incl. aesthetic.
+    const persisted = await deps.blueprintStore.get(result.blueprintId);
+    expect(persisted?.variance).toEqual(variance);
+    // Cache mirror resolves at the requested variantKey…
+    const contractKey = blueprintKey(emptyContract());
+    const atRequested = await findBlueprintExact(
+      cacheRegistry,
+      "app-1",
+      "template",
+      contractKey,
+      variantKey(variance)
+    );
+    expect(atRequested).not.toBeNull();
+    expect(atRequested?.variance).toEqual(variance);
+    // …and NOT under the default-variant sentinel.
+    const atSentinel = await findBlueprintExact(cacheRegistry, "app-1", "template", contractKey);
+    expect(atSentinel).toBeNull();
   });
 
   it("pins as operator default when setAsOperatorDefault=true", async () => {

@@ -413,6 +413,7 @@ export function createGguiOpsGenerateBlueprintHandler(
         source,
         variance: {
           ...(normalizedPersona !== undefined ? { persona: normalizedPersona } : {}),
+          ...(parsed.aesthetic !== undefined ? { aesthetic: parsed.aesthetic } : {}),
           ...(parsed.context !== undefined ? { context: parsed.context } : {}),
           ...(parsed.seedPrompt !== undefined ? { seedPrompt: parsed.seedPrompt } : {}),
         },
@@ -445,6 +446,13 @@ export function createGguiOpsGenerateBlueprintHandler(
             contract,
             intent: intentForCache,
             componentCode,
+            // The cache row MUST carry the same variance as the MVB
+            // row: `registerBlueprint` keys the exact-lookup on
+            // `variantKey(variance)`, so omitting it here filed every
+            // operator-authored variant under the default-variant
+            // sentinel — invisible to any request that asks for the
+            // persona it was minted for.
+            variance: blueprint.variance,
             // Operator-DISPATCHED but engine-GENERATED: the code came
             // out of `generator.generate(...)`, so provenance is the
             // llm arm — the same `source` stamped on the MVB row above.
