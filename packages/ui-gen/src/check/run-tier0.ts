@@ -15,6 +15,7 @@
 import ts from 'typescript';
 import type { DataContract } from '@ggui-ai/protocol';
 import { HOOK_NAME_RE, listContractGadgets } from '@ggui-ai/protocol';
+import { consumedTokenManifest } from '@ggui-ai/design/themes';
 import { validateAllContracts, type ContractIssue } from './contract-validation.js';
 import { typecheck } from './type-checker.js';
 import { lintReactHooks, type ReactLintDiagnostic } from './react-linter.js';
@@ -259,6 +260,17 @@ function detectCertainDoubleWiredActions(
   visit(sf);
   return issues;
 }
+
+/**
+ * The consumed-token manifest as a closed set (ggui#613 residual 3 —
+ * the generation-time closure leg of the #598 record). Every theme
+ * MUST define exactly these names (the coverage gate); a generated
+ * component may therefore consume ONLY these names. Anything else
+ * is a reference no theme is obligated to define, and under the s4
+ * fallback ban it paints nothing.
+ */
+const MANIFEST_TOKENS: ReadonlySet<string> = new Set(consumedTokenManifest);
+const TOKEN_REF_RE = /var\(\s*(--ggui-[a-zA-Z0-9-]+)/g;
 
 /** Map wire kind to the matching `@ggui-ai/wire` hook name. */
 const HOOK_NAME_FOR: Readonly<Record<WireKind, string>> = {
@@ -565,6 +577,31 @@ export async function runTier0Checks(
         severity: 'critical',
         description: `Hardcoded ${colorFnMatch[1]}() breaks theme switching — use design tokens.`,
         fix: 'Replace with a primitive variant OR a semantic token: var(--ggui-color-surface), var(--ggui-color-onSurface), var(--ggui-color-outline), etc.',
+        line: lineNum,
+      });
+    }
+
+    // Off-manifest token references (ggui#613 residual 3): a
+    // `var(--ggui-*)` whose name is outside the consumed-token
+    // manifest. The manifest is the closed vocabulary the prompt
+    // teaches AND the set every theme must define — so a name outside
+    // it is invented, and with literal fallbacks banned it renders
+    // UNSET. Fail, like the other token-contract violations; one issue
+    // per distinct name per line.
+    const offManifest = new Set<string>();
+    for (const m of line.matchAll(TOKEN_REF_RE)) {
+      const name = m[1]!;
+      if (!MANIFEST_TOKENS.has(name)) offManifest.add(name);
+    }
+    for (const name of offManifest) {
+      issues.push({
+        tier: 0,
+        result: 'fail',
+        category: 'tokens',
+        subcategory: 'off-manifest-token',
+        severity: 'critical',
+        description: `Token "${name}" is not in the design system's token manifest — no theme defines it, so it renders unset.`,
+        fix: `Choose a token that exists: the closed vocabulary is the manifest the design-system docs list (colors: var(--ggui-color-primary-500), var(--ggui-color-onSurface), …; spacing: var(--ggui-spacing-4); type: var(--ggui-font-size-sm)). Never invent a name and never add a literal fallback.`,
         line: lineNum,
       });
     }

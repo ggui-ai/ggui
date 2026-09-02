@@ -1230,3 +1230,53 @@ describe('DEFAULT_QUALITY_CONFIG', () => {
     expect(DEFAULT_QUALITY_CONFIG.maxCostPerGeneration).toBe(3);
   });
 });
+
+// =============================================================================
+// Off-manifest token references (ggui#613 residual 3 — the generation-time
+// closure leg of the #598 record)
+// =============================================================================
+
+describe('runTier0Checks — off-manifest token references (ggui#613)', () => {
+  it('FAILS a var(--ggui-*) whose name is outside the consumed-token manifest — it renders UNSET under the fallback ban', async () => {
+    // The manifest is the closed set of tokens every theme MUST define
+    // (the #598 coverage gate). A name outside it is one no theme is
+    // obligated to define; with literal fallbacks banned (s4), the
+    // reference paints nothing. This is the closure leg: generated
+    // code may only consume manifest tokens.
+    const code = `
+interface Props { x: string }
+export default function C(props: Props) {
+  return <div style={{ color: 'var(--ggui-color-primary-999)' }}>x</div>;
+}`;
+    const issues = await runTier0Checks(code);
+    const off = issues.filter(
+      i => i.category === 'tokens' && i.subcategory === 'off-manifest-token',
+    );
+    expect(off).toHaveLength(1);
+    expect(off[0].result).toBe('fail');
+    expect(off[0].severity).toBe('critical');
+    expect(off[0].description).toContain('--ggui-color-primary-999');
+    // Remediation names the closed vocabulary, never a literal escape.
+    expect(off[0].fix).not.toMatch(/#[0-9a-fA-F]{3,8}|\d+px/);
+  });
+
+  it('manifest tokens stay clean — the taught vocabulary is inside the manifest by construction', async () => {
+    const code = `
+interface Props { x: string }
+export default function C(props: Props) {
+  return <div style={{ color: 'var(--ggui-color-onSurface)', padding: 'var(--ggui-spacing-4)', boxShadow: 'var(--ggui-shape-shadow-lg)' }}>x</div>;
+}`;
+    const issues = await runTier0Checks(code);
+    expect(issues.filter(i => i.subcategory === 'off-manifest-token')).toHaveLength(0);
+  });
+
+  it('reports each off-manifest name once per line, even when referenced twice', async () => {
+    const code = `
+interface Props { x: string }
+export default function C(props: Props) {
+  return <div style={{ color: 'var(--ggui-color-nope)', borderColor: 'var(--ggui-color-nope)' }}>x</div>;
+}`;
+    const issues = await runTier0Checks(code);
+    expect(issues.filter(i => i.subcategory === 'off-manifest-token')).toHaveLength(1);
+  });
+});
