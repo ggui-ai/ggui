@@ -1,4 +1,4 @@
-import type { Meta, StoryObj } from '@storybook/react';
+import type { Meta, StoryObj } from '@storybook/react-vite';
 import { Image } from './Image';
 
 const meta: Meta<typeof Image> = {
@@ -37,7 +37,7 @@ export const Rounded: Story = {
     alt: 'Rounded image',
     width: 300,
     height: 300,
-    borderRadius: 16,
+    radius: 16,
   },
 };
 

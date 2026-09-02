@@ -1,5 +1,7 @@
-import type { Preview } from '@storybook/react';
+import type { Preview } from '@storybook/react-vite';
 import React from 'react';
+import { ThemeProvider } from '../src/themes/ThemeProvider';
+import { MotionKeyframes } from '../src/primitives/motion';
 
 const preview: Preview = {
   parameters: {
@@ -21,9 +23,8 @@ const preview: Preview = {
   },
   decorators: [
     (Story) => {
-      // Inject MotionKeyframes and ThemeProvider for all stories
-      const { ThemeProvider } = require('../src/themes/ThemeProvider');
-      const { MotionKeyframes } = require('../src/primitives/motion');
+      // Inject MotionKeyframes and ThemeProvider for all stories (static
+      // imports — Storybook 10 loads config as ESM; no `require` shim).
 
       return React.createElement(
         ThemeProvider,

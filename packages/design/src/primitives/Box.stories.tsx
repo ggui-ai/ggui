@@ -1,4 +1,4 @@
-import type { Meta, StoryObj } from '@storybook/react';
+import type { Meta, StoryObj } from '@storybook/react-vite';
 import { Box } from './Box';
 import type { BoxProps } from './types';
 
@@ -45,7 +45,7 @@ export const WithBackground: Story = {
     children: sampleContent,
     padding: 24,
     surface: 'sunken',
-    borderRadius: 8,
+    radius: 8,
   },
 };
 
@@ -55,7 +55,7 @@ export const PaddingXY: Story = {
     paddingX: 32,
     paddingY: 12,
     surface: 'accent',
-    borderRadius: 8,
+    radius: 8,
   },
 };
 

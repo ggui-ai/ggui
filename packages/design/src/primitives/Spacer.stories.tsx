@@ -1,5 +1,5 @@
 import React from 'react';
-import type { Meta, StoryObj } from '@storybook/react';
+import type { Meta, StoryObj } from '@storybook/react-vite';
 import { Spacer } from './Spacer';
 
 const colorBlock = (label: string, color = '#0284c7') =>

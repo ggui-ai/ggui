@@ -1,5 +1,5 @@
 import React from 'react';
-import type { Meta, StoryObj } from '@storybook/react';
+import type { Meta, StoryObj } from '@storybook/react-vite';
 import { CommandPalette } from './CommandPalette';
 import type { Command } from './types';
 import { Icon } from '../primitives/Icon';
