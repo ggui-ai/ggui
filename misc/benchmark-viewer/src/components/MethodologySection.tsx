@@ -62,6 +62,18 @@ const DIMENSIONS: ReadonlyArray<{ label: string; definition: string }> = [
  */
 const CHANGELOG: ReadonlyArray<{ date: string; text: string }> = [
   {
+    date: '2026-09-03',
+    text:
+      'Cadence refinement: the change detector now keys on a hash of the ' +
+      'generation harness and runner source (and their declared ' +
+      'dependencies), not on the runner image’s commit. Between ' +
+      '2026-08-24 and 2026-09-01, five of the published runs were triggered ' +
+      'by image rebuilds caused only by unrelated dependency-lockfile changes ' +
+      '— honest re-measurements of an unchanged harness. Those rows stand; ' +
+      'from this date such rebuilds no longer trigger a run. Scoring, corpus, ' +
+      'matrix, and the judge panel are unchanged.',
+  },
+  {
     date: '2026-09-02',
     text:
       'Matrix: a Claude frontier arm added — claude-frontier = Claude Fable 5.1 ' +

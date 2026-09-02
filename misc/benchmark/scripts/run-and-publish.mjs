@@ -26,6 +26,7 @@ import { fileURLToPath } from 'node:url';
 import { S3Client, GetObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3';
 import { buildHeadline } from './headline.mjs';
 import { missingProviderKeys } from './preflight.mjs';
+import { decideBenchRun, isRealSourceHash } from './run-gate.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const BENCH_ROOT = resolve(__dirname, '..');
@@ -73,7 +74,6 @@ console.log(`  force=${FORCE}`);
 const s3 = new S3Client({});
 
 {
-  const { decideBenchRun } = await import('./run-gate.mjs');
   const { index } = await tryFetchIndex(`${S3_PREFIX}index.json`);
   const latest = index?.runs?.find((r) => r.multiSdk);
   // Fleet main-hold marker (#684): written/cleared next to the index by
@@ -84,6 +84,10 @@ const s3 = new S3Client({});
     console.warn(`[run-and-publish] MAIN-HOLD marker present (set ${hold.setAt ?? '?'}, ${hold.source ?? 'unknown source'}):`);
     for (const i of hold.issues) console.warn(`  #${i.number} ${i.title ?? ''} ${i.url ?? ''}`);
   }
+  // BENCH_SOURCE_HASH (ggui#766): what the bench measures — the image also
+  // rebuilds on unrelated lockfile churn, so the gate keys on this, not
+  // GIT_SHA, whenever the last published row carries one too.
+  console.log(`  sourceHash=${process.env.BENCH_SOURCE_HASH ?? '(none)'} (last published: ${latest?.multiSdk?.sourceHash ?? '(none)'})`);
   const decision = decideBenchRun({
     imageVersion: process.env.GIT_SHA,
     latestVersion: latest?.multiSdk?.version,
@@ -91,6 +95,8 @@ const s3 = new S3Client({});
     today: BENCH_DATE,
     force: FORCE,
     hold: hold ?? undefined,
+    imageSourceHash: process.env.BENCH_SOURCE_HASH,
+    latestSourceHash: latest?.multiSdk?.sourceHash,
   });
   console.log(`[run-and-publish] gate: ${decision.reason}`);
   if (!decision.run) {
@@ -192,6 +198,9 @@ function newRunEntry() {
       // Runner-image build commit — the change gate compares the current
       // image against this to decide whether an update exists.
       version: report?.meta?.version,
+      // Triad/runner source hash the run measured — the change gate's key
+      // from 2026-09-03 (ggui#766). Omitted when the image predates it.
+      ...(isRealSourceHash(process.env.BENCH_SOURCE_HASH) ? { sourceHash: process.env.BENCH_SOURCE_HASH } : {}),
       headline: buildHeadline(report),
     },
   };

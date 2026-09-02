@@ -29,6 +29,69 @@ describe('decideBenchRun (change-triggered cadence)', () => {
     expect(decideBenchRun(args({ force: true })).run).toBe(true);
   });
 
+  // #766: the image commit changes on every rebuild (pnpm-lock churn), but
+  // "an update exists" means the triad/runner SOURCE changed.
+  it('skips a lock-only rebuild: image version differs but the source hash is unchanged', () => {
+    const d = decideBenchRun(
+      args({ imageVersion: 'def5678', imageSourceHash: 'src-aaa', latestSourceHash: 'src-aaa' }),
+    );
+    expect(d.run).toBe(false);
+    expect(d.reason).toContain('src-aaa');
+  });
+
+  it('runs when the source hash differs, whatever the version says', () => {
+    const d = decideBenchRun(
+      args({ imageVersion: 'abc1234', imageSourceHash: 'src-bbb', latestSourceHash: 'src-aaa' }),
+    );
+    expect(d.run).toBe(true);
+    expect(d.reason).toContain('src-bbb');
+  });
+
+  it('falls back to the version compare when either side lacks a source hash', () => {
+    // Image carries a hash, the last published row predates the field → version rules.
+    expect(decideBenchRun(args({ imageVersion: 'def5678', imageSourceHash: 'src-aaa' })).run).toBe(true);
+    expect(decideBenchRun(args({ imageSourceHash: 'src-aaa' })).run).toBe(false);
+    // The other direction: an older image at :latest, a row that carries a hash.
+    expect(decideBenchRun(args({ imageVersion: 'def5678', latestSourceHash: 'src-aaa' })).run).toBe(true);
+    expect(decideBenchRun(args({ latestSourceHash: 'src-aaa' })).run).toBe(false);
+  });
+
+  it('treats an empty or sentinel ("dev"/"local") source hash as ABSENT — never as a real hash', () => {
+    // A failed bake must not mint a spurious run ('' ≠ 'src-aaa') nor a
+    // forever-skip ('dev' === 'dev'); both fall back to the version compare.
+    const empty = decideBenchRun(args({ imageVersion: 'def5678', imageSourceHash: '', latestSourceHash: 'src-aaa' }));
+    expect(empty.run).toBe(true);
+    expect(empty.reason).toContain('image def5678 ≠');
+    const dev = decideBenchRun(args({ imageVersion: 'def5678', imageSourceHash: 'dev', latestSourceHash: 'dev' }));
+    expect(dev.run).toBe(true);
+    expect(dev.reason).toContain('image def5678 ≠');
+  });
+
+  it('the skip reason mentions an unrelated rebuild only when the image commit actually differs', () => {
+    const same = decideBenchRun(args({ imageSourceHash: 'src-aaa', latestSourceHash: 'src-aaa' }));
+    expect(same.run).toBe(false);
+    expect(same.reason).not.toContain('rebuilt');
+    const rebuilt = decideBenchRun(
+      args({ imageVersion: 'def5678', imageSourceHash: 'src-aaa', latestSourceHash: 'src-aaa' }),
+    );
+    expect(rebuilt.run).toBe(false);
+    expect(rebuilt.reason).toContain('rebuilt');
+  });
+
+  it('long-stop still fires on an unchanged source hash', () => {
+    const d = decideBenchRun(
+      args({
+        imageVersion: 'def5678',
+        imageSourceHash: 'src-aaa',
+        latestSourceHash: 'src-aaa',
+        latestDate: '2026-07-24',
+        today: '2026-08-21',
+      }),
+    );
+    expect(d.run).toBe(true);
+    expect(d.reason).toContain('long-stop');
+  });
+
   it('runs when no run was ever published', () => {
     const d = decideBenchRun(args({ latestVersion: undefined, latestDate: undefined }));
     expect(d.run).toBe(true);

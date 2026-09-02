@@ -78,10 +78,18 @@ WORKDIR /app
 ENV NODE_ENV=production
 
 ARG GIT_SHA=dev
+# Hash of the triad/runner SOURCE the image measures (git tree hashes of
+# ui-gen/src, benchmark/src, benchmark/scripts + the triad packages'
+# package.json — see `make bench-image`). The publish gate compares this,
+# not GIT_SHA, to decide whether an update exists: the image also
+# rebuilds on unrelated pnpm-lock churn, which is not an update (ggui#766).
+ARG BENCH_SOURCE_HASH=dev
 LABEL org.opencontainers.image.revision=$GIT_SHA
+LABEL ai.ggui.bench.source-hash=$BENCH_SOURCE_HASH
 LABEL org.opencontainers.image.source="https://github.com/ggui-ai/ggui"
 LABEL org.opencontainers.image.licenses="Apache-2.0"
 ENV GIT_SHA=$GIT_SHA
+ENV BENCH_SOURCE_HASH=$BENCH_SOURCE_HASH
 
 COPY --from=prep --chown=node:node /prep ./
 # COPY --chown sets ownership on copied FILES but not on the WORKDIR

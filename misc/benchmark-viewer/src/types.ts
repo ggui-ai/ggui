@@ -75,6 +75,13 @@ export interface BenchSummaryRef {
    * published before 2026-08-21.
    */
   version?: string;
+  /**
+   * Hash of the triad/runner source the run measured (baked into the
+   * runner image). The change gate compares this, not `version` — the
+   * image also rebuilds on unrelated lockfile churn. Absent on rows
+   * published before 2026-09-03 (the gate then falls back to `version`).
+   */
+  sourceHash?: string;
   /** Optional headline string the runner emits — short summary line. */
   headline?: string;
 }
