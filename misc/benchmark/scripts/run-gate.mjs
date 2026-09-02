@@ -30,12 +30,27 @@ export const MAX_AGE_DAYS = 28;
  * @param {string|undefined} a.latestDate    YYYY-MM-DD of the newest index row.
  * @param {string} a.today                   YYYY-MM-DD.
  * @param {boolean} a.force                  Manual/verify dispatch — always runs (standing P0 rule).
+ * @param {{ issues?: Array<{ number: number, title?: string }> }} [a.hold]
+ *   The fleet main-hold marker (`data/HOLD.json`, mirrored from open
+ *   `hold:main` issues by the bench-hold-mirror workflow — #684). A marker
+ *   naming at least one issue means a commit escaped onto main ahead of its
+ *   verdict: the probe must not measure it. Checked BEFORE update detection.
  * @param {number} [a.maxAgeDays]            Long-stop threshold (default MAX_AGE_DAYS).
  * @returns {{ run: boolean, reason: string }}
  */
-export function decideBenchRun({ imageVersion, latestVersion, latestDate, today, force, maxAgeDays = MAX_AGE_DAYS }) {
+export function decideBenchRun({ imageVersion, latestVersion, latestDate, today, force, hold, maxAgeDays = MAX_AGE_DAYS }) {
+  const holdIssues = hold?.issues ?? [];
+  const holdList = holdIssues.map((i) => `#${i.number}${i.title ? ` ${i.title}` : ''}`).join(', ');
   if (force) {
-    return { run: true, reason: 'forced dispatch (BENCH_FORCE) — manual/verify runs never gate' };
+    return {
+      run: true,
+      reason: holdIssues.length > 0
+        ? `forced dispatch (BENCH_FORCE) DESPITE main-hold ${holdList} — a human chose to run`
+        : 'forced dispatch (BENCH_FORCE) — manual/verify runs never gate',
+    };
+  }
+  if (holdIssues.length > 0) {
+    return { run: false, reason: `HOLD ${holdList}: main-hold marker present (data/HOLD.json) — skipping` };
   }
   if (!imageVersion || imageVersion === 'local') {
     return { run: true, reason: 'no image version (dev/local run) — gate only applies to the published pipeline' };

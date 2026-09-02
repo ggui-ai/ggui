@@ -76,12 +76,21 @@ const s3 = new S3Client({});
   const { decideBenchRun } = await import('./run-gate.mjs');
   const { index } = await tryFetchIndex(`${S3_PREFIX}index.json`);
   const latest = index?.runs?.find((r) => r.multiSdk);
+  // Fleet main-hold marker (#684): written/cleared next to the index by
+  // the bench-hold-mirror workflow from open `hold:main` issues. Same
+  // fetch helper — it's a JSON object at a key, absent when no hold.
+  const { index: hold } = await tryFetchIndex(`${S3_PREFIX}HOLD.json`);
+  if (hold?.issues?.length) {
+    console.warn(`[run-and-publish] MAIN-HOLD marker present (set ${hold.setAt ?? '?'}, ${hold.source ?? 'unknown source'}):`);
+    for (const i of hold.issues) console.warn(`  #${i.number} ${i.title ?? ''} ${i.url ?? ''}`);
+  }
   const decision = decideBenchRun({
     imageVersion: process.env.GIT_SHA,
     latestVersion: latest?.multiSdk?.version,
     latestDate: latest?.date,
     today: BENCH_DATE,
     force: FORCE,
+    hold: hold ?? undefined,
   });
   console.log(`[run-and-publish] gate: ${decision.reason}`);
   if (!decision.run) {

@@ -51,6 +51,31 @@ describe('decideBenchRun (change-triggered cadence)', () => {
     expect(d.run).toBe(false);
   });
 
+  it('skips while a main-hold is set — even when an update exists (#684)', () => {
+    const d = decideBenchRun(
+      args({
+        imageVersion: 'def5678',
+        hold: { issues: [{ number: 690, title: 'hold: triad escape 702549c89' }] },
+      }),
+    );
+    expect(d.run).toBe(false);
+    expect(d.reason).toContain('HOLD');
+    expect(d.reason).toContain('#690');
+  });
+
+  it('force overrides a main-hold with an explicit reason naming the hold', () => {
+    const d = decideBenchRun(
+      args({ force: true, hold: { issues: [{ number: 690, title: 'hold: triad escape' }] } }),
+    );
+    expect(d.run).toBe(true);
+    expect(d.reason).toContain('#690');
+  });
+
+  it('a hold marker with no issues listed is not a hold', () => {
+    const d = decideBenchRun(args({ imageVersion: 'def5678', hold: { issues: [] } }));
+    expect(d.run).toBe(true);
+  });
+
   it('runs uncontainerized (no image version) — the gate never blocks dev', () => {
     expect(decideBenchRun(args({ imageVersion: undefined })).run).toBe(true);
     expect(decideBenchRun(args({ imageVersion: 'local' })).run).toBe(true);
