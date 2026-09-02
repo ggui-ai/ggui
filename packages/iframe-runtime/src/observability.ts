@@ -347,9 +347,29 @@ export type ObservabilityEmitter = (event: ObservabilityEvent) => void;
 
 /**
  * Type guard for the `ggui:observe` envelope as it arrives on a host's
- * `message` listener — narrows `event.data` so the host switches on
- * `event.kind` (and `state`) without hand-typed payloads. Unknown kinds
- * stay in the union's open tail: hosts MUST ignore them, never throw.
+ * `message` listener — narrows `event.data` to {@link ObservabilityMessage}.
+ * Read fields through the per-kind guards, never through
+ * `switch (event.kind)`: the union's open tail (`kind: string & {}`)
+ * keeps TypeScript from using `kind` as a discriminant, so a `case`
+ * body sees the whole union. Unknown kinds stay in that tail: hosts
+ * MUST ignore them, never throw.
+ *
+ * @example
+ * ```ts
+ * import {
+ *   isObservabilityMessage,
+ *   isRelayDeadTapEvent,
+ *   isRelayIncapabilityEvent,
+ * } from '@ggui-ai/iframe-runtime/observability';
+ *
+ * window.addEventListener('message', ({ data, source }) => {
+ *   if (source !== iframe.contentWindow || !isObservabilityMessage(data)) return;
+ *   const { event } = data;
+ *   if (isRelayDeadTapEvent(event)) count(event.intent, event.latchAgeMs);
+ *   else if (isRelayIncapabilityEvent(event) && event.state === 'cleared') recovered(event.deadTaps);
+ *   // any other kind: ignore
+ * });
+ * ```
  *
  * @public
  */
