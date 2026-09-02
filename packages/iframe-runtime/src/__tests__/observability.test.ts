@@ -278,3 +278,90 @@ describe('connectViaRegistry — subscribe-failed emission', () => {
     void promise;
   });
 });
+
+// ---------------------------------------------------------------------------
+// Per-kind guards + the `./observability` subpath (ggui#670 Phase 3, first-
+// consumer finding from the console seat): the union's open tail
+// (`kind: string & {}`) stops TypeScript from using `kind` as a
+// discriminant, so `switch (event.kind)` never narrows — hosts need
+// per-kind guards. And a host importing a VALUE guard from the package
+// root drags the whole runtime graph into its bundle, so the guards live
+// on a subpath whose only import is the protocol's tag constant.
+// ---------------------------------------------------------------------------
+import { expectTypeOf } from 'vitest';
+import { readFileSync, existsSync } from 'node:fs';
+import { resolve, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import {
+  isObservabilityMessage,
+  isRelayDeadTapEvent,
+  isRelayIncapabilityEvent,
+  type RelayDeadTapEvent,
+  type RelayIncapabilityEvent,
+} from '../observability.js';
+
+describe('per-kind observability guards (ggui#670 Phase 3)', () => {
+  const deadTap: ObservabilityEvent = {
+    kind: 'relay-dead-tap',
+    intent: 'archive',
+    latchAgeMs: 120,
+    ordinal: 1,
+    trigger: 'confirmed-refusal',
+    appId: 'app_1',
+  };
+  const cleared: ObservabilityEvent = {
+    kind: 'relay-incapability',
+    state: 'cleared',
+    latchedForMs: 900,
+    deadTaps: 2,
+  };
+  const feedback: ObservabilityEvent = { kind: 'ui-feedback', verdict: 'up' };
+
+  it('isRelayDeadTapEvent narrows the union to the dead-tap shape and rejects every other kind', () => {
+    expect(isRelayDeadTapEvent(deadTap)).toBe(true);
+    expect(isRelayDeadTapEvent(cleared)).toBe(false);
+    expect(isRelayDeadTapEvent(feedback)).toBe(false);
+    if (isRelayDeadTapEvent(deadTap)) {
+      expectTypeOf(deadTap).toEqualTypeOf<RelayDeadTapEvent>();
+      expect(deadTap.intent).toBe('archive');
+    }
+  });
+
+  it('isRelayIncapabilityEvent narrows to the latch-edge union, on which `state` then discriminates', () => {
+    expect(isRelayIncapabilityEvent(cleared)).toBe(true);
+    expect(isRelayIncapabilityEvent(deadTap)).toBe(false);
+    if (isRelayIncapabilityEvent(cleared)) {
+      expectTypeOf(cleared).toEqualTypeOf<RelayIncapabilityEvent>();
+      if (cleared.state === 'cleared') expect(cleared.deadTaps).toBe(2);
+    }
+  });
+
+  it('the envelope guard accepts the wire shape and rejects near-misses', () => {
+    expect(isObservabilityMessage({ type: 'ggui:observe', event: deadTap })).toBe(true);
+    expect(isObservabilityMessage({ type: 'ggui:observe', event: { nokind: true } })).toBe(false);
+    expect(isObservabilityMessage({ type: 'ggui:lifecycle', event: deadTap })).toBe(false);
+    expect(isObservabilityMessage(null)).toBe(false);
+  });
+
+  it('ships on the `./observability` subpath — types + guards only, pointing at emitted files', () => {
+    const pkgRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
+    const pkg = JSON.parse(readFileSync(resolve(pkgRoot, 'package.json'), 'utf8')) as {
+      exports: Record<string, { types: string; import: string; default: string }>;
+    };
+    const sub = pkg.exports['./observability'];
+    expect(sub).toBeDefined();
+    expect(sub.types).toBe('./dist/observability.d.ts');
+    expect(sub.import).toBe('./dist/observability.js');
+    // The subpath's module graph is the protocol tag constant and nothing
+    // else — a host importing the value guard must not pull the runtime.
+    const src = readFileSync(resolve(pkgRoot, 'src', 'observability.ts'), 'utf8');
+    const imports = [...src.matchAll(/^import .* from '([^']+)';/gm)].map((m) => m[1]);
+    expect(imports).toEqual(['@ggui-ai/protocol/integrations/mcp-apps']);
+    // Pinned only when a build has run (dist is gitignored): the emitted
+    // files the export map points at.
+    if (existsSync(resolve(pkgRoot, 'dist'))) {
+      expect(existsSync(resolve(pkgRoot, sub.import))).toBe(true);
+      expect(existsSync(resolve(pkgRoot, sub.types))).toBe(true);
+    }
+  });
+});

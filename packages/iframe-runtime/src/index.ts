@@ -76,6 +76,11 @@ export type {
   RelayLatchTrigger,
   UnknownObservabilityEvent,
 } from './observability.js';
-export { isObservabilityMessage, postObservabilityToParent } from './observability.js';
+export {
+  isObservabilityMessage,
+  isRelayDeadTapEvent,
+  isRelayIncapabilityEvent,
+  postObservabilityToParent,
+} from './observability.js';
 export type { LifecycleEmitter } from './lifecycle.js';
 export { postLifecycleToParent, makeLifecycleEvent } from './lifecycle.js';

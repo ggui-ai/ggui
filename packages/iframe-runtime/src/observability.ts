@@ -362,6 +362,31 @@ export function isObservabilityMessage(value: unknown): value is ObservabilityMe
 }
 
 /**
+ * Narrows to {@link RelayDeadTapEvent}. The union's open tail
+ * (`kind: string & {}`) keeps TypeScript from using `kind` as a
+ * discriminant, so `switch (event.kind)` never narrows across
+ * {@link ObservabilityEvent} — hosts read fields through the per-kind
+ * guards (first-consumer finding, ggui#670 Phase 3).
+ *
+ * @public
+ */
+export function isRelayDeadTapEvent(event: ObservabilityEvent): event is RelayDeadTapEvent {
+  return event.kind === 'relay-dead-tap';
+}
+
+/**
+ * Narrows to {@link RelayIncapabilityEvent}; inside it `state`
+ * discriminates the `'latched'` / `'cleared'` edges normally.
+ *
+ * @public
+ */
+export function isRelayIncapabilityEvent(
+  event: ObservabilityEvent,
+): event is RelayIncapabilityEvent {
+  return event.kind === 'relay-incapability';
+}
+
+/**
  * Default emitter — posts an {@link ObservabilityMessage} to
  * `window.parent`. Mirrors `postBootFailure` / `postRendererReady`
  * posture in `runtime.ts`: swallows postMessage failure so a detached

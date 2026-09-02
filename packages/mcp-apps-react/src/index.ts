@@ -70,11 +70,17 @@ export type {
   UiFeedbackEvent,
   UnknownObservabilityEvent,
 } from '@ggui-ai/iframe-runtime';
-// The `ggui:observe` envelope guard — a web host owns its iframe and
-// listens on the protocol-owned tag directly; this narrows `event.data`
-// so it can switch on `event.kind` (relay dead taps, latch edges, …)
-// without hand-typed payloads. Runtime value, so a separate export.
-export { isObservabilityMessage } from '@ggui-ai/iframe-runtime';
+// The `ggui:observe` guards — a web host owns its iframe and listens on
+// the protocol-owned tag directly: `isObservabilityMessage` narrows
+// `event.data`, and the per-kind guards narrow the event (the union's
+// open tail keeps `switch (event.kind)` from narrowing). Re-exported
+// from the runtime's `./observability` subpath so a host importing the
+// VALUE guards pulls the protocol tag constant, never the runtime graph.
+export {
+  isObservabilityMessage,
+  isRelayDeadTapEvent,
+  isRelayIncapabilityEvent,
+} from '@ggui-ai/iframe-runtime/observability';
 
 // Provider
 export { GguiProvider } from './components/GguiProvider';
