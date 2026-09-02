@@ -40,7 +40,7 @@
     }
   },
   "scripts": {
-    "build": "TSUP_OUT_DIR=dist.staging tsup && node ../scripts/atomic-swap.mjs dist.staging dist",
+    "build": "TSUP_OUT_DIR=dist.staging-$$ tsup && node ../scripts/atomic-swap.mjs dist.staging-$$ dist",
     "dev": "tsup --watch",
     "typecheck": "tsc --noEmit",
     "test": "node ../../e2e/fixtures/silverprotocol/fetch-fixtures.mjs && vitest run",

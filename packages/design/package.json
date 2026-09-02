@@ -77,7 +77,7 @@
     "!**/*.stories.d.ts.map"
   ],
   "scripts": {
-    "build": "rm -rf dist.staging && tsc -p tsconfig.build.json --outDir dist.staging && node ../scripts/fix-esm-imports.mjs dist.staging && node ../scripts/atomic-swap.mjs dist.staging dist && pnpm run generate:docs && pnpm run generate:docs-ts",
+    "build": "rm -rf dist.staging-$$ && tsc -p tsconfig.build.json --outDir dist.staging-$$ && node ../scripts/fix-esm-imports.mjs dist.staging-$$ && node ../scripts/atomic-swap.mjs dist.staging-$$ dist && pnpm run generate:docs && pnpm run generate:docs-ts",
     "dev": "tsc --watch",
     "typecheck": "tsc --noEmit",
     "clean": "rm -rf dist",

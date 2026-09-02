@@ -46,7 +46,7 @@
     "LICENSE"
   ],
   "scripts": {
-    "build": "TSUP_OUT_DIR=dist.staging tsup && node ../scripts/atomic-swap.mjs dist.staging dist",
+    "build": "TSUP_OUT_DIR=dist.staging-$$ tsup && node ../scripts/atomic-swap.mjs dist.staging-$$ dist",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "lint": "eslint src --ext .ts,.tsx --max-warnings 0",

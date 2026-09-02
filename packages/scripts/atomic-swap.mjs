@@ -31,8 +31,8 @@
  * fleet-wide (the #681 incident). Removing the race itself (per-process
  * staging dirs) is the follow-up; this gate makes it loud, not silent.
  */
-import { existsSync, readFileSync, renameSync, rmSync } from 'node:fs';
-import { join, relative, resolve } from 'node:path';
+import { existsSync, readFileSync, readdirSync, renameSync, rmSync } from 'node:fs';
+import { basename, dirname, join, relative, resolve } from 'node:path';
 
 const [stagingArg, liveArg] = process.argv.slice(2);
 if (!stagingArg || !liveArg) {
@@ -115,3 +115,17 @@ try {
 // Cleanup happens AFTER the live dir is whole again — a slow rm of the
 // old tree never widens the visibility window.
 rmSync(trash, { recursive: true, force: true });
+
+// ggui#694: staging dirs are per-process (`<live>.staging-<pid>`, the
+// build script's `$$`), so two concurrent builds of the SAME package never
+// share one. A crashed prior build leaves its `<live>.staging-<pid>` behind;
+// sweep only those whose pid is DEAD — a live sibling's staging dir is its
+// mid-flight build, never ours to touch (mirror of the trash rule above).
+const stagingPrefix = `${basename(live)}.staging-`;
+const alive = (pid) => { try { process.kill(pid, 0); return true; } catch (e) { return e && e.code === 'EPERM'; } };
+for (const name of readdirSync(dirname(live))) {
+  if (!name.startsWith(stagingPrefix)) continue;
+  const pid = Number(name.slice(stagingPrefix.length));
+  if (!Number.isInteger(pid) || pid <= 0 || alive(pid)) continue;
+  rmSync(join(dirname(live), name), { recursive: true, force: true });
+}

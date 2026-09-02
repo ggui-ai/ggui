@@ -25,7 +25,7 @@
     }
   },
   "scripts": {
-    "build": "rm -rf dist.staging && tsc -p tsconfig.build.json --outDir dist.staging && node ../scripts/atomic-swap.mjs dist.staging dist",
+    "build": "rm -rf dist.staging-$$ && tsc -p tsconfig.build.json --outDir dist.staging-$$ && node ../scripts/atomic-swap.mjs dist.staging-$$ dist",
     "dev": "tsc --watch",
     "typecheck": "tsc --noEmit",
     "test": "node ../../e2e/fixtures/silverprotocol/fetch-fixtures.mjs && vitest run",

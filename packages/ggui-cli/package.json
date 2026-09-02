@@ -33,7 +33,7 @@
     "README.md"
   ],
   "scripts": {
-    "build": "rm -rf dist.staging && tsc -p tsconfig.build.json --outDir dist.staging && chmod +x dist.staging/cli.js && node ../scripts/atomic-swap.mjs dist.staging dist",
+    "build": "rm -rf dist.staging-$$ && tsc -p tsconfig.build.json --outDir dist.staging-$$ && chmod +x dist.staging-$$/cli.js && node ../scripts/atomic-swap.mjs dist.staging-$$ dist",
     "dev": "tsc --watch",
     "typecheck": "tsc --noEmit",
     "test": "vitest run --passWithNoTests",
