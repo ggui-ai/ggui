@@ -2099,7 +2099,7 @@ export interface CreateGguiServerOptions {
   /**
    * Runtime theme-registration resolver (ggui#598-C): `(appId,
    * themeName)` → the registered ladder's delivery payload
-   * (`{documentHash, light, dark}`) or `null` for names with no
+   * (`{documentHash, light, dark, keyframes?, frameless?}`) or `null` for names with no
    * registration. Threaded to every emitting door (render/update
    * result-meta, the read-served shell, `/state`) so delivery cannot
    * drift across transports. Bind it to a ThemeStore +

@@ -14,21 +14,40 @@ import type { DtcgTheme } from './types.js';
 import { parseTheme } from './parser.js';
 import type { ThemeRegistrationDocs } from './validate-coverage.js';
 
-/** Emit-ready variable maps, one per mode. */
+/**
+ * Emit-ready variable maps, one per mode — plus the two non-variable
+ * carriages (ggui#613 residual 2): per-mode `@keyframes` blocks (a
+ * mode key is absent when its document declares none) and the
+ * `frameless` flag (the OR of both modes' `$metadata.frameless` —
+ * suppression is the safe direction: a frameless declaration on
+ * either mode means the host owns the silhouette).
+ */
 export interface ResolvedRegistrationVariables {
   readonly light: Readonly<Record<string, string>>;
   readonly dark: Readonly<Record<string, string>>;
+  readonly keyframes: { readonly light?: string; readonly dark?: string };
+  readonly frameless: boolean;
 }
 
 const DECLARATION_RE = /(--ggui-[a-zA-Z0-9-]+)\s*:\s*([^;]+);/g;
 
-function extract(doc: DtcgTheme): Record<string, string> {
+interface ExtractedMode {
+  readonly variables: Record<string, string>;
+  readonly keyframes: string;
+  readonly frameless: boolean;
+}
+
+function extract(doc: DtcgTheme): ExtractedMode {
   const parsed = parseTheme('registration-delivery', doc);
-  const out: Record<string, string> = {};
+  const variables: Record<string, string> = {};
   for (const match of parsed.cssVariables.matchAll(DECLARATION_RE)) {
-    out[match[1]!] = match[2]!.trim();
+    variables[match[1]!] = match[2]!.trim();
   }
-  return out;
+  return {
+    variables,
+    keyframes: parsed.cssKeyframes,
+    frameless: parsed.metadata?.frameless === true,
+  };
 }
 
 /**
@@ -38,5 +57,15 @@ function extract(doc: DtcgTheme): Record<string, string> {
 export function resolveRegistrationVariables(
   docs: ThemeRegistrationDocs,
 ): ResolvedRegistrationVariables {
-  return { light: extract(docs.light), dark: extract(docs.dark) };
+  const light = extract(docs.light);
+  const dark = extract(docs.dark);
+  return {
+    light: light.variables,
+    dark: dark.variables,
+    keyframes: {
+      ...(light.keyframes !== '' ? { light: light.keyframes } : {}),
+      ...(dark.keyframes !== '' ? { dark: dark.keyframes } : {}),
+    },
+    frameless: light.frameless || dark.frameless,
+  };
 }

@@ -351,14 +351,21 @@ function baseInheritsRule(scopeClass: string): string {
  * path silently dropped every non-ladder rule (the injection review's
  * finding).
  *
- * Known v1 deltas vs the compiled path, deliberate and documented:
+ * Parity with the compiled path is now full (ggui#613 residual 2):
  * theme-document keyframes and the `$metadata.frameless` suppression
- * do not ride the delivered wire yet — both are follow-ups on the
- * registration arc, neither affects variable resolution.
+ * ride the delivered wire via `opts` — same blocks, same rule text,
+ * one doctrine on two transports.
  */
 export function assembleDeliveredThemeCss(
   scopeClass: string,
   variables: Readonly<Record<string, string>>,
+  opts?: {
+    /** The active mode's `@keyframes` block from the delivered base. */
+    readonly keyframes?: string;
+    /** `$metadata.frameless` delivered — appends the compiled path's
+     *  exact root-children border-suppression rule. */
+    readonly frameless?: boolean;
+  },
 ): string {
   const body = Object.keys(variables)
     .sort()
@@ -368,7 +375,15 @@ export function assembleDeliveredThemeCss(
   const primary500 = resolvePrimary500Hex(block);
   const scoped = withColorMixFallback(block, `.${scopeClass}`, primary500);
   const gradientTokens = buildGradientTokens(scopeClass, primary500);
-  return `${scoped}\n${baseInheritsRule(scopeClass)}\n${gradientTokens}\n${structuralScaffolding(scopeClass)}`;
+  const keyframesBlock =
+    opts?.keyframes !== undefined && opts.keyframes !== ''
+      ? `\n${opts.keyframes}`
+      : '';
+  const framelessRule =
+    opts?.frameless === true
+      ? `\n.${scopeClass} > :where(:not(style)) { border: none !important; }`
+      : '';
+  return `${scoped}\n${baseInheritsRule(scopeClass)}\n${gradientTokens}${keyframesBlock}\n${structuralScaffolding(scopeClass)}${framelessRule}`;
 }
 
 /**

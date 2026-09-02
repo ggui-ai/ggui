@@ -1164,7 +1164,7 @@ export interface RenderSliceMetaDeps {
   /**
    * Runtime theme-registration resolver (ggui#598-C delivery): given
    * `(appId, themeName)`, return the registered ladder's delivery
-   * payload — `{documentHash, light, dark}` — or `null` when the name
+   * payload — `{documentHash, light, dark, keyframes?, frameless?}` — or `null` when the name
    * resolves to no registration (static presets and decorative names
    * stay on today's path). Bound by the composer to the ThemeStore +
    * `resolveRegistrationVariables` (typically behind a documentHash-

@@ -48,3 +48,43 @@ describe('appThemeSchema', () => {
     expect(appThemeSchema.safeParse({ ...valid, cssVariables: many }).success).toBe(false);
   });
 });
+
+describe('base carries keyframes + frameless (ggui#613 residual 2, additive optional)', () => {
+  const baseCore = {
+    documentHash: 'a'.repeat(64),
+    light: { '--ggui-color-primary-500': '#3b82f6' },
+    dark: { '--ggui-color-primary-500': '#60a5fa' },
+  };
+  const theme = (base: object) => ({
+    mode: 'light',
+    cssVariables: {},
+    base,
+  });
+
+  it('accepts per-mode keyframes and frameless', () => {
+    const r = appThemeSchema.safeParse(
+      theme({
+        ...baseCore,
+        keyframes: { light: '@keyframes pulse { 0% { opacity: 1; } }' },
+        frameless: true,
+      }),
+    );
+    expect(r.success).toBe(true);
+  });
+
+  it('absent keyframes/frameless still parse (wire compat with pre-#613 bases)', () => {
+    expect(appThemeSchema.safeParse(theme(baseCore)).success).toBe(true);
+  });
+
+  it('rejects oversized keyframes (per-mode cap)', () => {
+    const r = appThemeSchema.safeParse(
+      theme({ ...baseCore, keyframes: { light: 'x'.repeat(8193) } }),
+    );
+    expect(r.success).toBe(false);
+  });
+
+  it('base stays strict — unknown fields rejected', () => {
+    const r = appThemeSchema.safeParse(theme({ ...baseCore, behaviorSpec: 'no' }));
+    expect(r.success).toBe(false);
+  });
+});

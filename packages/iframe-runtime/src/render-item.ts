@@ -39,7 +39,7 @@
  */
 import { createElement } from 'react';
 import type { ReactNode } from 'react';
-import type { GguiSession } from '@ggui-ai/protocol';
+import type { AppTheme, GguiSession } from '@ggui-ai/protocol';
 import type { McpAppsGguiSession } from '@ggui-ai/protocol/integrations/mcp-apps';
 import type { GguiSessionSeedInput } from './types.js';
 import { GguiWireProvider, type WireConfig } from '@ggui-ai/wire';
@@ -114,11 +114,7 @@ export interface RenderItemOptions {
   readonly appTheme?: {
     readonly mode: 'light' | 'dark';
     readonly cssVariables: Record<string, string>;
-    readonly base?: {
-      readonly documentHash: string;
-      readonly light: Readonly<Record<string, string>>;
-      readonly dark: Readonly<Record<string, string>>;
-    };
+    readonly base?: NonNullable<AppTheme['base']>;
   };
   /**
    * Host-announced palette, pre-mapped onto `--ggui-*` tokens by the

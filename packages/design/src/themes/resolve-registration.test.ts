@@ -40,3 +40,51 @@ describe('resolveRegistrationVariables', () => {
     expect(a).toEqual(b);
   });
 });
+
+describe('keyframes + frameless ride the resolution (ggui#613 residual 2)', () => {
+  const animatedLight = {
+    ...lightTheme,
+    $metadata: { ...lightTheme.$metadata, frameless: true },
+    motion: {
+      ...lightTheme.motion,
+      keyframes: {
+        pulse: { $value: '0%{opacity:1} to{opacity:0.4}', $type: 'keyframes' },
+      },
+    },
+  };
+
+  it('a document with motion keyframes resolves them per-mode; frameless surfaces', () => {
+    const resolved = resolveRegistrationVariables({
+      light: animatedLight,
+      dark: darkTheme,
+    });
+    // The parser NAMESPACES keyframe names (pulse → ggui-pulse) —
+    // delivered blocks carry the same namespacing as compiled ones,
+    // because both are the same parseTheme emission.
+    expect(resolved.keyframes.light).toContain('@keyframes ggui-pulse');
+    expect(resolved.keyframes.dark).toBeUndefined();
+    expect(resolved.frameless).toBe(true);
+  });
+
+  it('keyframe-less, framed documents resolve with empty keyframes and frameless false', () => {
+    const resolved = resolveRegistrationVariables({
+      light: lightTheme,
+      dark: darkTheme,
+    });
+    expect(resolved.keyframes.light).toBeUndefined();
+    expect(resolved.keyframes.dark).toBeUndefined();
+    expect(resolved.frameless).toBe(false);
+  });
+
+  it('frameless is the OR of both modes — suppression is the safe direction', () => {
+    const framelessDark = {
+      ...darkTheme,
+      $metadata: { ...darkTheme.$metadata, frameless: true },
+    };
+    const resolved = resolveRegistrationVariables({
+      light: lightTheme,
+      dark: framelessDark,
+    });
+    expect(resolved.frameless).toBe(true);
+  });
+});

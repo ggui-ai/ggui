@@ -63,6 +63,29 @@ export const appThemeSchema = z
           .regex(/^[0-9a-f]{64}$/, 'documentHash must be sha256 lowercase hex'),
         light: cssVariableMap,
         dark: cssVariableMap,
+        /**
+         * Per-mode `@keyframes` blocks from the registration document
+         * (ggui#613 residual 2). A mode key is absent when its
+         * document declares no motion keyframes; the whole field is
+         * absent on pre-#613 registrations (additive optional — old
+         * bases stay valid). Injected verbatim after the variable
+         * ladder, same position the compiled path gives
+         * `theme.cssKeyframes`.
+         */
+        keyframes: z
+          .object({
+            light: z.string().max(8192).optional(),
+            dark: z.string().max(8192).optional(),
+          })
+          .strict()
+          .optional(),
+        /**
+         * `$metadata.frameless` delivered (OR of both modes): the
+         * embedding host owns the card silhouette, so the renderer
+         * appends the root-children border-suppression rule — the
+         * SAME rule the compiled path emits.
+         */
+        frameless: z.boolean().optional(),
       })
       .strict()
       .optional(),

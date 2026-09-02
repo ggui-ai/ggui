@@ -60,3 +60,31 @@ describe('assembleDeliveredThemeCss', () => {
     }
   });
 });
+
+describe('delivered ladder carries keyframes + frameless (ggui#613 residual 2 — the two documented v1 deltas close)', () => {
+  it('opts.keyframes appends the block; opts.frameless appends the SAME suppression rule the compiled path emits', async () => {
+    const { assembleDeliveredThemeCss } = await import('./css-tokens.js');
+    const css = assembleDeliveredThemeCss(
+      'ggui-scope-x',
+      { '--ggui-color-primary-500': '#3b82f6' },
+      {
+        keyframes: '@keyframes pulse {\n  0% { opacity: 1; }\n  to { opacity: 0.4; }\n}',
+        frameless: true,
+      },
+    );
+    expect(css).toContain('@keyframes pulse');
+    // Byte-identical to the compiled path's rule — one doctrine, two transports.
+    expect(css).toContain(
+      '.ggui-scope-x > :where(:not(style)) { border: none !important; }',
+    );
+  });
+
+  it('without opts the output is unchanged — absent keyframes/frameless add nothing', async () => {
+    const { assembleDeliveredThemeCss } = await import('./css-tokens.js');
+    const css = assembleDeliveredThemeCss('ggui-scope-x', {
+      '--ggui-color-primary-500': '#3b82f6',
+    });
+    expect(css).not.toContain('@keyframes');
+    expect(css).not.toContain('border: none !important');
+  });
+});

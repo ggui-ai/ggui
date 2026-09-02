@@ -38,6 +38,10 @@ import React, {
   type ReactNode,
 } from 'react';
 import { createRoot } from 'react-dom/client';
+// Schema-derived (ggui#613 residual 2): the delivered-base option type
+// comes from the wire schema, never a hand mirror — future base fields
+// can't silently diverge here again.
+import type { AppTheme } from '@ggui-ai/protocol';
 import {
   stripMarkers,
   rewriteImports,
@@ -369,11 +373,7 @@ export interface ReactRootMountOptions {
      * painted ladder to its registration record); the renderer
      * carries it but exposes no observability surface for it today.
      */
-    readonly base?: {
-      readonly documentHash: string;
-      readonly light: Readonly<Record<string, string>>;
-      readonly dark: Readonly<Record<string, string>>;
-    };
+    readonly base?: NonNullable<AppTheme['base']>;
   };
   /**
    * Host-announced palette, already translated onto `--ggui-*` tokens
@@ -567,6 +567,16 @@ export async function mountReactRoot(
           assembleDeliveredThemeCss(
             scopeClass,
             opts.themeMode === 'dark' ? deliveredBase.dark : deliveredBase.light,
+            {
+              // ggui#613 residual 2 — the two former v1 deltas ride:
+              // the active mode's keyframes block + the frameless
+              // silhouette suppression, both same-rule as compiled.
+              keyframes:
+                opts.themeMode === 'dark'
+                  ? deliveredBase.keyframes?.dark
+                  : deliveredBase.keyframes?.light,
+              frameless: deliveredBase.frameless,
+            },
           )
         : opts.themeId
           ? getScopedThemeCss(opts.themeId, scopeClass, opts.themeMode)
