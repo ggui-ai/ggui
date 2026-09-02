@@ -763,6 +763,26 @@ export interface ButtonProps extends BaseProps, Omit<ButtonHTMLAttributes<HTMLBu
    * @default false
    */
   loading?: boolean;
+  /**
+   * NON-SUPPRESSING inert state (ggui#670): the control renders
+   * visibly inert — `aria-disabled`, dimmed, `inertHint` as its
+   * `title` — while the click handler STAYS wired, so the attempt
+   * still happens. Use this when the surrounding host cannot currently
+   * deliver the action (the runtime's relay latch) and the attempt is
+   * how the runtime discovers recovery; use `disabled` when the action
+   * must not fire at all (validation, limits). `disabled` wins when
+   * both are set.
+   * @internal Hidden from the generated primitives reference until
+   * ggui#670 Phase 2 un-hides it under its pre-registered bench.
+   * @default false
+   */
+  inert?: boolean;
+  /**
+   * Explanation for the inert state, rendered as the button's `title`
+   * (tooltip + assistive text). Only read when `inert` is true.
+   * @internal Hidden with `inert` (ggui#670).
+   */
+  inertHint?: string;
   /** ReactNode rendered before children, inside the flex layout with `var(--ggui-spacing-2)` gap. */
   leftIcon?: ReactNode;
   /** ReactNode rendered after children, inside the flex layout with `var(--ggui-spacing-2)` gap. */

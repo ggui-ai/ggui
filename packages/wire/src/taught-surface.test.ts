@@ -46,7 +46,9 @@ describe('the rendered prompt surface (WIRE_DOCUMENTATION) is frozen — the wir
   // (ggui#670 Phase 1 caught its own leak this way: an optional
   // `render.connection` field surfaced ~400 chars into the prompt.)
   it('WireConfig.render prints exactly {sessionId, isConnected} and the provider has exactly config + children', async () => {
-    const doc = readFileSync(resolve(here, '..', '..', 'ui-gen', 'src', 'tools', 'get-wire.ts'), 'utf8');
+    // The artifact is ONE JS string literal with `\n` escape sequences —
+    // unescape before line-anchored matching.
+    const doc = readFileSync(resolve(here, '..', '..', 'ui-gen', 'src', 'tools', 'get-wire.ts'), 'utf8').replace(/\\n/g, '\n');
     expect(doc).toContain('| render | `{     readonly sessionId: string;     readonly isConnected: boolean;   }` | render |');
     // Pin the absence of the FIELD, not the word: "render context with
     // connection status" is the taught useRender docstring.
@@ -54,5 +56,20 @@ describe('the rendered prompt surface (WIRE_DOCUMENTATION) is frozen — the wir
     expect(doc).not.toContain('connection?:');
     const provider = doc.slice(doc.indexOf('### GguiWireProvider'), doc.indexOf('## Internal: WireConfig'));
     expect((provider.match(/^\| [a-zA-Z]+ \| `/gm) ?? []).length).toBe(2);
+  });
+});
+
+describe('the rendered PRIMITIVES references are frozen for ggui#670 G1 (design build regenerates both)', () => {
+  // `pnpm --filter @ggui-ai/design build` ends with generate:docs AND
+  // generate:docs-ts — two taught artifacts in ui-gen. `Button inert`
+  // is hidden with `@internal`; the generators must SKIP it, proven on
+  // the rendered artifacts after a full build + regen (rnd's rule):
+  // neither reference may mention the prop until Phase 2 un-hides it.
+  it('neither primitives reference documents `inert` / `inertHint`', () => {
+    for (const rel of ['src/validation/primitives.ts', 'src/tools/get-primitives-ts.ts']) {
+      const doc = readFileSync(resolve(here, '..', '..', 'ui-gen', rel), 'utf8');
+      expect(doc, rel).not.toMatch(/\binert\??:/);
+      expect(doc, rel).not.toMatch(/\binertHint\??:/);
+    }
   });
 });
