@@ -13,8 +13,8 @@
   },
   "dependencies": {
     "@ggui-ai/design": "^0.13.0",
-    "@guuey/agent-client": "0.16.7",
-    "@guuey/mcp-apps-host": "0.16.7",
+    "@guuey/agent-client": "0.16.14",
+    "@guuey/mcp-apps-host": "0.16.14",
     "@mcp-ui/client": "^7.1.1",
     "@modelcontextprotocol/sdk": "^1.27.0",
     "react": "^19.0.0",
@@ -25,7 +25,7 @@
     "@types/node": "^24.13.3",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
-    "@vitejs/plugin-react": "^6.1.0",
+    "@vitejs/plugin-react": "^6.1.1",
     "typescript": "^7.0.2",
     "vite": "^8.2.2"
   }
