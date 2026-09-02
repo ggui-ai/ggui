@@ -616,9 +616,20 @@ export async function mountReactRoot(
     // `ThemeProvider` so a Studio/Portal context with both runtime + RP
     // active doesn't double-stack.
     if (typeof document !== 'undefined') {
-      let rootCss = opts.themeId
-        ? getThemeCss(opts.themeId, opts.themeMode)
-        : getCssTokens(opts.themeMode);
+      // ggui#613 residual 5: under a DELIVERED base the body-chrome
+      // ladder is the delivered set too — mirroring the scoped ternary
+      // above — so the standalone viewer's body chrome and its tree
+      // content resolve the same values. Pre-fix this started from the
+      // compiled/default ladder regardless, and body chrome painted the
+      // default brand under a registered theme.
+      let rootCss =
+        deliveredBase !== undefined
+          ? `:root{${toCssDecls(
+              opts.themeMode === 'dark' ? deliveredBase.dark : deliveredBase.light,
+            )}}`
+          : opts.themeId
+            ? getThemeCss(opts.themeId, opts.themeMode)
+            : getCssTokens(opts.themeMode);
       if (opts.hostPalette) {
         // BODY-CHROME ONLY, same as the appTheme `:root` append below —
         // and beneath it, mirroring the scoped-block order (#573:

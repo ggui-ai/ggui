@@ -236,3 +236,34 @@ describe('mountReactRoot — delivered base ladder (theme.base, ggui#598-C)', ()
     mount!.unmount();
   });
 });
+
+describe('mountReactRoot — :root body-chrome under a delivered base (ggui#613 residual 5)', () => {
+  it('the :root body-chrome block paints the DELIVERED base, not the compiled/default ladder, when base is present', async () => {
+    // Standalone viewer only (the runtime as the top document): the
+    // `#ggui-theme-vars` head style themes body chrome (font/color/
+    // background outside the scope div). Pre-fix it started from the
+    // compiled/default ladder even with a delivered base present, so
+    // body chrome and tree content disagreed on the surface color.
+    const container = makeContainer();
+    let mount: Awaited<ReturnType<typeof mountReactRoot>> | null = null;
+    await flush(async () => {
+      mount = await mountReactRoot(container, {
+        render: { id: 'x', componentCode: '' },
+        themeMode: 'light',
+        appTheme: { mode: 'light', cssVariables: {}, base: BASE },
+      });
+    });
+
+    const rootStyle = document.getElementById('ggui-theme-vars');
+    expect(rootStyle).not.toBeNull();
+    const css = rootStyle!.textContent ?? '';
+    // Delivered light surface painted at :root …
+    expect(css).toContain('--ggui-color-surface: #fefefe');
+    // … and the compiled DEFAULT ladder's surface is NOT (the default
+    // light theme's surface is #ffffff — its presence means the
+    // compiled ladder was injected under a delivered base).
+    expect(css).not.toContain('--ggui-color-surface: #ffffff');
+
+    mount!.unmount();
+  });
+});
