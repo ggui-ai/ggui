@@ -60,8 +60,9 @@ export const MODELS = {
     // Wire-canonical IDs accepted by api.anthropic.com/v1/messages.
     // Per Anthropic's official models doc (claude.com/docs/about-claude/models/overview):
     // the Claude 5 family (2026-07: Opus 5, Sonnet 5, and the
-    // Mythos-class Fable 5) and the 4.6–4.8 generation carry undated
+    // Mythos-class Fable 5; 2026-09: Fable 5.1) and the 4.6–4.8 generation carry undated
     // wire IDs; Haiku 4.5 still uses the dated form.
+    'claude-fable-5-1', // 2026-09 (ggui#706); dateless like the rest of the 5 family
     'claude-fable-5',
     'claude-opus-5',
     'claude-sonnet-5',
@@ -132,6 +133,7 @@ export const MODELS = {
     //     403s "not available for this account".
 
     // Messages-API endpoint (Mantle) — Claude 5 family + Opus 4.8
+    'anthropic.claude-fable-5-1', // ggui#706: Bedrock id for Fable 5.1
     'anthropic.claude-fable-5',
     'anthropic.claude-opus-5',
     'anthropic.claude-sonnet-5',

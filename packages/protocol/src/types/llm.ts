@@ -25,8 +25,10 @@
  * `LLMProvider` (capital)) were deleted in the slice #43 close-out —
  * routing went through `parseAnyLlmRoute` + typed dispatch.
  *
- * Pricing last verified: 2026-08-04 (all three providers re-checked
- * against the vendored LiteLLM snapshot + vendor announcements).
+ * Pricing last verified: 2026-09-02 — Anthropic 5-family + Haiku 4.5 (and the
+ * new Fable 5.1 row) against platform.claude.com, quoted on ggui#706; the
+ * Anthropic 4.x legacy rows and the Google/OpenAI rows keep their 2026-08-04
+ * re-vendor verification (not re-checked on 2026-09-02 — no source quoted).
  * Sources:
  *   https://docs.anthropic.com/en/docs/about-claude/pricing
  *   https://developers.openai.com/api/docs/pricing/
@@ -51,39 +53,37 @@ import type { LlmProvider } from "./llm-route.js";
 // Model Types (LiteLLM format: provider/model-name)
 // =============================================================================
 
-export type ModelId =
-  // Anthropic Claude models
-  | "anthropic/claude-fable-5"
-  | "anthropic/claude-opus-5"
-  | "anthropic/claude-sonnet-5"
-  | "anthropic/claude-haiku-4-5"
-  | "anthropic/claude-opus-4-7"
-  | "anthropic/claude-sonnet-4-6"
-  | "anthropic/claude-opus-4-6"
-  // Google Gemini models (preview suffix required by API for *-preview ids)
-  | "gemini/gemini-3.7-flash"
-  | "gemini/gemini-3.6-flash"
-  | "gemini/gemini-3.5-flash"
-  | "gemini/gemini-3.5-flash-lite"
-  | "gemini/gemini-3.1-flash-lite"
-  | "gemini/gemini-3-flash-preview"
-  | "gemini/gemini-3.1-pro-preview"
-  // OpenAI models
-  | "openai/gpt-5.6-sol"
-  | "openai/gpt-5.6-terra"
-  | "openai/gpt-5.6-luna"
-  | "openai/gpt-5.3-codex"
-  | "openai/gpt-5.4"
-  | "openai/gpt-5.4-mini"
-  | "openai/gpt-5.4-nano";
-
 export type ModelTier = "fast" | "balanced" | "premium";
 
-export interface ModelConfig {
-  id: ModelId;
+/**
+ * Registry state of a row (ggui#707). `legacy` = still available and
+ * routable, no longer the current generation (Anthropic's deprecations
+ * page lists it Active with no retirement date); a retired model is
+ * DELETED from the registry, never marked. Required on every row so a
+ * consumer branches on a discriminant, never on an optional flag.
+ */
+export type ModelState = "active" | "legacy";
+
+/** Every registry fact except the id, which the key supplies. */
+export interface ModelConfigBase {
   provider: LlmProvider;
   displayName: string;
   tier: ModelTier;
+  /** See {@link ModelState}. */
+  state: ModelState;
+  /**
+   * Member of the curated "current lineup" a picker shows up front
+   * (ggui#707 / #711: Fable 5.1 · Opus 5 · Sonnet 5 · Haiku 4.5 as the
+   * pool default). A registry fact, never a console array. Required so
+   * a new row cannot silently fall out of both groups.
+   */
+  lineup: boolean;
+  /**
+   * Earliest date the vendor's deprecation page guarantees the model is
+   * still available (ISO date; the page's "≥ date" floor). Present only
+   * when quoted from the vendor (ggui#706).
+   */
+  retireNotBefore?: string;
   costs: {
     inputPer1M: number;
     outputPer1M: number;
@@ -106,17 +106,51 @@ export interface ModelConfig {
   supportsThinking?: boolean;
 }
 
+/**
+ * The registry is the ONLY list of model ids (Strict Typing First,
+ * ggui#707): {@link ModelId} is derived from its keys below, and this
+ * definer forces every row's `id` to equal its key at the type level.
+ */
+function defineModelRegistry<
+  const T extends { readonly [K in keyof T]: ModelConfigBase & { readonly id: K } },
+>(rows: T): T {
+  return rows;
+}
+
 // =============================================================================
-// Model Registry — verified pricing March 2026
+// Model Registry — pricing verified 2026-09-02 (Anthropic 5-family + Haiku 4.5;
+// see the file header for what the 2026-08-04 re-vendor still covers)
 // =============================================================================
 
-export const MODEL_REGISTRY: Record<ModelId, ModelConfig> = {
+const MODEL_ROWS = defineModelRegistry({
   // ── Anthropic Claude ──────────────────────────────────────────────
+  // Strings quoted from ggui#706 (platform.claude.com, 2026-09-02):
+  // $10/$50, 1M context, adaptive thinking always on, retire ≥ 2027-09-01.
+  "anthropic/claude-fable-5-1": {
+    id: "anthropic/claude-fable-5-1",
+    provider: "anthropic",
+    displayName: "Claude Fable 5.1",
+    tier: "premium",
+    state: "active",
+    lineup: true,
+    retireNotBefore: "2027-09-01",
+    costs: {
+      inputPer1M: 10.0,
+      outputPer1M: 50.0,
+      cacheWritePer1M: 12.5,
+      cacheReadPer1M: 1.0,
+    },
+    maxTokens: 1000000,
+    supportsTools: true,
+  },
   "anthropic/claude-fable-5": {
     id: "anthropic/claude-fable-5",
     provider: "anthropic",
     displayName: "Claude Fable 5",
     tier: "premium",
+    state: "legacy",
+    lineup: false,
+    retireNotBefore: "2027-06-09",
     costs: {
       inputPer1M: 10.0,
       outputPer1M: 50.0,
@@ -131,6 +165,9 @@ export const MODEL_REGISTRY: Record<ModelId, ModelConfig> = {
     provider: "anthropic",
     displayName: "Claude Opus 5",
     tier: "premium",
+    state: "active",
+    lineup: true,
+    retireNotBefore: "2027-07-24",
     costs: {
       inputPer1M: 5.0,
       outputPer1M: 25.0,
@@ -149,6 +186,9 @@ export const MODEL_REGISTRY: Record<ModelId, ModelConfig> = {
     provider: "anthropic",
     displayName: "Claude Sonnet 5",
     tier: "balanced",
+    state: "active",
+    lineup: true,
+    retireNotBefore: "2027-06-30",
     costs: {
       inputPer1M: 2.0,
       outputPer1M: 10.0,
@@ -165,6 +205,9 @@ export const MODEL_REGISTRY: Record<ModelId, ModelConfig> = {
     provider: "anthropic",
     displayName: "Claude Haiku 4.5",
     tier: "fast",
+    state: "active",
+    lineup: true,
+    retireNotBefore: "2026-10-15",
     costs: {
       inputPer1M: 1.0,
       outputPer1M: 5.0,
@@ -179,6 +222,8 @@ export const MODEL_REGISTRY: Record<ModelId, ModelConfig> = {
     provider: "anthropic",
     displayName: "Claude Sonnet 4.6",
     tier: "balanced",
+    state: "legacy",
+    lineup: false,
     costs: {
       inputPer1M: 3.0,
       outputPer1M: 15.0,
@@ -193,6 +238,8 @@ export const MODEL_REGISTRY: Record<ModelId, ModelConfig> = {
     provider: "anthropic",
     displayName: "Claude Opus 4.7",
     tier: "premium",
+    state: "legacy",
+    lineup: false,
     costs: {
       inputPer1M: 5.0,
       outputPer1M: 25.0,
@@ -207,6 +254,8 @@ export const MODEL_REGISTRY: Record<ModelId, ModelConfig> = {
     provider: "anthropic",
     displayName: "Claude Opus 4.6",
     tier: "premium",
+    state: "legacy",
+    lineup: false,
     costs: {
       inputPer1M: 5.0,
       outputPer1M: 25.0,
@@ -232,6 +281,8 @@ export const MODEL_REGISTRY: Record<ModelId, ModelConfig> = {
     provider: "google",
     displayName: "Gemini 3.7 Flash",
     tier: "balanced",
+    state: "active",
+    lineup: false,
     costs: { inputPer1M: 0.75, outputPer1M: 3.75, cacheReadPer1M: 0.075 },
     maxTokens: 1048576,
     supportsTools: true,
@@ -242,6 +293,8 @@ export const MODEL_REGISTRY: Record<ModelId, ModelConfig> = {
     provider: "google",
     displayName: "Gemini 3.6 Flash",
     tier: "fast",
+    state: "active",
+    lineup: false,
     // 2026-08-19 re-vendor: cut from $1.5/$7.5 to the 3.7-launch intro
     // rate (see NOTE above 3.7-flash).
     costs: { inputPer1M: 0.75, outputPer1M: 3.75, cacheReadPer1M: 0.075 },
@@ -254,6 +307,8 @@ export const MODEL_REGISTRY: Record<ModelId, ModelConfig> = {
     provider: "google",
     displayName: "Gemini 3.5 Flash",
     tier: "fast",
+    state: "active",
+    lineup: false,
     costs: { inputPer1M: 1.5, outputPer1M: 9.0 },
     maxTokens: 1048576,
     supportsTools: true,
@@ -265,6 +320,8 @@ export const MODEL_REGISTRY: Record<ModelId, ModelConfig> = {
     provider: "google",
     displayName: "Gemini 3.5 Flash Lite",
     tier: "fast",
+    state: "active",
+    lineup: false,
     costs: { inputPer1M: 0.3, outputPer1M: 2.5, cacheReadPer1M: 0.03 },
     maxTokens: 1048576,
     supportsTools: true,
@@ -276,6 +333,8 @@ export const MODEL_REGISTRY: Record<ModelId, ModelConfig> = {
     provider: "google",
     displayName: "Gemini 3.1 Flash Lite",
     tier: "fast",
+    state: "active",
+    lineup: false,
     costs: { inputPer1M: 0.25, outputPer1M: 1.5 },
     maxTokens: 1000000,
     supportsTools: true,
@@ -285,6 +344,8 @@ export const MODEL_REGISTRY: Record<ModelId, ModelConfig> = {
     provider: "google",
     displayName: "Gemini 3 Flash",
     tier: "fast",
+    state: "active",
+    lineup: false,
     costs: { inputPer1M: 0.5, outputPer1M: 3.0 },
     maxTokens: 1000000,
     supportsTools: true,
@@ -294,6 +355,8 @@ export const MODEL_REGISTRY: Record<ModelId, ModelConfig> = {
     provider: "google",
     displayName: "Gemini 3.1 Pro",
     tier: "balanced",
+    state: "active",
+    lineup: false,
     costs: { inputPer1M: 2.0, outputPer1M: 12.0 },
     maxTokens: 1000000,
     supportsTools: true,
@@ -310,6 +373,8 @@ export const MODEL_REGISTRY: Record<ModelId, ModelConfig> = {
     provider: "openai",
     displayName: "GPT-5.6 Sol",
     tier: "premium",
+    state: "active",
+    lineup: false,
     costs: {
       inputPer1M: 4.0,
       outputPer1M: 20.0,
@@ -324,6 +389,8 @@ export const MODEL_REGISTRY: Record<ModelId, ModelConfig> = {
     provider: "openai",
     displayName: "GPT-5.6 Terra",
     tier: "balanced",
+    state: "active",
+    lineup: false,
     costs: { inputPer1M: 2.0, outputPer1M: 12.0, cacheReadPer1M: 0.2 },
     maxTokens: 1050000,
     supportsTools: true,
@@ -334,6 +401,8 @@ export const MODEL_REGISTRY: Record<ModelId, ModelConfig> = {
     provider: "openai",
     displayName: "GPT-5.6 Luna",
     tier: "fast",
+    state: "active",
+    lineup: false,
     costs: { inputPer1M: 0.2, outputPer1M: 1.2, cacheReadPer1M: 0.02 },
     maxTokens: 1050000,
     supportsTools: true,
@@ -343,6 +412,8 @@ export const MODEL_REGISTRY: Record<ModelId, ModelConfig> = {
     provider: "openai",
     displayName: "GPT-5.3 Codex",
     tier: "balanced",
+    state: "active",
+    lineup: false,
     costs: { inputPer1M: 1.75, outputPer1M: 14.0 },
     maxTokens: 200000,
     supportsTools: true,
@@ -352,6 +423,8 @@ export const MODEL_REGISTRY: Record<ModelId, ModelConfig> = {
     provider: "openai",
     displayName: "GPT-5.4",
     tier: "premium",
+    state: "active",
+    lineup: false,
     costs: { inputPer1M: 2.5, outputPer1M: 15.0 },
     maxTokens: 1050000,
     supportsTools: true,
@@ -361,6 +434,8 @@ export const MODEL_REGISTRY: Record<ModelId, ModelConfig> = {
     provider: "openai",
     displayName: "GPT-5.4 Mini",
     tier: "fast",
+    state: "active",
+    lineup: false,
     costs: { inputPer1M: 0.75, outputPer1M: 4.5 },
     maxTokens: 400000,
     supportsTools: true,
@@ -370,13 +445,48 @@ export const MODEL_REGISTRY: Record<ModelId, ModelConfig> = {
     provider: "openai",
     displayName: "GPT-5.4 Nano",
     tier: "fast",
+    state: "active",
+    lineup: false,
     costs: { inputPer1M: 0.20, outputPer1M: 1.25 },
     maxTokens: 400000,
     supportsTools: true,
   },
-} as const;
+});
+
+/** A model id = a registry key. Derived; never a second list. */
+export type ModelId = keyof typeof MODEL_ROWS;
+
+/** A registry row, as consumers read it. */
+export interface ModelConfig extends ModelConfigBase {
+  id: ModelId;
+}
 
 /**
- * Default model for generation
+ * The registry consumers read. Typed by the normalized {@link ModelConfig}
+ * (not the literal row types) so `MODEL_REGISTRY[id]` for any `ModelId`
+ * exposes every optional field as `T | undefined` rather than a union in
+ * which some rows lack the property. The literal rows above still derive
+ * {@link ModelId} and enforce `id === key`.
+ */
+export const MODEL_REGISTRY: Readonly<Record<ModelId, ModelConfig>> = MODEL_ROWS;
+
+/**
+ * The curated "current lineup" — derived once from the rows' `lineup`
+ * fact, in registry order. Pickers render this up front and put the
+ * rest of the ACTIVE registry (legacy rows inside, marked) behind a
+ * "see all models" door (ggui#707 / #711).
+ */
+export const MODEL_LINEUP: readonly ModelId[] = (
+  Object.keys(MODEL_REGISTRY) as ModelId[]
+).filter((id) => MODEL_REGISTRY[id].lineup);
+
+/** Whether `id` is in {@link MODEL_LINEUP}. */
+export function isLineupModel(id: ModelId): boolean {
+  return MODEL_REGISTRY[id].lineup;
+}
+
+/**
+ * Default model for generation. Stays Haiku 4.5 until the founder rules
+ * ggui#706 decision 1 (Fable 5.1 is 10× the per-render cost).
  */
 export const DEFAULT_MODEL: ModelId = "anthropic/claude-haiku-4-5";

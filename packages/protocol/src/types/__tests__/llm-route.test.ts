@@ -408,3 +408,17 @@ describe('regression: #22 + #42 (the bug class this slice eliminates)', () => {
     expect(route?.model.includes('/')).toBe(false);
   });
 });
+
+describe('Fable 5.1 wire ids (ggui#707 — strings quoted from ggui#706)', () => {
+  it('claude-fable-5-1 is a known Anthropic wire id and its LiteLLM form parses to it unchanged', () => {
+    expect(isKnownModel('anthropic', 'claude-fable-5-1')).toBe(true);
+    expect(parseAnyLlmRoute('anthropic/claude-fable-5-1')).toEqual({
+      provider: 'anthropic',
+      model: 'claude-fable-5-1',
+    });
+  });
+
+  it('the Bedrock Messages-API (Mantle) id anthropic.claude-fable-5-1 is known', () => {
+    expect(isKnownModel('bedrock', 'anthropic.claude-fable-5-1')).toBe(true);
+  });
+});
