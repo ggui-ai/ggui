@@ -519,30 +519,45 @@ export async function runTier0Checks(
     // patterns flowing untouched. Asset-fixed brand colors get a
     // typed escape on Box (`assetColor` + `assetSemantic`) — see
     // T-4 follow-up.
+    // Literal fallback inside ANY token reference (ggui#598 slice 4
+    // origin-kill, generalized by ggui#613 residual 4 from color to
+    // every token): the runtime injects every token — colors, spacing,
+    // typography, radius, shadows — so a literal fallback can only
+    // ever paint default-brand pixels under a failed injection, which
+    // must be visible (unset) rather than silently default. The old
+    // hex-only exemption plus a remediation that suggested
+    // `var(--x, ${hex})` actively taught the model to launder invented
+    // values INTO fallbacks (adversarial-cycle find). A token-to-token
+    // fallback (`var(--a, var(--b))`) is not a literal — it stays on
+    // the manifest check alone.
+    const literalFallbackMatch = line.match(
+      /var\(\s*(--ggui-[a-zA-Z0-9-]+)\s*,\s*([^)]+)\)/,
+    );
+    const literalFallback =
+      literalFallbackMatch !== null &&
+      !literalFallbackMatch[2]!.trim().startsWith('var(')
+        ? { token: literalFallbackMatch[1]!, literal: literalFallbackMatch[2]!.trim() }
+        : null;
+    if (literalFallback !== null && !assetEscapedLines.has(lineNum)) {
+      issues.push({
+        tier: 0,
+        result: 'fail',
+        category: 'tokens',
+        subcategory: 'token-fallback',
+        severity: 'critical',
+        description: `Literal fallback "${literalFallback.literal}" inside a token reference — the runtime injects every token, and the fallback paints the wrong value exactly when the theme matters most.`,
+        fix: `Drop the fallback: write var(${literalFallback.token}) bare. If the token might not exist, that is a vocabulary problem to fix by choosing a token from the design-system docs, never by a literal.`,
+        line: lineNum,
+      });
+    }
+
     const hexMatch = line.match(/#[0-9a-fA-F]{3,8}\b/);
     if (hexMatch && !assetEscapedLines.has(lineNum)) {
-      // ggui#598 slice 4 (origin-kill): hex inside a `var(--ggui-*, #hex)`
-      // fallback is ALSO a violation now — the runtime injects every
-      // token, so a literal fallback can only ever paint default-brand
-      // pixels under a failed injection, which must be visible (unset)
-      // rather than silently sky-blue under someone's brand. The old
-      // exemption plus a remediation text that suggested
-      // `var(--x, ${hex})` actively taught the model to launder its
-      // invented hex INTO fallbacks (adversarial-cycle find).
-      const fallbackVarMatch = line.match(
-        /var\((--ggui-[a-zA-Z0-9-]+)\s*,[^)]*#[0-9a-fA-F]{3,8}/,
-      );
-      if (fallbackVarMatch) {
-        issues.push({
-          tier: 0,
-          result: 'fail',
-          category: 'tokens',
-          subcategory: 'token-fallback',
-          severity: 'critical',
-          description: `Literal fallback "${hexMatch[0]}" inside a token reference — the runtime injects every token, and the fallback paints the wrong brand exactly when the theme matters most.`,
-          fix: `Drop the fallback: write var(${fallbackVarMatch[1]}) bare. If the token might not exist, that is a vocabulary problem to fix by choosing a token from the design-system docs, never by a literal.`,
-          line: lineNum,
-        });
+      // A hex that lives inside a token fallback is already reported
+      // above as `token-fallback` — don't double-report it as
+      // `hex-color`.
+      if (literalFallback !== null && literalFallback.literal.includes(hexMatch[0])) {
+        // reported above
       } else if (!line.includes('// fallback')) {
         issues.push({
           tier: 0,

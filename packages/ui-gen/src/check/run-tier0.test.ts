@@ -24,7 +24,7 @@ interface Props {
 
 export default function MyComponent({ title, count = 0 }: Props) {
   return (
-    <div style={{ padding: 'var(--ggui-spacing-md, 16px)' }}>
+    <div style={{ padding: 'var(--ggui-spacing-md)' }}>
       <h1 style={{ color: 'var(--ggui-color-onSurface)' }}>{title}</h1>
       <Button>{count}</Button>
     </div>
@@ -1278,5 +1278,108 @@ export default function C(props: Props) {
 }`;
     const issues = await runTier0Checks(code);
     expect(issues.filter(i => i.subcategory === 'off-manifest-token')).toHaveLength(1);
+  });
+});
+
+
+// =============================================================================
+// Non-color literal fallbacks (ggui#613 residual 4 — the s4 origin-kill
+// generalized: EVERY token is injected, so no literal fallback is ever
+// correct, not just color ones)
+// =============================================================================
+
+describe('runTier0Checks — non-color literal fallbacks (ggui#613 residual 4)', () => {
+  it('FAILS a px literal fallback on a spacing token — same class as the hex fallback, lower stakes', async () => {
+    const code = `
+interface Props { x: string }
+export default function C(props: Props) {
+  return <div style={{ padding: 'var(--ggui-spacing-4, 16px)' }}>x</div>;
+}`;
+    const issues = await runTier0Checks(code);
+    const fb = issues.filter(i => i.category === 'tokens' && i.subcategory === 'token-fallback');
+    expect(fb).toHaveLength(1);
+    expect(fb[0].result).toBe('fail');
+    expect(fb[0].description).toContain('16px');
+    expect(fb[0].fix).toContain('var(--ggui-spacing-4)');
+    expect(fb[0].fix).not.toContain('16px');
+  });
+
+  it('FAILS a unitless literal fallback on a typography token', async () => {
+    const code = `
+interface Props { x: string }
+export default function C(props: Props) {
+  return <div style={{ fontWeight: 'var(--ggui-font-weight-semibold, 600)' }}>x</div>;
+}`;
+    const issues = await runTier0Checks(code);
+    expect(issues.filter(i => i.subcategory === 'token-fallback')).toHaveLength(1);
+  });
+
+  it('a token-to-token fallback (var inside var) is NOT a literal fallback — it stays on the manifest check only', async () => {
+    const code = `
+interface Props { x: string }
+export default function C(props: Props) {
+  return <div style={{ gap: 'var(--ggui-spacing-4, var(--ggui-spacing-2))' }}>x</div>;
+}`;
+    const issues = await runTier0Checks(code);
+    expect(issues.filter(i => i.subcategory === 'token-fallback')).toHaveLength(0);
+  });
+});
+
+// =============================================================================
+// Constraint-alignment guard (rnd's condition on ggui#613 residual 3): the
+// taught token vocabulary must be a strict subset of the consumed-token
+// manifest at EVERY edit of either side — a test, not a review step, so
+// the prompt and the manifest can never drift into an unsatisfiable pair
+// (the Exp 56 class: a rule the model cannot obey without breaking another).
+// =============================================================================
+
+describe('taught token vocabulary ⊆ consumed-token manifest (constraint alignment, ggui#613)', () => {
+  const TOKEN_RE = /--ggui-[a-zA-Z0-9-]+/g;
+
+  /** Concrete token names in a taught surface — wildcard prose fragments
+   *  are not references: a name ending in `-` (`--ggui-color-*`) or in a
+   *  `-N` placeholder (`--ggui-spacing-N`, the docs' "any step" form). */
+  function concreteTokens(text: string): Set<string> {
+    const out = new Set<string>();
+    for (const m of text.matchAll(TOKEN_RE)) {
+      const name = m[0];
+      if (name.endsWith('-') || /-N$/.test(name)) continue;
+      out.add(name);
+    }
+    return out;
+  }
+
+  it('the extractor flags an off-manifest name (guard proves it can fail)', async () => {
+    const { consumedTokenManifest } = await import('@ggui-ai/design/themes');
+    const manifest = new Set(consumedTokenManifest);
+    const sample = 'use var(--ggui-color-onSurface) and var(--ggui-color-primary-999) and var(--ggui-color-*)';
+    const off = [...concreteTokens(sample)].filter(t => !manifest.has(t));
+    expect(off).toEqual(['--ggui-color-primary-999']);
+  });
+
+  it('every concrete token the generation surfaces teach is in the manifest', async () => {
+    const { consumedTokenManifest } = await import('@ggui-ai/design/themes');
+    const { readFileSync, readdirSync, statSync } = await import('node:fs');
+    const { resolve, dirname, join } = await import('node:path');
+    const { fileURLToPath } = await import('node:url');
+    const manifest = new Set(consumedTokenManifest);
+    const srcRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+    const taughtRoots = ['boilerplate', 'fragments', 'harness', 'design-system-docs.ts', 'validation/primitives.ts'];
+    const files: string[] = [];
+    const walk = (p: string) => {
+      if (statSync(p).isDirectory()) {
+        for (const e of readdirSync(p)) walk(join(p, e));
+      } else if (p.endsWith('.ts') && !p.includes('.test.')) {
+        files.push(p);
+      }
+    };
+    for (const r of taughtRoots) walk(resolve(srcRoot, r));
+    const violations: string[] = [];
+    for (const f of files) {
+      for (const t of concreteTokens(readFileSync(f, 'utf8'))) {
+        if (!manifest.has(t)) violations.push(`${t} <- ${f.slice(srcRoot.length + 1)}`);
+      }
+    }
+    expect(violations).toEqual([]);
   });
 });
