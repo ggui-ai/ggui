@@ -101,6 +101,11 @@ overrides:
   "form-data@>=2 <2.5.6": ^2.5.6
   "form-data@>=4 <4.0.6": ^4.0.6
   "@anthropic-ai/sdk@<0.91.1": ^0.91.1
+  # DB-driver CVE floors (alerts 406-412, 2026-09-02) — lockstep with the
+  # root yaml (check-lockfile-split --overrides); see root comment for
+  # the peer-rewrite assessment.
+  "mysql2@<3.22.0": ^3.22.0
+  "mariadb@<3.4.6": ^3.4.6
   # vite floor RETIRED 2026-08-22 (was "vite@<6.4.3": ^6.4.3, advisories
   # 247/248): pnpm rewrites INTERSECTING peer ranges too, so the floor
   # clamped vitest 4's true `^6||^7||^8` vite peer to ^6.4.3 and broke
@@ -206,9 +211,10 @@ overrides:
   "@aws-sdk/types": 3.974.5
   "@aws-sdk/xml-builder": 3.972.40
   "@aws/lambda-invoke-store": 0.3.0
-  "@azure/msal-browser": 5.18.0
-  "@azure/msal-common": 16.12.0
-  "@azure/msal-node": 5.5.0
+  "@azure/identity": 4.13.2
+  "@azure/msal-browser": 5.20.0
+  "@azure/msal-common": 16.14.0
+  "@azure/msal-node": 5.6.0
   "@babel/helper-plugin-utils": 7.29.7
   "@babel/plugin-syntax-import-attributes": 7.29.7
   "@babel/runtime@^7": 7.29.7
@@ -334,9 +340,11 @@ overrides:
   isomorphic-git: 1.40.0
   "jose@^5": 5.10.0
   "jose@^6": 6.2.8
+  lru.min: 1.1.5
+  mariadb: 3.5.4
   memfs: 4.66.1
   mikro-orm: 6.6.16
-  mysql2: 3.19.0
+  mysql2: 3.24.2
   node-abi: 3.94.0
   node-exports-info: 1.6.2
   node-releases: 2.0.52
