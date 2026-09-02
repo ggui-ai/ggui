@@ -3,9 +3,32 @@ import {
   aggregatePanel,
   retryWithBackoff,
   createLimiter,
+  buildJudgeDisclosure,
+  AESTHETIC_PROMPT_VERSION_PANEL,
   type SingleJudgeResult,
   type AestheticScores,
 } from './post-eval.js';
+
+describe('buildJudgeDisclosure (effective sampling, #713)', () => {
+  it('records the sampling the router reports it applied', () => {
+    expect(
+      buildJudgeDisclosure('claude-opus-5', {
+        temperature: 'provider-default',
+        strippedReason: 'claude-opus-5 rejects sampling params',
+      }),
+    ).toEqual({
+      model: 'claude-opus-5',
+      promptVersion: AESTHETIC_PROMPT_VERSION_PANEL,
+      sampling: { temperature: 'provider-default', strippedReason: 'claude-opus-5 rejects sampling params' },
+    });
+  });
+
+  it('omits the sampling key entirely when the router reported none — unknown, not assumed', () => {
+    const d = buildJudgeDisclosure('gpt-5.4-mini', undefined);
+    expect(d).toEqual({ model: 'gpt-5.4-mini', promptVersion: AESTHETIC_PROMPT_VERSION_PANEL });
+    expect('sampling' in d).toBe(false);
+  });
+});
 
 /** Build a SingleJudgeResult with the given score + (optionally) per-dim scores. */
 function judge(score: number, dims?: Partial<AestheticScores>): SingleJudgeResult {

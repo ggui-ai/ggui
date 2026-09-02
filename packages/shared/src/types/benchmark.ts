@@ -140,6 +140,14 @@ export interface CriterionCoverageDisplay {
 export interface JudgeDisclosureDisplay {
   model: string;
   promptVersion: string;
+  /**
+   * Sampling the judge ACTUALLY ran with, as reported by the harness router
+   * (the panel requests temperature 0; families that reject sampling
+   * params get `'provider-default'` plus the reason). Absent on reports
+   * published before 2026-09-02 or when the router reported nothing —
+   * unknown, never assumed.
+   */
+  sampling?: { temperature: number | 'provider-default'; strippedReason?: string };
 }
 
 export interface VariantInfo {

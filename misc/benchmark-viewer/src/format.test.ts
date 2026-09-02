@@ -7,7 +7,30 @@ import {
   formatDate,
   judgeCoverageLine,
   criteriaCoverageLine,
+  formatJudge,
 } from './format';
+
+describe('formatJudge (effective sampling disclosure, #713)', () => {
+  it('names the model with the temperature the router actually applied', () => {
+    expect(formatJudge({ model: 'claude-haiku-4-5-20251001', promptVersion: 'v3', sampling: { temperature: 0 } })).toBe(
+      'claude-haiku-4-5-20251001 (temperature 0)',
+    );
+  });
+
+  it('says provider-default when the router stripped the requested temperature', () => {
+    expect(
+      formatJudge({
+        model: 'claude-opus-5',
+        promptVersion: 'v3',
+        sampling: { temperature: 'provider-default', strippedReason: 'claude-opus-5 rejects sampling params' },
+      }),
+    ).toBe('claude-opus-5 (provider-default sampling)');
+  });
+
+  it('shows the bare model for reports that predate the field — unknown, not assumed', () => {
+    expect(formatJudge({ model: 'gpt-5.4-mini', promptVersion: 'v3' })).toBe('gpt-5.4-mini');
+  });
+});
 
 describe('criteriaCoverageLine', () => {
   const full = [

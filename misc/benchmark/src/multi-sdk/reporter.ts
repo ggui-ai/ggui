@@ -12,6 +12,8 @@ import type {
   SdkComparisonEntry,
 } from '@ggui-ai/shared';
 import type { CriterionRunStatus } from '@ggui-ai/ui-gen/evaluation';
+import type { JudgeDisclosureDisplay } from '@ggui-ai/shared';
+import type { JudgeSampling } from './post-eval.js';
 import type {
   AestheticScores,
   BenchmarkReport,
@@ -766,6 +768,18 @@ function mapEvaluation(r: BenchmarkRunResult): EvaluationResultDisplay | null {
  * narrowing or erroring at a distance.
  */
 const _criterionStatusVocabularyPinned: CriterionRunStatus extends TierEvaluationCriterionStatus
+  ? true
+  : never = true;
+
+/**
+ * Same pin for the judge sampling disclosure (#713): the runner's
+ * `JudgeSampling` (derived from ui-gen's `LLMResponse.sampling`) must stay
+ * assignable to the shared display shape, or a router vocabulary change
+ * fails here instead of silently narrowing on the page.
+ */
+const _judgeSamplingVocabularyPinned: JudgeSampling extends NonNullable<
+  JudgeDisclosureDisplay['sampling']
+>
   ? true
   : never = true;
 type TierEvaluationCriterionStatus = NonNullable<

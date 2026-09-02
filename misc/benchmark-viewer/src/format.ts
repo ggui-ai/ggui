@@ -42,6 +42,26 @@ export function formatDate(date: string): string {
 }
 
 /**
+ * One judge's disclosure with the sampling the router ACTUALLY applied
+ * (#713): the panel requests temperature 0 for reproducibility, but the
+ * router strips sampling params for model families that reject them
+ * (Opus 4.7+/5) and reports what it did. We print the effective value —
+ * never the requested one — so a future 5-family judge shows
+ * "provider-default sampling" by construction. Reports that predate the
+ * field show the bare model: unknown, not assumed.
+ */
+export function formatJudge(j: {
+  model: string;
+  promptVersion?: string;
+  sampling?: { temperature: number | 'provider-default'; strippedReason?: string };
+}): string {
+  if (j.sampling === undefined) return j.model;
+  return j.sampling.temperature === 'provider-default'
+    ? `${j.model} (provider-default sampling)`
+    : `${j.model} (temperature ${j.sampling.temperature})`;
+}
+
+/**
  * Judge-coverage disclosure line (#565): how many generated cells actually
  * carry a panel score, and whether the runner flagged the run degraded
  * (coverage under its floor — aggregate scores not representative).

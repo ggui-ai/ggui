@@ -1,5 +1,6 @@
 import type { BenchmarkMeta } from '@ggui-ai/shared';
 import type { CommitSummary } from '../types';
+import { formatJudge } from '../format';
 
 interface Props {
   /**
@@ -60,6 +61,28 @@ const DIMENSIONS: ReadonlyArray<{ label: string; definition: string }> = [
  * announced here, dated, because run-to-run comparability is the product.
  */
 const CHANGELOG: ReadonlyArray<{ date: string; text: string }> = [
+  {
+    date: '2026-09-02',
+    text:
+      'Matrix: a Claude frontier arm added — claude-frontier = Claude Fable 5.1 ' +
+      '($10 / $50 per MTok), alongside the existing fast (Haiku 4.5), balanced ' +
+      '(Sonnet 5), and premium (Opus 5) arms. Both Opus 5 and Fable 5.1 carry ' +
+      'the "premium" tier label (the tier vocabulary has no frontier value); ' +
+      'they are separate arms with separate rows. Scores for the new arm ' +
+      'start with the first run after this date; every existing arm, the ' +
+      'corpus, and the judge panel are unchanged, so prior rows stay ' +
+      'comparable. History is not rewritten.',
+  },
+  {
+    date: '2026-09-02',
+    text:
+      'Judge disclosure now records the sampling each judge ACTUALLY ran with. ' +
+      'The panel requests temperature 0 for reproducibility; the router ' +
+      'strips sampling parameters for model families that reject them and ' +
+      'reports what it applied. All three pinned judges accept temperature 0, ' +
+      'so no published score changes — the line under each run simply says so ' +
+      'per judge instead of asserting it.',
+  },
   {
     date: '2026-08-25',
     text:
@@ -171,7 +194,7 @@ export function MethodologySection({ meta, commits, rawDataUrl }: Props) {
           </p>
           {judges && judges.length > 0 && (
             <p className="font-mono text-xs text-ink-4 mt-2">
-              panel: {judges.map((j) => j.model).join(', ')}
+              panel: {judges.map(formatJudge).join(', ')}
             </p>
           )}
         </div>

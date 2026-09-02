@@ -400,9 +400,18 @@ describe('MODEL_REGISTRY', () => {
 // =============================================================================
 
 describe('Benchmark Variants', () => {
-  it('default variants cover all 9 SDK × tier combos', () => {
+  it('default variants cover all 9 SDK × tier combos plus the Claude frontier arm (10)', () => {
     const variants = getDefaultVariants();
-    expect(variants).toHaveLength(9);
+    expect(variants).toHaveLength(10);
+
+    // #713 (Fable 5.1 sweep): the frontier SKU rides alongside the standard
+    // flagship; both carry tier 'premium' because ModelTier has no 4th value.
+    const frontier = variants.find((v) => v.id === 'claude-frontier');
+    expect(frontier).toMatchObject({
+      sdkName: 'claude',
+      tier: 'premium',
+      modelId: 'anthropic/claude-fable-5-1',
+    });
 
     const combos = variants.map((v) => `${v.sdkName}-${v.tier}`);
     for (const sdk of ['claude', 'openai', 'google'] as const) {

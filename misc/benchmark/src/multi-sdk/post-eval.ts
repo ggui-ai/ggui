@@ -5,15 +5,26 @@
  * ggui-specific quality criteria. Runs after generation, before reporting.
  *
  * {@link evaluateAestheticsPanel} — a 3-provider judge PANEL (Anthropic +
- * OpenAI + Google) scored at temperature 0; reports the mean score and the
- * spread (max−min) so a single biased self-judge can no longer dominate.
+ * OpenAI + Google) that REQUESTS temperature 0 for reproducibility and
+ * discloses, per judge, the sampling the router actually applied (model
+ * families that reject sampling params get it stripped — ggui#710/#713);
+ * reports the mean score and the spread (max−min) so a single biased
+ * self-judge can no longer dominate.
  *
  * Routes its LLM calls through `@ggui-ai/ui-gen/harness`'s `callLLM`,
  * which reads provider keys from env (ANTHROPIC_API_KEY / OPENAI_API_KEY /
  * GEMINI_API_KEY|GOOGLE_API_KEY).
  */
 
-import { callLLM, type AgentConfig } from '@ggui-ai/ui-gen/harness';
+import { callLLM, type AgentConfig, type LLMResponse } from '@ggui-ai/ui-gen/harness';
+
+/**
+ * The sampling the router reports it ACTUALLY applied to a judge call —
+ * derived from the response contract so the disclosure can never drift
+ * from what the harness emits (ggui#710: Opus 4.7+/5-family reject
+ * sampling params; the router strips them and says so).
+ */
+export type JudgeSampling = NonNullable<LLMResponse['sampling']>;
 
 /**
  * Extract the first balanced JSON object from LLM output. Handles the case
@@ -71,6 +82,28 @@ export interface JudgeDisclosure {
   model: string;
   /** Version tag of the scoring prompt that produced this score. */
   promptVersion: string;
+  /**
+   * Effective sampling per the router's report (#713). The panel REQUESTS
+   * temperature 0; this records what was applied — `'provider-default'`
+   * with a reason when the model family rejects sampling params. Absent
+   * when the router reported nothing (unknown, never assumed).
+   */
+  sampling?: JudgeSampling;
+}
+
+/**
+ * Build a judge's disclosure from the router's applied-sampling report.
+ * Pure — unit-tested directly; {@link runSingleJudge} is the only caller.
+ */
+export function buildJudgeDisclosure(
+  model: string,
+  sampling: JudgeSampling | undefined,
+): JudgeDisclosure {
+  return {
+    model,
+    promptVersion: AESTHETIC_PROMPT_VERSION_PANEL,
+    ...(sampling !== undefined ? { sampling } : {}),
+  };
 }
 
 /** System prompt for the aesthetic judge panel. Module-private. */
@@ -302,7 +335,7 @@ async function runSingleJudge(
     };
 
     return {
-      judge: { model, promptVersion: AESTHETIC_PROMPT_VERSION_PANEL },
+      judge: buildJudgeDisclosure(model, response.sampling),
       score: weightedScore(dimensions),
       dimensions,
       critique: parsed.critique,

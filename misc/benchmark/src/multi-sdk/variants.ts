@@ -13,9 +13,17 @@ export function getDefaultVariants(): BenchmarkVariant[] {
     // --- Claude (Anthropic) ---
     // Matrix refresh 2026-08-19 (#557 follow-up): balanced/premium moved to
     // the current standard lineup per platform.claude.com model overview —
-    // sonnet-4-6/opus-4-6 are now filed under "Legacy models". Fable 5 is
+    // sonnet-4-6/opus-4-6 are now filed under "Legacy models". Fable 5 was
     // deliberately NOT the premium slot: premium = the provider's flagship
     // STANDARD tier ($5/$25 Opus 5), not the above-standard capability SKU.
+    //
+    // 2026-09-02 (#713, Fable 5.1 sweep #706): the frontier SKU now rides as
+    // its OWN arm, `claude-frontier` (below), alongside claude-premium — a
+    // 10th default variant, announced in the methodology changelog. Both
+    // carry tier 'premium' only because ModelTier has no 4th value; they are
+    // separate arms with separate rows. Consequence for bench.mjs selection:
+    // `-p claude --tier premium` runs both. History (published rows) is
+    // untouched.
     {
       id: 'claude-fast',
       sdkName: 'claude',
@@ -33,6 +41,15 @@ export function getDefaultVariants(): BenchmarkVariant[] {
       sdkName: 'claude',
       tier: 'premium',
       modelId: 'anthropic/claude-opus-5',
+    },
+    {
+      // Frontier SKU (Claude Fable 5.1, $10/$50 per MTok, registry row
+      // landed ggui#707). Adaptive thinking is always on and the model
+      // rejects sampling params; the router handles both (ggui#710).
+      id: 'claude-frontier',
+      sdkName: 'claude',
+      tier: 'premium',
+      modelId: 'anthropic/claude-fable-5-1',
     },
 
     // --- OpenAI ---

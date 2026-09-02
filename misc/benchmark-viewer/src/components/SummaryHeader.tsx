@@ -4,6 +4,7 @@ import {
   formatPercent,
   judgeCoverageLine,
   criteriaCoverageLine,
+  formatJudge,
 } from '../format';
 
 interface Props {
@@ -53,7 +54,7 @@ export function SummaryHeader({ report, date }: Props) {
       </dl>
       {meta.judges && meta.judges.length > 0 && (
         <p className="font-mono text-xs text-ink-4 mt-3">
-          scores judged by panel: {meta.judges.map((j) => j.model).join(', ')}
+          scores judged by panel: {meta.judges.map(formatJudge).join(', ')}
         </p>
       )}
       {coverage && (
