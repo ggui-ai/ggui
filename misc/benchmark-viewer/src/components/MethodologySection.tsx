@@ -69,7 +69,7 @@ const CHANGELOG: ReadonlyArray<{ date: string; text: string }> = [
       '(Sonnet 5), and premium (Opus 5) arms. Both Opus 5 and Fable 5.1 carry ' +
       'the "premium" tier label (the tier vocabulary has no frontier value); ' +
       'they are separate arms with separate rows. Scores for the new arm ' +
-      'start with the first run after this date; every existing arm, the ' +
+      'start with the first run on or after this date; every existing arm, the ' +
       'corpus, and the judge panel are unchanged, so prior rows stay ' +
       'comparable. History is not rewritten.',
   },
