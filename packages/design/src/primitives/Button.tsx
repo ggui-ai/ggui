@@ -67,8 +67,6 @@ export function Button({
   fullWidth,
   loading,
   disabled,
-  inert,
-  inertHint,
   leftIcon,
   rightIcon,
   type = 'button',
@@ -79,10 +77,6 @@ export function Button({
   ...rest
 }: ButtonProps) {
   const isDisabled = disabled || loading;
-  // ggui#670: `inert` is visibly inert but NEVER suppresses — the
-  // handler stays wired (the attempt is the runtime's self-heal
-  // sensor). `disabled` keeps its suppressing contract and wins.
-  const isInert = inert === true && !isDisabled;
   const handleClick = onClick ?? (onPress as ButtonProps['onClick']);
 
   return (
@@ -90,8 +84,6 @@ export function Button({
       type={type}
       onClick={isDisabled ? undefined : handleClick}
       disabled={isDisabled}
-      aria-disabled={isInert ? true : undefined}
-      title={isInert ? inertHint : undefined}
       className={className}
       style={{
         ...sizeStyles[size],
@@ -103,7 +95,7 @@ export function Button({
         borderRadius: 'var(--ggui-shape-radius-md, 8px)',
         fontWeight: 'var(--ggui-font-weight-medium, 500)',
         cursor: isDisabled ? 'not-allowed' : 'pointer',
-        opacity: isDisabled || isInert ? 0.5 : 1,
+        opacity: isDisabled ? 0.5 : 1,
         width: fullWidth ? '100%' : undefined,
         transition: `background-color ${duration.normal} ${easing.easeInOut}, box-shadow ${duration.normal} ${easing.easeInOut}, opacity ${duration.normal} ${easing.easeInOut}`,
         boxShadow: 'var(--ggui-shape-shadow-sm, 0 1px 2px rgba(0,0,0,0.05))',

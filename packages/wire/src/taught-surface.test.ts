@@ -58,18 +58,3 @@ describe('the rendered prompt surface (WIRE_DOCUMENTATION) is frozen — the wir
     expect((provider.match(/^\| [a-zA-Z]+ \| `/gm) ?? []).length).toBe(2);
   });
 });
-
-describe('the rendered PRIMITIVES references are frozen for ggui#670 G1 (design build regenerates both)', () => {
-  // `pnpm --filter @ggui-ai/design build` ends with generate:docs AND
-  // generate:docs-ts — two taught artifacts in ui-gen. `Button inert`
-  // is hidden with `@internal`; the generators must SKIP it, proven on
-  // the rendered artifacts after a full build + regen (rnd's rule):
-  // neither reference may mention the prop until Phase 2 un-hides it.
-  it('neither primitives reference documents `inert` / `inertHint`', () => {
-    for (const rel of ['src/validation/primitives.ts', 'src/tools/get-primitives-ts.ts']) {
-      const doc = readFileSync(resolve(here, '..', '..', 'ui-gen', rel), 'utf8');
-      expect(doc, rel).not.toMatch(/\binert\??:/);
-      expect(doc, rel).not.toMatch(/\binertHint\??:/);
-    }
-  });
-});

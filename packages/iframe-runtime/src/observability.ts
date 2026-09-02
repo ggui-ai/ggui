@@ -44,6 +44,7 @@ export type ObservabilityEvent =
   | ChannelPollRecoveredEvent
   | UiFeedbackEvent
   | RelayIncapabilityEvent
+  | RelayDeadTapEvent
   | UnknownObservabilityEvent;
 
 /**
@@ -199,25 +200,41 @@ export interface UiFeedbackEvent {
 }
 
 /**
+ * The evidence that latched a relay dead zone (ggui#599 cycle-2):
+ * `'confirmed-refusal'` — the relay answered a declared refusal code
+ * (helper-minted; outranks any positive advertisement), vs
+ * `'advert-silent'` — the host never advertised `serverTools` and the
+ * attempt failed relay-shaped.
+ *
+ * @public
+ */
+export type RelayLatchTrigger = 'confirmed-refusal' | 'advert-silent';
+
+/**
  * Fired at the two transition edges of the renderer's
  * relay-incapability latch — the runtime's confirmed determination
  * that the host cannot relay `tools/call` to the MCP server:
  *
- *   - `'latched'` — a real user gesture just failed relay-shaped (no
- *     well-formed result envelope came back at all) on a host whose
- *     captured capability handshake never advertised `serverTools`.
+ *   - `'latched'` — a real user gesture just failed relay-shaped on a
+ *     host whose captured capability handshake never advertised
+ *     `serverTools`, or the relay answered a declared refusal code.
  *     The runtime now treats relay as confirmed-unavailable: it shows
- *     one persistent explanation instead of a per-gesture error toast,
- *     and channel polls fail fast without a transport round-trip.
+ *     one persistent explanation, arms the dead-zone cue for every
+ *     later gesture, and channel polls fail fast without a transport
+ *     round-trip.
  *   - `'cleared'` — a later well-formed result envelope arrived
  *     (`ok:true` and `ok:false` alike — either proves the host relayed
- *     the call there and back), so the determination no longer holds;
- *     per-gesture feedback and channel transport attempts resume.
+ *     the call there and back), so the determination no longer holds.
+ *     Carries the dead zone's summary: how long it stood and how many
+ *     gestures were attempted inside it.
  *
- * Emitted once per edge, never per channel poll tick: repeated failing
- * gestures while latched emit nothing further, and the router's
- * fail-fast ticks emit nothing at all — the edges carry the full
- * information.
+ * Emitted once per edge, never per channel poll tick. Gestures
+ * attempted while latched are NOT silent on this stream: each one is a
+ * {@link RelayDeadTapEvent} (ggui#670 Phase 3) — one per real user
+ * gesture, never per tick — so a host can count dead taps and measure
+ * dead-tap-to-recovery without watching the render. A boot that finds
+ * a latch standing from a prior mount closes it with a `'cleared'`
+ * edge before the new session starts.
  *
  * Always emitted via the postMessage-to-parent default — the emission
  * sites live in module-level gesture-dispatch code outside the boot
@@ -225,19 +242,64 @@ export interface UiFeedbackEvent {
  *
  * @public
  */
-export interface RelayIncapabilityEvent {
-  readonly kind: 'relay-incapability';
-  readonly state: 'latched' | 'cleared';
-  /**
-   * What evidence latched the notice (present on `state: 'latched'`
-   * only; ggui#599 cycle-2): `'confirmed-refusal'` — the relay
-   * answered a declared refusal code (helper-minted; outranks any
-   * positive advertisement), vs `'advert-silent'` — the host never
-   * advertised `serverTools` and the attempt failed relay-shaped.
-   * Additive optional: consumers keying on `kind`/`state` are
-   * unaffected.
-   */
-  readonly trigger?: 'confirmed-refusal' | 'advert-silent';
+export type RelayIncapabilityEvent =
+  | {
+      readonly kind: 'relay-incapability';
+      readonly state: 'latched';
+      readonly trigger: RelayLatchTrigger;
+      /** GguiSession id of the render, when the latching gesture carried one. */
+      readonly sessionId?: string;
+      /** App id of the render, when the latching gesture carried one. */
+      readonly appId?: string;
+    }
+  | {
+      readonly kind: 'relay-incapability';
+      readonly state: 'cleared';
+      /** How long the dead zone stood, in milliseconds. */
+      readonly latchedForMs: number;
+      /**
+       * Gestures attempted inside the zone — equals the last
+       * {@link RelayDeadTapEvent} `ordinal` this edge closes (0 when
+       * none was attempted).
+       */
+      readonly deadTaps: number;
+      readonly sessionId?: string;
+      readonly appId?: string;
+    };
+
+/**
+ * A user gesture attempted while the relay-incapability latch stands
+ * (ggui#670 Phase 3). The runtime never suppresses the attempt — the
+ * attempt is the self-heal sensor (ggui#443) — and presents it in the
+ * document (pulse, spoken cue, fallback toast); this event makes the
+ * attempt COUNTABLE by the host.
+ *
+ * Contract: exactly one per gesture attempted while latched whose
+ * attempt comes back undelivered (relay-shaped failure or a declared
+ * refusal); never emitted off-latch, and never from the channel
+ * router's fail-fast ticks. Counted at the outcome, not the tap: the
+ * gesture that latched the zone is the `'latched'` edge and the gesture
+ * that heals it is the `'cleared'` edge — neither is a dead tap.
+ * `ordinal` counts from 1 within one dead zone; the `'cleared'` edge
+ * reports the total as `deadTaps`. `latchAgeMs` is measured when the
+ * outcome lands. Hosts MUST tolerate the event being absent (an older
+ * renderer) — absence means no attempt was observed, not that none
+ * happened.
+ *
+ * @public
+ */
+export interface RelayDeadTapEvent {
+  readonly kind: 'relay-dead-tap';
+  /** The gesture's intent — the action name the component dispatched. */
+  readonly intent: string;
+  /** Milliseconds since the latch set. */
+  readonly latchAgeMs: number;
+  /** 1-based position of this attempt within the current dead zone. */
+  readonly ordinal: number;
+  /** The evidence that latched the zone this attempt landed in. */
+  readonly trigger: RelayLatchTrigger;
+  readonly sessionId?: string;
+  readonly appId?: string;
 }
 
 /**
@@ -282,6 +344,22 @@ export interface ObservabilityMessage {
  * @public
  */
 export type ObservabilityEmitter = (event: ObservabilityEvent) => void;
+
+/**
+ * Type guard for the `ggui:observe` envelope as it arrives on a host's
+ * `message` listener — narrows `event.data` so the host switches on
+ * `event.kind` (and `state`) without hand-typed payloads. Unknown kinds
+ * stay in the union's open tail: hosts MUST ignore them, never throw.
+ *
+ * @public
+ */
+export function isObservabilityMessage(value: unknown): value is ObservabilityMessage {
+  if (typeof value !== 'object' || value === null) return false;
+  const probe = value as { readonly type?: unknown; readonly event?: unknown };
+  if (probe.type !== MCP_APP_OBSERVE_TYPE) return false;
+  if (typeof probe.event !== 'object' || probe.event === null) return false;
+  return typeof (probe.event as { readonly kind?: unknown }).kind === 'string';
+}
 
 /**
  * Default emitter — posts an {@link ObservabilityMessage} to

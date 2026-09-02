@@ -48,9 +48,13 @@ import {
   __resetAppForTest,
   __resetRelayNoticeForTest,
   channelToolsCall,
+  dispatchDrainAck,
+  ensureToastAnnouncer,
+  resetRelayLatchForBoot,
   routeDispatch,
   setCurrentApp,
 } from '../runtime.js';
+import { ensureStatusDom } from '../status-dom.js';
 import {
   __resetHostCapabilitiesForTest,
   setHostCapabilities,
@@ -59,6 +63,7 @@ import {
 // that both types stay part of the published export surface.
 import type {
   ObservabilityMessage,
+  RelayDeadTapEvent,
   RelayIncapabilityEvent,
 } from '../index.js';
 import {
@@ -66,7 +71,7 @@ import {
   isRelayIncapableError,
 } from '../relay-incapability.js';
 import { buildBootHarness, tick } from './boot-helpers.js';
-import type { MockTransport } from './mock-transport.js';
+import type { MockTransport, QueueResponseOptions } from './mock-transport.js';
 
 let postMessageSpy: ReturnType<typeof vi.fn>;
 let originalPostMessage: typeof window.parent.postMessage;
@@ -946,10 +951,10 @@ describe('latch transitions — unlatch on ANY result envelope + edge observabil
     expect(toast?.textContent).toBe('→ archive');
   });
 
-  it('emits exactly one relay-incapability observability event per transition edge — repeated failing gestures add no duplicate latched events', async () => {
+  it('emits exactly one relay-incapability observability event per transition edge — repeated failing gestures add no duplicate latched events (they are dead taps, summarized at the cleared edge)', async () => {
     await latchViaFailedGesture();
     expect(relayIncapabilityEvents()).toEqual([
-      { kind: 'relay-incapability', state: 'latched', trigger: 'confirmed-refusal' },
+      { kind: 'relay-incapability', state: 'latched', trigger: 'confirmed-refusal', sessionId: 'sess_1', appId: 'app_1' },
     ]);
 
     // A SECOND failing gesture while already latched is not a
@@ -966,7 +971,7 @@ describe('latch transitions — unlatch on ANY result envelope + edge observabil
     await tick();
     await tick();
     expect(relayIncapabilityEvents()).toEqual([
-      { kind: 'relay-incapability', state: 'latched', trigger: 'confirmed-refusal' },
+      { kind: 'relay-incapability', state: 'latched', trigger: 'confirmed-refusal', sessionId: 'sess_1', appId: 'app_1' },
     ]);
 
     // The clearing response is the other edge — exactly one 'cleared'.
@@ -982,8 +987,10 @@ describe('latch transitions — unlatch on ANY result envelope + edge observabil
     await tick();
     await tick();
     expect(relayIncapabilityEvents()).toEqual([
-      { kind: 'relay-incapability', state: 'latched', trigger: 'confirmed-refusal' },
-      { kind: 'relay-incapability', state: 'cleared' },
+      { kind: 'relay-incapability', state: 'latched', trigger: 'confirmed-refusal', sessionId: 'sess_1', appId: 'app_1' },
+      // The repeated failing gesture above was the zone's one dead tap;
+      // the {ok:false} gesture healed it and is the edge, not a tap.
+      { kind: 'relay-incapability', state: 'cleared', latchedForMs: expect.any(Number), deadTaps: 1, sessionId: 'sess_1', appId: 'app_1' },
     ]);
   });
 
@@ -1026,6 +1033,10 @@ describe('latch transitions — unlatch on ANY result envelope + edge observabil
     expect(afterEvents[afterEvents.length - 1]?.event).toEqual({
       kind: 'relay-incapability',
       state: 'cleared',
+      latchedForMs: expect.any(Number),
+      deadTaps: 0,
+      sessionId: 'sess_1',
+      appId: 'app_1',
     });
   });
 });
@@ -1391,5 +1402,148 @@ describe('confirmed-refusal latch precision — attempt outcome outranks adverti
 
     const events = relayEvents();
     expect(events[events.length - 1]?.state).toBe('cleared');
+  });
+});
+
+describe('relay dead zone — truth surface + instrument (ggui#670 Phase 3)', () => {
+  // The Phase-3 adversarial pass found the runtime dishonest at HEAD in
+  // two reachable classes: a late `drain_ack` retires the standing
+  // notice without flipping the dismissed flag, and toast-disabled
+  // hosts never get the notice — after either, every attempt in the
+  // dead zone is SILENT. The cue must arm on "notice not visible", not
+  // on the user's click. The instrument makes every attempt countable.
+  const REFUSAL: QueueResponseOptions = { error: { code: -32601, message: 'method not supported' } };
+  const DELIVERED: QueueResponseOptions = { result: { structuredContent: { ok: true, consumerPresent: true } } };
+  const TOAST_ID = '__ggui-action-toast__';
+  /** The zone summary a `cleared` edge carries — narrows the discriminated union. */
+  function summary(e: RelayIncapabilityEvent | undefined): { deadTaps: number; latchedForMs: number } | undefined {
+    return e?.state === 'cleared' ? { deadTaps: e.deadTaps, latchedForMs: e.latchedForMs } : undefined;
+  }
+
+  beforeEach(() => {
+    __resetHostCapabilitiesForTest();
+    __resetRelayNoticeForTest();
+    document.getElementById(TOAST_ID)?.remove();
+    document.querySelector('[data-ggui-session-root]')?.remove();
+  });
+
+  function observed(): ObservabilityMessage['event'][] {
+    return postMessageSpy.mock.calls
+      .map(([msg]) => msg as { type?: unknown })
+      .filter((msg): msg is ObservabilityMessage => msg.type === MCP_APP_OBSERVE_TYPE)
+      .map((msg) => msg.event);
+  }
+  function deadTaps(): RelayDeadTapEvent[] {
+    return observed().filter((e): e is RelayDeadTapEvent => e.kind === 'relay-dead-tap');
+  }
+  function relay(): RelayIncapabilityEvent[] {
+    return observed().filter((e): e is RelayIncapabilityEvent => e.kind === 'relay-incapability');
+  }
+  async function attempt(intent = 'archive', resp: QueueResponseOptions = REFUSAL): Promise<void> {
+    transport.queueResponse('tools/call', resp);
+    routeDispatch({
+      actionName: intent,
+      data: {},
+      meta: { sessionId: 'sess_1', appId: 'app_1' },
+      dispatchToolName: 'ggui_runtime_submit_action',
+    });
+    await tick();
+    await tick();
+  }
+  async function latch(): Promise<void> {
+    setHostCapabilities({ serverTools: {} });
+    await attempt();
+    expect(relay().at(-1)?.state).toBe('latched');
+  }
+  const toast = (): HTMLElement | null => document.getElementById(TOAST_ID);
+  const assertive = (): string => document.querySelector('[aria-live="assertive"]')?.textContent ?? '';
+
+  it('a drain_ack that retires the standing notice does not silence the dead zone — the next attempt still cues (truth-2)', async () => {
+    await latch();
+    expect(toast()?.textContent).toMatch(/cannot relay/i);
+    // A late ack for an EARLIER delivered gesture (the #599 advertises-
+    // but-refuses class) dismisses whatever action toast is up — the
+    // notice included — by a path that is not the user's click.
+    dispatchDrainAck({
+      appId: 'app_1',
+      sessionId: 'sess_1',
+      eventId: 'evt_earlier_success',
+      drainedAt: new Date().toISOString(),
+    });
+    expect(toast()?.style.opacity === '0' || toast() === null).toBe(true);
+    await attempt();
+    // No focused control in this document → the fallback cue toast.
+    expect(toast()?.textContent).toMatch(/not delivered/);
+    expect(toast()?.style.opacity).not.toBe('0');
+  });
+
+  it('a host that disables toast chrome still gets the spoken cue on every attempt in the dead zone (a11y-1)', async () => {
+    Reflect.set(window, '__GGUI_TOAST_DISABLED__', true);
+    try {
+      ensureToastAnnouncer(document);
+      setHostCapabilities({ serverTools: {} });
+      await attempt(); // latches; the notice is suppressed with the chrome
+      expect(relay().at(-1)?.state).toBe('latched');
+      expect(toast()).toBeNull();
+      await attempt('save');
+      expect(assertive()).toMatch(/save — not delivered/);
+    } finally {
+      Reflect.deleteProperty(window, '__GGUI_TOAST_DISABLED__');
+    }
+  });
+
+  it('boot while latched routes through the latch writer: emits cleared with the summary and removes the prior notice (truth-5)', async () => {
+    await latch();
+    await attempt(); // one dead tap
+    resetRelayLatchForBoot();
+    const last = relay().at(-1);
+    expect(last?.state).toBe('cleared');
+    expect(summary(last)?.deadTaps).toBe(1);
+    expect(summary(last)?.latchedForMs).toBeGreaterThanOrEqual(0);
+    expect(toast()).toBeNull();
+  });
+
+  it('emits exactly one relay-dead-tap per attempt while latched (latch age, ordinal, appId); none before the latch, none after the clear', async () => {
+    setHostCapabilities({ serverTools: {} });
+    await attempt('archive', DELIVERED);
+    expect(deadTaps()).toHaveLength(0);
+    await attempt(); // the latching gesture IS the 'latched' edge, not a dead tap
+    expect(relay().at(-1)?.state).toBe('latched');
+    expect(deadTaps()).toHaveLength(0);
+    await attempt();
+    await attempt('save');
+    const taps = deadTaps();
+    expect(taps.map((t) => t.ordinal)).toEqual([1, 2]);
+    expect(taps[1]).toMatchObject({
+      intent: 'save',
+      trigger: 'confirmed-refusal',
+      appId: 'app_1',
+      sessionId: 'sess_1',
+    });
+    expect(taps[0]?.latchAgeMs).toBeGreaterThanOrEqual(0);
+    await attempt('archive', DELIVERED); // clears
+    const cleared = relay().at(-1);
+    expect(cleared).toMatchObject({ state: 'cleared', deadTaps: 2, appId: 'app_1', sessionId: 'sess_1' });
+    expect(summary(cleared)?.latchedForMs).toBeGreaterThanOrEqual(0);
+    await attempt('archive', DELIVERED);
+    expect(deadTaps()).toHaveLength(2);
+  });
+
+  it('the channel router fail-fast while latched emits no relay-dead-tap — one event per user gesture, never per tick', async () => {
+    await latch();
+    await expect(
+      channelToolsCall({ toolName: 'ggui_runtime_subscribe', args: {} }),
+    ).rejects.toBeInstanceOf(RelayIncapableError);
+    expect(deadTaps()).toHaveLength(0);
+  });
+
+  it('the standing notice precedes the render root in document order — the explanation is met before the dead controls (a11y-4)', async () => {
+    ensureStatusDom(document);
+    await latch();
+    const notice = toast();
+    const root = document.querySelector('[data-ggui-session-root]');
+    expect(notice).not.toBeNull();
+    expect(root).not.toBeNull();
+    expect(notice!.compareDocumentPosition(root!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 });

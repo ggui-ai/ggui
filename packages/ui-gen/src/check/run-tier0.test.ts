@@ -1383,3 +1383,102 @@ describe('taught token vocabulary ⊆ consumed-token manifest (constraint alignm
     expect(violations).toEqual([]);
   });
 });
+
+// =============================================================================
+// Connection suppression (ggui#670 Phase 2 — the deterministic check leg).
+// `disabled={…isConnected…}` strips the handler and kills the runtime's
+// self-heal sensor: the ATTEMPT is how the relay latch clears (#440/#443
+// attempt-always). The runtime presents the dead zone (ggui#670 Phase 3);
+// generated code leaves the control enabled. Direct binding only.
+// =============================================================================
+
+describe('runTier0Checks — connection-suppression (ggui#670 Phase 2)', () => {
+  it('FAILS disabled={!render.isConnected} on an action control — suppression kills the self-heal sensor', async () => {
+    const code = `
+import { useAction, useRender } from '@ggui-ai/wire';
+import { Button } from '@ggui-ai/design/primitives';
+interface Props { id: string }
+export default function C(props: Props) {
+  const save = useAction('save');
+  const render = useRender();
+  return <Button disabled={!render.isConnected} onClick={() => save({ id: props.id })}>Save</Button>;
+}`;
+    const issues = await runTier0Checks(code);
+    const cs = issues.filter(i => i.subcategory === 'connection-suppression');
+    expect(cs).toHaveLength(1);
+    expect(cs[0].result).toBe('fail');
+    expect(cs[0].severity).toBe('critical');
+    expect(cs[0].category).toBe('interactivity');
+    expect(cs[0].line).toBe(8);
+    // The remediation teaches the non-suppressing idiom and never a
+    // `disabled={…}` form.
+    expect(cs[0].fix).toContain('Leave the control enabled');
+    expect(cs[0].fix).not.toContain('disabled={');
+  });
+
+  it('FAILS the destructured form, across a multi-line attribute, reporting the attribute line', async () => {
+    const code = `
+import { useAction, useRender } from '@ggui-ai/wire';
+interface Props { id: string }
+export default function C(props: Props) {
+  const save = useAction('save');
+  const { isConnected } = useRender();
+  return (
+    <Button
+      disabled={
+        !isConnected || props.id === ''
+      }
+      onClick={() => save({ id: props.id })}
+    >
+      Save
+    </Button>
+  );
+}`;
+    const issues = await runTier0Checks(code);
+    const cs = issues.filter(i => i.subcategory === 'connection-suppression');
+    expect(cs).toHaveLength(1);
+    expect(cs[0].line).toBe(9);
+  });
+
+  it('does NOT fire on legitimate suppression — disabled={isLoading} is the taught busy-state idiom', async () => {
+    const code = `
+import { useAction, useRender } from '@ggui-ai/wire';
+interface Props { id: string; isLoading: boolean }
+export default function C(props: Props) {
+  const save = useAction('save');
+  const render = useRender();
+  return <Button disabled={props.isLoading} aria-busy={props.isLoading} onClick={() => save({ id: props.id })}>{render.isConnected ? 'Save' : 'Save (offline)'}</Button>;
+}`;
+    const issues = await runTier0Checks(code);
+    expect(issues.filter(i => i.subcategory === 'connection-suppression')).toHaveLength(0);
+  });
+
+  it('does NOT fire on aria-disabled bound to isConnected with the handler retained (presentation, not suppression)', async () => {
+    const code = `
+import { useAction, useRender } from '@ggui-ai/wire';
+interface Props { id: string }
+export default function C(props: Props) {
+  const save = useAction('save');
+  const render = useRender();
+  return (
+    <Stack>
+      <button aria-disabled={!render.isConnected} onClick={() => save({ id: props.id })}>Save</button>
+    </Stack>
+  );
+}`;
+    const issues = await runTier0Checks(code);
+    expect(issues.filter(i => i.subcategory === 'connection-suppression')).toHaveLength(0);
+  });
+
+  it('does NOT fire on a same-named prop when the component never reads useRender (a device-status card)', async () => {
+    const code = `
+import { useAction } from '@ggui-ai/wire';
+interface Props { id: string; isConnected: boolean }
+export default function C(props: Props) {
+  const pair = useAction('pair');
+  return <Button disabled={!props.isConnected} onClick={() => pair({ id: props.id })}>Pair device</Button>;
+}`;
+    const issues = await runTier0Checks(code);
+    expect(issues.filter(i => i.subcategory === 'connection-suppression')).toHaveLength(0);
+  });
+});

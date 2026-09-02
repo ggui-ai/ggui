@@ -131,10 +131,6 @@ function parseInterfaces(filePath: string): InterfaceInfo[] {
 
       // Skip style and className (from BaseProps)
       if (propName === 'style' || propName === 'className') continue;
-      // `@internal` members never reach the generated (prompt-facing)
-      // reference — the taught surface moves only under a bench
-      // (ggui#670 G1). Presence of the tag is the skip, comment or not.
-      if (getJSDocTag(member, 'internal') !== undefined) continue;
 
       const propType = typeNodeToString(member.type, sourceFile);
       const propDescription = getJSDocDescription(member);

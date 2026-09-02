@@ -141,6 +141,7 @@ import {
   postObservabilityToParent,
   type ObservabilityEmitter,
 } from './observability.js';
+import type { RelayLatchTrigger } from './observability.js';
 import {
   ACTION_TOAST_Z_INDEX,
   mountUiFeedbackChrome,
@@ -218,7 +219,15 @@ export function subscribeDrainAck(listener: DrainAckListener): () => void {
   };
 }
 
-function dispatchDrainAck(payload: DrainAckPayload): void {
+/**
+ * The `drain_ack` ingress — fans a frame out to subscribers until one
+ * claims it.
+ *
+ * @internal — exported for unit tests: a late ack for an earlier
+ * delivered gesture is the path that retires the standing relay notice
+ * without any user click (ggui#670 Phase 3, truth-2).
+ */
+export function dispatchDrainAck(payload: DrainAckPayload): void {
   for (const listener of drainAckListeners) {
     try {
       if (listener(payload) === true) return;
@@ -1211,8 +1220,7 @@ export async function bootSequence(opts: BootSequenceOptions): Promise<BootSeque
   // Fresh boot ⇒ the relay latch and the connection store start
   // aligned (ggui#670): a standing latch from a prior mount in a
   // re-booted document must not outlive the store it was written to.
-  relayIncapabilityAnnounced = false;
-  connectionStore.set(true);
+  resetRelayLatchForBoot();
   telemetry?.record(
     'boot.path',
     JSON.stringify({
@@ -2663,6 +2671,9 @@ function hideToast(el: HTMLElement): void {
   clearToastAnnouncement();
 }
 
+/** The single action-toast element, reused for every message. */
+const ACTION_TOAST_ID = '__ggui-action-toast__';
+
 /**
  * Lightweight toast UX surface for dispatched actions. Renders a
  * fixed-position element at the bottom of the iframe so the user
@@ -2714,9 +2725,8 @@ function showActionToast(
   onDismiss?: () => void,
 ): void {
   if (typeof document === 'undefined') return;
-  const w = window as unknown as { __GGUI_TOAST_DISABLED__?: boolean };
-  if (w.__GGUI_TOAST_DISABLED__) return;
-  const id = '__ggui-action-toast__';
+  if (isToastChromeDisabled()) return;
+  const id = ACTION_TOAST_ID;
   let el = document.getElementById(id);
   if (!el) {
     el = document.createElement('div');
@@ -2753,6 +2763,9 @@ function showActionToast(
           : 'rgba(178,54,54,.94)';
   el.style.background = bg;
   el.textContent = text;
+  // Any message rendered here replaces whatever stood before — a
+  // standing relay notice included; the mark goes with it.
+  el.removeAttribute(RELAY_NOTICE_ATTR);
   el.style.opacity = '1';
   el.style.transform = 'translateX(-50%) translateY(0)';
   // Reset to the non-interactive posture every time, so a toast that
@@ -2991,24 +3004,172 @@ function emitUserActionDoorbell(args: {
 let relayIncapabilityAnnounced = false;
 
 /**
+ * The current dead zone's origin and tally (ggui#670 Phase 3 — the
+ * instrument's state): when the latch set, what set it, which render
+ * it belongs to, and how many gestures have been attempted inside it.
+ * Written only by {@link transitionRelayLatch} and
+ * {@link emitRelayDeadTap}; read by nothing else.
+ */
+let relayLatchedAt: number | undefined;
+let relayDeadTaps = 0;
+let relayLatchTrigger: RelayLatchTrigger | undefined;
+let relayLatchScope: RelayLatchScope = {};
+
+/** The render a dead zone belongs to — carried on every event of the zone. */
+interface RelayLatchScope {
+  readonly sessionId?: string;
+  readonly appId?: string;
+}
+
+/**
  * The ONE writer of the relay latch (ggui#670, adversarial-pass fold):
  * flips the flag, posts the transition-edge observability event, and
  * writes the document's connection store — so "exactly one transition
  * per edge" is structural, not a convention spread over inline sites.
- * `next === true` latches (host cannot relay); `false` clears. Never
- * call off-edge; callers guard on the current flag.
+ * Latching records the zone's origin (time, trigger, render); clearing
+ * reports the zone's summary (how long it stood, how many gestures were
+ * attempted inside it) and resets the tally. Never call off-edge;
+ * callers guard on the current flag.
  */
 function transitionRelayLatch(
+  next: true,
+  trigger: RelayLatchTrigger,
+  scope: RelayLatchScope,
+): void;
+function transitionRelayLatch(next: false): void;
+function transitionRelayLatch(
   next: boolean,
-  trigger?: 'confirmed-refusal' | 'advert-silent',
+  trigger?: RelayLatchTrigger,
+  scope: RelayLatchScope = {},
 ): void {
   relayIncapabilityAnnounced = next;
   connectionStore.set(!next);
-  postObservabilityToParent(
-    next
-      ? { kind: 'relay-incapability', state: 'latched', ...(trigger !== undefined ? { trigger } : {}) }
-      : { kind: 'relay-incapability', state: 'cleared' },
+  if (next && trigger !== undefined) {
+    relayLatchedAt = Date.now();
+    relayDeadTaps = 0;
+    relayLatchTrigger = trigger;
+    relayLatchScope = scope;
+    postObservabilityToParent({
+      kind: 'relay-incapability',
+      state: 'latched',
+      trigger,
+      ...scope,
+    });
+    return;
+  }
+  postObservabilityToParent({
+    kind: 'relay-incapability',
+    state: 'cleared',
+    latchedForMs: relayLatchedAt === undefined ? 0 : Date.now() - relayLatchedAt,
+    deadTaps: relayDeadTaps,
+    ...relayLatchScope,
+  });
+  relayLatchedAt = undefined;
+  relayDeadTaps = 0;
+  relayLatchTrigger = undefined;
+  relayLatchScope = {};
+}
+
+/**
+ * One {@link RelayDeadTapEvent} per gesture attempted inside a standing
+ * dead zone that came back UNDELIVERED (ggui#670 Phase 3). Called from
+ * the dispatch outcome branch ONLY — the channel router's fail-fast
+ * never dispatches, so poll ticks are never counted; off-latch it is a
+ * no-op by construction. Counted at the outcome, not the tap, so the
+ * gesture that heals the zone is never a dead tap.
+ */
+function emitRelayDeadTap(intent: string, scope: RelayLatchScope): void {
+  if (
+    !relayIncapabilityAnnounced ||
+    relayLatchedAt === undefined ||
+    relayLatchTrigger === undefined
+  ) {
+    return;
+  }
+  relayDeadTaps += 1;
+  postObservabilityToParent({
+    kind: 'relay-dead-tap',
+    intent,
+    latchAgeMs: Date.now() - relayLatchedAt,
+    ordinal: relayDeadTaps,
+    trigger: relayLatchTrigger,
+    ...scope,
+  });
+}
+
+/**
+ * Marks the toast element as the STANDING relay notice. The dead-zone
+ * cue arms on this element's absence or invisibility — however it went
+ * away (the user's click, a late `drain_ack` retiring it, or the host
+ * disabling our chrome so it was never created). `showActionToast`
+ * drops the mark whenever it renders any other message, so a fallback
+ * cue or a later pending toast never passes for the explanation.
+ */
+const RELAY_NOTICE_ATTR = 'data-ggui-relay-notice';
+
+/**
+ * Tag the just-shown notice and place it BEFORE the render root in
+ * document order, so a keyboard or virtual-cursor user meets the
+ * explanation before the dead controls it explains (ggui#670 Phase 3,
+ * a11y fold). Reading order only — the element's fixed-position paint
+ * is unchanged.
+ */
+function markRelayNotice(): void {
+  if (typeof document === 'undefined') return;
+  const el = document.getElementById(ACTION_TOAST_ID);
+  if (el === null) return; // chrome disabled: no notice exists — the cue covers every attempt
+  el.setAttribute(RELAY_NOTICE_ATTR, '');
+  const root = document.querySelector('[data-ggui-session-root]');
+  if (
+    root !== null &&
+    root.parentNode !== null &&
+    (root.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0
+  ) {
+    root.parentNode.insertBefore(el, root);
+  }
+}
+
+/** Whether the standing relay notice is on screen right now. */
+function isRelayNoticeVisible(): boolean {
+  if (typeof document === 'undefined') return false;
+  const el = document.getElementById(ACTION_TOAST_ID);
+  return (
+    el !== null &&
+    el.hasAttribute(RELAY_NOTICE_ATTR) &&
+    el.style.opacity !== '0' &&
+    el.getAttribute('aria-hidden') !== 'true'
   );
+}
+
+/**
+ * The operator override that suppresses our toast chrome (a host that
+ * renders its own). Visual halves honor it; the dead-zone cue's spoken
+ * half does not (ggui#447 — "fires either way" must be true as wired).
+ */
+function isToastChromeDisabled(): boolean {
+  return typeof window !== 'undefined' && Reflect.get(window, '__GGUI_TOAST_DISABLED__') === true;
+}
+
+/**
+ * Boot-time reset of the relay latch (ggui#670 Phase 3). A latch
+ * standing from a prior mount in a re-booted document is closed through
+ * the ONE writer — the host gets its `cleared` edge with the zone's
+ * summary — and the prior mount's standing notice is removed rather
+ * than left describing a session that no longer exists.
+ *
+ * @internal — exported for unit tests.
+ */
+export function resetRelayLatchForBoot(): void {
+  if (typeof document !== 'undefined') {
+    const el = document.getElementById(ACTION_TOAST_ID);
+    if (el !== null && el.hasAttribute(RELAY_NOTICE_ATTR)) el.remove();
+  }
+  resetRelayCueThrottles();
+  if (relayIncapabilityAnnounced) {
+    transitionRelayLatch(false);
+  } else {
+    connectionStore.set(true);
+  }
 }
 
 /**
@@ -3030,24 +3191,6 @@ let currentTelemetrySink: TelemetrySink | null = null;
  */
 let mountSuperseded = false;
 
-/**
- * Whether the user has manually dismissed the CURRENTLY-STANDING relay
- * notice (ggui#442).
- *
- * "Dismissed the one explanation" is not "wants zero feedback forever",
- * but it IS consent that the explanation itself has been read. So the
- * dead zone this opens is filled with a per-gesture CUE, never with the
- * notice again.
- *
- * Scoped to the notice, not to toasts in general: the doorbell's
- * `action_required` toast is a different message with a different
- * dismissal meaning, so the flag is set from the relay notice's own
- * `onDismiss` callback rather than from `showActionToast` at large.
- *
- * Reset on BOTH latch edges — a re-latch shows a fresh notice nobody
- * has dismissed yet, and a self-heal must leave no residue behind.
- */
-let relayNoticeDismissed = false;
 
 /**
  * Timestamp of the last fallback cue toast, for the throttle below.
@@ -3131,7 +3274,10 @@ function resetRelayCueThrottles(): void {
 export function __resetRelayNoticeForTest(): void {
   relayIncapabilityAnnounced = false;
   connectionStore.set(true);
-  relayNoticeDismissed = false;
+  relayLatchedAt = undefined;
+  relayDeadTaps = 0;
+  relayLatchTrigger = undefined;
+  relayLatchScope = {};
   resetRelayCueThrottles();
 }
 
@@ -3252,8 +3398,11 @@ function retractRelayCueAnnouncement(): void {
 
 /**
  * The dead-zone cue (ggui#442): the smallest honest "that did nothing"
- * signal, for a gesture on a host already known — and already
- * explained — to be relay-incapable.
+ * signal, for a gesture on a host already known to be relay-incapable
+ * while the standing explanation is NOT on screen — dismissed by the
+ * user, retired by a late `drain_ack`, or never created because the
+ * host disabled our toast chrome (ggui#670 Phase 3: the cue arms on the
+ * notice's absence, never on how it went away).
  *
  * Component-agnostic by construction. It pulses whatever the user
  * focused without knowing what that is, and falls back to the toast
@@ -3261,7 +3410,7 @@ function retractRelayCueAnnouncement(): void {
  * (ggui#447) — the pulse via {@link announceRelayCue}, the fallback via
  * the toast primitive's own announcement.
  */
-function showPostDismissalCue(intent: string): void {
+function showDeadZoneCue(intent: string): void {
   if (typeof document === 'undefined') return;
   const target = resolveRelayCueTarget();
   if (target !== null) {
@@ -3300,6 +3449,13 @@ function showPostDismissalCue(intent: string): void {
   // a second explanation, so it must clear itself. Throttled because a
   // per-click toast on a host that fails every click is the #426
   // failure mode the latch exists to prevent.
+  if (isToastChromeDisabled()) {
+    // The host replaced our visual chrome; the spoken half of the cue
+    // is still ours to deliver (ggui#447) — `showActionToast` would
+    // return before announcing.
+    announceRelayCue(intent);
+    return;
+  }
   showActionToast(`⚠ ${intent} — not delivered`, 'error');
 }
 
@@ -3377,15 +3533,20 @@ export function dispatchSubmitAction(args: {
   // that nothing downstream ever restores — the opposite of "left
   // standing" (see the latch declaration + terminal branch below).
   //
-  // Once that explanation has been DISMISSED, though, skipping leaves
-  // the gesture with no feedback at all — the dead zone ggui#442
-  // names. The cue fills it here, at dispatch time, because the
-  // element it pulses is the one the user has focused NOW; by the time
-  // the relay response settles, focus may have moved on.
+  // While the latch stands the gesture still dispatches (attempt-always,
+  // #443 — the attempt is the self-heal sensor); its outcome is counted
+  // for the host where it lands (ggui#670 Phase 3, the terminal branch
+  // below). When the standing explanation is not on screen — dismissed,
+  // retired by a late `drain_ack`, or never created because the host
+  // disabled our chrome — skipping would leave the gesture with no
+  // feedback at all: the dead zone ggui#442 names. The cue fills it
+  // here, at dispatch time, because the element it pulses is the one
+  // the user has focused NOW; by the time the relay response settles,
+  // focus may have moved on.
   if (!relayIncapabilityAnnounced) {
     showActionToast(`→ ${intent}${dataPart}`, 'pending');
-  } else if (relayNoticeDismissed) {
-    showPostDismissalCue(intent);
+  } else if (!isRelayNoticeVisible()) {
+    showDeadZoneCue(intent);
   }
 
   // (2) Try submit_action via host relay. Spec-compliant hosts
@@ -3457,7 +3618,6 @@ export function dispatchSubmitAction(args: {
       // Self-heal leaves NO cue residue (ggui#442): the dead zone is
       // gone, so the state that armed the cue goes with it. A later
       // re-latch starts from a clean slate.
-      relayNoticeDismissed = false;
       resetRelayCueThrottles();
       transitionRelayLatch(false);
       // The (1.5) pending toast above was SKIPPED for this gesture —
@@ -3561,7 +3721,11 @@ export function dispatchSubmitAction(args: {
         // response-arrival guard above. NEVER emit off-edge (e.g. per
         // channel poll tick): the router ticks on an interval and
         // would spam; the two edges carry the full information.
-        transitionRelayLatch(true, confirmedRefusal ? 'confirmed-refusal' : 'advert-silent');
+        transitionRelayLatch(
+          true,
+          confirmedRefusal ? 'confirmed-refusal' : 'advert-silent',
+          { sessionId, appId },
+        );
         // Establish the flag's invariant where the notice it describes
         // is created: a freshly-shown notice is undismissed, and its
         // dead zone starts with an unspent throttle. Today every
@@ -3569,15 +3733,19 @@ export function dispatchSubmitAction(args: {
         // resets both), so this is the same value arriving by a second
         // route — kept because the state belongs to THIS notice, and a
         // future second latch-set path shouldn't have to know that.
-        relayNoticeDismissed = false;
         resetRelayCueThrottles();
         showActionToast(
           'This host cannot relay actions to the agent — interactive controls will not work here.',
           'action_required',
-          () => {
-            relayNoticeDismissed = true;
-          },
         );
+        markRelayNotice();
+      } else {
+        // A gesture attempted inside a standing dead zone came back
+        // undelivered — a dead tap, counted for the host (ggui#670
+        // Phase 3). The latching gesture above is the 'latched' edge,
+        // and a gesture that heals the zone is the 'cleared' edge —
+        // neither is a dead tap.
+        emitRelayDeadTap(intent, { sessionId, appId });
       }
       return;
     }

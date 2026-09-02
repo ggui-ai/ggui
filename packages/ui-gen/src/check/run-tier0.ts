@@ -798,6 +798,41 @@ export async function runTier0Checks(
     );
   }
 
+  // ── Connection suppression (ggui#670 Phase 2) ────────────────
+  // `useRender().isConnected` is a LIVE read of the relay latch, and
+  // the ATTEMPT is the runtime's self-heal sensor (#440/#443
+  // attempt-always): a dispatch fired while the latch stands is how the
+  // runtime discovers the host can relay again. Binding `disabled` to
+  // the connection state strips the handler and blinds that sensor —
+  // the control stays dead after recovery. The runtime owns the dead
+  // zone's presentation (ggui#670 Phase 3: standing notice, then a
+  // per-gesture cue) — generated code never suppresses on it. Direct
+  // binding only, and only when the source reads
+  // `useRender` at all — a same-named `props.isConnected` (a device-
+  // status card) is not the connection state. Whole-source scan so a
+  // multi-line attribute is caught; the issue reports the attribute's
+  // line. The lookbehind keeps `aria-disabled={…}` (the idiom) out.
+  if (/\buseRender\s*\(/.test(sourceCode)) {
+    const suppressionRe = /(?<![\w-])disabled\s*=\s*\{([^}]*)\}/gs;
+    for (const m of sourceCode.matchAll(suppressionRe)) {
+      const expr = m[1]!;
+      if (!/\bisConnected\b/.test(expr)) continue;
+      const attrLine = sourceCode.slice(0, m.index ?? 0).split('\n').length;
+      issues.push({
+        tier: 0,
+        result: 'fail',
+        category: 'interactivity',
+        subcategory: 'connection-suppression',
+        severity: 'critical',
+        description:
+          `\`disabled\` is bound to the connection state (\`${expr.trim().replace(/\s+/g, ' ')}\`) — that strips the click handler, and the click is how the runtime detects that the host can relay actions again. The control stays dead after recovery.`,
+        fix:
+          'Leave the control enabled — never bind `disabled` to the connection state. The runtime presents the dead zone itself (a standing notice, then a per-gesture cue) and the attempt is how it detects recovery; a suppressed control stays dead after the host recovers.',
+        line: attrLine,
+      });
+    }
+  }
+
   // ── Optional props accessed without guard ──────────────────
   // Check if Props interface has optional fields that are accessed without ?. or ?? or &&
   const propsInterfaceMatch = sourceCode.match(/interface Props\s*\{([^}]+)\}/);

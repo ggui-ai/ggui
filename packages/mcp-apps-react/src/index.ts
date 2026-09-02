@@ -62,11 +62,19 @@ export type {
   // `ProtocolError` above.
   ObservabilityEvent,
   ObservabilityMessage,
+  RelayDeadTapEvent,
+  RelayIncapabilityEvent,
+  RelayLatchTrigger,
   SchemaVersionMismatchEvent,
   SubscribeFailedEvent,
   UiFeedbackEvent,
   UnknownObservabilityEvent,
 } from '@ggui-ai/iframe-runtime';
+// The `ggui:observe` envelope guard — a web host owns its iframe and
+// listens on the protocol-owned tag directly; this narrows `event.data`
+// so it can switch on `event.kind` (relay dead taps, latch edges, …)
+// without hand-typed payloads. Runtime value, so a separate export.
+export { isObservabilityMessage } from '@ggui-ai/iframe-runtime';
 
 // Provider
 export { GguiProvider } from './components/GguiProvider';
