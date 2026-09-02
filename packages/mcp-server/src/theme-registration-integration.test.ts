@@ -1,3 +1,4 @@
+import type { AppTheme } from '@ggui-ai/protocol';
 /**
  * ggui#598-C INTEGRATION VERIFY — register → validate → store →
  * deliver, end to end against the REAL components and the in-memory
@@ -81,14 +82,19 @@ function buildHandlers(store: InMemoryThemeStore) {
   };
 }
 
+/** The delivered theme base — derived from the schema, never hand-typed (ggui#613). */
+type AppThemeBase = NonNullable<AppTheme['base']>;
+
 /** The reference themeBaseProvider: store → parser-grounded resolver. */
 function referenceProvider(store: InMemoryThemeStore) {
   return async (appId: string, themeName: string) => {
     const stored = await store.get(appId, themeName);
     if (stored === null) return null;
     const docs = JSON.parse(stored.document) as ThemeRegistrationDocs;
-    const resolved = resolveRegistrationVariables(docs);
-    return { documentHash: stored.documentHash, light: { ...resolved.light }, dark: { ...resolved.dark } };
+    // The reference IS the projection — the resolver's whole output beside
+    // the hash, exactly what the hosted provider delivers (ggui#613); a
+    // hand-picked light/dark subset under-exercises the wire (ggui#700 find).
+    return { documentHash: stored.documentHash, ...resolveRegistrationVariables(docs) };
   };
 }
 
@@ -120,14 +126,14 @@ async function bootReadDoor(store: InMemoryThemeStore) {
   return {
     client,
     close: () => client.close(),
-    async readBase(): Promise<{ documentHash: string; light: Record<string, string>; dark: Record<string, string> } | undefined> {
+    async readBase(): Promise<AppThemeBase | undefined> {
       const read = await client.readResource({ uri: `ui://ggui/render/${SID}` });
       const html = (read.contents[0] as { text?: string }).text ?? "";
       const match = html.match(/__GGUI_META__\s*=\s*(.*?);<\/script>/);
       expect(match).not.toBeNull();
       const raw = match![1]!.replace(/\\u003c/g, "<").replace(/\\u003e/g, ">").replace(/\\u0026/g, "&");
       const slice = (JSON.parse(raw) as Record<string, Record<string, unknown>>)["ai.ggui/render"];
-      return (slice.theme as { base?: { documentHash: string; light: Record<string, string>; dark: Record<string, string> } })?.base;
+      return (slice.theme as { base?: AppThemeBase })?.base;
     },
   };
 }
@@ -148,6 +154,12 @@ describe("598-C integration: register → validate → store → deliver (in-mem
     expect(base?.light["--ggui-color-surface"]).toBeDefined();
     expect(base?.dark["--ggui-color-surface"]).toBeDefined();
     expect(base?.light["--ggui-spacing-4"]).toBe("1rem");
+    // The delivered base is the resolver's WHOLE projection (ggui#613): the
+    // per-mode keyframes carriage and the frameless flag ride beside the
+    // ladders — a covering registration without either delivers the empty
+    // carriage and `false`, never an absent key.
+    expect(base?.keyframes).toEqual({});
+    expect(base?.frameless).toBe(false);
     await door.close();
   });
 
