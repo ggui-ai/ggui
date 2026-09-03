@@ -3089,7 +3089,11 @@
  *      `contractHash`, `blueprintId`, `variantKey` and `cache` are
  *      OPTIONAL at the schema level and pinned present on the two
  *      committed outcomes by a presence refinement. A refusal
- *      commits nothing, so it carries none of them.
+ *      commits nothing, so it carries none of them. The same
+ *      refinement pins `resourceUri` present-iff-`'rendered'` — the
+ *      mount affordance, whose iff its docstring already stated and
+ *      nothing enforced: a `failed` result carrying one advertises a
+ *      mount for a render that does not exist.
  *   r3. **The refusal envelope** — `refusal: {code, message, fix,
  *      retry, handshake: 'intact', balanceCentsAtCheck?}`, present
  *      iff `outcome: 'refused'` and then the ONLY field beside

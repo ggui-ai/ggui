@@ -899,6 +899,26 @@ export const renderOutputSchema = z.object({
   requireOnCommittedArm(value.variantKey !== undefined, 'variantKey', value.outcome, ctx);
   requireOnCommittedArm(value.cache !== undefined, 'cache', value.outcome, ctx);
   rejectRefusalOnCommittedArm(value.refusal, value.outcome, ctx);
+  // `resourceUri` present IFF `rendered` — the mountability rule, the
+  // one presence rule the six identity fields do not cover. A `failed`
+  // render commits an error GguiSession but exposes no mount, so a URI
+  // beside it points a host at a render that does not exist.
+  if (value.outcome === 'rendered' && value.resourceUri === undefined) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['resourceUri'],
+      message:
+        "outcome 'rendered' MUST carry `resourceUri` — a rendered result is mountable, and the URI is how a host mounts it.",
+    });
+  }
+  if (value.outcome === 'failed' && value.resourceUri !== undefined) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['resourceUri'],
+      message:
+        "`resourceUri` is present only on outcome 'rendered' — a failed render exposes no mount affordance.",
+    });
+  }
   if (value.outcome === 'failed' && value.error === undefined) {
     ctx.addIssue({
       code: 'custom',

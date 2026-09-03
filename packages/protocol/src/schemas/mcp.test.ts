@@ -876,6 +876,41 @@ describe('renderOutputSchema — outcome is required on every arm (#786)', () =>
     }
   });
 
+  it("rejects outcome:'rendered' missing resourceUri — a rendered result is mountable", () => {
+    // `resourceUri` is present IFF the render is mountable, and every
+    // `rendered` outcome is. Paired accept/reject so the assertion cannot
+    // pass vacuously: the only difference is the dropped field.
+    const out = { outcome: 'rendered' as const, ...SUCCESS };
+    expect(renderOutputSchema.parse(out)).toEqual(out);
+    const { resourceUri: _dropped, ...noUri } = SUCCESS;
+    expect(() =>
+      renderOutputSchema.parse({ outcome: 'rendered', ...noUri }),
+    ).toThrow();
+  });
+
+  it("rejects outcome:'failed' carrying resourceUri — a failed render is not mountable", () => {
+    // The other half of the iff. A failed render commits an error
+    // GguiSession but exposes NO mount affordance; advertising one points
+    // a host at a render that does not exist.
+    const failed = {
+      outcome: 'failed' as const,
+      sessionId: 'render_1',
+      action: 'create' as const,
+      contractHash: '1c00b3ab282a45f6',
+      blueprintId: '',
+      variantKey: 'v_default',
+      cache: { hit: false, llmCallsAvoided: 0, kind: 'cold' as const },
+      error: { code: 'PRODUCTION_FAILED' as const, message: 'provider 500' },
+    };
+    expect(renderOutputSchema.parse(failed)).toEqual(failed);
+    expect(() =>
+      renderOutputSchema.parse({
+        ...failed,
+        resourceUri: 'ui://ggui/render/render_1',
+      }),
+    ).toThrow();
+  });
+
   it("rejects outcome:'rendered' carrying a refusal", () => {
     expect(() =>
       renderOutputSchema.parse({
