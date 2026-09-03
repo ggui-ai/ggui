@@ -25,7 +25,9 @@ import {
   renderCacheMarkerSchema,
   renderErrorCodeSchema,
   renderInputSchema,
+  renderOutcomeSchema,
   renderOutputSchema,
+  renderRefusalSchema,
   resourceReadErrorCodeSchema,
   resourceReadErrorSchema,
   runtimePullEventsPageSchema,
@@ -653,6 +655,314 @@ describe('ggui_update', () => {
 
   it('rejects an update output missing resourceUri', () => {
     expect(() => updateOutputSchema.parse({ sessionId: 'render_1', updated: true })).toThrow();
+  });
+});
+
+/**
+ * Pre-generation refusal envelope (ggui#786) — the THIRD outcome.
+ *
+ * §7.1's failure envelope is for a generation that RAN and failed: the
+ * error session IS committed, so `sessionId` / `contractHash` / `cache`
+ * are live handles. A refusal fires BEFORE input parsing — no handshake
+ * read, no session committed, no spend — so the identity fields are
+ * structurally ABSENT and `refusal` carries the whole story. The
+ * `outcome` discriminant is what lets a reader tell the three apart
+ * without guessing from which fields happen to be present.
+ *
+ * The identity fields go OPTIONAL at the schema level (the MCP spec's
+ * `Tool.outputSchema` root must stay one object and the SDK registers
+ * raw shapes, so a discriminated union cannot be the root) and the
+ * presence rules ride a `superRefine`. That makes the NEGATIVE cases
+ * the load-bearing ones: a rendered output missing `sessionId`, or a
+ * refused output carrying one, must both still reject — otherwise
+ * demoting the fields silently removed a guarantee every reader has.
+ */
+describe('renderOutcomeSchema — the three-outcome discriminant', () => {
+  it('is the closed three-value set, in declaration order', () => {
+    expect(renderOutcomeSchema.options).toEqual([
+      'rendered',
+      'failed',
+      'refused',
+    ]);
+  });
+
+  it('rejects a non-canonical outcome — the enum is closed', () => {
+    // Accept-then-reject in one test: a missing schema would otherwise
+    // make the reject half pass vacuously.
+    expect(renderOutcomeSchema.parse('refused')).toBe('refused');
+    expect(() => renderOutcomeSchema.parse('declined')).toThrow();
+    expect(() => renderOutcomeSchema.parse('error')).toThrow();
+  });
+});
+
+describe('renderRefusalSchema — the refusal envelope', () => {
+  /** A fully-formed refusal, as a deployment's gate returns it. */
+  const REFUSAL = {
+    code: 'hard_cap_exceeded' as const,
+    message: 'the configured render cap for this app was reached',
+    fix: 'the cap resets at the start of the next period; no action restores it sooner',
+    retry: 'next-period' as const,
+    handshake: 'intact' as const,
+  };
+
+  it('round-trips a refusal (required fields only)', () => {
+    expect(renderRefusalSchema.parse(REFUSAL)).toEqual(REFUSAL);
+  });
+
+  it('round-trips a refusal carrying the optional balanceCentsAtCheck', () => {
+    const withBalance = {
+      code: 'insufficient_credit' as const,
+      message: 'the configured allowance for this app is exhausted',
+      fix: 'top up the allowance for this app, then retry the same handshakeId',
+      retry: 'after-fix' as const,
+      handshake: 'intact' as const,
+      balanceCentsAtCheck: 0,
+    };
+    expect(renderRefusalSchema.parse(withBalance)).toEqual(withBalance);
+  });
+
+  it('rejects a code that is not in the registry — z.enum closes the namespace', () => {
+    // The ruling's defined failure mode: an unregistered code fails at
+    // the transport, loudly (a bug, never a wire state). Accept-first so
+    // an absent schema cannot make the reject half pass vacuously.
+    expect(renderRefusalSchema.parse(REFUSAL)).toEqual(REFUSAL);
+    expect(() =>
+      renderRefusalSchema.parse({ ...REFUSAL, code: 'not_a_registered_code' }),
+    ).toThrow();
+  });
+
+  it('rejects an owner-api-only code — those never reach a render wire', () => {
+    expect(renderRefusalSchema.parse(REFUSAL)).toEqual(REFUSAL);
+    expect(() =>
+      renderRefusalSchema.parse({ ...REFUSAL, code: 'subscription_exists' }),
+    ).toThrow();
+    expect(() =>
+      renderRefusalSchema.parse({ ...REFUSAL, code: 'checkout_unavailable' }),
+    ).toThrow();
+  });
+
+  it("pins handshake to the literal 'intact' — a refusal consumes nothing", () => {
+    expect(renderRefusalSchema.parse(REFUSAL)).toEqual(REFUSAL);
+    expect(() =>
+      renderRefusalSchema.parse({ ...REFUSAL, handshake: 'consumed' }),
+    ).toThrow();
+  });
+
+  it('requires message and fix — the fix is addressed to the party that can act', () => {
+    expect(renderRefusalSchema.parse(REFUSAL)).toEqual(REFUSAL);
+    const { fix: _fix, ...noFix } = REFUSAL;
+    expect(() => renderRefusalSchema.parse(noFix)).toThrow();
+    const { message: _message, ...noMessage } = REFUSAL;
+    expect(() => renderRefusalSchema.parse(noMessage)).toThrow();
+  });
+});
+
+describe('renderOutputSchema — the refused outcome (#786)', () => {
+  const REFUSAL = {
+    code: 'hard_cap_exceeded' as const,
+    message: 'the configured render cap for this app was reached',
+    fix: 'the cap resets at the start of the next period',
+    retry: 'next-period' as const,
+    handshake: 'intact' as const,
+  };
+
+  it('accepts a refused output with NO identity fields', () => {
+    const out = { outcome: 'refused' as const, refusal: REFUSAL };
+    const parsed = renderOutputSchema.parse(out);
+    expect(parsed).toEqual(out);
+    expect(parsed.sessionId).toBeUndefined();
+    expect(parsed.resourceUri).toBeUndefined();
+    expect(parsed.action).toBeUndefined();
+    expect(parsed.contractHash).toBeUndefined();
+    expect(parsed.blueprintId).toBeUndefined();
+    expect(parsed.variantKey).toBeUndefined();
+    expect(parsed.cache).toBeUndefined();
+    expect(parsed.error).toBeUndefined();
+    expect(parsed.nextStep).toBeUndefined();
+  });
+
+  it('rejects a refused output that carries a sessionId — nothing was committed', () => {
+    // Paired with the accept above so it can never pass vacuously: the
+    // ONLY difference between the two literals is the stray sessionId.
+    const refused = { outcome: 'refused' as const, refusal: REFUSAL };
+    expect(renderOutputSchema.parse(refused)).toEqual(refused);
+    expect(() =>
+      renderOutputSchema.parse({ ...refused, sessionId: 'render_1' }),
+    ).toThrow();
+  });
+
+  it('rejects a refused output whose refusal.code is unregistered', () => {
+    const refused = { outcome: 'refused' as const, refusal: REFUSAL };
+    expect(renderOutputSchema.parse(refused)).toEqual(refused);
+    expect(() =>
+      renderOutputSchema.parse({
+        ...refused,
+        refusal: { ...REFUSAL, code: 'not_a_registered_code' },
+      }),
+    ).toThrow();
+  });
+
+  it('rejects outcome:refused with no refusal object', () => {
+    const refused = { outcome: 'refused' as const, refusal: REFUSAL };
+    expect(renderOutputSchema.parse(refused)).toEqual(refused);
+    expect(() => renderOutputSchema.parse({ outcome: 'refused' })).toThrow();
+  });
+
+  it('rejects a refused output carrying the §7.1 error marker — different outcome', () => {
+    const refused = { outcome: 'refused' as const, refusal: REFUSAL };
+    expect(renderOutputSchema.parse(refused)).toEqual(refused);
+    expect(() =>
+      renderOutputSchema.parse({
+        ...refused,
+        error: { code: 'VALIDATION_ERROR', message: 'm' },
+      }),
+    ).toThrow();
+  });
+});
+
+describe('renderOutputSchema — outcome is required on every arm (#786)', () => {
+  const SUCCESS = {
+    sessionId: 'render_1',
+    resourceUri: 'ui://ggui/render/render_1',
+    action: 'create' as const,
+    contractHash: '1c00b3ab282a45f6',
+    blueprintId: 'bp_x',
+    variantKey: 'v_default',
+    cache: { hit: false, llmCallsAvoided: 0, kind: 'cold' as const },
+  };
+
+  it("round-trips today's success shape once outcome:'rendered' is added", () => {
+    const out = { outcome: 'rendered' as const, ...SUCCESS };
+    expect(renderOutputSchema.parse(out)).toEqual(out);
+  });
+
+  it("rejects today's success shape WITHOUT outcome — the discriminant is mandatory", () => {
+    // BREAKING, pre-launch, no shim: every render result carries an
+    // outcome from this ruling on. The sibling fixtures in
+    // `describe('ggui_render — variance-aware override reshape')` that
+    // still omit it are updated in the GREEN slice.
+    expect(() => renderOutputSchema.parse(SUCCESS)).toThrow();
+  });
+
+  it("rejects outcome:'rendered' missing an identity field", () => {
+    // The whole point of the superRefine: demoting the six fields to
+    // optional must NOT weaken the success arm.
+    for (const missing of [
+      'sessionId',
+      'action',
+      'contractHash',
+      'blueprintId',
+      'variantKey',
+      'cache',
+    ] as const) {
+      const { [missing]: _dropped, ...rest } = SUCCESS;
+      expect(() =>
+        renderOutputSchema.parse({ outcome: 'rendered', ...rest }),
+      ).toThrow();
+    }
+  });
+
+  it("rejects outcome:'rendered' carrying a refusal", () => {
+    expect(() =>
+      renderOutputSchema.parse({
+        outcome: 'rendered',
+        ...SUCCESS,
+        refusal: {
+          code: 'hard_cap_exceeded',
+          message: 'm',
+          fix: 'f',
+          retry: 'next-period',
+          handshake: 'intact',
+        },
+      }),
+    ).toThrow();
+  });
+
+  it("round-trips the §7.1 failure envelope as outcome:'failed'", () => {
+    const out = {
+      outcome: 'failed' as const,
+      sessionId: 'render_1',
+      action: 'create' as const,
+      contractHash: '1c00b3ab282a45f6',
+      blueprintId: '',
+      variantKey: 'v_default',
+      cache: { hit: false, llmCallsAvoided: 0, kind: 'cold' as const },
+      error: { code: 'PRODUCTION_FAILED' as const, message: 'provider 500' },
+    };
+    const parsed = renderOutputSchema.parse(out);
+    expect(parsed).toEqual(out);
+    // The committed session stays a live handle — that is the whole
+    // difference from a refusal.
+    expect(parsed.sessionId).toBe('render_1');
+    expect(parsed.resourceUri).toBeUndefined();
+  });
+
+  it("rejects outcome:'failed' with no error marker", () => {
+    expect(() =>
+      renderOutputSchema.parse({
+        outcome: 'failed',
+        sessionId: 'render_1',
+        action: 'create',
+        contractHash: 'h',
+        blueprintId: '',
+        variantKey: 'v_default',
+        cache: { hit: false, llmCallsAvoided: 0, kind: 'cold' },
+      }),
+    ).toThrow();
+  });
+});
+
+describe('updateOutputSchema — the same discriminant (#786, ruling item 1)', () => {
+  const REFUSAL = {
+    code: 'hard_cap_exceeded' as const,
+    message: 'the configured render cap for this app was reached',
+    fix: 'the cap resets at the start of the next period',
+    retry: 'next-period' as const,
+    handshake: 'intact' as const,
+  };
+
+  const UPDATED = {
+    sessionId: 'render_1',
+    updated: true,
+    resourceUri: 'ui://ggui/render/render_1#1',
+    epoch: 1,
+  };
+
+  it("round-trips today's update output once outcome is added", () => {
+    const out = { outcome: 'rendered' as const, ...UPDATED };
+    expect(updateOutputSchema.parse(out)).toEqual(out);
+  });
+
+  it("rejects today's update output WITHOUT outcome", () => {
+    expect(() => updateOutputSchema.parse(UPDATED)).toThrow();
+  });
+
+  it('accepts a refused update output with NO sessionId / resourceUri / epoch', () => {
+    const out = { outcome: 'refused' as const, refusal: REFUSAL };
+    const parsed = updateOutputSchema.parse(out);
+    expect(parsed).toEqual(out);
+    expect(parsed.sessionId).toBeUndefined();
+    expect(parsed.resourceUri).toBeUndefined();
+    expect(parsed.epoch).toBeUndefined();
+  });
+
+  it('rejects a refused update output that carries a sessionId', () => {
+    const refused = { outcome: 'refused' as const, refusal: REFUSAL };
+    expect(updateOutputSchema.parse(refused)).toEqual(refused);
+    expect(() =>
+      updateOutputSchema.parse({ ...refused, sessionId: 'render_1' }),
+    ).toThrow();
+  });
+
+  it('rejects a refused update output whose refusal.code is unregistered', () => {
+    const refused = { outcome: 'refused' as const, refusal: REFUSAL };
+    expect(updateOutputSchema.parse(refused)).toEqual(refused);
+    expect(() =>
+      updateOutputSchema.parse({
+        ...refused,
+        refusal: { ...REFUSAL, code: 'not_a_registered_code' },
+      }),
+    ).toThrow();
   });
 });
 

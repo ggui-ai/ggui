@@ -14,6 +14,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { z, type ZodRawShape } from 'zod';
+import { renderOutputSchema } from '@ggui-ai/protocol';
 import {
   handlerFailure,
   type HandlerContext,
@@ -21,6 +22,7 @@ import {
   type SharedHandler,
 } from '@ggui-ai/mcp-server-handlers';
 import { buildMcpServer } from './build-mcp.js';
+import type { Logger } from './logger.js';
 
 const silentLogger = {
   info: () => undefined,
@@ -384,5 +386,238 @@ describe('buildMcpServer — in-result isError failure channel (ruling B)', () =
     } finally {
       await close();
     }
+  });
+});
+
+/**
+ * Pre-generation refusal on the wire (ggui#786, ruling items 2 + 7).
+ *
+ * The MECHANISM is unchanged — a refusal rides the same in-result
+ * `isError` channel as the §7.1 failure envelope. Two things are new and
+ * both are asserted here against the REAL `renderOutputSchema`, not a
+ * synthetic shape, because the whole claim is that a refusal is
+ * schema-conformant structuredContent on the render tool's own declared
+ * output:
+ *
+ *   1. The envelope: `outcome: 'refused'` + `refusal`, no identity
+ *      fields, no `_meta`, and `content[0].text` leading with the code.
+ *      The client's own `outputSchema` validation of `structuredContent`
+ *      (which the SDK performs even when `isError` is set) is part of the
+ *      assertion — a non-conformant payload makes `callTool` throw.
+ *   2. The ops line: `tool_invoked` carries `outcome` (from the payload
+ *      when present) and `code`. Today it hard-codes `'tool_error'` and
+ *      no code, so a refusal is indistinguishable from a generation
+ *      failure in the logs — which is what makes cloud's
+ *      `generation_refused` accounting impossible from the transport.
+ *
+ * The THROW path is deliberately untouched (`outcome: 'error'` +
+ * `errorClass`) — that is what makes "a gate that throws is a
+ * conformance failure" observable in ops rather than silent.
+ */
+describe('buildMcpServer — pre-generation refusal envelope (#786)', () => {
+  const info = { name: 'test', version: '0.0.1' };
+
+  const REFUSAL = {
+    code: 'hard_cap_exceeded',
+    message: 'the configured render cap for this app was reached',
+    fix: 'the cap resets at the start of the next period',
+    retry: 'next-period',
+    handshake: 'intact',
+  };
+
+  const REFUSAL_TEXT = `${REFUSAL.code}: ${REFUSAL.message} ${REFUSAL.fix}`;
+
+  /** One captured structured-log call. */
+  interface LogCall {
+    readonly level: 'info' | 'warn' | 'error';
+    readonly event: string;
+    readonly fields: Record<string, unknown>;
+  }
+
+  function capturingLogger(calls: LogCall[]): Logger {
+    const logger: Logger = {
+      info: (event, fields) => calls.push({ level: 'info', event, fields: fields ?? {} }),
+      warn: (event, fields) => calls.push({ level: 'warn', event, fields: fields ?? {} }),
+      error: (event, fields) =>
+        calls.push({ level: 'error', event, fields: fields ?? {} }),
+      debug: () => undefined,
+      child: () => logger,
+    };
+    return logger;
+  }
+
+  /**
+   * A handler declaring the REAL render output shape whose only
+   * behaviour is to refuse. Stands in for `ggui_render` with a
+   * deployment gate bound — the transport cannot tell the difference,
+   * which is the point.
+   */
+  function refusingRenderHandler(
+    data: unknown,
+    text: string = REFUSAL_TEXT,
+  ): SharedHandler<ZodRawShape, ZodRawShape> {
+    return {
+      name: 'ggui_render',
+      description: 'render, refusing',
+      inputSchema: {},
+      outputSchema: renderOutputSchema.shape,
+      async handler() {
+        return handlerFailure(data, text);
+      },
+    };
+  }
+
+  async function bootWithLogger(
+    handlers: ReadonlyArray<SharedHandler<ZodRawShape, ZodRawShape>>,
+    logger: Logger,
+  ): Promise<{ client: Client; close: () => Promise<void> }> {
+    const server = buildMcpServer(info, handlers, () => baseCtx, logger);
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    const client = new Client({ name: 'refusal-test', version: '0' });
+    await Promise.all([
+      server.connect(serverTransport),
+      client.connect(clientTransport),
+    ]);
+    return {
+      client,
+      close: async () => {
+        await client.close();
+        await server.close();
+      },
+    };
+  }
+
+  it('projects a refusal to isError + refused structuredContent + no _meta', async () => {
+    const calls: LogCall[] = [];
+    const { client, close } = await bootWithLogger(
+      [refusingRenderHandler({ outcome: 'refused', refusal: REFUSAL })],
+      capturingLogger(calls),
+    );
+    try {
+      const result = await client.callTool({ name: 'ggui_render', arguments: {} });
+      expect(result.isError).toBe(true);
+      // The whole payload, so a stray identity field would fail here.
+      expect(result.structuredContent).toEqual({
+        outcome: 'refused',
+        refusal: REFUSAL,
+      });
+      expect(result.content).toEqual([{ type: 'text', text: REFUSAL_TEXT }]);
+      expect(result._meta).toBeUndefined();
+    } finally {
+      await close();
+    }
+  });
+
+  it('logs tool_invoked with outcome:refused and the registry code', async () => {
+    const calls: LogCall[] = [];
+    const { client, close } = await bootWithLogger(
+      [refusingRenderHandler({ outcome: 'refused', refusal: REFUSAL })],
+      capturingLogger(calls),
+    );
+    try {
+      await client.callTool({ name: 'ggui_render', arguments: {} });
+      const invoked = calls.filter((c) => c.event === 'tool_invoked');
+      expect(invoked.length).toBe(1);
+      expect(invoked[0]?.fields).toMatchObject({
+        tool: 'ggui_render',
+        appId: 'app-1',
+        outcome: 'refused',
+        code: 'hard_cap_exceeded',
+      });
+      // The throw path's marker must NOT appear — a refusal is a wire
+      // state, not an exception.
+      expect(invoked[0]?.fields).not.toHaveProperty('errorClass');
+    } finally {
+      await close();
+    }
+  });
+
+  it("keeps outcome:'tool_error' on a failure payload that declares no outcome", async () => {
+    // The §7.1 arm and any other HandlerFailure keep today's line, so
+    // the log change is additive rather than a rename.
+    const calls: LogCall[] = [];
+    const plainFailure: SharedHandler<ZodRawShape, ZodRawShape> = {
+      name: 'synth_plain_failure',
+      description: 'synthetic failure with no outcome field',
+      inputSchema: {},
+      outputSchema: { ok: z.boolean() },
+      async handler() {
+        return handlerFailure({ ok: false }, 'CODE: it broke.');
+      },
+    };
+    const { client, close } = await bootWithLogger(
+      [plainFailure],
+      capturingLogger(calls),
+    );
+    try {
+      await client.callTool({ name: 'synth_plain_failure', arguments: {} });
+      const invoked = calls.filter((c) => c.event === 'tool_invoked');
+      expect(invoked.length).toBe(1);
+      expect(invoked[0]?.fields).toMatchObject({ outcome: 'tool_error' });
+      expect(invoked[0]?.fields).not.toHaveProperty('code');
+    } finally {
+      await close();
+    }
+  });
+
+  /**
+   * Drive one refusal payload and report what reached the wire. Used by
+   * the two "fails loudly" tests so each can assert the CLEAN payload
+   * conforms in the SAME test as the poisoned one — otherwise a schema
+   * that rejects every refusal would satisfy them vacuously.
+   */
+  async function callWith(data: unknown): Promise<{
+    isError: boolean | undefined;
+    structuredContent: unknown;
+  }> {
+    const { client, close } = await bootWithLogger(
+      [refusingRenderHandler(data)],
+      capturingLogger([]),
+    );
+    try {
+      const result = await client.callTool({ name: 'ggui_render', arguments: {} });
+      return {
+        isError: result.isError,
+        structuredContent: result.structuredContent,
+      };
+    } finally {
+      await close();
+    }
+  }
+
+  it('a refusal carrying a sessionId fails loudly — never a silent wire state', async () => {
+    // The registry code is valid; the ENVELOPE is not. The refused arm
+    // commits nothing, so an identity field on it means the projection
+    // leaked committed state.
+    const clean = await callWith({ outcome: 'refused', refusal: REFUSAL });
+    expect(clean.structuredContent).toEqual({
+      outcome: 'refused',
+      refusal: REFUSAL,
+    });
+
+    const poisoned = await callWith({
+      outcome: 'refused',
+      refusal: REFUSAL,
+      sessionId: 'render_1',
+    });
+    expect(poisoned.isError).toBe(true);
+    // Server-side validation rejects it; the SDK auto-wraps the throw
+    // WITHOUT structuredContent — loud, never silently non-conformant.
+    expect(poisoned.structuredContent).toBeUndefined();
+  });
+
+  it('an unregistered refusal code fails loudly at the transport', async () => {
+    const clean = await callWith({ outcome: 'refused', refusal: REFUSAL });
+    expect(clean.structuredContent).toEqual({
+      outcome: 'refused',
+      refusal: REFUSAL,
+    });
+
+    const poisoned = await callWith({
+      outcome: 'refused',
+      refusal: { ...REFUSAL, code: 'not_a_registered_code' },
+    });
+    expect(poisoned.isError).toBe(true);
+    expect(poisoned.structuredContent).toBeUndefined();
   });
 });
