@@ -110,11 +110,18 @@ interface RefusalRowShared {
  * `later` MAY (the operator who restores a transiently unavailable
  * surface); `next-period` and `never` MUST NOT — time restores the one
  * and nothing restores the other, so there is no party to address.
+ *
+ * The forbidden arm is branded `fixBy?: never` rather than left silent.
+ * TypeScript's excess-property check against a UNION admits any property
+ * declared by ANY member, so an unbranded `{ retry: 'never' }` arm would
+ * accept `fixBy: 'tenant'` beside it — the docstring would then claim an
+ * enforcement the compiler never performed. `never` closes it: the value
+ * matches no member, so the row is a compile error at the definer call.
  */
 type RefusalRowPolicy =
   | { readonly retry: 'after-fix'; readonly fixBy: RefusalFixBy }
   | { readonly retry: 'later'; readonly fixBy?: RefusalFixBy }
-  | { readonly retry: 'next-period' | 'never' };
+  | { readonly retry: 'next-period' | 'never'; readonly fixBy?: never };
 
 type RefusalRowBase = RefusalRowShared & RefusalRowPolicy;
 
@@ -134,7 +141,7 @@ function defineRefusalRegistry<
   return rows;
 }
 
-const REFUSAL_ROWS = defineRefusalRegistry({
+const REFUSAL_ROWS = /* @__PURE__ */ defineRefusalRegistry({
   // ── render-gate ───────────────────────────────────────────────────
   unsupported_provider: {
     code: 'unsupported_provider',
