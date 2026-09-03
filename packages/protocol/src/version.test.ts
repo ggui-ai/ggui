@@ -15,7 +15,7 @@ import {
 
 describe('PROTOCOL_VERSION', () => {
   it('is the current draft', () => {
-    expect(PROTOCOL_VERSION).toBe('draft-2026-08-19');
+    expect(PROTOCOL_VERSION).toBe('draft-2026-09-04');
   });
 
   it('schema version aliases the protocol version', () => {

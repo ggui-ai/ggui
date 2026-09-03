@@ -3072,8 +3072,49 @@
  *      (drift / hash / profile / authority obligations; pins the
  *      2026-08-19 out-of-vocabulary enum incident as a permanent
  *      sample).
+ *
+ * draft-2026-09-04 — PRE-GENERATION REFUSAL ENVELOPE (ggui#786;
+ *      BREAKING IN INTENT, pre-launch so no shim and no `@deprecated`
+ *      — see `docs/protocol/migrations/2026-09-04-pre-generation-refusal-envelope.md`):
+ *
+ *   r1. **`outcome` on every render result** (SPEC §7.1). A REQUIRED
+ *      discriminant, `'rendered' | 'failed' | 'refused'`. Under
+ *      §1.1 of VERSION-POLICY a required-field addition on an
+ *      envelope is a major-class change; §1.4 waives the migration
+ *      obligation while the version carries the `draft-` prefix, and
+ *      the dated doc above is written anyway. `ggui_update` is
+ *      UNCHANGED — it binds no pre-generation gate and consumes no
+ *      handshake, so a mutation arm is a separate slice.
+ *   r2. **Identity present-iff-committed** — `sessionId`, `action`,
+ *      `contractHash`, `blueprintId`, `variantKey` and `cache` are
+ *      OPTIONAL at the schema level and pinned present on the two
+ *      committed outcomes by a presence refinement. A refusal
+ *      commits nothing, so it carries none of them.
+ *   r3. **The refusal envelope** — `refusal: {code, message, fix,
+ *      retry, handshake: 'intact', balanceCentsAtCheck?}`, present
+ *      iff `outcome: 'refused'` and then the ONLY field beside
+ *      `outcome`. Enforced ON THE WIRE: a handler now declares
+ *      `outputEnvelopeSchema` (the composed schema) beside
+ *      `outputSchema` (the raw shape the SDK registers), and the
+ *      transport validates against the former — so the presence
+ *      rules a raw-shape rebuild would drop fail loudly instead.
+ *   r4. **`PRE_GENERATION_REFUSAL_CODES`** — a closed registry, one
+ *      `code` namespace across the render-gate, owner-api and
+ *      provisioning-api surfaces, with `retry` on every row and
+ *      `fixBy` on every `after-fix` row. `refusal.code` is the
+ *      render-gate subset; a code outside it fails the wire enum.
+ *   r5. **Hook contract** — `preValidationGate` RETURNS a refusal
+ *      instead of throwing; the handler owns the envelope and
+ *      projects it before input parsing. A gate that throws to
+ *      refuse is a conformance failure, observable in the
+ *      `tool_invoked` line.
+ *   r6. **Conformance:** two catalogs — `refusal-envelope-conformance`
+ *      (the projection obligation, graded against a kit-local
+ *      reference and against the shipping projector in
+ *      `@ggui-ai/mcp-server-handlers`) and `registry-completeness`
+ *      (the registry's structural pins, bound to the LIVE registry).
  */
-export const PROTOCOL_VERSION = "draft-2026-08-19";
+export const PROTOCOL_VERSION = "draft-2026-09-04";
 
 /**
  * The shipped `@ggui-ai/*` WAVE version — bare semver, identical to
