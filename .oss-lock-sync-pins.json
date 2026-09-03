@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-03T00:34:07.956Z",
+  "generatedAt": "2026-09-03T01:25:24.548Z",
   "pinnedNames": [
     "@a2a-js/sdk",
     "@adobe/css-tools",
@@ -196,6 +196,7 @@
     "eventsource-parser",
     "expect-type",
     "express-rate-limit",
+    "fast-uri",
     "fast-xml-builder",
     "fast-xml-parser",
     "flatted",
@@ -500,6 +501,7 @@
     "eventsource-parser",
     "expect-type",
     "express-rate-limit",
+    "fast-uri",
     "fast-xml-builder",
     "fast-xml-parser",
     "flatted",

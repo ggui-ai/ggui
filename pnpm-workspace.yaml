@@ -137,7 +137,8 @@ overrides:
   puppeteer-core: 25.6.0
   "@smithy/types": ^4.14.0
   "brace-expansion@>=5": ^5.0.9
-  "fast-uri@<3.1.4": ^3.1.4
+  # fast-uri floor raised 3.1.4 → 3.1.6 (2026-09-03: GHSA-5jgf-p345-68v8 / f65p-4m7j-42xc / fph4-wmhf-6fwf / jqff-g426-hqxp, HIGH, published 2026-09-02; ajv@8 resolver, in the pod + backend prod closures). Same-major.
+  "fast-uri@<3.1.6": ^3.1.6
   "fast-xml-builder@<1.1.7": ^1.1.7
   # Kept in lockstep with the root workspace's block. These two files
   # drifted once — the root had no security overrides at all while this
@@ -158,7 +159,8 @@ overrides:
   "js-yaml@>=4": ^4.3.1
   "ip-address@<10.3.1": ^10.3.1
   "@mikro-orm/knex@<6.6.14": ^6.6.14
-  "qs@>=6.11.1 <6.15.2": ^6.15.2
+  # qs floor raised 6.15.2 → 6.16.0 (2026-09-03: GHSA-4mjr-xmp4-gh2g / x5fp-wj9c-mxmx, MEDIUM, published 2026-09-02; express 5 / body-parser, in the pod + backend prod closures). Same-major.
+  "qs@>=6.11.1 <6.16.0": ^6.16.0
   "protobufjs@<7.6.5": ^7.6.5
   # @opentelemetry/core <2.8.0 (advisory 256; root carries 282): every
   # otel package exact-pins its sibling core (resources@2.1.0 →
@@ -435,6 +437,7 @@ overrides:
   eventsource-parser: 3.1.0
   expect-type: 1.4.0
   express-rate-limit: 8.6.1
+  fast-uri: 3.1.7
   fast-xml-builder: 1.3.0
   fast-xml-parser: 5.10.1
   flatted: 3.4.4
@@ -463,7 +466,7 @@ overrides:
   "prettier@^2": 2.3.2
   "prettier@^3": 3.9.6
   "puppeteer-core@^25": 25.6.0
-  qs: 6.15.3
+  qs: 6.16.0
   react-docgen: 8.0.3
   recast: 0.23.19
   resend: 6.18.1
