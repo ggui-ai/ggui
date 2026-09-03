@@ -58,6 +58,7 @@ import {
   type GguiSession,
   type ComponentGguiSession,
   type SystemGguiSession,
+  refusedOutputSchema,
 } from '@ggui-ai/protocol';
 import {
   GGUI_RENDER_UI_META,
@@ -977,10 +978,7 @@ type RenderFailureOutput = GguiRenderOutput &
  * stray `sessionId` here is a type error at the projection site rather
  * than a wire-validation failure later.
  */
-type RenderRefusedOutput = {
-  outcome: 'refused';
-  refusal: PreGenerationRefusal;
-};
+type RenderRefusedOutput = z.infer<typeof refusedOutputSchema>;
 
 /**
  * Per-code recovery guidance folded into the failure envelope's
