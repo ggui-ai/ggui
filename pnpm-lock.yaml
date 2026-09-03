@@ -178,8 +178,6 @@ overrides:
   '@esbuild/win32-x64@0.27.x': 0.27.7
   '@esbuild/win32-x64@0.28.x': 0.28.2
   '@google-cloud/storage': 7.21.0
-  '@google/adk@^1': 1.5.0
-  '@google/adk@^2': 2.0.0
   '@guuey/mcp-apps-host@0.16.x': 0.16.14
   '@guuey/threads': 0.16.14
   '@hono/node-server': 2.1.0
@@ -1704,7 +1702,7 @@ importers:
         specifier: workspace:*
         version: link:../protocol
       '@google/adk':
-        specifier: 2.0.0
+        specifier: ^2.0.0
         version: 2.0.0(9266cd0ddb5fa8bae748e9937008a8f6)
       '@openai/agents':
         specifier: ^0.17.0
@@ -1852,7 +1850,7 @@ importers:
         specifier: workspace:*
         version: link:../../../packages/protocol
       '@google/adk':
-        specifier: 1.5.0
+        specifier: ^1.1.0
         version: 1.5.0(@grpc/grpc-js@1.14.4)(@mikro-orm/mariadb@6.6.9(@mikro-orm/core@6.6.16)(better-sqlite3@12.11.1)(pg@8.19.0))(@mikro-orm/mssql@6.6.9(@mikro-orm/core@6.6.16)(better-sqlite3@12.11.1)(mariadb@3.5.4)(pg@8.19.0))(@mikro-orm/mysql@6.6.9(@mikro-orm/core@6.6.16)(@types/node@22.19.15)(better-sqlite3@12.11.1)(mariadb@3.5.4)(pg@8.19.0))(@mikro-orm/postgresql@6.6.9(@mikro-orm/core@6.6.16)(better-sqlite3@12.11.1)(mariadb@3.5.4))(@mikro-orm/sqlite@6.6.9(@mikro-orm/core@6.6.16)(better-sqlite3@12.11.1)(mariadb@3.5.4)(pg@8.19.0))(@opentelemetry/core@2.10.0(@opentelemetry/api@1.9.0))(encoding@0.1.13)
       '@google/genai':
         specifier: ^1.37.0
