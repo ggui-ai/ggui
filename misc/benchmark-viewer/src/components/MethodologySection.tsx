@@ -64,6 +64,18 @@ const CHANGELOG: ReadonlyArray<{ date: string; text: string }> = [
   {
     date: '2026-09-03',
     text:
+      'Disclosure: the in-loop evaluator’s per-criterion coverage now also ' +
+      'counts the cells it bypassed by design (same-image low-risk cells, where ' +
+      'no criterion applies). Those cells were always outside the coverage ' +
+      'denominator and still are; the change is that a run whose every cell ' +
+      'was bypassed now reads "no cell required the in-loop evaluator" instead ' +
+      'of carrying no coverage disclosure at all — which was indistinguishable ' +
+      'from a run that predates the instrument. Scores, corpus, matrix, and ' +
+      'the judge panel are unchanged.',
+  },
+  {
+    date: '2026-09-03',
+    text:
       'Cadence refinement: the change detector now keys on a hash of the ' +
       'generation harness and runner source (and their declared ' +
       'dependencies), not on the runner image’s commit. Between ' +

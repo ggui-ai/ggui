@@ -84,6 +84,29 @@ describe('criteriaCoverageLine', () => {
   it('returns null for pre-instrument reports', () => {
     expect(criteriaCoverageLine({})).toBeNull();
   });
+
+  it('says so when no cell needed the in-loop evaluator (all bypassed by design) instead of "0/0 cells"', () => {
+    const line = criteriaCoverageLine({
+      criteriaCoverage: [
+        { criterion: 'functionality', tier: 1, ran: 0, skipped: 0, unknown: 0, notApplicable: 9 },
+        { criterion: 'visual', tier: 2, ran: 0, skipped: 0, unknown: 0, notApplicable: 9 },
+      ],
+    });
+    expect(line?.text).toBe('eval criteria: no cell required the in-loop evaluator (9 bypassed by design)');
+    expect(line?.degraded).toBe(false);
+    expect(line?.short).toEqual([]);
+  });
+
+  it('names the bypassed cells beside a real denominator, and keeps them out of it', () => {
+    const line = criteriaCoverageLine({
+      criteriaCoverage: [
+        { criterion: 'functionality', tier: 1, ran: 81, skipped: 0, unknown: 0, notApplicable: 9 },
+        { criterion: 'visual', tier: 2, ran: 81, skipped: 0, unknown: 0, notApplicable: 9 },
+      ],
+    });
+    expect(line?.text).toBe('eval criteria: 2/2 ran on all 81 evaluated cells (9 bypassed by design)');
+    expect(line?.short).toEqual([]);
+  });
 });
 
 describe('judgeCoverageLine', () => {

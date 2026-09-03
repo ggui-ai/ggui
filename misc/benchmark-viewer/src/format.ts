@@ -96,7 +96,10 @@ const CRITERIA_COVERAGE_FLOOR = 0.8;
  * "name ran/total (pct)". A criterion that never ran fail-opens into
  * `pass` inside the evaluator, so an undisclosed shortfall would publish
  * non-evidence as evidence. Returns null for reports without the
- * instrument (no cell carried it) — unknown coverage, never 100%.
+ * instrument (no cell carried it) — unknown coverage, never 100%. A run
+ * where every cell was bypassed by design (same-image low-risk) is NOT
+ * that case: the instrument was present and found nothing applicable —
+ * said in words, never as "0/0 cells".
  */
 export function criteriaCoverageLine(meta: {
   criteriaCoverage?: Array<{
@@ -105,22 +108,35 @@ export function criteriaCoverageLine(meta: {
     ran: number;
     skipped: number;
     unknown: number;
+    /** Absent on reports published before 2026-09-03 — read as 0. */
+    notApplicable?: number;
   }>;
   criteriaCoverageDegraded?: true;
 }): { text: string; degraded: boolean; short: string[] } | null {
   const rows = meta.criteriaCoverage;
   if (rows === undefined || rows.length === 0) return null;
   const [first] = rows;
-  // Every row's counts are over the same cell set, so any row yields the total.
+  // Every row's counts are over the same cell set, so any row yields the
+  // denominator (cells the criterion applied to) and the bypass count.
   const cells = first.ran + first.skipped + first.unknown;
-  const share = (ran: number) => (cells > 0 ? ran / cells : 0);
+  const bypassed = first.notApplicable ?? 0;
+  const degraded = meta.criteriaCoverageDegraded === true;
+  if (cells === 0) {
+    return {
+      text: `eval criteria: no cell required the in-loop evaluator (${bypassed} bypassed by design)`,
+      degraded,
+      short: [],
+    };
+  }
+  const share = (ran: number) => ran / cells;
   const full = rows.filter((r) => r.ran === cells).length;
   const short = rows
     .filter((r) => share(r.ran) < CRITERIA_COVERAGE_FLOOR)
     .map((r) => `${r.criterion} ${r.ran}/${cells} (${formatCoveragePercent(share(r.ran))})`);
+  const bypassNote = bypassed > 0 ? ` (${bypassed} bypassed by design)` : '';
   return {
-    text: `eval criteria: ${full}/${rows.length} ran on all ${cells} evaluated cells`,
-    degraded: meta.criteriaCoverageDegraded === true,
+    text: `eval criteria: ${full}/${rows.length} ran on all ${cells} evaluated cells${bypassNote}`,
+    degraded,
     short,
   };
 }

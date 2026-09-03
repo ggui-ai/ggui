@@ -101,8 +101,10 @@ export interface BenchmarkMeta {
    * `pass` inside the evaluator, so a pass with skipped coverage is zero
    * evidence — this is the disclosure. `unknown` = cells whose eval
    * predates the instrument (or lacks that criterion's row). Cells whose
-   * evaluator was bypassed by design (all rows `not-applicable`) are
-   * excluded from the counts. Absent when no cell carries the instrument.
+   * evaluator was bypassed by design (all rows `not-applicable`) sit
+   * outside the coverage denominator but are counted as `notApplicable`.
+   * Absent when no cell carries the instrument — an all-bypass run is
+   * PRESENT (nothing applicable), which is not the same as pre-instrument.
    */
   criteriaCoverage?: CriterionCoverageSummaryDisplay[];
   /**
@@ -115,13 +117,22 @@ export interface BenchmarkMeta {
   dataLicense?: string;
 }
 
-/** Run-level roll-up of one eval criterion's coverage. */
+/**
+ * Run-level roll-up of one eval criterion's coverage. `ran + skipped +
+ * unknown` = the cells the criterion applied to (the denominator).
+ */
 export interface CriterionCoverageSummaryDisplay {
   criterion: string;
   tier: 1 | 2;
   ran: number;
   skipped: number;
   unknown: number;
+  /**
+   * Cells the evaluator bypassed by design for this criterion — outside
+   * the denominator, counted so "nothing applicable" is visible. Absent
+   * on reports published before 2026-09-03 (read as 0).
+   */
+  notApplicable?: number;
 }
 
 /**

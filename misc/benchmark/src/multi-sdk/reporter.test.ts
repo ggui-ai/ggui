@@ -142,9 +142,9 @@ describe('criteria coverage meta (#591 class)', () => {
       0,
     );
     const visual = report.meta.criteriaCoverage?.find((c) => c.criterion === 'visual');
-    expect(visual).toEqual({ criterion: 'visual', tier: 2, ran: 1, skipped: 1, unknown: 0 });
+    expect(visual).toEqual({ criterion: 'visual', tier: 2, ran: 1, skipped: 1, unknown: 0, notApplicable: 0 });
     const crash = report.meta.criteriaCoverage?.find((c) => c.criterion === 'crash');
-    expect(crash).toEqual({ criterion: 'crash', tier: 1, ran: 2, skipped: 0, unknown: 0 });
+    expect(crash).toEqual({ criterion: 'crash', tier: 1, ran: 2, skipped: 0, unknown: 0, notApplicable: 0 });
   });
 
   it('counts a tier-evaluated cell without the field as unknown — never as ran', () => {
@@ -153,7 +153,7 @@ describe('criteria coverage meta (#591 class)', () => {
       0,
     );
     const visual = report.meta.criteriaCoverage?.find((c) => c.criterion === 'visual');
-    expect(visual).toEqual({ criterion: 'visual', tier: 2, ran: 1, skipped: 0, unknown: 1 });
+    expect(visual).toEqual({ criterion: 'visual', tier: 2, ran: 1, skipped: 0, unknown: 1, notApplicable: 0 });
   });
 
   it('omits criteriaCoverage entirely when no cell carries the instrument', () => {
@@ -189,14 +189,31 @@ describe('criteria coverage meta (#591 class)', () => {
     }));
     const report = generateReport([tierEvaluatedRun('a', ALL_RAN), tierEvaluatedRun('b', bypass)], 0);
     const visual = report.meta.criteriaCoverage?.find((c) => c.criterion === 'visual');
-    expect(visual).toEqual({ criterion: 'visual', tier: 2, ran: 1, skipped: 0, unknown: 0 });
+    // The bypass cell is COUNTED as not-applicable (visible), not in the denominator.
+    expect(visual).toEqual({ criterion: 'visual', tier: 2, ran: 1, skipped: 0, unknown: 0, notApplicable: 1 });
+    expect(report.meta.criteriaCoverageDegraded).toBeUndefined();
+  });
+
+  it('an all-bypass run is INSTRUMENT PRESENT with everything not-applicable — never "absent"', () => {
+    // rnd, Exp 006: 18 low-risk cells, every row not-applicable, read as
+    // "(0,0,0,9) = absent" — the exact conflation the instrument exists to kill.
+    const bypass: CriterionCoverage[] = ALL_RAN.map((c) => ({
+      ...c,
+      status: 'not-applicable',
+      reason: 'same-image low-risk bypass',
+    }));
+    const report = generateReport([tierEvaluatedRun('a', bypass), tierEvaluatedRun('b', bypass)], 0);
+    expect(report.meta.criteriaCoverage).toHaveLength(3);
+    expect(report.meta.criteriaCoverage?.[0]).toEqual({
+      criterion: 'functionality', tier: 1, ran: 0, skipped: 0, unknown: 0, notApplicable: 2,
+    });
     expect(report.meta.criteriaCoverageDegraded).toBeUndefined();
   });
 
   it('treats an empty criteriaCoverage array as unknown — ui-gen never emits it', () => {
     const report = generateReport([tierEvaluatedRun('a', ALL_RAN), tierEvaluatedRun('b', [])], 0);
     const visual = report.meta.criteriaCoverage?.find((c) => c.criterion === 'visual');
-    expect(visual).toEqual({ criterion: 'visual', tier: 2, ran: 1, skipped: 0, unknown: 1 });
+    expect(visual).toEqual({ criterion: 'visual', tier: 2, ran: 1, skipped: 0, unknown: 1, notApplicable: 0 });
   });
 
   it('propagates meta summary and per-cell rows to the display report', () => {

@@ -303,7 +303,9 @@ export interface BenchmarkReport {
      * fail-opens into `pass` in the evaluator, so a pass with `skipped`
      * coverage is zero evidence). One row per criterion seen; `unknown`
      * counts cells whose eval predates the instrument (field absent —
-     * never assumed `ran`). Absent when NO cell carries the instrument.
+     * never assumed `ran`). Absent when NO cell carries the instrument —
+     * a run whose every cell was bypassed by design IS present (all
+     * `notApplicable`): "nothing applicable" is not "pre-instrument".
      */
     criteriaCoverage?: CriterionCoverageSummary[];
     /**
@@ -342,7 +344,9 @@ export interface BenchmarkReport {
 /**
  * Run-level roll-up of one in-loop eval criterion's coverage (see
  * {@link BenchmarkReport.meta.criteriaCoverage}). Counts are over the
- * tier-evaluated cells of the run; `ran + skipped + unknown` = that count.
+ * tier-evaluated cells of the run; `ran + skipped + unknown` = the cells
+ * the criterion was applicable to (the coverage denominator), and
+ * `+ notApplicable` = every tier-evaluated cell.
  */
 export interface CriterionCoverageSummary {
   readonly criterion: string;
@@ -355,11 +359,17 @@ export interface CriterionCoverageSummary {
    * Cells whose eval carries no coverage field (predates the instrument),
    * or carries the field without a row for this criterion (the
    * evaluator's static criterion set changed within one report). Never
-   * counted as `ran`. Cells whose rows are all `not-applicable` (evaluator
-   * bypassed by design — same-image low-risk cells) are excluded from all
-   * three counts: no criteria applicable is not evidence either way.
+   * counted as `ran`.
    */
   readonly unknown: number;
+  /**
+   * Cells where the evaluator was bypassed by design for this criterion
+   * (row `not-applicable`; every row on a same-image low-risk cell).
+   * Outside the coverage denominator — no criteria applicable is not
+   * evidence either way — but COUNTED, so an all-bypass run reads as
+   * "instrument present, nothing applicable" rather than as absent.
+   */
+  readonly notApplicable: number;
 }
 
 /**

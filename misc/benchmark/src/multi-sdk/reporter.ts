@@ -72,7 +72,10 @@ export const CRITERIA_COVERAGE_FLOOR = 0.8;
  * tier-evaluated cells. Returns undefined when no cell carries the
  * instrument (pre-instrument image) — "unknown everywhere" is not a
  * summary, it's the absence of one. When present, cells without the
- * field count as `unknown` for every criterion (never `ran`).
+ * field count as `unknown` for every criterion (never `ran`), and cells
+ * the evaluator bypassed by design count as `notApplicable` — so a run
+ * whose every cell was bypassed is PRESENT with nothing applicable, not
+ * absent (rnd's Exp 006 read an all-bypass slice as "absent = unknown").
  */
 function buildCriteriaCoverage(
   results: BenchmarkRunResult[],
@@ -80,16 +83,18 @@ function buildCriteriaCoverage(
   // Contract (ui-gen `CriterionCoverage`): field ABSENT = unknown (never
   // ran / predates the instrument); `not-applicable` rows = the evaluator
   // was bypassed by design (same-image low-risk cell) — no criterion was
-  // applicable, so the cell is excluded from the denominator; `skipped` =
-  // silent absence, counts against; `ran` = covered. `[]` never arrives
-  // from ui-gen — treated as unknown, never as presence or bypass.
+  // applicable, so the cell is outside the coverage denominator but is
+  // counted as `notApplicable`; `skipped` = silent absence, counts
+  // against; `ran` = covered. `[]` never arrives from ui-gen — treated as
+  // unknown, never as presence or bypass.
   const isBypassed = (r: BenchmarkRunResult): boolean => {
     const cc = r.tierEvaluation?.criteriaCoverage;
     return cc !== undefined && cc.length > 0 && cc.every((c) => c.status === 'not-applicable');
   };
-  const evaluated = results.filter((r) => r.tierEvaluation !== undefined && !isBypassed(r));
+  const evaluated = results.filter((r) => r.tierEvaluation !== undefined);
   // Instrument presence = at least one evaluated cell the evaluator
-  // actually stamped (non-empty rows). Bypass cells alone don't count.
+  // stamped (non-empty rows) — a bypass stamp counts: the instrument was
+  // there and said "nothing applicable".
   const instrumented = evaluated.filter(
     (r) => (r.tierEvaluation?.criteriaCoverage?.length ?? 0) > 0,
   );
@@ -109,14 +114,22 @@ function buildCriteriaCoverage(
     let ran = 0;
     let skipped = 0;
     let unknown = 0;
+    let notApplicable = 0;
     for (const r of evaluated) {
+      // A bypassed cell is not-applicable for EVERY criterion, whatever
+      // rows it happens to carry (the static set may differ from this one).
+      if (isBypassed(r)) {
+        notApplicable++;
+        continue;
+      }
       const row = r.tierEvaluation?.criteriaCoverage?.find((c) => c.criterion === criterion);
       if (!row) unknown++;
       else if (row.status === 'ran') ran++;
       else if (row.status === 'skipped') skipped++;
-      // 'not-applicable' on a non-bypass cell: not in this criterion's denominator.
+      else notApplicable++; // per-criterion bypass on an otherwise evaluated cell
     }
-    rows.push({ criterion, tier, ran, skipped, unknown });
+    rows.push({ criterion, tier, ran, skipped, unknown, notApplicable });
+    // Coverage is over the cells the criterion was applicable to.
     const denominator = ran + skipped + unknown;
     if (denominator > 0 && ran / denominator < CRITERIA_COVERAGE_FLOOR) degraded = true;
   }
