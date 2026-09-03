@@ -1,0 +1,29 @@
+{
+  "name": "refuse-after-fix-owner-with-balance",
+  "description": "An after-fix refusal whose fix belongs to the app OWNER, carrying the optional balance the refusing check read. The optional field rides the envelope unchanged \u2014 a projector must not drop it, and an agent must not auto-retry a fix it cannot perform.",
+  "refusal": {
+    "code": "insufficient_credit",
+    "message": "the balance this deployment funds the app from is exhausted",
+    "fix": "the app owner adds funds; the same handshakeId is still valid afterwards",
+    "retry": "after-fix",
+    "handshake": "intact",
+    "balanceCentsAtCheck": 0
+  },
+  "expect": {
+    "isError": true,
+    "text": "insufficient_credit: the balance this deployment funds the app from is exhausted the app owner adds funds; the same handshakeId is still valid afterwards",
+    "structuredContent": {
+      "outcome": "refused",
+      "refusal": {
+        "code": "insufficient_credit",
+        "message": "the balance this deployment funds the app from is exhausted",
+        "fix": "the app owner adds funds; the same handshakeId is still valid afterwards",
+        "retry": "after-fix",
+        "handshake": "intact",
+        "balanceCentsAtCheck": 0
+      }
+    },
+    "hasMeta": false,
+    "identityFields": []
+  }
+}

@@ -14,6 +14,7 @@
  * `reporter` config.
  */
 import { fixturesByContract } from './fixtures/index.js';
+import { PURE_FUNCTION_CATALOG_SLUGS } from './run-conformance.js';
 import type {
   ConformanceFailure,
   ConformanceReporter,
@@ -95,23 +96,42 @@ export function createDefaultReporter(
 
 export function formatScorecard(result: ConformanceResult): string {
   // Group fixtures by contract so operators see pass rates per
-  // criterion, mirroring `fixturesByContract`'s classification.
+  // criterion, mirroring `fixturesByContract`'s classification, then
+  // the pure-function catalogs, whose rows carry a `<slug>/` prefix
+  // instead of living in that map (they are not WS-observable).
   const lines: string[] = [];
   for (const [slug, fixtures] of Object.entries(fixturesByContract)) {
     const names = new Set(fixtures.map((f) => f.name));
-    const passedCount = result.passed.filter((n) => names.has(n)).length;
-    const failedCount = result.failed.filter((f) => names.has(f.name)).length;
-    const skippedCount = result.skipped.filter((s) => names.has(s.name)).length;
-    const total = passedCount + failedCount + skippedCount;
-    if (total === 0) continue;
-    const tone = failedCount > 0 ? MARK_FAIL : passedCount > 0 ? MARK_PASS : MARK_SKIP;
-    lines.push(
-      `  ${tone}  ${padRight(slug, 38)}  ${passedCount}/${total} pass${
-        failedCount > 0 ? ` · ${failedCount} fail` : ''
-      }${skippedCount > 0 ? ` · ${skippedCount} skip` : ''}`,
-    );
+    lines.push(...scorecardRow(slug, result, (name) => names.has(name)));
+  }
+  for (const slug of PURE_FUNCTION_CATALOG_SLUGS) {
+    const prefix = `${slug}/`;
+    lines.push(...scorecardRow(slug, result, (name) => name.startsWith(prefix)));
   }
   return lines.join('\n');
+}
+
+/**
+ * One scorecard line for the rows `belongs` selects, or no line at all
+ * when the group graded nothing. A group that is entirely SKIPPED still
+ * prints — an obligation nobody graded must be visible, not absent.
+ */
+function scorecardRow(
+  slug: string,
+  result: ConformanceResult,
+  belongs: (name: string) => boolean,
+): string[] {
+  const passedCount = result.passed.filter(belongs).length;
+  const failedCount = result.failed.filter((f) => belongs(f.name)).length;
+  const skippedCount = result.skipped.filter((s) => belongs(s.name)).length;
+  const total = passedCount + failedCount + skippedCount;
+  if (total === 0) return [];
+  const tone = failedCount > 0 ? MARK_FAIL : passedCount > 0 ? MARK_PASS : MARK_SKIP;
+  return [
+    `  ${tone}  ${padRight(slug, 38)}  ${passedCount}/${total} pass${
+      failedCount > 0 ? ` · ${failedCount} fail` : ''
+    }${skippedCount > 0 ? ` · ${skippedCount} skip` : ''}`,
+  ];
 }
 
 export function formatSummary(result: ConformanceResult): string {

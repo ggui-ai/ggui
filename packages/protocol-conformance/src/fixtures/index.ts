@@ -36,6 +36,13 @@
  * frame to drive — so they do NOT belong in this behavioral fixture
  * catalog.
  *
+ * The same is true of SPEC §7.1's PRE-GENERATION refusal obligations
+ * (ggui#786): what a server projects for a refusal
+ * (`../refusal-envelope-conformance`) and what a deployment's closed
+ * refusal registry must satisfy (`../registry-completeness`) are a
+ * projection and a data check. Neither is WebSocket-observable, so
+ * neither is registered below.
+ *
  * ## An MCP-binding driver EXISTS for `resources/read` — `../resource-read-conformance`
  *
  * This catalog used to declare the MCP-binding driver as missing. It is

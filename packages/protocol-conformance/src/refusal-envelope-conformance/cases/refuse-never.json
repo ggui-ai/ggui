@@ -1,0 +1,27 @@
+{
+  "name": "refuse-never",
+  "description": "A refusal no caller action can lift. It still projects to a normal isError tool result \u2014 a terminal refusal is a wire state, never a thrown error.",
+  "refusal": {
+    "code": "tier_unrecognized",
+    "message": "the plan recorded on this app matches none this deployment declares",
+    "fix": "no caller or owner action restores rendering under this identity; the operator reconciles the record",
+    "retry": "never",
+    "handshake": "intact"
+  },
+  "expect": {
+    "isError": true,
+    "text": "tier_unrecognized: the plan recorded on this app matches none this deployment declares no caller or owner action restores rendering under this identity; the operator reconciles the record",
+    "structuredContent": {
+      "outcome": "refused",
+      "refusal": {
+        "code": "tier_unrecognized",
+        "message": "the plan recorded on this app matches none this deployment declares",
+        "fix": "no caller or owner action restores rendering under this identity; the operator reconciles the record",
+        "retry": "never",
+        "handshake": "intact"
+      }
+    },
+    "hasMeta": false,
+    "identityFields": []
+  }
+}

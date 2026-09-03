@@ -1,0 +1,27 @@
+{
+  "name": "refuse-next-period",
+  "description": "A next-period refusal names no party at all \u2014 time restores it. The envelope is otherwise identical, which is the point: the retry class is data on the wire, not a different shape.",
+  "refusal": {
+    "code": "hard_cap_exceeded",
+    "message": "the app reached the hard ceiling set for the current period",
+    "fix": "the ceiling resets at the start of the next period; no action restores it sooner",
+    "retry": "next-period",
+    "handshake": "intact"
+  },
+  "expect": {
+    "isError": true,
+    "text": "hard_cap_exceeded: the app reached the hard ceiling set for the current period the ceiling resets at the start of the next period; no action restores it sooner",
+    "structuredContent": {
+      "outcome": "refused",
+      "refusal": {
+        "code": "hard_cap_exceeded",
+        "message": "the app reached the hard ceiling set for the current period",
+        "fix": "the ceiling resets at the start of the next period; no action restores it sooner",
+        "retry": "next-period",
+        "handshake": "intact"
+      }
+    },
+    "hasMeta": false,
+    "identityFields": []
+  }
+}

@@ -57,7 +57,12 @@
  */
 import { createServer, type Server as HttpServer } from 'node:http';
 import { runConformance, type ConformanceHost } from '@ggui-ai/protocol-conformance';
-import { jsonSchemaSchema, type ActionSpec, type JsonValue } from '@ggui-ai/protocol';
+import {
+  jsonSchemaSchema,
+  PRE_GENERATION_REFUSAL_CODES,
+  type ActionSpec,
+  type JsonValue,
+} from '@ggui-ai/protocol';
 import {
   InMemoryAuthAdapter,
   InMemoryGguiSessionStore,
@@ -153,9 +158,18 @@ const EXPECTED_PASSING = [
   'app-mismatch',
   'bootstrap-success',
   'host-context-observed-persists',
+  // The four `registry-completeness` pins (ggui#786). Not WS
+  // obligations — the runner folds the pure-function catalogs in, and
+  // this driver supplies the SHIPPING `PRE_GENERATION_REFUSAL_CODES`,
+  // so the registry an emitter actually reads is graded on the same
+  // path an adopter uses rather than only in the kit's own meta-test.
+  'registry-completeness/after-fix-names-fixby',
+  'registry-completeness/code-equals-key',
+  'registry-completeness/retry-in-closed-set',
+  'registry-completeness/surfaces-non-empty',
   'undeclared-action-rejected',
   'version-match',
-];
+].sort();
 
 /**
  * Fixtures that SKIP on the first-party server, pinned name → reason
@@ -174,11 +188,26 @@ const EXPECTED_PASSING = [
  *     caller; the host refuses.
  *   - `props-update-roundtrip`: the assertion is on rendered DOM — the
  *     kit's own matcher partitions it as Path-B (`unmatchable-on-ws`).
+ *   - `refusal-envelope/*` (ggui#786): the runner folds this
+ *     pure-function catalog in and this driver supplies no
+ *     `refusalProjector`. It is the WRONG driver to supply one from —
+ *     the subject is `ggui_render`'s projection, not this live-channel
+ *     server, and the SHIPPING projector is already graded through the
+ *     same runner by
+ *     `mcp-server-handlers/src/renders/render-refusal-projection.conformance.test.ts`.
+ *     Pinning the skips here keeps that visible rather than absent:
+ *     the reason names the input that would grade them.
  */
 const EXPECTED_SKIPPED: Readonly<Record<string, string>> = {
   'bootstrap-bundle-fetch-failed': 'renderer-url-override',
   'bootstrap-meta-missing': 'ui-initialize-response-override',
   'props-update-roundtrip': 'Path-B',
+  'refusal-envelope/refuse-after-fix-caller': 'refusalProjector',
+  'refusal-envelope/refuse-after-fix-owner-with-balance': 'refusalProjector',
+  'refusal-envelope/refuse-later': 'refusalProjector',
+  'refusal-envelope/refuse-never': 'refusalProjector',
+  'refusal-envelope/refuse-next-period': 'refusalProjector',
+  'refusal-envelope/refuse-non-render-surface': 'refusalProjector',
   'version-mismatch': 'server-version-override',
 };
 
@@ -465,6 +494,9 @@ describe('first-party @ggui-ai/mcp-server passes @ggui-ai/protocol-conformance',
       // window — keep it short; the in-memory server's emissions
       // resolve within a few event-loop turns.
       observationTimeoutMs: 1500,
+      // ggui#786 — grade the SHIPPING refusal registry through the
+      // runner. No `refusalProjector`: see EXPECTED_SKIPPED.
+      refusalRegistry: PRE_GENERATION_REFUSAL_CODES,
     });
 
     const diagnostic = [

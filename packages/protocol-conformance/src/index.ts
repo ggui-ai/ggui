@@ -171,6 +171,39 @@ export type {
   McpToolFilterDecl,
 } from './binding-conformance/index.js';
 
+// Refusal-envelope conformance — the tool result a server MUST emit for
+// a PRE-GENERATION refusal (SPEC §7.1's refused arm): an in-result
+// `isError`, the code leading the text, `{outcome, refusal}` and
+// nothing else on structuredContent, no `_meta`, and no envelope at all
+// for a code whose surfaces exclude the render gate.
+export {
+  refusalEnvelopeCases,
+  runRefusalEnvelopeConformance,
+} from './refusal-envelope-conformance/index.js';
+export type {
+  PreGenerationRefusalInput,
+  ProjectedRefusalResult,
+  RefusalEnvelopeConformanceCase,
+  RefusalEnvelopeConformanceResult,
+  RefusalEnvelopeMismatch,
+} from './refusal-envelope-conformance/index.js';
+
+// Registry-completeness — the structural obligations a deployment's
+// closed refusal-code registry MUST satisfy. Grades DATA rather than a
+// function: `surfaces` non-empty, `code === key`, every `after-fix`
+// entry naming who acts, and `retry` inside the closed four-value set.
+export {
+  registryCompletenessPins,
+  runRegistryCompletenessConformance,
+} from './registry-completeness/index.js';
+export type {
+  RefusalRegistryRow,
+  RefusalRegistryView,
+  RegistryCompletenessMismatch,
+  RegistryCompletenessPin,
+  RegistryCompletenessResult,
+} from './registry-completeness/index.js';
+
 // Resource-read conformance — the kit's first MCP-binding driver, and
 // it binds `resources/read` ONLY (`tools/call` has none). A read of a
 // render locator has exactly two exits: a result whose contents

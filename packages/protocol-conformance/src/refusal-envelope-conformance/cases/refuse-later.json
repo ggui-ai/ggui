@@ -1,0 +1,27 @@
+{
+  "name": "refuse-later",
+  "description": "A transient refusal: unbounded time rather than a period boundary. Handshake intact, so the SAME id is valid on the retry the fix invites \u2014 the case exists so a projector cannot special-case the retryable class.",
+  "refusal": {
+    "code": "issuer_rate_limited",
+    "message": "calls under this issuing identity are over the rate this deployment allows",
+    "fix": "retry shortly \u2014 time restores it",
+    "retry": "later",
+    "handshake": "intact"
+  },
+  "expect": {
+    "isError": true,
+    "text": "issuer_rate_limited: calls under this issuing identity are over the rate this deployment allows retry shortly \u2014 time restores it",
+    "structuredContent": {
+      "outcome": "refused",
+      "refusal": {
+        "code": "issuer_rate_limited",
+        "message": "calls under this issuing identity are over the rate this deployment allows",
+        "fix": "retry shortly \u2014 time restores it",
+        "retry": "later",
+        "handshake": "intact"
+      }
+    },
+    "hasMeta": false,
+    "identityFields": []
+  }
+}

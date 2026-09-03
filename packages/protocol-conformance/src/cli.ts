@@ -128,10 +128,19 @@ Required:
                              session-cookie:COOKIE — Cookie header
 
 Options:
-  --only <fixture-name>    Run only this fixture. May be repeated.
+  --only <fixture-name>    Run only this fixture. May be repeated. Also
+                           filters the pure-function catalog rows, whose
+                           names are prefixed <catalog>/<case>.
   --timeout-ms <N>         Per-fixture observation window. Default 2000.
   --verbose, -v            Print failure details + skip reasons at the end.
   --help, -h               Show this help.
+
+Pure-function catalogs (refusal-envelope, registry-completeness):
+  These grade an in-process function and a data table, not the wire, so
+  the CLI cannot supply them over a URL. They appear on every scorecard
+  as SKIPPED with the reason — an ungraded obligation stays visible
+  rather than vanishing. To GRADE them, call runConformance()
+  programmatically with refusalProjector / refusalRegistry.
 
 Exit codes:
   0  — at least one fixture executed and none failed.

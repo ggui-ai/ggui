@@ -46,11 +46,17 @@
  *         (No teardown vocabulary exists in this kit version, so the
  *         loop is empty today.)
  *      l. Record the outcome via reporter + accumulate in result.
- *   3. Invoke `reporter.onComplete(result)` + return.
+ *   3. Fold in the PURE-FUNCTION catalogs (ggui#786) —
+ *      `refusal-envelope` and `registry-completeness`. They grade a
+ *      caller-supplied projector / registry rather than the wire, so
+ *      they need no transport; when the caller supplies neither, their
+ *      rows are reported SKIPPED with that reason so an ungraded
+ *      obligation stays visible on the scorecard.
+ *   4. Invoke `reporter.onComplete(result)` + return.
  *
- * Scope v1: pure WS transport. Browser-level fixtures (bootstrap-
- * failure, props-update) automatically skip via the matcher's
- * `unmatchable-on-ws` arm.
+ * Scope v1: pure WS transport for the fixture catalog. Browser-level
+ * fixtures (bootstrap-failure, props-update) automatically skip via the
+ * matcher's `unmatchable-on-ws` arm.
  */
 import { PROTOCOL_SCHEMA_VERSION } from '@ggui-ai/protocol';
 import type {
@@ -77,6 +83,17 @@ import type {
   VersionMismatchBehavior,
 } from './types.js';
 import { openWsTransport, type WsTransport } from './ws-transport.js';
+import {
+  refusalEnvelopeCases,
+  runRefusalEnvelopeConformance,
+  type PreGenerationRefusalInput,
+  type ProjectedRefusalResult,
+} from './refusal-envelope-conformance/index.js';
+import {
+  registryCompletenessPins,
+  runRegistryCompletenessConformance,
+  type RefusalRegistryView,
+} from './registry-completeness/index.js';
 
 // =============================================================================
 // Public API
@@ -107,7 +124,41 @@ export interface RunConformanceConfig {
   readonly host?: ConformanceHost;
   /** Per-fixture observation window. Default 2000ms. */
   readonly observationTimeoutMs?: number;
+  /**
+   * The implementation's PRE-GENERATION refusal projector (SPEC §7.1's
+   * refused arm). Given a refusal, return the tool result the server
+   * would emit for it, or `null` when the code has no envelope on this
+   * surface.
+   *
+   * Supplied ⇒ the `refusal-envelope` catalog is graded as part of this
+   * run. Omitted ⇒ its cases are reported SKIPPED with that reason, so
+   * an ungraded obligation shows up on the scorecard instead of
+   * vanishing from it.
+   */
+  readonly refusalProjector?: (
+    refusal: PreGenerationRefusalInput,
+  ) => ProjectedRefusalResult | null;
+  /**
+   * The deployment's closed refusal-code registry, keyed by code.
+   * Supplied ⇒ the `registry-completeness` pins are graded as part of
+   * this run; omitted ⇒ reported SKIPPED, same reasoning as above.
+   */
+  readonly refusalRegistry?: RefusalRegistryView;
 }
+
+/**
+ * Row-name prefixes for the PURE-FUNCTION catalogs the runner folds
+ * into a run. Prefixed so a catalog row can never collide with a
+ * WebSocket fixture name, and so the reporter can group them without a
+ * second registry of names.
+ */
+export const PURE_FUNCTION_CATALOG_SLUGS = [
+  'refusal-envelope',
+  'registry-completeness',
+] as const;
+
+/** One member of {@link PURE_FUNCTION_CATALOG_SLUGS}. */
+export type PureFunctionCatalogSlug = (typeof PURE_FUNCTION_CATALOG_SLUGS)[number];
 
 export interface ConformanceResult {
   readonly passed: readonly string[];
@@ -186,6 +237,8 @@ export async function runConformance(
     }
   }
 
+  runPureFunctionCatalogs(config, reporter, { passed, failed, skipped });
+
   const result: ConformanceResult = {
     passed,
     failed,
@@ -194,6 +247,104 @@ export async function runConformance(
   };
   reporter.onComplete?.(result);
   return result;
+}
+
+// =============================================================================
+// Pure-function catalogs
+// =============================================================================
+
+/** The three verdict buckets a run accumulates. */
+interface VerdictBuckets {
+  readonly passed: string[];
+  readonly failed: ConformanceFailure[];
+  readonly skipped: SkippedFixture[];
+}
+
+/**
+ * Fold the pure-function catalogs (ggui#786) into a run.
+ *
+ * These obligations are not WebSocket-observable — a refusal projection
+ * is a pure function and a registry is data — so they are NOT in
+ * `fixturesByContract` (see `fixtures/index.ts` for why registering a
+ * non-WS case there would be a permanent skip). But leaving them
+ * reachable only through a direct import made them invisible to every
+ * CLI run: a catalog the runner cannot report is a silent gate
+ * (docs/principles/no-silent-block.md).
+ *
+ * So they run HERE, on the same verdict buckets as the fixtures, and an
+ * absent input produces a SKIP row naming what to supply rather than
+ * nothing at all.
+ */
+function runPureFunctionCatalogs(
+  config: RunConformanceConfig,
+  reporter: ConformanceReporter,
+  buckets: VerdictBuckets,
+): void {
+  const only = config.only;
+  const wanted = (name: string): boolean =>
+    only === undefined || only.length === 0 || only.includes(name);
+
+  const pass = (name: string): void => {
+    if (!wanted(name)) return;
+    buckets.passed.push(name);
+    reporter.onFixturePass?.(name, 0);
+  };
+  const skip = (name: string, reason: string): void => {
+    if (!wanted(name)) return;
+    buckets.skipped.push({ name, reason });
+    reporter.onFixtureSkip?.(name, reason);
+  };
+  const fail = (failure: ConformanceFailure): void => {
+    if (!wanted(failure.name)) return;
+    buckets.failed.push(failure);
+    reporter.onFixtureFail?.(failure);
+  };
+
+  // ── refusal-envelope ──
+  const projector = config.refusalProjector;
+  if (projector === undefined) {
+    for (const testCase of refusalEnvelopeCases) {
+      skip(
+        `refusal-envelope/${testCase.name}`,
+        'no `refusalProjector` supplied — pass one to runConformance() to grade SPEC §7.1\u2019s refused arm',
+      );
+    }
+  } else {
+    const envelope = runRefusalEnvelopeConformance(projector);
+    for (const name of envelope.passed) pass(`refusal-envelope/${name}`);
+    for (const mismatch of envelope.failed) {
+      fail({
+        name: `refusal-envelope/${mismatch.name}`,
+        criterion: 'pre-generation refusal envelope (SPEC §7.1, refused arm)',
+        expected: mismatch.expected,
+        received: mismatch.actual,
+        message: 'the projected refusal envelope does not match the catalog case',
+      });
+    }
+  }
+
+  // ── registry-completeness ──
+  const registry = config.refusalRegistry;
+  if (registry === undefined) {
+    for (const pin of registryCompletenessPins) {
+      skip(
+        `registry-completeness/${pin.name}`,
+        'no `refusalRegistry` supplied — pass the deployment\u2019s refusal-code registry to runConformance() to grade it',
+      );
+    }
+  } else {
+    const completeness = runRegistryCompletenessConformance(registry);
+    for (const name of completeness.passed) pass(`registry-completeness/${name}`);
+    for (const mismatch of completeness.failed) {
+      fail({
+        name: `registry-completeness/${mismatch.name}`,
+        criterion: 'refusal-registry completeness',
+        expected: mismatch.description,
+        received: mismatch.violations,
+        message: `${String(mismatch.violations.length)} row(s) violate this pin`,
+      });
+    }
+  }
 }
 
 // =============================================================================

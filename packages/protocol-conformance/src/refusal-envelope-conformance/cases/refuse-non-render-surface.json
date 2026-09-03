@@ -1,0 +1,12 @@
+{
+  "name": "refuse-non-render-surface",
+  "description": "A REGISTERED code whose surfaces exclude the render gate. It has no render envelope at all, so a conformant projector produces nothing for it. Projecting it anyway is the drift the per-surface namespace rule forbids \u2014 this case is what makes that rule observable rather than prose.",
+  "refusal": {
+    "code": "subscription_exists",
+    "message": "an active plan already exists on this app",
+    "fix": "cancel the existing plan first, then call again",
+    "retry": "after-fix",
+    "handshake": "intact"
+  },
+  "expect": null
+}
