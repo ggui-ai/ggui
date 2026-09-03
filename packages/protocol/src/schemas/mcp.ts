@@ -31,6 +31,10 @@ import {
 } from './handshake-suggestion';
 import { dataContractSchema } from './data-contract';
 import { blueprintVarianceSchema } from './blueprint';
+import {
+  REFUSAL_RETRIES,
+  RENDER_GATE_REFUSAL_CODES,
+} from '../types/refusal-codes';
 
 // ── Shared Sub-Schemas ──
 
@@ -523,6 +527,150 @@ export const renderErrorSchema = z.object({
 });
 
 /**
+ * The three outcomes a `ggui_render` result can report (SPEC §7.1,
+ * ggui#786). A reader branches on this rather than guessing from which
+ * fields happen to be present:
+ *
+ *   - `rendered` — the render ran and produced an interface. The
+ *     identity fields (`sessionId`, `action`, `contractHash`,
+ *     `blueprintId`, `variantKey`, `cache`) are all present.
+ *   - `failed` — generation RAN and did not produce a component. The
+ *     error session IS committed, so the identity fields are present
+ *     and `error` carries the classification. The handshake is
+ *     consumed.
+ *   - `refused` — the deployment declined the call BEFORE it did any
+ *     work: nothing parsed, no state read, nothing committed, no
+ *     spend. The identity fields are structurally ABSENT and `refusal`
+ *     carries the whole story; the handshake is INTACT, so the same id
+ *     is valid on a retry.
+ *
+ * Declared HERE rather than in `types/mcp.ts` (which re-exports the
+ * inferred type) so `types/render.ts` can reference it without a
+ * type-only import cycle through `types/mcp.ts` — same convention as
+ * {@link renderErrorCodeSchema}.
+ */
+export const renderOutcomeSchema = z.enum(['rendered', 'failed', 'refused']);
+
+/** Canonical inferred type for {@link renderOutcomeSchema}. */
+export type RenderOutcome = z.infer<typeof renderOutcomeSchema>;
+
+/**
+ * In-result PRE-GENERATION REFUSAL marker (SPEC §7.1's refused arm,
+ * ggui#786). Present iff `outcome: 'refused'`.
+ *
+ * `code` draws from the closed render-gate subset of
+ * `PRE_GENERATION_REFUSAL_CODES` — a code that is not registered fails
+ * this enum at the transport, loudly. It is a bug, never a wire state.
+ *
+ * An agent MUST NOT auto-retry an `after-fix` refusal whose registry
+ * row names a `fixBy` other than `caller`: the fix belongs to the app's
+ * owner, the tenant, or the operator, and retrying does not perform it.
+ */
+export const renderRefusalSchema = z.object({
+  code: z
+    .enum(RENDER_GATE_REFUSAL_CODES)
+    .describe(
+      "Registered refusal state. Look the code up in the protocol's refusal registry for its retry class and which party can act; the accompanying `fix` names the one recovery step.",
+    ),
+  message: z
+    .string()
+    .describe(
+      'Precise diagnostic — what was checked, and against what. Surface it to the operator; do not parse it.',
+    ),
+  fix: z
+    .string()
+    .describe(
+      'The one recovery step, addressed to the party that can take it. Retry the same call only when that party is the caller.',
+    ),
+  retry: z
+    .enum(REFUSAL_RETRIES)
+    .describe(
+      "How the call becomes possible again. 'after-fix': a named party acts and the same call then succeeds. 'next-period': time restores it at the next period boundary. 'later': transient — retry after a short delay. 'never': no caller action restores it under this identity.",
+    ),
+  handshake: z
+    .literal('intact')
+    .describe(
+      'The handshake was NOT consumed — nothing was read. The same handshakeId is valid on a retry.',
+    ),
+  balanceCentsAtCheck: z
+    .number()
+    .int()
+    .optional()
+    .describe(
+      'Present only when the refusing check read a balance: its value at the moment of the check.',
+    ),
+});
+
+/** The refusal marker, derived from {@link renderRefusalSchema}. */
+export type PreGenerationRefusal = z.infer<typeof renderRefusalSchema>;
+
+/**
+ * The COMPLETE structuredContent of a refused tool result — the whole
+ * payload, not a slice of it. Strict on purpose: a refusal commits
+ * nothing, so ANY other key (a `sessionId`, a `resourceUri`, an
+ * `error`) means the projection leaked state that does not exist.
+ *
+ * The envelope carries nothing render-specific, so a second refusing
+ * tool would reuse it verbatim rather than mint a dialect. Today
+ * `ggui_render` is the only tool that carries a refusing gate;
+ * {@link renderOutputSchema} delegates its refused arm here rather than
+ * restating the rules, so there is exactly ONE declaration of them.
+ */
+export const refusedOutputSchema = z.strictObject({
+  outcome: z.literal('refused'),
+  refusal: renderRefusalSchema,
+});
+
+/**
+ * The refused arm's presence rule: the WHOLE payload must be
+ * {@link refusedOutputSchema}. Delegating here rather than restating
+ * the rule inline keeps one declaration of the refused envelope — the
+ * same one a second refusing tool would delegate to.
+ */
+function refineRefusedArm(value: unknown, ctx: z.RefinementCtx): void {
+  if (refusedOutputSchema.safeParse(value).success) return;
+  ctx.addIssue({
+    code: 'custom',
+    message:
+      "outcome 'refused' MUST carry a registered `refusal` and nothing else — a refusal commits nothing, so no identity field and no `error` may appear beside it.",
+  });
+}
+
+/**
+ * Report a field the committed arms (`rendered` / `failed`) require but
+ * the payload omits. The fields are optional at the schema level only
+ * to make room for the refused arm; demoting them must not weaken the
+ * committed arms, which is what this restores.
+ */
+function requireOnCommittedArm(
+  present: boolean,
+  field: string,
+  outcome: string,
+  ctx: z.RefinementCtx,
+): void {
+  if (present) return;
+  ctx.addIssue({
+    code: 'custom',
+    path: [field],
+    message: `outcome '${outcome}' MUST carry \`${field}\` — a committed render reports its full identity.`,
+  });
+}
+
+/** `refusal` rides the refused arm only. */
+function rejectRefusalOnCommittedArm(
+  refusal: unknown,
+  outcome: string,
+  ctx: z.RefinementCtx,
+): void {
+  if (refusal === undefined) return;
+  ctx.addIssue({
+    code: 'custom',
+    path: ['refusal'],
+    message: `\`refusal\` is present only on outcome 'refused', not '${outcome}'.`,
+  });
+}
+
+/**
  * Canonical failure codes for a `resources/read` on a render locator
  * (`ui://ggui/render/{sessionId}/{blueprintKey}`). Closed enum.
  *
@@ -597,17 +745,40 @@ export const resourceReadErrorSchema = z.object({
  * `render-resource/...`). Leaving a dead URL on the wire had the model
  * hallucinating links that resolve nowhere.
  *
- * Failure envelope (SPEC §7.1): a failed/rejected generation returns
- * this same schema-conformant shape on an `isError: true` tool result —
- * `error` present, `resourceUri` absent (nothing mountable), no
- * `_meta` on the result. The error GguiSession is still committed, so
- * `sessionId` remains a live handle into the session channel.
+ * THREE OUTCOMES (SPEC §7.1, ggui#786). Every result carries
+ * {@link renderOutcomeSchema} on `outcome`, and the identity fields are
+ * present IFF something was committed — which is why they are optional
+ * at the schema level and pinned by the presence refinement below:
+ *
+ *   - `rendered` — identity fields present; `resourceUri` present iff
+ *     mountable; no `error`, no `refusal`.
+ *   - `failed` — generation ran and produced nothing. Identity fields
+ *     present (the error GguiSession IS committed, so `sessionId`
+ *     remains a live handle into the session channel), `error`
+ *     present, `resourceUri` absent, no `_meta` on the result. The
+ *     handshake is consumed.
+ *   - `refused` — the deployment declined before doing any work.
+ *     Identity fields ABSENT, `refusal` present, no `error`, no
+ *     `nextStep`, no `_meta`. Nothing was committed and the handshake
+ *     is intact. The refused arm's whole envelope is
+ *     {@link refusedOutputSchema}.
+ *
+ * The root stays ONE object with a discriminant field rather than a
+ * discriminated union: the MCP spec's `Tool.outputSchema` root MUST be
+ * a JSON Schema of type `object`, and the SDK registers zod raw shapes.
+ * TypeScript narrowing is via the guards at the bottom of this file
+ * ({@link isRenderedOutput} / {@link isFailedRenderOutput} /
+ * {@link isRefusedRenderOutput}), never a parallel union type.
  *
  * Post-Phase-B the `'compose'` action enum value is gone — there is no
  * stack of N renders to compose against.
  */
 export const renderOutputSchema = z.object({
-  sessionId: z.string(),
+  outcome: renderOutcomeSchema.describe(
+    "Which of the three outcomes this result reports. 'rendered': an interface was produced. 'failed': generation ran and produced none — the session is committed and `error` classifies it. 'refused': the deployment declined before doing any work — `refusal` carries the state, nothing was committed, and the handshake is still valid.",
+  ),
+  /** Present iff something was committed — absent on a refusal. */
+  sessionId: z.string().optional(),
   /**
    * Spec-canonical MCP-Apps entry-point — same `ui://ggui/render/{id}`
    * URI surfaced on `_meta.ui.resourceUri`. Surfacing it on the LLM-
@@ -626,25 +797,32 @@ export const renderOutputSchema = z.object({
     .describe(
       'MCP-Apps mount URI (ui://ggui/render/{id}). Present iff the render is mountable; absent on a failed render.',
     ),
-  action: z.enum(['create', 'reuse', 'update', 'replace', 'declined']),
+  action: z
+    .enum(['create', 'reuse', 'update', 'replace', 'declined'])
+    .optional(),
   contractHash: z
     .string()
+    .optional()
     .describe(
       'Canonical hash of the rendered data contract (shape only — fields, types, specs). Same hash ⟺ same data flow.',
     ),
   blueprintId: z
     .string()
+    .optional()
     .describe(
       'Opaque id of the materialised component for this render. On the handshake-decided reuse paths (accept a cache-origin proposal, or a variance re-aim that resolves to an existing variant) it is the stored id — equal ids across renders mean the same stored component. override.contract always generates cold and mints a fresh id, even for an identical contract.',
     ),
   variantKey: z
     .string()
+    .optional()
     .describe(
       'Canonical hash of the design-time variance (persona, aesthetic, seed prompt, context). With contractHash it forms the reuse key: the same pair reuses one component; a different variant of the same contract gets its own.',
     ),
-  cache: renderCacheMarkerSchema.describe(
-    'Reuse outcome for this render: whether a stored component was served, its similarity, the matched component id, and how many generation calls that avoided.',
-  ),
+  cache: renderCacheMarkerSchema
+    .optional()
+    .describe(
+      'Reuse outcome for this render: whether a stored component was served, its similarity, the matched component id, and how many generation calls that avoided.',
+    ),
   /**
    * In-result failure marker — present iff the tool result is
    * `isError: true`. The structuredContent stays schema-conformant on
@@ -655,6 +833,16 @@ export const renderOutputSchema = z.object({
     .optional()
     .describe(
       'Present iff the tool result is isError — canonical {code, message} for a failed/rejected generation. Absent on success.',
+    ),
+  /**
+   * In-result PRE-GENERATION REFUSAL marker — present iff
+   * `outcome: 'refused'`, and then it is the ONLY field besides
+   * `outcome` (see {@link refusedOutputSchema}).
+   */
+  refusal: renderRefusalSchema
+    .optional()
+    .describe(
+      'Present iff outcome is refused — the registered state the deployment declined on, plus the one recovery step. Nothing was committed and the handshake is still valid.',
     ),
   /**
    * Wire-shape recovery hint for the next call. Emitted ONLY when the
@@ -683,6 +871,49 @@ export const renderOutputSchema = z.object({
   }).optional().describe(
     'Required-next-call hint — when the rendered contract has actions, points the agent at ggui_consume({sessionId, timeout}) for the inbound action loop. Absent for pure-display renders.',
   ),
+}).superRefine((value, ctx) => {
+  // Present-iff-committed. NOTE for implementors: this refinement is
+  // attached to the COMPOSED schema. A consumer that decomposes the
+  // schema to its raw shape and rebuilds it (`z.object(schema.shape)`,
+  // which is how the MCP SDK registers a tool's outputSchema) loses
+  // these rules — which is why the transport validates a refused
+  // payload against `refusedOutputSchema` directly. See SPEC §7.1.
+  if (value.outcome === 'refused') {
+    refineRefusedArm(value, ctx);
+    return;
+  }
+  requireOnCommittedArm(value.sessionId !== undefined, 'sessionId', value.outcome, ctx);
+  requireOnCommittedArm(value.action !== undefined, 'action', value.outcome, ctx);
+  requireOnCommittedArm(
+    value.contractHash !== undefined,
+    'contractHash',
+    value.outcome,
+    ctx,
+  );
+  requireOnCommittedArm(
+    value.blueprintId !== undefined,
+    'blueprintId',
+    value.outcome,
+    ctx,
+  );
+  requireOnCommittedArm(value.variantKey !== undefined, 'variantKey', value.outcome, ctx);
+  requireOnCommittedArm(value.cache !== undefined, 'cache', value.outcome, ctx);
+  rejectRefusalOnCommittedArm(value.refusal, value.outcome, ctx);
+  if (value.outcome === 'failed' && value.error === undefined) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['error'],
+      message:
+        "outcome 'failed' MUST carry `error` — the classification is what distinguishes it from a render that succeeded.",
+    });
+  }
+  if (value.outcome === 'rendered' && value.error !== undefined) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['error'],
+      message: "`error` is present only on outcome 'failed', not 'rendered'.",
+    });
+  }
 });
 
 /**
@@ -766,6 +997,12 @@ export const amendInputSchema = z.discriminatedUnion('kind', [
  * history when its higher-epoch `props_update` frame lands; the
  * in-place repaint over the live-channel ladder (WS / SSE / polling /
  * bridge-pull) is `ggui_amend`'s job.
+ *
+ * NO refusal arm (ggui#786): the pre-generation refusal envelope rides
+ * `ggui_render` only. `ggui_update` binds no refusing gate — its
+ * `BillingGate` is a different, post-parse seam, and `handshake:
+ * 'intact'` is meaningless on a tool that consumes no handshake. A
+ * mutation arm is a separate slice, not a mechanical port.
  */
 export const updateOutputSchema = z.object({
   sessionId: z.string(),
@@ -1092,3 +1329,52 @@ export const runtimeTelemetryInputSchema = z.object(runtimeTelemetryInputShape);
 
 /** `ggui_runtime_telemetry` output — bare acknowledgement. */
 export const runtimeTelemetryOutputSchema = z.object({ ok: z.literal(true) });
+
+// ── Outcome narrowing (ggui#786) ──
+//
+// The wire root must stay ONE object with a discriminant field (the MCP
+// spec's `Tool.outputSchema` root MUST be type `object`, and the SDK
+// registers raw shapes), so the identity fields are optional at the
+// schema level and the presence rules ride the refinements above.
+// Readers narrow with these guards — there is no parallel discriminated
+// union type to keep in step with the schema.
+
+type RenderOutputValue = z.infer<typeof renderOutputSchema>;
+
+/** Identity fields a committed render reports. */
+type CommittedRenderIdentity = Required<
+  Pick<
+    RenderOutputValue,
+    'sessionId' | 'action' | 'contractHash' | 'blueprintId' | 'variantKey' | 'cache'
+  >
+>;
+
+/** A render that produced an interface — identity fields present. */
+export function isRenderedOutput(
+  output: RenderOutputValue,
+): output is RenderOutputValue & { outcome: 'rendered' } & CommittedRenderIdentity {
+  return output.outcome === 'rendered';
+}
+
+/**
+ * A generation that RAN and produced nothing. The error session is
+ * committed, so `sessionId` is a live handle and `error` classifies it.
+ */
+export function isFailedRenderOutput(
+  output: RenderOutputValue,
+): output is RenderOutputValue & {
+  outcome: 'failed';
+  error: z.infer<typeof renderErrorSchema>;
+} & CommittedRenderIdentity {
+  return output.outcome === 'failed';
+}
+
+/**
+ * A PRE-GENERATION refusal — nothing was parsed, read or committed, so
+ * every identity field is absent and `refusal` carries the state.
+ */
+export function isRefusedRenderOutput(
+  output: RenderOutputValue,
+): output is { outcome: 'refused'; refusal: PreGenerationRefusal } {
+  return output.outcome === 'refused';
+}

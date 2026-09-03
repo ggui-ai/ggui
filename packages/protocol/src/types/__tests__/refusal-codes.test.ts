@@ -150,10 +150,6 @@ describe('PRE_GENERATION_REFUSAL_CODES — the rules the ruling states', () => {
   });
 
   it('every `after-fix` row carries `fixBy` — WHO acts', () => {
-    // v5's kit pin, verbatim: "every `after-fix` entry carries `fixBy`".
-    // NOT an "iff": the LANDED owner-api mirror carries `fixBy: operator`
-    // on its three `later` rows and `fixBy: tenant` on its three `never`
-    // rows, so `fixBy` is REQUIRED on after-fix and PERMITTED elsewhere.
     for (const [key, row] of rows()) {
       if (row.retry === 'after-fix') {
         expect(row.fixBy, `row ${key}`).toBeDefined();
@@ -162,14 +158,31 @@ describe('PRE_GENERATION_REFUSAL_CODES — the rules the ruling states', () => {
     }
   });
 
-  it('`next-period` rows carry no `fixBy` — time restores them, no party acts', () => {
-    // Registry v3: "`next-period`/`never` entries carry no `fixBy`". Only
-    // the next-period half is pinned — v4 shipped `never` rows WITH a
-    // `fixBy` (`managed_app_no_*` → tenant) and the landed mirror proves it.
+  it('`next-period` and `never` rows carry no `fixBy` — no party can act', () => {
+    // The ruled cardinality: REQUIRED on `after-fix`, PERMITTED on
+    // `later` (the operator who restores a transiently unavailable
+    // surface), FORBIDDEN on `next-period` and `never`. Time restores
+    // the one and nothing restores the other, so naming a party would
+    // be a lie about who can act. The LANDED owner-api mirror carries
+    // `fixBy: 'tenant'` on its three `never` rows; the registry is the
+    // authority and the mirror loses those at the swap.
     for (const [key, row] of rows()) {
-      if (row.retry === 'next-period') {
+      if (row.retry === 'next-period' || row.retry === 'never') {
         expect(row.fixBy, `row ${key}`).toBeUndefined();
       }
+    }
+  });
+
+  it('only `later` rows may name a `fixBy` outside the after-fix class', () => {
+    // The permitted middle. Asserted as a POSITIVE (at least one `later`
+    // row names its operator) so the rule above cannot be satisfied by a
+    // registry that simply carries no `fixBy` anywhere.
+    const laterWithFixBy = rows().filter(
+      ([, row]) => row.retry === 'later' && row.fixBy !== undefined,
+    );
+    expect(laterWithFixBy.length).toBeGreaterThan(0);
+    for (const [key, row] of laterWithFixBy) {
+      expect(REFUSAL_FIX_BY, `row ${key}`).toContain(row.fixBy);
     }
   });
 
@@ -180,11 +193,18 @@ describe('PRE_GENERATION_REFUSAL_CODES — the rules the ruling states', () => {
 });
 
 describe('PRE_GENERATION_REFUSAL_CODES — surface membership', () => {
-  it('ships exactly the fourteen render-gate codes (v2 + v5 + v6)', () => {
+  it('ships exactly the sixteen render-gate codes (v2 + v5 + v7 + v8)', () => {
     expect(codesOn('render-gate')).toEqual(
       [
         'app_canceled',
+        // v8 — a record with no owner claim cannot be funded, so the
+        // gate refuses it BEFORE any reservation or metering. It is a
+        // render-gate state, not (only) a provisioning one.
+        'app_deprovisioned',
         'app_policy_missing',
+        // v7 — the per-APP rate cap. A separate state from the
+        // per-issuer one below: one state, one code.
+        'app_rate_limited',
         'billing_mode_anomaly',
         'free_allowance_exceeded',
         'hard_cap_exceeded',
@@ -198,6 +218,20 @@ describe('PRE_GENERATION_REFUSAL_CODES — surface membership', () => {
         'trial_expired',
         'unsupported_provider',
       ].sort(),
+    );
+  });
+
+  it('the two rate-limit codes are distinct states, both render-gate/later', () => {
+    // v7 minted `app_rate_limited` BESIDE `issuer_rate_limited` rather
+    // than widening one code to two meanings — the namespace rule.
+    for (const code of ['app_rate_limited', 'issuer_rate_limited'] as const) {
+      const row = refusalRowContract.parse(PRE_GENERATION_REFUSAL_CODES?.[code]);
+      expect(row.surfaces, code).toEqual(['render-gate']);
+      expect(row.retry, code).toBe('later');
+      expect(row.fixBy, code).toBeUndefined();
+    }
+    expect(PRE_GENERATION_REFUSAL_CODES?.app_rate_limited?.emitter).not.toBe(
+      PRE_GENERATION_REFUSAL_CODES?.issuer_rate_limited?.emitter,
     );
   });
 
@@ -217,15 +251,21 @@ describe('PRE_GENERATION_REFUSAL_CODES — surface membership', () => {
     );
   });
 
-  it('ships the provisioning-api codes (v6 + #785)', () => {
+  it('ships exactly the three provisioning-api codes (v7 + v8)', () => {
+    // `app_deprovisioned` moved to the render gate in v8 — it is the
+    // gate's owner-claim check, not a provisioning-route guard.
     expect(codesOn('provisioning-api')).toEqual(
-      [
-        'app_deprovisioned',
-        'billing_mode_anomaly',
-        'owner_ref_mismatch',
-        'policy_version_stale',
-      ].sort(),
+      ['billing_mode_anomaly', 'owner_ref_mismatch', 'policy_version_stale'].sort(),
     );
+  });
+
+  it('`policy_version_stale` is a provisioning-api after-fix state the tenant owns (v7)', () => {
+    const row = refusalRowContract.parse(
+      PRE_GENERATION_REFUSAL_CODES?.policy_version_stale,
+    );
+    expect(row.surfaces).toEqual(['provisioning-api']);
+    expect(row.retry).toBe('after-fix');
+    expect(row.fixBy).toBe('tenant');
   });
 
   it('`billing_mode_anomaly` is ONE code on TWO surfaces (v6 — the rule refined, not bent)', () => {
@@ -286,7 +326,7 @@ describe('RENDER_GATE_REFUSAL_CODES — derived, never a second list', () => {
   it('carries no owner-api-only or provisioning-api-only code', () => {
     // Asserted against the POPULATED tuple — an empty/absent list must
     // not satisfy "contains none of these" vacuously.
-    const renderGate = new Set(RENDER_GATE_REFUSAL_CODES);
+    const renderGate = new Set<string>(RENDER_GATE_REFUSAL_CODES);
     expect(renderGate.size).toBe(codesOn('render-gate').length);
     for (const code of ['subscription_exists', 'owner_ref_mismatch']) {
       expect(renderGate.has(code)).toBe(false);

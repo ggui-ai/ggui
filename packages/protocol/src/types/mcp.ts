@@ -503,6 +503,15 @@ export type { RenderErrorCode } from '../schemas/mcp';
 export type RenderError = z.infer<typeof renderErrorSchema>;
 
 /**
+ * The three-outcome discriminant on `GguiRenderOutput.outcome`
+ * (ggui#786) and the PRE-GENERATION refusal marker on
+ * `GguiRenderOutput.refusal`. Canonical declarations live beside their
+ * schemas in `schemas/mcp.ts`; re-exported here so importers of the
+ * output types find them on the same path.
+ */
+export type { PreGenerationRefusal, RenderOutcome } from '../schemas/mcp';
+
+/**
  * Canonical failure code for a `resources/read` on a render locator
  * (SPEC §7.9 Plane 1). Derived from
  * {@link resourceReadErrorCodeSchema} — the schema is the source of

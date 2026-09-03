@@ -64,6 +64,11 @@ export type {
   InvokeTurn,
 } from "./types/invoke";
 export * from "./types/llm";
+// Pre-generation refusal registry (ggui#786) — the closed `code`
+// namespace every refusing surface reads from. Browser-safe pure data,
+// so it rides the root barrel (unlike ./blueprint-key, which is
+// subpathed only because it pulls node:crypto).
+export * from "./types/refusal-codes";
 export * from "./types/llm-route";
 export * from "./types/interface-context";
 export * from "./types/host-context";

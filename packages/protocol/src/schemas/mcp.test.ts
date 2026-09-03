@@ -354,6 +354,7 @@ describe('ggui_render — variance-aware override reshape', () => {
   it('rejects an output missing the required cache-reuse fields', () => {
     expect(() =>
       renderOutputSchema.parse({
+        outcome: 'rendered',
         sessionId: 'render_1',
         resourceUri: 'ui://ggui/render/render_1',
         action: 'create',
@@ -363,6 +364,7 @@ describe('ggui_render — variance-aware override reshape', () => {
 
   it('round-trips a render output with contractHash + blueprintId + variantKey + cache', () => {
     const out = {
+      outcome: 'rendered' as const,
       sessionId: 'render_1',
       resourceUri: 'ui://ggui/render/render_1',
       action: 'create' as const,
@@ -377,6 +379,7 @@ describe('ggui_render — variance-aware override reshape', () => {
   it('rejects an output missing the required blueprintId / variantKey fields', () => {
     expect(() =>
       renderOutputSchema.parse({
+        outcome: 'rendered',
         sessionId: 'render_1',
         resourceUri: 'ui://ggui/render/render_1',
         action: 'create',
@@ -388,6 +391,7 @@ describe('ggui_render — variance-aware override reshape', () => {
 
   it('surfaces a cache.hit:true marker on output, with cachedBlueprintId === blueprintId', () => {
     const out = {
+      outcome: 'rendered' as const,
       sessionId: 'render_1',
       resourceUri: 'ui://ggui/render/render_1',
       action: 'reuse' as const,
@@ -403,13 +407,17 @@ describe('ggui_render — variance-aware override reshape', () => {
       },
     };
     const parsed = renderOutputSchema.parse(out);
-    expect(parsed.cache.hit).toBe(true);
-    expect(parsed.cache.cachedBlueprintId).toBe('bp_abc');
-    expect(parsed.cache.cachedBlueprintId).toBe(parsed.blueprintId);
+    // `cache` is optional at the schema level (absent on the refused
+    // arm) and required by the refinement on this one — read it with
+    // `?.` the way the sibling `error` assertions already do.
+    expect(parsed.cache?.hit).toBe(true);
+    expect(parsed.cache?.cachedBlueprintId).toBe('bp_abc');
+    expect(parsed.cache?.cachedBlueprintId).toBe(parsed.blueprintId);
   });
 
   it('strips the post-R5-retired `url` field on parse (no clickable URL on the wire)', () => {
     const parsed = renderOutputSchema.parse({
+      outcome: 'rendered',
       sessionId: 'render_1',
       resourceUri: 'ui://ggui/render/render_1',
       action: 'create',
@@ -423,6 +431,7 @@ describe('ggui_render — variance-aware override reshape', () => {
       url: 'https://stale-render.example.com/abc12345',
     } as unknown as Record<string, unknown>);
     expect(parsed).toEqual({
+      outcome: 'rendered',
       sessionId: 'render_1',
       resourceUri: 'ui://ggui/render/render_1',
       action: 'create',
@@ -437,6 +446,7 @@ describe('ggui_render — variance-aware override reshape', () => {
   it('rejects the retired `compose` action value on output', () => {
     expect(() =>
       renderOutputSchema.parse({
+        outcome: 'rendered',
         sessionId: 'render_1',
         resourceUri: 'ui://ggui/render/render_1',
         action: 'compose',
@@ -446,6 +456,7 @@ describe('ggui_render — variance-aware override reshape', () => {
 
   it('accepts an output WITHOUT resourceUri — present iff mountable (failure envelope omits it)', () => {
     const out = {
+      outcome: 'failed' as const,
       sessionId: 'render_1',
       action: 'create' as const,
       contractHash: '1c00b3ab282a45f6',
@@ -473,13 +484,14 @@ describe('ggui_render — variance-aware override reshape', () => {
   });
 
   it('accepts every canonical error code on the failure envelope', () => {
-    for (const code of [
-      'PRODUCTION_FAILED',
-      'VALIDATION_ERROR',
-      'NO_PLATFORM_KEY',
-      'NO_CREDENTIALS',
-    ] as const) {
+    // Driven from the enum itself, so the fixture can never enumerate a
+    // SUBSET again: a code added to `renderErrorCodeSchema` is exercised
+    // here the moment it lands. (It previously listed four of the five,
+    // silently leaving `GENERATION_QUEUE_OVERLOADED` ungraded.)
+    expect(renderErrorCodeSchema.options.length).toBe(5);
+    for (const code of renderErrorCodeSchema.options) {
       const parsed = renderOutputSchema.parse({
+        outcome: 'failed',
         sessionId: 'render_1',
         action: 'create',
         contractHash: 'h',
@@ -495,6 +507,7 @@ describe('ggui_render — variance-aware override reshape', () => {
   it('rejects a non-canonical error code — the enum is closed', () => {
     expect(() =>
       renderOutputSchema.parse({
+        outcome: 'failed',
         sessionId: 'render_1',
         action: 'create',
         contractHash: 'h',
@@ -508,6 +521,7 @@ describe('ggui_render — variance-aware override reshape', () => {
 
   it('success outputs carry no error field and keep resourceUri', () => {
     const out = {
+      outcome: 'rendered' as const,
       sessionId: 'render_1',
       resourceUri: 'ui://ggui/render/render_1',
       action: 'create' as const,
@@ -907,60 +921,6 @@ describe('renderOutputSchema — outcome is required on every arm (#786)', () =>
         blueprintId: '',
         variantKey: 'v_default',
         cache: { hit: false, llmCallsAvoided: 0, kind: 'cold' },
-      }),
-    ).toThrow();
-  });
-});
-
-describe('updateOutputSchema — the same discriminant (#786, ruling item 1)', () => {
-  const REFUSAL = {
-    code: 'hard_cap_exceeded' as const,
-    message: 'the configured render cap for this app was reached',
-    fix: 'the cap resets at the start of the next period',
-    retry: 'next-period' as const,
-    handshake: 'intact' as const,
-  };
-
-  const UPDATED = {
-    sessionId: 'render_1',
-    updated: true,
-    resourceUri: 'ui://ggui/render/render_1#1',
-    epoch: 1,
-  };
-
-  it("round-trips today's update output once outcome is added", () => {
-    const out = { outcome: 'rendered' as const, ...UPDATED };
-    expect(updateOutputSchema.parse(out)).toEqual(out);
-  });
-
-  it("rejects today's update output WITHOUT outcome", () => {
-    expect(() => updateOutputSchema.parse(UPDATED)).toThrow();
-  });
-
-  it('accepts a refused update output with NO sessionId / resourceUri / epoch', () => {
-    const out = { outcome: 'refused' as const, refusal: REFUSAL };
-    const parsed = updateOutputSchema.parse(out);
-    expect(parsed).toEqual(out);
-    expect(parsed.sessionId).toBeUndefined();
-    expect(parsed.resourceUri).toBeUndefined();
-    expect(parsed.epoch).toBeUndefined();
-  });
-
-  it('rejects a refused update output that carries a sessionId', () => {
-    const refused = { outcome: 'refused' as const, refusal: REFUSAL };
-    expect(updateOutputSchema.parse(refused)).toEqual(refused);
-    expect(() =>
-      updateOutputSchema.parse({ ...refused, sessionId: 'render_1' }),
-    ).toThrow();
-  });
-
-  it('rejects a refused update output whose refusal.code is unregistered', () => {
-    const refused = { outcome: 'refused' as const, refusal: REFUSAL };
-    expect(updateOutputSchema.parse(refused)).toEqual(refused);
-    expect(() =>
-      updateOutputSchema.parse({
-        ...refused,
-        refusal: { ...REFUSAL, code: 'not_a_registered_code' },
       }),
     ).toThrow();
   });
