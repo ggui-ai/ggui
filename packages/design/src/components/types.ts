@@ -702,7 +702,7 @@ export interface StepperProps extends BaseProps {
 /**
  * Markdown -- renders markdown-formatted text as styled content:
  * headings, paragraphs, **bold** / *italic*, `inline code`, fenced
- * code blocks, bulleted and numbered lists, and links.
+ * code blocks, bulleted and numbered lists, pipe tables, and links.
  *
  * Use it whenever a prop or context slot carries prose the agent
  * authors in markdown -- article bodies, AI-generated explanations,
@@ -731,8 +731,9 @@ export interface MarkdownProps extends BaseProps {
   /**
    * Markdown source text, passed through verbatim. Supports the
    * conversational subset: `#`-`###` headings, paragraphs, bold,
-   * italic, inline code, fenced code blocks, `-`/`1.` lists, and
-   * `[label](url)` links. Bind stateful or streamed prose directly.
+   * italic, inline code, fenced code blocks, `-`/`1.` lists, `|` pipe
+   * tables, and `[label](url)` links. Bind stateful or streamed prose
+   * directly.
    */
   markdown: string;
 }

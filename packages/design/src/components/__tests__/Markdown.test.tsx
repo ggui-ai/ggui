@@ -48,6 +48,19 @@ describe('Markdown — block renderer over the design richtext model', () => {
     expect(html).toContain('<br/>');
   });
 
+  it('renders a pipe table as a real <table> — <th> header, <td> body, per-column alignment, literal cells', () => {
+    const html = renderToStaticMarkup(
+      <Markdown markdown={'| Item | Qty |\n|:--|--:|\n| apple | 3 |\n| pear < 2 | 12 |'} />,
+    );
+    expect(html).toContain('<table');
+    expect(html.match(/<th[ >]/g)).toHaveLength(2);
+    expect(html.match(/<td[ >]/g)).toHaveLength(4);
+    expect(html).toContain('text-align:right');
+    // Literal-content rule holds inside cells; the pipe syntax never reaches the DOM.
+    expect(html).toContain('pear &lt; 2');
+    expect(html).not.toContain('| apple |');
+  });
+
   it('fails soft on mid-stream input (unclosed constructs render, nothing throws)', () => {
     const html = renderToStaticMarkup(<Markdown markdown={'**bol'} />);
     expect(html).toContain('bol');

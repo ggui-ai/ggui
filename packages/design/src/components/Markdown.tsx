@@ -70,6 +70,28 @@ const LIST: CSSProperties = {
   paddingInlineStart: 'var(--ggui-spacing-lg, 24px)',
 };
 
+/** A wide table scrolls inside its own box; the surrounding column never widens. */
+const TABLE_SCROLL: CSSProperties = { overflowX: 'auto' };
+
+const TABLE: CSSProperties = {
+  borderCollapse: 'collapse',
+  width: '100%',
+  fontSize: 'var(--ggui-font-size-sm, 14px)',
+};
+
+const TABLE_CELL: CSSProperties = {
+  padding: 'var(--ggui-spacing-xs, 6px) var(--ggui-spacing-sm, 12px)',
+  borderBottom: '1px solid var(--ggui-color-outline, rgba(0,0,0,0.15))',
+  verticalAlign: 'top',
+  textAlign: 'left',
+};
+
+const TABLE_HEADER_CELL: CSSProperties = {
+  ...TABLE_CELL,
+  fontWeight: 'var(--ggui-font-weight-semibold, 600)',
+  background: 'var(--ggui-color-surface-sunken, rgba(0,0,0,0.06))',
+};
+
 /**
  * Render a run of rich-text inline nodes to React children.
  *
@@ -111,6 +133,11 @@ export function renderRichTextInlines(inlines: RichTextInline[]): ReactNode[] {
           </span>
         );
       }
+      default: {
+        // A new inline kind is a compile error here, never silent text loss.
+        const _exhaustive: never = node;
+        return _exhaustive;
+      }
     }
   });
 }
@@ -144,6 +171,45 @@ function renderBlock(block: RichTextBlock, key: number): ReactNode {
           {items}
         </ul>
       );
+    }
+    case 'table': {
+      // Column alignment comes from the delimiter row; unaligned columns
+      // keep the base (left) so header and body line up.
+      const aligned = (base: CSSProperties, col: number): CSSProperties => {
+        const align = block.align[col];
+        return align === undefined ? base : { ...base, textAlign: align };
+      };
+      return (
+        <div key={key} style={TABLE_SCROLL}>
+          <table style={TABLE}>
+            <thead>
+              <tr>
+                {block.header.cells.map((cell, c) => (
+                  <th key={c} scope="col" style={aligned(TABLE_HEADER_CELL, c)}>
+                    {renderRichTextInlines(cell.children)}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {block.rows.map((row, r) => (
+                <tr key={r}>
+                  {row.cells.map((cell, c) => (
+                    <td key={c} style={aligned(TABLE_CELL, c)}>
+                      {renderRichTextInlines(cell.children)}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      );
+    }
+    default: {
+      // A new block kind is a compile error here, never a block that renders as nothing.
+      const _exhaustive: never = block;
+      return _exhaustive;
     }
   }
 }

@@ -4,7 +4,12 @@
  * semantics. Extend here as ggui's subset evolves.
  */
 import { describe, it, expect } from "vitest";
-import parseRichText, { parseInlineRichText, type RichTextBlock, type RichTextInline } from "./parse";
+import parseRichText, {
+  parseInlineRichText,
+  type RichTextBlock,
+  type RichTextInline,
+  type RichTextTableRow,
+} from "./parse";
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 
@@ -82,6 +87,74 @@ describe("parseRichText — block goldens", () => {
     const blocks = parseRichText("- top\n  - nested\n- top again");
     expect(blocks).toHaveLength(1);
     expect((blocks[0] as Extract<RichTextBlock, { type: "list" }>).items).toHaveLength(3);
+  });
+});
+
+// ─── tables (GFM pipe tables) ─────────────────────────────────────────────────
+
+describe("parseRichText — GFM pipe tables", () => {
+  type Table = Extract<RichTextBlock, { type: "table" }>;
+  const table = (blocks: RichTextBlock[], at = 0): Table => blocks[at] as Table;
+  const cellText = (row: RichTextTableRow | undefined): string[] =>
+    (row?.cells ?? []).map((c) => visibleText(c.children));
+
+  it("header + delimiter + body rows parse to ONE table block; cells trimmed; columns unaligned by default", () => {
+    const blocks = parseRichText("| Name | Qty |\n|---|---|\n| apple | 3 |\n| pear | 12 |");
+    expect(blocks.map((b) => b.type)).toEqual(["table"]);
+    const t = table(blocks);
+    expect(cellText(t.header)).toEqual(["Name", "Qty"]);
+    expect(t.rows.map(cellText)).toEqual([
+      ["apple", "3"],
+      ["pear", "12"],
+    ]);
+    expect(t.align).toEqual([undefined, undefined]);
+  });
+
+  it("the delimiter row's colons set per-column alignment", () => {
+    const t = table(parseRichText("| l | c | r | n |\n|:--|:-:|--:|---|\n| 1 | 2 | 3 | 4 |"));
+    expect(t.align).toEqual(["left", "center", "right", undefined]);
+  });
+
+  it("cells are inline rich text, and an escaped pipe is cell content, not a column break", () => {
+    const t = table(parseRichText("| **bold** | `a \\| b` |\n|---|---|\n| [x](https://x.io) | 1 \\| 2 |"));
+    expect(t.header.cells[0]?.children[0]).toMatchObject({ type: "strong", closed: true });
+    expect(t.header.cells[1]?.children[0]).toMatchObject({ type: "code", code: "a | b" });
+    expect(t.rows[0]?.cells[0]?.children[0]).toMatchObject({ type: "link", href: "https://x.io" });
+    expect(cellText(t.rows[0])).toEqual(["x", "1 | 2"]);
+  });
+
+  it("ragged body rows pad short rows with empty cells and drop excess cells", () => {
+    const t = table(parseRichText("| a | b | c |\n|---|---|---|\n| 1 |\n| 1 | 2 | 3 | 4 |"));
+    expect(t.rows.map(cellText)).toEqual([
+      ["1", "", ""],
+      ["1", "2", "3"],
+    ]);
+  });
+
+  it("a pipe line without a matching delimiter row stays a paragraph — pipe text is just text", () => {
+    expect(parseRichText("| a | b |").map((b) => b.type)).toEqual(["paragraph"]);
+    const twoLines = parseRichText("a | b\nc | d");
+    expect(twoLines).toHaveLength(1);
+    expect(twoLines[0]?.type).toBe("paragraph");
+    // A column-count mismatch between header and delimiter is not a table either.
+    expect(parseRichText("| a | b |\n|---|\n| 1 | 2 |").every((b) => b.type === "paragraph")).toBe(true);
+  });
+
+  it("a table ends at a blank line or at a line without a pipe; surrounding prose is its own paragraph", () => {
+    const blocks = parseRichText("intro\n| a | b |\n|---|---|\n| 1 | 2 |\noutro\n\n- item");
+    expect(blocks.map((b) => b.type)).toEqual(["paragraph", "table", "paragraph", "list"]);
+    expect(table(blocks, 1).rows.map(cellText)).toEqual([["1", "2"]]);
+  });
+
+  it("every prefix of a table parses without throwing, and rows already streamed never reshape", () => {
+    const doc = "| Name | Qty |\n|---|---|\n| apple | 3 |\n| pear | 12 |\n\nafter";
+    for (let i = 0; i <= doc.length; i++) parseRichText(doc.slice(0, i)); // must not throw at ANY cut point
+    const mid = parseRichText(doc.slice(0, doc.indexOf("| pear")));
+    const full = parseRichText(doc);
+    expect(mid.map((b) => b.type)).toEqual(["table"]);
+    expect(full.map((b) => b.type)).toEqual(["table", "paragraph"]);
+    expect(table(full).header).toEqual(table(mid).header);
+    expect(table(full).rows[0]).toEqual(table(mid).rows[0]);
   });
 });
 
@@ -240,7 +313,9 @@ describe("streaming tolerance", () => {
             ? b.code
             : b.type === "list"
               ? b.items.map((it) => visibleText(it.children)).join("\n")
-              : visibleText(b.children),
+              : b.type === "table"
+                ? [b.header, ...b.rows].map((r) => r.cells.map((c) => visibleText(c.children)).join(" ")).join("\n")
+                : visibleText(b.children),
         )
         .join("\n");
       // Soft-fail bound: the visible text never exceeds what has streamed in,

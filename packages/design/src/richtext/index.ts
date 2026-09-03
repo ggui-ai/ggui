@@ -6,4 +6,7 @@ export type {
   RichTextBlock,
   RichTextInline,
   RichTextListItem,
+  RichTextTableAlign,
+  RichTextTableCell,
+  RichTextTableRow,
 } from './parse';
