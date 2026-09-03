@@ -17,7 +17,7 @@
  * ```
  */
 import type { AuthResult, CredentialScope } from '@ggui-ai/mcp-server-core';
-import type { ZodRawShape } from 'zod';
+import type { ZodRawShape, ZodType } from 'zod';
 
 /**
  * Per-request context threaded through every shared handler.
@@ -221,6 +221,15 @@ export const HANDLER_FAILURE_MARKER: unique symbol = Symbol.for(
  * transport. Handlers whose failure still has a meaningful,
  * schema-conformant output (e.g. `ggui_render` committing an error
  * GguiSession) MUST use this channel instead.
+ *
+ * The channel carries TWO kinds of non-success (SPEC §7.1, ggui#786),
+ * told apart by the payload's `outcome`:
+ *
+ *   - `failed` — work RAN and did not produce a result. State was
+ *     committed, so the payload carries the full identity.
+ *   - `refused` — a PRE-STATE refusal: the deployment declined before
+ *     anything was parsed, read or committed, so the payload is the
+ *     refusal envelope and NOTHING else.
  */
 export interface HandlerFailure<OutputData = unknown> {
   readonly [HANDLER_FAILURE_MARKER]: true;
@@ -228,7 +237,12 @@ export interface HandlerFailure<OutputData = unknown> {
    * Schema-conformant structuredContent for the failed call. Parsed
    * (and unknown-key-stripped) against the handler's `outputSchema`
    * by the transport before serialization — a non-conformant payload
-   * fails loudly at the transport, never silently on the wire.
+   * fails loudly at the transport, never silently on the wire —
+   * INCLUDING its cross-field rules when the handler declares an
+   * {@link SharedHandler.outputEnvelopeSchema}. `ggui_render` does, so
+   * "a refusal carries `refusal` and nothing else" and
+   * "present-iff-committed on the `rendered` / `failed` arms" are both
+   * transport-enforced, not merely test-enforced.
    */
   readonly data: OutputData;
   /**
@@ -291,6 +305,28 @@ export interface SharedHandler<
   readonly inputSchema: Input;
   /** Zod raw-shape for the output. */
   readonly outputSchema: Output;
+  /**
+   * The COMPOSED output schema, when the tool declares cross-field
+   * rules that a raw shape cannot carry (ggui#786).
+   *
+   * `outputSchema` above is a raw field record because that is what the
+   * MCP SDK registers — and the spec requires the declared
+   * `Tool.outputSchema` root to be a JSON Schema of type `object`, so
+   * that must stay a plain shape. But rebuilding it with
+   * `z.object(shape)` at the transport DROPS every refinement attached
+   * to the composed schema, which would leave rules like "a refused
+   * result carries no identity fields" unenforced on the wire.
+   *
+   * A handler whose protocol schema carries refinements sets this to
+   * that schema. The transport then validates outbound payloads
+   * against it INSTEAD of the rebuilt shape — same stripping, plus the
+   * refinements — so a non-conformant payload fails loudly at the
+   * transport rather than shipping. Registration keeps using
+   * `outputSchema`.
+   *
+   * Omitted ⇒ the transport rebuilds the raw shape, exactly as before.
+   */
+  readonly outputEnvelopeSchema?: ZodType;
   /**
    * Declaration-level metadata forwarded on the MCP tool registration's
    * `_meta` field. MCP-Apps-aware hosts read `_meta.ui.resourceUri` and

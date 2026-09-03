@@ -11,7 +11,9 @@
  *   2. `structuredContent` stays SCHEMA-CONFORMANT on failure — the
  *      MCP SDK client validates it against the tool's outputSchema
  *      even when `isError` is set, so this test passing at all proves
- *      the envelope validates. It carries the committed error render's
+ *      the envelope validates, and the test re-parses it against the
+ *      live `renderOutputSchema` rather than a local mirror. It
+ *      carries `outcome: 'failed'`, the committed error render's
  *      `sessionId`, the canonical `error: {code, message}`, a
  *      `cache.hit: false` marker, and NO `resourceUri` (the render is
  *      not mountable).
@@ -22,16 +24,8 @@
  *      again…` format.
  */
 import { afterEach, describe, expect, it } from 'vitest';
+import { isFailedRenderOutput, renderOutputSchema } from '@ggui-ai/protocol';
 import { HostSimulator, bootOssServer, type OssFixture } from '../src/index.js';
-
-/** Structural mirror of the failure slice of `renderOutputSchema`. */
-interface FailureStructured {
-  readonly sessionId?: string;
-  readonly resourceUri?: string;
-  readonly blueprintId?: string;
-  readonly cache?: { readonly hit?: boolean };
-  readonly error?: { readonly code?: string; readonly message?: string };
-}
 
 describe('host-simulator: ggui_render failure envelope against OSS createGguiServer', () => {
   let fixture: OssFixture | null = null;
@@ -105,17 +99,30 @@ describe('host-simulator: ggui_render failure envelope against OSS createGguiSer
     // 2. Schema-conformant structuredContent with the canonical error.
     //    (The MCP SDK client already validated it against the tool's
     //    outputSchema — reaching this line proves conformance.)
-    const structured = flow.render.structuredContent as FailureStructured;
-    expect(structured.error?.code).toBe('PRODUCTION_FAILED');
-    expect(structured.error?.message).toContain(
-      'forced generation failure',
-    );
+    //
+    //    Parsed against the LIVE `renderOutputSchema` rather than a
+    //    hand-written structural mirror (ggui#786): a mirror is exactly
+    //    the drift surface the wire schema exists to close, and parsing
+    //    here also re-checks the presence refinements the schema
+    //    carries.
+    const structured = renderOutputSchema.parse(flow.render.structuredContent);
+    // The outcome discriminant tells the failure envelope apart from a
+    // pre-generation refusal, which commits nothing and carries none of
+    // the identity fields asserted below. Narrowing on the exported
+    // guard is what makes them non-optional to the reader.
+    if (!isFailedRenderOutput(structured)) {
+      throw new Error(
+        `expected outcome 'failed', got '${structured.outcome}'`,
+      );
+    }
+    expect(structured.error.code).toBe('PRODUCTION_FAILED');
+    expect(structured.error.message).toContain('forced generation failure');
     // The error GguiSession IS committed — sessionId names it.
-    expect(structured.sessionId?.length ?? 0).toBeGreaterThan(0);
+    expect(structured.sessionId.length).toBeGreaterThan(0);
     // Not mountable: no resourceUri; no materialised blueprint.
     expect(structured.resourceUri).toBeUndefined();
     expect(structured.blueprintId).toBe('');
-    expect(structured.cache?.hit).toBe(false);
+    expect(structured.cache.hit).toBe(false);
 
     // 3. NO _meta on failures — nothing to mount, no bootstrap slice.
     expect(

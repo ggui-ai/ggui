@@ -451,6 +451,13 @@ describe('buildMcpServer — pre-generation refusal envelope (#786)', () => {
    * behaviour is to refuse. Stands in for `ggui_render` with a
    * deployment gate bound — the transport cannot tell the difference,
    * which is the point.
+   *
+   * It declares BOTH surfaces exactly as the shipping handler does:
+   * the raw `outputSchema` (what the SDK registers — the MCP
+   * `Tool.outputSchema` root must be a plain object) and the composed
+   * `outputEnvelopeSchema` (what the transport validates against, so
+   * the presence refinements a raw-shape rebuild would drop are
+   * enforced on the wire).
    */
   function refusingRenderHandler(
     data: unknown,
@@ -461,6 +468,7 @@ describe('buildMcpServer — pre-generation refusal envelope (#786)', () => {
       description: 'render, refusing',
       inputSchema: {},
       outputSchema: renderOutputSchema.shape,
+      outputEnvelopeSchema: renderOutputSchema,
       async handler() {
         return handlerFailure(data, text);
       },
@@ -567,7 +575,9 @@ describe('buildMcpServer — pre-generation refusal envelope (#786)', () => {
    * that rejects every refusal would satisfy them vacuously.
    */
   async function callWith(data: unknown): Promise<{
-    isError: boolean | undefined;
+    // `isError` is `unknown` on the SDK's loosely-typed result — the
+    // sibling assertions in this file read it the same way.
+    isError: unknown;
     structuredContent: unknown;
   }> {
     const { client, close } = await bootWithLogger(

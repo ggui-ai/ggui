@@ -203,7 +203,10 @@ async function renderFailingFor(
   // A failing generator settles as the in-result failure envelope —
   // the committed error render's id rides on the envelope's `data`
   // (the session channel keeps its archaeology).
-  if (!isHandlerFailure(out)) {
+  // ggui#786: the marker's data is `failed | refused`; a failing
+  // generator settles on the FAILED arm (the refused arm never reaches
+  // generation at all).
+  if (!isHandlerFailure(out) || out.data.outcome !== 'failed') {
     throw new Error('expected the failing generator to produce a failure envelope');
   }
   return { sessionId: out.data.sessionId };

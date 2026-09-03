@@ -209,6 +209,77 @@ function identityPointerMeta(validated: unknown): Record<string, unknown> | unde
   return { ui: { resourceUri: uri }, 'ui/resourceUri': uri };
 }
 
+/** Whether a failure payload declares itself a pre-generation refusal. */
+function declaresRefusedOutcome(payload: unknown): boolean {
+  return isRecord(payload) && payload['outcome'] === 'refused';
+}
+
+/**
+ * Validate an outbound tool payload — success or failure — before it
+ * reaches the wire.
+ *
+ * A tool's `outputSchema` is a raw FIELD RECORD, because that is what
+ * the MCP SDK registers. Rebuilding it here with `z.object(shape)`
+ * therefore drops every cross-field refinement the tool's composed
+ * protocol schema carries — which would leave rules like ggui#786's
+ * "a refused result carries `refusal` and NOTHING else" and
+ * "present-iff-committed on the rendered / failed arms" unenforced at
+ * the very seam that is supposed to enforce them.
+ *
+ * So a handler that declares {@link SharedHandler.outputEnvelopeSchema}
+ * gets validated against THAT (same object, same unknown-key
+ * stripping, plus its refinements); every other handler keeps today's
+ * rebuilt-shape validation verbatim. Either way a non-conformant
+ * payload throws — loudly at the transport, never silently on the
+ * wire.
+ */
+function validateOutputPayload(
+  handler: SharedHandler<ZodRawShape, ZodRawShape>,
+  payload: unknown,
+): Record<string, unknown> {
+  const envelope = handler.outputEnvelopeSchema;
+  const validated: unknown =
+    envelope !== undefined
+      ? envelope.parse(payload)
+      : z.object(handler.outputSchema).parse(payload);
+  // `ZodType.parse` widens to `unknown`, and the MCP result's
+  // `structuredContent` is a JSON OBJECT by spec. Both branches above
+  // are object schemas, so this narrowing never fires in practice — but
+  // it is a real check rather than an assertion, and a handler that
+  // ever declares a non-object envelope fails here by name.
+  if (!isRecord(validated)) {
+    throw new Error(
+      `${handler.name}: validated tool output is not a JSON object — structuredContent cannot carry it`,
+    );
+  }
+  return validated;
+}
+
+/**
+ * The `tool_invoked` fields that classify a failure result (ggui#786,
+ * ruling item 7). A refusal is a WIRE STATE, so it reports its own
+ * `outcome` and the registry `code` that produced it — without those
+ * two fields a refusal is indistinguishable from a generation failure
+ * in the logs. Any other failure keeps the generic `tool_error`.
+ *
+ * The thrown path is untouched (`outcome: 'error'` + `errorClass`),
+ * which is what makes "a gate that throws instead of returning a
+ * refusal is a conformance failure" observable in ops.
+ */
+function classifyFailurePayload(
+  payload: unknown,
+): { readonly outcome: string; readonly code?: string } {
+  if (!declaresRefusedOutcome(payload) || !isRecord(payload)) {
+    return { outcome: 'tool_error' };
+  }
+  const refusal = payload['refusal'];
+  const code = isRecord(refusal) ? refusal['code'] : undefined;
+  return {
+    outcome: 'refused',
+    ...(typeof code === 'string' ? { code } : {}),
+  };
+}
+
 export function buildMcpServer(
   info: ServerInfo,
   handlers: ReadonlyArray<SharedHandler<ZodRawShape, ZodRawShape>>,
@@ -317,11 +388,11 @@ export function buildMcpServer(
         // not invoked, so no mount affordance / bootstrap slice is
         // emitted for a failed call.
         if (isHandlerFailure(data)) {
-          const validated = z.object(handler.outputSchema).parse(data.data);
+          const validated = validateOutputPayload(handler, data.data);
           logger.warn('tool_invoked', {
             tool: handler.name,
             appId: ctx.appId,
-            outcome: 'tool_error',
+            ...classifyFailurePayload(data.data),
             elapsedMs: Date.now() - start,
           });
           return {
@@ -330,7 +401,7 @@ export function buildMcpServer(
             content: [{ type: 'text' as const, text: data.errorText }],
           };
         }
-        const validated = z.object(handler.outputSchema).parse(data);
+        const validated = validateOutputPayload(handler, data);
         // Per-result `_meta` — NOT merged into structuredContent, so
         // agents that typecheck against the tool signature never see
         // it. This is where view-only bootstrap material lives. Under

@@ -141,6 +141,7 @@ import {
   renderOutputSchema,
   type GenerationError,
   type GguiRenderOutput,
+  type PreGenerationRefusal,
   type RenderCacheMarker,
   type RenderError,
   type RenderErrorCode,
@@ -741,23 +742,33 @@ export interface GguiRenderHandlerDeps extends RenderSliceMetaDeps {
 
   /**
    * Pre-validation gate. Fires at the very TOP of the handler, BEFORE
-   * any input parsing or state-changing work. Throws to reject the
-   * render — the thrown error class propagates unchanged through
-   * JSON-RPC, so the gate owns the wire envelope (e.g. cloud's
-   * `RenderBillingError` mapping to HTTP 402).
+   * any input parsing or state-changing work.
    *
-   * Receives raw input (untyped) so the gate can inspect cloud-only
-   * fields (e.g. `infra.model` for provider derivation) before zod
-   * validation strips them. The handler still validates the wire
-   * shape afterward; the gate doesn't replace input validation.
+   * RETURN a {@link PreGenerationRefusal} to refuse the render;
+   * return `undefined` to let it proceed. Returning a refusal is the
+   * ONLY conformant way to refuse (SPEC §7.1): the HANDLER owns the
+   * wire envelope and projects the refusal onto an `isError: true`
+   * tool result with `outcome: 'refused'`, committing nothing and
+   * consuming no handshake. **A gate that THROWS instead is a
+   * conformance failure** — the throw lands on the JSON-RPC error path
+   * as an opaque prose message, losing the code, the `fix` and the
+   * retry class, which is exactly the loss this contract removes.
+   * (Genuine faults inside a gate — a store that is down — still
+   * throw; that path is unchanged. What must not throw is a REFUSAL.)
    *
-   * Cloud wiring: BYOK + credit pre-check (insufficient_credit /
-   * unsupported_provider). OSS leaves absent — no per-render billing.
+   * Receives raw input (untyped) so the gate can inspect deployment-
+   * specific fields (e.g. `infra.model` for provider derivation)
+   * before zod validation strips them. The handler still validates the
+   * wire shape afterward; the gate doesn't replace input validation.
+   *
+   * OSS deployments typically leave this absent — no per-render
+   * policy. A deployment that funds generation binds it and answers
+   * with a registered refusal code.
    */
   readonly preValidationGate?: (
     ctx: HandlerContext,
     rawInput: unknown,
-  ) => Promise<void> | void;
+  ) => Promise<PreGenerationRefusal | undefined> | PreGenerationRefusal | undefined;
 
   /**
    * Post-success hook. Fires AFTER the render commit for this call
@@ -906,18 +917,31 @@ const outputSchema = renderOutputSchema.shape;
  * `resourceUri` is re-required here: the wire schema makes it optional
  * (present iff mountable), and every SUCCESS render is mountable — the
  * intersection keeps the success path's type exactly as strict as
- * before the failure envelope landed.
+ * before the failure envelope landed. Since ggui#786 the same is true
+ * of the six IDENTITY fields: the wire schema demoted them to optional
+ * to make room for the refused arm (where nothing is committed), and
+ * {@link CommittedIdentity} re-requires them here so the committed
+ * paths stay exactly as strict as before.
  */
-type RenderOutput = GguiRenderOutput & {
-  resourceUri: string;
-  // Internal seams (stripped from JSON-RPC envelope by outputSchema):
-  shortCode: string;
-  codeReady: boolean;
-  handshakeId?: string;
-  codeUrl?: string;
-  codeHash?: string;
-  codeModuleUrl?: string;
-};
+type CommittedIdentity = Required<
+  Pick<
+    GguiRenderOutput,
+    'sessionId' | 'action' | 'contractHash' | 'blueprintId' | 'variantKey' | 'cache'
+  >
+>;
+
+type RenderOutput = GguiRenderOutput &
+  CommittedIdentity & {
+    outcome: 'rendered';
+    resourceUri: string;
+    // Internal seams (stripped from JSON-RPC envelope by outputSchema):
+    shortCode: string;
+    codeReady: boolean;
+    handshakeId?: string;
+    codeUrl?: string;
+    codeHash?: string;
+    codeModuleUrl?: string;
+  };
 
 /**
  * Internal handler-output type (FAILURE shape) — the schema-conformant
@@ -927,12 +951,26 @@ type RenderOutput = GguiRenderOutput & {
  * not mountable); `nextStep` never lands here (the content text
  * carries the recovery guidance instead).
  */
-type RenderFailureOutput = GguiRenderOutput & {
-  error: RenderError;
-  // Internal seams (stripped from JSON-RPC envelope by outputSchema):
-  shortCode: string;
-  codeReady: false;
-  handshakeId?: string;
+type RenderFailureOutput = GguiRenderOutput &
+  CommittedIdentity & {
+    outcome: 'failed';
+    error: RenderError;
+    // Internal seams (stripped from JSON-RPC envelope by outputSchema):
+    shortCode: string;
+    codeReady: false;
+    handshakeId?: string;
+  };
+
+/**
+ * Internal handler-output type (REFUSED shape) — the structuredContent
+ * of a PRE-GENERATION refusal. Deliberately NOT an intersection with
+ * {@link GguiRenderOutput}: nothing was parsed, read or committed, so a
+ * stray `sessionId` here is a type error at the projection site rather
+ * than a wire-validation failure later.
+ */
+type RenderRefusedOutput = {
+  outcome: 'refused';
+  refusal: PreGenerationRefusal;
 };
 
 /**
@@ -964,6 +1002,21 @@ function buildRenderFailureText(failure: RenderError): string {
     'Do not call ggui_render again with this handshakeId — it is consumed. ' +
     `${RENDER_FAILURE_GUIDANCE[failure.code]}; call ggui_handshake again once resolved.`
   );
+}
+
+/**
+ * Model-visible content text for the REFUSED envelope. Pinned format:
+ * `<code>: <message> <fix>` — the code LEADS as a courtesy so the model
+ * can see the state without parsing structuredContent, but the code on
+ * `refusal.code` is the mechanism, not this line.
+ *
+ * A separate builder from {@link buildRenderFailureText} on purpose:
+ * that text says the handshakeId "is consumed", which is FALSE for a
+ * refusal — nothing was read, so the same id is valid on a retry. The
+ * two texts are contradictory by construction and must never be shared.
+ */
+function buildRenderRefusalText(refusal: PreGenerationRefusal): string {
+  return `${refusal.code}: ${refusal.message} ${refusal.fix}`;
 }
 
 /**
@@ -1019,6 +1072,12 @@ function generateShortCode(): string {
  * it to an `isError: true` tool result with validated
  * structuredContent and NO `_meta`. In-process callers narrow with
  * `isHandlerFailure`.
+ *
+ * The marker carries TWO arms since ggui#786 (SPEC §7.1): the `failed`
+ * envelope above (generation ran, the error session IS committed), and
+ * the `refused` envelope — returned by the pre-validation gate before
+ * anything is parsed, committing nothing and firing no post-success
+ * hook. Both ride the same channel; `outcome` tells them apart.
  */
 /**
  * The themeId door (ggui#598 slice 3). Refuses an explicit per-render
@@ -1059,7 +1118,7 @@ export function createGguiRenderHandler(
 ): SharedHandler<
   typeof inputSchema,
   typeof outputSchema,
-  RenderOutput | HandlerFailure<RenderFailureOutput>
+  RenderOutput | HandlerFailure<RenderFailureOutput | RenderRefusedOutput>
 > {
   return {
     name: 'ggui_render',
@@ -1087,6 +1146,13 @@ export function createGguiRenderHandler(
       ].join(' '),
     inputSchema,
     outputSchema,
+    // The COMPOSED schema, so the transport enforces the presence rules
+    // the raw shape above cannot carry: a refused result with a stray
+    // identity field, or a `rendered` one missing `contractHash`, fails
+    // at the transport rather than shipping (ggui#786). `outputSchema`
+    // stays the registration surface — the MCP `Tool.outputSchema` root
+    // must be a plain object.
+    outputEnvelopeSchema: renderOutputSchema,
     _meta: {
       // §2.4.1 entry-point lock, REVISED 2026-08-11: `_meta.ui.resourceUri`
       // + `_meta.ui.visibility` per the MCP Apps spec. Exactly TWO ggui
@@ -1106,7 +1172,7 @@ export function createGguiRenderHandler(
     async handler(
       input,
       ctx: HandlerContext,
-    ): Promise<RenderOutput | HandlerFailure<RenderFailureOutput>> {
+    ): Promise<RenderOutput | HandlerFailure<RenderFailureOutput | RenderRefusedOutput>> {
       // Rendering is handshake-first. The wire input is just
       // {handshakeId, props, override?}; the generator input (intent,
       // context, schema, adapters, forceCreate) flows from the
@@ -1116,13 +1182,21 @@ export function createGguiRenderHandler(
       // zod parse error includes actionable recovery text inside the
       // JSON-RPC -32602 envelope.
 
-      // Pre-validation gate fires BEFORE input parsing so a cloud
-      // deployment's billing checks (insufficient_credit /
-      // unsupported_provider) can reject the render without spending
-      // validation work. Errors propagate unchanged — the gate owns
-      // the JSON-RPC envelope.
+      // Pre-validation gate fires BEFORE input parsing so a
+      // deployment's own policy checks can decline the render without
+      // spending validation work. A returned refusal is projected
+      // right here — before the parse, before any store read — which
+      // is what makes "nothing parsed, no handshake read, nothing
+      // committed, no postSuccessHook" true by construction rather
+      // than by discipline (SPEC §7.1, refused arm).
       if (deps.preValidationGate) {
-        await deps.preValidationGate(ctx, input);
+        const refusal = await deps.preValidationGate(ctx, input);
+        if (refusal !== undefined) {
+          return handlerFailure<RenderRefusedOutput>(
+            { outcome: 'refused', refusal },
+            buildRenderRefusalText(refusal),
+          );
+        }
       }
 
       const parsed = z.object(inputSchema).parse(input);
@@ -2379,6 +2453,7 @@ export function createGguiRenderHandler(
       // (`GguiSession.error` carries the failure message).
       if (generationFailure) {
         const failureResult: RenderFailureOutput = {
+          outcome: 'failed',
           sessionId,
           action,
           shortCode,
@@ -2465,6 +2540,7 @@ export function createGguiRenderHandler(
         : '';
       const resourceUriForOutput = `${GGUI_RENDER_UI_META.resourceUri}/${sessionId}${blueprintSegmentForOutput}`;
       const result: RenderOutput = {
+        outcome: 'rendered',
         sessionId,
         resourceUri: resourceUriForOutput,
         action,

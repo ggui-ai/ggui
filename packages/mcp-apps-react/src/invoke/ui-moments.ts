@@ -131,6 +131,12 @@ export function extractUiMoments(
 
       // Render-resource moment — GguiRenderOutput shape. Requires an
       // origin; skip silently when there is no URL to build.
+      //
+      // A REFUSED render result (ggui#786, `outcome: 'refused'`) carries
+      // no `sessionId` — nothing was committed — so the extractor
+      // returns null and the moment is correctly skipped. That is the
+      // intended behaviour, not a tolerance gap: a refusal has nothing
+      // to mount. Do not "fix" it by widening the extractor.
       if (origin === undefined) continue;
       const rendered = extractRenderCoordinates(block.content);
       if (rendered === null) continue;

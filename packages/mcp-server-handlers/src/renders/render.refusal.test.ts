@@ -121,14 +121,7 @@ const REFUSAL = {
  */
 function buildHarness(
   gate: NonNullable<Parameters<typeof createGguiRenderHandler>[0]>['preValidationGate'],
-): {
-  readonly handler: ReturnType<typeof createGguiRenderHandler>;
-  readonly handshakeStore: InMemoryKeyValueStore;
-  readonly renderStore: InMemoryGguiSessionStore;
-  readonly handshakeGet: ReturnType<typeof vi.spyOn>;
-  readonly commit: ReturnType<typeof vi.spyOn>;
-  readonly postSuccessHook: ReturnType<typeof vi.fn>;
-} {
+) {
   const handshakeStore = new InMemoryKeyValueStore();
   const renderStore = new InMemoryGguiSessionStore();
   const handshakeGet = vi.spyOn(handshakeStore, 'get');
@@ -230,7 +223,7 @@ describe('ggui_render — a gate that RETURNS a refusal', () => {
     expect(h.handshakeGet).not.toHaveBeenCalled();
     expect(h.commit).not.toHaveBeenCalled();
     expect(h.postSuccessHook).not.toHaveBeenCalled();
-    expect(await h.renderStore.get(APP_ID, 'render_1')).toBeNull();
+    expect(await h.renderStore.get('render_1')).toBeNull();
   });
 
   it('leads the model-visible text with the code, then message + fix', async () => {

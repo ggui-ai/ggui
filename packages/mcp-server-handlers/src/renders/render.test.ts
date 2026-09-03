@@ -53,6 +53,7 @@ import type {
   UiGenerateResult,
 } from '@ggui-ai/mcp-server-core';
 import {
+  isFailedRenderOutput,
   renderOutputSchema,
   type AppTheme,
   type DataContract,
@@ -1833,6 +1834,7 @@ describe('createGguiRenderHandler — resultMeta forwards App.theme to the wire 
       sessionId,
       resourceUri: `ui://ggui/render/${sessionId}`,
       action: 'create' as const,
+      outcome: 'rendered' as const,
       contractHash: 'hash',
       blueprintId: 'bp_x',
       variantKey: 'vk',
@@ -1964,11 +1966,21 @@ describe('createGguiRenderHandler — isError failure envelope (ruling B)', () =
     });
     const out = await handler.handler({ handshakeId, props: {} }, CTX);
     expect(isHandlerFailure(out)).toBe(true);
-    if (!isHandlerFailure(out)) return;
+    // ggui#786 widened the marker's data to `failed | refused`; this
+    // suite drives the FAILED arm, so narrow once here.
+    if (!isHandlerFailure(out) || out.data.outcome !== 'failed') {
+      throw new Error('expected the FAILED arm of the failure envelope');
+    }
 
     // structuredContent stays schema-conformant (isError:true results
     // are still validated against outputSchema by MCP SDK clients).
     const parsed = renderOutputSchema.parse(out.data);
+    // ggui#786 — narrow the wire envelope with the protocol's own
+    // guard: the identity fields are optional at the schema level
+    // (absent on a refusal) and required on this arm.
+    if (!isFailedRenderOutput(parsed)) {
+      throw new Error("expected outcome:'failed' on the parsed wire envelope");
+    }
     expect(parsed.error).toEqual({
       code: 'PRODUCTION_FAILED',
       message: 'provider 500',
@@ -2001,7 +2013,9 @@ describe('createGguiRenderHandler — isError failure envelope (ruling B)', () =
       error: { code: 'PRODUCTION_FAILED', message: 'provider 500' },
     });
     const out = await handler.handler({ handshakeId, props: {} }, CTX);
-    if (!isHandlerFailure(out)) throw new Error('expected failure envelope');
+    if (!isHandlerFailure(out) || out.data.outcome !== 'failed') {
+      throw new Error('expected the FAILED arm of the failure envelope');
+    }
     expect(out.errorText.startsWith('PRODUCTION_FAILED: provider 500. ')).toBe(
       true,
     );
@@ -2036,7 +2050,9 @@ describe('createGguiRenderHandler — isError failure envelope (ruling B)', () =
         error: { code: kase.in, message: `m-${kase.in}` },
       });
       const out = await handler.handler({ handshakeId, props: {} }, CTX);
-      if (!isHandlerFailure(out)) throw new Error('expected failure envelope');
+      if (!isHandlerFailure(out) || out.data.outcome !== 'failed') {
+      throw new Error('expected the FAILED arm of the failure envelope');
+    }
       expect(out.data.error.code).toBe(kase.outCode);
       expect(out.data.error.message).toBe(`m-${kase.in}`);
       expect(out.errorText.startsWith(`${kase.outCode}: m-${kase.in}.`)).toBe(
@@ -2051,7 +2067,9 @@ describe('createGguiRenderHandler — isError failure envelope (ruling B)', () =
       message: 'esbuild exploded',
     });
     const out = await handler.handler({ handshakeId, props: {} }, CTX);
-    if (!isHandlerFailure(out)) throw new Error('expected failure envelope');
+    if (!isHandlerFailure(out) || out.data.outcome !== 'failed') {
+      throw new Error('expected the FAILED arm of the failure envelope');
+    }
     expect(out.data.error.code).toBe('PRODUCTION_FAILED');
     expect(out.data.error.message).toContain('esbuild exploded');
   });
@@ -2059,7 +2077,9 @@ describe('createGguiRenderHandler — isError failure envelope (ruling B)', () =
   it('resolveLlm returning null (no fallback card) maps to NO_CREDENTIALS, with the same pinned cache reason', async () => {
     const { handler, handshakeId } = await buildNoCredsHarness(() => null);
     const out = await handler.handler({ handshakeId, props: {} }, CTX);
-    if (!isHandlerFailure(out)) throw new Error('expected failure envelope');
+    if (!isHandlerFailure(out) || out.data.outcome !== 'failed') {
+      throw new Error('expected the FAILED arm of the failure envelope');
+    }
     expect(out.data.error.code).toBe('NO_CREDENTIALS');
     // No cache deps on this harness — the ?? fallback pins the same reason.
     expect(out.data.cache.reason).toBe(
@@ -2072,7 +2092,9 @@ describe('createGguiRenderHandler — isError failure envelope (ruling B)', () =
       throw new Error('keychain unreachable');
     });
     const out = await handler.handler({ handshakeId, props: {} }, CTX);
-    if (!isHandlerFailure(out)) throw new Error('expected failure envelope');
+    if (!isHandlerFailure(out) || out.data.outcome !== 'failed') {
+      throw new Error('expected the FAILED arm of the failure envelope');
+    }
     expect(out.data.error.code).toBe('NO_CREDENTIALS');
     expect(out.data.error.message).toContain('keychain unreachable');
   });
@@ -2084,8 +2106,13 @@ describe('createGguiRenderHandler — isError failure envelope (ruling B)', () =
         error: { code: 'PRODUCTION_FAILED', message: 'provider 500' },
       });
     const out = await handler.handler({ handshakeId, props: {} }, CTX);
-    if (!isHandlerFailure(out)) throw new Error('expected failure envelope');
-    const stored = await renderStore.get(out.data.sessionId);
+    if (!isHandlerFailure(out) || out.data.outcome !== 'failed') {
+      throw new Error('expected the FAILED arm of the failure envelope');
+    }
+    // Bound outside the closure below: a discriminant narrowing on a
+    // dotted path does not survive into a callback.
+    const failedSessionId = out.data.sessionId;
+    const stored = await renderStore.get(failedSessionId);
     const render = stored?.render;
     expect(render).toBeDefined();
     if (!render || render.type === 'mcpApps' || render.type === 'system') {
@@ -2100,7 +2127,7 @@ describe('createGguiRenderHandler — isError failure envelope (ruling B)', () =
     // The commit notify fan-out fired for the error render.
     expect(
       notified.some(
-        (n) => n.sessionId === out.data.sessionId && n.error === 'provider 500',
+        (n) => n.sessionId === failedSessionId && n.error === 'provider 500',
       ),
     ).toBe(true);
   });
@@ -2111,7 +2138,9 @@ describe('createGguiRenderHandler — isError failure envelope (ruling B)', () =
       error: { code: 'PRODUCTION_FAILED', message: 'provider 500' },
     });
     const out = await handler.handler({ handshakeId, props: {} }, CTX);
-    if (!isHandlerFailure(out)) throw new Error('expected failure envelope');
+    if (!isHandlerFailure(out) || out.data.outcome !== 'failed') {
+      throw new Error('expected the FAILED arm of the failure envelope');
+    }
     const meta = await handler.resultMeta?.(out, { handshakeId, props: {} }, CTX);
     expect(meta).toBeUndefined();
   });
